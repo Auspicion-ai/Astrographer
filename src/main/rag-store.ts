@@ -229,6 +229,13 @@ function edgeHash(e: RagEdge): string { return sha256(edgeSource(e)) }
 
 // ---- shape validation ------------------------------------------------------
 
+// True for a non-empty string that parses as a date (ISO-8601). The spec
+// (§5.1) requires createdAt/updatedAt to be ISO-8601 strings; a record with a
+// non-ISO value is rejected at write time and skipped at boot.
+function isIso8601(v: unknown): v is string {
+  return typeof v === 'string' && v !== '' && !Number.isNaN(Date.parse(v))
+}
+
 type NodeShapeResult = { ok: true; node: RagNode } | { ok: false; field: string }
 
 function validateNodeShape(input: unknown): NodeShapeResult {
@@ -241,8 +248,8 @@ function validateNodeShape(input: unknown): NodeShapeResult {
   if (n.props !== undefined && hasDangerousKey(n.props)) return { ok: false, field: 'props' }
   if (!Array.isArray(n.ownedNodeIds) || !n.ownedNodeIds.every((x) => typeof x === 'string')) return { ok: false, field: 'ownedNodeIds' }
   if (n.ownedNodeIds.some((x) => x === '')) return { ok: false, field: 'ownedNodeIds' }
-  if (typeof n.createdAt !== 'string' || n.createdAt === '') return { ok: false, field: 'createdAt' }
-  if (typeof n.updatedAt !== 'string' || n.updatedAt === '') return { ok: false, field: 'updatedAt' }
+  if (!isIso8601(n.createdAt)) return { ok: false, field: 'createdAt' }
+  if (!isIso8601(n.updatedAt)) return { ok: false, field: 'updatedAt' }
   return {
     ok: true,
     node: {
@@ -269,8 +276,8 @@ function validateEdgeShape(input: unknown): EdgeShapeResult {
   if (e.documentIds !== undefined && (!Array.isArray(e.documentIds) || !e.documentIds.every((x) => typeof x === 'string'))) return { ok: false, field: 'documentIds' }
   if (e.documentIds !== undefined && e.documentIds.some((x) => x === '')) return { ok: false, field: 'documentIds' }
   if (e.documentIds !== undefined && !DOC_FLOW_KINDS.has(e.kind)) return { ok: false, field: 'documentIds' }
-  if (typeof e.createdAt !== 'string' || e.createdAt === '') return { ok: false, field: 'createdAt' }
-  if (typeof e.updatedAt !== 'string' || e.updatedAt === '') return { ok: false, field: 'updatedAt' }
+  if (!isIso8601(e.createdAt)) return { ok: false, field: 'createdAt' }
+  if (!isIso8601(e.updatedAt)) return { ok: false, field: 'updatedAt' }
   return {
     ok: true,
     edge: {
@@ -293,13 +300,13 @@ function isRagNode(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
   const n = v as Partial<RagNode>
   return typeof n.id === 'string' && typeof n.type === 'string' && typeof n.content === 'string' &&
-    Array.isArray(n.ownedNodeIds) && typeof n.createdAt === 'string' && typeof n.updatedAt === 'string'
+    Array.isArray(n.ownedNodeIds) && isIso8601(n.createdAt) && isIso8601(n.updatedAt)
 }
 function isRagEdge(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
   const e = v as Partial<RagEdge>
   return typeof e.id === 'string' && typeof e.kind === 'string' && typeof e.source === 'string' &&
-    typeof e.target === 'string' && typeof e.createdAt === 'string' && typeof e.updatedAt === 'string'
+    typeof e.target === 'string' && isIso8601(e.createdAt) && isIso8601(e.updatedAt)
 }
 function isSrcTgt(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false

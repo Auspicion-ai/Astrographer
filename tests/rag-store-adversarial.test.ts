@@ -371,4 +371,39 @@ describe('RagStore — adversarial regression (HOST findings)', () => {
       rmSyncSafe(dir)
     }
   })
+
+  it('non-ISO-8601 createdAt/updatedAt is rejected at write time and skipped at boot', async () => {
+    const dir = freshDir()
+    try {
+      const file = join(dir, 'rag.json')
+      const store: RagStore = createJsonRagStore({ path: file })
+      // putNode with a non-ISO createdAt/updatedAt → throws; store unchanged.
+      await expect(store.putNode(makeNode('n1', { createdAt: 'not-a-date' }))).rejects.toThrow()
+      await expect(store.putNode(makeNode('n1', { updatedAt: 'not-a-date' }))).rejects.toThrow()
+      expect(store.listNodes()).toEqual([])
+
+      // putEdge with a non-ISO createdAt/updatedAt → throws; store unchanged.
+      await store.putNode(makeNode('n1'))
+      await store.putNode(makeNode('n2'))
+      await expect(store.putEdge(makeEdge('e1', 'n1', 'n2', { createdAt: 'not-a-date' }))).rejects.toThrow()
+      await expect(store.putEdge(makeEdge('e1', 'n1', 'n2', { updatedAt: 'not-a-date' }))).rejects.toThrow()
+      expect(store.listEdges()).toEqual([])
+
+      // Boot-skip: a persisted node/edge with a non-ISO createdAt is skipped at
+      // boot (never loaded), consistent with the shape-rule discipline.
+      await store.putNode(makeNode('n1'))
+      await store.putNode(makeNode('n2'))
+      await store.putEdge(makeEdge('e1', 'n1', 'n2'))
+      const onDisk = JSON.parse(readFileSync(file, 'utf8'))
+      onDisk.nodes.find((n: RagNode) => n.id === 'n1').createdAt = 'not-a-date'
+      onDisk.edges.find((e: RagEdge) => e.id === 'e1').createdAt = 'not-a-date'
+      writeFileSync(file, JSON.stringify(onDisk))
+      const reloaded: RagStore = createJsonRagStore({ path: file })
+      expect(reloaded.getNode('n1')).toBeUndefined()
+      expect(reloaded.getEdge('e1')).toBeUndefined()
+      expect(reloaded.listNodes().map((n) => n.id)).toContain('n2')
+    } finally {
+      rmSyncSafe(dir)
+    }
+  })
 })
