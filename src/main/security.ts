@@ -42,6 +42,16 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'edit.split_node': 'edit',
   'edit.merge_node': 'edit',
   'edit.set_edge': 'edit',
+  // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
+  // tools, ALL in the `code` group (default-off). Main-handled against the
+  // template store through the five-seam gate. `get`/`validate` are read-only;
+  // `set`/`create`/`delete`/`reset` are mutating.
+  'code.template.get': 'code',
+  'code.template.validate': 'code',
+  'code.template.set': 'code',
+  'code.template.create': 'code',
+  'code.template.delete': 'code',
+  'code.template.reset': 'code',
   // R1 (mcp-resources-review.md) — the read-group resources. Keyed by
   // `resource:<uri>` so `toolAllowed` gates them with the `read` group. A
   // resource is registered ONLY when its group is allowed (never always-

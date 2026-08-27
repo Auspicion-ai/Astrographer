@@ -4,11 +4,12 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, type McpTransportKind } from './mcp-server.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
+import { createTemplateStore } from './template-store.js'
 import { handleEditCommit } from './edit-ops.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
@@ -105,6 +106,13 @@ async function main(): Promise<void> {
   const ragStore = createJsonRagStore({
     path: join(app.getPath('userData'), 'provident-rag.json'),
   })
+  // Unit I — the main-process template store (docs/specs/unit-i-template.md
+  // §5.2). SEPARATE from the RAG store (the template is the envelope's
+  // `template`, not RAG content). The MCP `code.template.*` tools and the UI
+  // template IPC both route through it (MCP/UI equivalence — §8.2).
+  const templateStore = createTemplateStore({
+    path: join(app.getPath('userData'), 'provident-template.json'),
+  })
   // Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE with the
   // store + the selected embedder. F1: `rag.query` (MCP) and the `rag-query`
   // IPC both use THIS engine; the index is reconciled incrementally on
@@ -127,7 +135,7 @@ async function main(): Promise<void> {
   } else {
     retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
   }
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine })
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -214,6 +222,25 @@ async function main(): Promise<void> {
   ipcMain.handle(IPC_RAG_BACKLINKS, (_event, payload: RagBacklinksPayload) => {
     return handleRagBacklinksIpc(ragStore, { nodeId: payload?.nodeId })
   })
+
+  // Unit I §5.4/§8.2 — the UI template IPC surface. Each renderer→main
+  // `code.template.*`-equivalent channel delegates to `handleTemplateTool` with
+  // the SAME template store as the MCP tools (MCP/UI equivalence — a BINDING
+  // constraint). The mutating handlers broadcast `template-changed` on success
+  // (the whole-graph re-derive trigger). The IPC surface is NOT group-gated
+  // (the renderer is a trusted surface; the `code` group gates the MCP agent
+  // path).
+  const handleTemplateIpc = (name: string) => (_event: unknown, payload: unknown) => {
+    return handleTemplateTool(templateStore, name, (payload ?? {}) as Record<string, unknown>, (p) => {
+      backend.broadcast(IPC_TEMPLATE_CHANGED, p)
+    })
+  }
+  ipcMain.handle(IPC_TEMPLATE_GET, handleTemplateIpc('code.template.get'))
+  ipcMain.handle(IPC_TEMPLATE_VALIDATE, handleTemplateIpc('code.template.validate'))
+  ipcMain.handle(IPC_TEMPLATE_SET, handleTemplateIpc('code.template.set'))
+  ipcMain.handle(IPC_TEMPLATE_CREATE, handleTemplateIpc('code.template.create'))
+  ipcMain.handle(IPC_TEMPLATE_DELETE, handleTemplateIpc('code.template.delete'))
+  ipcMain.handle(IPC_TEMPLATE_RESET, handleTemplateIpc('code.template.reset'))
 
   // Finding 3 — the re-traversal data source. The renderer's `onRebuild`
   // re-traversal (Unit C `buildTraversal`) needs the RAG store's nodes/edges,

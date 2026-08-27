@@ -20,10 +20,12 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
-import { IPC_RAG_STORE_CHANGED } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
+import { validateTemplate } from './template-shape.js'
+import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
@@ -211,6 +213,92 @@ export async function handleRagBacklinksIpc(
   const nodeId = typeof payload?.nodeId === 'string' ? payload.nodeId : ''
   if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
   return enumerateLinks(store, nodeId)
+}
+
+/** Unit I §5.3 — the shared main-process handler for the `code.template.*`
+ *  CRUD tools (MCP/UI equivalence — §8.2 a BINDING constraint). The MCP
+ *  `code.template.*` tools call it via the `registerTools` main-handled branch;
+ *  the UI IPC handlers call it with the SAME store, so the two surfaces are
+ *  equivalent. On a successful MUTATING op (`set`/`create`/`delete`/`reset`) it
+ *  invokes `onTemplateChanged({ source, template })`, which the caller wires to
+ *  an `IPC_TEMPLATE_CHANGED` broadcast (the whole-graph re-derive trigger).
+ *
+ *  `create`/`delete` are ORCHESTRATED here: read the current template (`get()`),
+ *  add/remove the zone's container producer, then call `store.set(modified)` —
+ *  which runs `validateTemplate` and REJECTS an invalid result. This keeps ALL
+ *  writes on the single validated `set` path. The `delete`-of-targeted message
+ *  (`template delete: cannot remove targeted zone "<zone>"`) differs from
+ *  `set`'s missing-zone message, so the handler distinguishes them with an
+ *  explicit pre-check. */
+export function handleTemplateTool(
+  templateStore: TemplateStore | null,
+  name: string,
+  args: Record<string, unknown>,
+  onTemplateChanged?: (payload: TemplateChangedPayload) => void,
+): unknown {
+  if (!templateStore) throw new Error(`${name}: no template store configured`)
+  switch (name) {
+    case 'code.template.get':
+      return { source: templateStore.status().source, template: templateStore.get() }
+    case 'code.template.validate':
+      return validateTemplate(args.template, templateStore.targetedZones)
+    case 'code.template.set': {
+      const tpl = templateStore.set(args.template as ContentWindowTemplate)
+      const payload: TemplateChangedPayload = { source: 'custom', template: tpl }
+      onTemplateChanged?.(payload)
+      return payload
+    }
+    case 'code.template.create': {
+      const zone = typeof args.zone === 'string' ? args.zone : ''
+      if (zone === '') throw new Error('template create: zone required')
+      const current = templateStore.get()
+      const children = current.root.children ?? []
+      const present = children.some(
+        (c) => (c.placement as { placementName?: string } | undefined)?.placementName === zone,
+      )
+      if (present) throw new Error(`template create: zone "${zone}" already present`)
+      const id = typeof args.id === 'string' && args.id !== '' ? args.id : `zone:${zone}`
+      const modified: ContentWindowTemplate = {
+        root: {
+          ...current.root,
+          children: [...children, { type: 'div', props: { id }, placement: { placementName: zone } }],
+        },
+      }
+      const tpl = templateStore.set(modified)
+      const payload: TemplateChangedPayload = { source: 'custom', template: tpl }
+      onTemplateChanged?.(payload)
+      return payload
+    }
+    case 'code.template.delete': {
+      const zone = typeof args.zone === 'string' ? args.zone : ''
+      if (zone === '') throw new Error('template delete: zone required')
+      // The zone-consistency invariant forbids dropping a targeted zone.
+      if (templateStore.targetedZones.includes(zone)) {
+        throw new Error(`template delete: cannot remove targeted zone "${zone}"`)
+      }
+      const current = templateStore.get()
+      const children = current.root.children ?? []
+      const idx = children.findIndex(
+        (c) => (c.placement as { placementName?: string } | undefined)?.placementName === zone,
+      )
+      if (idx === -1) throw new Error(`template delete: no zone "${zone}"`)
+      const modified: ContentWindowTemplate = {
+        root: { ...current.root, children: children.filter((_, i) => i !== idx) },
+      }
+      const tpl = templateStore.set(modified)
+      const payload: TemplateChangedPayload = { source: 'custom', template: tpl }
+      onTemplateChanged?.(payload)
+      return payload
+    }
+    case 'code.template.reset': {
+      const tpl = templateStore.reset()
+      const payload: TemplateChangedPayload = { source: 'default', template: tpl }
+      onTemplateChanged?.(payload)
+      return payload
+    }
+    default:
+      throw new Error(`unknown template tool: ${name}`)
+  }
 }
 
 /** The `rag-store-changed` broadcast payload (§5.1.9) — the re-traversal
@@ -454,6 +542,10 @@ export interface McpServerOptions {
    *  wires `engine.onStoreChanged` into the `rag-store-changed` broadcast. The
    *  UI `rag-query` IPC uses the same engine (MCP/UI equivalence — §8.2). */
   retrievalEngine?: RetrievalEngine
+  /** Unit I — the main-process template store. The `code.template.*` tools are
+   *  handled in MAIN against this store (never routed to the renderer). Injected
+   *  like `ragStore`. */
+  templateStore?: TemplateStore
 }
 
 export interface SecuritySnapshot { token: string | null; enabled: ToolGroup[] }
@@ -467,6 +559,7 @@ export class ProvidentMcpServer {
   private readonly router: CapabilityRouter | null
   private readonly ragStore: RagStore | null
   private readonly retrievalEngine: RetrievalEngine | null
+  private readonly templateStore: TemplateStore | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
   private _gate: SecurityGate
@@ -492,6 +585,7 @@ export class ProvidentMcpServer {
     this.router = opts.router ?? null
     this.ragStore = opts.ragStore ?? null
     this.retrievalEngine = opts.retrievalEngine ?? null
+    this.templateStore = opts.templateStore ?? null
   }
 
   getGateConfig(): SecuritySnapshot {
@@ -536,6 +630,15 @@ export class ProvidentMcpServer {
     'edit.split_node',
     'edit.merge_node',
     'edit.set_edge',
+    // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
+    // tools, ALL in the `code` group (default-off), main-handled against the
+    // template store.
+    'code.template.get',
+    'code.template.validate',
+    'code.template.set',
+    'code.template.create',
+    'code.template.delete',
+    'code.template.reset',
   ]
 
   /** The subset of ALL_TOOLS whose group the current gate allows — the tools
@@ -617,7 +720,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this._gate)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -761,7 +864,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this._gate)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -778,6 +881,7 @@ export class ProvidentMcpServer {
     router: CapabilityRouter | null,
     ragStore: RagStore | null,
     engine: RetrievalEngine | null,
+    templateStore: TemplateStore | null,
     gate: SecurityGate,
   ): void {
     if (allowed.includes('provident.dispatch')) {
@@ -915,6 +1019,17 @@ export class ProvidentMcpServer {
       { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number() } },
       { name: 'edit.merge_node', description: 'Merge sourceId into targetId (structural → re-traversal). Requires edit group.', inputSchema: { sourceId: z.string(), targetId: z.string() } },
       { name: 'edit.set_edge', description: 'Create/update a RAG edge (structural → re-traversal). order is for doc-child edges; documentIds is for doc-flow edges. Requires edit group.', inputSchema: { kind: z.string(), source: z.string(), target: z.string(), edgeId: z.string().optional(), order: z.number().optional(), documentIds: z.array(z.string()).optional() } },
+      // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*`
+      // CRUD tools, ALL in the `code` group (default-off), main-handled against
+      // the template store. `get`/`validate` are read-only; `set`/`create`/
+      // `delete`/`reset` are mutating (each persists + broadcasts
+      // `template-changed` → whole-graph re-derive).
+      { name: 'code.template.get', description: 'Read the current content-window template + source. Requires code group.', inputSchema: {} },
+      { name: 'code.template.validate', description: 'Validate a proposed content-window template against the store targetedZones (no mutation). Requires code group.', inputSchema: { template: z.unknown().optional() } },
+      { name: 'code.template.set', description: 'Validate + persist a content-window template (source=custom), broadcast template-changed. Requires code group.', inputSchema: { template: z.unknown() } },
+      { name: 'code.template.create', description: 'Add a container-role producer for zone to the current template, validate, persist, broadcast. Requires code group.', inputSchema: { zone: z.string(), id: z.string().optional() } },
+      { name: 'code.template.delete', description: 'Remove the container-role producer for zone. A targeted zone cannot be removed (the zone-consistency invariant). Requires code group.', inputSchema: { zone: z.string() } },
+      { name: 'code.template.reset', description: 'Restore the default content-window template, persist, broadcast. Requires code group.', inputSchema: {} },
     ]
     const dispatch = (name: string): string => name.slice('provident.'.length)
     for (const { name, description, inputSchema } of graph) {
@@ -960,6 +1075,15 @@ export class ProvidentMcpServer {
               console.error('[provident-mcp] retrieval index reconcile failed:', e)
             })
             backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)
+          })
+          return text(result)
+        }
+        // Unit I — the code.template.* tools are MAIN-process (the template
+        // store), NOT routed to the renderer. On a successful mutation they
+        // broadcast `template-changed` (the whole-graph re-derive trigger).
+        if (name.startsWith('code.template.')) {
+          const result = handleTemplateTool(templateStore, name, args, (payload) => {
+            backend.broadcast?.(IPC_TEMPLATE_CHANGED, payload)
           })
           return text(result)
         }

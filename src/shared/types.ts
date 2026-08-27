@@ -7,6 +7,7 @@
 // args). The renderer owns the producing graph; the main process owns the MCP
 // server and forwards tool calls over IPC (renderer DOM + IPC bridge).
 import type { BacklinkResult } from '../main/backlinks.js'
+import type { ContentWindowTemplate, TemplateSource } from '../main/template-shape.js'
 
 /** A render target in the producing graph. Two vocabularies per the Phase B
  *  synthetic-event contract (docs/specs/ssr-synthetic-event.md §2.2):
@@ -294,6 +295,16 @@ export type RpcMethod =
   | 'edit.split_node'
   | 'edit.merge_node'
   | 'edit.set_edge'
+  // Unit I (docs/specs/unit-i-template.md §5.3) — the main-handled
+  // `code.template.*` tool methods. They are handled in MAIN (the template
+  // store), never routed to the renderer, but still declare their method names
+  // here for the shared IPC contract (like the `rag.*`/`edit.*` methods).
+  | 'code.template.get'
+  | 'code.template.validate'
+  | 'code.template.set'
+  | 'code.template.create'
+  | 'code.template.delete'
+  | 'code.template.reset'
 
 export interface RpcRequest {
   id: number
@@ -415,3 +426,24 @@ export interface RagBacklinksPayload {
  *  `BacklinkResult`. Mirrors the MCP `rag.backlinks` result so both surfaces are
  *  equivalent. */
 export type RagBacklinksResult = BacklinkResult
+
+// ---- Unit I template IPC (docs/specs/unit-i-template.md §5.4) -------------
+
+/** The renderer→main `code.template.*`-equivalent IPC channels. Each is handled
+ *  in `src/main/main.ts` by delegating to `handleTemplateTool` with the SAME
+ *  template store as the MCP tools (MCP/UI equivalence — §8.2 a BINDING
+ *  constraint). The renderer never computes template CRUD itself. */
+export const IPC_TEMPLATE_GET = 'provident:template:get'
+export const IPC_TEMPLATE_VALIDATE = 'provident:template:validate'
+export const IPC_TEMPLATE_SET = 'provident:template:set'
+export const IPC_TEMPLATE_CREATE = 'provident:template:create'
+export const IPC_TEMPLATE_DELETE = 'provident:template:delete'
+export const IPC_TEMPLATE_RESET = 'provident:template:reset'
+/** The main→renderer template-change broadcast (the whole-graph re-derive
+ *  trigger, §5.5). Payload carries the current template so the renderer
+ *  re-derives without a follow-up fetch. */
+export const IPC_TEMPLATE_CHANGED = 'provident:template-changed'
+export interface TemplateChangedPayload {
+  source: TemplateSource
+  template: ContentWindowTemplate
+}

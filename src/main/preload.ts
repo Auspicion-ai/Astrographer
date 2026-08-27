@@ -4,7 +4,8 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload } from '../shared/types.js'
+import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -61,6 +62,21 @@ export interface ProvidentBridge {
      *  as the MCP `rag.backlinks` tool (MCP/UI equivalence). The renderer never
      *  computes the enumeration itself. */
     backlinks(nodeId: string): Promise<RagBacklinksResult>
+  }
+  /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
+   *  `code.template.*`-equivalent IPC to main, which delegates to
+   *  `handleTemplateTool` with the SAME template store as the MCP tools (MCP/UI
+   *  equivalence). The renderer never computes template CRUD itself. */
+  template: {
+    get(): Promise<{ source: TemplateSource; template: ContentWindowTemplate }>
+    validate(tpl: unknown): Promise<TemplateVerdict>
+    set(template: unknown): Promise<{ source: TemplateSource; template: ContentWindowTemplate }>
+    create(zone: string, id?: string): Promise<{ source: TemplateSource; template: ContentWindowTemplate }>
+    delete(zone: string): Promise<{ source: TemplateSource; template: ContentWindowTemplate }>
+    reset(): Promise<{ source: TemplateSource; template: ContentWindowTemplate }>
+    /** Subscribe to the template-change re-derive trigger. Returns an
+     *  unsubscribe function. */
+    onTemplateChanged(handler: (payload: TemplateChangedPayload) => void): () => void
   }
 }
 
@@ -141,6 +157,41 @@ const bridge: ProvidentBridge = {
     backlinks(nodeId: string): Promise<RagBacklinksResult> {
       const payload: RagBacklinksPayload = { nodeId }
       return ipcRenderer.invoke(IPC_RAG_BACKLINKS, payload)
+    },
+  },
+  /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
+   *  `code.template.*`-equivalent IPC to main, which delegates to
+   *  `handleTemplateTool` with the SAME template store as the MCP tools (MCP/UI
+   *  equivalence). The renderer never computes template CRUD itself. */
+  template: {
+    get(): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_GET)
+    },
+    validate(tpl: unknown): Promise<TemplateVerdict> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_VALIDATE, tpl)
+    },
+    set(template: unknown): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_SET, { template })
+    },
+    create(zone: string, id?: string): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_CREATE, { zone, ...(id !== undefined ? { id } : {}) })
+    },
+    delete(zone: string): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_DELETE, { zone })
+    },
+    reset(): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
+      return ipcRenderer.invoke(IPC_TEMPLATE_RESET)
+    },
+    /** Subscribe to the template-change re-derive trigger. Returns an
+     *  unsubscribe function. */
+    onTemplateChanged(handler: (payload: TemplateChangedPayload) => void): () => void {
+      const listener = (_event: unknown, payload: TemplateChangedPayload): void => {
+        handler(payload)
+      }
+      ipcRenderer.on(IPC_TEMPLATE_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC_TEMPLATE_CHANGED, listener)
+      }
     },
   },
 }

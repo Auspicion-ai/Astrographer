@@ -283,6 +283,10 @@ export interface TemplateStore {
   reset(): ContentWindowTemplate
   /** The template source. */
   status(): TemplateStatus
+  /** The traversal-targeted zones the template MUST keep a `container`-role
+   *  producer for (the ZONE-CONSISTENCY-INVARIANT). Read by `set` (validation)
+   *  and by the `code.template.validate` tool. */
+  readonly targetedZones: string[]
 }
 
 export function createTemplateStore(opts: TemplateStoreOptions): TemplateStore
@@ -411,12 +415,12 @@ mirroring the `rag.*`/`edit.*` main-handled pattern (Unit B §5.3).
 ```ts
 // src/main/mcp-server.ts.
 
-export async function handleTemplateTool(
+export function handleTemplateTool(
   templateStore: TemplateStore | null,
   name: string,
   args: Record<string, unknown>,
   onTemplateChanged?: (payload: TemplateChangedPayload) => void,
-): Promise<unknown>
+): unknown
 ```
 
 `handleTemplateTool` is the thin validator that calls the template store and, on
@@ -784,7 +788,8 @@ export interface TraversalInput {
   `{ type: 'div', props: { id: 'wiki-root' }, children: [zone:main producer] }`.
 - **`targetedZones` default:** `['main']` (the traversal's `zoneName`; the zones a
   customized template MUST keep).
-- **Template-store methods:** 4 (`get`, `set`, `reset`, `status`).
+- **Template-store methods:** 4 (`get`, `set`, `reset`, `status`) + 1 readonly
+  property (`targetedZones`).
 - **`TemplateVerdict` fail reasons:** 2 (`invalid-shape`, `missing-zone`) + 1
   happy path (`{ ok: true }`).
 - **`code.template.*` tools:** 6 (`get`, `validate`, `set`, `create`, `delete`,

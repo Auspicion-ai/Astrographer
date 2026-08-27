@@ -32,6 +32,7 @@
 import type { RagStore, RagNode, RagEdge } from './rag-store.js'
 import { validateDocFlow } from './doc-flow.js'
 import { translateLegacy, renderProducingProcess, MarkdownAdapter } from 'provident-ssr'
+import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from './template-shape.js'
 import type {
   LegacyInitialData,
   LegacyNodeData,
@@ -47,6 +48,12 @@ export interface TraversalInput {
   documentIds: string[]
   /** The root-visible zone to attach the RAG subtrees into. */
   zoneName: string
+  /** Unit I — the content-window template. When provided, the envelope's
+   *  `template` is built from it (replacing the default); when absent, the
+   *  default `DEFAULT_CONTENT_WINDOW_TEMPLATE` is used. The traversal ENSURES
+   *  the `zoneName` container producer exists (adding it if the template lacks
+   *  it — the zone-consistency defense-in-depth, §5.6). */
+  template?: ContentWindowTemplate
 }
 
 /** The coarse line→node map: each RAG object → its line range in the rendered
@@ -316,16 +323,25 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
   }
 
   // The envelope: template root with one container producer per targeted zone
-  // (the HARD PRECONDITION) + one ContentPayload per RAG subtree.
+  // (the HARD PRECONDITION) + one ContentPayload per RAG subtree. Unit I — the
+  // template is the provided `input.template` (or the default), and the
+  // traversal ENSURES the `zoneName` producer exists (the zone-consistency
+  // defense-in-depth — a missing producer would leave the subtree unplaced).
+  const templateRoot = (input.template ?? DEFAULT_CONTENT_WINDOW_TEMPLATE).root
+  const templateChildren = [...(templateRoot.children ?? [])]
+  const hasZoneProducer = templateChildren.some(
+    (c) => (c.placement as { placementName?: string } | undefined)?.placementName === zoneName,
+  )
+  if (!hasZoneProducer) {
+    templateChildren.push({
+      type: 'div',
+      props: { id: `zone:${zoneName}` },
+      placement: { placementName: zoneName },
+    })
+  }
   const envelope: LegacyInitialData = {
     template: {
-      root: {
-        type: 'div',
-        props: { id: 'wiki-root' },
-        children: [
-          { type: 'div', props: { id: `zone:${zoneName}` }, placement: { placementName: zoneName } },
-        ],
-      },
+      root: { ...templateRoot, children: templateChildren },
     },
     content,
     clientConfig: { runInstantiation: true, runRendering: true },
