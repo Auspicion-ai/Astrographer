@@ -233,7 +233,7 @@ registered in every seam (§5.5).
 | --- | --- | --- | --- | --- |
 | `rag.query` | `rag` | read-only | `handleRagTool` case `'rag.query'` | `RetrievalResult` (`{ query, ranked, context, markdown, lineMap, k }`) |
 | `rag.get_document` | `rag` | read-only | `handleRagTool` case `'rag.get_document'` | `{ documentId, nodes, edges }` — **PLACEHOLDER** (returns the ENTIRE store, not the document's subtree; full subtree scoping lands in Unit C — §5.7) |
-| `rag.list_nodes` | `rag` | read-only | `handleRagTool` case `'rag.list_nodes'` | `Array<{ id, type, content, ownedNodeIds }>` (content preview = `content.slice(0, 80)`) |
+| `rag.list_nodes` | `rag` | read-only | `handleRagTool` case `'rag.list_nodes'` | `Array<{ id, type, content, ownedNodeIds }>` (content preview = `content.slice(0, 80)`; `ownedNodeIds` = the COUNT, a number — `n.ownedNodeIds.length`) |
 | `rag.get_edges` | `rag` | read-only | `handleRagTool` case `'rag.get_edges'` | `RagEdge[]` (all, or those touching `nodeId`) |
 | `rag.backlinks` | `rag` | read-only | `handleRagTool` case `'rag.backlinks'` | `BacklinkResult` |
 
@@ -450,7 +450,7 @@ gaps — they are pinned so a TestWriter does not misclassify them.
     (the placeholder behavior — returns the entire store).
 15. **`rag.list_nodes` census:** `rag.list_nodes` → an array of
     `{ id, type, content, ownedNodeIds }` (content preview = `content.slice(0,
-    80)`).
+    80)`; `ownedNodeIds` = the COUNT, a number — `n.ownedNodeIds.length`).
 16. **`rag.get_edges` all:** `rag.get_edges` with no `nodeId` → all edges.
 17. **`rag.get_edges` filtered:** `rag.get_edges` with a `nodeId` → the edges
     where `source === nodeId || target === nodeId`.

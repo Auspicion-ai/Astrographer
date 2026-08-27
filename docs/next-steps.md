@@ -33,11 +33,15 @@ _(none — Units A–J are implemented.)_
   inventory (17 `rag`/`edit`/`code.template.*` tools) + the equivalence mapping
   (§5.4). TestWriter red: **EMPTY** (the verification contract — no new
   behavior to red-test; the invariants are verified against the already-
-  implemented Units B/D/E/G/I surfaces); blind-greens in
-  `docs/specs/unit-j-mcp-security-hardening-greens.md` (60 scenarios, all
-  pass); adversarial pass (RCA-3) in the spec §3a — **NO host findings**, three
-  LOW/informational observations (none fix-required, none in Unit J's scope);
-  documentation review (this proofreader pass — spec + greens + trackers
+  implemented Units B/D/E/G/I surfaces) → the committed verification-contract
+  test in `tests/mcp-security-hardening.test.ts` (audits the invariants (a)–(f)
+  + the 17-tool inventory + the equivalence mapping + §5.8/§5.9/§5.10; the red
+  set is what would FAIL if an invariant did not hold — the audit finds none);
+  blind-greens in `docs/specs/unit-j-mcp-security-hardening-greens.md` (60
+  scenarios, all pass); adversarial pass (RCA-3) in the spec §3a — **NO host
+  findings**, three LOW/informational observations (none fix-required, none in
+  Unit J's scope); documentation review in
+  `archive/reviews/2026-08-28-unit-j-doc-review.md` (spec + greens + trackers
   reconciled against the build); trio green (test + typecheck + build).
 - **Unit I — template customization (2026-08-28).** The content-window template
   as a stored, customizable value + the `code.template.*` CRUD + the
