@@ -234,4 +234,24 @@ The user refined the subtree-ownership model (§10) to handle NESTED semantic un
 ### 12.3 Open question for the spec update
 - How does the `doc-child` `order` position the child's subtree within the parent's subtree relative to the parent's owned nodes and other doc-children? (The cleanest: the child's subtree is inserted at the position of the corresponding engine family child — e.g. the `li` node — within the parent's owned subtree.)
 
+---
+
+## 13. User clarity check (2026-08-26) — cross-document shared nodes
+
+The user asked whether the document-ownership model allows the SAME RAG nodes to appear in MULTIPLE documents at the same time:
+
+> "Function A is called by both Class B and Class C. The document flows detailing the B and C use cases both have edges connecting to the node containing A's spec explaining how they use function A. The node for function A renders in both documents, and if the text of A changes, so do both documents. Extension: Function A creates an object of class D. Both documents connect from node A on an edge containing the same explanation of D's use in function A, to the node containing D's spec."
+
+### 13.1 The answer — YES, via MULTI-PARENT-DUPLICATE, with one doc-flow clarification
+
+The model already supports shared nodes across documents through the **MULTI-PARENT-DUPLICATE** decision (§9.2.8): a shared node (A's spec) has MULTIPLE `parent-child` edges — one from B's use-case node, one from C's use-case node — so it is materialized as **duplicate subtrees** in each document, all sharing the same RAG id via the back-reference map. A text change to A updates all duplicates (the content-edit path state-slices every duplicate, or a re-traversal re-materializes all consistently). This satisfies "if the text of A changes, so do both documents."
+
+**The one clarification needed:** the doc-flow edges must support a node being in MULTIPLE documents' linear flows. The current `next-section` edge is `source → target` (one next per node), which cannot express A's spec having a next-section in B's flow AND a next-section in C's flow. **Resolution: the doc-flow edges (`next-section`, `doc-head`, `doc-end`) are SCOPED BY DOCUMENT** — each carries a `documentId` (the document root node id). A node can have a `next-section` edge in each document's flow. The traversal, when assembling document B, follows B's `next-section` edges; when assembling document C, follows C's.
+
+### 13.2 The extension (D's spec) — also supported
+D's spec is a shared node referenced by both documents. In document B, A's spec (duplicate 1) has a `parent-child` edge to D's spec; in document C, A's spec (duplicate 2) has a `parent-child` edge to D's spec. So D's spec has two `parent-child` edges → materialized as duplicate subtrees in both documents, sharing the RAG id. A text change to D updates both. The "same explanation of D's use in function A" is the edge's content/metadata, shared across both documents.
+
+### 13.3 Cost note (the tradeoff of MULTI-PARENT-DUPLICATE)
+A node referenced by N documents is materialized as N duplicate subtrees. This is the cost of respecting the engine's single-parent family model (SI-1). For a heavily-shared node (e.g. a widely-referenced spec), this is N render copies. The alternative — a single node with multiple parents — is structurally impossible in the engine. The duplicate-per-document model is the only option that respects the engine, and the back-reference map keeps all duplicates coherent (one RAG id → N node-id sets).
+
 This refines the "relevant document lines" requirement: the line→node map is still produced by the assembly step (so the agent can cite the owning RAG object), but it is a READ aid, not a write-back path. The primary agent write path is direct MCP `edit`-group mutations to the RAG store.

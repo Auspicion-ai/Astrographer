@@ -117,6 +117,11 @@ No engine gap. ENG-GAP-1 stays a non-blocking handoff item.
   nested subtrees owned by its doc-children; the traversal materializes them at
   the doc-child `order` position. The parent's `ownedNodeIds` EXCLUDES the
   doc-children's nodes. (User clarification 2026-08-26 — review §12.)
+- **CROSS-DOCUMENT-SHARED:** a RAG node can appear in MULTIPLE documents. The
+  traversal assembles EACH document's flow (scoped by `documentId`), resolving a
+  shared node as a duplicate subtree per document (MULTI-PARENT-DUPLICATE). A
+  text change to a shared node updates all its duplicates. (User clarity check
+  2026-08-26 — review §13.)
 
 ## 5. The exhaustive contract
 
@@ -341,6 +346,13 @@ export interface LineNodeMap {
    map has one entry for the `ul` RAG object (its owned nodes, excluding the
    `li`s) + one entry per `li` doc-child RAG object; the line→node map maps each
    `li`'s lines to its own doc-child RAG object.
+9. **Cross-document shared node:** A's spec is called by both Class B and Class
+   C → A's spec has two `parent-child` edges (one from B's use-case node, one
+   from C's use-case node) and a `next-section` edge in BOTH documents' flows
+   (scoped by `documentId`). The traversal assembles document B and document C
+   separately; A's spec is materialized as a duplicate subtree in each, both
+   sharing the RAG id in the back-reference map. A text change to A's spec
+   updates both duplicates (re-traversal re-materializes both consistently).
 
 ### 5.8 Fail-states (TestWriter red set — documented fail-states)
 

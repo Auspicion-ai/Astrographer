@@ -111,10 +111,30 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
 | Edge kind | Meaning | Direction |
 | --- | --- | --- |
 | `parent-child` | A RAG node's family parent. Multi-parent is allowed (a node may have several `parent-child` edges — MULTI-PARENT-DUPLICATE). | `source` is the parent, `target` is the child. |
-| `doc-head` | `source` is the **head** of the document that `target` belongs to. A document has exactly one head. | `source` = head node, `target` = a document-identifying node (the head's document root). |
-| `next-section` | `source`'s next section in document order is `target`. | `source` → `target` (document order). |
-| `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. | `source` = end node, `target` = a document-identifying node. |
+| `doc-head` | `source` is the **head** of the document that `target` belongs to. A document has exactly one head. Scoped by `documentId`. | `source` = head node, `target` = a document-identifying node (the head's document root). |
+| `next-section` | `source`'s next section in document order is `target`. **Scoped by `documentId`** — a node can be in MULTIPLE documents' flows, so it can have a `next-section` edge in each document's flow (CROSS-DOCUMENT-SHARED, review §13). | `source` → `target` (document order, within the edge's `documentId`). |
+| `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. Scoped by `documentId`. | `source` = end node, `target` = a document-identifying node. |
 | `doc-child` | **HIERARCHICAL NESTING** (distinct from the linear doc-flow edges): the `target` RAG object's subtree is nested WITHIN the `source` RAG object's subtree at the given `order` position. A nested node (e.g. a paragraph-length `li` inside a `ul`) that is large enough for semantic distinctiveness is its own RAG object, a doc-child of the containing RAG object. The engine's family structure (e.g. `ul` → `li`) is the RENDER structure; the `doc-child` edge expresses the SEMANTIC ownership boundary. | `source` = the containing RAG object, `target` = the nested RAG object, `order` = the position of the child's subtree within the parent's subtree. |
+
+**Cross-document shared nodes (CROSS-DOCUMENT-SHARED, review §13):**
+
+- A RAG node can appear in MULTIPLE documents at the same time. A shared node
+  (e.g. A's spec, called by both Class B and Class C) has MULTIPLE `parent-child`
+  edges — one from each document's use-case node. Per MULTI-PARENT-DUPLICATE, it
+  is materialized as **duplicate subtrees** in each document, all sharing the same
+  RAG id via the back-reference map. A text change to the shared node updates all
+  duplicates (the content-edit path state-slices every duplicate, or a
+  re-traversal re-materializes all consistently) — "if the text of A changes, so
+  do both documents."
+- The doc-flow edges (`next-section`/`doc-head`/`doc-end`) are **scoped by
+  `documentId`** (the document root node id). A node in multiple documents' flows
+  has a `next-section` edge in each document's flow. The traversal, when
+  assembling document B, follows B's `next-section` edges; when assembling
+  document C, follows C's.
+- A shared node referenced by N documents is materialized as N duplicate
+  subtrees — the cost of respecting the engine's single-parent family model
+  (SI-1). The back-reference map keeps all duplicates coherent (one RAG id → N
+  node-id sets).
 
 **Doc-child semantics (refining SUBTREE-OWNERSHIP §10/§12):**
 
@@ -163,20 +183,23 @@ export function validateDocFlow(
 ): DocFlowVerdict
 ```
 
-**Validation rules:**
+**Validation rules** (`validateDocFlow(nodes, edges, documentId)` validates ONE
+document's flow, scoped by `documentId`; a shared node in multiple documents'
+flows is validated independently per document):
 
 1. **Missing-head:** if the document has no `doc-head` edge (or the head node
    does not exist), the verdict is `{ ok: false, reason: 'missing-head' }`.
 2. **Missing-node:** if any `next-section`/`doc-end`/`doc-head`/`doc-child` edge
    references a node id not present in `nodes`, the verdict is `{ ok: false,
    reason: 'missing-node' }`.
-3. **Cycle:** if following `next-section` edges from the head revisits a node
-   (a cycle), the verdict is `{ ok: false, reason: 'cycle' }`.
+3. **Cycle:** if following the document's `next-section` edges (scoped by
+   `documentId`) from the head revisits a node (a cycle), the verdict is
+   `{ ok: false, reason: 'cycle' }`.
 4. **Nesting cycle:** if the `doc-child` edges form a cycle (a RAG object is a
    doc-child of itself, transitively), the verdict is `{ ok: false, reason:
    'cycle' }` (a `doc-child` nesting cycle is a structural violation).
 5. **Happy path:** if the head exists, all referenced nodes exist, the
-   `next-section` chain is acyclic and reaches the `doc-end`, and the
+   document's `next-section` chain is acyclic and reaches the `doc-end`, and the
    `doc-child` nesting is acyclic, the verdict is `{ ok: true, order:
    <head-first document order> }`.
 

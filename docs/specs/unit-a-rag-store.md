@@ -157,6 +157,12 @@ export interface RagEdge {
    *  the parent's subtree (relative to the parent's owned nodes and other
    *  doc-children). Absent for the other kinds. */
   order?: number
+  /** For the doc-flow edges (`doc-head`/`next-section`/`doc-end`) only: the
+   *  document whose flow this edge belongs to (the document root node id). A
+   *  node can be in MULTIPLE documents' flows, so it can have a `next-section`
+   *  edge in each document's flow (CROSS-DOCUMENT-SHARED, review §13). Absent
+   *  for `parent-child`/`doc-child`. */
+  documentId?: string
   createdAt: string
   updatedAt: string
 }
