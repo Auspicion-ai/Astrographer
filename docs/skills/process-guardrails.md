@@ -1,9 +1,10 @@
 # Skill — Process Guardrails for the Battery / Multi-Unit Deliverables
 
-Consolidates the RCA lessons (RCA-1..RCA-5) for a fresh sub-agent, so the
-battery B/C/D process miss is not repeated. Canonical record:
-`archive/parent-project/2026-08-26-process-rca-battery.md`; the rules live in
-`AGENTS.md` items 2/3/7/10.
+Consolidates the RCA lessons (RCA-1..RCA-7) for a fresh sub-agent, so the
+battery B/C/D process miss and the narrative-as-action loop are not repeated.
+Canonical records: `archive/parent-project/2026-08-26-process-rca-battery.md`
+and `archive/parent-project/2026-08-27-process-rca-narrative-as-action.md`;
+the rules live in `AGENTS.md` items 2/3/7/10.
 
 ## When this applies
 
@@ -23,7 +24,7 @@ the thing that lets a fresh sub-agent inherit an accurate, reviewable state —
 was absent at merge time. The RCA is
 `archive/parent-project/2026-08-26-process-rca-battery.md`.
 
-## The six guards (RCA-1..RCA-6)
+## The seven guards (RCA-1..RCA-7)
 
 | # | Rule | How to comply |
 | --- | --- | --- |
@@ -33,6 +34,7 @@ was absent at merge time. The RCA is
 | RCA-4 | **Greens must be blind-verified, not self-verified.** | The `*-greens.md` scenario set is produced AND run by an agent who has NOT read the implementation, from the docs ONLY. A self-written greens set is a review finding. |
 | RCA-5 | **>50%-context or multi-unit work is delegated, never inlined.** | If the deliverable spans 2+ spec units, split before starting; never share a unit's red→green→adversarial→greens→doc-review sequence with a sibling unit's in one inline run. |
 | RCA-6 | **A documentation review is MANDATORY after the greens, not optional.** | AFTER the greens (before the unit is done), a read-only **documentation reviewer** reconciles the unit's spec + `*-greens.md` + active trackers against the ACTUAL build (names/signatures/return shapes/census claims/cross-refs/section numbers/test-counts). Fix stale entries in the SAME pass; record to `archive/reviews/<date>-<unit>-doc-review.md` (the archive is gitignored — the record is provenance only; the findings must land in the active trackers). This is the upstream archival loop (AGENTS.md item 6) applied AS A GATE — see item 10d. |
+| RCA-7 | **A "waiting/reading" narrative must be paired with the tool call in the same turn — never narrate an action you are not performing.** | The loop failure mode: emitting "The X is running. Let me wait for it." / "Let me read X." WITHOUT calling the tool. Because the narrative calls no tool, the state never changes, so the next turn reproduces the same narrative — a fixed-point loop. Comply: (a) if you are going to wait on a background job, call `job_output(wait: true)` in the SAME turn; (b) if you are going to read, call `read` in the SAME turn; (c) if you have independent work, do it — never narrate waiting; (d) treat "Let me wait for it" / "Let me read X" as a red flag — if you are about to emit it without the tool call, that is the failure mode. A narration-only turn that advances no state is a review finding. |
 
 ## The per-unit cadence (the gold path)
 
