@@ -310,8 +310,9 @@ export interface TemplateStatus {
 }
 
 export interface TemplateStore {
-  /** Read the current content-window template (a shallow copy — never the
-   *  internal record). */
+  /** Read the current content-window template (a DEEP copy — never the
+   *  internal record; a caller mutating the returned template cannot mutate
+   *  the store, bypassing the zone-consistency validation — the I4 fix). */
   get(): ContentWindowTemplate
   /** Replace the content-window template. VALIDATES it against the store's
    *  targetedZones BEFORE persisting — an invalid template (missing a targeted
@@ -333,8 +334,9 @@ export function createTemplateStore(opts: TemplateStoreOptions): TemplateStore
 
 **Return-shape / behavior rules:**
 
-- `get()` returns a **shallow copy** of the current template (never the internal
-  record).
+- `get()` returns a **deep copy** of the current template (never the internal
+  record — a caller mutating the returned template cannot mutate the store,
+  bypassing the zone-consistency validation; the I4 adversarial fix).
 - `set(tpl)` calls `validateTemplate(tpl, this.targetedZones)` first. On
   `{ ok: false }` it throws (see §5.9); on `{ ok: true }` it persists the
   template to the JSON file and sets `source = 'custom'`, then returns the

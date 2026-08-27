@@ -309,7 +309,7 @@ describe('DEFAULT_CONTENT_WINDOW_TEMPLATE + the store — happy paths (§5.8)', 
     }
   })
 
-  it('4d. get() returns a SHALLOW COPY — never the internal record (two calls return distinct objects)', () => {
+  it('4d. get() returns a DEEP COPY — never the internal record (two calls return distinct objects)', () => {
     const dir = freshDir()
     try {
       const store: TemplateStore = createTemplateStore({ path: join(dir, 'template.json'), targetedZones: ['main'] })

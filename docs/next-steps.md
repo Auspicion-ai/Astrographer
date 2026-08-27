@@ -9,21 +9,55 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A–H are implemented (persistence → document model + doc-flow →
+Units A–I are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
-crosslink/backlink → sidebar panes); Units I–J remain later units.
+crosslink/backlink → sidebar panes → template customization); Unit J remains a
+later unit.
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit I — template customization.** Envelope CRUD via a provident-rendered
-  template-editor pane.
 - **Unit J — MCP/security hardening.** Completion pass for the `rag`/`edit`
   groups and the equivalence surface.
 
 ## DONE
 
+- **Unit I — template customization (2026-08-28).** The content-window template
+  as a stored, customizable value + the `code.template.*` CRUD + the
+  template-editor pane. `src/main/template-shape.ts` (pure, no Electron): the
+  `ContentWindowTemplate` shape + `DEFAULT_CONTENT_WINDOW_TEMPLATE` (the FIXED
+  `wiki-root` + one `main` zone) + `validateTemplate` (the zone-consistency
+  invariant — `invalid-shape`/`missing-zone`). `src/main/template-store.ts`
+  (pure over `node:fs`): `createTemplateStore` (the 4 methods `get`/`set`/
+  `reset`/`status` + the `readonly targetedZones` property; fail-disabled boot;
+  atomic temp+rename persistence; deep-copy `get` + copy `targetedZones` — the
+  I4/I5 adversarial fixes). The `code.template.*` CRUD (six tools, ALL in the
+  `code` group default-off, main-handled) + `handleTemplateTool` in
+  `src/main/mcp-server.ts` (the shared MCP/UI-equivalence handler; `create`/
+  `delete` orchestrated on the single validated `set` path); the `code`
+  TOOL_GROUPS in `src/main/security.ts`; the `TraversalInput.template`
+  amendment + the zone-producer defense-in-depth in `src/main/traversal.ts`;
+  the `template` bridge in `src/main/preload.ts`; the template-editor pane
+  (`createTemplateEditorPane` + `TEMPLATE_PANE_ID`) in
+  `src/renderer/template-pane.ts`; the `IPC_TEMPLATE_*` channels +
+  `TemplateChangedPayload` in `src/shared/types.ts`; the template IPC wired in
+  `src/main/main.ts`. TestWriter red → Implementer green in
+  `tests/template.test.ts` (RED marker: `src/main/template-store.js` +
+  `src/renderer/template-pane.js` did not exist; the traversal/mcp-server/
+  security/types amendments RED → 48 node-tested tests pass; §5.8 14–16 / §5.9
+  12 are renderer-dependent, skipped by design and verified by code review);
+  adversarial pass in `tests/template-adversarial.test.ts` (6 regression tests
+  — host findings I3–I5 fixed + regression-tested, recorded in the spec §3a;
+  no unauthorized-access finding — the six `code.template.*` names map to the
+  `code` group default-off, the renderer switch has no `code.template.*` cases,
+  and `MUTATING_METHODS` excludes them; I1/I2 deferred to the UI mount per the
+  spec §3a — the `template-changed` re-derive wiring + the pane registration
+  land with the `SidebarPanes` renderer host); blind-greens in
+  `docs/specs/unit-i-template-greens.md` (45 scenarios, all pass);
+  documentation review in `archive/reviews/2026-08-28-unit-i-doc-review.md`
+  (spec + greens + trackers reconciled against the build); trio green (test +
+  typecheck + build).
 - **Unit H — sidebar panes (2026-08-28).** The host-side pane registry +
   the app-graph-vs-operator scope split. `src/renderer/pane-registry.ts` (pure,
   no Electron): `PaneScope`/`PaneDefinition`/`PaneContext`/`PaneChange`/
