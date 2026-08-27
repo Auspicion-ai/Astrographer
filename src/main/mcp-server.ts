@@ -22,7 +22,8 @@ import type {
 } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
-import type { RagStore, RagNodeType, RagEdgeKind } from './rag-store.js'
+import type { RagStore } from './rag-store.js'
+import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -148,103 +149,85 @@ export function handleRagTool(store: RagStore | null, name: string, args: Record
   }
 }
 
-/** Unit B — handle an `edit.*` tool in MAIN (mutating, through the RAG store's
+/** The `rag-store-changed` broadcast payload (§5.1.9) — the re-traversal
+ *  trigger. After ANY successful RAG-store mutation via an MCP `edit.*` tool
+ *  (or a UI commit-on-blur), the main process broadcasts this to the renderer. */
+export interface RagStoreChangedPayload {
+  kind: 'content' | 'structural'
+  nodeIds: string[]
+  edgeIds: string[]
+}
+
+/** Unit B/D — handle an `edit.*` tool in MAIN (mutating, through the RAG store's
  *  single-writer queue). The edit tools are NOT routed to the renderer. Editing
- *  is NEVER a `code`-group op. Exported for direct unit testing. */
-export async function handleEditTool(store: RagStore | null, name: string, args: Record<string, unknown>): Promise<unknown> {
+ *  is NEVER a `code`-group op. Exported for direct unit testing.
+ *
+ *  H1 — the handler is a THIN validator that calls the corresponding edit op
+ *  (§5.1.2-§5.1.7) from `src/main/edit-ops.ts` (the tool→op mapping in §5.1.8)
+ *  and returns the op's JSON result. It does NOT reimplement the ops inline.
+ *  After a successful mutation it invokes `onStoreChanged` (the §5.1.9
+ *  re-traversal trigger), which the caller wires to a `rag-store-changed`
+ *  broadcast to the renderer. */
+export async function handleEditTool(
+  store: RagStore | null,
+  name: string,
+  args: Record<string, unknown>,
+  onStoreChanged?: (payload: RagStoreChangedPayload) => void,
+): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
-  const now = () => new Date().toISOString()
+  const ctx = { store }
   switch (name) {
     case 'edit.set_content': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       const content = typeof args.content === 'string' ? args.content : ''
       if (nodeId === '') throw new Error('edit.set_content: nodeId required')
-      const existing = store.getNode(nodeId)
-      if (!existing) throw new Error(`edit.set_content: node not found: ${nodeId}`)
-      return store.putNode({ ...existing, content, updatedAt: now() })
+      const result = await setContent(ctx, { nodeId, content })
+      if (result.ok) onStoreChanged?.({ kind: 'content', nodeIds: [nodeId], edgeIds: [] })
+      return result
     }
     case 'edit.create_node': {
-      const type = (typeof args.type === 'string' ? args.type : 'p') as RagNodeType
+      const type = typeof args.type === 'string' ? args.type : ''
       const content = typeof args.content === 'string' ? args.content : ''
       const parentId = typeof args.parentId === 'string' && args.parentId !== '' ? args.parentId : undefined
       const props = args.props && typeof args.props === 'object' ? (args.props as Record<string, unknown>) : undefined
-      const id = `rag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const node = {
-        id,
-        type,
-        content,
-        ...(props ? { props } : {}),
-        ownedNodeIds: [],
-        createdAt: now(),
-        updatedAt: now(),
-      }
-      await store.putNode(node)
-      // Finding 3 — when a `parentId` is given, create the node AND a
-      // `parent-child` edge (source=parentId, target=newNodeId) through the
-      // store so the created node is not orphaned. The store's putEdge rejects
-      // a missing/quarantined parent (surfaced to the caller).
-      if (parentId !== undefined) {
-        await store.putEdge({
-          id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          kind: 'parent-child',
-          source: parentId,
-          target: id,
-          createdAt: now(),
-          updatedAt: now(),
-        })
-      }
-      return node
+      const result = await createNode(ctx, { type, content, parentId, props })
+      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [] })
+      return result
     }
     case 'edit.delete_node': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       if (nodeId === '') throw new Error('edit.delete_node: nodeId required')
-      return store.removeNode(nodeId)
+      const result = await deleteNode(ctx, { nodeId })
+      if (result.ok && result.removed) onStoreChanged?.({ kind: 'structural', nodeIds: [nodeId], edgeIds: [] })
+      return result
     }
     case 'edit.split_node': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       const at = typeof args.at === 'number' ? args.at : 0
       if (nodeId === '') throw new Error('edit.split_node: nodeId required')
-      const existing = store.getNode(nodeId)
-      if (!existing) throw new Error(`edit.split_node: node not found: ${nodeId}`)
-      const head = existing.content.slice(0, at)
-      const tail = existing.content.slice(at)
-      const tailId = `rag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      await store.putNode({ ...existing, content: head, updatedAt: now() })
-      await store.putNode({ id: tailId, type: existing.type, content: tail, ownedNodeIds: [], createdAt: now(), updatedAt: now() })
-      return { nodeId, tailId }
+      const result = await splitNode(ctx, { nodeId, at })
+      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [result.nodes[0].id, result.nodes[1].id], edgeIds: [result.edge.id] })
+      return result
     }
     case 'edit.merge_node': {
       const sourceId = typeof args.sourceId === 'string' ? args.sourceId : ''
       const targetId = typeof args.targetId === 'string' ? args.targetId : ''
       if (sourceId === '' || targetId === '') throw new Error('edit.merge_node: sourceId and targetId required')
-      const source = store.getNode(sourceId)
-      const target = store.getNode(targetId)
-      if (!source) throw new Error(`edit.merge_node: source node not found: ${sourceId}`)
-      if (!target) throw new Error(`edit.merge_node: target node not found: ${targetId}`)
-      await store.putNode({ ...target, content: `${target.content}\n${source.content}`, updatedAt: now() })
-      await store.removeNode(sourceId)
-      return { sourceId, targetId }
+      const result = await mergeNode(ctx, { sourceId, targetId })
+      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [sourceId, targetId], edgeIds: [] })
+      return result
     }
     case 'edit.set_edge': {
-      const kindArg = typeof args.kind === 'string' ? args.kind : ''
+      const kind = typeof args.kind === 'string' ? args.kind : ''
       const source = typeof args.source === 'string' ? args.source : ''
       const target = typeof args.target === 'string' ? args.target : ''
-      if (kindArg === '' || source === '' || target === '') throw new Error('edit.set_edge: kind, source and target required')
-      const kind = kindArg as RagEdgeKind
-      const edgeId = typeof args.edgeId === 'string' && args.edgeId !== '' ? args.edgeId : `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      if (kind === '' || source === '' || target === '') throw new Error('edit.set_edge: kind, source and target required')
+      const edgeId = typeof args.edgeId === 'string' && args.edgeId !== '' ? args.edgeId : undefined
       const order = typeof args.order === 'number' ? args.order : undefined
       const documentIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]).filter((x): x is string => typeof x === 'string') : undefined
-      const edge = {
-        id: edgeId,
-        kind,
-        source,
-        target,
-        ...(order !== undefined ? { order } : {}),
-        ...(documentIds !== undefined ? { documentIds } : {}),
-        createdAt: now(),
-        updatedAt: now(),
-      }
-      return store.putEdge(edge)
+      const result = await setEdge(ctx, { kind, source, target, edgeId, order, documentIds })
+      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
+      return result
     }
     default:
       throw new Error(`unknown edit tool: ${name}`)
@@ -348,6 +331,9 @@ export function registeredToolNames(gate: SecurityGate, allNames: string[]): str
  *  process forwards each call to the renderer over IPC and awaits the reply. */
 export interface McpBackend {
   invoke(method: string, payload: unknown): Promise<unknown>
+  /** H5 (§5.1.9) — broadcast a main→renderer event (e.g. the `rag-store-changed`
+   *  re-traversal trigger). A no-op when no window is attached/destroyed. */
+  broadcast?(channel: string, msg: unknown): void
 }
 
 /** Format an MCP text result from a JSON-serializable value. */
@@ -875,7 +861,12 @@ export class ProvidentMcpServer {
           return text(handleRagTool(ragStore, name, args))
         }
         if (name.startsWith('edit.')) {
-          return text(await handleEditTool(ragStore, name, args))
+          // H5 (§5.1.9) — after a successful edit mutation, broadcast the
+          // `rag-store-changed` re-traversal trigger to the renderer.
+          const result = await handleEditTool(ragStore, name, args, (payload) => {
+            backend.broadcast?.('rag-store-changed', payload)
+          })
+          return text(result)
         }
         const method = dispatch(name)
         const value = await backend.invoke(method, args)
@@ -1156,6 +1147,19 @@ export class RendererBackend implements McpBackend {
     if (this.ready) return
     this.ready = true
     this.resolveReady?.()
+  }
+
+  /** H5 (§5.1.9) — broadcast a main→renderer event (e.g. the `rag-store-changed`
+   *  re-traversal trigger) to the attached window's webContents. A no-op when
+   *  no window is attached or it is destroyed. */
+  broadcast(channel: string, msg: unknown): void {
+    const win = this.window
+    if (!win || win.isDestroyed()) return
+    try {
+      win.webContents.send(channel, msg)
+    } catch {
+      // renderer window destroyed between the check and the send — ignore
+    }
   }
 
   /** Reject all in-flight pending + reset the readiness gate (a fresh

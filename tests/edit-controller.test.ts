@@ -204,9 +204,12 @@ describe('edit-controller — Unit D editing controller (unit-d-editing.md §5.2
   })
 
   it('15. UI commit-on-blur store error → { ok: false, reason: "store-error", error }', async () => {
+    // the node must be EDITABLE (in backRefs) so the injected commit runs and
+    // can surface the store error — a non-editable node is refused as
+    // 'deleted-node' before the injected commit (M9)
     const commit: (n: string, c: string) => Promise<CommitResult> = async () =>
       ({ ok: false, reason: 'store-error', error: 'disk full' })
-    const backRefs = new Map<string, string[]>()
+    const backRefs = new Map<string, string[]>([['n1', ['provident-n1']]])
     const controller = makeController(backRefs, commit)
     const result: CommitResult = await controller.commit('n1', 'after')
     expect(result.ok).toBe(false)

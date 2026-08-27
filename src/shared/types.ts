@@ -340,3 +340,20 @@ export const IPC_SECURITY_GET = 'provident:security:get'
 export const IPC_SECURITY_SET = 'provident:security:set'
 export const IPC_MODULE_GET = 'provident:module:get'
 export const IPC_MODULE_SET_DISABLED = 'provident:module:set-disabled'
+
+// ---- Unit D editing IPC (docs/specs/unit-d-editing.md §5.1.9/§5.1.10) ----
+
+/** The main→renderer `rag-store-changed` event (the re-traversal trigger,
+ *  §5.1.9). Payload: `{ kind: 'content' | 'structural', nodeIds: string[],
+ *  edgeIds: string[] }`. Broadcast after ANY successful RAG-store mutation via
+ *  an MCP `edit.*` tool OR a UI commit-on-blur. */
+export const IPC_RAG_STORE_CHANGED = 'provident:rag-store-changed'
+/** The renderer→main `edit-commit` IPC (the UI commit-on-blur write-back,
+ *  §5.1.10). Payload: `{ nodeId: string, content: string }`. Main calls
+ *  `setContent` on the store (the SAME edit op as the MCP tool), then
+ *  broadcasts `rag-store-changed`. */
+export const IPC_EDIT_COMMIT = 'provident:edit-commit'
+export interface EditCommitPayload {
+  nodeId: string
+  content: string
+}

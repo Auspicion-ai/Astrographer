@@ -4,6 +4,7 @@
 import { Runtime } from './runtime.js'
 import { demoEnvelope } from '../shared/demo-envelope.js'
 import { SecurePanels } from './secure-panels.js'
+import { createEditController } from './edit-controller.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
@@ -129,6 +130,28 @@ async function main(): Promise<void> {
       panels?.refreshDebug(runtime)
       bridge.sendReply(reply)
     })
+  })
+  // Unit D §5.1.9/§5.1.10 — the re-traversal trigger. On `rag-store-changed`
+  // (broadcast by main after ANY successful RAG-store mutation via an MCP
+  // `edit.*` tool OR a UI commit-on-blur), the renderer calls `requestRebuild()`
+  // on the edit controller (the dirty-edit guard queues it if a control is
+  // dirty). The injected `commit` routes through the SAME edit op (`setContent`)
+  // as the MCP tool (MCP/UI equivalence — §5.7).
+  //
+  // SCOPE NOTE: the back-reference map (Unit C §5.3) and the re-traversal
+  // re-materialization (Unit C `buildTraversal`) are rendering concerns not yet
+  // wired into this entry; the controller is created with an empty backRefs map
+  // and a no-op onRebuild so the trigger path is live. The form-control editing
+  // UI (§5.6 — the provident-rendered textarea) is a follow-up scope item.
+  const editController = createEditController({
+    backRefs: new Map<string, string[]>(),
+    commit: (nodeId, content) => bridge!.edit!.commit(nodeId, content),
+    onRebuild: () => {
+      // re-traversal re-materialization (Unit C) — a rendering follow-up
+    },
+  })
+  bridge.edit?.onRagStoreChanged(() => {
+    editController.requestRebuild()
   })
   bridge.ready()
 }

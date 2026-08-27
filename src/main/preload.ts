@@ -4,13 +4,25 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload } from '../shared/types.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
   quarantined: string[]
   loaded: string[]
   modules: ModuleListEntry[]
+}
+
+/** The Unit D §5.1.10 commit result (mirrors the controller's CommitResult). */
+export type EditCommitResult =
+  | { ok: true; nodeId: string }
+  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
+
+/** The Unit D §5.1.9 `rag-store-changed` payload. */
+export interface RagStoreChangedPayload {
+  kind: 'content' | 'structural'
+  nodeIds: string[]
+  edgeIds: string[]
 }
 
 export interface ProvidentBridge {
@@ -25,6 +37,15 @@ export interface ProvidentBridge {
   module: {
     get(): Promise<ModuleBridgeResult>
     setDisabled(name: string, disabled: boolean): Promise<ModuleBridgeResult>
+  }
+  edit: {
+    /** Unit D §5.1.10 — the UI commit-on-blur write-back. Sends the
+     *  `edit-commit` IPC to main, which calls `setContent` on the store (the
+     *  SAME edit op as the MCP tool) and broadcasts `rag-store-changed`. */
+    commit(nodeId: string, content: string): Promise<EditCommitResult>
+    /** Unit D §5.1.9 — subscribe to the `rag-store-changed` re-traversal
+     *  trigger. Returns an unsubscribe function. */
+    onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void
   }
 }
 
@@ -65,6 +86,24 @@ const bridge: ProvidentBridge = {
     },
     setDisabled(name: string, disabled: boolean): Promise<ModuleBridgeResult> {
       return ipcRenderer.invoke(IPC_MODULE_SET_DISABLED, { name, disabled })
+    },
+  },
+  // Unit D §5.1.9/§5.1.10 — the editing IPC surface. The UI commit-on-blur
+  // routes through the SAME edit op (`setContent`) as the MCP tool; the
+  // `rag-store-changed` event is the re-traversal trigger.
+  edit: {
+    commit(nodeId: string, content: string): Promise<EditCommitResult> {
+      const payload: EditCommitPayload = { nodeId, content }
+      return ipcRenderer.invoke(IPC_EDIT_COMMIT, payload)
+    },
+    onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void {
+      const listener = (_event: unknown, payload: RagStoreChangedPayload): void => {
+        handler(payload)
+      }
+      ipcRenderer.on(IPC_RAG_STORE_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC_RAG_STORE_CHANGED, listener)
+      }
     },
   },
 }

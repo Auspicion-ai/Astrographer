@@ -4,11 +4,12 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, type RpcReply, type NotifyPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
+import { setContent } from './edit-ops.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -108,6 +109,23 @@ async function main(): Promise<void> {
       syncModuleRouter(moduleRouter, moduleStore)
     }
     return moduleBridgeResult()
+  })
+
+  // Unit D §5.1.10 — the UI commit-on-blur write-back. The renderer sends an
+  // `edit-commit` IPC on blur; main calls the SAME edit op (`setContent`) as
+  // the MCP tool (MCP/UI equivalence — §5.7), then broadcasts the
+  // `rag-store-changed` re-traversal trigger (§5.1.9). Returns a CommitResult
+  // shape so the renderer's injected commit can surface store errors.
+  ipcMain.handle(IPC_EDIT_COMMIT, async (_event, payload: EditCommitPayload) => {
+    if (!payload || typeof payload.nodeId !== 'string' || typeof payload.content !== 'string') {
+      return { ok: false, reason: 'store-error', error: 'edit-commit: nodeId and content required' }
+    }
+    const result = await setContent({ store: ragStore }, { nodeId: payload.nodeId, content: payload.content })
+    if (result.ok) {
+      backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
+      return { ok: true, nodeId: payload.nodeId }
+    }
+    return { ok: false, reason: 'store-error', error: result.error }
   })
 
   // The MCP stdio transport is spawned by a client (the battery, a test, or an

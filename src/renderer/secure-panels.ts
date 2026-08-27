@@ -43,6 +43,10 @@ declare global {
         get(): Promise<{ corrupt: boolean; quarantined: string[]; loaded: string[]; modules: Array<{ name: string; version: string; capabilities?: unknown; disabled?: boolean; quarantined?: boolean }> }>
         setDisabled(name: string, disabled: boolean): Promise<{ corrupt: boolean; quarantined: string[]; loaded: string[]; modules: Array<{ name: string; version: string; capabilities?: unknown; disabled?: boolean; quarantined?: boolean }> }>
       }
+      edit?: {
+        commit(nodeId: string, content: string): Promise<{ ok: true; nodeId: string } | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }>
+        onRagStoreChanged(handler: (payload: { kind: 'content' | 'structural'; nodeIds: string[]; edgeIds: string[] }) => void): () => void
+      }
     }
   }
 }

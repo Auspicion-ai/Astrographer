@@ -36,6 +36,32 @@ function sameDocIds(a: string[] | undefined, b: string[] | undefined): boolean {
   return a.every((x, i) => x === b[i])
 }
 
+/** Whether `targetId` is a descendant of `sourceId` in the subtree graph
+ *  (parent-child / doc-child edges). Used by `mergeNode` to reject a merge
+ *  that would create a self-referential edge (H4). */
+function isDescendant(store: RagStore, sourceId: string, targetId: string): boolean {
+  const children = new Map<string, string[]>()
+  for (const e of store.listEdges()) {
+    if (e.kind === 'parent-child' || e.kind === 'doc-child') {
+      const list = children.get(e.source) ?? []
+      list.push(e.target)
+      children.set(e.source, list)
+    }
+  }
+  const visited = new Set<string>()
+  const stack = [sourceId]
+  while (stack.length > 0) {
+    const cur = stack.pop()!
+    if (cur === targetId) return true
+    if (visited.has(cur)) continue
+    visited.add(cur)
+    for (const c of children.get(cur) ?? []) {
+      if (!visited.has(c)) stack.push(c)
+    }
+  }
+  return false
+}
+
 /** Set a RAG node's content. A CONTENT op → journaled as a `content` entry
  *  (Unit A §5.6). The renderer's response to the store change is a re-traversal
  *  (CONTENT-EDIT-RE-TRAVERSAL). */
@@ -59,6 +85,9 @@ export async function setContent(ctx: EditOpContext, params: { nodeId: string; c
 export async function createNode(ctx: EditOpContext, params: { type: string; content: string; parentId?: string; props?: Record<string, unknown> }): Promise<CreateNodeResult> {
   if (!RAG_NODE_TYPES.has(params.type)) {
     return { ok: false, error: 'edit.create_node: invalid type' }
+  }
+  if (typeof params.content !== 'string') {
+    return { ok: false, error: 'edit.create_node: content must be a string' }
   }
   if (params.parentId !== undefined) {
     if (!ctx.store.getNode(params.parentId)) {
@@ -94,6 +123,11 @@ export async function createNode(ctx: EditOpContext, params: { type: string; con
 /** Delete a RAG node + cascade its edges. A STRUCTURAL op → journaled as a
  *  `node-delete` entry → re-traversal. */
 export async function deleteNode(ctx: EditOpContext, params: { nodeId: string }): Promise<DeleteNodeResult> {
+  // Existence check FIRST (L1): a nonexistent OR quarantined node (getNode
+  // returns undefined for both) is a no-op — never physically removed.
+  if (!ctx.store.getNode(params.nodeId)) {
+    return { ok: true, removed: false }
+  }
   const removed = await ctx.store.removeNode(params.nodeId)
   return { ok: true, removed }
 }
@@ -119,18 +153,24 @@ export async function splitNode(ctx: EditOpContext, params: { nodeId: string; at
     id: newId,
     type: node.type,
     content: newContent,
+    // L2 — preserve the original's props on the new node (the split keeps the
+    // original's metadata; the spec §5.1.5 does not forbid it).
+    props: node.props,
     ownedNodeIds: [],
     createdAt: now,
     updatedAt: now,
   }
   await ctx.store.putNode(fresh)
   const docChildren = ctx.store.listEdges().filter((e) => e.kind === 'doc-child' && e.source === params.nodeId)
+  // L3 — the new doc-child order is max(existing doc-child orders) + 1, so a
+  // non-contiguous existing order set does not collide.
+  const order = docChildren.reduce((max, e) => Math.max(max, e.order ?? 0), -1) + 1
   const edge: RagEdge = {
     id: `e-${randomUUID()}`,
     kind: 'doc-child',
     source: params.nodeId,
     target: newId,
-    order: docChildren.length,
+    order,
     createdAt: now,
     updatedAt: now,
   }
@@ -150,21 +190,34 @@ export async function mergeNode(ctx: EditOpContext, params: { sourceId: string; 
   if (!source || !target) {
     return { ok: false, error: 'edit.merge_node: source/target not found' }
   }
+  // H4 — validate BEFORE mutating: if target is a descendant of source (or a
+  // doc-child of source), re-parenting source's children to target would create
+  // a self-referential edge. Return a domain result (never throw) and leave the
+  // store untouched (no partial mutation).
+  if (isDescendant(ctx.store, params.sourceId, params.targetId)) {
+    return { ok: false, error: 'edit.merge_node: cannot merge a node into its own subtree' }
+  }
   // 1. target content = target.content + source.content
   const updatedTarget = await ctx.store.putNode({ ...target, content: target.content + source.content })
-  // 2. re-parent source's parent-child children to target
+  // 2. re-parent source's parent-child children to target (L4 — skip if target
+  //    already has an edge to the same child)
   for (const e of ctx.store.listEdges().filter((x) => x.kind === 'parent-child' && x.source === params.sourceId)) {
-    await ctx.store.putEdge({ id: `e-${randomUUID()}`, kind: 'parent-child', source: params.targetId, target: e.target, createdAt: e.createdAt, updatedAt: new Date().toISOString() })
+    const targetHasChild = ctx.store.listEdges().some((te) => te.kind === 'parent-child' && te.source === params.targetId && te.target === e.target)
+    if (!targetHasChild) {
+      await ctx.store.putEdge({ id: `e-${randomUUID()}`, kind: 'parent-child', source: params.targetId, target: e.target, createdAt: e.createdAt, updatedAt: new Date().toISOString() })
+    }
     await ctx.store.removeEdge(e.id)
   }
   // 3. re-parent source's doc-child children to target (appended at the end of
-  //    target's doc-children)
-  const targetDocChildren = ctx.store.listEdges().filter((x) => x.kind === 'doc-child' && x.source === params.targetId)
-  let order = targetDocChildren.length
+  //    target's doc-children; L4 — skip if target already has the child)
+  let order = ctx.store.listEdges().filter((x) => x.kind === 'doc-child' && x.source === params.targetId).reduce((max, e) => Math.max(max, e.order ?? 0), -1) + 1
   for (const e of ctx.store.listEdges().filter((x) => x.kind === 'doc-child' && x.source === params.sourceId)) {
-    await ctx.store.putEdge({ id: `e-${randomUUID()}`, kind: 'doc-child', source: params.targetId, target: e.target, order, createdAt: e.createdAt, updatedAt: new Date().toISOString() })
+    const targetHasChild = ctx.store.listEdges().some((te) => te.kind === 'doc-child' && te.source === params.targetId && te.target === e.target)
+    if (!targetHasChild) {
+      await ctx.store.putEdge({ id: `e-${randomUUID()}`, kind: 'doc-child', source: params.targetId, target: e.target, order, createdAt: e.createdAt, updatedAt: new Date().toISOString() })
+      order++
+    }
     await ctx.store.removeEdge(e.id)
-    order++
   }
   // 4. transfer source's next-section edges to target (target's wins if it has
   //    one in the same document; otherwise the source's is transferred)
@@ -188,8 +241,18 @@ export async function setEdge(ctx: EditOpContext, params: { kind: string; source
   if (params.source === params.target) {
     return { ok: false, error: 'edit.set_edge: self-referential edge' }
   }
+  // M3 — `order` must be a number when given (a non-number would throw an
+  // uncaught store error on write).
+  if (params.order !== undefined && typeof params.order !== 'number') {
+    return { ok: false, error: 'edit.set_edge: order must be a number' }
+  }
   if (params.order !== undefined && params.kind !== 'doc-child') {
     return { ok: false, error: 'edit.set_edge: order only valid on doc-child' }
+  }
+  // M1 — `documentIds` must be a string array when given (a non-array would
+  // throw an uncaught store error on write).
+  if (params.documentIds !== undefined && (!Array.isArray(params.documentIds) || params.documentIds.some((x) => typeof x !== 'string'))) {
+    return { ok: false, error: 'edit.set_edge: documentIds must be a string array' }
   }
   if (!ctx.store.getNode(params.source) || !ctx.store.getNode(params.target)) {
     return { ok: false, error: 'edit.set_edge: source/target node not found or quarantined' }

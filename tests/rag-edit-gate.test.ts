@@ -217,12 +217,12 @@ describe('edit.create_node — adversarial regression (HOST finding 3)', () => {
         type: 'p',
         content: 'child',
         parentId: 'parent',
-      })) as { id: string }
+      })) as { ok: true; node: { id: string } }
 
       const edges = store.listEdges()
-      const parentChild = edges.find((e) => e.kind === 'parent-child' && e.source === 'parent' && e.target === created.id)
+      const parentChild = edges.find((e) => e.kind === 'parent-child' && e.source === 'parent' && e.target === created.node.id)
       expect(parentChild).toBeDefined()
-      expect(store.getNode(created.id)).toBeDefined()
+      expect(store.getNode(created.node.id)).toBeDefined()
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

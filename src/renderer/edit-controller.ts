@@ -87,15 +87,34 @@ export function createEditController(opts: EditControllerOptions): EditControlle
       return dirty.size > 0
     },
     isEditable(nodeId: string): boolean {
-      // A dangling back-reference (the RAG node was deleted — the node id is
-      // not a key in backRefs) marks the element read-only.
+      // M8 — BEST-EFFORT backRefs check. The controller has no store access
+      // (spec §5.2 options = { backRefs, commit, onRebuild }), so `isEditable`
+      // is a proxy for `status().loadedNodes` and is UNSOUND in the
+      // delete→re-traversal window (a deleted node's stale backRefs key → true;
+      // a live-but-unrendered node absent from backRefs → false). The
+      // AUTHORITATIVE deleted-node check lives in the injected `commit` (which
+      // has store access via IPC) — `commit` refuses a write to a deleted node
+      // (M9). This is a best-effort read-only hint for the form control.
       return opts.backRefs.has(nodeId)
     },
     async commit(nodeId: string, content: string): Promise<CommitResult> {
-      // Delegate to the injected commit (the authoritative store-level
-      // deleted-node check → { ok: false, reason: 'deleted-node' } and store
-      // errors → { ok: false, reason: 'store-error', error }).
-      return opts.commit(nodeId, content)
+      // M9 — refuse a write to a non-editable (dangling back-reference) node
+      // BEFORE delegating. The `edit-commit` IPC is NOT sent; the injected
+      // commit is never called.
+      if (!opts.backRefs.has(nodeId)) {
+        return { ok: false, reason: 'deleted-node' }
+      }
+      const result = await opts.commit(nodeId, content)
+      // L6 — on a successful commit, clear the node's dirty flag (which may
+      // trigger a queued rebuild per §5.2).
+      if (result.ok) {
+        dirty.delete(nodeId)
+        if (queuedRebuild && dirty.size === 0) {
+          queuedRebuild = false
+          opts.onRebuild()
+        }
+      }
+      return result
     },
     requestRebuild(): void {
       if (dirty.size > 0) {
@@ -113,8 +132,12 @@ export function createEditController(opts: EditControllerOptions): EditControlle
     },
     restoreCaret(nodeId: string): CaretState | undefined {
       // A dangling back-reference (deleted node) clears the saved caret — no
-      // restore.
-      if (!opts.backRefs.has(nodeId)) return undefined
+      // restore. L5 — actually clear the stale caret from the map so a later
+      // re-created node with the same id does not restore a stale caret.
+      if (!opts.backRefs.has(nodeId)) {
+        carets.delete(nodeId)
+        return undefined
+      }
       return carets.get(nodeId)
     },
     clearCaret(nodeId: string): void {
