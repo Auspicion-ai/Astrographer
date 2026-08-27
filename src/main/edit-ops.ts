@@ -10,7 +10,7 @@ import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind } from './rag
 
 export interface EditOpContext {
   /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
-   *  Unit A §5.3). The edit ops depend on the interface, NOT the concrete JSON
+   *  Unit A §5.4). The edit ops depend on the interface, NOT the concrete JSON
    *  store, so the source is switchable. */
   store: RagStore
 }

@@ -226,7 +226,7 @@ the MCP tool.
 
 export interface EditOpContext {
   /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
-   *  Unit A §5.3). The edit ops depend on the interface, NOT the concrete JSON
+   *  Unit A §5.4). The edit ops depend on the interface, NOT the concrete JSON
    *  store, so the source is switchable. */
   store: RagStore
 }
@@ -297,7 +297,7 @@ rule). The op ensures uniqueness (a fresh id per create).
 
 - **Content op** → journaled as a `content` entry (Unit A §5.6). The renderer's
   response to the store change is a re-traversal (CONTENT-EDIT-RE-TRAVERSAL).
-- **Validation:** `nodeId` is a non-empty string; `content` is a string.
+- **Validation:** `content` is a string (a non-string → `'edit.set_content: content must be a string'`). Non-empty `nodeId` is enforced by the MCP handler (throws); an empty id reaching the op returns `'edit.set_content: node not found'` via `getNode('')`.
 - **Existence check:** reads the node via `store.getNode(nodeId)`. If undefined
   (or quarantined — not in `status().loadedNodes`), returns
   `{ ok: false, error: 'edit.set_content: node not found' }`.
@@ -347,9 +347,10 @@ rule). The op ensures uniqueness (a fresh id per create).
   `content[at..]`, the SAME `type` as the original, `ownedNodeIds: []`, fresh
   `createdAt`/`updatedAt`, via `store.putNode`.
 - **Doc-child edge:** a `doc-child` edge is created
-  `{ kind: 'doc-child', source: originalId, target: newId, order: <the count of
-  the original's existing doc-children> }` — the new node is appended as the
-  last doc-child, via `store.putEdge`.
+  `{ kind: 'doc-child', source: originalId, target: newId, order: <max(existing
+  doc-child orders) + 1> }` — the new node is appended as the last doc-child
+  (L3: `max + 1`, so a non-contiguous existing order set does not collide), via
+  `store.putEdge`.
 - **Return:** `{ ok: true, nodes: [original, new], edge: <doc-child edge> }`.
 
 #### 5.1.6 `mergeNode` — full behavior
@@ -416,7 +417,7 @@ declared them main-handled. Unit D implements the FULL handler behavior:
   methods are queue-serialized — Unit A §5.5).
 - After a successful mutation, the main process broadcasts a `rag-store-changed`
   event to the renderer (the re-traversal trigger — §5.1.9).
-- The handler depends on the `RagStore` INTERFACE (Unit A §5.3 — SOURCE-
+- The handler depends on the `RagStore` INTERFACE (Unit A §5.4 — SOURCE-
   SWITCHABLE), never the concrete JSON store.
 
 **Tool → op mapping:**
