@@ -192,14 +192,26 @@ export type PlacementDecision =
 /** The interface-swappable scoring engine. The lexical-first implementation
  *  (BM25/tf-idf) is the v1 default; vector embeddings (Unit F) are a drop-in
  *  behind the SAME interface. The Embedder owns the SEMANTIC PLACEMENT
- *  decision. Deterministic (no network egress, no randomness). */
+ *  decision. Deterministic (no network egress, no randomness).
+ *
+ *  **ASYNC (Unit F amendment, 2026-08-27):** the interface is ASYNC — `score`
+ *  and `place` return Promises. A vector embedder (Unit F) must compute the
+ *  query embedding via an async provider call, so the interface is async to
+ *  fit a network-backed embedder. The lexical embedder wraps its synchronous
+ *  computation in a resolved promise. The optional `onStoreChanged?` lifecycle
+ *  hook lets a stateful embedder (e.g. the vector embedder's vector index)
+ *  reconcile its own state on a store change. */
 export interface Embedder {
   /** Score all RAG nodes against a query. Returns a ranked list (highest score
-   *  first). Deterministic. */
-  score(query: string, nodes: RagNode[]): ScoredNode[]
+   *  first). Deterministic. ASYNC. */
+  score(query: string, nodes: RagNode[]): Promise<ScoredNode[]>
   /** The semantic placement decision: given a new section's content, which
-   *  existing RAG node/edge it attaches to. */
-  place(content: string, nodes: RagNode[], edges: RagEdge[]): PlacementDecision
+   *  existing RAG node/edge it attaches to. ASYNC. */
+  place(content: string, nodes: RagNode[], edges: RagEdge[]): Promise<PlacementDecision>
+  /** Optional lifecycle hook: reconcile the embedder's own state (e.g. a vector
+   *  index) on a store change. The retrieval engine calls it (if present) after
+   *  its own index reconciliation (§5.6). ASYNC. */
+  onStoreChanged?(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
 }
 
 export interface LexicalEmbedderOptions {
@@ -233,9 +245,9 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
   const b = opts?.b ?? 0.75
   const stopwords = opts?.stopwords ?? DEFAULT_STOPWORDS
 
-  function score(query: string, nodes: RagNode[]): ScoredNode[] {
+  function score(query: string, nodes: RagNode[]): Promise<ScoredNode[]> {
     if (typeof query !== 'string' || nodes === null || nodes === undefined) {
-      throw new Error('embedder score: query/nodes required')
+      return Promise.reject(new Error('embedder score: query/nodes required'))
     }
     const qTokens = tokenizeWithStopwords(query, stopwords)
     const N = index.documentCount
@@ -257,27 +269,28 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
       return { nodeId: node.id, score: s }
     })
     scored.sort((a, b) => b.score - a.score || (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0))
-    return scored
+    return Promise.resolve(scored)
   }
 
-  function place(content: string, nodes: RagNode[], edges: RagEdge[]): PlacementDecision {
+  function place(content: string, nodes: RagNode[], edges: RagEdge[]): Promise<PlacementDecision> {
     if (typeof content !== 'string' || nodes === null || nodes === undefined || edges === null || edges === undefined) {
-      throw new Error('embedder place: content/nodes/edges required')
+      return Promise.reject(new Error('embedder place: content/nodes/edges required'))
     }
-    if (content.trim() === '') return { ok: false, reason: 'empty-content' }
-    const scored = score(content, nodes)
-    const best = scored[0]
-    if (!best || best.score <= PLACEMENT_MIN_SCORE) return { ok: false, reason: 'no-match' }
-    const bestNode = nodes.find((n) => n.id === best.nodeId)
-    let edgeKind: 'parent-child' | 'doc-child' | 'next-section'
-    if (bestNode && (bestNode.type === 'ul' || bestNode.type === 'ol' || bestNode.type === 'div')) {
-      edgeKind = 'doc-child'
-    } else if (bestNode && (bestNode.type.startsWith('h') || bestNode.type === 'p')) {
-      edgeKind = 'next-section'
-    } else {
-      edgeKind = 'parent-child'
-    }
-    return { ok: true, targetNodeId: best.nodeId, edgeKind, score: best.score }
+    if (content.trim() === '') return Promise.resolve({ ok: false, reason: 'empty-content' })
+    return score(content, nodes).then((scored) => {
+      const best = scored[0]
+      if (!best || best.score <= PLACEMENT_MIN_SCORE) return { ok: false, reason: 'no-match' }
+      const bestNode = nodes.find((n) => n.id === best.nodeId)
+      let edgeKind: 'parent-child' | 'doc-child' | 'next-section'
+      if (bestNode && (bestNode.type === 'ul' || bestNode.type === 'ol' || bestNode.type === 'div')) {
+        edgeKind = 'doc-child'
+      } else if (bestNode && (bestNode.type.startsWith('h') || bestNode.type === 'p')) {
+        edgeKind = 'next-section'
+      } else {
+        edgeKind = 'parent-child'
+      }
+      return { ok: true, targetNodeId: best.nodeId, edgeKind, score: best.score }
+    })
   }
 
   const embedder: Embedder = { score, place }
@@ -292,8 +305,9 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
 // §5.3 Selection (score all, take top-k)
 // ---------------------------------------------------------------------------
 
-/** Select the top-k scored RAG nodes. Deterministic. */
-export function selectTopK(embedder: Embedder, query: string, nodes: RagNode[], k: number): ScoredNode[] {
+/** Select the top-k scored RAG nodes. Deterministic. ASYNC (Unit F amendment —
+ *  awaits the embedder's async `score`). */
+export async function selectTopK(embedder: Embedder, query: string, nodes: RagNode[], k: number): Promise<ScoredNode[]> {
   if (embedder === null || embedder === undefined || typeof query !== 'string' || nodes === null || nodes === undefined) {
     throw new Error('selectTopK: embedder/query/nodes/k required')
   }
@@ -302,7 +316,7 @@ export function selectTopK(embedder: Embedder, query: string, nodes: RagNode[], 
     throw new Error('selectTopK: embedder/query/nodes/k required')
   }
   if (k < 1) throw new Error('selectTopK: k must be a positive integer')
-  const scored = embedder.score(query, nodes)
+  const scored = await embedder.score(query, nodes)
   scored.sort((a, b) => b.score - a.score || (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0))
   return scored.slice(0, k)
 }
@@ -473,14 +487,15 @@ export interface RetrievalResult {
 }
 
 /** The retrieval entry point: select top-k, then assemble context by graph
- *  traversal. Deterministic. */
-export function retrieve(
+ *  traversal. Deterministic. ASYNC (Unit F amendment — awaits the embedder's
+ *  async `score` via `selectTopK`). */
+export async function retrieve(
   store: RagStore,
   embedder: Embedder,
   index: LexicalIndex,
   query: string,
   opts: RetrievalOptions,
-): RetrievalResult {
+): Promise<RetrievalResult> {
   if (
     store === null || store === undefined ||
     embedder === null || embedder === undefined ||
@@ -506,7 +521,7 @@ export function retrieve(
   // returns only nodes that actually match the query. (selectTopK itself still
   // returns the full scored list including score-0 nodes when k exceeds the
   // node count — §5.3 test 12.)
-  const ranked = selectTopK(embedder, query, store.listNodes(), k).filter((s) => s.score > 0)
+  const ranked = (await selectTopK(embedder, query, store.listNodes(), k)).filter((s) => s.score > 0)
   const assembled = assembleContext(store, ranked, { maxNodes, maxDepth })
   return {
     query,
@@ -523,10 +538,12 @@ export function retrieve(
 // ---------------------------------------------------------------------------
 
 export interface RetrievalEngine {
-  /** Run a retrieval query. Returns the ranked + assembled context + line map. */
-  query(query: string, opts?: { k?: number }): RetrievalResult
-  /** Update the index on a store change (content or structural). */
-  onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): void
+  /** Run a retrieval query. Returns the ranked + assembled context + line map.
+   *  ASYNC (Unit F amendment — awaits the embedder's async `score`). */
+  query(query: string, opts?: { k?: number }): Promise<RetrievalResult>
+  /** Update the index on a store change (content or structural). ASYNC (Unit F
+   *  amendment — forwards to the embedder's `onStoreChanged` hook, if present). */
+  onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
 }
 
 /** Create the retrieval engine. Builds the index from the store on
@@ -553,10 +570,10 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
   const maxDepth = opts?.maxDepth ?? 3
 
   return {
-    query(query: string, qopts?: { k?: number }): RetrievalResult {
+    query(query: string, qopts?: { k?: number }): Promise<RetrievalResult> {
       return retrieve(store, embedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
     },
-    onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): void {
+    async onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void> {
       if (nodeIds === null || nodeIds === undefined) throw new Error('onStoreChanged: nodeIds required')
       // edgeIds is accepted and ignored for index purposes (edges are not indexed).
       for (const nodeId of nodeIds) {
@@ -568,6 +585,10 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
           removeFromLexicalIndex(index, nodeId)
         }
       }
+      // Unit F amendment — forward to the embedder's onStoreChanged hook (if
+      // present) so a stateful embedder (e.g. the vector embedder's vector
+      // index) reconciles its own state on the same store change.
+      await embedder.onStoreChanged?.(kind, nodeIds, edgeIds)
     },
   }
 }

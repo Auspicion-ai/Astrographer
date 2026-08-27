@@ -17,6 +17,13 @@
 //   F6 — `tokenize` is Unicode-aware (non-ASCII letters/numbers are kept).
 //   F7 — `assembleContext` terminates on a doc-flow cycle and dedupes a seed
 //         reachable from another seed.
+//
+// ASYNC (Unit F amendment, 2026-08-27): the embedder-dependent functions
+// (`score`, `place`, `selectTopK`, `retrieve`, `RetrievalEngine.query`,
+// `RetrievalEngine.onStoreChanged`, the `rag.query` MCP handler, the `rag-query`
+// IPC) are ASYNC — the tests `await` them; their throws are REJECTED PROMISES
+// (`await expect(...).rejects.toThrow(...)`). The spy embedder's `score`/`place`
+// return resolved promises.
 import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -29,6 +36,7 @@ import {
   assembleContext,
   retrieve,
   type Embedder,
+  type PlacementDecision,
   type RetrievalEngine,
   type AssemblyOptions,
   type ScoredNode,
@@ -73,14 +81,15 @@ function makeEdge(id: string, source: string, target: string, overrides: Partial
 
 /** A deterministic drop-in embedder that scores every node the same (fixed
  *  score) and never matches for placement — used to prove `createRetrieval`
- *  actually invokes the PASSED embedder (F2). */
+ *  actually invokes the PASSED embedder (F2). ASYNC (Unit F amendment): the
+ *  `score`/`place` return resolved promises. */
 function fixedScoreEmbedder(score: number, onScore?: (query: string, nodes: RagNode[]) => void): Embedder {
   return {
-    score(query: string, nodes: RagNode[]): ScoredNode[] {
+    async score(query: string, nodes: RagNode[]): Promise<ScoredNode[]> {
       onScore?.(query, nodes)
       return nodes.map((n) => ({ nodeId: n.id, score }))
     },
-    place(): ReturnType<Embedder['place']> {
+    async place(): Promise<PlacementDecision> {
       return { ok: false, reason: 'no-match' }
     },
   }
@@ -92,15 +101,15 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
   // index is maintained incrementally (NOT rebuilt per rag.query call).
   // =========================================================================
 
-  it('F1 — rag.query uses the passed (maintained) engine, not a per-call rebuild', () => {
+  it('F1 — rag.query uses the passed (maintained) engine, not a per-call rebuild', async () => {
     const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
     // A spy engine: if `rag.query` rebuilt the index internally it would never
     // call THIS engine's query (it would build a fresh createRetrieval instead).
     const engine: RetrievalEngine = {
-      query: vi.fn().mockReturnValue({ query: 'hello', ranked: [], context: [], markdown: '', lineMap: { ranges: [] }, k: 5 }),
+      query: vi.fn().mockResolvedValue({ query: 'hello', ranked: [], context: [], markdown: '', lineMap: { ranges: [] }, k: 5 }),
       onStoreChanged: vi.fn(),
     }
-    const result = handleRagTool(store, 'rag.query', { query: 'hello', topK: 5 }, engine)
+    const result = await handleRagTool(store, 'rag.query', { query: 'hello', topK: 5 }, engine)
     expect(engine.query).toHaveBeenCalledTimes(1)
     expect(engine.query).toHaveBeenCalledWith('hello', { k: 5 })
     expect(result.query).toBe('hello')
@@ -117,14 +126,14 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
       // a structural add + the store-change reconcile (as main wires on
       // rag-store-changed)
       await store.putNode(makeNode('n2', { content: 'goodbye moon' }))
-      engine.onStoreChanged('structural', ['n2'], [])
+      await engine.onStoreChanged('structural', ['n2'], [])
       // rag.query uses the maintained engine — the newly-indexed node is found
-      const result = handleRagTool(store, 'rag.query', { query: 'goodbye', topK: 5 }, engine) as RetrievalResult
+      const result = await handleRagTool(store, 'rag.query', { query: 'goodbye', topK: 5 }, engine) as RetrievalResult
       expect(result.ranked[0].nodeId).toBe('n2')
       // and a content edit reconcile is reflected too
       await store.putNode(makeNode('n1', { content: 'hello moon' }))
-      engine.onStoreChanged('content', ['n1'], [])
-      const both = handleRagTool(store, 'rag.query', { query: 'moon', topK: 5 }, engine) as RetrievalResult
+      await engine.onStoreChanged('content', ['n1'], [])
+      const both = await handleRagTool(store, 'rag.query', { query: 'moon', topK: 5 }, engine) as RetrievalResult
       expect(both.ranked.some((s) => s.nodeId === 'n1')).toBe(true)
       expect(both.ranked.some((s) => s.nodeId === 'n2')).toBe(true)
     } finally {
@@ -145,7 +154,7 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
       const onScore = vi.fn()
       const spy = fixedScoreEmbedder(0.75, onScore)
       const engine = createRetrieval(store, spy)
-      const a = engine.query('anything', { k: 1 })
+      const a = await engine.query('anything', { k: 1 })
       // the passed embedder's score is invoked (NOT an internally-built lexical
       // embedder)
       expect(onScore).toHaveBeenCalled()
@@ -154,7 +163,7 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
 
       // a DIFFERENT embedder changes the result (the drop-in seam is live)
       const engineB = createRetrieval(store, fixedScoreEmbedder(0.1))
-      const b = engineB.query('anything', { k: 1 })
+      const b = await engineB.query('anything', { k: 1 })
       expect(b.ranked[0].score).toBe(0.1)
       expect(b.ranked[0].score).not.toBe(a.ranked[0].score)
     } finally {
@@ -175,8 +184,8 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
       await store.putNode(makeNode('n2', { content: 'hello there' }))
       const engine = createRetrieval(store, createLexicalEmbedder(createLexicalIndex(store.listNodes())))
       // the MCP tool path and the UI IPC path both call the SAME engine
-      const mcp = handleRagTool(store, 'rag.query', { query: 'hello', topK: 2 }, engine)
-      const ipc = handleRagQueryIpc(engine, store, { query: 'hello', topK: 2 })
+      const mcp = await handleRagTool(store, 'rag.query', { query: 'hello', topK: 2 }, engine)
+      const ipc = await handleRagQueryIpc(engine, store, { query: 'hello', topK: 2 })
       expect(ipc).toEqual(mcp)
       expect((ipc as RetrievalResult).ranked).toEqual((mcp as RetrievalResult).ranked)
       expect((ipc as RetrievalResult).context).toEqual((mcp as RetrievalResult).context)
@@ -217,8 +226,8 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
       await store.putNode(makeNode('n1', { content: 'hello world' }))
       const index = createLexicalIndex(store.listNodes())
       const embedder = createLexicalEmbedder(index)
-      expect(() => retrieve(store, embedder, index, 'hello', { maxNodes: 1.5 })).toThrow('assembleContext: maxNodes/maxDepth invalid')
-      expect(() => retrieve(store, embedder, index, 'hello', { maxDepth: -1 })).toThrow('assembleContext: maxNodes/maxDepth invalid')
+      await expect(retrieve(store, embedder, index, 'hello', { maxNodes: 1.5 })).rejects.toThrow('assembleContext: maxNodes/maxDepth invalid')
+      await expect(retrieve(store, embedder, index, 'hello', { maxDepth: -1 })).rejects.toThrow('assembleContext: maxNodes/maxDepth invalid')
     } finally {
       rmSyncSafe(dir)
     }
@@ -235,11 +244,11 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
       await store.putNode(makeNode('n1', { content: 'hello world' }))
       const index = createLexicalIndex(store.listNodes())
       const embedder = createLexicalEmbedder(index)
-      expect(() => retrieve(store, embedder, index, 'the', {})).toThrow('retrieve: query must be a non-empty string')
-      expect(() => retrieve(store, embedder, index, 'and or', {})).toThrow('retrieve: query must be a non-empty string')
-      expect(() => retrieve(store, embedder, index, 'a  an  the', {})).toThrow('retrieve: query must be a non-empty string')
+      await expect(retrieve(store, embedder, index, 'the', {})).rejects.toThrow('retrieve: query must be a non-empty string')
+      await expect(retrieve(store, embedder, index, 'and or', {})).rejects.toThrow('retrieve: query must be a non-empty string')
+      await expect(retrieve(store, embedder, index, 'a  an  the', {})).rejects.toThrow('retrieve: query must be a non-empty string')
       // a query with a real token still works
-      const ok = retrieve(store, embedder, index, 'the hello', {})
+      const ok = await retrieve(store, embedder, index, 'the hello', {})
       expect(ok.ranked.length).toBeGreaterThan(0)
     } finally {
       rmSyncSafe(dir)

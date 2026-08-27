@@ -11,6 +11,8 @@ import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
 import { setContent } from './edit-ops.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
+import type { RetrievalEngine } from './retrieval.js'
+import { createVectorEmbedder, type EmbeddingProviderConfig } from './embeddings.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -39,6 +41,36 @@ function portFromArgs(argv: string[]): number {
   const env = Number(process.env.PROVIDENT_MCP_PORT)
   if (Number.isFinite(env)) return env
   return 3787
+}
+
+/** Unit F §5.7 — the retrieval embedder selection (`retrieval.embedder`).
+ *  Default 'lexical'. Read from `--retrieval-embedder=` / env. */
+function retrievalEmbedderFromArgs(argv: string[]): 'lexical' | 'vector' {
+  const flag = argv.find((a) => a.startsWith('--retrieval-embedder='))
+  if (flag) {
+    const v = flag.slice('--retrieval-embedder='.length)
+    if (v === 'vector' || v === 'lexical') return v
+  }
+  const env = process.env.PROVIDENT_RETRIEVAL_EMBEDDER
+  if (env === 'vector' || env === 'lexical') return env
+  return 'lexical'
+}
+
+/** Unit F §5.7 — the embedding provider config (`retrieval.embeddingProvider`),
+ *  read from env. REQUIRED when `retrieval.embedder === 'vector'`. */
+function embeddingProviderConfigFromEnv(): EmbeddingProviderConfig | null {
+  const provider = process.env.PROVIDENT_EMBEDDING_PROVIDER
+  const baseUrl = process.env.PROVIDENT_EMBEDDING_BASE_URL
+  const model = process.env.PROVIDENT_EMBEDDING_MODEL
+  if (!provider || !baseUrl || !model) return null
+  return {
+    provider,
+    baseUrl,
+    model,
+    apiKey: process.env.PROVIDENT_EMBEDDING_API_KEY,
+    dimension: process.env.PROVIDENT_EMBEDDING_DIMENSION ? Number(process.env.PROVIDENT_EMBEDDING_DIMENSION) : undefined,
+    timeoutMs: process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS ? Number(process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS) : undefined,
+  }
 }
 
 async function main(): Promise<void> {
@@ -71,10 +103,27 @@ async function main(): Promise<void> {
     path: join(app.getPath('userData'), 'provident-rag.json'),
   })
   // Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE with the
-  // store + the lexical embedder (v1 default). F1: `rag.query` (MCP) and the
-  // `rag-query` IPC both use THIS engine; the index is reconciled incrementally
-  // on `rag-store-changed` (never rebuilt from scratch per query).
-  const retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
+  // store + the selected embedder. F1: `rag.query` (MCP) and the `rag-query`
+  // IPC both use THIS engine; the index is reconciled incrementally on
+  // `rag-store-changed` (never rebuilt from scratch per query).
+  // Unit F §5.7 — the embedder selection (`retrieval.embedder`): 'lexical'
+  // (default) uses the lexical embedder; 'vector' uses the vector embedder
+  // (created from the REQUIRED `retrieval.embeddingProvider` config). A
+  // 'vector' selection with a missing/invalid provider config FAILS (the
+  // provider-creation error propagates; the app does NOT silently fall back to
+  // lexical).
+  const embedderKind = retrievalEmbedderFromArgs(process.argv.slice(1))
+  let retrievalEngine: RetrievalEngine
+  if (embedderKind === 'vector') {
+    const providerConfig = embeddingProviderConfigFromEnv()
+    if (!providerConfig) {
+      throw new Error('retrieval.embedder: vector requires retrieval.embeddingProvider config')
+    }
+    const vectorEmbedder = await createVectorEmbedder(ragStore, { provider: providerConfig })
+    retrievalEngine = createRetrieval(ragStore, vectorEmbedder)
+  } else {
+    retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
+  }
   const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
@@ -130,7 +179,7 @@ async function main(): Promise<void> {
     if (result.ok) {
       // F1 — reconcile the maintained retrieval index incrementally, then
       // broadcast the `rag-store-changed` re-traversal trigger to the renderer.
-      retrievalEngine.onStoreChanged('content', [payload.nodeId], [])
+      void retrievalEngine.onStoreChanged('content', [payload.nodeId], [])
       backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
       return { ok: true, nodeId: payload.nodeId }
     }

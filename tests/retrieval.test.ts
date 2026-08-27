@@ -3,11 +3,20 @@
 // Mirrors the rag-store.test.ts conventions (temp dirs via node:fs, vitest
 // node environment, `.js` import suffix for the main-process ESM module).
 //
-// The module under test is `src/main/retrieval.ts` — it DOES NOT EXIST yet, so
-// this whole file is RED (the static import fails to resolve). The store's
-// mutating methods (putNode/putEdge/removeNode) are async and queue-serialized,
-// so every call is awaited here.
-import { describe, it, expect } from 'vitest'
+// ASYNC (Unit F amendment, 2026-08-27): the embedder-dependent functions
+// (`score`, `place`, `selectTopK`, `retrieve`, `RetrievalEngine.query`,
+// `RetrievalEngine.onStoreChanged`, the `rag.query` MCP handler, the `rag-query`
+// IPC) are ASYNC — the tests `await` them; their throws are REJECTED PROMISES
+// (`await expect(...).rejects.toThrow(...)`). The lexical embedder's
+// `score`/`place` are synchronous internally but return resolved promises.
+//
+// The module under test is `src/main/retrieval.ts` — it is currently
+// SYNCHRONOUS, so the async-amended tests are RED (the rejects fail-states throw
+// synchronously instead of rejecting; the engine's `onStoreChanged` does not
+// forward to the embedder's `onStoreChanged` hook). The store's mutating methods
+// (putNode/putEdge/removeNode) are async and queue-serialized, so every call is
+// awaited here.
+import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -231,14 +240,14 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
   // =========================================================================
 
   describe('§5.2 createLexicalEmbedder + BM25', () => {
-    it('6. createLexicalEmbedder + score happy: a matching node scores > 0, ranked highest-first', () => {
+    it('6. createLexicalEmbedder + score happy: a matching node scores > 0, ranked highest-first', async () => {
       const nodes = [
         makeNode('n1', { content: 'hello world' }),
         makeNode('n2', { content: 'goodbye moon' }),
       ]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const scored = embedder.score('hello', nodes)
+      const scored = await embedder.score('hello', nodes)
       expect(scored).toHaveLength(2)
       expect(scored[0].nodeId).toBe('n1')
       expect(scored[0].score).toBeGreaterThan(0)
@@ -246,30 +255,30 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       expect(scored[1].score).toBe(0) // no matching terms
     })
 
-    it('BM25 exact score: single node "hello world", query "hello" → ln(4/3)', () => {
+    it('BM25 exact score: single node "hello world", query "hello" → ln(4/3)', async () => {
       const nodes = [makeNode('n1', { content: 'hello world' })]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const scored = embedder.score('hello', nodes)
+      const scored = await embedder.score('hello', nodes)
       // N=1, df(hello)=1 → IDF = ln(1 + (1-1+0.5)/(1+0.5)) = ln(4/3)
       // tf=1, |d|=2, avgdl=2, k1=1.2, b=0.75 → the tf·(k1+1)/(tf + k1·(1-b+b·|d|/avgdl)) factor = 1
       expect(scored[0].nodeId).toBe('n1')
       expect(scored[0].score).toBeCloseTo(Math.log(4 / 3), 5)
     })
 
-    it('7. BM25 determinism: same query + same index + same nodes → same ranked result (twice)', () => {
+    it('7. BM25 determinism: same query + same index + same nodes → same ranked result (twice)', async () => {
       const nodes = [
         makeNode('n1', { content: 'hello world' }),
         makeNode('n2', { content: 'hello there' }),
       ]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const a = embedder.score('hello', nodes)
-      const b = embedder.score('hello', nodes)
+      const a = await embedder.score('hello', nodes)
+      const b = await embedder.score('hello', nodes)
       expect(a).toEqual(b)
     })
 
-    it('8. BM25 tie-break: equal scores sorted by node id ascending', () => {
+    it('8. BM25 tie-break: equal scores sorted by node id ascending', async () => {
       // both nodes have tf(hello)=1, |d|=2, avgdl=2, df(hello)=2 → equal scores
       const nodes = [
         makeNode('n2', { content: 'hello world' }),
@@ -277,17 +286,17 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       ]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const scored = embedder.score('hello', nodes)
+      const scored = await embedder.score('hello', nodes)
       expect(scored[0].score).toBeCloseTo(scored[1].score, 10)
       expect(scored[0].nodeId).toBe('n1') // ascending tie-break
       expect(scored[1].nodeId).toBe('n2')
     })
 
-    it('9. place happy: a new section matches an existing section → next-section', () => {
+    it('9. place happy: a new section matches an existing section → next-section', async () => {
       const nodes = [makeNode('n1', { type: 'p', content: 'hello world' })]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const decision = embedder.place('hello', nodes, [])
+      const decision = await embedder.place('hello', nodes, [])
       expect(decision.ok).toBe(true)
       if (decision.ok) {
         expect(decision.targetNodeId).toBe('n1')
@@ -296,12 +305,12 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       }
     })
 
-    it('10. place container match: best match is a ul/ol/div node → doc-child', () => {
+    it('10. place container match: best match is a ul/ol/div node → doc-child', async () => {
       for (const type of ['ul', 'ol', 'div'] as const) {
         const nodes = [makeNode('n1', { type, content: 'hello world' })]
         const index = createLexicalIndex(nodes)
         const embedder = createLexicalEmbedder(index)
-        const decision = embedder.place('hello', nodes, [])
+        const decision = await embedder.place('hello', nodes, [])
         expect(decision.ok).toBe(true)
         if (decision.ok) {
           expect(decision.targetNodeId).toBe('n1')
@@ -319,41 +328,41 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       expect(() => createLexicalEmbedder(undefined as never)).toThrow('createLexicalEmbedder: index required')
     })
 
-    it('6. score non-string query or null/undefined nodes throws "embedder score: query/nodes required"', () => {
+    it('6. score non-string query or null/undefined nodes rejects "embedder score: query/nodes required"', async () => {
       const index = createLexicalIndex([makeNode('n1', { content: 'hello' })])
       const embedder = createLexicalEmbedder(index)
-      expect(() => embedder.score(null as never, [])).toThrow('embedder score: query/nodes required')
-      expect(() => embedder.score(undefined as never, [])).toThrow('embedder score: query/nodes required')
-      expect(() => embedder.score(42 as never, [])).toThrow('embedder score: query/nodes required')
-      expect(() => embedder.score('hello', null as never)).toThrow('embedder score: query/nodes required')
-      expect(() => embedder.score('hello', undefined as never)).toThrow('embedder score: query/nodes required')
+      await expect(embedder.score(null as never, [])).rejects.toThrow('embedder score: query/nodes required')
+      await expect(embedder.score(undefined as never, [])).rejects.toThrow('embedder score: query/nodes required')
+      await expect(embedder.score(42 as never, [])).rejects.toThrow('embedder score: query/nodes required')
+      await expect(embedder.score('hello', null as never)).rejects.toThrow('embedder score: query/nodes required')
+      await expect(embedder.score('hello', undefined as never)).rejects.toThrow('embedder score: query/nodes required')
     })
 
-    it('7. place non-string content or null/undefined nodes/edges throws "embedder place: content/nodes/edges required"', () => {
+    it('7. place non-string content or null/undefined nodes/edges rejects "embedder place: content/nodes/edges required"', async () => {
       const index = createLexicalIndex([makeNode('n1', { content: 'hello' })])
       const embedder = createLexicalEmbedder(index)
-      expect(() => embedder.place(null as never, [], [])).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place(undefined as never, [], [])).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place(42 as never, [], [])).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place('hello', null as never, [])).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place('hello', undefined as never, [])).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place('hello', [], null as never)).toThrow('embedder place: content/nodes/edges required')
-      expect(() => embedder.place('hello', [], undefined as never)).toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place(null as never, [], [])).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place(undefined as never, [], [])).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place(42 as never, [], [])).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place('hello', null as never, [])).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place('hello', undefined as never, [])).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place('hello', [], null as never)).rejects.toThrow('embedder place: content/nodes/edges required')
+      await expect(embedder.place('hello', [], undefined as never)).rejects.toThrow('embedder place: content/nodes/edges required')
     })
 
-    it('8. place empty content → { ok: false, reason: "empty-content" }', () => {
+    it('8. place empty content → { ok: false, reason: "empty-content" }', async () => {
       const index = createLexicalIndex([makeNode('n1', { content: 'hello' })])
       const embedder = createLexicalEmbedder(index)
-      expect(embedder.place('', [], [])).toEqual({ ok: false, reason: 'empty-content' })
-      expect(embedder.place('   ', [], [])).toEqual({ ok: false, reason: 'empty-content' })
+      await expect(embedder.place('', [], [])).resolves.toEqual({ ok: false, reason: 'empty-content' })
+      await expect(embedder.place('   ', [], [])).resolves.toEqual({ ok: false, reason: 'empty-content' })
     })
 
-    it('9. place no match → { ok: false, reason: "no-match" }', () => {
+    it('9. place no match → { ok: false, reason: "no-match" }', async () => {
       const nodes = [makeNode('n1', { content: 'alpha beta' })]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
       // no shared terms → best score 0 → below the placement threshold → no-match
-      const decision = embedder.place('zzz qqq', nodes, [])
+      const decision = await embedder.place('zzz qqq', nodes, [])
       expect(decision).toEqual({ ok: false, reason: 'no-match' })
     })
   })
@@ -363,7 +372,7 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
   // =========================================================================
 
   describe('§5.3 selectTopK', () => {
-    it('11. selectTopK happy: top-k scored nodes, highest-first', () => {
+    it('11. selectTopK happy: top-k scored nodes, highest-first', async () => {
       const nodes = [
         makeNode('n1', { content: 'hello world' }),
         makeNode('n2', { content: 'hello there' }),
@@ -371,7 +380,7 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       ]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const top = selectTopK(embedder, 'hello', nodes, 2)
+      const top = await selectTopK(embedder, 'hello', nodes, 2)
       expect(top).toHaveLength(2)
       // n1 and n2 both match "hello" with equal scores → tie-break by node id
       expect(top[0].nodeId).toBe('n1')
@@ -379,39 +388,39 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       expect(top[0].score).toBeGreaterThan(0)
     })
 
-    it('12. selectTopK k > node count → all scored nodes returned', () => {
+    it('12. selectTopK k > node count → all scored nodes returned', async () => {
       const nodes = [
         makeNode('n1', { content: 'hello world' }),
         makeNode('n2', { content: 'goodbye moon' }),
       ]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      const top = selectTopK(embedder, 'hello', nodes, 10)
+      const top = await selectTopK(embedder, 'hello', nodes, 10)
       expect(top).toHaveLength(2)
     })
 
-    it('10. selectTopK null/undefined embedder, non-string query, null/undefined nodes, or non-positive-integer k throws "selectTopK: embedder/query/nodes/k required"', () => {
+    it('10. selectTopK null/undefined embedder, non-string query, null/undefined nodes, or non-positive-integer k rejects "selectTopK: embedder/query/nodes/k required"', async () => {
       const nodes = [makeNode('n1', { content: 'hello' })]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      expect(() => selectTopK(null as never, 'hello', nodes, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(undefined as never, 'hello', nodes, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, null as never, nodes, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, undefined as never, nodes, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, 42 as never, nodes, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, 'hello', null as never, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, 'hello', undefined as never, 1)).toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(null as never, 'hello', nodes, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(undefined as never, 'hello', nodes, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, null as never, nodes, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, undefined as never, nodes, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, 42 as never, nodes, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, 'hello', null as never, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, 'hello', undefined as never, 1)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
       // non-integer k (1.5) and NaN are non-positive-integers → the required error
-      expect(() => selectTopK(embedder, 'hello', nodes, 1.5)).toThrow('selectTopK: embedder/query/nodes/k required')
-      expect(() => selectTopK(embedder, 'hello', nodes, Number.NaN)).toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, 'hello', nodes, 1.5)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
+      await expect(selectTopK(embedder, 'hello', nodes, Number.NaN)).rejects.toThrow('selectTopK: embedder/query/nodes/k required')
     })
 
-    it('11. selectTopK k < 1 throws "selectTopK: k must be a positive integer"', () => {
+    it('11. selectTopK k < 1 rejects "selectTopK: k must be a positive integer"', async () => {
       const nodes = [makeNode('n1', { content: 'hello' })]
       const index = createLexicalIndex(nodes)
       const embedder = createLexicalEmbedder(index)
-      expect(() => selectTopK(embedder, 'hello', nodes, 0)).toThrow('selectTopK: k must be a positive integer')
-      expect(() => selectTopK(embedder, 'hello', nodes, -1)).toThrow('selectTopK: k must be a positive integer')
+      await expect(selectTopK(embedder, 'hello', nodes, 0)).rejects.toThrow('selectTopK: k must be a positive integer')
+      await expect(selectTopK(embedder, 'hello', nodes, -1)).rejects.toThrow('selectTopK: k must be a positive integer')
     })
   })
 
@@ -507,7 +516,7 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         await store.putNode(makeNode('n2', { content: 'goodbye moon' }))
         const index = createLexicalIndex(store.listNodes())
         const embedder = createLexicalEmbedder(index)
-        const result = retrieve(store, embedder, index, 'hello', {})
+        const result = await retrieve(store, embedder, index, 'hello', {})
         expect(result.query).toBe('hello')
         expect(result.ranked.length).toBeGreaterThan(0)
         expect(result.ranked[0].nodeId).toBe('n1')
@@ -520,36 +529,36 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       }
     })
 
-    it('14. retrieve null/undefined store/embedder/index, non-string query, or null/undefined opts throws "retrieve: store/embedder/index/query/opts required"', () => {
+    it('14. retrieve null/undefined store/embedder/index, non-string query, or null/undefined opts rejects "retrieve: store/embedder/index/query/opts required"', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
       const index = createLexicalIndex([])
       const embedder = createLexicalEmbedder(index)
-      expect(() => retrieve(null as never, embedder, index, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(undefined as never, embedder, index, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, null as never, index, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, undefined as never, index, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, null as never, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, undefined as never, 'hello', {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, index, null as never, {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, index, 42 as never, {})).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, index, 'hello', null as never)).toThrow('retrieve: store/embedder/index/query/opts required')
-      expect(() => retrieve(store, embedder, index, 'hello', undefined as never)).toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(null as never, embedder, index, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(undefined as never, embedder, index, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, null as never, index, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, undefined as never, index, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, null as never, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, undefined as never, 'hello', {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, index, null as never, {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, index, 42 as never, {})).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, index, 'hello', null as never)).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
+      await expect(retrieve(store, embedder, index, 'hello', undefined as never)).rejects.toThrow('retrieve: store/embedder/index/query/opts required')
     })
 
-    it('15. retrieve empty/whitespace query throws "retrieve: query must be a non-empty string"', () => {
+    it('15. retrieve empty/whitespace query rejects "retrieve: query must be a non-empty string"', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
       const index = createLexicalIndex([])
       const embedder = createLexicalEmbedder(index)
-      expect(() => retrieve(store, embedder, index, '', {})).toThrow('retrieve: query must be a non-empty string')
-      expect(() => retrieve(store, embedder, index, '   ', {})).toThrow('retrieve: query must be a non-empty string')
+      await expect(retrieve(store, embedder, index, '', {})).rejects.toThrow('retrieve: query must be a non-empty string')
+      await expect(retrieve(store, embedder, index, '   ', {})).rejects.toThrow('retrieve: query must be a non-empty string')
     })
 
-    it('16. retrieve k < 1 throws "retrieve: k must be a positive integer"', () => {
+    it('16. retrieve k < 1 rejects "retrieve: k must be a positive integer"', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
       const index = createLexicalIndex([])
       const embedder = createLexicalEmbedder(index)
-      expect(() => retrieve(store, embedder, index, 'hello', { k: 0 })).toThrow('retrieve: k must be a positive integer')
-      expect(() => retrieve(store, embedder, index, 'hello', { k: -1 })).toThrow('retrieve: k must be a positive integer')
+      await expect(retrieve(store, embedder, index, 'hello', { k: 0 })).rejects.toThrow('retrieve: k must be a positive integer')
+      await expect(retrieve(store, embedder, index, 'hello', { k: -1 })).rejects.toThrow('retrieve: k must be a positive integer')
     })
   })
 
@@ -566,7 +575,7 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         const index = createLexicalIndex(store.listNodes())
         const embedder = createLexicalEmbedder(index)
         const engine = createRetrieval(store, embedder)
-        const result = engine.query('hello')
+        const result = await engine.query('hello')
         expect(result.query).toBe('hello')
         expect(result.ranked.length).toBeGreaterThan(0)
         expect(result.k).toBe(5)
@@ -585,10 +594,10 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         const engine = createRetrieval(store, embedder)
         // content edit
         await store.putNode(makeNode('n1', { content: 'goodbye moon' }))
-        engine.onStoreChanged('content', ['n1'], [])
-        const result = engine.query('goodbye')
+        await engine.onStoreChanged('content', ['n1'], [])
+        const result = await engine.query('goodbye')
         expect(result.ranked[0].nodeId).toBe('n1')
-        const old = engine.query('hello')
+        const old = await engine.query('hello')
         expect(old.ranked.some((s) => s.nodeId === 'n1')).toBe(false)
       } finally {
         rmSyncSafe(dir)
@@ -604,8 +613,8 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         const embedder = createLexicalEmbedder(index)
         const engine = createRetrieval(store, embedder)
         await store.putNode(makeNode('n2', { content: 'goodbye moon' }))
-        engine.onStoreChanged('structural', ['n2'], [])
-        const result = engine.query('goodbye')
+        await engine.onStoreChanged('structural', ['n2'], [])
+        const result = await engine.query('goodbye')
         expect(result.ranked[0].nodeId).toBe('n2')
       } finally {
         rmSyncSafe(dir)
@@ -622,9 +631,30 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         const embedder = createLexicalEmbedder(index)
         const engine = createRetrieval(store, embedder)
         await store.removeNode('n1')
-        engine.onStoreChanged('structural', ['n1'], [])
-        const result = engine.query('hello')
+        await engine.onStoreChanged('structural', ['n1'], [])
+        const result = await engine.query('hello')
         expect(result.ranked.some((s) => s.nodeId === 'n1')).toBe(false)
+      } finally {
+        rmSyncSafe(dir)
+      }
+    })
+
+    it('18. onStoreChanged forwards to the embedder onStoreChanged hook (if present) with the same kind/nodeIds/edgeIds', async () => {
+      const dir = freshDir()
+      try {
+        const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
+        await store.putNode(makeNode('n1', { content: 'hello world' }))
+        const index = createLexicalIndex(store.listNodes())
+        const onStoreChanged = vi.fn()
+        const embedder: Embedder = {
+          score: async (q, nodes) => nodes.map((n) => ({ nodeId: n.id, score: 1 })),
+          place: async (): Promise<PlacementDecision> => ({ ok: false, reason: 'no-match' }),
+          onStoreChanged,
+        }
+        const engine = createRetrieval(store, embedder)
+        await engine.onStoreChanged('content', ['n1'], [])
+        expect(onStoreChanged).toHaveBeenCalledTimes(1)
+        expect(onStoreChanged).toHaveBeenCalledWith('content', ['n1'], [])
       } finally {
         rmSyncSafe(dir)
       }
@@ -640,13 +670,13 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       expect(() => createRetrieval(store, undefined as never)).toThrow('createRetrieval: store/embedder required')
     })
 
-    it('18. onStoreChanged null/undefined nodeIds throws "onStoreChanged: nodeIds required"', () => {
+    it('18. onStoreChanged null/undefined nodeIds rejects "onStoreChanged: nodeIds required"', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
       const index = createLexicalIndex([])
       const embedder = createLexicalEmbedder(index)
       const engine = createRetrieval(store, embedder)
-      expect(() => engine.onStoreChanged('content', null as never, [])).toThrow('onStoreChanged: nodeIds required')
-      expect(() => engine.onStoreChanged('content', undefined as never, [])).toThrow('onStoreChanged: nodeIds required')
+      await expect(engine.onStoreChanged('content', null as never, [])).rejects.toThrow('onStoreChanged: nodeIds required')
+      await expect(engine.onStoreChanged('content', undefined as never, [])).rejects.toThrow('onStoreChanged: nodeIds required')
     })
   })
 
@@ -655,9 +685,9 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
   // =========================================================================
 
   describe('§5.7 rag.query MCP tool + MCP/UI equivalence', () => {
-    it('21. rag.query happy: a valid query → the tool returns the retrieval result', () => {
+    it('21. rag.query happy: a valid query → the tool returns the retrieval result', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
-      const result = handleRagTool(store, 'rag.query', { query: 'hello' }) as Record<string, unknown>
+      const result = await handleRagTool(store, 'rag.query', { query: 'hello' }) as Record<string, unknown>
       expect(result.query).toBe('hello')
       expect(Array.isArray(result.ranked)).toBe(true)
       expect(Array.isArray(result.context)).toBe(true)
@@ -676,8 +706,8 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
         const engine = createRetrieval(store, embedder)
         // both the MCP rag.query tool and the UI rag-query IPC call the SAME
         // engine (§5.6) — same params → same ranked/context/markdown/lineMap.
-        const a = engine.query('hello', { k: 2 })
-        const b = engine.query('hello', { k: 2 })
+        const a = await engine.query('hello', { k: 2 })
+        const b = await engine.query('hello', { k: 2 })
         expect(a).toEqual(b)
         expect(a.ranked).toEqual(b.ranked)
         expect(a.context).toEqual(b.context)
@@ -688,18 +718,18 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
       }
     })
 
-    it('19. rag.query non-string/empty query → the tool rejects it', () => {
+    it('19. rag.query non-string/empty query → the tool rejects it', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
-      expect(() => handleRagTool(store, 'rag.query', { query: '' })).toThrow('rag.query: query must be a non-empty string')
-      expect(() => handleRagTool(store, 'rag.query', { query: '   ' })).toThrow('rag.query: query must be a non-empty string')
-      expect(() => handleRagTool(store, 'rag.query', { query: 42 })).toThrow('rag.query: query must be a non-empty string')
+      await expect(handleRagTool(store, 'rag.query', { query: '' })).rejects.toThrow('rag.query: query must be a non-empty string')
+      await expect(handleRagTool(store, 'rag.query', { query: '   ' })).rejects.toThrow('rag.query: query must be a non-empty string')
+      await expect(handleRagTool(store, 'rag.query', { query: 42 })).rejects.toThrow('rag.query: query must be a non-empty string')
     })
 
-    it('20. rag.query non-positive-integer topK → the tool rejects it', () => {
+    it('20. rag.query non-positive-integer topK → the tool rejects it', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
-      expect(() => handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 })).toThrow('rag.query: topK must be a positive integer')
-      expect(() => handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 })).toThrow('rag.query: topK must be a positive integer')
-      expect(() => handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 })).toThrow('rag.query: topK must be a positive integer')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 })).rejects.toThrow('rag.query: topK must be a positive integer')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 })).rejects.toThrow('rag.query: topK must be a positive integer')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 })).rejects.toThrow('rag.query: topK must be a positive integer')
     })
 
     it('21. rag.query with the rag group disabled → not callable (toolAllowed false)', () => {

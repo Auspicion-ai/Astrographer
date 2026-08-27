@@ -120,18 +120,19 @@ export function handleModuleTool(store: ModuleStore | null, name: string, args: 
  *  does NOT rebuild the whole index per call. A fresh engine is built ONLY as a
  *  direct-call fallback (when no engine is passed — unit tests / non-wired
  *  callers). */
-export function handleRagTool(
+export async function handleRagTool(
   store: RagStore | null,
   name: string,
   args: Record<string, unknown>,
   engine?: RetrievalEngine | null,
-): unknown {
+): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
   switch (name) {
     case 'rag.query': {
       // Unit E — the retrieval entry point. Validates the zod input
       // ({ query, topK? }), then calls the retrieval engine's query (the SAME
-      // module the UI `rag-query` IPC calls — §8.2 MCP/UI equivalence).
+      // module the UI `rag-query` IPC calls — §8.2 MCP/UI equivalence). ASYNC
+      // (Unit F amendment) — awaits the engine's async `query`.
       const query = typeof args.query === 'string' ? args.query : ''
       if (query.trim() === '') throw new Error('rag.query: query must be a non-empty string')
       const topK = args.topK !== undefined ? args.topK : 5
@@ -176,11 +177,11 @@ export function handleRagTool(
  *  `RetrievalResult`; on an invalid query/topK it throws the same documented
  *  `rag.query` fail-states (so the IPC rejects identically to the MCP tool).
  *  Exported for direct unit testing of the equivalence. */
-export function handleRagQueryIpc(
+export async function handleRagQueryIpc(
   engine: RetrievalEngine | null,
   store: RagStore | null,
   payload: { query?: unknown; topK?: unknown },
-): unknown {
+): Promise<unknown> {
   return handleRagTool(store, 'rag.query', {
     query: payload?.query,
     topK: payload?.topK,
@@ -905,15 +906,16 @@ export class ProvidentMcpServer {
         // NOT routed to the renderer. Editing is NEVER a `code`-group op.
         if (name.startsWith('rag.')) {
           // F1 — `rag.query` uses the MAINTAINED engine (created once in main),
-          // never a per-call index rebuild.
-          return text(handleRagTool(ragStore, name, args, engine))
+          // never a per-call index rebuild. ASYNC (Unit F amendment) — awaits
+          // the engine's async `query`.
+          return text(await handleRagTool(ragStore, name, args, engine))
         }
         if (name.startsWith('edit.')) {
           // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval
           // engine's incremental index reconcile (F1) AND broadcast the
           // `rag-store-changed` re-traversal trigger to the renderer.
           const result = await handleEditTool(ragStore, name, args, (payload) => {
-            engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)
+            void engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)
             backend.broadcast?.('rag-store-changed', payload)
           })
           return text(result)
