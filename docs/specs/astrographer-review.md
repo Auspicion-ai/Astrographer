@@ -251,6 +251,8 @@ The model already supports shared nodes across documents through the **MULTI-PAR
 ### 13.2 The extension (D's spec) — also supported
 D's spec is a shared node referenced by both documents. In document B, A's spec (duplicate 1) has a `parent-child` edge to D's spec; in document C, A's spec (duplicate 2) has a `parent-child` edge to D's spec. So D's spec has two `parent-child` edges → materialized as duplicate subtrees in both documents, sharing the RAG id. A text change to D updates both. The "same explanation of D's use in function A" is the edge's content/metadata, shared across both documents.
 
+**Two-edge variant (differing explanations):** if the use case of D DIFFERS between the B and C flows, there are TWO distinct A→D edges — each with its own content (the differing explanation) and each scoped to one document (`documentIds: [B]` and `documentIds: [C]`). The model supports BOTH: one shared A→D edge with `documentIds: [B, C]` (same explanation) OR two distinct A→D edges (differing explanations). The B/C → A → D scenario is an END-TO-END test (Unit C §5.7 scenario 9/10).
+
 ### 13.3 Cost note (the tradeoff of MULTI-PARENT-DUPLICATE)
 A node referenced by N documents is materialized as N duplicate subtrees. This is the cost of respecting the engine's single-parent family model (SI-1). For a heavily-shared node (e.g. a widely-referenced spec), this is N render copies. The alternative — a single node with multiple parents — is structurally impossible in the engine. The duplicate-per-document model is the only option that respects the engine, and the back-reference map keeps all duplicates coherent (one RAG id → N node-id sets).
 

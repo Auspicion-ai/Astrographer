@@ -346,16 +346,27 @@ export interface LineNodeMap {
    map has one entry for the `ul` RAG object (its owned nodes, excluding the
    `li`s) + one entry per `li` doc-child RAG object; the line→node map maps each
    `li`'s lines to its own doc-child RAG object.
-9. **Cross-document shared node:** A's spec is called by both Class B and Class
-   C → A's spec has two `parent-child` edges (one from B's use-case node, one
-   from C's use-case node) and a `next-section` edge in BOTH documents' flows
-   (a separate `next-section` edge per document, each with one `documentIds`
-   owner). The A→D reference edge (the shared explanation of D's use in function
-   A) has `documentIds: [B, C]` (MULTIPLE document owners). The traversal
-   assembles document B and document C separately; A's spec is materialized as a
-   duplicate subtree in each, both sharing the RAG id in the back-reference map.
-   A text change to A's spec updates both duplicates (re-traversal
-   re-materializes both consistently).
+9. **E2E — cross-document shared node (B/C → A → D):** A's spec is called by
+   both Class B and Class C → A's spec has two `parent-child` edges (one from
+   B's use-case node, one from C's use-case node) and a `next-section` edge in
+   BOTH documents' flows (a separate `next-section` edge per document, each with
+   one `documentIds` owner). The A→D reference edge (the shared explanation of
+   D's use in function A) has `documentIds: [B, C]` (MULTIPLE document owners).
+   The traversal assembles document B and document C separately; A's spec is
+   materialized as a duplicate subtree in each, both sharing the RAG id in the
+   back-reference map. A text change to A's spec updates both duplicates
+   (re-traversal re-materializes both consistently). **This is an END-TO-END
+   test** — it exercises the full spine (RAG store → document model → traversal →
+   render) and MUST be run as an e2e test (store the B/C/A/D fixtures, run the
+   traversal, assert both documents render A's spec and D's spec, then mutate A's
+   text and assert both documents update).
+10. **Two distinct A→D edges (differing explanations):** if the use case of D
+    DIFFERS between the B and C flows, there are TWO distinct A→D edges — each
+    with its own content (the differing explanation) and each scoped to one
+    document (`documentIds: [B]` and `documentIds: [C]`). The traversal renders
+    the B-specific explanation in document B and the C-specific explanation in
+    document C. This is the counterpart to scenario 9 (one shared A→D edge with
+    `documentIds: [B, C]` when the explanation is the same).
 
 ### 5.8 Fail-states (TestWriter red set — documented fail-states)
 
