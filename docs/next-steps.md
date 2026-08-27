@@ -9,20 +9,36 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A–I are implemented (persistence → document model + doc-flow →
+Units A–J are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
-crosslink/backlink → sidebar panes → template customization); Unit J remains a
-later unit.
+crosslink/backlink → sidebar panes → template customization → MCP/security
+hardening).
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit J — MCP/security hardening.** Completion pass for the `rag`/`edit`
-  groups and the equivalence surface.
+_(none — Units A–J are implemented.)_
 
 ## DONE
 
+- **Unit J — MCP/security hardening (2026-08-28).** The completion/hardening
+  pass over the `rag`/`edit`/`code.template.*` tool groups + the MCP↔UI
+  equivalence surface. It AUDITS the five-seam gate (completeness, default-off,
+  read-vs-mutating split), the equivalence surface (every MCP tool with a UI IPC
+  counterpart routes through the SAME handler), the renderer switch (fails
+  closed on unknown methods), and `MUTATING_METHODS` (covers every mutating
+  method). Pins the hardening as a VERIFICATION CONTRACT (the invariants (a)–(f)
+  in `docs/specs/unit-j-mcp-security-hardening.md` §5.2) + the full tool
+  inventory (17 `rag`/`edit`/`code.template.*` tools) + the equivalence mapping
+  (§5.4). TestWriter red: **EMPTY** (the verification contract — no new
+  behavior to red-test; the invariants are verified against the already-
+  implemented Units B/D/E/G/I surfaces); blind-greens in
+  `docs/specs/unit-j-mcp-security-hardening-greens.md` (60 scenarios, all
+  pass); adversarial pass (RCA-3) in the spec §3a — **NO host findings**, three
+  LOW/informational observations (none fix-required, none in Unit J's scope);
+  documentation review (this proofreader pass — spec + greens + trackers
+  reconciled against the build); trio green (test + typecheck + build).
 - **Unit I — template customization (2026-08-28).** The content-window template
   as a stored, customizable value + the `code.template.*` CRUD + the
   template-editor pane. `src/main/template-shape.ts` (pure, no Electron): the

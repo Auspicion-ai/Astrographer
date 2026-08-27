@@ -164,7 +164,10 @@ queue-serialized, awaited). A template store via
 - **Setup:** a JSON store with `src`/`tgt` nodes + a `crosslink` edge `cl`.
 - **Ops:** `handleRagTool(store, 'rag.backlinks', { nodeId:'tgt' })`.
 - **Expected:** the `BacklinkResult` — `nodeId === 'tgt'`, `backlinks` =
-  `['cl']`, `crosslinkBacklinks` = `['cl']`.
+  `[<LinkEntry for cl>]` (an array of `LinkEntry` objects, each with
+  `edge.id === 'cl'`, `kind === 'crosslink'`, `source === 'src'`,
+  `target === 'tgt'`), `crosslinkBacklinks` = the same (the edge kind is
+  `crosslink`).
 
 ### H19. `rag.query` happy (§5.8 19)
 - **Setup:** a JSON store with `n1('hello world')`.

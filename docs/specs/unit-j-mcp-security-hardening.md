@@ -342,7 +342,7 @@ seams.
   SOURCE-SWITCHABLE); the `code.template.*` tools depend on the `TemplateStore`.
 - A tool registers ONLY when its group is allowed (the `registeredToolNames`
   gate).
-- `ProvidentMcpServerOptions` gains `ragStore?`, `retrievalEngine?`,
+- `McpServerOptions` gains `ragStore?`, `retrievalEngine?`,
   `templateStore?` (injected like `moduleStore`).
 
 **Seam 3 — `src/shared/types.ts` RpcMethod:**
