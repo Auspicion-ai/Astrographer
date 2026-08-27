@@ -69,7 +69,10 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   Implementer green in `tests/rag-store.test.ts` (§5.8/§5.9, 11 happy-path +
   11 fail-state); adversarial pass in `tests/rag-store-adversarial.test.ts`
   (host findings fixed + regression-tested); blind-greens in
-  `docs/specs/unit-a-rag-store-greens.md` (27 scenarios, all pass).
+  `docs/specs/unit-a-rag-store-greens.md` (27 scenarios, all pass);
+  documentation review in `archive/reviews/2026-08-26-unit-a-doc-review.md`
+  (spec + greens + trackers reconciled against the build); trio green (test +
+  typecheck + build).
 - **Proposal gate (2026-08-26).** Three-agent gate (validity ∥ critique →
   architecture → change-analysis) on the top-level deliverable, then a re-run
   gate on the refined two-graph model, then a focused validity check on the

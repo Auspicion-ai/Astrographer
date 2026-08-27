@@ -90,8 +90,10 @@ Each scenario lists: name, setup, operations, expected outcome (from the spec).
 ## B. §5.9 Fail-states (11)
 
 ### F1. `createJsonRagStore` bad opts
-- **Setup:** `null`, `undefined`, `{ path: '' }`, `{ path: '   ' }`.
+- **Setup:** `null`, `undefined`, `{ path: '' }`.
 - **Expected:** each throws `Error('rag store: path required')`.
+- **Note:** `{ path: '   ' }` (whitespace-only) is a NON-empty string, so it
+  does NOT throw (spec §5.3 — see the test-authoring note below).
 
 ### F2. Corrupt file boot
 - **Setup:** file with (a) invalid JSON, (b) a non-object (e.g. `[1,2,3]`),
@@ -114,8 +116,9 @@ Each scenario lists: name, setup, operations, expected outcome (from the spec).
 - **Setup:** store with `n1` only.
 - **Ops:** `putEdge` with `source:'n1', target:'ghost'`; and `source:'ghost',
   target:'n1'`.
-- **Expected:** each throws `Error('rag putEdge: source/target node not found')`;
-  the store is unchanged.
+- **Expected:** each throws
+  `Error('rag putEdge: source/target node not found or quarantined')`; the
+  store is unchanged.
 
 ### F6. `removeNode` of a nonexistent id
 - **Expected:** returns `false` (no-op, no throw).
@@ -206,8 +209,7 @@ Each scenario lists: name, setup, operations, expected outcome (from the spec).
 | C1 | Return-shape discipline | ✅ PASS |
 | C2 | Atomic write | ✅ PASS |
 | C3 | Hash-verified source | ✅ PASS |
-| C4 | Journal cap (`maxJournalLength` option) | ✅ PASS |
-| C4b | Default journal cap = 1000 | ✅ PASS |
+| C4 | Journal cap (`maxJournalLength` option, incl. default = 1000) | ✅ PASS |
 | C5 | Structural edge inversion | ✅ PASS |
 
 **Run summary:** 27 scenarios — 27 pass.
