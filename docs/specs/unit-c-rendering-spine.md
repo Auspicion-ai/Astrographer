@@ -132,7 +132,9 @@ No engine gap. ENG-GAP-1 stays a non-blocking handoff item.
 // main and renderer).
 
 export interface TraversalInput {
-  /** The RAG store (Unit A). Read-only for the traversal. */
+  /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
+   *  §5.3). The traversal depends on the interface, NOT the concrete JSON
+   *  store, so the source is switchable (JSON today, remote DB later). */
   store: RagStore
   /** The documents to materialize (RAG document ids). */
   documentIds: string[]

@@ -6,7 +6,7 @@
   (SUBTREE-OWNERSHIP), §11 (markdown export-only). Decisions:
   `docs/decisions.md` rows **SINGLE-WRITER-STORE**, **PROJECT-JOURNAL**,
   **SUBTREE-OWNERSHIP**, **RAG-AUTHORITATIVE**.
-- **Scope:** the main-process `createRagStore` persistence module — RAG
+- **Scope:** the main-process `createJsonRagStore` persistence module — RAG
   node/edge CRUD, the single-writer write queue (the lock point), the project
   journal with invertible entries, and the subtree-ownership convention on the
   RAG node/edge types. This unit does NOT implement the document model
@@ -210,7 +210,16 @@ interface RagStoreFile {
   (fail-disabled boot).
 - The file is written atomically (temp + rename) on every mutation.
 
-### 5.3 `createRagStore` factory + options
+### 5.3 The store abstraction + the JSON factory
+
+**The abstraction layer (SOURCE-SWITCHABLE):** `RagStore` (§5.4) is the
+INTERFACE the document load (the Unit C traversal) depends on — NOT the
+concrete JSON store. This is the abstraction between the JSON store and the
+document load, enabling easy source switching: the traversal reads/writes
+through `RagStore`, so the backing source can be swapped (JSON files today, a
+remote DB later) without changing the traversal. `createJsonRagStore` is the
+JSON-file implementation; a future `createRemoteRagStore` (pending — see
+`docs/pending.md`) implements the SAME `RagStore` interface.
 
 ```ts
 export interface RagStoreOptions {
@@ -218,13 +227,18 @@ export interface RagStoreOptions {
   path: string
 }
 
-export function createRagStore(opts: RagStoreOptions): RagStore
+/** The JSON-file implementation of the `RagStore` interface. */
+export function createJsonRagStore(opts: RagStoreOptions): RagStore
 ```
 
-- **Throws:** `createRagStore` throws `Error('rag store: path required')` if
+- **Throws:** `createJsonRagStore` throws `Error('rag store: path required')` if
   `opts` is null/undefined or `opts.path` is not a non-empty string. It does
   NOT throw on a corrupt/missing file (fail-disabled boot — §5.7).
 - **Return:** a `RagStore` object (§5.4).
+- **Source-switching contract:** the traversal (Unit C) and the MCP `rag`/`edit`
+  tool handlers depend on the `RagStore` INTERFACE only. They never import
+  `createJsonRagStore` directly; the store is injected (constructor/options).
+  This is what makes a remote-DB store a drop-in replacement.
 
 ### 5.4 The `RagStore` interface
 
@@ -383,7 +397,7 @@ export type StructuralJournalOp =
   `writeFileSync(tmp, JSON.stringify(payload, null, 2))` then
   `renameSync(tmp, opts.path)`, where `tmp = `${opts.path}.tmp``. A crash
   mid-write never leaves a truncated/partial store file (data loss).
-- **Fail-disabled boot:** `createRagStore` reads the file at `opts.path`. If
+- **Fail-disabled boot:** `createJsonRagStore` reads the file at `opts.path`. If
   the file is missing, the store boots empty with `corrupt: false`. If the file
   exists but fails `JSON.parse`, or is not an object, or has a non-`1`
   `version`, the store boots empty with `corrupt: true` — **never throws,
@@ -403,7 +417,7 @@ export type StructuralJournalOp =
 
 ### 5.8 Happy-path states (TestWriter red set — valid paths)
 
-1. **Fresh boot (missing file):** `createRagStore({ path: '/nonexistent.json' })`
+1. **Fresh boot (missing file):** `createJsonRagStore({ path: '/nonexistent.json' })`
    → `status()` = `{ corrupt: false, quarantined: [], loadedNodes: [], loadedEdges: [] }`.
 2. **Node create:** `putNode({ id: 'n1', type: 'p', content: 'hello', ownedNodeIds: [], createdAt, updatedAt })`
    → returns the stored node; `getNode('n1')` returns it; `listNodes()` has 1
@@ -432,7 +446,7 @@ export type StructuralJournalOp =
 
 ### 5.9 Fail-states (TestWriter red set — documented fail-states)
 
-1. **`createRagStore` with null/undefined opts or empty path** → throws
+1. **`createJsonRagStore` with null/undefined opts or empty path** → throws
    `Error('rag store: path required')`.
 2. **Corrupt file boot:** a file that fails `JSON.parse`, or is not an object,
    or has a non-`1` version → boots empty, `status().corrupt === true`, never

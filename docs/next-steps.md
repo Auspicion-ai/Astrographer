@@ -15,10 +15,13 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ### First milestone — Units A/B/C (smaller slice)
 
-- **Unit A — RAG store (persistence).** Main-process `node:fs` store
-  (module-store pattern), single-writer write queue (the lock point), and the
-  project journal with invertible entries for both content and structural ops.
-  RAG node/edge types carry the subtree-ownership convention (a RAG object
+- **Unit A — RAG store (persistence).** Main-process `createJsonRagStore`
+  (`node:fs`, module-store pattern) behind the **`RagStore` interface** (the
+  abstraction layer between the JSON store and the document load — the
+  traversal depends on the interface, so the source is switchable; a remote-DB
+  store is a pending feature). Single-writer write queue (the lock point), and
+  the project journal with invertible entries for both content and structural
+  ops. RAG node/edge types carry the subtree-ownership convention (a RAG object
   declares the provident node ids it owns).
 - **Unit B — document model + doc-flow.** RAG node/edge types; doc-flow edges
   (doc-head / next-section / doc-end) authoritative in the store, **scoped by
