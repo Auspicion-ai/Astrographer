@@ -20,6 +20,7 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
@@ -218,18 +219,25 @@ export async function handleEditTool(
   switch (name) {
     case 'edit.set_content': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
-      const content = typeof args.content === 'string' ? args.content : ''
+      // Finding 5 — pass the RAW content through (no coercion to ''). A
+      // non-string content (e.g. `content:123`) reaches the op, which returns
+      // its documented `'edit.set_content: content must be a string'`
+      // fail-state instead of silently succeeding with an empty string.
+      const content = args.content
       if (nodeId === '') throw new Error('edit.set_content: nodeId required')
-      const result = await setContent(ctx, { nodeId, content })
+      const result = await setContent(ctx, { nodeId, content: content as string })
       if (result.ok) onStoreChanged?.({ kind: 'content', nodeIds: [nodeId], edgeIds: [] })
       return result
     }
     case 'edit.create_node': {
       const type = typeof args.type === 'string' ? args.type : ''
-      const content = typeof args.content === 'string' ? args.content : ''
+      // Finding 5 — pass the RAW content through (no coercion to ''). A
+      // non-string content reaches the op, which returns its documented
+      // `'edit.create_node: content must be a string'` fail-state.
+      const content = args.content
       const parentId = typeof args.parentId === 'string' && args.parentId !== '' ? args.parentId : undefined
       const props = args.props && typeof args.props === 'object' ? (args.props as Record<string, unknown>) : undefined
-      const result = await createNode(ctx, { type, content, parentId, props })
+      const result = await createNode(ctx, { type, content: content as string, parentId, props })
       if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [] })
       return result
     }
@@ -262,9 +270,12 @@ export async function handleEditTool(
       const target = typeof args.target === 'string' ? args.target : ''
       if (kind === '' || source === '' || target === '') throw new Error('edit.set_edge: kind, source and target required')
       const edgeId = typeof args.edgeId === 'string' && args.edgeId !== '' ? args.edgeId : undefined
-      const order = typeof args.order === 'number' ? args.order : undefined
+      // Finding 5 — pass the RAW order through (no coercion to undefined). A
+      // non-number order reaches the op, which returns its documented
+      // `'edit.set_edge: order must be a number'` fail-state.
+      const order = args.order
       const documentIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]).filter((x): x is string => typeof x === 'string') : undefined
-      const result = await setEdge(ctx, { kind, source, target, edgeId, order, documentIds })
+      const result = await setEdge(ctx, { kind, source, target, edgeId, order: order as number | undefined, documentIds })
       if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
       return result
     }
@@ -924,7 +935,7 @@ export class ProvidentMcpServer {
             void engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)?.catch((e) => {
               console.error('[provident-mcp] retrieval index reconcile failed:', e)
             })
-            backend.broadcast?.('rag-store-changed', payload)
+            backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)
           })
           return text(result)
         }

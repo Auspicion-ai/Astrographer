@@ -4,12 +4,12 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
-import { setContent } from './edit-ops.js'
+import { handleEditCommit } from './edit-ops.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
 import { createVectorEmbedder, parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
@@ -178,7 +178,11 @@ async function main(): Promise<void> {
     if (!payload || typeof payload.nodeId !== 'string' || typeof payload.content !== 'string') {
       return { ok: false, reason: 'store-error', error: 'edit-commit: nodeId and content required' }
     }
-    const result = await setContent({ store: ragStore }, { nodeId: payload.nodeId, content: payload.content })
+    // Unit D §5.1.10 — the SAME edit op (`setContent`) as the MCP tool
+    // (MCP/UI equivalence — §5.7). `handleEditCommit` maps a deleted-node race
+    // (setContent's `'edit.set_content: node not found'`) to
+    // `reason:'deleted-node'` (Finding 4), NOT `store-error`.
+    const result = await handleEditCommit(ragStore, { nodeId: payload.nodeId, content: payload.content })
     if (result.ok) {
       // F1 — reconcile the maintained retrieval index incrementally, then
       // broadcast the `rag-store-changed` re-traversal trigger to the renderer.
@@ -191,9 +195,8 @@ async function main(): Promise<void> {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
       backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
-      return { ok: true, nodeId: payload.nodeId }
     }
-    return { ok: false, reason: 'store-error', error: result.error }
+    return result
   })
 
   // Unit E §5.7/§8.2 — the UI retrieval path. The `rag-query` IPC calls the SAME
@@ -203,6 +206,16 @@ async function main(): Promise<void> {
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
     return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK })
   })
+
+  // Finding 3 — the re-traversal data source. The renderer's `onRebuild`
+  // re-traversal (Unit C `buildTraversal`) needs the RAG store's nodes/edges,
+  // which live in MAIN (the single-writer store). This IPC returns a read-only
+  // snapshot so the renderer can re-derive the graph + back-reference map after
+  // a `rag-store-changed` broadcast.
+  ipcMain.handle(IPC_RAG_SNAPSHOT, () => ({
+    nodes: ragStore.listNodes(),
+    edges: ragStore.listEdges(),
+  }))
 
   // The MCP stdio transport is spawned by a client (the battery, a test, or an
   // agent). When that client disconnects, stdin closes. Exit so a test run does

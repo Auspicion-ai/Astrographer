@@ -26,7 +26,7 @@ import {
   type LegacyInitialData,
 } from 'provident-ssr'
 import { createIsolatedScope, type GraphScope } from 'provident-ssr/core/registry.js'
-import type { SecuritySettings, RpcRequest, RpcReply } from '../shared/types.js'
+import type { SecuritySettings, RpcRequest, RpcReply, RagSnapshotPayload } from '../shared/types.js'
 
 declare global {
   interface Window {
@@ -46,6 +46,10 @@ declare global {
       edit?: {
         commit(nodeId: string, content: string): Promise<{ ok: true; nodeId: string } | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }>
         onRagStoreChanged(handler: (payload: { kind: 'content' | 'structural'; nodeIds: string[]; edgeIds: string[] }) => void): () => void
+      }
+      rag?: {
+        query(query: string, topK?: number): Promise<unknown>
+        snapshot(): Promise<RagSnapshotPayload>
       }
     }
   }

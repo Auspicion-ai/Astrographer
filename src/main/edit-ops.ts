@@ -7,6 +7,7 @@
 // reaching putNode), which propagates to the caller (the MCP handler).
 import { randomUUID } from 'node:crypto'
 import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind } from './rag-store.js'
+import type { EditCommitResult } from '../shared/types.js'
 
 export interface EditOpContext {
   /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
@@ -197,6 +198,23 @@ export async function mergeNode(ctx: EditOpContext, params: { sourceId: string; 
   if (isDescendant(ctx.store, params.sourceId, params.targetId)) {
     return { ok: false, error: 'edit.merge_node: cannot merge a node into its own subtree' }
   }
+  // Finding 2 (Unit B) — reject a merge whose source carries a doc-flow role
+  // (the source of a `doc-head`/`doc-end` edge) or is mid-chain (the target of
+  // a `next-section` edge). Merging such a source would break the document's
+  // next-section chain (a predecessor's next-section would dangle at the
+  // deleted source) or leave the document headless/endless. The transfer of
+  // incoming next-section + doc-head/doc-end role edges is NOT attempted (a
+  // chain rewire is error-prone); a domain rejection is the safe, documented
+  // fail-state. Validate BEFORE mutating — no partial mutation.
+  const docFlowRole = ctx.store.listEdges().some(
+    (e) => (e.kind === 'doc-head' || e.kind === 'doc-end') && e.source === params.sourceId,
+  )
+  const midChain = ctx.store.listEdges().some(
+    (e) => e.kind === 'next-section' && e.target === params.sourceId,
+  )
+  if (docFlowRole || midChain) {
+    return { ok: false, error: 'edit.merge_node: cannot merge a node that carries a doc-flow role or is mid-chain' }
+  }
   // 1. target content = target.content + source.content
   const updatedTarget = await ctx.store.putNode({ ...target, content: target.content + source.content })
   // 2. re-parent source's parent-child children to target (L4 — skip if target
@@ -287,4 +305,27 @@ export async function setEdge(ctx: EditOpContext, params: { kind: string; source
   }
   const result = await ctx.store.putEdge(edge)
   return { ok: true, edge: result }
+}
+
+/** Unit D §5.1.10 — the UI commit-on-blur write-back result. Calls the SAME
+ *  edit op (`setContent`) as the MCP tool (MCP/UI equivalence — §5.7) and maps
+ *  the op's domain result to the `EditCommitResult` shape the renderer's
+ *  injected commit surfaces. Finding 4: a deleted-node race (the renderer's M9
+ *  guard prevents the common case, but the race window is unhandled) surfaces
+ *  as `reason:'deleted-node'` (NOT `store-error`) when `setContent` returns its
+ *  documented `'edit.set_content: node not found'` fail-state. PURE — no
+ *  Electron; the caller (main) performs the broadcast + index reconcile on
+ *  success. */
+export async function handleEditCommit(
+  store: RagStore,
+  payload: { nodeId: string; content: string },
+): Promise<EditCommitResult> {
+  const result = await setContent({ store }, { nodeId: payload.nodeId, content: payload.content })
+  if (result.ok) {
+    return { ok: true, nodeId: payload.nodeId }
+  }
+  if (result.error === 'edit.set_content: node not found') {
+    return { ok: false, reason: 'deleted-node', error: result.error }
+  }
+  return { ok: false, reason: 'store-error', error: result.error }
 }

@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload } from '../shared/types.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -14,9 +14,7 @@ export interface ModuleBridgeResult {
 }
 
 /** The Unit D §5.1.10 commit result (mirrors the controller's CommitResult). */
-export type EditCommitResult =
-  | { ok: true; nodeId: string }
-  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
+export type { EditCommitResult }
 
 /** The Unit D §5.1.9 `rag-store-changed` payload. */
 export interface RagStoreChangedPayload {
@@ -53,6 +51,11 @@ export interface ProvidentBridge {
    *  retrieval itself. */
   rag: {
     query(query: string, topK?: number): Promise<RagQueryResult>
+    /** Finding 3 — the re-traversal data source. Returns a read-only snapshot
+     *  of the RAG store (nodes + edges) so the renderer's `onRebuild` can
+     *  re-derive the graph + back-reference map after a `rag-store-changed`
+     *  broadcast. */
+    snapshot(): Promise<RagSnapshotPayload>
   }
 }
 
@@ -119,6 +122,13 @@ const bridge: ProvidentBridge = {
     query(query: string, topK?: number): Promise<RagQueryResult> {
       const payload: RagQueryPayload = { query, ...(topK !== undefined ? { topK } : {}) }
       return ipcRenderer.invoke(IPC_RAG_QUERY, payload)
+    },
+    /** Finding 3 — the re-traversal data source. Returns a read-only snapshot
+     *  of the RAG store (nodes + edges) so the renderer's `onRebuild` can
+     *  re-derive the graph + back-reference map after a `rag-store-changed`
+     *  broadcast. */
+    snapshot(): Promise<RagSnapshotPayload> {
+      return ipcRenderer.invoke(IPC_RAG_SNAPSHOT)
     },
   },
 }

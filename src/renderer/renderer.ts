@@ -5,7 +5,9 @@ import { Runtime } from './runtime.js'
 import { demoEnvelope } from '../shared/demo-envelope.js'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
+import { rebuildBackRefs } from '../main/traversal.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
+import type { RagNode, RagEdge } from '../main/rag-store.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
  *  (content/structural/re-derive). Only these trigger the app-graph-changed push
@@ -138,16 +140,26 @@ async function main(): Promise<void> {
   // dirty). The injected `commit` routes through the SAME edit op (`setContent`)
   // as the MCP tool (MCP/UI equivalence — §5.7).
   //
-  // SCOPE NOTE: the back-reference map (Unit C §5.3) and the re-traversal
-  // re-materialization (Unit C `buildTraversal`) are rendering concerns not yet
-  // wired into this entry; the controller is created with an empty backRefs map
-  // and a no-op onRebuild so the trigger path is live. The form-control editing
-  // UI (§5.6 — the provident-rendered textarea) is a follow-up scope item.
+  // Finding 3 — the re-traversal is REAL (not a no-op). `onRebuild` fetches the
+  // RAG store snapshot over the `rag-snapshot` IPC, re-derives the graph via
+  // `buildTraversal` (Unit C), and feeds the resulting back-reference map back
+  // into the controller's `backRefs` (the SOLE authoritative carrier, §5.3).
+  // The controller holds the SAME Map reference, so mutating it in place is
+  // visible to `isEditable`/`commit`/`restoreCaret`. The re-traversal is
+  // fire-and-forget (the `onRebuild` signature is sync); a fetch/re-derive
+  // failure leaves the current backRefs in place (never a crash).
+  const backRefs = new Map<string, string[]>()
   const editController = createEditController({
-    backRefs: new Map<string, string[]>(),
+    backRefs,
     commit: (nodeId, content) => bridge!.edit!.commit(nodeId, content),
     onRebuild: () => {
-      // re-traversal re-materialization (Unit C) — a rendering follow-up
+      void bridge!.rag!.snapshot().then(({ nodes, edges }) => {
+        const rebuilt = rebuildBackRefs(nodes as RagNode[], edges as RagEdge[], 'main')
+        backRefs.clear()
+        for (const [k, v] of rebuilt) backRefs.set(k, v)
+      }).catch(() => {
+        // re-traversal failure — leave the current backRefs in place
+      })
     },
   })
   bridge.edit?.onRagStoreChanged(() => {

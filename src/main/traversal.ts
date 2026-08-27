@@ -336,3 +336,22 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
 
   return { envelope, backRefs, lineMap }
 }
+
+/** Finding 3 — the renderer re-traversal re-materialization. Given a RAG store
+ *  SNAPSHOT (nodes + edges — the renderer has no store access; it fetches this
+ *  over the `rag-snapshot` IPC), re-derive the graph via `buildTraversal` and
+ *  return the resulting back-reference `Map<ragNodeId, nodeId[]>` (Unit C §5.3
+ *  — the SOLE authoritative carrier). The document ids are derived from the
+ *  `doc-head` edges' targets (the document roots). PURE — no Electron; the
+ *  renderer's `onRebuild` feeds the returned map back into the edit controller.
+ *  An empty snapshot (no doc-head edges → no documents) returns an empty map
+ *  (never throws). */
+export function rebuildBackRefs(nodes: RagNode[], edges: RagEdge[], zoneName: string): Map<string, string[]> {
+  const documentIds = [...new Set(edges.filter((e) => e.kind === 'doc-head').map((e) => e.target))]
+  if (documentIds.length === 0) return new Map<string, string[]>()
+  // buildTraversal only reads listNodes()/listEdges() — a minimal read-only
+  // adapter over the snapshot satisfies the RagStore interface.
+  const store = { listNodes: () => nodes, listEdges: () => edges } as unknown as RagStore
+  const result = buildTraversal({ store, documentIds, zoneName })
+  return result.backRefs
+}

@@ -370,6 +370,24 @@ export interface RagQueryPayload {
   topK?: number
 }
 
+/** The renderer→main `rag-snapshot` IPC (the re-traversal data source). The
+ *  renderer's `onRebuild` re-traversal (Unit C `buildTraversal`) needs the RAG
+ *  store's nodes/edges, which live in MAIN (the single-writer store). This IPC
+ *  returns a read-only snapshot so the renderer can re-derive the graph +
+ *  back-reference map after a `rag-store-changed` broadcast. */
+export const IPC_RAG_SNAPSHOT = 'provident:rag-snapshot'
+export interface RagSnapshotPayload {
+  nodes: Array<{ id: string; type: string; content: string; props?: Record<string, unknown>; ownedNodeIds: string[]; createdAt: string; updatedAt: string }>
+  edges: Array<{ id: string; kind: string; source: string; target: string; order?: number; documentIds?: string[]; createdAt: string; updatedAt: string }>
+}
+
+/** The Unit D §5.1.10 commit result (the `edit-commit` IPC reply). Mirrors the
+ *  controller's `CommitResult`; a deleted-node race surfaces as
+ *  `reason:'deleted-node'` (not `store-error`). */
+export type EditCommitResult =
+  | { ok: true; nodeId: string }
+  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
+
 /** The `rag-query` IPC result — the JSON-safe transport of the retrieval
  *  engine's `RetrievalResult` (ranked + assembled context + markdown + line map
  *  + k). Mirrors the MCP `rag.query` result so both surfaces are equivalent. */
