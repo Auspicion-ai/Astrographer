@@ -8,16 +8,15 @@ this project's local next-steps (the foundation's queue lives in the adjacent
 Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
-`docs/specs/astrographer-review.md`). The first milestone is a smaller slice:
-Units A/B/C (persistence → document model + doc-flow → rendering spine).
+`docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
+Units A/B/C/D/E are implemented (persistence → document model + doc-flow →
+rendering spine → editable text → RAG index + retrieval); Units F–J remain
+later units.
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit E — RAG index + retrieval.** Lexical-first BM25/tf-idf behind an
-  interface-swappable `Embedder`; graph traversal for context assembly;
-  deterministic and testable.
 - **Unit F — embeddings.** Vector embeddings behind the `Embedder` interface
   (deferred; local-first, no network egress).
 - **Unit G — crosslink/backlink.** Custom crosslink `LinkConfig` (open name
@@ -48,6 +47,31 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   blind-greens in `docs/specs/unit-d-editing-greens.md` (38 scenarios, all
   pass); documentation review in
   `archive/reviews/2026-08-27-unit-d-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (test + typecheck + build).
+- **Unit E — RAG index + retrieval (2026-08-27).** `src/main/retrieval.ts`
+  (pure, no Electron — operates on the `RagStore` INTERFACE, Unit A §5.4):
+  tokenization + the lexical index (§5.1 — `tokenize`/`DEFAULT_STOPWORDS`/
+  `createLexicalIndex`/`updateLexicalIndex`/`addToLexicalIndex`/
+  `removeFromLexicalIndex`), the interface-swappable `Embedder` + the lexical
+  (BM25) implementation (§5.2 — `createLexicalEmbedder`, `score`, `place`,
+  `PLACEMENT_MIN_SCORE`), selection (§5.3 — `selectTopK`), bounded graph
+  traversal for context assembly + the coarse line→node map (§5.4 —
+  `assembleContext`), the retrieval entry point (§5.5 — `retrieve`), and the
+  maintained retrieval engine (§5.6 — `createRetrieval`, index reconciled
+  incrementally on `onStoreChanged`, never rebuilt per query). The `rag.query`
+  MCP tool (FULL handler in `src/main/mcp-server.ts` `handleRagTool`) + the
+  `rag-query` IPC (MCP/UI equivalence — §5.7/§8.2) both use the SAME maintained
+  engine, created once in `src/main/main.ts` with the store + the lexical
+  embedder (F1) and wired into the `edit.*` broadcast + the `IPC_EDIT_COMMIT`
+  handler; `IPC_RAG_QUERY`/`RagQueryPayload`/`RagQueryResult` in
+  `src/shared/types.ts`; `rag.query` on the preload bridge (`src/main/preload.ts`).
+  TestWriter red → Implementer green in `tests/retrieval.test.ts` (RED marker:
+  `src/main/retrieval.ts` did not exist → 51 tests pass); adversarial pass in
+  `tests/retrieval-adversarial.test.ts` (10 regression tests — host findings
+  F1–F7 fixed + regression-tested, recorded in the spec §3a); blind-greens in
+  `docs/specs/unit-e-rag-index-greens.md` (52 scenarios, all pass);
+  documentation review in
+  `archive/reviews/2026-08-27-unit-e-doc-review.md` (spec + greens + trackers
   reconciled against the build); trio green (test + typecheck + build).
 - **Unit A — RAG store (persistence) (2026-08-26).** `createJsonRagStore`
   implemented in `src/main/rag-store.ts` behind the `RagStore` interface:

@@ -194,7 +194,8 @@ export function removeFromLexicalIndex(index: LexicalIndex, nodeId: string): voi
 **Tokenization rules** (`tokenize(text)`):
 
 - Lowercase the input.
-- Split on runs of non-alphanumeric characters (`/[^a-z0-9]+/`).
+- Split on runs of non-alphanumeric characters (`/[^\p{L}\p{N}]+/u` — Unicode
+  letters/numbers; ASCII behavior unchanged, per the F6 fix in §3a).
 - Drop empty tokens.
 - Drop tokens in the stopword set (default `DEFAULT_STOPWORDS`).
 - Returns the token array in order. Deterministic.
@@ -385,10 +386,15 @@ export function assembleContext(store: RagStore, topK: ScoredNode[], opts: Assem
 
 **Line→node map (first-class assembly output):**
 
-- The assembly step renders the context to markdown (via the render path —
-  Unit C's `buildTraversal` + `renderProducingProcess` + `MarkdownAdapter`) and
-  produces the coarse line→node map: each context RAG object → its line range
-  in the rendered markdown.
+- The assembly step renders the context to markdown via `assembleContext`'s
+  LOCAL renderer (`renderNode`/`buildMarkdown` — a per-`node.type` switch over
+  the assembled context RAG nodes, building the markdown lines + line ranges).
+  It does NOT invoke Unit C's full-document render path (`buildTraversal` +
+  `renderProducingProcess` + `MarkdownAdapter`) — the context assembly is a
+  targeted subset, so it renders only the assembled nodes. The MCP tool
+  (`rag.query`) and the UI IPC (`rag-query`) BOTH call the same engine →
+  `assembleContext`, so the markdown/line-map output is identical across the
+  equivalence surface (§5.7).
 - **Coarse by design:** all lines of a subtree's markdown map to the owning RAG
   object (the whole `ul`+`li` chunk), so the agent cites the RAG object, not a
   leaf (§10.3 Q3). Per-leaf citation is impossible by design (MarkdownAdapter
@@ -651,8 +657,8 @@ default-off). Unit E implements the FULL handler behavior:
 - **Retrieval outputs:** 5 (`ranked`, `context`, `markdown`, `lineMap`, `k`).
 - **Edge kinds followed in traversal:** 5 (`next-section`, `parent-child`,
   `doc-child`, `doc-head`, `doc-end`).
-- **`rag.*` tools:** 5 (registered in Unit B §5.5); Unit E implements the FULL
-  behavior of `rag.query` (the retrieval entry point).
+- **`rag.*` tools:** 5 (registered in Unit B §5.3 — the five-seam gate); Unit E
+  implements the FULL behavior of `rag.query` (the retrieval entry point).
 - **IPC method:** 1 (`rag-query`, renderer → main — the UI retrieval path).
 
 ### 5.11 Cross-references
@@ -664,7 +670,7 @@ default-off). Unit E implements the FULL handler behavior:
   `next-section`/`doc-head`/`doc-end`/`doc-child`/`parent-child`), §5.3
   (five-seam gate — the `rag` group), §5.4 (the `rag.query` tool schema).
 - Unit C: `docs/specs/unit-c-rendering-spine.md` §5.6 (the coarse line→node
-  map — the first-class assembly output), §5.2 (the render path —
+  map — the first-class assembly output), §5.4 (the render path —
   `buildTraversal` + `renderProducingProcess` + `MarkdownAdapter`).
 - Unit D: `docs/specs/unit-d-editing.md` §5.1.9 (the `rag-store-changed` event —
   the index-consistency trigger), §5.1.10 (the `edit-commit` IPC — the UI
