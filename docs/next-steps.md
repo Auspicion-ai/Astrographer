@@ -38,7 +38,11 @@ crosslink/backlink → sidebar panes); Units I–J remain later units.
   `searchContent`. TestWriter red → Implementer green in
   `tests/sidebar-panes.test.ts` (RED marker: `src/renderer/pane-registry.js` +
   `pane-graph.js` did not exist → 48 node-tested tests pass; §5.8 22–25 /
-  §5.9 15–16/18 are renderer-dependent, skipped by design and verified by code
+  §5.9 15–16/18 are renderer-dependent, skipped by design and verified by code — the renderer host (`src/renderer/sidebar-panes.ts` — the
+   `SidebarPanes` `loadAppGraph`/`mountOperator`/`refresh` + the `renderer.ts`
+   pane wiring) is a DOCUMENTED DEFERRAL per the spec §3a: Unit H landed the
+   PURE modules only (`pane-registry.ts` + `pane-graph.ts`); the isolated-
+   GraphScope renderer mount lands with the UI mount
   review); adversarial pass in `tests/sidebar-panes-adversarial.test.ts` (12
   regression tests — host findings H1–H4/H6 fixed + regression-tested, recorded
   in the spec §3a; no unauthorized-access finding — the operator-isolation seam
