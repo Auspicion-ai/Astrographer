@@ -398,6 +398,10 @@ export function retrieve(store: RagStore, embedder: Embedder, index: LexicalInde
 
 - `k` defaults to 5; `maxNodes` defaults to 50; `maxDepth` defaults to 3.
 - Scores all nodes via `selectTopK(embedder, query, store.listNodes(), k)`.
+- **`ranked` excludes zero-score nodes** (relevant results only): after
+  `selectTopK`, `retrieve` drops nodes whose score is 0 (a node with no matching
+  terms is not a relevant result). `selectTopK` itself MAY return score-0 nodes
+  (§5.3); `retrieve`'s `ranked` filters them.
 - Assembles the context via `assembleContext(store, ranked, { maxNodes,
   maxDepth })`.
 - Returns the `RetrievalResult`.

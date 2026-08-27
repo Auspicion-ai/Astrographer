@@ -24,6 +24,7 @@ import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
+import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -116,10 +117,19 @@ export function handleRagTool(store: RagStore | null, name: string, args: Record
   if (!store) throw new Error(`${name}: no rag store configured`)
   switch (name) {
     case 'rag.query': {
-      // Unit E implements the retrieval; registered here with a placeholder.
+      // Unit E — the retrieval entry point. Validates the zod input
+      // ({ query, topK? }), then calls the retrieval engine's query (the SAME
+      // module the UI `rag-query` IPC calls — §8.2 MCP/UI equivalence).
       const query = typeof args.query === 'string' ? args.query : ''
-      const topK = typeof args.topK === 'number' ? args.topK : undefined
-      return { query, topK, results: [], lineMap: {} }
+      if (query.trim() === '') throw new Error('rag.query: query must be a non-empty string')
+      const topK = args.topK !== undefined ? args.topK : 5
+      if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1) {
+        throw new Error('rag.query: topK must be a positive integer')
+      }
+      const index = createLexicalIndex(store.listNodes())
+      const embedder = createLexicalEmbedder(index)
+      const engine = createRetrieval(store, embedder)
+      return engine.query(query, { k: topK })
     }
     case 'rag.get_document': {
       // Finding 4 (known behavior, no code change): this is a PLACEHOLDER —
