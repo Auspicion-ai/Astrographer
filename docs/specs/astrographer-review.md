@@ -277,4 +277,17 @@ The user asked to include STRUCTURAL element types (e.g. `div`) as valid RAG nod
 - **Document model (Unit B §5.1):** a `div` root is a valid node root for grouping unstructured text lines into one semantic chunk.
 - **Traversal (Unit C):** a `div` RAG object is emitted as a `div` content root with its text-line children; the whole subtree is one RAG object / one embedding.
 
+---
+
+## 15. Speculative features (2026-08-26) — RAG versioning + RBAC to versions
+
+The user marked two SPECULATIVE features (recorded in `docs/pending.md`):
+
+1. **RAG object versioning by journal timestamps.** The project journal (Unit A §5.6) already records invertible entries with timestamps. Versioning would reconstruct a RAG object's state at a given journal timestamp (point-in-time snapshot).
+2. **RBAC to selective versions.** Role-based access control to SPECIFIC versions of RAG objects — e.g. test/users have READ-ONLY access to the LTS version, while developers can edit the dev version.
+
+**Example use case:** preserve the documentation for a long-term-stable (LTS) build while development continues; test/users only have read-access to LTS.
+
+Both are SPECULATIVE — revisit when the project journal lands (versioning) and when versioning lands (RBAC). They build on the project journal + the foundation's security model (tool groups, `security.ts`).
+
 This refines the "relevant document lines" requirement: the line→node map is still produced by the assembly step (so the agent can cite the owning RAG object), but it is a READ aid, not a write-back path. The primary agent write path is direct MCP `edit`-group mutations to the RAG store.
