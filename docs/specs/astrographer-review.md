@@ -256,4 +256,7 @@ D's spec is a shared node referenced by both documents. In document B, A's spec 
 ### 13.3 Cost note (the tradeoff of MULTI-PARENT-DUPLICATE)
 A node referenced by N documents is materialized as N duplicate subtrees. This is the cost of respecting the engine's single-parent family model (SI-1). For a heavily-shared node (e.g. a widely-referenced spec), this is N render copies. The alternative — a single node with multiple parents — is structurally impossible in the engine. The duplicate-per-document model is the only option that respects the engine, and the back-reference map keeps all duplicates coherent (one RAG id → N node-id sets).
 
+### 13.4 Pending feature — shared-node edit UX (recorded in `docs/pending.md`)
+When a user/agent edits a section (RAG node) that is incorporated into MORE THAN ONE document (a CROSS-DOCUMENT-SHARED node), NOTIFY them that the node is shared across N documents. When the document would save, PROMPT whether the text should be changed for ALL owners (update all duplicates) or whether SOME should be preserved on a CLONE of the original (fork the node for one document, leaving the others unchanged). This is a SPECULATIVE feature — revisit when the editing path (Unit D) lands and the cross-document shared-node model is implemented.
+
 This refines the "relevant document lines" requirement: the line→node map is still produced by the assembly step (so the agent can cite the owning RAG object), but it is a READ aid, not a write-back path. The primary agent write path is direct MCP `edit`-group mutations to the RAG store.
