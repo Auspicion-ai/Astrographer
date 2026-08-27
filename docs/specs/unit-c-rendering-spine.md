@@ -123,8 +123,13 @@ markdown-parsing-to-storage will use text-match diffing — see
 - **CROSS-DOCUMENT-SHARED:** a RAG node can appear in MULTIPLE documents. The
   traversal assembles EACH document's flow (scoped by `documentIds`), resolving
   a shared node as a duplicate subtree per document (MULTI-PARENT-DUPLICATE). A
-  text change to a shared node updates all its duplicates. (User clarity check
-  2026-08-26 — review §13.)
+  text change to a shared node updates all its duplicates. **Material-state
+  nuance (2026-08-26):** the duplicates are PER-RENDER materializations; render
+  is transient. In the single-document view only ONE document renders at a time,
+  so only ONE instance of a shared subtree exists at any moment (documents
+  cannot loop in one view). The N duplicates COEXIST only if multiple documents
+  render simultaneously — which requires UI TABS (a pending feature,
+  `docs/pending.md`). (User clarity check 2026-08-26 — review §13.)
 
 ## 5. The exhaustive contract
 
