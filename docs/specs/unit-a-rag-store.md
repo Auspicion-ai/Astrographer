@@ -168,8 +168,9 @@ export interface RagEdge {
    *  A→D edge carrying the shared explanation of D's use in function A) is used
    *  by both document B and document C, so it lists both (CROSS-DOCUMENT-SHARED,
    *  review §13). A `next-section` edge's TARGET (the next section) differs per
-   *  document, so those are separate edges each with ONE owner. Absent for
-   *  `parent-child`/`doc-child`. */
+   *  document, so those are separate edges each with ONE owner. Allowed on ANY
+   *  edge kind (CROSS-DOCUMENT-SHARED — an edge can have multiple document
+   *  owners), including `parent-child`/`doc-child`. */
   documentIds?: string[]
   createdAt: string
   updatedAt: string
@@ -185,9 +186,10 @@ export interface RagEdge {
 - `RagEdge.id` — non-empty string. `kind` — one of the closed `RagEdgeKind`
   union. `source`/`target` — non-empty strings (RAG node ids). `createdAt`/
   `updatedAt` — ISO-8601 strings.
-- **Per-kind field enforcement:** `order` is only valid on `doc-child` edges;
-  `documentIds` is only valid on doc-flow kinds (`doc-head`/`next-section`/
-  `doc-end`). A field on the wrong kind is rejected.
+- **Per-kind field enforcement:** `order` is only valid on `doc-child` edges.
+  `documentIds` is allowed on ANY edge kind (CROSS-DOCUMENT-SHARED — an edge can
+  have multiple document owners), not just doc-flow kinds. A field on the wrong
+  kind is rejected.
 - **Self-referential edges rejected:** an edge with `source === target` is
   rejected.
 - **Prototype-pollution keys rejected:** `props`/`ownedNodeIds`/`documentIds`

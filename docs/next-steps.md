@@ -13,18 +13,6 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ## OPEN
 
-### First milestone — Unit C (Units A/B done)
-
-- **Unit C — rendering spine.** Main-process traversal producing TWO outputs —
-  the `LegacyInitialData` envelope AND the back-reference `Map<ragNodeId,
-  nodeId[]>` — envelope shipped to the renderer for `translateLegacy` →
-  `renderProducingProcess`. Each RAG object's subtree emitted as a
-  `ContentPayload.content[]` root with `placement.targetPlacement`, attached
-  into a root-visible zone. **Hard precondition:** the traversal must also emit a
-  `container`-role producer (`placementName`) for every targeted zone, or the
-  subtree stays `unplaced` and won't render. Multi-parent duplicate coherence;
-  the coarse line→node map; MCP/UI equivalence verified on the spine.
-
 ### Later units (noted, not in this slice)
 
 - **Unit D — editable text.** Commit-on-blur write-back to the RAG store →
@@ -81,6 +69,28 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   `archive/reviews/2026-08-26-unit-b-doc-review.md` (spec + greens + trackers
   reconciled against the build); trio green (test 735 pass / 2 skip, typecheck
   clean, build clean — full suite no regressions).
+- **Unit C — rendering spine (2026-08-26).** `buildTraversal` in
+  `src/main/traversal.ts` (pure, no Electron): the `LegacyInitialData` envelope
+  (one container producer per targeted zone — the HARD PRECONDITION — + one
+  `ContentPayload` per RAG subtree), the back-reference `Map<ragNodeId,
+  nodeId[]>` (the SOLE authoritative carrier, built by running `translateLegacy`
+  and mapping each subtree root by its stable `rag-<id>` id), and the coarse
+  line→node map. Doc-child nesting (a parent's subtree CONTAINS its doc-children
+  at their `order` positions; the parent's owned set EXCLUDES the doc-children's
+  nodes), multi-parent duplicate coherence, doc-flow fallback to family
+  pre-order, and the doc-head marker prop. TestWriter red: 20 failing (module
+  not found — `src/main/traversal.ts` did not exist) → Implementer green: 20
+  pass in `tests/traversal.test.ts` (§5.7/§5.8, 16 happy-path + fail-state) +
+  `tests/traversal-e2e.test.ts` (scenarios 9-10, 4 tests); adversarial pass
+  (HOST findings fixed + regression-tested — 5 regression tests in
+  `tests/traversal.test.ts`): real markdown line ranges (rendered via
+  `renderProducingProcess` + `MarkdownAdapter`), parent back-refs exclude
+  doc-children, per-document doc-child exclusion scoping, `documentIds` dedup,
+  and RAG-node `props` propagation to the subtree root; blind-greens in
+  `docs/specs/unit-c-rendering-spine-greens.md` (18 scenarios, all pass);
+  documentation review in `archive/reviews/2026-08-26-unit-c-doc-review.md`
+  (spec + greens + trackers reconciled against the build); trio green (test 761
+  pass / 2 skip, typecheck clean, build clean — full suite no regressions).
 - **Proposal gate (2026-08-26).** Three-agent gate (validity ∥ critique →
   architecture → change-analysis) on the top-level deliverable, then a re-run
   gate on the refined two-graph model, then a focused validity check on the
@@ -90,8 +100,8 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   markdown-export-only decision.
 - **Spec gate (2026-08-26).** The first-slice contracts are written and
   verified in the compile-horizon-review format:
-  `docs/specs/unit-a-rag-store.md` (505 lines), `docs/specs/unit-b-document-model.md`
-  (401 lines), `docs/specs/unit-c-rendering-spine.md` (381 lines). Each is
+  `docs/specs/unit-a-rag-store.md` (526 lines), `docs/specs/unit-b-document-model.md`
+  (431 lines), `docs/specs/unit-c-rendering-spine.md` (446 lines). Each is
   exhaustive enough for a TestWriter to derive every state and fail-state from
   §5.8/§5.9. **Unit C pinned a reconciliation key:** the back-reference map is
   built by the main-process traversal running `translateLegacy`, but the

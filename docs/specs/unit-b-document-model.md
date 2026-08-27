@@ -266,7 +266,10 @@ with no signal.
 **Fallback (family pre-order):** on any violation (`ok: false`), the traversal
 falls back to **family pre-order** — the order defined by the `parent-child`
 edges (a pre-order walk of the family tree). The fallback is deterministic and
-never throws.
+never throws. **Fallback ordering note (finding 5):** the traversal's fallback
+is STORE INSERTION ORDER (the order nodes were added to the store), not a tree
+pre-order — the node SET is correct (the document's nodes), but the ordering is
+deterministic insertion order, not a pre-order walk of the family tree.
 
 **Fail-states (TestWriter red set):**
 

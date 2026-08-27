@@ -247,7 +247,7 @@ describe('RagStore — adversarial regression (HOST findings)', () => {
     }
   })
 
-  it('per-kind enforcement: order only on doc-child; documentIds only on doc-flow kinds', async () => {
+  it('per-kind enforcement: order only on doc-child; documentIds allowed on any kind', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -257,10 +257,11 @@ describe('RagStore — adversarial regression (HOST findings)', () => {
       await expect(store.putEdge(makeEdge('e1', 'n1', 'n2', { order: 1 }))).rejects.toThrow()
       // order on doc-child → ok
       await expect(store.putEdge(makeEdge('e1', 'n1', 'n2', { kind: 'doc-child', order: 1 }))).resolves.toBeDefined()
-      // documentIds on a non-doc-flow kind → reject
-      await expect(store.putEdge(makeEdge('e2', 'n1', 'n2', { documentIds: ['d1'] }))).rejects.toThrow()
+      // documentIds on a non-doc-flow kind (parent-child) → ok (CROSS-DOCUMENT-SHARED)
+      await expect(store.putEdge(makeEdge('e2', 'n1', 'n2', { documentIds: ['d1'] }))).resolves.toBeDefined()
+      expect(store.getEdge('e2')!.documentIds).toEqual(['d1'])
       // documentIds on a doc-flow kind → ok
-      await expect(store.putEdge(makeEdge('e2', 'n1', 'n2', { kind: 'doc-head', documentIds: ['d1'] }))).resolves.toBeDefined()
+      await expect(store.putEdge(makeEdge('e3', 'n1', 'n2', { kind: 'doc-head', documentIds: ['d1'] }))).resolves.toBeDefined()
     } finally {
       rmSyncSafe(dir)
     }
@@ -402,6 +403,27 @@ describe('RagStore — adversarial regression (HOST findings)', () => {
       expect(reloaded.getNode('n1')).toBeUndefined()
       expect(reloaded.getEdge('e1')).toBeUndefined()
       expect(reloaded.listNodes().map((n) => n.id)).toContain('n2')
+    } finally {
+      rmSyncSafe(dir)
+    }
+  })
+
+  it('CROSS-DOCUMENT-SHARED: a parent-child edge may carry documentIds and round-trips; invalid documentIds still rejected', async () => {
+    const dir = freshDir()
+    try {
+      const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
+      await store.putNode(makeNode('n1'))
+      await store.putNode(makeNode('n2'))
+      // A non-doc-flow (parent-child) edge with MULTIPLE document owners is
+      // accepted (CROSS-DOCUMENT-SHARED — an edge can have multiple document
+      // owners) and the documentIds are preserved on read.
+      await store.putEdge(makeEdge('e1', 'n1', 'n2', { documentIds: ['B', 'C'] }))
+      expect(store.getEdge('e1')!.kind).toBe('parent-child')
+      expect(store.getEdge('e1')!.documentIds).toEqual(['B', 'C'])
+
+      // Invalid documentIds on a parent-child edge are still rejected.
+      await expect(store.putEdge(makeEdge('e2', 'n1', 'n2', { documentIds: ['B', 42 as never] }))).rejects.toThrow()
+      await expect(store.putEdge(makeEdge('e3', 'n1', 'n2', { documentIds: [''] }))).rejects.toThrow()
     } finally {
       rmSyncSafe(dir)
     }

@@ -141,8 +141,8 @@ markdown-parsing-to-storage will use text-match diffing — see
 
 export interface TraversalInput {
   /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
-   *  §5.3). The traversal depends on the interface, NOT the concrete JSON
-   *  store, so the source is switchable (JSON today, remote DB later). */
+   *  Unit A §5.3). The traversal depends on the interface, NOT the concrete
+   *  JSON store, so the source is switchable (JSON today, remote DB later). */
   store: RagStore
   /** The documents to materialize (RAG document ids). */
   documentIds: string[]
@@ -341,10 +341,17 @@ export interface LineNodeMap {
    `props['data-doc-head'] = true`.
 4. **Doc-flow violation → fallback:** a document with a `next-section` cycle →
    the traversal falls back to family pre-order (no throw); the envelope still
-   renders.
+   renders. **Fallback ordering note (finding 5):** the "family pre-order"
+   fallback is STORE INSERTION ORDER (the order nodes were added to the store),
+   not a tree pre-order — the node SET is correct (the document's nodes), but
+   the ordering is deterministic insertion order, not a pre-order walk of the
+   family tree.
 5. **Multi-parent node:** a RAG node with two `parent-child` edges →
    materialized as two duplicate subtrees, both sharing the RAG id in the
-   back-reference map.
+   back-reference map. **Complement (finding 4):** a SINGLE-parent,
+   non-section, non-doc-child RAG node is NEVER materialized as its own content
+   root — it is expected to be reached via its parent's subtree or a later
+   unit.
 6. **Render path:** the envelope loads through `provident.load` (MCP) and
    `loadEnvelope` (UI) → `translateLegacy` → `renderProducingProcess` produces
    the `CompiledState[]`; the RAG subtrees render in the root-visible zone.
@@ -360,8 +367,9 @@ export interface LineNodeMap {
    both Class B and Class C → A's spec has two `parent-child` edges (one from
    B's use-case node, one from C's use-case node) and a `next-section` edge in
    BOTH documents' flows (a separate `next-section` edge per document, each with
-   one `documentIds` owner). The A→D reference edge (the shared explanation of
-   D's use in function A) has `documentIds: [B, C]` (MULTIPLE document owners).
+   one `documentIds` owner). The A→D reference edge (a `next-section` edge in
+   the document flow — the shared explanation of D's use in function A) has
+   `documentIds: [B, C]` (MULTIPLE document owners).
    The traversal assembles document B and document C separately; A's spec is
    materialized as a duplicate subtree in each, both sharing the RAG id in the
    back-reference map. A text change to A's spec updates both duplicates
@@ -371,12 +379,13 @@ export interface LineNodeMap {
    traversal, assert both documents render A's spec and D's spec, then mutate A's
    text and assert both documents update).
 10. **Two distinct A→D edges (differing explanations):** if the use case of D
-    DIFFERS between the B and C flows, there are TWO distinct A→D edges — each
-    with its own content (the differing explanation) and each scoped to one
-    document (`documentIds: [B]` and `documentIds: [C]`). The traversal renders
-    the B-specific explanation in document B and the C-specific explanation in
-    document C. This is the counterpart to scenario 9 (one shared A→D edge with
-    `documentIds: [B, C]` when the explanation is the same).
+    DIFFERS between the B and C flows, there are TWO distinct A→D `next-section`
+    edges — each with its own content (the differing explanation) and each scoped
+    to one document (`documentIds: [B]` and `documentIds: [C]`). The traversal
+    renders the B-specific explanation in document B and the C-specific
+    explanation in document C. This is the counterpart to scenario 9 (one shared
+    A→D `next-section` edge with `documentIds: [B, C]` when the explanation is
+    the same).
 
 ### 5.8 Fail-states (TestWriter red set — documented fail-states)
 
@@ -395,6 +404,8 @@ export interface LineNodeMap {
    deleted node.
 5. **Doc-flow validation failure** (cycle/missing-node/missing-head) → the
    traversal falls back to family pre-order (no throw) — Unit B §5.2.
+   **Fallback ordering note (finding 5):** the fallback is STORE INSERTION
+   ORDER, not a tree pre-order (see §5.7.4).
 6. **A RAG node with no `ownedNodeIds`** → the traversal derives the owned set
    from the subtree structure (the content root + its children); the
    back-reference map still records the RAG object → its subtree's node ids.
@@ -414,7 +425,10 @@ export interface LineNodeMap {
 - **ContentPayloads:** exactly one per RAG subtree (a doc-child's nested
   subtree is emitted WITHIN its parent's subtree, not as a separate
   ContentPayload — the doc-child's content root is a child of the parent's
-  content root).
+  content root). **Edge case (finding 8):** a node that is BOTH a section AND a
+  doc-child of another section is materialized TWICE — once as its own section
+  ContentPayload and once nested within its parent's subtree (the section and
+  doc-child roles are treated as mutually exclusive).
 - **Back-reference map:** one entry per RAG object; values are the owned provident
   node ids (≥ 1 per subtree root). A doc-child RAG object has its own entry
   (its owned nodes, EXCLUDING any deeper doc-children).

@@ -24,7 +24,9 @@
 //     [0, journal.length].
 //   - undo/redo do NOT advance the cursor when the inverse/forward op cannot be
 //     applied (out-of-band record removal is surfaced, not swallowed).
-//   - Per-kind order/documentIds enforcement; createdAt preserved on update;
+//   - Per-kind order enforcement; documentIds allowed on ANY edge kind
+//     (CROSS-DOCUMENT-SHARED — an edge can have multiple document owners);
+//     createdAt preserved on update;
 //     self-referential edges rejected; prototype-pollution keys rejected;
 //     empty-string/duplicate ids rejected.
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
@@ -151,7 +153,6 @@ interface RagStoreFile {
 
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
 const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child'])
-const DOC_FLOW_KINDS = new Set<string>(['doc-head', 'next-section', 'doc-end'])
 const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
 const DEFAULT_MAX_JOURNAL_LENGTH = 1000
 
@@ -275,7 +276,6 @@ function validateEdgeShape(input: unknown): EdgeShapeResult {
   if (e.order !== undefined && e.kind !== 'doc-child') return { ok: false, field: 'order' }
   if (e.documentIds !== undefined && (!Array.isArray(e.documentIds) || !e.documentIds.every((x) => typeof x === 'string'))) return { ok: false, field: 'documentIds' }
   if (e.documentIds !== undefined && e.documentIds.some((x) => x === '')) return { ok: false, field: 'documentIds' }
-  if (e.documentIds !== undefined && !DOC_FLOW_KINDS.has(e.kind)) return { ok: false, field: 'documentIds' }
   if (!isIso8601(e.createdAt)) return { ok: false, field: 'createdAt' }
   if (!isIso8601(e.updatedAt)) return { ok: false, field: 'updatedAt' }
   return {

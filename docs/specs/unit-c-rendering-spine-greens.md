@@ -67,15 +67,15 @@ document-root node ids.
   `doc-head C-head→C-root`, `next-section B-head→B-use, B-use→A, A→D`
   (`documentIds:['B-root']`), `next-section C-head→C-use, C-use→A, A→D`
   (`documentIds:['C-root']`), `doc-end D→B-root`, `doc-end D→C-root`,
-  `parent-child B-use→A`, `parent-child C-use→A`, `parent-child A→D`.
+  `parent-child B-use→A`, `parent-child C-use→A`.
 - **Ops:** `buildTraversal({ store, documentIds:['B-root','C-root'], zoneName:'main' })`.
 - **Expected:** A is materialized as TWO duplicate subtrees (two content roots
   with `props.id='rag-A'`, one per document); backRefs has one entry for A whose
   value is the union of both duplicate subtrees' node ids (length 2).
 - **Note:** MULTI-PARENT-DUPLICATE manifests per-document (a shared node in N
-  documents → N duplicate subtrees). Within a single document a multi-parent
-  node is materialized once (in the doc-flow chain) — see §5.7.5 phrasing note
-  in the findings.
+  documents → N duplicate subtrees). Within a single document, a multi-parent
+  node (≥2 `parent-child` parents) is ALSO materialized as duplicate subtrees —
+  one per parent (see §5.7.5 and the findings).
 
 ### S6. Render path (envelope loads through `provident.load` + `loadEnvelope`)
 - **Setup:** nodes `root, H(h1,'Title'), A(p,'Body text')`; edges `doc-head
@@ -229,26 +229,35 @@ document-root node ids.
   `buildTraversal`. The envelope shape, container-producer emission, backRefs
   shape, lineMap shape, doc-head marker, doc-child nesting, multi-parent
   duplicate, and all fail-states match the spec.
+- **Known behaviors (documented in the code, not blind-test failures — flagged
+  for the doc review, now pinned in the spec):** (finding 4) a SINGLE-parent,
+  non-section, non-doc-child RAG node is NEVER materialized as its own content
+  root; (finding 5) the "family pre-order" fallback is STORE INSERTION ORDER,
+  not a tree pre-order; (finding 8) a node that is BOTH a section AND a doc-child
+  is materialized TWICE (once as its own section ContentPayload, once nested in
+  its parent's subtree). These are documented known behaviors, not drifts the
+  blind test could catch (the spec did not name them).
 
 ### Spec-internal tensions (not traversal drifts — flagged for the doc review)
 
-- **`documentIds` on a `parent-child` reference edge (Unit A vs Unit C).** Unit C
-  §5.7 scenario 9 describes the A→D reference edge as carrying
-  `documentIds: [B, C]` (MULTIPLE document owners). Unit A §5.1 shape rule
-  restricts `documentIds` to doc-flow kinds (`doc-head`/`next-section`/`doc-end`),
-  and the live store REJECTS a `parent-child` edge with `documentIds`
-  (`rag putEdge: documentIds required/invalid`). The E2E scenario was therefore
-  run with a `parent-child` A→D edge WITHOUT `documentIds`; the core claims
-  (A shared → duplicate subtree per document; text change updates both) all hold.
-  The `documentIds`-on-a-reference-edge representation is a spec-internal
-  contradiction between Unit A §5.1 and Unit C §5.7/Unit B §5.1 — a documentation
-  reconciliation item, not a traversal defect.
-- **§5.7.5 "two parent-child edges → two duplicate subtrees" phrasing.** Within a
-  single document a multi-parent node is materialized ONCE (in the doc-flow
-  chain); the duplicate materialization is per-document (a shared node in N
-  documents → N duplicate subtrees), consistent with §5.5 and the material-state
-  nuance in §4. S5 tests the cross-document case. The §5.7.5 wording is imprecise
-  but the intent (MULTI-PARENT-DUPLICATE) is honored.
+- **`documentIds` on the A→D reference edge (Unit A vs Unit C) — RESOLVED.**
+  Unit C §5.7 scenario 9 describes the A→D reference edge as carrying
+  `documentIds: [B, C]` (MULTIPLE document owners). The A→D edge is a
+  `next-section` edge in the document flow (scenario 9/10). Unit A §5.1 was
+  extended so `documentIds` is allowed on ANY edge kind (CROSS-DOCUMENT-SHARED),
+  and the live store accepts it — the earlier contradiction (Unit A restricting
+  `documentIds` to doc-flow kinds) is resolved. The E2E scenario runs with the
+  shared `next-section` A→D edge carrying `documentIds: ['docB', 'docC']`; the
+  core claims (A shared → duplicate subtree per document; text change updates
+  both) all hold.
+- **§5.7.5 "two parent-child edges → two duplicate subtrees" — accurate.** The
+  spec's §5.7.5 wording is correct: within a single document, a multi-parent
+  node (≥2 `parent-child` parents) is materialized as duplicate subtrees — one
+  per parent (traversal test 5). The per-document duplicate (a shared node in N
+  documents → N duplicate subtrees) is the cross-document manifestation of the
+  same MULTI-PARENT-DUPLICATE rule, consistent with §5.5 and the material-state
+  nuance in §4. S5 tests the cross-document case; the single-document case is
+  covered by the traversal test suite.
 
 ### Test-authoring notes (not drifts)
 
