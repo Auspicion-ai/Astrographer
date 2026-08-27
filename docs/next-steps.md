@@ -60,6 +60,21 @@ Units G–J remain later units.
   documentation review in
   `archive/reviews/2026-08-27-unit-f-doc-review.md` (spec + greens + trackers
   reconciled against the build); trio green (test + typecheck + build).
+- **Integration adversarial pass (2026-08-27, before Unit G).** A broad
+  cross-unit review (RCA-3) checked whether the LATER units (D/E/F) introduced
+  integration defects on the EARLIER units (A/B/C) and the cross-unit seams.
+  All findings HOST, fixed + regression-tested (14 tests in
+  `tests/integration-adversarial.test.ts`): **I1** (MCP `edit.*` broadcast on
+  the wrong IPC channel — now on the `IPC_RAG_STORE_CHANGED` constant), **I2**
+  (`mergeNode` rejects a doc-flow-role/mid-chain source — preserves doc-flow
+  validity), **I3** (renderer `onRebuild` wired to a real `buildTraversal`
+  re-materialization via `IPC_RAG_SNAPSHOT` + `rebuildBackRefs`), **I4**
+  (`edit-commit` maps `node not found` to `deleted-node`), **I5**
+  (`handleEditTool` passes raw malformed inputs to the ops). Seams verified
+  clean: the async `Embedder` migration, the `rag.query`/`rag-query` MCP/UI
+  equivalence, the `retrieval.embedder` selection, and the `RagStore` interface
+  usage. Record: `archive/reviews/2026-08-27-integration-adversarial.md`. Trio
+  green (974 pass).
 - **Unit D — editable text (form-control editing) (2026-08-27).** The `edit.*`
   tool handlers (Unit B registered them through the five-seam gate; Unit D
   implements the FULL behavior) in `src/main/edit-ops.ts` (pure ops over the
