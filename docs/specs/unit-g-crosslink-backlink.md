@@ -105,6 +105,28 @@ No engine gap. ENG-GAP-1 is SHELVED 2026-08-26 (markdown is export-only;
 markdown-parsing-to-storage will use text-match diffing — see
 `docs/pending.md`).
 
+### 3a. Adversarial findings (host findings, fixed + regression-tested)
+
+Post-green adversarial pass (RCA-3) 2026-08-27. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`). Each host finding was fixed + regression-
+tested (6 regression tests in `tests/crosslink-backlink-adversarial.test.ts`).
+
+**LOW:**
+- **G1** — `edit.set_edge` with an empty-string `documentIds` element on a
+  crosslink THREW out of the op (the store's `validateEdgeShape` rejected `''`
+  and `putEdge` threw), violating the op's "Ops NEVER throw for domain failures"
+  contract. Fixed: `setEdge` now guards empty-string elements → returns
+  `{ ok: false, error: 'edit.set_edge: documentIds must be a non-empty string
+  array' }` (a domain result, store untouched). Regression-tested (empty-string
+  element → domain result; valid non-empty `documentIds` still succeeds).
+- **G2** — the `rag-backlinks` IPC (`handleRagBacklinksIpc`) threw
+  `'backlinks: store required'` on a null store, while the `rag.backlinks` MCP
+  tool threw `'rag.backlinks: no rag store configured'` — breaking the §5.4
+  "rejects identically" MCP/UI-equivalence claim. Fixed: the IPC now throws the
+  SAME message as the MCP tool. Regression-tested (IPC + MCP with a null store
+  throw the same message).
+
 ## 4. Design decisions pinned by this spec
 
 - **CROSSLINK-EDGE-KIND:** a crosslink is represented in the RAG layer as a NEW

@@ -272,6 +272,13 @@ export async function setEdge(ctx: EditOpContext, params: { kind: string; source
   if (params.documentIds !== undefined && (!Array.isArray(params.documentIds) || params.documentIds.some((x) => typeof x !== 'string'))) {
     return { ok: false, error: 'edit.set_edge: documentIds must be a string array' }
   }
+  // G1 — `documentIds` elements must be NON-EMPTY strings (the store's
+  // `validateEdgeShape` rejects empty strings, which would throw an uncaught
+  // store error on write). Return a domain result (never throw), mirroring the
+  // store's rule.
+  if (params.documentIds !== undefined && params.documentIds.some((x) => x === '')) {
+    return { ok: false, error: 'edit.set_edge: documentIds must be a non-empty string array' }
+  }
   if (!ctx.store.getNode(params.source) || !ctx.store.getNode(params.target)) {
     return { ok: false, error: 'edit.set_edge: source/target node not found or quarantined' }
   }

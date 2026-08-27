@@ -204,7 +204,10 @@ export async function handleRagBacklinksIpc(
   store: RagStore | null,
   payload: { nodeId?: unknown },
 ): Promise<BacklinkResult> {
-  if (!store) throw new Error('backlinks: store required')
+  // G2 — the store-null fail-state mirrors the MCP `rag.backlinks` tool's
+  // (`handleRagTool`'s top guard throws `${name}: no rag store configured`), so
+  // the IPC rejects identically to the MCP tool (§5.4 MCP/UI equivalence).
+  if (!store) throw new Error('rag.backlinks: no rag store configured')
   const nodeId = typeof payload?.nodeId === 'string' ? payload.nodeId : ''
   if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
   return enumerateLinks(store, nodeId)
