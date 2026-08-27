@@ -847,9 +847,13 @@ suite, no network egress in CI):**
 
 **Fail-states (amended):**
 
-- `RetrievalEngine.query` with a non-string/empty `query` → the returned promise
-  REJECTS with `Error('retrieve: query must be a non-empty string')` (propagated
-  from `retrieve`).
+- `RetrievalEngine.query` with a NON-STRING `query` (e.g. `null`) → the returned
+  promise REJECTS with `Error('retrieve: store/embedder/index/query/opts
+  required')` (the `retrieve` "required" fail-state, propagated — consistent
+  with Unit E §5.9 F14).
+- `RetrievalEngine.query` with an EMPTY/WHITESPACE `query` (`''`, `'   '`) → the
+  returned promise REJECTS with `Error('retrieve: query must be a non-empty
+  string')` (propagated from `retrieve` — consistent with Unit E §5.9 F15).
 - `RetrievalEngine.onStoreChanged` with a null/undefined `nodeIds` → the
   returned promise REJECTS with `Error('onStoreChanged: nodeIds required')`.
 - An embedder rejection (e.g. the provider is down during `score`) propagates
@@ -996,8 +1000,11 @@ suite, no network egress in CI):**
 32. **Embed rejection propagation** → an `embedFn` rejection (e.g. the provider
     is down) propagates from `score`/`place`/`onStoreChanged`/`query` (the
     returned promise REJECTS with the embed error).
-33. **`RetrievalEngine.query` non-string/empty query** → the returned promise
-    REJECTS with `Error('retrieve: query must be a non-empty string')`.
+33. **`RetrievalEngine.query` non-string query** → the returned promise REJECTS
+    with `Error('retrieve: store/embedder/index/query/opts required')` (the
+    `retrieve` "required" fail-state — consistent with Unit E §5.9 F14). An
+    EMPTY/WHITESPACE query (`''`, `'   '`) instead REJECTS with
+    `Error('retrieve: query must be a non-empty string')` (Unit E §5.9 F15).
 34. **`retrieval.embedder: 'vector'` with a missing/invalid
     `retrieval.embeddingProvider` config** → main fails to create the vector
     embedder (the provider-creation error propagates; the app does NOT silently
