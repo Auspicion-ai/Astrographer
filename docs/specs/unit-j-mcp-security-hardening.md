@@ -89,16 +89,35 @@ markdown-parsing-to-storage will use text-match diffing — see
 
 ### 3a. Adversarial findings
 
-The post-green adversarial pass (RCA-3) for Unit J audits the hardening
-invariants for edge cases / unauthorized access / malformed inputs. The audit
-of the current build surfaces NO host findings requiring a fix (the invariants
-hold — see §5.2). The adversarial checks that MUST be regression-tested are
-pinned in §5.9 (the fail-states): a `rag.*`/`edit.*`/`code.template.*` method
-reaching the renderer switch throws `unknown method` (fail-closed); a mutating
-method missing from `MUTATING_METHODS` is a finding; a tool missing from a
-group is a finding; an IPC channel not routing through the shared handler is a
-finding. No package/upstream findings (nothing went to `docs/defects.md`/
-`docs/HANDOFF.md`).
+Post-green adversarial pass (RCA-3) 2026-08-28. The audit of the current build
+surfaces **NO host findings requiring a fix** — the hardening invariants (a)-(f)
+hold (see §5.2), verified against the code: all 5 `rag.*` tools are read-only +
+`rag`-group + default-off; all 6 `edit.*` tools are mutating + `edit`-group +
+default-off; editing is never a `code`-group op; all 4 equivalence pairs route
+through the SAME shared handler; the renderer switch has 18 cases + a
+fail-closed `default` (no `rag.*`/`edit.*`/`code.template.*` case); and
+`MUTATING_METHODS` = the 7 spec'd methods (the `code.set`/`create`/`delete`
+exclusion is correct — they are envelope-only mutations that do not call
+`this.render()`). No package/upstream findings (nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`).
+
+Three LOW/informational observations (none fix-required, none in Unit J's
+scope):
+- **`groupForTool` `module:` prefix** — the comment claims an empty rest is
+  denied, but the guard only checks `toolName.length > 'module:'.length`, so
+  `module:foo` (no dot) resolves to `'module'`. Not a security bypass
+  (`syncModuleRouter` only registers `module:<name>.<tool>` names, so
+  `module:foo` is never a live tool). This is the module system (Unit U), not
+  Unit J's `rag`/`edit`/`code.template` scope.
+- **IPC error-handling inconsistency** — `edit-commit` maps a malformed payload
+  to a domain result, while `rag-query`/`rag-backlinks` throw (rejecting the
+  `ipcRenderer.invoke` promise). Both reject identically to their documented
+  fail-states (§5.9 #9/#14 vs #18); a robustness nit, not a security finding.
+- **IPC surface is not group-gated** — the renderer→main channels are callable
+  regardless of the `edit`/`rag`/`code` group state. Per §4
+  `IPC-SURFACE-NOT-GROUP-GATED` this is a deliberate design (the renderer is a
+  trusted surface; `contextIsolation:true`, `nodeIntegration:false`). A
+  defense-in-depth note, not a Unit J defect.
 
 ## 4. Design decisions pinned by this spec
 
