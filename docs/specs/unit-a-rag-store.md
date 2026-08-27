@@ -184,6 +184,17 @@ export interface RagEdge {
 - `RagEdge.id` — non-empty string. `kind` — one of the closed `RagEdgeKind`
   union. `source`/`target` — non-empty strings (RAG node ids). `createdAt`/
   `updatedAt` — ISO-8601 strings.
+- **Per-kind field enforcement:** `order` is only valid on `doc-child` edges;
+  `documentIds` is only valid on doc-flow kinds (`doc-head`/`next-section`/
+  `doc-end`). A field on the wrong kind is rejected.
+- **Self-referential edges rejected:** an edge with `source === target` is
+  rejected.
+- **Prototype-pollution keys rejected:** `props`/`ownedNodeIds`/`documentIds`
+  containing `__proto__`/`constructor`/`prototype` keys are rejected.
+- **Empty-string/duplicate rejection:** empty strings in `ownedNodeIds`/
+  `documentIds` are rejected; duplicates are deduped on write.
+- **`createdAt` preservation:** on update, `createdAt` is preserved (only
+  `updatedAt` refreshes).
 - A record that fails a shape rule is **rejected at write time** (throw) and
   **skipped at boot** (never loaded) — the module-store `sanitizeRecord`
   discipline.
@@ -225,6 +236,9 @@ JSON-file implementation; a future `createRemoteRagStore` (pending — see
 export interface RagStoreOptions {
   /** The JSON file the RAG store persists to (usually in userData). */
   path: string
+  /** The project-journal cap (default 1000). When the journal exceeds this,
+   *  the oldest entries are dropped (a boundary for `undo()`). */
+  maxJournalLength?: number
 }
 
 /** The JSON-file implementation of the `RagStore` interface. */
@@ -259,19 +273,19 @@ export interface RagStore {
   getNode(id: string): RagNode | undefined
   listNodes(): RagNode[]
   /** Create/update a node. Computes the hash from the record (never trusts
-   *  input). Serialized through the write queue. */
-  putNode(node: RagNode): RagNode
+   *  input). Serialized through the write queue. Async. */
+  putNode(node: RagNode): Promise<RagNode>
   /** Remove a node. Returns true if it existed. Serialized. Also removes any
-   *  edge whose source/target references the removed node (cascade). */
-  removeNode(id: string): boolean
+   *  edge whose source/target references the removed node (cascade). Async. */
+  removeNode(id: string): Promise<boolean>
 
   // ---- edge CRUD ---------------------------------------------------------
   getEdge(id: string): RagEdge | undefined
   listEdges(): RagEdge[]
-  /** Create/update an edge. Serialized. */
-  putEdge(edge: RagEdge): RagEdge
-  /** Remove an edge. Returns true if it existed. Serialized. */
-  removeEdge(id: string): boolean
+  /** Create/update an edge. Serialized. Async. */
+  putEdge(edge: RagEdge): Promise<RagEdge>
+  /** Remove an edge. Returns true if it existed. Serialized. Async. */
+  removeEdge(id: string): Promise<boolean>
 
   // ---- status ------------------------------------------------------------
   status(): RagStoreStatus
@@ -280,11 +294,11 @@ export interface RagStore {
   /** The journal entries (read-only snapshot). */
   journal(): JournalEntry[]
   /** Undo the top journal entry (invert it). A structural undo re-traverses
-   *  (Unit C). Returns the inverted entry, or null at the base boundary. */
-  undo(): JournalEntry | null
+   *  (Unit C). Returns the inverted entry, or null at the base boundary. Async. */
+  undo(): Promise<JournalEntry | null>
   /** Redo the next undone entry. Returns the re-applied entry, or null at the
-   *  redo boundary. */
-  redo(): JournalEntry | null
+   *  redo boundary. Async. */
+  redo(): Promise<JournalEntry | null>
   /** The number of undoable entries. */
   undoDepth(): number
   /** The number of redoable entries. */
@@ -303,12 +317,12 @@ export interface RagStore {
 - `getNode`/`getEdge` return a **shallow copy** (never the internal record —
   the module-store `get` discipline). `listNodes`/`listEdges` return fresh
   arrays of shallow copies.
-- `putNode`/`putEdge` return a shallow copy of the stored record.
-- `removeNode`/`removeEdge` return `true` if the id existed and was removed,
-  `false` if it did not exist (no-op).
+- `putNode`/`putEdge` resolve to a shallow copy of the stored record.
+- `removeNode`/`removeEdge` resolve to `true` if the id existed and was
+  removed, `false` if it did not exist (no-op).
 - `status()` returns a fresh `RagStoreStatus`.
 - `journal()` returns a fresh array of shallow copies of the journal entries.
-- `undo()`/`redo()` return the inverted/re-applied entry, or `null` at the
+- `undo()`/`redo()` resolve to the inverted/re-applied entry, or `null` at the
   boundary.
 
 ### 5.5 The single-writer write queue (the lock point)
@@ -326,13 +340,12 @@ export interface RagStore {
   `status()`/`journal()`/`undoDepth()`/`redoDepth()` are synchronous and do NOT
   go through the queue (they read the in-memory store, which is only mutated
   inside the queue).
-- **Mutating methods are queue-serialized:** `putNode`, `removeNode`,
-  `putEdge`, `removeEdge`, `undo`, `redo` each enqueue their work. They return
-  synchronously-shaped results but the actual mutation is queued; the store
-  exposes the synchronous return for the common single-write case and
-  `enqueue` for atomic multi-step writes. (Implementation note: the mutating
-  methods may be async or may enqueue-and-return; the spec pins the *ordering*
-  guarantee — all mutations are serialized — and the *return* shapes above.)
+- **Mutating methods are queue-serialized and async:** `putNode`, `removeNode`,
+  `putEdge`, `removeEdge`, `undo`, `redo` each enqueue their work and return a
+  `Promise` (the §5.4 signatures are async). A call made FROM INSIDE the queue
+  (re-entrant) runs its work directly rather than enqueueing onto the tail
+  (which would deadlock). The store also exposes `enqueue` for atomic
+  multi-step writes.
 - **The queue is the concurrency model for MCP↔UI equivalence** (§9.2.6): two
   concurrent writers (an MCP `edit` call and a UI commit-on-blur) are
   serialized; neither observes a half-applied write.
@@ -363,9 +376,11 @@ export type JournalEntry =
 export type StructuralJournalOp =
   | { op: 'node-add'; node: RagNode }
   | { op: 'node-delete'; node: RagNode }
+  | { op: 'node-update'; nodeId: string; before: RagNode; after: RagNode }
   | { op: 'edge-add'; edge: RagEdge }
   | { op: 'edge-remove'; edge: RagEdge }
   | { op: 'edge-retarget'; edgeId: string; before: { source: string; target: string }; after: { source: string; target: string } }
+  | { op: 'edge-update'; edgeId: string; before: RagEdge; after: RagEdge }
   | { op: 'doc-flow-role-change'; edgeId: string; before: RagEdgeKind; after: RagEdgeKind }
 ```
 
@@ -379,17 +394,19 @@ export type StructuralJournalOp =
   op, then re-traverses. The inverse ops:
   - `node-add` → `node-delete` (remove the node + cascade its edges).
   - `node-delete` → `node-add` (re-insert the node + its edges).
+  - `node-update` → restore the node to `before` (type/ownedNodeIds).
   - `edge-add` → `edge-remove`.
   - `edge-remove` → `edge-add`.
   - `edge-retarget` → restore `before` source/target.
+  - `edge-update` → restore the edge to `before` (kind/order/documentIds).
   - `doc-flow-role-change` → restore `before` kind.
 - **Boundary:** `undo()` at the base (cursor at 0) returns `null` (no-op).
   `redo()` at the redo boundary (cursor at journal length) returns `null`.
 - **Journal cap:** the journal is bounded (a `maxJournalLength` option,
   defaulting to a project constant — see §5.10). When the journal exceeds the
-  cap, the oldest entries are condensed into a base snapshot (the module-store
-  condense discipline). A condensed base is a boundary: `undo()` past the base
-  is a guarded no-op (`null`).
+  cap, the oldest entries are DROPPED (condense = drop oldest, not a
+  materialized base snapshot). The dropped boundary is a boundary for `undo()`:
+  `undo()` past the base is a guarded no-op (`null`).
 
 ### 5.7 Persistence details (module-store pattern)
 
@@ -414,6 +431,11 @@ export type StructuralJournalOp =
   caught and does not crash the process; the in-memory store still reflects the
   write, but the on-disk state may be stale. (The module-store `persist()`
   catch discipline.)
+- **Known limitation — journal entries are NOT hash-verified:** the
+  hash-verified source discipline applies to node/edge records only. Journal
+  entries are shape-validated at boot (malformed entries are skipped) but are
+  not individually hash-verified. This is a documented asymmetry; journal
+  hashing is out of scope for this slice.
 
 ### 5.8 Happy-path states (TestWriter red set — valid paths)
 
@@ -456,9 +478,10 @@ export type StructuralJournalOp =
    `Error('rag putNode: <field> required/invalid')`; the store is unchanged.
 4. **`putEdge` with a malformed record** (null, non-object, empty `id`, invalid
    `kind`, empty `source`/`target`) → throws; the store is unchanged.
-5. **`putEdge` referencing a nonexistent node** → throws
-   `Error('rag putEdge: source/target node not found')`; the store is unchanged.
-   (Referential integrity: an edge must reference existing nodes.)
+5. **`putEdge` referencing a nonexistent (or quarantined) node** → throws
+   `Error('rag putEdge: source/target node not found or quarantined')`; the
+   store is unchanged. (Referential integrity: an edge must reference existing,
+   non-quarantined nodes.)
 6. **`removeNode` of a nonexistent id** → returns `false` (no-op, no throw).
 7. **`removeEdge` of a nonexistent id** → returns `false` (no-op, no throw).
 8. **`undo()` at the base boundary** → returns `null` (no-op, no throw).
@@ -476,8 +499,7 @@ export type StructuralJournalOp =
 - **Atomic write:** temp file `${opts.path}.tmp` + `renameSync`; JSON written
   with 2-space indent.
 - **Journal cap:** `maxJournalLength` option; default **1000** entries. When
-  exceeded, the oldest entries condense into a base snapshot (a boundary for
-  `undo()`).
+  exceeded, the oldest entries are dropped (a boundary for `undo()`).
 - **File version:** `version: 1`. A non-`1` version is corrupt.
 - **Record counts:** `status().loadedNodes`/`loadedEdges` count active
   (non-quarantined) records; `status().quarantined` counts hash-failed records.

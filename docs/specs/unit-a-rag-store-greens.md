@@ -206,23 +206,21 @@ Each scenario lists: name, setup, operations, expected outcome (from the spec).
 | C1 | Return-shape discipline | ✅ PASS |
 | C2 | Atomic write | ✅ PASS |
 | C3 | Hash-verified source | ✅ PASS |
-| C4 | Journal cap (`maxJournalLength` option) | ❌ FAIL |
+| C4 | Journal cap (`maxJournalLength` option) | ✅ PASS |
 | C4b | Default journal cap = 1000 | ✅ PASS |
 | C5 | Structural edge inversion | ✅ PASS |
 
-**Run summary:** 27 scenarios — 26 pass, 1 fail (C4).
+**Run summary:** 27 scenarios — 27 pass.
 
-### Finding (spec-vs-impl drift)
+### Finding (spec-vs-impl drift — RESOLVED)
 
-- **C4 — `maxJournalLength` option not honored.** §5.6 and §5.10 document a
-  `maxJournalLength` option (default 1000) that bounds the journal by dropping
-  the oldest entries. The implementation applies a **hardcoded default cap of
-  1000** (verified: 1001 content writes → journal length exactly 1000), but it
-  **ignores the `maxJournalLength` option entirely**: a store created with
-  `maxJournalLength: 3` (and `2`) grew its journal to 11 entries (10 content
-  updates + 1 create) with no dropping. The option is documented in the spec
-  but not wired through the implementation. This is a spec-vs-impl drift — the
-  spec's `maxJournalLength` option is not implemented.
+- **C4 — `maxJournalLength` option not honored (RESOLVED).** The blind run
+  found the option documented in §5.6/§5.10 but not wired through the
+  implementation (a store created with `maxJournalLength: 3` grew its journal
+  unbounded). This was a genuine spec-vs-impl drift. The host-side fix landed in
+  `src/main/rag-store.ts` — the option is now honored (`maxJournalLength`
+  bounds the journal by dropping the oldest entries, default 1000) — and is
+  regression-tested in `tests/rag-store-adversarial.test.ts`. C4 now passes.
 
 ### Test-authoring note (not a drift)
 

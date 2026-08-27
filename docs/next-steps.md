@@ -13,16 +13,8 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ## OPEN
 
-### First milestone — Units A/B/C (smaller slice)
+### First milestone — Units B/C (Unit A done)
 
-- **Unit A — RAG store (persistence).** Main-process `createJsonRagStore`
-  (`node:fs`, module-store pattern) behind the **`RagStore` interface** (the
-  abstraction layer between the JSON store and the document load — the
-  traversal depends on the interface, so the source is switchable; a remote-DB
-  store is a pending feature). Single-writer write queue (the lock point), and
-  the project journal with invertible entries for both content and structural
-  ops. RAG node/edge types carry the subtree-ownership convention (a RAG object
-  declares the provident node ids it owns).
 - **Unit B — document model + doc-flow.** RAG node/edge types; doc-flow edges
   (doc-head / next-section / doc-end) authoritative in the store, **scoped by
   `documentId`** so a node can be in MULTIPLE documents' flows
@@ -67,6 +59,17 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ## DONE
 
+- **Unit A — RAG store (persistence) (2026-08-26).** `createJsonRagStore`
+  implemented in `src/main/rag-store.ts` behind the `RagStore` interface:
+  node/edge CRUD, single-writer write queue, persisted invertible project
+  journal (`maxJournalLength` cap, default 1000), fail-disabled boot,
+  hash-verified source + quarantine, per-kind `order`/`documentIds`
+  enforcement, `createdAt` preservation, self-referential-edge /
+  prototype-pollution / empty-string / duplicate rejection. TestWriter red →
+  Implementer green in `tests/rag-store.test.ts` (§5.8/§5.9, 11 happy-path +
+  11 fail-state); adversarial pass in `tests/rag-store-adversarial.test.ts`
+  (host findings fixed + regression-tested); blind-greens in
+  `docs/specs/unit-a-rag-store-greens.md` (27 scenarios, all pass).
 - **Proposal gate (2026-08-26).** Three-agent gate (validity ∥ critique →
   architecture → change-analysis) on the top-level deliverable, then a re-run
   gate on the refined two-graph model, then a focused validity check on the
@@ -76,7 +79,7 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   markdown-export-only decision.
 - **Spec gate (2026-08-26).** The first-slice contracts are written and
   verified in the compile-horizon-review format:
-  `docs/specs/unit-a-rag-store.md` (466 lines), `docs/specs/unit-b-document-model.md`
+  `docs/specs/unit-a-rag-store.md` (505 lines), `docs/specs/unit-b-document-model.md`
   (313 lines), `docs/specs/unit-c-rendering-spine.md` (381 lines). Each is
   exhaustive enough for a TestWriter to derive every state and fail-state from
   §5.8/§5.9. **Unit C pinned a reconciliation key:** the back-reference map is
