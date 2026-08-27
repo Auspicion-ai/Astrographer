@@ -1,4 +1,4 @@
-# Spec — Unit F: Vector Embeddings (Ollama `embeddinggemma`)
+# Spec — Unit F: Vector Embeddings (Provider/Model Agnostic)
 
 - **Status:** SPEC (later unit, Unit F). Gate reference:
   `docs/specs/astrographer-review.md` §3d (lexical-first retrieval ENDORSE,
@@ -7,21 +7,32 @@
   (SINGLE-WRITER-STORE), §9.3 ("strays from the topic" re-scoping — the
   `Embedder` owns the semantic placement decision). Decisions:
   `docs/decisions.md` rows **LEXICAL-FIRST-RETRIEVAL** (the `Embedder` is the
-  drop-in seam for the Unit F vector implementation), **SINGLE-WRITER-STORE**,
+  drop-in seam for the Unit F vector implementation), **PROVIDER-AGNOSTIC**
+  (2026-08-27 — all agent/model-specific tasks are provider/model AGNOSTIC,
+  including remote/cloud-sourced providers, with config settings for the
+  required inputs; the vector embedder is a configurable provider, NOT
+  hardcoded to one provider/model), **SINGLE-WRITER-STORE**,
   **RAG-EDIT-MCP-GROUPS**. Pending: `docs/pending.md` (vector embeddings — the
-  deferred row; the "no network egress yet (the `connect-src` CSP allowlist for
-  a declared network is an open tracked item)" constraint — a localhost ollama
-  call is LOCAL, not external egress).
+  deferred row; the updated "no network egress" row — **PROVIDER-AGNOSTIC
+  (2026-08-27):** the vector embedder is provider/model agnostic — local
+  (ollama `embeddinggemma`) AND remote/cloud providers are in scope, so the
+  `connect-src` CSP allowlist + API-key handling become a DESIGNED security
+  surface; a localhost ollama call is LOCAL (no external egress); a
+  remote/cloud provider requires the CSP allowlist + API-key config).
 - **Scope:** the vector embedder behind the `Embedder` interface (the Unit E
-  drop-in seam) — the ollama `embeddinggemma` provider (a localhost HTTP call,
-  local-first, NO external network egress), the vector index (node id →
-  embedding, maintained incrementally on store change), cosine similarity
-  scoring, the **async `Embedder` interface amendment** (a Unit E contract
-  amendment), the deterministic mock embedder for unit tests, the real-ollama
-  INTEGRATION test path (the test environment), the config selection, and
+  drop-in seam) — a **configurable embedding provider** (an `EmbeddingProvider`
+  abstraction + an `EmbeddingProviderConfig` config shape; ollama
+  `embeddinggemma` is ONE concrete provider config — the local test
+  environment — and remote/cloud providers such as OpenAI/Cohere are drop-ins
+  via the SAME interface + config), the vector index (node id → embedding,
+  maintained incrementally on store change), cosine similarity scoring, the
+  **async `Embedder` interface amendment** (a Unit E contract amendment), the
+  deterministic mock embedder for unit tests, the real-ollama INTEGRATION test
+  path (the test environment), the MOCKED remote/cloud provider test path (no
+  live remote call in the test suite — no network egress in CI), the config
+  selection, the security/CSP posture for BOTH local and remote providers, and
   MCP/UI equivalence. This unit does NOT implement crosslinks/backlinks
-  (Unit G) or a remote embedding provider (a pending SPECULATIVE item —
-  `docs/pending.md`).
+  (Unit G).
 - **TestWriter contract:** every method/API signature, return shape, throw
   pattern, happy-path state, and fail-state below is derivable from this spec
   ALONE. The TestWriter writes the red set for `src/main/embeddings.ts` (and
@@ -33,55 +44,76 @@
 ## 1. What the proposal asks
 
 1. A **vector embedder** behind the `Embedder` interface (the Unit E drop-in
-   seam) — local-first, NO external network egress.
-2. The **ollama `embeddinggemma` provider** as the local vectorization backend
-   — a localhost HTTP call to ollama's embeddings endpoint.
-3. **Testability:** a deterministic MOCK for unit tests (no ollama dependency)
-   AND a real-ollama INTEGRATION test path (the test environment) that exercises
-   the actual `embeddinggemma` model.
-4. A **vector index** (node id → embedding vector), built by calling ollama once
-   per node (at index build / on store change), maintained incrementally like
-   the lexical index.
-5. **Cosine similarity** scoring with deterministic tie-breaking (by node id,
+   seam) that is **provider/model AGNOSTIC** — NOT hardcoded to one
+   provider/model (the **PROVIDER-AGNOSTIC** binding decision, 2026-08-27).
+2. A **configurable embedding provider** — an `EmbeddingProvider` abstraction
+   with config settings for the required inputs (model URL / endpoint, API
+   keys, model name, embedding dimension, etc.). The config is the ONLY thing
+   that differs between providers; the retrieval engine uses the passed
+   embedder (Unit E F2) unchanged.
+3. **ollama `embeddinggemma` as ONE concrete provider config** — the local
+   test environment (a localhost HTTP call to ollama's embeddings endpoint),
+   framed as one configurable provider among many, NOT the only one.
+4. **Remote/cloud providers supported** (e.g. OpenAI, Cohere, etc.) via the
+   SAME provider abstraction + config — a drop-in (same interface, different
+   config: model URL, API key, model name).
+5. **Testability:** a deterministic MOCK for unit tests (no provider
+   dependency) AND a real-ollama INTEGRATION test path (the test environment)
+   that exercises the actual `embeddinggemma` model, AND a MOCKED remote/cloud
+   provider test path (no live remote call in the test suite — no network
+   egress in CI).
+6. A **vector index** (node id → embedding vector), built by calling the
+   provider once per node (at index build / on store change), maintained
+   incrementally like the lexical index.
+7. **Cosine similarity** scoring with deterministic tie-breaking (by node id,
    matching Unit E).
-6. **MCP/UI equivalence** — the vector embedder is a drop-in behind the
+8. **MCP/UI equivalence** — the vector embedder is a drop-in behind the
    `Embedder` interface so `rag.query`/`rag-query` work unchanged (§8.2, a
    BINDING constraint).
-7. **Security/CSP posture** — the ollama call is a localhost HTTP request
-   (local, no external egress); pin the security surface.
+9. **Security/CSP posture** — a localhost ollama call is LOCAL (no external
+   egress); a remote/cloud provider requires the `connect-src` CSP allowlist +
+   API-key handling (a DESIGNED security surface, per the PROVIDER-AGNOSTIC
+   decision). Pin the security posture for BOTH local and remote providers.
 
 ## 2. Feasibility verdict
 
 **Feasible — grounded in the review's lexical-first ENDORSE (§3d, "vector
-later") and the retrieval-selection resolution (§9.2.10), and the Unit E
-drop-in seam.** The vector embedder is net-new host-side work (the foundation
-has no embeddings/similarity mechanism — review §2 finding 1), but it composes
-the existing `Embedder` interface (Unit E §5.2) + the `RagStore` interface
-(Unit A §5.4). The ollama `embeddinggemma` model is available as a TEST
-ENVIRONMENT (local ollama running `embeddinggemma`). The one contract tension —
-the Unit E `Embedder` interface is SYNCHRONOUS, but a vector embedder must
-compute the query embedding via an async ollama HTTP call — is resolved by
-amending the interface to async (§4, §5.1). No engine/foundation gap blocks
-this unit. The ollama call is a localhost HTTP request (local-first, no
-external egress) — it does NOT trigger the pending.md "no network egress"
-constraint's `connect-src` CSP allowlist (that remains an open tracked item for
-REMOTE providers only).
+later"), the retrieval-selection resolution (§9.2.10), the Unit E drop-in seam,
+and the PROVIDER-AGNOSTIC binding decision (2026-08-27).** The vector embedder
+is net-new host-side work (the foundation has no embeddings/similarity mechanism
+— review §2 finding 1), but it composes the existing `Embedder` interface
+(Unit E §5.2) + the `RagStore` interface (Unit A §5.4). The provider abstraction
+is a thin configurable seam: ollama `embeddinggemma` is available as a TEST
+ENVIRONMENT (local ollama running `embeddinggemma`), and remote/cloud providers
+are drop-ins behind the SAME interface + config. The one contract tension — the
+Unit E `Embedder` interface is SYNCHRONOUS, but a vector embedder must compute
+the query embedding via an async provider call — is resolved by amending the
+interface to async (§4, §5.1). No engine/foundation gap blocks this unit. The
+security surface is now a DESIGNED surface (per PROVIDER-AGNOSTIC): a localhost
+ollama call is LOCAL (no external egress, no `connect-src` CSP allowlist
+needed); a remote/cloud provider requires the `connect-src` CSP allowlist +
+API-key handling (pinned in §5.7).
 
 ## 3. Gaps + costs-benefits
 
 | Gap | Project-specific vs engine-handoff | Cost / benefit |
 | --- | --- | --- |
 | Async `Embedder` interface amendment | Project-specific (a Unit E contract amendment) | Low cost; the lexical embedder wraps its sync computation in a resolved promise. |
-| Ollama `embeddinggemma` provider (localhost HTTP) | Project-specific (no foundation HTTP-embedding mechanism) | Low cost; local-first, no external egress. |
+| `EmbeddingProvider` abstraction + `EmbeddingProviderConfig` config shape | Project-specific (no foundation HTTP-embedding mechanism) | Low cost; the provider/model-agnostic seam (PROVIDER-AGNOSTIC). |
+| Ollama `embeddinggemma` provider (localhost HTTP) — ONE concrete config | Project-specific | Low cost; local-first, no external egress. |
+| Remote/cloud provider (OpenAI/Cohere/etc.) — a drop-in via the same interface + config | Project-specific | Low cost; same interface, different config (model URL, API key, model name). |
 | Vector index (node id → embedding) | Project-specific (composes the RagStore + the provider) | Low cost; maintained incrementally like the lexical index. |
 | Cosine similarity scoring | Project-specific | Low cost; deterministic, range [-1, 1]. |
-| Mock embedder (unit tests) | Project-specific | Low cost; deterministic, no ollama dependency. |
+| Mock embedder (unit tests) | Project-specific | Low cost; deterministic, no provider dependency. |
 | Real-ollama integration test path | Project-specific (the test environment) | Low cost; gated/skipped when ollama is unavailable. |
+| MOCKED remote/cloud provider test path | Project-specific | Low cost; no live remote call in the test suite (no network egress in CI). |
+| Security/CSP posture (local vs remote) | Project-specific (a DESIGNED security surface per PROVIDER-AGNOSTIC) | Low cost; localhost = no egress; remote = `connect-src` CSP allowlist + API-key handling. |
 | Config selection + MCP/UI equivalence | Project-specific (reuses the Unit E engine + the passed-embedder seam) | Low cost; the vector embedder is a drop-in. |
 
-No engine gap. The ollama call is localhost (local, no external egress) — the
-pending.md `connect-src` CSP allowlist for a declared network remains an open
-tracked item for REMOTE providers only.
+No engine gap. The ollama call is localhost (local, no external egress). A
+remote/cloud provider requires the `connect-src` CSP allowlist + API-key
+handling — now a DESIGNED security surface (per PROVIDER-AGNOSTIC), not just an
+open tracked item.
 
 ### 3a. Adversarial findings
 
@@ -96,7 +128,7 @@ yet implemented).
   `Embedder` interface is amended to ASYNC: `score(query, nodes):
   Promise<ScoredNode[]>` and `place(content, nodes, edges):
   Promise<PlacementDecision>`. Rationale: a vector embedder must compute the
-  query embedding via an async ollama HTTP call, and the interface takes the
+  query embedding via an async provider call, and the interface takes the
   query STRING (so pre-computing the embedding elsewhere would change the
   interface shape anyway — the embedder must receive the query to embed it).
   Async is the natural fit for a network-backed embedder. The lexical embedder
@@ -106,25 +138,52 @@ yet implemented).
   `rag.query` MCP handler, and the `rag-query` IPC all become async. **Unit E
   tests must be updated** (the lexical embedder's `score`/`place` now return
   promises; the retrieval stack is async).
-- **OLLAMA-EMBEDDINGGEMMA-PROVIDER:** the vector embedder uses the ollama
-  `embeddinggemma` model as the local vectorization backend — a localhost HTTP
+- **PROVIDER-AGNOSTIC (the binding decision, 2026-08-27):** the vector embedder
+  is provider/model AGNOSTIC — NOT hardcoded to one provider/model. It is
+  configurable to point at ANY provider — local (ollama `embeddinggemma`) OR
+  remote/cloud — via config settings for the required inputs (model URL, API
+  keys, model name, embedding dimension, etc.). The `Embedder` interface
+  (Unit E) is the seam; the vector embedder (Unit F) is a configurable
+  provider, with ollama `embeddinggemma` as ONE concrete config and
+  remote/cloud providers as others. **Security implication:** supporting
+  remote/cloud providers means network egress IS in scope — the `connect-src`
+  CSP allowlist + API-key handling become a DESIGNED security surface (§5.7).
+- **EMBEDDING-PROVIDER-ABSTRACTION:** an `EmbeddingProvider` interface +
+  `EmbeddingProviderConfig` config shape (§5.2). The config is the ONLY thing
+  that differs between providers; the retrieval engine uses the passed embedder
+  (Unit E F2) unchanged. `createEmbeddingProvider(config)` dispatches on
+  `config.provider`: `'ollama'` → the local ollama provider; any other kind →
+  the remote/cloud provider.
+- **OLLAMA-EMBEDDINGGEMMA-PROVIDER (ONE concrete config):** the ollama
+  `embeddinggemma` model is the LOCAL vectorization backend — a localhost HTTP
   call to ollama's embeddings endpoint (`POST http://127.0.0.1:11434/api/embed`).
-  Local-first, NO external network egress.
+  Local-first, NO external network egress. It is ONE concrete provider config,
+  not the only one.
+- **REMOTE-CLOUD-PROVIDER-SUPPORT:** remote/cloud providers (e.g. OpenAI,
+  Cohere) are drop-ins via the SAME `EmbeddingProvider` interface + config
+  (different config: model URL, API key, model name). A remote/cloud provider
+  requires the `connect-src` CSP allowlist + API-key handling (§5.7).
 - **VECTOR-INDEX-MAINTAINED:** a vector index (node id → embedding vector) is
-  built by calling ollama once per node (at index build) and maintained
+  built by calling the provider once per node (at index build) and maintained
   incrementally on store change (content edit → re-embed; structural add →
   embed; structural delete → remove), mirroring the lexical index maintenance.
 - **COSINE-SIMILARITY-SCORING:** the vector embedder scores each node by cosine
   similarity between the query embedding and the node's embedding (range
   [-1, 1]); deterministic tie-breaking by node id ascending (matching Unit E).
-- **MOCK-AND-INTEGRATION-TESTABILITY:** a deterministic mock embedder (no ollama
-  dependency) for unit tests AND a real-ollama integration test path (the test
-  environment) that exercises the actual `embeddinggemma` model, gated/skipped
-  when ollama is unavailable.
-- **LOCALHOST-SECURITY-POSTURE:** the ollama call is a localhost HTTP request
+- **MOCK-AND-INTEGRATION-TESTABILITY:** a deterministic mock embedder (no
+  provider dependency) for unit tests AND a real-ollama integration test path
+  (the test environment) that exercises the actual `embeddinggemma` model,
+  gated/skipped when ollama is unavailable, AND a MOCKED remote/cloud provider
+  test path (no live remote call in the test suite — no network egress in CI).
+- **LOCAL-SECURITY-POSTURE:** the ollama call is a localhost HTTP request
   (local, no external egress) — it does NOT require a `connect-src` CSP
-  allowlist for a declared network (that remains an open tracked item for
-  REMOTE providers). The provider is main-process-only, localhost-pinned,
+  allowlist for a declared network. The provider is main-process-only,
+  localhost-pinned, opt-in via config.
+- **REMOTE-SECURITY-POSTURE:** a remote/cloud provider requires the `connect-src`
+  CSP allowlist for the declared network (the provider's baseUrl origin must be
+  in the allowlist) + API-key handling (stored in config, sent as an
+  Authorization bearer header, never logged, never exposed to the renderer,
+  never sent to a non-allowlisted origin). The provider is main-process-only,
   opt-in via config.
 - **MCP-UI-EQUIVALENCE:** the vector embedder is a drop-in behind the `Embedder`
   interface; the retrieval engine uses the passed embedder (Unit E F2);
@@ -155,7 +214,7 @@ export type PlacementDecision =
  *  (BM25/tf-idf) is the v1 default; vector embeddings (Unit F) are a drop-in
  *  behind the SAME interface. The Embedder owns the SEMANTIC PLACEMENT
  *  decision. ASYNC (Unit F amendment): a vector embedder computes the query
- *  embedding via an async ollama HTTP call. */
+ *  embedding via an async provider call. */
 export interface Embedder {
   /** Score all RAG nodes against a query. Returns a ranked list (highest score
    *  first). Deterministic. ASYNC. */
@@ -195,21 +254,84 @@ export interface Embedder {
 - `place` with a non-string `content` or null/undefined `nodes`/`edges` → the
   returned promise REJECTS with `Error('embedder place: content/nodes/edges required')`.
 
-### 5.2 The ollama `embeddinggemma` provider
+### 5.2 The embedding provider abstraction + config (provider/model agnostic)
 
-The local vectorization backend — a localhost HTTP call to ollama's embeddings
-endpoint. Local-first, NO external network egress.
+The vector embedder is a **configurable provider** — NOT hardcoded to ollama.
+The `EmbeddingProvider` interface is the provider abstraction; the
+`EmbeddingProviderConfig` is the config shape. ollama `embeddinggemma` is ONE
+concrete provider config (the local test environment); remote/cloud providers
+(OpenAI, Cohere, etc.) are drop-ins via the SAME interface + config.
 
 ```ts
 // src/main/embeddings.ts (project-specific; pure + async; no Electron — the
-// HTTP call is a plain fetch to the localhost ollama endpoint).
+// HTTP call is a plain fetch to the configured endpoint).
 
 /** The embed function: text → embedding vector. ASYNC. */
 export type EmbedTextFn = (text: string) => Promise<number[]>
 
+/** The embedding provider config — the ONLY thing that differs between
+ *  providers. The vector embedder is constructed from this config; the
+ *  retrieval engine uses the passed embedder (Unit E F2) unchanged. */
+export interface EmbeddingProviderConfig {
+  /** The provider kind. 'ollama' is the local test environment (localhost);
+   *  remote/cloud providers ('openai', 'cohere', ...) are drop-ins via the
+   *  same interface + config. */
+  provider: 'ollama' | 'openai' | 'cohere' | string
+  /** The model URL / endpoint base. For ollama, the localhost base URL
+   *  (default 'http://127.0.0.1:11434'). For a remote/cloud provider, the
+   *  cloud endpoint (e.g. 'https://api.openai.com/v1'). */
+  baseUrl: string
+  /** The model name (e.g. 'embeddinggemma' for ollama; a cloud model id). */
+  model: string
+  /** The API key. REQUIRED for remote/cloud providers; optional/absent for
+   *  local ollama (no credentials sent). */
+  apiKey?: string
+  /** The expected embedding dimension. Default undefined = auto-detect from the
+   *  model's first response (validated for consistency across all vectors). */
+  dimension?: number
+  /** The HTTP request timeout in ms. Default 5000. */
+  timeoutMs?: number
+}
+
+/** The provider abstraction — a configurable embedding provider. A remote/cloud
+ *  provider is a drop-in (same interface, different config). */
+export interface EmbeddingProvider {
+  /** The provider kind (config.provider). */
+  readonly kind: string
+  /** The configured model name (config.model). */
+  readonly model: string
+  /** The configured base URL (config.baseUrl). */
+  readonly baseUrl: string
+  /** The embedding dimension (auto-detected from the first embed, or the
+   *  configured dimension). */
+  readonly dimension: number
+  /** Embed a single text → embedding vector. ASYNC. */
+  embed(text: string): Promise<number[]>
+}
+
+/** Create the embedding provider from a config. Dispatches on config.provider:
+ *  'ollama' → the local ollama provider; any other kind → the remote/cloud
+ *  provider. */
+export function createEmbeddingProvider(config: EmbeddingProviderConfig): EmbeddingProvider
+```
+
+**`createEmbeddingProvider(config)` dispatch:**
+
+- `config.provider === 'ollama'` → `createOllamaEmbedProvider({ baseUrl:
+  config.baseUrl, model: config.model, timeoutMs: config.timeoutMs, dimension:
+  config.dimension })` (the local test environment).
+- Any other `config.provider` (e.g. `'openai'`, `'cohere'`) →
+  `createRemoteEmbedProvider({ baseUrl: config.baseUrl, model: config.model,
+  apiKey: config.apiKey, dimension: config.dimension, timeoutMs:
+  config.timeoutMs })` (a remote/cloud provider — a drop-in).
+
+**The ollama concrete provider (ONE concrete config — the local test
+environment):**
+
+```ts
 export interface OllamaEmbedOptions {
   /** The ollama base URL. Default 'http://127.0.0.1:11434'. MUST be a
-   *  localhost/loopback address (LOCALHOST-SECURITY-POSTURE — §5.7). */
+   *  localhost/loopback address (LOCAL-SECURITY-POSTURE — §5.7). */
   baseUrl?: string
   /** The ollama model name. Default 'embeddinggemma'. */
   model?: string
@@ -220,15 +342,17 @@ export interface OllamaEmbedOptions {
   dimension?: number
 }
 
-/** Create the ollama embed provider. The returned function embeds a single text
- *  string via a localhost HTTP POST to ollama's embeddings endpoint. */
-export function createOllamaEmbedProvider(opts?: OllamaEmbedOptions): EmbedTextFn
+/** Create the ollama embed provider — ONE concrete provider config (the local
+ *  test environment). The returned provider embeds a single text via a
+ *  localhost HTTP POST to ollama's embeddings endpoint. */
+export function createOllamaEmbedProvider(opts?: OllamaEmbedOptions): EmbeddingProvider
 ```
 
-**Request/response shape (the `POST {baseUrl}/api/embed` endpoint):**
+**Ollama request/response shape (the `POST {baseUrl}/api/embed` endpoint):**
 
 - **Request:** `POST {baseUrl}/api/embed` with a JSON body
-  `{ model: <model>, input: <text> }` (a single string input).
+  `{ model: <model>, input: <text> }` (a single string input). No auth header
+  (no credentials sent — LOCAL-SECURITY-POSTURE).
 - **Response (2xx):** `{ embeddings: number[][], ... }` — `embeddings[0]` is the
   embedding vector for the single input. The provider reads `embeddings[0]`.
 - **Dimension:** if `opts.dimension` is set, the provider validates that every
@@ -240,32 +364,95 @@ export function createOllamaEmbedProvider(opts?: OllamaEmbedOptions): EmbedTextF
   input + model + server state (no sampling for embeddings). The provider does
   NOT add randomness.
 
+**The remote/cloud concrete provider (a drop-in via the SAME interface):**
+
+```ts
+export interface RemoteEmbedOptions {
+  /** The cloud endpoint base URL (e.g. 'https://api.openai.com/v1'). */
+  baseUrl: string
+  /** The cloud model id. */
+  model: string
+  /** The API key (REQUIRED — sent as an Authorization bearer header). */
+  apiKey: string
+  /** The expected embedding dimension. Default undefined = auto-detect. */
+  dimension?: number
+  /** The HTTP request timeout in ms. Default 5000. */
+  timeoutMs?: number
+}
+
+/** Create a remote/cloud embed provider — a drop-in behind the SAME
+ *  EmbeddingProvider interface (different config: model URL, API key, model
+ *  name). The exact request/response body is provider-specific; the interface
+ *  contract (auth header, error handling, dimension validation) is pinned
+ *  here. */
+export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingProvider
+```
+
+**Remote/cloud request/response contract:**
+
+- **Request:** an HTTP POST to the configured `baseUrl` with the model name and
+  the text to embed. The exact body shape is provider-specific (e.g. OpenAI's
+  `{ model, input }`; Cohere's `{ model, texts }`). The provider MUST send the
+  API key as an `Authorization: Bearer <apiKey>` header (REMOTE-SECURITY-POSTURE
+  — §5.7).
+- **Response (2xx):** the provider parses the provider-specific response into
+  the single embedding vector for the input. The exact field is
+  provider-specific (e.g. OpenAI's `data[0].embedding`; Cohere's
+  `embeddings[0]`).
+- **Dimension:** same auto-detect/validate rule as ollama (§5.2).
+- **Determinism note:** the provider does NOT add randomness; the model output
+  is deterministic for the same input + model + server state.
+
 **Error handling (documented fail-states):**
 
-- A non-2xx HTTP response → the returned promise REJECTS with
-  `Error('ollama embed: HTTP <status>')`.
-- A network failure (ollama down / connection refused / timeout) → the returned
-  promise REJECTS with `Error('ollama embed: <message>')` (the underlying fetch
-  error message).
-- A timeout (the request exceeds `timeoutMs`) → the returned promise REJECTS
-  with `Error('ollama embed: timeout after <timeoutMs>ms')`.
-- A malformed response (no `embeddings` array, or `embeddings[0]` missing) →
-  the returned promise REJECTS with `Error('ollama embed: malformed response')`.
-- A dimension mismatch (against `opts.dimension` or the auto-detected dimension)
-  → the returned promise REJECTS with
-  `Error('ollama embed: dimension mismatch (expected <n>, got <m>)')`.
-- A non-string `text` → the returned promise REJECTS with
-  `Error('ollama embed: text must be a string')`.
+- `createEmbeddingProvider` with a null/undefined `config` → throws
+  `Error('createEmbeddingProvider: config required')`.
+- `createEmbeddingProvider` with a missing/empty `config.baseUrl` → throws
+  `Error('createEmbeddingProvider: baseUrl required')`.
+- `createEmbeddingProvider` with a missing/empty `config.model` → throws
+  `Error('createEmbeddingProvider: model required')`.
 - `createOllamaEmbedProvider` with a `baseUrl` that is NOT a localhost/loopback
   address (not `127.0.0.1`/`localhost`/`::1`) → throws
   `Error('createOllamaEmbedProvider: baseUrl must be localhost')` (the
-  LOCALHOST-SECURITY-POSTURE — §5.7).
+  LOCAL-SECURITY-POSTURE — §5.7).
+- `createRemoteEmbedProvider` with a missing/empty `apiKey` → throws
+  `Error('createRemoteEmbedProvider: apiKey required')` (a remote/cloud
+  provider REQUIRES an API key).
+- A non-2xx HTTP response (ollama) → the returned promise REJECTS with
+  `Error('ollama embed: HTTP <status>')`.
+- A non-2xx HTTP response (remote/cloud) → the returned promise REJECTS with
+  `Error('remote embed: HTTP <status>')`.
+- A network failure (ollama down / connection refused / timeout) → the returned
+  promise REJECTS with `Error('ollama embed: <message>')` (the underlying fetch
+  error message).
+- A network failure (remote/cloud) → the returned promise REJECTS with
+  `Error('remote embed: <message>')`.
+- A timeout (the request exceeds `timeoutMs`) → the returned promise REJECTS
+  with `Error('ollama embed: timeout after <timeoutMs>ms')` (ollama) or
+  `Error('remote embed: timeout after <timeoutMs>ms')` (remote/cloud).
+- A malformed response (no embeddings array, or the expected vector field
+  missing) → the returned promise REJECTS with
+  `Error('ollama embed: malformed response')` (ollama) or
+  `Error('remote embed: malformed response')` (remote/cloud).
+- A dimension mismatch (against the configured/auto-detected dimension) → the
+  returned promise REJECTS with
+  `Error('ollama embed: dimension mismatch (expected <n>, got <m>)')` (ollama)
+  or `Error('remote embed: dimension mismatch (expected <n>, got <m>)')`
+  (remote/cloud).
+- A non-string `text` → the returned promise REJECTS with
+  `Error('ollama embed: text must be a string')` (ollama) or
+  `Error('remote embed: text must be a string')` (remote/cloud).
+- A remote/cloud `baseUrl` whose origin is NOT in the `connect-src` CSP
+  allowlist → the returned promise REJECTS with
+  `Error('remote embed: baseUrl not in connect-src allowlist')` (the
+  REMOTE-SECURITY-POSTURE — §5.7).
 
 ### 5.3 The vector index
 
-The maintained node-id → embedding map, built by calling ollama once per node
-(at index build) and maintained incrementally on store change (mirroring the
-lexical index — Unit E §5.1).
+The maintained node-id → embedding map, built by calling the provider once per
+node (at index build) and maintained incrementally on store change (mirroring
+the lexical index — Unit E §5.1). The index is provider-agnostic — it takes an
+`EmbedTextFn` (the provider's `embed`), so it works with ANY provider.
 
 ```ts
 /** The vector index — the maintained node-id → embedding map over the RAG
@@ -321,7 +508,7 @@ export function removeFromVectorIndex(index: VectorIndex, nodeId: string): void
   `Error('vector index: index/node/embedFn required')`.
 - `removeFromVectorIndex` with a null/undefined `index` or a non-string `nodeId`
   → throws `Error('vector index: index/nodeId required')`.
-- An `embedFn` rejection (e.g. ollama down) propagates from the index
+- An `embedFn` rejection (e.g. the provider is down) propagates from the index
   build/maintenance functions (the returned promise REJECTS with the embed
   error).
 
@@ -360,36 +547,40 @@ export function cosineSimilarity(a: number[], b: number[]): number
 - `cosineSimilarity` with different-length vectors → throws
   `Error('cosineSimilarity: dimension mismatch')`.
 
-### 5.5 The vector embedder (`createOllamaEmbedder`)
+### 5.5 The vector embedder (`createVectorEmbedder`)
 
 The vector embedder — a drop-in behind the (async-amended) `Embedder` interface.
-It holds a reference to the `RagStore` (to read nodes in `onStoreChanged`) and
-its own `VectorIndex` (maintained on store change).
+It is provider/model AGNOSTIC: it is constructed from an `EmbeddingProviderConfig`
+(§5.2), creates the provider via `createEmbeddingProvider`, and holds a reference
+to the `RagStore` (to read nodes in `onStoreChanged`) and its own `VectorIndex`
+(maintained on store change).
 
 ```ts
-export interface OllamaEmbedderOptions {
-  /** The embed provider options (baseUrl/model/timeoutMs/dimension — §5.2). */
-  provider?: OllamaEmbedOptions
+export interface VectorEmbedderOptions {
+  /** The embedding provider config (provider kind, baseUrl, apiKey, model,
+   *  dimension, timeoutMs — §5.2). The config is the ONLY thing that differs
+   *  between providers. */
+  provider: EmbeddingProviderConfig
   /** The placement minimum score threshold. Default PLACEMENT_MIN_SCORE (0). */
   placementMinScore?: number
 }
 
 /** Create the vector embedder. Builds the vector index from the store's nodes
- *  (embedding each once). ASYNC. */
-export function createOllamaEmbedder(store: RagStore, opts?: OllamaEmbedderOptions): Promise<Embedder>
+ *  (embedding each once) via the configured provider. ASYNC. */
+export function createVectorEmbedder(store: RagStore, opts: VectorEmbedderOptions): Promise<Embedder>
 ```
 
 **Construction:**
 
+- Creates the provider via `createEmbeddingProvider(opts.provider)`.
 - Builds the vector index from the store's nodes
-  (`createVectorIndex(store.listNodes(), embedFn)`), where `embedFn` is the
-  ollama provider (`createOllamaEmbedProvider(opts.provider)`).
+  (`createVectorIndex(store.listNodes(), provider.embed)`).
 - Returns an `Embedder` whose `score`/`place` are async and whose
   `onStoreChanged` maintains the vector index.
 
 **`score(query, nodes)` (async):**
 
-- Computes the query embedding (`await embedFn(query)`).
+- Computes the query embedding (`await provider.embed(query)`).
 - Scores each node by cosine similarity against its vector-index embedding
   (a node not in the vector index scores 0) — §5.4.
 - Sorts by score descending, then node id ascending. Returns `ScoredNode[]`.
@@ -423,8 +614,14 @@ export function createOllamaEmbedder(store: RagStore, opts?: OllamaEmbedderOptio
 
 **Fail-states:**
 
-- `createOllamaEmbedder` with a null/undefined `store` → the returned promise
-  REJECTS with `Error('createOllamaEmbedder: store required')`.
+- `createVectorEmbedder` with a null/undefined `store` → the returned promise
+  REJECTS with `Error('createVectorEmbedder: store required')`.
+- `createVectorEmbedder` with a null/undefined `opts` or `opts.provider` → the
+  returned promise REJECTS with
+  `Error('createVectorEmbedder: provider config required')`.
+- A provider-creation failure (e.g. a remote/cloud config missing its `apiKey`)
+  propagates from `createVectorEmbedder` (the returned promise REJECTS with the
+  provider error).
 - `score` with a non-string `query` or null/undefined `nodes` → the returned
   promise REJECTS with `Error('embedder score: query/nodes required')`.
 - `place` with a non-string `content` or null/undefined `nodes`/`edges` → the
@@ -432,16 +629,16 @@ export function createOllamaEmbedder(store: RagStore, opts?: OllamaEmbedderOptio
   `Error('embedder place: content/nodes/edges required')`.
 - `onStoreChanged` with a null/undefined `nodeIds` → the returned promise
   REJECTS with `Error('onStoreChanged: nodeIds required')`.
-- An `embedFn` rejection (e.g. ollama down) propagates from `score`/`place`/
-  `onStoreChanged` (the returned promise REJECTS with the embed error).
+- An `embedFn` rejection (e.g. the provider is down) propagates from `score`/
+  `place`/`onStoreChanged` (the returned promise REJECTS with the embed error).
 
-### 5.6 The mock embedder + the integration test path
+### 5.6 The mock embedder + the integration test path + the remote/cloud test path
 
-**The mock embedder (unit tests — no ollama dependency):**
+**The mock embedder (unit tests — no provider dependency):**
 
 ```ts
 /** Create a deterministic mock embedder for unit tests. Implements the async
- *  Embedder interface with NO ollama dependency. Deterministic. */
+ *  Embedder interface with NO provider dependency. Deterministic. */
 export function createMockEmbedder(opts?: { dimension?: number }): Embedder
 ```
 
@@ -452,9 +649,9 @@ export function createMockEmbedder(opts?: { dimension?: number }): Embedder
 - `score(query, nodes)` — computes the query embedding and each node's
   embedding deterministically (from the node's `content`), scores by cosine
   similarity, sorts by score descending then node id ascending. Returns
-  `ScoredNode[]`. No ollama call.
+  `ScoredNode[]`. No provider call.
 - `place(content, nodes, edges)` — the same placement logic as the vector
-  embedder (§5.5), using the deterministic mock embeddings. No ollama call.
+  embedder (§5.5), using the deterministic mock embeddings. No provider call.
 - `onStoreChanged` — a no-op (the mock computes embeddings on demand; it holds
   no persistent index). Deterministic.
 - **Determinism:** the same query + same nodes → the same result (twice).
@@ -477,7 +674,9 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   environment). The skip is a vitest `skipIf` (the test is reported as skipped,
   not failed, when ollama is down).
 - **Integration test scope:** exercises the ACTUAL `embeddinggemma` model via
-  the real provider (`createOllamaEmbedProvider` + `createOllamaEmbedder`):
+  the real provider (`createOllamaEmbedProvider` + `createVectorEmbedder` with
+  `{ provider: { provider: 'ollama', baseUrl: 'http://127.0.0.1:11434', model:
+  'embeddinggemma' } }`):
   - A real embed of a known text returns a vector of the model's dimension
     (auto-detected).
   - Two semantically-similar texts score higher (cosine) than two dissimilar
@@ -487,6 +686,34 @@ export function isOllamaAvailable(baseUrl?: string): boolean
 - **Fail-state:** if ollama is down, the integration test is SKIPPED (not
   failed) — the `skipIf` gate. If ollama is up but the model is missing, the
   provider rejects with the ollama error (a documented fail-state — §5.2).
+
+**The remote/cloud provider test path (MOCKED — no live remote call in the test
+suite, no network egress in CI):**
+
+- The remote/cloud provider (`createRemoteEmbedProvider`) is tested with a
+  MOCKED HTTP layer (a stubbed `fetch`), NOT a live remote call. The test suite
+  makes NO network egress to a remote/cloud provider.
+- **Mocked test scope:**
+  - A stubbed `fetch` returns a canned 2xx response → the provider parses the
+    embedding vector, validates the dimension, and resolves.
+  - The test asserts the REQUEST shape: the URL is the configured `baseUrl`, the
+    body carries the model name + text, and the `Authorization: Bearer <apiKey>`
+    header is present (REMOTE-SECURITY-POSTURE).
+  - A stubbed `fetch` returns a non-2xx response → the provider rejects with
+    `Error('remote embed: HTTP <status>')`.
+  - A stubbed `fetch` rejects (network failure) → the provider rejects with
+    `Error('remote embed: <message>')`.
+  - A stubbed `fetch` returns a malformed response → the provider rejects with
+    `Error('remote embed: malformed response')`.
+  - A dimension mismatch against the configured dimension → the provider rejects
+    with `Error('remote embed: dimension mismatch (expected <n>, got <m>)')`.
+  - A `baseUrl` whose origin is NOT in the `connect-src` CSP allowlist → the
+    provider rejects with `Error('remote embed: baseUrl not in connect-src
+    allowlist')`.
+- **No live remote call:** the remote/cloud provider is NEVER exercised against
+  a real cloud endpoint in the test suite (no network egress in CI). The
+  real-ollama integration test is the ONLY live-network test path, and it is
+  localhost-only + gated by `isOllamaAvailable`.
 
 ### 5.7 The retrieval engine + MCP/UI equivalence + security/CSP + config selection
 
@@ -500,7 +727,7 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   the hook (the vector embedder does; the lexical embedder does not).
 - `createRetrieval(store, embedder, opts)` stays SYNCHRONOUS (it builds the
   lexical index synchronously; the vector embedder's index is built in
-  `createOllamaEmbedder`, before the engine is created).
+  `createVectorEmbedder`, before the engine is created).
 
 **Config selection (how the vector embedder is selected):**
 
@@ -508,12 +735,16 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   `'lexical'`).
 - When `'lexical'` (default): main creates the lexical embedder (Unit E) and
   passes it to `createRetrieval` — unchanged.
-- When `'vector'`: main creates the vector embedder
-  (`await createOllamaEmbedder(store, opts)`) and passes it to
-  `createRetrieval`.
+- When `'vector'`: main reads the embedding provider config
+  (`retrieval.embeddingProvider: EmbeddingProviderConfig` — REQUIRED when
+  `retrieval.embedder === 'vector'`) and creates the vector embedder
+  (`await createVectorEmbedder(store, { provider: config })`), then passes it
+  to `createRetrieval`.
 - **The engine uses the passed embedder** (Unit E F2 — `createRetrieval` uses
   the passed embedder; a vector embedder is a drop-in). No engine change is
-  needed to select the vector embedder beyond passing it.
+  needed to select the vector embedder beyond passing it. The config is the ONLY
+  thing that differs between providers — the retrieval engine is unchanged
+  regardless of which provider the vector embedder uses.
 
 **MCP/UI equivalence (§8.2, a BINDING constraint):**
 
@@ -522,28 +753,44 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   the renderer.
 - The vector embedder is a drop-in behind the `Embedder` interface, so
   `rag.query`/`rag-query` work UNCHANGED (same engine, same result shape) when
-  the vector embedder is selected.
+  the vector embedder is selected — regardless of which provider the vector
+  embedder uses.
 - **Equivalence test:** an MCP `rag.query` and a UI `rag-query` IPC with the
   same params produce the same result (same ranked, context, markdown, lineMap)
   — with EITHER embedder selected.
 
-**Security/CSP posture (LOCALHOST-SECURITY-POSTURE):**
+**Security/CSP posture (LOCAL-SECURITY-POSTURE + REMOTE-SECURITY-POSTURE):**
 
-- The ollama call is a localhost HTTP request (`http://127.0.0.1:11434`) — LOCAL,
-  no external network egress. It does NOT require a `connect-src` CSP allowlist
-  for a declared network (that remains an open tracked item in `docs/pending.md`
-  for REMOTE providers only).
-- **Security surface:**
-  - The base URL is pinned to localhost/loopback by default and REJECTED if
-    set to a non-localhost address (§5.2 — `createOllamaEmbedProvider` throws).
+- **Local (ollama) — LOCAL-SECURITY-POSTURE:**
+  - The ollama call is a localhost HTTP request (`http://127.0.0.1:11434`) —
+    LOCAL, no external network egress. It does NOT require a `connect-src` CSP
+    allowlist for a declared network.
+  - The base URL is pinned to localhost/loopback by default and REJECTED if set
+    to a non-localhost address (§5.2 — `createOllamaEmbedProvider` throws).
+  - No credentials are sent; the request is a plain HTTP POST to the localhost
+    endpoint (no API key).
   - The provider is a MAIN-PROCESS-ONLY module — the renderer has NO access to
     the ollama endpoint (no IPC exposes it).
   - The vector embedder is OPT-IN via config (`retrieval.embedder: 'vector'`);
-    the lexical embedder is the default (no ollama call unless opted in).
-  - No credentials are sent; the request is a plain HTTP POST to the localhost
-    endpoint.
-  - The ollama call is made only when the vector embedder is selected (not by
-    default).
+    the lexical embedder is the default (no provider call unless opted in).
+- **Remote/cloud — REMOTE-SECURITY-POSTURE (a DESIGNED security surface, per
+  PROVIDER-AGNOSTIC):**
+  - A remote/cloud provider requires the `connect-src` CSP allowlist for the
+    declared network: the provider's `baseUrl` origin MUST be in the CSP
+    `connect-src` allowlist. A `baseUrl` whose origin is NOT in the allowlist →
+    the provider REJECTS with `Error('remote embed: baseUrl not in connect-src
+    allowlist')` (fail-closed — §5.2).
+  - **API-key handling:** the API key is stored in config
+    (`EmbeddingProviderConfig.apiKey`), sent as an `Authorization: Bearer
+    <apiKey>` header, NEVER logged, NEVER exposed to the renderer
+    (main-process-only — no IPC exposes it), and NEVER sent to a
+    non-allowlisted origin.
+  - The provider is a MAIN-PROCESS-ONLY module — the renderer has NO access to
+    the cloud endpoint or the API key.
+  - The vector embedder is OPT-IN via config (`retrieval.embedder: 'vector'`);
+    the lexical embedder is the default (no provider call unless opted in).
+  - A remote/cloud provider REQUIRES an API key (`createRemoteEmbedProvider`
+    throws if `apiKey` is missing — §5.2).
 
 **Fail-states (amended):**
 
@@ -552,8 +799,12 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   from `retrieve`).
 - `RetrievalEngine.onStoreChanged` with a null/undefined `nodeIds` → the
   returned promise REJECTS with `Error('onStoreChanged: nodeIds required')`.
-- An embedder rejection (e.g. ollama down during `score`) propagates from
-  `query` (the returned promise REJECTS with the embed error).
+- An embedder rejection (e.g. the provider is down during `score`) propagates
+  from `query` (the returned promise REJECTS with the embed error).
+- `retrieval.embedder: 'vector'` with a missing/invalid
+  `retrieval.embeddingProvider` config → main fails to create the vector
+  embedder (the provider-creation error propagates; the app does NOT silently
+  fall back to lexical).
 - `rag.query` with the `rag` group disabled → not registered, not callable
   (Unit B §5.3).
 - A `rag.query` that reaches the renderer switch → `unknown method` throw
@@ -561,114 +812,163 @@ export function isOllamaAvailable(baseUrl?: string): boolean
 
 ### 5.8 Happy-path states (TestWriter red set — valid paths)
 
-1. **`createOllamaEmbedProvider` happy:** a provider with default options → the
-   returned function embeds a text via a localhost POST to
-   `http://127.0.0.1:11434/api/embed` (model `embeddinggemma`).
-2. **Provider dimension auto-detect:** the first embed returns a vector; the
+1. **`createEmbeddingProvider` happy (ollama):** config
+   `{ provider: 'ollama', baseUrl: 'http://127.0.0.1:11434', model:
+   'embeddinggemma' }` → an `EmbeddingProvider` whose `embed` posts to the
+   localhost endpoint (model `embeddinggemma`).
+2. **`createEmbeddingProvider` happy (remote/cloud):** config
+   `{ provider: 'openai', baseUrl: 'https://api.openai.com/v1', model:
+   'text-embedding-3-small', apiKey: 'sk-...' }` → an `EmbeddingProvider` whose
+   `embed` posts to the cloud endpoint with the `Authorization: Bearer` header.
+3. **Provider dimension auto-detect:** the first embed returns a vector; the
    provider auto-detects its length and validates subsequent vectors against it.
-3. **Provider configured dimension:** `dimension: 4` → every returned vector is
+4. **Provider configured dimension:** `dimension: 4` → every returned vector is
    validated to length 4.
-4. **`createVectorIndex` happy:** a node list + a mock `embedFn` → the index has
+5. **`createVectorIndex` happy:** a node list + a mock `embedFn` → the index has
    the node ids, embeddings (one per node), and the dimension.
-5. **`updateVectorIndex` happy (content edit):** a content edit changes a node's
+6. **`updateVectorIndex` happy (content edit):** a content edit changes a node's
    text → the node's embedding is replaced.
-6. **`addToVectorIndex` happy (node add):** a new node → its embedding added, its
+7. **`addToVectorIndex` happy (node add):** a new node → its embedding added, its
    id appended.
-7. **`removeFromVectorIndex` happy (node delete):** a node removed → its
+8. **`removeFromVectorIndex` happy (node delete):** a node removed → its
    embedding and id removed.
-8. **`cosineSimilarity` happy:** two identical vectors → 1; two orthogonal
+9. **`cosineSimilarity` happy:** two identical vectors → 1; two orthogonal
    vectors → 0; two opposite vectors → -1.
-9. **`cosineSimilarity` zero vector:** a zero vector → 0 (no throw).
-10. **`createOllamaEmbedder` + `score` happy (mock):** a query matching a node's
+10. **`cosineSimilarity` zero vector:** a zero vector → 0 (no throw).
+11. **`createVectorEmbedder` + `score` happy (mock):** a query matching a node's
     content → the node scores > 0; the result is ranked highest-first.
-11. **Vector determinism:** the same query + same vector index + same nodes →
+12. **Vector determinism:** the same query + same vector index + same nodes →
     the same ranked result (twice).
-12. **Vector tie-break:** two nodes with equal scores → sorted by node id
+13. **Vector tie-break:** two nodes with equal scores → sorted by node id
     ascending.
-13. **`place` happy (vector):** a new section's content matches an existing
+14. **`place` happy (vector):** a new section's content matches an existing
     section → `{ ok: true, targetNodeId, edgeKind: 'next-section', score }`.
-14. **`place` container match (vector):** a new section's content matches a
+15. **`place` container match (vector):** a new section's content matches a
     `ul`/`ol`/`div` node → `edgeKind: 'doc-child'`.
-15. **`createMockEmbedder` happy:** a deterministic mock embedder → `score`/
-    `place` work with no ollama dependency; the same query + nodes → the same
+16. **`createMockEmbedder` happy:** a deterministic mock embedder → `score`/
+    `place` work with no provider dependency; the same query + nodes → the same
     result (twice).
-16. **`isOllamaAvailable` happy (ollama up):** the probe returns `true`.
-17. **`isOllamaAvailable` happy (ollama down):** the probe returns `false` (no
+17. **`isOllamaAvailable` happy (ollama up):** the probe returns `true`.
+18. **`isOllamaAvailable` happy (ollama down):** the probe returns `false` (no
     throw).
-18. **Integration test gating:** with ollama down, the integration test is
+19. **Integration test gating:** with ollama down, the integration test is
     SKIPPED (not failed).
-19. **Integration test happy (ollama up):** a real embed of a known text returns
+20. **Integration test happy (ollama up):** a real embed of a known text returns
     a vector of the model's dimension; similar texts score higher than
     dissimilar texts.
-20. **Async lexical embedder (amended):** the lexical embedder's `score`/`place`
+21. **Remote/cloud provider mocked happy:** a stubbed `fetch` returns a canned
+    2xx response → the provider parses the embedding, validates the dimension,
+    and resolves; the request carries the `Authorization: Bearer <apiKey>`
+    header and the configured URL/body.
+22. **Async lexical embedder (amended):** the lexical embedder's `score`/`place`
     return RESOLVED promises (the Unit E behavior preserved).
-21. **Async retrieval stack (amended):** `selectTopK`/`retrieve`/`engine.query`
+23. **Async retrieval stack (amended):** `selectTopK`/`retrieve`/`engine.query`
     return promises that resolve to the same results as the sync Unit E
     behavior.
-22. **`onStoreChanged` vector maintenance:** a content edit → the vector index
+24. **`onStoreChanged` vector maintenance:** a content edit → the vector index
     re-embeds the affected node; a structural add → embeds the new node; a
     structural delete → removes the node's embedding.
-23. **Config selection:** `retrieval.embedder: 'vector'` → main creates the
-    vector embedder and passes it to `createRetrieval`; the engine uses it.
-24. **MCP/UI equivalence (vector):** an MCP `rag.query` and a UI `rag-query` IPC
+25. **Config selection:** `retrieval.embedder: 'vector'` with a valid
+    `retrieval.embeddingProvider` config → main creates the vector embedder and
+    passes it to `createRetrieval`; the engine uses it.
+26. **MCP/UI equivalence (vector):** an MCP `rag.query` and a UI `rag-query` IPC
     with the same params → the same result, with the vector embedder selected.
 
 ### 5.9 Fail-states (TestWriter red set — documented fail-states)
 
-1. **`createOllamaEmbedProvider` non-localhost baseUrl** → throws
+1. **`createEmbeddingProvider` null/undefined config** → throws
+   `Error('createEmbeddingProvider: config required')`.
+2. **`createEmbeddingProvider` missing/empty baseUrl** → throws
+   `Error('createEmbeddingProvider: baseUrl required')`.
+3. **`createEmbeddingProvider` missing/empty model** → throws
+   `Error('createEmbeddingProvider: model required')`.
+4. **`createOllamaEmbedProvider` non-localhost baseUrl** → throws
    `Error('createOllamaEmbedProvider: baseUrl must be localhost')`.
-2. **Provider non-2xx HTTP** → the returned promise REJECTS with
+5. **`createRemoteEmbedProvider` missing/empty apiKey** → throws
+   `Error('createRemoteEmbedProvider: apiKey required')`.
+6. **Ollama provider non-2xx HTTP** → the returned promise REJECTS with
    `Error('ollama embed: HTTP <status>')`.
-3. **Provider network failure (ollama down)** → the returned promise REJECTS
-   with `Error('ollama embed: <message>')`.
-4. **Provider timeout** → the returned promise REJECTS with
+7. **Ollama provider network failure (ollama down)** → the returned promise
+   REJECTS with `Error('ollama embed: <message>')`.
+8. **Ollama provider timeout** → the returned promise REJECTS with
    `Error('ollama embed: timeout after <timeoutMs>ms')`.
-5. **Provider malformed response** → the returned promise REJECTS with
+9. **Ollama provider malformed response** → the returned promise REJECTS with
    `Error('ollama embed: malformed response')`.
-6. **Provider dimension mismatch** → the returned promise REJECTS with
-   `Error('ollama embed: dimension mismatch (expected <n>, got <m>)')`.
-7. **Provider non-string text** → the returned promise REJECTS with
-   `Error('ollama embed: text must be a string')`.
-8. **`createVectorIndex` null/undefined nodes or embedFn** → the returned
-   promise REJECTS with `Error('createVectorIndex: nodes/embedFn required')`.
-9. **`updateVectorIndex`/`addToVectorIndex` null/undefined index/node/embedFn** →
-   the returned promise REJECTS with
-   `Error('vector index: index/node/embedFn required')`.
-10. **`removeFromVectorIndex` null/undefined index or non-string nodeId** →
+10. **Ollama provider dimension mismatch** → the returned promise REJECTS with
+    `Error('ollama embed: dimension mismatch (expected <n>, got <m>)')`.
+11. **Ollama provider non-string text** → the returned promise REJECTS with
+    `Error('ollama embed: text must be a string')`.
+12. **Remote provider non-2xx HTTP** → the returned promise REJECTS with
+    `Error('remote embed: HTTP <status>')`.
+13. **Remote provider network failure** → the returned promise REJECTS with
+    `Error('remote embed: <message>')`.
+14. **Remote provider timeout** → the returned promise REJECTS with
+    `Error('remote embed: timeout after <timeoutMs>ms')`.
+15. **Remote provider malformed response** → the returned promise REJECTS with
+    `Error('remote embed: malformed response')`.
+16. **Remote provider dimension mismatch** → the returned promise REJECTS with
+    `Error('remote embed: dimension mismatch (expected <n>, got <m>)')`.
+17. **Remote provider non-string text** → the returned promise REJECTS with
+    `Error('remote embed: text must be a string')`.
+18. **Remote provider baseUrl not in connect-src allowlist** → the returned
+    promise REJECTS with `Error('remote embed: baseUrl not in connect-src
+    allowlist')`.
+19. **`createVectorIndex` null/undefined nodes or embedFn** → the returned
+    promise REJECTS with `Error('createVectorIndex: nodes/embedFn required')`.
+20. **`updateVectorIndex`/`addToVectorIndex` null/undefined index/node/embedFn** →
+    the returned promise REJECTS with
+    `Error('vector index: index/node/embedFn required')`.
+21. **`removeFromVectorIndex` null/undefined index or non-string nodeId** →
     throws `Error('vector index: index/nodeId required')`.
-11. **`cosineSimilarity` null/undefined a/b** → throws
+22. **`cosineSimilarity` null/undefined a/b** → throws
     `Error('cosineSimilarity: a/b required')`.
-12. **`cosineSimilarity` dimension mismatch** → throws
+23. **`cosineSimilarity` dimension mismatch** → throws
     `Error('cosineSimilarity: dimension mismatch')`.
-13. **`createOllamaEmbedder` null/undefined store** → the returned promise
-    REJECTS with `Error('createOllamaEmbedder: store required')`.
-14. **`score` non-string query or null/undefined nodes** → the returned promise
+24. **`createVectorEmbedder` null/undefined store** → the returned promise
+    REJECTS with `Error('createVectorEmbedder: store required')`.
+25. **`createVectorEmbedder` null/undefined opts or opts.provider** → the returned
+    promise REJECTS with `Error('createVectorEmbedder: provider config required')`.
+26. **Provider-creation failure propagation** → a provider-creation failure
+    (e.g. a remote/cloud config missing its `apiKey`) propagates from
+    `createVectorEmbedder` (the returned promise REJECTS with the provider
+    error).
+27. **`score` non-string query or null/undefined nodes** → the returned promise
     REJECTS with `Error('embedder score: query/nodes required')`.
-15. **`place` non-string content or null/undefined nodes/edges** → the returned
+28. **`place` non-string content or null/undefined nodes/edges** → the returned
     promise REJECTS with `Error('embedder place: content/nodes/edges required')`.
-16. **`place` empty content (vector)** → `{ ok: false, reason: 'empty-content' }`.
-17. **`place` no match (vector)** → `{ ok: false, reason: 'no-match' }`.
-18. **`onStoreChanged` null/undefined nodeIds** → the returned promise REJECTS
+29. **`place` empty content (vector)** → `{ ok: false, reason: 'empty-content' }`.
+30. **`place` no match (vector)** → `{ ok: false, reason: 'no-match' }`.
+31. **`onStoreChanged` null/undefined nodeIds** → the returned promise REJECTS
     with `Error('onStoreChanged: nodeIds required')`.
-19. **Embed rejection propagation** → an `embedFn` rejection (e.g. ollama down)
-    propagates from `score`/`place`/`onStoreChanged`/`query` (the returned
-    promise REJECTS with the embed error).
-20. **`RetrievalEngine.query` non-string/empty query** → the returned promise
+32. **Embed rejection propagation** → an `embedFn` rejection (e.g. the provider
+    is down) propagates from `score`/`place`/`onStoreChanged`/`query` (the
+    returned promise REJECTS with the embed error).
+33. **`RetrievalEngine.query` non-string/empty query** → the returned promise
     REJECTS with `Error('retrieve: query must be a non-empty string')`.
-21. **`rag.query` with the `rag` group disabled** → not registered, not callable
+34. **`retrieval.embedder: 'vector'` with a missing/invalid
+    `retrieval.embeddingProvider` config** → main fails to create the vector
+    embedder (the provider-creation error propagates; the app does NOT silently
+    fall back to lexical).
+35. **`rag.query` with the `rag` group disabled** → not registered, not callable
     (Unit B §5.3).
-22. **`rag.query` reaching the renderer switch** → `unknown method` throw
+36. **`rag.query` reaching the renderer switch** → `unknown method` throw
     (fail-closed, the negative contract — Unit B §5.3 Seam 4).
 
 ### 5.10 Census / numeric claims
 
+- **Provider kinds:** 2 concrete (`ollama` — local; remote/cloud — generic
+  OpenAI/Cohere/etc.) behind ONE `EmbeddingProvider` interface.
+- **`EmbeddingProvider` interface members:** 5 (`kind`, `model`, `baseUrl`,
+  `dimension`, `embed`).
+- **`EmbeddingProviderConfig` fields:** 6 (`provider`, `baseUrl`, `model`,
+  `apiKey?`, `dimension?`, `timeoutMs?`).
 - **Ollama base URL:** `http://127.0.0.1:11434` (default; localhost-pinned).
 - **Ollama model:** `embeddinggemma` (default).
 - **Ollama endpoint:** `POST /api/embed` (the embeddings endpoint).
-- **HTTP timeout:** 5000 ms (default, configurable via `OllamaEmbedOptions.timeoutMs`).
+- **HTTP timeout:** 5000 ms (default, configurable via `timeoutMs`).
 - **Embedding dimension:** auto-detected from the model's first response
-  (validated for consistency); configurable via `OllamaEmbedOptions.dimension`.
-  The mock's fixed dimension is 4 (default).
+  (validated for consistency); configurable via `dimension`. The mock's fixed
+  dimension is 4 (default).
 - **Cosine similarity range:** [-1, 1].
 - **Placement threshold:** `PLACEMENT_MIN_SCORE` — a fixed constant (default 0);
   a best score below it is `no-match` (shared with Unit E).
@@ -682,8 +982,12 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   `retrieve`, `RetrievalEngine.query`, `RetrievalEngine.onStoreChanged`).
 - **Mock dimension:** 4 (default).
 - **Integration-test probe timeout:** 1000 ms (the `isOllamaAvailable` probe).
-- **Config option:** 1 (`retrieval.embedder: 'lexical' | 'vector'`, default
-  `'lexical'`).
+- **Config options:** 2 (`retrieval.embedder: 'lexical' | 'vector'`, default
+  `'lexical'`; `retrieval.embeddingProvider: EmbeddingProviderConfig`, REQUIRED
+  when `retrieval.embedder === 'vector'`).
+- **Security surfaces:** 2 (LOCAL-SECURITY-POSTURE — localhost, no egress, no
+  API key; REMOTE-SECURITY-POSTURE — `connect-src` CSP allowlist + API-key
+  handling).
 
 ### 5.11 Cross-references
 
@@ -708,10 +1012,15 @@ export function isOllamaAvailable(baseUrl?: string): boolean
   placement decision).
 - Decisions: `docs/decisions.md` rows **LEXICAL-FIRST-RETRIEVAL** (the `Embedder`
   is the drop-in seam for the Unit F vector implementation),
+  **PROVIDER-AGNOSTIC** (2026-08-27 — the vector embedder is provider/model
+  agnostic; ollama `embeddinggemma` is ONE concrete config; remote/cloud
+  providers are drop-ins; network egress IS in scope — the `connect-src` CSP
+  allowlist + API-key handling are a DESIGNED security surface),
   **SINGLE-WRITER-STORE**, **RAG-EDIT-MCP-GROUPS**.
 - Pending: `docs/pending.md` (vector embeddings — the deferred row, now
-  implemented by Unit F; the "no network egress yet (the `connect-src` CSP
-  allowlist for a declared network is an open tracked item)" constraint — a
-  localhost ollama call is LOCAL, not external egress; the remote embedding
-  provider — a SPECULATIVE item that requires network egress + a CSP allowlist
-  + a new security surface).
+  implemented by Unit F; the updated "no network egress" row — **PROVIDER-
+  AGNOSTIC (2026-08-27):** the vector embedder is provider/model agnostic —
+  local (ollama `embeddinggemma`) AND remote/cloud providers are in scope, so
+  the `connect-src` CSP allowlist + API-key handling become a DESIGNED security
+  surface; a localhost ollama call is LOCAL (no external egress); a remote/cloud
+  provider requires the CSP allowlist + API-key config).
