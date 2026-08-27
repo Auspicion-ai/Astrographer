@@ -4,12 +4,13 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, type McpTransportKind } from './mcp-server.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
 import { setContent } from './edit-ops.js'
+import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -69,7 +70,12 @@ async function main(): Promise<void> {
   const ragStore = createJsonRagStore({
     path: join(app.getPath('userData'), 'provident-rag.json'),
   })
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore })
+  // Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE with the
+  // store + the lexical embedder (v1 default). F1: `rag.query` (MCP) and the
+  // `rag-query` IPC both use THIS engine; the index is reconciled incrementally
+  // on `rag-store-changed` (never rebuilt from scratch per query).
+  const retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -122,10 +128,21 @@ async function main(): Promise<void> {
     }
     const result = await setContent({ store: ragStore }, { nodeId: payload.nodeId, content: payload.content })
     if (result.ok) {
+      // F1 — reconcile the maintained retrieval index incrementally, then
+      // broadcast the `rag-store-changed` re-traversal trigger to the renderer.
+      retrievalEngine.onStoreChanged('content', [payload.nodeId], [])
       backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
       return { ok: true, nodeId: payload.nodeId }
     }
     return { ok: false, reason: 'store-error', error: result.error }
+  })
+
+  // Unit E §5.7/§8.2 — the UI retrieval path. The `rag-query` IPC calls the SAME
+  // maintained retrieval engine as the MCP `rag.query` tool (MCP/UI
+  // equivalence — a BINDING constraint). The renderer never computes retrieval
+  // itself.
+  ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
+    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK })
   })
 
   // The MCP stdio transport is spawned by a client (the battery, a test, or an

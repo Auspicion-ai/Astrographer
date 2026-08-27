@@ -77,6 +77,49 @@ see `docs/pending.md`).
 No engine gap. ENG-GAP-1 is SHELVED 2026-08-26 (markdown is export-only; the
 host-side line→node map covers it — see `docs/pending.md`).
 
+### 3a. Adversarial findings (host findings, fixed + regression-tested)
+
+Post-green adversarial pass (RCA-3) 2026-08-27. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`). Each host finding was fixed + regression-
+tested (10 regression tests in `tests/retrieval-adversarial.test.ts`).
+
+**MEDIUM:**
+- **F1** — the maintained retrieval engine (§5.6) was never wired into the
+  running app; `rag.query` rebuilt the whole index on every call, leaving the
+  §5.1 incremental-index machinery dead in production. Fixed: `main.ts` creates
+  the engine ONCE with the store + the lexical embedder; `rag.query` uses the
+  maintained engine; `engine.onStoreChanged(...)` is wired into the `edit.*`
+  broadcast + the `IPC_EDIT_COMMIT` handler. Regression-tested (incremental
+  maintenance, not rebuild, across calls).
+- **F2** — `createRetrieval` silently discarded its `embedder` argument (the
+  interface-swappable seam was dead). Fixed: the engine now USES the passed
+  embedder (a vector embedder is a drop-in); the lexical v1 default shares the
+  same `LexicalIndex` via a module-private symbol so `onStoreChanged` stays
+  consistent. Regression-tested (a spy embedder's `score` is invoked; a
+  different embedder changes the result).
+- **F3** — MCP/UI equivalence (§5.7/§8.2 BINDING) was not implemented — no
+  `rag-query` IPC. Fixed: added `IPC_RAG_QUERY` (`src/shared/types.ts`),
+  `ipcMain.handle(IPC_RAG_QUERY)` in `main.ts`, a shared `handleRagQueryIpc` in
+  `mcp-server.ts` (same maintained engine as the MCP tool), and `rag.query` on
+  the preload bridge. Regression-tested (IPC and MCP produce identical results).
+
+**LOW:**
+- **F4** — `retrieve`/`assembleContext` accepted malformed `maxNodes`/`maxDepth`
+  (non-numeric, non-integer, fractional). Fixed: validate `maxNodes` (positive
+  integer) + `maxDepth` (non-negative integer) → `'assembleContext:
+  maxNodes/maxDepth invalid'`. Regression-tested.
+- **F5** — stopword-only / no-token queries yielded a silently-empty result.
+  Fixed: `retrieve` treats a query that tokenizes to zero tokens as invalid →
+  `'retrieve: query must be a non-empty string'`. Regression-tested.
+- **F6** — `tokenize` Unicode edge (non-ASCII letters became split boundaries).
+  Fixed: extended the split regex to `/[^\p{L}\p{N}]+/u` (Unicode
+  letters/numbers); ASCII behavior unchanged. Regression-tested.
+- **F7** — cyclic-graph / seed-reachable-by-traversal behavior was untested.
+  The implementation was already safe (visited set); added regression tests
+  constructing an explicit doc-flow cycle + a parent-child back/self edge,
+  proving `assembleContext` terminates and dedupes.
+
 ## 4. Design decisions pinned by this spec
 
 - **LEXICAL-FIRST-RETRIEVAL:** retrieval is lexical-first (BM25/tf-idf) behind

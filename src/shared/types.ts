@@ -357,3 +357,27 @@ export interface EditCommitPayload {
   nodeId: string
   content: string
 }
+
+// ---- Unit E retrieval IPC (docs/specs/unit-e-rag-index.md §5.7/§8.2) ----
+
+/** The renderer→main `rag-query` IPC (the UI retrieval path, §5.7 — MCP/UI
+ *  equivalence, §8.2 a BINDING constraint). Payload: `{ query: string, topK?:
+ *  number }`. Main calls the SAME retrieval engine as the MCP `rag.query` tool
+ *  (the maintained engine, §5.6) and returns the retrieval result. */
+export const IPC_RAG_QUERY = 'provident:rag-query'
+export interface RagQueryPayload {
+  query: string
+  topK?: number
+}
+
+/** The `rag-query` IPC result — the JSON-safe transport of the retrieval
+ *  engine's `RetrievalResult` (ranked + assembled context + markdown + line map
+ *  + k). Mirrors the MCP `rag.query` result so both surfaces are equivalent. */
+export interface RagQueryResult {
+  query: string
+  ranked: Array<{ nodeId: string; score: number }>
+  context: unknown[]
+  markdown: string
+  lineMap: { ranges: Array<{ nodeId: string; startLine: number; endLine: number }> }
+  k: number
+}

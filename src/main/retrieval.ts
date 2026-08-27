@@ -30,7 +30,10 @@ export const DEFAULT_STOPWORDS: ReadonlySet<string> = new Set([
 ])
 
 /** Tokenize text for lexical retrieval. Deterministic: lowercase, split on
- *  non-alphanumeric runs, drop empty tokens, drop stopwords. */
+ *  non-alphanumeric runs, drop empty tokens, drop stopwords. F6 — the split
+ *  boundary is UNICODE-aware (`\p{L}` letters / `\p{N}` numbers, `u` flag), so
+ *  non-ASCII letters/numbers are kept as token characters rather than split
+ *  into boundaries. ASCII behavior is unchanged (a-z/0-9 are `\p{L}`/`\p{N}`). */
 export function tokenize(text: string): string[] {
   if (typeof text !== 'string') throw new Error('tokenize: text must be a string')
   return tokenizeWithStopwords(text, DEFAULT_STOPWORDS)
@@ -39,7 +42,7 @@ export function tokenize(text: string): string[] {
 function tokenizeWithStopwords(text: string, stopwords: ReadonlySet<string>): string[] {
   return text
     .toLowerCase()
-    .split(/[^a-z0-9]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     // Drop empty tokens and stopwords (§5.1 — a stopword is dropped regardless
     // of length; 'a'/'i' are in DEFAULT_STOPWORDS and are dropped too).
     .filter((t) => t !== '' && !stopwords.has(t))
@@ -212,6 +215,16 @@ export interface LexicalEmbedderOptions {
  *  Fixed constant (default 0). */
 export const PLACEMENT_MIN_SCORE = 0
 
+/** Module-private marker: the `LexicalIndex` a `createLexicalEmbedder`-created
+ *  `Embedder` scores against. The retrieval engine (F2) reads it so it can
+ *  share the SAME maintained index with the lexical (v1 default) embedder —
+ *  `onStoreChanged` then updates the index the embedder actually references. A
+ *  non-lexical drop-in embedder (a vector embedder, Unit F) has no such marker
+ *  and the engine maintains its own index (a no-op for scoring — such an
+ *  embedder computes scores from the live node content). */
+const LEXICAL_INDEX = Symbol('lexical-index')
+type LexicalEmbedder = Embedder & { [LEXICAL_INDEX]: LexicalIndex }
+
 /** The lexical-first (BM25) implementation. Holds a reference to the
  *  LexicalIndex (maintained by the retrieval engine — §5.6). */
 export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedderOptions): Embedder {
@@ -267,7 +280,12 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
     return { ok: true, targetNodeId: best.nodeId, edgeKind, score: best.score }
   }
 
-  return { score, place }
+  const embedder: Embedder = { score, place }
+  // F2 — tag the lexical embedder with the index it references, so the
+  // retrieval engine can share it (the engine maintains the index the embedder
+  // scores against). The public `Embedder` shape is unchanged.
+  ;(embedder as LexicalEmbedder)[LEXICAL_INDEX] = index
+  return embedder
 }
 
 // ---------------------------------------------------------------------------
@@ -354,7 +372,13 @@ export function assembleContext(store: RagStore, topK: ScoredNode[], opts: Assem
   if (store === null || store === undefined || topK === null || topK === undefined || opts === null || opts === undefined) {
     throw new Error('assembleContext: store/topK/opts required')
   }
-  if (opts.maxNodes < 1 || opts.maxDepth < 0) {
+  // F4 — `maxNodes` must be a positive INTEGER and `maxDepth` a non-negative
+  // INTEGER. A non-numeric / non-integer / fractional bound is rejected (the
+  // documented §5.9 fail-state) rather than silently mis-bounding the walk.
+  if (
+    !Number.isInteger(opts.maxNodes) || opts.maxNodes < 1 ||
+    !Number.isInteger(opts.maxDepth) || opts.maxDepth < 0
+  ) {
     throw new Error('assembleContext: maxNodes/maxDepth invalid')
   }
   const maxNodes = opts.maxNodes
@@ -467,6 +491,11 @@ export function retrieve(
     throw new Error('retrieve: store/embedder/index/query/opts required')
   }
   if (query.trim() === '') throw new Error('retrieve: query must be a non-empty string')
+  // F5 — a query that tokenizes to zero tokens (stopword-only / no-token, e.g.
+  // 'the' or 'and') is treated as INVALID — the documented empty-query
+  // fail-state — rather than silently returning an empty result. The renderer
+  // and the agent both surface the same error instead of a confusing no-match.
+  if (tokenize(query).length === 0) throw new Error('retrieve: query must be a non-empty string')
   const k = opts.k ?? 5
   if (typeof k !== 'number' || !Number.isInteger(k) || k < 1) {
     throw new Error('retrieve: k must be a positive integer')
@@ -501,22 +530,31 @@ export interface RetrievalEngine {
 }
 
 /** Create the retrieval engine. Builds the index from the store on
- *  construction; maintains it on store changes. The engine owns its maintained
- *  LexicalIndex and its own lexical embedder referencing that index, so the
- *  index the embedder scores against is the SAME object the engine reconciles
- *  on `onStoreChanged` (the tests observe the index via the engine's query). */
+ *  construction; maintains it on store changes. F2 — the passed `embedder` IS
+ *  used (the interface-swappable seam). For a lexical embedder the engine
+ *  shares the SAME index the embedder references, so `onStoreChanged` keeps the
+ *  index the embedder scores against consistent (the tests observe the index
+ *  via the engine's query). For any other drop-in embedder (no exposed index)
+ *  the engine maintains its own index. */
 export function createRetrieval(store: RagStore, embedder: Embedder, opts?: RetrievalOptions): RetrievalEngine {
   if (store === null || store === undefined || embedder === null || embedder === undefined) {
     throw new Error('createRetrieval: store/embedder required')
   }
-  const index = createLexicalIndex(store.listNodes())
-  const engineEmbedder = createLexicalEmbedder(index)
+  // F2 — the passed `embedder` IS used (the interface-swappable seam: a vector
+  // embedder is a drop-in behind the same interface). For the lexical (v1
+  // default) embedder the engine SHARES the index the embedder references
+  // (LEXICAL_INDEX) so `onStoreChanged` keeps the index the embedder scores
+  // against consistent. For any other embedder (no exposed index) the engine
+  // maintains its own index (a no-op for scoring — such an embedder derives
+  // scores from the live node content passed to `score`).
+  const shared = (embedder as { [LEXICAL_INDEX]?: LexicalIndex })[LEXICAL_INDEX]
+  const index = shared ?? createLexicalIndex(store.listNodes())
   const maxNodes = opts?.maxNodes ?? 50
   const maxDepth = opts?.maxDepth ?? 3
 
   return {
     query(query: string, qopts?: { k?: number }): RetrievalResult {
-      return retrieve(store, engineEmbedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
+      return retrieve(store, embedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
     },
     onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): void {
       if (nodeIds === null || nodeIds === undefined) throw new Error('onStoreChanged: nodeIds required')

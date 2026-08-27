@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult } from '../shared/types.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -46,6 +46,13 @@ export interface ProvidentBridge {
     /** Unit D §5.1.9 — subscribe to the `rag-store-changed` re-traversal
      *  trigger. Returns an unsubscribe function. */
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void
+  }
+  /** Unit E §5.7/§8.2 — the UI retrieval surface. Sends the `rag-query` IPC to
+   *  main, which calls the SAME maintained retrieval engine as the MCP
+   *  `rag.query` tool (MCP/UI equivalence). The renderer never computes
+   *  retrieval itself. */
+  rag: {
+    query(query: string, topK?: number): Promise<RagQueryResult>
   }
 }
 
@@ -104,6 +111,14 @@ const bridge: ProvidentBridge = {
       return () => {
         ipcRenderer.removeListener(IPC_RAG_STORE_CHANGED, listener)
       }
+    },
+  },
+  // Unit E §5.7/§8.2 — the UI retrieval surface. The `rag-query` IPC calls the
+  // same maintained retrieval engine as the MCP `rag.query` tool.
+  rag: {
+    query(query: string, topK?: number): Promise<RagQueryResult> {
+      const payload: RagQueryPayload = { query, ...(topK !== undefined ? { topK } : {}) }
+      return ipcRenderer.invoke(IPC_RAG_QUERY, payload)
     },
   },
 }

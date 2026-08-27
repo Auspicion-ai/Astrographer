@@ -25,6 +25,7 @@ import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
+import type { RetrievalEngine } from './retrieval.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -112,8 +113,19 @@ export function handleModuleTool(store: ModuleStore | null, name: string, args: 
  *  never the concrete JSON store. Tools whose behavior lands in a later unit
  *  (rag.query → Unit E retrieval, rag.backlinks → Unit G) are registered with a
  *  minimal/placeholder handler that is gated correctly. Exported for direct
- *  unit testing. */
-export function handleRagTool(store: RagStore | null, name: string, args: Record<string, unknown>): unknown {
+ *  unit testing.
+ *
+ *  F1 — the retrieval ENGINE is created ONCE in main and passed in; `rag.query`
+ *  uses that maintained engine (index reconciled on `rag-store-changed`) and
+ *  does NOT rebuild the whole index per call. A fresh engine is built ONLY as a
+ *  direct-call fallback (when no engine is passed — unit tests / non-wired
+ *  callers). */
+export function handleRagTool(
+  store: RagStore | null,
+  name: string,
+  args: Record<string, unknown>,
+  engine?: RetrievalEngine | null,
+): unknown {
   if (!store) throw new Error(`${name}: no rag store configured`)
   switch (name) {
     case 'rag.query': {
@@ -126,10 +138,8 @@ export function handleRagTool(store: RagStore | null, name: string, args: Record
       if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1) {
         throw new Error('rag.query: topK must be a positive integer')
       }
-      const index = createLexicalIndex(store.listNodes())
-      const embedder = createLexicalEmbedder(index)
-      const engine = createRetrieval(store, embedder)
-      return engine.query(query, { k: topK })
+      const e = engine ?? createRetrieval(store, createLexicalEmbedder(createLexicalIndex(store.listNodes())))
+      return e.query(query, { k: topK })
     }
     case 'rag.get_document': {
       // Finding 4 (known behavior, no code change): this is a PLACEHOLDER —
@@ -157,6 +167,24 @@ export function handleRagTool(store: RagStore | null, name: string, args: Record
     default:
       throw new Error(`unknown rag tool: ${name}`)
   }
+}
+
+/** Unit E §5.7/§8.2 — the UI retrieval path. The main-process `rag-query` IPC
+ *  handler delegates to THIS (via the SAME validation + the SAME maintained
+ *  engine as the MCP `rag.query` tool), so the two surfaces are equivalent
+ *  (MCP/UI equivalence — a BINDING constraint). Returns the engine's
+ *  `RetrievalResult`; on an invalid query/topK it throws the same documented
+ *  `rag.query` fail-states (so the IPC rejects identically to the MCP tool).
+ *  Exported for direct unit testing of the equivalence. */
+export function handleRagQueryIpc(
+  engine: RetrievalEngine | null,
+  store: RagStore | null,
+  payload: { query?: unknown; topK?: unknown },
+): unknown {
+  return handleRagTool(store, 'rag.query', {
+    query: payload?.query,
+    topK: payload?.topK,
+  }, engine)
 }
 
 /** The `rag-store-changed` broadcast payload (§5.1.9) — the re-traversal
@@ -385,6 +413,11 @@ export interface McpServerOptions {
    *  routed to the renderer). Injected like `moduleStore`; the tools depend on
    *  the `RagStore` INTERFACE, never the concrete JSON store. */
   ragStore?: RagStore
+  /** Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE in main
+   *  (F1). `rag.query` uses it (no per-call index rebuild); `edit.*` success
+   *  wires `engine.onStoreChanged` into the `rag-store-changed` broadcast. The
+   *  UI `rag-query` IPC uses the same engine (MCP/UI equivalence — §8.2). */
+  retrievalEngine?: RetrievalEngine
 }
 
 export interface SecuritySnapshot { token: string | null; enabled: ToolGroup[] }
@@ -397,6 +430,7 @@ export class ProvidentMcpServer {
   private readonly moduleStore: ModuleStore | null
   private readonly router: CapabilityRouter | null
   private readonly ragStore: RagStore | null
+  private readonly retrievalEngine: RetrievalEngine | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
   private _gate: SecurityGate
@@ -421,6 +455,7 @@ export class ProvidentMcpServer {
     this.moduleStore = opts.moduleStore ?? null
     this.router = opts.router ?? null
     this.ragStore = opts.ragStore ?? null
+    this.retrievalEngine = opts.retrievalEngine ?? null
   }
 
   getGateConfig(): SecuritySnapshot {
@@ -546,7 +581,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this._gate)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this._gate)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -690,7 +725,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this._gate)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this._gate)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -706,6 +741,7 @@ export class ProvidentMcpServer {
     moduleStore: ModuleStore | null,
     router: CapabilityRouter | null,
     ragStore: RagStore | null,
+    engine: RetrievalEngine | null,
     gate: SecurityGate,
   ): void {
     if (allowed.includes('provident.dispatch')) {
@@ -868,12 +904,16 @@ export class ProvidentMcpServer {
         // Unit B — the rag.*/edit.* tools are MAIN-process (the RAG store),
         // NOT routed to the renderer. Editing is NEVER a `code`-group op.
         if (name.startsWith('rag.')) {
-          return text(handleRagTool(ragStore, name, args))
+          // F1 — `rag.query` uses the MAINTAINED engine (created once in main),
+          // never a per-call index rebuild.
+          return text(handleRagTool(ragStore, name, args, engine))
         }
         if (name.startsWith('edit.')) {
-          // H5 (§5.1.9) — after a successful edit mutation, broadcast the
+          // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval
+          // engine's incremental index reconcile (F1) AND broadcast the
           // `rag-store-changed` re-traversal trigger to the renderer.
           const result = await handleEditTool(ragStore, name, args, (payload) => {
+            engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)
             backend.broadcast?.('rag-store-changed', payload)
           })
           return text(result)
