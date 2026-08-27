@@ -1,0 +1,167 @@
+// src/main/main.ts — the Electron main process entry. Creates the BrowserWindow
+// (the renderer owns the provident-ssr graph + DOM), starts the MCP server
+// (stdio or Streamable HTTP), and bridges MCP tool calls to the renderer via
+// IPC.
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { join } from 'node:path'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, type RpcReply, type NotifyPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, type McpTransportKind } from './mcp-server.js'
+import { createSecurityStore, type SecurityStore } from './security-store.js'
+import { createModuleStore } from './module-store.js'
+import { CapabilityRouter } from '../renderer/extensions.js'
+import { syncModuleRouter } from './mcp-server.js'
+import { SecurityGate, type ToolGroup } from './security.js'
+
+// The main process is bundled as CJS (Electron runs it reliably that way), so
+// `__dirname` is available.
+const here = __dirname
+
+function transportFromArgs(argv: string[]): McpTransportKind {
+  const flag = argv.find((a) => a.startsWith('--mcp-transport='))
+  if (flag) {
+    const v = flag.slice('--mcp-transport='.length)
+    if (v === 'http' || v === 'stdio') return v
+  }
+  const env = process.env.PROVIDENT_MCP_TRANSPORT
+  if (env === 'http' || env === 'stdio') return env
+  return 'http'
+}
+
+function portFromArgs(argv: string[]): number {
+  const flag = argv.find((a) => a.startsWith('--mcp-port='))
+  if (flag) {
+    const v = Number(flag.slice('--mcp-port='.length))
+    if (Number.isFinite(v)) return v
+  }
+  const env = Number(process.env.PROVIDENT_MCP_PORT)
+  if (Number.isFinite(env)) return env
+  return 3787
+}
+
+async function main(): Promise<void> {
+  console.error(`[provident-main] node ${process.versions.node} electron ${process.versions.electron} crypto=${typeof globalThis.crypto}`)
+  const transport = transportFromArgs(process.argv.slice(1))
+  const port = portFromArgs(process.argv.slice(1))
+
+  // The manual-UI security settings (mcp-endpoint.md §6.4): persisted to
+  // userData so a restart restores them. The MCP server gate is built from the
+  // persisted config (read+dispatch ON by default on first run).
+  const securityStore: SecurityStore = createSecurityStore({
+    path: join(app.getPath('userData'), 'provident-security.json'),
+  })
+  const persisted = securityStore.get()
+  const gate = new SecurityGate({ token: persisted.token, enabled: persisted.enabled as ToolGroup[] })
+  const backend = new RendererBackend()
+  // U8 — the module store (operator-owned, persisted to userData). The MCP
+  // server handles module.* tools against it; the pane reads/writes it over IPC.
+  const moduleStore = createModuleStore({
+    path: join(app.getPath('userData'), 'provident-modules.json'),
+  })
+  // U9-FIX — the live capability router (main-process). Synced from the module
+  // store so installed modules' declared tools become callable. Passed to the
+  // MCP server so dynamic module tools are registered + two-gated.
+  const moduleRouter = new CapabilityRouter()
+  syncModuleRouter(moduleRouter, moduleStore)
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter })
+
+  // The manual-UI settings IPC: main owns the config + re-wires the MCP server
+  // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
+  // MCP tool (the MCP tool handlers never route to it), so an agent cannot grant
+  // itself capabilities.
+  ipcMain.handle(IPC_SECURITY_GET, () => securityStore.get())
+  ipcMain.handle(IPC_SECURITY_SET, (_event, patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }) => {
+    const updated = securityStore.set(patch)
+    // Re-gate the live MCP server + persist.
+    mcp.applyGatePatch({ token: patch.token, groups: patch.groups as ToolGroup[] | undefined, disable: patch.disable as ToolGroup[] | undefined })
+    return updated
+  })
+
+  // U8 — the module management IPC (module-feature-list.md §4). Manual-UI only:
+  // the module store is operator-owned; an agent never reaches it over MCP.
+  const moduleBridgeResult = () => {
+    const status = moduleStore.status()
+    return {
+      corrupt: status.corrupt,
+      quarantined: status.quarantined,
+      loaded: status.loaded,
+      modules: moduleStore.list().map((r) => ({
+        name: r.name,
+        version: r.version,
+        capabilities: r.capabilities,
+        disabled: r.disabled,
+        quarantined: r.quarantined,
+      })),
+    }
+  }
+  ipcMain.handle(IPC_MODULE_GET, () => moduleBridgeResult())
+  ipcMain.handle(IPC_MODULE_SET_DISABLED, (_event, payload: { name?: string; disabled?: boolean }) => {
+    if (typeof payload?.name === 'string' && payload.name !== '') {
+      moduleStore.setDisabled(payload.name, payload.disabled === true)
+      // U9-FIX (#2) — disabling/enabling a module must re-sync the live router
+      // so its tools are registered/deregistered accordingly.
+      syncModuleRouter(moduleRouter, moduleStore)
+    }
+    return moduleBridgeResult()
+  })
+
+  // The MCP stdio transport is spawned by a client (the battery, a test, or an
+  // agent). When that client disconnects, stdin closes. Exit so a test run does
+  // NOT leave an orphaned Electron app instance open on the machine — otherwise
+  // every test spawn leaves a live BrowserWindow behind.
+  if (transport === 'stdio') {
+    process.stdin.on('end', () => {
+      console.error('[provident-main] stdin closed — MCP client disconnected; exiting')
+      void mcp.close().finally(() => app.exit(0))
+    })
+    process.stdin.on('error', () => {
+      void mcp.close().finally(() => app.exit(0))
+    })
+  }
+
+  ipcMain.on(IPC_READY, () => {
+    backend.markReady()
+    console.error('[provident-main] renderer ready — MCP backend armed')
+  })
+  ipcMain.on(IPC_REPLY, (_event, reply: RpcReply) => {
+    backend.handleReply(reply)
+  })
+  // N4 (live-notification-review.md) — the app-graph-changed push from the
+  // renderer. Maps it into a resource-updated notification over the stdio MCP
+  // server (N2: HTTP is stateless → no-op). Sourced ONLY from the app Runtime
+  // re-render; SecurePanels never emits here.
+  ipcMain.on(IPC_NOTIFY, (_event, payload: NotifyPayload) => {
+    void mcp.notifyGraphChanged()
+  })
+
+  const win = new BrowserWindow({
+    width: 980,
+    height: 720,
+    webPreferences: {
+      preload: join(here, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  backend.attachWindow(win)
+
+  const rendererHtml = join(here, '..', 'renderer', 'index.html')
+  await win.loadFile(rendererHtml)
+
+  await mcp.start()
+
+  win.on('closed', () => {
+    void mcp.close()
+    app.quit()
+  })
+}
+
+app.whenReady().then(() => {
+  void main().catch((e) => {
+    console.error('[provident-main] fatal:', e)
+    app.exit(1)
+  })
+})
+
+app.on('window-all-closed', () => {
+  app.quit()
+})

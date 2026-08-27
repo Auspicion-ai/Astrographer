@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'" />
+  <title>Provident-Electron</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f4f6f8; }
+    header h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+    header p { margin: 0 0 1rem; color: #556; font-size: 0.85rem; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .card { background: #fff; border: 1px solid #d8dde3; border-radius: 8px; padding: 1rem; }
+    h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+    .counter-value { font-size: 2rem; font-weight: 700; margin: 0 0 0.75rem; }
+    .btn { margin-right: 0.5rem; }
+    input { width: 100%; box-sizing: border-box; padding: 0.4rem; }
+    .echo-out { margin-top: 0.75rem; padding: 0.5rem; border: 1px dashed #b9c2cc; min-height: 1.25rem; }
+    #status { margin-top: 1rem; font-family: monospace; font-size: 0.75rem; color: #556; }
+    #panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    #panes .hint { font-size: 0.75rem; color: #667; margin: 0 0 0.75rem; }
+    #panes #security-status { font-family: monospace; font-size: 0.8rem; margin-bottom: 0.75rem; color: #445; }
+    #panes #security-token label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: #445; }
+    #panes .token-row { display: flex; gap: 0.5rem; }
+    #panes .token-row input { flex: 1; }
+    #panes #group-toggles { border: 1px solid #d8dde3; border-radius: 8px; margin-top: 0.75rem; padding: 0.5rem 0.75rem; }
+    #panes #group-toggles label { display: block; padding: 0.25rem 0; }
+    .group-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+    .group-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+    .error { color: #c0392b; font-size: 0.8rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Provident-Electron — MCP endpoint demo</h1>
+    <p>provident-ssr renderer with synthetic-event access + rendered-HTML visibility for agentic MCP use.</p>
+  </header>
+  <main class="layout">
+    <div id="app" class="card"></div>
+    <div id="panes"></div>
+  </main>
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

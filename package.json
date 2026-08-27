@@ -1,0 +1,32 @@
+{
+  "name": "provident-electron",
+  "version": "0.1.0",
+  "description": "Prebuilt Electron shell for apps using the Provident SSR framework (provident-ssr) — full synthetic-event access + rendered-HTML visibility for MCP endpoints, for agentic use and debugging exposure.",
+  "license": "AGPL-3.0",
+  "type": "module",
+  "main": "dist/main/main.cjs",
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && esbuild src/main/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/main.cjs && esbuild src/main/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/preload.cjs && esbuild src/main/standalone.ts --bundle --platform=node --format=esm --outfile=dist/main/standalone.mjs && esbuild src/main/battery-host.ts --bundle --platform=node --format=esm --outfile=dist/main/battery-host.mjs && esbuild src/renderer/renderer.ts --bundle --platform=browser --format=esm --outdir=dist/renderer && cp src/renderer/index.html dist/renderer/index.html",
+    "build:watch": "esbuild src/main/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/main.cjs --watch & esbuild src/main/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/preload.cjs --watch & esbuild src/renderer/renderer.ts --bundle --platform=browser --format=esm --outdir=dist/renderer --watch",
+    "start": "npm run build && electron .",
+    "start:http": "npm run build && electron . --mcp-transport=http",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "battery": "npm run build && node tests/e2e-battery.test.mjs",
+    "divergence": "npm run build && node scripts/electron-divergence.mjs",
+    "mcp": "npm run build && node scripts/mcp-cli.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "provident-ssr": "^0.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "electron": "^33.4.11",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
