@@ -12,7 +12,7 @@ import { createJsonRagStore } from './rag-store.js'
 import { setContent } from './edit-ops.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
-import { createVectorEmbedder, type EmbeddingProviderConfig } from './embeddings.js'
+import { createVectorEmbedder, parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -68,8 +68,11 @@ function embeddingProviderConfigFromEnv(): EmbeddingProviderConfig | null {
     baseUrl,
     model,
     apiKey: process.env.PROVIDENT_EMBEDDING_API_KEY,
-    dimension: process.env.PROVIDENT_EMBEDDING_DIMENSION ? Number(process.env.PROVIDENT_EMBEDDING_DIMENSION) : undefined,
-    timeoutMs: process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS ? Number(process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS) : undefined,
+    // F5 — validate the numeric env fields: a NaN/negative/non-integer value
+    // is dropped (undefined) rather than passed through as a malformed
+    // dimension/timeout.
+    dimension: parsePositiveIntEnv(process.env.PROVIDENT_EMBEDDING_DIMENSION),
+    timeoutMs: parsePositiveIntEnv(process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS),
   }
 }
 
@@ -179,7 +182,14 @@ async function main(): Promise<void> {
     if (result.ok) {
       // F1 — reconcile the maintained retrieval index incrementally, then
       // broadcast the `rag-store-changed` re-traversal trigger to the renderer.
-      void retrievalEngine.onStoreChanged('content', [payload.nodeId], [])
+      // The reconcile is fire-and-forget, but a rejection (e.g. the vector
+      // embedder's provider is down) MUST be caught — never an unhandled
+      // rejection. The lexical index is already reconciled inside the engine's
+      // `onStoreChanged` before the embedder hook runs, so a hook failure only
+      // leaves the vector index stale (logged), not the lexical index.
+      void retrievalEngine.onStoreChanged('content', [payload.nodeId], []).catch((e) => {
+        console.error('[provident-main] retrieval index reconcile failed:', e)
+      })
       backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
       return { ok: true, nodeId: payload.nodeId }
     }

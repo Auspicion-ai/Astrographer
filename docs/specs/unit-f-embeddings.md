@@ -115,12 +115,65 @@ remote/cloud provider requires the `connect-src` CSP allowlist + API-key
 handling — now a DESIGNED security surface (per PROVIDER-AGNOSTIC), not just an
 open tracked item.
 
-### 3a. Adversarial findings
+### 3a. Adversarial findings (host findings, fixed + regression-tested)
 
-Pending — the adversarial pass (RCA-3) runs AFTER the green. This section is
-filled in the post-green adversarial pass (host findings fixed +
-regression-tested, recorded here). No adversarial findings yet (Unit F is not
-yet implemented).
+Post-green adversarial pass (RCA-3) 2026-08-27. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`). Each host finding was fixed + regression-
+tested (13 regression tests in `tests/embeddings-adversarial.test.ts`).
+
+**MEDIUM:**
+- **F1** — with `retrieval.embedder: 'vector'` and the provider down, any edit
+  triggered `engine.onStoreChanged`, which awaits the vector embedder's hook;
+  the hook re-embeds via the provider and rejects. Both call sites
+  (`src/main/main.ts`, `src/main/mcp-server.ts`) fired-and-forgot with `void`
+  and no `.catch()` → unhandled promise rejection + a silently-stale vector
+  index. Fixed: attached `.catch()` to both fire-and-forget calls (log the
+  embed error; the lexical index is already reconciled inside the engine before
+  the embedder hook runs, so a hook failure only leaves the vector index stale,
+  logged, never an unhandled rejection). Regression-tested (an edit tool
+  succeeds even when the engine's `onStoreChanged` rejects, over a real
+  in-process MCP client).
+- **F2** — `isOllamaAvailable` interpolated the caller-supplied `baseUrl` into
+  `execSync(\`curl ... ${url}/api/tags\`)` — a shell-command injection vector
+  (a `baseUrl` with shell metacharacters executes arbitrary shell). Fixed:
+  validate the URL is localhost/loopback before probing AND use
+  `execFileSync('curl', [...])` (no shell). Regression-tested (non-localhost
+  returns false; a baseUrl with shell metacharacters is not executed).
+
+**LOW:**
+- **F3** — IPv6 loopback `http://[::1]:11434` was rejected by the ollama
+  localhost check (`new URL(...).hostname` returns `'[::1]'` bracketed, but the
+  check compared against unbracketed `'::1'`). Fixed: strip `[`/`]` before the
+  comparison. Regression-tested.
+- **F4** — `retrieve` applied the lexical-specific zero-token (stopword-only)
+  check to the vector embedder, rejecting a valid stopword-only query like
+  `"the"`. Fixed: gate the zero-token check on the lexical embedder (detected
+  via the `LEXICAL_INDEX` marker). Regression-tested (the vector embedder
+  handles a stopword-only query).
+- **F5** — `embeddingProviderConfigFromEnv` did `Number(env)` without
+  validating → `NaN` dimension/timeout (every embed fails with `expected NaN`,
+  or `setTimeout(..., NaN)` fires immediately). Fixed: `parsePositiveIntEnv`
+  drops NaN/negative/non-integer/empty env values. Regression-tested.
+- **F6** — `createVectorIndex` set `dimension` from the first embed and never
+  checked subsequent vectors → mixed-dimension index → a later `score` rejects
+  with `dimension mismatch`. Fixed: validate each vector's length against the
+  established dimension in create/update/add. Regression-tested.
+- **F7** — both providers cast the response vector to `number[]` without
+  validating element types → a malformed response with string elements yields
+  `NaN` scores (breaking `place` and the sort). Fixed: validate every element
+  is a finite number before returning (else `malformed response`).
+  Regression-tested.
+- **F8** — the remote provider was OpenAI-shaped only, not truly
+  provider-agnostic (a `provider: 'cohere'` config would send the wrong body and
+  fail to parse). Fixed: dispatch the request/response shape on
+  `config.provider`/`kind` (`cohere` → `{ model, texts }` / `embeddings[0]`;
+  any other → the OpenAI-shaped `{ model, input }` / `data[0].embedding`).
+  Regression-tested.
+- **F9** — the `connect-src` allowlist was a hardcoded module constant with no
+  extension seam (a legitimate custom/self-hosted remote provider could never
+  be allowlisted). Fixed: the allowlist is extensible via a `connectSrc` config
+  field (defaulting to the safe set, remaining fail-closed). Regression-tested.
 
 ## 4. Design decisions pinned by this spec
 

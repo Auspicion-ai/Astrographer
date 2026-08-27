@@ -915,7 +915,15 @@ export class ProvidentMcpServer {
           // engine's incremental index reconcile (F1) AND broadcast the
           // `rag-store-changed` re-traversal trigger to the renderer.
           const result = await handleEditTool(ragStore, name, args, (payload) => {
-            void engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)
+            // F1 — the index reconcile is fire-and-forget, but a rejection
+            // (e.g. the vector embedder's provider is down) MUST be caught —
+            // never an unhandled rejection. The lexical index is already
+            // reconciled inside the engine's `onStoreChanged` before the
+            // embedder hook runs, so a hook failure only leaves the vector
+            // index stale (logged), not the lexical index.
+            void engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)?.catch((e) => {
+              console.error('[provident-mcp] retrieval index reconcile failed:', e)
+            })
             backend.broadcast?.('rag-store-changed', payload)
           })
           return text(result)

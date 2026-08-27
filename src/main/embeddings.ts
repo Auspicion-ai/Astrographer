@@ -7,7 +7,7 @@
 // remote/cloud provider drop-in, the vector index (§5.3), cosine similarity
 // scoring (§5.4), the vector embedder behind the async `Embedder` interface
 // (§5.5), the deterministic mock embedder + the integration-test probe (§5.6).
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import type { RagNode, RagStore, RagEdge } from './rag-store.js'
 import type { Embedder, PlacementDecision, ScoredNode } from './retrieval.js'
 import { PLACEMENT_MIN_SCORE } from './retrieval.js'
@@ -28,6 +28,10 @@ export interface EmbeddingProviderConfig {
   apiKey?: string
   dimension?: number
   timeoutMs?: number
+  /** F9 — an optional EXTENSION to the default `connect-src` CSP allowlist
+   *  (hostnames). The default safe set is always included (fail-closed); this
+   *  only ADDS hostnames for a remote/cloud provider. */
+  connectSrc?: string[]
 }
 
 /** The provider abstraction — a configurable embedding provider. */
@@ -53,7 +57,7 @@ export function createEmbeddingProvider(config: EmbeddingProviderConfig): Embedd
   if (config.provider === 'ollama') {
     return createOllamaEmbedProvider({ baseUrl: config.baseUrl, model: config.model, timeoutMs: config.timeoutMs, dimension: config.dimension })
   }
-  return createRemoteEmbedProvider({ baseUrl: config.baseUrl, model: config.model, apiKey: config.apiKey, dimension: config.dimension, timeoutMs: config.timeoutMs, kind: config.provider })
+  return createRemoteEmbedProvider({ baseUrl: config.baseUrl, model: config.model, apiKey: config.apiKey, dimension: config.dimension, timeoutMs: config.timeoutMs, kind: config.provider, connectSrc: config.connectSrc })
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +84,20 @@ const DEFAULT_CONNECT_SRC = new Set([
 ])
 
 function isLocalhostHost(hostname: string): boolean {
-  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+  // F3 — normalize the hostname: `new URL('http://[::1]:11434').hostname` is
+  // '[::1]' (bracketed), so strip the brackets before the '::1' comparison.
+  const h = hostname.replace(/^\[|\]$/g, '')
+  return h === '127.0.0.1' || h === 'localhost' || h === '::1'
+}
+
+/** F5 — parse a positive-integer env value. NaN / negative / non-integer /
+ *  empty → undefined (the field is dropped rather than passed through as a
+ *  malformed dimension/timeout). */
+export function parsePositiveIntEnv(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === '') return undefined
+  const n = Number(raw)
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) return undefined
+  return n
 }
 
 function hostnameOf(baseUrl: string): string {
@@ -142,6 +159,11 @@ export function createOllamaEmbedProvider(opts?: OllamaEmbedOptions): EmbeddingP
       throw new Error('ollama embed: malformed response')
     }
     const vec = embeddings[0] as number[]
+    // F7 — validate every element is a finite number (a non-numeric element
+    // would produce NaN scores downstream).
+    if (!vec.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+      throw new Error('ollama embed: malformed response')
+    }
     if (!dimensionSet) {
       dimension = vec.length
       dimensionSet = true
@@ -166,8 +188,13 @@ export interface RemoteEmbedOptions {
   dimension?: number
   timeoutMs?: number
   /** The provider kind (config.provider) — surfaced as `EmbeddingProvider.kind`.
-   *  Defaults to 'remote'. */
+   *  Defaults to 'remote'. F8 — the request/response shape is dispatched on
+   *  this kind ('cohere' → `{ model, texts }` / `embeddings[0]`; any other →
+   *  the OpenAI-shaped `{ model, input }` / `data[0].embedding`). */
   kind?: string
+  /** F9 — an optional EXTENSION to the default `connect-src` CSP allowlist
+   *  (hostnames). The default safe set is always included (fail-closed). */
+  connectSrc?: string[]
 }
 
 /** Create a remote/cloud embed provider — a drop-in behind the SAME
@@ -182,7 +209,18 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
   const timeoutMs = opts.timeoutMs ?? 5000
   const configuredDimension = opts.dimension
   const kind = opts.kind ?? 'remote'
-  const allowlisted = DEFAULT_CONNECT_SRC.has(hostnameOf(baseUrl))
+  // F9 — the connect-src allowlist is the DEFAULT safe set (fail-closed) plus
+  // any caller-supplied EXTENSION hostnames. A remote baseUrl whose origin is
+  // NOT in the resulting allowlist is rejected.
+  const allowlist = new Set(DEFAULT_CONNECT_SRC)
+  for (const h of opts.connectSrc ?? []) {
+    if (typeof h === 'string' && h.trim() !== '') allowlist.add(h.trim())
+  }
+  const allowlisted = allowlist.has(hostnameOf(baseUrl))
+  // F8 — dispatch the request/response shape on the provider kind. The
+  // OpenAI-shaped `{ model, input }` / `data[0].embedding` is the default; a
+  // Cohere-shaped provider uses `{ model, texts }` / `embeddings[0]`.
+  const isCohere = kind === 'cohere'
   let dimension = configuredDimension ?? 0
   let dimensionSet = configuredDimension !== undefined
 
@@ -196,13 +234,14 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => reject(timeoutError), timeoutMs)
     })
+    const body = isCohere ? { model, texts: [text] } : { model, input: text }
     let res: Response
     try {
       res = await Promise.race([
         fetch(baseUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
-          body: JSON.stringify({ model, input: text }),
+          body: JSON.stringify(body),
         }),
         timeoutPromise,
       ])
@@ -214,20 +253,33 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
       if (timer) clearTimeout(timer)
     }
     if (!res.ok) throw new Error(`remote embed: HTTP ${res.status}`)
-    let data: { data?: Array<{ embedding?: unknown }> }
+    let data: Record<string, unknown>
     try {
-      data = await res.json() as { data?: Array<{ embedding?: unknown }> }
+      data = await res.json() as Record<string, unknown>
     } catch {
       throw new Error('remote embed: malformed response')
     }
-    const vec = data?.data?.[0]?.embedding
-    if (!Array.isArray(vec)) throw new Error('remote embed: malformed response')
+    let vec: unknown
+    if (isCohere) {
+      const embeddings = (data as { embeddings?: unknown }).embeddings
+      if (!Array.isArray(embeddings) || !Array.isArray(embeddings[0])) throw new Error('remote embed: malformed response')
+      vec = embeddings[0]
+    } else {
+      const d = (data as { data?: Array<{ embedding?: unknown }> }).data
+      vec = d?.[0]?.embedding
+      if (!Array.isArray(vec)) throw new Error('remote embed: malformed response')
+    }
+    // F7 — validate every element is a finite number (a non-numeric element
+    // would produce NaN scores downstream).
+    if (!(vec as number[]).every((v) => typeof v === 'number' && Number.isFinite(v))) {
+      throw new Error('remote embed: malformed response')
+    }
     if (!dimensionSet) {
-      dimension = vec.length
+      dimension = (vec as number[]).length
       dimensionSet = true
     }
-    if (vec.length !== dimension) {
-      throw new Error(`remote embed: dimension mismatch (expected ${dimension}, got ${vec.length})`)
+    if ((vec as number[]).length !== dimension) {
+      throw new Error(`remote embed: dimension mismatch (expected ${dimension}, got ${(vec as number[]).length})`)
     }
     return vec as number[]
   }
@@ -256,6 +308,11 @@ export async function createVectorIndex(nodes: RagNode[], embedFn: EmbedTextFn):
   for (const node of nodes) {
     const vec = await embedFn(node.content)
     if (dimension === 0) dimension = vec.length
+    // F6 — validate each vector's length against the first (dimension
+    // consistency across nodes).
+    else if (vec.length !== dimension) {
+      throw new Error(`createVectorIndex: dimension mismatch (expected ${dimension}, got ${vec.length})`)
+    }
     embeddings.set(node.id, vec)
     nodeIds.push(node.id)
   }
@@ -273,6 +330,10 @@ export async function updateVectorIndex(index: VectorIndex, node: RagNode, embed
     return
   }
   const vec = await embedFn(node.content)
+  // F6 — validate the vector's length against the index dimension.
+  if (index.dimension !== 0 && vec.length !== index.dimension) {
+    throw new Error(`updateVectorIndex: dimension mismatch (expected ${index.dimension}, got ${vec.length})`)
+  }
   index.embeddings.set(node.id, vec)
 }
 
@@ -287,6 +348,10 @@ export async function addToVectorIndex(index: VectorIndex, node: RagNode, embedF
     return
   }
   const vec = await embedFn(node.content)
+  // F6 — validate the vector's length against the index dimension.
+  if (index.dimension !== 0 && vec.length !== index.dimension) {
+    throw new Error(`addToVectorIndex: dimension mismatch (expected ${index.dimension}, got ${vec.length})`)
+  }
   index.embeddings.set(node.id, vec)
   index.nodeIds.push(node.id)
 }
@@ -459,10 +524,15 @@ export function createMockEmbedder(opts?: { dimension?: number }): Embedder {
 export function isOllamaAvailable(baseUrl?: string): boolean {
   const url = baseUrl ?? 'http://127.0.0.1:11434'
   try {
-    // A synchronous reachability probe: spawn a short-lived curl to the ollama
-    // tags endpoint. If curl is unavailable or the server does not respond
-    // within the timeout, the probe fails → false (never throws).
-    execSync(`curl -s -m 1 -o /dev/null ${url}/api/tags`, { stdio: 'ignore', timeout: 1500 })
+    // F2 — validate the URL is a localhost/loopback address before probing (a
+    // caller-supplied baseUrl must not be used to reach an arbitrary host).
+    if (!isLocalhostHost(hostnameOf(url))) return false
+    // F2 — use execFileSync (NO shell) so a caller-supplied baseUrl cannot
+    // inject shell metacharacters into the probe command. A synchronous
+    // reachability probe: spawn a short-lived curl to the ollama tags
+    // endpoint. If curl is unavailable or the server does not respond within
+    // the timeout, the probe fails → false (never throws).
+    execFileSync('curl', ['-s', '-m', '1', '-o', '/dev/null', `${url}/api/tags`], { stdio: 'ignore', timeout: 1500 })
     return true
   } catch {
     return false

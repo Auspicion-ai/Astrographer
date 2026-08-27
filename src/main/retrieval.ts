@@ -506,11 +506,13 @@ export async function retrieve(
     throw new Error('retrieve: store/embedder/index/query/opts required')
   }
   if (query.trim() === '') throw new Error('retrieve: query must be a non-empty string')
-  // F5 — a query that tokenizes to zero tokens (stopword-only / no-token, e.g.
-  // 'the' or 'and') is treated as INVALID — the documented empty-query
-  // fail-state — rather than silently returning an empty result. The renderer
-  // and the agent both surface the same error instead of a confusing no-match.
-  if (tokenize(query).length === 0) throw new Error('retrieve: query must be a non-empty string')
+  // F4 — the zero-token (stopword-only) check is LEXICAL-specific: a lexical
+  // embedder cannot score a query that tokenizes to zero tokens (the documented
+  // empty-query fail-state — Unit E F5). A vector embedder CAN embed a
+  // stopword-only query (e.g. 'the'), so the check is gated on the lexical
+  // embedder (detected via the LEXICAL_INDEX marker).
+  const isLexical = (embedder as { [LEXICAL_INDEX]?: unknown })[LEXICAL_INDEX] !== undefined
+  if (isLexical && tokenize(query).length === 0) throw new Error('retrieve: query must be a non-empty string')
   const k = opts.k ?? 5
   if (typeof k !== 'number' || !Number.isInteger(k) || k < 1) {
     throw new Error('retrieve: k must be a positive integer')
