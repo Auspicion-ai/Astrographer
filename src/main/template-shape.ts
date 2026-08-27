@@ -51,8 +51,8 @@ export interface TemplateStore {
   /** The zones the traversal targets (the ZONE-CONSISTENCY-INVARIANT). The
    *  `code.template.validate` tool validates against these. */
   readonly targetedZones: string[]
-  /** Read the current content-window template (a shallow copy — never the
-   *  internal record). */
+  /** Read the current content-window template (a DEEP copy — never the
+   *  internal record; the §3a I4 fix). */
   get(): ContentWindowTemplate
   /** Replace the content-window template. VALIDATES it against the store's
    *  targetedZones BEFORE persisting — an invalid template (missing a targeted
