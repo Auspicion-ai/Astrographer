@@ -331,7 +331,7 @@ boots. All payloads are JSON-safe (structured-clone).
 
 ## 6. Security & agent permissions (design — the A1 trust gate + manual-UI settings)
 
-The architecture review (`docs/specs/architecture-review.md`) made A1 **critical**
+The architecture review (`archive/parent-project/2026-08-26-architecture-review.md`) made A1 **critical**
 and A2..A6 required. This section is the design for MCP security + agent
 permissions + the **manual-UI-only settings controls** a human operator uses to
 set them up.
@@ -400,7 +400,7 @@ re-build the graph. Enabling `graph`/`code` is an explicit human grant.
 >   `createIsolatedScope()` GraphScope, own Supervisor + DomAdapter, so the MCP
 >   endpoints never see/dispatch it). Token show/clear/regenerate + one toggle
 >   per tool group, re-wiring the LIVE MCP server on change + persisting. See
->   `docs/specs/secure-panels.md`;
+>   `archive/parent-project/2026-08-26-secure-panels.md`;
 > - the MCP server is built from the persisted config on boot (default
 >   `read`+`dispatch` ON / `graph`+`code` OFF / token null on first run).
 > The settings surface is **manual-UI-only by construction**: the IPC channel is

@@ -2,7 +2,8 @@
 
 Consolidates the RCA lessons (RCA-1..RCA-5) for a fresh sub-agent, so the
 battery B/C/D process miss is not repeated. Canonical record:
-`docs/specs/process-rca-battery.md`; the rules live in `AGENTS.md` items 2/3/7/10.
+`archive/parent-project/2026-08-26-process-rca-battery.md`; the rules live in
+`AGENTS.md` items 2/3/7/10.
 
 ## When this applies
 
@@ -19,7 +20,8 @@ The battery pass (Units B/C/D/R13) was:
 
 Net: the features worked and the trio passed, but the PROCESS compliance —
 the thing that lets a fresh sub-agent inherit an accurate, reviewable state —
-was absent at merge time. The RCA is `docs/specs/process-rca-battery.md`.
+was absent at merge time. The RCA is
+`archive/parent-project/2026-08-26-process-rca-battery.md`.
 
 ## The six guards (RCA-1..RCA-6)
 

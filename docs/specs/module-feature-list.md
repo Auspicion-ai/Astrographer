@@ -3,14 +3,15 @@
 **Status**: SPECULATIVE / PLANNING (2026-08-26). The `module.*` extension system
 passed the three-agent gate as GO-CONDITIONAL, then the second-pass gate returned
 STILL-NOT-READY on the isolation requirement. The architect chose **(b) drop the
-isolation claim, gate-only** (`docs/specs/module-import-review.md`), and the third
+isolation claim, gate-only** (`archive/parent-project/2026-08-26-module-import-review.md`), and the third
 pass accepted the remaining blockers. This document
 is the SPECULATIVE MAJOR-UPDATE feature list: the blockers, the required internal
 toolset to build example modules WITHOUT allowing arbitrary external code, and the
 additional module-management settings pane.
 
 **Sources:** `docs/specs/module-import-proposal.md` (contract),
-`docs/specs/module-import-review.md` (three-pass gate), `docs/decisions.md`.
+`archive/parent-project/2026-08-26-module-import-review.md` (three-pass gate),
+`docs/decisions.md`.
 
 ## 1. The feature (what "modules/extensions" means here)
 
