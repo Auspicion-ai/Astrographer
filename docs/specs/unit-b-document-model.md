@@ -116,6 +116,20 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
 | `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. `documentIds` lists the document(s) this edge belongs to. | `source` = end node, `target` = a document-identifying node. |
 | `doc-child` | **HIERARCHICAL NESTING** (distinct from the linear doc-flow edges): the `target` RAG object's subtree is nested WITHIN the `source` RAG object's subtree at the given `order` position. A nested node (e.g. a paragraph-length `li` inside a `ul`) that is large enough for semantic distinctiveness is its own RAG object, a doc-child of the containing RAG object. The engine's family structure (e.g. `ul` → `li`) is the RENDER structure; the `doc-child` edge expresses the SEMANTIC ownership boundary. | `source` = the containing RAG object, `target` = the nested RAG object, `order` = the position of the child's subtree within the parent's subtree. |
 
+**Structural element types as valid node roots (STRUCTURAL-ROOT, review §14):**
+
+- A RAG object's subtree root can be a STRUCTURAL element type (e.g. `div`), not
+  just a semantic element (`h1-h6`/`p`/`ul`/`ol`/`li`/...). This is for cases
+  where text is broken up enough to have the semantic-isolation problem (like
+  the list example) but WITHOUT a solid syntactic structure to mark it — e.g. a
+  lazy/shorthand note like "S3 Bucket types / General Purpose / Vector /
+  Directory / Table" written as plain lines with no `ul`/`ol` structure. The
+  `div` root groups those lines into ONE RAG object / one semantic chunk, so
+  they embed together (not as N useless separate embeddings).
+- The `div` root's children are the text lines (each a `p` or plain text node);
+  the whole `div` subtree is one RAG object. This is the same subtree-ownership
+  model as `ul`/`ol` — the structural root is just a grouping container.
+
 **Cross-document shared nodes (CROSS-DOCUMENT-SHARED, review §13):**
 
 - A RAG node can appear in MULTIPLE documents at the same time. A shared node

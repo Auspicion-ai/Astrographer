@@ -112,6 +112,11 @@ export type RagNodeType =
   | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
   | 'p' | 'ul' | 'ol' | 'li' | 'blockquote' | 'pre' | 'code'
   | 'strong' | 'em' | 'a' | 'img'
+  | 'div'   // STRUCTURAL root: groups semantically-related but
+            // syntactically-unstructured text lines into one RAG object /
+            // one semantic chunk (e.g. a lazy/shorthand note like
+            // "S3 Bucket types / General Purpose / Vector / Directory /
+            // Table" written as plain lines with no ul/ol structure).
 
 /** A RAG node — one knowledge-graph object. OWNS a subtree of provident
  *  nodes (SUBTREE-OWNERSHIP). */

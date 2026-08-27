@@ -259,4 +259,22 @@ A node referenced by N documents is materialized as N duplicate subtrees. This i
 ### 13.4 Pending feature — shared-node edit UX (recorded in `docs/pending.md`)
 When a user/agent edits a section (RAG node) that is incorporated into MORE THAN ONE document (a CROSS-DOCUMENT-SHARED node), NOTIFY them that the node is shared across N documents. When the document would save, PROMPT whether the text should be changed for ALL owners (update all duplicates) or whether SOME should be preserved on a CLONE of the original (fork the node for one document, leaving the others unchanged). This is a SPECULATIVE feature — revisit when the editing path (Unit D) lands and the cross-document shared-node model is implemented.
 
+---
+
+## 14. User clarification (2026-08-26) — structural element types as valid node roots
+
+The user asked to include STRUCTURAL element types (e.g. `div`) as valid RAG node roots, for cases where text is broken up enough to have the semantic-isolation problem (like the list example) but WITHOUT a solid syntactic structure to mark it:
+
+> "S3 Bucket types / General Purpose / Vector / Directory / Table — is an example of a common lazy/shorthand note-taking output of a human writer."
+
+### 14.1 The refinement
+- A RAG object's subtree root can be a STRUCTURAL element type (e.g. `div`), not just a semantic element (`h1-h6`/`p`/`ul`/`ol`/`li`/...).
+- This groups semantically-related but syntactically-unstructured text lines into ONE RAG object / one semantic chunk, so they embed together (not as N useless separate embeddings). The `div` root's children are the text lines; the whole `div` subtree is one RAG object.
+- This is the same subtree-ownership model as `ul`/`ol` — the structural root is just a grouping container.
+
+### 14.2 Effect on the architecture
+- **`RagNodeType` (Unit A §5.1):** add `div` (and other structural element types) to the closed union.
+- **Document model (Unit B §5.1):** a `div` root is a valid node root for grouping unstructured text lines into one semantic chunk.
+- **Traversal (Unit C):** a `div` RAG object is emitted as a `div` content root with its text-line children; the whole subtree is one RAG object / one embedding.
+
 This refines the "relevant document lines" requirement: the line→node map is still produced by the assembly step (so the agent can cite the owning RAG object), but it is a READ aid, not a write-back path. The primary agent write path is direct MCP `edit`-group mutations to the RAG store.
