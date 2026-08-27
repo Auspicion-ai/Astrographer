@@ -176,6 +176,26 @@ _(none — Units A–J are implemented.)_
   equivalence, the `retrieval.embedder` selection, and the `RagStore` interface
   usage. Record: `archive/reviews/2026-08-27-integration-adversarial.md`. Trio
   green (974 pass).
+- **Look-back adversarial pass (2026-08-28, after Unit J).** A broad cross-unit
+  review (RCA-3) over all units A–J checked the store→traversal→pane-assembly→
+  render pipeline, the editing→re-traversal path, the retrieval→render path,
+  the MCP/UI equivalence, and the shared types/IPC wiring. All findings HOST,
+  fixed + regression-tested (10 tests in `tests/lookback-adversarial.test.ts`):
+  **L3** (the `rag`/`edit` groups were unreachable — `security-store.ts` +
+  `secure-panels.ts` omitted them, and `applyGatePatch` used the raw patch →
+  live/persisted divergence; fixed: added the groups + the gate now consumes the
+  store-filtered result), **L4** (`rag.get_document` returned the whole store,
+  not the document's subtree — fixed: document-subtree scoping), **L5** (the
+  traversal `lineMap` ranges were computed from standalone subtree renders, not
+  the real envelope markdown — fixed: anchored to the single full-envelope
+  render). Seams verified clean: the MCP/UI equivalence (every tool with a UI
+  IPC counterpart routes through the same handler), the five-seam gate, the
+  `edit-commit` deleted-node race. **Deferred (the `SidebarPanes` renderer host,
+  Unit H §3a):** **L1** (the store→traversal→pane-assembly→render pipeline is
+  not wired into the live renderer — the app bootstraps with `demoEnvelope()`,
+  so the RAG content + app-graph panes are not MCP-visible) and **L2** (the
+  D→C re-traversal only updates the backRefs map, never re-renders the RAG
+  content). These are the remaining UI-mount work. Trio green (1208 pass).
 - **Unit D — editable text (form-control editing) (2026-08-27).** The `edit.*`
   tool handlers (Unit B registered them through the five-seam gate; Unit D
   implements the FULL behavior) in `src/main/edit-ops.ts` (pure ops over the
