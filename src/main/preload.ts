@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 
 export interface ModuleBridgeResult {
@@ -77,6 +77,14 @@ export interface ProvidentBridge {
     /** Subscribe to the template-change re-derive trigger. Returns an
      *  unsubscribe function. */
     onTemplateChanged(handler: (payload: TemplateChangedPayload) => void): () => void
+  }
+  /** Unit K §5.4 M9 — the operator-settings surface. The `settings` pane
+   *  reads/writes the operator-owned config over these channels; the MCP tool
+   *  handlers never route to them, so an agent cannot change the operator's
+   *  view/retrieval defaults. */
+  operatorSettings: {
+    get(): Promise<OperatorSettings>
+    set(patch: OperatorSettingsPatch): Promise<OperatorSettings>
   }
 }
 
@@ -195,6 +203,18 @@ const bridge: ProvidentBridge = {
       return () => {
         ipcRenderer.removeListener(IPC_TEMPLATE_CHANGED, listener)
       }
+    },
+  },
+  // Unit K §5.4 M9 — the operator-settings surface. Manual-UI only: the
+  // `settings` pane reads/writes the operator-owned config over these channels;
+  // the MCP tool handlers never route to them, so an agent cannot change the
+  // operator's view/retrieval defaults.
+  operatorSettings: {
+    get(): Promise<OperatorSettings> {
+      return ipcRenderer.invoke(IPC_OPERATOR_SETTINGS_GET)
+    },
+    set(patch: OperatorSettingsPatch): Promise<OperatorSettings> {
+      return ipcRenderer.invoke(IPC_OPERATOR_SETTINGS_SET, patch)
     },
   },
 }

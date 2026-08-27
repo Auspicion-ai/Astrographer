@@ -447,3 +447,28 @@ export interface TemplateChangedPayload {
   source: TemplateSource
   template: ContentWindowTemplate
 }
+
+// ---- Unit K operator-settings IPC (docs/specs/unit-k-sidebar-panes-host.md
+// §5.4 M9) ----------------------------------------------------------------
+
+/** The operator-owned settings the `settings` pane reads/writes. Transported
+ *  main→renderer→main ONLY (never an MCP tool — an agent must not be able to
+ *  change the operator's view/retrieval defaults). */
+export interface OperatorSettings {
+  /** The sidebar panes enabled for the operator view (subset of the pane ids). */
+  enabledPanes: string[]
+  /** The default document root id on boot (null = all documents). */
+  defaultDocumentId: string | null
+  /** The retrieval topK default. */
+  topK: number
+}
+
+/** A partial patch applied by `bridge.operatorSettings.set`. */
+export interface OperatorSettingsPatch {
+  enabledPanes?: string[]
+  defaultDocumentId?: string | null
+  topK?: number
+}
+
+export const IPC_OPERATOR_SETTINGS_GET = 'provident:operator-settings:get'
+export const IPC_OPERATOR_SETTINGS_SET = 'provident:operator-settings:set'

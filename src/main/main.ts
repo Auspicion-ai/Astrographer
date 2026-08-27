@@ -4,9 +4,10 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
+import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
@@ -119,6 +120,13 @@ async function main(): Promise<void> {
   // template IPC both route through it (MCP/UI equivalence — §8.2).
   const templateStore = createTemplateStore({
     path: join(app.getPath('userData'), 'provident-template.json'),
+  })
+  // Unit K §5.4 M9 — the operator-settings store (operator-owned, persisted to
+  // userData). The `settings` pane reads/writes it over the operator-settings
+  // IPC; it is NEVER an MCP tool (an agent must not change the operator's
+  // view/retrieval defaults).
+  const operatorSettingsStore = createOperatorSettingsStore({
+    path: join(app.getPath('userData'), 'provident-operator-settings.json'),
   })
   // Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE with the
   // store + the selected embedder. F1: `rag.query` (MCP) and the `rag-query`
@@ -256,6 +264,13 @@ async function main(): Promise<void> {
   ipcMain.handle(IPC_TEMPLATE_CREATE, handleTemplateIpc('code.template.create'))
   ipcMain.handle(IPC_TEMPLATE_DELETE, handleTemplateIpc('code.template.delete'))
   ipcMain.handle(IPC_TEMPLATE_RESET, handleTemplateIpc('code.template.reset'))
+
+  // Unit K §5.4 M9 — the operator-settings IPC surface. Manual-UI only: the
+  // `settings` pane reads/writes the operator-owned config over these channels;
+  // the MCP tool handlers never route to them, so an agent cannot change the
+  // operator's view/retrieval defaults.
+  ipcMain.handle(IPC_OPERATOR_SETTINGS_GET, () => operatorSettingsStore.get())
+  ipcMain.handle(IPC_OPERATOR_SETTINGS_SET, (_event, patch: OperatorSettingsPatch) => operatorSettingsStore.set(patch))
 
   // Finding 3 — the re-traversal data source. The renderer's `onRebuild`
   // re-traversal (Unit C `buildTraversal`) needs the RAG store's nodes/edges,

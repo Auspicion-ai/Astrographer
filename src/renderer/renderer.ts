@@ -2,7 +2,10 @@
 // Bootstraps the provident-ssr producing process into #app and serves the
 // MCP-facing operations over the preload bridge (main process = MCP server).
 import { Runtime } from './runtime.js'
-import { demoEnvelope } from '../shared/demo-envelope.js'
+import { SidebarPanes } from './sidebar-panes.js'
+import { createPaneRegistry } from './pane-registry.js'
+import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
+import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
 import { rebuildBackRefs } from '../main/traversal.js'
@@ -111,7 +114,17 @@ async function main(): Promise<void> {
       // keep the default (never condense) on a bridge error
     }
   }
-  const runtime = new Runtime({ mount, envelope: demoEnvelope(), maxJournalLength })
+  // Unit K §5.1 — the placeholder bootstrap envelope: the default content-window
+  // template envelope (a bare `wiki-root` + one `main` zone container, NO content
+  // payloads) so the Runtime is constructible synchronously. The `demoEnvelope()`
+  // bootstrap is REMOVED — the SidebarPanes host loads the pane-inclusive
+  // envelope (derived from the RAG store + the stored template) at boot.
+  const placeholderEnvelope: LegacyInitialData = {
+    template: DEFAULT_CONTENT_WINDOW_TEMPLATE,
+    content: [],
+    clientConfig: { runInstantiation: true, runRendering: true },
+  }
+  const runtime = new Runtime({ mount, envelope: placeholderEnvelope, maxJournalLength })
   runtime.bootstrap()
   if (!bridge) {
     console.warn('[provident-renderer] no preload bridge — MCP endpoints unavailable (running as a plain page?)')
@@ -162,6 +175,26 @@ async function main(): Promise<void> {
       })
     },
   })
+  // Unit K §5.1 — the SidebarPanes host. The renderer constructs the host with
+  // the app mount (#app), the operator mount (#operator-panes — a NEW element,
+  // NOT #panes which stays SecurePanels'; M3), the pane registry, the bridge,
+  // the current-document/node accessors, the backRefs map, and the edit
+  // controller, then calls `host.boot(runtime)` (the pane-inclusive envelope
+  // replaces the demoEnvelope() bootstrap).
+  const operatorMount = document.getElementById('operator-panes')
+  const registry = createPaneRegistry()
+  const docState = { currentDocumentId: null as string | null, currentNodeId: null as string | null }
+  const host = new SidebarPanes({
+    mount,
+    operatorMount: operatorMount as HTMLElement,
+    registry,
+    bridge: bridge as never,
+    currentDocumentId: () => docState.currentDocumentId,
+    currentNodeId: () => docState.currentNodeId,
+    backRefs,
+    editController,
+  })
+  void host.boot(runtime)
   bridge.edit?.onRagStoreChanged(() => {
     editController.requestRebuild()
   })
