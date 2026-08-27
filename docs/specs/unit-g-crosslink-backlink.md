@@ -553,11 +553,19 @@ It was registered in Unit B §5.3; Unit G implements the FULL handler. The
   crosslink is a `crosslink` edge (`{ kind: 'crosslink', source, target,
   documentIds? }` — §5.1). The store is the source of truth; the provident graph
   is a transient render materialization (RAG-AUTHORITATIVE).
-- **The traversal materializes outgoing crosslinks into the provident graph**
-  (§5.2): the traversal emits a `crosslinks: CrosslinkWiring[]` output; the
-  renderer materializes each as a `Link`/`Anchor` (a `source` anchor on the
-  source subtree root, a `target` anchor on the target subtree root, with a
-  dangling string target when the target is in a different document).
+- **The traversal emits outgoing crosslinks into the provident graph** (§5.2):
+  the traversal produces a `crosslinks: CrosslinkWiring[]` output. This is the
+  Unit G deliverable — the traversal-side wiring of each `crosslink` edge whose
+  SOURCE is materialized (outgoing-only), with a dangling string target when the
+  target is in a different document.
+- **The RENDERER materialization of the `Link`/`Anchor` from the `crosslinks`
+  wiring is a Unit H consumer** (the renderer/display surface — the actual DOM
+  rendering of the crosslink links, a `source` anchor on the source subtree
+  root + a `target` anchor on the target subtree root, plus the hover-preview
+  pane from `docs/pending.md`). Unit G delivers the wiring output + the
+  enumeration + the MCP/UI equivalence; the renderer walks the wiring and
+  creates the `Link`/`Anchor` post-`translateLegacy` when the renderer surface
+  (Unit H) lands. The greens verify the traversal output, not the renderer DOM.
 - **The backlink enumeration reads the store** (§5.3): `listBacklinks`/
   `listOutlinks`/`enumerateLinks` read `store.listEdges()` + the doc-flow edges
   for document membership. The enumeration is read-only and lock-free (Unit A

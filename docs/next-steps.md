@@ -9,16 +9,14 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A/B/C/D/E/F are implemented (persistence → document model + doc-flow →
-rendering spine → editable text → RAG index + retrieval → vector embeddings);
-Units G–J remain later units.
+Units A/B/C/D/E/F/G are implemented (persistence → document model + doc-flow →
+rendering spine → editable text → RAG index + retrieval → vector embeddings →
+crosslink/backlink); Units H–J remain later units.
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit G — crosslink/backlink.** Custom crosslink `LinkConfig` (open name
-  union) + host-side backlink enumeration.
 - **Unit H — sidebar panes.** Host-side pane registry; app-graph panes
   MCP-visible; operator-only panes (settings) in an isolated `GraphScope`.
 - **Unit I — template customization.** Envelope CRUD via a provident-rendered
@@ -28,6 +26,30 @@ Units G–J remain later units.
 
 ## DONE
 
+- **Unit G — crosslink/backlink (2026-08-27).** The backend crosslink/backlink
+  mechanism. `src/main/backlinks.ts` (pure, no Electron — operates on the
+  `RagStore` interface, Unit A §5.4): the `LinkScope`/`LinkEntry`/`BacklinkResult`
+  shapes + `listBacklinks`/`listOutlinks`/`enumerateLinks` + the `documentOf`
+  helper + the scope classification (cross-document / intra-document / unscoped)
+  (§5.3). The `crosslink` RAG edge kind in `src/main/rag-store.ts` (`RagEdgeKind`
+  + the per-kind field enforcement — `order` only on `doc-child`, `documentIds`
+  on any kind) (§5.1). `CROSSLINK_LINK_CONFIG` + the `crosslinks:
+  CrosslinkWiring[]` output + outgoing-only materialization in
+  `src/main/traversal.ts` (`buildTraversal`) (§5.2). The `rag.backlinks` MCP tool
+  FULL handler + `handleRagBacklinksIpc` in `src/main/mcp-server.ts` (MCP/UI
+  equivalence — §5.4/§8.2). The `'crosslink'` kind in `src/main/edit-ops.ts`
+  (`setEdge`) (§5.6). `IPC_RAG_BACKLINKS`/`RagBacklinksPayload`/
+  `RagBacklinksResult` in `src/shared/types.ts`; the `rag-backlinks` IPC wired in
+  `src/main/main.ts` + `rag.backlinks` on the preload bridge
+  (`src/main/preload.ts`). TestWriter red → Implementer green in
+  `tests/crosslink-backlink.test.ts` (RED marker: `src/main/backlinks.ts` did not
+  exist → 40 tests pass); adversarial pass in
+  `tests/crosslink-backlink-adversarial.test.ts` (6 regression tests — host
+  findings G1/G2 fixed + regression-tested, recorded in the spec §3a); blind-
+  greens in `docs/specs/unit-g-crosslink-backlink-greens.md` (38 scenarios, all
+  pass); documentation review in
+  `archive/reviews/2026-08-27-unit-g-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (test + typecheck + build).
 - **Unit F — vector embeddings (provider/model agnostic) (2026-08-27).**
   `src/main/embeddings.ts` (pure + async, no Electron — the HTTP call is a
   plain fetch to the configured endpoint): the `EmbeddingProvider` abstraction
