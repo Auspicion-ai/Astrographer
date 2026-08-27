@@ -25,8 +25,11 @@
 
 1. **RAG node/edge types** with the doc-flow semantics: doc-flow edges
    (doc-head / next-section / doc-end) are **authoritative in the store** (not
-   derived at render time). The traversal maps them to family child-anchor
-   order + a doc-head marker prop.
+   derived at render time), PLUS the **`doc-child` edge** for hierarchical
+   nesting (a nested semantic unit — e.g. a paragraph-length `li` inside a
+   `ul` — is its own RAG object, a doc-child of the containing RAG object).
+   The traversal maps them to family child-anchor order + a doc-head marker
+   prop.
 2. **Traversal-time edge validation:** the traversal VALIDATES the doc-flow
    edges (cycle / missing-node / missing-head) and **falls back to family
    pre-order** on any violation.
@@ -87,6 +90,12 @@ non-blocking handoff item (the host-side line→node map covers it).
 - **SUBTREE-OWNERSHIP:** a RAG object owns a subtree of provident nodes; the
   boundary is declared by `ownedNodeIds` and carried by the back-reference map
   (Unit C).
+- **DOC-CHILD (nested semantic units):** a RAG object can own a subtree that
+  CONTAINS nested subtrees owned by doc-child RAG objects (a paragraph-length
+  `li` inside a `ul` is its own RAG object). The `doc-child` edge expresses
+  hierarchical nesting, distinct from the linear doc-flow edges. A RAG object's
+  `ownedNodeIds` EXCLUDES the nodes owned by its doc-children. (User
+  clarification 2026-08-26 — `docs/specs/astrographer-review.md` §12.)
 - **SINGLE-WRITER-STORE:** the `edit` tools route through the main-process
   store's single-writer queue (Unit A).
 
@@ -105,6 +114,13 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
 | `doc-head` | `source` is the **head** of the document that `target` belongs to. A document has exactly one head. | `source` = head node, `target` = a document-identifying node (the head's document root). |
 | `next-section` | `source`'s next section in document order is `target`. | `source` → `target` (document order). |
 | `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. | `source` = end node, `target` = a document-identifying node. |
+| `doc-child` | **HIERARCHICAL NESTING** (distinct from the linear doc-flow edges): the `target` RAG object's subtree is nested WITHIN the `source` RAG object's subtree at the given `order` position. A nested node (e.g. a paragraph-length `li` inside a `ul`) that is large enough for semantic distinctiveness is its own RAG object, a doc-child of the containing RAG object. The engine's family structure (e.g. `ul` → `li`) is the RENDER structure; the `doc-child` edge expresses the SEMANTIC ownership boundary. | `source` = the containing RAG object, `target` = the nested RAG object, `order` = the position of the child's subtree within the parent's subtree. |
+
+**Doc-child semantics (refining SUBTREE-OWNERSHIP §10/§12):**
+
+- A RAG object's `ownedNodeIds` EXCLUDES the nodes owned by its doc-children (those belong to the doc-children). The ownership is hierarchical: a parent RAG object owns its subtree, and within it, doc-child RAG objects own nested subtrees.
+- The `doc-child` `order` positions the child's subtree within the parent's subtree relative to the parent's owned nodes and other doc-children. The cleanest mapping: the child's subtree is inserted at the position of the corresponding engine family child (e.g. the `li` node) within the parent's owned subtree.
+- A doc-child RAG object's text = the markdown of its OWN subtree, embedded as a SEPARATE chunk (a paragraph-length `li` is its own embedding); the parent RAG object's text = the markdown of its subtree EXCLUDING the doc-children's subtrees (or including them as references). The exact chunking is a Unit E decision.
 
 **Doc-head marker prop convention:**
 
@@ -151,14 +167,18 @@ export function validateDocFlow(
 
 1. **Missing-head:** if the document has no `doc-head` edge (or the head node
    does not exist), the verdict is `{ ok: false, reason: 'missing-head' }`.
-2. **Missing-node:** if any `next-section`/`doc-end`/`doc-head` edge references a
-   node id not present in `nodes`, the verdict is `{ ok: false, reason:
-   'missing-node' }`.
+2. **Missing-node:** if any `next-section`/`doc-end`/`doc-head`/`doc-child` edge
+   references a node id not present in `nodes`, the verdict is `{ ok: false,
+   reason: 'missing-node' }`.
 3. **Cycle:** if following `next-section` edges from the head revisits a node
    (a cycle), the verdict is `{ ok: false, reason: 'cycle' }`.
-4. **Happy path:** if the head exists, all referenced nodes exist, and the
-   `next-section` chain is acyclic and reaches the `doc-end`, the verdict is
-   `{ ok: true, order: <head-first document order> }`.
+4. **Nesting cycle:** if the `doc-child` edges form a cycle (a RAG object is a
+   doc-child of itself, transitively), the verdict is `{ ok: false, reason:
+   'cycle' }` (a `doc-child` nesting cycle is a structural violation).
+5. **Happy path:** if the head exists, all referenced nodes exist, the
+   `next-section` chain is acyclic and reaches the `doc-end`, and the
+   `doc-child` nesting is acyclic, the verdict is `{ ok: true, order:
+   <head-first document order> }`.
 
 **Fallback (family pre-order):** on any violation (`ok: false`), the traversal
 falls back to **family pre-order** — the order defined by the `parent-child`
@@ -168,12 +188,14 @@ never throws.
 **Fail-states (TestWriter red set):**
 
 1. No `doc-head` edge for the document → `{ ok: false, reason: 'missing-head' }`.
-2. A `next-section`/`doc-end`/`doc-head` edge references a nonexistent node →
-   `{ ok: false, reason: 'missing-node' }`.
+2. A `next-section`/`doc-end`/`doc-head`/`doc-child` edge references a
+   nonexistent node → `{ ok: false, reason: 'missing-node' }`.
 3. A `next-section` cycle (A→B→A) → `{ ok: false, reason: 'cycle' }`.
-4. A valid document → `{ ok: true, order: [...] }` (head-first, acyclic,
-   reaches the end).
-5. `validateDocFlow` with a null/undefined `nodes`/`edges`/`documentId` → throws
+4. A `doc-child` nesting cycle (A is a doc-child of B, B is a doc-child of A) →
+   `{ ok: false, reason: 'cycle' }`.
+5. A valid document (head exists, all nodes exist, acyclic flow + nesting,
+   reaches the end) → `{ ok: true, order: [...] }` (head-first, acyclic).
+6. `validateDocFlow` with a null/undefined `nodes`/`edges`/`documentId` → throws
    `Error('validateDocFlow: nodes/edges/documentId required')` (a malformed
    input is a caller error, never a silent fallback).
 
@@ -287,10 +309,12 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
   `ALL_TOOLS`.
 - **Groups:** 2 new `ToolGroup` values (`rag`, `edit`); `VALID_GROUPS` grows
   from 5 to 7.
-- **Doc-flow edges:** 3 doc-flow kinds (`doc-head`, `next-section`, `doc-end`)
-  + 1 family kind (`parent-child`) in the first slice.
+- **Doc-flow edges:** 3 linear doc-flow kinds (`doc-head`, `next-section`,
+  `doc-end`) + 1 hierarchical nesting kind (`doc-child`) + 1 family kind
+  (`parent-child`) in the first slice = 5 edge kinds.
 - **Validation outcomes:** 3 fail reasons (`cycle`, `missing-node`,
-  `missing-head`) + 1 happy path.
+  `missing-head`) + 1 happy path. The `cycle` reason covers BOTH a
+  `next-section` cycle AND a `doc-child` nesting cycle.
 
 ### 5.6 Cross-references
 

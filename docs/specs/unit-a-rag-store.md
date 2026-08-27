@@ -135,12 +135,16 @@ export interface RagNode {
 }
 
 /** The RAG edge kinds. Doc-flow kinds (doc-head/next-section/doc-end) are
- *  authoritative in the store (Unit B validates them at traversal). */
+ *  authoritative in the store (Unit B validates them at traversal). The
+ *  `doc-child` kind expresses HIERARCHICAL NESTING (a nested semantic unit —
+ *  e.g. a paragraph-length `li` inside a `ul` — is its own RAG object, a
+ *  doc-child of the containing RAG object). */
 export type RagEdgeKind =
   | 'parent-child'   // a RAG node's family parent (multi-parent allowed)
   | 'doc-head'       // source is the head of target's document
   | 'next-section'   // source's next section in document order is target
   | 'doc-end'        // source is the end of target's document
+  | 'doc-child'      // target's subtree is nested WITHIN source's subtree at `order`
   // 'crosslink' is a LATER unit (Unit G) — not in the first slice.
 
 /** A RAG edge — a directed relationship between two RAG nodes. */
@@ -149,6 +153,10 @@ export interface RagEdge {
   kind: RagEdgeKind
   source: string   // RAG node id
   target: string   // RAG node id
+  /** For `doc-child` edges only: the position of the child's subtree within
+   *  the parent's subtree (relative to the parent's owned nodes and other
+   *  doc-children). Absent for the other kinds. */
+  order?: number
   createdAt: string
   updatedAt: string
 }

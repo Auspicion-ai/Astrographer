@@ -21,11 +21,14 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   RAG node/edge types carry the subtree-ownership convention (a RAG object
   declares the provident node ids it owns).
 - **Unit B — document model + doc-flow.** RAG node/edge types; doc-flow edges
-  (doc-head / next-section / doc-end) authoritative in the store; traversal-time
-  edge validation (cycle/missing-node/missing-head) with family-pre-order
-  fallback; the doc-head marker prop; the subtree-boundary convention; **plus
-  the `rag` (read-only, default-off) + `edit` (mutating, default-off) MCP group
-  decisions** through the five-seam gate.
+  (doc-head / next-section / doc-end) authoritative in the store; the **`doc-child`
+  edge** for hierarchical nesting (a nested semantic unit — e.g. a
+  paragraph-length `li` inside a `ul` — is its own RAG object, a doc-child of
+  the containing RAG object); traversal-time edge validation
+  (cycle/missing-node/missing-head, incl. doc-child nesting cycles) with
+  family-pre-order fallback; the doc-head marker prop; the subtree-boundary
+  convention; **plus the `rag` (read-only, default-off) + `edit` (mutating,
+  default-off) MCP group decisions** through the five-seam gate.
 - **Unit C — rendering spine.** Main-process traversal producing TWO outputs —
   the `LegacyInitialData` envelope AND the back-reference `Map<ragNodeId,
   nodeId[]>` — envelope shipped to the renderer for `translateLegacy` →

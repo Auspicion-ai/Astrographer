@@ -113,6 +113,10 @@ No engine gap. ENG-GAP-1 stays a non-blocking handoff item.
   through the single-writer queue (Unit A).
 - **DERIVED-DOC-FLOW:** the traversal maps doc-flow edges to family order + a
   doc-head marker prop, validating and falling back to family pre-order (Unit B).
+- **DOC-CHILD (nested semantic units):** a RAG object's subtree can CONTAIN
+  nested subtrees owned by its doc-children; the traversal materializes them at
+  the doc-child `order` position. The parent's `ownedNodeIds` EXCLUDES the
+  doc-children's nodes. (User clarification 2026-08-26 — review §12.)
 
 ## 5. The exhaustive contract
 
@@ -212,6 +216,17 @@ envelope = {
 5. **Formatting → element type:** RAG text → `content`; formatting → element
    `type` (h1-h6/p/ul/ol/li/blockquote/pre/code/strong/em/a/img). CSS is used
    only for non-semantic styling (MarkdownAdapter drops `css:*`, D5).
+6. **Doc-child nesting (Unit B §5.1 / review §12):** a RAG object's subtree can
+   CONTAIN nested subtrees owned by its doc-children. When materializing a
+   parent RAG object's subtree, the traversal emits the parent's owned nodes AND,
+   at the position of each doc-child (by the `doc-child` edge `order`), the
+   doc-child RAG object's OWN subtree (its content root + its children). The
+   engine's family structure (e.g. `ul` → `li`) is the RENDER structure; the
+   `doc-child` edge expresses the SEMANTIC ownership boundary. A doc-child's
+   subtree root carries its own stable authored id (`rag-<docChildRagNodeId>`)
+   and its own `data-doc-head` marker if it is a document head. The parent RAG
+   object's `ownedNodeIds` EXCLUDES the nodes owned by its doc-children (Unit B
+   §5.1).
 
 ### 5.3 Back-reference map lifecycle
 
@@ -320,6 +335,12 @@ export interface LineNodeMap {
    the `CompiledState[]`; the RAG subtrees render in the root-visible zone.
 7. **MCP/UI equivalence:** the same envelope + back-reference map reachable
    through both MCP and UI; the rendered output is identical.
+8. **Doc-child nesting:** a `ul` RAG object with four paragraph-length `li`
+   doc-children → the traversal emits the `ul` content root with the four
+   `li` doc-child subtrees nested at their `order` positions; the back-reference
+   map has one entry for the `ul` RAG object (its owned nodes, excluding the
+   `li`s) + one entry per `li` doc-child RAG object; the line→node map maps each
+   `li`'s lines to its own doc-child RAG object.
 
 ### 5.8 Fail-states (TestWriter red set — documented fail-states)
 
@@ -345,16 +366,24 @@ export interface LineNodeMap {
    array) → `translateLegacy` warns + skips (the engine's `placement-name-invalid`/
    `placement-target-invalid` guards); the subtree may not render. The traversal
    must emit well-formed `targetPlacement: string[]`.
+8. **Doc-child nesting cycle** (a RAG object is a doc-child of itself,
+   transitively) → the traversal falls back to family pre-order (no throw) —
+   Unit B §5.2 (the `cycle` reason covers a `doc-child` nesting cycle).
 
 ### 5.9 Census / numeric claims
 
 - **Traversal outputs:** 2 (the envelope + the back-reference map) + 1
   first-class assembly output (the line→node map).
 - **Container producers:** exactly one per distinct targeted zone name.
-- **ContentPayloads:** exactly one per RAG subtree.
+- **ContentPayloads:** exactly one per RAG subtree (a doc-child's nested
+  subtree is emitted WITHIN its parent's subtree, not as a separate
+  ContentPayload — the doc-child's content root is a child of the parent's
+  content root).
 - **Back-reference map:** one entry per RAG object; values are the owned provident
-  node ids (≥ 1 per subtree root).
-- **Line→node map:** one range per RAG object.
+  node ids (≥ 1 per subtree root). A doc-child RAG object has its own entry
+  (its owned nodes, EXCLUDING any deeper doc-children).
+- **Line→node map:** one range per RAG object (a doc-child's lines map to the
+  doc-child RAG object, not the parent).
 
 ### 5.10 Cross-references
 
@@ -364,7 +393,7 @@ export interface LineNodeMap {
   doc-head marker prop, subtree-boundary convention), §5.2 (edge validation +
   fallback), §5.3 (five-seam gate).
 - Gate: `docs/specs/astrographer-review.md` §8.1, §8.2, §9.2.2, §9.2.4, §9.2.8,
-  §9.3(c), §9.3(h), §10, §10.3 Q1-Q5, §11.
+  §9.3(c), §9.3(h), §10, §10.3 Q1-Q5, §11, §12 (doc-child nesting).
 - Decisions: `docs/decisions.md` rows **RAG-AUTHORITATIVE**,
   **SUBTREE-OWNERSHIP**, **MULTI-PARENT-DUPLICATE**, **SINGLE-WRITER-STORE**,
   **DERIVED-DOC-FLOW**, **MARKDOWN-EXPORT-ONLY**.

@@ -211,4 +211,27 @@ The user confirmed the markdown ownership loss (D7) is a **known factor** and se
 - **Agent-driven changes are encouraged to go through DIRECT MCP UPDATES** (the `edit` tool group / RAG-store mutations), not markdown round-trips. The agent reads via markdown (export) and writes via direct MCP edits to the RAG store.
 - **Diffing of markdown vs. generated source to detect changes is a FUTURE SPECULATIVE FEATURE** — recorded in `docs/pending.md` with its revisit condition, not built in the first slice.
 
+---
+
+## 12. User clarification (2026-08-26) — the `doc-child` edge type (nested semantic units)
+
+The user refined the subtree-ownership model (§10) to handle NESTED semantic units:
+
+> "Depending on document layout, a provident node could end up being nested inside of another node while still being large enough for semantic distinctiveness, e.g. a `ul`/`ol` element with paragraph-length `li` elements. Resolving this situation would require a **doc-child edge type**, e.g. `node-1` contains a `ul` element, and four edges connect to/contain `li` elements with `doc-child-<placementName@doc-name>`. Example format is provided for clarity, not as an instruction. There are more explicit/elegant ways to represent doc ownership."
+
+### 12.1 The refinement
+- A RAG object can own a subtree (§10), but WITHIN that subtree a nested node (e.g. a paragraph-length `li` inside a `ul`) can itself be a distinct RAG object — a **doc-child** of the containing RAG object.
+- This requires a **`doc-child` edge type** in the RAG store, distinct from the linear doc-flow edges (`doc-head` / `next-section` / `doc-end`). The doc-flow edges express the LINEAR document sequence; the `doc-child` edge expresses HIERARCHICAL nesting (a semantic unit nested inside another).
+- The user's example format (`doc-child-<placementName@doc-name>`) is illustrative only — the clean representation is a `doc-child` edge `{ type: 'doc-child', parent: <ragNodeId>, child: <ragNodeId>, order: <number> }`: the child RAG object's subtree is nested within the parent RAG object's subtree at the given order/position.
+
+### 12.2 Effect on the architecture
+- **RAG edge kinds (Unit A §5.1 / Unit B §5.1):** add `doc-child` to the edge kinds. The first-slice edge kinds become: `parent-child` (family), `doc-head` / `next-section` / `doc-end` (linear flow), `doc-child` (hierarchical nesting).
+- **Subtree-boundary convention (§10.2):** a RAG object's `ownedNodeIds` EXCLUDES the nodes owned by its doc-children (those belong to the doc-children). The ownership is hierarchical: a parent RAG object owns its subtree, and within it, doc-child RAG objects own nested subtrees.
+- **Traversal (Unit C):** when materializing a parent RAG object's subtree, the traversal must ALSO materialize the doc-child RAG objects' subtrees nested within it at the right position (the engine's family structure — e.g. `ul` → `li` — is the render structure; the RAG doc-child edges express the semantic ownership boundary).
+- **Embedding/chunking (§10.1):** a doc-child RAG object's text = the markdown of its OWN subtree, embedded as a SEPARATE chunk (a paragraph-length `li` is its own embedding), while the parent RAG object's text = the markdown of its subtree EXCLUDING the doc-children's subtrees (or including them as references). The exact chunking is a Unit E decision.
+- **Validation (Unit B §5.2):** the traversal-time validation must also validate `doc-child` edges (missing-node, nesting cycle).
+
+### 12.3 Open question for the spec update
+- How does the `doc-child` `order` position the child's subtree within the parent's subtree relative to the parent's owned nodes and other doc-children? (The cleanest: the child's subtree is inserted at the position of the corresponding engine family child — e.g. the `li` node — within the parent's owned subtree.)
+
 This refines the "relevant document lines" requirement: the line→node map is still produced by the assembly step (so the agent can cite the owning RAG object), but it is a READ aid, not a write-back path. The primary agent write path is direct MCP `edit`-group mutations to the RAG store.
