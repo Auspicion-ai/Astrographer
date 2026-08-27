@@ -278,6 +278,21 @@ export type RpcMethod =
   | 'module.install'
   | 'module.update'
   | 'module.list'
+  // Unit B (docs/specs/unit-b-document-model.md §5.3) — the main-handled
+  // `rag`/`edit` tool methods. They are handled in MAIN (the RAG store), never
+  // routed to the renderer, but still declare their method names here for the
+  // shared IPC contract.
+  | 'rag.query'
+  | 'rag.get_document'
+  | 'rag.list_nodes'
+  | 'rag.get_edges'
+  | 'rag.backlinks'
+  | 'edit.set_content'
+  | 'edit.create_node'
+  | 'edit.delete_node'
+  | 'edit.split_node'
+  | 'edit.merge_node'
+  | 'edit.set_edge'
 
 export interface RpcRequest {
   id: number
@@ -314,7 +329,7 @@ export interface NotifyPayload {
  *  be able to grant itself capabilities). */
 export interface SecuritySettings {
   token: string | null
-  /** The enabled tool groups (`read`/`dispatch`/`graph`/`code`). */
+  /** The enabled tool groups (`read`/`dispatch`/`graph`/`code`/`module`/`rag`/`edit`). */
   enabled: string[]
   /** Maximum journal entries before auto-condense (undefined = never condense).
    *  Passed to the provident-ssr Supervisor constructor. */

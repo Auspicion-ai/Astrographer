@@ -13,18 +13,8 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ## OPEN
 
-### First milestone — Units B/C (Unit A done)
+### First milestone — Unit C (Units A/B done)
 
-- **Unit B — document model + doc-flow.** RAG node/edge types; doc-flow edges
-  (doc-head / next-section / doc-end) authoritative in the store, **scoped by
-  `documentId`** so a node can be in MULTIPLE documents' flows
-  (CROSS-DOCUMENT-SHARED); the **`doc-child` edge** for hierarchical nesting (a
-  nested semantic unit — e.g. a paragraph-length `li` inside a `ul` — is its own
-  RAG object, a doc-child of the containing RAG object); traversal-time edge
-  validation (cycle/missing-node/missing-head, incl. doc-child nesting cycles)
-  with family-pre-order fallback; the doc-head marker prop; the subtree-boundary
-  convention; **plus the `rag` (read-only, default-off) + `edit` (mutating,
-  default-off) MCP group decisions** through the five-seam gate.
 - **Unit C — rendering spine.** Main-process traversal producing TWO outputs —
   the `LegacyInitialData` envelope AND the back-reference `Map<ragNodeId,
   nodeId[]>` — envelope shipped to the renderer for `translateLegacy` →
@@ -73,6 +63,24 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   documentation review in `archive/reviews/2026-08-26-unit-a-doc-review.md`
   (spec + greens + trackers reconciled against the build); trio green (test +
   typecheck + build).
+- **Unit B — document model + doc-flow (2026-08-26).** `validateDocFlow` in
+  `src/main/doc-flow.ts` (pure, no Electron): the `DocFlowVerdict` union
+  (`ok:true` order / `ok:false` with `cycle`/`missing-node`/`missing-head`/
+  `missing-end`), missing-head precedence, missing-node incl. the doc-head
+  target, next-section + doc-child cycles, missing-end, happy path, and the
+  null/undefined throw. The five-seam `rag`/`edit` gate: `security.ts`
+  ToolGroup/TOOL_GROUPS/VALID_GROUPS/defaultSecurityConfig, `mcp-server.ts`
+  ALL_TOOLS/registerTools/handleRagTool/handleEditTool (main-handled against
+  the `RagStore` interface), `shared/types.ts` RpcMethod, and the renderer
+  negative contracts (no switch cases; `edit.*` not in MUTATING_METHODS).
+  TestWriter red → Implementer green in `tests/doc-flow.test.ts` (11
+  happy-path + fail-state) + `tests/rag-edit-gate.test.ts` (19 seam + gating);
+  + 6 adversarial regression tests (host findings fixed + regression-tested);
+  blind-greens in `docs/specs/unit-b-document-model-greens.md` (22 scenarios,
+  all pass); documentation review in
+  `archive/reviews/2026-08-26-unit-b-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (test 735 pass / 2 skip, typecheck
+  clean, build clean — full suite no regressions).
 - **Proposal gate (2026-08-26).** Three-agent gate (validity ∥ critique →
   architecture → change-analysis) on the top-level deliverable, then a re-run
   gate on the refined two-graph model, then a focused validity check on the
@@ -83,7 +91,7 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 - **Spec gate (2026-08-26).** The first-slice contracts are written and
   verified in the compile-horizon-review format:
   `docs/specs/unit-a-rag-store.md` (505 lines), `docs/specs/unit-b-document-model.md`
-  (313 lines), `docs/specs/unit-c-rendering-spine.md` (381 lines). Each is
+  (401 lines), `docs/specs/unit-c-rendering-spine.md` (381 lines). Each is
   exhaustive enough for a TestWriter to derive every state and fail-state from
   §5.8/§5.9. **Unit C pinned a reconciliation key:** the back-reference map is
   built by the main-process traversal running `translateLegacy`, but the

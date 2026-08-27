@@ -22,6 +22,7 @@ import type {
 } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
+import type { RagStore, RagNodeType, RagEdgeKind } from './rag-store.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -101,6 +102,153 @@ export function handleModuleTool(store: ModuleStore | null, name: string, args: 
     return store.list().map((r) => ({ name: r.name, version: r.version, capabilities: r.capabilities ?? {}, disabled: r.disabled, quarantined: r.quarantined }))
   }
   throw new Error(`unknown module tool: ${name}`)
+}
+
+/** Unit B — handle a `rag.*` tool in MAIN (read-only, against the RAG store).
+ *  The rag tools are NOT routed to the renderer (the store is main-process).
+ *  The tools depend on the `RagStore` INTERFACE (Unit A §5.3 — SOURCE-SWITCHABLE),
+ *  never the concrete JSON store. Tools whose behavior lands in a later unit
+ *  (rag.query → Unit E retrieval, rag.backlinks → Unit G) are registered with a
+ *  minimal/placeholder handler that is gated correctly. Exported for direct
+ *  unit testing. */
+export function handleRagTool(store: RagStore | null, name: string, args: Record<string, unknown>): unknown {
+  if (!store) throw new Error(`${name}: no rag store configured`)
+  switch (name) {
+    case 'rag.query': {
+      // Unit E implements the retrieval; registered here with a placeholder.
+      const query = typeof args.query === 'string' ? args.query : ''
+      const topK = typeof args.topK === 'number' ? args.topK : undefined
+      return { query, topK, results: [], lineMap: {} }
+    }
+    case 'rag.get_document': {
+      // Finding 4 (known behavior, no code change): this is a PLACEHOLDER —
+      // it returns the ENTIRE store, not the document's subtree. Full subtree
+      // scoping (the document's RAG nodes/edges) lands in Unit C (the
+      // traversal/render spine). Do not change the behavior here.
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (documentId === '') throw new Error('rag.get_document: documentId required')
+      return { documentId, nodes: store.listNodes(), edges: store.listEdges() }
+    }
+    case 'rag.list_nodes':
+      return store.listNodes().map((n) => ({ id: n.id, type: n.type, content: n.content.slice(0, 80), ownedNodeIds: n.ownedNodeIds.length }))
+    case 'rag.get_edges': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : undefined
+      const edges = store.listEdges()
+      if (nodeId === undefined) return edges
+      return edges.filter((e) => e.source === nodeId || e.target === nodeId)
+    }
+    case 'rag.backlinks': {
+      // Unit G enumerates the backlinks; registered here with a placeholder.
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+      if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
+      return { nodeId, backlinks: [] }
+    }
+    default:
+      throw new Error(`unknown rag tool: ${name}`)
+  }
+}
+
+/** Unit B — handle an `edit.*` tool in MAIN (mutating, through the RAG store's
+ *  single-writer queue). The edit tools are NOT routed to the renderer. Editing
+ *  is NEVER a `code`-group op. Exported for direct unit testing. */
+export async function handleEditTool(store: RagStore | null, name: string, args: Record<string, unknown>): Promise<unknown> {
+  if (!store) throw new Error(`${name}: no rag store configured`)
+  const now = () => new Date().toISOString()
+  switch (name) {
+    case 'edit.set_content': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+      const content = typeof args.content === 'string' ? args.content : ''
+      if (nodeId === '') throw new Error('edit.set_content: nodeId required')
+      const existing = store.getNode(nodeId)
+      if (!existing) throw new Error(`edit.set_content: node not found: ${nodeId}`)
+      return store.putNode({ ...existing, content, updatedAt: now() })
+    }
+    case 'edit.create_node': {
+      const type = (typeof args.type === 'string' ? args.type : 'p') as RagNodeType
+      const content = typeof args.content === 'string' ? args.content : ''
+      const parentId = typeof args.parentId === 'string' && args.parentId !== '' ? args.parentId : undefined
+      const props = args.props && typeof args.props === 'object' ? (args.props as Record<string, unknown>) : undefined
+      const id = `rag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const node = {
+        id,
+        type,
+        content,
+        ...(props ? { props } : {}),
+        ownedNodeIds: [],
+        createdAt: now(),
+        updatedAt: now(),
+      }
+      await store.putNode(node)
+      // Finding 3 — when a `parentId` is given, create the node AND a
+      // `parent-child` edge (source=parentId, target=newNodeId) through the
+      // store so the created node is not orphaned. The store's putEdge rejects
+      // a missing/quarantined parent (surfaced to the caller).
+      if (parentId !== undefined) {
+        await store.putEdge({
+          id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          kind: 'parent-child',
+          source: parentId,
+          target: id,
+          createdAt: now(),
+          updatedAt: now(),
+        })
+      }
+      return node
+    }
+    case 'edit.delete_node': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+      if (nodeId === '') throw new Error('edit.delete_node: nodeId required')
+      return store.removeNode(nodeId)
+    }
+    case 'edit.split_node': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+      const at = typeof args.at === 'number' ? args.at : 0
+      if (nodeId === '') throw new Error('edit.split_node: nodeId required')
+      const existing = store.getNode(nodeId)
+      if (!existing) throw new Error(`edit.split_node: node not found: ${nodeId}`)
+      const head = existing.content.slice(0, at)
+      const tail = existing.content.slice(at)
+      const tailId = `rag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      await store.putNode({ ...existing, content: head, updatedAt: now() })
+      await store.putNode({ id: tailId, type: existing.type, content: tail, ownedNodeIds: [], createdAt: now(), updatedAt: now() })
+      return { nodeId, tailId }
+    }
+    case 'edit.merge_node': {
+      const sourceId = typeof args.sourceId === 'string' ? args.sourceId : ''
+      const targetId = typeof args.targetId === 'string' ? args.targetId : ''
+      if (sourceId === '' || targetId === '') throw new Error('edit.merge_node: sourceId and targetId required')
+      const source = store.getNode(sourceId)
+      const target = store.getNode(targetId)
+      if (!source) throw new Error(`edit.merge_node: source node not found: ${sourceId}`)
+      if (!target) throw new Error(`edit.merge_node: target node not found: ${targetId}`)
+      await store.putNode({ ...target, content: `${target.content}\n${source.content}`, updatedAt: now() })
+      await store.removeNode(sourceId)
+      return { sourceId, targetId }
+    }
+    case 'edit.set_edge': {
+      const kindArg = typeof args.kind === 'string' ? args.kind : ''
+      const source = typeof args.source === 'string' ? args.source : ''
+      const target = typeof args.target === 'string' ? args.target : ''
+      if (kindArg === '' || source === '' || target === '') throw new Error('edit.set_edge: kind, source and target required')
+      const kind = kindArg as RagEdgeKind
+      const edgeId = typeof args.edgeId === 'string' && args.edgeId !== '' ? args.edgeId : `edge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const order = typeof args.order === 'number' ? args.order : undefined
+      const documentIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]).filter((x): x is string => typeof x === 'string') : undefined
+      const edge = {
+        id: edgeId,
+        kind,
+        source,
+        target,
+        ...(order !== undefined ? { order } : {}),
+        ...(documentIds !== undefined ? { documentIds } : {}),
+        createdAt: now(),
+        updatedAt: now(),
+      }
+      return store.putEdge(edge)
+    }
+    default:
+      throw new Error(`unknown edit tool: ${name}`)
+  }
 }
 
 /** U9-FIX — re-sync the CapabilityRouter from the persisted module store. The
@@ -236,6 +384,11 @@ export interface McpServerOptions {
   /** U9 — the CapabilityRouter whose dynamic `module:<name>.<tool>` tools are
    *  registered + invoked (with the invocation two-gate, F1). */
   router?: CapabilityRouter
+  /** Unit B — the main-process RAG store (Unit A §5.3, SOURCE-SWITCHABLE). The
+   *  `rag.*`/`edit.*` tools are handled in MAIN against this store (never
+   *  routed to the renderer). Injected like `moduleStore`; the tools depend on
+   *  the `RagStore` INTERFACE, never the concrete JSON store. */
+  ragStore?: RagStore
 }
 
 export interface SecuritySnapshot { token: string | null; enabled: ToolGroup[] }
@@ -247,6 +400,7 @@ export class ProvidentMcpServer {
   private readonly port: number
   private readonly moduleStore: ModuleStore | null
   private readonly router: CapabilityRouter | null
+  private readonly ragStore: RagStore | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
   private _gate: SecurityGate
@@ -270,6 +424,7 @@ export class ProvidentMcpServer {
     this._gate = opts.gate ?? new SecurityGate()
     this.moduleStore = opts.moduleStore ?? null
     this.router = opts.router ?? null
+    this.ragStore = opts.ragStore ?? null
   }
 
   getGateConfig(): SecuritySnapshot {
@@ -300,6 +455,20 @@ export class ProvidentMcpServer {
     'module.install',
     'module.update',
     'module.list',
+    // Unit B (docs/specs/unit-b-document-model.md §5.3) — the `rag` (read-only,
+    // default-off) + `edit` (mutating, default-off) tool groups. Main-handled
+    // against the RAG store, never routed to the renderer.
+    'rag.query',
+    'rag.get_document',
+    'rag.list_nodes',
+    'rag.get_edges',
+    'rag.backlinks',
+    'edit.set_content',
+    'edit.create_node',
+    'edit.delete_node',
+    'edit.split_node',
+    'edit.merge_node',
+    'edit.set_edge',
   ]
 
   /** The subset of ALL_TOOLS whose group the current gate allows — the tools
@@ -381,7 +550,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this._gate)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this._gate)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -525,7 +694,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this._gate)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this._gate)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -540,6 +709,7 @@ export class ProvidentMcpServer {
     registered: Map<string, RegisteredTool>,
     moduleStore: ModuleStore | null,
     router: CapabilityRouter | null,
+    ragStore: RagStore | null,
     gate: SecurityGate,
   ): void {
     if (allowed.includes('provident.dispatch')) {
@@ -663,6 +833,20 @@ export class ProvidentMcpServer {
       { name: 'module.install', description: 'Install/update a module in the persisted registry (U3). Same name+version → no-op; same name+different version → rejected unless force:true. Requires module AND code groups (executable entry).', inputSchema: { name: z.string(), source: z.string(), version: z.string().optional(), force: z.boolean().optional() } },
       { name: 'module.update', description: 'Re-load + re-register a module at a new version. Requires module AND code groups.', inputSchema: { name: z.string(), source: z.string(), version: z.string().optional(), force: z.boolean().optional() } },
       { name: 'module.list', description: 'Read-only census of installed modules + versions. Requires module group.', inputSchema: {} },
+      // Unit B (docs/specs/unit-b-document-model.md §5.4) — the `rag` (read-only,
+      // default-off) + `edit` (mutating, default-off) tool groups. Main-handled
+      // against the RAG store; editing is NEVER a `code`-group op.
+      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional() } },
+      { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string() } },
+      { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: {} },
+      { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional() } },
+      { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string() } },
+      { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, no re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string() } },
+      { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional() } },
+      { name: 'edit.delete_node', description: 'Delete a RAG node + cascade its edges (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string() } },
+      { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number() } },
+      { name: 'edit.merge_node', description: 'Merge sourceId into targetId (structural → re-traversal). Requires edit group.', inputSchema: { sourceId: z.string(), targetId: z.string() } },
+      { name: 'edit.set_edge', description: 'Create/update a RAG edge (structural → re-traversal). order is for doc-child edges; documentIds is for doc-flow edges. Requires edit group.', inputSchema: { kind: z.string(), source: z.string(), target: z.string(), edgeId: z.string().optional(), order: z.number().optional(), documentIds: z.array(z.string()).optional() } },
     ]
     const dispatch = (name: string): string => name.slice('provident.'.length)
     for (const { name, description, inputSchema } of graph) {
@@ -684,6 +868,14 @@ export class ProvidentMcpServer {
             }
           }
           return text(before)
+        }
+        // Unit B — the rag.*/edit.* tools are MAIN-process (the RAG store),
+        // NOT routed to the renderer. Editing is NEVER a `code`-group op.
+        if (name.startsWith('rag.')) {
+          return text(handleRagTool(ragStore, name, args))
+        }
+        if (name.startsWith('edit.')) {
+          return text(await handleEditTool(ragStore, name, args))
         }
         const method = dispatch(name)
         const value = await backend.invoke(method, args)

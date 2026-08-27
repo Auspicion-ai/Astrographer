@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 
-export type ToolGroup = 'read' | 'dispatch' | 'graph' | 'code' | 'module'
+export type ToolGroup = 'read' | 'dispatch' | 'graph' | 'code' | 'module' | 'rag' | 'edit'
 
 const TOOL_GROUPS: Record<string, ToolGroup> = {
   'provident.get_rendered_html': 'read',
@@ -28,6 +28,20 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'module.list': 'module',
   'module.disable': 'module',
   'module.enable': 'module',
+  // Unit B (docs/specs/unit-b-document-model.md §5.3) — the `rag` (read-only,
+  // default-off) + `edit` (mutating, default-off) tool groups. Editing is
+  // NEVER a `code`-group op.
+  'rag.query': 'rag',
+  'rag.get_document': 'rag',
+  'rag.list_nodes': 'rag',
+  'rag.get_edges': 'rag',
+  'rag.backlinks': 'rag',
+  'edit.set_content': 'edit',
+  'edit.create_node': 'edit',
+  'edit.delete_node': 'edit',
+  'edit.split_node': 'edit',
+  'edit.merge_node': 'edit',
+  'edit.set_edge': 'edit',
   // R1 (mcp-resources-review.md) — the read-group resources. Keyed by
   // `resource:<uri>` so `toolAllowed` gates them with the `read` group. A
   // resource is registered ONLY when its group is allowed (never always-
@@ -131,7 +145,7 @@ export function authorized(
   return false
 }
 
-const VALID_GROUPS: ReadonlySet<string> = new Set(['read', 'dispatch', 'graph', 'code', 'module'])
+const VALID_GROUPS: ReadonlySet<string> = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit'])
 
 /** F3/F4 — a token/groups/disable field of the wrong shape ⇒ the whole patch
  *  is REJECTED (config unchanged, never throws). */

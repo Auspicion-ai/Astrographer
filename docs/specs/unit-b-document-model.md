@@ -82,6 +82,23 @@ No engine gap. ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) is SHELVED
 markdown-parsing-to-storage will use text-match diffing — see
 `docs/pending.md`).
 
+### 3a. Adversarial findings (host findings, fixed + regression-tested)
+
+The post-green adversarial pass (RCA-3) surfaced 7 HOST findings in
+`src/main/doc-flow.ts` + `src/main/mcp-server.ts`. All were fixed here +
+regression-tested (`tests/doc-flow.test.ts` + `tests/rag-edit-gate.test.ts`
+adversarial blocks). None are package/foundation gaps (no handoff items).
+
+| # | Finding | Where pinned |
+| --- | --- | --- |
+| 1 | A `next-section` chain that does NOT reach the `doc-end` (dangling chain) is a structural violation → `missing-end`. | §5.2 rule 6 / fail-state 6 |
+| 2 | A `doc-head` edge whose TARGET (the document root) is missing is `missing-node` (rule 2), NOT `missing-head`. | §5.2 rule 2 / fail-state 2 |
+| 3 | `edit.create_node` with a `parentId` ALSO creates a `parent-child` edge (source=`parentId`, target=new node) so the created node is not orphaned. | §5.4 `edit.create_node` |
+| 4 | `rag.get_document` is a PLACEHOLDER — it returns the ENTIRE store, not the document's subtree. Full subtree scoping lands in Unit C. | §5.4 `rag.get_document` |
+| 5 | Two `next-section` edges from the same source in the same document (a node has one next per document) → `cycle` with detail `duplicate next-section`. | §5.2 fail-state 8 |
+| 6 | Two `doc-head` edges for the same document (a document has exactly one head) → `missing-head` with detail `multiple heads`. | §5.2 fail-state 7 |
+| 7 | A doc-flow edge with missing/empty `documentIds` is silently scoped OUT — it belongs to no document (correct scoping: an edge with no owner belongs to no document). A malformed `next-section` edge is dropped with no signal. | §5.2 scoping note |
+
 ## 4. Design decisions pinned by this spec
 
 - **DERIVED-DOC-FLOW:** doc-flow edges are authoritative in the RAG store; the
@@ -199,7 +216,7 @@ family order. The validation is a pure function over the RAG store:
 
 export type DocFlowVerdict =
   | { ok: true; order: string[] }   // the document order (RAG node ids), head-first
-  | { ok: false; reason: 'cycle' | 'missing-node' | 'missing-head'; detail: string }
+  | { ok: false; reason: 'cycle' | 'missing-node' | 'missing-head' | 'missing-end'; detail: string }
 
 /** Validate the doc-flow edges for one document and produce the document
  *  order. On any violation, the caller falls back to family pre-order. */
@@ -216,9 +233,13 @@ flows is validated independently per document):
 
 1. **Missing-head:** if the document has no `doc-head` edge (or the head node
    does not exist), the verdict is `{ ok: false, reason: 'missing-head' }`.
-2. **Missing-node:** if any `next-section`/`doc-end`/`doc-head`/`doc-child` edge
-   references a node id not present in `nodes`, the verdict is `{ ok: false,
-   reason: 'missing-node' }`.
+   **Precedence:** the head is checked FIRST — a `doc-head` edge referencing a
+   nonexistent node is `missing-head` (rule 1), NOT `missing-node`.
+2. **Missing-node:** if any `next-section`/`doc-end`/`doc-child` edge (NOT
+   `doc-head` — the head is handled by rule 1) references a node id not present
+   in `nodes`, the verdict is `{ ok: false, reason: 'missing-node' }`. The
+   `doc-head` edge's TARGET (the document root) is also checked here — a
+   nonexistent target is `{ ok: false, reason: 'missing-node' }`.
 3. **Cycle:** if following the document's `next-section` edges (scoped by
    `documentId`) from the head revisits a node (a cycle), the verdict is
    `{ ok: false, reason: 'cycle' }`.
@@ -229,6 +250,18 @@ flows is validated independently per document):
    document's `next-section` chain is acyclic and reaches the `doc-end`, and the
    `doc-child` nesting is acyclic, the verdict is `{ ok: true, order:
    <head-first document order> }`.
+6. **Missing-end:** if the `next-section` chain is acyclic but does NOT reach
+   the `doc-end` (a dangling chain — no `doc-end` edge, or the `doc-end` edge's
+   source is not the chain's terminal node), the verdict is `{ ok: false,
+   reason: 'missing-end' }`.
+
+**Scoping note (Finding 7):** the doc-flow edges (`doc-head`/`next-section`/
+`doc-end`) are scoped to those whose `documentIds` includes the given
+`documentId`; the `doc-child` edges (hierarchical nesting, no `documentIds`)
+are validated globally. A doc-flow edge with missing/empty `documentIds` is
+silently scoped OUT — it belongs to no document (correct scoping: an edge with
+no owner belongs to no document). A malformed `next-section` edge is dropped
+with no signal.
 
 **Fallback (family pre-order):** on any violation (`ok: false`), the traversal
 falls back to **family pre-order** — the order defined by the `parent-child`
@@ -238,8 +271,9 @@ never throws.
 **Fail-states (TestWriter red set):**
 
 1. No `doc-head` edge for the document → `{ ok: false, reason: 'missing-head' }`.
-2. A `next-section`/`doc-end`/`doc-head`/`doc-child` edge references a
-   nonexistent node → `{ ok: false, reason: 'missing-node' }`.
+2. A `next-section`/`doc-end`/`doc-child` edge references a nonexistent node →
+   `{ ok: false, reason: 'missing-node' }`. (A `doc-head` edge referencing a
+   nonexistent node is `missing-head` — rule 1 precedence.)
 3. A `next-section` cycle (A→B→A) → `{ ok: false, reason: 'cycle' }`.
 4. A `doc-child` nesting cycle (A is a doc-child of B, B is a doc-child of A) →
    `{ ok: false, reason: 'cycle' }`.
@@ -248,6 +282,11 @@ never throws.
 6. `validateDocFlow` with a null/undefined `nodes`/`edges`/`documentId` → throws
    `Error('validateDocFlow: nodes/edges/documentId required')` (a malformed
    input is a caller error, never a silent fallback).
+7. Two `doc-head` edges for the same document (a document has exactly one head)
+   → `{ ok: false, reason: 'missing-head', detail: 'multiple heads' }`.
+8. Two `next-section` edges from the same source in the same document (a node
+   has one next per document) → `{ ok: false, reason: 'cycle', detail:
+   'duplicate next-section' }`.
 
 ### 5.3 The five-seam gate for `rag`/`edit`
 
@@ -314,7 +353,7 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
 | Tool | Input schema | Return (JSON) |
 | --- | --- | --- |
 | `rag.query` | `{ query: string, topK?: number }` | The relevant RAG objects + the coarse line→node map (Unit E implements the retrieval; the tool is registered here). |
-| `rag.get_document` | `{ documentId: string }` | The document's RAG nodes/edges (the subtree). |
+| `rag.get_document` | `{ documentId: string }` | The document's RAG nodes/edges (the subtree). **Placeholder (Finding 4):** the current handler returns the ENTIRE store (`{ documentId, nodes: listNodes(), edges: listEdges() }`), not the document's subtree — full subtree scoping lands in Unit C (the traversal/render spine). |
 | `rag.list_nodes` | `{}` | A census of RAG nodes (id, type, content preview, ownedNodeIds count). |
 | `rag.get_edges` | `{ nodeId?: string }` | The RAG edges (all, or those touching `nodeId`). |
 | `rag.backlinks` | `{ nodeId: string }` | The backlinks to `nodeId` (Unit G enumerates them; the tool is registered here). |
@@ -324,11 +363,11 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
 | Tool | Input schema | Effect |
 | --- | --- | --- |
 | `edit.set_content` | `{ nodeId: string, content: string }` | Set a RAG node's content (a content op → journaled, no re-traversal). |
-| `edit.create_node` | `{ type: RagNodeType, content: string, parentId?: string, props?: Record<string, unknown> }` | Create a RAG node (a structural op → journaled, re-traversal). |
+| `edit.create_node` | `{ type: string, content: string, parentId?: string, props?: Record<string, unknown> }` | Create a RAG node (a structural op → journaled, re-traversal). When `parentId` is given, ALSO create a `parent-child` edge (source=`parentId`, target=new node) so the created node is not orphaned; a missing/quarantined parent is rejected by the store (surfaced to the caller). |
 | `edit.delete_node` | `{ nodeId: string }` | Delete a RAG node + cascade its edges (structural → re-traversal). |
 | `edit.split_node` | `{ nodeId: string, at: number }` | Split a RAG node at character offset `at` (structural → re-traversal). |
 | `edit.merge_node` | `{ sourceId: string, targetId: string }` | Merge `sourceId` into `targetId` (structural → re-traversal). |
-| `edit.set_edge` | `{ kind: RagEdgeKind, source: string, target: string, edgeId?: string, order?: number, documentIds?: string[] }` | Create/update a RAG edge (structural → re-traversal). `order` is for `doc-child` edges (the child's subtree position); `documentIds` is for doc-flow edges (the documents that own/use the edge — CROSS-DOCUMENT-SHARED). |
+| `edit.set_edge` | `{ kind: string, source: string, target: string, edgeId?: string, order?: number, documentIds?: string[] }` | Create/update a RAG edge (structural → re-traversal). `order` is for `doc-child` edges (the child's subtree position); `documentIds` is for doc-flow edges (the documents that own/use the edge — CROSS-DOCUMENT-SHARED). |
 
 **Gating behavior:**
 
@@ -366,8 +405,8 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
 - **Doc-flow edges:** 3 linear doc-flow kinds (`doc-head`, `next-section`,
   `doc-end`) + 1 hierarchical nesting kind (`doc-child`) + 1 family kind
   (`parent-child`) in the first slice = 5 edge kinds.
-- **Validation outcomes:** 3 fail reasons (`cycle`, `missing-node`,
-  `missing-head`) + 1 happy path. The `cycle` reason covers BOTH a
+- **Validation outcomes:** 4 fail reasons (`cycle`, `missing-node`,
+  `missing-head`, `missing-end`) + 1 happy path. The `cycle` reason covers BOTH a
   `next-section` cycle AND a `doc-child` nesting cycle.
 
 ### 5.6 Cross-references

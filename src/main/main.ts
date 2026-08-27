@@ -8,6 +8,7 @@ import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, I
 import { ProvidentMcpServer, RendererBackend, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
+import { createJsonRagStore } from './rag-store.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -62,7 +63,12 @@ async function main(): Promise<void> {
   // MCP server so dynamic module tools are registered + two-gated.
   const moduleRouter = new CapabilityRouter()
   syncModuleRouter(moduleRouter, moduleStore)
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter })
+  // Unit B — the main-process RAG store (Unit A §5.3, SOURCE-SWITCHABLE). The
+  // MCP server handles the rag.*/edit.* tools against it (never the renderer).
+  const ragStore = createJsonRagStore({
+    path: join(app.getPath('userData'), 'provident-rag.json'),
+  })
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
