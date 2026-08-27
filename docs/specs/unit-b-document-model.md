@@ -154,6 +154,14 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
   subtrees — the cost of respecting the engine's single-parent family model
   (SI-1). The back-reference map keeps all duplicates coherent (one RAG id → N
   node-id sets).
+- **Material-state nuance (2026-08-26):** the N duplicates are PER-RENDER
+  materializations; render is transient. In the single-document view only ONE
+  document renders at a time, so only ONE instance of a shared subtree exists at
+  any moment (documents cannot loop in one view). The N duplicates COEXIST only
+  if multiple documents render simultaneously — which requires UI TABS (a
+  pending feature, `docs/pending.md`). So "updates all duplicates" is live only
+  under a multi-document (tabs) render; in the single-view UI, a content edit
+  updates the one visible duplicate + the authoritative RAG store.
 
 **Doc-child semantics (refining SUBTREE-OWNERSHIP §10/§12):**
 
@@ -266,7 +274,9 @@ the five-seam gate. Both default-off. Editing is NEVER a `code`-group op.
 - `registerTools` handles the `rag.*`/`edit.*` tools **in MAIN** (like
   `module.*`), calling the main-process RAG store (Unit A) — NEVER routed to
   the renderer. The `rag.*` tools call read methods; the `edit.*` tools call
-  mutating methods (through the single-writer queue).
+  mutating methods (through the single-writer queue). The tools depend on the
+  `RagStore` INTERFACE (Unit A §5.3 — SOURCE-SWITCHABLE), never the concrete
+  JSON store, so the backing source is switchable.
 - A tool registers ONLY when its group is allowed (the existing
   `registeredToolNames` gate).
 
@@ -318,7 +328,7 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
 | `edit.delete_node` | `{ nodeId: string }` | Delete a RAG node + cascade its edges (structural → re-traversal). |
 | `edit.split_node` | `{ nodeId: string, at: number }` | Split a RAG node at character offset `at` (structural → re-traversal). |
 | `edit.merge_node` | `{ sourceId: string, targetId: string }` | Merge `sourceId` into `targetId` (structural → re-traversal). |
-| `edit.set_edge` | `{ kind: RagEdgeKind, source: string, target: string, edgeId?: string }` | Create/update a RAG edge (structural → re-traversal). |
+| `edit.set_edge` | `{ kind: RagEdgeKind, source: string, target: string, edgeId?: string, order?: number, documentIds?: string[] }` | Create/update a RAG edge (structural → re-traversal). `order` is for `doc-child` edges (the child's subtree position); `documentIds` is for doc-flow edges (the documents that own/use the edge — CROSS-DOCUMENT-SHARED). |
 
 **Gating behavior:**
 
@@ -339,11 +349,13 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
    (fail-closed, the existing F2 guard).
 4. An `edit.*` tool that reaches the renderer switch → `unknown method` throw
    (fail-closed, the negative contract).
-5. `edit.set_content` on a nonexistent node → the store throws
-   `rag putNode: node not found` (Unit A fail-state); the tool surfaces the
-   error.
+5. `edit.set_content` on a nonexistent node → the TOOL rejects it (a tool-level
+   existence check; the store's `putNode` is an UPSERT — create/update — and
+   never throws "node not found", so the tool must verify the node exists before
+   calling the store).
 6. `edit.set_edge` referencing a nonexistent node → the store throws
-   `rag putEdge: source/target node not found` (Unit A fail-state).
+   `rag putEdge: source/target node not found or quarantined` (Unit A
+   fail-state); the tool surfaces the error.
 
 ### 5.5 Census / numeric claims
 
@@ -369,7 +381,8 @@ The `rag.*`/`edit.*` tool schemas (zod, mirroring the `registerTools` pattern):
   §10.
 - Decisions: `docs/decisions.md` rows **DERIVED-DOC-FLOW**,
   **RAG-EDIT-MCP-GROUPS**, **SUBTREE-OWNERSHIP**, **SINGLE-WRITER-STORE**,
-  **MULTI-PARENT-DUPLICATE**.
+  **MULTI-PARENT-DUPLICATE**, **CROSS-DOCUMENT-SHARED**, **STRUCTURAL-ROOT**,
+  **DOC-CHILD**, **SOURCE-SWITCHABLE**.
 - Foundation seams: `src/main/security.ts` (TOOL_GROUPS/`groupForTool`/
   `toolAllowed`/`defaultSecurityConfig`/`applyPatch`), `src/main/mcp-server.ts`
   (ALL_TOOLS/`registerTools`/`handleModuleTool`), `src/shared/types.ts`
