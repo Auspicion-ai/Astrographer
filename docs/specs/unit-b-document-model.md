@@ -77,8 +77,10 @@ are project-specific (the RAG layer is not a foundation feature).
 | Doc-head marker prop convention | Engine-adjacent (allowed; documented as a convention, not an engine feature) | Low cost; a `props` marker on the head node. |
 | `rag`/`edit` MCP groups | Project-specific (mirrors the foundation's `module` group pattern) | Low cost; reuses the five-seam gate. |
 
-No engine gap. ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) stays a
-non-blocking handoff item (the host-side line→node map covers it).
+No engine gap. ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) is SHELVED
+2026-08-26 (markdown is export-only; the host-side line→node map covers it;
+markdown-parsing-to-storage will use text-match diffing — see
+`docs/pending.md`).
 
 ## 4. Design decisions pinned by this spec
 

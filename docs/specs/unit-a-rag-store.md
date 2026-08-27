@@ -77,8 +77,9 @@ feature). No handoff item is opened by this unit.
 | Persisted journal (survives restart) | Project-specific | Medium cost; undo/redo across restarts is a design choice — see §5.6. |
 
 No engine gap. The one known engine gap (ENG-GAP-1, MarkdownAdapter
-`data-node-id` D7) is unrelated to persistence and stays a non-blocking
-handoff item.
+`data-node-id` D7) is unrelated to persistence and is SHELVED 2026-08-26
+(markdown is export-only; markdown-parsing-to-storage will use text-match
+diffing — see `docs/pending.md`).
 
 ## 4. Design decisions pinned by this spec
 

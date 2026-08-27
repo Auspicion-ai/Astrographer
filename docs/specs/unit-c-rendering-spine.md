@@ -84,8 +84,9 @@ render path.**
 No engine/foundation gap blocks this unit. The traversal, back-reference map,
 subtree-boundary convention, container-producer emission, and line→node map are
 all project-specific (compose `translateLegacy`/`renderProducingProcess`).
-ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) stays a non-blocking handoff item
-(the host-side line→node map covers it).
+ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) is SHELVED 2026-08-26 (markdown
+is export-only; the host-side line→node map covers it; markdown-parsing-to-storage
+will use text-match diffing — see `docs/pending.md`).
 
 ## 3. Gaps + costs-benefits
 
@@ -98,7 +99,9 @@ ENG-GAP-1 (MarkdownAdapter `data-node-id`, D7) stays a non-blocking handoff item
 | Coarse line→node map | Project-specific (the assembly step; MarkdownAdapter drops node identity) | Low cost; the agent cites the RAG object, not a leaf. |
 | MCP/UI equivalence on the spine | Project-specific (both load the same envelope) | Low cost; reuses the foundation's `provident.load` + `loadEnvelope`. |
 
-No engine gap. ENG-GAP-1 stays a non-blocking handoff item.
+No engine gap. ENG-GAP-1 is SHELVED 2026-08-26 (markdown is export-only;
+markdown-parsing-to-storage will use text-match diffing — see
+`docs/pending.md`).
 
 ## 4. Design decisions pinned by this spec
 

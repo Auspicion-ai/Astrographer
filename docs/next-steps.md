@@ -90,4 +90,4 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   renderer re-translates and re-mints node ids — resolved by a stable authored
   root id (`props.id = 'rag-<ragNodeId>'`) as the reconciliation key between
   the main-process map and the renderer's translated tree. No engine gap opened
-  by this slice (ENG-GAP-1 remains the sole non-blocking handoff item).
+  by this slice (ENG-GAP-1 shelved 2026-08-26 — no open handoff items).
