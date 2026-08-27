@@ -4,8 +4,8 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, type McpTransportKind } from './mcp-server.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
@@ -205,6 +205,14 @@ async function main(): Promise<void> {
   // itself.
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
     return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK })
+  })
+
+  // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the
+  // SAME host-side enumeration (`enumerateLinks`) as the MCP `rag.backlinks`
+  // tool (MCP/UI equivalence — a BINDING constraint). The renderer never
+  // computes the enumeration itself.
+  ipcMain.handle(IPC_RAG_BACKLINKS, (_event, payload: RagBacklinksPayload) => {
+    return handleRagBacklinksIpc(ragStore, { nodeId: payload?.nodeId })
   })
 
   // Finding 3 — the re-traversal data source. The renderer's `onRebuild`

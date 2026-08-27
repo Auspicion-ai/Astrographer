@@ -54,13 +54,16 @@ export interface RagNode {
 }
 
 /** The RAG edge kinds. Doc-flow kinds (doc-head/next-section/doc-end) are
- *  authoritative in the store; `doc-child` expresses hierarchical nesting. */
+ *  authoritative in the store; `doc-child` expresses hierarchical nesting;
+ *  `crosslink` expresses a CROSS-DOCUMENT reference (a link from a node in one
+ *  document to a node in another document). */
 export type RagEdgeKind =
   | 'parent-child'
   | 'doc-head'
   | 'next-section'
   | 'doc-end'
   | 'doc-child'
+  | 'crosslink'   // Unit G — a cross-document reference (source → target).
 
 /** A RAG edge — a directed relationship between two RAG nodes. */
 export interface RagEdge {
@@ -152,7 +155,7 @@ interface RagStoreFile {
 }
 
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
-const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child'])
+const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
 const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
 const DEFAULT_MAX_JOURNAL_LENGTH = 1000
 

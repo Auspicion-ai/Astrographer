@@ -28,7 +28,7 @@ export type SetEdgeResult = { ok: true; edge: RagEdge } | { ok: false; error: st
 // The closed unions (Unit A §5.1). Duplicated here as runtime sets because the
 // store does not export them; the store validates the same unions at write time.
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
-const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child'])
+const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
 
 function sameDocIds(a: string[] | undefined, b: string[] | undefined): boolean {
   if (a === undefined && b === undefined) return true

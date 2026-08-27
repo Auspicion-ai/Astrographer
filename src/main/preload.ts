@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult } from '../shared/types.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -56,6 +56,11 @@ export interface ProvidentBridge {
      *  re-derive the graph + back-reference map after a `rag-store-changed`
      *  broadcast. */
     snapshot(): Promise<RagSnapshotPayload>
+    /** Unit G §5.4/§8.2 — the UI backlink surface. Sends the `rag-backlinks`
+     *  IPC to main, which calls the SAME host-side enumeration (`enumerateLinks`)
+     *  as the MCP `rag.backlinks` tool (MCP/UI equivalence). The renderer never
+     *  computes the enumeration itself. */
+    backlinks(nodeId: string): Promise<RagBacklinksResult>
   }
 }
 
@@ -129,6 +134,13 @@ const bridge: ProvidentBridge = {
      *  broadcast. */
     snapshot(): Promise<RagSnapshotPayload> {
       return ipcRenderer.invoke(IPC_RAG_SNAPSHOT)
+    },
+    /** Unit G §5.4/§8.2 — the UI backlink surface. Sends the `rag-backlinks`
+     *  IPC to main, which calls the SAME host-side enumeration (`enumerateLinks`)
+     *  as the MCP `rag.backlinks` tool (MCP/UI equivalence). */
+    backlinks(nodeId: string): Promise<RagBacklinksResult> {
+      const payload: RagBacklinksPayload = { nodeId }
+      return ipcRenderer.invoke(IPC_RAG_BACKLINKS, payload)
     },
   },
 }

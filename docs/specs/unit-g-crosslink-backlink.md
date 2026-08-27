@@ -352,9 +352,9 @@ export interface BacklinkResult {
   backlinks: LinkEntry[]
   /** The edges that nodeId SOURCES (outlinks/crosslinks), in store order. */
   outlinks: LinkEntry[]
-  /** The cross-document backlinks (the backlinks with scope === 'cross-document'). */
+  /** The crosslink backlinks (the backlinks whose edge kind is 'crosslink'). */
   crosslinkBacklinks: LinkEntry[]
-  /** The cross-document outlinks (the outlinks with scope === 'cross-document'). */
+  /** The crosslink outlinks (the outlinks whose edge kind is 'crosslink'). */
   crosslinkOutlinks: LinkEntry[]
 }
 
@@ -410,8 +410,11 @@ A node with none of these memberships belongs to NO document (an empty set).
   in store order.
 - `enumerateLinks(store, nodeId)` returns the combined result: `backlinks` =
   `listBacklinks`, `outlinks` = `listOutlinks`, `crosslinkBacklinks` = the
-  backlinks with `scope === 'cross-document'`, `crosslinkOutlinks` = the outlinks
-  with `scope === 'cross-document'`.
+  backlinks whose edge kind is `'crosslink'`, `crosslinkOutlinks` = the outlinks
+  whose edge kind is `'crosslink'`. (A `crosslink` edge is a crosslink BY
+  DEFINITION — its `scope` may be `'cross-document'`, `'intra-document'`, or
+  `'unscoped'` (no document membership); the `crosslink*` fields select by edge
+  KIND, not by scope.)
 - The `edge` in each `LinkEntry` is a shallow copy (the store's `listEdges`
   already returns shallow copies — Unit A §5.4).
 - A nonexistent `nodeId` → an empty result (no throw): `listBacklinks` → `[]`,

@@ -25,6 +25,7 @@ import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
+import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
@@ -161,10 +162,13 @@ export async function handleRagTool(
       return edges.filter((e) => e.source === nodeId || e.target === nodeId)
     }
     case 'rag.backlinks': {
-      // Unit G enumerates the backlinks; registered here with a placeholder.
+      // Unit G — the FULL handler. Validates nodeId, then calls the SAME
+      // host-side enumeration (`enumerateLinks`, §5.3) as the `rag-backlinks`
+      // IPC (MCP/UI equivalence — §8.2 a BINDING constraint). Returns the
+      // `BacklinkResult` (JSON-serializable).
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
-      return { nodeId, backlinks: [] }
+      return enumerateLinks(store, nodeId)
     }
     default:
       throw new Error(`unknown rag tool: ${name}`)
@@ -187,6 +191,23 @@ export async function handleRagQueryIpc(
     query: payload?.query,
     topK: payload?.topK,
   }, engine)
+}
+
+/** Unit G §5.4/§8.2 — the UI backlink path. The main-process `rag-backlinks`
+ *  IPC handler delegates to THIS (via the SAME validation + the SAME host-side
+ *  enumeration as the MCP `rag.backlinks` tool), so the two surfaces are
+ *  equivalent (MCP/UI equivalence — a BINDING constraint). Returns the
+ *  `BacklinkResult`; on an invalid `nodeId` it throws the same documented
+ *  `rag.backlinks` fail-state (so the IPC rejects identically to the MCP tool).
+ *  Exported for direct unit testing of the equivalence. */
+export async function handleRagBacklinksIpc(
+  store: RagStore | null,
+  payload: { nodeId?: unknown },
+): Promise<BacklinkResult> {
+  if (!store) throw new Error('backlinks: store required')
+  const nodeId = typeof payload?.nodeId === 'string' ? payload.nodeId : ''
+  if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
+  return enumerateLinks(store, nodeId)
 }
 
 /** The `rag-store-changed` broadcast payload (§5.1.9) — the re-traversal

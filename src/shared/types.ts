@@ -6,6 +6,7 @@
 // payloads crossing the IPC boundary MUST be JSON-safe (structured-clone
 // args). The renderer owns the producing graph; the main process owns the MCP
 // server and forwards tool calls over IPC (renderer DOM + IPC bridge).
+import type { BacklinkResult } from '../main/backlinks.js'
 
 /** A render target in the producing graph. Two vocabularies per the Phase B
  *  synthetic-event contract (docs/specs/ssr-synthetic-event.md §2.2):
@@ -399,3 +400,18 @@ export interface RagQueryResult {
   lineMap: { ranges: Array<{ nodeId: string; startLine: number; endLine: number }> }
   k: number
 }
+
+// ---- Unit G backlink IPC (docs/specs/unit-g-crosslink-backlink.md §5.4) ----
+
+/** The renderer→main `rag-backlinks` IPC (the UI enumeration path, §5.4 —
+ *  MCP/UI equivalence, §8.2 a BINDING constraint). Payload: `{ nodeId: string }`.
+ *  Main calls the SAME host-side enumeration as the MCP `rag.backlinks` tool
+ *  (`enumerateLinks`, §5.3) and returns the `BacklinkResult`. */
+export const IPC_RAG_BACKLINKS = 'provident:rag-backlinks'
+export interface RagBacklinksPayload {
+  nodeId: string
+}
+/** The `rag-backlinks` IPC result — the JSON-safe transport of the enumeration's
+ *  `BacklinkResult`. Mirrors the MCP `rag.backlinks` result so both surfaces are
+ *  equivalent. */
+export type RagBacklinksResult = BacklinkResult

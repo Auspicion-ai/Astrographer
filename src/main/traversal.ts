@@ -37,6 +37,7 @@ import type {
   LegacyNodeData,
   LegacyContentPayload,
   CompiledState,
+  LinkConfig,
 } from 'provident-ssr'
 
 export interface TraversalInput {
@@ -54,6 +55,32 @@ export interface LineNodeMap {
   ranges: Array<{ ragNodeId: string; startLine: number; endLine: number }>
 }
 
+/** Unit G — the custom crosslink LinkConfig. `name: 'crosslink'` is a custom
+ *  name in the engine's OPEN `LinkConfig.name` union ('parent-child' |
+ *  'component' | 'placement' | (string & {})). `roles: ['source', 'target']`
+ *  MUST be set explicitly — the `Link` constructor's `baseFor(name)` returns
+ *  DEFAULT_PARENT_CHILD (roles ['parent','child']) for an unknown name, and the
+ *  custom config overrides it. The inherited `parent`/`children` constraints
+ *  are inert for a source/target link (they only apply to `parent`/`child`
+ *  role anchors). */
+export const CROSSLINK_LINK_CONFIG: LinkConfig = {
+  name: 'crosslink',
+  roles: ['source', 'target'],
+}
+
+/** Unit G — one crosslink wiring entry: a `crosslink` RAG edge whose SOURCE
+ *  RAG node is materialized in the current traversal. The renderer
+ *  materializes the `Link`/`Anchor` from this wiring after `translateLegacy`. */
+export interface CrosslinkWiring {
+  /** The crosslink RAG edge id. */
+  edgeId: string
+  /** The source RAG node id (in the current materialization). */
+  sourceRagNodeId: string
+  /** The target RAG node id (may be in a DIFFERENT document — not materialized
+   *  in the single-document view). */
+  targetRagNodeId: string
+}
+
 export interface TraversalResult {
   /** The envelope shipped to the renderer for translateLegacy →
    *  renderProducingProcess. */
@@ -62,6 +89,10 @@ export interface TraversalResult {
   backRefs: Map<string, string[]>
   /** The coarse line→node map (first-class assembly output). */
   lineMap: LineNodeMap
+  /** Unit G — the crosslink wiring: one entry per `crosslink` edge whose SOURCE
+   *  RAG node is materialized in the current traversal. The renderer
+   *  materializes the `Link`/`Anchor` from this wiring after `translateLegacy`. */
+  crosslinks: CrosslinkWiring[]
 }
 
 /** True when the RAG node is a document head for the given document (a
@@ -334,7 +365,17 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
   }
   const lineMap: LineNodeMap = { ranges }
 
-  return { envelope, backRefs, lineMap }
+  // Unit G — the crosslink wiring. OUTGOING-ONLY materialization (pinned): emit
+  // a wiring entry ONLY for a `crosslink` edge whose SOURCE RAG node is
+  // materialized in the current traversal. A crosslink whose source is in a
+  // DIFFERENT document (an incoming crosslink) is NOT materialized here — it is
+  // visible via the backlink enumeration (§5.3). A missing target (a dangling
+  // reference) is valid — no throw.
+  const crosslinks: CrosslinkWiring[] = edges
+    .filter((e) => e.kind === 'crosslink' && materialized.has(e.source))
+    .map((e) => ({ edgeId: e.id, sourceRagNodeId: e.source, targetRagNodeId: e.target }))
+
+  return { envelope, backRefs, lineMap, crosslinks }
 }
 
 /** Finding 3 — the renderer re-traversal re-materialization. Given a RAG store
