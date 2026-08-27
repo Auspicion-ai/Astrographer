@@ -594,7 +594,7 @@ form-control editing model (Unit D) applies to app-graph panes that render
 EDITABLE RAG content; none of the three concrete app-graph panes in this unit do
 (§5.3 — all read-only), so no app-graph pane in this unit binds an edit control.
 A future app-graph pane that renders editable RAG content MUST use the Unit D
-form-control editing model (§5.7).
+form-control editing model (§5.6).
 
 ### 5.5 The panes' data flow (per pane)
 
@@ -729,7 +729,7 @@ export class SidebarPanes {
   query), re-assembles, and re-renders. A bridge error is caught (the last-known
   pane state is kept — never a crash), mirroring `SecurePanels.refresh`.
 
-**Form-control editing (Unit D) integration (§5.7 of the editing contract):**
+**Form-control editing (Unit D) integration (§5.6 of the editing contract):**
 
 - App-graph panes that render EDITABLE RAG content (none of the three concrete
   panes in §5.3; a future pane) MUST bind their controls through the Unit D

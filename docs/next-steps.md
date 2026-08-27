@@ -9,16 +9,14 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A/B/C/D/E/F/G are implemented (persistence → document model + doc-flow →
+Units A–H are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
-crosslink/backlink); Units H–J remain later units.
+crosslink/backlink → sidebar panes); Units I–J remain later units.
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit H — sidebar panes.** Host-side pane registry; app-graph panes
-  MCP-visible; operator-only panes (settings) in an isolated `GraphScope`.
 - **Unit I — template customization.** Envelope CRUD via a provident-rendered
   template-editor pane.
 - **Unit J — MCP/security hardening.** Completion pass for the `rag`/`edit`
@@ -26,6 +24,29 @@ crosslink/backlink); Units H–J remain later units.
 
 ## DONE
 
+- **Unit H — sidebar panes (2026-08-28).** The host-side pane registry +
+  the app-graph-vs-operator scope split. `src/renderer/pane-registry.ts` (pure,
+  no Electron): `PaneScope`/`PaneDefinition`/`PaneContext`/`PaneChange`/
+  `PaneRegistry` + `createPaneRegistry` (the 9 methods `register`/`get`/`list`/
+  `listByScope`/`isEnabled`/`enable`/`disable`/`setEnabled`/`onChanged`; the
+  registered-DISABLED default; the documented throw patterns — §5.1/§5.8/§5.9).
+  `src/renderer/pane-graph.ts` (pure): `SIDEBAR_ZONE` +
+  `paneSubtreeRoot`/`assembleAppGraphEnvelope`/`buildOperatorEnvelope` (§5.2 —
+  the HARD PRECONDITION `sidebar` container producer, operator-pane exclusion,
+  id/placement forcing, the operator-envelope shape) + the §5.3 data-flow
+  helpers `deriveDocNavDocuments`/`docNavContent`/`crosslinksContent`/
+  `searchContent`. TestWriter red → Implementer green in
+  `tests/sidebar-panes.test.ts` (RED marker: `src/renderer/pane-registry.js` +
+  `pane-graph.js` did not exist → 48 node-tested tests pass; §5.8 22–25 /
+  §5.9 15–16/18 are renderer-dependent, skipped by design and verified by code
+  review); adversarial pass in `tests/sidebar-panes-adversarial.test.ts` (12
+  regression tests — host findings H1–H4/H6 fixed + regression-tested, recorded
+  in the spec §3a; no unauthorized-access finding — the operator-isolation seam
+  is enforced at the assembly layer); blind-greens in
+  `docs/specs/unit-h-sidebar-panes-greens.md` (61 scenarios, all pass);
+  documentation review in `archive/reviews/2026-08-28-unit-h-doc-review.md`
+  (spec + greens + trackers reconciled against the build); trio green (test +
+  typecheck + build).
 - **Unit G — crosslink/backlink (2026-08-27).** The backend crosslink/backlink
   mechanism. `src/main/backlinks.ts` (pure, no Electron — operates on the
   `RagStore` interface, Unit A §5.4): the `LinkScope`/`LinkEntry`/`BacklinkResult`

@@ -23,7 +23,7 @@
   `buildTraversal` over a minimal read-only `RagStore` adapter (`listNodes`/
   `listEdges`), the same adapter pattern the traversal uses. The `rag-backlinks`
   IPC null-store fail-state is exercised via `handleRagBacklinksIpc`.
-- **Run:** 58 scenarios — 58 pass, 0 fail. No spec-vs-impl drift observed.
+- **Run:** 61 scenarios — 61 pass, 0 fail. No spec-vs-impl drift observed.
 
 Each scenario lists: name, setup, operations, expected outcome (from the spec).
 
@@ -471,7 +471,7 @@ uses `zoneName:'main'` (NO sidebar producer), `envelopeWithSidebar` uses
 | D4 | (H4) `onChanged` subscriber isolation | ✅ PASS |
 | D5 | (H6) `docNavContent` doc-head dedupe | ✅ PASS |
 
-**Run summary:** 58 scenarios — 58 pass, 0 fail.
+**Run summary:** 61 scenarios — 61 pass, 0 fail.
 
 ### Findings (spec-vs-impl drift)
 
