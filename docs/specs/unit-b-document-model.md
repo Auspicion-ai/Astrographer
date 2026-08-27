@@ -111,9 +111,9 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
 | Edge kind | Meaning | Direction |
 | --- | --- | --- |
 | `parent-child` | A RAG node's family parent. Multi-parent is allowed (a node may have several `parent-child` edges — MULTI-PARENT-DUPLICATE). | `source` is the parent, `target` is the child. |
-| `doc-head` | `source` is the **head** of the document that `target` belongs to. A document has exactly one head. Scoped by `documentId`. | `source` = head node, `target` = a document-identifying node (the head's document root). |
-| `next-section` | `source`'s next section in document order is `target`. **Scoped by `documentId`** — a node can be in MULTIPLE documents' flows, so it can have a `next-section` edge in each document's flow (CROSS-DOCUMENT-SHARED, review §13). | `source` → `target` (document order, within the edge's `documentId`). |
-| `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. Scoped by `documentId`. | `source` = end node, `target` = a document-identifying node. |
+| `doc-head` | `source` is the **head** of the document that `target` belongs to. A document has exactly one head. `documentIds` lists the document(s) this edge belongs to. | `source` = head node, `target` = a document-identifying node (the head's document root). |
+| `next-section` | `source`'s next section in document order is `target`. **`documentIds` has ONE owner** — the target (next section) differs per document, so a node in multiple documents' flows has a separate `next-section` edge per document (CROSS-DOCUMENT-SHARED, review §13). | `source` → `target` (document order, within the edge's `documentIds`). |
+| `doc-end` | `source` is the **end** of the document that `target` belongs to. A document has exactly one end. `documentIds` lists the document(s) this edge belongs to. | `source` = end node, `target` = a document-identifying node. |
 | `doc-child` | **HIERARCHICAL NESTING** (distinct from the linear doc-flow edges): the `target` RAG object's subtree is nested WITHIN the `source` RAG object's subtree at the given `order` position. A nested node (e.g. a paragraph-length `li` inside a `ul`) that is large enough for semantic distinctiveness is its own RAG object, a doc-child of the containing RAG object. The engine's family structure (e.g. `ul` → `li`) is the RENDER structure; the `doc-child` edge expresses the SEMANTIC ownership boundary. | `source` = the containing RAG object, `target` = the nested RAG object, `order` = the position of the child's subtree within the parent's subtree. |
 
 **Cross-document shared nodes (CROSS-DOCUMENT-SHARED, review §13):**
@@ -126,9 +126,12 @@ The persisted shapes are defined in Unit A §5.1. This section pins their
   duplicates (the content-edit path state-slices every duplicate, or a
   re-traversal re-materializes all consistently) — "if the text of A changes, so
   do both documents."
-- The doc-flow edges (`next-section`/`doc-head`/`doc-end`) are **scoped by
-  `documentId`** (the document root node id). A node in multiple documents' flows
-  has a `next-section` edge in each document's flow. The traversal, when
+- **An edge can have MULTIPLE document owners in its metadata** — the
+  `documentIds: string[]` field (document root node ids). A shared
+  reference/content edge (e.g. the A→D edge carrying the shared explanation of
+  D's use in function A) is used by both document B and document C, so it lists
+  both. A `next-section` edge's TARGET (the next section) differs per document,
+  so those are separate edges each with ONE owner. The traversal, when
   assembling document B, follows B's `next-section` edges; when assembling
   document C, follows C's.
 - A shared node referenced by N documents is materialized as N duplicate

@@ -349,10 +349,13 @@ export interface LineNodeMap {
 9. **Cross-document shared node:** A's spec is called by both Class B and Class
    C → A's spec has two `parent-child` edges (one from B's use-case node, one
    from C's use-case node) and a `next-section` edge in BOTH documents' flows
-   (scoped by `documentId`). The traversal assembles document B and document C
-   separately; A's spec is materialized as a duplicate subtree in each, both
-   sharing the RAG id in the back-reference map. A text change to A's spec
-   updates both duplicates (re-traversal re-materializes both consistently).
+   (a separate `next-section` edge per document, each with one `documentIds`
+   owner). The A→D reference edge (the shared explanation of D's use in function
+   A) has `documentIds: [B, C]` (MULTIPLE document owners). The traversal
+   assembles document B and document C separately; A's spec is materialized as a
+   duplicate subtree in each, both sharing the RAG id in the back-reference map.
+   A text change to A's spec updates both duplicates (re-traversal
+   re-materializes both consistently).
 
 ### 5.8 Fail-states (TestWriter red set — documented fail-states)
 

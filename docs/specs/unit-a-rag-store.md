@@ -157,12 +157,14 @@ export interface RagEdge {
    *  the parent's subtree (relative to the parent's owned nodes and other
    *  doc-children). Absent for the other kinds. */
   order?: number
-  /** For the doc-flow edges (`doc-head`/`next-section`/`doc-end`) only: the
-   *  document whose flow this edge belongs to (the document root node id). A
-   *  node can be in MULTIPLE documents' flows, so it can have a `next-section`
-   *  edge in each document's flow (CROSS-DOCUMENT-SHARED, review §13). Absent
-   *  for `parent-child`/`doc-child`. */
-  documentId?: string
+  /** The documents that OWN/USE this edge (document root node ids). An edge can
+   *  have MULTIPLE document owners — a shared reference/content edge (e.g. the
+   *  A→D edge carrying the shared explanation of D's use in function A) is used
+   *  by both document B and document C, so it lists both (CROSS-DOCUMENT-SHARED,
+   *  review §13). A `next-section` edge's TARGET (the next section) differs per
+   *  document, so those are separate edges each with ONE owner. Absent for
+   *  `parent-child`/`doc-child`. */
+  documentIds?: string[]
   createdAt: string
   updatedAt: string
 }
