@@ -9,7 +9,12 @@
   decision), §10.3 Q3 (the coarse line→node map), §13 (cross-document shared
   nodes). Decisions: `docs/decisions.md` rows **LEXICAL-FIRST-RETRIEVAL**,
   **RAG-EDIT-MCP-GROUPS**, **SINGLE-WRITER-STORE**, **SUBTREE-OWNERSHIP**,
-  **CROSS-DOCUMENT-SHARED**.
+  **CROSS-DOCUMENT-SHARED**, **PROVIDER-AGNOSTIC** (2026-08-27).
+- **Unit F amendment (2026-08-27):** the `Embedder` interface is amended to
+  ASYNC (`score`/`place` → `Promise`, plus an optional `onStoreChanged?` hook) —
+  a Unit E contract change required by Unit F (a vector embedder must compute
+  the query embedding via an async provider call). See §4 ASYNC-EMBEDDER and
+  §5.2. **Unit E tests must be updated to `await` the async functions.**
 - **Scope:** the main-process retrieval module — the interface-swappable
   `Embedder` (lexical-first BM25/tf-idf is the v1 default; vector embeddings,
   Unit F, are a drop-in behind the SAME interface), the lexical index
@@ -140,6 +145,17 @@ tested (10 regression tests in `tests/retrieval-adversarial.test.ts`).
 - **DETERMINISTIC-RETRIEVAL:** no network egress, no randomness. BM25 with
   fixed default parameters (k1=1.2, b=0.75); tie-breaking by node id
   (lexicographic ascending). Same query + same store → same result.
+- **ASYNC-EMBEDDER (Unit F amendment, 2026-08-27):** the `Embedder` interface is
+  ASYNC — `score`/`place` return Promises, plus an optional `onStoreChanged?`
+  lifecycle hook. This is a Unit E contract amendment required by Unit F (a
+  vector embedder must compute the query embedding via an async provider call).
+  It ripples through `selectTopK`, `retrieve`, `RetrievalEngine.query`, the
+  `rag.query` MCP handler, and the `rag-query` IPC (all async); the lexical
+  embedder wraps its synchronous computation in a resolved promise. **Unit E
+  tests must be updated to `await` the async functions.** The engine's
+  `onStoreChanged` forwards to the embedder's `onStoreChanged` hook (if present)
+  so a stateful embedder (e.g. the Unit F vector embedder's vector index)
+  reconciles its own state on the same store change.
 - **MCP-UI-EQUIVALENCE:** retrieval is reachable equivalently through the MCP
   `rag.query` tool and the UI (a `rag-query` IPC), both calling the same
   retrieval module (§8.2, a BINDING constraint).
@@ -247,14 +263,26 @@ export type PlacementDecision =
 /** The interface-swappable scoring engine. The lexical-first implementation
  *  (BM25/tf-idf) is the v1 default; vector embeddings (Unit F) are a drop-in
  *  behind the SAME interface. The Embedder owns the SEMANTIC PLACEMENT
- *  decision. Deterministic (no network egress, no randomness). */
+ *  decision. Deterministic (no network egress, no randomness).
+ *
+ *  **ASYNC (Unit F amendment, 2026-08-27):** the interface is ASYNC — `score`
+ *  and `place` return Promises. A vector embedder (Unit F) must compute the
+ *  query embedding via an async provider call (e.g. ollama `embeddinggemma`),
+ *  so the interface is async to fit a network-backed embedder. The lexical
+ *  embedder wraps its synchronous computation in a resolved promise. The
+ *  optional `onStoreChanged?` lifecycle hook lets a stateful embedder (e.g. the
+ *  vector embedder's vector index) reconcile its own state on a store change. */
 export interface Embedder {
   /** Score all RAG nodes against a query. Returns a ranked list (highest score
-   *  first). Deterministic. */
-  score(query: string, nodes: RagNode[]): ScoredNode[]
+   *  first). Deterministic. ASYNC (Unit F amendment). */
+  score(query: string, nodes: RagNode[]): Promise<ScoredNode[]>
   /** The semantic placement decision: given a new section's content, which
-   *  existing RAG node/edge it attaches to. */
-  place(content: string, nodes: RagNode[], edges: RagEdge[]): PlacementDecision
+   *  existing RAG node/edge it attaches to. ASYNC (Unit F amendment). */
+  place(content: string, nodes: RagNode[], edges: RagEdge[]): Promise<PlacementDecision>
+  /** Optional lifecycle hook: reconcile the embedder's own state (e.g. a vector
+   *  index) on a store change. The retrieval engine calls it (if present) after
+   *  its own index reconciliation (§5.6). */
+  onStoreChanged?(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): void
 }
 
 export interface LexicalEmbedderOptions {
@@ -288,7 +316,9 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
 - **Determinism:** the result is sorted by score descending, then by node id
   ascending (lexicographic) — a deterministic tie-break. Same query + same
   index + same nodes → same result.
-- **Return:** a fresh array of `ScoredNode` (highest score first).
+- **Return:** a fresh array of `ScoredNode` (highest score first), wrapped in a
+  RESOLVED PROMISE (the lexical embedder's `score` is synchronous internally but
+  returns `Promise<ScoredNode[]>` per the async interface — Unit F amendment).
 
 **Placement decision** (`place(content, nodes, edges)`):
 
@@ -317,13 +347,15 @@ export function createLexicalEmbedder(index: LexicalIndex, opts?: LexicalEmbedde
 ### 5.3 Selection (score all, take top-k)
 
 ```ts
-/** Select the top-k scored RAG nodes. Deterministic. */
-export function selectTopK(embedder: Embedder, query: string, nodes: RagNode[], k: number): ScoredNode[]
+/** Select the top-k scored RAG nodes. Deterministic. ASYNC (Unit F amendment —
+ *  awaits the embedder's async `score`). */
+export function selectTopK(embedder: Embedder, query: string, nodes: RagNode[], k: number): Promise<ScoredNode[]>
 ```
 
 **Behavior:**
 
-- Scores all nodes via `embedder.score(query, nodes)`.
+- Scores all nodes via `await embedder.score(query, nodes)` (async — Unit F
+  amendment).
 - Sorts by score descending, then by node id ascending (tie-break).
 - Takes the top-k. If `k` > the number of nodes, returns all scored nodes.
 - Returns a fresh array of `ScoredNode` (highest score first).
@@ -439,14 +471,16 @@ export interface RetrievalResult {
 }
 
 /** The retrieval entry point: select top-k, then assemble context by graph
- *  traversal. Deterministic. */
-export function retrieve(store: RagStore, embedder: Embedder, index: LexicalIndex, query: string, opts: RetrievalOptions): RetrievalResult
+ *  traversal. Deterministic. ASYNC (Unit F amendment — awaits the embedder's
+ *  async `score` via `selectTopK`). */
+export function retrieve(store: RagStore, embedder: Embedder, index: LexicalIndex, query: string, opts: RetrievalOptions): Promise<RetrievalResult>
 ```
 
 **Behavior:**
 
 - `k` defaults to 5; `maxNodes` defaults to 50; `maxDepth` defaults to 3.
-- Scores all nodes via `selectTopK(embedder, query, store.listNodes(), k)`.
+- Scores all nodes via `await selectTopK(embedder, query, store.listNodes(), k)`
+  (async — Unit F amendment).
 - **`ranked` excludes zero-score nodes** (relevant results only): after
   `selectTopK`, `retrieve` drops nodes whose score is 0 (a node with no matching
   terms is not a relevant result). `selectTopK` itself MAY return score-0 nodes
@@ -468,8 +502,9 @@ export function retrieve(store: RagStore, embedder: Embedder, index: LexicalInde
 
 ```ts
 export interface RetrievalEngine {
-  /** Run a retrieval query. Returns the ranked + assembled context + line map. */
-  query(query: string, opts?: { k?: number }): RetrievalResult
+  /** Run a retrieval query. Returns the ranked + assembled context + line map.
+   *  ASYNC (Unit F amendment — awaits the embedder's async `score`). */
+  query(query: string, opts?: { k?: number }): Promise<RetrievalResult>
   /** Update the index on a store change (content or structural). */
   onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): void
 }
@@ -483,8 +518,8 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
 
 - **Construction:** builds the index from the store's nodes
   (`createLexicalIndex(store.listNodes())`).
-- **`query(query, { k })`:** calls `retrieve(store, embedder, index, query, {
-  k, maxNodes, maxDepth })` and returns the result.
+- **`query(query, { k })`:** calls `await retrieve(store, embedder, index, query,
+  { k, maxNodes, maxDepth })` and returns the result (async — Unit F amendment).
 - **`onStoreChanged(kind, nodeIds, edgeIds)`:** reconciles the index for the
   affected nodeIds:
   - For each nodeId, read the node via `store.getNode(nodeId)`.
@@ -494,6 +529,11 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
   - If the node does NOT exist and IS in the index → `removeFromLexicalIndex`.
   - Edge changes do not affect the index (edges are not indexed); `edgeIds` is
     accepted and ignored for index purposes.
+  - **Forwards to the embedder's `onStoreChanged` hook (if present):** after the
+    engine's own index reconciliation, it calls `embedder.onStoreChanged?.(kind,
+    nodeIds, edgeIds)` so a stateful embedder (e.g. the Unit F vector embedder's
+    vector index) reconciles its own state on the same store change (Unit F
+    amendment).
 - **Determinism:** the engine is deterministic (no network, no randomness).
 
 **Fail-states:**
@@ -518,7 +558,8 @@ default-off). Unit E implements the FULL handler behavior:
   - Validates the input against the zod schema.
   - `query` must be a non-empty string; `topK` (if given) must be a positive
     integer (default 5).
-  - Calls the retrieval engine's `query(query, { k: topK })`.
+  - Calls the retrieval engine's `await query(query, { k: topK })` (async — Unit
+    F amendment).
   - Returns the JSON result: `{ query, ranked, context, markdown, lineMap, k }`.
 - **The engine is created once in main** with the store + the lexical embedder
   (v1 default). The index is maintained on `rag-store-changed` (§5.6).
@@ -530,8 +571,8 @@ default-off). Unit E implements the FULL handler behavior:
 
 - **UI retrieval path:** the renderer sends a `rag-query` IPC to main:
   `{ query: string, topK?: number }`. Main calls the SAME retrieval engine's
-  `query` (the same function as the MCP `rag.query` tool) and returns the
-  result.
+  `await query` (the same function as the MCP `rag.query` tool) and returns the
+  result (async — Unit F amendment).
 - **Same module:** both the MCP `rag.query` tool and the UI `rag-query` IPC
   call the same retrieval engine (§5.6). Neither computes retrieval in the
   renderer.
@@ -552,6 +593,12 @@ default-off). Unit E implements the FULL handler behavior:
 
 ### 5.8 Happy-path states (TestWriter red set — valid paths)
 
+> **ASYNC (Unit F amendment):** the embedder-dependent functions (`score`,
+> `place`, `selectTopK`, `retrieve`, `RetrievalEngine.query`, the `rag.query`
+> MCP handler, the `rag-query` IPC) are ASYNC — the tests `await` them. The
+> lexical embedder's `score`/`place` are synchronous internally but return
+> resolved promises.
+
 1. **`tokenize` happy:** `tokenize('Hello, World!')` → `['hello', 'world']`
    (lowercase, split, drop empty + stopwords).
 2. **`createLexicalIndex` happy:** a node list → the index has the node ids,
@@ -565,39 +612,45 @@ default-off). Unit E implements the FULL handler behavior:
 5. **`removeFromLexicalIndex` happy (node delete):** a node removed → its TF
    removed, DF decremented, documentCount decremented.
 6. **`createLexicalEmbedder` + `score` happy:** a query matching a node's
-   content → the node scores > 0; the result is ranked highest-first.
+   content → the node scores > 0; the result is ranked highest-first (awaited).
 7. **BM25 determinism:** the same query + same index + same nodes → the same
-   ranked result (twice).
+   ranked result (twice, awaited).
 8. **BM25 tie-break:** two nodes with equal scores → sorted by node id
-   ascending.
+   ascending (awaited).
 9. **`place` happy:** a new section's content matches an existing section →
-   `{ ok: true, targetNodeId, edgeKind: 'next-section', score }`.
+   `{ ok: true, targetNodeId, edgeKind: 'next-section', score }` (awaited).
 10. **`place` container match:** a new section's content matches a `ul`/`ol`/
-    `div` node → `edgeKind: 'doc-child'`.
+    `div` node → `edgeKind: 'doc-child'` (awaited).
 11. **`selectTopK` happy:** a query + nodes + k → the top-k scored nodes,
-    highest-first.
+    highest-first (awaited).
 12. **`selectTopK` k > node count:** k larger than the node count → all scored
-    nodes returned.
+    nodes returned (awaited).
 13. **`assembleContext` happy:** top-k seeds → the context assembled by graph
     traversal (bounded), with the markdown + line map.
 14. **`assembleContext` bound:** a large graph → the context never exceeds
     `maxNodes`; the depth never exceeds `maxDepth`.
 15. **`assembleContext` empty seeds:** an empty top-k → an empty context (no
     throw).
-16. **`retrieve` happy:** a query → the ranked + context + markdown + lineMap.
+16. **`retrieve` happy:** a query → the ranked + context + markdown + lineMap
+    (awaited).
 17. **`createRetrieval` + `query` happy:** the engine returns the retrieval
-    result.
+    result (awaited).
 18. **`onStoreChanged` content:** a content edit → the index updated for the
-    affected node.
+    affected node; the embedder's `onStoreChanged` hook (if present) is called
+    with the same kind/nodeIds/edgeIds.
 19. **`onStoreChanged` structural add:** a node add → the index adds the node.
 20. **`onStoreChanged` structural delete:** a node delete → the index removes
     the node.
 21. **`rag.query` happy:** a valid query → the tool returns the retrieval
-    result.
+    result (awaited).
 22. **MCP/UI equivalence happy:** an MCP `rag.query` and a UI `rag-query` IPC
-    with the same params → the same result.
+    with the same params → the same result (both awaited).
 
 ### 5.9 Fail-states (TestWriter red set — documented fail-states)
+
+> **ASYNC (Unit F amendment):** the embedder-dependent functions (`score`,
+> `place`, `selectTopK`, `retrieve`, `RetrievalEngine.query`) are ASYNC — their
+> throws are REJECTED PROMISES, so the tests `await expect(...).rejects.toThrow(...)`.
 
 1. **`tokenize` non-string** → throws `Error('tokenize: text must be a string')`.
 2. **`createLexicalIndex` null/undefined nodes** → throws
@@ -608,26 +661,26 @@ default-off). Unit E implements the FULL handler behavior:
    throws `Error('lexical index: index/nodeId required')`.
 5. **`createLexicalEmbedder` null/undefined index** → throws
    `Error('createLexicalEmbedder: index required')`.
-6. **`score` non-string query or null/undefined nodes** → throws
-   `Error('embedder score: query/nodes required')`.
-7. **`place` non-string content or null/undefined nodes/edges** → throws
-   `Error('embedder place: content/nodes/edges required')`.
-8. **`place` empty content** → `{ ok: false, reason: 'empty-content' }`.
-9. **`place` no match** → `{ ok: false, reason: 'no-match' }`.
+6. **`score` non-string query or null/undefined nodes** → rejects
+   `Error('embedder score: query/nodes required')` (awaited).
+7. **`place` non-string content or null/undefined nodes/edges** → rejects
+   `Error('embedder place: content/nodes/edges required')` (awaited).
+8. **`place` empty content** → `{ ok: false, reason: 'empty-content' }` (awaited).
+9. **`place` no match** → `{ ok: false, reason: 'no-match' }` (awaited).
 10. **`selectTopK` null/undefined embedder, non-string query, null/undefined
-    nodes, or non-positive-integer k** → throws
-    `Error('selectTopK: embedder/query/nodes/k required')`.
-11. **`selectTopK` k < 1** → throws `Error('selectTopK: k must be a positive integer')`.
+    nodes, or non-positive-integer k** → rejects
+    `Error('selectTopK: embedder/query/nodes/k required')` (awaited).
+11. **`selectTopK` k < 1** → rejects `Error('selectTopK: k must be a positive integer')` (awaited).
 12. **`assembleContext` null/undefined store/topK/opts** → throws
     `Error('assembleContext: store/topK/opts required')`.
 13. **`assembleContext` maxNodes < 1 or maxDepth < 0** → throws
     `Error('assembleContext: maxNodes/maxDepth invalid')`.
 14. **`retrieve` null/undefined store/embedder/index, non-string query, or
-    null/undefined opts** → throws
-    `Error('retrieve: store/embedder/index/query/opts required')`.
-15. **`retrieve` empty/whitespace query** → throws
-    `Error('retrieve: query must be a non-empty string')`.
-16. **`retrieve` k < 1** → throws `Error('retrieve: k must be a positive integer')`.
+    null/undefined opts** → rejects
+    `Error('retrieve: store/embedder/index/query/opts required')` (awaited).
+15. **`retrieve` empty/whitespace query** → rejects
+    `Error('retrieve: query must be a non-empty string')` (awaited).
+16. **`retrieve` k < 1** → rejects `Error('retrieve: k must be a positive integer')` (awaited).
 17. **`createRetrieval` null/undefined store or embedder** → throws
     `Error('createRetrieval: store/embedder required')`.
 18. **`onStoreChanged` null/undefined nodeIds** → throws
@@ -660,6 +713,10 @@ default-off). Unit E implements the FULL handler behavior:
 - **`rag.*` tools:** 5 (registered in Unit B §5.3 — the five-seam gate); Unit E
   implements the FULL behavior of `rag.query` (the retrieval entry point).
 - **IPC method:** 1 (`rag-query`, renderer → main — the UI retrieval path).
+- **Async surface (Unit F amendment):** the embedder-dependent functions
+  (`score`, `place`, `selectTopK`, `retrieve`, `RetrievalEngine.query`, the
+  `rag.query` MCP handler, the `rag-query` IPC) are ASYNC; the lexical embedder
+  wraps its synchronous computation in a resolved promise.
 
 ### 5.11 Cross-references
 
@@ -683,9 +740,13 @@ default-off). Unit E implements the FULL handler behavior:
   line→node map), §13 (cross-document shared nodes).
 - Decisions: `docs/decisions.md` rows **LEXICAL-FIRST-RETRIEVAL**,
   **RAG-EDIT-MCP-GROUPS**, **SINGLE-WRITER-STORE**, **SUBTREE-OWNERSHIP**,
-  **CROSS-DOCUMENT-SHARED**.
+  **CROSS-DOCUMENT-SHARED**, **PROVIDER-AGNOSTIC** (2026-08-27 — the vector
+  embedder is provider/model agnostic, local + remote/cloud, via config).
 - Pending: `docs/pending.md` (vector embeddings — Unit F, the drop-in behind
   the `Embedder` interface; document tabs — the multi-document render).
+- Unit F: `docs/specs/unit-f-embeddings.md` — the vector embedder behind the
+  `Embedder` interface (the async amendment + the optional `onStoreChanged`
+  hook are the Unit F contract changes this spec records).
 - Engine invariants: `node.md` §1.2 SI-1 (single-parent — the multi-parent
   duplicate model the traversal respects); `adapters.md` §4.7 D7
   (MarkdownAdapter drops `data-node-id` — the reason the line→node map is
