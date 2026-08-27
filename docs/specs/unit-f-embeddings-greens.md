@@ -113,8 +113,9 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 - **Expected:** both calls return identical ranked results.
 
 ### H13. Vector tie-break
-- **Setup:** store with `N2('hello world')`, `N1('hello there')` (equal scores);
-  a vector embedder over a stubbed `fetch` provider.
+- **Setup:** store with `N1('hello world')`, `N2('hello world')` (identical
+  content → identical embeddings → equal scores); a vector embedder over a
+  stubbed `fetch` provider.
 - **Ops:** `embedder.score('hello', nodes)`.
 - **Expected:** equal scores sorted by node id ascending → `n1` then `n2`.
 
