@@ -146,51 +146,67 @@ function renderEnvelopeMarkdown(envelope: LegacyInitialData): string {
 }
 
 /** Render a single RAG subtree (a LegacyNodeData content root) to markdown.
- *  The mini-envelope uses the SAME zone as the subtree's targetPlacement so the
- *  content root is placed and renders (the HARD PRECONDITION — a zone mismatch
- *  leaves the root unplaced and the markdown empty). */
-function renderSubtreeMarkdown(subtree: LegacyNodeData, zoneName: string): string {
+ *  The mini-envelope uses the SAME template root as the real envelope (so the
+ *  content root is placed in the same zone and renders — the HARD PRECONDITION;
+ *  a zone mismatch leaves the root unplaced and the markdown empty). The
+ *  template root's own lines (if any) are included in the returned markdown and
+ *  are subtracted by the caller (`assignSubtreeRanges`) so each subtree's OWN
+ *  line count is isolated. */
+function renderSubtreeMarkdown(subtree: LegacyNodeData, templateRoot: LegacyNodeData): string {
   const miniEnvelope: LegacyInitialData = {
-    template: {
-      root: {
-        type: 'div',
-        props: { id: 'wiki-root' },
-        children: [{ type: 'div', props: { id: `zone:${zoneName}` }, placement: { placementName: zoneName } }],
-      },
-    },
+    template: { root: templateRoot },
     content: [{ content: [subtree] }],
     clientConfig: { runInstantiation: true, runRendering: true },
   }
   return renderEnvelopeMarkdown(miniEnvelope)
 }
 
+/** The template root's OWN markdown line count (rendered with NO content
+ *  payloads). In the real envelope this is rendered exactly ONCE, at the top of
+ *  the markdown, so it must be subtracted from every standalone subtree render
+ *  (which re-includes it) and the lineMap cursor must start AFTER it. */
+function renderTemplateLines(templateRoot: LegacyNodeData): number {
+  const miniEnvelope: LegacyInitialData = {
+    template: { root: templateRoot },
+    content: [],
+    clientConfig: { runInstantiation: true, runRendering: true },
+  }
+  const md = renderEnvelopeMarkdown(miniEnvelope)
+  return md === '' ? 0 : md.split('\n').length
+}
+
 /** Recursively assign REAL markdown line ranges to a RAG subtree and its
  *  nested doc-children. The subtree's own lines come BEFORE its doc-children's
  *  lines in the markdown (the parent renders its own content first, then
  *  recurses children), so the doc-children start after the parent's own lines.
- *  Returns the next free line index. */
+ *  Every standalone render re-includes the template root's lines, so each line
+ *  count is reduced by `templateLines` — the ranges are anchored to the single
+ *  full-envelope render (the template root counted once, at the top), NOT to a
+ *  sum of standalone renders (which would over-count the template root per
+ *  subtree). Returns the next free line index. */
 function assignSubtreeRanges(
   subtree: LegacyNodeData,
   start: number,
   ranges: Array<{ ragNodeId: string; startLine: number; endLine: number }>,
-  zoneName: string,
+  templateRoot: LegacyNodeData,
+  templateLines: number,
 ): number {
   const pid = subtree.props?.id
   const ragId = typeof pid === 'string' && pid.startsWith('rag-') ? pid.slice(4) : String(pid ?? '')
-  const md = renderSubtreeMarkdown(subtree, zoneName)
-  const lineCount = md === '' ? 0 : md.split('\n').length
+  const md = renderSubtreeMarkdown(subtree, templateRoot)
+  const lineCount = Math.max(0, (md === '' ? 0 : md.split('\n').length) - templateLines)
   ranges.push({ ragNodeId: ragId, startLine: start, endLine: start + lineCount })
   const children = subtree.children ?? []
-  // Each doc-child's own line count (rendered standalone).
+  // Each doc-child's own line count (rendered standalone, template subtracted).
   const childCounts = children.map((c) => {
-    const cMd = renderSubtreeMarkdown(c as LegacyNodeData, zoneName)
-    return cMd === '' ? 0 : cMd.split('\n').length
+    const cMd = renderSubtreeMarkdown(c as LegacyNodeData, templateRoot)
+    return Math.max(0, (cMd === '' ? 0 : cMd.split('\n').length) - templateLines)
   })
   const sumChildLines = childCounts.reduce((a, b) => a + b, 0)
   const childStart = start + (lineCount - sumChildLines)
   let offset = 0
   for (let i = 0; i < children.length; i++) {
-    assignSubtreeRanges(children[i] as LegacyNodeData, childStart + offset, ranges, zoneName)
+    assignSubtreeRanges(children[i] as LegacyNodeData, childStart + offset, ranges, templateRoot, templateLines)
     offset += childCounts[i]
   }
   return start + lineCount
@@ -339,9 +355,10 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
       placement: { placementName: zoneName },
     })
   }
+  const envelopeTemplateRoot: LegacyNodeData = { ...templateRoot, children: templateChildren }
   const envelope: LegacyInitialData = {
     template: {
-      root: { ...templateRoot, children: templateChildren },
+      root: envelopeTemplateRoot,
     },
     content,
     clientConfig: { runInstantiation: true, runRendering: true },
@@ -373,11 +390,17 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
   // line span to its RAG object. Ranges are 0-based, inclusive start, exclusive
   // end, and COARSE (a `ul` with 4 `li` doc-children maps to a range spanning
   // the whole list; a doc-child's lines map to the doc-child, not the parent).
-  renderEnvelopeMarkdown(envelope) // the real markdown the ranges refer to
+  // The ranges are anchored to the SINGLE full-envelope render: the template
+  // root's lines (if any) are counted ONCE at the top (the cursor starts after
+  // them), and each subtree's own lines follow in content order. Each subtree's
+  // own line count is its standalone render minus the template root's lines —
+  // NOT a sum of standalone renders (which would over-count the template root
+  // once per subtree — L5).
+  const templateLines = renderTemplateLines(envelopeTemplateRoot)
   const ranges: Array<{ ragNodeId: string; startLine: number; endLine: number }> = []
-  let cursor = 0
+  let cursor = templateLines
   for (const payload of content) {
-    cursor = assignSubtreeRanges(payload.content[0], cursor, ranges, zoneName)
+    cursor = assignSubtreeRanges(payload.content[0], cursor, ranges, envelopeTemplateRoot, templateLines)
   }
   const lineMap: LineNodeMap = { ranges }
 

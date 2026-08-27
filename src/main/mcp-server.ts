@@ -147,13 +147,47 @@ export async function handleRagTool(
       return e.query(query, { k: topK })
     }
     case 'rag.get_document': {
-      // Finding 4 (known behavior, no code change): this is a PLACEHOLDER —
-      // it returns the ENTIRE store, not the document's subtree. Full subtree
-      // scoping (the document's RAG nodes/edges) lands in Unit C (the
-      // traversal/render spine). Do not change the behavior here.
+      // L4 — the document-subtree scoping (the tool description's "The
+      // document's RAG nodes/edges (the subtree)"). Returns ONLY the requested
+      // document's nodes/edges, NOT the whole store. The document's node set
+      // mirrors the traversal's document model (Unit C §5.2): the doc root
+      // (documentId) + the nodes reachable from the doc-head root via the
+      // doc-flow edges (scoped by documentId) + their doc-children
+      // (transitively). The document's edges are the doc-flow edges scoped by
+      // documentId + the doc-child edges among the document's nodes.
       const documentId = typeof args.documentId === 'string' ? args.documentId : ''
       if (documentId === '') throw new Error('rag.get_document: documentId required')
-      return { documentId, nodes: store.listNodes(), edges: store.listEdges() }
+      const allNodes = store.listNodes()
+      const allEdges = store.listEdges()
+
+      // The document's node set: the doc root + the sources/targets of the
+      // edges scoped by documentId + their doc-children (transitively).
+      const docNodeIds = new Set<string>([documentId])
+      for (const e of allEdges) {
+        if (e.documentIds?.includes(documentId)) {
+          docNodeIds.add(e.source)
+          docNodeIds.add(e.target)
+        }
+      }
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const e of allEdges) {
+          if (e.kind === 'doc-child' && docNodeIds.has(e.source) && !docNodeIds.has(e.target)) {
+            docNodeIds.add(e.target)
+            changed = true
+          }
+        }
+      }
+
+      const nodes = allNodes.filter((n) => docNodeIds.has(n.id))
+      const edges = allEdges.filter((e) => {
+        if (e.kind === 'doc-child') {
+          return docNodeIds.has(e.source) && docNodeIds.has(e.target)
+        }
+        return e.documentIds?.includes(documentId)
+      })
+      return { documentId, nodes, edges }
     }
     case 'rag.list_nodes':
       return store.listNodes().map((n) => ({ id: n.id, type: n.type, content: n.content.slice(0, 80), ownedNodeIds: n.ownedNodeIds.length }))

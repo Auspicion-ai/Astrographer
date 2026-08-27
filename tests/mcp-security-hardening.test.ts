@@ -562,18 +562,34 @@ describe('§5.8 happy paths — group default-off + enabled → callable', () =>
 })
 
 describe('§5.8 happy paths — the rag.* tools', () => {
-  it('14. rag.get_document placeholder: returns the ENTIRE store (not the document subtree)', async () => {
+  it('14. rag.get_document returns ONLY the requested document\'s subtree (not the whole store)', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
+      // Two documents in one store: docA (head a1 → a2 → end) and docB
+      // (head b1 → b2 → end). Requesting docA must return ONLY docA's
+      // nodes/edges, never docB's.
       await seedStore(store, [
-        makeNode('n1', { content: 'hello' }),
-        makeNode('n2', { content: 'world' }),
+        makeNode('docA', { type: 'div' }),
+        makeNode('a1', { content: 'A head' }),
+        makeNode('a2', { content: 'A end' }),
+        makeNode('docB', { type: 'div' }),
+        makeNode('b1', { content: 'B head' }),
+        makeNode('b2', { content: 'B end' }),
       ], [
-        makeEdge('e1', 'parent-child', 'n1', 'n2'),
+        makeEdge('eA-head', 'doc-head', 'a1', 'docA', { documentIds: ['docA'] }),
+        makeEdge('eA-next', 'next-section', 'a1', 'a2', { documentIds: ['docA'] }),
+        makeEdge('eA-end', 'doc-end', 'a2', 'docA', { documentIds: ['docA'] }),
+        makeEdge('eB-head', 'doc-head', 'b1', 'docB', { documentIds: ['docB'] }),
+        makeEdge('eB-next', 'next-section', 'b1', 'b2', { documentIds: ['docB'] }),
+        makeEdge('eB-end', 'doc-end', 'b2', 'docB', { documentIds: ['docB'] }),
       ])
-      const result = await handleRagTool(store, 'rag.get_document', { documentId: 'doc' })
-      expect(result).toEqual({ documentId: 'doc', nodes: store.listNodes(), edges: store.listEdges() })
+      const result = await handleRagTool(store, 'rag.get_document', { documentId: 'docA' })
+      expect(result).toEqual({
+        documentId: 'docA',
+        nodes: store.listNodes().filter((n) => ['docA', 'a1', 'a2'].includes(n.id)),
+        edges: store.listEdges().filter((e) => ['eA-head', 'eA-next', 'eA-end'].includes(e.id)),
+      })
     } finally {
       rmSyncSafe(dir)
     }
