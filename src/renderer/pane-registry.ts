@@ -75,7 +75,19 @@ export function createPaneRegistry(): PaneRegistry {
     if (enabled.get(id) === value) return // a no-op — never notifies
     enabled.set(id, value)
     const change: PaneChange = { id, enabled: value }
-    for (const cb of subscribers) cb(change)
+    // H4 (adversarial): iterate a SNAPSHOT copy of the subscriber list so a
+    // subscriber that unsubscribes itself during iteration cannot splice the
+    // live array and skip later subscribers; and wrap each callback in
+    // try/catch so ONE throwing subscriber can never starve the rest of the
+    // change. Every subscriber (as of the change) receives the change.
+    for (const cb of [...subscribers]) {
+      try {
+        cb(change)
+      } catch {
+        // swallow a subscriber error — a throwing subscriber must not block
+        // later subscribers from receiving the change.
+      }
+    }
   }
 
   return {

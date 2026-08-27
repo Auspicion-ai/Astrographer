@@ -131,11 +131,44 @@ markdown-parsing-to-storage will use text-match diffing — see
 
 ### 3a. Adversarial findings (host findings, fixed + regression-tested)
 
-Post-green adversarial pass (RCA-3) — recorded here when the unit lands. All
-findings are expected to be HOST (this repo's `src/`); none are package/upstream
-findings (the `createIsolatedScope()` mechanism is an engine primitive and is NOT
-patched). Any host finding is fixed + regression-tested; the findings + the
-regression-test count are recorded in this section when the greens land.
+Post-green adversarial pass (RCA-3) 2026-08-27. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (the `createIsolatedScope()`
+mechanism is an engine primitive and is NOT patched). Each host finding was
+fixed + regression-tested (12 regression tests in
+`tests/sidebar-panes-adversarial.test.ts`). No unauthorized-access finding: the
+operator-isolation seam is correctly enforced at the assembly layer
+(`assembleAppGraphEnvelope` collects only `listByScope('app-graph')`; operator
+panes never enter the app graph). The renderer `mountOperator`
+(`createIsolatedScope()` GraphScope) is a Unit H renderer-surface host concern
+that lands with the UI mount.
+
+**MEDIUM:**
+- **H1** — the §5.3 data-flow helpers crashed on a null store/ctx:
+  `deriveDocNavDocuments`/`docNavContent` dereferenced `ctx.snapshot.nodes`/
+  `.edges` and `crosslinksContent` dereferenced `ctx.crosslinks`
+  unconditionally. Fixed: guards return the empty state (`[]` / `(no documents)`
+  / `(none)`) instead of a `TypeError`. Regression-tested.
+
+**LOW:**
+- **H2** — `assembleAppGraphEnvelope` threw a non-documented `TypeError` on a
+  malformed traversal envelope (`template?.root == null`). Fixed: the guard
+  validates `template?.root` and throws the documented
+  `'assembleAppGraphEnvelope: input/registry/ctx/traversalEnvelope required'`.
+- **H3** — `crosslinksContent` threw `... is not iterable` on a non-null but
+  partial `result` (missing `crosslinkBacklinks`/`crosslinkOutlinks`). Fixed:
+  coerced with `[...(result?.crosslinkBacklinks ?? []), ...(result?.
+  crosslinkOutlinks ?? [])]`.
+- **H4** — `onChanged` subscriber throw/re-entrancy could starve subscribers (a
+  throwing callback aborted the loop; a self-unsubscribing callback spliced the
+  live array mid-iteration). Fixed: iterate a snapshot copy + wrap each
+  `cb(change)` in try/catch.
+- **H6** — `docNavContent` emitted duplicate `li`s on repeated `doc-head`
+  targets (a corrupted store). Fixed: `deriveDocNavDocuments` dedupes by target
+  `documentId` (first head wins).
+
+Per-contract, not fixed: the registry's `list()` returns the live internal array
+(the spec explicitly pins "never a copy — the registry is read-only over its
+records; a caller must not mutate them"). Documented as a defensive observation.
 
 ## 4. Design decisions pinned by this spec
 
@@ -850,7 +883,7 @@ export class SidebarPanes {
 - **Registry methods:** 9 (`register`, `get`, `list`, `listByScope`, `isEnabled`,
   `enable`, `disable`, `setEnabled`, `onChanged`).
 - **`PaneDefinition` fields:** 4 (`id`, `title`, `scope`, `render`).
-- **`PaneContext` fields:** 6 (`snapshot`, `currentDocumentId`, `currentNodeId`,
+- **`PaneContext` fields:** 5 (`snapshot`, `currentDocumentId`, `currentNodeId`,
   `backRefs`, `crosslinks`).
 - **Assembly functions:** 3 (`paneSubtreeRoot`, `assembleAppGraphEnvelope`,
   `buildOperatorEnvelope`).

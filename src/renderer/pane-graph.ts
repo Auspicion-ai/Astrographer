@@ -65,7 +65,11 @@ export function assembleAppGraphEnvelope(input: AppGraphAssemblyInput): AppGraph
     input == null ||
     input.registry == null ||
     input.ctx == null ||
-    input.traversalEnvelope == null
+    input.traversalEnvelope == null ||
+    // H2 (adversarial): a malformed traversal envelope with a null/missing
+    // `template` or `template.root` must throw the DOCUMENTED guard error
+    // (not a raw TypeError from dereferencing `template.root.children`).
+    input.traversalEnvelope.template?.root == null
   ) {
     throw new Error('assembleAppGraphEnvelope: input/registry/ctx/traversalEnvelope required')
   }
@@ -153,17 +157,33 @@ export function buildOperatorEnvelope(
 export function deriveDocNavDocuments(
   snapshot: PaneContext['snapshot'],
 ): Array<{ documentId: string; title: string }> {
+  // H1 (adversarial): a null/missing snapshot must survive (return the empty
+  // list → the "(no documents)" empty state), never a TypeError.
+  if (snapshot == null || snapshot.nodes == null || snapshot.edges == null) return []
   const nodeById = new Map<string, RagNode>(snapshot.nodes.map((n) => [n.id, n]))
-  return snapshot.edges
-    .filter((e) => e.kind === 'doc-head')
-    .map((e) => ({ documentId: e.target, title: nodeById.get(e.source)?.content ?? '' }))
-    .sort((a, b) => a.documentId.localeCompare(b.documentId))
+  const seen = new Set<string>()
+  const docs: Array<{ documentId: string; title: string }> = []
+  for (const e of snapshot.edges) {
+    if (e.kind !== 'doc-head') continue
+    // H6 (adversarial): dedupe by target documentId (first head wins) — a
+    // corrupted store with two `doc-head` edges to the SAME document must emit
+    // ONE entry (one `li`), never duplicate `data-document-id` entries.
+    if (seen.has(e.target)) continue
+    seen.add(e.target)
+    docs.push({ documentId: e.target, title: nodeById.get(e.source)?.content ?? '' })
+  }
+  return docs.sort((a, b) => a.documentId.localeCompare(b.documentId))
 }
 
 /** The `doc-nav` pane content: a `ul` of `li` document entries. The current
  *  document's `li` carries `props['data-current'] = 'true'`. Empty store → a
  *  single `p` with content `(no documents)`. */
 export function docNavContent(ctx: PaneContext): LegacyNodeData {
+  // H1 (adversarial): a null ctx or a null/missing ctx.snapshot must survive →
+  // the "(no documents)" empty state, never a TypeError.
+  if (ctx == null || ctx.snapshot == null) {
+    return { type: 'p', content: '(no documents)' }
+  }
   const docs = deriveDocNavDocuments(ctx.snapshot)
   if (docs.length === 0) return { type: 'p', content: '(no documents)' }
   return {
@@ -189,7 +209,11 @@ export function crosslinksContent(
   ctx: PaneContext,
   result: BacklinkResult | null,
 ): LegacyNodeData {
-  const outgoingLis: LegacyNodeData[] = ctx.crosslinks.map((cl) => ({
+  // H1 (adversarial): a null ctx or a null/missing ctx.crosslinks must survive →
+  // the empty-state sections (the outgoing list shows "(none)"), never a
+  // TypeError from `ctx.crosslinks.map`.
+  const crosslinks = ctx == null || ctx.crosslinks == null ? [] : ctx.crosslinks
+  const outgoingLis: LegacyNodeData[] = crosslinks.map((cl) => ({
     type: 'li',
     props: { 'data-target': cl.targetRagNodeId },
     content: cl.targetRagNodeId,
@@ -202,7 +226,12 @@ export function crosslinksContent(
     ],
   }
 
-  const backEntries = result ? [...result.crosslinkBacklinks, ...result.crosslinkOutlinks] : []
+  // H3 (adversarial): a non-null but PARTIAL result (missing
+  // `crosslinkBacklinks`/`crosslinkOutlinks`) must coerce the missing fields to
+  // [] — never a TypeError from spreading `undefined`.
+  const backEntries = result
+    ? [...(result.crosslinkBacklinks ?? []), ...(result.crosslinkOutlinks ?? [])]
+    : []
   const backLis: LegacyNodeData[] = backEntries.map((l) => ({
     type: 'li',
     props: { 'data-source': l.source, 'data-target': l.target, 'data-scope': l.scope },
