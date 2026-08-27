@@ -104,11 +104,73 @@ markdown-parsing-to-storage will use text-match diffing — see
 
 ### 3a. Adversarial findings (host findings, fixed + regression-tested)
 
-This section is populated by the post-green adversarial pass (RCA-3). It is a
-placeholder in the SPEC; the adversarial sub-agent records its host findings
-here after the greens, and each host finding is fixed here + regression-tested.
-Package/foundation findings are recorded in `docs/defects.md` + `docs/HANDOFF.md`
-(never patched).
+Post-green adversarial pass (RCA-3) 2026-08-26. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`). Each host finding was fixed + regression-
+tested (27 regression tests in `tests/edit-adversarial.test.ts`).
+
+**HIGH:**
+- **H1** — `handleEditTool` reimplemented each edit op inline instead of calling
+  the ops from `edit-ops.ts` (spec §5.1.8). Fixed: refactored to call
+  `setContent`/`createNode`/`deleteNode`/`splitNode`/`mergeNode`/`setEdge` and
+  return the op's JSON result. This also fixed H2/H3/M4/M5/M6/M7.
+- **H2** — MCP `edit.split_node` did not create a `doc-child` edge → tail node
+  orphaned. Fixed by H1 (the `splitNode` op creates the edge).
+- **H3** — MCP `edit.merge_node` did not re-parent children or transfer
+  `next-section` edges → source's children orphaned. Fixed by H1 (the `mergeNode`
+  op does this).
+- **H4** — `mergeNode` with source as an ancestor of target (or target as a
+  doc-child of source) created a self-referential edge and threw an uncaught
+  store error after a partial mutation. Fixed: validate BEFORE mutating — if
+  target is a descendant of source (or a doc-child of source), return
+  `{ ok: false, error: 'edit.merge_node: cannot merge a node into its own
+  subtree' }`; never throws, no partial mutation.
+- **H5** — the re-traversal trigger (§5.1.9) and commit-on-blur IPC (§5.1.10)
+  were not wired. Fixed: `handleEditTool` takes an `onStoreChanged` callback,
+  broadcast via `RendererBackend.broadcast()`; `rag-store-changed` broadcast
+  after a successful mutation; `edit-commit` IPC handler in main; renderer
+  subscribes to `rag-store-changed` → `requestRebuild()`. The form-control
+  textarea UI (§5.6) is deferred as a rendering follow-up.
+
+**MEDIUM:**
+- **M1** — `setEdge` with a non-array `documentIds` threw an uncaught store
+  error. Fixed: validate → `'edit.set_edge: documentIds must be a string array'`.
+- **M2** — `createNode` with a non-string `content` threw an uncaught store
+  error. Fixed: validate → `'edit.create_node: content must be a string'`.
+- **M3** — `setEdge` with a non-number `order` on a `doc-child` threw an uncaught
+  store error. Fixed: validate → `'edit.set_edge: order must be a number'`.
+- **M4** — MCP `edit.set_edge` with a nonexistent `edgeId` created a new edge
+  instead of "edge not found". Fixed by H1 (the `setEdge` op returns
+  `'edit.set_edge: edge not found'`).
+- **M5** — MCP `edit.split_node` did not validate `at` bounds. Fixed by H1.
+- **M6** — MCP `edit.create_node` did not validate `type`. Fixed by H1.
+- **M7** — MCP `edit.set_edge` did not validate kind/self-reference/order-on-non-
+  doc-child. Fixed by H1.
+- **M8** — edit-controller `isEditable` uses `backRefs.has(nodeId)` as a proxy
+  for `status().loadedNodes` — unsound in the delete→re-traversal window.
+  Reconciled: documented as a best-effort backRefs check; the AUTHORITATIVE
+  deleted-node check lives in the injected `commit` (which has store access via
+  IPC).
+- **M9** — edit-controller `commit` did not check `isEditable` before delegating.
+  Fixed: `commit` checks `isEditable` first; a non-editable node returns
+  `{ ok: false, reason: 'deleted-node' }` WITHOUT calling the injected commit
+  (the IPC is not sent).
+
+**LOW:**
+- **L1** — `deleteNode` on a quarantined node removed it and returned
+  `removed:true`. Fixed: check existence first; a quarantined/nonexistent node
+  is a no-op `{ ok: true, removed: false }`.
+- **L2** — `splitNode` dropped the original's `props` on the new node. Fixed:
+  copy the original's `props` to the new node.
+- **L3** — `splitNode` doc-child `order` collision with non-contiguous existing
+  orders. Fixed: `order` = `max(existing doc-child orders) + 1`.
+- **L4** — `mergeNode` could create duplicate `parent-child`/`doc-child` edges.
+  Fixed: skip creating an edge when target already has the child.
+- **L5** — edit-controller `restoreCaret` returned `undefined` for a dangling
+  node but did not clear the caret from the map. Fixed: clear the stale caret on
+  a dangling node.
+- **L6** — edit-controller `commit` did not clear the dirty flag. Fixed: clear
+  the node's dirty flag on a successful commit (may trigger a queued rebuild).
 
 **2026-08-27 — Unit D adversarial-fix pass (all HOST, fixed in `src/` +
 regression-tested in `tests/edit-adversarial.test.ts`):**
