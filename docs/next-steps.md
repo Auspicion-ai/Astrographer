@@ -9,16 +9,14 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A/B/C/D/E are implemented (persistence → document model + doc-flow →
-rendering spine → editable text → RAG index + retrieval); Units F–J remain
-later units.
+Units A/B/C/D/E/F are implemented (persistence → document model + doc-flow →
+rendering spine → editable text → RAG index + retrieval → vector embeddings);
+Units G–J remain later units.
 
 ## OPEN
 
 ### Later units (noted, not in this slice)
 
-- **Unit F — embeddings.** Vector embeddings behind the `Embedder` interface
-  (deferred; local-first, no network egress).
 - **Unit G — crosslink/backlink.** Custom crosslink `LinkConfig` (open name
   union) + host-side backlink enumeration.
 - **Unit H — sidebar panes.** Host-side pane registry; app-graph panes
@@ -30,6 +28,38 @@ later units.
 
 ## DONE
 
+- **Unit F — vector embeddings (provider/model agnostic) (2026-08-27).**
+  `src/main/embeddings.ts` (pure + async, no Electron — the HTTP call is a
+  plain fetch to the configured endpoint): the `EmbeddingProvider` abstraction
+  + `EmbeddingProviderConfig` config shape (§5.2 — provider/model AGNOSTIC,
+  the PROVIDER-AGNOSTIC binding decision), the ollama `embeddinggemma` concrete
+  provider (the local test environment, localhost-pinned), the remote/cloud
+  provider drop-in (OpenAI/Cohere/etc. via the SAME interface + config, with
+  the `connect-src` CSP allowlist + API-key handling — a DESIGNED security
+  surface), the vector index (§5.3 — node id → embedding, maintained
+  incrementally on store change), cosine similarity scoring (§5.4), the vector
+  embedder behind the async-amended `Embedder` interface (§5.5), the
+  deterministic mock embedder + the real-ollama integration path + the mocked
+  remote/cloud path (§5.6). The async `Embedder` interface amendment (Unit E
+  contract amendment — §5.1) ripples through `src/main/retrieval.ts`
+  (`selectTopK`/`retrieve`/`RetrievalEngine.query`/`RetrievalEngine.onStoreChanged`
+  all async; the engine forwards `onStoreChanged` to the embedder's hook). The
+  `retrieval.embedder: 'lexical' | 'vector'` selection in `src/main/main.ts`
+  (§5.7 — default 'lexical'; 'vector' reads the REQUIRED
+  `retrieval.embeddingProvider` config and creates the vector embedder; a
+  missing config FAILS, never silently falls back to lexical). `rag.query`/
+  `rag-query` both use the SAME maintained engine (MCP/UI equivalence — §8.2).
+  TestWriter red → Implementer green in `tests/embeddings.test.ts` (RED marker:
+  `src/main/embeddings.ts` did not exist → 57 tests pass) + the async-amendment
+  test in `tests/retrieval.test.ts` (the engine's `onStoreChanged` forwards to
+  the embedder hook); adversarial pass in `tests/embeddings-adversarial.test.ts`
+  (13 regression tests — host findings F1–F9 fixed + regression-tested,
+  recorded in the spec §3a); blind-greens in
+  `docs/specs/unit-f-embeddings-greens.md` (79 scenarios, all pass — the F33
+  spec-vs-impl drift was resolved by correcting the spec §5.9 F33);
+  documentation review in
+  `archive/reviews/2026-08-27-unit-f-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (test + typecheck + build).
 - **Unit D — editable text (form-control editing) (2026-08-27).** The `edit.*`
   tool handlers (Unit B registered them through the five-seam gate; Unit D
   implements the FULL behavior) in `src/main/edit-ops.ts` (pure ops over the

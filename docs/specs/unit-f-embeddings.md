@@ -1,6 +1,6 @@
 # Spec — Unit F: Vector Embeddings (Provider/Model Agnostic)
 
-- **Status:** SPEC (later unit, Unit F). Gate reference:
+- **Status:** SPEC (first-milestone Unit F). Gate reference:
   `docs/specs/astrographer-review.md` §3d (lexical-first retrieval ENDORSE,
   "vector later"), §9.2.10 (retrieval selection), §8.2 (MCP/UI equivalence — a
   BINDING constraint on every unit that touches retrieval), §9.2.6
@@ -344,6 +344,10 @@ export interface EmbeddingProviderConfig {
   dimension?: number
   /** The HTTP request timeout in ms. Default 5000. */
   timeoutMs?: number
+  /** F9 — an optional EXTENSION to the default `connect-src` CSP allowlist
+   *  (hostnames) for a remote/cloud provider. The default safe set is always
+   *  included (fail-closed); this only ADDS hostnames. */
+  connectSrc?: string[]
 }
 
 /** The provider abstraction — a configurable embedding provider. A remote/cloud
@@ -376,7 +380,8 @@ export function createEmbeddingProvider(config: EmbeddingProviderConfig): Embedd
 - Any other `config.provider` (e.g. `'openai'`, `'cohere'`) →
   `createRemoteEmbedProvider({ baseUrl: config.baseUrl, model: config.model,
   apiKey: config.apiKey, dimension: config.dimension, timeoutMs:
-  config.timeoutMs })` (a remote/cloud provider — a drop-in).
+  config.timeoutMs, kind: config.provider, connectSrc: config.connectSrc })`
+  (a remote/cloud provider — a drop-in).
 
 **The ollama concrete provider (ONE concrete config — the local test
 environment):**
@@ -431,6 +436,14 @@ export interface RemoteEmbedOptions {
   dimension?: number
   /** The HTTP request timeout in ms. Default 5000. */
   timeoutMs?: number
+  /** The provider kind (config.provider) — surfaced as `EmbeddingProvider.kind`.
+   *  Defaults to 'remote'. F8 — the request/response shape is dispatched on
+   *  this kind ('cohere' → `{ model, texts }` / `embeddings[0]`; any other →
+   *  the OpenAI-shaped `{ model, input }` / `data[0].embedding`). */
+  kind?: string
+  /** F9 — an optional EXTENSION to the default `connect-src` CSP allowlist
+   *  (hostnames). The default safe set is always included (fail-closed). */
+  connectSrc?: string[]
 }
 
 /** Create a remote/cloud embed provider — a drop-in behind the SAME
@@ -1020,8 +1033,8 @@ suite, no network egress in CI):**
   OpenAI/Cohere/etc.) behind ONE `EmbeddingProvider` interface.
 - **`EmbeddingProvider` interface members:** 5 (`kind`, `model`, `baseUrl`,
   `dimension`, `embed`).
-- **`EmbeddingProviderConfig` fields:** 6 (`provider`, `baseUrl`, `model`,
-  `apiKey?`, `dimension?`, `timeoutMs?`).
+- **`EmbeddingProviderConfig` fields:** 7 (`provider`, `baseUrl`, `model`,
+  `apiKey?`, `dimension?`, `timeoutMs?`, `connectSrc?`).
 - **Ollama base URL:** `http://127.0.0.1:11434` (default; localhost-pinned).
 - **Ollama model:** `embeddinggemma` (default).
 - **Ollama endpoint:** `POST /api/embed` (the embeddings endpoint).

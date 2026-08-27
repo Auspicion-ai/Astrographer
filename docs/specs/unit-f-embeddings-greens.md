@@ -23,8 +23,9 @@
   gated by `isOllamaAvailable`. The store's mutating methods
   (`putNode`/`putEdge`/`removeNode`) are async and queue-serialized, so they are
   awaited.
-- **Run:** 63 scenarios — 62 pass, 1 fail (F33 — a spec-vs-impl drift; see the
-  Findings section).
+- **Run:** 79 scenarios — 79 pass, 0 fail (the F33 spec-vs-impl drift was
+  RESOLVED — the spec §5.9 F33 was corrected to match the implementation; see
+  the Findings section).
 
 Each scenario lists: name, setup, operations, expected outcome (from the spec).
 
@@ -382,17 +383,15 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
   propagates).
 
 ### F33. `RetrievalEngine.query` non-string/empty query
-- **Ops:** `engine.query('')`, `engine.query('   ')`, `engine.query(null)`.
-- **Expected:** each REJECTS with `Error('retrieve: query must be a non-empty string')`.
-- **Result:** **FAIL (spec-vs-impl drift).** The empty/whitespace sub-cases
-  (`''`, `'   '`) correctly reject with `Error('retrieve: query must be a
-  non-empty string')`. The NON-STRING sub-case (`null`) rejects with
-  `Error('retrieve: store/embedder/index/query/opts required')` instead — the
-  implementation distinguishes a non-string query (→ the `retrieve` "required"
-  fail-state, consistent with Unit E §5.9 F14) from an empty/whitespace string
-  (→ the "non-empty string" fail-state, Unit E §5.9 F15). The Unit F spec §5.9
-  F33 (and §5.7) conflates the two, claiming a non-string query also rejects
-  with `'retrieve: query must be a non-empty string'`. See the Findings section.
+- **Ops:** `engine.query(null)`; `engine.query('')`, `engine.query('   ')`.
+- **Expected:** `engine.query(null)` REJECTS with
+  `Error('retrieve: store/embedder/index/query/opts required')` (the `retrieve`
+  "required" fail-state — Unit E §5.9 F14); `engine.query('')`/`engine.query('   ')`
+  REJECT with `Error('retrieve: query must be a non-empty string')` (Unit E §5.9
+  F15).
+- **Result:** **PASS** (the corrected spec §5.9 F33 matches the implementation —
+  a non-string query → the "required" fail-state; an empty/whitespace string →
+  the "non-empty string" fail-state).
 
 ### F34. `retrieval.embedder: 'vector'` with a missing/invalid `retrieval.embeddingProvider` config
 - **Setup:** `src/main/main.ts` (static verification).
@@ -430,10 +429,10 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 - **Ops:** inspect a created provider.
 - **Expected:** exactly `kind`, `model`, `baseUrl`, `dimension`, `embed`.
 
-### C3. `EmbeddingProviderConfig` fields — 6
+### C3. `EmbeddingProviderConfig` fields — 7
 - **Ops:** inspect the config shape.
 - **Expected:** exactly `provider`, `baseUrl`, `model`, `apiKey?`, `dimension?`,
-  `timeoutMs?`.
+  `timeoutMs?`, `connectSrc?`.
 
 ### C4. Ollama base URL + model + endpoint
 - **Ops:** `createOllamaEmbedProvider()` (no opts).
@@ -571,13 +570,13 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 | F30 | `place` no match (vector) | ✅ PASS |
 | F31 | `onStoreChanged` null/undefined nodeIds | ✅ PASS |
 | F32 | Embed rejection propagation | ✅ PASS |
-| F33 | `RetrievalEngine.query` non-string/empty query | ❌ FAIL (drift) |
+| F33 | `RetrievalEngine.query` non-string/empty query | ✅ PASS (drift resolved) |
 | F34 | `retrieval.embedder: 'vector'` missing/invalid provider config | ✅ PASS |
 | F35 | `rag.query` with the `rag` group disabled | ✅ PASS |
 | F36 | `rag.query` reaching the renderer switch → unknown method | ✅ PASS |
 | C1 | Provider kinds (2 concrete, ONE interface) | ✅ PASS |
 | C2 | `EmbeddingProvider` interface members (5) | ✅ PASS |
-| C3 | `EmbeddingProviderConfig` fields (6) | ✅ PASS |
+| C3 | `EmbeddingProviderConfig` fields (7) | ✅ PASS |
 | C4 | Ollama base URL + model + endpoint | ✅ PASS |
 | C5 | HTTP timeout default (5000 ms) | ✅ PASS |
 | C6 | Embedding dimension (auto-detect; mock = 4) | ✅ PASS |
@@ -593,24 +592,23 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 | C16 | Security surfaces (2) | ✅ PASS |
 | C17 | `parsePositiveIntEnv` (F5 env-parse guard) | ✅ PASS |
 
-**Run summary:** 63 scenarios — 62 pass, 1 fail (F33 — a spec-vs-impl drift).
+**Run summary:** 79 scenarios — 79 pass, 0 fail (the F33 drift was resolved —
+the spec §5.9 F33 was corrected to match the implementation).
 
 ### Findings (spec-vs-impl drift)
 
-- **F33 — `RetrievalEngine.query` non-string query (DRIFT).** The Unit F spec
-  §5.9 F33 (and §5.7) claims a NON-STRING query to `RetrievalEngine.query`
-  rejects with `Error('retrieve: query must be a non-empty string')`. The
-  implementation rejects a non-string query (`null`) with
-  `Error('retrieve: store/embedder/index/query/opts required')` — the
-  `retrieve` "required" fail-state. The empty/whitespace sub-cases (`''`,
-  `'   '`) DO reject with `'retrieve: query must be a non-empty string'` as the
-  spec claims. The implementation distinguishes a non-string query (→ the
-  "required" fail-state, consistent with Unit E §5.9 F14) from an
-  empty/whitespace string (→ the "non-empty string" fail-state, Unit E §5.9
-  F15). The Unit F spec F33 conflates the two. **This is a documentation drift
-  in the Unit F spec** — the implementation is consistent with the authoritative
-  Unit E `retrieve` fail-states (F14/F15). The implementation was NOT changed
-  to make the scenario pass; the drift is reported to the supervisor.
+- **F33 — `RetrievalEngine.query` non-string query (DRIFT — RESOLVED).** The
+  Unit F spec §5.9 F33 (and §5.7) originally claimed a NON-STRING query to
+  `RetrievalEngine.query` rejects with `Error('retrieve: query must be a
+  non-empty string')`. The implementation rejects a non-string query (`null`)
+  with `Error('retrieve: store/embedder/index/query/opts required')` — the
+  `retrieve` "required" fail-state (consistent with Unit E §5.9 F14); the
+  empty/whitespace sub-cases (`''`, `'   '`) reject with `'retrieve: query must
+  be a non-empty string'` (Unit E §5.9 F15). **RESOLVED:** the Unit F spec §5.9
+  F33 (and §5.7) was corrected to match the implementation — a non-string query
+  → the "required" fail-state; an empty/whitespace string → the "non-empty
+  string" fail-state. The scenario above is updated to the corrected spec and
+  now PASSES. The implementation was NOT changed to make the scenario pass.
 - **No other drift observed.** Every other scenario derived from
   `docs/specs/unit-f-embeddings.md` §5.1–§5.10 (plus the amended
   `docs/specs/unit-e-rag-index.md` §5.2 async `Embedder`) passed against the
@@ -620,8 +618,8 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
   behind the async `Embedder` interface (§5.5), the mock embedder + the
   real-ollama integration path + the mocked remote path (§5.6), the async
   retrieval-engine ripple + MCP/UI equivalence + security/CSP + config
-  selection (§5.7), all 26 happy paths (§5.8), the other 35 fail-states (§5.9),
-  and every census claim (§5.10) match the spec.
+  selection (§5.7), all 26 happy paths (§5.8), all 36 fail-states (§5.9), and
+  every census claim (§5.10) match the spec.
 
 ### Test-authoring notes (not drifts)
 
