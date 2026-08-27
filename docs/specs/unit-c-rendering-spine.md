@@ -118,8 +118,8 @@ No engine gap. ENG-GAP-1 stays a non-blocking handoff item.
   the doc-child `order` position. The parent's `ownedNodeIds` EXCLUDES the
   doc-children's nodes. (User clarification 2026-08-26 — review §12.)
 - **CROSS-DOCUMENT-SHARED:** a RAG node can appear in MULTIPLE documents. The
-  traversal assembles EACH document's flow (scoped by `documentId`), resolving a
-  shared node as a duplicate subtree per document (MULTI-PARENT-DUPLICATE). A
+  traversal assembles EACH document's flow (scoped by `documentIds`), resolving
+  a shared node as a duplicate subtree per document (MULTI-PARENT-DUPLICATE). A
   text change to a shared node updates all its duplicates. (User clarity check
   2026-08-26 — review §13.)
 
