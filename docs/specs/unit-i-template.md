@@ -136,12 +136,51 @@ markdown-parsing-to-storage will use text-match diffing — see
 
 ### 3a. Adversarial findings
 
-Recorded here when the unit lands (RCA-3 — a post-green adversarial pass is
-MANDATORY per completed unit). At spec time there are no findings; the pass is
-expected to hunt: a zone-container drop via `code.template.delete` on a targeted
-zone, a malformed custom template booting to a broken graph, a re-derive that
-runs while a template-editor control is dirty, and the operator-vs-app-graph
-isolation of the template-editor pane's handlers.
+Post-green adversarial pass (RCA-3) 2026-08-28. All findings are HOST (this
+repo's `src/`); none are package/upstream findings (no `provident-ssr` defect
+was exposed — the Unit I code composes existing engine surfaces). Each host
+finding is fixed + regression-tested (6 regression tests in
+`tests/template-adversarial.test.ts`). No unauthorized-access finding: the six
+`code.template.*` names map to the `code` group (default-off), the renderer
+switch has no `code.template.*` cases (fail-closed `unknown method`), and
+`MUTATING_METHODS` correctly excludes the mutating `code.template.*` tools.
+
+**MEDIUM:**
+- **I3** — the IPC `bridge.template.validate` payload shape broke MCP/UI
+  equivalence: `preload.ts` sent the raw `tpl` as the IPC payload, but
+  `handleTemplateTool` reads `args.template`, so `args.template` was
+  `undefined` → `invalid-shape`, while the MCP `code.template.validate` (zod
+  `{ template: z.unknown().optional() }`) passed `{ template: tpl }` and worked.
+  Fixed: `validate` now wraps the template like `set` does
+  (`ipcRenderer.invoke(IPC_TEMPLATE_VALIDATE, { template: tpl })`).
+  Regression-tested.
+
+**LOW:**
+- **I4** — `get()` returned a top-level shallow copy that shared the nested
+  `root`, so a caller could mutate the store's internal template through
+  `get()`, bypassing the zone-consistency validation. Fixed: `get()` returns
+  `deepCopy(current)` (the same safe deep-copy discipline used on write).
+  Regression-tested.
+- **I5** — the `readonly targetedZones` property returned the internal array
+  directly, so a caller could `store.targetedZones.push('x')` and change which
+  zones `set`/`delete`/`validate` enforce. Fixed: the accessor returns a copy
+  (`[...targetedZones]`). Regression-tested.
+
+**Deferred to the UI mount (the `SidebarPanes` renderer host — Unit H §3a):**
+- **I1** — the `template-changed` whole-graph re-derive is not wired in the
+  renderer: after a mutating template op, main broadcasts `IPC_TEMPLATE_CHANGED`
+  but `renderer.ts` has no `bridge.template.onTemplateChanged` subscription, so
+  the content-window keeps rendering the old template. The §5.5 re-derive
+  (fetch snapshot → `buildTraversal` with the stored template →
+  `assembleAppGraphEnvelope` → app Runtime re-render) is a renderer-surface
+  host concern that lands with the UI mount (mirroring the `rag-store-changed`
+  re-traversal path).
+- **I2** — the template-editor pane is authored but never registered/wired into
+  the app-graph: `createTemplateEditorPane()` is not registered in a pane
+  registry, `assembleAppGraphEnvelope` is not called in the renderer, and the
+  pane's four handlers are not bound to the template IPC bridge. The pane
+  registration + MCP-visibility + handler binding is the `SidebarPanes` renderer
+  host (Unit H §3a deferral), which lands with the UI mount.
 
 ## 4. Design decisions pinned by this spec
 

@@ -111,10 +111,17 @@ export function createTemplateStore(opts: TemplateStoreOptions): TemplateStore {
   }
 
   return {
-    targetedZones,
+    // I5 — return a COPY, never the internal array: a caller mutating the
+    // returned array must NOT change which zones set/delete/validate enforce.
+    get targetedZones(): string[] {
+      return [...targetedZones]
+    },
     get(): ContentWindowTemplate {
-      // a SHALLOW copy — never the internal record.
-      return { ...current }
+      // I4 — a DEEP copy (never the internal record): a caller mutating the
+      // returned template must NOT mutate the store's internal template,
+      // bypassing the zone-consistency validation. The shallow `{ ...current }`
+      // shared `current.root`, so a nested mutation leaked into the store.
+      return deepCopy(current)
     },
     set(tpl: ContentWindowTemplate): ContentWindowTemplate {
       const verdict = validateTemplate(tpl, targetedZones)

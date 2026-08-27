@@ -168,7 +168,10 @@ const bridge: ProvidentBridge = {
       return ipcRenderer.invoke(IPC_TEMPLATE_GET)
     },
     validate(tpl: unknown): Promise<TemplateVerdict> {
-      return ipcRenderer.invoke(IPC_TEMPLATE_VALIDATE, tpl)
+      // MCP/UI equivalence: `handleTemplateTool` reads `args.template`, so the
+      // IPC payload must wrap the template like `set` does (`{ template: tpl }`).
+      // Sending the raw `tpl` made `args.template` undefined → invalid-shape.
+      return ipcRenderer.invoke(IPC_TEMPLATE_VALIDATE, { template: tpl })
     },
     set(template: unknown): Promise<{ source: TemplateSource; template: ContentWindowTemplate }> {
       return ipcRenderer.invoke(IPC_TEMPLATE_SET, { template })
