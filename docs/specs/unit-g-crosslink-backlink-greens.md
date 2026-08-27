@@ -97,7 +97,9 @@ edge `pc1` (`nX`→`nY`) between two nodes with no document membership.
   (`src`→`tgt`).
 - **Ops:** `handleRagTool(store, 'rag.backlinks', { nodeId: 'tgt' })`.
 - **Expected:** the tool returns the `BacklinkResult` — `nodeId === 'tgt'`,
-  `backlinks` = `['cl']`, `crosslinkBacklinks` = `['cl']`.
+  `backlinks` = `[LinkEntry]` (an array of `LinkEntry` objects, NOT strings —
+  each entry's `edge.id === 'cl'`), `crosslinkBacklinks` = `[LinkEntry]` (the
+  same `cl` entry, selected by edge kind `'crosslink'`).
 
 ### H9. `rag-backlinks` IPC happy
 - **Setup:** a JSON store with `src`/`tgt` nodes + a `crosslink` edge `cl`.
