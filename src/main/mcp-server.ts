@@ -827,7 +827,7 @@ export class ProvidentMcpServer {
       { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: {} },
       { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional() } },
       { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string() } },
-      { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, no re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string() } },
+      { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string() } },
       { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional() } },
       { name: 'edit.delete_node', description: 'Delete a RAG node + cascade its edges (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string() } },
       { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number() } },

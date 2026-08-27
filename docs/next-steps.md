@@ -15,15 +15,6 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ### Later units (noted, not in this slice)
 
-- **Unit D — editable text (SPEC WRITTEN 2026-08-26).** Commit-on-blur
-  write-back to the RAG store → re-traversal (NOT a zone-targeted state-slice —
-  FS-10 blocks it); dirty-edit guard; caret/focus preservation keyed by RAG node
-  id; dangling back-reference → read-only; multi-parent duplicate coherence;
-  form-control editing UI (provident-rendered textarea); MCP/UI equivalence.
-  Spec: `docs/specs/unit-d-editing.md` (713 lines). **Pending UX (see
-  `docs/pending.md`):** when editing a CROSS-DOCUMENT-SHARED node, notify the
-  user it is shared across N documents and, on save, prompt whether to change
-  all owners or preserve some on a clone of the original.
 - **Unit E — RAG index + retrieval.** Lexical-first BM25/tf-idf behind an
   interface-swappable `Embedder`; graph traversal for context assembly;
   deterministic and testable.
@@ -40,6 +31,24 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ## DONE
 
+- **Unit D — editable text (form-control editing) (2026-08-27).** The `edit.*`
+  tool handlers (Unit B registered them through the five-seam gate; Unit D
+  implements the FULL behavior) in `src/main/edit-ops.ts` (pure ops over the
+  `RagStore` interface — `setContent`/`createNode`/`deleteNode`/`splitNode`/
+  `mergeNode`/`setEdge`) + `src/main/mcp-server.ts` `handleEditTool` (thin
+  validators calling the ops, broadcasting `rag-store-changed` after a
+  successful mutation); the edit controller in `src/renderer/edit-controller.ts`
+  (`createEditController`: dirty-edit guard, caret/focus preservation, dangling
+  back-reference → read-only, MCP/UI equivalence); the `edit-commit` IPC +
+  `rag-store-changed` re-traversal trigger wired in main/preload/renderer.
+  TestWriter red → Implementer green in `tests/edit-ops.test.ts` (23 tests) +
+  `tests/edit-controller.test.ts` (14 tests); adversarial pass in
+  `tests/edit-adversarial.test.ts` (27 regression tests — host findings
+  H1-H5/M1-M9/L1-L6 fixed + regression-tested, recorded in the spec §3a);
+  blind-greens in `docs/specs/unit-d-editing-greens.md` (38 scenarios, all
+  pass); documentation review in
+  `archive/reviews/2026-08-27-unit-d-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (test + typecheck + build).
 - **Unit A — RAG store (persistence) (2026-08-26).** `createJsonRagStore`
   implemented in `src/main/rag-store.ts` behind the `RagStore` interface:
   node/edge CRUD, single-writer write queue, persisted invertible project
