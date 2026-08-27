@@ -300,10 +300,16 @@ export interface TraversalResult {
   §5.1). It does NOT throw on a missing crosslink target (a crosslink whose
   target is not materialized is a valid dangling reference).
 
-**The renderer materialization (post-`translateLegacy`):**
+**The renderer materialization (post-`translateLegacy`) — a Unit H consumer:**
 
-After the renderer's `translateLegacy` mints the live Nodes (Unit C §5.4), the
-renderer walks the `crosslinks` wiring and, for each entry:
+Unit G's deliverable is the traversal `crosslinks: CrosslinkWiring[]` output
+(above) + the enumeration (§5.3) + the MCP/UI equivalence (§5.4). The actual DOM
+rendering of the crosslink `Link`/`Anchor` is the Unit H renderer/display
+surface (which also hosts the hover-preview pane from `docs/pending.md`); the
+following is the UNIT H consumption contract, pinned here so Unit H implements
+it against this wiring. After the renderer's `translateLegacy` mints the live
+Nodes (Unit C §5.4), the renderer walks the `crosslinks` wiring and, for each
+entry:
 
 1. Resolves the source subtree root by its stable authored id
    `rag-<sourceRagNodeId>` (Unit C §5.2 rule 2 — the reconciliation key).
@@ -599,13 +605,16 @@ It was registered in Unit B §5.3; Unit G implements the FULL handler. The
 10. **MCP/UI equivalence happy:** an MCP `rag.backlinks` and a UI `rag-backlinks`
     IPC with the same `nodeId` → the same result.
 11. **Traversal crosslink materialization happy:** a document with an outgoing
-    crosslink → the traversal emits a `CrosslinkWiring` entry; the renderer
-    materializes the `Link`/`Anchor` (a `source` anchor on the source root, a
-    `target` anchor on the target root).
+    crosslink → the traversal emits a `CrosslinkWiring` entry (the Unit G
+    deliverable). The renderer `Link`/`Anchor` DOM materialization (a `source`
+    anchor on the source root, a `target` anchor on the target root) is the Unit
+    H renderer-surface consumer — the greens verify the traversal output, not the
+    renderer DOM.
 12. **Traversal crosslink with a dangling target:** a crosslink whose target is
-    in a different (not-currently-rendered) document → the source anchor is
-    materialized; the target anchor is a dangling string reference
-    (`'rag-<targetRagNodeId>'`); no throw.
+    in a different (not-currently-rendered) document → the traversal emits the
+    wiring with the dangling target `'rag-<targetRagNodeId>'`; no throw. The
+    renderer materialization (source anchor + dangling string target anchor) is
+    the Unit H consumer.
 13. **`edit.set_edge` creating a crosslink:** `edit.set_edge` with
     `kind: 'crosslink'` → the edge is created (a structural op → journaled →
     re-traversal).
