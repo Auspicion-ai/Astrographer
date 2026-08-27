@@ -15,9 +15,12 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
 
 ### Later units (noted, not in this slice)
 
-- **Unit D — editable text.** Commit-on-blur write-back to the RAG store →
-  re-traversal (NOT a zone-targeted state-slice — FS-10 blocks it); dirty-edit
-  guard; caret/focus preservation keyed by RAG node id. **Pending UX (see
+- **Unit D — editable text (SPEC WRITTEN 2026-08-26).** Commit-on-blur
+  write-back to the RAG store → re-traversal (NOT a zone-targeted state-slice —
+  FS-10 blocks it); dirty-edit guard; caret/focus preservation keyed by RAG node
+  id; dangling back-reference → read-only; multi-parent duplicate coherence;
+  form-control editing UI (provident-rendered textarea); MCP/UI equivalence.
+  Spec: `docs/specs/unit-d-editing.md` (713 lines). **Pending UX (see
   `docs/pending.md`):** when editing a CROSS-DOCUMENT-SHARED node, notify the
   user it is shared across N documents and, on save, prompt whether to change
   all owners or preserve some on a clone of the original.
