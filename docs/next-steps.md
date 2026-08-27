@@ -64,3 +64,14 @@ Units A/B/C (persistence → document model + doc-flow → rendering spine).
   in `docs/specs/astrographer-review.md` (§1-§11). User approved the adjusted
   first-slice scope (Units A/B/C) with the subtree-ownership model and the
   markdown-export-only decision.
+- **Spec gate (2026-08-26).** The first-slice contracts are written and
+  verified in the compile-horizon-review format:
+  `docs/specs/unit-a-rag-store.md` (466 lines), `docs/specs/unit-b-document-model.md`
+  (313 lines), `docs/specs/unit-c-rendering-spine.md` (381 lines). Each is
+  exhaustive enough for a TestWriter to derive every state and fail-state from
+  §5.8/§5.9. **Unit C pinned a reconciliation key:** the back-reference map is
+  built by the main-process traversal running `translateLegacy`, but the
+  renderer re-translates and re-mints node ids — resolved by a stable authored
+  root id (`props.id = 'rag-<ragNodeId>'`) as the reconciliation key between
+  the main-process map and the renderer's translated tree. No engine gap opened
+  by this slice (ENG-GAP-1 remains the sole non-blocking handoff item).
