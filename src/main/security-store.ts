@@ -18,7 +18,31 @@ export interface SecurityStore {
   set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): SecuritySettings
 }
 
-const VALID_GROUPS = new Set(['read', 'dispatch', 'graph', 'code', 'module'])
+/** L3 (adversarial) — derive the live-gate patch from the STORE's FILTERED
+ *  result (the diff of the persisted enabled set), NOT from the raw IPC patch.
+ *  The store drops unknown/invalid groups; if the live gate consumed the raw
+ *  patch it could enable a group the persisted config drops → live/persisted
+ *  divergence on restart. main.ts uses this so the live gate stays exactly in
+ *  sync with what is persisted. */
+export function gatePatchFromStoreResult(
+  previousEnabled: string[],
+  updated: SecuritySettings,
+): { token?: string | null; groups: string[]; disable: string[] } {
+  const after = updated.enabled
+  const groups = after.filter((g) => !previousEnabled.includes(g))
+  const disable = previousEnabled.filter((g) => !after.includes(g))
+  // Only forward a token when the store actually set a non-empty one. A
+  // null/empty token would make SecurityGate.applyPatch reject the WHOLE patch
+  // (including the groups), breaking the live re-gate.
+  const token = typeof updated.token === 'string' && updated.token !== '' ? updated.token : undefined
+  return { token, groups, disable }
+}
+
+// L3 (adversarial) — the store's valid-group set MUST match security.ts's
+// ToolGroup union (read/dispatch/graph/code/module/rag/edit). Omitting `rag`/
+// `edit` here would make the manual-UI settings pane the only path to enable
+// groups, permanently disabling the rag.*/edit.* MCP tools in the running app.
+const VALID_GROUPS = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit'])
 
 function sanitize(input: unknown): SecuritySettings {
   const src = (input ?? {}) as Partial<SecuritySettings>

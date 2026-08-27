@@ -6,7 +6,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
 import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
-import { createSecurityStore, type SecurityStore } from './security-store.js'
+import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
@@ -90,6 +90,13 @@ async function main(): Promise<void> {
   })
   const persisted = securityStore.get()
   const gate = new SecurityGate({ token: persisted.token, enabled: persisted.enabled as ToolGroup[] })
+  // L3 (adversarial) — track the last-known persisted enabled set so the live
+  // gate is re-patched from the STORE's FILTERED result (not the raw IPC patch).
+  // The store drops unknown/invalid groups; if the live gate consumed the raw
+  // patch it could enable a group the persisted config drops → live/persisted
+  // divergence on restart. Deriving the add/remove diff from the store's result
+  // keeps the live gate exactly in sync with what is persisted.
+  let currentEnabled = persisted.enabled
   const backend = new RendererBackend()
   // U8 — the module store (operator-owned, persisted to userData). The MCP
   // server handles module.* tools against it; the pane reads/writes it over IPC.
@@ -144,8 +151,16 @@ async function main(): Promise<void> {
   ipcMain.handle(IPC_SECURITY_GET, () => securityStore.get())
   ipcMain.handle(IPC_SECURITY_SET, (_event, patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }) => {
     const updated = securityStore.set(patch)
-    // Re-gate the live MCP server + persist.
-    mcp.applyGatePatch({ token: patch.token, groups: patch.groups as ToolGroup[] | undefined, disable: patch.disable as ToolGroup[] | undefined })
+    // L3 — re-gate the live MCP server from the STORE's FILTERED result (the
+    // diff of the persisted enabled set), NOT the raw patch. This keeps the
+    // live gate and the persisted config in sync: a group the store drops
+    // (unknown/invalid) is never enabled live, and a group it keeps is enabled
+    // live exactly as persisted.
+    const gatePatch = gatePatchFromStoreResult(currentEnabled, updated)
+    // The store only keeps VALID groups (all of which are ToolGroup), so the
+    // cast is safe — the store's filtered result is the source of truth.
+    mcp.applyGatePatch({ token: gatePatch.token, groups: gatePatch.groups as ToolGroup[], disable: gatePatch.disable as ToolGroup[] })
+    currentEnabled = updated.enabled
     return updated
   })
 
