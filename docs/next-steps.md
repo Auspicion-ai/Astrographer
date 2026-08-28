@@ -9,26 +9,29 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A–P are implemented (persistence → document model + doc-flow →
+Units A–S are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
 crosslink/backlink → sidebar panes → template customization → MCP/security
 hardening → the form-control textarea editing UI → the `children` store-format
-foundation → batch atomicity → the rich-text edit ops).
+foundation → batch atomicity → the rich-text edit ops → the rich-text
+contenteditable editing slice: retrieval indexing of inline `children` text,
+traversal disambiguation of inline vs doc-children, paste-time sanitization).
 
 ## OPEN
 
-### Next slice — the rich-text contenteditable editing machinery
+### Next slice — the rich-text contenteditable editing machinery (COMPLETE)
 
 The rich-text contenteditable editing machinery (the `provident-editable@0.1.0`
 integration — see `docs/decisions.md` RICH-TEXT-EDITING-GATE, sequenced
-textarea-first) is the next slice. The plain-text textarea editing UI (Unit L)
-has landed, so the textarea-first prerequisite is MET; the store-format
-`children` additive + hash-source foundation (Unit M) has landed; the three
-rich-text edit ops `setProps`/`setSubtree`/`setType` + the edit-op census 6→9
-(Unit O) have landed; the `IPC_EDIT_BATCH` batch channel (Unit P) has landed.
-Scope: the contenteditable UI. Remaining RICH-TEXT-EDITING-GATE must-fix items:
-retrieval indexing of inline `children` text (Unit Q), traversal disambiguation
-of inline vs doc-children (Unit R), paste-time sanitization (part of Unit S).
+textarea-first) is now **COMPLETE (2026-08-28, Units Q/R/S)**. The plain-text
+textarea editing UI (Unit L) landed the textarea-first prerequisite; the
+store-format `children` additive + hash-source foundation (Unit M) landed; the
+three rich-text edit ops `setProps`/`setSubtree`/`setType` + the edit-op census
+6→9 (Unit O) landed; the `IPC_EDIT_BATCH` batch channel (Unit P) landed; and the
+three remaining RICH-TEXT-EDITING-GATE must-fix items have all landed: retrieval
+indexing of inline `children` text (Unit Q), traversal disambiguation of inline
+vs doc-children (Unit R), and paste-time sanitization (Unit S). **All
+RICH-TEXT-EDITING-GATE must-fix items are now MET** — the milestone is complete.
 **Batch atomicity MET 2026-08-28 (Unit N)** — the `applyBatch` transaction
 primitive (a real transaction, not `store.enqueue`) has landed (see the Unit N
 DONE row). **Census 6→9 MET 2026-08-28 (Unit O)** — the three rich-text ops
@@ -36,13 +39,112 @@ DONE row). **Census 6→9 MET 2026-08-28 (Unit O)** — the three rich-text ops
 **IPC_EDIT_BATCH MET 2026-08-28 (Unit P)** — the `IPC_EDIT_BATCH` channel +
 the `handleEditBatch` shared handler + the `bridge.edit.batch` bridge + the
 `deriveBatchBroadcast` helper have landed (see the Unit P DONE row).
+**Retrieval indexing of inline `children` text MET 2026-08-28 (Unit Q)** — the
+retrieval module indexes + renders the inline `children` text via the new
+`nodeText(node)` helper (see the Unit Q DONE row). **Traversal disambiguation
+of inline vs doc-children MET 2026-08-28 (Unit R)** — the traversal renders the
+inline `children` as child elements of the subtree root, disambiguated from
+doc-children by the `rag-` id prefix (see the Unit R DONE row). **Paste-time
+sanitization MET 2026-08-28 (Unit S)** — the pure `sanitizePastedHtml` module
+normalizes pasted HTML into the `RagNodeChild[]` shape (see the Unit S DONE
+row).
 
 ### Later units (noted, not in this slice)
 
-_(none — Units A–P are implemented.)_
+_(none — Units A–S are implemented.)_
 
 ## DONE
 
+- **Unit S — paste-time sanitization (2026-08-28).** The RICH-TEXT-EDITING-GATE
+  must-fix "paste-time sanitization". A new PURE, node-testable module
+  `src/main/paste-sanitize.ts` exports `sanitizePastedHtml(rawHtml: string):
+  SanitizePasteResult` — a deterministic, TOTAL (never throws for a string input)
+  sanitizer that removes dangerous content and normalizes the surviving content
+  into the `RagNodeChild[]` shape. The discriminated return
+  `{ ok: true; html; content; children } | { ok: false; error }`; the ONLY
+  fail-state is a non-string input → `{ ok: false, error: 'sanitizePastedHtml:
+  input must be a string' }`. Removes 79 disallowed elements + the `fe*`
+  wildcard + `a`-in-SVG-context; strips `on*`/dangerous-key attributes;
+  validates URLs (http(s), relative, raster-only `data:image/*` for `img`);
+  demotes unsafe/missing-`href` `a` to text, drops unsafe/missing-`src` `img`;
+  folds `span` into the parent's content; hoists nested inline elements to
+  siblings. TestWriter red → Implementer green in
+  `tests/unit-s-paste-sanitization.test.ts` (RED marker: `src/main/paste-sanitize.ts`
+  did not exist → **whole suite red → 46 green**; the 46 tests = the §5.6 32
+  happy-path states + the §5.7 8 fail-states + the 1 module-existence RED + the
+  5 adversarial regressions). Adversarial pass (RCA-3, two focused passes) in
+  the spec §3a — **all HOST (none package)**: URL-F1 (CRITICAL — leading
+  C0-control/space scheme bypass → XSS in the `html` output; fixed:
+  `normalizeUrl` strips leading C0-control + space before the scheme test),
+  URL-F2 (MEDIUM — the `data:image/*` carve-out admitted script-capable
+  subtypes; fixed: raster-only), URL-F3 (MEDIUM — HTML character-reference
+  smuggling survived in `props.href`; fixed: `decodeHtmlRefs` decodes before
+  validation), TOK-F1 (MEDIUM — recursive normalization overflowed the stack on
+  deeply-nested input, violating totality; fixed: iterative post-order
+  traversal), TOK-F2 (LOW — O(n·m) re-lowercasing; fixed: lowercase once up
+  front), TOK-F4 (LOW — `noembed`/`noframes` not in `DISALLOWED`; fixed).
+  Blind-greens in `docs/specs/unit-s-paste-sanitization-greens.md` (46
+  scenarios — 46 pass, 0 fail, 0 skipped); proofreader pass (test-count 40→46,
+  raster-only carve-out, disallowed-element census 77→79); documentation review
+  in `archive/reviews/2026-08-28-unit-s-doc-review.md` (CLEAN — no drift); trio
+  green. Decisions landed: PASTE-SANITIZATION (see `docs/decisions.md`).
+- **Unit R — traversal disambiguation of inline vs doc-children (2026-08-28).**
+  The RICH-TEXT-EDITING-GATE must-fix "traversal disambiguation of inline vs
+  doc-children". The traversal (`src/main/traversal.ts`) now renders the node's
+  inline `children` (the Unit M `RagNodeChild[]` field) as child elements of the
+  subtree root, disambiguated from doc-children by the `rag-` id prefix.
+  `buildSubtree` renders each inline child as a same-type `LegacyNodeData`
+  element (strong/em/a/img) with `content` + merged `props`, authored id
+  `inline-<ragId>-<index>` (NOT `rag-`-prefixed, distinct from the textarea's
+  `textarea-<ragId>`), ordered [inline children, textarea overlay, doc-children].
+  Inline children get NO `rag-` id, are NOT in `materialized`, get NO backRefs
+  entry, get NO lineMap range; doc-children ARE separate RAG subtree roots.
+  `collectSubtreeIds`/`assignSubtreeRanges`/`rebuildBackRefs` are unchanged (the
+  existing `rag-`-prefix logic handles the inline children). TestWriter red →
+  Implementer green in `tests/unit-r-traversal-inline-children.test.ts` (RED
+  marker: the inline-children rendering in `buildSubtree` did not exist →
+  **15 red → 27 green**; the 27 tests = the §5.6 15 happy-path states + the §5.7
+  8 fail-states + the 4 adversarial regressions F1/F2/F3/F4/F6). Adversarial
+  pass (RCA-3) in the spec §3a — **all HOST (none package)**: F1/F2 (LOW, known
+  behavior — multi-parent duplicate + section+doc-child double-materialization
+  render duplicate `inline-<ragId>-<index>` ids across the envelope, mirroring
+  the existing `rag-<id>` collision; documented + regression-tested), F3/F4/F6
+  (LOW, test gaps — added regression tests for many inline children, the A5
+  child-props precedence, and the fallback path with both inline + doc-children),
+  F5 (INFORMATIONAL, deferred to Unit S — inline a/img props rendered
+  unsanitized). Blind-greens in
+  `docs/specs/unit-r-traversal-inline-children-greens.md` (27 scenarios — 27
+  pass, 0 fail, 0 skipped); proofreader pass (test-count 23→27, §3a F1/F2
+  reworded); documentation review in
+  `archive/reviews/2026-08-28-unit-r-doc-review.md` (CLEAN — no drift); trio
+  green. Decisions landed: INLINE-CHILDREN-AUTHORED-ID (see `docs/decisions.md`).
+- **Unit Q — retrieval indexing of inline `children` text (2026-08-28).** The
+  RICH-TEXT-EDITING-GATE must-fix "retrieval indexing of inline `children`
+  text". The retrieval module (`src/main/retrieval.ts`) now indexes and renders
+  the inline `children` text that Unit M landed on the data model. A new
+  exported `nodeText(node)` helper returns a node's FULL searchable text
+  (content + every inline child's content, space-joined after dropping empty
+  strings); the three index builders
+  (`createLexicalIndex`/`updateLexicalIndex`/`addToLexicalIndex`) tokenize
+  `nodeText(node)` instead of `node.content`; the `renderNode`/`renderInlineText`
+  renderer renders content + inline children (strong → `**…**`, em → `*…*`,
+  a → `[…](href)`, img → `![alt](src)`). `place`/`retrieve`/`createRetrieval`
+  are unchanged in shape (they route through the index). TestWriter red →
+  Implementer green in `tests/unit-q-retrieval-children-indexing.test.ts` (RED
+  marker: the `nodeText` export + the amended index builders + the renderer did
+  not exist → **19 red → 25 green**; the 25 tests = the §5.6 20 happy-path
+  states + the §5.7 5 fail-states + the 2 adversarial regressions F1/F2).
+  Adversarial pass (RCA-3) in the spec §3a — **2 host findings F1/F2, all HOST
+  (none package)**: F1 (LOW — `renderInlineText` did not drop empty-content
+  children, rendering `****`/`[]()` markers; fixed: skips empty-content
+  children), F2 (LOW — a non-string `href`/`src` rendered garbage; fixed:
+  coerced to string). Blind-greens in
+  `docs/specs/unit-q-retrieval-children-indexing-greens.md` (25 scenarios — 25
+  pass, 0 fail, 0 skipped); proofreader pass (test-count 23→25, renderer code
+  block, cross-ref); documentation review in
+  `archive/reviews/2026-08-28-unit-q-doc-review.md` (CLEAN — no drift); trio
+  green (1478 pass / 30 skip, typecheck clean, build clean). Decisions landed:
+  NODETEXT-SPACE-JOIN, RENDER-DIRECT-CONCAT (see `docs/decisions.md`).
 - **Unit P — the `IPC_EDIT_BATCH` IPC channel (a batch of edits to the RAG
   store) (2026-08-28).** The RICH-TEXT-EDITING-GATE batch channel — the
   renderer→main IPC channel that carries a batch of `BatchOp` values to the

@@ -48,6 +48,16 @@ function tokenizeWithStopwords(text: string, stopwords: ReadonlySet<string>): st
     .filter((t) => t !== '' && !stopwords.has(t))
 }
 
+/** Unit Q — return a node's FULL searchable text: content + the content of
+ *  every inline child (in order), space-joined after dropping empty strings.
+ *  Pure + deterministic. Reads the Unit M `children?: RagNodeChild[]` field. */
+export function nodeText(node: RagNode): string {
+  if (node === null || node === undefined) throw new Error('nodeText: node required')
+  return [node.content, ...(node.children ?? []).map((c) => c.content)]
+    .filter((s) => s !== '')
+    .join(' ')
+}
+
 /** The lexical index — the maintained term/document statistics over the RAG
  *  node content. */
 export interface LexicalIndex {
@@ -72,7 +82,7 @@ export function createLexicalIndex(nodes: RagNode[]): LexicalIndex {
   let totalTokens = 0
   for (const node of nodes) {
     const tf = new Map<string, number>()
-    for (const t of tokenize(node.content)) tf.set(t, (tf.get(t) ?? 0) + 1)
+    for (const t of tokenize(nodeText(node))) tf.set(t, (tf.get(t) ?? 0) + 1)
     termFrequencies.set(node.id, tf)
     nodeIds.push(node.id)
     for (const [t, c] of tf) {
@@ -112,7 +122,7 @@ export function updateLexicalIndex(index: LexicalIndex, node: RagNode): void {
   }
   const oldTF = index.termFrequencies.get(node.id) ?? new Map<string, number>()
   const newTF = new Map<string, number>()
-  for (const t of tokenize(node.content)) newTF.set(t, (newTF.get(t) ?? 0) + 1)
+  for (const t of tokenize(nodeText(node))) newTF.set(t, (newTF.get(t) ?? 0) + 1)
   // decrement DF for terms removed from this node
   for (const t of oldTF.keys()) {
     if (!newTF.has(t)) {
@@ -142,7 +152,7 @@ export function addToLexicalIndex(index: LexicalIndex, node: RagNode): void {
     return
   }
   const tf = new Map<string, number>()
-  for (const t of tokenize(node.content)) tf.set(t, (tf.get(t) ?? 0) + 1)
+  for (const t of tokenize(nodeText(node))) tf.set(t, (tf.get(t) ?? 0) + 1)
   index.termFrequencies.set(node.id, tf)
   index.nodeIds.push(node.id)
   for (const t of tf.keys()) index.documentFrequencies.set(t, (index.documentFrequencies.get(t) ?? 0) + 1)
@@ -350,19 +360,41 @@ export interface AssemblyResult {
   traversal: { visited: string[]; depth: number; nodeCount: number }
 }
 
+/** Unit Q — render a node's full inline markdown: content + each inline child's
+ *  markdown, concatenated DIRECTLY (no auto-inserted separator). A node WITHOUT
+ *  children returns content unchanged. Pure + deterministic. */
+function renderInlineText(n: RagNode): string {
+  let text = n.content
+  for (const c of n.children ?? []) {
+    // F1 — skip empty-content children (consistent with nodeText's empty-string
+    // filter): a `strong` child with content '' must not render `****`, an `em`
+    // `**`, an `a` `[]()`, an `img` `![]()`.
+    if (c.content === '') continue
+    switch (c.type) {
+      case 'strong': text += `**${c.content}**`; break
+      case 'em':     text += `*${c.content}*`;   break
+      // F2 — coerce href/src to string: a non-string value (e.g. `{}`) must not
+      // coerce to garbage like `[object Object]`; it renders the empty-URL form.
+      case 'a':      text += `[${c.content}](${typeof c.props?.href === 'string' ? c.props.href : ''})`; break
+      case 'img':    text += `![${c.content}](${typeof c.props?.src === 'string' ? c.props.src : ''})`; break
+    }
+  }
+  return text
+}
+
 function renderNode(n: RagNode): string {
   switch (n.type) {
-    case 'h1': return `# ${n.content}`
-    case 'h2': return `## ${n.content}`
-    case 'h3': return `### ${n.content}`
-    case 'h4': return `#### ${n.content}`
-    case 'h5': return `##### ${n.content}`
-    case 'h6': return `###### ${n.content}`
-    case 'li': return `- ${n.content}`
-    case 'blockquote': return `> ${n.content}`
-    case 'pre': return `\`\`\`\n${n.content}\n\`\`\``
-    case 'code': return `\`${n.content}\``
-    default: return n.content
+    case 'h1': return `# ${renderInlineText(n)}`
+    case 'h2': return `## ${renderInlineText(n)}`
+    case 'h3': return `### ${renderInlineText(n)}`
+    case 'h4': return `#### ${renderInlineText(n)}`
+    case 'h5': return `##### ${renderInlineText(n)}`
+    case 'h6': return `###### ${renderInlineText(n)}`
+    case 'li': return `- ${renderInlineText(n)}`
+    case 'blockquote': return `> ${renderInlineText(n)}`
+    case 'pre': return `\`\`\`\n${renderInlineText(n)}\n\`\`\``
+    case 'code': return `\`${renderInlineText(n)}\``
+    default: return renderInlineText(n)
   }
 }
 

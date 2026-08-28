@@ -313,6 +313,25 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         content: node.content,
         placement: { targetPlacement: [zoneName] },
         children: [
+          // Unit R — the node's inline children (RagNodeChild[]) rendered as
+          // child elements of the subtree root, INLINE within the node's own
+          // content (docs/specs/unit-r-traversal-inline-children.md §5.1). Each
+          // maps to a LegacyNodeData element of the SAME type (strong/em/a/img)
+          // with `content` + the child's `props` merged. Authored id:
+          // `inline-<ragId>-<index>` (0-based) — NOT `rag-`-prefixed (that
+          // prefix marks a doc-child subtree root) and NOT colliding with the
+          // textarea's `textarea-<ragId>` id. The authored `id` and
+          // `data-rag-node-id` take precedence over the child's own props (the
+          // same merge discipline as the subtree root's props — Unit C finding 7).
+          ...(node.children ?? []).map((child, index) => ({
+            type: child.type,
+            props: {
+              ...(child.props ?? {}),
+              id: `inline-${ragId}-${index}`,
+              'data-rag-node-id': ragId,
+            },
+            content: child.content,
+          })),
           // Unit L — the textarea child bound to the RAG node's content. Its
           // OWN authored id is `textarea-<ragId>` (NOT `rag-`-prefixed —
           // `collectSubtreeIds` treats a `rag-`-prefixed child as a doc-child
