@@ -61,6 +61,27 @@ PROCEED-WITH-AMENDMENTS gate verdict + the user's ADJUSTED SCOPE) is now
 have landed, along with the additive `RagNodeType` 18→23 change
 (`table`/`thead`/`tr`/`td`/`th`). See the Unit T DONE row.
 
+### Live-app verification + two host fixes (2026-08-28)
+
+Live verification of Unit T through the foundation HTML reading tools
+(`provident.get_rendered_html`/`get_markdown`) surfaced **two PRE-EXISTING host
+bugs (not Unit T), both fixed + regression-tested** (see `docs/defects.md`
+HOST-UI1/HOST-UI2):
+- **HOST-UI1** — the app shell was unreadable in dark mode (white-on-white).
+- **HOST-UI2** — the `SidebarPanes` host NEVER booted in the real Electron
+  renderer (`contextIsolation` freezes the `contextBridge`-exposed
+  `window.provident`, so `installSidebarBridge` threw and aborted boot before
+  subscribing to `rag-store-changed`; the test dom-shim didn't freeze, so tests
+  missed it). Fixed by owning the `sidebar` bridge in the preload +
+  `installSidebar(methods)`.
+
+After the fixes, `edit.import_markdown` → RAG store → `rag-store-changed`
+broadcast → renderer `reDerive` → `buildTraversal` → materialize works end to
+end: the imported doc (headings, inline `<strong>`/`<em>`/`<a>`, list, and the
+**table** with `th` cells) renders through `get_rendered_html`, the doc appears
+in the doc-nav pane, and `get_markdown` carries the same content. Trio green
+(1523 pass / 30 skip).
+
 ### Later units (noted, not in this slice)
 
 _(none — Units A–T are implemented.)_

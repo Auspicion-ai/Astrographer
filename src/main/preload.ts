@@ -93,6 +93,55 @@ export interface ProvidentBridge {
     get(): Promise<OperatorSettings>
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings>
   }
+  /** Unit K M2 — the `window.provident.sidebar` bridge the compiled handler
+   *  bodies call (`var s = window && window.provident && window.provident.sidebar`).
+   *  The preload OWNS the `sidebar` object (contextBridge FREEZES everything it
+   *  exposes, so the renderer CANNOT attach `sidebar` to `window.provident` at
+   *  runtime — a renderer-side attach throws in the real Electron renderer).
+   *  `installSidebar(methods)` lets the renderer register its host methods; the
+   *  exposed `sidebar.*` methods DELEGATE to the installed holder. */
+  sidebar: {
+    selectDocument(id: string): void
+    submitQuery(value: string): void
+    templateAdd(zone: string): void
+    templateRemove(zone: string): void
+    templateReset(): void
+    operatorSet(patch: OperatorSettingsPatch): void
+    textareaInput(ragId: string): void
+    textareaBlur(ragId: string, value: string): void
+  }
+  installSidebar(methods: {
+    selectDocument(id: string): void
+    submitQuery(value: string): void
+    templateAdd(zone: string): void
+    templateRemove(zone: string): void
+    templateReset(): void
+    operatorSet(patch: OperatorSettingsPatch): void
+    textareaInput(ragId: string): void
+    textareaBlur(ragId: string, value: string): void
+  }): void
+}
+
+// The renderer-installed sidebar host methods (Unit K M2 — set via
+// `window.provident.installSidebar`). No-ops until the host boots and registers.
+let sidebarHolder: {
+  selectDocument(id: string): void
+  submitQuery(value: string): void
+  templateAdd(zone: string): void
+  templateRemove(zone: string): void
+  templateReset(): void
+  operatorSet(patch: OperatorSettingsPatch): void
+  textareaInput(ragId: string): void
+  textareaBlur(ragId: string, value: string): void
+} = {
+  selectDocument: () => {},
+  submitQuery: () => {},
+  templateAdd: () => {},
+  templateRemove: () => {},
+  templateReset: () => {},
+  operatorSet: () => {},
+  textareaInput: () => {},
+  textareaBlur: () => {},
 }
 
 const bridge: ProvidentBridge = {
@@ -227,6 +276,24 @@ const bridge: ProvidentBridge = {
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings> {
       return ipcRenderer.invoke(IPC_OPERATOR_SETTINGS_SET, patch)
     },
+  },
+  // Unit K M2 — the sidebar bridge the compiled handler bodies call. The preload
+  // OWNS this object (contextBridge freezes exposed values, so the renderer must
+  // NOT attach `sidebar` to `window.provident` — see installSidebarBridge).
+  // `installSidebar(methods)` registers the renderer host's methods; each exposed
+  // `sidebar.<method>` DELEGATES to the installed holder (a no-op until installed).
+  sidebar: {
+    selectDocument: (id) => sidebarHolder.selectDocument?.(id),
+    submitQuery: (value) => sidebarHolder.submitQuery?.(value),
+    templateAdd: (zone) => sidebarHolder.templateAdd?.(zone),
+    templateRemove: (zone) => sidebarHolder.templateRemove?.(zone),
+    templateReset: () => sidebarHolder.templateReset?.(),
+    operatorSet: (patch) => sidebarHolder.operatorSet?.(patch),
+    textareaInput: (ragId) => sidebarHolder.textareaInput?.(ragId),
+    textareaBlur: (ragId, value) => sidebarHolder.textareaBlur?.(ragId, value),
+  },
+  installSidebar(methods) {
+    sidebarHolder = methods
   },
 }
 

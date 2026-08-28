@@ -649,12 +649,18 @@ export class SidebarPanes {
 
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
    *  handler bodies call. Unit L §5.2 — extended with the textarea bridge
-   *  methods (`textareaInput`/`textareaBlur`) the textarea handlers reach. */
+   *  methods (`textareaInput`/`textareaBlur`) the textarea handlers reach.
+   *
+   *  contextIsolation fix — the REAL Electron renderer FREEZES the
+   *  contextBridge-exposed `window.provident`, so attaching `sidebar` to it here
+   *  throws ("Cannot add property sidebar, object is not extensible") and aborts
+   *  boot (the test dom-shim leaves `window.provident` a plain object, so tests
+   *  never hit it). The preload OWNS `sidebar` + exposes `installSidebar(methods)`;
+   *  when present, the host REGISTERS its methods through it (delegated back by
+   *  the preload). Fall back to a direct attach only for the non-contextBridge
+   *  test/dom-shim environment. */
   private installSidebarBridge(): void {
-    const w = globalThis as unknown as { window?: { provident?: Record<string, unknown> } }
-    if (!w.window) w.window = {} as never
-    if (!w.window.provident) w.window.provident = {}
-    w.window.provident.sidebar = {
+    const methods = {
       selectDocument: (id: string) => this.selectDocument(id),
       submitQuery: (value: string) => void this.submitQuery(value),
       templateAdd: (zone: string) => void this.templateAdd(zone),
@@ -664,6 +670,17 @@ export class SidebarPanes {
       textareaInput: (ragId: string) => this.textareaInput(ragId),
       textareaBlur: (ragId: string, value: string) => void this.textareaBlur(ragId, value),
     }
+    const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
+    const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar
+    if (typeof install === 'function') {
+      install(methods)
+      return
+    }
+    // Non-contextBridge fallback (test dom-shim): attach `sidebar` directly.
+    const w = globalThis as unknown as { window?: { provident?: Record<string, unknown> } }
+    if (!w.window) w.window = {} as never
+    if (!w.window.provident) w.window.provident = {}
+    ;(w.window.provident as Record<string, unknown>).sidebar = methods
   }
 
   /** `pane-doc-nav-select` — set the current document + trigger a document-switch

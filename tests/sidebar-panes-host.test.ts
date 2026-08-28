@@ -587,6 +587,26 @@ describe('boot (§5.8.7)', () => {
       errSpy.mockRestore()
     }
   })
+  it('contextIsolation fix — a FROZEN (non-extensible) window.provident (the real contextBridge) does NOT abort boot; the sidebar bridge is registered via installSidebar, never a property add', async () => {
+    const h = makeHarness({ snapshot: validSnapshot() })
+    // contextBridge FREEZES the exposed window.provident; installing `sidebar`
+    // by property-add would throw "Cannot add property sidebar, object is not
+    // extensible" and abort boot. The preload owns `sidebar` + exposes
+    // `installSidebar(methods)`; the host MUST register through it.
+    let installed: Record<string, unknown> | null = null
+    const frozenProvident = Object.freeze({
+      installSidebar: (m: Record<string, unknown>) => {
+        installed = m
+      },
+    })
+    ;(globalThis as unknown as { window?: { provident?: unknown } }).window = { provident: frozenProvident }
+    await expect(h.host.boot(h.runtime)).resolves.toBeUndefined()
+    // boot completed (not aborted) AND the sidebar bridge was registered via
+    // installSidebar with the host's methods.
+    expect(installed).not.toBeNull()
+    expect(typeof (installed as Record<string, unknown>).selectDocument).toBe('function')
+    expect(typeof (installed as Record<string, unknown>).textareaBlur).toBe('function')
+  })
 })
 
 // ===========================================================================

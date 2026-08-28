@@ -28,6 +28,22 @@
     .group-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
     .group-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
     .error { color: #c0392b; font-size: 0.8rem; margin-top: 0.5rem; }
+    @media (prefers-color-scheme: dark) {
+      /* `:root { color-scheme: light dark }` makes the UA use dark-scheme
+         default TEXT (white), so every hard-coded light background/text must
+         have a dark equivalent or the shell is white-on-white and unreadable. */
+      body { background: #1e2226; color: #e8eaed; }
+      header p { color: #b0b7bf; }
+      .card { background: #262a2e; border-color: #3a4046; }
+      .echo-out { border-color: #4a525a; }
+      #status { color: #b0b7bf; }
+      #panes .hint { color: #b0b7bf; }
+      #panes #security-status { color: #c9cfd5; }
+      #panes #security-token label { color: #c9cfd5; }
+      #panes #group-toggles { border-color: #3a4046; }
+      input, textarea { background: #1a1d21; color: #e8eaed; border-color: #3a4046; }
+      .error { color: #e07b72; }
+    }
   </style>
 </head>
 <body>
