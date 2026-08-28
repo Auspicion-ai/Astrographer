@@ -4,14 +4,15 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcReply, type NotifyPayload, type EditCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
-import { createJsonRagStore } from './rag-store.js'
+import { createJsonRagStore, type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
-import { handleEditCommit } from './edit-ops.js'
+import { handleEditCommit, handleEditBatch, deriveBatchBroadcast } from './edit-ops.js'
+import type { RagStoreChangedPayload } from './preload.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
 import { createVectorEmbedder, parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
@@ -57,6 +58,7 @@ function retrievalEmbedderFromArgs(argv: string[]): 'lexical' | 'vector' {
   if (env === 'vector' || env === 'lexical') return env
   return 'lexical'
 }
+
 
 /** Unit F §5.7 — the embedding provider config (`retrieval.embeddingProvider`),
  *  read from env. REQUIRED when `retrieval.embedder === 'vector'`. */
@@ -226,6 +228,43 @@ async function main(): Promise<void> {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
       backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
+    }
+    return result
+  })
+
+  // Unit P §5.1/§5.4 — the UI batch write-back. The renderer sends an
+  // `edit-batch` IPC carrying a batch of `BatchOp` values; main validates the
+  // payload, calls the SAME `applyBatch` transaction primitive as the MCP
+  // `edit.batch` tool (MCP/UI equivalence — §8.2 BINDING), then broadcasts the
+  // `rag-store-changed` re-traversal trigger (§5.4) on success. A malformed
+  // payload or a failed batch is a domain result (never a throw) and broadcasts
+  // 0 times (A1/A2); a successful batch broadcasts EXACTLY ONCE (A4).
+  ipcMain.handle(IPC_EDIT_BATCH, async (_event, payload: EditBatchPayload) => {
+    // A1 — a malformed payload is a domain result, never a throw.
+    if (!payload || !Array.isArray(payload.ops)) {
+      return { ok: false, error: 'edit-batch: ops must be an array', failedIndex: 0 }
+    }
+    // Capture the pre-batch node snapshot for the broadcast derivation (A6).
+    const preBatchNodes = new Map<string, RagNode>()
+    for (const op of payload.ops) {
+      if (op && op.op === 'putNode' && op.node && typeof op.node.id === 'string') {
+        const n = ragStore.getNode(op.node.id)
+        if (n) preBatchNodes.set(op.node.id, n)
+      }
+    }
+    const result = await handleEditBatch(ragStore, payload)
+    if (result.ok) {
+      // A4 — a successful batch broadcasts EXACTLY ONCE. Reconcile the
+      // maintained retrieval index incrementally, then broadcast the
+      // `rag-store-changed` re-traversal trigger. The reconcile is
+      // fire-and-forget, but a rejection (e.g. the vector embedder's provider
+      // is down) MUST be caught — never an unhandled rejection (the same
+      // pattern as the `IPC_EDIT_COMMIT` handler, Unit D §5.1.10).
+      const { kind, nodeIds, edgeIds } = deriveBatchBroadcast(payload.ops, result.results, preBatchNodes)
+      void retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds).catch((e) => {
+        console.error('[provident-main] retrieval index reconcile failed:', e)
+      })
+      backend.broadcast(IPC_RAG_STORE_CHANGED, { kind, nodeIds, edgeIds })
     }
     return result
   })

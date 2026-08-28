@@ -398,7 +398,9 @@ describe('buildTraversal — happy paths (§5.7)', () => {
       expect(ulRoot.type).toBe('ul')
       expect(ulRoot.props?.id).toBe('rag-ul')
       const childIds = (ulRoot.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual(['rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
+      // Unit L — the textarea editing overlay is the FIRST child of each RAG
+      // subtree root (render-only, `textarea-<ragId>`), then the doc-children.
+      expect(childIds).toEqual(['textarea-ul', 'rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
 
       // backRefs: one entry for the ul (its owned nodes, excluding the lis) +
       // one per li doc-child RAG object

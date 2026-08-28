@@ -196,7 +196,13 @@ function assignSubtreeRanges(
   const md = renderSubtreeMarkdown(subtree, templateRoot)
   const lineCount = Math.max(0, (md === '' ? 0 : md.split('\n').length) - templateLines)
   ranges.push({ ragNodeId: ragId, startLine: start, endLine: start + lineCount })
-  const children = subtree.children ?? []
+  const children = (subtree.children ?? []).filter((c) => {
+    // Only recurse into RAG subtree roots (a `rag-`-prefixed authored id). The
+    // textarea editing overlay (`textarea-<ragId>`) is a render-only child and
+    // must NOT mint a lineMap range (Conflict C resolution).
+    const cid = (c as LegacyNodeData).props?.id
+    return typeof cid === 'string' && cid.startsWith('rag-')
+  })
   // Each doc-child's own line count (rendered standalone, template subtracted).
   const childCounts = children.map((c) => {
     const cMd = renderSubtreeMarkdown(c as LegacyNodeData, templateRoot)
@@ -289,16 +295,47 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         for (const dc of docChildren) children.push(buildSubtree(dc.target))
       }
       // Merge the RAG node's own props (e.g. `href`/`src` for `a`/`img`) into
-      // the subtree root's props, with the stable authored `id` and the
-      // `data-doc-head` marker taking precedence (finding 7).
-      const props: Record<string, unknown> = { ...(node.props ?? {}), id: `rag-${ragId}` }
+      // the subtree root's props, with the stable authored `id`, the
+      // `data-rag-node-id` prop, and the `data-doc-head` marker taking
+      // precedence (finding 7). Unit L — the subtree root's `content` is KEPT
+      // (Conflict C resolution: the markdown/line→node map renders the root's
+      // text; the textarea is a RENDER-ONLY editing overlay present in the DOM
+      // render view, NOT in the markdown — docs/specs/unit-l-textarea-editing-ui.md §5.1).
+      const props: Record<string, unknown> = {
+        ...(node.props ?? {}),
+        id: `rag-${ragId}`,
+        'data-rag-node-id': ragId,
+      }
       if (isDocHead(ragId, documentId, edges)) props['data-doc-head'] = true
       return {
         type: node.type,
         props,
         content: node.content,
         placement: { targetPlacement: [zoneName] },
-        children,
+        children: [
+          // Unit L — the textarea child bound to the RAG node's content. Its
+          // OWN authored id is `textarea-<ragId>` (NOT `rag-`-prefixed —
+          // `collectSubtreeIds` treats a `rag-`-prefixed child as a doc-child
+          // subtree root and would exclude the textarea from the backRefs map).
+          // The `readOnly` prop is OMITTED (editable by default) — emitting
+          // `readOnly: false` would render as the `readonly` boolean attribute
+          // and make the textarea uneditable in a real DOM (adversarial H1).
+          // The HOST sets `readOnly: true` at render time when `!isEditable(ragId)`
+          // (§5.3).
+          {
+            type: 'textarea',
+            props: {
+              id: `textarea-${ragId}`,
+              'data-rag-node-id': ragId,
+              value: node.content,
+            },
+            handlers: [
+              { name: 'rag-textarea-input', event: 'input' },
+              { name: 'rag-textarea-blur', event: 'blur' },
+            ],
+          },
+          ...children,
+        ],
       }
     }
 

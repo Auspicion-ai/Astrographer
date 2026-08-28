@@ -102,6 +102,14 @@ export function createEditController(opts: EditControllerOptions): EditControlle
       // BEFORE delegating. The `edit-commit` IPC is NOT sent; the injected
       // commit is never called.
       if (!opts.backRefs.has(nodeId)) {
+        // H5 — a deleted node can never commit successfully, so clear its dirty
+        // flag (the edit is unrecoverable — the node is gone). Otherwise the
+        // dirty-edit guard would permanently block every future re-derive.
+        dirty.delete(nodeId)
+        if (queuedRebuild && dirty.size === 0) {
+          queuedRebuild = false
+          opts.onRebuild()
+        }
         return { ok: false, reason: 'deleted-node' }
       }
       const result = await opts.commit(nodeId, content)

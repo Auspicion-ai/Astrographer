@@ -764,12 +764,19 @@ describe('scope classification + census (§5.10)', () => {
       registry: reg,
       ctx: makeContext(),
     })
-    const text = JSON.stringify(result.envelope)
+    // The three app-graph panes are read-only — their content carries no
+    // edit/textarea/commit controls. (The RAG content subtrees DO carry the
+    // textarea editing overlay — Unit L §5.1 — so the read-only check is scoped
+    // to the pane payloads, identified by their `pane-` authored ids.)
+    const paneText = (result.envelope.content ?? [])
+      .filter((p) => (p.content?.[0]?.props?.id as string | undefined)?.startsWith('pane-'))
+      .map((p) => JSON.stringify(p))
+      .join('')
     // No editable RAG control — none of the three panes binds an edit/textarea.
-    expect(text).not.toContain('textarea')
-    expect(text).not.toContain('edit-commit')
-    expect(text).not.toContain('onInput')
-    expect(text).not.toContain('onBlur')
+    expect(paneText).not.toContain('textarea')
+    expect(paneText).not.toContain('edit-commit')
+    expect(paneText).not.toContain('onInput')
+    expect(paneText).not.toContain('onBlur')
   })
 })
 

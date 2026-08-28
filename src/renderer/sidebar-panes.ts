@@ -139,6 +139,30 @@ const TEMPLATE_RESET_BODY = `function (ctx) {
   if (!s) return;
   s.templateReset();
 }`
+// Unit L — the textarea handler defs (docs/specs/unit-l-textarea-editing-ui.md
+// §5.2). They reach the edit controller via `window.provident.sidebar` — NEVER
+// an MCP tool. The blur body reads the DOM textarea's CURRENT `.value` (M4 —
+// the engine's node `props.value` is the initial value; the typed value lives
+// in the DOM).
+const TEXTAREA_INPUT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (ragId) s.textareaInput(ragId);
+}`
+const TEXTAREA_BLUR_BODY = `function (ctx, value) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (!ragId) return;
+  // H6 — prefer a dispatch-provided value arg (MCP path) when present; fall
+  // back to the DOM textarea's current value (UI path, M4).
+  if (value === undefined) {
+    var el = document.getElementById('textarea-' + ragId);
+    value = el ? el.value : '';
+  }
+  s.textareaBlur(ragId, value);
+}`
 
 /** Collect a translated node's subtree node ids (root-first, tree order),
  *  STOPPING at each doc-child subtree root (a child carrying the stable
@@ -203,6 +227,11 @@ export class SidebarPanes {
   /** The re-derive in-flight coalescing (M11/S19). */
   private reDeriveInFlight = false
   private reDeriveQueued = false
+
+  /** Unit L — the set of RAG node ids with a saved caret (the caret restore
+   *  after a re-derive, §5.4). On `saveCaret` (in `textareaBlur`) the node id is
+   *  added; on restore/clear it is removed. */
+  private caretNodes = new Set<string>()
 
   /** The subscription cleanup handles. */
   private unsubRag: (() => void) | null = null
@@ -277,6 +306,11 @@ export class SidebarPanes {
     registerHandlerDef('template-zone-add', { name: 'template-zone-add', body: TEMPLATE_ZONE_ADD_BODY })
     registerHandlerDef('template-zone-remove', { name: 'template-zone-remove', body: TEMPLATE_ZONE_REMOVE_BODY })
     registerHandlerDef('template-reset', { name: 'template-reset', body: TEMPLATE_RESET_BODY })
+    // Unit L — the textarea handler defs (§5.2). Registered in the app-graph
+    // scope so `provident.dispatch` can drive them (MCP/UI equivalence — the
+    // textarea is MCP-visible, §5.6).
+    registerHandlerDef('rag-textarea-input', { name: 'rag-textarea-input', body: TEXTAREA_INPUT_BODY })
+    registerHandlerDef('rag-textarea-blur', { name: 'rag-textarea-blur', body: TEXTAREA_BLUR_BODY })
   }
 
   /** Build the base PaneContext from the current host-owned state + backRefs +
@@ -316,6 +350,14 @@ export class SidebarPanes {
       ctx: this.buildTemplateContext(),
       sidebarZone: this.sidebarZone,
     })
+    // Unit L §5.3 — the `readOnly` prop is HOST-SET at render time from
+    // `editController.isEditable(ragId)` (the traversal is pure and cannot see
+    // the edit controller). It runs BEFORE recomputeBackRefs so it reflects the
+    // PRE-EXISTING backRefs (a dangling back-reference is absent from the
+    // pre-existing map; the recomputed map would re-add every materialized node,
+    // making every textarea editable). The authoritative deleted-node check
+    // lives in `commit` (Unit D §5.4 M9).
+    this.setTextareaReadOnly(result.envelope)
     // M14 — recompute the backRefs from the ASSEMBLED envelope (the node ids the
     // loaded graph actually mints), AFTER assembly and BEFORE load.
     const assembledBackRefs = this.recomputeBackRefs(result.envelope)
@@ -448,6 +490,29 @@ export class SidebarPanes {
       if (this.runtime) {
         this.loadAppGraph(this.runtime, traversalEnvelope)
       }
+      // Unit L §5.4 — after a re-derive re-loads the pane-inclusive envelope,
+      // restore the saved caret for each node with a saved caret. A dangling
+      // back-reference clears the stale caret (restoreCaret returns undefined —
+      // Unit D §5.3 L5); the host does NOT re-apply a stale caret (A4).
+      for (const ragId of [...this.caretNodes]) {
+        const caret = this.editController.restoreCaret(ragId)
+        if (caret === undefined) {
+          this.caretNodes.delete(ragId)
+        } else {
+          // One-shot restore (adversarial H2): remove the node after a
+          // SUCCESSFUL restore too, so only the re-derive immediately following
+          // the edit re-focuses — not every subsequent re-derive.
+          this.caretNodes.delete(ragId)
+          const el = document.getElementById('textarea-' + ragId) as HTMLTextAreaElement | null
+          if (el) {
+            el.selectionStart = caret.offset
+            el.selectionEnd = caret.offset
+            // Guard the focus call — the dom-shim element (test env) has no
+            // `focus`; the real DOM does.
+            if (caret.focused && typeof el.focus === 'function') el.focus()
+          }
+        }
+      }
       await this.refresh()
     } finally {
       this.reDeriveInFlight = false
@@ -554,8 +619,37 @@ export class SidebarPanes {
     return backRefs
   }
 
+  /** Unit L §5.3 — walk the assembled envelope's content payloads and set the
+   *  textarea `readOnly` prop to the CORRECT value on every pass: `true` when
+   *  the `data-rag-node-id` is NOT editable (`!editController.isEditable(ragId)`
+   *  — a dangling back-reference), and OMITTED (editable by default) otherwise.
+   *  The traversal emits no `readOnly` prop (adversarial H1 — emitting
+   *  `readOnly: false` would render as the `readonly` boolean attribute and make
+   *  the textarea uneditable); the host sets it at render time. Setting the
+   *  correct value on every pass (not just flipping to `true`) keeps the
+   *  mutation idempotent across re-assembles (adversarial H4). */
+  private setTextareaReadOnly(envelope: LegacyInitialData): void {
+    const walk = (n: LegacyNodeData): void => {
+      if (n.type === 'textarea') {
+        const ragId = n.props?.['data-rag-node-id']
+        if (typeof ragId === 'string') {
+          const props = { ...(n.props ?? {}) }
+          if (this.editController.isEditable(ragId)) {
+            delete props.readOnly
+          } else {
+            props.readOnly = true
+          }
+          n.props = props
+        }
+      }
+      for (const c of n.children ?? []) walk(c as LegacyNodeData)
+    }
+    for (const p of envelope.content ?? []) walk(p.content[0])
+  }
+
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
-   *  handler bodies call. */
+   *  handler bodies call. Unit L §5.2 — extended with the textarea bridge
+   *  methods (`textareaInput`/`textareaBlur`) the textarea handlers reach. */
   private installSidebarBridge(): void {
     const w = globalThis as unknown as { window?: { provident?: Record<string, unknown> } }
     if (!w.window) w.window = {} as never
@@ -567,6 +661,8 @@ export class SidebarPanes {
       templateRemove: (zone: string) => void this.templateRemove(zone),
       templateReset: () => void this.templateReset(),
       operatorSet: (patch: OperatorSettingsPatch) => void this.operatorSet(patch),
+      textareaInput: (ragId: string) => this.textareaInput(ragId),
+      textareaBlur: (ragId: string, value: string) => void this.textareaBlur(ragId, value),
     }
   }
 
@@ -638,6 +734,37 @@ export class SidebarPanes {
       this.lastOperatorSettings = settings
       this.mountOperator()
     })
+  }
+
+  /** Unit L §5.2 — `rag-textarea-input`: mark the RAG node's control dirty. A
+   *  re-derive while dirty is QUEUED (the dirty-edit guard, Unit D §5.2). */
+  private textareaInput(ragId: string): void {
+    this.editController.markDirty(ragId)
+  }
+
+  /** Unit L §5.2/§5.4 — `rag-textarea-blur`: save the caret (M5 — the offset
+   *  captured from the DOM textarea's `selectionStart`), then commit if dirty.
+   *  The commit routes through the SAME `edit-commit` IPC → `setContent` op as
+   *  the MCP `edit.set_content` tool (MCP/UI equivalence, §5.6). A non-dirty
+   *  textarea is a no-op blur (no commit, no IPC). */
+  private textareaBlur(ragId: string, value: string): void {
+    const el = document.getElementById('textarea-' + ragId) as HTMLTextAreaElement | null
+    const offset = el && typeof el.selectionStart === 'number' ? el.selectionStart : 0
+    // H3 — a non-dirty (no-op) blur saves the caret OFFSET but not focus, so a
+    // re-derive restores the offset without stealing focus from the control the
+    // user is now interacting with. Only a real edit (dirty) re-focuses.
+    const dirty = this.editController.isDirty(ragId)
+    this.editController.saveCaret(ragId, { offset, focused: dirty })
+    this.caretNodes.add(ragId)
+    if (dirty) {
+      void this.editController.commit(ragId, value).then((result) => {
+        // commit clears the dirty flag on success (Unit D §5.2 L6), which may
+        // trigger a queued rebuild. On a `deleted-node` result the controller
+        // ALSO clears the dirty flag (H5 — the node is gone, the edit is
+        // unrecoverable, and the guard must not permanently block re-derives).
+        // On `store-error` the dirty flag stays (the edit is not lost).
+      })
+    }
   }
 
   /** Wire a real DOM interaction on an operator control to the operator graph's

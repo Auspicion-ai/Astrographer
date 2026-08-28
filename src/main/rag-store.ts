@@ -41,12 +41,33 @@ export type RagNodeType =
   | 'strong' | 'em' | 'a' | 'img'
   | 'div'
 
+/** The inline rich-text child type — the closed union of inline formatting
+ *  elements held on a RAG node's `children`. `span` is NOT here (a diff-matching
+ *  artifact folded into the parent's `content`). */
+export type RagNodeChildType = 'strong' | 'em' | 'a' | 'img'
+
+/** An inline rich-text child of a RAG node. Held on the owning node's
+ *  `children` field — NOT a separate RAG node, NOT part of `ownedNodeIds`. */
+export interface RagNodeChild {
+  type: RagNodeChildType
+  /** The inline text content of the child. */
+  content: string
+  /** Arbitrary props (e.g. `href`/`src`/`alt` for `a`/`img`). Optional. */
+  props?: Record<string, unknown>
+}
+
 /** A RAG node — one knowledge-graph object. OWNS a subtree of provident nodes
  *  (SUBTREE-OWNERSHIP). */
 export interface RagNode {
   id: string
   type: RagNodeType
   content: string
+  /** The inline rich-text children (strong/em/a/img) held ON this node — NOT
+   *  separate RAG nodes (one-chunk-per-subtree preserved). OPTIONAL and
+   *  ADDITIVE: a node without `children` is a plain-text node (the v1 default).
+   *  `span` is NOT a child type — it is a diff-matching artifact folded into
+   *  the parent's `content`. */
+  children?: RagNodeChild[]
   props?: Record<string, unknown>
   ownedNodeIds: string[]
   createdAt: string
@@ -88,19 +109,64 @@ export type StructuralJournalOp =
   | { op: 'edge-update'; edgeId: string; before: RagEdge; after: RagEdge }
   | { op: 'doc-flow-role-change'; edgeId: string; before: RagEdgeKind; after: RagEdgeKind }
 
-/** A project journal entry — content (invertible by restore) or structural
- *  (invertible by applying the inverse op). */
+/** A single edit operation a batch can carry. The four store primitives
+ *  (putNode/removeNode/putEdge/removeEdge) are applied by THIS unit. The three
+ *  rich-text ops (setProps/setSubtree/setType) are FORWARD-LOOKING (Unit O) —
+ *  the batch op shape carries them so the rich-text machinery can apply a
+ *  multi-op edit atomically, but their APPLICATION is Unit O; in THIS unit a
+ *  batch containing one is a documented fail-state (§5.8). */
+export type BatchOp =
+  | { op: 'putNode'; node: RagNode }
+  | { op: 'removeNode'; id: string }
+  | { op: 'putEdge'; edge: RagEdge }
+  | { op: 'removeEdge'; id: string }
+  // Forward-looking rich-text ops (Unit O) — pinned in the TYPE now so Unit O
+  // does not change the batch op shape; their application is Unit O.
+  | { op: 'setProps'; nodeId: string; props: Record<string, unknown> }
+  | { op: 'setSubtree'; nodeId: string; children: RagNodeChild[] }
+  | { op: 'setType'; nodeId: string; type: RagNodeType }
+
+/** The per-op result of a SUCCESSFUL batch — one entry per op, in order. The
+ *  forward-looking rich-text ops (setProps/setSubtree/setType) never produce a
+ *  result in THIS unit (a batch containing one is a fail-state). */
+export type BatchOpResult =
+  | { op: 'putNode'; node: RagNode }
+  | { op: 'removeNode'; removed: boolean }
+  | { op: 'putEdge'; edge: RagEdge }
+  | { op: 'removeEdge'; removed: boolean }
+
+/** The batch result — a DISCRIMINATED result. `applyBatch` NEVER throws for a
+ *  domain failure (invalid op, malformed payload, referential failure,
+ *  unsupported rich-text op, mid-batch failure); it returns `{ ok: false }`.
+ *  On success, `results` has one `BatchOpResult` per op, in order. On failure,
+ *  `failedIndex` is the index of the first failing op and `error` is the
+ *  failure message; the store is rolled back to the pre-batch state. */
+export type BatchResult =
+  | { ok: true; results: BatchOpResult[] }
+  | { ok: false; error: string; failedIndex: number }
+
+/** A project journal entry — content (invertible by restore), structural
+ *  (invertible by applying the inverse op), or batch (invertible by applying
+ *  the reverse-ordered inverse ops). */
 export type JournalEntry =
   | {
       kind: 'content'
       nodeId: string
-      before: { content: string; props?: Record<string, unknown> }
-      after: { content: string; props?: Record<string, unknown> }
+      before: { content: string; children?: RagNodeChild[]; props?: Record<string, unknown> }
+      after: { content: string; children?: RagNodeChild[]; props?: Record<string, unknown> }
       at: string
     }
   | {
       kind: 'structural'
       op: StructuralJournalOp
+      at: string
+    }
+  | {
+      kind: 'batch'
+      /** The forward ops (redo re-applies these, in order). */
+      ops: BatchOp[]
+      /** The inverse ops, in REVERSE order (undo applies these, in order). */
+      inverse: BatchOp[]
       at: string
     }
 
@@ -133,6 +199,13 @@ export interface RagStore {
   undoDepth(): number
   redoDepth(): number
   enqueue<T>(fn: () => T | Promise<T>): Promise<T>
+  /** Apply a batch of edit operations ATOMICALLY (all or nothing). Serialized
+   *  through the single-writer queue. A successful batch lands as a SINGLE
+   *  `batch` journal entry and persists ONCE. On ANY op failure the WHOLE batch
+   *  rolls back: the store's in-memory state is restored to the pre-batch
+   *  state, the journal is not polluted, and no persist happens. Returns a
+   *  discriminated result (NEVER throws for domain failures). Async. */
+  applyBatch(ops: BatchOp[]): Promise<BatchResult>
 }
 
 export interface RagStoreOptions {
@@ -155,6 +228,7 @@ interface RagStoreFile {
 }
 
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
+const RAG_NODE_CHILD_TYPES = new Set<string>(['strong', 'em', 'a', 'img'])
 const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
 const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
 const DEFAULT_MAX_JOURNAL_LENGTH = 1000
@@ -195,6 +269,18 @@ function deepCopy<T>(value: T): T {
 function hasDangerousKey(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasDangerousKey)
   if (value !== null && typeof value === 'object') {
+    // A `__proto__` set via an object literal changes the object's prototype
+    // away from Object.prototype (no own key is created), so it is invisible to
+    // Object.keys. Detect that as a dangerous key too. F3 — scope the check to
+    // actual `__proto__` pollution: only flag a PLAIN-object prototype that is
+    // not Object.prototype (its constructor is Object). A legitimate non-plain
+    // object (Date, class instance) has a non-plain prototype whose constructor
+    // is not Object, so it is NOT flagged.
+    const proto = Object.getPrototypeOf(value)
+    if (proto !== null && proto !== Object.prototype) {
+      const ctor = (proto as { constructor?: unknown }).constructor
+      if (ctor === Object || ctor === undefined) return true
+    }
     for (const key of Object.keys(value)) {
       if (DANGEROUS_KEYS.has(key)) return true
       if (hasDangerousKey((value as Record<string, unknown>)[key])) return true
@@ -216,7 +302,7 @@ function sameStringArray(a: string[] | undefined, b: string[] | undefined): bool
 function nodeSource(n: RagNode): string {
   return JSON.stringify({
     id: n.id, type: n.type, content: n.content,
-    props: n.props, ownedNodeIds: n.ownedNodeIds,
+    children: n.children, props: n.props, ownedNodeIds: n.ownedNodeIds,
     createdAt: n.createdAt, updatedAt: n.updatedAt,
   })
 }
@@ -248,6 +334,19 @@ function validateNodeShape(input: unknown): NodeShapeResult {
   if (typeof n.id !== 'string' || n.id === '') return { ok: false, field: 'id' }
   if (typeof n.type !== 'string' || !RAG_NODE_TYPES.has(n.type)) return { ok: false, field: 'type' }
   if (typeof n.content !== 'string') return { ok: false, field: 'content' }
+  if (n.children !== undefined) {
+    if (!Array.isArray(n.children)) return { ok: false, field: 'children' }
+    for (const c of n.children) {
+      if (c === null || typeof c !== 'object' || Array.isArray(c)) return { ok: false, field: 'children' }
+      // F4 — reject a dangerous key on the child ITSELF (not just in its props),
+      // so a `__proto__`-bearing child is rejected rather than silently stripped.
+      if (hasDangerousKey(c)) return { ok: false, field: 'children' }
+      if (typeof c.type !== 'string' || !RAG_NODE_CHILD_TYPES.has(c.type)) return { ok: false, field: 'children' }
+      if (typeof c.content !== 'string') return { ok: false, field: 'children' }
+      if (c.props !== undefined && (c.props === null || typeof c.props !== 'object' || Array.isArray(c.props))) return { ok: false, field: 'children' }
+      if (c.props !== undefined && hasDangerousKey(c.props)) return { ok: false, field: 'children' }
+    }
+  }
   if (n.props !== undefined && (n.props === null || typeof n.props !== 'object' || Array.isArray(n.props))) return { ok: false, field: 'props' }
   if (n.props !== undefined && hasDangerousKey(n.props)) return { ok: false, field: 'props' }
   if (!Array.isArray(n.ownedNodeIds) || !n.ownedNodeIds.every((x) => typeof x === 'string')) return { ok: false, field: 'ownedNodeIds' }
@@ -258,6 +357,7 @@ function validateNodeShape(input: unknown): NodeShapeResult {
     ok: true,
     node: {
       id: n.id, type: n.type as RagNodeType, content: n.content,
+      children: n.children !== undefined ? deepCopy(n.children) : undefined,
       props: n.props !== undefined ? deepCopy(n.props) : undefined,
       ownedNodeIds: [...new Set(n.ownedNodeIds)],
       createdAt: n.createdAt, updatedAt: n.updatedAt,
@@ -292,18 +392,45 @@ function validateEdgeShape(input: unknown): EdgeShapeResult {
 }
 
 // ---- journal-entry shape validation (boot) ---------------------------------
+// True for a valid RagNodeChild[] (or undefined). Mirrors the `children`
+// validation branch of validateNodeShape.
+function isValidChildren(v: unknown): boolean {
+  if (v === undefined) return true
+  if (!Array.isArray(v)) return false
+  for (const c of v) {
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) return false
+    const child = c as { type?: unknown; content?: unknown; props?: unknown }
+    if (typeof child.type !== 'string' || !RAG_NODE_CHILD_TYPES.has(child.type)) return false
+    if (typeof child.content !== 'string') return false
+    if (child.props !== undefined && (child.props === null || typeof child.props !== 'object' || Array.isArray(child.props))) return false
+    if (child.props !== undefined && hasDangerousKey(child.props)) return false
+  }
+  return true
+}
 function isContentSnapshot(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
-  const s = v as { content?: unknown; props?: unknown }
+  const s = v as { content?: unknown; children?: unknown; props?: unknown }
   if (typeof s.content !== 'string') return false
+  if (!isValidChildren(s.children)) return false
   if (s.props !== undefined && (s.props === null || typeof s.props !== 'object' || Array.isArray(s.props))) return false
+  // F1 — apply the prototype-pollution guard to the snapshot's `props` too, so
+  // a journal content entry with a dangerous-key `props` is skipped at boot
+  // (consistent with `validateNodeShape` at write).
+  if (s.props !== undefined && hasDangerousKey(s.props)) return false
   return true
 }
 function isRagNode(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
   const n = v as Partial<RagNode>
-  return typeof n.id === 'string' && typeof n.type === 'string' && typeof n.content === 'string' &&
-    Array.isArray(n.ownedNodeIds) && isIso8601(n.createdAt) && isIso8601(n.updatedAt)
+  // F2 — mirror `validateNodeShape`: type in RAG_NODE_TYPES, non-empty id,
+  // `props` object + dangerous-key guard, `ownedNodeIds` all non-empty strings.
+  return typeof n.id === 'string' && n.id !== '' &&
+    typeof n.type === 'string' && RAG_NODE_TYPES.has(n.type) &&
+    typeof n.content === 'string' &&
+    isValidChildren(n.children) &&
+    (n.props === undefined || (typeof n.props === 'object' && !Array.isArray(n.props) && !hasDangerousKey(n.props))) &&
+    Array.isArray(n.ownedNodeIds) && n.ownedNodeIds.every((x) => typeof x === 'string' && x !== '') &&
+    isIso8601(n.createdAt) && isIso8601(n.updatedAt)
 }
 function isRagEdge(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
@@ -343,6 +470,37 @@ function isValidStructuralOp(op: unknown): boolean {
     default: return false
   }
 }
+function isValidBatchOp(op: unknown): boolean {
+  if (op === null || typeof op !== 'object') return false
+  const o = op as { op?: unknown }
+  switch (o.op) {
+    case 'putNode': return validateNodeShape((op as { node?: unknown }).node).ok
+    case 'removeNode': {
+      const id = (op as { id?: unknown }).id
+      return typeof id === 'string' && id !== ''
+    }
+    case 'putEdge': return validateEdgeShape((op as { edge?: unknown }).edge).ok
+    case 'removeEdge': {
+      const id = (op as { id?: unknown }).id
+      return typeof id === 'string' && id !== ''
+    }
+    case 'setProps': {
+      const s = op as { nodeId?: unknown; props?: unknown }
+      return typeof s.nodeId === 'string' && s.nodeId !== '' &&
+        s.props !== null && typeof s.props === 'object' && !Array.isArray(s.props)
+    }
+    case 'setSubtree': {
+      const s = op as { nodeId?: unknown; children?: unknown }
+      return typeof s.nodeId === 'string' && s.nodeId !== '' && isValidChildren(s.children)
+    }
+    case 'setType': {
+      const s = op as { nodeId?: unknown; type?: unknown }
+      return typeof s.nodeId === 'string' && s.nodeId !== '' &&
+        typeof s.type === 'string' && RAG_NODE_TYPES.has(s.type)
+    }
+    default: return false
+  }
+}
 function isValidJournalEntry(input: unknown): input is JournalEntry {
   if (input === null || typeof input !== 'object') return false
   const e = input as Partial<JournalEntry>
@@ -353,6 +511,12 @@ function isValidJournalEntry(input: unknown): input is JournalEntry {
   if (e.kind === 'structural') {
     const s = e as { op?: unknown; at?: unknown }
     return isValidStructuralOp(s.op) && typeof s.at === 'string'
+  }
+  if (e.kind === 'batch') {
+    const b = e as { ops?: unknown; inverse?: unknown; at?: unknown }
+    return Array.isArray(b.ops) && b.ops.every(isValidBatchOp) &&
+      Array.isArray(b.inverse) && b.inverse.every(isValidBatchOp) &&
+      typeof b.at === 'string'
   }
   return false
 }
@@ -502,7 +666,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- public record copies (strip hash/quarantine, deep-copy mutable fields)
   function toPublicNode(n: StoredNode): RagNode {
-    return { id: n.id, type: n.type, content: n.content, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
+    return { id: n.id, type: n.type, content: n.content, children: n.children !== undefined ? deepCopy(n.children) : undefined, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
   }
   function toPublicEdge(e: StoredEdge): RagEdge {
     return { id: e.id, kind: e.kind, source: e.source, target: e.target, order: e.order, documentIds: e.documentIds !== undefined ? [...e.documentIds] : undefined, createdAt: e.createdAt, updatedAt: e.updatedAt }
@@ -510,7 +674,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- internal (non-journaled) mutations used by undo/redo ----------------
   function insertNode(node: RagNode): void {
-    const base = { ...node, props: node.props !== undefined ? deepCopy(node.props) : undefined, ownedNodeIds: [...node.ownedNodeIds] }
+    const base = { ...node, children: node.children !== undefined ? deepCopy(node.children) : undefined, props: node.props !== undefined ? deepCopy(node.props) : undefined, ownedNodeIds: [...node.ownedNodeIds] }
     const rec: StoredNode = { ...base, hash: nodeHash(base) }
     nodes.set(rec.id, rec)
   }
@@ -529,6 +693,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function setNodeFields(n: StoredNode, src: RagNode): void {
     n.type = src.type
     n.content = src.content
+    n.children = src.children !== undefined ? deepCopy(src.children) : undefined
     n.props = src.props !== undefined ? deepCopy(src.props) : undefined
     n.ownedNodeIds = [...src.ownedNodeIds]
     n.createdAt = src.createdAt
@@ -546,6 +711,47 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     e.hash = edgeHash(e)
   }
 
+  // Applies a single BatchOp via the NON-JOURNALING, NON-PERSISTING internal
+  // mutation paths (used by batch undo/redo). Returns false when the op cannot
+  // be applied (e.g. a putEdge whose source/target is missing — an out-of-band
+  // record removal) so undo/redo can surface the desync without advancing the
+  // cursor. A removeNode/removeEdge of a nonexistent id is a no-op (true).
+  function applyBatchOpInternal(op: BatchOp): boolean {
+    switch (op.op) {
+      case 'putNode': {
+        const shape = validateNodeShape(op.node)
+        if (!shape.ok) return false
+        insertNode(shape.node)
+        return true
+      }
+      case 'removeNode': {
+        const existing = nodes.get(op.id)
+        if (!existing) return true // no-op
+        removeNodeInternal(op.id)
+        return true
+      }
+      case 'putEdge': {
+        const shape = validateEdgeShape(op.edge)
+        if (!shape.ok) return false
+        const src = nodes.get(shape.edge.source)
+        const tgt = nodes.get(shape.edge.target)
+        if (!src || !tgt || src.quarantined || tgt.quarantined) return false
+        insertEdge(shape.edge)
+        return true
+      }
+      case 'removeEdge': {
+        const existing = edges.get(op.id)
+        if (!existing) return true // no-op
+        edges.delete(op.id)
+        return true
+      }
+      case 'setProps':
+      case 'setSubtree':
+      case 'setType':
+        return false // not supported in this unit
+    }
+  }
+
   // Returns false when the referenced record is missing (out-of-band removal) so
   // undo/redo can surface the desync instead of silently advancing the cursor.
   function applyInverse(entry: JournalEntry): boolean {
@@ -553,9 +759,16 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
       const n = nodes.get(entry.nodeId)
       if (!n) return false
       n.content = entry.before.content
+      n.children = entry.before.children !== undefined ? deepCopy(entry.before.children) : undefined
       n.props = entry.before.props !== undefined ? deepCopy(entry.before.props) : undefined
       n.updatedAt = new Date().toISOString()
       n.hash = nodeHash(n)
+      return true
+    }
+    if (entry.kind === 'batch') {
+      for (const op of entry.inverse) {
+        if (!applyBatchOpInternal(op)) return false
+      }
       return true
     }
     const op = entry.op
@@ -601,9 +814,16 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
       const n = nodes.get(entry.nodeId)
       if (!n) return false
       n.content = entry.after.content
+      n.children = entry.after.children !== undefined ? deepCopy(entry.after.children) : undefined
       n.props = entry.after.props !== undefined ? deepCopy(entry.after.props) : undefined
       n.updatedAt = new Date().toISOString()
       n.hash = nodeHash(n)
+      return true
+    }
+    if (entry.kind === 'batch') {
+      for (const op of entry.ops) {
+        if (!applyBatchOpInternal(op)) return false
+      }
       return true
     }
     const op = entry.op
@@ -670,8 +890,8 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
         // journal the full before/after node so undo restores type/ownedNodeIds
         pushJournal({ kind: 'structural', op: { op: 'node-update', nodeId: rec.id, before: toPublicNode(existing), after: toPublicNode(rec) }, at })
       } else {
-        const before = { content: existing.content, props: existing.props !== undefined ? deepCopy(existing.props) : undefined }
-        const after = { content: rec.content, props: rec.props !== undefined ? deepCopy(rec.props) : undefined }
+        const before = { content: existing.content, children: existing.children !== undefined ? deepCopy(existing.children) : undefined, props: existing.props !== undefined ? deepCopy(existing.props) : undefined }
+        const after = { content: rec.content, children: rec.children !== undefined ? deepCopy(rec.children) : undefined, props: rec.props !== undefined ? deepCopy(rec.props) : undefined }
         pushJournal({ kind: 'content', nodeId: rec.id, before, after, at })
       }
     } else {
@@ -775,6 +995,160 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     return enqueue(() => removeEdgeSync(id))
   }
 
+  // ---- batch (atomic transaction) -----------------------------------------
+  // Applies a single BatchOp against the in-memory store WITHOUT journaling or
+  // persisting (the batch defers journal + persist to a single unit at the end).
+  // Returns the per-op result and the inverse ops (in undo-application order)
+  // for the SUCCESS path's journal entry. On failure returns the error message.
+  type BatchOpOutcome =
+    | { ok: true; result: BatchOpResult; inverse: BatchOp[] }
+    | { ok: false; error: string }
+  function applyBatchOp(op: BatchOp, index: number): BatchOpOutcome {
+    const kind = (op as { op?: string }).op
+    switch (kind) {
+      case 'putNode': {
+        const o = op as Extract<BatchOp, { op: 'putNode' }>
+        const shape = validateNodeShape(o.node)
+        if (!shape.ok) return { ok: false, error: `rag applyBatch: ${shape.field} required/invalid at index ${index}` }
+        const existing = nodes.get(shape.node.id)
+        if (existing) {
+          // update → preserve createdAt, refresh updatedAt
+          const updatedAt = refreshTimestamp(existing.updatedAt)
+          const base = { ...shape.node, createdAt: existing.createdAt, updatedAt }
+          const rec: StoredNode = { ...base, hash: nodeHash(base) }
+          nodes.set(rec.id, rec)
+          return { ok: true, result: { op: 'putNode', node: toPublicNode(rec) }, inverse: [{ op: 'putNode', node: toPublicNode(existing) }] }
+        }
+        const rec: StoredNode = { ...shape.node, hash: nodeHash(shape.node) }
+        nodes.set(rec.id, rec)
+        return { ok: true, result: { op: 'putNode', node: toPublicNode(rec) }, inverse: [{ op: 'removeNode', id: rec.id }] }
+      }
+      case 'removeNode': {
+        const o = op as Extract<BatchOp, { op: 'removeNode' }>
+        const existing = nodes.get(o.id)
+        if (!existing) return { ok: true, result: { op: 'removeNode', removed: false }, inverse: [] }
+        // cascade: remove any edge whose source/target references the removed node
+        const cascaded: StoredEdge[] = []
+        for (const e of edges.values()) {
+          if (e.source === o.id || e.target === o.id) cascaded.push(e)
+        }
+        for (const e of cascaded) edges.delete(e.id)
+        nodes.delete(o.id)
+        // inverse restores the node AND its cascaded edges (node first, then
+        // edges in REVERSE order — F4, matching the spec's pinned order)
+        const inverse: BatchOp[] = [{ op: 'putNode', node: toPublicNode(existing) }]
+        for (let i = cascaded.length - 1; i >= 0; i--) inverse.push({ op: 'putEdge', edge: toPublicEdge(cascaded[i]) })
+        return { ok: true, result: { op: 'removeNode', removed: true }, inverse }
+      }
+      case 'putEdge': {
+        const o = op as Extract<BatchOp, { op: 'putEdge' }>
+        const shape = validateEdgeShape(o.edge)
+        if (!shape.ok) return { ok: false, error: `rag applyBatch: ${shape.field} required/invalid at index ${index}` }
+        const src = nodes.get(shape.edge.source)
+        const tgt = nodes.get(shape.edge.target)
+        if (!src || !tgt || src.quarantined || tgt.quarantined) {
+          return { ok: false, error: `rag applyBatch: source/target node not found or quarantined at index ${index}` }
+        }
+        const existing = edges.get(shape.edge.id)
+        if (existing) {
+          const updatedAt = refreshTimestamp(existing.updatedAt)
+          const base = { ...shape.edge, createdAt: existing.createdAt, updatedAt }
+          const rec: StoredEdge = { ...base, hash: edgeHash(base) }
+          edges.set(rec.id, rec)
+          return { ok: true, result: { op: 'putEdge', edge: toPublicEdge(rec) }, inverse: [{ op: 'putEdge', edge: toPublicEdge(existing) }] }
+        }
+        const rec: StoredEdge = { ...shape.edge, hash: edgeHash(shape.edge) }
+        edges.set(rec.id, rec)
+        return { ok: true, result: { op: 'putEdge', edge: toPublicEdge(rec) }, inverse: [{ op: 'removeEdge', id: rec.id }] }
+      }
+      case 'removeEdge': {
+        const o = op as Extract<BatchOp, { op: 'removeEdge' }>
+        const existing = edges.get(o.id)
+        if (!existing) return { ok: true, result: { op: 'removeEdge', removed: false }, inverse: [] }
+        edges.delete(o.id)
+        return { ok: true, result: { op: 'removeEdge', removed: true }, inverse: [{ op: 'putEdge', edge: toPublicEdge(existing) }] }
+      }
+      case 'setProps':
+      case 'setSubtree':
+      case 'setType':
+        return { ok: false, error: `rag applyBatch: op not supported: ${String(kind)} at index ${index}` }
+      default:
+        return { ok: false, error: `rag applyBatch: invalid op at index ${index}` }
+    }
+  }
+
+  function applyBatchSync(ops: BatchOp[]): BatchResult {
+    // F2 — reject a non-array `ops` argument (never throw for a domain failure).
+    if (!Array.isArray(ops)) return { ok: false, error: 'rag applyBatch: ops must be an array', failedIndex: 0 }
+    // F5 — an empty batch is a valid no-op; skip the snapshot (nothing to roll back).
+    if (ops.length === 0) return { ok: true, results: [] }
+
+    // Snapshot the pre-batch in-memory state (deep copy) so a mid-batch failure
+    // can restore it exactly — no partial mutations, no journal pollution.
+    const snapshotNodes = new Map<string, StoredNode>()
+    for (const [k, v] of nodes) snapshotNodes.set(k, deepCopy(v))
+    const snapshotEdges = new Map<string, StoredEdge>()
+    for (const [k, v] of edges) snapshotEdges.set(k, deepCopy(v))
+    const snapshotJournal = journal.map((e) => deepCopy(e))
+    const snapshotCursor = cursor
+
+    const results: BatchOpResult[] = []
+    const perOpInverse: BatchOp[][] = []
+
+    try {
+      for (let i = 0; i < ops.length; i++) {
+        const outcome = applyBatchOp(ops[i], i)
+        if (!outcome.ok) {
+          // rollback: restore the pre-batch state (nodes/edges/journal/cursor)
+          nodes.clear()
+          for (const [k, v] of snapshotNodes) nodes.set(k, v)
+          edges.clear()
+          for (const [k, v] of snapshotEdges) edges.set(k, v)
+          journal.length = 0
+          journal.push(...snapshotJournal)
+          cursor = snapshotCursor
+          return { ok: false, error: outcome.error, failedIndex: i }
+        }
+        results.push(outcome.result)
+        perOpInverse.push(outcome.inverse)
+      }
+    } catch (err) {
+      // F1 — an unexpected throw (e.g. a null/undefined op) must still roll back
+      // the WHOLE batch and return { ok: false }, never leak a partial mutation.
+      nodes.clear()
+      for (const [k, v] of snapshotNodes) nodes.set(k, v)
+      edges.clear()
+      for (const [k, v] of snapshotEdges) edges.set(k, v)
+      journal.length = 0
+      journal.push(...snapshotJournal)
+      cursor = snapshotCursor
+      return { ok: false, error: 'rag applyBatch: unexpected failure', failedIndex: -1 }
+    }
+
+    // success: land as a SINGLE `batch` journal entry + persist ONCE
+    // inverse array is in REVERSE order of the forward ops (undo undoes the
+    // last op first); each op's inverse keeps its undo-application order.
+    const inverse: BatchOp[] = []
+    for (let i = perOpInverse.length - 1; i >= 0; i--) inverse.push(...perOpInverse[i])
+    // F3 — persist the APPLIED records as the forward ops (not the raw caller
+    // ops), so redo() reproduces the exact applied record (createdAt preserved,
+    // updatedAt refreshed, ownedNodeIds deduped) rather than the caller's raw
+    // values. `removeNode`/`removeEdge` ids are unchanged, so the raw op is fine.
+    const forward: BatchOp[] = ops.map((op, i) => {
+      const r = results[i]
+      if (r.op === 'putNode') return { op: 'putNode', node: r.node }
+      if (r.op === 'putEdge') return { op: 'putEdge', edge: r.edge }
+      return op
+    })
+    pushJournal({ kind: 'batch', ops: deepCopy(forward), inverse: deepCopy(inverse), at: new Date().toISOString() })
+    persist()
+    return { ok: true, results }
+  }
+  async function applyBatch(ops: BatchOp[]): Promise<BatchResult> {
+    if (inQueue) return applyBatchSync(ops)
+    return enqueue(() => applyBatchSync(ops))
+  }
+
   // ---- status -------------------------------------------------------------
   function status(): RagStoreStatus {
     const loadedNodes: string[] = []
@@ -829,5 +1203,6 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     journal: journalSnapshot,
     undo, redo, undoDepth, redoDepth,
     enqueue,
+    applyBatch,
   }
 }

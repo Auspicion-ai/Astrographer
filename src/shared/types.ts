@@ -8,6 +8,7 @@
 // server and forwards tool calls over IPC (renderer DOM + IPC bridge).
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { ContentWindowTemplate, TemplateSource } from '../main/template-shape.js'
+import type { BatchOp } from '../main/rag-store.js'
 
 /** A render target in the producing graph. Two vocabularies per the Phase B
  *  synthetic-event contract (docs/specs/ssr-synthetic-event.md §2.2):
@@ -368,6 +369,18 @@ export const IPC_EDIT_COMMIT = 'provident:edit-commit'
 export interface EditCommitPayload {
   nodeId: string
   content: string
+}
+
+/** The renderer→main `edit-batch` IPC (the batch channel for the rich-text
+ *  editing machinery — RICH-TEXT-EDITING-GATE). Payload: `{ ops: BatchOp[] }`.
+ *  Main calls `applyBatch` on the store (the SAME transaction primitive as the
+ *  MCP `edit.batch` tool — MCP/UI equivalence, §8.2 BINDING), then broadcasts
+ *  `rag-store-changed` on success. */
+export const IPC_EDIT_BATCH = 'provident:edit-batch'
+export interface EditBatchPayload {
+  /** The batch of edit operations to apply atomically (a `BatchOp[]` — Unit N
+   *  §5.1). Applied via `applyBatch` — all or nothing. */
+  ops: BatchOp[]
 }
 
 // ---- Unit E retrieval IPC (docs/specs/unit-e-rag-index.md §5.7/§8.2) ----

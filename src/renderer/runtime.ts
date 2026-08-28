@@ -57,6 +57,7 @@ import type {
   JournalResult,
 } from '../shared/types.js'
 import type { TranslatedWarning } from 'provident-ssr/core/translate.js'
+import { handlerDef, compileHandlerBody } from 'provident-ssr/core/registry.js'
 import type { CapabilityRouter } from './extensions.js'
 
 export interface RuntimeOptions {
@@ -300,6 +301,27 @@ export class Runtime {
    *  existing content, sets/clears the translate-scoped userData (R8), then
    *  translate → register → compile → recordResolved → render. Captures the
    *  envelope (the code-CRUD source of truth) + the translate warnings (R10). */
+  /** Resolve name-referenced handler bodies (registered via `registerHandlerDef`
+   *  and referenced by name in a node's `handlers` array) onto the node, so the
+   *  engine's `dispatchEvent` can fire them. The engine's `translateLegacy`
+   *  only compiles INLINE bodies; a name-referenced handler keeps `body`
+   *  undefined and is skipped by dispatch (Conflict B resolution — this also
+   *  fixes the pre-existing template-handler dispatch gap). The def bodies are
+   *  authored as `function (ctx)` (context-direct), so they are attached WITHOUT
+   *  the legacy `wrapLegacyHandler` (event, context) adaptation. */
+  private resolveNameReferencedHandlerBodies(nodes: Array<{ handlers?: unknown }>): void {
+    for (const n of nodes) {
+      const handlers = n.handlers as Array<{ name?: string; body?: unknown }> | undefined
+      if (!handlers) continue
+      for (const h of handlers) {
+        if (h.body !== undefined || !h.name) continue
+        const def = handlerDef(h.name)
+        if (!def || def.body === undefined) continue
+        h.body = typeof def.body === 'function' ? def.body : compileHandlerBody(def.body)
+      }
+    }
+  }
+
   loadEnvelope(envelope: LegacyInitialData, opts?: { userData?: unknown }): Census {
     this.tearDownGraph()
     const env = structuredClone(envelope)
@@ -311,6 +333,7 @@ export class Runtime {
       env.content[0].userData = opts.userData
     }
     const translated = translateLegacy(env)
+    this.resolveNameReferencedHandlerBodies(translated.nodes)
     this.rootNode = translated.root
     this.nodes = translated.nodes
     this.supervisor = new Supervisor({ events: new EventBridge(), maxJournalLength: this.maxJournalLength })
@@ -332,6 +355,7 @@ export class Runtime {
     const seeds = loadState(doc)
     const hub = createLinkHub()
     const nodes = seeds.map((s) => new Node(s, hub))
+    this.resolveNameReferencedHandlerBodies(nodes)
     reconcileParentTargets(nodes)
     // 0.2 Feature 1a — re-register the def prototypes (the `defPrototypes`
     // census section) on the loadState hub so a rows-bearing doc re-mints

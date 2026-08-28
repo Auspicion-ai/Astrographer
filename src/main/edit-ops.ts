@@ -6,8 +6,14 @@
 // path is a store-level failure the op does not catch (e.g. a malformed record
 // reaching putNode), which propagates to the caller (the MCP handler).
 import { randomUUID } from 'node:crypto'
-import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind } from './rag-store.js'
-import type { EditCommitResult } from '../shared/types.js'
+import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind, RagNodeChild, BatchResult, BatchOp, BatchOpResult } from './rag-store.js'
+import type { EditCommitResult, EditBatchPayload } from '../shared/types.js'
+import type { RagStoreChangedPayload } from './preload.js'
+
+// Unit P (docs/specs/unit-p-ipc-edit-batch.md §5.1) — re-export the batch
+// channel's payload + result types so the shared handler's callers (the IPC
+// handler in main.ts, the preload bridge) import them from one place.
+export type { EditBatchPayload, BatchResult }
 
 export interface EditOpContext {
   /** The RAG store (Unit A) — the `RagStore` INTERFACE (the abstraction layer,
@@ -24,11 +30,83 @@ export type DeleteNodeResult = { ok: true; removed: boolean } | { ok: false; err
 export type SplitNodeResult = { ok: true; nodes: [RagNode, RagNode]; edge: RagEdge } | { ok: false; error: string }
 export type MergeNodeResult = { ok: true; target: RagNode } | { ok: false; error: string }
 export type SetEdgeResult = { ok: true; edge: RagEdge } | { ok: false; error: string }
+// Unit O — the three rich-text edit-op result types (docs/specs/unit-o-edit-ops.md
+// §5.1). Each is a discriminated result: `{ ok: true, node }` on success,
+// `{ ok: false, error }` on a domain failure.
+export type SetPropsResult = { ok: true; node: RagNode } | { ok: false; error: string }
+export type SetSubtreeResult = { ok: true; node: RagNode } | { ok: false; error: string }
+export type SetTypeResult = { ok: true; node: RagNode } | { ok: false; error: string }
 
 // The closed unions (Unit A §5.1). Duplicated here as runtime sets because the
 // store does not export them; the store validates the same unions at write time.
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
 const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
+// Unit M §5.1 — the inline rich-text child types (strong/em/a/img). `span` is
+// NOT a child type (a diff-matching artifact folded into the parent's content).
+const RAG_NODE_CHILD_TYPES = new Set<string>(['strong', 'em', 'a', 'img'])
+// Unit A §5.1 / Unit M §5.4 — the prototype-pollution keys the store rejects.
+const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
+
+// True if any key anywhere in the value is a prototype-pollution key — mirrors
+// the store's `hasDangerousKey` (Unit A §5.1 / Unit M §5.4) so the ops surface
+// a dangerous-key prop/child as a domain result instead of an uncaught store
+// throw at write time.
+function hasDangerousKey(value: unknown, depth = 0): boolean {
+  // F4 — bounded recursion: a deeply-nested props/children object must not
+  // overflow the call stack (a RangeError would violate the never-throw rule).
+  // At the depth limit, treat the value as dangerous (reject) — conservative.
+  if (depth > 100) return true
+  if (Array.isArray(value)) return value.some((v) => hasDangerousKey(v, depth + 1))
+  if (value !== null && typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value)
+    if (proto !== null && proto !== Object.prototype) {
+      const ctor = (proto as { constructor?: unknown }).constructor
+      if (ctor === Object || ctor === undefined) return true
+    }
+    for (const key of Object.keys(value)) {
+      if (DANGEROUS_KEYS.has(key)) return true
+      if (hasDangerousKey((value as Record<string, unknown>)[key], depth + 1)) return true
+    }
+  }
+  return false
+}
+
+// True for a valid `RagNodeChild[]` (or undefined) — mirrors the store's
+// `children` validation branch (Unit M §5.4): a non-array, a non-object child,
+// a `span`/unknown/non-string child `type`, a missing/non-string child
+// `content`, a null/array/non-object child `props`, or a dangerous key in a
+// child's `props`/on the child itself is invalid.
+function isValidChildren(v: unknown): boolean {
+  if (v === undefined) return true
+  if (!Array.isArray(v)) return false
+  for (const c of v) {
+    if (c === null || typeof c !== 'object' || Array.isArray(c)) return false
+    if (hasDangerousKey(c)) return false
+    const child = c as { type?: unknown; content?: unknown; props?: unknown }
+    if (typeof child.type !== 'string' || !RAG_NODE_CHILD_TYPES.has(child.type)) return false
+    if (typeof child.content !== 'string') return false
+    if (child.props !== undefined && (child.props === null || typeof child.props !== 'object' || Array.isArray(child.props))) return false
+    if (child.props !== undefined && hasDangerousKey(child.props)) return false
+  }
+  return true
+}
+
+// Deep structural equality (used to detect a no-op setProps — an empty merge
+// that changes no key).
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((x, i) => deepEqual(x, b[i]))
+  }
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+    const ka = Object.keys(a as Record<string, unknown>)
+    const kb = Object.keys(b as Record<string, unknown>)
+    if (ka.length !== kb.length) return false
+    return ka.every((k) => deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]))
+  }
+  return false
+}
 
 function sameDocIds(a: string[] | undefined, b: string[] | undefined): boolean {
   if (a === undefined && b === undefined) return true
@@ -335,4 +413,166 @@ export async function handleEditCommit(
     return { ok: false, reason: 'deleted-node', error: result.error }
   }
   return { ok: false, reason: 'store-error', error: result.error }
+}
+
+/** Unit P §5.1 — the shared `IPC_EDIT_BATCH` handler. Validates the payload
+ *  (a non-object payload or a non-array `ops` is a domain result, never a
+ *  throw — A1) and calls `ragStore.applyBatch(payload.ops)` (Unit N — the SAME
+ *  transaction primitive as the MCP `edit.batch` tool, MCP/UI equivalence
+ *  §8.2 BINDING), returning the `BatchResult` verbatim. NEVER throws for a
+ *  domain failure. PURE — no Electron; the caller (main) performs the broadcast
+ *  + index reconcile on success. */
+export async function handleEditBatch(
+  store: RagStore,
+  payload: EditBatchPayload,
+): Promise<BatchResult> {
+  if (!payload || !Array.isArray(payload.ops)) {
+    return { ok: false, error: 'edit-batch: ops must be an array', failedIndex: 0 }
+  }
+  return store.applyBatch(payload.ops)
+}
+
+// ---- Unit O: the rich-text edit ops (docs/specs/unit-o-edit-ops.md) ---------
+
+/** Set a RAG node's props by MERGE — only the named keys in `props` are
+ *  updated; the node's existing props (including the `data-doc-head` marker)
+ *  are preserved. A CONTENT op → journaled as a `content` entry (the content
+ *  snapshot includes `props` — Unit A §5.6) → re-traversal. An empty `setProps`
+ *  (no keys changed) is a NO-OP — no write, no journal entry. */
+export async function setProps(ctx: EditOpContext, params: { nodeId: string; props: Record<string, unknown> }): Promise<SetPropsResult> {
+  if (params.props === null || typeof params.props !== 'object' || Array.isArray(params.props)) {
+    return { ok: false, error: 'edit.set_props: props must be an object' }
+  }
+  if (hasDangerousKey(params.props)) {
+    return { ok: false, error: 'edit.set_props: props contains a dangerous key' }
+  }
+  const node = ctx.store.getNode(params.nodeId)
+  if (!node) {
+    return { ok: false, error: 'edit.set_props: node not found' }
+  }
+  const merged = { ...node.props, ...params.props }
+  // A no-op merge (no keys changed) performs NO write and records NO journal
+  // entry (F1/F6). F1 — an empty merge is a no-op even when the node has no
+  // props (merged `{}` vs `undefined` would not deep-equal).
+  if (Object.keys(params.props).length === 0 || deepEqual(merged, node.props)) {
+    return { ok: true, node }
+  }
+  // putNode preserves createdAt and refreshes updatedAt (Unit A §5.1); the
+  // store's validateNodeShape re-validates the merged props at write time
+  // (throw — the ONLY throw path).
+  const updated = await ctx.store.putNode({ ...node, props: merged })
+  return { ok: true, node: updated }
+}
+
+/** Replace a RAG node's inline `children` (the `RagNodeChild[]` field added in
+ *  Unit M) with a new array. A CONTENT op → journaled as a `content` entry (the
+ *  content snapshot includes `children` — Unit M §5.5) → re-traversal. */
+export async function setSubtree(ctx: EditOpContext, params: { nodeId: string; children: RagNodeChild[] }): Promise<SetSubtreeResult> {
+  // F2 — `children` is REQUIRED (a `RagNodeChild[]`); `undefined` is a non-array
+  // and is a fail-state (only `[]` clears children). `isValidChildren` treats
+  // `undefined` as "no children", so reject it explicitly here.
+  if (params.children === undefined || !isValidChildren(params.children)) {
+    return { ok: false, error: 'edit.set_subtree: children required/invalid' }
+  }
+  const node = ctx.store.getNode(params.nodeId)
+  if (!node) {
+    return { ok: false, error: 'edit.set_subtree: node not found' }
+  }
+  // putNode preserves createdAt and refreshes updatedAt (Unit A §5.1); the
+  // store's validateNodeShape re-validates the children at write time (throw —
+  // the ONLY throw path).
+  const updated = await ctx.store.putNode({ ...node, children: params.children })
+  return { ok: true, node: updated }
+}
+
+/** Change a RAG node's `type`. NEVER delete+create: the node's id, content,
+ *  children, props, and ownedNodeIds are all preserved; only `type` changes. A
+ *  STRUCTURAL op → journaled as a `node-update` entry (the type change — Unit A
+ *  §5.6) → re-traversal. A same-type `setType` is a NO-OP — no write, no journal
+ *  entry. */
+export async function setType(ctx: EditOpContext, params: { nodeId: string; type: RagNodeType }): Promise<SetTypeResult> {
+  if (typeof params.type !== 'string' || !RAG_NODE_TYPES.has(params.type)) {
+    return { ok: false, error: 'edit.set_type: invalid type' }
+  }
+  const node = ctx.store.getNode(params.nodeId)
+  if (!node) {
+    return { ok: false, error: 'edit.set_type: node not found' }
+  }
+  // A same-type setType is a NO-OP — no write, no journal entry (F1/F6).
+  if (node.type === params.type) {
+    return { ok: true, node }
+  }
+  // putNode preserves createdAt and refreshes updatedAt (Unit A §5.1); the
+  // store's validateNodeShape re-validates the type at write time (throw — the
+  // ONLY throw path). The node id is STABLE — no delete+create.
+  const updated = await ctx.store.putNode({ ...node, type: params.type })
+  return { ok: true, node: updated }
+}
+
+// ---- Unit P: the batch broadcast derivation (docs/specs/unit-p-ipc-edit-batch.md
+// §5.4) — a PURE helper (exported for direct unit testing). Derives the
+// `rag-store-changed` payload from a successful batch. Deterministic (A6): the
+// same batch + pre-batch snapshot always produces the same payload. Lives here
+// (not main.ts) so it is node-testable without importing electron. ------------
+
+function sameOwned(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (a === undefined && b === undefined) return true
+  if (a === undefined || b === undefined) return false
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
+export function deriveBatchBroadcast(
+  ops: BatchOp[],
+  results: BatchOpResult[],
+  preBatchNodes: Map<string, RagNode>,
+): RagStoreChangedPayload {
+  const nodeIds: string[] = []
+  const edgeIds: string[] = []
+  let structural = false
+  const pushNode = (id: string) => { if (!nodeIds.includes(id)) nodeIds.push(id) }
+  const pushEdge = (id: string) => { if (!edgeIds.includes(id)) edgeIds.push(id) }
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i]
+    const result = results[i]
+    switch (op.op) {
+      case 'putNode': {
+        pushNode(op.node.id)
+        const pre = preBatchNodes.get(op.node.id)
+        // F2 — guard `result` (a successful batch returns one result per op, but
+        // the helper is exported for direct unit testing and must not throw on a
+        // short/null results array).
+        const after = result && result.op === 'putNode' ? result.node : op.node
+        // A putNode is structural when it CREATES a node (no pre-batch node) or
+        // changes type/ownedNodeIds; otherwise it is content.
+        if (!pre || pre.type !== after.type || !sameOwned(pre.ownedNodeIds, after.ownedNodeIds)) {
+          structural = true
+        }
+        break
+      }
+      case 'removeNode':
+        pushNode(op.id)
+        structural = true
+        break
+      case 'putEdge':
+        pushNode(op.edge.source)
+        pushNode(op.edge.target)
+        if (result && result.op === 'putEdge') pushEdge(result.edge.id)
+        structural = true
+        break
+      case 'removeEdge':
+        pushEdge(op.id)
+        structural = true
+        break
+      case 'setProps':
+      case 'setSubtree':
+      case 'setType':
+        // Forward-looking rich-text ops — never reach a successful batch in the
+        // current code (applyBatch rejects them, §5.2). If one did, treat it as
+        // structural (conservative).
+        structural = true
+        break
+    }
+  }
+  return { kind: structural ? 'structural' : 'content', nodeIds, edgeIds }
 }

@@ -9,19 +9,241 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A–J are implemented (persistence → document model + doc-flow →
+Units A–P are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
 crosslink/backlink → sidebar panes → template customization → MCP/security
-hardening).
+hardening → the form-control textarea editing UI → the `children` store-format
+foundation → batch atomicity → the rich-text edit ops).
 
 ## OPEN
 
+### Next slice — the rich-text contenteditable editing machinery
+
+The rich-text contenteditable editing machinery (the `provident-editable@0.1.0`
+integration — see `docs/decisions.md` RICH-TEXT-EDITING-GATE, sequenced
+textarea-first) is the next slice. The plain-text textarea editing UI (Unit L)
+has landed, so the textarea-first prerequisite is MET; the store-format
+`children` additive + hash-source foundation (Unit M) has landed; the three
+rich-text edit ops `setProps`/`setSubtree`/`setType` + the edit-op census 6→9
+(Unit O) have landed; the `IPC_EDIT_BATCH` batch channel (Unit P) has landed.
+Scope: the contenteditable UI. Remaining RICH-TEXT-EDITING-GATE must-fix items:
+retrieval indexing of inline `children` text (Unit Q), traversal disambiguation
+of inline vs doc-children (Unit R), paste-time sanitization (part of Unit S).
+**Batch atomicity MET 2026-08-28 (Unit N)** — the `applyBatch` transaction
+primitive (a real transaction, not `store.enqueue`) has landed (see the Unit N
+DONE row). **Census 6→9 MET 2026-08-28 (Unit O)** — the three rich-text ops
+`setProps`/`setSubtree`/`setType` have landed (see the Unit O DONE row).
+**IPC_EDIT_BATCH MET 2026-08-28 (Unit P)** — the `IPC_EDIT_BATCH` channel +
+the `handleEditBatch` shared handler + the `bridge.edit.batch` bridge + the
+`deriveBatchBroadcast` helper have landed (see the Unit P DONE row).
+
 ### Later units (noted, not in this slice)
 
-_(none — Units A–J are implemented.)_
+_(none — Units A–P are implemented.)_
 
 ## DONE
 
+- **Unit P — the `IPC_EDIT_BATCH` IPC channel (a batch of edits to the RAG
+  store) (2026-08-28).** The RICH-TEXT-EDITING-GATE batch channel — the
+  renderer→main IPC channel that carries a batch of `BatchOp` values to the
+  store, applied atomically via the `applyBatch` transaction primitive (Unit N)
+  and consuming the three rich-text ops (Unit O). The `IPC_EDIT_BATCH =
+  'provident:edit-batch'` constant + the `EditBatchPayload { ops: BatchOp[] }`
+  type in `src/shared/types.ts`; the `bridge.edit.batch(ops): Promise<BatchResult>`
+  preload method in `src/main/preload.ts`; the `ipcMain.handle(IPC_EDIT_BATCH, ...)`
+  handler in `src/main/main.ts` (validates the payload, captures the pre-batch
+  node snapshot, calls `handleEditBatch`, broadcasts `rag-store-changed` EXACTLY
+  ONCE on success, 0 on failure); the `handleEditBatch` shared handler + the
+  `deriveBatchBroadcast` pure helper in `src/main/edit-ops.ts` (moved out of
+  `main.ts` so it is node-testable without importing electron). The channel is
+  MCP/UI-equivalent (§8.2 BINDING) — the same batch reachable via the MCP
+  `edit.batch` tool (forward-looking wiring) and the UI IPC, both routing through
+  the same `applyBatch` primitive. TestWriter red → Implementer green in
+  `tests/unit-p-ipc-edit-batch.test.ts` (RED marker: the `IPC_EDIT_BATCH`/
+  `EditBatchPayload`/`BatchResult` + the `handleEditBatch`/`deriveBatchBroadcast`
+  + the `bridge.edit.batch` did not exist → **19 red → 19 green**; the 19 tests =
+  the §5.6 8 happy-path states + the §5.7 10 fail-states + the export check).
+  Adversarial pass (RCA-3) in the spec §3a — **4 host findings F1–F4, all HOST
+  (none package)**: F1 (HIGH — `deriveBatchBroadcast` was untested and the greens
+  doc made an unbacked coverage claim; fixed: moved it + the `sameOwned` helper
+  out of `main.ts` into `edit-ops.ts` + added a direct regression set), F2 (LOW —
+  `deriveBatchBroadcast` dereferenced `result` without a guard; fixed: guarded
+  `result`), F3 (LOW — stale RED-state header/name in the test file; fixed),
+  F4 (LOW, note — redundant payload validation in the main handler; accepted as
+  defense-in-depth). The 9 adversarial regression tests (F1a–F1i) bring the
+  suite to **28 green**. Blind-greens in
+  `docs/specs/unit-p-ipc-edit-batch-greens.md` (18 scenarios — 18 pass, 0 fail,
+  0 skipped, authored from the docs ONLY, blind-run against the live modules);
+  proofreader pass (7 fixes); documentation review in
+  `archive/reviews/2026-08-28-unit-p-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (1380 tests, typecheck clean, build
+  clean). Decisions landed: IPC-EDIT-BATCH (see `docs/decisions.md`).
+- **Unit O — the rich-text edit ops (`setProps`/`setSubtree`/`setType`)
+  (2026-08-28).** The final RICH-TEXT-EDITING-GATE must-fix item that lands the
+  edit-op census 6→9 — the three rich-text edit ops on the edit-ops layer
+  (`src/main/edit-ops.ts`). `setProps` MERGES props onto a node (only the named
+  keys update; the existing props including the `data-doc-head` marker are
+  preserved — the `setProps` edit op the user chose, Option A); `setSubtree`
+  replaces a node's inline `children` (the Unit M `RagNodeChild[]` field) with a
+  new array (a FULL replace, no merge/append); `setType` changes a node's `type`
+  NEVER delete+create (the node's id/content/children/props/ownedNodeIds are all
+  preserved; only `type` changes). Each op is a single atomic edit (a single
+  `putNode` write, or a single-op `applyBatch` from Unit N), returns the
+  discriminated `SetPropsResult`/`SetSubtreeResult`/`SetTypeResult`, and NEVER
+  throws for a domain failure. The census 6→9: the edit-op count goes from 6
+  (`setContent`/`createNode`/`deleteNode`/`splitNode`/`mergeNode`/`setEdge`) to 9
+  (adding `setProps`/`setSubtree`/`setType`) — the RICH-TEXT-EDITING-GATE
+  "census 6→9" must-fix is now MET. TestWriter red → Implementer green in
+  `tests/unit-o-edit-ops.test.ts` (RED marker: the three ops + the three result
+  types did not exist → **19 red → 23 green**; the 23 tests = the §5.7 10
+  happy-path states + the §5.8 8 fail-states + the 4 adversarial regressions
+  F1/F2/F3a/F3b). Adversarial pass (RCA-3) in the spec §3a — **6 host findings
+  F1–F6, all HOST (none package)**: F1 (LOW — `setProps` empty-merge on a node
+  with `props: undefined` was NOT a no-op; fixed: an empty merge is a no-op
+  regardless of the prior props), F2 (LOW — `setSubtree` accepted
+  `children: undefined` as valid; fixed: rejects `undefined` explicitly, only
+  `[]` clears children), F3 (LOW — test-coverage gaps for the adversarial edge
+  cases; fixed: added regression tests), F4 (LOW — unbounded recursion in
+  `hasDangerousKey` on deeply-nested props/children, a `RangeError` DoS; fixed:
+  depth-bounded at > 100), F5 (LOW, OBSERVATION — read-modify-write lost-update
+  race across concurrent ops; a PRE-EXISTING pattern shared with the six existing
+  ops, NOT a Unit O regression; documented as an accepted limitation), F6 (LOW —
+  a `setProps` that changes no key and a same-type `setType` were NOT no-ops;
+  fixed: both are no-ops — no write, no journal entry). Blind-greens in
+  `docs/specs/unit-o-edit-ops-greens.md` (18 scenarios — 18 pass, 0 fail, 0
+  skipped, authored from the docs ONLY, blind-run against the live modules);
+  documentation review in `archive/reviews/2026-08-28-unit-o-doc-review.md`
+  (spec + greens + trackers reconciled against the build); trio green (1352
+  tests, typecheck clean, build clean). Decisions landed: RICH-TEXT-EDIT-OPS
+  (see `docs/decisions.md`).
+- **Unit N — batch atomicity (a real transaction on the `RagStore`)
+  (2026-08-28).** The RICH-TEXT-EDITING-GATE must-fix "batch atomicity (a real
+  transaction, not `store.enqueue`)" — the batch/transaction primitive the
+  rich-text ops (Unit O) and `IPC_EDIT_BATCH` (Unit P) build on. The `RagStore`
+  interface in `src/main/rag-store.ts` gains the NEW `applyBatch(ops: BatchOp[]):
+  Promise<BatchResult>` method + the `BatchOp`/`BatchOpResult`/`BatchResult`
+  types. The `BatchOp` union is CLOSED at 7 members — the 4 store primitives
+  (`putNode`/`removeNode`/`putEdge`/`removeEdge`, applied by THIS unit) + the 3
+  forward-looking rich-text ops (`setProps`/`setSubtree`/`setType`, applied by
+  Unit O — a batch containing one is a documented fail-state in THIS unit). A
+  successful batch applies all ops ATOMICALLY (all or nothing), lands as a SINGLE
+  invertible `batch` journal entry (undo/redo restores the whole batch as a
+  unit), and persists ONCE; a failed batch ROLLS BACK the in-memory state to
+  the pre-batch snapshot, does NOT pollute the journal, and does NOT persist.
+  Serialized through the single-writer queue; re-entrant (the `inQueue` pattern,
+  no deadlock). `applyBatch` NEVER throws for a domain failure — it returns the
+  discriminated `BatchResult` (`{ ok: true, results }` / `{ ok: false, error,
+  failedIndex }`). The `batch` journal kind slots into the `JournalEntry` union +
+  the `isValidJournalEntry` boot validator (a malformed `batch` entry is SKIPPED
+  at boot); the new `isValidBatchOp` validator gates the `ops`/`inverse` arrays.
+  TestWriter red → Implementer green in `tests/unit-n-batch-atomicity.test.ts`
+  (RED marker: the `applyBatch` method + the `BatchOp`/`BatchOpResult`/
+  `BatchResult` types + the `batch` journal kind + the `isValidBatchOp`/
+  `isValidJournalEntry` amendments did not exist → **25 red → 25 green**; the 25
+  tests = the §5.7 14 happy-path states + the §5.8 11 fail-states). Adversarial
+  pass (RCA-3) in the spec §3a — **5 host findings F1–F5, all HOST (none
+  package)**: F1 (MEDIUM — a `null`/`undefined` op in the array threw a
+  `TypeError` instead of returning `{ ok: false }`, leaking a partial mutation;
+  fixed: the op loop is wrapped in `try/catch`, an unexpected throw restores the
+  snapshot and returns `{ ok: false, error: 'rag applyBatch: unexpected failure',
+  failedIndex: -1 }`), F2 (LOW-MEDIUM — `applyBatch(null)`/`applyBatch(undefined)`
+  threw at `ops.length`; fixed: `applyBatchSync` rejects a non-array `ops` with
+  `{ ok: false, error: 'rag applyBatch: ops must be an array', failedIndex: 0 }`),
+  F3 (LOW — the journal `batch` entry stored the RAW caller ops, so `redo()`
+  diverged from the original batch; fixed: the forward ops persisted are the
+  APPLIED records), F4 (LOW — the `removeNode` cascade inverse edges were not
+  reverse-ordered; fixed: the cascaded-edge inverse array is reversed before
+  pushing), F5 (LOW/INFORMATIONAL — the snapshot deep-copied the entire store on
+  every batch, even empty; fixed: an empty batch is a valid no-op that skips the
+  snapshot). Blind-greens in `docs/specs/unit-n-batch-atomicity-greens.md` (25
+  scenarios — 25 pass, 0 fail, 0 skipped, authored from the docs ONLY, blind-run
+  against the live modules); documentation review in
+  `archive/reviews/2026-08-28-unit-n-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (1329 tests, typecheck clean, build
+  clean). Decisions landed: BATCH-ATOMICITY-API (see `docs/decisions.md`). The
+  edit-op census 6→9 is Unit O, NOT this unit — this unit adds NO edit op (the
+  current count 6: `setContent`/`createNode`/`deleteNode`/`splitNode`/`mergeNode`/
+  `setEdge` is unchanged).
+- **Unit M — the `children` field on `RagNode` (2026-08-28).** The store-format
+  `children` additive + hash-source must-fix (RICH-TEXT-EDITING-GATE) — the
+  persistence-layer foundation the rich-text machinery builds on. The `RagNode`
+  interface in `src/main/rag-store.ts` gains the NEW optional
+  `children?: RagNodeChild[]` field + the `RagNodeChild`/`RagNodeChildType`
+  types (the closed 4-member union `strong`/`em`/`a`/`img`; `span` NOT a member
+  and NOT added to `RagNodeType` — the 18-member union is UNCHANGED).
+  `nodeSource` includes `children` in the fixed field order (after `content`,
+  before `props`), so the SHA-256 hash covers the inline children (a `children`
+  change → a new hash; a tampered `children` → QUARANTINED at boot).
+  `validateNodeShape` validates `children` at write (throw) and boot (skip);
+  the journal content-entry snapshot carries before/after `children`; the
+  internal copy paths (`toPublicNode`/`insertNode`/`setNodeFields`/
+  `applyInverse`/`applyForward`) deep-copy `children`. The store-format change
+  is ADDITIVE — existing records without `children` still load and hash-verify
+  (a missing `children` serializes identically to `children: undefined`), no
+  migration/re-hash. TestWriter red → Implementer green in
+  `tests/unit-m-children-field.test.ts` (RED marker: the `children` field +
+  `RagNodeChild`/`RagNodeChildType` + the `nodeSource`/`validateNodeShape`/
+  journal/copy-path amendments did not exist → **20 red → 22 green**; the 22
+  tests = the §5.6 12 happy-path states + the §5.7 10 fail-states). Adversarial
+  pass (RCA-3) in the spec §3a — **5 host findings F1–F5, all HOST (none
+  package)**: F1 (MEDIUM — `isContentSnapshot` did not apply the
+  prototype-pollution guard to `props`; fixed), F2 (LOW — `isRagNode` was weaker
+  than `validateNodeShape`; fixed to mirror it), F3 (LOW — `hasDangerousKey`
+  false-positived on non-plain objects; fixed to scope to actual `__proto__`
+  pollution), F4 (LOW — a dangerous key on the child ITSELF was silently
+  stripped; fixed to reject), F5 (INFORMATIONAL — `__proto__` with a
+  primitive/null value bypasses `hasDangerousKey`; no fix required). Blind-greens
+  in `docs/specs/unit-m-children-field-greens.md` (22 scenarios — 22 pass, 0
+  fail, 0 skipped, authored from the docs ONLY, blind-run against the live
+  modules); documentation review in
+  `archive/reviews/2026-08-28-unit-m-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (Unit M suite 22 pass, typecheck
+  clean, build clean). Decisions landed: CHILDREN-ADDITIVE-STORE-FORMAT,
+  CHILDREN-HASH-SOURCE (see `docs/decisions.md`).
+- **Unit L — the form-control textarea editing UI (2026-08-28).** The deferred
+  rendering follow-up (Unit D §3a H5) that makes the RAG node content editable
+  in the live app via a provident-rendered textarea. The traversal
+  (`src/main/traversal.ts` `buildSubtree`) authors a `textarea` child of each
+  RAG subtree root (bound to the RAG node's content via the back-reference map;
+  the subtree root's `content` is KEPT — Conflict C resolution: the textarea is
+  a RENDER-ONLY editing overlay present in the DOM render view, NOT in the
+  markdown). The `onInput`/`onBlur` handlers reach the edit controller through
+  the `window.provident.sidebar` bridge surface (extended with
+  `textareaInput`/`textareaBlur` — the Unit K §5.3 M2 pattern); `onInput` →
+  `markDirty`, `onBlur` → if dirty `commit` (routing through the SAME
+  `edit-commit` IPC → `setContent` op as the MCP `edit.set_content` tool —
+  MCP/UI equivalence). The `readOnly` prop is HOST-SET at render time from
+  `editController.isEditable(ragId)` (dangling back-reference → read-only). The
+  caret is saved on blur (`saveCaret`, `focused: dirty` — H3) and restored
+  after a re-derive (one-shot — H2). The dirty-edit guard queues a re-derive
+  while the textarea is dirty. TestWriter red → Implementer green in
+  `tests/unit-l-textarea-editing-ui.test.ts` (RED marker: the textarea
+  authoring/handlers/readOnly/caret did not exist → **25 active pass / 7
+  skipped**; the 7 skipped are the Electron/DOM-dependent §5.8 13–16 + §5.9 8–10
+  cases, verified by code review / the e2e battery). Adversarial pass (RCA-3)
+  in the spec §3a — **6 host findings H1–H6, all HOST (none package)**: H1
+  (CRITICAL — `readOnly: false` rendered as the `readonly` boolean attribute,
+  making the textarea uneditable; fixed: the traversal omits `readOnly`,
+  `setTextareaReadOnly` sets `true` only when `!isEditable`), H2 (caret restore
+  was not one-shot — now removed after a successful restore), H3 (a no-op blur
+  saved `focused: true`, stealing focus — now `focused: dirty`), H4
+  (`setTextareaReadOnly` mutated the shared traversal envelope — now idempotent
+  across re-assembles), H5 (a node deleted while dirty permanently blocked
+  re-derives — `commit` now clears the dirty flag on a `deleted-node` result),
+  H6 (MCP `dispatch` of `blur` ignored the dispatch `value` arg — the blur body
+  now prefers a dispatch-provided value, falling back to the DOM textarea's
+  current value). Blind-greens in
+  `docs/specs/unit-l-textarea-editing-ui-greens.md` (32 scenarios — 25 pass, 0
+  fail, 7 skipped, authored from the docs ONLY, blind-run against the live
+  modules); documentation review in
+  `archive/reviews/2026-08-28-unit-l-doc-review.md` (spec + greens + trackers
+  reconciled against the build — the greens H1/H6 `readOnly: false` and H8
+  `focused: true` claims fixed to match the spec's OMITTED/`focused: dirty`
+  contract); trio green (Unit L suite 25 pass / 7 skip, typecheck clean, build
+  clean). Decisions landed: TEXTAREA-PROVIDENT-AUTHORING,
+  TEXTAREA-BRIDGE-SURFACE, TEXTAREA-READONLY-HOST-SET,
+  NAME-REFERENCED-HANDLER-RESOLUTION, TEXTAREA-RENDER-ONLY-OVERLAY (see
+  `docs/decisions.md`).
 - **Unit K — SidebarPanes renderer host (2026-08-28).** The UI-mount work that
   closes the deferred L1/L2/I1/I2 findings: the `SidebarPanes` host in
   `src/renderer/sidebar-panes.ts` wires the store→traversal→pane-assembly→render

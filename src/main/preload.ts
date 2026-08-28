@@ -4,8 +4,9 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
+import type { BatchOp, BatchResult } from './rag-store.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -42,6 +43,12 @@ export interface ProvidentBridge {
      *  `edit-commit` IPC to main, which calls `setContent` on the store (the
      *  SAME edit op as the MCP tool) and broadcasts `rag-store-changed`. */
     commit(nodeId: string, content: string): Promise<EditCommitResult>
+    /** Unit P §5.1 — the UI batch write-back. Sends the `edit-batch` IPC to
+     *  main, which calls `applyBatch` on the store (the SAME transaction
+     *  primitive as the MCP `edit.batch` tool — MCP/UI equivalence, §8.2
+     *  BINDING) and broadcasts `rag-store-changed` on success. Returns the
+     *  `BatchResult`. */
+    batch(ops: BatchOp[]): Promise<BatchResult>
     /** Unit D §5.1.9 — subscribe to the `rag-store-changed` re-traversal
      *  trigger. Returns an unsubscribe function. */
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void
@@ -134,6 +141,10 @@ const bridge: ProvidentBridge = {
     commit(nodeId: string, content: string): Promise<EditCommitResult> {
       const payload: EditCommitPayload = { nodeId, content }
       return ipcRenderer.invoke(IPC_EDIT_COMMIT, payload)
+    },
+    batch(ops: BatchOp[]): Promise<BatchResult> {
+      const payload: EditBatchPayload = { ops }
+      return ipcRenderer.invoke(IPC_EDIT_BATCH, payload)
     },
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void {
       const listener = (_event: unknown, payload: RagStoreChangedPayload): void => {
