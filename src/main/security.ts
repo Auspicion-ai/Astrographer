@@ -42,6 +42,7 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'edit.split_node': 'edit',
   'edit.merge_node': 'edit',
   'edit.set_edge': 'edit',
+  'edit.import_markdown': 'edit',
   // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
   // tools, ALL in the `code` group (default-off). Main-handled against the
   // template store through the five-seam gate. `get`/`validate` are read-only;

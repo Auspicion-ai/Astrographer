@@ -27,6 +27,7 @@ import type { RagStore } from './rag-store.js'
 import { validateTemplate } from './template-shape.js'
 import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
+import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
@@ -425,6 +426,19 @@ export async function handleEditTool(
       if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
       return result
     }
+    case 'edit.import_markdown': {
+      // Unit T — the markdown file import tool. Reads the corpus files, parses
+      // each via parseMarkdown, validates each document's doc-flow, and applies
+      // the whole corpus via applyBatch as ONE atomic batch journal entry. A
+      // domain failure returns { ok: false } (never throws). On success,
+      // broadcast the re-traversal trigger. The corpus root is FIXED server-side
+      // (the project root) — it is NOT an agent-supplied argument (the
+      // path-containment seam must not be defeatable by the caller).
+      const files = Array.isArray(args.files) ? (args.files as unknown[]).filter((x): x is string => typeof x === 'string') : []
+      const result = await importMarkdownCorpus(ctx, { files })
+      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [] })
+      return result
+    }
     default:
       throw new Error(`unknown edit tool: ${name}`)
   }
@@ -664,6 +678,7 @@ export class ProvidentMcpServer {
     'edit.split_node',
     'edit.merge_node',
     'edit.set_edge',
+    'edit.import_markdown',
     // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
     // tools, ALL in the `code` group (default-off), main-handled against the
     // template store.
@@ -1053,6 +1068,7 @@ export class ProvidentMcpServer {
       { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number() } },
       { name: 'edit.merge_node', description: 'Merge sourceId into targetId (structural → re-traversal). Requires edit group.', inputSchema: { sourceId: z.string(), targetId: z.string() } },
       { name: 'edit.set_edge', description: 'Create/update a RAG edge (structural → re-traversal). order is for doc-child edges; documentIds is for doc-flow edges. Requires edit group.', inputSchema: { kind: z.string(), source: z.string(), target: z.string(), edgeId: z.string().optional(), order: z.number().optional(), documentIds: z.array(z.string()).optional() } },
+      { name: 'edit.import_markdown', description: 'Import a corpus of markdown files into the RAG store as a ONE-WAY SNAPSHOT (parse → validate doc-flow → applyBatch as ONE atomic batch journal entry). Requires edit group. The corpus root is fixed server-side (the project root) — it is NOT an agent-supplied argument.', inputSchema: { files: z.array(z.string().min(1)).min(1) } },
       // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*`
       // CRUD tools, ALL in the `code` group (default-off), main-handled against
       // the template store. `get`/`validate` are read-only; `set`/`create`/

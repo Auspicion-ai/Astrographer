@@ -9,13 +9,15 @@ Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —
-Units A–S are implemented (persistence → document model + doc-flow →
+Units A–T are implemented (persistence → document model + doc-flow →
 rendering spine → editable text → RAG index + retrieval → vector embeddings →
 crosslink/backlink → sidebar panes → template customization → MCP/security
 hardening → the form-control textarea editing UI → the `children` store-format
 foundation → batch atomicity → the rich-text edit ops → the rich-text
 contenteditable editing slice: retrieval indexing of inline `children` text,
-traversal disambiguation of inline vs doc-children, paste-time sanitization).
+traversal disambiguation of inline vs doc-children, paste-time sanitization →
+the markdown file import slice: initial-ingestion corpus → RAG store as a
+one-way snapshot).
 
 ## OPEN
 
@@ -49,12 +51,81 @@ sanitization MET 2026-08-28 (Unit S)** — the pure `sanitizePastedHtml` module
 normalizes pasted HTML into the `RagNodeChild[]` shape (see the Unit S DONE
 row).
 
+### Markdown file import (Unit T) — COMPLETE
+
+The markdown file import slice (the initial-ingestion framing, per the
+PROCEED-WITH-AMENDMENTS gate verdict + the user's ADJUSTED SCOPE) is now
+**COMPLETE (2026-08-28, Unit T)**. The PURE `parseMarkdown` parser
+(`src/main/markdown-parse.ts`) + the `importMarkdownCorpus` importer
+(`src/main/markdown-import.ts`) + the default-off `edit.import_markdown` MCP tool
+have landed, along with the additive `RagNodeType` 18→23 change
+(`table`/`thead`/`tr`/`td`/`th`). See the Unit T DONE row.
+
 ### Later units (noted, not in this slice)
 
-_(none — Units A–S are implemented.)_
+_(none — Units A–T are implemented.)_
 
 ## DONE
 
+- **Unit T — markdown file import (initial-ingestion corpus → RAG store)
+  (2026-08-28).** The markdown file import feature (the initial-ingestion
+  framing, per the PROCEED-WITH-AMENDMENTS gate verdict + the user's ADJUSTED
+  SCOPE — `docs/specs/markdown-import-review.md` §4/§5). A new PURE,
+  node-testable module `src/main/markdown-parse.ts` exports
+  `parseMarkdown(markdown: string, documentId: string): ParsedMarkdown` — a
+  deterministic, TOTAL (never throws on malformed markdown; the ONLY throw is a
+  caller error → `Error('markdown parse: markdown/documentId required')`) parser
+  that maps markdown → RAG nodes/edges per the closed grammar (§5.2), the
+  importer's deterministic heading→section chunking rule (R1–R9), the
+  inline-children parse (§5.3, the closed `strong`/`em`/`a`/`img` union), the
+  table rule (the additive `table`/`thead`/`tr`/`td`/`th` types), the URL-safety
+  rules (inherited from Unit S), and the raw-HTML drop (A8). A new importer
+  module `src/main/markdown-import.ts` exports
+  `importMarkdownCorpus(ctx: EditOpContext, params: ImportMarkdownParams):
+  Promise<ImportMarkdownResult>` — reads the corpus files (path-containment
+  seam, `corpusRoot`), parses each via `parseMarkdown`, validates each
+  document's doc-flow via `validateDocFlow` BEFORE commit, and applies the whole
+  corpus via `applyBatch` as ONE atomic batch journal entry (putNode ops before
+  putEdge ops). NEVER throws for a domain failure — returns the discriminated
+  `{ ok: true, documentIds, nodeCount, edgeCount } | { ok: false, error,
+  failedFile? }`. The `edit.import_markdown` MCP tool (default-off, `edit`
+  group, main-handled, schema `z.array(z.string().min(1)).min(1)`, the corpus
+  root FIXED server-side — the project root, NOT an agent-supplied arg) in
+  `src/main/mcp-server.ts` + the `edit.import_markdown` TOOL_GROUPS entry in
+  `src/main/security.ts`. The additive `RagNodeType` change 18→23
+  (`table`/`thead`/`tr`/`td`/`th`) in `src/main/rag-store.ts` (the
+  `RAG_NODE_TYPES` runtime set gains the 5 members; existing records still
+  load). TestWriter red → Implementer green in
+  `tests/unit-t-markdown-parse.test.ts` (RED marker: `src/main/markdown-parse.ts`
+  did not exist → **26 green**) + `tests/unit-t-markdown-import.test.ts` (RED
+  marker: `src/main/markdown-import.ts` did not exist → **18 green**); the red
+  set = the 2 module-existence RED tests (module does not exist) → **40 green**
+  total. Adversarial pass (RCA-3, two focused passes — security + edge-cases) in
+  the spec §3a — **9 host findings ADV-1..ADV-9, all HOST (none package)**:
+  ADV-1 (CRITICAL — `corpusRoot` was exposed as an MCP tool arg, defeating the
+  path-containment seam; fixed: removed from the tool schema + handler, the
+  containment root is FIXED server-side), ADV-2 (MEDIUM — TOCTOU: the importer
+  realpath-checked but read the logical path; fixed: reads the REALPATH'D path),
+  ADV-3 (LOW/MEDIUM — an unclosed inline raw-HTML element left its content as
+  plain text; fixed: drops through end-of-input; regression test 10a), ADV-4
+  (LOW — the zod schema did not enforce non-empty array of non-empty strings;
+  fixed), ADV-5 (LOW — `isWithin` rejected everything when the root is `/`;
+  fixed), ADV-6 (HIGH — `String.fromCodePoint` threw a RangeError on a numeric
+  HTML ref > 0x10FFFF; fixed: guarded; regression test 10b), ADV-7 (HIGH — stack
+  overflow on a deeply nested blockquote; fixed: `MAX_BLOCK_DEPTH`; regression
+  test 10c), ADV-8 (HIGH — stack overflow on deeply nested inline; fixed:
+  `MAX_INLINE_DEPTH`; regression test 10d), ADV-9 (MEDIUM — a re-import of a
+  SHORTENED doc leaves stale nodes/edges orphaned; documented as a KNOWN
+  LIMITATION of the one-shot design, not a defect). Blind-greens in
+  `docs/specs/unit-t-markdown-import-greens.md` (47 scenarios — 47 pass, 0 fail,
+  0 skipped); proofreader pass (the relative-path-vs-`corpusRoot` doc-ambiguity
+  RESOLVED — §5.1/§5.4/fail-state 3b now pin that a RELATIVE `files` path
+  resolves against the process CWD, not `corpusRoot`); documentation review in
+  `archive/reviews/2026-08-28-unit-t-markdown-import-doc-review.md` (spec +
+  greens + trackers reconciled against the build); trio green (1522 pass / 30
+  skip, typecheck clean, build clean). Decisions landed: ONE-WAY-SNAPSHOT,
+  MARKDOWN-EXPORT-ONLY-CARVE-OUT, TABLE-TYPES-ADDITIVE-STORE-FORMAT (see
+  `docs/decisions.md`).
 - **Unit S — paste-time sanitization (2026-08-28).** The RICH-TEXT-EDITING-GATE
   must-fix "paste-time sanitization". A new PURE, node-testable module
   `src/main/paste-sanitize.ts` exports `sanitizePastedHtml(rawHtml: string):

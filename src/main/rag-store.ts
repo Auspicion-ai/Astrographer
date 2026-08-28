@@ -40,6 +40,7 @@ export type RagNodeType =
   | 'p' | 'ul' | 'ol' | 'li' | 'blockquote' | 'pre' | 'code'
   | 'strong' | 'em' | 'a' | 'img'
   | 'div'
+  | 'table' | 'thead' | 'tr' | 'td' | 'th'
 
 /** The inline rich-text child type — the closed union of inline formatting
  *  elements held on a RAG node's `children`. `span` is NOT here (a diff-matching
@@ -227,7 +228,7 @@ interface RagStoreFile {
   cursor: number
 }
 
-const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
+const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th'])
 const RAG_NODE_CHILD_TYPES = new Set<string>(['strong', 'em', 'a', 'img'])
 const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
 const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
