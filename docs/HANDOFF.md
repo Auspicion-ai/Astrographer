@@ -11,7 +11,9 @@ requests. NEVER patch the engine.
 
 ## OPEN handoff items
 
-_(none — ENG-GAP-1 shelved 2026-08-26.)_
+| # | Severity | Feature request | Why it mattered | Proposed shape |
+| --- | --- | --- | --- | --- |
+| **HOST/U1-ENG** | a-big (high) | **Boolean-attribute support in `DomAdapter.setProp`.** `setProp` has NO boolean-attribute special-casing: `checked: false` / `selected: false` routes to the generic `else` branch (`el.setAttribute(attr, bakeValue(val))`), and `bakeValue(false)` → `'false'`, so the boolean attribute is STILL PRESENT. An agent cannot set a boolean-false attribute through the prop path, so a radio `input` or `select`/`option` control cannot render an UNchecked/UNselected state via a `false` prop. | Astrographer's U1 editing-mode Settings control could NOT be a `select`/`radio` because an agent-driven `false` could never uncheck/unselect. The U1 control PIVOTED to a button-toggle (a `button` carries no boolean form state) to avoid the gap, but the engine limitation remains for any consumer that needs boolean-false form state. | A host-side post-render DOM property fix (set `el.checked`/`el.selected`/`el.defaultChecked` from the authored boolean after render) OR an engine boolean-attribute opt-in (a set of boolean-attribute names `setProp` routes to the DOM property, dropping the attribute when the value is `false`). Found in the Unit U1 read-only review (finding 2); reproduction: author a radio/select with `checked: false` → renders checked. See `docs/defects.md` HOST/U1-ENG. |
 
 ## SHELVED / CLOSED
 

@@ -8,7 +8,7 @@
 // server and forwards tool calls over IPC (renderer DOM + IPC bridge).
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { ContentWindowTemplate, TemplateSource } from '../main/template-shape.js'
-import type { BatchOp } from '../main/rag-store.js'
+import type { BatchOp, RagNode, RagNodeChild } from '../main/rag-store.js'
 
 /** A render target in the producing graph. Two vocabularies per the Phase B
  *  synthetic-event contract (docs/specs/ssr-synthetic-event.md §2.2):
@@ -383,6 +383,19 @@ export interface EditBatchPayload {
   ops: BatchOp[]
 }
 
+/** Unit U5 §1.3 — the renderer→main `edit-rich-commit` IPC (the atomic
+ *  rich-text write-back, decision A). Payload: `{ nodeId, content, children }`
+ *  — the FULL decomposed result of the contenteditable blur (Unit U2). Main
+ *  calls the SAME `setRichText` edit op the renderer's `edit.commitRich` bridge
+ *  wraps (one call — the host decomposes ONCE in `editorBlur`, Unit U4), then
+ *  derives + broadcasts `rag-store-changed` on success. */
+export const IPC_EDIT_RICH_COMMIT = 'provident:edit-rich-commit'
+export interface EditRichCommitPayload {
+  nodeId: string
+  content: string
+  children: RagNodeChild[] // REQUIRED — a valid RagNodeChild[] (possibly [])
+}
+
 // ---- Unit E retrieval IPC (docs/specs/unit-e-rag-index.md §5.7/§8.2) ----
 
 /** The renderer→main `rag-query` IPC (the UI retrieval path, §5.7 — MCP/UI
@@ -402,15 +415,43 @@ export interface RagQueryPayload {
  *  back-reference map after a `rag-store-changed` broadcast. */
 export const IPC_RAG_SNAPSHOT = 'provident:rag-snapshot'
 export interface RagSnapshotPayload {
-  nodes: Array<{ id: string; type: string; content: string; props?: Record<string, unknown>; ownedNodeIds: string[]; createdAt: string; updatedAt: string }>
+  nodes: Array<{
+    id: string
+    type: string
+    content: string
+    props?: Record<string, unknown>
+    /** Unit U3 §1.4 — the inline rich-text children of the snapshot node
+     *  (mirrors the store's `RagNodeChild` shape but uses `type: string` to
+     *  match this node's existing `type: string` convention). ADDITIVE +
+     *  OPTIONAL — a node WITHOUT `children` (the v1 plain-text default) is
+     *  valid. No runtime change: the `IPC_RAG_SNAPSHOT` handler already returns
+     *  full `RagNode` objects that carry `children`. */
+    children?: Array<{ type: string; content: string; props?: Record<string, unknown> }>
+    ownedNodeIds: string[]
+    createdAt: string
+    updatedAt: string
+  }>
   edges: Array<{ id: string; kind: string; source: string; target: string; order?: number; documentIds?: string[]; createdAt: string; updatedAt: string }>
 }
+
+/** Unit U3 §1.3/§1.4 — the rich-text editing mode. Decision D: `'textarea'`
+ *  is the safe default. Unit U1 later adds an `editingMode` field to
+ *  `OperatorSettings` using this SAME type. */
+export type EditingMode = 'textarea' | 'contenteditable'
 
 /** The Unit D §5.1.10 commit result (the `edit-commit` IPC reply). Mirrors the
  *  controller's `CommitResult`; a deleted-node race surfaces as
  *  `reason:'deleted-node'` (not `store-error`). */
 export type EditCommitResult =
   | { ok: true; nodeId: string }
+  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
+
+/** Unit U5 §1.3 — the `edit-rich-commit` IPC reply. Mirrors `EditCommitResult`
+ *  (a deleted-node race surfaces as `reason:'deleted-node'`, not `store-error`)
+ *  and additionally returns the UPDATED node on success (so the
+ *  renderer/controller can observe the written state + refreshed `updatedAt`). */
+export type RichCommitResult =
+  | { ok: true; nodeId: string; node: RagNode }
   | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
 
 /** The `rag-query` IPC result — the JSON-safe transport of the retrieval
@@ -474,6 +515,10 @@ export interface OperatorSettings {
   defaultDocumentId: string | null
   /** The retrieval topK default. */
   topK: number
+  /** Unit U1 §1.2 — the rich-text editing mode. The safe default is
+   *  `'textarea'` (decision D); `'contenteditable'` is the operator opt-in
+   *  (the rich-eligible subtree-root splice target). */
+  editingMode: EditingMode
 }
 
 /** A partial patch applied by `bridge.operatorSettings.set`. */
@@ -481,7 +526,15 @@ export interface OperatorSettingsPatch {
   enabledPanes?: string[]
   defaultDocumentId?: string | null
   topK?: number
+  /** Unit U1 §1.2 — a patch WITHOUT `editingMode` leaves the stored mode
+   *  unchanged. */
+  editingMode?: EditingMode
 }
 
 export const IPC_OPERATOR_SETTINGS_GET = 'provident:operator-settings:get'
 export const IPC_OPERATOR_SETTINGS_SET = 'provident:operator-settings:set'
+/** Unit U1 §1.2 — the main→renderer broadcast channel. Payload: the current
+ *  `OperatorSettings` (the store's filtered result — the exact return of
+ *  `operatorSettingsStore.set(patch)`). One-way notification (the re-derive
+ *  trigger for a settings change), NOT a request/response. */
+export const IPC_OPERATOR_SETTINGS_CHANGED = 'provident:operator-settings-changed'

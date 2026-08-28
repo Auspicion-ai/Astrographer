@@ -21,6 +21,54 @@ one-way snapshot).
 
 ## OPEN
 
+### Editing-mode toggle slice — IN PROGRESS (2026-08-28, execution order U2→U3→U1→U5→U4)
+
+The editing-mode toggle proposal (the "demo textarea vs rich-text document
+editing" switch — `docs/specs/editing-mode-toggle-review.md`,
+PROCEED-WITH-AMENDMENTS, approved as a 5-unit slice) is **IN PROGRESS**,
+executing in order **U2 → U3 → U1 → U5 → U4** (confirmed; no split/merge).
+**U2 is DONE (2026-08-28)** — the pure `decomposeRichHtml` module
+(`src/main/rich-decompose.ts`) + the additive exports on
+`src/main/paste-sanitize.ts` (see the Unit U2 DONE row). **U3 is DONE
+(2026-08-28)** — the pure `isRichEditableRoot(type, ownsDocChildren)` gate + the
+closed `EDITABLE_TYPES` set (new `src/renderer/rich-eligibility.ts`), the host
+`applyEditingMode(envelope, editingMode)` post-assembly splice + the private
+`this.editingMode` field (in `src/renderer/sidebar-panes.ts`, invoked in
+`loadAppGraph` after `setTextareaReadOnly`, before `recomputeBackRefs`), and the
+additive snapshot `children?` field on `RagSnapshotPayload.nodes` + the
+`EditingMode` type (`src/shared/types.ts`) (see the Unit U3 DONE row). **U1 is
+DONE (2026-08-28)** — the `editingMode` 4th
+`OperatorSettings`/`Patch` field + `coerceEditingMode` (only `'contenteditable'`
+passes, else `'textarea'`), the `IPC_OPERATOR_SETTINGS_CHANGED` broadcast (main
+post-SET) + preload `onChanged`, the payload-authoritative synchronous host
+`onOperatorSettingsChanged` (broadcast payload IS the store result — NO
+re-fetch) + the button-toggle Settings control (text div + a toggle button
+reading `data-mode`), the `operatorSet` simplification (broadcast drives the
+re-render), the M9 supersession, the decision **D** supersession
+(EDITING-MODE-SETTING row in decisions.md), AND the adversarial F1–F5 host
+fixes (F1 = boot now applies a PERSISTED editingMode before loadAppGraph, F2 =
+null-payload guard, F3 = compileHandlerBody-compatible toggle body, F4 =
+double-click coalescing regression, F5 = operatorSet .catch). Full suite
+1679 pass / 0 failed. Engine boolean-attribute gap recorded as `HOST/U1-ENG`
+in docs/defects.md + docs/HANDOFF.md (the control pivoted to a button-toggle
+to avoid it). Blind-greens (35/35, `docs/specs/unit-u1-editing-mode-setting-greens.md`
+— the single F-2 blind FAIL was re-verified by the Implementer as a HARNESS
+ARTIFACT, not a real bug; a regression test added to
+`tests/editing-mode-broadcast-host.test.ts` that PASSES); proofreader +
+documentation review in `archive/reviews/2026-08-28-u1-doc-review.md`; the U1
+DONE row below. **U5 is DONE (2026-08-28)** — the `setRichText` atomic
+content+children write-back op + the pure `deriveRichCommitBroadcast` helper +
+the `handleRichCommit` shared handler + the `handleRichCommitIpc` broadcast
+handler-body extraction + the `IPC_EDIT_RICH_COMMIT` channel +
+`EditRichCommitPayload`/`RichCommitResult` + the preload `edit.commitRich`
+bridge (see the Unit U5 DONE row below). Remaining unit:
+- **U4** — the contenteditable handlers + bridge + discriminated `CaretState` +
+  IME + re-derive restore.
+textarea stays the DEFAULT (decision **D** supersedes the FORM-CONTROL-EDITING
+'NOT contenteditable' + the 'no global editingMode field' clauses in U1). Each
+unit is its own red→green→adversarial→greens→doc-review cycle per AGENTS.md
+(RCA-1/2/3/6).
+
 ### Next slice — the rich-text contenteditable editing machinery (COMPLETE)
 
 The rich-text contenteditable editing machinery (the `provident-editable@0.1.0`
@@ -88,6 +136,210 @@ _(none — Units A–T are implemented.)_
 
 ## DONE
 
+- **Unit U5 — the atomic rich-text write-back op + `IPC_EDIT_RICH_COMMIT` +
+  preload `edit.commitRich` (2026-08-28).** The editing-mode-toggle slice's
+  fourth unit (unit 4 of 5 in execution order U2→U3→U1→U5→U4 — decision **A**
+  of `docs/specs/editing-mode-toggle-review.md` §4 + amendment 7 (UI-IPC-only
+  rich commit); the U5 spec is `docs/specs/unit-u5-set-rich-text.md`). The
+  SINGLE `setRichText(ctx, {nodeId, content, children})` op writes BOTH `content`
+  AND `children` in ONE atomic `putNode` (one `content` journal entry; decision
+  A — `applyBatch`/`BatchOp` UNTOUCHED), with the `undefined`≡`[]` children
+  no-op guard (`sameChildren`) + the `children`-required + `nextChildren`
+  representation-preserve contracts; the PURE exported
+  `deriveRichCommitBroadcast(before, after)` helper (kind rule: children change
+  → `structural`, content-only → `content`, no-op → `null`); the shared
+  `handleRichCommit` handler (deleted-node → `reason:'deleted-node'`, else
+  `store-error`); the `IPC_EDIT_RICH_COMMIT` channel +
+  `EditRichCommitPayload`/`RichCommitResult`; and the preload `edit.commitRich`
+  bridge (the `edit` bridge grows 3→4 methods). **F1 (post-green adversarial)
+  extraction** — the main handler's derive→reconcile→broadcast-once body is the
+  node-testable `handleRichCommitIpc(store, payload, deps)` (this repo tests
+  shared handlers, not `main.ts` directly), so the §2.1 states 24-27 broadcast
+  contract (real change → broadcast ONCE / no-op → 0 / kind routing / reconcile
+  failure NON-FATAL) is regression-covered. TestWriter red → Implementer green in
+  `tests/unit-u5-set-rich-text.test.ts` + `tests/unit-u5-rich-commit-ipc.test.ts`
+  = **TestWriter red: 37 failing / 3 pass** (the missing
+  `setRichText`/`deriveRichCommitBroadcast`/`handleRichCommit`/`handleRichCommitIpc`
+  + the missing `IPC_EDIT_RICH_COMMIT`/`EditRichCommitPayload`/`RichCommitResult`
+  + the missing preload `edit.commitRich` — method-does-not-exist + type-level
+  gaps, run and reported before implementation, RCA-1) → **Implementer green:
+  40/40** → the adversarial F1-F4 regressions grew the two files to **51 pass**
+  (the F1 handler-broadcast + F2 before-guard regressions in
+  `tests/unit-u5-rich-commit-ipc.test.ts`, the F4 deepEqual-recursion-cap
+  regressions in `tests/unit-u5-set-rich-text.test.ts`). Adversarial pass
+  (RCA-3) in the spec §5 — **all HOST, F1-F4** (F1 = the handler-broadcast
+  contract UNTESTED → fixed by the `handleRichCommitIpc` extraction +
+  regression tests; F2 = the ADR-9 `before` narrowing had no runtime guard →
+  fixed with a `before ?` derive-guard (never throws, falls back to no
+  broadcast) + regression; F3 = spurious broadcast on a concurrent no-op →
+  ACCEPTED (extra re-derive only, documented, no code change); F4 = `deepEqual`
+  had no recursion-depth guard → fixed with a depth-100 cap (treat as changed,
+  conservative, mirroring `hasDangerousKey`) + regressions), all fixed here +
+  regression-tested. Blind-greens: NOT yet run (creating the
+  `unit-u5-set-rich-text-greens.md` file is a later blind-test pass, not this
+  task). Documentation review in
+  `archive/reviews/2026-08-28-u5-doc-review.md` (spec + trackers reconciled
+  against the build). Trio green: full suite **1730 pass / 32 skip / 0 fail**
+  (up from 1719 by the 11 F1/F4 regression tests), typecheck clean, build clean.
+- **Unit U1 — `editingMode` operator setting + Settings button-toggle control +
+  `operator-settings-changed` re-derive broadcast + the decision supersession
+  (2026-08-28).** The editing-mode-toggle slice's third unit (unit 3 of 5 in
+  execution order U2→U3→U1→U5→U4 — decisions **C** and **D** of
+  `docs/specs/editing-mode-toggle-review.md` §4/§5, U1 row; the U1 spec is
+  `docs/specs/unit-u1-editing-mode-setting.md`). Four pieces: (1) the
+  `editingMode` 4th field on `OperatorSettings`/`OperatorSettingsPatch` + the
+  store (`DEFAULT_SETTINGS`/`sanitize`/`set`/`get`) using the existing
+  `EditingMode` type, with `coerceEditingMode` (only the exact string
+  `'contenteditable'` passes, everything else → `'textarea'`; TOTAL, never
+  throws); (2) the NEW `IPC_OPERATOR_SETTINGS_CHANGED` broadcast (main fires it
+  EXACTLY ONCE post-`set`, payload = the store's filtered/coerced result, NOT the
+  raw patch; GET never broadcasts) + the preload `operatorSettings.onChanged`
+  (returns an unsubscribe); (3) the payload-authoritative SYNCHRONOUS host
+  `onOperatorSettingsChanged` (uses the PAYLOAD directly — NO re-fetch,
+  amendment A; defensive coercion; routes `requestRebuild` → the SAME single
+  fresh re-derive as rag/template) + the boot-applies-persisted-mode fix (F1) +
+  the button-toggle Settings control (a text div `operator-editing-mode` + a
+  button `operator-editing-mode-toggle` reading `data-mode`, operator isolated
+  scope, never MCP-visible, NO `checked`/`selected` boolean-attribute state — the
+  pivot that avoids the confirmed `provident-ssr` gap `HOST/U1-ENG`) + the
+  `operatorSet` simplification (broadcast drives the re-render, no inline
+  re-mount / `.then`) + the M9 supersession (the reconciled M9 test drives the
+  operator re-render via the broadcast path); (4) the NEW `docs/decisions.md`
+  DECIDED `EDITING-MODE-SETTING` row superseding FORM-CONTROL-EDITING's "NOT
+  contenteditable" clause + RICH-TEXT-EDITING-GATE's "no global `editingMode`
+  field" clause. TestWriter red → Implementer green in
+  `tests/operator-settings-editing-mode.test.ts` (21 node-tested) +
+  `tests/editing-mode-broadcast-host.test.ts` (30 pass / 2 skip, incl. the F-2
+  regression) = **51 pass / 2 skip** (the RED set = the missing
+  `editingMode` field / `coerceEditingMode` / `IPC_OPERATOR_SETTINGS_CHANGED` /
+  `onChanged` / `onOperatorSettingsChanged` / the button-toggle control / the
+  `operatorSet` simplification — method-does-not-exist + type-level gaps — run
+  and reported before implementation, RCA-1); the **2 contract conflicts** (the
+  payload-authoritative amendment A rework + the M9 supersession) reconciled by
+  amending the spec + the reconciled tests. Adversarial pass (RCA-3) in the spec
+  §5 — **all HOST, F1–F5** (F1 boot-applies-persisted-mode, F2 null-payload
+  guard, F3 compileHandlerBody-compatible toggle body, F4 double-click
+  coalescing, F5 operatorSet `.catch`), all fixed + regression-tested in
+  `tests/editing-mode-broadcast-host.test.ts`; the confirmed `provident-ssr`
+  boolean-attribute engine gap recorded as **`HOST/U1-ENG`** in
+  `docs/defects.md` + `docs/HANDOFF.md` (the control PIVOTED to a button-toggle
+  to avoid it — a `button` is NOT a form control, carries no checked/selected
+  state). Blind-greens in
+  `docs/specs/unit-u1-editing-mode-setting-greens.md` (35 scenarios — 35 pass, 0
+  fail, 0 skipped; the single F-2 blind FAIL was re-verified by the Implementer
+  as a **HARNESS ARTIFACT, not a real bug** — the blind harness's `get()` mock
+  did not reflect `set()`, so `refresh()`'s re-fetch overwrote the
+  payload-authoritative value; a regression test added to
+  `tests/editing-mode-broadcast-host.test.ts` that drives the EXACT blind flow
+  and PASSES); proofreader pass; documentation review in
+  `archive/reviews/2026-08-28-u1-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (full suite **1679 pass / 0 fail**,
+  typecheck clean, build clean). Decision landed: **EDITING-MODE-SETTING** (see
+  `docs/decisions.md`).
+- **Unit U3 — rich-text editing eligibility + host post-assembly splice +
+  snapshot `children` field (2026-08-28).** The editing-mode-toggle slice's
+  second unit (unit 2 of 5 in execution order U2→U3→U1→U5→U4 — decisions **C**
+  and **E** of `docs/specs/editing-mode-toggle-review.md` §4/§5, U3 row). A new
+  PURE, node-testable module `src/renderer/rich-eligibility.ts` exports
+  `isRichEditableRoot(type, ownsDocChildren): boolean` (true iff
+  `EDITABLE_TYPES.has(type) && !ownsDocChildren` — PURE + DETERMINISTIC + TOTAL,
+  never throws) + the closed `EDITABLE_TYPES` set (`h1`–`h6`/`p`/`blockquote`/
+  `div` — **9 members**, NOT the review's miscounted "7"; the 14 other
+  `RagNodeType` members fall back to the textarea). The host post-assembly
+  splice — a private `SidebarPanes` method `applyEditingMode(envelope,
+  editingMode)` in `src/renderer/sidebar-panes.ts` — walks each payload
+  `content[0]`, recurses into `rag-`-prefixed doc-children, REMOVES the
+  traversal-authored `textarea-<ragId>` child + sets `contenteditable: true` on
+  every RICH-ELIGIBLE root (preserving the root's other props, incl. authored
+  `id`/`data-rag-node-id`/`data-doc-head`); ineligible roots keep their textarea
+  (the fallback control); `editingMode === 'textarea'` is a byte-for-byte no-op;
+  idempotent across re-assembles (H4-style). `applyEditingMode` is invoked in
+  `loadAppGraph` immediately after `setTextareaReadOnly` and BEFORE
+  `recomputeBackRefs` (decision C — the readOnly pass still sees the textarea;
+  backRefs recomputed from the POST-splice envelope). The mode is supplied from
+  a NEW private host field `private editingMode: EditingMode = 'textarea'` (the
+  safe default, decision D) INJECTED by the U3 integration test (no U1
+  operator-settings field required). `src/shared/types.ts` gains the additive
+  `children?` field on `RagSnapshotPayload.nodes` (no runtime change — the
+  `IPC_RAG_SNAPSHOT` handler already returns full `RagNode` objects) + the
+  `EditingMode = 'textarea' | 'contenteditable'` type (Unit U1 later adds the
+  `editingMode` field to `OperatorSettings` using this SAME type and rewires the
+  host source). TestWriter red → Implementer green in
+  `tests/rich-eligibility.test.ts` (20) + `tests/rich-splice.test.ts` (21) =
+  41 — **TestWriter red: 32 failing / 8 pass** (the RED set: the
+  `isRichEditableRoot`/`EDITABLE_TYPES` module missing + `applyEditingMode`/
+  `this.editingMode` absent + the `children?`/`EditingMode` type-level gaps) →
+  **Implementer green: 40 → 41 pass** (the F3 adversarial regression added after
+  the adversarial pass). The **state-14 spec contradiction** (the §2.1 state-14
+  prose read an "eligible h1 owning an h2 doc-child splices" vs the pinned
+  `ownsDocChildren` rule making the h1 INELIGIBLE) resolved by amending the test
+  + spec prose to pin "parent-keeps-textarea / doc-child-splices" — the h1
+  keeps its textarea (it owns a doc-child), only the doc-child h2 splices.
+  Adversarial pass (RCA-3) in the spec §5 — all HOST (none package): F1 (a-med,
+  forward-looking for U1 — the splice irreversibly mutates the shared cached
+  traversal envelope; contract for U1: mode toggling MUST always trigger a fresh
+  traversal / re-derive, never `refresh()` over the cached envelope), F2 (minor,
+  deferred to U4 — textarea caret over-delete on the textarea→contenteditable
+  transition), F3 (minor, FIXED — `setTextareaReadOnly` AND `applyEditingMode`
+  dereferenced `p.content[0]` without a guard → a payload with an empty `content`
+  array threw; fixed: both passes drive the walk with `walk(p.content?.[0])` and
+  the `walk` helper starts with `if (!n) return`; regression-tested — see
+  `docs/defects.md` HOST-U3-F3). Blind-greens in
+  `docs/specs/unit-u3-rich-eligibility-splice-greens.md` (35 scenarios — 35
+  pass, 0 fail, 0 skipped, authored from the docs ONLY, blind-run against the
+  live eligibility gate + a spec-derived splice harness); proofreader pass;
+  documentation review in `archive/reviews/2026-08-28-u3-doc-review.md` (spec +
+  greens + trackers reconciled against the build); trio green (full suite 1628
+  pass / 30 skip, typecheck clean, build clean).
+- **Unit U2 — contenteditable-blur HTML → `RagNodeChild[]` decomposition (pure)
+  (2026-08-28).** The editing-mode-toggle slice's first unit (unit 1 of 5 in
+  execution order U2→U3→U1→U5→U4 — decision **F** of
+  `docs/specs/editing-mode-toggle-review.md`). A new PURE, TOTAL,
+  node-testable module `src/main/rich-decompose.ts` exports
+  `decomposeRichHtml(rawHtml: string): DecomposeRichResult` — a deterministic
+  converter that turns a contenteditable root's `innerHTML` (browser-authored
+  rich text) back into the RAG node's plain-text `content` + inline `children`
+  (`RagNodeChild[]`), so the host can write it back via the combined
+  `setRichText` edit op after blur (Unit U5). The discriminated return
+  `{ ok: true; content; children } | { ok: false; error }`; the ONLY fail-state
+  is a non-string input → `{ ok: false, error: 'decomposeRichHtml: input must be
+  a string' }`; for ANY string input it returns `{ ok: true, ... }` (never
+  throws). Closed accepted element set (11 types): `strong`/`em`/`a`/`img`
+  (as-is) + `b`→`strong`/`i`→`em` (mapped — emitted `RagNodeChildType`s: 4,
+  `strong`/`em`/`a`/`img`) + `u`/`font`/`span`/`div`/`br` + anything outside the
+  set unwrapped to text (folded into the parent `content`); strips `on*`/
+  dangerous-key attributes; re-validates `a` href / `img` src via
+  `normalizeUrl`/`isSafeUrl` (raster-only `data:image/*` carve-out for `img`
+  only); demotes unsafe/missing-`href` `a` to text, drops unsafe/missing-`src`
+  `img`; nested-inline flattening + recursive hoisting; text-between-children
+  folds into `content` (the §3 round-trip invariant). REUSES the paste-sanitize
+  tokenizer + URL helpers exported ADDITIVELY from `src/main/paste-sanitize.ts`
+  (`parseHtml`/`normalizeUrl`/`isSafeUrl`/`escapeAttr` + the
+  `HtmlText`/`HtmlElement`/`HtmlNode` types) with NO behavior change to
+  `sanitizePastedHtml` (the pinned Unit S 46-test suite stays green).
+  TestWriter red → Implementer green in `tests/unit-u2-rich-decompose.test.ts`
+  (RED marker: `src/main/rich-decompose.ts` did not exist + the additive exports
+  were still private → **62 failing** → **64 green**; the 64 tests = the §2.1 38
+  happy-path states + the §2.2 8 fail-states + the 1 module-existence RED + the
+  §1.3 5 additive-export tests + the §6 12 adversarial regressions ADR-1..ADR-12
+  — the original ADR-1..ADR-10 must-hunt + the two host-fix regressions ADR-11
+  (F1) + ADR-12 (F2) added after the adversarial pass). Adversarial pass (RCA-3)
+  in the spec §6 — **all HOST (none package)**: F1 (a-big, FIXED —
+  `String.fromCodePoint` threw a `RangeError` on out-of-range / lone-surrogate
+  HTML refs, violating totality; fixed with a `code > 0x10ffff || surrogate`
+  guard in `decodeHtmlRefs` leaving the literal un-decoded — also makes
+  `sanitizePastedHtml` not throw; regression ADR-11), F2 (a-med, FIXED — a
+  legitimate trailing text run after `img` was dropped as the img's
+  tokenizer-attached child; fixed by recovering it into the parent `content`;
+  regression ADR-12), F3 (minor, resolved by F2 — `br` and `img` now recover
+  tokenizer-attached text consistently). Blind-greens in
+  `docs/specs/unit-u2-rich-decompose-greens.md` (35 scenarios / 36 vitest
+  assertions — 35 pass, 0 fail, 0 skipped, authored from the docs ONLY, blind-run
+  against the live module); proofreader pass (test-count 62→64 + the F1/F2
+  host-fix records); documentation review in
+  `archive/reviews/2026-08-28-u2-doc-review.md` (spec + greens + trackers
+  reconciled against the build); trio green (Unit U2 suite 64 pass; full suite
+  1587 pass / 30 skip, 83 files, typecheck clean, build clean).
 - **Unit T — markdown file import (initial-ingestion corpus → RAG store)
   (2026-08-28).** The markdown file import feature (the initial-ingestion
   framing, per the PROCEED-WITH-AMENDMENTS gate verdict + the user's ADJUSTED

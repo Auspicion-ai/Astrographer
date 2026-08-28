@@ -4,9 +4,9 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
-import type { BatchOp, BatchResult } from './rag-store.js'
+import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -49,6 +49,11 @@ export interface ProvidentBridge {
      *  BINDING) and broadcasts `rag-store-changed` on success. Returns the
      *  `BatchResult`. */
     batch(ops: BatchOp[]): Promise<BatchResult>
+    /** Unit U5 §1.4 — the atomic rich-text write-back. Sends the
+     *  `edit-rich-commit` IPC to main, which calls the SAME `setRichText` op
+     *  once and derives + broadcasts `rag-store-changed` on a real change.
+     *  Returns the `RichCommitResult`. */
+    commitRich(nodeId: string, content: string, children: RagNodeChild[]): Promise<RichCommitResult>
     /** Unit D §5.1.9 — subscribe to the `rag-store-changed` re-traversal
      *  trigger. Returns an unsubscribe function. */
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void
@@ -92,6 +97,9 @@ export interface ProvidentBridge {
   operatorSettings: {
     get(): Promise<OperatorSettings>
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings>
+    /** Unit U1 §1.3 — subscribe to the operator-settings-change re-derive
+     *  trigger; returns an unsubscribe function. */
+    onChanged(handler: (settings: OperatorSettings) => void): () => void
   }
   /** Unit K M2 — the `window.provident.sidebar` bridge the compiled handler
    *  bodies call (`var s = window && window.provident && window.provident.sidebar`).
@@ -195,6 +203,14 @@ const bridge: ProvidentBridge = {
       const payload: EditBatchPayload = { ops }
       return ipcRenderer.invoke(IPC_EDIT_BATCH, payload)
     },
+    /** Unit U5 §1.4 — the atomic rich-text write-back. Sends the
+     *  `edit-rich-commit` IPC to main, which calls the SAME `setRichText` op
+     *  once and derives + broadcasts `rag-store-changed` on a real change.
+     *  Returns the `RichCommitResult`. */
+    commitRich(nodeId: string, content: string, children: RagNodeChild[]): Promise<RichCommitResult> {
+      const payload: EditRichCommitPayload = { nodeId, content, children }
+      return ipcRenderer.invoke(IPC_EDIT_RICH_COMMIT, payload)
+    },
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void {
       const listener = (_event: unknown, payload: RagStoreChangedPayload): void => {
         handler(payload)
@@ -275,6 +291,17 @@ const bridge: ProvidentBridge = {
     },
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings> {
       return ipcRenderer.invoke(IPC_OPERATOR_SETTINGS_SET, patch)
+    },
+    /** Unit U1 §1.3 — subscribe to the operator-settings-change re-derive
+     *  trigger. Returns an unsubscribe function. */
+    onChanged(handler: (settings: OperatorSettings) => void): () => void {
+      const listener = (_event: unknown, settings: OperatorSettings): void => {
+        handler(settings)
+      }
+      ipcRenderer.on(IPC_OPERATOR_SETTINGS_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC_OPERATOR_SETTINGS_CHANGED, listener)
+      }
     },
   },
   // Unit K M2 — the sidebar bridge the compiled handler bodies call. The preload

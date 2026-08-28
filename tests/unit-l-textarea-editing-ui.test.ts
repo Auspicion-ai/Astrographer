@@ -468,7 +468,7 @@ describe('the textarea handler wiring (§5.8.3-5)', () => {
     const saveCaret = vi.spyOn(h.editController, 'saveCaret')
     h.sidebar.textareaBlur('n1', 'new value')
     // the caret is saved (offset captured from the DOM textarea's selectionStart)
-    expect(saveCaret).toHaveBeenCalledWith('n1', { offset: 0, focused: true })
+    expect(saveCaret).toHaveBeenCalledWith('n1', { kind: 'textarea', offset: 0, focused: true })
     // the commit routes through the edit-commit IPC (bridge.edit.commit)
     await vi.waitFor(() => expect(h.bridge.edit.commit).toHaveBeenCalledWith('n1', 'new value'))
     // on success the dirty flag is cleared
@@ -527,7 +527,7 @@ describe('the caret/focus preservation (§5.8.8/9)', () => {
     await h.host.boot(h.runtime)
     const saveCaret = vi.spyOn(h.editController, 'saveCaret')
     h.sidebar.textareaBlur('n1', 'new value')
-    expect(saveCaret).toHaveBeenCalledWith('n1', { offset: 0, focused: false })
+    expect(saveCaret).toHaveBeenCalledWith('n1', { kind: 'textarea', offset: 0, focused: false })
   })
 
   it('§5.8.9 — after a re-derive, the host calls editController.restoreCaret(ragId) for each node with a saved caret', async () => {

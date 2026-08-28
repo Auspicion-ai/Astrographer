@@ -32,7 +32,7 @@ import {
   type AppGraphAssemblyResult,
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
-import type { EditController } from './edit-controller.js'
+import type { EditController, CaretState, RichCaretEdge } from './edit-controller.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../main/template-shape.js'
 import type {
@@ -42,8 +42,12 @@ import type {
   SecuritySettings,
   OperatorSettings,
   OperatorSettingsPatch,
+  EditingMode,
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
+import type { RagNodeType } from '../main/rag-store.js'
+import { isRichEditableRoot } from './rich-eligibility.js'
+import { decomposeRichHtml } from '../main/rich-decompose.js'
 
 /** The Unit D §5.1.9 `rag-store-changed` payload (declared structurally here —
  *  the canonical type lives in `src/main/preload.ts`, which the renderer bundle
@@ -63,6 +67,13 @@ export interface SidebarBridge {
   }
   edit: {
     onRagStoreChanged(handler: (payload: RagStoreChangedPayload) => void): () => void
+    /** Unit U5 §1.4 — the atomic rich-text write-back the contenteditable blur
+     *  commits through. */
+    commitRich(
+      nodeId: string,
+      content: string,
+      children: import('../main/rag-store.js').RagNodeChild[],
+    ): Promise<import('../shared/types.js').RichCommitResult>
   }
   rag: {
     query(query: string, topK?: number): Promise<RagQueryResult>
@@ -79,6 +90,7 @@ export interface SidebarBridge {
   operatorSettings: {
     get(): Promise<OperatorSettings>
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings>
+    onChanged(handler: (settings: OperatorSettings) => void): () => void
   }
 }
 
@@ -113,6 +125,28 @@ const DOC_NAV_SELECT_BODY = `function (ctx) {
   if (!s) return;
   var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-document-id'];
   if (id) s.selectDocument(id);
+}`
+
+// Unit U1 §1.4 — the editingMode button-toggle click handler. Reads the TOGGLED
+// mode from the button node's `data-mode` prop (a `<button>` target's `value` is
+// the empty string via handleOperatorEvent, so the dispatched click arg is
+// unusable), validates it against the two-member union, and routes it through
+// the shared operator-change → `sidebar.operatorSet({ editingMode })` bridge
+// path. Mirrors DOC_NAV_SELECT_BODY.
+//
+// Two representations of the SAME handler:
+//   - `OPERATOR_EDITING_MODE_TOGGLE_BODY` — the INNER STATEMENTS. This is what the
+//     harness registers via `registerHandlerDef` and reads back with
+//     `handlerDef(...).body`, executing it as `new Function('ctx', body)`.
+//   - `OPERATOR_EDITING_MODE_TOGGLE_HANDLER` — the FULL function-expression string
+//     the operator isolated scope's INLINE handler needs (the engine
+//     instantiates inline handler bodies via `return (${src})`).
+const OPERATOR_EDITING_MODE_TOGGLE_BODY = `var s = window && window.provident && window.provident.sidebar;
+if (!s) return;
+var mode = ctx && ctx.node && ctx.node.props && ctx.node.props['data-mode'];
+if (mode === 'textarea' || mode === 'contenteditable') s.operatorSet({ editingMode: mode });`
+const OPERATOR_EDITING_MODE_TOGGLE_HANDLER = `function (ctx) {
+${OPERATOR_EDITING_MODE_TOGGLE_BODY}
 }`
 const SEARCH_SUBMIT_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
@@ -162,6 +196,43 @@ const TEXTAREA_BLUR_BODY = `function (ctx, value) {
     value = el ? el.value : '';
   }
   s.textareaBlur(ragId, value);
+}`
+
+// Unit U4 §1.3 — the contenteditable rich-text handler defs (decision G). They
+// reach the host via `window.provident.sidebar` — NEVER an MCP tool (the Unit K
+// M2 pattern). The blur body prefers a dispatch-provided `html` arg (MCP path,
+// decision G) and falls back to the DOM contenteditable root's `innerHTML`
+// (`document.getElementById('rag-' + ragId)`, UI path).
+const RAG_EDITOR_INPUT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (ragId) s.editorInput(ragId);
+}`
+const RAG_EDITOR_BLUR_BODY = `function (ctx, html) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (!ragId) return;
+  // G — prefer a dispatch-provided html arg (MCP path); else read the DOM
+  // contenteditable root's innerHTML (UI path).
+  if (html === undefined) {
+    var el = document.getElementById('rag-' + ragId);
+    html = el ? el.innerHTML : '';
+  }
+  s.editorBlur(ragId, html);
+}`
+const RAG_EDITOR_COMPOSITIONSTART_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (ragId) s.editorCompositionStart(ragId);
+}`
+const RAG_EDITOR_COMPOSITIONEND_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var ragId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-rag-node-id'];
+  if (ragId) s.editorCompositionEnd(ragId);
 }`
 
 /** Collect a translated node's subtree node ids (root-first, tree order),
@@ -233,9 +304,24 @@ export class SidebarPanes {
    *  added; on restore/clear it is removed. */
   private caretNodes = new Set<string>()
 
+  /** Unit U4 §1.4 (decision H) — the IME composition guard fields. `composingRagId`
+   *  is the RAG node id currently IME-composing; `pendingCommitRagId` is a blur
+   *  deferred mid-composition, keyed by ragId; `committingRagIds` is the per-ragId
+   *  commit-in-flight latch (ADR-1 no-double-commit race). */
+  private composingRagId: string | null = null
+  private pendingCommitRagId: string | null = null
+  private committingRagIds: Set<string> = new Set()
+
+  /** Unit U3 §1.3 — the rich-text editing mode (the U1 wiring point). The safe
+   *  default is `'textarea'` (decision D). Unit U1 later wires this field to the
+   *  operator-settings value + the re-derive broadcast; the U3 integration test
+   *  INJECTS the mode by setting this field before calling `loadAppGraph`. */
+  private editingMode: EditingMode = 'textarea'
+
   /** The subscription cleanup handles. */
   private unsubRag: (() => void) | null = null
   private unsubTemplate: (() => void) | null = null
+  private unsubSettings: (() => void) | null = null
 
   constructor(opts: SidebarPanesOptions) {
     this.mount = opts.mount
@@ -311,6 +397,25 @@ export class SidebarPanes {
     // textarea is MCP-visible, §5.6).
     registerHandlerDef('rag-textarea-input', { name: 'rag-textarea-input', body: TEXTAREA_INPUT_BODY })
     registerHandlerDef('rag-textarea-blur', { name: 'rag-textarea-blur', body: TEXTAREA_BLUR_BODY })
+    // Unit U4 §1.3 — the 4 contenteditable rich-text handler defs (decision G).
+    // Registered in the app-graph scope so `provident.dispatch` can drive them
+    // (MCP/UI equivalence — the contenteditable is MCP-visible, §3). FULL
+    // function-expression bodies (the compileHandlerBody-compatible form, the
+    // U1 F3 convention).
+    registerHandlerDef('rag-editor-input', { name: 'rag-editor-input', body: RAG_EDITOR_INPUT_BODY })
+    registerHandlerDef('rag-editor-blur', { name: 'rag-editor-blur', body: RAG_EDITOR_BLUR_BODY })
+    registerHandlerDef('rag-editor-compositionstart', { name: 'rag-editor-compositionstart', body: RAG_EDITOR_COMPOSITIONSTART_BODY })
+    registerHandlerDef('rag-editor-compositionend', { name: 'rag-editor-compositionend', body: RAG_EDITOR_COMPOSITIONEND_BODY })
+    // Unit U1 §1.4 — the editingMode button-toggle click handler. Additive +
+    // harmless in the app graph (the operator scope uses the INLINE body; the
+    // app graph never references this handler name). F3 (adversarial): register
+    // the FULL function-expression form (`OPERATOR_EDITING_MODE_TOGGLE_HANDLER`)
+    // so the registered body is `compileHandlerBody`-compatible (the app Runtime
+    // resolves `registerHandlerDef` bodies via
+    // `compileHandlerBody(src) = new Function('return (' + src + ')')()`, which
+    // SyntaxErrors on the inner-statements form) — matching every other
+    // `registerHandlerDef` body in this file.
+    registerHandlerDef('operator-editing-mode-toggle', { name: 'operator-editing-mode-toggle', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER })
   }
 
   /** Build the base PaneContext from the current host-owned state + backRefs +
@@ -358,6 +463,11 @@ export class SidebarPanes {
     // making every textarea editable). The authoritative deleted-node check
     // lives in `commit` (Unit D §5.4 M9).
     this.setTextareaReadOnly(result.envelope)
+    // Unit U3 §1.3 (decision C) — the host post-assembly splice runs AFTER the
+    // Unit L readOnly pass (so it still sees the textarea) and BEFORE
+    // recomputeBackRefs (so the backRefs are recomputed from the POST-splice
+    // envelope — a removed `textarea-<ragId>` never lingers in the map).
+    this.applyEditingMode(result.envelope, this.editingMode)
     // M14 — recompute the backRefs from the ASSEMBLED envelope (the node ids the
     // loaded graph actually mints), AFTER assembly and BEFORE load.
     const assembledBackRefs = this.recomputeBackRefs(result.envelope)
@@ -407,7 +517,11 @@ export class SidebarPanes {
     if (this.runtime && this.lastTraversalEnvelope) {
       this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
     }
-    this.renderOperator()
+    // Unit U1 §1.4 — REBUILD the operator envelope (not just re-render the
+    // cached translated nodes) so `settingsContent` re-evaluates with the
+    // re-fetched `lastOperatorSettings` — the editingMode text-div + button
+    // label/`data-mode` update on every re-derive/re-fetch.
+    this.mountOperator()
   }
 
   /** The full boot wiring: register + enable the panes, bind the handlers,
@@ -447,6 +561,21 @@ export class SidebarPanes {
     } catch {
       this.security = null
     }
+    // F1 (adversarial) — fetch the PERSISTED operator settings at boot so a
+    // persisted `editingMode` (e.g. 'contenteditable') is honored from the very
+    // first load. The only other get is in `refresh()`, which boot never calls —
+    // without this fetch `this.editingMode` would stay 'textarea' until a
+    // broadcast, and a later re-derive would flip the control without the graph.
+    // Same coercion as onOperatorSettingsChanged: only 'contenteditable' passes,
+    // else 'textarea'. A bridge error keeps the default (textarea) + null
+    // lastOperatorSettings (never a crash).
+    try {
+      const settings = await this.bridge.operatorSettings.get()
+      this.lastOperatorSettings = settings
+      this.editingMode = settings.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea'
+    } catch {
+      // keep the default editingMode (textarea) + null lastOperatorSettings
+    }
     // Derive the document ids from the doc-head edges' targets.
     const documentIds = this.deriveDocumentIds(snapshot)
     const traversalEnvelope = this.buildTraversalEnvelope(snapshot, documentIds)
@@ -455,6 +584,13 @@ export class SidebarPanes {
     // Subscribe to the re-derive triggers.
     this.unsubRag = this.bridge.edit.onRagStoreChanged((p) => this.onRagStoreChanged(p))
     this.unsubTemplate = this.bridge.template.onTemplateChanged((p) => this.onTemplateChanged(p))
+    // Unit U1 §1.3 — the operator-settings-change re-derive trigger. Guarded so
+    // a bridge whose `operatorSettings` predates the `onChanged` subscription
+    // (e.g. an older host/test surface) still boots — the settings-change
+    // broadcast simply has no subscriber in that case.
+    if (typeof this.bridge.operatorSettings.onChanged === 'function') {
+      this.unsubSettings = this.bridge.operatorSettings.onChanged((p) => void this.onOperatorSettingsChanged(p))
+    }
   }
 
   /** The re-derive wiring: fetch the snapshot, buildTraversal (with the stored
@@ -490,27 +626,50 @@ export class SidebarPanes {
       if (this.runtime) {
         this.loadAppGraph(this.runtime, traversalEnvelope)
       }
-      // Unit L §5.4 — after a re-derive re-loads the pane-inclusive envelope,
-      // restore the saved caret for each node with a saved caret. A dangling
+      // Unit U4 §1.7 — after a re-derive re-loads the pane-inclusive envelope,
+      // restore the saved caret for each node with a saved caret, GATED by the
+      // node's RENDERED control type (amendment 4 / U3 F2 / ADR-8). A dangling
       // back-reference clears the stale caret (restoreCaret returns undefined —
       // Unit D §5.3 L5); the host does NOT re-apply a stale caret (A4).
       for (const ragId of [...this.caretNodes]) {
         const caret = this.editController.restoreCaret(ragId)
         if (caret === undefined) {
-          this.caretNodes.delete(ragId)
+          this.caretNodes.delete(ragId) // dangling backRef — stale caret cleared (L5)
+          continue
+        }
+        // ONE-SHOT (H2) — remove the node after a SUCCESSFUL restore AND after a
+        // dropped/mismatched restore, so only the re-derive immediately following
+        // the edit re-focuses — not every subsequent re-derive.
+        this.caretNodes.delete(ragId)
+        if (caret.kind === 'rich') {
+          // Gate — ONLY restore a rich caret into a REAL contenteditable root. The
+          // `rag-<ragId>` element is authored by the traversal UNCONDITIONALLY (it
+          // exists in BOTH modes), so ELEMENT PRESENCE is NOT a valid gate (U3 F2).
+          // The real indicator is `this.editingMode === 'contenteditable'` AND the
+          // rendered root carrying the `contenteditable` attribute that
+          // `applyEditingMode` authors ONLY for eligible roots in contenteditable mode.
+          const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+          const rootIsContenteditable =
+            this.editingMode === 'contenteditable' &&
+            !!root &&
+            ((root as { isContentEditable?: boolean }).isContentEditable === true || root.getAttribute?.('contenteditable') === 'true')
+          if (rootIsContenteditable) {
+            this.restoreRichCaret(ragId, caret)
+          }
+          // else: editingMode is 'textarea', the node is ineligible, or the rendered
+          // root is not contenteditable (a contenteditable→textarea toggle) — the
+          // rich caret is DROPPED, never applied to a textarea/non-contenteditable
+          // node (amendment 4 / U3 F2 / ADR-8).
         } else {
-          // One-shot restore (adversarial H2): remove the node after a
-          // SUCCESSFUL restore too, so only the re-derive immediately following
-          // the edit re-focuses — not every subsequent re-derive.
-          this.caretNodes.delete(ragId)
+          // Gate — ONLY restore a textarea caret into a `textarea-<ragId>` element.
           const el = document.getElementById('textarea-' + ragId) as HTMLTextAreaElement | null
           if (el) {
             el.selectionStart = caret.offset
             el.selectionEnd = caret.offset
-            // Guard the focus call — the dom-shim element (test env) has no
-            // `focus`; the real DOM does.
             if (caret.focused && typeof el.focus === 'function') el.focus()
           }
+          // else: the node now renders contenteditable — the textarea caret is
+          // DROPPED, never applied to a contenteditable node (amendment 4 / U3 F2).
         }
       }
       await this.refresh()
@@ -536,6 +695,27 @@ export class SidebarPanes {
     this.editController.requestRebuild()
   }
 
+  /** Unit U1 §1.3 (amendment A) — the operator-settings-changed handler. The
+   *  broadcast payload IS the authoritative store state (main broadcasts
+   *  `operatorSettingsStore.set()`'s result post-SET), so the host does NOT
+   *  re-fetch — a re-fetch is redundant and creates an async race with the sync
+   *  requestRebuild requirement. FULLY SYNCHRONOUS: set lastOperatorSettings +
+   *  editingMode from the PAYLOAD (defensive coercion — only 'contenteditable'
+   *  passes), then route through the edit controller's dirty-edit guard
+   *  (requestRebuild) → the SAME single re-derive as rag-store-changed /
+   *  template-changed (a FRESH traversal — never refresh() over the cached
+   *  envelope). A malformed/absent editingMode is coerced to 'textarea' and the
+   *  handler STILL rebuilds (the payload is authoritative, not dropped). */
+  private onOperatorSettingsChanged(payload: OperatorSettings): void {
+    // F2 (adversarial) — defensive guard: a null/undefined payload is never
+    // dereferenced (never throw); it coerces to the textarea default and the
+    // handler STILL rebuilds (the broadcast is authoritative, not dropped).
+    payload = (payload ?? { editingMode: 'textarea' }) as OperatorSettings
+    this.lastOperatorSettings = payload
+    this.editingMode = payload.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea'
+    this.editController.requestRebuild() // → reDerive (FRESH traversal — never refresh() over the cached envelope)
+  }
+
   // ---- private helpers ----------------------------------------------------
 
   /** The operator settings pane content (M9 — the render reads
@@ -549,6 +729,24 @@ export class SidebarPanes {
         { type: 'div', props: { id: 'operator-enabled-panes' }, content: (s?.enabledPanes ?? []).join(', ') },
         { type: 'div', props: { id: 'operator-default-document' }, content: s?.defaultDocumentId ?? '(all)' },
         { type: 'div', props: { id: 'operator-topk' }, content: `topK: ${s?.topK ?? 5}` },
+        // Unit U1 §1.4 — the editingMode button-toggle. A text div shows the
+        // CURRENT mode; a button (NOT a form control — the pivot) carries the
+        // TOGGLED (other union member) mode in `data-mode` + the toggle-action
+        // label. NO checked/selected boolean-attribute props are authored.
+        {
+          type: 'div',
+          props: { id: 'operator-editing-mode' },
+          content: `editingMode: ${s?.editingMode ?? 'textarea'}`,
+        },
+        {
+          type: 'button',
+          props: {
+            id: 'operator-editing-mode-toggle',
+            'data-mode': (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'textarea' : 'contenteditable',
+          },
+          content: (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
+          handlers: [{ name: 'operator-editing-mode-toggle', event: 'click', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER }],
+        },
       ],
     }
   }
@@ -629,7 +827,8 @@ export class SidebarPanes {
    *  correct value on every pass (not just flipping to `true`) keeps the
    *  mutation idempotent across re-assembles (adversarial H4). */
   private setTextareaReadOnly(envelope: LegacyInitialData): void {
-    const walk = (n: LegacyNodeData): void => {
+    const walk = (n?: LegacyNodeData): void => {
+      if (!n) return // F3 (adversarial) — a malformed payload root must not throw
       if (n.type === 'textarea') {
         const ragId = n.props?.['data-rag-node-id']
         if (typeof ragId === 'string') {
@@ -644,7 +843,62 @@ export class SidebarPanes {
       }
       for (const c of n.children ?? []) walk(c as LegacyNodeData)
     }
-    for (const p of envelope.content ?? []) walk(p.content[0])
+    for (const p of envelope.content ?? []) walk(p.content?.[0])
+  }
+
+  /** Unit U3 §1.3 — the host post-assembly splice. When `editingMode ===
+   *  'contenteditable'`, walk every subtree root in the assembled envelope's
+   *  content payloads: for each RICH-ELIGIBLE root, REMOVE the
+   *  traversal-authored `textarea-<ragId>` child and set `contenteditable:
+   *  true` on the root's props (authored as provident data). Ineligible roots
+   *  keep their textarea (the fallback control). When `editingMode ===
+   *  'textarea'`, no-op. Idempotent (mirrors setTextareaReadOnly's H4): on a
+   *  repeated splice of the SAME envelope, an already-removed textarea is not
+   *  found → the removal no-ops; `contenteditable: true` is set again. Recurse
+   *  into `rag-`-prefixed subtree roots only (doc-children); inline children
+   *  (`inline-…`) and textareas are never subtree roots. */
+  private applyEditingMode(envelope: LegacyInitialData, editingMode: EditingMode): void {
+    if (editingMode !== 'contenteditable') return
+    const walk = (n?: LegacyNodeData): void => {
+      if (!n) return // F3 (adversarial) — a malformed payload root must not throw
+      const pid = n.props?.id
+      if (typeof pid === 'string' && pid.startsWith('rag-')) {
+        const ragId = pid.slice(4)
+        // `ownsDocChildren` mirrors the traversal's `rag-`-prefix rule
+        // (collectSubtreeIds / recomputeBackRefs): a DIRECT child whose
+        // authored `props.id` is a `rag-`-prefixed string is a doc-child
+        // subtree root. Inline children (`inline-…`) and the textarea
+        // (`textarea-…`) are NOT `rag-`-prefixed → never doc-children.
+        const ownsDocChildren = (n.children ?? []).some((c) => {
+          const cid = (c as LegacyNodeData).props?.id
+          return typeof cid === 'string' && cid.startsWith('rag-')
+        })
+        if (isRichEditableRoot(n.type as RagNodeType, ownsDocChildren)) {
+          n.children = (n.children ?? []).filter(
+            (child) => (child as LegacyNodeData).props?.id !== `textarea-${ragId}`,
+          )
+          // Preserve the root's existing props (authored id, data-rag-node-id,
+          // data-doc-head); overwrite any stale authored `contenteditable`.
+          n.props = { ...(n.props ?? {}), contenteditable: true }
+          // Unit U4 §1.3 — ATTACH the 4 name-referenced rich handler defs to the
+          // eligible root (idempotent — mirrors the U3 H4: a repeated splice sets
+          // the SAME 4-def array, no duplicate accumulation, no throw). Resolved to
+          // the registered bodies by the app Runtime's
+          // `resolveNameReferencedHandlerBodies` (the Unit L §5.8 state-12 pattern).
+          n.handlers = [
+            { name: 'rag-editor-input', event: 'input' },
+            { name: 'rag-editor-blur', event: 'blur' },
+            { name: 'rag-editor-compositionstart', event: 'compositionstart' },
+            { name: 'rag-editor-compositionend', event: 'compositionend' },
+          ]
+        }
+      }
+      for (const c of n.children ?? []) {
+        const cid = (c as LegacyNodeData).props?.id
+        if (typeof cid === 'string' && cid.startsWith('rag-')) walk(c as LegacyNodeData)
+      }
+    }
+    for (const p of envelope.content ?? []) walk(p.content?.[0])
   }
 
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
@@ -669,6 +923,11 @@ export class SidebarPanes {
       operatorSet: (patch: OperatorSettingsPatch) => void this.operatorSet(patch),
       textareaInput: (ragId: string) => this.textareaInput(ragId),
       textareaBlur: (ragId: string, value: string) => void this.textareaBlur(ragId, value),
+      // Unit U4 §1.4 (decisions G/H) — the 4 rich-text bridge methods.
+      editorInput: (ragId: string) => this.editorInput(ragId),
+      editorBlur: (ragId: string, html: string) => void this.editorBlur(ragId, html),
+      editorCompositionStart: (ragId: string) => void this.editorCompositionStart(ragId),
+      editorCompositionEnd: (ragId: string) => void this.editorCompositionEnd(ragId),
     }
     const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
     const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar
@@ -743,13 +1002,17 @@ export class SidebarPanes {
     })
   }
 
-  /** `operatorSet` — `bridge.operatorSettings.set` → update lastOperatorSettings
-   *  → re-mount the operator scope (M9/M17). SYNCHRONOUS (the IPC is fired; the
-   *  re-mount happens on resolution). */
+  /** `operatorSet` — Unit U1 §1.4 — `bridge.operatorSettings.set` → main
+   *  broadcasts `operator-settings-changed` → the host re-derives (fresh
+   *  traversal) + `refresh()` re-renders the operator graph. SYNCHRONOUS (the IPC
+   *  is fired; the broadcast drives the re-render — no inline re-mount). */
   private operatorSet(patch: OperatorSettingsPatch): void {
-    void this.bridge.operatorSettings.set(patch).then((settings) => {
-      this.lastOperatorSettings = settings
-      this.mountOperator()
+    // F5 (adversarial) — catch a REJECTED set so a store/bridge failure is
+    // logged, never an unhandled rejection (mirrors the submitQuery / refresh
+    // bridge-error-catch pattern). The broadcast drives the re-render, so a
+    // failed set simply leaves the prior mode in place.
+    void this.bridge.operatorSettings.set(patch).catch((e) => {
+      console.error('[sidebar-panes] operator settings set failed', e)
     })
   }
 
@@ -771,7 +1034,7 @@ export class SidebarPanes {
     // re-derive restores the offset without stealing focus from the control the
     // user is now interacting with. Only a real edit (dirty) re-focuses.
     const dirty = this.editController.isDirty(ragId)
-    this.editController.saveCaret(ragId, { offset, focused: dirty })
+    this.editController.saveCaret(ragId, { kind: 'textarea', offset, focused: dirty })
     this.caretNodes.add(ragId)
     if (dirty) {
       void this.editController.commit(ragId, value).then((result) => {
@@ -782,6 +1045,191 @@ export class SidebarPanes {
         // On `store-error` the dirty flag stays (the edit is not lost).
       })
     }
+  }
+
+  /** Unit U4 §1.4 — `rag-editor-input`: mark the RAG node's control dirty. A
+   *  re-derive while the contenteditable is dirty is QUEUED (the dirty-edit
+   *  guard, Unit D §5.2) — the in-progress edit is never destroyed. */
+  private editorInput(ragId: string): void {
+    this.editController.markDirty(ragId)
+  }
+
+  /** Unit U4 §1.4 (decisions G/I) — `rag-editor-blur`: capture + save the rich
+   *  caret BEFORE the commit, then decompose-ONCE + commit-ONCE when dirty. A
+   *  non-dirty blur is a no-op (caret saved, NO commit/NO IPC). A mid-composition
+   *  blur is DEFERRED (decision H) — the caret was already captured + saved; the
+   *  commit runs on `compositionend`-then-blur. */
+  private editorBlur(ragId: string, html: string): void {
+    // I — capture the rich caret (selection) from the DOM BEFORE the commit; the
+    // re-derive re-renders and destroys the selection.
+    const anchor = this.captureRichCaret(ragId, 'anchor')
+    const focus = this.captureRichCaret(ragId, 'focus')
+    const dirty = this.editController.isDirty(ragId)
+    this.editController.saveCaret(ragId, { kind: 'rich', ragId, anchor, focus, focused: dirty })
+    this.caretNodes.add(ragId)
+    if (!dirty) return // no-op blur: caret saved, NO commit (no-op blur contract)
+    if (this.composingRagId === ragId) {
+      // H — a mid-composition blur is DEFERRED (commit suppressed until
+      // compositionend); the selection was already captured + saved above.
+      this.pendingCommitRagId = ragId
+      return
+    }
+    this.editorBlurCommit(ragId, html)
+  }
+
+  /** The decompose-ONCE + commit-ONCE body (shared by the normal blur and the
+   *  compositionend-deferred blur). Pinned with a per-ragId commit-in-flight
+   *  latch (ADR-1 — the no-double-commit race) + a `.catch` (ADR-4 — a rejected
+   *  invoke is logged, never an unhandled rejection). */
+  private editorBlurCommit(ragId: string, html: string): void {
+    if (this.committingRagIds.has(ragId)) return // ADR-1 — a commit is already in flight for this node
+    const result = decomposeRichHtml(html) // U2 — decompose ONCE (decision G)
+    if (!result.ok) return // defensive fail-state — NO commit; the DOM content is preserved (§2.2)
+    this.committingRagIds.add(ragId) // ADR-1 — latch the in-flight commit BEFORE the async settle
+    void this.bridge.edit.commitRich(ragId, result.content, result.children)
+      .then((r) => {
+        // I/L6 — on success clear the dirty flag (which may trigger a queued
+        // rebuild). On `deleted-node` ALSO clear it (H5 — the node is gone, the
+        // edit is unrecoverable). On `store-error` keep it (the edit is not lost).
+        if (r.ok || r.reason === 'deleted-node') {
+          this.editController.clearDirty(ragId)
+        }
+        // ADR-1 — release the latch once the commit settles (the success path).
+        this.committingRagIds.delete(ragId)
+      })
+      .catch((e) => {
+        // ADR-4 — a rejected invoke is logged, NEVER an unhandled rejection; the
+        // dirty flag STAYS (the edit is not lost — a later blur may retry).
+        console.error('[sidebar-panes] rich commit failed', e)
+        // ADR-1 — release the latch on a rejected settle too (the node may retry).
+        this.committingRagIds.delete(ragId)
+      })
+  }
+
+  /** Unit U4 §1.4 (decision H) — `rag-editor-compositionstart`: begin the IME
+   *  composition window for this node. The IME text lands via `input` events
+   *  (which mark the node dirty); the composition events themselves do NOT mark
+   *  dirty. */
+  private editorCompositionStart(ragId: string): void {
+    this.composingRagId = ragId
+  }
+
+  /** Unit U4 §1.4 (decision H) — `rag-editor-compositionend`: clear the
+   *  composition window AND, if a blur was deferred for the SAME ragId
+   *  (`pendingCommitRagId === ragId`), run the deferred commit ONCE. Guarded
+   *  keyed by ragId — a spurious/unmatched `compositionend` clears nothing. */
+  private editorCompositionEnd(ragId: string): void {
+    if (this.composingRagId !== ragId) return // only the composing node's end clears
+    this.composingRagId = null
+    if (this.pendingCommitRagId === ragId) {
+      // A blur was deferred mid-composition; run the deferred commit NOW
+      // (the final commit happens on compositionend-then-blur).
+      this.pendingCommitRagId = null
+      const el = document.getElementById('rag-' + ragId) as HTMLElement | null
+      const html = el ? el.innerHTML : ''
+      this.editorBlurCommit(ragId, html)
+    }
+  }
+
+  // ---- Unit U4 §1.6 — the rich caret capture/restore machinery -------------
+
+  /** Capture the anchor or focus edge of the current selection as a
+   *  `RichCaretEdge` (a child-index path from the root down to the target text
+   *  node + an offset). ADR-13 — the dom-shim supplies neither `getSelection`
+   *  nor `createRange`; their absence NO-OPs into the fallback, never throws. */
+  private captureRichCaret(ragId: string, which: 'anchor' | 'focus'): RichCaretEdge {
+    const sel = typeof window.getSelection === 'function' ? window.getSelection() : null
+    const node = which === 'anchor' ? sel?.anchorNode : sel?.focusNode
+    const offset = which === 'anchor' ? sel?.anchorOffset : sel?.focusOffset
+    const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+    if (!sel || !node || !root || !(typeof root.contains === 'function' ? root.contains(node) : false)) {
+      return { path: [0], offset: 0 } // fallback — the start of the root's first text run
+    }
+    return { path: this.domPathToRoot(root, node), offset: typeof offset === 'number' ? offset : 0 }
+  }
+
+  /** Compute the child-index path from `root` down to `node` by walking
+   *  `node.parentNode` up to `root`, collecting the `childNodes` index at each
+   *  level, and reversing. The path targets a TEXT NODE (the caret lives in a
+   *  text node). */
+  private domPathToRoot(root: Node, node: Node): number[] {
+    const path: number[] = []
+    let cur: Node | null = node
+    while (cur && cur !== root && cur.parentNode) {
+      const parent: Node = cur.parentNode
+      let index = 0
+      for (let i = 0; i < parent.childNodes.length; i++) {
+        if (parent.childNodes[i] === cur) {
+          index = i
+          break
+        }
+      }
+      path.push(index)
+      cur = parent
+    }
+    return path.reverse()
+  }
+
+  /** Re-resolve a `RichCaretEdge.path` (child-index steps) from `root`. Returns
+   *  the resolved node or `null` if any step is out of range (or the final node
+   *  is not a text node). `[]` (empty path) addresses the root element itself;
+   *  for caret restore the host resolves it to the root's FIRST text node. */
+  private resolveDomPath(root: Node, path: number[]): Node | null {
+    let cur: Node = root
+    for (const step of path) {
+      const kids = cur.childNodes
+      if (!kids || step >= kids.length) return null
+      cur = kids[step]
+    }
+    // `[]` addresses the root element; for caret restore resolve to the root's
+    // FIRST text node in document order.
+    if (path.length === 0 && cur.childNodes && cur.childNodes.length > 0) {
+      const firstText = this.firstTextNode(cur)
+      if (firstText) return firstText
+    }
+    if (cur.nodeType === 3) return cur // a text node
+    return null
+  }
+
+  /** Find the first text node in document order within `node` (including
+   *  `node` itself if it is a text node). */
+  private firstTextNode(node: Node): Node | null {
+    if (node.nodeType === 3) return node
+    const kids = node.childNodes
+    if (kids) {
+      for (let i = 0; i < kids.length; i++) {
+        const found = this.firstTextNode(kids[i])
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  /** Unit U4 §1.6 — restore a saved rich caret into a re-rendered
+   *  contenteditable root. The anchor/focus edges are re-resolved against the
+   *  RE-RENDERED DOM, offsets CLAMPED to the text node's length. ADR-13 — the
+   *  dom-shim supplies neither `getSelection` nor `createRange`; their absence
+   *  NO-OPs the restore (never throws). A path that no longer resolves → NO-OP. */
+  private restoreRichCaret(ragId: string, caret: Extract<CaretState, { kind: 'rich' }>): void {
+    const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+    if (!root) return // no contenteditable root — dropped (stale)
+    const anchorNode = this.resolveDomPath(root, caret.anchor.path)
+    const focusNode = this.resolveDomPath(root, caret.focus.path)
+    if (!anchorNode || !focusNode) return // path invalid after re-derive — dropped (§2.2)
+    // ADR-13 — the dom-shim supplies neither `getSelection` nor `createRange`;
+    // their absence NO-OPs the restore (never throws, never an unhandled error).
+    if (typeof window.getSelection !== 'function') return
+    const sel = window.getSelection()
+    if (!sel) return
+    if (typeof document.createRange !== 'function') return
+    const range = document.createRange()
+    const aLen = (anchorNode as Text).data?.length ?? 0
+    const fLen = (focusNode as Text).data?.length ?? 0
+    range.setStart(anchorNode, Math.min(caret.anchor.offset, aLen))
+    range.setEnd(focusNode, Math.min(caret.focus.offset, fLen))
+    sel.removeAllRanges()
+    sel.addRange(range)
+    if (caret.focused && typeof root.focus === 'function') root.focus()
   }
 
   /** Wire a real DOM interaction on an operator control to the operator graph's

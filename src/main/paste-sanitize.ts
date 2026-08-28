@@ -57,9 +57,9 @@ const RAW_TEXT = new Set<string>([
 
 // ---- a minimal DOM-free HTML tokenizer -------------------------------------
 
-interface HtmlText { type: 'text'; text: string }
-interface HtmlElement { type: 'element'; tag: string; attrs: Record<string, string>; children: HtmlNode[] }
-type HtmlNode = HtmlText | HtmlElement
+export interface HtmlText { type: 'text'; text: string }
+export interface HtmlElement { type: 'element'; tag: string; attrs: Record<string, string>; children: HtmlNode[] }
+export type HtmlNode = HtmlText | HtmlElement
 
 /** Find the `>` that ends the tag starting at `start` (respecting quotes). */
 function findTagEnd(input: string, start: number): number {
@@ -103,7 +103,7 @@ function parseTag(content: string): { tag: string; attrs: Record<string, string>
 }
 
 /** Parse an HTML string into a tree of nodes. Lenient — never throws. */
-function parseHtml(input: string): HtmlNode[] {
+export function parseHtml(input: string): HtmlNode[] {
   const root: HtmlNode[] = []
   const stack: HtmlElement[] = []
   let current: HtmlNode[] = root
@@ -196,6 +196,12 @@ function decodeHtmlRefs(s: string): string {
       const hex = body[1] === 'x' || body[1] === 'X'
       const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10)
       if (Number.isNaN(code)) return m
+      // TOTAL guard: `String.fromCodePoint` THROWS RangeError for a code point
+      // above 0x10FFFF or in the surrogate range 0xD800–0xDFFF (an out-of-range
+      // or lone-surrogate reference, e.g. `&#x110000;` / `&#xD800;`). Leave the
+      // literal un-decoded so a hostile reference cannot turn a lenient
+      // parse/decompose into a throw (Unit U2 adversarial F1).
+      if (code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return m
       return String.fromCodePoint(code)
     }
     return NAMED_ENTITIES[body] ?? m
@@ -206,14 +212,14 @@ function decodeHtmlRefs(s: string): string {
  *  leading C0-control + space characters (the WHATWG URL parser strips these
  *  before scheme parsing, so a leading space/tab/NUL must not defeat the scheme
  *  check — F1). The returned value is the form that is validated AND stored. */
-function normalizeUrl(raw: string): string {
+export function normalizeUrl(raw: string): string {
   return decodeHtmlRefs(raw).replace(/^[\u0000-\u0020]+/, '')
 }
 
 /** True if `url` is safe. `allowDataImage` permits the `data:image/*` carve-out
  *  (for `img` ONLY). The caller MUST pass the already-normalized URL (decoded +
  *  leading C0-control/space stripped). */
-function isSafeUrl(url: string, allowDataImage: boolean): boolean {
+export function isSafeUrl(url: string, allowDataImage: boolean): boolean {
   // A relative URL (no scheme) is safe.
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) return true
   // http: / https:
@@ -225,7 +231,7 @@ function isSafeUrl(url: string, allowDataImage: boolean): boolean {
 }
 
 /** Escape an attribute value for the sanitized HTML output. */
-function escapeAttr(s: string): string {
+export function escapeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 }
 

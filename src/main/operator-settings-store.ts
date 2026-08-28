@@ -8,7 +8,7 @@
 // view/retrieval defaults).
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { OperatorSettings, OperatorSettingsPatch } from '../shared/types.js'
+import type { OperatorSettings, OperatorSettingsPatch, EditingMode } from '../shared/types.js'
 
 export interface OperatorSettingsStoreOptions {
   /** The JSON file the settings persist to (usually in Electron userData). */
@@ -24,6 +24,15 @@ const DEFAULT_SETTINGS: OperatorSettings = {
   enabledPanes: [],
   defaultDocumentId: null,
   topK: 5,
+  editingMode: 'textarea', // Unit U1 — the safe default (decision D)
+}
+
+/** Unit U1 §1.2 — the pinned coercion rule (used identically in `sanitize` AND
+ *  `set`): ONLY the exact string `'contenteditable'` passes through; ANY other
+ *  value (undefined, null, '', 'textarea', junk) coerces to `'textarea'`. TOTAL
+ *  — never throws for any `src.editingMode` value. */
+function coerceEditingMode(value: unknown): EditingMode {
+  return value === 'contenteditable' ? 'contenteditable' : 'textarea'
 }
 
 function sanitize(input: unknown): OperatorSettings {
@@ -34,7 +43,8 @@ function sanitize(input: unknown): OperatorSettings {
   const defaultDocumentId =
     typeof src.defaultDocumentId === 'string' && src.defaultDocumentId !== '' ? src.defaultDocumentId : null
   const topK = typeof src.topK === 'number' && Number.isFinite(src.topK) && src.topK > 0 ? Math.floor(src.topK) : 5
-  return { enabledPanes, defaultDocumentId, topK }
+  const editingMode = coerceEditingMode(src.editingMode)
+  return { enabledPanes, defaultDocumentId, topK, editingMode }
 }
 
 /** Create an operator-settings store backed by `path`. A missing/empty file is
@@ -64,7 +74,12 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
 
   return {
     get(): OperatorSettings {
-      return { enabledPanes: [...current.enabledPanes], defaultDocumentId: current.defaultDocumentId, topK: current.topK }
+      return {
+        enabledPanes: [...current.enabledPanes],
+        defaultDocumentId: current.defaultDocumentId,
+        topK: current.topK,
+        editingMode: current.editingMode,
+      }
     },
     set(patch: OperatorSettingsPatch): OperatorSettings {
       if (patch === null || patch === undefined || typeof patch !== 'object') {
@@ -81,7 +96,9 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
         patch.topK !== undefined
           ? (typeof patch.topK === 'number' && Number.isFinite(patch.topK) && patch.topK > 0 ? Math.floor(patch.topK) : current.topK)
           : current.topK
-      current = { enabledPanes, defaultDocumentId, topK }
+      const editingMode =
+        patch.editingMode !== undefined ? coerceEditingMode(patch.editingMode) : current.editingMode
+      current = { enabledPanes, defaultDocumentId, topK, editingMode }
       persist()
       return this.get()
     },

@@ -23,12 +23,28 @@ export type CommitResult =
   | { ok: true; nodeId: string }
   | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
 
-export interface CaretState {
-  /** The caret offset within the control's text. */
+/** The discriminated caret state (Unit U4 §1.2 — decision B). A `textarea`
+ *  caret is the existing Unit L shape PLUS the `kind` discriminator; a `rich`
+ *  caret carries the RAG node id + a path-based anchor/focus edge into the
+ *  decomposed inline children. Restored after a re-derive, gated by the node's
+ *  RENDERED control type (amendment 4 — a textarea caret is never applied to a
+ *  contenteditable node and vice versa). */
+export type RichCaretEdge = {
+  /** The child-index path from the contenteditable root element down to the
+   *  target text node in the rendered inline-children subtree (the decomposed
+   *  `content`/`children` render). Each element is the child index at that
+   *  depth (0-based). `[]` addresses the root element itself (its direct text
+   *  run); a non-empty path addresses the text node reached by following the
+   *  child indices from the root. */
+  path: number[]
+  /** The character offset within the target text node. Clamped to the text
+   *  node's length on restore. */
   offset: number
-  /** Whether the control had focus. */
-  focused: boolean
 }
+
+export type CaretState =
+  | { kind: 'textarea'; offset: number; focused: boolean }
+  | { kind: 'rich'; ragId: string; anchor: RichCaretEdge; focus: RichCaretEdge; focused: boolean }
 
 export interface EditController {
   /** Mark a control dirty. A rebuild is QUEUED (not executed) while any control

@@ -975,8 +975,13 @@ export class SidebarPanes {
 27. **Operator-settings IPC (M9):** `bridge.operatorSettings.get()` returns the
     current `OperatorSettings`; the settings pane's `render` reads
     `this.lastOperatorSettings`; a settings control commit via
-    `window.provident.sidebar.operatorSet(patch)` → `bridge.operatorSettings.set`
-    → `lastOperatorSettings` updates + the operator scope re-renders.
+    `window.provident.sidebar.operatorSet(patch)` → `bridge.operatorSettings.set`.
+    **M9 superseded by Unit U1 (§1.4 of `docs/specs/unit-u1-editing-mode-setting.md`,
+    amendment B):** `operatorSet` no longer re-mounts / updates `lastOperatorSettings`
+    inline — the SET fires the IPC, main broadcasts `operator-settings-changed`, and
+    the broadcast-driven re-derive re-renders the operator scope. The reconciled M9
+    test drives the re-render via the host's `onOperatorSettingsChanged` broadcast
+    path.
 28. **Distinct operator mount (M3):** the settings pane mounts in `#operator-panes`
     (NOT `#panes`, which stays `SecurePanels`'); both isolated scopes render
     independently.

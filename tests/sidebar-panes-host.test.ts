@@ -202,6 +202,9 @@ function makeBridge(opts: {
         state.operatorSettings = { ...state.operatorSettings, ...patch }
         return { ...state.operatorSettings }
       }),
+      // Unit U1 — the operator-settings-changed subscription (needed to boot; the
+      // host subscribes via onChanged when present). Mirrors the U1 harness.
+      onChanged: vi.fn(() => () => {}),
     },
   }
   return { bridge, state }
@@ -807,14 +810,23 @@ describe('the operator-settings IPC surface (§5.8.27, M9)', () => {
     expect((h.operatorMount as unknown as { innerHTML: string }).innerHTML).toContain('operator-pane-settings')
   })
 
-  it('a settings control commit via operatorSet(patch) → bridge.operatorSettings.set → lastOperatorSettings updates + the operator scope re-renders', async () => {
+  it('a settings control commit via operatorSet(patch) → bridge.operatorSettings.set; the broadcast path (onOperatorSettingsChanged) drives the operator re-render (M9 supersession — no inline re-mount)', async () => {
     const h = makeHarness({ snapshot: validSnapshot(), operatorSettings: { enabledPanes: [], defaultDocumentId: null, topK: 5 } })
     await h.host.boot(h.runtime)
     const before = (h.operatorMount as unknown as { innerHTML: string }).innerHTML
+    // The U1 operatorSet simplification fires the SET; the broadcast drives the
+    // re-render (no inline re-mount / .then update).
     h.sidebar.operatorSet({ topK: 10 })
     expect(h.bridge.operatorSettings.set).toHaveBeenCalledWith({ topK: 10 })
-    // The operator scope re-renders (the settings pane data stays fresh via
-    // lastOperatorSettings + a re-render, NOT a RAG re-traversal — M17).
+    // Drive the re-render via the broadcast path: fire the host's
+    // onOperatorSettingsChanged with the new settings (the payload IS the store result).
+    ;(h.host as unknown as { onOperatorSettingsChanged(p: OperatorSettings): void }).onOperatorSettingsChanged({
+      enabledPanes: [],
+      defaultDocumentId: null,
+      topK: 10,
+    } as OperatorSettings)
+    // The operator scope re-renders (the settings pane data stays fresh via the
+    // broadcast-driven re-derive + re-render, NOT an inline re-mount).
     await vi.waitFor(() => {
       const after = (h.operatorMount as unknown as { innerHTML: string }).innerHTML
       expect(after).not.toBe(before)

@@ -4,14 +4,14 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
 import { createJsonRagStore, type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
-import { handleEditCommit, handleEditBatch, deriveBatchBroadcast } from './edit-ops.js'
+import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIpc, deriveBatchBroadcast, deriveRichCommitBroadcast } from './edit-ops.js'
 import type { RagStoreChangedPayload } from './preload.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
@@ -269,6 +269,27 @@ async function main(): Promise<void> {
     return result
   })
 
+  // Unit U5 §1.3 — the atomic rich-text write-back (decision A). The renderer
+  // sends an `edit-rich-commit` IPC carrying the FULL decomposed `{content,
+  // children}` of a contenteditable blur (Unit U2/U4); main calls the SAME
+  // `setRichText` op once (one atomic putNode), then derives + broadcasts the
+  // `rag-store-changed` re-traversal trigger on a REAL change. A no-op commit
+  // broadcasts 0 times (idempotent — no redundant re-derive); a failed op or
+  // malformed payload broadcasts 0 times.
+  ipcMain.handle(IPC_EDIT_RICH_COMMIT, (_event, payload: EditRichCommitPayload) => {
+    // F1 — the derive→reconcile→broadcast-once body is the node-testable
+    // `handleRichCommitIpc` (edit-ops.ts, Unit U5 §1.3 — §2.1 states 24-27 +
+    // ADR-2/3/11, F2 ADR-9 before-guard). This handler binds the Electron
+    // boundary (the retrieval-index reconcile + the `rag-store-changed`
+    // broadcast). The boundary check (A1) lives INSIDE `handleRichCommitIpc`,
+    // so the malformed/failed/no-op/real-change broadcast contract is covered
+    // by the F1 regression tests against the shared handler.
+    return handleRichCommitIpc(ragStore, payload, {
+      reconcile: (kind, nodeIds, edgeIds) => retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds),
+      broadcast: (kind, nodeIds, edgeIds) => backend.broadcast(IPC_RAG_STORE_CHANGED, { kind, nodeIds, edgeIds }),
+    })
+  })
+
   // Unit E §5.7/§8.2 — the UI retrieval path. The `rag-query` IPC calls the SAME
   // maintained retrieval engine as the MCP `rag.query` tool (MCP/UI
   // equivalence — a BINDING constraint). The renderer never computes retrieval
@@ -309,7 +330,16 @@ async function main(): Promise<void> {
   // the MCP tool handlers never route to them, so an agent cannot change the
   // operator's view/retrieval defaults.
   ipcMain.handle(IPC_OPERATOR_SETTINGS_GET, () => operatorSettingsStore.get())
-  ipcMain.handle(IPC_OPERATOR_SETTINGS_SET, (_event, patch: OperatorSettingsPatch) => operatorSettingsStore.set(patch))
+  ipcMain.handle(IPC_OPERATOR_SETTINGS_SET, (_event, patch: OperatorSettingsPatch) => {
+    const updated = operatorSettingsStore.set(patch)
+    // Unit U1 §1.3 — the operator-settings-change broadcast (the re-derive
+    // trigger). Payload = the store's filtered/coerced result (single source of
+    // truth = the main store), NOT the raw patch. One-way notification, fired
+    // exactly once per SET (the store's set never throws for a domain failure).
+    // GET never broadcasts.
+    backend.broadcast(IPC_OPERATOR_SETTINGS_CHANGED, updated)
+    return updated
+  })
 
   // Finding 3 — the re-traversal data source. The renderer's `onRebuild`
   // re-traversal (Unit C `buildTraversal`) needs the RAG store's nodes/edges,

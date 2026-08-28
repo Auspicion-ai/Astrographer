@@ -7,7 +7,7 @@
 // reaching putNode), which propagates to the caller (the MCP handler).
 import { randomUUID } from 'node:crypto'
 import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind, RagNodeChild, BatchResult, BatchOp, BatchOpResult } from './rag-store.js'
-import type { EditCommitResult, EditBatchPayload } from '../shared/types.js'
+import type { EditCommitResult, EditBatchPayload, RichCommitResult, EditRichCommitPayload } from '../shared/types.js'
 import type { RagStoreChangedPayload } from './preload.js'
 
 // Unit P (docs/specs/unit-p-ipc-edit-batch.md §5.1) — re-export the batch
@@ -36,6 +36,8 @@ export type SetEdgeResult = { ok: true; edge: RagEdge } | { ok: false; error: st
 export type SetPropsResult = { ok: true; node: RagNode } | { ok: false; error: string }
 export type SetSubtreeResult = { ok: true; node: RagNode } | { ok: false; error: string }
 export type SetTypeResult = { ok: true; node: RagNode } | { ok: false; error: string }
+// Unit U5 §1.2 — the atomic rich-text write-back result.
+export type SetRichTextResult = { ok: true; node: RagNode } | { ok: false; error: string }
 
 // The closed unions (Unit A §5.1). Duplicated here as runtime sets because the
 // store does not export them; the store validates the same unions at write time.
@@ -92,18 +94,25 @@ function isValidChildren(v: unknown): boolean {
 }
 
 // Deep structural equality (used to detect a no-op setProps — an empty merge
-// that changes no key).
-function deepEqual(a: unknown, b: unknown): boolean {
+// that changes no key, and the `setRichText`/`setSubtree` no-op + broadcast
+// children comparison). F4 — bounded recursion: a pathologically deep props /
+// children object must not overflow the call stack (a RangeError out of the op
+// would violate the never-throw rule). At the depth limit, treat the pair as
+// UNEQUAL (conservative — a no-op comparison yields "changed", so the op
+// proceeds with a write rather than mis-declaring equality on a deep structure),
+// mirroring `hasDangerousKey`'s depth cap at 100.
+function deepEqual(a: unknown, b: unknown, depth = 0): boolean {
   if (a === b) return true
+  if (depth > 100) return false
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false
-    return a.every((x, i) => deepEqual(x, b[i]))
+    return a.every((x, i) => deepEqual(x, b[i], depth + 1))
   }
   if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
     const ka = Object.keys(a as Record<string, unknown>)
     const kb = Object.keys(b as Record<string, unknown>)
     if (ka.length !== kb.length) return false
-    return ka.every((k) => deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]))
+    return ka.every((k) => deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], depth + 1))
   }
   return false
 }
@@ -575,4 +584,164 @@ export function deriveBatchBroadcast(
     }
   }
   return { kind: structural ? 'structural' : 'content', nodeIds, edgeIds }
+}
+
+// ---- Unit U5: the atomic rich-text write-back op + broadcast helper
+// (docs/specs/unit-u5-set-rich-text.md §1.2) ------------------------------
+
+/** The `undefined` ≡ `[]` children equivalence used for the no-op guard AND the
+ *  broadcast derivation (stored `undefined` and `[]` are both "no children"). */
+function sameChildren(a: RagNodeChild[] | undefined, b: RagNodeChild[] | undefined): boolean {
+  return deepEqual(a ?? [], b ?? [])
+}
+
+/** Unit U5 §1.2 — the SINGLE atomic rich-text write-back op. Writes BOTH
+ *  `content` AND `children` for a node in ONE `putNode` (one record write, one
+ *  `content` journal entry). Content-only / children-only ops (Unit O) cannot
+ *  write the pair atomically — this op can. A CONTENT op → journaled as a
+ *  `content` entry (the content snapshot includes `children`+`props`) → the
+ *  main handler derives the broadcast via `deriveRichCommitBroadcast`. */
+export async function setRichText(
+  ctx: EditOpContext,
+  params: { nodeId: string; content: string; children: RagNodeChild[] },
+): Promise<SetRichTextResult> {
+  if (typeof params.content !== 'string') {
+    return { ok: false, error: 'edit.set_rich_text: content must be a string' }
+  }
+  // `children` is REQUIRED (a `RagNodeChild[]`) — `undefined`/absent is a
+  // fail-state (only `[]` clears); the deeper shape is validated by
+  // `isValidChildren` (mirrors `setSubtree` Unit O F2).
+  if (params.children === undefined || !isValidChildren(params.children)) {
+    return { ok: false, error: 'edit.set_rich_text: children required/invalid' }
+  }
+  const node = ctx.store.getNode(params.nodeId)
+  if (!node) {
+    return { ok: false, error: 'edit.set_rich_text: node not found' }
+  }
+  const contentChanged = node.content !== params.content
+  const childrenChanged = !sameChildren(node.children, params.children)
+  // Idempotent no-op (content AND children both unchanged, `undefined` ≡ `[]`):
+  // NO write, NO journal entry, NO `updatedAt` refresh, NO broadcast (the
+  // redundant blur does not re-derive). Short-circuits BEFORE putNode.
+  if (!contentChanged && !childrenChanged) {
+    return { ok: true, node }
+  }
+  // When the children are EQUIVALENT but content changed, preserve the stored
+  // children representation (a node with `children: undefined` stays undefined;
+  // no `undefined`→`[]` normalization noise on a content-only edit).
+  const nextChildren = childrenChanged ? params.children : node.children
+  // ONE `putNode` carries BOTH `content` and `children` — atomic (decision A).
+  // The ONLY throw path is a store-level validateNodeShape failure (unreachable
+  // in practice), which propagates — the write is atomic, so NEITHER field is
+  // applied on a throw (fail-closed).
+  const updated = await ctx.store.putNode({ ...node, content: params.content, children: nextChildren })
+  return { ok: true, node: updated }
+}
+
+/** Unit U5 §1.2 — derive the `rag-store-changed` payload from a successful
+ *  `setRichText`. Returns null for a no-op commit (content AND children both
+ *  unchanged → NO broadcast → no redundant re-derive). A `children` change is
+ *  tagged `structural` (children → traversal re-derives the inline subtree —
+ *  mirrors `deriveBatchBroadcast`'s conservative `structural` tag for
+ *  `setSubtree`); a content-only change is `content`. A combined change is
+ *  `structural` (the structural reconcile re-indexes content too — so BOTH the
+ *  content change AND the structural children change are reflected). */
+export function deriveRichCommitBroadcast(
+  before: RagNode,
+  after: RagNode,
+): RagStoreChangedPayload | null {
+  const contentChanged = before.content !== after.content
+  const childrenChanged = !sameChildren(before.children, after.children)
+  if (!contentChanged && !childrenChanged) {
+    return null // no-op — no broadcast
+  }
+  const kind = childrenChanged ? 'structural' : 'content'
+  return { kind, nodeIds: [after.id], edgeIds: [] }
+}
+
+/** Unit U5 §1.3 — the shared `IPC_EDIT_RICH_COMMIT` handler. Calls the SAME
+ *  `setRichText` op as the bridge (MCP/UI-equivalent by construction — though
+ *  there is NO MCP rich tool yet, amendment 7) and maps the op's domain result
+ *  to the `RichCommitResult` shape. `setRichText`'s documented
+ *  `'edit.set_rich_text: node not found'` fail-state (a deleted-node race)
+ *  surfaces as `reason:'deleted-node'` (NOT `store-error`), mirroring
+ *  `handleEditCommit`. PURE — the caller (main) performs the broadcast + index
+ *  reconcile on success. */
+export async function handleRichCommit(
+  store: RagStore,
+  payload: EditRichCommitPayload,
+): Promise<RichCommitResult> {
+  const result = await setRichText({ store }, { nodeId: payload.nodeId, content: payload.content, children: payload.children })
+  if (result.ok) {
+    return { ok: true, nodeId: payload.nodeId, node: result.node }
+  }
+  if (result.error === 'edit.set_rich_text: node not found') {
+    return { ok: false, reason: 'deleted-node', error: result.error }
+  }
+  return { ok: false, reason: 'store-error', error: result.error }
+}
+
+/** The Electron boundary the `IPC_EDIT_RICH_COMMIT` handler injects into
+ *  `handleRichCommitIpc`: the retrieval-index reconcile + the
+ *  `rag-store-changed` broadcast (Unit U5 §1.3 — §2.1 states 24-27). Both
+ *  consume the SAME `{kind, nodeIds, edgeIds}` derived from
+ *  `deriveRichCommitBroadcast`. */
+export interface RichCommitIpcDeps {
+  /** Reconcile the maintained retrieval index (main passes
+   *  `retrievalEngine.onStoreChanged`). This wrapper `.catch`es a rejection —
+   *  reconcile failure is NON-FATAL: the broadcast still fires, never an
+   *  unhandled rejection (ADR-11 / §2.1 state 27). */
+  reconcile: (kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]) => Promise<void>
+  /** Broadcast `rag-store-changed` (main passes `backend.broadcast`). */
+  broadcast: (kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]) => void
+}
+
+/** Unit U5 §1.3/F1 — a node-testable extraction of the `IPC_EDIT_RICH_COMMIT`
+ *  handler's derive→reconcile→broadcast-once body (docs/specs/unit-u5-set-rich-text.md
+ *  §2.1 states 24-27 + ADR-2/3/11). PURE-ish — no Electron: the Electron
+ *  boundary (`retrievalEngine.onStoreChanged` + `backend.broadcast`) is
+ *  injected as the `reconcile`/`broadcast` callbacks. This is the F1
+ *  handler-broadcast regression surface:
+ *   - a REAL change → reconcile + broadcast EXACTLY ONCE (kind routed
+ *     structural vs content by `deriveRichCommitBroadcast`);
+ *   - a no-op / failed / malformed commit → 0 reconciles, 0 broadcasts;
+ *   - a rejecting `reconcile` is NON-FATAL — the broadcast still fires (never
+ *     an unhandled rejection);
+ *   - F2 (ADR-9) — an exotic node-absent→recreated race that makes `before`
+ *     undefined while `result.ok` NEVER throws: the derive is guarded so the
+ *     handler falls back to NO broadcast instead of a TypeError.
+ * The A1 boundary check is KEPT here (a malformed payload is a domain result,
+ * never a throw). */
+export async function handleRichCommitIpc(
+  store: RagStore,
+  payload: EditRichCommitPayload,
+  deps: RichCommitIpcDeps,
+): Promise<RichCommitResult> {
+  // A1 — a malformed payload is a domain result, never a throw. The boundary
+  // check covers nodeId/content/children-presence; the deeper children SHAPE is
+  // validated inside setRichText (isValidChildren) and mapped to store-error.
+  if (!payload || typeof payload.nodeId !== 'string' || typeof payload.content !== 'string' || !Array.isArray(payload.children)) {
+    return { ok: false, reason: 'store-error', error: 'edit-rich-commit: nodeId, content, and children array required' }
+  }
+  // Capture the pre-commit node for the broadcast derivation (idempotence + kind).
+  const before = store.getNode(payload.nodeId)
+  const result = await handleRichCommit(store, payload)
+  if (result.ok) {
+    // F2 (ADR-9) — the `before`-guard: an exotic node-absent→recreated race can
+    // make `before` undefined while `result.ok` (the node was recreated between
+    // the entry capture and `setRichText`). Guard the derive so the handler
+    // NEVER throws a TypeError in that window — it falls back to NO broadcast
+    // (the store change still landed; the redundant re-derive trigger is
+    // skipped, conservative).
+    const broadcast = before ? deriveRichCommitBroadcast(before as RagNode, result.node) : null
+    if (broadcast) {
+      // ADR-11 / state 27 — reconcile failure is NON-FATAL: caught + logged,
+      // the broadcast still fires, never an unhandled rejection.
+      void deps.reconcile(broadcast.kind, broadcast.nodeIds, broadcast.edgeIds).catch((e) => {
+        console.error('[provident-main] retrieval index reconcile failed:', e)
+      })
+      deps.broadcast(broadcast.kind, broadcast.nodeIds, broadcast.edgeIds)
+    }
+  }
+  return result
 }
