@@ -74,9 +74,12 @@ export function createSecurityStore(opts: SecurityStoreOptions): SecurityStore {
     try {
       mkdirSync(dirname(opts.path), { recursive: true })
       writeFileSync(opts.path, JSON.stringify(current, null, 2))
-    } catch {
+    } catch (e) {
       // persist failures are non-fatal (the in-memory config still applies for
-      // this process lifetime); never crash the app on a settings write.
+      // this process lifetime); never crash the app on a settings write. Log a
+      // warning so a SILENT persistence failure (e.g. an unwritable userData
+      // dir) is observable instead of resurfacing as "settings didn't save".
+      console.error(`[security-store] persist failed (${opts.path}):`, e)
     }
   }
 
