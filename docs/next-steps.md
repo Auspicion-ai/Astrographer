@@ -21,13 +21,14 @@ one-way snapshot).
 
 ## OPEN
 
-### Editing-mode toggle slice — IN PROGRESS (2026-08-28, execution order U2→U3→U1→U5→U4)
+### Editing-mode toggle slice — COMPLETE (all 5 units done), AWAITING the user's commit (2026-08-28, execution order U2→U3→U1→U5→U4)
 
 The editing-mode toggle proposal (the "demo textarea vs rich-text document
 editing" switch — `docs/specs/editing-mode-toggle-review.md`,
-PROCEED-WITH-AMENDMENTS, approved as a 5-unit slice) is **IN PROGRESS**,
-executing in order **U2 → U3 → U1 → U5 → U4** (confirmed; no split/merge).
-**U2 is DONE (2026-08-28)** — the pure `decomposeRichHtml` module
+PROCEED-WITH-AMENDMENTS, approved as a 5-unit slice) is **CODE-COMPLETE** — all
+five units (**U2 → U3 → U1 → U5 → U4**) have landed their red→green→adversarial→
+greens→doc-review cycles (confirmed; no split/merge). The slice is **AWAITING
+the user's commit**. **U2 is DONE (2026-08-28)** — the pure `decomposeRichHtml` module
 (`src/main/rich-decompose.ts`) + the additive exports on
 `src/main/paste-sanitize.ts` (see the Unit U2 DONE row). **U3 is DONE
 (2026-08-28)** — the pure `isRichEditableRoot(type, ownsDocChildren)` gate + the
@@ -61,12 +62,13 @@ content+children write-back op + the pure `deriveRichCommitBroadcast` helper +
 the `handleRichCommit` shared handler + the `handleRichCommitIpc` broadcast
 handler-body extraction + the `IPC_EDIT_RICH_COMMIT` channel +
 `EditRichCommitPayload`/`RichCommitResult` + the preload `edit.commitRich`
-bridge (see the Unit U5 DONE row below). Remaining unit:
-- **U4** — the contenteditable handlers + bridge + discriminated `CaretState` +
-  IME + re-derive restore.
+bridge (see the Unit U5 DONE row below). **U4 is DONE (2026-08-28)** — the
+contenteditable rich-text editor (handlers + bridge + discriminated
+`CaretState`/`RichCaretEdge` + IME composition guard + the gated re-derive
+caret restore) — the final unit of the slice (see the Unit U4 DONE row below).
 textarea stays the DEFAULT (decision **D** supersedes the FORM-CONTROL-EDITING
 'NOT contenteditable' + the 'no global editingMode field' clauses in U1). Each
-unit is its own red→green→adversarial→greens→doc-review cycle per AGENTS.md
+unit was its own red→green→adversarial→greens→doc-review cycle per AGENTS.md
 (RCA-1/2/3/6).
 
 ### Next slice — the rich-text contenteditable editing machinery (COMPLETE)
@@ -136,6 +138,76 @@ _(none — Units A–T are implemented.)_
 
 ## DONE
 
+- **Unit U4 — the contenteditable rich-text editor (handlers + bridge +
+  discriminated `CaretState` + IME + re-derive restore) (2026-08-28).** The
+  editing-mode-toggle slice's FIFTH and FINAL unit (unit 5 of 5 in execution
+  order U2→U3→U1→U5→U4 — decisions **B/G/H/I** of
+  `docs/specs/editing-mode-toggle-review.md` §4 + §3 amendments 4/6; the U4
+  spec is `docs/specs/unit-u4-contenteditable-editor.md`). **The slice is now
+  CODE-COMPLETE (all 5 units U2/U3/U1/U5/U4 done) — AWAITING the user's
+  commit.** Wires the U3-spliced per-node contenteditable to the edit path:
+  the 4 rich handler defs (`rag-editor-input`/`rag-editor-blur`/
+  `rag-editor-compositionstart`/`rag-editor-compositionend`, `registerHandlerDef`
+  in `bindHandlers`) + the `applyEditingMode` handler attachment (APPEND-IF-
+  ABSENT / name-deduplicated, minor #5) in `src/renderer/sidebar-panes.ts`; the
+  4 bridge methods (`editorInput`/`editorBlur`/`editorCompositionStart`/
+  `editorCompositionEnd` — surface 8→12) + the 3 host fields
+  (`composingRagId`/`pendingCommitRagId`/`committingRagIds`) + `editorBlur`
+  decompose-ONCE (`decomposeRichHtml`) + commit-ONCE (`bridge.edit.commitRich`,
+  the atomic `{content, children}` pair) + the `.catch`-keeps-dirty (ADR-4) +
+  the per-ragId commit-in-flight latch (ADR-1, released in the `.then`/`.catch`
+  — the dual-delete is behaviorally the pinned `.finally` release); the IME
+  composition guard (mid-composition blur deferred to `compositionend`, the
+  orphaned-pending a-med #2 fix on a superseding `compositionstart`); the
+  discriminated `CaretState` (`{kind:'textarea'}` | `{kind:'rich'; ragId;
+  anchor; focus; focused}`) + `RichCaretEdge` in `src/renderer/edit-controller.ts`
+  with kind-agnostic `saveCaret`/`restoreCaret`/`clearCaret` (no DOM, no mode
+  knowledge — the MODE GATING lives in the host); and the gated re-derive caret
+  restore loop (rich caret → contenteditable root ONLY when
+  `editingMode==='contenteditable'` AND the rendered root carries the
+  `contenteditable` attribute; textarea caret → textarea ONLY when the
+  `textarea-<ragId>` element exists; a MISMATCH is DROPPED one-shot, never
+  misapplied — amendment 4 / U3 F2 / ADR-8) with the element-caret clamp to the
+  nearest text node (a-med #3), the ADR-13 dom-shim no-throw guards (no
+  `getSelection`/`createRange`), and the FIRST-materialization restore
+  limitation (decision I). TestWriter red → Implementer green in
+  `tests/contenteditable-editor-host.test.ts` (44 pass / 5 skip — the 5 skipped
+  are the browser-only real-DOM `createRange`/`getSelection`/IME/`dispatch`
+  cases, documented in a `.skip` block, the Unit L §5.8/§5.9 convention) +
+  `tests/contenteditable-caret.test.ts` (10 pass) = **54 pass / 5 skip** (the
+  RED set = the 4 handler defs + 4 bridge methods + 3 host fields absent + the
+  `CaretState`/`RichCaretEdge` types absent + the both-kinds controller
+  storage absent + the decompose-ONCE/commit-ONCE blur + the composition guard
+  + the gated restore — method-does-not-exist + type-level gaps, **36 failing /
+  14 pass / 5 skip**, run and reported before implementation, RCA-1) →
+  **Implementer green: 50 → 54 pass / 5 skip** (the 4 adversarial regressions
+  CRITICAL #1 / a-med #2 / a-med #3 / minor #6 added after the adversarial
+  pass). Adversarial pass (RCA-3) in the spec §5.1 — **all HOST (none
+  package)**: **CRITICAL #1** (the re-derive caret restore was clobbered by the
+  `await this.refresh()` that immediately followed `reDerive`'s own
+  `loadAppGraph` — the second load's `tearDownGraph`+fresh `render()` destroyed
+  the just-applied selection in a real browser; FIXED: `reDerive` no longer
+  calls `loadAppGraph` itself — it stashes the traversal in
+  `lastTraversalEnvelope` and lets `refresh()` perform the SINGLE final load,
+  then the restore loop runs AFTER that render), **a-med #2** (a superseding
+  composition orphaned a deferred commit + permanently wedged the dirty guard;
+  FIXED: `editorCompositionStart` for a node ≠ the pending node runs the
+  orphaned deferred commit NOW), **a-med #3** (an element-node caret edge was
+  silently dropped on restore; FIXED: `resolveDomPath` clamps an element edge
+  to its nearest text node via `firstTextNode`), **minor #5** (append-if-absent
+  handler merge — confirmed no authored handler on a rich root today), **minor
+  #6** (the 4 public bridge methods NO-OP on a null/undefined ragId), all fixed
+  here + regression-tested (the CRITICAL #1 regression asserts `loadAppGraph`
+  is called EXACTLY ONCE and the restore runs after that single final load).
+  Blind-greens in `docs/specs/unit-u4-contenteditable-editor-greens.md`
+  (44/44 — 43 node-runnable + 1 type-level; no spec-vs-impl drift observed).
+  Documentation review in `archive/reviews/2026-08-28-u4-doc-review.md` (spec
+  + greens + trackers reconciled against the build — the stale sidebar-panes /
+  edit-controller line-number cross-refs + the CaretState line ref fixed).
+  Trio green: full suite **1784 pass / 37 skip / 0 fail** (up from 1730/32 by
+  the 54 U4 tests + 5 skips; the scratch-greens 1827 includes the deleted
+  scratch run), typecheck clean, build clean. **Editing-mode toggle slice
+  COMPLETE — AWAITING the user's commit.**
 - **Unit U5 — the atomic rich-text write-back op + `IPC_EDIT_RICH_COMMIT` +
   preload `edit.commitRich` (2026-08-28).** The editing-mode-toggle slice's
   fourth unit (unit 4 of 5 in execution order U2→U3→U1→U5→U4 — decision **A**

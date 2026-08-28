@@ -1045,6 +1045,106 @@ describe('the full end-to-end edit path (§2.1 state 37)', () => {
 })
 
 // ===========================================================================
+// Adversarial findings + resolutions (RCA-3) — regression tests for the
+// read-only adversarial review findings (docs/specs/unit-u4-contenteditable-editor.md §5):
+//   CRITICAL #1 — the re-derive caret restore clobbered by the refresh() double
+//                 graph load (the caret did NOT survive the re-derive).
+//   a-med #2     — a superseding composition orphans the deferred commit + wedges
+//                 the dirty guard.
+//   a-med #3     — an element-node caret edge is silently dropped on restore.
+//   minor #6     — the public bridge methods no-op on a null/undefined ragId.
+// ===========================================================================
+describe('adversarial findings + resolutions (RCA-3)', () => {
+  it('CRITICAL #1 — the re-derive caret restore runs AFTER the SINGLE final graph load (never on a render a second load tears down)', async () => {
+    const h = makeHarness({
+      snapshot: singleSectionSnapshot(),
+      operatorSettings: { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable' },
+    })
+    await h.host.boot(h.runtime)
+    const p = priv(h)
+    p.editingMode = 'contenteditable'
+    document.getElementById('rag-s1').setAttribute('contenteditable', 'true')
+    h.editController.saveCaret('s1', { kind: 'rich', ragId: 's1', anchor: { path: [0], offset: 1 }, focus: { path: [0], offset: 1 }, focused: true })
+    p.caretNodes.add('s1')
+    const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
+    const restoreSpy = vi.spyOn(p as unknown as object, 'restoreRichCaret')
+    await h.host.reDerive()
+    // EXACTLY ONE final graph load for the whole re-derive. The buggy path called
+    // loadAppGraph TWICE (reDerive itself + refresh()'s loadAppGraph), so the
+    // restore selection was set on a pre-teardown render that the second load's
+    // tearDownGraph + fresh render destroyed in a real browser.
+    expect(loadSpy).toHaveBeenCalledTimes(1)
+    // The restore was invoked AFTER that single load (its global call index is
+    // greater than the load's), so the caret is applied to the FINAL render — the
+    // selection survives the re-derive (the central U4 §1.7/§2.1 states 29/33/37
+    // contract).
+    const loadOrder = loadSpy.mock.invocationCallOrder[0]
+    const restoreOrder = restoreSpy.mock.invocationCallOrder[0]
+    expect(loadOrder).toBeGreaterThan(0)
+    expect(restoreOrder).toBeGreaterThan(loadOrder)
+    expect(restoreSpy).toHaveBeenCalled()
+    restoreSpy.mockRestore()
+    loadSpy.mockRestore()
+  })
+
+  it('a-med #2 — a superseding composition does NOT wedge A\'s dirty guard: the orphaned deferred commit runs on compositionstart', async () => {
+    const h = makeHarness({ snapshot: singleSectionSnapshot() })
+    await h.host.boot(h.runtime)
+    const p = priv(h)
+    const decompose = spyDecompose().mockReturnValue({ ok: true, content: '', children: [] })
+    h.editController.markDirty('s1')
+    p.editorCompositionStart('s1') // A begins composing
+    p.editorBlur('s1', '<p>a</p>') // A's dirty blur is DEFERRED (pendingCommitRagId = s1)
+    expect(p.pendingCommitRagId).toBe('s1')
+    // A SUPERSEDING composition starts on B BEFORE A's compositionend. The fix
+    // runs A's orphaned deferred commit so dirty(A) is not left set forever
+    // (which would permanently queue every re-derive through the dirty guard).
+    p.editorCompositionStart('s2')
+    expect(decompose).toHaveBeenCalledTimes(1)
+    expect(h.bridge.edit.commitRich).toHaveBeenCalledTimes(1)
+    expect(p.pendingCommitRagId).toBeNull()
+    // A's commit settles → dirty(A) clears → the guard is not wedged.
+    await vi.waitFor(() => expect(h.editController.isDirty('s1')).toBe(false))
+    p.editorCompositionEnd('s2')
+    expect(h.editController.anyDirty()).toBe(false)
+    decompose.mockRestore()
+  })
+
+  it('a-med #3 — an element-node caret edge (a strong/em/a boundary) is clamped to the nearest text node, not dropped', async () => {
+    const h = makeHarness({ snapshot: singleSectionSnapshot() })
+    await h.host.boot(h.runtime)
+    const host = h.host as unknown as {
+      resolveDomPath(root: Node, path: number[]): Node | null
+    }
+    // A synthetic DOM: root > strong > text. The caret edge lands on the <strong>
+    // ELEMENT (a boundary selection); resolveDomPath must CLAMP to the nearest
+    // text node — a real-DOM boundary selection is restored, not dropped.
+    const text = { nodeType: 3, data: 'hello', childNodes: [] } as unknown as Text
+    const strong = { nodeType: 1, childNodes: [text] } as unknown as Node
+    const root = { nodeType: 1, childNodes: [strong] } as unknown as HTMLElement
+    expect(host.resolveDomPath(root, [0])).toBe(text) // element edge → clamped to text (NOT null)
+    expect(host.resolveDomPath(root, [0, 0])).toBe(text) // direct text path still resolves
+    expect(host.resolveDomPath(root, [])).toBe(text) // empty-path (root element) → the root's first text
+  })
+
+  it('minor #6 — the public bridge methods NO-OP on a null/undefined ragId (never throw, never mark a phantom dirty, never commit)', async () => {
+    const h = makeHarness({ snapshot: singleSectionSnapshot() })
+    await h.host.boot(h.runtime)
+    const decompose = spyDecompose().mockReturnValue({ ok: true, content: '', children: [] })
+    // A malformed dispatch that omits the ragId → each public bridge method no-ops.
+    expect(() => (h.sidebar.editorInput as (r?: string) => void)(undefined as never)).not.toThrow()
+    expect(() => (h.sidebar.editorBlur as (r?: string, html?: string) => void)(null as never, '<p>x</p>')).not.toThrow()
+    expect(() => (h.sidebar.editorCompositionStart as (r?: string) => void)(undefined as never)).not.toThrow()
+    expect(() => (h.sidebar.editorCompositionEnd as (r?: string) => void)(undefined as never)).not.toThrow()
+    // No phantom dirty flag, no composition state, no commit.
+    expect(h.editController.anyDirty()).toBe(false)
+    expect(h.bridge.edit.commitRich).not.toHaveBeenCalled()
+    expect(decompose).not.toHaveBeenCalled()
+    decompose.mockRestore()
+  })
+})
+
+// ===========================================================================
 // Renderer-dependent (real DOM Selection/Range, real IME sequencing, real
 // innerHTML multi-materialization) — documented, NOT runnable in node. The
 // harness tests above pin the gating, decompose/commit ONCE, and no-throw

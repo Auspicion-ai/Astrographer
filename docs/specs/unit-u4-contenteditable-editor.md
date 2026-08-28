@@ -69,9 +69,10 @@ U3 F2). A multi-parent duplicate commits from the FIRST materialization only
 
 ### 1.2 The discriminated `CaretState` + `RichCaretEdge` (pinned — decision B)
 
-**`src/renderer/edit-controller.ts`.** The current `CaretState = { offset;
-focused }` (lines 26-31, textarea-only, Unit D §5.3 / Unit L §5.4) becomes a
-DISCRIMINATED union. The `saveCaret`/`restoreCaret` signatures are UNCHANGED in
+**`src/renderer/edit-controller.ts`.** The former textarea-only `CaretState = {
+offset; focused }` (Unit D §5.3 / Unit L §5.4) is SUPERSEDED by the
+DISCRIMINATED union (now the pinned `CaretState` type at lines 45-47). The
+`saveCaret`/`restoreCaret` signatures are UNCHANGED in
 shape (`saveCaret(nodeId, caret: CaretState)`, `restoreCaret(nodeId): CaretState
 | undefined`); only the `CaretState` type is superseded.
 
@@ -209,7 +210,14 @@ n.handlers = [
   (the U3 idempotence contract is preserved).
 - **Idempotence (mirrors the U3 H4):** on a repeated splice of the same envelope,
   the handler attachment is set again to the same 4-def array (idempotent — no
-  duplicate handler accumulation, no throw).
+  duplicate handler accumulation, no throw). **minor #5 (adversarial):** the
+  splice APPENDS the 4 defs NAME-DEDUPLICATED (`[...(n.handlers ?? []), ...the 4
+  defs not already present]`) instead of REPLACING `n.handlers`. No authored
+  template or traversal ever places a handler on a rich root (verified — the
+  traversal authors handlers ONLY on the `textarea-<ragId>` child, traversal.ts;
+  the content-window template authors zone containers only), so the merge yields
+  EXACTLY the 4 defs today, but a future/extended authored handler on the root is
+  never clobbered.
 - **Authoring constraint (pinned):** the contenteditable root + its handlers are
   authored as provident-ssr data in the splice (the AGENTS.md
   all-UI-via-provident constraint). A contenteditable rendered outside the
@@ -281,20 +289,35 @@ private editorBlurCommit(ragId: string, html: string): void {
       if (r.ok || r.reason === 'deleted-node') {
         this.editController.clearDirty(ragId)
       }
+      // ADR-1 — release the latch once the commit settles (the success path).
+      this.committingRagIds.delete(ragId)
     })
     .catch((e) => {
       // ADR-4 — a rejected invoke is logged, NEVER an unhandled rejection; the
-      // dirty flag STAYS (the edit is not lost — a later blur may retry). This
-      // mirrors the `operatorSet` `.catch` (sidebar-panes.ts:913).
+      // dirty flag STAYS (the edit is not lost — a later blur may retry).
       console.error('[sidebar-panes] rich commit failed', e)
-    })
-    .finally(() => {
-      this.committingRagIds.delete(ragId)   // ADR-1 — release the latch once the commit settles
+      // ADR-1 — release the latch on a rejected settle too (the node may retry).
+      this.committingRagIds.delete(ragId)
     })
 }
 ```
 
+> **minor (adversarial, spec alignment):** the pinned §1.4 form above uses a
+> dual `.then`/`.catch` that each release the latch (instead of a `.finally`).
+> This is BEHAVIORALLY EQUIVALENT to the pinned `.finally` release — the latch is
+> released exactly once on every settle (success or rejection), never before the
+> async settle. The spec is aligned to the implemented form (a `.finally` would
+> require a `.finally` on the promise chain and is not present).
+
 **Bridge-contract rules (pinned):**
+
+- **minor #6 (adversarial) — the public bridge methods no-op on a null/undefined
+  ragId:** each of the 4 bridge methods (`editorInput`/`editorBlur`/
+  `editorCompositionStart`/`editorCompositionEnd`) guards `ragId == null` and
+  returns — it never throws, never marks a phantom node dirty, never commits an
+  id-less blur, and never starts/ends a composition on a phantom node.
+  `editorBlur` also defaults a missing `html` to `''` (the same fallback the
+  handler body applies when the DOM root is absent).
 
 - **`decomposeRichHtml` is called EXACTLY ONCE per real blur commit** (decision
   G — never in the handler body, never twice). It is imported into the renderer
@@ -326,6 +349,18 @@ private editorBlurCommit(ragId: string, html: string): void {
 decision H, the IME composition guard):**
 ```ts
 private editorCompositionStart(ragId: string): void {
+  if (this.pendingCommitRagId && this.pendingCommitRagId !== ragId) {
+    // a-med #2 — a SUPERSEDING composition: a blur deferred for a DIFFERENT node
+    // will never get its compositionend (this composition supersedes it), so run
+    // the orphaned deferred commit NOW (its dirty flag clears — the guard is never
+    // wedged). Reads the orphan node's CURRENT innerHTML (the same read
+    // compositionend would have used).
+    const orphan = this.pendingCommitRagId
+    this.pendingCommitRagId = null
+    const el = document.getElementById('rag-' + orphan) as HTMLElement | null
+    const html = el ? el.innerHTML : ''
+    this.editorBlurCommit(orphan, html)
+  }
   this.composingRagId = ragId   // begin the IME composition window for this node
 }
 
@@ -424,10 +459,16 @@ private captureRichCaret(ragId: string, which: 'anchor' | 'focus'): RichCaretEdg
 
 **The path re-resolution (`resolveDomPath(root, path)`, pinned):**
 - Walks the `childNodes` child-index steps from `root`; returns the resolved node
-  or `null` if any step is out of range (or the final node is not a text node).
+  or `null` if any step is out of range.
 - **`[]` (empty path)** addresses the root element itself; for caret restore the
   host resolves it to the root's FIRST text node with offset clamped to its
   length (a document-order text run).
+- **a-med #3 (adversarial) — an ELEMENT-node edge is CLAMPED to its nearest text
+  node** in document order (via `firstTextNode`): a caret whose anchor/focus lands
+  on a `strong`/`em`/`a` element boundary (a real-DOM boundary selection) is
+  restored instead of silently dropped. An element with NO text-node descendant
+  (e.g. an empty `<br>`) still resolves to `null` (dropped — there is no text run
+  to place a caret in).
 
 **The restore (`restoreRichCaret(ragId, caret)`, pinned):**
 ```ts
@@ -463,8 +504,9 @@ private restoreRichCaret(ragId: string, caret: Extract<CaretState, { kind: 'rich
 ### 1.7 The gated re-derive caret restore (pinned — amendment 4 / U3 F2)
 
 **`src/renderer/sidebar-panes.ts` `reDerive()`.** The EXISTING textarea-only
-caret-restore loop (lines 571-589, Unit L §5.4) is REPLACED by a kind-GATED
-loop. The controller's `restoreCaret` returns the discriminated state; the host
+caret-restore loop (Unit L §5.4; the pre-U4 loop lived at the old lines
+571-589) is REPLACED by a kind-GATED loop (now the `reDerive` restore loop at
+lines 659-699). The controller's `restoreCaret` returns the discriminated state; the host
 applies the caret to the node's RENDERED control (rich caret → contenteditable
 root, textarea caret → textarea), gated so a caret is NEVER applied to a control
 of the wrong kind:
@@ -514,9 +556,17 @@ for (const ragId of [...this.caretNodes]) {
 
 **Restore-loop rules (pinned):**
 
-- **Restore runs AFTER `loadAppGraph` re-loads the envelope** (in `reDerive`,
-  after the re-load, before `refresh()`), for each node in `caretNodes` (Unit L
-  §5.4 M6).
+- **Restore runs AFTER the SINGLE final graph load** (in `reDerive`, after
+  `refresh()`'s one `loadAppGraph`, against the FINAL render), for each node in
+  `caretNodes` (Unit L §5.4 M6). **CRITICAL #1 (adversarial):** `reDerive` does
+  NOT call `loadAppGraph` itself — it stashes the fresh traversal envelope into
+  `lastTraversalEnvelope` and lets `refresh()` perform the ONE `loadAppGraph`
+  (which re-assembles + re-loads → `tearDownGraph` + `resetRenderState` + a full
+  fresh `render()`), then the restore loop runs AFTER that single final render so
+  the selection survives. The prior shape called `loadAppGraph` in `reDerive`
+  AND again in `refresh()` — the second load destroyed the restore selection in a
+  real browser (a real-render bug the dom-shim's persistent `getElementById` +
+  restore-CALLED-only assertions masked).
 - **Mode gating (amendment 4 / U3 F2 / ADR-8):** the node's RENDERED control
   decides the valid kind, and the gate is on a REAL rendered indicator, never on
   `rag-<ragId>` element presence (that element is authored by the traversal in
@@ -764,7 +814,7 @@ node-testable):**
     rejection is the async main-handler rejection (U5 §2.2 state 13 — a `putNode`
     throw rejects the invoke). `editorBlurCommit` pins a `.catch` (ADR-4) that
     LOGS the error and KEEPS the dirty flag set — mirroring the `operatorSet`
-    `.catch` (sidebar-panes.ts:913) — so the host NEVER leaves an unhandled
+    `.catch` (sidebar-panes.ts:1048) — so the host NEVER leaves an unhandled
     rejection and a rejected invoke is retryable. The `.then` clears dirty only
     on `ok`/`deleted-node`; a rejected promise leaves dirty set (the edit is not
     lost). The commit-in-flight latch is released in `.finally` (the node may
@@ -881,21 +931,22 @@ node-testable):**
   `RagNodeChildType` (lines 45-58), `RagNode.children` (line 71) — the decomposed
   model U4 commits; `validateNodeShape`/`isValidChildren` (the write-time
   validation the committed `children` passes via U5's `setRichText`).
-- **Edit controller:** `src/renderer/edit-controller.ts` — the current
-  `CaretState` (lines 26-31, textarea-only) SUPERSEDED by the discriminated union
-  (§1.2); `saveCaret`/`restoreCaret` (lines 138-150); `markDirty`/`clearDirty`/
-  `requestRebuild` (lines 71-82/127-134, the dirty-edit guard); `isEditable`
-  (line 91).
-- **Host:** `src/renderer/sidebar-panes.ts` — `installSidebarBridge` (~820-842,
-  the bridge surface extended with 4 methods), `bindHandlers` (~336-357, the 4
-  rich defs registered), `applyEditingMode` (~775-806, the U3 splice U4 extends
-  with the handler attachment), `reDerive` (~537-598, the caret-restore loop U4
-  replaces with the gated loop), `loadAppGraph` (~384-417, the splice +
-  recompute path), `textareaBlur` (~929-947, the `CaretState` shape superseded to
-  `kind:'textarea'`), `decomposeRichHtml` import (from `src/main/rich-decompose.js`,
-  the same cross-main pattern as `buildTraversal` line 36).
+- **Edit controller:** `src/renderer/edit-controller.ts` — the former
+  textarea-only `CaretState` SUPERSEDED by the discriminated union (now the
+  pinned `CaretState` type, lines 45-47; §1.2); `saveCaret`/`restoreCaret`
+  (lines 154-166); `markDirty`/`clearDirty` (lines 87-98) / `requestRebuild`
+  (lines 143-150, the dirty-edit guard); `isEditable` (lines 105-115).
+- **Host:** `src/renderer/sidebar-panes.ts` — `installSidebarBridge` (~944-977,
+  the bridge surface extended with 4 methods), `bindHandlers` (~404-434, the 4
+  rich defs registered), `applyEditingMode` (~884-930, the U3 splice U4 extends
+  with the handler attachment), `reDerive` (~614-707, the caret-restore loop U4
+  replaces with the gated loop), `loadAppGraph` (~461-494, the splice +
+  recompute path), `textareaBlur` (~1064-1082, the `CaretState` shape superseded
+  to `kind:'textarea'`), `decomposeRichHtml` import (line 50, from
+  `src/main/rich-decompose.js`, the same cross-main pattern as `buildTraversal`
+  line 36).
 - **Preload (consumed, NOT changed by U4):** `src/main/preload.ts` — `edit.commitRich`
-  (lines 206-213), the `edit` bridge (lines 197-223).
+  (lines 210-213), the `edit` bridge (lines 197-223).
 - **Decisions:** `docs/decisions.md` — RICH-TEXT-EDITING-GATE (the rich-text
   machinery context), RAG-AUTHORITATIVE (the decomposed `content`+`children` are
   what the rich edit writes), SINGLE-WRITER-STORE (the rich commit via U5's
@@ -961,7 +1012,7 @@ these; the TestWriter writes the regression tests NOW from this list):**
   leaves the dirty flag set (edit not lost — the guard keeps queuing); a
   `deleted-node` clears it (unrecoverable — H5); a REJECTED `commitRich` (a
   `putNode` throw, U5 §2.2 state 13) is CAUGHT by `editorBlurCommit`'s `.catch`
-  (mirroring the `operatorSet` `.catch` at sidebar-panes.ts:913) — it LOGS, KEEPS
+  (mirroring the `operatorSet` `.catch` at sidebar-panes.ts:1048) — it LOGS, KEEPS
   the dirty flag set, and releases the commit-in-flight latch, so the host never
   leaves an unhandled rejection and the node may retry on a later blur
   (§2.2 states 2/3/16).
@@ -1036,3 +1087,84 @@ record is appended to this §5. Every PACKAGE finding (in
 is recorded in `docs/defects.md` + `docs/HANDOFF.md`, never patched here. The
 expected findings are HOST findings; none are catalogued unless a package defect
 surfaces.
+
+### 5.1 Adversarial findings record (RCA-3 — post-green read-only review)
+
+The read-only adversarial reviewer ran the must-hunt list + edge cases against
+the green U4 and found the following HOST findings, each fixed here +
+regression-tested (RCA-3). All are HOST findings (`src/renderer/sidebar-panes.ts`);
+no package defect surfaced.
+
+- **CRITICAL #1 (real-browser) — the re-derive caret restore is clobbered by the
+  `await this.refresh()` that immediately follows it.** `reDerive()` ran
+  `loadAppGraph` (fresh render) → the gated caret-restore loop → `await
+  this.refresh()`. But `refresh()` calls `this.loadAppGraph(...)` AGAIN, and
+  `loadAppGraph` → `runtime.loadEnvelope` → `tearDownGraph` (destroys every node)
+  + `resetRenderState` + a full fresh `render()` — so the selection the restore
+  loop just set (on the prior render's elements) is destroyed in a real browser.
+  The caret does NOT survive the re-derive (the central §1.7/§2.1 states 29/33/37
+  contract). The dom-shim masked it (persistent `getElementById` + the tests only
+  asserted `restoreRichCaret` was CALLED, not that the selection survives the
+  final render).
+  **RESOLUTION:** eliminated the double graph load — `reDerive` no longer calls
+  `loadAppGraph` itself; it stashes the fresh traversal envelope in
+  `lastTraversalEnvelope` and lets `refresh()` perform the SINGLE `loadAppGraph`,
+  then the restore loop runs AFTER that final render (§1.7 rule). The selection is
+  applied to the FINAL render and survives.
+  **REGRESSION (RCA-3):** `tests/contenteditable-editor-host.test.ts`
+  "CRITICAL #1 — the re-derive caret restore runs AFTER the SINGLE final graph
+  load" — drives `reDerive` through the full `loadAppGraph→refresh` and asserts
+  `runtime.loadEnvelope` is called EXACTLY ONCE (the buggy path called it twice)
+  and that `restoreRichCaret`'s global call index is AFTER the load's (the restore
+  runs on the final render, not on a pre-teardown render).
+
+- **a-med #2 — the composition guard can orphan a deferred commit + wedge the
+  dirty guard.** `editorCompositionStart` unconditionally overwrites
+  `composingRagId` and `pendingCommitRagId` is a single slot. Sequence: blur
+  deferred for A (`pendingCommitRagId=A`) → `compositionstart B` → `compositionend
+  B` (`pendingCommitRagId !== B`) → A's deferred commit never runs, `dirty(A)`
+  stays forever → the dirty guard permanently queues every re-derive.
+  **RESOLUTION:** on `compositionstart` for a node ≠ the pending node, run the
+  orphaned deferred commit NOW (reads the orphan node's current innerHTML, the
+  same read `compositionend` would have used) so `dirty(A)` clears and the guard
+  is never wedged. A re-composition of the SAME node (`pendingCommitRagId ===
+  ragId`) is NOT orphaned (§1.4 composition-start block).
+  **REGRESSION (RCA-3):** "a-med #2 — a superseding composition does NOT wedge A's
+  dirty guard" — `compositionstart s1` → dirty blur s1 (deferred) →
+  `compositionstart s2` (superseding) → asserts the orphaned commit fires ONCE,
+  `pendingCommitRagId` clears, `dirty(s1)` clears, and the guard is no longer
+  wedged.
+
+- **a-med #3 — a caret whose anchor/focus lands on an element node is silently
+  dropped on restore.** `captureRichCaret` records `domPathToRoot` for whatever
+  the anchorNode is; `resolveDomPath` returned `null` unless the final node was
+  `nodeType===3`. A real-DOM selection at a `strong`/`em`/`a` boundary was never
+  restored.
+  **RESOLUTION:** `resolveDomPath` now CLAMPS an element-node edge to its nearest
+  text node in document order (via `firstTextNode`), so a boundary selection is
+  restored. An element with no text-node descendant still resolves to `null`
+  (§1.6).
+  **REGRESSION (RCA-3):** "a-med #3 — an element-node caret edge ... is clamped to
+  the nearest text node, not dropped" — drives `resolveDomPath` with a synthetic
+  `root > strong > text` and asserts the element-edge path resolves to the text
+  node.
+
+- **minor (spec alignment) — the pinned `.finally` latch release vs the
+  implemented dual `.then`/`.catch` deletes.** The pinned §1.4 `editorBlurCommit`
+  released the commit-in-flight latch in `.finally`; the implementation releases
+  it in each of `.then` (success) and `.catch` (rejection). Behaviorally
+  equivalent (released exactly once on every settle); the spec §1.4 was aligned to
+  the actual form.
+
+- **minor #6 — public bridge methods vs a null/undefined ragId.** The 4 rich
+  bridge methods now guard `ragId == null` and no-op (never throw / never mark a
+  phantom dirty / never commit / never start or end a composition on a phantom
+  node). Regression: "minor #6 — the public bridge methods NO-OP on a
+  null/undefined ragId".
+
+- **minor #5 — authored handler on a rich root.** Confirmed: NO authored template
+  or traversal ever places a handler on a rich root (the traversal authors
+  handlers ONLY on the `textarea-<ragId>` child; the content-window template
+  authors zone containers only). The splice still changed to APPEND-IF-ABSENT
+  (name-deduplicated) so a future/extended authored handler is never clobbered
+  (§1.3).

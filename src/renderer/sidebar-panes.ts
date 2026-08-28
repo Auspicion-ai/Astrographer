@@ -235,6 +235,21 @@ const RAG_EDITOR_COMPOSITIONEND_BODY = `function (ctx) {
   if (ragId) s.editorCompositionEnd(ragId);
 }`
 
+// Unit U4 §1.3 — the 4 name-referenced rich handler defs attached to every
+// RICH-ELIGIBLE root by the U3 `applyEditingMode` splice (contenteditable mode).
+// minor #5 (adversarial) — APPEND-IF-ABSENT: no authored template or traversal
+// ever places a handler on a rich root (verified — the traversal authors
+// handlers ONLY on the textarea child, traversal.ts; the content-window template
+// authors zone containers only, no rag-root handlers), but the splice merges
+// these in NAME-DEDUPLICATED rather than replacing `n.handlers`, so a future or
+// extended authored handler on the root is never clobbered.
+const RAG_EDITOR_HANDLER_DEFS = [
+  { name: 'rag-editor-input', event: 'input' },
+  { name: 'rag-editor-blur', event: 'blur' },
+  { name: 'rag-editor-compositionstart', event: 'compositionstart' },
+  { name: 'rag-editor-compositionend', event: 'compositionend' },
+] as const
+
 /** Collect a translated node's subtree node ids (root-first, tree order),
  *  STOPPING at each doc-child subtree root (a child carrying the stable
  *  authored `rag-<id>` id — the same rule `buildTraversal` uses). */
@@ -623,14 +638,24 @@ export class SidebarPanes {
       const current = this._currentDocumentId
       const documentIds = current ? [current] : this.deriveDocumentIds(snapshot)
       const traversalEnvelope = this.buildTraversalEnvelope(snapshot, documentIds)
-      if (this.runtime) {
-        this.loadAppGraph(this.runtime, traversalEnvelope)
-      }
-      // Unit U4 §1.7 — after a re-derive re-loads the pane-inclusive envelope,
-      // restore the saved caret for each node with a saved caret, GATED by the
-      // node's RENDERED control type (amendment 4 / U3 F2 / ADR-8). A dangling
-      // back-reference clears the stale caret (restoreCaret returns undefined —
-      // Unit D §5.3 L5); the host does NOT re-apply a stale caret (A4).
+      // CRITICAL #1 (adversarial) — a SINGLE final graph load. Stash the fresh
+      // traversal envelope and let `refresh()` perform the ONE loadAppGraph
+      // (re-assemble + re-load → `runtime.loadEnvelope` → `tearDownGraph` (destroys
+      // every node) → `resetRenderState` → a full fresh `render()`) + the operator
+      // re-mount + the data re-fetch. The caret-restore loop BELOW runs AFTER that
+      // single final render, so the selection it applies is set on the FINAL
+      // render and survives. Previously `reDerive` called `loadAppGraph` itself AND
+      // then `refresh()` called `loadAppGraph` AGAIN — the second load's
+      // `tearDownGraph` + fresh `render()` destroyed the selection the restore loop
+      // had just set on the prior render's elements (a real-browser bug the
+      // dom-shim's persistent getElementById masked).
+      this.lastTraversalEnvelope = traversalEnvelope
+      await this.refresh()
+      // Unit U4 §1.7 — after the re-derive's FINAL re-load of the pane-inclusive
+      // envelope, restore the saved caret for each node with a saved caret, GATED
+      // by the node's RENDERED control type (amendment 4 / U3 F2 / ADR-8). A
+      // dangling back-reference clears the stale caret (restoreCaret returns
+      // undefined — Unit D §5.3 L5); the host does NOT re-apply a stale caret (A4).
       for (const ragId of [...this.caretNodes]) {
         const caret = this.editController.restoreCaret(ragId)
         if (caret === undefined) {
@@ -672,7 +697,6 @@ export class SidebarPanes {
           // DROPPED, never applied to a contenteditable node (amendment 4 / U3 F2).
         }
       }
-      await this.refresh()
     } finally {
       this.reDeriveInFlight = false
       if (this.reDeriveQueued) {
@@ -881,15 +905,19 @@ export class SidebarPanes {
           // data-doc-head); overwrite any stale authored `contenteditable`.
           n.props = { ...(n.props ?? {}), contenteditable: true }
           // Unit U4 §1.3 — ATTACH the 4 name-referenced rich handler defs to the
-          // eligible root (idempotent — mirrors the U3 H4: a repeated splice sets
-          // the SAME 4-def array, no duplicate accumulation, no throw). Resolved to
-          // the registered bodies by the app Runtime's
-          // `resolveNameReferencedHandlerBodies` (the Unit L §5.8 state-12 pattern).
+          // eligible root. minor #5 (adversarial) — APPEND-IF-ABSENT, name-
+          // deduplicated, instead of REPLACE: `n.handlers = RAG_EDITOR_HANDLER_DEFS`
+          // would clobber any authored handler already on the root. No authored
+          // template/traversal places a handler on a rich root today (verified),
+          // but the merge makes the splice robust to one. Idempotent (H4) — a
+          // repeated splice of the SAME envelope cannot duplicate the 4 defs (the
+          // existing names are excluded).
+          const existingHandlerNames = new Set(
+            (n.handlers ?? []).map((h) => (h as { name?: string }).name),
+          )
           n.handlers = [
-            { name: 'rag-editor-input', event: 'input' },
-            { name: 'rag-editor-blur', event: 'blur' },
-            { name: 'rag-editor-compositionstart', event: 'compositionstart' },
-            { name: 'rag-editor-compositionend', event: 'compositionend' },
+            ...(n.handlers ?? []),
+            ...RAG_EDITOR_HANDLER_DEFS.filter((d) => !existingHandlerNames.has(d.name)),
           ]
         }
       }
@@ -923,11 +951,17 @@ export class SidebarPanes {
       operatorSet: (patch: OperatorSettingsPatch) => void this.operatorSet(patch),
       textareaInput: (ragId: string) => this.textareaInput(ragId),
       textareaBlur: (ragId: string, value: string) => void this.textareaBlur(ragId, value),
-      // Unit U4 §1.4 (decisions G/H) — the 4 rich-text bridge methods.
-      editorInput: (ragId: string) => this.editorInput(ragId),
-      editorBlur: (ragId: string, html: string) => void this.editorBlur(ragId, html),
-      editorCompositionStart: (ragId: string) => void this.editorCompositionStart(ragId),
-      editorCompositionEnd: (ragId: string) => void this.editorCompositionEnd(ragId),
+      // Unit U4 §1.4 (decisions G/H) — the 4 rich-text bridge methods. minor #6
+      // (adversarial) — each PUBLIC bridge method guards against a null/undefined
+      // ragId (a malformed/craftable dispatch that omits the `data-rag-node-id`
+      // prop) and NO-OPs: it never throws, never marks a phantom node dirty, never
+      // commits an id-less blur, and never starts/ends a composition on a phantom
+      // node. `editorBlur` also defaults a missing `html` to '' (the same fallback
+      // the handler body applies when the DOM root is absent).
+      editorInput: (ragId?: string) => { if (ragId == null) return; this.editorInput(ragId) },
+      editorBlur: (ragId?: string, html?: string) => { if (ragId == null) return; void this.editorBlur(ragId, html ?? '') },
+      editorCompositionStart: (ragId?: string) => { if (ragId == null) return; void this.editorCompositionStart(ragId) },
+      editorCompositionEnd: (ragId?: string) => { if (ragId == null) return; void this.editorCompositionEnd(ragId) },
     }
     const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
     const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar
@@ -1109,8 +1143,24 @@ export class SidebarPanes {
   /** Unit U4 §1.4 (decision H) — `rag-editor-compositionstart`: begin the IME
    *  composition window for this node. The IME text lands via `input` events
    *  (which mark the node dirty); the composition events themselves do NOT mark
-   *  dirty. */
+   *  dirty. a-med #2 (adversarial) — a SUPERSEDING composition: if a blur was
+   *  deferred mid-composition for a DIFFERENT node (its `compositionend` will
+   *  never fire because this composition supersedes it), run that orphaned
+   *  deferred commit NOW so its dirty flag clears — the dirty-edit guard is never
+   *  permanently wedged. With the single-slot `pendingCommitRagId`, the sequence
+   *  blur-deferred-for-A → compositionstart B → compositionend B (pending !== B)
+   *  would otherwise orphan A's deferred commit and leave dirty(A) set forever,
+   *  permanently queuing every re-derive. The orphan's commit reads its CURRENT
+   *  innerHTML (the same read `compositionend` would have used); a re-composition
+   *  of the SAME node (`pendingCommitRagId === ragId`) is NOT orphaned here. */
   private editorCompositionStart(ragId: string): void {
+    if (this.pendingCommitRagId && this.pendingCommitRagId !== ragId) {
+      const orphan = this.pendingCommitRagId
+      this.pendingCommitRagId = null
+      const el = document.getElementById('rag-' + orphan) as HTMLElement | null
+      const html = el ? el.innerHTML : ''
+      this.editorBlurCommit(orphan, html)
+    }
     this.composingRagId = ragId
   }
 
@@ -1171,9 +1221,14 @@ export class SidebarPanes {
   }
 
   /** Re-resolve a `RichCaretEdge.path` (child-index steps) from `root`. Returns
-   *  the resolved node or `null` if any step is out of range (or the final node
-   *  is not a text node). `[]` (empty path) addresses the root element itself;
-   *  for caret restore the host resolves it to the root's FIRST text node. */
+   *  the resolved node or `null` if any step is out of range. `[]` (empty path)
+   *  addresses the root element itself; for caret restore the host resolves it to
+   *  the root's FIRST text node. a-med #3 (adversarial) — an ELEMENT-node edge
+   *  (a caret whose anchor/focus lands on a strong/em/a element boundary) is
+   *  CLAMPED to the nearest text node in document order, so a real-DOM boundary
+   *  selection is restored instead of silently dropped. An element with no text
+   *  node descendant (e.g. an empty `<br>`) still resolves to `null` (dropped —
+   *  there is no text run to place a caret in). */
   private resolveDomPath(root: Node, path: number[]): Node | null {
     let cur: Node = root
     for (const step of path) {
@@ -1188,6 +1243,11 @@ export class SidebarPanes {
       if (firstText) return firstText
     }
     if (cur.nodeType === 3) return cur // a text node
+    // a-med #3 — clamp an element-node edge to its nearest text node (the caret
+    // lives in a text node; a boundary selection on strong/em/a must be restored,
+    // not dropped).
+    const nearest = this.firstTextNode(cur)
+    if (nearest) return nearest
     return null
   }
 
