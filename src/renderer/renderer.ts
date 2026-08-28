@@ -8,9 +8,7 @@ import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
-import { rebuildBackRefs } from '../main/traversal.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
-import type { RagNode, RagEdge } from '../main/rag-store.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
  *  (content/structural/re-derive). Only these trigger the app-graph-changed push
@@ -162,42 +160,36 @@ async function main(): Promise<void> {
   // fire-and-forget (the `onRebuild` signature is sync); a fetch/re-derive
   // failure leaves the current backRefs in place (never a crash).
   const backRefs = new Map<string, string[]>()
+  // Unit K §5.1 step 4 — the edit controller's `onRebuild` IS the host's
+  // `reDerive` (the pane-inclusive re-traversal). `host` is declared before the
+  // controller so the closure can reference it; the closure only runs after the
+  // host is constructed + booted (a store change → requestRebuild → reDerive).
+  let host: SidebarPanes
   const editController = createEditController({
     backRefs,
     commit: (nodeId, content) => bridge!.edit!.commit(nodeId, content),
-    onRebuild: () => {
-      void bridge!.rag!.snapshot().then(({ nodes, edges }) => {
-        const rebuilt = rebuildBackRefs(nodes as RagNode[], edges as RagEdge[], 'main')
-        backRefs.clear()
-        for (const [k, v] of rebuilt) backRefs.set(k, v)
-      }).catch(() => {
-        // re-traversal failure — leave the current backRefs in place
-      })
-    },
+    onRebuild: () => void host.reDerive(),
   })
   // Unit K §5.1 — the SidebarPanes host. The renderer constructs the host with
   // the app mount (#app), the operator mount (#operator-panes — a NEW element,
   // NOT #panes which stays SecurePanels'; M3), the pane registry, the bridge,
-  // the current-document/node accessors, the backRefs map, and the edit
-  // controller, then calls `host.boot(runtime)` (the pane-inclusive envelope
-  // replaces the demoEnvelope() bootstrap).
+  // the backRefs map, and the edit controller. The host owns the current-
+  // document/node state. Then calls `host.boot(runtime)` (the pane-inclusive
+  // envelope replaces the demoEnvelope() bootstrap). The host's boot subscribes
+  // to rag-store-changed/template-changed and routes them through the edit
+  // controller's dirty-edit guard → reDerive (the SOLE subscription; the old
+  // renderer-level onRagStoreChanged closure is removed to avoid double-firing).
   const operatorMount = document.getElementById('operator-panes')
   const registry = createPaneRegistry()
-  const docState = { currentDocumentId: null as string | null, currentNodeId: null as string | null }
-  const host = new SidebarPanes({
+  host = new SidebarPanes({
     mount,
     operatorMount: operatorMount as HTMLElement,
     registry,
     bridge: bridge as never,
-    currentDocumentId: () => docState.currentDocumentId,
-    currentNodeId: () => docState.currentNodeId,
     backRefs,
     editController,
   })
   void host.boot(runtime)
-  bridge.edit?.onRagStoreChanged(() => {
-    editController.requestRebuild()
-  })
   bridge.ready()
 }
 

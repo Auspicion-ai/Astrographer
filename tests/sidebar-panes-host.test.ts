@@ -220,7 +220,6 @@ interface Harness {
   backRefs: Map<string, string[]>
   editController: EditController
   onRebuild: ReturnType<typeof vi.fn>
-  docState: { currentDocumentId: string | null; currentNodeId: string | null }
   sidebar: {
     selectDocument: (id: string) => void
     submitQuery: (value: string) => void
@@ -249,7 +248,6 @@ function makeHarness(opts: {
   const registry = createPaneRegistry()
   const { bridge, state } = makeBridge(opts)
   const backRefs = new Map<string, string[]>()
-  const docState = { currentDocumentId: null as string | null, currentNodeId: null as string | null }
   let host: SidebarPanes
   const onRebuild = vi.fn(() => host.reDerive())
   const editController = createEditController({ backRefs, commit: vi.fn(async () => ({ ok: true, nodeId: 'x' })), onRebuild })
@@ -258,8 +256,6 @@ function makeHarness(opts: {
     operatorMount,
     registry,
     bridge: bridge as never,
-    currentDocumentId: () => docState.currentDocumentId,
-    currentNodeId: () => docState.currentNodeId,
     backRefs,
     editController,
   })
@@ -281,7 +277,6 @@ function makeHarness(opts: {
     backRefs,
     editController,
     onRebuild,
-    docState,
     get sidebar() {
       return sidebar()
     },
@@ -389,13 +384,17 @@ describe('registerPanes (§5.8.1)', () => {
 // buildContext + buildTemplateContext — §5.8.2/3 + M7/M8/M12
 // ===========================================================================
 describe('buildContext (§5.8.2, M7)', () => {
-  it('returns a PaneContext carrying the snapshot, currentDocumentId, currentNodeId, backRefs, and crosslinks', () => {
-    const h = makeHarness({ snapshot: validSnapshot() })
-    h.docState.currentDocumentId = 'doc-a'
-    h.docState.currentNodeId = 'n1'
+  it('returns a PaneContext carrying the snapshot, currentDocumentId, currentNodeId, backRefs, and crosslinks', async () => {
+    const snapshot = validSnapshot()
+    const h = makeHarness({ snapshot })
+    // The snapshot is populated by boot (M7 — `lastSnapshot` is set by the
+    // boot/re-derive).
+    await h.host.boot(h.runtime)
+    h.host.setCurrentDocumentId('doc-a')
+    h.host.setCurrentNodeId('n1')
     h.backRefs.set('n1', ['node-1'])
     const ctx = h.host.buildContext()
-    expect(ctx.snapshot).toEqual(validSnapshot())
+    expect(ctx.snapshot).toEqual(snapshot)
     expect(ctx.currentDocumentId).toBe('doc-a')
     expect(ctx.currentNodeId).toBe('n1')
     expect(ctx.backRefs).toBe(h.backRefs)
@@ -404,8 +403,10 @@ describe('buildContext (§5.8.2, M7)', () => {
 })
 
 describe('buildTemplateContext (§5.8.3, M8/M12)', () => {
-  it('returns a TemplatePaneContext carrying the stored template + the host-pinned targetedZones', () => {
+  it('returns a TemplatePaneContext carrying the stored template + the host-pinned targetedZones', async () => {
     const h = makeHarness({ template: { source: 'custom', template: customTemplate() } })
+    // The stored template is fetched + populated by boot (M8).
+    await h.host.boot(h.runtime)
     const ctx = h.host.buildTemplateContext()
     expect(ctx.template).toEqual(customTemplate())
     // M8 — targetedZones is the host-side constant/default ['main'], NOT fetched
@@ -511,7 +512,7 @@ describe('refresh (§5.8.6, M17)', () => {
   it('re-fetches the pane data (backlinks when currentNodeId is set + operator settings) and re-renders; NEVER re-runs a RAG re-traversal', async () => {
     const h = makeHarness({ snapshot: validSnapshot() })
     await h.host.boot(h.runtime)
-    h.docState.currentNodeId = 'n1'
+    h.host.setCurrentNodeId('n1')
     h.bridge.rag.snapshot.mockClear()
     await h.host.refresh()
     // The crosslinks backlink enumeration is re-fetched for the current node.
@@ -828,7 +829,7 @@ describe('the current-document documentIds (§5.8.29, M6)', () => {
   it('with currentDocumentId set, a re-derive uses documentIds = [<root id>] (single-document view)', async () => {
     const h = makeHarness({ snapshot: validSnapshot() })
     await h.host.boot(h.runtime)
-    h.docState.currentDocumentId = 'doc-a'
+    h.host.setCurrentDocumentId('doc-a')
     h.bridge.rag.snapshot.mockClear()
     await h.host.reDerive()
     // The single-document view re-derives with documentIds = ['doc-a'].
@@ -839,7 +840,7 @@ describe('the current-document documentIds (§5.8.29, M6)', () => {
   it('with currentDocumentId null, a re-derive derives all doc-head targets', async () => {
     const h = makeHarness({ snapshot: validSnapshot() })
     await h.host.boot(h.runtime)
-    h.docState.currentDocumentId = null
+    h.host.setCurrentDocumentId(null)
     h.bridge.rag.snapshot.mockClear()
     await h.host.reDerive()
     expect(h.bridge.rag.snapshot).toHaveBeenCalled()

@@ -3,8 +3,8 @@
 // Electron) — the single authority over which sidebar panes exist and which
 // are enabled. Holds the `PaneDefinition` records + an enabled-state map.
 import type { LegacyNodeData } from 'provident-ssr'
-import type { RagNode, RagEdge } from '../main/rag-store.js'
 import type { CrosslinkWiring } from '../main/traversal.js'
+import type { RagSnapshotPayload } from '../shared/types.js'
 
 /** The scope of a sidebar pane. 'app-graph' panes render in the app Runtime
  *  graph → MCP-visible. 'operator' panes render in an isolated GraphScope →
@@ -17,8 +17,10 @@ export type PaneScope = 'app-graph' | 'operator'
 export interface PaneContext {
   /** The current RAG store snapshot (nodes + edges), fetched over the
    *  `rag-snapshot` IPC. The doc-nav pane derives the document list from the
-   *  `doc-head` edges. */
-  snapshot: { nodes: RagNode[]; edges: RagEdge[] }
+   *  `doc-head` edges. null before the first boot/re-derive (M1 — the empty-
+   *  snapshot guard: consumers must survive a null snapshot → the "(no
+   *  documents)" empty state, never a TypeError). */
+  snapshot: RagSnapshotPayload | null
   /** The current document root id (the single-document view). null if none. */
   currentDocumentId: string | null
   /** The currently-selected RAG node id (the crosslink pane's focus node). */

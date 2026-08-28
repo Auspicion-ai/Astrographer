@@ -22,6 +22,50 @@ _(none — Units A–J are implemented.)_
 
 ## DONE
 
+- **Unit K — SidebarPanes renderer host (2026-08-28).** The UI-mount work that
+  closes the deferred L1/L2/I1/I2 findings: the `SidebarPanes` host in
+  `src/renderer/sidebar-panes.ts` wires the store→traversal→pane-assembly→render
+  pipeline into the live renderer. `boot(runtime)` replaces the `demoEnvelope()`
+  bootstrap with the pane-inclusive envelope (fetch snapshot + stored template →
+  derive document ids → `buildTraversal` → `assembleAppGraphEnvelope` → load into
+  the app Runtime), so the RAG content + the app-graph panes are MCP-visible by
+  construction. The host owns the current-document/node state (M5); the edit
+  controller's `onRebuild` IS the host's `reDerive` (the SOLE subscription —
+  `rag-store-changed`/`template-changed` → dirty-edit guard → re-derive, with
+  in-flight coalescing). `registerPanes()` registers the four app-graph panes
+  (doc-nav/crosslinks/search/template-editor) + the operator `settings` pane;
+  `bindHandlers()` registers the handler defs; the operator settings pane mounts
+  in an isolated `createIsolatedScope()` GraphScope (`#operator-panes`, M3),
+  never MCP-visible. TestWriter red → Implementer green in
+  `tests/sidebar-panes-host.test.ts` (RED marker: `src/renderer/sidebar-panes.ts`
+  missing → **49 active pass / 7 skipped**; the 7 skipped are the
+  Electron/DOM-dependent §5.8 16–20 + §5.9 10–11 cases, verified by code review
+  / the e2e battery). The last 3 red tests (#1/#2/#4) were a **spec conflict**
+  (the spec pinned `currentDocumentId`/`currentNodeId` as read-only accessors;
+  the tests required host-owned state) — resolved by amending the spec §5.6 M5
+  (the host owns the state; `buildContext()` reads host-owned state; the
+  accessors removed), tracked in `docs/unit-k-test-resolution-tracker.md` (all
+  9 resolved). Adversarial pass (RCA-3) in the spec §3a — **11 host findings
+  F1–F11, all HOST (none package)**: F1 (re-derive wiring not connected — the
+  renderer's `onRebuild` was a leftover Unit-D closure; fixed to
+  `host.reDerive()` + the duplicate subscription removed), F2 (stale M13 security
+  cache — refreshed on re-derive), F3 (fail-closed template gate left a permanent
+  dirty flag — the gate now runs before `markDirty`), F4 (operator `topK` ignored
+  — now feeds `bridge.rag.query`), F7 (search re-render bypassed the dirty-edit
+  guard — now skipped while `anyDirty()`), F8 (`selectDocument` accepted a bogus
+  id — now validated against `doc-head` targets), F10 (malformed `''` dispatch on
+  a null event — now a no-op), F11 (`deriveDocumentIds` threw on a malformed
+  snapshot — now guarded); F5/F6/F9 recorded as LOW (double-load, boot-time
+  subscription window, operator scope re-mount) — not fixed (perf/leak only).
+  Blind-greens in `docs/specs/unit-k-sidebar-panes-host-greens.md` (57
+  scenarios, all pass — authored from the docs ONLY, blind-run against the live
+  modules); proofreader pass (fixed stale test-counts, phantom `currentNodeId()`
+  accessor refs, the `refresh()` over-claim, the renderer-wiring claim);
+  documentation review in `archive/reviews/2026-08-28-unit-k-doc-review.md`
+  (spec + greens + trackers reconciled against the build — 15 stale entries
+  fixed); trio green (test 1257 pass / 23 skip, typecheck clean, build clean).
+  Decisions landed: UI-MOUNT-BOOT, UI-MOUNT-RE-DERIVE, UI-MOUNT-PANE-REGISTRATION,
+  UI-MOUNT-OPERATOR (see `docs/decisions.md`).
 - **Unit J — MCP/security hardening (2026-08-28).** The completion/hardening
   pass over the `rag`/`edit`/`code.template.*` tool groups + the MCP↔UI
   equivalence surface. It AUDITS the five-seam gate (completeness, default-off,

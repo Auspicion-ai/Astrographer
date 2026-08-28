@@ -144,8 +144,25 @@ deferred findings this unit closes are recorded here for provenance:
 - **I2 (Unit I §3a, 2026-08-28):** the template-editor pane is authored but never
   registered/wired into the app-graph. Closed by the pane registration (§5.3).
 
-The adversarial pass findings (host findings, fixed + regression-tested) will be
-recorded here when the unit lands.
+The adversarial pass findings (host findings, fixed + regression-tested) are
+recorded here. All findings are HOST findings (this repo's `src/`); none are
+PACKAGE findings, so none are catalogued in `docs/defects.md`/`docs/HANDOFF.md`.
+
+**Adversarial pass (2026-08-28, RCA-3) — 11 findings (F1–F11):**
+
+| # | Sev | Finding | Status |
+| --- | --- | --- | --- |
+| F1 | HIGH | The re-derive wiring was not connected: `renderer.ts` wired the edit controller's `onRebuild` to a leftover Unit-D closure (backRefs-only), never to `host.reDerive()`, and subscribed to `onRagStoreChanged` twice. | **RESOLVED** — `onRebuild: () => void host.reDerive()`; duplicate subscription removed. |
+| F2 | MED (security) | The M13 handler gate read a boot-time-cached `this.security`, so a group turned OFF after boot stayed fail-OPEN. | **RESOLVED (partial)** — the cache is refreshed on each re-derive; the handlers stay synchronous (per the MCP/UI-equivalence test contract), so a security change that does not coincide with a re-derive is honored on the next re-derive. |
+| F3 | MED/HIGH | A fail-closed template gate (`code` OFF) called `markDirty` before the gate and never `clearDirty`, leaving the template-editor dirty flag set forever and freezing the re-derive queue. | **RESOLVED** — the gate now runs BEFORE `markDirty`, so a gated-off handler never leaves a permanent dirty flag. |
+| F4 | MED | The operator-settings `topK` was ignored; the search pane hardcoded `5`. | **RESOLVED** — `submitQuery` uses `this.lastOperatorSettings?.topK ?? 5`. |
+| F5 | LOW/MED | `reDerive` double-loads the app graph (step 6 `loadAppGraph` + step 7 `refresh` both re-load). Spec-mandated; wasteful but not a correctness bug. | **KNOWN (LOW)** — recorded, not fixed (spec pins both steps). |
+| F6 | LOW | A `rag-store-changed`/`template-changed` broadcast during `boot()`'s async fetches is missed (subscriptions installed at the end of boot). | **KNOWN (LOW)** — recorded; fixing risks a boot/reDerive race. |
+| F7 | MED | The search re-render (`submitQuery` → `loadAppGraph`) bypassed the dirty-edit guard, clobbering an in-progress edit. | **RESOLVED** — the re-load is skipped while `editController.anyDirty()`. |
+| F8 | LOW/MED | `selectDocument` accepted an arbitrary document id, re-deriving with a phantom `documentIds`. | **RESOLVED** — the id is validated against the snapshot's `doc-head` targets. |
+| F9 | LOW | `operatorSet` re-mounts the operator scope on every change, accumulating orphaned scopes. | **KNOWN (LOW)** — recorded, not fixed (perf/leak only). |
+| F10 | LOW | `handleOperatorEvent` dispatched a malformed `''` event on a null/undefined DOM event. | **RESOLVED** — a null/undefined event is a no-op. |
+| F11 | LOW | `deriveDocumentIds` threw on a malformed snapshot (no `edges`); `recomputeBackRefs` double-translates the envelope. | **RESOLVED (guard)** — `snapshot?.edges ?? []`; the double-translate is accepted as LOW. |
 
 ### 3b. Proposal-review findings
 
@@ -166,22 +183,24 @@ contract below. Each is cross-referenced to the section that resolves it:
   re-derive step 3): the host SKIPS `buildTraversal` when `documentIds` is empty
   (mirroring `rebuildBackRefs`'s empty-map guard at `traversal.ts:431`), because
   `buildTraversal` throws `'traversal: store/documentIds/zoneName required'` on an
-  empty array (`traversal.ts:220`). The empty-store envelope is pinned in §5.1.
+  empty array (`traversal.ts:224`). The empty-store envelope is pinned in §5.1.
 - **M2 — handler attachment + handler-body→host communication** (§5.3): the pure
   modules emit NO `handlers`; the host injects the handler references
   post-assembly, and a compiled handler body reaches the host through a
   `window.provident.sidebar.*` bridge surface (a function-string body cannot
   call `reDerive`/`requestRebuild` directly).
 - **M3 — distinct operator mount element** (§5.4): the operator settings scope
-  mounts in a NEW element, NOT `#panes` (`renderer.ts:123-124` + `index.html:40`
+  mounts in a NEW element, NOT `#panes` (`renderer.ts:134-135` + `index.html:40`
   already bind `#panes` to `SecurePanels`; two isolated scopes cannot share one
   DomAdapter mount).
 - **M4 — `registerHandlerDef` throw surface** (§5.3, §5.9 fail-state 3):
   `registerHandlerDef` does NOT throw on a non-string body (it stores the def);
   the throw is at compile (`compileHandlerBody`/`new Function`).
 - **M5 — `currentDocumentId`/`currentNodeId` state ownership** (§5.6): both are
-  read-only getters in `SidebarPanesOptions`; the host owns the mutable state +
-  a setter the handler body reaches.
+  host-owned mutable state (`this._currentDocumentId`/`this._currentNodeId`); the
+  host exposes setters the handler bodies reach via the
+  `window.provident.sidebar` bridge (M2). The host determines which document is
+  loaded + displayed.
 - **M6 — single-document view vs re-derive `documentIds`** (§5.2 step 3): the
   current-document state is the re-derive's `documentIds` source (a selected
   document → `[<root id>]`; none → all `doc-head` targets).
@@ -276,9 +295,9 @@ bootstrap. The `SidebarPanes` host owns the boot sequence.
 2. The renderer constructs the `SidebarPanes` host with the mount (`#app`), the
    operator mount (`#operator-panes` — a NEW element added to `index.html`, NOT
    `#panes` which stays `SecurePanels`', M3), the registry, the bridge, the
-   current-document/node accessors, the backRefs map, and the edit controller.
-   The renderer also installs the `window.provident.sidebar` bridge surface
-   (M2) that the compiled handler bodies call.
+   backRefs map, and the edit controller. The host owns the current-document/
+   node state (M5). The host installs the `window.provident.sidebar` bridge
+   surface (M2) at boot — the surface the compiled handler bodies call.
 3. The renderer calls `host.boot(runtime)` (async). The boot sequence is pinned
    below.
 4. The renderer wires the MCP request handler (`handleRequest`) + the
@@ -305,7 +324,7 @@ bootstrap. The `SidebarPanes` host owns the boot sequence.
    → an empty `documentIds` array. **Empty-snapshot guard (M1):** when
    `documentIds` is empty the host SKIPS `buildTraversal` (it would throw
    `'traversal: store/documentIds/zoneName required'` on an empty array —
-   `traversal.ts:220`), mirrors `rebuildBackRefs`'s empty-map guard
+   `traversal.ts:224`), mirrors `rebuildBackRefs`'s empty-map guard
    (`traversal.ts:431`), and uses the **empty-store envelope** (pinned below).
 6. **`buildTraversal`** (ONLY when `documentIds` is non-empty) with the snapshot
    adapter + the derived document ids + the zone name (`'main'`) + the stored
@@ -480,7 +499,7 @@ mounted in the operator scope.
 and `lastOperatorSettings: OperatorSettings | null` (M7/M9). The `crosslinks` and
 `search` pane render closures read these (the pure helpers take the result as a
 parameter — Unit H §5.3). `refresh()` re-fetches `lastBacklinks` (when
-`currentNodeId()` is non-null) over the `rag-backlinks` IPC; `lastQueryResult` is
+`this._currentNodeId` is non-null) over the `rag-backlinks` IPC; `lastQueryResult` is
 set by the `pane-search-submit` handler (§5.3); `lastSnapshot`/`lastCrosslinks`
 are set by the boot/re-derive (the snapshot + the traversal crosslinks);
 `lastOperatorSettings` is set by the operator-settings IPC (§5.4).
@@ -510,16 +529,16 @@ scope) for the app-graph panes, so `provident.dispatch` can drive them (§5.5).
 The settings handlers are registered in the ISOLATED scope (the operator mount,
 §5.4), so an agent cannot reach them.
 
-**Handler attachment (M2, pinned):** the PURE modules emit NO `handlers` —
+**Handler attachment (M2, pinned):** the PURE modules emit NO handler bodies —
 `docNavContent`'s `li` carries only `data-document-id`/`data-current`;
 `searchContent`'s input carries only `props.id`; the template-editor pane's
 buttons carry `handlers` with `name`/`event` but NO `body`. Since Unit K is
-scoped to NOT touch the pure modules, the HOST injects the handler references
-POST-ASSEMBLY: after `assembleAppGraphEnvelope` (and after the operator envelope
-build), the host walks the assembled envelope's content nodes and attaches the
-`handlers: [{ name, event, body }]` entries (the compiled handler bodies) to the
-pane content nodes that declare the matching `name`/`event`. The host is the
-single place that knows the handler bodies.
+scoped to NOT touch the pure modules, the HOST registers the handler defs (with
+the compiled function-string bodies) via `registerHandlerDef` in `bindHandlers()`
+(§5.3); the engine's compile path (`loadEnvelope` → `compileHandlerBody`)
+resolves each pane content node's `handlers: [{ name, event }]` entry to the
+registered def's body by name. The host is the single place that knows the
+handler bodies.
 
 **Handler-body → host communication (M2, pinned):** a compiled handler body is a
 function-STRING and cannot call `reDerive`/`requestRebuild`/`markDirty`/`commit`
@@ -572,7 +591,7 @@ never MCP-visible, mirroring `SecurePanels` (Unit H §5.4).
   operator mount), mirroring `SecurePanels` (`src/renderer/secure-panels.ts`).
 - **Distinct operator mount element (M3, pinned):** the operator settings scope
   mounts in a NEW element (`#operator-panes`), NOT `#panes` —
-  `renderer.ts:123-124` + `index.html:40` already bind `#panes` to `SecurePanels`
+  `renderer.ts:134-135` + `index.html:40` already bind `#panes` to `SecurePanels`
   (its own isolated scope + own DomAdapter). Two isolated scopes cannot share one
   DomAdapter mount. The renderer entry adds the `#operator-panes` element to
   `index.html` and passes it as `SidebarPanesOptions.operatorMount`. The
@@ -640,8 +659,12 @@ operator-settings IPC surface:
   `ipcMain.handle(IPC_OPERATOR_SETTINGS_SET, ...)` in `main.ts`, backed by a
   main-process operator-settings store (persisted, operator-owned, never an MCP
   tool). The `topK` default feeds the search pane's `bridge.rag.query(value, topK)`
-  (§5.3); the `defaultDocumentId` feeds the boot's initial `currentDocumentId`
-  (§5.1); the `enabledPanes` feeds the operator view's enabled set.
+  (§5.3 — `submitQuery` uses `this.lastOperatorSettings?.topK ?? 5`). The
+  `defaultDocumentId` is stored/rendered in the settings pane (the operator's
+  default-document preference) but is NOT yet wired into the boot's initial
+  `currentDocumentId` (the boot derives all `doc-head` targets — a documented
+  gap). The `enabledPanes` is rendered in the settings pane (the operator's
+  enabled-pane preference) but is not applied to the operator view's enabled set.
 - **Render data source (M9, pinned):** `buildOperatorEnvelope(registry, ctx)`
   passes a `PaneContext`, NOT operator settings — so the settings pane's `render`
   has no values to display from `ctx`. The host therefore passes the settings
@@ -712,12 +735,10 @@ export interface SidebarPanesOptions {
   operatorMount: HTMLElement
   /** The pane registry (the single authority over enabled panes). */
   registry: PaneRegistry
-  /** The preload IPC bridge (window.provident). */
-  bridge: ProvidentBridge
-  /** The current document root id accessor (the single-document view). */
-  currentDocumentId: () => string | null
-  /** The current node id accessor (the crosslink pane's focus node). */
-  currentNodeId: () => string | null
+  /** The preload IPC bridge (window.provident) — declared structurally as
+   *  `SidebarBridge` (the renderer bundle cannot import `ProvidentBridge` from
+   *  `src/main/preload.ts`, which imports `electron`). */
+  bridge: SidebarBridge
   /** The back-reference map (the edit controller's map — the SOLE authoritative
    *  carrier). The host clears + repopulates it after each buildTraversal. */
   backRefs: Map<string, string[]>
@@ -732,11 +753,10 @@ export interface SidebarPanesOptions {
 
 export class SidebarPanes {
   constructor(opts: SidebarPanesOptions)
-  /** Host-owned mutable state (M5): `currentDocumentId`/`currentNodeId` are
-   *  READ-ONLY getters in `SidebarPanesOptions` — nothing sets them. The host
-   *  owns the mutable backing state (`this._currentDocumentId`/
-   *  `this._currentNodeId`) and exposes setters the handler bodies reach via the
-   *  `window.provident.sidebar` bridge (M2). */
+  /** Host-owned mutable state (M5): the host owns the current-document/node
+   *  state (`this._currentDocumentId`/`this._currentNodeId`) and exposes these
+   *  setters the handler bodies reach via the `window.provident.sidebar` bridge
+   *  (M2). The host determines which document is loaded + displayed. */
   setCurrentDocumentId(id: string | null): void
   setCurrentNodeId(id: string | null): void
   /** Register the concrete panes (doc-nav/crosslinks/search/template-editor
@@ -745,8 +765,8 @@ export class SidebarPanes {
   registerPanes(): void
   /** Bind the pane handlers to the IPC bridge (register the handler defs). */
   bindHandlers(): void
-  /** Build the base PaneContext from the current accessors + backRefs + the
-   *  traversal crosslinks + the last-fetched pane data. */
+  /** Build the base PaneContext from the current host-owned state + backRefs +
+   *  the traversal crosslinks + the last-fetched pane data. */
   buildContext(): PaneContext
   /** Build the TemplatePaneContext (PaneContext + template + targetedZones). */
   buildTemplateContext(): TemplatePaneContext
@@ -758,7 +778,7 @@ export class SidebarPanes {
   /** Mount the operator settings pane in its OWN isolated GraphScope (the
    *  SecurePanels pattern) from the enabled operator panes. */
   mountOperator(): void
-  /** Re-fetch the pane data (snapshot/backlinks/query/operator-settings) over
+  /** Re-fetch the pane data (backlinks/operator-settings) over
    *  the bridge and re-render. Re-renders the EXISTING app graph + the EXISTING
    *  operator graph (M17) — it NEVER rebuilds the operator envelope or re-runs a
    *  RAG re-traversal. Async. */
@@ -784,9 +804,9 @@ export class SidebarPanes {
 **Return-shape / behavior rules:**
 
 - `setCurrentDocumentId(id)`/`setCurrentNodeId(id)` (M5) set the host-owned
-  mutable state; the read-only `currentDocumentId()`/`currentNodeId()` getters
-  return it. `setCurrentDocumentId(null)` clears the single-document view (the
-  next re-derive derives all `doc-head` targets).
+  mutable state (`this._currentDocumentId`/`this._currentNodeId`). `buildContext()`
+  reads this host-owned state. `setCurrentDocumentId(null)` clears the
+  single-document view (the next re-derive derives all `doc-head` targets).
 - `registerPanes()` registers the five panes + enables the four app-graph panes +
   the `settings` pane. A duplicate id → the registry throws (Unit H §5.9.1).
 - `bindHandlers()` registers the pane handler defs (§5.3). A non-string body →
@@ -794,10 +814,11 @@ export class SidebarPanes {
   COMPILE (`compileHandlerBody`/`new Function`) via the app Runtime's
   `loadEnvelope` path.
 - `buildContext()` returns a `PaneContext`:
-  `{ snapshot: this.lastSnapshot, currentDocumentId: currentDocumentId(),
-  currentNodeId: currentNodeId(), backRefs, crosslinks: this.lastCrosslinks }` —
+  `{ snapshot: this.lastSnapshot, currentDocumentId: this._currentDocumentId,
+  currentNodeId: this._currentNodeId, backRefs, crosslinks: this.lastCrosslinks }` —
   the `snapshot`/`crosslinks` are the host's retained `lastSnapshot`/
-  `lastCrosslinks` (M7), set by the boot/re-derive.
+  `lastCrosslinks` (M7), set by the boot/re-derive; the `currentDocumentId`/
+  `currentNodeId` are the host-owned state (M5).
 - `buildTemplateContext()` returns a `TemplatePaneContext` (PaneContext +
   `template: this.template` + `targetedZones: this.targetedZones`). The
   `targetedZones` source (M8): `bridge.template.get()` returns `{ source,
@@ -821,7 +842,7 @@ export class SidebarPanes {
 - `mountOperator()` builds the operator envelope via `buildOperatorEnvelope` and
   renders it in a fresh `createIsolatedScope()` GraphScope (§5.4).
 - `refresh()` re-fetches the pane data over the bridge (the crosslinks backlink
-  enumeration when `currentNodeId()` is non-null; the operator settings) and
+  enumeration when `this._currentNodeId` is non-null; the operator settings) and
   re-renders the EXISTING app graph + the EXISTING operator graph (M17). It NEVER
   rebuilds the operator envelope and NEVER re-runs a RAG re-traversal. A bridge
   error is caught (the last-known pane state is kept — never a crash), mirroring
@@ -863,8 +884,9 @@ export class SidebarPanes {
 1. **`registerPanes` happy:** registering the five panes + enabling the four
    app-graph panes + the `settings` pane → `registry.list()` has 5 entries;
    `isEnabled` is `true` for all five.
-2. **`buildContext` happy:** with the current accessors + backRefs + crosslinks →
-   the returned `PaneContext` carries the snapshot, the current document id, the
+2. **`buildContext` happy:** with the host-owned current document/node state +
+   backRefs + crosslinks → the returned `PaneContext` carries the snapshot, the
+   current document id, the
    current node id, the backRefs, and the crosslinks.
 3. **`buildTemplateContext` happy:** with the stored template + targetedZones →
    the returned `TemplatePaneContext` carries the template + targetedZones.
@@ -875,7 +897,7 @@ export class SidebarPanes {
    `createIsolatedScope()` GraphScope → the operator mount shows the settings
    content; the app Runtime does NOT include it.
 6. **`refresh` happy:** re-fetching the pane data over the bridge → the
-   `lastBacklinks`/`lastQueryResult` are updated; the panes re-render.
+   `lastBacklinks`/`lastOperatorSettings` are updated; the panes re-render.
 7. **`boot` happy:** the full boot sequence → the app Runtime renders the
    pane-inclusive envelope (the RAG content + the app-graph panes); the operator
    settings pane is mounted; the re-derive triggers are subscribed.
@@ -1018,7 +1040,7 @@ export class SidebarPanes {
 18. **A `buildTraversal` throw on an empty `documentIds` (M1)** → does NOT occur:
     the empty-snapshot guard skips `buildTraversal` (it would throw
     `'traversal: store/documentIds/zoneName required'` on an empty array —
-    `traversal.ts:220`).
+    `traversal.ts:224`).
 
 ### 5.10 Census / numeric claims
 
@@ -1035,17 +1057,20 @@ export class SidebarPanes {
   `buildTemplateContext`, `loadAppGraph`, `mountOperator`, `refresh`, `boot`,
   `reDerive`) + 2 subscription handlers (`onRagStoreChanged`,
   `onTemplateChanged`).
-- **`SidebarPanesOptions` fields:** 8 required (`mount`, `operatorMount`,
-  `registry`, `bridge`, `currentDocumentId`, `currentNodeId`, `backRefs`,
-  `editController`) + 2 optional (`zoneName`, `sidebarZone`).
-- **Boot steps:** 10 (register+enable → bind handlers → fetch snapshot → fetch
-  template → derive document ids → buildTraversal (or empty-store envelope) →
-  repopulate backRefs → loadAppGraph (assemble + recompute backRefs + load) →
-  mount operator → subscribe).
-- **Re-derive steps:** 7 (fetch snapshot → use stored template → derive document
-  ids (current-document source) → buildTraversal (or empty-store envelope) →
-  repopulate backRefs → loadAppGraph (assemble + recompute backRefs + load) →
-  refresh).
+- **`SidebarPanesOptions` fields:** 6 required (`mount`, `operatorMount`,
+  `registry`, `bridge`, `backRefs`, `editController`) + 2 optional (`zoneName`,
+  `sidebarZone`).
+- **Boot steps:** 10 core pinned steps (register+enable → bind handlers → fetch
+  snapshot → fetch template → derive document ids → buildTraversal (or
+  empty-store envelope) → repopulate backRefs → loadAppGraph (assemble + recompute
+  backRefs + load) → mount operator → subscribe). The boot ALSO installs the
+  `window.provident.sidebar` bridge surface (M2) and fetches the M13 security
+  cache (the handler gate) — two defensive steps not counted in the 10.
+- **Re-derive steps:** 7 core pinned steps (fetch snapshot → use stored template →
+  derive document ids (current-document source) → buildTraversal (or empty-store
+  envelope) → repopulate backRefs → loadAppGraph (assemble + recompute backRefs +
+  load) → refresh). The re-derive ALSO refreshes the M13 security cache (F2 — a
+  defensive step not counted in the 7).
 - **Re-derive triggers:** 2 (`rag-store-changed`, `template-changed`), both
   routing through the edit controller's dirty-edit guard + the in-flight
   coalescing (M11/S19).
@@ -1135,7 +1160,7 @@ export class SidebarPanes {
   `src/renderer/index.html` (`#app` = the app mount, `#panes` = `SecurePanels`'
   mount — the operator settings pane mounts in a NEW `#operator-panes`, M3),
   `src/main/traversal.ts` (`buildTraversal` throws on an empty `documentIds` at
-  line 220 — the M1 empty-snapshot guard skips it; `rebuildBackRefs`'s empty-map
+  line 224 — the M1 empty-snapshot guard skips it; `rebuildBackRefs`'s empty-map
   guard at line 431 is the pattern the host mirrors),
   `src/main/preload.ts` (`ProvidentBridge` — the `rag.snapshot`/`rag.backlinks`/
   `rag.query`/`edit.commit`/`template.*`/`security.get` surfaces the panes

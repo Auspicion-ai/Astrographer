@@ -4,9 +4,8 @@
 // app-graph panes (into the pane-inclusive app-graph envelope) and builds the
 // operator isolated-scope envelope.
 import type { LegacyInitialData, LegacyNodeData, LegacyContentPayload } from 'provident-ssr'
-import type { RagNode } from '../main/rag-store.js'
 import type { BacklinkResult } from '../main/backlinks.js'
-import type { RagQueryResult } from '../shared/types.js'
+import type { RagQueryResult, RagSnapshotPayload } from '../shared/types.js'
 import type { PaneRegistry, PaneDefinition, PaneContext } from './pane-registry.js'
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
@@ -160,7 +159,7 @@ export function deriveDocNavDocuments(
   // H1 (adversarial): a null/missing snapshot must survive (return the empty
   // list → the "(no documents)" empty state), never a TypeError.
   if (snapshot == null || snapshot.nodes == null || snapshot.edges == null) return []
-  const nodeById = new Map<string, RagNode>(snapshot.nodes.map((n) => [n.id, n]))
+  const nodeById = new Map<string, NonNullable<RagSnapshotPayload['nodes'][number]>>(snapshot.nodes.map((n) => [n.id, n]))
   const seen = new Set<string>()
   const docs: Array<{ documentId: string; title: string }> = []
   for (const e of snapshot.edges) {
