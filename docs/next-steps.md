@@ -5,7 +5,7 @@ top; finished items move to the tracker rows they produced. This queue is
 this project's local next-steps (the foundation's queue lives in the adjacent
 `../Provident-Electron/docs/next-steps.md`).
 
-Astrographer is a **hybrid human-readable local wiki (Obsidian-like) with a
+Astrographer is a **hybrid human-readable local wiki with a
 graph-based RAG**, built on a fork of the Provident-Electron foundation. The
 proposal gate is complete (PROCEED-WITH-AMENDMENTS — see
 `docs/specs/astrographer-review.md`). The first milestone is a smaller slice —

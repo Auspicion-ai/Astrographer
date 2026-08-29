@@ -1,6 +1,6 @@
 # Astrographer — Change-Analysis Review (compile-horizon-review)
 
-- **Proposal:** Astrographer — a hybrid human-readable local wiki (Obsidian-like) with graph-based RAG, built on a fork of the Provident-Electron foundation.
+- **Proposal:** Astrographer — a hybrid human-readable local wiki with graph-based RAG, built on a fork of the Provident-Electron foundation.
 - **Reviewer:** Change-analysis agent (step 4 of the proposal gate).
 - **Inputs:** proposal text; validity (step 1); critique (step 2); architecture review (step 3).
 - **Status:** **PROCEED-RESHAPED** (conditional on the reshape below and the user's go-ahead).
@@ -73,7 +73,7 @@ The 10-unit foundation-first order (A persistence → B document model+flow → 
 - *Benefit:* Foundation-first build order de-risks the two net-new subsystems (RAG, editing) behind a working render/persistence spine.
 - *Benefit:* Derived-RAG + lexical-first keeps the system local-first, deterministic, and testable.
 - *Cost:* Significant net-new host-side work — persistence store, retrieval index, editing, pane registry, MCP gating. This is a large project, not a thin wrapper.
-- *Cost:* Form-control editing is a UX downgrade vs. Obsidian's rich inline editing; acceptable given the constraint.
+- *Cost:* Form-control editing is a UX downgrade vs. a rich inline editing experience; acceptable given the constraint.
 - *Cost:* Two-graph coherence (content graph vs. RAG index) must be maintained by a defined rebuild trigger; a correctness risk if the trigger is incomplete.
 
 **Alternatives:**
