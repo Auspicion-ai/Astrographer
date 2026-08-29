@@ -21,6 +21,16 @@ one-way snapshot).
 
 ## OPEN
 
+**New SPECULATIVE items (2026-08-29, user request):** six future features
+recorded in `docs/pending.md` §SPECULATIVE — (1) lock document elements from
+editing; (2) toggle whether MCP can lock/unlock elements (or only human); (3)
+automatic (re-)export of markdown when contents change internally; (4) optional
+HTML export instead of markdown; (5) MAJOR — migrate the RAG engine to a
+faster/more-multithreading-capable language (Rust/Go/Odin/etc.); (6) JSON export
+of a document path through the RAG graph with adjacent nodes out to a requested
+number of steps. None are scheduled; each has a revisit condition in
+`docs/pending.md`.
+
 ### Scoped-load fix — PROPOSAL GATE PROCEED-WITH-AMENDMENTS; Unit 1 (store adjacency) DONE, Unit 2 (scoped traversal + MCP refactor) DONE, Unit 3 (doc-heads doc-nav) DONE (2026-08-29, user go-ahead given)
 
 **LIVE VERIFICATION (2026-08-29):** the app was run against the persisted
