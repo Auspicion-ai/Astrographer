@@ -344,6 +344,13 @@ describe('F1 — a persisted contenteditable editingMode is honored at boot (not
     await expect(h.host.boot(h.runtime)).resolves.toBeUndefined()
     expect(privateOf(h).editingMode).toBe('contenteditable')
     expect(h.runtime.renderedHtmlResult().renderedHtml).not.toContain('textarea-s1') // contenteditable default: no textarea
+    // The control fallback (lastOperatorSettings null on boot-get failure) must
+    // advertise the SAME contenteditable default the host actually uses — the
+    // control must never show a mode that contradicts the live editing mode.
+    const opHtml = (h.operatorMount as unknown as { innerHTML: string }).innerHTML
+    expect(opHtml).toContain('editingMode: contenteditable')
+    expect(opHtml).toContain('Switch to textarea')
+    expect(opHtml).toContain('data-mode="textarea"')
   })
 })
 

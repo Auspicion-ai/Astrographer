@@ -513,7 +513,7 @@ describe('applyEditingMode — the 4 handler defs attached to eligible roots (§
     expect(s1.root.handlers).toEqual(RAG_EDITOR_HANDLERS)
   })
 
-  it('state 15 — an ineligible root keeps its textarea + NO rag-editor-* handlers are attached', () => {
+  it('state 15 — an ineligible root has its textarea removed (no textareas in contenteditable mode) + NO rag-editor-* handlers are attached', () => {
     const { spliceEnvelope } = spliceHarness()
     const { nodes: inNodes, edges: inEdges } = ((): { nodes: RagSnapshotPayload['nodes']; edges: RagSnapshotPayload['edges'] } => {
       const n = [makeNode('doc', { type: 'h1', content: 'Doc' }), makeNode('s1', { type: 'ul', content: 'list' })]
@@ -522,7 +522,7 @@ describe('applyEditingMode — the 4 handler defs attached to eligible roots (§
     })()
     const env = spliceEnvelope(traversalEnv(inNodes, inEdges), 'contenteditable')
     const [s1] = rootsFor(env, 's1')
-    expect(hasTextarea(s1.root, 's1')).toBe(true)
+    expect(hasTextarea(s1.root, 's1')).toBe(false) // no textarea in contenteditable mode
     const names = (s1.root.handlers ?? []).map((x) => (x as { name: string }).name)
     expect(names).not.toContain('rag-editor-input')
     expect(names).not.toContain('rag-editor-blur')

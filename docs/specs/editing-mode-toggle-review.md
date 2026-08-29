@@ -9,12 +9,12 @@
 
 ## 1. What the proposal asks
 
-1. Add `editingMode: 'textarea' | 'contenteditable'` to the operator settings (`OperatorSettings` + `DEFAULT_SETTINGS` + `sanitize`/`patch`), default **textarea**.
+1. Add `editingMode: 'textarea' | 'contenteditable'` to the operator settings (`OperatorSettings` + `DEFAULT_SETTINGS` + `sanitize`/`patch`), default **contenteditable** (commit `1af5000` "Render fix" flipped the default from textarea to contenteditable).
 2. Render an operator-settings control (provident `select`/`option`, or radio fallback) to toggle it.
 3. Broadcast `operator-settings-changed` on a settings set → host `requestRebuild` → `reDerive` → whole-graph re-materialization in the chosen mode.
-4. In `contenteditable` mode, splice the assembled envelope (remove the textarea child; set `contenteditable:true` on the RAG subtree root), with a pure `isRichEditableRoot(type, ownsDocChildren)` gate (h1–h6/p/blockquote/div and NOT a doc-children-owner); all other types + doc-children owners fall back to textarea.
+4. In `contenteditable` mode, splice the assembled envelope (remove the textarea child; set `contenteditable:true` on the RAG subtree root), with a pure `isRichEditableRoot(type, ownsDocChildren)` gate (h1–h6/p/blockquote/div and NOT a doc-children-owner); all other types + doc-children owners are ineligible — in contenteditable mode their textarea is removed too (they render as plain text).
 5. Build the contenteditable editor UI: rich-event handler defs (input/blur/compositionstart/compositionend) + bridge methods; decomposition ONCE in the host `editorBlur`; a new combined `setRichText` edit op + `IPC_EDIT_RICH_COMMIT` + preload `edit.commitRich`; discriminated path-based `CaretState` restored after re-derive; IME composition guard keyed by ragId.
-6. Supersede the RICH-TEXT-EDITING-GATE "no global editingMode field" + FORM-CONTROL-EDITING "NOT contenteditable" pins with one new DECIDED row; textarea stays the default.
+6. Supersede the RICH-TEXT-EDITING-GATE "no global editingMode field" + FORM-CONTROL-EDITING "NOT contenteditable" pins with one new DECIDED row; contenteditable is the default (commit `1af5000` "Render fix" flipped the default from textarea to contenteditable).
 
 ## 2. Feasibility verdict
 
@@ -41,7 +41,7 @@ The data-model prerequisites (Units N/O/P/Q/R/S) are all landed and verified. `s
 
 **Costs:** U4 is the most DOM-coupled, least node-testable work in the project; new IPC + broadcast + snapshot-payload field; new supersession row; an accepted, documented duplicate-materialization innerHTML limitation; a small engine-rendering fallback risk in the settings control.
 
-**Benefits:** turns the complete-but-idle rich-text machinery (Units N/S) into a usable feature; a low-cost global toggle with a **safe default (textarea)** preserves current behavior and lets operators opt into rich editing; graph-is-authoritative, commit-on-blur, and MCP/UI equivalence are preserved; the RAG store stays authoritative.
+**Benefits:** turns the complete-but-idle rich-text machinery (Units N/S) into a usable feature; a low-cost global toggle with a **default (contenteditable)** — commit `1af5000` "Render fix" flipped the default from textarea to contenteditable — lets operators opt into the legacy textarea; graph-is-authoritative, commit-on-blur, and MCP/UI equivalence are preserved; the RAG store stays authoritative.
 
 **Net: clearly positive.**
 
@@ -50,7 +50,7 @@ The data-model prerequisites (Units N/O/P/Q/R/S) are all landed and verified. `s
 - **A** New `setRichText` combined op (atomic putNode, ONE content journal entry, `kind:'content'` broadcast) + `IPC_EDIT_RICH_COMMIT` + preload `edit.commitRich`. `applyBatch` untouched (still rejects Unit O ops).
 - **B** Discriminated `CaretState` = `{kind:'textarea'}` | `{kind:'rich'; ragId; anchor; focus; focused}` with path-based `RichCaretEdge`; restored after re-derive.
 - **C** Host `applyEditingMode(envelope)` splice (in `loadAppGraph` after `setTextareaReadOnly`, before `recomputeBackRefs`): remove textarea + set `contenteditable:true` on the root when contenteditable + rich-eligible. New `operator-settings-changed` broadcast → `requestRebuild` → `reDerive`. Traversal stays pure.
-- **D** One new DECIDED row superseding FORM-CONTROL-EDITING's 'NOT contenteditable' + the 'no global editingMode field' clause; textarea remains the default.
+- **D** One new DECIDED row superseding FORM-CONTROL-EDITING's 'NOT contenteditable' + the 'no global editingMode field' clause; contenteditable is the default (commit `1af5000` "Render fix" flipped the default from textarea to contenteditable).
 - **E** Pure `isRichEditableRoot(type, ownsDocChildren)` (new `src/renderer/rich-eligibility.ts`): EDITABLE_TYPES = h1–h6/p/blockquote/div && !ownsDocChildren; else textarea.
 - **F** Pure `decomposeRichHtml(rawHtml)` (new `src/main/rich-decompose.ts`), reusing paste-sanitize's tokenizer + URL helpers (exported additively); b/i→strong/em; unwrap u/font/span/div/br; re-validate a href/img src; emits `{content, children}` in document order; TOTAL.
 - **G** Rich handler defs (rag-editor-input/blur/compositionstart/compositionend) + bridge methods; decomposition ONCE in host `editorBlur` (never the handler body); blur prefers dispatch-provided html (MCP) else `getElementById('rag-'+ragId).innerHTML` (UI).

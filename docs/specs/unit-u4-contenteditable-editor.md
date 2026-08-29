@@ -204,8 +204,10 @@ n.handlers = [
   app Runtime's `resolveNameReferencedHandlerBodies`, the Unit L §5.8 state-12
   pattern). The root's `data-rag-node-id` prop (preserved by the splice) is what
   the handler bodies resolve.
-- **Ineligible root, contenteditable mode:** the root keeps its textarea (and its
-  textarea handlers, Unit L) — NO `rag-editor-*` handlers are attached.
+- **Ineligible root, contenteditable mode:** the root's textarea is REMOVED too
+  (the textarea is removed for ALL rag roots in contenteditable mode — it renders
+  as plain text) — NO `contenteditable` prop and NO `rag-editor-*` handlers are
+  attached.
 - **`editingMode === 'textarea'`:** the splice no-ops — no handler attachment
   (the U3 idempotence contract is preserved).
 - **Idempotence (mirrors the U3 H4):** on a repeated splice of the same envelope,
@@ -662,8 +664,8 @@ node-testable):**
 14. **An eligible root gains EXACTLY the 4 `rag-editor-*` handlers** (name-referenced
     `{ name, event }` on `input`/`blur`/`compositionstart`/`compositionend`) +
     `contenteditable: true` + the textarea removed (U3 splice preserved).
-15. **An ineligible root keeps its textarea + textarea handlers** (NO
-    `rag-editor-*` handlers attached).
+15. **An ineligible root has its textarea removed (plain text)** (NO
+    `rag-editor-*` handlers attached, NO `contenteditable` prop).
 16. **`editingMode === 'textarea'` → no handler attachment, no splice** (no-op).
 
 **The rich edit path — input marks dirty:**
@@ -851,7 +853,8 @@ node-testable):**
 - **`RichCaretEdge` fields:** **2** — `path: number[]`, `offset: number`.
 - **Handler defs attached per eligible root (contenteditable mode):** **4**
   (`input`/`blur`/`compositionstart`/`compositionend`). Per ineligible root: **0**
-  (keeps its textarea handlers). Overall in textarea mode: **0**.
+  (its textarea is removed — it renders as plain text, no `rag-editor-*`
+  handlers). Overall in textarea mode: **0**.
 - **`decomposeRichHtml` calls per real blur commit:** **1** (decision G — never
   in the handler body, never twice). Per no-op/deferred blur: **0**.
 - **`edit.commitRich` calls per real blur commit:** **1** (decision A/G). Per

@@ -60,10 +60,10 @@ PASS/FAIL.
 
 ## A. The store (§1.2, node-testable — LIVE `createOperatorSettingsStore`)
 
-### A-1. `get()` default — 4 fields, `editingMode: 'textarea'` (§2.1 1, §3 DEFAULT_SETTINGS)
+### A-1. `get()` default — 4 fields, `editingMode: 'contenteditable'` (§2.1 1, §3 DEFAULT_SETTINGS)
 - **Input:** `createOperatorSettingsStore({ path }).get()`
-- **Expected:** `{ enabledPanes:[], defaultDocumentId:null, topK:5, editingMode:'textarea' }` (4 fields; textarea = the safe default, decision D)
-- **Actual:** exactly `{ enabledPanes:[], defaultDocumentId:null, topK:5, editingMode:'textarea' }`
+- **Expected:** `{ enabledPanes:[], defaultDocumentId:null, topK:5, editingMode:'contenteditable' }` (4 fields; contenteditable = the default edit mode, decision D)
+- **Actual:** exactly `{ enabledPanes:[], defaultDocumentId:null, topK:5, editingMode:'contenteditable' }`
 - **Result:** ✅ PASS
 
 ### A-2. `set({ editingMode: 'contenteditable' })` passes (§2.1 6)
@@ -96,22 +96,22 @@ PASS/FAIL.
 - **Actual:** both returned `editingMode:'contenteditable'`, no throw
 - **Result:** ✅ PASS
 
-### A-7. Junk `editingMode` in a patch coerced to `'textarea'` (§2.2 state 1)
-- **Input:** `set({ editingMode: 'foo' })`, `set({ editingMode: null })`, `set({ editingMode: '' })` after a contenteditable set
-- **Expected:** ALL coerced to `'textarea'` (never stored as junk; the coercion rule: only the exact string `'contenteditable'` passes)
-- **Actual:** `'textarea'` for `'foo'`, `null`, and `''`
+### A-7. Junk `editingMode` in a patch coerced to `'contenteditable'` (§2.2 state 1)
+- **Input:** `set({ editingMode: 'foo' })`, `set({ editingMode: null })`, `set({ editingMode: '' })` after a textarea set
+- **Expected:** ALL coerced to `'contenteditable'` (never stored as junk; the coercion rule: only the exact string `'textarea'` passes)
+- **Actual:** `'contenteditable'` for `'foo'`, `null`, and `''`
 - **Result:** ✅ PASS
 
-### A-8. Junk `editingMode` in a persisted file → `sanitize` coerces to `'textarea'` (§2.2 state 2, §1.2 sanitize)
+### A-8. Junk `editingMode` in a persisted file → `sanitize` coerces to `'contenteditable'` (§2.2 state 2, §1.2 sanitize)
 - **Input:** a temp settings file written with `editingMode: 'bogus'`, then a fresh store over it
-- **Expected:** `get().editingMode === 'textarea'` (a tampered/corrupt persisted value is coerced, never propagated)
-- **Actual:** `'textarea'`
+- **Expected:** `get().editingMode === 'contenteditable'` (a tampered/corrupt persisted value is coerced, never propagated)
+- **Actual:** `'contenteditable'`
 - **Result:** ✅ PASS
 
 ### A-9. `get()` returns a copy (§1.2 get, §3)
 - **Input:** `const g = store.get(); g.editingMode = 'contenteditable'`
 - **Expected:** the store's `editingMode` unchanged (never a live reference into `current`)
-- **Actual:** store still `'textarea'` after mutating the returned copy
+- **Actual:** store still `'contenteditable'` after mutating the returned copy
 - **Result:** ✅ PASS
 
 ### A-10. Round-trip persist — `set` contenteditable → reload → still contenteditable; all 4 fields persisted (§2.1 12, §1.2 persist)
@@ -158,16 +158,16 @@ PASS/FAIL.
 - **Actual:** `lastOperatorSettings.editingMode === 'contenteditable'`, `editingMode === 'contenteditable'`, `onRebuild` called 1× synchronously
 - **Result:** ✅ PASS
 
-### C-2. Junk payload `editingMode` → coerced to `'textarea'`, STILL rebuilds, no throw (§2.2 states 3/4, ADR-3)
+### C-2. Junk payload `editingMode` → coerced to `'contenteditable'`, STILL rebuilds, no throw (§2.2 states 3/4, ADR-3)
 - **Input:** `onOperatorSettingsChanged({ ..., editingMode: 'junk' })`
-- **Expected:** no throw; `this.editingMode` NOT set to junk (coerced to `'textarea'`); `requestRebuild` still fires (the payload is authoritative, not dropped)
-- **Actual:** no throw; `editingMode === 'textarea'`; `onRebuild` called
+- **Expected:** no throw; `this.editingMode` NOT set to junk (coerced to `'contenteditable'`); `requestRebuild` still fires (the payload is authoritative, not dropped)
+- **Actual:** no throw; `editingMode === 'contenteditable'`; `onRebuild` called
 - **Result:** ✅ PASS
 
-### C-3. Null/undefined payload → no throw, coerced `'textarea'`, STILL rebuilds (F2)
+### C-3. Null/undefined payload → no throw, coerced `'contenteditable'`, STILL rebuilds (F2)
 - **Input:** `onOperatorSettingsChanged(null)` and `onOperatorSettingsChanged(undefined)`
-- **Expected:** no throw (the guard `payload ?? { editingMode: 'textarea' }`); `editingMode`/`lastOperatorSettings` coerced to `'textarea'`; `requestRebuild` still fires
-- **Actual:** no throw for both; `editingMode === 'textarea'`; `onRebuild` called
+- **Expected:** no throw (the guard `payload ?? { editingMode: 'contenteditable' }`); `editingMode`/`lastOperatorSettings` coerced to `'contenteditable'`; `requestRebuild` still fires
+- **Actual:** no throw for both; `editingMode === 'contenteditable'`; `onRebuild` called
 - **Result:** ✅ PASS
 
 ### C-4. No re-fetch — `onOperatorSettingsChanged` does NOT call `bridge.operatorSettings.get` (amendment A, §1.3)
@@ -216,10 +216,10 @@ PASS/FAIL.
 - **Actual:** `textarea-` present in app html; control `editingMode: textarea` / `Switch to contenteditable` / `data-mode="contenteditable"`
 - **Result:** ✅ PASS
 
-### D-3. Boot-time `get` failure → textarea default + null `lastOperatorSettings` + still loads (F1)
-- **Input:** boot with persisted contenteditable, but `bridge.operatorSettings.get` rejects once
-- **Expected:** a bridge error keeps the textarea default + null `lastOperatorSettings` (never aborts boot); the graph still loads
-- **Actual:** control `editingMode: textarea`; `lastOperatorSettings === null`; app html still contains `Doc A`
+### D-3. Boot-time `get` failure → contenteditable default + null `lastOperatorSettings` + still loads (F1)
+- **Input:** boot with persisted textarea, but `bridge.operatorSettings.get` rejects once
+- **Expected:** a bridge error keeps the contenteditable default + null `lastOperatorSettings` (never aborts boot); the graph still loads
+- **Actual:** control `editingMode: contenteditable`; `lastOperatorSettings === null`; app html still contains `Doc A`
 - **Result:** ✅ PASS
 
 ### D-4. Boot subscribes `operatorSettings.onChanged` (the `unsubSettings` subscription, §1.3)
@@ -244,10 +244,10 @@ PASS/FAIL.
 - **Actual:** exactly those values
 - **Result:** ✅ PASS
 
-### E-3. `lastOperatorSettings === null` (before the first fetch) → default textarea, toggle target contenteditable (§2.1 28)
+### E-3. `lastOperatorSettings === null` (before the first fetch) → default contenteditable, toggle target textarea (§2.1 28)
 - **Input:** boot with a rejecting `get` (so `lastOperatorSettings` stays null)
-- **Expected:** text div `editingMode: textarea`; `data-mode="contenteditable"` (the `'textarea'` default toggles to contenteditable)
-- **Actual:** `editingMode: textarea` / `data-mode="contenteditable"`
+- **Expected:** text div `editingMode: contenteditable`; `data-mode="textarea"` (the `'contenteditable'` default toggles to textarea)
+- **Actual:** `editingMode: contenteditable` / `data-mode="textarea"`
 - **Result:** ✅ PASS
 
 ### E-4. No boolean-attribute state — no `checked`/`selected` prop authored (the pivot, §1.4 / HOST/U1-ENG)
@@ -291,7 +291,7 @@ PASS/FAIL.
 
 ### G-1. A new DECIDED row supersedes FORM-CONTROL-EDITING's "NOT contenteditable" + RICH-TEXT-EDITING-GATE's "no global editingMode field" (§1.5, §2.1 31)
 - **Input:** `docs/decisions.md` (documentation check — not a code test)
-- **Expected:** under `## ACTIVE`, one row (`DECIDED: EDITING-MODE-SETTING`) records the opt-in contenteditable control + textarea default + retained commit-on-blur/dirty-edit guard/RAG-authoritative re-traversal/all-UI-via-provident, and explicitly supersedes the two clauses
+- **Expected:** under `## ACTIVE`, one row (`DECIDED: EDITING-MODE-SETTING`) records the contenteditable-default control + retained commit-on-blur/dirty-edit guard/RAG-authoritative re-traversal/all-UI-via-provident, and explicitly supersedes the two clauses
 - **Actual:** the `EDITING-MODE-SETTING` row exists under `## ACTIVE` and supersedes FORM-CONTROL-EDITING's `"NOT contenteditable"` clause + RICH-TEXT-EDITING-GATE's `"no global \`editingMode\` field"` clause
 - **Result:** ✅ PASS (documentation)
 
@@ -301,13 +301,13 @@ PASS/FAIL.
 
 | # | Scenario | Result |
 | --- | --- | --- |
-| A-1 | `get()` default = 4 fields + `editingMode:'textarea'` | ✅ PASS |
+| A-1 | `get()` default = 4 fields + `editingMode:'contenteditable'` | ✅ PASS |
 | A-2 | `set` contenteditable passes | ✅ PASS |
 | A-3 | `set` textarea passes | ✅ PASS |
 | A-4 | empty patch → editingMode unchanged | ✅ PASS |
 | A-5 | `set({topK:7})` → editingMode unchanged, topK updated | ✅ PASS |
 | A-6 | `set(null)`/`set(undefined)` unchanged, no throw | ✅ PASS |
-| A-7 | junk editingMode in patch → coerced textarea | ✅ PASS |
+| A-7 | junk editingMode in patch → coerced contenteditable | ✅ PASS |
 | A-8 | junk editingMode in persisted file → sanitize coerces | ✅ PASS |
 | A-9 | `get()` returns a copy | ✅ PASS |
 | A-10 | round-trip persist → contenteditable; all 4 fields | ✅ PASS |
@@ -316,7 +316,7 @@ PASS/FAIL.
 | B-2 | `OperatorSettingsPatch.editingMode?` optional | ✅ PASS |
 | B-3 | `IPC_OPERATOR_SETTINGS_CHANGED` const value | ✅ PASS |
 | C-1 | payload-authoritative + synchronous requestRebuild | ✅ PASS |
-| C-2 | junk payload → coerced textarea, still rebuilds | ✅ PASS |
+| C-2 | junk payload → coerced contenteditable, still rebuilds | ✅ PASS |
 | C-3 | null/undefined payload → no throw, coerced, rebuilds (F2) | ✅ PASS |
 | C-4 | no re-fetch (`get` not called) | ✅ PASS |
 | C-5 | no-loop (`set` not called) | ✅ PASS |
@@ -325,11 +325,11 @@ PASS/FAIL.
 | C-8 | dirty-edit guard queues + runs on clear | ✅ PASS |
 | D-1 | boot persisted contenteditable → splice + control + get called | ✅ PASS |
 | D-2 | boot persisted textarea → textarea + control textarea | ✅ PASS |
-| D-3 | boot get failure → textarea default + null + still loads | ✅ PASS |
+| D-3 | boot get failure → contenteditable default + null + still loads | ✅ PASS |
 | D-4 | boot subscribes operatorSettings.onChanged | ✅ PASS |
 | E-1 | control renders (contenteditable mode) | ✅ PASS |
 | E-2 | control renders (textarea mode) | ✅ PASS |
-| E-3 | null lastOperatorSettings → default textarea toggle | ✅ PASS |
+| E-3 | null lastOperatorSettings → default contenteditable toggle | ✅ PASS |
 | E-4 | no checked/selected prop authored | ✅ PASS |
 | E-5 | handler body compiles + data-mode validation + operatorSet | ✅ PASS |
 | E-6 | operatorSet fires set, no inline re-mount | ✅ PASS |

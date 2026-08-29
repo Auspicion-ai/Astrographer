@@ -174,10 +174,10 @@ PASS/FAIL.
 - **Actual:** handlers = the exact 4-def array; `contenteditable:true`; textarea removed
 - **Result:** ✅ PASS
 
-### C-2. Ineligible root keeps its textarea + textarea handlers, NO `rag-editor-*` handlers (§2.1 15)
+### C-2. Ineligible root has its textarea removed (plain text), NO `rag-editor-*` handlers (§2.1 15)
 - **Input:** a `ul` root envelope (NOT in `EDITABLE_TYPES`) spliced with `contenteditable` mode
-- **Expected:** `root.handlers` undefined; no `contenteditable` prop; the `textarea-s1` child REMAINS
-- **Actual:** handlers undefined, no `contenteditable`, textarea kept
+- **Expected:** `root.handlers` undefined; no `contenteditable` prop; the `textarea-s1` child is REMOVED (the textarea is removed for ALL rag roots in contenteditable mode — the ineligible root renders as plain text)
+- **Actual:** handlers undefined, no `contenteditable`, textarea removed
 - **Result:** ✅ PASS
 
 ### C-3. `editingMode === 'textarea'` → no attachment, no splice (byte-for-byte no-op) (§2.1 16 / U3 ADR-10)
@@ -420,7 +420,7 @@ PASS/FAIL.
 | B-6 | rag-editor-compositionend → editorCompositionEnd | ✅ PASS |
 | B-7 | bodies no-op without sidebar/ragId | ✅ PASS |
 | C-1 | eligible root gains exactly 4 defs + contenteditable + textarea removed | ✅ PASS |
-| C-2 | ineligible root keeps textarea + no rag-editor handlers | ✅ PASS |
+| C-2 | ineligible root textarea removed (plain text) + no rag-editor handlers | ✅ PASS |
 | C-3 | textarea mode → byte-for-byte no-op | ✅ PASS |
 | C-4 | idempotent re-run + append-if-absent preserves authored handler | ✅ PASS |
 | D-1 | editorInput marks dirty | ✅ PASS |

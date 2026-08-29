@@ -51,8 +51,8 @@
 
 ### 1.1 What the proposal asks (U1)
 
-Toggling the editing control between `textarea` (the safe default) and
-`contenteditable` (the opt-in rich editor) is an OPERATOR decision, persisted in
+Toggling the editing control between `textarea` and `contenteditable` (the
+default edit mode) is an OPERATOR decision, persisted in
 the operator settings. The operator picks the mode in the isolated Settings
 pane; the change writes back to the main store; main broadcasts a
 `operator-settings-changed` event with the STORE'S RESULT as the authoritative
@@ -63,8 +63,8 @@ payload; the host uses that payload directly (NO re-fetch — amendment A, see
 `refresh()` over the cached envelope — Unit U3 finding F1), so
 `loadAppGraph`'s `applyEditingMode` splices the envelope in the new mode,
 swapping textareas for contenteditable editors. A single DECIDED row records
-that contenteditable is the OPT-IN control when `editingMode ===
-'contenteditable'`, textarea stays the default, and commit-on-blur, the
+that contenteditable is the DEFAULT editing control when `editingMode ===
+'contenteditable'`, textarea is the opt-in legacy control, and commit-on-blur, the
 dirty-edit guard, RAG-authoritative re-traversal, and all-UI-via-provident
 authoring are all retained.
 
@@ -96,8 +96,8 @@ export const IPC_OPERATOR_SETTINGS_CHANGED = 'provident:operator-settings-change
 
 **API rules (pinned):**
 - **`OperatorSettings.editingMode: EditingMode`** — REQUIRED field, the 4th
-  member. Default **`'textarea'`** (decision D — textarea stays the safe
-  default).
+  member. Default **`'contenteditable'`** (decision D — contenteditable is the
+  default edit mode).
 - **`OperatorSettingsPatch.editingMode?: EditingMode`** — OPTIONAL patch field.
   A patch WITHOUT `editingMode` leaves the stored `editingMode` unchanged.
 - **`IPC_OPERATOR_SETTINGS_CHANGED = 'provident:operator-settings-changed'`** —
@@ -113,12 +113,12 @@ const DEFAULT_SETTINGS: OperatorSettings = {
   enabledPanes: [],
   defaultDocumentId: null,
   topK: 5,
-  editingMode: 'textarea',          // NEW — the safe default (decision D)
+  editingMode: 'contenteditable',          // NEW — the default edit mode (decision D)
 }
 
 function sanitize(input: unknown): OperatorSettings {
   // ...existing enabledPanes/defaultDocumentId/topK as today...
-  const editingMode = (src.editingMode === 'contenteditable') ? 'contenteditable' : 'textarea'   // NEW
+  const editingMode = (src.editingMode === 'textarea') ? 'textarea' : 'contenteditable'   // NEW
   return { enabledPanes, defaultDocumentId, topK, editingMode }
 }
 
@@ -130,7 +130,7 @@ set(patch: OperatorSettingsPatch): OperatorSettings {
   // ...existing null/undefined-patch early return, enabledPanes, defaultDocumentId, topK as today...
   const editingMode =
     patch.editingMode !== undefined
-      ? (patch.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea')
+      ? (patch.editingMode === 'textarea' ? 'textarea' : 'contenteditable')
       : current.editingMode                                    // NEW
   current = { enabledPanes, defaultDocumentId, topK, editingMode }
   persist()
@@ -139,13 +139,14 @@ set(patch: OperatorSettingsPatch): OperatorSettings {
 ```
 
 **Coercion rule (pinned — used identically in `sanitize` AND `set`):** any value
-that is NOT exactly the string `'contenteditable'` coerces to `'textarea'`.
-`undefined`, `null`, `''`, `'textarea'`, or any junk value → `'textarea'`. ONLY
-the exact string `'contenteditable'` passes through. The function is TOTAL and
-never throws for any `src.editingMode` / `patch.editingMode` value.
+that is NOT exactly the string `'textarea'` coerces to `'contenteditable'`.
+`undefined`, `null`, `''`, `'contenteditable'`, or any junk value →
+`'contenteditable'`. ONLY the exact string `'textarea'` passes through. The
+function is TOTAL and never throws for any `src.editingMode` /
+`patch.editingMode` value.
 - **`sanitize`:** applied to the persisted file on every read (first-run,
   existing-file, corrupt-file fallback). A persisted `editingMode` of junk
-  coerces to `'textarea'`.
+  coerces to `'contenteditable'`.
 - **`set`:** `patch.editingMode !== undefined` → coerce and apply;
   `patch.editingMode === undefined` → keep the current `editingMode`.
 - **`get`:** returns `editingMode` in the copied result (never a live reference
@@ -226,14 +227,14 @@ this.unsubSettings = this.bridge.operatorSettings.onChanged((p) => void this.onO
  *  `operatorSettingsStore.set()`'s result post-SET), so the host does NOT
  *  re-fetch — a re-fetch is redundant and creates an async race with the sync
  *  requestRebuild requirement. FULLY SYNCHRONOUS: set lastOperatorSettings +
- *  editingMode from the PAYLOAD (defensive coercion — only 'contenteditable'
+ *  editingMode from the PAYLOAD (defensive coercion — only 'textarea'
  *  passes), then route through the edit controller's dirty-edit guard
  *  (requestRebuild) → the SAME single re-derive as rag-store-changed /
- *  template-changed. A malformed/absent editingMode is coerced to 'textarea'
+ *  template-changed. A malformed/absent editingMode is coerced to 'contenteditable'
  *  and the handler STILL rebuilds (the payload is authoritative, not dropped). */
 private onOperatorSettingsChanged(payload: OperatorSettings): void {
   this.lastOperatorSettings = payload
-  this.editingMode = payload.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea'
+  this.editingMode = payload.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
   this.editController.requestRebuild()   // → reDerive (FRESH traversal — never refresh() over the cached envelope)
 }
 ```
@@ -251,8 +252,8 @@ private onOperatorSettingsChanged(payload: OperatorSettings): void {
   `lastOperatorSettings` from the store on its own — in the real flow the store
   was already updated when the broadcast fired, so payload === store.)
 - **Coercion:** `editingMode` is defensively coerced
-  (`=== 'contenteditable' ? 'contenteditable' : 'textarea'`) — a malformed/
-  absent `editingMode` in the payload coerces to `'textarea'`, and the handler
+  (`=== 'textarea' ? 'textarea' : 'contenteditable'`) — a malformed/
+  absent `editingMode` in the payload coerces to `'contenteditable'`, and the handler
   STILL rebuilds (the payload is authoritative, not dropped; §2.2 state 4).
 - **Same single re-derive path:** `requestRebuild()` routes through the edit
   controller's dirty-edit guard (`onRebuild` = `reDerive`) — the SAME path as
@@ -301,7 +302,7 @@ The control PIVOTS to AVOID the gap entirely: a `button` element RENDERS
 button-toggle is provident-authored, operator-scope, and green-testable.
 
 **Control shape (pinned):** the control is **2 nodes** — (1) a text `div` showing
-the CURRENT mode (`editingMode: <s?.editingMode ?? 'textarea'>`), and (2) a
+the CURRENT mode (`editingMode: <s?.editingMode ?? 'contenteditable'>`), and (2) a
 `button` whose label = the TOGGLE ACTION (e.g. "Switch to contenteditable") and
 whose `data-mode` prop carries the TOGGLED (target) mode. Clicking the button
 dispatches the shared operator-change path → `operatorSet({ editingMode: <toggled> })`
@@ -313,15 +314,15 @@ dispatches the shared operator-change path → `operatorSet({ editingMode: <togg
 {
   type: 'div',
   props: { id: 'operator-editing-mode' },
-  content: `editingMode: ${s?.editingMode ?? 'textarea'}`,
+  content: `editingMode: ${s?.editingMode ?? 'contenteditable'}`,
 },
 {
   type: 'button',
   props: {
     id: 'operator-editing-mode-toggle',
-    'data-mode': (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'textarea' : 'contenteditable',
+    'data-mode': (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'textarea' : 'contenteditable',
   },
-  content: (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
+  content: (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
   handlers: [{ name: 'operator-editing-mode-toggle', event: 'click', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER }],
 },
 ```
@@ -361,14 +362,14 @@ Registered in `bindHandlers()` via `registerHandlerDef('operator-editing-mode-to
 **The toggled value (pinned):** the authoring computes `data-mode` at
 `settingsContent()` render time as the OTHER union member of the current stored
 mode — `current === 'contenteditable' ? 'textarea' : 'contenteditable'` (when
-`lastOperatorSettings === null`, current defaults to `'textarea'`, so the toggle
-target is `'contenteditable'`). The handler body VALIDATES the `data-mode` value
+`lastOperatorSettings === null`, current defaults to `'contenteditable'`, so the toggle
+target is `'textarea'`). The handler body VALIDATES the `data-mode` value
 against the two-member union before calling `operatorSet` — a junk `data-mode` is
 dropped (no write). The label text always mirrors the toggle ACTION ("Switch to
 <other-member>").
 
 **Control contract (pinned):**
-- **Text div reflects the CURRENT mode** (`editingMode: <s?.editingMode ?? 'textarea'>`);
+- **Text div reflects the CURRENT mode** (`editingMode: <s?.editingMode ?? 'contenteditable'>`);
   the button label reflects the TOGGLE ACTION; the button's `data-mode` carries the
   TOGGLED mode. All three re-render on every `settingsContent()` call (the
   broadcast → re-derive → `refresh()` → `renderOperator` re-render).
@@ -432,7 +433,7 @@ Date | What it pins | Source` columns) that supersedes:
 
 - **line 17, FORM-CONTROL-EDITING:** the "NOT contenteditable (fights
   graph-is-authoritative; `DomAdapter.text` clobbers a live editor)" clause —
-  superseded insofar as contenteditable is now the OPT-IN editing control when
+  superseded insofar as contenteditable is now the DEFAULT editing control when
   `editingMode === 'contenteditable'`. The commit-on-blur, dirty-edit guard,
   and caret/focus-host-state pins remain.
 - **line 51, RICH-TEXT-EDITING-GATE:** the "no global `editingMode` field"
@@ -440,10 +441,11 @@ Date | What it pins | Source` columns) that supersedes:
   setting.
 
 The row records: `editingMode: 'textarea' | 'contenteditable'` is an
-`OperatorSettings` field (default `'textarea'`); contenteditable is the OPT-IN
-editing control when `editingMode === 'contenteditable'` (a rich-eligible RAG
-subtree root splices to `contenteditable: true`; ineligible roots fall back to
-textarea); textarea stays the DEFAULT; a mode change writes the store → main
+`OperatorSettings` field (default `'contenteditable'`); contenteditable is the
+DEFAULT editing control when `editingMode === 'contenteditable'` (a rich-eligible RAG
+subtree root splices to `contenteditable: true`; ineligible roots have their
+textarea removed in contenteditable mode — they render as plain text); textarea is
+the opt-in legacy control; a mode change writes the store → main
 broadcasts `operator-settings-changed` → host uses the payload (authoritative,
 amendment A — no re-fetch) → fresh re-derive; commit-on-blur, the dirty-edit
 guard, RAG-authoritative re-traversal, and all-UI-via-provident authoring are
@@ -457,12 +459,12 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 ### 2.1 Happy-path states (TestWriter red set — valid paths)
 
 **Store — `DEFAULT_SETTINGS` / `sanitize` / `set` / `get` (node-testable):**
-1. **`DEFAULT_SETTINGS.editingMode === 'textarea'`** (the safe default, decision D).
+1. **`DEFAULT_SETTINGS.editingMode === 'contenteditable'`** (the default edit mode, decision D).
 2. **`sanitize({ editingMode: 'contenteditable' })`** → `editingMode: 'contenteditable'`.
 3. **`sanitize({ editingMode: 'textarea' })`** → `editingMode: 'textarea'`.
-4. **`sanitize` with `editingMode` ABSENT** → `'textarea'` (a v1 settings file
-   without the field defaults to textarea — additive/backward-compatible).
-5. **`sanitize` of a first-run / empty / corrupt file** → `editingMode: 'textarea'`
+4. **`sanitize` with `editingMode` ABSENT** → `'contenteditable'` (a v1 settings file
+   without the field defaults to contenteditable — additive/backward-compatible).
+5. **`sanitize` of a first-run / empty / corrupt file** → `editingMode: 'contenteditable'`
    (existing never-throws boot path extended with the 4th field).
 6. **`set({ editingMode: 'contenteditable' })`** → stores + returns
    `editingMode: 'contenteditable'`, persists, and leaves the other 3 fields
@@ -533,7 +535,7 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 **Control — `settingsContent` (through the operator graph):**
 26. **Button-toggle renders (the pivot):** the control renders a text `div`
     (`id: 'operator-editing-mode'`) whose content is `editingMode:
-    <s?.editingMode ?? 'textarea'>` AND a `button` (`id: 'operator-editing-mode-toggle'`)
+    <s?.editingMode ?? 'contenteditable'>` AND a `button` (`id: 'operator-editing-mode-toggle'`)
     whose `content` is the toggle action label and whose `data-mode` prop is the
     toggled mode. When current is `'textarea'`, the label is `'Switch to
     contenteditable'` and `data-mode` is `'contenteditable'`; when current is
@@ -547,9 +549,9 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
     handler does NOT use the dispatched click `value` arg (a button's `value` is
     the empty string on click).
 28. **`lastOperatorSettings === null` (before the first fetch):** the text div
-    shows `editingMode: textarea`, the button label is `'Switch to contenteditable'`,
-    and `data-mode` is `'contenteditable'` (the `'textarea'` default → toggles to
-    contenteditable).
+    shows `editingMode: contenteditable`, the button label is `'Switch to textarea'`,
+    and `data-mode` is `'textarea'` (the `'contenteditable'` default → toggles to
+    textarea).
 29. **A click on the control → `operatorSet({ editingMode })` → SET → broadcast
     → re-derive → mode swap:** the full end-to-end path swaps the editor.
 
@@ -563,30 +565,30 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 **Supersession:**
 31. **A new DECIDED row** appears under `## ACTIVE` in `docs/decisions.md`
     superseding FORM-CONTROL-EDITING's "NOT contenteditable" + RICH-TEXT-EDITING-GATE's
-    "no global editingMode field" (decision D), recording the opt-in
-    contenteditable control + textarea-default + retained commit-on-blur /
+    "no global editingMode field" (decision D), recording the contenteditable-default
+    control + retained commit-on-blur /
     dirty-edit guard / RAG-authoritative re-traversal / all-UI-via-provident.
 
 ### 2.2 Fail-states (TestWriter red set — documented fail-states)
 
 1. **Junk `editingMode` in a patch:** `set({ editingMode: 'foo' })` /
    `set({ editingMode: null })` / `set({ editingMode: '' })` → coerced to
-   `'textarea'` (never stored as junk; the union `EditingMode` is enforced at the
+   `'contenteditable'` (never stored as junk; the union `EditingMode` is enforced at the
    boundary by the coercion rule).
 2. **Junk `editingMode` in a persisted file:** `sanitize({ editingMode: 'bogus' })`
-   → `'textarea'` (a tampered/corrupt persisted value is coerced, never
+   → `'contenteditable'` (a tampered/corrupt persisted value is coerced, never
    propagated).
 3. **Malformed settings payload on the broadcast (amendment A):** the host trusts
    the PAYLOAD as authoritative (it IS the store result) but defensively coerces
-   `editingMode` (`=== 'contenteditable' ? 'contenteditable' : 'textarea'`). A
+   `editingMode` (`=== 'textarea' ? 'textarea' : 'contenteditable'`). A
    malformed/garbage `editingMode` value in the payload does NOT set
-   `this.editingMode` to junk — it coerces to `'textarea'` and the handler STILL
+   `this.editingMode` to junk — it coerces to `'contenteditable'` and the handler STILL
    rebuilds (the payload is authoritative, not dropped). Must NOT throw / crash
    the host.
 4. **Payload-authoritative (amendment A — the re-fetch failure path is GONE):**
    there is NO re-fetch, so there is no `bridge.get()` rejection path in
    `onOperatorSettingsChanged`. A malformed/absent `editingMode` in the payload
-   coerces to `'textarea'` and `requestRebuild` still fires (the mode change is
+   coerces to `'contenteditable'` and `requestRebuild` still fires (the mode change is
    NOT silently dropped). Must NOT throw / crash the host.
 5. **Handler body with a junk `data-mode`:** a crafted button whose `data-mode`
    prop is NOT `'textarea'`/`'contenteditable'` (e.g. `'foo'`) → the handler
@@ -648,10 +650,10 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 - **New handler bodies:** **1** — `OPERATOR_EDITING_MODE_TOGGLE_HANDLER` (the
   button's click handler; shared by the single toggle; `OPERATOR_EDITING_MODE_TOGGLE_BODY`
   is the same handler's inner-statements form — the two-string representation).
-- **`DEFAULT_SETTINGS`:** `editingMode: 'textarea'` (the 4th member).
+- **`DEFAULT_SETTINGS`:** `editingMode: 'contenteditable'` (the 4th member).
 - **Coercion rules:** **2** — one in `sanitize`, one in `set` (identical
-  rule: only the exact string `'contenteditable'` passes; everything else →
-  `'textarea'`).
+  rule: only the exact string `'textarea'` passes; everything else →
+  `'contenteditable'`).
 - **Broadcast count:** exactly **1** per `IPC_OPERATOR_SETTINGS_SET` invocation
   (after the store `set` returns); **0** per `IPC_OPERATOR_SETTINGS_GET`.
 - **Settings control (the pivot):** **1** editingMode button-toggle = **1** text
@@ -665,7 +667,7 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
   (FORM-CONTROL-EDITING "NOT contenteditable" + RICH-TEXT-EDITING-GATE "no global
   editingMode field").
 - **Retained invariants (0 changes):** traversal stays PURE (still emits
-  textarea); textarea stays the DEFAULT mode; commit-on-blur; the dirty-edit
+  textarea); contenteditable stays the DEFAULT mode; commit-on-blur; the dirty-edit
   guard; RAG-authoritative re-traversal; all-UI-via-provident authoring.
 
 ---
@@ -675,7 +677,7 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 - **Proposal review:** `docs/specs/editing-mode-toggle-review.md` §4-C (decision
   **C** — the `operator-settings-changed` broadcast → `requestRebuild` →
   `reDerive` mechanism, the host `applyEditingMode` splice), §4-D / decision
-  **D** (the supersession — one new DECIDED row; textarea stays the default), §3
+  **D** (the supersession — one new DECIDED row; contenteditable is the default), §3
   amendment 1 (the ORIGINAL SELECT-vs-radio control fallback test-first; **this
   rework pivots it to the button-toggle to AVOID the confirmed boolean-attribute
   engine gap** — see `HOST/U1-ENG` and the §4 engine reference), amendment 2 (no
@@ -694,7 +696,7 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
   envelope**), §2.2 state 5 (the cross-unit textarea gate).
 - **Store:** `src/main/operator-settings-store.ts` — `OperatorSettings` default
   (`{enabledPanes:[], defaultDocumentId:null, topK:5}`, + `editingMode:
-  'textarea'`), `sanitize` (coercion), `set` (patch), `get` (copy), `persist`.
+  'contenteditable'`), `sanitize` (coercion), `set` (patch), `get` (copy), `persist`.
 - **Shared types:** `src/shared/types.ts` — `OperatorSettings` (~490),
   `OperatorSettingsPatch` (~500), `IPC_OPERATOR_SETTINGS_GET/SET` (~506),
   `EditingMode` (~427, already added in U3), the IPC channel list, the broadcast
@@ -766,7 +768,7 @@ these; the TestWriter writes the regression tests NOW from this list):**
   post-SET), so the host trusts the payload directly for state — NO re-fetch
   (redundant + an async race with the sync `requestRebuild`). A payload
   `editingMode` of `'contenteditable'` → host uses `'contenteditable'` +
-  rebuilds; a junk/absent `editingMode` → coerced to `'textarea'` (still
+  rebuilds; a junk/absent `editingMode` → coerced to `'contenteditable'` (still
   rebuilds). The old payload-vs-fetch divergence is gone (§2.2 states 3/4).
 - **ADR-3 — malformed settings payload:** a garbage/malformed `editingMode` in
   the payload, or a persisted corrupt file, must all be coerced (never set
@@ -824,27 +826,27 @@ here + regression-tested in `tests/editing-mode-broadcast-host.test.ts`):**
 
 - **F1 (a-med) — persisted `editingMode` not applied at boot.** `boot()` never
   fetched `operatorSettings` (the only `get()` was in `refresh()`, which boot
-  never calls), so `this.editingMode` stayed `'textarea'` until a broadcast — a
-  persisted `'contenteditable'` was not honored at boot, and a later re-derive
+  never calls), so `this.editingMode` stayed `'contenteditable'` until a broadcast — a
+  persisted `'textarea'` was not honored at boot, and a later re-derive
   flipped the control but not the graph (control/app-graph mismatch). **FIX:**
   `boot()` now fetches `operatorSettings` (after the security cache, before
   `loadAppGraph`), sets `this.lastOperatorSettings` + `this.editingMode` from the
   coerced value (same coercion as `onOperatorSettingsChanged`: only
-  `'contenteditable'` passes, else `'textarea'`), and then loads the graph so the
+  `'textarea'` passes, else `'contenteditable'`), and then loads the graph so the
   persisted mode is honored from the very first load. A bridge error keeps the
-  textarea default + null `lastOperatorSettings` (never aborts boot). **Regression
+  contenteditable default + null `lastOperatorSettings` (never aborts boot). **Regression
   (F1):** a boot with a persisted `contenteditable` yields `contenteditable` in the
   graph (the splice is applied — `textarea-s1` absent, `contenteditable` present) +
   the control (`editingMode: contenteditable`, "Switch to textarea",
   `data-mode="textarea"`); boot calls `bridge.operatorSettings.get`; a boot-time
-  get failure keeps the textarea default + still loads.
+  get failure keeps the contenteditable default + still loads.
 - **F2 (minor) — `onOperatorSettingsChanged` not defensive against a null/undefined
   payload.** A null/undefined payload was dereferenced (`payload.editingMode`) and
   could throw. **FIX:** the handler now guards first —
-  `payload = (payload ?? { editingMode: 'textarea' }) as OperatorSettings` — it
-  never throws, coerces to `'textarea'`, and STILL rebuilds (the broadcast is
+  `payload = (payload ?? { editingMode: 'contenteditable' }) as OperatorSettings` — it
+  never throws, coerces to `'contenteditable'`, and STILL rebuilds (the broadcast is
   authoritative, not dropped). **Regression (F2):** a null/undefined payload → no
-  throw, `editingMode`/`lastOperatorSettings` coerced to `'textarea'`, and
+  throw, `editingMode`/`lastOperatorSettings` coerced to `'contenteditable'`, and
   `requestRebuild` still fires.
 - **F3 (minor) — the registered toggle body was the inner-statements form, not
   `compileHandlerBody`-compatible.** The app Runtime resolves `registerHandlerDef`

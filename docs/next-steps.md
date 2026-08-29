@@ -116,8 +116,9 @@ bridge (see the Unit U5 DONE row below). **U4 is DONE (2026-08-28)** — the
 contenteditable rich-text editor (handlers + bridge + discriminated
 `CaretState`/`RichCaretEdge` + IME composition guard + the gated re-derive
 caret restore) — the final unit of the slice (see the Unit U4 DONE row below).
-textarea stays the DEFAULT (decision **D** supersedes the FORM-CONTROL-EDITING
-'NOT contenteditable' + the 'no global editingMode field' clauses in U1). Each
+contenteditable is the DEFAULT (decision **D** supersedes the FORM-CONTROL-EDITING
+'NOT contenteditable' + the 'no global editingMode field' clauses in U1; commit
+`1af5000` "Render fix" flipped the default from textarea to contenteditable). Each
 unit was its own red→green→adversarial→greens→doc-review cycle per AGENTS.md
 (RCA-1/2/3/6).
 
@@ -442,7 +443,7 @@ _(none — Units A–T are implemented.)_
   `editingMode` 4th field on `OperatorSettings`/`OperatorSettingsPatch` + the
   store (`DEFAULT_SETTINGS`/`sanitize`/`set`/`get`) using the existing
   `EditingMode` type, with `coerceEditingMode` (only the exact string
-  `'contenteditable'` passes, everything else → `'textarea'`; TOTAL, never
+  `'textarea'` passes, everything else → `'contenteditable'`; TOTAL, never
   throws); (2) the NEW `IPC_OPERATOR_SETTINGS_CHANGED` broadcast (main fires it
   EXACTLY ONCE post-`set`, payload = the store's filtered/coerced result, NOT the
   raw patch; GET never broadcasts) + the preload `operatorSettings.onChanged`
@@ -487,7 +488,15 @@ _(none — Units A–T are implemented.)_
   `archive/reviews/2026-08-28-u1-doc-review.md` (spec + greens + trackers
   reconciled against the build); trio green (full suite **1679 pass / 0 fail**,
   typecheck clean, build clean). Decision landed: **EDITING-MODE-SETTING** (see
-  `docs/decisions.md`).
+  `docs/decisions.md`). **Control-fallback fix (2026-08-29, doc-review finding):**
+  the `settingsContent` button-toggle's `?? 'textarea'` fallback (used when
+  `lastOperatorSettings` is null — the boot-get-failure edge) contradicted the
+  `contenteditable` default the host actually uses, so the control could
+  advertise `editingMode: textarea` while the live mode was contenteditable. The
+  three fallbacks in `src/renderer/sidebar-panes.ts` `settingsContent` were
+  changed to `?? 'contenteditable'`; the F1 boot-failure test in
+  `tests/editing-mode-broadcast-host.test.ts` was extended to pin the control
+  fallback (red → green; trio green 2003 pass / 38 skip).
 - **Unit U3 — rich-text editing eligibility + host post-assembly splice +
   snapshot `children` field (2026-08-28).** The editing-mode-toggle slice's
   second unit (unit 2 of 5 in execution order U2→U3→U1→U5→U4 — decisions **C**
@@ -497,20 +506,23 @@ _(none — Units A–T are implemented.)_
   `EDITABLE_TYPES.has(type) && !ownsDocChildren` — PURE + DETERMINISTIC + TOTAL,
   never throws) + the closed `EDITABLE_TYPES` set (`h1`–`h6`/`p`/`blockquote`/
   `div` — **9 members**, NOT the review's miscounted "7"; the 14 other
-  `RagNodeType` members fall back to the textarea). The host post-assembly
+  `RagNodeType` members are ineligible (in contenteditable mode they render as
+  plain text — their textarea is removed). The host post-assembly
   splice — a private `SidebarPanes` method `applyEditingMode(envelope,
   editingMode)` in `src/renderer/sidebar-panes.ts` — walks each payload
   `content[0]`, recurses into `rag-`-prefixed doc-children, REMOVES the
   traversal-authored `textarea-<ragId>` child + sets `contenteditable: true` on
   every RICH-ELIGIBLE root (preserving the root's other props, incl. authored
-  `id`/`data-rag-node-id`/`data-doc-head`); ineligible roots keep their textarea
-  (the fallback control); `editingMode === 'textarea'` is a byte-for-byte no-op;
+  `id`/`data-rag-node-id`/`data-doc-head`); in contenteditable mode the textarea
+  is removed for ALL rag roots — ineligible roots render as plain text (no
+  textarea, no `contenteditable` prop, no `rag-editor-*` handlers);
+  `editingMode === 'textarea'` is a byte-for-byte no-op;
   idempotent across re-assembles (H4-style). `applyEditingMode` is invoked in
   `loadAppGraph` immediately after `setTextareaReadOnly` and BEFORE
   `recomputeBackRefs` (decision C — the readOnly pass still sees the textarea;
   backRefs recomputed from the POST-splice envelope). The mode is supplied from
-  a NEW private host field `private editingMode: EditingMode = 'textarea'` (the
-  safe default, decision D) INJECTED by the U3 integration test (no U1
+  a NEW private host field `private editingMode: EditingMode = 'contenteditable'` (the
+  default edit mode, decision D) INJECTED by the U3 integration test (no U1
   operator-settings field required). `src/shared/types.ts` gains the additive
   `children?` field on `RagSnapshotPayload.nodes` (no runtime change — the
   `IPC_RAG_SNAPSHOT` handler already returns full `RagNode` objects) + the
@@ -525,8 +537,9 @@ _(none — Units A–T are implemented.)_
   the adversarial pass). The **state-14 spec contradiction** (the §2.1 state-14
   prose read an "eligible h1 owning an h2 doc-child splices" vs the pinned
   `ownsDocChildren` rule making the h1 INELIGIBLE) resolved by amending the test
-  + spec prose to pin "parent-keeps-textarea / doc-child-splices" — the h1
-  keeps its textarea (it owns a doc-child), only the doc-child h2 splices.
+  + spec prose to pin "parent-textarea-removed / doc-child-splices" — the h1
+  (ineligible — it owns a doc-child) has its textarea removed too (plain text),
+  only the doc-child h2 splices.
   Adversarial pass (RCA-3) in the spec §5 — all HOST (none package): F1 (a-med,
   forward-looking for U1 — the splice irreversibly mutates the shared cached
   traversal envelope; contract for U1: mode toggling MUST always trigger a fresh
@@ -650,7 +663,14 @@ _(none — Units A–T are implemented.)_
   greens + trackers reconciled against the build); trio green (1522 pass / 30
   skip, typecheck clean, build clean). Decisions landed: ONE-WAY-SNAPSHOT,
   MARKDOWN-EXPORT-ONLY-CARVE-OUT, TABLE-TYPES-ADDITIVE-STORE-FORMAT (see
-  `docs/decisions.md`).
+  `docs/decisions.md`). **Inline-formatting-order defect catalogued (2026-08-29):**
+  a formatted span that PRECEDES plain text (e.g. `**Proposal:** Astrographer…`)
+  renders AFTER the content text — the `RagNodeChild` model (`content` = all
+  plain text, `children` = all formatted spans) cannot represent interleaving
+  order, and the provident-ssr framework renders `escapeText(content) + children`
+  with no text/element interleaving. This is a PACKAGE limitation (not a host
+  bug) — recorded as **`ENG-INLINE-ORDER`** in `docs/defects.md` +
+  `docs/HANDOFF.md` (handled upstream, never patched here).
 - **Unit S — paste-time sanitization (2026-08-28).** The RICH-TEXT-EDITING-GATE
   must-fix "paste-time sanitization". A new PURE, node-testable module
   `src/main/paste-sanitize.ts` exports `sanitizePastedHtml(rawHtml: string):

@@ -825,15 +825,15 @@ export class SidebarPanes {
         {
           type: 'div',
           props: { id: 'operator-editing-mode' },
-          content: `editingMode: ${s?.editingMode ?? 'textarea'}`,
+          content: `editingMode: ${s?.editingMode ?? 'contenteditable'}`,
         },
         {
           type: 'button',
           props: {
             id: 'operator-editing-mode-toggle',
-            'data-mode': (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'textarea' : 'contenteditable',
+            'data-mode': (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'textarea' : 'contenteditable',
           },
-          content: (s?.editingMode ?? 'textarea') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
+          content: (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
           handlers: [{ name: 'operator-editing-mode-toggle', event: 'click', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER }],
         },
       ],

@@ -163,29 +163,34 @@ PASS/FAIL.
 - **Actual:** inline children intact, textarea removed, `contenteditable:true`
 - **Result:** ✅ PASS
 
-### B-3. Ineligible roots keep their textarea (§2.1 13 / ADR-1 / §2.2 3)
+### B-3. Ineligible roots have their textarea removed too (plain text) (§2.1 13 / ADR-1 / §2.2 3)
 - **Input:** envelope with `ul`, `pre`, and `td` subtree roots, `contenteditable`
   mode
-- **Expected:** each root's `textarea-<ragId>` child REMAINS; `contenteditable` NOT set
-  on any (no erroneous removal — a dangling-edit-control defect is a fail-state)
-- **Actual:** all three textareas remain, no `contenteditable` prop
+- **Expected:** each root's `textarea-<ragId>` child is REMOVED (the textarea is
+  removed for ALL rag roots in contenteditable mode); `contenteditable` NOT set
+  on any (no `contenteditable` prop, no `rag-editor-*` handlers — the ineligible
+  root renders as plain text). A stale textarea left on an ineligible root is a
+  dangling-edit-control defect (fail-state).
+- **Actual:** all three textareas removed, no `contenteditable` prop
 - **Result:** ✅ PASS
 
-### B-4. `EDITABLE_TYPES` type WITH a doc-child keeps its textarea (§2.1 13 / §2.1 8)
+### B-4. `EDITABLE_TYPES` type WITH a doc-child has its textarea removed too (§2.1 13 / §2.1 8)
 - **Input:** an `h1` root that owns an `h2` doc-child (a `rag-`-prefixed child),
   `contenteditable` mode
 - **Expected:** the `h1` is NOT eligible (`ownsDocChildren=true`) → its
-  `textarea-h1` REMAINS; `contenteditable` NOT set on the `h1`
-- **Actual:** `textarea-h1` kept, no `contenteditable` on `h1`
+  `textarea-h1` is REMOVED (plain text); `contenteditable` NOT set on the `h1`
+- **Actual:** `textarea-h1` removed, no `contenteditable` on `h1`
 - **Result:** ✅ PASS
 
-### B-5. Parent-keeps-textarea / doc-child-splices (§2.1 14 — state 14)
+### B-5. Parent-textarea-removed / doc-child-splices (§2.1 14 — state 14)
 - **Input:** an `h1` root owning an eligible `h2` doc-child (both with their own
   textareas), `contenteditable` mode
 - **Expected:** the `h2` doc-child (eligible) has its `textarea-h2` removed +
-  `contenteditable:true`; the parent `h1` (ineligible) KEEPS its `textarea-h1` and no
+  `contenteditable:true`; the parent `h1` (ineligible) ALSO has its `textarea-h1`
+  removed (plain text — the textarea is removed for ALL rag roots) and no
   `contenteditable`
-- **Actual:** `h2` spliced (textarea gone + `contenteditable:true`); `h1` untouched
+- **Actual:** `h2` spliced (textarea gone + `contenteditable:true`); `h1` textarea
+  removed, no `contenteditable`
 - **Result:** ✅ PASS
 
 ### B-6. Deep recursion — the walk descends doc-children, each judged by its OWN eligibility (§1.3 walk / §1.2 / §2.1 14)
@@ -193,11 +198,12 @@ PASS/FAIL.
   next as its doc-child (so each of top/mid has `ownsDocChildren=true`), `contenteditable`
   mode
 - **Expected:** the top `div` and the mid `div` EACH own a doc-child, so both are
-  INELIGIBLE (§1.2 — a doc-child owner is never a rich-text leaf) and keep their own
-  textareas; the walk still RECURSES down to the leaf `p` (owns no doc-child), which is
+  INELIGIBLE (§1.2 — a doc-child owner is never a rich-text leaf) and have their
+  own textareas REMOVED (plain text — the textarea is removed for ALL rag roots);
+  the walk still RECURSES down to the leaf `p` (owns no doc-child), which is
   eligible → its textarea removed + `contenteditable:true`. Recursion is per-node,
   independent of the parent.
-- **Actual:** top `div` and mid `div` keep their textareas (no `contenteditable`); the
+- **Actual:** top `div` and mid `div` textareas removed (no `contenteditable`); the
   leaf `p` spliced (textarea gone + `contenteditable:true`) — the recursion reached and
   correctly evaluated every nested level.
 - **Result:** ✅ PASS
@@ -227,11 +233,11 @@ PASS/FAIL.
 - **Actual:** both duplicates spliced identically
 - **Result:** ✅ PASS
 
-### B-10. Multi-parent INELIGIBLE duplicates all keep the textarea (§2.1 15 / ADR-8)
+### B-10. Multi-parent INELIGIBLE duplicates all have their textarea removed (§2.1 15 / ADR-8)
 - **Input:** one ineligible `ul` subtree root materialized TWICE, `contenteditable`
   mode
-- **Expected:** BOTH duplicates keep their textarea; no `contenteditable`
-- **Actual:** both kept, no `contenteditable`
+- **Expected:** BOTH duplicates have their textarea removed (plain text); no `contenteditable`
+- **Actual:** both removed, no `contenteditable`
 - **Result:** ✅ PASS
 
 ### B-11. Root that is BOTH a subtree root AND a doc-child — same verdict (§2.2 7 / ADR-3)
@@ -240,7 +246,7 @@ PASS/FAIL.
 - **Expected:** both materializations get the SAME splice verdict (same type + same
   `ownsDocChildren=false` → both splice); a divergence is a defect
 - **Actual:** both `h2` materializations spliced (textarea removed +
-  `contenteditable:true`); the `h1` parent kept its textarea
+  `contenteditable:true`); the `h1` parent's textarea removed (plain text)
 - **Result:** ✅ PASS
 
 ### B-12. Empty eligible root still splices (§2.1 16 / ADR-5)
@@ -349,14 +355,14 @@ PASS/FAIL.
 | A-14 | Totality — no throw across the domain | ✅ PASS |
 | B-1 | Eligible `p` splices (textarea removed + contenteditable:true) | ✅ PASS |
 | B-2 | Inline children survive | ✅ PASS |
-| B-3 | Ineligible roots keep textarea (ul/pre/td) | ✅ PASS |
-| B-4 | EDITABLE_TYPES WITH doc-child keeps textarea | ✅ PASS |
-| B-5 | Parent-keeps-textarea / doc-child-splices (state 14) | ✅ PASS |
+| B-3 | Ineligible roots textarea removed (ul/pre/td → plain text) | ✅ PASS |
+| B-4 | EDITABLE_TYPES WITH doc-child textarea removed | ✅ PASS |
+| B-5 | Parent-textarea-removed / doc-child-splices (state 14) | ✅ PASS |
 | B-6 | Deep recursion (div→div→p) | ✅ PASS |
 | B-7 | Inline children NOT doc-children (ADR-6) | ✅ PASS |
 | B-8 | Textarea NOT doc-child (ADR-6) | ✅ PASS |
 | B-9 | Multi-parent eligible duplicates both splice | ✅ PASS |
-| B-10 | Multi-parent ineligible duplicates both keep | ✅ PASS |
+| B-10 | Multi-parent ineligible duplicates both textarea-removed | ✅ PASS |
 | B-11 | Root BOTH subtree root AND doc-child — same verdict | ✅ PASS |
 | B-12 | Empty eligible root splices | ✅ PASS |
 | B-13 | Empty envelope no-op | ✅ PASS |
@@ -382,7 +388,7 @@ PASS/FAIL.
   `ownsDocChildren` = direct child with `rag-`-prefixed `props.id`, remove
   `textarea-<ragId>` + set `contenteditable:true` on eligible roots, no-op in textarea
   mode, idempotent) satisfied every splice state and fail-state, including state 14
-  (parent-keeps-textarea / doc-child-splices), multi-parent consistency, the
+  (parent-textarea-removed / doc-child-splices), multi-parent consistency, the
   `contenteditable` prop-collision overwrite, and the never-remove-a-non-textarea
   guarantee.
 - **Snapshot `children` field is additive and optional** — both with and without
@@ -403,7 +409,8 @@ PASS/FAIL.
   scenario wrongly expected the mid `div` (which owns the leaf `p` as a doc-child) to
   splice. Re-deriving from §1.2's pinned rule — "a node that owns a doc-child is NOT
   eligible even if its type is in `EDITABLE_TYPES`" — the correct expectation is that
-  only the leaf (owns no doc-child) splices. The correction was applied to the scenario
+  only the leaf (owns no doc-child) splices (gets `contenteditable:true`); the mid `div`
+  (ineligible) has its textarea removed too (plain text). The correction was applied to the scenario
   and the live gate + harness passed the corrected expectation; the spec's
   `ownsDocChildren` rule is what caught the slip (not a spec-vs-impl drift).
 - **A-1/A-5 (grouped heading scenarios).** The six heading types share one spec state

@@ -46,9 +46,11 @@ traversal always emits (Unit L). The traversal cannot see `editingMode` (it is
 PURE and has no settings access — decision **C**), so the HOST splices the
 ASSEMBLED envelope after assembly: for each eligible subtree root it REMOVES the
 traversal-authored `textarea-<ragId>` child and sets `contenteditable: true` on
-the root's props (authored as provident data). Ineligible roots keep their
-textarea (the fallback control). When `editingMode === 'textarea'` the splice is
-a no-op. Separately, `RagSnapshotPayload.nodes` must expose the `children` the
+the root's props (authored as provident data). In contenteditable mode the
+textarea is REMOVED for ALL rag roots — eligible roots get `contenteditable:
+true` + the 4 `rag-editor-*` handlers, while INELIGIBLE roots render as plain
+text (no textarea, no `contenteditable` prop, no `rag-editor-*` handlers).
+When `editingMode === 'textarea'` the splice is a no-op. Separately, `RagSnapshotPayload.nodes` must expose the `children` the
 snapshot already returns, so the traversal + splice can type-check `node.children`.
 
 ### 1.2 The pure eligibility function (pinned)
@@ -80,7 +82,9 @@ export const EDITABLE_TYPES: ReadonlySet<RagNodeType>
   enumerated set has 9. This spec pins **9**.)
 - **Eligibility by type:** every other `RagNodeType` member
   (`ul`, `ol`, `li`, `pre`, `code`, `strong`, `em`, `a`, `img`, `table`, `thead`,
-  `tr`, `td`, `th` — **14 members**) is NOT eligible → falls back to textarea.
+  `tr`, `td`, `th` — **14 members**) is NOT eligible → in contenteditable mode it
+  renders as plain text (its textarea is removed, no `contenteditable` prop, no
+  `rag-editor-*` handlers).
 - **`ownsDocChildren` semantics:** true when the ROOT has a DIRECT child whose
   authored `props.id` is a string starting with `'rag-'` (the doc-child subtree
   root convention — traversal.ts `buildSubtree` / `collectSubtreeIds`). A node
@@ -109,8 +113,11 @@ export const EDITABLE_TYPES: ReadonlySet<RagNodeType>
  *  'contenteditable'`, walk every subtree root in the assembled envelope's
  *  content payloads: for each RICH-ELIGIBLE root, REMOVE the traversal-authored
  *  `textarea-<ragId>` child and set `contenteditable: true` on the root's props
- *  (authored as provident data). Ineligible roots keep their textarea (the
- *  fallback control). When `editingMode === 'textarea'`, no-op. Idempotent. */
+ *  (authored as provident data). In contenteditable mode the textarea is REMOVED
+ *  for ALL rag roots — eligible roots get `contenteditable: true` + the 4
+ *  `rag-editor-*` handlers; INELIGIBLE roots render as plain text (no textarea,
+ *  no `contenteditable` prop, no `rag-editor-*` handlers). When `editingMode ===
+ *  'textarea'`, no-op. Idempotent. */
 private applyEditingMode(envelope: LegacyInitialData, editingMode: EditingMode): void
 ```
 
@@ -136,8 +143,8 @@ const assembledBackRefs = this.recomputeBackRefs(result.envelope)
 ```
 
 The mode is supplied from a NEW private host field `private editingMode:
-EditingMode = 'textarea'` (the safe default — textarea stays the default,
-decision **D**). U3's integration test INJECTS the mode by setting this field to
+EditingMode = 'contenteditable'` (the default edit mode — contenteditable is the
+default, decision D). U3's integration test INJECTS the mode by setting this field to
 `'contenteditable'` (or `'textarea'`) before calling `loadAppGraph`. Unit U1
 later wires this field to the operator-settings value + the re-derive broadcast.
 
@@ -150,8 +157,11 @@ later wires this field to the operator-settings value + the re-derive broadcast.
   root's existing props, including the authored `id`, `data-rag-node-id`,
   `data-doc-head`). The root's INLINE children (`inline-<ragId>-<n>`) and any
   nested doc-child subtree roots are NOT touched by the removal.
-- **Ineligible root, contenteditable mode:** leave the `textarea-<ragId>` child
-  in place (the fallback control) and do NOT set `contenteditable` on the root.
+- **Ineligible root, contenteditable mode:** the `textarea-<ragId>` child is
+  REMOVED too (the textarea is removed for ALL rag roots in contenteditable
+  mode) and `contenteditable` is NOT set on the root — the ineligible root
+  renders as plain text with no textarea, no `contenteditable` prop, and no
+  `rag-editor-*` handlers.
 - **`editingMode === 'textarea'`:** no-op — no node is mutated, no textarea
   removed, no prop set.
 - **Walk coverage:** the walk starts at each payload's `content[0]` (always a
@@ -243,21 +253,26 @@ nodes: Array<{
 12. **Inline children survive the splice:** an eligible root WITH inline
     children → the inline children remain in `root.children` (only the textarea
     is removed) and `contenteditable: true` is set.
-13. **Ineligible root keeps its textarea:** an ineligible root (e.g. `ul`, `pre`,
-    `td`, or an `EDITABLE_TYPES` type WITH a doc-child) → its `textarea-<ragId>`
-    child REMAINS and `contenteditable` is NOT set on the root.
+13. **Ineligible root's textarea is removed too (plain text):** an ineligible
+    root (e.g. `ul`, `pre`, `td`, or an `EDITABLE_TYPES` type WITH a doc-child)
+    → its `textarea-<ragId>` child is REMOVED (the textarea is removed for ALL
+    rag roots in contenteditable mode) and `contenteditable` is NOT set on the
+    root — it renders as plain text with no textarea, no `contenteditable` prop,
+    and no `rag-editor-*` handlers.
 14. **Nested subtree roots splice recursively:** a subtree root that is a
     doc-child of another subtree root and is ITSELF eligible (e.g. an `h2`
     doc-child of a parent `h1`) → its own textarea is removed +
     `contenteditable: true`, recursively, independent of its parent. NOTE: the
     PARENT that OWNS the doc-child is itself INELIGIBLE (state 8/13 —
-    `ownsDocChildren=true` → `isRichEditableRoot` false), so it KEEPS its
-    textarea; only the doc-child splices. (A parent that owns no doc-child and
+    `ownsDocChildren=true` → `isRichEditableRoot` false), so its textarea is
+    REMOVED too (it renders as plain text); only the doc-child splices (gets
+    `contenteditable: true`). (A parent that owns no doc-child and
     is in EDITABLE_TYPES, e.g. a plain `p`, splices normally.)
 15. **Multi-parent duplicates are consistent:** an ELIGIBLE multi-parent RAG
     node materialized twice → BOTH duplicate subtree roots have their textarea
     removed + `contenteditable: true` (the same rule per duplicate). An
-    INELIGIBLE multi-parent node → BOTH duplicates keep their textarea.
+    INELIGIBLE multi-parent node → BOTH duplicates have their textarea removed
+    (plain text).
 16. **Empty eligible root:** an eligible root with `content: ''` and no children
     → still eligible; its textarea is removed + `contenteditable: true` (the
     contenteditable editor exists, empty).
@@ -305,10 +320,11 @@ nodes: Array<{
    `'plaintext-only'` authored on the store node) → the splice OVERWRITES it to
    `true` (`root.props.contenteditable === true`). The authored value is NOT
    preserved — the splice's `contenteditable: true` wins. (Must-hunt §5.)
-3. **Ineligible roots MUST keep their textarea (no erroneous removal):** for
-   every INELIGIBLE root in contenteditable mode, the textarea remains — a
-   regression assertion that no ineligible root loses its fallback control. An
-   ineligible root WITHOUT its textarea is a dangling-edit-control defect
+3. **Ineligible roots MUST have their textarea removed (no erroneous retention):**
+   for every INELIGIBLE root in contenteditable mode, the textarea is REMOVED
+   (the textarea is removed for ALL rag roots) — a regression assertion that no
+   ineligible root keeps a stale textarea overlay. An ineligible root that KEEPS
+   its textarea in contenteditable mode is a dangling-edit-control defect
    (must-hunt §5).
 4. **Missing textarea on an eligible root (idempotent/partial envelope):** an
    eligible root whose `textarea-<ragId>` child is ALREADY absent (a repeated
@@ -324,14 +340,14 @@ nodes: Array<{
 6. **Inconsistent multi-parent treatment is a defect:** a multi-parent RAG node
    must receive the SAME splice decision on every duplicate — a regression
    assertion that a multi-parent eligible node's duplicates ALL splice (and an
-   ineligible one's duplicates ALL keep the textarea). One-removed-one-kept is a
+   ineligible one's duplicates ALL have their textarea removed). One-removed-one-kept is a
    fail-state (must-hunt §5).
 7. **A root that is BOTH a subtree root AND a doc-child:** such a node is
    materialized TWICE (once as its own section content[0], once nested — finding
    8, mutual-exclusion, traversal.ts). Both materializations MUST get the SAME
    splice treatment (same type + same `ownsDocChildren` → same verdict). A
    regression assertion that both materializations either both splice or both
-   keep the textarea. (Must-hunt §5.)
+   have their textarea removed. (Must-hunt §5.)
 
 ---
 
@@ -348,15 +364,16 @@ nodes: Array<{
   in the U3 brief. The ENUMERATED set has **9** members. This spec pins **9**
   (the set definition is authoritative); the "7" is a miscount to be corrected by
   the proofreader/doc-reviewer, not enshrined.
-- **Non-eligible `RagNodeType` members (fallback to textarea):** **14** —
-  `ul`, `ol`, `li`, `pre`, `code` (5), `strong`, `em`, `a`, `img` (4 → 9),
-  `table`, `thead`, `tr`, `td`, `th` (5 → 14). (9 + 14 = 23.)
-- **Eligible-with-doc-children → fallback:** every `RagNodeType` member with
+- **Non-eligible `RagNodeType` members (in contenteditable mode → plain text):**
+  **14** — `ul`, `ol`, `li`, `pre`, `code` (5), `strong`, `em`, `a`, `img` (4 →
+  9), `table`, `thead`, `tr`, `td`, `th` (5 → 14). (9 + 14 = 23.)
+- **Eligible-with-doc-children → ineligible:** every `RagNodeType` member with
   `ownsDocChildren=true` is NOT eligible (0 eligible doc-child owners).
-- **Textareas per eligible root (contenteditable mode):** removed — an eligible
-  root renders 0 textareas (the contenteditable editor replaces it). Per
-  INELIGIBLE root: 1 textarea (the fallback control, as in Unit L §5.10). A
-  multi-parent node with N duplicates → N textareas ineligible, 0 if eligible.
+- **Textareas per root (contenteditable mode):** removed for ALL rag roots — an
+  eligible root renders 0 textareas (the contenteditable editor replaces it);
+  an INELIGIBLE root ALSO renders 0 textareas (it renders as plain text — the
+  textarea is removed for every root). A multi-parent node with N duplicates →
+  N textareas removed (0 textareas) in contenteditable mode.
 - **`contenteditable` props (contenteditable mode):** 1 per eligible subtree
   root; 0 per ineligible root; 0 overall in textarea mode.
 - **New functions/methods:** `isRichEditableRoot` (1 pure export),
@@ -428,11 +445,12 @@ required). The pure `isRichEditableRoot` is fully node-testable in isolation.
 **Adversarial must-hunt list (the post-green adversarial reviewer MUST verify
 these; the TestWriter writes the regression tests NOW from this list):**
 
-- **ADR-1 — dangling backRef / dangling edit control:** an INELIGIBLE root whose
-  textarea was ERRONEOUSLY removed (a splice bug) would leave the root without any
-  editing control while its `rag-<ragId>` backRef remains → the edit controller
-  thinks it editable but no control exists. Regression: every ineligible root in
-  contenteditable mode keeps its textarea (§2.2 state 3). Conversely, an eligible
+- **ADR-1 — dangling backRef / dangling edit control:** in contenteditable mode an
+  INELIGIBLE root renders as plain text (its textarea is removed — the intended
+  behavior), so it has NO editing control while its `rag-<ragId>` backRef remains
+  → the edit controller thinks it editable but no control exists. Regression:
+  every ineligible root in contenteditable mode has its textarea removed (no
+  stale textarea overlay — §2.2 state 3). Conversely, an eligible
   root's REMOVED `textarea-<ragId>` must be absent from the recomputed backRefs
   (recompute runs AFTER the splice) — no dangling textarea reference.
 - **ADR-2 — `contenteditable` prop collision:** an eligible root whose authored
@@ -441,7 +459,7 @@ these; the TestWriter writes the regression tests NOW from this list):**
   editor). Regression: §2.2 state 2.
 - **ADR-3 — root that is BOTH a subtree root AND a doc-child:** the two
   materializations (own section + nested) must get the SAME splice verdict
-  (§2.2 state 7). A divergence (one splices, the other keeps the textarea) is a
+  (§2.2 state 7). A divergence (one splices, the other keeps its textarea) is a
   defect.
 - **ADR-4 — the splice on a re-assemble (idempotence):** the splice must be
   idempotent across re-assembles (H4-style) — re-running on the same envelope (or
@@ -467,8 +485,9 @@ these; the TestWriter writes the regression tests NOW from this list):**
   ONLY the child whose `props.id === 'textarea-<ragId>'`; a same-type-elsewhere
   or a different-authored-id child must not be removed by mistake.
 - **ADR-10 — textarea mode is byte-for-byte inert:** `applyEditingMode(…,
-  'textarea')` mutates NOTHING (§2.1 state 18). The safe default (decision D)
-  must not regress the existing Unit L behavior.
+  'textarea')` mutates NOTHING (§2.1 state 18). The default mode (contenteditable,
+  decision D) must not regress the existing Unit L textarea behavior in textarea
+  mode.
 
 ### Adversarial findings (post-green, RCA-3) — HOST fixes, regression-tested
 

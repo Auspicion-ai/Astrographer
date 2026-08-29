@@ -605,9 +605,9 @@ describe('rich-splice — fail-state 7: a root that is BOTH a subtree root AND a
       expect(hasTextarea(r.root, 'sec-a')).toBe(false)
       expect(contenteditableProp(r.root)).toBe(true)
     }
-    // sec-b OWNS sec-a as a doc-child → NOT eligible → keeps its textarea.
+    // sec-b OWNS sec-a as a doc-child → NOT eligible → textarea removed (no contenteditable).
     const [secB] = rootsFor(env, 'sec-b')
-    expect(hasTextarea(secB.root, 'sec-b')).toBe(true)
+    expect(hasTextarea(secB.root, 'sec-b')).toBe(false)
     expect(contenteditableProp(secB.root)).toBeUndefined()
   })
 })

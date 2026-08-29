@@ -50,6 +50,7 @@ import type {
   SecuritySettings,
   OperatorSettings,
   OperatorSettingsPatch,
+  EditingMode,
 } from '../src/shared/types.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
 
@@ -209,7 +210,7 @@ function makeBridge(opts: {
     queryResult: opts.queryResult ?? null,
     backlinksResult: opts.backlinksResult ?? null,
     security: opts.security ?? { token: null, enabled: ['read', 'dispatch'] },
-    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5 },
+    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' },
   }
   const bridge = {
     security: {
@@ -500,6 +501,9 @@ describe('the readOnly behavior (§5.8.6/7)', () => {
   it('§5.8.6 — a textarea whose RAG node is editable → readOnly: false', () => {
     const h = makeHarness({ snapshot: editSnapshot() })
     h.host.registerPanes()
+    // The readOnly behavior is a TEXTAREA-mode concern — force textarea mode
+    // (the default is contenteditable, which removes the textareas).
+    ;(h.host as unknown as { editingMode: EditingMode }).editingMode = 'textarea'
     // 'n1' is editable (in backRefs) at the time the readOnly setting runs
     h.backRefs.set('n1', ['provident-n1'])
     const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
@@ -513,6 +517,8 @@ describe('the readOnly behavior (§5.8.6/7)', () => {
   it('§5.8.7 — a textarea whose RAG node is NOT editable (dangling back-reference) → readOnly: true', () => {
     const h = makeHarness({ snapshot: editSnapshot() })
     h.host.registerPanes()
+    // The readOnly behavior is a TEXTAREA-mode concern — force textarea mode.
+    ;(h.host as unknown as { editingMode: EditingMode }).editingMode = 'textarea'
     // 'n1' is NOT in backRefs (a dangling back-reference) at the time the
     // readOnly setting runs — the host flips the textarea to read-only
     const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
