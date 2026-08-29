@@ -39,6 +39,7 @@ import { createPaneRegistry, type PaneRegistry } from '../src/renderer/pane-regi
 import { createEditController, type EditController, type CommitResult } from '../src/renderer/edit-controller.js'
 import { buildTraversal } from '../src/main/traversal.js'
 import { createJsonRagStore, type RagStore, type RagNode, type RagEdge } from '../src/main/rag-store.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
 import { setContent } from '../src/main/edit-ops.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../src/main/template-shape.js'
 import type { BacklinkResult } from '../src/main/backlinks.js'
@@ -168,7 +169,10 @@ function traversalEnvelope(): LegacyInitialData {
     makeEdge('e1', 'next-section', 'head', 'n1', { documentIds: ['doc'] }),
     makeEdge('e2', 'doc-end', 'n1', 'doc', { documentIds: ['doc'] }),
   ]
-  const store = { listNodes: () => nodes, listEdges: () => edges } as never
+  // The scoped walk reads the adjacency methods, so the snapshot adapter MUST be
+  // `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw.
+  const store = createSnapshotStore(nodes, edges)
   return buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' }).envelope
 }
 
@@ -221,6 +225,8 @@ function makeBridge(opts: {
       snapshot: vi.fn(async (): Promise<RagSnapshotPayload> => state.snapshot),
       backlinks: vi.fn(async (): Promise<BacklinkResult> =>
         state.backlinksResult ?? { nodeId: '', backlinks: [], outlinks: [], crosslinkBacklinks: [], crosslinkOutlinks: [] }),
+      // Unit V3 — the doc-nav data source (the `rag-doc-heads` IPC).
+      docHeads: vi.fn(async () => ({ documents: [] })),
     },
     template: {
       get: vi.fn(async () => state.template),

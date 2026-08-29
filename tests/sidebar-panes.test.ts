@@ -28,6 +28,7 @@
 import { describe, it, expect } from 'vitest'
 import type { RagNode, RagEdge } from '../src/main/rag-store.js'
 import { buildTraversal, type CrosslinkWiring } from '../src/main/traversal.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
 import type { BacklinkResult, LinkEntry } from '../src/main/backlinks.js'
 import type { RagQueryResult } from '../src/shared/types.js'
 
@@ -90,6 +91,7 @@ function makeEdge(
 function makeContext(overrides: Partial<PaneContext> = {}): PaneContext {
   return {
     snapshot: { nodes: [], edges: [] },
+    docHeads: [],
     currentDocumentId: null,
     currentNodeId: null,
     backRefs: new Map<string, string[]>(),
@@ -125,7 +127,10 @@ const validRender = (): { type: string; content: Array<{ type: string; content: 
 function traversalEnvelope(zoneName: string): { envelope: ReturnType<typeof buildTraversal>['envelope']; _storeNodes: RagNode[]; _storeEdges: RagEdge[] } {
   const nodes = [makeNode('head-a', { content: 'Doc A' })]
   const edges = [makeEdge('dh1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] })]
-  const store = { listNodes: () => nodes, listEdges: () => edges } as never
+  // The scoped walk reads the adjacency methods, so the snapshot adapter MUST be
+  // `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw.
+  const store = createSnapshotStore(nodes, edges)
   const result = buildTraversal({ store, documentIds: ['doc-a'], zoneName })
   return { envelope: result.envelope, _storeNodes: nodes, _storeEdges: edges }
 }
@@ -545,48 +550,36 @@ describe('buildOperatorEnvelope — fail-states (§5.9 13-14)', () => {
 })
 
 // ===========================================================================
-// Data flow: doc-nav ← rag-snapshot (§5.3, §5.8 17-18)
+// Data flow: doc-nav ← rag-doc-heads (§5.3, §5.8 17-18)
 // ===========================================================================
-describe('deriveDocNavDocuments — the store doc-heads (§5.3, §5.8 17)', () => {
-  it('maps each doc-head edge to {documentId, title} (title = source node content), sorted by root id ascending', () => {
+describe('deriveDocNavDocuments — the doc-heads list (§5.3, §5.8 17)', () => {
+  it('returns the docHeads list (already sorted + deduped by the IPC handler)', () => {
     const ctx = makeContext({
-      snapshot: {
-        nodes: [
-          makeNode('head-b', { content: 'Doc B' }),
-          makeNode('head-a', { content: 'Doc A' }),
-        ],
-        edges: [
-          makeEdge('e2', 'doc-head', 'head-b', 'doc-b', { documentIds: ['doc-b'] }),
-          makeEdge('e1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
-        ],
-      },
+      docHeads: [
+        { documentId: 'doc-a', title: 'Doc A' },
+        { documentId: 'doc-b', title: 'Doc B' },
+      ],
     })
-    const docs = deriveDocNavDocuments(ctx.snapshot)
+    const docs = deriveDocNavDocuments(ctx.docHeads)
     expect(docs).toEqual([
       { documentId: 'doc-a', title: 'Doc A' },
       { documentId: 'doc-b', title: 'Doc B' },
     ]) // sorted by root id, lexicographic ascending, deterministic
   })
 
-  it('returns an empty list for an empty store (no doc-head edges)', () => {
+  it('returns an empty list for an empty docHeads list (no documents)', () => {
     const ctx = makeContext()
-    expect(deriveDocNavDocuments(ctx.snapshot)).toEqual([])
+    expect(deriveDocNavDocuments(ctx.docHeads)).toEqual([])
   })
 })
 
 describe('docNavContent (§5.3, §5.8 17-18)', () => {
   it('renders one li per document with data-document-id; the current document li carries data-current=true', () => {
     const ctx = makeContext({
-      snapshot: {
-        nodes: [
-          makeNode('head-a', { content: 'Doc A' }),
-          makeNode('head-b', { content: 'Doc B' }),
-        ],
-        edges: [
-          makeEdge('e1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
-          makeEdge('e2', 'doc-head', 'head-b', 'doc-b', { documentIds: ['doc-b'] }),
-        ],
-      },
+      docHeads: [
+        { documentId: 'doc-a', title: 'Doc A' },
+        { documentId: 'doc-b', title: 'Doc B' },
+      ],
       currentDocumentId: 'doc-b',
     })
     const content = docNavContent(ctx)
@@ -599,7 +592,7 @@ describe('docNavContent (§5.3, §5.8 17-18)', () => {
     expect(lis[1].props?.['data-current']).toBe('true')
   })
 
-  it('renders "(no documents)" for an empty store (no throw)', () => {
+  it('renders "(no documents)" for an empty docHeads list (no throw)', () => {
     const content = docNavContent(makeContext())
     expect(content.type).toBe('p')
     expect(content.content).toBe('(no documents)')

@@ -32,6 +32,33 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createHash } from 'node:crypto'
+// The shared PURE adjacency core + `createSnapshotStore` live in the NODE-FREE
+// `adjacency.ts` module (so the renderer bundle can import them without pulling
+// in the node builtins above). This module imports the runtime helpers from it
+// and re-exports the public adjacency surface (Unit V1 §5.1/§5.4).
+import {
+  DANGEROUS_KEYS,
+  deepCopy,
+  RAG_EDGE_KINDS,
+  requireNonEmptyString,
+  buildAdjacencyIndex,
+  edgesFromIndex,
+  edgesToIndex,
+  edgesByKindIndex,
+  edgesForDocumentIndex,
+  docHeadForDocumentIndex,
+  type AdjacencyIndex,
+} from './adjacency.js'
+export {
+  buildAdjacencyIndex,
+  edgesFromIndex,
+  edgesToIndex,
+  edgesByKindIndex,
+  edgesForDocumentIndex,
+  docHeadForDocumentIndex,
+  createSnapshotStore,
+  type AdjacencyIndex,
+} from './adjacency.js'
 
 /** The RAG node element type — the provident element type the subtree root
  *  renders as. Closed union for the first slice. */
@@ -207,6 +234,20 @@ export interface RagStore {
    *  state, the journal is not polluted, and no persist happens. Returns a
    *  discriminated result (NEVER throws for domain failures). Async. */
   applyBatch(ops: BatchOp[]): Promise<BatchResult>
+
+  // ---- adjacency (Unit V1) -------------------------------------------------
+  /** All edges whose `source` is `source`, in store order. */
+  edgesFrom(source: string): RagEdge[]
+  /** All edges whose `target` is `target`, in store order. */
+  edgesTo(target: string): RagEdge[]
+  /** All edges of `kind`, in store order. */
+  edgesByKind(kind: RagEdgeKind): RagEdge[]
+  /** The edges scoped to `documentId` (the doc-flow edges whose `documentIds`
+   *  includes it + ALL `doc-child` edges), in store order. */
+  edgesForDocument(documentId: string): RagEdge[]
+  /** The head node id for `documentId` (the source of the FIRST `doc-head`
+   *  edge whose `documentIds` includes it), or `undefined` if none. */
+  docHeadForDocument(documentId: string): string | undefined
 }
 
 export interface RagStoreOptions {
@@ -230,8 +271,6 @@ interface RagStoreFile {
 
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th'])
 const RAG_NODE_CHILD_TYPES = new Set<string>(['strong', 'em', 'a', 'img'])
-const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
-const DANGEROUS_KEYS = new Set<string>(['__proto__', 'constructor', 'prototype'])
 const DEFAULT_MAX_JOURNAL_LENGTH = 1000
 
 function sha256(source: string): string {
@@ -246,24 +285,6 @@ function refreshTimestamp(after: string): string {
   const now = Date.now()
   const ms = Number.isFinite(afterMs) && now <= afterMs ? afterMs + 1 : now
   return new Date(ms).toISOString()
-}
-
-// ---- safe deep copy --------------------------------------------------------
-// Returns a deep copy that can never be used to prototype-pollute: dangerous
-// keys (__proto__/constructor/prototype) are dropped at every level. Used on
-// BOTH write (store a copy) and read (return a copy) so a caller cannot mutate
-// the store through a returned record.
-function deepCopy<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((v) => deepCopy(v)) as unknown as T
-  if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(value)) {
-      if (DANGEROUS_KEYS.has(key)) continue
-      out[key] = deepCopy((value as Record<string, unknown>)[key])
-    }
-    return out as T
-  }
-  return value
 }
 
 // True if any key anywhere in the value is a prototype-pollution key.
@@ -613,6 +634,23 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   const corrupt = loaded.corrupt
   const maxJournalLength = opts.maxJournalLength ?? DEFAULT_MAX_JOURNAL_LENGTH
 
+  // ---- lazy adjacency index (Unit V1) --------------------------------------
+  // Built on the FIRST adjacency query after a mutation (or at construction).
+  // A `dirty` flag tracks whether the index is stale; ANY mutation that changes
+  // the edge set sets it, so the next adjacency query rebuilds the index lazily.
+  let adjacencyIndex: AdjacencyIndex | null = null
+  let adjacencyDirty = true
+  function ensureAdjacencyIndex(): AdjacencyIndex {
+    if (adjacencyDirty || adjacencyIndex === null) {
+      adjacencyIndex = buildAdjacencyIndex([...edges.values()].filter((e) => !e.quarantined))
+      adjacencyDirty = false
+    }
+    return adjacencyIndex
+  }
+  function invalidateAdjacency(): void {
+    adjacencyDirty = true
+  }
+
   // ---- single-writer queue (promise-chain mutex) --------------------------
   let queueTail: Promise<unknown> = Promise.resolve()
   // True while a queued fn is executing (including its awaits). Mutating
@@ -911,6 +949,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function removeNodeSync(id: string): boolean {
     const existing = nodes.get(id)
     if (!existing) return false
+    invalidateAdjacency() // LOW-6 — only invalidate on an actual edge-set change (cascade)
     // cascade: remove any edge whose source/target references the removed node
     const cascaded: StoredEdge[] = []
     for (const e of edges.values()) {
@@ -941,7 +980,34 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function listEdges(): RagEdge[] {
     return [...edges.values()].filter((e) => !e.quarantined).map(toPublicEdge)
   }
+
+  // ---- adjacency (Unit V1) -------------------------------------------------
+  // Reads are lock-free (synchronous, no queue); they read the in-memory store
+  // + the lazily-rebuilt index. The index is built over the ACTIVE
+  // (non-quarantined) edges only — a quarantined edge is never returned.
+  function edgesFrom(source: string): RagEdge[] {
+    const s = requireNonEmptyString(source, 'rag edgesFrom', 'source')
+    return (edgesFromIndex(ensureAdjacencyIndex(), s) as StoredEdge[]).map(toPublicEdge)
+  }
+  function edgesTo(target: string): RagEdge[] {
+    const t = requireNonEmptyString(target, 'rag edgesTo', 'target')
+    return (edgesToIndex(ensureAdjacencyIndex(), t) as StoredEdge[]).map(toPublicEdge)
+  }
+  function edgesByKind(kind: RagEdgeKind): RagEdge[] {
+    if (typeof kind !== 'string' || !RAG_EDGE_KINDS.has(kind)) throw new Error('rag edgesByKind: invalid kind')
+    return (edgesByKindIndex(ensureAdjacencyIndex(), kind) as StoredEdge[]).map(toPublicEdge)
+  }
+  function edgesForDocument(documentId: string): RagEdge[] {
+    const d = requireNonEmptyString(documentId, 'rag edgesForDocument', 'documentId')
+    return (edgesForDocumentIndex(ensureAdjacencyIndex(), d) as StoredEdge[]).map(toPublicEdge)
+  }
+  function docHeadForDocument(documentId: string): string | undefined {
+    const d = requireNonEmptyString(documentId, 'rag docHeadForDocument', 'documentId')
+    return docHeadForDocumentIndex(ensureAdjacencyIndex(), d)
+  }
+
   function putEdgeSync(edge: RagEdge): RagEdge {
+    invalidateAdjacency()
     const shape = validateEdgeShape(edge)
     if (!shape.ok) throw new Error(`rag putEdge: ${shape.field} required/invalid`)
     const src = nodes.get(shape.edge.source)
@@ -986,6 +1052,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function removeEdgeSync(id: string): boolean {
     const existing = edges.get(id)
     if (!existing) return false
+    invalidateAdjacency() // LOW-6 — only invalidate on an actual edge-set change
     edges.delete(id)
     pushJournal({ kind: 'structural', op: { op: 'edge-remove', edge: toPublicEdge(existing) }, at: new Date().toISOString() })
     persist()
@@ -1131,6 +1198,9 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     // last op first); each op's inverse keeps its undo-application order.
     const inverse: BatchOp[] = []
     for (let i = perOpInverse.length - 1; i >= 0; i--) inverse.push(...perOpInverse[i])
+    // LOW-6 — only invalidate on a successful non-empty batch (a failed batch
+    // rolled back to the pre-batch state; an empty batch is a no-op).
+    invalidateAdjacency()
     // F3 — persist the APPLIED records as the forward ops (not the raw caller
     // ops), so redo() reproduces the exact applied record (createdAt preserved,
     // updatedAt refreshed, ownedNodeIds deduped) rather than the caller's raw
@@ -1174,6 +1244,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     if (cursor === 0) return null
     const entry = journal[cursor - 1]
     if (!applyInverse(entry)) return null // desync → do NOT advance the cursor
+    invalidateAdjacency() // LOW-6 — only invalidate on an actually-applied inverse
     cursor--
     persist()
     return { ...entry }
@@ -1186,6 +1257,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     if (cursor >= journal.length) return null
     const entry = journal[cursor]
     if (!applyForward(entry)) return null // desync → do NOT advance the cursor
+    invalidateAdjacency() // LOW-6 — only invalidate on an actually-applied forward
     cursor++
     persist()
     return { ...entry }
@@ -1205,5 +1277,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     undo, redo, undoDepth, redoDepth,
     enqueue,
     applyBatch,
+    edgesFrom, edgesTo, edgesByKind, edgesForDocument, docHeadForDocument,
   }
 }
+

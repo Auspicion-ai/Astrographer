@@ -65,6 +65,7 @@ function makeEdge(
 function makeContext(overrides: Partial<PaneContext> = {}): PaneContext {
   return {
     snapshot: { nodes: [], edges: [] },
+    docHeads: [],
     currentDocumentId: null,
     currentNodeId: null,
     backRefs: new Map<string, string[]>(),
@@ -98,17 +99,16 @@ function linkEntry(edgeId: string, source: string, target: string, scope: LinkEn
 // H1 — the §5.3 data-flow helpers survive a null store/ctx.
 // ===========================================================================
 describe('H1 — data-flow helpers survive a null store/ctx', () => {
-  it('deriveDocNavDocuments returns [] for a null / missing snapshot', () => {
+  it('deriveDocNavDocuments returns [] for a null / missing docHeads', () => {
     expect(deriveDocNavDocuments(null as never)).toEqual([])
-    expect(deriveDocNavDocuments({ nodes: null, edges: null } as never)).toEqual([])
-    expect(deriveDocNavDocuments({ nodes: [], edges: undefined } as never)).toEqual([])
+    expect(deriveDocNavDocuments(undefined as never)).toEqual([])
   })
 
-  it('docNavContent returns the "(no documents)" empty state for a null ctx / missing ctx.snapshot', () => {
+  it('docNavContent returns the "(no documents)" empty state for a null ctx / missing ctx.docHeads', () => {
     const empty = { type: 'p', content: '(no documents)' }
     expect(docNavContent(null as never)).toEqual(empty)
-    expect(docNavContent({ ...makeContext(), snapshot: null as never })).toEqual(empty)
-    expect(docNavContent({ ...makeContext(), snapshot: { nodes: undefined, edges: undefined } as never })).toEqual(empty)
+    expect(docNavContent({ ...makeContext(), docHeads: null as never })).toEqual(empty)
+    expect(docNavContent({ ...makeContext(), docHeads: undefined as never })).toEqual(empty)
   })
 
   it('crosslinksContent returns the empty-state sections for a null ctx / missing ctx.crosslinks (no throw)', () => {
@@ -250,35 +250,18 @@ describe('H4 — onChanged subscribers survive a throwing sibling + mid-iteratio
 // H6 — doc-nav dedupes repeated doc-head targets (first head wins).
 // ===========================================================================
 describe('H6 — doc-nav dedupes repeated doc-head targets', () => {
-  it('deriveDocNavDocuments emits ONE entry per documentId (first head wins) despite duplicate doc-head edges', () => {
-    const snapshot = {
-      nodes: [
-        makeNode('head-a', { content: 'Doc A' }),
-        makeNode('head-a2', { content: 'Doc A duplicate head' }),
-      ],
-      edges: [
-        makeEdge('e1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
-        makeEdge('e2', 'doc-head', 'head-a2', 'doc-a', { documentIds: ['doc-a'] }), // duplicate target
-      ],
-    }
-    const docs = deriveDocNavDocuments(snapshot)
+  it('deriveDocNavDocuments returns the docHeads list (already deduped by the IPC handler)', () => {
+    // The IPC handler dedupes by target (first head wins); the helper returns
+    // the list as-is.
+    const docHeads = [{ documentId: 'doc-a', title: 'Doc A' }]
+    const docs = deriveDocNavDocuments(docHeads)
     expect(docs).toHaveLength(1)
-    // First head wins → the title comes from the FIRST edge's source node.
     expect(docs[0]).toEqual({ documentId: 'doc-a', title: 'Doc A' })
   })
 
   it('docNavContent emits ONE li per documentId (no duplicate data-document-id)', () => {
     const ctx = makeContext({
-      snapshot: {
-        nodes: [
-          makeNode('head-a', { content: 'Doc A' }),
-          makeNode('head-a2', { content: 'Doc A duplicate head' }),
-        ],
-        edges: [
-          makeEdge('e1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
-          makeEdge('e2', 'doc-head', 'head-a2', 'doc-a', { documentIds: ['doc-a'] }),
-        ],
-      },
+      docHeads: [{ documentId: 'doc-a', title: 'Doc A' }],
     })
     const content = docNavContent(ctx)
     expect(content.type).toBe('ul')

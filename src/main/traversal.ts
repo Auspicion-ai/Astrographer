@@ -29,6 +29,7 @@
 //     double-materializes every section).
 //   - A RAG node's own `props` (e.g. `href`/`src` for `a`/`img`) are merged
 //     into the subtree root's props (`id` and `data-doc-head` take precedence).
+import { createSnapshotStore } from './adjacency.js'
 import type { RagStore, RagNode, RagEdge } from './rag-store.js'
 import { validateDocFlow } from './doc-flow.js'
 import { translateLegacy, renderProducingProcess, MarkdownAdapter } from 'provident-ssr'
@@ -100,15 +101,6 @@ export interface TraversalResult {
    *  RAG node is materialized in the current traversal. The renderer
    *  materializes the `Link`/`Anchor` from this wiring after `translateLegacy`. */
   crosslinks: CrosslinkWiring[]
-}
-
-/** True when the RAG node is a document head for the given document (a
- *  `doc-head` edge whose source is the node and whose documentIds include the
- *  document). */
-function isDocHead(ragId: string, documentId: string, edges: RagEdge[]): boolean {
-  return edges.some(
-    (e) => e.kind === 'doc-head' && e.source === ragId && e.documentIds?.includes(documentId),
-  )
 }
 
 /** Collect a translated node's subtree node ids (root-first, tree order),
@@ -218,6 +210,63 @@ function assignSubtreeRanges(
   return start + lineCount
 }
 
+/** The document's node set + its scoped edges — the SINGLE shared derivation
+ *  used by BOTH the scoped `buildTraversal` walk AND the `rag.get_document`
+ *  MCP tool (amendment 2). PURE. */
+export interface DocumentSubgraph {
+  /** The document's node ids: the doc root (documentId) + the sources/targets
+   *  of the edges scoped by documentId + their doc-children (transitively). */
+  docNodeIds: Set<string>
+  /** The document's edges: the doc-flow edges scoped by documentId + the
+   *  doc-child edges among the document's nodes. */
+  edges: RagEdge[]
+}
+
+/** The SINGLE shared derivation of a document's node set + its scoped edges
+ *  (amendment 2). Used by BOTH the scoped `buildTraversal` walk (§5.1 step 3)
+ *  and the `rag.get_document` MCP tool (§5.3) — neither re-derives the node set
+ *  inline. PURE — no Electron; reads through the `RagStore` interface
+ *  (SOURCE-SWITCHABLE). */
+export function computeDocumentSubgraph(store: RagStore, documentId: string): DocumentSubgraph {
+  if (store == null) throw new Error('computeDocumentSubgraph: store required')
+  if (typeof documentId !== 'string' || documentId === '') {
+    throw new Error('computeDocumentSubgraph: documentId must be a non-empty string')
+  }
+  const docNodeIds = new Set<string>([documentId])
+  // The doc-flow edges scoped by documentId. `edgesForDocument` returns the
+  // doc-flow edges scoped by documentId + ALL `doc-child` edges; the doc-child
+  // edges are handled by the transitive closure below (NOT added here — a
+  // doc-child edge's endpoints are only in the set when its source is already
+  // reachable, matching the current buildTraversal/rag.get_document closure).
+  for (const e of store.edgesForDocument(documentId)) {
+    if (e.kind === 'doc-child') continue
+    docNodeIds.add(e.source)
+    docNodeIds.add(e.target)
+  }
+  // Transitive `doc-child` closure: for each `doc-child` edge whose source is
+  // in docNodeIds (via edgesFrom filtered by kind), add the target; repeat
+  // until no change.
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const id of [...docNodeIds]) {
+      for (const e of store.edgesFrom(id)) {
+        if (e.kind === 'doc-child' && !docNodeIds.has(e.target)) {
+          docNodeIds.add(e.target)
+          changed = true
+        }
+      }
+    }
+  }
+  // The document's edges: the doc-flow edges scoped by documentId + the
+  // `doc-child` edges whose source AND target are both in docNodeIds.
+  const edges = store.edgesForDocument(documentId).filter((e) => {
+    if (e.kind === 'doc-child') return docNodeIds.has(e.source) && docNodeIds.has(e.target)
+    return true
+  })
+  return { docNodeIds, edges }
+}
+
 export function buildTraversal(input: TraversalInput): TraversalResult {
   if (
     input == null ||
@@ -243,30 +292,18 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
   const materialized = new Set<string>()
 
   for (const documentId of documentIds) {
-    // The current document's node set: the doc root + nodes referenced by its
-    // scoped doc-flow edges + their doc-children (transitively). Used for the
-    // fallback section set AND to scope the doc-child exclusion to THIS
-    // document (finding 3 — a node that is a doc-child target in another
-    // document must not be excluded here).
-    const docNodeIds = new Set<string>([documentId])
-    for (const e of edges) {
-      if (e.documentIds?.includes(documentId)) {
-        docNodeIds.add(e.source)
-        docNodeIds.add(e.target)
-      }
-    }
-    let changed = true
-    while (changed) {
-      changed = false
-      for (const e of edges) {
-        if (e.kind === 'doc-child' && docNodeIds.has(e.source) && !docNodeIds.has(e.target)) {
-          docNodeIds.add(e.target)
-          changed = true
-        }
-      }
-    }
+    // The current document's node set — the SINGLE shared derivation (amendment
+    // 2, §5.2). Used for the fallback section set AND to scope the doc-child
+    // exclusion to THIS document (finding 3 — a node that is a doc-child target
+    // in another document must not be excluded here).
+    const { docNodeIds } = computeDocumentSubgraph(store, documentId)
 
-    const verdict = validateDocFlow(nodes, edges, documentId)
+    // Scope the edges passed to validateDocFlow (amendment 7, §5.1 step 4):
+    // `edgesForDocument` returns the doc-flow edges scoped by documentId + ALL
+    // `doc-child` edges — EXACTLY the set `validateDocFlow` computes internally
+    // (Unit B §5.2 Finding 7) — so the pre-scoped call produces the SAME
+    // verdict as the current full-edge call.
+    const verdict = validateDocFlow(nodes, store.edgesForDocument(documentId), documentId)
     let sections: string[]
     let nestDocChildren: boolean
     if (verdict.ok) {
@@ -283,16 +320,26 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
     }
 
     // Build one RAG object's subtree: its content root + its doc-children's
-    // subtrees nested at their `order` positions.
-    const buildSubtree = (ragId: string): LegacyNodeData => {
+    // subtrees nested at their `order` positions. The doc-children are read via
+    // `edgesFrom(ragId)` filtered by `doc-child` (O(adjacency), §5.1 step 6).
+    // The `seen` set (per recursion path) breaks a `doc-child` cycle
+    // (defense-in-depth, §5.1 step 9 — the `validateDocFlow` `cycle` verdict
+    // already falls back to family pre-order, so this never throws).
+    const buildSubtree = (ragId: string, seen: Set<string>): LegacyNodeData => {
       materialized.add(ragId)
       const node = nodeById.get(ragId)!
       const children: LegacyNodeData[] = []
       if (nestDocChildren) {
-        const docChildren = edges
-          .filter((e) => e.kind === 'doc-child' && e.source === ragId)
+        const docChildren = store
+          .edgesFrom(ragId)
+          .filter((e) => e.kind === 'doc-child')
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        for (const dc of docChildren) children.push(buildSubtree(dc.target))
+        for (const dc of docChildren) {
+          if (seen.has(dc.target)) continue
+          seen.add(dc.target)
+          children.push(buildSubtree(dc.target, seen))
+          seen.delete(dc.target)
+        }
       }
       // Merge the RAG node's own props (e.g. `href`/`src` for `a`/`img`) into
       // the subtree root's props, with the stable authored `id`, the
@@ -306,7 +353,9 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         id: `rag-${ragId}`,
         'data-rag-node-id': ragId,
       }
-      if (isDocHead(ragId, documentId, edges)) props['data-doc-head'] = true
+      // isDocHead via docHeadForDocument (O(1), §5.1 step 7) — replacing the
+      // O(E) `isDocHead` scan.
+      if (store.docHeadForDocument(documentId) === ragId) props['data-doc-head'] = true
       return {
         type: node.type,
         props,
@@ -365,30 +414,36 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
     // section roles are treated as mutually exclusive; documented as known
     // behavior, not changed.
     for (const sectionId of sections) {
-      content.push({ content: [buildSubtree(sectionId)] })
+      content.push({ content: [buildSubtree(sectionId, new Set())] })
     }
 
     // MULTI-PARENT-DUPLICATE: a non-section, non-doc-child RAG node with ≥2
     // in-scope parent-child parents is materialized as a duplicate subtree per
-    // parent (distinct content roots sharing the RAG id via the map). NOTE
+    // parent (distinct content roots sharing the RAG id via the map). The
+    // parents are the sources of the `parent-child` edges whose target is the
+    // node (via `edgesTo`, §5.1 step 8) and whose source is a section. NOTE
     // (finding 4): a SINGLE-parent, non-section, non-doc-child RAG node is
     // NEVER materialized as its own content root — it is expected to be
     // reached via its parent's subtree or a later unit. Documented as known
     // behavior; not changed.
     const sectionSet = new Set(sections)
-    const docChildTargets = new Set(
-      edges.filter((e) => e.kind === 'doc-child' && docNodeIds.has(e.source)).map((e) => e.target),
-    )
+    const docChildTargets = new Set<string>()
+    for (const id of docNodeIds) {
+      for (const e of store.edgesFrom(id)) {
+        if (e.kind === 'doc-child') docChildTargets.add(e.target)
+      }
+    }
     for (const node of nodes) {
       if (node.id === documentId) continue
       if (sectionSet.has(node.id)) continue
       if (docChildTargets.has(node.id)) continue
-      const parents = edges
-        .filter((e) => e.kind === 'parent-child' && e.target === node.id && sectionSet.has(e.source))
+      const parents = store
+        .edgesTo(node.id)
+        .filter((e) => e.kind === 'parent-child' && sectionSet.has(e.source))
         .map((e) => e.source)
       if (parents.length >= 2) {
         for (let i = 0; i < parents.length; i++) {
-          content.push({ content: [buildSubtree(node.id)] })
+          content.push({ content: [buildSubtree(node.id, new Set())] })
         }
       }
     }
@@ -485,9 +540,11 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
 export function rebuildBackRefs(nodes: RagNode[], edges: RagEdge[], zoneName: string): Map<string, string[]> {
   const documentIds = [...new Set(edges.filter((e) => e.kind === 'doc-head').map((e) => e.target))]
   if (documentIds.length === 0) return new Map<string, string[]>()
-  // buildTraversal only reads listNodes()/listEdges() — a minimal read-only
-  // adapter over the snapshot satisfies the RagStore interface.
-  const store = { listNodes: () => nodes, listEdges: () => edges } as unknown as RagStore
+  // The scoped walk reads the adjacency methods (edgesForDocument/edgesFrom/
+  // edgesTo/docHeadForDocument), so the snapshot adapter MUST be
+  // `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw.
+  const store = createSnapshotStore(nodes, edges)
   const result = buildTraversal({ store, documentIds, zoneName })
   return result.backRefs
 }

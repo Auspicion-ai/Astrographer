@@ -399,7 +399,7 @@ uses `zoneName:'main'` (NO sidebar producer), `envelopeWithSidebar` uses
 ### D5 (H6). `docNavContent` dedupes duplicate doc-head targets
 - **Setup:** a corrupted store with TWO `doc-head` edges to the SAME document
   (`doc-a`), from different source nodes.
-- **Ops:** `deriveDocNavDocuments(snapshot)` + `docNavContent(ctx)`.
+- **Ops:** `deriveDocNavDocuments(docHeads)` + `docNavContent(ctx)`.
 - **Expected:** ONE document entry (`doc-a`, first head wins) and ONE `li` —
   no duplicate `data-document-id` entries.
 

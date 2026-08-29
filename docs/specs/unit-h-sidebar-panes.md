@@ -226,9 +226,13 @@ export type PaneScope = 'app-graph' | 'operator'
  *  supplies it. */
 export interface PaneContext {
   /** The current RAG store snapshot (Unit A §5.2 — nodes + edges), fetched over
-   *  the `rag-snapshot` IPC. The doc-nav pane derives the document list from the
-   *  `doc-head` edges. */
+   *  the `rag-snapshot` IPC. RETAINED for the re-derive + the other panes; the
+   *  doc-nav pane reads `docHeads` (Unit V3). */
   snapshot: { nodes: RagNode[]; edges: RagEdge[] }
+  /** Unit V3 — the document list (the `doc-head` edges' targets + the head node
+   *  content), fetched over the `rag-doc-heads` IPC. The doc-nav pane reads
+   *  this. */
+  docHeads: Array<{ documentId: string; title: string }> | null
   /** The current document root id (the single-document view). null if none. */
   currentDocumentId: string | null
   /** The currently-selected RAG node id (the crosslink pane's focus node). */
@@ -452,17 +456,17 @@ authored into the app-graph envelope (§5.2) → MCP-visible (§5.6).
 
 | Pane id | Title | Scope | Data source | Editable? |
 | --- | --- | --- | --- | --- |
-| `doc-nav` | "Documents" | `app-graph` | `ctx.snapshot` (the Unit A store's `doc-head` edges) | read-only |
+| `doc-nav` | "Documents" | `app-graph` | `ctx.docHeads` (the `rag-doc-heads` IPC — Unit V3) | read-only |
 | `crosslinks` | "Links" | `app-graph` | `ctx.crosslinks` (Unit G wiring) + the `rag-backlinks` IPC (Unit G enumeration) | read-only |
 | `search` | "Search" | `app-graph` | the `rag-query` IPC (Unit E retrieval) | read-only (the input is a UI control; it never edits the store) |
 
 **The `doc-nav` pane (document navigation):**
 
-- **Data:** the store's documents, derived from `ctx.snapshot.edges` where
-  `edge.kind === 'doc-head'`. Each document = the `doc-head` edge's `target`
-  (the document root id); its title = the `doc-head` edge's SOURCE node's
-  `content` (the document head — from `ctx.snapshot.nodes`). Sorted by document
-  root id (lexicographic ascending, deterministic).
+- **Data:** the store's documents, derived from `ctx.docHeads` (the `rag-doc-heads`
+  IPC — Unit V3). Each document = the `doc-head` edge's `target` (the document
+  root id); its title = the `doc-head` edge's SOURCE node's `content` (the
+  document head). Sorted by document root id (lexicographic ascending,
+  deterministic).
 - **Render:** a `ul` of `li` entries, one per document, each `li` carrying
   `props['data-document-id'] = <document root id>`. The current document's `li`
   carries `props['data-current'] = 'true'`. Empty store (no `doc-head` edges) →
@@ -600,14 +604,15 @@ form-control editing model (§5.6).
 
 | Pane | Scope | Read path | Write path | Editable? |
 | --- | --- | --- | --- | --- |
-| `doc-nav` | app-graph | `ctx.snapshot` (via `bridge.rag.snapshot()`) | none (selection → re-traversal, not a store write) | read-only |
+| `doc-nav` | app-graph | `ctx.docHeads` (via `bridge.rag.docHeads()`) | none (selection → re-traversal, not a store write) | read-only |
 | `crosslinks` | app-graph | `ctx.crosslinks` (Unit G wiring) + `bridge.rag.backlinks(currentNodeId)` | none | read-only |
 | `search` | app-graph | `bridge.rag.query(query)` (Unit E engine) | none (a query, never a store write) | read-only (input is a UI control) |
 | `settings` | operator | the IPC bridge (`window.provident.*` operator channels) | the IPC bridge (operator-owned settings; never the RAG `edit.*` path) | operator-editable |
 
-- **`doc-nav`:** reads the Unit A store's documents over the `rag-snapshot` IPC
-  (the renderer has no store access — SINGLE-WRITER-STORE; the snapshot is a
-  read-only copy). The document list is derived from the `doc-head` edges'
+- **`doc-nav`:** reads the document list over the `rag-doc-heads` IPC
+  (`bridge.rag.docHeads()` → `RagDocHeadsPayload`, the `doc-head` edges' targets
+  + the head node content — Unit V3; the renderer has no store access —
+  SINGLE-WRITER-STORE). The document list is derived from the `doc-head` edges'
   targets. Selecting a document triggers a re-traversal with the selected
   document's root id as the single `documentIds` entry (the single-document view
   switch). The pane is read-only — it never writes to the store.
@@ -883,8 +888,8 @@ export class SidebarPanes {
 - **Registry methods:** 9 (`register`, `get`, `list`, `listByScope`, `isEnabled`,
   `enable`, `disable`, `setEnabled`, `onChanged`).
 - **`PaneDefinition` fields:** 4 (`id`, `title`, `scope`, `render`).
-- **`PaneContext` fields:** 5 (`snapshot`, `currentDocumentId`, `currentNodeId`,
-  `backRefs`, `crosslinks`).
+- **`PaneContext` fields:** 6 (`snapshot`, `docHeads` (Unit V3), `currentDocumentId`,
+  `currentNodeId`, `backRefs`, `crosslinks`).
 - **Assembly functions:** 3 (`paneSubtreeRoot`, `assembleAppGraphEnvelope`,
   `buildOperatorEnvelope`).
 - **Sidebar zone:** 1 constant (`SIDEBAR_ZONE = 'sidebar'`).

@@ -67,7 +67,6 @@ export function createTemplateEditorPane(): PaneDefinition<TemplatePaneContext> 
           { type: 'input', props: { id: 'template-zone-input' } },
           { type: 'button', content: 'Add zone', handlers: [{ name: 'template-zone-add', event: 'click' }] },
           { type: 'button', content: 'Reset', handlers: [{ name: 'template-reset', event: 'click' }] },
-          { type: 'button', content: 'Save', handlers: [{ name: 'template-save', event: 'click' }] },
         ],
       }
     },

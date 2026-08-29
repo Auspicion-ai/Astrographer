@@ -21,6 +21,12 @@ export interface PaneContext {
    *  snapshot guard: consumers must survive a null snapshot → the "(no
    *  documents)" empty state, never a TypeError). */
   snapshot: RagSnapshotPayload | null
+  /** Unit V3 — the document list (the `doc-head` edges' targets + the head node
+   *  content), fetched over the `rag-doc-heads` IPC. The doc-nav pane reads this.
+   *  null before the first boot/re-derive (M1 — the empty-state guard: consumers
+   *  must survive a null `docHeads` → the "(no documents)" empty state, never a
+   *  TypeError). */
+  docHeads: Array<{ documentId: string; title: string }> | null
   /** The current document root id (the single-document view). null if none. */
   currentDocumentId: string | null
   /** The currently-selected RAG node id (the crosslink pane's focus node). */

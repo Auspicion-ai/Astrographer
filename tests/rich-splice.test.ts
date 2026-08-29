@@ -35,7 +35,8 @@ import { createEditController, type EditController } from '../src/renderer/edit-
 import { buildTraversal } from '../src/main/traversal.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../src/main/template-store.js'
 import type { RagSnapshotPayload, EditingMode } from '../src/shared/types.js'
-import type { RagNodeChild } from '../src/main/rag-store.js'
+import type { RagNodeChild, RagNode, RagEdge } from '../src/main/rag-store.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
 import { SidebarPanes, type SidebarPanesOptions } from '../src/renderer/sidebar-panes.js'
 
 // ===========================================================================
@@ -79,7 +80,11 @@ function makeEdge(
 /** Build a real traversal envelope (Unit C `buildTraversal`) over the given
  *  snapshot. `documentIds = ['doc']` (the doc root). */
 function traversalEnv(nodes: RagSnapshotPayload['nodes'], edges: RagSnapshotPayload['edges']): LegacyInitialData {
-  const store = { listNodes: () => nodes, listEdges: () => edges } as never
+  // The scoped walk reads the adjacency methods, so the snapshot adapter MUST
+  // be `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw. The snapshot's `type` fields are `string`; the cast is
+  // structural-only.
+  const store = createSnapshotStore(nodes as RagNode[], edges as RagEdge[])
   return buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' }).envelope
 }
 

@@ -21,6 +21,42 @@ one-way snapshot).
 
 ## OPEN
 
+### Scoped-load fix — PROPOSAL GATE PROCEED-WITH-AMENDMENTS; Unit 1 (store adjacency) DONE, Unit 2 (scoped traversal + MCP refactor) DONE, Unit 3 (doc-heads doc-nav) DONE (2026-08-29, user go-ahead given)
+
+A user-reported load bug: "Application is trying to parse entire graph and
+timing out. Correct behavior is that the document list only needs to find the
+document heads, and the document rendering only needs to walk the graph based
+on the document links from the head." The proposal gate is **PROCEED-WITH-
+AMENDMENTS** (validity VALID-WITH-AMENDMENTS, critique SOUND-WITH-AMENDMENTS,
+architecture SOUND-WITH-AMENDMENTS, change-analysis PROCEED-WITH-AMENDMENTS —
+see `docs/specs/load-bug-scoped-traversal-review.md`). **Unit 1 (store
+adjacency) is DONE (2026-08-29)** — the five `RagStore` adjacency methods
+(`edgesFrom`/`edgesTo`/`edgesByKind`/`edgesForDocument`/`docHeadForDocument`),
+the lazy O(E) index + invalidation across the 6 mutation paths, the shared PURE
+adjacency core (`buildAdjacencyIndex` + the 5 query helpers), the quarantine
+exclusion, and the read-only `createSnapshotStore(nodes, edges)` adapter have
+landed (the PURE core + `createSnapshotStore` in `src/main/adjacency.ts`,
+re-exported by `src/main/rag-store.ts`; spec
+`docs/specs/unit-v1-store-adjacency.md`; greens
+`docs/specs/unit-v1-store-adjacency-greens.md` 40/40). **Unit 2 (scoped traversal
++ MCP refactor) is DONE (2026-08-29)** — see the Unit V2 DONE row. **Unit 3
+(doc-heads doc-nav) is DONE (2026-08-29)** — see the Unit V3 DONE row.
+The fix is host-side (`src/`), scoped to
+BOTH the document list AND document rendering. **9 amendments** (pin the
+`materialized`-set equivalence; single `computeDocumentSubgraph` source; the
+`createSnapshotStore` shares the JSON store's adjacency implementation; the two
+snapshot adapters implement the new methods; `selectDocument` validates against
+the doc-heads list; preserve the `rag.get_document` return contract; pin the
+`validateDocFlow` pre-scoping; reconcile the greens docs + trackers (RCA-6);
+document the snapshot-transfer limitation). **3-unit split (RCA-2, each its own
+red→green→adversarial→greens→doc-review cycle):** Unit 1 store adjacency
+(`rag-store.ts` + `createSnapshotStore`); Unit 2 scoped traversal + MCP refactor
+(`traversal.ts` + `mcp-server.ts` + the edit-surface change — highest risk);
+Unit 3 doc-heads doc-nav (`shared/types.ts` + `preload.ts` + `main.ts` +
+`pane-graph.ts` + `sidebar-panes.ts`). Units 2 and 3 depend only on Unit 1, so
+they can run in parallel after it. Decision recorded in `docs/decisions.md`
+(SCOPED-LOAD, ACTIVE); the snapshot-transfer follow-up in `docs/pending.md`.
+
 ### Editing-mode toggle slice — COMPLETE (all 5 units done), AWAITING the user's commit (2026-08-28, execution order U2→U3→U1→U5→U4)
 
 The editing-mode toggle proposal (the "demo textarea vs rich-text document
@@ -137,6 +173,123 @@ in the doc-nav pane, and `get_markdown` carries the same content. Trio green
 _(none — Units A–T are implemented.)_
 
 ## DONE
+
+- **Unit V1 — store adjacency (2026-08-29).** The SCOPED-LOAD fix's Unit 1
+  (see `docs/specs/load-bug-scoped-traversal-review.md` §6). Added to
+  `src/main/rag-store.ts`: the shared PURE adjacency core (`buildAdjacencyIndex`
+  + the 5 query helpers `edgesFromIndex`/`edgesToIndex`/`edgesByKindIndex`/
+  `edgesForDocumentIndex`/`docHeadForDocumentIndex`), the 5 new `RagStore`
+  interface methods (`edgesFrom`/`edgesTo`/`edgesByKind`/`edgesForDocument`/
+  `docHeadForDocument`), the lazy O(E) index + invalidation across all 6 mutation
+  paths, the quarantine exclusion, and `createSnapshotStore(nodes, edges)` (the
+  read-only adapter delegating to the SAME pure adjacency core). **TestWriter
+  red: 34 failing (method does not exist)** → **Implementer green: 34/34** +
+  the existing `rag-store.test.ts` 23/23 (no regression). **Adversarial: 3 MED +
+  3 LOW host findings** (MED-1 snapshot aliasing, MED-2 duplicate `documentIds`
+  parity, MED-3 doc-child-only scoping, LOW-4 throw-message divergence, LOW-5
+  dangling doc-head source, LOW-6 no-op invalidation) — all fixed + regression-
+  tested (`tests/unit-v1-store-adjacency-adversarial.test.ts`, 7/7). **Blind
+  greens: 40/40** (`docs/specs/unit-v1-store-adjacency-greens.md`). **Live
+  scenarios: PARKED** (the adjacency surface is internal — consumed by Units
+  V2/V3; `docs/specs/unit-v1-store-adjacency-live-pending-battery.md`). **Doc
+  review:** `archive/reviews/2026-08-29-unit-v1-store-adjacency-doc-review.md`
+  (repointed the wrong "Unit C §5.9 (`rebuildBackRefs`)" citations in
+  `unit-k-sidebar-panes-host.md` + `unit-v2-scoped-traversal-mcp.md` to
+  `src/main/traversal.ts:485`). **Trio: 1865 pass / 37 skip, typecheck + build
+  clean.** Decisions ADJACENCY-INDEXED / SHARED-ADJACENCY-CORE /
+  READ-ONLY-SNAPSHOT-ADAPTER added to `docs/decisions.md`.
+
+- **Unit V2 — scoped traversal + MCP refactor (2026-08-29).** The SCOPED-LOAD
+  fix's Unit 2 (see `docs/specs/load-bug-scoped-traversal-review.md` §6). The
+  scoped `buildTraversal` walk in `src/main/traversal.ts` (per-document
+  `computeDocumentSubgraph` node set + `edgesForDocument` pre-scoped
+  `validateDocFlow` + `edgesFrom`-filtered doc-child subtrees +
+  `docHeadForDocument` O(1) doc-head marker + `edgesTo`-filtered multi-parent
+  duplicates + the `seen`-set defense-in-depth cycle guard + the full-edge
+  outgoing-only crosslink wiring), the shared `computeDocumentSubgraph(store,
+  documentId)` helper (the SINGLE derivation used by BOTH the walk AND the
+  `rag.get_document` MCP tool), the `rag.get_document` refactor in
+  `src/main/mcp-server.ts` (preserving the `{ documentId, nodes, edges }`
+  contract), the `rebuildBackRefs` inline-adapter replacement via
+  `createSnapshotStore`, AND the renderer's `buildTraversalEnvelope` adapter
+  (`sidebar-panes.ts:831`) replaced via `createSnapshotStore` (amendment 4). The
+  accepted edit-surface change (amendment 1): the scoped walk's `materialized`
+  set is the reachable-from-head set, so `backRefs`/`crosslinks` drop nodes not
+  reachable from the head. **TestWriter red: 24 failing** (the
+  `computeDocumentSubgraph` export + the `DocumentSubgraph` type do not exist;
+  the adjacency-method enforcement does not throw) → **Implementer green: 24/24**
+  (`tests/unit-v2-scoped-traversal-mcp.test.ts`). **Adversarial: HOST-2..HOST-8
+  host findings** (HOST-2 cross-document shared-fixture equivalence, HOST-3
+  `computeDocumentSubgraph` malformed-input cases, HOST-4 the edit-surface
+  shrink drops a node the OLD walk materializes, HOST-5 the doc-child cycle
+  terminates via the family-pre-order fallback, HOST-6 `rag.get_document` with
+  an unknown id → `{ documentId, nodes: [], edges: [] }`, HOST-8
+  `rebuildBackRefs([], [], 'main')` → empty `Map`) — all fixed + regression-tested
+  (`tests/unit-v2-scoped-traversal-mcp-adversarial.test.ts`, 9/9); HOST-1
+  (tracker staleness) + HOST-7 (informational) handled by the doc-review. **Blind
+  greens: 32/32** (`docs/specs/unit-v2-scoped-traversal-mcp-greens.md`). **Trio:
+  full suite 1898 pass / 0 fail, typecheck + build clean.** Decisions
+  SCOPED-WALK / SINGLE-DOCUMENT-SUBGRAPH / MATERIALIZED-SHRINK added to
+  `docs/decisions.md`; the snapshot-transfer limitation noted in `docs/pending.md`
+  (amendment 9).
+
+- **Unit V3 — doc-heads doc-nav (2026-08-29).** The SCOPED-LOAD fix's Unit 3
+  (see `docs/specs/load-bug-scoped-traversal-review.md` §6). The lighter
+  `rag-doc-heads` IPC (`IPC_RAG_DOC_HEADS` + `RagDocHeadsPayload` in
+  `src/shared/types.ts`, the shared `handleRagDocHeadsIpc(store)` handler in
+  `src/main/mcp-server.ts`, the `ipcMain.handle(IPC_RAG_DOC_HEADS, ...)` in
+  `src/main/main.ts`, the `bridge.rag.docHeads()` in `src/main/preload.ts`)
+  returns `{ documents: [{ documentId, title }] }` from the `doc-head` edges +
+  the head node content — a strict subset of the snapshot. The doc-nav switched
+  from `PaneContext.snapshot` to `ctx.docHeads` (`deriveDocNavDocuments`/
+  `docNavContent` in `src/renderer/pane-graph.ts` read `ctx.docHeads`; the
+  `PaneContext.docHeads` field added in `src/renderer/pane-registry.ts`), the
+  host gained a `lastDocHeads` cache (boot/re-derive fetch `bridge.rag.docHeads()`;
+  `buildContext` populates `ctx.docHeads`), and `selectDocument` validates
+  against the doc-heads list instead of `lastSnapshot.edges` (amendment 5). The
+  `RagSnapshotPayload` + the `rag-snapshot` IPC are PRESERVED for
+  `buildTraversal` (amendment 9). **TestWriter red: 24 failing / 1 skip** (the
+  `IPC_RAG_DOC_HEADS`/`RagDocHeadsPayload`/`handleRagDocHeadsIpc`/
+  `bridge.rag.docHeads`/`PaneContext.docHeads`/`lastDocHeads` absent + the
+  doc-nav helpers still reading `ctx.snapshot` — method-does-not-exist +
+  type-level gaps) → **Implementer green: 24 pass / 1 skip**
+  (`tests/unit-v3-doc-heads-docnav.test.ts`; the 1 skip is the preload bridge
+  method, verified by code review). **Adversarial: MED-1 + LOW-2..LOW-6 host
+  findings** (MED-1 `handleRagDocHeadsIpc` skips a malformed `doc-head` target,
+  LOW-2 non-array `docHeads` → `[]`, LOW-3 defensive sort/dedupe restored,
+  LOW-4 missing `title` → `''`, LOW-5 `reDerive` commits `lastSnapshot` +
+  `lastDocHeads` together, LOW-6 null `lastDocHeads` no-ops) — all fixed +
+  regression-tested (`tests/unit-v3-doc-heads-docnav-adversarial.test.ts`, 12/12).
+  **Blind greens: 36/36** (`docs/specs/unit-v3-doc-heads-docnav-greens.md`).
+  **Trio: full suite 1966 pass / 0 fail, typecheck + build clean.** Decisions
+  DOC-HEADS-IPC / DOC-NAV-DOCHEADS / HOST-DOCHEADS-CACHE / RAG-SNAPSHOT-PRESERVED
+  added to `docs/decisions.md`; the amendment-8 greens/tracker reconciliation
+  (the stale `deriveDocNavDocuments(snapshot)`/`ctx.snapshot` doc-nav references
+  in `unit-h-sidebar-panes-greens.md`/`unit-h-sidebar-panes.md`/
+  `unit-k-sidebar-panes-host.md`) done in this pass.
+
+- **Live-app fixes — the editing-mode slice's 3 reported UI issues + the dead
+  Save button (2026-08-28).** After the slice landed, the user reported 3 live
+  issues; all fixed + verified (trio 1784 pass / 37 skip, typecheck + build
+  clean):
+  1. **Settings rendered at the bottom, not as a pane** — the operator panes
+     (`#operator-panes`) are a separate graph scope (never MCP-visible), so they
+     can't live in the app-graph sidebar; styled the container as a proper
+     full-width card/pane (light + dark) in `src/renderer/index.html`.
+  2. **Clicking the editing-mode toggle appended a new settings element** — a
+     regression from the U1 `refresh→mountOperator` change: the engine's
+     `DomAdapter.endBatch` APPENDS roots and never clears the mount, so each
+     re-derive appended a duplicate. Fixed in `src/renderer/sidebar-panes.ts`
+     (`mountOperator` now clears the container first, robustly across the real
+     DOM + the test dom-shim).
+  3. **Add-zone / reset / save buttons did nothing** — Add-zone read the button's
+     own empty `value` prop; fixed to read the `template-zone-input`'s DOM value
+     (UI) or a dispatch arg (MCP). Reset was already wired. Save was a documented
+     no-op (M15 — the template is auto-committed, nothing to save); the dead
+     Save button is REMOVED from the pane (decision
+     TEMPLATE-SAVE-BUTTON-REMOVED; `src/renderer/template-pane.ts` + the Unit I
+     spec + tests updated). **Verified live** via the MCP endpoint: Add-zone
+     adds a zone, Reset restores it, the Save button is gone.
 
 - **Unit U4 — the contenteditable rich-text editor (handlers + bridge +
   discriminated `CaretState` + IME + re-derive restore) (2026-08-28).** The

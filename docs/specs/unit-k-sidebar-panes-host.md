@@ -156,10 +156,10 @@ PACKAGE findings, so none are catalogued in `docs/defects.md`/`docs/HANDOFF.md`.
 | F2 | MED (security) | The M13 handler gate read a boot-time-cached `this.security`, so a group turned OFF after boot stayed fail-OPEN. | **RESOLVED (partial)** — the cache is refreshed on each re-derive; the handlers stay synchronous (per the MCP/UI-equivalence test contract), so a security change that does not coincide with a re-derive is honored on the next re-derive. |
 | F3 | MED/HIGH | A fail-closed template gate (`code` OFF) called `markDirty` before the gate and never `clearDirty`, leaving the template-editor dirty flag set forever and freezing the re-derive queue. | **RESOLVED** — the gate now runs BEFORE `markDirty`, so a gated-off handler never leaves a permanent dirty flag. |
 | F4 | MED | The operator-settings `topK` was ignored; the search pane hardcoded `5`. | **RESOLVED** — `submitQuery` uses `this.lastOperatorSettings?.topK ?? 5`. |
-| F5 | LOW/MED | `reDerive` double-loads the app graph (step 6 `loadAppGraph` + step 7 `refresh` both re-load). Spec-mandated; wasteful but not a correctness bug. | **KNOWN (LOW)** — recorded, not fixed (spec pins both steps). |
+| F5 | LOW/MED | `reDerive` double-loads the app graph (step 7 `loadAppGraph` + step 8 `refresh` both re-load). Spec-mandated; wasteful but not a correctness bug. | **KNOWN (LOW)** — recorded, not fixed (spec pins both steps). |
 | F6 | LOW | A `rag-store-changed`/`template-changed` broadcast during `boot()`'s async fetches is missed (subscriptions installed at the end of boot). | **KNOWN (LOW)** — recorded; fixing risks a boot/reDerive race. |
 | F7 | MED | The search re-render (`submitQuery` → `loadAppGraph`) bypassed the dirty-edit guard, clobbering an in-progress edit. | **RESOLVED** — the re-load is skipped while `editController.anyDirty()`. |
-| F8 | LOW/MED | `selectDocument` accepted an arbitrary document id, re-deriving with a phantom `documentIds`. | **RESOLVED** — the id is validated against the snapshot's `doc-head` targets. |
+| F8 | LOW/MED | `selectDocument` accepted an arbitrary document id, re-deriving with a phantom `documentIds`. | **RESOLVED** — the id is validated against the doc-heads list (amendment 5, Unit V3 — `lastDocHeads`, not `lastSnapshot.edges`). |
 | F9 | LOW | `operatorSet` re-mounts the operator scope on every change, accumulating orphaned scopes. | **KNOWN (LOW)** — recorded, not fixed (perf/leak only). |
 | F10 | LOW | `handleOperatorEvent` dispatched a malformed `''` event on a null/undefined DOM event. | **RESOLVED** — a null/undefined event is a no-op. |
 | F11 | LOW | `deriveDocumentIds` threw on a malformed snapshot (no `edges`); `recomputeBackRefs` double-translates the envelope. | **RESOLVED (guard)** — `snapshot?.edges ?? []`; the double-translate is accepted as LOW. |
@@ -179,8 +179,8 @@ returned **PROCEED-WITH-AMENDMENTS**. The consolidated verdicts:
 The consolidated amendments (17 MUST-FIX + 2 SHOULD-FIX) are folded into the
 contract below. Each is cross-referenced to the section that resolves it:
 
-- **M1 — empty-snapshot guard + empty-store envelope** (§5.1 boot step 5, §5.2
-  re-derive step 3): the host SKIPS `buildTraversal` when `documentIds` is empty
+- **M1 — empty-snapshot guard + empty-store envelope** (§5.1 boot step 6, §5.2
+  re-derive step 4): the host SKIPS `buildTraversal` when `documentIds` is empty
   (mirroring `rebuildBackRefs`'s empty-map guard at `traversal.ts:431`), because
   `buildTraversal` throws `'traversal: store/documentIds/zoneName required'` on an
   empty array (`traversal.ts:224`). The empty-store envelope is pinned in §5.1.
@@ -201,11 +201,12 @@ contract below. Each is cross-referenced to the section that resolves it:
   host exposes setters the handler bodies reach via the
   `window.provident.sidebar` bridge (M2). The host determines which document is
   loaded + displayed.
-- **M6 — single-document view vs re-derive `documentIds`** (§5.2 step 3): the
+- **M6 — single-document view vs re-derive `documentIds`** (§5.2 step 4): the
   current-document state is the re-derive's `documentIds` source (a selected
   document → `[<root id>]`; none → all `doc-head` targets).
-- **M7 — `buildContext` snapshot/crosslinks sources** (§5.6): the host retains
-  `lastSnapshot`/`lastCrosslinks` (alongside `lastBacklinks`/`lastQueryResult`).
+- **M7 — `buildContext` snapshot/doc-heads/crosslinks sources** (§5.6): the host retains
+  `lastSnapshot`/`lastDocHeads` (Unit V3)/`lastCrosslinks` (alongside
+  `lastBacklinks`/`lastQueryResult`).
 - **M8 — `buildTemplateContext` `targetedZones` source** (§5.6): the host pins a
   host-side constant/default (`['main']`) — `bridge.template.get()` returns
   `{ source, template }` only.
@@ -225,13 +226,14 @@ contract below. Each is cross-referenced to the section that resolves it:
   host-side gate on the pane handlers checks `bridge.security.get()` before the
   IPC, fail-closed when the group is off. Does NOT change Unit J's security model
   or the five-seam gate.
-- **M14 — backRefs ↔ loaded-graph node-id correspondence** (§5.1 step 8, §5.2
-  step 6): backRefs are recomputed from the ASSEMBLED envelope's translate (after
+- **M14 — backRefs ↔ loaded-graph node-id correspondence** (§5.1 step 9, §5.2
+  step 7): backRefs are recomputed from the ASSEMBLED envelope's translate (after
   `assembleAppGraphEnvelope`, before `loadEnvelope`), NOT the traversal
   envelope's.
 - **M15 — `template-save` `editedTemplate` phantom** (§5.3): `template-save` is
   DROPPED as redundant with the zone add/remove/reset handlers (the pane renders
-  no editable template body).
+  no editable template body). The dead Save button is REMOVED from the pane
+  (Unit I) — the pane authors only Add-zone + Reset.
 - **M16 — template-editor dirty-edit integration** (§5.3): the template-editor
   handlers call `markDirty` + route through the dirty-edit guard before the direct
   IPC commits.
@@ -316,26 +318,31 @@ bootstrap. The `SidebarPanes` host owns the boot sequence.
 3. **Fetch the RAG snapshot** (`bridge.rag.snapshot()` → `RagSnapshotPayload`).
    The renderer has no store access (SINGLE-WRITER-STORE); the snapshot is a
    read-only copy.
-4. **Fetch the stored template** (`bridge.template.get()` →
+4. **Fetch the doc-heads** (`bridge.rag.docHeads()` → `RagDocHeadsPayload` —
+   Unit V3). The doc-nav's data source (the `doc-head` edges' targets + the head
+   node content). A bridge error ABORTS the boot (the placeholder envelope stays
+   rendered; caught + logged, never a crash — the same discipline as the
+   snapshot fetch).
+5. **Fetch the stored template** (`bridge.template.get()` →
    `{ source, template }`). The stored template is the envelope's `template`
    (Unit I §5.1); the default is `DEFAULT_CONTENT_WINDOW_TEMPLATE`.
-5. **Derive the document ids** from the snapshot's `doc-head` edges' targets
+6. **Derive the document ids** from the snapshot's `doc-head` edges' targets
    (the document roots). An empty snapshot (no `doc-head` edges → no documents)
    → an empty `documentIds` array. **Empty-snapshot guard (M1):** when
    `documentIds` is empty the host SKIPS `buildTraversal` (it would throw
    `'traversal: store/documentIds/zoneName required'` on an empty array —
    `traversal.ts:224`), mirrors `rebuildBackRefs`'s empty-map guard
    (`traversal.ts:431`), and uses the **empty-store envelope** (pinned below).
-6. **`buildTraversal`** (ONLY when `documentIds` is non-empty) with the snapshot
+7. **`buildTraversal`** (ONLY when `documentIds` is non-empty) with the snapshot
    adapter + the derived document ids + the zone name (`'main'`) + the stored
    template:
    `buildTraversal({ store: <snapshot adapter>, documentIds, zoneName: 'main', template: storedTemplate })`
    → the `TraversalResult` (envelope + backRefs + lineMap + crosslinks).
-7. **Repopulate the backRefs map** (the SOLE authoritative carrier, Unit C §5.3):
+8. **Repopulate the backRefs map** (the SOLE authoritative carrier, Unit C §5.3):
    clear + repopulate the host's `backRefs` Map (the SAME reference the edit
    controller holds) from `traversal.backRefs` (non-empty case) or clear it
    (empty-store case). This makes the re-traversal REAL (closes L2).
-8. **`loadAppGraph(runtime, traversalEnvelope)`** (S18 — DELEGATION, §5.6): the
+9. **`loadAppGraph(runtime, traversalEnvelope)`** (S18 — DELEGATION, §5.6): the
    host delegates the assembly + load to `loadAppGraph` (never re-implements it
    inline). `loadAppGraph` (a) calls
    `assembleAppGraphEnvelope({ traversalEnvelope, registry, ctx, sidebarZone })`
@@ -347,10 +354,10 @@ bootstrap. The `SidebarPanes` host owns the boot sequence.
    `runtime.loadEnvelope(result.envelope)` — the app Runtime renders the
    pane-inclusive envelope. The app-graph panes are now MCP-visible by
    construction (§5.5).
-9. **`mountOperator()`** (§5.4): build the operator envelope via
+10. **`mountOperator()`** (§5.4): build the operator envelope via
    `buildOperatorEnvelope` + render it in a fresh `createIsolatedScope()`
    GraphScope (own Supervisor + own DomAdapter → the operator mount).
-10. **Subscribe to the re-derive triggers** (§5.2): `bridge.edit.onRagStoreChanged`
+11. **Subscribe to the re-derive triggers** (§5.2): `bridge.edit.onRagStoreChanged`
     + `bridge.template.onTemplateChanged`.
 
 **The empty-store envelope (M1, pinned):** when `documentIds` is empty the host
@@ -365,10 +372,10 @@ entry step 1).
 **The snapshot adapter (pinned):** the host builds a minimal read-only adapter
 over the snapshot that satisfies the `RagStore` interface:
 `{ listNodes: () => snapshot.nodes, listEdges: () => snapshot.edges }` (the same
-adapter `rebuildBackRefs` uses — Unit C §5.9). `buildTraversal` only reads
-`listNodes()`/`listEdges()`.
+adapter `rebuildBackRefs` uses — `src/main/traversal.ts:490`). `buildTraversal`
+only reads `listNodes()`/`listEdges()`.
 
-**The document-id derivation (pinned):** `documentIds = [...new Set(snapshot.edges.filter(e => e.kind === 'doc-head').map(e => e.target))]` — the `doc-head` edges' targets, deduped, in store order. This is the SAME derivation `rebuildBackRefs` uses (Unit C §5.9).
+**The document-id derivation (pinned):** `documentIds = [...new Set(snapshot.edges.filter(e => e.kind === 'doc-head').map(e => e.target))]` — the `doc-head` edges' targets, deduped, in store order. This is the SAME derivation `rebuildBackRefs` uses (`src/main/traversal.ts:485`).
 
 **Fail-states (boot):** a `null`/`undefined` `runtime` argument to `boot` → throws
 `Error('SidebarPanes.boot: runtime required')`. A bridge error during the
@@ -388,24 +395,27 @@ assembly + the Unit D §5.1.9 re-traversal path — NO new render path.
 **The re-derive sequence (`SidebarPanes.reDerive()`, pinned):**
 
 1. **Fetch the RAG snapshot** (`bridge.rag.snapshot()`).
-2. **Use the stored template** (`this.template` — the current template, updated
+2. **Fetch the doc-heads** (`bridge.rag.docHeads()` → `RagDocHeadsPayload` —
+   Unit V3). The doc-nav's data source. A bridge error ABORTS the re-derive (the
+   current graph stays rendered; caught + logged, never a crash).
+3. **Use the stored template** (`this.template` — the current template, updated
    on boot + on each `template-changed`). No template fetch is needed on a
    `template-changed` re-derive (the payload carries the template).
-3. **Derive the document ids (M6):** the CURRENT-DOCUMENT state is the
+4. **Derive the document ids (M6):** the CURRENT-DOCUMENT state is the
    `documentIds` source. When `this.currentDocumentId` is set (a document was
    selected via `pane-doc-nav-select`), `documentIds = [this.currentDocumentId]`
    (the single-document view). When it is `null`, `documentIds` = the snapshot's
    `doc-head` edges' targets (all documents). **Empty-snapshot guard (M1):** an
    empty `documentIds` → skip `buildTraversal`, use the empty-store envelope
-   (§5.1), clear `backRefs`, assemble + load (steps 4-7 below still run with the
+   (§5.1), clear `backRefs`, assemble + load (steps 5-8 below still run with the
    empty-store envelope).
-4. **`buildTraversal`** (ONLY when `documentIds` is non-empty) with the snapshot
+5. **`buildTraversal`** (ONLY when `documentIds` is non-empty) with the snapshot
    adapter + the derived document ids + the zone name + `this.template`.
-5. **Repopulate the backRefs map** from `traversal.backRefs` (the SOLE
-   authoritative carrier) — this is a provisional fill; `loadAppGraph` (step 6)
+6. **Repopulate the backRefs map** from `traversal.backRefs` (the SOLE
+   authoritative carrier) — this is a provisional fill; `loadAppGraph` (step 7)
    RECOMPUTES it from the ASSEMBLED envelope (M14), which is the authoritative
    value the loaded graph matches.
-6. **`loadAppGraph(runtime, traversalEnvelope)`** (S18 — DELEGATION, §5.6): the
+7. **`loadAppGraph(runtime, traversalEnvelope)`** (S18 — DELEGATION, §5.6): the
    host delegates the assembly + load to `loadAppGraph` (never re-implements it
    inline). `loadAppGraph` (a) calls
    `assembleAppGraphEnvelope({ traversalEnvelope, registry, ctx, sidebarZone })`
@@ -416,7 +426,7 @@ assembly + the Unit D §5.1.9 re-traversal path — NO new render path.
    AFTER assembly and BEFORE load; (c) calls `runtime.loadEnvelope(result.envelope)`
    — re-render. The app-graph panes stay MCP-visible with their `data-*` payloads
    re-materialized from the current store (closes L2 + I1).
-7. **`refresh()`** the pane data (the crosslinks backlink enumeration) over the
+8. **`refresh()`** the pane data (the crosslinks backlink enumeration) over the
    bridge (§5.6).
 
 **In-flight coalescing (M11, pinned):** `reDerive()` is async + fire-and-forget;
@@ -430,8 +440,8 @@ flag:
 - Otherwise `reDeriveInFlight = true`; the sequence runs; on completion (success
   OR failure) `reDeriveInFlight = false`; if `reDeriveQueued` was set, it is
   cleared and `reDerive()` runs once more (the latest snapshot wins).
-- The backRefs repopulation (step 5) is ATOMIC with the winning `loadEnvelope`
-  (inside `loadAppGraph`, step 6): the map is cleared + repopulated immediately
+- The backRefs repopulation (step 6) is ATOMIC with the winning `loadEnvelope`
+  (inside `loadAppGraph`, step 7): the map is cleared + repopulated immediately
   before the winning `loadEnvelope`, so a stale re-derive can never leave a
   mismatched backRefs↔graph pair.
 
@@ -464,7 +474,7 @@ control is dirty is QUEUED (not executed); at most ONE queued rebuild (coalesced
 when the control commits and clears its dirty flag, the queued re-derive
 executes. This is the SAME guard as the Unit D re-traversal.
 
-**Fail-states (re-derive):** a bridge error during the snapshot fetch → the
+**Fail-states (re-derive):** a bridge error during the snapshot/doc-heads fetch → the
 re-derive is ABORTED (the current graph stays rendered; the error is caught +
 logged, never a crash). A `buildTraversal` / `assembleAppGraphEnvelope` throw →
 propagates (a caller error). The re-derive is fire-and-forget (the `onRebuild`
@@ -480,7 +490,7 @@ concurrent `buildTraversal`).
 
 | Pane id | Title | Scope | Render (the host's closure) | Data source |
 | --- | --- | --- | --- | --- |
-| `doc-nav` | "Documents" | `app-graph` | `(ctx) => docNavContent(ctx)` (Unit H §5.3) | `ctx.snapshot` (the `doc-head` edges) |
+| `doc-nav` | "Documents" | `app-graph` | `(ctx) => docNavContent(ctx)` (Unit H §5.3) | `ctx.docHeads` (the `rag-doc-heads` IPC — Unit V3) |
 | `crosslinks` | "Links" | `app-graph` | `(ctx) => crosslinksContent(ctx, this.lastBacklinks)` (Unit H §5.3) | `ctx.crosslinks` + `this.lastBacklinks` (the `rag-backlinks` IPC) |
 | `search` | "Search" | `app-graph` | `(ctx) => searchContent(ctx, this.lastQueryResult)` (Unit H §5.3) | `this.lastQueryResult` (the `rag-query` IPC) |
 | `template-editor` | "Template" | `app-graph` | `createTemplateEditorPane().render(this.buildTemplateContext())` (Unit I §5.4) | `ctx.template` + `ctx.targetedZones` (the `template` IPC) |
@@ -494,14 +504,18 @@ MCP-visible (Unit H §4 PANE-REGISTRY). The `settings` pane MUST be enabled to b
 mounted in the operator scope.
 
 **The host's pane-data cache (pinned):** the host maintains
-`lastSnapshot: RagSnapshotPayload | null`, `lastCrosslinks: CrosslinkWiring[]`,
+`lastSnapshot: RagSnapshotPayload | null`, `lastDocHeads:
+RagDocHeadsPayload['documents'] | null` (Unit V3 — the doc-nav's data source),
+`lastCrosslinks: CrosslinkWiring[]`,
 `lastBacklinks: BacklinkResult | null`, `lastQueryResult: RagQueryResult | null`,
 and `lastOperatorSettings: OperatorSettings | null` (M7/M9). The `crosslinks` and
 `search` pane render closures read these (the pure helpers take the result as a
 parameter — Unit H §5.3). `refresh()` re-fetches `lastBacklinks` (when
 `this._currentNodeId` is non-null) over the `rag-backlinks` IPC; `lastQueryResult` is
-set by the `pane-search-submit` handler (§5.3); `lastSnapshot`/`lastCrosslinks`
-are set by the boot/re-derive (the snapshot + the traversal crosslinks);
+set by the `pane-search-submit` handler (§5.3); `lastSnapshot`/`lastDocHeads`/
+`lastCrosslinks`
+are set by the boot/re-derive (the snapshot + the doc-heads + the traversal
+crosslinks);
 `lastOperatorSettings` is set by the operator-settings IPC (§5.4).
 
 **The handler binding (`bindHandlers`, pinned):** the host registers the pane
@@ -519,9 +533,10 @@ NEVER an MCP tool. The handler names + the IPC calls they make:
 | the settings handlers | `settings` | the operator-settings IPC bridge (§5.4) — operator-owned settings; never the RAG `edit.*` path, never an MCP tool |
 
 **`template-save` is DROPPED (M15):** the template-editor pane renders only a
-root-id row, a zone list, a zone input, and Add/Reset/Save buttons — there is NO
+root-id row, a zone list, a zone input, and Add-zone/Reset buttons — there is NO
 editable template body, so there is no `editedTemplate` to save. `template-save`
-is redundant with the zone add/remove/reset handlers and is NOT registered. The
+is redundant with the zone add/remove/reset handlers and is NOT registered; the
+dead Save button is REMOVED from the pane (Unit I). The
 app-graph handler-def census (§5.10) drops it accordingly.
 
 **The handler defs are registered in the app-graph scope** (the app Runtime's
@@ -814,10 +829,12 @@ export class SidebarPanes {
   COMPILE (`compileHandlerBody`/`new Function`) via the app Runtime's
   `loadEnvelope` path.
 - `buildContext()` returns a `PaneContext`:
-  `{ snapshot: this.lastSnapshot, currentDocumentId: this._currentDocumentId,
+  `{ snapshot: this.lastSnapshot, docHeads: this.lastDocHeads,
+  currentDocumentId: this._currentDocumentId,
   currentNodeId: this._currentNodeId, backRefs, crosslinks: this.lastCrosslinks }` —
-  the `snapshot`/`crosslinks` are the host's retained `lastSnapshot`/
-  `lastCrosslinks` (M7), set by the boot/re-derive; the `currentDocumentId`/
+  the `snapshot`/`docHeads`/`crosslinks` are the host's retained `lastSnapshot`/
+  `lastDocHeads`/`lastCrosslinks` (M7; `lastDocHeads` — Unit V3), set by the
+  boot/re-derive; the `currentDocumentId`/
   `currentNodeId` are the host-owned state (M5).
 - `buildTemplateContext()` returns a `TemplatePaneContext` (PaneContext +
   `template: this.template` + `targetedZones: this.targetedZones`). The
@@ -849,7 +866,7 @@ export class SidebarPanes {
   `SecurePanels.refresh`.
 - `boot(runtime)` runs the §5.1 sequence. A null `runtime` → throws
   `Error('SidebarPanes.boot: runtime required')`.
-- `reDerive()` runs the §5.2 sequence. A bridge error during the snapshot fetch →
+- `reDerive()` runs the §5.2 sequence. A bridge error during the snapshot/doc-heads fetch →
   the re-derive is aborted (the current graph stays rendered; caught + logged).
 - `onRagStoreChanged(payload)` calls `editController.requestRebuild()`.
 - `onTemplateChanged(payload)` sets `this.template = payload.template` + calls
@@ -886,7 +903,7 @@ export class SidebarPanes {
    `isEnabled` is `true` for all five.
 2. **`buildContext` happy:** with the host-owned current document/node state +
    backRefs + crosslinks → the returned `PaneContext` carries the snapshot, the
-   current document id, the
+   doc-heads (Unit V3), the current document id, the
    current node id, the backRefs, and the crosslinks.
 3. **`buildTemplateContext` happy:** with the stored template + targetedZones →
    the returned `TemplatePaneContext` carries the template + targetedZones.
@@ -1009,10 +1026,10 @@ export class SidebarPanes {
    `buildOperatorEnvelope` throws
    `Error('buildOperatorEnvelope: operator pane "<id>" render returned nothing')`
    (Unit H §5.9.14).
-7. **A bridge error during the boot snapshot/template fetch** → the boot is
+7. **A bridge error during the boot snapshot/doc-heads/template fetch** → the boot is
    ABORTED (the placeholder envelope stays rendered; the error is caught + logged,
    never a crash).
-8. **A bridge error during the re-derive snapshot fetch** → the re-derive is
+8. **A bridge error during the re-derive snapshot/doc-heads fetch** → the re-derive is
    ABORTED (the current graph stays rendered; the error is caught + logged,
    never a crash).
 9. **A `buildTraversal` / `assembleAppGraphEnvelope` throw during boot/re-derive**
@@ -1065,22 +1082,25 @@ export class SidebarPanes {
 - **`SidebarPanesOptions` fields:** 6 required (`mount`, `operatorMount`,
   `registry`, `bridge`, `backRefs`, `editController`) + 2 optional (`zoneName`,
   `sidebarZone`).
-- **Boot steps:** 10 core pinned steps (register+enable → bind handlers → fetch
-  snapshot → fetch template → derive document ids → buildTraversal (or
+- **Boot steps:** 11 core pinned steps (register+enable → bind handlers → fetch
+  snapshot → fetch doc-heads (Unit V3) → fetch template → derive document ids →
+  buildTraversal (or
   empty-store envelope) → repopulate backRefs → loadAppGraph (assemble + recompute
   backRefs + load) → mount operator → subscribe). The boot ALSO installs the
   `window.provident.sidebar` bridge surface (M2) and fetches the M13 security
-  cache (the handler gate) — two defensive steps not counted in the 10.
-- **Re-derive steps:** 7 core pinned steps (fetch snapshot → use stored template →
+  cache (the handler gate) — two defensive steps not counted in the 11.
+- **Re-derive steps:** 8 core pinned steps (fetch snapshot → fetch doc-heads
+  (Unit V3) → use stored template →
   derive document ids (current-document source) → buildTraversal (or empty-store
   envelope) → repopulate backRefs → loadAppGraph (assemble + recompute backRefs +
   load) → refresh). The re-derive ALSO refreshes the M13 security cache (F2 — a
-  defensive step not counted in the 7).
+  defensive step not counted in the 8).
 - **Re-derive triggers:** 2 (`rag-store-changed`, `template-changed`), both
   routing through the edit controller's dirty-edit guard + the in-flight
   coalescing (M11/S19).
-- **IPC surfaces consumed:** the pre-existing `rag-snapshot` (doc-nav + the
-  re-derive), `rag-backlinks` (crosslinks), `rag-query` (search),
+- **IPC surfaces consumed:** the pre-existing `rag-snapshot` (the re-derive) +
+  the new `rag-doc-heads` (doc-nav — Unit V3), `rag-backlinks` (crosslinks),
+  `rag-query` (search),
   `template.get`/`create`/`delete`/`reset` (template-editor — `template.set` is
   no longer consumed since `template-save` is dropped, M15), `edit-commit` (the
   edit controller), `rag-store-changed` + `template-changed` (the re-derive
@@ -1105,8 +1125,8 @@ export class SidebarPanes {
   `envelope` + `backRefs` + `lineMap` + `crosslinks` the host consumes), §5.2
   (the envelope rules + the HARD PRECONDITION), §5.3 (the back-reference map the
   host repopulates), §5.4 (the render path the pane-inclusive envelope loads
-  through), §5.9 (`rebuildBackRefs` — the snapshot adapter + document-id
-  derivation the host mirrors).
+  through), `rebuildBackRefs` (`src/main/traversal.ts:485` — the snapshot
+  adapter + document-id derivation the host mirrors).
 - Unit D: `docs/specs/unit-d-editing.md` §5.1.9 (the `rag-store-changed`
   re-traversal trigger the host subscribes to), §5.1.10 (the `edit-commit` IPC),
   §5.2 (the dirty-edit guard that queues a re-derive while a control is dirty),

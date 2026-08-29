@@ -27,6 +27,15 @@
     #panes #group-toggles label { display: block; padding: 0.25rem 0; }
     .group-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
     .group-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+    /* The operator panes (settings) are a SEPARATE graph scope (never
+       MCP-visible), so they cannot live inside the app-graph sidebar. Style
+       the #operator-panes container as a proper card/pane so the settings
+       render as a titled pane instead of a bare element at the bottom. */
+    #operator-panes { grid-column: 1 / -1; }
+    #operator-panes section { background: #fff; border: 1px solid #d8dde3; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    #operator-panes h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+    #operator-panes div { margin: 0.25rem 0; }
+    #operator-panes button { margin-top: 0.5rem; }
     .error { color: #c0392b; font-size: 0.8rem; margin-top: 0.5rem; }
     @media (prefers-color-scheme: dark) {
       /* `:root { color-scheme: light dark }` makes the UA use dark-scheme
@@ -41,6 +50,7 @@
       #panes #security-status { color: #c9cfd5; }
       #panes #security-token label { color: #c9cfd5; }
       #panes #group-toggles { border-color: #3a4046; }
+      #operator-panes section { background: #262a2e; border-color: #3a4046; }
       input, textarea { background: #1a1d21; color: #e8eaed; border-color: #3a4046; }
       .error { color: #e07b72; }
     }

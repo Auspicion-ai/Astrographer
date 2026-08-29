@@ -520,7 +520,6 @@ describing the current template:
 - An `input` (`props.id = 'template-zone-input'`) + a `template-zone-add`
   handler (adds the input's value as a zone).
 - A `template-reset` handler (restores the default template).
-- A `template-save` handler (commits the current edited template).
 - Empty template (no zone producers) → the zone list renders `(no zones)`.
 
 **Handlers (pinned — all call the template IPC bridge, NEVER an MCP tool and
@@ -530,7 +529,11 @@ NEVER the RAG `edit.*` path):**
 - `template-zone-remove` → `bridge.template.delete(zone)`; a TARGETED zone's
   remove is disabled (a targeted-zone delete would reject — §5.9.5).
 - `template-reset` → `bridge.template.reset()`.
-- `template-save` → `bridge.template.set(editedTemplate)`.
+
+> **No `template-save` (M15):** the template is AUTO-COMMITTED via the
+> create/delete/reset IPC — there is no separate save IPC and no
+> `editedTemplate` to commit. The pane does NOT author a Save button (the dead
+> control was removed) and `template-save` is NOT registered (Unit K M15).
 
 The pane's controls are form controls (Unit D): a dirty edit guards the re-derive
 (§5.5 step 5). The pane is authored via `paneSubtreeRoot` (§5.2 happy path 13), so
@@ -541,9 +544,9 @@ its authored id is `pane-template-editor` and its `targetPlacement` is
 authored into the pane-inclusive app-graph envelope (Unit H §5.2) → the app
 Runtime renders it → `get_rendered_html`/`get_markdown` include it, `list_targets`
 lists it, and `provident.dispatch` can drive `template-zone-add`/
-`template-zone-remove`/`template-reset`/`template-save` (the §8.2 equivalence —
-an agent can dispatch the pane's save OR call the `code.template.*` tools; both
-reach the same template store + re-derive).
+`template-zone-remove`/`template-reset` (the §8.2 equivalence —
+an agent can dispatch the pane's controls OR call the `code.template.*` tools;
+both reach the same template store + re-derive).
 
 **New IPC channels (`src/shared/types.ts`):**
 
@@ -773,7 +776,7 @@ export interface TraversalInput {
 14. **Template-editor pane MCP-visible (equivalence):** after `loadAppGraph`, the
     pane subtree is in the app Runtime → `get_rendered_html`/`get_markdown`
     include it, `list_targets` lists it, `dispatch` can target a pane handler
-    (e.g. `template-save`).
+    (e.g. `template-zone-add`).
 15. **Re-derive via IPC:** `bridge.template.set(...)` → the pane + content-window
     re-render with the new template; the app-graph panes stay MCP-visible (their
     `data-*` payloads re-materialize, Unit H §5.5).
@@ -847,8 +850,9 @@ export interface TraversalInput {
   (`props.id = 'pane-template-editor'`, `targetPlacement: ['sidebar']`).
 - **`TemplatePaneContext` fields:** 2 beyond `PaneContext` (`template`,
   `targetedZones`).
-- **Pane handlers:** 4 (`template-zone-add`, `template-zone-remove`,
-  `template-reset`, `template-save`), all calling the template IPC bridge.
+- **Pane handlers:** 3 (`template-zone-add`, `template-zone-remove`,
+  `template-reset`), all calling the template IPC bridge. No `template-save`
+  (M15 — the template is auto-committed; the dead Save button is removed).
 - **Re-derive outputs:** the SAME `TraversalResult` as Unit C (envelope +
   backRefs + lineMap + crosslinks) + the Unit H pane-inclusive envelope — 1 per
   template change.

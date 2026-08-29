@@ -5,7 +5,7 @@
 // operator isolated-scope envelope.
 import type { LegacyInitialData, LegacyNodeData, LegacyContentPayload } from 'provident-ssr'
 import type { BacklinkResult } from '../main/backlinks.js'
-import type { RagQueryResult, RagSnapshotPayload } from '../shared/types.js'
+import type { RagQueryResult } from '../shared/types.js'
 import type { PaneRegistry, PaneDefinition, PaneContext } from './pane-registry.js'
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
@@ -149,41 +149,46 @@ export function buildOperatorEnvelope(
 // §5.3 data-flow helpers (PURE)
 // ===========================================================================
 
-/** The store's documents, derived from the `doc-head` edges. Each document =
- *  the `doc-head` edge's target (the document root id); its title = the
+/** The doc-nav document list, derived from the `doc-head` edges. Each document
+ *  = the `doc-head` edge's target (the document root id); its title = the
  *  `doc-head` edge's SOURCE node's content. Sorted by document root id
- *  (lexicographic ascending, deterministic). */
+ *  (lexicographic ascending, deterministic). Unit V3 — the input is the
+ *  `docHeads` list (from the `rag-doc-heads` IPC), NOT the full snapshot. */
 export function deriveDocNavDocuments(
-  snapshot: PaneContext['snapshot'],
+  docHeads: PaneContext['docHeads'],
 ): Array<{ documentId: string; title: string }> {
-  // H1 (adversarial): a null/missing snapshot must survive (return the empty
+  // H1 (adversarial): a null/missing docHeads must survive (return the empty
   // list → the "(no documents)" empty state), never a TypeError.
-  if (snapshot == null || snapshot.nodes == null || snapshot.edges == null) return []
-  const nodeById = new Map<string, NonNullable<RagSnapshotPayload['nodes'][number]>>(snapshot.nodes.map((n) => [n.id, n]))
+  if (docHeads == null) return []
+  // LOW-2 (adversarial): a truthy NON-ARRAY docHeads (a malformed bridge
+  // payload) must coerce to [] — never a TypeError from `.map`.
+  if (!Array.isArray(docHeads)) return []
+  // LOW-3 (adversarial): restore the defensive sort-by-documentId + dedupe-by-
+  // target so a malformed/unsorted/duplicated docHeads from the bridge renders
+  // a sorted, deduped doc-nav. A missing/empty documentId or a missing title is
+  // coerced (LOW-4) — never a phantom entry or a `content: undefined`.
   const seen = new Set<string>()
   const docs: Array<{ documentId: string; title: string }> = []
-  for (const e of snapshot.edges) {
-    if (e.kind !== 'doc-head') continue
-    // H6 (adversarial): dedupe by target documentId (first head wins) — a
-    // corrupted store with two `doc-head` edges to the SAME document must emit
-    // ONE entry (one `li`), never duplicate `data-document-id` entries.
-    if (seen.has(e.target)) continue
-    seen.add(e.target)
-    docs.push({ documentId: e.target, title: nodeById.get(e.source)?.content ?? '' })
+  for (const d of docHeads) {
+    if (d == null || d.documentId == null || d.documentId === '') continue
+    if (seen.has(d.documentId)) continue // dedupe by target (first head wins)
+    seen.add(d.documentId)
+    docs.push({ documentId: d.documentId, title: d.title ?? '' })
   }
-  return docs.sort((a, b) => a.documentId.localeCompare(b.documentId))
+  docs.sort((a, b) => a.documentId.localeCompare(b.documentId))
+  return docs
 }
 
 /** The `doc-nav` pane content: a `ul` of `li` document entries. The current
- *  document's `li` carries `props['data-current'] = 'true'`. Empty store → a
- *  single `p` with content `(no documents)`. */
+ *  document's `li` carries `props['data-current'] = 'true'`. Empty list → a
+ *  single `p` with content `(no documents)`. Unit V3 — reads `ctx.docHeads`. */
 export function docNavContent(ctx: PaneContext): LegacyNodeData {
-  // H1 (adversarial): a null ctx or a null/missing ctx.snapshot must survive →
+  // H1 (adversarial): a null ctx or a null/missing ctx.docHeads must survive →
   // the "(no documents)" empty state, never a TypeError.
-  if (ctx == null || ctx.snapshot == null) {
+  if (ctx == null || ctx.docHeads == null) {
     return { type: 'p', content: '(no documents)' }
   }
-  const docs = deriveDocNavDocuments(ctx.snapshot)
+  const docs = deriveDocNavDocuments(ctx.docHeads)
   if (docs.length === 0) return { type: 'p', content: '(no documents)' }
   return {
     type: 'ul',
@@ -193,7 +198,7 @@ export function docNavContent(ctx: PaneContext): LegacyNodeData {
         'data-document-id': d.documentId,
         ...(d.documentId === ctx.currentDocumentId ? { 'data-current': 'true' } : {}),
       },
-      content: d.title,
+      content: d.title ?? '', // LOW-4 (adversarial): a missing title → '' (never `content: undefined`)
     })),
   }
 }

@@ -46,6 +46,8 @@ import { Runtime } from '../src/renderer/runtime.js'
 import { createPaneRegistry, type PaneRegistry } from '../src/renderer/pane-registry.js'
 import { createEditController, type EditController } from '../src/renderer/edit-controller.js'
 import { buildTraversal } from '../src/main/traversal.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
+import type { RagNode, RagEdge } from '../src/main/rag-store.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../src/main/template-store.js'
 import * as richDecomposeModule from '../src/main/rich-decompose.js'
 import type {
@@ -176,6 +178,8 @@ function makeBridge(opts: {
       snapshot: vi.fn(async (): Promise<RagSnapshotPayload> => state.snapshot),
       backlinks: vi.fn(async (): Promise<BacklinkResult> =>
         ({ nodeId: '', backlinks: [], outlinks: [], crosslinkBacklinks: [], crosslinkOutlinks: [] })),
+      // Unit V3 — the doc-nav data source (the `rag-doc-heads` IPC).
+      docHeads: vi.fn(async () => ({ documents: [] })),
     },
     template: {
       get: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
@@ -308,7 +312,11 @@ afterEach(() => {
 // applyEditingMode handler-attachment tests
 // ===========================================================================
 function traversalEnv(nodes: RagSnapshotPayload['nodes'], edges: RagSnapshotPayload['edges']): LegacyInitialData {
-  const store = { listNodes: () => nodes, listEdges: () => edges } as never
+  // The scoped walk reads the adjacency methods, so the snapshot adapter MUST be
+  // `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw. The snapshot's `type` fields are `string`; the cast is
+  // structural-only.
+  const store = createSnapshotStore(nodes as RagNode[], edges as RagEdge[])
   return buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' }).envelope
 }
 

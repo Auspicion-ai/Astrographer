@@ -481,6 +481,19 @@ export interface RagBacklinksPayload {
  *  equivalent. */
 export type RagBacklinksResult = BacklinkResult
 
+// ---- Unit V3 doc-heads IPC (docs/specs/unit-v3-doc-heads-docnav.md §5.1) ----
+
+/** The renderer→main `rag-doc-heads` IPC (the doc-nav data source). Returns the
+ *  document list (the `doc-head` edges' targets + the head node content) — a
+ *  strict subset of the `rag-snapshot` payload. The doc-nav reads this, not the
+ *  full snapshot. */
+export const IPC_RAG_DOC_HEADS = 'provident:rag-doc-heads'
+export interface RagDocHeadsPayload {
+  /** One entry per document, sorted by document root id (lexicographic
+   *  ascending, deterministic). */
+  documents: Array<{ documentId: string; title: string }>
+}
+
 // ---- Unit I template IPC (docs/specs/unit-i-template.md §5.4) -------------
 
 /** The renderer→main `code.template.*`-equivalent IPC channels. Each is handled

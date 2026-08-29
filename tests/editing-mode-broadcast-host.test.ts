@@ -155,6 +155,8 @@ function makeBridge(opts: {
       snapshot: vi.fn(async (): Promise<RagSnapshotPayload> => state.snapshot),
       backlinks: vi.fn(async (): Promise<BacklinkResult> =>
         ({ nodeId: '', backlinks: [], outlinks: [], crosslinkBacklinks: [], crosslinkOutlinks: [] })),
+      // Unit V3 — the doc-nav data source (the `rag-doc-heads` IPC).
+      docHeads: vi.fn(async () => ({ documents: [] })),
     },
     template: {
       get: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),

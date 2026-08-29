@@ -34,10 +34,12 @@ import {
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
 import type { EditController, CaretState, RichCaretEdge } from './edit-controller.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
+import { createSnapshotStore } from '../main/adjacency.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../main/template-shape.js'
 import type {
   RagSnapshotPayload,
   RagQueryResult,
+  RagDocHeadsPayload,
   TemplateChangedPayload,
   SecuritySettings,
   OperatorSettings,
@@ -45,7 +47,7 @@ import type {
   EditingMode,
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
-import type { RagNodeType } from '../main/rag-store.js'
+import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
 import { isRichEditableRoot } from './rich-eligibility.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
 
@@ -79,6 +81,10 @@ export interface SidebarBridge {
     query(query: string, topK?: number): Promise<RagQueryResult>
     snapshot(): Promise<RagSnapshotPayload>
     backlinks(nodeId: string): Promise<BacklinkResult>
+    /** Unit V3 — the doc-nav data source. Returns the document list (the
+     *  `doc-head` edges' targets + the head node content) — a strict subset of
+     *  the snapshot. */
+    docHeads(): Promise<RagDocHeadsPayload>
   }
   template: {
     get(): Promise<{ source: string; template: ContentWindowTemplate }>
@@ -155,10 +161,18 @@ const SEARCH_SUBMIT_BODY = `function (ctx) {
   var value = input != null ? String(input) : '';
   s.submitQuery(value);
 }`
-const TEMPLATE_ZONE_ADD_BODY = `function (ctx) {
+const TEMPLATE_ZONE_ADD_BODY = `function (ctx, value) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s) return;
+  // The Add-zone button carries no value prop; read the zone from (1) a
+  // dispatch-provided value arg (MCP path), (2) the template-zone-input's
+  // CURRENT DOM value (UI path, M4 — the typed value lives in the DOM).
   var input = ctx && ctx.node && ctx.node.props && ctx.node.props['value'];
+  if (input === undefined && value !== undefined) input = value;
+  if (input === undefined) {
+    var el = document.getElementById('template-zone-input');
+    input = el ? el.value : '';
+  }
   var zone = input != null ? String(input) : '';
   if (zone) s.templateAdd(zone);
 }`
@@ -281,6 +295,10 @@ export class SidebarPanes {
 
   /** The host's pane-data cache (M7/M9). */
   private lastSnapshot: RagSnapshotPayload | null = null
+  /** Unit V3 — the doc-heads cache (the doc-nav's data source, amendment 5).
+   *  Set by the boot/re-derive (fetched over the `rag-doc-heads` IPC) and read
+   *  by `buildContext()` (which populates `ctx.docHeads`). */
+  private lastDocHeads: RagDocHeadsPayload['documents'] | null = null
   private lastCrosslinks: CrosslinkWiring[] = []
   private lastBacklinks: BacklinkResult | null = null
   private lastQueryResult: RagQueryResult | null = null
@@ -438,6 +456,7 @@ export class SidebarPanes {
   buildContext(): PaneContext {
     return {
       snapshot: this.lastSnapshot,
+      docHeads: this.lastDocHeads,
       currentDocumentId: this._currentDocumentId,
       currentNodeId: this._currentNodeId,
       backRefs: this.backRefs,
@@ -496,6 +515,15 @@ export class SidebarPanes {
   /** Mount the operator settings pane in its OWN isolated GraphScope (the
    *  SecurePanels pattern) from the enabled operator panes. */
   mountOperator(): void {
+    // The DomAdapter's endBatch APPENDS roots to the mount and never clears it,
+    // so a fresh mount (new adapter + prevMap=null) must clear the container
+    // first — otherwise every re-derive appends a DUPLICATE settings element
+    // (the "clicking the toggle adds a new settings element" live bug). Clear
+    // robustly across the real DOM (replaceChildren) and the test dom-shim
+    // (a public `children` array with no replaceChildren).
+    const mount = this.operatorMount as unknown as { replaceChildren?: () => void; children?: unknown[] }
+    if (typeof mount.replaceChildren === 'function') mount.replaceChildren()
+    else if (Array.isArray(mount.children)) mount.children.length = 0
     const envelope = buildOperatorEnvelope(this.registry, this.buildTemplateContext())
     this.operatorScope = createIsolatedScope()
     const hub = createLinkHub()
@@ -558,6 +586,16 @@ export class SidebarPanes {
       return
     }
     this.lastSnapshot = snapshot
+    // Unit V3 — fetch the doc-heads (the doc-nav's data source). A bridge error
+    // ABORTS the boot (the placeholder envelope stays rendered; caught + logged,
+    // never a crash — the same discipline as the snapshot fetch).
+    try {
+      const docHeads = await this.bridge.rag.docHeads()
+      this.lastDocHeads = docHeads.documents
+    } catch (e) {
+      console.error('[sidebar-panes] doc-heads fetch failed', e)
+      return
+    }
     // Fetch the stored template (a bridge error ABORTS the boot).
     let template: ContentWindowTemplate
     try {
@@ -591,9 +629,21 @@ export class SidebarPanes {
     } catch {
       // keep the default editingMode (textarea) + null lastOperatorSettings
     }
-    // Derive the document ids from the doc-head edges' targets.
-    const documentIds = this.deriveDocumentIds(snapshot)
-    const traversalEnvelope = this.buildTraversalEnvelope(snapshot, documentIds)
+    // SCOPED-LOAD (live finding) — render ONLY the current document at boot, not
+    // the whole corpus. The document list (doc-nav) shows all heads; the content
+    // window renders ONE document at a time, walking from its head via the
+    // document links (the scoped-load fix). At boot the current document is the
+    // first doc-head (sorted by id — the doc-nav's order), so the initial load
+    // is a single-document traversal, not a full-graph render (which times out
+    // on a large corpus). The current document is derived from the SNAPSHOT's
+    // doc-head edges (the authoritative source), not `lastDocHeads` (the doc-nav
+    // IPC can be empty even when the snapshot has documents). A persisted/
+    // selected current document (set before boot) is honored.
+    const documentIds = this.deriveDocumentIds(snapshot).sort()
+    const current = this._currentDocumentId ?? documentIds[0] ?? null
+    if (current) this.setCurrentDocumentId(current)
+    const renderIds = current ? [current] : []
+    const traversalEnvelope = this.buildTraversalEnvelope(snapshot, renderIds)
     this.loadAppGraph(runtime, traversalEnvelope)
     this.mountOperator()
     // Subscribe to the re-derive triggers.
@@ -625,7 +675,22 @@ export class SidebarPanes {
         console.error('[sidebar-panes] re-derive snapshot fetch failed', e)
         return
       }
+      // Unit V3 — fetch the doc-heads (the doc-nav's data source). A bridge
+      // error ABORTS the re-derive (the current graph stays rendered; caught +
+      // logged, never a crash).
+      let docHeads: RagDocHeadsPayload
+      try {
+        docHeads = await this.bridge.rag.docHeads()
+      } catch (e) {
+        console.error('[sidebar-panes] re-derive doc-heads fetch failed', e)
+        return
+      }
+      // LOW-5 (adversarial): commit lastSnapshot + lastDocHeads TOGETHER, only
+      // after BOTH fetches succeed — an aborted doc-heads fetch never leaves
+      // lastSnapshot fresh while lastDocHeads is stale (a transient state
+      // inconsistency).
       this.lastSnapshot = snapshot
+      this.lastDocHeads = docHeads.documents
       // F2 — refresh the M13 security cache on each re-derive so a runtime
       // security tightening (a group turned OFF after boot) is honored by the
       // handler gates. A bridge error leaves the gate fail-closed (null).
@@ -804,7 +869,13 @@ export class SidebarPanes {
       this.lastCrosslinks = []
       return this.emptyStoreEnvelope()
     }
-    const store = { listNodes: () => snapshot.nodes, listEdges: () => snapshot.edges } as never
+    // The scoped walk reads the adjacency methods (edgesForDocument/edgesFrom/
+    // edgesTo/docHeadForDocument), so the snapshot adapter MUST be
+    // `createSnapshotStore` (amendment 4, Unit V1 §5.4) — a listNodes/
+    // listEdges-only adapter would throw. The snapshot's `type` fields are
+    // `string` (the IPC shape); the main process returns full `RagNode`/`RagEdge`
+    // objects, so the cast is structural-only.
+    const store = createSnapshotStore(snapshot.nodes as RagNode[], snapshot.edges as RagEdge[])
     const result = buildTraversal({
       store,
       documentIds,
@@ -979,9 +1050,10 @@ export class SidebarPanes {
   /** `pane-doc-nav-select` — set the current document + trigger a document-switch
    *  re-traversal (the single-document view, M5/M6). */
   private selectDocument(id: string): void {
-    // F8 — only accept a real doc-head target as the single-document view (M6);
-    // a crafted/bogus id is ignored (no re-derive with a phantom documentIds).
-    if (!this.lastSnapshot || !this.lastSnapshot.edges.some((e) => e.kind === 'doc-head' && e.target === id)) return
+    // F8 (amendment 5) — validate against the doc-heads list (the doc-nav's data
+    // source), not lastSnapshot.edges. A crafted/bogus id is ignored (no
+    // re-derive with a phantom documentIds).
+    if (!this.lastDocHeads || !this.lastDocHeads.some((d) => d.documentId === id)) return
     this.setCurrentDocumentId(id)
     this.editController.requestRebuild()
   }

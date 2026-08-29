@@ -572,7 +572,7 @@ describe('the template-editor pane — Unit H authoring (§5.8)', () => {
     expect(asideLi!.props?.['data-targeted']).toBeUndefined()
   })
 
-  it('13e. render(ctx) authors the zone-add input (props.id="template-zone-input") + the template-zone-add / template-zone-remove / template-reset / template-save handlers', () => {
+  it('13e. render(ctx) authors the zone-add input (props.id="template-zone-input") + the template-zone-add / template-zone-remove / template-reset handlers', () => {
     const pane = createTemplateEditorPane()
     const ctx = makeTemplatePaneContext({ template: customTemplateWithMain() })
     const content = pane.render(ctx)
@@ -582,7 +582,9 @@ describe('the template-editor pane — Unit H authoring (§5.8)', () => {
     expect(handlerNames).toContain('template-zone-add')
     expect(handlerNames).toContain('template-zone-remove')
     expect(handlerNames).toContain('template-reset')
-    expect(handlerNames).toContain('template-save')
+    // The dead Save button is removed (M15 — the template is auto-committed,
+    // nothing to save), so template-save is NOT authored.
+    expect(handlerNames).not.toContain('template-save')
   })
 
   it('13f. empty template (no zone producers) → the zone list renders "(no zones)"', () => {
@@ -876,14 +878,14 @@ describe('census (§5.10)', () => {
     expect(pane.title).toBe('Template')
   })
 
-  it('the pane declares the 4 handlers: template-zone-add, template-zone-remove, template-reset, template-save', () => {
+  it('the pane declares the 3 handlers: template-zone-add, template-zone-remove, template-reset (no template-save — the dead Save button is removed)', () => {
     const pane = createTemplateEditorPane()
     const content = pane.render(makeTemplatePaneContext({ template: customTemplateWithMain() }))
     const handlerNames = findNodes(content, () => true).flatMap((n) => (n.handlers ?? []).map((h) => h.name))
     expect(handlerNames).toContain('template-zone-add')
     expect(handlerNames).toContain('template-zone-remove')
     expect(handlerNames).toContain('template-reset')
-    expect(handlerNames).toContain('template-save')
+    expect(handlerNames).not.toContain('template-save')
   })
 
   it('the zone-consistency invariant has 2 layers: save-time validation (store.set rejects a missing-zone) + traversal defense-in-depth (buildTraversal adds the producer)', async () => {

@@ -20,10 +20,11 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
-import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
+import { computeDocumentSubgraph } from './traversal.js'
 import { validateTemplate } from './template-shape.js'
 import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
@@ -150,45 +151,17 @@ export async function handleRagTool(
     case 'rag.get_document': {
       // L4 — the document-subtree scoping (the tool description's "The
       // document's RAG nodes/edges (the subtree)"). Returns ONLY the requested
-      // document's nodes/edges, NOT the whole store. The document's node set
-      // mirrors the traversal's document model (Unit C §5.2): the doc root
-      // (documentId) + the nodes reachable from the doc-head root via the
-      // doc-flow edges (scoped by documentId) + their doc-children
-      // (transitively). The document's edges are the doc-flow edges scoped by
-      // documentId + the doc-child edges among the document's nodes.
+      // document's nodes/edges, NOT the whole store. The document's node set +
+      // scoped edges come from `computeDocumentSubgraph` — the SINGLE shared
+      // derivation used by BOTH the scoped `buildTraversal` walk AND this MCP
+      // tool (amendment 2, §5.2), so the traversal and the MCP contract cannot
+      // diverge. The `{ documentId, nodes, edges }` return contract is preserved
+      // (amendment 6, §5.3).
       const documentId = typeof args.documentId === 'string' ? args.documentId : ''
       if (documentId === '') throw new Error('rag.get_document: documentId required')
-      const allNodes = store.listNodes()
-      const allEdges = store.listEdges()
-
-      // The document's node set: the doc root + the sources/targets of the
-      // edges scoped by documentId + their doc-children (transitively).
-      const docNodeIds = new Set<string>([documentId])
-      for (const e of allEdges) {
-        if (e.documentIds?.includes(documentId)) {
-          docNodeIds.add(e.source)
-          docNodeIds.add(e.target)
-        }
-      }
-      let changed = true
-      while (changed) {
-        changed = false
-        for (const e of allEdges) {
-          if (e.kind === 'doc-child' && docNodeIds.has(e.source) && !docNodeIds.has(e.target)) {
-            docNodeIds.add(e.target)
-            changed = true
-          }
-        }
-      }
-
-      const nodes = allNodes.filter((n) => docNodeIds.has(n.id))
-      const edges = allEdges.filter((e) => {
-        if (e.kind === 'doc-child') {
-          return docNodeIds.has(e.source) && docNodeIds.has(e.target)
-        }
-        return e.documentIds?.includes(documentId)
-      })
-      return { documentId, nodes, edges }
+      const subgraph = computeDocumentSubgraph(store, documentId)
+      const nodes = store.listNodes().filter((n) => subgraph.docNodeIds.has(n.id))
+      return { documentId, nodes, edges: subgraph.edges }
     }
     case 'rag.list_nodes':
       return store.listNodes().map((n) => ({ id: n.id, type: n.type, content: n.content.slice(0, 80), ownedNodeIds: n.ownedNodeIds.length }))
@@ -248,6 +221,40 @@ export async function handleRagBacklinksIpc(
   const nodeId = typeof payload?.nodeId === 'string' ? payload.nodeId : ''
   if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
   return enumerateLinks(store, nodeId)
+}
+
+/** Unit V3 §5.1 — the shared main-process handler for the `rag-doc-heads` IPC
+ *  (the doc-nav data source). Returns `{ documents: [{ documentId, title }] }`
+ *  from the `doc-head` edges + the head node content — a strict subset of the
+ *  `rag-snapshot` payload. The doc-nav reads this, not the full snapshot.
+ *  Exported for direct unit testing.
+ *
+ *  Behavior (pinned): reads the `doc-head` edges (via `edgesByKind('doc-head')`,
+ *  falling back to `listEdges()` for a store that predates the adjacency
+ *  surface); the head node content is read via `getNode(source)`. Deduped by
+ *  target `documentId` (first head wins); sorted by document root id
+ *  (lexicographic ascending, deterministic). A missing source node → `''` (no
+ *  throw). An empty store → `{ documents: [] }` (no throw). A null store →
+ *  throws `Error('rag-doc-heads: no rag store configured')`. */
+export function handleRagDocHeadsIpc(store: RagStore | null): RagDocHeadsPayload {
+  if (!store) throw new Error('rag-doc-heads: no rag store configured')
+  const edges = typeof store.edgesByKind === 'function' ? store.edgesByKind('doc-head') : store.listEdges().filter((e) => e.kind === 'doc-head')
+  const nodeById = new Map(store.listNodes().map((n) => [n.id, n]))
+  const seen = new Set<string>()
+  const documents: Array<{ documentId: string; title: string }> = []
+  for (const e of edges) {
+    if (e.kind !== 'doc-head') continue
+    // MED-1 (adversarial): a `doc-head` edge with a missing/undefined/empty
+    // target is a MALFORMED edge — SKIP it (never push a phantom
+    // `{ documentId: undefined }` entry that crashes the sort below, and never
+    // emit an unselectable `''` document entry).
+    if (e.target == null || e.target === '') continue
+    if (seen.has(e.target)) continue // dedupe by target (first head wins)
+    seen.add(e.target)
+    documents.push({ documentId: e.target, title: nodeById.get(e.source)?.content ?? '' })
+  }
+  documents.sort((a, b) => a.documentId.localeCompare(b.documentId))
+  return { documents }
 }
 
 /** Unit I §5.3 — the shared main-process handler for the `code.template.*`

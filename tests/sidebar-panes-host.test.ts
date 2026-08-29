@@ -41,10 +41,12 @@ import { assembleAppGraphEnvelope, buildOperatorEnvelope, SIDEBAR_ZONE } from '.
 import { createTemplateEditorPane, type TemplatePaneContext } from '../src/renderer/template-pane.js'
 import { createEditController, type EditController } from '../src/renderer/edit-controller.js'
 import { buildTraversal, type CrosslinkWiring } from '../src/main/traversal.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
+import type { RagNode, RagEdge } from '../src/main/rag-store.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../src/main/template-store.js'
 import type { BacklinkResult } from '../src/main/backlinks.js'
 import type { RagStoreChangedPayload } from '../src/main/preload.js'
-import type { RagSnapshotPayload, RagQueryResult, TemplateChangedPayload, SecuritySettings } from '../src/shared/types.js'
+import type { RagSnapshotPayload, RagQueryResult, RagDocHeadsPayload, TemplateChangedPayload, SecuritySettings } from '../src/shared/types.js'
 
 // ---- Unit K module (RED — module not found) --------------------------------
 import { SidebarPanes, type SidebarPanesOptions } from '../src/renderer/sidebar-panes.js'
@@ -148,7 +150,10 @@ function customTemplate(): ContentWindowTemplate {
 function traversalEnvelope(): LegacyInitialData {
   const nodes = [makeNode('head-a', { type: 'h1', content: 'Doc A' })]
   const edges = [makeEdge('dh1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] })]
-  const store = { listNodes: () => nodes, listEdges: () => edges } as never
+  // The scoped walk reads the adjacency methods, so the snapshot adapter MUST be
+  // `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+  // would throw.
+  const store = createSnapshotStore(nodes, edges)
   return buildTraversal({ store, documentIds: ['doc-a'], zoneName: 'main' }).envelope
 }
 
@@ -158,6 +163,7 @@ function traversalEnvelope(): LegacyInitialData {
  *  controllable state. The `operatorSettings` namespace is the NEW M9 surface. */
 function makeBridge(opts: {
   snapshot?: RagSnapshotPayload
+  docHeads?: RagDocHeadsPayload
   template?: { source: string; template: ContentWindowTemplate }
   queryResult?: RagQueryResult
   backlinksResult?: BacklinkResult
@@ -166,6 +172,7 @@ function makeBridge(opts: {
 } = {}) {
   const state = {
     snapshot: opts.snapshot ?? emptySnapshot(),
+    docHeads: opts.docHeads ?? { documents: [] },
     template: opts.template ?? { source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE },
     queryResult: opts.queryResult ?? null,
     backlinksResult: opts.backlinksResult ?? null,
@@ -186,6 +193,8 @@ function makeBridge(opts: {
       snapshot: vi.fn(async (): Promise<RagSnapshotPayload> => state.snapshot),
       backlinks: vi.fn(async (): Promise<BacklinkResult> =>
         state.backlinksResult ?? { nodeId: '', backlinks: [], outlinks: [], crosslinkBacklinks: [], crosslinkOutlinks: [] }),
+      // Unit V3 — the doc-nav data source (the `rag-doc-heads` IPC).
+      docHeads: vi.fn(async (): Promise<RagDocHeadsPayload> => state.docHeads),
     },
     template: {
       get: vi.fn(async () => state.template),
@@ -559,6 +568,41 @@ describe('boot (§5.8.7)', () => {
     expect(h.bridge.template.onTemplateChanged).toHaveBeenCalled()
   })
 
+  it('SCOPED-LOAD (live finding) — boot renders ONLY the current document (the first doc-head, sorted by id), not the whole corpus', async () => {
+    // A two-document snapshot: doc-a (head-a) + doc-b (head-b). The doc-nav
+    // lists BOTH titles; the content window renders ONLY the current document.
+    const snapshot: RagSnapshotPayload = {
+      version: 1,
+      nodes: [
+        makeNode('head-a', { type: 'h1', content: 'Doc A body' }),
+        makeNode('head-b', { type: 'h1', content: 'Doc B body' }),
+      ],
+      edges: [
+        makeEdge('dh1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
+        makeEdge('dh2', 'doc-head', 'head-b', 'doc-b', { documentIds: ['doc-b'] }),
+      ],
+    }
+    const h = makeHarness({ snapshot })
+    // The doc-heads list (sorted by id) — the doc-nav's data source.
+    h.state.docHeads = {
+      documents: [
+        { documentId: 'doc-a', title: 'Doc A' },
+        { documentId: 'doc-b', title: 'Doc B' },
+      ],
+    }
+    await h.host.boot(h.runtime)
+    // The current document is the first doc-head (doc-a).
+    expect(h.host.buildContext().currentDocumentId).toBe('doc-a')
+    const html = h.runtime.renderedHtmlResult().renderedHtml
+    // The doc-nav lists BOTH document titles.
+    expect(html).toContain('Doc A')
+    expect(html).toContain('Doc B')
+    // The content window renders ONLY doc-a's body — doc-b's body is NOT
+    // rendered (the scoped walk from the current document's head).
+    expect(html).toContain('Doc A body')
+    expect(html).not.toContain('Doc B body')
+  })
+
   it('§5.9.1 — a null/undefined runtime → throws Error("SidebarPanes.boot: runtime required")', async () => {
     const h = makeHarness()
     await expect(h.host.boot(null as never)).rejects.toThrow('SidebarPanes.boot: runtime required')
@@ -706,7 +750,10 @@ describe('the dirty-edit guard integration (§5.8.10, §5.9.14)', () => {
 // ===========================================================================
 describe('window.provident.sidebar.selectDocument (§5.8.11, M5/M6)', () => {
   it('sets the currentDocumentId + triggers a document-switch re-traversal (the single-document view)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot() })
+    const h = makeHarness({
+      snapshot: validSnapshot(),
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+    })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
     h.sidebar.selectDocument('doc-a')

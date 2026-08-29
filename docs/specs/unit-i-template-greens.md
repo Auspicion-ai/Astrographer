@@ -136,8 +136,9 @@ well-formed custom template with a `main` container producer; `customAside()` =
   content root.
 - **Expected:** the root is a `section` with a `data-template-root-id` row, one
   `li` per zone producer carrying `data-template-zone` (+ `data-targeted: 'true'`
-  for a targeted zone), a `template-zone-input` input, and the four handlers
-  `template-zone-add`/`template-zone-remove`/`template-reset`/`template-save`.
+  for a targeted zone), a `template-zone-input` input, and the three handlers
+  `template-zone-add`/`template-zone-remove`/`template-reset` (no
+  `template-save` — M15, the dead Save button is removed).
   The pane is `scope: 'app-graph'` → authored into the pane-inclusive app-graph
   envelope → MCP-visible by construction (the full Runtime load is a
   renderer-surface behavior; the assembly guarantee is its node-testable
@@ -294,9 +295,10 @@ well-formed custom template with a `main` container producer; `customAside()` =
 ### C11. `TemplatePaneContext` fields — 2 beyond `PaneContext`
 - **Expected:** `template`, `targetedZones`.
 
-### C12. Pane handlers — 4; zone-consistency layers — 2
-- **Expected:** the pane's four handlers `template-zone-add`/`template-zone-remove`/
-  `template-reset`/`template-save` all call the template IPC bridge; the
+### C12. Pane handlers — 3; zone-consistency layers — 2
+- **Expected:** the pane's three handlers `template-zone-add`/`template-zone-remove`/
+  `template-reset` all call the template IPC bridge (no `template-save` — M15,
+  the dead Save button is removed); the
   zone-consistency invariant is enforced at 2 layers (save-time validation +
   traversal defense-in-depth).
 

@@ -40,6 +40,7 @@ import {
   type RagEdgeKind,
 } from '../src/main/rag-store.js'
 import { handleRagTool, handleRagBacklinksIpc, handleEditTool } from '../src/main/mcp-server.js'
+import { createSnapshotStore } from '../src/main/adjacency.js'
 import { IPC_RAG_BACKLINKS, type RagBacklinksPayload, type RagBacklinksResult } from '../src/shared/types.js'
 import { groupForTool, toolAllowed, defaultSecurityConfig, SecurityGate } from '../src/main/security.js'
 import { ProvidentMcpServer, type McpBackend } from '../src/main/mcp-server.js'
@@ -91,13 +92,13 @@ function makeEdge(
   }
 }
 
-/** A minimal read-only `RagStore` adapter over plain node/edge arrays (the
- *  enumeration + traversal only read `listNodes()`/`listEdges()` — the same
- *  adapter pattern `rebuildBackRefs` uses). Lets the tests control store order
- *  directly and avoids the concrete store's (currently crosslink-rejecting)
- *  write path. */
+/** A minimal read-only `RagStore` adapter over plain node/edge arrays. The
+ *  scoped walk reads the adjacency methods, so the adapter MUST be
+ *  `createSnapshotStore` (amendment 4) — a listNodes/listEdges-only adapter
+ *  would throw. Lets the tests control store order directly and avoids the
+ *  concrete store's (currently crosslink-rejecting) write path. */
 function mockStore(nodes: RagNode[], edges: RagEdge[]): RagStore {
-  return { listNodes: () => nodes, listEdges: () => edges } as unknown as RagStore
+  return createSnapshotStore(nodes, edges)
 }
 
 /** Two valid single-document flows (docA, docB) + a crosslink edge from a
