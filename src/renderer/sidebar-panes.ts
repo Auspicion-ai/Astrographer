@@ -349,7 +349,7 @@ export class SidebarPanes {
    *  default is `'textarea'` (decision D). Unit U1 later wires this field to the
    *  operator-settings value + the re-derive broadcast; the U3 integration test
    *  INJECTS the mode by setting this field before calling `loadAppGraph`. */
-  private editingMode: EditingMode = 'textarea'
+  private editingMode: EditingMode = 'contenteditable'
 
   /** The subscription cleanup handles. */
   private unsubRag: (() => void) | null = null
@@ -617,17 +617,17 @@ export class SidebarPanes {
     // F1 (adversarial) — fetch the PERSISTED operator settings at boot so a
     // persisted `editingMode` (e.g. 'contenteditable') is honored from the very
     // first load. The only other get is in `refresh()`, which boot never calls —
-    // without this fetch `this.editingMode` would stay 'textarea' until a
+    // without this fetch `this.editingMode` would stay 'contenteditable' until a
     // broadcast, and a later re-derive would flip the control without the graph.
-    // Same coercion as onOperatorSettingsChanged: only 'contenteditable' passes,
-    // else 'textarea'. A bridge error keeps the default (textarea) + null
-    // lastOperatorSettings (never a crash).
+    // Same coercion as onOperatorSettingsChanged: only 'textarea' passes, else
+    // 'contenteditable' (the default edit mode). A bridge error keeps the
+    // default (contenteditable) + null lastOperatorSettings (never a crash).
     try {
       const settings = await this.bridge.operatorSettings.get()
       this.lastOperatorSettings = settings
-      this.editingMode = settings.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea'
+      this.editingMode = settings.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
     } catch {
-      // keep the default editingMode (textarea) + null lastOperatorSettings
+      // keep the default editingMode (contenteditable) + null lastOperatorSettings
     }
     // SCOPED-LOAD (live finding) — render ONLY the current document at boot, not
     // the whole corpus. The document list (doc-nav) shows all heads; the content
@@ -639,7 +639,7 @@ export class SidebarPanes {
     // doc-head edges (the authoritative source), not `lastDocHeads` (the doc-nav
     // IPC can be empty even when the snapshot has documents). A persisted/
     // selected current document (set before boot) is honored.
-    const documentIds = this.deriveDocumentIds(snapshot).sort()
+    const documentIds = this.deriveDocumentIds(snapshot).sort((a, b) => a.localeCompare(b))
     const current = this._currentDocumentId ?? documentIds[0] ?? null
     if (current) this.setCurrentDocumentId(current)
     const renderIds = current ? [current] : []
@@ -797,11 +797,11 @@ export class SidebarPanes {
    *  handler STILL rebuilds (the payload is authoritative, not dropped). */
   private onOperatorSettingsChanged(payload: OperatorSettings): void {
     // F2 (adversarial) — defensive guard: a null/undefined payload is never
-    // dereferenced (never throw); it coerces to the textarea default and the
-    // handler STILL rebuilds (the broadcast is authoritative, not dropped).
-    payload = (payload ?? { editingMode: 'textarea' }) as OperatorSettings
+    // dereferenced (never throw); it coerces to the contenteditable default and
+    // the handler STILL rebuilds (the broadcast is authoritative, not dropped).
+    payload = (payload ?? { editingMode: 'contenteditable' }) as OperatorSettings
     this.lastOperatorSettings = payload
-    this.editingMode = payload.editingMode === 'contenteditable' ? 'contenteditable' : 'textarea'
+    this.editingMode = payload.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
     this.editController.requestRebuild() // → reDerive (FRESH traversal — never refresh() over the cached envelope)
   }
 
@@ -959,6 +959,14 @@ export class SidebarPanes {
       const pid = n.props?.id
       if (typeof pid === 'string' && pid.startsWith('rag-')) {
         const ragId = pid.slice(4)
+        // CONTENTEDITABLE MODE — do NOT produce the textarea editing overlay in
+        // the render for ANY rag root (the user's requirement: no textareas in
+        // contenteditable mode). The textarea is a textarea-mode artifact; in
+        // contenteditable mode the rich editor (or plain text for non-eligible
+        // roots) replaces it. Removed for ALL roots, not just rich-eligible ones.
+        n.children = (n.children ?? []).filter(
+          (child) => (child as LegacyNodeData).props?.id !== `textarea-${ragId}`,
+        )
         // `ownsDocChildren` mirrors the traversal's `rag-`-prefix rule
         // (collectSubtreeIds / recomputeBackRefs): a DIRECT child whose
         // authored `props.id` is a `rag-`-prefixed string is a doc-child
@@ -969,9 +977,6 @@ export class SidebarPanes {
           return typeof cid === 'string' && cid.startsWith('rag-')
         })
         if (isRichEditableRoot(n.type as RagNodeType, ownsDocChildren)) {
-          n.children = (n.children ?? []).filter(
-            (child) => (child as LegacyNodeData).props?.id !== `textarea-${ragId}`,
-          )
           // Preserve the root's existing props (authored id, data-rag-node-id,
           // data-doc-head); overwrite any stale authored `contenteditable`.
           n.props = { ...(n.props ?? {}), contenteditable: true }

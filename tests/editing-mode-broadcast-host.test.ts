@@ -338,12 +338,12 @@ describe('F1 — a persisted contenteditable editingMode is honored at boot (not
     expect(h.bridge.operatorSettings.get).toHaveBeenCalled()
   })
 
-  it('F1 — a bridge error during the boot operator-settings fetch keeps the textarea default (never a crash / never aborts the boot)', async () => {
+  it('F1 — a bridge error during the boot operator-settings fetch keeps the contenteditable default (never a crash / never aborts the boot)', async () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     h.bridge.operatorSettings.get.mockRejectedValueOnce(new Error('boom'))
     await expect(h.host.boot(h.runtime)).resolves.toBeUndefined()
-    expect(privateOf(h).editingMode).toBe('textarea')
-    expect(h.runtime.renderedHtmlResult().renderedHtml).toContain('textarea-s1') // textarea default still loads
+    expect(privateOf(h).editingMode).toBe('contenteditable')
+    expect(h.runtime.renderedHtmlResult().renderedHtml).not.toContain('textarea-s1') // contenteditable default: no textarea
   })
 })
 
@@ -369,18 +369,18 @@ describe('onOperatorSettingsChanged — the re-derive handler (§2.1 state 21)',
     expect(h.onRebuild).toHaveBeenCalled()
   })
 
-  it('state 4 / §2.2 — a malformed/absent editingMode in the payload is defensively coerced to textarea, and the handler STILL rebuilds (no throw, no crash — the payload is authoritative, not dropped)', async () => {
+  it('state 4 / §2.2 — a malformed/absent editingMode in the payload is defensively coerced to contenteditable, and the handler STILL rebuilds (no throw, no crash — the payload is authoritative, not dropped)', async () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
     // Since there is NO re-fetch, the old re-fetch-failure path is gone. A
     // malformed payload is coerced (not dropped) and the handler still rebuilds.
     expect(() => onOperatorSettingsChanged(h, { editingMode: 'bogus' } as OperatorSettings)).not.toThrow()
-    expect(privateOf(h).editingMode).toBe('textarea')
+    expect(privateOf(h).editingMode).toBe('contenteditable')
     expect(h.onRebuild).toHaveBeenCalled()
   })
 
-  it('ADR-2 / §2.2 state 3 — the payload IS authoritative (amendment A, no re-fetch): a contenteditable payload → host uses contenteditable + rebuilds; a junk/absent editingMode → textarea', async () => {
+  it('ADR-2 / §2.2 state 3 — the payload IS authoritative (amendment A, no re-fetch): a contenteditable payload → host uses contenteditable + rebuilds; a junk/absent editingMode → contenteditable', async () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
@@ -392,30 +392,30 @@ describe('onOperatorSettingsChanged — the re-derive handler (§2.1 state 21)',
     expect(privateOf(h).editingMode).toBe('contenteditable')
     expect(privateOf(h).lastOperatorSettings?.editingMode).toBe('contenteditable')
     expect(h.onRebuild).toHaveBeenCalled()
-    // A junk editingMode in the payload is defensively coerced → textarea.
+    // A junk editingMode in the payload is defensively coerced → contenteditable.
     onOperatorSettingsChanged(h, { editingMode: 'junk' } as OperatorSettings)
-    expect(privateOf(h).editingMode).toBe('textarea')
+    expect(privateOf(h).editingMode).toBe('contenteditable')
   })
 
-  it('ADR-3 — a malformed editingMode value in the PAYLOAD is defensively coerced (only "contenteditable" passes; everything else → textarea)', async () => {
+  it('ADR-3 — a malformed editingMode value in the PAYLOAD is defensively coerced (only "textarea" passes; everything else → contenteditable)', async () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     await h.host.boot(h.runtime)
     onOperatorSettingsChanged(h, { editingMode: 'bogus' as EditingMode } as OperatorSettings)
     await awaitRebuild(h)
-    expect(privateOf(h).editingMode).toBe('textarea')
+    expect(privateOf(h).editingMode).toBe('contenteditable')
   })
 
-  it('F2 (adversarial) — a null/undefined payload is guarded (never dereferenced / never throws): coerced to textarea, coerced lastOperatorSettings, and the handler STILL rebuilds', async () => {
+  it('F2 (adversarial) — a null/undefined payload is guarded (never dereferenced / never throws): coerced to contenteditable, coerced lastOperatorSettings, and the handler STILL rebuilds', async () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
     expect(() => onOperatorSettingsChanged(h, null as unknown as OperatorSettings)).not.toThrow()
-    expect(privateOf(h).editingMode).toBe('textarea')
-    expect(privateOf(h).lastOperatorSettings?.editingMode).toBe('textarea')
+    expect(privateOf(h).editingMode).toBe('contenteditable')
+    expect(privateOf(h).lastOperatorSettings?.editingMode).toBe('contenteditable')
     expect(h.onRebuild).toHaveBeenCalled()
     h.onRebuild.mockClear()
     expect(() => onOperatorSettingsChanged(h, undefined as unknown as OperatorSettings)).not.toThrow()
-    expect(privateOf(h).editingMode).toBe('textarea')
+    expect(privateOf(h).editingMode).toBe('contenteditable')
     expect(h.onRebuild).toHaveBeenCalled()
   })
 })

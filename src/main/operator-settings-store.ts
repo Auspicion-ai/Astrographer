@@ -24,15 +24,15 @@ const DEFAULT_SETTINGS: OperatorSettings = {
   enabledPanes: [],
   defaultDocumentId: null,
   topK: 5,
-  editingMode: 'textarea', // Unit U1 — the safe default (decision D)
+  editingMode: 'contenteditable', // the default edit mode (rich-text contenteditable)
 }
 
 /** Unit U1 §1.2 — the pinned coercion rule (used identically in `sanitize` AND
- *  `set`): ONLY the exact string `'contenteditable'` passes through; ANY other
- *  value (undefined, null, '', 'textarea', junk) coerces to `'textarea'`. TOTAL
- *  — never throws for any `src.editingMode` value. */
+ *  `set`): ONLY the exact string `'textarea'` passes through; ANY other value
+ *  (undefined, null, '', 'contenteditable', junk) coerces to `'contenteditable'`
+ *  (the default edit mode). TOTAL — never throws for any `src.editingMode` value. */
 function coerceEditingMode(value: unknown): EditingMode {
-  return value === 'contenteditable' ? 'contenteditable' : 'textarea'
+  return value === 'textarea' ? 'textarea' : 'contenteditable'
 }
 
 function sanitize(input: unknown): OperatorSettings {

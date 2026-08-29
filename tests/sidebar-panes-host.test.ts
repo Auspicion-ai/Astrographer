@@ -568,39 +568,42 @@ describe('boot (§5.8.7)', () => {
     expect(h.bridge.template.onTemplateChanged).toHaveBeenCalled()
   })
 
-  it('SCOPED-LOAD (live finding) — boot renders ONLY the current document (the first doc-head, sorted by id), not the whole corpus', async () => {
-    // A two-document snapshot: doc-a (head-a) + doc-b (head-b). The doc-nav
-    // lists BOTH titles; the content window renders ONLY the current document.
+  it('SCOPED-LOAD (live finding) — boot renders ONLY the current document (the first doc-head, localeCompare-sorted to match the doc-nav), not the whole corpus', async () => {
+    // A two-document snapshot: FORKER + astrographer-review. The doc-nav lists
+    // BOTH titles; the content window renders ONLY the current document. The
+    // current document is the localeCompare-first (astrographer-review), which
+    // matches the doc-nav's first entry — NOT the ASCII-first (FORKER).
     const snapshot: RagSnapshotPayload = {
       version: 1,
       nodes: [
-        makeNode('head-a', { type: 'h1', content: 'Doc A body' }),
-        makeNode('head-b', { type: 'h1', content: 'Doc B body' }),
+        makeNode('head-forker', { type: 'h1', content: 'FORKER body' }),
+        makeNode('head-astro', { type: 'h1', content: 'Astrographer body' }),
       ],
       edges: [
-        makeEdge('dh1', 'doc-head', 'head-a', 'doc-a', { documentIds: ['doc-a'] }),
-        makeEdge('dh2', 'doc-head', 'head-b', 'doc-b', { documentIds: ['doc-b'] }),
+        makeEdge('dh1', 'doc-head', 'head-forker', 'FORKER', { documentIds: ['FORKER'] }),
+        makeEdge('dh2', 'doc-head', 'head-astro', 'astrographer-review', { documentIds: ['astrographer-review'] }),
       ],
     }
     const h = makeHarness({ snapshot })
-    // The doc-heads list (sorted by id) — the doc-nav's data source.
+    // The doc-heads list (localeCompare-sorted) — the doc-nav's data source.
     h.state.docHeads = {
       documents: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'astrographer-review', title: 'Astrographer' },
+        { documentId: 'FORKER', title: 'FORKER' },
       ],
     }
     await h.host.boot(h.runtime)
-    // The current document is the first doc-head (doc-a).
-    expect(h.host.buildContext().currentDocumentId).toBe('doc-a')
+    // The current document is the localeCompare-first doc-head (astrographer-review),
+    // matching the doc-nav's first entry.
+    expect(h.host.buildContext().currentDocumentId).toBe('astrographer-review')
     const html = h.runtime.renderedHtmlResult().renderedHtml
     // The doc-nav lists BOTH document titles.
-    expect(html).toContain('Doc A')
-    expect(html).toContain('Doc B')
-    // The content window renders ONLY doc-a's body — doc-b's body is NOT
-    // rendered (the scoped walk from the current document's head).
-    expect(html).toContain('Doc A body')
-    expect(html).not.toContain('Doc B body')
+    expect(html).toContain('Astrographer')
+    expect(html).toContain('FORKER')
+    // The content window renders ONLY the current document's body — the other
+    // document's body is NOT rendered (the scoped walk from the current head).
+    expect(html).toContain('Astrographer body')
+    expect(html).not.toContain('FORKER body')
   })
 
   it('§5.9.1 — a null/undefined runtime → throws Error("SidebarPanes.boot: runtime required")', async () => {

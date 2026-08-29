@@ -75,11 +75,11 @@ const fourField = (editingMode: EditingMode): OperatorSettings => ({
 // §2.1 HAPPY-PATH STATES (1-12) + §1.2 API rules
 // ===========================================================================
 describe('operator-settings store — the editingMode default (§2.1 state 1)', () => {
-  it('state 1 — a first-run store (no file) returns editingMode "textarea" (the safe default, decision D) + all 4 fields', () => {
+  it('state 1 — a first-run store (no file) returns editingMode "contenteditable" (the default edit mode) + all 4 fields', () => {
     const store = createOperatorSettingsStore({ path: tempPath() })
     const s = store.get()
-    expect(s).toEqual({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' })
-    expect(s.editingMode).toBe('textarea')
+    expect(s).toEqual({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable' })
+    expect(s.editingMode).toBe('contenteditable')
   })
 })
 
@@ -98,30 +98,30 @@ describe('operator-settings store — sanitize (persisted-file read) (§2.1 stat
     expect(store.get().editingMode).toBe('textarea')
   })
 
-  it('state 4 — a persisted v1 file WITHOUT the editingMode field defaults to "textarea" (additive / backward-compatible)', () => {
+  it('state 4 — a persisted v1 file WITHOUT the editingMode field defaults to "contenteditable" (additive / backward-compatible)', () => {
     const path = tempPath()
     seedFile(path, { enabledPanes: ['doc-nav'], defaultDocumentId: null, topK: 5 }) // no editingMode
     const store = createOperatorSettingsStore({ path })
     const s = store.get()
-    expect(s.editingMode).toBe('textarea')
+    expect(s.editingMode).toBe('contenteditable')
     // The other 3 fields survive the backward-compatible sanitize.
     expect(s.enabledPanes).toEqual(['doc-nav'])
     expect(s.topK).toBe(5)
   })
 
-  it('state 5a — an EMPTY persisted file is treated as the first-run default → editingMode "textarea"', () => {
+  it('state 5a — an EMPTY persisted file is treated as the first-run default → editingMode "contenteditable"', () => {
     const path = tempPath()
     seedFile(path, '') // JSON.parse('') throws → the never-throws fallback default
     const store = createOperatorSettingsStore({ path })
-    expect(store.get().editingMode).toBe('textarea')
+    expect(store.get().editingMode).toBe('contenteditable')
   })
 
-  it('state 5b — a CORRUPT persisted file falls back to the default → editingMode "textarea" (never throws)', () => {
+  it('state 5b — a CORRUPT persisted file falls back to the default → editingMode "contenteditable" (never throws)', () => {
     const path = tempPath()
     seedFile(path, '{not valid json!!') // corrupt → catch → default
     const store = createOperatorSettingsStore({ path })
     expect(() => store.get()).not.toThrow()
-    expect(store.get().editingMode).toBe('textarea')
+    expect(store.get().editingMode).toBe('contenteditable')
   })
 })
 
@@ -196,26 +196,26 @@ describe('operator-settings store — get (§2.1 states 11-12)', () => {
 // §2.2 FAIL-STATES (1, 2, 6) — the coercion rule + the partial-patch no-clobber
 // ===========================================================================
 describe('operator-settings store — coercion fail-states (§2.2 1/2)', () => {
-  it('state 1 — a junk editingMode in a PATCH is coerced to "textarea" (never stored as junk)', () => {
+  it('state 1 — a junk editingMode in a PATCH is coerced to "contenteditable" (never stored as junk)', () => {
     for (const junk of ['foo', 'bogus', '', 0, 42, true, false] as const) {
       const store = createOperatorSettingsStore({ path: tempPath() })
       const result = store.set({ editingMode: junk as unknown as EditingMode })
-      expect(result.editingMode).toBe('textarea')
-      expect(store.get().editingMode).toBe('textarea')
+      expect(result.editingMode).toBe('contenteditable')
+      expect(store.get().editingMode).toBe('contenteditable')
     }
   })
 
-  it('state 1b — set({ editingMode: null }) / set({ editingMode: "textarea" }) → "textarea"', () => {
+  it('state 1b — set({ editingMode: null }) → "contenteditable"; set({ editingMode: "textarea" }) → "textarea"', () => {
     const store = createOperatorSettingsStore({ path: tempPath() })
-    expect(store.set({ editingMode: null as unknown as EditingMode }).editingMode).toBe('textarea')
+    expect(store.set({ editingMode: null as unknown as EditingMode }).editingMode).toBe('contenteditable')
     expect(store.set({ editingMode: 'textarea' }).editingMode).toBe('textarea')
   })
 
-  it('state 2 — a JUNK editingMode in a PERSISTED file is coerced to "textarea" on read (a tampered value never propagates)', () => {
+  it('state 2 — a JUNK editingMode in a PERSISTED file is coerced to "contenteditable" on read (a tampered value never propagates)', () => {
     const path = tempPath()
     seedFile(path, { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'bogus' })
     const store = createOperatorSettingsStore({ path })
-    expect(store.get().editingMode).toBe('textarea')
+    expect(store.get().editingMode).toBe('contenteditable')
   })
 })
 

@@ -124,6 +124,19 @@ was found (nothing handed off to `docs/defects.md`).
   untested.** **Resolution:** added a regression test for the null-cache branch
   (a null `lastDocHeads` → `selectDocument` no-ops, never throws).
 
+- **LIVE-1 (2026-08-29, live-verification finding) — the boot rendered ALL
+  documents at once (the full-graph render that times out).** Live testing
+  against the persisted 63-document corpus showed `get_rendered_html` timing
+  out (60s+) because the boot called `buildTraversal` with ALL doc-head targets
+  (`deriveDocumentIds(snapshot)`), rendering the whole corpus even with the
+  scoped walk. **Resolution:** the boot now renders ONLY the current document —
+  the localeCompare-first doc-head (matching the doc-nav's first entry), derived
+  from the SNAPSHOT's doc-head edges (not `lastDocHeads`, which can be empty
+  even when the snapshot has documents). `get_rendered_html` dropped to ~0.15s.
+  Regression test added (`tests/sidebar-panes-host.test.ts` "SCOPED-LOAD (live
+  finding)"); the Unit V3 `selectDocument` fail-state tests updated for the new
+  boot behavior (the boot sets `currentDocumentId` to the first doc-head).
+
 ### 3b. Proposal-review findings
 
 The proposal-review gate (three-agent: validity → critique → change-analysis)

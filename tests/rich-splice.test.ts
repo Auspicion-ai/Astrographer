@@ -277,19 +277,19 @@ describe('rich-splice — inline children survive the splice (§2.1 state 12)', 
   })
 })
 
-describe('rich-splice — ineligible root keeps its textarea (§2.1 state 13)', () => {
-  it('a non-EDITABLE type (ul/pre/td) → its textarea remains and contenteditable is NOT set', () => {
+describe('rich-splice — ineligible root has its textarea removed (§2.1 state 13)', () => {
+  it('a non-EDITABLE type (ul/pre/td) → its textarea is removed and contenteditable is NOT set', () => {
     for (const type of ['ul', 'pre', 'td'] as const) {
       const { nodes, edges } = singleSectionStore(type, 'x')
       const h = makeHarness()
       const env = spliceEnvelope(h, traversalEnv(nodes, edges), 'contenteditable')
       const [s1] = rootsFor(env, 's1')
-      expect(hasTextarea(s1.root, 's1')).toBe(true)
+      expect(hasTextarea(s1.root, 's1')).toBe(false) // no textarea in contenteditable mode
       expect(contenteditableProp(s1.root)).toBeUndefined()
     }
   })
 
-  it('an EDITABLE type that OWNS a doc-child → NOT eligible → keeps its textarea; the nested doc-child (itself eligible) splices', () => {
+  it('an EDITABLE type that OWNS a doc-child → NOT eligible → its textarea is removed (no contenteditable); the nested doc-child (itself eligible) splices', () => {
     const nodes = [
       makeNode('doc', { type: 'h1', content: 'Doc' }),
       makeNode('s1', { type: 'h1', content: 'Head' }), // owns doc-child dc
@@ -304,7 +304,7 @@ describe('rich-splice — ineligible root keeps its textarea (§2.1 state 13)', 
     const env = spliceEnvelope(h, traversalEnv(nodes, edges), 'contenteditable')
     const [s1] = rootsFor(env, 's1')
     const [dc] = rootsFor(env, 'dc')
-    expect(hasTextarea(s1.root, 's1')).toBe(true) // doc-child owner → fallback textarea kept
+    expect(hasTextarea(s1.root, 's1')).toBe(false) // doc-child owner → textarea removed (no contenteditable)
     expect(contenteditableProp(s1.root)).toBeUndefined()
     expect(hasTextarea(dc.root, 'dc')).toBe(false) // the doc-child p splices independently
     expect(contenteditableProp(dc.root)).toBe(true)
@@ -312,11 +312,11 @@ describe('rich-splice — ineligible root keeps its textarea (§2.1 state 13)', 
 })
 
 describe('rich-splice — nested subtree roots splice recursively (§2.1 state 14)', () => {
-  it('a doc-child h2 splices independent of its parent; the parent h1 (which OWNS the doc-child) is itself ineligible and keeps its textarea', () => {
+  it('a doc-child h2 splices independent of its parent; the parent h1 (which OWNS the doc-child) is itself ineligible and has its textarea removed', () => {
     // An h1 that owns a rag-prefixed doc-child is NOT eligible (spec state
-    // 8/13 — ownsDocChildren=true → isRichEditableRoot false), so it keeps its
-    // textarea. Only the doc-child (h2) splices. This resolves the state-14
-    // contradiction: the parent is NOT an "eligible h1".
+    // 8/13 — ownsDocChildren=true → isRichEditableRoot false), so it does NOT
+    // get contenteditable. Its textarea is STILL removed (no textareas in
+    // contenteditable mode). Only the doc-child (h2) splices.
     const nodes = [
       makeNode('doc', { type: 'h1', content: 'Doc' }),
       makeNode('s1', { type: 'h1', content: 'Parent' }),
@@ -331,8 +331,8 @@ describe('rich-splice — nested subtree roots splice recursively (§2.1 state 1
     const env = spliceEnvelope(h, traversalEnv(nodes, edges), 'contenteditable')
     const [s1] = rootsFor(env, 's1')
     const [s2] = rootsFor(env, 's2')
-    // parent h1 owns a doc-child → ineligible → keeps its textarea, no contenteditable.
-    expect(hasTextarea(s1.root, 's1')).toBe(true)
+    // parent h1 owns a doc-child → ineligible → textarea removed, no contenteditable.
+    expect(hasTextarea(s1.root, 's1')).toBe(false)
     expect(contenteditableProp(s1.root)).toBeUndefined()
     // the doc-child h2 is eligible → splices recursively.
     expect(hasTextarea(s2.root, 's2')).toBe(false)
@@ -374,14 +374,14 @@ describe('rich-splice — multi-parent duplicates are consistent (§2.1 state 15
     }
   })
 
-  it('an INELIGIBLE multi-parent node → BOTH duplicate subtree roots keep their textarea', () => {
+  it('an INELIGIBLE multi-parent node → BOTH duplicate subtree roots have their textarea removed (no contenteditable)', () => {
     const { nodes, edges } = multiParentStore('pre')
     const h = makeHarness()
     const env = spliceEnvelope(h, traversalEnv(nodes, edges), 'contenteditable')
     const dups = rootsFor(env, 'dup')
     expect(dups.length).toBe(2)
     for (const d of dups) {
-      expect(hasTextarea(d.root, 'dup')).toBe(true)
+      expect(hasTextarea(d.root, 'dup')).toBe(false) // no textarea in contenteditable mode
       expect(contenteditableProp(d.root)).toBeUndefined()
     }
   })
@@ -502,8 +502,8 @@ describe('rich-splice — fail-state 2: contenteditable prop collision (§2.2/AD
   })
 })
 
-describe('rich-splice — fail-state 3: ineligible roots MUST keep their textarea (§2.2/ADR-1)', () => {
-  it('in contenteditable mode, EVERY ineligible root keeps its fallback textarea (no erroneous removal) and no contenteditable prop', () => {
+describe('rich-splice — fail-state 3: ineligible roots have their textarea removed (§2.2/ADR-1)', () => {
+  it('in contenteditable mode, EVERY ineligible root has its textarea removed (no textareas in contenteditable mode) and no contenteditable prop', () => {
     const nodes = [
       makeNode('doc', { type: 'h1', content: 'Doc' }),
       makeNode('s-ul', { type: 'ul', content: 'list' }),
@@ -524,7 +524,7 @@ describe('rich-splice — fail-state 3: ineligible roots MUST keep their textare
     const env = spliceEnvelope(h, traversalEnv(nodes, edges), 'contenteditable')
     for (const ragId of ['s-ul', 's-pre', 's-td', 's-h1-dc']) {
       const [root] = rootsFor(env, ragId)
-      expect(hasTextarea(root.root, ragId)).toBe(true)
+      expect(hasTextarea(root.root, ragId)).toBe(false) // no textarea in contenteditable mode
       expect(contenteditableProp(root.root)).toBeUndefined()
     }
   })
@@ -560,7 +560,7 @@ describe('rich-splice — fail-state 6: multi-parent consistency (§2.2/ADR-8)',
     return { nodes, edges }
   }
 
-  it('a multi-parent node receives the SAME splice decision on EVERY duplicate — eligible: ALL splice; ineligible: ALL keep the textarea (one-removed-one-kept is a fail-state)', () => {
+  it('a multi-parent node receives the SAME splice decision on EVERY duplicate — eligible: ALL splice; ineligible: ALL have the textarea removed (one-removed-one-kept is a fail-state)', () => {
     // Eligible: ALL duplicates splice.
     const h1 = makeHarness()
     const { nodes: en, edges: ee } = multiParentStore('p')
@@ -569,12 +569,12 @@ describe('rich-splice — fail-state 6: multi-parent consistency (§2.2/ADR-8)',
       expect(hasTextarea(d.root, 'dup')).toBe(false)
       expect(contenteditableProp(d.root)).toBe(true)
     }
-    // Ineligible: ALL duplicates keep the textarea.
+    // Ineligible: ALL duplicates have the textarea removed (no contenteditable).
     const h2 = makeHarness()
     const { nodes: in_, edges: ie } = multiParentStore('pre')
     const envI = spliceEnvelope(h2, traversalEnv(in_, ie), 'contenteditable')
     for (const d of rootsFor(envI, 'dup')) {
-      expect(hasTextarea(d.root, 'dup')).toBe(true)
+      expect(hasTextarea(d.root, 'dup')).toBe(false)
       expect(contenteditableProp(d.root)).toBeUndefined()
     }
   })

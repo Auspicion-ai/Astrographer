@@ -23,6 +23,20 @@ one-way snapshot).
 
 ### Scoped-load fix — PROPOSAL GATE PROCEED-WITH-AMENDMENTS; Unit 1 (store adjacency) DONE, Unit 2 (scoped traversal + MCP refactor) DONE, Unit 3 (doc-heads doc-nav) DONE (2026-08-29, user go-ahead given)
 
+**LIVE VERIFICATION (2026-08-29):** the app was run against the persisted
+62MB corpus (63 documents, 23469 nodes) and the live scenarios exercised via
+the MCP server (HTTP 3787). **A live finding surfaced + was fixed:** the boot
+rendered ALL 63 documents at once (the full-graph render that times out), even
+with the scoped walk. The boot now renders ONLY the current document (the
+localeCompare-first doc-head, matching the doc-nav's first entry) — `get_rendered_html`
+dropped from a 60s+ timeout to ~0.15s. The doc-nav pane renders all 63
+documents with the current marked; `rag.get_document` returns scoped subgraphs
+(77–430 nodes, not the whole graph). Regression test added
+(`tests/sidebar-panes-host.test.ts` "SCOPED-LOAD (live finding)"). The doc-nav
+`li` nodes are NOT MCP dispatch targets (no handlers), so the `pane-doc-nav-select`
+select can't be driven via MCP dispatch — a pre-existing MCP-surface limitation
+(recorded in `docs/pending.md`).
+
 A user-reported load bug: "Application is trying to parse entire graph and
 timing out. Correct behavior is that the document list only needs to find the
 document heads, and the document rendering only needs to walk the graph based
@@ -266,7 +280,20 @@ _(none — Units A–T are implemented.)_
   added to `docs/decisions.md`; the amendment-8 greens/tracker reconciliation
   (the stale `deriveDocNavDocuments(snapshot)`/`ctx.snapshot` doc-nav references
   in `unit-h-sidebar-panes-greens.md`/`unit-h-sidebar-panes.md`/
-  `unit-k-sidebar-panes-host.md`) done in this pass.
+  `unit-k-sidebar-panes-host.md`) done in this pass. **LIVE VERIFICATION
+  (2026-08-29):** the app was run against the persisted 63-document corpus and
+  the live scenarios exercised via the MCP server. A live finding surfaced + was
+  fixed: the boot rendered ALL 63 documents at once (the full-graph render that
+  times out) even with the scoped walk — the boot now renders ONLY the current
+  document (the localeCompare-first doc-head, matching the doc-nav's first
+  entry), dropping `get_rendered_html` from a 60s+ timeout to ~0.15s. Regression
+  test added (`tests/sidebar-panes-host.test.ts` "SCOPED-LOAD (live finding)");
+  the Unit V3 `selectDocument` fail-state tests updated for the new boot
+  behavior (the boot sets `currentDocumentId` to the first doc-head). **Trio
+  (post-fix): full suite 2003 pass / 0 fail, typecheck + build clean.** The
+  doc-nav `li` nodes are NOT MCP dispatch targets (no handlers), so the
+  `pane-doc-nav-select` select can't be driven via MCP dispatch — recorded in
+  `docs/pending.md`.
 
 - **Live-app fixes — the editing-mode slice's 3 reported UI issues + the dead
   Save button (2026-08-28).** After the slice landed, the user reported 3 live
