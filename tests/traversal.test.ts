@@ -149,7 +149,10 @@ describe('buildTraversal — happy paths (§5.7)', () => {
       const root = result.envelope.content![0].content[0]
       expect(root.type).toBe('h1')
       expect(root.props?.id).toBe('rag-head')
-      expect(root.content).toBe('Title')
+      // 0.4.0 content-XOR-children — the subtree root carries NO scalar content;
+      // its body is the interleaved `text` children (the node's content 'Title').
+      expect(root.content).toBeUndefined()
+      expect(root.children?.[0]).toMatchObject({ type: 'text', content: 'Title' })
       expect(root.placement?.targetPlacement).toEqual(['main'])
 
       // backRefs: one entry for head
@@ -398,9 +401,9 @@ describe('buildTraversal — happy paths (§5.7)', () => {
       expect(ulRoot.type).toBe('ul')
       expect(ulRoot.props?.id).toBe('rag-ul')
       const childIds = (ulRoot.children ?? []).map((c) => c.props?.id)
-      // Unit L — the textarea editing overlay is the FIRST child of each RAG
-      // subtree root (render-only, `textarea-<ragId>`), then the doc-children.
-      expect(childIds).toEqual(['textarea-ul', 'rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
+      // 0.4.0 content-XOR-children — the ul's body is a bare `text` child (its
+      // content 'List'), then the textarea editing overlay, then the doc-children.
+      expect(childIds).toEqual([undefined, 'textarea-ul', 'rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
 
       // backRefs: one entry for the ul (its owned nodes, excluding the lis) +
       // one per li doc-child RAG object

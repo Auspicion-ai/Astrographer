@@ -30,7 +30,7 @@
 //   - A RAG node's own `props` (e.g. `href`/`src` for `a`/`img`) are merged
 //     into the subtree root's props (`id` and `data-doc-head` take precedence).
 import { createSnapshotStore } from './adjacency.js'
-import type { RagStore, RagNode, RagEdge } from './rag-store.js'
+import type { RagStore, RagNode, RagEdge, RagNodeChild } from './rag-store.js'
 import { validateDocFlow } from './doc-flow.js'
 import { translateLegacy, renderProducingProcess, MarkdownAdapter } from 'provident-ssr'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from './template-shape.js'
@@ -267,6 +267,54 @@ export function computeDocumentSubgraph(store: RagStore, documentId: string): Do
   return { docNodeIds, edges }
 }
 
+/** 0.4.0 content-XOR-children — build the subtree root's ordered CHILDREN from
+ *  the node's full-projection `content` + its inline `children` (each carrying
+ *  `offset` = the char offset into `content` where the child's run slot begins).
+ *  The node's text is emitted as bare `text` children interleaved with the
+ *  inline spans (strong/em/a/img) in document order, so the subtree root carries
+ *  NO scalar `content` (XOR). A child WITHOUT an `offset` (legacy) is appended
+ *  after the interleaved body. PURE + TOTAL (never throws). */
+function buildInterleavedChildren(ragId: string, content: string, children: RagNodeChild[]): LegacyNodeData[] {
+  const positioned = children
+    .map((c, i) => ({ c, i }))
+    .filter((x) => typeof x.c.offset === 'number' && Number.isFinite(x.c.offset))
+    .sort((a, b) => a.c.offset! - b.c.offset!)
+  const out: LegacyNodeData[] = []
+  let cursor = 0
+  for (const { c, i } of positioned) {
+    const off = c.offset!
+    if (off > cursor) {
+      const seg = content.slice(cursor, off)
+      if (seg.length > 0) out.push({ type: 'text', content: seg })
+    }
+    out.push({
+      type: c.type,
+      props: {
+        ...(c.props ?? {}),
+        id: `inline-${ragId}-${i}`,
+        'data-rag-node-id': ragId,
+      },
+      content: c.content,
+    })
+    cursor = Math.max(cursor, off) + c.content.length
+  }
+  if (cursor < content.length) {
+    const seg = content.slice(cursor)
+    if (seg.length > 0) out.push({ type: 'text', content: seg })
+  }
+  // offset-absent (legacy) children append after the interleaved body
+  for (const c of children) {
+    if (typeof c.offset !== 'number') {
+      out.push({
+        type: c.type,
+        props: { ...(c.props ?? {}), id: `inline-${ragId}-${children.indexOf(c)}`, 'data-rag-node-id': ragId },
+        content: c.content,
+      })
+    }
+  }
+  return out
+}
+
 export function buildTraversal(input: TraversalInput): TraversalResult {
   if (
     input == null ||
@@ -359,28 +407,14 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
       return {
         type: node.type,
         props,
-        content: node.content,
+        // 0.4.0 content-XOR-children — the subtree root carries NO scalar
+        // `content`; its body is the interleaved `text` + inline-span children
+        // (built from the full-projection `content` + child offsets).
         placement: { targetPlacement: [zoneName] },
         children: [
-          // Unit R — the node's inline children (RagNodeChild[]) rendered as
-          // child elements of the subtree root, INLINE within the node's own
-          // content (docs/specs/unit-r-traversal-inline-children.md §5.1). Each
-          // maps to a LegacyNodeData element of the SAME type (strong/em/a/img)
-          // with `content` + the child's `props` merged. Authored id:
-          // `inline-<ragId>-<index>` (0-based) — NOT `rag-`-prefixed (that
-          // prefix marks a doc-child subtree root) and NOT colliding with the
-          // textarea's `textarea-<ragId>` id. The authored `id` and
-          // `data-rag-node-id` take precedence over the child's own props (the
-          // same merge discipline as the subtree root's props — Unit C finding 7).
-          ...(node.children ?? []).map((child, index) => ({
-            type: child.type,
-            props: {
-              ...(child.props ?? {}),
-              id: `inline-${ragId}-${index}`,
-              'data-rag-node-id': ragId,
-            },
-            content: child.content,
-          })),
+          // The node's body: bare `text` children interleaved with the inline
+          // spans (strong/em/a/img) in document order (0.4.0 `text` child).
+          ...buildInterleavedChildren(ragId, node.content ?? '', node.children ?? []),
           // Unit L — the textarea child bound to the RAG node's content. Its
           // OWN authored id is `textarea-<ragId>` (NOT `rag-`-prefixed —
           // `collectSubtreeIds` treats a `rag-`-prefixed child as a doc-child

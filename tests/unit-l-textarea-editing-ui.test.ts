@@ -380,10 +380,11 @@ describe('the textarea authoring in buildSubtree (§5.8.1/2)', () => {
       const root = payload!.content[0]
       // the subtree root KEEPS its semantic type
       expect(root.type).toBe('h1')
-      // the subtree root's `content` is KEPT (Conflict C resolution — the
-      // markdown/line→node map renders the root's text; the textarea is a
-      // render-only editing overlay)
-      expect(root.content).toBe('Title')
+      // 0.4.0 content-XOR-children — the subtree root carries NO scalar `content`;
+      // its body is the interleaved `text` children (the textarea is a render-only
+      // editing overlay)
+      expect(root.content).toBeUndefined()
+      expect(root.children?.[0]).toMatchObject({ type: 'text', content: 'Title' })
       // the textarea child
       const textarea = (root.children ?? []).find((c) => c.type === 'textarea')
       expect(textarea).toBeDefined()

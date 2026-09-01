@@ -96,54 +96,54 @@ describe('paste-sanitize — Unit S happy-path states (§5.6)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('4. a single strong → one strong child, content = ""', () => {
+  it('4. a single strong → one strong child, content = "bold" (full projection)', () => {
     const r = expectOk(sanitizePastedHtml('<strong>bold</strong>'))
     expect(r.html).toBe('<strong>bold</strong>')
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'strong', content: 'bold' }])
+    expect(r.content).toBe('bold')
+    expect(r.children).toEqual([{ type: 'strong', content: 'bold', offset: 0 }])
   })
 
-  it('5. a single em → one em child, content = ""', () => {
+  it('5. a single em → one em child, content = "italic" (full projection)', () => {
     const r = expectOk(sanitizePastedHtml('<em>italic</em>'))
     expect(r.html).toBe('<em>italic</em>')
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'em', content: 'italic' }])
+    expect(r.content).toBe('italic')
+    expect(r.children).toEqual([{ type: 'em', content: 'italic', offset: 0 }])
   })
 
-  it('6. text + inline child: content folds the surrounding text, child preserved', () => {
+  it('6. text + inline child: content is the FULL projection, child carries its offset', () => {
     const r = expectOk(sanitizePastedHtml('Hello <strong>bold</strong> world'))
     expect(r.html).toBe('Hello <strong>bold</strong> world')
-    expect(r.content).toBe('Hello  world')
-    expect(r.children).toEqual([{ type: 'strong', content: 'bold' }])
+    expect(r.content).toBe('Hello bold world')
+    expect(r.children).toEqual([{ type: 'strong', content: 'bold', offset: 6 }])
   })
 
-  it('7. a safe a → one a child with props { href }', () => {
+  it('7. a safe a → one a child with props { href } (full projection content)', () => {
     const r = expectOk(sanitizePastedHtml('<a href="https://x">link</a>'))
     expect(r.html).toBe('<a href="https://x">link</a>')
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.content).toBe('link')
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('8. an a with title: props keeps href + title, all other attributes stripped', () => {
     const r = expectOk(sanitizePastedHtml('<a href="https://x" title="t">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x', title: 't' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x', title: 't' } }])
   })
 
   it('9. a relative a href is safe: props = { href: "/path" }', () => {
     const r = expectOk(sanitizePastedHtml('<a href="/path">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: '/path' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: '/path' } }])
   })
 
-  it('10. a safe img → one img child (content "") with props { src, alt }', () => {
+  it('10. a safe img → one img child (content "") with props { src, alt }, offset slot', () => {
     const r = expectOk(sanitizePastedHtml('<img src="https://x/i.png" alt="pic">'))
     expect(r.html).toBe('<img src="https://x/i.png" alt="pic">')
     expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'img', content: '', props: { src: 'https://x/i.png', alt: 'pic' } }])
+    expect(r.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'https://x/i.png', alt: 'pic' } }])
   })
 
   it('11. a safe data:image/* img survives (the data:image carve-out — A4)', () => {
     const r = expectOk(sanitizePastedHtml('<img src="data:image/png;base64,AAAA" alt="p">'))
-    expect(r.children).toEqual([{ type: 'img', content: '', props: { src: 'data:image/png;base64,AAAA', alt: 'p' } }])
+    expect(r.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'data:image/png;base64,AAAA', alt: 'p' } }])
   })
 
   it('12. span folded into the parent text: NO span child (A6)', () => {
@@ -152,29 +152,29 @@ describe('paste-sanitize — Unit S happy-path states (§5.6)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('13. nested inline flattening: inner strong hoisted to a sibling (A7)', () => {
+  it('13. nested inline flattening: inner strong hoisted to a sibling (A7), full-projection content', () => {
     const r = expectOk(sanitizePastedHtml('<em>italic <strong>bold</strong> tail</em>'))
-    expect(r.content).toBe('')
+    expect(r.content).toBe('italic  tailbold')
     expect(r.children).toEqual([
-      { type: 'em', content: 'italic  tail' },
-      { type: 'strong', content: 'bold' },
+      { type: 'em', content: 'italic  tail', offset: 0 },
+      { type: 'strong', content: 'bold', offset: 0 },
     ])
   })
 
   it('14. recursive flattening: deeply-nested chain flattens to a flat sibling list (A7)', () => {
     const r = expectOk(sanitizePastedHtml('<em>a <strong>b <em>c</em></strong> d</em>'))
-    expect(r.content).toBe('')
+    expect(r.content).toBe('a  db c')
     expect(r.children).toEqual([
-      { type: 'em', content: 'a  d' },
-      { type: 'strong', content: 'b ' },
-      { type: 'em', content: 'c' },
+      { type: 'em', content: 'a  d', offset: 0 },
+      { type: 'strong', content: 'b ', offset: 0 },
+      { type: 'em', content: 'c', offset: 0 },
     ])
   })
 
-  it('15. unwrapped block element: p wrapper dropped, text + inline children preserved', () => {
+  it('15. unwrapped block element: p wrapper dropped, text + inline children preserved (full projection)', () => {
     const r = expectOk(sanitizePastedHtml('<p>Hello <strong>world</strong></p>'))
-    expect(r.content).toBe('Hello ')
-    expect(r.children).toEqual([{ type: 'strong', content: 'world' }])
+    expect(r.content).toBe('Hello world')
+    expect(r.children).toEqual([{ type: 'strong', content: 'world', offset: 6 }])
   })
 
   it('16. script removed entirely: script AND its content dropped (A1)', () => {
@@ -209,7 +209,7 @@ describe('paste-sanitize — Unit S happy-path states (§5.6)', () => {
 
   it('21. event-handler attribute stripped: onclick removed from the a (A2)', () => {
     const r = expectOk(sanitizePastedHtml('<a href="https://x" onclick="alert(1)">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('22. javascript: URL demotes an a to plain text (A3)', () => {
@@ -256,7 +256,7 @@ describe('paste-sanitize — Unit S happy-path states (§5.6)', () => {
 
   it('29. dangerous-key attribute stripped: __proto__ removed from the a (A10)', () => {
     const r = expectOk(sanitizePastedHtml('<a href="https://x" __proto__="p">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('30. determinism: the same input returns the SAME result (deep-equal) both times', () => {

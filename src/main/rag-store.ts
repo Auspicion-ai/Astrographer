@@ -82,6 +82,13 @@ export interface RagNodeChild {
   content: string
   /** Arbitrary props (e.g. `href`/`src`/`alt` for `a`/`img`). Optional. */
   props?: Record<string, unknown>
+  /** NEW (Unit M1) — the 0-based char offset into the owning node's FULL
+   *  plain-text `content` at which this child's run slot begins. ABSENT =
+   *  append-after-content (the v1 default; backward-compatible with pre-B
+   *  stored nodes). When present it MUST satisfy 0 ≤ offset ≤ content.length
+   *  (the bound). A flattened nested-inline sibling INHERITS the outer child's
+   *  offset slot (back-to-back, §5.3). */
+  offset?: number
 }
 
 /** A RAG node — one knowledge-graph object. OWNS a subtree of provident nodes

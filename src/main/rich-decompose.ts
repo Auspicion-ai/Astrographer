@@ -47,10 +47,39 @@ interface Processed {
   children: RagNodeChild[]
 }
 
-/** Merge `r` into `target` in place (document-order concatenation). */
+/** Unit M1 (§5.3) — splice-EXTRACTION (see paste-sanitize.js): the own
+ *  non-child text of a subtree's FULL projection. Flattened nested siblings
+ *  SHARE an offset (back-to-back), so equal-offset children are grouped into
+ *  one contiguous run before the removal. */
+function spliceOutInline(full: string, children: RagNodeChild[]): string {
+  if (children.length === 0) return full
+  // Group contiguous back-to-back (equal-offset) runs — flattened nested siblings.
+  const runs: { off: number; text: string }[] = []
+  for (const c of children) {
+    const off = c.offset ?? 0
+    const last = runs[runs.length - 1]
+    if (last && last.off === off) last.text += c.content
+    else runs.push({ off, text: c.content })
+  }
+  const out: string[] = []
+  let cursor = 0
+  for (const r of runs) {
+    if (r.off > cursor) out.push(full.slice(cursor, r.off))
+    cursor = r.off + r.text.length
+  }
+  if (cursor < full.length) out.push(full.slice(cursor))
+  return out.join('')
+}
+
+/** Merge `r` into `target` in place (document-order concatenation). `r.content`
+ *  is the FULL projection of `r`; `r.children` carry offsets RELATIVE to it, so
+ *  each is rebased by the target's pre-append content length (§5.4). */
 function merge(target: Processed, r: Processed): void {
+  const base = target.content.length
   target.content += r.content
-  target.children = target.children.concat(r.children)
+  for (const c of r.children) {
+    target.children.push({ ...c, offset: (c.offset ?? 0) + base })
+  }
 }
 
 /** Compute a single element node's result from its already-processed children
@@ -63,10 +92,18 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
   // outside elements (`inner.content`), and nested child-producing descendants
   // are hoisted to SIBLINGS after the outer child (`inner.children`).
   if (tag === 'strong' || tag === 'b') {
-    return { content: '', children: [{ type: 'strong', content: inner.content }, ...inner.children] }
+    const own = spliceOutInline(inner.content, inner.children)
+    return {
+      content: own + inner.children.map((c) => c.content).join(''),
+      children: [{ type: 'strong', content: own, offset: 0 }, ...inner.children.map((c) => ({ ...c, offset: 0 }))],
+    }
   }
   if (tag === 'em' || tag === 'i') {
-    return { content: '', children: [{ type: 'em', content: inner.content }, ...inner.children] }
+    const own = spliceOutInline(inner.content, inner.children)
+    return {
+      content: own + inner.children.map((c) => c.content).join(''),
+      children: [{ type: 'em', content: own, offset: 0 }, ...inner.children.map((c) => ({ ...c, offset: 0 }))],
+    }
   }
 
   if (tag === 'a') {
@@ -86,7 +123,14 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
     const props: Record<string, unknown> = { href: normalizedHref }
     const title = node.attrs['title']
     if (title !== undefined) props.title = title
-    return { content: '', children: [{ type: 'a', content: inner.content, props }, ...inner.children] }
+    const own = spliceOutInline(inner.content, inner.children)
+    return {
+      content: own + inner.children.map((c) => c.content).join(''),
+      children: [
+        { type: 'a', content: own, props, offset: 0 },
+        ...inner.children.map((c) => ({ ...c, offset: 0 })),
+      ],
+    }
   }
 
   if (tag === 'img') {
@@ -112,7 +156,7 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
     const props: Record<string, unknown> = { src: normalizedSrc }
     const alt = node.attrs['alt']
     if (alt !== undefined) props.alt = alt
-    return { content: inner.content, children: [{ type: 'img', content: '', props }] }
+    return { content: inner.content, children: [{ type: 'img', content: '', props, offset: 0 }] }
   }
 
   // Any other element (`u`/`font`/`span`/`div`/`br` + anything outside the

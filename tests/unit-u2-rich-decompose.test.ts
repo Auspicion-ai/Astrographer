@@ -114,63 +114,63 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('4. a single strong → one strong child, content = ""', () => {
+  it('4. a single strong → one strong child, content = "bold" (full projection)', () => {
     const r = expectOk(decomposeRichHtml('<strong>bold</strong>'))
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'strong', content: 'bold' }])
+    expect(r.content).toBe('bold')
+    expect(r.children).toEqual([{ type: 'strong', content: 'bold', offset: 0 }])
   })
 
-  it('5. a single em → one em child, content = ""', () => {
+  it('5. a single em → one em child, content = "italic" (full projection)', () => {
     const r = expectOk(decomposeRichHtml('<em>italic</em>'))
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'em', content: 'italic' }])
+    expect(r.content).toBe('italic')
+    expect(r.children).toEqual([{ type: 'em', content: 'italic', offset: 0 }])
   })
 
   it('6. b is MAPPED to strong: one strong child, NO b child', () => {
     const r = expectOk(decomposeRichHtml('<b>bold</b>'))
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'strong', content: 'bold' }])
+    expect(r.content).toBe('bold')
+    expect(r.children).toEqual([{ type: 'strong', content: 'bold', offset: 0 }])
     expect(r.children.some((c) => c.type === 'b')).toBe(false)
   })
 
   it('7. i is MAPPED to em: one em child, NO i child', () => {
     const r = expectOk(decomposeRichHtml('<i>italic</i>'))
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'em', content: 'italic' }])
+    expect(r.content).toBe('italic')
+    expect(r.children).toEqual([{ type: 'em', content: 'italic', offset: 0 }])
     expect(r.children.some((c) => c.type === 'i')).toBe(false)
   })
 
-  it('8. text + inline child: text before AND after folds into content', () => {
+  it('8. text + inline child: full-projection content + the child carries its offset', () => {
     const r = expectOk(decomposeRichHtml('Hello <strong>bold</strong> world'))
-    expect(r.content).toBe('Hello  world')
-    expect(r.children).toEqual([{ type: 'strong', content: 'bold' }])
+    expect(r.content).toBe('Hello bold world')
+    expect(r.children).toEqual([{ type: 'strong', content: 'bold', offset: 6 }])
   })
 
-  it('9. a safe a → one a child with props { href }', () => {
+  it('9. a safe a → one a child with props { href } (full-projection content)', () => {
     const r = expectOk(decomposeRichHtml('<a href="https://x">link</a>'))
-    expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.content).toBe('link')
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('10. an a with title: props keeps href + title, all other attributes stripped', () => {
     const r = expectOk(decomposeRichHtml('<a href="https://x" title="t">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x', title: 't' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x', title: 't' } }])
   })
 
   it('11. a relative a href is safe: props = { href: "/path" }', () => {
     const r = expectOk(decomposeRichHtml('<a href="/path">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: '/path' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: '/path' } }])
   })
 
-  it('12. a safe img → one img child (content "") with props { src, alt }', () => {
+  it('12. a safe img → one img child (content "") with props { src, alt }, offset slot', () => {
     const r = expectOk(decomposeRichHtml('<img src="https://x/i.png" alt="pic">'))
     expect(r.content).toBe('')
-    expect(r.children).toEqual([{ type: 'img', content: '', props: { src: 'https://x/i.png', alt: 'pic' } }])
+    expect(r.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'https://x/i.png', alt: 'pic' } }])
   })
 
   it('13. a safe raster data:image/* img survives (the data:image carve-out, img only)', () => {
     const r = expectOk(decomposeRichHtml('<img src="data:image/png;base64,AAAA" alt="p">'))
-    expect(r.children).toEqual([{ type: 'img', content: '', props: { src: 'data:image/png;base64,AAAA', alt: 'p' } }])
+    expect(r.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'data:image/png;base64,AAAA', alt: 'p' } }])
   })
 
   it('14. u is unwrapped: text folded into content, NO u child', () => {
@@ -203,10 +203,10 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('19. div with inline children: unwrap + hoist the strong', () => {
+  it('19. div with inline children: unwrap + hoist the strong (full-projection content)', () => {
     const r = expectOk(decomposeRichHtml('<div>a <strong>b</strong> c</div>'))
-    expect(r.content).toBe('a  c')
-    expect(r.children).toEqual([{ type: 'strong', content: 'b' }])
+    expect(r.content).toBe('a b c')
+    expect(r.children).toEqual([{ type: 'strong', content: 'b', offset: 2 }])
   })
 
   it('20. span with nested text folded: content = "a b c", children = []', () => {
@@ -215,31 +215,31 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('21. nested inline flattening: inner strong hoisted to a sibling AFTER the em', () => {
+  it('21. nested inline flattening: inner strong hoisted to a sibling AFTER the em (full projection)', () => {
     const r = expectOk(decomposeRichHtml('<em>italic <strong>bold</strong> tail</em>'))
-    expect(r.content).toBe('')
+    expect(r.content).toBe('italic  tailbold')
     expect(r.children).toEqual([
-      { type: 'em', content: 'italic  tail' },
-      { type: 'strong', content: 'bold' },
+      { type: 'em', content: 'italic  tail', offset: 0 },
+      { type: 'strong', content: 'bold', offset: 0 },
     ])
   })
 
   it('22. recursive flattening: deeply-nested chain flattens to a flat sibling list', () => {
     const r = expectOk(decomposeRichHtml('<em>a <strong>b <em>c</em></strong> d</em>'))
-    expect(r.content).toBe('')
+    expect(r.content).toBe('a  db c')
     expect(r.children).toEqual([
-      { type: 'em', content: 'a  d' },
-      { type: 'strong', content: 'b ' },
-      { type: 'em', content: 'c' },
+      { type: 'em', content: 'a  d', offset: 0 },
+      { type: 'strong', content: 'b ', offset: 0 },
+      { type: 'em', content: 'c', offset: 0 },
     ])
   })
 
-  it('23. a inside strong: strong text folds, a hoisted to a sibling', () => {
+  it('23. a inside strong: strong text folds, a hoisted to a sibling (full projection)', () => {
     const r = expectOk(decomposeRichHtml('<strong>bold <a href="/x">link</a></strong>'))
-    expect(r.content).toBe('')
+    expect(r.content).toBe('bold link')
     expect(r.children).toEqual([
-      { type: 'strong', content: 'bold ' },
-      { type: 'a', content: 'link', props: { href: '/x' } },
+      { type: 'strong', content: 'bold ', offset: 0 },
+      { type: 'a', content: 'link', offset: 0, props: { href: '/x' } },
     ])
   })
 
@@ -269,12 +269,12 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
 
   it('28. on* attribute stripped: onclick removed from the a', () => {
     const r = expectOk(decomposeRichHtml('<a href="https://x" onclick="alert(1)">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('29. dangerous-key attribute stripped: __proto__ removed from the a', () => {
     const r = expectOk(decomposeRichHtml('<a href="https://x" __proto__="p">link</a>'))
-    expect(r.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(r.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
   it('30. data: on an a demotes (data: is NEVER allowed on a)', () => {
@@ -313,12 +313,12 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
     expect(r.children).toEqual([])
   })
 
-  it('36. text between children (the round-trip case): ALL inter-child text folds into content', () => {
+  it('36. text between children (the round-trip case): ALL inter-child text folds into the full projection', () => {
     const r = expectOk(decomposeRichHtml('a <strong>b</strong> c <em>d</em> e'))
-    expect(r.content).toBe('a  c  e')
+    expect(r.content).toBe('a b c d e')
     expect(r.children).toEqual([
-      { type: 'strong', content: 'b' },
-      { type: 'em', content: 'd' },
+      { type: 'strong', content: 'b', offset: 2 },
+      { type: 'em', content: 'd', offset: 6 },
     ])
   })
 
@@ -329,10 +329,10 @@ describe('rich-decompose — Unit U2 happy-path states (§2.1)', () => {
     expect(r.content).not.toMatch(/alert\(1\)/)
   })
 
-  it('38. outside-accepted element (p) unwrapped to text + its inline child hoisted', () => {
+  it('38. outside-accepted element (p) unwrapped to text + its inline child hoisted (full projection)', () => {
     const r = expectOk(decomposeRichHtml('<p>Hello <strong>world</strong></p>'))
-    expect(r.content).toBe('Hello ')
-    expect(r.children).toEqual([{ type: 'strong', content: 'world' }])
+    expect(r.content).toBe('Hello world')
+    expect(r.children).toEqual([{ type: 'strong', content: 'world', offset: 6 }])
   })
 })
 
@@ -483,16 +483,17 @@ describe('rich-decompose — Unit U2 fail-states (§2.2)', () => {
     }
   })
 
-  it('8. sanitizePastedHtml behavior is UNCHANGED (non-regression — the pinned Unit S outputs are byte-identical)', () => {
-    // The additive exports must NOT alter sanitizePastedHtml. These are the
-    // pinned Unit S §5.6/§5.7 outputs for a representative sample of cases.
+  it('8. sanitizePastedHtml shares the M1 full-projection model (A5 producer consistency)', () => {
+    // M1 A5: sanitizePastedHtml emits full-projection `content` + per-child
+    // `offset`, exactly like decomposeRichHtml. These are the pinned Unit S §5.6
+    // outputs under the M1 model for a representative sample of cases.
     expect(sanitizePastedHtml('Hello world').html).toBe('Hello world')
     expect(sanitizePastedHtml('<strong>bold</strong>').html).toBe('<strong>bold</strong>')
-    expect(sanitizePastedHtml('<strong>bold</strong>').content).toBe('')
-    expect(sanitizePastedHtml('<strong>bold</strong>').children).toEqual([{ type: 'strong', content: 'bold' }])
-    expect(sanitizePastedHtml('Hello <strong>bold</strong> world').content).toBe('Hello  world')
+    expect(sanitizePastedHtml('<strong>bold</strong>').content).toBe('bold')
+    expect(sanitizePastedHtml('<strong>bold</strong>').children).toEqual([{ type: 'strong', content: 'bold', offset: 0 }])
+    expect(sanitizePastedHtml('Hello <strong>bold</strong> world').content).toBe('Hello bold world')
     expect(sanitizePastedHtml('<a href="https://x" onclick="alert(1)">link</a>').children)
-      .toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+      .toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
     expect(sanitizePastedHtml('a<script>alert(1)</script>b').content).toBe('ab')
   })
 })
@@ -546,7 +547,7 @@ describe('rich-decompose — additive exports on paste-sanitize (§1.3)', () => 
 describe('rich-decompose — adversarial regression (§6 ADR-1..ADR-10)', () => {
   it('ADR-1. on* XSS attributes never survive into props (img onerror)', () => {
     const r = expectOk(decomposeRichHtml('<img src="https://x/i.png" onerror="alert(1)">'))
-    expect(r.children).toEqual([{ type: 'img', content: '', props: { src: 'https://x/i.png' } }])
+    expect(r.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'https://x/i.png' } }])
     if (r.children[0].props) {
       expect(Object.keys(r.children[0].props).some((k) => k.toLowerCase().startsWith('on'))).toBe(false)
     }

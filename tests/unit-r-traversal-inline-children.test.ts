@@ -147,12 +147,15 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      // the FIRST child is the inline strong element (before the textarea)
-      const inline = root.children![0]
-      expect(inline.type).toBe('strong')
-      expect(inline.content).toBe('bold')
-      expect(inline.props?.id).toBe('inline-rich-0')
-      expect(inline.props?.['data-rag-node-id']).toBe('rich')
+      // 0.4.0 content-XOR-children — the subtree root carries NO scalar content
+      expect(root.content).toBeUndefined()
+      // the inline strong element is present (filtered by its authored inline- id)
+      const inline = inlineChildren(root)
+      expect(inline).toHaveLength(1)
+      expect(inline[0].type).toBe('strong')
+      expect(inline[0].content).toBe('bold')
+      expect(inline[0].props?.id).toBe('inline-rich-0')
+      expect(inline[0].props?.['data-rag-node-id']).toBe('rich')
     } finally {
       rmSyncSafe(dir)
     }
@@ -174,7 +177,7 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      const inline = (root.children ?? []).slice(0, 4)
+      const inline = inlineChildren(root)
       expect(inline.map((c) => c.type)).toEqual(['strong', 'em', 'a', 'img'])
       expect(inline[0].content).toBe('b')
       expect(inline[1].content).toBe('i')
@@ -201,7 +204,8 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      const inline = (root.children ?? []).slice(0, 2)
+      const inline = inlineChildren(root)
+      expect(inline).toHaveLength(2)
       expect(inline[0].props?.id).toBe('inline-rich-0')
       expect(inline[1].props?.id).toBe('inline-rich-1')
       // NOT rag- prefixed (A1)
@@ -236,7 +240,10 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
       const childIds = (root.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual(['inline-rich-0', 'textarea-rich', 'rag-li1'])
+      // 0.4.0 content-XOR-children — the ordering is [interleaved body (a bare
+      // `text` child for the node's content 'Rich' + the inline span), textarea
+      // overlay, doc-children subtrees].
+      expect(childIds).toEqual([undefined, 'inline-rich-0', 'textarea-rich', 'rag-li1'])
     } finally {
       rmSyncSafe(dir)
     }
@@ -253,7 +260,9 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
 
       expect(inlineChildren(root)).toHaveLength(0)
       const childIds = (root.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual(['textarea-rich'])
+      // 0.4.0 content-XOR-children — the node's body is a bare `text` child
+      // (its content), then the textarea overlay.
+      expect(childIds).toEqual([undefined, 'textarea-rich'])
     } finally {
       rmSyncSafe(dir)
     }
@@ -270,7 +279,9 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
 
       expect(inlineChildren(root)).toHaveLength(0)
       const childIds = (root.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual(['textarea-rich'])
+      // 0.4.0 content-XOR-children — the node's body is a bare `text` child
+      // (its content), then the textarea overlay.
+      expect(childIds).toEqual([undefined, 'textarea-rich'])
     } finally {
       rmSyncSafe(dir)
     }
@@ -396,9 +407,9 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      // ordering: [inline, textarea, doc-child]
+      // ordering: [interleaved body (text + inline), textarea, doc-child]
       const childIds = (root.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual(['inline-rich-0', 'textarea-rich', 'rag-li1'])
+      expect(childIds).toEqual([undefined, 'inline-rich-0', 'textarea-rich', 'rag-li1'])
 
       // backRefs: one entry for rich (including inline, excluding li1) + one for li1
       expect(result.backRefs.has('rich')).toBe(true)
@@ -476,8 +487,10 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
 
       const root = findPayloadByRootId(result!.envelope, 'rich')!.content[0]
       // the inline children are STILL rendered (independent of nestDocChildren)
-      expect(root.children![0].type).toBe('strong')
-      expect(root.children![0].props?.id).toBe('inline-rich-0')
+      const inline = inlineChildren(root)
+      expect(inline).toHaveLength(1)
+      expect(inline[0].type).toBe('strong')
+      expect(inline[0].props?.id).toBe('inline-rich-0')
     } finally {
       rmSyncSafe(dir)
     }
@@ -708,7 +721,7 @@ describe('Unit R — adversarial regression tests (F1/F2/F3/F4/F6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      const inline = (root.children ?? []).slice(0, 20)
+      const inline = inlineChildren(root)
       // all inline ids are distinct and ordered `inline-rich-0` … `inline-rich-19`
       expect(inline.map((c) => c.props?.id)).toEqual(
         Array.from({ length: 20 }, (_, i) => `inline-rich-${i}`),
@@ -788,8 +801,10 @@ describe('Unit R — adversarial regression tests (F1/F2/F3/F4/F6)', () => {
       // rich's subtree renders the inline children (nestDocChildren: false does
       // NOT suppress the inline children — they are the node's OWN content)
       const richRoot = findPayloadByRootId(result!.envelope, 'rich')!.content[0]
-      expect(richRoot.children![0].type).toBe('strong')
-      expect(richRoot.children![0].props?.id).toBe('inline-rich-0')
+      const inline = inlineChildren(richRoot)
+      expect(inline).toHaveLength(1)
+      expect(inline[0].type).toBe('strong')
+      expect(inline[0].props?.id).toBe('inline-rich-0')
 
       // the doc-child li1 becomes a SEPARATE section (its own ContentPayload)
       const li1Payload = findPayloadByRootId(result!.envelope, 'li1')

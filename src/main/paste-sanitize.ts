@@ -243,15 +243,50 @@ interface Processed {
   html: string
 }
 
-/** Merge `r` into `target` in place (document-order concatenation). */
+/** Unit M1 (§5.3) — splice-EXTRACTION: remove the hoisted inline children's own
+ *  text (their contiguous back-to-back runs at their offsets) out of a subtree's
+ *  FULL projection `full`, leaving the subtree's own non-child text — the outer
+ *  child's own `content` (nested child-producing descendants are hoisted out).
+ *  Flattened nested siblings SHARE an offset (back-to-back), so equal-offset
+ *  children are grouped into one contiguous run before the removal. */
+function spliceOutInline(full: string, children: RagNodeChild[]): string {
+  if (children.length === 0) return full
+  // Group contiguous back-to-back (equal-offset) runs — flattened nested siblings.
+  const runs: { off: number; text: string }[] = []
+  for (const c of children) {
+    const off = c.offset ?? 0
+    const last = runs[runs.length - 1]
+    if (last && last.off === off) last.text += c.content
+    else runs.push({ off, text: c.content })
+  }
+  const out: string[] = []
+  let cursor = 0
+  for (const r of runs) {
+    if (r.off > cursor) out.push(full.slice(cursor, r.off))
+    cursor = r.off + r.text.length
+  }
+  if (cursor < full.length) out.push(full.slice(cursor))
+  return out.join('')
+}
+
+/** Merge `r` into `target` in place (document-order concatenation). `r.content`
+ *  is the FULL projection of `r`; `r.children` carry offsets RELATIVE to it, so
+ *  each is rebased by the target's pre-append content length (§5.4). */
 function merge(target: Processed, r: Processed): void {
+  const base = target.content.length
   target.content += r.content
-  target.children = target.children.concat(r.children)
   target.html += r.html
+  for (const c of r.children) {
+    target.children.push({ ...c, offset: (c.offset ?? 0) + base })
+  }
 }
 
 /** Compute a single element node's result from its already-processed children
- *  (`inner` = the concatenated result of `node.children`). */
+ *  (`inner` = the concatenated FULL-projection result of `node.children`; its
+ *  children carry relative offsets). The result's `content` is the FULL
+ *  projection of this element's contribution and its child offsets are RELATIVE
+ *  to that content (the merge rebases them into the owning node's coordinate
+ *  space). */
 function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
   const tag = node.tag
   // Disallowed element (or the fe* wildcard) → removed ENTIRELY (§5.2).
@@ -268,9 +303,10 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
   }
 
   if (tag === 'strong' || tag === 'em') {
+    const own = spliceOutInline(inner.content, inner.children)
     return {
-      content: '',
-      children: [{ type: tag, content: inner.content }, ...inner.children],
+      content: own + inner.children.map((c) => c.content).join(''),
+      children: [{ type: tag, content: own, offset: 0 }, ...inner.children.map((c) => ({ ...c, offset: 0 }))],
       html: '<' + tag + '>' + inner.html + '</' + tag + '>',
     }
   }
@@ -292,9 +328,13 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
     const attrHtml = title !== undefined
       ? ` href="${escapeAttr(normalizedHref)}" title="${escapeAttr(title)}"`
       : ` href="${escapeAttr(normalizedHref)}"`
+    const own = spliceOutInline(inner.content, inner.children)
     return {
-      content: '',
-      children: [{ type: 'a', content: inner.content, props }, ...inner.children],
+      content: own + inner.children.map((c) => c.content).join(''),
+      children: [
+        { type: 'a', content: own, props, offset: 0 },
+        ...inner.children.map((c) => ({ ...c, offset: 0 })),
+      ],
       html: '<a' + attrHtml + '>' + inner.html + '</a>',
     }
   }
@@ -316,9 +356,13 @@ function computeNodeResult(node: HtmlElement, inner: Processed): Processed {
     const attrHtml = alt !== undefined
       ? ` src="${escapeAttr(normalizedSrc)}" alt="${escapeAttr(alt)}"`
       : ` src="${escapeAttr(normalizedSrc)}"`
+    // img is VOID: it emits an `img` child (content '') at the current slot and
+    // contributes NO text. (The shared tokenizer treats img as a container, so
+    // any text it absorbed (`inner.content`) is DROPPED here — paste-sanitize
+    // discards img-attached text; rich-decompose recovers it instead.)
     return {
       content: '',
-      children: [{ type: 'img', content: '', props }],
+      children: [{ type: 'img', content: '', props, offset: 0 }],
       html: '<img' + attrHtml + '>',
     }
   }

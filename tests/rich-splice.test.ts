@@ -271,8 +271,10 @@ describe('rich-splice — inline children survive the splice (§2.1 state 12)', 
     expect(hasTextarea(s1.root, 's1')).toBe(false)
     expect(contenteditableProp(s1.root)).toBe(true)
     // The inline children remain (authored id `inline-s1-<n>`, NOT rag-prefixed).
+    // 0.4.0 content-XOR-children — the root's body is a bare `text` child (its
+    // content 'plain') interleaved with the inline spans; the textarea is removed.
     const inlineIds = (s1.root.children ?? []).map((c) => (c as LegacyNodeData).props?.id)
-    expect(inlineIds).toEqual(['inline-s1-0', 'inline-s1-1'])
+    expect(inlineIds).toEqual([undefined, 'inline-s1-0', 'inline-s1-1'])
     expect(inlineIds.some((id) => id === 'textarea-s1')).toBe(false)
   })
 })

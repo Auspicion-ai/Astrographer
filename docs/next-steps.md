@@ -21,6 +21,53 @@ one-way snapshot).
 
 ## OPEN
 
+**provident-ssr upgraded to 0.3.2 (2026-08-31):** the package was upgraded
+from `^0.3.0` → `^0.3.1` → `^0.3.2` (trio green — 2003 pass / 38 skip,
+typecheck clean, build clean). This resolves the **ENG-INLINE-ORDER** engine defect
+(the upstream `bodyRuns` capability — additive, opt-in text/element interleaving;
+DOM/SSR adapters render runs IN ORDER) and the **ENG-BODYRUNS-WIRE-REF** blocker
+(the `{ child: <authored-id> }` ref is rewritten at emit time — verified: a
+TEMPLATE-authored node renders `<strong>Proposal:</strong> Astrographer`
+correctly). **0.3.2 additionally fixed the def-fill / component-prototype
+`bodyRuns` gap.** **HOST-SIDE re-expression STILL BLOCKED (2026-08-31, verified
+with the real `buildTraversal` envelope):** the emit-boundary child-wire
+translation STILL FAILS for **PLACEMENT-ROUTED (path-state) content roots** — the
+RAG wiki's exact rendering model (every subtree root is a placement-routed
+`LegacyContentPayload` into a zone). The global `authoredIdToWire` index maps a
+path-state child to `pathWireOf`'s NODE id while the parent's `childOrder`
+references its PATH-KEY wire, so the rewritten child run is dropped (children
+vanish). Recorded as handoff item **`ENG-BODYRUNS-WIRE-REF-PATHSTATE`**
+(`docs/defects.md` + `docs/HANDOFF.md`); a candidate host-side resolution is a
+post-`translateLegacy` rewrite of `bodyRuns` child refs to the ACTUAL emitted
+(path-key) wires. The parser/model offset work was reverted (it is inert without
+working `bodyRuns`). NOTE: the host's dom-shim does not track interleaved order
+for DOM-view tests. The markdown adapter does NOT consume
+`bodyRuns` (upstream §9 L3 — the fix is for HTML/DOM rendering).
+
+**Inline-ordering render fix — RESOLVED via provident-ssr 0.4.0 (2026-08-31).**
+The four-agent gate ran (`docs/specs/inline-order-render-fix-review.md`):
+PROCEED-WITH-AMENDMENTS, Design B (per-child `offset?: number` on `RagNodeChild`).
+**M1 (offset model + the three producers emitting full-projection `content` +
+offsets) is DONE + GREEN** (spec `docs/specs/unit-m1-inline-offset-model.md`;
+adversarial findings H1–H6 recorded in §3a). **The render was blocked by a THIRD
+engine ADAPTER defect** (`ENG-BODYRUNS-WIRE-REF-PATHSTATE` — the `bodyRuns`
+run-child lookup uses a bare `wireKey` while placement path-state children are
+under composite `pathKey\0forkKey` keys; not host-fixable). **provident-ssr 0.4.0
+(2026-08-31) resolved it by adding a bare `text` child node + the content-XOR-
+children model**: text beside children is now a `text` child in `childOrder`, so
+interleave is deterministic WITHOUT `bodyRuns`. **The traversal `buildSubtree` was
+rewritten to the XOR shape** — the subtree root carries NO `content`; its body is
+the interleaved `text` + inline-span children (built from the full-projection
+`content` + child offsets via `buildInterleavedChildren`). Verified end-to-end:
+`**Proposal:** Astrographer` → `<strong>Proposal:</strong> Astrographer` (strong
+first) and `Some **bold** text` → `Some <strong>bold</strong> text`. **Trio green
+(2031 pass / 38 skip, typecheck clean, build clean).** The M3/M2/M4 `bodyRuns`
+units are SUPERSEDED (the host no longer emits `bodyRuns`); the M3 red set is
+archived at `archive/inline-order/2026-08-31-m3-bodyruns-rewrite-redset.test.ts`.
+`ENG-BODYRUNS-WIRE-REF-PATHSTATE` is now MOOT for the host (still an upstream
+adapter defect, but the host's interleave no longer uses `bodyRuns`).
+kept (data-correct, inert for render until the adapter is fixed).
+
 **New SPECULATIVE items (2026-08-29, user request):** six future features
 recorded in `docs/pending.md` §SPECULATIVE — (1) lock document elements from
 editing; (2) toggle whether MCP can lock/unlock elements (or only human); (3)

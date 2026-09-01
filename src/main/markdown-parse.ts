@@ -12,7 +12,7 @@
 // (§5.4 — inherited from Unit S), the raw-HTML drop (A8), the `data-doc-head`
 // marker prop on the first section (R7), the deterministic node id scheme
 // (R1a), and the `ownedNodeIds` population (R9).
-import type { RagNode, RagEdge, RagNodeChild, RagNodeType } from './rag-store.js'
+import type { RagNode, RagEdge, RagNodeChild, RagNodeChildType, RagNodeType } from './rag-store.js'
 
 /** The parsed output of one markdown document: the RAG nodes + edges that
  *  represent it, plus the documentId they belong to. */
@@ -264,12 +264,39 @@ function findClosingParen(text: string, open: number): number {
   return text.indexOf(')', open + 1)
 }
 
+/** Unit M1 (§5.3) — splice-EXTRACTION: remove the inline children's own text
+ *  (their contiguous back-to-back runs at their offsets) out of a subtree's FULL
+ *  projection `full`, leaving the subtree's own non-child text. This is the
+ *  outer child's own `content` (the flattened nested siblings are hoisted out).
+ *  Flattened nested siblings SHARE an offset (back-to-back), so equal-offset
+ *  children are grouped into one contiguous run before the removal. */
+function spliceOutInline(full: string, children: RagNodeChild[]): string {
+  if (children.length === 0) return full
+  // Group contiguous back-to-back (equal-offset) runs — flattened nested siblings.
+  const runs: { off: number; text: string }[] = []
+  for (const c of children) {
+    const off = c.offset ?? 0
+    const last = runs[runs.length - 1]
+    if (last && last.off === off) last.text += c.content
+    else runs.push({ off, text: c.content })
+  }
+  const out: string[] = []
+  let cursor = 0
+  for (const r of runs) {
+    if (r.off > cursor) out.push(full.slice(cursor, r.off))
+    cursor = r.off + r.text.length
+  }
+  if (cursor < full.length) out.push(full.slice(cursor))
+  return out.join('')
+}
+
 /** Parse inline markdown into a node's `content` (plain text) + `children`
  *  (the strong/em/a/img RagNodeChild[]). Nested inline is FLATTENED to siblings
  *  (the Unit S §5.5 discipline). Inline code is folded into the content. Raw
  *  HTML is dropped entirely (A8). TOTAL — never throws. */
 function parseInline(text: string, depth = 0): { content: string; children: RagNodeChild[] } {
-  const content: string[] = []
+  const parts: string[] = []
+  let cur = 0
   const children: RagNodeChild[] = []
   let i = 0
   const n = text.length
@@ -279,6 +306,26 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
   // violate the TOTAL contract).
   const recurse = (s: string): { content: string; children: RagNodeChild[] } =>
     depth >= MAX_INLINE_DEPTH ? { content: s, children: [] } : parseInline(s, depth + 1)
+
+  /** Emit an outer child whose run occupies the CURRENT slot (`cur`), plus its
+   *  hoisted nested-inline siblings EACH INHERITING the outer's slot (§5.3): the
+   *  outer's own `content` is the inner text with the nested children excised
+   *  (`spliceOutInline`), and the nested children are emitted back-to-back at
+   *  `slot`. Advances `cur` by the flattened run text (the outer's own text +
+   *  each nested child's text) so `content` is the FULL projection. */
+  const appendOuter = (type: RagNodeChildType, inner: { content: string; children: RagNodeChild[] }, extra?: Record<string, unknown>): void => {
+    const slot = cur
+    const own = spliceOutInline(inner.content, inner.children)
+    children.push({ type, content: own, ...(extra ?? {}), offset: slot } as RagNodeChild)
+    parts.push(own)
+    cur += own.length
+    for (const nc of inner.children) {
+      children.push({ ...nc, offset: slot })
+      parts.push(nc.content)
+      cur += nc.content.length
+    }
+  }
+
   while (i < n) {
     // image ![alt](src)
     if (text[i] === '!' && text[i + 1] === '[') {
@@ -290,7 +337,7 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
           const src = text.slice(close + 2, parenEnd)
           const normalized = normalizeUrl(src)
           if (isSafeUrl(normalized, true)) {
-            children.push({ type: 'img', content: '', props: { src: normalized, alt } })
+            children.push({ type: 'img', content: '', props: { src: normalized, alt }, offset: cur })
           }
           // unsafe/missing src → dropped entirely (A7)
           i = parenEnd + 1
@@ -309,12 +356,11 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
           const normalized = normalizeUrl(href)
           if (isSafeUrl(normalized, false)) {
             const inner = recurse(linkText)
-            children.push({ type: 'a', content: inner.content, props: { href: normalized } })
-            // flatten nested inline to siblings (Unit S §5.5)
-            children.push(...inner.children)
+            appendOuter('a', inner, { props: { href: normalized } })
           } else {
             // unsafe href → demoted to plain text (A7)
-            content.push(linkText)
+            parts.push(linkText)
+            cur += linkText.length
           }
           i = parenEnd + 1
           continue
@@ -326,9 +372,7 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
       const marker = text[i]
       const close = text.indexOf(marker + marker, i + 2)
       if (close !== -1) {
-        const inner = recurse(text.slice(i + 2, close))
-        children.push({ type: 'strong', content: inner.content })
-        children.push(...inner.children)
+        appendOuter('strong', recurse(text.slice(i + 2, close)))
         i = close + 2
         continue
       }
@@ -338,9 +382,7 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
       const marker = text[i]
       const close = text.indexOf(marker, i + 1)
       if (close !== -1) {
-        const inner = recurse(text.slice(i + 1, close))
-        children.push({ type: 'em', content: inner.content })
-        children.push(...inner.children)
+        appendOuter('em', recurse(text.slice(i + 1, close)))
         i = close + 1
         continue
       }
@@ -349,7 +391,8 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
     if (text[i] === '`') {
       const close = text.indexOf('`', i + 1)
       if (close !== -1) {
-        content.push(text.slice(i + 1, close))
+        parts.push(text.slice(i + 1, close))
+        cur += close - i - 1
         i = close + 1
         continue
       }
@@ -378,10 +421,11 @@ function parseInline(text: string, depth = 0): { content: string; children: RagN
       }
     }
     // plain text
-    content.push(text[i])
+    parts.push(text[i])
+    cur++
     i++
   }
-  return { content: content.join(''), children }
+  return { content: parts.join(''), children }
 }
 
 // ---- document construction (R1–R9) -------------------------------------------

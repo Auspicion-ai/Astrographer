@@ -158,9 +158,10 @@ describe('E2E scenario 9 — cross-document shared node (B/C → A → D)', () =
       const docB: TraversalResult = buildTraversal({ store, documentIds: ['docB'], zoneName: 'main' })
       const docC: TraversalResult = buildTraversal({ store, documentIds: ['docC'], zoneName: 'main' })
 
-      // both documents' A subtrees carry the new text
-      expect(findPayloadByRootId(docB.envelope, 'A')!.content[0].content).toBe('A spec UPDATED')
-      expect(findPayloadByRootId(docC.envelope, 'A')!.content[0].content).toBe('A spec UPDATED')
+      // both documents' A subtrees carry the new text (0.4.0 content-XOR-children
+      // — the root carries NO scalar content; its body is the `text` child)
+      expect(findPayloadByRootId(docB.envelope, 'A')!.content[0].children?.[0]).toMatchObject({ type: 'text', content: 'A spec UPDATED' })
+      expect(findPayloadByRootId(docC.envelope, 'A')!.content[0].children?.[0]).toMatchObject({ type: 'text', content: 'A spec UPDATED' })
 
       // both still share the RAG id in backRefs
       expect(docB.backRefs.has('A')).toBe(true)
@@ -230,13 +231,13 @@ describe('E2E scenario 10 — two distinct A→D edges (differing explanations)'
       const docB: TraversalResult = buildTraversal({ store, documentIds: ['docB'], zoneName: 'main' })
       expect(findPayloadByRootId(docB.envelope, 'D_B')).toBeDefined()
       expect(findPayloadByRootId(docB.envelope, 'D_C')).toBeUndefined()
-      expect(findPayloadByRootId(docB.envelope, 'D_B')!.content[0].content).toBe('D explanation for B')
+      expect(findPayloadByRootId(docB.envelope, 'D_B')!.content[0].children?.[0]).toMatchObject({ type: 'text', content: 'D explanation for B' })
 
       // document C renders the C-specific explanation, NOT the B-specific one
       const docC: TraversalResult = buildTraversal({ store, documentIds: ['docC'], zoneName: 'main' })
       expect(findPayloadByRootId(docC.envelope, 'D_C')).toBeDefined()
       expect(findPayloadByRootId(docC.envelope, 'D_B')).toBeUndefined()
-      expect(findPayloadByRootId(docC.envelope, 'D_C')!.content[0].content).toBe('D explanation for C')
+      expect(findPayloadByRootId(docC.envelope, 'D_C')!.content[0].children?.[0]).toMatchObject({ type: 'text', content: 'D explanation for C' })
     } finally {
       rmSyncSafe(dir)
     }

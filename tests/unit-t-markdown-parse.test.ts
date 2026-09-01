@@ -135,13 +135,15 @@ describe('markdown-parse — Unit T happy-path states (§5.6)', () => {
     expect(edgesOfKind(p, 'parent-child')).toContainEqual(expect.objectContaining({ source: 'doc:table:1', target: 'doc:tr:1' }))
   })
 
-  it('6. inline formatting → inline children (strong/em hoisted to siblings; the plain text is the content)', () => {
+  it('6. inline formatting → full-projection content + inline children (each with its offset)', () => {
+    // M1 model: content is the FULL plain-text projection; each child carries the
+    // char offset of its run into that projection (M1 §5.6-2).
     const p = parseMarkdown('# A\n\nSome **bold** and *em*.\n', 'doc')
     const para = nodeById(p, 'doc:p:1')
-    expect(para.content).toBe('Some  and .')
+    expect(para.content).toBe('Some bold and em.')
     expect(para.children).toEqual([
-      { type: 'strong', content: 'bold' },
-      { type: 'em', content: 'em' },
+      { type: 'strong', content: 'bold', offset: 5 },
+      { type: 'em', content: 'em', offset: 14 },
     ])
   })
 
@@ -152,16 +154,18 @@ describe('markdown-parse — Unit T happy-path states (§5.6)', () => {
     expect(para.children).toBeUndefined()
   })
 
-  it('8. safe link → a child with props { href }', () => {
+  it('8. safe link → full projection content + a child with props { href } at offset 0', () => {
     const p = parseMarkdown('# A\n\n[link](https://x)\n', 'doc')
     const para = nodeById(p, 'doc:p:1')
-    expect(para.children).toEqual([{ type: 'a', content: 'link', props: { href: 'https://x' } }])
+    expect(para.content).toBe('link')
+    expect(para.children).toEqual([{ type: 'a', content: 'link', offset: 0, props: { href: 'https://x' } }])
   })
 
-  it('9. safe image → img child with props { src, alt }', () => {
+  it('9. safe image → empty full projection content + img child at offset 0 with props { src, alt }', () => {
     const p = parseMarkdown('# A\n\n![alt](https://x/i.png)\n', 'doc')
     const para = nodeById(p, 'doc:p:1')
-    expect(para.children).toEqual([{ type: 'img', content: '', props: { src: 'https://x/i.png', alt: 'alt' } }])
+    expect(para.content).toBe('')
+    expect(para.children).toEqual([{ type: 'img', content: '', offset: 0, props: { src: 'https://x/i.png', alt: 'alt' } }])
   })
 
   it('10. setext heading: === underline → h1 section', () => {
