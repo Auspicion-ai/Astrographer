@@ -37,7 +37,20 @@
   pattern, happy-path state, and fail-state below is derivable from this spec
   ALONE. The TestWriter writes the red set for `src/main/embeddings.ts` (and
   the amended `src/main/retrieval.ts`) from §5.8/§5.9 before any
-  implementation.
+  implementation. For the vector-boot units, the red set derives from
+  §5.8/§5.9 + §5.12 (W1) / §5.13 (W4) ALONE — no code reading.
+- **Amended (2026-09-05 — the vector-boot amendment):** amended per
+  `docs/specs/ollama-vector-boot-review.md` (the four-agent gate verdict
+  PROCEED-WITH-AMENDMENTS, §2 binding amendments A1–A6) + the USER GO-AHEAD
+  for the CACHE-INCLUSIVE variant (review §4a, 2026-09-05 — the persisted
+  embedding cache is IN-SCOPE core contract, unit W4). Amended in place:
+  §5.2 (the optional `embedBatch?` provider member + the batch seam + the
+  per-text timeout budget), §5.3 (the `skipped` map + the UNIT-F-SKIP-EMPTY
+  empty-content guard extension + the W3 embed-failure flip), §5.5 (the
+  prebuilt-index option), §5.7 (the born-lexical boot flow), §5.8–§5.10
+  (states, fail-states, census). NEW: §5.12 (the vector-boot controller —
+  W1) and §5.13 (the persisted embedding cache — W4). Existing section
+  numbering is UNCHANGED; the §3a F9 label collision is resolved (§3a).
 
 ---
 
@@ -174,6 +187,264 @@ tested (13 regression tests in `tests/embeddings-adversarial.test.ts`).
   extension seam (a legitimate custom/self-hosted remote provider could never
   be allowlisted). Fixed: the allowlist is extensible via a `connectSrc` config
   field (defaulting to the safe set, remaining fail-closed). Regression-tested.
+- **F9 label disambiguation (2026-09-05 amendment, review A2):** §3a F9 (the
+  `connect-src` extensibility finding, above) KEEPS the F9 label. The
+  greens-file row that was labelled "F9 — Ollama provider malformed response"
+  (`docs/specs/unit-f-embeddings-greens.md` — the §5.9 #9 scenario) is RENAMED
+  **GREEN-OLLAMA-MALFORMED** so the two ids never collide.
+- **F10 (UNIT-F-SKIP-EMPTY)** — the empty/whitespace-content node skip in
+  `createVectorIndex` (`src/main/embeddings.ts:309-313` pre-W2; `545-549` post-W2) existed only as a
+  code comment that REUSED the "F9" tag — colliding with §3a F9 above, with no
+  finding id, no spec rule, and no named test (yet the stale-`dist` boot crash
+  HOST-F-DIST-STALE made the unlabelled skip load-bearing). Fixed (2026-09-05
+  amendment): the skip is its OWN finding id **F10 / UNIT-F-SKIP-EMPTY**,
+  pinned as the §5.3 empty-content guard rule (EXTENDED to
+  `addToVectorIndex`/`updateVectorIndex` in W3 — those lacked the guard and
+  would embed empty content → ollama `malformed response`,
+  `src/main/embeddings.ts:329-362` pre-W2; `573-606` post-W2), with a NAMED regression test in the W3
+  test file (§5.12 unit mapping). The greens-row rename + the named regression
+  test land with the W2/W3 test passes.
+
+**W1 (RCA-3, 2026-09-05 — the MANDATORY post-W1 adversarial pass; 5 HOST
+findings in `src/main/`, nothing package/upstream; all fixed + regression-
+tested in `tests/vector-boot-adversarial.test.ts`, one test per finding):**
+
+- **F-W1-1 (HIGH)** — the §5.12 reconcile loop re-embedded a node whose
+  content became empty/whitespace during the build window: `embedFn('')` →
+  ollama `{ embeddings: [] }` → `ollama embed: malformed response` → a TOTAL
+  build failure → the engine pending FOREVER (single-shot `start()`, no
+  retry). Fixed: the reconcile pass guards the LIVE content — empty/whitespace
+  → `removeFromVectorIndex` (if present) + `skipped.set(id, 'empty')` + counted
+  as a skip (the build-side UNIT-F-SKIP-EMPTY semantics); the promotion
+  continues. Regression-tested (`tests/vector-boot-adversarial.test.ts`
+  "A-F-W1-1").
+- **F-W1-2 (MEDIUM, spec-gap)** — nodes ADDED during the build window (after
+  the `listNodes` snapshot) were never embedded and invisible post-promotion
+  (score 0, filtered from ranked). Fixed: the reconcile pass walks the LIVE
+  node list — every non-empty live node MISSING from the built index is
+  embedded + `addToVectorIndex` before the swap; counted in the NEW
+  `adopted: number` PromotionReport field (§5.12 amendment, noted there).
+  Empty/whitespace additions follow the F-W1-1 skip path. Regression-tested
+  (`tests/vector-boot-adversarial.test.ts` "A-F-W1-2").
+- **F-W1-3 (LOW, spec-gap)** — `retrieval.ts` `setEmbedder` rejected only
+  null/undefined: `setEmbedder({} as Embedder)` latched the one-way promotion
+  and the first query threw TypeError with no recovery. Fixed: a STRUCTURAL
+  guard (`typeof next.score !== 'function' || typeof next.place !==
+  'function'`) throws the PINNED message `retrieval engine: embedder required`
+  WITHOUT consuming the one-way latch (a subsequent VALID `setEmbedder` still
+  succeeds). Regression-tested (`tests/vector-boot-adversarial.test.ts`
+  "A-F-W1-3").
+- **F-W1-4 (LOW, test/type drift)** — `tests/vector-boot.test.ts` carried an
+  excess `skipped` property on a `VectorIndex` literal (TS2353 if tests ever
+  enter typecheck scope — they are excluded from `tsc -p tsconfig.json`).
+  Fixed: the property removed from that literal (type-only drift; no runtime
+  test semantics change; tests/ stays OUT of the typecheck scope — noted for
+  the doc review). Regression-tested via the real TypeScript compiler
+  (`tests/vector-boot-adversarial.test.ts` "A-F-W1-4" compiles the interface +
+  the literal in one virtual file and pins ZERO TS2353 diagnostics).
+- **F-W1-5 (LOW, spec-gap)** — `vector-boot.ts` `warmUpEmbeddingProvider`
+  constructed `createEmbeddingProvider(config)` OUTSIDE the try: a
+  present-but-invalid config (e.g. openai without `apiKey`) threw UNWRAPPED
+  instead of the pinned class-2 wrap. Fixed: the construction moved INSIDE the
+  try — ANY warm-up failure (construction or embed) rejects `vector boot
+  warm-up: <underlying message>` + logs the `vector boot: warm-up failed`
+  milestone once. Regression-tested (`tests/vector-boot-adversarial.test.ts`
+  "A-F-W1-5").
+
+**W2 (RCA-3, 2026-09-05 — the MANDATORY post-W2 adversarial pass; 6 findings:
+4 HOST code findings in `src/main/embeddings.ts` + 2 spec-only; nothing
+package/upstream — nothing went to `docs/defects.md`/`docs/HANDOFF.md`. The
+HOST findings were fixed RED-FIRST + regression-tested in
+`tests/embeddings-adversarial.test.ts`, describe "W2 adversarial regression
+(F-W2-1..F-W2-5)" — 10 tests; red set 9 failing | 14 passing (13 pre-existing
++ 1 guard), green 23/23):**
+
+- **F-W2-1 (MEDIUM)** — zero-length vectors passed F6/F7 (`[].every` is
+  vacuously true): a provider's first zero-length vector latched
+  `dimension = 0` (every later vector then rejected — a provider BRICK), and
+  `createVectorIndex` stored an `[]` vector (a later `cosineSimilarity` call
+  throws `dimension mismatch` — an index POISON). Fixed: (a) BOTH providers'
+  per-vector validation rejects `vec.length === 0` as `... malformed
+  response`; (b) validate-then-commit — ALL vectors of a response are
+  validated BEFORE any dimension state is committed (a malformed later
+  vector leaves no earlier latch); (c) `createVectorIndex`'s
+  `dimension === 0` sentinel replaced with an explicit `dimensionSet`
+  boolean, and zero-length vectors rejected there too with the PINNED
+  message `createVectorIndex: malformed response (zero-length vector)`.
+  Regression-tested ("F-W2-1 provider brick…", "F-W2-1 index poison…",
+  "F-W2-1 validate-then-commit…").
+- **F-W2-2 (MEDIUM)** — the batch build was monolithic (16,840 nodes → ONE
+  request; budget 16,840 × timeoutMs ≈ 23.4 h; one bad batch re-embedded
+  ALL texts per-item; N × timeoutMs > 2^31-1 hit Node's setTimeout 1 ms
+  clamp → a spurious instant timeout). Fixed: (a) the batch loop is CHUNKED
+  — module-level `export const BATCH_CHUNK_SIZE = 64` texts per request
+  (the last chunk may be short), with per-CHUNK fallback isolation (a
+  rejected/misaligned chunk falls back per-item for exactly that chunk's
+  texts); (b) `fetchWithTimeout` clamps the budget to
+  `Math.min(budget, 2147483647)` (the clamped budget is the reported
+  timeout). The §5.8 #39 assertions (union of texts in node order, ≥ 1
+  call) stay green under chunking. Regression-tested ("F-W2-2
+  BATCH_CHUNK_SIZE…", "F-W2-2 chunk count… 130 nodes → 3 batch calls of
+  64/64/2…", "F-W2-2 per-chunk fallback isolation…", "F-W2-2 budget
+  clamp…").
+- **F-W2-3 (MEDIUM, spec-only — Architect decision; NO code change)** — the
+  batch seam had no production caller (§5.12's wiring text was unassigned).
+  Resolved in §5.12 (the F-W2-3 amendment note there): W3 owns the
+  production wiring `embedBatchFn: provider.embedBatch` at controller
+  creation (main.ts); the §5.2 sequential-default expression is pinned at
+  that wiring.
+- **F-W2-4 (LOW)** — `embedBatch` input validation was missing (asymmetric
+  with the single-text `text must be a string` guard). Fixed: a non-array
+  input or any non-string item → `<prefix> embed: batch texts must be an
+  array of strings` (ollama + remote). Empty-string items remain VALID
+  (live-verified aligned — §5.2). Regression-tested ("F-W2-4 embedBatch
+  input validation…").
+- **F-W2-5 (LOW)** — `timeoutMs` was unvalidated on the direct-options path
+  (`{timeoutMs: -5}` → instant spurious timeouts). Fixed: at BOTH provider
+  constructions `timeoutMs` when present must be a positive integer within
+  the setTimeout ceiling (≤ 2147483647 — so `{timeoutMs: 1e12}` also
+  throws), else `createOllamaEmbedProvider: timeoutMs must be a positive
+  integer` / `createRemoteEmbedProvider: timeoutMs must be a positive
+  integer` (undefined keeps the 5000 default; env-parsed values are
+  pre-validated by `parsePositiveIntEnv` — unchanged). Regression-tested
+  ("F-W2-5 timeoutMs validation…", "F-W2-5 timeoutMs undefined keeps the
+  5000 default…").
+- **F-W2-6 (LOW, doc-only; NO code change)** — a caller-supplied
+  `embedBatchFn` that never settles hangs the build (the engine stays
+  pending — the F1 discipline); the provider's own `embedBatch` is bounded
+  by the per-text budget — callers are trusted to settle. Covered by the
+  §5.3 caller-trust-boundary note below.
+
+**W3 (RCA-3 pass 2, 2026-09-05 — the mandatory post-W3-green adversarial
+pass; 7 findings: 2 HOST code fixes (F1, F3), 1 hygiene (F5), 4 pins/records
+(F2, F4, F6, F7); nothing package/upstream — nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`. The code findings were fixed RED-FIRST +
+regression-tested in `tests/embeddings-failure-policy.test.ts`, describe
+"W3 adversarial regression (RCA-3 pass 2: F1/F3 fixes + F2/F4/F6 pins)" —
+6 tests; red set 2 failing (F1, F3) | 19 passing (the 15 pre-existing + the
+4 green-on-arrival pins F2/F4/F6a/F6b), green 21/21):**
+
+- **F1 (MEDIUM)** — a node deleted while 'transient'/'empty'-skipped left a
+  STALE skipped entry forever: the `onStoreChanged` hook's delete branch ran
+  only when the id was still in `index.nodeIds` — a skipped (unindexed) id
+  never matched, so its `skipped` record outlived the node (violating §5.3
+  "a successful re-embed (or a delete) removes the entry"). Fixed: the
+  hook's delete branch calls `removeFromVectorIndex(index, nodeId)`
+  UNCONDITIONALLY (it no-ops for unknown ids and clears any skipped entry).
+  Regression-tested ("F1: a node DELETED while transient-skipped…").
+- **F2 (LOW, Architect-decided — taxonomy registration; spec + test only,
+  NO code change)** — provider-channel malformed/dimension rejections ARE
+  transient-classified under the W3 flip: a systematic post-warm-up
+  malformation (e.g. EVERY node embed rejecting `dimension mismatch`) → an
+  ALL-transient build → the build RESOLVES with an empty index
+  (`embedded 0`) → the empty-index promotion with a LOUD census
+  (`skipped empty 0 / transient N`, §5.8 #34 empty-ranked semantics: every
+  node is omitted from the scored set, `ranked` is empty — re-pinned
+  2026-09-05 with §5.4's F-SCORE fix). This is the PINNED design — boot
+  resilience over loud abort. The index-level RESOLVED-vector checks
+  (zero-length, F6 on a resolved bad vector) remain HARD rejections.
+  Regression-tested ("F2 taxonomy (§3a): a systematic post-warm-up
+  dimension-mismatch rejection…").
+- **F3 (LOW, spec-gap)** — `index.dimension` never latched on the
+  maintenance paths for an index promoted at dimension 0 (the post-outage
+  standard shape): `addToVectorIndex`'s success path skipped the F6 check
+  when `index.dimension === 0` and never latched, so a later wrong-length
+  vector silently poisoned the index. Fixed: the add success path latches
+  `index.dimension = vec.length` when the dimension is 0 (subsequent
+  wrong-length adds then reject with the F6 message); the
+  `updateVectorIndex` success path latches too. Regression-tested ("F3: an
+  index at dimension 0…").
+- **F4 (LOW, doc drift)** — §5.12 pinned `vector boot: node embed failed
+  (transient): …` but the code logs `vector index: node embed failed
+  (transient): <nodeId> <error>` (the log site is the INDEX layer,
+  outside boot). Fixed: §5.12 re-pinned to the `vector index:` prefix;
+  string-asserted in the W3 test file ("F4: the transient-skip warning
+  carries the re-pinned prefix…").
+- **F5 (LOW, hygiene)** — dead import `removeFromVectorIndex` in
+  `src/main/vector-boot.ts` (the controller stopped calling it when the W3
+  build collapsed into `createVectorIndex`). Dropped.
+- **F6 (LOW, coverage)** — two previously-unasserted W3 behaviors, pinned in
+  the W3 test file: (a) the BATCH build path's 'empty' record
+  (`embedBatchFn` over `[content, '', content]` → `skipped.get('n2') ===
+  'empty'`; the empty text is never batched); (b) the double-failure
+  fallback (a chunk rejects → the per-item fallback ALSO rejects per text →
+  each text transient-skipped, the build resolves).
+- **F7 (INFO — count reconciliation)** — the failure-policy file carried 15
+  tests before this pass (21 after: +6), not 13 as an earlier note claimed;
+  the W3 re-pin comprises 5 sites — 2 in `tests/embeddings.test.ts` (the
+  build/maintenance skip+resolve block and the hook-path block, §5.9 #46)
+  and 3 in `tests/vector-boot.test.ts` (the three total-failure tests
+  reshaped onto the non-embed store-failure trigger via the shared RE-PIN
+  helper).
+
+**W4 (RCA-3, 2026-09-05 — the MANDATORY post-W4-green adversarial pass; 3 code
+findings (the pass's short labels F1/F3/F4, registered here as F-W4-1..F-W4-3)
++ 5 INFO registrations (F-W4-4..F-W4-8); all HOST findings in `src/main/`,
+nothing package/upstream — nothing went to `docs/defects.md`/`docs/HANDOFF.md`.
+The code findings were fixed RED-FIRST + regression-tested in
+`tests/vector-cache.test.ts` — the R-series written red-first (red run 5
+failing), green 8/8, the file growing 27 → 35 tests (R1–R8; see the Unit W4
+DONE row in `docs/next-steps.md`):**
+
+- **F-W4-1 (HIGH)** — the original write-through issued a WHOLE-MAP
+  synchronous write per `set()`: an N-node cold boot serialized the whole map
+  N times (O(n²) byte amplification over the build — write i carries i+1
+  entries) with every write landing on the main thread → main-thread freezes
+  during the build. Fixed: the COALESCING write queue — `set()` mutates the
+  in-memory map, marks a dirty flag, and schedules AT MOST ONE trailing
+  whole-map write on the module-level `CACHE_WRITE_DEBOUNCE_MS = 500`
+  debounce (exported from `src/main/vector-cache.ts`); the pending write
+  executes with the map state AT EXECUTION TIME (later sets need no new job),
+  `flush()` cancels the pending timer + forces the write when dirty (the
+  drain-before-report pin holds), and the single-writer serialization, atomic
+  temp+rename, never-awaited timing, and non-fatal recovery are unchanged.
+  Registered in §5.13 as the "RCA-3 F1 amendment". Regression-tested
+  (`tests/vector-cache.test.ts` R1 — 25 synchronous set()s + flush() → exactly
+  ONE whole-map write, the file holding all 25 entries; R2 — the exported
+  constant pinned to 500).
+- **F-W4-2 (LOW)** — the load-failure log interpolated the RAW error: a V8
+  JSON SyntaxError quotes ~30 chars of the corrupt file head — attacker-chosen
+  bytes straight into the main-process log. Fixed: the interpolated error is
+  SANITIZED (every double-quoted snippet stripped) before logging; the pinned
+  `vector cache: load failed (treating as empty): ` PREFIX is unchanged.
+  Regression-tested (R3 — a marker string in quotes in a corrupt body never
+  reaches the log).
+- **F-W4-3 (LOW)** — no special-file guard at either path: a symlink/FIFO/
+  device at the cache path was read through, a symlink at the tmp path was
+  written through, and a FIFO open would block the main thread forever. Fixed:
+  lstat REGULAR-FILE guards (never follow links, never open) at BOTH the load
+  path and the write/`<path>.tmp` paths — a non-regular file is a load failure
+  (the pinned empty-cache log) / the pinned non-fatal write skip — and the tmp
+  file is created mode `0o600`. Regression-tested (R4 symlink-at-path load;
+  R7 symlink-at-tmp write; R8 FIFO-at-path never hangs; R5/R6 the
+  directory-at-path load/write cases).
+- **F-W4-4 (INFO, census)** — the `cacheHits` census is DEDUPED by
+  contentHash: the W2 per-chunk fallback re-looks-up a rejected batch's texts
+  through the SAME wrapper, and identical-content nodes adopt ONE entry —
+  each distinct adopted text counts EXACTLY ONCE. §5.12's `cacheHits` field
+  is re-pinned accordingly ("distinct embedded texts adopted … deduped by
+  contentHash"); regression-tested (the W4 greens DEDUPE scenario).
+- **F-W4-5 (INFO, concurrency)** — the cache assumes the module-store
+  ONE-WRITER model: multi-instance/cross-process writers on the SAME
+  `provident-vector-cache.json` (two app instances, or a foreign process)
+  would last-wins race whole-map writes. Out of scope (single-instance
+  Electron app; the SINGLE-WRITER-STORE contract) — noted as the documented
+  one-writer assumption.
+- **F-W4-6 (INFO, quit-time)** — there is NO quit-time flush hook: quitting
+  mid-build (inside the 500 ms debounce window, before the drain) drops the
+  trailing write — those texts re-embed on the next boot. RE-EMBED ECONOMICS
+  ONLY (the in-memory index and the promotion are unaffected; the cache is an
+  optimization surface, never a correctness surface).
+- **F-W4-7 (INFO, invalidation scope)** — invalidation is hash+tuple keyed
+  ONLY: an entry whose (kind, model, dimension, contentHash) matches but whose
+  VECTOR is wrong (a poisoned entry, however it came to be) is served as a
+  hit. The invalidation paths are deleting the cache file (a fresh full
+  embed) or changing the model/dimension tuple (pinned as a §5.13 sentence).
+- **F-W4-8 (INFO, unreachable)** — `prune()` before ANY get()/set() traffic
+  would skip the foreign-tuple filter (`currentTuple` latches from traffic):
+  unreachable in the wired flow — the controller only prunes after a build
+  whose wrapper traffic latched the tuple. Noted for any future
+  direct-prune caller.
 
 ## 4. Design decisions pinned by this spec
 
@@ -364,6 +635,13 @@ export interface EmbeddingProvider {
   readonly dimension: number
   /** Embed a single text → embedding vector. ASYNC. */
   embed(text: string): Promise<number[]>
+  /** W2 (2026-09-05 amendment) — OPTIONAL batch member: embed several texts
+   *  in ONE provider request, preserving positional order (result[i] is the
+   *  vector for texts[i]). Implemented by BOTH concrete providers; callers
+   *  without a batch need use the sequential per-item default
+   *  (`provider.embedBatch ?? per-item embed()` — §5.2 "Batch seam").
+   *  Interface members: 5 → 6 (§5.10). */
+  embedBatch?(texts: string[]): Promise<number[][]>
 }
 
 /** Create the embedding provider from a config. Dispatches on config.provider:
@@ -469,6 +747,61 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
 - **Determinism note:** the provider does NOT add randomness; the model output
   is deterministic for the same input + model + server state.
 
+**The batch seam (W2, 2026-09-05 amendment — review A5):**
+
+- **Both concrete providers implement `embedBatch`.** Request shapes (the
+  plural form of each single-text request):
+  - **ollama:** `POST {baseUrl}/api/embed` with `{ model, input: [t1..tn] }` →
+    the response `embeddings[i]` is the vector for `texts[i]` (positional
+    order). LIVE-VERIFIED (review record §5 item 1, 2026-09-05): a 3-text
+    input returns 3 ordered 768-dim vectors, and alignment holds even when a
+    batch item is the empty string. The W2 request-shape test still pins this
+    by test.
+  - **OpenAI-shaped (the default remote kind):** the batch body is the OpenAI
+    plural form; the response `data[i].embedding` is the vector for
+    `texts[i]`.
+  - **Cohere (`kind: 'cohere'`):** `{ model, texts: [t1..tn] }` → the response
+    `embeddings[i]` is the vector for `texts[i]`.
+- **Sequential default (PROVIDER-AGNOSTIC preserved):** `embedBatch?` is
+  OPTIONAL. Any caller without a batch need uses the sequential per-item
+  default: `provider.embedBatch ?? ((texts) => Promise.all(texts.map((t) =>
+  provider.embed(t))))`. The mock embedder (and any test double exposing only
+  `embed`) passes through this default UNCHANGED — W2 requires no mock
+  change.
+- **Alignment invariant:** the batch response MUST satisfy
+  `vectors.length === texts.length` (1:1 positional alignment) or the WHOLE
+  batch is REJECTED — `Error('ollama embed: batch alignment mismatch
+  (expected <n> vectors, got <m>)')` (ollama) / `Error('remote embed: batch
+  alignment mismatch (expected <n> vectors, got <m>)')` (remote/cloud) — and
+  the CALLER re-embeds exactly that batch's texts via the per-item `embed()`
+  fallback (a rejected batch never assigns vectors positionally). [The
+  alignment message text is SpecWriter-pinned 2026-09-05 — the review pins
+  the invariant, not the string.]
+- **Per-vector validation (F6/F7 extended to batches):** every in-batch
+  vector is validated exactly as a single embed — every element a finite
+  number (F7; else `... malformed response`) and length === the
+  configured/auto-detected dimension (F6; else `... dimension mismatch
+  (expected <n>, got <m>)`). Dimension auto-detect uses the FIRST in-batch
+  vector.
+- **Timeout = a PER-TEXT server-time budget:** a batch of N texts gets
+  `N × timeoutMs` TOTAL (a single-text embed keeps exactly `timeoutMs`); the
+  timeout message is byte-identical in shape to §5.9 #8/#14 — `ollama embed:
+  timeout after <N × timeoutMs>ms` / `remote embed: timeout after <N ×
+  timeoutMs>ms`. On expiry the in-flight fetch is ACTUALLY ABORTED via
+  `AbortController` (the aborted fetch's rejection is swallowed — the timeout
+  error is the one thrown; no unhandled rejection). This replaced the pre-W2
+  `Promise.race` abandonment (the fetch kept running after the race lost —
+  `src/main/embeddings.ts:128-149,232-254` pre-W2 line numbers; the
+   AbortController rewrite itself LANDED with W2); the single-text `embed()` gains
+  the same AbortController abort (same message shape, no orphaned request).
+- **Index-build wiring:** `createVectorIndex` gains the batch fn as an
+  OPTIONAL THIRD param — `createVectorIndex(nodes, embedFn, embedBatchFn?)`
+  (§5.3). Existing two-arg calls (tests/mocks) are UNCHANGED. The per-node
+  `updateVectorIndex`/`addToVectorIndex` embed exactly ONE node each and keep
+  the per-item `embed()` path (their signatures are unchanged by W2 — the
+  W2/W3 handoff, review A6, keeps the §5.3/§5.9 reject-propagation contract
+  green until W3 re-pins it).
+
 **Error handling (documented fail-states):**
 
 - `createEmbeddingProvider` with a null/undefined `config` → throws
@@ -493,9 +826,17 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
   error message).
 - A network failure (remote/cloud) → the returned promise REJECTS with
   `Error('remote embed: <message>')`.
-- A timeout (the request exceeds `timeoutMs`) → the returned promise REJECTS
-  with `Error('ollama embed: timeout after <timeoutMs>ms')` (ollama) or
-  `Error('remote embed: timeout after <timeoutMs>ms')` (remote/cloud).
+- A timeout (the request exceeds its per-text budget — `timeoutMs` for a
+  single embed, `N × timeoutMs` for a batch of N, W2) → the returned promise
+  REJECTS with `Error('ollama embed: timeout after <timeoutMs>ms')` (ollama) or
+  `Error('remote embed: timeout after <timeoutMs>ms')` (remote/cloud), and the
+  in-flight fetch is ABORTED via `AbortController` (W2 — no orphaned request).
+- A batch alignment mismatch (`embedBatch` response vector count ≠ the input
+  count) → the `embedBatch` promise REJECTS with
+  `Error('ollama embed: batch alignment mismatch (expected <n> vectors, got <m>)')`
+  (ollama) or `Error('remote embed: batch alignment mismatch (expected <n>
+  vectors, got <m>)')` (remote/cloud); the caller falls back to per-item
+  `embed()` for exactly that batch's texts (§5.2 "Batch seam").
 - A malformed response (no embeddings array, or the expected vector field
   missing) → the returned promise REJECTS with
   `Error('ollama embed: malformed response')` (ollama) or
@@ -512,6 +853,18 @@ export function createRemoteEmbedProvider(opts: RemoteEmbedOptions): EmbeddingPr
   allowlist → the returned promise REJECTS with
   `Error('remote embed: baseUrl not in connect-src allowlist')` (the
   REMOTE-SECURITY-POSTURE — §5.7).
+- **W2 adversarial fail-states (F-W2-1/-2/-4/-5, 2026-09-05):** a
+  zero-length vector → `<prefix> embed: malformed response` (never latches
+  dimension 0; `createVectorIndex` rejects the PINNED
+  `createVectorIndex: malformed response (zero-length vector)`); the batch
+  timeout budget is clamped to `Math.min(N × timeoutMs, 2147483647)` (the
+  setTimeout ceiling); `embedBatch` with a non-array input or any
+  non-string item → `<prefix> embed: batch texts must be an array of
+  strings` (empty-string items remain VALID); a `timeoutMs` option that is
+  not a positive integer ≤ 2147483647 →
+  `createOllamaEmbedProvider: timeoutMs must be a positive integer` /
+  `createRemoteEmbedProvider: timeoutMs must be a positive integer`. The
+  batch build chunks its requests at `BATCH_CHUNK_SIZE = 64` texts (§5.3).
 
 ### 5.3 The vector index
 
@@ -531,11 +884,23 @@ export interface VectorIndex {
   /** The embedding dimension (auto-detected from the first embed, or the
    *  configured dimension). */
   dimension: number
+  /** W3 (2026-09-05 amendment) — the skipped-node record:
+   *  nodeId → 'empty' (a by-design PERMANENT skip — empty/whitespace content,
+   *  UNIT-F-SKIP-EMPTY) | 'transient' (a retryable per-node embed failure).
+   *  A skipped node is NOT in `nodeIds`/`embeddings` (omitted from the scored set — §5.4, re-pinned 2026-09-05);
+   *  an update-to-empty skip therefore ALSO removes the id from `nodeIds`
+   *  (AMENDMENT-REVIEW note 6, 2026-09-05 — the invariant wins).
+   *  A successful re-embed (or a delete) removes the entry.
+   *  Interface members: 3 → 4 (§5.10). */
+  skipped: Map<string, 'empty' | 'transient'>
 }
 
 /** Build the index from a node list (boot). Embeds each node's content once.
- *  ASYNC (calls embedFn once per node). */
-export function createVectorIndex(nodes: RagNode[], embedFn: EmbedTextFn): Promise<VectorIndex>
+ *  ASYNC. W2 (2026-09-05 amendment): `embedBatchFn?` is the OPTIONAL third
+ *  param (the provider's `embedBatch`) — when supplied, the build embeds the
+ *  non-empty contents in batch requests; omitted (ALL existing calls and
+ *  tests) → the sequential per-item embed, unchanged. */
+export function createVectorIndex(nodes: RagNode[], embedFn: EmbedTextFn, embedBatchFn?: (texts: string[]) => Promise<number[][]>): Promise<VectorIndex>
 /** Incremental content update: re-embed the node's new content, replace its
  *  embedding. ASYNC. */
 export function updateVectorIndex(index: VectorIndex, node: RagNode, embedFn: EmbedTextFn): Promise<void>
@@ -548,10 +913,70 @@ export function removeFromVectorIndex(index: VectorIndex, nodeId: string): void
 
 **Index rules:**
 
-- `createVectorIndex(nodes, embedFn)` — embeds each node's `content` once (in
-  `nodes` order), stores `nodeId → embedding`, sets `dimension` from the first
-  embed (or the configured dimension). `nodeIds` = the node ids in `nodes`
-  order.
+- `createVectorIndex(nodes, embedFn, embedBatchFn?)` — embeds each node's
+  `content` once (in `nodes` order), stores `nodeId → embedding`, sets
+  `dimension` from the first embed (or the configured dimension). `nodeIds` =
+  the node ids in `nodes` order.
+- **UNIT-F-SKIP-EMPTY — the empty-content guard (F10, 2026-09-05 amendment):**
+  a node whose `content` is not a string or is empty/whitespace is NEVER
+  embedded (ollama returns `{ embeddings: [] }` for an empty input, which the
+  embed fn rejects as `malformed response`): the node is recorded in
+  `index.skipped` with `'empty'` and left out of `nodeIds`/`embeddings`. The
+  guard applies to ALL THREE embed paths:
+  - `createVectorIndex` (build): the empty node is skipped (as today, plus the
+    `skipped` record — `src/main/embeddings.ts:545-549` post-W2; `309-313` pre-W2).
+  - `addToVectorIndex` (empty content): the node is NOT added (NO embed call);
+    `skipped.set(id, 'empty')`. [NEW — `src/main/embeddings.ts:591-606` post-W2 (`347-362` pre-W2) lacks
+    the guard today.]
+  - `updateVectorIndex` (content became empty): the node's embedding is
+    REMOVED from the index (an empty node has no retrieval value — the same
+    rule as the build) and `skipped.set(id, 'empty')`. [NEW —
+    `src/main/embeddings.ts:573-587` post-W2 (`329-343` pre-W2) lacks the guard today (W3).]
+  - An `'empty'` skip is BY-DESIGN PERMANENT (empty content is not a
+    failure); it is re-classified only if the node's content later becomes
+    non-empty (a normal `onStoreChanged` touch re-embeds it).
+- **Batch build path (W2, F-W2-2 amended 2026-09-05):** when `embedBatchFn`
+  is supplied, `createVectorIndex` embeds the non-empty node contents in
+  CHUNKED batch requests — `BATCH_CHUNK_SIZE = 64` texts per request (the
+  last chunk may be short), positional order preserved (the union of the
+  chunk texts is exactly the non-empty contents in node order); a chunk
+  alignment rejection falls back to per-item `embed()` for exactly THAT
+  chunk's texts (§5.2 per-chunk fallback isolation). Per-vector F6/F7
+  validation still runs on every vector, and a zero-length vector is
+  rejected with `createVectorIndex: malformed response (zero-length
+  vector)` (F-W2-1 — never stored, never used to latch the dimension).
+  **Caller-trust boundary (F-W2-6):** a caller-supplied `embedBatchFn` that
+  never settles hangs the build (the engine stays pending — the F1
+  discipline); the provider's own `embedBatch` is bounded by the per-text
+  budget — callers are trusted to settle.
+- **Embed-failure policy (W3, 2026-09-05 amendment — review W3/A6):** a
+  per-node embed rejection on ANY index-MAINTENANCE path (`createVectorIndex`
+  build loop, `addToVectorIndex`, `updateVectorIndex`, the `onStoreChanged`
+  hook) after the provider is reachable is NOT propagated: the node is
+  recorded `skipped.set(nodeId, 'transient')`, a warning is logged, and the
+  operation RESOLVES (the build continues). A transient skip on
+  `updateVectorIndex` REPLACES the node's previous embedding with nothing
+  (the node becomes unindexed — omitted from the scored set until a successful re-embed; the
+  `skipped` map stays the authoritative "not currently indexed due to
+  failure" record). A transient skip is RETRIED when the node is NEXT TOUCHED
+  (`onStoreChanged` re-embeds only its passed nodeIds — the trigger is REAL,
+  `src/main/embeddings.ts:718-729` post-W2; `452-463` pre-W2); a successful re-embed (or
+  a delete — the hook's delete branch removes UNCONDITIONALLY, RCA-3 pass 2
+  finding F1, so a node deleted while skipped leaves NO stale record) deletes
+  the `skipped` entry. Never-edited
+  transient skips are reported in the promotion census (§5.12).
+  **Taxonomy (F2, RCA-3 pass 2, 2026-09-05 — Architect-decided):**
+  PROVIDER-CHANNEL rejections (a malformed response / dimension mismatch
+  thrown while EMBEDDING a text) are transient-classified like any per-node
+  embed failure — a systematic post-warm-up malformation yields an
+  ALL-transient build that RESOLVES and promotes an EMPTY index with a loud
+  census (`skipped empty 0 / transient N`; §5.8 #34 empty-ranked semantics).
+  This is the pinned design: boot resilience over loud abort. The
+  INDEX-level checks on an already-RESOLVED vector (zero-length, F6 length
+  mismatch) remain HARD rejections (the promise REJECTS — never a skip).
+  **Unit handoff (A6):** this flip is a W3 contract change — W1/W2 keep the
+  reject-propagation fail-state (below) green; W3 re-pins
+  `tests/embeddings.test.ts:380-386` red→green.
 - `updateVectorIndex(index, node, embedFn)` — the node must already be in the
   index (its `nodeId` in `index.nodeIds`). Re-embeds the node's new content,
   replaces its embedding. If the node is NOT in the index, it is added (same as
@@ -560,7 +985,8 @@ export function removeFromVectorIndex(index: VectorIndex, nodeId: string): void
   index. Embeds the node, adds its embedding, appends its id. If the node IS
   already in the index, it is updated (same as `updateVectorIndex`).
 - `removeFromVectorIndex(index, nodeId)` — the node must be in the index.
-  Removes its embedding and id. If the node is NOT in the index, it is a no-op.
+  Removes its embedding and id (and any `skipped` entry for the id). If the
+  node is NOT in the index, it is a no-op.
 - **Determinism:** the index is deterministic given a deterministic `embedFn`
   (the mock is deterministic; the ollama provider is deterministic for the same
   input + model + server state).
@@ -576,7 +1002,13 @@ export function removeFromVectorIndex(index: VectorIndex, nodeId: string): void
   → throws `Error('vector index: index/nodeId required')`.
 - An `embedFn` rejection (e.g. the provider is down) propagates from the index
   build/maintenance functions (the returned promise REJECTS with the embed
-  error).
+  error). **[W1/W2 — unchanged until W3.]** The W3 amendment (2026-09-05)
+  FLIPS this for the maintenance paths: a per-node embed rejection after
+  warm-up is recorded `skipped.set(nodeId, 'transient')` + logged, and the
+  promise RESOLVES (see the embed-failure policy above). UNCHANGED in W3: the
+  required-argument rejections below, and the QUERY-time embed rejection
+  (`score`/`place` — §5.9 #32). The flip is pinned by the W3 re-pin of
+  `tests/embeddings.test.ts:380-386`.
 
 ### 5.4 Cosine similarity + scoring
 
@@ -599,7 +1031,14 @@ export function cosineSimilarity(a: number[], b: number[]): number
 
 - The query embedding is computed once (`await embedFn(query)`).
 - For each node in `nodes`, its embedding is looked up in the vector index (by
-  node id). A node NOT in the vector index scores 0.
+  node id). A node NOT in the vector index (never indexed, transiently/empty
+  skipped, or deleted) is OMITTED from the scored set — it is not scored at
+  all. **[DOC-LETTER RE-PIN 2026-09-05 (RCA-6 W3 doc review, greens finding
+  F-SCORE): the pre-W3 letter said "scores 0" (scored-then-filtered); the live
+  `score()` omits vector-absent nodes — equivalent at the ranked level to the
+  pre-W3 score-0-and-filter (the engine's `retrieval.ts:558` score>0 filter
+  drops a score-0 node either way), so `ranked` never contains a
+  vector-absent node under either letter.]**
 - The node's score = `cosineSimilarity(queryEmbedding, nodeEmbedding)`.
 - **Determinism:** the result is sorted by score descending, then by node id
   ascending (lexicographic) — a deterministic tie-break (matching Unit E §5.2).
@@ -625,10 +1064,19 @@ to the `RagStore` (to read nodes in `onStoreChanged`) and its own `VectorIndex`
 export interface VectorEmbedderOptions {
   /** The embedding provider config (provider kind, baseUrl, apiKey, model,
    *  dimension, timeoutMs — §5.2). The config is the ONLY thing that differs
-   *  between providers. */
-  provider: EmbeddingProviderConfig
+   *  between providers. W1 amendment (2026-09-05, implementer deviation —
+   *  see the note below the code block): an ALREADY-CREATED provider
+   *  INSTANCE may be passed instead of a config. */
+  provider: EmbeddingProviderConfig | EmbeddingProvider
   /** The placement minimum score threshold. Default PLACEMENT_MIN_SCORE (0). */
   placementMinScore?: number
+  /** W1 (2026-09-05 amendment) — OPTIONAL prebuilt index: when supplied, the
+   *  embedder ADOPTS it (NO build embeds happen inside
+   *  `createVectorEmbedder`). The vector-boot controller builds the index in
+   *  the BACKGROUND (§5.12 — cache/batch-aware) and hands the prebuilt index
+   *  here for the promotion. Omitted (ALL existing calls and tests) → build
+   *  from the store's nodes as today. */
+  index?: VectorIndex
 }
 
 /** Create the vector embedder. Builds the vector index from the store's nodes
@@ -636,11 +1084,20 @@ export interface VectorEmbedderOptions {
 export function createVectorEmbedder(store: RagStore, opts: VectorEmbedderOptions): Promise<Embedder>
 ```
 
+**W1 amendment (2026-09-05 — the provider-option widening, an implementer
+deviation now documented):** `provider` accepts `EmbeddingProviderConfig |
+EmbeddingProvider` — a supplied provider INSTANCE is adopted as-is (the
+vector-boot controller hands its warmed provider here so the promoted embedder
+embeds through the SAME instance — no second provider is constructed); a
+config is created via `createEmbeddingProvider` unchanged
+(`src/main/embeddings.ts:675-677` post-W2; `402-433` pre-W2).
+
 **Construction:**
 
 - Creates the provider via `createEmbeddingProvider(opts.provider)`.
 - Builds the vector index from the store's nodes
-  (`createVectorIndex(store.listNodes(), provider.embed)`).
+  (`createVectorIndex(store.listNodes(), provider.embed)`) — OR adopts
+  `opts.index` when supplied (W1 amendment: no build embeds; §5.12).
 - Returns an `Embedder` whose `score`/`place` are async and whose
   `onStoreChanged` maintains the vector index.
 
@@ -648,7 +1105,8 @@ export function createVectorEmbedder(store: RagStore, opts: VectorEmbedderOption
 
 - Computes the query embedding (`await provider.embed(query)`).
 - Scores each node by cosine similarity against its vector-index embedding
-  (a node not in the vector index scores 0) — §5.4.
+  (a node not in the vector index is OMITTED from the scored set — §5.4,
+  re-pinned 2026-09-05, greens finding F-SCORE).
 - Sorts by score descending, then node id ascending. Returns `ScoredNode[]`.
 
 **`place(content, nodes, edges)` (async):**
@@ -812,6 +1270,16 @@ suite, no network egress in CI):**
   thing that differs between providers — the retrieval engine is unchanged
   regardless of which provider the vector embedder uses.
 
+**AMENDED (2026-09-05, W1 — boot model B):** in vector mode the config
+selection no longer awaits `createVectorEmbedder` before `createRetrieval`
+(the old dark-boot flow, `src/main/main.ts:150` — pre-W1 line numbers,
+shifted by the W1 rewiring). Boot performs the warm-up
+gate, creates the engine BORN-LEXICAL (the pending phase) with the lexical
+embedder, starts the window + MCP server, and promotes the vector embedder
+into the SAME engine instance at the end of the background build (§5.12 — the
+new one-way `setEmbedder` promotion seam on `RetrievalEngine`).
+`retrieval.embedder: 'lexical'` behavior is UNCHANGED.
+
 **MCP/UI equivalence (§8.2, a BINDING constraint):**
 
 - The `rag.query` MCP tool and the `rag-query` IPC both call the SAME maintained
@@ -943,6 +1411,70 @@ suite, no network egress in CI):**
     passes it to `createRetrieval`; the engine uses it.
 26. **MCP/UI equivalence (vector):** an MCP `rag.query` and a UI `rag-query` IPC
     with the same params → the same result, with the vector embedder selected.
+27. **Warm-up gate happy (W1, §5.12):** the boot warm-up performs ONE REAL
+    `POST /api/embed` (a single-text probe embed through the configured
+    provider — NOT `isOllamaAvailable`, which probes `GET /api/tags` and does
+    NOT load the model) and resolves with the warmed provider when the embed
+    succeeds.
+28. **Born-lexical pending (W1, §5.12):** after a successful warm-up, the ONE
+    shared `RetrievalEngine` instance is created with the LEXICAL embedder
+    (the pending phase); the window + MCP server start while the vector index
+    builds in the background.
+29. **Pending query equivalence (W1, §5.12):** during the pending phase,
+    `rag.query` (MCP) and `rag-query` (IPC) both return the SAME
+    `RetrievalResult` shape, served LEXICALLY by the shared engine — the
+    DESIGNED born-lexical state (logged as pending), explicitly NOT a silent
+    lexical fallback. Equivalence holds at EVERY instant (pending AND
+    promoted).
+30. **Background build (W1, §5.12):** the controller builds the vector index
+    from the store's non-empty nodes after boot (sequential in W1; the W2
+    batch seam when `embedBatchFn` is supplied); the engine stays pending
+    until promotion.
+31. **Reconcile + tie rule (W1, §5.12):** at promotion, every node whose
+    `updatedAt` is strictly greater than its build-time embed start is
+    re-embedded BEFORE the swap; `updatedAt === embedAt` (tie) → UNCHANGED
+    (no re-embed).
+32. **Atomic one-way promotion (W1, §5.12):** `engine.setEmbedder(vectorEmbedder)`
+    swaps the embedder inside the SAME engine instance; a pre-promotion
+    in-flight query completes coherently on the LEXICAL embedder with the
+    same `RetrievalResult` shape; a post-promotion query is scored by the
+    vector embedder; `onStoreChanged` forwards to the vector hook after the
+    swap (the `retrieval.ts:639` closure binding).
+33. **Promotion is one-way (W1):** after promotion the engine never serves
+    lexical scoring again (a second `setEmbedder` throws — §5.9 #42).
+34. **Partial-index query semantics (W3):** a node absent from the vector
+    index (never indexed, skipped, or deleted) is OMITTED from the vector
+    embedder's scored set — the `retrieval.ts:558` score>0 filter never sees
+    it either way — and is excluded from `ranked` (the ranked-level observable
+    is identical to the pre-W3 score-0-and-filter letter; DOC-LETTER RE-PIN
+    2026-09-05, greens finding F-SCORE); the `RetrievalResult`
+    shape is identical on MCP and IPC; post-promotion this is partial-index
+    serving, NOT a lexical fallback.
+35. **Transient skip + retry (W3):** a per-node embed failure during
+    build/maintenance records `skipped.set(nodeId, 'transient')`, logs, and
+    the operation RESOLVES; when the node is next touched (`onStoreChanged`
+    lists it), it is re-embedded and, on success, removed from `skipped`.
+36. **Skipped census (W3, §5.12):** the promotion report carries the skipped
+    census (`empty` n, `transient` m) covering the never-edited transient
+    skips.
+37. **Batch happy (W2):** `provider.embedBatch(['a','b','c'])` sends ONE
+    request (the provider's plural shape) and returns 3 vectors in
+    positional order, each passing F6/F7 validation.
+38. **Batch sequential default (W2):** a provider without `embedBatch` (the
+    mock) is consumed via the sequential default — identical results to
+    per-item `embed()`.
+39. **Batch index build (W2):** `createVectorIndex(nodes, embedFn,
+    provider.embedBatch)` embeds in batch requests; the resulting index is
+    identical to the sequential build's.
+40. **Cache hit adoption (W4, §5.13):** a node whose (kind, model, dimension,
+    contentHash) is in the persisted cache adopts the cached vector with NO
+    HTTP call.
+41. **Cache miss embed + write-through (W4, §5.13):** a cache miss embeds
+    through the provider and the entry is persisted (write-through, queued)
+    after the embed succeeds.
+42. **Cache prune (W4, §5.13):** at promotion, entries whose key tuple ≠ the
+    current provider tuple, or whose contentHash matches no current store
+    node's embedded text, are dropped and the file is rewritten once.
 
 ### 5.9 Fail-states (TestWriter red set — documented fail-states)
 
@@ -1026,13 +1558,78 @@ suite, no network egress in CI):**
     (Unit B §5.3).
 36. **`rag.query` reaching the renderer switch** → `unknown method` throw
     (fail-closed, the negative contract — Unit B §5.3 Seam 4).
+37. **Warm-up total failure (W1, failure class 2)** → the warm-up promise
+    REJECTS with `Error('vector boot warm-up: <underlying provider error
+    message>')` (e.g. `vector boot warm-up: ollama embed: timeout after
+    5000ms`); the boot aborts BEFORE the window (`main()` throws → the fatal
+    handler `app.exit(1)`, `src/main/main.ts:434-439`). The warm-up is the
+    ONLY abort point after config. [Message shape SpecWriter-pinned
+    2026-09-05 — the review pins "distinct + actionable", not the string.]
+38. **Config-missing abort (W1, UNCHANGED — failure class 1)** →
+    `retrieval.embedder: 'vector'` with a missing/invalid provider config
+    throws `Error('retrieval.embedder: vector requires
+    retrieval.embeddingProvider config')` at boot
+    (`src/main/main.ts:153-157`); §5.9 #34 is preserved verbatim.
+39. **Batch alignment mismatch (W2)** → the `embedBatch` promise REJECTS with
+    `Error('ollama embed: batch alignment mismatch (expected <n> vectors, got
+    <m>)')` (ollama) / `Error('remote embed: batch alignment mismatch
+    (expected <n> vectors, got <m>)')` (remote); the caller falls back to
+    per-item `embed()` for exactly that batch's texts (no positional
+    assignment from a rejected batch).
+40. **Batch timeout budget (W2)** → a batch of N exceeding `N × timeoutMs`
+    rejects with `Error('ollama embed: timeout after <N × timeoutMs>ms')`
+    (remote: `remote embed: timeout after <N × timeoutMs>ms`), and the
+    in-flight fetch IS aborted (the fetch stub observes the abort signal); no
+    unhandled rejection from the aborted fetch.
+41. **Batch per-vector validation (W2)** → an in-batch vector failing F7 →
+    `... malformed response`; failing F6 → `... dimension mismatch (expected
+    <n>, got <m>)` (per-provider prefix — the §5.9 #9/#10/#15/#16 messages,
+    batch context).
+42. **Double promotion (W1)** → `setEmbedder` after promotion throws
+    `Error('retrieval engine: embedder promotion is one-way (already
+    promoted)')`. [SpecWriter-pinned 2026-09-05.]
+43. **`setEmbedder` null/undefined (W1)** → throws `Error('retrieval engine:
+    embedder required')`. [SpecWriter-pinned 2026-09-05.]
+44. **Warm-up ≠ availability probe (W1)** → a server whose `/api/tags`
+    responds but whose `/api/embed` fails (model missing / cold-load beyond
+    the per-text budget) FAILS the warm-up (abort, #37) — never a false-ready
+    boot.
+45. **Empty-content add/update (W3, the UNIT-F-SKIP-EMPTY extension)** →
+    `addToVectorIndex`/`updateVectorIndex` with empty/whitespace/non-string
+    content make NO embed call: add → not indexed (`skipped` 'empty');
+    update → the previous embedding removed (`skipped` 'empty'); no
+    `malformed response` rejection.
+46. **Per-node transient failure (W3, failure class 3)** → after warm-up
+    success, a per-node embed rejection on build/add/update/hook does NOT
+    reject: recorded `skipped.set(nodeId, 'transient')` + logged + the
+    promise RESOLVES (re-pins `tests/embeddings.test.ts:380-386` red→green).
+47. **Required-arg rejections (W3, UNCHANGED)** → §5.9 #19–21 (the
+    null/undefined nodes/embedFn/index/node rejections) still reject
+    verbatim.
+48. **Query-time embed rejection (W3, UNCHANGED)** → §5.9 #32: a provider
+    rejection during `score`/`place` (the query/content embedding) still
+    propagates from the embedder and from `RetrievalEngine.query`.
+49. **Corrupt/unreadable cache file (W4, §5.13)** → an absent file, invalid
+    JSON, a non-object root, or a wrong/absent `version` → the cache is
+    treated as EMPTY (a full re-embed) + logged; boot NEVER crashes on the
+    cache.
+50. **Cache write failure (W4, §5.13)** → a failed cache persist is NON-FATAL
+    (logged; the in-memory index and the promotion continue; the next
+    successful write recovers the file).
+51. **Malformed cache entries (W4, §5.13)** → an entry whose vector is not an
+    array of finite numbers, whose length ≠ its key's dimension, or whose
+    fields are missing/wrong-typed is DROPPED (treated as a miss), never
+    thrown.
 
 ### 5.10 Census / numeric claims
 
 - **Provider kinds:** 2 concrete (`ollama` — local; remote/cloud — generic
   OpenAI/Cohere/etc.) behind ONE `EmbeddingProvider` interface.
-- **`EmbeddingProvider` interface members:** 5 (`kind`, `model`, `baseUrl`,
-  `dimension`, `embed`).
+- **`EmbeddingProvider` interface members:** 6 (`kind`, `model`, `baseUrl`,
+  `dimension`, `embed`, optional `embedBatch?` — the W2 amendment,
+  2026-09-05 — LANDED (runtime `typeof embedBatch === 'function'` on BOTH
+  concrete providers, confirmed by the W2 greens battery CENSUS row); the
+  W1-era live interface was 5 members).
 - **`EmbeddingProviderConfig` fields:** 7 (`provider`, `baseUrl`, `model`,
   `apiKey?`, `dimension?`, `timeoutMs?`, `connectSrc?`).
 - **Ollama base URL:** `http://127.0.0.1:11434` (default; localhost-pinned).
@@ -1061,6 +1658,53 @@ suite, no network egress in CI):**
 - **Security surfaces:** 2 (LOCAL-SECURITY-POSTURE — localhost, no egress, no
   API key; REMOTE-SECURITY-POSTURE — `connect-src` CSP allowlist + API-key
   handling).
+- **AMENDED (2026-09-05, the vector-boot amendment) — interface/param census:**
+  `EmbeddingProvider` members 5 → 6 (`embedBatch?` — the W1-era
+  live interface was 5 members, `embedBatch === undefined` at runtime,
+  confirmed by the Unit W1 greens battery; LANDED with the W2 red→green
+  cycle, 2026-09-05 — runtime `typeof embedBatch === 'function'` on BOTH
+  concrete providers, confirmed by the W2 greens battery CENSUS row);
+  `VectorIndex` members 3 → 4 (`skipped`, W3 — still 3 in W1/W2, confirmed by
+  the W2 greens EMPTY-BATCH observation);
+  `RetrievalEngine` members 2 → 3 (`setEmbedder`, W1 — LANDED);
+  `createVectorIndex` params 2 → 3 (optional `embedBatchFn?`, W2 — LANDED);
+  `VectorEmbedderOptions` fields 2 → 3 (optional `index?`, W1 — LANDED).
+- **Warm-up gate (W1):** ONE real `POST /api/embed` (a single-text probe
+  through the configured provider; NOT the `/api/tags` availability probe);
+  its timeout is the provider's `timeoutMs` (default 5000 ms) applied to that
+  ONE embed; total failure → boot aborts before the window (§5.9 #37).
+- **Per-text timeout budget (W2):** a batch of N texts gets `N × timeoutMs`
+  total (single-text keeps exactly `timeoutMs`); the fetch is aborted via
+  `AbortController` on expiry.
+- **Batch chunk size (F-W2-2):** `BATCH_CHUNK_SIZE = 64` texts per batch
+  request (module-level export; the last chunk may be short); the batch
+  timeout budget is clamped to `Math.min(N × timeoutMs, 2147483647)`; the
+  per-text `timeoutMs` option must be a positive integer ≤ 2147483647
+  (F-W2-5).
+- **Skipped map (W3):** `Map<nodeId, 'empty' | 'transient'>` — 'empty' =
+  by-design permanent (UNIT-F-SKIP-EMPTY); 'transient' = a retryable per-node
+  embed failure (retried when the node is next touched by `onStoreChanged`).
+- **Failure classes (W3):** 3 — (1) config-missing/invalid → abort (§5.9
+  #34, unchanged); (2) provider-down at warm-up → abort BEFORE the window
+  (§5.9 #37); (3) per-node failure AFTER warm-up success → skip + log +
+  continue (`skipped` map).
+- **Truncation measurement (the A7 pre-W2 gate, live-verified 2026-09-05 —
+  review record §5 item 3):** over the operator's real store (23,469 nodes;
+  16,840 non-empty; est. tokens ≈ chars/4): **0 nodes exceed the ollama
+  model's 2048-token context** (est. p50 = 12, p90 = 47, p99 = 196, max =
+  1,998) → the "large fraction truncates → chunking unit" condition is NOT
+  triggered; NO chunking unit; never silent truncation absorption.
+- **Sequential-build reference (live-measured 2026-09-05 — review record §5 item 4):**
+  ~0.1s per single-text embed (probes 0.103s / 0.103s / 0.080s) × 16,840
+  non-empty nodes ≈ 28 min sequential — the motivation for the background
+  build + the batch seam.
+- **Cache (W4, §5.13):** file `provident-vector-cache.json` (userData);
+  format `{ version: 1, entries: [...] }`; key = provider kind + model +
+  dimension + contentHash (lowercase-hex SHA-256 of the exact embedded text —
+  the `nodeSource` SHA-256 discipline); write-through after each successful
+  embed (single-writer queued, atomic temp+rename); pruning at promotion
+  (drop other-tuple + no-longer-in-store entries); 3 documented cache
+  fail-states (§5.9 #49–#51).
 
 ### 5.11 Cross-references
 
@@ -1097,3 +1741,404 @@ suite, no network egress in CI):**
   the `connect-src` CSP allowlist + API-key handling become a DESIGNED security
   surface; a localhost ollama call is LOCAL (no external egress); a remote/cloud
   provider requires the CSP allowlist + API-key config).
+- Vector-boot amendment: `docs/specs/ollama-vector-boot-review.md` (the
+  four-agent gate record — §2 binding amendments A1–A8, §3 change inventory +
+  risk register, §4a the user go-ahead for the cache-inclusive variant, §5 the
+  live-verified premises); decisions **VECTOR-BOOT-BACKGROUND-PROMOTE** and
+  **VECTOR-CACHE-CONTENT-HASH-KEY** (`docs/decisions.md`, 2026-09-05).
+
+### 5.12 The vector-boot controller (W1 — BOOT MODEL B: warm-up gate → born-lexical pending → background build → reconcile → atomic one-way promotion)
+
+**[2026-09-05 amendment — source: `docs/specs/ollama-vector-boot-review.md` §2
+amendments A1/A3/A4, §4 (the W1 TestWriter brief), §4a (the user go-ahead,
+cache-inclusive variant).]**
+
+**[2026-09-05 doc review (RCA-6): the `main.ts`/`retrieval.ts`/
+`embeddings.ts` line citations in this section were re-pointed to the
+POST-W1 file layout (the W1 rewiring shifted them); the pre-W1 narrative
+cites are annotated as such. The `embeddings.ts` cites were re-pointed AGAIN
+by the W2 doc review (2026-09-05, post-W2 — the W2 batch seam shifted the
+`embeddings.ts` layout); the pre-W2 numbers are kept inline for provenance.]**
+
+**Pre-W1 (the W1 motivation):** vector-mode boot embedded the whole corpus
+SYNCHRONOUSLY and DARK: `src/main/main.ts:150` awaited
+`createVectorEmbedder` before the window (`main.ts:392`) and `mcp.start()`
+(`main.ts:406`) — pre-W1 line numbers, shifted by the W1 rewiring — ~28 min
+for 16,840 non-empty nodes at ~0.1s/embed, and ANY single embed failure
+aborted boot
+(`createVectorIndex` rejection propagates — `tests/embeddings.test.ts:380-386`).
+W1 re-structures boot as BOOT MODEL B, in order:
+
+1. **Config (failure class 1 — UNCHANGED):** `retrieval.embedder: 'vector'`
+   with a missing/invalid provider config throws
+   `Error('retrieval.embedder: vector requires retrieval.embeddingProvider
+   config')` at `src/main/main.ts:153-157` — preserved VERBATIM (§5.9 #34/#38).
+2. **Warm-up gate (failure class 2):** ONE REAL `POST /api/embed` — a
+   single-text probe embed through the configured provider. NOT
+   `isOllamaAvailable` (that probes `GET /api/tags`, `embeddings.ts:806` post-W2; `551` pre-W2,
+   which does NOT load the model — a tags-only probe would false-ready the
+   boot onto a cold/missing model). The warm-up timeout is the provider's
+   `timeoutMs` (default 5000 ms) applied to that one embed. TOTAL failure
+   (connection refused / non-2xx / timeout / malformed) → the warm-up promise
+   REJECTS with `Error('vector boot warm-up: <underlying message>')` →
+   `main()` throws → the fatal handler exits the app (`main.ts:434-439`)
+   BEFORE the window.
+3. **Born-lexical pending:** after a successful warm-up, the ONE shared
+   `RetrievalEngine` instance is created with the LEXICAL embedder (the
+   pending phase) and handed to BOTH the MCP server and the IPC handlers;
+   window + MCP start immediately. Pending queries are served LEXICALLY in
+   the SAME `RetrievalResult` shape (`retrieval.ts:560-568`) on BOTH
+   `rag.query` (MCP) and `rag-query` (IPC) — the DESIGNED born-lexical state,
+   LOGGED as pending, explicitly NOT a silent lexical fallback. §8.2
+   equivalence holds at EVERY instant (pending AND promoted).
+4. **Background build:** the controller builds the vector index from the
+   store's non-empty nodes AFTER boot (sequential per-item in W1; the W2
+   batch seam via `opts.embedBatchFn`; the W4 cache via `opts.cache`). The
+   controller is fire-and-forget with a `.catch` (the F1 discipline — a
+   build failure is LOGGED and the engine STAYS pending; never an unhandled
+   rejection).
+5. **Reconcile (before the swap):** the controller re-checks every indexed
+   node's `updatedAt` against its build-time embed snapshot. **`embedAt`
+   operationally defined (AMENDMENT-REVIEW finding 2, 2026-09-05):** for node
+   N, `embedAt` = the value of `N.updatedAt` AS READ at the moment the
+   background build embedded N (a snapshot recorded WITH the embed — no
+   injectable clock; a red test constructs it deterministically with a store
+   double: build at T, keep T → unchanged; bump the node to T+1 → re-embed).
+   A node whose current `updatedAt` strictly POSTDATES its snapshot is
+   RE-EMBEDDED before the swap. **Tie rule (pinned, review A4):**
+   `updatedAt === embedAt` → UNCHANGED (no re-embed) — equality means the
+   embed observed exactly that version; re-embed iff `updatedAt > embedAt`
+   (conservative: an over-embed is safe, an under-embed is not; `<` is
+   impossible and ignored).
+6. **Atomic ONE-WAY promotion:** the vector embedder is swapped INTO the same
+   engine instance via the promotion seam below. In-flight pre-swap queries
+   complete coherently on the OLD (lexical) embedder; post-swap queries are
+   scored by the vector embedder; the `onStoreChanged` hook attaches with the
+   swap (post-swap edits flow to the vector hook — the `retrieval.ts:639`
+   binding). No demotion ever.
+
+**Module seam (node-testable — review A3; this repo tests shared modules, not
+`main.ts` — the U5-F1 handler-extraction precedent):** a NEW pure module
+`src/main/vector-boot.ts` (NO Electron; the store + provider are injected):
+
+```ts
+// src/main/vector-boot.ts (W1 — pure + injectable; no Electron)
+import type { RagStore } from './rag-store.js'
+import type { RetrievalEngine } from './retrieval.js'
+import type { EmbeddingProvider, EmbeddingProviderConfig } from './embeddings.js'
+
+/** The boot phase of the shared engine. */
+export type VectorBootPhase = 'pending' | 'promoted'
+
+/** The warm-up probe text (a fixed non-empty string; pinned for determinism
+ *  of the warm-up request). */
+export const VECTOR_BOOT_WARMUP_TEXT = 'provident warm-up'
+
+/** W1 fail-fast warm-up gate (failure class 2). Performs ONE REAL
+ *  `POST /api/embed` — a single-text embed of VECTOR_BOOT_WARMUP_TEXT via
+ *  `createEmbeddingProvider(config)` — NOT `isOllamaAvailable`. Resolves
+ *  with the warmed provider (the model is loaded; the SAME provider instance
+ *  is reused for the background build). REJECTS with
+ *  `Error('vector boot warm-up: <underlying message>')` on ANY total
+ *  failure → the caller aborts boot BEFORE the window. */
+export function warmUpEmbeddingProvider(config: EmbeddingProviderConfig): Promise<EmbeddingProvider>
+
+/** The promotion report (the promotion log census). */
+export interface PromotionReport {
+  /** Nodes embedded by the background build (W4 LANDED 2026-09-05: with a
+   *  cache this counts the provider embeds = the cache MISSES — adopted hits
+   *  made no embed call; without one, the indexed-node count, unchanged). */
+  embedded: number
+  /** W4 re-pin 2026-09-05 (§3a F-W4-4): distinct embedded texts adopted from
+   *  the persisted cache with no HTTP call — DEDUPED by contentHash (a
+   *  fallback re-lookup of the same text counts once). */
+  cacheHits: number
+  /** Nodes re-embedded by the reconcile pass (updatedAt > embedAt). */
+  reEmbedded: number
+  /** RCA-3 amendment (F-W1-2, 2026-09-05): nodes ADDED during the build
+   *  window (after the listNodes snapshot) that the reconcile pass embedded +
+   *  added to the built index before the swap. */
+  adopted: number
+  /** The skipped census at promotion: never-indexed 'empty' +
+   *  never-edited 'transient' counts. W1 pins: `empty` = the build's
+   *  empty-content skip count, `transient` = 0 (the transient class does
+   *  not exist until W3 — AMENDMENT-REVIEW note 7, 2026-09-05). */
+  skipped: { empty: number; transient: number }
+  /** The promotion timestamp (Date.now() at the swap). */
+  promotedAt: number
+}
+
+/** The W1 boot controller. Created SYNCHRONOUSLY after a successful
+ *  warm-up. The controller OWNS engine creation: constructing it
+ *  SYNCHRONOUSLY creates the ONE shared `RetrievalEngine` instance
+ *  (born-lexical, pending — `createRetrieval` with the lexical embedder
+ *  runs inside the factory) that main hands to the MCP server AND the IPC
+ *  handlers (review R7 — the MCP server ALWAYS receives a live engine).
+ *  AMENDMENT-REVIEW finding 1 (2026-09-05): main never creates the engine
+ *  in vector mode. */
+export interface VectorBootController {
+  /** The shared engine (pending → promoted in place). */
+  readonly engine: RetrievalEngine
+  /** 'pending' until the promotion swap completes, then 'promoted'. */
+  phase(): VectorBootPhase
+  /** The live skipped map of the background build. */
+  skipped(): Map<string, 'empty' | 'transient'>
+  /** Background: build the vector index → reconcile → atomic one-way
+   *  promotion. Resolves with the promotion report; REJECTS only on a TOTAL
+   *  build failure (the engine STAYS pending — lexical-served — and the
+   *  rejection is logged by main's fire-and-forget `.catch`).
+   *  SINGLE-SHOT (AMENDMENT-REVIEW note 8, 2026-09-05): a second `start()`
+   *  call — while a build is running, after it resolved, or after it
+   *  rejected — REJECTS with `Error('vector boot: start already called')`;
+   *  the original promise's settlement is authoritative. */
+  start(): Promise<PromotionReport>
+}
+
+export interface VectorBootOptions {
+  /** W2 seam — the provider's `embedBatch`, when available. */
+  embedBatchFn?: (texts: string[]) => Promise<number[][]>
+  /** W4 — the loaded persisted cache (§5.13). LANDED 2026-09-05 (W4 doc
+   *  review: the option is live; absent callers → the W1–W3 no-op
+   *  passthrough). */
+  cache?: VectorCache
+}
+
+export function createVectorBootController(store: RagStore, provider: EmbeddingProvider, opts?: VectorBootOptions): VectorBootController
+```
+
+**RCA-3 amendment (2026-09-05, the W1 adversarial pass):** `PromotionReport`
+gains `adopted: number` — the nodes ADDED during the build window (after the
+`listNodes` snapshot) that the reconcile pass embeds + adds to the built index
+before the swap (finding F-W1-2 in §3a; regression-tested in
+`tests/vector-boot-adversarial.test.ts`).
+
+**The promotion seam on the engine (NEW, W1 — LANDED 2026-09-05):** the `RetrievalEngine`
+interface (`src/main/retrieval.ts:574-587`) gains a THIRD member:
+
+```ts
+export interface RetrievalEngine {
+  query(query: string, opts?: { k?: number }): Promise<RetrievalResult>
+  onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
+  /** W1 — atomic ONE-WAY embedder promotion: replaces the closed-over
+   *  embedder binding (`retrieval.ts:607-656` — the closure had NO setter
+   *  pre-W1; the setter LANDED in W1) so
+   *  the SAME engine instance serves lexical pre-swap and vector post-swap.
+   *  Throws on a second call (one-way) or a null/undefined embedder. */
+  setEmbedder(embedder: Embedder): void
+}
+```
+
+- `setEmbedder(v)` is a SINGLE assignment of the closure `activeEmbedder`
+  variable read by `query` (`retrieval.ts:617`, read at `:622`) and by the
+  hook forward
+  (`retrieval.ts:639`) — post-W1 line numbers. Every query observes exactly ONE embedder (R1: an
+  in-flight pre-swap query completes on the OLD embedder with the same
+  `RetrievalResult` shape; no torn/mixed results; §8.2 equivalence asserted
+  in BOTH phases).
+- The engine's LEXICAL index maintenance is UNCHANGED and continues in BOTH
+  phases (`retrieval.ts:627-635`) — the pending phase scores with it;
+  post-swap the vector embedder scores against its own VectorIndex.
+- ONE-WAY fail-states: a second call throws `Error('retrieval engine:
+  embedder promotion is one-way (already promoted)')`; a null/undefined
+  `embedder` throws `Error('retrieval engine: embedder required')`.
+  [Messages SpecWriter-pinned 2026-09-05 — the review pins the one-way
+  semantics, not the strings.]
+
+**main() wiring (W1 — the ONLY main.ts change; AMENDMENT-REVIEW finding 1
+resolved — the CONTROLLER owns engine creation):** (1) the config check at
+`main.ts:153-157` UNCHANGED; (2) `const provider = await
+warmUpEmbeddingProvider(config)` — a rejection aborts boot before the window;
+(3) `const boot = createVectorBootController(ragStore, provider, {
+embedBatchFn: provider.embedBatch, cache })` — the controller
+SYNCHRONOUSLY creates the born-lexical engine INTERNALLY
+(`createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(store.listNodes())))`
+— the lexical default path, moved inside the controller) and exposes it as
+`boot.engine`; main NEVER calls `createRetrieval` in vector mode; [W3 doc-review byte-check 2026-09-05: the LANDED W3 call was
+`createVectorBootController(ragStore, provider, { embedBatchFn:
+provider.embedBatch })` at `main.ts:163` — the `cache` arg in the pinned
+final shape above arrives with W4. **W4 doc-review byte-check 2026-09-05 (the
+W4 RCA-6 pass): the LANDED W4 call is `createVectorBootController(ragStore,
+provider, { embedBatchFn: provider.embedBatch, cache: createVectorCache() })`
+at `main.ts:168` — the pinned final shape above is now the LIVE call site
+(the W3-era `main.ts:163` cite shifted +5 with the W4 wiring; the W4 greens'
+WIRE-CACHE DEFERRED-STATIC row is closed on this verification).]** (4) the MCP
+server + the IPC handlers are wired from `boot.engine` (the ONE shared
+instance — R7 holds: the MCP server ALWAYS receives a live engine);
+(5) window + `mcp.start()` immediately; (6) `void boot.start().catch(...)`
+(F1 discipline). In lexical mode (the default) `main.ts:162-164` is unchanged
+(pre-W1: `main.ts:153`).
+
+**F-W2-3 amendment (2026-09-05, the W2 adversarial pass — spec-only,
+Architect decision):** W3 owns the production wiring `embedBatchFn:
+provider.embedBatch` at controller creation (main.ts) — the W1 sequential
+loop is replaced by the batched build when W3 lands; the §5.2
+sequential-default expression is pinned at that wiring. Until then the
+`embedBatchFn?` option exists (W2) with NO production caller — the wiring
+text in step (3) above is the W3 assignment, not a W1/W2 claim.
+
+**Log milestones (pinned — review change-inventory item 6; strings
+SpecWriter-pinned 2026-09-05):** `vector boot: pending (born-lexical)` →
+`vector boot: build complete (embedded N, cacheHits M, re-embedded R,
+skipped empty e / transient t)` → `vector boot: promoted`; a total build
+failure logs `vector boot: build failed (staying pending): <error>`; a
+per-node transient failure (W3) logs
+`vector index: node embed failed (transient): <nodeId> <error>` (RE-PINNED
+2026-09-05, RCA-3 pass 2 finding F4 — was mis-pinned as `vector boot: node
+embed failed (transient): …`; the log site is the INDEX layer
+(`src/main/embeddings.ts` `warnTransientSkip`), outside boot). Failure
+classes (1/2/3) are distinguishable in the output.
+
+**Promotion pins (review A4/R1/R2 — pin-by-test):** (a) an in-flight
+pre-promotion query completes on the OLD embedder with the same
+`RetrievalResult` shape; (b) a post-promotion query uses the new embedder; no
+mixed index observable; §8.2 equivalence asserted in BOTH phases; (c) the
+`onStoreChanged` hook attaches with the swap (`retrieval.ts:639`); (d) the
+reconcile tie rule (`updatedAt > embedAt` → re-embed; `===` → unchanged);
+changed nodes re-embed BEFORE the swap; (e) a pre-swap edit landing after the
+reconcile re-check but before the swap completes leaves that node on its
+pre-edit embedding until its NEXT touch via the attached hook — a PINNED,
+documented window (the reconcile-to-swap gap; the promotion log reports the
+re-embedded count). The boot-equivalence test asserts the MCP server always
+receives a live engine (R7).
+
+**Unit decomposition + spec-section → unit mapping (the W1 → W2 → W3 → W4
+order; each unit its own red→green→adversarial→greens cycle, RCA-2/5):**
+
+| Unit | Spec sections | Test files (names SpecWriter-pinned 2026-09-05) |
+| --- | --- | --- |
+| **W1** boot model + promotion (this section; §5.5 prebuilt-index adoption `opts.index` — AMENDMENT-REVIEW finding 3; §5.7 amendment; §5.9 #37/#38/#42/#43/**#44**; §5.8 #27–33) | §5.12 + §5.5 + §5.9 | `tests/vector-boot.test.ts` (+ `tests/vector-boot-adversarial.test.ts`) |
+| **W2** batch seam (§5.2 "Batch seam"; §5.3 batch build path; §5.9 #39–41; §5.8 #37–39) | §5.2/§5.3 | `tests/embeddings-batch.test.ts` (the `tests/embeddings.test.ts:380-386` reject contract stays GREEN until W3) |
+| **W3** failure policy (§5.3 `skipped` map + the empty-guard extension + the embed-failure flip; §5.8 #34–36; §5.9 #45–48) + the F9→F10 comment cleanup in `src/main/embeddings.ts:545-549` post-W2 (`309-313` pre-W2) (AMENDMENT-REVIEW note 12 — the pass that touches those lines retires the stale F9 tag) | §5.3/§5.9 | `tests/embeddings-failure-policy.test.ts` + the re-pin of `tests/embeddings.test.ts:380-386` |
+| **W4** persisted cache (§5.13; §5.9 #49–51; §5.8 #40–42) | §5.13 | `tests/vector-cache.test.ts` |
+
+### 5.13 The persisted embedding cache (W4 — the cache-inclusive variant, IN-SCOPE per the user go-ahead 2026-09-05)
+
+**[2026-09-05 amendment — source: review record §4a. The user approved the
+"vectorize only if the vector is not found" model; the previously PARKED
+cache (review §2 parked item 2) is PROMOTED to core contract; the
+`docs/pending.md` parked row is SUPERSEDED (2026-09-05).]**
+
+- **File:** `provident-vector-cache.json` in Electron `userData`
+  (`join(app.getPath('userData'), 'provident-vector-cache.json')`) — the
+  module-store idiom: same directory, same atomic temp+rename write, one
+  main-process writer.
+- **Format (pinned):**
+  `{ "version": 1, "entries": [ { "kind": "ollama", "model":
+  "embeddinggemma", "dimension": 768, "contentHash": "<lowercase hex
+  sha-256>", "vector": [...], "savedAt": <epoch ms> } ] }`.
+- **Key (the decision VECTOR-CACHE-CONTENT-HASH-KEY):** (provider kind, model,
+  dimension, contentHash). `contentHash` = the lowercase-hex SHA-256 of the
+  EXACT embedded text (the string passed to the embed fn — `node.content` at
+  build; the SAME raw-bytes discipline as `nodeSource` — hash the exact
+  string bytes, no normalization. AMENDMENT-REVIEW note 9, 2026-09-05: this
+  is plain SHA-256 of the embedded TEXT, NOT the nodeSource record
+  serialization). **Invalidation:** a hash mismatch (content changed) OR a
+  key mismatch (provider/model/dimension changed) → a MISS → re-embed; the
+  new entry overwrites on write-through. **Known limitation (§3a F-W4-7,
+  2026-09-05):** invalidation is hash+tuple keyed ONLY — an entry whose key
+  matches but whose VECTOR is wrong (a poisoned entry) is served as a hit;
+  the invalidation paths are deleting the cache file (a fresh full embed) or
+  changing the model/dimension tuple.
+- **Load:** at controller creation (W4 wiring), the cache file is read
+  synchronously; entries whose `vector` is not an array of finite numbers
+  with length === their `dimension`, or whose fields are missing/wrong-typed,
+  are DROPPED. **Fail-states (§5.9 #49/#51):** an absent/unreadable file,
+  invalid JSON, a non-object root, or a wrong/absent `version` → the cache is
+  treated as EMPTY (a full re-embed) + logged; the load NEVER throws and boot
+  NEVER crashes on the cache.
+- **Adoption ("vectorize only if the vector is not found"):** the cache is a
+  MEMOIZING WRAPPER around the embed fns — the controller supplies
+  `createVectorIndex` a wrapped `embedFn`/`embedBatchFn`: a key HIT adopts
+  the cached vector with NO HTTP call; a MISS embeds through the provider and
+  writes the entry through. The batch wrapper preserves positional alignment
+  (hits adopted in place, misses batch-embedded; the assembled array length
+  === texts.length). `createVectorIndex` itself stays cache-agnostic.
+- **Write timing (PINNED — one of the two candidate models):** WRITE-THROUGH
+  after each successful embed: the new entry is enqueued on the controller's
+  SINGLE-WRITER queue and persisted with an atomic temp+rename write,
+  serialized (never concurrent), NOT awaited by the embed loop (disk never
+  throttles the build). The queue is DRAINED before the promotion report
+  resolves (the persisted cache reflects the promoted index). Rationale: this
+  matches every store in this project (per-write persistence + one writer).
+  **RCA-3 F1 amendment (2026-09-05, the W4 adversarial pass):** `set()`
+  COALESCES — it mutates the in-memory map and schedules AT MOST ONE trailing
+  whole-map write on the module-level `CACHE_WRITE_DEBOUNCE_MS = 500`
+  debounce (exported from `src/main/vector-cache.ts`); the pending write
+  executes with the map state AT EXECUTION TIME (later sets need no new
+  job), `flush()` cancels the pending timer + forces the write when dirty
+  (the drain-before-report pin above holds), and the atomic temp+rename
+  write, single-writer serialization, never-awaited-by-the-embed-loop
+  timing, and non-fatal recovery are unchanged.
+- **Write failure (§5.9 #50):** NON-FATAL — logged; the in-memory index and
+  the promotion continue; the next successful write recovers the file.
+- **Pruning (pinned):** at promotion the cache is COMPACTED: entries whose
+  (kind, model, dimension) ≠ the current provider tuple, OR whose
+  `contentHash` matches NO current store node's embedded text (the hash set
+  of the non-empty contents), are dropped; the file is rewritten ONCE after
+  the drain. Oversized growth is thereby bounded by the live corpus.
+- **Census:** the promotion report carries `cacheHits` (§5.12) — the FIRST
+  boot embeds the full corpus in the background; later boots embed only
+  new/changed nodes (cache misses).
+- **The `VectorCache` seam (AMENDMENT-REVIEW finding 4, 2026-09-05 — the type
+  referenced by `VectorBootOptions.cache?` is THIS):**
+
+  ```ts
+  // src/main/vector-cache.ts (W4 — pure + injectable; no Electron)
+  export interface CacheKey { kind: string; model: string; dimension: number; contentHash: string }
+
+  export interface VectorCache {
+    /** A HIT returns the cached vector (no HTTP call); a MISS returns
+     *  undefined (the caller embeds + writes through). */
+    get(key: CacheKey): number[] | undefined
+    /** Write-through: enqueues the entry on the single-writer queue
+     *  (atomic temp+rename, serialized, never awaited by the embed loop). */
+    set(key: CacheKey, vector: number[]): void
+    /** At promotion: drop entries outside `keepKeys` (or with a foreign
+     *  provider tuple), then rewrite the file ONCE. */
+    prune(keepKeys: Set<string>): void
+    /** Drain the write queue; resolves when the file reflects every set(). */
+    flush(): Promise<void>
+  }
+
+  /** The factory reads the file SYNCHRONOUSLY at creation (the load
+   *  fail-states above apply — corrupt/absent → an EMPTY in-memory cache +
+   *  logged, NEVER a throw). `opts.path` defaults to
+   *  `join(app.getPath('userData'), 'provident-vector-cache.json')`. */
+  export function createVectorCache(opts?: { path?: string }): VectorCache
+  ```
+
+  **Load ownership (resolves the §5.13/`VectorBootOptions` contradiction):**
+  the FILE is read at `createVectorCache(...)` call time; the W4 wiring
+  constructs the cache AT controller-creation time
+  (`createVectorBootController(ragStore, provider, { cache:
+  createVectorCache() })`), so the controller creation remains synchronous
+  and the cache is fully loaded before the background build starts.
+  **Batch-fallback routing (pinned):** the W2 per-item fallback routes
+  through the SAME memoizing wrapper (NOT the raw provider) — a
+  fallback-embedded text is a cache write-through like any other embed.
+  **§5.9 #49–#51 log strings (pinned):** a load failure logs
+  `vector cache: load failed (treating as empty): <error>`; a write failure
+  logs `vector cache: write failed (non-fatal): <error>`; the promotion
+  prune logs `vector cache: pruned to N entries`.
+  **W4 implementation pins (2026-09-05, the W4 green pass — one line
+  each):** (a) `prune(keepKeys)` elements are contentHash STRINGS for the
+  CURRENT provider tuple — the controller builds the set from the live
+  store's non-empty embedded texts, and the cache drops foreign-tuple
+  entries and hashes outside the set; (b) the ABSENT-file case is NOT
+  silent — per §5.9 #49 (which groups "an absent/unreadable file" under
+  "+ logged", pinned by the W4 red set, test 2a) the first cold start logs
+  the SAME `vector cache: load failed (treating as empty)` line as the
+  unreadable/corrupt/wrong-version cases, and the load never throws either
+  way; (c) the prune census log is emitted by `VectorCache.prune` (the
+  cache layer) — one line per prune, after the in-memory compaction, with
+  the one-shot rewrite enqueued on the single-writer queue.
+  **W4 adversarial hardening pins (2026-09-05, the W4 RCA-3 pass — §3a
+  F-W4-1..F-W4-3):** the write is COALESCED on the exported
+  `CACHE_WRITE_DEBOUNCE_MS = 500` debounce (F-W4-1, the F1 amendment
+  above); the load-failure log's interpolated error is SANITIZED — quoted
+  corrupt-file snippets are stripped before logging (F-W4-2); BOTH the
+  cache path and the `<path>.tmp` write path carry lstat REGULAR-FILE
+  guards (a symlink/FIFO/directory/device is a load failure / the non-fatal
+  write skip — never read through, never written through, never a
+  main-thread block) and the tmp file is created mode `0o600` (F-W4-3).
+  Regression tests: `tests/vector-cache.test.ts` R1–R8.

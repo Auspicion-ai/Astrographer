@@ -257,7 +257,10 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 - **Ops:** `createOllamaEmbedProvider({ timeoutMs: 20 }).embed('hello')`.
 - **Expected:** the returned promise REJECTS with `Error('ollama embed: timeout after 20ms')`.
 
-### F9. Ollama provider malformed response
+### GREEN-OLLAMA-MALFORMED. Ollama provider malformed response
+(Renamed 2026-09-05 from the colliding "F9" label — review amendment A2:
+"F9" is §3a's connect-src finding; the empty-node skip is F10 /
+UNIT-F-SKIP-EMPTY. This row tests spec §5.9 #9.)
 - **Setup:** a stubbed `fetch` returns `{ ok:true, json: async () => ({}) }`
   (no embeddings array).
 - **Ops:** `createOllamaEmbedProvider().embed('hello')`.
@@ -429,6 +432,9 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 ### C2. `EmbeddingProvider` interface members — 5
 - **Ops:** inspect a created provider.
 - **Expected:** exactly `kind`, `model`, `baseUrl`, `dimension`, `embed`.
+- **[2026-09-05 annotation — spec-forward, NOT drift]** the AMENDED spec
+  §5.10 pins 6 members once W2 lands (`embedBatch?`). This battery pins the
+  CURRENT code (5) until the W2 red→green cycle re-pins it.
 
 ### C3. `EmbeddingProviderConfig` fields — 7
 - **Ops:** inspect the config shape.
@@ -462,6 +468,9 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 - **Ops:** `createVectorIndex` over a 2-node list.
 - **Expected:** `nodeIds` (insertion order), `embeddings` (nodeId → vector),
   `dimension`.
+- **[2026-09-05 annotation — spec-forward, NOT drift]** the AMENDED spec §5.10
+  pins a 4th member (`skipped: Map<nodeId,'empty'|'transient'>`) once W3
+  lands. This battery pins the CURRENT code (3) until the W3 cycle re-pins it.
 
 ### C10. Vector index maintenance calls — 1 embed per node at build; 1 per affected node on change; 0 on delete
 - **Setup:** a counting `embedFn`.
@@ -547,7 +556,7 @@ Fixture helpers: `N(id, type, content)` = a `RagNode`
 | F6 | Ollama provider non-2xx HTTP | ✅ PASS |
 | F7 | Ollama provider network failure | ✅ PASS |
 | F8 | Ollama provider timeout | ✅ PASS |
-| F9 | Ollama provider malformed response | ✅ PASS |
+| GREEN-OLLAMA-MALFORMED | Ollama provider malformed response (renamed from the colliding "F9" label, 2026-09-05 — review A2) | ✅ PASS |
 | F10 | Ollama provider dimension mismatch | ✅ PASS |
 | F11 | Ollama provider non-string text | ✅ PASS |
 | F12 | Remote provider non-2xx HTTP | ✅ PASS |

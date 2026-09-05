@@ -578,6 +578,12 @@ export interface RetrievalEngine {
   /** Update the index on a store change (content or structural). ASYNC (Unit F
    *  amendment — forwards to the embedder's `onStoreChanged` hook, if present). */
   onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
+  /** W1 (§5.12) — atomic ONE-WAY embedder promotion: replaces the active
+   *  embedder binding so the SAME engine instance serves lexical pre-swap and
+   *  vector post-swap. Every query observes exactly ONE embedder (an in-flight
+   *  pre-swap query completes on the OLD embedder). Throws on a second call
+   *  (one-way) or a null/undefined embedder. */
+  setEmbedder(embedder: Embedder): void
 }
 
 /** Create the retrieval engine. Builds the index from the store on
@@ -602,10 +608,18 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
   const index = shared ?? createLexicalIndex(store.listNodes())
   const maxNodes = opts?.maxNodes ?? 50
   const maxDepth = opts?.maxDepth ?? 3
+  // W1 (§5.12) — the ACTIVE embedder binding, read by `query` and by the
+  // `onStoreChanged` hook forward at each call. `setEmbedder` reassigns it
+  // (a single assignment): an in-flight pre-swap query holds the OLD embedder
+  // (passed by value into `retrieve`), post-swap queries observe the new one.
+  // The engine's OWN lexical `index` maintenance is UNCHANGED and continues in
+  // both phases.
+  let activeEmbedder = embedder
+  let promoted = false
 
   return {
     query(query: string, qopts?: { k?: number }): Promise<RetrievalResult> {
-      return retrieve(store, embedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
+      return retrieve(store, activeEmbedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
     },
     async onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void> {
       if (nodeIds === null || nodeIds === undefined) throw new Error('onStoreChanged: nodeIds required')
@@ -622,7 +636,23 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
       // Unit F amendment — forward to the embedder's onStoreChanged hook (if
       // present) so a stateful embedder (e.g. the vector embedder's vector
       // index) reconciles its own state on the same store change.
-      await embedder.onStoreChanged?.(kind, nodeIds, edgeIds)
+      await activeEmbedder.onStoreChanged?.(kind, nodeIds, edgeIds)
+    },
+    // W1 (§5.12) — atomic ONE-WAY embedder promotion. A second call throws
+    // (one-way); a null/undefined embedder throws and consumes nothing.
+    setEmbedder(next: Embedder): void {
+      if (next === null || next === undefined) throw new Error('retrieval engine: embedder required')
+      // F-W1-3 (RCA-3) — the STRUCTURAL guard: a present-but-invalid embedder
+      // (e.g. `{} as Embedder`) must be rejected with the SAME pinned message
+      // WITHOUT consuming the one-way latch (promoted stays false) — otherwise
+      // the promotion latches a broken embedder and the first query throws
+      // TypeError with no recovery.
+      if (typeof next.score !== 'function' || typeof next.place !== 'function') {
+        throw new Error('retrieval engine: embedder required')
+      }
+      if (promoted) throw new Error('retrieval engine: embedder promotion is one-way (already promoted)')
+      activeEmbedder = next
+      promoted = true
     },
   }
 }

@@ -21,6 +21,67 @@ one-way snapshot).
 
 ## OPEN
 
+**Vector-mode (local ollama) boot fix — the vector-boot proposal COMPLETE (2026-09-05):** DIAGNOSED → immediate remediation LANDED → four-agent proposal gate COMPLETE (PROCEED-WITH-AMENDMENTS) → user go-ahead GIVEN (cache-inclusive variant, 2026-09-05) → spec amendment LANDED (§5.12/§5.13) → **all four units LANDED per gates 2–9 — W1 boot model, W2 batch seam, W3 failure policy, W4 cache (each its own red→green→adversarial→blind-greens→doc-review cycle; see the Unit W1–W4 DONE rows below). The user-approved cache-inclusive design is fully in place — "vectorize only if the vector is not found": the persisted cache loads at boot, hits adopt with NO HTTP call, only the misses embed; the final trio is 2161 pass / 38 skip (106 files), typecheck + build clean. Every gate (RCA-1..RCA-6) ran per unit; the W4 doc review (RCA-6, the closing pass) recorded the FINAL GATE STATEMENT in `archive/reviews/2026-09-05-unit-f-w4-doc-review.md`. No OPEN work remains for this proposal — this entry is retained as the completed-slice narrative + pointer to the DONE rows (P4 dist hygiene stays parked in `docs/pending.md`).**
+User report: "Issue with attempting to use local Ollama as embedding provider."
+Diagnosis (reproduced on this machine): (1) **FIXED** — the `dist/` bundle was
+STALE, predating the F9 empty-node-skip fix (green-tested in src; the operator's
+real store has 6,629 empty/whitespace-content nodes), so vector-mode boot crashed
+deterministically with `ollama embed: malformed response` before any UI. A/B
+reproduced (git HEAD vs fixed src against the real store slice). `dist/` rebuilt;
+F9 verified in the bundle; trio green (2031 pass / 38 skip, typecheck clean,
+build clean). Recorded as **HOST-F-DIST-STALE** in `docs/defects.md`.
+(2) **APPROVED — the user's go-ahead is GIVEN (2026-09-05, the cache-inclusive variant):**
+even with F9, vector-mode boot embeds ~16,840 non-empty nodes SEQUENTIALLY
+(~0.1s/call measured against live ollama `embeddinggemma:latest`) ≈ 28 minutes
+before the app is usable; ANY single embed failure aborts boot (`createVectorIndex`
+rejects → `main()` throws — and the build runs BEFORE the window + MCP server
+come up, so boot is fully dark); the 5s default `timeoutMs` can trip on ollama's
+cold model load. **Four-agent gate run** (validity VALID-WITH-AMENDMENTS →
+critique BLOCKERs B1–B4/amendments A5–A11 → architecture SOUND-WITH-AMENDMENTS
+→ change-analysis **PROCEED-WITH-AMENDMENTS** — full record:
+`docs/specs/ollama-vector-boot-review.md`). The reviewed design: boot model B
+(fail-fast warm-up gate on a real `/api/embed` → window+MCP born-lexical →
+background batched build → reconcile → atomic one-way promotion swapping the
+embedder inside the ONE shared engine), an optional provider-level `embedBatch`
+seam (alignment invariant + per-batch reject→per-item fallback + N×timeoutMs
+budget + AbortController), and the three-class failure policy (config-missing →
+abort; provider-down-at-boot → abort; per-node-after-reachability → skip+log
+with an 'empty'|'transient' skipped-map), landed as W1 → W2 → W3. **User
+go-ahead (2026-09-05, review record §4a):** asked whether embeddings are
+computed on every boot or only when a vector "is not found", the user approved
+the **CACHE-INCLUSIVE VARIANT** — the persisted embedding cache is IN-SCOPE
+core contract, landing as unit **W4** (the `docs/pending.md` parked row is
+SUPERSEDED). **Spec amendment LANDED (2026-09-05, this pass):**
+`docs/specs/unit-f-embeddings.md` amended — NEW §5.12 (the W1 vector-boot
+controller: warm-up gate / born-lexical pending / background build /
+reconcile-with-tie-rule / atomic one-way `setEmbedder` promotion + the
+unit→section→test-file mapping) and §5.13 (the W4 cache contract:
+content-hash key, embed-on-miss, invalidation, write-through, pruning,
+fail-states); §5.2 (`embedBatch?` + per-text budget + AbortController), §5.3
+(`skipped` map + the UNIT-F-SKIP-EMPTY empty-guard extension to add/update +
+the W3 embed-failure flip), §5.5/§5.7, and §5.8–§5.10 (states/fail-states/
+census, incl. the 0-of-16,840 truncation measurement) amended in place; the
+§3a F9 label collision resolved (the greens row renamed **GREEN-OLLAMA-MALFORMED**;
+the empty-node skip is **F10 / UNIT-F-SKIP-EMPTY** with a §5.3 rule + a named
+W3 regression test). Decision rows **VECTOR-BOOT-BACKGROUND-PROMOTE** +
+**VECTOR-CACHE-CONTENT-HASH-KEY** landed in `docs/decisions.md`. Still parked
+with a revisit condition: P4 dist hygiene (`docs/pending.md`). **W1 is LANDED (2026-09-05):** the TestWriter brief (the review record §4
+final delegation — consumed by the W1 TestWriter) was executed red →
+implementer green → adversarial (RCA-3) → blind-greens → doc-review (RCA-6);
+the Unit W1 DONE row below carries the full record. **W2 batch seam is
+LANDED (2026-09-05** — the Unit W2 DONE row below carries the full record;
+`tests/embeddings-batch.test.ts`). **All four units ARE landed (the §5.12
+decomposition COMPLETE):** W4 cache LANDED 2026-09-05 (`tests/vector-cache.test.ts`
+— 35 tests incl. the 8 RCA-3 adversarial regressions R1–R8; see the Unit W4
+DONE row) after the W3 failure policy (`tests/embeddings-failure-policy.test.ts`
++ the re-pins; see the Unit W3 DONE row). The adversarial (RCA-3),
+blind-greens (RCA-4) and doc-review (RCA-6) gates all ran for W4; the
+vector-boot proposal is COMPLETE.
+**Live-verified in the gate pass (review record §5):** ollama batch
+`input` works (3→3 ordered 768-dim vectors); positional alignment holds even
+with an empty batch item; **0 of 16,840 non-empty nodes exceed the model's
+2048-token context** (est. p50=12 tokens) — no chunking unit needed.
+
 **provident-ssr upgraded to 0.3.2 (2026-08-31):** the package was upgraded
 from `^0.3.0` → `^0.3.1` → `^0.3.2` (trio green — 2003 pass / 38 skip,
 typecheck clean, build clean). This resolves the **ENG-INLINE-ORDER** engine defect
@@ -246,6 +307,253 @@ _(none — Units A–T are implemented.)_
 
 ## DONE
 
+- **Unit W4 — the persisted embedding cache (§5.13, the cache-inclusive
+  variant) (2026-09-05).** The vector-boot slice's fourth + LAST unit (spec
+  `docs/specs/unit-f-embeddings.md` §5.13 + §5.8 #40–42 + §5.9 #49–51 +
+  §5.12 `VectorBootOptions.cache?` + the `cacheHits` census; the §5.12
+  decomposition W1 → W2 → W3 → W4). Landed: the NEW pure module
+  `src/main/vector-cache.ts` (`CacheKey` / `VectorCache{get,set,prune,flush}` /
+  `createVectorCache(opts?: {path?})` — the file read SYNCHRONOUSLY at
+  creation; ANY load failure incl. the ABSENT first-run file → EMPTY cache +
+  the pinned `vector cache: load failed (treating as empty): <error>` log,
+  never a throw (§5.9 #49 — the spec groups absent under "+ logged"; the W4
+  red test 2a pins it literally, so the task brief's "silent absent-file"
+  idea was NOT implemented — pinned in §5.13's W4 implementation-pin note
+  (b), an Architect-ratification point); malformed entries DROPPED at load
+  (§5.9 #51); `set` write-through on a single-writer promise-chain queue with
+  atomic `<path>.tmp`+rename writes, non-fatal failures
+  (`vector cache: write failed (non-fatal): <error>`, the next successful
+  write serializes the WHOLE map and recovers the file — §5.9 #50); `prune`
+  drops foreign-tuple entries + hashes outside the keepKeys set (contentHash
+  STRINGS), rewrites the file ONCE, logs `vector cache: pruned to N entries`
+  (emitted by `VectorCache.prune`, pinned in §5.13 note (c))); the W4 wiring
+  in `src/main/vector-boot.ts` (`VectorBootOptions.cache?`; the MEMOIZING
+  wrapper around the embed fns handed `createVectorIndex` — a HIT adopts with
+  NO HTTP call, a MISS embeds + writes through; the batch wrapper adopts hits
+  IN PLACE and batch-embeds only the misses, the W2 per-chunk fallback
+  re-routing through the SAME wrapper; the `cacheHits` census deduped by
+  contentHash so a fallback re-lookup counts once; drain → prune → drain
+  before the promotion report; the `embedded` census = provider embeds =
+  cache misses when a cache is present, `index.nodeIds.length` unchanged
+  otherwise) and `src/main/main.ts` (`cache: createVectorCache()` at
+  controller creation — no opts, the default
+  `join(app.getPath('userData'), 'provident-vector-cache.json')` resolves
+  through the running Electron app, lazy required, no module-level Electron
+  import in the pure seam). **TestWriter red: 27 failing** (the module
+  `src/main/vector-cache.js` does not exist — suite-load failure; the boot-
+  path controller-option reds surfaced after the module landed) →
+  **Implementer green: 27/27** (`tests/vector-cache.test.ts`). Keep-green:
+  vector-boot 34 + vector-boot-adversarial 5 + embeddings 57 + embeddings-
+  batch 25 + embeddings-failure-policy 21 + embeddings-adversarial 23 — all
+  passing (the brief's 58/35 counts include 2 conditionally-gated live-ollama
+  tests; zero regressions). **Trio: 2161 pass / 38 skip (106 files),
+  typecheck clean, build clean** (2126/38 + the 27 W4 tests + the 8 W4
+  adversarial tests). Design note:
+  the build's snapshot settles the store's ALREADY-ENQUEUED mutations first
+  (`await store.enqueue(() => undefined)` — the store's own single-writer
+  queue; the W4 boot wiring fires `putNode` without awaiting). **Adversarial
+  pass (RCA-3, registered in spec §3a's W4 subsection):** F-W4-1 HIGH (the
+  whole-map sync write per `set()` → O(n²) amplification + main-thread
+  freezes; fixed: the COALESCING write queue + the exported
+  `CACHE_WRITE_DEBOUNCE_MS = 500`; regression tests R1/R2), F-W4-2 LOW (the
+  load log quoted corrupt-file content; fixed: the sanitized tail; R3),
+  F-W4-3 LOW (symlink/FIFO/device at either path — written through /
+  main-thread wedge; fixed: the lstat regular-file guards + the 0o600 tmp;
+  R4/R7/R8 + the R5/R6 directory cases), F-W4-4..F-W4-8 INFO (the census
+  dedupe — §5.12 re-pinned; the one-writer assumption; the no-quit-flush
+  re-embed economics; the poison-entry limitation — a §5.13 sentence; the
+  unreachable pre-traffic prune) — red-first 5→8 (the R-series red run 5
+  failing | green 8/8; `tests/vector-cache.test.ts` now 35 tests).
+  **Blind-greens (RCA-4):** `docs/specs/unit-f-w4-cache-greens.md` — 28
+  scenarios: 27 PASS / 1 DEFERRED-STATIC (WIRE-CACHE — verified by this
+  review at `main.ts:168`), zero un-hardened regressions, LIVE 3-boot
+  sequence proving hit-adoption economics (boot 1: embedded 2 / cacheHits 0;
+  boot 2: cacheHits 2 / embedded 0 with the fetch count UNCHANGED; boot 3
+  after an edit: cacheHits 1 / embedded 1, exactly one HTTP embed).
+  **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-05-unit-f-w4-doc-review.md` (the §3a W4
+  subsection written, the §5.12 `cacheHits` census re-pinned + the W4 wiring
+  byte-check at `main.ts:168`, the §5.13 hardening pins + the F-W4-7
+  limitation sentence, the two `docs/decisions.md` vector rows annotated
+  W4-LANDED, the `docs/pending.md` cache row repointed to the landed
+  reality, the OPEN row → the completed-proposal state, the W2/W3 greens
+  `main.ts:163` cites re-pointed to `main.ts:168`). **The vector-boot
+  proposal is COMPLETE — every gate run per unit.**
+- **Unit W3 — the embed-failure policy (the `skipped` map + the W3 flip + the
+  production `embedBatchFn` wiring) (2026-09-05).** The vector-boot slice's
+  third unit (spec `docs/specs/unit-f-embeddings.md` §5.3 (the `skipped` map +
+  the UNIT-F-SKIP-EMPTY extension + the embed-failure flip) + §5.8 #34–36 +
+  §5.9 #45–48 + §5.10 census + §5.12 (the F-W2-3 production wiring) + §3a's W3
+  registrations; the §5.12 decomposition W1 → W2 → W3 → W4). Landed: the 4th
+  `VectorIndex` member `skipped: Map<nodeId, 'empty' | 'transient'>`
+  (interface members 3 → 4, §5.10); the UNIT-F-SKIP-EMPTY empty-content guard
+  extended to `addToVectorIndex`/`updateVectorIndex` (an update-to-empty skip
+  also removes the id from `nodeIds`); the W3 FLIP — a per-node embed
+  rejection on ANY index-maintenance path (`createVectorIndex` build loop,
+  `addToVectorIndex`, `updateVectorIndex`, the `onStoreChanged` hook) is
+  recorded `skipped.set(nodeId, 'transient')` + logged via the RE-PINNED
+  `vector index: node embed failed (transient): <nodeId> <error>` milestone
+  and the operation RESOLVES (the required-arg rejections §5.9 #19–21 and the
+  query-time embed rejection §5.9 #32 are UNCHANGED); `removeFromVectorIndex`
+  clears any `skipped` entry (incl. the F1 UNCONDITIONAL hook-delete — a node
+  deleted while skipped leaves no stale record); the F3 dimension-0 latch on
+  the add/update success paths; the F2 taxonomy (provider-channel malformed/
+  dimension rejections are transient-CLASSIFIED by design — an ALL-transient
+  build promotes an EMPTY index with a loud census; the index-level
+  RESOLVED-vector checks stay HARD rejections); the controller build routed
+  through `createVectorIndex(snapshotNodes, provider.embed, opts.embedBatchFn)`
+  (`src/main/vector-boot.ts`) and the production wiring
+  `embedBatchFn: provider.embedBatch` at controller creation (`main.ts:163` —
+  the F-W2-3 assignment). **TestWriter red: 14 failing** (13 in
+  `tests/embeddings-failure-policy.test.ts` + 1 sanctioned
+  `tests/embeddings.test.ts:380-386` re-pin) → **Implementer green: 14/14**
+  (trio 2120 pass / 38 skip). **Adversarial pass (RCA-3, TWO passes;
+  registered in spec §3a's W3 subsection):** pass 1 — F-W3-1 MEDIUM (a node
+  DELETED while transient/empty-skipped left a stale `skipped` entry forever;
+  fixed: the hook's delete branch calls `removeFromVectorIndex`
+  UNCONDITIONALLY — it no-ops for unknown ids and clears any skipped entry),
+  F-W3-2 (Architect taxonomy decision — malformed provider-channel rejections
+  are transient-classified BY DESIGN; boot resilience over loud abort),
+  F-W3-3 (the dimension-0 index shape never latched on the maintenance paths —
+  the add/update success paths now latch), F-W3-4 (the §5.12 milestone-string
+  drift — re-pinned to the `vector index:` prefix), F-W3-5 (dead
+  `removeFromVectorIndex` import in `vector-boot.ts` dropped), F-W3-6
+  (coverage gaps — the batch-path 'empty' record + the double-failure
+  fallback; the regression tests grew red-first 2 → 6); pass 2 — the fixes
+  registered in spec §3a + F-W3-7 (count reconciliation: the failure-policy
+  file is 21 tests — 15 before the pass, +6 — and the W3 re-pin comprises 5
+  sites: 2 in `tests/embeddings.test.ts` (the build/maintenance block + the
+  hook-path block) and 3 in `tests/vector-boot.test.ts` (the three
+  total-failure tests reshaped onto a non-embed store-failure trigger via the
+  shared `armListNodesFailure` helper)); red set 2 failing (F-W3-1/F-W3-3) |
+  green 21/21. **Blind-greens (RCA-4):**
+  `docs/specs/unit-f-w3-failure-policy-greens.md` — 25 scenarios (24
+  executable + 1 deferred-static): 23 PASS / 1 F-SCORE doc-letter drift (the
+  direct `score()` output OMITS rather than zero-scores vector-absent nodes —
+  the ranked-level observable identical) **CLOSED by this review's DOC-LETTER
+  re-pin** (§5.4/§5.5/§5.8 #34) / 1 DEFERRED-STATIC (WIRE-MAIN — verified by
+  this review at `main.ts:163`); zero un-hardened regressions. **Doc-review
+  pass (RCA-6):** `archive/reviews/2026-09-05-unit-f-w3-doc-review.md` (the
+  F-SCORE letter re-pinned, the OPEN row → this DONE row, the two
+  `docs/decisions.md` vector rows annotated W3-LANDED, the W2 greens' W3-era
+  pointers closed). **Trio: 2126 pass / 38 skip (105 files), typecheck clean,
+  build clean** (2120/38 + the 6 W3 adversarial pass-2 tests).
+  **NOT yet landed (the next unit):** W4 cache (§5.13) only. [2026-09-05 W4
+  doc review: W4 has since LANDED — see the Unit W4 DONE row above; the
+  vector-boot proposal is COMPLETE. The controller-creation call cited here
+  at `main.ts:163` is now at `main.ts:168` (the W4 `cache:
+  createVectorCache()` arg added).]
+- **Unit W2 — the batch seam (`embedBatch?` on BOTH providers + the chunked
+  batch build path) (2026-09-05).** The vector-boot slice's second unit (spec
+  `docs/specs/unit-f-embeddings.md` §5.2 "Batch seam" + §5.3 batch build path +
+  §5.9 #39–41 + §5.8 #37–39; the §5.12 decomposition W1 → W2 → W3 → W4).
+  Landed: the OPTIONAL `embedBatch?` member on BOTH concrete providers (ollama
+  + remote, F8-dispatched plural request shapes, the positional alignment
+  invariant — the WHOLE batch rejects on a mismatch; interface members 5 → 6,
+  §5.10), the exported `EmbedBatchFn` type, `fetchWithTimeout` with a REAL
+  `AbortController` abort + the `Math.min(budget, 2147483647)`
+  setTimeout-ceiling clamp, the exported `BATCH_CHUNK_SIZE = 64`,
+  `createVectorIndex(nodes, embedFn, embedBatchFn?)` CHUNKED with per-chunk
+  fallback isolation (a rejected/misaligned chunk falls back per-item for
+  exactly THAT chunk's texts; the two-arg form unchanged), zero-length-vector
+  rejection + validate-then-commit (no dimension-0 latch; the pinned
+  `createVectorIndex: malformed response (zero-length vector)`), `embedBatch`
+  input validation (`<prefix> embed: batch texts must be an array of strings`;
+  empty-string items stay VALID), and `timeoutMs` construction validation at
+  BOTH providers (positive integer ≤ 2147483647). **TestWriter red: 23
+  failing** (18 missing-member `embedBatch`, 5 assertion — no AbortController,
+  no batch wiring) **+ 2 unchanged-behavior guards green** → **Implementer
+  green: 25/25** (`tests/embeddings-batch.test.ts`, incl. the LIVE 3-text
+  batch against the real ollama `embeddinggemma`). **Adversarial pass (RCA-3,
+  registered in spec §3a):** F-W2-1 MEDIUM (zero-length-vector dimension
+  poisoning — the provider brick + the index poison; fixed: per-vector
+  zero-length rejection + validate-then-commit + the explicit `dimensionSet`
+  flag), F-W2-2 MEDIUM (the monolithic batch / the budget clamp / chunking —
+  fixed: `BATCH_CHUNK_SIZE = 64` + per-chunk fallback isolation +
+  `fetchWithTimeout` clamps to `Math.min(N × timeoutMs, 2147483647)`), F-W2-3
+  MEDIUM (the production wiring was unassigned → resolved SPEC-ONLY: W3 owns
+  the `embedBatchFn: provider.embedBatch` wiring per §5.12's F-W2-3 amendment
+  note), F-W2-4/F-W2-5 LOW (`embedBatch` input validation; `timeoutMs`
+  validation), F-W2-6 LOW (doc note — the §5.3 caller-trust boundary) — all
+  fixed + regression-tested red-first 9→10 (red set 9 failing | 14 passing =
+  13 pre-existing + 1 guard; green 23/23 in
+  `tests/embeddings-adversarial.test.ts`). **Blind-greens (RCA-4):**
+  `docs/specs/unit-f-w2-batch-greens.md` — 24 scenarios: 23 PASS /
+  1 DEFERRED-STATIC (A-F-W2-3 — the wiring claim's site is `main.ts`,
+  main-process-only), zero findings, 2 LIVE incl. a real 70-text chunked build
+  (2 POSTs of 64 + 6 observed through a recording passthrough fetch); the
+  battery closed the W1 greens' PENDING-W2 rows F39/F40/F41. **Doc-review pass
+  (RCA-6):** `archive/reviews/2026-09-05-unit-f-w2-doc-review.md` (the
+  §5.2/§5.3/§5.5/§5.12 `embeddings.ts` line cites re-pointed post-W2, the
+  §5.10 census annotated W2-LANDED, this DONE row + the OPEN row updated, the
+  W1 greens PENDING-W2 rows closed with a pointer). **Trio: 2104 pass / 38
+  skip (104 files), typecheck clean, build clean** (2069/38 + the 25 batch
+  tests + the 10 W2 adversarial tests). **NOT yet landed (the next units):**
+  W3 failure policy + the production `embedBatchFn` wiring (per
+  §5.12/F-W2-3), then W4 cache (§5.13). [2026-09-05 W4 doc review: W3 + W4
+  have since LANDED — see the Unit W3/W4 DONE rows above; the vector-boot
+  proposal is COMPLETE.]
+- **Unit W1 — vector-boot (BOOT MODEL B + the promotion seam + prebuilt-index
+  adoption) (2026-09-05).** The vector-boot slice's first unit (spec
+  `docs/specs/unit-f-embeddings.md` §5.12 + §5.5 + §5.9, amended 2026-09-05;
+  the §5.12 decomposition W1 → W2 → W3 → W4). Landed: the NEW pure module
+  `src/main/vector-boot.ts` (`warmUpEmbeddingProvider` — ONE real
+  `POST /api/embed` warm-up gate of the pinned `VECTOR_BOOT_WARMUP_TEXT`, NOT
+  `isOllamaAvailable`; total failure rejects
+  `vector boot warm-up: <underlying message>` → boot aborts before the window;
+  `createVectorBootController` — created SYNCHRONOUSLY, builds the ONE shared
+  `RetrievalEngine` born-LEXICAL internally (main never calls
+  `createRetrieval` in vector mode), background sequential build over the
+  non-empty nodes (UNIT-F-SKIP-EMPTY) → reconcile (strict `updatedAt >
+  embedAt` tie rule; F-W1-1 live-empty guard; F-W1-2 mid-build additions
+  adopted) → atomic one-way promotion; the `PromotionReport` census
+  (`embedded`/`cacheHits` 0-until-W4/`reEmbedded`/`adopted`/`skipped
+  {empty, transient}`/`promotedAt`); SINGLE-SHOT `start()` rejecting
+  `vector boot: start already called`), the `RetrievalEngine.setEmbedder`
+  promotion seam (the THIRD engine member in `src/main/retrieval.ts` — ONE-WAY
+  `retrieval engine: embedder promotion is one-way (already promoted)`; the
+  F-W1-3 structural guard rejects a broken embedder with
+  `retrieval engine: embedder required` WITHOUT consuming the latch; the
+  `onStoreChanged` hook attaches with the swap), `VectorEmbedderOptions.index?`
+  prebuilt-index adoption (zero build embeds inside `createVectorEmbedder`)
+  + the provider option WIDENED to config | instance (implementer deviation,
+  documented in §5.5 this pass), and the `main.ts` vector branch rewired
+  (config-check throw preserved verbatim at `main.ts:153-157`; the controller
+  owns engine creation; window + `mcp.start()` start PENDING; fire-and-forget
+  `void vectorBoot.start().catch(...)`). **TestWriter red: 33 red** (module
+  `src/main/vector-boot.js` does not exist — suite-load failure; the RED
+  marker test pins it) **+ adversarial red: 5 — A-F-W1-1..5 reproduced** →
+  **Implementer green: 33/33** (`tests/vector-boot.test.ts`) **+ adversarial
+  fixes green: 5/5** (`tests/vector-boot-adversarial.test.ts`). **Adversarial
+  pass (RCA-3, registered in spec §3a):** F-W1-1 HIGH (the reconcile
+  empty-guard — a node emptied mid-build re-embedded `''` →
+  `malformed response` → total failure, pending forever; fixed: live-content
+  guard + `skipped` 'empty' + the promotion continues), F-W1-2 MEDIUM
+  (mid-build additions invisible post-promotion; fixed: the reconcile pass
+  adopts them + the NEW `PromotionReport.adopted` field), F-W1-3/F-W1-4/F-W1-5
+  LOW (the structural `setEmbedder` guard without consuming the one-way
+  latch; the `VectorIndex` literal TS2353 type drift, pinned by a real
+  in-process TypeScript compile; the warm-up provider construction moved
+  INSIDE the try so a present-but-invalid config gets the class-2 wrap) —
+  all fixed + regression-tested. **Blind-greens:**
+  `docs/specs/unit-f-w1-vector-boot-greens.md` — 32 scenarios: 28 PASS,
+  3 PENDING-W2 (F39/F40/F41 — the batch seam is W2's contract;
+  `embedBatch === undefined` at runtime), 1 DEFERRED-STATIC (F38 —
+  main-process-only; verified by this pass's doc review at
+  `main.ts:153-157`), zero doc-drift findings in the W1 scope. **Doc-review
+  pass (RCA-6):** `archive/reviews/2026-09-05-unit-f-w1-doc-review.md`
+  (spec §5.12/§5.7 line-cites re-pointed post-W1, §5.5 provider-widening
+  amendment note added, §5.10 census annotated W2-forward, the
+  VECTOR-BOOT-BACKGROUND-PROMOTE decision row updated, this tracker row
+  rewritten from the stale "NEXT = W1 TestWriter red"). **Trio: 2069 pass /
+  38 skip (103 files), typecheck clean, build clean** (2031/38 + the 33 W1
+  tests + the 5 adversarial tests). **NOT yet landed (the next units):** W2
+  batch seam, W3 failure policy, W4 cache (§5.13). [2026-09-05 W2 doc review:
+  W2 has since LANDED — see the Unit W2 DONE row above; W3 + W4
+  outstanding.] [2026-09-05 W4 doc review: W3 + W4 have since LANDED — see
+  the Unit W3/W4 DONE rows above; the vector-boot proposal is COMPLETE.] Decisions
+  VECTOR-BOOT-BACKGROUND-PROMOTE / VECTOR-CACHE-CONTENT-HASH-KEY in
+  `docs/decisions.md`.
 - **Unit V1 — store adjacency (2026-08-29).** The SCOPED-LOAD fix's Unit 1
   (see `docs/specs/load-bug-scoped-traversal-review.md` §6). Added to
   `src/main/rag-store.ts`: the shared PURE adjacency core (`buildAdjacencyIndex`

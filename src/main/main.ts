@@ -15,7 +15,9 @@ import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIp
 import type { RagStoreChangedPayload } from './preload.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
-import { createVectorEmbedder, parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
+import { parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
+import { warmUpEmbeddingProvider, createVectorBootController, type VectorBootController } from './vector-boot.js'
+import { createVectorCache } from './vector-cache.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -142,13 +144,30 @@ async function main(): Promise<void> {
   // lexical).
   const embedderKind = retrievalEmbedderFromArgs(process.argv.slice(1))
   let retrievalEngine: RetrievalEngine
+  // Unit F §5.12 (W1 BOOT MODEL B) — in vector mode the CONTROLLER owns engine
+  // creation: warm-up gate (ONE real embed probe; a rejection aborts boot
+  // before the window) → the born-lexical pending controller, which creates
+  // the ONE shared engine INTERNALLY and exposes it as `boot.engine` (main
+  // never calls `createRetrieval` in vector mode) → background build →
+  // reconcile → atomic one-way promotion.
+  let vectorBoot: VectorBootController | null = null
   if (embedderKind === 'vector') {
     const providerConfig = embeddingProviderConfigFromEnv()
     if (!providerConfig) {
       throw new Error('retrieval.embedder: vector requires retrieval.embeddingProvider config')
     }
-    const vectorEmbedder = await createVectorEmbedder(ragStore, { provider: providerConfig })
-    retrievalEngine = createRetrieval(ragStore, vectorEmbedder)
+    const provider = await warmUpEmbeddingProvider(providerConfig)
+    // W3 (§5.12 F-W2-3 amendment) — the production boot build is BATCHED: the
+    // controller's background build routes through createVectorIndex(nodes,
+    // provider.embed, opts.embedBatchFn) when the warmed provider exposes the
+    // batch seam (the §5.2 sequential-default expression is pinned here).
+    // W4 (§5.13 load ownership) — the persisted cache is constructed AT
+    // controller-creation time; no opts → the default
+    // join(app.getPath('userData'), 'provident-vector-cache.json') applies,
+    // so the cache is fully loaded before the background build starts.
+    const boot = createVectorBootController(ragStore, provider, { embedBatchFn: provider.embedBatch, cache: createVectorCache() })
+    retrievalEngine = boot.engine
+    vectorBoot = boot
   } else {
     retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
   }
@@ -404,6 +423,16 @@ async function main(): Promise<void> {
   await win.loadFile(rendererHtml)
 
   await mcp.start()
+
+  // Unit F §5.12 — the fire-and-forget background build (F1 discipline): the
+  // window + MCP server started immediately (the pending phase serves
+  // LEXICALLY through the shared engine); a build failure is LOGGED and the
+  // engine STAYS pending — never an unhandled rejection.
+  if (vectorBoot) {
+    void vectorBoot.start().catch((e) => {
+      console.error('[provident-main] vector boot build failed (staying pending):', e)
+    })
+  }
 
   win.on('closed', () => {
     void mcp.close()

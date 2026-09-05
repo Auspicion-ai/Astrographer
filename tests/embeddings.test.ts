@@ -377,12 +377,23 @@ describe('Unit F — embeddings module (unit-f-embeddings.md §5.8/§5.9)', () =
       expect(() => removeFromVectorIndex(index, 42 as never)).toThrow('vector index: index/nodeId required')
     })
 
-    it('embedFn rejection propagates from the index build/maintenance', async () => {
+    // W3 RE-PIN (2026-09-05 amendment — §5.3 embed-failure policy, §5.9 #46):
+    // a per-node embed rejection on the index build/maintenance paths is NOT
+    // propagated — the node is recorded `skipped.set(nodeId, 'transient')` and
+    // the operation RESOLVES. (The required-arg rejections above and the
+    // query-time rejection §5.9 #32 stay — unchanged pins.)
+    it('W3: an embedFn rejection on the index build/maintenance is NOT propagated — skip \'transient\' + resolve', async () => {
       const failing: EmbedTextFn = async () => { throw new Error('provider down') }
-      await expect(createVectorIndex([makeNode('n1', { content: 'x' })], failing)).rejects.toThrow('provider down')
+      // build: the failed node is skipped 'transient', the build RESOLVES
+      const built = await createVectorIndex([makeNode('n1', { content: 'x' })], failing)
+      expect(built.skipped.get('n1')).toBe('transient')
+      expect(built.nodeIds).toEqual([])
+      expect(built.embeddings.has('n1')).toBe(false)
+      // maintenance: update/add record the transient skip and RESOLVE
       const index = await createVectorIndex([], embedFn)
-      await expect(updateVectorIndex(index, makeNode('n1', { content: 'x' }), failing)).rejects.toThrow('provider down')
-      await expect(addToVectorIndex(index, makeNode('n1', { content: 'x' }), failing)).rejects.toThrow('provider down')
+      await updateVectorIndex(index, makeNode('n1', { content: 'x' }), failing)
+      await addToVectorIndex(index, makeNode('n1', { content: 'x' }), failing)
+      expect(index.skipped.get('n1')).toBe('transient')
     })
   })
 
@@ -629,7 +640,7 @@ describe('Unit F — embeddings module (unit-f-embeddings.md §5.8/§5.9)', () =
       }
     })
 
-    it('32. embed rejection propagates from score/place/onStoreChanged', async () => {
+    it('32. embed rejection propagates from score/place (W3: the hook path transient-skips + resolves)', async () => {
       const dir = freshDir()
       try {
         const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -638,9 +649,17 @@ describe('Unit F — embeddings module (unit-f-embeddings.md §5.8/§5.9)', () =
         const embedder = await createVectorEmbedder(store, { provider: OLLAMA_CONFIG })
         // now the provider is down
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('provider down') }))
+        // §5.9 #48 (UNCHANGED): the QUERY-time embed rejection still propagates
         await expect(embedder.score('hello', store.listNodes())).rejects.toThrow('provider down')
         await expect(embedder.place('hello', store.listNodes(), [])).rejects.toThrow('provider down')
-        await expect(embedder.onStoreChanged('content', ['n1'], [])).rejects.toThrow('provider down')
+        // W3 RE-PIN (2026-09-05 — §5.3 embed-failure flip, §5.9 #46): a per-node
+        // embed rejection on the onStoreChanged HOOK (an index-maintenance path)
+        // is NOT propagated — it records a 'transient' skip and RESOLVES (the
+        // node scores 0 until a successful re-embed).
+        await expect(embedder.onStoreChanged('content', ['n1'], [])).resolves.toBeUndefined()
+        stubOllamaEmbedFetch() // the provider recovers — the skip PERSISTS until a next touch
+        const afterSkip = await embedder.score('hello', store.listNodes())
+        expect(afterSkip.find((s) => s.nodeId === 'n1')).toBeUndefined() // unindexed (transient skip)
       } finally {
         rmSyncSafe(dir)
       }
