@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process'
 import type { RagNode, RagStore, RagEdge } from './rag-store.js'
 import type { Embedder, PlacementDecision, ScoredNode } from './retrieval.js'
 import { PLACEMENT_MIN_SCORE } from './retrieval.js'
+import { createSingleTextMemoizer, type VectorCache } from './vector-cache.js'
 
 // ---------------------------------------------------------------------------
 // §5.2 The embedding provider abstraction + config
@@ -778,6 +779,19 @@ export interface VectorEmbedderOptions {
    *  here for the promotion. Omitted (ALL existing calls and tests) → build
    *  from the store's nodes as today. */
   index?: VectorIndex
+  /** W5 (§5.13 amendment, 2026-09-05) — the OPTIONAL persisted cache: when
+   *  supplied, ALL the embedder's single-text embeds (the `score`
+   *  query-embed — which is also `place()`'s content-embed — and the
+   *  `onStoreChanged` maintenance embeds via addToVectorIndex/
+   *  updateVectorIndex) route through the ONE single-text memoizer over this
+   *  provider instance's tuple (a HIT adopts with NO HTTP call; a FAILED
+   *  embed writes nothing). F1/F2 (RCA-3 pass 2): a QUERY-embed MISS is
+   *  adopted IN-MEMORY ONLY (session-scoped — a repeated identical query
+   *  still makes no HTTP call; nothing is persisted); only the MAINTENANCE
+   *  (node-content) embeds write through on the cache's debounced
+   *  single-writer queue. Absent (ALL W1–W3 callers/tests) → byte-identical
+   *  `provider.embed` behavior. */
+  cache?: VectorCache
 }
 
 /** Create the vector embedder. Builds the vector index from the store's nodes
@@ -798,12 +812,32 @@ export async function createVectorEmbedder(store: RagStore, opts: VectorEmbedder
   // background); omitted → build from the store's nodes as today.
   const index = opts.index ?? await createVectorIndex(store.listNodes(), provider.embed)
   const placementMinScore = opts.placementMinScore ?? PLACEMENT_MIN_SCORE
+  // W5 (§5.13 amendment) — with a cache, the ONE memoizer over the provider
+  // instance's tuple fronts every single-text live embed; without one the
+  // raw `provider.embed` passes through byte-identically (W1–W3 unchanged —
+  // the L5 guard). The internal-build path (no `opts.index`) is NOT a live
+  // embed route and keeps the raw provider fn.
+  // F1/F2 (the RCA-3 pass-2 ruling) — the CALLER distinction: the memoizer
+  // is built with `persistMisses: false` (the default), so a QUERY-embed
+  // miss (score/place — `embed(text)`) is adopted IN-MEMORY ONLY (session-
+  // scoped, nothing on disk) while a MAINTENANCE (node-content) miss — the
+  // onStoreChanged add/update embeds — calls `embed(text, { persist: true })`
+  // and writes through (the live-upload write-through the user ordered).
+  const memoizer = opts.cache
+    ? createSingleTextMemoizer(provider, opts.cache, { persistMisses: false })
+    : undefined
+  const queryEmbedFn: EmbedTextFn = memoizer
+    ? (text: string) => memoizer.embed(text)
+    : (text: string) => provider.embed(text)
+  const maintenanceEmbedFn: EmbedTextFn = memoizer
+    ? (text: string) => memoizer.embed(text, { persist: true })
+    : (text: string) => provider.embed(text)
 
   async function score(query: string, nodes: RagNode[]): Promise<ScoredNode[]> {
     if (typeof query !== 'string' || nodes === null || nodes === undefined) {
       throw new Error('embedder score: query/nodes required')
     }
-    const qVec = await provider.embed(query)
+    const qVec = await queryEmbedFn(query)
     // W3 (§5.8 #34, partial-index query semantics): a node absent from the
     // vector index (never indexed, transiently/empty skipped, or deleted)
     // scores 0 and is EXCLUDED — it is not scored at all (the engine's
@@ -844,8 +878,15 @@ export async function createVectorEmbedder(store: RagStore, opts: VectorEmbedder
     for (const nodeId of nodeIds) {
       const node = store.getNode(nodeId)
       if (node) {
-        if (index.nodeIds.includes(nodeId)) await updateVectorIndex(index, node, provider.embed)
-        else await addToVectorIndex(index, node, provider.embed)
+        // W5 (§5.13 amendment) — the maintenance embeds route through the
+        // maintenance embed fn (memoized + PERSIST:true when a cache was
+        // supplied — the node-content write-through; the raw provider fn
+        // otherwise). W3's transient-skip policy is UNCHANGED: a failed
+        // embed still resolves the hook and, memoized, writes nothing
+        // through. (F1/F2: only THESE maintenance embeds persist — the
+        // score/place query path is in-memory only.)
+        if (index.nodeIds.includes(nodeId)) await updateVectorIndex(index, node, maintenanceEmbedFn)
+        else await addToVectorIndex(index, node, maintenanceEmbedFn)
       } else {
         // RCA-3 pass 2 (F1) — the delete branch is UNCONDITIONAL:
         // removeFromVectorIndex no-ops for an id the index never saw, and

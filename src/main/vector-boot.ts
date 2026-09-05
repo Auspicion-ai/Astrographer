@@ -6,11 +6,10 @@
 // Pure + injectable module seam (review A3 — node-testable): NO Electron —
 // the store and the ALREADY-WARMED provider are injected. Logs go to
 // console.error (the spec pins the LOG MILESTONE strings, not the stream).
-import { createHash } from 'node:crypto'
-import type { RagStore } from './rag-store.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval, type RetrievalEngine } from './retrieval.js'
 import { createEmbeddingProvider, createVectorEmbedder, createVectorIndex, addToVectorIndex, updateVectorIndex, type EmbeddingProvider, type EmbeddingProviderConfig, type VectorIndex } from './embeddings.js'
-import type { VectorCache } from './vector-cache.js'
+import { contentHashOf, type VectorCache } from './vector-cache.js'
+import type { RagStore } from './rag-store.js'
 
 /** The boot phase of the shared engine. */
 export type VectorBootPhase = 'pending' | 'promoted'
@@ -134,13 +133,10 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
   // a cache HIT also establishes it (§5.13). 0 = not yet established.
   let establishedDim = 0
 
-  /** §5.13 — contentHash = the lowercase-hex SHA-256 of the EXACT embedded
-   *  text (the raw string bytes, no normalization — the nodeSource
-   *  discipline; AMENDMENT-REVIEW note 9: NOT the nodeSource record
-   *  serialization). */
-  function contentHashOf(text: string): string {
-    return createHash('sha256').update(text, 'utf8').digest('hex')
-  }
+  // §5.13 — contentHashOf (the lowercase-hex SHA-256 of the EXACT embedded
+  // text, no normalization — AMENDMENT-REVIEW note 9) is the SHARED cache
+  // helper imported from vector-cache.ts (the W5 consolidation: the boot
+  // wrapper and the live memoizer hash through the ONE function).
 
   /** The key dimension for a cache lookup: the established dimension, else
    *  the provider's (0 while an auto-detect provider is still cold — a cold
@@ -299,7 +295,11 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       // Atomic ONE-WAY promotion: the vector embedder ADOPTS the background-
       // built index (§5.5 `opts.index` — zero build embeds inside
       // createVectorEmbedder) and is swapped INTO the same engine instance.
-      const vectorEmbedder = await createVectorEmbedder(store, { provider, index })
+      // W5 (§5.13 amendment) — the SAME VectorCache instance the build used
+      // is handed to the promoted embedder (the shared in-memory map makes
+      // the build-time entries live-hittable; absent cache → undefined, the
+      // W1–W3 passthrough unchanged).
+      const vectorEmbedder = await createVectorEmbedder(store, { provider, index, cache })
       const promotedAt = Date.now()
       engine.setEmbedder(vectorEmbedder)
       phase = 'promoted'

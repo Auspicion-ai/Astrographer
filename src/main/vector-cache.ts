@@ -34,6 +34,7 @@
 //   write after the drain) and the pinned `vector cache: pruned to N
 //   entries` census is logged by the prune method.
 import { lstatSync, readFileSync, writeFileSync, renameSync, type Stats } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 /** The cache key (§5.13 — the decision VECTOR-CACHE-CONTENT-HASH-KEY). */
@@ -307,6 +308,128 @@ export function createVectorCache(opts?: { path?: string }): VectorCache {
       }
       if (dirty && !writeQueued) enqueueWrite()
       return queue
+    },
+  }
+}
+
+/** §5.13 (the decision VECTOR-CACHE-CONTENT-HASH-KEY) — contentHash = the
+ *  lowercase-hex SHA-256 of the EXACT embedded text (the raw string bytes, no
+ *  normalization — AMENDMENT-REVIEW note 9: NOT the nodeSource record
+ *  serialization). THE one hash helper of the cache discipline: the boot
+ *  wrapper (vector-boot.ts) and the W5 live memoizer below both hash through
+ *  THIS — no duplicated hash logic. */
+export function contentHashOf(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+/** W5 (§5.13 amendment) — the source the live memoizer is built over: the
+ *  §5.13 key tuple (kind/model/dimension) PLUS the `embed` fn a MISS routes
+ *  through. The embedder hands its provider instance here (structural: every
+ *  EmbeddingProvider satisfies it). NOTE: the MISS path REQUIRES `embed` — a
+ *  bare kind/model/dimension tuple cannot perform a MISS embed. */
+export interface SingleTextMemoizerProvider {
+  /** The provider kind (config.provider). */
+  kind: string
+  /** The configured model name. */
+  model: string
+  /** The established embedding dimension. */
+  dimension: number
+  /** The MISS embed route (the provider's single-text embed). */
+  embed(text: string): Promise<number[]>
+}
+
+/** W5 (§5.13 amendment) — the SINGLE-TEXT memoizer the PROMOTED embedder
+ *  routes ALL its single-text embeds through when a cache is supplied (not
+ *  only the boot build): a HIT (exact tuple kind+model+dimension+contentHash,
+ *  the dimension being read PER EMBED from the live `provider` object — F3 —
+ *  so a cold auto-detect provider becomes hit-eligible as soon as its first
+ *  embed latches the dimension) adopts the cached vector with NO HTTP call +
+ *  fires `onHit`; a MISS embeds through `provider.embed` and — on SUCCESS —
+ *  fires `onMiss` + persists per the caller:
+ *
+ *  - F1/F2 (the RCA-3 pass-2 ruling): a QUERY-embed miss (`embed(text)` —
+ *    the default `persistMisses: false`) is adopted IN-MEMORY ONLY: the
+ *    vector is REMEMBERED in a session map keyed by the SAME four-field
+ *    tuple, so a repeated identical text still adopts with no HTTP call, but
+ *    NOTHING is written to disk (the entries map + file stay untouched —
+ *    closing the inter-prune growth bound and query-hash disk retention).
+ *  - A MAINTENANCE (node-content) miss (`embed(text, { persist: true })`)
+ *    ALSO writes through on the cache's existing debounced single-writer
+ *    queue (NEVER awaited by the caller; flush() forces the pending write) —
+ *    the live-upload write-through the user ordered.
+ *
+ *  A FAILED embed writes NOTHING (neither disk nor session — write-through/
+ *  remembering happens only AFTER each successful embed) and propagates the
+ *  rejection. A 0 `provider.dimension` (an auto-detect provider still cold,
+ *  read per embed — F3) is CACHE-INELIGIBLE: straight to the provider (a
+ *  persisting miss still writes through with the vector's own length, like
+ *  the boot wrapper; a non-persisting miss session-remembers it). A
+ *  non-string text is rejected with the pinned
+ *  `cache memoizer: text must be a string` (F6 — never a raw crypto
+ *  TypeError from the hash helper). The hash is the module's `contentHashOf`
+ *  — the lowercase-hex SHA-256 of the EXACT text, shared with the boot
+ *  wrapper. */
+export function createSingleTextMemoizer(
+  provider: SingleTextMemoizerProvider,
+  cache: VectorCache,
+  opts?: {
+    onHit?: (hash: string) => void
+    onMiss?: (hash: string) => void
+    /** F1/F2 — the DEFAULT for a MISS: FALSE (the default) = in-memory
+     *  session adoption only (no disk write); TRUE = the miss also writes
+     *  through. A per-call `{ persist: true }` overrides for that call. */
+    persistMisses?: boolean
+  },
+): { embed(text: string, callOpts?: { persist?: boolean }): Promise<number[]> } {
+  // F1/F2 — the in-memory SESSION map for non-persisted (query) misses:
+  // keyOf(tuple) → a COPY of the adopted vector. Session-scoped (lives with
+  // the memoizer), never written to disk, never pruned.
+  const session = new Map<string, number[]>()
+  const persistDefault = opts?.persistMisses ?? false
+  // F3 — the hit-check dimension is read PER EMBED from the LIVE provider
+  // object (the boot wrapper's keyDimension() shape): a cold auto-detect
+  // provider reports 0 until its first embed latches the dimension; a
+  // creation-time latch would keep it permanently hit-ineligible while its
+  // misses write entries it can never hit.
+  function hitDimension(): number {
+    return provider.dimension > 0 ? provider.dimension : 0
+  }
+  return {
+    async embed(text: string, callOpts?: { persist?: boolean }): Promise<number[]> {
+      // F6 — validate the input BEFORE hashing (a non-string text used to
+      // throw a raw crypto TypeError out of contentHashOf).
+      if (typeof text !== 'string') throw new Error('cache memoizer: text must be a string')
+      const hash = contentHashOf(text)
+      const dim = hitDimension()
+      if (dim > 0) {
+        const hit = cache.get({ kind: provider.kind, model: provider.model, dimension: dim, contentHash: hash })
+        if (hit !== undefined) {
+          opts?.onHit?.(hash)
+          return hit
+        }
+        // F1/F2 — the session map: a repeated identical (non-persisted) text
+        // adopts with NO HTTP call and does not re-embed.
+        const remembered = session.get(keyOf({ kind: provider.kind, model: provider.model, dimension: dim, contentHash: hash }))
+        if (remembered !== undefined) {
+          opts?.onHit?.(hash)
+          return [...remembered]
+        }
+      }
+      // MISS (or cache-ineligible) — embed through the provider; the
+      // rejection propagates BEFORE any write-through/remembering (no
+      // cache.set and no session entry on failure). On success: onMiss + the
+      // caller-routed persist (F1/F2): a persisting miss writes through
+      // keyed with the vector's own length (the boot wrapper's discipline —
+      // so an auto-detect provider's first embed still seeds the cache); a
+      // non-persisting miss is REMEMBERED IN-MEMORY under the same tuple.
+      const vec = await provider.embed(text)
+      opts?.onMiss?.(hash)
+      if (callOpts?.persist ?? persistDefault) {
+        cache.set({ kind: provider.kind, model: provider.model, dimension: vec.length, contentHash: hash }, vec)
+      } else {
+        session.set(keyOf({ kind: provider.kind, model: provider.model, dimension: vec.length, contentHash: hash }), [...vec])
+      }
+      return vec
     },
   }
 }

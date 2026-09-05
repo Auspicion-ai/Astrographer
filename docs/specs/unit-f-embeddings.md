@@ -446,6 +446,71 @@ DONE row in `docs/next-steps.md`):**
   whose wrapper traffic latched the tuple. Noted for any future
   direct-prune caller.
 
+**W5 (RCA-3, 2026-09-05 — the MANDATORY post-W5-green adversarial pass, TWO
+passes: pass 1 found F-W5-1..F-W5-3 and was re-run (pass 2) after the
+Architect ruling re-shaped the F-W5-1 fix; the live-embed cache unit — the
+user-directed follow-up to the completed W4 cache, "live upload should also
+update the cache". 6 findings: 3 HOST code fixes (F-W5-1 MEDIUM;
+F-W5-2/F-W5-3 LOW) + 3 INFO registrations (F-W5-4..F-W5-6); all HOST findings
+in `src/main/`, nothing package/upstream — nothing went to
+`docs/defects.md`/`docs/HANDOFF.md`. The code findings were fixed RED-FIRST +
+regression-tested in `tests/live-embed-cache.test.ts` — the R-series written
+red-first (red run 6 failing: R1–R5 + the RE-PINNED L4 tail, whose original
+"query misses write through" assertion was SUPERSEDED by the F-W5-1 ruling —
+its HTTP-call pins kept verbatim), green 15/15 (the file's 15 tests:
+L1–L7 + R1–R5; the initial pre-fix red set was 9 failing + 1
+green-on-arrival guard L5):**
+
+- **F-W5-1 (MEDIUM)** — the exported memoizer PERSISTED query-embed misses:
+  every `score`/`place` query miss wrote through to the persisted cache →
+  UNBOUNDED inter-prune growth (prune runs only at promotion, so query-hash
+  entries matching no store node accumulated until the next boot), whole-map
+  main-thread writes triggered by QUERY traffic, and query-hash disk
+  retention (queries are ephemeral, not node content). Fixed per the
+  Architect ruling: in-memory-only adoption for query misses — the memoizer
+  is built `persistMisses: false` (the DEFAULT) and a MAINTENANCE embed opts
+  in per call with `{ persist: true }` (the query path calls `embed(text)`
+  bare → session-scoped adoption; only node-content embeds write through —
+  the disk cache holds node-content vectors only). Registered in §5.13 as
+  the "RCA-3 pass-2 amendment". Regression-tested
+  (`tests/live-embed-cache.test.ts` R1 — a query-only session leaves a
+  pre-seeded file BYTE-UNCHANGED and the VectorCache map clean; R2 — a
+  query-only session NEVER CREATES the cache file, before AND after the
+  coalescing window; R3 — the maintenance-vs-query persist contrast in ONE
+  session; plus the re-pinned L4 tail).
+- **F-W5-2 (LOW)** — the memoizer latched the provider's `dimension` at
+  CREATION time: a cold auto-detect provider (dimension 0 until its first
+  embed) was PERMANENTLY hit-ineligible (every live `get` keyed dimension 0 →
+  a miss → a re-embed) while its misses wrote entries it could never hit.
+  Fixed: the hit-check dimension is read PER EMBED from the live provider
+  object (the boot wrapper's `keyDimension()` shape) — hit-eligible as soon
+  as the first embed latches the dimension. Regression-tested (R4 — a
+  getter-backed latching double: the second identical-text embed is a HIT,
+  exactly ONE provider embed total).
+- **F-W5-3 (LOW)** — the exported memoizer accepted a non-string text and
+  passed it to the hash helper → a raw crypto TypeError (inconsistent with
+  every provider's `<prefix> embed: text must be a string` guard). Fixed:
+  the input guard fires BEFORE hashing with the PINNED message
+  `cache memoizer: text must be a string`. Regression-tested (R5).
+- **F-W5-4 (INFO, failure-class asymmetry)** — the poison-HIT class: a
+  wrong-length cached entry (constructible only out-of-contract via a direct
+  `set()`; §5.13's F-W4-7 limitation) is SERVED as a hit and fails the
+  index-layer F6 dimension check OUTSIDE the embed try/catch → the hook
+  REJECTS (caught + logged non-fatal at the four reconcile call sites — the
+  two `IPC_EDIT_*` handlers + the rich-commit handler's reconcile wrapper in
+  `src/main/main.ts`, and the MCP edit-tool wiring in
+  `src/main/mcp-server.ts`), NOT a W3 transient skip — the pinned
+  hit-served/prune-invalidation posture applies. Recorded verbatim in the
+  greens POISON-HIT scenario:
+  `updateVectorIndex: dimension mismatch (expected 4, got 3)`.
+- **F-W5-5 (INFO, note-only)** — an in-flight single-text dedup (coalescing
+  concurrent identical misses) was considered and NOT approved — note-only,
+  unpinned (no code change, no test).
+- **F-W5-6 (INFO, doc-only)** — §5.5's `VectorEmbedderOptions` code block
+  omitted the live `cache?` field (the blind-greens DOC DRIFT finding) —
+  fixed by the W5 doc review (the field + doc-comment + the §5.5 W5
+  amendment note added below, 2026-09-05).
+
 ## 4. Design decisions pinned by this spec
 
 - **ASYNC-EMBEDDER-AMENDMENT (CRITICAL — a Unit E contract amendment):** the
@@ -1077,6 +1142,17 @@ export interface VectorEmbedderOptions {
    *  here for the promotion. Omitted (ALL existing calls and tests) → build
    *  from the store's nodes as today. */
   index?: VectorIndex
+  /** W5 (§5.13 W5 amendment, 2026-09-05 — the user directive "live upload
+   *  should also update the cache") — the OPTIONAL persisted cache: when
+   *  supplied, ALL the embedder's single-text live embeds route through the
+   *  ONE single-text memoizer over this provider instance's tuple (the
+   *  score query-embed — which is also place()'s content-embed — and the
+   *  onStoreChanged maintenance embeds): a HIT adopts with NO HTTP call; a
+   *  FAILED embed writes nothing; a QUERY-embed MISS is adopted IN-MEMORY
+   *  ONLY (F1/F2) while the MAINTENANCE (node-content) embeds write through
+   *  on the cache's debounced single-writer queue. Absent (ALL W1–W3
+   *  callers/tests) → byte-identical `provider.embed` behavior. */
+  cache?: VectorCache
 }
 
 /** Create the vector embedder. Builds the vector index from the store's nodes
@@ -1090,7 +1166,21 @@ EmbeddingProvider` — a supplied provider INSTANCE is adopted as-is (the
 vector-boot controller hands its warmed provider here so the promoted embedder
 embeds through the SAME instance — no second provider is constructed); a
 config is created via `createEmbeddingProvider` unchanged
-(`src/main/embeddings.ts:675-677` post-W2; `402-433` pre-W2).
+(`src/main/embeddings.ts:807-809` post-W5; `675-677` post-W2; `402-433`
+pre-W2 — the cite re-pointed by the W5 doc review, the W5 seam additions
+having shifted the layout).
+
+**W5 amendment (2026-09-05 — the live cache write-through; §5.13's W5
+amendment):** `VectorEmbedderOptions.cache?` is LANDED (2026-09-05;
+`src/main/embeddings.ts:782-794` the field, `:815-834` the wiring). With a
+cache, the ONE memoizer (`createSingleTextMemoizer(provider, opts.cache, {
+persistMisses: false })`) fronts every single-text live embed: `score`'s
+query-embed and `place()`'s content-embed route through the query fn
+(`memoizer.embed(text)` — a MISS is adopted IN-MEMORY ONLY, F1/F2), and
+`onStoreChanged`'s maintenance embeds route through the maintenance fn
+(`memoizer.embed(text, { persist: true })` — the node-content write-through
+on the cache's debounced single-writer queue). Without a cache the raw
+`provider.embed` passes through byte-identically (W1–W3 unchanged).
 
 **Construction:**
 
@@ -1103,7 +1193,9 @@ config is created via `createEmbeddingProvider` unchanged
 
 **`score(query, nodes)` (async):**
 
-- Computes the query embedding (`await provider.embed(query)`).
+- Computes the query embedding (`await provider.embed(query)`; W5 — when
+  `opts.cache` is supplied, through the memoizer's query path: in-memory
+  miss adoption, never persisted).
 - Scores each node by cosine similarity against its vector-index embedding
   (a node not in the vector index is OMITTED from the scored set — §5.4,
   re-pinned 2026-09-05, greens finding F-SCORE).
@@ -1133,6 +1225,10 @@ config is created via `createEmbeddingProvider` unchanged
   - If the node exists and is NOT in the vector index → `addToVectorIndex`.
   - If the node does NOT exist and IS in the vector index →
     `removeFromVectorIndex`.
+  - W5: with `opts.cache`, the update/add re-embeds route through the
+    maintenance embed fn (`memoizer.embed(text, { persist: true })`) — a
+    cached hash adopts with NO HTTP call; new/changed content embeds +
+    writes through (the F1/F2 persist split — §5.13's W5 amendment).
 - Edge changes do not affect the vector index (edges are not embedded);
   `edgeIds` is accepted and ignored for index purposes.
 
@@ -1668,7 +1764,8 @@ new one-way `setEmbedder` promotion seam on `RetrievalEngine`).
   the W2 greens EMPTY-BATCH observation);
   `RetrievalEngine` members 2 → 3 (`setEmbedder`, W1 — LANDED);
   `createVectorIndex` params 2 → 3 (optional `embedBatchFn?`, W2 — LANDED);
-  `VectorEmbedderOptions` fields 2 → 3 (optional `index?`, W1 — LANDED).
+  `VectorEmbedderOptions` fields 2 → 4 (optional `index?`, W1 — LANDED;
+  optional `cache?`, W5 — LANDED 2026-09-05).
 - **Warm-up gate (W1):** ONE real `POST /api/embed` (a single-text probe
   through the configured provider; NOT the `/api/tags` availability probe);
   its timeout is the provider's `timeoutMs` (default 5000 ms) applied to that
@@ -2001,8 +2098,8 @@ documented window (the reconcile-to-swap gap; the promotion log reports the
 re-embedded count). The boot-equivalence test asserts the MCP server always
 receives a live engine (R7).
 
-**Unit decomposition + spec-section → unit mapping (the W1 → W2 → W3 → W4
-order; each unit its own red→green→adversarial→greens cycle, RCA-2/5):**
+**Unit decomposition + spec-section → unit mapping (the W1 → W2 → W3 → W4 →
+W5 order; each unit its own red→green→adversarial→greens cycle, RCA-2/5):**
 
 | Unit | Spec sections | Test files (names SpecWriter-pinned 2026-09-05) |
 | --- | --- | --- |
@@ -2010,6 +2107,7 @@ order; each unit its own red→green→adversarial→greens cycle, RCA-2/5):**
 | **W2** batch seam (§5.2 "Batch seam"; §5.3 batch build path; §5.9 #39–41; §5.8 #37–39) | §5.2/§5.3 | `tests/embeddings-batch.test.ts` (the `tests/embeddings.test.ts:380-386` reject contract stays GREEN until W3) |
 | **W3** failure policy (§5.3 `skipped` map + the empty-guard extension + the embed-failure flip; §5.8 #34–36; §5.9 #45–48) + the F9→F10 comment cleanup in `src/main/embeddings.ts:545-549` post-W2 (`309-313` pre-W2) (AMENDMENT-REVIEW note 12 — the pass that touches those lines retires the stale F9 tag) | §5.3/§5.9 | `tests/embeddings-failure-policy.test.ts` + the re-pin of `tests/embeddings.test.ts:380-386` |
 | **W4** persisted cache (§5.13; §5.9 #49–51; §5.8 #40–42) | §5.13 | `tests/vector-cache.test.ts` |
+| **W5** live cache write-through (§5.13's W5 amendment — the promoted embedder's `score`/`place` + maintenance embeds route through the ONE single-text memoizer; the §5.5 `cache?` amendment; §5.12's promote step passing the SAME cache instance) | §5.13 (the W5 amendment) + §5.5 | `tests/live-embed-cache.test.ts` (L1–L7 + R1–R5) |
 
 ### 5.13 The persisted embedding cache (W4 — the cache-inclusive variant, IN-SCOPE per the user go-ahead 2026-09-05)
 
@@ -2079,6 +2177,50 @@ cache (review §2 parked item 2) is PROMOTED to core contract; the
 - **Census:** the promotion report carries `cacheHits` (§5.12) — the FIRST
   boot embeds the full corpus in the background; later boots embed only
   new/changed nodes (cache misses).
+- **W5 amendment (2026-09-05, user directive "live upload should also update
+  the cache"):** the memoizing wrapper applies to ALL vector-embed paths of
+  the PROMOTED embedder when a cache is supplied — not only the boot build.
+  `createVectorEmbedder` gains an optional `cache?: VectorCache` (§5.5
+  amendment): the promoted embedder's `score` query-embeds AND its
+  `onStoreChanged` maintenance embeds (`addToVectorIndex`/`updateVectorIndex`)
+  route through a single-text memoizer — a live embed whose content matches a
+  cached hash adopts with NO HTTP call; a live embed of NEW/CHANGED content
+  embeds through the provider AND writes through to the persisted cache
+  immediately (the cache's own debounced queue persists it — no explicit
+  flush is needed post-promotion; the drain-before-report pin is a boot-time
+  guarantee and the F-W4-6 quit-tail note still applies to a quit mid-debounce).
+  The promote step passes the SAME `VectorCache` instance it used for the
+  build (the shared in-memory map makes build-time entries live-hittable).
+  The boot build's batch wrapper + census are UNCHANGED. `place()`'s
+  content-embed routes through the SAME single-text memoizer — `place()`
+  embeds its content by scoring it through `score` (supervisor ruling
+  2026-09-05 on the W5 TestWriter's Q1). The
+  shape-validation + poison-entry limitation (hash+tuple invalidation only)
+  applies identically to the live path. **RCA-3 pass-2 amendment (F1/F2, the
+  Architect ruling, 2026-09-05):** query-embed misses are adopted in-memory
+  only (session-scoped, not persisted — closing the inter-prune growth bound
+  and query-hash disk retention); only maintenance (node-content) embeds
+  write through (`embed(text, { persist: true })`; the L4 one-HTTP-call pin
+  holds via in-memory adoption). Regression-pinned by
+  `tests/live-embed-cache.test.ts` R1–R3 + the re-pinned L4 tail.
+  **W5 implementation pins (2026-09-05, the W5 RCA-3 pass 2 — §3a
+  F-W5-2/F-W5-3):** the memoizer is built `persistMisses: false` (the
+  DEFAULT) with the per-call `{ persist: true }` split (the query path calls
+  `embed(text)` bare; the maintenance path passes the flag); the hit-check
+  dimension is read PER EMBED from the live provider object (F-W5-2 — a cold
+  auto-detect provider becomes hit-eligible once its first embed latches the
+  dimension; pinned R4); a non-string text rejects with the PINNED
+  `cache memoizer: text must be a string` guard BEFORE hashing (F-W5-3;
+  pinned R5); the hash helper is the module's shared `contentHashOf`
+  (exported from `src/main/vector-cache.ts` — the boot wrapper and the live
+  memoizer hash through the ONE function).
+  **RCA-3 pass-2 note (F4, doc-only):** a poison HIT (a wrong-length entry —
+  only constructible out-of-contract) fails the index-layer F6 check OUTSIDE
+  the embed try/catch → the hook REJECTS (caught + logged non-fatal at the
+  four reconcile call sites: the two `IPC_EDIT_*` handlers + the rich-commit
+  handler's reconcile wrapper in `src/main/main.ts`, and the MCP edit-tool
+  wiring in `src/main/mcp-server.ts`), NOT a W3 transient skip — the pinned
+  hit-served/prune-invalidation posture applies.
 - **The `VectorCache` seam (AMENDMENT-REVIEW finding 4, 2026-09-05 — the type
   referenced by `VectorBootOptions.cache?` is THIS):**
 

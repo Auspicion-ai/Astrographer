@@ -21,7 +21,7 @@ one-way snapshot).
 
 ## OPEN
 
-**Vector-mode (local ollama) boot fix — the vector-boot proposal COMPLETE (2026-09-05):** DIAGNOSED → immediate remediation LANDED → four-agent proposal gate COMPLETE (PROCEED-WITH-AMENDMENTS) → user go-ahead GIVEN (cache-inclusive variant, 2026-09-05) → spec amendment LANDED (§5.12/§5.13) → **all four units LANDED per gates 2–9 — W1 boot model, W2 batch seam, W3 failure policy, W4 cache (each its own red→green→adversarial→blind-greens→doc-review cycle; see the Unit W1–W4 DONE rows below). The user-approved cache-inclusive design is fully in place — "vectorize only if the vector is not found": the persisted cache loads at boot, hits adopt with NO HTTP call, only the misses embed; the final trio is 2161 pass / 38 skip (106 files), typecheck + build clean. Every gate (RCA-1..RCA-6) ran per unit; the W4 doc review (RCA-6, the closing pass) recorded the FINAL GATE STATEMENT in `archive/reviews/2026-09-05-unit-f-w4-doc-review.md`. No OPEN work remains for this proposal — this entry is retained as the completed-slice narrative + pointer to the DONE rows (P4 dist hygiene stays parked in `docs/pending.md`).**
+**Vector-mode (local ollama) boot fix — the vector-boot proposal COMPLETE (2026-09-05):** DIAGNOSED → immediate remediation LANDED → four-agent proposal gate COMPLETE (PROCEED-WITH-AMENDMENTS) → user go-ahead GIVEN (cache-inclusive variant, 2026-09-05) → spec amendment LANDED (§5.12/§5.13) → **all four units LANDED per gates 2–9 — W1 boot model, W2 batch seam, W3 failure policy, W4 cache (each its own red→green→adversarial→blind-greens→doc-review cycle; see the Unit W1–W4 DONE rows below) — plus the USER-DIRECTED W5 FOLLOW-UP LANDED (2026-09-05, "live upload should also update the cache"; see the Unit W5 DONE row below): live uploads now update the cache. The user-approved cache-inclusive design is fully in place — "vectorize only if the vector is not found": the persisted cache loads at boot, hits adopt with NO HTTP call, only the misses embed; the final trio is 2176 pass / 38 skip (107 files), typecheck + build clean. Every gate (RCA-1..RCA-6) ran per unit; the W4 doc review recorded the proposal's gate statement in `archive/reviews/2026-09-05-unit-f-w4-doc-review.md`, and the W5 doc review (RCA-6, the closing pass of the follow-up) the follow-up's FINAL GATE STATEMENT in `archive/reviews/2026-09-05-unit-f-w5-doc-review.md`. No OPEN work remains for this proposal — this entry is retained as the completed-slice narrative + pointer to the DONE rows (P4 dist hygiene stays parked in `docs/pending.md`).**
 User report: "Issue with attempting to use local Ollama as embedding provider."
 Diagnosis (reproduced on this machine): (1) **FIXED** — the `dist/` bundle was
 STALE, predating the F9 empty-node-skip fix (green-tested in src; the operator's
@@ -76,7 +76,9 @@ decomposition COMPLETE):** W4 cache LANDED 2026-09-05 (`tests/vector-cache.test.
 DONE row) after the W3 failure policy (`tests/embeddings-failure-policy.test.ts`
 + the re-pins; see the Unit W3 DONE row). The adversarial (RCA-3),
 blind-greens (RCA-4) and doc-review (RCA-6) gates all ran for W4; the
-vector-boot proposal is COMPLETE.
+vector-boot proposal is COMPLETE; the user-directed W5 follow-up ("live
+upload should also update the cache") is likewise LANDED (2026-09-05,
+`tests/live-embed-cache.test.ts` — see the Unit W5 DONE row below).
 **Live-verified in the gate pass (review record §5):** ollama batch
 `input` works (3→3 ordered 768-dim vectors); positional alignment holds even
 with an empty batch item; **0 of 16,840 non-empty nodes exceed the model's
@@ -307,6 +309,62 @@ _(none — Units A–T are implemented.)_
 
 ## DONE
 
+- **Unit W5 — the live cache write-through (the promoted embedder's live
+  embeds route through the SAME persisted cache) (2026-09-05).** The
+  vector-boot slice's USER-DIRECTED follow-up to the completed W4 cache unit
+  (the directive "live upload should also update the cache"; spec
+  `docs/specs/unit-f-embeddings.md` §5.13's W5 amendment + the §5.5
+  `cache?` amendment + §5.12's promote step passing the SAME cache
+  instance). Landed: the exported `contentHashOf` + `createSingleTextMemoizer`
+  in `src/main/vector-cache.ts` (the §5.13 key tuple + the provider's
+  `embed` fn as the MISS route; `persistMisses: false` DEFAULT + the
+  per-call `{ persist: true }` split; the PER-EMBED dimension read; the
+  pinned `cache memoizer: text must be a string` input guard); the
+  `VectorEmbedderOptions.cache?` seam in `src/main/embeddings.ts`
+  (`queryEmbedFn` — the score/place query path, `memoizer.embed(text)`,
+  in-memory only; `maintenanceEmbedFn` — the `onStoreChanged` add/update
+  path, `memoizer.embed(text, { persist: true })`, the node-content
+  write-through; no cache → byte-identical `provider.embed`, the L5 guard);
+  the promote step in `src/main/vector-boot.ts` passes the SAME
+  `VectorCache` instance into `createVectorEmbedder` (`vector-boot.ts:302`,
+  byte-checked by this review). **TestWriter red: 9 failing** (the missing
+  `cache?` option + the non-caching live embeds: extra HTTP calls, no
+  in-memory entry, no persisted entry, re-embedded query texts) **+ 1
+  green-on-arrival guard** (L5 — the no-cache byte-identity clause) →
+  **Implementer green: 10/10** (`tests/live-embed-cache.test.ts` L1–L7).
+  **Adversarial pass (RCA-3, TWO passes; registered in spec §3a's W5
+  subsection):** F-W5-1 MEDIUM (query-embed misses persisted → unbounded
+  inter-prune growth + whole-map main-thread writes + query-hash disk
+  retention; fixed per the Architect ruling: in-memory-only adoption for
+  query misses — `persistMisses: false` + the per-call persist split;
+  regression R1/R2/R3), F-W5-2 LOW (creation-time dimension snapshot → a
+  cold provider permanently hit-ineligible; fixed: the per-embed dimension
+  read; regression R4), F-W5-3 LOW (the exported memoizer accepted a
+  non-string → raw crypto TypeError; fixed: the pinned guard; regression
+  R5), F-W5-4/F-W5-5/F-W5-6 INFO (the poison-HIT failure-class asymmetry —
+  the hook REJECTS outside the embed try/catch, caught + logged non-fatal at
+  the four call sites, NOT a W3 transient skip; in-flight dedup NOT approved
+  — note-only; the §5.5 code-block drift — fixed by this doc review) —
+  red-first 6 (incl. the L4 re-pin per the superseded-persistence ruling;
+  its HTTP-call pins kept verbatim) → **green 15/15** (`tests/live-embed-
+  cache.test.ts` 15 tests: L1–L7 + R1–R5). **Blind-greens (RCA-4):**
+  `docs/specs/unit-f-w5-live-cache-greens.md` — 13 scenarios: 12 PASS / 1
+  DEFERRED-STATIC (WIRE-LIVE call-site), two consecutive green runs, zero
+  un-hardened regressions, LIVE-1 running against the real localhost ollama
+  `embeddinggemma` (768-dim) in BOTH recorded runs; the §H doc gap (the W5
+  F3/F6 registrations) + the §5.5 DOC DRIFT finding CLOSED by this doc
+  review, and the WIRE-LIVE DEFERRED-STATIC row CLOSED by this doc review
+  (verified at the four reconcile call sites: `main.ts:246-248` /
+  `:283-285` / `:307` → `edit-ops.ts:740-741` / `mcp-server.ts:1131-1133` —
+  all four `.catch` + non-fatal `console.error`). **Doc-review pass
+  (RCA-6):** `archive/reviews/2026-09-05-unit-f-w5-doc-review.md` (the §3a
+  W5 subsection written, the §5.5 `cache?` field + the W5 amendment note +
+  the stale provider-widening cite re-pointed, the §5.10 census re-pinned
+  2 → 4, the §5.12 table W5 row, the §5.13 W5 implementation pins, the
+  decisions.md W5-LANDED annotation, this DONE row + the OPEN narrative).
+  **Trio: 2176 pass / 38 skip (107 files), typecheck clean, build clean**
+  (the W4-era 2161/38 + the 15 W5 tests; 106 + 1 = 107 files). The
+  vector-boot proposal + its user-directed follow-up are COMPLETE.
 - **Unit W4 — the persisted embedding cache (§5.13, the cache-inclusive
   variant) (2026-09-05).** The vector-boot slice's fourth + LAST unit (spec
   `docs/specs/unit-f-embeddings.md` §5.13 + §5.8 #40–42 + §5.9 #49–51 +
