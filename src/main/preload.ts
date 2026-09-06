@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 
@@ -18,12 +18,10 @@ export interface ModuleBridgeResult {
 /** The Unit D §5.1.10 commit result (mirrors the controller's CommitResult). */
 export type { EditCommitResult }
 
-/** The Unit D §5.1.9 `rag-store-changed` payload. */
-export interface RagStoreChangedPayload {
-  kind: 'content' | 'structural'
-  nodeIds: string[]
-  edgeIds: string[]
-}
+/** Unit MS3 §5.1 — a compat RE-EXPORT of the ONE shared `rag-store-changed`
+ *  payload declaration (the three-structural-copy collapse; the canonical type
+ *  lives in `../shared/types.js`). */
+export type { RagStoreChangedPayload }
 
 export interface ProvidentBridge {
   ready(): void
@@ -63,7 +61,10 @@ export interface ProvidentBridge {
    *  `rag.query` tool (MCP/UI equivalence). The renderer never computes
    *  retrieval itself. */
   rag: {
-    query(query: string, topK?: number): Promise<RagQueryResult>
+    /** U-MS5 — the third optional `store` param (MCP/UI mechanical symmetry,
+     *  UI-SELECTOR-DEFERRED). Omitted ⇒ the default store (zero-config
+     *  byte-equal; the settings/search pane's own path never passes it). */
+    query(query: string, topK?: number, store?: string): Promise<RagQueryResult>
     /** Finding 3 — the re-traversal data source. Returns a read-only snapshot
      *  of the RAG store (nodes + edges) so the renderer's `onRebuild` can
      *  re-derive the graph + back-reference map after a `rag-store-changed`
@@ -78,6 +79,12 @@ export interface ProvidentBridge {
      *  `doc-head` edges' targets + the head node content) — a strict subset of
      *  the snapshot. */
     docHeads(): Promise<RagDocHeadsPayload>
+    /** U-MS5 — the read-only settings-pane store listing. Returns the registry's
+     *  presentation view (one entry per configured store: name, default flag,
+     *  persistence file name, corpus root, per-store load status). Manual-UI only:
+     *  never an MCP tool — an agent must not enumerate the configured store names
+     *  (B9/A9). */
+    stores(): Promise<RagStoreListingPayload>
   }
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
    *  `code.template.*`-equivalent IPC to main, which delegates to
@@ -228,8 +235,15 @@ const bridge: ProvidentBridge = {
   // Unit E §5.7/§8.2 — the UI retrieval surface. The `rag-query` IPC calls the
   // same maintained retrieval engine as the MCP `rag.query` tool.
   rag: {
-    query(query: string, topK?: number): Promise<RagQueryResult> {
-      const payload: RagQueryPayload = { query, ...(topK !== undefined ? { topK } : {}) }
+    /** U-MS5 — the third optional `store` param builds the payload via the
+     *  conditional-spread idiom (byte-equal: included ONLY when passed — a
+     *  two-arg call carries NO `store` key, A4). */
+    query(query: string, topK?: number, store?: string): Promise<RagQueryResult> {
+      const payload: RagQueryPayload = {
+        query,
+        ...(topK !== undefined ? { topK } : {}),
+        ...(store !== undefined ? { store } : {}),
+      }
       return ipcRenderer.invoke(IPC_RAG_QUERY, payload)
     },
     /** Finding 3 — the re-traversal data source. Returns a read-only snapshot
@@ -251,6 +265,13 @@ const bridge: ProvidentBridge = {
      *  node content) — a strict subset of the snapshot. */
     docHeads(): Promise<RagDocHeadsPayload> {
       return ipcRenderer.invoke(IPC_RAG_DOC_HEADS)
+    },
+    /** U-MS5 — the read-only settings-pane store listing. Sends the
+     *  `rag-store-listing` IPC to main, which projects the boot-loaded registry's
+     *  presentation view (name, default flag, persistence file name, corpus root,
+     *  per-store load status). */
+    stores(): Promise<RagStoreListingPayload> {
+      return ipcRenderer.invoke(IPC_RAG_STORE_LISTING)
     },
   },
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the

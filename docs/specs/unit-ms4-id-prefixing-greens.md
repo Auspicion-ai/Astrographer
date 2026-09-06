@@ -241,7 +241,11 @@ default import UNPREFIXED and the wired non-default import PREFIXED through
    and F-MS4-10 are "(pending verbatim transcription … NOTHING invented)"** —
    no concrete input is recorded, so no user-observable scenario is derivable
    blind (D1/D2 above). The supervisor transcribes both at doc-review time;
-   F-MS4-10 is a HOST-DEFECT for its owning unit, not for U-MS4.
+   F-MS4-10 is a HOST-DEFECT for its owning unit, not for U-MS4. **CLOSED
+   2026-09-05 (the U-MS4 doc-review pass):** both are now transcribed verbatim
+   in the spec §3a — F-MS4-5 = INFO RECORDED-NO-CHANGE; F-MS4-10 = INFO
+   HOST-DEFECT recorded as `HOST-MS4-10` in `docs/defects.md`.
+   See `archive/reviews/2026-09-05-unit-ms4-doc-review.md`.
 4. **F-BLIND-MS4-3 (observation, consistent with the spec): the defensive
    `isDefault !== true` prefix rule is observable** — an explicit context
    `{name:'main', isDefault:'yes'}` (a truthy NON-`true` value) takes PREFIX

@@ -130,7 +130,7 @@ describe('Finding 1 — MCP edit.* broadcast uses IPC_RAG_STORE_CHANGED', () => 
       expect(broadcasts).toHaveLength(1)
       expect(broadcasts[0].channel).toBe(IPC_RAG_STORE_CHANGED)
       expect(broadcasts[0].channel).toBe('provident:rag-store-changed')
-      expect(broadcasts[0].msg).toEqual({ kind: 'content', nodeIds: ['n1'], edgeIds: [] })
+      expect(broadcasts[0].msg).toEqual({ kind: 'content', nodeIds: ['n1'], edgeIds: [], store: '' })
     } finally {
       rmSyncSafe(dir)
     }

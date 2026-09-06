@@ -1232,7 +1232,7 @@ describe('§5.5 — the per-store reconcile routing (the onStoreChanged callback
       await handleEditTool(main.store, 'edit.set_content', { nodeId: 'r1', content: 'new content', store: OTHER_NAME }, cb1, dir)
       expect(cb1).toHaveBeenCalledTimes(1)
       expect(cb1.mock.calls[0]).toHaveLength(2)
-      expect(cb1.mock.calls[0][0]).toEqual({ kind: 'content', nodeIds: ['r1'], edgeIds: [] })
+      expect(cb1.mock.calls[0][0]).toEqual({ kind: 'content', nodeIds: ['r1'], edgeIds: [], store: OTHER_NAME })
       expect(cb1.mock.calls[0][1]).toBe(OTHER_NAME)
       // Omitted ⇒ the default name.
       const cb2 = vi.fn()
@@ -1301,10 +1301,11 @@ describe('§5.5 — the per-store reconcile routing (the onStoreChanged callback
         expect(researchEngine.calls).toEqual([{ kind: 'content', nodeIds: ['r1'], edgeIds: [] }])
         // The DEFAULT (bound) engine was NOT used (per-store coherence, §5.5).
         expect(mainEngine.calls).toEqual([])
-        // The broadcast is UNCHANGED in shape (the `store` field is U-MS3's).
+        // The broadcast is UNCHANGED in shape (U-MS3 adds the REQUIRED `store`
+        // field — the per-store coherence is otherwise identical).
         expect(broadcasts).toHaveLength(1)
         expect(broadcasts[0].channel).toBe(IPC_RAG_STORE_CHANGED)
-        expect(Object.keys(broadcasts[0].msg as Record<string, unknown>).sort()).toEqual(['edgeIds', 'kind', 'nodeIds'])
+        expect(Object.keys(broadcasts[0].msg as Record<string, unknown>).sort()).toEqual(['edgeIds', 'kind', 'nodeIds', 'store'])
       } finally {
         await client.close()
       }

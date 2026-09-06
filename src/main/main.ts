@@ -3,20 +3,19 @@
 // (stdio or Streamable HTTP), and bridges MCP tool calls to the renderer via
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
+import { join, basename } from 'node:path'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
 import { type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
 import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIpc, deriveBatchBroadcast, deriveRichCommitBroadcast } from './edit-ops.js'
-import type { RagStoreChangedPayload } from './preload.js'
 import { parsePositiveIntEnv, type EmbeddingProvider, type EmbeddingProviderConfig } from './embeddings.js'
 import { warmUpEmbeddingProvider } from './vector-boot.js'
 import { loadRagStoreRegistry } from './rag-store-registry.js'
-import { buildRagStoreDirectory } from './rag-store-directory.js'
+import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -271,7 +270,8 @@ async function main(): Promise<void> {
       void retrievalEngine.onStoreChanged('content', [payload.nodeId], []).catch((e) => {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
-      backend.broadcast(IPC_RAG_STORE_CHANGED, { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [] })
+      const changedPayload: RagStoreChangedPayload = { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [], store: plan.defaultName }
+      backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
     }
     return result
   })
@@ -308,7 +308,8 @@ async function main(): Promise<void> {
       void retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds).catch((e) => {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
-      backend.broadcast(IPC_RAG_STORE_CHANGED, { kind, nodeIds, edgeIds })
+      const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: plan.defaultName }
+      backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
     }
     return result
   })
@@ -330,7 +331,10 @@ async function main(): Promise<void> {
     // by the F1 regression tests against the shared handler.
     return handleRichCommitIpc(ragStore, payload, {
       reconcile: (kind, nodeIds, edgeIds) => retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds),
-      broadcast: (kind, nodeIds, edgeIds) => backend.broadcast(IPC_RAG_STORE_CHANGED, { kind, nodeIds, edgeIds }),
+      broadcast: (kind, nodeIds, edgeIds) => {
+        const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: plan.defaultName }
+        backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
+      },
     })
   })
 
@@ -342,7 +346,7 @@ async function main(): Promise<void> {
   // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
   // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK }, plan.directory)
+    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store }, plan.directory)
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the
@@ -360,6 +364,48 @@ async function main(): Promise<void> {
   // derivation itself.
   ipcMain.handle(IPC_RAG_DOC_HEADS, () => {
     return handleRagDocHeadsIpc(ragStore)
+  })
+
+  // U-MS5 — the read-only settings-pane store listing. Manual-UI ONLY: the MCP
+  // tool handlers never route to this channel, so an agent cannot enumerate the
+  // configured store names (B9/A9). NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED,
+  // decisions.md:45) and NOT a five-seam gate seam — no RpcMethod, no TOOL_GROUPS
+  // row, no ALL_TOOLS row, no MUTATING_METHODS member, no renderer-switch method
+  // (the MCP tool census stays 12). The handler projects the BOOT-LOADED
+  // registry's presentation view; the registry file is NEVER re-read here (D8 —
+  // a mid-run registry edit is observed only after restart).
+  ipcMain.handle(IPC_RAG_STORE_LISTING, () => {
+    // listingEntries — the U-MS1 boot-loaded registry's resolved per-store view
+    // PROJECTED into the handler's input shape by the PINNED wiring local:
+    // F7 — the FILE NAME (the basename of U-MS1's resolved absolute path);
+    // F13 — U-MS1 OMITS `corpusRoot` when unconfigured (`corpusRoot?`); the
+    // handler's type requires `string | null`. The implicit zero-config form
+    // yields exactly the one `main` entry.
+    const listingEntries = registry.stores.map((s) => ({
+      name: s.name,
+      default: s.default,
+      persistenceFile: basename(s.persistenceFile),
+      corpusRoot: s.corpusRoot ?? null,
+    }))
+    return handleRagStoreListingIpc(
+      listingEntries,
+      // The U-MS2 per-store status resolver (loaded / failed-corrupt /
+      // failed-missing — the D7 matrix) over the boot plan directory.
+      //
+      // F-MS5-2 (§3a) — the wiring-level defensive guard for the latent `!`
+      // deref: the directory derives from the SAME boot registry as
+      // `listingEntries`, and a failed store construction aborts boot, so the
+      // entry is ALWAYS present today. But if `entries.get(name)` were EVER
+      // undefined, the old `storeLoadStatus(entries.get(name)!)` threw an
+      // UNPINNED TypeError. Guard it byte-pinned so a divergence is a
+      // diagnosable Error, never a raw TypeError. (The handler pins THREE
+      // throws; this is the WIRING's defensive fourth.)
+      (name) => {
+        const e = plan.directory.entries.get(name)
+        if (!e) throw new Error(`rag-store-listing: no directory entry for store "${name}"`)
+        return storeLoadStatus(e)
+      },
+    )
   })
 
   // Unit I §5.4/§8.2 — the UI template IPC surface. Each renderer→main
@@ -405,6 +451,7 @@ async function main(): Promise<void> {
   ipcMain.handle(IPC_RAG_SNAPSHOT, () => ({
     nodes: ragStore.listNodes(),
     edges: ragStore.listEdges(),
+    store: plan.defaultName,
   }))
 
   // The MCP stdio transport is spawned by a client (the battery, a test, or an

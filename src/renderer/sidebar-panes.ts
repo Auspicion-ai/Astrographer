@@ -40,6 +40,8 @@ import type {
   RagSnapshotPayload,
   RagQueryResult,
   RagDocHeadsPayload,
+  RagStoreListingPayload,
+  RagStoreChangedPayload,
   TemplateChangedPayload,
   SecuritySettings,
   OperatorSettings,
@@ -50,15 +52,6 @@ import type { BacklinkResult } from '../main/backlinks.js'
 import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
 import { isRichEditableRoot } from './rich-eligibility.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
-
-/** The Unit D §5.1.9 `rag-store-changed` payload (declared structurally here —
- *  the canonical type lives in `src/main/preload.ts`, which the renderer bundle
- *  cannot import). */
-export interface RagStoreChangedPayload {
-  kind: 'content' | 'structural'
-  nodeIds: string[]
-  edgeIds: string[]
-}
 
 /** The preload IPC bridge surface the host consumes (structural — the canonical
  *  `ProvidentBridge` lives in `src/main/preload.ts`, which the renderer bundle
@@ -78,13 +71,22 @@ export interface SidebarBridge {
     ): Promise<import('../shared/types.js').RichCommitResult>
   }
   rag: {
-    query(query: string, topK?: number): Promise<RagQueryResult>
+    /** U-MS5 — the third optional `store` param (MCP/UI mechanical symmetry,
+     *  UI-SELECTOR-DEFERRED). Omitted ⇒ the default store (zero-config
+     *  byte-equal; the settings/search pane's own path never passes it). */
+    query(query: string, topK?: number, store?: string): Promise<RagQueryResult>
     snapshot(): Promise<RagSnapshotPayload>
     backlinks(nodeId: string): Promise<BacklinkResult>
     /** Unit V3 — the doc-nav data source. Returns the document list (the
      *  `doc-head` edges' targets + the head node content) — a strict subset of
      *  the snapshot. */
     docHeads(): Promise<RagDocHeadsPayload>
+    /** U-MS5 — the read-only settings-pane store listing. Returns the registry's
+     *  presentation view (one entry per configured store: name, default flag,
+     *  persistence file name, corpus root, per-store load status). Manual-UI
+     *  only: never an MCP tool — an agent must not enumerate the configured
+     *  store names (B9/A9). */
+    stores(): Promise<RagStoreListingPayload>
   }
   template: {
     get(): Promise<{ source: string; template: ContentWindowTemplate }>
@@ -295,6 +297,12 @@ export class SidebarPanes {
 
   /** The host's pane-data cache (M7/M9). */
   private lastSnapshot: RagSnapshotPayload | null = null
+  /** Unit MS3 — the host's boot store (the store this host renders + edits).
+   *  Captured from the `rag-snapshot` payload's REQUIRED `store` field at BOTH
+   *  snapshot-commit points (boot + re-derive), committed TOGETHER with
+   *  lastSnapshot/lastDocHeads (the LOW-5 discipline, three-way). Null until the
+   *  first successful snapshot commit. Read by the foreign-store drop guard. */
+  private lastStore: string | null = null
   /** Unit V3 — the doc-heads cache (the doc-nav's data source, amendment 5).
    *  Set by the boot/re-derive (fetched over the `rag-doc-heads` IPC) and read
    *  by `buildContext()` (which populates `ctx.docHeads`). */
@@ -303,6 +311,10 @@ export class SidebarPanes {
   private lastBacklinks: BacklinkResult | null = null
   private lastQueryResult: RagQueryResult | null = null
   private lastOperatorSettings: OperatorSettings | null = null
+  /** U-MS5 — the host's cached store listing (the operator's Phase-1 census).
+   *  Fetched ONCE at boot (D8 — boot-time-only registry); the operator pane
+   *  re-renders this cache on every mount/refresh/re-derive, never re-fetching. */
+  private lastStoreListing: RagStoreListingPayload | null = null
 
   /** The cached security settings (fetched at boot) — the M13 handler gate reads
    *  this SYNCHRONOUSLY so a dispatchable pane handler cannot bypass the
@@ -586,6 +598,7 @@ export class SidebarPanes {
       return
     }
     this.lastSnapshot = snapshot
+    this.lastStore = snapshot.store
     // Unit V3 — fetch the doc-heads (the doc-nav's data source). A bridge error
     // ABORTS the boot (the placeholder envelope stays rendered; caught + logged,
     // never a crash — the same discipline as the snapshot fetch).
@@ -628,6 +641,16 @@ export class SidebarPanes {
       this.editingMode = settings.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
     } catch {
       // keep the default editingMode (contenteditable) + null lastOperatorSettings
+    }
+    // U-MS5 — the read-only store listing (the operator's Phase-1 census). A
+    // bridge error does NOT abort the boot (a display-only surface — the boot
+    // must not depend on it; keep null → the '(stores unavailable)' placeholder).
+    // Deliberately DIVERGES from the snapshot/docHeads/template abort discipline
+    // for exactly this reason.
+    try {
+      this.lastStoreListing = await this.bridge.rag.stores()
+    } catch (e) {
+      console.error('[sidebar-panes] store-listing fetch failed', e)
     }
     // SCOPED-LOAD (live finding) — render ONLY the current document at boot, not
     // the whole corpus. The document list (doc-nav) shows all heads; the content
@@ -691,6 +714,7 @@ export class SidebarPanes {
       // inconsistency).
       this.lastSnapshot = snapshot
       this.lastDocHeads = docHeads.documents
+      this.lastStore = snapshot.store
       // F2 — refresh the M13 security cache on each re-derive so a runtime
       // security tightening (a group turned OFF after boot) is honored by the
       // handler gates. A bridge error leaves the gate fail-closed (null).
@@ -773,7 +797,26 @@ export class SidebarPanes {
 
   /** The rag-store-changed handler: routes through the edit controller's
    *  dirty-edit guard (requestRebuild). */
-  onRagStoreChanged(_payload: RagStoreChangedPayload): void {
+  onRagStoreChanged(payload: RagStoreChangedPayload): void {
+    // B5 — the fail-closed foreign-store drop: a broadcast for a store this
+    // host is NOT rendering must NOT re-derive the unchanged default graph.
+    // Fail-closed diagnostics (F-MS3-1): distinguish the drop branches so an
+    // untyped/malformed producer cannot SILENTLY starve the re-derive —
+    // (a) a malformed store (missing/undefined/non-string/empty) OR an
+    // uncaptured host (`lastStore === null`) emits ONE pinned `console.warn`
+    // (the malformed case and the null-lastStore defense case carry DISTINCT
+    // messages); (b) a FOREIGN-store drop (a valid string !== the captured
+    // name) stays SILENT by design (routine). The drop OUTCOME is unchanged
+    // in every branch — the warn is diagnostic-only.
+    if (this.lastStore === null) {
+      console.warn('[sidebar] rag-store-changed dropped: no captured boot store (lastStore null)')
+      return
+    }
+    if (typeof payload.store !== 'string' || payload.store === '') {
+      console.warn(`[sidebar] rag-store-changed dropped: malformed store (payload had '${payload.store}')`)
+      return
+    }
+    if (payload.store !== this.lastStore) return
     this.editController.requestRebuild()
   }
 
@@ -811,6 +854,25 @@ export class SidebarPanes {
    *  `this.lastOperatorSettings`, NOT ctx). */
   private settingsContent(): LegacyNodeData {
     const s = this.lastOperatorSettings
+    // U-MS5 — the read-only store listing (the operator's Phase-1 census).
+    // Provident-authored data (PANE-PROVIDENT-AUTHORING); NO handlers on any
+    // listing node (read-only; NO switcher — UI-SELECTOR-DEFERRED).
+    const listing = this.lastStoreListing
+    const storeRows: LegacyNodeData[] =
+      listing == null
+        ? [{ type: 'p', content: '(stores unavailable)' }]
+        : listing.stores.length === 0
+          ? [{ type: 'p', content: '(no stores)' }]
+          : listing.stores.map((s) => ({
+              type: 'div',
+              props: {
+                id: `operator-rag-store-${s.name}`,
+                'data-store': s.name,
+                'data-default': s.default ? 'true' : 'false',
+                'data-status': s.status,
+              },
+              content: `${s.name} — default: ${s.default ? 'yes' : 'no'} — persistence: ${s.persistenceFile} — corpus: ${s.corpusRoot ?? '(project root)'} — status: ${s.status}`,
+            }))
     return {
       type: 'section',
       children: [
@@ -835,6 +897,13 @@ export class SidebarPanes {
           },
           content: (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
           handlers: [{ name: 'operator-editing-mode-toggle', event: 'click', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER }],
+        },
+        // U-MS5 — the read-only store-listing section (APPENDED as the LAST
+        // child; NO handlers on any node — read-only, no switcher).
+        {
+          type: 'div',
+          props: { id: 'operator-rag-stores' },
+          children: [{ type: 'h3', content: 'RAG stores' }, ...storeRows],
         },
       ],
     }

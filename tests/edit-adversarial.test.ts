@@ -461,7 +461,7 @@ describe('handleEditTool adversarial fixes (H1/H2/H3/M4/M5/M6/M7/H5)', () => {
       await store.putNode(makeNode('n1', { content: 'hello' }))
       const payloads: RagStoreChangedPayload[] = []
       await handleEditTool(store, 'edit.set_content', { nodeId: 'n1', content: 'world' }, (p) => payloads.push(p))
-      expect(payloads).toEqual([{ kind: 'content', nodeIds: ['n1'], edgeIds: [] }])
+      expect(payloads).toEqual([{ kind: 'content', nodeIds: ['n1'], edgeIds: [], store: '' }])
     } finally {
       rmSyncSafe(dir)
     }

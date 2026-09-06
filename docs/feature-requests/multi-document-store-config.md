@@ -15,6 +15,17 @@
   per-store RBAC, the root allowlist, and scratch-promotion are DEFERRED to
   Phase 2 (`docs/pending.md`). The eight decision rows are LANDED in
   `docs/decisions.md`.
+  **PHASE-1 SLICE IMPLEMENTED/COMPLETE (2026-09-05):** all five units are
+  LANDED with their DONE rows in `docs/next-steps.md` — U-MS1 (the pure
+  registry module + `provident-rag-stores.json`), U-MS2 (the store wiring +
+  the `store` selector on all 12 rag/edit MCP tools, LIVE on the running app),
+  U-MS4 (the `<name>:` id-prefixing at the import seam), U-MS3 (the
+  store-qualified broadcast + snapshot + host re-derive guard), U-MS5 (the
+  read-only settings-pane listing + the `RagQueryPayload.store` passthrough);
+  final trio **2415 pass / 41 skip, typecheck + build clean** (113 files); the
+  app is LIVE on :3787 serving the multi-store surface. The Phase-2 non-goals
+  stay parked (`docs/pending.md`); the live batteries (U-MS1/U-MS2/U-MS4/U-MS3/
+  U-MS5) await a UI-interactive / multi-store-registry session.
 - **Origin:** the Agent Harness **bulk-research workflow** (a reusable,
   level-gated research process) ingests each dependency level's research
   reports into Astrographer's RAG engine as persistent documentation —

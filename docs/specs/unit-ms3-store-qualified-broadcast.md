@@ -143,14 +143,14 @@ already-landed machinery.** No engine/foundation gap; entirely host-side
 No engine gap. Nothing is handed off to `docs/defects.md`/`docs/HANDOFF.md` by
 this unit.
 
-### 3a. Adversarial findings (placeholder — RCA-3)
+### 3a. Adversarial findings (RCA-3 — post-green record)
 
-**This section is intentionally EMPTY until the unit's green.** Per RCA-3, the
-mandatory post-green read-only adversarial pass (edge cases / unauthorized
-access / malformed inputs) registers its findings here, and each host finding
-is fixed + regression-tested before the unit is reported done. The
-contract-pinned edge cases the pass must NOT regress (pre-pinned here so the
-pass starts from them):
+**Adversarial pass completed post-green.** Per RCA-3, the mandatory read-only
+adversarial pass (edge cases / malformed inputs) registered its findings
+below. Each host finding was ruled by the Architect and, where FIXED, is
+regression-tested (the R-series in `tests/unit-ms3-store-qualified-broadcast.test.ts`)
+before the unit is reported done. The contract-pinned edge cases the pass must
+NOT regress (the pre-pinned baseline it started from):
 
 - A broadcast payload whose `store` is missing/`undefined`/non-string must be
   DROPPED by the host guard (fail-closed — never a re-derive, never a throw).
@@ -164,6 +164,70 @@ pass starts from them):
 - A `store` argument on an MCP tool cannot influence anything except the
   payload's `store` value (the selector semantics are U-MS2's; the adversarial
   probe re-checks it here — R7's "the `store` arg cannot influence any path").
+
+**The full adversarial record (F-MS3-1..F-MS3-6) — each with id, severity,
+one-line problem, concrete input, and the Architect's ruling:**
+
+- **F-MS3-1 (MEDIUM — FIXED-WITH-REGRESSION):** the host's fail-closed drop
+  (`sidebar-panes.ts` `onRagStoreChanged`) silently drops a broadcast whose
+  `store` is missing/`undefined`/non-string even when it was addressed at the
+  rendered store — an untyped producer silently starves the re-derive with no
+  diagnostic. *Input:* a booted host (`lastStore='main'`) receives
+  `{ kind:'content', nodeIds:['n1'], edgeIds:[], store:undefined }` ⇒ dropped,
+  no rebuild, no diagnostic. *Ruling:* NO behavior change — before the drop
+  DISTINGUISH the branches: a malformed store (missing/undefined/non-string/
+  empty) OR `lastStore === null` emits ONE pinned `console.warn` (distinct
+  messages for the malformed case — `[sidebar] rag-store-changed dropped:
+  malformed store (payload had '<raw>')` — and the null-lastStore defense case
+  — `[sidebar] rag-store-changed dropped: no captured boot store (lastStore
+  null)`); a FOREIGN-store drop (a valid string `!== lastStore`) stays SILENT
+  (routine, by design). Implemented in `sidebar-panes.ts` (§5.4 guard); pinned
+  by the R1/R2/R3 regression tests.
+- **F-MS3-2 (LOW — DOCUMENTED-LEGACY-CONSEQUENCE):** the `store:''` sentinel
+  (the S3 legacy directory-less value, `ref?.name ?? ''`) means a broadcast on
+  a directory-less server has `store:''`, which the malformed-store branch now
+  warns on AND drops — a directory-less-only broadcast loss. *Input:*
+  `handleEditTool(store, name, args, cb /* dir null */)` on a successful edit
+  emits `{ …, store:'' }`; a host drops it (with the F-MS3-1 malformed warn).
+  *Ruling:* DOCUMENTED, not a code change — `store:''` is spec-pinned S3 (§5.3)
+  and production ALWAYS injects the non-null directory (the wired server passes
+  `dir`), so the `''`-broadcast is unreachable in the running app; the loss is
+  the documented legacy consequence. One-line note added in §5.3.
+- **F-MS3-3 (LOW — SPEC-AMENDED):** the spec §5.3/§5.7 `edit.delete_node` rows
+  lack the `removed` qualifier — the code broadcasts ONLY when
+  `result.ok && result.removed` (a no-op delete → 0 broadcasts, matching §5.6
+  "a failed mutation ⇒ 0"). *Input:* `edit.delete_node` on a missing node
+  returns `{ ok:true }` yet emits 0 broadcasts — the spec's delete_node row
+  implied a broadcast on `ok` alone. *Ruling:* spec wording drift — amend
+  §5.3's delete_node construction-point row + §5.7's delete_node row to
+  annotate "broadcast only when `removed: true` (no-op delete ⇒ 0)" (no code
+  change; the landed behavior is correct and §5.6 already pins the zero-count).
+- **F-MS3-4 (LOW — RECORDED):** the REQUIRED `store` field is a COMPILE-TIME
+  contract, not a runtime boundary validation — the guard DROPS malformed
+  payloads (F-MS3-1) but nothing at runtime REJECTS a missing `store` earlier
+  (a hand-built/untyped payload with a bad `store` still reaches the host and
+  is dropped, never surfaced as a validation error). *Input:* any malformed
+  `rag-store-changed` payload delivered straight to the host pipe. *Ruling:*
+  RECORDED as intended — the REQUIRED field + the TYPED literals (§5.1's
+  `main.ts:15` pin) make an omitted `store` a compile error (TS2741); the
+  fail-closed runtime drop is the boundary's defense, not a validation layer.
+  One-line note added in §5.1.
+- **F-MS3-5 (n/a — RECORDED-NO-CHANGE, verified clean):** a dropped broadcast
+  must not touch the edit controller's coalescing state
+  (`reDeriveInFlight`/`reDeriveQueued`). *Input:* a foreign-store broadcast
+  during an in-flight default re-derive ⇒ exactly ONE snapshot re-fetch, no
+  queued foreign re-derive (W3). *Ruling:* verified clean — the guard returns
+  BEFORE `requestRebuild()`, so a drop never reaches the dirty-edit guard or
+  the coalescing state (pinned by existing tests 17–18 + §5.8 fail 4).
+- **F-MS3-6 (n/a — RECORDED-NO-CHANGE, verified clean):** main/preload NEVER
+  filters or suppresses foreign-store broadcasts — the drop is exclusively the
+  renderer host's decision, and the exactly-once broadcast invariants per path
+  (§5.6) hold with the field present. *Input:* a foreign-store MCP edit emits
+  EXACTLY ONE qualified payload; a UI commit emits exactly once. *Ruling:*
+  verified clean — main still broadcasts exactly once for every store (the
+  payload is the Phase-2 seam, §3b B5), the preload bridge stays a transparent
+  pipe (no filtering), and the exactly-once/zero invariants are unchanged
+  (pinned by tests 10–11 + §5.6).
 
 ### 3b. Proposal-review findings (the gate amendments this unit folds in)
 
@@ -338,11 +402,16 @@ type-level sync-test alternative is rejected (§4).
 from './preload.js'` is repointed to `'../shared/types.js'` and gains a real
 use — the three UI emission-site payload literals are TYPED
 `RagStoreChangedPayload` (§5.3), so an omitted `store` is a compile error (the
-R5 drift guard made structural).
+R5 drift guard made structural). **F-MS3-4 note (RECORDED):** the REQUIRED
+`store` is a COMPILE-TIME contract, not a runtime boundary validation — a
+hand-built/untyped payload with a bad `store` is not REJECTED at the boundary;
+it reaches the host and is fail-closed DROPPED (F-MS3-1), which is the guard's
+defense, not a validation layer.
 
-### 5.2 The `RagSnapshotPayload.store` field (`src/shared/types.ts:416-435` + `src/main/main.ts:377-380`)
+### 5.2 The `RagSnapshotPayload.store` field (`src/shared/types.ts:436-441` + `src/main/main.ts:409-413`)
 
-**BEFORE** (`shared/types.ts:417-435`): `{ nodes: Array<{…}>, edges: Array<{…}> }`.
+**BEFORE** (`shared/types.ts`, pre-U-MS3 — the payload carried only
+`nodes`/`edges`): `{ nodes: Array<{…}>, edges: Array<{…}> }`.
 **AFTER** (pinned):
 
 ```ts
@@ -394,7 +463,7 @@ mutation landed on (§4 QUALIFIED-VALUE). Zero-config, every site emits
 `'main'`. Every site's broadcast COUNT, channel, kind, nodeIds, and edgeIds
 logic is UNCHANGED — the field is additive.
 
-**Site 1 — the UI commit path (`src/main/main.ts:246-249`, inside
+**Site 1 — the UI commit path (landed: `src/main/main.ts:270-274`, inside
 `ipcMain.handle(IPC_EDIT_COMMIT, …)`, broadcast only on `result.ok`):**
 
 ```ts
@@ -408,9 +477,9 @@ backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
 ```
 Zero-config broadcast: `{ kind: 'content', nodeIds: [<nodeId>], edgeIds: [], store: 'main' }`.
 
-**Site 2 — the UI batch path (`src/main/main.ts:282-286`, inside
+**Site 2 — the UI batch path (landed: `src/main/main.ts:307-312`, inside
 `ipcMain.handle(IPC_EDIT_BATCH, …)`, broadcast only on `result.ok`; the
-`deriveBatchBroadcast` destructure at :282 is unchanged):**
+`deriveBatchBroadcast` destructure is unchanged):**
 
 ```ts
 // BEFORE (main.ts:282-286)
@@ -424,9 +493,9 @@ const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: 
 backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
 ```
 
-**Site 3 — the UI rich-commit path (`src/main/main.ts:306-309`,
+**Site 3 — the UI rich-commit path (landed: `src/main/main.ts:332-338`,
 `handleRichCommitIpc`'s injected broadcast boundary; the `reconcile` boundary
-at :307 is UNCHANGED — this unit touches NO reconcile call):**
+is UNCHANGED — this unit touches NO reconcile call):**
 
 ```ts
 // BEFORE (main.ts:306-309)
@@ -447,9 +516,10 @@ return handleRichCommitIpc(ragStore, payload, {
 behavior — the deps boundary receives `(kind, nodeIds, edgeIds)` exactly as
 today, `edit-ops.ts:689-747`; the qualification happens at the injection site.)
 
-**Site 4 — the MCP edit path (`src/main/mcp-server.ts:1120-1136`; the
+**Site 4 — the MCP edit path (`src/main/mcp-server.ts:1250-1262`; the
 qualification lands inside `handleEditTool`'s SEVEN payload-construction
-points — `mcp-server.ts:383, 395, 402, 410, 418, 433, 446` — one per
+points — `mcp-server.ts:456, 468, 475, 483, 491, 506, 538` (the landed `emit`
+call sites; see the §5.3 erratum below) — one per
 `edit.*` tool, mutually exclusive per call):**
 
 ```ts
@@ -488,6 +558,24 @@ resolved name `ref?.name ?? ''` — an omitted `args.store` ⇒ the DEFAULT
 store's name (S1), an addressed name ⇒ that name (S2), `''` only on the legacy
 directory-less sentinel (S3 — U-MS2 §5.3 step 5's pinned legacy fallback,
 reachable only in direct test calls; the wired server always injects `dir`)):
+> **F-MS3-2 note (DOCUMENTED-LEGACY-CONSEQUENCE):** on a directory-less server
+> the broadcast carries `store:''`, so a host DROPS it (the malformed-store
+> branch, F-MS3-1) — the `''`-broadcast loss is the documented legacy
+> consequence of the S3 sentinel, unreachable in the running app because
+> production always injects the non-null directory.
+
+> **§5.3 anchor-drift erratum (U-MS3 implementer, post-U-MS2; re-verified at the
+> doc-review pass):** the seven construction points are NOW at
+> `mcp-server.ts:456/:468/:475/:483/:491/:506/:538` (each implemented through the
+> local `emit(payload)` helper — `mcp-server.ts:443-445` — which forwards the
+> qualified payload to the widened `onStoreChanged(payload, storeName)`;
+> `store: storeName` where `storeName = ref?.name ?? ''` at `mcp-server.ts:441`),
+> NOT the pre-U-MS2 `:383/:395/:402/:410/:418/:433/:446` shown in the table below
+> (nor the intermediate post-U-MS2 numbers the first erratum cited — the `emit`
+> helper's definition shifted them again). The table's line anchors are therefore
+> historical; the §5.1 note — "tests pin emitted payloads, not line/location
+> shape" — governs, so each row's payload SHAPE (kind/nodeIds/edgeIds/store — not
+> the cited anchor) is binding.
 
 | Tool | Line | After (payload shape) |
 | --- | --- | --- |
@@ -499,16 +587,24 @@ reachable only in direct test calls; the wired server always injects `dir`)):
 | `edit.set_edge` | :433 | `{ kind: 'structural', nodeIds: [source, target], edgeIds: [edge.id], store: ref?.name ?? '' }` |
 | `edit.import_markdown` | :446 | `{ kind: 'structural', nodeIds: result.documentIds, edgeIds: [], store: ref?.name ?? '' }` |
 
-**The wiring + broadcast (`mcp-server.ts:1124-1135`):** the `onStoreChanged`
-callback body is otherwise unchanged — the engine reconcile at :1131 is
-U-MS2's addressed-engine routing (NOT this unit's), and the broadcast at :1134
-forwards the payload VERBATIM (pinned: the callback MUST NOT add/overwrite
-`store` — the payload arrives already qualified). Post-U-MS2/MS3 the call is:
+> **F-MS3-3 annotation (spec-amended):** the `edit.delete_node` row above — and
+> its §5.7 counterpart — broadcast ONLY when `result.ok && result.removed`:
+> a no-op delete (a missing/absent node) ⇒ **0 broadcasts**, matching §5.6 "a
+> failed mutation ⇒ 0". The `removed: true` qualifier is the broadcast gate, so
+> the row's emitted-payload shape applies when (and only when) the delete
+> actually removed a node.
+
+**The wiring + broadcast (`mcp-server.ts:1250-1262`):** the `onStoreChanged`
+callback body is otherwise unchanged — the engine reconcile (the
+`ragStores.entries.get(storeName)?.engine ?? engine` resolve + the
+`onStoreChanged` at :1258) is U-MS2's addressed-engine routing (NOT this unit's),
+and the broadcast at :1261 forwards the payload VERBATIM (pinned: the callback
+MUST NOT add/overwrite `store` — the payload arrives already qualified). Post-U-MS2/MS3 the call is:
 
 ```ts
 const result = await handleEditTool(addressedStore, name, args, (payload, storeName) => {
   void addressedEngine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)?.catch((e) => { … })  // U-MS2's routing, unchanged here
-  backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)   // :1134 — the qualified payload forwarded as-is
+  backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)   // :1261 — the qualified payload forwarded as-is
 }, ragStores)   // U-MS2 §5.3's 5th `dir` argument — the ONLY 5th arg; NO 6th argument exists (F1)
 ```
 
@@ -652,13 +748,25 @@ onRagStoreChanged(_payload: RagStoreChangedPayload): void {
 }
 
 // AFTER — the SOLE subscription's handler (Unit K §5.2); the guard runs
-// BEFORE the re-derive trigger (the B5 foreign-store drop, host-side per A3)
+// BEFORE the re-derive trigger (the B5 foreign-store drop, host-side per A3;
+// F-MS3-1 — the fail-closed drop carries a DIAGNOSTIC, no change to the outcome)
 onRagStoreChanged(payload: RagStoreChangedPayload): void {
   // B5 — the foreign-store drop: a broadcast for a store this host is NOT
   // rendering must NOT re-derive the unchanged default graph. Fail-closed:
   // an uncaptured store (null) or a payload whose store is missing/non-string
-  // (!== the captured name) is DROPPED, never re-derived.
-  if (this.lastStore === null || payload.store !== this.lastStore) return
+  // (!== the captured name) is DROPPED, never re-derived. F-MS3-1: each drop
+  // branch is DISTINGUISHED — a malformed store OR `lastStore === null` emits
+  // ONE pinned console.warn; a foreign-store drop (a valid string !== the
+  // captured name) stays SILENT (routine, by design).
+  if (this.lastStore === null) {
+    console.warn('[sidebar] rag-store-changed dropped: no captured boot store (lastStore null)')
+    return
+  }
+  if (typeof payload.store !== 'string' || payload.store === '') {
+    console.warn(`[sidebar] rag-store-changed dropped: malformed store (payload had '${payload.store}')`)
+    return
+  }
+  if (payload.store !== this.lastStore) return
   this.editController.requestRebuild()
 }
 ```
@@ -766,7 +874,7 @@ broadcast:
 - **UI rich commit** (`main.ts:298-310` + `edit-ops.ts:715-747`): a REAL
   change ⇒ EXACTLY 1; a no-op / failed / malformed commit ⇒ 0 (the U5
   idempotence — unchanged).
-- **MCP `edit.*`** (`mcp-server.ts:1120-1136`): a successful tool call ⇒
+- **MCP `edit.*`** (`mcp-server.ts:1250-1262`): a successful tool call ⇒
   EXACTLY 1 qualified payload (the seven construction points are mutually
   exclusive — one per tool); a failed mutation ⇒ 0 (the H5 fail-state,
   `tests/edit-adversarial.test.ts:486-496`).
@@ -806,7 +914,9 @@ broadcast:
    widened callback's second arg is `'main'`; the
    same assertion shape for the other six construction points (at minimum:
    `split_node` structural + edgeIds, `set_edge` edgeIds, `create_node`
-   structural, `delete_node`, `merge_node`, `import_markdown`
+   structural, `delete_node` — broadcast ONLY when `result.removed` is `true`:
+   a no-op delete on a missing node ⇒ 0 broadcasts (F-MS3-3), `merge_node`,
+   `import_markdown`
    `nodeIds: documentIds`).
 6. **Site 4 non-default:** `handleEditTool(store2, 'edit.set_content', { …args,
    store: 'research-2026-09' }, cb, dir2)` where `dir2`'s entries include
@@ -871,9 +981,10 @@ broadcast:
   none.
 - **Emission sites:** **4** (each gains the field; zero-config value `'main'`).
 - **`handleEditTool` payload-construction points qualified:** **7**
-  (`mcp-server.ts:383,395,402,410,418,433,446`) via the in-scope U-MS2-resolved
-  name (`ref?.name ?? ''`) — NO new parameter, NO 6th argument (F1); the 5th
-  slot remains U-MS2's `dir`.
+  (`mcp-server.ts:456,468,475,483,491,506,538` — the landed `emit(payload)` call
+  sites, `mcp-server.ts:443-445`; see the §5.3 erratum) via the in-scope
+  U-MS2-resolved name (`ref?.name ?? ''`, carried as `storeName`) — NO new
+  parameter, NO 6th argument (F1); the 5th slot remains U-MS2's `dir`.
 - **`RagSnapshotPayload` field added:** **1** (`store: string`, REQUIRED);
   producer sites: **1** (`main.ts:377-380`).
 - **Host fields added:** **1** (`lastStore: string | null`).
@@ -892,6 +1003,8 @@ broadcast:
   `src/main/preload.ts`, `src/main/mcp-server.ts`, `src/main/main.ts`,
   `src/main/edit-ops.ts` (type-only), `src/renderer/sidebar-panes.ts`.
 - **New tests (est. per the review §6):** **14–18**, in ONE new test file.
+  LANDED: **23** — the red set 00–19 (20) + the F-MS3-1 R-series regression
+  tests R1–R3 (3), in `tests/unit-ms3-store-qualified-broadcast.test.ts`.
 - **Renderer behavior change:** exactly the guard (§5.4 item 4) + the capture
   (item 3) + the import (item 1) — the renderer still renders ONE store
   (UI-SELECTOR-DEFERRED holds).

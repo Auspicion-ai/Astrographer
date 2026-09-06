@@ -20,7 +20,7 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
-import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
@@ -237,12 +237,13 @@ export async function handleRagTool(
 export async function handleRagQueryIpc(
   engine: RetrievalEngine | null,
   store: RagStore | null,
-  payload: { query?: unknown; topK?: unknown },
+  payload: { query?: unknown; topK?: unknown; store?: unknown },
   dir?: RagStoreDirectory | null,
 ): Promise<unknown> {
   return handleRagTool(store, 'rag.query', {
     query: payload?.query,
     topK: payload?.topK,
+    store: payload?.store,
   }, engine, dir)
 }
 
@@ -298,6 +299,66 @@ export function handleRagDocHeadsIpc(store: RagStore | null): RagDocHeadsPayload
   }
   documents.sort((a, b) => a.documentId.localeCompare(b.documentId))
   return { documents }
+}
+
+/** U-MS5 §5.2 — the shared main-process handler for the read-only
+ *  `rag-store-listing` IPC (the operator settings pane's store census). Returns
+ *  the registry's presentation view: one `RagStoreListingEntry` per configured
+ *  store (name, default flag, persistence file name, corpus root, per-store
+ *  load status). PURE — performs NO I/O: `entries` is the boot-loaded registry's
+ *  resolved per-store view passed through the §5.4 WIRING ADAPTER (U-MS1's
+ *  loaded form with `persistenceFile` already basename-projected and
+ *  `corpusRoot` already `?? null`-coerced — the handler itself is a verbatim
+ *  projector of the ALREADY-projected input) and
+ *  `statusOf` is the per-store status resolver (U-MS2's `storeLoadStatus`
+ *  accessor over the boot store map). Exported
+ *  for direct unit testing.
+ *
+ *  Behavior (pinned): null entries → throw
+ *  `Error('rag-store-listing: no rag store registry configured')`; a
+ *  non-function `statusOf` → throw `Error('rag-store-listing: statusOf resolver
+ *  required')`; a malformed entry (null entry, or a non-string/empty `name`) is
+ *  SKIPPED (never a crash, never a phantom entry); `default` coerces to
+ *  `e.default === true`; a non-string `persistenceFile` coerces to `''`; a
+ *  non-string/empty `corpusRoot` coerces to `null`; `status = statusOf(name)`
+ *  and a resolver return outside the three-member union THROWS
+ *  `Error('rag-store-listing: unknown store status "<v>" for store "<name>"')`
+ *  (fail-loud — the host's fetch catch keeps the last-known listing). One
+ *  output entry per valid input entry, in the INPUT array order — NO sort, NO
+ *  dedupe (uniqueness + order are U-MS1's validated-registry contract; the
+ *  handler is a verbatim projector). An empty array → `{ stores: [] }`. */
+export function handleRagStoreListingIpc(
+  entries:
+    | ReadonlyArray<{
+        name: string
+        default: boolean
+        persistenceFile: string
+        corpusRoot: string | null
+      }>
+    | null,
+  statusOf: (name: string) => RagStoreLoadStatus,
+): RagStoreListingPayload {
+  if (!entries) throw new Error('rag-store-listing: no rag store registry configured')
+  if (typeof statusOf !== 'function') throw new Error('rag-store-listing: statusOf resolver required')
+  const VALID: ReadonlySet<string> = new Set(['loaded', 'failed-corrupt', 'failed-missing'])
+  const stores: RagStoreListingEntry[] = []
+  for (const e of entries) {
+    // MED-1 discipline (the V3 adversarial lesson): a malformed entry is
+    // SKIPPED — never a phantom `{ name: undefined }` entry, never a crash.
+    if (e == null || typeof e.name !== 'string' || e.name === '') continue
+    const status = statusOf(e.name)
+    if (typeof status !== 'string' || !VALID.has(status)) {
+      throw new Error(`rag-store-listing: unknown store status "${String(status)}" for store "${e.name}"`)
+    }
+    stores.push({
+      name: e.name,
+      default: e.default === true,
+      persistenceFile: typeof e.persistenceFile === 'string' ? e.persistenceFile : '',
+      corpusRoot: typeof e.corpusRoot === 'string' && e.corpusRoot !== '' ? e.corpusRoot : null,
+      status,
+    })
+  }
+  return { stores }
 }
 
 /** Unit I §5.3 — the shared main-process handler for the `code.template.*`
@@ -386,14 +447,10 @@ export function handleTemplateTool(
   }
 }
 
-/** The `rag-store-changed` broadcast payload (§5.1.9) — the re-traversal
- *  trigger. After ANY successful RAG-store mutation via an MCP `edit.*` tool
- *  (or a UI commit-on-blur), the main process broadcasts this to the renderer. */
-export interface RagStoreChangedPayload {
-  kind: 'content' | 'structural'
-  nodeIds: string[]
-  edgeIds: string[]
-}
+/** Unit MS3 §5.1 — a compat RE-EXPORT of the ONE shared `rag-store-changed`
+ *  payload declaration (the three-structural-copy collapse; the canonical type
+ *  lives in `../shared/types.js`). */
+export type { RagStoreChangedPayload }
 
 /** Unit B/D — handle an `edit.*` tool in MAIN (mutating, through the RAG store's
  *  single-writer queue). The edit tools are NOT routed to the renderer. Editing
@@ -457,7 +514,7 @@ export async function handleEditTool(
       const content = args.content
       if (nodeId === '') throw new Error('edit.set_content: nodeId required')
       const result = await setContent(ctx, { nodeId, content: content as string })
-      if (result.ok) emit({ kind: 'content', nodeIds: [nodeId], edgeIds: [] })
+      if (result.ok) emit({ kind: 'content', nodeIds: [nodeId], edgeIds: [], store: storeName })
       return result
     }
     case 'edit.create_node': {
@@ -469,14 +526,14 @@ export async function handleEditTool(
       const parentId = typeof args.parentId === 'string' && args.parentId !== '' ? args.parentId : undefined
       const props = args.props && typeof args.props === 'object' ? (args.props as Record<string, unknown>) : undefined
       const result = await createNode(ctx, { type, content: content as string, parentId, props })
-      if (result.ok) emit({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [], store: storeName })
       return result
     }
     case 'edit.delete_node': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       if (nodeId === '') throw new Error('edit.delete_node: nodeId required')
       const result = await deleteNode(ctx, { nodeId })
-      if (result.ok && result.removed) emit({ kind: 'structural', nodeIds: [nodeId], edgeIds: [] })
+      if (result.ok && result.removed) emit({ kind: 'structural', nodeIds: [nodeId], edgeIds: [], store: storeName })
       return result
     }
     case 'edit.split_node': {
@@ -484,7 +541,7 @@ export async function handleEditTool(
       const at = typeof args.at === 'number' ? args.at : 0
       if (nodeId === '') throw new Error('edit.split_node: nodeId required')
       const result = await splitNode(ctx, { nodeId, at })
-      if (result.ok) emit({ kind: 'structural', nodeIds: [result.nodes[0].id, result.nodes[1].id], edgeIds: [result.edge.id] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [result.nodes[0].id, result.nodes[1].id], edgeIds: [result.edge.id], store: storeName })
       return result
     }
     case 'edit.merge_node': {
@@ -492,7 +549,7 @@ export async function handleEditTool(
       const targetId = typeof args.targetId === 'string' ? args.targetId : ''
       if (sourceId === '' || targetId === '') throw new Error('edit.merge_node: sourceId and targetId required')
       const result = await mergeNode(ctx, { sourceId, targetId })
-      if (result.ok) emit({ kind: 'structural', nodeIds: [sourceId, targetId], edgeIds: [] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [sourceId, targetId], edgeIds: [], store: storeName })
       return result
     }
     case 'edit.set_edge': {
@@ -507,7 +564,7 @@ export async function handleEditTool(
       const order = args.order
       const documentIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]).filter((x): x is string => typeof x === 'string') : undefined
       const result = await setEdge(ctx, { kind, source, target, edgeId, order: order as number | undefined, documentIds })
-      if (result.ok) emit({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id], store: storeName })
       return result
     }
     case 'edit.import_markdown': {
@@ -539,7 +596,7 @@ export async function handleEditTool(
             reservedNames: [...dir!.entries.keys()].filter((n) => n !== dir!.defaultName),
           })
         : await importMarkdownCorpus(ctx, { files })
-      if (result.ok) emit({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [], store: storeName })
       return result
     }
     default:

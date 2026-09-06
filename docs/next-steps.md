@@ -21,7 +21,7 @@ one-way snapshot).
 
 ## CURRENT WORK / handover-state
 
-**In progress (2026-09-05): the multi-store Phase-1 slice — SPEC GATE COMPLETE; the per-unit TDD cycles are RUNNING (U-MS1 and U-MS2 COMPLETE through their doc-review passes; U-MS4 is green but its post-green gates are mid-cycle; U-MS3 next after U-MS4's DONE row). The APP IS NOW LIVE WITH THE MULTI-STORE BUILD (2026-09-05, operator restart via the new launcher `scripts/start-app.sh`): the electron app serves the HTTP MCP on :3787 with all 12 rag/edit tools carrying the `store` argument, the amended A5 description, the F3 `rag.query` result `store:'main'` field, and the `rag.query {store:'nope'}` fail-loud `rag.query: unknown store 'nope'` — the U-MS2 live battery's P0 gates are VERIFIED SATISFIED, and the U-MS1/U-MS4 batteries are now runnable (a later live-scenario iteration executes them against this instance / an isolated userData). A vector-mode launch was ALSO verified end-to-end against real ollama (`scripts/start-app.sh --mode=vector`: warm-up gate → born-lexical pending → MCP ready → background build → `vector boot: promoted`), confirming the launcher's vector path works.** New feature request
+**COMPLETE (2026-09-05): the multi-store Phase-1 slice — SPEC GATE + ALL FIVE per-unit TDD cycles COMPLETE (U-MS1, U-MS2, U-MS4, U-MS3 and U-MS5 — all five DONE rows are LANDED below; the U-MS5 blind-greens + live-scenario ran after its doc-review and are LANDED: `unit-ms5-settings-listing-greens.md` 25/0/9 + the live battery). The feature request is marked PHASE-1-SLICE IMPLEMENTED/COMPLETE in `docs/feature-requests/multi-document-store-config.md`. Trio: 2415 pass / 41 skip, typecheck + build clean (113 files). The APP IS LIVE WITH THE MULTI-STORE BUILD (2026-09-05, operator restart via the new launcher `scripts/start-app.sh`): all 12 rag/edit tools carry the `store` argument, the amended A5 description, the F3 `rag.query` result `store:'main'` field, and `rag.query {store:'nope'}` fails loud. A vector-mode launch was verified end-to-end against real ollama (`scripts/start-app.sh --mode=vector`: warm-up → born-lexical → MCP ready → build → `vector boot: promoted`). No OPEN work remains for this proposal — this entry is retained as the completed-slice narrative + pointer to the Phase-2 parked rows in `docs/pending.md` and the live pending batteries (U-MS1/U-MS2/U-MS4/U-MS3/U-MS5 — each awaits a UI-interactive / multi-store-registry session, per its revisit condition).** New feature request
 `docs/feature-requests/multi-document-store-config.md` (configurable multiple named document stores for the RAG engine). The four-agent gate ran per gate 1: validity **VALID-WITH-AMENDMENTS** → critique **UNSOUND-as-written**
 (12 blockers B1–B12; path forward = a Phase-1-only slice) → architecture **PROCEED — SOUND-WITH-AMENDMENTS** (Alternative B, Phase-1 slice,
 decisions D1–D12) → change-analysis **PROCEED-WITH-AMENDMENTS** (binding amendments A1–A10). Full record:
@@ -38,14 +38,17 @@ the orphaned `ImportStoreContext` pass-through, the unowned result-`store` field
 (3 MAJOR incomplete-sweep leftovers), iteration 3 = 3 must-fix residuals (a false cross-ref, a retired placeholder, an assertion-level
 ambiguity) — all fixed, marker-sweep clean. **Next steps for a fresh supervisor:** the per-unit cycles in execution order **U-MS1 → U-MS2 →
 U-MS4 → U-MS3 → U-MS5** (RCA-2: one red→green→adversarial→blind-greens→doc-review cycle per unit, never shared inline; red set recorded per
-RCA-1) — U-MS1 cycle COMPLETE through the doc-review pass (2026-09-05: TestWriter red 46 — suite-load, the module does not exist → Implementer green 46/46, with the FS20–FS24 spec self-contradiction resolved by the Architect's option-A amendment of the five example rows, code unchanged → adversarial F-MS1-1..15 (2 MEDIUM / 6 LOW / 7 INFO) → red-first fix batch 10 → 63/63 → blind-greens 34 PASS / 1 FAIL reconciled to 35/0 (F-BLIND-MS1-1: ECMAScript `String(1n)` === `'1'`; the expectation was the drift) → live-scenario battery PARKED (the V1 pattern; the app is running but exposes no registry surface until U-MS2) → the doc-review pass `archive/reviews/2026-09-05-unit-ms1-doc-review.md`); **the U-MS1 DONE row is LANDED below; the U-MS2 cycle is COMPLETE through the doc-review pass (2026-09-05: TestWriter red 57 — suite-load → Implementer green 56/57 + 1 staged red (test 56, U-MS4's F2 staging pin) + 2 supervisor repairs to TestWriter defects (tests 08/16) → adversarial F-MS2-1..11 (1 HIGH / 3 MEDIUM / 3 LOW / 4 INFO) → red-first fix batch (58/59/60/61 + the sanctioned test-20 re-pin; test 63 HUNG the pre-fix module) → 62 pass / 1 staged red → blind-greens 43 PASS / 0 FAIL / 3 DEFERRED (`docs/specs/unit-ms2-store-wiring-greens.md`) → live-scenario PARKED (surface-absence — the app serves the pre-U-MS2 build; battery written, `docs/specs/unit-ms2-store-wiring-live-pending-battery.md`) → the doc-review pass `archive/reviews/2026-09-05-unit-ms2-doc-review.md`) — the supervisor lands the U-MS2 DONE row; U-MS4's TestWriter red is the NEXT delegation (the execution order U-MS1 → U-MS2 → U-MS4 → U-MS3 → U-MS5 puts U-MS4 next, NOT U-MS3).** After each unit's green run the adversarial (RCA-3) and blind-greens (RCA-4) gates,
-then the doc review (RCA-6), then the trio. The trio baseline is 2301 pass / 38 skip (109 files) after the U-MS2 cycle (2239/38 after the U-MS1 fix batch; 2176/38 at the W5 close; review §6's cost estimate cites the W5 baseline historically).
+RCA-1) — U-MS1 cycle COMPLETE through the doc-review pass (2026-09-05: TestWriter red 46 — suite-load, the module does not exist → Implementer green 46/46, with the FS20–FS24 spec self-contradiction resolved by the Architect's option-A amendment of the five example rows, code unchanged → adversarial F-MS1-1..15 (2 MEDIUM / 6 LOW / 7 INFO) → red-first fix batch 10 → 63/63 → blind-greens 34 PASS / 1 FAIL reconciled to 35/0 (F-BLIND-MS1-1: ECMAScript `String(1n)` === `'1'`; the expectation was the drift) → live-scenario battery PARKED (the V1 pattern; the app is running but exposes no registry surface until U-MS2) → the doc-review pass `archive/reviews/2026-09-05-unit-ms1-doc-review.md`); **the U-MS1 DONE row is LANDED below; the U-MS2 cycle is COMPLETE through the doc-review pass (2026-09-05: TestWriter red 57 — suite-load → Implementer green 56/57 + 1 staged red (test 56, U-MS4's F2 staging pin) + 2 supervisor repairs to TestWriter defects (tests 08/16) → adversarial F-MS2-1..11 (1 HIGH / 3 MEDIUM / 3 LOW / 4 INFO) → red-first fix batch (58/59/60/61 + the sanctioned test-20 re-pin; test 63 HUNG the pre-fix module) → 62 pass / 1 staged red → blind-greens 43 PASS / 0 FAIL / 3 DEFERRED (`docs/specs/unit-ms2-store-wiring-greens.md`) → live-scenario PARKED (surface-absence — the app serves the pre-U-MS2 build; battery written, `docs/specs/unit-ms2-store-wiring-live-pending-battery.md`) → the doc-review pass `archive/reviews/2026-09-05-unit-ms2-doc-review.md`) — the supervisor lands the U-MS2 DONE row; U-MS4's delegation followed (the execution order U-MS1 → U-MS2 → U-MS4 → U-MS3 → U-MS5) — **U-MS4's cycle is NOW COMPLETE through its doc-review pass (see above; the supervisor lands the U-MS4 DONE row). U-MS3's cycle is COMPLETE through its doc-review pass (see the U-MS3 cycle record below); U-MS5's cycle is COMPLETE through the doc-review pass (2026-09-05 — TestWriter red (the §5.8/§5.9 red set authored per RCA-1) → Implementer green 39 pass / 3 skip (3 sanctioned re-pins = TestWriter fixture gaps) → adversarial F-MS5-1..5 (2 MEDIUM / 2 LOW / 1 INFO) → the F-MS5-2 red-first fix batch (the §5.4 wiring guard, byte-pinned) → **unit 41 pass / 3 skip (44 total: the 39/3 + the 2 F-MS5-2 R-tests), full suite 2415 pass / 41 skip, typecheck + build clean** → §3a registered → this doc-review pass `archive/reviews/2026-09-05-unit-ms5-doc-review.md`, which also CLOSES the U-MS2 F4 end-to-end row; the supervisor lands the U-MS5 DONE row AFTER the outstanding U-MS5 blind-greens + live-scenario gates, see the outstanding items).** After each unit's green run the adversarial (RCA-3) and blind-greens (RCA-4) gates,
+then the doc review (RCA-6), then the trio. The trio baseline is **2415 pass / 41 skip after the U-MS5 cycle** (2374/38 after the U-MS3 cycle; 2351/38 (111 files) after the U-MS4 cycle; 2301/38 (109 files) after the U-MS2 cycle; 2239/38 after the U-MS1 fix batch; 2176/38 at the W5 close; review §6's cost estimate cites the W5 baseline historically).
 **U-MS2 delegation notes (EXECUTED 2026-09-05 — the cycle is COMPLETE through the doc-review pass; kept as the record of the delegation brief):** the spec is `docs/specs/unit-ms2-store-wiring.md` (the `rag-store-directory` pure module `resolveStoreArg`/`buildRagStoreDirectory` + the 12 tool inputSchemas + the resolution-first ordering + the engine map + the failed-store matrix + the F2 import pass-through + the F3 result-`store` field + the F4 IPC dir injection); the TestWriter writes `tests/unit-ms2-store-wiring.test.ts` from the spec ALONE (est. 28–36 tests) and must NOT touch `src/`; the Implementer then lands the least code in `src/main/rag-store-directory.ts` (NEW) + `src/main/main.ts` + `src/main/mcp-server.ts` (+ the `edit-ops.ts` context plumbing) — mind the §5.6 execution-order staging pins (the F2 pass-through byte-equals the 2-arg call until U-MS4's optional parameter exists; the F4 dir injection's end-to-end IPC row completes at U-MS5) and the §5.9 byte-equality red matrix; U-MS1's module (`src/main/rag-store-registry.ts`) is the consumed dependency — its F-MS1-15(c) downstream pin (the directory stays Map-keyed by name) is a U-MS2 conformance requirement.
-**U-MS4 delegation notes (the NEXT delegation — U-MS4, the store-id prefixing at the import minting seam):** the spec is `docs/specs/unit-ms4-id-prefixing.md` (the `importMarkdownCorpus` optional 3rd param `store?: ImportStoreContext` `{ name, isDefault, reservedNames? }`; the A1 resolution (a) — the default store's import seam REJECTS a documentId equal to any registered non-default store name with the byte-pinned message `markdown import: documentId collides with a registered store name: <id>`; the FOUR id-minting-site census in `markdown-parse.ts` incl. the edge-id site `:448`; the per-store path resolution `resolve(corpusRoot, file)` at `markdown-import.ts:84`; the Unit T supersession of the old relative-path rule); the TestWriter writes `tests/unit-ms4-id-prefixing.test.ts` from the spec ALONE (est. 12–16 tests, the spec's §5.10 notes the count supersedes the review's estimate) and must NOT touch `src/`; the Implementer then lands the least code in `src/main/markdown-import.ts` (+ the store-name param; `markdown-parse.ts` is NOT changed — the prefix is applied to the documentId INPUT, not inside the parser); the F2 staging handoff: U-MS2's wired import call (`mcp-server.ts:529`) currently passes 2 args — U-MS4 adds the optional 3rd `ImportStoreContext` and U-MS2's §5.6 pass-through becomes active (the U-MS2 test 56 staged red flips green HERE); the default store's import output stays BYTE-EQUAL to today (A4); the A1 corner (a default-store document whose basename equals a registered store name) per the pinned resolution (a).
+U-MS4 delegation notes (EXECUTED 2026-09-05 — the cycle is COMPLETE through the doc-review pass; kept as the record of the delegation brief): the spec is `docs/specs/unit-ms4-id-prefixing.md` (the `importMarkdownCorpus` optional 3rd param `store?: ImportStoreContext` `{ name, isDefault, reservedNames? }`; the A1 resolution (a) — the default store's import seam REJECTS a documentId equal to any registered non-default store name with the byte-pinned message `markdown import: documentId collides with a registered store name: <id>`; the FOUR id-minting-site census in `markdown-parse.ts` incl. the edge-id site `:448`; the per-store path resolution `resolve(corpusRoot, file)` at `markdown-import.ts:84`; the Unit T supersession of the old relative-path rule); the TestWriter writes `tests/unit-ms4-id-prefixing.test.ts` from the spec ALONE (est. 12–16 tests, the spec's §5.10 notes the count supersedes the review's estimate) and must NOT touch `src/`; the Implementer then lands the least code in `src/main/markdown-import.ts` (+ the store-name param; `markdown-parse.ts` is NOT changed — the prefix is applied to the documentId INPUT, not inside the parser); the F2 staging handoff: U-MS2's wired import call (`mcp-server.ts:529`) currently passes 2 args — U-MS4 adds the optional 3rd `ImportStoreContext` and U-MS2's §5.6 pass-through becomes active (the U-MS2 test 56 staged red flips green HERE); the default store's import output stays BYTE-EQUAL to today (A4); the A1 corner (a default-store document whose basename equals a registered store name) per the pinned resolution (a).
+**U-MS3 delegation notes (EXECUTED 2026-09-05 — the cycle is COMPLETE through the doc-review pass; kept as the record of the delegation brief):** the spec is `docs/specs/unit-ms3-store-qualified-broadcast.md` (the §5.1 collapse resolution — ONE shared `RagStoreChangedPayload` in `src/shared/types.ts` with REQUIRED `store: string`; §5.3 the four emission sites — main.ts:249,286,308 + mcp-server.ts:1134's seven construction points stamping `store: <resolved name>` via U-MS2's `ref?.name ?? ''` (NO new handleEditTool param — F1); §5.3a the main.ts-side state-expression map (NODE-TESTED vs TYPECHECK-LEVEL vs RELEGATED-to-live-pending-battery); §5.4 the `lastStore` capture + the foreign-store drop guard with the R3 ordering; §5.5/§5.6 the snapshot `store` field + the byte-equality rows + the exactly-once broadcast-count invariants); the TestWriter writes `tests/unit-ms3-store-qualified-broadcast.test.ts` from the spec ALONE and must NOT touch `src/`; the Implementer then lands the least code in `src/shared/types.ts` + `src/main/preload.ts` (the compat re-export) + `src/main/mcp-server.ts` (the seven construction points + the collapse) + `src/main/main.ts` (the three sites + the snapshot handler + the host capture) + `src/renderer/sidebar-panes.ts` (the `lastStore`/`lastSnapshot` capture + the drop guard) — mind the pre-U-MS3 41 `handleEditTool` call-site ripple (the payload-literal assertions only) + the 11 snapshot-fixture files gaining `store: 'main'` + the 3 direct host-payload injections (contenteditable-editor-host.test.ts:568,835,1046); the broadcast-count invariants (a successful edit broadcasts EXACTLY ONCE, the Unit P A4 extension) MUST stay green; the F9 R3 ordering (capture-before-subscribe) + the fail-closed drop on `lastStore === null`.
+**U-MS3 cycle record (COMPLETE through the doc-review pass, 2026-09-05 — the supervisor lands the U-MS3 DONE row below):** TestWriter red **16 behavioral + 3 typecheck-level** (20 authored; the emission sites don't stamp `store`; the host lacks the guard; the collapsed shared type doesn't exist; 4 green-on-arrival guards) → Implementer green 19/20 (two SPEC-CONFLICT escapes, both arbitrated: (1) test 04's `split_node` assertions — `splitNode` KEEPS the source id as `nodeIds[0]`, only `nodeIds[1]` is minted per §5.3's pinned `[n0.id, n1.id]` — corrected `expect(p.nodeIds[0]).toBe('para')`; (2) the §6-mandated `contenteditable-editor-host.test.ts` fixture updates were NOT applied by the landing pass — the 3 injected payloads (:568/:835/:1046) AND the harness BOOT snapshots (`singleSectionSnapshot()` + the `makeBridge` default) lacked `store`, so the guard (and the `lastStore` capture reading `snapshot.store`) dropped every broadcast → state 18/28/37 failed. The supervisor closed the gap: `store:'main'` added to the 3 injections, `singleSectionSnapshot()` and the `makeBridge` default) → **U-MS3 green: 20/20 unit; full trio 2374 pass / 38 skip, typecheck + build clean** (the §6 contenteditable re-pins are the ONLY sanctioned test changes). **Adversarial pass (RCA-3): F-MS3-1..6** (1 MEDIUM: F-MS3-1 the fail-closed silent drop of an addressed-store broadcast with a missing/`undefined` store → FIXED-WITH-REGRESSION: distinct `console.warn` on the malformed-store + `lastStore === null` drop branches, foreign drops stay silent, no drop-outcome change (R1–R3 red→green → unit 23/23); 2 LOW: F-MS3-2 the legacy `store:''` sentinel loss documented, F-MS3-3 the `delete_node` §5.3 `removed:true` qualifier spec-amended; 3 INFO: F-MS3-4 type-level-only REQUIRED field noted, F-MS3-5/6 verified-clean — recorded in spec §3a). **U-MS3 cycle COMPLETE (2026-09-05) — see the CURRENT WORK block + the U-MS3 delegation notes (EXECUTED) above; the original NEXT-directive text that follows is SUPERSEDED (recorded for history):** blind-greens (RCA-4) → live-scenario (the app is LIVE — the broadcast/snapshot `store` surface may be observable via a UI edit's re-derive on :3787, but the host change is renderer-side; park if not MCP-observable) → doc-review (RCA-6, `archive/reviews/2026-09-05-unit-ms3-doc-review.md`) → the U-MS3 DONE row.**
+**U-MS5 delegation notes (EXECUTED 2026-09-05 — the cycle is COMPLETE through the doc-review pass; kept as the record of the delegation brief — the FINAL unit, the read-only settings listing + the `RagQueryPayload.store` passthrough):** the spec is `docs/specs/unit-ms5-settings-listing.md` (the `IPC_RAG_STORE_LISTING = 'provident:rag-store-listing'` channel + the `RagStoreLoadStatus`/`RagStoreListingEntry`/`RagStoreListingPayload` types + the `handleRagStoreListingIpc` handler + the `bridge.rag.stores()` preload method + the `operator-rag-stores` settings-pane section authored as provident data in the isolated operator scope + the `RagQueryPayload.store?` optional field + the F4 dir-plumbing consumption + the `query(query, topK?, store?)` bridge param + the RAG-QUERY-STORE-DISPLAY-ASYMMETRY row + the BE-1..BE-8 byte-equality acceptance rows); the TestWriter writes `tests/unit-ms5-settings-listing.test.ts` from the spec ALONE; the Implementer lands `src/shared/types.ts` + `src/main/preload.ts` + `src/main/mcp-server.ts` (the handler) + `src/main/main.ts` (the ipcMain.handle) + `src/renderer/sidebar-panes.ts` (the settings-pane section + the search-pane passthrough) — this unit COMPLETES the U-MS2 F4 end-to-end row (`RagQueryPayload.store` + `handleRagQueryIpc`'s dir plumbing) and the U-MS2 §5.9 IPC-half staging pin; the U-MS3 snapshot/broadcast `store` delta is the precedent for the settings listing's byte-equality rows; it is the slice's final unit (execution order U-MS1 → U-MS2 → U-MS4 → U-MS3 → U-MS5).
 
 ## OPEN
 
-**Multi-document store config — PROPOSAL GATE COMPLETE (PROCEED-WITH-AMENDMENTS), USER GO-AHEAD GIVEN; SPEC GATE COMPLETE (2026-09-05 — see the CURRENT WORK block); the per-unit cycles are RUNNING: U-MS1's and U-MS2's cycles are COMPLETE through their doc-review passes, U-MS4's TestWriter red is next (2026-09-05).** Feature request
+**Multi-document store config — PROPOSAL GATE COMPLETE (PROCEED-WITH-AMENDMENTS), USER GO-AHEAD GIVEN; SPEC GATE COMPLETE (2026-09-05 — see the CURRENT WORK block); the per-unit TDD cycles are COMPLETE: U-MS1's, U-MS2's, U-MS4's, U-MS3's AND U-MS5's cycles are COMPLETE through their doc-review passes (the supervisor lands the U-MS3 and the U-MS5 DONE rows; the U-MS5 DONE row additionally awaits the outstanding U-MS5 blind-greens + live-scenario gates).** Feature request
 `docs/feature-requests/multi-document-store-config.md` (the Agent Harness bulk-research dogfooding driver: per-run corpora must not mix with the
 main knowledge base in the single store). **Gate outcome:** validity VALID-WITH-AMENDMENTS → critique UNSOUND-as-written (the literal five-ask
 package is rejected — per-store embedders would destroy other stores' vector-cache entries via the single-tuple prune contract [B1], per-store
@@ -350,6 +353,149 @@ in the doc-nav pane, and `get_markdown` carries the same content. Trio green
 _(none — Units A–T are implemented.)_
 
 ## DONE
+
+- **Unit U-MS5 — the read-only settings-pane store listing + the
+  `RagQueryPayload.store` passthrough (the multi-store Phase-1 slice's FINAL
+  unit) (2026-09-05).** Spec `docs/specs/unit-ms5-settings-listing.md`. Landed:
+  the `IPC_RAG_STORE_LISTING = 'provident:rag-store-listing'` channel + the
+  `RagStoreLoadStatus`/`RagStoreListingEntry`/`RagStoreListingPayload` types +
+  the additive `RagQueryPayload.store?: string` (the F4 end-to-end
+  completion) in `src/shared/types.ts`; the `handleRagStoreListingIpc` pure
+  handler in `src/main/mcp-server.ts` (the three pinned throw paths + the
+  coercion rules + the empty→`{ stores: [] }`) + the `handleRagQueryIpc` store
+  forward; the `ipcMain.handle` registration + the F-MS5-2 defensive guard in
+  `src/main/main.ts`; the `bridge.rag.stores()` + the 3-arg `query` widening in
+  `src/main/preload.ts`; the `operator-rag-stores` settings-pane section + the
+  `lastStoreListing` cache + the no-refetch in `src/renderer/sidebar-panes.ts`
+  (provident-authored, operator-isolated, never MCP-visible). **TestWriter red:
+  27 runtime-failing + 7 typecheck-leg + 12 green-on-arrival guards** (42
+  authored) → **Implementer green: 39 pass / 3 skip** (3 sanctioned re-pins =
+  TestWriter fixture bugs: the statusOf out-of-union resolver, the
+  `SidebarBridge.stores` fixture, the null-storeListing coercion) → full suite
+  2413/41. **Adversarial pass (RCA-3): F-MS5-1..5** (2 MEDIUM: F-MS5-1 the
+  PROCESS gate — the five decision rows + §3a + the doc-review must land before
+  the DONE row, F-MS5-4 the trusted-renderer cross-store read documented; 2 LOW:
+  F-MS5-2 the unguarded `entries.get(name)!` → FIXED-WITH-REGRESSION (the
+  byte-pinned `rag-store-listing: no directory entry for store "<name>"`
+  guard), F-MS5-3 the awaited-inline boot fetch documented; 1 INFO: F-MS5-5
+  verified-clean — registered in spec §3a) → fix batch → unit 41/3, full suite
+  **2415/41**. **Blind-greens (RCA-4):**
+  `docs/specs/unit-ms5-settings-listing-greens.md` — **25 PASS / 0 FAIL /
+  9 DOCUMENTED-OR-RELEGATED** (the preload/ipcMain/render seams Electron/DOM-
+  bound; the F4 end-to-end + the F-MS5-2 defensive throw byte-exact). **Live-
+  scenario gate: PARKED** —
+  `docs/specs/unit-ms5-settings-listing-live-pending-battery.md` (surface-
+  observability park — the operator-isolated pane is by design never MCP-
+  visible, verified live: `get_rendered_html` shows zero `operator-*` nodes;
+  revisit = a UI-interactive settings-pane session + a multi-store registry for
+  the N-entry case). **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-05-unit-ms5-doc-review.md` (the §5.4 repoint to the
+  landed F-MS5-2 guard; the five decision rows STORE-LISTING-IPC /
+  STORE-LISTING-PROVIDENT-AUTHORED / STORE-LISTING-BOOT-CACHED /
+  STORE-LISTING-STATUS-SHARED / RAG-QUERY-STORE-DISPLAY-ASYMMETRY LANDED in
+  `docs/decisions.md` + the UI-SELECTOR-DEFERRED LANDED-HALF annotation; the
+  U-MS2 §5.9/§5.4 F4-staging rows marked COMPLETED; the trackers reconciled).
+  **Trio: 2415 pass / 41 skip, typecheck clean, build clean** (baseline 2374 +
+  39 U-MS5 + 2 R-tests). Decisions STORE-LISTING-* ×5 +
+  RAG-QUERY-STORE-DISPLAY-ASYMMETRY (LANDED) in `docs/decisions.md`.
+
+- **Unit U-MS3 — the store-qualified broadcast + the snapshot store field +
+  the host re-derive guard (the multi-store Phase-1 slice's fourth unit)
+  (2026-09-05).** Spec `docs/specs/unit-ms3-store-qualified-broadcast.md`.
+  Landed: the collapse — ONE shared `RagStoreChangedPayload` in
+  `src/shared/types.ts` with REQUIRED `store: string` (the three structural
+  copies in preload/mcp-server/sidebar-panes DELETED with compat re-exports,
+  `edit-ops.ts`/`main.ts` imports repointed) + `RagSnapshotPayload.store`; the
+  four emission sites stamping `store: <resolved name>` (the seven
+  `handleEditTool` construction points via `ref?.name ?? ''`, the typed
+  `main.ts` UI literals + the snapshot handler via `plan.defaultName`, the
+  `delete_node` `removed:true` gate); the host `lastStore` capture (boot +
+  re-derive) + the foreign-store drop guard + the R3 capture-before-subscribe
+  ordering + the fail-closed drops, in `src/renderer/sidebar-panes.ts`; the two
+  derive helpers narrowed to `Omit<…,'store'>`. **TestWriter red: 16 behavioral
+  + 3 typecheck-level + 4 guards** (20 authored; the emission sites don't stamp
+  `store`, the host lacks the guard, the collapsed type doesn't exist) →
+  **Implementer green: 19/20** (two SPEC-CONFLICT escapes arbitrated: test 04's
+  `split_node` expectation — `splitNode` KEEPS the source id, corrected to
+  `expect(p.nodeIds[0]).toBe('para')`; the §6-mandated
+  `contenteditable-editor-host.test.ts` fixture gap — the 3 injected payloads
+  :568/:835/:1046 AND the harness boot snapshots lacked `store`, so the guard +
+  `lastStore` capture dropped every broadcast → state 18/28/37 failed; the
+  supervisor applied the `store:'main'` fixture updates). Full suite 2374 pass /
+  38 skip. **Adversarial pass (RCA-3): F-MS3-1..6** (1 MEDIUM: F-MS3-1 the
+  fail-closed silent drop of an addressed-store broadcast with a
+  missing/`undefined` store → FIXED-WITH-REGRESSION: distinct `console.warn`
+  on the malformed-store + `lastStore === null` drop branches, foreign drops
+  stay silent, no drop-outcome change; 2 LOW: F-MS3-2 the legacy `store:''`
+  sentinel documented, F-MS3-3 the §5.3 `delete_node` `removed:true` qualifier
+  spec-amended; 3 INFO: F-MS3-4 type-level-only REQUIRED field, F-MS3-5/6
+  verified-clean — registered in spec §3a) → fix batch R1–R3 red→green →
+  **unit 23/23**. **Blind-greens (RCA-4):**
+  `docs/specs/unit-ms3-store-qualified-broadcast-greens.md` — **23 PASS /
+  0 FAIL / 4 RELEGATED** (the host/UI-path states routed to the live battery per
+  §5.3a; the collapse + REQUIRED `store` verified at the typecheck level; the
+  broadcast-count invariants + the `delete_node`-no-op-zero + the `''` sentinel
+  observed live). **Live-scenario gate: PARKED** —
+  `docs/specs/unit-ms3-store-qualified-broadcast-live-pending-battery.md`
+  (structural surface-absence: the broadcast/snapshot are renderer/IPC-side,
+  not MCP tools; the app is live on :3787 but exercising the guard needs a
+  UI-interactive or operator-edit session; 5 live-observable-later + 22
+  never-live = 27). **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-05-unit-ms3-doc-review.md` (the spec↔code
+  reconciliation incl. the ONE-shared-declaration + the four emission sites +
+  the guard byte-verification; the construction-point anchors repointed to the
+  landed `emit` sites ; the STORE-QUALIFIED-BROADCAST decision row annotated
+  LANDED; the trackers reconciled). **Trio: 2374 pass / 38 skip, typecheck
+  clean, build clean** (baseline 2351 + 20 U-MS3 + 3 R-tests). Decision
+  STORE-QUALIFIED-BROADCAST (LANDED annotation) in `docs/decisions.md`.
+
+- **Unit U-MS4 — the store-id prefixing at the import minting seam (the
+  multi-store Phase-1 slice's third unit) (2026-09-05).** Spec
+  `docs/specs/unit-ms4-id-prefixing.md`. Landed: the optional third
+  `store?: ImportStoreContext { name, isDefault, reservedNames? }` parameter on
+  `importMarkdownCorpus` + the SC1–SC5 fail-fast battery + the A1 collision
+  rejection (byte-pinned `markdown import: documentId collides with a
+  registered store name: <id>`, resolved (a) — the default store's seam rejects
+  a documentId equal to any registered non-default store name) + the `<name>:`
+  prefix minting for non-default stores + the per-store path resolution
+  `resolve(corpusRoot, file)` + the corpusRoot guard + the NUL probe + the
+  snapshot consts, all in `src/main/markdown-import.ts` (`markdown-parse.ts`
+  UNCHANGED — the prefix rides the documentId INPUT); + the F2 wiring in
+  `src/main/mcp-server.ts` (§5.6 pass-through, flipping U-MS2's test 56 green)
+  + the two sanctioned U-MS2 re-pins (tests 53/55). **TestWriter red: 21 failing
+  / 19 green-on-arrival guards** (40 authored; the 3-arg calls ignored at
+  runtime — prefix/A1/SC absent; TS2554 ×39 + TS2305 ×1) → **Implementer green:
+  39/40** (one SPEC-CONFLICT escape: test 13's misplaced atomicity assertion,
+  arbitrated by the supervisor — moved above the successful boundary import) →
+  F2 wiring + the two U-MS2 re-pins + the A1-S7 erratum → **40/40**. Full suite
+  2342 pass / 38 skip. **Adversarial pass (RCA-3): F-MS4-1..11** (0 HIGH / 0
+  MEDIUM / 4 LOW — F-MS4-1 the INV-6 non-coincidence erratum, F-MS4-2 the
+  Proxy/trusted-caller snapshot, F-MS4-3 the corpusRoot throw gap, F-MS4-4 the
+  NUL-byte probe — / 7 INFO) — host findings FIXED + regression-tested
+  red-first (R2/R3/R5 red → adversarial 9/9 in
+  `tests/unit-ms4-id-prefixing-adversarial.test.ts`; registered in spec §3a with
+  the F-MS4-5/10 transcription completed at the doc review); HOST-MS4-10 (the
+  MCP handler silently drops non-string `files` elements) recorded OPEN in
+  `docs/defects.md`. **Blind-greens (RCA-4):**
+  `docs/specs/unit-ms4-id-prefixing-greens.md` — 43 rows: **41 PASS / 0 FAIL /
+  2 DEFERRED** (the F13 batch-failure row not doc-derivable; the pending
+  transcriptions); the F2 staging LIVE (the wired non-default import is
+  prefixed, U-MS2's S39 staged red now green). **Live-scenario gate: PARKED**
+  — `docs/specs/unit-ms4-id-prefixing-live-pending-battery.md` (the app was
+  down at the time; the U-MS4 build + dist were on disk; the revisit condition
+  is now MET — the operator restarted the app with the multi-store build, so
+  the U-MS1/U-MS2/U-MS4 batteries all run in a later live-scenario iteration).
+  **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-05-unit-ms4-doc-review.md` (the spec↔code byte
+  census re-verified; the line-citation repoints recomputed against the actual
+  landed file — the implementer's proposed stale mapping was corrected; §5.10
+  census "2 → 3 error strings" + "1 → 2 test files"; §3a completed; the F-MS4-7
+  `corpusRoot: '/'` limitation landed as a `docs/pending.md` DEFERRED row;
+  HOST-MS4-10 recorded; the STORE-ID-PREFIX + IMPORT-ROOT-PER-STORE decision
+  rows annotated LANDED). **Trio: 2351 pass / 38 skip (111 files), typecheck
+  clean, build clean** (baseline 2342 + 9 U-MS4 adversarial tests). Decisions
+  STORE-ID-PREFIX / IMPORT-ROOT-PER-STORE (LANDED annotations) in
+  `docs/decisions.md`.
 
 - **Unit U-MS2 — the store-instance wiring + the `store` selector on the 12
   MCP tools (the multi-store Phase-1 slice's second unit) (2026-09-05).** Spec

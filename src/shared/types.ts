@@ -361,6 +361,25 @@ export const IPC_MODULE_SET_DISABLED = 'provident:module:set-disabled'
  *  edgeIds: string[] }`. Broadcast after ANY successful RAG-store mutation via
  *  an MCP `edit.*` tool OR a UI commit-on-blur. */
 export const IPC_RAG_STORE_CHANGED = 'provident:rag-store-changed'
+
+// src/shared/types.ts — the ONE canonical declaration (Unit MS3 §5.1; the
+// three structural copies in preload.ts/mcp-server.ts/sidebar-panes.ts are
+// DELETED — A3's collapse resolution).
+/** The main→renderer `rag-store-changed` event payload (the re-traversal
+ *  trigger, Unit D §5.1.9). Broadcast after ANY successful RAG-store mutation
+ *  via an MCP `edit.*` tool OR a UI commit-on-blur/batch/rich commit.
+ *  Unit MS3 — `store` is REQUIRED: the registry-resolved name of the store the
+ *  mutation landed on (the default store's name for the UI paths + an omitted
+ *  `store` selector; the addressed store's name otherwise). The renderer host
+ *  DROPS payloads whose `store` is not the store it renders (the B5 guard). */
+export interface RagStoreChangedPayload {
+  kind: 'content' | 'structural'
+  nodeIds: string[]
+  edgeIds: string[]
+  /** REQUIRED (A3) — the registry name of the store the mutation landed on. */
+  store: string
+}
+
 /** The renderer→main `edit-commit` IPC (the UI commit-on-blur write-back,
  *  §5.1.10). Payload: `{ nodeId: string, content: string }`. Main calls
  *  `setContent` on the store (the SAME edit op as the MCP tool), then
@@ -406,6 +425,12 @@ export const IPC_RAG_QUERY = 'provident:rag-query'
 export interface RagQueryPayload {
   query: string
   topK?: number
+  /** U-MS5 — the optional store selector (MCP/UI mechanical symmetry,
+   *  UI-SELECTOR-DEFERRED). Omitted ⇒ the default store (zero-config
+   *  byte-equal). The settings/search pane's own query path NEVER passes it;
+   *  a UI-passed non-default store's results are display-only
+   *  (RAG-QUERY-STORE-DISPLAY-ASYMMETRY). */
+  store?: string
 }
 
 /** The renderer→main `rag-snapshot` IPC (the re-traversal data source). The
@@ -415,6 +440,11 @@ export interface RagQueryPayload {
  *  back-reference map after a `rag-store-changed` broadcast. */
 export const IPC_RAG_SNAPSHOT = 'provident:rag-snapshot'
 export interface RagSnapshotPayload {
+  /** Unit MS3 — REQUIRED: the registry-resolved name of the store this
+   *  snapshot was taken from. The `rag-snapshot` IPC stays DEFAULT-STORE-BOUND
+   *  (A2) — this names the default store ('main' zero-config). The renderer
+   *  host captures its boot store from this field (§5.4). */
+  store: string
   nodes: Array<{
     id: string
     type: string
@@ -501,6 +531,51 @@ export interface RagDocHeadsPayload {
    *  ascending, deterministic). */
   documents: Array<{ documentId: string; title: string }>
 }
+
+// ---- U-MS5 store-listing IPC (docs/specs/unit-ms5-settings-listing.md §5.1) --
+
+/** U-MS5 — a store's load status as presented in the settings-pane listing.
+ *  The THREE members and their meanings are the D7 failed-store matrix
+ *  (multi-document-store-config-review.md §2 D7): `loaded` (the store loaded
+ *  normally); `failed-corrupt` (loads empty + corrupt flag — serves EMPTY, the
+ *  per-store fail-disabled semantics); `failed-missing` (absent file = first-run
+ *  empty store — NOT an error state). This shared declaration is the SINGLE
+ *  source, coordinated with U-MS2's per-store status derivation
+ *  (docs/specs/unit-ms2-store-wiring.md) — a divergent re-declaration is a
+ *  review finding (the A3/RCA-6 drift class). */
+export type RagStoreLoadStatus = 'loaded' | 'failed-corrupt' | 'failed-missing'
+
+/** One entry of the registry's presentation view. `persistenceFile` is the
+ *  persistence file NAME — the BASENAME of U-MS1's resolved absolute path,
+ *  projected by the §5.4 wiring adapter (`basename(entry.persistenceFile)`,
+ *  F7): the derived names are `provident-rag-<name>.json`, or the legacy
+ *  `provident-rag.json` for the name `main` (U-MS1's derivation rules), and
+ *  an explicitly configured absolute path contributes its basename (e.g.
+ *  `<dir>/scratch.json` → `scratch.json`). `corpusRoot` is
+ *  the CONFIGURED absolute corpus root, or `null` when the entry configures
+ *  none (the importer's own `process.cwd()` resolution at import time is the
+ *  importer's rule, NOT the listing's — the listing displays the config, and
+ *  the pane renders null as `(project root)`). */
+export interface RagStoreListingEntry {
+  name: string
+  default: boolean
+  persistenceFile: string
+  corpusRoot: string | null
+  status: RagStoreLoadStatus
+}
+
+/** The `rag-store-listing` IPC result — the registry's presentation view (one
+ *  entry per configured store, in the registry's own array order). */
+export interface RagStoreListingPayload {
+  stores: RagStoreListingEntry[]
+}
+
+/** The renderer→main `rag-store-listing` IPC (the operator settings pane's
+ *  read-only store census). Manual-UI ONLY: the MCP tool handlers never route
+ *  to this channel, so an agent cannot enumerate the configured store names
+ *  (B9/A9). NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED) and NOT a five-seam
+ *  gate seam — no RpcMethod, no TOOL_GROUPS entry, no ALL_TOOLS row. */
+export const IPC_RAG_STORE_LISTING = 'provident:rag-store-listing'
 
 // ---- Unit I template IPC (docs/specs/unit-i-template.md §5.4) -------------
 

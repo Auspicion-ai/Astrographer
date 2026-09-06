@@ -32,7 +32,7 @@
      `resolve(file)` → `resolve(corpusRoot, file)`);
   4. the **A1 prefix-namespace resolution** (pinned here: resolution **(a)**,
      §5.4) + the cross-store uniqueness regressions.
-  The containment/TOCTOU discipline (`markdown-import.ts:204-248`) is reused
+  The containment/TOCTOU discipline (`markdown-import.ts:207-248`) is reused
   UNCHANGED per store root. This unit does NOT change `markdown-parse.ts`
   (verified + pinned in §5.2: the parser takes the documentId as an INPUT,
   `markdown-parse.ts:617-620`, and every id-minting site inside it derives
@@ -64,7 +64,7 @@ U-MS2 wiring). Two of its CRITICAL/HIGH findings close at the import minting
 seam, which is U-MS4:
 
 1. **Cross-store id collisions (critique B3).** Today every store would mint
-   documentIds from the sanitized basename alone (`markdown-import.ts:120` —
+   documentIds from the sanitized basename alone (`markdown-import.ts:249` —
    `sanitizeDocumentId(basename(file))`), so two stores importing the
    same-named file would both mint the document root id `readme` and the node
    id `readme:section:1` — a foreign-store result id passed to an id-based
@@ -90,13 +90,13 @@ seam, which is U-MS4:
    store; U-MS4 owns the importer's internal path-resolution change —
    relative `files` paths resolve against the STORE's corpus root
    (`resolve(corpusRoot, file)` replacing `resolve(file)`,
-   `markdown-import.ts:84`), byte-identical for the default store only when
+   `markdown-import.ts:203`), byte-identical for the default store only when
    the effective root is `process.cwd()`. The TOOL schema stays `files`-only
    (ADV-1 preserved, `unit-t-markdown-import.md:183`,
    `mcp-server.ts:1196`); the `store` argument cannot influence any path
    (risk R7).
 4. **Per-store containment + ONE-WAY-SNAPSHOT reuse.** The realpath/TOCTOU
-   discipline (`markdown-import.ts:204-248`) is reused UNCHANGED per store
+   discipline (`markdown-import.ts:207-248`) is reused UNCHANGED per store
    root; each store's import remains its own one-shot batch journal entry
    (ONE-WAY-SNAPSHOT per store, `decisions.md:70`).
 5. **Zero-config byte-equality (A4).** With no registry (the implicit default
@@ -122,7 +122,7 @@ stays registry-agnostic and node-testable).
   takes the documentId as an INPUT (`markdown-parse.ts:617-620`; its ONLY
   throw is a non-string markdown or an EMPTY documentId,
   `markdown-parse.ts:618-619`). Prefixing the documentId before the call
-  (`markdown-import.ts:128`) changes every derived id mechanically — no
+  (`markdown-import.ts:286`) changes every derived id mechanically — no
   parser change.
 - **`:`-bearing ids round-trip the store.** `validateNodeShape` requires only
   a non-empty string id (`rag-store.ts:363`); `validateEdgeShape` likewise
@@ -131,7 +131,7 @@ stays registry-agnostic and node-testable).
   edge-`documentIds` entries pass write-time validation unchanged.
 - **The namespace rule is sound by construction.** `sanitizeDocumentId`
   replaces every character outside `[a-zA-Z0-9._-]` — including `:` — with
-  `-` (`markdown-import.ts:47-54`, the regex at `:51`), so no default-store
+  `-` (`markdown-import.ts:69-76`, the regex at `:73`), so no default-store
   documentId can contain `:`; the registry name charset
   `/^[a-z0-9][a-z0-9_-]{0,63}$/` (review §2 D2) also excludes `:`. Hence a
   `<name>:`-prefixed id can never be minted by a default-store import, and
@@ -140,7 +140,7 @@ stays registry-agnostic and node-testable).
   ADV-1-sanctioned programmatic input (`unit-t-markdown-import.md:183` —
   "The importer function still accepts `corpusRoot` for programmatic/test
   use"); U-MS2 feeds it per store; U-MS4 only changes what it is resolved
-  AGAINST (`markdown-import.ts:84`) and adds the store-context parameter.
+  AGAINST (`markdown-import.ts:203`) and adds the store-context parameter.
 - **No engine gap.** The minting seam, the path resolution, and the A1
   rejection are entirely host-side (`src/main/markdown-import.ts`); the
   parser, the store, and `validateDocFlow` are reused unchanged.
@@ -150,9 +150,9 @@ stays registry-agnostic and node-testable).
 | Gap | Project-specific vs engine-handoff | Cost / benefit |
 | --- | --- | --- |
 | The store-context parameter (`ImportStoreContext`) on `importMarkdownCorpus` | Project-specific (a pure injected input; the importer stays registry-agnostic) | Low cost; makes the seam composable with U-MS2's wiring without touching `mcp-server.ts` in this unit (the 2-arg call stays valid). |
-| The `<name>:` prefix rule at the minting seam | Project-specific (a minting-order change inside `markdown-import.ts:120-128`) | Medium cost; closes B3's mutation hazard by construction. The duplicate/documentId checks must re-order onto the FINAL id (§5.2) — pinned so the error messages stay deterministic. |
+| The `<name>:` prefix rule at the minting seam | Project-specific (a minting-order change inside `markdown-import.ts:249-286`) | Medium cost; closes B3's mutation hazard by construction. The duplicate/documentId checks must re-order onto the FINAL id (§5.2) — pinned so the error messages stay deterministic. |
 | The A1 prefix-namespace hole | Project-specific (an import-seam rejection — resolution (a)) | Medium cost; one new fail-state + a byte-pinned message; avoids the (b) alternative's cross-cutting resolver change (§4). The accepted cost: an operator CANNOT import a default-store doc named exactly like a registered non-default store (rename the file or the store — the operator controls both). |
-| The relative-path resolution change (`markdown-import.ts:84`) | Project-specific (a documented Unit T contract supersession — `unit-t-markdown-import.md:591-594` and `:744-747` pin the OLD cwd rule) | Medium cost; byte-equal only when the effective root is `process.cwd()`; the RCA-6 doc review must reconcile the Unit T lines in the same pass (§5.11). |
+| The relative-path resolution change (`markdown-import.ts:203`) | Project-specific (a documented Unit T contract supersession — `unit-t-markdown-import.md:591-594` and `:744-747` pin the OLD cwd rule) | Medium cost; byte-equal only when the effective root is `process.cwd()`; the RCA-6 doc review must reconcile the Unit T lines in the same pass (§5.11). |
 | Cross-store uniqueness regressions (two stores × same file; foreign-id miss) | Project-specific (tests only — the invariant falls out of the minting rule) | Low cost; the B3 regression tests. |
 | Cross-store EDGE-id equality (the `e-` space) | Project-specific (a documented non-hazard — §5.5 INV-6) | Low cost; documented + adversarial-tested, NOT prevented: edge ids are store-local and carry no store-namespace claim. |
 
@@ -199,12 +199,12 @@ import). After the fix batch: 9/9 green, and
 | F-MS4-2 | LOW | The A1 gate + the prefix mint RE-READ the store context by property access AFTER the SC battery — a getter/Proxy context can desync (a different value per read), so the SC battery validates one shape while the gate/mint act on another. | a Proxy context whose `isDefault` getter returns `false` at the SC read and `true` at the mint read ⇒ SC validates prefix mode but the mint goes UNPREFIXED; likewise a `reservedNames` getter that desyncs between SC and the A1 gate waves the collision through | **FIXED-WITH-REGRESSION** — snapshot `isDefault`/`name`/`reservedNames` into consts immediately AFTER the SC block; the A1 gate + the mint read the SNAPSHOTTED values only (one deterministic point-in-time). Regressions: R2 (the isDefault flip ⇒ the snapshot governs the mint: `S:note`), R3 (the reservedNames desync ⇒ the snapshot governs the gate: REJECT), R4 (determinism across repeated runs). |
 | F-MS4-3 | LOW | A non-string `params.corpusRoot` throws an UNCAUGHT `TypeError` (`ERR_INVALID_ARG_TYPE`) at `resolve(params.corpusRoot ?? process.cwd())` — contradicting the module's NEVER-throws-for-a-domain-failure pin. | `corpusRoot: 42` / `false` / `{}` (and `''`) ⇒ the raw TypeError, not a domain result | **FIXED-WITH-REGRESSION** — a typeof guard BEFORE the resolve returning the NEW byte-pinned fail-state `markdown import: corpusRoot must be a string (got <json>)` with the F-MS1-6 `jsonOf` rendering (TOTAL + capped at 200 chars), NO `failedFile`; `''` PINNED as a caller error with the same message (consistency chosen — the nullish coalescing keeps `''`); `null`/`undefined` keep the `process.cwd()` default. Spec amendment: §5.2 step 3 gains the guard + the message row. Regressions R5 (the four values + the cap probe) + R6 (the precedence guards). |
 | F-MS4-4 | LOW | A NUL byte in a `file` path fails closed only by ACCIDENT of the host: `statSync` throws `TypeError` (`ERR_INVALID_ARG_VALUE`) and the catch happens to absorb it — the seam never states the rule. | `files: ['note\u0000.md']` ⇒ `cannot read file: note\u0000.md` (correct outcome, unstated mechanism) | **FIXED-WITH-REGRESSION** — an explicit NUL probe in the per-file pipeline (after the containment check, before `statSync`) returning the EXISTING cannot-read message (NO new string) — deterministic, host-independent. Regression R7: a NUL-bearing file ⇒ the cannot-read message, fail-closed, no batch, no ids; the outside-the-root NUL path keeps the outside-corpus-root error (containment still precedes). |
-| F-MS4-5 | (pending transcription) | *(pending verbatim transcription from the adversarial report — supplied by the supervisor at doc-review time; NOTHING invented, per the U-MS1 §3a precedent)* | *(pending)* | **RECORDED-NO-CHANGE** (per the Architect ruling) — the finding stands recorded as-is; no code, no spec change. |
+| F-MS4-5 | INFO | verified-safe — the brief's explicit probes register NO code/spec change (all inert edge cases on the SC/seam): (a) a `reservedNames` entry containing `:` is ACCEPTED (SC4/SC5 check only array-ness/string-ness) and is INERT — exact equality against a colon-free sanitized base can never fire (harmless: U-MS1's charset makes such names unregistrable; A1-S7 pins take-as-given); (b) prefix-vs-prefix: `research:` vs `research-2026:` are distinct — `:` is a hard delimiter; (c) store `research` importing `research-2026.md` mints `research:research-2026` — no collision with `research-2026:`'s namespace; (d) double-prefix (`S:S:doc`) impossible — the base is colon-free and the prefix is applied exactly once; (e) empty-after-prefix (`S:`) impossible — the empty check precedes the mint; (f) SC1 accepts any non-array object (a mutated `Date` with `isDefault: true` passes as a default context; a `Map` fails SC2); (g) unknown context fields silently ignored — spec-silent, consistent with the registry's documented unknown-key tolerance. | all seven probes vs the landed SC/A1 seam (see the disposition) | **RECORDED-NO-CHANGE** (transcribed verbatim from the adversarial report at doc-review time; NOTHING invented) — the finding stands recorded as-is with the full probe register; no code, no spec change. |
 | F-MS4-6 | INFO | The A1 boundary family was untested for basenames that SANITIZE ONTO a reserved name — the exact-equality predicate operates on the SANITIZED base. | `research-2026-09-.md` (trailing-dash strip), `research-2026-09 .md` (space→dash→strip), `research:2026:09.md` (colon→dash), `research-2026-09.MD` (case-insensitive extension strip) — all sanitize onto `research-2026-09` ⇒ A1 fires; `research-2026-09..md` (the trailing dot survives the dash-only trim) ⇒ base `research-2026-09.` ⇒ IMPORT | **FIXED-WITH-REGRESSION** — the A1 boundary family extended with the five inputs (R8 rejects the four sanitize-onto basenames with the byte-pinned A1 message; R9 imports `research-2026-09..md` with documentId `research-2026-09.`). NO production change — the existing sanitizer + predicate already behave correctly (the regressions pin it). |
 | F-MS4-7 | INFO | `corpusRoot: '/'` makes path containment VACUOUS (every absolute path is within `/`); the importer cannot distinguish a server-fixed root from an operator-authored one. | `importMarkdownCorpus(ctx, { files: ['/etc/passwd'], corpusRoot: '/' })` resolves + reads (containment holds trivially) | **SPEC-NOTE** — the §5.5 containment-limitation note (below): a DOCUMENTED LIMITATION, no code change; ADV-1 keeps the root server-fixed (the tool schema stays `files`-only) and the operator authors the registry (U-MS1's absolute-root validation). The supervisor lands the pending.md row. |
 | F-MS4-8 | INFO | Stale pre-unit line citations in spec §5.2–§5.4/§5.9 (several cite pre-U-MS4 line numbers that shifted when the SC block + A1 + the mint landed). | the §5.2–§5.4/§5.9 citation lines vs the post-U-MS4 `src/main/markdown-import.ts` | **DOC-REVIEW** — the doc-review pass repoints the stale citations; NOT touched in this batch. |
 | F-MS4-9 | PROCESS | The §3a adversarial-findings section was still the pre-green placeholder ("No findings registered yet") after the adversarial pass had run. | the §3a placeholder vs the pass's 11 findings | **PROCESS** — the FULL record is registered HERE (this section), per RCA-3, together with the red-first R-series regression file `tests/unit-ms4-id-prefixing-adversarial.test.ts`. |
-| F-MS4-10 | (pending transcription) | *(pending verbatim transcription from the adversarial report — supplied by the supervisor at doc-review time; NOTHING invented, per the U-MS1 §3a precedent)* | *(pending)* | **HOST-DEFECT** (per the Architect ruling) — a defect in host code OUTSIDE this unit's allowed files; recorded for its owning unit; NOT fixed in this batch (no `src/` change outside `src/main/markdown-import.ts`). |
+| F-MS4-10 | INFO | out-of-unit observation on the unit's seam: the MCP handler SILENTLY DROPS non-string `files` elements — `mcp-server.ts:534` `.filter((x): x is string => typeof x === 'string')` — so `edit.import_markdown { files: ['a.md', 42] }` silently imports `a.md`, and the importer's pinned non-string-element fail-state (`markdown import: empty file path`) is UNREACHABLE via the MCP surface. Pre-existing handler behavior (NOT a U-MS4/U-MS2 marker). | `edit.import_markdown { files: ['a.md', 42] }` via the MCP surface ⇒ ok, imports only `a.md`; the importer's non-string-element fail-state is never surfaced through MCP. | **HOST-DEFECT** (per the Architect ruling) — recorded as OPEN host finding **HOST-MS4-10** in `docs/defects.md` (observed symptom, reproduction, proposed fix shape: fail loud on the mixed-type array with the byte-pinned `empty file path` message, OR document the filter); HOST-side, so NO `docs/HANDOFF.md` entry (no package/engine finding); NOT fixed here (outside `src/main/markdown-import.ts`). |
 | F-MS4-11 | INFO | The non-import `edit.set_edge` path can PLANT caller-supplied prefix-SHAPED edge ids/documentIds in the default store — harmless now, but U-MS3's store-derivation resolver must not mis-scope them. | `edit.set_edge(ctx, { kind, source, target, documentIds: ['S:doc'] })` against the DEFAULT store plants the prefix-shaped owner string | **SPEC-NOTE** — the §5.4 residue-paragraph sentence (below); no code change in this unit. |
 
 ### 3b. Proposal-review amendments folded in
@@ -224,7 +224,7 @@ import). After the fix batch: 9/9 green, and
 - **R3 (review §5):** the red test "default store imports `research-2026-09.md`
   while `research-2026-09` is a registered store" → §5.9 F6.
 - **R7 (review §5):** per-store containment + TOCTOU regression
-  (`markdown-import.ts:204-248` unchanged); tool schema stays files-only;
+  (`markdown-import.ts:207-248` unchanged); tool schema stays files-only;
   the `store` arg cannot influence any path → §5.3 + §3a's mandatory probe.
 
 ## 4. Design decisions pinned by this spec
@@ -233,7 +233,7 @@ import). After the fix batch: 9/9 green, and
   this unit.** `importMarkdownCorpus` prefixes the documentId passed to
   `parseMarkdown` with `<name>:` for NON-default stores; the default store's
   output is byte-equal to today (unprefixed). Safe because
-  `sanitizeDocumentId` strips `:` (`markdown-import.ts:47-54`) and the
+  `sanitizeDocumentId` strips `:` (`markdown-import.ts:69-76`) and the
   registry name charset excludes it — no default-store documentId can contain
   `:`, so cross-store documentId uniqueness is guaranteed. `edit.create_node`
   mints `n-${randomUUID()}` (`edit-ops.ts:185`) — already globally unique,
@@ -241,8 +241,8 @@ import). After the fix batch: 9/9 green, and
 - **IMPORT-ROOT-PER-STORE (landed 2026-09-05, `decisions.md:110`) — the
   importer half implemented by this unit.** The addressed store's
   `corpusRoot` is the containment root; relative `files` resolve against it
-  (`resolve(corpusRoot, file)` — `markdown-import.ts:84` changes from
-  `resolve(file)`); the realpath/TOCTOU discipline (`markdown-import.ts:204-248`)
+  (`resolve(corpusRoot, file)` — `markdown-import.ts:203` changes from
+  `resolve(file)`); the realpath/TOCTOU discipline (`markdown-import.ts:207-248`)
   is reused UNCHANGED per store root; ONE-WAY-SNAPSHOT holds per store. U-MS2
   owns the wiring half (passing `corpusRoot` + the store context per store,
   the corrected description at `mcp-server.ts:1196`).
@@ -308,17 +308,18 @@ export async function importMarkdownCorpus(
 ```
 
 - **Signature delta:** +1 OPTIONAL third parameter. The two-parameter call
-  (`importMarkdownCorpus(ctx, params)`) stays valid — today's only call site
-  (`mcp-server.ts:445`, `importMarkdownCorpus(ctx, { files })`) keeps
-  compiling and behaving byte-identically until U-MS2 lands its wiring; U-MS4
-  must NOT edit `mcp-server.ts`.
+  (`importMarkdownCorpus(ctx, params)`) stays valid — the LEGACY
+  directory-less path (`mcp-server.ts:541`, `importMarkdownCorpus(ctx, {
+  files })`) still uses it and keeps compiling byte-identically; U-MS2's wired
+  call site (`mcp-server.ts:534-541`) now passes the three-argument form
+  (post-U-MS2). U-MS4 must NOT edit `mcp-server.ts`.
 - **`ImportMarkdownParams` / `ImportMarkdownResult`: UNCHANGED** (Unit T §5.1
   shapes — `unit-t-markdown-import.md:357-368,370-378`; the discriminated
   result `{ ok: true; documentIds: string[]; nodeCount: number; edgeCount:
   number } | { ok: false; error: string; failedFile?: string }`,
   `markdown-import.ts:32-34`). On a non-default success, `documentIds` lists
   the PREFIXED documentIds; `nodeCount`/`edgeCount` remain the BATCH SIZE
-  (unchanged semantics, `markdown-import.ts:29-31,162-163`).
+  (unchanged semantics, `markdown-import.ts:29-31,320-321`).
 - **`ctx: EditOpContext` UNCHANGED** (`edit-ops.ts:18-23` — `{ store:
   RagStore }`); the addressed store is `ctx.store` (U-MS2 binds it per store).
 - **Throw patterns UNCHANGED:** `importMarkdownCorpus` NEVER throws for a
@@ -333,7 +334,7 @@ export async function importMarkdownCorpus(
 
 **The per-call pipeline (pinned order; unchanged steps cite today's lines):**
 
-1. **Files guard** (`markdown-import.ts:63-65`) — unchanged;
+1. **Files guard** (`markdown-import.ts:115-116`) — unchanged;
    `{ ok: false, error: 'markdown import: files must be a non-empty array' }`.
 2. **NEW — store-context validation** — runs ONCE per call, immediately
    AFTER the files guard and BEFORE the corpus-root resolution (fail-fast: an
@@ -374,23 +375,23 @@ export async function importMarkdownCorpus(
      only (string-typedness + non-emptiness are now the importer's own
      guard). Precedence: the files guard (step 1) and the SC battery (step 2)
      both precede this guard.
-4. **Per file** (`markdown-import.ts:80-130`):
-   a. empty-path guard (`:81-83`) — unchanged;
+4. **Per file** (`markdown-import.ts:194-288`):
+   a. empty-path guard (`:195-196`) — unchanged;
       `'markdown import: empty file path'`.
-   b. **`const abs = resolve(corpusRoot, file)`** (`:84` — THE change; was
+   b. **`const abs = resolve(corpusRoot, file)`** (`:203` — THE change; was
       `resolve(file)`). `path.resolve` semantics: an ABSOLUTE `file` ignores
       the root (identical behavior to today); a RELATIVE `file` resolves
       against the store's root (the A5 behavior change, §5.3).
-   c. logical containment (`:88-90`), stat + directory rejection
-      (`:92-100`), realpath + containment + read-the-realpath'd-path
-      (`:101-119`) — ALL UNCHANGED, exercised against the store's root. The
+   c. logical containment (`:207-209`), stat + directory rejection
+      (`:220-229`), realpath + containment + read-the-realpath'd-path
+      (`:234-248`) — ALL UNCHANGED, exercised against the store's root. The
       error messages are byte-equal:
       `'markdown import: path outside corpus root: <file>'` /
       `'markdown import: cannot read file: <file>'`, each with
       `failedFile: file`.
-   d. `const base = sanitizeDocumentId(basename(file))` (`:120`) — UNCHANGED
-      (the regex at `:51` strips `:` — the namespace-soundness guarantee).
-   e. empty-documentId check (`:121-123`) — UNCHANGED and runs on `base`
+   d. `const base = sanitizeDocumentId(basename(file))` (`:249`) — UNCHANGED
+      (the regex at `:73` strips `:` — the namespace-soundness guarantee).
+   e. empty-documentId check (`:252-254`) — UNCHANGED and runs on `base`
       BEFORE any prefixing (a non-default store importing a file that
       sanitizes to `''` fails with the SAME byte-equal message
       `'markdown import: empty documentId for file: <file>'` — never a
@@ -405,26 +406,26 @@ export async function importMarkdownCorpus(
       corpus (it derives from the store context, not the file). The default
       path (`store == null` or `isDefault === true`) yields `documentId ===
       base` — byte-equal to today.
-   h. duplicate-documentId check (`:124-127`) — runs on the FINAL
+   h. duplicate-documentId check (`:282-284`) — runs on the FINAL
       (prefixed) documentId; the message echoes the FINAL id:
       `'markdown import: duplicate documentId: <final-id>'`, NO `failedFile`
       (shape unchanged). Since the prefix is constant within one call, the
       prefix-then-check order cannot change which files collide.
-   i. `parseMarkdown(content, documentId)` (`:128`) — the CALL IS UNCHANGED;
+   i. `parseMarkdown(content, documentId)` (`:286`) — the CALL IS UNCHANGED;
       the prefix rides on the documentId INPUT. `markdown-parse.ts` is NOT
       modified (verified: `markdown-parse.ts:617-620` takes the documentId as
       a parameter; ALL id minting inside derives from it).
-5. **Doc-flow validation** (`markdown-import.ts:133-142`) — code UNCHANGED;
+5. **Doc-flow validation** (`markdown-import.ts:291-300`) — code UNCHANGED;
    on failure the message echoes the FINAL (prefixed) documentId:
    `` `markdown import: doc-flow validation failed for ${doc.documentId}: ${v.reason}` ``
-   with `failedFile: doc.file` (`:136-140`). `validateDocFlow` itself has no
+   with `failedFile: doc.file` (`:294-299`). `validateDocFlow` itself has no
    id-charset rule (`doc-flow.ts:14-136`) — prefixed ids and prefixed
    edge-`documentIds` scope correctly (`doc-flow.ts:32-35` matches by
    `includes(documentId)`).
-6. **Batch + applyBatch + success return** (`markdown-import.ts:146-164`) —
-   UNCHANGED: ALL `putNode` ops precede ALL `putEdge` ops (`:146-152`), ONE
-   atomic batch (`:154-157`, Unit N §5.3), success `documentIds` are the
-   FINAL ids (`:161`), counts are the batch size (`:162-163`).
+6. **Batch + applyBatch + success return** (`markdown-import.ts:304-322`) —
+   UNCHANGED: ALL `putNode` ops precede ALL `putEdge` ops (`:304-310`), ONE
+   atomic batch (`:312-315`, Unit N §5.3), success `documentIds` are the
+   FINAL ids (`:317-319`), counts are the batch size (`:320-321`).
 
 **Which store classes get the prefix (pinned):**
 
@@ -463,9 +464,9 @@ already globally unique: UNTOUCHED, and pinned by the existing suites.
 
 ### 5.3 The path-resolution rule (IMPORT-ROOT-PER-STORE, importer half)
 
-- **The rule:** `const abs = resolve(corpusRoot, file)` (`markdown-import.ts:84`)
-  where `corpusRoot` is the RESOLVED effective root from `:66`
-  (`resolve(params.corpusRoot ?? process.cwd())` — line `:66` UNCHANGED).
+- **The rule:** `const abs = resolve(corpusRoot, file)` (`markdown-import.ts:203`)
+  where `corpusRoot` is the RESOLVED effective root from `:180`
+  (`resolve(params.corpusRoot ?? process.cwd())` — line `:180` UNCHANGED).
   - ABSOLUTE `file` ⇒ `abs === resolve(file)` (path.resolve ignores the
     root) — identical behavior to today.
   - RELATIVE `file` ⇒ `abs` = the store's root + the relative path — THE
@@ -481,9 +482,9 @@ already globally unique: UNTOUCHED, and pinned by the existing suites.
   explicitly `process.cwd()`. A configured default-store `corpusRoot ≠ cwd`
   intentionally changes relative-path resolution (A5's letter).
 - **Containment + TOCTOU per store root (UNCHANGED code, per-store root):**
-  the logical check `isWithin(abs, corpusRoot)` (`:88-90`, helper `:38-42`),
-  the stat + directory rejection (`:92-100`), the realpath + containment +
-  read-the-realpath'd-path discipline (`:101-119`, the ADV-2 fix). A symlink
+  the logical check `isWithin(abs, corpusRoot)` (`:207-209`, helper `:60-64`),
+  the stat + directory rejection (`:220-229`), the realpath + containment +
+  read-the-realpath'd-path discipline (`:234-248`, the ADV-2 fix). A symlink
   inside a store's root pointing outside it is rejected exactly as today:
   `'markdown import: path outside corpus root: <file>'`, `failedFile: file`.
 - **No new path input:** the store context carries NO path data — `name` is
@@ -493,7 +494,7 @@ already globally unique: UNTOUCHED, and pinned by the existing suites.
   R7 containment pin: the `store` argument cannot influence ANY path (the
   tool schema stays `files`-only, ADV-1, `unit-t-markdown-import.md:183`;
   `mcp-server.ts:1196` unchanged by this unit).
-- **Relative corpusRoot:** still resolved against cwd at `:66` (unchanged);
+- **Relative corpusRoot:** still resolved against cwd at `:180` (unchanged);
   U-MS4 adds NO absoluteness validation — the registry requires absolute
   `corpusRoot`s (review §2 D2/D10; U-MS1's fail-loud domain), and the
   programmatic seam stays permissive for tests.
@@ -503,25 +504,25 @@ already globally unique: UNTOUCHED, and pinned by the existing suites.
 **Pinned resolution (a): the DEFAULT store's import seam REJECTS a documentId
 equal to any registered NON-default store name.**
 
-- **Predicate (exact):** for each file, AFTER the sanitize (`:120`) and the
-  empty-documentId check (`:121-123`), BEFORE the prefix mint and the
+- **Predicate (exact):** for each file, AFTER the sanitize (`:249`) and the
+  empty-documentId check (`:252-254`), BEFORE the prefix mint and the
   duplicate check: if `store != null && store.isDefault === true &&
   Array.isArray(store.reservedNames) && store.reservedNames.includes(base)`
   ⇒ `{ ok: false, error: 'markdown import: documentId collides with a
   registered store name: <base>', failedFile: file }`. `<base>` is the
   sanitized documentId (=== the would-be documentId for the default store).
   NO node/edge is applied; NO batch is submitted; NO journal entry; the store
-  is unchanged (the failure precedes the batch build, `:146`).
+  is unchanged (the failure precedes the batch build, `:304`).
 - **Byte-pinned message:** `` `markdown import: documentId collides with a
   registered store name: ${documentId}` `` — echoes ONLY the caller-derived
   id (the caller supplied it via the filename; identical discipline to the
-  duplicate-documentId error at `:125`). This does NOT violate A9/B9 (the
+  duplicate-documentId error at `:283`). This does NOT violate A9/B9 (the
   no-registry-enumeration rule for the store-SELECTOR error — U-MS2's seam):
   by the definition of the failure the echoed id EQUALS one store name, so it
   carries zero information beyond the caller's own input, and it never
   enumerates the registry.
 - **Exact-equality is the ONLY predicate.** `sanitizeDocumentId` strips `:`
-  (`:51`), so a default documentId can never CONTAIN a colon and a
+  (`:73`), so a default documentId can never CONTAIN a colon and a
   first-`:`-segment collision reduces to whole-string equality. Substring,
   dash-extension, and case variants do NOT collide (F8/F9 + the A1 boundary
   probes in §3a): `research-2026-09-notes` ≠ `research-2026-09`;
@@ -574,7 +575,7 @@ equal to any registered NON-default store name.**
 ### 5.5 Cross-store uniqueness invariants
 
 - **INV-1 (documentId uniqueness across stores):** a default-store
-  documentId `D` (colon-free, `:51`) can never equal a non-default
+  documentId `D` (colon-free, `:73`) can never equal a non-default
   documentId `S:Dd` (contains exactly one `:`). Two stores importing the
   SAME file (`readme.md`) mint `readme` and `S:readme` — distinct.
 - **INV-2 (node-id uniqueness across stores):** default node ids have the
@@ -601,7 +602,7 @@ equal to any registered NON-default store name.**
   contains no import-seam-minted `<name>:`-prefixed ids (INV-2).
 - **INV-5 (per-store import isolation):** `importMarkdownCorpus` touches
   exactly ONE store — `ctx.store`; `seenIds` is a per-call `Set`
-  (`markdown-import.ts:79`); there is NO cross-call or cross-store shared
+  (`markdown-import.ts:193`); there is NO cross-call or cross-store shared
   mutable state in the minting path. Two stores importing `readme.md`
   CONCURRENTLY (`Promise.all`, two `ctx.store`s) cannot interfere; each
   import serializes through its OWN store's single-writer queue
@@ -613,7 +614,7 @@ equal to any registered NON-default store name.**
   UNREACHABLE post-U-MS4: the non-default documentId is `<name>:<doc>`
   (colon-prefixed, §5.2 step 4g), so its edge ids embed the colon
   (`e-<name>:<doc>-<n>`), while every default-store documentId is colon-free
-  (`:51`) — a default-store edge id and a non-default edge id can never be
+  (`:73`) — a default-store edge id and a non-default edge id can never be
   equal. **The original example is corrected:** it claimed default doc
   `research-2026-09-readme-3` edge 1 (`e-research-2026-09-readme-3-1`) and
   store `research-2026-09` doc `readme-3` edge 1 mint the IDENTICAL string —
@@ -630,7 +631,7 @@ equal to any registered NON-default store name.**
   blocks). Pinned by the adversarial regression R1 (§3a probe iv), NOT by a
   minting change.
 - **Within-store uniqueness (unchanged):** per import, duplicate documentIds
-  abort (`:124-127`); the per-type node counters and the per-document edge
+  abort (`:282-284`); the per-type node counters and the per-document edge
   counter (`markdown-parse.ts:438-439`) make all ids within one document
   distinct; cross-import re-mints produce the SAME ids and overwrite (upsert
   — §5.7).
@@ -651,7 +652,7 @@ red-test assertion against the CURRENT (pre-U-MS4) behavior captured by the
 existing Unit T suites:
 
 1. **documentIds:** the imported `documentId` for `readme.md` is exactly
-   `readme` — never prefixed (`markdown-import.ts:120` unchanged on the
+   `readme` — never prefixed (`markdown-import.ts:249` unchanged on the
    default path).
 2. **Node ids:** root `readme` (`markdown-parse.ts:558`); sections
    `readme:section:<n>` (`:565`); blocks `readme:<type>:<n>` (`:444`) — for
@@ -660,14 +661,14 @@ existing Unit T suites:
    `documentIds: ['readme']` (`:602-605`); root `ownedNodeIds`
    `['readme:section:1', …]` (`:576`).
 4. **Result shape:** `{ ok: true, documentIds: ['readme', …], nodeCount,
-   edgeCount }` — identical values (`markdown-import.ts:159-164`).
+   edgeCount }` — identical values (`markdown-import.ts:317-322`).
 5. **Journal:** ONE `batch` journal entry, same ops in the same order
-   (putNode-before-putEdge, `:146-152`; Unit N §5.3 via
+   (putNode-before-putEdge, `:304-310`; Unit N §5.3 via
    `unit-t-markdown-import.md:631-637`).
 6. **Error messages:** all eight inherited fail-states byte-equal on the
-   legacy path (files-array `:64`, empty-file-path `:82`, cannot-read
-   `:96/:99/:112/:118`, outside-corpus-root `:89/:109`, duplicate-documentId
-   `:125`, empty-documentId `:122`, doc-flow `:138`, batch failure `:156`).
+   legacy path (files-array `:116`, empty-file-path `:196`, cannot-read
+   `:225/:228/:241/:247`, outside-corpus-root `:208/:238`, duplicate-documentId
+   `:283`, empty-documentId `:253`, doc-flow `:296`, batch failure `:314`).
 7. **Import root:** `resolve(corpusRoot, file)` with an omitted
    `corpusRoot` ⇒ `abs === resolve(file)` (the review §4 byte-equality row,
    `multi-document-store-config-review.md:81`).
@@ -741,7 +742,7 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
 8. **H8 — per-store-root containment discipline:** a symlink
    `<store-root>/link.md` → outside the store root ⇒ REJECTED with the
    byte-equal `'markdown import: path outside corpus root: <file>'` (the
-   `:101-119` discipline reused UNCHANGED for a non-default store's root).
+   `:234-248` discipline reused UNCHANGED for a non-default store's root).
 9. **H9 — re-import into the same non-default store:** the second import
    re-mints the SAME prefixed ids and overwrites (upsert) — deterministic
    (§5.7).
@@ -765,7 +766,7 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
 1. **F1 — SC1:** `store` truthy non-object (`'main'`, `42`, `true`, `[]`) ⇒
    `{ ok: false, error: 'markdown import: invalid store context' }`; NO
    `failedFile`; NO file read (precedence: after the files guard
-   `markdown-import.ts:63-65`, before the corpus-root resolution `:66`).
+   `markdown-import.ts:115-116`, before the corpus-root resolution `:180`).
 2. **F2 — SC2:** prefix mode (`store.isDefault !== true`) with a
    non-string/empty `name` ⇒ invalid store context.
 3. **F3 — SC3:** prefix mode with `name: 'a:b'` ⇒ invalid store context
@@ -791,21 +792,21 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
 10. **F10 — doc-flow failure echoes the PREFIXED id:** a heading-less
     document in store `S` ⇒
     `` `markdown import: doc-flow validation failed for S:<doc>: missing-head` ``
-    with `failedFile` (the message embeds the final prefixed id, `:138`).
+    with `failedFile` (the message embeds the final prefixed id, `:296`).
 11. **F11 — duplicate-documentId error echoes the PREFIXED id:** two files
     sanitizing to the same base (`a.md` + `a.markdown`) in store `S` ⇒
     `markdown import: duplicate documentId: S:a`, NO `failedFile` (shape
-    unchanged, `:125`).
+    unchanged, `:283`).
 12. **F12 — relative path escaping the STORE root:** `files:
     ['../outside.md']` with a non-cwd `corpusRoot` ⇒
     `markdown import: path outside corpus root: ../outside.md`,
     `failedFile: '../outside.md'` (containment now against the store root;
-    message format unchanged, `:89`).
+    message format unchanged, `:208`).
 13. **F13 — the inherited fail-states stay byte-equal on the legacy path**
-    (the Unit T suite is the regression): files-array (`:64`), empty file
-    path (`:82`), cannot read (`:96/:99/:112/:118`), outside corpus root
-    (`:89/:109`), duplicate documentId (`:125`), empty documentId (`:122`),
-    doc-flow (`:138`), batch failure (`:156`).
+    (the Unit T suite is the regression): files-array (`:116`), empty file
+    path (`:196`), cannot read (`:225/:228/:241/:247`), outside corpus root
+    (`:208/:238`), duplicate documentId (`:283`), empty documentId (`:253`),
+    doc-flow (`:296`), batch failure (`:314`).
 14. **F14 — empty-documentId precedence BEFORE the prefix:** a file
     sanitizing to `''` in a NON-default store ⇒ the byte-equal
     `'markdown import: empty documentId for file: <file>'` — NEVER a
@@ -818,8 +819,10 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
   `isDefault`, `reservedNames?`). `ImportMarkdownParams`/
   `ImportMarkdownResult`/`EditOpContext`: 0 members changed.
 - **Files changed by U-MS4:** exactly 1 source file
-  (`src/main/markdown-import.ts`) + 1 new test file
-  (`tests/unit-ms4-id-prefixing.test.ts`). Files NOT changed (pinned):
+  (`src/main/markdown-import.ts`) + 2 NEW test files
+  (`tests/unit-ms4-id-prefixing.test.ts` — the SpecWriter red set H1–H13/F1–F14
+  — and `tests/unit-ms4-id-prefixing-adversarial.test.ts` — the post-green
+  R-series R1–R9 regression file, §3a). Files NOT changed (pinned):
   `markdown-parse.ts` (0 lines), `doc-flow.ts`, `rag-store.ts`,
   `edit-ops.ts`, `mcp-server.ts`, `main.ts`, `shared/types.ts`,
   `preload.ts`, `src/renderer/*`.
@@ -832,9 +835,12 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
   (root parent-child source), `:602-605` (edge documentIds/owners),
   `:609` (the return). Non-import minting: `edit-ops.ts:185` (`n-${randomUUID()}`)
   + `:199` (`e-${randomUUID()}`) — documentId-independent, untouched.
-- **New fail-states:** 2 new error strings (`'markdown import: invalid store
-  context'`; `'markdown import: documentId collides with a registered store
-  name: <id>'`); 8 inherited fail-states preserved byte-equal (§5.9 F13).
+- **New fail-states:** 3 new error strings — (1) `'markdown import: invalid
+  store context'` (SC1–SC5); (2) `'markdown import: documentId collides with
+  a registered store name: <id>'` (A1); (3) `'markdown import: corpusRoot
+  must be a string (got <json>)'` (the F-MS4-3 corpusRoot guard — the THIRD
+  string the initial census missed, corrected by the doc review). 8 inherited
+  fail-states preserved byte-equal (§5.9 F13).
 - **New tests:** the enumerated red set is 13 happy-path + 14 fail-state
   states (H1–H13, F1–F14) — the TestWriter may combine multiple triggers
   into one `it()` per family, but EVERY state/fail-state above must be
@@ -843,7 +849,10 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
   the trio projection (RCA-6).
 - **Estimated implementation delta:** ~15–25 lines inside
   `markdown-import.ts` (the context validation, the A1 check, the prefix
-  mint, and the one-line `resolve` change at `:84`); no deletions.
+  mint, and the one-line `resolve` change at `:203`); no deletions. (Landed,
+  the cycle added the SC battery + the A1 gate + the mint + the corpusRoot
+  guard + the snapshot consts + the NUL probe — see `markdown-import.ts`
+  lines 36–322.)
 
 ### 5.11 Cross-references
 
@@ -851,7 +860,7 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
   prefix decision + the foreign-id-miss resolution; D11 — the import-root
   re-point; D2 — the name charset), §3 (the U-MS4 row: "Store-id prefixing
   at the import minting seam… cross-store uniqueness + the A1 prefix-hole
-  regressions" — `markdown-import.ts:120-128` + the store-name param), §4
+  regressions" — `markdown-import.ts:249-286` + the store-name param), §4
   (the byte-equality table — the "Import root" and "documentId minting" rows
   are this unit's), §5 (R3 — the prefix-hole red test; R7 — the containment
   regression), §8 (A1 — the resolution pin; A4 — the binding byte-equality
@@ -904,13 +913,14 @@ payloads"); U-MS4's zero-config delta set is EMPTY.
 - Unit A: `docs/specs/unit-a-rag-store.md` §5.1/§5.4 (the permissive id
   validation — `rag-store.ts:363,402` — that makes `:`-bearing ids legal
   store records).
-- Host patterns: `src/main/markdown-import.ts` (`:47-54` the sanitizer; `:63-65`
-  the files guard; `:66-75` the root resolution; `:80-130` the per-file
-  pipeline; `:88-113` the containment/TOCTOU discipline; `:120-128` the
-  minting seam; `:133-142` doc-flow; `:146-164` batch + result),
+- Host patterns: `src/main/markdown-import.ts` (`:69-76` the sanitizer; `:115-116`
+  the files guard; `:180-189` the root resolution + realpath; `:194-288` the
+  per-file pipeline; `:207-248` the containment/TOCTOU discipline; `:249-286`
+  the minting seam; `:291-300` doc-flow; `:304-322` batch + result),
   `src/main/markdown-parse.ts` (the id-minting census, §5.2),
-  `src/main/mcp-server.ts:436-447,445,446` (today's call site + broadcast —
-  U-MS2's), `src/main/edit-ops.ts:18-23,160-163,185,199` (the ctx shape, the
+  `src/main/mcp-server.ts:534-541,542` (U-MS2's wired call site + the
+  broadcast; the import handler's `files` filter is at `:534`),
+  `src/main/edit-ops.ts:18-23,160-163,185,199` (the ctx shape, the
   miss fail-state, the non-import minting), `src/main/rag-store.ts:360-363,399-410`
   (the permissive id validation), `src/main/doc-flow.ts:14-136`.
 

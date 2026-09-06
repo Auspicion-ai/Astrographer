@@ -295,6 +295,17 @@ re-attempted live:
   isolation OUTCOME is live-observable (class L1).
 - **D1/D2 (F-MS4-5, F-MS4-10):** DEFERRED per the greens (pending verbatim
   transcription; NOTHING invented) — stay deferred, not live-exercisable.
+  **CLOSED 2026-09-05 (the U-MS4 doc-review pass):** both findings are now
+  transcribed verbatim in the spec §3a (with dates) — F-MS4-5 = INFO
+  RECORDED-NO-CHANGE (no user-observable scenario, still not
+  live-exercisable; the greens D1 DEFERRED row is now a recorded finding,
+  not a pending one); F-MS4-10 = INFO HOST-DEFECT recorded as **HOST-MS4-10**
+  in `docs/defects.md` — the MCP handler's silent non-string-`files` drop
+  (`mcp-server.ts:534`) IS reachable via the WIRED MCP `edit.import_markdown`
+  once the app is restarted, so a later live run MAY add it as an optional
+  class-L5 probe (fail-loud expected after the fix lands), but it is NOT a
+  U-MS4 importer behavior — see the doc-review record
+  `archive/reviews/2026-09-05-unit-ms4-doc-review.md`.
 
 ---
 

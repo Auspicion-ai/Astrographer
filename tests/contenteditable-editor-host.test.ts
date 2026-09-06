@@ -101,6 +101,7 @@ function makeEdge(
  *  root. documentIds derive to ['doc']. */
 function singleSectionSnapshot(): RagSnapshotPayload {
   return {
+    store: 'main',
     nodes: [
       makeNode('doc', { type: 'h1', content: 'Doc' }),
       makeNode('s1', { type: 'p', content: 'hello' }),
@@ -160,7 +161,7 @@ function makeBridge(opts: {
   operatorSettings?: OperatorSettings
 } = {}) {
   const state = {
-    snapshot: opts.snapshot ?? { nodes: [], edges: [] },
+    snapshot: opts.snapshot ?? { store: 'main', nodes: [], edges: [] },
     operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' },
   }
   const bridge = {
@@ -565,7 +566,7 @@ describe('editorInput marks dirty (§1.4, §2.1 states 17-18)', () => {
     const h = makeHarness({ snapshot: singleSectionSnapshot() })
     await h.host.boot(h.runtime)
     priv(h).editorInput('s1') // dirty
-    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [] })
+    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [], store: 'main' })
     expect(h.editController.hasQueuedRebuild()).toBe(true)
     expect(h.onRebuild).not.toHaveBeenCalled()
   })
@@ -832,7 +833,7 @@ describe('the composition guard (decision H, §2.1 states 24-28)', () => {
     await h.host.boot(h.runtime)
     priv(h).editorCompositionStart('s1')
     h.editController.markDirty('s1')
-    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [] })
+    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [], store: 'main' })
     expect(h.editController.hasQueuedRebuild()).toBe(true)
     expect(h.onRebuild).not.toHaveBeenCalled()
   })
@@ -1043,7 +1044,7 @@ describe('the full end-to-end edit path (§2.1 state 37)', () => {
     await vi.waitFor(() => expect(h.editController.isDirty('s1')).toBe(false))
     // The store broadcasts → the re-derive re-renders + restores the saved rich caret.
     const restoreSpy = vi.spyOn(p as unknown as object, 'restoreRichCaret')
-    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [] })
+    h.host.onRagStoreChanged({ kind: 'content', nodeIds: ['s1'], edgeIds: [], store: 'main' })
     await awaitRebuild(h)
     expect(restoreSpy).toHaveBeenCalledWith('s1', expect.objectContaining({ kind: 'rich', ragId: 's1' }))
     expect(p.caretNodes.has('s1')).toBe(false) // one-shot — the selection survives the re-derive

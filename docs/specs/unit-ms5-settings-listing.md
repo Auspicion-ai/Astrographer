@@ -119,14 +119,35 @@ gap; no foundation work.**
 No engine gap. The unit is entirely host-side (`src/`), pure-module-testable at
 every seam.
 
-### 3a. Adversarial findings (placeholder — the RCA-3 adversarial pass registers findings here after the unit's green)
+### 3a. Adversarial findings (registered — the U-MS5 adversarial pass + the Architect's ruled fix batch)
 
-*(Placeholder. Per RCA-3, the MANDATORY post-green read-only adversarial pass —
-edge cases / unauthorized access / malformed inputs — records its findings in
-this section; every host finding is fixed here + regression-tested in
-`tests/unit-ms5-settings-listing.test.ts`; every genuine PACKAGE finding goes
-to `docs/defects.md` + `docs/HANDOFF.md`, never patched. A unit DONE row that
-cites no adversarial pass is a review finding.)*
+The RCA-3 read-only adversarial pass on the U-MS5 green returned 5 findings
+(F-MS5-1..F-MS5-5). The Architect ruled: **FIXED-WITH-REGRESSION** for F-MS5-2
+(the wiring guard + the R-series regression in
+`tests/unit-ms5-settings-listing.test.ts`), **DOCUMENTED** (spec notes, no
+code) for F-MS5-3/F-MS5-4 (§5.5 + the §5.5/§5.6 compromise note),
+**PROCESS** for F-MS5-1 (the RCA-6 documentation-review gate lands before the
+unit's DONE row — this registration is part of it), **RECORDED-NO-CHANGE** for
+F-MS5-5 (verified clean).
+
+Red-first record (RCA-1): the F-MS5-2 R-tests were written FIRST and run RED
+against the PRE-FIX wiring — the unguarded `storeLoadStatus(entries.get(name)!)`
+resolver threw the UNPINNED `TypeError: Cannot read properties of undefined
+(reading 'missing')` where the guarded resolver throws the byte-pinned
+`rag-store-listing: no directory entry for store "<name>"`. (main.ts is
+RELEGATED — never node-importable — so the R-tests drive the pinned resolver
+through the RESOLVER/HANDLER seam: a stub directory MISSING the store the
+listing names, wired as `handleRagStoreListingIpc`'s `statusOf`.) After the
+fix: `tests/unit-ms5-settings-listing.test.ts` is 41 pass / 3 skip (39/3 +
+the 2 F-MS5-2 R-tests).
+
+| id | sev | problem (one line) | concrete input | ruling + fix shape as ruled |
+| --- | --- | --- | --- | --- |
+| F-MS5-1 | PROCESS | §3a was still the RCA-3 pre-green placeholder after the adversarial pass had run; the RCA-6 documentation-review gate (spec/`*-greens.md`/test-count reconciliation vs the actual build) must land BEFORE the unit's DONE row. | the §3a placeholder vs the pass's 5 findings | **PROCESS** — this registration (the FULL record below) lands BEFORE the DONE row, together with the mandated RCA-6 doc-review pass (mirrors F-MS4-9). |
+| F-MS5-2 | LOW | The wiring resolver at `main.ts` (the §5.4 pinned expression) did `storeLoadStatus(plan.directory.entries.get(name)!)` — a name with NO matching directory entry (unreachable today: the directory derives from the SAME boot registry as `listingEntries`, and a failed store construction aborts boot) would make `storeLoadStatus(undefined)` throw an UNPINNED `TypeError`. | a `listingEntries`-style name with NO matching directory entry (a stub directory missing that store) ⇒ `Cannot read properties of undefined (reading 'missing')` | **FIXED-WITH-REGRESSION** — a byte-pinned guard in the resolver: `const e = plan.directory.entries.get(name); if (!e) throw new Error('rag-store-listing: no directory entry for store "<name>"'); return storeLoadStatus(e)`. The handler PINS three throws (§5.2 behavior 3); this is the WIRING's defensive fourth (§5.2 note). Regressions: the F-MS5-2 R-tests (missing-entry byte-pinned throw + present-entry coexistence through the resolver/handler seam). |
+| F-MS5-3 | LOW | The boot listing fetch is AWAITED INLINE (matching the pre-existing operator-settings fetch pattern) — a never-settling `stores()` delays boot by design; fail-state 5's non-abort covers REJECTION, not NON-RESOLUTION. | a `bridge.rag.stores()` that neither resolves nor rejects ⇒ boot awaits it indefinitely (by design) | **DOCUMENTED** (spec note, §5.5 — no code): the awaited-inline availability note; the deliberate divergence from the snapshot/docHeads/template abort discipline covers rejection only. |
+| F-MS5-4 | MEDIUM | The operator-isolated + never-MCP-visible guarantees assume an UNCOMPROMISED renderer: `IPC_RAG_STORE_LISTING` + the forwarded `store` on `IPC_RAG_QUERY` are NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED), so a compromised trusted renderer could enumerate stores + read non-default content. | a compromised renderer invoking `IPC_RAG_STORE_LISTING` + a `store`-bearing `IPC_RAG_QUERY` ⇒ store enumeration + non-default reads | **DOCUMENTED** (spec note, §5.5/§5.6 — no code): the accepted model; NO agent escalation (the IPC is not agent-reachable — no MCP tool/group-gate row exposes it; B9/A9/BE-7 keep the census operator-UI-only). |
+| F-MS5-5 | INFO | verified-clean probe register — the negative pins (§5.9 fail 8–9) held against the landed code: no listing-node handlers/switcher, no new handler-def (census 12), no MCP store census, no group-gate seam, the channel absent from `RpcMethod`/`TOOL_GROUPS`/`ALL_TOOLS`/`MUTATING_METHODS`. | the §5.9 fail 8–9 negative pins vs the landed module (already pinned GREEN-guard in the test file) | **RECORDED-NO-CHANGE** — transcribed verbatim; no code, no spec change (verified clean). |
 
 ### 3b. Proposal-review findings folded in
 
@@ -387,6 +408,12 @@ export function handleRagStoreListingIpc(
 3. **Throw patterns (exactly three):** the null-entries error, the
    statusOf-resolver error, and the unknown-status error (§5.2's doc comment).
    No other throw path exists; a malformed ENTRY is never a throw (skip).
+   **F-MS5-2 erratum (§3a):** the handler PINS these three throws; the WIRING
+   (`main.ts` §5.4) adds a DEFENSIVE FOURTH — a byte-pinned `rag-store-listing:
+   no directory entry for store "<name>"` guard in the per-name status resolver
+   for the latent `!` deref (`entries.get(name)!`), so a name with no matching
+   directory entry (unreachable today) throws a diagnosable Error, never an
+   unpinned TypeError.
 4. **Status supply:** every status comes from `statusOf(e.name)` — the handler
    never derives a status itself and never defaults one (an unknown status
    fails loud, it does not coerce to `'loaded'`).
@@ -509,9 +536,18 @@ ipcMain.handle(IPC_RAG_STORE_LISTING, () => {
        PINNED by docs/specs/unit-ms2-store-wiring.md §5.1: the exported PURE
        `storeLoadStatus(entry)` over the boot-captured missing flag + the
        store's own `status().corrupt` (rag-store.ts:1231-1243). The wiring
-       closes over U-MS2's boot plan directory — the PINNED argument
-       expression is EXACTLY: */
-    (name) => storeLoadStatus(plan.directory.entries.get(name)!),
+       closes over U-MS2's boot plan directory. **F-MS5-2 repoint (the
+       landed form — the §3a F-MS5-2 guard REPLACES the latent `!` deref):**
+       the PINNED argument expression (as landed) GUARDS the `entries.get(name)`
+       result before dereferencing — a name with NO matching directory entry
+       (unreachable today: the directory derives from the SAME boot registry as
+       `listingEntries`, and a failed store construction aborts boot) throws a
+       byte-pinned Error, NEVER an unpinned TypeError: */
+    (name) => {
+      const e = plan.directory.entries.get(name)
+      if (!e) throw new Error(`rag-store-listing: no directory entry for store "${name}"`)
+      return storeLoadStatus(e)
+    },
   )
 })
 ```
@@ -561,6 +597,26 @@ try {
   console.error('[sidebar-panes] store-listing fetch failed', e)
 }
 ```
+
+**F-MS5-3 availability note (§3a):** the boot listing fetch is AWAITED INLINE
+above — the SAME shape as the pre-existing persisted operator-settings fetch
+that precedes it — so a `stores()` that never settles delays boot by design.
+Fail-state 5's non-abort discipline covers a REJECTED fetch only; it does NOT
+cover NON-RESOLUTION (a never-settling promise holds the boot await). This is a
+documented availability note, not a code change — the fetch's rejection
+non-abort (the deliberate divergence from the snapshot/docHeads/template abort
+discipline) is unchanged.
+
+**F-MS5-4 compromise note (§3a):** the operator-isolated + never-MCP-visible
+guarantees (§5.5's mount paragraph, §5.9 fail 9) assume an UNCOMPROMISED
+renderer. `IPC_RAG_STORE_LISTING` and the forwarded `store` on `IPC_RAG_QUERY`
+(§5.6) are NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED, `decisions.md:45`) —
+the renderer is a trusted surface. A COMPROMISED trusted renderer could
+therefore enumerate store names + read non-default content through these IPC
+channels. This is the ACCEPTED model: these channels are NOT agent-reachable
+(no MCP tool, no tool→group row, no `ALL_TOOLS`/`RpcMethod` member — B9/A9/
+BE-7), so there is NO agent escalation; only an already-trusted renderer could
+reach them. Documented here; no code change.
 
 **No re-fetch (pinned):** `reDerive()` (`:664-772`) and `refresh()`
 (`:544-568`) do NOT re-fetch the listing — the registry is boot-time-only
@@ -880,8 +936,12 @@ review §4's rows, owned by U-MS1/MS2/MS4/MS3 and cited, not restated.)
   N entry divs (one per configured store) or 1 placeholder `p`.
 - **New pane handler defs:** 0 (the `registerHandlerDef` census stays 12,
   `sidebar-panes.ts:423-451`). **New MCP tools:** 0 (the census stays 12).
-- **New tests (est.):** 10–14 (`multi-document-store-config-review.md` §6),
-  in `tests/unit-ms5-settings-listing.test.ts`.
+- **New tests (est.):** 10–14 (`multi-document-store-config-review.md` §6) —
+  **LANDED: 44 authored (41 pass / 3 skip)** in
+  `tests/unit-ms5-settings-listing.test.ts` (the §5.8/§5.9 red set + the
+  §5.3 structural-bridge typecheck leg + the F-MS5-2 R-tests + the negative
+  GREEN-guards; the 3 sanctioned re-pins are the §5.3 bridge happy-path rows 8–10 —
+  TestWriter fixture gaps).
 
 ### 5.11 Cross-references
 

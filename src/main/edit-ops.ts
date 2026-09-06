@@ -7,8 +7,7 @@
 // reaching putNode), which propagates to the caller (the MCP handler).
 import { randomUUID } from 'node:crypto'
 import type { RagStore, RagNode, RagEdge, RagNodeType, RagEdgeKind, RagNodeChild, BatchResult, BatchOp, BatchOpResult } from './rag-store.js'
-import type { EditCommitResult, EditBatchPayload, RichCommitResult, EditRichCommitPayload } from '../shared/types.js'
-import type { RagStoreChangedPayload } from './preload.js'
+import type { EditCommitResult, EditBatchPayload, RichCommitResult, EditRichCommitPayload, RagStoreChangedPayload } from '../shared/types.js'
 
 // Unit P (docs/specs/unit-p-ipc-edit-batch.md §5.1) — re-export the batch
 // channel's payload + result types so the shared handler's callers (the IPC
@@ -535,7 +534,7 @@ export function deriveBatchBroadcast(
   ops: BatchOp[],
   results: BatchOpResult[],
   preBatchNodes: Map<string, RagNode>,
-): RagStoreChangedPayload {
+): Omit<RagStoreChangedPayload, 'store'> {
   const nodeIds: string[] = []
   const edgeIds: string[] = []
   let structural = false
@@ -649,7 +648,7 @@ export async function setRichText(
 export function deriveRichCommitBroadcast(
   before: RagNode,
   after: RagNode,
-): RagStoreChangedPayload | null {
+): Omit<RagStoreChangedPayload, 'store'> | null {
   const contentChanged = before.content !== after.content
   const childrenChanged = !sameChildren(before.children, after.children)
   if (!contentChanged && !childrenChanged) {
