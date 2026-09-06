@@ -11,6 +11,8 @@
     "build:watch": "esbuild src/main/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/main.cjs --watch & esbuild src/main/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/main/preload.cjs --watch & esbuild src/renderer/renderer.ts --bundle --platform=browser --format=esm --outdir=dist/renderer --watch",
     "start": "npm run build && electron .",
     "start:http": "npm run build && electron . --mcp-transport=http",
+    "start:app": "bash scripts/start-app.sh",
+    "start:vector": "bash scripts/start-app.sh --mode=vector",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

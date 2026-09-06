@@ -456,7 +456,13 @@ export type RichCommitResult =
 
 /** The `rag-query` IPC result — the JSON-safe transport of the retrieval
  *  engine's `RetrievalResult` (ranked + assembled context + markdown + line map
- *  + k). Mirrors the MCP `rag.query` result so both surfaces are equivalent. */
+ *  + k). Mirrors the MCP `rag.query` result so both surfaces are equivalent.
+ *  U-MS2 §5.9 (F3) — the ONE additive query-RESULT field `store` (the review
+ *  §4 "Tool results" row, U-MS2-owned): the field is stamped through the SHARED
+ *  handler (`handleRagTool` — the ONE stamp point serving the MCP `rag.query`
+ *  tool and this IPC — MCP-UI-EQUIVALENCE) and carries the ADDRESSED entry's
+ *  registry name ('main' zero-config; a non-default store's name when
+ *  addressed; '' for the legacy directory-less sentinel). */
 export interface RagQueryResult {
   query: string
   ranked: Array<{ nodeId: string; score: number }>
@@ -464,6 +470,8 @@ export interface RagQueryResult {
   markdown: string
   lineMap: { ranges: Array<{ nodeId: string; startLine: number; endLine: number }> }
   k: number
+  /** U-MS2 §5.9 F3 — the additive store stamp (see the interface doc above). */
+  store: string
 }
 
 // ---- Unit G backlink IPC (docs/specs/unit-g-crosslink-backlink.md §5.4) ----

@@ -19,7 +19,49 @@ traversal disambiguation of inline vs doc-children, paste-time sanitization →
 the markdown file import slice: initial-ingestion corpus → RAG store as a
 one-way snapshot).
 
+## CURRENT WORK / handover-state
+
+**In progress (2026-09-05): the multi-store Phase-1 slice — SPEC GATE COMPLETE; the per-unit TDD cycles are RUNNING (U-MS1 and U-MS2 COMPLETE through their doc-review passes; U-MS4 is green but its post-green gates are mid-cycle; U-MS3 next after U-MS4's DONE row). The APP IS NOW LIVE WITH THE MULTI-STORE BUILD (2026-09-05, operator restart via the new launcher `scripts/start-app.sh`): the electron app serves the HTTP MCP on :3787 with all 12 rag/edit tools carrying the `store` argument, the amended A5 description, the F3 `rag.query` result `store:'main'` field, and the `rag.query {store:'nope'}` fail-loud `rag.query: unknown store 'nope'` — the U-MS2 live battery's P0 gates are VERIFIED SATISFIED, and the U-MS1/U-MS4 batteries are now runnable (a later live-scenario iteration executes them against this instance / an isolated userData). A vector-mode launch was ALSO verified end-to-end against real ollama (`scripts/start-app.sh --mode=vector`: warm-up gate → born-lexical pending → MCP ready → background build → `vector boot: promoted`), confirming the launcher's vector path works.** New feature request
+`docs/feature-requests/multi-document-store-config.md` (configurable multiple named document stores for the RAG engine). The four-agent gate ran per gate 1: validity **VALID-WITH-AMENDMENTS** → critique **UNSOUND-as-written**
+(12 blockers B1–B12; path forward = a Phase-1-only slice) → architecture **PROCEED — SOUND-WITH-AMENDMENTS** (Alternative B, Phase-1 slice,
+decisions D1–D12) → change-analysis **PROCEED-WITH-AMENDMENTS** (binding amendments A1–A10). Full record:
+`docs/specs/multi-document-store-config-review.md`. **The user approved the Phase-1 slice (2026-09-05, the recommended option).** The eight
+decision rows (MULTI-STORE-REGISTRY, SINGLE-WRITER-STORE-PER-STORE, ENGINE-PER-STORE, STORE-QUALIFIED-BROADCAST, STORE-ID-PREFIX,
+IMPORT-ROOT-PER-STORE, VECTOR-TOPOLOGY-PER-STORE, UI-SELECTOR-DEFERRED) are LANDED in `docs/decisions.md`; the Phase-2 non-goals are parked in
+`docs/pending.md`. **SPEC GATE COMPLETE (2026-09-05):** the five unit specs are LANDED — `docs/specs/unit-ms1-store-registry.md` (452-line
+registry contract at the gate: 3 exported functions + 13 byte-pinned fail-loud messages + FS1–FS30; the landed unit added FS31/FS32 (the adversarial fix batch) and 63 tests), `unit-ms2-store-wiring.md` (the `rag-store-directory`
+resolver + the 12 tool schemas + the failed-store matrix + the result-`store` ownership), `unit-ms3-store-qualified-broadcast.md` (the shared
+payload collapse + the 4 emission sites + the host drop guard), `unit-ms4-id-prefixing.md` (the `<name>:` minting seam + A1 resolution (a) +
+the FOUR id-minting-site census), `unit-ms5-settings-listing.md` (`IPC_RAG_STORE_LISTING` + the settings pane + the `RagQueryPayload.store?`
+passthrough). The reviewer loop ran THREE iterations to empty: iteration 1 = 13 findings (4 BLOCKER — the U-MS2/U-MS3 `handleEditTool` seam,
+the orphaned `ImportStoreContext` pass-through, the unowned result-`store` field, the unresolvable IPC passthrough), iteration 2 = 8 findings
+(3 MAJOR incomplete-sweep leftovers), iteration 3 = 3 must-fix residuals (a false cross-ref, a retired placeholder, an assertion-level
+ambiguity) — all fixed, marker-sweep clean. **Next steps for a fresh supervisor:** the per-unit cycles in execution order **U-MS1 → U-MS2 →
+U-MS4 → U-MS3 → U-MS5** (RCA-2: one red→green→adversarial→blind-greens→doc-review cycle per unit, never shared inline; red set recorded per
+RCA-1) — U-MS1 cycle COMPLETE through the doc-review pass (2026-09-05: TestWriter red 46 — suite-load, the module does not exist → Implementer green 46/46, with the FS20–FS24 spec self-contradiction resolved by the Architect's option-A amendment of the five example rows, code unchanged → adversarial F-MS1-1..15 (2 MEDIUM / 6 LOW / 7 INFO) → red-first fix batch 10 → 63/63 → blind-greens 34 PASS / 1 FAIL reconciled to 35/0 (F-BLIND-MS1-1: ECMAScript `String(1n)` === `'1'`; the expectation was the drift) → live-scenario battery PARKED (the V1 pattern; the app is running but exposes no registry surface until U-MS2) → the doc-review pass `archive/reviews/2026-09-05-unit-ms1-doc-review.md`); **the U-MS1 DONE row is LANDED below; the U-MS2 cycle is COMPLETE through the doc-review pass (2026-09-05: TestWriter red 57 — suite-load → Implementer green 56/57 + 1 staged red (test 56, U-MS4's F2 staging pin) + 2 supervisor repairs to TestWriter defects (tests 08/16) → adversarial F-MS2-1..11 (1 HIGH / 3 MEDIUM / 3 LOW / 4 INFO) → red-first fix batch (58/59/60/61 + the sanctioned test-20 re-pin; test 63 HUNG the pre-fix module) → 62 pass / 1 staged red → blind-greens 43 PASS / 0 FAIL / 3 DEFERRED (`docs/specs/unit-ms2-store-wiring-greens.md`) → live-scenario PARKED (surface-absence — the app serves the pre-U-MS2 build; battery written, `docs/specs/unit-ms2-store-wiring-live-pending-battery.md`) → the doc-review pass `archive/reviews/2026-09-05-unit-ms2-doc-review.md`) — the supervisor lands the U-MS2 DONE row; U-MS4's TestWriter red is the NEXT delegation (the execution order U-MS1 → U-MS2 → U-MS4 → U-MS3 → U-MS5 puts U-MS4 next, NOT U-MS3).** After each unit's green run the adversarial (RCA-3) and blind-greens (RCA-4) gates,
+then the doc review (RCA-6), then the trio. The trio baseline is 2301 pass / 38 skip (109 files) after the U-MS2 cycle (2239/38 after the U-MS1 fix batch; 2176/38 at the W5 close; review §6's cost estimate cites the W5 baseline historically).
+**U-MS2 delegation notes (EXECUTED 2026-09-05 — the cycle is COMPLETE through the doc-review pass; kept as the record of the delegation brief):** the spec is `docs/specs/unit-ms2-store-wiring.md` (the `rag-store-directory` pure module `resolveStoreArg`/`buildRagStoreDirectory` + the 12 tool inputSchemas + the resolution-first ordering + the engine map + the failed-store matrix + the F2 import pass-through + the F3 result-`store` field + the F4 IPC dir injection); the TestWriter writes `tests/unit-ms2-store-wiring.test.ts` from the spec ALONE (est. 28–36 tests) and must NOT touch `src/`; the Implementer then lands the least code in `src/main/rag-store-directory.ts` (NEW) + `src/main/main.ts` + `src/main/mcp-server.ts` (+ the `edit-ops.ts` context plumbing) — mind the §5.6 execution-order staging pins (the F2 pass-through byte-equals the 2-arg call until U-MS4's optional parameter exists; the F4 dir injection's end-to-end IPC row completes at U-MS5) and the §5.9 byte-equality red matrix; U-MS1's module (`src/main/rag-store-registry.ts`) is the consumed dependency — its F-MS1-15(c) downstream pin (the directory stays Map-keyed by name) is a U-MS2 conformance requirement.
+**U-MS4 delegation notes (the NEXT delegation — U-MS4, the store-id prefixing at the import minting seam):** the spec is `docs/specs/unit-ms4-id-prefixing.md` (the `importMarkdownCorpus` optional 3rd param `store?: ImportStoreContext` `{ name, isDefault, reservedNames? }`; the A1 resolution (a) — the default store's import seam REJECTS a documentId equal to any registered non-default store name with the byte-pinned message `markdown import: documentId collides with a registered store name: <id>`; the FOUR id-minting-site census in `markdown-parse.ts` incl. the edge-id site `:448`; the per-store path resolution `resolve(corpusRoot, file)` at `markdown-import.ts:84`; the Unit T supersession of the old relative-path rule); the TestWriter writes `tests/unit-ms4-id-prefixing.test.ts` from the spec ALONE (est. 12–16 tests, the spec's §5.10 notes the count supersedes the review's estimate) and must NOT touch `src/`; the Implementer then lands the least code in `src/main/markdown-import.ts` (+ the store-name param; `markdown-parse.ts` is NOT changed — the prefix is applied to the documentId INPUT, not inside the parser); the F2 staging handoff: U-MS2's wired import call (`mcp-server.ts:529`) currently passes 2 args — U-MS4 adds the optional 3rd `ImportStoreContext` and U-MS2's §5.6 pass-through becomes active (the U-MS2 test 56 staged red flips green HERE); the default store's import output stays BYTE-EQUAL to today (A4); the A1 corner (a default-store document whose basename equals a registered store name) per the pinned resolution (a).
+
 ## OPEN
+
+**Multi-document store config — PROPOSAL GATE COMPLETE (PROCEED-WITH-AMENDMENTS), USER GO-AHEAD GIVEN; SPEC GATE COMPLETE (2026-09-05 — see the CURRENT WORK block); the per-unit cycles are RUNNING: U-MS1's and U-MS2's cycles are COMPLETE through their doc-review passes, U-MS4's TestWriter red is next (2026-09-05).** Feature request
+`docs/feature-requests/multi-document-store-config.md` (the Agent Harness bulk-research dogfooding driver: per-run corpora must not mix with the
+main knowledge base in the single store). **Gate outcome:** validity VALID-WITH-AMENDMENTS → critique UNSOUND-as-written (the literal five-ask
+package is rejected — per-store embedders would destroy other stores' vector-cache entries via the single-tuple prune contract [B1], per-store
+embedder boot contradicts the §5.12 failure-class-2 sync warm-up [B2], cross-store fan-out collides on deterministically-minted node ids with
+corpus-relative BM25 scores [B3/B4]) → architecture PROCEED (Alternative B) → change-analysis **PROCEED-WITH-AMENDMENTS**. **RATIFIED SHAPE (user go-ahead 2026-09-05): the Phase-1 slice** — a NEW pure registry module `src/main/rag-store-registry.ts` + server-side registry file
+`provident-rag-stores.json` (NOT in OperatorSettings), implicit `{name:'main', default:true}` entry synthesized at boot mapping to the legacy
+`provident-rag.json` (zero-config byte-equal), optional `store` argument on all 12 `rag.*`/`edit.*` tools resolved FIRST with fail-loud
+no-enumeration errors, N store instances + N lexical engines, per-store import roots (relative paths resolve against the addressed store's
+`corpusRoot`), non-default-store `<name>:` id prefixing at the import minting seam, REQUIRED `store` qualifier on `rag-store-changed` broadcasts
++ host-side foreign-store drop, a read-only provident-authored settings listing, and NO store-census MCP tool. **Phase-2 non-goals** (parked in
+`docs/pending.md` with pinned seams): per-store embedder configs + per-store cache files + N boot controllers; cross-store `stores:"all"` fan-out;
+registry hot-apply/removal/rename; per-store RBAC; root-allowlist base; scratch-store promotion. **Amendments A1–A10 bind the spec** —
+notably A1 (the `<name>:` prefix-namespace hole at the node-id level, `markdown-parse.ts:444,565`), A4 (the zero-config byte-equality table as
+binding acceptance criteria, the ONE intentional delta being the broadcast/result `store:'main'` field), A8 (the stale `mcp-endpoint.md` §6.2
+group table must be reconciled in the per-unit doc reviews). Full record + unit decomposition + risk register + cost estimate:
+`docs/specs/multi-document-store-config-review.md`. Decision rows LANDED in `docs/decisions.md` (2026-09-05).
 
 **Vector-mode (local ollama) boot fix — the vector-boot proposal COMPLETE (2026-09-05):** DIAGNOSED → immediate remediation LANDED → four-agent proposal gate COMPLETE (PROCEED-WITH-AMENDMENTS) → user go-ahead GIVEN (cache-inclusive variant, 2026-09-05) → spec amendment LANDED (§5.12/§5.13) → **all four units LANDED per gates 2–9 — W1 boot model, W2 batch seam, W3 failure policy, W4 cache (each its own red→green→adversarial→blind-greens→doc-review cycle; see the Unit W1–W4 DONE rows below) — plus the USER-DIRECTED W5 FOLLOW-UP LANDED (2026-09-05, "live upload should also update the cache"; see the Unit W5 DONE row below): live uploads now update the cache. The user-approved cache-inclusive design is fully in place — "vectorize only if the vector is not found": the persisted cache loads at boot, hits adopt with NO HTTP call, only the misses embed; the final trio is 2176 pass / 38 skip (107 files), typecheck + build clean. Every gate (RCA-1..RCA-6) ran per unit; the W4 doc review recorded the proposal's gate statement in `archive/reviews/2026-09-05-unit-f-w4-doc-review.md`, and the W5 doc review (RCA-6, the closing pass of the follow-up) the follow-up's FINAL GATE STATEMENT in `archive/reviews/2026-09-05-unit-f-w5-doc-review.md`. No OPEN work remains for this proposal — this entry is retained as the completed-slice narrative + pointer to the DONE rows (P4 dist hygiene stays parked in `docs/pending.md`).**
 User report: "Issue with attempting to use local Ollama as embedding provider."
@@ -308,6 +350,109 @@ in the doc-nav pane, and `get_markdown` carries the same content. Trio green
 _(none — Units A–T are implemented.)_
 
 ## DONE
+
+- **Unit U-MS2 — the store-instance wiring + the `store` selector on the 12
+  MCP tools (the multi-store Phase-1 slice's second unit) (2026-09-05).** Spec
+  `docs/specs/unit-ms2-store-wiring.md`. Landed: the NEW pure module
+  `src/main/rag-store-directory.ts` (`resolveStoreArg` / `buildRagStoreDirectory`
+  / `storeLoadStatus` + 6 interfaces; the byte-pinned M1/M2/M3 + the one-default
+  guard + the F-MS2-7 kind guard; the F8 explicit cache path; the A6/R10
+  lexical-only non-defaults; the D8 read-once; Map-keyed entries per U-MS1's
+  F-MS1-15(c) pin), the `main.ts` registry load at the ~116-120 position
+  (fail-soft implicit / fail-loud abort before the window) + the default-entry
+  bindings + `ragStores: plan.directory` in the server options, the
+  `mcp-server.ts` 12 inputSchemas each gaining `store: z.string().optional()`
+  + the A5 description amendment (the configured-corpusRoot qualification) +
+  the resolution-first ordering + the 2-arg `onStoreChanged(payload, storeName)`
+  widening + the F4 `handleRagQueryIpc` dir injection, and the
+  `RagQueryResult.store` required field (the F3 stamp at the ONE shared handler
+  seam — `RetrievalResult` gains NO field, the F-MS2-4 erratum). **TestWriter
+  red: 57 authored, suite-load failure** (module does not exist) →
+  **Implementer green: 56/57 + 1 staged red** (test 56 = U-MS4's F2 prefix pin)
+  + 2 supervisor repairs to TestWriter defects (test 08's malformed-dir variant,
+  test 16's mkdir). **Adversarial pass (RCA-3): F-MS2-1..11** (1 HIGH: F-MS2-1
+  the registry-file self-collision — a store named `stores` derives its path
+  ONTO `provident-rag-stores.json`, the first write destroys the registry and
+  the next boot fail-loud locks the app out; 3 MEDIUM: F-MS2-2 FIFO/device
+  store-file hang, F-MS2-3 symlink/hardlink aliasing, F-MS2-4 the F3 type-level
+  drift; 3 LOW; 4 INFO) — host findings FIXED + regression-tested red-first
+  (58/59/60/61 + test 20 red; test 63 HUNG pre-fix — the F-MS2-2 defect
+  evidence) → **green 62 pass / 1 staged red** (`tests/unit-ms2-store-wiring.test.ts`
+  63 tests; F14 added to U-MS1's module + the isFile probe in `rag-store.ts`;
+  registered in spec §3a with the F-MS2-10/11 transcription completed at the
+  doc review). **Blind-greens (RCA-4):**
+  `docs/specs/unit-ms2-store-wiring-greens.md` — 46 rows: **43 PASS / 0 FAIL /
+  3 DEFERRED** (S39 U-MS4's staged red, S40 U-MS5's end-to-end row, S42 the
+  SDK-seam byte rows deferred to the live battery); the mkfifo sub-case
+  returned in ~0ms (the F-MS2-2 hang hardened). **Live-scenario gate: PARKED**
+  — `docs/specs/unit-ms2-store-wiring-live-pending-battery.md` (surface-absence:
+  the app is up but serving the pre-U-MS2 build — no `store` arg live, the old
+  A5 description, the negative control silently ignores the arg; 30 live +
+  16 not-live = 46; revisit = the operator restarts with the rebuilt dist, which
+  also unlocks the U-MS1 battery). **Proofreader pass:** the `handleRagQueryIpc`
+  param-order drift fixed (greens recorded `(store, engine, …)`, the module is
+  `(engine, store, …)`), the F3-erratum residuals, the A5 consistency, the
+  census updates, the three decision rows annotated LANDED. **Doc-review pass
+  (RCA-6):** `archive/reviews/2026-09-05-unit-ms2-doc-review.md` (spec↔code
+  re-verified incl. the byte census; §3a completed; the F-MS2-3 symlink-aliasing
+  limitation landed as a `docs/pending.md` DEFERRED row; the IMPORT-ROOT-PER-STORE
+  A5 tail + the U-MS1 greens/battery F1–F14 re-census fixed; the U-MS3/U-MS5
+  phantom-`RetrievalResult`-field cites corrected). **Trio: 2301 pass / 38 skip
+  (109 files), typecheck clean, build clean** (baseline 2239 + 62 U-MS2 tests).
+  Decisions MULTI-STORE-REGISTRY / SINGLE-WRITER-STORE-PER-STORE /
+  ENGINE-PER-STORE (LANDED annotations) in `docs/decisions.md`.
+
+- **Unit U-MS1 — the pure store-registry module (the multi-store Phase-1
+  slice's first unit) (2026-09-05).** Spec `docs/specs/unit-ms1-store-registry.md`
+  (the spec gate: five specs written per-unit, reviewer loop THREE iterations
+  to empty — 13 findings → 8 → 3, all fixed; full record in the CURRENT WORK
+  section). Landed: the NEW pure module `src/main/rag-store-registry.ts` — the
+  registry load/sanitize/validate surface (`implicitRegistry` /
+  `resolveRegistry` / `loadRagStoreRegistry` + the frozen
+  `RAG_STORE_NAME_PATTERN` + 6 exported types; internals `jsonOf` +
+  `derivePersistenceFile` + `CASE_INSENSITIVE_FS_PLATFORMS`), the D2
+  validation rules (charset `/^[a-z0-9][a-z0-9_-]{0,63}$/`, unique names,
+  exactly one `default`, derived∪explicit persistence-file collisions,
+  absolute paths, the Phase-1 embedder rejection with the verbatim D2
+  message), the MIGRATION-LEGACY-PATH implicit `{name:'main', default:true}`
+  entry (legacy `provident-rag.json`, synthesized at boot, never written
+  back), the fail-soft/fail-loud boot split (corrupt file ⇒ implicit entry +
+  the pinned LOG-1 line; invalid registry ⇒ 13 byte-pinned fail-loud
+  messages F1–F13 + 2 caller guards), and the adversarial hardenings (BOM
+  strip, the `statSync().isFile()` non-regular-file probe, the
+  platform-conditional casefolded collision key, the total `jsonOf` with the
+  200-char render cap, the frozen regex export, NUL-byte path rejection).
+  **TestWriter red: 46 failing** (suite-load failure — module
+  `src/main/rag-store-registry.ts` does not exist; all H1–H14/FS1–FS30/F1–F13/B1–B5
+  ids authored) → **Implementer green: 46/46** (one SPEC-CONFLICT escape
+  during green: the spec's FS20–FS24 example rows omitted the `default` flag,
+  contradicting the pinned C-before-D order — Architect ruling option A: the
+  five example rows amended, tests 29–32 re-transcribed, code unchanged).
+  **Adversarial pass (RCA-3): F-MS1-1..15** (2 MEDIUM: F-MS1-1 BOM⇒fail-soft
+  wrong-store, F-MS1-2 lexical collision normalization misses case-FS/symlink
+  identity; 6 LOW; 7 INFO) — host findings FIXED + regression-tested
+  red-first 10 failing → **green 63/63** (`tests/unit-ms1-store-registry.test.ts`
+  63 tests; registered in spec §3a with the F-MS1-9/11..15 transcription
+  completed at the doc review). **Blind-greens (RCA-4):**
+  `docs/specs/unit-ms1-store-registry-greens.md` — 35 scenarios: as recorded
+  34 PASS / 1 FAIL (F-BLIND-MS1-1 — the BigInt got-clause expectation), the
+  FAIL RECONCILED as conformant (`String(1n)` === `'1'`, ECMAScript
+  BigInt::ToString; the drift was the greens expectation, not the module) →
+  **35 PASS / 0 FAIL / 0 DEFERRED**. **Live-scenario gate: PARKED** —
+  `docs/specs/unit-ms1-store-registry-live-pending-battery.md` (the V1
+  pattern: the module is boot-time dead code until U-MS2 wires it; 30 live
+  classes + 5 permanently-internal, 0 run live; revisit = U-MS2's wiring
+  lands). **Proofreader pass:** census/section-count staleness fixed
+  (FS1–FS32, LANDED: 63 tests), the FS3/FS4 mechanism notes, the §5.4 BigInt
+  clarification, the MULTI-STORE-REGISTRY decision row annotated LANDED.
+  **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-05-unit-ms1-doc-review.md` (spec↔code re-verified
+  incl. the full 15-message byte census; §3a completed; §5.9's four decision
+  rows reconciled INTO the single MULTI-STORE-REGISTRY row; trackers
+  reconciled; the battery census corrected 30+5=35; the two test-file comment
+  drifts fixed by the supervisor). **Trio: 2239 pass / 38 skip (108 files),
+  typecheck clean, build clean** (baseline 2176 + 63 U-MS1 tests). Decisions
+  MULTI-STORE-REGISTRY (LANDED annotation) in `docs/decisions.md`.
 
 - **Unit W5 — the live cache write-through (the promoted embedder's live
   embeds route through the SAME persisted cache) (2026-09-05).** The

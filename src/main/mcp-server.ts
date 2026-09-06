@@ -32,6 +32,7 @@ import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
 import type { RetrievalEngine } from './retrieval.js'
+import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -125,14 +126,36 @@ export function handleModuleTool(store: ModuleStore | null, name: string, args: 
  *  uses that maintained engine (index reconciled on `rag-store-changed`) and
  *  does NOT rebuild the whole index per call. A fresh engine is built ONLY as a
  *  direct-call fallback (when no engine is passed — unit tests / non-wired
- *  callers). */
+ *  callers).
+ *
+ *  U-MS2 (docs/specs/unit-ms2-store-wiring.md §5.3) — the OPTIONAL `store`
+ *  selector resolved FIRST (R1): the resolution call sits between the
+ *  (unchanged) null-store guard and the per-tool `switch`, so an unknown
+ *  `store` fails before ANY tool-specific validation throw and before ANY
+ *  store method call / side effect. With a directory injected it is the SINGLE
+ *  SOURCE OF TRUTH: the passed `store`/`engine` params are IGNORED (they exist
+ *  for the legacy directory-less path and the wired server passes the default
+ *  entry's objects anyway). `dir == null` (the legacy sentinel) keeps today's
+ *  byte-equal behavior. The `rag.query` result additionally carries the F3
+ *  additive `store` field — stamped HERE, the ONE stamp point shared by the
+ *  MCP `rag.query` tool and the `rag-query` IPC (both route through this
+ *  handler — MCP-UI-EQUIVALENCE): the addressed entry's registry name, or ''
+ *  for the legacy directory-less sentinel (§5.9). */
 export async function handleRagTool(
   store: RagStore | null,
   name: string,
   args: Record<string, unknown>,
   engine?: RetrievalEngine | null,
+  dir?: RagStoreDirectory | null,
 ): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
+  // U-MS2 §5.3 step 2 — resolve FIRST (before every tool-specific validation
+  // throw and before ANY store method call / side effect — R1).
+  const ref = resolveStoreArg(name, args?.store, dir)
+  // §5.3 step 3 — the addressed entry: with a directory injected it is the
+  // single source of truth (M3 already guaranteed the default exists).
+  const entry = ref === null ? null : dir!.entries.get(ref.name)!
+  const target = entry ? entry.store : store
   switch (name) {
     case 'rag.query': {
       // Unit E — the retrieval entry point. Validates the zod input
@@ -145,8 +168,17 @@ export async function handleRagTool(
       if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1) {
         throw new Error('rag.query: topK must be a positive integer')
       }
-      const e = engine ?? createRetrieval(store, createLexicalEmbedder(createLexicalIndex(store.listNodes())))
-      return e.query(query, { k: topK })
+      // U-MS2 §5.3 engine selection: with a directory injected the engine is
+      // the ENTRY's engine — NEVER the per-call createRetrieval fallback (the
+      // F1 no-rebuild property, per store). With `dir == null` today's
+      // `engine ?? createRetrieval(...)` fallback is UNCHANGED.
+      const e = entry ? entry.engine : (engine ?? createRetrieval(target, createLexicalEmbedder(createLexicalIndex(target.listNodes()))))
+      // U-MS2 §5.9 F3 — the ONE additive query-RESULT field (`store`), stamped
+      // HERE at the shared-handler seam (the engine's RetrievalResult is
+      // store-name-blind; the public tool result carries the addressed entry's
+      // registry name, '' for the legacy directory-less sentinel — §5.9).
+      const raw = await e.query(query, { k: topK })
+      return { ...raw, store: ref?.name ?? '' }
     }
     case 'rag.get_document': {
       // L4 — the document-subtree scoping (the tool description's "The
@@ -159,15 +191,15 @@ export async function handleRagTool(
       // (amendment 6, §5.3).
       const documentId = typeof args.documentId === 'string' ? args.documentId : ''
       if (documentId === '') throw new Error('rag.get_document: documentId required')
-      const subgraph = computeDocumentSubgraph(store, documentId)
-      const nodes = store.listNodes().filter((n) => subgraph.docNodeIds.has(n.id))
+      const subgraph = computeDocumentSubgraph(target, documentId)
+      const nodes = target.listNodes().filter((n) => subgraph.docNodeIds.has(n.id))
       return { documentId, nodes, edges: subgraph.edges }
     }
     case 'rag.list_nodes':
-      return store.listNodes().map((n) => ({ id: n.id, type: n.type, content: n.content.slice(0, 80), ownedNodeIds: n.ownedNodeIds.length }))
+      return target.listNodes().map((n) => ({ id: n.id, type: n.type, content: n.content.slice(0, 80), ownedNodeIds: n.ownedNodeIds.length }))
     case 'rag.get_edges': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : undefined
-      const edges = store.listEdges()
+      const edges = target.listEdges()
       if (nodeId === undefined) return edges
       return edges.filter((e) => e.source === nodeId || e.target === nodeId)
     }
@@ -178,7 +210,7 @@ export async function handleRagTool(
       // `BacklinkResult` (JSON-serializable).
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
-      return enumerateLinks(store, nodeId)
+      return enumerateLinks(target, nodeId)
     }
     default:
       throw new Error(`unknown rag tool: ${name}`)
@@ -191,16 +223,27 @@ export async function handleRagTool(
  *  (MCP/UI equivalence — a BINDING constraint). Returns the engine's
  *  `RetrievalResult`; on an invalid query/topK it throws the same documented
  *  `rag.query` fail-states (so the IPC rejects identically to the MCP tool).
- *  Exported for direct unit testing of the equivalence. */
+ *  Exported for direct unit testing of the equivalence.
+ *
+ *  U-MS2 §5.4 step 4 (F4) — the IPC path gains the SAME directory injection as
+ *  the MCP path: the trailing optional `dir` param is forwarded into
+ *  `handleRagTool`, so the resolver behaves IDENTICALLY on both surfaces
+ *  (MCP-UI-EQUIVALENCE). At U-MS2 the IPC payload carries no `store` field ⇒
+ *  the resolver's omitted ⇒ default-entry rule (S1) applies unchanged
+ *  (byte-equal); once U-MS5's additive `RagQueryPayload.store` field exists, a
+ *  forwarded store resolves through the SAME `resolveStoreArg` and an unknown
+ *  forwarded store FAILS LOUD here too (M2/A9). The payload's `store` field
+ *  itself is U-MS5's — NOT added by this unit. */
 export async function handleRagQueryIpc(
   engine: RetrievalEngine | null,
   store: RagStore | null,
   payload: { query?: unknown; topK?: unknown },
+  dir?: RagStoreDirectory | null,
 ): Promise<unknown> {
   return handleRagTool(store, 'rag.query', {
     query: payload?.query,
     topK: payload?.topK,
-  }, engine)
+  }, engine, dir)
 }
 
 /** Unit G §5.4/§8.2 — the UI backlink path. The main-process `rag-backlinks`
@@ -361,15 +404,49 @@ export interface RagStoreChangedPayload {
  *  and returns the op's JSON result. It does NOT reimplement the ops inline.
  *  After a successful mutation it invokes `onStoreChanged` (the §5.1.9
  *  re-traversal trigger), which the caller wires to a `rag-store-changed`
- *  broadcast to the renderer. */
+ *  broadcast to the renderer.
+ *
+ *  U-MS2 (docs/specs/unit-ms2-store-wiring.md §5.3/§5.5) — the OPTIONAL `store`
+ *  selector resolved FIRST (R1, identical to `handleRagTool`), and the
+ *  `onStoreChanged` callback is WIDENED to `(payload, storeName)`: every
+ *  successful-mutation callback invocation receives the RESOLVED store's name
+ *  (the addressed entry's registry name; '' for the legacy directory-less
+ *  sentinel — §5.3 step 5). Backward-compatible: existing single-arg callbacks
+ *  still compile and run (the extra argument is ignored). The ADDRESSED store's
+ *  store instance serves the call (SINGLE-WRITER-STORE-PER-STORE); with a
+ *  directory injected it is the single source of truth (the passed `store`
+ *  param is ignored — the legacy directory-less path byte-equal). The
+ *  `edit.import_markdown` corpus root is the ADDRESSED entry's configured
+ *  `corpusRoot` — passed via the importer's EXISTING programmatic param
+ *  (markdown-import.ts:23,66 — IMPORT-ROOT-PER-STORE; the tool schema stays
+ *  `files`-only, ADV-1). The third `ImportStoreContext` pass-through argument
+ *  is U-MS2 §5.6's pinned pass-through (F2) — LIVE since U-MS4 landed the
+ *  optional parameter: the wired call passes `{ name, isDefault, reservedNames
+ *  }` byte-for-byte (reservedNames = ONLY the non-default names, U-MS4 §5.4
+ *  A1-S7); the LEGACY directory-less path passes NO third argument (the 2-ARG
+ *  form — byte-equal today). */
 export async function handleEditTool(
   store: RagStore | null,
   name: string,
   args: Record<string, unknown>,
-  onStoreChanged?: (payload: RagStoreChangedPayload) => void,
+  onStoreChanged?: (payload: RagStoreChangedPayload, storeName: string) => void,
+  dir?: RagStoreDirectory | null,
 ): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
-  const ctx = { store }
+  // U-MS2 §5.3 step 2 — resolve FIRST (before every tool-specific validation
+  // throw and before ANY store method call / mutation / broadcast — R1).
+  const ref = resolveStoreArg(name, args?.store, dir)
+  // §5.3 step 3 — the addressed entry: with a directory injected it is the
+  // single source of truth (M3 already guaranteed the default exists).
+  const entry = ref === null ? null : dir!.entries.get(ref.name)!
+  const target = entry ? entry.store : store
+  // §5.3 step 5 — the callback receives the RESOLVED name; the legacy sentinel
+  // (dir == null ⇒ ref null) passes '' (byte-equal discipline).
+  const storeName = ref?.name ?? ''
+  const ctx = { store: target }
+  const emit = (payload: RagStoreChangedPayload): void => {
+    onStoreChanged?.(payload, storeName)
+  }
   switch (name) {
     case 'edit.set_content': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
@@ -380,7 +457,7 @@ export async function handleEditTool(
       const content = args.content
       if (nodeId === '') throw new Error('edit.set_content: nodeId required')
       const result = await setContent(ctx, { nodeId, content: content as string })
-      if (result.ok) onStoreChanged?.({ kind: 'content', nodeIds: [nodeId], edgeIds: [] })
+      if (result.ok) emit({ kind: 'content', nodeIds: [nodeId], edgeIds: [] })
       return result
     }
     case 'edit.create_node': {
@@ -392,14 +469,14 @@ export async function handleEditTool(
       const parentId = typeof args.parentId === 'string' && args.parentId !== '' ? args.parentId : undefined
       const props = args.props && typeof args.props === 'object' ? (args.props as Record<string, unknown>) : undefined
       const result = await createNode(ctx, { type, content: content as string, parentId, props })
-      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [result.node.id], edgeIds: [] })
       return result
     }
     case 'edit.delete_node': {
       const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
       if (nodeId === '') throw new Error('edit.delete_node: nodeId required')
       const result = await deleteNode(ctx, { nodeId })
-      if (result.ok && result.removed) onStoreChanged?.({ kind: 'structural', nodeIds: [nodeId], edgeIds: [] })
+      if (result.ok && result.removed) emit({ kind: 'structural', nodeIds: [nodeId], edgeIds: [] })
       return result
     }
     case 'edit.split_node': {
@@ -407,7 +484,7 @@ export async function handleEditTool(
       const at = typeof args.at === 'number' ? args.at : 0
       if (nodeId === '') throw new Error('edit.split_node: nodeId required')
       const result = await splitNode(ctx, { nodeId, at })
-      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [result.nodes[0].id, result.nodes[1].id], edgeIds: [result.edge.id] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [result.nodes[0].id, result.nodes[1].id], edgeIds: [result.edge.id] })
       return result
     }
     case 'edit.merge_node': {
@@ -415,7 +492,7 @@ export async function handleEditTool(
       const targetId = typeof args.targetId === 'string' ? args.targetId : ''
       if (sourceId === '' || targetId === '') throw new Error('edit.merge_node: sourceId and targetId required')
       const result = await mergeNode(ctx, { sourceId, targetId })
-      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [sourceId, targetId], edgeIds: [] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [sourceId, targetId], edgeIds: [] })
       return result
     }
     case 'edit.set_edge': {
@@ -430,7 +507,7 @@ export async function handleEditTool(
       const order = args.order
       const documentIds = Array.isArray(args.documentIds) ? (args.documentIds as string[]).filter((x): x is string => typeof x === 'string') : undefined
       const result = await setEdge(ctx, { kind, source, target, edgeId, order: order as number | undefined, documentIds })
-      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [source, target], edgeIds: [result.edge.id] })
       return result
     }
     case 'edit.import_markdown': {
@@ -439,11 +516,30 @@ export async function handleEditTool(
       // the whole corpus via applyBatch as ONE atomic batch journal entry. A
       // domain failure returns { ok: false } (never throws). On success,
       // broadcast the re-traversal trigger. The corpus root is FIXED server-side
-      // (the project root) — it is NOT an agent-supplied argument (the
+      // (the ADDRESSED store's configured corpus root; the default store's root
+      // is its configured corpus root — the project root when unconfigured, the
+      // F-MS2-6 amended A5 wording) — it is NOT an agent-supplied argument (the
       // path-containment seam must not be defeatable by the caller).
+      // U-MS2 §5.6 — IMPORT-ROOT-PER-STORE: the addressed entry's corpusRoot
+      // flows through the importer's EXISTING programmatic param; `undefined`
+      // ⇒ the importer's `resolve(params.corpusRoot ?? process.cwd())` default
+      // (the zero-config byte-equal case). The LEGACY directory-less path
+      // passes NO corpusRoot at all (byte-equal today — the addressed store IS
+      // the default store). F2 (§5.6's pinned third argument, live since
+      // U-MS4's optional `ImportStoreContext` parameter landed): the wired call
+      // passes the context byte-for-byte — `isDefault` = whether the ADDRESSED
+      // entry is the default; `reservedNames` carries ONLY the non-default
+      // store names (U-MS4 §5.4 A1-S7: the seam takes the list as GIVEN, so
+      // the wiring must never include the default store's own name).
       const files = Array.isArray(args.files) ? (args.files as unknown[]).filter((x): x is string => typeof x === 'string') : []
-      const result = await importMarkdownCorpus(ctx, { files })
-      if (result.ok) onStoreChanged?.({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [] })
+      const result = entry
+        ? await importMarkdownCorpus(ctx, { files, corpusRoot: entry.corpusRoot }, {
+            name: entry.name,
+            isDefault: entry.name === dir!.defaultName,
+            reservedNames: [...dir!.entries.keys()].filter((n) => n !== dir!.defaultName),
+          })
+        : await importMarkdownCorpus(ctx, { files })
+      if (result.ok) emit({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [] })
       return result
     }
     default:
@@ -597,6 +693,15 @@ export interface McpServerOptions {
    *  wires `engine.onStoreChanged` into the `rag-store-changed` broadcast. The
    *  UI `rag-query` IPC uses the same engine (MCP/UI equivalence — §8.2). */
   retrievalEngine?: RetrievalEngine
+  /** U-MS2 §5.4 step 5 — the wired store directory (the N stores + N engines
+   *  built at boot). When set it is the SINGLE SOURCE OF TRUTH for the
+   *  rag./edit. tool routing: the handlers resolve the `store` selector
+   *  through it and the default entry's store/engine serve the omitted-store
+   *  calls. Wiring invariant: when `ragStores` is set, `ragStore` IS
+   *  `entries.get(defaultName).store` and `retrievalEngine` IS that entry's
+   *  engine. Backward-compatible: omitting it keeps today's single-store
+   *  legacy path byte-equal (tests/embeddings-adversarial.test.ts:104). */
+  ragStores?: RagStoreDirectory
   /** Unit I — the main-process template store. The `code.template.*` tools are
    *  handled in MAIN against this store (never routed to the renderer). Injected
    *  like `ragStore`. */
@@ -614,6 +719,9 @@ export class ProvidentMcpServer {
   private readonly router: CapabilityRouter | null
   private readonly ragStore: RagStore | null
   private readonly retrievalEngine: RetrievalEngine | null
+  /** U-MS2 §5.4 step 5 — the wired store directory (null ⇒ the legacy
+   *  single-store path). */
+  private readonly ragStores: RagStoreDirectory | null
   private readonly templateStore: TemplateStore | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
@@ -640,6 +748,7 @@ export class ProvidentMcpServer {
     this.router = opts.router ?? null
     this.ragStore = opts.ragStore ?? null
     this.retrievalEngine = opts.retrievalEngine ?? null
+    this.ragStores = opts.ragStores ?? null
     this.templateStore = opts.templateStore ?? null
   }
 
@@ -776,7 +885,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -920,7 +1029,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -939,6 +1048,7 @@ export class ProvidentMcpServer {
     engine: RetrievalEngine | null,
     templateStore: TemplateStore | null,
     gate: SecurityGate,
+    ragStores: RagStoreDirectory | null,
   ): void {
     if (allowed.includes('provident.dispatch')) {
       registered.set('provident.dispatch', server.registerTool('provident.dispatch', {
@@ -1064,18 +1174,26 @@ export class ProvidentMcpServer {
       // Unit B (docs/specs/unit-b-document-model.md §5.4) — the `rag` (read-only,
       // default-off) + `edit` (mutating, default-off) tool groups. Main-handled
       // against the RAG store; editing is NEVER a `code`-group op.
-      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional() } },
-      { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string() } },
-      { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: {} },
-      { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional() } },
-      { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string() } },
-      { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string() } },
-      { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional() } },
-      { name: 'edit.delete_node', description: 'Delete a RAG node + cascade its edges (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string() } },
-      { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number() } },
-      { name: 'edit.merge_node', description: 'Merge sourceId into targetId (structural → re-traversal). Requires edit group.', inputSchema: { sourceId: z.string(), targetId: z.string() } },
-      { name: 'edit.set_edge', description: 'Create/update a RAG edge (structural → re-traversal). order is for doc-child edges; documentIds is for doc-flow edges. Requires edit group.', inputSchema: { kind: z.string(), source: z.string(), target: z.string(), edgeId: z.string().optional(), order: z.number().optional(), documentIds: z.array(z.string()).optional() } },
-      { name: 'edit.import_markdown', description: 'Import a corpus of markdown files into the RAG store as a ONE-WAY SNAPSHOT (parse → validate doc-flow → applyBatch as ONE atomic batch journal entry). Requires edit group. The corpus root is fixed server-side (the project root) — it is NOT an agent-supplied argument.', inputSchema: { files: z.array(z.string().min(1)).min(1) } },
+      // U-MS2 §5.2 — EVERY one of the 12 inputSchemas gains the SAME trailing
+      // optional field `store: z.string().optional()` (the house `topK` mirror:
+      // lax schema + strict handler validation — resolveStoreArg enforces the
+      // byte-pinned M1/M2 fail-states). The existing fields of each schema are
+      // UNCHANGED. No new tool name, no new group, no RpcMethod change (the
+      // five-seam gate gains NOTHING — security.ts:34-45).
+      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional() } },
+      { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string(), store: z.string().optional() } },
+      { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: { store: z.string().optional() } },
+      { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional(), store: z.string().optional() } },
+      { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string(), store: z.string().optional() } },
+      { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string(), store: z.string().optional() } },
+      { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional(), store: z.string().optional() } },
+      { name: 'edit.delete_node', description: 'Delete a RAG node + cascade its edges (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), store: z.string().optional() } },
+      { name: 'edit.split_node', description: 'Split a RAG node at character offset at (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), at: z.number(), store: z.string().optional() } },
+      { name: 'edit.merge_node', description: 'Merge sourceId into targetId (structural → re-traversal). Requires edit group.', inputSchema: { sourceId: z.string(), targetId: z.string(), store: z.string().optional() } },
+      { name: 'edit.set_edge', description: 'Create/update a RAG edge (structural → re-traversal). order is for doc-child edges; documentIds is for doc-flow edges. Requires edit group.', inputSchema: { kind: z.string(), source: z.string(), target: z.string(), edgeId: z.string().optional(), order: z.number().optional(), documentIds: z.array(z.string()).optional(), store: z.string().optional() } },
+      // U-MS2 §5.2 A5 — the ONE description change (mcp-server.ts:1078): the
+      // per-store import root. The schema stays `files`-ONLY otherwise (ADV-1).
+      { name: 'edit.import_markdown', description: 'Import a corpus of markdown files into the addressed RAG store as a ONE-WAY SNAPSHOT (parse → validate doc-flow → applyBatch as ONE atomic batch journal entry). Requires edit group. The corpus root is fixed server-side per store: the addressed store\'s configured corpus root; the default store\'s root is its configured corpus root (the project root when unconfigured) — it is NOT an agent-supplied argument.', inputSchema: { files: z.array(z.string().min(1)).min(1), store: z.string().optional() } },
       // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*`
       // CRUD tools, ALL in the `code` group (default-off), main-handled against
       // the template store. `get`/`validate` are read-only; `set`/`create`/
@@ -1111,28 +1229,41 @@ export class ProvidentMcpServer {
         }
         // Unit B — the rag.*/edit.* tools are MAIN-process (the RAG store),
         // NOT routed to the renderer. Editing is NEVER a `code`-group op.
+        // U-MS2 §5.3/§5.5 — the wired directory is passed to BOTH shared
+        // handlers so the `store` selector resolves identically on the tool
+        // path (the omitted ⇒ default-entry rule applies; an unknown store
+        // fails loud BEFORE any tool-specific validation).
         if (name.startsWith('rag.')) {
           // F1 — `rag.query` uses the MAINTAINED engine (created once in main),
           // never a per-call index rebuild. ASYNC (Unit F amendment) — awaits
           // the engine's async `query`.
-          return text(await handleRagTool(ragStore, name, args, engine))
+          return text(await handleRagTool(ragStore, name, args, engine, ragStores))
         }
         if (name.startsWith('edit.')) {
           // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval
           // engine's incremental index reconcile (F1) AND broadcast the
           // `rag-store-changed` re-traversal trigger to the renderer.
-          const result = await handleEditTool(ragStore, name, args, (payload) => {
+          // U-MS2 §5.5 — the callback is widened to `(payload, storeName)` and
+          // the reconcile resolves the ADDRESSED store's engine PER CALL
+          // (D5 — ENGINE-PER-STORE): a call addressing store X reconciles ONLY
+          // X's engine (a foreign store's index is untouched). With no
+          // directory wired (the legacy single-store options), the BOUND
+          // engine reconciles exactly as today (backward-compatible —
+          // `retrievalEngine` stays a live option). The broadcast payload
+          // shape is UNCHANGED (the `store` field is U-MS3's).
+          const result = await handleEditTool(ragStore, name, args, (payload, storeName) => {
+            const reconcileEngine = ragStores ? (ragStores.entries.get(storeName)?.engine ?? null) : engine
             // F1 — the index reconcile is fire-and-forget, but a rejection
             // (e.g. the vector embedder's provider is down) MUST be caught —
             // never an unhandled rejection. The lexical index is already
             // reconciled inside the engine's `onStoreChanged` before the
             // embedder hook runs, so a hook failure only leaves the vector
             // index stale (logged), not the lexical index.
-            void engine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)?.catch((e) => {
+            void reconcileEngine?.onStoreChanged(payload.kind, payload.nodeIds, payload.edgeIds)?.catch((e) => {
               console.error('[provident-mcp] retrieval index reconcile failed:', e)
             })
             backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)
-          })
+          }, ragStores)
           return text(result)
         }
         // Unit I — the code.template.* tools are MAIN-process (the template

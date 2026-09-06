@@ -29,7 +29,7 @@
 //     createdAt preserved on update;
 //     self-referential edges rejected; prototype-pollution keys rejected;
 //     empty-string/duplicate ids rejected.
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 // The shared PURE adjacency core + `createSnapshotStore` live in the NODE-FREE
@@ -567,6 +567,23 @@ function load(path: string): {
   let cursor = 0
   let corrupt = false
   if (existsSync(path)) {
+    // F-MS2-2 — the FIFO/device probe (the F-MS1-5 registry-side precedent):
+    // a non-regular file must NEVER reach readFileSync — a FIFO would block
+    // the read forever (no writer ⇒ no EOF; the single-threaded boot hangs /
+    // OOMs). `statSync().isFile() === false` (a FIFO, a device — and a
+    // directory, whose graceful EISDIR⇒corrupt outcome is outcome-identical
+    // since the probe short-circuits it) or a THROWING stat (a raced deletion
+    // in the existsSync→stat window) takes the EXISTING corrupt-class fail-soft
+    // outcome: empty store + corrupt: true, no hang.
+    let regularFile = false
+    try {
+      regularFile = statSync(path).isFile()
+    } catch {
+      regularFile = false // a stat race behaves as non-regular ⇒ corrupt path
+    }
+    if (!regularFile) {
+      return { nodes, edges, journal, cursor, corrupt: true, quarantined }
+    }
     let parsed: unknown
     try {
       parsed = JSON.parse(readFileSync(path, 'utf8'))

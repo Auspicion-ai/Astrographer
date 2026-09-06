@@ -9,15 +9,14 @@ import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBackli
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
-import { createJsonRagStore, type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
+import { type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
 import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIpc, deriveBatchBroadcast, deriveRichCommitBroadcast } from './edit-ops.js'
 import type { RagStoreChangedPayload } from './preload.js'
-import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
-import type { RetrievalEngine } from './retrieval.js'
-import { parsePositiveIntEnv, type EmbeddingProviderConfig } from './embeddings.js'
-import { warmUpEmbeddingProvider, createVectorBootController, type VectorBootController } from './vector-boot.js'
-import { createVectorCache } from './vector-cache.js'
+import { parsePositiveIntEnv, type EmbeddingProvider, type EmbeddingProviderConfig } from './embeddings.js'
+import { warmUpEmbeddingProvider } from './vector-boot.js'
+import { loadRagStoreRegistry } from './rag-store-registry.js'
+import { buildRagStoreDirectory } from './rag-store-directory.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -113,10 +112,21 @@ async function main(): Promise<void> {
   // MCP server so dynamic module tools are registered + two-gated.
   const moduleRouter = new CapabilityRouter()
   syncModuleRouter(moduleRouter, moduleStore)
-  // Unit B — the main-process RAG store (Unit A §5.3, SOURCE-SWITCHABLE). The
-  // MCP server handles the rag.*/edit.* tools against it (never the renderer).
-  const ragStore = createJsonRagStore({
-    path: join(app.getPath('userData'), 'provident-rag.json'),
+  // U-MS2 §5.4 step 1 — the multi-store registry loads ONCE at boot (U-MS1's
+  // loader) from `join(userData, 'provident-rag-stores.json')`, at today's
+  // single-store position (main.ts:116-120 replaced). Outcomes (U-MS1's
+  // contract): file absent OR corrupt/unreadable ⇒ the fail-soft implicit
+  // entry `{ name: 'main', default: true }` (persistence
+  // `provident-rag.json`, no corpusRoot) + U-MS1's pinned log — boot
+  // CONTINUES; valid-JSON-but-invalid ⇒ the loader THROWS, propagating out of
+  // `main()` into the existing fatal path (`console.error('[provident-main]
+  // fatal:', e)` + `app.exit(1)`) BEFORE the window, before `mcp.start()`,
+  // before `vectorBoot.start()`, and before ANY store file is created or
+  // written. The registry is read exactly ONCE per boot (D8): no IPC surface
+  // below re-reads it, and a registry file changed while running is observed
+  // only after restart.
+  const registry = loadRagStoreRegistry({
+    path: join(app.getPath('userData'), 'provident-rag-stores.json'),
   })
   // Unit I — the main-process template store (docs/specs/unit-i-template.md
   // §5.2). SEPARATE from the RAG store (the template is the envelope's
@@ -132,10 +142,12 @@ async function main(): Promise<void> {
   const operatorSettingsStore = createOperatorSettingsStore({
     path: join(app.getPath('userData'), 'provident-operator-settings.json'),
   })
-  // Unit E §5.6/§5.7 — the maintained retrieval engine, created ONCE with the
-  // store + the selected embedder. F1: `rag.query` (MCP) and the `rag-query`
-  // IPC both use THIS engine; the index is reconciled incrementally on
-  // `rag-store-changed` (never rebuilt from scratch per query).
+  // Unit E §5.6/§5.7 — the maintained retrieval engines, created ONCE per
+  // store with the store + the selected embedder (U-MS2 §5.4 step 3 —
+  // ENGINE-PER-STORE, the directory's per-name entries). F1: `rag.query` (MCP)
+  // and the `rag-query` IPC both use the DEFAULT entry's engine; the index is
+  // reconciled incrementally on `rag-store-changed` (never rebuilt from
+  // scratch per query).
   // Unit F §5.7 — the embedder selection (`retrieval.embedder`): 'lexical'
   // (default) uses the lexical embedder; 'vector' uses the vector embedder
   // (created from the REQUIRED `retrieval.embeddingProvider` config). A
@@ -143,35 +155,48 @@ async function main(): Promise<void> {
   // provider-creation error propagates; the app does NOT silently fall back to
   // lexical).
   const embedderKind = retrievalEmbedderFromArgs(process.argv.slice(1))
-  let retrievalEngine: RetrievalEngine
-  // Unit F §5.12 (W1 BOOT MODEL B) — in vector mode the CONTROLLER owns engine
-  // creation: warm-up gate (ONE real embed probe; a rejection aborts boot
-  // before the window) → the born-lexical pending controller, which creates
-  // the ONE shared engine INTERNALLY and exposes it as `boot.engine` (main
-  // never calls `createRetrieval` in vector mode) → background build →
-  // reconcile → atomic one-way promotion.
-  let vectorBoot: VectorBootController | null = null
+  // U-MS2 §5.4 step 2 — the vector provider config + warm-up: UNCHANGED
+  // position and semantics (the null-config check + the ONE warm-up probe stay
+  // SYNC-BEFORE-WINDOW, for the DEFAULT store's branch only). The registry
+  // load above precedes this, so an invalid registry aborts before the
+  // embedder probe (§5.4 step 1).
+  let provider: EmbeddingProvider | null = null
   if (embedderKind === 'vector') {
     const providerConfig = embeddingProviderConfigFromEnv()
     if (!providerConfig) {
       throw new Error('retrieval.embedder: vector requires retrieval.embeddingProvider config')
     }
-    const provider = await warmUpEmbeddingProvider(providerConfig)
-    // W3 (§5.12 F-W2-3 amendment) — the production boot build is BATCHED: the
-    // controller's background build routes through createVectorIndex(nodes,
-    // provider.embed, opts.embedBatchFn) when the warmed provider exposes the
-    // batch seam (the §5.2 sequential-default expression is pinned here).
-    // W4 (§5.13 load ownership) — the persisted cache is constructed AT
-    // controller-creation time; no opts → the default
-    // join(app.getPath('userData'), 'provident-vector-cache.json') applies,
-    // so the cache is fully loaded before the background build starts.
-    const boot = createVectorBootController(ragStore, provider, { embedBatchFn: provider.embedBatch, cache: createVectorCache() })
-    retrievalEngine = boot.engine
-    vectorBoot = boot
-  } else {
-    retrievalEngine = createRetrieval(ragStore, createLexicalEmbedder(createLexicalIndex(ragStore.listNodes())))
+    provider = await warmUpEmbeddingProvider(providerConfig)
   }
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore })
+  // U-MS2 §5.4 step 3 — construct the N stores + N engines (the directory plan
+  // — the U-MS1 registry view consumed here). The DEFAULT store follows
+  // today's exact lexical/vector branch (the vector branch via the ONE
+  // plan.vectorBoot controller with the byte-equal explicit cache path);
+  // non-default stores are ALWAYS lexical in Phase 1 (A6/R10).
+  const plan = buildRagStoreDirectory(registry, {
+    userDataPath: app.getPath('userData'),
+    embedderKind,
+    provider,
+  })
+  // U-MS2 §5.4 step 4 — the DEFAULT bindings: every existing binding site
+  // below (the server options, the UI edit/batch/rich-commit reconciles, the
+  // rag-query/backlinks/doc-heads/snapshot IPCs) keeps binding the DEFAULT
+  // store's store/engine — now derived from the plan's default entry (the
+  // legacy locals' names are kept so every binding site stays byte-equal).
+  // All IPC surfaces remain DEFAULT-STORE-BOUND in Phase 1 (D9/
+  // UI-SELECTOR-DEFERRED; the RagQueryPayload.store FIELD is U-MS5's).
+  const defaultEntry = plan.directory.entries.get(plan.defaultName)
+  if (!defaultEntry) throw new Error('rag-store-directory: default store not found')
+  const ragStore = defaultEntry.store
+  const retrievalEngine = defaultEntry.engine
+  // U-MS2 §5.4 step 6 — vectorBoot is now the plan's at-most-ONE controller
+  // (the default store's — A6); the background start() + the failure-logged
+  // stay-pending behavior below are UNCHANGED.
+  const vectorBoot = plan.vectorBoot
+  // U-MS2 §5.4 step 5 — the server options gain the wired store directory
+  // (`ragStores`); `ragStore`/`retrievalEngine` stay (backward-compatible) and
+  // are the default entry's objects (the wiring invariant, §5.4 step 5).
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore, ragStores: plan.directory })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -312,9 +337,12 @@ async function main(): Promise<void> {
   // Unit E §5.7/§8.2 — the UI retrieval path. The `rag-query` IPC calls the SAME
   // maintained retrieval engine as the MCP `rag.query` tool (MCP/UI
   // equivalence — a BINDING constraint). The renderer never computes retrieval
-  // itself.
+  // itself. U-MS2 §5.4 step 4 (F4) — the SAME directory injection as the MCP
+  // path: the resolver behaves IDENTICALLY on both surfaces (at U-MS2 the
+  // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
+  // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK })
+    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK }, plan.directory)
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the
