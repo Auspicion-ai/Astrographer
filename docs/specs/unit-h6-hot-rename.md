@@ -1,28 +1,32 @@
 # Spec — Unit U-H6: Hot-Rename — the DRAIN-THEN-TEARDOWN rename (`hotRename(from, to)`) on the runtime controller
 
-> **STATE (2026-09-08): U-H6 IS A SPEC AWAITING THE §7 ARCHITECT RULING — NOT
-> YET LANDED.** This document is the exhaustive behavior contract for U-H6.
-> The §7 design questions (below) are RESOLVED PROVISIONALLY and MUST be
-> arbitrated CONFIRMED by the Architect BEFORE the TestWriter derives the red set.
-> The two genuine either/or decisions are **Q1** (the `hotRename` surface + the
-> drain-teardown home — reuse `rag-store-remove.ts` `drainAndReleaseEntry`
-> directly vs a NEW rename module) and **Q2** (the D4 no-ids precondition —
-> inherit `R-rename-ids-present` from the underlying `hotApply({kind:'rename'})`
-> vs re-inspect at the `hotRename` level). Q3/Q4 are confirmations of the
-> recommended reading (mirror of the U-H4 Q2/Q3/Q4 ruling). The current landed
-> baseline this unit builds on: U-H1 (write module incl. `renameRegistryStore` +
-> the `W-rename-default`/`W-rename-target-exists`/`W-rename-unknown-from`
-> byte-pinned rejections + the D4 no-persisted-ids doc), U-H2a (runtime
-> controller with the `hotApply({kind:'rename'})` REBUILD path + the D4
-> `R-rename-ids-present` inspect), U-H2b (closure rewiring), U-H3 (confirmatory),
-> U-H5 (teardown primitives + `inFlight()`), U-H4 (hot-remove — the
-> drain-then-teardown `hotRemove` + the `rag-store-remove.ts` orchestration
-> module). Execution order: U-H1 → U-H2 (a+b) → U-H3 → U-H5 → **U-H4 (LANDED)** →
-> **U-H6 (this — hot-rename, NEXT)** → U-H7 (default reassignment) → U-H8
-> (operator-UI editor).**
+> **STATE (2026-09-08): U-H6 IS LANDED — the drain-then-teardown rename is
+> implemented, tested (20/20 via `tests/unit-h6-hot-rename.test.ts`), adversarially
+> checked, blind-greens-green, and doc-reviewed.** This document is the LANDED
+> behavior contract for U-H6. The §7 design questions are RESOLVED and arbitrated
+> CONFIRMED by the Architect (see §7, below) and the TestWriter red set RAN against
+> that ruling (§5.9). The two genuine either/or decisions were **Q1** (the
+> `hotRename` surface + the drain-teardown home — REUSE `rag-store-remove.ts`
+> `drainAndReleaseEntry` directly, NOT a new rename module) and **Q2** (the D4
+> no-ids precondition — INHERIT `R-rename-ids-present` from the underlying
+> `hotApply({kind:'rename'})`, NOT a re-inspect at the `hotRename` level);
+> Q3/Q4 were confirmations of the recommended reading (mirror of the U-H4
+> Q2/Q3/Q4 ruling). The LANDED baseline this unit built on: U-H1 (write module
+> incl. `renameRegistryStore` + the `W-rename-default`/`W-rename-target-exists`/
+> `W-rename-unknown-from` byte-pinned rejections + the D4 no-persisted-ids doc),
+> U-H2a (runtime controller with the `hotApply({kind:'rename'})` REBUILD path +
+> the D4 `R-rename-ids-present` inspect), U-H2b (closure rewiring), U-H3
+> (confirmatory), U-H5 (teardown primitives + `inFlight()`), U-H4 (hot-remove —
+> the drain-then-teardown `hotRemove` + the `rag-store-remove.ts` orchestration
+> module). Execution order: U-H1 → U-H2 (a+b) → U-H3 → U-H5 → U-H4 (LANDED) →
+> **U-H6 (hot-rename — LANDED, this unit)** → **U-H7 (default reassignment —
+> NEXT, untouched)** → U-H8 (operator-UI editor).**
 
-- **Status: SPEC (2026-09-08 — awaiting the §7 Architect ruling; the
-  TestWriter runs only AFTER the ruling is arbitrated CONFIRMED)** — the
+- **Status: LANDED (2026-09-08 — the §7 Architect ruling is CONFIRMED; the
+  drain-then-teardown rename is implemented: 20/20 via
+  `tests/unit-h6-hot-rename.test.ts`; the U-H4/U-H2/U-H5 co-existence + pin
+  suites stay green 20/56/22; full trio **2727 pass / 41 skip**, typecheck +
+  build clean)** — the
   registry hot-apply/removal/rename slice, Unit U-H6 (hot-rename, the
   drain-then-teardown upgrade of the rename path). Gate reference:
   `docs/specs/registry-hot-apply-review.md` §2 **D4** (rename semantics —
@@ -79,20 +83,21 @@
   NOT change the vector boot (a renamed non-default store is ALWAYS lexical,
   A6/R10), and does NOT change any page design.
 
-- **TestWriter contract (PENDING — the §7 ruling must precede the red run):**
-  every method/signature, return shape, throw pattern, happy-path state, and
-  fail-state below is derivable from this spec ALONE (after the §7 ruling). The
-  TestWriter writes the U-H6 red set into the SpecWriter-pinned file
-  `tests/unit-h6-hot-rename.test.ts` (§5.9) in the house red-first order
-  (RCA-1), reporting the failing set BEFORE the Implementer goes green. **The
-  red set asserts the NEW orchestration surface does NOT exist on the
-  pre-U-H6 code: `RagStoreRuntimeController` has NO `hotRename` (`typeof
-  controller.hotRename === 'undefined'`), and the existing
+- **TestWriter contract (LANDED — the red set RAN after the §7 ruling was
+  arbitrated CONFIRMED, and the suite is now green):** every method/signature,
+  return shape, throw pattern, happy-path state, and fail-state below is
+  derivable from this spec ALONE (post-ruling). The TestWriter wrote the U-H6
+  red set into the SpecWriter-pinned file `tests/unit-h6-hot-rename.test.ts`
+  (§5.9) in the house red-first order (RCA-1), reporting the failing set BEFORE
+  the Implementer went green. The red set asserted the NEW orchestration surface
+  did NOT exist on the pre-U-H6 code: `RagStoreRuntimeController` had NO
+  `hotRename` (`typeof controller.hotRename === 'undefined'`), and the existing
   `hotApply({kind:'rename'})` REBUILDS + ORPHANS — it does NOT drain/teardown,
   so the H1–H6 bodies that assert teardown/strand/unregister each FAIL on the
   absent `hotRename`. The suite LOADS (the reused `rag-store-remove.js` exists
   — U-H4 landed it), so the red is the method-absence marker + the failing
-  behavior bodies, NOT a suite-load failure (§5.9).**
+  behavior bodies, NOT a suite-load failure (§5.9). Implementer green: 20/20
+  (14 new tests + the 6 U-H4/U-H2/U-H5 pins).**
 
 ---
 
@@ -259,10 +264,44 @@ landed code):**
   page-design change** (D6/A-P2-5/§5.11); NO new module is authored
   (`rag-store-remove.ts` is REUSED, not forked or aliased).
 
-**Adversarial findings (registered AFTER the U-H6 green — to be appended here
-by the adversarial pass; each HOST finding fixed + regression-tested in
-`tests/unit-h6-hot-rename.test.ts` §3a; an engine finding → defects.md/HANDOFF.md).**
-*Placeholder — no findings yet (the pass has not run; the unit is pre-ruling).*
+**Adversarial findings (registered AFTER the U-H6 green).** The read-only RCA-3
+adversarial pass ran on the LANDED U-H6 code and found **NO HOST DEFECTS** — every
+pre-registered probe (§3a above) held on the landed implementation, and **NO
+package/upstream (provident-ssr) findings** surfaced. Three INFO observations
+were recorded (all HOST/scoped-out — no code change, no regression test, no
+`docs/defects.md`/`docs/HANDOFF.md` item):
+
+- **INFO-H6-1 — `hotRename(from, from)` (`from === to`):** the write module's
+  guards check `W-rename-unknown-from` BEFORE `W-rename-target-exists`, and a
+  `to` equal to a PRESENT `from` falls to the target-exists branch. An equal
+  from/to pair therefore rejects with **W-rename-target-exists**
+  (`rag-store-registry-write: store '<from>' cannot be renamed to '<to>':
+  '<to>' already exists`) — consistent with the D3/NO-OP-ON-ABSENT contract
+  (a rename is never a silent no-op at the write level). **Untested edge** (no
+  U-H6 test pins the equal-pair case, and none is required — the behavior is
+  the already-pinned target-exists branch, §5.7 F3). No fix.
+- **INFO-H6-2 — a whitespace-only `from`/`to` (e.g. `'   '`):** a whitespace
+  name is a NON-EMPTY string, so it passes the top-of-method `from required` /
+  `to required` guards and routes through `hotApply` → the write module. This is
+  SPEC-CONFORMANT MODULE-WIDE (the U-H1 write module + the U-H4/U-H6 arg guards
+  treat whitespace-only names as valid non-empty strings, consistent with §5.3
+  step 1 and the U-H4 F-H4-5 "unknown non-empty string" contract). A whitespace
+  `from` → W-rename-unknown-from for the literal whitespace name; a whitespace
+  `to` → W-rename-target-exists. **DO NOT CHANGE** — tightening here would
+  diverge from the write module's established semantics. No fix.
+- **INFO-H6-3 — the survivor-rebuild orphan churn on a multi-store rename:** when
+  >1 non-default store exists, the U-H2 coarse rebuild path re-constructs + re-
+  orphans the surviving non-defaults (their object identity may change) while
+  U-H6 drains/torn-down ONLY the renamed-away `from` orphan. This is the PRE-
+  EXISTING, documented U-H2 behavior (§5.11 / the §3 table "survivor-rebuild
+  orphan churn" row) — **out of U-H6's single-pair scope** (unchanged behavior,
+  H4 passes as pinned). No fix.
+
+All three are consistent with the pinned §4/§5 contract; U-H6 lands with **no
+host defects and no engine findings**. The greens battery's throw-mode
+reconciliation (a torn-down engine's `query()` throws synchronously while the
+async store `putNode` surfaces as a rejection — see §5.6/§5.7 note) is recorded
+for the proofreader gate.
 
 ### 3b. Proposal-review findings folded in
 
@@ -288,10 +327,11 @@ From `docs/specs/registry-hot-apply-review.md`:
 
 ## 4. Design decisions pinned by this spec
 
-> **§7 note:** all decisions below are PROVISIONALLY resolved; §7 Q1–Q4 must be
-> arbitrated CONFIRMED before the TestWriter derives the red set. The two
-> genuine either/or items are Q1 (the `hotRename` surface + the
-> drain-teardown home + N1) and Q2 (the D4 precondition inheritance).
+> **§7 note:** all decisions below are PROVISIONALLY resolved AND arbitrated
+> CONFIRMED (see §7, the Architect ruling) before the TestWriter derived the red
+> set. The two genuine either/or items were Q1 (the `hotRename` surface + the
+> drain-teardown home + N1) and Q2 (the D4 precondition inheritance); Q3/Q4
+> confirmed the recommended reading.
 
 - **RENAME-ORCHESTRATION-HOME (new — §7 Q1, resolve to REUSE the U-H4 module
   + a controller method, NOT a new module):** the drain-then-teardown
@@ -649,6 +689,16 @@ exists for the strand byte-compare AND the D4 inspect passes).
    immediately — the RENAME is idempotent at the drain/teardown layer even
    though the WRITE is not (W-rename-unknown-from for a repeat `from`, §5.7 F2).
 
+> **Sync-vs-async fail-loud note (for a future blind-test writer):** a TORN-DOWN
+> engine's `query()` THROWS synchronously, while a torn-down store's `putNode`
+> (an `async` function) surfaces its guard-throw as a REJECTION. Assert the
+> former with a synchronous `toThrow` wrapper and the latter with `.rejects` —
+> both byte-pin `retrieval engine: torn down` / `rag store: torn down`
+> (§5.6 H2 / §5.7 F7). Cross-reference the **U-H5** spec (`unit-h5-teardown.md`
+> §5, the byte-pinned torn-down messages + the F8 "a mid-query teardown is a
+> caller error" row) and `retrieval.ts:668` / `rag-store.ts:735`; do not re-derive
+> the throw-mode.
+
 ### 5.7 U-H6 fail-states (TestWriter red set — documented fail-states)
 
 Outcomes: **fail-loud** = the propagated `Error`; **live-untouched** =
@@ -800,7 +850,7 @@ Outcomes: **fail-loud** = the propagated `Error`; **live-untouched** =
 - **Consumed — the U-H4 homolog (the structure U-H6 mirrors):**
   `docs/specs/unit-h4-hot-remove.md` §5.2–§5.8 (the landed `drainAndReleaseEntry`
   + `RemovedEntry`/`RemovedEntryReleaseResult` + the H1–H6/F1–F8/N-pin set the
-  rename mirrors; the F-F-H4-1 TOCTOU re-entry + the F-H4-2 default-drift
+  rename mirrors; the F-H4-1 TOCTOU re-entry + the F-H4-2 default-drift
   orphan-leak fixed contract, both INHERITED by U-H6), §7 (the Q1 option-b
   orchestration home + Q2 two-path co-existence + Q3 `HotRemoveResult` + Q4
   UNBOUNDED drain ruling); `src/main/rag-store-remove.ts` (REUSED by U-H6).
@@ -836,8 +886,8 @@ Outcomes: **fail-loud** = the propagated `Error`; **live-untouched** =
   (hot-remove, LANDED — the homolog), U-H7 (default reassignment — owns the
   DEFAULT's rename + the vector-boot re-warm handoff; OUT of U-H6's scope),
   U-H8 (the operator-UI editor — invokes `hotRename` after the confirmation
-  dialog; D6). **Execution order proceeding: U-H4 (LANDED) → U-H6 (this — NEXT)
-  → U-H7 → U-H8.**
+  dialog; D6). **Execution order proceeding: U-H4 (LANDED) → U-H6 (LANDED, this)
+  → U-H7 (default reassignment — NEXT, untouched) → U-H8.**
 - **In-scope boundary vs U-H7/U-H8:** U-H6 lands the CONTROLLER/mechanism-level
   rename (`hotRename` reusing the drain helper), node-testable, NO IPC/MCP,
   NON-DEFAULT-only (the default's rename folds into U-H7). U-H8 lands the

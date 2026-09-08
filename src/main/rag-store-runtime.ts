@@ -116,6 +116,20 @@ export interface HotRemoveResult {
   drained: number
 }
 
+/** The successful DRAIN-THEN-TEARDOWN rename result (Unit U-H6).
+ *  `delta.renamed` is exactly `[{ from, to }]`; `drained` is the settled
+ *  in-flight query count at teardown of the OLD `from` engine — ALWAYS 0 (the
+ *  drain gate never tears down mid-query, A-P2-2/D7). */
+export interface HotRenameResult {
+  /** The FRESH `loaded` registry just written + re-read by the U-H2 write path. */
+  loaded: LoadedRagStoreRegistry
+  /** `{ added: [], removed: [], renamed: [{ from, to }] }` — the applied delta. */
+  delta: RegistryDelta
+  /** The settled in-flight query count on the OLD `from` engine at teardown —
+   *  0 (the drain guarantee). */
+  drained: number
+}
+
 /** The controller instance returned by `createRagStoreRuntimeController`. */
 export interface RagStoreRuntimeController {
   getDirectory(): RagStoreDirectory
@@ -137,6 +151,19 @@ export interface RagStoreRuntimeController {
    *  remove seam U-H8 calls. Throws propagate (W-remove-unknown / W-remove-arg
    *  / loader F12 / fs); live Map + disk are untouched on a throw. */
   hotRemove(name: string): Promise<HotRemoveResult>
+  /** U-H6 — the DRAIN-THEN-TEARDOWN rename of a non-default store (Unit U-H6):
+   *  write + rebuild-under-`to` + unregister-the-old-`from` (via the existing
+   *  `hotApply({kind:'rename'})`), then drain the OLD renamed engine
+   *  (`inFlight()===0`), tear the old-`from` store + engine down (U-H5
+   *  primitives, owned by `rag-store-remove.js`), and STRAND the old `from`
+   *  persistence file + journal (D3) while the NEW `to` entry becomes live.
+   *  NON-DEFAULT-only (a default rename propagates `W-rename-default` — folds
+   *  into U-H7); inherits the D4 `R-rename-ids-present` rejection from
+   *  `hotApply`. ASYNC — the operator-facing rename seam U-H8 calls. Throws
+   *  propagate (W-rename-unknown-from / W-rename-target-exists /
+   *  W-rename-default / R-rename-ids-present / loader F12 / native fs); the live
+   *  Map + disk are untouched on a throw. */
+  hotRename(from: string, to: string): Promise<HotRenameResult>
 }
 
 /** Construction: validates the inputs FAIL-LOUD (R-* guards), stores the boot
@@ -330,6 +357,61 @@ export function createRagStoreRuntimeController(
     return { loaded, delta: { added: [], removed: [name], renamed: [] }, drained: 0 }
   }
 
+  /** U-H6 — the DRAIN-THEN-TEARDOWN rename. Order (§5.3):
+   *  1. top-of-method arg guards (W-rename-arg `from required` / `to required`,
+   *     locally-thrown, byte-equal to the landed W-rename-arg — 0 new templates);
+   *  2. CAPTURE the old-`from` orphan `RagStoreEntry` from the live Map BEFORE
+   *     the write (the swap unregisters it);
+   *  3. write + default-stability + live-map swap via the LANDED synchronous
+   *     `hotApply({kind:'rename'})` (all W-rename-* / the inherited
+   *     R-rename-ids-present / loader-F12 / native-fs errors propagate; live +
+   *     disk untouched on throw);
+   *  4. defensive skip + `await drainAndReleaseEntry(orphan)` — UNBOUNDED drain
+   *     (`inFlight()===0`) then store+engine teardown, owned by
+   *     `rag-store-remove.js`;
+   *  5. return `{ loaded, delta:{added:[],removed:[],renamed:[{from,to}]}, drained: 0 }`.
+   *  The drain never tears down a renamed-away engine mid-query (A-P2-2/D7). */
+  async function hotRename(from: string, to: string): Promise<HotRenameResult> {
+    // F1/F1b — the arg guards fire BEFORE any write/drain (null/5/'' → W-rename-arg).
+    if (typeof from !== 'string' || from.length === 0) {
+      throw new Error('rag-store-registry-write: from required')
+    }
+    if (typeof to !== 'string' || to.length === 0) {
+      throw new Error('rag-store-registry-write: to required')
+    }
+    // Capture the orphan BEFORE the swap drops it from the live Map.
+    const orphan = directory.entries.get(from)
+    // Write + rebuild + unregister (the U-H2 hot-apply rename swap). Any throw
+    // propagates with live + disk untouched on the EARLY return, EXCEPT the
+    // default-drift guard:
+    let loaded: LoadedRagStoreRegistry
+    try {
+      ;({ loaded } = hotApply({ kind: 'rename', from, to }))
+    } catch (err) {
+      // F-H4-2 (inherited) — the default-drift throw (F15/F16). That guard fires
+      // AFTER the rename already persisted AND the live map was re-synced to
+      // `loaded` (HOST-1 / D2 — `syncLiveToLoaded(loaded, true)` dropped `from` /
+      // rebuilt `to`). The orphan would otherwise LEAK undrained/unterminated.
+      // If the swap DID drop the `from` entry, still drain+teardown the orphan
+      // before rethrowing — a renamed-but-drifted old store/engine is always
+      // drained/torn down, with the byte-pinned error still propagating. Other
+      // throw paths (W-rename-unknown-from, W-rename-target-exists,
+      // W-rename-default, the inherited R-rename-ids-present, loader F12, native
+      // fs) leave the `from` entry IN the live map, so this re-check keeps their
+      // early-return NO-teardown contract intact.
+      if (orphan !== undefined && !directory.entries.has(from)) {
+        await drainAndReleaseEntry({ store: orphan.store, engine: orphan.engine })
+      }
+      throw err
+    }
+    // Defensive skip (F8): if the orphan is somehow missing after a successful
+    // write — unreachable by contract — drain nothing and return the result.
+    if (orphan !== undefined) {
+      await drainAndReleaseEntry({ store: orphan.store, engine: orphan.engine })
+    }
+    return { loaded, delta: { added: [], removed: [], renamed: [{ from, to }] }, drained: 0 }
+  }
+
   /** Build a fresh lexical `RagStoreEntry` for a resolved store (the non-default
    *  rebuild path — A6/R10 byte-equal to `buildRagStoreDirectory` rule 2). A
    *  construct throw PROPAGATES (the staging swap never runs — F17). */
@@ -390,5 +472,6 @@ export function createRagStoreRuntimeController(
     statusOf,
     hotApply,
     hotRemove,
+    hotRename,
   }
 }
