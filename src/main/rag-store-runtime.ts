@@ -40,6 +40,10 @@ import { createJsonRagStore, type RagStore } from './rag-store.js'
 import { createLexicalEmbedder, createLexicalIndex, createRetrieval, type RetrievalEngine } from './retrieval.js'
 import type { VectorBootController } from './vector-boot.js'
 import type { EmbeddingProvider } from './embeddings.js'
+// U-H7 — the default-change orchestration helpers. NEITHER identifier contains
+// a lowercase `teardown`, so the U-H2 N1 / U-H5 A-P2-8 grep pins on this file's
+// source stay green — the release call site lives ONLY in `rag-store-default.js`.
+import { createDefaultVectorBoot, releaseDefaultVectorBoot } from './rag-store-default.js'
 
 const RT = 'rag-store-runtime:'
 function msg(text: string): string {
@@ -130,6 +134,39 @@ export interface HotRenameResult {
   drained: number
 }
 
+/** The successful default-REASSIGNMENT result (Unit U-H7).
+ *  `delta.defaultChanged` is exactly `[name]`; `drained` is the settled
+ *  in-flight query count on the OLD default's vector engine at release — ALWAYS
+ *  0 (the A-P2-2 drain never tears down mid-query; always 0 in lexical mode).
+ *  `noop` is TRUE iff `name` was already the default (no write, no release, no
+ *  live mutation). */
+export interface HotSetDefaultResult {
+  /** The FRESH `loaded` registry just written + re-read by the U-H2 write path
+   *  (for a no-op, the current registry). */
+  loaded: LoadedRagStoreRegistry
+  /** `{ added: [], removed: [], renamed: [], defaultChanged: [name] }`
+   *  (all-empty for a no-op). */
+  delta: RegistryDelta
+  /** The settled in-flight query count on the OLD default's vector engine at
+   *  release — 0 (the drain guarantee; always 0 in lexical mode). */
+  drained: number
+  /** TRUE iff `name` was already the default (no-op — no write, no release). */
+  noop: boolean
+}
+
+/** The successful default-RENAME result (Unit U-H7, Q3 R1). The store stays the
+ *  default under the new name. `delta.renamed === [{ from, to }]` AND
+ *  `delta.defaultChanged === [to]`. */
+export interface HotRenameDefaultResult {
+  /** The FRESH `loaded` registry just written + re-read by the U-H2 write path. */
+  loaded: LoadedRagStoreRegistry
+  /** `{ added: [], removed: [], renamed: [{ from, to }], defaultChanged: [to] }`
+   *  — the applied delta (the default is PRESERVED under the new name). */
+  delta: RegistryDelta
+  /** The settled in-flight query count — 0 (no release occurs on a rename). */
+  drained: number
+}
+
 /** The controller instance returned by `createRagStoreRuntimeController`. */
 export interface RagStoreRuntimeController {
   getDirectory(): RagStoreDirectory
@@ -164,6 +201,23 @@ export interface RagStoreRuntimeController {
    *  W-rename-default / R-rename-ids-present / loader F12 / native fs); the live
    *  Map + disk are untouched on a throw. */
   hotRename(from: string, to: string): Promise<HotRenameResult>
+  /** U-H7 — REASSIGN the default at runtime (D5/A-P2-4): flip `default:true`
+   *  onto the named existing non-default store (via the write module's
+   *  `setDefault` kind — the atomic D2 write), RE-BIND the runtime's internal
+   *  default (`getDefaultName`/`getDefaultEntry`/`getDefaultStore`/
+   *  `getDefaultEngine`/`getVectorBoot`) so every already-rewired closure
+   *  reflects the new default per call (A-P2-1), and in vector mode release the
+   *  OLD default's vector boot + re-warm the NEW default's (construct-new-before-
+   *  release-old — no dark default). A no-op when `name` is already the default.
+   *  ASYNC — the operator-facing default-reassignment seam U-H8 calls. Throws
+   *  propagate (R-set-default-arg / the write-set / the loader-F set / fs); live
+   *  + disk untouched on a throw. */
+  hotSetDefault(name: string): Promise<HotSetDefaultResult>
+  /** U-H7 — the SANCTIONED default rename (Q3 R1): the current default's name
+   *  changes BUT it stays `default:true` (via the write module's `renameDefault`
+   *  kind). The LEGACY `hotApply`/`hotRename` default paths KEEP propagating
+   *  `W-rename-default` (U-H2 F9/HOST-2 + U-H6 F4 — NOT relaxed). */
+  hotRenameDefault(to: string): Promise<HotRenameDefaultResult>
 }
 
 /** Construction: validates the inputs FAIL-LOUD (R-* guards), stores the boot
@@ -214,8 +268,13 @@ export function createRagStoreRuntimeController(
   }
 
   const directory: RagStoreDirectory = opts.directory
-  const defaultEntry: RagStoreEntry = opts.defaultEntry
-  const vectorBoot: VectorBootController | null = opts.vectorBoot
+  // U-H7 — the default becomes RE-BINDABLE: `defaultEntry`/`vectorBoot` are
+  // re-pointed by `hotSetDefault`/`hotRenameDefault` (D1/A-P2-1). Every
+  // already-rewired closure reads the accessors PER CALL, so the re-bind
+  // propagates with ZERO additional rewiring (A-P2-1). This also closes U-H2's
+  // HOST-LOW-1 accessor desync on this path (Q11).
+  let defaultEntry: RagStoreEntry = opts.defaultEntry
+  let vectorBoot: VectorBootController | null = opts.vectorBoot
   const registryPath = opts.registryPath
   const _userDataPath = opts.userDataPath
   const _embedderKind = opts.embedderKind
@@ -224,9 +283,18 @@ export function createRagStoreRuntimeController(
   // The real underlying Map (typed ReadonlyMap at the boundary — the controller
   // is the ONLY writer, mutating it in place, D1).
   const liveMap = directory.entries as unknown as Map<string, RagStoreEntry>
-  // The boot default's persistence file — captured once from the initial
-  // registry so a drift in the loaded default (F16) can be detected.
-  const defaultPersistenceFile = opts.registry.stores.find((s) => s.name === directory.defaultName)?.persistenceFile
+  // The default's persistence file — captured from the initial registry so a
+  // drift in the loaded default (F16) can be detected. U-H7 (RCA-3 HOST-1): a
+  // `let`, RE-POINTED after a successful `hotSetDefault`/`hotRenameDefault` to
+  // the FRESH loaded default's persistence file — otherwise the F15/F16 drift
+  // guard would keep comparing every later loaded default's `persistenceFile`
+  // against the stale BOOT default's, firing the drift branch on a legitimate
+  // post-reassignment hot-* op (scrambling the live map + throwing).
+  let defaultPersistenceFile = opts.registry.stores.find((s) => s.name === directory.defaultName)?.persistenceFile
+  // RCA-3 HOST-5 — the concurrency serialization seam: exactly ONE hot-* default
+  // reassignment runs at a time (a transient A6 at-most-ONE boot violation if a
+  // second `hotSetDefault`/`hotRenameDefault` started a new boot mid-drain).
+  let reassignInFlight = false
 
   function statusOf(name: string): 'loaded' | 'failed-corrupt' | 'failed-missing' {
     const e = directory.entries.get(name)
@@ -242,6 +310,13 @@ export function createRagStoreRuntimeController(
       throw new Error(msg('mutation required'))
     }
     const kind = mutation.kind
+    // U-H7 — `hotApply` is DEFAULT-STABLE: a `setDefault` mutation through the
+    // hot-apply seam is rejected with the byte-pinned message (the sanctioned
+    // default reassignment is `hotSetDefault`, F6). A `renameDefault` mutation
+    // (also a default-changing kind) is rejected here too — before the write.
+    if (kind === 'setDefault' || kind === 'renameDefault') {
+      throw new Error(msg('default reassignment must use hotSetDefault'))
+    }
     if (kind !== 'add' && kind !== 'remove' && kind !== 'rename') {
       throw new Error(msg(`unknown mutation kind '${kindOf(kind)}'`))
     }
@@ -412,6 +487,174 @@ export function createRagStoreRuntimeController(
     return { loaded, delta: { added: [], removed: [], renamed: [{ from, to }] }, drained: 0 }
   }
 
+  /** U-H7 — REASSIGN the default at runtime (D5/A-P2-4). Order (§4
+   *  ATOMIC-APPLY-DEFAULT / §5.4):
+   *  1. top-of-method arg guard (R-set-default-arg, locally-thrown);
+   *  2. NO-OP guard (`name === directory.defaultName` → the all-empty delta +
+   *     `noop:true`; no write, no release, no live mutation — Q8);
+   *  3. capture the old/new default entries + the current vector boot;
+   *  4. vector CONSTRUCT-FIRST (only when vector) — a construct throw leaves disk
+   *     + live untouched (an orphaned born-lexical engine is a bounded hold);
+   *  5. write the `setDefault` flip via `writeRegistryMutation` (the ONLY disk
+   *     touch — D2). Any throw propagates; live untouched;
+   *  6. defensive drift check (`loaded.defaultStoreName === name`, else sync-to-
+   *     loaded + R-default-changed — D2 preserved even in the throw path);
+   *  7. apply + re-bind (no dark default): replace the new default's entry engine
+   *     with the new boot's (born-lexical-pending) engine in vector mode; rebuild
+   *     the OLD default as a fresh LEXICAL non-default (vector mode; the store is
+   *     RETAINED — Q4); re-point `directory.defaultName`/`defaultEntry`/
+   *     `vectorBoot`/`currentRegistry`;
+   *  8. vector: RELEASE the OLD default's boot LAST (UNBOUNDED drain + re-entry +
+   *     `releaseDefaultVectorBoot`) + START the new boot fire-and-forget
+   *     (`.catch(() => undefined)` — the runtime's 0-log census holds);
+   *  9. return `{ loaded, delta, drained, noop: false }`. */
+  async function hotSetDefault(name: string): Promise<HotSetDefaultResult> {
+    // 1. Arg guard.
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new Error(msg('default store name required'))
+    }
+    // 5b. HOST-5 — reject a SECOND reassignment while one is in flight (a
+    //     transient A6 at-most-ONE boot violation if a concurrent call started a
+    //     new boot mid-drain). Fires BEFORE any write/construct/NO-OP.
+    if (reassignInFlight) {
+      throw new Error(msg('default reassignment already in progress'))
+    }
+    reassignInFlight = true
+    try {
+      // 2. NO-OP guard (Q8) — the current default: no write, no release, no live
+      //    mutation.
+      if (name === directory.defaultName) {
+        return {
+          loaded: currentRegistry,
+          delta: { added: [], removed: [], renamed: [], defaultChanged: [] },
+          drained: 0,
+          noop: true,
+        }
+      }
+      // 3. Capture the old/new default entries + the current vector boot.
+      const oldDefaultEntry = directory.entries.get(directory.defaultName)
+      const newDefaultEntry = directory.entries.get(name)
+      const oldVectorBoot = vectorBoot
+      const vectorMode = _embedderKind === 'vector' && _provider !== null
+      // 4. Vector construct-first — NOT started. A construct throw propagates with
+      //    disk + live untouched (F5).
+      let newBoot: VectorBootController | undefined
+      if (vectorMode && newDefaultEntry !== undefined) {
+        newBoot = createDefaultVectorBoot(newDefaultEntry.store, _provider!, _userDataPath)
+      }
+      // 5. Write the flip (the ONLY disk touch — D2).
+      const { loaded, delta } = writeRegistryMutation({ path: registryPath, mutation: { kind: 'setDefault', name } })
+      // 6. Defensive drift check (F7) — external edit; sync-to-loaded before throw.
+      if (loaded.defaultStoreName !== name) {
+        syncLiveToLoaded(loaded, true)
+        throw new Error(msg('default store changed by a hot-apply (default reassignment is a separate unit)'))
+      }
+      // 7. Apply + re-bind (no dark default).
+      if (vectorMode) {
+        if (newDefaultEntry !== undefined && newBoot !== undefined) {
+          newDefaultEntry.engine = newBoot.engine
+        }
+        // The OLD default's STORE is RETAINED — rebuild its entry engine as a fresh
+        // lexical engine (the store is never released, only the boot is, Q4).
+        if (oldDefaultEntry !== undefined) {
+          oldDefaultEntry.engine = createRetrieval(
+            oldDefaultEntry.store,
+            createLexicalEmbedder(createLexicalIndex(oldDefaultEntry.store.listNodes())),
+          )
+        }
+      }
+      directory.defaultName = loaded.defaultStoreName
+      if (newDefaultEntry !== undefined) {
+        defaultEntry = newDefaultEntry
+      }
+      if (vectorMode) {
+        vectorBoot = newBoot ?? null
+      }
+      currentRegistry = loaded
+      // HOST-1 — re-point the drift-guard default to the FRESH loaded default's
+      // persistence file so a later hot-* op compares against the NEW default.
+      defaultPersistenceFile = loaded.stores.find((s) => s.name === loaded.defaultStoreName)?.persistenceFile
+      // 8. Vector release-old-LAST + start-new (fire-and-forget).
+      let drained = 0
+      if (vectorMode && oldVectorBoot !== null) {
+        const result = await releaseDefaultVectorBoot(oldVectorBoot)
+        drained = result.drained
+      }
+      if (vectorMode && newBoot !== undefined) {
+        void newBoot.start().catch(() => undefined)
+      }
+      // 9. Return.
+      return { loaded, delta, drained, noop: false }
+    } finally {
+      reassignInFlight = false
+    }
+  }
+
+  /** U-H7 — the SANCTIONED default rename (Q3 R1): the current default changes
+   *  its NAME but stays `default:true`. Local guard (incl. HOST-4 whitespace) →
+   *  the D4 persisted-`<from>:`-id decline (HOST-2) → write the `renameDefault`
+   *  kind (D2) → the F7-consistent defensive drift guard (HOST-3) → re-point
+   *  `directory.defaultName` + re-key the default entry under the new name (the
+   *  same store object stays default) + re-point the drift-guard persistence
+   *  file (HOST-1). The LEGACY `hotApply`/`hotRename` default paths keep
+   *  propagating `W-rename-default` (NOT relaxed). HOST-5 serializes a
+   *  concurrent reassignment. */
+  async function hotRenameDefault(to: string): Promise<HotRenameDefaultResult> {
+    // HOST-4 — the local guard also REJECTS a whitespace-only `to` (a `'   '`
+    // must not rename the default to a whitespace name); byte-pinned `to required`.
+    if (typeof to !== 'string' || to.length === 0 || to.trim() === '') {
+      throw new Error('rag-store-registry-write: to required')
+    }
+    // HOST-5 — reject a SECOND reassignment while one is in flight.
+    if (reassignInFlight) {
+      throw new Error(msg('default reassignment already in progress'))
+    }
+    reassignInFlight = true
+    try {
+      // HOST-2 — the D4/A-P2-5 persisted-`<from>:`-id decline, BEFORE the write:
+      // if the CURRENT default's data carries a `<from>:`-prefixed node id, the
+      // default-rename is DECLINED with R-rename-ids-present (mirroring the
+      // legacy `hotApply` scan, which is SKIPPED for the default and never used
+      // by `renameDefault`). Disk NOT written, live untouched, NO drain.
+      const from = directory.defaultName
+      const curDefault = directory.entries.get(from)
+      if (curDefault !== undefined) {
+        const ids = curDefault.store.listNodes().map((n) => n.id)
+        if (ids.some((id) => id.startsWith(`${from}:`))) {
+          throw new Error(msg(`cannot rename store '${from}' — it has persisted '${from}:'-prefixed ids`))
+        }
+      }
+      const { loaded, delta } = writeRegistryMutation({ path: registryPath, mutation: { kind: 'renameDefault', to } })
+      // HOST-3 — the F7-consistent defensive drift check: the write module
+      // renamed the ON-DISK current default (`delta.renamed[0].from`); if the
+      // LIVE default drifted from it (an external mid-run registry default edit),
+      // SYNCHRONIZE the live directory to `loaded` BEFORE throwing the byte-pinned
+      // R-default-changed — the re-key is gated on the freshly-loaded default, so
+      // live and disk NEVER diverge (D2 even in the throw path).
+      if (delta.renamed[0]?.from !== from) {
+        syncLiveToLoaded(loaded, true)
+        throw new Error(msg('default store changed by a hot-apply (default reassignment is a separate unit)'))
+      }
+      // Re-bind — the default entry object keeps its store under the new name; the
+      // OLD name is unkeyed (D4 fold). The store STAYS default under the new name.
+      const currentDefault = directory.entries.get(directory.defaultName)
+      if (currentDefault !== undefined && directory.defaultName !== loaded.defaultStoreName) {
+        liveMap.delete(directory.defaultName)
+        currentDefault.name = loaded.defaultStoreName
+        liveMap.set(loaded.defaultStoreName, currentDefault)
+        defaultEntry = currentDefault
+      }
+      directory.defaultName = loaded.defaultStoreName
+      // HOST-1 — re-point the drift-guard default to the FRESH loaded default's
+      // persistence file (the default's file is preserved under the rename).
+      defaultPersistenceFile = loaded.stores.find((s) => s.name === loaded.defaultStoreName)?.persistenceFile
+      currentRegistry = loaded
+      return { loaded, delta, drained: 0 }
+    } finally {
+      reassignInFlight = false
+    }
+  }
+
   /** Build a fresh lexical `RagStoreEntry` for a resolved store (the non-default
    *  rebuild path — A6/R10 byte-equal to `buildRagStoreDirectory` rule 2). A
    *  construct throw PROPAGATES (the staging swap never runs — F17). */
@@ -473,5 +716,7 @@ export function createRagStoreRuntimeController(
     hotApply,
     hotRemove,
     hotRename,
+    hotSetDefault,
+    hotRenameDefault,
   }
 }

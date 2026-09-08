@@ -37,21 +37,32 @@ import { resolveRegistry, loadRagStoreRegistry } from './rag-store-registry.js'
 import type { RagStoreConfig, ResolvedRagStoreRegistry } from './rag-store-registry.js'
 import type { LoadedRagStoreRegistry } from './rag-store-registry.js'
 
-/** The mutation the operator requests. Exactly ONE of the three kinds.
+/** The mutation the operator requests. Exactly ONE of the kinds.
  *  'add' appends a new store; 'remove' unregisters a store BY NAME (orphan —
  *  D3: the persistence file + journal are NEVER touched by this module);
- *  'rename' renames a store, restricted to NON-default stores (D4/D5). */
+ *  'rename' renames a store, restricted to NON-default stores (D4/D5);
+ *  'setDefault' (Unit U-H7) flips `default:true` onto the named store;
+ *  'renameDefault' (Unit U-H7) renames the CURRENT default preserving its
+ *  `default:true` (the SANCTIONED default-rename — the legacy 'rename' branch's
+ *  `W-rename-default` guard is UNCHANGED). */
 export type RegistryMutation =
   | { kind: 'add'; store: RagStoreConfig }
   | { kind: 'remove'; name: string }
   | { kind: 'rename'; from: string; to: string }
+  | { kind: 'setDefault'; name: string }
+  | { kind: 'renameDefault'; to: string }
 
 /** The delta the runtime controller (U-H2) applies — NOT this module's job.
- *  Always exactly ONE non-empty member (a single mutation is one delta entry). */
+ *  Always exactly ONE non-empty member (a single mutation is one delta entry).
+ *  Unit U-H7 adds the `defaultChanged` member: present (with `[name]`) ONLY on a
+ *  `setDefault` delta and (with `[to]`) ONLY on a `renameDefault` delta; it is
+ *  ABSENT on the add/remove/rename deltas so the LANDED U-H2/U-H4/U-H6 exact-
+ *  delta assertions stay green (§5.9 — those suites are NOT re-pinned). */
 export interface RegistryDelta {
   added: string[]
   removed: string[]
   renamed: { from: string; to: string }[]
+  defaultChanged?: string[]
 }
 
 /** The pure validate+derive output. `registry` is the new RESOLVED state (the
@@ -142,7 +153,13 @@ export function applyRegistryMutation(
     throw new Error(msg('mutation required'))
   }
   const kind = mutation.kind
-  if (kind !== 'add' && kind !== 'remove' && kind !== 'rename') {
+  if (
+    kind !== 'add' &&
+    kind !== 'remove' &&
+    kind !== 'rename' &&
+    kind !== 'setDefault' &&
+    kind !== 'renameDefault'
+  ) {
     throw new Error(msg(`unknown mutation kind '${jsonOf(kind)}'`))
   }
 
@@ -185,7 +202,7 @@ export function applyRegistryMutation(
     }
     candidate = currentConfigs.filter((c) => c.name !== name)
     delta = { added: [], removed: [name], renamed: [] }
-  } else {
+  } else if (kind === 'rename') {
     const from = String(mutation.from)
     const to = String(mutation.to)
     if (!currentNames.includes(from)) {
@@ -199,6 +216,31 @@ export function applyRegistryMutation(
     }
     candidate = currentConfigs.map((c) => (c.name === from ? { ...c, name: to } : c))
     delta = { added: [], removed: [], renamed: [{ from, to }] }
+  } else if (kind === 'setDefault') {
+    const name = String(mutation.name)
+    if (!currentNames.includes(name)) {
+      throw new Error(msg(`cannot set unknown store '${name}' as default`))
+    }
+    if (name === existing.defaultStoreName) {
+      throw new Error(msg(`store '${name}' is already the default`))
+    }
+    // Flip `default:true` off the current default onto `name` — exactly ONE
+    // default remains (the loader's Pass-C re-validates cleanly).
+    candidate = currentConfigs.map((c) => ({ ...c, default: c.name === name }))
+    delta = { added: [], removed: [], renamed: [], defaultChanged: [name] }
+  } else {
+    // renameDefault — the SANCTIONED default-rename: rename the CURRENT default
+    // preserving its `default:true` (it stays default under the new name).
+    const to = String(mutation.to)
+    const from = existing.defaultStoreName
+    if (currentNames.includes(to)) {
+      throw new Error(msg(`store '${from}' cannot be renamed to '${to}': '${to}' already exists`))
+    }
+    if (to === from) {
+      throw new Error(msg(`store '${from}' cannot be renamed to '${to}': '${to}' already exists`))
+    }
+    candidate = currentConfigs.map((c) => (c.name === from ? { ...c, name: to, default: true } : c))
+    delta = { added: [], removed: [], renamed: [{ from, to }], defaultChanged: [to] }
   }
 
   // 5. Validate the CANDIDATE (any loader F-rule propagates unchanged). The
@@ -338,4 +380,29 @@ export function renameRegistryStore(
   const f = requireName(from, 'from')
   const t = requireName(to, 'to')
   return applyRegistryMutation(parsed, registryDir, { kind: 'rename', from: f, to: t }, reservedPath)
+}
+
+/** Named PURE convenience — thin wrapper over `applyRegistryMutation` for the
+ *  default flip (Unit U-H7). `delta.defaultChanged === [name]`. */
+export function setDefaultRegistryStore(
+  parsed: unknown,
+  registryDir: string,
+  name: string,
+  reservedPath?: string,
+): RegistryMutationResult {
+  const n = requireName(name, 'name')
+  return applyRegistryMutation(parsed, registryDir, { kind: 'setDefault', name: n }, reservedPath)
+}
+
+/** Named PURE convenience — thin wrapper over `applyRegistryMutation` for the
+ *  default's SANCTIONED rename (Unit U-H7). `delta.renamed === [{ from, to }]`
+ *  AND `delta.defaultChanged === [to]` (the default stays default). */
+export function renameDefaultRegistryStore(
+  parsed: unknown,
+  registryDir: string,
+  to: string,
+  reservedPath?: string,
+): RegistryMutationResult {
+  const t = requireName(to, 'to')
+  return applyRegistryMutation(parsed, registryDir, { kind: 'renameDefault', to: t }, reservedPath)
 }

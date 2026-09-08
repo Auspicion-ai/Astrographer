@@ -1,20 +1,23 @@
 # Spec — Unit U-H7: Default Reassignment — `hotSetDefault(name)` — the hot-set-default controller mechanism (D5/A-P2-4/D4-rename-fold)
 
-> **STATE (2026-09-08): U-H7 is THE NEXT CYCLE after U-H6 — NOT YET LANDED.** This
-> document is the PROPOSED behavior contract for U-H7. The gate's **HIGHEST-RISK
-> unit** (D5 split out for teardown + accessor-backed IPC + vector re-warm —
+> **STATE (2026-09-08): U-H7 IS LANDED.** This document is the landed behavior
+> contract for U-H7 (the gate's **HIGHEST-RISK unit** — the default reassignment,
+> D5 split out for teardown + accessor-backed IPC + vector re-warm —
 > `docs/specs/registry-hot-apply-review.md` §2 D5/A-P2-4). U-H5 (teardown
 > primitives), U-H4 (hot-remove), U-H6 (hot-rename) are LANDED and this unit
 > CONSUMES their primitives/home (`drainAndReleaseEntry` + the `rag-store-remove.ts`
-> pattern + the U-H5 vector-boot `teardown()`). Execution order proceeding:
-> U-H4 (LANDED) → U-H6 (LANDED) → **U-H7 (this — default reassignment, NEXT)** →
-> U-H8 (operator-UI editor). Execution order in the gate: **…**U-H6 → **U-H7** →
-> U-H8. **The §7 design questions below MUST be arbitrated CONFIRMED by the
-> Architect before the TestWriter derives the red set** — this unit carries the
-> slice's most open design debt; do not hand-wave it.
+> pattern + the U-H5 vector-boot `teardown()`). **Landed 2026-09-08: 29/29 via
+> `tests/unit-h7-default-reassign.test.ts`; blind-greens 18 PASS / 0 FAIL / 4
+> DEFERRED; full trio 2761 pass / 41 skip, typecheck + build clean.** The §7
+> eleven-item Architect ruling is CONFIRMED (lines 1115–1176); the RCA-3
+> adversarial pass (HOST-1..7) ran on the green and its host findings
+> HOST-1..5 were fixed + regression-tested here (spec §3a). Execution order in
+> the gate: U-H1 → U-H2 (a+b) → U-H3 → U-H5 → U-H4 → U-H6 → **U-H7 (LANDED)** →
+> U-H8 (operator-UI editor — the FINAL unit, untouched).
 
-- **Status: SPEC (PROPOSED — the §7 rulings are the gate; NOT YET arbitrated,
-  NOT YET red/green).** The registry hot-apply/removal/rename slice, Unit U-H7 of
+- **Status: SPEC (LANDED — 2026-09-08; the §7 eleven-item ruling is CONFIRMED,
+  the RCA-3 HOST-1..7 adversarial pass + the blind-greens + the doc-review are
+  complete).** The registry hot-apply/removal/rename slice, Unit U-H7 of
   8 — the ability to REASSIGN which store is the default at runtime (hot-set-default),
   making the currently STABLE default re-bindable (D1 → "Default-bound consts stay
   until U-H5/D5" ⇒ U-H7 is when the default becomes re-bindable), INCLUDING the
@@ -258,6 +261,60 @@ probes (the adversarial pass MUST confirm on the landed code):**
 - **NO U-H7 change adds an MCP tool / IPC channel / `stores:"all"` fan-out edit /
   page-design change** (D6/A-P2-4/§5.8/§5.11).
 
+**RCA-3 adversarial record (2026-09-08 — the read-only pass on the U-H7 green; HOST-1..7):**
+the pass surfaced host findings that were FIXED + regression-tested here (all in
+`rag-store-runtime.ts` / `rag-store-default.ts`; the regressions in
+`tests/unit-h7-default-reassign.test.ts` §"RCA-3 HOST regressions"):
+
+- **HOST-1 (HIGH — FIXED):** `defaultPersistenceFile` was a `const` captured ONCE from the BOOT
+  default. After a `hotSetDefault`/`hotRenameDefault` re-bind, it was never re-pointed, so the
+  F15/F16 drift guard compared every later loaded default's `persistenceFile` against the STALE
+  boot file → fired the drift branch on a legitimate post-reassignment `hotRemove`/`hotRename`/
+  `hotApply` (rebuild-everything + throw). **Fix:** `defaultPersistenceFile` is a `let`, re-pointed
+  after a successful reassignment to the fresh `loaded` default's `persistenceFile`.
+  **Regression:** post-`hotSetDefault` `hotRemove('research-2026-10')` + `hotRename` of a non-default
+  both SUCCEED (no drift-throw / scramble).
+- **HOST-2 (MEDIUM — FIXED):** `hotRenameDefault` did NOT enforce the D4/A-P2-5 persisted-`<from>:`-id
+  decline (the legacy `hotApply` scan is skipped for the default and `renameDefault` never used it).
+  **Fix:** a `<from>:`-prefixed-id scan BEFORE the write, mirroring the legacy scan — throws the
+  byte-pinned R-rename-ids-present; disk NOT written, live untouched, NO drain.
+  **Regression:** a `main:`-prefixed node id on the current default → `hotRenameDefault('main-new')`
+  throws R-rename-ids-present with disk+live untouched.
+- **HOST-3 (MEDIUM — FIXED):** `hotRenameDefault` lacked the F7 defensive drift guard (it
+  unconditionally re-keyed `directory.entries.get(directory.defaultName)`). **Fix:** after the write,
+  if the freshly-loaded renamed default's `from` (`delta.renamed[0].from`) does not match the live
+  `directory.defaultName`, SYNCHRONIZE the live directory to `loaded` + throw R-default-changed —
+  the re-key is gated on the freshly-loaded default (D2 preserved even in the throw path).
+  **Regression:** an external mid-run default edit then `hotRenameDefault` → fail-loud with live
+  synced to loaded.
+- **HOST-4 (LOW — FIXED):** `hotRenameDefault`'s guard was `typeof to !== 'string' || to.length === 0`;
+  a `'   '` `to` renamed the default to a whitespace name. **Fix:** the local guard also rejects
+  `to.trim() === ''` (byte-pinned `to required`). **Regression:** `hotRenameDefault('   ')` → `to required`.
+- **HOST-5 (LOW — FIXED):** no concurrency serialization across the async hot-* seams (two concurrent
+  `hotSetDefault` calls could each start a boot — a transient A6 at-most-ONE violation). **Fix:** a
+  `reassignInFlight` guard on the controller — a second `hotSetDefault`/`hotRenameDefault` while one
+  is in flight throws `rag-store-runtime: default reassignment already in progress` before any
+  write/construct. **Regression:** a concurrent-`hotSetDefault` test asserting the second is rejected
+  (no two started boots).
+- **HOST-6 (INFO — documented, NO code change):** the new boot's `start()` is DEFERRED behind the
+  UNBOUNDED old-boot drain (the re-warm releases the OLD boot FIRST, then starts the new one), so a
+  hung old query leaves the new default permanently LEXICAL (`start()` has not yet fired). This is a
+  CHOSEN behavior: the atomic order (§4 VECTOR-REWARM-CONSTRUCT-FIRST) guarantees no-dark-default —
+  the new default serves born-Lexical-pending and never demotes (W1 F1 parity); a build could be
+  fired BEFORE the drain, but then a teardown-old mid-build would CANCEL it (U-H5
+  BOOT-CONTROLLER-TEARDOWN-CANCELS-BUILD), defeating the re-warm. The deferred-start tradeoff is the
+  documented choice, not a bug.
+- **HOST-7 (INFO — recorded):** (a) the "orphaned born-lexical engine" wording (§4/§5.4/§5.7 F5/§7
+  Q2/Q5) was a NON-EVENT — a `createVectorBootController` construct throw happens BEFORE any engine
+  object is created, so there is no orphan and no bounded hold; **the wording was fixed above.**
+  (b) `hotApply`'s guard for a `renameDefault` mutation reuses the setDefault message (it says
+  "must use hotSetDefault" but `renameDefault`'s sanctioned seam is `hotRenameDefault`) —
+  **documented** in §5.5/F6 (NOT reworded: the message is byte-pinned by the U-H7 F6 assertion).
+  (c) `releaseDefaultVectorBoot` had a REDUNDANT second drain `while` loop — **removed** (the real
+  F-H4-1 re-entry is the no-await transition from the final `inFlight()===0` read into
+  `boot.teardown()`'s synchronously-set STOPPED mark; no await-boundary sits between the two loops,
+  so the second loop was dead). The runtime's N1/A-P2-8 `no teardown(` pin stays green.
+
 ### 3b. Proposal-review findings folded in
 
 From `docs/specs/registry-hot-apply-review.md`:
@@ -318,10 +375,11 @@ From `docs/specs/registry-hot-apply-review.md`:
   `setDefaultRegistryStore(parsed, registryDir, name, reservedPath?)`, handled by
   `applyRegistryMutation` (validate existing → build the candidate with `default` flipped off the
   current default onto `name` → validate the candidate → return `{ registry, configs, delta }`),
-  consumed by `writeRegistryMutation` (the atomic persist + re-load, D2). `RegistryDelta` gains a
-  REQUIRED `defaultChanged: string[]` member (`[name]` for setDefault, `[]` otherwise) — the
-  "exactly ONE non-empty member per op" pin is preserved (a setDefault delta has exactly
-  `defaultChanged` non-empty). The alternative (a U-H7-owned non-mutation write path that
+  consumed by `writeRegistryMutation` (the atomic persist + re-load, D2). `RegistryDelta` gains an
+  OPTIONAL `defaultChanged?: string[]` member — present ONLY on the `setDefault` delta (`[name]`)
+  and the `renameDefault` delta (`[to]`), ABSENT on add/remove/rename (so the U-H2/U-H4/U-H6
+  3-key exact-delta assertions stay green; §5.9). For a setDefault delta, exactly
+  `defaultChanged` is non-empty. The alternative (a U-H7-owned non-mutation write path that
   keeps U-H1 byte-pinned but duplicates the load→mutate→persist→reload) is REJECTED — the write
   module is the designated D2 disk owner.
 - **DEFAULT-RENAME-FOLD (new — §7 Q3, resolve to a SEPARATE sanctioned write kind, NOT a
@@ -350,8 +408,9 @@ From `docs/specs/registry-hot-apply-review.md`:
 - **VECTOR-REWARM-CONSTRUCT-FIRST (new — the atomic order, D7/D5, §7 Q2):** the vector re-warm is
   ordered CONSTRUCT-NEW-BEFORE-TEAR-DOWN-OLD so there is NO dark default: (1) CONSTRUCT the NEW
   default's `createVectorBootController(store, provider, { embedBatchFn, cache })` (born-lexical-
-  pending) BEFORE the write — a construct throw leaves disk + live untouched, at the cost of an
-  orphaned born-lexical engine (bounded hold); (2) write the `setDefault` flip (D2); (3) apply —
+  pending) BEFORE the write — a construct throw leaves disk + live untouched (HOST-7a: a construct
+  throw happens BEFORE any engine object is created, so it is a NON-EVENT — no orphaned born-lexical
+  engine exists, no bounded hold); (2) write the `setDefault` flip (D2); (3) apply —
   replace the NEW default's entry `.engine` with the new boot's engine (live), replace the OLD
   default's entry `.engine` with a fresh lexical engine (live), RE-BIND `defaultName`/`defaultEntry`/
   `vectorBoot` (so new queries route to the new default — no dark period); (4) TEAR DOWN the OLD
@@ -434,15 +493,17 @@ export type RegistryMutation =
   | { kind: 'setDefault'; name: string }       // U-H7 — flip default:true onto `name`
   | { kind: 'renameDefault'; to: string }      // U-H7 — rename the CURRENT default, default preserved
 
-/** U-H7 — gains a 4th member. `add`/`remove`/`rename` deltas set it `[]`;
- *  a `setDefault` delta sets `defaultChanged: [name]`; a `renameDefault` delta
- *  sets `renamed: [{from,to}]` AND `defaultChanged: [to]`. The "exactly ONE
- *  non-empty member per op" pin holds for every op. */
+/** U-H7 — gains an OPTIONAL 4th member. `defaultChanged` is ABSENT on the
+ *  add/remove/rename deltas (the "exactly ONE non-empty member per op" pin
+ *  holds — no add/remove/rename delta ever carries an empty `defaultChanged`
+ *  key, so the LANDED U-H2/U-H4/U-H6 3-key delta assertions stay green, §5.9);
+ *  present ONLY as `defaultChanged: [name]` on a `setDefault` delta and
+ *  `defaultChanged: [to]` on a `renameDefault` delta. */
 export interface RegistryDelta {
   added: string[]
   removed: string[]
   renamed: { from: string; to: string }[]
-  defaultChanged: string[]   // U-H7 — [name] iff the default was reassigned
+  defaultChanged?: string[]   // U-H7 — present ONLY on the setDefault/renameDefault deltas
 }
 
 /** U-H7 — PURE named convenience over `applyRegistryMutation` for the default flip. */
@@ -481,9 +542,11 @@ export function renameDefaultRegistryStore(
   This is the SANCTIONED default-rename — the LEGACY `rename` branch's `W-rename-default` guard is
   UNCHANGED (§4 DEFAULT-RENAME-FOLD).
 
-The new `RegistryDelta.defaultChanged` member is REQUIRED on every delta returned by
-`applyRegistryMutation` (set to `[]` for add/remove/rename), so `writeRegistryMutation` returns the
-uniform 4-member delta on every path.
+The new `RegistryDelta.defaultChanged` member is OPTIONAL (`defaultChanged?`): it is ABSENT on the
+add/remove/rename deltas (preserving the LANDED U-H2/U-H4/U-H6 3-key exact-delta assertions,
+§5.9), and present ONLY on the `setDefault` delta (`[name]`) and the `renameDefault` delta
+(`[to]`). On the write side `applyRegistryMutation` sets it only on those two kinds; the
+add/remove/rename deltas keep their 3-key shape byte-identical to U-H1.
 
 ### 5.2 The new orchestration module (`src/main/rag-store-default.ts` — exact TS)
 
@@ -541,10 +604,16 @@ construction); the background build is started by the runtime (`newBoot.start().
 
 ### 5.3 The runtime controller surface changes (exact TS shapes)
 
-U-H7 ADDS one method + one result type to the U-H5/U-H4/U-H6 controller interface
-(`src/main/rag-store-runtime.ts`); it does NOT change `hotApply`/`HotApplyResult`, `hotRemove`/
-`HotRemoveResult`, or `hotRename`/`HotRenameResult`, or the existing 12 members. It re-binds the
-`defaultEntry`/`vectorBoot` closures (const→let).
+U-H7 ADDS two methods + two result types to the U-H5/U-H4/U-H6 controller interface
+(`src/main/rag-store-runtime.ts`): **`hotSetDefault(name): Promise<HotSetDefaultResult>`** + the
+Q3-R1-sanctioned **`hotRenameDefault(to): Promise<HotRenameDefaultResult>`** (per the §7 Q3 ruling,
+the default's rename folds in as a separate sanctioned seam). It does NOT change
+`hotApply`/`HotApplyResult`, `hotRemove`/`HotRemoveResult`, or `hotRename`/`HotRenameResult`, or
+the existing 12 members — the controller goes 12 → **14** members. It re-binds the
+`defaultEntry`/`vectorBoot` closures (const→let). The `hotRenameDefault` surface + the
+`HotRenameDefaultResult` type are additionally pinned by §7 Q3 (R1) and §5.4/H8; the exhaustive
+signature block below shows the `hotSetDefault` seam (the `hotRenameDefault` seam is the
+§5.4/H8/F6/H8 path).
 
 ```ts
 // src/main/rag-store-runtime.ts — Unit U-H7 additions (ON TOP of the U-H2/U-H4/U-H6 shapes).
@@ -606,7 +675,8 @@ export interface HotSetDefaultResult {
 4. **Vector construct-first** (only when `_embedderKind === 'vector'` AND `_provider !== null`):
    `const newBoot = createDefaultVectorBoot(newDefaultEntry.store, _provider, _userDataPath)` — a
    born-lexical-pending boot, NOT started. A construct throw PROPAGATES and leaves disk + live
-   untouched (an orphaned born-lexical engine — a bounded hold; §4 VECTOR-REWARM-CONSTRUCT-FIRST).
+   untouched (HOST-7a: a construct throw happens BEFORE any engine is created — NO orphaned
+   born-lexical engine exists; §4 VECTOR-REWARM-CONSTRUCT-FIRST).
 5. **Write (the ONLY disk touch — D2):** `const { loaded, delta } = writeRegistryMutation({ path:
    registryPath, mutation: { kind: 'setDefault', name } })`. Any throw (W-set-default-unknown /
    W-set-default-nop / the loader-F-set / the native-fs set) PROPAGATES and the live directory is
@@ -649,7 +719,7 @@ messages:
 | # | Trigger | Exact `Error` message |
 | --- | --- | --- |
 | R-set-default-arg | `hotSetDefault` with a null/non-string/`''` `name` | `rag-store-runtime: default store name required` |
-| R-set-default-through-hot-apply | `hotApply` called with a `{ kind: 'setDefault' }` mutation (defensive — `hotApply` is default-stable; its input type narrows to exclude setDefault) | `rag-store-runtime: default reassignment must use hotSetDefault` |
+| R-set-default-through-hot-apply | `hotApply` called with a `{ kind: 'setDefault' }` OR `{ kind: 'renameDefault' }` mutation (defensive — `hotApply` is default-stable; its input type narrows to exclude both kinds) | `rag-store-runtime: default reassignment must use hotSetDefault` — **HOST-7b (documented):** the message reuses the `setDefault` wording for the `renameDefault` guard too (byte-pinned against the landed U-H7 F6 assertion, so it is NOT reworded); the sanctioned default-rename seam is `hotRenameDefault` |
 | R-default-changed | `loaded.defaultStoreName !== name` after the write (defensive; external edit) | `rag-store-runtime: default store changed by a hot-apply (default reassignment is a separate unit)` — the live directory is SYNCHRONIZED to `loaded` BEFORE the throw (HOST-1/D2) |
 
 The write module's new W-set-default-* family (PROPAGATED from `applyRegistryMutation` /
@@ -667,9 +737,10 @@ by U-H2), **W-rename-target-exists** (reused by `renameDefault`), the loader **F
 
 **Census (U-H7 additions):**
 - New modules/files created (in `src/`): **1** — `src/main/rag-store-default.ts`.
-- New controller members: **1** — `hotSetDefault(name): Promise<HotSetDefaultResult>`; 1 new result
-  type `HotSetDefaultResult`; the controller goes from **12 to 13** members. A NEW possible
-  `hotRenameDefault(to)` (or the fold-in, per §7 Q3) would make it 14.
+- New controller members: **2** — `hotSetDefault(name): Promise<HotSetDefaultResult>` +
+  `hotRenameDefault(to): Promise<HotRenameDefaultResult>` (Q3 R1 — the sanctioned default-rename
+  seam); 2 new result types `HotSetDefaultResult` + `HotRenameDefaultResult`; the controller goes
+  from **12 to 14** members.
 - New write-module surface: **2** mutation kinds (`setDefault`, `renameDefault`), **2** named
   conveniences (`setDefaultRegistryStore`, `renameDefaultRegistryStore`), **1** new `RegistryDelta`
   member (`defaultChanged: string[]`).
@@ -679,7 +750,10 @@ by U-H2), **W-rename-target-exists** (reused by `renameDefault`), the loader **F
   call sites: **+1 / +1**, both in `rag-store-default.ts`.
 - New byte-pinned message templates: **5** (R-set-default-arg, R-set-default-through-hot-apply,
   W-set-default-arg, W-set-default-unknown, W-set-default-nop) — plus the REUSED R-default-changed /
-  W-rename-target-exists.
+  W-rename-target-exists. **Post-spec census note (RCA-3 HOST-5, 2026-09-08):** the HOST-5
+  concurrency guard adds ONE further byte-pinned runtime message — `rag-store-runtime: default
+  reassignment already in progress` (spec §3a HOST-5) — pinned by the HOST-5 regression; it is NOT
+  counted among the 5 original §5.5 templates (it was authored during the adversarial fix batch).
 - New MCP tools / IPC channels / `stores:"all"` fan-out changes: **0** (D6/A-P2-4/§5.8).
 - New `console.*` lines: **0** (the runtime's 0-log census holds — the new boot's `.catch` is
   silent; the boot logs its own milestones; `rag-store-default.ts` emits none).
@@ -737,7 +811,13 @@ the U-H4/U-H6 fixture. Vector tests construct with `embedderKind:'vector'` + a m
    `hotRenameDefault('main-new')` (per §7 Q3) → `getDefaultName()` = `'main-new'`, the store is STILL
    `default:true` (it stayed the default), `delta.renamed === [{from:'main', to:'main-new'}]` + `delta.
    defaultChanged === ['main-new']`; the write module's legacy `W-rename-default` STILL rejects a
-   plain `hotRename('main','x')` (§5.7).
+   plain `hotRename('main','x')` (§5.7). **Persistence-file semantics (pinned per the landed
+   `renameDefault` write kind):** the default's config is re-keyed under the new name preserving its
+   OTHER pinned fields (`persistenceFile` RE-DERIVED under the new name if the config omitted it;
+   corpusRoot verbatim — §4 DEFAULT-RENAME-FOLD) — the derived file is NOT migrated, it is re-derived
+   under `to`, and the OLD default's derived file + journal STRAND byte-identical (D3, never
+   deleted/re-written); the live re-key keeps the SAME retained store object until the next rebuild
+   under the new derived path.
 
 ### 5.7 U-H7 fail-states (TestWriter red set — documented fail-states)
 
@@ -751,8 +831,8 @@ before the apply/teardown).
 | F2 | `hotSetDefault('nope')` (unknown) | fail-loud | the write module's **W-set-default-unknown** `rag-store-registry-write: cannot set unknown store 'nope' as default` PROPAGATES; live-untouched; NO teardown |
 | F3 | `hotSetDefault('main')` where `main` IS the current default | no-op (NOT a fail) | returns `{ ..., noop: true }` — NO write, NO teardown; the registry file byte-identical |
 | F4 | `hotSetDefault` whose persist hits a native fs failure (ENOSPC/EACCES/EROFS) | fail-loud | the native fs Error PROPAGATES; live-untouched; the ORIGINAL file intact; NO teardown |
-| F5 | the NEW default's vector boot CONSTRUCTION throws (vector mode — a provider/config/construct failure) | fail-loud; disk + live untouched | the construct Error PROPAGATES (before the write — construct-first); an orphaned born-lexical engine is a bounded hold; NO write, NO teardown |
-| F6 | `hotApply({ kind: 'setDefault', name })` (the default-stable seam given a setDefault) | fail-loud | **R-set-default-through-hot-apply** `rag-store-runtime: default reassignment must use hotSetDefault`; live-untouched (hotApply stays default-stable) |
+| F5 | the NEW default's vector boot CONSTRUCTION throws (vector mode — a provider/config/construct failure) | fail-loud; disk + live untouched | the construct Error PROPAGATES (before the write — construct-first); HOST-7a: NO orphaned born-lexical engine exists (the construct throw happens BEFORE any engine object is created); NO write, NO teardown |
+| F6 | `hotApply({ kind: 'setDefault', name })` (the default-stable seam given a setDefault) | fail-loud | **R-set-default-through-hot-apply** `rag-store-runtime: default reassignment must use hotSetDefault`; live-untouched (hotApply stays default-stable). The `renameDefault` kind is rejected with the SAME byte-pinned message (HOST-7b — documented; the sanctioned default-rename is `hotRenameDefault`) |
 | F7 | the defensive drift — `loaded.defaultStoreName !== name` after the write (external edit) | fail-loud, D2-preserving | **R-default-changed**; the live directory is SYNCHRONIZED to `loaded` BEFORE the throw (HOST-1) |
 | F8 | the OLD default's vector engine has an in-flight query at teardown (A-P2-2) | does NOT settle until the query settles | `releaseDefaultVectorBoot`'s UNBOUNDED drain awaits `boot.engine.inFlight()===0`; the engine is NEVER torn down mid-query (a never-settling query HANGS — §7 Q10) |
 | F9 | the default's RENAME through the LEGACY path | fail-loud (UNCHANGED) | `hotApply({kind:'rename', from:'main'})` / `hotRename('main','x')` PROpagates **W-rename-default** — the default's rename only succeeds via the U-H7 sanctioned `renameDefault`/`hotRenameDefault` path (U-H2 F9/HOST-2 + U-H6 F4 stay green) |
@@ -834,17 +914,26 @@ before the apply/teardown).
   `adjacency.ts`/`rag-store-registry.ts`/`rag-store-directory.ts`/`main.ts`/`mcp-server.ts`/`preload.ts`/
   `shared/types.ts`/`security.ts`/`sidebar-panes.ts`.
 - **New exports/methods:** `RagStoreRuntimeController.hotSetDefault(name): Promise<HotSetDefaultResult>`
-  (1 method) + `HotSetDefaultResult` (1 type) in `rag-store-runtime.ts`; `releaseDefaultVectorBoot(boot):
+  + `hotRenameDefault(to): Promise<HotRenameDefaultResult>` (2 methods) + `HotSetDefaultResult` +
+  `HotRenameDefaultResult` (2 types) in `rag-store-runtime.ts`; `releaseDefaultVectorBoot(boot):
   Promise<{drained:number}>` + `createDefaultVectorBoot(store, provider, userDataPath): VectorBootController`
   (2 factory-free functions) in `rag-store-default.ts`; `setDefaultRegistryStore` + `renameDefaultRegistryStore`
   (2 named conveniences) + the `'setDefault'`/`'renameDefault'` kinds + `RegistryDelta.defaultChanged` (1
-  member) in `rag-store-registry-write.ts`. Controller member count: **12 → 13** (14 if `hotRenameDefault`
-  is added per §7 Q3).
-- **New `teardown(` call sites:** **+1 total** (`boot.teardown()` in `rag-store-default.ts`); the reused
+  member) in `rag-store-registry-write.ts`. Controller member count: **12 → 14** (`hotSetDefault` +
+  `hotRenameDefault`, per §7 Q3 **R1**).
+- **New `teardown(` call sites (CALL-SITE count):** **+1 total** (`boot.teardown()` inside
+  `releaseDefaultVectorBoot` in `rag-store-default.ts` — the ONLY genuine call site); the reused
   `rag-store-remove.ts`'s LANDED 4 are UNCHANGED; **ZERO** in `rag-store-runtime.ts` (the N1 pin).
+  **Call-site-vs-grep note (reconciled):** the raw `\bteardown\s*\(` grep on `rag-store-default.ts`
+  returns 2 matches — the genuine `await boot.teardown()` call (line 65) + the module's OWN
+  docstring mention of `await boot.teardown()` (line ~44, the DRAIN-THEN-RELEASE comment step 2) —
+  so the CALL-SITE census is **+1**, not the raw-grep 2. The N1/A-P2-8 pin is a CALL-SITE pin:
+  **ZERO** `teardown(` calls (and no `teardown` literal at all) in `rag-store-runtime.ts`.
 - **New byte-pinned message templates:** **5** (R-set-default-arg, R-set-default-through-hot-apply,
   W-set-default-arg, W-set-default-unknown, W-set-default-nop) + the REUSED R-default-changed /
-  W-rename-target-exists.
+  W-rename-target-exists. (The RCA-3 HOST-5 concurrency message `default reassignment already in
+  progress` is an ADDITIONAL byte-pinned runtime template authored in the fix batch — see §5.5's
+  post-spec census note; not counted in the 5.)
 - **New MCP tools / IPC channels / `stores:"all"` fan-out edits / teardown calls in the runtime:**
   **0** (D6/A-P2-4/N1/§5.8).
 - **New `console.*` lines:** **0** (the runtime's 0-log census holds; the new boot's `.catch(() =>
@@ -953,8 +1042,8 @@ NOT authored now (PARKED).
 2. **The vector teardown + re-warm approach — CONSTRUCT-NEW-BEFORE-TEAR-DOWN-OLD + born-lexical-pending
    + fire-and-forget start + LEXICAL-PENDING failsafe. (RESOLVED provisionally; needs the ruling.)**
    - The vector re-warm is ordered: (1) CONSTRUCT the new default's `createVectorBootController` FIRST
-     (born-lexical-pending, NOT started; a construct throw leaves disk + live untouched at the cost of an
-     orphaned born-lexical engine), (2) write the flip, (3) replace the new default's engine + rebuild the
+     (born-lexical-pending, NOT started; a construct throw leaves disk + live untouched — HOST-7a: it happens
+     BEFORE any engine is created, so there is no orphaned born-lexical engine), (2) write the flip, (3) replace the new default's engine + rebuild the
      old default lexical + re-bind (no dark default), (4) TEAR DOWN the old default's boot LAST (its engine
      drained to `inFlight()===0` first — A-P2-2), (5) START the new boot fire-and-forget with a silent
      `.catch(() => undefined)` (the runtime 0-log census holds). The failsafe: a new-default background-build
@@ -1075,8 +1164,8 @@ All eleven §7 items are **CONFIRMED** as provisionally resolved — the record 
    a FRESH lexical engine (non-default always-lexical, A6/R10). ONLY the old default's `VectorBootController`
    is torn down (via `releaseDefaultVectorBoot` in the new `rag-store-default.ts`). `drainAndReleaseEntry` is
    NOT used (it tears the store too). **CONFIRMED.**
-5. **Q5 — CONFIRMED.** Atomic order: (1) construct-new-first (a construct throw leaves disk+live untouched at
-   the cost of an orphaned born-lexical engine) → (2) write the flip (D2) → (3) replace the new default's engine
+5. **Q5 — CONFIRMED.** Atomic order: (1) construct-new-first (a construct throw leaves disk+live untouched —
+   HOST-7a: it precedes any engine creation, so there is NO orphaned born-lexical engine) → (2) write the flip (D2) → (3) replace the new default's engine
    + rebuild the old default lexical + re-bind → (4) tear-down-old-LAST (UNBOUNDED `inFlight()===0` drain +
    the F-H4-1 re-entry) → (5) start-new. NO dark default; the old default's vector engine is NEVER torn down
    mid-query. **CONFIRMED.**

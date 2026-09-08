@@ -56,6 +56,8 @@ import {
   addRegistryStore,
   removeRegistryStore,
   renameRegistryStore,
+  setDefaultRegistryStore,
+  renameDefaultRegistryStore,
   persistRagStoreRegistry,
   writeRegistryMutation,
   type RegistryMutation,
@@ -175,14 +177,16 @@ describe('U-H1 RED marker — the write module does not exist yet (§5.1, §6)',
     expect(typeof writeRegistryMutation).toBe('function')
   })
 
-  it('02. §5.3/§5.8 — the runtime export surface is EXACTLY the 6 functions (NO exported consts — RAG_STORE_NAME_PATTERN is not re-exported)', () => {
+  it('02. §5.3/§5.8 — the runtime export surface is the 6 functions + the two U-H7 additions (NO exported consts — RAG_STORE_NAME_PATTERN is not re-exported)', () => {
     const mod = writeModule as unknown as Record<string, unknown>
     expect(Object.keys(mod).sort()).toEqual([
       'addRegistryStore',
       'applyRegistryMutation',
       'persistRagStoreRegistry',
       'removeRegistryStore',
+      'renameDefaultRegistryStore',
       'renameRegistryStore',
+      'setDefaultRegistryStore',
       'writeRegistryMutation',
     ])
   })
@@ -324,6 +328,81 @@ describe('pure mutators — happy paths (§5.6 H1–H5, H6 double-validation, H1
       }
       // The existing entry's unknown key 'custom' is dropped from configs.
       expect(results[0].configs[0]).toEqual({ name: 'main', default: true })
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Unit U-H7 additive — the default reassignment + sanctioned default rename.
+// (docs/specs/unit-h7-default-reassign.md §5.1 — Q6 additive amendment; NONE of
+// the existing add/remove/rename rows is re-pinned.)
+// ---------------------------------------------------------------------------
+describe('U-H7 additive — setDefault + renameDefault kinds (Q6: additive; existing rows unchanged)', () => {
+  it('SH1 — pure setDefault flips `default:true` onto the named store; delta.defaultChanged === [name], all other members empty', () => {
+    withDir((dir) => {
+      const parsed = {
+        version: 1,
+        stores: [{ name: 'main', default: true }, { name: 'research-2026-09', default: false }],
+      }
+      const result = setDefaultRegistryStore(parsed, dir, 'research-2026-09')
+      expect(result.delta).toEqual({ added: [], removed: [], renamed: [], defaultChanged: ['research-2026-09'] })
+      // Exactly ONE default — the candidate re-validates cleanly.
+      expect(result.registry.defaultStoreName).toBe('research-2026-09')
+      expect(result.configs.find((c) => c.name === 'main')!.default).toBe(false)
+      expect(result.configs.find((c) => c.name === 'research-2026-09')!.default).toBe(true)
+    })
+  })
+
+  it('SH2 — setDefault UNKNOWN name → W-set-default-unknown; the current default STILL the default (no mutation)', () => {
+    withDir((dir) => {
+      const parsed = {
+        version: 1,
+        stores: [{ name: 'main', default: true }, { name: 'research-2026-09', default: false }],
+      }
+      expectThrow(() => setDefaultRegistryStore(parsed, dir, 'nope'), `${WRITE} cannot set unknown store 'nope' as default`)
+    })
+  })
+
+  it('SH3 — setDefault to the CURRENT default → W-set-default-nop (defensive; the runtime pre-checks no-op)', () => {
+    withDir((dir) => {
+      const parsed = {
+        version: 1,
+        stores: [{ name: 'main', default: true }, { name: 'research-2026-09', default: false }],
+      }
+      expectThrow(() => setDefaultRegistryStore(parsed, dir, 'main'), `${WRITE} store 'main' is already the default`)
+    })
+  })
+
+  it('SH4 — renameDefault renames the CURRENT default preserving `default:true`; delta.renamed === [{from,to}] AND defaultChanged === [to]', () => {
+    withDir((dir) => {
+      const parsed = {
+        version: 1,
+        stores: [{ name: 'main', default: true }, { name: 'research-2026-09', default: false }],
+      }
+      const result = renameDefaultRegistryStore(parsed, dir, 'main-new')
+      expect(result.delta).toEqual({
+        added: [],
+        removed: [],
+        renamed: [{ from: 'main', to: 'main-new' }],
+        defaultChanged: ['main-new'],
+      })
+      expect(result.registry.defaultStoreName).toBe('main-new')
+      expect(result.configs.find((c) => c.name === 'main-new')!.default).toBe(true)
+      expect(result.configs.some((c) => c.name === 'main')).toBe(false)
+    })
+  })
+
+  it('SH5 — renameDefault onto an EXISTING name / to its OWN name → W-rename-target-exists (reused)', () => {
+    withDir((dir) => {
+      const parsed = {
+        version: 1,
+        stores: [{ name: 'main', default: true }, { name: 'research-2026-09', default: false }],
+      }
+      expectThrow(
+        () => renameDefaultRegistryStore(parsed, dir, 'research-2026-09'),
+        W_renameTargetExists('main', 'research-2026-09'),
+      )
+      expectThrow(() => renameDefaultRegistryStore(parsed, dir, 'main'), W_renameTargetExists('main', 'main'))
     })
   })
 })
