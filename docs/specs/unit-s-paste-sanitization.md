@@ -12,8 +12,8 @@
   is the **paste-time sanitization** must-fix item. It does NOT implement the
   contenteditable UI (a later slice), the retrieval indexing of inline
   `children` text (Unit Q), the traversal disambiguation of inline vs
-  doc-children (Unit R), or the `provident-editable@0.1.0` converter/diff
-  integration (a later slice). It is the PURE, DOM-free sanitization contract the
+  doc-children (Unit R), or the rich-text converter/diff integration (built
+  IN-HOUSE as `src/main/rich-decompose.ts`, Unit U2 — a later slice). It is the PURE, DOM-free sanitization contract the
   contenteditable paste path builds on.
 - **Scope:** a single PURE function `sanitizePastedHtml(rawHtml: string):
   SanitizePasteResult` in a new node-testable module `src/main/paste-sanitize.ts`
@@ -93,8 +93,8 @@ landed:
 - **The `setSubtree` edit op** (Unit O §5.3) is the write path the sanitized
   `children` flows into — a full replace of a node's inline `children`. The
   sanitizer's output is the `RagNodeChild[]` `setSubtree` accepts.
-- **The `provident-editable@0.1.0` converter** (the RICH-TEXT-EDITING-GATE
-  adopted package) consumes the SANITIZED HTML (the `html` field of the result)
+- **The rich-text converter** (built IN-HOUSE as `src/main/rich-decompose.ts`,
+  Unit U2 — the RICH-TEXT-EDITING-GATE adopted package) consumes the SANITIZED HTML (the `html` field of the result)
   to build the provident tree; the sanitizer's `html` output is safe to feed to
   it. The converter/diff integration is a LATER slice — this unit pins the
   sanitizer contract the paste path builds on.
@@ -118,8 +118,7 @@ No engine/foundation gap blocks this unit. The sanitizer is **project-specific**
 | The determinism + totality guarantee (never throws) | Project-specific | Low cost; a malformed input returns a sanitized result or a pinned fail-state, never an uncaught throw. |
 | The pure-JS HTML parser dependency | Project-specific (a node-testable, DOM-free parser) | Low cost; the only new dependency — enables node-testing without Electron/DOM. |
 
-No engine gap. The contenteditable UI, the `provident-editable@0.1.0`
-converter/diff integration, the retrieval indexing of inline `children` text
+No engine gap. The contenteditable UI, the rich-text converter/diff integration (built IN-HOUSE as `src/main/rich-decompose.ts`, Unit U2), the retrieval indexing of inline `children` text
 (Unit Q), and the traversal disambiguation of inline vs doc-children (Unit R)
 are LATER slices (the remaining RICH-TEXT-EDITING-GATE must-fix items) — NOT
 this unit.
@@ -314,7 +313,7 @@ export type SanitizePasteResult =
       ok: true
       /** The SANITIZED HTML string — safe, order-preserving, containing ONLY
        *  `strong`/`em`/`a`/`img` + text (no script/iframe/svg/on*/unsafe-URL).
-       *  Ready to feed to the `provident-editable@0.1.0` converter. */
+       *  Ready to feed to the rich-text converter (`src/main/rich-decompose.ts`, Unit U2). */
       html: string
       /** The plain-text content (text nodes + folded `span` + unwrapped-element
        *  text), in document order. This is the RAG node's `content`. */
@@ -347,7 +346,7 @@ export type SanitizePasteResult =
   empty/whitespace-only input).
 - **The `html` field** is the sanitized HTML string — safe, order-preserving,
   containing ONLY `strong`/`em`/`a`/`img` + text. It is the input to the
-  `provident-editable@0.1.0` converter (a later slice).
+  rich-text converter (`src/main/rich-decompose.ts`, Unit U2 — a later slice).
 - **The `content` field** is the plain-text content (text nodes + folded `span`
   + unwrapped-element text), in document order. It is the RAG node's `content`.
 - **The `children` field** is the normalized inline children (`strong`/`em`/
@@ -746,7 +745,7 @@ preserved as siblings. This applies to block/other elements such as `div`, `p`,
 - Pending: `docs/pending.md` (the remaining RICH-TEXT-EDITING-GATE must-fix
   items — retrieval indexing of inline `children` text (Unit Q), traversal
   disambiguation of inline vs doc-children (Unit R), the contenteditable UI +
-  the `provident-editable@0.1.0` converter/diff integration — LATER slices, NOT
+  the rich-text converter/diff integration (built IN-HOUSE as `src/main/rich-decompose.ts`, Unit U2) — LATER slices, NOT
   this unit).
 - Host patterns: `src/main/paste-sanitize.ts` (the NEW pure module — the
   `sanitizePastedHtml` function + the `SanitizePasteResult` type + the internal

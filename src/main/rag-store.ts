@@ -74,6 +74,10 @@ export type RagNodeType =
  *  artifact folded into the parent's `content`). */
 export type RagNodeChildType = 'strong' | 'em' | 'a' | 'img'
 
+/** The RAG node kind — the provenance category of a node. OPTIONAL and ADDITIVE
+ *  (Unit X): a node without `nodeKind` is a `content` node (the v1 default). */
+export type RagNodeKind = 'content' | 'fact' | 'reference'
+
 /** An inline rich-text child of a RAG node. Held on the owning node's
  *  `children` field — NOT a separate RAG node, NOT part of `ownedNodeIds`. */
 export interface RagNodeChild {
@@ -96,6 +100,9 @@ export interface RagNodeChild {
 export interface RagNode {
   id: string
   type: RagNodeType
+  /** NEW (Unit X) — the provenance kind of the node. OPTIONAL and ADDITIVE: a
+   *  node without `nodeKind` is a `content` node (the v1 default). */
+  nodeKind?: RagNodeKind
   content: string
   /** The inline rich-text children (strong/em/a/img) held ON this node — NOT
    *  separate RAG nodes (one-chunk-per-subtree preserved). OPTIONAL and
@@ -121,10 +128,25 @@ export type RagEdgeKind =
   | 'doc-child'
   | 'crosslink'   // Unit G — a cross-document reference (source → target).
 
+/** The RAG edge type — how an edge relates its source to its target. OPTIONAL
+ *  and ADDITIVE (Unit X): an edge without `edgeType` is a `link` (the v1
+ *  default). */
+export type RagEdgeType = 'link' | 'embed'
+
+/** The reference-resolution state of an edge. OPTIONAL and ADDITIVE (Unit X):
+ *  defaults to `RESOLVED` for a `link` edge and `FRESH` for an `embed` edge. */
+export type RagReferenceState = 'FRESH' | 'RESOLVED' | 'STALE' | 'BROKEN'
+
 /** A RAG edge — a directed relationship between two RAG nodes. */
 export interface RagEdge {
   id: string
   kind: RagEdgeKind
+  /** NEW (Unit X) — the edge type. OPTIONAL and ADDITIVE: an edge without
+   *  `edgeType` is a `link` (the v1 default). */
+  edgeType?: RagEdgeType
+  /** NEW (Unit X) — the reference-resolution state. OPTIONAL and ADDITIVE:
+   *  defaults to `RESOLVED` for a `link` edge and `FRESH` for an `embed` edge. */
+  state?: RagReferenceState
   source: string
   target: string
   order?: number
@@ -278,6 +300,9 @@ interface RagStoreFile {
 
 const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th'])
 const RAG_NODE_CHILD_TYPES = new Set<string>(['strong', 'em', 'a', 'img'])
+const RAG_NODE_KINDS = new Set<string>(['content', 'fact', 'reference'])
+const RAG_EDGE_TYPES = new Set<string>(['link', 'embed'])
+const RAG_REFERENCE_STATES = new Set<string>(['FRESH', 'RESOLVED', 'STALE', 'BROKEN'])
 const DEFAULT_MAX_JOURNAL_LENGTH = 1000
 
 function sha256(source: string): string {
@@ -331,6 +356,7 @@ function sameStringArray(a: string[] | undefined, b: string[] | undefined): bool
 function nodeSource(n: RagNode): string {
   return JSON.stringify({
     id: n.id, type: n.type, content: n.content,
+    nodeKind: n.nodeKind,
     children: n.children, props: n.props, ownedNodeIds: n.ownedNodeIds,
     createdAt: n.createdAt, updatedAt: n.updatedAt,
   })
@@ -340,6 +366,7 @@ function nodeHash(n: RagNode): string { return sha256(nodeSource(n)) }
 function edgeSource(e: RagEdge): string {
   return JSON.stringify({
     id: e.id, kind: e.kind, source: e.source, target: e.target,
+    edgeType: e.edgeType, state: e.state,
     order: e.order, documentIds: e.documentIds,
     createdAt: e.createdAt, updatedAt: e.updatedAt,
   })
@@ -362,6 +389,7 @@ function validateNodeShape(input: unknown): NodeShapeResult {
   const n = input as Partial<RagNode>
   if (typeof n.id !== 'string' || n.id === '') return { ok: false, field: 'id' }
   if (typeof n.type !== 'string' || !RAG_NODE_TYPES.has(n.type)) return { ok: false, field: 'type' }
+  if (n.nodeKind !== undefined && (typeof n.nodeKind !== 'string' || !RAG_NODE_KINDS.has(n.nodeKind))) return { ok: false, field: 'nodeKind' }
   if (typeof n.content !== 'string') return { ok: false, field: 'content' }
   if (n.children !== undefined) {
     if (!Array.isArray(n.children)) return { ok: false, field: 'children' }
@@ -386,6 +414,7 @@ function validateNodeShape(input: unknown): NodeShapeResult {
     ok: true,
     node: {
       id: n.id, type: n.type as RagNodeType, content: n.content,
+      nodeKind: n.nodeKind as RagNodeKind | undefined,
       children: n.children !== undefined ? deepCopy(n.children) : undefined,
       props: n.props !== undefined ? deepCopy(n.props) : undefined,
       ownedNodeIds: [...new Set(n.ownedNodeIds)],
@@ -401,6 +430,8 @@ function validateEdgeShape(input: unknown): EdgeShapeResult {
   const e = input as Partial<RagEdge>
   if (typeof e.id !== 'string' || e.id === '') return { ok: false, field: 'id' }
   if (typeof e.kind !== 'string' || !RAG_EDGE_KINDS.has(e.kind)) return { ok: false, field: 'kind' }
+  if (e.edgeType !== undefined && (typeof e.edgeType !== 'string' || !RAG_EDGE_TYPES.has(e.edgeType))) return { ok: false, field: 'edgeType/state' }
+  if (e.state !== undefined && (typeof e.state !== 'string' || !RAG_REFERENCE_STATES.has(e.state))) return { ok: false, field: 'edgeType/state' }
   if (typeof e.source !== 'string' || e.source === '') return { ok: false, field: 'source' }
   if (typeof e.target !== 'string' || e.target === '') return { ok: false, field: 'target' }
   if (e.source === e.target) return { ok: false, field: 'source' }
@@ -414,6 +445,8 @@ function validateEdgeShape(input: unknown): EdgeShapeResult {
     ok: true,
     edge: {
       id: e.id, kind: e.kind as RagEdgeKind, source: e.source, target: e.target,
+      edgeType: e.edgeType as RagEdgeType | undefined,
+      state: e.state as RagReferenceState | undefined,
       order: e.order, documentIds: e.documentIds !== undefined ? [...new Set(e.documentIds)] : undefined,
       createdAt: e.createdAt, updatedAt: e.updatedAt,
     },
@@ -455,6 +488,7 @@ function isRagNode(v: unknown): boolean {
   // `props` object + dangerous-key guard, `ownedNodeIds` all non-empty strings.
   return typeof n.id === 'string' && n.id !== '' &&
     typeof n.type === 'string' && RAG_NODE_TYPES.has(n.type) &&
+    (n.nodeKind === undefined || (typeof n.nodeKind === 'string' && RAG_NODE_KINDS.has(n.nodeKind))) &&
     typeof n.content === 'string' &&
     isValidChildren(n.children) &&
     (n.props === undefined || (typeof n.props === 'object' && !Array.isArray(n.props) && !hasDangerousKey(n.props))) &&
@@ -465,7 +499,10 @@ function isRagEdge(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
   const e = v as Partial<RagEdge>
   return typeof e.id === 'string' && typeof e.kind === 'string' && typeof e.source === 'string' &&
-    typeof e.target === 'string' && isIso8601(e.createdAt) && isIso8601(e.updatedAt)
+    typeof e.target === 'string' &&
+    (e.edgeType === undefined || (typeof e.edgeType === 'string' && RAG_EDGE_TYPES.has(e.edgeType))) &&
+    (e.state === undefined || (typeof e.state === 'string' && RAG_REFERENCE_STATES.has(e.state))) &&
+    isIso8601(e.createdAt) && isIso8601(e.updatedAt)
 }
 function isSrcTgt(v: unknown): boolean {
   if (v === null || typeof v !== 'object') return false
@@ -729,10 +766,12 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- public record copies (strip hash/quarantine, deep-copy mutable fields)
   function toPublicNode(n: StoredNode): RagNode {
-    return { id: n.id, type: n.type, content: n.content, children: n.children !== undefined ? deepCopy(n.children) : undefined, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
+    return { id: n.id, type: n.type, content: n.content, nodeKind: n.nodeKind ?? 'content', children: n.children !== undefined ? deepCopy(n.children) : undefined, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
   }
   function toPublicEdge(e: StoredEdge): RagEdge {
-    return { id: e.id, kind: e.kind, source: e.source, target: e.target, order: e.order, documentIds: e.documentIds !== undefined ? [...e.documentIds] : undefined, createdAt: e.createdAt, updatedAt: e.updatedAt }
+    const edgeType = e.edgeType ?? 'link'
+    const state = e.state ?? (edgeType === 'embed' ? 'FRESH' : 'RESOLVED')
+    return { id: e.id, kind: e.kind, source: e.source, target: e.target, edgeType, state, order: e.order, documentIds: e.documentIds !== undefined ? [...e.documentIds] : undefined, createdAt: e.createdAt, updatedAt: e.updatedAt }
   }
 
   // ---- internal (non-journaled) mutations used by undo/redo ----------------
@@ -756,6 +795,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function setNodeFields(n: StoredNode, src: RagNode): void {
     n.type = src.type
     n.content = src.content
+    n.nodeKind = src.nodeKind
     n.children = src.children !== undefined ? deepCopy(src.children) : undefined
     n.props = src.props !== undefined ? deepCopy(src.props) : undefined
     n.ownedNodeIds = [...src.ownedNodeIds]
@@ -765,6 +805,8 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   }
   function setEdgeFields(e: StoredEdge, src: RagEdge): void {
     e.kind = src.kind
+    e.edgeType = src.edgeType
+    e.state = src.state
     e.source = src.source
     e.target = src.target
     e.order = src.order

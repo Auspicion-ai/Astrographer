@@ -111,7 +111,9 @@ describe('Unit E adversarial-fix regression (HOST findings F1-F7)', () => {
     }
     const result = await handleRagTool(store, 'rag.query', { query: 'hello', topK: 5 }, engine)
     expect(engine.query).toHaveBeenCalledTimes(1)
-    expect(engine.query).toHaveBeenCalledWith('hello', { k: 5 })
+    // Unit X — the handler forwards the full RagQueryOptions to the maintained
+    // engine's `query` (F1 preserved: the passed engine is used, not a rebuild).
+    expect(engine.query).toHaveBeenCalledWith('hello', { k: 5, mode: 'flat', maxHops: 3, expand: 'none', maxParentContext: 5, filters: undefined })
     expect(result.query).toBe('hello')
   })
 

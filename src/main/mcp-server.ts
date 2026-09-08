@@ -31,7 +31,8 @@ import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } fro
 import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
-import type { RetrievalEngine } from './retrieval.js'
+import type { RetrievalEngine, RagQueryFilters } from './retrieval.js'
+import type { QueryAuditLog } from './query-audit.js'
 import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
@@ -141,12 +142,42 @@ export function handleModuleTool(store: ModuleStore | null, name: string, args: 
  *  MCP `rag.query` tool and the `rag-query` IPC (both route through this
  *  handler — MCP-UI-EQUIVALENCE): the addressed entry's registry name, or ''
  *  for the legacy directory-less sentinel (§5.9). */
+/** Unit X §5.8 — validate the `filters` arg shape for the `rag.query`/
+ *  `rag-stream` tools. Throws `Error('rag.query: filters malformed')` on a
+ *  malformed shape (a non-object, a `nodeKind`/`edgeType`/`state` outside the
+ *  closed union, or a `target` missing `documentId`/`nodeId`). */
+function validateRagQueryFilters(filters: unknown): void {
+  if (filters === null || typeof filters !== 'object' || Array.isArray(filters)) {
+    throw new Error('rag.query: filters malformed')
+  }
+  const f = filters as Record<string, unknown>
+  if (f.nodeKind !== undefined && !['content', 'fact', 'reference'].includes(f.nodeKind as string)) {
+    throw new Error('rag.query: filters malformed')
+  }
+  if (f.edgeType !== undefined && !['link', 'embed'].includes(f.edgeType as string)) {
+    throw new Error('rag.query: filters malformed')
+  }
+  if (f.state !== undefined && !['FRESH', 'RESOLVED', 'STALE', 'BROKEN'].includes(f.state as string)) {
+    throw new Error('rag.query: filters malformed')
+  }
+  if (f.target !== undefined) {
+    if (f.target === null || typeof f.target !== 'object' || Array.isArray(f.target)) {
+      throw new Error('rag.query: filters malformed')
+    }
+    const t = f.target as Record<string, unknown>
+    if (typeof t.documentId !== 'string' || typeof t.nodeId !== 'string') {
+      throw new Error('rag.query: filters malformed')
+    }
+  }
+}
+
 export async function handleRagTool(
   store: RagStore | null,
   name: string,
   args: Record<string, unknown>,
   engine?: RetrievalEngine | null,
   dir?: RagStoreDirectory | null,
+  auditLog?: QueryAuditLog | null,
 ): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
   // U-MS2 §5.3 step 2 — resolve FIRST (before every tool-specific validation
@@ -158,28 +189,122 @@ export async function handleRagTool(
   const target = entry ? entry.store : store
   switch (name) {
     case 'rag.query': {
-      // Unit E — the retrieval entry point. Validates the zod input
-      // ({ query, topK? }), then calls the retrieval engine's query (the SAME
-      // module the UI `rag-query` IPC calls — §8.2 MCP/UI equivalence). ASYNC
-      // (Unit F amendment) — awaits the engine's async `query`.
+      // Unit E + Unit X — the retrieval entry point. Validates the zod input
+      // ({ query, topK?, mode?, maxHops?, expand?, maxParentContext?, filters? }),
+      // then calls the extended `ragQuery` (the SAME module the UI `rag-query`
+      // IPC calls — §8.2 MCP/UI equivalence). ASYNC (Unit F amendment).
       const query = typeof args.query === 'string' ? args.query : ''
       if (query.trim() === '') throw new Error('rag.query: query must be a non-empty string')
       const topK = args.topK !== undefined ? args.topK : 5
-      if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1) {
-        throw new Error('rag.query: topK must be a positive integer')
+      if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1 || topK > 50) {
+        throw new Error('rag.query: topK must be an integer in [1, 50]')
       }
-      // U-MS2 §5.3 engine selection: with a directory injected the engine is
-      // the ENTRY's engine — NEVER the per-call createRetrieval fallback (the
-      // F1 no-rebuild property, per store). With `dir == null` today's
-      // `engine ?? createRetrieval(...)` fallback is UNCHANGED.
+      const mode = args.mode !== undefined ? args.mode : 'flat'
+      if (mode !== 'flat' && mode !== 'graph') throw new Error('rag.query: mode must be "flat" or "graph"')
+      const maxHops = args.maxHops !== undefined ? args.maxHops : 3
+      if (typeof maxHops !== 'number' || !Number.isInteger(maxHops) || maxHops < 1 || maxHops > 5) {
+        throw new Error('rag.query: maxHops must be an integer in [1, 5]')
+      }
+      const expand = args.expand !== undefined ? args.expand : 'none'
+      if (expand !== 'none' && expand !== 'parent') throw new Error('rag.query: expand must be "none" or "parent"')
+      const maxParentContext = args.maxParentContext !== undefined ? args.maxParentContext : 5
+      if (typeof maxParentContext !== 'number' || !Number.isInteger(maxParentContext) || maxParentContext < 1) {
+        throw new Error('rag.query: maxParentContext must be a positive integer')
+      }
+      if (args.filters !== undefined) validateRagQueryFilters(args.filters)
+      // Unit X — the extended retrieval entry point (the SAME module the UI
+      // `rag-query` IPC calls — §8.2 MCP/UI equivalence). Uses the MAINTAINED
+      // engine (F1 — no per-call index rebuild): the addressed entry's engine,
+      // or the passed engine, or a fresh engine as a direct-call fallback. The
+      // engine's `query` returns the extended RagResult (citations/trace/
+      // blockedBy/results/engine + the preserved ranked/context/markdown/
+      // lineMap/k).
       const e = entry ? entry.engine : (engine ?? createRetrieval(target, createLexicalEmbedder(createLexicalIndex(target.listNodes()))))
+      const result = await e.query(query, {
+        k: topK,
+        mode: mode as 'flat' | 'graph',
+        maxHops,
+        expand: expand as 'none' | 'parent',
+        maxParentContext,
+        filters: args.filters as RagQueryFilters | undefined,
+      })
+      // Unit X §5.7 — record the call in the shared audit log (skip when
+      // null/absent — no throw).
+      if (auditLog) {
+        auditLog.record({
+          query,
+          filters: (args.filters as RagQueryFilters) ?? null,
+          mode: mode as 'flat' | 'graph',
+          resultCount: result.results.length,
+          timestamp: new Date().toISOString(),
+          requester: 'mcp',
+        })
+      }
       // U-MS2 §5.9 F3 — the ONE additive query-RESULT field (`store`), stamped
       // HERE at the shared-handler seam (the engine's RetrievalResult is
       // store-name-blind; the public tool result carries the addressed entry's
       // registry name, '' for the legacy directory-less sentinel — §5.9).
-      const raw = await e.query(query, { k: topK })
-      return { ...raw, store: ref?.name ?? '' }
+      return { ...result, store: ref?.name ?? '' }
     }
+    case 'rag-stream': {
+      // Unit X §5.8 — the degenerate stream tool. Same input schema + same
+      // validation as `rag.query`; runs the SAME `ragQuery` and returns
+      // [{ type: 'result', result }, { type: 'done' }], or
+      // [{ type: 'error', error: <message> }] on a fail-state. F-X-3 — the
+      // VALIDATION fail-states (empty query, bad topK/mode/maxHops/expand/
+      // maxParentContext/filters) are INSIDE the try, so EVERY fail-state
+      // returns the spec §5.8-mandated [{ type: 'error', error: <message> }]
+      // chunk (the same `rag.query:`-prefixed message) rather than surfacing as
+      // an MCP tool error.
+      try {
+        const query = typeof args.query === 'string' ? args.query : ''
+        if (query.trim() === '') throw new Error('rag.query: query must be a non-empty string')
+        const topK = args.topK !== undefined ? args.topK : 5
+        if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1 || topK > 50) {
+          throw new Error('rag.query: topK must be an integer in [1, 50]')
+        }
+        const mode = args.mode !== undefined ? args.mode : 'flat'
+        if (mode !== 'flat' && mode !== 'graph') throw new Error('rag.query: mode must be "flat" or "graph"')
+        const maxHops = args.maxHops !== undefined ? args.maxHops : 3
+        if (typeof maxHops !== 'number' || !Number.isInteger(maxHops) || maxHops < 1 || maxHops > 5) {
+          throw new Error('rag.query: maxHops must be an integer in [1, 5]')
+        }
+        const expand = args.expand !== undefined ? args.expand : 'none'
+        if (expand !== 'none' && expand !== 'parent') throw new Error('rag.query: expand must be "none" or "parent"')
+        const maxParentContext = args.maxParentContext !== undefined ? args.maxParentContext : 5
+        if (typeof maxParentContext !== 'number' || !Number.isInteger(maxParentContext) || maxParentContext < 1) {
+          throw new Error('rag.query: maxParentContext must be a positive integer')
+        }
+        if (args.filters !== undefined) validateRagQueryFilters(args.filters)
+        // Unit X — the SAME maintained-engine `e.query` call as `rag.query` (F1 —
+        // no per-call index rebuild).
+        const e = entry ? entry.engine : (engine ?? createRetrieval(target, createLexicalEmbedder(createLexicalIndex(target.listNodes()))))
+        const result = await e.query(query, {
+          k: topK,
+          mode: mode as 'flat' | 'graph',
+          maxHops,
+          expand: expand as 'none' | 'parent',
+          maxParentContext,
+          filters: args.filters as RagQueryFilters | undefined,
+        })
+        if (auditLog) {
+          auditLog.record({
+            query,
+            filters: (args.filters as RagQueryFilters) ?? null,
+            mode: mode as 'flat' | 'graph',
+            resultCount: result.results.length,
+            timestamp: new Date().toISOString(),
+            requester: 'mcp',
+          })
+        }
+        return [{ type: 'result', result }, { type: 'done' }]
+      } catch (e) {
+        return [{ type: 'error', error: e instanceof Error ? e.message : String(e) }]
+      }
+    }
+    case 'get_query_audit_log':
+      // Unit X §5.7 — read the shared audit log (empty when null/absent).
+      return { entries: auditLog ? auditLog.list() : [] }
     case 'rag.get_document': {
       // L4 — the document-subtree scoping (the tool description's "The
       // document's RAG nodes/edges (the subtree)"). Returns ONLY the requested
@@ -239,12 +364,13 @@ export async function handleRagQueryIpc(
   store: RagStore | null,
   payload: { query?: unknown; topK?: unknown; store?: unknown },
   dir?: RagStoreDirectory | null,
+  auditLog?: QueryAuditLog | null,
 ): Promise<unknown> {
   return handleRagTool(store, 'rag.query', {
     query: payload?.query,
     topK: payload?.topK,
     store: payload?.store,
-  }, engine, dir)
+  }, engine, dir, auditLog)
 }
 
 /** Unit G §5.4/§8.2 — the UI backlink path. The main-process `rag-backlinks`
@@ -763,6 +889,11 @@ export interface McpServerOptions {
    *  handled in MAIN against this store (never routed to the renderer). Injected
    *  like `ragStore`. */
   templateStore?: TemplateStore
+  /** Unit X §5.7 — the shared query-audit log, created ONCE in main and passed
+   *  in. The `rag.query`/`rag-stream` handlers record to it; the
+   *  `get_query_audit_log` tool reads from it. When null/absent the handlers
+   *  skip recording (no throw). */
+  auditLog?: QueryAuditLog | null
 }
 
 export interface SecuritySnapshot { token: string | null; enabled: ToolGroup[] }
@@ -780,6 +911,9 @@ export class ProvidentMcpServer {
    *  single-store path). */
   private readonly ragStores: RagStoreDirectory | null
   private readonly templateStore: TemplateStore | null
+  /** Unit X §5.7 — the shared query-audit log (null ⇒ the handlers skip
+   *  recording). */
+  private readonly auditLog: QueryAuditLog | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
   private _gate: SecurityGate
@@ -807,6 +941,7 @@ export class ProvidentMcpServer {
     this.retrievalEngine = opts.retrievalEngine ?? null
     this.ragStores = opts.ragStores ?? null
     this.templateStore = opts.templateStore ?? null
+    this.auditLog = opts.auditLog ?? null
   }
 
   getGateConfig(): SecuritySnapshot {
@@ -845,6 +980,11 @@ export class ProvidentMcpServer {
     'rag.list_nodes',
     'rag.get_edges',
     'rag.backlinks',
+    // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
+    // `rag`-group (read-only, default-off) tools: the degenerate `rag-stream`
+    // + the `get_query_audit_log` audit-log reader. Main-handled.
+    'rag-stream',
+    'get_query_audit_log',
     'edit.set_content',
     'edit.create_node',
     'edit.delete_node',
@@ -942,7 +1082,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -1086,7 +1226,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -1106,6 +1246,7 @@ export class ProvidentMcpServer {
     templateStore: TemplateStore | null,
     gate: SecurityGate,
     ragStores: RagStoreDirectory | null,
+    auditLog: QueryAuditLog | null,
   ): void {
     if (allowed.includes('provident.dispatch')) {
       registered.set('provident.dispatch', server.registerTool('provident.dispatch', {
@@ -1237,11 +1378,16 @@ export class ProvidentMcpServer {
       // byte-pinned M1/M2 fail-states). The existing fields of each schema are
       // UNCHANGED. No new tool name, no new group, no RpcMethod change (the
       // five-seam gate gains NOTHING — security.ts:34-45).
-      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional() } },
+      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; Unit X extends it with mode/maxHops/expand/maxParentContext/filters + the citations/trace/blockedBy/results/engine result fields; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
       { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string(), store: z.string().optional() } },
       { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: { store: z.string().optional() } },
       { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional(), store: z.string().optional() } },
       { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string(), store: z.string().optional() } },
+      // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
+      // degenerate `rag-stream` (same schema as `rag.query`) + the
+      // `get_query_audit_log` audit-log reader. Both `rag`-group, main-handled.
+      { name: 'rag-stream', description: 'A degenerate stream of the rag.query result (Unit X §5.8): [{type:"result",result},{type:"done"}] or [{type:"error",error}] on a runtime fail-state. Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'get_query_audit_log', description: 'Read the query-audit log entries (Unit X §5.7): { entries: [{ query, filters, mode, resultCount, timestamp, requester }] }. Requires rag group.', inputSchema: {} },
       { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string(), store: z.string().optional() } },
       { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional(), store: z.string().optional() } },
       { name: 'edit.delete_node', description: 'Delete a RAG node + cascade its edges (structural → re-traversal). Requires edit group.', inputSchema: { nodeId: z.string(), store: z.string().optional() } },
@@ -1290,11 +1436,13 @@ export class ProvidentMcpServer {
         // handlers so the `store` selector resolves identically on the tool
         // path (the omitted ⇒ default-entry rule applies; an unknown store
         // fails loud BEFORE any tool-specific validation).
-        if (name.startsWith('rag.')) {
-          // F1 — `rag.query` uses the MAINTAINED engine (created once in main),
-          // never a per-call index rebuild. ASYNC (Unit F amendment) — awaits
-          // the engine's async `query`.
-          return text(await handleRagTool(ragStore, name, args, engine, ragStores))
+        if (name.startsWith('rag.') || name === 'get_query_audit_log' || name === 'rag-stream') {
+          // Unit B + Unit X — the rag.* tools + the `get_query_audit_log`/
+          // `rag-stream` tools are MAIN-process (the RAG store + the shared
+          // audit log), NOT routed to the renderer. The shared audit log is
+          // threaded through so the `rag.query`/`rag-stream` handlers record to
+          // it and `get_query_audit_log` reads from it.
+          return text(await handleRagTool(ragStore, name, args, engine, ragStores, auditLog))
         }
         if (name.startsWith('edit.')) {
           // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval

@@ -36,6 +36,11 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'rag.list_nodes': 'rag',
   'rag.get_edges': 'rag',
   'rag.backlinks': 'rag',
+  // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
+  // degenerate `rag-stream` + the `get_query_audit_log` audit-log reader, both
+  // in the `rag` group (read-only, default-off).
+  'rag-stream': 'rag',
+  'get_query_audit_log': 'rag',
   'edit.set_content': 'edit',
   'edit.create_node': 'edit',
   'edit.delete_node': 'edit',

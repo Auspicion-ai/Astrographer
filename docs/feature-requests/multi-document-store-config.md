@@ -11,9 +11,10 @@
   (2026-09-05): the Phase-1 slice is APPROVED** (5 units U-MS1 registry →
   U-MS2 wiring → U-MS4 id-prefixing → U-MS3 broadcast qualifier → U-MS5
   settings listing; execution order U-MS1 → U-MS2 → U-MS4 → U-MS3 → U-MS5);
-  per-store embedders, cross-store fan-out, hot-apply, active-store UI,
-  per-store RBAC, the root allowlist, and scratch-promotion are DEFERRED to
-  Phase 2 (`docs/pending.md`). The eight decision rows are LANDED in
+  per-store embedders, cross-store fan-out, hot-apply, per-store RBAC, the root
+  allowlist, and scratch-promotion are DEFERRED to
+  Phase 2 (`docs/pending.md`); the active-store switcher was REJECTED as out of
+  scope (the renderer boots/edits ONE store — the default; review D9). The eight decision rows are LANDED in
   `docs/decisions.md`.
   **PHASE-1 SLICE IMPLEMENTED/COMPLETE (2026-09-05):** all five units are
   LANDED with their DONE rows in `docs/next-steps.md` — U-MS1 (the pure

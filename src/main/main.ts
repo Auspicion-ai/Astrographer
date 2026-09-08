@@ -19,6 +19,7 @@ import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.j
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
+import { createQueryAuditLog } from './query-audit.js'
 
 // The main process is bundled as CJS (Electron runs it reliably that way), so
 // `__dirname` is available.
@@ -195,7 +196,11 @@ async function main(): Promise<void> {
   // U-MS2 §5.4 step 5 — the server options gain the wired store directory
   // (`ragStores`); `ragStore`/`retrievalEngine` stay (backward-compatible) and
   // are the default entry's objects (the wiring invariant, §5.4 step 5).
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore, ragStores: plan.directory })
+  // Unit X §5.7 — the query audit log is created ONCE in main and shared by the
+  // MCP `rag.query`/`rag-stream` handlers + the `rag-query` IPC + the
+  // `get_query_audit_log` tool (the shared-handler seam).
+  const auditLog = createQueryAuditLog()
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore, ragStores: plan.directory, auditLog })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -346,7 +351,7 @@ async function main(): Promise<void> {
   // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
   // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store }, plan.directory)
+    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store }, plan.directory, auditLog)
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the

@@ -867,7 +867,7 @@ describe('§5.2 — the per-tool `store` schema change + the A5 description (SDK
         }
         // Existing fields UNCHANGED — spot pins from the §5.2 table.
         const ragQuery = byName.get('rag.query')!.inputSchema as { properties?: Record<string, unknown>; required?: string[] }
-        expect(Object.keys(ragQuery.properties ?? {}).sort()).toEqual(['query', 'store', 'topK'])
+        expect(Object.keys(ragQuery.properties ?? {}).sort()).toEqual(['expand', 'filters', 'maxHops', 'maxParentContext', 'mode', 'query', 'store', 'topK'])
         expect(ragQuery.required ?? []).toEqual(['query'])
         // rag.list_nodes was {} — it gains ONLY store.
         const listNodes = byName.get('rag.list_nodes')!.inputSchema as { properties?: Record<string, unknown> }
@@ -1399,6 +1399,10 @@ describe('§5.7 — the failed-store matrix (the store\'s OWN fail-disabled empt
         // Retrieval (the additive F3 store field stamps the addressed entry's name).
         expect(await handleRagTool(main.store, 'rag.query', { query: 'anything' }, main.engine, plan.directory)).toEqual({
           query: 'anything',
+          results: [],
+          engine: 'local',
+          citations: [],
+          trace: { mode: 'flat', engine: 'local', topK: 5, source: 'local' },
           ranked: [],
           context: [],
           markdown: '',
@@ -1453,6 +1457,10 @@ describe('§5.7 — the failed-store matrix (the store\'s OWN fail-disabled empt
       expect(await handleRagTool(main.store, 'rag.list_nodes', {}, main.engine, plan.directory)).toEqual([])
       expect(await handleRagTool(main.store, 'rag.query', { query: 'x' }, main.engine, plan.directory)).toEqual({
         query: 'x',
+        results: [],
+        engine: 'local',
+        citations: [],
+        trace: { mode: 'flat', engine: 'local', topK: 5, source: 'local' },
         ranked: [],
         context: [],
         markdown: '',

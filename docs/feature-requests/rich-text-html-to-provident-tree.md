@@ -1,9 +1,13 @@
 # Feature Request — Rich-Text HTML → Provident Tree Converter
 
-- **Status:** FEATURE REQUEST (external package, for import). Not part of the
-  Astrographer first-milestone slice. The consumer (Astrographer) will import
-  this package; the converter itself is built and maintained in a SEPARATE
-  project.
+- **Status:** RESOLVED / SUPERSEDED (2026-09-08). The revisit condition was MET
+  — the rich-text contenteditable editing slice landed (Units N–S + U1–U5,
+  complete 2026-08-28). The converter was NOT built as a separate external
+  package; it was built IN-HOUSE as `src/main/rich-decompose.ts` (Unit U2, the
+  pure `decomposeRichHtml` module). This feature request's premise (a separate
+  importable package) was superseded by the in-house build. See
+  `docs/decisions.md` RICH-TEXT-EDITING-GATE + `docs/pending.md` (contenteditable
+  row).
 - **Date:** 2026-08-26
 - **Origin:** the contenteditable editing proposal (focused validity check
   2026-08-26 — `docs/pending.md`). The textarea is kept for v1; this converter
@@ -156,3 +160,9 @@ missing piece that would make rich-text contenteditable editing feasible later.
 If pursued, scope the FIRST version to **single-node plain-text editing** (a
 `p`/leaf) where `textContent` conversion is trivial, and add the rich-subtree
 converter (this feature request) as the second step.
+
+**RESOLVED (2026-09-08):** the revisit condition was MET — the rich-text
+contenteditable editing slice landed (Units N–S + U1–U5, complete 2026-08-28).
+The converter was built IN-HOUSE as `src/main/rich-decompose.ts` (Unit U2, the
+pure `decomposeRichHtml` module) rather than as a separate importable package;
+this feature request is superseded by that in-house build.

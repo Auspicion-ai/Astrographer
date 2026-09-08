@@ -289,8 +289,8 @@ unit was its own red→green→adversarial→greens→doc-review cycle per AGENT
 
 ### Next slice — the rich-text contenteditable editing machinery (COMPLETE)
 
-The rich-text contenteditable editing machinery (the `provident-editable@0.1.0`
-integration — see `docs/decisions.md` RICH-TEXT-EDITING-GATE, sequenced
+The rich-text contenteditable editing machinery (the rich-text converter built
+IN-HOUSE as `src/main/rich-decompose.ts`, Unit U2 — see `docs/decisions.md` RICH-TEXT-EDITING-GATE, sequenced
 textarea-first) is now **COMPLETE (2026-08-28, Units Q/R/S)**. The plain-text
 textarea editing UI (Unit L) landed the textarea-first prerequisite; the
 store-format `children` additive + hash-source foundation (Unit M) landed; the
@@ -353,6 +353,50 @@ in the doc-nav pane, and `get_markdown` carries the same content. Trio green
 _(none — Units A–T are implemented.)_
 
 ## DONE
+
+- **Unit X — RAG-surface provenance + multi-hop traversal (2026-09-08).** Spec
+  `docs/specs/unit-x-rag-provenance-traversal.md` (the Auspicion Suite contract
+  handoff — A1 result-level provenance + A2 multi-hop traversal). Landed: the
+  extended `ragQuery`/`walkReferenceGraph`/`expandParentContext`/
+  `documentIdsForNode`/`buildCitations`/`buildFlatTrace` + the `RagResult`/
+  `RagQueryFilters`/`RagResultItem`/`FlatTrace`/`GraphTraceEntry`/`RagTrace`/
+  `BlockedByEntry`/`RagQueryOptions`/`WalkOptions`/`WalkResult` types in
+  `src/main/retrieval.ts`; the NEW pure `src/main/query-audit.ts`
+  (`createQueryAuditLog` + `QueryAuditEntry`/`QueryAuditLog`); the extended
+  `rag.query` handler + the NEW `get_query_audit_log`/`rag-stream` tools in
+  `src/main/mcp-server.ts` (the `handleRagTool` optional `auditLog?` param,
+  threaded through `handleRagQueryIpc`); the additive `nodeKind`/`edgeType`/
+  `state` store fields in `src/main/rag-store.ts` (the `RagNodeKind`/
+  `RagEdgeType`/`RagReferenceState` types + the `RAG_NODE_KINDS`/
+  `RAG_EDGE_TYPES`/`RAG_REFERENCE_STATES` runtime sets + the byte-pinned
+  `rag putNode: nodeKind required/invalid` / `rag putEdge: edgeType/state
+  required/invalid` fail-states + the hash-coverage). **TestWriter red: 48
+  failing** (the suite failed to load — the NEW module/functions/types absent;
+  the §5.9/§5.10 red set authored per RCA-1) → **Implementer green: 54/54
+  after the adversarial fix batch** (`tests/unit-x-rag-provenance-traversal.test.ts`
+  54 tests). **Adversarial pass (RCA-3): F-X-1..F-X-6** (1 HIGH: F-X-1 the
+  `HopLimitExceeded` off-by-one — a chain of exactly `maxHops` hops resolved a
+  target then threw; 2 MEDIUM: F-X-2 `blockedBy` populated for a `BROKEN`/`STALE`
+  edge even when a target was resolved, F-X-3 `rag-stream` validation threw
+  OUTSIDE the `try`; 2 LOW: F-X-4 a malformed crosslink to a `content` node was
+  traversed, F-X-5 a `null` result element threw an unpinned `TypeError`; 1 INFO:
+  F-X-6 `buildFlatTrace` accepts `source` outside the union — matches the spec's
+  pinned fail-state, NO fix) — **all HOST, fixed + regression-tested** (the
+  F-X-1a/b, F-X-2, F-X-3, F-X-4, F-X-5 regression tests in the unit file;
+  registered in spec §3a). **Blind-greens (RCA-4):**
+  `docs/specs/unit-x-rag-provenance-traversal-greens.md` — **27 PASS / 0 FAIL**
+  (27 scenarios). **Live-scenario gate: PARKED** —
+  `docs/specs/unit-x-rag-provenance-traversal-live-pending-battery.md` (the app
+  was down at the time; the battery is written and pending a live-scenario
+  session). **Doc-review pass (RCA-6):**
+  `archive/reviews/2026-09-08-unit-x-doc-review.md` (the spec↔code
+  reconciliation incl. the §5.11 census + the greens count; the five §4 decision
+  rows LANDED in `docs/decisions.md`; the trackers reconciled). **Trio: 2465
+  pass / 41 skip, typecheck clean, build clean** (the 4 ollama live-test
+  failures are a PRE-EXISTING environment issue — ollama has no models loaded,
+  not a Unit X regression). Decisions RESULT-LEVEL-PROVENANCE /
+  QUERY-AUDIT-LOG / GRAPH-MODE-WALK / PARENT-CONTEXT-EXPAND /
+  REFERENCE-GRAPH-ADDITIVE-FIELDS (LANDED) in `docs/decisions.md`.
 
 - **Unit U-MS5 — the read-only settings-pane store listing + the
   `RagQueryPayload.store` passthrough (the multi-store Phase-1 slice's FINAL

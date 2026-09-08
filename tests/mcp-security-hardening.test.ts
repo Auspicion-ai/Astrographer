@@ -827,9 +827,9 @@ describe('§5.9 fail-states — malformed rag.* inputs', () => {
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
       const engine = makeEngine(store)
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 }, engine)).rejects.toThrow('rag.query: topK must be a positive integer')
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 }, engine)).rejects.toThrow('rag.query: topK must be a positive integer')
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 }, engine)).rejects.toThrow('rag.query: topK must be a positive integer')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 }, engine)).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 }, engine)).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 }, engine)).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
     } finally {
       rmSyncSafe(dir)
     }

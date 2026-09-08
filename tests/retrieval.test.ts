@@ -727,9 +727,9 @@ describe('Unit E — retrieval module (unit-e-rag-index.md §5.8/§5.9)', () => 
 
     it('20. rag.query non-positive-integer topK → the tool rejects it', async () => {
       const store: RagStore = createJsonRagStore({ path: join(freshDir(), 'rag.json') })
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 })).rejects.toThrow('rag.query: topK must be a positive integer')
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 })).rejects.toThrow('rag.query: topK must be a positive integer')
-      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 })).rejects.toThrow('rag.query: topK must be a positive integer')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 0 })).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: -1 })).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
+      await expect(handleRagTool(store, 'rag.query', { query: 'hello', topK: 1.5 })).rejects.toThrow('rag.query: topK must be an integer in [1, 50]')
     })
 
     it('21. rag.query with the rag group disabled → not callable (toolAllowed false)', () => {

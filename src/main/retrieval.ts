@@ -11,6 +11,7 @@
 // (k1=1.2, b=0.75); tie-breaking by node id (lexicographic ascending). Same
 // query + same store → same result.
 import type { RagNode, RagEdge, RagStore } from './rag-store.js'
+import { computeDocumentSubgraph } from './traversal.js'
 
 // ---------------------------------------------------------------------------
 // §5.1 Tokenization + the lexical index
@@ -572,9 +573,22 @@ export async function retrieve(
 // ---------------------------------------------------------------------------
 
 export interface RetrievalEngine {
-  /** Run a retrieval query. Returns the ranked + assembled context + line map.
-   *  ASYNC (Unit F amendment — awaits the embedder's async `score`). */
-  query(query: string, opts?: { k?: number }): Promise<RetrievalResult>
+  /** Run a retrieval query. Returns the extended `RagResult` (the preserved
+   *  ranked/context/markdown/lineMap/k fields + the Unit X results/engine/
+   *  citations/trace/blockedBy surface). ASYNC (Unit F amendment — awaits the
+   *  embedder's async `score`). The existing `{ k }` calls still work (mapped
+   *  to `topK`). */
+  query(
+    query: string,
+    opts?: {
+      k?: number
+      mode?: 'flat' | 'graph'
+      maxHops?: number
+      expand?: 'none' | 'parent'
+      maxParentContext?: number
+      filters?: RagQueryFilters
+    },
+  ): Promise<RagResult>
   /** Update the index on a store change (content or structural). ASYNC (Unit F
    *  amendment — forwards to the embedder's `onStoreChanged` hook, if present). */
   onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
@@ -618,8 +632,28 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
   let promoted = false
 
   return {
-    query(query: string, qopts?: { k?: number }): Promise<RetrievalResult> {
-      return retrieve(store, activeEmbedder, index, query, { k: qopts?.k, maxNodes, maxDepth })
+    query(
+      query: string,
+      qopts?: {
+        k?: number
+        mode?: 'flat' | 'graph'
+        maxHops?: number
+        expand?: 'none' | 'parent'
+        maxParentContext?: number
+        filters?: RagQueryFilters
+      },
+    ): Promise<RagResult> {
+      // Unit X — the extended retrieval entry point. Uses the MAINTAINED
+      // `index`/`activeEmbedder` (F1 — no per-call rebuild) and returns the
+      // extended `RagResult`. The existing `{ k }` calls map to `topK`.
+      return ragQuery(store, activeEmbedder, index, query, {
+        topK: qopts?.k,
+        mode: qopts?.mode,
+        maxHops: qopts?.maxHops,
+        expand: qopts?.expand,
+        maxParentContext: qopts?.maxParentContext,
+        filters: qopts?.filters,
+      })
     },
     async onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void> {
       if (nodeIds === null || nodeIds === undefined) throw new Error('onStoreChanged: nodeIds required')
@@ -654,5 +688,457 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
       activeEmbedder = next
       promoted = true
     },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unit X — RAG-surface provenance + multi-hop traversal
+// (docs/specs/unit-x-rag-provenance-traversal.md §5.2–§5.6)
+// ---------------------------------------------------------------------------
+
+/** The snippet cap — a node's `content` is truncated to this length for the
+ *  `snippet` field (default 200). */
+export const SNIPPET_MAX_LENGTH = 200
+
+/** The engine id — the current Astrographer value is 'local' (the contract's
+ *  'incanter' is the Auspicion Suite's framing — F4). */
+export const RAG_ENGINE_ID = 'local'
+
+/** The pinned filters shape (A2). */
+export interface RagQueryFilters {
+  nodeKind?: 'content' | 'fact' | 'reference'
+  edgeType?: 'link' | 'embed'
+  target?: { documentId: string; nodeId: string }
+  state?: 'FRESH' | 'RESOLVED' | 'STALE' | 'BROKEN'
+}
+
+/** The per-result item (the contract's `results` array element). */
+export interface RagResultItem {
+  documentId: string
+  nodeId: string
+  score: number
+  snippet: string
+  source: 'local' | 'incanter' | 'zodiac'
+  parent?: { documentId: string; title: string; snippet: string; stale: boolean }
+}
+
+/** The flat-mode trace (A1). */
+export interface FlatTrace {
+  mode: 'flat'
+  engine: string
+  topK: number
+  source: 'local' | 'incanter' | 'zodiac'
+}
+
+/** The graph-mode trace entry (A1). */
+export interface GraphTraceEntry {
+  from: { documentId: string; nodeId: string }
+  to: { documentId: string; nodeId: string }
+  edge: 'link' | 'embed'
+  state: 'FRESH' | 'RESOLVED' | 'STALE' | 'BROKEN'
+}
+
+/** The trace — per-mode (A1). */
+export type RagTrace = FlatTrace | GraphTraceEntry[]
+
+/** The blocked-by entry (graph mode, empty result — a valid state, not an
+ *  error). */
+export interface BlockedByEntry {
+  documentId: string
+  nodeId: string
+  state: 'BROKEN' | 'STALE'
+}
+
+/** The extended RAG query options (A1 + A2). */
+export interface RagQueryOptions {
+  wikiId?: string
+  topK?: number
+  filters?: RagQueryFilters
+  mode?: 'flat' | 'graph'
+  maxHops?: number
+  expand?: 'none' | 'parent'
+  maxParentContext?: number
+}
+
+/** The extended RAG result (A1 + A2). The existing RetrievalResult fields
+ *  (ranked/context/markdown/lineMap/k) are PRESERVED — a backward-compatible
+ *  additive extension. */
+export interface RagResult {
+  query: string
+  /** The contract's per-result items (A1/A2). */
+  results: RagResultItem[]
+  /** The engine identifier. The current Astrographer value is 'local'. */
+  engine: string
+  /** The deduplicated grounding set (A1). */
+  citations: Array<{ documentId: string; nodeId: string }>
+  /** The per-mode trace (A1). */
+  trace: RagTrace
+  /** Present ONLY in graph mode when the traversal resolves no target (A2). */
+  blockedBy?: BlockedByEntry[]
+  // ---- the preserved existing surface (backward-compatible) ----
+  ranked: ScoredNode[]
+  context: RagNode[]
+  markdown: string
+  lineMap: LineNodeMap
+  k: number
+}
+
+/** The graph-mode walk options (§5.4). */
+export interface WalkOptions {
+  maxHops: number
+  filters?: RagQueryFilters
+}
+
+/** The graph-mode walk result (§5.4). */
+export interface WalkResult {
+  /** The resolved target nodes the traversal reached (deduped by
+   *  (documentId, nodeId)). */
+  targets: RagResultItem[]
+  /** The ordered reference→fact path walked (the graph-mode trace). */
+  trace: GraphTraceEntry[]
+  /** Present when the traversal resolves no target (a valid state, not an
+   *  error). */
+  blockedBy?: BlockedByEntry[]
+}
+
+/** The node's `content` truncated to `SNIPPET_MAX_LENGTH` (200); empty content
+ *  → `''`. Deterministic. */
+function snippetOf(node: RagNode): string {
+  return node.content.slice(0, SNIPPET_MAX_LENGTH)
+}
+
+/** The owning document id for a node (the first of `documentIdsForNode`,
+ *  sorted ascending), or `''` when the node belongs to no document. */
+function docForNode(store: RagStore, nodeId: string): string {
+  return documentIdsForNode(store, nodeId)[0] ?? ''
+}
+
+/** Derive the document id(s) for a node: the document(s) whose docNodeIds (via
+ *  computeDocumentSubgraph) include the node. Returns [] if the node belongs to
+ *  no document. Deterministic (sorted ascending). */
+export function documentIdsForNode(store: RagStore, nodeId: string): string[] {
+  if (store == null || typeof nodeId !== 'string') {
+    throw new Error('documentIdsForNode: store/nodeId required')
+  }
+  const docIds: string[] = []
+  const seen = new Set<string>()
+  for (const e of store.edgesByKind('doc-head')) {
+    for (const d of e.documentIds ?? []) {
+      if (seen.has(d)) continue
+      seen.add(d)
+      const { docNodeIds } = computeDocumentSubgraph(store, d)
+      if (docNodeIds.has(nodeId)) docIds.push(d)
+    }
+  }
+  return docIds.sort()
+}
+
+/** Build the deduplicated grounding set from the result items. Order is by
+ *  first appearance in the result set; duplicates (same documentId+nodeId) are
+ *  removed. */
+export function buildCitations(items: RagResultItem[]): Array<{ documentId: string; nodeId: string }> {
+  if (items == null) throw new Error('buildCitations: items required')
+  const out: Array<{ documentId: string; nodeId: string }> = []
+  const seen = new Set<string>()
+  for (const item of items) {
+    // F-X-5 — skip a null element (a malformed result item must not throw an
+    // unpinned TypeError; it is simply not cited).
+    if (item == null) continue
+    const key = `${item.documentId}\u0000${item.nodeId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ documentId: item.documentId, nodeId: item.nodeId })
+  }
+  return out
+}
+
+/** Build the flat-mode trace. */
+export function buildFlatTrace(engine: string, topK: number, source: 'local' | 'incanter' | 'zodiac'): FlatTrace {
+  if (typeof engine !== 'string' || typeof source !== 'string' || typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1) {
+    throw new Error('buildFlatTrace: engine/topK/source required')
+  }
+  return { mode: 'flat', engine, topK, source }
+}
+
+/** True when an edge passes the walk's edge filters (edgeType/state/target). */
+function edgePassesFilters(store: RagStore, e: RagEdge, filters: RagQueryFilters | undefined): boolean {
+  if (!filters) return true
+  if (filters.edgeType !== undefined && e.edgeType !== filters.edgeType) return false
+  if (filters.state !== undefined && e.state !== filters.state) return false
+  if (filters.target !== undefined && (e.target !== filters.target.nodeId || docForNode(store, e.target) !== filters.target.documentId)) return false
+  return true
+}
+
+/** Walk the reference→fact graph from the seed nodes, hop-limited, resolving
+ *  through FRESH/RESOLVED and surfacing BROKEN/STALE. Deterministic. */
+export function walkReferenceGraph(store: RagStore, seeds: RagResultItem[], opts: WalkOptions): WalkResult {
+  if (store == null || seeds == null || opts == null) {
+    throw new Error('walkReferenceGraph: store/seeds/opts required')
+  }
+  const maxHops = opts.maxHops
+  if (typeof maxHops !== 'number' || !Number.isInteger(maxHops) || maxHops < 1 || maxHops > 5) {
+    throw new Error('walkReferenceGraph: maxHops must be an integer in [1, 5]')
+  }
+  const filters = opts.filters
+
+  const targets: RagResultItem[] = []
+  const trace: GraphTraceEntry[] = []
+  const blockedBy: BlockedByEntry[] = []
+  const seenTargets = new Set<string>()
+
+  const addTarget = (item: RagResultItem): void => {
+    const key = `${item.documentId}\u0000${item.nodeId}`
+    if (seenTargets.has(key)) return
+    seenTargets.add(key)
+    targets.push(item)
+  }
+
+  for (const seed of seeds) {
+    const path = [seed.nodeId]
+    const pathSet = new Set<string>([seed.nodeId])
+    let current = seed.nodeId
+    let hops = 0
+    let resolved = false
+
+    // A seed that is itself a fact node is a resolved target.
+    const seedNode = store.getNode(current)
+    if (seedNode && seedNode.nodeKind === 'fact') {
+      if (filters?.nodeKind === undefined || filters.nodeKind === 'fact') {
+        addTarget(seed)
+        resolved = true
+      }
+    }
+
+    while (true) {
+      // F-X-4 (refined) — traverse a crosslink-kind edge whose target is a
+      // `reference` OR `fact` node (a `content` target is NON-traversable).
+      // A `reference` target is a WAYPOINT (not a resolved target) — this is
+      // what makes `HopLimitExceeded` (a reference chain longer than maxHops)
+      // and `CycleDetected` (a reference→fact→reference cycle) reachable.
+      const edges = store.edgesFrom(current).filter(
+        (e) => e.kind === 'crosslink' && edgePassesFilters(store, e, filters) && (store.getNode(e.target)?.nodeKind === 'fact' || store.getNode(e.target)?.nodeKind === 'reference'),
+      )
+      if (edges.length === 0) {
+        // No traversable edge — the walk cannot proceed. If no target was
+        // resolved, the traversal is blocked (a valid state, not an error).
+        // F-X-2 — `blockedBy` is present ONLY when the traversal resolves NO
+        // target (spec §5.4/§5.2): guard on `targets.length === 0`, not the
+        // per-seed `resolved` flag.
+        if (targets.length === 0) {
+          blockedBy.push({ documentId: docForNode(store, current), nodeId: current, state: 'BROKEN' })
+        }
+        break
+      }
+      const e = edges[0]
+      const state = e.state ?? 'RESOLVED'
+      const edgeType = e.edgeType ?? 'link'
+      if (state === 'BROKEN' || state === 'STALE') {
+        // A BROKEN/STALE edge is NOT traversed; it is recorded in the trace.
+        trace.push({ from: { documentId: docForNode(store, e.source), nodeId: e.source }, to: { documentId: docForNode(store, e.target), nodeId: e.target }, edge: edgeType, state })
+        // F-X-2 — `blockedBy` is present ONLY when the traversal resolves NO
+        // target (spec §5.4/§5.2): a BROKEN/STALE edge encountered AFTER a
+        // target was already resolved must NOT populate `blockedBy`.
+        if (targets.length === 0) {
+          blockedBy.push({ documentId: docForNode(store, e.source), nodeId: e.source, state })
+        }
+        break
+      }
+      // F-X-1 — `HopLimitExceeded` fires ONLY when the walk exceeds `maxHops`
+      // AND no target was resolved (spec §5.4: "exceeds maxHops WITHOUT
+      // resolving a target"). A chain of exactly `maxHops` hops that resolves a
+      // target must NOT throw on the next iteration.
+      if (hops > maxHops && !resolved) throw new Error('walkReferenceGraph: HopLimitExceeded')
+      hops++
+      trace.push({ from: { documentId: docForNode(store, e.source), nodeId: e.source }, to: { documentId: docForNode(store, e.target), nodeId: e.target }, edge: edgeType, state })
+      const target = e.target
+      if (pathSet.has(target)) throw new Error('walkReferenceGraph: CycleDetected')
+      path.push(target)
+      pathSet.add(target)
+      current = target
+      const targetNode = store.getNode(target)
+      if (targetNode && targetNode.nodeKind === 'fact') {
+        if (filters?.nodeKind === undefined || filters.nodeKind === 'fact') {
+          addTarget({ documentId: docForNode(store, target), nodeId: target, score: seed.score, snippet: snippetOf(targetNode), source: 'local' as const })
+          resolved = true
+        }
+      }
+    }
+  }
+
+  return { targets, trace, blockedBy: blockedBy.length > 0 ? blockedBy : undefined }
+}
+
+/** The parent Document/node-cluster context for a retrieved child node, or
+ *  `undefined` when the child has no owning document. Stale-propagating: a
+ *  child's `parent.stale` is `true` if ANY incoming `reference`→`fact` edge to
+ *  the child has `state: 'STALE'`. */
+function parentFor(store: RagStore, item: RagResultItem): { documentId: string; title: string; snippet: string; stale: boolean } | undefined {
+  const docIds = documentIdsForNode(store, item.nodeId)
+  if (docIds.length === 0) return undefined
+  const documentId = docIds[0]
+  const headEdge = store.edgesByKind('doc-head').find((e) => (e.documentIds ?? []).includes(documentId))
+  const headNode = headEdge ? store.getNode(headEdge.source) : undefined
+  const title = headNode ? headNode.content : ''
+  const snippet = headNode ? headNode.content.slice(0, SNIPPET_MAX_LENGTH) : ''
+  const stale = store.edgesTo(item.nodeId).some(
+    (e) => e.kind === 'crosslink' && e.state === 'STALE' && store.getNode(e.source)?.nodeKind === 'reference',
+  )
+  return { documentId, title, snippet, stale }
+}
+
+/** Expand the top-capped result items with their parent Document/node-cluster
+ *  context. Capped by maxParentContext; stale-propagating. Deterministic. */
+export function expandParentContext(store: RagStore, items: RagResultItem[], maxParentContext: number): RagResultItem[] {
+  if (store == null || items == null) throw new Error('expandParentContext: store/items required')
+  if (typeof maxParentContext !== 'number' || !Number.isInteger(maxParentContext) || maxParentContext < 1) {
+    throw new Error('expandParentContext: maxParentContext must be a positive integer')
+  }
+  return items.map((item, i) => {
+    // F-X-5 — skip a null element (a malformed result item must not throw an
+    // unpinned TypeError; it is returned unchanged).
+    if (item == null) return item
+    if (i >= maxParentContext) return item
+    const parent = parentFor(store, item)
+    if (!parent) return item
+    return { ...item, parent }
+  })
+}
+
+/** Validate the pinned filters shape (§5.2). A malformed filters object throws
+ *  `Error('ragQuery: filters malformed')`. */
+function validateFilters(filters: RagQueryFilters): void {
+  if (filters === null || typeof filters !== 'object' || Array.isArray(filters)) {
+    throw new Error('ragQuery: filters malformed')
+  }
+  if (filters.nodeKind !== undefined && !['content', 'fact', 'reference'].includes(filters.nodeKind)) {
+    throw new Error('ragQuery: filters malformed')
+  }
+  if (filters.edgeType !== undefined && !['link', 'embed'].includes(filters.edgeType)) {
+    throw new Error('ragQuery: filters malformed')
+  }
+  if (filters.state !== undefined && !['FRESH', 'RESOLVED', 'STALE', 'BROKEN'].includes(filters.state)) {
+    throw new Error('ragQuery: filters malformed')
+  }
+  if (filters.target !== undefined) {
+    if (filters.target === null || typeof filters.target !== 'object' || Array.isArray(filters.target)) {
+      throw new Error('ragQuery: filters malformed')
+    }
+    if (typeof filters.target.documentId !== 'string' || typeof filters.target.nodeId !== 'string') {
+      throw new Error('ragQuery: filters malformed')
+    }
+  }
+}
+
+/** The extended retrieval entry point (A1 + A2). Selects the top-k, then either
+ *  (flat mode) assembles the context + builds the flat trace, or (graph mode)
+ *  walks the reference→fact graph + builds the graph trace. Applies the filters
+ *  and the parent-context expansion. ASYNC. */
+export async function ragQuery(
+  store: RagStore,
+  embedder: Embedder,
+  index: LexicalIndex,
+  query: string,
+  opts: RagQueryOptions,
+): Promise<RagResult> {
+  if (store == null || embedder == null || index == null || typeof query !== 'string' || opts == null) {
+    throw new Error('ragQuery: store/embedder/index/query/opts required')
+  }
+  if (query.trim() === '') throw new Error('ragQuery: query must be a non-empty string')
+
+  const topK = opts.topK ?? 5
+  if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1 || topK > 50) {
+    throw new Error('ragQuery: topK must be an integer in [1, 50]')
+  }
+
+  const mode = opts.mode ?? 'flat'
+  if (mode !== 'flat' && mode !== 'graph') throw new Error('ragQuery: mode must be "flat" or "graph"')
+
+  const maxHops = opts.maxHops ?? 3
+  if (typeof maxHops !== 'number' || !Number.isInteger(maxHops) || maxHops < 1 || maxHops > 5) {
+    throw new Error('ragQuery: maxHops must be an integer in [1, 5]')
+  }
+
+  const expand = opts.expand ?? 'none'
+  if (expand !== 'none' && expand !== 'parent') throw new Error('ragQuery: expand must be "none" or "parent"')
+
+  const maxParentContext = opts.maxParentContext ?? 5
+  if (typeof maxParentContext !== 'number' || !Number.isInteger(maxParentContext) || maxParentContext < 1) {
+    throw new Error('ragQuery: maxParentContext must be a positive integer')
+  }
+
+  if (opts.filters !== undefined) validateFilters(opts.filters)
+
+  const ranked = (await selectTopK(embedder, query, store.listNodes(), topK)).filter((s) => s.score > 0)
+
+  let results: RagResultItem[]
+  let trace: RagTrace
+  let blockedBy: BlockedByEntry[] | undefined
+  let context: RagNode[]
+  let markdown: string
+  let lineMap: LineNodeMap
+
+  if (mode === 'flat') {
+    const assembled = assembleContext(store, ranked, { maxNodes: 50, maxDepth: 3 })
+    context = assembled.context
+    markdown = assembled.markdown
+    lineMap = assembled.lineMap
+    results = ranked.map((s) => {
+      const node = store.getNode(s.nodeId)
+      return {
+        documentId: docForNode(store, s.nodeId),
+        nodeId: s.nodeId,
+        score: s.score,
+        snippet: node ? snippetOf(node) : '',
+        source: 'local' as const,
+      }
+    })
+    if (opts.filters?.nodeKind !== undefined) {
+      results = results.filter((r) => store.getNode(r.nodeId)?.nodeKind === opts.filters!.nodeKind)
+    }
+    trace = buildFlatTrace(RAG_ENGINE_ID, topK, 'local')
+  } else {
+    const seeds = ranked.map((s) => {
+      const node = store.getNode(s.nodeId)
+      return {
+        documentId: docForNode(store, s.nodeId),
+        nodeId: s.nodeId,
+        score: s.score,
+        snippet: node ? snippetOf(node) : '',
+        source: 'local' as const,
+      }
+    })
+    const walk = walkReferenceGraph(store, seeds, { maxHops, filters: opts.filters })
+    results = walk.targets
+    trace = walk.trace
+    blockedBy = walk.blockedBy
+    const targetScored = walk.targets.map((t) => ({ nodeId: t.nodeId, score: t.score }))
+    const assembled = assembleContext(store, targetScored, { maxNodes: 50, maxDepth: 3 })
+    context = assembled.context
+    markdown = assembled.markdown
+    lineMap = assembled.lineMap
+  }
+
+  if (expand === 'parent') {
+    results = expandParentContext(store, results, maxParentContext)
+  }
+
+  const citations = buildCitations(results)
+
+  // TraceUnavailable (FS-16) — a defensive fail-state: a valid result always
+  // carries a trace.
+  if (trace == null) throw new Error('ragQuery: TraceUnavailable — result has no trace')
+
+  return {
+    query,
+    results,
+    engine: RAG_ENGINE_ID,
+    citations,
+    trace,
+    blockedBy,
+    ranked,
+    context,
+    markdown,
+    lineMap,
+    k: topK,
   }
 }

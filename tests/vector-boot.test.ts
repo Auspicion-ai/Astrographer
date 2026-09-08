@@ -289,6 +289,14 @@ function makeStoreDouble(dir: string): { store: RagStore; counts: { listNodes: n
     undoDepth: () => real.undoDepth(),
     redoDepth: () => real.redoDepth(),
     enqueue: (fn) => real.enqueue(fn),
+    // Unit X — the adjacency methods the extended `ragQuery` (via the engine's
+    // `query`) uses (documentIdsForNode → edgesByKind('doc-head')). Forward to
+    // the real store so the full RagStore surface is exercised.
+    edgesFrom: (source) => real.edgesFrom(source),
+    edgesTo: (target) => real.edgesTo(target),
+    edgesByKind: (kind) => real.edgesByKind(kind),
+    edgesForDocument: (documentId) => real.edgesForDocument(documentId),
+    docHeadForDocument: (documentId) => real.docHeadForDocument(documentId),
   }
   return { store, counts }
 }

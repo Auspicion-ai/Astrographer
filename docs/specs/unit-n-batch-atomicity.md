@@ -95,8 +95,7 @@ the exact machinery this needs:
 
 No engine/foundation gap blocks this unit. The batch/transaction API is
 **project-specific** (the RAG store is host-side, per `docs/decisions.md`
-ENGINE-GAP-HANDOFF). No handoff item is opened by this unit. The
-`provident-editable@0.1.0` package (the rich-text converter/diff) is consumed by
+ENGINE-GAP-HANDOFF). No handoff item is opened by this unit. The rich-text converter is built IN-HOUSE as `src/main/rich-decompose.ts` (Unit U2, the pure `decomposeRichHtml` module — the `provident-editable@0.1.0` import plan was replaced by the in-house build); it is consumed by
 Unit O, NOT this unit.
 
 ## 3. Gaps + costs-benefits

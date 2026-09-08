@@ -80,8 +80,7 @@ project already has the exact machinery this needs:
 
 No engine/foundation gap blocks this unit. The IPC channel is **project-specific**
 (the IPC surface is host-side, per `docs/decisions.md` ENGINE-GAP-HANDOFF). No
-handoff item is opened by this unit. The `provident-editable@0.1.0` package (the
-rich-text converter/diff) is consumed by the contenteditable UI (a later slice),
+handoff item is opened by this unit. The rich-text converter is built IN-HOUSE as `src/main/rich-decompose.ts` (Unit U2, the pure `decomposeRichHtml` module — the `provident-editable@0.1.0` import plan was replaced by the in-house build); it is consumed by the contenteditable UI,
 NOT this unit.
 
 ## 3. Gaps + costs-benefits
