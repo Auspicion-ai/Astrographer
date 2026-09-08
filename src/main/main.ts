@@ -351,7 +351,7 @@ async function main(): Promise<void> {
   // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
   // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store }, plan.directory, auditLog)
+    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store, stores: payload?.stores }, plan.directory, auditLog)
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the

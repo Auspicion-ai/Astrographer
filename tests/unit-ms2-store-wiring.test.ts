@@ -867,7 +867,7 @@ describe('§5.2 — the per-tool `store` schema change + the A5 description (SDK
         }
         // Existing fields UNCHANGED — spot pins from the §5.2 table.
         const ragQuery = byName.get('rag.query')!.inputSchema as { properties?: Record<string, unknown>; required?: string[] }
-        expect(Object.keys(ragQuery.properties ?? {}).sort()).toEqual(['expand', 'filters', 'maxHops', 'maxParentContext', 'mode', 'query', 'store', 'topK'])
+        expect(Object.keys(ragQuery.properties ?? {}).sort()).toEqual(['expand', 'filters', 'maxHops', 'maxParentContext', 'mode', 'query', 'store', 'stores', 'topK'])
         expect(ragQuery.required ?? []).toEqual(['query'])
         // rag.list_nodes was {} — it gains ONLY store.
         const listNodes = byName.get('rag.list_nodes')!.inputSchema as { properties?: Record<string, unknown> }

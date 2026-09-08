@@ -30,9 +30,10 @@ import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
 import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
 import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
-import { createLexicalIndex, createLexicalEmbedder, createRetrieval } from './retrieval.js'
+import { createLexicalIndex, createLexicalEmbedder, createRetrieval, qualifyStoreResult } from './retrieval.js'
 import type { RetrievalEngine, RagQueryFilters } from './retrieval.js'
 import type { QueryAuditLog } from './query-audit.js'
+import { mergeStoreResults, type StoreResultInput } from './merge-store-results.js'
 import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
@@ -180,6 +181,17 @@ export async function handleRagTool(
   auditLog?: QueryAuditLog | null,
 ): Promise<unknown> {
   if (!store) throw new Error(`${name}: no rag store configured`)
+  // U-F3 §5.2 A-F3 — Guard 1 (the `store`/`stores` mutual exclusion) fires
+  // FIRST, BEFORE `resolveStoreArg`'s unknown-store M2 throw (arbitration) and
+  // before ANY engine call — for BOTH `rag.query` and `rag-stream`. In the
+  // `rag-stream` case it surfaces as the spec §5.8 error chunk (the stream
+  // validation errors carry the `rag.query:` literal), not an MCP tool error.
+  if ((name === 'rag.query' || name === 'rag-stream') && args.store !== undefined && args.stores !== undefined) {
+    if (name === 'rag-stream') {
+      return [{ type: 'error', error: 'rag.query: store and stores are mutually exclusive' }]
+    }
+    throw new Error('rag.query: store and stores are mutually exclusive')
+  }
   // U-MS2 §5.3 step 2 — resolve FIRST (before every tool-specific validation
   // throw and before ANY store method call / side effect — R1).
   const ref = resolveStoreArg(name, args?.store, dir)
@@ -212,6 +224,71 @@ export async function handleRagTool(
         throw new Error('rag.query: maxParentContext must be a positive integer')
       }
       if (args.filters !== undefined) validateRagQueryFilters(args.filters)
+      // U-F3 §5.2 A-F3/D4 — Guards 2/3/4 (the `stores:"all"` guards). Guard 1
+      // (mutual exclusion) already fired at the top. Guards 2/3/4 evaluate in
+      // order after the field-type checks they depend on (the flat-only guard
+      // compares a VALID `mode`).
+      if (args.stores !== undefined && args.stores !== 'all') {
+        throw new Error('rag.query: stores must be "all"')
+      }
+      if (args.stores === 'all' && dir == null) {
+        throw new Error('rag.query: stores:"all" requires a configured store registry')
+      }
+      if (args.stores === 'all' && mode === 'graph') {
+        throw new Error('rag.query: stores:"all" is only valid in flat mode')
+      }
+      // U-F3 §5.3 — the `stores:"all"` fan-out. Runs INSTEAD of the single-store
+      // engine call. The guards above already passed (flat mode, dir != null).
+      if (args.stores === 'all') {
+        // Step 1 — query every entry in canonical (registry insertion) order. A
+        // failed-corrupt store's engine throwing is SKIPPED (D6 — { name,
+        // result: null }); an empty store contributes zero items naturally.
+        const perStore: StoreResultInput[] = []
+        for (const [name, centry] of dir!.entries) {
+          try {
+            const res = await centry.engine.query(query, {
+              k: topK,
+              mode: 'flat',
+              maxHops,
+              expand: expand as 'none' | 'parent',
+              maxParentContext,
+              filters: args.filters as RagQueryFilters | undefined,
+            })
+            perStore.push({ name, result: res })
+          } catch {
+            perStore.push({ name, result: null })
+          }
+        }
+        // Step 2 — merge. `mergeStoreResults` consumes default-first (index 0 is
+        // the default store). REORDER the canonical array so the default entry is
+        // first; the other entries stay in canonical order.
+        const defaultIdx = perStore.findIndex((s) => s.name === dir!.defaultName)
+        const mergeStores: StoreResultInput[] = [...perStore]
+        if (defaultIdx > 0) {
+          const [def] = mergeStores.splice(defaultIdx, 1)
+          mergeStores.unshift(def)
+        }
+        const merged = mergeStoreResults(mergeStores, { topK })
+        // Step 3 — qualify (U-F2): stamp per-item/per-entry `store` + build
+        // `storeContexts` (default-first), `{ qualified: true }`.
+        const qualified = qualifyStoreResult(merged, mergeStores, { qualified: true })
+        // Step 4 — audit (§5.4): ONE entry, merged count, canonical-order store
+        // names, mode 'flat'. skip when auditLog null/absent (no throw).
+        if (auditLog) {
+          auditLog.record({
+            query,
+            filters: (args.filters as RagQueryFilters) ?? null,
+            mode: 'flat',
+            resultCount: merged.results.length,
+            timestamp: new Date().toISOString(),
+            requester: 'mcp',
+            stores: [...dir!.entries.keys()],
+          })
+        }
+        // Step 5 — stamp + return. `ref.name` is the default entry's registry
+        // name (guard 1 already enforced `store` absent ⇒ S1 resolves default).
+        return { ...qualified, store: ref?.name ?? '' }
+      }
       // Unit X — the extended retrieval entry point (the SAME module the UI
       // `rag-query` IPC calls — §8.2 MCP/UI equivalence). Uses the MAINTAINED
       // engine (F1 — no per-call index rebuild): the addressed entry's engine,
@@ -276,6 +353,59 @@ export async function handleRagTool(
           throw new Error('rag.query: maxParentContext must be a positive integer')
         }
         if (args.filters !== undefined) validateRagQueryFilters(args.filters)
+        // U-F3 §5.2 A-F3/D4 — Guards 2/3/4 (Guard 1 mutual exclusion already
+        // fired at the top). INSIDE the try ⇒ every guard surfaces as the spec
+        // §5.8 error chunk.
+        if (args.stores !== undefined && args.stores !== 'all') {
+          throw new Error('rag.query: stores must be "all"')
+        }
+        if (args.stores === 'all' && dir == null) {
+          throw new Error('rag.query: stores:"all" requires a configured store registry')
+        }
+        if (args.stores === 'all' && mode === 'graph') {
+          throw new Error('rag.query: stores:"all" is only valid in flat mode')
+        }
+        // U-F3 §5.5 — the `rag-stream` fan-out (A-F4), the SAME wiring as the
+        // `rag.query` case. Returns the degenerate stream with the merged +
+        // qualified `RagResult` as the `result` chunk (NO top-level `store`).
+        if (args.stores === 'all') {
+          const perStore: StoreResultInput[] = []
+          for (const [sname, centry] of dir!.entries) {
+            try {
+              const res = await centry.engine.query(query, {
+                k: topK,
+                mode: 'flat',
+                maxHops,
+                expand: expand as 'none' | 'parent',
+                maxParentContext,
+                filters: args.filters as RagQueryFilters | undefined,
+              })
+              perStore.push({ name: sname, result: res })
+            } catch {
+              perStore.push({ name: sname, result: null })
+            }
+          }
+          const defaultIdx = perStore.findIndex((s) => s.name === dir!.defaultName)
+          const mergeStores: StoreResultInput[] = [...perStore]
+          if (defaultIdx > 0) {
+            const [def] = mergeStores.splice(defaultIdx, 1)
+            mergeStores.unshift(def)
+          }
+          const merged = mergeStoreResults(mergeStores, { topK })
+          const qualified = qualifyStoreResult(merged, mergeStores, { qualified: true })
+          if (auditLog) {
+            auditLog.record({
+              query,
+              filters: (args.filters as RagQueryFilters) ?? null,
+              mode: 'flat',
+              resultCount: merged.results.length,
+              timestamp: new Date().toISOString(),
+              requester: 'mcp',
+              stores: [...dir!.entries.keys()],
+            })
+          }
+          return [{ type: 'result', result: qualified }, { type: 'done' }]
+        }
         // Unit X — the SAME maintained-engine `e.query` call as `rag.query` (F1 —
         // no per-call index rebuild).
         const e = entry ? entry.engine : (engine ?? createRetrieval(target, createLexicalEmbedder(createLexicalIndex(target.listNodes()))))
@@ -362,7 +492,7 @@ export async function handleRagTool(
 export async function handleRagQueryIpc(
   engine: RetrievalEngine | null,
   store: RagStore | null,
-  payload: { query?: unknown; topK?: unknown; store?: unknown },
+  payload: { query?: unknown; topK?: unknown; store?: unknown; stores?: unknown },
   dir?: RagStoreDirectory | null,
   auditLog?: QueryAuditLog | null,
 ): Promise<unknown> {
@@ -370,6 +500,7 @@ export async function handleRagQueryIpc(
     query: payload?.query,
     topK: payload?.topK,
     store: payload?.store,
+    stores: payload?.stores, // U-F3 A-F4 — ADDITIVE, forwarded unchanged
   }, engine, dir, auditLog)
 }
 
@@ -1378,7 +1509,7 @@ export class ProvidentMcpServer {
       // byte-pinned M1/M2 fail-states). The existing fields of each schema are
       // UNCHANGED. No new tool name, no new group, no RpcMethod change (the
       // five-seam gate gains NOTHING — security.ts:34-45).
-      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; Unit X extends it with mode/maxHops/expand/maxParentContext/filters + the citations/trace/blockedBy/results/engine result fields; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; Unit X extends it with mode/maxHops/expand/maxParentContext/filters + the citations/trace/blockedBy/results/engine result fields; U-F3 adds the optional stores:"all" fan-out; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
       { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string(), store: z.string().optional() } },
       { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: { store: z.string().optional() } },
       { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional(), store: z.string().optional() } },
@@ -1386,7 +1517,7 @@ export class ProvidentMcpServer {
       // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
       // degenerate `rag-stream` (same schema as `rag.query`) + the
       // `get_query_audit_log` audit-log reader. Both `rag`-group, main-handled.
-      { name: 'rag-stream', description: 'A degenerate stream of the rag.query result (Unit X §5.8): [{type:"result",result},{type:"done"}] or [{type:"error",error}] on a runtime fail-state. Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'rag-stream', description: 'A degenerate stream of the rag.query result (Unit X §5.8): [{type:"result",result},{type:"done"}] or [{type:"error",error}] on a runtime fail-state. Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
       { name: 'get_query_audit_log', description: 'Read the query-audit log entries (Unit X §5.7): { entries: [{ query, filters, mode, resultCount, timestamp, requester }] }. Requires rag group.', inputSchema: {} },
       { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string(), store: z.string().optional() } },
       { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional(), store: z.string().optional() } },

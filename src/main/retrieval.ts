@@ -12,6 +12,7 @@
 // query + same store → same result.
 import type { RagNode, RagEdge, RagStore } from './rag-store.js'
 import { computeDocumentSubgraph } from './traversal.js'
+import type { StoreResultInput } from './merge-store-results.js'
 
 // ---------------------------------------------------------------------------
 // §5.1 Tokenization + the lexical index
@@ -720,6 +721,9 @@ export interface RagResultItem {
   snippet: string
   source: 'local' | 'incanter' | 'zodiac'
   parent?: { documentId: string; title: string; snippet: string; stale: boolean }
+  /** ADDITIVE — the producing store's registry name. Present ONLY in a
+   *  qualified (`stores:"all"`) result (A-F1). */
+  store?: string
 }
 
 /** The flat-mode trace (A1). */
@@ -736,6 +740,9 @@ export interface GraphTraceEntry {
   to: { documentId: string; nodeId: string }
   edge: 'link' | 'embed'
   state: 'FRESH' | 'RESOLVED' | 'STALE' | 'BROKEN'
+  /** ADDITIVE — type-shape uniformity only; NEVER stamped by the qualified FLAT
+   *  builder (the fan-out is FLAT-only, D4). */
+  store?: string
 }
 
 /** The trace — per-mode (A1). */
@@ -747,6 +754,9 @@ export interface BlockedByEntry {
   documentId: string
   nodeId: string
   state: 'BROKEN' | 'STALE'
+  /** ADDITIVE — type-shape uniformity only; NEVER stamped by the qualified FLAT
+   *  builder (the fan-out is FLAT-only, D4). */
+  store?: string
 }
 
 /** The extended RAG query options (A1 + A2). */
@@ -770,7 +780,7 @@ export interface RagResult {
   /** The engine identifier. The current Astrographer value is 'local'. */
   engine: string
   /** The deduplicated grounding set (A1). */
-  citations: Array<{ documentId: string; nodeId: string }>
+  citations: Array<{ documentId: string; nodeId: string; store?: string }>
   /** The per-mode trace (A1). */
   trace: RagTrace
   /** Present ONLY in graph mode when the traversal resolves no target (A2). */
@@ -781,6 +791,10 @@ export interface RagResult {
   markdown: string
   lineMap: LineNodeMap
   k: number
+  /** D2/A-F1 — per-store context blocks. Present ONLY in a qualified
+   *  (`stores:"all"`) result; the top-level context/markdown/lineMap stay the
+   *  default store's block. Absent (undefined) in a single-store result. */
+  storeContexts?: StoreContextBlock[]
 }
 
 /** The graph-mode walk options (§5.4). */
@@ -1140,5 +1154,158 @@ export async function ragQuery(
     markdown,
     lineMap,
     k: topK,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unit F2 — result qualification + `storeContexts` (cross-store fan-out)
+// (docs/specs/unit-f2-result-qualification.md §5.3–§5.7)
+// ---------------------------------------------------------------------------
+
+/** One per-store context block (D2). */
+export interface StoreContextBlock {
+  store: string // the producing store's registry name (no `<name>:` prefix)
+  context: RagNode[]
+  markdown: string
+  lineMap: LineNodeMap
+}
+
+/** Qualify a merged fan-out result. PURE + DETERMINISTIC — never mutates
+ *  `merged` or the per-store results/items.
+ *
+ *  A-F1 gate — when `opts.qualified` is FALSE, returns `merged` UNCHANGED
+ *  (byte-equal, no `store`/`storeContexts`), preserving the Phase-1 A4
+ *  single-store contract. `stores` is NOT read. When TRUE, stamps the
+ *  per-item/per-entry `store` (D3) and builds `storeContexts` (D2) from the
+ *  per-store results. */
+export function qualifyStoreResult(
+  merged: RagResult,
+  stores: Array<StoreResultInput>,
+  opts: { qualified: boolean },
+): RagResult {
+  if (merged === null || merged === undefined) {
+    throw new Error('qualifyStoreResult: merged result required')
+  }
+  if (opts === null || opts === undefined) {
+    throw new Error('qualifyStoreResult: opts required')
+  }
+  if (typeof opts.qualified !== 'boolean') {
+    throw new Error('qualifyStoreResult: qualified must be a boolean')
+  }
+  if (!opts.qualified) {
+    return merged
+  }
+
+  // `qualified` === true — validate the store inputs.
+  if (stores === null || stores === undefined || !Array.isArray(stores)) {
+    throw new Error('qualifyStoreResult: stores required when qualified')
+  }
+
+  // ---- validation pass (§5.6) ----
+  // A store with a valid (non-null) result must carry context/markdown/lineMap
+  // (needed for its storeContexts block). A null/undefined-result store is
+  // SKIPPED (D6 — no block, no attribution, never a throw).
+  for (let i = 0; i < stores.length; i++) {
+    const entry: StoreResultInput = stores[i]
+    if (entry === null || entry === undefined) {
+      throw new Error('qualifyStoreResult: store entry required')
+    }
+    if (typeof entry.name !== 'string' || entry.name.trim().length === 0) {
+      throw new Error('qualifyStoreResult: store name must be a non-empty string')
+    }
+    const result = entry.result
+    if (result !== null && result !== undefined) {
+      // F-F2-1: a non-null `result` MUST carry a `results` array. An absent/
+      // undefined (or non-array) `results` would otherwise survive the §5.6
+      // pass and crash later with an unpinned `entry.result.results is not
+      // iterable` — assert it here with the pinned message instead.
+      if (!Array.isArray(result.results)) {
+        throw new Error('qualifyStoreResult: store results must be an array')
+      }
+      if (
+        result.context === null ||
+        result.context === undefined ||
+        result.markdown === null ||
+        result.markdown === undefined ||
+        result.lineMap === null ||
+        result.lineMap === undefined
+      ) {
+        throw new Error(
+          'qualifyStoreResult: store result must have context, markdown and lineMap',
+        )
+      }
+    }
+  }
+
+  // ---- attribute every merged item (§5.3.1) — reference identity against the
+  // per-store results.items arrays (mergeStoreResults interleaves BY REFERENCE,
+  // U-F1 §5.2, so reference identity is exact) ----
+  const itemOwner = new Map<RagResultItem, string>()
+  for (const entry of stores) {
+    if (entry && entry.result) {
+      const name = entry.name
+      for (const it of entry.result.results) {
+        if (it !== null && it !== undefined) {
+          if (!itemOwner.has(it)) itemOwner.set(it, name)
+        }
+      }
+    }
+  }
+  const ownerName = (item: RagResultItem): string => {
+    const n = itemOwner.get(item)
+    if (n === undefined) {
+      throw new Error('qualifyStoreResult: unattributable result item')
+    }
+    return n
+  }
+
+  // ---- spread-copy the items with `store` stamped (§5.3.1) ----
+  // F-F2-2: skip a `null`/`undefined` element in `merged.results` (a sparse-array
+  // hole or an explicit null) rather than silently spreading it to `{}` and then
+  // mischaracterizing it as `unattributable result item` — consistent with U-F1's
+  // null skip (merge-store-results F-F1-3).
+  const results = merged.results
+    .filter((item) => item !== null && item !== undefined)
+    .map((item) => ({ ...item, store: ownerName(item) }))
+
+  // ---- re-derive citations with the first-appearance store (§5.3.2) ----
+  const citations: RagResult['citations'] = []
+  const seen = new Set<string>()
+  for (const item of results) {
+    const key = `${item.documentId}\u0000${item.nodeId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    citations.push({ documentId: item.documentId, nodeId: item.nodeId, store: item.store })
+  }
+
+  // ---- build `storeContexts` (§5.3.3, D2) — one block per VALID store in
+  // the `stores` array order; the null/undefined-result stores are skipped ----
+  const storeContexts: StoreContextBlock[] = []
+  for (const entry of stores) {
+    if (entry && entry.result) {
+      storeContexts.push({
+        store: entry.name,
+        context: entry.result.context,
+        markdown: entry.result.markdown,
+        lineMap: entry.result.lineMap,
+      })
+    }
+  }
+
+  // ---- the qualified result: passthrough of the preserved surface; the
+  // top-level block stays the default store's block (D2); no `blockedBy`
+  // (FLAT-only, D4) ----
+  return {
+    query: merged.query,
+    results,
+    engine: merged.engine,
+    citations,
+    trace: merged.trace,
+    ranked: merged.ranked,
+    context: merged.context,
+    markdown: merged.markdown,
+    lineMap: merged.lineMap,
+    k: merged.k,
+    storeContexts,
   }
 }

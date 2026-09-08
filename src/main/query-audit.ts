@@ -25,6 +25,10 @@ export interface QueryAuditEntry {
   resultCount: number
   timestamp: string
   requester: string
+  /** A-F2 — present ONLY for a `stores:"all"` fan-out (the canonical-order
+   *  store names the fan-out queried); ABSENT (undefined) in a single-store
+   *  audit entry (the existing entries stay byte-equal). */
+  stores?: string[]
 }
 
 /** The query-audit log surface (§5.7). */

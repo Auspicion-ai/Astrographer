@@ -431,6 +431,9 @@ export interface RagQueryPayload {
    *  a UI-passed non-default store's results are display-only
    *  (RAG-QUERY-STORE-DISPLAY-ASYMMETRY). */
   store?: string
+  /** U-F3 — `stores: 'all'` runs the cross-store fan-out. Mutually exclusive
+   *  with `store` (A-F3). Omitted ⇒ today's single-store path. */
+  stores?: 'all'
 }
 
 /** The renderer→main `rag-snapshot` IPC (the re-traversal data source). The
