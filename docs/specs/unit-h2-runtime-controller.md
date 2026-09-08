@@ -1,14 +1,17 @@
 # Spec — Unit H2: The Registry Hot-Apply Runtime Controller (`rag-store-runtime.ts`) + the Closure Rewiring
 
-> **STATE (2026-09-08): U-H2a is LANDED — the module
-> `src/main/rag-store-runtime.ts` exists and is green (38/38 via
+> **STATE (2026-09-08): U-H2 is LANDED — BOTH sub-units.** U-H2a — the module
+> `src/main/rag-store-runtime.ts` — exists and is green (38/38 via
 > `tests/unit-h2-runtime-controller.test.ts`, typecheck + build clean), incl.
 > the four RCA-3 adversarial host regressions HOST-1a/1b/2/3 (F-H2-1/2/3); the
 > blind-greens ran 28 PASS / 1 FAIL / 3 DEFERRED with the single FAIL (F8,
-> §5.5 R-kind single-quote) + the F7 note reconciled in THIS doc-review pass.
-> **U-H2b (the closure rewiring — §5.8/§5.9 and the §4 A-P2-1/REFRESH-ON-APPLY
-> seams) is NOT-YET-IMPLEMENTED — the NEXT cycle.** Do NOT read the U-H2b
-> sections as landed.**
+> §5.5 R-kind single-quote) + the F7 note reconciled in the U-H2a doc-review
+> (`archive/reviews/2026-09-08-unit-h2a-doc-review.md`). **U-H2b (the closure
+> rewiring — §5.8/§5.9 and the §4 A-P2-1/REFRESH-ON-APPLY seams, main.ts
+> B1–B13 + mcp-server.ts M1–M4) is LANDED (2026-09-08) — the U-H2b sections
+> below describe the landed U-H2b contract (14/14 + 4 pins).** The unit trio
+> baseline (incl. U-H2) is **2665 pass / 41 skip per the triowrite, pending
+> the supervisor's parallel trio-run confirmation** (typecheck + build clean).
 
 - **Status: SPEC (DRAFT, pre-gate)** — the registry hot-apply/removal/rename
   slice, Unit U-H2 of 8 — the SECOND unit in the pinned execution order
@@ -235,6 +238,37 @@ rows (HOST-1a/HOST-1b/HOST-2/HOST-3):
   `stores: undefined` and `stores: []` both fail loud with
   `rag-store-runtime: registry default does not match the directory default`.
 
+**U-H2b adversarial findings (registered 2026-09-08 — the U-H2b adversarial
+pass ran against the landed B1–B13/M1–M4 wiring + the U-H2b green set):**
+
+- **HOST-LOW-1 (LOW, DEFERRED to U-H7 / the next unit — NOT fixed in U-H2) —
+  U-H2 closure-rewiring drift on the U-H2a F15/F16 rebuildAll path:** the
+  U-H2a `syncLiveToLoaded(_, rebuildAll=true)` drift sync (HOST-1) rebuilds
+  EVERY entry from `loaded` and sets `directory.defaultName =
+  loaded.defaultStoreName`, but it NEVER re-binds the controller's captured
+  `defaultEntry` (nor the store/engine accessors that read it). After a
+  F15/F16 drifted-default apply the directory's `defaultName` + rebuilt
+  entries reflect disk, while `getDefaultStore()`/`getDefaultEngine()`/
+  `getDefaultName()` (via `defaultEntry`) still read the OLD boot default —
+  so the runtime's direct accessors DESYNCHRONIZE from `directory.defaultName`
+  on exactly the path HOST-1 created to preserve D2. **LATENT** — no
+  `hotApply` caller is wired until U-H8, so no live closure consumes the
+  accessors post-drift today (the U-H2b bindings B2/B5/B13 + M3/M4 ARE the
+  exposure the moment U-H8 invokes `hotApply` on a drifted registry). **Fix
+  deferred to U-H7 / the next unit** (revisit when the real hot-apply caller
+  is wired): either re-bind `defaultEntry` on `rebuildAll` OR route the
+  direct-accessor handlers B2/B5/B13 through
+  `runtime.getDirectory().entries.get(runtime.getDefaultName())`. RECORDED —
+  pending.md row added (2026-09-08).
+- **HOST-INFO-1 (INFO, FIXED this pass — 2026-09-08): dead boot consts in
+  `main.ts`:** the post-rewiring `main.ts` no longer needs standalone
+  `ragStore`/`retrievalEngine` constants (every live closure reads
+  `runtime.getDefaultStore()`/`runtime.getDefaultEngine()` per call). The dead
+  consts were removed in this pass; verify NO documentation still claims they
+  exist (this spec's §5.8 prose now consistently reads the runtime accessors;
+  the legacy single-store fallback lives only inside `mcp-server.ts` when the
+  runtime is absent — M1/M4).
+
 **Documentation-drift notes for the proofreader/doc-review gate (§5.5/§5.7
 prose — the module is UNAMBIGUOUSLY correct; do NOT change it; BOTH notes
 below are RECONCILED in the per-unit doc-review pass, 2026-09-08):**
@@ -374,14 +408,14 @@ From `docs/specs/registry-hot-apply-review.md`:
 - **A-P2-1-CLOSURE-REWIRING (new):** all default/directory-bound closures in
   `main.ts` and `mcp-server.ts` read the runtime's accessors PER CALL (the
   runtime seam is injected); the legacy const fallback stays byte-equal for
-  the directory-less/single-store path. **NOT-YET-IMPLEMENTED — this is a
-  U-H2b seam (the NEXT cycle); §5.8/§5.9 describe the pending U-H2b contract.**
-  Pinned §5.8.
+  the directory-less/single-store path. **LANDED (U-H2b, 2026-09-08)** —
+  §5.8/§5.9 describe the landed U-H2b contract (main.ts B1–B13 +
+  mcp-server.ts M1–M4). Pinned §5.8.
 - **REFRESH-ON-APPLY (new, A-P2-3):** `IPC_RAG_STORE_LISTING` reads the
   runtime's CURRENT resolved projection (`currentStores()` + `statusOf`), NOT
   the boot `registry` const — a pull after an apply shows the new state.
-  **NOT-YET-IMPLEMENTED — a U-H2b seam (the NEXT cycle); the module already
-  exposes the `currentStores()`/`statusOf` source it reads (§5.4).**
+  **LANDED (U-H2b, 2026-09-08 — §5.8 B12)**; the module already
+  exposes the `currentStores()`/`statusOf` source it reads (§5.4).
   Pinned §5.8/§5.10.
 - **Consumed decision rows (implemented by this unit or inherited, cite-only):**
   **REGISTRY-WRITE-MODULE** / **REGISTRY-ATOMIC-WRITE** /
@@ -818,12 +852,13 @@ guarantee is preserved — U-H2 never deletes a store file).
 
 ### 5.8 U-H2b — the closure rewiring contract (`main.ts` + `mcp-server.ts`)
 
-> **⚠ NOT-YET-IMPLEMENTED (U-H2b is a SEPARATE later cycle — the NEXT cycle
-> after U-H2a).** This section + §5.9 describe the PENDING U-H2b closure-rewiring
-> contract; a fresh agent MUST NOT read these bind sites (B1–B13 / M1–M4) as
-> already landed. Only `src/main/rag-store-runtime.ts` (the U-H2a module, §5.1–§5.7)
-> is landed, 38/38. The next cycle re-derives U-H2b's red set from these two
-> sections after the U-H2a DONE row lands.
+> **⚠ LANDED (U-H2b, 2026-09-08).** This section + §5.9 describe the landed
+> U-H2b closure-rewiring contract; the bind sites (B1–B13 / M1–M4) ARE
+> implemented in the current build (`src/main/main.ts` +
+> `src/main/mcp-server.ts`), green via `tests/unit-h2-runtime-controller.test.ts`
+> (14/14 + 4 pins). `src/main/rag-store-runtime.ts` (the U-H2a module, §5.1–§5.7)
+> is LANDED, 38/38. The anchor line numbers below reflect the CURRENT build
+> (reconciled in the per-unit doc-review, 2026-09-08).
 
 **U-H2b scope:** rewire every const-captured default/directory closure +
 the server options to read the runtime's accessors per call (A-P2-1),
@@ -861,19 +896,19 @@ locals read by live closures are replaced by `runtime.getDefaultName()`. `ragSto
 
 | # | Site (today) | Rewire to |
 | --- | --- | --- |
-| B1 | `ProvidentMcpServer` options — `ragStore`, `retrievalEngine`, `ragStores: plan.directory` (`main.ts:203`) | `ragStore: runtime.getDefaultStore()`, `retrievalEngine: runtime.getDefaultEngine()`, `ragStores: runtime.getDirectory()` + the NEW `runtime` option (M1) |
-| B2 | `IPC_EDIT_COMMIT` — `handleEditCommit(ragStore, …)` (`main.ts:266`) | `runtime.getDefaultStore()` |
-| B3 | `IPC_EDIT_COMMIT` reconcile `retrievalEngine.onStoreChanged` (`main.ts:275`) | `runtime.getDefaultEngine()` |
-| B4 | `IPC_EDIT_COMMIT` broadcast `plan.defaultName` (`main.ts:278`) | `runtime.getDefaultName()` |
-| B5 | `IPC_EDIT_BATCH` — `ragStore.getNode`/`handleEditBatch(ragStore, …)` (`main.ts:300,304`) | `runtime.getDefaultStore()` |
-| B6 | `IPC_EDIT_BATCH` reconcile `retrievalEngine` (`main.ts:313`) | `runtime.getDefaultEngine()` |
-| B7 | `IPC_EDIT_BATCH` broadcast `plan.defaultName` (`main.ts:316`) | `runtime.getDefaultName()` |
-| B8 | `IPC_EDIT_RICH_COMMIT` — `handleRichCommitIpc(ragStore, …)` + `retrievalEngine` reconcile + `plan.defaultName` broadcast (`main.ts:337-341`) | `runtime.getDefaultStore()`/`getDefaultEngine()`/`getDefaultName()` |
-| B9 | `IPC_RAG_QUERY` — `handleRagQueryIpc(retrievalEngine, ragStore, …, plan.directory, …)` (`main.ts:354`) | `runtime.getDefaultEngine()`, `runtime.getDefaultStore()`, `runtime.getDirectory()` |
-| B10 | `IPC_RAG_BACKLINKS` — `handleRagBacklinksIpc(ragStore, …)` (`main.ts:362`) | `runtime.getDefaultStore()` |
-| B11 | `IPC_RAG_DOC_HEADS` — `handleRagDocHeadsIpc(ragStore)` (`main.ts:371`) | `runtime.getDefaultStore()` |
-| B12 | `IPC_RAG_STORE_LISTING` — reads `registry.stores` (boot) + `plan.directory.entries`/`plan.directory` (`main.ts:382-414`) | A-P2-3: read `runtime.currentStores()` for the projection + `runtime.statusOf(name)` for the status resolver (the `listingEntries` map becomes `runtime.currentStores().map(s => ({ name: s.name, default: s.default, persistenceFile: basename(s.persistenceFile), corpusRoot: s.corpusRoot ?? null }))`) |
-| B13 | `IPC_RAG_SNAPSHOT` — `ragStore.listNodes()`/`listEdges()` + `plan.defaultName` (`main.ts:456-460`) | `runtime.getDefaultStore()` + `runtime.getDefaultName()` |
+| B1 | `ProvidentMcpServer` options — `ragStore`, `retrievalEngine`, `ragStores: plan.directory` (`main.ts:219`) | `ragStore: runtime.getDefaultStore()`, `retrievalEngine: runtime.getDefaultEngine()`, `ragStores: runtime.getDirectory()` + the NEW `runtime` option (M1) |
+| B2 | `IPC_EDIT_COMMIT` — `handleEditCommit(ragStore, …)` (`main.ts:282`) | `runtime.getDefaultStore()` |
+| B3 | `IPC_EDIT_COMMIT` reconcile `retrievalEngine.onStoreChanged` (`main.ts:291`) | `runtime.getDefaultEngine()` |
+| B4 | `IPC_EDIT_COMMIT` broadcast `plan.defaultName` (`main.ts:294`) | `runtime.getDefaultName()` |
+| B5 | `IPC_EDIT_BATCH` — `ragStore.getNode`/`handleEditBatch(ragStore, …)` (`main.ts:316,320`) | `runtime.getDefaultStore()` |
+| B6 | `IPC_EDIT_BATCH` reconcile `retrievalEngine` (`main.ts:329`) | `runtime.getDefaultEngine()` |
+| B7 | `IPC_EDIT_BATCH` broadcast `plan.defaultName` (`main.ts:332`) | `runtime.getDefaultName()` |
+| B8 | `IPC_EDIT_RICH_COMMIT` — `handleRichCommitIpc(ragStore, …)` + `retrievalEngine` reconcile + `plan.defaultName` broadcast (`main.ts:353-357`) | `runtime.getDefaultStore()`/`getDefaultEngine()`/`getDefaultName()` |
+| B9 | `IPC_RAG_QUERY` — `handleRagQueryIpc(retrievalEngine, ragStore, …, plan.directory, …)` (`main.ts:370`) | `runtime.getDefaultEngine()`, `runtime.getDefaultStore()`, `runtime.getDirectory()` |
+| B10 | `IPC_RAG_BACKLINKS` — `handleRagBacklinksIpc(ragStore, …)` (`main.ts:378`) | `runtime.getDefaultStore()` |
+| B11 | `IPC_RAG_DOC_HEADS` — `handleRagDocHeadsIpc(ragStore)` (`main.ts:387`) | `runtime.getDefaultStore()` |
+| B12 | `IPC_RAG_STORE_LISTING` — reads `registry.stores` (boot) + `plan.directory.entries`/`plan.directory` (`main.ts:401-419`) | A-P2-3: read `runtime.currentStores()` for the projection + `runtime.statusOf(name)` for the status resolver (the `listingEntries` map becomes `runtime.currentStores().map(s => ({ name: s.name, default: s.default, persistenceFile: basename(s.persistenceFile), corpusRoot: s.corpusRoot ?? null }))`) |
+| B13 | `IPC_RAG_SNAPSHOT` — `ragStore.listNodes()`/`listEdges()` + `plan.defaultName` (`main.ts:462-466`) | `runtime.getDefaultStore()` + `runtime.getDefaultName()` |
 
 **The mcp-server.ts changes (A-P2-1):**
 
@@ -885,14 +920,14 @@ locals read by live closures are replaced by `runtime.getDefaultName()`. `ragSto
   serves byte-equal (the legacy/single-store path, `tests/embeddings-adversarial.test.ts:104`).
 - **M2 — `registerTools` threads the runtime:** the static
   `registerTools(… ragStore, engine, templateStore, gate, ragStores, auditLog)`
-  (`mcp-server.ts:1368-1381`) gains a trailing `runtime` param (optional). Both
-  its call sites (`applyGatePatch`:1216 and `createServer`:1360) forward
+  (`mcp-server.ts:1383-1397`) gains a trailing `runtime` param (optional). Both
+  its call sites (`applyGatePatch`:1231 and `createServer`:1375) forward
   `this.runtime`.
-- **M3 — the `rag.*` handler closure** (`mcp-server.ts:1576`) reads per call:
+- **M3 — the `rag.*` handler closure** (`mcp-server.ts:1592`) reads per call:
   `handleRagTool(runtime ? runtime.getDefaultStore() : ragStore, name, args,
   runtime ? runtime.getDefaultEngine() : engine, runtime ? runtime.getDirectory() :
   ragStores, auditLog)`.
-- **M4 — the `edit.*` reconcile closure** (`mcp-server.ts:1590-1602`) reads per
+- **M4 — the `edit.*` reconcile closure** (`mcp-server.ts:1606-1620`) reads per
   call: the directory is `runtime ? runtime.getDirectory() : ragStores` and the
   reconcile engine is that directory's `entries.get(storeName)?.engine`
   (`runtime.getDirectory().entries.get(storeName)?.engine` when the runtime is
@@ -904,7 +939,7 @@ apply shows the current state. The `sidebar-panes.ts` listing nodes are
 UNTOUCHED by U-H2 (U-MS5's surface; the operator editor is U-H8).
 
 **Negative pins for U-H2b (grep-level):** (a) no new MCP tool name in
-`ALL_TOOLS` (`mcp-server.ts:1084-1135` — the census stays at its pre-H2 set),
+`ALL_TOOLS` (`mcp-server.ts:1099-1150` — the census stays at its pre-H2 set of 41),
 no new `security.ts` tool→group row, no `RpcMethod` member, no
 `MUTATING_METHODS` member, no renderer method switch change (D6); (b) the
 boot loader path still reads the registry EXACTLY ONCE per boot — there is NO
@@ -914,15 +949,16 @@ path is byte-equal (the accessors return the boot default objects).
 
 ### 5.9 Unit → file → test-file mapping + the red-set expectation
 
-> **⚠ U-H2b's red-set expectation below is PENDING — U-H2b has NOT landed.**
-> The U-H2a row (module `src/main/rag-store-runtime.ts`, 38/38) is LANDED; the
-> U-H2b row (main.ts/mcp-server.ts, B1–B13/M1–M4) is the NEXT cycle and is
-> NOT yet implemented.
+> **U-H2b is LANDED (2026-09-08).** The U-H2a row (module
+> `src/main/rag-store-runtime.ts`, 38/38) is LANDED; the U-H2b row
+> (main.ts/mcp-server.ts, B1–B13/M1–M4) is LANDED — its red-set expectation
+> below (14 red) flipped to **14 green + 4 negative pins** in
+> `tests/unit-h2-runtime-controller.test.ts`.
 
 | Unit | File | Test file | Red-set expectation (RCA-1) |
 | --- | --- | --- | --- |
 | **U-H2a** (this spec) | NEW `src/main/rag-store-runtime.ts` (runtime controller + mutable live directory + `hotApply`) | `tests/unit-h2-runtime-controller.test.ts` (SpecWriter-pinned; U-H2a's §5.3–§5.7 red set) | Suite fails to LOAD — the module/controller does not exist (the red set asserts `import { createRagStoreRuntimeController } from '../src/main/rag-store-runtime.js'` throws before ANY test body runs). The §5.6 H1–H12 + §5.7 F1–F18 test bodies are authored in the same pass and each FAIL on the missing module. |
-| **U-H2b** (this spec) | `src/main/main.ts` (rewire B1–B13) + `src/main/mcp-server.ts` (M1–M4) | `tests/unit-h2-runtime-controller.test.ts` (§5.8 seams, node-tested) + grep/structure scans of `main.ts`/`mcp-server.ts` | U-H2b's red set runs AFTER U-H2a green ONLY. The node-testable seams (M1–M4 — `registerTools` threading a runtime, the `rag.*`/`edit.*` closures resolving via `runtime`) FAIL (the runtime param does not exist). The `main.ts` B1–B13 rewiring is asserted via grep/structure scans (the runtime is constructed at boot; every listed bind site references `runtime.*`); these scans fail on the pre-H2 wiring. |
+| **U-H2b** (this spec) | `src/main/main.ts` (rewire B1–B13) + `src/main/mcp-server.ts` (M1–M4) | `tests/unit-h2-runtime-controller.test.ts` (§5.8 seams, node-tested) + grep/structure scans of `main.ts`/`mcp-server.ts` | U-H2b's red set ran AFTER U-H2a green. The node-testable seams (M1–M4 — `registerTools` threading a runtime, the `rag.*`/`edit.*` closures resolving via `runtime`) FAILED on the pre-H2 wiring (the runtime param did not exist); the `main.ts` B1–B13 rewiring (runtime constructed at boot; every listed bind site references `runtime.*`) failed the pre-H2 grep scans. **LANDED: 14 green + 4 negative pins (D6a/D6b/D8/A-P2-8)** in `tests/unit-h2-runtime-controller.test.ts`. |
 
 - **Specifier note:** the §5.6 H-rows + §5.7 F-rows derive the U-H2a red set;
   §5.8's M1–M4 derive the node-testable U-H2b red set; §5.8's B1–B13 derive the
@@ -951,9 +987,10 @@ path is byte-equal (the accessors return the boot default objects).
 ### 5.10 The supersession row (A-P2-3/D2) — which tests stay green vs which are superseded mechanically
 
 > **⚠ The superseded rows below (Red 18 / fail-state 10) are mechanically landed
-> in U-H2b (the NEXT cycle) — NOT in U-H2a. The U-H2a module is LANDED; the
-> refresh-on-apply re-wiring of `IPC_RAG_STORE_LISTING` + the Red-18 re-base are
-> PENDING until U-H2b lands.**
+> in U-H2b (2026-09-08) — the refresh-on-apply re-wiring of
+> `IPC_RAG_STORE_LISTING` (B12) IS landed; the Red-18 re-base applies to the
+> pre-apply boot path. The U-H2a module is LANDED; the D8 no-idle-re-read
+> holds (the pre-apply boot path still re-reads nothing).**
 
 **STAY GREEN (UNTOUCHED):** `tests/unit-h1-registry-write.test.ts` (49 — U-H1's
 contract unchanged), the loader census (`tests/unit-ms1-store-registry.test.ts`
@@ -991,20 +1028,20 @@ legacy const fallback is byte-equal).
   the propagated write-module W-* / loader F-* / native fs sets.
 - **Log output:** 0 lines (no `console.*` in `rag-store-runtime.ts`).
 - **Closure bind sites rewired in `main.ts`:** 13 (B1–B13, §5.8) — NOT 14/12;
-  doc-review (RCA-6) catches drift against the table. **NOT-YET-IMPLEMENTED
-  (a U-H2b census — the NEXT cycle).**
+  doc-review (RCA-6) catches drift against the table. **LANDED (U-H2b,
+  2026-09-08).**
 - **mcp-server.ts changes:** 1 new server option (`runtime?`), 1 stored field,
   2 `registerTools` call-site forwards, 1 signature change, 2 handler-closure
-  resolution changes (M1–M4). **NOT-YET-IMPLEMENTED (a U-H2b census).**
+  resolution changes (M1–M4). **LANDED (U-H2b, 2026-09-08).**
 - **Disk writes per successful `hotApply`:** exactly ONE registry file write
   (U-H1's temp→fsync→rename) + the step-5 re-load read; ZERO writes to any
   store persistence file or journal; ZERO removals/teardowns.
 - **Runtimes re-created per `hotApply`:** N_non-default fresh store/engine
   pairs; the default store/engine/vector-boot are preserved (ZERO rebuilt).
 - **Files this unit creates/edits:** LANDED (U-H2a) — `src/main/rag-store-runtime.ts`
-  + `tests/unit-h2-runtime-controller.test.ts`; PENDING (U-H2b) —
+  + `tests/unit-h2-runtime-controller.test.ts`; LANDED (U-H2b) —
   `src/main/main.ts` (B1–B13) + `src/main/mcp-server.ts` (M1–M4) + the
-  A-P2-3 `IPC_RAG_STORE_LISTING` refresh re-wire. UNTOUCHED: the loader
+  A-P2-3 `IPC_RAG_STORE_LISTING` refresh re-wire (B12). UNTOUCHED: the loader
   `rag-store-registry.ts`, the write module `rag-store-registry-write.ts`
   (U-H1's byte-pinned surface), `rag-store.ts`/`retrieval.ts`/
   `vector-boot.ts`/`rag-store-directory.ts`, `preload.ts`, `shared/types.ts`,
@@ -1015,12 +1052,17 @@ legacy const fallback is byte-equal).
   (the §5.4–§5.7 contract: F1–F14 + F18 + P0 + P1, H1–H12, F15–F17, N1–N2,
   and the four RCA-3 HOST-1a/HOST-1b/HOST-2/HOST-3 regression rows; 0 log,
   typecheck + build clean). The §5.11 original 18–30 estimate is superseded by
-  the landed 38. **Estimated new tests/rows (U-H2b, PENDING):** the M1–M4
-  node-testable seams (the runtime-threaded `registerTools` + the
-  accessor-resolved `rag.*`/`edit.*` closures, ~4–8) + the §5.8 grep/structure
-  scans of `main.ts` (B1–B13) + the A-P2-3 supersession re-write of the ms5
-  Red 18 row (re-based to the pre-apply boot path) + the post-apply
-  listing-refresh red row.
+  the landed 38. **Tests landed (U-H2b, LANDED 2026-09-08):** **14 green + 4
+  negative pins** in the SAME `tests/unit-h2-runtime-controller.test.ts` —
+  the M1–M4 node-testable/structural seams (the runtime-threaded `registerTools`
+  + the accessor-resolved `rag.*`/`edit.*` closures + the constructor seam) +
+  the B0/B1–B13 grep/structure scans of `main.ts` (runtime constructed at boot,
+  every bind site `runtime.*`) + the 4 negative pins D6a (ALL_TOOLS stays 41) /
+  D6b (no IPC channel) / D8 (loader reads once) / A-P2-8 (no teardown call).
+  Full file total: 38 + 14 + 4 = **56 `it()` blocks**. (The A-P2-3 supersession
+  re-write of the ms5 Red 18 row + a post-apply listing-refresh red row are
+  covered by the B12 scan; the live listing-refresh end-to-end stays a §6
+  live-app scenario.)
 
 ### 5.12 Cross-references
 
@@ -1051,15 +1093,16 @@ legacy const fallback is byte-equal).
   (the per-store reconcile routing U-H2b preserves); `src/main/rag-store-directory.ts`
   (`rag-store-directory.ts:260-264` — the `directory` + rule-2 lexical branch `:246`).
 - **Boot wiring anchors (the closure-rewiring surface):** `src/main/main.ts`
-  `:128-130` (the ONCE-per-boot loader — D8), `:176-203` (`plan`/
-  `defaultEntry`/`ragStore`/`retrievalEngine`/`vectorBoot`/`mcp`), `:266-279`
-  (IPC_EDIT_COMMIT), `:300-317` (IPC_EDIT_BATCH), `:337-343`
-  (IPC_EDIT_RICH_COMMIT), `:354-372` (IPC_RAG_QUERY/BACKLINKS/DOC_HEADS),
-  `:382-414` (IPC_RAG_STORE_LISTING), `:456-460` (IPC_RAG_SNAPSHOT). The
-  mcp-server closure-capture sites: `mcp-server.ts:1039-1043,1071-1073`
-  (the const fields), `:1216,:1360` (registerTools forwards), `:1368-1381`
-  (the signature), `:1576` (the `rag.*` closure), `:1590-1602` (the `edit.*`
-  reconcile closure).
+  `:129-131` (the ONCE-per-boot loader — D8), `:177-219` (`plan`/
+  `defaultEntry`/`vectorBoot`/`registryPath`/`runtime`/`mcp`), `:274-298`
+  (IPC_EDIT_COMMIT), `:307-336` (IPC_EDIT_BATCH), `:345-360`
+  (IPC_EDIT_RICH_COMMIT), `:369-388` (IPC_RAG_QUERY/BACKLINKS/DOC_HEADS),
+  `:401-420` (IPC_RAG_STORE_LISTING), `:462-466` (IPC_RAG_SNAPSHOT). The
+  mcp-server closure-capture sites: `mcp-server.ts:1050-1061`
+  (the const fields — `ragStore`/`retrievalEngine`/`ragStores`/`runtime`),
+  `:1231,:1375` (registerTools forwards), `:1383-1397`
+  (the signature), `:1592` (the `rag.*` closure), `:1606-1620` (the `edit.*`
+  reconcile closure); the `ALL_TOOLS` census lives at `mcp-server.ts:1099-1150` (41).
 - **Sibling hot-apply units (cite-only):** U-H3 (hot-add — the incremental
   teardown-aware ADD), U-H4 (hot-remove — drain-then-teardown, after U-H5),
   U-H5 (teardown primitives — A-P2-8), U-H6 (hot-rename), U-H7 (default
@@ -1081,9 +1124,9 @@ legacy const fallback is byte-equal).
 
 ## 6. The split decision + the live-scenario gate
 
-> **State (2026-09-08): U-H2a is LANDED (38/38, doc-reviewed); the §5.8–§5.9
-> U-H2b half is the NEXT cycle and is NOT yet implemented.** The split decision
-> below is LANDED (the U-H2a half of this ONE spec file is green).
+> **State (2026-09-08): U-H2 is LANDED — BOTH U-H2a (38/38, doc-reviewed) and
+> U-H2b (14/14 + 4 pins, doc-reviewed this pass).** The split decision
+> below is LANDED (both halves of this ONE spec file are green).
 
 **Split decision (RCA-5 + the review §2 D8 explicit warning): U-H2 is DECLARED
 TOO LARGE FOR ONE RED SET and is split into TWO sub-units — U-H2a (the runtime
@@ -1158,18 +1201,18 @@ no change:
    **CONFIRMED.**
 4. **`IPC_RAG_STORE_LISTING` pulls `runtime.currentStores()` + `runtime.statusOf`**
    (A-P2-3); NO renderer/pane node change in U-H2 (U-MS5's surface survives intact;
-   U-H8 owns the operator editor). **CONFIRMED — this Q4 wiring is a U-H2b seam
-   (the NEXT cycle), NOT-YET-IMPLEMENTED; only the `currentStores()`/`statusOf`
-   source it reads is landed (U-H2a).**
+   U-H8 owns the operator editor). **CONFIRMED — this Q4 wiring is a U-H2b seam;
+   LANDED in U-H2b (2026-09-08, §5.8 B12), reading the `currentStores()`/`statusOf`
+   source it pulls (U-H2a).**
 
 The TestWriter may derive U-H2a (from §5.3–§5.7) and U-H2b (from §5.8–§5.9)
 against this ruling; no further arbitration is required before the red runs.
-**State (2026-09-08): U-H2a LANDED (38/38, doc-reviewed — this pass); U-H2b is
-NOT yet implemented (the NEXT cycle; re-derive its red set from §5.8–§5.9).**
+**State (2026-09-08): U-H2 is LANDED — U-H2a 38/38 (doc-reviewed) + U-H2b
+14/14 + 4 pins (doc-reviewed this pass).**
 
 ---
 
-**Bottom line:** U-H2 delivers the two LANDED-contract half — U-H2a is the
+**Bottom line:** U-H2 delivers the two LANDED-contract halves — U-H2a is the
 runtime controller (`src/main/rag-store-runtime.ts`) that owns the mutable live
 `RagStoreDirectory`, the runtime accessors, and the single `hotApply` seam
 (a default-stable, non-teardown rebuild of the non-default entries driven by
@@ -1177,6 +1220,7 @@ U-H1's `writeRegistryMutation`), keeping the boot path byte-equal for a NO-OP
 run (**LANDED 2026-09-08, 38/38 + the four RCA-3 HOST-1a/1b/2/3 regression
 rows, typecheck + build clean**); U-H2b rewires every const-captured
 default/directory closure + the server options to read runtime accessors per
-call (A-P2-1) and lands the A-P2-3 refresh-on-apply (**PENDING — the NEXT
-cycle**). No engine gap, no teardown (U-H5), no new MCP tool or IPC
+call (A-P2-1, main.ts B1–B13 + mcp-server.ts M1–M4) and lands the A-P2-3
+refresh-on-apply (**LANDED 2026-09-08, 14/14 + 4 pins, typecheck + build
+clean**). No engine gap, no teardown (U-H5), no new MCP tool or IPC
 channel (D6), no page-design change (U-H8 owns the operator editor).

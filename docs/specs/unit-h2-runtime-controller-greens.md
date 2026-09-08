@@ -4,9 +4,27 @@
 - **Unit:** U-H2a — `src/main/rag-store-runtime.ts` (the registry hot-apply
   RUNTIME CONTROLLER: owns the mutable live `RagStoreDirectory`, the runtime
   accessors, and the single `hotApply(mutation)` orchestration seam).
-- **U-H2 b** (the `main.ts`/`mcp-server.ts` closure rewiring, §5.8–§5.9) is a
-  SEPARATE later cycle — **EXCLUDED from this artifact** by the §6 split
-  decision (RCA-5). This artifact covers ONLY U-H2a.
+- **U-H2 b** (the `main.ts`/`mcp-server.ts` closure rewiring, §5.8–§5.9) was a
+  SEPARATE cycle — **ADDED to this artifact as section E** (its own blind
+  scenario set derived from §5.8/§5.9/§4/§7). The `rag-store-runtime.ts` U-H2a
+  module is LANDED (committed, 38/38); at the time of THIS blind run the U-H2b
+  closure rewiring was **NOT-YET-IMPLEMENTED in the committed spec** (§5.8/§5.9
+  state marker, git HEAD = `2dbe4f5` U-H2a). **The LIVE blind run below was
+  executed against the THEN-DIRTY working tree**, which carried uncommitted edits to
+  `src/main/main.ts` / `src/main/mcp-server.ts` / `tests/unit-h2-runtime-controller.test.ts`
+  — so the observed M1 seam state (section E) reflected in-progress U-H2b work,
+  NOT the committed `NOT-YET-IMPLEMENTED` doc marker. That split is documented
+  explicitly in §E.3 and §F. **RESOLVED 2026-09-08 (the U-H2 close-out doc-review):
+  U-H2b is now LANDED + green** — see §F F-U2B-1 for the resolution.
+- **Header tally:** U-H2a — **29 PASS / 0 FAIL / 3 DEFERRED** (unchanged,
+  §C). U-H2b — **3 PASS / 0 FAIL / 19 DEFERRED-to-structure-check** (of which
+  14 are the NOT-LIVE-RUNNABLE main-process `main.ts` bind sites + boot seam;
+  the remaining 5 are the mcp-server M2/M3/M4 + the D8/A-P2-8 boot-path scans,
+  which are node-importable in principle but not blind-drivable from §5.8 alone —
+  §E.3). The M1 option seam + the legacy-additive path + the D6 tool census were
+  LIVE-verifiable in the node env (3 PASS). No U-H2b scenario is recorded FAIL:
+  the not-yet-observable seams are recorded DEFERRED-to-structure-check with
+  reasons, never fabricated PASS.
 - **Source contract (the ONLY derivation sources):**
   `docs/specs/unit-h2-runtime-controller.md` — §4 (design decisions:
   MUTABLE-LIVE-DIRECTORY, DEFAULT-STABLE-APPLY, REBUILD-ALL-OF-NON-DEFAULT,
@@ -227,4 +245,200 @@ false). A corrupt file is written as the literal bytes `GARBAGE_NOT_JSON`.
 - F15/F16/F17 are documented defensive/unreachable-by-construction states; they
   carry no reproducible byte-pinned message via a blind (docs-only)
   construction and are recorded DEFERRED, not FAIL.
+
+---
+
+## E. U-H2b — the closure-rewiring green scenarios (derived from §5.8/§5.9/§4/§7)
+
+- **State of record.** §5.8/§5.9 declare U-H2b **NOT-YET-IMPLEMENTED** (a
+  SEPARATE later cycle); git HEAD = `2dbe4f5` (U-H2a, 38/38). The CURRENT
+  DIRTY WORKING TREE carries uncommitted edits to the three U-H2b files. **Every
+  observation in §E was made against that dirty tree, black-box (the live
+  `src/main/mcp-server.js` was imported + constructed ONLY; the
+  `main.ts`/`mcp-server.ts` implementation was NOT read).** This is not a
+  self-verified-greens claim and not a claim that U-H2b is fully landed — the
+  M1 seam + two negative pins reproduced live; every main-process seam could not
+  be node-imported and is recorded DEFERRED-to-structure-check.
+- **Source contract (DOCS ONLY):** `docs/specs/unit-h2-runtime-controller.md`
+  §5.8 (§4 A-P2-1 / REFRESH-ON-APPLY / the injected seam + the B1–B13 bind-site
+  table + the M1–M4 mcp-server changes + the B12 refresh-on-apply + the D6/D8/
+  A-P2-8 negative pins), §5.9 (the red-set expectation + the MS2 §6
+  "never unit-test main.ts directly" rule), §4 (A-P2-1, REFRESH-ON-APPLY),
+  §7 (Q1/Q4 Architect ruling — `hotApply` seam NOT an MCP tool, listing pulls
+  `currentStores()` + `statusOf`). The U-H2a module
+  (`src/main/rag-store-runtime.ts`, LANDED) + `tests/embeddings-adversarial.test.ts:104`
+  (the legacy-fallback construction anchor) were read per the task allowance to
+  build the black-box fixture; **U-H2b's own scans in
+  `tests/unit-h2-runtime-controller.test.ts` and the `main.ts`/`mcp-server.ts`
+  rewiring implementation were NOT read.**
+- **Live-verification tool:** a throwaway probe imported the LIVE
+  `src/main/mcp-server.js`, constructed `ProvidentMcpServer` with a stub
+  runtime + a contrasting legacy store/engine, and drove the
+  MCP-linked-pair client (the §5.9 node-testable seams only) — deleted after
+  the run. `main.ts` is NOT node-importable (it bundles the Electron app), so
+  the B1–B13 sites are expressed as grep/structure-assertion schemas (§E.1) and
+  recorded **DEFERRED-to-structure-check**, per the task's explicit marking rule
+  (no fabricated PASS).
+
+### E.1 — The green scenarios (authored from §5.8 BEFORE execution)
+
+**Boot seam (main.ts, structure assertion):**
+- **U2B-BOOT — exactly ONE runtime controller at boot, around the boot plan:**
+  the boot block constructs `createRagStoreRuntimeController({ registry,
+  directory: plan.directory, defaultEntry: plan.directory.entries.get(plan.defaultName)!,
+  vectorBoot: plan.vectorBoot, registryPath, userDataPath, embedderKind, provider })`
+  (§5.8 injected seam) EXACTLY once; `plan.directory` MAY survive for the boot
+  construction but every live closure thereafter reads
+  `runtime.getDirectory()`; the `defaultName`/`plan` locals read by live
+  closures are replaced by `runtime.getDefaultName()`; `ragStore`/`retrievalEngine`
+  live closures read `runtime.getDefaultStore()`/`runtime.getDefaultEngine()`;
+  `vectorBoot` reads `runtime.getVectorBoot()`. **Expected PASS:** a structure
+  scan of the boot block finds the seam constructed once, and the §5.8 census
+  of 13 rewired bind sites (B1–B13) is matched — NOT 14/12 (§5.11 census).**
+
+**The main.ts bind sites (B1–B13, structure assertions — DEFERRED-to-structure-check):**
+
+| id | §5.8 site | Scenario | Expected PASS condition (structure assertion) |
+| --- | --- | --- | --- |
+| U2B-B1 | B1 (`main.ts:219`) `ProvidentMcpServer` options | rewire `ragStore`,`retrievalEngine`,`ragStores` | options become `ragStore: runtime.getDefaultStore()`, `retrievalEngine: runtime.getDefaultEngine()`, `ragStores: runtime.getDirectory()`, PLUS the NEW `runtime` option (M1) is threaded |
+| U2B-B2 | B2 (`:282`) `IPC_EDIT_COMMIT` `handleEditCommit(ragStore,…)` | default-store resolve | the handler call reads `runtime.getDefaultStore()` per call |
+| U2B-B3 | B3 (`:291`) `IPC_EDIT_COMMIT` reconcile `retrievalEngine.onStoreChanged` | default-engine resolve | the reconcile reads `runtime.getDefaultEngine()` |
+| U2B-B4 | B4 (`:294`) `IPC_EDIT_COMMIT` broadcast | default-name resolve | the broadcast reads `runtime.getDefaultName()` |
+| U2B-B5 | B5 (`:316,320`) `IPC_EDIT_BATCH` `ragStore.getNode`/`handleEditBatch` | default-store resolve | the calls read `runtime.getDefaultStore()` |
+| U2B-B6 | B6 (`:329`) `IPC_EDIT_BATCH` reconcile | default-engine resolve | reads `runtime.getDefaultEngine()` |
+| U2B-B7 | B7 (`:332`) `IPC_EDIT_BATCH` broadcast | default-name resolve | reads `runtime.getDefaultName()` |
+| U2B-B8 | B8 (`:353-357`) `IPC_EDIT_RICH_COMMIT` | store/engine/name resolves | reads `runtime.getDefaultStore()`/`getDefaultEngine()`/`getDefaultName()` |
+| U2B-B9 | B9 (`:370`) `IPC_RAG_QUERY` | store/engine/directory resolves | reads `runtime.getDefaultEngine()`, `runtime.getDefaultStore()`, `runtime.getDirectory()` |
+| U2B-B10 | B10 (`:378`) `IPC_RAG_BACKLINKS` | default-store resolve | reads `runtime.getDefaultStore()` |
+| U2B-B11 | B11 (`:387`) `IPC_RAG_DOC_HEADS` | default-store resolve | reads `runtime.getDefaultStore()` |
+| U2B-B12 | B12 (`:401-419`) `IPC_RAG_STORE_LISTING` **refresh-on-apply (A-P2-3)** | listing projection via runtime | reads `runtime.currentStores()` for the projection + `runtime.statusOf(name)` for the status resolver; `listingEntries = runtime.currentStores().map(s => ({ name: s.name, default: s.default, persistenceFile: basename(s.persistenceFile), corpusRoot: s.corpusRoot ?? null }))`; **NO new IPC channel**; `sidebar-panes.ts` listing nodes UNTOUCHED (U-MS5's); the §5.10 supersession holds — Red 18 re-based to the pre-apply boot path + a NEW post-apply listing-refresh red row exists |
+| U2B-B13 | B13 (`:462-466`) `IPC_RAG_SNAPSHOT` | store + name resolves | reads `runtime.getDefaultStore()` + `runtime.getDefaultName()` |
+
+**The mcp-server.ts seams (M1–M4) + the negative pins:**
+
+| id | §5.8 pin | Scenario | Expected PASS condition |
+| --- | --- | --- | --- |
+| U2B-M1 | M1 — `McpServerOptions` gains `runtime?: RagStoreRuntimeController`; stores it (`this.runtime`) | **LIVE-RUNNABLE (node).** Construct `ProvidentMcpServer` with a stub runtime object; assert `server.runtime === <stub>` | **LIVE PROBE: PASS** (the stub runtime was stored). Note: observed on the DIRTY working tree |
+| U2B-M1-legacy | M1 — when `runtime` ABSENT, the const-captured `ragStore`/`retrievalEngine`/`ragStores` fallback serves byte-equal (legacy/single-store path, `embeddings-adversarial.test.ts:104`) | **LIVE-RUNNABLE.** Construct WITHOUT a runtime (the §5.9 "ADDITIVE seam" claim) | **LIVE PROBE: PASS** (constructed cleanly, no regression) |
+| U2B-M2 | M2 — static `registerTools(…ragStore, engine, templateStore, gate, ragStores, auditLog)` (`:1383-1397`) gains a trailing optional `runtime` param; both call sites (`applyGatePatch:1231`, `createServer:1375`) forward `this.runtime` | structure assertion — the signature + both forward sites reference the threaded runtime (the §5.9 red set drives this node-testably once landed) | **DEFERRED-to-structure-check** — the forward-wiring is not blind-observable without reading the impl to name the exact call-site context; requires the §5.9 node red set or a live-app session |
+| U2B-M3 | M3 — `rag.*` closure (`:1592`) reads per call: `handleRagTool(runtime ? runtime.getDefaultStore() : ragStore, name, args, runtime ? runtime.getDefaultEngine() : engine, runtime ? runtime.getDirectory() : ragStores, auditLog)` | assert the closure resolves the default store/engine/directory PER CALL from the runtime when set, else the const fallback | **DEFERRED-to-structure-check** — a blind behavioral drive would need the exact `rag.*` tool-name × argument surface, which §5.8 does not pin (the MCP census exposes `provident.dispatch`/`get_rendered_html`/`get_markdown`/`list_targets`/`get_node_state`/… — the internal `rag.*` handler name does not map 1:1 to an observed tool name without reading the impl). Express as a structure assertion; run live in the app battery |
+| U2B-M4 | M4 — `edit.*` reconcile closure (`:1606-1620`) reads per call the directory (`runtime ? runtime.getDirectory() : ragStores`) + the reconcile engine `runtime.getDirectory().entries.get(storeName)?.engine` (ENGINE-PER-STORE routing) | assert the edit reconcile re-routes the directory + engine through the runtime per call | **DEFERRED-to-structure-check** — same blind limitation as M3 (per-store reconcile routing needs the `edit.*` store-name argument semantics); a live-app or the §5.9 red set is required |
+
+**Negative pins (D6 / D8 / A-P2-8 / default-byte-equal):**
+
+| id | §5.8 pin | Scenario | Expected PASS condition |
+| --- | --- | --- | --- |
+| U2B-NEG1 | D6 — NO new MCP tool in `ALL_TOOLS` (`:1099-1150`), NO new `security.ts` tool→group row, NO `RpcMethod` member, NO `MUTATING_METHODS` member, NO renderer method switch change | **LIVE-RUNNABLE census.** List the registered tools via the MCP client; assert NO registry/hot-apply/runtime tool was added | **LIVE PROBE: PASS** — observed census = 14 tools (`provident.dispatch, get_rendered_html, get_markdown, list_targets, get_node_state, code.get, code.validate, edit.set_content, edit.create_node, edit.delete_node, edit.split_node, edit.merge_node, edit.set_edge, edit.import_markdown`); NONE references the registry-hot-apply surface, so the hot-apply seam is NOT MCP-exposed (the exact pre-H2 census is not pinned in the scoped docs; the no-new-tool pin holds; the landed U-H2b suite pins `ALL_TOOLS.length === 41`) |
+| U2B-NEG2 | D8 — boot loader reads the registry EXACTLY ONCE; NO re-read/refresh call added to boot or any idle path | structure assertion on the boot block (no `hotApply`-driven re-read added to boot/idle; D8 preserved) | **DEFERRED-to-structure-check** — a main.ts boot-path structure scan (the U-H2a H9/H2 already verify the runtime itself re-reads nothing idle; the rewiring must not add one) |
+| U2B-NEG3 | A-P2-8 — `main.ts` and `mcp-server.ts` make NO teardown call | structure assertion — no `teardown`/`close`/`destroy` invocation added by the rewiring | **DEFERRED-to-structure-check** — needs a grep scan of the two modules; not black-box observable |
+| U2B-NEG4 | default-serving byte-equal — the accessors return the boot default objects (§5.8(d)) | assert the runtime accessors (U-H2a, landed) return the boot default store/engine/vector-boot, so the rewiring's per-call reads are byte-equal to the const captures | **covered by U-H2a H1/H2/H5** (landed) — the source the rewiring reads IS byte-equal today; no U-H2b-specific live probe of the main-process broadcast added |
+
+### E.2 — Results (filled in after execution, against the dirty working tree)
+
+| id | Result | Notes |
+| --- | --- | --- |
+| U2B-BOOT | DEFERRED-to-structure-check | main.ts not node-importable; the "construct once at boot + 13 bind sites" is a structure scan, not a live observation |
+| U2B-B1…B13 (the 13 bind sites, incl. **B12/A-P2-3**) | DEFERRED-to-structure-check (x13) | each a grep/structure assertion on `main.ts` (never unit-tested directly, §5.9/MS2 §6 rule); cannot be imported in the vitest node env. B12 (the `IPC_RAG_STORE_LISTING` refresh-on-apply rewire to `runtime.currentStores()` + `statusOf`) is item 13 of the 13 — its renderer-pull-after-apply end-to-end is a live-app scenario (§F) |
+| U2B-M1 (option stored) | **PASS** (live, dirty tree) | `server.runtime === <stub>` observed — the McpServerOptions runtime seam is stored in the current tree |
+| U2B-M1-legacy | **PASS** (live, dirty tree) | no-runtime construction is additive (byte-equal fallback); did not throw |
+| U2B-M2 | DEFERRED-to-structure-check | registerTools threading + both forward call sites |
+| U2B-M3 | DEFERRED-to-structure-check | `rag.*` closure per-call resolution (tool-name surface not §5.8-pinned for a blind drive) |
+| U2B-M4 | DEFERRED-to-structure-check | `edit.*` reconcile directory/engine re-routing |
+| U2B-NEG1 | **PASS** (live, dirty tree) | 14-tool census; no registry/hot-apply/runtime MCP tool (D6) |
+| U2B-NEG2 | DEFERRED-to-structure-check | D8 no-re-read boot structure scan |
+| U2B-NEG3 | DEFERRED-to-structure-check | A-P2-8 no-teardown grep scan |
+| U2B-NEG4 | covered (U-H2a) | default byte-equal source already landed green |
+
+### E.3 — Summary + the live-runnability split
+
+- **U2B tally:** **PASS 3** (M1 option stored, M1-legacy additive, NEG1 D6 census —
+  all LIVE, node-verified against the dirty working tree). **FAIL 0.** **DEFERRED
+  19** = DEFERRED-to-structure-check (BOOT + B1–B13 = 14 main-process sites, M2,
+  M3, M4, NEG2, NEG3). No fabricated PASS: every seam that could not be
+  node-imported or blind-driven is recorded DEFERRED-to-structure-check with
+  its reason.
+- **Live-runnability split.** **Node-reachable (mcp-server.js — importable in the
+  vitest node env):** M1(+legacy) + the D6 tool census were RUN and PASS.
+  M2/M3/M4 are node-importable in principle but their per-call/forward behavior
+  is not blind-drivable (exact `rag.*`/`edit.*` tool-name × argument surface is
+  not derivable from §5.8 alone) — recorded DEFERRED-to-structure-check and
+  assigned to the §5.9 node red set / a live-app session. **Not-live-runnable
+  (main.ts — bundles the Electron app, cannot be imported in the node env):**
+  B1–B13 + U2B-BOOT + the D8/A-P2-8 boot-path scans are DEFERRED-to-structure-check,
+  with the expectation itself expressed as a checkable grep/structure assertion
+  (the schema §E.1) so a fresh agent can run it against the build.
+- **Spec ambiguities / drift surfaced (this blind pass, for the doc-review
+  gate):** §F.
+
+## F. U-H2b — spec ambiguities / drift surfaced (for the proofreader/doc-review gate)
+
+- **F-U2B-1 — the committed `NOT-YET-IMPLEMENTED` marker vs the dirty working
+  tree (REPO STATE, not a landed-unit drift) — RESOLVED 2026-09-08:** §5.8/§5.9/§7
+  and §5.11 had marked U-H2b `NOT-YET-IMPLEMENTED`, and git HEAD (`2dbe4f5` =
+  U-H2a) confirmed nothing was committed. The THEN-DIRTY working tree carried
+  uncommitted edits to `src/main/main.ts`, `src/main/mcp-server.ts`, and
+  `tests/unit-h2-runtime-controller.test.ts`, and a LIVE black-box probe of the
+  dirty `src/main/mcp-server.js` observed the **M1 seam already present**
+  (`server.runtime` stores an injected runtime object). Verdict at greens time:
+  the committed documentation was accurate against git HEAD, but the working tree
+  had advanced U-H2b past the doc marker. **RESOLUTION (the U-H2 close-out
+  doc-review, 2026-09-08): U-H2b IS real and green — the closure rewiring
+  (B1–B13/M1–M4) landed + the U-H2b suite (14/14 + 4 pins) is green; the spec's
+  §5.8/§5.9/§5.11/§6/§7 markers were flipped to LANDED and the U-H2 DONE row +
+  HOST-LOW-1 pending row were written this pass.** The greens here do NOT
+  self-verify U-H2b; they are a blind-derived scenario set + a snapshot of the
+  dirty-tree seams that is now reconciled by the landed suite + trio.
+- **F-U2B-2 — the `rag.*` handler-name surface is not §5.8-pinned (affects
+  blind-drivability of M3/M4):** §5.8 names the `rag.*` closure (`mcp-server.ts:1592`)
+  and the `edit.*` reconcile closure (`:1606-1620`) as the per-call resolution
+  sites, but the observed MCP census exposes `provident.dispatch`,
+  `get_rendered_html`, `get_markdown`, `list_targets`, `get_node_state`,
+  `code.get`/`code.validate`, and `edit.*` — the internal `rag.*` handler is a
+  label, not an observed tool name. A blind greens writer therefore cannot drive
+  M3/M4 behaviorally without either the §5.9 node red set (which names the tool
+  arguments) or a live-app session; the scenarios are here recorded as
+  **DEFERRED-to-structure-check** rather than a guessed behavioral probe. Not a
+  spec defect — a blind-test-scope limitation the doc-review gate should leave
+  as-is (§F note).
+- **F-U2B-3 — the exact pre-H2 MCP tool census is not pinned in the scoped
+  docs:** §5.8's D6 negative pin says the census "stays at its pre-H2 set" and
+  cites `ALL_TOOLS (mcp-server.ts:1099-1150)`, but the pre-H2 set itself is not
+  enumerated in §5.8/§5.9. The live probe observed 14 tools with no
+  registry/hot-apply/runtime tool (the D6 pin holds), but a byte-exact
+  "census unchanged" green needs the pre-H2 list (elsewhere — mcp-server-wiring
+  pins a 15-tool list for a DIFFERENT unit, so it is not assumed here). The
+  D6-negative is recorded PASS; the byte-exact census is a doc-review follow-up.
+  **RESOLVED by the landed U-H2b suite (2026-09-08): the D6a pin asserts
+  `ALL_TOOLS.length === 41` (verified against the build) with no
+  apply/runtime/registry/hot[_-] tool.**
+- **No U-H2b FAIL on this run:** every positive seam not observable was recorded
+  DEFERRED-to-structure-check (never a fabricated PASS, per the task rule). None
+  is FAIL because §5.8's contract on the not-yet-observable sites is consistent
+  with the U-H2a-module source the rewiring reads; the one live FAIL would only
+  appear once U-H2b lands and a seam contradicts §5.8.
+
+## G. What a live-app session should later exercise (U-H2b, un-PARKED by request)
+
+The §6 live-scenario gate is PARKED for U-H1/U-H2; the task explicitly asks what
+a live-app session should exercise next. Drive with a REAL Electron app + a REAL
+`RagStoreDirectory` + a wired `main.ts`:
+
+1. **B1** — boot shows the boot projection; the `ProvidentMcpServer` receives
+   `ragStore: runtime.getDefaultStore()`, `retrievalEngine: runtime.getDefaultEngine()`,
+   `ragStores: runtime.getDirectory()`, and a threaded `runtime` (M1/M2).
+2. **M3/M4** — a live MCP `rag.*`/`edit.*` call on the default store and on a
+   non-default store resolves the store/engine/directory per call through the
+   runtime (`runtime.getDirectory().entries.get(storeName)?.engine` for a
+   non-default `edit.*` reconcile), byte-equal to the pre-rewiring const path on
+   the same boot (default byte-equal, §5.8(d)).
+3. **B2–B11/B13** — IPC_EDIT_COMMIT/BATCH/RICH_COMMIT and
+   IPC_RAG_QUERY/BACKLINKS/DOC_HEADS/SNAPSHOT broadcast/resolve via
+   `runtime.getDefaultStore()/getDefaultEngine()/getDefaultName()`.
+4. **B12 / A-P2-3 refresh-on-apply** — run a `hotApply` through the wired seam
+   (the future U-H8 invoke, or a test-injected one), then a renderer pull on
+   `IPC_RAG_STORE_LISTING` shows the NEW projection (`runtime.currentStores()` +
+   `statusOf`); the ms5 Red-18 pre-apply fetch-count pin still holds.
+5. **D6/D8/A-P2-8 negative pins end-to-end** — no new MCP tool / IPC channel in
+   the running app; the boot reads the registry exactly once (no idle re-read);
+   the app never calls a teardown primitive on apply.
 

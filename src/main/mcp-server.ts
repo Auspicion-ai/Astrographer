@@ -35,6 +35,7 @@ import type { RetrievalEngine, RagQueryFilters } from './retrieval.js'
 import type { QueryAuditLog } from './query-audit.js'
 import { mergeStoreResults, type StoreResultInput } from './merge-store-results.js'
 import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
+import type { RagStoreRuntimeController } from './rag-store-runtime.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
 
 const TOOL_PREFIX = 'provident.'
@@ -1016,6 +1017,16 @@ export interface McpServerOptions {
    *  engine. Backward-compatible: omitting it keeps today's single-store
    *  legacy path byte-equal (tests/embeddings-adversarial.test.ts:104). */
   ragStores?: RagStoreDirectory
+  /** U-H2b §5.8/M1 (A-P2-1) — the registry runtime controller seam. When set,
+   *  the `rag.*`/`edit.*` handler closures resolve the default store/engine/
+   *  directory PER CALL from the runtime's accessors (`getDefaultStore`/
+   *  `getDefaultEngine`/`getDirectory`), so a hot-apply's in-place directory
+   *  mutation is observed by already-registered handlers without re-registration
+   *  (D1) and every call reads the CURRENT live state. When absent, the
+   *  const-captured `ragStore`/`retrievalEngine`/`ragStores` fallback serves
+   *  byte-equal (the legacy/single-store path,
+   *  tests/embeddings-adversarial.test.ts:104). */
+  runtime?: RagStoreRuntimeController
   /** Unit I — the main-process template store. The `code.template.*` tools are
    *  handled in MAIN against this store (never routed to the renderer). Injected
    *  like `ragStore`. */
@@ -1041,6 +1052,9 @@ export class ProvidentMcpServer {
   /** U-MS2 §5.4 step 5 — the wired store directory (null ⇒ the legacy
    *  single-store path). */
   private readonly ragStores: RagStoreDirectory | null
+  /** U-H2b §5.8/M1 — the registry runtime controller (null ⇒ the legacy const
+   *  fallback serves byte-equal). */
+  private readonly runtime: RagStoreRuntimeController | null
   private readonly templateStore: TemplateStore | null
   /** Unit X §5.7 — the shared query-audit log (null ⇒ the handlers skip
    *  recording). */
@@ -1071,6 +1085,7 @@ export class ProvidentMcpServer {
     this.ragStore = opts.ragStore ?? null
     this.retrievalEngine = opts.retrievalEngine ?? null
     this.ragStores = opts.ragStores ?? null
+    this.runtime = opts.runtime ?? null
     this.templateStore = opts.templateStore ?? null
     this.auditLog = opts.auditLog ?? null
   }
@@ -1213,7 +1228,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -1357,7 +1372,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -1378,6 +1393,7 @@ export class ProvidentMcpServer {
     gate: SecurityGate,
     ragStores: RagStoreDirectory | null,
     auditLog: QueryAuditLog | null,
+    runtime?: RagStoreRuntimeController | null,
   ): void {
     if (allowed.includes('provident.dispatch')) {
       registered.set('provident.dispatch', server.registerTool('provident.dispatch', {
@@ -1573,7 +1589,7 @@ export class ProvidentMcpServer {
           // audit log), NOT routed to the renderer. The shared audit log is
           // threaded through so the `rag.query`/`rag-stream` handlers record to
           // it and `get_query_audit_log` reads from it.
-          return text(await handleRagTool(ragStore, name, args, engine, ragStores, auditLog))
+          return text(await handleRagTool(runtime ? runtime.getDefaultStore() : ragStore, name, args, runtime ? runtime.getDefaultEngine() : engine, runtime ? runtime.getDirectory() : ragStores, auditLog))
         }
         if (name.startsWith('edit.')) {
           // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval
@@ -1587,8 +1603,10 @@ export class ProvidentMcpServer {
           // engine reconciles exactly as today (backward-compatible —
           // `retrievalEngine` stays a live option). The broadcast payload
           // shape is UNCHANGED (the `store` field is U-MS3's).
-          const result = await handleEditTool(ragStore, name, args, (payload, storeName) => {
-            const reconcileEngine = ragStores ? (ragStores.entries.get(storeName)?.engine ?? null) : engine
+          const result = await handleEditTool(runtime ? runtime.getDefaultStore() : ragStore, name, args, (payload, storeName) => {
+            const reconcileEngine = runtime
+              ? runtime.getDirectory().entries.get(storeName)?.engine ?? null
+              : (ragStores ? (ragStores.entries.get(storeName)?.engine ?? null) : engine)
             // F1 — the index reconcile is fire-and-forget, but a rejection
             // (e.g. the vector embedder's provider is down) MUST be caught —
             // never an unhandled rejection. The lexical index is already
@@ -1599,7 +1617,7 @@ export class ProvidentMcpServer {
               console.error('[provident-mcp] retrieval index reconcile failed:', e)
             })
             backend.broadcast?.(IPC_RAG_STORE_CHANGED, payload)
-          }, ragStores)
+          }, runtime ? runtime.getDirectory() : ragStores)
           return text(result)
         }
         // Unit I — the code.template.* tools are MAIN-process (the template

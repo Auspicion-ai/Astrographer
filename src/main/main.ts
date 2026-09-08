@@ -16,6 +16,7 @@ import { parsePositiveIntEnv, type EmbeddingProvider, type EmbeddingProviderConf
 import { warmUpEmbeddingProvider } from './vector-boot.js'
 import { loadRagStoreRegistry } from './rag-store-registry.js'
 import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.js'
+import { createRagStoreRuntimeController } from './rag-store-runtime.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
@@ -187,12 +188,27 @@ async function main(): Promise<void> {
   // UI-SELECTOR-DEFERRED; the RagQueryPayload.store FIELD is U-MS5's).
   const defaultEntry = plan.directory.entries.get(plan.defaultName)
   if (!defaultEntry) throw new Error('rag-store-directory: default store not found')
-  const ragStore = defaultEntry.store
-  const retrievalEngine = defaultEntry.engine
   // U-MS2 §5.4 step 6 — vectorBoot is now the plan's at-most-ONE controller
   // (the default store's — A6); the background start() + the failure-logged
   // stay-pending behavior below are UNCHANGED.
   const vectorBoot = plan.vectorBoot
+  // U-H2b §5.8 — the injected runtime seam (A-P2-1). Construct the runtime
+  // controller ONCE at boot around the boot plan (the SAME directory object,
+  // the SAME default entry, the SAME vectorBoot — NO-OP byte-equal, §4). No
+  // rebuild/fs/read side effect at construction; the normal boot loader path
+  // still reads the registry EXACTLY ONCE per boot (D8). Every LIVE closure
+  // below reads the runtime's accessors per call.
+  const registryPath = join(app.getPath('userData'), 'provident-rag-stores.json')
+  const runtime = createRagStoreRuntimeController({
+    registry,
+    directory: plan.directory,
+    defaultEntry: plan.directory.entries.get(plan.defaultName)!,
+    vectorBoot: plan.vectorBoot,
+    registryPath,
+    userDataPath: app.getPath('userData'),
+    embedderKind,
+    provider,
+  })
   // U-MS2 §5.4 step 5 — the server options gain the wired store directory
   // (`ragStores`); `ragStore`/`retrievalEngine` stay (backward-compatible) and
   // are the default entry's objects (the wiring invariant, §5.4 step 5).
@@ -200,7 +216,7 @@ async function main(): Promise<void> {
   // MCP `rag.query`/`rag-stream` handlers + the `rag-query` IPC + the
   // `get_query_audit_log` tool (the shared-handler seam).
   const auditLog = createQueryAuditLog()
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore, retrievalEngine, templateStore, ragStores: plan.directory, auditLog })
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore: runtime.getDefaultStore(), retrievalEngine: runtime.getDefaultEngine(), templateStore, ragStores: runtime.getDirectory(), runtime, auditLog })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -263,7 +279,7 @@ async function main(): Promise<void> {
     // (MCP/UI equivalence — §5.7). `handleEditCommit` maps a deleted-node race
     // (setContent's `'edit.set_content: node not found'`) to
     // `reason:'deleted-node'` (Finding 4), NOT `store-error`.
-    const result = await handleEditCommit(ragStore, { nodeId: payload.nodeId, content: payload.content })
+    const result = await handleEditCommit(runtime.getDefaultStore(), { nodeId: payload.nodeId, content: payload.content })
     if (result.ok) {
       // F1 — reconcile the maintained retrieval index incrementally, then
       // broadcast the `rag-store-changed` re-traversal trigger to the renderer.
@@ -272,10 +288,10 @@ async function main(): Promise<void> {
       // rejection. The lexical index is already reconciled inside the engine's
       // `onStoreChanged` before the embedder hook runs, so a hook failure only
       // leaves the vector index stale (logged), not the lexical index.
-      void retrievalEngine.onStoreChanged('content', [payload.nodeId], []).catch((e) => {
+      void runtime.getDefaultEngine().onStoreChanged('content', [payload.nodeId], []).catch((e) => {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
-      const changedPayload: RagStoreChangedPayload = { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [], store: plan.defaultName }
+      const changedPayload: RagStoreChangedPayload = { kind: 'content', nodeIds: [payload.nodeId], edgeIds: [], store: runtime.getDefaultName() }
       backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
     }
     return result
@@ -297,11 +313,11 @@ async function main(): Promise<void> {
     const preBatchNodes = new Map<string, RagNode>()
     for (const op of payload.ops) {
       if (op && op.op === 'putNode' && op.node && typeof op.node.id === 'string') {
-        const n = ragStore.getNode(op.node.id)
+        const n = runtime.getDefaultStore().getNode(op.node.id)
         if (n) preBatchNodes.set(op.node.id, n)
       }
     }
-    const result = await handleEditBatch(ragStore, payload)
+    const result = await handleEditBatch(runtime.getDefaultStore(), payload)
     if (result.ok) {
       // A4 — a successful batch broadcasts EXACTLY ONCE. Reconcile the
       // maintained retrieval index incrementally, then broadcast the
@@ -310,10 +326,10 @@ async function main(): Promise<void> {
       // is down) MUST be caught — never an unhandled rejection (the same
       // pattern as the `IPC_EDIT_COMMIT` handler, Unit D §5.1.10).
       const { kind, nodeIds, edgeIds } = deriveBatchBroadcast(payload.ops, result.results, preBatchNodes)
-      void retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds).catch((e) => {
+      void runtime.getDefaultEngine().onStoreChanged(kind, nodeIds, edgeIds).catch((e) => {
         console.error('[provident-main] retrieval index reconcile failed:', e)
       })
-      const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: plan.defaultName }
+      const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: runtime.getDefaultName() }
       backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
     }
     return result
@@ -334,10 +350,10 @@ async function main(): Promise<void> {
     // broadcast). The boundary check (A1) lives INSIDE `handleRichCommitIpc`,
     // so the malformed/failed/no-op/real-change broadcast contract is covered
     // by the F1 regression tests against the shared handler.
-    return handleRichCommitIpc(ragStore, payload, {
-      reconcile: (kind, nodeIds, edgeIds) => retrievalEngine.onStoreChanged(kind, nodeIds, edgeIds),
+    return handleRichCommitIpc(runtime.getDefaultStore(), payload, {
+      reconcile: (kind, nodeIds, edgeIds) => runtime.getDefaultEngine().onStoreChanged(kind, nodeIds, edgeIds),
       broadcast: (kind, nodeIds, edgeIds) => {
-        const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: plan.defaultName }
+        const changedPayload: RagStoreChangedPayload = { kind, nodeIds, edgeIds, store: runtime.getDefaultName() }
         backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
       },
     })
@@ -351,7 +367,7 @@ async function main(): Promise<void> {
   // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
   // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(retrievalEngine, ragStore, { query: payload?.query, topK: payload?.topK, store: payload?.store, stores: payload?.stores }, plan.directory, auditLog)
+    return handleRagQueryIpc(runtime.getDefaultEngine(), runtime.getDefaultStore(), { query: payload?.query, topK: payload?.topK, store: payload?.store, stores: payload?.stores }, runtime.getDirectory(), auditLog)
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the
@@ -359,7 +375,7 @@ async function main(): Promise<void> {
   // tool (MCP/UI equivalence — a BINDING constraint). The renderer never
   // computes the enumeration itself.
   ipcMain.handle(IPC_RAG_BACKLINKS, (_event, payload: RagBacklinksPayload) => {
-    return handleRagBacklinksIpc(ragStore, { nodeId: payload?.nodeId })
+    return handleRagBacklinksIpc(runtime.getDefaultStore(), { nodeId: payload?.nodeId })
   })
 
   // Unit V3 §5.1 — the UI doc-nav path. The `rag-doc-heads` IPC calls the SAME
@@ -368,7 +384,7 @@ async function main(): Promise<void> {
   // strict subset of the snapshot. The renderer never computes the doc-heads
   // derivation itself.
   ipcMain.handle(IPC_RAG_DOC_HEADS, () => {
-    return handleRagDocHeadsIpc(ragStore)
+    return handleRagDocHeadsIpc(runtime.getDefaultStore())
   })
 
   // U-MS5 — the read-only settings-pane store listing. Manual-UI ONLY: the MCP
@@ -376,17 +392,18 @@ async function main(): Promise<void> {
   // configured store names (B9/A9). NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED,
   // decisions.md:45) and NOT a five-seam gate seam — no RpcMethod, no TOOL_GROUPS
   // row, no ALL_TOOLS row, no MUTATING_METHODS member, no renderer-switch method
-  // (the MCP tool census stays 12). The handler projects the BOOT-LOADED
-  // registry's presentation view; the registry file is NEVER re-read here (D8 —
-  // a mid-run registry edit is observed only after restart).
+  // (the MCP tool census stays 12). U-H2b §5.8/A-P2-3 — the handler projects the
+  // runtime's CURRENT resolved projection (`currentStores()` + `statusOf`), NOT
+  // the boot `registry` const: a renderer pull after a registry apply shows the fresh
+  // state (refresh-on-apply). The registry file is still NEVER re-read on this
+  // idle path (D8 — the boot path re-reads nothing; the runtime's apply seam is
+  // the ONLY re-read).
   ipcMain.handle(IPC_RAG_STORE_LISTING, () => {
-    // listingEntries — the U-MS1 boot-loaded registry's resolved per-store view
-    // PROJECTED into the handler's input shape by the PINNED wiring local:
-    // F7 — the FILE NAME (the basename of U-MS1's resolved absolute path);
-    // F13 — U-MS1 OMITS `corpusRoot` when unconfigured (`corpusRoot?`); the
-    // handler's type requires `string | null`. The implicit zero-config form
-    // yields exactly the one `main` entry.
-    const listingEntries = registry.stores.map((s) => ({
+    // U-H2b §5.8/B12 — the runtime's CURRENT resolved projection (A-P2-3): the
+    // fresh `loaded.stores` after an apply, the boot registry at boot. The FILE
+    // NAME (basename) + `corpusRoot ?? null` projection is byte-equal to the
+    // previous boot-cached projection.
+    const listingEntries = runtime.currentStores().map((s) => ({
       name: s.name,
       default: s.default,
       persistenceFile: basename(s.persistenceFile),
@@ -394,22 +411,11 @@ async function main(): Promise<void> {
     }))
     return handleRagStoreListingIpc(
       listingEntries,
-      // The U-MS2 per-store status resolver (loaded / failed-corrupt /
-      // failed-missing — the D7 matrix) over the boot plan directory.
-      //
-      // F-MS5-2 (§3a) — the wiring-level defensive guard for the latent `!`
-      // deref: the directory derives from the SAME boot registry as
-      // `listingEntries`, and a failed store construction aborts boot, so the
-      // entry is ALWAYS present today. But if `entries.get(name)` were EVER
-      // undefined, the old `storeLoadStatus(entries.get(name)!)` threw an
-      // UNPINNED TypeError. Guard it byte-pinned so a divergence is a
-      // diagnosable Error, never a raw TypeError. (The handler pins THREE
-      // throws; this is the WIRING's defensive fourth.)
-      (name) => {
-        const e = plan.directory.entries.get(name)
-        if (!e) throw new Error(`rag-store-listing: no directory entry for store "${name}"`)
-        return storeLoadStatus(e)
-      },
+      // U-H2b §5.8/B12 — the per-store load status is resolved via the
+      // runtime's `statusOf` (the U-MS2 D7 matrix over the LIVE entries: loaded
+      // / failed-corrupt / failed-missing). An unknown store throws
+      // `rag-store-runtime: unknown store '<name>'` (byte-pinned R-status-unknown).
+      (name) => runtime.statusOf(name),
     )
   })
 
@@ -454,9 +460,9 @@ async function main(): Promise<void> {
   // snapshot so the renderer can re-derive the graph + back-reference map after
   // a `rag-store-changed` broadcast.
   ipcMain.handle(IPC_RAG_SNAPSHOT, () => ({
-    nodes: ragStore.listNodes(),
-    edges: ragStore.listEdges(),
-    store: plan.defaultName,
+    nodes: runtime.getDefaultStore().listNodes(),
+    edges: runtime.getDefaultStore().listEdges(),
+    store: runtime.getDefaultName(),
   }))
 
   // The MCP stdio transport is spawned by a client (the battery, a test, or an

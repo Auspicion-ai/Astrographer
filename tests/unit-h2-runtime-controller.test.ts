@@ -1202,3 +1202,202 @@ describe('§5.4/§5.7 RCA-3 host-findings regression — D2 preservation, defaul
     })
   })
 })
+
+// ===========================================================================
+// U-H2b — closure rewiring (B1–B13 / M1–M4 / refresh-on-apply)
+//
+// This is the U-H2b red set, derived from docs/specs/unit-h2-runtime-controller.md
+// §5.8 (the closure-rewiring contract: the injected seam, the B1–B13 bind-site
+// table, the M1–M4 server changes, the refresh-on-apply, the D6/D8/A-P2-8
+// negative pins), §5.9 (the unit→file→test mapping — U-H2b's red-set
+// expectation), §4's A-P2-1-CLOSURE-REWIRING + REFRESH-ON-APPLY rows, and §7
+// (Q4). It is a SEPARATE cycle from U-H2a (green, 38/38, above): U-H2a tests
+// are NOT part of this red run.
+//
+// WHY STRUCTURE SCANS (not node-level calls): the M1–M4 mcp-server seams —
+// the `McpServerOptions.runtime` field, the constructor's `this.runtime`
+// store, the private-static `registerTools` runtime param + its two call-site
+// forwards, and the `rag.*`/`edit.*` closure resolutions — live inside PRIVATE
+// static / closure internals that are NOT reachable through the public class
+// surface (only the census `ALL_TOOLS` is public-static and is node-asserted
+// in D6a). Per §5.9's structure-scan allowance ("the main.ts B1–B13 rewiring
+// is asserted via grep/structure scans") and the mcp-server private seams, these
+// are authored as SOURCE-STRUCTURE scans of `main.ts`/`mcp-server.ts` read via
+// node:fs (the same `readSrc` the suite already imports). They trip RED on the
+// current pre-U-H2b wiring because the runtime seam does not exist and every
+// bind site still reads the const-captured locals.
+// ===========================================================================
+describe('U-H2b — closure rewiring (B1–B13 / M1–M4 / refresh-on-apply)', () => {
+  const mainSrc = (): string =>
+    readSrc(fileURLToPath(new URL('../src/main/main.ts', import.meta.url)), 'utf8')
+  const mcpSrc = (): string =>
+    readSrc(fileURLToPath(new URL('../src/main/mcp-server.ts', import.meta.url)), 'utf8')
+
+  const count = (src: string, probe: string): number => src.split(probe).length - 1
+
+  /** The body of the IPC handler for `channel` — from that `ipcMain.handle(`
+   *  up to the next one. This is the closure-rewiring surface (§5.12 anchors:
+   *  IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_QUERY /
+   *  BACKLINKS / DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_SNAPSHOT). */
+  const handlerRegion = (src: string, channel: string): string => {
+    const start = src.indexOf(`ipcMain.handle(${channel}`)
+    expect(start, `main.ts must contain ipcMain.handle(${channel})`).toBeGreaterThan(-1)
+    const next = src.indexOf('ipcMain.handle(', start + 1)
+    return src.slice(start, next === -1 ? src.length : next)
+  }
+
+  // -------------------------------------------------------------------------
+  describe('B0/B1 — runtime constructed at boot + threaded into the MCP server (RED)', () => {
+    it('B0 — main.ts constructs the runtime controller at boot around the boot plan (§5.8 injected seam)', () => {
+      expect(mainSrc()).toMatch(/createRagStoreRuntimeController\(/)
+    })
+
+    it('B1 — the ProvidentMcpServer options read runtime accessors per call + thread the runtime (M1)', () => {
+      const m = mainSrc().match(/new ProvidentMcpServer\(\{[\s\S]*?\}\)/)
+      expect(m).toBeTruthy()
+      const opts = m![0]
+      expect(opts).not.toMatch(/ragStores: plan\.directory/)
+      expect(opts).toMatch(/ragStore: runtime\.getDefaultStore\(\)/)
+      expect(opts).toMatch(/retrievalEngine: runtime\.getDefaultEngine\(\)/)
+      expect(opts).toMatch(/ragStores: runtime\.getDirectory\(\)/)
+      expect(opts).toMatch(/[,{]\s*runtime\s*[,}]/)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  describe('B2–B13 — the closure bind sites read runtime accessors per call (RED)', () => {
+    it('B2/B3/B4 — IPC_EDIT_COMMIT resolves the store / engine / defaultName via the runtime', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_EDIT_COMMIT')
+      expect(r).not.toMatch(/handleEditCommit\(ragStore,/)
+      expect(r).not.toMatch(/retrievalEngine\.onStoreChanged/)
+      expect(r).not.toMatch(/plan\.defaultName/)
+      expect(r).toMatch(/handleEditCommit\(runtime\.getDefaultStore\(\),/)
+      expect(r).toMatch(/runtime\.getDefaultEngine\(\)\.onStoreChanged/)
+      expect(r).toMatch(/runtime\.getDefaultName\(\)/)
+    })
+
+    it('B5/B6/B7 — IPC_EDIT_BATCH resolves the store / engine / defaultName via the runtime', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_EDIT_BATCH')
+      expect(r).not.toMatch(/ragStore\.getNode|handleEditBatch\(ragStore,/)
+      expect(r).not.toMatch(/retrievalEngine\.onStoreChanged/)
+      expect(r).not.toMatch(/plan\.defaultName/)
+      expect(r).toMatch(/handleEditBatch\(runtime\.getDefaultStore\(\),/)
+      expect(r).toMatch(/runtime\.getDefaultEngine\(\)\.onStoreChanged/)
+      expect(r).toMatch(/runtime\.getDefaultName\(\)/)
+    })
+
+    it('B8 — IPC_EDIT_RICH_COMMIT reconciles + broadcasts via the runtime', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_EDIT_RICH_COMMIT')
+      expect(r).not.toMatch(/handleRichCommitIpc\(ragStore,/)
+      expect(r).not.toMatch(/retrievalEngine\.onStoreChanged/)
+      expect(r).not.toMatch(/plan\.defaultName/)
+      expect(r).toMatch(/runtime\.getDefaultStore\(\)/)
+      expect(r).toMatch(/runtime\.getDefaultEngine\(\)/)
+      expect(r).toMatch(/runtime\.getDefaultName\(\)/)
+    })
+
+    it('B9 — IPC_RAG_QUERY resolves the engine / store / directory via the runtime', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_RAG_QUERY')
+      expect(r).not.toMatch(/handleRagQueryIpc\(retrievalEngine, ragStore,/)
+      expect(r).not.toMatch(/plan\.directory/)
+      expect(r).toMatch(/runtime\.getDefaultEngine\(\)/)
+      expect(r).toMatch(/runtime\.getDefaultStore\(\)/)
+      expect(r).toMatch(/runtime\.getDirectory\(\)/)
+    })
+
+    it('B10/B11 — IPC_RAG_BACKLINKS + IPC_RAG_DOC_HEADS resolve the store via the runtime', () => {
+      const r1 = handlerRegion(mainSrc(), 'IPC_RAG_BACKLINKS')
+      expect(r1).toMatch(/handleRagBacklinksIpc\(runtime\.getDefaultStore\(\),/)
+      const r2 = handlerRegion(mainSrc(), 'IPC_RAG_DOC_HEADS')
+      expect(r2).toMatch(/handleRagDocHeadsIpc\(runtime\.getDefaultStore\(\)\)/)
+    })
+
+    it('B12 — IPC_RAG_STORE_LISTING reads the runtime currentStores()/statusOf() (refresh-on-apply, A-P2-3)', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_RAG_STORE_LISTING')
+      expect(r).not.toMatch(/const listingEntries = registry\.stores\.map/)
+      expect(r).not.toMatch(/plan\.directory/)
+      expect(r).toMatch(/runtime\.currentStores\(\)/)
+      expect(r).toMatch(/runtime\.statusOf\(/)
+    })
+
+    it('B13 — IPC_RAG_SNAPSHOT reads the runtime store + defaultName', () => {
+      const r = handlerRegion(mainSrc(), 'IPC_RAG_SNAPSHOT')
+      expect(r).not.toMatch(/ragStore\.listNodes|ragStore\.listEdges/)
+      expect(r).not.toMatch(/plan\.defaultName/)
+      expect(r).toMatch(/runtime\.getDefaultStore\(\)\.listNodes/)
+      expect(r).toMatch(/runtime\.getDefaultStore\(\)\.listEdges/)
+      expect(r).toMatch(/runtime\.getDefaultName\(\)/)
+    })
+
+    it('B1–B13 cross-cutting — every runtime accessor form is present in the rewired main.ts', () => {
+      const src = mainSrc()
+      expect(count(src, 'runtime.getDefaultStore()')).toBeGreaterThanOrEqual(7)
+      expect(count(src, 'runtime.getDefaultEngine()')).toBeGreaterThanOrEqual(2)
+      expect(count(src, 'runtime.getDefaultName()')).toBeGreaterThanOrEqual(2)
+      expect(count(src, 'runtime.getDirectory()')).toBeGreaterThanOrEqual(2)
+      expect(count(src, 'runtime.currentStores()')).toBeGreaterThanOrEqual(1)
+      expect(count(src, 'runtime.statusOf(')).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // M1–M4 — the mcp-server runtime seam. PRIVATE-STATIC/closure internals ⇒
+  // source-structure scans (see the block header). All trip RED now.
+  // -------------------------------------------------------------------------
+  describe('M1–M4 — the mcp-server runtime seam (RED)', () => {
+    it('M1 — McpServerOptions declares a runtime seam + the constructor stores this.runtime', () => {
+      const src = mcpSrc()
+      expect(src).toMatch(/runtime\??\s*:\s*RagStoreRuntimeController/u)
+      expect(src).toMatch(/this\.runtime = opts\.runtime \?\? null/)
+    })
+
+    it('M2 — registerTools gains a trailing runtime param + both call sites forward this.runtime', () => {
+      const src = mcpSrc()
+      const sig = src.match(/private static registerTools\([\s\S]*?\):\s*void/u)
+      expect(sig).toBeTruthy()
+      expect(count(src, 'this.runtime')).toBeGreaterThanOrEqual(2)
+    })
+
+    it('M3 — the rag.* handler closure resolves the default store/engine/directory via the runtime per call', () => {
+      const src = mcpSrc()
+      expect(src).toMatch(/runtime\.getDefaultStore\(\)/)
+      expect(src).toMatch(/runtime\.getDefaultEngine\(\)/)
+      expect(src).toMatch(/runtime\.getDirectory\(\)/)
+    })
+
+    it('M4 — the edit.* reconcile closure resolves the addressed store engine via runtime.getDirectory()', () => {
+      expect(mcpSrc()).toMatch(/runtime\.getDirectory\(\)\.entries\.get\(storeName\)/)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  describe('Negative pins (D6 / D8 / A-P2-8) — must STAY GREEN', () => {
+    it('D6a — the MCP tool census stays at its pre-H2 count (41); no hot-apply/runtime/registry tool added', async () => {
+      const { ProvidentMcpServer } = await import('../src/main/mcp-server.js')
+      const tools = ProvidentMcpServer.ALL_TOOLS
+      expect(tools.length).toBe(41)
+      for (const t of tools) expect(t).not.toMatch(/apply|runtime|registry|hot[_-]/i)
+      expect(tools).not.toContain('provident.hotApply')
+    })
+
+    it('D6b — no new IPC channel / RpcMethod for hot-apply is added', () => {
+      const typesSrc = readSrc(fileURLToPath(new URL('../src/shared/types.ts', import.meta.url)), 'utf8')
+      expect(typesSrc).not.toMatch(/HOT_APPLY|_APPLY|hotApply|RAG_WRITE|REGISTRY_WRITE/)
+      expect(mainSrc()).not.toMatch(/HOT_APPLY|hotApplyIpc|_APPLY/)
+    })
+
+    it('D8 — the boot loader reads the registry EXACTLY once; no idle re-read added', () => {
+      const src = mainSrc()
+      expect(count(src, 'loadRagStoreRegistry(')).toBe(1)
+      expect(src).not.toMatch(/writeRegistryMutation|hotApply|refreshRegistry|reloadRegistry/)
+    })
+
+    it('A-P2-8 — no runtime/registry/store teardown call is introduced (U-H5 owns teardown)', () => {
+      const main = mainSrc()
+      const mcp = mcpSrc()
+      expect(main).not.toMatch(/runtime\.teardown\(|runtime\.destroy\(|runtime\.close\(/)
+      expect(main).not.toMatch(/\.teardown\(|\.destroy\(/)
+      expect(mcp).not.toMatch(/runtime\.teardown\(|runtime\.destroy\(|\.teardown\(|\.destroy\(/)
+    })
+  })
+})
