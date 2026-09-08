@@ -1,25 +1,24 @@
 # Spec — Unit U-H4: Hot-Remove — the DRAIN-THEN-TEARDOWN remove (D7/A-P2-2) on the runtime controller
 
-> **STATE (2026-09-08): U-H4 SPEC WRITTEN — AWAITING THE §7 ARCHITECT RULING.** U-H5
-> (the teardown PRIMITIVES — `RagStore.teardown()`,
-> `RetrievalEngine.teardown()+inFlight()`, `VectorBootController.teardown()`) is
-> LANDED (22/22 via `tests/unit-h5-teardown.test.ts`; full trio green). U-H4 —
-> the next cycle in the registry hot-apply slice — UPGRADES the remove path from
-> U-H2's ORPHAN (unregister-only) to a REAL **drain-then-teardown**. This spec is
-> the behavior contract for that upgrade. It does NOT touch `src/` or `tests/`
-> (SpecWriter/TestWriter/Implementer units follow, per the house red→green→
-> adversarial→blind-greens→doc-review gate). The TestWriter derives the U-H4 red
-> set from §5.4/§5.6/§5.7/§5.8/§5.9 ONLY after the §7 design questions are
-> arbitrated CONFIRMED (the §7 ruling is the gate — the two open items below are
-> genuine either/or decisions, not hand-waves).** The live-scenario gate is
-> PARKED per the slice-wide user instruction (§6).
+> **STATE (2026-09-08): U-H4 IS LANDED.** The §7 Architect ruling (§7) was
+> arbitrated CONFIRMED (Q1 option-b — a separate `rag-store-remove.ts`
+> orchestration home + an additive async `hotRemove`, the N1/A-P2-8 grep pin
+> STAYS GREEN; Q2 co-exist; Q3 `HotRemoveResult`; Q4 UNBOUNDED drain; + the F1
+> addendum top-of-method arg guard), and the unit ran the FULL red→green→
+> adversarial→blind-greens→doc-review gate. Landed build: **20/20** via
+> `tests/unit-h4-hot-remove.test.ts`; full suite **2707 pass / 41 skip**,
+> typecheck + build clean (the Implementer's run); the co-existing
+> `tests/unit-h2-runtime-controller.test.ts` 56/56 + `tests/unit-h5-teardown.test.ts`
+> 22/22 keep-green incl. the N1/A-P2-8 runtime grep. The live-scenario gate
+> remains PARKED per the slice-wide user instruction (§6).**
 
-- **Status: SPEC (written 2026-09-08; AWAITING the §7 Architect ruling)** — the
-  registry hot-apply/removal/rename slice, Unit U-H4 (hot-remove, the
+- **Status: LANDED (2026-09-08; the §7 ruling is CONFIRMED — see §7; this spec
+  reconciled against the landed `rag-store-remove.ts` + `rag-store-runtime.ts`)** —
+  the registry hot-apply/removal/rename slice, Unit U-H4 (hot-remove, the
   drain-then-teardown upgrade). Execution order: U-H1 → U-H2 (a+b, LANDED) →
   U-H3 (hot-add CONFIRMATORY, EMPTY red) → U-H5 (teardown PRIMITIVES, LANDED) →
-  **U-H4 (this — hot-remove, drain-then-teardown)** → U-H6 (hot-rename) → U-H8
-  (operator-UI editor); U-H7 (default reassignment) is split out. Gate reference:
+  **U-H4 (this — hot-remove, drain-then-teardown, LANDED)** → U-H6 (hot-rename,
+  NEXT) → U-H8 (operator-UI editor); U-H7 (default reassignment) is split out. Gate reference:
   `docs/specs/registry-hot-apply-review.md` §2 **D3** (hot-remove = ORPHAN —
   unregister-only, strand the persistence file + journal/undo; operator
   confirmation via the operator-UI control (D8), NOT MCP), **D7** (mid-flight
@@ -58,15 +57,18 @@
   or the vector boot (a removed non-default store is ALWAYS lexical, A6/R10), and
   does NOT change any page design.
 
-- **TestWriter contract:** every method/signature, return shape, throw pattern,
-  happy-path state, and fail-state below is derivable from this spec ALONE
-  (after the §7 ruling). The TestWriter writes the U-H4 red set into the
-  SpecWriter-pinned file `tests/unit-h4-hot-remove.test.ts` (§5.9), in the house
-  red-first order (RCA-1), reporting the failing set BEFORE the Implementer goes
-  green. **The red set asserts the new orchestration surface does NOT exist on
-  the pre-U-H4 code: `rag-store-remove.ts` is absent (the `drainAndReleaseEntry`
-  import fails), the runtime controller has NO `hotRemove`, and the runtime's
-  remove does NOT drain+teardown (it orphans). §5.9.**
+- **TestWriter contract (EXECUTED — LANDED):** every method/signature, return
+  shape, throw pattern, happy-path state, and fail-state below was derivable from
+  this spec ALONE (after the §7 ruling). The TestWriter wrote the U-H4 red set
+  into the SpecWriter-pinned file `tests/unit-h4-hot-remove.test.ts` (§5.9) in
+  the house red-first order (RCA-1), reporting the failing set BEFORE the
+  Implementer went green. **The red set asserts the new orchestration surface
+  does NOT exist on the pre-U-H4 code: `rag-store-remove.ts` is absent (the
+  `drainAndReleaseEntry` import fails), the runtime controller has NO
+  `hotRemove`, and the runtime's remove does NOT drain+teardown (it orphans).
+  §5.9. Outcome: TestWriter red (suite-load failure — module absent) →
+  Implementer green 18/18 (after the F2 sanctioned fixture fix) → adversarial
+  F-H4-1/F-H4-2 FIXED + regressions → 20/20.**
 
 ---
 
@@ -168,13 +170,16 @@ controller + primitive contracts, node-testable.
 No engine gap — the changes are entirely host-side (`src/`), node-testable, and
 consume only LANDED contracts (U-H5 primitives + U-H2 controller + U-H1 write).
 
-### 3a. Adversarial findings (registered — the U-H4 adversarial pass RUNS after the green, per RCA-3; placeholder + pre-registered probes)
+### 3a. Adversarial findings (registered — the U-H4 adversarial pass RAN after the green, per RCA-3; pre-registered probes + the landed findings below)
 
-The RCA-3 read-only adversarial pass on the U-H4 green runs BEFORE the unit is
-reported done; host findings (ids `F-H4-*`) are fixed here + regression-tested;
+The RCA-3 read-only adversarial pass on the U-H4 green ran BEFORE the unit was
+reported done (= the landed **20/20**, after the 18/18 green + the F2 sanctioned
+fixture fix); host findings (ids `F-H4-*`) were fixed here + regression-tested;
 an engine (provident-ssr) finding, should one ever surface, is a
 `docs/defects.md` + `docs/HANDOFF.md` item, NEVER a package patch (AGENTS.md
-item 7).
+item 7). All U-H4 findings were HOST (F-H4-1/F-H4-2 FIXED + regression-tested;
+F-H4-3/4/5 INFO) — no package/upstream finding, so `docs/defects.md`/
+`docs/HANDOFF.md` are unchanged.
 
 **Pre-registered edge probes (the adversarial pass MUST confirm on the landed
 code):**
@@ -199,8 +204,55 @@ code):**
 - **NO U-H4 change adds an MCP tool / IPC channel / `stores:"all"` fan-out
   edit / page-design change** (D6/A-P2-7/§5.11).
 
-**Adversarial findings (registered after the U-H4 green):** *(to record
-`F-H4-*` here in the same-session pass.)*
+**Adversarial findings (registered AFTER the U-H4 green — the RCA-3 pass on the
+landed 18/18; each HOST finding fixed here + regression-tested in
+`tests/unit-h4-hot-remove.test.ts` §3a; full suite 2707/41, typecheck + build
+clean):**
+
+- **F-H4-1 (MEDIUM — drain-gate TOCTOU, FIXED):** `drainAndReleaseEntry`'s single
+  poll `while (entry.engine.inFlight() !== 0) await sleep(1)` reads 0, then
+  `await store.teardown()` YIELDS to the event loop, then `engine.teardown()`
+  runs with NO re-check. A caller holding a captured reference to the removed
+  engine can enter `engine.query()` during that store-teardown yield — `inFlight()`
+  becomes 1 AFTER the gate observed 0 — and `engine.teardown()` then marks the
+  engine STOPPED mid-query, violating A-P2-2/D7. **Fix:** re-enter the drain gate
+  immediately before `engine.teardown()` (a second `while (inFlight() !== 0)
+  await sleep(1)`), so the engine is marked STOPPED only AFTER `inFlight()` drops
+  back to 0. `engine.teardown()` synchronously marks STOPPED, so re-checking in
+  the same synchronous block closes the window. Regression: **F-H4-1** (a new
+  query entered during the store-teardown window is never torn down mid-flight).
+- **F-H4-2 (LOW — default-drift orphan leak on the throw path, FIXED):** `hotRemove`
+  reuses `hotApply({kind:'remove'})`, which on the F15/F16 default-drift path
+  `syncLiveToLoaded(loaded, true)` MUTATES the live map (the remove applied + the
+  default re-pointed) and PERSISTS, THEN throws `R-default-changed` /
+  `R-default-mismatch2`. `hotRemove`'s early return treated the throw as a clean
+  no-op, so `drainAndReleaseEntry(orphan)` was SKIPPED even though the store was
+  already removed from the live map + disk — a leaked (undrained, unterminated)
+  store/engine. **Fix:** in `hotRemove`, catch the default-drift throw; if the
+  swap already dropped the entry from the live map (`orphan !== undefined &&
+  !directory.entries.has(name)`), STILL `await drainAndReleaseEntry(orphan)`
+  before rethrowing. The byte-pinned throw propagates unchanged; the other throw
+  paths leave the entry IN the live map, so their early-return NO-teardown
+  contract (F1–F4) is intact. Regression: **F-H4-2** (a removed-but-drifted
+  store's engine is still torn down even though `hotRemove` threw).
+- **F-H4-3 (INFO — doc wording, reworded §5.5 R-remove-arg + §5.7 F1, no code
+  change):** the earlier F1/R-remove-arg wording said the `name required` message
+  "PROPAGATES (W-remove-arg)"; it is actually **locally thrown** by the `hotRemove`
+  top-method guard (byte-equal to the LANDED W-remove-arg string, synthesized
+  because the raw `hotApply` remove path cannot produce it — §7 F1 addendum). Both
+  rows now read "locally-thrown, byte-equal to W-remove-arg". Census unchanged (0
+  new templates).
+- **F-H4-4 (INFO — record only, known gap, no code change):** A-P2-2 "never
+  mid-query" applies only to the REMOVED store; U-H2's survivor-rebuild orphans
+  (the old surviving non-default store/engine dropped without drain when >1
+  non-default exists) are NOT drained/torn down by U-H4 — a known gap out of
+  U-H4's single-store remove scope (§5.11). Candidate follow-on: a teardown-aware
+  survivor path (U-H6 hot-rename / a future multi-store remove).
+- **F-H4-5 (INFO — record only, no test):** a whitespace-only name
+  (`hotRemove('   ')`) is a non-empty string, so it passes the F1 arg guard and
+  routes through `hotApply` → the write module's remove branch → **W-remove-unknown**
+  for the literal whitespace name — consistent with the "unknown non-empty string"
+  contract. No dedicated fail-state needed.
 
 ### 3b. Proposal-review findings folded in
 
@@ -345,6 +397,12 @@ export interface HotRemoveResult {
 
 ### 5.2 The new drain+teardown module (`src/main/rag-store-remove.ts` — exact TS)
 
+> The illustrative signature/order below is simplified for the contract; the
+> landed body (and §5.4) additionally RE-ENTERS the `engine.inFlight()===0` gate
+> immediately before `engine.teardown()` (the **F-H4-1** drain-gate TOCTOU fix),
+> so `engine.inFlight()` is read TWICE (the initial unbounded gate + the
+> re-entry) — see §3a F-H4-1.
+
 ```ts
 // src/main/rag-store-remove.ts — Unit U-H4: THE drain-then-teardown caller of
 // the U-H5 primitives for a REMOVED store. The ONLY module that lexically calls
@@ -419,6 +477,11 @@ See §5.2. Elaborations that a TestWriter derives:
   `engine.teardown()` while `entry.engine.inFlight() > 0`. It awaits the count
   to reach `0` (an in-flight query that settles — resolve OR reject — decrements
   per U-H5 — completes on the OLD embedder per U-H5 F8, THEN the teardown runs).
+  Because `await store.teardown()` YIELDS to the event loop, the gate is RE-ENTERED
+  (a second `while (inFlight() !== 0) await sleep(1)`) immediately before
+  `engine.teardown()` — **F-H4-1** closes the drain-gate TOCTOU so a query entered
+  DURING the store-teardown yield can never leave the engine in flight when the
+  (synchronous) STOPPED marking runs (`entry.engine.inFlight()` is read twice).
 - **Drained value:** the returned `drained` is the settled `inFlight()` count at
   teardown time — ALWAYS `0`. Deterministic, node-testable.
 - **Order:** `store.teardown()` THEN `engine.teardown()` (pinned). The store
@@ -447,7 +510,7 @@ themselves — they are observed by any later caller of a torn-down store/engine
 | --- | --- | --- | --- |
 | R-remove-unknown | `name` not present (or already removed) | fail-loud; live + disk untouched; NO teardown | `rag-store-registry-write: cannot remove unknown store '<name>'` (W-remove-unknown, write module) |
 | R-remove-default | `name` === the default store (removing the only `default:true` leaves zero) | fail-loud; live + disk untouched; NO teardown | `rag-store-registry: exactly one store must have default: true (found 0)` (loader F12, candidate re-validation — NO `W-remove-default` message exists) |
-| R-remove-arg | `name` not a non-empty string (`''`, null, non-string) | fail-loud; NO teardown | `rag-store-registry-write: name required` (W-remove-arg) |
+| R-remove-arg | `name` not a non-empty string (`''`, null, non-string) | fail-loud; NO teardown | `rag-store-registry-write: name required` (W-remove-arg — **locally-thrown** by the `hotRemove` top-method guard, byte-equal to W-remove-arg; F-H4-3) |
 | R-remove-fs | a native fs failure on persist | fail-loud Error (message native); live + disk untouched; NO teardown | propagated |
 | (defensive) | `orphan === undefined` after a SUCCESSFUL write | no throw — drain/teardown SKIPPED (D2-invariant bug guard, §5.3 step 3) | — (not asserted as reachable) |
 
@@ -458,8 +521,9 @@ themselves — they are observed by any later caller of a torn-down store/engine
   1 new result type `HotRemoveResult`; 1 new exported interface + 1 factory-free
   type in `rag-store-remove.ts` (`RemovedEntry`, `RemovedEntryReleaseResult`).
 - New `teardown(`/`inFlight()` CALL SITES (all in `rag-store-remove.ts`):
-  **2** (`store.teardown()`, `engine.teardown()`) + **1** drain CHECK
-  (`engine.inFlight()`). **ZERO** such call sites in `rag-store-runtime.ts`.
+  **2** (`store.teardown()`, `engine.teardown()`) + **2** drain CHECKS
+  (`engine.inFlight()` — the initial UNBOUNDED gate + the F-H4-1 re-entry) =
+  **4 total**. **ZERO** such call sites in `rag-store-runtime.ts` (the N1 pin).
 - New byte-pinned message templates: **0** (all errors propagate from LANDED
   sets).
 - New MCP tools / IPC channels / `stores:"all"` fan-out changes: **0** (D6/
@@ -527,7 +591,7 @@ step 2 EARLY return).
 
 | # | Trigger | Outcome | Exact result |
 | --- | --- | --- | --- |
-| F1 | `hotRemove(null)` / `hotRemove(5)` / `hotRemove('')` | fail-loud | **W-remove-arg** `rag-store-registry-write: name required` (PROPAGATES); live-untouched; NO teardown |
+| F1 | `hotRemove(null)` / `hotRemove(5)` / `hotRemove('')` | fail-loud | **W-remove-arg** `rag-store-registry-write: name required` (locally-thrown by the top-method guard, byte-equal to W-remove-arg — F-H4-3, NOT propagated: the raw `hotApply` remove path cannot produce it); live-untouched; NO teardown |
 | F2 | `hotRemove('nope')` (unknown / already-removed) | fail-loud | **W-remove-unknown** `rag-store-registry-write: cannot remove unknown store 'nope'` (PROPAGATES); live-untouched; NO teardown — remove is NOT a silent no-op at the write level |
 | F3 | `hotRemove('main')` (the DEFAULT) | fail-loud | the propagated loader **F12** `rag-store-registry: exactly one store must have default: true (found 0)` — the write module's candidate re-validation rejects a zero-default registry; live-untouched; NO teardown; NO `W-remove-default` message exists |
 | F4 | `hotRemove` whose persist hits a native fs failure (ENOSPC/EACCES/EROFS) | fail-loud | the native fs Error PROPAGATES; live-untouched; the ORIGINAL file intact; NO teardown |
@@ -614,8 +678,9 @@ step 2 EARLY return).
   `drainAndReleaseEntry(entry): Promise<RemovedEntryReleaseResult>` (1 factory-free
   function) + `RemovedEntry` + `RemovedEntryReleaseResult` (2 types) in
   `rag-store-remove.ts`.
-- **New `teardown(`/`inFlight()` call sites:** **3 TOTAL, ALL in `rag-store-remove.ts`**
-  (`engine.inFlight()` drain ×1 poll, `store.teardown()` ×1, `engine.teardown()`
+- **New `teardown(`/`inFlight()` call sites:** **4 TOTAL, ALL in `rag-store-remove.ts`**
+  (`engine.inFlight()` drain gate ×1 poll + the **F-H4-1 re-entry** ×1 poll,
+  `store.teardown()` ×1, `engine.teardown()`
   ×1); **ZERO in `rag-store-runtime.ts`** (the N1 pin).
 - **New byte-pinned message templates:** **0** (all `hotRemove` errors propagate
   from the LANDED write/loader/fs sets; F5/F6 hang rather than throw).
@@ -670,7 +735,8 @@ step 2 EARLY return).
   (teardown primitives, LANDED), U-H6 (hot-rename — its own teardown-aware
   caller), U-H7 (default reassignment — OUT), U-H8 (the operator-UI editor —
   invokes `hotRemove` after the confirmation dialog; D6/A-P2-7). **Execution
-  order proceeding: U-H5 → U-H4 → U-H6 → U-H8; U-H7 split out.**
+  order proceeding: U-H5 → U-H4 (LANDED) → U-H6 (NEXT, hot-rename) → U-H8;
+  U-H7 split out.**
 - **In-scope boundary vs U-H8:** U-H4 lands the CONTROLLER/mechanism-level remove
   (`hotRemove` + the drain module), node-testable, NO IPC/MCP. U-H8 lands the
   operator-facing trigger + confirmation dialog + the IPC channel that calls
@@ -775,15 +841,27 @@ primitives), and STRANDS the persistence file + journal byte-identical (D3).
 The teardown CALL SITES live in a new module **`src/main/rag-store-remove.ts`**,
 so `rag-store-runtime.ts` keeps its N1/A-P2-8 grep pin GREEN (no re-pin).
 U-H4 exposes the controller mechanism only — no MCP tool, no IPC channel (D6) —
-and the operator trigger + confirmation dialog are U-H8's. **Two §7 items need a
-positive Architect ruling before the TestWriter derives the red set: Q1 (the
-orchestration home + N1) and Q4 (unbounded vs. bounded drain).**
+and the operator trigger + confirmation dialog are U-H8's. **The two §7 genuine
+either/or items (Q1 the orchestration home + N1, Q4 unbounded vs. bounded drain)
+were arbitrated CONFIRMED (see the §7 Architect ruling below) and the unit is
+LANDED — 20/20 via `tests/unit-h4-hot-remove.test.ts`; full suite 2707 pass /
+41 skip.**
 
 ---
 
 ### §7 Architect ruling (2026-09-08, Gate Supervisor / Architect)
 
-All four §7 items **CONFIRMED** as provisionally resolved:
+**Addendum — F1 bad-name arbitration:** `hotRemove` adds a TOP-OF-METHOD arg guard:
+`if (typeof name !== 'string' || name.length === 0) throw new Error('rag-store-registry-write: name required')`
+(reusing the LANDED `W-remove-arg` message string — NOT a new template, so the §5.5
+census stays "0 new messages"). This keeps §5.7 F1's `name required` pin true for
+`null`/`5`/`''` (the guard fires before forwarding), while a genuinely-unknown
+NON-EMPTY string still routes through `hotApply` → the write module's remove branch
+→ `W-remove-unknown`. (This reconciles F1 with §5.3's forwarding mechanics; the
+typed `removeRegistryStore` convenience wrapper is NOT on the hotRemove hot path.)
+
+All four original §7 items remain CONFIRMED (Q1 option-b, Q2 co-exist, Q3
+`HotRemoveResult`, Q4 unbounded drain).
 
 1. **Q1 — OPTION (b).** The drain-then-teardown orchestration lives in a NEW
    module `src/main/rag-store-remove.ts` (`drainAndReleaseEntry`); the runtime

@@ -31,6 +31,11 @@ import { existsSync } from 'node:fs'
 import { writeRegistryMutation, type RegistryMutation, type RegistryDelta } from './rag-store-registry-write.js'
 import type { LoadedRagStoreRegistry, ResolvedRagStore } from './rag-store-registry.js'
 import { storeLoadStatus, type RagStoreDirectory, type RagStoreEntry } from './rag-store-directory.js'
+// U-H4 — the ONLY drain-then-teardown caller referenced by this module. The
+// identifier `drainAndReleaseEntry` contains NO lowercase `teardown`, so the
+// U-H2 N1 / U-H5 A-P2-8 grep pins on this file's source stay green — the
+// teardown call sites live ONLY in `rag-store-remove.js`.
+import { drainAndReleaseEntry } from './rag-store-remove.js'
 import { createJsonRagStore, type RagStore } from './rag-store.js'
 import { createLexicalEmbedder, createLexicalIndex, createRetrieval, type RetrievalEngine } from './retrieval.js'
 import type { VectorBootController } from './vector-boot.js'
@@ -99,6 +104,18 @@ export interface HotApplyResult {
   delta: RegistryDelta
 }
 
+/** The successful DRAIN-THEN-TEARDOWN remove result (Unit U-H4). `delta.removed`
+ *  is exactly `[name]`; `drained` is the settled in-flight query count at
+ *  teardown — ALWAYS 0 (the drain gate never tears down mid-query, A-P2-2/D7). */
+export interface HotRemoveResult {
+  /** The FRESH `loaded` registry just written + re-read by the U-H2 write path. */
+  loaded: LoadedRagStoreRegistry
+  /** `{ added: [], removed: [name], renamed: [] }` — the applied delta. */
+  delta: RegistryDelta
+  /** The settled in-flight query count at teardown — 0 (the drain guarantee). */
+  drained: number
+}
+
 /** The controller instance returned by `createRagStoreRuntimeController`. */
 export interface RagStoreRuntimeController {
   getDirectory(): RagStoreDirectory
@@ -111,6 +128,15 @@ export interface RagStoreRuntimeController {
   currentStores(): ResolvedRagStore[]
   statusOf(name: string): 'loaded' | 'failed-corrupt' | 'failed-missing'
   hotApply(mutation: RegistryMutation): HotApplyResult
+  /** U-H4 — the DRAIN-THEN-TEARDOWN remove of a non-default store (Unit U-H4):
+   *  write + unregister the
+   *  named NON-default store via the existing `hotApply({kind:'remove'})`, then
+   *  drain the removed engine (`inFlight()===0`) + tear the removed store's
+   *  store + engine down (U-H5 primitives, owned by `rag-store-remove.js`), and
+   *  STRAND the persistence file + journal (D3). ASYNC — the operator-facing
+   *  remove seam U-H8 calls. Throws propagate (W-remove-unknown / W-remove-arg
+   *  / loader F12 / fs); live Map + disk are untouched on a throw. */
+  hotRemove(name: string): Promise<HotRemoveResult>
 }
 
 /** Construction: validates the inputs FAIL-LOUD (R-* guards), stores the boot
@@ -256,6 +282,54 @@ export function createRagStoreRuntimeController(
     return { loaded, delta }
   }
 
+  /** U-H4 — the DRAIN-THEN-TEARDOWN remove. Order (§5.3):
+   *  1. top-of-method arg guard (W-remove-arg `name required`, reused — 0 new
+   *     templates);
+   *  2. CAPTURE the orphan `RagStoreEntry` from the live Map BEFORE the write
+   *     (the swap unregisters it);
+   *  3. write + default-stability + live-map swap via the LANDED synchronous
+   *     `hotApply({kind:'remove'})` (all W-remove-* / loader-F12 / fs errors
+   *     propagate; live + disk untouched on throw);
+   *  4. defensive skip + `await drainAndReleaseEntry(orphan)` — UNBOUNDED drain
+   *     (`inFlight()===0`) then store+engine teardown, owned by
+   *     `rag-store-remove.js`;
+   *  5. return `{ loaded, delta:{added:[],removed:[name],renamed:[]}, drained: 0 }`.
+   *  The drain never tears down a removed engine mid-query (A-P2-2/D7). */
+  async function hotRemove(name: string): Promise<HotRemoveResult> {
+    // F1 — the arg guard fires BEFORE any write/drain (null/5/'' → W-remove-arg).
+    if (typeof name !== 'string' || name.length === 0) {
+      throw new Error('rag-store-registry-write: name required')
+    }
+    // Capture the orphan BEFORE the swap drops it from the live Map.
+    const orphan = directory.entries.get(name)
+    // Write + unregister (the U-H2 hot-apply swap). Any throw propagates with
+    // live + disk untouched on the EARLY return, EXCEPT the default-drift guard:
+    let loaded: LoadedRagStoreRegistry
+    try {
+      ;({ loaded } = hotApply({ kind: 'remove', name }))
+    } catch (err) {
+      // F-H4-2 (RCA-3) — the default-drift throw (F15/F16). That guard fires
+      // AFTER the remove already persisted AND the live map was re-synced
+      // (HOST-1 / D2), so `directory.entries` no longer contains `name`. The
+      // orphan would otherwise LEAK undrained/unterminated. If the swap DID drop
+      // the entry, still drain+teardown the orphan before rethrowing — a
+      // removed-but-drifted store/engine is always drained/torn down, with the
+      // byte-pinned error still propagating. Other throw paths (W-remove-unknown,
+      // W-remove-arg, loader F12, native fs) leave the entry IN the live map, so
+      // this re-check keeps their early-return NO-teardown contract intact.
+      if (orphan !== undefined && !directory.entries.has(name)) {
+        await drainAndReleaseEntry({ store: orphan.store, engine: orphan.engine })
+      }
+      throw err
+    }
+    // Defensive skip (F8): if the orphan is somehow missing after a successful
+    // write — unreachable by contract — drain nothing and return the result.
+    if (orphan !== undefined) {
+      await drainAndReleaseEntry({ store: orphan.store, engine: orphan.engine })
+    }
+    return { loaded, delta: { added: [], removed: [name], renamed: [] }, drained: 0 }
+  }
+
   /** Build a fresh lexical `RagStoreEntry` for a resolved store (the non-default
    *  rebuild path — A6/R10 byte-equal to `buildRagStoreDirectory` rule 2). A
    *  construct throw PROPAGATES (the staging swap never runs — F17). */
@@ -315,5 +389,6 @@ export function createRagStoreRuntimeController(
     currentStores: () => [...currentRegistry.stores],
     statusOf,
     hotApply,
+    hotRemove,
   }
 }
