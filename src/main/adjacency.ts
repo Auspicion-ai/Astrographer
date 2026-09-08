@@ -233,5 +233,13 @@ export function createSnapshotStore(nodes: RagNode[], edges: RagEdge[]): RagStor
       const d = requireNonEmptyString(documentId, 'rag docHeadForDocument', 'documentId')
       return docHeadForDocumentIndex(index, d)
     },
+    // ---- teardown (Unit U-H5) — the reference NO-OP ------------------------
+    // The read-only adapter has no lifecycle queue to drain; teardown is a pure
+    // idempotent NO-OP that resolves `undefined` and changes NOTHING else
+    // (reads still work; the mutators keep throwing the EXISTING read-only
+    // message, NOT `rag store: torn down` — §5.4/F9).
+    async teardown(): Promise<void> {
+      return undefined
+    },
   }
 }

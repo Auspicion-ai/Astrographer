@@ -224,6 +224,11 @@ export interface Embedder {
    *  index) on a store change. The retrieval engine calls it (if present) after
    *  its own index reconciliation (§5.6). ASYNC. */
   onStoreChanged?(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void>
+  /** RELEASE U-H5 — OPTIONAL forward-only hook: an embedder's resource-release
+   *  (e.g. a future vector embedder releasing its memoizer/session). NOT
+   *  required — no current embedder implements it (absent = a no-op). Called
+   *  by the retrieval engine's `teardown()`. */
+  teardown?(): Promise<void>
 }
 
 export interface LexicalEmbedderOptions {
@@ -599,6 +604,16 @@ export interface RetrievalEngine {
    *  pre-swap query completes on the OLD embedder). Throws on a second call
    *  (one-way) or a null/undefined embedder. */
   setEmbedder(embedder: Embedder): void
+  /** RELEASE U-H5 — tear the engine down: mark STOPPED (query/onStoreChanged/
+   *  setEmbedder now throw `retrieval engine: torn down`), forward to
+   *  `activeEmbedder.teardown?.()`, resolve with `undefined`. IDEMPOTENT.
+   *  NO-FAIL. Does NOT cancel an in-flight query (the U-H4 drain first). */
+  teardown(): Promise<void>
+  /** DRAIN-SEAM U-H5 (A-P2-2 check) — the count of currently-unsettled
+   *  `query()` calls (incremented on entry, decremented on settle). The U-H4
+   *  drain-then-teardown reads it and awaits 0 BEFORE tearing down. A stopped
+   *  engine reports its residual unresolved count (truthful). */
+  inFlight(): number
 }
 
 /** Create the retrieval engine. Builds the index from the store on
@@ -631,6 +646,9 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
   // both phases.
   let activeEmbedder = embedder
   let promoted = false
+  // U-H5 — the STOPPED latch + the unsettled-query counter (the drain seam).
+  let stopped = false
+  let inFlightCount = 0
 
   return {
     query(
@@ -644,9 +662,17 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
         filters?: RagQueryFilters
       },
     ): Promise<RagResult> {
+      // U-H5 — a NEW query on a torn-down engine fails loud (F4). A query that
+      // entered BEFORE teardown (already past this check) is NOT cancelled and
+      // settles on the OLD embedder (F8).
+      if (stopped) throw new Error('retrieval engine: torn down')
+      // DRAIN-SEAM — increment on entry, decrement on settle (resolve OR reject).
+      inFlightCount++
       // Unit X — the extended retrieval entry point. Uses the MAINTAINED
       // `index`/`activeEmbedder` (F1 — no per-call rebuild) and returns the
       // extended `RagResult`. The existing `{ k }` calls map to `topK`.
+      // `ragQuery` captures `activeEmbedder` by value here, so an in-flight
+      // pre-teardown query keeps scoring against the OLD embedder (F8).
       return ragQuery(store, activeEmbedder, index, query, {
         topK: qopts?.k,
         mode: qopts?.mode,
@@ -654,9 +680,14 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
         expand: qopts?.expand,
         maxParentContext: qopts?.maxParentContext,
         filters: qopts?.filters,
-      })
+      }).then(
+        (result) => { inFlightCount--; return result },
+        (err) => { inFlightCount--; throw err },
+      )
     },
     async onStoreChanged(kind: 'content' | 'structural', nodeIds: string[], edgeIds: string[]): Promise<void> {
+      // U-H5 — a torn-down engine no longer serves store changes (F5).
+      if (stopped) throw new Error('retrieval engine: torn down')
       if (nodeIds === null || nodeIds === undefined) throw new Error('onStoreChanged: nodeIds required')
       // edgeIds is accepted and ignored for index purposes (edges are not indexed).
       for (const nodeId of nodeIds) {
@@ -676,6 +707,8 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
     // W1 (§5.12) — atomic ONE-WAY embedder promotion. A second call throws
     // (one-way); a null/undefined embedder throws and consumes nothing.
     setEmbedder(next: Embedder): void {
+      // U-H5 — a torn-down engine can no longer be promoted (F6).
+      if (stopped) throw new Error('retrieval engine: torn down')
       if (next === null || next === undefined) throw new Error('retrieval engine: embedder required')
       // F-W1-3 (RCA-3) — the STRUCTURAL guard: a present-but-invalid embedder
       // (e.g. `{} as Embedder`) must be rejected with the SAME pinned message
@@ -688,6 +721,25 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
       if (promoted) throw new Error('retrieval engine: embedder promotion is one-way (already promoted)')
       activeEmbedder = next
       promoted = true
+    },
+    // ---- teardown + the drain seam (Unit U-H5) -----------------------------
+    // Mark STOPPED (revoke future service calls), forward the optional
+    // embedder teardown hook, resolve `undefined`. IDEMPOTENT and NO-FAIL: an
+    // embedder hook that rejects is swallowed (best-effort release). Does NOT
+    // cancel an in-flight query (F8 — the U-H4 drain guarantees idleness).
+    async teardown(): Promise<void> {
+      if (stopped) return undefined // idempotent NO-OP
+      stopped = true
+      try {
+        await activeEmbedder.teardown?.()
+      } catch {
+        // no-fail — the STOPPED state is the binding contract.
+      }
+      return undefined
+    },
+    // The unsettled-query count (resolve OR reject decrements).
+    inFlight(): number {
+      return inFlightCount
     },
   }
 }

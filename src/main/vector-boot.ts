@@ -84,6 +84,13 @@ export interface VectorBootController {
    *  `Error('vector boot: start already called')`; the original promise's
    *  settlement is authoritative. */
   start(): Promise<PromotionReport>
+  /** RELEASE U-H5 — tear the controller down: mark STOPPED, REJECT any
+   *  in-flight background build's promise with `vector boot: torn down` and
+   *  AWAIT its settlement, forward `engine.teardown()`, resolve with
+   *  `undefined`. IDEMPOTENT. NEVER deletes/flushes the persisted cache file
+   *  (content-addressed, D3). A post-teardown `start()` rejects
+   *  `vector boot: torn down`. */
+  teardown(): Promise<void>
 }
 
 export interface VectorBootOptions {
@@ -119,6 +126,28 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
   const pendingSkips = new Map<string, 'empty' | 'transient'>()
   let builtIndex: VectorIndex | undefined
   let started = false
+  // U-H5 — the STOPPED latch + the deferred `start()` wrapper the teardown
+  // rejects to CANCEL an in-flight background build (deterministic settlement).
+  let stopped = false
+  let startDeferred: ReturnType<typeof createDeferred<PromotionReport>> | undefined
+  // H5-1 — the GENUINE cancel seam (REVIEW finding): teardown must actually
+  // STOP the background build and await its settlement, so NO store mutation,
+  // engine.setEmbedder, or cache write can outlive teardown() (the §5.6 H11 /
+  // D3 "cache byte-identical after EVERY teardown path" invariant). The build
+  // loops check `aborted` at every await boundary and short-circuit; teardown
+  // awaits `buildPromise` (the REAL build, not just the start() deferred),
+  // so the build is fully settled — before its promotion-time cache.flush/
+  // prune/setEmbedder — when teardown resolves.
+  let aborted = false
+  let buildPromise: Promise<PromotionReport> | undefined
+
+  // H5-1 — the abort-check the build loops call at every await boundary: when
+  // teardown has armed the token, throw the CANCELLATION sentinel (NOT a real
+  // build failure — the build catch rethrows it without logging, and the
+  // start() deferred is already settled by teardown, so no caller sees it).
+  function assertNotAborted(): void {
+    if (aborted) throw new CancelledBuildError('vector boot: build cancelled')
+  }
 
   // W4 (§5.13) — the memoizing wrapper state. Absent cache → every piece
   // below is a no-op (the W1–W3 behavior byte-identical).
@@ -167,6 +196,9 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
     const hit = lookup(text)
     if (hit !== undefined) return hit
     const vec = await provider.embed(text)
+    // H5-1 — a build aborted WHILE this embed was in flight must NOT write
+    // through: the cache.set is the write that must not run after teardown.
+    if (aborted) return vec
     missEmbeds++
     if (establishedDim === 0) establishedDim = vec.length
     cache?.set({ kind: provider.kind, model: provider.model, dimension: vec.length, contentHash: contentHashOf(text) }, vec)
@@ -191,6 +223,10 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       const batchFn = opts?.embedBatchFn
       if (!batchFn) throw new Error('vector boot: batch cache wrapper requires embedBatchFn')
       const vectors = await batchFn(missIdx.map((i) => texts[i]))
+      // H5-1 — a build aborted while this batch was in flight must NOT write
+      // any miss through (the per-miss cache.set is the post-teardown write to
+      // avoid). The already-embedded hits above are safe (they wrote nothing).
+      if (aborted) return out as number[][]
       for (let j = 0; j < missIdx.length; j++) {
         const vec = vectors[j]
         missEmbeds++
@@ -221,6 +257,7 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       // adopt passes still own anything that changes DURING the build
       // window (embedAt semantics unchanged).
       await store.enqueue(() => undefined)
+      assertNotAborted()
       const snapshotNodes = store.listNodes()
       const embedAt = new Map<string, string>()
       for (const node of snapshotNodes) {
@@ -232,6 +269,7 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       const buildEmbedFn = cache ? wrappedEmbed : provider.embed
       const buildBatchFn = cache && opts?.embedBatchFn ? wrappedBatch : opts?.embedBatchFn
       const index = await createVectorIndex(snapshotNodes, buildEmbedFn, buildBatchFn)
+      assertNotAborted()
       builtIndex = index
       // §5.12 census: with a cache, `embedded` counts the provider embeds
       // (the cache MISSES — adopted hits made no embed call); without one,
@@ -252,6 +290,7 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
         // the stale vector + records the 'empty' skip WITHOUT an embed call.
         // W3: a per-node embed rejection here is a 'transient' skip recorded
         // on the index (the flip) — the promotion continues either way.
+        assertNotAborted()
         await updateVectorIndex(index, live, provider.embed)
         if (index.nodeIds.includes(id)) reEmbedded++
       }
@@ -264,6 +303,7 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       let adopted = 0
       for (const node of store.listNodes()) {
         if (index.nodeIds.includes(node.id) || embedAt.has(node.id)) continue
+        assertNotAborted()
         await addToVectorIndex(index, node, provider.embed)
         if (index.nodeIds.includes(node.id)) adopted++
       }
@@ -281,8 +321,10 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       // current store node's non-empty embedded text and rewrites the file
       // ONCE after the drain. keepKeys = contentHash STRINGS for the CURRENT
       // provider tuple.
+      assertNotAborted()
       if (cache) {
         await cache.flush()
+        assertNotAborted()
         const keepKeys = new Set<string>()
         for (const node of store.listNodes()) {
           if (typeof node.content === 'string' && node.content.trim() !== '') keepKeys.add(contentHashOf(node.content))
@@ -290,6 +332,7 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
         cache.prune(keepKeys)
         await cache.flush()
       }
+      assertNotAborted()
       const cacheHits = hitHashes.size
       console.error(`vector boot: build complete (embedded ${embedded}, cacheHits ${cacheHits}, re-embedded ${reEmbedded}, skipped empty ${empty} / transient ${transient})`)
       // Atomic ONE-WAY promotion: the vector embedder ADOPTS the background-
@@ -300,12 +343,17 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
       // the build-time entries live-hittable; absent cache → undefined, the
       // W1–W3 passthrough unchanged).
       const vectorEmbedder = await createVectorEmbedder(store, { provider, index, cache })
+      assertNotAborted()
       const promotedAt = Date.now()
       engine.setEmbedder(vectorEmbedder)
       phase = 'promoted'
       console.error('vector boot: promoted')
       return { embedded, cacheHits, reEmbedded, adopted, skipped: { empty, transient }, promotedAt }
     } catch (e) {
+      // H5-1 — a teardown CANCEL is NOT a build failure: rethrow with no log
+      // (the U-H5 §5.5 "0 new console lines" pin). Only a REAL build failure
+      // gets the F1 "build failed (staying pending)" log.
+      if (e instanceof CancelledBuildError) throw e
       // F1 discipline — a total build failure is LOGGED and the engine STAYS
       // pending (lexical-served); the rejection propagates to main's
       // fire-and-forget `.catch`. Never an unhandled rejection, never a
@@ -321,9 +369,90 @@ export function createVectorBootController(store: RagStore, provider: EmbeddingP
     phase: () => phase,
     skipped: () => (builtIndex ? builtIndex.skipped : pendingSkips),
     start(): Promise<PromotionReport> {
+      // U-H5 — F7: a post-teardown start rejects with the pinned message.
+      if (stopped) return Promise.reject(new Error('vector boot: torn down'))
       if (started) return Promise.reject(new Error('vector boot: start already called'))
       started = true
-      return build()
+      // The deferred `start()` wrapper: the REAL `build()` runs in the
+      // background and forwards its settlement into the deferred; a teardown
+      // REJECTS the deferred (the pinned message the start() caller sees).
+      const d = createDeferred<PromotionReport>()
+      startDeferred = d
+      // H5-1 — keep the REAL build promise so a teardown can AWAIT the build's
+      // actual settlement (not just the deferred) and thereby stop it before
+      // any promotion-time store/flush/setEmbedder write outlives teardown.
+      buildPromise = build()
+      buildPromise.then(
+        (report) => { if (!d.settled) d.resolve(report) },
+        (err) => { if (!d.settled) d.reject(err) },
+      )
+      return d.promise
     },
+    // ---- teardown (Unit U-H5) ----------------------------------------------
+    // Mark STOPPED, set the H5-1 abort token + await the build's REAL
+    // settlement (a genuine cancel — the build short-circuits at its abort
+    // checks without any flush/prune/setEmbedder/cache.write), forward the
+    // engine teardown, resolve `undefined`. IDEMPOTENT and NO-FAIL. NEVER
+    // deletes/flushes the persisted content-addressed vector-cache file
+    // (D3 / §7 Q2).
+    async teardown(): Promise<void> {
+      if (stopped) return undefined // idempotent NO-OP
+      stopped = true
+      // Reject the outstanding start() promise with the pinned message — the
+      // start() caller sees `vector boot: torn down`.
+      const d = startDeferred
+      if (d && !d.settled) d.reject(new Error('vector boot: torn down'))
+      // H5-1 — the GENUINE cancel: arm the abort token the build checks at
+      // every await boundary, then AWAIT the build's ACTUAL settlement. A
+      // never-started or already-settled build is a no-op (nothing running).
+      aborted = true
+      if (buildPromise) {
+        await buildPromise.catch(() => undefined) // no-fail — await the rejection
+      }
+      // Forward the shared engine's teardown (no-fail by contract; wrapped for
+      // the U-H5 no-fail guarantee).
+      try {
+        await engine.teardown()
+      } catch {
+        // best-effort — the STOPPED state is the binding contract.
+      }
+      return undefined
+    },
+  }
+}
+
+/** H5-1 — the internal sentinel a teardown-cancelled build rejects with: the
+ *  build catch rethrows it UNLOGGED (it is NOT a real build failure — §5.5
+ *  "0 new console lines"), and the start() deferred is already settled by
+ *  teardown, so no caller observes it (start() rejects `vector boot: torn
+ *  down`, not this). */
+class CancelledBuildError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CancelledBuildError'
+  }
+}
+
+/** U-H5 — a deferred we control: settles EXACTLY once (a second resolve/reject
+ *  is a no-op), so a teardown CANCEL vs the real build's settlement cannot
+ *  race (the first settlement wins). */
+function createDeferred<T>(): { promise: Promise<T>; resolve(v: T): void; reject(e: unknown): void; settled: boolean } {
+  let settled = false
+  let resolve!: (v: T) => void
+  let reject!: (e: unknown) => void
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+  return {
+    promise,
+    resolve(v: T): void {
+      if (settled) return
+      settled = true
+      resolve(v)
+    },
+    reject(e: unknown): void {
+      if (settled) return
+      settled = true
+      reject(e)
+    },
+    get settled(): boolean { return settled },
   }
 }

@@ -277,6 +277,14 @@ export interface RagStore {
   /** The head node id for `documentId` (the source of the FIRST `doc-head`
    *  edge whose `documentIds` includes it), or `undefined` if none. */
   docHeadForDocument(documentId: string): string | undefined
+
+  // ---- teardown (Unit U-H5) ------------------------------------------------
+  /** RELEASE U-H5 — tear the store down: drain the single-writer write queue,
+   *  revoke FUTURE mutations (they throw `rag store: torn down`), and resolve
+   *  with `undefined`. IDEMPOTENT (a second call resolves immediately). NEVER
+   *  deletes or touches the persisted file/journal (D3). NO-FAIL: never
+   *  throws, never rejects. READ methods still resolve after teardown. */
+  teardown(): Promise<void>
 }
 
 export interface RagStoreOptions {
@@ -719,7 +727,12 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   // directly (re-entrant) instead of enqueueing onto the tail — enqueueing
   // there would append after the current fn's continuation and deadlock.
   let inQueue = false
+  // U-H5 — the torn-down latch. Once set, every MUTATING enqueue (and the
+  // mutators that route through it) throws `rag store: torn down` and does NOT
+  // enqueue. Reads are unaffected (read-safe store teardown, §7 Q4).
+  let tornDown = false
   function enqueue<T>(fn: () => T | Promise<T>): Promise<T> {
+    if (tornDown) throw new Error('rag store: torn down')
     const result = queueTail.then(async () => {
       inQueue = true
       try {
@@ -1335,6 +1348,19 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   function undoDepth(): number { return cursor }
   function redoDepth(): number { return journal.length - cursor }
 
+  // ---- teardown (Unit U-H5) ------------------------------------------------
+  // Drain the single-writer queue + revoke future mutations. Idempotent,
+  // no-fail. NEVER touches the persisted file/journal (D3). Reads stay safe.
+  async function teardown(): Promise<void> {
+    if (tornDown) return undefined // idempotent NO-OP
+    tornDown = true
+    // Await the queue tail so a mutation enqueued BEFORE this teardown settles
+    // with its persist before teardown resolves. The tail is failure-isolated
+    // (`enqueue` keeps the chain alive), so this cannot reject (no-fail).
+    await queueTail
+    return undefined
+  }
+
   return {
     getNode, listNodes, putNode, removeNode,
     getEdge, listEdges, putEdge, removeEdge,
@@ -1344,6 +1370,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     enqueue,
     applyBatch,
     edgesFrom, edgesTo, edgesByKind, edgesForDocument, docHeadForDocument,
+    teardown,
   }
 }
 

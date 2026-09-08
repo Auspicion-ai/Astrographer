@@ -13,7 +13,7 @@
 > baseline (incl. U-H2) is **2665 pass / 41 skip per the triowrite, pending
 > the supervisor's parallel trio-run confirmation** (typecheck + build clean).
 
-- **Status: SPEC (DRAFT, pre-gate)** — the registry hot-apply/removal/rename
+- **Status: SPEC (LANDED 2026-09-08 — U-H2a + U-H2b)** — the registry hot-apply/removal/rename
   slice, Unit U-H2 of 8 — the SECOND unit in the pinned execution order
   U-H1 → **U-H2** → U-H3 → U-H5 → U-H4 → U-H6 → U-H8; U-H7 (default
   reassignment) is split out. Gate reference:`docs/specs/registry-hot-apply-review.md`
