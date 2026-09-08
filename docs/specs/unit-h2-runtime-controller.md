@@ -1,5 +1,15 @@
 # Spec — Unit H2: The Registry Hot-Apply Runtime Controller (`rag-store-runtime.ts`) + the Closure Rewiring
 
+> **STATE (2026-09-08): U-H2a is LANDED — the module
+> `src/main/rag-store-runtime.ts` exists and is green (38/38 via
+> `tests/unit-h2-runtime-controller.test.ts`, typecheck + build clean), incl.
+> the four RCA-3 adversarial host regressions HOST-1a/1b/2/3 (F-H2-1/2/3); the
+> blind-greens ran 28 PASS / 1 FAIL / 3 DEFERRED with the single FAIL (F8,
+> §5.5 R-kind single-quote) + the F7 note reconciled in THIS doc-review pass.
+> **U-H2b (the closure rewiring — §5.8/§5.9 and the §4 A-P2-1/REFRESH-ON-APPLY
+> seams) is NOT-YET-IMPLEMENTED — the NEXT cycle.** Do NOT read the U-H2b
+> sections as landed.**
+
 - **Status: SPEC (DRAFT, pre-gate)** — the registry hot-apply/removal/rename
   slice, Unit U-H2 of 8 — the SECOND unit in the pinned execution order
   U-H1 → **U-H2** → U-H3 → U-H5 → U-H4 → U-H6 → U-H8; U-H7 (default
@@ -184,9 +194,69 @@ module):**
 - The default entry/vector-boot object identities are preserved across every
   reachable apply (add/remove/rename of a NON-default).
 - A second `hotApply` after a failed first leaves the live state byte-identical
-  to before the first (no partial apply).
+  to before the first (no partial apply) — for a WRITE/loader/fs or construct
+  failure. The F15/F16 default-drift THROW path (step 4) is the documented
+  HOST-1 exception: it deliberately SYNCHRONIZES the live directory to `loaded`
+  before throwing D2-preserving — a FULL (never partial) sync, not a divergence.
 - `currentStores()` returns a FRESH slice (mutating it cannot affect the
   controller), and after an apply reflects the fresh `loaded` registry.
+
+**RCA-3 host findings (F-H2-1/F-H2-2/F-H2-3, fixed + regression-tested
+2026-09-08) — see the same-session H-rows at the bottom of U-H2a's test file:**
+`tests/unit-h2-runtime-controller.test.ts` now carries four RCA-3 regression
+rows (HOST-1a/HOST-1b/HOST-2/HOST-3):
+
+- **HOST-1 (F-H2-1, HIGH) — D2 persisted-and-live divergence after the
+  post-write F15/F16 defensive throws:** step 3 of `hotApply` calls
+  `writeRegistryMutation` (re-read → mutate → persist → re-load); the step-4/5
+  defensive throws (`R-default-changed` F15 / `R-default-mismatch2` F16) then
+  fired AFTER the write already persisted while the live Map was never swapped.
+  Reachable through an EXTERNAL mid-run registry default edit (in-contract —
+  H9/F15/F16). FIX: on the F15/F16 drift the live directory is SYNCHRONIZED to
+  the freshly-loaded `loaded` projection BEFORE the throw (`syncLiveToLoaded`,
+  rebuild-all) — the newly-defaulted store is rebuilt as a lexical entry and
+  `directory.defaultName` follows `loaded.defaultStoreName`, so live reflects
+  exactly what is on disk (D2 preserved even in the throw path). Regression:
+  after a drifted-default apply, `controller.getDirectory()`/`getDefaultName()`/
+  `statusOf`/`currentStores()` match disk EVEN THOUGH `hotApply` throws.
+- **HOST-2 (F-H2-2, MEDIUM) — the D4 no-ids scan preempted the pinned
+  `W-rename-default` for a default rename:** the step-2 inspect ran even when
+  `from === directory.defaultName`, so a POPULATED default rename threw
+  `R-rename-ids-present` instead of the write module's `W-rename-default` (F9).
+  FIX: skip the D4 id scan when `from === directory.defaultName` so the write
+  module's `W-rename-default` fires first and keeps its pinned message.
+  Regression: a rename of a POPULATED default store (seeded with a
+  `<default>:`-prefixed id) throws `W-rename-default`, not `R-rename-ids-present`.
+- **HOST-3 (F-H2-3, LOW) — `R-registry-default` guard gap:** the constructor's
+  guard validated only the default-name tie. A malformed `opts.registry.stores`
+  (`undefined`/`[]`) slipped through to a raw `TypeError` or a silently-weakened
+  F16 drift guard. FIX: the guard now requires `Array.isArray(opts.registry.stores)`
+  with a resolvable default entry (byte-pinned `R-registry-default`). Regression:
+  `stores: undefined` and `stores: []` both fail loud with
+  `rag-store-runtime: registry default does not match the directory default`.
+
+**Documentation-drift notes for the proofreader/doc-review gate (§5.5/§5.7
+prose — the module is UNAMBIGUOUSLY correct; do NOT change it; BOTH notes
+below are RECONCILED in the per-unit doc-review pass, 2026-09-08):**
+
+- **F8 `R-kind` message uses SINGLE quotes.** The module's message is
+  `rag-store-runtime: unknown mutation kind 'delete'` — a string `kind` renders
+  WITHOUT JSON quoting (its `kindOf` renders a string verbatim), consistent with
+  the module's other `'<id>'`/`'<from>'` interpolations. Spec §5.5's `<json>`
+  note points at the loader's `jsonOf` discipline (JSON.stringify ⇒ double
+  quotes), which would imply `"delete"`. The module's single-quote form matches
+  the §5.5 census table's wording AND U-H2a's own red-set assertions; ONLY the
+  `<json>` prose pointer (§5.5 message-conventions paragraph) is imprecise for
+  the single-quote render. Fix the PROSE (or annotate that R-kind renders a
+  string verbatim, single-quoted), never the module. (See also §5.7 F8.) This
+  mirrors the module's own header comment on `kindOf`.
+- **F7 `R-embedder` prose vs fixed-string census.** The module's message is the
+  §5.5 census fixed string `rag-store-runtime: embedderKind must be 'lexical' or
+  'vector'`. Spec §5.7's F7 row adds "(`<json>` rendering; a >200-char kind
+  renders capped)" — but R-embedder is a FIXED string (its `<json>`-rendering
+  half does not apply). The module matches §5.5's fixed-string census and the
+  `<json>` note in §5.7 F7 is the drift; leave the module as-is and reconcile
+  the §5.7 F7 prose (the caps note belongs to R-kind, not R-embedder).
 
 ### 3b. Proposal-review findings folded in
 
@@ -284,7 +354,16 @@ From `docs/specs/registry-hot-apply-review.md`:
   for U-H2's reachable set (loader-validated paths ⇒ non-throwing constructs),
   preserving D2 (persisted-and-live never diverge); the (unreachable)
   construct-throw case is documented as an implementation bug surfaced by the
-  throw, not a silent divergence.
+  throw, not a silent divergence. **D2-preserving drift path (HOST-1):** when
+  the post-write defensive check fires (`R-default-changed` F15 /
+  `R-default-mismatch2` F16 — §5.4 step 4, reached only through an EXTERNAL
+  mid-run registry default edit that the re-read picks up), the live directory
+  is SYNCHRONIZED to the freshly-loaded `loaded` projection (the newly-defaulted
+  store rebuilt as a lexical entry, `defaultName` following
+  `loaded.defaultStoreName`) BEFORE the byte-pinned throw — so persisted-and-live
+  never diverge even though `hotApply` throws. This sync-before-throw is the
+  ONLY throwing path that mutates the live Map, and it is a deliberate FULL
+  sync (never a partial apply).
 - **D4-NO-IDS-CALLER-PRECONDITION (new):** `hotApply` for a `kind:'rename'`
   inspects the CURRENT store (`createJsonRagStore`/entry `.listNodes()`) for
   any node id starting with `` `<from>:` `` BEFORE calling
@@ -295,10 +374,14 @@ From `docs/specs/registry-hot-apply-review.md`:
 - **A-P2-1-CLOSURE-REWIRING (new):** all default/directory-bound closures in
   `main.ts` and `mcp-server.ts` read the runtime's accessors PER CALL (the
   runtime seam is injected); the legacy const fallback stays byte-equal for
-  the directory-less/single-store path. Pinned §5.8.
+  the directory-less/single-store path. **NOT-YET-IMPLEMENTED — this is a
+  U-H2b seam (the NEXT cycle); §5.8/§5.9 describe the pending U-H2b contract.**
+  Pinned §5.8.
 - **REFRESH-ON-APPLY (new, A-P2-3):** `IPC_RAG_STORE_LISTING` reads the
   runtime's CURRENT resolved projection (`currentStores()` + `statusOf`), NOT
   the boot `registry` const — a pull after an apply shows the new state.
+  **NOT-YET-IMPLEMENTED — a U-H2b seam (the NEXT cycle); the module already
+  exposes the `currentStores()`/`statusOf` source it reads (§5.4).**
   Pinned §5.8/§5.10.
 - **Consumed decision rows (implemented by this unit or inherited, cite-only):**
   **REGISTRY-WRITE-MODULE** / **REGISTRY-ATOMIC-WRITE** /
@@ -507,9 +590,11 @@ export function createRagStoreRuntimeController(
 1. **Guard (mutation):** `mutation` must be a non-null object whose `kind` is
    exactly one of `'add'`/`'remove'`/`'rename'` — else throw **R-mutation**
    `rag-store-runtime: mutation required` / **R-kind**
-   `` rag-store-runtime: unknown mutation kind '<json>' `` (the `<json>`
-   renderer is the loader's TOTAL + CAPPED `jsonOf` discipline; the write
-   module's own copy, §5.5 of U-H1).
+   `` rag-store-runtime: unknown mutation kind '<json>' `` (the `<json>` value
+   renders a STRING kind VERBATIM, single-quoted — `unknown mutation kind 'delete'`
+   — a bare string interpolation consistent with the module's `'<id>'`/
+   `'<from>'` message shapes, NOT the loader's JSON double-quote render; only a
+   NON-STRING kind uses the loader's TOTAL + CAPPED `jsonOf` discipline, §5.5).
 2. **D4 no-ids caller precondition (rename only):** if
    `mutation.kind === 'rename'`, inspect the CURRENT store
    (`_directory.entries.get(mutation.from)` — a MISSING `from` ⇒ let
@@ -524,13 +609,24 @@ export function createRagStoreRuntimeController(
    (the write module's W-* set, the loader's F-set, or the native fs set —
    per U-H1 §5.5) **PROPAGATES unchanged** and the live directory is UNTOUCHED
    (U-H1's atomic persist left the original file + the live state intact).
-4. **Default-stability defensive check:** if
-   `loaded.defaultStoreName !== _directory.defaultName` → throw **R-default-changed**
-   `rag-store-runtime: default store changed by a hot-apply (default reassignment is a separate unit)`.
-   **ORDERING NOTE:** this runs AFTER the write (the default change is only
-   observable from `loaded`); it is UNREACHABLE via U-H1 (W-rename-default +
-   F12 no-remove-default/no-second-default) — documented so it never fires and
-   never diverges. U-H7 owns default reassignment.
+4. **Default-stability defensive check (HOST-1):** if the on-disk default is
+   no longer STABLE after the write — `loaded.defaultStoreName !==
+   _directory.defaultName` (**R-default-changed**
+   `rag-store-runtime: default store changed by a hot-apply (default reassignment is a separate unit)`),
+   OR the loaded default's `persistenceFile` differs from the carried boot
+   default (**R-default-mismatch2**
+   `rag-store-runtime: default entry drifted from the loaded registry`) — the
+   live directory is SYNCHRONIZED to the freshly-loaded `loaded` projection
+   (the newly-defaulted store rebuilt as a lexical entry,
+   `directory.defaultName` following `loaded.defaultStoreName`) BEFORE the
+   byte-pinned throw, so D2 (persisted-and-live never diverge) holds EVEN in the
+   throw path. **ORDERING NOTE:** this runs AFTER the write (the default change
+   is only observable from `loaded`); it is UNREACHABLE via the U-H1 write
+   module alone (W-rename-default + F12 no-remove-default/no-second-default) and
+   is reached only through an EXTERNAL mid-run registry default edit that the
+   re-read picks up (H9). This sync-before-throw is the ONLY throwing path on
+   which `hotApply` mutates the live Map, and it is a deliberate FULL sync
+   (never a partial apply). U-H7 owns default reassignment.
 5. **REBUILD the non-default entries (construct-fully-then-insert, D7):**
    - Build a STAGING `Map<string, RagStoreEntry>`:
      for each `loaded.stores` entry EXCEPT `loaded.defaultStoreName`:
@@ -542,7 +638,9 @@ export function createRagStoreRuntimeController(
      missing: !existsSync(s.persistenceFile) }` and `if (s.corpusRoot !==
      undefined) entry.corpusRoot = s.corpusRoot`; set it in the staging map
      keyed by `s.name`. A MISSING default in `loaded.stores` — impossible via
-     U-H1 (F12) — would throw (R-bug, §5.7 F8).
+     U-H1 (F12) — would trip the loaded-default mismatch guard (defensive throw, `R-default-mismatch2`,
+      §5.7 F16) during the default-entry carry; it is NOT the `R-kind` mutation-kind
+      guard (§5.7 F8).
    - The DEFAULT entry: carry `_defaultEntry` (its `name`/`persistenceFile`
      must match the `loaded` default — defensive assert; a mismatch → throw
      **R-default-mismatch2** `rag-store-runtime: default entry drifted from the loaded registry`).
@@ -564,7 +662,10 @@ export function createRagStoreRuntimeController(
 `writeRegistryMutation`) and produces the same live-map contents (deep-equal
 entries, mod object identity). A FAILED `hotApply` leaves the live directory
 and the disk EXACTLY as before the call (the write module's atomicity + the
-staging-before-swap).
+staging-before-swap) — with ONE deliberate exception: the F15/F16 default-drift
+throw path, where by design (HOST-1) the live directory is SYNCHRONIZED to the
+freshly-written `loaded` before the throw so the on-disk projection is never
+left invisible live.
 
 ### 5.5 The byte-pinned error set + the message census
 
@@ -574,8 +675,14 @@ the write module's exact strings (W-path, W-configs, W-mutation, W-kind,
 W-add-store, W-remove-arg/W-rename-arg, W-add-existing, W-remove-unknown,
 W-rename-unknown-from, W-rename-target-exists, W-rename-default, W-unreadable —
 U-H1 §5.5) plus the loading loader F-set (F1–F14, G-load, G-dir) plus the
-native fs set. `<json>` is the loader's TOTAL + CAPPED renderer (the write
-module's `jsonOf` discipline — reused for R-kind).
+native fs set. The `R-kind` interpolated value `<json>` renders a STRING kind
+**VERBATIM, single-quoted** — `unknown mutation kind 'delete'` — a bare string
+interpolation consistent with the module's `'<id>'`/`'<from>'` message shapes,
+NOT a JSON double-quote render. Only a NON-STRING kind value uses the loader's
+TOTAL + CAPPED renderer (the write module's `jsonOf` JSON.stringify discipline,
+capped at 200 chars) — the module's `kindOf` helper (§2's header comment). The
+`R-kind` message therefore uses SINGLE quotes around the rendered value, not the
+loader's double-quote JSON form.
 
 | # | Trigger | Exact `Error` message |
 | --- | --- | --- |
@@ -587,10 +694,10 @@ module's `jsonOf` discipline — reused for R-kind).
 | R-registry-default | `registry.defaultStoreName !== directory.defaultName` | `rag-store-runtime: registry default does not match the directory default` |
 | R-embedder | `opts.embedderKind` neither `'lexical'` nor `'vector'` | `rag-store-runtime: embedderKind must be 'lexical' or 'vector'` |
 | R-mutation | `hotApply` with a null/not-object `mutation` | `rag-store-runtime: mutation required` |
-| R-kind | a `mutation.kind` outside `'add'`/`'remove'`/`'rename'` | `rag-store-runtime: unknown mutation kind '<json>'` |
+| R-kind | a `mutation.kind` outside `'add'`/`'remove'`/`'rename'` | `rag-store-runtime: unknown mutation kind '<json>'` (the `<json>` renders a string kind VERBATIM, single-quoted — `'delete'`; a non-string kind renders via the loader's capped JSON `jsonOf`) |
 | R-rename-ids-present | rename a store whose CURRENT node ids include `<from>:`-prefixed ids (D4 caller precondition — before any write) | `rag-store-runtime: cannot rename store '<from>' — it has persisted '<from>:'-prefixed ids` |
-| R-default-changed | `loaded.defaultStoreName !== directory.defaultName` after a write (defensive, unreachable via U-H1) | `rag-store-runtime: default store changed by a hot-apply (default reassignment is a separate unit)` |
-| R-default-mismatch2 | the carried default entry's `name`/`persistenceFile` ≠ the `loaded` default (defensive) | `rag-store-runtime: default entry drifted from the loaded registry` |
+| R-default-changed | `loaded.defaultStoreName !== directory.defaultName` after a write (defensive; reached only via an external mid-run registry default edit) | `rag-store-runtime: default store changed by a hot-apply (default reassignment is a separate unit)` — the live directory is SYNCHRONIZED to `loaded` BEFORE the throw (HOST-1) |
+| R-default-mismatch2 | the carried default entry's `name`/`persistenceFile` ≠ the `loaded` default (defensive; external edit) | `rag-store-runtime: default entry drifted from the loaded registry` — the live directory is SYNCHRONIZED to `loaded` BEFORE the throw (HOST-1) |
 | R-status-unknown | `statusOf(name)` with no directory entry | `rag-store-runtime: unknown store '<name>'` |
 | R-construct | a non-default construct throws during the staging rebuild | the underlying (native/constructor) Error PROPAGATES; the live Map is NOT mutated |
 | (write/loader/fs) | `writeRegistryMutation` fails | the write-module W-* / loader F-* / native fs Error PROPAGATES unchanged; live untouched |
@@ -687,7 +794,7 @@ Outcomes: **fail-loud** = the pinned `Error`/propagated Error; **live-untouched*
 | F4 | `createRagStoreRuntimeController({ ... })` with a null `defaultEntry` | fail-loud | R-default-entry |
 | F5 | construction whose `defaultEntry.name` ≠ `directory.defaultName`, or a directory whose defaultKey is absent / maps elsewhere | fail-loud | R-default-mismatch |
 | F6 | construction whose `registry.defaultStoreName` ≠ `directory.defaultName` | fail-loud | R-registry-default |
-| F7 | construction with `embedderKind:'hybrid'` (or any non-union value) | fail-loud | R-embedder (`<json>` rendering; a >200-char kind renders capped) |
+| F7 | construction with `embedderKind:'hybrid'` (or any non-union value) | fail-loud | R-embedder — the §5.5 census FIXED string `rag-store-runtime: embedderKind must be 'lexical' or 'vector'` (NO `<json>` interpolation; the `<json>`/capped rendering belongs to R-kind, §5.5) |
 | F8 | `hotApply(null)` / `hotApply({ kind:'delete' })` | fail-loud | R-mutation / R-kind; live-untouched |
 | F9 | `hotApply({ kind:'rename', from:'main', to:'x' })` (the DEFAULT store — U-H1 rejects first) | fail-loud | the write module's **W-rename-default** PROPAGATES; live-untouched; disk untouched |
 | F10 | `hotApply({ kind:'rename', from:'research-2026-09', to:'z' })` where the CURRENT store's nodes include `research-2026-09:`-prefixed ids (D4 caller precondition) | fail-loud | R-rename-ids-present; DISK NOT WRITTEN (byte-compare the registry file — unchanged); live-untouched; the write module was NEVER called |
@@ -695,8 +802,8 @@ Outcomes: **fail-loud** = the pinned `Error`/propagated Error; **live-untouched*
 | F12 | `hotApply({ kind:'add', store:{ name:'research-2026-09' } })` (already present) | fail-loud | W-add-existing PROPAGATES; live-untouched; disk untouched |
 | F13 | `hotApply` on a CORRUPT/absent-with-broken-file registry path | fail-loud | W-unreadable PROPAGATES; live-untouched; disk untouched |
 | F14 | `hotApply` whose persist hits a native fs failure (ENOSPC/EACCES/EROFS) | fail-loud | the native fs Error PROPAGATES (throw path pinned, message native); live-untouched; the ORIGINAL file intact (R1) |
-| F15 | `hotApply` whose `loaded.defaultStoreName` differs (defensive, unreachable via U-H1) | fail-loud | R-default-changed |
-| F16 | the carried default entry drifts from the `loaded` default (defensive) | fail-loud | R-default-mismatch2 |
+| F15 | `hotApply` whose `loaded.defaultStoreName` differs (defensive; reachable only via an EXTERNAL mid-run registry default edit that the re-read picks up) | fail-loud | **R-default-changed**; the live directory is SYNCHRONIZED to the freshly-written `loaded` default (persisted==live) BEFORE the throw (HOST-1 — D2 preserved even in the throw path) |
+| F16 | the carried default entry's `name`/`persistenceFile` drifts from the `loaded` default (defensive; external edit) | fail-loud | **R-default-mismatch2**; the live directory is SYNCHRONIZED to the fresh `loaded` (persisted==live) BEFORE the throw (HOST-1 — D2 preserved) |
 | F17 | a non-default construct throws during the staging rebuild | fail-loud | R-construct (the underlying Error PROPAGATES); the live Map is NOT mutated (staging never swapped) |
 | F18 | `statusOf('gone')` (an entry removed by an apply or never present) | fail-loud | R-status-unknown `` rag-store-runtime: unknown store 'gone' `` |
 
@@ -710,6 +817,13 @@ rebuild ORPHANS, never tears down (U-H5). **Negative pin (imports):** no
 guarantee is preserved — U-H2 never deletes a store file).
 
 ### 5.8 U-H2b — the closure rewiring contract (`main.ts` + `mcp-server.ts`)
+
+> **⚠ NOT-YET-IMPLEMENTED (U-H2b is a SEPARATE later cycle — the NEXT cycle
+> after U-H2a).** This section + §5.9 describe the PENDING U-H2b closure-rewiring
+> contract; a fresh agent MUST NOT read these bind sites (B1–B13 / M1–M4) as
+> already landed. Only `src/main/rag-store-runtime.ts` (the U-H2a module, §5.1–§5.7)
+> is landed, 38/38. The next cycle re-derives U-H2b's red set from these two
+> sections after the U-H2a DONE row lands.
 
 **U-H2b scope:** rewire every const-captured default/directory closure +
 the server options to read the runtime's accessors per call (A-P2-1),
@@ -800,6 +914,11 @@ path is byte-equal (the accessors return the boot default objects).
 
 ### 5.9 Unit → file → test-file mapping + the red-set expectation
 
+> **⚠ U-H2b's red-set expectation below is PENDING — U-H2b has NOT landed.**
+> The U-H2a row (module `src/main/rag-store-runtime.ts`, 38/38) is LANDED; the
+> U-H2b row (main.ts/mcp-server.ts, B1–B13/M1–M4) is the NEXT cycle and is
+> NOT yet implemented.
+
 | Unit | File | Test file | Red-set expectation (RCA-1) |
 | --- | --- | --- | --- |
 | **U-H2a** (this spec) | NEW `src/main/rag-store-runtime.ts` (runtime controller + mutable live directory + `hotApply`) | `tests/unit-h2-runtime-controller.test.ts` (SpecWriter-pinned; U-H2a's §5.3–§5.7 red set) | Suite fails to LOAD — the module/controller does not exist (the red set asserts `import { createRagStoreRuntimeController } from '../src/main/rag-store-runtime.js'` throws before ANY test body runs). The §5.6 H1–H12 + §5.7 F1–F18 test bodies are authored in the same pass and each FAIL on the missing module. |
@@ -830,6 +949,11 @@ path is byte-equal (the accessors return the boot default objects).
   after each green. The live-scenario battery stays PARKED.
 
 ### 5.10 The supersession row (A-P2-3/D2) — which tests stay green vs which are superseded mechanically
+
+> **⚠ The superseded rows below (Red 18 / fail-state 10) are mechanically landed
+> in U-H2b (the NEXT cycle) — NOT in U-H2a. The U-H2a module is LANDED; the
+> refresh-on-apply re-wiring of `IPC_RAG_STORE_LISTING` + the Red-18 re-base are
+> PENDING until U-H2b lands.**
 
 **STAY GREEN (UNTOUCHED):** `tests/unit-h1-registry-write.test.ts` (49 — U-H1's
 contract unchanged), the loader census (`tests/unit-ms1-store-registry.test.ts`
@@ -867,32 +991,36 @@ legacy const fallback is byte-equal).
   the propagated write-module W-* / loader F-* / native fs sets.
 - **Log output:** 0 lines (no `console.*` in `rag-store-runtime.ts`).
 - **Closure bind sites rewired in `main.ts`:** 13 (B1–B13, §5.8) — NOT 14/12;
-  doc-review (RCA-6) catches drift against the table.
+  doc-review (RCA-6) catches drift against the table. **NOT-YET-IMPLEMENTED
+  (a U-H2b census — the NEXT cycle).**
 - **mcp-server.ts changes:** 1 new server option (`runtime?`), 1 stored field,
   2 `registerTools` call-site forwards, 1 signature change, 2 handler-closure
-  resolution changes (M1–M4).
+  resolution changes (M1–M4). **NOT-YET-IMPLEMENTED (a U-H2b census).**
 - **Disk writes per successful `hotApply`:** exactly ONE registry file write
   (U-H1's temp→fsync→rename) + the step-5 re-load read; ZERO writes to any
   store persistence file or journal; ZERO removals/teardowns.
 - **Runtimes re-created per `hotApply`:** N_non-default fresh store/engine
   pairs; the default store/engine/vector-boot are preserved (ZERO rebuilt).
-- **Files this unit creates/edits:** `src/main/rag-store-runtime.ts` +
-  `src/main/main.ts` (B1–B13) + `src/main/mcp-server.ts` (M1–M4) +
-  `tests/unit-h2-runtime-controller.test.ts`. UNTOUCHED: the loader
+- **Files this unit creates/edits:** LANDED (U-H2a) — `src/main/rag-store-runtime.ts`
+  + `tests/unit-h2-runtime-controller.test.ts`; PENDING (U-H2b) —
+  `src/main/main.ts` (B1–B13) + `src/main/mcp-server.ts` (M1–M4) + the
+  A-P2-3 `IPC_RAG_STORE_LISTING` refresh re-wire. UNTOUCHED: the loader
   `rag-store-registry.ts`, the write module `rag-store-registry-write.ts`
   (U-H1's byte-pinned surface), `rag-store.ts`/`retrieval.ts`/
   `vector-boot.ts`/`rag-store-directory.ts`, `preload.ts`, `shared/types.ts`,
   `sidebar-panes.ts` (U-MS5's listing), `security.ts`. No new MCP tool, no new
   IPC channel (D6). NO page-design change (the operator-UI editor is U-H8) ⇒
   `docs/skills/designing-pages.md` is UNCHANGED by U-H2.
-- **Estimated new tests (U-H2a):** 18–30 (the §5.6 H1–H12 + §5.7 F1–F18 red
-  rows + the D6/A-P2-8 negative pins + the R-rename-ids-present store-data
-  probe), all in `tests/unit-h2-runtime-controller.test.ts`. **Estimated new
-  tests/rows (U-H2b):** the M1–M4 node-testable seams (the runtime-threaded
-  `registerTools` + the accessor-resolved `rag.*`/`edit.*` closures, ~4–8) +
-  the §5.8 grep/structure scans of `main.ts` (B1–B13) + the A-P2-3
-  supersession re-write of the ms5 Red 18 row (re-based to the pre-apply boot
-  path) + the post-apply listing-refresh red row.
+- **Tests landed (U-H2a):** 38 all-green in `tests/unit-h2-runtime-controller.test.ts`
+  (the §5.4–§5.7 contract: F1–F14 + F18 + P0 + P1, H1–H12, F15–F17, N1–N2,
+  and the four RCA-3 HOST-1a/HOST-1b/HOST-2/HOST-3 regression rows; 0 log,
+  typecheck + build clean). The §5.11 original 18–30 estimate is superseded by
+  the landed 38. **Estimated new tests/rows (U-H2b, PENDING):** the M1–M4
+  node-testable seams (the runtime-threaded `registerTools` + the
+  accessor-resolved `rag.*`/`edit.*` closures, ~4–8) + the §5.8 grep/structure
+  scans of `main.ts` (B1–B13) + the A-P2-3 supersession re-write of the ms5
+  Red 18 row (re-based to the pre-apply boot path) + the post-apply
+  listing-refresh red row.
 
 ### 5.12 Cross-references
 
@@ -952,6 +1080,10 @@ legacy const fallback is byte-equal).
 - **Test file (SpecWriter-pinned):** `tests/unit-h2-runtime-controller.test.ts`.
 
 ## 6. The split decision + the live-scenario gate
+
+> **State (2026-09-08): U-H2a is LANDED (38/38, doc-reviewed); the §5.8–§5.9
+> U-H2b half is the NEXT cycle and is NOT yet implemented.** The split decision
+> below is LANDED (the U-H2a half of this ONE spec file is green).
 
 **Split decision (RCA-5 + the review §2 D8 explicit warning): U-H2 is DECLARED
 TOO LARGE FOR ONE RED SET and is split into TWO sub-units — U-H2a (the runtime
@@ -1026,10 +1158,14 @@ no change:
    **CONFIRMED.**
 4. **`IPC_RAG_STORE_LISTING` pulls `runtime.currentStores()` + `runtime.statusOf`**
    (A-P2-3); NO renderer/pane node change in U-H2 (U-MS5's surface survives intact;
-   U-H8 owns the operator editor). **CONFIRMED.**
+   U-H8 owns the operator editor). **CONFIRMED — this Q4 wiring is a U-H2b seam
+   (the NEXT cycle), NOT-YET-IMPLEMENTED; only the `currentStores()`/`statusOf`
+   source it reads is landed (U-H2a).**
 
 The TestWriter may derive U-H2a (from §5.3–§5.7) and U-H2b (from §5.8–§5.9)
 against this ruling; no further arbitration is required before the red runs.
+**State (2026-09-08): U-H2a LANDED (38/38, doc-reviewed — this pass); U-H2b is
+NOT yet implemented (the NEXT cycle; re-derive its red set from §5.8–§5.9).**
 
 ---
 
@@ -1038,7 +1174,9 @@ runtime controller (`src/main/rag-store-runtime.ts`) that owns the mutable live
 `RagStoreDirectory`, the runtime accessors, and the single `hotApply` seam
 (a default-stable, non-teardown rebuild of the non-default entries driven by
 U-H1's `writeRegistryMutation`), keeping the boot path byte-equal for a NO-OP
-run; U-H2b rewires every const-captured default/directory closure + the server
-options to read runtime accessors per call (A-P2-1) and lands the A-P2-3
-refresh-on-apply. No engine gap, no teardown (U-H5), no new MCP tool or IPC
+run (**LANDED 2026-09-08, 38/38 + the four RCA-3 HOST-1a/1b/2/3 regression
+rows, typecheck + build clean**); U-H2b rewires every const-captured
+default/directory closure + the server options to read runtime accessors per
+call (A-P2-1) and lands the A-P2-3 refresh-on-apply (**PENDING — the NEXT
+cycle**). No engine gap, no teardown (U-H5), no new MCP tool or IPC
 channel (D6), no page-design change (U-H8 owns the operator editor).
