@@ -580,6 +580,43 @@ export interface RagStoreListingPayload {
  *  gate seam — no RpcMethod, no TOOL_GROUPS entry, no ALL_TOOLS row. */
 export const IPC_RAG_STORE_LISTING = 'provident:rag-store-listing'
 
+// ---- U-H8 operator-registry-manage IPC (docs/specs/unit-h8-operator-editor.md §5.1)
+// The renderer→main `rag-store-manage` IPC — the operator-registry management
+// channel (the review §2 D6's ONE operator-UI IPC exemption). Manual-UI ONLY: the
+// MCP tool handlers NEVER route to this channel, so an agent cannot add/remove/
+// rename/re-default a store (A-P2-6/A-P2-7). NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED)
+// and NOT a five-seam gate seam — no RpcMethod, no TOOL_GROUPS entry, no ALL_TOOLS
+// row, no MUTATING_METHODS member. The DESTRUCTIVE ops (remove/rename/setDefault/
+// renameDefault) require the two-phase confirmation (D3): a request WITHOUT
+// `confirmed:true` returns `{ confirmationRequired: true, summary }` and invokes NO
+// seam; a request WITH `confirmed:true` invokes the LANDED hot-* seam, whose own
+// rejection propagates fail-closed on a stale target. `add` is NON-destructive and
+// executes immediately.
+
+export type RagStoreManageOp = 'add' | 'remove' | 'rename' | 'setDefault' | 'renameDefault'
+
+export type RagStoreManageRequest =
+  | { op: 'add'; name: string }                                          // non-destructive — executes immediately
+  | { op: 'remove'; name: string; confirmed?: boolean }                  // D3 ORPHAN — confirmation required
+  | { op: 'rename'; from: string; to: string; confirmed?: boolean }      // destructive — confirmation required
+  | { op: 'setDefault'; name: string; confirmed?: boolean }              // high-impact — confirmation required
+  | { op: 'renameDefault'; to: string; confirmed?: boolean }             // default rename — confirmation required
+
+/** The `rag-store-manage` IPC RESULT. Three members:
+ *  1. `{ confirmationRequired: true; summary }` — a destructive request WITHOUT
+ *     `confirmed:true`; the UI prompts before the real execution. NO seam ran.
+ *  2. `{ ok: true; done }` — a mutation succeeded; `done` is the byte-pinned
+ *     operator-readable summary (§5.4). The live registry now reflects the change.
+ *  3. `{ ok: false; error }` — a domain failure (a malformed request, an advisory
+ *     request-step rejection, or a PROPAGATED seam rejection on the confirm step —
+ *     e.g. a now-stale target). The live registry is UNCHANGED on a failure. */
+export type RagStoreManageResult =
+  | { confirmationRequired: true; summary: string }
+  | { ok: true; done: string }
+  | { ok: false; error: string }
+
+export const IPC_RAG_STORE_MANAGE = 'provident:rag-store-manage'
+
 // ---- Unit I template IPC (docs/specs/unit-i-template.md §5.4) -------------
 
 /** The renderer→main `code.template.*`-equivalent IPC channels. Each is handled

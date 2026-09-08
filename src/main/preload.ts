@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 
@@ -85,6 +85,14 @@ export interface ProvidentBridge {
      *  never an MCP tool — an agent must not enumerate the configured store names
      *  (B9/A9). */
     stores(): Promise<RagStoreListingPayload>
+    /** U-H8 — the operator-registry management surface (the review §2 D6 ONE
+     *  exemption). Sends the `rag-store-manage` IPC to main, which validates the
+     *  request, reads the live projection, runs the two-phase confirmation (a
+     *  destructive op without `confirmed:true` returns `{ confirmationRequired:
+     *  true, summary }`), and invokes the LANDED hot-* seams. Manual-UI only:
+     *  never an MCP tool — an agent must not add/remove/rename/re-default a
+     *  store (A-P2-6/A-P2-7). */
+    manage(request: RagStoreManageRequest): Promise<RagStoreManageResult>
   }
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
    *  `code.template.*`-equivalent IPC to main, which delegates to
@@ -128,6 +136,10 @@ export interface ProvidentBridge {
     operatorSet(patch: OperatorSettingsPatch): void
     textareaInput(ragId: string): void
     textareaBlur(ragId: string, value: string): void
+    /** U-H8 — the operator-registry manage dispatch (the D6 ONE operator-UI IPC
+     *  exemption). The `operator-rag-manage-*` handler bodies call these. */
+    registryManage(request: RagStoreManageRequest): void
+    registryManageDismiss(): void
   }
   installSidebar(methods: {
     selectDocument(id: string): void
@@ -138,6 +150,8 @@ export interface ProvidentBridge {
     operatorSet(patch: OperatorSettingsPatch): void
     textareaInput(ragId: string): void
     textareaBlur(ragId: string, value: string): void
+    registryManage(request: RagStoreManageRequest): void
+    registryManageDismiss(): void
   }): void
 }
 
@@ -152,6 +166,8 @@ let sidebarHolder: {
   operatorSet(patch: OperatorSettingsPatch): void
   textareaInput(ragId: string): void
   textareaBlur(ragId: string, value: string): void
+  registryManage(request: RagStoreManageRequest): void
+  registryManageDismiss(): void
 } = {
   selectDocument: () => {},
   submitQuery: () => {},
@@ -161,6 +177,8 @@ let sidebarHolder: {
   operatorSet: () => {},
   textareaInput: () => {},
   textareaBlur: () => {},
+  registryManage: () => {},
+  registryManageDismiss: () => {},
 }
 
 const bridge: ProvidentBridge = {
@@ -273,6 +291,12 @@ const bridge: ProvidentBridge = {
     stores(): Promise<RagStoreListingPayload> {
       return ipcRenderer.invoke(IPC_RAG_STORE_LISTING)
     },
+    /** U-H8 — the operator-registry manage dispatch. Sends the `rag-store-manage`
+     *  IPC to main, which validates the request, reads the live projection, runs
+     *  the two-phase confirmation, and invokes the LANDED hot-* seams. */
+    manage(request: RagStoreManageRequest): Promise<RagStoreManageResult> {
+      return ipcRenderer.invoke(IPC_RAG_STORE_MANAGE, request)
+    },
   },
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
    *  `code.template.*`-equivalent IPC to main, which delegates to
@@ -349,6 +373,8 @@ const bridge: ProvidentBridge = {
     operatorSet: (patch) => sidebarHolder.operatorSet?.(patch),
     textareaInput: (ragId) => sidebarHolder.textareaInput?.(ragId),
     textareaBlur: (ragId, value) => sidebarHolder.textareaBlur?.(ragId, value),
+    registryManage: (request) => sidebarHolder.registryManage?.(request),
+    registryManageDismiss: () => sidebarHolder.registryManageDismiss?.(),
   },
   installSidebar(methods) {
     sidebarHolder = methods

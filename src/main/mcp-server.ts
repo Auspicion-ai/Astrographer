@@ -20,7 +20,7 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
-import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagStoreManageOp } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
@@ -617,6 +617,224 @@ export function handleRagStoreListingIpc(
     })
   }
   return { stores }
+}
+
+/** U-H8 §5.2 — the shared main-process handler for the mutating
+ *  `rag-store-manage` IPC (the operator-registry editor, the review §2 D6 ONE
+ *  exemption). Operates ONLY through the LANDED `RagStoreRuntimeController` seams —
+ *  it READS `getDefaultName()`/`currentStores()`/`statusOf(name)` per call (A-P2-1)
+ *  and invokes `hotApply({kind:'add'})`/`hotRemove`/`hotRename`/`hotSetDefault`/
+ *  `hotRenameDefault`; it ADDS NO registry logic at all.
+ *
+ *  Two-phase confirmation (D3/A-P2-7): a DESTRUCTIVE op (remove/rename/setDefault/
+ *  renameDefault) sent WITHOUT `confirmed:true` returns
+ *  `{ confirmationRequired: true, summary }` and invokes NO seam; the SAME op sent
+ *  with `confirmed:true` invokes the seam, whose OWN rejection PROPAGATES as
+ *  `{ ok:false, error }` (fail-closed on a stale/removed target). `add` is
+ *  non-destructive and executes immediately. A malformed request or an unknown op is
+ *  a domain error (never a throw); the ONLY throw paths are the seams' own (which
+ *  this handler catches and returns as `{ ok:false, error }`). */
+export async function handleRagStoreManageIpc(
+  runtime: RagStoreRuntimeController,
+  request: unknown,
+): Promise<RagStoreManageResult> {
+  // ---- Shape guard (never a throw for a malformed request) ----
+  if (!isObject(request)) return { ok: false, error: 'rag-store-manage: op required' }
+  const op = (request as Record<string, unknown>).op
+  if (op === undefined) return { ok: false, error: 'rag-store-manage: op required' }
+  if (!isManageOp(op)) {
+    return { ok: false, error: `rag-store-manage: unknown op ${JSON.stringify(String(op))}` }
+  }
+  const req = request as RagStoreManageRequest
+  switch (req.op) {
+    case 'add':
+      return manageAdd(runtime, req)
+    case 'remove':
+    case 'rename':
+    case 'setDefault':
+    case 'renameDefault':
+      return manageDestructive(runtime, req)
+  }
+  // Unreachable in practice (op is a validated RagStoreManageOp) — defensive.
+  return { ok: false, error: `rag-store-manage: unknown op ${JSON.stringify(String(op))}` }
+}
+
+const MANAGE_OPS: ReadonlySet<string> = new Set(['add', 'remove', 'rename', 'setDefault', 'renameDefault'])
+
+function isManageOp(op: unknown): op is RagStoreManageOp {
+  return typeof op === 'string' && MANAGE_OPS.has(op)
+}
+
+/** The basename projection for a store's `persistenceFile` (the summary's
+ *  `<file>` substitution — the LANDED listing's basename view, U-MS5). Handles
+ *  an absolute path (the runtime's resolved store) or a bare basename alike. */
+function fileBasename(pathOrName: string): string {
+  if (typeof pathOrName !== 'string' || pathOrName === '') return ''
+  const idx = Math.max(pathOrName.lastIndexOf('/'), pathOrName.lastIndexOf('\\'))
+  return idx >= 0 ? pathOrName.slice(idx + 1) : pathOrName
+}
+
+function manageErrorOf(e: unknown): string {
+  // HOST-H8-5 (LOW): a thrown null/undefined must NOT stringify as the literal
+  // "null"/"undefined" — map it to a useful manage-level message.
+  if (e == null) return 'rag-store-manage: operation failed'
+  return e instanceof Error && e.message !== '' ? e.message : String(e)
+}
+
+async function manageAdd(
+  runtime: RagStoreRuntimeController,
+  req: Extract<RagStoreManageRequest, { op: 'add' }>,
+): Promise<RagStoreManageResult> {
+  const { name } = req
+  if (typeof name !== 'string' || name === '') return { ok: false, error: 'rag-store-manage: name required' }
+  // `add` is NON-destructive — a `confirmed:true` is a domain error, never an execution.
+  if ((req as { confirmed?: boolean }).confirmed === true) return { ok: false, error: 'rag-store-manage: add does not require confirmation' }
+  try {
+    runtime.hotApply({ kind: 'add', store: { name } })
+    return { ok: true, done: `Added store '${name}'` }
+  } catch (e) {
+    // the seam's OWN rejection (W-add-required / W-add-existing / loader-F / fs) PROPAGATES.
+    return { ok: false, error: manageErrorOf(e) }
+  }
+}
+
+async function manageDestructive(
+  runtime: RagStoreRuntimeController,
+  req: Extract<RagStoreManageRequest, { op: 'remove' | 'rename' | 'setDefault' | 'renameDefault' }>,
+): Promise<RagStoreManageResult> {
+  // ---- CONFIRM step (the operator explicitly confirmed via the same channel) ----
+  if (req.confirmed === true) {
+    try {
+      // HOST-H8-2 (MEDIUM): re-run the advisory default/target guards BEFORE the
+      // seam — a concurrent setDefault/renameDefault between the prompt and the
+      // confirm surfaces the correct manage-level message (NOT the write module's
+      // generic Pass-C "exactly one store must have default" error), and the
+      // operator-only destructive seam is never invoked against a now-default /
+      // now-conflicting target. Wrapped in the fail-safe umbrella with the seam.
+      const defaultName = runtime.getDefaultName()
+      const stores = runtime.currentStores()
+      const byName = new Map<string, { default: boolean }>()
+      for (const s of stores) byName.set(s.name, { default: s.default })
+      switch (req.op) {
+        case 'remove': {
+          if (typeof req.name !== 'string' || req.name === '') return { ok: false, error: 'rag-store-manage: name required' }
+          if (byName.get(req.name)?.default) return { ok: false, error: `rag-store-manage: cannot remove the default store '${req.name}'` }
+          await runtime.hotRemove(req.name)
+          return { ok: true, done: `Removed store '${req.name}'` }
+        }
+        case 'rename': {
+          if (typeof req.from !== 'string' || req.from === '') return { ok: false, error: 'rag-store-manage: from required' }
+          if (typeof req.to !== 'string' || req.to === '') return { ok: false, error: 'rag-store-manage: to required' }
+          if (byName.get(req.from)?.default) {
+            return { ok: false, error: 'rag-store-manage: cannot rename the default store (use the default-row Rename-default)' }
+          }
+          if (req.from === req.to || byName.has(req.to)) {
+            return { ok: false, error: `rag-store-registry-write: store '${req.from}' cannot be renamed to '${req.to}': '${req.to}' already exists` }
+          }
+          await runtime.hotRename(req.from, req.to)
+          return { ok: true, done: `Renamed store '${req.from}' to '${req.to}'` }
+        }
+        case 'setDefault': {
+          if (typeof req.name !== 'string' || req.name === '') return { ok: false, error: 'rag-store-manage: name required' }
+          if (byName.get(req.name)?.default) return { ok: false, error: `rag-store-manage: store '${req.name}' is already the default` }
+          await runtime.hotSetDefault(req.name)
+          return { ok: true, done: `Made store '${req.name}' the default` }
+        }
+        case 'renameDefault': {
+          if (typeof req.to !== 'string' || req.to === '') return { ok: false, error: 'rag-store-manage: to required' }
+          if (req.to === defaultName || byName.has(req.to)) {
+            return { ok: false, error: `rag-store-registry-write: store '${defaultName}' cannot be renamed to '${req.to}': '${req.to}' already exists` }
+          }
+          await runtime.hotRenameDefault(req.to)
+          return { ok: true, done: `Renamed the default store to '${req.to}'` }
+        }
+      }
+    } catch (e) {
+      // ---- fail-closed: the seam's OWN rejection (or a guard accessor throw)
+      //      PROPAGATES as a manage-level { ok:false, error } — never a throw ----
+      return { ok: false, error: manageErrorOf(e) }
+    }
+    return { ok: false, error: 'rag-store-manage: unknown op' }
+  }
+
+  // ---- REQUEST step (no `confirmed:true`) — read the live projection + the
+  //      advisory pre-flight + the summary. NO seam is invoked. HOST-H8-3 (LOW):
+  //      the WHOLE step is wrapped in the fail-safe umbrella so a defensive
+  //      accessor read (`getDefaultName`/`currentStores`/`statusOf`) throw
+  //      becomes a clean `{ ok:false, error }` — the handler NEVER throws for a
+  //      domain failure (the "never throws" contract). ----
+  try {
+    const defaultName = runtime.getDefaultName()
+    const stores = runtime.currentStores()
+    const byName = new Map<string, { default: boolean; persistenceFile: string }>()
+    for (const s of stores) byName.set(s.name, { default: s.default, persistenceFile: fileBasename(s.persistenceFile) })
+
+    switch (req.op) {
+      case 'remove': {
+        const { name } = req
+        if (typeof name !== 'string' || name === '') return { ok: false, error: 'rag-store-manage: name required' }
+        const target = byName.get(name)
+        if (!target) return { ok: false, error: `rag-store-registry-write: cannot remove unknown store '${name}'` }
+        runtime.statusOf(name)
+        if (target.default) return { ok: false, error: `rag-store-manage: cannot remove the default store '${name}'` }
+        return {
+          confirmationRequired: true,
+          summary: `Remove store '${name}'? This unregisters it and STRANDS its persistence file '${target.persistenceFile}' + journal (never deleted). This cannot be undone.`,
+        }
+      }
+      case 'rename': {
+        const { from, to } = req
+        if (typeof from !== 'string' || from === '') return { ok: false, error: 'rag-store-manage: from required' }
+        if (typeof to !== 'string' || to === '') return { ok: false, error: 'rag-store-manage: to required' }
+        const fromStore = byName.get(from)
+        if (!fromStore) return { ok: false, error: `rag-store-registry-write: cannot rename unknown store '${from}'` }
+        if (from === to || byName.has(to)) {
+          return { ok: false, error: `rag-store-registry-write: store '${from}' cannot be renamed to '${to}': '${to}' already exists` }
+        }
+        runtime.statusOf(from)
+        if (fromStore.default) return { ok: false, error: 'rag-store-manage: cannot rename the default store (use the default-row Rename-default)' }
+        return {
+          confirmationRequired: true,
+          summary: `Rename store '${from}' to '${to}'? The old store is drained + torn down; its file '${fromStore.persistenceFile}' is stranded.`,
+        }
+      }
+      case 'setDefault': {
+        const { name } = req
+        if (typeof name !== 'string' || name === '') return { ok: false, error: 'rag-store-manage: name required' }
+        const target = byName.get(name)
+        if (!target) return { ok: false, error: `rag-store-registry-write: cannot set unknown store '${name}' as default` }
+        runtime.statusOf(name)
+        if (target.default) return { ok: false, error: `rag-store-manage: store '${name}' is already the default` }
+        return {
+          confirmationRequired: true,
+          summary: `Make store '${name}' the default? Queries and edits target the default until reassigned.`,
+        }
+      }
+      case 'renameDefault': {
+        const { to } = req
+        if (typeof to !== 'string' || to === '') return { ok: false, error: 'rag-store-manage: to required' }
+        if (to === defaultName || byName.has(to)) {
+          return { ok: false, error: `rag-store-registry-write: store '${defaultName}' cannot be renamed to '${to}': '${to}' already exists` }
+        }
+        runtime.statusOf(defaultName)
+        return {
+          confirmationRequired: true,
+          summary: `Rename the default store to '${to}'? It stays the default under the new name.`,
+        }
+      }
+    }
+    // Unreachable in practice (req.op is a validated destructive op) — defensive.
+    return { ok: false, error: 'rag-store-manage: unknown op' }
+  } catch (e) {
+    // a defensive accessor read throw → a clean domain error, never a handler throw.
+    return { ok: false, error: manageErrorOf(e) }
+  }
+}
+
+/** U-H8 §5.3 — a structural object guard: a non-null object is a valid request
+ *  envelope (null/undefined/primitive → op-required). */
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
 }
 
 /** Unit I §5.3 — the shared main-process handler for the `code.template.*`

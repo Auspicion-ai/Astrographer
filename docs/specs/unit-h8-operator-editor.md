@@ -1,9 +1,11 @@
 # Spec — Unit U-H8: The OPERATOR-UI Registry Editor — the `IPC_RAG_STORE_MANAGE` channel, the confirmation flow, and the provident-authored manage controls (D6 exemption)
 
-> **STATE (2026-09-08): U-H8 IS THE SPEC FOR THE FINAL UNIT of the registry
-> hot-apply slice — the OPERATOR-FACING editor. It is NOT LANDED; the §7 design
-> questions (§7) MUST be arbitrated CONFIRMED by the Architect BEFORE the
-> TestWriter derives the red set. All seven mechanism units are LANDED and are
+> **STATE (2026-09-09): U-H8 IS LANDED — the FINAL unit of the registry
+> hot-apply slice — the OPERATOR-FACING editor (the ONE D6-exempted
+> `IPC_RAG_STORE_MANAGE` operator channel + the two-phase confirmation + the
+> provident-authored manage controls). All seven §7 design questions
+> were arbitrated CONFIRMED by the Architect (2026-09-08) before the
+> TestWriter derived the red set. All seven mechanism units are LANDED and are
 > CONSUMED (NOT re-authored) here: U-H1 (write module), U-H2a/b (runtime controller
 > `RagStoreRuntimeController` + closure rewiring — the accessors + `hotApply`),
 > U-H5 (teardown primitives), U-H4 (`hotRemove`), U-H6 (`hotRename`), U-H7
@@ -32,8 +34,11 @@
 > `shared/types.ts` payload/result convention), `docs/specs/unit-ms3-store-qualified-broadcast.md`
 > (the ONE shared broadcast payload declaration, cited not restated).**
 
-- **Status: SPEC (NOT LANDED — 2026-09-08; the §7 rulings below are PROVISIONAL and
-  MUST be arbitrated CONFIRMED before the TestWriter derives the red set).** The
+- **Status: SPEC — LANDED (2026-09-09; the §7 rulings were arbitrated CONFIRMED by the
+  Architect 2026-09-08; the TestWriter-derived suite is GREEN **64/64** via
+  `tests/unit-h8-operator-editor.test.ts`, incl. the HOST-H8-1..5 adversarial regressions;
+  blind-greens 23 PASS / 0 FAIL / 6 DEFERRED / 6 not-live-runnable; full trio **2825 pass /
+  41 skip**, typecheck + build clean).** The
   registry hot-apply/removal/rename slice, Unit **U-H8 of 8 — the FINAL unit** — the
   operator-facing surface that lets the OPERATOR (a human, NOT an agent) manage the
   registry at runtime over a NEW IPC channel (the ONE channel D6 exempts for the
@@ -230,6 +235,50 @@ adversarial pass MUST confirm on the landed code):**
 - A `provident.dispatch` (app Runtime) on the operator manage controls does NOTHING —
   they live in the isolated operator scope, NOT the app graph (§5.8).
 
+**HOST-H8 findings + fixes (2026-09-09 — the adversarial pass on the GREEN U-H8):
+each is fixed here + regression-tested in `tests/unit-h8-operator-editor.test.ts`
+(the "HOST-H8 regressions" describe; RED-first on the pre-fix code).**
+
+- **HOST-H8-1 (HIGH, security — the primary fix):** the 7 `OPERATOR_RAG_*` defs were
+  registered in the GLOBAL app-graph `handlerDef` table (`registerRagManageHandlerDefs`
+  in `pane-graph.ts` → `registerHandlerDef`). The app Runtime's
+  `resolveNameReferencedHandlerBodies` resolves ANY `handlers:[{name}]` on ANY
+  translated envelope node from that SAME global table, with NO allowlist; `code.set`
+  does not strip `handlers`/`data-*` on a zone container and the traversal carries
+  template zone containers verbatim into the app envelope — so a `code`-group agent
+  could `code.set` a template whose `main` zone carries
+  `handlers:[{name:'operator-rag-manage-confirm'}]` + `props:{'data-op':'remove',
+  'data-store':'<non-default>'}` and, after a re-derive, `provident.dispatch` fires the
+  destructive confirm body → `hotRemove`/`hotSetDefault`/etc. with `confirmed:true` —
+  falsifying A-P2-6/A-P2-7 + §5.8's "an agent cannot drive the operator editor".
+  **Fix:** the global registration is REMOVED — `registerRagManageHandlerDefs` is
+  deleted; the operator isolate-scope nodes carry INLINE full-expression bodies (the
+  operator scope does not need the global name-addressable registry). VERIFIED: the
+  operator pane works via its inline bodies (all U-H8 operator-scope flows stay
+  green), the 7 names are absent from `handlerDef` after boot, and a crafted
+  name-referenced `operator-rag-manage-confirm` does NOT resolve → `dispatch` drives
+  nothing. The operator-UI IPC surface is now operator-only and agent-un-driveable.
+- **HOST-H8-2 (MEDIUM):** the advisory rejected `remove`-of-default only at the
+  REQUEST step; the CONFIRM step did not re-check the default, so a concurrent
+  setDefault/renameDefault between the prompt and the confirm made the confirm remove
+  the now-default store — failing closed only at the write module's generic Pass-C
+  error, not the manage-level `rag-store-manage: cannot remove the default store
+  '<name>'`. **Fix:** the CONFIRM branch re-runs the advisory default-guard (remove) +
+  the rename-default/target guards (rename/setDefault/renameDefault) BEFORE invoking
+  the seam. Regression: a concurrent setDefault-then-confirm-remove yields the
+  manage-level M-remove-default byte-pin and does NOT invoke `hotRemove`.
+- **HOST-H8-3 (LOW):** the non-confirmed request step was not wrapped in the
+  fail-safe umbrella. **Fix:** the WHOLE request step (the accessor reads +
+  `statusOf`) is wrapped in the same try/catch, so a defensive read throw becomes a
+  clean `{ok:false,error}` — the handler "never throws" for a domain failure.
+- **HOST-H8-4 (LOW):** a rapid double-click on Confirm fired two applies + could leave
+  a stale `registryManageError` after the store was actually removed. **Fix:** a
+  transient in-flight guard (`regMgmtConfirmingOp`) ignores a second confirmed apply of
+  the SAME op while one is pending.
+- **HOST-H8-5 (LOW):** `manageErrorOf` stringified a thrown null/undefined as the
+  literal `"null"`/`"undefined"`. **Fix:** a `String(e)` fallback guard maps a
+  null/undefined thrown value to `rag-store-manage: operation failed`.
+
 ### 3b. Proposal-review findings folded in
 
 From `docs/specs/registry-hot-apply-review.md`:
@@ -246,10 +295,12 @@ From `docs/specs/registry-hot-apply-review.md`:
 - **A-P2-7 (bound):** hot-remove = orphan via operator control, confirmation required,
   no MCP path. U-H8's confirmation protocol (§1/§4/§5).
 
-## 4. Design decisions pinned by this spec (PROVISIONAL — §7 must rule CONFIRMED)
+## 4. Design decisions pinned by this spec (LANDED — the §7 rulings ruled CONFIRMED 2026-09-08)
 
-> All decisions below are P R O V I S I O N A L; the TestWriter derives the red set
-> ONLY after the §7 rulings. The genuine either/or items are Q1 (one combined channel
+> The decisions below were P R O V I S I O N A L until the §7 rulings; all seven items
+> were ruled **CONFIRMED** by the Architect (2026-09-08), the TestWriter derived the
+> red set against the ruling, and the unit LANDED green (64/64). The genuine
+> either/or items were Q1 (one combined channel
 > vs per-op channels), Q3 (confirmation-dialog authoring), Q4 (add-store UI scope),
 > Q5 (the default-change app re-derive coupling), Q7 (the two-phase channel topology).
 > The rest confirm the recommended reading.
@@ -445,8 +496,10 @@ export async function handleRagStoreManageIpc(
      separate boundary (§4 OPERATOR-INPUT-HYGIENE).
 2. **`add` (non-destructive, immediate):**
    - `if (request.confirmed === true) return { ok: false, error: 'rag-store-manage: add does not require confirmation' }`.
-   - Invoke the LANDED add seam: `const { loaded, delta } = runtime.hotApply({ kind: 'add', store: { name: request.name } })`.
-   - On success return `{ ok: true, done: 'Added store "' + request.name + '"' }`.
+   - Invoke the LANDED add seam: `runtime.hotApply({ kind: 'add', store: { name: request.name } })`
+     (synchronous; the returned `{ loaded, delta }` delta is not re-shaped here — the
+     seam's atomic apply + re-load owns it).
+   - On success return `{ ok: true, done: "Added store '" + request.name + "'" }` (the §5.4 single-quote norm).
    - On a synchronous throw/rejected promise (W-add-required / **W-add-existing** for
      an already-present store / loader-F / native-fs) catch + return
      `{ ok: false, error: <the seam's message> }`.
@@ -627,7 +680,7 @@ const rows = (listing?.stores ?? []).map((s) => {
             // the default row — Rename-default (the sanctioned seam), never remove/set-default:
             type: 'div', props: { id: `operator-rag-manage-actions-${s.name}` },
             children: [
-              { type: 'text', props: { id: 'operator-rag-manage-renamedefault-input', value: '' } },
+              { type: 'input', props: { id: 'operator-rag-manage-renamedefault-input', value: '' } },
               { type: 'button', props: { id: 'operator-rag-manage-renamedefault' }, content: 'Rename default',
                 handlers: [{ name: 'operator-rag-manage-renamedefault', event: 'click', body: OPERATOR_RAG_RENAME_DEFAULT_BODY }] },
             ],
@@ -637,7 +690,7 @@ const rows = (listing?.stores ?? []).map((s) => {
             children: [
               { type: 'button', props: { id: `operator-rag-manage-remove-${s.name}`, 'data-store': s.name }, content: 'Remove',
                 handlers: [{ name: 'operator-rag-manage-remove', event: 'click', body: OPERATOR_RAG_REMOVE_BODY }] },
-              { type: 'text', props: { id: `operator-rag-manage-rename-input-${s.name}`, value: '' } },
+              { type: 'input', props: { id: `operator-rag-manage-rename-input-${s.name}`, value: '' } },
               { type: 'button', props: { id: `operator-rag-manage-rename-${s.name}`, 'data-store': s.name }, content: 'Rename',
                 handlers: [{ name: 'operator-rag-manage-rename', event: 'click', body: OPERATOR_RAG_RENAME_BODY }] },
               { type: 'button', props: { id: `operator-rag-manage-setdefault-${s.name}`, 'data-store': s.name }, content: 'Set default',
@@ -651,7 +704,7 @@ const rows = (listing?.stores ?? []).map((s) => {
 const addForm = {
   type: 'div', props: { id: 'operator-rag-manage-add' },
   children: [
-    { type: 'text', props: { id: 'operator-rag-manage-add-name', value: '' } },
+    { type: 'input', props: { id: 'operator-rag-manage-add-name', value: '' } },
     { type: 'button', props: { id: 'operator-rag-manage-add-submit' }, content: 'Add store',
       handlers: [{ name: 'operator-rag-manage-add', event: 'click', body: OPERATOR_RAG_ADD_BODY }] },
   ],
@@ -685,11 +738,11 @@ const errorStrip = this.registryManageError === null ? [] : [{ type: 'p', props:
 ```
 
 **Node contract (pinned):** the manage section is a `div#operator-rag-manage`; the
-add-store form is `div#operator-rag-manage-add` (a `text` input
+add-store form is `div#operator-rag-manage-add` (an `input` node
 `#operator-rag-manage-add-name` + a `button#operator-rag-manage-add-submit`); one row
 `div#operator-rag-manage-row-<name>` per store (content
 `<name>` or `<name> (default)`); NON-default rows carry a `div#operator-rag-manage-actions-<name>`
-with Remove/Rename/Set-default (ids `...-remove-<name>`, the rename `text`
+with Remove/Rename/Set-default (ids `...-remove-<name>`, the rename `input`
 `...-rename-input-<name>`, `...-rename-<name>`, `...-setdefault-<name>`), the DEFAULT
 row carries only Rename-default (`#operator-rag-manage-renamedefault-input` +
 `#operator-rag-manage-renamedefault`); the confirmation strip
@@ -734,10 +787,21 @@ else if (op === 'renameDefault') s.registryManage({ op: 'renameDefault', to: o['
 const OPERATOR_RAG_DISMISS_BODY = `var s = window && window.provident && window.provident.sidebar; if (!s) return; s.registryManageDismiss();`
 ```
 
-Each is registered in `bindHandlers()` via `registerHandlerDef(<name>, { name,
-body: <HANDLER> })` (additive — the operator isolated scope uses the inline body;
-the app graph registration is harmless), mirroring the U1
-`OPERATOR_EDITING_MODE_TOGGLE_HANDLER` two-string representation.
+**Type note (HOST-H8 doc reconciliation):** the manage inputs are authored as
+`type: 'input'` (NOT `type: 'text'`) — the engine ignores `props` on `text` nodes, so
+a `text` control loses its `id` (the `getElementById(...)` the bodies read), exactly the
+`searchContent` precedent (`pane-graph.ts:259`, the `pane-search-input` `input`).
+`type: 'input'` is the minimal correct fix and is pinned here.
+
+The 7 body constants are carried INLINE on the operator-scope controls (each handler
+has BOTH a `name` AND a full-expression `body`). **They are NEVER registered in the
+global app-graph `handlerDef` table (HOST-H8-1, HIGH security):** the pre-fix
+`registerHandlerDef` registration let a `code.set`-crafted template name-resolve the
+destructive `operator-rag-manage-confirm` body in the APP Runtime (`resolveNameReferencedHandlerBodies`,
+no allowlist) and drive `hotRemove`/`hotSetDefault`/etc. via `provident.dispatch`
+without operator confirmation (falsifying A-P2-6/A-P2-7 + §5.8). The operator isolated
+scope needs no global registration — it compiles the inline bodies — so removing it
+leaves the operator-UI IPC surface truly operator-only (§3a HOST-H8-1).
 
 **The host `installSidebarBridge()` (`sidebar-panes.ts:1089-1122`):** add to the
 `methods` object:
@@ -816,26 +880,26 @@ The pane: the SidebarPanes host harness with a stubbed `bridge.rag.manage` +
 
 1. **H1 — add (immediate, non-confirmed):**
    `handleRagStoreManageIpc(runtime, { op: 'add', name: 'research-2026-10' })` →
-   `{ ok: true, done: 'Added store "research-2026-10"' }`; `runtime.hotApply` was called
+   `{ ok: true, done: 'Added store 'research-2026-10'' }`; `runtime.hotApply` was called
    once with `{ kind: 'add', store: { name: 'research-2026-10' } }`; no `confirmed`
    flow.
 2. **H2 — remove requires confirmation:** a NON-confirmed remove →
-   `{ confirmationRequired: true, summary: 'Remove store "research-2026-09"? ...' }`;
+   `{ confirmationRequired: true, summary: 'Remove store 'research-2026-09'? ...' }`;
    `runtime.hotRemove` call count = 0 (NO seam ran).
 3. **H3 — confirmed remove executes (D3/D7):** the confirmed remove → `{ ok: true,
-   done: 'Removed store "research-2026-09"' }`; `runtime.hotRemove` was called once with
+   done: 'Removed store 'research-2026-09'' }`; `runtime.hotRemove` was called once with
    the name.
 4. **H4 — rename two-phase:** NON-confirmed rename → `{ confirmationRequired: true,
-   summary: 'Rename store "research-2026-09" to "x"? ...' }`; confirmed rename →
-   `{ ok: true, done: 'Renamed store "research-2026-09" to "x"' }`; `runtime.hotRename`
+   summary: 'Rename store 'research-2026-09' to 'x'? ...' }`; confirmed rename →
+   `{ ok: true, done: 'Renamed store 'research-2026-09' to 'x'' }`; `runtime.hotRename`
    called once with `{ from, to }`.
 5. **H5 — setDefault two-phase:** NON-confirmed setDefault → `{ confirmationRequired:
-   true, summary: 'Make store "research-2026-09" the default? ...' }`; confirmed →
-   `{ ok: true, done: 'Made store "research-2026-09" the default' }`; `runtime.hotSetDefault`
+   true, summary: 'Make store 'research-2026-09' the default? ...' }`; confirmed →
+   `{ ok: true, done: 'Made store 'research-2026-09' the default' }`; `runtime.hotSetDefault`
    called once.
 6. **H6 — renameDefault two-phase:** NON-confirmed renameDefault → `{ confirmationRequired:
-   true, summary: 'Rename the default store to "main-new"? ...' }`; confirmed →
-   `{ ok: true, done: 'Renamed the default store to "main-new"' }`; `runtime.hotRenameDefault`
+   true, summary: 'Rename the default store to 'main-new'? ...' }`; confirmed →
+   `{ ok: true, done: 'Renamed the default store to 'main-new'' }`; `runtime.hotRenameDefault`
    called once with `{ to }`.
 7. **H7 — the read-the-runtime-per-call (A-P2-1):** the handler calls
    `runtime.getDefaultName()`/`currentStores()`/`statusOf(name)` PER manage request
@@ -996,11 +1060,11 @@ accessor state) unchanged. The handler NEVER throws for a domain failure.
 - **New renderer handler bodies:** **7** — `OPERATOR_RAG_ADD_BODY`,
   `OPERATOR_RAG_REMOVE_BODY`, `OPERATOR_RAG_RENAME_BODY`,
   `OPERATOR_RAG_SET_DEFAULT_BODY`, `OPERATOR_RAG_RENAME_DEFAULT_BODY`,
-  `OPERATOR_RAG_CONFIRM_BODY`, `OPERATOR_RAG_DISMISS_BODY` (+ the `registerHandlerDef`
-  registrations).
+  `OPERATOR_RAG_CONFIRM_BODY`, `OPERATOR_RAG_DISMISS_BODY` (carried INLINE on the
+  operator-scope controls; NOT globally registered — HOST-H8-1, §3a).
 - **New host methods:** **3** — `registryManage(request)`, `registryManageDismiss()`,
-  `refreshRegistryManage()`. **New host fields:** **2** — `pendingRegMgmt`,
-  `registryManageError`.
+  `refreshRegistryManage()`. **New host fields:** **3** — `pendingRegMgmt`,
+  `registryManageError`, + `regMgmtConfirmingOp` (the HOST-H8-4 transient in-flight guard, §3a).
 - **New byte-pinned message templates (manage-level):** **8** (M-manage-op ×2,
   M-manage-name/from/to ×3, M-add-confirm, M-remove-default, M-rename-default,
   M-setdefault-nop = 8). The seam-propagated messages REUSE the LANDED W-*/R-*/loader-F/
@@ -1182,22 +1246,21 @@ OPERATOR isolated scope (`createIsolatedScope()`, NOT MCP-visible). U-H8 CONSUME
 (with ZERO new registry logic) and adds NO MCP tool / census / group-gate row — the
 five-seam gate + the census-41 pins stay green. The operator editor is the ONLY
 registry-management surface; an agent CANNOT drive it (`provident.dispatch` reads only
-the app graph). **The five genuine §7 either/or items (Q1 the channel surface, Q3 the
+the app graph). **All five genuine §7 either/or items (Q1 the channel surface, Q3 the
 confirmation authoring, Q4 the add-store scope, Q5 the default-change re-derive, Q7 the
-two-phase topology) MUST be arbitrated CONFIRMED before the TestWriter derives the red
-set; Q2/Q6 confirm the recommended reading.** U-H8 is the FIRST unit where a live app
+two-phase topology) were arbitrated CONFIRMED by the Architect (2026-09-08) before the
+TestWriter derived the red set; Q2/Q6 confirm the recommended reading.** U-H8 is the FIRST unit where a live app
 session is genuinely needed (the operator UI end-to-end); the live-scenario gate is
 PARKED (§6) and a `unit-h8` live-pending battery is RECOMMENDED.
 
 ---
 
-### §7 Architect ruling (placeholder — the Architect must CONFIRM each item before the TestWriter derives the red set)
+### §7 Architect ruling (CONFIRMED 2026-09-08 — the authoritative record is the ruling block below)
 
-> Awaiting the Architect's CONFIRMED rulings on §7 items 1–7 (the record for the
-> TestWriter). On confirmation, transcribe the rulings here (the U-H4/U-H6/U-H7
-> pattern) + lock the H1–H15/F1–F16/N-pin red set + the census (§5.10) against the
-> final ruling. The operator manage surface remains U-H8's sole deliverable; the
-> mechanism seams stay untouched.
+> Resolved 2026-09-08: the Architect CONFIRMED all seven §7 items (the U-H4/U-H6/U-H7
+> pattern). The H1–H15/F1–F16/N-pin red set (TestWriter red **49**) + the census (§5.10)
+> were locked against the ruling and landed green **64/64**. The operator manage surface
+> was U-H8's sole deliverable; the mechanism seams stayed untouched.
 
 ---
 

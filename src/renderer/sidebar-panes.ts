@@ -47,6 +47,9 @@ import type {
   OperatorSettings,
   OperatorSettingsPatch,
   EditingMode,
+  RagStoreManageRequest,
+  RagStoreManageResult,
+  RagStoreManageOp,
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
@@ -87,6 +90,14 @@ export interface SidebarBridge {
      *  only: never an MCP tool — an agent must not enumerate the configured
      *  store names (B9/A9). */
     stores(): Promise<RagStoreListingPayload>
+    /** U-H8 — the operator-registry management surface (the review §2 D6 ONE
+     *  exemption). Sends the `rag-store-manage` IPC to main, which validates
+     *  the request, reads the live projection, runs the two-phase confirmation
+     *  (a destructive op without `confirmed:true` returns `{ confirmationRequired:
+     *  true, summary }`), and invokes the LANDED hot-* seams. Manual-UI only:
+     *  never an MCP tool — an agent must not add/remove/rename/re-default a
+     *  store (A-P2-6/A-P2-7). */
+    manage(request: RagStoreManageRequest): Promise<RagStoreManageResult>
   }
   template: {
     get(): Promise<{ source: string; template: ContentWindowTemplate }>
@@ -155,6 +166,56 @@ var mode = ctx && ctx.node && ctx.node.props && ctx.node.props['data-mode'];
 if (mode === 'textarea' || mode === 'contenteditable') s.operatorSet({ editingMode: mode });`
 const OPERATOR_EDITING_MODE_TOGGLE_HANDLER = `function (ctx) {
 ${OPERATOR_EDITING_MODE_TOGGLE_BODY}
+}`
+// Unit U-H8 — the 7 operator-registry-manage handler bodies (the review §2 D6
+// ONE operator-UI IPC exemption). Each reaches `window.provident.sidebar.registryManage`/
+// `registryManageDismiss` (the U1 `sidebar.operatorSet` convention) — NEVER an MCP
+// tool. Registered via `registerHandlerDef` (additive + harmless in the app graph)
+// in the FULL function-expression form (the `compileHandlerBody`-compatible
+// representation, the U1 F3 convention). The operator isolated scope uses the SAME
+// full form as its INLINE handler bodies. Each body reads the target data from
+// `ctx.node.props['data-*']` + the DOM input values (`getElementById(...).value`),
+// TRIMS the operator-typed name (OPERATOR-INPUT-HYGIENE — a whitespace-only value
+// is DROPPED, no dispatch), and dispatches.
+const OPERATOR_RAG_ADD_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var el = document.getElementById('operator-rag-manage-add-name'); var name = el ? el.value : '';
+  if (name && String(name).trim() !== '') s.registryManage({ op: 'add', name: String(name).trim() });
+}`
+const OPERATOR_RAG_REMOVE_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var name = ctx && ctx.node && ctx.node.props && ctx.node.props['data-store'];
+  if (name) s.registryManage({ op: 'remove', name: name });
+}`
+const OPERATOR_RAG_RENAME_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var name = ctx && ctx.node && ctx.node.props && ctx.node.props['data-store'];
+  var el = name ? document.getElementById('operator-rag-manage-rename-input-' + name) : null; var to = el ? el.value : '';
+  if (name && to && String(to).trim() !== '') s.registryManage({ op: 'rename', from: name, to: String(to).trim() });
+}`
+const OPERATOR_RAG_SET_DEFAULT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var name = ctx && ctx.node && ctx.node.props && ctx.node.props['data-store'];
+  if (name) s.registryManage({ op: 'setDefault', name: name });
+}`
+const OPERATOR_RAG_RENAME_DEFAULT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var el = document.getElementById('operator-rag-manage-renamedefault-input'); var to = el ? el.value : '';
+  if (to && String(to).trim() !== '') s.registryManage({ op: 'renameDefault', to: String(to).trim() });
+}`
+// Reconstructs the CONFIRMED request from the confirmation strip's data-* props
+// (Q7 — SAME-channel two-phase: the Confirm re-invokes the SAME op with
+// `confirmed:true`).
+const OPERATOR_RAG_CONFIRM_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return;
+  var o = ctx && ctx.node && ctx.node.props; if (!o) return; var op = o['data-op'];
+  if (op === 'remove') s.registryManage({ op: 'remove', name: o['data-store'], confirmed: true });
+  else if (op === 'rename') s.registryManage({ op: 'rename', from: o['data-from'], to: o['data-to'], confirmed: true });
+  else if (op === 'setDefault') s.registryManage({ op: 'setDefault', name: o['data-store'], confirmed: true });
+  else if (op === 'renameDefault') s.registryManage({ op: 'renameDefault', to: o['data-to'], confirmed: true });
+}`
+const OPERATOR_RAG_DISMISS_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar; if (!s) return; s.registryManageDismiss();
 }`
 const SEARCH_SUBMIT_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
@@ -315,6 +376,18 @@ export class SidebarPanes {
    *  Fetched ONCE at boot (D8 — boot-time-only registry); the operator pane
    *  re-renders this cache on every mount/refresh/re-derive, never re-fetching. */
   private lastStoreListing: RagStoreListingPayload | null = null
+  /** U-H8 — the pending destructive op awaiting the operator's provident-authored
+   *  confirmation (the two-phase request step's result). null = nothing pending. */
+  private pendingRegMgmt: { request: RagStoreManageRequest; summary: string } | null = null
+  /** U-H8 — the operator-facing error surface (a manage `{ ok:false, error }` or
+   *  a failed confirm). null = no error. Rendered as `p#operator-rag-manage-error`. */
+  private registryManageError: string | null = null
+  /** HOST-H8-4 (LOW) — a transient in-flight guard: while a CONFIRMED apply for an
+   *  op is in flight (the bridge call is pending), a SECOND confirmed apply of the
+   *  SAME op is IGNORED — a rapid double-click on Confirm must NOT re-fire the seam
+   *  (which would leave a stale `registryManageError` after the store was actually
+   *  removed). Cleared when the confirmed apply settles (ok / error / bridge reject). */
+  private regMgmtConfirmingOp: RagStoreManageOp | null = null
 
   /** The cached security settings (fetched at boot) — the M13 handler gate reads
    *  this SYNCHRONOUSLY so a dispatchable pane handler cannot bypass the
@@ -461,6 +534,18 @@ export class SidebarPanes {
     // SyntaxErrors on the inner-statements form) — matching every other
     // `registerHandlerDef` body in this file.
     registerHandlerDef('operator-editing-mode-toggle', { name: 'operator-editing-mode-toggle', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER })
+    // Unit U-H8 — the 7 operator-registry-manage handlers are NOT registered in
+    // the global app-graph registry (HOST-H8-1, HIGH security): the operator
+    // isolate scope's nodes carry INLINE full-expression bodies (the operator
+    // scope does not need the global name-addressable table). Registering them
+    // globally let a `code.set`-crafted template whose `main` zone carries
+    // `handlers:[{name:'operator-rag-manage-confirm'}]` + `props:{'data-op':
+    // 'remove','data-store':'<non-default>'}` name-resolve the DESTRUCTIVE body
+    // in the APP Runtime after a re-derive → `provident.dispatch` could drive
+    // hotRemove/hotSetDefault/etc. with `confirmed:true` (a falsified A-P2-6/
+    // A-P2-7 + §5.8 boundary). The 7 defs are therefore NEVER registered here —
+    // the app Runtime's `resolveNameReferencedHandlerBodies` has nothing to
+    // resolve, so the operator-UI IPC surface stays operator-only.
   }
 
   /** Build the base PaneContext from the current host-owned state + backRefs +
@@ -905,8 +990,133 @@ export class SidebarPanes {
           props: { id: 'operator-rag-stores' },
           children: [{ type: 'h3', content: 'RAG stores' }, ...storeRows],
         },
+        // U-H8 — the operator registry-management section (provident-authored;
+        // operator isolated scope; the ONLY registry-mutation surface — D6/A-P2-6).
+        // Every control is envelope data + a function-string handler body reaching
+        // `window.provident.sidebar.registryManage`/`registryManageDismiss`.
+        ...this.buildOperatorManageSection(listing),
       ],
     }
+  }
+
+  /** U-H8 §5.5 — the provident-authored operator `registry-manage` section: the
+   *  name-only ADD form, the per-store action rows (the default row carries ONLY
+   *  Rename-default; non-default rows carry Remove/Rename/Set-default), the
+   *  pending-confirmation strip (rendered ONLY when `pendingRegMgmt !== null`),
+   *  and the error strip (rendered ONLY when `registryManageError !== null`).
+   *  All nodes are provident envelope data — NO hand-written HTML/DOM. */
+  private buildOperatorManageSection(listing: RagStoreListingPayload | null): LegacyNodeData[] {
+    const rows: LegacyNodeData[] = (listing?.stores ?? []).map((s) => {
+      const isDefault = s.default
+      const named = s.name
+      return {
+        type: 'div',
+        props: { id: `operator-rag-manage-row-${named}`, 'data-store': named },
+        content: `${named}${isDefault ? ' (default)' : ''}`,
+        children: [
+          isDefault
+            ? {
+                type: 'div',
+                props: { id: `operator-rag-manage-actions-${named}` },
+                children: [
+                  { type: 'input', props: { id: 'operator-rag-manage-renamedefault-input', value: '' } },
+                  {
+                    type: 'button',
+                    props: { id: 'operator-rag-manage-renamedefault' },
+                    content: 'Rename default',
+                    handlers: [{ name: 'operator-rag-manage-renamedefault', event: 'click', body: OPERATOR_RAG_RENAME_DEFAULT_BODY }],
+                  },
+                ],
+              }
+            : {
+                type: 'div',
+                props: { id: `operator-rag-manage-actions-${named}` },
+                children: [
+                  {
+                    type: 'button',
+                    props: { id: `operator-rag-manage-remove-${named}`, 'data-store': named },
+                    content: 'Remove',
+                    handlers: [{ name: 'operator-rag-manage-remove', event: 'click', body: OPERATOR_RAG_REMOVE_BODY }],
+                  },
+                  { type: 'input', props: { id: `operator-rag-manage-rename-input-${named}`, value: '' } },
+                  {
+                    type: 'button',
+                    props: { id: `operator-rag-manage-rename-${named}`, 'data-store': named },
+                    content: 'Rename',
+                    handlers: [{ name: 'operator-rag-manage-rename', event: 'click', body: OPERATOR_RAG_RENAME_BODY }],
+                  },
+                  {
+                    type: 'button',
+                    props: { id: `operator-rag-manage-setdefault-${named}`, 'data-store': named },
+                    content: 'Set default',
+                    handlers: [{ name: 'operator-rag-manage-setdefault', event: 'click', body: OPERATOR_RAG_SET_DEFAULT_BODY }],
+                  },
+                ],
+              },
+        ],
+      }
+    })
+    const addForm: LegacyNodeData = {
+      type: 'div',
+      props: { id: 'operator-rag-manage-add' },
+      children: [
+        { type: 'input', props: { id: 'operator-rag-manage-add-name', value: '' } },
+        {
+          type: 'button',
+          props: { id: 'operator-rag-manage-add-submit' },
+          content: 'Add store',
+          handlers: [{ name: 'operator-rag-manage-add', event: 'click', body: OPERATOR_RAG_ADD_BODY }],
+        },
+      ],
+    }
+    const p = this.pendingRegMgmt
+    const confirmStrip: LegacyNodeData | null =
+      p === null
+        ? null
+        : {
+            type: 'div',
+            props: {
+              id: 'operator-rag-manage-confirm',
+              'data-op': p.request.op,
+              'data-store':
+                p.request.op === 'add' || p.request.op === 'remove' || p.request.op === 'setDefault'
+                  ? (p.request as { name?: string }).name ?? ''
+                  : '',
+              'data-from': (p.request as { from?: string }).from ?? '',
+              'data-to': (p.request as { to?: string }).to ?? '',
+            },
+            children: [
+              { type: 'p', content: p.summary },
+              {
+                type: 'button',
+                props: { id: 'operator-rag-manage-confirm-yes' },
+                content: 'Confirm',
+                handlers: [{ name: 'operator-rag-manage-confirm', event: 'click', body: OPERATOR_RAG_CONFIRM_BODY }],
+              },
+              {
+                type: 'button',
+                props: { id: 'operator-rag-manage-confirm-no' },
+                content: 'Cancel',
+                handlers: [{ name: 'operator-rag-manage-dismiss', event: 'click', body: OPERATOR_RAG_DISMISS_BODY }],
+              },
+            ],
+          }
+    const errorStrip: LegacyNodeData[] =
+      this.registryManageError === null
+        ? []
+        : [{ type: 'p', props: { id: 'operator-rag-manage-error' }, content: this.registryManageError }]
+    const section: LegacyNodeData = {
+      type: 'div',
+      props: { id: 'operator-rag-manage' },
+      children: [
+        { type: 'h3', content: 'Manage RAG stores' },
+        addForm,
+        { type: 'div', props: { 'data-store-rows': '' }, children: rows },
+        ...(confirmStrip == null ? [] : [confirmStrip]),
+        ...errorStrip,
+      ],
+    }
+    return [section]
   }
 
   /** Derive the document ids from the snapshot's `doc-head` edges' targets
@@ -1094,6 +1304,10 @@ export class SidebarPanes {
       templateRemove: (zone: string) => void this.templateRemove(zone),
       templateReset: () => void this.templateReset(),
       operatorSet: (patch: OperatorSettingsPatch) => void this.operatorSet(patch),
+      // U-H8 — the operator-registry manage surface (the review §2 D6 ONE
+      // operator-UI IPC exemption). The OPERATOR_RAG_* handler bodies reach these.
+      registryManage: (request: RagStoreManageRequest) => void this.registryManage(request),
+      registryManageDismiss: () => void this.registryManageDismiss(),
       textareaInput: (ragId: string) => this.textareaInput(ragId),
       textareaBlur: (ragId: string, value: string) => void this.textareaBlur(ragId, value),
       // Unit U4 §1.4 (decisions G/H) — the 4 rich-text bridge methods. minor #6
@@ -1193,6 +1407,68 @@ export class SidebarPanes {
     // failed set simply leaves the prior mode in place.
     void this.bridge.operatorSettings.set(patch).catch((e) => {
       console.error('[sidebar-panes] operator settings set failed', e)
+    })
+  }
+
+  /** U-H8 — the operator-registry manage dispatch. Fires `bridge.rag.manage(request)`.
+   *  A `{ confirmationRequired: true, summary }` result sets pendingRegMgmt + re-renders
+   *  the operator pane (the provident-authored confirm strip appears); a `{ ok: true,
+   *  done }` result clears the pending + re-fetches the listing + re-renders, AND for a
+   *  default-changing op calls `requestRebuild()` (fresh app re-derive against the new
+   *  default); a `{ ok: false, error }` result clears the pending + shows the error.
+   *  SYNCHRONOUS (the IPC is fired; the result routes on resolution). */
+  private registryManage(request: RagStoreManageRequest): void {
+    // HOST-H8-4 — a rapid double-click on Confirm fires the SAME confirmed apply
+    // twice; while one is in flight a second confirmed apply of the SAME op is
+    // ignored (it would just re-drive the seam + could clobber the feedback strip).
+    // NB: `confirmed` lives only on the destructive (non-add) variants of the
+    // RagStoreManageRequest union — narrow via `op !== 'add'` before touching it.
+    const confirmedApply = request.op !== 'add' && request.confirmed === true
+    if (confirmedApply) {
+      if (this.regMgmtConfirmingOp === request.op) return
+      this.regMgmtConfirmingOp = request.op
+    }
+    void this.bridge.rag.manage(request).then((res) => {
+      if (confirmedApply) this.regMgmtConfirmingOp = null
+      if ('confirmationRequired' in res && res.confirmationRequired) {
+        this.pendingRegMgmt = { request, summary: res.summary }
+        this.registryManageError = null
+        this.mountOperator()
+      } else if ('ok' in res && res.ok) {
+        this.pendingRegMgmt = null
+        this.registryManageError = null
+        this.refreshRegistryManage()
+        const op = request.op
+        if (op === 'setDefault' || op === 'renameDefault') this.editController.requestRebuild()
+      } else if ('ok' in res && !res.ok) {
+        this.pendingRegMgmt = null
+        this.registryManageError = res.error
+        this.mountOperator()
+      }
+    }).catch((e) => {
+      // HOST-H8-4 — clear the in-flight guard on a bridge reject too.
+      if (confirmedApply) this.regMgmtConfirmingOp = null
+      // a bridge/rejection — leave the pending state + log (never a crash)
+      console.error('[sidebar-panes] registry manage failed', e)
+      this.pendingRegMgmt = null
+      this.mountOperator()
+    })
+  }
+
+  /** U-H8 — cancel/clear a pending confirmation without invoking any seam. */
+  private registryManageDismiss(): void {
+    this.pendingRegMgmt = null
+    this.registryManageError = null
+    this.mountOperator()
+  }
+
+  /** U-H8 — re-fetch the read-only listing (refresh-on-apply) + re-render the pane. */
+  private refreshRegistryManage(): void {
+    void this.bridge.rag.stores().then((p) => {
+      this.lastStoreListing = p
+      this.mountOperator()
+    }).catch(() => {
+      // keep the last-known listing (never a crash) — the F-MS5-3 non-abort discipline
     })
   }
 

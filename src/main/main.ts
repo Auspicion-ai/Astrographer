@@ -4,8 +4,8 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join, basename } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
 import { createModuleStore } from './module-store.js'
@@ -417,6 +417,19 @@ async function main(): Promise<void> {
       // `rag-store-runtime: unknown store '<name>'` (byte-pinned R-status-unknown).
       (name) => runtime.statusOf(name),
     )
+  })
+
+  // Unit U-H8 §5.4 — the operator-registry MANAGE wiring (the review §2 D6's ONE
+  // operator-UI IPC exemption: the operator editor). The shared
+  // `handleRagStoreManageIpc` validates the request, reads the live projection per
+  // call (A-P2-1), runs the two-phase confirmation (a destructive op without
+  // `confirmed:true` returns `{ confirmationRequired: true, summary }` and invokes
+  // NO seam), and invokes the LANDED hot-* seams with `confirmed:true` — routing
+  // add/remove/rename to a listing-refresh and setDefault/renameDefault to the
+  // app re-derive. Manual-UI only: never an MCP tool — an agent cannot manage the
+  // registry over MCP (A-P2-6/A-P2-7). NOT group-gated (IPC-SURFACE-NOT-GROUP-GATED).
+  ipcMain.handle(IPC_RAG_STORE_MANAGE, (_event, request: unknown) => {
+    return handleRagStoreManageIpc(runtime, request)
   })
 
   // Unit I §5.4/§8.2 — the UI template IPC surface. Each renderer→main
