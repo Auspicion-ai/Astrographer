@@ -75,6 +75,14 @@ The `rag.*` / `edit.*` tools (the multi-store + hot-apply surfaces) are driven
 over the MCP server. **The operator-UI manage surface (U-H8) is NOT MCP-visible**
 (see §4) — it must be exercised in the Electron window itself.
 
+> **Prerequisite note (2026-09-08, live-testing finding F1):** the FULL
+> ~39–41-tool MCP surface is CONDITIONAL on the security gate. A fresh isolated
+> boot enables only the `read` + `dispatch` groups (`defaultSecurityConfig()`,
+> `security.ts:112-113`) → just **7 tools**. The `graph`/`code`/`module`/`rag`/
+> `edit` groups must be enabled in the operator settings pane (persisted to
+> `provident-security.json`) for the full surface. Any battery/test that assumes
+> the full tool list must ensure the groups are on first.
+
 ---
 
 ## 3. The live-pending batteries (authored)

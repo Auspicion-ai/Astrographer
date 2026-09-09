@@ -7,6 +7,22 @@ was present, so the Unit X MCP tools (`rag.query` extended, `rag-stream`,
 failure. A later iteration of the Live-Scenario Runner executes this battery once
 the app is running.
 
+**CORRECTED 2026-09-08 (live-testing finding F5 — HOST-LIVE-UX-SETUP):** the
+graph-mode provenance scenarios (S9–S13) and the nodeKind-classified setup
+(S1–S4) are **NOT live-exercisable** — there is **NO live MCP path that mints
+`nodeKind:'fact'`/`'reference'` nodes**. `edit.create_node` is a STRUCTURAL op
+(validates `type` against `RAG_NODE_TYPES` = h1-h6/p/ul/ol/li/blockquote/pre/code/
+strong/em/a/img/div/table…, `edit-ops.ts:173-174`) and rejects RAG kinds with
+`edit.create_node: invalid type`; markdown import does NOT set `nodeKind`
+(no `nodeKind` in `markdown-parse.ts`/`markdown-import.ts` — imported nodes are
+`nodeKind`-undefined ⇒ 'content'); the ONLY place RAG kinds are created is the
+module test suite via direct `store.putNode(makeNode(…, { nodeKind: 'fact' }))`
+(`tests/unit-x-rag-provenance-traversal.test.ts`). The **runnable MCP subset**
+(flat-mode `rag.query`, `rag-stream`, `get_query_audit_log`, the `store` stamp,
+the validation fails) IS live. The graph-mode provenance is covered by the
+module-level greens and is parked here as not-live-exercisable (the V2-battery
+A10/A11/B5/B6/C5 pattern).
+
 **Source scenarios:** `docs/specs/unit-x-rag-provenance-traversal-greens.md`
 (27 scenarios) authored from `docs/specs/unit-x-rag-provenance-traversal.md`
 §5.1–§5.8. The Unit X MCP tools are implemented in `src/main/mcp-server.ts`
@@ -46,151 +62,77 @@ app was down.
 
 ---
 
-## 2. Setup — build the reference→fact graph (one-time, before the scenarios)
+## 2. Setup — the runnable MCP subset (one-time, before the scenarios)
 
-The greens scenarios need a store containing `content` nodes (in documents),
-`reference` nodes, `fact` nodes, `reference→fact` edges, `embed` edges, and
-`doc-head` edges. Build it with the `edit.*` tools. The exact node/edge ids are
-returned by each `edit.create_node`/`edit.set_edge` call; capture them and
-substitute into the scenario steps below.
+The graph-mode provenance scenarios (S9–S13) and the nodeKind-classified setup
+(S1–S4) are **NOT live-exercisable** (no live MCP path mints
+`nodeKind:'fact'`/`'reference'` nodes — see the header correction). The runnable
+MCP subset needs only a store with `content` nodes (in documents). Seed via
+`edit.import_markdown` (which produces `content` nodes) or `edit.create_node`
+with a STRUCTURAL `type`:
 
 ```json
 [
-  { "cmd": "edit.create_node", "args": { "type": "content", "content": "The capital of France is Paris." } },
-  { "cmd": "edit.create_node", "args": { "type": "content", "content": "Paris is the capital of France." } },
-  { "cmd": "edit.create_node", "args": { "type": "fact", "content": "France's capital is Paris." } },
-  { "cmd": "edit.create_node", "args": { "type": "reference", "content": "See the France capital fact." } },
-  { "cmd": "edit.create_node", "args": { "type": "fact", "content": "Paris lies on the Seine." } },
-  { "cmd": "edit.create_node", "args": { "type": "reference", "content": "See the Seine fact." } },
-  { "cmd": "edit.set_edge", "args": { "kind": "doc-head", "source": "<contentNode1>", "target": "<contentNode2>", "documentIds": ["doc-1"] } },
-  { "cmd": "edit.set_edge", "args": { "kind": "crosslink", "source": "<referenceNode1>", "target": "<factNode1>" } },
-  { "cmd": "edit.set_edge", "args": { "kind": "crosslink", "source": "<factNode1>", "target": "<factNode2>" } },
-  { "cmd": "edit.set_edge", "args": { "kind": "crosslink", "source": "<referenceNode2>", "target": "<factNode2>" } },
-  { "cmd": "edit.set_edge", "args": { "kind": "embed", "source": "<contentNode1>", "target": "<factNode1>" } }
+  { "cmd": "edit.create_node", "args": { "type": "p", "content": "The capital of France is Paris." } },
+  { "cmd": "edit.create_node", "args": { "type": "p", "content": "Paris is the capital of France." } }
 ]
 ```
 
-> **Note for the later iteration:** the `edit.create_node` tool takes `type`
-> (`content`/`fact`/`reference`) and `edit.set_edge` takes `kind`
-> (`doc-head`/`crosslink`/`embed`/`link`). The store derives `nodeKind` from the
-> node and `edgeType`/`state` from the edge. If a step's exact id/kind mapping
-> differs from the above, reconcile against the live `rag.list_nodes` /
-> `rag.get_edges` output and adjust the scenario steps accordingly — the
-> *behavioral* expectations below are the contract.
+> **Note for the later iteration:** `edit.create_node` takes a STRUCTURAL `type`
+> (`p`/`div`/`h1`…), NOT a RAG kind (`fact`/`reference`/`content`). RAG
+> `nodeKind` is a separate provenance field with NO live minting path. The
+> graph-mode provenance scenarios are parked as not-live-exercisable (covered
+> by the module-level greens).
 
 ---
 
-## 3. The 27 scenarios — live MCP tool calls + expected results
+## 3. The scenarios — live MCP tool calls + expected results
 
-### §5.1 Additive store fields (scenarios 1–4)
+### §5.1 Additive store fields (scenarios 1–4) — NOT live-exercisable
 
-These are store-substrate behaviors (`putNode`/`putEdge`). On the live MCP
-surface they are exercised **indirectly** through the `edit.*` tools + the
-`rag.*` readers.
+These are store-substrate behaviors (`putNode`/`putEdge`) requiring
+`nodeKind:'fact'`/`'reference'` nodes, which have NO live MCP minting path.
+**Parked as not-live-exercisable** (covered by the module-level greens
+`tests/unit-x-rag-provenance-traversal.test.ts`). The live `edit.create_node`
+rejects RAG kinds with `edit.create_node: invalid type` (NOT the recorded
+`rag putNode: nodeKind required/invalid`).
 
-- **S1 — putNode nodeKind stored.** `edit.create_node` with `type:"fact"`; then
-  `rag.list_nodes` (or `rag.get_document`) must return the node with
-  `nodeKind:"fact"`. **Expected:** the created node is present with
-  `nodeKind:"fact"`.
-- **S2 — putNode invalid nodeKind.** `edit.create_node` with `type:"bogus"` must
-  be rejected (the tool returns an error / the store throws
-  `'rag putNode: nodeKind required/invalid'`). **Expected:** the call fails; no
-  node is created.
-- **S3 — putEdge edgeType/state stored.** `edit.set_edge` with `kind:"embed"`
-  (an embed edge defaults to `edgeType:"embed"`, `state:"FRESH"`); then
-  `rag.get_edges` must return the edge with `edgeType:"embed"` and its `state`.
-  **Expected:** the edge is present with `edgeType:"embed"` and a valid `state`.
-- **S4 — putEdge invalid edgeType.** `edit.set_edge` with an invalid `kind`
-  must be rejected (the store throws
-  `'rag putEdge: edgeType/state required/invalid'`). **Expected:** the call
-  fails; no edge is created.
+### §5.3 Provenance builders (scenarios 5–8) — NOT live-exercisable
 
-### §5.3 Provenance builders (scenarios 5–8)
+Exercised through the `rag.query` result fields (`citations`, `trace`), which
+require fact/reference nodes. **Parked as not-live-exercisable** (no live
+minting path; covered by the module-level greens).
 
-Exercised through the `rag.query` result fields (`citations`, `trace`).
+### §5.4 walkReferenceGraph (scenarios 9–13) — NOT live-exercisable
 
-- **S5 — documentIdsForNode happy.** `rag.query` on a query matching the
-  document's content node → the result's `citations` include the document id
-  whose `docNodeIds` contain the node, sorted ascending. **Expected:** the
-  citation set is non-empty and includes the owning document id.
-- **S6 — documentIdsForNode no document.** `rag.query` on a node in no document
-  → that node contributes no citation. **Expected:** the result's `citations`
-  do not include a phantom document id for the orphan node.
-- **S7 — buildCitations dedup.** `rag.query` returning duplicate
-  `(documentId, nodeId)` items → `citations` is the deduplicated set in
-  first-appearance order. **Expected:** no duplicate `(documentId, nodeId)`
-  pairs in `citations`.
-- **S8 — buildFlatTrace.** `rag.query` in default (flat) mode → `trace` is
-  `{ mode:"flat", engine:"local", topK:<n>, source:"local" }`. **Expected:** the
-  flat trace object with `mode:"flat"`, `engine:"local"`, `source:"local"`.
+Graph-mode provenance requires fact/reference nodes + crosslink edges. **Parked
+as not-live-exercisable** (no live minting path; covered by the module-level
+greens).
 
-### §5.4 walkReferenceGraph (scenarios 9–13)
+### §5.5 expandParentContext (scenarios 14–15) — NOT live-exercisable
 
-Exercised through `rag.query` with `mode:"graph"`.
-
-- **S9 — walk happy + resolve-through.** `rag.query` with `mode:"graph"` on a
-  query matching the reference node → `results` contain the resolved target
-  `fact` nodes (incl. the fact-to-fact dependency), `trace` is the ordered
-  `reference→fact` path, `citations` = the deduped resolved targets.
-  **Expected:** non-empty `results` of `fact` nodes; graph-mode `trace`; no
-  `blockedBy`.
-- **S10 — walk surface-BROKEN/STALE.** Build a `crosslink` edge with a
-  `BROKEN`/`STALE` state (via `edit.set_edge` + the store's state field); run
-  `rag.query` `mode:"graph"` through it. **Expected:** the `BROKEN`/`STALE` edge
-  is NOT traversed; it appears in `trace`; if no target resolves, `blockedBy`
-  is populated with `{documentId, nodeId, state}`.
-- **S11 — walk HopLimitExceeded.** Build a `reference` chain longer than
-  `maxHops` with no resolved target; `rag.query` `mode:"graph"` with
-  `maxHops:1` → the tool rejects with
-  `'walkReferenceGraph: HopLimitExceeded'`. **Expected:** the call fails with
-  the HopLimitExceeded message.
-- **S12 — walk CycleDetected.** Build a `reference→fact→reference` cycle;
-  `rag.query` `mode:"graph"` → the tool rejects with
-  `'walkReferenceGraph: CycleDetected'`. **Expected:** the call fails with the
-  CycleDetected message.
-- **S13 — walk determinism.** Run the SAME `rag.query` `mode:"graph"` twice on
-  the same store/seeds/options. **Expected:** byte-identical results (same
-  `results`, `trace`, `citations`).
-
-### §5.5 expandParentContext (scenarios 14–15)
-
-Exercised through `rag.query` with `expand:"parent"`.
-
-- **S14 — expandParentContext happy.** `rag.query` with `expand:"parent"` and a
-  small `maxParentContext` → the top `maxParentContext` items carry a `parent`
-  (owning document title + snippet); items beyond the cap are returned without
-  one. **Expected:** the first `maxParentContext` results have a `parent`
-  object; the rest do not.
-- **S15 — expandParentContext stale.** A child reached via a `STALE` embed edge
-  → its `parent.stale === true`. **Expected:** the `parent` object carries
-  `stale:true` for the stale-reached child.
+Requires embed edges to fact nodes. **Parked as not-live-exercisable** (covered
+by the module-level greens).
 
 ### §5.6 ragQuery (scenarios 16–21)
 
-Exercised through the `rag.query` MCP tool.
-
-- **S16 — ragQuery flat happy.** `rag.query` (default flat) → `results` (each
-  `{documentId, nodeId, score, snippet, source:"local"}`), `citations`, flat
-  `trace`, and the preserved `ranked`/`context`/`markdown`/`lineMap`/`k`.
-  **Expected:** all fields present; each result has `source:"local"`.
-- **S17 — ragQuery graph happy.** `rag.query` `mode:"graph"` → resolved target
-  `fact` nodes, graph-mode `trace`, `citations` = the deduped resolved targets.
-  **Expected:** as in S9.
-- **S18 — ragQuery graph blocked.** `rag.query` `mode:"graph"` resolving no
-  target → `{ results:[], citations:[], trace, blockedBy:[...] }` (a valid
-  state, not an error). **Expected:** the tool returns successfully with empty
-  `results`/`citations` and a populated `blockedBy`.
-- **S19 — ragQuery filters.** `rag.query` with `filters:{nodeKind:"fact"}` in
-  flat mode → only `fact`-kind nodes in `results`. **Expected:** every result
-  node is a `fact` node.
-- **S20 — ragQuery parent-context.** `rag.query` with `expand:"parent"` → the
-  top `maxParentContext` items carry a `parent`. **Expected:** as in S14.
+- **S16 — ragQuery flat happy.** `rag.query` (default flat) on a content-only
+  store → `results` (each `{documentId, nodeId, score, snippet, source:"local"}`),
+  `citations`, flat `trace`, and the preserved `ranked`/`context`/`markdown`/
+  `lineMap`/`k`. **Expected:** all fields present; each result has
+  `source:"local"`. **LIVE.**
+- **S17 — ragQuery graph happy.** **NOT live-exercisable** (needs fact nodes).
+- **S18 — ragQuery graph blocked.** **NOT live-exercisable** (needs fact nodes).
+- **S19 — ragQuery filters.** `rag.query` with `filters:{nodeKind:"fact"}` —
+  **NOT live-exercisable** (no fact nodes live; the `filters` schema accepts
+  `nodeKind` but a content-only store returns no fact-kind results).
+- **S20 — ragQuery parent-context.** **NOT live-exercisable** (needs embed edges
+  to fact nodes).
 - **S21 — ragQuery validation fail.** `rag.query` with `query:""` (or
   whitespace) → the tool rejects with
-  `'rag.query: query must be a non-empty string'`. **Expected:** the call fails
-  with that message.
+  `'rag.query: query must be a non-empty string'`. **LIVE.**
 
-### §5.7 Query audit log (scenarios 22–23)
+### §5.7 Query audit log (scenarios 22–23) — LIVE
 
 Exercised through `get_query_audit_log` (the MCP reader) + the `rag.query`/
 `rag-stream` recorders.
@@ -215,17 +157,19 @@ Directly exercised through the MCP surface.
   filters}` → the extended result with the `store` stamp (the U-MS2 F3 field)
   AND records the call in the shared audit log (visible via
   `get_query_audit_log`). **Expected:** the result carries `store`; a matching
-  audit entry appears.
+  audit entry appears. **LIVE** (the graph-mode fields are present but return
+  empty on a content-only store).
 - **S25 — rag-stream.** `rag-stream` with a valid query → the degenerate stream
   `[{ type:"result", result }, { type:"done" }]`. **Expected:** exactly two
   chunks, `result` then `done`. On a fail-state (e.g. empty query) → the stream
   is `[{ type:"error", error:"rag.query: query must be a non-empty string" }]`.
+  **LIVE.**
 - **S26 — get_query_audit_log.** `get_query_audit_log` → `{ entries:
   auditLog.list() }`. **Expected:** the entries array (newest-first) matching
-  the recorded calls.
+  the recorded calls. **LIVE.**
 - **S27 — rag.query empty query.** `rag.query` with `query:""` → the tool
   rejects with `'rag.query: query must be a non-empty string'`. **Expected:** the
-  call fails with that message.
+  call fails with that message. **LIVE.**
 
 ---
 
@@ -236,8 +180,11 @@ or **FAIL** (a live contradiction of the greens — a real regression or a
 doc/spec drift, never a pass). A scenario whose MCP tool is not yet live stays
 parked here and is NOT a failure.
 
-**Expected outcome when the app is live:** 27 scenarios — 27 PASS / 0 FAIL,
-matching the greens set. Any live FAIL is a finding to report to the supervisor.
+**Expected outcome when the app is live:** the runnable MCP subset (S16, S21,
+S22, S23, S24, S25, S26, S27) — **8 PASS / 0 FAIL**; the graph-mode provenance
+(S1–S15, S17–S20) is parked as not-live-exercisable (covered by the module-level
+greens) and is NOT a failure. Any live FAIL is a finding to report to the
+supervisor.
 
 ---
 
@@ -250,9 +197,16 @@ matching the greens set. Any live FAIL is a finding to report to the supervisor.
 - The `rag` group is **default-off** (Unit B §5.3). If the app boots with the
   group disabled, the Unit X tools are not registered — enable the group before
   running the battery.
-- Scenarios S1–S4, S22–S23 (and the `clear()`/boundedness internals) are
-  store/audit-log module behaviors exercised indirectly through the MCP surface;
-  their exact module-level fail-states are covered by the module test suite.
-  The live battery confirms the MCP-reachable behavior.
+- **Graph-mode provenance (S9–S13) + the nodeKind-classified setup (S1–S4) are
+  NOT live-exercisable** — there is NO live MCP path that mints
+  `nodeKind:'fact'`/`'reference'` nodes (`edit.create_node` is structural;
+  markdown import does NOT set `nodeKind`; RAG kinds are created only via direct
+  `store.putNode` in the module test suite). They are covered by the module-level
+  greens and are NOT re-attempted live. Extending `edit.create_node` to mint RAG
+  kinds is a SEPARATE feature addition (see `docs/defects.md` HOST-LIVE-UX-SETUP).
+- Scenarios S22–S23 (and the `clear()`/boundedness internals) are store/audit-log
+  module behaviors exercised indirectly through the MCP surface; their exact
+  module-level fail-states are covered by the module test suite. The live battery
+  confirms the MCP-reachable behavior.
 - Use an isolated store (`HOME=$(mktemp -d)`) so the battery never touches the
   operator's real persisted RAG store.

@@ -376,6 +376,8 @@ export function storeLoadStatus(
 | # | Condition | Throw (byte-exact) |
 | --- | --- | --- |
 | M1 | `raw` present and not a non-empty string (`typeof raw !== 'string' \|\| raw === ''` — covers `null`, numbers, booleans, objects, arrays, `''`) | `` `${tool}: store must be a non-empty string` `` — e.g. `rag.query: store must be a non-empty string` |
+
+> **MCP-observability erratum (2026-09-08, live-testing finding F2 — HOST-LIVE-ZOD-SEAM):** the M1 row above is the PURE resolver's contract (total on non-string inputs — reachable via direct `resolveStoreArg`/handler calls in tests). On the LIVE MCP surface, a non-string `store` (`null`/`5`/`true`/`{}`/`[]`) is rejected BEFORE the handler by the SDK zod input-schema seam (`store: z.string().optional()`) with `-32602 … expected string, received … at store` — only the empty string `''` (a valid zod string) reaches the handler and yields M1. This matches the house "schema validates type, handler validates value" topK pattern; the M1 non-string branch is NOT MCP-observable. The U-MS2 battery §3.3 S19 row is amended accordingly.
 | M2 | `raw` a non-empty string and (`dir == null` or `!dir.entries.has(raw)`) | `` `${tool}: unknown store '${raw}'` `` — e.g. `rag.query: unknown store 'nope'` — echoes ONLY the caller's input, never the registry census (B9/A9); the raw string is interpolated WITHOUT escaping. **F-MS2-5 (the echo cap):** the `<raw>` ECHO is capped at 200 chars — a raw longer than 200 chars renders as its first 197 chars + `…` (exactly 198 chars; the F-MS1-6 idiom); the ≤200-char case stays byte-exact (all existing tests use short names), and the cap applies to the RENDERING only — a long raw is still M2 (membership), never M1 |
 | M3 | `raw` omitted (`undefined`) and `dir != null` and `!dir.entries.has(dir.defaultName)` (a malformed directory — a wiring bug) | `rag-store-directory: default store not found` |
 
@@ -542,6 +544,8 @@ tool's own name, so the per-tool messages differ only by prefix):**
 | R5 | an unknown non-empty string | any | fail-loud M2 — `` `<tool>: unknown store '<raw>'` ``; NO store method ran, NO mutation, NO broadcast |
 | R6 | non-string (`null`, number, boolean, object, array) | any | fail-loud M1 — `` `<tool>: store must be a non-empty string` ``; no side effect |
 | R7 | empty string `''` | any | fail-loud M1 — same message; no side effect |
+
+> **MCP-observability erratum (2026-09-08, live-testing findings F2/F3 — HOST-LIVE-ZOD-SEAM):** the R6 row (non-string `store` ⇒ M1) is the PURE resolver's contract, but on the LIVE MCP surface a non-string `store` is rejected BEFORE the handler by the SDK zod seam (`store: z.string().optional()`) with `-32602` — only `''` (R7) reaches the handler and yields M1. Likewise, the resolution-first ordering (R5 — an unknown `store` fails M2 before any tool-specific validation) holds ONLY for calls that PASS the zod schema: when a tool's REQUIRED arg is MISSING (e.g. `create_node {store:'nope'}` without `type`/`content`, `split_node {store:'nope'}` without `nodeId`), the SDK zod seam returns `-32602` before the handler's store-resolution runs. The 12-tool ordering matrix below uses present-but-invalid remaining args (which pass zod), so its M2-first assertions remain valid; the battery §3.3 S21 "every time" wording is amended to "every time the call passes the zod schema".
 
 **Per-tool resolution-first ordering tests (12 — one per tool):** for each
 tool, a call carrying BOTH an unknown `store` AND that tool's otherwise-invalid

@@ -127,7 +127,7 @@ Exercised **directly** through the `rag.get_document` MCP tool.
 | C1 Happy — `{ documentId, nodes, edges }` | `rag.get_document` | Seed `root,H,A,LI` + valid flow + `doc-child A→LI`; call `rag.get_document { documentId:'root' }`. | Returns `{ documentId:'root', nodes:[root,H,A,LI], edges:[scoped doc-flow + doc-child] }`. |
 | C2 Empty document | `rag.get_document` | Seed only `root`; call `rag.get_document { documentId:'root' }`. | `{ documentId:'root', nodes:[root], edges:[] }`. |
 | C3 Unknown document id | `rag.get_document` | Seed `root`; call `rag.get_document { documentId:'ghost' }`. | `{ documentId:'ghost', nodes:[], edges:[] }` — NOT `[<doc root>]`. |
-| C4 Missing/empty documentId throws | `rag.get_document` | Call `rag.get_document {}` and `rag.get_document { documentId:'' }`. | Each throws `Error('rag.get_document: documentId required')`. |
+| C4 Missing/empty documentId throws | `rag.get_document` | Call `rag.get_document {}` and `rag.get_document { documentId:'' }`. | **ERRATUM (2026-09-08, live-testing F4 — HOST-LIVE-ZOD-SEAM):** only `documentId:''` reaches the handler and throws `Error('rag.get_document: documentId required')`. `rag.get_document {}` (missing `documentId`) is rejected BEFORE the handler by the SDK zod seam (`documentId: z.string()` required) with `-32602 … expected string, received undefined at documentId`. Assert `''` ⇒ `documentId required`; assert `{}` ⇒ the SDK `-32602` error. |
 | C5 Null store throws | **NOT reachable live** | — | Internal validation; the live app always has a store configured. Parked as not-live-exercisable. |
 
 ### 3.4 Cross-cutting amendments (greens D1–D7)
