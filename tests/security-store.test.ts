@@ -96,6 +96,48 @@ describe('SecurityStore — manual-UI settings persistence (mcp-endpoint.md §6.
     }
   })
 
+  it('the Gnosis groups enable through the store and persist (the security-UI live toggle fix)', () => {
+    const dir = freshDir()
+    try {
+      const file = join(dir, 'sec.json')
+      const store: SecurityStore = createSecurityStore({ path: file })
+      // The SecurePanels security-UI toggle calls set({ groups: ['gnosis'] }).
+      // The store's VALID_GROUPS MUST include the Gnosis groups (it must stay
+      // in lockstep with security.ts's ToolGroup union — the L3 concern) or the
+      // group is silently dropped and the checkbox never sticks.
+      const after = store.set({ groups: ['gnosis', 'gnosis-edit'] })
+      expect(after.enabled).toContain('gnosis')
+      expect(after.enabled).toContain('gnosis-edit')
+      // write-through + reload: the persisted file round-trips the groups
+      const onDisk = JSON.parse(readFileSync(file, 'utf8')) as SecuritySettings
+      expect(onDisk.enabled).toContain('gnosis')
+      expect(onDisk.enabled).toContain('gnosis-edit')
+      const reloaded = createSecurityStore({ path: file })
+      expect(reloaded.get().enabled).toContain('gnosis')
+      expect(reloaded.get().enabled).toContain('gnosis-edit')
+      // a disable patch removes them (symmetric)
+      const off = store.set({ disable: ['gnosis'] })
+      expect(off.enabled).not.toContain('gnosis')
+      expect(off.enabled).toContain('gnosis-edit')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('sanitize of a pre-existing file accepts the Gnosis groups (reload restores them)', () => {
+    const dir = freshDir()
+    try {
+      const file = join(dir, 'sec.json')
+      // An operator who enabled gnosis/gnosis-edit must get them back on reload;
+      // sanitize() filters against the SAME VALID_GROUPS as set().
+      writeFileSync(file, JSON.stringify({ token: null, enabled: ['read', 'dispatch', 'gnosis', 'gnosis-edit'] }))
+      const store: SecurityStore = createSecurityStore({ path: file })
+      expect(store.get().enabled).toEqual(['read', 'dispatch', 'gnosis', 'gnosis-edit'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('a fresh store has maxJournalLength undefined (never condense)', () => {
     const dir = freshDir()
     try {

@@ -39,10 +39,11 @@ export function gatePatchFromStoreResult(
 }
 
 // L3 (adversarial) — the store's valid-group set MUST match security.ts's
-// ToolGroup union (read/dispatch/graph/code/module/rag/edit). Omitting `rag`/
-// `edit` here would make the manual-UI settings pane the only path to enable
-// groups, permanently disabling the rag.*/edit.* MCP tools in the running app.
-const VALID_GROUPS = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit'])
+// ToolGroup union (read/dispatch/graph/code/module/rag/edit + gnosis/gnosis-edit).
+// Omitting a group here would make the manual-UI settings pane the only path to
+// enable groups silently DROP that group's toggle (set() filters against this
+// list), permanently disabling its MCP tools in the running app.
+const VALID_GROUPS = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit', 'gnosis', 'gnosis-edit'])
 
 function sanitize(input: unknown): SecuritySettings {
   const src = (input ?? {}) as Partial<SecuritySettings>

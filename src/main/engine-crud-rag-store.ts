@@ -34,6 +34,7 @@ import {
   fetchWithTimeout,
   headers,
   createEngineFetch,
+  createCrudFetch,
 } from './engine-transport.js'
 
 // ---------------------------------------------------------------------------
@@ -129,8 +130,19 @@ export interface Document {
   tags: string[]
   author: string | null
 }
+/** The §4.1.3 list-item shape — a lightweight `DocumentSummary` (six fields; the
+ *  snake→camel projection of the wire `DocumentSummary`). `graph`/`tags`/
+ *  `createdAt`/`author` are ABSENT by contract (HOST-CRUD-LIST-SUMMARY-DECODE). */
+export interface DocumentSummary {
+  documentId: string
+  wikiId: string
+  title: string
+  state: 'Draft' | 'Published' | 'Archived'
+  revision: number
+  updatedAt: string
+}
 export interface DocumentList {
-  items: Document[]
+  items: DocumentSummary[]
   total: number
   page: number
   pageSize: number
@@ -436,6 +448,47 @@ function decodeWiki(body: unknown): Wiki {
   return { wikiId, name }
 }
 
+/** Decode a single `DocumentSummary` list item (the §4.1.3 lenient decoder —
+ *  HOST-CRUD-LIST-SUMMARY-DECODE). Accepts the six well-formed wire fields
+ *  (snake_case AND camelCase); a full `Document` item is tolerated and projected
+ *  to the six-field summary. NEVER requires `graph`/`tags`/`created_at`/`author`.
+ *  A genuinely malformed summary (missing/typed-wrong `document_id`,`wiki_id`,
+ *  `title`, `state`, `revision`, `updated_at`) → EngineError('malformed
+ *  document'), matching the strict `decodeDocument` throw message (§5.9-14 /
+ *  register P-IM-4). */
+function decodeDocumentSummary(body: unknown): DocumentSummary {
+  if (!body || typeof body !== 'object') {
+    throw new EngineError('malformed document')
+  }
+  const b = body as Record<string, any>
+  // Accept both the snake_case wire keys and the camelCase typed keys.
+  const documentId = b.document_id ?? b.documentId
+  const wikiId = b.wiki_id ?? b.wikiId
+  const title = b.title
+  const state = b.state
+  const revision = b.revision
+  const updatedAt = b.updated_at ?? b.updatedAt
+  if (
+    typeof documentId !== 'string' ||
+    typeof wikiId !== 'string' ||
+    typeof title !== 'string' ||
+    typeof state !== 'string' ||
+    !['Draft', 'Published', 'Archived'].includes(state) ||
+    typeof revision !== 'number' ||
+    typeof updatedAt !== 'string'
+  ) {
+    throw new EngineError('malformed document')
+  }
+  return {
+    documentId,
+    wikiId,
+    title,
+    state: state as DocumentSummary['state'],
+    revision,
+    updatedAt,
+  }
+}
+
 function decodeDocumentList(body: unknown): DocumentList {
   if (!body || typeof body !== 'object') {
     throw new EngineError('malformed document list')
@@ -451,7 +504,7 @@ function decodeDocumentList(body: unknown): DocumentList {
     throw new EngineError('malformed document list')
   }
   return {
-    items: b.items.map(decodeDocument),
+    items: b.items.map(decodeDocumentSummary),
     total: b.total,
     page: b.page,
     pageSize,
@@ -615,7 +668,7 @@ export function createEngineCrudRagStore(opts: EngineCrudRagStoreOptions): Engin
   }
   assertLoopback(opts.baseUrl, 'engine crud rag store')
   const baseUrl = opts.baseUrl.replace(/\/+$/, '')
-  const fetchImpl = opts.fetch ?? createEngineFetch(opts.auth)
+  const fetchImpl = opts.fetch ?? createCrudFetch(opts.auth)
   const requestTimeoutMs = opts.requestTimeoutMs ?? 10_000
   const auth = opts.auth
   const retry = opts.retry

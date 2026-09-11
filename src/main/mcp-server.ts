@@ -739,7 +739,13 @@ export async function handleGnosisTool(
       const documentId = typeof args.documentId === 'string' ? args.documentId : ''
       if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
       const caller = resolveCallerCredential(callerId)
-      return engineCrud.deleteDocument({ caller, documentId })
+      await engineCrud.deleteDocument({ caller, documentId })
+      // The wire pins deleteDocument → () void → result:null. Return the typed
+      // null result (NOT undefined): the MCP tool-result serializer (text())
+      // must receive a JSON-serializable value — `text(undefined)` yields a
+      // `text` field that is NOT a string, which the SDK rejects with
+      // `-32602: Invalid tools/call result` (HOST-CRUD-DELETE-RESULT-SERIALIZATION).
+      return null
     }
     case 'gnosis.document.publish': {
       if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)

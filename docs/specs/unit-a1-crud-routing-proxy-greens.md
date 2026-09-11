@@ -8,8 +8,11 @@
   verification derived from the spec alone); the run file is a **future artifact**
   to be created when the live-transport scenarios can be executed (after A2 lands
   + a live `gnosis-server` runs). The module-level pure scenarios are verified by
-  the unit tests `tests/unit-a1-crud-routing-proxy.test.ts` (52) +
-  `tests/props-a1-crud-routing-proxy.test.ts` (8 PBT rows).
+  the unit tests `tests/unit-a1-crud-routing-proxy.test.ts` (60 — the original
+  52 + the 8 re-derivation `HOST-CRUD-LIST-SUMMARY-DECODE` additions) +
+  `tests/props-a1-crud-routing-proxy.test.ts` (8 PBT rows; the re-derivation's
+  P-IM-4 generator-coverage tightening is recorded in
+  `docs/specs/unit-a1-crud-list-summary-decode-greens.md`).
 - **Source under test (LIVE module):** `src/main/engine-crud-rag-store.js` (the
   `createEngineCrudRagStore` proxy + the `encodeCrudRequest`/`decodeCrudRequest`/
   `decodeCrudResponse`/`validateCrudResult` helpers + `ENGINE_CRUD_ENDPOINTS`).

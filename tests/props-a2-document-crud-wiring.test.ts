@@ -14,13 +14,19 @@
 // `handleGnosisTool`, the `AuthorityStore`, the `IdempotencyRegistry`, the GUI
 // panes), so the rows that exercise those surfaces are the red set. The rows
 // that only check spec-pinned constants (the tool-name → group mapping totality
-// half of P-IM-1, the default-off half of P-SM-1, the tool → method bijection
-// constant of P-TP-1) are GREEN.
+// half of P-IM-1, the default-off half of P-SM-1) are GREEN.
+// RE-BALANCED at the H-6 re-derivation (HOST-GUI-DOCS-PANE-DEADLOCK, 2026-09-11):
+// the former P-TP-1 tool → CRUD-method bijection is MERGED into P-IM-1, and the
+// freed row is the NEW P-IM-4 documents-pane-render-total row. The pane render
+// helper IS code-bearing + property-testable, so it earns a register row. P-IM-4
+// is the big RED here: the current `gnosisDocumentsContent` returns the whole-pane
+// `unavailable` whenever `documents == null`, so the deadlock-free row fails.
 import { describe, it, expect } from 'vitest'
 import {
   createEngineCrudRagStore,
   type EngineCrudRagStore,
   type Document,
+  type DocumentList,
   type Wiki,
 } from '../src/main/engine-crud-rag-store.js'
 import {
@@ -198,6 +204,24 @@ const DOC_TYPED: Document = {
 }
 const WIKI_WIRE = { wiki_id: 'w1', name: 'My Wiki' }
 const WIKI_TYPED: Wiki = { wikiId: 'w1', name: 'My Wiki' }
+// The §4.1.3 list wire — `DocumentSummary` serde items (the re-derived A1
+// HOST-CRUD-LIST-SUMMARY-DECODE contract: `DocumentList.items` is
+// `DocumentSummary[]`).
+const DOCLIST_TYPED: DocumentList = {
+  items: [
+    {
+      documentId: 'd1',
+      wikiId: 'w1',
+      title: 'Getting Started',
+      state: 'Draft',
+      revision: 3,
+      updatedAt: '2026-09-09T00:00:00Z',
+    },
+  ],
+  total: 1,
+  page: 1,
+  pageSize: 20,
+}
 
 function makeAuthorityStore(mapping: Record<string, string>): AuthorityStore {
   return {
@@ -210,6 +234,48 @@ function makeIdempotencyRegistry(): IdempotencyRegistry {
   return {
     get(callerId, requestId) { return m.get(`${callerId}\u0000${requestId}`) },
     set(callerId, requestId, result) { m.set(`${callerId}\u0000${requestId}`, result) },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Finding 1 (post-green adversarial) — the P-IM-1 BEHAVIORAL conjunct: for each
+// of the 11 tools, a valid CRUD-request arg set (the §5.1 input-shape).
+// ---------------------------------------------------------------------------
+/** Per-tool args that exercise the real `handleGnosisTool` CRUD dispatch. */
+function behavioralArgs(tool: string): Record<string, unknown> {
+  switch (tool) {
+    case 'gnosis.document.get': return { documentId: 'd1' }
+    case 'gnosis.document.list': return { wikiId: 'w1' }
+    case 'gnosis.wiki.get': return { wikiId: 'w1' }
+    case 'gnosis.wiki.list': return {}
+    case 'gnosis.document.create': return { callerId: 'alice', wikiId: 'w1', title: 't' }
+    case 'gnosis.document.update': return { callerId: 'alice', documentId: 'd1', baseRevision: 0, graph: { nodes: [], edges: [] } }
+    case 'gnosis.document.delete': return { callerId: 'alice', documentId: 'd1' }
+    case 'gnosis.document.publish': return { callerId: 'alice', documentId: 'd1' }
+    case 'gnosis.document.unpublish': return { callerId: 'alice', documentId: 'd1' }
+    case 'gnosis.document.archive': return { callerId: 'alice', documentId: 'd1' }
+    case 'gnosis.wiki.create': return { callerId: 'alice', name: 'My Wiki' }
+    default: throw new Error(`unexpected tool ${tool}`)
+  }
+}
+
+/** A decode-then-validate-clean CRUD response result per §5.1 method, so the
+ *  behavioral conjunct's `handleGnosisTool` call RESOLVES after issuing the
+ *  request (the request envelope is captured at fetch time, before decode). */
+function behavioralResult(method: string): { method: string; result: unknown } {
+  switch (method) {
+    case 'getDocument': return { method, result: DOC_WIRE }
+    case 'listDocuments': return { method, result: { items: [], total: 0, page: 1, page_size: 20 } }
+    case 'getWiki': return { method, result: WIKI_WIRE }
+    case 'listWikis': return { method, result: [WIKI_WIRE] }
+    case 'createDocument': return { method, result: DOC_WIRE } // Draft + revision 0 → valid
+    case 'updateDocument': return { method, result: DOC_WIRE }
+    case 'deleteDocument': return { method, result: null }
+    case 'publishDocument': return { method, result: { ...DOC_WIRE, state: 'Published' } }
+    case 'unpublishDocument': return { method, result: { ...DOC_WIRE, state: 'Draft' } }
+    case 'archiveDocument': return { method, result: { ...DOC_WIRE, state: 'Archived' } }
+    case 'createWiki': return { method, result: WIKI_WIRE }
+    default: throw new Error(`unhandled behavioral result method ${method}`)
   }
 }
 
@@ -259,7 +325,7 @@ function registeredSchemaKeys(server: ProvidentMcpServer, toolName: string): rea
 // The §5.7 register (8 rows).
 // ---------------------------------------------------------------------------
 describe('PBT register (§5.7)', () => {
-  it('P-IM-1 [strat:crud-tool-group-total] tool-name → group mapping total/unambiguous', () => {
+  it('P-IM-1 [strat:crud-tool-mapping-total-bj-behavioral] tool-name → group mapping total/unambiguous + bijective + BEHAVIORAL (the merged P-TP-1 conjunct + the real-handler method discriminator, H-6 / Finding 1)', async () => {
     const rep = runProperty(PBT_ATTEMPTS, PBT_STOP_AFTER, (_i, rng) => {
       const tool = pick(rng, ALL_11_TOOLS)
       const expected = READ_ONLY_TOOLS.includes(tool as any) ? 'gnosis' : 'gnosis-edit'
@@ -278,6 +344,54 @@ describe('PBT register (§5.7)', () => {
       expect(t.length).toBeGreaterThan(0)
       expect(t.startsWith('gnosis.')).toBe(true)
     }
+    // RE-BALANCED at the H-6 re-derivation: the retired P-TP-1 tool → CRUD-method
+    // bijection conjunct is MERGED into this row (one tool per method, one method
+    // per tool — exactly 11 rows, one per §5.1 CRUD method).
+    expect(Object.keys(TOOL_TO_METHOD).length).toBe(11)
+    expect(new Set(Object.values(TOOL_TO_METHOD)).size).toBe(11)
+    for (const a of ALL_11_TOOLS) {
+      for (const b of ALL_11_TOOLS) {
+        if (a !== b) {
+          expect(TOOL_TO_METHOD[a]).not.toBe(TOOL_TO_METHOD[b])
+        }
+      }
+    }
+    // The 11 tools must be registered (the mapping-family row pins ALL_TOOLS).
+    for (const t of ALL_11_TOOLS) {
+      expect(ProvidentMcpServer.ALL_TOOLS).toContain(t)
+    }
+    // BEHAVIORAL conjunct (Finding 1): the tool-name → CRUD-method mapping MUST
+    // actually drive the real `handleGnosisTool` dispatch. For each of the 11
+    // tools, invoke the REAL handler over a capture-fetch and assert the outgoing
+    // CRUD request envelope's `payload.method` discriminator equals the
+    // spec-pinned mapping. The old conjunct asserted the bijection ONLY against the
+    // test-local TOOL_TO_METHOD constant (self-referential) — a routing swap (e.g.
+    // `gnosis.document.get` → `createDocument`) would never fail it, because the
+    // property never invoked `handleGnosisTool`. This conjunct closes that gap.
+    const mcpMod = await import('../src/main/mcp-server.js')
+    const handle = mcpMod.handleGnosisTool as ExtendedGnosisToolHandler
+    if (typeof handle !== 'function') {
+      throw new Error('handleGnosisTool not implemented (wiring RED — needs the Implementer)')
+    }
+    const authority = makeAuthorityStore({ alice: 'user:alice' })
+    const behavioralCes: string[] = []
+    for (const tool of ALL_11_TOOLS) {
+      const expectedMethod = TOOL_TO_METHOD[tool]
+      let captured: unknown
+      const engineCrud = createEngineCrudRagStore({
+        baseUrl: 'http://127.0.0.1:8080',
+        fetch: readyGateThenCrud((_m, _u, body) => {
+          captured = body
+          return jsonResponse(crudResponseEnvelope(behavioralResult(expectedMethod)))
+        }),
+      })
+      await handle(null, tool, behavioralArgs(tool), null, engineCrud, authority)
+      const env = (captured as any)?.payload as { method?: string } | undefined
+      if (!env || env.method !== expectedMethod) {
+        behavioralCes.push(`${tool} routed to method ${String(env?.method)} (expected ${expectedMethod})`)
+      }
+    }
+    expect(behavioralCes, JSON.stringify(behavioralCes)).toEqual([])
   })
 
   it('P-IM-2 [strat:crud-no-credential-args] no document/wiki tool schema accepts a credential arg', async () => {
@@ -472,24 +586,146 @@ describe('PBT register (§5.7)', () => {
     expect(result.held, JSON.stringify(result.counterexamples)).toBe(true)
   })
 
-  it('P-TP-1 [strat:crud-tool-method-bijection] tool → CRUD-method mapping is a bijection', () => {
-    const rep = runProperty(PBT_ATTEMPTS, PBT_STOP_AFTER, (_i, rng) => {
-      const a = pick(rng, ALL_11_TOOLS)
-      const b = pick(rng, ALL_11_TOOLS)
-      if (a === b) return null
-      if (TOOL_TO_METHOD[a] === TOOL_TO_METHOD[b]) {
-        return `method collision: ${a} and ${b} both map to ${TOOL_TO_METHOD[a]}`
+  it('P-IM-4 [strat:documents-pane-render-total] the gnosisDocumentsContent pane render is total + deadlock-free over the grid', async () => {
+    const result = await (async () => {
+      let renderers: Awaited<ReturnType<typeof loadRenderers>>
+      try {
+        renderers = await loadRenderers()
+      } catch (e) {
+        return { held: false, counterexamples: [`gnosis-documents renderer unavailable — ${String(e)}`] }
       }
-      return null
-    })
-    expect(rep.held, JSON.stringify(rep.counterexamples)).toBe(true)
-    // Direct: exactly 11 rows, one per CRUD method (a bijection).
-    expect(Object.keys(TOOL_TO_METHOD).length).toBe(11)
-    expect(new Set(Object.values(TOOL_TO_METHOD)).size).toBe(11)
-    // The tools must actually be registered (RED — the 11 names are absent).
-    for (const t of ALL_11_TOOLS) {
-      expect(ProvidentMcpServer.ALL_TOOLS).toContain(t)
-    }
+      const EMPTY_DOCLIST_TYPED: DocumentList = { items: [], total: 0, page: 1, pageSize: 20 }
+      // The §5.7 P-IM-4 grid: wikis × documents × document × conflict.
+      const WIKI_RW = ['null', 'empty', 'populated'] as const
+      const DOCS_RW = ['null', 'empty', 'populated'] as const
+      const DOC_RW = ['null', 'present'] as const
+      const CONFLICT_RW = ['null', 'set'] as const
+      const rng = mulberry32(PBT_SEED)
+      const ces: string[] = []
+      // Finding 2 + Finding 3 (post-green adversarial) negative-state fold-ins.
+      // They run INSIDE the same PBT_ATTEMPTS-loop (the register caps ≤100 cases/
+      // row / ≤400 total), at deterministic indices, so they add NO extra cases to
+      // the executed property layer — only the states they generate.
+      const MALFORMED_DOCS: unknown[] = [{}, { items: null }, { items: {} }, { items: 5 }]
+      const NON_ARRAY_WIKIS: unknown[] = ['abc', {}, 5]
+      const isNativeTypeError = (e: unknown): boolean => e instanceof TypeError
+      for (let i = 0; i < PBT_ATTEMPTS && ces.length < PBT_STOP_AFTER; i++) {
+        // Finding 2: the grid never fed `state === null` ITSELF (it only varied
+        // `state.wikis` to null), so a guard-2 regression to `state.wikis == null`
+        // ALONE (dropping the `state == null` disjunct) would throw
+        // `gnosisDocumentsContent(ctx, null)` and the property would NOT catch it.
+        // Feed a literal null state → the whole-pane unavailable, no throw.
+        if (i === 0) {
+          let node: unknown
+          try {
+            node = renderers.gnosisDocumentsContent({} as never, null as never)
+          } catch (e) {
+            ces.push(`state:null threw ${String(e)}`)
+            continue
+          }
+          if (!/"data-gnosis-state"\s*:\s*"unavailable"/i.test(JSON.stringify(node))) {
+            ces.push('state:null did not render the whole-pane unavailable')
+          }
+          continue
+        }
+        // Finding 3: the generator only fed documents ∈ {null, {items:[]},
+        // {items:[...]}} and well-formed array wikis, so a regression that makes the
+        // pane throw a native TypeError on a MALFORMED documents/wikis shape would
+        // never be caught — violating the contract's "NEVER a TypeError" promise
+        // (§5.5). Feed negative documents/wikis — each must EITHER render
+        // gracefully (a placeholder/empty state) OR throw an EXPLICITLY documented
+        // error, but NEVER a silent native JS TypeError.
+        if (1 <= i && i <= MALFORMED_DOCS.length) {
+          const malformed = MALFORMED_DOCS[i - 1]
+          try {
+            const node = renderers.gnosisDocumentsContent({} as never, {
+              wikis: [WIKI_TYPED],
+              documents: malformed,
+              document: null,
+              conflict: null,
+            })
+            // graceful render: the pane must still surface a selectable wiki
+            // surface (never crash-adjacent inert/undefined content).
+            if (!JSON.stringify(node).includes('gnosis-documents-select-wiki')) {
+              ces.push(`malformed documents ${JSON.stringify(malformed)} rendered without the wiki selector`)
+            }
+          } catch (e) {
+            if (isNativeTypeError(e)) {
+              ces.push(`malformed documents ${JSON.stringify(malformed)} threw a native TypeError: ${String(e)}`)
+            }
+          }
+          continue
+        }
+        if (MALFORMED_DOCS.length < i && i <= MALFORMED_DOCS.length + NON_ARRAY_WIKIS.length) {
+          const bad = NON_ARRAY_WIKIS[i - MALFORMED_DOCS.length - 1]
+          try {
+            renderers.gnosisDocumentsContent({} as never, {
+              wikis: bad,
+              documents: null,
+              document: null,
+              conflict: null,
+            })
+          } catch (e) {
+            if (isNativeTypeError(e)) {
+              ces.push(`non-array wikis ${JSON.stringify(bad)} threw a native TypeError: ${String(e)}`)
+            }
+          }
+          continue
+        }
+        // ---- the §5.7 P-IM-4 grid (unchanged) ----
+        const w = pick(rng, WIKI_RW)
+        const d = pick(rng, DOCS_RW)
+        const doc = pick(rng, DOC_RW)
+        const c = pick(rng, CONFLICT_RW)
+        const wikis = w === 'null' ? null : w === 'empty' ? [] : [WIKI_TYPED]
+        const documents = d === 'null' ? null : d === 'empty' ? EMPTY_DOCLIST_TYPED : DOCLIST_TYPED
+        const document = doc === 'null' ? null : DOC_TYPED
+        const conflict = c === 'null' ? null : new ConflictError('optimistic-concurrency conflict')
+        const state = { wikis, documents, document, conflict }
+        let node: unknown
+        try {
+          node = renderers.gnosisDocumentsContent({} as never, state)
+        } catch (e) {
+          ces.push(`grid(w=${w},d=${d},doc=${doc},c=${c}) threw ${String(e)}`)
+          continue
+        }
+        const html = JSON.stringify(node)
+        // (a) conflict set → the whole-pane conflict state (checked FIRST).
+        if (conflict != null) {
+          if (!/"data-gnosis-state"\s*:\s*"conflict"/i.test(html)) {
+            ces.push(`grid(c=set) did not render the whole-pane conflict state`)
+          }
+          continue
+        }
+        // (b) wikis == null → the whole-pane unavailable (engine-absent).
+        if (wikis === null) {
+          if (!/"data-gnosis-state"\s*:\s*"unavailable"/i.test(html)) {
+            ces.push(`grid(w=null) did not render the whole-pane unavailable`)
+          }
+          continue
+        }
+        // (c) wikis present → the wiki selector <li> renders ALWAYS (deadlock-free).
+        if (!html.includes('gnosis-documents-select-wiki') || !html.includes('"data-wiki-id"')) {
+          ces.push(`grid(w=${w},d=${d}) did not render the wiki selector (deadlock)`)
+        }
+        // …and the documents section is the EMPTY doc-list state when null/empty…
+        if (documents === null || documents.items.length === 0) {
+          if (!/"data-gnosis-docstate"\s*:\s*"empty"/i.test(html)) {
+            ces.push(`grid(w=${w},d=${d}) did not render data-gnosis-docstate="empty"`)
+          }
+          if (/"data-gnosis-state"\s*:\s*"unavailable"/i.test(html)) {
+            ces.push(`grid(w=${w},d=${d}) rendered whole-pane unavailable while the wiki selector is available`)
+          }
+        } else {
+          // …otherwise the populated doc-list renders.
+          if (!html.includes('"data-document-id"')) {
+            ces.push(`grid(w=${w},d=populated) did not render the document list`)
+          }
+        }
+      }
+      return { held: ces.length === 0, counterexamples: ces }
+    })()
+    expect(result.held, JSON.stringify(result.counterexamples)).toBe(true)
   })
 
   it('P-TP-2 [strat:crud-engine-absent] connection-refused surfaces consistently on MCP + GUI', async () => {

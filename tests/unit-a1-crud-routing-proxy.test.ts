@@ -41,6 +41,7 @@ import {
   type CrudResult,
   type Document,
   type DocumentList,
+  type DocumentSummary,
   type Wiki,
 } from '../src/main/engine-crud-rag-store.js'
 import {
@@ -121,9 +122,33 @@ const DOC_TYPED: Document = {
 const WIKI_WIRE = { wiki_id: 'w1', name: 'My Wiki' }
 const WIKI_TYPED: Wiki = { wikiId: 'w1', name: 'My Wiki' }
 
-const DOCLIST_WIRE = { items: [DOC_WIRE], total: 1, page: 1, page_size: 20 }
+// The §4.1.3 list wire — `DocumentSummary` serde items (six snake_case fields;
+// graph/tags/created_at/author are ABSENT by contract). The re-derived
+// HOST-CRUD-LIST-SUMMARY-DECODE fix (§5.2) routes list items through the NEW
+// lenient `decodeDocumentSummary`, never the strict full-`Document` decoder.
+const DOC_SUMMARY_WIRE = {
+  document_id: 'd1',
+  wiki_id: 'w1',
+  title: 'Getting Started',
+  state: 'Draft',
+  revision: 3,
+  updated_at: '2026-09-09T00:00:00Z',
+}
+
+// The §5.1 `DocumentSummary` typed projection (snake→camel; six fields — no
+// graph/tags/createdAt/author). `DocumentList.items` is `DocumentSummary[]`.
+const DOC_SUMMARY_TYPED: DocumentSummary = {
+  documentId: 'd1',
+  wikiId: 'w1',
+  title: 'Getting Started',
+  state: 'Draft',
+  revision: 3,
+  updatedAt: '2026-09-09T00:00:00Z',
+}
+
+const DOCLIST_WIRE = { items: [DOC_SUMMARY_WIRE], total: 1, page: 1, page_size: 20 }
 const DOCLIST_TYPED: DocumentList = {
-  items: [DOC_TYPED],
+  items: [DOC_SUMMARY_TYPED],
   total: 1,
   page: 1,
   pageSize: 20,
@@ -757,6 +782,257 @@ describe('golden-vector conformance (§5.2 / P1a §9)', () => {
       expect((e as ConflictError).code).toBe('conflict')
       expect((e as ConflictError).httpStatus).toBe(409)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// §5.2/§5.3 listDocuments summary-decode — HOST-CRUD-LIST-SUMMARY-DECODE (the
+// re-derived red set). The engine's `listDocuments` returns a lightweight
+// `DocumentSummary` per item (six fields, no graph/tags/created_at/author); the
+// host decoder for list items is the NEW lenient `decodeDocumentSummary`, which
+// never requires the four full-`Document` fields. A genuinely malformed summary
+// (missing/typed-wrong document_id etc.) still throws `EngineError('malformed
+// document')` (502).
+// ---------------------------------------------------------------------------
+
+describe('listDocuments summary-decode contract (§5.2/§5.3 — HOST-CRUD-LIST-SUMMARY-DECODE)', () => {
+  // CORE RED: the CURRENT `decodeDocumentList` maps every item through the
+  // strict full-`Document` `decodeDocument` (requires graph/tags/created_at/
+  // author), so a summary item throws `EngineError('malformed document')`. The
+  // re-derived contract decodes a well-formed summary WITHOUT throwing.
+  it('§5.2 core-red: listDocuments with well-formed DocumentSummary items decodes WITHOUT throwing', () => {
+    const result = decodeCrudResponse({
+      method: 'listDocuments',
+      result: DOCLIST_WIRE,
+    })
+    expect(result).toEqual({ method: 'listDocuments', result: DOCLIST_TYPED })
+  })
+
+  it('§5.2 each decoded item is a typed DocumentSummary; total/page/pageSize map', () => {
+    const multiWire = {
+      items: [
+        DOC_SUMMARY_WIRE,
+        { ...DOC_SUMMARY_WIRE, document_id: 'd2', state: 'Published', revision: 5 },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+    }
+    const r = decodeCrudResponse({ method: 'listDocuments', result: multiWire })
+    const list = r.result
+    expect(list.items).toHaveLength(2)
+    expect(list.items[0]).toEqual(DOC_SUMMARY_TYPED)
+    expect(list.items[1]).toEqual({
+      ...DOC_SUMMARY_TYPED,
+      documentId: 'd2',
+      state: 'Published',
+      revision: 5,
+    })
+    expect(list.total).toBe(2)
+    expect(list.page).toBe(1)
+    expect(list.pageSize).toBe(50)
+  })
+
+  it('§5.1 shape round-trip: items[0] carries exactly the six summary camelCase fields and NO graph/tags/createdAt/author', () => {
+    const { result } = decodeCrudResponse({
+      method: 'listDocuments',
+      result: DOCLIST_WIRE,
+    })
+    const it = result.items[0] as unknown as Record<string, unknown>
+    expect(it.documentId).toBe('d1')
+    expect(it.wikiId).toBe('w1')
+    expect(it.title).toBe('Getting Started')
+    expect(it.state).toBe('Draft')
+    expect(it.revision).toBe(3)
+    expect(it.updatedAt).toBe('2026-09-09T00:00:00Z')
+    // The four full-`Document` fields are ABSENT by contract on the list wire —
+    // the wire itself never carries them, and the decoder never requires them.
+    expect('graph' in it).toBe(false)
+    expect('tags' in it).toBe(false)
+    expect('createdAt' in it).toBe(false)
+    expect('author' in it).toBe(false)
+    expect('created_at' in DOC_SUMMARY_WIRE).toBe(false)
+    expect('updated_at' in DOC_SUMMARY_WIRE).toBe(true)
+  })
+
+  it('§5.3 re-derived: a full Document list item is valid and decodes to its six-field summary projection', () => {
+    const { result } = decodeCrudResponse({
+      method: 'listDocuments',
+      result: { items: [DOC_WIRE], total: 1, page: 1, page_size: 20 },
+    })
+    // A full `Document` list item (`DOC_WIRE`, revision 0) decodes to its
+    // six-field summary projection — the §5.1/§5.8 camelCase mapping with no
+    // graph/tags/createdAt/author, preserving the item's OWN field values
+    // (revision 0 → 0, not the §5.1 fixture's revision 3).
+    expect(result.items).toEqual([{ ...DOC_SUMMARY_TYPED, revision: 0 }])
+  })
+
+  it('§5.8-9 golden: listDocuments over a summary-shaped fetch resolves to a typed DocumentList', async () => {
+    const calls: CrudCall[] = []
+    const store = createEngineCrudRagStore({
+      baseUrl: 'http://127.0.0.1:8080',
+      fetch: readyGateThenCrud((method, url) => {
+        expect(method).toBe('GET')
+        expect(url).toBe('http://127.0.0.1:8080/documents')
+        return jsonResponse(
+          crudResponseEnvelope({ method: 'listDocuments', result: DOCLIST_WIRE }),
+        )
+      }, calls),
+    })
+    const list = await store.listDocuments({
+      wikiId: 'w1',
+      body: { state: null, tag: null, page: 1, pageSize: 20 },
+    })
+    expect(list).toEqual(DOCLIST_TYPED)
+    expect(list.items[0]).toEqual(DOC_SUMMARY_TYPED)
+    expect(calls.length).toBe(1)
+  })
+
+  it('§5.9-14 fail-state: a malformed DocumentSummary item → EngineError("malformed document") (502), direct + proxy', async () => {
+    const brokenSummaries: unknown[] = [
+      // missing document_id
+      { wiki_id: 'w1', title: 't', state: 'Draft', revision: 1, updated_at: 'TS' },
+      // typed-wrong document_id (a number)
+      { document_id: 123, wiki_id: 'w1', title: 't', state: 'Draft', revision: 1, updated_at: 'TS' },
+      // non-string title
+      { document_id: 'd1', wiki_id: 'w1', title: 5, state: 'Draft', revision: 1, updated_at: 'TS' },
+      // state not one of Draft|Published|Archived
+      { document_id: 'd1', wiki_id: 'w1', title: 't', state: 'Foo', revision: 1, updated_at: 'TS' },
+      // non-number revision
+      { document_id: 'd1', wiki_id: 'w1', title: 't', state: 'Draft', revision: 'x', updated_at: 'TS' },
+      // missing updated_at
+      { document_id: 'd1', wiki_id: 'w1', title: 't', state: 'Draft', revision: 1 },
+      // HOST-3 (the adversarial pass's main finding): the original negative set
+      // missed `wikiId`/`updatedAt` (camelCase) AND the snake_case variants. The
+      // register clause is ∀ malformed over ALL six wire fields
+      // (`document_id`/`wiki_id`/`title`/`state`/`revision`/`updated_at`).
+      // typed-wrong `wikiId` (camelCase)
+      { documentId: 'd1', wikiId: 123, title: 't', state: 'Draft', revision: 1, updatedAt: 'TS' },
+      // typed-wrong `updatedAt` (camelCase)
+      { documentId: 'd1', wikiId: 'w1', title: 't', state: 'Draft', revision: 1, updatedAt: 0 },
+      // snake_case malformed `wiki_id: 123`
+      { document_id: 'd1', wiki_id: 123, title: 't', state: 'Draft', revision: 1, updated_at: 'TS' },
+      // snake_case malformed `updated_at: 0`
+      { document_id: 'd1', wiki_id: 'w1', title: 't', state: 'Draft', revision: 1, updated_at: 0 },
+    ]
+    for (const item of brokenSummaries) {
+      // Direct decoder path (the register P-IM-4 negative generator).
+      let thrown: unknown
+      try {
+        decodeCrudResponse({
+          method: 'listDocuments',
+          result: { items: [item], total: 1, page: 1, page_size: 20 },
+        })
+      } catch (e) {
+        thrown = e
+      }
+      expect(thrown).toBeInstanceOf(EngineError)
+      // A malformed summary is an EngineError — NOT a native TypeError (HOST-1).
+      expect(thrown).not.toBeInstanceOf(TypeError)
+      expect((thrown as EngineError).code).toBe('engine_error')
+      expect((thrown as EngineError).httpStatus).toBe(502)
+      expect((thrown as Error).message).toBe('malformed document')
+
+      // The same via the proxy (§5.9-14).
+      const store = crudStoreWithResponse(
+        jsonResponse(
+          crudResponseEnvelope({
+            method: 'listDocuments',
+            result: { items: [item], total: 1, page: 1, page_size: 20 },
+          }),
+        ),
+      )
+      const err = await captureError(
+        store.listDocuments({
+          wikiId: 'w1',
+          body: { state: null, tag: null, page: 1, pageSize: 20 },
+        }),
+      )
+      expect(err).toBeInstanceOf(EngineError)
+      expect(err).not.toBeInstanceOf(TypeError)
+      expect(err).toMatchObject({ code: 'engine_error', httpStatus: 502 })
+      expect((err as Error).message).toBe('malformed document')
+    }
+  })
+
+  it('§5.9-14 HOST-1: non-object list items ([null],[5],["x"],[true]) → EngineError("malformed document"), NOT a native TypeError', async () => {
+    for (const item of [null, 5, 'x', true]) {
+      // Direct decoder path — `decodeDocumentList` maps each item through the
+      // lenient `decodeDocumentSummary`, which throws `EngineError('malformed
+      // document')` — never a native TypeError — on a non-object item.
+      let thrown: unknown
+      try {
+        decodeCrudResponse({
+          method: 'listDocuments',
+          result: { items: [item], total: 1, page: 1, page_size: 20 },
+        })
+      } catch (e) {
+        thrown = e
+      }
+      expect(thrown, `direct: items:[${JSON.stringify(item)}]`).toBeInstanceOf(
+        EngineError,
+      )
+      expect(thrown, `direct: not a TypeError`).not.toBeInstanceOf(TypeError)
+      expect((thrown as EngineError).code).toBe('engine_error')
+      expect((thrown as EngineError).httpStatus).toBe(502)
+      expect((thrown as Error).message).toBe('malformed document')
+
+      // The same via the proxy (§5.9-14).
+      const store = crudStoreWithResponse(
+        jsonResponse(
+          crudResponseEnvelope({
+            method: 'listDocuments',
+            result: { items: [item], total: 1, page: 1, page_size: 20 },
+          }),
+        ),
+      )
+      const err = await captureError(
+        store.listDocuments({
+          wikiId: 'w1',
+          body: { state: null, tag: null, page: 1, pageSize: 20 },
+        }),
+      )
+      expect(err).toBeInstanceOf(EngineError)
+      expect(err).not.toBeInstanceOf(TypeError)
+      expect(err).toMatchObject({ code: 'engine_error', httpStatus: 502 })
+      expect((err as Error).message).toBe('malformed document')
+    }
+  })
+
+  it('§4.1.3 HOST-2: items:[] page-beyond-data decodes WITHOUT throwing to an empty DocumentList', async () => {
+    // The engine's §4.1.3 page-beyond-data response — an empty list is a valid
+    // `DocumentList` (page >= 1, 1 <= pageSize <= 100, zero items), NOT a
+    // malformed-list fail-state.
+    const direct = decodeCrudResponse({
+      method: 'listDocuments',
+      result: { items: [], total: 0, page: 1, page_size: 20 },
+    })
+    expect(direct).toEqual({
+      method: 'listDocuments',
+      result: { items: [], total: 0, page: 1, pageSize: 20 },
+    })
+
+    // The same via the proxy.
+    const calls: CrudCall[] = []
+    const store = createEngineCrudRagStore({
+      baseUrl: 'http://127.0.0.1:8080',
+      fetch: readyGateThenCrud((method, url) => {
+        expect(method).toBe('GET')
+        expect(url).toBe('http://127.0.0.1:8080/documents')
+        return jsonResponse(
+          crudResponseEnvelope({
+            method: 'listDocuments',
+            result: { items: [], total: 0, page: 1, page_size: 20 },
+          }),
+        )
+      }, calls),
+    })
+    const list = await store.listDocuments({
+      wikiId: 'w1',
+      body: { state: null, tag: null, page: 1, pageSize: 20 },
+    })
+    expect(list).toEqual({ items: [], total: 0, page: 1, pageSize: 20 })
+    expect(calls.length).toBe(1)
   })
 })
 

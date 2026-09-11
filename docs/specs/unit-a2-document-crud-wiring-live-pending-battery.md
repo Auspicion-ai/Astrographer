@@ -1,5 +1,101 @@
 # Unit A2 — Document-CRUD D4 Wiring (`gnosis.document.*` / `gnosis.wiki.*` MCP tools + the `gnosis-edit` group + the extended `handleGnosisTool` + the `AuthorityStore` + the `IdempotencyRegistry` + the GUI document-editor/wiki screens): LIVE-Scenario Pending Battery (handoff)
 
+## LIVE-RUN UPDATE (2026-09-11) — the mutating CRUD write surface + the read-class GET-body finding
+
+- **Author:** Gate supervisor (live runner). **Date: 2026-09-11.**
+- **Context:** the app is LIVE with the `gnosis` + `gnosis-edit` groups enabled (the
+  `HOST-SECURITY-STORE-GNOSIS-GROUPS` fix) and the `gnosis-server` in `state:Ready`
+  (Ollama `embeddinggemma` wired on `127.0.0.1:8081`). Drove the 11 `gnosis.document.*`/
+  `gnosis.wiki.*` MCP tools + the group/audit/deny surfaces over the live app (`tools/call`
+  on `127.0.0.1:3787/mcp`). **Result: the mutating write surface is verified live; the
+  read-class GET-with-body regression is confirmed (a live finding, not a pass).**
+
+### 2.0 RE-DRIVE UPDATE (2026-09-11) — host fixes `HOST-GET-WITH-BODY-SSE-CRUD` + `HOST-CRUD-DELETE-RESULT-SERIALIZATION` are now LIVE-VERIFIED; the reads/delete scenarios are CLOSED
+
+- **Author:** Live-scenario runner. **Date: 2026-09-11** (fresh app relaunch: `gnosis-server`
+  `/engine/status` → `state:Ready`; all **14** gnosis tools registered; MCP `tools/call`
+  driven over `127.0.0.1:3787/mcp` with the streamable-HTTP client).
+- **Re-drove:** the four GET-with-body reads (`gnosis.wiki.list`, `gnosis.document.list`,
+  `gnosis.wiki.get`, `gnosis.document.get`) and `gnosis.document.delete`, over a fresh
+  create-wiki→create-doc round-trip, reads ordered BEFORE the delete.
+- **Result — the GET-with-body regression is FIXED and live-verified:** `gnosis.wiki.list`,
+  `gnosis.wiki.get`, and `gnosis.document.get` all resolve to real typed payloads (a `Wiki[]`,
+  a `Wiki`, a full `Document`); none throws `TypeError: Request with GET/HEAD method cannot have
+  body` anymore. `HOST-GET-WITH-BODY-SSE-CRUD` = **FIXED (live)**.
+- **Result — the delete serialization is FIXED and live-verified:** `gnosis.document.delete`
+  returns wire `result:null` (`void`); no `MCP error -32602: Invalid tools/call result`.
+  `HOST-CRUD-DELETE-RESULT-SERIALIZATION` = **FIXED (live)**.
+- **Closing:** scenarios **G4/R1, G1/R1, G2/R1, G3/R1** (the reads) and **G7** (the delete) are
+  now **CLOSED / PASS (live)** for the previously-failing classes.
+- **Fresh live observation to flag (a follow-up, NOT one of the two fixed defects):**
+  `gnosis.document.list` no longer throws the GET-with-body `TypeError` (the fix is
+  live-verified), but on this run it returns the engine-level **`"malformed document"`**
+  string even for a fresh wiki containing a single just-created doc. This is neither `-32602`
+  nor the TypeError, but it contradicts G2's expected `DocumentList {items,total,page,pageSize}`
+  shape — recorded as a live observation / possible residual read-enumeration finding for the
+  supervisor (not a pass on G2's full expectation). Not rolled into the two closed host fixes.
+  **→ Now CLOSED (2026-09-11, fresh relaunch, `HOST-CRUD-LIST-SUMMARY-DECODE` fix live-verified):
+  on the latest fresh relaunch of the fixed app, `gnosis.document.list` on a populated wiki
+  resolves to the typed `DocumentList` (`items` of six-field `DocumentSummary[]`, `total:1,
+  page:1, pageSize:20`) — no `malformed document`, no `-32602`; on an empty wiki → `items:[]`.
+  The §2.2 `G2 / R1` residual `"malformed document"` row is now **FULLY PASS (live)**, no longer
+  a follow-up. See `docs/specs/unit-a1-crud-list-summary-decode-greens.md` §LIVE-LOCATION.
+
+### 2.1 Live PASSED (this iteration — engine Ready, operator credential `user:operator` set)
+
+| Scenario | Live observation | Result |
+| --- | --- | --- |
+| **G19** | `tools/list` with `gnosis` + `gnosis-edit` ON → all **14** gnosis tools registered (7 read-only in `gnosis` — the 3 retrieval-trio + the 4 read-only document/wiki — + 7 mutating in `gnosis-edit`) | **PASS (live)** |
+| **G11** | `gnosis.wiki.create {callerId:'operator', name}` → typed `{wikiId, name}` | **PASS (live)** |
+| **G5** | `gnosis.document.create {callerId:'operator', wikiId, title}` → `Document` (`revision:0`, `state:'Draft'`) | **PASS (live)** |
+| **G8** | `gnosis.document.publish` → `revision≥1`, `state:'Published'` | **PASS (live)** |
+| **G9** | `gnosis.document.unpublish` → `state:'Draft'` | **PASS (live)** |
+| **G10** | `gnosis.document.archive` → `state:'Archived'` | **PASS (live)** |
+| **G20** | `get_query_audit_log` shows the CRUD tools add NO entry | **PASS (live)** |
+| **G18/G23** | unknown `gnosis.document.other` / `gnosis.frobnicate` → fail-closed (`Tool not found`) | **PASS (live)** |
+| **F40** | a mutating call without a `callerId` → caller-side deny (no proxy call) | **PASS (live, fail-closed)** |
+
+### 2.2 Prior live findings — all CLOSED on the 2026-09-11 re-drive (the two host fixes are live-verified)
+
+| Scenario | Live observation | Finding |
+| --- | --- | --- |
+| **G4 / R1** | `gnosis.wiki.list {}` → **(previously** `TypeError: Request with GET/HEAD method cannot have body.`**)** | **CLOSED / PASS (live, 2026-09-11)** — resolves to a typed `Wiki[]`; the GET-with-body regression is FIXED (`HOST-GET-WITH-BODY-SSE-CRUD` live-verified). |
+| **G1 / R1** | `gnosis.document.get` → **(previously** same GET-body `TypeError`**)** | **CLOSED / PASS (live, 2026-09-11)** — resolves to a full typed `Document`; GET-with-body FIXED (live-verified). |
+| **G2 / R1** | `gnosis.document.list` → **(previously** same GET-body `TypeError`**)** | **CLOSED / PASS (live, 2026-09-11, fresh relaunch)** — GET-with-body FIXED AND the residual `"malformed document"` follow-up is now CLOSED (`HOST-CRUD-LIST-SUMMARY-DECODE`): on a populated wiki it resolves to the typed `DocumentList` (`items` six-field `DocumentSummary[]`, `total:1, page:1, pageSize:20`; no `malformed document`, no `-32602`); on an empty wiki → `items:[]`. |
+| **G3 / R1** | `gnosis.wiki.get` → **(previously** same GET-body `TypeError`**)** | **CLOSED / PASS (live, 2026-09-11)** — resolves to a typed `Wiki`; GET-with-body FIXED (live-verified). |
+| **G7** | `gnosis.document.delete` → **(previously** `MCP error -32602: Invalid tools/call result`**)** | **CLOSED / PASS (live, 2026-09-11)** — returns wire `result:null`; the delete result-serialization defect is FIXED (`HOST-CRUD-DELETE-RESULT-SERIALIZATION` live-verified). |
+| **G6** | `gnosis.document.update` with `graph:{nodes:[],edges:[]}` → `graph must be a valid Provident graph (exactly one doc-head and one doc-end)` | **needs a real Provident graph arg** (my empty graph was invalid) — the update HAPPY-path was not fully driven; the graph validation is the engine's own. **Re-drive with a valid `{root:'div',...}` graph before claiming G6.**
+
+### 2.3 GUI-PANE LIVE-DRIVE (2026-09-11) — the `gnosis-documents`/`gnosis-wikis`/`gnosis-status` panes driven live via CDP
+
+- **Author:** Gate supervisor (CDP-driven live pane battery). **Date: 2026-09-11.** App relaunched with `--remote-debugging-port=9222` (CDP on `ws://127.0.0.1:9222/devtools/page/...`), engine `Ready`, 14 gnosis tools, `gnosis`/`gnosis-edit` groups ON. Drove the rendered panes via `Runtime.evaluate` + real DOM clicks through the `window.provident.sidebar.*` bridge, and inspected the rendered `/` `provident.get_rendered_html`/DOM.
+
+> **2026-09-11 — FORMAL deadlock closure (live-scenario runner, THIS pass):** re-verified live against the freshly-relaunched app + rebuilt `dist/`. After clicking `gnosis-documents-refresh`, `#pane-gnosis-documents` renders the wiki selector (10 `<li data-wiki-id>` live wiki names) AND `data-gnosis-docstate="empty"` ("No documents — select a wiki") — NO whole-pane `data-gnosis-state="unavailable"`, no `unavailable` string anywhere in the pane. `pane-gnosis-wikis` renders all 10 wikis; `pane-gnosis-status` renders `State: Ready` with all 6 subsystems up — unaffected. Module contract re-confirmed green: `npx vitest run tests/unit-a2-document-crud-wiring.test.ts tests/props-a2-document-crud-wiring.test.ts` → **99/99 (91 + 8)**. `HOST-GUI-DOCS-PANE-DEADLOCK` is **FIXED + live-verified and closed** (see `docs/defects.md`); the G29 document-population slice is **PARKED** (see the G29 row + §2.4 revisit condition).
+
+| Scenario | Live result | Note |
+| --- | --- | --- |
+| **G30** (`gnosis-wikis` pane renders live wiki list + a wiki) | **PASS (live)** | The `pane-gnosis-wikis` subtree renders ALL live wiki names (e.g. `probe…`, `c1789114661836`, `a2redrive…`, `w-live…`, `rt…`, `list-summary…`, `listprobe…`) + the `Create wiki` control. The wikis pane self-populates on `boot()` → `refreshWikis()`. |
+| **G-status** (`gnosis-status` pane renders the engine HealthReport) | **PASS (live)** | `data-gnosis-state="Ready"` renders (`[data-gnosis-pane="status"]`). |
+| **G-query empty** (`gnosis-query` pane on no result) | **PASS (live)** | Renders the "(no engine results)" empty state, never a TypeError. |
+| **G29** (`gnosis-documents` pane renders a live wiki list + document list + a document) | **DEADLOCK-ROW FIXED + LIVE-VERIFIED (2026-09-11 closure); DOC-POPULATION SLICE PARKED** | The pane NO LONGER whole-pane `data-gnosis-state="unavailable"`. After a fresh `gnosis-documents-refresh` (the `gnosis.wiki.list` bridge) the pane renders the **wiki selector** (10 `<li data-wiki-id>` items, each a live wiki name with the `gnosis-documents-select-wiki` handler via `data-wiki-id`) AND the empty Documents section `data-gnosis-docstate="empty"` ("No documents — select a wiki"). No `unavailable`, no deadlock → **`HOST-GUI-DOCS-PANE-DEADLOCK` FIXED + live-verified** (closed in `docs/defects.md`). **Remaining slice (PARKED — NOT a failure):** the FULL G29 happy path (select a wiki → the doc `<ul>` populates the doc-19 from wiki-18) needs provident's handler-dispatch surface. A synthetic DOM `.click()` on a `<li data-wiki-id>`, `window.provident.sidebar.gnosisDocuments('gnosis.document.list',{wikiId})`, and `window.provident.dispatch` do NOT populate the doc list — the wiki-select binding is via provident's handler-def system (a native onclick is absent; `window.provident.dispatch` is undefined), a **CDP-probe limitation**, not a fresh app defect. **Revisit condition (for a provident-capable UI-drive):** dispatch the `gnosis-documents-select-wiki` handler (or wire a native-clickable provident render) on a doc-bearing wiki (`wiki-18`, doc-19) and confirm the `data-gnosis-docstate` flips from `empty` to populated and the doc-19 `<li>` renders under the Documents section. |
+| **G31** (`gnosis-documents` on a 409 `ConflictError`) | **NOT-REACHABLE live → PARKED** | The pane's document-population interaction (select a wiki → render a real doc) is still parked (the CDP probe can't drive provident's handler-dispatch `select-wiki` binding), so no document can be selected to drive a stale-`baseRevision` 409 update from the GUI. Parked with G29's doc-population slice. |
+| **G32** (`gnosis-documents` with a null result) | **PASS (live, deadlock branch gone)** | The deadlock is gone — the pane no longer renders whole-pane `unavailable`; the empty-documents branch (`data-gnosis-docstate="empty"`, "No documents — select a wiki") is live-exercised after refresh. The populated happy path (a real doc `<li>`) remains parked with G29's doc-population slice. |
+| **G33** (`gnosis-wikis` with a null result) | **PARTIAL** | The wikis pane renders live data (G30). The null-result empty branch is covered by the module greens; live it renders populated (no null case observed). |
+| **F38** (`gnosis-documents`/`gnosis-wikis` when the engine is absent) | **PARTIAL (fail-closed side not engine-tested live)** | With the deadlock gone, the documents pane no longer reaches its `unavailable` branch via the deadlock — but the true engine-absent F38 path is a separate D2 fail-closed render, still **not re-driven** this run (the engine was kept `Ready`). The `data-gnosis-state="unavailable"` / `"disabled"` fail-closed renders remain module-green. |
+| **F39** (panes when the `gnosis`/`gnosis-edit` group is OFF) | **NOT-RE-TESTED live** | The groups are ON this run; the fail-closed `data-gnosis-state="disabled"` render is module-green. |
+
+**Net:** the wikis pane + status pane + query empty-state are **live-verified**. The G29 **deadlock is FIXED and live-verified** — after refresh the documents pane renders the wiki selector + `data-gnosis-docstate="empty"` (no whole-pane `unavailable`); the wikis/status panes are unaffected. The remaining G29 document-population slice (select a wiki → doc `<li>` renders), and thereby G31 and the G32 happy path, stay **PARKED** pending a provident-capable UI-drive (the CDP probe cannot dispatch provident's handler-`select-wiki` binding). The F38/F39 fail-closed renders remain module-green (not engine-absent/group-off re-driven live). The G6 update happy-path still needs a valid Provident graph arg.
+
+### 2.4 Parked (unchanged — need the GUI pane surface / a valid graph)
+
+- **G29–G31** — the `gnosis-documents` GUI pane happy-path/conflict. The host deadlock (`HOST-GUI-DOCS-PANE-DEADLOCK`) that previously blocked these is **FIXED + live-verified** (the wiki selector + `data-gnosis-docstate="empty"` render; no whole-pane `unavailable`). What remains is the **document-population interaction** — selecting a wiki via provident's handler-`select-wiki` binding so the doc list populates — which the current CDP/MCP harness cannot drive (CDP-probe limitation, not a fresh defect). PARKED with the revisit condition: a **provident-capable UI-drive** (or wiring a way to dispatch the `gnosis-documents-select-wiki` handler) on a doc-bearing wiki (`wiki-18`, doc-19). F38/F39 remain parked (engine-absent / group-off not re-driven live).
+- **G6** happy path — needs a valid Provident graph arg.
+- The SSE `ragStream` real-frame + the `rag.query`/`rag.status` happy paths need the retrieval trio (engine is `Ready` so these should now run — a follow-on re-drive).
+
+### 2.5 Net-status
+
+The **A2 mutating CRUD write surface is VERIFIED LIVE** (create→update-validated→publish→unpublish→archive + the RBAC caller deny + group gating). As of the **2026-09-11 re-drive**, BOTH previously-open host defects are now **FIXED and live-verified**: **(1)** the read class no longer fails on GET-with-body (`HOST-GET-WITH-BODY-SSE-CRUD` CLOSED) and **(2)** `gnosis.document.delete` returns `result:null` (no `-32602`; `HOST-CRUD-DELETE-RESULT-SERIALIZATION` CLOSED). The G6 happy path + the GUI-pane scenarios remain parked. **The prior `"malformed document"` live follow-up is now CLOSED** (2026-09-11, fresh relaunch): `gnosis.document.list` resolves to the typed `DocumentList` on populated (`items` six-field `DocumentSummary[]`, `total:1`) and empty (`items:[]`) wikis — `HOST-CRUD-LIST-SUMMARY-DECODE` fixed + live-verified (see `docs/specs/unit-a1-crud-list-summary-decode-greens.md` §LIVE-LOCATION).
+
 - **Author:** Live-scenario runner (delegated subagent). **Date: 2026-09-10.**
 - **Source contract:** `docs/specs/unit-a2-document-crud-wiring.md` — §5.1 (the 11
   `gnosis.document.*`/`gnosis.wiki.*` MCP tools + the body-construction rule),

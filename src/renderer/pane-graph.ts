@@ -455,9 +455,13 @@ export function gnosisDocumentsContent(
       ],
     }
   }
-  // H1 (adversarial): a null state (or a null wikis/documents) → the
-  // unavailable/empty state, never a TypeError.
-  if (state == null || state.wikis == null || state.documents == null) {
+  // H1 (adversarial) + HOST-GUI-DOCS-PANE-DEADLOCK (re-derived 2026-09-11): a
+  // null state (or a null wikis) → the whole-pane unavailable/engine-absent
+  // state, never a TypeError. This is checked BEFORE the wiki selector so the
+  // no-wikis/engine-absent case keeps its pinned message, but is INDEPENDENT of
+  // `documents` — a null `documents` with a present `wikis` is NOT the
+  // engine-absent case (it is the empty doc-list state, below).
+  if (state == null || state.wikis == null) {
     return {
       type: 'div',
       props: { 'data-gnosis-pane': 'documents', 'data-gnosis-state': 'unavailable' },
@@ -467,38 +471,84 @@ export function gnosisDocumentsContent(
       ],
     }
   }
+  // HARDENING (adversarial — P-IM-4 "NEVER a TypeError"): a non-array `wikis`
+  // (a malformed bridge payload — a string/object/number) must coerce to [] →
+  // the empty-wiki-selector path (the "No wikis" placeholder), never a native
+  // TypeError from `.map`. Only a literal `null` wikis is the engine-absent case
+  // (kept unchanged above).
+  const wikis = Array.isArray(state.wikis) ? state.wikis : []
   // H-1 — the wiki/document list items carry the `handlers` field so a user can
   // CLICK an item to select it (the select handler bodies are hardcoded above —
   // the PURE helper cannot receive them as args). The `data-wiki-id`/
   // `data-document-id`/`data-revision` props feed the handler bodies.
-  const wikiLis: LegacyNodeData[] = state.wikis.map((w) => ({
+  const wikiLis: LegacyNodeData[] = wikis.map((w) => ({
     type: 'li',
     props: { 'data-wiki-id': w.wikiId },
     content: w.name,
     handlers: [{ name: 'gnosis-documents-select-wiki', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY }],
   }))
-  const docLis: LegacyNodeData[] = (state.documents?.items ?? []).map((d) => ({
-    type: 'li',
-    props: { 'data-document-id': d.documentId, 'data-revision': String(d.revision) },
-    content: `${d.title} (${d.state})`,
-    handlers: [{ name: 'gnosis-documents-select-doc', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_DOC_BODY }],
-  }))
-  const doc = state.document
+  // The wiki selector list renders ALWAYS (independent of `documents`/`document`),
+  // so the clickable <li> items that trigger gnosis.document.list are never
+  // gated behind a non-null `documents` (deadlock fix). When `wikis` is an empty
+  // list (still non-null — the engine is present), render a wiki-selector
+  // placeholder <li> carrying the same `data-wiki-id` + select handler shape so
+  // the selector surface is always present (P-IM-4: "wiki selector present
+  // whenever `state.wikis != null`").
+  if (wikiLis.length === 0) {
+    wikiLis.push({
+      type: 'li',
+      props: { 'data-wiki-id': '' },
+      content: 'No wikis',
+      handlers: [{ name: 'gnosis-documents-select-wiki', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY }],
+    })
+  }
+  const children: LegacyNodeData[] = [
+    { type: 'strong', content: 'Wikis' },
+    { type: 'ul', children: wikiLis },
+  ]
+  // The Documents section: when `documents` is null OR its.items is empty → the
+  // empty doc-list state (data-gnosis-docstate="empty"); otherwise the populated
+  // doc <ul> + the document-editor fields when `document` is present. Never
+  // dereference `.items`/`.map` on a null `documents`; never throw.
+  // HARDENING (adversarial — P-IM-4 "NEVER a TypeError"): a non-array
+  // `documents` or a non-array `.items` (a malformed bridge payload —
+  // `{}`/`{items:null}`/`{items:{}}`/`{items:5}`) must coerce to [] → the empty
+  // doc-list state (data-gnosis-docstate="empty"), NEVER `.length`/`.map` on a
+  // non-array. Guard with `Array.isArray` before any deref.
+  const docItems =
+    state.documents != null && Array.isArray(state.documents.items) ? (state.documents.items as Document[]) : []
+  if (docItems.length === 0) {
+    children.push({
+      type: 'div',
+      props: { 'data-gnosis-docstate': 'empty' },
+      children: [
+        { type: 'strong', content: 'Documents' },
+        { type: 'p', content: 'No documents — select a wiki' },
+      ],
+    })
+  } else {
+    const docLis: LegacyNodeData[] = docItems.map((d) => ({
+      type: 'li',
+      props: { 'data-document-id': d.documentId, 'data-revision': String(d.revision ?? 0) },
+      content: `${d.title ?? ''} (${d.state ?? ''})`,
+      handlers: [{ name: 'gnosis-documents-select-doc', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_DOC_BODY }],
+    }))
+    children.push(
+      { type: 'strong', content: 'Documents' },
+      { type: 'ul', children: docLis },
+    )
+    const doc = state.document
+    if (doc) {
+      children.push(
+        { type: 'strong' as const, content: `Document: ${doc.title}` },
+        { type: 'p' as const, content: `Revision: ${doc.revision} — state: ${doc.state}` },
+      )
+    }
+  }
   return {
     type: 'div',
     props: { 'data-gnosis-pane': 'documents' },
-    children: [
-      { type: 'strong', content: 'Wikis' },
-      { type: 'ul', children: wikiLis },
-      { type: 'strong', content: 'Documents' },
-      { type: 'ul', children: docLis },
-      ...(doc
-        ? [
-            { type: 'strong' as const, content: `Document: ${doc.title}` },
-            { type: 'p' as const, content: `Revision: ${doc.revision} — state: ${doc.state}` },
-          ]
-        : []),
-    ],
+    children,
   }
 }
 

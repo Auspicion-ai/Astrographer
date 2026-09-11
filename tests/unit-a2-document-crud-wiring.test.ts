@@ -3,8 +3,10 @@
 // `gnosis-edit` group + the extended `handleGnosisTool` + the
 // `McpServerOptions.engineCrudRagStore` injection + the `AuthorityStore` + the
 // `IdempotencyRegistry` + the GUI document-editor/wiki screens.
-// (docs/specs/unit-a2-document-crud-wiring.md §5.8 happy-path states (19) +
-// §5.9 fail-states (40) + the pinned non-throws + §5.1 the 11 tool inputSchemas
+// (docs/specs/unit-a2-document-crud-wiring.md §5.8 happy-path states (20, with
+// §5.8-20 the HOST-GUI-DOCS-PANE-DEADLOCK wiki-selector-ALWAYS row, re-derived
+// 2026-09-11) + §5.9 fail-states (41, with §5.9-41 the deadlock regression) +
+// the pinned non-throws + §5.1 the 11 tool inputSchemas
 // + §5.2 the `gnosis-edit` group + §5.3 the extended main-process handler +
 // §5.4 the injection/boot/AuthorityStore/IdempotencyRegistry + §5.5 the D4 GUI
 // panes + §5.6 D2 engine-absent + H1 store authority; the A1 proxy surface
@@ -49,6 +51,7 @@ import {
   type EngineCrudRagStore,
   type Document,
   type DocumentList,
+  type DocumentSummary,
   type Wiki,
 } from '../src/main/engine-crud-rag-store.js'
 import {
@@ -164,9 +167,30 @@ const DOC_TYPED: Document = {
 const WIKI_WIRE = { wiki_id: 'w1', name: 'My Wiki' }
 const WIKI_TYPED: Wiki = { wikiId: 'w1', name: 'My Wiki' }
 
-const DOCLIST_WIRE = { items: [DOC_WIRE], total: 1, page: 1, page_size: 20 }
+// The §4.1.3 list wire — `DocumentSummary` serde items (six snake_case fields;
+// graph/tags/created_at/author are ABSENT by contract). The re-derived A1 fix
+// (`HOST-CRUD-LIST-SUMMARY-DECODE`) decodes list items through the lenient
+// decodeDocumentSummary; `DocumentList.items` is `DocumentSummary[]`.
+const DOC_SUMMARY_WIRE = {
+  document_id: 'd1',
+  wiki_id: 'w1',
+  title: 'Getting Started',
+  state: 'Draft',
+  revision: 3,
+  updated_at: '2026-09-09T00:00:00Z',
+}
+const DOC_SUMMARY_TYPED: DocumentSummary = {
+  documentId: 'd1',
+  wikiId: 'w1',
+  title: 'Getting Started',
+  state: 'Draft',
+  revision: 3,
+  updatedAt: '2026-09-09T00:00:00Z',
+}
+
+const DOCLIST_WIRE = { items: [DOC_SUMMARY_WIRE], total: 1, page: 1, page_size: 20 }
 const DOCLIST_TYPED: DocumentList = {
-  items: [DOC_TYPED],
+  items: [DOC_SUMMARY_TYPED],
   total: 1,
   page: 1,
   pageSize: 20,
@@ -386,7 +410,7 @@ describe('handleGnosisTool — the 11 document/wiki tools (RED until wired)', ()
     expect(out).toEqual(DOC_TYPED)
   })
 
-  it('§5.8-7 gnosis.document.delete happy: deleteDocument → void', async () => {
+  it('§5.8-7 gnosis.document.delete happy: deleteDocument → result null (the typed void result)', async () => {
     const handle = await loadHandler()
     const engineCrud = createEngineCrudRagStore({
       baseUrl: 'http://127.0.0.1:8080',
@@ -405,7 +429,11 @@ describe('handleGnosisTool — the 11 document/wiki tools (RED until wired)', ()
       engineCrud,
       authority,
     )
-    expect(out).toBeUndefined()
+    // HOST-CRUD-DELETE-RESULT-SERIALIZATION fix: the MCP tool-result serializer
+    // must receive a JSON-serializable value. `undefined` → `text(undefined)` →
+    // a `text` field that is NOT a string → the SDK rejects the call. The wire
+    // pins deleteDocument → () void → result:null, so the handler returns null.
+    expect(out).toBeNull()
   })
 
   it('§5.8-8 gnosis.document.publish happy: publishDocument → typed Document (Published)', async () => {
@@ -986,7 +1014,7 @@ describe('the D4 parity scope — the GUI document-editor/wiki screens (RED unti
   it('exports gnosisDocumentsContent + gnosisWikisContent render helpers', async () => {
     await expect(loadRenderers()).resolves.toBeTruthy()
   })
-  it('§5.8-16 gnosisDocumentsContent renders the document surface (wiki selector + list + editor)', async () => {
+  it('§5.8-16 gnosisDocumentsContent renders the document surface (wiki selector + list + editor, wiki-selector-ALWAYS)', async () => {
     const { gnosisDocumentsContent } = await loadRenderers()
     const node = gnosisDocumentsContent({} as never, {
       wikis: [WIKI_TYPED],
@@ -995,9 +1023,77 @@ describe('the D4 parity scope — the GUI document-editor/wiki screens (RED unti
       conflict: null,
     })
     const html = JSON.stringify(node)
-    expect(html).toContain('d1')
+    // wiki-selector-ALWAYS (H-6 / HOST-GUI-DOCS-PANE-DEADLOCK): for a non-null
+    // `wikis` the wiki <li> items render (one per wiki, data-wiki-id + the
+    // gnosis-documents-select-wiki click handler), INDEPENDENT of `documents`.
+    expect(html).toContain('"data-wiki-id":"w1"')
+    expect(html).toContain('gnosis-documents-select-wiki')
+    // document list + editor
+    expect(html).toContain('"data-document-id":"d1"')
     expect(html).toContain('Getting Started')
     expect(html).toContain('My Wiki')
+  })
+  it('§5.8-20 the docs-pane deadlock fix — null documents + present wikis renders the wiki selector <li> list (NOT the whole-pane unavailable)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const node = gnosisDocumentsContent({} as never, {
+      wikis: [WIKI_TYPED],
+      documents: null,
+      document: null,
+      conflict: null,
+    })
+    const html = JSON.stringify(node)
+    // the clickable wiki selector <li> items render (one per wiki) with the
+    // gnosis-documents-select-wiki handler — the ONLY path that triggers
+    // gnosis.document.list.
+    expect(html).toContain('"data-wiki-id":"w1"')
+    expect(html).toContain('gnosis-documents-select-wiki')
+    expect(html).toContain('My Wiki')
+    // the pane is NOT the whole-pane unavailable while the wiki selector is available.
+    expect(html).not.toContain('"data-gnosis-state":"unavailable"')
+  })
+  it('§5.8-20b the empty document-list state — null documents renders data-gnosis-docstate="empty" (never a TypeError, never unavailable)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    expect(() => gnosisDocumentsContent({} as never, { wikis: [WIKI_TYPED], documents: null, document: null, conflict: null })).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, { wikis: [WIKI_TYPED], documents: null, document: null, conflict: null }))
+    expect(html).toMatch(/"data-gnosis-docstate"\s*:\s*"empty"/)
+    expect(html).not.toContain('"data-gnosis-state":"unavailable"')
+  })
+  it('§5.8-20c an EMPTY DocumentList (items: []) with a non-null wikis renders the empty document-list state', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const node = gnosisDocumentsContent({} as never, {
+      wikis: [WIKI_TYPED],
+      documents: { items: [], total: 0, page: 1, pageSize: 20 },
+      document: null,
+      conflict: null,
+    })
+    const html = JSON.stringify(node)
+    expect(html).toMatch(/"data-gnosis-docstate"\s*:\s*"empty"/)
+    expect(html).not.toContain('"data-gnosis-state":"unavailable"')
+  })
+  it('§5.9-41 the HOST-GUI-DOCS-PANE-DEADLOCK regression — null documents + non-null wikis is NOT the engine-absent case, never a TypeError', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    expect(() => gnosisDocumentsContent({} as never, { wikis: [WIKI_TYPED], documents: null, document: null, conflict: null })).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, { wikis: [WIKI_TYPED], documents: null, document: null, conflict: null }))
+    expect(html).toContain('gnosis-documents-select-wiki')
+    expect(html).not.toContain('"data-gnosis-state":"unavailable"')
+  })
+  it('§5.9-38 preserved — a null wikis (the no-wikis/engine-absent case) STILL renders the whole-pane unavailable', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const node = gnosisDocumentsContent({} as never, { wikis: null, documents: null, document: null, conflict: null })
+    expect(JSON.stringify(node)).toMatch(/"data-gnosis-state"\s*:\s*"unavailable"/)
+  })
+  it('§5.9-38b preserved — gnosisDocumentsContent(ctx, null) → the whole-pane unavailable (never a TypeError)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    expect(() => gnosisDocumentsContent({} as never, null as never)).not.toThrow()
+    expect(JSON.stringify(gnosisDocumentsContent({} as never, null as never))).toMatch(/"data-gnosis-state"\s*:\s*"unavailable"/)
+  })
+  it('§5.5 conflict-first preserved — a ConflictError with null wikis/documents renders the conflict state (checked FIRST)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const node = gnosisDocumentsContent({} as never, {
+      wikis: null, documents: null, document: null,
+      conflict: new ConflictError('optimistic-concurrency conflict: stale base revision'),
+    })
+    expect(JSON.stringify(node)).toMatch(/"data-gnosis-state"\s*:\s*"conflict"/)
   })
   it('§5.8-17 gnosisWikisContent renders the wiki surface (list + view + create)', async () => {
     const { gnosisWikisContent } = await loadRenderers()
@@ -1032,6 +1128,64 @@ describe('the D4 parity scope — the GUI document-editor/wiki screens (RED unti
   it('§5.9-40 GUI document pane no-edit-authority → no-edit-access state (never a crash)', async () => {
     const { gnosisDocumentsContent } = await loadRenderers()
     expect(() => gnosisDocumentsContent({} as never, { wikis: null, documents: null, document: null, conflict: null })).not.toThrow()
+  })
+  it('HOST-3 graceful wiki-name degradation — a wiki item missing `name` renders NO literal "undefined" (LOW-4 convention, never an inert label)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const state = { wikis: [{ wikiId: 'w1' } as Wiki], documents: null, document: null, conflict: null }
+    expect(() => gnosisDocumentsContent({} as never, state)).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, state))
+    // a missing `name` must never ship the literal `undefined` string to the DOM
+    // (the module's own LOW-4 convention — `deriveDocNavDocuments` coerces a
+    // missing title to `''`, never `content: undefined`).
+    expect(html).not.toContain('undefined')
+    // graceful: the wiki selector still renders (ONE <li> per wiki), not a dropped pane.
+    expect(html).toContain('gnosis-documents-select-wiki')
+    expect(html).toContain('"data-wiki-id":"w1"')
+  })
+  it('HOST-3 graceful doc-title degradation — a document item missing `title` renders NO literal "undefined" (LOW-4 convention)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const malformedList = {
+      items: [
+        // title intentionally ABSENT (a summary/malformed item)
+        { documentId: 'd1', wikiId: 'w1', state: 'Draft', revision: 1, updatedAt: '2026-09-09T00:00:00Z' },
+      ],
+      total: 1, page: 1, pageSize: 20,
+    }
+    const state = { wikis: [WIKI_TYPED], documents: malformedList as unknown as DocumentList, document: null, conflict: null }
+    expect(() => gnosisDocumentsContent({} as never, state)).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, state))
+    expect(html).not.toContain('undefined')
+    expect(html).toContain('gnosis-documents-select-doc')
+  })
+  it('HOST-3 graceful doc-revision degradation — a document item missing `revision` renders NO literal "undefined" (LOW-4 convention)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const malformedList = {
+      items: [
+        // revision intentionally ABSENT
+        { documentId: 'd2', wikiId: 'w1', title: 'Doc', state: 'Draft', updatedAt: '2026-09-09T00:00:00Z' },
+      ],
+      total: 1, page: 1, pageSize: 20,
+    }
+    const state = { wikis: [WIKI_TYPED], documents: malformedList as unknown as DocumentList, document: null, conflict: null }
+    expect(() => gnosisDocumentsContent({} as never, state)).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, state))
+    expect(html).not.toContain('undefined')
+    expect(html).toContain('gnosis-documents-select-doc')
+  })
+  it('HOST-3 graceful doc-state degradation — a document item missing `state` renders NO literal "undefined" (LOW-4 convention)', async () => {
+    const { gnosisDocumentsContent } = await loadRenderers()
+    const malformedList = {
+      items: [
+        // state intentionally ABSENT
+        { documentId: 'd3', wikiId: 'w1', title: 'Doc', revision: 1, updatedAt: '2026-09-09T00:00:00Z' },
+      ],
+      total: 1, page: 1, pageSize: 20,
+    }
+    const state = { wikis: [WIKI_TYPED], documents: malformedList as unknown as DocumentList, document: null, conflict: null }
+    expect(() => gnosisDocumentsContent({} as never, state)).not.toThrow()
+    const html = JSON.stringify(gnosisDocumentsContent({} as never, state))
+    expect(html).not.toContain('undefined')
+    expect(html).toContain('gnosis-documents-select-doc')
   })
   it('H1 — the A2 screens do NOT fall back to createJsonRagStore (RED — the GnosisCrudPanes host is absent)', () => {
     const renderer = readFileSync(fileURLToPath(new URL('../src/renderer/gnosis-crud-panes.ts', import.meta.url)), 'utf8')

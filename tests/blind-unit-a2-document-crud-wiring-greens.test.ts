@@ -295,14 +295,16 @@ describe('§5.1/§5.8 the 11 document/wiki tools happy paths (mock transport —
     expect(out).toMatchObject({ documentId: 'd1', revision: 1 })
   })
 
-  it('G7 gnosis.document.delete happy -> void', async () => {
+  it('G7 gnosis.document.delete happy -> result null (the typed void result)', async () => {
     const fetch = crudMockFetch({ routes: { 'DELETE /documents/d1': DELETE_DOC_ENV } })
     const proxy = createEngineCrudRagStore({ baseUrl: 'http://127.0.0.1:8080', fetch })
     const out = await handleGnosisTool(
       null, 'gnosis.document.delete', { callerId: 'operator', documentId: 'd1' },
       null, proxy, authority, null,
     )
-    expect(out).toBeUndefined()
+    // HOST-CRUD-DELETE-RESULT-SERIALIZATION: the tool result must be a
+    // JSON-serializable value (null — the wire result), never undefined.
+    expect(out).toBeNull()
   })
 
   it('G8 gnosis.document.publish happy -> typed Document (Published)', async () => {

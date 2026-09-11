@@ -11,13 +11,20 @@
   unit-spec (P4):** **idempotency/retry for mutating creates** is a required
   deliverable of the A1/A2 unit specs — this spec pins the A1 half (a bounded,
   opt-in retry-on-`EngineUnavailable` for the mutating creates) and records the
-  A2 half (idempotency-key dedup) as a deferred decision (§5.10). **LANDED-GREEN:
-  `src/main/engine-crud-rag-store.ts` is implemented + green** — 60 tests (52
-  unit + 8 PBT rows), trio green (3111 pass / 41 skip, typecheck + build clean);
-  the greens doc `docs/specs/unit-a1-crud-routing-proxy-greens.md` (26 PASS / 18
-  NOT-VERIFIED / 0 FAIL) and the live-pending battery
-  `docs/specs/unit-a1-crud-routing-proxy-live-pending-battery.md` (parked on A2)
-  are recorded.
+  A2 half (idempotency-key dedup) as a deferred decision (§5.10). **LANDED-GREEN
+  + RE-DERIVED:** `src/main/engine-crud-rag-store.ts` is implemented + green, and
+  the `DocumentList` contract is re-derived so **`items: DocumentSummary[]`** is
+  decoded by the NEW lenient **`decodeDocumentSummary`** (six fields, snake+camel,
+  tolerates a full `Document` item / projects it; a malformed summary →
+  `EngineError('malformed document')` 502) — closing **HOST-CRUD-LIST-SUMMARY-DECODE**
+  (§3 FINDING). A1 green set: **60 unit + 8 PBT rows** (`tests/unit-a1-crud-routing-proxy.test.ts`
+  + `tests/props-a1-crud-routing-proxy.test.ts` = 68 A1 test rows), trio green
+  (**3356 pass / 43 skip**, 137 test files, typecheck + build clean); the greens
+  docs `docs/specs/unit-a1-crud-routing-proxy-greens.md` (26 PASS / 18
+  NOT-VERIFIED / 0 FAIL) and `docs/specs/unit-a1-crud-list-summary-decode-greens.md`
+  (8 PASS / 0 FAIL — the re-derivation + a §LIVE-LOCATION), and the live-pending
+  battery `docs/specs/unit-a1-crud-routing-proxy-live-pending-battery.md` (parked
+  on A2) are recorded.
 - **Scope:** a NEW shell-side module `src/main/engine-crud-rag-store.ts` — a
   **sibling** to the LANDED `src/main/engine-rag-store.ts` (Unit GN). It routes
   the **11 §4.1 document-CRUD methods** (`createDocument`, `getDocument`,
@@ -136,6 +143,35 @@ persistence (H1 — Gnosis supplants the document store; the local store is the 
 fallback). The server-host binary crate is deferred (P2, out of scope); the shell
 does not host the Rust server.
 
+**FINDING — `HOST-CRUD-LIST-SUMMARY-DECODE` (live-confirmed 2026-09-11 → this
+re-derivation):** `gnosis.document.list` (the host A1 `listDocuments` proxy) fails
+against the real Gnosis engine with the engine error **`malformed document`**
+whenever the wiki has **≥1 document**. Root cause: the engine's `listDocuments`
+(Gnosis §4.1.3) returns a **lightweight summary** — `DocumentSummary =
+{document_id, wiki_id, title, state, revision, updated_at}`, **no
+graph/tags/created_at/author**. The host decoder `decodeDocumentList` mapped every
+item through the strict full `decodeDocument` (which requires
+`graph`/`tags`/`created_at`/`author`), so the list wire — which never carries
+those four — always threw `EngineError('malformed document')` on a non-empty
+wiki. **The engine wire is correct (§4.1.3 documents the summary); the host
+contract was over-strong** (it pinned `DocumentList.items: Document[]`, which the
+list endpoint never returns).
+
+**Adopted fix direction (this re-derivation):** (1) a host `DocumentSummary`
+interface mirroring the wire (`documentId`, `wikiId`, `title`, `state`,
+`revision`, `updatedAt` — snake→camel); (2) `DocumentList.items` re-typed
+`Document[]` → `DocumentSummary[]` (full `Document` is only for
+get/create/update/publish/unpublish/archive); (3) `decodeDocumentList` maps each
+item through a NEW **lenient `decodeDocumentSummary`** (accept the six summary
+fields, never require `graph`/`tags`/`created_at`/`author`) instead of the strict
+`decodeDocument`; (4) consistent with the renderer (`gnosis-crud-panes.ts`,
+which reads only `documentId`/`revision`/`title`/`state` from list items — all
+present on a summary); (5) a genuinely malformed summary (missing/typed-wrong
+`document_id` etc.) still throws `EngineError('malformed document')`. These
+deliverables (2)/(3) are the TestWriter red set for this re-derivation;
+`DocumentSummary` and the list wire are pinned in §5.1/§5.2, the decode-fail
+contract in §5.3/§5.9, and the PBT rows in §5.7.
+
 ### 3a. Adversarial findings register
 
 > This register is populated by the post-green adversarial pass (RCA-3) when
@@ -158,9 +194,40 @@ does not host the Rust server.
   `typeof 'object'` check and was returned opaque. **FIXED:** an array `graph` →
   `EngineError` (502). Regression-tested.
 
-**PBT audit (read-only, §5.7 register):** all 8 rows correctly scoped to
-well-formed input; none over-strength; no negative-generator gap (the snake_case
-wire-decode path is covered by the unit happy-path tests + V-11).
+**Re-derivation adversarial findings (RCA-3, `HOST-CRUD-LIST-SUMMARY-DECODE` — all HOST, fixed + regression-tested):**
+
+- **HOST-1:** a **non-object `listDocuments` item** (`null`, `5`, `'x'`, `true`)
+  was not covered by the negative set and could surface as a **native `TypeError`**.
+  **FIXED:** `decodeDocumentSummary` treats any non-object item as malformed →
+  `EngineError('malformed document')` (502) — never a native `TypeError`.
+  Regression-tested (`§5.9-14 HOST-1`).
+- **HOST-2:** the engine's §4.1.3 **page-beyond-data empty-items** response
+  (`{items:[], total:0, page:1, pageSize:20}`) was not covered and could be
+  misjudged as a fail-state. **FIXED (coverage addition):** an empty `items:[]
+  DocumentList` is pinned to decode WITHOUT throwing (`§4.1.3 HOST-2`); the
+  mixed full-`Document`-item projection (a full `Document` interleaved among
+  summaries) is also pinned to decode to its six-field summary. Regression-tested.
+- **HOST-3 (the re-derivation's main finding):** the original negative generator
+  set for `P-IM-4` missed **`wikiId`/`updatedAt` (camelCase) AND the snake_case
+  wire variants** — so the malformed clause did not cover all six wire fields
+  (`document_id`/`wiki_id`/`title`/`state`/`revision`/`updated_at`). **FIXED
+  (generator-coverage tightening):** the `P-IM-4` negative set is now ∀ malformed
+  over **all six fields in both snake_case and camelCase** (incl. `wiki_id`/
+  `updated_at`), plus the non-object-item cases. Regression-tested.
+- **HOST-MINOR-A (precedence doc-note, no code change):** a spec-doc note pinned
+  in §5.2/§5.3 clarifying the **`listDocuments` decode precedence**: a full
+  `Document` item (extra `graph`/`tags`/`created_at`/`author` present) is **projected
+  to its six-field summary, never malformed**; a well-formed six-field summary
+  decodes as-is; and a **malformed** item throws `EngineError('malformed document')`
+  during the item decode (fail-state 14) — **before** the `validateCrudResult`
+  pagination check (fail-state 15f) runs. Documented only; the decoder already
+  behaves this way.
+
+**PBT audit (read-only, §5.7 register):** all **8 register rows HELD** (P-IM-1..P-IM-4,
+P-SM-1..P-SM-3, P-TP-1); none over-strength. **`P-IM-4` generator-coverage was
+tightened** to cover all six summary fields (snake_case AND camelCase), the
+non-object-item cases (HOST-1), and the mixed full-`Document`-item projection
+(HOST-2) — the re-derivation's negative-generator gap (HOST-3) is now **closed**.
 
 ### 3b. Package findings register (provident-ssr / Gnosis — recorded, never patched)
 
@@ -302,7 +369,11 @@ export interface CreateWikiArgs { caller: string; name: string }
 export interface GetWikiArgs { wikiId: string }
 export interface ListWikisArgs { /* empty */ }
 
-/** The typed result types (mirroring the P1a serde bodies, snake→camel mapped). */
+/** The typed result types (mirroring the P1a serde bodies, snake→camel mapped).
+ *  The FULL `Document` is the wire body for get/create/update/publish/unpublish/
+ *  archive (§4.1.1). The `DocumentSummary` is the WIRE-EXACT subset the engine's
+ *  `listDocuments` (Gnosis §4.1.3) returns per item — a full `Document` is NEVER
+ *  on the list wire. */
 export interface Document {
   documentId: string
   wikiId: string
@@ -315,8 +386,25 @@ export interface Document {
   tags: string[]
   author: string | null
 }
+/** A lightweight `Document` summary mirroring the wire `DocumentSummary` (Gnosis
+ *  §4.1.3 / `src/store/mod.rs`) — the ONLY item shape on the list wire: six typed
+ *  fields, NO `graph`/`tags`/`created_at`/`author`. snake→camel re-case:
+ *  `document_id`→`documentId`, `wiki_id`→`wikiId`, `updated_at`→`updatedAt`. */
+export interface DocumentSummary {
+  documentId: string
+  wikiId: string
+  title: string
+  state: 'Draft' | 'Published' | 'Archived'
+  revision: number
+  updatedAt: string
+}
 export interface DocumentList {
-  items: Document[]
+  /** `DocumentSummary[]` — NOT `Document[]`. The engine's `listDocuments`
+   *  (Gnosis §4.1.3, `src/store/mod.rs`) returns a lightweight summary per item
+   *  (§5.2); a full `Document` is never on the list wire. The pre-fix contract
+   *  pinned `items: Document[]`, which the real engine never returns — the
+   *  over-strong host contract behind `HOST-CRUD-LIST-SUMMARY-DECODE`. */
+  items: DocumentSummary[]
   total: number
   page: number
   pageSize: number
@@ -447,7 +535,8 @@ substituted with the URL-encoded `documentId`/`wikiId` from the args.
 - `createDocument`/`getDocument`/`updateDocument`/`publishDocument`/
   `unpublishDocument`/`archiveDocument` resolve to the typed `Document`.
 - `deleteDocument` resolves to `void` (the wire `result:null`).
-- `listDocuments` resolves to the typed `DocumentList`.
+- `listDocuments` resolves to the typed `DocumentList` whose `items` are
+  `DocumentSummary[]` (the engine's §4.1.3 list wire), NOT full `Document`s.
 - `createWiki`/`getWiki` resolve to the typed `Wiki`.
 - `listWikis` resolves to the typed `Wiki[]`.
 
@@ -528,7 +617,7 @@ or
 | `publishDocument` | `Document` | the `Document` serde body |
 | `unpublishDocument` | `Document` | the `Document` serde body |
 | `archiveDocument` | `Document` | the `Document` serde body |
-| `listDocuments` | `DocumentList` | the `DocumentList` serde body `{"items":[…],"total":<u64>,"page":<u64>,"page_size":<u64>}` |
+| `listDocuments` | `DocumentList` | the `DocumentList` serde body `{"items":[…],"total":<u64>,"page":<u64>,"page_size":<u64>}` — **`items` is `Vec<DocumentSummary>`** (§4.1.3), the lightweight list wire; a full `Document` is never on this wire |
 | `createWiki` | `Wiki` | the `Wiki` serde body `{"wiki_id":"<opaque>","name":"…"}` |
 | `getWiki` | `Wiki` | the `Wiki` serde body |
 | `listWikis` | `Vec<Wiki>` | a JSON array of `Wiki` serde bodies |
@@ -537,6 +626,18 @@ or
 ```json
 {"document_id":"<opaque>","wiki_id":"<opaque>","revision":<u64>,"state":"Draft|Published|Archived","graph":{"nodes":[…],"edges":[…] },"title":"…","created_at":"<ISO-8601>","updated_at":"<ISO-8601>","tags":[…],"author":<string|null>}
 ```
+
+**`DocumentSummary` serde body (the §4.1.3 `listDocuments` item shape — the ONLY
+item on the list wire):**
+```json
+{"document_id":"<opaque>","wiki_id":"<opaque>","title":"…","state":"Draft|Published|Archived","revision":<u64>,"updated_at":"<ISO-8601>"}
+```
+> `DocumentSummary` has **exactly six** fields: `document_id`, `wiki_id`, `title`,
+> `state`, `revision`, `updated_at`. `graph`, `tags`, `created_at`, and `author`
+> are **ABSENT** from the list wire by contract (Gnosis §4.1.3). The host decoder
+> for a list item therefore accepts a summary that omits all four and NEVER
+> throws on their absence — only a **malformed** summary (a missing/typed-wrong
+> `document_id`, `wiki_id`, `title`, `state`, `revision`, or `updated_at`) throws.
 
 **The wire body → typed-result mapping (the client's decode output, snake→camel
 mapped):**
@@ -558,6 +659,15 @@ mapped):**
 | `page` | `page` | unchanged |
 | `page_size` | `pageSize` | key rename |
 | `name` | `name` | unchanged |
+
+**List-item decode discipline (re-derived — `HOST-CRUD-LIST-SUMMARY-DECODE`):**
+`listDocuments` items decode through a **lenient summary path** (`decodeDocumentSummary`), NOT
+the strict full-`Document` decoder. Only the six summary fields (`document_id`,
+`wiki_id`, `title`, `state`, `revision`, `updated_at`) are read; `graph`,
+`tags`, `created_at`, `author` are **absent by contract** on the list wire and
+never required. The decode is total over a well-formed summary and throws
+`EngineError('malformed document')` only when a summary field is missing or
+typed-wrong.
 
 **Golden-vector conformance (P1a §9):**
 
@@ -637,10 +747,18 @@ discriminator, then the body):**
 | `publishDocument` | `Document.state == 'Published'` |
 | `unpublishDocument` | `Document.state == 'Draft'` |
 | `archiveDocument` | `Document.state == 'Archived'` |
-| `listDocuments` | `DocumentList.page >= 1`, `1 <= pageSize <= 100` |
+| `listDocuments` | `DocumentList.page >= 1`, `1 <= pageSize <= 100`; each `items` entry is a valid `DocumentSummary` (six typed fields — the §4.1.3 list wire) |
 | `createWiki` | none (any well-formed `Wiki`) |
 | `getWiki` | none (any well-formed `Wiki`) |
 | `listWikis` | none (any well-formed `Wiki[]`) |
+
+> **`listDocuments` validity re-derived:** `DocumentList.page >= 1` and
+> `1 <= pageSize <= 100` are **unchanged** (the same `InvalidPagination`
+> invariant). What changes is the item check: a valid `listDocuments` result has
+> **well-formed `DocumentSummary` items** (six typed fields), and a summary is
+> STILL valid when `graph`/`tags`/`created_at`/`author` are entirely absent. A
+> `listDocuments` result whose item is a FULL `Document` body is valid too but is
+> decoded to its six-field summary projection.
 
 **`CrudValidationFailure` variants (mirroring P1a):**
 
@@ -803,21 +921,22 @@ F-rows, NEVER §6/FS-n rows. **At most 8 rows.** Each row: id, the invariant it
 pins, the generator/strategy that exercises it, and the deterministic pinned seed
 + attempt budget (≤100 attempts/row, ≤400 total, stop-after-5). The register is
 genuinely invariant-bearing (request round-trip identity, response/error decode
-determinism, method-discriminator uniqueness, endpoint-path bijection, RBAC
-caller preservation, envelope stability, decode-then-validate totality).
+determinism, the `listDocuments` summary-decode contract, method + endpoint
+uniqueness/bijection, RBAC caller preservation, envelope stability,
+decode-then-validate totality).
 
 | Property-id | Class | Invariant | Strategy-id | Observable-as-property |
 |---|---|---|---|---|
 | `P-IM-1` | IM | **CRUD request round-trip identity.** For **any** `(method, args)` over the 11 `CrudMethod` values with well-formed per-method `args` (the serde-frozen bodies built per §5.2), decoding the envelope that `encodeCrudRequest` produced returns the identical `(method, args)` — the `method` discriminator and every `args` field (incl. the RBAC `caller` on mutating methods and the serde-frozen `body` verbatim) round-trip element-wise. | `strat:crud-request-roundtrip` | ∀ generated `(method, args)`: `decodeCrudRequest(encodeCrudRequest(method, args))` has `method` `==` and `args` element-wise `==` (caller, ids, and the full serde-frozen body). |
-| `P-IM-2` | IM | **CRUD response decode determinism + golden-vector conformance.** For **any** well-formed response envelope (a `(method, result)` satisfying the CRUD-specific invariants of §5.3), `decodeCrudResponse` returns a **deterministic** typed `CrudResult`; the golden vector **V-11** (P1a §9) decodes to the pinned typed `Document`. | `strat:crud-response-decode` | ∀ well-formed `(method, result)`: `decodeCrudResponse(env.payload)` is deterministic (decoding the same payload twice yields the same `CrudResult`); `decodeCrudResponse(decodeEnvelope(V-11).payload)` equals the pinned typed `Document`. |
+| `P-IM-2` | IM | **CRUD response decode determinism + golden-vector conformance.** For **any** well-formed response envelope (a `(method, result)` satisfying the CRUD-specific invariants of §5.3), `decodeCrudResponse` returns a **deterministic** typed `CrudResult` — for a `listDocuments` result the decoded `DocumentList.items` are `DocumentSummary[]` (the six-field §5.1 summary, not full `Document`s); decoding the same payload twice yields the same `CrudResult`. The golden vector **V-11** (P1a §9) decodes to the pinned typed `Document`. | `strat:crud-response-decode` | ∀ well-formed `(method, result)`: `decodeCrudResponse(env.payload)` is deterministic; for a `listDocuments` result `env.payload`, the decoded `items` are typed `DocumentSummary[]`; `decodeCrudResponse(decodeEnvelope(V-11).payload)` equals the pinned typed `Document`. |
 | `P-IM-3` | IM | **CRUD error decode determinism + round-trip.** For **any** `(method, e)` over the 11 methods and the 21-code `EngineErrorCode` set, decoding an error envelope with code `e` throws the **matching** typed error (code + §11 httpStatus); the golden vector **V-12** (`ConflictError`) decodes to `ConflictError` (409). | `strat:crud-error-decode` | ∀ `(method, e)`: `decodeCrudResponse({method, error:{code:e, message}})` throws an `EngineWireError` with `code == e` and `httpStatus == ENGINE_HTTP_STATUS[e]`; `decodeCrudResponse(decodeEnvelope(V-12).payload)` throws `ConflictError` (409). |
-| `P-IM-4` | IM | **Method-discriminator uniqueness + non-empty.** The 11 `CrudMethod` values are **11 pairwise-distinct non-empty camelCase strings**, and the mapping is a deterministic pure function of the value (the same value always yields the same string; the same string never names two methods). | `strat:crud-method-unique` | ∀ distinct `a,b: CrudMethod`: `a != b`; `!a.isEmpty()`; `a == a` on repeat and for equal values. |
-| `P-SM-1` | SM | **Endpoint-path bijection.** The 11 pinned endpoint paths (§5.1) are **pairwise distinct** and each maps to **exactly one** `CrudMethod`; the `ENGINE_CRUD_ENDPOINTS` table is a bijection between the 11 paths and the 11 methods. | `strat:crud-endpoint-unique` | ∀ distinct `(path_a, method_a), (path_b, method_b)` in `ENGINE_CRUD_ENDPOINTS`: `path_a != path_b`; `method_a != method_b`; the table has exactly 11 rows, one per `CrudMethod`. |
+| `P-IM-4` | IM | **`listDocuments` summary-decode contract.** For **any** `listDocuments` result whose `items` are well-formed `DocumentSummary` wire bodies (the six typed fields `document_id`/`wiki_id`/`title`/`state`/`revision`/`updated_at`; `graph`/`tags`/`created_at`/`author` ABSENT is legal), the decode maps every item to a typed `DocumentSummary` and **never throws on an absent `graph`/`tags`/`created_at`/`author`**; a **malformed** summary (a missing or non-string `document_id`/`wiki_id`/`title`/`updated_at`, a `state` not one of `Draft`/`Published`/`Archived`, or a non-number `revision`) throws `EngineError('malformed document')` (502). | `strat:crud-summary-decode` | ∀ well-formed summary `items`: the decoded `DocumentSummary[]` matches the pinned six-field projection and the decode does NOT throw when `graph`/`tags`/`created_at`/`author` are absent; ∀ malformed summary item (missing/typed-wrong `document_id` etc.): `decodeCrudResponse` throws `EngineError('malformed document')` (502). |
+| `P-SM-1` | SM | **Method + endpoint uniqueness/bijection.** The 11 `CrudMethod` values are **11 pairwise-distinct non-empty camelCase strings** (a deterministic pure function of the value — the same value always yields the same string; the same string never names two methods), and the 11 pinned endpoint paths (§5.1) are **pairwise distinct** with each mapping to **exactly one** `CrudMethod`; the `ENGINE_CRUD_ENDPOINTS` table is a bijection between the 11 paths and the 11 methods. | `strat:crud-method-endpoint-unique` | ∀ distinct `a,b: CrudMethod`: `a != b`; `!a.isEmpty()`; `a == a` on repeat/equal values; ∀ distinct `(path_a, method_a), (path_b, method_b)` in `ENGINE_CRUD_ENDPOINTS`: `path_a != path_b`; `method_a != method_b`; the table has exactly 11 rows, one per `CrudMethod`. |
 | `P-SM-2` | SM | **RBAC `caller` preservation.** For **any** mutating `(method, args)` (the 7 mutating methods), the encoded request carries `caller` and it round-trips; for **any** read-only `(method, args)` (the 4 read-only methods), the encoded request carries **no** `caller` field. | `strat:crud-caller-preserved` | ∀ mutating `(method, args)`: `decodeCrudRequest(encodeCrudRequest(method, args)).args` has `caller == args.caller`; ∀ read-only `(method, args)`: the encoded `args` object has no `"caller"` key. |
 | `P-SM-3` | SM | **Envelope stability.** For **any** CRUD request envelope the client builds, `schemaVersion` is `1` and `idFormat` is `'opaque-string-v1'`; serializing and re-parsing preserves the three fields. | `strat:crud-envelope-stable` | ∀ CRUD request envelope `env` (from `encodeCrudRequest`): `JSON.parse(JSON.stringify(env))` `==`-equals `env` (payload `Value` `==`-equal); `env.schemaVersion == 1`; `env.idFormat == 'opaque-string-v1'`. |
-| `P-TP-1` | TP | **decode-then-validate totality on well-formed input.** For **any** well-formed `(method, result)` satisfying the CRUD-specific invariants of §5.3, `validateCrudResult(method, result)` is `null` (never a `CrudValidationFailure`); equivalently the decode path never throws a validation `EngineError` on a well-formed result. | `strat:crud-validate-total` | ∀ well-formed `(method, result)`: `validateCrudResult(method, result) == null`; `decodeCrudResponse` of the corresponding well-formed response envelope is `ok` (never a validation `EngineError`). |
+| `P-TP-1` | TP | **decode-then-validate totality on well-formed input.** For **any** well-formed `(method, result)` satisfying the CRUD-specific invariants of §5.3 — for `listDocuments`, a well-formed result whose `items` are well-formed `DocumentSummary` bodies (six typed fields; `graph`/`tags`/`created_at`/`author` omitted is still well-formed) — `validateCrudResult(method, result)` is `null` (never a `CrudValidationFailure`); equivalently the decode path never throws a validation `EngineError` on a well-formed result. | `strat:crud-validate-total` | ∀ well-formed `(method, result)`: `validateCrudResult(method, result) == null`; `decodeCrudResponse` of the corresponding well-formed response envelope is `ok` (never a validation `EngineError`). |
 
-**Class tally:** IM ×4, SM ×3, TP ×1 = **8 rows ≤ 8** ✔.
+**Class tally:** IM ×4 (P-IM-1..4, incl. the summary-decode P-IM-4), SM ×3, TP ×1 = **8 rows ≤ 8** ✔.
 
 **PBT-gate note (determinism/seeding):** the TestWriter's executed property layer
 runs under the test runner with a **deterministic pinned seed** (`0xA1A1A1A1` —
@@ -837,7 +956,12 @@ invariant (e.g. a `createDocument` result with `revision != 0` or `state !=
 'Draft'`), an unknown `schema_version`/`id_format`, or a malformed
 request/response — those are `EngineError`/validation fail-states (the auditor's
 negative-generator territory), **not** invariant rows. The unit has **no**
-reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule.
+reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule. The
+**P-IM-4** summary-decode row deliberately carries the malformed-summary
+`EngineError('malformed document')` throw as an explicit negative assertion
+inside its invariant (mirroring the GN `P-IM-4`/`P-SM-1` negative-generator
+pattern); a malformed summary is a decode fail-state, never a `CrudResult`
+the generators produce.
 
 ### 5.8 Happy-path states (TestWriter red set — valid paths)
 
@@ -863,8 +987,12 @@ reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule.
    `archiveDocument` response envelope with a `Document` body (`state:'Archived'`)
    → resolves to the typed `Document`.
 9. **`listDocuments` happy:** a `GET /documents` returns a `listDocuments`
-   response envelope with a `DocumentList` body (`page>=1`, `1<=pageSize<=100`) →
-   resolves to the typed `DocumentList`.
+   response envelope with a `DocumentList` body (`page>=1`, `1<=pageSize<=100`;
+   `items` are `DocumentSummary` serde bodies — six fields, no
+   `graph`/`tags`/`created_at`/`author`) → resolves to the typed `DocumentList`
+   whose `items` are `DocumentSummary[]`. A list item that carries a full
+   `Document` body (incl. `graph`/`tags`/`created_at`/`author`) is also valid
+   and decodes to its six-field summary projection.
 10. **`createWiki` happy:** a `POST /wikis` returns a `createWiki` response
     envelope with a `Wiki` body → resolves to the typed `Wiki`.
 11. **`getWiki` happy:** a `GET /wikis/:id` returns a `getWiki` response envelope
@@ -926,7 +1054,13 @@ reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule.
 13. **A CRUD response with an `error` field for an UNKNOWN wire code** → rejects
     with `EngineError` (502).
 14. **A CRUD response with a malformed `result` body** (wrong field types) →
-    rejects with `EngineError` (502).
+    rejects with `EngineError` (502). **List-specific (§4.1.3):** a
+    `listDocuments` result with a **malformed `DocumentSummary` item** (a missing
+    or non-string `document_id`/`wiki_id`/`title`/`updated_at`, a `state` not one
+    of `Draft`/`Published`/`Archived`, or a non-number `revision`) → rejects with
+    `EngineError('malformed document')` (502). A summary item that simply omits
+    `graph`/`tags`/`created_at`/`author` is **NOT** malformed (those are absent by
+    contract).
 15. **A CRUD response with a well-formed body failing a CRUD-specific invariant**
     → rejects with `EngineError` (502) naming the `CrudValidationFailure` variant:
     - 15a. `createDocument` with `revision != 0` → `UnexpectedRevision`.
@@ -969,7 +1103,7 @@ reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule.
   `DeleteDocumentArgs`, `PublishDocumentArgs`, `UnpublishDocumentArgs`,
   `ArchiveDocumentArgs`, `ListDocumentsArgs`, `CreateWikiArgs`, `GetWikiArgs`,
   `ListWikisArgs`, `CrudMethod`, `CrudRequestArgs`, `CrudResult`,
-  `CrudValidationFailure`, `Document`, `DocumentList`, `Wiki`,
+  `CrudValidationFailure`, `Document`, `DocumentSummary`, `DocumentList`, `Wiki`,
   `CreateDocumentRequest`, `UpdateDocumentRequest`, `ListDocumentsFilter`,
   `Graph`, `GraphNode`, `GraphEdge`.
 - **New exported functions:** `encodeCrudRequest`, `decodeCrudRequest`,
@@ -1051,7 +1185,9 @@ reserved fail-variant rows (no `FS-*` rows) by the invariant-only rule.
   shell's local-first store implements. The `createEngineCrudRagStore` proxy is a
   NEW surface (the document-CRUD wire client), NOT the `RagStore` CRUD interface.
 - **The behavior contract:** `../Gnosis/docs/specs/gnosis.md` §4.1 (the document
-  store), §4.1.1 (the DRAFT→PUBLISHED→ARCHIVED state machine), §4.1.4 (optimistic
+  store), §4.1.1 (the DRAFT→PUBLISHED→ARCHIVED state machine), **§4.1.3
+  (`listDocuments` returns `DocumentList { items: DocumentSummary[], total, page,
+  page_size }` — the summary wire this re-derivation targets)**, §4.1.4 (optimistic
   concurrency, `ConflictError` = 409), §4.4.3 (the publish gate,
   `UnresolvedReference`), §4.4.5 (delete integrity, `DocumentInUse`), §6
   (FS-1..FS-26), §4.6.2 (no engine MCP/GUI; the "engine is optional" framing).

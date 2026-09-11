@@ -21,6 +21,18 @@ import { installShim, mountEl } from '../src/shared/dom-shim.js'
 import { Runtime } from '../src/renderer/runtime.js'
 import { demoEnvelope } from '../src/shared/demo-envelope.js'
 import { SecurePanels } from '../src/renderer/secure-panels.js'
+import { type ToolGroup } from '../src/main/security.js'
+import type { ShimElement } from '../src/shared/dom-shim.js'
+
+/** Walk a ShimElement tree and return the element whose authored id matches. */
+function findById(root: ShimElement, id: string): ShimElement | null {
+  if (root.id === id || root.attrs?.['id'] === id) return root
+  for (const c of root.children ?? []) {
+    const found = findById(c as ShimElement, id)
+    if (found) return found
+  }
+  return null
+}
 
 beforeAll(() => {
   installShim()
@@ -106,5 +118,73 @@ describe('SecurePanels — the isolated security/debug pane graph', () => {
     expect(fake.current().enabled).toContain('graph')
     await panels.dispatch('toggle:graph')
     expect(fake.current().enabled).not.toContain('graph')
+  })
+
+  // L3 — the pane's group-toggle list MUST cover EVERY group in security.ts's
+  // ToolGroup union (incl. the Gnosis groups gnosis/gnosis-edit). Omitting one
+  // leaves the manual-UI settings pane (the ONLY path to enable a group) unable
+  // to toggle it, permanently disabling its MCP tools.
+  it('renders a toggle for EVERY ToolGroup value in security.ts (incl. gnosis + gnosis-edit)', async () => {
+    const mount = document.createElement('div') as never
+    const fake = fakeSecurity()
+    installBridge(fake)
+    const panels = new SecurePanels(mount)
+    await panels.refresh()
+    const html = (mount as unknown as { innerHTML: string }).innerHTML
+    // The known ToolGroup union — every value the pane must be able to toggle.
+    const allGroups: ToolGroup[] = ['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit', 'gnosis', 'gnosis-edit']
+    for (const g of allGroups) {
+      expect(html, `toggle for group '${g}' should be rendered by the security pane`).toMatch(new RegExp(`toggle:${g}`))
+    }
+  })
+
+  it('toggling the gnosis group via the pane calls the IPC bridge.set and enables it live', async () => {
+    const mount = document.createElement('div') as never
+    const fake = fakeSecurity()
+    installBridge(fake)
+    const panels = new SecurePanels(mount)
+    await panels.refresh()
+    expect(fake.current().enabled).not.toContain('gnosis')
+    await panels.dispatch('toggle:gnosis')
+    expect(fake.current().enabled).toContain('gnosis')
+    await panels.dispatch('toggle:gnosis-edit')
+    expect(fake.current().enabled).toContain('gnosis-edit')
+    // disabling again flips it off
+    await panels.dispatch('toggle:gnosis')
+    expect(fake.current().enabled).not.toContain('gnosis')
+  })
+
+  // REAL-DOM reproduction (the bug the seam tests miss): a physical browser
+  // click goes DomAdapter.addEventListener('click') → onEvent(wire, domEvent) →
+  // handleDomEvent → supervisor.getNode(wire) → dispatchEvent. The `dispatch`
+  // seam skips this by calling supervisor.dispatchEvent directly. This test
+  // fires the mounted toggle's stored click listener — the exact DOM entrypoint.
+  it('a REAL DOM click on the gnosis/gnosis-edit toggle flips it via the IPC bridge', async () => {
+    const mount = mountEl() as never
+    const fake = fakeSecurity()
+    installBridge(fake)
+    const panels = new SecurePanels(mount)
+    await panels.refresh()
+    expect(fake.current().enabled).not.toContain('gnosis')
+
+    // find the rendered toggle element by its authored id and fire its click
+    // listeners (what a browser dispatches on a real click).
+    const toggles = [['toggle:gnosis', 'gnosis'], ['toggle:gnosis-edit', 'gnosis-edit']] as const
+    for (const [id, group] of toggles) {
+      const el = findById(mount as never, id)
+      expect(el, `rendered toggle '${id}' not found in pane DOM`).toBeTruthy()
+      const listeners = el.listeners['click']
+      expect(listeners, `toggle '${id}' has no bound click listener`).toBeTruthy()
+      for (const fn of listeners) fn({ type: 'click', target: el })
+    }
+    await panels.refresh()
+    expect(fake.current().enabled).toContain('gnosis')
+    expect(fake.current().enabled).toContain('gnosis-edit')
+
+    // a second real click on gnosis flips it back off
+    const el2 = findById(mount as never, 'toggle:gnosis')
+    for (const fn of el2.listeners['click']) fn({ type: 'click', target: el2 })
+    await panels.refresh()
+    expect(fake.current().enabled).not.toContain('gnosis')
   })
 })

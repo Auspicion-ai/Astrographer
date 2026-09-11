@@ -13,9 +13,18 @@
   **Deferred-to-unit-spec (P4):** the **caller-side idempotency-key dedup/UX** for
   the duplicate-create risk is a REQUIRED deliverable of this spec (P1a's frozen
   wire carries NO idempotency-key field, so the dedup is caller-side). **The unit
-  is LANDED (GREEN)** — the implementation landed + the tests pass (80 unit + 8
+  is LANDED (GREEN)** — the implementation landed + the tests pass (91 unit + 8
   props + 49 blind-greens); the TestWriter derived the red set from §5.8/§5.9
-  ALONE, then the Implementer landed the least code to green.
+  ALONE, then the Implementer landed the least code to green. **Scoped re-derivation
+  (2026-09-11, `HOST-GUI-DOCS-PANE-DEADLOCK`):** the `gnosisDocumentsContent`
+  render contract is re-derived so the `gnosis-documents` pane's wiki selector
+  renders whenever `state.wikis` is non-null, INDEPENDENT of `state.documents` —
+  breaking the pane's chicken-and-egg deadlock (the all-unavailable guard no longer
+  hides the wiki-selector `<li>` items that populate `documents`). The whole-pane
+  `unavailable` is reserved for the no-wikis (engine-absent) case; a null
+  `documents` with a non-null `wikis` renders the wiki selector + the empty
+  document-list state, never a TypeError. See §3a H-6, §5.5, §5.8-20, §5.9-41, and
+  the register row `P-IM-4`.
 - **Scope:** (1) the **11 `gnosis.document.*`/`gnosis.wiki.*` MCP tools**
   (create/get/update/delete/publish/unpublish/archive/list documents;
   create/get/list wikis) — the **4 read-only** tools in the read-only `gnosis`
@@ -238,6 +247,25 @@ enforcement.
   channel's mutating gate was incomplete. **Fixed** to ONE complete mutating-tool
   set (`MUTATING_TOOLS`, all 7 mutating document/wiki tools) that gates BOTH the
   `gnosisDocuments` and `gnosisWikis` channels. **Regression-tested.**
+- **H-6 (`HOST-GUI-DOCS-PANE-DEADLOCK` — the documents-pane chicken-and-egg
+  deadlock, live-confirmed 2026-09-11):** the PURE render helper
+  `gnosisDocumentsContent` (in `src/renderer/pane-graph.ts`) returned the whole-pane
+  `data-gnosis-state='unavailable'` whenever `state.wikis` was populated but
+  `state.documents` was still `null` — the NORMAL state right after a refresh,
+  before the user selected a wiki. Because the clickable wiki selector `<li>` items
+  (the ONLY path that triggers `gnosis.document.list`, which sets `documents`) were
+  rendered BELOW the all-unavailable guard, the pane was stuck in `unavailable` — a
+  chicken-and-egg deadlock. The `gnosis-wikis` pane did NOT have this problem (its
+  wiki list self-populates on boot, independent of any document state). **Fixed** by
+  this scoped spec re-derivation (the `gnosisDocumentsContent` contract, §5.5/§5.7/
+  §5.8-20/§5.9-41): the wiki selector renders whenever `state.wikis != null`
+  (INDEPENDENT of `state.documents` — the `<li>` items keep the
+  `gnosis-documents-select-wiki` click handler → `gnosis.document.list`); only the
+  document-list/editor section shows the empty document-list state
+  (`data-gnosis-docstate='empty'`) when `documents` is null or empty — NEVER the
+  whole-pane `unavailable` while the wiki selector is available and NEVER a
+  TypeError. The whole-pane `unavailable` (engine-absent) state is reserved for
+  `state == null || state.wikis == null`. **Regression-tested.**
 
 **PBT audit (read-only, §5.7 register):** the executed property layer ran under
 the deterministic pinned seed `0xA2A2A2A2` (≤100 attempts/row, ≤400 total,
@@ -245,7 +273,12 @@ stop-after-5). The adversarial reviewer's read-only PBT audit (per-row
 over-strength reasoning, generator-coverage check, prose counterexamples,
 negative-generator requests) returned **all 8 register rows HELD** (P-IM-1,
 P-IM-2, P-IM-3, P-SM-1, P-SM-2, P-SM-3, P-TP-1, P-TP-2) — no row broken, no
-generator-coverage gap, no prose counterexample.
+generator-coverage gap, no prose counterexample. **RE-BALANCED at the H-6
+re-derivation:** the register is now **P-IM-1 (the merged §5.1 tool/method-mapping
+family), P-IM-2, P-IM-3, P-IM-4 (the documents-pane render row), P-SM-1, P-SM-2,
+P-SM-3, P-TP-2** (= 8 rows; the old `P-TP-1` bijection is merged into `P-IM-1`,
+§5.7). The re-derivation re-runs the register under the same pinned seed
+(`0xA2A2A2A2`).
 
 ### 3b. Package findings register (provident-ssr / Gnosis — recorded, never patched)
 
@@ -330,7 +363,8 @@ accepts a credential arg (no `token`/`tls`/`ca`/`cert`/`key`/`apiKey`). The
 credential — the credential is derived from the `AuthorityStore`, never accepted
 as an arg).
 
-**Tool-name → CRUD-method mapping (the §5.7 `P-TP-1` bijection):**
+**Tool-name → CRUD-method mapping (the §5.7 `P-IM-1` mapping family — total,
+unambiguous, bijective):**
 
 | MCP tool | CRUD method | mutating? | group |
 | --- | --- | --- | --- |
@@ -348,7 +382,8 @@ as an arg).
 
 The 11 tool names are **pairwise distinct, non-empty, `gnosis.document.*`/
 `gnosis.wiki.*`** strings (the §5.7 `P-IM-1` row). The mapping is a **bijection**
-between the 11 tool names and the 11 CRUD methods (the §5.7 `P-TP-1` row).
+between the 11 tool names and the 11 CRUD methods (the §5.7 `P-IM-1` mapping
+family — the bijection conjunct merged at the H-6 re-derivation).
 
 **Body-construction rule (pinned — the MCP-args → A1-proxy-body mapping):** the
 three body-carrying tools (`gnosis.document.create`, `gnosis.document.update`,
@@ -403,7 +438,10 @@ return the typed `DocumentList`.
   }
   ```
 - **Return shape:** the typed `DocumentList` (A1 §5.1 — `items`, `total`, `page`,
-  `pageSize`).
+  `pageSize`), whose **`items` are `DocumentSummary[]`** (the six-field §5.1
+  summary — `documentId`, `wikiId`, `title`, `state`, `revision`, `updatedAt`),
+  per the re-derived A1 contract (`HOST-CRUD-LIST-SUMMARY-DECODE`). A full
+  `Document` is never on the list wire.
 - **Throw pattern:** `WikiNotFound` → `EngineWireError` (404); `ValidationError`
   → `EngineWireError` (400) (a `page < 1` or `pageSize < 1` or `pageSize > 100`
   filter is a server-side `ValidationError`). A non-`Ready` observed state →
@@ -746,7 +784,9 @@ export async function handleGnosisTool(
 - **`gnosis.document.list`:** validates the args (the `wikiId` + the optional
   `state`/`tag`/`page`/`pageSize` fields), builds the `ListDocumentsFilter` body,
   then calls `engineCrud.listDocuments({ wikiId, body })` and returns the typed
-  `DocumentList`. **H-4 (adversarial):** a present-but-invalid `state` is rejected
+  `DocumentList` (whose `items` are `DocumentSummary[]`, per the re-derived A1
+  `HOST-CRUD-LIST-SUMMARY-DECODE` contract — A1 §5.1/§5.2). **H-4
+  (adversarial):** a present-but-invalid `state` is rejected
   (`Error('<tool>: invalid state')`), never silently nulled.
 - **`gnosis.wiki.get`:** validates the args (the `wikiId` field), then calls
   `engineCrud.getWiki({ wikiId })` and returns the typed `Wiki`.
@@ -971,7 +1011,11 @@ provident constraint — a pane rendered outside the graph is a review finding).
   document surface: a **wiki selector** (listWikis/getWiki), a **document list**
   (listDocuments), and a **document editor** (getDocument/createDocument/
   updateDocument/deleteDocument/publishDocument/unpublishDocument/archiveDocument).
-  A null result → an empty state (never a TypeError).
+  **H-6 / `HOST-GUI-DOCS-PANE-DEADLOCK` (re-derived):** the wiki selector renders
+  whenever `state.wikis` is non-null, INDEPENDENT of `state.documents`; a null
+  `documents` shows the empty document-list state (`data-gnosis-docstate='empty'`);
+  the whole-pane `unavailable` (engine-absent) is reserved for a null `state`/null
+  `wikis`. A null result → the empty/unavailable state (never a TypeError).
 - **Data source:** a new bridge method (e.g. `bridge.gnosis.documents(tool, args)`)
   → an IPC → main → the SAME `handleGnosisTool` handler (MCP/UI equivalence). The
   handler body reaches the bridge via `window.provident.sidebar` — NEVER an MCP
@@ -997,7 +1041,15 @@ provident constraint — a pane rendered outside the graph is a review finding).
 ```ts
 /** Unit A2 §5.5 — the gnosis-documents pane content: renders the document
  *  surface (wiki selector + document list + document editor) over the typed
- *  Document/DocumentList/Wiki shapes. A null result → the empty state (never a
+ *  Document/DocumentList/Wiki shapes. RE-DERIVED (H-6,
+ *  HOST-GUI-DOCS-PANE-DEADLOCK — live-confirmed 2026-09-11): the wiki selector
+ *  renders whenever `state.wikis != null` — INDEPENDENT of `state.documents`;
+ *  only the document-list/editor section shows the empty document-list state
+ *  (`data-gnosis-docstate='empty'`) when `state.documents` is null or empty —
+ *  NEVER the whole-pane `unavailable` while the wiki selector is available and
+ *  NEVER a TypeError. The whole-pane `unavailable` (engine-absent) state is
+ *  reserved for `state == null || state.wikis == null`; the `conflict` (409)
+ *  state is checked FIRST. A null result → the empty/unavailable state (never a
  *  TypeError). PURE. */
 export function gnosisDocumentsContent(
   ctx: PaneContext,
@@ -1017,6 +1069,60 @@ export function gnosisWikisContent(
   state: { wikis: Wiki[] | null; wiki: Wiki | null },
 ): LegacyNodeData
 ```
+
+**`gnosisDocumentsContent` contract (re-derived by H-6, `HOST-GUI-DOCS-PANE-DEADLOCK`):
+the wiki-selector-ALWAYS rule.** The PURE helper returns a `LegacyNodeData` subtree
+(provident-authored data — NEVER hand-written DOM) over the typed
+`Document`/`DocumentList`/`Wiki`/`ConflictError` shapes. The return shape must
+remain `LegacyNodeData`; the select `<li>` items keep the `handlers` field bound
+(the `gnosis-documents-select-wiki` / `gnosis-documents-select-doc` click handlers,
+hardcoded as module constants — the PURE helper cannot receive them as args). The
+guard order and the state mapping are PINNED:
+
+1. **`state != null && state.conflict != null` → the whole-pane `conflict` state**
+   (`data-gnosis-state='conflict'` — the H2 409 message + the re-read/current-
+   revision prompt). **CHECKED FIRST** (unchanged): a `ConflictError` surfaces the
+   conflict UX even when the cached `wikis`/`documents` are null (a re-read
+   prompt). A null `state` at this point (a `conflict` field on a null `state`
+   dereference is impossible) still falls through to guard 2.
+2. **`state == null || state.wikis == null` → the whole-pane `unavailable` state**
+   (`data-gnosis-pane='documents'`, `data-gnosis-state='unavailable'`). This is the
+   **engine-absent** branch (unchanged in shape): no engine / no wiki data at all.
+   After this guard, **`state.wikis` is non-null** — the wiki selector path is
+   reachable.
+3. **Otherwise (wikis present) — render the wiki selector ALWAYS, INDEPENDENT of
+   `state.documents`/`state.document`:** the `Wikis` heading + the `ul` of `li`
+   items, ONE `li` per `state.wikis` entry, each carrying
+   `props['data-wiki-id'] = w.wikiId`, `content: w.name`, and
+   `handlers: [{name:'gnosis-documents-select-wiki', event:'click', body:<the select-wiki body>}]`
+   (the body calls `window.provident.sidebar.gnosisDocuments('gnosis.document.list',
+   { wikiId })`). These `<li>` items are the **ONLY path that triggers
+   `gnosis.document.list`** (which populates `state.documents`) — rendering them
+   whenever `wikis` is present is precisely what defuses the deadlock: a user can
+   always click a wiki to populate the document list. The wiki selector must NOT be
+   gated on `state.documents`.
+4. **The Documents section renders as either (a) the empty doc-list state or (b)
+   the populated doc-list/editor, selected by `state.documents`:**
+   - **(a) `state.documents` is null OR `state.documents.items` is empty → the
+     EMPTY document-list state:** the `Documents` heading + an empty-state
+     indicator (a `p` such as `'(No documents — select a wiki)'`) carrying
+     `props['data-gnosis-docstate'] = 'empty'`. This branch MUST NOT dereference a
+     null `documents` (never a TypeError — the `?.items ?? []` null-result rule)
+     and MUST NOT return the whole-pane `unavailable` while the wiki selector is
+     available.
+   - **(b) `state.documents` is non-null and non-empty → the populated doc-list /
+     editor:** the `Documents` heading + the `ul` of doc `li` items, ONE `li` per
+     `state.documents.items` entry, each carrying `props['data-document-id']`,
+     `props['data-revision']`, `content: `${d.title} (${d.state})``, and the
+     `gnosis-documents-select-doc` click handler (`gnosis.document.get`); plus the
+     document-editor fields when `state.document` is present (the `Document: …`
+     title + the `Revision: … — state: …` fields, per the existing render).
+**The `data-gnosis-state` attribute semantics:** the all-unavailable branch
+(guard 2) now covers ONLY the no-wikis (engine-absent) case; the populated/empty
+documents pane carries NO `data-gnosis-state` on the pane root — the documents
+section's empty distinction is pinned by `data-gnosis-docstate='empty'` on its
+empty-state indicator (consistent with the pane conventions; the `conflict` state
+is `data-gnosis-state='conflict'`, the no-wikis is `data-gnosis-state='unavailable'`).
 
 **The optimistic-concurrency 409 UX (H2 — GNOSIS-409-UX):** the `gnosis-documents`
 pane renders a **conflict state** when an `updateDocument` action surfaces a
@@ -1129,24 +1235,39 @@ This is a CODE-BEARING unit, so the register is mandatory. Rows are typed
 F-rows, NEVER §6/FS-n rows. **At most 8 rows.** Each row: id, the invariant it
 pins, the generator/strategy that exercises it, and the deterministic pinned seed
 + attempt budget (≤100 attempts/row, ≤400 total, stop-after-5). The register is
-genuinely invariant-bearing (the tool-name → group mapping is total/unambiguous;
-the mutating tool schemas reject credential args; the caller credential threading
-is deterministic; the `gnosis-edit` group is default-off; the 409 UX is consistent
-across MCP + GUI; the idempotency dedup is deterministic; the tool → method mapping
-is a bijection; the D2 engine-absent surfacing is consistent across MCP + GUI).
+genuinely invariant-bearing (the §5.1 tool/method mapping is total/unambiguous/
+bijective — the merged `P-IM-1`; the mutating tool schemas reject credential args;
+the caller credential threading is deterministic; the `gnosis-edit` group is
+default-off; the 409 UX is consistent across MCP + GUI; the idempotency dedup is
+deterministic; the `gnosisDocumentsContent` documents-pane render is total +
+deadlock-free (H-6 / `HOST-GUI-DOCS-PANE-DEADLOCK`, `P-IM-4`); the D2 engine-absent
+surfacing is consistent across MCP + GUI).
 
 | Property-id | Class | Invariant | Strategy-id | Observable-as-property |
 |---|---|---|---|---|
-| `P-IM-1` | IM | **The 11 document/wiki tool names are pairwise-distinct non-empty `gnosis.document.*`/`gnosis.wiki.*` strings, and the tool-name → group mapping is total/unambiguous.** The 4 read-only tools resolve to `'gnosis'`; the 7 mutating tools resolve to `'gnosis-edit'`; a `gnosis.*` name NOT in `TOOL_GROUPS` resolves to `null` (fail-closed, never a wrong group). | `strat:crud-tool-group-total` | ∀ `name ∈ {gnosis.document.get, gnosis.document.list, gnosis.wiki.get, gnosis.wiki.list}`: `groupForTool(name) === 'gnosis'`; ∀ `name ∈ {gnosis.document.create, gnosis.document.update, gnosis.document.delete, gnosis.document.publish, gnosis.document.unpublish, gnosis.document.archive, gnosis.wiki.create}`: `groupForTool(name) === 'gnosis-edit'`; ∀ generated unknown `gnosis.<other>` name: `groupForTool(name) === null`; the 11 names are pairwise distinct + non-empty. |
+| `P-IM-1` | IM | **The §5.1 tool/method mapping is total, unambiguous, and bijective.** (RE-BALANCED at the H-6 re-derivation: the old `P-TP-1` tool→method-bijection invariant is MERGED into this row so a render-property row `P-IM-4` can be added within the 8-row budget.) The 11 document/wiki tool names are pairwise-distinct non-empty `gnosis.document.*`/`gnosis.wiki.*` strings, the tool-name → group mapping is total/unambiguous (the 4 read-only tools resolve to `'gnosis'`; the 7 mutating tools resolve to `'gnosis-edit'`; a `gnosis.*` name NOT in `TOOL_GROUPS` resolves to `null`, fail-closed), AND the tool-name → CRUD-method mapping is a bijection (the 11 names map to the 11 §5.1 CRUD methods, one tool per method, one method per tool). | `strat:crud-tool-mapping-total` | ∀ `name ∈ {gnosis.document.get, gnosis.document.list, gnosis.wiki.get, gnosis.wiki.list}`: `groupForTool(name) === 'gnosis'`; ∀ `name ∈ {gnosis.document.create, gnosis.document.update, gnosis.document.delete, gnosis.document.publish, gnosis.document.unpublish, gnosis.document.archive, gnosis.wiki.create}`: `groupForTool(name) === 'gnosis-edit'`; ∀ generated unknown `gnosis.<other>` name: `groupForTool(name) === null`; the 11 names are pairwise distinct + non-empty; ∀ distinct `(tool_a, method_a), (tool_b, method_b)` in the §5.1 mapping: `tool_a != tool_b`, `method_a != method_b`, the mapping has exactly 11 rows, one per CRUD method. |
 | `P-IM-2` | IM | **The 11 document/wiki tool schemas reject credential args.** NONE of the 11 tools' `inputSchema` accepts a credential field — no `token`, no `tls`, no `ca`/`cert`/`key`, no `apiKey` (A7). The `callerId` arg is an identity, NOT a credential. | `strat:crud-no-credential-args` | ∀ `tool ∈ {the 11 document/wiki tools}`: the tool's `inputSchema` has NO key in `{token, tls, ca, cert, key, apiKey}`. |
 | `P-IM-3` | IM | **The caller credential threading is deterministic.** For **any** mutating document/wiki tool call with a `callerId` that has edit authority, the handler resolves the credential from the `AuthorityStore` and threads it into the mutating args' `caller` field (the encoded request carries the credential); for a `callerId` with NO edit authority, the mutating call is denied caller-side (no proxy call is issued). | `strat:crud-caller-threaded` | ∀ mutating `(tool, callerId)` with `authorityStore.callerCredential(callerId) != null`: the encoded request's `args.caller == authorityStore.callerCredential(callerId)`; ∀ mutating `(tool, callerId)` with `authorityStore.callerCredential(callerId) == null`: the handler throws `Error('<tool>: caller has no edit authority')` and issues NO proxy call. |
+| `P-IM-4` | IM | **The `gnosisDocumentsContent` documents-pane render is total + deadlock-free over its input states.** (NEW at the H-6 re-derivation — the pure render helper IS property-testable, `state → LegacyNodeData`, so it earns a register row.) For ANY generated `state` over the `wikis ∈ {null, empty, populated}` × `documents ∈ {null, empty, populated}` × `document ∈ {null, present}` × `conflict ∈ {null, set}` grid: (a) `state.conflict != null` → the whole-pane conflict state (checked first); (b) `state == null || state.wikis == null` → the whole-pane `unavailable` (engine-absent); (c) otherwise (wikis present, documents null/empty/populated) the render ALWAYS emits the wiki selector `<li>` items (one per wiki, `data-wiki-id` + the `gnosis-documents-select-wiki` click handler, INDEPENDENT of `documents`) and renders the documents section as the EMPTY document-list state (`data-gnosis-docstate='empty'`) when `documents` is null or empty — NEVER the whole-pane `unavailable` while the wiki selector is available and NEVER a TypeError. | `strat:documents-pane-render-total` | ∀ generated `state` per the grid: `gnosisDocumentsContent(ctx, state)` returns a `LegacyNodeData` that satisfies (a)/(b)/(c); in case (c) with `documents == null` or `documents.items == []`, the returned subtree contains the `gnosis-documents-select-wiki` handler + the empty-state `data-gnosis-docstate='empty'`, and NEVER the `data-gnosis-state='unavailable'` on the pane root NOR a thrown TypeError (case (c) `documents == null` does NOT dereference `.items`/`.map`). |
 | `P-SM-1` | SM | **The `gnosis-edit` group is default-off + `VALID_GROUPS` membership.** The default security config does NOT enable `gnosis-edit`; `VALID_GROUPS` includes `'gnosis-edit'`. (The tool-name → group mapping totality is P-IM-1's invariant, NOT this row's.) | `strat:crud-group-default-off` | `defaultSecurityConfig().enabled` does NOT include `'gnosis-edit'`; `VALID_GROUPS` includes `'gnosis-edit'`. |
 | `P-SM-2` | SM | **The optimistic-concurrency 409 UX is consistent across MCP + GUI.** A `ConflictError` (409) surfaces as the typed error on the MCP `gnosis.document.update` tool AND as the conflict state on the GUI `gnosis-documents` pane. | `strat:crud-409-ux` | ∀ generated `ConflictError` (409) from the A1 proxy: the MCP tool throws `ConflictError` (409); the GUI pane renders the conflict state (never a crash). |
 | `P-SM-3` | SM | **The idempotency dedup is deterministic + caller-scoped.** A duplicate `(callerId, requestId)` returns the first result WITHOUT issuing a new create; a new `(callerId, requestId)` issues a fresh create and caches the result; a caller can NEVER receive another caller's cached result. | `strat:crud-idempotency-dedup` | ∀ generated `(callerId, requestId)` + create result: `idempotency.get(callerId, requestId)` after a first create returns the cached result; a second create with the SAME `(callerId, requestId)` returns the cached result and issues NO new proxy call; a NEW `(callerId, requestId)` issues a fresh create; `idempotency.get(otherCaller, requestId)` is `undefined` (never another caller's result). |
-| `P-TP-1` | TP | **The tool → CRUD-method mapping is a bijection.** The 11 document/wiki tool names map to the 11 CRUD methods (one tool per method, one method per tool); each tool routes to exactly one proxy method. | `strat:crud-tool-method-bijection` | ∀ distinct `(tool_a, method_a), (tool_b, method_b)` in the §5.1 mapping: `tool_a != tool_b`; `method_a != method_b`; the mapping has exactly 11 rows, one per CRUD method. |
 | `P-TP-2` | TP | **The D2 engine-absent surfacing is consistent across MCP + GUI for the CRUD tools.** A connection-refused engine surfaces as `EngineUnavailable` (503) on the MCP document/wiki tools AND as the unavailable state on the GUI panes. | `strat:crud-engine-absent` | ∀ generated connection-refused transport: the MCP document/wiki tool throws `EngineUnavailable` (503, `cause: 'connection-refused'`); the GUI panes render the unavailable state. |
 
-**Class tally:** IM ×3, SM ×3, TP ×2 = **8 rows ≤ 8** ✔.
+**Class tally:** IM ×4 (P-IM-1 the merged §5.1-mapping family, P-IM-2, P-IM-3, P-IM-4 the documents-pane render row), SM ×3, TP ×1 (P-TP-2) = **8 rows ≤ 8** ✔.
+
+**Register re-balance decision (H-6, recorded):** the pure render helper
+`gnosisDocumentsContent` is CODE-BEARING and property-testable (`state →
+LegacyNodeData`), so it earns a register row per the house rule (a zero-row
+exemption is NOT taken — the helper IS an executable `state → LegacyNodeData`
+surface). To stay within the **at-most-8** budget, the old `P-TP-1` (tool →
+CRUD-method bijection) invariant was **merged into `P-IM-1`** (both characterize the
+§5.1 tool/method mapping family — totality/unambiguous-ness + bijection), freeing a
+slot for the new **`P-IM-4`** documents-pane-render row. The executed property layer
+must therefore assert the merged `P-IM-1` observable (which now includes the
+method-bijection conjunct) in place of the retired `P-TP-1`, and the new `P-IM-4`
+grid. All 8 rows stay within the ≤100 attempts/row / ≤400 total / stop-after-5
+budget under the pinned seed `0xA2A2A2A2`.
 
 **PBT-gate note (determinism/seeding):** the TestWriter's executed property layer
 runs under the test runner with a **deterministic pinned seed** (`0xA2A2A2A2` —
@@ -1178,7 +1299,8 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
    `Document`.
 2. **`gnosis.document.list` happy:** a `gnosis.document.list` call with a
    well-formed `wikiId` + optional filters → the handler calls
-   `engineCrud.listDocuments` and returns the typed `DocumentList`.
+   `engineCrud.listDocuments` and returns the typed `DocumentList` whose `items`
+   are `DocumentSummary[]` (the re-derived A1 §5.1 summary — six fields).
 3. **`gnosis.wiki.get` happy:** a `gnosis.wiki.get` call with a well-formed
    `wikiId` → the handler calls `engineCrud.getWiki` and returns the typed `Wiki`.
 4. **`gnosis.wiki.list` happy:** a `gnosis.wiki.list` call → the handler calls
@@ -1239,6 +1361,16 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
 19. **Mock-transport happy:** the wiring tests inject a mock `fetch` into
     `createEngineCrudRagStore` and exercise the real proxy against the
     deterministic mock transport (no live engine).
+20. **GUI document pane wiki-selector-ALWAYS (the docs-pane deadlock fix, H-6 /
+    `HOST-GUI-DOCS-PANE-DEADLOCK`):** `gnosisDocumentsContent(ctx, { wikis:[<Wiki>],
+    documents:null, document:null, conflict:null })` → renders a subtree that
+    includes the wiki selector `<li>` items (each carrying `data-wiki-id` + the
+    `gnosis-documents-select-wiki` click handler → `gnosis.document.list`) AND the
+    empty document-list state (`data-gnosis-docstate='empty'`) — a null `documents`
+    with a non-null `wikis` shows the wiki selector + the empty doc-list, NEVER the
+    whole-pane `unavailable` and NEVER a TypeError. The `<li>` items are the ONLY
+    path that triggers `gnosis.document.list` (populating `documents`), so this
+    breaks the deadlock.
 
 ### 5.9 Fail-states (TestWriter red set — documented fail-states)
 
@@ -1323,9 +1455,12 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
     `Error('unknown gnosis tool: <name>')`.
 37. **A `gnosis.*` name NOT in `TOOL_GROUPS`** → `groupForTool` returns `null`
     (fail-closed — never resolves to a group).
-38. **GUI document/wiki pane engine-absent** → the `gnosis-documents`/`gnosis-wikis`
-    panes show the unavailable state (the bridge rejection is caught, never a
-    crash).
+38. **GUI document/wiki pane engine-absent** — the NO-WIKIS case
+    (`state == null || state.wikis == null`) → the `gnosis-documents`/`gnosis-wikis`
+    panes show the whole-pane unavailable state (the bridge rejection is caught,
+    never a crash). DISTINCT from §5.8-20/§5.9-41: a non-null `wikis` with a null
+    `documents` is NOT the engine-absent case and does NOT show the whole-pane
+    unavailable.
 39. **GUI document/wiki pane group-off** → the panes fail closed (the
     `gnosis`/`gnosis-edit` group gates) and/or surface the `EngineUnavailable` as
     an empty/error state — never a crash.
@@ -1333,6 +1468,13 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
     `gnosis-documents` pane with a caller that has no edit authority → the pane
     shows the no-edit-access state (the caller-side deny is surfaced, never a
     crash).
+41. **GUI document pane with a null `documents` but a non-null `wikis` (the
+    `HOST-GUI-DOCS-PANE-DEADLOCK` regression, H-6):**
+    `gnosisDocumentsContent(ctx, { wikis:[<Wiki>], documents:null, document:null,
+    conflict:null })` → renders the wiki selector `<li>` items + the empty
+    document-list state (`data-gnosis-docstate='empty'`), NEVER a TypeError (a null
+    `documents` MUST NOT be dereferenced via `.map`) and NEVER the whole-pane
+    `unavailable` while the wiki selector is available.
 
 **Pinned non-throws / type-level guarantees:**
 
@@ -1388,12 +1530,17 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
 - **`ConflictError` = 409 (mandated, H2):** the optimistic-concurrency 409 UX
   surfaces `ConflictError` (409) on BOTH the MCP `gnosis.document.update` tool AND
   the GUI `gnosis-documents` pane.
-- **PBT register:** **8 rows** (IM ×3, SM ×3, TP ×2), ≤100 attempts/row, ≤400
+- **PBT register:** **8 rows** (IM ×4, SM ×3, TP ×1 — the §5.1 mapping-family
+  `P-IM-1` merged from the retired `P-TP-1`, the documents-pane render `P-IM-4`
+  added at the H-6 re-derivation), ≤100 attempts/row, ≤400
   total, stop-after-5, deterministic pinned seed `0xA2A2A2A2`. **Post-green: all
   8 rows HELD** (the adversarial PBT audit, §3a).
-- **Test counts (LANDED):** the unit's red set covered §5.8 (19 happy states) +
-  §5.9 (40 fail-states + the pinned non-throws) + the PBT register (§5.7). The
-  LANDED test files: **80 unit tests** (`tests/unit-a2-document-crud-wiring.test.ts`),
+- **Test counts (LANDED + re-derived):** the unit's red set covered §5.8 (**19
+  happy states; now 20 with §5.8-20 the wiki-selector-ALWAYS row**) +
+  §5.9 (**40 fail-states + the pinned non-throws; now 41 with §5.9-41 the
+  `HOST-GUI-DOCS-PANE-DEADLOCK` regression**) + the PBT register (§5.7; now IM ×4
+  with the `P-IM-4` documents-pane render row). The
+  LANDED test files: **91 unit tests** (`tests/unit-a2-document-crud-wiring.test.ts`),
   **8 props tests** (`tests/props-a2-document-crud-wiring.test.ts`), and **49
   blind-greens tests** (`tests/blind-unit-a2-document-crud-wiring-greens.test.ts`,
   covering the 81 greens scenarios — 33 G + 40 F + 8 P). All green.
@@ -1495,8 +1642,12 @@ this unit):
   (construction does no I/O; the caller-credential threading; the idempotency
   dedup) + the fail-states 12, 13 (no-edit-authority; null/absent authority store).
 - **The D4 parity scope (the GUI document-editor/wiki screens + the render paths):**
-  the happy states 16, 17, 18 + the fail-states 38, 39, 40 (the panes' unavailable
-  state; the fail-closed gates; the 409 conflict state; the no-edit-access state).
+  the happy states 16, 17, 18, **20** + the fail-states 38, 39, 40, **41** (the
+  panes' unavailable state — now the no-wikis/engine-absent case only; the
+  fail-closed gates; the 409 conflict state; the no-edit-access state; the
+  `HOST-GUI-DOCS-PANE-DEADLOCK` regression — a null `documents` with a non-null
+  `wikis` renders the wiki selector + the empty doc-list, never a TypeError) +
+  the PBT register P-IM-4 (the total/deadlock-free documents-pane render).
 - **The optimistic-concurrency 409 UX (H2):** the happy state 18 + the fail-state
   22 (a `ConflictError` (409) surfaces on the MCP `gnosis.document.update` tool
   AND as the conflict state on the GUI `gnosis-documents` pane) + the PBT register

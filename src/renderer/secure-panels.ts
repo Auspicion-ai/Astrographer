@@ -56,10 +56,11 @@ declare global {
 }
 
 // L3 (adversarial) — the pane's group list MUST match security.ts's ToolGroup
-// union (read/dispatch/graph/code/module/rag/edit). Omitting `rag`/`edit` here
-// would leave the manual-UI settings pane (the ONLY path to enable groups)
-// unable to toggle them, permanently disabling the rag.*/edit.* MCP tools.
-const GROUPS = ['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit'] as const
+// union (read/dispatch/graph/code/module/rag/edit + the Gnosis groups
+// gnosis/gnosis-edit). Omitting a group here would leave the manual-UI settings
+// pane (the ONLY path to enable groups) unable to toggle it, permanently
+// disabling its MCP tools.
+const GROUPS = ['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit', 'gnosis', 'gnosis-edit'] as const
 const GROUP_LABELS: Record<string, string> = {
   read: 'read (get_rendered_html, get_markdown, list_targets, get_node_state, code.get, code.validate)',
   dispatch: 'dispatch (synthetic event driving)',
@@ -68,6 +69,8 @@ const GROUP_LABELS: Record<string, string> = {
   module: 'module (module.install/update/list + module:<name>.<tool> extensions — trusted-equivalent to code)',
   rag: 'rag (rag.query, get_document, list_nodes, get_edges, backlinks — read-only retrieval)',
   edit: 'edit (edit.set_content/create_node/delete_node/split_node/merge_node/set_edge — mutating)',
+  gnosis: 'gnosis (gnosis.query, gnosis.stream, gnosis.status + the read-only gnosis.document.*/gnosis.wiki.* — the Gnosis engine retrieval trio + document/wiki reads)',
+  'gnosis-edit': 'gnosis-edit (gnosis.document.create/update/delete/publish/unpublish/archive + gnosis.wiki.create — mutating Gnosis document/wiki CRUD)',
 }
 
 function randToken(len = 32): string {

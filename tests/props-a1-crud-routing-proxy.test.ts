@@ -23,9 +23,11 @@ import {
   type CrudRequestArgs,
   type CrudResult,
   type Document,
+  type DocumentSummary,
 } from '../src/main/engine-crud-rag-store.js'
 import {
   EngineWireError,
+  EngineError,
   ConflictError,
   ENGINE_HTTP_STATUS,
   decodeEnvelope,
@@ -224,6 +226,22 @@ function genDocument(
   }
 }
 
+/** A well-formed `DocumentSummary` (the §4.1.3 list item — six typed fields).
+ *  `graph`/`tags`/`createdAt`/`author` are ABSENT by contract. */
+function genSummary(
+  rng: () => number,
+  state: 'Draft' | 'Published' | 'Archived',
+): DocumentSummary {
+  return {
+    documentId: pick(rng, ['d1', 'd2', 'a b/c']),
+    wikiId: pick(rng, ['w1', 'w2']),
+    title: pick(rng, ['t', 'Getting Started']),
+    state,
+    revision: pick(rng, [0, 1, 5]),
+    updatedAt: '2026-09-09T00:00:00Z',
+  }
+}
+
 /** A well-formed CrudResult for the method (satisfying the §5.3 invariants). */
 function genResult(rng: () => number, method: CrudMethod): CrudResult {
   switch (method) {
@@ -247,16 +265,32 @@ function genResult(rng: () => number, method: CrudMethod): CrudResult {
       return { method, result: genDocument(rng, 'Draft', pick(rng, [0, 1])) }
     case 'archiveDocument':
       return { method, result: genDocument(rng, 'Archived', pick(rng, [0, 1])) }
-    case 'listDocuments':
+    case 'listDocuments': {
+      // Counterexample 4 (HOST-2): also emit the engine's §4.1.3 page-beyond-data
+      // shape — empty `items`, `total: 0` — among the positive listDocuments
+      // samples, so the property path (P-IM-2 / P-TP-1 / P-IM-4) exercises the
+      // empty-items decode (a HOST-2 unit/positive path, not only the proxy).
+      if (rng() < 0.15) {
+        return {
+          method,
+          result: { items: [], total: 0, page: 1, pageSize: 20 },
+        }
+      }
       return {
         method,
         result: {
-          items: [genDocument(rng, 'Draft', 0)],
-          total: 1,
+          // The §4.1.3 list wire carries `DocumentSummary` items — NEVER full
+          // `Document`s. Re-derived `HOST-CRUD-LIST-SUMMARY-DECODE`.
+          items: [
+            genSummary(rng, pick(rng, ['Draft', 'Published', 'Archived'] as const)),
+            genSummary(rng, pick(rng, ['Draft', 'Published', 'Archived'] as const)),
+          ],
+          total: 2,
           page: pick(rng, [1, 2, 100]),
           pageSize: pick(rng, [1, 20, 100]),
         },
       }
+    }
     case 'createWiki':
     case 'getWiki':
       return { method, result: { wikiId: 'w1', name: pick(rng, ['', 'My Wiki']) } }
@@ -299,7 +333,7 @@ describe('PBT register (§5.7)', () => {
     expect(held).toBe(true)
   })
 
-  it('P-IM-2 [strat:crud-response-decode] CRUD response decode determinism + V-11', () => {
+  it('P-IM-2 [strat:crud-response-decode] CRUD response decode determinism + listDocuments DocumentSummary[] + V-11', () => {
     const { held, counterexamples } = runProperty(
       PBT_ATTEMPTS,
       PBT_STOP_AFTER,
@@ -311,6 +345,24 @@ describe('PBT register (§5.7)', () => {
         const b = decodeCrudResponse(payload)
         if (JSON.stringify(a) !== JSON.stringify(b)) {
           return `non-deterministic decode for ${method}`
+        }
+        // Re-derived: a listDocuments result decodes to `DocumentSummary[]`
+        // items (the six-field summary, not full `Document`s), and the summary
+        // round-trips element-wise (the decoder accepts the camelCase typed
+        // shape and never requires graph/tags/createdAt/author).
+        if (method === 'listDocuments') {
+          const decodedItems = (a.result as { items: unknown[] }).items
+          const genItems = (result.result as { items: unknown[] }).items
+          if (JSON.stringify(decodedItems) !== JSON.stringify(genItems)) {
+            return `listDocuments: decoded items != generated DocumentSummary[]`
+          }
+          for (const it of decodedItems as DocumentSummary[]) {
+            const keys = Object.keys(it).sort().join(',')
+            const expected = ['documentId', 'revision', 'state', 'title', 'updatedAt', 'wikiId'].join(',')
+            if (keys !== expected) {
+              return `listDocuments summary item keys [${keys}] != the six summary fields (graph/tags/createdAt/author present?)`
+            }
+          }
         }
         return null
       },
@@ -356,35 +408,196 @@ describe('PBT register (§5.7)', () => {
     )
   })
 
-  it('P-IM-4 [strat:crud-method-unique] method-discriminator uniqueness + non-empty', () => {
+  it('P-IM-4 [strat:crud-summary-decode] listDocuments summary-decode contract', () => {
     const { held, counterexamples } = runProperty(
       PBT_ATTEMPTS,
       PBT_STOP_AFTER,
       (_i, rng) => {
-        const v = pick(rng, CRUD_METHODS)
-        if (v.length === 0) return 'empty method string'
-        if (!/^[a-z][a-zA-Z]*$/.test(v)) return `non-camelCase method: ${v}`
+        const state = pick(rng, ['Draft', 'Published', 'Archived'] as const)
+        const summary = genSummary(rng, state)
+
+        // POSITIVE 1 (original): well-formed `DocumentSummary[]` (six typed
+        // fields; graph/tags/createdAt/author ABSENT is legal) → decode WITHOUT
+        // throwing, and the decoded item matches the pinned six-field
+        // projection.
+        let decoded: CrudResult | null = null
+        try {
+          decoded = decodeCrudResponse({
+            method: 'listDocuments',
+            result: { items: [summary], total: 1, page: 1, pageSize: 20 },
+          })
+        } catch (e) {
+          return `well-formed summary threw (malformed document? current host routes list items through strict decodeDocument): ${String(e)}`
+        }
+        const decodedItem = (decoded.result as { items: unknown[] }).items[0] as DocumentSummary
+        if (JSON.stringify(decodedItem) !== JSON.stringify(summary)) {
+          return `summary item decoded != generated (six-field projection mismatch)`
+        }
+        const keys = Object.keys(decodedItem).sort().join(',')
+        const expected = ['documentId', 'revision', 'state', 'title', 'updatedAt', 'wikiId'].join(',')
+        if (keys !== expected) {
+          return `decoded summary keys [${keys}] != the six summary fields (graph/tags/createdAt/author surfaced?)`
+        }
+
+        // POSITIVE 2 (HOST-2): the engine's §4.1.3 page-beyond-data response
+        // `{items:[], total:0, page:1, pageSize:20}` decodes WITHOUT throwing to
+        // an empty `DocumentList`.
+        const emptyList = decodeCrudResponse({
+          method: 'listDocuments',
+          result: { items: [], total: 0, page: 1, pageSize: 20 },
+        })
+        const emptyResult = emptyList.result as {
+          items: unknown[]
+          total: number
+          page: number
+          pageSize: number
+        }
+        if (
+          emptyResult.items.length !== 0 ||
+          emptyResult.total !== 0 ||
+          emptyResult.page !== 1 ||
+          emptyResult.pageSize !== 20
+        ) {
+          return `empty-items page-beyond-data list did not decode to DocumentList { items:[], total:0, page:1, pageSize:20 }`
+        }
+
+        // POSITIVE 3 (Counterexample 5): interleave ONE full `Document` item
+        // (graph/tags/createdAt/author all present) among summary items — the
+        // §5.8-9 clause says a full-`Document` list item is valid and projects
+        // to its six-field `DocumentSummary`, preserving its OWN revision/state/
+        // title (no hard-coded default). The property layer must pin this, not
+        // just the unit.
+        const full = genDocument(
+          rng,
+          pick(rng, ['Draft', 'Published', 'Archived'] as const),
+          pick(rng, [0, 1, 5]),
+        )
+        const mixed = rng() < 0.5 ? [summary, full] : [full, summary]
+        let decMixed: CrudResult | null = null
+        try {
+          decMixed = decodeCrudResponse({
+            method: 'listDocuments',
+            result: { items: mixed, total: 2, page: 1, pageSize: 20 },
+          })
+        } catch (e) {
+          return `full Document list item threw (projection not tolerated): ${String(e)}`
+        }
+        const decMixedItems = (decMixed.result as { items: DocumentSummary[] }).items
+        const project = (it: Document | DocumentSummary): DocumentSummary => ({
+          documentId: it.documentId,
+          wikiId: it.wikiId,
+          title: it.title,
+          state: it.state,
+          revision: it.revision,
+          updatedAt: it.updatedAt,
+        })
+        if (
+          JSON.stringify(decMixedItems) !==
+          JSON.stringify(mixed.map(project))
+        ) {
+          return `mixed full/summary items: decoded != the six-field projection of the input`
+        }
+        const fullDec = decMixedItems[mixed.indexOf(full)] as DocumentSummary
+        if (
+          fullDec.revision !== full.revision ||
+          fullDec.state !== full.state ||
+          fullDec.title !== full.title
+        ) {
+          return `full Document item did not preserve its OWN revision/state/title in its six-field projection`
+        }
+
+        // NEGATIVE (HOST-1 + HOST-3): every malformed summary item → the decode
+        // MUST throw `EngineError('malformed document')` (502) — NOT a native
+        // TypeError. The register clause is ∀ malformed over ALL six wire fields
+        // (`document_id`/`wiki_id`/`title`/`state`/`revision`/`updated_at`),
+        // incl. the snake_case forms — the fields the original generator missed.
+        const malformed: unknown[] = [
+          // missing/typed-wrong `documentId` (camelCase).
+          { ...summary, documentId: undefined as unknown as string },
+          { ...summary, documentId: 123 as unknown as string },
+          // HOST-3: typed-wrong / missing `wikiId` (camelCase, missed before).
+          { ...summary, wikiId: 123 as unknown as string },
+          { ...summary, wikiId: undefined as unknown as string },
+          { ...summary, title: 5 as unknown as string },
+          { ...summary, state: 'Foo' as unknown as DocumentSummary['state'] },
+          { ...summary, revision: 'x' as unknown as number },
+          // HOST-3: typed-wrong / missing `updatedAt` (camelCase, missed before).
+          { ...summary, updatedAt: 0 as unknown as string },
+          { ...summary, updatedAt: undefined as unknown as string },
+          // HOST-3: snake_case malformed variants — `wiki_id` / `updated_at`.
+          {
+            document_id: summary.documentId,
+            wiki_id: 123,
+            title: summary.title,
+            state: summary.state,
+            revision: summary.revision,
+            updated_at: summary.updatedAt,
+          },
+          {
+            document_id: summary.documentId,
+            wiki_id: summary.wikiId,
+            title: summary.title,
+            state: summary.state,
+            revision: summary.revision,
+            updated_at: 0,
+          },
+        ]
+        for (const bad of malformed) {
+          let threw: unknown
+          try {
+            decodeCrudResponse({
+              method: 'listDocuments',
+              result: { items: [bad], total: 1, page: 1, pageSize: 20 },
+            })
+          } catch (e) {
+            threw = e
+          }
+          if (
+            !(threw instanceof EngineError) ||
+            (threw as Error).message !== 'malformed document' ||
+            threw instanceof TypeError
+          ) {
+            return `malformed summary item did NOT throw EngineError('malformed document') (${threw instanceof TypeError ? 'was a native TypeError' : 'no/wrong throw'}): ${String(threw)}`
+          }
+        }
+
+        // HOST-1: non-object list items (`[null]`, `[5]`, `['x']`, `[true]`) →
+        // `decodeDocumentList` must throw `EngineError('malformed document')`, NOT
+        // a native TypeError.
+        for (const nonObject of [null, 5, 'x', true]) {
+          let threw: unknown
+          try {
+            decodeCrudResponse({
+              method: 'listDocuments',
+              result: { items: [nonObject], total: 1, page: 1, pageSize: 20 },
+            })
+          } catch (e) {
+            threw = e
+          }
+          if (
+            !(threw instanceof EngineError) ||
+            (threw as Error).message !== 'malformed document' ||
+            threw instanceof TypeError
+          ) {
+            return `non-object list item ${JSON.stringify(nonObject)} did NOT throw EngineError('malformed document'): ${String(threw)}`
+          }
+        }
         return null
       },
     )
     expect(counterexamples).toEqual([])
     expect(held).toBe(true)
-    // Direct: 11 pairwise-distinct non-empty camelCase values.
-    expect(new Set(CRUD_METHODS).size).toBe(11)
-    for (let i = 0; i < CRUD_METHODS.length; i++) {
-      for (let j = i + 1; j < CRUD_METHODS.length; j++) {
-        expect(CRUD_METHODS[i]).not.toBe(CRUD_METHODS[j])
-      }
-    }
   })
 
-  it('P-SM-1 [strat:crud-endpoint-unique] endpoint-path bijection', () => {
+  it('P-SM-1 [strat:crud-method-endpoint-unique] method + endpoint bijection', () => {
     const { held, counterexamples } = runProperty(
       PBT_ATTEMPTS,
       PBT_STOP_AFTER,
       (_i, rng) => {
         const a = pick(rng, CRUD_METHODS)
         const b = pick(rng, CRUD_METHODS)
+        if (a.length === 0) return 'empty method string'
+        if (!/^[a-z][a-zA-Z]*$/.test(a)) return `non-camelCase method: ${a}`
         if (a === b) return null
         if (ENGINE_CRUD_ENDPOINTS[a] === ENGINE_CRUD_ENDPOINTS[b]) {
           return `path collision: ${a} and ${b}`
@@ -394,7 +607,14 @@ describe('PBT register (§5.7)', () => {
     )
     expect(counterexamples).toEqual([])
     expect(held).toBe(true)
-    // Direct: exactly 11 rows, one per method (a bijection).
+    // Direct: 11 pairwise-distinct non-empty camelCase values, and exactly 11
+    // rows, one per method (a bijection between the 11 paths and 11 methods).
+    expect(new Set(CRUD_METHODS).size).toBe(11)
+    for (let i = 0; i < CRUD_METHODS.length; i++) {
+      for (let j = i + 1; j < CRUD_METHODS.length; j++) {
+        expect(CRUD_METHODS[i]).not.toBe(CRUD_METHODS[j])
+      }
+    }
     expect(Object.keys(ENGINE_CRUD_ENDPOINTS).length).toBe(11)
     for (const m of CRUD_METHODS) {
       expect(ENGINE_CRUD_ENDPOINTS[m]).toBeTruthy()

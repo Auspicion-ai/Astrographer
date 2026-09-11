@@ -12,7 +12,7 @@
 // uses the other's bindings at module-evaluation time (the error classes are
 // referenced only inside function bodies, resolved at call time) — the cycle is
 // intentional and MUST NOT be "fixed" by moving the error model.
-import { Agent, fetch as undiciFetch } from 'undici'
+import { Agent, fetch as undiciFetch, request as undiciRequest } from 'undici'
 import {
   EngineWireError,
   EngineUnavailable,
@@ -161,4 +161,43 @@ export function createEngineFetch(
     ) as unknown as Response
   }) as unknown as typeof fetch
   return fn
+}
+
+/** Unit shell-integration + HOST-GET-WITH-BODY-SSE-CRUD (2026-09-11): a
+ *  GET-with-body-CAPABLE injectable fetch built on undici's lower-level
+ *  `request()` (which — unlike the undici `fetch` that `globalThis.fetch`
+ *  aliases — PERMITS a JSON request body on a GET). The document/wiki CRUD
+ *  READ methods (`getDocument`/`listDocuments`/`getWiki`/`listWikis`) send the
+ *  request envelope in the GET body per the P1a wire (the Gnosis server's
+ *  `crud_handler` reads the envelope from the request body for ALL methods),
+ *  so the default `globalThis.fetch` transport rejects them. This is the CRUD
+ *  client's DEFAULT transport (`opts.fetch` still overrides it as the test seam).
+ *  Applies `auth.tls` via the undici dispatcher + `auth.token` as Bearer. */
+export function createCrudFetch(
+  auth?: { token?: string; tls?: { ca?: string; cert?: string; key?: string } },
+): typeof fetch {
+  const dispatcher = auth?.tls
+    ? new Agent({
+        connect: {
+          ...(auth.tls.ca !== undefined ? { ca: auth.tls.ca } : {}),
+          ...(auth.tls.cert !== undefined ? { cert: auth.tls.cert } : {}),
+          ...(auth.tls.key !== undefined ? { key: auth.tls.key } : {}),
+        },
+      })
+    : undefined
+  const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as { url?: string })?.url ?? String(input)
+    const method = (init?.method ?? 'GET').toUpperCase()
+    const body = typeof init?.body === 'string' ? init.body : undefined
+    const res = await undiciRequest(url, {
+      ...(method ? { method } : {}),
+      headers: { ...headers(auth), ...(init?.headers as Record<string, string> | undefined) },
+      body,
+      ...(init?.signal ? { signal: init.signal } : {}),
+      ...(dispatcher ? { dispatcher } : {}),
+    } as unknown as Parameters<typeof undiciRequest>[1])
+    const text = await res.body.text()
+    return new Response(text, { status: res.statusCode })
+  }
+  return fn as unknown as typeof fetch
 }
