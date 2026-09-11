@@ -6,6 +6,8 @@
 import type { LegacyInitialData, LegacyNodeData, LegacyContentPayload } from 'provident-ssr'
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { RagQueryResult } from '../shared/types.js'
+import type { EngineRagResult, HealthReport, ConflictError } from '../main/engine-rag-store.js'
+import type { Document, DocumentList, Wiki } from '../main/engine-crud-rag-store.js'
 import type { PaneRegistry, PaneDefinition, PaneContext } from './pane-registry.js'
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
@@ -263,4 +265,279 @@ export function searchContent(ctx: PaneContext, result: RagQueryResult | null): 
     content: `${r.nodeId} — ${String(r.score)}`,
   }))
   return { type: 'div', children: [input, ...lis] }
+}
+
+// ===========================================================================
+// Unit GN-MCP-UI §5.5 — the D4 parity GUI render helpers (PURE, provident-
+// authored LegacyNodeData). The `gnosis-query` app-graph pane + the `gnosis-status`
+// operator pane both render through these; neither ever references the local
+// `RagResult` fields (ranked/context/markdown/lineMap/k).
+// ===========================================================================
+
+/** The `gnosis-status` operator pane content: renders the engine `HealthReport`
+ *  (state/version/subsystems/lastError). A null report → the unavailable state
+ *  (D2 engine-absent), never a TypeError. PURE. */
+export function gnosisStatusContent(ctx: PaneContext, report: HealthReport | null): LegacyNodeData {
+  if (report == null) {
+    return {
+      type: 'div',
+      props: { 'data-gnosis-pane': 'status', 'data-gnosis-state': 'unavailable' },
+      children: [
+        { type: 'strong', content: 'Gnosis engine' },
+        { type: 'p', content: 'Engine unavailable — not connected or absent' },
+      ],
+    }
+  }
+  const subsystemLis: LegacyNodeData[] = Object.entries(report.subsystems ?? {}).map(([name, ok]) => ({
+    type: 'li',
+    props: { 'data-subsystem': name, 'data-ok': ok ? 'true' : 'false' },
+    content: `${name}: ${ok ? 'up' : 'down'}`,
+  }))
+  return {
+    type: 'div',
+    props: { 'data-gnosis-pane': 'status', 'data-gnosis-state': report.state, 'data-engine-version': report.version },
+    children: [
+      { type: 'strong', content: 'Gnosis engine' },
+      { type: 'p', content: `State: ${report.state}` },
+      { type: 'p', content: `Version: ${report.version}` },
+      { type: 'ul', children: subsystemLis },
+      { type: 'p', content: `lastError: ${report.lastError ?? 'null'}` },
+    ],
+  }
+}
+
+/** The `gnosis-query` app-graph pane content: renders the proxy-specific
+ *  `EngineRagResult` (query/results/citations/trace mode/blockedBy). DISTINCT
+ *  from `searchContent` (which renders the local `RagQueryResult`). A null
+ *  result → the empty state, never a TypeError. PURE. */
+export function gnosisQueryContent(ctx: PaneContext, result: EngineRagResult | null): LegacyNodeData {
+  if (result == null) {
+    return {
+      type: 'div',
+      props: { 'data-gnosis-pane': 'query', 'data-gnosis-query': '' },
+      children: [{ type: 'p', content: '(no engine results)' }],
+    }
+  }
+  const resultLis: LegacyNodeData[] = (result.results ?? []).map((r) => ({
+    type: 'li',
+    props: {
+      'data-document-id': r.documentId,
+      'data-node-id': r.nodeId,
+      'data-score': String(r.score),
+      ...(r.stale !== undefined ? { 'data-stale': r.stale ? 'true' : 'false' } : {}),
+    },
+    content: `${r.documentId}/${r.nodeId} — score ${String(r.score)} — ${String(r.snippet ?? '')}`,
+  }))
+  const citationLis: LegacyNodeData[] = (result.citations ?? []).map((c) => ({
+    type: 'li',
+    props: { 'data-document-id': c.documentId, 'data-node-id': c.nodeId },
+    content: `${c.documentId}:${c.nodeId}`,
+  }))
+  const blockedByLis: LegacyNodeData[] = (result.blockedBy ?? []).map((b) => ({
+    type: 'li',
+    props: { 'data-document-id': b.documentId, 'data-node-id': b.nodeId, 'data-state': b.state },
+    content: `Blocked by ${b.documentId}:${b.nodeId} (${b.state})`,
+  }))
+  return {
+    type: 'div',
+    props: {
+      'data-gnosis-pane': 'query',
+      'data-gnosis-query': result.query,
+      'data-engine': result.engine ?? 'gnosis',
+      'data-trace-mode': result.trace.mode ?? 'flat',
+    },
+    children: [
+      { type: 'strong', content: `Query: ${result.query}` },
+      { type: 'ul', children: resultLis },
+      { type: 'strong', content: 'Citations' },
+      { type: 'ul', children: citationLis },
+      { type: 'p', content: `Trace mode: ${result.trace.mode ?? 'flat'}` },
+      ...(blockedByLis.length > 0
+        ? [{ type: 'strong' as const, content: 'Blocked by' }, { type: 'ul' as const, children: blockedByLis }]
+        : []),
+    ],
+  }
+}
+
+/** Unit GN-MCP-UI §5.6 — the status-pane HANDLER: awaits the `getEngineStatus`
+ *  bridge; on success renders `gnosisStatusContent(ctx, report)`; on a REJECTED
+ *  bridge (the D2 engine-absent `EngineUnavailable`) renders the UNAVAILABLE
+ *  state (`gnosisStatusContent(ctx, null)`) — the handler NEVER throws on an
+ *  engine rejection (§5.6: the bridge rejection is caught → unavailable, never
+ *  a crash). Exported here (the render-helpers module) so the pane host + the
+ *  D2 parity tests share it. */
+export async function gnosisStatusPaneHandler(
+  ctx: PaneContext,
+  bridge: () => Promise<HealthReport>,
+): Promise<LegacyNodeData> {
+  try {
+    const report = await bridge()
+    return gnosisStatusContent(ctx, report)
+  } catch {
+    // §5.6 — the engine is absent / the bridge rejected (EngineUnavailable):
+    // the pure helper's unavailable state, never a throw.
+    return gnosisStatusContent(ctx, null)
+  }
+}
+
+// ===========================================================================
+// Unit A2 §5.5 — the D4-parity document-editor/wiki GUI render helpers (PURE,
+// provident-authored LegacyNodeData). The `gnosis-documents`/`gnosis-wikis`
+// app-graph panes render through these over the typed Document/DocumentList/Wiki
+// shapes (DISTINCT from the local `RagResult` render path). A null result → the
+// empty/unavailable state (never a TypeError). H1: these screens are the
+// document surface over the engine — they NEVER fall back to the local
+// `createJsonRagStore`.
+//
+// H-1 (adversarial — the D4-parity gap): the list items are rendered WITH the
+// `handlers` field bound so a user can CLICK a wiki/document list item to select
+// it. The render helpers are PURE and their signatures are spec-pinned to
+// `(ctx, state)` — they CANNOT receive the handler bodies as args — so the
+// select-handler body strings are hardcoded HERE as module constants (the
+// provident-ssr `handlers` field carries the body inline; translate.js
+// instantiates a string body via `new Function`). The mutating editor controls
+// (create/update/delete/publish/unpublish/archive) are bound in the HOST
+// (`GnosisCrudPanes.documentsContent`/`wikisContent`), which wraps this PURE
+// output with the interactive controls carrying the host's body strings.
+// ===========================================================================
+
+/** H-1 — the wiki-select handler body (a wiki list item click → list the wiki's
+ *  documents). Hardcoded here (the PURE helper cannot receive it as an arg). */
+const GNOSIS_DOCUMENTS_SELECT_WIKI_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var wikiId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-wiki-id'];
+  if (wikiId) s.gnosisDocuments('gnosis.document.list', { wikiId: wikiId });
+}`
+/** H-1 — the document-select handler body (a document list item click → get the
+ *  document). Hardcoded here (the PURE helper cannot receive it as an arg). */
+const GNOSIS_DOCUMENTS_SELECT_DOC_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var documentId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-document-id'];
+  if (documentId) s.gnosisDocuments('gnosis.document.get', { documentId: documentId });
+}`
+/** H-1 — the wiki-select handler body (a wiki list item click → get the wiki).
+ *  Hardcoded here (the PURE helper cannot receive it as an arg). */
+const GNOSIS_WIKIS_SELECT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var wikiId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-wiki-id'];
+  if (wikiId) s.gnosisWikis('gnosis.wiki.get', { wikiId: wikiId });
+}`
+
+/** Unit A2 §5.5 — the gnosis-documents pane content: renders the document
+ *  surface (wiki selector + document list + document editor) over the typed
+ *  Document/DocumentList/Wiki shapes. A null result → the empty state (never a
+ *  TypeError). A `conflict` set → the conflict state (the optimistic-concurrency
+ *  409 UX, H2 — the conflict message + the current revision). PURE. */
+export function gnosisDocumentsContent(
+  ctx: PaneContext,
+  state: {
+    wikis: Wiki[] | null
+    documents: DocumentList | null
+    document: Document | null
+    conflict: ConflictError | null
+  },
+): LegacyNodeData {
+  // H2 — the optimistic-concurrency 409 UX: a ConflictError renders the conflict
+  // state (the conflict message + the current revision), never a crash. Checked
+  // BEFORE the null/unavailable state so a conflict surfaces even when the
+  // cached list is null (a re-read prompt).
+  if (state != null && state.conflict != null) {
+    return {
+      type: 'div',
+      props: { 'data-gnosis-pane': 'documents', 'data-gnosis-state': 'conflict' },
+      children: [
+        { type: 'strong', content: 'Document conflict (409)' },
+        { type: 'p', content: `Conflict: ${state.conflict.message}` },
+        { type: 'p', content: 'Re-read the document and re-apply your changes against the current revision.' },
+      ],
+    }
+  }
+  // H1 (adversarial): a null state (or a null wikis/documents) → the
+  // unavailable/empty state, never a TypeError.
+  if (state == null || state.wikis == null || state.documents == null) {
+    return {
+      type: 'div',
+      props: { 'data-gnosis-pane': 'documents', 'data-gnosis-state': 'unavailable' },
+      children: [
+        { type: 'strong', content: 'Gnosis documents' },
+        { type: 'p', content: 'Documents unavailable — engine not connected or absent' },
+      ],
+    }
+  }
+  // H-1 — the wiki/document list items carry the `handlers` field so a user can
+  // CLICK an item to select it (the select handler bodies are hardcoded above —
+  // the PURE helper cannot receive them as args). The `data-wiki-id`/
+  // `data-document-id`/`data-revision` props feed the handler bodies.
+  const wikiLis: LegacyNodeData[] = state.wikis.map((w) => ({
+    type: 'li',
+    props: { 'data-wiki-id': w.wikiId },
+    content: w.name,
+    handlers: [{ name: 'gnosis-documents-select-wiki', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY }],
+  }))
+  const docLis: LegacyNodeData[] = (state.documents?.items ?? []).map((d) => ({
+    type: 'li',
+    props: { 'data-document-id': d.documentId, 'data-revision': String(d.revision) },
+    content: `${d.title} (${d.state})`,
+    handlers: [{ name: 'gnosis-documents-select-doc', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_DOC_BODY }],
+  }))
+  const doc = state.document
+  return {
+    type: 'div',
+    props: { 'data-gnosis-pane': 'documents' },
+    children: [
+      { type: 'strong', content: 'Wikis' },
+      { type: 'ul', children: wikiLis },
+      { type: 'strong', content: 'Documents' },
+      { type: 'ul', children: docLis },
+      ...(doc
+        ? [
+            { type: 'strong' as const, content: `Document: ${doc.title}` },
+            { type: 'p' as const, content: `Revision: ${doc.revision} — state: ${doc.state}` },
+          ]
+        : []),
+    ],
+  }
+}
+
+/** Unit A2 §5.5 — the gnosis-wikis pane content: renders the wiki surface (wiki
+ *  list + wiki view + wiki create) over the typed Wiki/Wiki[] shapes. A null
+ *  result → the empty state (never a TypeError). PURE. */
+export function gnosisWikisContent(
+  ctx: PaneContext,
+  state: { wikis: Wiki[] | null; wiki: Wiki | null },
+): LegacyNodeData {
+  // H1 (adversarial): a null state (or a null wikis) → the unavailable/empty
+  // state, never a TypeError.
+  if (state == null || state.wikis == null) {
+    return {
+      type: 'div',
+      props: { 'data-gnosis-pane': 'wikis', 'data-gnosis-state': 'unavailable' },
+      children: [
+        { type: 'strong', content: 'Gnosis wikis' },
+        { type: 'p', content: 'Wikis unavailable — engine not connected or absent' },
+      ],
+    }
+  }
+  // H-1 — the wiki list items carry the `handlers` field so a user can CLICK an
+  // item to select it (the select handler body is hardcoded above — the PURE
+  // helper cannot receive it as an arg). The `data-wiki-id` prop feeds the body.
+  const wikiLis: LegacyNodeData[] = state.wikis.map((w) => ({
+    type: 'li',
+    props: { 'data-wiki-id': w.wikiId },
+    content: w.name,
+    handlers: [{ name: 'gnosis-wikis-select', event: 'click', body: GNOSIS_WIKIS_SELECT_BODY }],
+  }))
+  const wiki = state.wiki
+  return {
+    type: 'div',
+    props: { 'data-gnosis-pane': 'wikis' },
+    children: [
+      { type: 'strong', content: 'Wikis' },
+      { type: 'ul', children: wikiLis },
+      ...(wiki ? [{ type: 'strong' as const, content: `Wiki: ${wiki.name}` }] : []),
+    ],
+  }
 }

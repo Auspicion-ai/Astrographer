@@ -3,6 +3,8 @@
 // MCP-facing operations over the preload bridge (main process = MCP server).
 import { Runtime } from './runtime.js'
 import { SidebarPanes } from './sidebar-panes.js'
+import { GnosisPanes } from './gnosis-panes.js'
+import { GnosisCrudPanes } from './gnosis-crud-panes.js'
 import { createPaneRegistry } from './pane-registry.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
@@ -181,6 +183,50 @@ async function main(): Promise<void> {
   // renderer-level onRagStoreChanged closure is removed to avoid double-firing).
   const operatorMount = document.getElementById('operator-panes')
   const registry = createPaneRegistry()
+  const pvBridge = bridge as never as {
+    gnosis: {
+      status(): Promise<import('../main/engine-rag-store.js').HealthReport>
+      query(query: string, opts?: Record<string, unknown>): Promise<import('../main/engine-rag-store.js').EngineRagResult>
+      // Unit A2 §5.5 — the document/wiki CRUD bridge surface (the SAME
+      // `handleGnosisTool` handler as the `gnosis.document.*`/`gnosis.wiki.*`
+      // MCP tools — MCP/UI equivalence).
+      documents(tool: string, args: Record<string, unknown>): Promise<unknown>
+      wikis(tool: string, args: Record<string, unknown>): Promise<unknown>
+    }
+    security: { get(): Promise<import('../shared/types.js').SecuritySettings> }
+  }
+  // Unit GN-MCP-UI §5.5 — the D4-parity gnosis GUI panes. Registered into the
+  // SHARED registry BEFORE SidebarPanes.boot so the sidebars assemble the
+  // `gnosis-status` operator pane (isolated scope, MCP-invisible) + the
+  // `gnosis-query` app-graph pane (fail-closed on the `gnosis` group) into the
+  // app-graph/operator envelopes. The pane handlers reach the bridge via
+  // `window.provident.sidebar.gnosisStatus`/`gnosisQuery` (the M2 pattern).
+  const gnosisPanes = new GnosisPanes({
+    registry,
+    bridge: pvBridge,
+    // Re-render the pane-inclusive envelopes after a status/query settles so the
+    // updated gnosis data renders (the host re-assembles + re-mounts).
+    onChanged: () => {
+      if (host) void host.refresh()
+    },
+  })
+  gnosisPanes.registerPanes()
+  // Unit A2 §5.5 — the D4-parity gnosis document-editor/wiki GUI panes.
+  // Registered into the SHARED registry BEFORE SidebarPanes.boot so the
+  // sidebars assemble the `gnosis-documents` + `gnosis-wikis` app-graph panes
+  // (fail-closed on the `gnosis`/`gnosis-edit` groups) into the app-graph
+  // envelope. The pane handlers reach the bridge via
+  // `window.provident.sidebar.gnosisDocuments`/`gnosisWikis` (the M2 pattern).
+  const gnosisCrudPanes = new GnosisCrudPanes({
+    registry,
+    bridge: pvBridge,
+    // Re-render the pane-inclusive envelopes after a document/wiki call settles
+    // so the updated CRUD data renders (the host re-assembles + re-mounts).
+    onChanged: () => {
+      if (host) void host.refresh()
+    },
+  })
+  gnosisCrudPanes.registerPanes()
   host = new SidebarPanes({
     mount,
     operatorMount: operatorMount as HTMLElement,
@@ -188,8 +234,14 @@ async function main(): Promise<void> {
     bridge: bridge as never,
     backRefs,
     editController,
+    gnosis: {
+      status: () => gnosisPanes.refreshStatus(),
+      query: (value: string) => gnosisPanes.submitQuery(value),
+    },
   })
   void host.boot(runtime)
+  void gnosisPanes.boot()
+  void gnosisCrudPanes.boot()
   bridge.ready()
 }
 

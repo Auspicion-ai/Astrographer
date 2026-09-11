@@ -124,6 +124,12 @@ export interface SidebarPanesOptions {
   registry: PaneRegistry
   /** The preload IPC bridge (window.provident). */
   bridge: SidebarBridge
+  /** Unit GN-MCP-UI §5.5 — the optional gnosis GUI delegate (the D4-parity
+   *  panes, wired by the renderer via `GnosisPanes`). When present, the
+   *  `window.provident.sidebar.gnosisStatus`/`gnosisQuery` handler bodies route
+   *  here. Absent (tests / pre-Gnosis hosts) → the sidebar gnosis methods are
+   *  no-ops (never throw). */
+  gnosis?: { status(): void; query(value: string): void }
   /** The back-reference map (the edit controller's map — the SOLE authoritative
    *  carrier). The host clears + repopulates it after each buildTraversal. */
   backRefs: Map<string, string[]>
@@ -351,6 +357,9 @@ export class SidebarPanes {
   private readonly editController: EditController
   private readonly zoneName: string
   private readonly sidebarZone: string
+  /** Unit GN-MCP-UI §5.5 — the optional gnosis GUI delegate (see the options
+   *  doc). Null when not provided (the sidebar gnosis methods become no-ops). */
+  private readonly gnosis: { status(): void; query(value: string): void } | null
 
   /** Host-owned mutable state (M5). */
   private _currentDocumentId: string | null = null
@@ -450,6 +459,7 @@ export class SidebarPanes {
     this.editController = opts.editController
     this.zoneName = opts.zoneName ?? 'main'
     this.sidebarZone = opts.sidebarZone ?? SIDEBAR_ZONE
+    this.gnosis = opts.gnosis ?? null
   }
 
   /** Host-owned mutable state (M5): the host owns the current-document/node
@@ -1321,6 +1331,12 @@ export class SidebarPanes {
       editorBlur: (ragId?: string, html?: string) => { if (ragId == null) return; void this.editorBlur(ragId, html ?? '') },
       editorCompositionStart: (ragId?: string) => { if (ragId == null) return; void this.editorCompositionStart(ragId) },
       editorCompositionEnd: (ragId?: string) => { if (ragId == null) return; void this.editorCompositionEnd(ragId) },
+      // Unit GN-MCP-UI §5.5 — the gnosis GUI handler methods. The
+      // `gnosis-status`/`gnosis-query` pane handler bodies reach them via the M2
+      // `window.provident.sidebar` surface; they DELEGATE to the renderer-wired
+      // `GnosisPanes` delegate (a no-op when no delegate is provided — never throw).
+      gnosisStatus: () => { this.gnosis?.status?.() },
+      gnosisQuery: (value: string) => { this.gnosis?.query?.(value) },
     }
     const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
     const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar

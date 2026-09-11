@@ -1372,10 +1372,14 @@ describe('U-H2b — closure rewiring (B1–B13 / M1–M4 / refresh-on-apply)', (
 
   // -------------------------------------------------------------------------
   describe('Negative pins (D6 / D8 / A-P2-8) — must STAY GREEN', () => {
-    it('D6a — the MCP tool census stays at its pre-H2 count (41); no hot-apply/runtime/registry tool added', async () => {
+    it('D6a — the MCP tool census is 55 (41 + the 3 gnosis.* names + the 11 A2 document/wiki names); no hot-apply/runtime/registry tool added', async () => {
       const { ProvidentMcpServer } = await import('../src/main/mcp-server.js')
       const tools = ProvidentMcpServer.ALL_TOOLS
-      expect(tools.length).toBe(41)
+      // Census is 55, not 41: the gnosis.* MCP/UI wiring unit added gnosis.query /
+      // gnosis.stream / gnosis.status to ALL_TOOLS (§5.2/§5.10 census bump), and
+      // Unit A2 added the 11 gnosis.document.*/gnosis.wiki.* names
+      // (docs/specs/unit-a2-document-crud-wiring.md §5.10 — 11 new ALL_TOOLS rows).
+      expect(tools.length).toBe(55)
       for (const t of tools) expect(t).not.toMatch(/apply|runtime|registry|hot[_-]/i)
       expect(tools).not.toContain('provident.hotApply')
     })

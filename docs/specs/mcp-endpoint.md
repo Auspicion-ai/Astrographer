@@ -364,6 +364,15 @@ whose group is disabled is not registered / not listed / returns an error.
 | `dispatch` | `provident.dispatch` | mutates the graph (handler args, no eval) | **ON** |
 | `graph` | `load`, `op`, `export`, `validate`, `teardown`, `journal` | mutates/re-derives the graph + the envelope re-load + journal reversibility | **OFF** (manual) |
 | `code` | `code.set`, `code.create`, `code.delete`, `code.load` | WRITES + re-loads (eval via `new Function` on load) | **OFF** (manual) |
+| `gnosis` | `gnosis.query`, `gnosis.stream`, `gnosis.status` (Unit GN-MCP-UI 2026-09-10 — the retrieval trio + health over the LANDED `createEngineRagStore` proxy, main-handled) | read-only; the ONLY gate on engine status (`A8` — health is a TOOL, NOT an `mcp://` resource; a resource would be gated on the default-ON `read` group, leaking engine status) | **OFF** (manual) |
+
+> **Astrographer-extension note (2026-09-10, Unit GN-MCP-UI):** this §6.2 table is the
+> base-contract group inventory (`read`/`dispatch`/`graph`/`code` + the `gnosis` row
+> added here, the A9 group-table requirement). The Astrographer app additionally gates
+> the `module`/`rag`/`edit` groups (`security.ts` `TOOL_GROUPS`/`VALID_GROUPS`); those
+> groups + the `gnosis` group's tools are catalogued in `docs/decisions.md` (the
+> MODULE/`RAG-EDIT-MCP-GROUPS`/`GNOSIS-*` rows) + their unit specs, not in this §3 `provident.*`
+> tool table (which hosts only the base read/dispatch surface).
 
 \* `code.validate` may eval a proposed body to check it compiles — treat it as
 `code`-group when the body is evaluated; `code.get`/`code.validate`(shape-only)

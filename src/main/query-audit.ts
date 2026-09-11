@@ -21,7 +21,11 @@ import type { RagQueryFilters } from './retrieval.js'
 export interface QueryAuditEntry {
   query: string
   filters: RagQueryFilters | null
-  mode: 'flat' | 'graph'
+  /** Unit GN-MCP-UI §5.3 — widened (additive) from `'flat' | 'graph'` to the
+   *  full four-member union so the `gnosis.*` tools (which pass the proxy's full
+   *  mode set) share the same audit shape. Existing `rag.query`/`rag-stream`
+   *  entries stay byte-equal (their modes are flat/graph). */
+  mode: 'flat' | 'graph' | 'vector' | 'hybrid'
   resultCount: number
   timestamp: string
   requester: string

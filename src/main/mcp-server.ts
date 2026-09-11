@@ -37,6 +37,18 @@ import { mergeStoreResults, type StoreResultInput } from './merge-store-results.
 import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
 import type { RagStoreRuntimeController } from './rag-store-runtime.js'
 import type { CapabilityRouter } from '../renderer/extensions.js'
+// Unit GN-MCP-UI (docs/specs/unit-gn-mcp-ui-wiring.md §5.1/§5.3) — the LANDED
+// createEngineRagStore proxy: the `gnosis.*` tools route in MAIN against it.
+import type { EngineRagStore, EngineRagQueryOptions, RagChunk } from './engine-rag-store.js'
+import type { HealthReport } from './engine-rag-store.js'
+// Unit A2 (docs/specs/unit-a2-document-crud-wiring.md §5.1/§5.3) — the LANDED
+// createEngineCrudRagStore proxy (the 11 §4.1 document-CRUD methods over the
+// frozen P1a wire): the `gnosis.document.*`/`gnosis.wiki.*` tools route in MAIN
+// against it. Plus the shell-side AuthorityStore (H3) + the caller-side
+// IdempotencyRegistry (P4).
+import type { EngineCrudRagStore, Document, DocumentList, Wiki, CreateDocumentRequest, UpdateDocumentRequest, ListDocumentsFilter, Graph } from './engine-crud-rag-store.js'
+import type { AuthorityStore } from './authority-store.js'
+import type { IdempotencyRegistry } from './idempotency-registry.js'
 
 const TOOL_PREFIX = 'provident.'
 
@@ -470,6 +482,312 @@ export async function handleRagTool(
     }
     default:
       throw new Error(`unknown rag tool: ${name}`)
+  }
+}
+
+/** Unit GN-MCP-UI §5.3 — validate the `filters` arg shape for the `gnosis.*`
+ *  tools (the SAME shape checks as `rag.query`, with the gnosis tool's own
+ *  name prefix on the throw message). */
+function validateGnosisFilters(filters: unknown, prefix: string): void {
+  if (filters === null || typeof filters !== 'object' || Array.isArray(filters)) {
+    throw new Error(`${prefix}: filters malformed`)
+  }
+  const f = filters as Record<string, unknown>
+  if (f.nodeKind !== undefined && !['content', 'fact', 'reference'].includes(f.nodeKind as string)) {
+    throw new Error(`${prefix}: filters malformed`)
+  }
+  if (f.edgeType !== undefined && !['link', 'embed'].includes(f.edgeType as string)) {
+    throw new Error(`${prefix}: filters malformed`)
+  }
+  if (f.state !== undefined && !['FRESH', 'RESOLVED', 'STALE', 'BROKEN'].includes(f.state as string)) {
+    throw new Error(`${prefix}: filters malformed`)
+  }
+  if (f.target !== undefined) {
+    if (f.target === null || typeof f.target !== 'object' || Array.isArray(f.target)) {
+      throw new Error(`${prefix}: filters malformed`)
+    }
+    const t = f.target as Record<string, unknown>
+    if (typeof t.documentId !== 'string' || typeof t.nodeId !== 'string') {
+      throw new Error(`${prefix}: filters malformed`)
+    }
+  }
+}
+
+/** Unit GN-MCP-UI §5.3 + Unit A2 §5.3 — handle a `gnosis.*` tool in MAIN. The
+ *  retrieval trio (`gnosis.query`/`gnosis.stream`/`gnosis.status`) route against
+ *  the LANDED `EngineRagStore` proxy (`engine`); the 11 document/wiki tools
+ *  route against the LANDED `EngineCrudRagStore` proxy (`engineCrud`). The
+ *  mutating document/wiki tools resolve the caller's edit-authority credential
+ *  from the `AuthorityStore` and thread it into the mutating args' `caller`
+ *  field; the mutating create tools dedup via the `IdempotencyRegistry`.
+ *  Exported for direct unit testing. The gnosis tools are NOT routed to the
+ *  renderer (the proxies are main-process). `gnosis.query`/`gnosis.stream`
+ *  record to the shared audit log (like `rag.query`); `gnosis.status` is
+ *  read-only and does NOT record; the CRUD tools do NOT record to the audit log
+ *  (the `QueryAuditLog` is query-specific — the CRUD security surface is the
+ *  group gate + the RBAC caller check, §5.3). */
+export async function handleGnosisTool(
+  engine: EngineRagStore | null,
+  name: string,
+  args: Record<string, unknown>,
+  auditLog?: QueryAuditLog | null,
+  engineCrud?: EngineCrudRagStore | null,
+  authorityStore?: AuthorityStore | null,
+  idempotency?: IdempotencyRegistry | null,
+): Promise<unknown> {
+  // §5.1/§5.9 — the `gnosis.query`/`gnosis.stream` shared argument validation
+  // (the SAME field checks as `rag.query`, with the full four-member mode set
+  // and the tool's own name prefix on the throw messages).
+  const validateArgs = (): {
+    query: string
+    topK: number
+    mode: 'flat' | 'graph' | 'vector' | 'hybrid'
+    maxHops: number
+    expand: 'none' | 'parent'
+    maxParentContext: number
+  } => {
+    const query = typeof args.query === 'string' ? args.query : ''
+    if (query.trim() === '') throw new Error(`${name}: query must be a non-empty string`)
+    const topK = args.topK !== undefined ? (args.topK as number) : 5
+    if (typeof topK !== 'number' || !Number.isInteger(topK) || topK < 1 || topK > 50) {
+      throw new Error(`${name}: topK must be an integer in [1, 50]`)
+    }
+    const mode = args.mode !== undefined ? (args.mode as 'flat' | 'graph' | 'vector' | 'hybrid') : 'flat'
+    if (mode !== 'flat' && mode !== 'graph' && mode !== 'vector' && mode !== 'hybrid') {
+      throw new Error(`${name}: mode must be "flat", "graph", "vector", or "hybrid"`)
+    }
+    const maxHops = args.maxHops !== undefined ? (args.maxHops as number) : 3
+    if (typeof maxHops !== 'number' || !Number.isInteger(maxHops) || maxHops < 1 || maxHops > 5) {
+      throw new Error(`${name}: maxHops must be an integer in [1, 5]`)
+    }
+    const expand = args.expand !== undefined ? (args.expand as 'none' | 'parent') : 'none'
+    if (expand !== 'none' && expand !== 'parent') throw new Error(`${name}: expand must be "none" or "parent"`)
+    const maxParentContext = args.maxParentContext !== undefined ? (args.maxParentContext as number) : 5
+    if (typeof maxParentContext !== 'number' || !Number.isInteger(maxParentContext) || maxParentContext < 1) {
+      throw new Error(`${name}: maxParentContext must be a positive integer`)
+    }
+    if (args.filters !== undefined) validateGnosisFilters(args.filters, name)
+    return { query, topK, mode, maxHops, expand, maxParentContext }
+  }
+
+  const opts = (v: ReturnType<typeof validateArgs>): EngineRagQueryOptions => ({
+    topK: v.topK,
+    mode: v.mode,
+    maxHops: v.maxHops,
+    expand: v.expand,
+    maxParentContext: v.maxParentContext,
+    ...(args.filters !== undefined ? { filters: args.filters as RagQueryFilters } : {}),
+  })
+
+  // Unit A2 §5.4 — resolve the caller's edit-authority credential for a mutating
+  // document/wiki tool call. A null/absent `authorityStore` (or a callerId with
+  // no edit authority) → the caller-side deny (fail-closed): the mutating call
+  // is denied and NO proxy call is issued.
+  const resolveCallerCredential = (callerId: string): string => {
+    const credential = authorityStore ? authorityStore.callerCredential(callerId) : null
+    if (credential === null) throw new Error(`${name}: caller has no edit authority`)
+    return credential
+  }
+
+  switch (name) {
+    case 'gnosis.query': {
+      if (!engine) throw new Error(`${name}: no engine rag store configured`)
+      const v = validateArgs()
+      const result = await engine.ragQuery(v.query, opts(v))
+      if (auditLog) {
+        auditLog.record({
+          query: v.query,
+          filters: (args.filters as RagQueryFilters) ?? null,
+          mode: v.mode,
+          resultCount: result.results.length,
+          timestamp: new Date().toISOString(),
+          requester: 'mcp',
+        })
+      }
+      return result
+    }
+    case 'gnosis.stream': {
+      if (!engine) throw new Error(`${name}: no engine rag store configured`)
+      const v = validateArgs()
+      // A3 — fully consume the single-shot AsyncIterable within the call (the
+      // SSE teardown + premature-close EngineUnavailable are handled by the
+      // proxy's own consumption; the tool leaves no half-open stream).
+      const chunks: RagChunk[] = []
+      for await (const c of engine.ragStream(v.query, opts(v))) {
+        chunks.push(c)
+      }
+      if (auditLog) {
+        let resultCount = 0
+        const resultChunk = chunks.find((c) => c.type === 'result')
+        if (resultChunk && resultChunk.type === 'result') resultCount = resultChunk.result.results.length
+        auditLog.record({
+          query: v.query,
+          filters: (args.filters as RagQueryFilters) ?? null,
+          mode: v.mode,
+          resultCount,
+          timestamp: new Date().toISOString(),
+          requester: 'mcp',
+        })
+      }
+      return { chunks }
+    }
+    case 'gnosis.status': {
+      if (!engine) throw new Error(`${name}: no engine rag store configured`)
+      // A8 — `gnosis.status` is a TOOL (default-off), NOT an mcp:// resource:
+      // the only gate on engine status is the `gnosis` group. Read-only — NO
+      // audit entry.
+      const report: HealthReport = await engine.getEngineStatus()
+      return report
+    }
+    // ---- Unit A2 §5.1 — the 11 document/wiki tools (the LANDED CRUD proxy).
+    // Each case guards `if (!engineCrud)` FIRST (the null-CRUD-engine check
+    // fires BEFORE the authority check — fail-state 5 vs 12/13 ordering). The
+    // read-only tools never carry `caller`; the mutating tools resolve the
+    // caller credential and thread it into the mutating args' `caller` field.
+    // The CRUD tools do NOT record to the QueryAuditLog. ----
+    case 'gnosis.document.get': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (documentId === '') throw new Error(`${name}: documentId required`)
+      return engineCrud.getDocument({ documentId })
+    }
+    case 'gnosis.document.list': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const wikiId = typeof args.wikiId === 'string' ? args.wikiId : ''
+      if (wikiId === '') throw new Error(`${name}: wikiId required`)
+      // H-4 (adversarial) — an invalid `state` is REJECTED (never silently
+      // nulled into a no-filter). The `state` arg is a closed enum
+      // (Draft/Published/Archived); a present-but-invalid value is a handler-side
+      // error, not a pass-through.
+      if (args.state !== undefined && args.state !== 'Draft' && args.state !== 'Published' && args.state !== 'Archived') {
+        throw new Error(`${name}: invalid state`)
+      }
+      // §5.1 — the ListDocumentsFilter body with the wire's null-when-None
+      // discipline (null for absent Option fields).
+      const body: ListDocumentsFilter = {
+        state: args.state === 'Draft' || args.state === 'Published' || args.state === 'Archived' ? args.state : null,
+        tag: typeof args.tag === 'string' ? args.tag : null,
+        page: typeof args.page === 'number' ? args.page : null,
+        pageSize: typeof args.pageSize === 'number' ? args.pageSize : null,
+      }
+      return engineCrud.listDocuments({ wikiId, body })
+    }
+    case 'gnosis.wiki.get': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const wikiId = typeof args.wikiId === 'string' ? args.wikiId : ''
+      if (wikiId === '') throw new Error(`${name}: wikiId required`)
+      return engineCrud.getWiki({ wikiId })
+    }
+    case 'gnosis.wiki.list': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      return engineCrud.listWikis({})
+    }
+    case 'gnosis.document.create': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const wikiId = typeof args.wikiId === 'string' ? args.wikiId : ''
+      const title = typeof args.title === 'string' ? args.title : ''
+      // §5.1 — the empty/overlong `title` is a PROXY-side ValidationError (400),
+      // NOT a handler-side reject: the handler requires only the identity + the
+      // wiki, and passes the title through (even empty) so the proxy's
+      // ValidationError (400) propagates (§5.9-19).
+      if (callerId === '' || wikiId === '') throw new Error(`${name}: callerId and wikiId required`)
+      const caller = resolveCallerCredential(callerId)
+      const requestId = typeof args.requestId === 'string' && args.requestId !== '' ? args.requestId : undefined
+      // P4 — the caller-side idempotency dedup: a duplicate (callerId, requestId)
+      // returns the cached result WITHOUT issuing a new createDocument.
+      if (requestId !== undefined && idempotency) {
+        const cached = idempotency.get(callerId, requestId)
+        if (cached !== undefined) return cached
+      }
+      // §5.1 — the CreateDocumentRequest body with the null-when-None discipline
+      // (tags/author null for absent args, NEVER [] for an absent tags arg).
+      const body: CreateDocumentRequest = {
+        title,
+        tags: Array.isArray(args.tags) ? (args.tags as string[]) : null,
+        author: typeof args.author === 'string' ? args.author : null,
+      }
+      const result = await engineCrud.createDocument({ caller, wikiId, body })
+      if (requestId !== undefined && idempotency) idempotency.set(callerId, requestId, result)
+      return result
+    }
+    case 'gnosis.document.update': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
+      const caller = resolveCallerCredential(callerId)
+      // H-3 (adversarial) — `baseRevision` and `graph` are REQUIRED args (§5.1);
+      // a missing one is a handler-side error, never a silent default (the old
+      // code defaulted `baseRevision` to 0 and `graph` to {nodes:[],edges:[]}).
+      if (typeof args.baseRevision !== 'number' || args.graph === undefined || args.graph === null) {
+        throw new Error(`${name}: baseRevision and graph required`)
+      }
+      // §5.1 — the UpdateDocumentRequest body with the null-when-None discipline
+      // (title/tags null for absent args; graph passed through opaque).
+      const body: UpdateDocumentRequest = {
+        baseRevision: args.baseRevision as number,
+        graph: args.graph as Graph,
+        title: typeof args.title === 'string' ? args.title : null,
+        tags: Array.isArray(args.tags) ? (args.tags as string[]) : null,
+      }
+      return engineCrud.updateDocument({ caller, documentId, body })
+    }
+    case 'gnosis.document.delete': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
+      const caller = resolveCallerCredential(callerId)
+      return engineCrud.deleteDocument({ caller, documentId })
+    }
+    case 'gnosis.document.publish': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
+      const caller = resolveCallerCredential(callerId)
+      return engineCrud.publishDocument({ caller, documentId })
+    }
+    case 'gnosis.document.unpublish': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
+      const caller = resolveCallerCredential(callerId)
+      return engineCrud.unpublishDocument({ caller, documentId })
+    }
+    case 'gnosis.document.archive': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const documentId = typeof args.documentId === 'string' ? args.documentId : ''
+      if (callerId === '' || documentId === '') throw new Error(`${name}: callerId and documentId required`)
+      const caller = resolveCallerCredential(callerId)
+      return engineCrud.archiveDocument({ caller, documentId })
+    }
+    case 'gnosis.wiki.create': {
+      if (!engineCrud) throw new Error(`${name}: no engine crud rag store configured`)
+      const callerId = typeof args.callerId === 'string' ? args.callerId : ''
+      const wikiName = typeof args.name === 'string' ? args.name : ''
+      // §5.1 — the empty/overlong `name` is a PROXY-side ValidationError (400),
+      // NOT a handler-side reject: the handler requires only the identity and
+      // passes the name through (even empty) so the proxy's ValidationError (400)
+      // propagates (§5.9-31).
+      if (callerId === '') throw new Error(`${name}: callerId required`)
+      const caller = resolveCallerCredential(callerId)
+      const requestId = typeof args.requestId === 'string' && args.requestId !== '' ? args.requestId : undefined
+      // P4 — the caller-side idempotency dedup: a duplicate (callerId, requestId)
+      // returns the cached result WITHOUT issuing a new createWiki.
+      if (requestId !== undefined && idempotency) {
+        const cached = idempotency.get(callerId, requestId)
+        if (cached !== undefined) return cached
+      }
+      const result = await engineCrud.createWiki({ caller, name: wikiName })
+      if (requestId !== undefined && idempotency) idempotency.set(callerId, requestId, result)
+      return result
+    }
+    default:
+      throw new Error(`unknown gnosis tool: ${name}`)
   }
 }
 
@@ -1254,6 +1572,27 @@ export interface McpServerOptions {
    *  `get_query_audit_log` tool reads from it. When null/absent the handlers
    *  skip recording (no throw). */
   auditLog?: QueryAuditLog | null
+  /** Unit GN-MCP-UI §5.4 — the LANDED createEngineRagStore proxy (the retrieval
+   *  trio + health over the F2 wire contract). The `gnosis.*` tools are handled
+   *  in MAIN against this proxy (never routed to the renderer). Injected like
+   *  `retrievalEngine`. The proxy is constructed at boot UNCONDITIONALLY (no
+   *  I/O at construction); `waitForReady` is NOT awaited at boot and NOT
+   *  exposed as a tool. */
+  engineRagStore?: EngineRagStore
+  /** Unit A2 §5.4 — the LANDED createEngineCrudRagStore proxy (the 11 §4.1
+   *  document-CRUD methods over the frozen P1a wire). The `gnosis.document.*`/
+   *  `gnosis.wiki.*` tools are handled in MAIN against this proxy (never routed
+   *  to the renderer). Injected like `engineRagStore`. */
+  engineCrudRagStore?: EngineCrudRagStore
+  /** Unit A2 §5.4 — the shell-side authority store (H3): maps a caller identity
+   *  (a human/agent user) to their edit-authority credential (the opaque `caller`
+   *  string the engine's RBAC check consumes). The mutating document/wiki tools
+   *  resolve the caller's credential from this store. */
+  authorityStore?: AuthorityStore
+  /** Unit A2 §5.4 — the caller-side idempotency registry (P4): dedups the
+   *  duplicate-create risk (P1a's wire has no idempotency-key field). The
+   *  mutating create tools cache their results under a `requestId`. */
+  idempotency?: IdempotencyRegistry
 }
 
 export interface SecuritySnapshot { token: string | null; enabled: ToolGroup[] }
@@ -1277,6 +1616,19 @@ export class ProvidentMcpServer {
   /** Unit X §5.7 — the shared query-audit log (null ⇒ the handlers skip
    *  recording). */
   private readonly auditLog: QueryAuditLog | null
+  /** Unit GN-MCP-UI §5.4 — the LANDED createEngineRagStore proxy (null ⇒ the
+   *  `gnosis.*` tools' handlers throw the "no engine rag store configured"
+   *  guard). */
+  private readonly engineRagStore: EngineRagStore | null
+  /** Unit A2 §5.4 — the LANDED createEngineCrudRagStore proxy (null ⇒ the
+   *  `gnosis.document.*`/`gnosis.wiki.*` tools' handlers throw the "no engine
+   *  crud rag store configured" guard). */
+  private readonly engineCrudRagStore: EngineCrudRagStore | null
+  /** Unit A2 §5.4 — the shell-side authority store (H3; null ⇒ fail-closed: no
+   *  caller has edit authority). */
+  private readonly authorityStore: AuthorityStore | null
+  /** Unit A2 §5.4 — the caller-side idempotency registry (P4; null ⇒ no dedup). */
+  private readonly idempotency: IdempotencyRegistry | null
   private httpServer: ReturnType<typeof createServer> | null = null
   private readonly httpServers = new Set<McpServer>()
   private _gate: SecurityGate
@@ -1306,6 +1658,10 @@ export class ProvidentMcpServer {
     this.runtime = opts.runtime ?? null
     this.templateStore = opts.templateStore ?? null
     this.auditLog = opts.auditLog ?? null
+    this.engineRagStore = opts.engineRagStore ?? null
+    this.engineCrudRagStore = opts.engineCrudRagStore ?? null
+    this.authorityStore = opts.authorityStore ?? null
+    this.idempotency = opts.idempotency ?? null
   }
 
   getGateConfig(): SecuritySnapshot {
@@ -1365,6 +1721,28 @@ export class ProvidentMcpServer {
     'code.template.create',
     'code.template.delete',
     'code.template.reset',
+    // Unit GN-MCP-UI (docs/specs/unit-gn-mcp-ui-wiring.md §5.2) — the `gnosis`
+    // (read-only, default-off) tool group: the retrieval trio + health over the
+    // LANDED createEngineRagStore proxy. Main-handled. `waitForReady` is a
+    // shell-side convenience (NOT a D4 parity feature) and is deliberately NOT
+    // exposed as a tool.
+    'gnosis.query',
+    'gnosis.stream',
+    'gnosis.status',
+    // Unit A2 (docs/specs/unit-a2-document-crud-wiring.md §5.2) — the 11
+    // document/wiki CRUD tools over the LANDED createEngineCrudRagStore proxy.
+    // Main-handled. 4 read-only in `gnosis`; 7 mutating in `gnosis-edit`.
+    'gnosis.document.get',
+    'gnosis.document.list',
+    'gnosis.wiki.get',
+    'gnosis.wiki.list',
+    'gnosis.document.create',
+    'gnosis.document.update',
+    'gnosis.document.delete',
+    'gnosis.document.publish',
+    'gnosis.document.unpublish',
+    'gnosis.document.archive',
+    'gnosis.wiki.create',
   ]
 
   /** The subset of ALL_TOOLS whose group the current gate allows — the tools
@@ -1446,7 +1824,7 @@ export class ProvidentMcpServer {
     if (liveServer) {
       const toAdd = this.allowedToolNames().filter((n) => !this.registered.has(n))
       if (toAdd.length > 0) {
-        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime)
+        ProvidentMcpServer.registerTools(liveServer, this.backend, toAdd, this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime, this.engineRagStore, this.engineCrudRagStore, this.authorityStore, this.idempotency)
       }
       const resToAdd = ProvidentMcpServer.ALL_RESOURCES.filter(
         (r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate}`) && !this.resources.has(r.uri ?? r.uriTemplate!),
@@ -1590,7 +1968,7 @@ export class ProvidentMcpServer {
           'DOM and the SSR fragment.',
       },
     )
-    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime)
+    ProvidentMcpServer.registerTools(server, this.backend, this.allowedToolNames(), this.registered, this.moduleStore, this.router, this.ragStore, this.retrievalEngine, this.templateStore, this._gate, this.ragStores, this.auditLog, this.runtime, this.engineRagStore, this.engineCrudRagStore, this.authorityStore, this.idempotency)
     // R3 — register the gated read-group resources in the SAME server build
     // (serves BOTH the stdio long-lived server and the per-POST HTTP server).
     const allowedResources = ProvidentMcpServer.ALL_RESOURCES.filter((r) => this._gate.toolAllowed(`resource:${r.uri ?? r.uriTemplate!}`))
@@ -1611,7 +1989,11 @@ export class ProvidentMcpServer {
     gate: SecurityGate,
     ragStores: RagStoreDirectory | null,
     auditLog: QueryAuditLog | null,
-    runtime?: RagStoreRuntimeController | null,
+    runtime: RagStoreRuntimeController | null | undefined,
+    engineRagStore: EngineRagStore | null,
+    engineCrudRagStore: EngineCrudRagStore | null,
+    authorityStore: AuthorityStore | null,
+    idempotency: IdempotencyRegistry | null,
   ): void {
     if (allowed.includes('provident.dispatch')) {
       registered.set('provident.dispatch', server.registerTool('provident.dispatch', {
@@ -1773,6 +2155,37 @@ export class ProvidentMcpServer {
       { name: 'code.template.create', description: 'Add a container-role producer for zone to the current template, validate, persist, broadcast. Requires code group.', inputSchema: { zone: z.string(), id: z.string().optional() } },
       { name: 'code.template.delete', description: 'Remove the container-role producer for zone. A targeted zone cannot be removed (the zone-consistency invariant). Requires code group.', inputSchema: { zone: z.string() } },
       { name: 'code.template.reset', description: 'Restore the default content-window template, persist, broadcast. Requires code group.', inputSchema: {} },
+      // Unit GN-MCP-UI (docs/specs/unit-gn-mcp-ui-wiring.md §5.1/§5.2) — the
+      // `gnosis` (read-only, default-off) tool group: the retrieval trio +
+      // health over the LANDED createEngineRagStore proxy. Main-handled. A8:
+      // `gnosis.status` is a TOOL in the `gnosis` group (default-off), NOT an
+      // mcp:// resource (a resource would be gated on the default-ON `read`
+      // group, leaking engine status). A7: NO schema carries a credential field
+      // — `baseUrl` is env/CLI config (NOT a credential), but it is never an
+      // MCP tool arg either.
+      { name: 'gnosis.query', description: 'Issue a gnosis ragQuery through the LANDED engine proxy and return the proxy-specific EngineRagResult (query/results/engine/citations/trace/blockedBy). Requires gnosis group.', inputSchema: { query: z.string(), topK: z.number().optional(), mode: z.enum(['flat', 'graph', 'vector', 'hybrid']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'gnosis.stream', description: 'Collect the single-shot gnosis ragStream AsyncIterable into { chunks: RagChunk[] } (at most one result/error then done, in order). Requires gnosis group.', inputSchema: { query: z.string(), topK: z.number().optional(), mode: z.enum(['flat', 'graph', 'vector', 'hybrid']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'gnosis.status', description: 'Read the engine HealthReport (state/version/subsystems/lastError) via the LANDED engine proxy. Read-only; does NOT record an audit entry. Requires gnosis group.', inputSchema: {} },
+      // Unit A2 (docs/specs/unit-a2-document-crud-wiring.md §5.1/§5.2) — the 11
+      // document/wiki CRUD tools over the LANDED createEngineCrudRagStore proxy.
+      // Main-handled. 4 read-only in the `gnosis` group; 7 mutating in the NEW
+      // `gnosis-edit` (mutating, default-off) group. A7: NO schema carries a
+      // credential field (no token/tls/ca/cert/key/apiKey) — the `callerId` arg
+      // is the caller's IDENTITY (NOT a credential; the edit-authority credential
+      // is derived from the AuthorityStore, never accepted as an arg). The
+      // `requestId` arg on the create tools is the caller-side idempotency key
+      // (P4).
+      { name: 'gnosis.document.get', description: 'Get a document by id through the LANDED CRUD proxy. Read-only; does NOT record an audit entry. Requires gnosis group.', inputSchema: { documentId: z.string() } },
+      { name: 'gnosis.document.list', description: 'List documents in a wiki through the LANDED CRUD proxy (state/tag/page/pageSize filters). Read-only; does NOT record an audit entry. Requires gnosis group.', inputSchema: { wikiId: z.string(), state: z.enum(['Draft', 'Published', 'Archived']).optional(), tag: z.string().optional(), page: z.number().optional(), pageSize: z.number().optional() } },
+      { name: 'gnosis.wiki.get', description: 'Get a wiki by id through the LANDED CRUD proxy. Read-only; does NOT record an audit entry. Requires gnosis group.', inputSchema: { wikiId: z.string() } },
+      { name: 'gnosis.wiki.list', description: 'List all wikis through the LANDED CRUD proxy. Read-only; does NOT record an audit entry. Requires gnosis group.', inputSchema: {} },
+      { name: 'gnosis.document.create', description: 'Create a document in a wiki through the LANDED CRUD proxy. Mutating; requires the gnosis-edit group + the caller\'s edit authority. The callerId is the caller\'s identity (the credential is derived from the AuthorityStore). A requestId dedups a duplicate create (P4).', inputSchema: { callerId: z.string(), wikiId: z.string(), title: z.string(), tags: z.array(z.string()).optional(), author: z.string().optional(), requestId: z.string().optional() } },
+      { name: 'gnosis.document.update', description: 'Update a document through the LANDED CRUD proxy (optimistic concurrency via baseRevision; a stale baseRevision surfaces ConflictError 409). Mutating; requires the gnosis-edit group + the caller\'s edit authority.', inputSchema: { callerId: z.string(), documentId: z.string(), baseRevision: z.number(), graph: z.object({ nodes: z.array(z.unknown()), edges: z.array(z.unknown()) }), title: z.string().optional(), tags: z.array(z.string()).optional() } },
+      { name: 'gnosis.document.delete', description: 'Delete a document through the LANDED CRUD proxy. Mutating; requires the gnosis-edit group + the caller\'s edit authority.', inputSchema: { callerId: z.string(), documentId: z.string() } },
+      { name: 'gnosis.document.publish', description: 'Publish a document through the LANDED CRUD proxy (the publish gate). Mutating; requires the gnosis-edit group + the caller\'s edit authority.', inputSchema: { callerId: z.string(), documentId: z.string() } },
+      { name: 'gnosis.document.unpublish', description: 'Unpublish a document through the LANDED CRUD proxy. Mutating; requires the gnosis-edit group + the caller\'s edit authority.', inputSchema: { callerId: z.string(), documentId: z.string() } },
+      { name: 'gnosis.document.archive', description: 'Archive a document through the LANDED CRUD proxy. Mutating; requires the gnosis-edit group + the caller\'s edit authority.', inputSchema: { callerId: z.string(), documentId: z.string() } },
+      { name: 'gnosis.wiki.create', description: 'Create a wiki through the LANDED CRUD proxy. Mutating; requires the gnosis-edit group + the caller\'s edit authority. A requestId dedups a duplicate create (P4).', inputSchema: { callerId: z.string(), name: z.string(), requestId: z.string().optional() } },
     ]
     const dispatch = (name: string): string => name.slice('provident.'.length)
     for (const { name, description, inputSchema } of graph) {
@@ -1808,6 +2221,13 @@ export class ProvidentMcpServer {
           // threaded through so the `rag.query`/`rag-stream` handlers record to
           // it and `get_query_audit_log` reads from it.
           return text(await handleRagTool(runtime ? runtime.getDefaultStore() : ragStore, name, args, runtime ? runtime.getDefaultEngine() : engine, runtime ? runtime.getDirectory() : ragStores, auditLog))
+        }
+        // Unit GN-MCP-UI §5.3 — the gnosis.* tools are MAIN-process (the LANDED
+        // engine proxy), never routed to the renderer. The shared audit log is
+        // threaded through so `gnosis.query`/`gnosis.stream` record to it (like
+        // `rag.query`); `gnosis.status` is read-only and does NOT record.
+        if (name.startsWith('gnosis.')) {
+          return text(await handleGnosisTool(engineRagStore, name, args, auditLog, engineCrudRagStore, authorityStore, idempotency))
         }
         if (name.startsWith('edit.')) {
           // H5 (§5.1.9) — after a successful edit mutation, wire the retrieval

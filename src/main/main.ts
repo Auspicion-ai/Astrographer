@@ -4,10 +4,11 @@
 // IPC.
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join, basename } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
-import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
+import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleGnosisTool, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
+import { createEngineConfigStore, setEngineConfigBaseUrl, getEngineConfigBaseUrl } from './engine-config.js'
 import { createModuleStore } from './module-store.js'
 import { type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
@@ -21,6 +22,10 @@ import { CapabilityRouter } from '../renderer/extensions.js'
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
 import { createQueryAuditLog } from './query-audit.js'
+import { createEngineRagStore } from './engine-rag-store.js'
+import { createEngineCrudRagStore } from './engine-crud-rag-store.js'
+import { createAuthorityStore } from './authority-store.js'
+import { createIdempotencyRegistry } from './idempotency-registry.js'
 
 // The main process is bundled as CJS (Electron runs it reliably that way), so
 // `__dirname` is available.
@@ -80,6 +85,41 @@ function embeddingProviderConfigFromEnv(): EmbeddingProviderConfig | null {
     dimension: parsePositiveIntEnv(process.env.PROVIDENT_EMBEDDING_DIMENSION),
     timeoutMs: parsePositiveIntEnv(process.env.PROVIDENT_EMBEDDING_TIMEOUT_MS),
   }
+}
+
+/** Unit GN-MCP-UI §5.4 — resolve the Gnosis engine's baseUrl A4 in the pinned
+ *  3-step priority. 1. the CONFIG SEAM (a config value, NOT a credential — the
+ *  operator-owned engine-config value; when set it wins), 2. the env var
+ *  `PROVIDENT_ENGINE_BASE_URL`, 3. the documented default `http://127.0.0.1:8080`.
+ *  The resolved URL must be loopback (the proxy enforces it at construction). */
+function resolveEngineBaseUrl(): string {
+  const fromConfig = getEngineConfigBaseUrl()
+  if (fromConfig) return fromConfig
+  const fromEnv = process.env.PROVIDENT_ENGINE_BASE_URL
+  if (fromEnv) return fromEnv
+  return 'http://127.0.0.1:8080'
+}
+
+/** Unit A2 §5.4 — load the shell-side `AuthorityStore` mapping (H3): the
+ *  callerId → edit-authority-credential mapping. It is a boot-time, in-memory
+ *  mapping loaded from the shell's operator settings (the same operator-settings
+ *  store that holds the engine `baseUrl` config seam — `src/main/engine-config.ts`).
+ *  It is NOT a credential store (the credentials are opaque application-level
+ *  strings, not secrets); it is the shell's "who may edit" RBAC mapping. The
+ *  mapping is populated at boot and is immutable for the process lifetime (a
+ *  change requires a restart). A callerId with no entry (or a null/empty
+ *  credential) has NO edit authority. */
+function loadAuthorityMapping(): Record<string, string> {
+  // The operator settings seam (the same engine-config store family). The
+  // mapping is read from the operator-owned config; a callerId with no entry
+  // has no edit authority. The fixed GUI operator identity ('operator') maps to
+  // the operator's edit-authority credential.
+  const mapping: Record<string, string> = {}
+  const operatorCredential = process.env.PROVIDENT_OPERATOR_CREDENTIAL
+  if (typeof operatorCredential === 'string' && operatorCredential !== '') {
+    mapping['operator'] = operatorCredential
+  }
+  return mapping
 }
 
 async function main(): Promise<void> {
@@ -143,6 +183,14 @@ async function main(): Promise<void> {
   const operatorSettingsStore = createOperatorSettingsStore({
     path: join(app.getPath('userData'), 'provident-operator-settings.json'),
   })
+  // Unit GN-MCP-UI §5.4 A4 — the Gnosis-engine baseUrl config seam (STEP 1 of
+  // resolveEngineBaseUrl). Persisted to userData (operator-owned; NOT a
+  // credential). The seam is mounted into `resolveEngineBaseUrl`'s registry;
+  // null → falls through to env `PROVIDENT_ENGINE_BASE_URL` → the default.
+  const engineConfigStore = createEngineConfigStore({
+    path: join(app.getPath('userData'), 'provident-engine-config.json'),
+  })
+  setEngineConfigBaseUrl(engineConfigStore.get().engineBaseUrl)
   // Unit E §5.6/§5.7 — the maintained retrieval engines, created ONCE per
   // store with the store + the selected embedder (U-MS2 §5.4 step 3 —
   // ENGINE-PER-STORE, the directory's per-name entries). F1: `rag.query` (MCP)
@@ -216,7 +264,24 @@ async function main(): Promise<void> {
   // MCP `rag.query`/`rag-stream` handlers + the `rag-query` IPC + the
   // `get_query_audit_log` tool (the shared-handler seam).
   const auditLog = createQueryAuditLog()
-  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore: runtime.getDefaultStore(), retrievalEngine: runtime.getDefaultEngine(), templateStore, ragStores: runtime.getDirectory(), runtime, auditLog })
+  // Unit GN-MCP-UI §5.4 — construct the engine proxy at boot UNCONDITIONALLY
+  // (the factory does NO network I/O — §5.8-7) and inject it into the MCP
+  // server. The `gnosis.*` tools are handled in MAIN against it. The engine may
+  // be absent (D2): `waitForReady` is NOT awaited at boot (the boot does not
+  // block on an absent engine) and is NOT exposed as a tool.
+  const engineRagStore = createEngineRagStore({ baseUrl: resolveEngineBaseUrl() })
+  // Unit A2 §5.4 — construct the CRUD proxy + the shell-side AuthorityStore (H3)
+  // + the caller-side IdempotencyRegistry (P4) at boot UNCONDITIONALLY (the CRUD
+  // factory does NO network I/O — A1 §5.1) and inject them into the MCP server.
+  // The `gnosis.document.*`/`gnosis.wiki.*` tools are handled in MAIN against the
+  // CRUD proxy. The engine may be absent (D2): `waitForReady` is NOT awaited at
+  // boot (the boot does not block on an absent engine) and is NOT exposed as a
+  // tool. The AuthorityStore mapping is a boot-time, in-memory mapping (a change
+  // requires a restart); a callerId with no entry has no edit authority.
+  const engineCrudRagStore = createEngineCrudRagStore({ baseUrl: resolveEngineBaseUrl() })
+  const authorityStore = createAuthorityStore(loadAuthorityMapping())
+  const idempotency = createIdempotencyRegistry({ maxEntries: 100 })
+  const mcp = new ProvidentMcpServer({ backend, transport, port, gate, moduleStore, router: moduleRouter, ragStore: runtime.getDefaultStore(), retrievalEngine: runtime.getDefaultEngine(), templateStore, ragStores: runtime.getDirectory(), runtime, auditLog, engineRagStore, engineCrudRagStore, authorityStore, idempotency })
 
   // The manual-UI settings IPC: main owns the config + re-wires the MCP server
   // tool-gating on change. This is manual-UI-ONLY — it is NOT reachable over an
@@ -465,6 +530,41 @@ async function main(): Promise<void> {
     // GET never broadcasts.
     backend.broadcast(IPC_OPERATOR_SETTINGS_CHANGED, updated)
     return updated
+  })
+
+  // Unit GN-MCP-UI §5.5 — the gnosis GUI bridge IPC (D4 MCP/UI parity). The
+  // `gnosis-status` operator pane + the `gnosis-query` app-graph pane reach the
+  // SAME main-process handler as the `gnosis.*` MCP tools (MCP/UI equivalence via
+  // the LANDED proxy — the renderer never computes engine retrieval itself). A
+  // rejection (e.g. the D2 engine-absent `EngineUnavailable`) propagates as the
+  // invoke rejection so the pane handler catches it and renders the unavailable
+  // state (never a crash). Manual-UI only: the MCP tool handlers never route to
+  // these channels (an agent cannot grant itself the gnosis group).
+  ipcMain.handle(IPC_GNOSIS_STATUS, () => {
+    return handleGnosisTool(engineRagStore, 'gnosis.status', {})
+  })
+  ipcMain.handle(IPC_GNOSIS_QUERY, (_event, args: Record<string, unknown>) => {
+    return handleGnosisTool(engineRagStore, 'gnosis.query', args ?? {})
+  })
+
+  // Unit A2 §5.5 — the gnosis document/wiki GUI bridge IPC (D4 MCP/UI parity).
+  // The `gnosis-documents`/`gnosis-wikis` app-graph panes reach the SAME
+  // main-process handler as the `gnosis.document.*`/`gnosis.wiki.*` MCP tools
+  // (MCP/UI equivalence via the LANDED CRUD proxy — the renderer never computes
+  // document/wiki CRUD itself). The mutating tools resolve the caller's
+  // edit-authority credential from the `authorityStore`; the create tools dedup
+  // via the `idempotency` registry. A rejection (e.g. the D2 engine-absent
+  // `EngineUnavailable`, or a `ConflictError` 409) propagates as the invoke
+  // rejection so the pane handler catches it and renders the unavailable/conflict
+  // state (never a crash). Manual-UI only: the MCP tool handlers never route to
+  // these channels (an agent cannot grant itself the gnosis/gnosis-edit groups).
+  ipcMain.handle(IPC_GNOSIS_DOCUMENTS, (_event, payload: { tool?: string; args?: Record<string, unknown> }) => {
+    const tool = typeof payload?.tool === 'string' ? payload.tool : ''
+    return handleGnosisTool(engineRagStore, tool, (payload?.args ?? {}) as Record<string, unknown>, auditLog, engineCrudRagStore, authorityStore, idempotency)
+  })
+  ipcMain.handle(IPC_GNOSIS_WIKIS, (_event, payload: { tool?: string; args?: Record<string, unknown> }) => {
+    const tool = typeof payload?.tool === 'string' ? payload.tool : ''
+    return handleGnosisTool(engineRagStore, tool, (payload?.args ?? {}) as Record<string, unknown>, auditLog, engineCrudRagStore, authorityStore, idempotency)
   })
 
   // Finding 3 — the re-traversal data source. The renderer's `onRebuild`

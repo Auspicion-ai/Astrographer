@@ -17,6 +17,28 @@ requests. NEVER patch the engine.
 | **ENG-INLINE-ORDER** | a-big (high) | **Text/element interleaving in a node's rendered output.** The framework renders a node as `escapeText(content) + children` (`adapters.js` `contentHtml`) — content text ALWAYS precedes child elements, with NO interleaving. `LegacyNodeData.children` is `LegacyNodeData[]` only (no text nodes) and `content` is a single escaped-text string, so a node cannot render text between child elements. | Astrographer's markdown import (`edit.import_markdown`) renders inline formatting (`**bold**`/`*em*`/`[link]`/`![img]`) as `RagNodeChild[]` child elements, but a formatted span that PRECEDES plain text (e.g. `**Proposal:** Astrographer…`) renders AFTER the content text — the bold label lands after the content ("Astrographer… foundation.Proposal:"). The `RagNodeChild` model (`content` = all plain text, `children` = all formatted spans) cannot represent the interleaving order, and the renderer emits content first then children. | **RESOLVED in provident-ssr 0.4.0 (2026-08-31)** — the upstream `bodyRuns` capability (0.3.0-0.3.2) was superseded by the 0.4.0 bare `text` child + content-XOR-children model: text beside children is a `text` child in `childOrder`, so interleave is deterministic WITHOUT `bodyRuns`. Astrographer upgraded to `provident-ssr@0.4.0` and rewrote `buildSubtree` to the XOR shape (no `content`; interleaved `text` + inline-span children). Verified: `**Proposal:** Astrographer` → `<strong>Proposal:</strong> Astrographer`. See `docs/defects.md` ENG-INLINE-ORDER. |
 | **ENG-BODYRUNS-WIRE-REF-PATHSTATE** | a-big (high) | **`bodyRuns` run-child render fails for PLACEMENT-ROUTED (path-state) content roots.** Emitting `bodyRuns` on a placement-routed subtree root DROPS the node's inline children instead of interleaving. **Root cause (corrected 2026-08-31 by the M3 TestWriter — ADAPTER, not the resolver):** `resolveBodyRunsChildWires` (0.3.2) DOES resolve the ref to the child's correct path-key wire (a valid childOrder member), but the ADAPTER's run-child lookup (`adapters.js:121` and SSR `contentHtml`) uses a BARE `wireKey(run.child)` while a placement path-state child is registered under the COMPOSITE key `pathKey\0forkKey` — so the child is not found and the run is dropped. No host-side `bodyRuns` rewrite fixes it (even composite-key refs drop; verified). | Astrographer rendered every RAG subtree root as a placement-routed `LegacyContentPayload` into a zone — so the host re-expression of ENG-INLINE-ORDER (emitting `bodyRuns` in `buildSubtree`) was blocked at the ADAPTER. **MOOT since 0.4.0 (2026-08-31):** the host's `buildSubtree` no longer emits `bodyRuns` (it uses the 0.4.0 `text`-child XOR model), so this adapter defect no longer affects the host. Still an upstream defect for any consumer using `bodyRuns` on placement-routed content. | **Upstream adapters.ts fix required** (for `bodyRuns` consumers): the run-child lookup must resolve a placement path-state child's COMPOSITE key (or the run-child render must be path-state-key aware). See `docs/defects.md` ENG-BODYRUNS-WIRE-REF-PATHSTATE. |
 
+**HANDOFF update (2026-09-10, Unit A2 landed):** A2 introduced **NO new
+engine/foundation gaps** — the A2 adversarial pass found NO defect in the
+`provident-ssr` package or the Gnosis wire contract (spec §3b: NONE). The
+**OPEN handoff items table is UNCHANGED** (HOST/U1-ENG, ENG-INLINE-ORDER,
+ENG-BODYRUNS-WIRE-REF-PATHSTATE). The **RBAC caller threading on the local
+`RagStore`** (the D2 fallback document store — the mutating methods take no
+`caller` param) is a **PACKAGE finding in `docs/defects.md`**, NOT a handoff
+item — it is unchanged and not part of A2.
+
+**HANDOFF update (2026-09-10, Unit shell-integration landed):** the shell-integration unit
+introduced **NO new engine/foundation gaps** — the adversarial pass (RCA-3) found **no
+defect in the `provident-ssr` package or the Gnosis wire contract** (spec §3b: NONE). The
+**OPEN handoff items table is UNCHANGED** (HOST/U1-ENG, ENG-INLINE-ORDER,
+ENG-BODYRUNS-WIRE-REF-PATHSTATE). The **GET-with-body finding is a HOST confirm-in-app
+item, NOT a handoff item** — the document-CRUD read methods send a GET-with-a-body (the P1a
+envelope-in-body wire) that **Node/undici `fetch` rejects but Electron/Chromium `fetch`
+permits**; it is a transport-RUNTIME divergence that the app's Chromium `fetch` adjudicates
+in-app, and it is recorded as a HOST finding in `docs/defects.md`
+(**HOST-GET-WITH-BODY-SSE-CRUD**, confirm-in-app status) + in the pending battery
+`docs/specs/unit-shell-integration-live-pending-battery.md` §2.1/§4.1/§6. It is NOT a
+feature request to the provident dev agent, so it does not appear here.
+
 ## SHELVED / CLOSED
 
 | # | Severity | Feature request | Why it mattered | Proposed shape | Shelved reason |

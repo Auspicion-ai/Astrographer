@@ -669,6 +669,26 @@ export interface OperatorSettingsPatch {
 
 export const IPC_OPERATOR_SETTINGS_GET = 'provident:operator-settings:get'
 export const IPC_OPERATOR_SETTINGS_SET = 'provident:operator-settings:set'
+
+// ---- Unit GN-MCP-UI §5.5 — the gnosis GUI bridge IPC (D4 MCP/UI parity) ----
+// The operator `gnosis-status` pane + the app-graph `gnosis-query` pane reach
+// the LANDED `createEngineRagStore` proxy (main-process) over these channels:
+// `bridge.gnosis.status()`/`bridge.gnosis.query()` → IPC → MAIN → the SAME
+// `handleGnosisTool` handler as the `gnosis.*` MCP tools (MCP/UI equivalence).
+// The IPC surface is NOT an MCP tool — the renderer (a trusted surface) calls
+// main directly; an MCP agent never routes to these channels.
+export const IPC_GNOSIS_STATUS = 'provident:gnosis:status'
+export const IPC_GNOSIS_QUERY = 'provident:gnosis:query'
+/** Unit A2 §5.5 — the gnosis document/wiki GUI bridge IPC channels (D4 MCP/UI
+ *  parity). The `gnosis-documents`/`gnosis-wikis` app-graph panes reach the
+ *  LANDED `createEngineCrudRagStore` proxy (main-process) over these channels:
+ *  `bridge.gnosis.documents(tool, args)`/`bridge.gnosis.wikis(tool, args)` →
+ *  IPC → MAIN → the SAME `handleGnosisTool` handler as the `gnosis.document.*`/
+ *  `gnosis.wiki.*` MCP tools (MCP/UI equivalence). The IPC surface is NOT an MCP
+ *  tool — the renderer (a trusted surface) calls main directly; an MCP agent
+ *  never routes to these channels. */
+export const IPC_GNOSIS_DOCUMENTS = 'provident:gnosis:documents'
+export const IPC_GNOSIS_WIKIS = 'provident:gnosis:wikis'
 /** Unit U1 §1.2 — the main→renderer broadcast channel. Payload: the current
  *  `OperatorSettings` (the store's filtered result — the exact return of
  *  `operatorSettingsStore.set(patch)`). One-way notification (the re-derive

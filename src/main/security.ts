@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 
-export type ToolGroup = 'read' | 'dispatch' | 'graph' | 'code' | 'module' | 'rag' | 'edit'
+export type ToolGroup = 'read' | 'dispatch' | 'graph' | 'code' | 'module' | 'rag' | 'edit' | 'gnosis' | 'gnosis-edit'
 
 const TOOL_GROUPS: Record<string, ToolGroup> = {
   'provident.get_rendered_html': 'read',
@@ -65,6 +65,27 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'resource:mcp://provident/app': 'read',
   'resource:mcp://provident/targets': 'read',
   'resource:mcp://provident/node/{nodeId}': 'read',
+  // Unit GN-MCP-UI (docs/specs/unit-gn-mcp-ui-wiring.md §5.2) — the `gnosis`
+  // (read-only, default-off) tool group: the retrieval trio + health over the
+  // LANDED createEngineRagStore proxy. Main-handled.
+  'gnosis.query': 'gnosis',
+  'gnosis.stream': 'gnosis',
+  'gnosis.status': 'gnosis',
+  // Unit A2 (docs/specs/unit-a2-document-crud-wiring.md §5.2) — the read-only
+  // document/wiki tools in the `gnosis` group + the mutating document/wiki tools
+  // in the NEW `gnosis-edit` (mutating, default-off) group. Editing is NEVER a
+  // `code`-group op.
+  'gnosis.document.get': 'gnosis',
+  'gnosis.document.list': 'gnosis',
+  'gnosis.wiki.get': 'gnosis',
+  'gnosis.wiki.list': 'gnosis',
+  'gnosis.document.create': 'gnosis-edit',
+  'gnosis.document.update': 'gnosis-edit',
+  'gnosis.document.delete': 'gnosis-edit',
+  'gnosis.document.publish': 'gnosis-edit',
+  'gnosis.document.unpublish': 'gnosis-edit',
+  'gnosis.document.archive': 'gnosis-edit',
+  'gnosis.wiki.create': 'gnosis-edit',
 }
 
 export function groupForTool(toolName: string): ToolGroup | null {
@@ -161,7 +182,7 @@ export function authorized(
   return false
 }
 
-const VALID_GROUPS: ReadonlySet<string> = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit'])
+const VALID_GROUPS: ReadonlySet<string> = new Set(['read', 'dispatch', 'graph', 'code', 'module', 'rag', 'edit', 'gnosis', 'gnosis-edit'])
 
 /** F3/F4 — a token/groups/disable field of the wrong shape ⇒ the whole patch
  *  is REJECTED (config unchanged, never throws). */

@@ -4,9 +4,10 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
+import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -120,6 +121,27 @@ export interface ProvidentBridge {
      *  trigger; returns an unsubscribe function. */
     onChanged(handler: (settings: OperatorSettings) => void): () => void
   }
+  /** Unit GN-MCP-UI §5.5 — the gnosis GUI bridge surface (D4 MCP/UI parity).
+   *  Sends the `gnosis-*` IPC to main, which calls the SAME `handleGnosisTool`
+   *  handler as the `gnosis.*` MCP tools against the LANDED engine proxy
+   *  (MCP/UI equivalence). The renderer never computes engine retrieval itself.
+   *  Manual-UI only: never an MCP tool (an agent cannot reach these channels). */
+  gnosis: {
+    status(): Promise<HealthReport>
+    query(query: string, opts?: EngineRagQueryOptions): Promise<EngineRagResult>
+    /** Unit A2 §5.5 — the document/wiki CRUD bridge surface (D4 MCP/UI parity).
+     *  Sends the `gnosis-documents` IPC to main, which calls the SAME
+     *  `handleGnosisTool` handler as the `gnosis.document.*` MCP tools against
+     *  the LANDED CRUD proxy (MCP/UI equivalence). The renderer never computes
+     *  document CRUD itself. Manual-UI only: never an MCP tool. */
+    documents(tool: string, args: Record<string, unknown>): Promise<unknown>
+    /** Unit A2 §5.5 — the wiki CRUD bridge surface (D4 MCP/UI parity). Sends the
+     *  `gnosis-wikis` IPC to main, which calls the SAME `handleGnosisTool` handler
+     *  as the `gnosis.wiki.*` MCP tools against the LANDED CRUD proxy (MCP/UI
+     *  equivalence). The renderer never computes wiki CRUD itself. Manual-UI only:
+     *  never an MCP tool. */
+    wikis(tool: string, args: Record<string, unknown>): Promise<unknown>
+  }
   /** Unit K M2 — the `window.provident.sidebar` bridge the compiled handler
    *  bodies call (`var s = window && window.provident && window.provident.sidebar`).
    *  The preload OWNS the `sidebar` object (contextBridge FREEZES everything it
@@ -140,6 +162,17 @@ export interface ProvidentBridge {
      *  exemption). The `operator-rag-manage-*` handler bodies call these. */
     registryManage(request: RagStoreManageRequest): void
     registryManageDismiss(): void
+    /** Unit GN-MCP-UI §5.5 — the gnosis GUI handlers (the M2 pattern). The
+     *  `gnosis-status`/`gnosis-query` pane handler bodies call these; they route
+     *  to the renderer host's `GnosisPanes` (via the sidebar holder). */
+    gnosisStatus(): void
+    gnosisQuery(value: string): void
+    /** Unit A2 §5.5 — the gnosis document/wiki CRUD GUI handlers (the M2
+     *  pattern). The `gnosis-documents`/`gnosis-wikis` pane handler bodies call
+     *  these; they route to the renderer host's `GnosisCrudPanes` (via the
+     *  sidebar holder). */
+    gnosisDocuments(tool: string, args: Record<string, unknown>): void
+    gnosisWikis(tool: string, args: Record<string, unknown>): void
   }
   installSidebar(methods: {
     selectDocument(id: string): void
@@ -152,6 +185,10 @@ export interface ProvidentBridge {
     textareaBlur(ragId: string, value: string): void
     registryManage(request: RagStoreManageRequest): void
     registryManageDismiss(): void
+    gnosisStatus(): void
+    gnosisQuery(value: string): void
+    gnosisDocuments(tool: string, args: Record<string, unknown>): void
+    gnosisWikis(tool: string, args: Record<string, unknown>): void
   }): void
 }
 
@@ -168,6 +205,10 @@ let sidebarHolder: {
   textareaBlur(ragId: string, value: string): void
   registryManage(request: RagStoreManageRequest): void
   registryManageDismiss(): void
+  gnosisStatus(): void
+  gnosisQuery(value: string): void
+  gnosisDocuments(tool: string, args: Record<string, unknown>): void
+  gnosisWikis(tool: string, args: Record<string, unknown>): void
 } = {
   selectDocument: () => {},
   submitQuery: () => {},
@@ -179,6 +220,10 @@ let sidebarHolder: {
   textareaBlur: () => {},
   registryManage: () => {},
   registryManageDismiss: () => {},
+  gnosisStatus: () => {},
+  gnosisQuery: () => {},
+  gnosisDocuments: () => {},
+  gnosisWikis: () => {},
 }
 
 const bridge: ProvidentBridge = {
@@ -359,6 +404,36 @@ const bridge: ProvidentBridge = {
       }
     },
   },
+  // Unit GN-MCP-UI §5.5 — the gnosis GUI bridge surface. Sends the `gnosis-*`
+  // IPC to main, which calls the SAME `handleGnosisTool` handler as the
+  // `gnosis.*` MCP tools against the LANDED engine proxy (MCP/UI equivalence).
+  // A rejection (e.g. the D2 engine-absent `EngineUnavailable`) propagates as
+  // the invoke rejection so the pane handler catches it → the unavailable state.
+  gnosis: {
+    status(): Promise<HealthReport> {
+      return ipcRenderer.invoke(IPC_GNOSIS_STATUS)
+    },
+    query(query: string, opts?: EngineRagQueryOptions): Promise<EngineRagResult> {
+      const payload: { query: string } & EngineRagQueryOptions = {
+        query,
+        ...(opts ?? {}),
+      }
+      return ipcRenderer.invoke(IPC_GNOSIS_QUERY, payload)
+    },
+    // Unit A2 §5.5 — the document/wiki CRUD bridge surface. Sends the
+    // `gnosis-documents`/`gnosis-wikis` IPC to main, which calls the SAME
+    // `handleGnosisTool` handler as the `gnosis.document.*`/`gnosis.wiki.*` MCP
+    // tools against the LANDED CRUD proxy (MCP/UI equivalence). A rejection
+    // (e.g. the D2 engine-absent `EngineUnavailable`, or a `ConflictError` 409)
+    // propagates as the invoke rejection so the pane handler catches it → the
+    // unavailable/conflict state.
+    documents(tool: string, args: Record<string, unknown>): Promise<unknown> {
+      return ipcRenderer.invoke(IPC_GNOSIS_DOCUMENTS, { tool, args: args ?? {} })
+    },
+    wikis(tool: string, args: Record<string, unknown>): Promise<unknown> {
+      return ipcRenderer.invoke(IPC_GNOSIS_WIKIS, { tool, args: args ?? {} })
+    },
+  },
   // Unit K M2 — the sidebar bridge the compiled handler bodies call. The preload
   // OWNS this object (contextBridge freezes exposed values, so the renderer must
   // NOT attach `sidebar` to `window.provident` — see installSidebarBridge).
@@ -375,6 +450,13 @@ const bridge: ProvidentBridge = {
     textareaBlur: (ragId, value) => sidebarHolder.textareaBlur?.(ragId, value),
     registryManage: (request) => sidebarHolder.registryManage?.(request),
     registryManageDismiss: () => sidebarHolder.registryManageDismiss?.(),
+    gnosisStatus: () => sidebarHolder.gnosisStatus?.(),
+    gnosisQuery: (value) => sidebarHolder.gnosisQuery?.(value),
+    // Unit A2 §5.5 — the gnosis document/wiki CRUD GUI handlers (the M2
+    // pattern). The `gnosis-documents`/`gnosis-wikis` pane handler bodies call
+    // these; they DELEGATE to the installed holder (a no-op until installed).
+    gnosisDocuments: (tool, args) => sidebarHolder.gnosisDocuments?.(tool, args),
+    gnosisWikis: (tool, args) => sidebarHolder.gnosisWikis?.(tool, args),
   },
   installSidebar(methods) {
     sidebarHolder = methods
