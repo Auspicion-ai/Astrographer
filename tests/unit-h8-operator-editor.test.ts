@@ -1261,12 +1261,14 @@ describe('HOST-H8 regressions (the adversarial pass findings — RED first)', ()
 // the all-UI-via-provident constraint + the NOT-MCP-visible boundary)
 // ===========================================================================
 describe('§5.8 — the negative pins: NO new MCP tool / census stays 41 / not group-gated / provident-authored / mechanism modules UNTOUCHED', () => {
-  it('GREEN-guard (census) — ALL_TOOLS is 55 entries (41 + the 3 gnosis.* names + the 11 A2 document/wiki names) and carries NO rag.manage / rag.list_stores / store-census tool (U-H8 adds 0 MCP tools, D6/A-P2-6)', () => {
-    // Census is 55, not 41: the gnosis.* MCP/UI wiring unit added gnosis.query /
+  it('GREEN-guard (census) — ALL_TOOLS is 57 entries (41 + the 3 gnosis.* names + the 11 A2 document/wiki names + rag.list_documents + U-D7 edit.set_doc_meta) and carries NO rag.manage / rag.list_stores / store-census tool (U-H8 adds 0 MCP tools, D6/A-P2-6)', () => {
+    // Census is 57, not 41: the gnosis.* MCP/UI wiring unit added gnosis.query /
     // gnosis.stream / gnosis.status to ALL_TOOLS (§5.2/§5.10 census bump), and
     // Unit A2 added the 11 gnosis.document.*/gnosis.wiki.* names
-    // (docs/specs/unit-a2-document-crud-wiring.md §5.10 — 11 new ALL_TOOLS rows).
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(55)
+    // (docs/specs/unit-a2-document-crud-wiring.md §5.10 — 11 new ALL_TOOLS rows),
+    // Unit U-D5 added rag.list_documents (unit-ud5 §5.3), and Unit U-D7 added
+    // edit.set_doc_meta (unit-ud7 §5.3).
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(57)
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.manage')
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.list_stores')
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.store-listing')

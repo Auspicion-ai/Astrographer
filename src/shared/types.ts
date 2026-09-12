@@ -290,12 +290,14 @@ export type RpcMethod =
   | 'rag.list_nodes'
   | 'rag.get_edges'
   | 'rag.backlinks'
+  | 'rag.list_documents'
   | 'edit.set_content'
   | 'edit.create_node'
   | 'edit.delete_node'
   | 'edit.split_node'
   | 'edit.merge_node'
   | 'edit.set_edge'
+  | 'edit.set_doc_meta'
   // Unit I (docs/specs/unit-i-template.md §5.3) — the main-handled
   // `code.template.*` tool methods. They are handled in MAIN (the template
   // store), never routed to the renderer, but still declare their method names
@@ -531,8 +533,20 @@ export type RagBacklinksResult = BacklinkResult
 export const IPC_RAG_DOC_HEADS = 'provident:rag-doc-heads'
 export interface RagDocHeadsPayload {
   /** One entry per document, sorted by document root id (lexicographic
-   *  ascending, deterministic). */
-  documents: Array<{ documentId: string; title: string }>
+   *  ascending, deterministic). Each entry carries the display-only
+   *  `path`/`tags` projected from the document ROOT node (`e.target`); `[]`
+   *  when the root has none (legacy / root-level / untagged). */
+  documents: Array<{
+    documentId: string
+    title: string
+    /** U-D4 (M7/M13) — the document root's corpus-relative DIRECTORY segments
+     *  (the root's `documentPath ?? []`). DISPLAY-ONLY: never persisted, never
+     *  derived by splitting `documentId` (C9). A legacy document (no
+     *  `documentPath`) displays as root-level `[]`. */
+    path: string[]
+    /** U-D4 (M7/Q7) — the document root's `tags ?? []`. DISPLAY-ONLY. */
+    tags: string[]
+  }>
 }
 
 // ---- U-MS5 store-listing IPC (docs/specs/unit-ms5-settings-listing.md §5.1) --

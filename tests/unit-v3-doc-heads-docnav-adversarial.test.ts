@@ -198,8 +198,8 @@ describe('MED-1 — handleRagDocHeadsIpc skips a doc-head edge with a missing/un
     )
     expect(mcp.handleRagDocHeadsIpc(store)).toEqual({
       documents: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
     })
   })
@@ -286,7 +286,7 @@ describe('LOW-5 — reDerive commits lastSnapshot + lastDocHeads together', () =
   it('a doc-heads fetch failure during reDerive → lastSnapshot is NOT updated (stays consistent with the stale lastDocHeads)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     const snapshotBefore = h.host.buildContext().snapshot

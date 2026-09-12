@@ -185,8 +185,8 @@ describe('A. §5.6 happy-path states', () => {
     )
     expect(mcp.handleRagDocHeadsIpc(store)).toEqual({
       documents: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
     })
   })
@@ -203,16 +203,16 @@ describe('A. §5.6 happy-path states', () => {
     )
     const result = mcp.handleRagDocHeadsIpc(store)
     expect(result.documents).toHaveLength(1)
-    expect(result.documents[0]).toEqual({ documentId: 'doc-a', title: 'Doc A' })
+    expect(result.documents[0]).toEqual({ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] })
   })
 
   it('A4. rag-doc-heads IPC missing head node → the entry title is "" (no throw)', () => {
     const store = createSnapshotStore([], [makeEdge('e1', 'doc-head', 'missing', 'doc-a')])
-    expect(mcp.handleRagDocHeadsIpc(store)).toEqual({ documents: [{ documentId: 'doc-a', title: '' }] })
+    expect(mcp.handleRagDocHeadsIpc(store)).toEqual({ documents: [{ documentId: 'doc-a', title: '', path: [], tags: [] }] })
   })
 
   it('A5. bridge.rag.docHeads() — the host boot calls it (the node-testable contract of the preload method)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     expect(h.bridge.rag.docHeads).toHaveBeenCalled()
   })
@@ -255,23 +255,23 @@ describe('A. §5.6 happy-path states', () => {
   })
 
   it('A10. buildContext happy — with lastDocHeads set → the PaneContext carries docHeads', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     const ctx = h.host.buildContext()
-    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
   })
 
   it('A11. boot happy — fetches the snapshot + the doc-heads + the template; lastDocHeads is set', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     expect(h.bridge.rag.snapshot).toHaveBeenCalled()
     expect(h.bridge.rag.docHeads).toHaveBeenCalled()
     expect(h.bridge.template.get).toHaveBeenCalled()
-    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
   })
 
   it('A12. selectDocument happy (amendment 5) — an id in the doc-heads list → setCurrentDocumentId + requestRebuild', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
     h.sidebar.selectDocument('doc-a')
@@ -280,13 +280,13 @@ describe('A. §5.6 happy-path states', () => {
   })
 
   it('A13. buildTraversalEnvelope via createSnapshotStore (amendment 4) — the boot renders the RAG content', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     expect(h.runtime.renderedHtmlResult().renderedHtml).toContain('Doc A')
   })
 
   it('A14. reDerive happy — fetches the snapshot + the doc-heads; lastDocHeads is refreshed', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     h.bridge.rag.docHeads.mockClear()
     await h.host.reDerive()
@@ -323,7 +323,7 @@ describe('B. §5.7 fail-states', () => {
   })
 
   it('B3. a bridge error during the re-derive rag-doc-heads fetch ABORTS the re-derive (the current graph stays rendered)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     h.bridge.rag.docHeads.mockRejectedValueOnce(new Error('doc-heads boom'))
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -343,7 +343,7 @@ describe('B. §5.7 fail-states', () => {
   })
 
   it('B5. selectDocument with a bogus id (amendment 5) → IGNORED (no setCurrentDocumentId, no re-derive)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
     h.sidebar.selectDocument('bogus')
@@ -374,7 +374,7 @@ describe('C. §5.8 census / numeric claims', () => {
   })
 
   it('C3. new bridge method (1) — the host boot calls bridge.rag.docHeads()', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     expect(h.bridge.rag.docHeads).toHaveBeenCalled()
   })
@@ -384,21 +384,21 @@ describe('C. §5.8 census / numeric claims', () => {
   })
 
   it('C5. PaneContext field added (1) — docHeads; the snapshot field is RETAINED', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     const ctx = h.host.buildContext()
-    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
     expect(ctx.snapshot).toBeDefined()
   })
 
   it('C6. host cache added (1) — lastDocHeads is set by the boot (buildContext carries it)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
-    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
   })
 
   it('C7. host adapter replaced (amendment 4) — the boot renders the RAG content; a listNodes/listEdges-only adapter throws', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     expect(h.runtime.renderedHtmlResult().renderedHtml).toContain('Doc A')
     const nodes = [makeNode('head-a', { content: 'Doc A' })]
@@ -446,8 +446,8 @@ describe('D. §3a adversarial resolutions', () => {
     )
     expect(mcp.handleRagDocHeadsIpc(storeMixed)).toEqual({
       documents: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
     })
   })
@@ -496,7 +496,7 @@ describe('D. §3a adversarial resolutions', () => {
   })
 
   it('D5 (LOW-5). reDerive commits lastSnapshot + lastDocHeads together (an aborted doc-heads fetch leaves both caches stale)', async () => {
-    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] } })
+    const h = makeHarness({ snapshot: validSnapshot(), docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] } })
     await h.host.boot(h.runtime)
     const snapshotBefore = h.host.buildContext().snapshot
     const docHeadsBefore = h.host.buildContext().docHeads

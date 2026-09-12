@@ -37,6 +37,8 @@ export type SetSubtreeResult = { ok: true; node: RagNode } | { ok: false; error:
 export type SetTypeResult = { ok: true; node: RagNode } | { ok: false; error: string }
 // Unit U5 §1.2 — the atomic rich-text write-back result.
 export type SetRichTextResult = { ok: true; node: RagNode } | { ok: false; error: string }
+// Unit U-D7 (docs/specs/unit-ud7-set-doc-meta-op.md §5.1) — the tag-write result.
+export type SetDocMetaResult = { ok: true; node: RagNode } | { ok: false; error: string }
 
 // The closed unions (Unit A §5.1). Duplicated here as runtime sets because the
 // store does not export them; the store validates the same unions at write time.
@@ -514,6 +516,80 @@ export async function setType(ctx: EditOpContext, params: { nodeId: string; type
   // store's validateNodeShape re-validates the type at write time (throw — the
   // ONLY throw path). The node id is STABLE — no delete+create.
   const updated = await ctx.store.putNode({ ...node, type: params.type })
+  return { ok: true, node: updated }
+}
+
+// ---- Unit U-D7: the tag write op (docs/specs/unit-ud7-set-doc-meta-op.md §5.1)
+
+// The U-D7 caps + the control-char guard (M11).
+const MAX_DOC_TAGS = 64
+const MAX_DOC_TAG_LENGTH = 128
+
+/** C0 controls + DEL: \u0000-\u001F and \u007F. */
+function hasControlChar(s: string): boolean {
+  return /[\u0000-\u001F\u007F]/.test(s)
+}
+
+/** Unit U-D7 (docs/specs/unit-ud7-set-doc-meta-op.md §5.1) — set a DOCUMENT
+ *  ROOT's `tags` ONLY. `documentPath` is import-minted and IMMUTABLE in v1
+ *  (M9/Q8): the op has no such parameter and the `{ ...node }` spread
+ *  PRESERVES the existing path. The node's `tags` are passed through to the
+ *  store's `putNode`, which applies the U-D1 normalization (trim, case-
+ *  sensitive, first-occurrence dedupe, `[]`→omitted) — the op does NOT
+ *  re-implement it. A STRUCTURAL op: `putNodeSync` classifies a `tags` delta as
+ *  a `node-update` entry (U-D2), so the write is journal-invertible. The op is
+ *  a single atomic `putNode` (NOT a `BatchOp`). NEVER throws for a domain
+ *  failure. */
+export async function setDocMeta(
+  ctx: EditOpContext,
+  params: { nodeId: string; tags: string[] },
+): Promise<SetDocMetaResult> {
+  // 1. tags shape + member type.
+  if (!Array.isArray(params.tags)) {
+    return { ok: false, error: 'edit.set_doc_meta: tags must be a string array' }
+  }
+  for (const t of params.tags) {
+    if (typeof t !== 'string') {
+      return { ok: false, error: 'edit.set_doc_meta: tags must be a string array' }
+    }
+  }
+  // 2. count cap (M11).
+  if (params.tags.length > MAX_DOC_TAGS) {
+    return { ok: false, error: `edit.set_doc_meta: too many tags (max ${MAX_DOC_TAGS})` }
+  }
+  // 3. per-tag length cap (M11).
+  for (const t of params.tags) {
+    if (t.length > MAX_DOC_TAG_LENGTH) {
+      return { ok: false, error: `edit.set_doc_meta: tag too long (max ${MAX_DOC_TAG_LENGTH})` }
+    }
+  }
+  // 4. control characters (M11).
+  for (const t of params.tags) {
+    if (hasControlChar(t)) {
+      return { ok: false, error: 'edit.set_doc_meta: tags must not contain control characters' }
+    }
+  }
+  // 5. non-empty-after-trim (M11; the store's own rule, surfaced as a result).
+  for (const t of params.tags) {
+    if (t.trim() === '') {
+      return { ok: false, error: 'edit.set_doc_meta: tags must be non-empty strings' }
+    }
+  }
+  // 6. existence.
+  const node = ctx.store.getNode(params.nodeId)
+  if (!node) {
+    return { ok: false, error: 'edit.set_doc_meta: node not found' }
+  }
+  // 7. the target MUST be a current document ROOT — the TARGET of a `doc-head`
+  //    edge (U-D3 markdown-parse.ts:602; U-D4 M7). A section / hand-created
+  //    node is a domain failure.
+  const isRoot = ctx.store.edgesTo(params.nodeId).some((e) => e.kind === 'doc-head')
+  if (!isRoot) {
+    return { ok: false, error: 'edit.set_doc_meta: target is not a document root' }
+  }
+  // 8. the single atomic write. `tags` is passed RAW; the store normalizes
+  //    (U-D1). `documentPath` is preserved by the spread — never set here.
+  const updated = await ctx.store.putNode({ ...node, tags: params.tags })
   return { ok: true, node: updated }
 }
 

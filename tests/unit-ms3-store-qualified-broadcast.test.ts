@@ -343,7 +343,8 @@ describe('site 4 â€” the seven handleEditTool construction points stamp store (Â
         expect(cb).toHaveBeenCalledTimes(1)
         const p = payloadOf(cb) as { kind: string; nodeIds: unknown[]; edgeIds: unknown[]; store: string }
         expect(p.kind).toBe('structural')
-        expect(p.nodeIds).toEqual(['note'])
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified.
+        expect(p.nodeIds).toEqual([relFile.replace(/\.md$/, '').split(/[\\/]/).join('/')])
         expect(p.edgeIds).toEqual([])
         expect(p.store).toBe(DEFAULT_NAME)
         expect(storeNameOf(cb)).toBe(DEFAULT_NAME)

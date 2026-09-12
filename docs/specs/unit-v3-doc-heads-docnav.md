@@ -195,6 +195,11 @@ export interface RagDocHeadsPayload {
 }
 ```
 
+> **SUPERSEDED ENTRY SHAPE (U-D4, 2026-09-11):** entries now carry the
+> REQUIRED `path: string[]` + `tags: string[]` in addition to
+> `documentId`/`title` (see `docs/specs/unit-ud4-doc-heads-tree.md` §5.1); the
+> IPC constant, payload name, and array shape are unchanged.
+
 **The main handler (`src/main/main.ts`):**
 
 ```ts
@@ -454,6 +459,11 @@ in `docs/pending.md` as a follow-up (main-side traversal or a scoped snapshot).
 
 - **New IPC channel:** 1 (`IPC_RAG_DOC_HEADS` = `'provident:rag-doc-heads'`).
 - **New shared type:** 1 (`RagDocHeadsPayload`).
+
+> **SUPERSEDED ENTRY SHAPE (U-D4, 2026-09-11):** entries now carry the
+> REQUIRED `path: string[]` + `tags: string[]` in addition to
+> `documentId`/`title` (see `docs/specs/unit-ud4-doc-heads-tree.md` §5.1); the
+> IPC constant, payload name, and array shape are unchanged.
 - **New bridge method:** 1 (`bridge.rag.docHeads()`).
 - **New main handler:** 1 (`ipcMain.handle(IPC_RAG_DOC_HEADS, ...)`).
 - **`PaneContext` field added:** 1 (`docHeads`). The `snapshot` field is RETAINED.

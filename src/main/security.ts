@@ -36,6 +36,9 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'rag.list_nodes': 'rag',
   'rag.get_edges': 'rag',
   'rag.backlinks': 'rag',
+  // U-D5 (docs/specs/unit-ud5-list-documents-tool.md §5.2) — the read-only
+  // `rag.list_documents` doc-heads listing (single-store). `rag` group.
+  'rag.list_documents': 'rag',
   // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
   // degenerate `rag-stream` + the `get_query_audit_log` audit-log reader, both
   // in the `rag` group (read-only, default-off).
@@ -48,6 +51,9 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'edit.merge_node': 'edit',
   'edit.set_edge': 'edit',
   'edit.import_markdown': 'edit',
+  // U-D7 (docs/specs/unit-ud7-set-doc-meta-op.md §5.3) — the mutating tag-write
+  // op (document-root `tags` only; path immutable). `edit` group, default-off.
+  'edit.set_doc_meta': 'edit',
   // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
   // tools, ALL in the `code` group (default-off). Main-handled against the
   // template store through the five-seam gate. `get`/`validate` are read-only;

@@ -276,8 +276,8 @@ describe('§5.1 the rag-doc-heads main handler (handleRagDocHeadsIpc)', () => {
     const result = mcp.handleRagDocHeadsIpc(store)
     expect(result).toEqual({
       documents: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
     })
   })
@@ -294,12 +294,12 @@ describe('§5.1 the rag-doc-heads main handler (handleRagDocHeadsIpc)', () => {
     )
     const result = mcp.handleRagDocHeadsIpc(store)
     expect(result.documents).toHaveLength(1)
-    expect(result.documents[0]).toEqual({ documentId: 'doc-a', title: 'Doc A' })
+    expect(result.documents[0]).toEqual({ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] })
   })
 
   it('happy 4: a doc-head edge whose source node is missing → the entry title is "" (no throw)', () => {
     const store = createSnapshotStore([], [makeEdge('e1', 'doc-head', 'missing', 'doc-a')])
-    expect(mcp.handleRagDocHeadsIpc(store)).toEqual({ documents: [{ documentId: 'doc-a', title: '' }] })
+    expect(mcp.handleRagDocHeadsIpc(store)).toEqual({ documents: [{ documentId: 'doc-a', title: '', path: [], tags: [] }] })
   })
 
   it('fail 1: a null store → throws Error("rag-doc-heads: no rag store configured")', () => {
@@ -366,11 +366,11 @@ describe('§5.4 buildContext (sidebar-panes.ts)', () => {
   it('happy 10: with lastDocHeads set → the returned PaneContext carries docHeads (alongside the existing fields)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     const ctx = h.host.buildContext()
-    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(ctx.docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
   })
 })
 
@@ -378,14 +378,14 @@ describe('§5.4 boot (sidebar-panes.ts)', () => {
   it('happy 11: boot fetches the snapshot + the doc-heads + the template; lastDocHeads is set', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     expect(h.bridge.rag.snapshot).toHaveBeenCalled()
     expect(h.bridge.rag.docHeads).toHaveBeenCalled()
     expect(h.bridge.template.get).toHaveBeenCalled()
     // lastDocHeads is set → buildContext carries it.
-    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A' }])
+    expect(h.host.buildContext().docHeads).toEqual([{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }])
   })
 
   it('fail 2: a bridge error during the boot rag-doc-heads fetch ABORTS the boot (the placeholder envelope stays rendered; caught + logged, never a crash)', async () => {
@@ -408,7 +408,7 @@ describe('§5.4 reDerive (sidebar-panes.ts)', () => {
   it('happy 14: a rag-store-changed re-derive fetches the snapshot + the doc-heads; lastDocHeads is refreshed', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     h.bridge.rag.docHeads.mockClear()
@@ -419,7 +419,7 @@ describe('§5.4 reDerive (sidebar-panes.ts)', () => {
   it('fail 3: a bridge error during the re-derive rag-doc-heads fetch ABORTS the re-derive (the current graph stays rendered; caught + logged)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     h.bridge.rag.docHeads.mockRejectedValueOnce(new Error('doc-heads boom'))
@@ -438,7 +438,7 @@ describe('§5.4 selectDocument (sidebar-panes.ts, amendment 5)', () => {
   it('happy 12: a document id in the doc-heads list → setCurrentDocumentId(id) + a document-switch re-traversal (via requestRebuild)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
@@ -450,7 +450,7 @@ describe('§5.4 selectDocument (sidebar-panes.ts, amendment 5)', () => {
   it('fail 5: a bogus id NOT in the doc-heads list → IGNORED (no setCurrentDocumentId, no re-derive with a phantom documentIds)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()
@@ -486,7 +486,7 @@ describe('§5.4 buildTraversalEnvelope via createSnapshotStore (amendment 4)', (
   it('happy 13: the host builds the traversal envelope correctly (boot renders the RAG content)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     expect(h.runtime.renderedHtmlResult().renderedHtml).toContain('Doc A')

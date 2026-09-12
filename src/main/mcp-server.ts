@@ -27,11 +27,11 @@ import type { RagStore } from './rag-store.js'
 import { computeDocumentSubgraph } from './traversal.js'
 import { validateTemplate } from './template-shape.js'
 import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
-import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge } from './edit-ops.js'
+import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge, setDocMeta } from './edit-ops.js'
 import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval, qualifyStoreResult } from './retrieval.js'
-import type { RetrievalEngine, RagQueryFilters } from './retrieval.js'
+import type { RetrievalEngine, RagQueryFilters, LocalRagQueryFilters } from './retrieval.js'
 import type { QueryAuditLog } from './query-audit.js'
 import { mergeStoreResults, type StoreResultInput } from './merge-store-results.js'
 import { resolveStoreArg, type RagStoreDirectory } from './rag-store-directory.js'
@@ -183,6 +183,18 @@ function validateRagQueryFilters(filters: unknown): void {
       throw new Error('rag.query: filters malformed')
     }
   }
+  if (f.documentPathPrefix !== undefined) {
+    if (!Array.isArray(f.documentPathPrefix) ||
+        !f.documentPathPrefix.every((s) => typeof s === 'string' && (s as string).length > 0)) {
+      throw new Error('rag.query: filters malformed')
+    }
+  }
+  if (f.tags !== undefined) {
+    if (!Array.isArray(f.tags) ||
+        !f.tags.every((s) => typeof s === 'string' && (s as string).length > 0)) {
+      throw new Error('rag.query: filters malformed')
+    }
+  }
 }
 
 export async function handleRagTool(
@@ -265,7 +277,7 @@ export async function handleRagTool(
               maxHops,
               expand: expand as 'none' | 'parent',
               maxParentContext,
-              filters: args.filters as RagQueryFilters | undefined,
+              filters: args.filters as LocalRagQueryFilters | undefined,
             })
             perStore.push({ name, result: res })
           } catch {
@@ -290,7 +302,7 @@ export async function handleRagTool(
         if (auditLog) {
           auditLog.record({
             query,
-            filters: (args.filters as RagQueryFilters) ?? null,
+            filters: (args.filters as LocalRagQueryFilters) ?? null,
             mode: 'flat',
             resultCount: merged.results.length,
             timestamp: new Date().toISOString(),
@@ -316,14 +328,14 @@ export async function handleRagTool(
         maxHops,
         expand: expand as 'none' | 'parent',
         maxParentContext,
-        filters: args.filters as RagQueryFilters | undefined,
+        filters: args.filters as LocalRagQueryFilters | undefined,
       })
       // Unit X §5.7 — record the call in the shared audit log (skip when
       // null/absent — no throw).
       if (auditLog) {
         auditLog.record({
           query,
-          filters: (args.filters as RagQueryFilters) ?? null,
+          filters: (args.filters as LocalRagQueryFilters) ?? null,
           mode: mode as 'flat' | 'graph',
           resultCount: result.results.length,
           timestamp: new Date().toISOString(),
@@ -391,7 +403,7 @@ export async function handleRagTool(
                 maxHops,
                 expand: expand as 'none' | 'parent',
                 maxParentContext,
-                filters: args.filters as RagQueryFilters | undefined,
+                filters: args.filters as LocalRagQueryFilters | undefined,
               })
               perStore.push({ name: sname, result: res })
             } catch {
@@ -409,7 +421,7 @@ export async function handleRagTool(
           if (auditLog) {
             auditLog.record({
               query,
-              filters: (args.filters as RagQueryFilters) ?? null,
+              filters: (args.filters as LocalRagQueryFilters) ?? null,
               mode: 'flat',
               resultCount: merged.results.length,
               timestamp: new Date().toISOString(),
@@ -428,12 +440,12 @@ export async function handleRagTool(
           maxHops,
           expand: expand as 'none' | 'parent',
           maxParentContext,
-          filters: args.filters as RagQueryFilters | undefined,
+          filters: args.filters as LocalRagQueryFilters | undefined,
         })
         if (auditLog) {
           auditLog.record({
             query,
-            filters: (args.filters as RagQueryFilters) ?? null,
+            filters: (args.filters as LocalRagQueryFilters) ?? null,
             mode: mode as 'flat' | 'graph',
             resultCount: result.results.length,
             timestamp: new Date().toISOString(),
@@ -480,6 +492,15 @@ export async function handleRagTool(
       if (nodeId === '') throw new Error('rag.backlinks: nodeId required')
       return enumerateLinks(target, nodeId)
     }
+    case 'rag.list_documents':
+      // U-D5 §5.4 — the read-only doc-heads listing. Routes through the SAME
+      // shared computation as the `rag-doc-heads` IPC (MCP-UI-EQUIVALENCE):
+      // `handleRagDocHeadsIpc(target)` — the ADDRESSED store (`target`, §5.4
+      // step 3). Single-store (M12): no fan-out, no census. Read-only: no
+      // audit entry (only rag.query/rag-stream record) and no broadcast. The
+      // U-D4 payload `{ documents: [{ documentId, title, path, tags }] }` is
+      // returned unchanged.
+      return handleRagDocHeadsIpc(target)
     default:
       throw new Error(`unknown rag tool: ${name}`)
   }
@@ -510,6 +531,12 @@ function validateGnosisFilters(filters: unknown, prefix: string): void {
     if (typeof t.documentId !== 'string' || typeof t.nodeId !== 'string') {
       throw new Error(`${prefix}: filters malformed`)
     }
+  }
+  // U-D6 §5.4.2 — the two LOCAL-only document filters are NOT part of the gnosis
+  // wire filter contract. Reject them outright so a direct (non-SDK)
+  // handleGnosisTool call cannot serialize them onto the engine wire.
+  if (f.documentPathPrefix !== undefined || f.tags !== undefined) {
+    throw new Error(`${prefix}: filters malformed`)
   }
 }
 
@@ -867,17 +894,29 @@ export function handleRagDocHeadsIpc(store: RagStore | null): RagDocHeadsPayload
   const edges = typeof store.edgesByKind === 'function' ? store.edgesByKind('doc-head') : store.listEdges().filter((e) => e.kind === 'doc-head')
   const nodeById = new Map(store.listNodes().map((n) => [n.id, n]))
   const seen = new Set<string>()
-  const documents: Array<{ documentId: string; title: string }> = []
+  const documents: RagDocHeadsPayload['documents'] = []
   for (const e of edges) {
     if (e.kind !== 'doc-head') continue
-    // MED-1 (adversarial): a `doc-head` edge with a missing/undefined/empty
-    // target is a MALFORMED edge — SKIP it (never push a phantom
-    // `{ documentId: undefined }` entry that crashes the sort below, and never
-    // emit an unselectable `''` document entry).
-    if (e.target == null || e.target === '') continue
+    // MED-1 (adversarial): a `doc-head` edge whose target is not a non-empty
+    // string (missing/undefined/null, empty, or a non-string number/object/
+    // boolean) is a MALFORMED edge — SKIP it (never push a phantom entry whose
+    // `documentId` crashes the `localeCompare` sort below, and never emit an
+    // unselectable `''` document entry). F2: the `typeof` guard subsumes the
+    // prior null/undefined/'' check.
+    if (typeof e.target !== 'string' || e.target === '') continue
     if (seen.has(e.target)) continue // dedupe by target (first head wins)
     seen.add(e.target)
-    documents.push({ documentId: e.target, title: nodeById.get(e.source)?.content ?? '' })
+    // M7 — the document ROOT (`e.target`) carries `documentPath`/`tags`; the
+    // head SECTION (`e.source`) carries the title. A missing/quarantined root
+    // → `[]`/`[]` (never throw). The arrays are COPIED so the emitted payload
+    // cannot alias the store's arrays (A8).
+    const root = nodeById.get(e.target)
+    documents.push({
+      documentId: e.target,
+      title: nodeById.get(e.source)?.content ?? '',
+      path: root && Array.isArray(root.documentPath) ? [...root.documentPath] : [],
+      tags: root && Array.isArray(root.tags) ? [...root.tags] : [],
+    })
   }
   documents.sort((a, b) => a.documentId.localeCompare(b.documentId))
   return { documents }
@@ -1399,6 +1438,17 @@ export async function handleEditTool(
       if (result.ok) emit({ kind: 'structural', nodeIds: result.documentIds, edgeIds: [], store: storeName })
       return result
     }
+    case 'edit.set_doc_meta': {
+      const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+      if (nodeId === '') throw new Error('edit.set_doc_meta: nodeId required')
+      // Finding-5 discipline — pass the RAW tags through (no coercion). A
+      // non-array reaches the op, which returns its documented
+      // `'edit.set_doc_meta: tags must be a string array'` fail-state.
+      const tags = args.tags
+      const result = await setDocMeta(ctx, { nodeId, tags: tags as string[] })
+      if (result.ok) emit({ kind: 'structural', nodeIds: [nodeId], edgeIds: [], store: storeName })
+      return result
+    }
     default:
       throw new Error(`unknown edit tool: ${name}`)
   }
@@ -1706,6 +1756,9 @@ export class ProvidentMcpServer {
     'rag.list_nodes',
     'rag.get_edges',
     'rag.backlinks',
+    // U-D5 (docs/specs/unit-ud5-list-documents-tool.md §5.3) — the read-only
+    // doc-heads listing tool (single-store).
+    'rag.list_documents',
     // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
     // `rag`-group (read-only, default-off) tools: the degenerate `rag-stream`
     // + the `get_query_audit_log` audit-log reader. Main-handled.
@@ -1718,6 +1771,8 @@ export class ProvidentMcpServer {
     'edit.merge_node',
     'edit.set_edge',
     'edit.import_markdown',
+    // U-D7 §5.3 — the mutating tag-write tool (document-root tags only).
+    'edit.set_doc_meta',
     // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
     // tools, ALL in the `code` group (default-off), main-handled against the
     // template store.
@@ -2131,15 +2186,16 @@ export class ProvidentMcpServer {
       // byte-pinned M1/M2 fail-states). The existing fields of each schema are
       // UNCHANGED. No new tool name, no new group, no RpcMethod change (the
       // five-seam gate gains NOTHING — security.ts:34-45).
-      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; Unit X extends it with mode/maxHops/expand/maxParentContext/filters + the citations/trace/blockedBy/results/engine result fields; U-F3 adds the optional stores:"all" fan-out; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'rag.query', description: 'Retrieve the relevant RAG objects + the coarse line→node map for a query (Unit E implements the retrieval; Unit X extends it with mode/maxHops/expand/maxParentContext/filters + the citations/trace/blockedBy/results/engine result fields; U-F3 adds the optional stores:"all" fan-out; registered here). Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional(), documentPathPrefix: z.array(z.string()).optional(), tags: z.array(z.string()).optional() }).optional() } },
       { name: 'rag.get_document', description: 'The document\'s RAG nodes/edges (the subtree). Requires rag group.', inputSchema: { documentId: z.string(), store: z.string().optional() } },
       { name: 'rag.list_nodes', description: 'A census of RAG nodes (id, type, content preview, ownedNodeIds count). Requires rag group.', inputSchema: { store: z.string().optional() } },
       { name: 'rag.get_edges', description: 'The RAG edges (all, or those touching nodeId). Requires rag group.', inputSchema: { nodeId: z.string().optional(), store: z.string().optional() } },
       { name: 'rag.backlinks', description: 'The backlinks to nodeId (Unit G enumerates them; registered here). Requires rag group.', inputSchema: { nodeId: z.string(), store: z.string().optional() } },
+      { name: 'rag.list_documents', description: 'List the documents in the addressed RAG store (the doc-heads listing: [{ documentId, title, path, tags }]) — the SAME shared computation as the rag-doc-heads IPC. SINGLE-STORE scope: never enumerates across stores. Read-only; does NOT record an audit entry. Requires rag group.', inputSchema: { store: z.string().optional() } },
       // Unit X (docs/specs/unit-x-rag-provenance-traversal.md §5.7/§5.8) — the
       // degenerate `rag-stream` (same schema as `rag.query`) + the
       // `get_query_audit_log` audit-log reader. Both `rag`-group, main-handled.
-      { name: 'rag-stream', description: 'A degenerate stream of the rag.query result (Unit X §5.8): [{type:"result",result},{type:"done"}] or [{type:"error",error}] on a runtime fail-state. Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional() }).optional() } },
+      { name: 'rag-stream', description: 'A degenerate stream of the rag.query result (Unit X §5.8): [{type:"result",result},{type:"done"}] or [{type:"error",error}] on a runtime fail-state. Requires rag group.', inputSchema: { query: z.string(), topK: z.number().optional(), store: z.string().optional(), stores: z.enum(['all']).optional(), mode: z.enum(['flat', 'graph']).optional(), maxHops: z.number().optional(), expand: z.enum(['none', 'parent']).optional(), maxParentContext: z.number().optional(), filters: z.object({ nodeKind: z.enum(['content', 'fact', 'reference']).optional(), edgeType: z.enum(['link', 'embed']).optional(), target: z.object({ documentId: z.string(), nodeId: z.string() }).optional(), state: z.enum(['FRESH', 'RESOLVED', 'STALE', 'BROKEN']).optional(), documentPathPrefix: z.array(z.string()).optional(), tags: z.array(z.string()).optional() }).optional() } },
       { name: 'get_query_audit_log', description: 'Read the query-audit log entries (Unit X §5.7): { entries: [{ query, filters, mode, resultCount, timestamp, requester }] }. Requires rag group.', inputSchema: {} },
       { name: 'edit.set_content', description: 'Set a RAG node\'s content (a content op → journaled, re-traversal — CONTENT-EDIT-RE-TRAVERSAL). Requires edit group.', inputSchema: { nodeId: z.string(), content: z.string(), store: z.string().optional() } },
       { name: 'edit.create_node', description: 'Create a RAG node (a structural op → journaled, re-traversal). Requires edit group.', inputSchema: { type: z.string(), content: z.string(), parentId: z.string().optional(), props: z.record(z.string(), z.unknown()).optional(), store: z.string().optional() } },
@@ -2150,6 +2206,7 @@ export class ProvidentMcpServer {
       // U-MS2 §5.2 A5 — the ONE description change (mcp-server.ts:1078): the
       // per-store import root. The schema stays `files`-ONLY otherwise (ADV-1).
       { name: 'edit.import_markdown', description: 'Import a corpus of markdown files into the addressed RAG store as a ONE-WAY SNAPSHOT (parse → validate doc-flow → applyBatch as ONE atomic batch journal entry). Requires edit group. The corpus root is fixed server-side per store: the addressed store\'s configured corpus root; the default store\'s root is its configured corpus root (the project root when unconfigured) — it is NOT an agent-supplied argument.', inputSchema: { files: z.array(z.string().min(1)).min(1), store: z.string().optional() } },
+      { name: 'edit.set_doc_meta', description: 'Set a document root\'s tags (a document-metadata write → journaled as a structural node-update, re-traversal). Only tags are mutable; documentPath is immutable in v1. The target must be a document root (a doc-head target). Requires edit group.', inputSchema: { nodeId: z.string(), tags: z.array(z.string()), store: z.string().optional() } },
       // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*`
       // CRUD tools, ALL in the `code` group (default-off), main-handled against
       // the template store. `get`/`validate` are read-only; `set`/`create`/

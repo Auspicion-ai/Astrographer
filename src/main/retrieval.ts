@@ -592,7 +592,7 @@ export interface RetrievalEngine {
       maxHops?: number
       expand?: 'none' | 'parent'
       maxParentContext?: number
-      filters?: RagQueryFilters
+      filters?: LocalRagQueryFilters
     },
   ): Promise<RagResult>
   /** Update the index on a store change (content or structural). ASYNC (Unit F
@@ -659,7 +659,7 @@ export function createRetrieval(store: RagStore, embedder: Embedder, opts?: Retr
         maxHops?: number
         expand?: 'none' | 'parent'
         maxParentContext?: number
-        filters?: RagQueryFilters
+        filters?: LocalRagQueryFilters
       },
     ): Promise<RagResult> {
       // U-H5 — a NEW query on a torn-down engine fails loud (F4). A query that
@@ -765,6 +765,21 @@ export interface RagQueryFilters {
   state?: 'FRESH' | 'RESOLVED' | 'STALE' | 'BROKEN'
 }
 
+/** U-D6 — the LOCAL-only additive document-metadata filter extension. These two
+ *  fields are LOCAL retrieval only: they are NOT on the shared RagQueryFilters
+ *  (the gnosis proxy's wire filter type) and are NOT advertised by the gnosis.*
+ *  schemas (M8/Q6; §5.4.2). Read against the document ROOT node's persisted
+ *  `documentPath`/`tags` (U-D1/U-D3/U-D4). */
+export interface LocalRagQueryFilters extends RagQueryFilters {
+  /** Match only documents whose root `documentPath` STARTS WITH this prefix,
+   *  element-wise (case-sensitive). `[]` = no constraint (matches all). A
+   *  prefix longer than the document's path never matches. */
+  documentPathPrefix?: string[]
+  /** Match only documents carrying EVERY requested tag — AND, case-sensitive
+   *  (Q7). `[]` = no constraint (matches all). */
+  tags?: string[]
+}
+
 /** The per-result item (the contract's `results` array element). */
 export interface RagResultItem {
   documentId: string
@@ -815,7 +830,7 @@ export interface BlockedByEntry {
 export interface RagQueryOptions {
   wikiId?: string
   topK?: number
-  filters?: RagQueryFilters
+  filters?: LocalRagQueryFilters
   mode?: 'flat' | 'graph'
   maxHops?: number
   expand?: 'none' | 'parent'
@@ -852,7 +867,7 @@ export interface RagResult {
 /** The graph-mode walk options (§5.4). */
 export interface WalkOptions {
   maxHops: number
-  filters?: RagQueryFilters
+  filters?: LocalRagQueryFilters
 }
 
 /** The graph-mode walk result (§5.4). */
@@ -899,6 +914,69 @@ export function documentIdsForNode(store: RagStore, nodeId: string): string[] {
   return docIds.sort()
 }
 
+/** U-D6 §5.2 — True when a document-metadata constraint is active (a non-empty
+ *  prefix or a non-empty tag list). */
+function hasDocumentFilters(filters: LocalRagQueryFilters | undefined): boolean {
+  if (!filters) return false
+  return (filters.documentPathPrefix !== undefined && filters.documentPathPrefix.length > 0) ||
+         (filters.tags !== undefined && filters.tags.length > 0)
+}
+
+/** U-D6 §5.2 — Element-wise, case-sensitive path prefix (empty prefix = true). */
+function pathHasPrefix(path: string[], prefix: string[]): boolean {
+  if (prefix.length > path.length) return false
+  for (let i = 0; i < prefix.length; i++) if (path[i] !== prefix[i]) return false
+  return true
+}
+
+/** U-D6 §5.2 — True when the DOCUMENT ROOT `documentId` satisfies the active
+ *  constraints. Reads the root's `documentPath`/`tags` (U-D1); a missing root /
+ *  non-array field is `[]` (never throws). */
+function documentMatchesDocumentFilters(
+  store: RagStore, documentId: string, filters: LocalRagQueryFilters,
+): boolean {
+  const root = documentId === '' ? undefined : store.getNode(documentId)
+  const path = root && Array.isArray(root.documentPath) ? root.documentPath : []
+  const tags = root && Array.isArray(root.tags) ? root.tags : []
+  if (filters.documentPathPrefix !== undefined && filters.documentPathPrefix.length > 0 &&
+      !pathHasPrefix(path, filters.documentPathPrefix)) return false
+  if (filters.tags !== undefined && filters.tags.length > 0 &&
+      !filters.tags.every((t) => tags.includes(t))) return false
+  return true
+}
+
+/** U-D6 §5.2 — True when a NODE passes: no constraint = true; otherwise ANY
+ *  owning document (documentIdsForNode) matches. No owning document + a
+ *  constraint = false. */
+function nodeMatchesDocumentFilters(
+  store: RagStore, nodeId: string, filters: LocalRagQueryFilters | undefined,
+): boolean {
+  if (!hasDocumentFilters(filters)) return true
+  return documentIdsForNode(store, nodeId).some((d) => documentMatchesDocumentFilters(store, d, filters!))
+}
+
+/** U-D6 §5.2 — True when an EDGE passes: no constraint = true; otherwise its
+ *  `documentIds` (owning documents) match, or (absent `documentIds`) either
+ *  endpoint's owning documents match.
+ *
+ *  F1 adversarial fix — a present-but-empty constraint (`filters: {}`,
+ *  `{ nodeKind: 'fact' }`, `{ documentPathPrefix: [] }`, `{ tags: [] }`) is NO
+ *  document constraint: return true byte-equal to omitted filters. Without this
+ *  early return, an edge whose owning-document set is EMPTY (both endpoints
+ *  unowned) would be rejected by `docs.some(...)` whenever `filters` is any
+ *  non-undefined object, breaking §5.5.2/A1 and flat/graph consistency (A11).
+ *  An ACTIVE constraint (`hasDocumentFilters` true) keeps the exact prior
+ *  behavior. */
+function edgeMatchesDocumentFilters(
+  store: RagStore, e: RagEdge, filters: LocalRagQueryFilters,
+): boolean {
+  if (!hasDocumentFilters(filters)) return true
+  const docs = (e.documentIds && e.documentIds.length > 0)
+    ? e.documentIds
+    : [...documentIdsForNode(store, e.source), ...documentIdsForNode(store, e.target)]
+  return docs.some((d) => documentMatchesDocumentFilters(store, d, filters))
+}
+
 /** Build the deduplicated grounding set from the result items. Order is by
  *  first appearance in the result set; duplicates (same documentId+nodeId) are
  *  removed. */
@@ -927,11 +1005,13 @@ export function buildFlatTrace(engine: string, topK: number, source: 'local' | '
 }
 
 /** True when an edge passes the walk's edge filters (edgeType/state/target). */
-function edgePassesFilters(store: RagStore, e: RagEdge, filters: RagQueryFilters | undefined): boolean {
+function edgePassesFilters(store: RagStore, e: RagEdge, filters: LocalRagQueryFilters | undefined): boolean {
   if (!filters) return true
   if (filters.edgeType !== undefined && e.edgeType !== filters.edgeType) return false
   if (filters.state !== undefined && e.state !== filters.state) return false
   if (filters.target !== undefined && (e.target !== filters.target.nodeId || docForNode(store, e.target) !== filters.target.documentId)) return false
+  // U-D6 §5.5.2 — the edge's owning document(s) must match.
+  if (!edgeMatchesDocumentFilters(store, e, filters)) return false
   return true
 }
 
@@ -969,7 +1049,8 @@ export function walkReferenceGraph(store: RagStore, seeds: RagResultItem[], opts
     // A seed that is itself a fact node is a resolved target.
     const seedNode = store.getNode(current)
     if (seedNode && seedNode.nodeKind === 'fact') {
-      if (filters?.nodeKind === undefined || filters.nodeKind === 'fact') {
+      if ((filters?.nodeKind === undefined || filters.nodeKind === 'fact') &&
+          nodeMatchesDocumentFilters(store, current, filters)) {
         addTarget(seed)
         resolved = true
       }
@@ -1023,7 +1104,8 @@ export function walkReferenceGraph(store: RagStore, seeds: RagResultItem[], opts
       current = target
       const targetNode = store.getNode(target)
       if (targetNode && targetNode.nodeKind === 'fact') {
-        if (filters?.nodeKind === undefined || filters.nodeKind === 'fact') {
+        if ((filters?.nodeKind === undefined || filters.nodeKind === 'fact') &&
+            nodeMatchesDocumentFilters(store, target, filters)) {
           addTarget({ documentId: docForNode(store, target), nodeId: target, score: seed.score, snippet: snippetOf(targetNode), source: 'local' as const })
           resolved = true
         }
@@ -1072,7 +1154,7 @@ export function expandParentContext(store: RagStore, items: RagResultItem[], max
 
 /** Validate the pinned filters shape (§5.2). A malformed filters object throws
  *  `Error('ragQuery: filters malformed')`. */
-function validateFilters(filters: RagQueryFilters): void {
+function validateFilters(filters: LocalRagQueryFilters): void {
   if (filters === null || typeof filters !== 'object' || Array.isArray(filters)) {
     throw new Error('ragQuery: filters malformed')
   }
@@ -1090,6 +1172,18 @@ function validateFilters(filters: RagQueryFilters): void {
       throw new Error('ragQuery: filters malformed')
     }
     if (typeof filters.target.documentId !== 'string' || typeof filters.target.nodeId !== 'string') {
+      throw new Error('ragQuery: filters malformed')
+    }
+  }
+  if (filters.documentPathPrefix !== undefined) {
+    if (!Array.isArray(filters.documentPathPrefix) ||
+        !filters.documentPathPrefix.every((s) => typeof s === 'string' && s.length > 0)) {
+      throw new Error('ragQuery: filters malformed')
+    }
+  }
+  if (filters.tags !== undefined) {
+    if (!Array.isArray(filters.tags) ||
+        !filters.tags.every((s) => typeof s === 'string' && s.length > 0)) {
       throw new Error('ragQuery: filters malformed')
     }
   }
@@ -1161,9 +1255,19 @@ export async function ragQuery(
     if (opts.filters?.nodeKind !== undefined) {
       results = results.filter((r) => store.getNode(r.nodeId)?.nodeKind === opts.filters!.nodeKind)
     }
+    // U-D6 §5.5.1 — the local document-metadata filter: a candidate passes when
+    // ANY of its owning documents satisfies BOTH the path prefix and the tags.
+    if (hasDocumentFilters(opts.filters)) {
+      results = results.filter((r) => nodeMatchesDocumentFilters(store, r.nodeId, opts.filters))
+    }
     trace = buildFlatTrace(RAG_ENGINE_ID, topK, 'local')
   } else {
-    const seeds = ranked.map((s) => {
+    // U-D6 §5.5.2 — restrict the graph seeds to matching documents (the same
+    // owning-document predicate as flat mode).
+    const graphRanked = hasDocumentFilters(opts.filters)
+      ? ranked.filter((s) => nodeMatchesDocumentFilters(store, s.nodeId, opts.filters))
+      : ranked
+    const seeds = graphRanked.map((s) => {
       const node = store.getNode(s.nodeId)
       return {
         documentId: docForNode(store, s.nodeId),

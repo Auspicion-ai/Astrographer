@@ -110,6 +110,15 @@ export interface RagNode {
    *  `span` is NOT a child type — it is a diff-matching artifact folded into
    *  the parent's `content`. */
   children?: RagNodeChild[]
+  /** NEW (U-D1) — the corpus-relative DIRECTORY segments of a DOCUMENT ROOT
+   *  node (no basename). OPTIONAL/ADDITIVE: absent = a root-level document
+   *  (the v1 default). `[]` is NOT stored — it normalizes to absent. */
+  documentPath?: string[]
+  /** NEW (U-D1) — multi-valued categories on a DOCUMENT ROOT node.
+   *  OPTIONAL/ADDITIVE: absent = untagged (the v1 default). `[]` is NOT
+   *  stored — it normalizes to absent. Entries are trimmed, case-SENSITIVE,
+   *  and DEDUPED (first-occurrence order). */
+  tags?: string[]
   props?: Record<string, unknown>
   ownedNodeIds: string[]
   createdAt: string
@@ -365,7 +374,10 @@ function nodeSource(n: RagNode): string {
   return JSON.stringify({
     id: n.id, type: n.type, content: n.content,
     nodeKind: n.nodeKind,
-    children: n.children, props: n.props, ownedNodeIds: n.ownedNodeIds,
+    children: n.children,
+    documentPath: n.documentPath,
+    tags: n.tags,
+    props: n.props, ownedNodeIds: n.ownedNodeIds,
     createdAt: n.createdAt, updatedAt: n.updatedAt,
   })
 }
@@ -390,6 +402,19 @@ function isIso8601(v: unknown): v is string {
   return typeof v === 'string' && v !== '' && !Number.isNaN(Date.parse(v))
 }
 
+// U-D1 canonical normalization. Shared by `validateNodeShape` (the write/boot
+// path) AND the structural replay paths (`insertNode`/`setNodeFields`), so a
+// persisted/tampered `node-add`/`node-update` journal entry can never store a
+// raw `[]` or untrimmed/duplicated `tags` that the boot re-verification (which
+// normalizes) would hash differently — which would self-quarantine the record
+// and violate "a stored `[]` cannot diverge from absent" (§5.1/§5.2/§5.4/A4).
+function normalizeDocumentPath(v: string[] | undefined): string[] | undefined {
+  return v !== undefined && v.length > 0 ? [...v] : undefined
+}
+function normalizeTags(v: string[] | undefined): string[] | undefined {
+  return v !== undefined && v.length > 0 ? [...new Set(v.map((t) => t.trim()))] : undefined
+}
+
 type NodeShapeResult = { ok: true; node: RagNode } | { ok: false; field: string }
 
 function validateNodeShape(input: unknown): NodeShapeResult {
@@ -412,6 +437,18 @@ function validateNodeShape(input: unknown): NodeShapeResult {
       if (c.props !== undefined && hasDangerousKey(c.props)) return { ok: false, field: 'children' }
     }
   }
+  if (n.documentPath !== undefined) {
+    if (!Array.isArray(n.documentPath)) return { ok: false, field: 'documentPath' }
+    for (const s of n.documentPath) {
+      if (typeof s !== 'string' || s === '') return { ok: false, field: 'documentPath' }
+    }
+  }
+  if (n.tags !== undefined) {
+    if (!Array.isArray(n.tags)) return { ok: false, field: 'tags' }
+    for (const t of n.tags) {
+      if (typeof t !== 'string' || t.trim() === '') return { ok: false, field: 'tags' }
+    }
+  }
   if (n.props !== undefined && (n.props === null || typeof n.props !== 'object' || Array.isArray(n.props))) return { ok: false, field: 'props' }
   if (n.props !== undefined && hasDangerousKey(n.props)) return { ok: false, field: 'props' }
   if (!Array.isArray(n.ownedNodeIds) || !n.ownedNodeIds.every((x) => typeof x === 'string')) return { ok: false, field: 'ownedNodeIds' }
@@ -424,6 +461,8 @@ function validateNodeShape(input: unknown): NodeShapeResult {
       id: n.id, type: n.type as RagNodeType, content: n.content,
       nodeKind: n.nodeKind as RagNodeKind | undefined,
       children: n.children !== undefined ? deepCopy(n.children) : undefined,
+      documentPath: normalizeDocumentPath(n.documentPath),
+      tags: normalizeTags(n.tags),
       props: n.props !== undefined ? deepCopy(n.props) : undefined,
       ownedNodeIds: [...new Set(n.ownedNodeIds)],
       createdAt: n.createdAt, updatedAt: n.updatedAt,
@@ -499,6 +538,8 @@ function isRagNode(v: unknown): boolean {
     (n.nodeKind === undefined || (typeof n.nodeKind === 'string' && RAG_NODE_KINDS.has(n.nodeKind))) &&
     typeof n.content === 'string' &&
     isValidChildren(n.children) &&
+    (n.documentPath === undefined || (Array.isArray(n.documentPath) && n.documentPath.every((s) => typeof s === 'string' && s !== ''))) &&
+    (n.tags === undefined || (Array.isArray(n.tags) && n.tags.every((t) => typeof t === 'string' && t.trim() !== ''))) &&
     (n.props === undefined || (typeof n.props === 'object' && !Array.isArray(n.props) && !hasDangerousKey(n.props))) &&
     Array.isArray(n.ownedNodeIds) && n.ownedNodeIds.every((x) => typeof x === 'string' && x !== '') &&
     isIso8601(n.createdAt) && isIso8601(n.updatedAt)
@@ -779,7 +820,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- public record copies (strip hash/quarantine, deep-copy mutable fields)
   function toPublicNode(n: StoredNode): RagNode {
-    return { id: n.id, type: n.type, content: n.content, nodeKind: n.nodeKind ?? 'content', children: n.children !== undefined ? deepCopy(n.children) : undefined, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
+    return { id: n.id, type: n.type, content: n.content, nodeKind: n.nodeKind ?? 'content', children: n.children !== undefined ? deepCopy(n.children) : undefined, ...(n.documentPath !== undefined ? { documentPath: [...n.documentPath] } : {}), ...(n.tags !== undefined ? { tags: [...n.tags] } : {}), props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
   }
   function toPublicEdge(e: StoredEdge): RagEdge {
     const edgeType = e.edgeType ?? 'link'
@@ -789,7 +830,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- internal (non-journaled) mutations used by undo/redo ----------------
   function insertNode(node: RagNode): void {
-    const base = { ...node, children: node.children !== undefined ? deepCopy(node.children) : undefined, props: node.props !== undefined ? deepCopy(node.props) : undefined, ownedNodeIds: [...node.ownedNodeIds] }
+    const base = { ...node, children: node.children !== undefined ? deepCopy(node.children) : undefined, documentPath: normalizeDocumentPath(node.documentPath), tags: normalizeTags(node.tags), props: node.props !== undefined ? deepCopy(node.props) : undefined, ownedNodeIds: [...node.ownedNodeIds] }
     const rec: StoredNode = { ...base, hash: nodeHash(base) }
     nodes.set(rec.id, rec)
   }
@@ -810,6 +851,8 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     n.content = src.content
     n.nodeKind = src.nodeKind
     n.children = src.children !== undefined ? deepCopy(src.children) : undefined
+    n.documentPath = normalizeDocumentPath(src.documentPath)
+    n.tags = normalizeTags(src.tags)
     n.props = src.props !== undefined ? deepCopy(src.props) : undefined
     n.ownedNodeIds = [...src.ownedNodeIds]
     n.createdAt = src.createdAt
@@ -1004,8 +1047,10 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
       const at = new Date().toISOString()
       const typeChanged = existing.type !== rec.type
       const ownedChanged = !sameStringArray(existing.ownedNodeIds, rec.ownedNodeIds)
-      if (typeChanged || ownedChanged) {
-        // journal the full before/after node so undo restores type/ownedNodeIds
+      const documentPathChanged = !sameStringArray(existing.documentPath, rec.documentPath)
+      const tagsChanged = !sameStringArray(existing.tags, rec.tags)
+      if (typeChanged || ownedChanged || documentPathChanged || tagsChanged) {
+        // journal the full before/after node so undo restores type/ownedNodeIds/metadata
         pushJournal({ kind: 'structural', op: { op: 'node-update', nodeId: rec.id, before: toPublicNode(existing), after: toPublicNode(rec) }, at })
       } else {
         const before = { content: existing.content, children: existing.children !== undefined ? deepCopy(existing.children) : undefined, props: existing.props !== undefined ? deepCopy(existing.props) : undefined }

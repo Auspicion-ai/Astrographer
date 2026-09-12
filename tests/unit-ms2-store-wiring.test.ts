@@ -1438,7 +1438,8 @@ describe('§5.7 — the failed-store matrix (the store\'s OWN fail-disabled empt
         // is undefined ⇒ the importer's cwd default ⇒ a real cwd-relative file.
         const imports = (await handleEditTool(main.store, 'edit.import_markdown', { files: [relNote] }, undefined, plan.directory)) as { ok: boolean; documentIds?: string[]; nodeCount?: number; edgeCount?: number }
         expect(imports.ok).toBe(true)
-        expect(imports.documentIds).toEqual(['note'])
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified.
+        expect(imports.documentIds).toEqual([relNote.replace(/\.md$/, '').split(/[\\/]/).join('/')])
         expect(imports.nodeCount ?? 0).toBeGreaterThan(0)
         expect(imports.edgeCount ?? 0).toBeGreaterThan(0)
       })
@@ -1664,12 +1665,14 @@ describe('§5.9 — the zero-config byte-equality rows (no provident-rag-stores.
         // The directory-routed call (2-arg wired form, corpusRoot undefined).
         const routed = (await handleEditTool(main.store, 'edit.import_markdown', { files: [relFile] }, undefined, plan.directory)) as { ok: boolean; documentIds?: string[] }
         expect(routed.ok).toBe(true)
-        expect(routed.documentIds).toEqual(['note'])
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified.
+        const expectedId = relFile.replace(/\.md$/, '').split(/[\\/]/).join('/')
+        expect(routed.documentIds).toEqual([expectedId])
         // The LEGACY call (dir == null) — byte-equal outcome on the same file.
         const legacyStore = createJsonRagStore({ path: join(root, 'legacy-import.json') })
         const legacy = (await handleEditTool(legacyStore, 'edit.import_markdown', { files: [relFile] }, undefined, null)) as { ok: boolean; documentIds?: string[] }
         expect(legacy.ok).toBe(true)
-        expect(legacy.documentIds).toEqual(['note'])
+        expect(legacy.documentIds).toEqual([expectedId])
         // An ABSOLUTE file OUTSIDE cwd fails containment — the cwd default is
         // what applied (the file is outside resolve(process.cwd())).
         const outside = mkdtempSync(join(tmpdir(), 'provident-ms2-outside-'))
@@ -1904,7 +1907,8 @@ describe('§5.6 — the wired import: the per-store corpusRoot + the F2 pass-thr
         const main = plan.directory.entries.get(DEFAULT_NAME)!
         const result = (await handleEditTool(main.store, 'edit.import_markdown', { files: [relFile] }, undefined, plan.directory)) as { ok: boolean; documentIds?: string[] }
         expect(result.ok).toBe(true)
-        expect(result.documentIds).toEqual(['note']) // UNPREFIXED (byte-equal)
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified (UNPREFIXED).
+        expect(result.documentIds).toEqual([relFile.replace(/\.md$/, '').split(/[\\/]/).join('/')])
       })
     })
   })

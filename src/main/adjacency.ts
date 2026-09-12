@@ -42,7 +42,7 @@ export const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next
 
 // ---- public record copies (shallow copies of the public record shapes) -----
 function copyNode(n: RagNode): RagNode {
-  return { id: n.id, type: n.type, content: n.content, children: n.children !== undefined ? deepCopy(n.children) : undefined, props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
+  return { id: n.id, type: n.type, content: n.content, children: n.children !== undefined ? deepCopy(n.children) : undefined, ...(Array.isArray(n.documentPath) ? { documentPath: [...n.documentPath] } : {}), ...(Array.isArray(n.tags) ? { tags: [...n.tags] } : {}), props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
 }
 function copyEdge(e: RagEdge): RagEdge {
   return { id: e.id, kind: e.kind, source: e.source, target: e.target, order: e.order, documentIds: e.documentIds !== undefined ? [...e.documentIds] : undefined, createdAt: e.createdAt, updatedAt: e.updatedAt }

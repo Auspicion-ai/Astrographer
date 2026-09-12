@@ -588,8 +588,8 @@ describe('boot (§5.8.7)', () => {
     // The doc-heads list (localeCompare-sorted) — the doc-nav's data source.
     h.state.docHeads = {
       documents: [
-        { documentId: 'astrographer-review', title: 'Astrographer' },
-        { documentId: 'FORKER', title: 'FORKER' },
+        { documentId: 'astrographer-review', title: 'Astrographer', path: [], tags: [] },
+        { documentId: 'FORKER', title: 'FORKER', path: [], tags: [] },
       ],
     }
     await h.host.boot(h.runtime)
@@ -755,7 +755,7 @@ describe('window.provident.sidebar.selectDocument (§5.8.11, M5/M6)', () => {
   it('sets the currentDocumentId + triggers a document-switch re-traversal (the single-document view)', async () => {
     const h = makeHarness({
       snapshot: validSnapshot(),
-      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A' }] },
+      docHeads: { documents: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }] },
     })
     await h.host.boot(h.runtime)
     h.onRebuild.mockClear()

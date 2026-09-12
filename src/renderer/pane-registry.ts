@@ -4,7 +4,7 @@
 // are enabled. Holds the `PaneDefinition` records + an enabled-state map.
 import type { LegacyNodeData } from 'provident-ssr'
 import type { CrosslinkWiring } from '../main/traversal.js'
-import type { RagSnapshotPayload } from '../shared/types.js'
+import type { RagSnapshotPayload, RagDocHeadsPayload } from '../shared/types.js'
 
 /** The scope of a sidebar pane. 'app-graph' panes render in the app Runtime
  *  graph → MCP-visible. 'operator' panes render in an isolated GraphScope →
@@ -23,10 +23,11 @@ export interface PaneContext {
   snapshot: RagSnapshotPayload | null
   /** Unit V3 — the document list (the `doc-head` edges' targets + the head node
    *  content), fetched over the `rag-doc-heads` IPC. The doc-nav pane reads this.
+   *  U-D4 widens the entries with the display `path`/`tags`.
    *  null before the first boot/re-derive (M1 — the empty-state guard: consumers
    *  must survive a null `docHeads` → the "(no documents)" empty state, never a
    *  TypeError). */
-  docHeads: Array<{ documentId: string; title: string }> | null
+  docHeads: RagDocHeadsPayload['documents'] | null
   /** The current document root id (the single-document view). null if none. */
   currentDocumentId: string | null
   /** The currently-selected RAG node id (the crosslink pane's focus node). */

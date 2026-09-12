@@ -556,8 +556,8 @@ describe('deriveDocNavDocuments — the doc-heads list (§5.3, §5.8 17)', () =>
   it('returns the docHeads list (already sorted + deduped by the IPC handler)', () => {
     const ctx = makeContext({
       docHeads: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
     })
     const docs = deriveDocNavDocuments(ctx.docHeads)
@@ -577,8 +577,8 @@ describe('docNavContent (§5.3, §5.8 17-18)', () => {
   it('renders one li per document with data-document-id; the current document li carries data-current=true', () => {
     const ctx = makeContext({
       docHeads: [
-        { documentId: 'doc-a', title: 'Doc A' },
-        { documentId: 'doc-b', title: 'Doc B' },
+        { documentId: 'doc-a', title: 'Doc A', path: [], tags: [] },
+        { documentId: 'doc-b', title: 'Doc B', path: [], tags: [] },
       ],
       currentDocumentId: 'doc-b',
     })

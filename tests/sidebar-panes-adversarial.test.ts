@@ -261,7 +261,7 @@ describe('H6 — doc-nav dedupes repeated doc-head targets', () => {
 
   it('docNavContent emits ONE li per documentId (no duplicate data-document-id)', () => {
     const ctx = makeContext({
-      docHeads: [{ documentId: 'doc-a', title: 'Doc A' }],
+      docHeads: [{ documentId: 'doc-a', title: 'Doc A', path: [], tags: [] }],
     })
     const content = docNavContent(ctx)
     expect(content.type).toBe('ul')

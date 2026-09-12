@@ -157,7 +157,7 @@ export function buildOperatorEnvelope(
  *  (lexicographic ascending, deterministic). Unit V3 — the input is the
  *  `docHeads` list (from the `rag-doc-heads` IPC), NOT the full snapshot. */
 export function deriveDocNavDocuments(
-  docHeads: PaneContext['docHeads'],
+  docHeads: ReadonlyArray<{ documentId: string; title: string }> | null,
 ): Array<{ documentId: string; title: string }> {
   // H1 (adversarial): a null/missing docHeads must survive (return the empty
   // list → the "(no documents)" empty state), never a TypeError.

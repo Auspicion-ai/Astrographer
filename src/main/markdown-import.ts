@@ -6,7 +6,7 @@
 // batch journal entry (putNode ops before putEdge ops). NEVER throws for a
 // domain failure; returns `{ ok: false, error, failedFile? }`.
 import { readFileSync, statSync, realpathSync } from 'node:fs'
-import { basename, resolve, sep } from 'node:path'
+import { basename, dirname, relative, resolve, sep } from 'node:path'
 import type { EditOpContext } from './edit-ops.js'
 import { parseMarkdown, type ParsedMarkdown } from './markdown-parse.js'
 import { validateDocFlow } from './doc-flow.js'
@@ -73,6 +73,28 @@ function sanitizeDocumentId(basenameNoExt: string): string {
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
   return cleaned
+}
+
+/** U-D3 (§5.1) — the directory-segment sanitizer. The SAME charset rule as
+ *  `sanitizeDocumentId` (`[^a-zA-Z0-9._-]+` → `-`, then strip leading/trailing
+ *  `-`) but WITHOUT the `.md`/`.markdown` extension-stripping (M4). A directory
+ *  segment's extension is preserved. Returns '' when the segment collapses to
+ *  empty (the F3 reject). `sanitizeDocumentId` is NOT relaxed. */
+function sanitizeSegment(segment: string): string {
+  return segment
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/** U-D3 (§5.2) — the corpus-relative DIRECTORY segments of `abs` under the
+ *  LOGICAL `corpusRoot`, native separators normalized to `/`. The basename is
+ *  NOT a member. A file at the corpus root yields [] (`dirname` is `.`), NOT
+ *  ['']. Logical-path-only (M5 — avoids symlink-path disclosure). */
+function deriveDocumentPath(abs: string, corpusRoot: string): string[] {
+  const relDir = dirname(relative(corpusRoot, abs))
+  const normalized = relDir.split(sep).join('/')
+  if (normalized === '.' || normalized === '') return []
+  return normalized.split('/')
 }
 
 /** F-MS4-3 — the `<json>` rendering for the corpusRoot guard's byte-pinned
@@ -191,6 +213,15 @@ export async function importMarkdownCorpus(
   // Read + parse each file, deriving its documentId.
   const documents: { documentId: string; parsed: ParsedMarkdown; file: string }[] = []
   const seenIds = new Set<string>()
+  // U-D3 §5.5 (ADV-1) — the per-import-call alias map (SANITIZED PARENT PATH →
+  // sanitized-segment → first raw segment). Two DIFFERENT raw directory
+  // segments that sanitize to the SAME segment UNDER THE SAME SANITIZED PARENT
+  // PATH reject the WHOLE import; identical raw segments are NOT an alias.
+  // Keying by the sanitized ancestor path (not merely the depth) prevents two
+  // distinct parents at the same depth (e.g. `docs/2024` vs `specs/2024`) from
+  // being mis-flagged as an alias when no derived-tree merge occurs. Fresh per
+  // call (no cross-call state).
+  const segmentAliasByParent = new Map<string, Map<string, string>>()
   for (const file of params.files) {
     if (typeof file !== 'string' || file === '') {
       return { ok: false, error: 'markdown import: empty file path' }
@@ -246,37 +277,72 @@ export async function importMarkdownCorpus(
     } catch {
       return { ok: false, error: `markdown import: cannot read file: ${file}`, failedFile: file }
     }
+    // U-D3 §5.2/§5.3 — derive + sanitize the corpus-relative DIRECTORY segments
+    // from the LOGICAL path (M5), then the F3 empty-segment and aliasing checks
+    // (§5.5) before the basename sanitize. Segments use `sanitizeSegment` (M4 —
+    // no `.md`/`.markdown` extension stripping); the basename still uses
+    // `sanitizeDocumentId`.
+    const rawSegments = deriveDocumentPath(abs, corpusRoot)
+    const documentPath: string[] = []
+    for (let depth = 0; depth < rawSegments.length; depth++) {
+      const raw = rawSegments[depth]
+      const seg = sanitizeSegment(raw)
+      if (seg === '') {
+        return {
+          ok: false,
+          error: `markdown import: empty documentPath segment for file: ${file}`,
+          failedFile: file,
+        }
+      }
+      // §5.5 aliasing (ADV-1) — two DIFFERENT raw segments that sanitize to the
+      // SAME segment UNDER THE SAME SANITIZED PARENT PATH reject the WHOLE
+      // import (even when their final ids differ). The scope key is the
+      // sanitized ancestor path (`documentPath.join('/')` at the current
+      // position), NOT the depth.
+      const parentKey = documentPath.join('/')
+      const seenUnderParent = segmentAliasByParent.get(parentKey) ?? new Map<string, string>()
+      const priorRaw = seenUnderParent.get(seg)
+      if (priorRaw !== undefined && priorRaw !== raw) {
+        return {
+          ok: false,
+          error: `markdown import: path segment alias at position ${depth}: ${jsonOf(priorRaw)} and ${jsonOf(raw)} both sanitize to ${jsonOf(seg)}`,
+          failedFile: file,
+        }
+      }
+      seenUnderParent.set(seg, raw)
+      segmentAliasByParent.set(parentKey, seenUnderParent)
+      documentPath.push(seg)
+    }
     const base = sanitizeDocumentId(basename(file))
     // §5.2 step 4e — the empty-documentId check runs on the sanitized base
     // BEFORE any prefixing (never a prefixed-empty id like `<name>:`).
     if (base === '') {
       return { ok: false, error: `markdown import: empty documentId for file: ${file}`, failedFile: file }
     }
+    // U-D3 §5.3 — the `/`-joined id; the A1 collision check now runs on it.
+    const joinedId = [...documentPath, base].join('/')
     // §5.2 step 4f — the A1 prefix-namespace collision check (resolution (a),
     // DEFAULT-store imports ONLY): a documentId exactly equal to a registered
     // NON-default store name is REJECTED here — after the sanitize and the
     // empty-documentId check, BEFORE the prefix mint and the duplicate check.
-    // Exact-equality is the ONLY predicate (`sanitizeDocumentId` strips `:`,
-    // so a first-`:`-segment collision reduces to whole-string equality); the
-    // list is taken as GIVEN (A1-S7 — the seam does not second-guess it).
-    // F-MS4-2: the gate reads the SC-validated SNAPSHOT (snapIsDefault /
-    // snapReservedNames), never the live context — a getter/Proxy context
-    // cannot desync the gate from the battery.
-    if (snapIsDefault && Array.isArray(snapReservedNames) && snapReservedNames.includes(base)) {
+    // Exact-equality is the ONLY predicate; the list is taken as GIVEN (A1-S7
+    // — the seam does not second-guess it). F-MS4-2: the gate reads the
+    // SC-validated SNAPSHOT (snapIsDefault / snapReservedNames), never the live
+    // context — a getter/Proxy context cannot desync the gate from the battery.
+    if (snapIsDefault && Array.isArray(snapReservedNames) && snapReservedNames.includes(joinedId)) {
       return {
         ok: false,
-        error: `markdown import: documentId collides with a registered store name: ${base}`,
+        error: `markdown import: documentId collides with a registered store name: ${joinedId}`,
         failedFile: file,
       }
     }
     // §5.2 step 4g — the prefix mint: NON-default stores prefix the documentId
-    // with `<name>:`; the default path (`store == null` or `isDefault ===
-    // true`) yields `documentId === base` — byte-equal to today (A4). The
-    // prefix is uniform across the corpus (it derives from the store context,
-    // not the file). F-MS4-2: the mint reads the SC-validated SNAPSHOT
-    // (storePresent / snapIsDefault / snapName), never the live context — a
-    // getter/Proxy context cannot desync the mint from the battery.
-    const documentId = store != null && !snapIsDefault ? `${snapName}:${base}` : base
+    // with `<name>:` applied to the WHOLE joined path EXACTLY ONCE; the default
+    // path (`store == null` or `isDefault === true`) yields `documentId ===
+    // joinedId` — byte-equal to today for a flat corpus (A4/F9). F-MS4-2: the
+    // mint reads the SC-validated SNAPSHOT (storePresent / snapIsDefault /
+    // snapName), never the live context.
+    const documentId = store != null && !snapIsDefault ? `${snapName}:${joinedId}` : joinedId
     // §5.2 step 4h — the duplicate-documentId check runs on the FINAL
     // (prefixed) documentId; the message echoes the FINAL id.
     if (seenIds.has(documentId)) {
@@ -284,6 +350,14 @@ export async function importMarkdownCorpus(
     }
     seenIds.add(documentId)
     const parsed = parseMarkdown(content, documentId)
+    // U-D3 §5.4 — set `documentPath` on the document ROOT node only (the node
+    // whose id === documentId), iff non-empty; a root-level document carries
+    // none (F9 byte-equality). The set happens BEFORE doc-flow validation and
+    // the batch build, so the value rides the putNode ops.
+    if (documentPath.length > 0) {
+      const rootNode = parsed.nodes.find((n) => n.id === documentId)
+      if (rootNode) rootNode.documentPath = [...documentPath]
+    }
     documents.push({ documentId, parsed, file })
   }
 

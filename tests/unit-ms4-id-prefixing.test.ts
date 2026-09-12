@@ -440,8 +440,10 @@ describe('§5.8 H1 + §5.6 — the default-store legacy import is byte-equal (A4
       await withDirAsync(async (dir) => {
         const store = freshStore(dir, 'd')
         const r = expectOk(await importMarkdownCorpus(makeCtx(store), { files: [relFile] }))
-        expect(r.documentIds).toEqual(['note'])
-        expect(store.getNode('note:p:1')!.content).toBe('Body note.')
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified.
+        const id = relFile.replace(/\.md$/, '').split(/[\\/]/).join('/')
+        expect(r.documentIds).toEqual([id])
+        expect(store.getNode(`${id}:p:1`)!.content).toBe('Body note.')
       })
     })
   })
@@ -950,8 +952,8 @@ describe('§5.3 — per-store path resolution: resolve(corpusRoot, file) (A5)', 
         { name: 'S', isDefault: false },
       )
       expectOk(r)
-      expect(r.ok && r.documentIds).toEqual(['S:note'])
-      expect(store.getNode('S:note:p:1')!.content).toBe('Subdir body.')
+      expect(r.ok && r.documentIds).toEqual(['S:sub/note'])
+      expect(store.getNode('S:sub/note:p:1')!.content).toBe('Subdir body.')
     })
   })
 

@@ -240,8 +240,10 @@ describe('F-MS4-3 — a non-string params.corpusRoot ⇒ the byte-pinned fail-st
         const r = expectOk(
           await importMarkdownCorpus(makeCtx(store), { files: [relFile], corpusRoot: corpusRoot(null) }),
         )
-        expect(r.documentIds).toEqual(['note'])
-        expect(store.getNode('note:p:1')!.content).toBe('Body note.')
+        // U-D3 sanctioned re-pin: a nested cwd file is path-qualified.
+        const id = relFile.replace(/\.md$/, '').split(/[\\/]/).join('/')
+        expect(r.documentIds).toEqual([id])
+        expect(store.getNode(`${id}:p:1`)!.content).toBe('Body note.')
       })
     })
   })
