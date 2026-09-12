@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
@@ -24,11 +24,63 @@ export type { EditCommitResult }
  *  lives in `../shared/types.js`). */
 export type { RagStoreChangedPayload }
 
+/** The renderer-registered `window.provident.sidebar` host methods (Unit K M2).
+ *  The preload OWNS the exposed `sidebar` object (contextBridge freezes it), so
+ *  each exposed method DELEGATES to the installed holder. W1-N11 — the C18/C19
+ *  advanced-search/hover-preview seams + the Unit U4 contenteditable rich-editor
+ *  seams live here alongside `selectDocument`/`docNavToggle`. */
+export interface SidebarMethods {
+  selectDocument(id: string): void
+  /** W1-N7 (U-PARITY-DOCNAV PG14) — the doc-nav folder toggle seam. The key is
+   *  the folder's `data-folder-path`. */
+  docNavToggle(key: string): void
+  submitQuery(value: string): void
+  /** W1-N11 (U-PARITY-C18) — the advanced-search disclosure toggle + submit
+   *  seams the `pane-search-advanced-*` handler bodies reach. */
+  searchAdvancedToggle(): void
+  submitAdvancedQuery(value: string, options: Omit<RagQueryPayload, 'query' | 'topK' | 'store'>): void
+  /** W1-N11 (U-PARITY-C19) — the link hover-preview shell timing seams the
+   *  `hover-preview-*` handler bodies reach. */
+  hoverPreviewEnter(id: string): void
+  hoverPreviewLeave(): void
+  hoverPreviewPopupEnter(): void
+  hoverPreviewPopupLeave(): void
+  /** W1-N5 (U-PARITY-PARTIALS §1.1) — the template Validate result seam. */
+  templateValidateResult(verdict: unknown): void
+  templateAdd(zone: string): void
+  templateRemove(zone: string): void
+  templateReset(): void
+  operatorSet(patch: OperatorSettingsPatch): void
+  textareaInput(ragId: string): void
+  textareaBlur(ragId: string, value: string): void
+  /** W1-N11 (Unit U4) — the contenteditable rich-text handler seams the
+   *  `rag-editor-*` handler bodies reach. */
+  editorInput(ragId?: string): void
+  editorBlur(ragId?: string, html?: string): void
+  editorCompositionStart(ragId?: string): void
+  editorCompositionEnd(ragId?: string): void
+  /** U-H8 — the operator-registry manage dispatch. */
+  registryManage(request: RagStoreManageRequest): void
+  registryManageDismiss(): void
+  gnosisStatus(): void
+  gnosisQuery(value: string): void
+  gnosisDocuments(tool: string, args: Record<string, unknown>): void
+  gnosisWikis(tool: string, args: Record<string, unknown>): void
+}
+
 export interface ProvidentBridge {
   ready(): void
   onRequest(handler: (req: RpcRequest) => void): void
   sendReply(reply: RpcReply): void
   notify(payload: NotifyPayload): void
+  /** Unit U-MENU-1 §2.2 — the renderer→main pane-catalog push. Sends the live
+   *  pane catalog at boot + on every `PaneRegistry` change so the native
+   *  View → Panes submenu is data-driven (never hard-coded). */
+  pushPaneCatalog(catalog: PaneCatalogEntry[]): void
+  /** Unit U-MENU-1 §2.3 — subscribe to the main→renderer pane-visibility action
+   *  (`IPC_PANE_VISIBILITY`), sent when a View → Panes checkbox is toggled.
+   *  Returns an unsubscribe function. The apply + persistence is U-SHELL-8. */
+  onPaneVisibility(handler: (change: { id: string; enabled: boolean }) => void): () => void
   security: {
     get(): Promise<SecuritySettings>
     set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings>
@@ -36,6 +88,16 @@ export interface ProvidentBridge {
   module: {
     get(): Promise<ModuleBridgeResult>
     setDisabled(name: string, disabled: boolean): Promise<ModuleBridgeResult>
+    /** W1-N6 (PG12) — the operator-only module-tool runner surface. Lists the
+     *  live `CapabilityRouter`'s registered `module:<name>.<tool>` tools; the
+     *  SecurePanels module pane authors one selectable row per name. Manual-UI
+     *  only (never an MCP tool); if no tools are registered the pane shows the
+     *  `(no module tools)` placeholder. */
+    listTools(): Promise<string[]>
+    /** W1-N6 (PG12) — invoke one registered module tool through the EXISTING
+     *  two-gate (`module` AND `code`) in main. Resolves the tool result or
+     *  rejects with the router/gate error. Manual-UI only. */
+    invoke(tool: string, args: unknown): Promise<unknown>
   }
   edit: {
     /** Unit D §5.1.10 — the UI commit-on-blur write-back. Sends the
@@ -64,8 +126,17 @@ export interface ProvidentBridge {
   rag: {
     /** U-MS5 — the third optional `store` param (MCP/UI mechanical symmetry,
      *  UI-SELECTOR-DEFERRED). Omitted ⇒ the default store (zero-config
-     *  byte-equal; the settings/search pane's own path never passes it). */
-    query(query: string, topK?: number, store?: string): Promise<RagQueryResult>
+     *  byte-equal; the settings/search pane's own path never passes it).
+     *  W1-N9 — the fourth optional `options` param carries the advanced-search
+     *  `rag.query` args (mode/maxHops/expand/maxParentContext/filters/stores),
+     *  threaded into the SAME `RagQueryPayload` the MCP `rag.query` tool's args
+     *  map to (MCP/UI equivalence). Omitted fields stay absent (byte-equal). */
+    query(
+      query: string,
+      topK?: number,
+      store?: string,
+      options?: Omit<RagQueryPayload, 'query' | 'topK' | 'store'>,
+    ): Promise<RagQueryResult>
     /** Finding 3 — the re-traversal data source. Returns a read-only snapshot
      *  of the RAG store (nodes + edges) so the renderer's `onRebuild` can
      *  re-derive the graph + back-reference map after a `rag-store-changed`
@@ -149,75 +220,33 @@ export interface ProvidentBridge {
    *  runtime — a renderer-side attach throws in the real Electron renderer).
    *  `installSidebar(methods)` lets the renderer register its host methods; the
    *  exposed `sidebar.*` methods DELEGATE to the installed holder. */
-  sidebar: {
-    selectDocument(id: string): void
-    submitQuery(value: string): void
-    templateAdd(zone: string): void
-    templateRemove(zone: string): void
-    templateReset(): void
-    operatorSet(patch: OperatorSettingsPatch): void
-    textareaInput(ragId: string): void
-    textareaBlur(ragId: string, value: string): void
-    /** U-H8 — the operator-registry manage dispatch (the D6 ONE operator-UI IPC
-     *  exemption). The `operator-rag-manage-*` handler bodies call these. */
-    registryManage(request: RagStoreManageRequest): void
-    registryManageDismiss(): void
-    /** Unit GN-MCP-UI §5.5 — the gnosis GUI handlers (the M2 pattern). The
-     *  `gnosis-status`/`gnosis-query` pane handler bodies call these; they route
-     *  to the renderer host's `GnosisPanes` (via the sidebar holder). */
-    gnosisStatus(): void
-    gnosisQuery(value: string): void
-    /** Unit A2 §5.5 — the gnosis document/wiki CRUD GUI handlers (the M2
-     *  pattern). The `gnosis-documents`/`gnosis-wikis` pane handler bodies call
-     *  these; they route to the renderer host's `GnosisCrudPanes` (via the
-     *  sidebar holder). */
-    gnosisDocuments(tool: string, args: Record<string, unknown>): void
-    gnosisWikis(tool: string, args: Record<string, unknown>): void
-  }
-  installSidebar(methods: {
-    selectDocument(id: string): void
-    submitQuery(value: string): void
-    templateAdd(zone: string): void
-    templateRemove(zone: string): void
-    templateReset(): void
-    operatorSet(patch: OperatorSettingsPatch): void
-    textareaInput(ragId: string): void
-    textareaBlur(ragId: string, value: string): void
-    registryManage(request: RagStoreManageRequest): void
-    registryManageDismiss(): void
-    gnosisStatus(): void
-    gnosisQuery(value: string): void
-    gnosisDocuments(tool: string, args: Record<string, unknown>): void
-    gnosisWikis(tool: string, args: Record<string, unknown>): void
-  }): void
+  sidebar: SidebarMethods
+  installSidebar(methods: SidebarMethods): void
 }
 
 // The renderer-installed sidebar host methods (Unit K M2 — set via
 // `window.provident.installSidebar`). No-ops until the host boots and registers.
-let sidebarHolder: {
-  selectDocument(id: string): void
-  submitQuery(value: string): void
-  templateAdd(zone: string): void
-  templateRemove(zone: string): void
-  templateReset(): void
-  operatorSet(patch: OperatorSettingsPatch): void
-  textareaInput(ragId: string): void
-  textareaBlur(ragId: string, value: string): void
-  registryManage(request: RagStoreManageRequest): void
-  registryManageDismiss(): void
-  gnosisStatus(): void
-  gnosisQuery(value: string): void
-  gnosisDocuments(tool: string, args: Record<string, unknown>): void
-  gnosisWikis(tool: string, args: Record<string, unknown>): void
-} = {
+let sidebarHolder: SidebarMethods = {
   selectDocument: () => {},
+  docNavToggle: () => {},
   submitQuery: () => {},
+  searchAdvancedToggle: () => {},
+  submitAdvancedQuery: () => {},
+  hoverPreviewEnter: () => {},
+  hoverPreviewLeave: () => {},
+  hoverPreviewPopupEnter: () => {},
+  hoverPreviewPopupLeave: () => {},
+  templateValidateResult: () => {},
   templateAdd: () => {},
   templateRemove: () => {},
   templateReset: () => {},
   operatorSet: () => {},
   textareaInput: () => {},
   textareaBlur: () => {},
+  editorInput: () => {},
+  editorBlur: () => {},
+  editorCompositionStart: () => {},
+  editorCompositionEnd: () => {},
   registryManage: () => {},
   registryManageDismiss: () => {},
   gnosisStatus: () => {},
@@ -244,6 +273,21 @@ const bridge: ProvidentBridge = {
   notify(payload: NotifyPayload): void {
     ipcRenderer.send(IPC_NOTIFY, payload)
   },
+  // Unit U-MENU-1 §2.2/§2.3 — the application-menu pane-catalog surface. The
+  // renderer pushes the live catalog (boot + registry change); main rebuilds the
+  // native View → Panes submenu and sends back the toggled pane state.
+  pushPaneCatalog(catalog: PaneCatalogEntry[]): void {
+    ipcRenderer.send(IPC_PANE_CATALOG, catalog)
+  },
+  onPaneVisibility(handler: (change: { id: string; enabled: boolean }) => void): () => void {
+    const listener = (_event: unknown, change: { id: string; enabled: boolean }): void => {
+      handler(change)
+    }
+    ipcRenderer.on(IPC_PANE_VISIBILITY, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC_PANE_VISIBILITY, listener)
+    }
+  },
   // The manual-UI security settings (mcp-endpoint.md §6.4): exposed to the
   // renderer Settings pane ONLY. The MCP tool handlers never route to these
   // channels, so an agent cannot grant itself capabilities.
@@ -263,6 +307,15 @@ const bridge: ProvidentBridge = {
     },
     setDisabled(name: string, disabled: boolean): Promise<ModuleBridgeResult> {
       return ipcRenderer.invoke(IPC_MODULE_SET_DISABLED, { name, disabled })
+    },
+    // W1-N6 (PG12) — the operator-only module-tool runner surface. Main lists
+    // the live router's tools + invokes one through the two-gate. Manual-UI only.
+    listTools(): Promise<string[]> {
+      return ipcRenderer.invoke(IPC_MODULE_TOOL_LIST)
+    },
+    invoke(tool: string, args: unknown): Promise<unknown> {
+      const payload: ModuleToolInvokePayload = { tool, args }
+      return ipcRenderer.invoke(IPC_MODULE_TOOL_INVOKE, payload)
     },
   },
   // Unit D §5.1.9/§5.1.10 — the editing IPC surface. The UI commit-on-blur
@@ -301,11 +354,20 @@ const bridge: ProvidentBridge = {
     /** U-MS5 — the third optional `store` param builds the payload via the
      *  conditional-spread idiom (byte-equal: included ONLY when passed — a
      *  two-arg call carries NO `store` key, A4). */
-    query(query: string, topK?: number, store?: string): Promise<RagQueryResult> {
+    query(query: string, topK?: number, store?: string, options?: Omit<RagQueryPayload, 'query' | 'topK' | 'store'>): Promise<RagQueryResult> {
+      // W1-N9 — the advanced-search args use the same conditional-spread idiom
+      // as topK/store: an absent field is ABSENT from the payload (byte-equal).
+      const o = options ?? {}
       const payload: RagQueryPayload = {
         query,
         ...(topK !== undefined ? { topK } : {}),
         ...(store !== undefined ? { store } : {}),
+        ...(o.mode !== undefined ? { mode: o.mode } : {}),
+        ...(o.maxHops !== undefined ? { maxHops: o.maxHops } : {}),
+        ...(o.expand !== undefined ? { expand: o.expand } : {}),
+        ...(o.maxParentContext !== undefined ? { maxParentContext: o.maxParentContext } : {}),
+        ...(o.filters !== undefined ? { filters: o.filters } : {}),
+        ...(o.stores !== undefined ? { stores: o.stores } : {}),
       }
       return ipcRenderer.invoke(IPC_RAG_QUERY, payload)
     },
@@ -441,13 +503,28 @@ const bridge: ProvidentBridge = {
   // `sidebar.<method>` DELEGATES to the installed holder (a no-op until installed).
   sidebar: {
     selectDocument: (id) => sidebarHolder.selectDocument?.(id),
+    docNavToggle: (key) => sidebarHolder.docNavToggle?.(key),
     submitQuery: (value) => sidebarHolder.submitQuery?.(value),
+    // W1-N11 — the C18 advanced-search seams.
+    searchAdvancedToggle: () => sidebarHolder.searchAdvancedToggle?.(),
+    submitAdvancedQuery: (value, options) => sidebarHolder.submitAdvancedQuery?.(value, options),
+    // W1-N11 — the C19 hover-preview timing seams.
+    hoverPreviewEnter: (id) => sidebarHolder.hoverPreviewEnter?.(id),
+    hoverPreviewLeave: () => sidebarHolder.hoverPreviewLeave?.(),
+    hoverPreviewPopupEnter: () => sidebarHolder.hoverPreviewPopupEnter?.(),
+    hoverPreviewPopupLeave: () => sidebarHolder.hoverPreviewPopupLeave?.(),
+    templateValidateResult: (verdict) => sidebarHolder.templateValidateResult?.(verdict),
     templateAdd: (zone) => sidebarHolder.templateAdd?.(zone),
     templateRemove: (zone) => sidebarHolder.templateRemove?.(zone),
     templateReset: () => sidebarHolder.templateReset?.(),
     operatorSet: (patch) => sidebarHolder.operatorSet?.(patch),
     textareaInput: (ragId) => sidebarHolder.textareaInput?.(ragId),
     textareaBlur: (ragId, value) => sidebarHolder.textareaBlur?.(ragId, value),
+    // W1-N11 — the Unit U4 contenteditable rich-editor seams.
+    editorInput: (ragId) => sidebarHolder.editorInput?.(ragId),
+    editorBlur: (ragId, html) => sidebarHolder.editorBlur?.(ragId, html),
+    editorCompositionStart: (ragId) => sidebarHolder.editorCompositionStart?.(ragId),
+    editorCompositionEnd: (ragId) => sidebarHolder.editorCompositionEnd?.(ragId),
     registryManage: (request) => sidebarHolder.registryManage?.(request),
     registryManageDismiss: () => sidebarHolder.registryManageDismiss?.(),
     gnosisStatus: () => sidebarHolder.gnosisStatus?.(),

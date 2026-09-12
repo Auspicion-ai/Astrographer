@@ -5,25 +5,95 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'" />
   <title>Provident-Electron</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #f4f6f8; }
+    /* Unit U-SHELL-2 §2.1 — the shell appearance token layer (Table C). All
+       shell chrome + pane styling reads these custom properties, so a theme
+       switch is a single attribute flip on <html>. The base set is light;
+       `html[data-theme='dark']` overrides it, and (until the renderer boot
+       applies an explicit attribute) the OS preference drives the same dark
+       tokens via the media query. Explicit `data-theme` wins over the media
+       query by specificity. `--hover` feeds the U-SHELL-6 hover affordance. */
+    :root,
+    html[data-theme='light'] {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --fg: #1a1d21;
+      --muted: #556;
+      --muted-2: #667;
+      --muted-3: #445;
+      --muted-4: #4a525a;
+      --card-bg: #fff;
+      --border: #d8dde3;
+      --border-strong: #b9c2cc;
+      --input-bg: #fff;
+      --input-fg: #1a1d21;
+      --input-border: #c8cdd3;
+      --error: #c0392b;
+      --accent: #2f6feb;
+      --hover: rgba(15, 23, 42, 0.06);
+    }
+    html[data-theme='dark'] {
+      color-scheme: dark;
+      --bg: #1e2226;
+      --fg: #e8eaed;
+      --muted: #b0b7bf;
+      --muted-2: #b0b7bf;
+      --muted-3: #c9cfd5;
+      --muted-4: #4a525a;
+      --card-bg: #262a2e;
+      --border: #3a4046;
+      --border-strong: #4a525a;
+      --input-bg: #1a1d21;
+      --input-fg: #e8eaed;
+      --input-border: #3a4046;
+      --error: #e07b72;
+      --accent: #7aa2f7;
+      --hover: rgba(255, 255, 255, 0.08);
+    }
+    /* OS-preference fallback (no explicit `data-theme` yet): `:root` has LOWER
+       specificity than `html[data-theme=…]`, so an explicit choice still wins. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #1e2226;
+        --fg: #e8eaed;
+        --muted: #b0b7bf;
+        --muted-2: #b0b7bf;
+        --muted-3: #c9cfd5;
+        --muted-4: #4a525a;
+        --card-bg: #262a2e;
+        --border: #3a4046;
+        --border-strong: #4a525a;
+        --input-bg: #1a1d21;
+        --input-fg: #e8eaed;
+        --input-border: #3a4046;
+        --error: #e07b72;
+        --accent: #7aa2f7;
+        --hover: rgba(255, 255, 255, 0.08);
+      }
+    }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: var(--bg); color: var(--fg); }
     header h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
-    header p { margin: 0 0 1rem; color: #556; font-size: 0.85rem; }
+    header p { margin: 0 0 1rem; color: var(--muted); font-size: 0.85rem; }
     .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .card { background: #fff; border: 1px solid #d8dde3; border-radius: 8px; padding: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
     h2 { font-size: 1rem; margin: 0 0 0.75rem; }
     .counter-value { font-size: 2rem; font-weight: 700; margin: 0 0 0.75rem; }
     .btn { margin-right: 0.5rem; }
-    input { width: 100%; box-sizing: border-box; padding: 0.4rem; }
-    .echo-out { margin-top: 0.75rem; padding: 0.5rem; border: 1px dashed #b9c2cc; min-height: 1.25rem; }
-    #status { margin-top: 1rem; font-family: monospace; font-size: 0.75rem; color: #556; }
+    /* Unit U-SHELL-6 (C6) — the shared hover affordance: every node authored
+       with a click/select handler carries `is-clickable`; the token background
+       themes with C1. */
+    .is-clickable { cursor: pointer; }
+    .is-clickable:hover { background: var(--hover); }
+    input { width: 100%; box-sizing: border-box; padding: 0.4rem; background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); }
+    .echo-out { margin-top: 0.75rem; padding: 0.5rem; border: 1px dashed var(--border-strong); min-height: 1.25rem; }
+    #status { margin-top: 1rem; font-family: monospace; font-size: 0.75rem; color: var(--muted); }
     #panes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    #panes .hint { font-size: 0.75rem; color: #667; margin: 0 0 0.75rem; }
-    #panes #security-status { font-family: monospace; font-size: 0.8rem; margin-bottom: 0.75rem; color: #445; }
-    #panes #security-token label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: #445; }
+    #panes .hint { font-size: 0.75rem; color: var(--muted-2); margin: 0 0 0.75rem; }
+    #panes #security-status { font-family: monospace; font-size: 0.8rem; margin-bottom: 0.75rem; color: var(--muted-3); }
+    #panes #security-token label { display: block; font-size: 0.8rem; margin-bottom: 0.3rem; color: var(--muted-3); }
     #panes .token-row { display: flex; gap: 0.5rem; }
     #panes .token-row input { flex: 1; }
-    #panes #group-toggles { border: 1px solid #d8dde3; border-radius: 8px; margin-top: 0.75rem; padding: 0.5rem 0.75rem; }
+    #panes #group-toggles { border: 1px solid var(--border); border-radius: 8px; margin-top: 0.75rem; padding: 0.5rem 0.75rem; }
     #panes #group-toggles label { display: block; padding: 0.25rem 0; }
     .group-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
     .group-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
@@ -32,28 +102,11 @@
        the #operator-panes container as a proper card/pane so the settings
        render as a titled pane instead of a bare element at the bottom. */
     #operator-panes { grid-column: 1 / -1; }
-    #operator-panes section { background: #fff; border: 1px solid #d8dde3; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+    #operator-panes section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-top: 1rem; }
     #operator-panes h2 { font-size: 1rem; margin: 0 0 0.75rem; }
     #operator-panes div { margin: 0.25rem 0; }
     #operator-panes button { margin-top: 0.5rem; }
-    .error { color: #c0392b; font-size: 0.8rem; margin-top: 0.5rem; }
-    @media (prefers-color-scheme: dark) {
-      /* `:root { color-scheme: light dark }` makes the UA use dark-scheme
-         default TEXT (white), so every hard-coded light background/text must
-         have a dark equivalent or the shell is white-on-white and unreadable. */
-      body { background: #1e2226; color: #e8eaed; }
-      header p { color: #b0b7bf; }
-      .card { background: #262a2e; border-color: #3a4046; }
-      .echo-out { border-color: #4a525a; }
-      #status { color: #b0b7bf; }
-      #panes .hint { color: #b0b7bf; }
-      #panes #security-status { color: #c9cfd5; }
-      #panes #security-token label { color: #c9cfd5; }
-      #panes #group-toggles { border-color: #3a4046; }
-      #operator-panes section { background: #262a2e; border-color: #3a4046; }
-      input, textarea { background: #1a1d21; color: #e8eaed; border-color: #3a4046; }
-      .error { color: #e07b72; }
-    }
+    .error { color: var(--error); font-size: 0.8rem; margin-top: 0.5rem; }
   </style>
 </head>
 <body>

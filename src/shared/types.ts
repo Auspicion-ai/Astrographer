@@ -9,6 +9,7 @@
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { ContentWindowTemplate, TemplateSource } from '../main/template-shape.js'
 import type { BatchOp, RagNode, RagNodeChild } from '../main/rag-store.js'
+import type { LocalRagQueryFilters } from '../main/retrieval.js'
 
 /** A render target in the producing graph. Two vocabularies per the Phase B
  *  synthetic-event contract (docs/specs/ssr-synthetic-event.md §2.2):
@@ -356,6 +357,25 @@ export const IPC_SECURITY_SET = 'provident:security:set'
 export const IPC_MODULE_GET = 'provident:module:get'
 export const IPC_MODULE_SET_DISABLED = 'provident:module:set-disabled'
 
+// ---- W1-N6 — the operator-only module-tool runner IPC (docs/specs/
+// wave-1-open-decisions.md §E W1-N6; unit-u-parity-decisions.md §1 PG12) ------
+// Manual-UI only: the operator runner lists the main-process `CapabilityRouter`'s
+// registered dynamic `module:<name>.<tool>` tools and invokes one through the
+// EXISTING two-gate (`module` AND `code`). Never an MCP tool; no new tool.
+
+/** List the live router's registered `module:<name>.<tool>` tool names. */
+export const IPC_MODULE_TOOL_LIST = 'provident:module:tools-list'
+
+/** Invoke one registered dynamic module tool through the invocation two-gate. */
+export const IPC_MODULE_TOOL_INVOKE = 'provident:module:tools-invoke'
+
+/** The `module-tools-invoke` IPC payload: the tool name + its structured-clone
+ *  args (the SAME call signature as `CapabilityRouter.invokeTool`). */
+export interface ModuleToolInvokePayload {
+  tool: string
+  args?: unknown
+}
+
 // ---- Unit D editing IPC (docs/specs/unit-d-editing.md §5.1.9/§5.1.10) ----
 
 /** The main→renderer `rag-store-changed` event (the re-traversal trigger,
@@ -436,6 +456,16 @@ export interface RagQueryPayload {
   /** U-F3 — `stores: 'all'` runs the cross-store fan-out. Mutually exclusive
    *  with `store` (A-F3). Omitted ⇒ today's single-store path. */
   stores?: 'all'
+  /** W1-N9 — the advanced-search `rag.query` args (U-PARITY-C18 / W1-Q9). The
+   *  renderer's advanced-search disclosure collects these and the preload
+   *  `rag.query` 4th `options` param threads them through the SAME IPC to the
+   *  SAME `handleRagTool` the MCP `rag.query` tool reaches (MCP/UI equivalence).
+   *  All optional: an omitted field keeps the engine default. */
+  mode?: 'flat' | 'graph'
+  maxHops?: number
+  expand?: 'none' | 'parent'
+  maxParentContext?: number
+  filters?: LocalRagQueryFilters
 }
 
 /** The renderer→main `rag-snapshot` IPC (the re-traversal data source). The
@@ -473,6 +503,12 @@ export interface RagSnapshotPayload {
  *  is the safe default. Unit U1 later adds an `editingMode` field to
  *  `OperatorSettings` using this SAME type. */
 export type EditingMode = 'textarea' | 'contenteditable'
+
+/** Unit U-SHELL-2 §2.2 — the tri-state appearance setting (C1). `'system'`
+ *  follows the OS preference live (resolved by the renderer's `resolveTheme`);
+ *  `'light'`/`'dark'` are explicit operator choices. Serialized through the
+ *  C9 UI-config carrier (`OperatorSettings`) — never an MCP tool. */
+export type ThemeSetting = 'system' | 'light' | 'dark'
 
 /** The Unit D §5.1.10 commit result (the `edit-commit` IPC reply). Mirrors the
  *  controller's `CommitResult`; a deleted-node race surfaces as
@@ -669,6 +705,9 @@ export interface OperatorSettings {
    *  `'textarea'` (decision D); `'contenteditable'` is the operator opt-in
    *  (the rich-eligible subtree-root splice target). */
   editingMode: EditingMode
+  /** Unit U-SHELL-2 §2.2 — the tri-state appearance setting (C1). The default
+   *  is `'system'` (follow the OS preference live). */
+  theme: ThemeSetting
 }
 
 /** A partial patch applied by `bridge.operatorSettings.set`. */
@@ -679,6 +718,9 @@ export interface OperatorSettingsPatch {
   /** Unit U1 §1.2 — a patch WITHOUT `editingMode` leaves the stored mode
    *  unchanged. */
   editingMode?: EditingMode
+  /** Unit U-SHELL-2 §2.2 — a patch WITHOUT `theme` leaves the stored theme
+   *  unchanged. */
+  theme?: ThemeSetting
 }
 
 export const IPC_OPERATOR_SETTINGS_GET = 'provident:operator-settings:get'
@@ -708,3 +750,26 @@ export const IPC_GNOSIS_WIKIS = 'provident:gnosis:wikis'
  *  `operatorSettingsStore.set(patch)`). One-way notification (the re-derive
  *  trigger for a settings change), NOT a request/response. */
 export const IPC_OPERATOR_SETTINGS_CHANGED = 'provident:operator-settings-changed'
+
+// ---- Unit U-MENU-1 application-menu IPC (docs/specs/unit-u-menu-1-application-menus.md
+// §2.2/§2.3) ----------------------------------------------------------------
+
+/** One entry of the live pane catalog the native View → Panes submenu is built
+ *  from. The renderer pushes the catalog at boot + on every `PaneRegistry`
+ *  change (`IPC_PANE_CATALOG`), so the menu is data-driven — never a hard-coded
+ *  list (W1-Q2). `scope` mirrors the `PaneScope` union. */
+export interface PaneCatalogEntry {
+  id: string
+  title: string
+  scope: 'app-graph' | 'operator'
+  enabled: boolean
+}
+
+/** The renderer→main pane-catalog push channel. Payload:
+ *  `Array<{ id, title, scope, enabled }>`. */
+export const IPC_PANE_CATALOG = 'provident:pane-catalog'
+
+/** The main→renderer pane-visibility action channel. Payload:
+ *  `{ id: string, enabled: boolean }` — sent when a View → Panes checkbox is
+ *  toggled. U-SHELL-8 owns the apply + persistence. */
+export const IPC_PANE_VISIBILITY = 'provident:pane-visibility'

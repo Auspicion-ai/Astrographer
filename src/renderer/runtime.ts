@@ -615,18 +615,47 @@ export class Runtime {
       const n = id ? this.supervisor.getNode(id) : undefined
       if (n) payload.node = n
     }
-    const result = this.supervisor.apply(payload)
+    // HOST-APPLYCOMMAND-PLACEMENT-STATESLICE (docs/defects.md; ruling
+    // 2026-09-11) — a `state-slice` goes through the SAME managed-channel
+    // normalization the SANCTIONED handler path uses (`clientAPI.apply`), never
+    // the raw `supervisor.apply`: both funnel into `supervisor.apply`, but the
+    // clientAPI entry is the attested handler shape (string node ref + mutation
+    // array) and keeps the op journaled/undoable identically. All other op
+    // kinds keep the raw `supervisor.apply` path unchanged.
+    const result: { status: string; dirtied?: string[]; minted?: string[] } = cmd.kind === 'state-slice'
+      ? (() => {
+          const r = this.supervisor.clientAPI.apply(
+            ((payload.node as Node | undefined)?.id ?? cmd.node) as string,
+            cmd.mutation as never,
+          )
+          return r.status === 'applied'
+            ? { status: r.status, dirtied: r.dirtied as string[] }
+            : { status: r.status }
+        })()
+      : this.supervisor.apply(payload)
     const dirty = (result.dirtied ?? []).filter((id) => this.supervisor.getNode(id)?.isInTree)
     for (const id of dirty) {
       const node = this.supervisor.getNode(id)
       if (!node) continue
-      const cr = node.compile(this.focusedSlice(node), { focusNodeId: node.id })
+      // The engine's pass-2 selects the compile MODE by routing: a
+      // placement-routed node (a `content`-role anchor) compiles through the
+      // path-enumeration `compilePath()`; every other node keeps the bounded
+      // focused-slice compile. mirroring `Supervisor.runPass2AndFlush` is what
+      // makes the placement-routed mutation visible to the render + resolved
+      // state (the silent no-op this defect fixes).
+      const placementRouted = node.anchors.some((a) => a.role === 'content')
+      const cr = placementRouted
+        ? node.compilePath()
+        : node.compile(this.focusedSlice(node), { focusNodeId: node.id })
       const grouped = new Map<string, CompiledState[]>()
       for (const s of cr.actionable) {
         const arr = grouped.get(s.nodeId) ?? []
         arr.push(s)
         grouped.set(s.nodeId, arr)
       }
+      // write through to the non-draining resolved store (handlers/nodeState
+      // read this) exactly as pass-2's `storeResolved(grouped)` does.
+      this.supervisor.recordResolved(cr.actionable as never)
       for (const [gid, arr] of grouped) {
         if (this.supervisor.getNode(gid)?.isInTree) this.prevStates.set(gid, arr)
       }

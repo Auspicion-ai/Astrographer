@@ -47,6 +47,7 @@ import type { LegacyNodeData } from 'provident-ssr'
 import { registerHandlerDef } from 'provident-ssr/core/registry.js'
 import type { PaneContext, PaneRegistry } from './pane-registry.js'
 import { gnosisDocumentsContent, gnosisWikisContent } from './pane-graph.js'
+import { clickableClasses } from './render-shared.js'
 import type { Document, DocumentList, Wiki } from '../main/engine-crud-rag-store.js'
 import type { ConflictError } from '../main/engine-rag-store.js'
 import type { SecuritySettings } from '../shared/types.js'
@@ -128,14 +129,6 @@ const GNOSIS_DOCUMENTS_CREATE_BODY = `function (ctx) {
   var title = el ? String(el.value || '') : '';
   if (!wikiId || !title) return;
   s.gnosisDocuments('gnosis.document.create', { callerId: 'operator', wikiId: wikiId, title: title, requestId: 'gui-' + Date.now() + '-' + Math.floor(Math.random() * 1e9) });
-}`
-const GNOSIS_DOCUMENTS_UPDATE_BODY = `function (ctx) {
-  var s = window && window.provident && window.provident.sidebar;
-  if (!s) return;
-  var documentId = ctx && ctx.node && ctx.node.props && ctx.node.props['data-document-id'];
-  var rev = ctx && ctx.node && ctx.node.props && ctx.node.props['data-revision'];
-  if (!documentId) return;
-  s.gnosisDocuments('gnosis.document.update', { callerId: 'operator', documentId: documentId, baseRevision: Number(rev || 0), graph: { nodes: [], edges: [] } });
 }`
 const GNOSIS_DOCUMENTS_DELETE_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
@@ -241,7 +234,6 @@ export class GnosisCrudPanes {
     registerHandlerDef('gnosis-documents-select-wiki', { name: 'gnosis-documents-select-wiki', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY })
     registerHandlerDef('gnosis-documents-select-doc', { name: 'gnosis-documents-select-doc', body: GNOSIS_DOCUMENTS_SELECT_DOC_BODY })
     registerHandlerDef('gnosis-documents-create', { name: 'gnosis-documents-create', body: GNOSIS_DOCUMENTS_CREATE_BODY })
-    registerHandlerDef('gnosis-documents-update', { name: 'gnosis-documents-update', body: GNOSIS_DOCUMENTS_UPDATE_BODY })
     registerHandlerDef('gnosis-documents-delete', { name: 'gnosis-documents-delete', body: GNOSIS_DOCUMENTS_DELETE_BODY })
     registerHandlerDef('gnosis-documents-publish', { name: 'gnosis-documents-publish', body: GNOSIS_DOCUMENTS_PUBLISH_BODY })
     registerHandlerDef('gnosis-documents-unpublish', { name: 'gnosis-documents-unpublish', body: GNOSIS_DOCUMENTS_UNPUBLISH_BODY })
@@ -465,6 +457,7 @@ export class GnosisCrudPanes {
         {
           type: 'button',
           props: { id: 'gnosis-documents-refresh' },
+          css: { classes: clickableClasses() },
           content: 'Refresh documents',
           handlers: [{ name: 'gnosis-documents-refresh', event: 'click', body: GNOSIS_DOCUMENTS_REFRESH_BODY }],
         },
@@ -489,6 +482,7 @@ export class GnosisCrudPanes {
             {
               type: 'button',
               props: { id: 'gnosis-documents-create' },
+              css: { classes: clickableClasses() },
               content: 'Create document',
               handlers: [{ name: 'gnosis-documents-create', event: 'click', body: GNOSIS_DOCUMENTS_CREATE_BODY }],
             },
@@ -497,16 +491,21 @@ export class GnosisCrudPanes {
         // H-1 — the document action controls (wired to the mutating handler
         // defs; the bodies read the target documentId/revision from this node's
         // `data-document-id`/`data-revision` props).
+        // W1-Q12 (U-PARITY-PARTIALS §1.2) — the Update control is PARKED: the
+        // old button submitted a fake empty graph (`{ nodes: [], edges: [] }`)
+        // to `gnosis.document.update`, which could blank a document but not edit
+        // it. The real graph edit is deferred (the local↔Gnosis graph bridge +
+        // engine-aware commit — docs/pending.md). Keep the real verbs; issue NO
+        // fake update.
         ...(doc
           ? [{
               type: 'div' as const,
               props: { 'data-document-id': doc.documentId, 'data-revision': String(doc.revision) },
               children: [
-                { type: 'button', props: { id: 'gnosis-documents-update' }, content: 'Update', handlers: [{ name: 'gnosis-documents-update', event: 'click', body: GNOSIS_DOCUMENTS_UPDATE_BODY }] },
-                { type: 'button', props: { id: 'gnosis-documents-delete' }, content: 'Delete', handlers: [{ name: 'gnosis-documents-delete', event: 'click', body: GNOSIS_DOCUMENTS_DELETE_BODY }] },
-                { type: 'button', props: { id: 'gnosis-documents-publish' }, content: 'Publish', handlers: [{ name: 'gnosis-documents-publish', event: 'click', body: GNOSIS_DOCUMENTS_PUBLISH_BODY }] },
-                { type: 'button', props: { id: 'gnosis-documents-unpublish' }, content: 'Unpublish', handlers: [{ name: 'gnosis-documents-unpublish', event: 'click', body: GNOSIS_DOCUMENTS_UNPUBLISH_BODY }] },
-                { type: 'button', props: { id: 'gnosis-documents-archive' }, content: 'Archive', handlers: [{ name: 'gnosis-documents-archive', event: 'click', body: GNOSIS_DOCUMENTS_ARCHIVE_BODY }] },
+                { type: 'button', props: { id: 'gnosis-documents-delete' }, css: { classes: clickableClasses() }, content: 'Delete', handlers: [{ name: 'gnosis-documents-delete', event: 'click', body: GNOSIS_DOCUMENTS_DELETE_BODY }] },
+                { type: 'button', props: { id: 'gnosis-documents-publish' }, css: { classes: clickableClasses() }, content: 'Publish', handlers: [{ name: 'gnosis-documents-publish', event: 'click', body: GNOSIS_DOCUMENTS_PUBLISH_BODY }] },
+                { type: 'button', props: { id: 'gnosis-documents-unpublish' }, css: { classes: clickableClasses() }, content: 'Unpublish', handlers: [{ name: 'gnosis-documents-unpublish', event: 'click', body: GNOSIS_DOCUMENTS_UNPUBLISH_BODY }] },
+                { type: 'button', props: { id: 'gnosis-documents-archive' }, css: { classes: clickableClasses() }, content: 'Archive', handlers: [{ name: 'gnosis-documents-archive', event: 'click', body: GNOSIS_DOCUMENTS_ARCHIVE_BODY }] },
               ],
             }]
           : []),
@@ -534,6 +533,7 @@ export class GnosisCrudPanes {
         {
           type: 'button',
           props: { id: 'gnosis-wikis-refresh' },
+          css: { classes: clickableClasses() },
           content: 'Refresh wikis',
           handlers: [{ name: 'gnosis-wikis-refresh', event: 'click', body: GNOSIS_WIKIS_REFRESH_BODY }],
         },
@@ -551,6 +551,7 @@ export class GnosisCrudPanes {
             {
               type: 'button',
               props: { id: 'gnosis-wikis-create' },
+              css: { classes: clickableClasses() },
               content: 'Create wiki',
               handlers: [{ name: 'gnosis-wikis-create', event: 'click', body: GNOSIS_WIKIS_CREATE_BODY }],
             },

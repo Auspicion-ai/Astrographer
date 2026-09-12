@@ -26,6 +26,7 @@ import {
   type LegacyInitialData,
 } from 'provident-ssr'
 import { createIsolatedScope, type GraphScope } from 'provident-ssr/core/registry.js'
+import { clickableClasses } from './render-shared.js'
 import type { SecuritySettings, RpcRequest, RpcReply, RagSnapshotPayload } from '../shared/types.js'
 
 declare global {
@@ -55,6 +56,35 @@ declare global {
   }
 }
 
+// PG12 (W1-Q14 a) — the operator-only module-tool runner seam. The modal
+// module manager lists the tools this seam reports (`CapabilityRouter.listTools()`
+// in production) and invokes them through `invoke` — which in production is the
+// EXISTING two-gate `invokeModuleTool(router, gate, …)` (module AND code).
+// Operator scope only: the runner is authored in this ISOLATED pane graph, never
+// exposed over MCP, and registers NO new tool.
+export interface ModuleToolRunner {
+  listTools(): string[]
+  /** The invoke seam MAY be async: in production it reaches main over the
+   *  `IPC_MODULE_TOOL_INVOKE` channel (a Promise); the in-process test/operator
+   *  router is synchronous. `SecurePanels` awaits it either way (W1-N10). */
+  invoke(toolName: string, args: unknown): unknown | Promise<unknown>
+}
+
+/** The pane-side host the runner control handlers reach (closures execute
+ *  in-process in the isolated pane graph — never a window/MCP bridge). */
+export interface ModuleRunnerHost {
+  listTools(): string[]
+  selectTool(tool: string): void
+  setArgs(value: string): void
+  run(): void
+}
+
+/** SecurePanels construction options. `moduleRunner` (PG12) is OPTIONAL: with
+ *  no runner the module pane renders an empty runner placeholder (fail-closed). */
+export interface SecurePanelsOptions {
+  moduleRunner?: ModuleToolRunner
+}
+
 // L3 (adversarial) — the pane's group list MUST match security.ts's ToolGroup
 // union (read/dispatch/graph/code/module/rag/edit + the Gnosis groups
 // gnosis/gnosis-edit). Omitting a group here would leave the manual-UI settings
@@ -71,6 +101,19 @@ const GROUP_LABELS: Record<string, string> = {
   edit: 'edit (edit.set_content/create_node/delete_node/split_node/merge_node/set_edge — mutating)',
   gnosis: 'gnosis (gnosis.query, gnosis.stream, gnosis.status + the read-only gnosis.document.*/gnosis.wiki.* — the Gnosis engine retrieval trio + document/wiki reads)',
   'gnosis-edit': 'gnosis-edit (gnosis.document.create/update/delete/publish/unpublish/archive + gnosis.wiki.create — mutating Gnosis document/wiki CRUD)',
+}
+
+/** PG12 — render a runner result to a short single-line string (the result
+ *  node's content). Objects/arrays serialize as JSON; a non-serializable value
+ *  falls back to String (never throws). */
+function stringifyRunResult(value: unknown): string {
+  if (typeof value === 'string') return value
+  try {
+    const json = JSON.stringify(value)
+    return json === undefined ? String(value) : json
+  } catch {
+    return String(value)
+  }
 }
 
 function randToken(len = 32): string {
@@ -117,11 +160,25 @@ const JOURNAL_LENGTH_BODY = `function (ctx) {
 /** The pane-graph envelope: the Security Settings pane + the Debug pane,
  *  authored as provident data. The group toggles are one node per group; their
  *  `data-on`/`data-group` props are refreshed by syncConfig on each refresh. */
-function paneEnvelope(): LegacyInitialData {
+export function paneEnvelope(runnerHost?: ModuleRunnerHost): LegacyInitialData {
+  // PG12 — the operator-only module-tool runner. The registered tool names are
+  // read from the runner seam at author time; one clickable item per tool
+  // selects it (operator scope — the runner lives in this isolated graph only).
+  const runnerTools = runnerHost ? runnerHost.listTools() : []
+  const runnerToolItems =
+    runnerTools.length > 0
+      ? runnerTools.map((tool) => ({
+          type: 'li',
+          props: { id: `module-tool:${tool}`, 'data-tool': tool },
+          css: { classes: clickableClasses(['module-tool']) },
+          content: tool,
+          handlers: [{ name: 'module-tool-select', event: 'click', body: () => { runnerHost?.selectTool(tool) } }],
+        }))
+      : [{ type: 'li', content: '(no module tools)' }]
   const toggles = GROUPS.map((g) => ({
     type: 'label',
     props: { id: `toggle:${g}`, 'data-group': g, 'data-on': 'false' },
-    css: { classes: ['group-row'] },
+    css: { classes: clickableClasses(['group-row']) },
     content: GROUP_LABELS[g],
     handlers: [{ name: `toggle-${g}`, event: 'click', body: TOGGLE_BODY }],
   }))
@@ -150,8 +207,8 @@ function paneEnvelope(): LegacyInitialData {
                     css: { classes: ['token-row'] },
                     children: [
                       { type: 'input', props: { id: 'token-input', placeholder: '(none)', readonly: true } },
-                      { type: 'button', props: { id: 'token-clear' }, css: { classes: ['btn'] }, content: 'Clear', handlers: [{ name: 'token-clear', event: 'click', body: TOKEN_CLEAR_BODY }] },
-                      { type: 'button', props: { id: 'token-gen' }, css: { classes: ['btn'] }, content: 'Regenerate', handlers: [{ name: 'token-gen', event: 'click', body: TOKEN_GEN_BODY }] },
+                      { type: 'button', props: { id: 'token-clear' }, css: { classes: clickableClasses(['btn']) }, content: 'Clear', handlers: [{ name: 'token-clear', event: 'click', body: TOKEN_CLEAR_BODY }] },
+                      { type: 'button', props: { id: 'token-gen' }, css: { classes: clickableClasses(['btn']) }, content: 'Regenerate', handlers: [{ name: 'token-gen', event: 'click', body: TOKEN_GEN_BODY }] },
                     ],
                   },
                 ],
@@ -168,7 +225,7 @@ function paneEnvelope(): LegacyInitialData {
                     css: { classes: ['token-row'] },
                     children: [
                       { type: 'input', props: { id: 'journal-length-input', placeholder: '(never condense)', type: 'number', min: '1' } },
-                      { type: 'button', props: { id: 'journal-length-apply' }, css: { classes: ['btn'] }, content: 'Apply', handlers: [{ name: 'journal-length-apply', event: 'click', body: JOURNAL_LENGTH_BODY }] },
+                      { type: 'button', props: { id: 'journal-length-apply' }, css: { classes: clickableClasses(['btn']) }, content: 'Apply', handlers: [{ name: 'journal-length-apply', event: 'click', body: JOURNAL_LENGTH_BODY }] },
                     ],
                   },
                 ],
@@ -195,6 +252,23 @@ function paneEnvelope(): LegacyInitialData {
               { type: 'p', css: { classes: ['hint'] }, content: 'Manual-UI only — installed modules + versions + quarantine status.' },
               { type: 'div', props: { id: 'module-status' }, content: 'loading…' },
               { type: 'div', props: { id: 'module-list' }, content: '' },
+              // ---- PG12 — operator-only module-tool runner ----------------
+              {
+                type: 'div',
+                props: { id: 'module-runner' },
+                children: [
+                  { type: 'p', css: { classes: ['hint'] }, content: 'Operator-only module-tool runner — invokes a registered module tool through the module + code two-gate (never exposed over MCP).' },
+                  { type: 'ul', props: { id: 'module-tool-list' }, children: runnerToolItems },
+                  {
+                    type: 'input',
+                    props: { id: 'module-args-input', placeholder: 'args (JSON, optional)' },
+                    css: { classes: clickableClasses() },
+                    handlers: [{ name: 'module-args-input', event: 'input', body: (_ctx: unknown, value?: unknown) => { runnerHost?.setArgs(value === undefined ? '' : String(value)) } }],
+                  },
+                  { type: 'button', props: { id: 'module-run' }, css: { classes: clickableClasses(['btn']) }, content: 'Run tool', handlers: [{ name: 'module-run', event: 'click', body: () => { runnerHost?.run() } }] },
+                  { type: 'div', props: { id: 'module-run-result' }, content: '' },
+                ],
+              },
             ],
           },
         ],
@@ -223,6 +297,15 @@ export class SecurePanels {
   private debugValue = 'booting…'
   private moduleStatus = 'loading…'
   private moduleListText = ''
+  // PG12 — the operator-only runner state (operator scope; never MCP-visible).
+  private readonly moduleRunner: ModuleToolRunner | null
+  private moduleSelectedTool = ''
+  private moduleArgsRaw = ''
+  private moduleRunResult = ''
+  // W1-N10 — the in-flight runner promise (the production seam is async IPC).
+  // The next render AWAITS it so the resolved result is displayed (never the
+  // synchronous stringify of a Promise, which would render `ok: {}`).
+  private pendingRun: Promise<void> | null = null
 
   /** Test/visibility accessor — the current Debug pane text (census + SSR
    *  preview). */
@@ -230,16 +313,78 @@ export class SecurePanels {
     return this.debugValue
   }
 
-  constructor(mount: HTMLElement) {
+  constructor(mount: HTMLElement, opts: SecurePanelsOptions = {}) {
     this.mount = mount
+    this.moduleRunner = opts.moduleRunner ?? null
+    // The runner control handlers reach this host via closures (in-process; the
+    // isolated pane graph — never a window/MCP bridge).
+    const runnerHost: ModuleRunnerHost = {
+      listTools: () => this.moduleRunner?.listTools() ?? [],
+      selectTool: (tool) => {
+        this.moduleSelectedTool = tool
+      },
+      setArgs: (value) => {
+        this.moduleArgsRaw = value
+      },
+      run: () => {
+        this.runModuleTool()
+      },
+    }
     this.scope = createIsolatedScope()
     const hub = createLinkHub()
-    const t = translateLegacy(paneEnvelope(), { hub, graphScope: this.scope })
+    const t = translateLegacy(paneEnvelope(runnerHost), { hub, graphScope: this.scope })
     this.supervisor = new Supervisor({ events: new EventBridge(), graphScope: this.scope })
     for (const n of t.nodes as unknown[]) this.supervisor.registerNode(n as never)
     this.adapter = new DomAdapter(mount, { onEvent: this.handleDomEvent })
     this.root = t.root
     this.nodes = t.nodes as unknown[]
+  }
+
+  /** PG12 — invoke the selected module tool through the injected two-gate seam
+   *  (`invokeModuleTool` in production — module AND code). Fail-closed: an
+   *  absent runner / no selection / malformed args / a gate denial / a throwing
+   *  tool all surface as an `error:` result string, never a crash.
+   *
+   *  W1-N10 — the production seam is async IPC, so the run is kicked off here
+   *  and tracked in `pendingRun`; `dispatch`/`handleDomEvent` await it before
+   *  rendering the resolved result (a sync runner still resolves immediately). */
+  private runModuleTool(): void {
+    this.pendingRun = this.runModuleToolAsync()
+  }
+
+  private async runModuleToolAsync(): Promise<void> {
+    if (!this.moduleRunner) {
+      this.moduleRunResult = 'error: no module runner configured'
+      return
+    }
+    if (!this.moduleSelectedTool) {
+      this.moduleRunResult = 'error: no tool selected'
+      return
+    }
+    const raw = this.moduleArgsRaw.trim()
+    let args: unknown
+    if (raw.length > 0) {
+      try {
+        args = JSON.parse(raw)
+      } catch {
+        this.moduleRunResult = `error: invalid JSON args: ${raw}`
+        return
+      }
+    }
+    try {
+      const result = await this.moduleRunner.invoke(this.moduleSelectedTool, args)
+      this.moduleRunResult = result === undefined ? 'ok' : `ok: ${stringifyRunResult(result)}`
+    } catch (e) {
+      this.moduleRunResult = `error: ${e instanceof Error ? e.message : String(e)}`
+    }
+  }
+
+  /** W1-N10 — await the in-flight operator run (if any) so the next render
+   *  reflects the resolved result. A no-op when nothing is pending. */
+  private async awaitPendingRun(): Promise<void> {
+    const pending = this.pendingRun
+    this.pendingRun = null
+    if (pending) await pending
   }
 
   /** Wire a real DOM interaction on a pane control to the pane graph's
@@ -252,7 +397,8 @@ export class SecurePanels {
       ? [String((domEvent.target as HTMLInputElement).value)]
       : []
     this.supervisor.dispatchEvent(node.id, eventName, ...extra)
-    void this.supervisor.flush().then(() => {
+    void this.supervisor.flush().then(async () => {
+      await this.awaitPendingRun()
       this.render()
       void this.refresh()
     })
@@ -265,6 +411,7 @@ export class SecurePanels {
     if (!node) throw new Error(`secure-panels: unresolved pane id '${id}'`)
     this.supervisor.dispatchEvent(node.id, 'click')
     await this.supervisor.flush()
+    await this.awaitPendingRun()
     this.render()
     await this.refresh()
   }
@@ -346,6 +493,8 @@ export class SecurePanels {
         mutation.push({ targetProp: 'content', value: this.moduleStatus })
       } else if (id === 'module-list') {
         mutation.push({ targetProp: 'content', value: this.moduleListText })
+      } else if (id === 'module-run-result') {
+        mutation.push({ targetProp: 'content', value: this.moduleRunResult })
       }
       if (mutation.length > 0) {
         this.supervisor.apply({ kind: 'state-slice', node: n, mutation })

@@ -10,6 +10,7 @@ import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
+import { applyThemeToRoot } from './theme.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
@@ -98,10 +99,75 @@ function handleRequest(runtime: Runtime, req: RpcRequest, notify: (p: { uri: str
   })
 }
 
+/** Unit U-SHELL-2 §2.4 (W1-N1) — apply the persisted/streamed operator theme at
+ *  boot and re-resolve it live while the setting is `system`. The shell applies
+ *  the theme by setting `document.documentElement.dataset.theme` (§2.3); the OS
+ *  preference is read from `matchMedia('(prefers-color-scheme: dark)')`.
+ *  Fail-soft (F2): an environment without `matchMedia` degrades to the light
+ *  default and never throws. */
+function installTheme(): void {
+  const themeBridge = (window.provident ?? {}) as unknown as {
+    operatorSettings?: {
+      get(): Promise<{ theme?: unknown }>
+      onChanged?(handler: (settings: { theme?: unknown }) => void): () => void
+    }
+  }
+  let media: MediaQueryList | null = null
+  try {
+    if (typeof window.matchMedia === 'function') media = window.matchMedia('(prefers-color-scheme: dark)')
+  } catch {
+    media = null
+  }
+  const prefersDark = (): boolean => {
+    try {
+      return media ? media.matches : false
+    } catch {
+      return false
+    }
+  }
+  let setting: unknown = 'system'
+  const apply = (): void => {
+    applyThemeToRoot(document.documentElement, setting, prefersDark())
+  }
+  // The OS listener is attached ONCE; its handler is inert while the setting is
+  // explicit (`light`/`dark`), so an OS flip only re-applies under `system`.
+  if (media) {
+    try {
+      media.addEventListener('change', () => {
+        if (setting !== 'light' && setting !== 'dark') apply()
+      })
+    } catch {
+      // a matchMedia without addEventListener — degrade, never throw
+    }
+  }
+  // Live operator-settings changes (the settings pane) — re-apply from the payload.
+  try {
+    themeBridge.operatorSettings?.onChanged?.((payload) => {
+      setting = payload?.theme
+      apply()
+    })
+  } catch {
+    // older bridge surface without onChanged — ignore
+  }
+  // Boot: read the persisted setting and apply. A bridge error keeps `system`.
+  void themeBridge.operatorSettings
+    ?.get?.()
+    .then((payload) => {
+      setting = payload?.theme
+      apply()
+    })
+    .catch(() => {
+      // keep the `system` default on a bridge error
+    })
+}
+
 async function main(): Promise<void> {
   const mount = document.getElementById('app')
   if (!mount) throw new Error('mount #app missing')
   const bridge = window.provident
+  // Unit U-SHELL-2 §2.4 (W1-N1) — apply the persisted theme + watch the OS
+  // preference live (`system`) before any graph mount.
+  installTheme()
   // Read the persisted operator config (maxJournalLength) so the app Runtime's
   // Supervisor is constructed with the journal-condense threshold. The config
   // is manual-UI-only (never an MCP tool); the Runtime reads it at boot.
@@ -133,8 +199,36 @@ async function main(): Promise<void> {
   // The operator-only Security + Debug panes render in their OWN isolated
   // provident graph (secure-panels.ts) — a separate GraphScope, so the MCP
   // endpoints (which read the app Runtime) can never see/dispatch them.
+  //
+  // W1-N6 (PG12) — wire the operator-only module-tool runner: list the live
+  // main-process `CapabilityRouter`'s tools over IPC (boot snapshot — the list is
+  // authored into the isolated pane graph at construction) and invoke a selected
+  // tool through the main-process two-gate (`module` AND `code`). Operator scope
+  // only: this runner never appears in the app graph and is never an MCP tool.
+  const moduleBridge = (bridge as unknown as {
+    module?: {
+      listTools?(): Promise<string[]>
+      invoke?(tool: string, args: unknown): Promise<unknown>
+    }
+  }).module
+  let moduleToolNames: string[] = []
+  try {
+    moduleToolNames = (await moduleBridge?.listTools?.()) ?? []
+  } catch {
+    // keep the empty list on a bridge error → the '(no module tools)' placeholder
+    moduleToolNames = []
+  }
+  const moduleRunner = {
+    listTools: (): string[] => moduleToolNames,
+    invoke: (tool: string, args: unknown): unknown => {
+      // Fail-closed: an older bridge without the runner surface must not read as
+      // a successful no-op — surface a real error to the operator.
+      if (!moduleBridge?.invoke) throw new Error('module-tool bridge unavailable')
+      return moduleBridge.invoke(tool, args)
+    },
+  }
   const panesMount = document.getElementById('panes')
-  const panels = panesMount ? new SecurePanels(panesMount) : null
+  const panels = panesMount ? new SecurePanels(panesMount, { moduleRunner }) : null
   if (panels) {
     void panels.refresh()
     // the Debug pane's live census + SSR preview, sourced from the APP graph

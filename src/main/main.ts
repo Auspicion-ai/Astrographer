@@ -2,9 +2,9 @@
 // (the renderer owns the provident-ssr graph + DOM), starts the MCP server
 // (stdio or Streamable HTTP), and bridges MCP tool calls to the renderer via
 // IPC.
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, dialog, type MenuItemConstructorOptions } from 'electron'
 import { join, basename } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, type RpcReply, type NotifyPayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type PaneCatalogEntry } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleGnosisTool, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
@@ -12,6 +12,7 @@ import { createEngineConfigStore, setEngineConfigBaseUrl, getEngineConfigBaseUrl
 import { createModuleStore } from './module-store.js'
 import { type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
+import { buildMenuTemplate, normalizePaneCatalog, importSelectionFromDialog, IMPORT_DIALOG_FILTERS, IMPORT_DIALOG_PROPERTIES, type AppMenuActions } from './app-menu.js'
 import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIpc, deriveBatchBroadcast, deriveRichCommitBroadcast } from './edit-ops.js'
 import { parsePositiveIntEnv, type EmbeddingProvider, type EmbeddingProviderConfig } from './embeddings.js'
 import { warmUpEmbeddingProvider } from './vector-boot.js'
@@ -143,6 +144,57 @@ async function main(): Promise<void> {
   // keeps the live gate exactly in sync with what is persisted.
   let currentEnabled = persisted.enabled
   const backend = new RendererBackend()
+  // Unit U-MENU-1 §2 — the native application-menu surface. The renderer pushes
+  // the live pane catalog over `IPC_PANE_CATALOG` (boot + registry change); main
+  // rebuilds the View → Panes submenu from the latest catalog. The menu bar is
+  // the AGENTS.md shell carve-out: actions route to the host over IPC (pane
+  // visibility — U-SHELL-8 owns apply/persist) or run the fs-only Import dialog
+  // (U-IMPORT-1 owns the directory expansion + handler).
+  let latestPaneCatalog: PaneCatalogEntry[] = []
+  let mainWindow: BrowserWindow | null = null
+  /** File → Import… — open the fs-only dialog and hand the raw selection to
+   *  U-IMPORT-1 (this unit only carries the selection across the boundary). A
+   *  cancel/dismiss is a no-op (§3.7/F3). */
+  const openImportDialog = (): void => {
+    const options = {
+      properties: [...IMPORT_DIALOG_PROPERTIES] as Array<'openFile' | 'openDirectory'>,
+      filters: IMPORT_DIALOG_FILTERS.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+    }
+    const pending = mainWindow
+      ? dialog.showOpenDialog(mainWindow, options)
+      : dialog.showOpenDialog(options)
+    void pending
+      .then((result) => {
+        const selection = importSelectionFromDialog(result)
+        if (selection == null) return
+        // U-IMPORT-1 owns the directory → `.md` expansion + the import handler;
+        // this unit forwards the selection only.
+        console.error('[provident-main] import selection (U-IMPORT-1 pending):', selection)
+      })
+      .catch((e) => {
+        console.error('[provident-main] import dialog failed:', e)
+      })
+  }
+  /** Build the application menu from the latest catalog and install it. */
+  const rebuildApplicationMenu = (): void => {
+    const actions: AppMenuActions = {
+      openImport: () => openImportDialog(),
+      togglePane: (id, enabled) => {
+        const entry = latestPaneCatalog.find((p) => p.id === id)
+        if (entry) entry.enabled = enabled
+        backend.broadcast(IPC_PANE_VISIBILITY, { id, enabled })
+        rebuildApplicationMenu()
+      },
+    }
+    const template = buildMenuTemplate(latestPaneCatalog, { actions }) as MenuItemConstructorOptions[]
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  }
+  // §2.2 — the renderer pushes the catalog at boot + on every registry change;
+  // main stores the normalised catalog (F1/F4) and rebuilds the submenu.
+  ipcMain.on(IPC_PANE_CATALOG, (_event, catalog: unknown) => {
+    latestPaneCatalog = normalizePaneCatalog(catalog)
+    rebuildApplicationMenu()
+  })
   // U8 — the module store (operator-owned, persisted to userData). The MCP
   // server handles module.* tools against it; the pane reads/writes it over IPC.
   const moduleStore = createModuleStore({
@@ -330,6 +382,18 @@ async function main(): Promise<void> {
     }
     return moduleBridgeResult()
   })
+  // W1-N6 (PG12) — the operator-only module-tool runner IPC. Manual-UI only:
+  // the MCP tool handlers never route here, so this is not an agent surface.
+  // `listTools` reports the live `CapabilityRouter`'s registered
+  // `module:<name>.<tool>` names; `invoke` routes through the server's live-gate
+  // `invokeTool` — the EXISTING module + code two-gate (the SAME seam the MCP
+  // SDK calls use, so the live gate and the runner never diverge). No new tool.
+  ipcMain.handle(IPC_MODULE_TOOL_LIST, () => moduleRouter.listTools())
+  ipcMain.handle(IPC_MODULE_TOOL_INVOKE, (_event, payload: ModuleToolInvokePayload) => {
+    const tool = typeof payload?.tool === 'string' ? payload.tool : ''
+    if (tool === '') throw new Error('module-tools-invoke: tool required')
+    return mcp.invokeTool(tool, payload.args)
+  })
 
   // Unit D §5.1.10 — the UI commit-on-blur write-back. The renderer sends an
   // `edit-commit` IPC on blur; main calls the SAME edit op (`setContent`) as
@@ -432,7 +496,26 @@ async function main(): Promise<void> {
   // payload carries no `store` field ⇒ the omitted ⇒ default-entry rule
   // applies; U-MS5's additive field resolves through the SAME resolver).
   ipcMain.handle(IPC_RAG_QUERY, (_event, payload: RagQueryPayload) => {
-    return handleRagQueryIpc(runtime.getDefaultEngine(), runtime.getDefaultStore(), { query: payload?.query, topK: payload?.topK, store: payload?.store, stores: payload?.stores }, runtime.getDirectory(), auditLog)
+    // W1-N9 — forward the advanced-search args (mode/maxHops/expand/
+    // maxParentContext/filters) alongside query/topK/store/stores so the UI IPC
+    // and the MCP `rag.query` tool resolve/validate the SAME field set.
+    return handleRagQueryIpc(
+      runtime.getDefaultEngine(),
+      runtime.getDefaultStore(),
+      {
+        query: payload?.query,
+        topK: payload?.topK,
+        store: payload?.store,
+        stores: payload?.stores,
+        mode: payload?.mode,
+        maxHops: payload?.maxHops,
+        expand: payload?.expand,
+        maxParentContext: payload?.maxParentContext,
+        filters: payload?.filters,
+      },
+      runtime.getDirectory(),
+      auditLog,
+    )
   })
 
   // Unit G §5.4/§8.2 — the UI backlink path. The `rag-backlinks` IPC calls the
@@ -617,6 +700,10 @@ async function main(): Promise<void> {
     },
   })
   backend.attachWindow(win)
+  // U-MENU-1 §2.1 — install the application menu once the window exists (the
+  // dialog is parented to it). Rebuilt on every `IPC_PANE_CATALOG` push.
+  mainWindow = win
+  rebuildApplicationMenu()
 
   const rendererHtml = join(here, '..', 'renderer', 'index.html')
   await win.loadFile(rendererHtml)

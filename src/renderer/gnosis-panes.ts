@@ -20,6 +20,7 @@ import type { LegacyNodeData } from 'provident-ssr'
 import { registerHandlerDef } from 'provident-ssr/core/registry.js'
 import type { PaneContext, PaneRegistry } from './pane-registry.js'
 import { gnosisStatusContent, gnosisQueryContent } from './pane-graph.js'
+import { clickableClasses } from './render-shared.js'
 import type { EngineRagResult, HealthReport } from '../main/engine-rag-store.js'
 import type { SecuritySettings } from '../shared/types.js'
 
@@ -202,6 +203,7 @@ export class GnosisPanes {
         {
           type: 'button',
           props: { id: 'gnosis-status-refresh' },
+          css: { classes: clickableClasses() },
           content: 'Refresh engine status',
           handlers: [{ name: 'gnosis-status-refresh', event: 'click', body: GNOSIS_STATUS_REFRESH_BODY }],
         },
@@ -229,6 +231,7 @@ export class GnosisPanes {
         {
           type: 'button',
           props: { id: 'gnosis-query-submit' },
+          css: { classes: clickableClasses() },
           content: 'Query engine',
           handlers: [{ name: 'gnosis-query-submit', event: 'click', body: GNOSIS_QUERY_SUBMIT_BODY }],
         },

@@ -63,22 +63,23 @@ afterEach(() => {
   }
 })
 
-/** A full 4-field OperatorSettings (the pinned U1 shape). */
+/** A full OperatorSettings (the pinned U1 shape + U-SHELL-2's additive theme). */
 const fourField = (editingMode: EditingMode): OperatorSettings => ({
   enabledPanes: ['doc-nav'],
   defaultDocumentId: 'doc-a',
   topK: 7,
   editingMode,
+  theme: 'system',
 })
 
 // ===========================================================================
 // §2.1 HAPPY-PATH STATES (1-12) + §1.2 API rules
 // ===========================================================================
 describe('operator-settings store — the editingMode default (§2.1 state 1)', () => {
-  it('state 1 — a first-run store (no file) returns editingMode "contenteditable" (the default edit mode) + all 4 fields', () => {
+  it('state 1 — a first-run store (no file) returns editingMode "contenteditable" (the default edit mode) + all fields', () => {
     const store = createOperatorSettingsStore({ path: tempPath() })
     const s = store.get()
-    expect(s).toEqual({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable' })
+    expect(s).toEqual({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable', theme: 'system' })
     expect(s.editingMode).toBe('contenteditable')
   })
 })
@@ -222,9 +223,9 @@ describe('operator-settings store — coercion fail-states (§2.2 1/2)', () => {
 describe('operator-settings store — the partial-patch no-clobber (§2.2 state 6)', () => {
   it('state 6 — a mode-toggle patch { editingMode } does NOT clobber enabledPanes/defaultDocumentId/topK', () => {
     const store = createOperatorSettingsStore({ path: tempPath() })
-    store.set(fourField('textarea')) // baseline: all 4 fields set
+    store.set(fourField('textarea')) // baseline: all fields set
     const result = store.set({ editingMode: 'contenteditable' }) // the control only ever sends editingMode
-    expect(result).toEqual({ enabledPanes: ['doc-nav'], defaultDocumentId: 'doc-a', topK: 7, editingMode: 'contenteditable' })
+    expect(result).toEqual({ enabledPanes: ['doc-nav'], defaultDocumentId: 'doc-a', topK: 7, editingMode: 'contenteditable', theme: 'system' })
   })
 })
 
@@ -233,9 +234,9 @@ describe('operator-settings store — the partial-patch no-clobber (§2.2 state 
 // runtime const is undefined → the assertion fails at run)
 // ===========================================================================
 describe('type-level: OperatorSettings / OperatorSettingsPatch / EditingMode (§2.1 13-15)', () => {
-  it('typecheck — OperatorSettings has 4 REQUIRED fields incl editingMode: EditingMode', () => {
+  it('typecheck — OperatorSettings has 5 REQUIRED fields incl editingMode: EditingMode', () => {
     const settings: OperatorSettings = fourField('contenteditable')
-    expect(Object.keys(settings).sort()).toEqual(['defaultDocumentId', 'editingMode', 'enabledPanes', 'topK'])
+    expect(Object.keys(settings).sort()).toEqual(['defaultDocumentId', 'editingMode', 'enabledPanes', 'theme', 'topK'])
     expect(settings.editingMode).toBe('contenteditable')
   })
 

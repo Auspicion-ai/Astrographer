@@ -8,7 +8,7 @@
 // view/retrieval defaults).
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { OperatorSettings, OperatorSettingsPatch, EditingMode } from '../shared/types.js'
+import type { OperatorSettings, OperatorSettingsPatch, EditingMode, ThemeSetting } from '../shared/types.js'
 
 export interface OperatorSettingsStoreOptions {
   /** The JSON file the settings persist to (usually in Electron userData). */
@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS: OperatorSettings = {
   defaultDocumentId: null,
   topK: 5,
   editingMode: 'contenteditable', // the default edit mode (rich-text contenteditable)
+  theme: 'system', // U-SHELL-2 §2.2 — default follows the OS preference
 }
 
 /** Unit U1 §1.2 — the pinned coercion rule (used identically in `sanitize` AND
@@ -33,6 +34,15 @@ const DEFAULT_SETTINGS: OperatorSettings = {
  *  (the default edit mode). TOTAL — never throws for any `src.editingMode` value. */
 function coerceEditingMode(value: unknown): EditingMode {
   return value === 'textarea' ? 'textarea' : 'contenteditable'
+}
+
+/** Unit U-SHELL-2 §2.2/F1 — the pinned theme coercion rule (used identically in
+ *  `sanitize` AND `set`, mirroring `coerceEditingMode`): ONLY the exact strings
+ *  `'light'`/`'dark'` pass through; ANY other value (undefined, null, '',
+ *  'system', junk) coerces to `'system'` (the OS-following default). TOTAL —
+ *  never throws for any `src.theme` value. */
+function coerceTheme(value: unknown): ThemeSetting {
+  return value === 'light' || value === 'dark' ? value : 'system'
 }
 
 function sanitize(input: unknown): OperatorSettings {
@@ -44,7 +54,8 @@ function sanitize(input: unknown): OperatorSettings {
     typeof src.defaultDocumentId === 'string' && src.defaultDocumentId !== '' ? src.defaultDocumentId : null
   const topK = typeof src.topK === 'number' && Number.isFinite(src.topK) && src.topK > 0 ? Math.floor(src.topK) : 5
   const editingMode = coerceEditingMode(src.editingMode)
-  return { enabledPanes, defaultDocumentId, topK, editingMode }
+  const theme = coerceTheme(src.theme)
+  return { enabledPanes, defaultDocumentId, topK, editingMode, theme }
 }
 
 /** Create an operator-settings store backed by `path`. A missing/empty file is
@@ -79,6 +90,7 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
         defaultDocumentId: current.defaultDocumentId,
         topK: current.topK,
         editingMode: current.editingMode,
+        theme: current.theme,
       }
     },
     set(patch: OperatorSettingsPatch): OperatorSettings {
@@ -98,7 +110,8 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
           : current.topK
       const editingMode =
         patch.editingMode !== undefined ? coerceEditingMode(patch.editingMode) : current.editingMode
-      current = { enabledPanes, defaultDocumentId, topK, editingMode }
+      const theme = patch.theme !== undefined ? coerceTheme(patch.theme) : current.theme
+      current = { enabledPanes, defaultDocumentId, topK, editingMode, theme }
       persist()
       return this.get()
     },

@@ -7,7 +7,8 @@
 // MCP-visible by construction.
 import type { LegacyNodeData } from 'provident-ssr'
 import type { PaneDefinition, PaneContext } from './pane-registry.js'
-import type { ContentWindowTemplate } from '../main/template-shape.js'
+import type { ContentWindowTemplate, TemplateVerdict } from '../main/template-shape.js'
+import { clickableClasses } from './render-shared.js'
 
 /** The template-editor pane's render context: the Unit H PaneContext PLUS the
  *  current content-window template + the traversal-targeted zones. */
@@ -17,10 +18,34 @@ export interface TemplatePaneContext extends PaneContext {
   /** The zones the traversal targets (the zones that cannot be dropped — the
    *  ZONE-CONSISTENCY-INVARIANT). Default `['main']`. */
   targetedZones: string[]
+  /** U-PARITY-PARTIALS §1.1 (W1-Q11 a) — the last `code.template.validate`
+   *  verdict, rendered inline below the controls. `null`/absent → no feedback
+   *  block (the pre-validate state). The host sets it from the validate
+   *  handler's resolved verdict. */
+  validation?: TemplateVerdict | null
 }
 
 /** The template-editor pane id. */
 export const TEMPLATE_PANE_ID = 'template-editor'
+
+/** U-PARITY-PARTIALS §1.1 (W1-Q11 a) — the Validate control's handler body.
+ *  It calls the SAME `code.template.validate` application seam as the MCP tool:
+ *  the preload `window.provident.template.validate` → `IPC_TEMPLATE_VALIDATE` →
+ *  `handleTemplateTool` against the SAME main-process template store (MCP/UI
+ *  equivalence). It validates the store's CURRENT template and hands the
+ *  resolved verdict to the host's `sidebar.templateValidateResult`, which
+ *  records it so the next re-render shows the inline valid/error feedback.
+ *  Guarded: a missing bridge / a rejected IPC is a silent no-op (never throws). */
+export const TEMPLATE_VALIDATE_BODY = `function (ctx) {
+  var t = window && window.provident && window.provident.template;
+  if (!t || typeof t.get !== 'function' || typeof t.validate !== 'function') return;
+  Promise.resolve(t.get()).then(function (cur) {
+    return t.validate(cur && cur.template);
+  }).then(function (verdict) {
+    var s = window && window.provident && window.provident.sidebar;
+    if (s && typeof s.templateValidateResult === 'function') s.templateValidateResult(verdict);
+  }).catch(function () {});
+}`
 
 /** The template-editor pane definition. `scope: 'app-graph'` (MCP-visible).
  *  `render(ctx)` authors the template's structure as editable provident content
@@ -52,12 +77,36 @@ export function createTemplateEditorPane(): PaneDefinition<TemplatePaneContext> 
               'data-template-zone': zoneName,
               ...(isTargeted ? { 'data-targeted': 'true' } : {}),
             },
+            css: { classes: clickableClasses() },
             content: zoneName,
             handlers: [{ name: 'template-zone-remove', event: 'click' }],
           }
         })
       const zoneList: LegacyNodeData =
         zoneLis.length > 0 ? { type: 'ul', children: zoneLis } : { type: 'p', content: '(no zones)' }
+      // U-PARITY-PARTIALS §1.1 (W1-Q11 a) — the inline validate result. Absent
+      // until a validate has run (`validation == null`); a valid verdict → the
+      // "valid" block; an invalid verdict → the reason + detail error block.
+      const verdict = ctx?.validation
+      const validationNode: LegacyNodeData | null =
+        verdict == null
+          ? null
+          : verdict.ok
+            ? {
+                type: 'p',
+                props: { id: 'template-validation', 'data-validation': 'valid' },
+                content: 'Template is valid',
+              }
+            : {
+                type: 'div',
+                props: { id: 'template-validation', 'data-validation': 'invalid' },
+                children: [
+                  {
+                    type: 'p',
+                    content: `Template is invalid (${verdict.reason}): ${verdict.detail}`,
+                  },
+                ],
+              }
       return {
         type: 'section',
         children: [
@@ -65,8 +114,12 @@ export function createTemplateEditorPane(): PaneDefinition<TemplatePaneContext> 
           { type: 'div', props: { 'data-template-root-id': rootId } },
           zoneList,
           { type: 'input', props: { id: 'template-zone-input' } },
-          { type: 'button', content: 'Add zone', handlers: [{ name: 'template-zone-add', event: 'click' }] },
-          { type: 'button', content: 'Reset', handlers: [{ name: 'template-reset', event: 'click' }] },
+          { type: 'button', content: 'Add zone', css: { classes: clickableClasses() }, handlers: [{ name: 'template-zone-add', event: 'click' }] },
+          { type: 'button', content: 'Reset', css: { classes: clickableClasses() }, handlers: [{ name: 'template-reset', event: 'click' }] },
+          // U-PARITY-PARTIALS §1.1 — the explicit Validate control (calls the
+          // `code.template.validate` seam; the inline result renders below).
+          { type: 'button', props: { id: 'template-validate' }, content: 'Validate', css: { classes: clickableClasses() }, handlers: [{ name: 'template-validate', event: 'click', body: TEMPLATE_VALIDATE_BODY }] },
+          ...(validationNode ? [validationNode] : []),
         ],
       }
     },

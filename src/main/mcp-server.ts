@@ -844,7 +844,20 @@ export async function handleGnosisTool(
 export async function handleRagQueryIpc(
   engine: RetrievalEngine | null,
   store: RagStore | null,
-  payload: { query?: unknown; topK?: unknown; store?: unknown; stores?: unknown },
+  payload: {
+    query?: unknown
+    topK?: unknown
+    store?: unknown
+    stores?: unknown
+    // W1-N9 — the advanced-search `rag.query` args. ADDITIVE + forwarded
+    // unchanged into `handleRagTool`, so the UI IPC and the MCP `rag.query`
+    // tool resolve/validate the SAME field set (MCP/UI equivalence).
+    mode?: unknown
+    maxHops?: unknown
+    expand?: unknown
+    maxParentContext?: unknown
+    filters?: unknown
+  },
   dir?: RagStoreDirectory | null,
   auditLog?: QueryAuditLog | null,
 ): Promise<unknown> {
@@ -853,6 +866,11 @@ export async function handleRagQueryIpc(
     topK: payload?.topK,
     store: payload?.store,
     stores: payload?.stores, // U-F3 A-F4 — ADDITIVE, forwarded unchanged
+    mode: payload?.mode,
+    maxHops: payload?.maxHops,
+    expand: payload?.expand,
+    maxParentContext: payload?.maxParentContext,
+    filters: payload?.filters,
   }, engine, dir, auditLog)
 }
 

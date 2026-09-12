@@ -29,14 +29,18 @@ import {
   docNavContent,
   crosslinksContent,
   searchContent,
+  editorToolbarContent,
+  EDITOR_TOOLBAR_TOGGLE_HANDLER,
   type AppGraphAssemblyResult,
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
+import { clickableClasses } from './render-shared.js'
 import type { EditController, CaretState, RichCaretEdge, RebuildKind } from './edit-controller.js'
 import { reconcileContentRoots, type ReconcileChange } from './content-reconcile.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
+import { HoverPreviewController } from './hover-preview.js'
 import { createSnapshotStore } from '../main/adjacency.js'
-import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../main/template-shape.js'
+import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate, type TemplateVerdict } from '../main/template-shape.js'
 import type {
   RagSnapshotPayload,
   RagQueryResult,
@@ -51,11 +55,27 @@ import type {
   RagStoreManageRequest,
   RagStoreManageResult,
   RagStoreManageOp,
+  PaneCatalogEntry,
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
+import type { LocalRagQueryFilters } from '../main/retrieval.js'
 import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
 import { isRichEditableRoot } from './rich-eligibility.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
+
+/** U-PARITY-C18 — the advanced-search args the `search` pane's disclosure
+ *  collects. Mirrors the `rag.query` argument surface (W1-Q9): the extended
+ *  engine options (`RagQueryOptions` minus `topK`/`wikiId`, which the pane
+ *  supplies separately) + `stores:'all'`. Routed through the SAME
+ *  `bridge.rag.query` seam as the basic submit (MCP/UI equivalence). */
+export interface AdvancedSearchQueryOptions {
+  mode?: 'flat' | 'graph'
+  maxHops?: number
+  expand?: 'none' | 'parent'
+  maxParentContext?: number
+  filters?: LocalRagQueryFilters
+  stores?: 'all'
+}
 
 /** The preload IPC bridge surface the host consumes (structural — the canonical
  *  `ProvidentBridge` lives in `src/main/preload.ts`, which the renderer bundle
@@ -77,8 +97,11 @@ export interface SidebarBridge {
   rag: {
     /** U-MS5 — the third optional `store` param (MCP/UI mechanical symmetry,
      *  UI-SELECTOR-DEFERRED). Omitted ⇒ the default store (zero-config
-     *  byte-equal; the settings/search pane's own path never passes it). */
-    query(query: string, topK?: number, store?: string): Promise<RagQueryResult>
+     *  byte-equal; the settings/search pane's own path never passes it).
+     *  U-PARITY-C18 — the fourth optional `options` param carries the
+     *  advanced-search `rag.query` args (mode/maxHops/expand/maxParentContext/
+     *  filters/stores) through this SAME seam. */
+    query(query: string, topK?: number, store?: string, options?: AdvancedSearchQueryOptions): Promise<RagQueryResult>
     snapshot(): Promise<RagSnapshotPayload>
     backlinks(nodeId: string): Promise<BacklinkResult>
     /** Unit V3 — the doc-nav data source. Returns the document list (the
@@ -112,6 +135,9 @@ export interface SidebarBridge {
     set(patch: OperatorSettingsPatch): Promise<OperatorSettings>
     onChanged(handler: (settings: OperatorSettings) => void): () => void
   }
+  /** Unit U-MENU-1 §2.2 — the renderer→main pane-catalog push. Optional so
+   *  older host/test bridges (which predate the menu surface) still boot. */
+  pushPaneCatalog?(catalog: PaneCatalogEntry[]): void
 }
 
 export interface SidebarPanesOptions {
@@ -182,6 +208,22 @@ var mode = ctx && ctx.node && ctx.node.props && ctx.node.props['data-mode'];
 if (mode === 'textarea' || mode === 'contenteditable') s.operatorSet({ editingMode: mode });`
 const OPERATOR_EDITING_MODE_TOGGLE_HANDLER = `function (ctx) {
 ${OPERATOR_EDITING_MODE_TOGGLE_BODY}
+}`
+// Unit U-EDIT-1 (C8) — the APP-GRAPH editor-toolbar toggle handler. The toolbar
+// button's `data-mode` reflects the CURRENT mode (spec §2 reflection); the
+// handler FLIPS to the other union member and routes through the SAME shared
+// operator-change seam (`sidebar.operatorSet`) → main SET → broadcast →
+// `requestRebuild('operator')`. FULL function-expression form (the
+// `compileHandlerBody`-compatible representation the app Runtime's
+// `resolveNameReferencedHandlerBodies` requires). A missing/invalid `data-mode`
+// is DROPPED (coerced at the boundary — never a junk write, never a throw).
+const EDITOR_TOOLBAR_TOGGLE_HANDLER_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s) return;
+  var mode = ctx && ctx.node && ctx.node.props && ctx.node.props['data-mode'];
+  if (mode !== 'textarea' && mode !== 'contenteditable') return;
+  var next = mode === 'contenteditable' ? 'textarea' : 'contenteditable';
+  s.operatorSet({ editingMode: next });
 }`
 // Unit U-H8 — the 7 operator-registry-manage handler bodies (the review §2 D6
 // ONE operator-UI IPC exemption). Each reaches `window.provident.sidebar.registryManage`/
@@ -371,6 +413,16 @@ export class SidebarPanes {
    *  doc). Null when not provided (the sidebar gnosis methods become no-ops). */
   private readonly gnosis: { status(): void; query(value: string): void } | null
 
+  /** U-PARITY-C19 — the shell hover-preview timing controller (W1-Q10: the
+   *  content is provident, the 0.5 s dismissal is shell). onChange re-renders
+   *  the EXISTING app graph so the popup subtree appears/clears. */
+  private readonly hoverPreview: HoverPreviewController = new HoverPreviewController({
+    onChange: () => this.rerenderAppGraph(),
+  })
+  /** U-PARITY-C19 — the shell-computed popup position (F3 best-effort; above
+   *  by default, flipped below on a viewport overflow). */
+  private hoverPreviewPosition: 'above' | 'below' = 'above'
+
   /** Host-owned mutable state (M5). */
   private _currentDocumentId: string | null = null
   private _currentNodeId: string | null = null
@@ -391,6 +443,16 @@ export class SidebarPanes {
   private lastBacklinks: BacklinkResult | null = null
   private lastQueryResult: RagQueryResult | null = null
   private lastOperatorSettings: OperatorSettings | null = null
+  /** U-PARITY-C18 — the advanced-search disclosure state (collapsed by default).
+   *  Flipped by the `pane-search-advanced-toggle` handler → re-derive. */
+  private advancedSearchOpen = false
+  /** U-PARITY-C18 — the C15 document-metadata fields are present in this build
+   *  (LocalRagQueryFilters), so the `documentPathPrefix`/`tags` controls render.
+   *  A pre-C15 host would set this false → the controls are omitted (F2). */
+  private readonly advancedSearchDocumentFilters = true
+  /** U-PARITY-C18 — the last advanced-search engine fail-state (F1/state 6).
+   *  Rendered inline by the search pane; cleared on the next success. */
+  private advancedSearchError: string | null = null
   /** U-MS5 — the host's cached store listing (the operator's Phase-1 census).
    *  Fetched ONCE at boot (D8 — boot-time-only registry); the operator pane
    *  re-renders this cache on every mount/refresh/re-derive, never re-fetching. */
@@ -413,8 +475,20 @@ export class SidebarPanes {
    *  `rag`/`code` default-off gates (fail-closed when the group is off). */
   private security: SecuritySettings | null = null
 
+  /** U-PARITY-DOCNAV — the doc-nav expanded-folder set (each key a
+   *  `JSON.stringify(path[])`). Toggled by the `pane-doc-nav-toggle` handler and
+   *  read by the doc-nav render on every re-derive. Folders default collapsed. */
+  private readonly expandedDocFolders = new Set<string>()
+
   /** The stored content-window template (updated on boot + template-changed). */
   private template: ContentWindowTemplate = DEFAULT_CONTENT_WINDOW_TEMPLATE
+  /** W1-N5 (U-PARITY-PARTIALS §1.1) — the last `code.template.validate`
+   *  verdict. Set by the `templateValidateResult` host seam (the pane's
+   *  Validate handler resolves `bridge.template.validate` then hands the
+   *  verdict here); rendered inline by the template-editor pane. `null` until a
+   *  validate runs (no feedback block). The verdict is display-only: the actual
+   *  validation + group gate live in main (`handleTemplateTool`). */
+  private templateValidation: TemplateVerdict | null = null
   /** The host-pinned targeted zones (M8). */
   private readonly targetedZones: string[] = ['main']
 
@@ -468,6 +542,9 @@ export class SidebarPanes {
   private unsubRag: (() => void) | null = null
   private unsubTemplate: (() => void) | null = null
   private unsubSettings: (() => void) | null = null
+  /** Unit U-MENU-1 — the PaneRegistry change subscription (re-push the catalog
+   *  to the native menu on every enable/disable). Null until boot. */
+  private unsubRegistry: (() => void) | null = null
 
   constructor(opts: SidebarPanesOptions) {
     this.mount = opts.mount
@@ -501,19 +578,29 @@ export class SidebarPanes {
       id: 'doc-nav',
       title: 'Documents',
       scope: 'app-graph',
-      render: (ctx: PaneContext) => docNavContent(ctx),
+      render: (ctx: PaneContext) =>
+        docNavContent(ctx, { expandedPaths: [...this.expandedDocFolders] }),
     })
     this.registry.register({
       id: 'crosslinks',
       title: 'Links',
       scope: 'app-graph',
-      render: (ctx: PaneContext) => crosslinksContent(ctx, this.lastBacklinks),
+      render: (ctx: PaneContext) =>
+        crosslinksContent(ctx, this.lastBacklinks, {
+          hoverPreviewId: this.hoverPreview.activeId,
+          hoverPreviewPosition: this.hoverPreviewPosition,
+        }),
     })
     this.registry.register({
       id: 'search',
       title: 'Search',
       scope: 'app-graph',
-      render: (ctx: PaneContext) => searchContent(ctx, this.lastQueryResult),
+      render: (ctx: PaneContext) =>
+        searchContent(ctx, this.lastQueryResult, {
+          expanded: this.advancedSearchOpen,
+          documentFilters: this.advancedSearchDocumentFilters,
+          error: this.advancedSearchError,
+        }),
     })
     this.registry.register({
       id: 'template-editor',
@@ -529,6 +616,29 @@ export class SidebarPanes {
     })
     for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor', 'settings']) {
       this.registry.enable(id)
+    }
+  }
+
+  /** Unit U-MENU-1 §2.2 — project the live registry into the catalog the native
+   *  View → Panes submenu consumes. */
+  private paneCatalog(): PaneCatalogEntry[] {
+    return this.registry.list().map((p) => ({
+      id: p.id,
+      title: p.title,
+      scope: p.scope,
+      enabled: this.registry.isEnabled(p.id),
+    }))
+  }
+
+  /** Unit U-MENU-1 §2.2 — push the catalog to main. A no-op when the bridge
+   *  predates the menu surface; a bridge throw never aborts boot/registration. */
+  private pushPaneCatalog(): void {
+    const push = this.bridge.pushPaneCatalog?.bind(this.bridge)
+    if (!push) return
+    try {
+      push(this.paneCatalog())
+    } catch {
+      // never abort boot / a registry change on a bridge error
     }
   }
 
@@ -563,6 +673,11 @@ export class SidebarPanes {
     // SyntaxErrors on the inner-statements form) — matching every other
     // `registerHandlerDef` body in this file.
     registerHandlerDef('operator-editing-mode-toggle', { name: 'operator-editing-mode-toggle', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER })
+    // Unit U-EDIT-1 (C8) — the APP-GRAPH editor-toolbar toggle handler. Unlike
+    // the operator handler, this one IS MCP-reachable: the app Runtime resolves
+    // the name-referenced body so `provident.dispatch` on `editor-toolbar-toggle`
+    // flips the mode. Registered in the FULL function-expression form.
+    registerHandlerDef(EDITOR_TOOLBAR_TOGGLE_HANDLER, { name: EDITOR_TOOLBAR_TOGGLE_HANDLER, body: EDITOR_TOOLBAR_TOGGLE_HANDLER_BODY })
     // Unit U-H8 — the 7 operator-registry-manage handlers are NOT registered in
     // the global app-graph registry (HOST-H8-1, HIGH security): the operator
     // isolate scope's nodes carry INLINE full-expression bodies (the operator
@@ -590,12 +705,14 @@ export class SidebarPanes {
     }
   }
 
-  /** Build the TemplatePaneContext (PaneContext + template + targetedZones). */
+  /** Build the TemplatePaneContext (PaneContext + template + targetedZones +
+   *  the last validate verdict). */
   buildTemplateContext(): TemplatePaneContext {
     return {
       ...this.buildContext(),
       template: this.template,
       targetedZones: this.targetedZones,
+      validation: this.templateValidation,
     }
   }
 
@@ -628,6 +745,12 @@ export class SidebarPanes {
     // recomputeBackRefs (so the backRefs are recomputed from the POST-splice
     // envelope — a removed `textarea-<ragId>` never lingers in the map).
     this.applyEditingMode(result.envelope, this.editingMode)
+    // Unit U-EDIT-1 (C8) — author the central-stage editor-toolbar toggle into
+    // the assembled APP graph (independent of mode — the control is present in
+    // both textarea + contenteditable modes and reflects the current one). Runs
+    // AFTER applyEditingMode and BEFORE recomputeBackRefs (the toolbar is not a
+    // `rag-`-prefixed root, so it contributes nothing to the backRefs).
+    this.applyEditorToolbar(result.envelope, this.editingMode)
     // M14 — recompute the backRefs from the ASSEMBLED envelope (the node ids the
     // loaded graph actually mints), AFTER assembly and BEFORE load.
     const assembledBackRefs = this.recomputeBackRefs(result.envelope)
@@ -659,6 +782,11 @@ export class SidebarPanes {
     const env = assembled.envelope
     this.setTextareaReadOnly(env)
     this.applyEditingMode(env, this.editingMode)
+    // Unit U-EDIT-1 (C8) — keep the app-graph editor toolbar in the reconciled
+    // envelope (the toolbar is a non-`rag-`/`pane-` root → NOT a reconcile
+    // bucket; it must already be present from boot and survives the content-only
+    // reconcile). Author it fresh so the reflected mode is current.
+    this.applyEditorToolbar(env, this.editingMode)
     const previous = this.runtime.materializedContentRoots()
     const result = reconcileContentRoots({ previous, next: env, change: this.pendingContentChange })
     this.runtime.applyContentReconcile({ result, next: env })
@@ -748,6 +876,13 @@ export class SidebarPanes {
     this.registerPanes()
     this.bindHandlers()
     this.installSidebarBridge()
+    // Unit U-MENU-1 §2.2 — push the pane catalog (boot) so the native
+    // View → Panes submenu is data-driven, then re-push on every registry
+    // change. Guarded for hosts/tests whose bridge predates the menu surface.
+    this.pushPaneCatalog()
+    if (typeof this.registry.onChanged === 'function') {
+      this.unsubRegistry = this.registry.onChanged(() => this.pushPaneCatalog())
+    }
     // Fetch the RAG snapshot (a bridge error ABORTS the boot — caught + logged).
     let snapshot: RagSnapshotPayload
     try {
@@ -1085,6 +1220,7 @@ export class SidebarPanes {
             id: 'operator-editing-mode-toggle',
             'data-mode': (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'textarea' : 'contenteditable',
           },
+          css: { classes: clickableClasses() },
           content: (s?.editingMode ?? 'contenteditable') === 'contenteditable' ? 'Switch to textarea' : 'Switch to contenteditable',
           handlers: [{ name: 'operator-editing-mode-toggle', event: 'click', body: OPERATOR_EDITING_MODE_TOGGLE_HANDLER }],
         },
@@ -1128,6 +1264,7 @@ export class SidebarPanes {
                   {
                     type: 'button',
                     props: { id: 'operator-rag-manage-renamedefault' },
+                    css: { classes: clickableClasses() },
                     content: 'Rename default',
                     handlers: [{ name: 'operator-rag-manage-renamedefault', event: 'click', body: OPERATOR_RAG_RENAME_DEFAULT_BODY }],
                   },
@@ -1140,6 +1277,7 @@ export class SidebarPanes {
                   {
                     type: 'button',
                     props: { id: `operator-rag-manage-remove-${named}`, 'data-store': named },
+                    css: { classes: clickableClasses() },
                     content: 'Remove',
                     handlers: [{ name: 'operator-rag-manage-remove', event: 'click', body: OPERATOR_RAG_REMOVE_BODY }],
                   },
@@ -1147,12 +1285,14 @@ export class SidebarPanes {
                   {
                     type: 'button',
                     props: { id: `operator-rag-manage-rename-${named}`, 'data-store': named },
+                    css: { classes: clickableClasses() },
                     content: 'Rename',
                     handlers: [{ name: 'operator-rag-manage-rename', event: 'click', body: OPERATOR_RAG_RENAME_BODY }],
                   },
                   {
                     type: 'button',
                     props: { id: `operator-rag-manage-setdefault-${named}`, 'data-store': named },
+                    css: { classes: clickableClasses() },
                     content: 'Set default',
                     handlers: [{ name: 'operator-rag-manage-setdefault', event: 'click', body: OPERATOR_RAG_SET_DEFAULT_BODY }],
                   },
@@ -1169,6 +1309,7 @@ export class SidebarPanes {
         {
           type: 'button',
           props: { id: 'operator-rag-manage-add-submit' },
+          css: { classes: clickableClasses() },
           content: 'Add store',
           handlers: [{ name: 'operator-rag-manage-add', event: 'click', body: OPERATOR_RAG_ADD_BODY }],
         },
@@ -1195,12 +1336,14 @@ export class SidebarPanes {
               {
                 type: 'button',
                 props: { id: 'operator-rag-manage-confirm-yes' },
+                css: { classes: clickableClasses() },
                 content: 'Confirm',
                 handlers: [{ name: 'operator-rag-manage-confirm', event: 'click', body: OPERATOR_RAG_CONFIRM_BODY }],
               },
               {
                 type: 'button',
                 props: { id: 'operator-rag-manage-confirm-no' },
+                css: { classes: clickableClasses() },
                 content: 'Cancel',
                 handlers: [{ name: 'operator-rag-manage-dismiss', event: 'click', body: OPERATOR_RAG_DISMISS_BODY }],
               },
@@ -1389,6 +1532,19 @@ export class SidebarPanes {
     for (const p of envelope.content ?? []) walk(p.content?.[0])
   }
 
+  /** Unit U-EDIT-1 (C8) — author the central-stage editor-toolbar toggle into
+   *  the assembled app-graph envelope. The toolbar is a content root placed in
+   *  the traversal's `zoneName` (MCP-visible, `provident.dispatch`-reachable);
+   *  it reflects the CURRENT `editingMode` and its name-referenced click handler
+   *  flips it. Appended fresh on every assemble so the reflected mode is current
+   *  and no stale toolbar accumulates (the `content` array is a new array per
+   *  assembly — the traversal envelope is never mutated). PURE authoring —
+   *  provident data only, no hand-written DOM. */
+  private applyEditorToolbar(envelope: LegacyInitialData, editingMode: EditingMode): void {
+    if (!Array.isArray(envelope.content)) envelope.content = []
+    envelope.content.push({ content: [editorToolbarContent(editingMode, this.zoneName)] })
+  }
+
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
    *  handler bodies call. Unit L §5.2 — extended with the textarea bridge
    *  methods (`textareaInput`/`textareaBlur`) the textarea handlers reach.
@@ -1404,10 +1560,30 @@ export class SidebarPanes {
   private installSidebarBridge(): void {
     const methods = {
       selectDocument: (id: string) => this.selectDocument(id),
+      // U-PARITY-DOCNAV — the doc-nav folder toggle seam (the
+      // `pane-doc-nav-toggle` handler body reaches it; same add/remove
+      // re-derive path as selectDocument).
+      docNavToggle: (key: string) => this.docNavToggle(key),
       submitQuery: (value: string) => void this.submitQuery(value),
+      // U-PARITY-C18 — the advanced-search disclosure toggle + submit seams (the
+      // `pane-search-advanced-*` handler bodies reach them).
+      searchAdvancedToggle: () => this.searchAdvancedToggle(),
+      submitAdvancedQuery: (value: string, options: AdvancedSearchQueryOptions) =>
+        void this.submitAdvancedQuery(value, options ?? {}),
+      // U-PARITY-C19 — the link hover-preview shell seams (the
+      // `hover-preview-*` handler bodies reach them). `enter`/`leave` cancel or
+      // schedule the 0.5 s dismissal; the popup's own enter/leave are hoverable.
+      hoverPreviewEnter: (id: string) => this.hoverPreview.enter(id),
+      hoverPreviewLeave: () => this.hoverPreview.leave(),
+      hoverPreviewPopupEnter: () => this.hoverPreview.enterPopup(),
+      hoverPreviewPopupLeave: () => this.hoverPreview.leavePopup(),
       templateAdd: (zone: string) => void this.templateAdd(zone),
       templateRemove: (zone: string) => void this.templateRemove(zone),
       templateReset: () => void this.templateReset(),
+      // W1-N5 — the template Validate result seam (the pane's `template-validate`
+      // handler body reaches it). Records the verdict + re-derives so the pane's
+      // inline valid/error feedback renders.
+      templateValidateResult: (verdict: TemplateVerdict) => this.templateValidateResult(verdict),
       operatorSet: (patch: OperatorSettingsPatch) => void this.operatorSet(patch),
       // U-H8 — the operator-registry manage surface (the review §2 D6 ONE
       // operator-UI IPC exemption). The OPERATOR_RAG_* handler bodies reach these.
@@ -1457,6 +1633,17 @@ export class SidebarPanes {
     this.editController.requestRebuild()
   }
 
+  /** `pane-doc-nav-toggle` — flip a folder's expanded state + re-derive (the
+   *  doc-nav tree re-renders from the refreshed state; the revealed children are
+   *  real app-graph nodes). The key is the folder's `data-folder-path`
+   *  (`JSON.stringify(path[])`). An empty/malformed key is ignored. */
+  private docNavToggle(key: string): void {
+    if (typeof key !== 'string' || key === '') return
+    if (this.expandedDocFolders.has(key)) this.expandedDocFolders.delete(key)
+    else this.expandedDocFolders.add(key)
+    this.editController.requestRebuild()
+  }
+
   /** `pane-search-submit` — gate (M13) → `bridge.rag.query` → store the result →
    *  re-render the search pane (M10). An empty query does nothing. SYNCHRONOUS
    *  (the gate reads the cached security; the IPC is fired, the result handled
@@ -1475,6 +1662,54 @@ export class SidebarPanes {
       }
     })
   }
+
+  /** `pane-search-advanced-toggle` — flip the disclosure state + re-derive (the
+   *  search pane re-renders with the fields revealed/hidden). Mirrors the
+   *  `docNavToggle` host seam. SYNCHRONOUS. */
+  private searchAdvancedToggle(): void {
+    this.advancedSearchOpen = !this.advancedSearchOpen
+    this.editController.requestRebuild()
+  }
+
+  /** U-PARITY-C19 — re-render the EXISTING app graph after a hover-preview
+   *  visibility change (the crosslinks pane re-authors the popup subtree from
+   *  the controller's active id). No RAG re-traversal + no operator remount; the
+   *  dirty-edit guard still applies (a re-render must not clobber an in-progress
+   *  edit). SYNCHRONOUS. */
+  private rerenderAppGraph(): void {
+    if (this.editController.anyDirty()) return
+    if (this.runtime && this.lastTraversalEnvelope) {
+      this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
+    }
+  }
+
+  /** `pane-search-advanced-submit` — gate (M13) → `bridge.rag.query` with the
+   *  advanced `options` → store the result → re-render the search pane. An
+   *  empty query does nothing. F1/state 6 — a REJECTED engine call surfaces its
+   *  message inline (`advancedSearchError`) and re-renders; it never throws. */
+  private submitAdvancedQuery(value: string, options: AdvancedSearchQueryOptions): void {
+    if (!value) return
+    if (!this.security?.enabled.includes('rag')) return // fail-closed (M13)
+    const rerender = (): void => {
+      if (this.editController.anyDirty()) return
+      if (this.runtime && this.lastTraversalEnvelope) {
+        this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
+      }
+    }
+    void this.bridge.rag
+      .query(value, this.lastOperatorSettings?.topK ?? 5, undefined, options ?? {})
+      .then((result) => {
+        this.lastQueryResult = result
+        this.advancedSearchError = null
+        rerender()
+      })
+      .catch((e: unknown) => {
+        // Surface the engine fail-state inline (never an unhandled rejection).
+        this.advancedSearchError = e instanceof Error ? e.message : String(e)
+        rerender()
+      })
+  }
+
 
   /** `template-zone-add` — gate (M13) → markDirty (M16) → `bridge.template.create`
    *  → on success clearDirty. SYNCHRONOUS (see submitQuery). The gate runs BEFORE
@@ -1505,6 +1740,17 @@ export class SidebarPanes {
     void this.bridge.template.reset().then(() => {
       this.editController.clearDirty('template-editor')
     })
+  }
+
+  /** W1-N5 (U-PARITY-PARTIALS §1.1) — the template Validate result seam. The
+   *  pane's `template-validate` handler resolves `bridge.template.validate` in
+   *  main (group-gated there) and hands the verdict here; the host records it as
+   *  the template pane's `validation` context and requests a rebuild so the next
+   *  render shows the inline valid/error feedback. A null/malformed verdict
+   *  clears the feedback (never throws). SYNCHRONOUS (the rebuild is guarded). */
+  private templateValidateResult(verdict: TemplateVerdict | null): void {
+    this.templateValidation = verdict ?? null
+    this.editController.requestRebuild()
   }
 
   /** `operatorSet` — Unit U1 §1.4 — `bridge.operatorSettings.set` → main

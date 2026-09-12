@@ -754,13 +754,15 @@ describe('§5.9 fail 8 — NO listing handlers / NO switcher (the operator pane 
     expect(args).toHaveLength(2) // (value, topK) — NEVER a store arg
   })
 
-  it('GREEN-guard (fail 8 / §5.10 census) — the handler-def census STAYS 12 (src/renderer/sidebar-panes.ts: no new registerHandlerDef on any listing node)', () => {
+  it('GREEN-guard (fail 8 / §5.10 census) — the handler-def census is 13: U-MS5 added none on any listing node, and U-EDIT-1 (C8) adds exactly ONE app-graph editor-toolbar toggle (src/renderer/sidebar-panes.ts: no new registerHandlerDef on any listing node)', () => {
     const src = readFileSync(
       fileURLToPath(new URL('../src/renderer/sidebar-panes.ts', import.meta.url)),
       'utf8',
     )
     const count = src.match(/registerHandlerDef\(/g)?.length ?? 0
-    expect(count).toBe(12)
+    // 12 (pre-U-EDIT-1) + 1 (U-EDIT-1 `editor-toolbar-editing-mode-toggle`, the
+    // app-graph editor toolbar — NOT a listing node / NOT an operator control).
+    expect(count).toBe(13)
   })
 })
 

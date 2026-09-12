@@ -9,6 +9,21 @@ import type { RagQueryResult } from '../shared/types.js'
 import type { EngineRagResult, HealthReport, ConflictError } from '../main/engine-rag-store.js'
 import type { Document, DocumentList, Wiki } from '../main/engine-crud-rag-store.js'
 import type { PaneRegistry, PaneDefinition, PaneContext } from './pane-registry.js'
+import { clickableClasses } from './render-shared.js'
+import {
+  HOVER_PREVIEW_ENTER_BODY,
+  HOVER_PREVIEW_ENTER_HANDLER,
+  HOVER_PREVIEW_LEAVE_BODY,
+  HOVER_PREVIEW_LEAVE_HANDLER,
+  hoverPreviewPopup,
+  resolveHoverPreview,
+} from './hover-preview.js'
+import type { EditingMode } from '../shared/types.js'
+import {
+  buildDocumentTree,
+  selectDocumentIdsByPathPrefix,
+  type DocumentTreeNode,
+} from '../shared/document-tree.js'
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
  *  MUST emit a `container`-role producer for this zone (the Unit C HARD
@@ -181,39 +196,212 @@ export function deriveDocNavDocuments(
   return docs
 }
 
-/** The `doc-nav` pane content: a `ul` of `li` document entries. The current
- *  document's `li` carries `props['data-current'] = 'true'`. Empty list → a
- *  single `p` with content `(no documents)`. Unit V3 — reads `ctx.docHeads`. */
-export function docNavContent(ctx: PaneContext): LegacyNodeData {
+// ===========================================================================
+// U-PARITY-DOCNAV (G2) — the doc-nav DERIVED tree + dispatchable nodes.
+// PG14 (W1-Q16): every item carries a handler so `provident.dispatch` and a DOM
+// click are equivalent. The C15 `buildDocumentTree`/`selectDocumentIdsByPathPrefix`
+// helpers supply the folder/leaf derivation (the U-D4 data model is reused
+// UNCHANGED). PURE (no Electron/fs/store/DOM).
+// ===========================================================================
+
+/** The doc-nav folder-toggle handler name. The body is authored INLINE on the
+ *  folder node (below) and calls the SAME `window.provident.sidebar.docNavToggle`
+ *  host seam the DOM click uses — `provident.dispatch` and a DOM click are
+ *  equivalent (PG14 / W1-Q16). */
+export const DOC_NAV_TOGGLE_HANDLER = 'pane-doc-nav-toggle'
+
+/** The doc-nav leaf-select handler name (registered in `sidebar-panes.ts`). Its
+ *  body calls the SAME `window.provident.sidebar.selectDocument(id)`
+ *  application seam the DOM click uses (PG14 / W1-Q16). */
+export const DOC_NAV_SELECT_HANDLER = 'pane-doc-nav-select'
+
+/** The inline folder-toggle body (a full function-expression string, the same
+ *  form the gnosis pane bodies use). It reads the folder's authored
+ *  `data-folder-path` key and routes it to the host seam, which flips the
+ *  expanded set + re-derives. A malformed node is a no-op — never a throw. */
+const DOC_NAV_TOGGLE_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.docNavToggle !== 'function') return;
+  var key = ctx && ctx.node && ctx.node.props && ctx.node.props['data-folder-path'];
+  if (key) s.docNavToggle(String(key));
+}`
+
+/** The doc-nav tree render options. `expandedPaths` is the host's expanded
+ *  folder set (each entry a `JSON.stringify(path[]))` key) — a folder renders
+ *  its children only when its key is present (expand/collapse). `pathPrefix`
+ *  narrows via the C15 `selectDocumentIdsByPathPrefix`; `tags` keeps only
+ *  leaves carrying ALL the requested tags. Filters are AND-combined;
+ *  omitted/`[]` is a no-op. */
+export interface DocNavRenderOptions {
+  expandedPaths?: ReadonlyArray<string>
+  pathPrefix?: string[]
+  tags?: string[]
+}
+
+type DocHeadList = NonNullable<PaneContext['docHeads']>
+
+/** Normalize + dedupe (first wins) the doc-heads list, coercing the display
+ *  fields. PURE + TOTAL — never throws on malformed input. */
+function normalizeDocNavHeads(docHeads: unknown): DocHeadList {
+  if (!Array.isArray(docHeads)) return []
+  const seen = new Set<string>()
+  const docs: DocHeadList = []
+  for (const raw of docHeads) {
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const d = raw as { documentId?: unknown; title?: unknown; path?: unknown; tags?: unknown }
+    if (typeof d.documentId !== 'string' || d.documentId === '') continue
+    if (seen.has(d.documentId)) continue
+    seen.add(d.documentId)
+    docs.push({
+      documentId: d.documentId,
+      title: typeof d.title === 'string' ? d.title : '',
+      path: Array.isArray(d.path) ? (d.path as string[]) : [],
+      tags: Array.isArray(d.tags) ? (d.tags as string[]) : [],
+    })
+  }
+  return docs
+}
+
+/** Apply the optional tree filter (state 3). PURE. */
+function filterDocNavHeads(docs: DocHeadList, options?: DocNavRenderOptions): DocHeadList {
+  if (options == null) return docs
+  let out = docs
+  const prefix = options.pathPrefix
+  if (Array.isArray(prefix) && prefix.length > 0) {
+    const ids = new Set(selectDocumentIdsByPathPrefix(docs, prefix))
+    out = out.filter((d) => ids.has(d.documentId))
+  }
+  const tags = options.tags
+  if (Array.isArray(tags) && tags.length > 0) {
+    out = out.filter((d) => tags.every((t) => d.tags.includes(t)))
+  }
+  return out
+}
+
+/** Render ONE derived tree node to provident data. Folders carry the
+ *  `pane-doc-nav-toggle` handler + `is-clickable`; leaves carry the
+ *  `pane-doc-nav-select` handler + `is-clickable`. An EXPANDED folder renders a
+ *  nested `<ul>` of its children; a collapsed folder renders none (the toggle
+ *  handler flips the host's expanded set → re-derive). PURE. */
+function renderDocNavNode(
+  node: DocumentTreeNode,
+  currentDocumentId: string | null,
+  expanded: ReadonlySet<string>,
+): LegacyNodeData {
+  if (node.kind === 'folder') {
+    const key = JSON.stringify(node.path)
+    const isExpanded = expanded.has(key)
+    return {
+      type: 'li',
+      props: {
+        'data-folder-path': key,
+        'data-folder-label': node.label,
+        'data-expanded': isExpanded ? 'true' : 'false',
+      },
+      css: { classes: clickableClasses() },
+      content: node.label,
+      handlers: [{ name: DOC_NAV_TOGGLE_HANDLER, event: 'click', body: DOC_NAV_TOGGLE_BODY }],
+      ...(isExpanded
+        ? { children: [{ type: 'ul', props: { 'data-folder-children': key }, children: [] }] }
+        : {}),
+    }
+  }
+  return {
+    type: 'li',
+    props: {
+      'data-document-id': node.documentId,
+      ...(node.documentId === currentDocumentId ? { 'data-current': 'true' } : {}),
+    },
+    css: { classes: clickableClasses() },
+    content: node.title ?? '', // LOW-4 (adversarial): a missing title → '' (never `content: undefined`)
+    handlers: [{ name: DOC_NAV_SELECT_HANDLER, event: 'click' }],
+  }
+}
+
+/** Flatten the derived tree into nested provident `li`/`ul` data using an
+ *  EXPLICIT STACK (depth-safe — a path of any finite depth renders without a
+ *  call-stack overflow, mirroring `buildDocumentTree`'s iterative walk). PURE. */
+function renderDocNavTree(
+  nodes: DocumentTreeNode[],
+  currentDocumentId: string | null,
+  expanded: ReadonlySet<string>,
+): LegacyNodeData[] {
+  const root: LegacyNodeData[] = []
+  const stack: Array<{ nodes: DocumentTreeNode[]; out: LegacyNodeData[] }> = [{ nodes, out: root }]
+  while (stack.length > 0) {
+    const frame = stack.pop() as { nodes: DocumentTreeNode[]; out: LegacyNodeData[] }
+    for (const node of frame.nodes) {
+      const rendered = renderDocNavNode(node, currentDocumentId, expanded)
+      frame.out.push(rendered)
+      if (node.kind === 'folder' && Array.isArray(rendered.children) && rendered.children.length > 0) {
+        const childUl = rendered.children[0] as LegacyNodeData
+        stack.push({ nodes: node.children, out: childUl.children as LegacyNodeData[] })
+      }
+    }
+  }
+  return root
+}
+
+/** The `doc-nav` pane content (U-PARITY-DOCNAV): a DERIVED folder/leaf tree
+ *  from the C15 `RagDocHeadsPayload.documents[].path` (via `buildDocumentTree`).
+ *  Folder toggles are dispatchable (`pane-doc-nav-toggle`); leaves select via
+ *  the shared `selectDocument` seam (`pane-doc-nav-select`). The current
+ *  document's leaf carries `props['data-current'] = 'true'`. A null/malformed
+ *  list OR an empty corpus → a single `p` with content `(no documents)`. When
+ *  the tree helper yields nothing for a non-empty list, the pre-U-PARITY flat
+ *  render is preserved (defensive fallback). `options.expandedPaths` expands
+ *  folders. PURE + TOTAL. */
+export function docNavContent(ctx: PaneContext, options?: DocNavRenderOptions): LegacyNodeData {
   // H1 (adversarial): a null ctx or a null/missing ctx.docHeads must survive →
   // the "(no documents)" empty state, never a TypeError.
   if (ctx == null || ctx.docHeads == null) {
     return { type: 'p', content: '(no documents)' }
   }
-  const docs = deriveDocNavDocuments(ctx.docHeads)
+  const docs = filterDocNavHeads(normalizeDocNavHeads(ctx.docHeads), options)
   if (docs.length === 0) return { type: 'p', content: '(no documents)' }
-  return {
-    type: 'ul',
-    children: docs.map((d) => ({
-      type: 'li',
-      props: {
-        'data-document-id': d.documentId,
-        ...(d.documentId === ctx.currentDocumentId ? { 'data-current': 'true' } : {}),
-      },
-      content: d.title ?? '', // LOW-4 (adversarial): a missing title → '' (never `content: undefined`)
-    })),
+  const tree = buildDocumentTree(docs)
+  if (tree.length === 0) {
+    // Defensive flat fallback — preserve the flat render when the C15 tree
+    // helper yields nothing for a non-empty (but malformed) list.
+    return {
+      type: 'ul',
+      children: deriveDocNavDocuments(docs).map((d) => ({
+        type: 'li',
+        props: {
+          'data-document-id': d.documentId,
+          ...(d.documentId === ctx.currentDocumentId ? { 'data-current': 'true' } : {}),
+        },
+        css: { classes: clickableClasses() },
+        content: d.title ?? '',
+        handlers: [{ name: DOC_NAV_SELECT_HANDLER, event: 'click' }],
+      })),
+    }
   }
+  const expanded = new Set(options?.expandedPaths ?? [])
+  return { type: 'ul', children: renderDocNavTree(tree, ctx.currentDocumentId, expanded) }
+}
+
+/** U-PARITY-C19 — the crosslinks pane's hover-preview render options. The host
+ *  passes the shell controller's active target id (null when no popup) + the
+ *  computed position (F3). */
+export interface CrosslinksRenderOptions {
+  hoverPreviewId?: string | null
+  hoverPreviewPosition?: 'above' | 'below'
 }
 
 /** The `crosslinks` pane content: two `section`s — "Outgoing crosslinks" (one
- *  `li` per `ctx.crosslinks` entry, `data-target`) and "Backlinks / outlinks"
+ *  `li` per `ctx.crosslinks` entry, `data-target`, with the C19
+ *  `on:mouseover`/`on:mouseout` hover-preview pair) and "Backlinks / outlinks"
  *  (one `li` per `crosslinkBacklinks` + one per `crosslinkOutlinks`, each
  *  carrying `data-source`/`data-target`/`data-scope`). A `null` result or a
  *  `null` currentNodeId → the enumeration is skipped (the backlink list is
- *  empty, never a crash). */
+ *  empty, never a crash). When `options.hoverPreviewId` resolves to a known
+ *  target, the C19 popup subtree is appended ABOVE the link (one popup at a
+ *  time — F2); a dangling target authors no popup (F1). */
 export function crosslinksContent(
   ctx: PaneContext,
   result: BacklinkResult | null,
+  options?: CrosslinksRenderOptions,
 ): LegacyNodeData {
   // H1 (adversarial): a null ctx or a null/missing ctx.crosslinks must survive →
   // the empty-state sections (the outgoing list shows "(none)"), never a
@@ -221,8 +409,13 @@ export function crosslinksContent(
   const crosslinks = ctx == null || ctx.crosslinks == null ? [] : ctx.crosslinks
   const outgoingLis: LegacyNodeData[] = crosslinks.map((cl) => ({
     type: 'li',
-    props: { 'data-target': cl.targetRagNodeId },
+    props: { 'data-target': cl.targetRagNodeId, 'data-hover-target': cl.targetRagNodeId },
+    css: { classes: clickableClasses() },
     content: cl.targetRagNodeId,
+    handlers: [
+      { name: HOVER_PREVIEW_ENTER_HANDLER, event: 'mouseover', body: HOVER_PREVIEW_ENTER_BODY },
+      { name: HOVER_PREVIEW_LEAVE_HANDLER, event: 'mouseout', body: HOVER_PREVIEW_LEAVE_BODY },
+    ],
   }))
   const outgoingSection: LegacyNodeData = {
     type: 'section',
@@ -251,20 +444,381 @@ export function crosslinksContent(
     ],
   }
 
-  return { type: 'div', children: [outgoingSection, backSection] }
+  const previewId = options?.hoverPreviewId
+  const preview =
+    typeof previewId === 'string' && previewId !== ''
+      ? resolveHoverPreview(previewId, {
+          nodes: ctx?.snapshot?.nodes ?? null,
+          docHeads: ctx?.docHeads ?? null,
+        })
+      : null
+  const popup = hoverPreviewPopup(preview, { position: options?.hoverPreviewPosition })
+
+  return { type: 'div', children: [outgoingSection, backSection, ...(popup ? [popup] : [])] }
 }
 
-/** The `search` pane content: a text `input` (`props.id = 'pane-search-input'`)
- *  + a results list (one `li` per `ranked` entry, `data-node-id` + the score).
- *  A `null` result → the input + an empty results list (never a throw). */
-export function searchContent(ctx: PaneContext, result: RagQueryResult | null): LegacyNodeData {
+// ===========================================================================
+// U-PARITY-C18 (C18/G4) — the advanced-search disclosure sub-pane
+// (docs/specs/unit-u-parity-c18-advanced-search.md §2; W1-Q9 RESOLVED).
+//
+// The `search` pane gains a collapsed-by-default disclosure exposing the full
+// `rag.query` argument surface: mode/maxHops/expand/maxParentContext/filters
+// (nodeKind/edgeType/target/state)/stores:'all' + the C15-only
+// `documentPathPrefix`/`tags` when present. Submitting routes the SAME payload
+// as `rag.query` through the shared `window.provident.sidebar.submitAdvancedQuery`
+// seam (the SAME `bridge.rag.query` the basic submit uses — MCP/UI equivalence).
+// The result detail renders citations/trace/blockedBy/results. PURE.
+// ===========================================================================
+
+/** The disclosure toggle handler name. The body is authored INLINE on the
+ *  toggle (below) and calls the SAME `window.provident.sidebar.searchAdvancedToggle`
+ *  host seam — `provident.dispatch` and a DOM click are equivalent. */
+export const ADVANCED_SEARCH_TOGGLE_HANDLER = 'pane-search-advanced-toggle'
+
+/** The advanced-search submit handler name. Its inline body collects the
+ *  field values + routes them through the shared
+ *  `window.provident.sidebar.submitAdvancedQuery` seam. */
+export const ADVANCED_SEARCH_SUBMIT_HANDLER = 'pane-search-advanced-submit'
+
+/** The advanced-search authored ids (single source of truth for the render
+ *  helpers + the submit body + the tests). */
+export const ADVANCED_SEARCH_IDS = {
+  toggle: 'advanced-search-toggle',
+  fields: 'advanced-search-fields',
+  mode: 'advanced-search-mode',
+  maxHops: 'advanced-search-max-hops',
+  expand: 'advanced-search-expand',
+  maxParentContext: 'advanced-search-max-parent-context',
+  nodeKind: 'advanced-search-filter-node-kind',
+  edgeType: 'advanced-search-filter-edge-type',
+  targetDocumentId: 'advanced-search-filter-target-document-id',
+  targetNodeId: 'advanced-search-filter-target-node-id',
+  state: 'advanced-search-filter-state',
+  stores: 'advanced-search-stores',
+  documentPathPrefix: 'advanced-search-document-path-prefix',
+  tags: 'advanced-search-tags',
+  submit: 'advanced-search-submit',
+  error: 'advanced-search-error',
+  citations: 'advanced-search-citations',
+  trace: 'advanced-search-trace',
+  blockedBy: 'advanced-search-blocked-by',
+} as const
+
+/** The advanced-search disclosure render options. `expanded` is the host's
+ *  disclosure state (collapsed by default); `documentFilters` gates the two
+ *  C15-only controls (`documentPathPrefix`/`tags`) — false/omitted → a pre-C15
+ *  host renders no broken control (F2); `error` surfaces an engine fail-state
+ *  inline (F1). */
+export interface AdvancedSearchRenderOptions {
+  expanded?: boolean
+  documentFilters?: boolean
+  error?: string | null
+}
+
+/** The engine's result-detail fields (Unit X) the search pane renders when
+ *  present. ADDITIVE to the `RagQueryResult` IPC shape. */
+export interface SearchResultDetail {
+  citations?: Array<{ documentId: string; nodeId: string; store?: string }>
+  trace?: { mode?: string; engine?: string; topK?: number; source?: string } | unknown[]
+  blockedBy?: Array<{ documentId: string; nodeId: string; state: string; store?: string }>
+  results?: Array<{ documentId: string; nodeId: string; score: number; snippet?: string; store?: string }>
+}
+
+/** The search result the pane renders: the `RagQueryResult` fields (ranked et
+ *  al.) + the optional Unit X result-detail fields. */
+export type SearchResult = Partial<RagQueryResult> & SearchResultDetail
+
+// The inline disclosure-toggle body (a full function-expression string). It
+// routes to the host seam (which flips the state + re-derives). A malformed
+// node/bridge is a no-op — never a throw.
+const ADVANCED_SEARCH_TOGGLE_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.searchAdvancedToggle !== 'function') return;
+  s.searchAdvancedToggle();
+}`
+
+// The inline submit body (a full function-expression string). It reads the
+// query input + every advanced control from the DOM (the UI path — the typed
+// values live in the DOM), builds the SAME `rag.query` payload shape the MCP
+// tool accepts, and routes it through the shared host seam. Empty/absent
+// fields are OMITTED (never junk); a partial target is dropped. `id`-only
+// bindings come from `ADVANCED_SEARCH_IDS` so the body can never drift.
+const ADVANCED_SEARCH_SUBMIT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.submitAdvancedQuery !== 'function') return;
+  function val(id) { var el = document.getElementById(id); return el && el.value != null ? String(el.value) : ''; }
+  var query = val('pane-search-input');
+  var opts = {};
+  var mode = val(${JSON.stringify(ADVANCED_SEARCH_IDS.mode)});
+  if (mode === 'flat' || mode === 'graph') opts.mode = mode;
+  var expand = val(${JSON.stringify(ADVANCED_SEARCH_IDS.expand)});
+  if (expand === 'none' || expand === 'parent') opts.expand = expand;
+  var stores = val(${JSON.stringify(ADVANCED_SEARCH_IDS.stores)});
+  if (stores === 'all') opts.stores = 'all';
+  var mh = val(${JSON.stringify(ADVANCED_SEARCH_IDS.maxHops)});
+  if (mh !== '') { var n = Number(mh); if (isFinite(n)) opts.maxHops = n; }
+  var mp = val(${JSON.stringify(ADVANCED_SEARCH_IDS.maxParentContext)});
+  if (mp !== '') { var p = Number(mp); if (isFinite(p)) opts.maxParentContext = p; }
+  var f = {};
+  var nodeKind = val(${JSON.stringify(ADVANCED_SEARCH_IDS.nodeKind)});
+  if (nodeKind) f.nodeKind = nodeKind;
+  var edgeType = val(${JSON.stringify(ADVANCED_SEARCH_IDS.edgeType)});
+  if (edgeType) f.edgeType = edgeType;
+  var state = val(${JSON.stringify(ADVANCED_SEARCH_IDS.state)});
+  if (state) f.state = state;
+  var docId = val(${JSON.stringify(ADVANCED_SEARCH_IDS.targetDocumentId)});
+  var nodeId = val(${JSON.stringify(ADVANCED_SEARCH_IDS.targetNodeId)});
+  if (docId && nodeId) f.target = { documentId: docId, nodeId: nodeId };
+  var dp = val(${JSON.stringify(ADVANCED_SEARCH_IDS.documentPathPrefix)});
+  if (dp) f.documentPathPrefix = dp.split('/').filter(Boolean);
+  var tags = val(${JSON.stringify(ADVANCED_SEARCH_IDS.tags)});
+  if (tags) f.tags = tags.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+  if (Object.keys(f).length > 0) opts.filters = f;
+  s.submitAdvancedQuery(query, opts);
+}`
+
+/** A labelled `select` control. PURE. */
+function advancedSelect(
+  id: string,
+  label: string,
+  options: Array<{ value: string; label: string }>,
+): LegacyNodeData {
+  return {
+    type: 'label',
+    content: label,
+    children: [
+      {
+        type: 'select',
+        props: { id },
+        children: options.map((o) => ({ type: 'option', props: { value: o.value }, content: o.label })),
+      },
+    ],
+  }
+}
+
+/** A labelled `input` control. PURE. */
+function advancedInput(id: string, label: string, type: string, extra: Record<string, unknown> = {}): LegacyNodeData {
+  return {
+    type: 'label',
+    content: label,
+    children: [{ type: 'input', props: { id, type, ...extra } }],
+  }
+}
+
+/** The advanced-search fieldset. The two C15-only controls render only when
+ *  `documentFilters` is true (F2 — a pre-C15 host omits them, never breaks). */
+function advancedSearchFields(documentFilters: boolean): LegacyNodeData {
+  return {
+    type: 'fieldset',
+    props: { id: ADVANCED_SEARCH_IDS.fields },
+    children: [
+      advancedSelect(ADVANCED_SEARCH_IDS.mode, 'Mode', [
+        { value: '', label: '(default)' },
+        { value: 'flat', label: 'flat' },
+        { value: 'graph', label: 'graph' },
+      ]),
+      advancedInput(ADVANCED_SEARCH_IDS.maxHops, 'Max hops', 'number', { min: '1', max: '5' }),
+      advancedSelect(ADVANCED_SEARCH_IDS.expand, 'Expand', [
+        { value: '', label: '(default)' },
+        { value: 'none', label: 'none' },
+        { value: 'parent', label: 'parent' },
+      ]),
+      advancedInput(ADVANCED_SEARCH_IDS.maxParentContext, 'Max parent context', 'number', { min: '1' }),
+      advancedSelect(ADVANCED_SEARCH_IDS.nodeKind, 'Filter: node kind', [
+        { value: '', label: '(any)' },
+        { value: 'content', label: 'content' },
+        { value: 'fact', label: 'fact' },
+        { value: 'reference', label: 'reference' },
+      ]),
+      advancedSelect(ADVANCED_SEARCH_IDS.edgeType, 'Filter: edge type', [
+        { value: '', label: '(any)' },
+        { value: 'link', label: 'link' },
+        { value: 'embed', label: 'embed' },
+      ]),
+      advancedInput(ADVANCED_SEARCH_IDS.targetDocumentId, 'Filter: target document id', 'text'),
+      advancedInput(ADVANCED_SEARCH_IDS.targetNodeId, 'Filter: target node id', 'text'),
+      advancedSelect(ADVANCED_SEARCH_IDS.state, 'Filter: state', [
+        { value: '', label: '(any)' },
+        { value: 'FRESH', label: 'FRESH' },
+        { value: 'RESOLVED', label: 'RESOLVED' },
+        { value: 'STALE', label: 'STALE' },
+        { value: 'BROKEN', label: 'BROKEN' },
+      ]),
+      advancedSelect(ADVANCED_SEARCH_IDS.stores, 'Stores', [
+        { value: '', label: '(default store)' },
+        { value: 'all', label: 'all (fan-out)' },
+      ]),
+      ...(documentFilters
+        ? [
+            advancedInput(ADVANCED_SEARCH_IDS.documentPathPrefix, 'Filter: document path prefix', 'text'),
+            advancedInput(ADVANCED_SEARCH_IDS.tags, 'Filter: tags (comma-separated)', 'text'),
+          ]
+        : []),
+      {
+        type: 'button',
+        props: { id: ADVANCED_SEARCH_IDS.submit },
+        css: { classes: clickableClasses() },
+        content: 'Run advanced search',
+        handlers: [{ name: ADVANCED_SEARCH_SUBMIT_HANDLER, event: 'click', body: ADVANCED_SEARCH_SUBMIT_BODY }],
+      },
+    ],
+  }
+}
+
+/** The `search` pane content (U-PARITY-C18): the text `input`
+ *  (`props.id = 'pane-search-input'`) + the advanced-search disclosure sub-pane
+ *  (collapsed by default; `options.expanded` reveals the W1-Q9 fields) + the
+ *  result detail. The detail renders the `results`/`ranked` list + (when
+ *  present) `citations`/`trace`/`blockedBy`; an engine error
+ *  (`options.error`) renders inline (F1); an empty result renders the empty
+ *  state (F3). A `null` result → the input + the disclosure + the empty state
+ *  (never a throw). */
+export function searchContent(
+  ctx: PaneContext,
+  result: SearchResult | null,
+  options?: AdvancedSearchRenderOptions,
+): LegacyNodeData {
+  const expanded = options?.expanded === true
   const input: LegacyNodeData = { type: 'input', props: { id: 'pane-search-input' } }
-  const lis: LegacyNodeData[] = (result?.ranked ?? []).map((r) => ({
-    type: 'li',
-    props: { 'data-node-id': r.nodeId },
-    content: `${r.nodeId} — ${String(r.score)}`,
-  }))
-  return { type: 'div', children: [input, ...lis] }
+  const toggle: LegacyNodeData = {
+    type: 'button',
+    props: { id: ADVANCED_SEARCH_IDS.toggle, 'data-expanded': expanded ? 'true' : 'false' },
+    css: { classes: clickableClasses() },
+    content: expanded ? 'Hide advanced search' : 'Advanced search',
+    handlers: [{ name: ADVANCED_SEARCH_TOGGLE_HANDLER, event: 'click', body: ADVANCED_SEARCH_TOGGLE_BODY }],
+  }
+  const advanced: LegacyNodeData[] = expanded ? [advancedSearchFields(options?.documentFilters === true)] : []
+
+  // ---- result detail ----
+  // Prefer the engine's `results` (documentId/nodeId/snippet); fall back to the
+  // local `ranked` list. Both keep the top-level `li` + `data-node-id` shape.
+  const children: LegacyNodeData[] = [input, toggle, ...advanced]
+  const resultItems: unknown[] = (result?.results ?? result?.ranked ?? []) as unknown[]
+  const lis: LegacyNodeData[] = resultItems.map((raw) => {
+    const r = raw as { documentId?: string; nodeId?: string; score?: unknown; snippet?: string }
+    if (r.documentId !== undefined) {
+      return {
+        type: 'li',
+        props: { 'data-document-id': r.documentId, 'data-node-id': r.nodeId ?? '', 'data-score': String(r.score) },
+        content: `${r.documentId}/${r.nodeId ?? ''} — ${String(r.score)} — ${String(r.snippet ?? '')}`,
+      }
+    }
+    return { type: 'li', props: { 'data-node-id': r.nodeId ?? '' }, content: `${r.nodeId ?? ''} — ${String(r.score)}` }
+  })
+  if (lis.length === 0) {
+    children.push({ type: 'p', props: { 'data-empty': 'true' }, content: '(no results)' })
+  } else {
+    children.push(...lis)
+  }
+
+  const citations = result?.citations ?? []
+  if (citations.length > 0) {
+    children.push({ type: 'strong', content: 'Citations' })
+    children.push({
+      type: 'ul',
+      props: { id: ADVANCED_SEARCH_IDS.citations },
+      children: citations.map((c) => ({
+        type: 'li',
+        props: { 'data-document-id': c.documentId, 'data-node-id': c.nodeId },
+        content: `${c.documentId}:${c.nodeId}`,
+      })),
+    })
+  }
+
+  const trace = result?.trace
+  if (trace !== undefined && trace !== null) {
+    if (Array.isArray(trace)) {
+      children.push({ type: 'strong', content: 'Trace' })
+      children.push({
+        type: 'ul',
+        props: { id: ADVANCED_SEARCH_IDS.trace },
+        children: trace.map((t) => {
+          const e = t as { from?: { documentId?: string; nodeId?: string }; to?: { documentId?: string; nodeId?: string }; edge?: string; state?: string }
+          return {
+            type: 'li',
+            props: { 'data-edge': e.edge ?? '', 'data-state': e.state ?? '' },
+            content: `${e.from?.documentId ?? ''}:${e.from?.nodeId ?? ''} → ${e.to?.documentId ?? ''}:${e.to?.nodeId ?? ''} (${e.edge ?? ''})`,
+          }
+        }),
+      })
+    } else {
+      const t = trace as { mode?: string }
+      children.push({
+        type: 'p',
+        props: { id: ADVANCED_SEARCH_IDS.trace, 'data-trace-mode': t.mode ?? 'flat' },
+        content: `Trace mode: ${t.mode ?? 'flat'}`,
+      })
+    }
+  }
+
+  const blockedBy = result?.blockedBy ?? []
+  if (blockedBy.length > 0) {
+    children.push({ type: 'strong', content: 'Blocked by' })
+    children.push({
+      type: 'ul',
+      props: { id: ADVANCED_SEARCH_IDS.blockedBy },
+      children: blockedBy.map((b) => ({
+        type: 'li',
+        props: { 'data-document-id': b.documentId, 'data-node-id': b.nodeId, 'data-state': b.state },
+        content: `Blocked by ${b.documentId}:${b.nodeId} (${b.state})`,
+      })),
+    })
+  }
+
+  const error = options?.error
+  if (error != null && error !== '') {
+    children.push({ type: 'p', props: { id: ADVANCED_SEARCH_IDS.error }, content: String(error) })
+  }
+
+  return { type: 'div', children }
+}
+
+// ===========================================================================
+// Unit U-EDIT-1 (C8) — the central-stage editor-toolbar markdown/html toggle
+// (docs/specs/unit-u-edit-1-markdown-html-toggle.md §2). The control is
+// APP-GRAPH authored (MCP-visible) — unlike the OPERATOR-scoped settings
+// button. It reflects the CURRENT `editingMode` (`data-mode`/label) and its
+// `on:click` handler (registered in the host) FLIPS the mode through the
+// existing operator-settings seam. PURE.
+// ===========================================================================
+
+/** The app-graph editor-toolbar css/props ids + the registered toggle handler
+ *  name (the host registers the body via `registerHandlerDef`). */
+export const EDITOR_TOOLBAR_ID = 'editor-toolbar'
+export const EDITOR_TOOLBAR_TOGGLE_ID = 'editor-toolbar-toggle'
+export const EDITOR_TOOLBAR_TOGGLE_HANDLER = 'editor-toolbar-editing-mode-toggle'
+
+/** The `editingMode` → representation label (W1-Q6: Markdown↔textarea,
+ *  HTML↔contenteditable). PURE + TOTAL (junk coerces to the contenteditable
+ *  default, mirroring the host/store coercion). */
+export function editingModeLabel(editingMode: EditingMode): 'Markdown' | 'HTML' {
+  return editingMode === 'textarea' ? 'Markdown' : 'HTML'
+}
+
+/** The central-stage editor toolbar content (app-graph). A `div` toolbar
+ *  carrying a mode readout (`editor-toolbar-mode`) + a `button`
+ *  (`editor-toolbar-toggle`) whose `data-mode` reflects the CURRENT mode and
+ *  whose click handler (name-referenced) flips it. The appended
+ *  `data-target-mode` documents the flip for agents. PURE. */
+export function editorToolbarContent(editingMode: EditingMode, zone = 'main'): LegacyNodeData {
+  const current: EditingMode = editingMode === 'textarea' ? 'textarea' : 'contenteditable'
+  const label = editingModeLabel(current)
+  const next: EditingMode = current === 'contenteditable' ? 'textarea' : 'contenteditable'
+  return {
+    type: 'div',
+    props: { id: EDITOR_TOOLBAR_ID, 'data-mode': current, 'data-role': 'editor-toolbar' },
+    placement: { targetPlacement: [zone] },
+    children: [
+      { type: 'span', props: { id: 'editor-toolbar-mode' }, content: `Editing: ${label}` },
+      {
+        type: 'button',
+        props: { id: EDITOR_TOOLBAR_TOGGLE_ID, 'data-mode': current, 'data-target-mode': next },
+        css: { classes: clickableClasses() },
+        content: label,
+        handlers: [{ name: EDITOR_TOOLBAR_TOGGLE_HANDLER, event: 'click' }],
+      },
+    ],
+  }
 }
 
 // ===========================================================================
@@ -484,6 +1038,7 @@ export function gnosisDocumentsContent(
   const wikiLis: LegacyNodeData[] = wikis.map((w) => ({
     type: 'li',
     props: { 'data-wiki-id': w.wikiId },
+    css: { classes: clickableClasses() },
     content: w.name,
     handlers: [{ name: 'gnosis-documents-select-wiki', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY }],
   }))
@@ -498,6 +1053,7 @@ export function gnosisDocumentsContent(
     wikiLis.push({
       type: 'li',
       props: { 'data-wiki-id': '' },
+      css: { classes: clickableClasses() },
       content: 'No wikis',
       handlers: [{ name: 'gnosis-documents-select-wiki', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_WIKI_BODY }],
     })
@@ -530,6 +1086,7 @@ export function gnosisDocumentsContent(
     const docLis: LegacyNodeData[] = docItems.map((d) => ({
       type: 'li',
       props: { 'data-document-id': d.documentId, 'data-revision': String(d.revision ?? 0) },
+      css: { classes: clickableClasses() },
       content: `${d.title ?? ''} (${d.state ?? ''})`,
       handlers: [{ name: 'gnosis-documents-select-doc', event: 'click', body: GNOSIS_DOCUMENTS_SELECT_DOC_BODY }],
     }))
@@ -577,6 +1134,7 @@ export function gnosisWikisContent(
   const wikiLis: LegacyNodeData[] = state.wikis.map((w) => ({
     type: 'li',
     props: { 'data-wiki-id': w.wikiId },
+    css: { classes: clickableClasses() },
     content: w.name,
     handlers: [{ name: 'gnosis-wikis-select', event: 'click', body: GNOSIS_WIKIS_SELECT_BODY }],
   }))
