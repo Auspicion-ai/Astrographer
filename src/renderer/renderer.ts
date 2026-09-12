@@ -170,7 +170,7 @@ async function main(): Promise<void> {
   const editController = createEditController({
     backRefs,
     commit: (nodeId, content) => bridge!.edit!.commit(nodeId, content),
-    onRebuild: () => void host.reDerive(),
+    onRebuild: (kind) => void host.reDerive(kind),
   })
   // Unit K §5.1 — the SidebarPanes host. The renderer constructs the host with
   // the app mount (#app), the operator mount (#operator-panes — a NEW element,

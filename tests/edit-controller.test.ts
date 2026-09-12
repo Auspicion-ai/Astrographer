@@ -261,3 +261,25 @@ describe('edit-controller — Unit D editing controller (unit-d-editing.md §5.2
     expect(controller.hasQueuedRebuild()).toBe(false)
   })
 })
+
+// U-STATE-1b — the rebuild kind (change-kind dispatch).
+describe('U-STATE-1b — rebuild kind dispatch', () => {
+  it('carries the kind and coalesces by precedence template > operator > content', () => {
+    const backRefs = new Map<string, string[]>([['n1', ['x']]])
+    const kinds: string[] = []
+    const c = createEditController({
+      backRefs,
+      commit: async () => ({ ok: true, nodeId: 'n1' }),
+      onRebuild: (k) => kinds.push(k),
+    })
+    c.markDirty('n1')
+    c.requestRebuild('content')
+    c.requestRebuild('template') // strongest wins
+    expect(kinds).toEqual([]) // queued behind the dirty guard
+    c.clearDirty('n1')
+    expect(kinds).toEqual(['template'])
+    // an immediate (clean) request carries its own kind
+    c.requestRebuild('operator')
+    expect(kinds).toEqual(['template', 'operator'])
+  })
+})

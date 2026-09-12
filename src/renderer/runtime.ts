@@ -27,11 +27,13 @@ import {
   Node,
   type RenderOp,
   type LegacyInitialData,
+  type LegacyNodeData,
   type RenderOptions,
   type SerializedRenderDoc,
   type Payload,
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
+import type { ReconcileResult } from './content-reconcile.js'
 import type {
   DispatchRequest,
   DispatchResult,
@@ -72,6 +74,45 @@ export interface RuntimeOptions {
   transformRouter?: CapabilityRouter
 }
 
+/** U-STATE-1b — the input to `Runtime.applyContentReconcile`. */
+export interface ApplyReconcileInput {
+  /** The reconcile buckets (from `reconcileContentRoots`). */
+  result: ReconcileResult
+  /** The fresh traversal envelope whose payload content supplies the
+   *  added/replaced roots' node data. */
+  next: LegacyInitialData
+}
+
+/** U-STATE-1b — the report from `Runtime.applyContentReconcile`. */
+export interface ApplyReconcileReport {
+  /** The content-root css ids actually applied (attached/updated/destroyed). */
+  applied: string[]
+  /** Non-fatal warnings (a root whose next node data was not found, etc.). */
+  warnings: string[]
+}
+
+/** U-STATE-1b — the content roots of an envelope: `rag-<id>` document subtrees
+ *  AND `pane-<id>` app-graph panes, in payload order. Overlays are excluded. */
+function extractContentRoots(envelope: LegacyInitialData | null | undefined): LegacyNodeData[] {
+  const out: LegacyNodeData[] = []
+  const payloads = envelope?.content
+  if (!Array.isArray(payloads)) return out
+  for (const payload of payloads) {
+    const nodes = (payload as { content?: unknown } | null | undefined)?.content
+    if (!Array.isArray(nodes)) continue
+    for (const node of nodes) {
+      const id = (node?.props as { id?: unknown } | undefined)?.id
+      if (
+        typeof id === 'string' &&
+        ((id.startsWith('rag-') && id.length > 4) || (id.startsWith('pane-') && id.length > 5))
+      ) {
+        out.push(node as LegacyNodeData)
+      }
+    }
+  }
+  return out
+}
+
 export class Runtime {
   private supervisor: Supervisor
   private readonly adapter: DomAdapter
@@ -107,17 +148,30 @@ export class Runtime {
    *  is MCP-visible, never a silently dead page. */
   private warnings: TranslatedWarning[] = []
 
+  /** U-STATE-1b — the currently materialized content roots (`rag-` envelope
+   *  nodes), maintained across content-only reconciles. NOT the panes. */
+  private contentRoots: LegacyNodeData[] = []
+
+  /** U-STATE-1c — the ONE app-graph `LinkConfigNameHub`. Placement/component
+   *  anchors resolve per hub, so a persistent hub lets U-STATE-1b translate a
+   *  changed content root into the LIVE graph and `placement-attach` it to the
+   *  live `zone:<name>` container. Recreated only on a full reset
+   *  (`loadEnvelope`/`loadDoc`/teardown), never on a content change. */
+  private hub: ReturnType<typeof createLinkHub>
+
   constructor(opts: RuntimeOptions) {
     this.mount = opts.mount
     this.maxJournalLength = opts.maxJournalLength
     this.transformRouter = opts.transformRouter ?? null
-    const translated = translateLegacy(opts.envelope)
+    this.hub = createLinkHub()
+    const translated = translateLegacy(opts.envelope, { hub: this.hub })
     this.rootNode = translated.root
     this.nodes = translated.nodes
     this.supervisor = new Supervisor({ events: new EventBridge(), maxJournalLength: opts.maxJournalLength })
     for (const n of translated.nodes) this.supervisor.registerNode(n)
     this.adapter = new DomAdapter(opts.mount, { onEvent: this.handleDomEvent })
     this.payloads = this.buildPayloads(translated.content, opts.envelope.content)
+    this.contentRoots = extractContentRoots(opts.envelope)
     this.rebuildIdIndex()
   }
 
@@ -332,7 +386,7 @@ export class Runtime {
       if (env.content.length === 0) env.content.push({ content: [] })
       env.content[0].userData = opts.userData
     }
-    const translated = translateLegacy(env)
+    const translated = translateLegacy(env, { hub: (this.hub = createLinkHub()) })
     this.resolveNameReferencedHandlerBodies(translated.nodes)
     this.rootNode = translated.root
     this.nodes = translated.nodes
@@ -340,11 +394,130 @@ export class Runtime {
     for (const n of translated.nodes) this.supervisor.registerNode(n)
     this.payloads = this.buildPayloads(translated.content, translated.userData)
     this.envelope = env
+    this.contentRoots = extractContentRoots(env)
     this.warnings = translated.warnings ?? []
     this.rebuildIdIndex()
     this.resetRenderState()
     this.render()
     return this.census()
+  }
+
+  /** U-STATE-1c — admit translated content nodes into the LIVE app graph
+   *  (register into the persistent Supervisor + track in `this.nodes`), with
+   *  name-referenced handler-body resolution. A no-op for an empty list. Used
+   *  by the U-STATE-1b attach path. */
+  admitContentNodes(nodes: Node[]): void {
+    if (!Array.isArray(nodes) || nodes.length === 0) return
+    this.resolveNameReferencedHandlerBodies(nodes as Array<{ handlers?: unknown }>)
+    for (const n of nodes) {
+      this.supervisor.registerNode(n)
+      this.nodes.push(n)
+    }
+  }
+
+  /** U-STATE-1b — the currently materialized content roots as envelope nodes
+   *  (the reconciler's `previous`). A copy; callers cannot mutate the store. */
+  materializedContentRoots(): LegacyNodeData[] {
+    return [...this.contentRoots]
+  }
+
+  /** U-STATE-1b — apply a content reconcile WITHOUT tearing the graph down
+   *  (C10). Destroys only the `removed` roots, attaches the `added`, and
+   *  replaces the `replaced` roots — all through the managed channel. The
+   *  template + zone producers + pane roots are untouched. Whole-root replace
+   *  v1 (A3). Content-only for document roots; pane re-attachment is the host's
+   *  (U-STATE-1c). */
+  applyContentReconcile(input: ApplyReconcileInput): ApplyReconcileReport {
+    if (input == null || input.result == null || input.next == null) {
+      throw new Error('applyContentReconcile: result/next required')
+    }
+    const warnings: string[] = []
+    const applied: string[] = []
+    const nextById = new Map<string, LegacyNodeData>()
+    for (const n of extractContentRoots(input.next)) {
+      const id = (n.props as { id?: unknown } | undefined)?.id
+      if (typeof id === 'string') nextById.set(id, n as LegacyNodeData)
+    }
+
+    const destroyRoot = (cssId: string): boolean => {
+      // AF2 — only reconcile content roots (`rag-` document subtrees or `pane-`
+      // panes); never let a malformed/hostile bucket entry destroy the
+      // template/zone nodes.
+      const isRoot = typeof cssId === 'string' && ((cssId.startsWith('rag-') && cssId.length > 4) || (cssId.startsWith('pane-') && cssId.length > 5))
+      if (!isRoot) return false
+      const node = this.nodeByPropsId(cssId)
+      if (!node) return false
+      const subtree = new Set<string>()
+      const walk = (n: Node): void => {
+        subtree.add(n.id)
+        for (const c of (n as unknown as { children: Node[] }).children ?? []) walk(c)
+      }
+      walk(node)
+      for (const n of this.supervisor.allNodes()) {
+        if (subtree.has(n.id) && !n.destroyed) this.supervisor.apply({ kind: 'destroy', node: n })
+      }
+      // AF5 — prune the destroyed nodes from `this.nodes` (it is never rebuilt
+      // on the reconcile path, so a leak accumulates otherwise).
+      this.nodes = this.nodes.filter((n) => !subtree.has(n.id))
+      return true
+    }
+
+    const attachRoot = (envNode: LegacyNodeData): boolean => {
+      // U-STATE-1b/1c — translate into the LIVE app-graph hub so the new
+      // content-root's `targetPlacement` anchor joins the same per-name Link as
+      // the live `zone:<name>` container (AF1 root cause: an anonymous hub).
+      const mini = translateLegacy(
+        {
+          template: { root: { type: 'div' } },
+          content: [{ content: [envNode] }],
+          clientConfig: { runInstantiation: true, runRendering: true },
+        } as never,
+        { hub: this.hub },
+      )
+      const contentNodes = mini.content as unknown as Node[]
+      if (contentNodes.length === 0) return false
+      const rootId = (mini.root as unknown as Node).id
+      this.admitContentNodes((mini.nodes as unknown as Node[]).filter((n) => n.id !== rootId))
+      // Force a fresh bootstrap compile so the newly admitted nodes are
+      // compiled/recorded (render() on a bootstrapped graph emits from
+      // prevStates). No teardown — the persistent scaffolding is intact.
+      this.bootstrapped = false
+      return true
+    }
+
+    for (const r of input.result.removed) {
+      if (destroyRoot(r.cssId)) applied.push(r.cssId)
+      else warnings.push(`applyContentReconcile: removed root not found: ${r.cssId}`)
+    }
+    for (const r of input.result.added) {
+      const envNode = nextById.get(r.cssId)
+      if (envNode == null) {
+        warnings.push(`applyContentReconcile: added root missing from next: ${r.cssId}`)
+        continue
+      }
+      if (attachRoot(envNode)) applied.push(r.cssId)
+      else warnings.push(`applyContentReconcile: added root produced no nodes: ${r.cssId}`)
+    }
+    for (const r of input.result.replaced) {
+      const envNode = nextById.get(r.cssId)
+      if (envNode == null) {
+        warnings.push(`applyContentReconcile: replaced root missing from next: ${r.cssId}`)
+        continue
+      }
+      destroyRoot(r.cssId)
+      if (attachRoot(envNode)) applied.push(r.cssId)
+      else warnings.push(`applyContentReconcile: replaced root produced no nodes: ${r.cssId}`)
+    }
+
+    this.contentRoots = extractContentRoots(input.next)
+    // AF3 — keep the code-CRUD source of truth (`this.envelope`) in step with
+    // the reconciled content (code.get/set/create/delete/validate read it).
+    if (Array.isArray((input.next as { content?: unknown }).content)) {
+      this.envelope = input.next
+    }
+    this.rebuildIdIndex()
+    this.render()
+    return { applied, warnings }
   }
 
   /** A1 — snapshot/restore load: loadState → seeds → Node(d, hub) (template
@@ -353,7 +526,7 @@ export class Runtime {
   loadDoc(doc: SerializedRenderDoc): Census {
     this.tearDownGraph()
     const seeds = loadState(doc)
-    const hub = createLinkHub()
+    const hub = (this.hub = createLinkHub())
     const nodes = seeds.map((s) => new Node(s, hub))
     this.resolveNameReferencedHandlerBodies(nodes)
     reconcileParentTargets(nodes)
@@ -768,6 +941,11 @@ export class Runtime {
     }
     for (const p of this.payloads) dropPayload(p)
     this.payloads = []
+    // U-STATE-1b — a full teardown clears the tracked content roots (so a later
+    // content reconcile does not use stale `previous` roots — adversarial
+    // finding 3). `loadEnvelope`/`loadDoc` re-populate it after.
+    this.contentRoots = []
+    this.envelope = null
     // Re-render from an empty actionable set: the kept prevMaps make
     // diffMinimal emit removal ops for every prior element, emptying the mount
     // to the root-only graph (the root stays in-tree, inTree === 1).

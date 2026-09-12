@@ -205,7 +205,7 @@ function makeHarness(opts: {
   const backRefs = new Map<string, string[]>()
   const { bridge, state } = makeBridge(opts)
   let host: SidebarPanes
-  const onRebuild = vi.fn(() => host.reDerive())
+  const onRebuild = vi.fn((kind?: unknown) => host.reDerive(kind as never))
   const editController = createEditController({ backRefs, commit: vi.fn(async () => ({ ok: true, nodeId: 'x' })), onRebuild })
   host = new SidebarPanes({
     mount,

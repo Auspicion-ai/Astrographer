@@ -1,14 +1,15 @@
-# UI Overhaul — Spec Draft (document-only; proposal gate pending)
+# UI Overhaul — Spec (GATED; Wave 0 implementation in progress)
 
-**Status:** DRAFT 2026-09-11. **Document-only — no code, no tests, no tracker
-status changes beyond the draft pointer.** This overhaul changes the shell/UI
-contract, so per AGENTS.md item 8 it must pass the three-agent proposal gate
-(validity → critique → change-analysis) and land as
-`docs/specs/ui-overhaul-review.md` **before any code**. This file is the draft
-input to that gate: it records the confirmed top-level constraints (§1), the
-shell-vs-provident boundary that every constraint must respect (§2), the pane
-layout model (§3), and the MCP/UI-parity pane grouping (§4–§6). Open decisions
-for the Architect are collected in §7. Proposed unit decomposition in §8.
+**Status:** **GATED 2026-09-11** — the three-agent umbrella proposal gate
+(`docs/specs/ui-overhaul-review.md`) returned **PROCEED-WITH-AMENDMENTS**
+(umbrella-only: it approves the contract + ordering; every unit still needs its
+own spec + TestWriter red set, amendment A1). **Wave 0 status:** U-STATE-1
+(content-only repopulation) is **COMPLETE** (`docs/specs/unit-u-state-1a..1c`,
+`src/renderer/content-reconcile.ts`); the C9 carrier is decided
+(`UI-CONFIG-CARRIER`); the C15 document-directory slice is **COMPLETE**
+(U-D1…U-D7). This file remains the container/contract: §1 constraints C1–C20,
+§2 the shell-vs-provident boundary, §3 layout/re-render/UI-config/C15, §4 the
+parity census, §5 gaps, §7 decisions, §8 the dependency-ordered units.
 
 Authoring rules this draft does NOT relax (AGENTS.md + `docs/pending.md`):
 all non-shell UI MUST be provident-authored (envelope nodes / handler bodies /
@@ -441,6 +442,28 @@ implemented):**
 - **Zone lifecycle is explicit:** first content (empty→non-empty), replacement,
   removal (non-empty→empty, per C11), and no-op (unchanged) are all defined
   transitions.
+
+**The teardown rule (2026-09-11, user ruling):** `tearDownGraph` is
+**clear-to-root** — it destroys every in-tree non-root node, and the UI
+(shell/root, `zone:*` containers, content roots, pane roots) **is** part of the
+app graph. It is therefore a **full-reset primitive only** — permitted for boot
+(before the app graph is first materialized), the MCP `provident.teardown` tool,
+and `loadDoc` (loading a wholly different serialized document). It **must never
+run on the RAG content-change path.** A content change uses targeted
+live-graph ops.
+
+**The translate+attach mechanism (2026-09-11, user ruling):**
+`translateLegacy` **is still required** — data arrives as legacy envelopes
+(from Gnosis / the UI import / an MCP tool), so a changed subtree must be
+translated into nodes before it can join the graph. The correct sequence is:
+
+1. translate the incoming content with `translateLegacy(..., { hub: <the LIVE app-graph hub> })` so the new nodes are admitted into the **live** graph/hub (not a side graph);
+2. `placement-attach` the translated content root to the **live** `zone:<name>` container **by node ref** (`{ kind: 'placement-attach', node, container, names: [<zone>] }`) — which is why a persistent app-graph hub is required (it is **U-STATE-1c**'s "engine scaffolding persists" concern, and the prerequisite for this attach);
+3. `destroy` only the removed roots; `detach` on replacement; `state-slice` for in-place edits.
+
+The Runtime must therefore own **one** persistent app-graph `LinkConfigNameHub`
+(created once and threaded through every app-graph `translateLegacy`); the
+per-`loadEnvelope` anonymous hub is the AF1 root cause.
 
 This is a **host implementation change on the renderer side**, not an engine
 requirement — the engine already exposes every primitive above (verified
@@ -1095,23 +1118,21 @@ complete while any is open.
 
 | # | Gap | Evidence | Owner |
 | --- | --- | --- | --- |
-| SG1 | **Content-only repopulation not implemented (C10 — hard spec requirement)** — a RAG change tears down + rebuilds the whole graph, destroying node identity and graph-resident UI state | §3.1 (`reDerive`→`loadEnvelope`→`tearDownGraph`); verified no code/git landing | **U-STATE-1 (Wave-0 keystone)** — prerequisite for C9/C11/C12/C14/C16 lifecycle |
+| SG1 | **Content-only repopulation — DONE (2026-09-11)** (C10 — hard spec requirement). Was: a RAG change tore down + rebuilt the whole graph, destroying node identity and graph-resident UI state. Now: `applyContentChange` reconciles content + panes in place; a content re-derive calls `loadEnvelope` **0 times**. | §3.1; **U-STATE-1a/b/c complete** (`docs/specs/unit-u-state-1a..1c`) | done |
 | SG2 | **C9 serialized UI-config state does not exist** — theme/layout/pane visibility/editing mode are not serialized; `enabledPanes` is display-only | §3.2/§4.13; `operator-settings-store.ts` | U-SHELL-1/2/8 |
 | SG3 | **No application menu at all** — no `Menu` in `main.ts`; therefore no View menu (C13), no File menu (C17) | §4/G10; grep `Menu` absent | U-SHELL-8, U-IMPORT-1 |
 | SG4 | **No modal / isolation mount** — settings render at page bottom; the modal isolation boundary (C3) is proposed, not built | §4/G8; `#operator-panes` | U-SHELL-7 |
 | SG5 | **No zones / layout model** — single fixed `[sidebar]`; no left/right/header/footer/stage/top-bar | §3 | U-SHELL-1 |
 | SG6 | **No appearance system** — OS-only theme, no manual tri-state, no tokens | §4/G10; `index.html` `@media` | U-SHELL-2 |
 | SG7 | **Doc-nav not dispatchable** (PG14) — `li` nodes carry no handler | `docs/pending.md` | U-PARITY (G2) — coverage/ergonomics |
-| SG8 | **`mountOperator` remounts every refresh** — replaces the container each re-derive | §3.1 (`sidebar-panes.ts:632`) | folded into SG1's unit |
+| SG8 | **`mountOperator` remounts every refresh** — fixed: `mountOperator` is idempotent (scope+adapter created once) and the operator pane is decoupled from content refreshes (§3.1, §4). | `docs/specs/unit-u-state-1c-persistent-scaffolding.md` | done |
 | SG9 | **The `U-PARITY`/tabular gaps are unscheduled** — §5.1 PG1–PG8 + §5.4 PARTIALs have no per-unit specs yet | §8 (draft units only) | gate proposes unit specs |
 | SG10 | **Operator scope navigation/un-dispatchability of app-graph panes** — doc-nav/gnosis selects are DOM-click only; no focus MCP tools | §5.2 last bullet | decision (§6) |
 
-**Note:** SG1 is the keystone — until content-only repopulation lands, C9/C11/
-C12/C16's "graph-resident state survives" claims and MCP target stability are
-unproven. **The C16 journal stack is a concrete instance:** it is rebuilt (and
-thus emptied) on every re-derive, so undo history depends on U-STATE-1. Order
-U-STATE-1 first among the structural units, before the pane/chrome units that
-depend on it.
+**Note:** SG1 was the keystone — it has now LANDED (U-STATE-1a/b/c), so
+C9/C11/C12/C16's "graph-resident state survives" claims are unblocked. The C16
+journal stack is a concrete instance: the `Supervisor` now persists across a
+content change.
 
 ---
 
@@ -1387,12 +1408,12 @@ in parallel; it is placed in Wave 1 above to front-load the cheap coverage wins.
 
 ### 8.2 Unit catalogue
 
-> **Keystone first:** **U-STATE-1 — content-only repopulation (SG1/SG8, §3.1)** —
-> without it, C9/C11/C12/C16 lifecycle claims + MCP target stability are
-> unproven. Build it before any unit below that depends on it (§8.1).
+> **Keystone LANDED (2026-09-11):** **U-STATE-1 — content-only repopulation
+> (SG1/SG8, §3.1)** is COMPLETE (1a/1b/1c/1d); the units below that depend on it
+> may now proceed.
 > **Wave order (§8.1) supersedes this list's numbering.**
 
-1. **U-STATE-1 — content-only repopulation** (SG1/SG8; placement/structural ops replace content roots, zones persist, stable node identity, no operator remount). **Keystone.**
+1. **U-STATE-1 — content-only repopulation** (SG1/SG8) — **DONE (2026-09-11)**; specs `docs/specs/unit-u-state-1a..1c`.
 2. **U-SHELL-1 — layout model + zones + persistence** (C4/C5/C7/C12 mechanics; the C9-serialized layout state; SG5).
 3. **U-SHELL-2 — appearance tokens + tri-state theme** (C1; SG6).
 4. **U-SHELL-3 — collapsible panes** (C5).

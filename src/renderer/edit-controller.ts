@@ -14,10 +14,17 @@ export interface EditControllerOptions {
    *  The renderer never writes to the RAG store directly; it sends an IPC to
    *  main, which calls the store. Injected for testability. */
   commit: (nodeId: string, content: string) => Promise<CommitResult>
-  /** Called to trigger a re-traversal (rebuild) after a store change. Injected
-   *  for testability. */
-  onRebuild: () => void
+  /** Called to trigger a rebuild after a change. The `kind` tells the host how
+   *  much to rebuild: a **content** change repopulates the document content only
+   *  (U-STATE-1b — no teardown, the operator pane untouched); an **operator**
+   *  change re-renders the operator pane + the app graph (editingMode); a
+   *  **template** change is a full reload. Injected for testability. */
+  onRebuild: (kind: RebuildKind) => void
 }
+
+/** The rebuild kind (U-STATE-1b change-kind discrimination). Precedence when
+ *  coalesced by the dirty-edit guard: `template` > `operator` > `content`. */
+export type RebuildKind = 'content' | 'operator' | 'template'
 
 export type CommitResult =
   | { ok: true; nodeId: string }
@@ -63,9 +70,10 @@ export interface EditController {
    *  back-reference. Refuses a write to a deleted node (dangling back-reference
    *  → read-only). */
   commit(nodeId: string, content: string): Promise<CommitResult>
-  /** Request a rebuild. If any control is dirty, the rebuild is QUEUED (not
-   *  executed). If no control is dirty, the rebuild executes immediately. */
-  requestRebuild(): void
+  /** Request a rebuild of the given kind. If any control is dirty, the rebuild
+   *  is QUEUED (not executed, coalesced by precedence). If no control is dirty,
+   *  the rebuild executes immediately. */
+  requestRebuild(kind?: RebuildKind): void
   /** Whether a rebuild is queued (waiting for the dirty-edit guard to clear). */
   hasQueuedRebuild(): boolean
   /** Save caret/focus state keyed by RAG node id. */
@@ -81,7 +89,15 @@ export interface EditController {
 export function createEditController(opts: EditControllerOptions): EditController {
   const dirty = new Set<string>()
   let queuedRebuild = false
+  let queuedKind: RebuildKind = 'content'
   const carets = new Map<string, CaretState>()
+
+  const RANK: Record<RebuildKind, number> = { content: 0, operator: 1, template: 2 }
+  const mergeKind = (a: RebuildKind, b: RebuildKind): RebuildKind => (RANK[b] > RANK[a] ? b : a)
+  const fire = (kind: RebuildKind): void => {
+    opts.onRebuild(kind)
+    queuedKind = 'content'
+  }
 
   return {
     markDirty(nodeId: string): void {
@@ -93,7 +109,7 @@ export function createEditController(opts: EditControllerOptions): EditControlle
       // dirty, execute the queued rebuild and clear the queue.
       if (queuedRebuild && dirty.size === 0) {
         queuedRebuild = false
-        opts.onRebuild()
+        fire(queuedKind)
       }
     },
     isDirty(nodeId: string): boolean {
@@ -124,7 +140,7 @@ export function createEditController(opts: EditControllerOptions): EditControlle
         dirty.delete(nodeId)
         if (queuedRebuild && dirty.size === 0) {
           queuedRebuild = false
-          opts.onRebuild()
+          fire(queuedKind)
         }
         return { ok: false, reason: 'deleted-node' }
       }
@@ -135,17 +151,19 @@ export function createEditController(opts: EditControllerOptions): EditControlle
         dirty.delete(nodeId)
         if (queuedRebuild && dirty.size === 0) {
           queuedRebuild = false
-          opts.onRebuild()
+          fire(queuedKind)
         }
       }
       return result
     },
-    requestRebuild(): void {
+    requestRebuild(kind: RebuildKind = 'content'): void {
       if (dirty.size > 0) {
-        // Dirty-edit guard: queue (coalesced — at most ONE queued rebuild).
+        // Dirty-edit guard: queue (coalesced — at most ONE queued rebuild,
+        // merged by precedence template > operator > content).
         queuedRebuild = true
+        queuedKind = mergeKind(queuedKind, kind)
       } else {
-        opts.onRebuild()
+        fire(kind)
       }
     },
     hasQueuedRebuild(): boolean {

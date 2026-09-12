@@ -8,6 +8,41 @@ contract required by AGENTS.md item 9 / umbrella amendment A1 **before any
 TestWriter red set**. Once this spec is ratified and a TestWriter authors the red
 set from it, the Implementer lands the least code.
 
+**Baseline (recorded 2026-09-11, commit `27cf9e5`):** the trio is green —
+`npm test` **155 files / 3762 pass + 43 skip**, `typecheck` 0, `build` 0. The
+red set for this unit is attributable to the new test file alone.
+
+**TestWriter RED (2026-09-11, RCA-1):** `tests/unit-u-state-1a-content-reconcile.test.ts`
+authored from this spec ALONE (22 cases: §4 states 1–12 + §5 F1–F6). RUN and
+reported: **suite-load failure** — `Failed to load url ../src/renderer/content-reconcile.js`
+(the module does not exist yet). 1 failed test file / 0 tests collected; the
+baseline 155 files stay green.
+
+**Implementer GREEN (2026-09-11):** `src/renderer/content-reconcile.ts` landed
+(`reconcileContentRoots` + `PreviousRoot`/`MaterializedRoot`/`ReconcileChange`/
+`ReconcileInput`/`ReconcileResult`). The red run surfaced one **spec
+ambiguity** (state 10 contradicted §3.1 — a nested doc-child is not a payload
+root); resolved in favour of §3.1 and state 10 amended. Unit 18/18.
+
+**Adversarial (RCA-3, 2026-09-11) — findings + fixes:**
+
+| # | Sev | Finding | Disposition |
+| --- | --- | --- | --- |
+| AF1 | HIGH | `shapeOf` omitted `props` → a props-only change reported `kept` | **FIXED** — the projection now includes authored props, excluding runtime `data-*` markers (regression R1/R1b) |
+| AF2 | HIGH | A content-only change that REMOVES a nested doc-child was missed (the payload path read only the *next* subtree; the fallback never fired) | **FIXED** — replaced = payload-hit **OR** prev/next subtree id-set change **OR** (fallback AND shape) (regression R2) |
+| AF3 | MED | Raw `TypeError`s on malformed envelopes (non-array `content`, non-array `children`, null child) | **FIXED** — defensive `Array.isArray`/null guards (regression R3) |
+| AF4 | MED | F1 did not fire for a missing `content` | **FIXED** — F1 now requires `content` present (empty `[]` still valid) (regression R4) |
+| AF5 | MED | A structural change discarded the payload `changed` set (fallback exclusive) | **FIXED** — union semantics (regression R5) |
+| AF6 | MED | A node that is both a nested doc-child and a payload section is emitted in two buckets | **SPEC NOTE** — correct per §3.1 (double-materialization, `traversal.ts`); buckets are per payload root. State 10 qualifies: it holds when the nested child is not also a section |
+| AF7 | LOW | `collectRagIds` diverges from the cited `collectSubtreeIds` (includes the nested root id) | **SPEC NOTE** — intentional (needed for direct nested-child changes); the citation is corrected to "adapted from" |
+| AF8 | LOW | `content` JSON projection: key-order false positives; `undefined`/`null` false negative | **FIXED** — canonical (sorted-key) projection (regression R6); non-JSON `content` is documented as out of scope |
+| AF9 | LOW | `usedFallback` wording contradiction (§3.2 "changes the outcome" vs §3.3 "always") | **SPEC RESOLVED** — `usedFallback` = true iff the fallback path ran (null/malformed change, structural, or edge-bearing); §3.2 reworded |
+| AF10 | LOW | §6 census said 4 types; 5 are exported (`PreviousRoot` omitted) | **FIXED** — census corrected to 1 function + 5 types |
+
+Adversarial regressions: `tests/unit-u-state-1a-content-reconcile-adversarial.test.ts`
+(8 tests, all green). **Trio after the fixes: 157 files / 3788 pass + 43 skip,
+typecheck 0, build 0.**
+
 Unit U-STATE-1a is the **pure reconciler** only — no Electron, no host wiring.
 Host application is U-STATE-1b; lifecycle state (journal/operator/backRefs) is
 U-STATE-1c; regression re-anchoring is U-STATE-1d (see the gate §5).
@@ -42,6 +77,11 @@ export interface MaterializedRoot {
   ragNodeId: string
 }
 
+/** A previously materialized content root, carrying its subtree so the
+ *  full-subgraph fallback can compare shapes. The previous roots are passed as
+ *  `LegacyNodeData[]` (user-confirmed 2026-09-11) — NOT id-only. */
+export type PreviousRoot = LegacyNodeData
+
 /** The change descriptor from the `rag-store-changed` broadcast. */
 export interface ReconcileChange {
   kind: 'content' | 'structural'
@@ -50,8 +90,9 @@ export interface ReconcileChange {
 }
 
 export interface ReconcileInput {
-  /** The previously materialized content roots, in render order. */
-  previous: MaterializedRoot[]
+  /** The previously materialized content roots, in render order, AS THEIR
+   *  ENVELOPE NODES (so the fallback can compare subtree shape). */
+  previous: PreviousRoot[]
   /** The newly built traversal envelope (`buildTraversal(...).envelope`). */
   next: LegacyInitialData
   /** The `rag-store-changed` payload when available; null on boot/template
@@ -113,14 +154,17 @@ When `change != null`:
 - `removed` = roots in `previous` not in `next`.
 
 **Subtree membership:** a root's subtree is its `rag-<id>` root PLUS its nested
-`rag-`-prefixed descendants (the `collectSubtreeIds` walk, stopping at nested
-`rag-` roots — the doc-child boundary). The reconciler reuses that walk
-conceptually (a local copy; the traversal export is not required).
+`rag-`-prefixed descendants (adapted from the `collectSubtreeIds` walk, stopping
+at nested `rag-` roots — the doc-child boundary; the local copy INCLUDES the
+nested root id so a direct nested-child change marks its containing root —
+adversarial AF7).
 
-**Under-reporting (ADV-1):** if `change.kind === 'structural'` OR any
-`change.edgeIds` is non-empty, the payload alone is **not** trusted for
-add/remove/reattach decisions — the reconciler **also** runs the full-subgraph
-comparison (§3.3) and sets `usedFallback = true` when it changes the outcome.
+**Under-reporting (ADV-1):** the fallback runs for a null/malformed change, a
+structural change, or any `edgeIds`-bearing change (`usedFallback = true` when
+the fallback path ran; §3.3). The **payload is UNIONED in, never discarded**:
+`replaced` = payload-hit **OR** prev/next subtree id-set change **OR**
+(fallback AND shape differs) — so a content-only change that REMOVES a nested
+doc-child is still detected (adversarial AF2/AF5).
 
 ### 3.3 Full-subgraph fallback (authoritative on ambiguity)
 
@@ -129,18 +173,26 @@ When `change == null`, or when §3.2 flags ambiguity:
 - Compare `previous` vs `next` by `cssId`.
 - `added` / `removed` from set difference (always exact).
 - For a shared `cssId`, compare the **serialized subtree shape** of the old
-  materialization against the new root's serialized shape. Since U-STATE-1a is
-  pure and receives only `previous` (roots list) + `next` (envelope), the
-  **previous subtree shape must be part of the input** — extend
-  `MaterializedRoot` with `shape: string` (a stable stringification of the
-  previously materialized root subtree) OR accept `previous: LegacyNodeData[]`
-  roots. **Decision pinned at implementation:** pass the previous roots as
-  `LegacyNodeData[]` and compare `JSON.stringify` of a normalized projection
-  (id + type + content + children + props, excluding runtime-minted fields).
-  A differing projection ⇒ **replaced**.
-- Always sets `usedFallback = true` when invoked.
+  materialization against the new root's serialized shape. `previous` carries
+  the old envelope roots (`PreviousRoot = LegacyNodeData[]`, user-confirmed
+  2026-09-11), so both sides are comparable directly: stringify a normalized
+  projection (id + type + content + children + props, excluding runtime-minted
+  fields) of each root's subtree. A differing projection ⇒ **replaced**.
+- `usedFallback = true` iff the fallback path ran (null/malformed change,
+  structural, or edge-bearing); a clean content change reports `false`
+  (adversarial AF9; this supersedes the earlier "changes the outcome" wording).
 
-### 3.4 Determinism + order
+### 3.4 Subtree shape / membership source (pinned)
+
+Both membership (§3.2) and shape comparison (§3.3) operate on the **envelope
+`LegacyNodeData`**, not a RAG-node graph fixture: a content root is a payload
+`content[]` entry with `props.id` starting `rag-`; its subtree is that node plus
+its descendants, stopping at nested `rag-` roots (the `collectSubtreeIds`
+doc-child boundary — a local re-implementation, since `traversal.ts` does not
+export it). The TestWriter fixtures are therefore envelope nodes, not
+`RagStore` stubs.
+
+### 3.5 Determinism + order
 
 - `added` / `replaced` / `removed` / `kept` preserve `next`'s render order
   (`removed` preserves `previous` order).
@@ -166,9 +218,20 @@ When `change == null`, or when §3.2 flags ambiguity:
    `replaced` **and** `usedFallback=true`.
 8. `change=null` (boot/template) → full-subgraph comparison; `usedFallback=true`.
 9. A changed node in document A does **not** mark document B's root `replaced`.
-10. A doc-child root (nested `rag-`) is its own `added`/`removed` bucket entry,
-    not folded into its parent.
-11. Pane payload roots (non-`rag-` ids) are never emitted in any bucket.
+10. A nested doc-child (`rag-` inside a root's subtree) is **part of its
+    containing root's subtree** — a change to it marks the *containing payload
+    root* `replaced`; it is **not** a separate bucket entry (buckets are per
+    payload content root, §3.1). *Qualifier (adversarial AF6): a node that is
+    BOTH a nested doc-child AND a top-level payload section is materialized
+    twice (`traversal.ts`), so it legitimately appears as its own root too.*
+    *(Amended after the TestWriter red run: the earlier "its own added/removed
+    entry" wording contradicted §3.1.)*
+11. **Pane roots (`pane-<id>`) ARE content roots** (U-STATE-1b pane refresh):
+    a pane root is reconciled like a document root and is **shape-compared
+    always** (its content is driven by the host `PaneContext`, not by the
+    `rag-store-changed` id payload) — so a changed pane is `replaced` and a new
+    pane is `added`. (Amended 2026-09-11: the earlier "never emitted in any
+    bucket" contract was superseded to fix HOST-PANE-STALE-ON-CONTENT-CHANGE.)
 12. Deterministic output: two runs on identical inputs are deep-equal.
 
 ## 5. Fail-states / edge cases
@@ -186,9 +249,9 @@ When `change == null`, or when §3.2 flags ambiguity:
 
 ## 6. Numeric / census claims
 
-- The module exports **1** function (`reconcileContentRoots`) + **4** types
-  (`MaterializedRoot`, `ReconcileChange`, `ReconcileInput`, `ReconcileResult`);
-  **0** exported consts.
+- The module exports **1** function (`reconcileContentRoots`) + **5** types
+  (`PreviousRoot`, `MaterializedRoot`, `ReconcileChange`, `ReconcileInput`,
+  `ReconcileResult`); **0** exported consts.
 - No new npm dependency; no `provident-ssr` package change (no `docs/defects.md`
   item expected).
 

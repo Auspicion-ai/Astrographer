@@ -32,7 +32,8 @@ import {
   type AppGraphAssemblyResult,
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
-import type { EditController, CaretState, RichCaretEdge } from './edit-controller.js'
+import type { EditController, CaretState, RichCaretEdge, RebuildKind } from './edit-controller.js'
+import { reconcileContentRoots, type ReconcileChange } from './content-reconcile.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
 import { createSnapshotStore } from '../main/adjacency.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from '../main/template-shape.js'
@@ -145,6 +146,15 @@ export interface SidebarPanesOptions {
 // ---- handler bodies (function-STRING data). They reach the IPC bridge via
 // `window.provident.sidebar` — NEVER an MCP tool. The host installs the
 // `window.provident.sidebar` surface at boot (M2).
+
+/** U-STATE-1b — coalesce two rebuild kinds by precedence
+ *  (template > operator > content). */
+const REBUILD_RANK: Record<RebuildKind, number> = { content: 0, operator: 1, template: 2 }
+function mergeRebuildKind(a: RebuildKind | null, b: RebuildKind): RebuildKind {
+  if (a == null) return b
+  return REBUILD_RANK[b] > REBUILD_RANK[a] ? b : a
+}
+
 const DOC_NAV_SELECT_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s) return;
@@ -425,6 +435,15 @@ export class SidebarPanes {
   /** The re-derive in-flight coalescing (M11/S19). */
   private reDeriveInFlight = false
   private reDeriveQueued = false
+  /** The strongest queued rebuild kind (precedence template > operator >
+   *  content) — preserved across the reDerive in-flight coalescing. */
+  private reDeriveQueuedKind: RebuildKind | null = null
+  /** U-STATE-1b — true once the app graph has been materialized (post-boot);
+   *  gates the content-only reconcile path (vs the boot full load). */
+  private appLoaded = false
+  /** U-STATE-1b — the RAG change descriptor captured by `onRagStoreChanged`
+   *  for the content reconciler. */
+  private pendingContentChange: ReconcileChange | null = null
 
   /** Unit L — the set of RAG node ids with a saved caret (the caret restore
    *  after a re-derive, §5.4). On `saveCaret` (in `textareaBlur`) the node id is
@@ -616,32 +635,77 @@ export class SidebarPanes {
     for (const [k, v] of assembledBackRefs) this.backRefs.set(k, v)
     this.lastTraversalEnvelope = traversalEnvelope
     runtime.loadEnvelope(result.envelope)
+    this.appLoaded = true
     return result
   }
 
+  /** U-STATE-1b — the CONTENT-only repopulation path. Processes the traversal
+   *  envelope (textarea readOnly + editingMode, as the assembly path does),
+   *  reconciles the document content roots against the LIVE graph, and applies
+   *  only the changed roots via `Runtime.applyContentReconcile` — no teardown,
+   *  node identity + graph-resident state survive, the operator pane untouched.
+   *  backRefs is recomputed from the new content (Decision 3). */
+  private applyContentChange(traversalEnvelope: LegacyInitialData): void {
+    if (!this.runtime) return
+    // Assemble the PANE-INCLUSIVE envelope (documents + app-graph panes) so the
+    // panes are reconciled alongside the document roots (HOST-PANE-STALE-ON-
+    // CONTENT-CHANGE) — not just the `rag-` document subtrees.
+    const assembled = assembleAppGraphEnvelope({
+      traversalEnvelope,
+      registry: this.registry,
+      ctx: this.buildTemplateContext(),
+      sidebarZone: this.sidebarZone,
+    })
+    const env = assembled.envelope
+    this.setTextareaReadOnly(env)
+    this.applyEditingMode(env, this.editingMode)
+    const previous = this.runtime.materializedContentRoots()
+    const result = reconcileContentRoots({ previous, next: env, change: this.pendingContentChange })
+    this.runtime.applyContentReconcile({ result, next: env })
+    const refs = this.recomputeBackRefs(env)
+    this.backRefs.clear()
+    for (const [k, v] of refs) this.backRefs.set(k, v)
+    this.lastTraversalEnvelope = traversalEnvelope
+    this.pendingContentChange = null
+  }
+
   /** Mount the operator settings pane in its OWN isolated GraphScope (the
-   *  SecurePanels pattern) from the enabled operator panes. */
+   *  SecurePanels pattern) from the enabled operator panes. U-STATE-1c:
+   *  IDEMPOTENT — the isolated scope + adapter are created ONCE; later calls
+   *  rebuild only the operator CONTENT (so `settingsContent` re-evaluates with
+   *  fresh settings) and re-render the EXISTING scope/adapter (no
+   *  `createIsolatedScope`/`replaceChildren`/new `DomAdapter`). */
   mountOperator(): void {
-    // The DomAdapter's endBatch APPENDS roots to the mount and never clears it,
-    // so a fresh mount (new adapter + prevMap=null) must clear the container
-    // first — otherwise every re-derive appends a DUPLICATE settings element
-    // (the "clicking the toggle adds a new settings element" live bug). Clear
-    // robustly across the real DOM (replaceChildren) and the test dom-shim
-    // (a public `children` array with no replaceChildren).
-    const mount = this.operatorMount as unknown as { replaceChildren?: () => void; children?: unknown[] }
-    if (typeof mount.replaceChildren === 'function') mount.replaceChildren()
-    else if (Array.isArray(mount.children)) mount.children.length = 0
+    if (this.operatorScope == null || this.operatorAdapter == null) {
+      // The DomAdapter's endBatch APPENDS roots to the mount and never clears
+      // it, so the FIRST mount (fresh adapter + prevMap=null) must clear the
+      // container — otherwise the settings element duplicates. On later calls
+      // the retained prevMap drives a proper diff (no clear, no duplicate).
+      const mount = this.operatorMount as unknown as { replaceChildren?: () => void; children?: unknown[] }
+      if (typeof mount.replaceChildren === 'function') mount.replaceChildren()
+      else if (Array.isArray(mount.children)) mount.children.length = 0
+      this.operatorScope = createIsolatedScope()
+      this.operatorAdapter = new DomAdapter(this.operatorMount, { onEvent: this.handleOperatorEvent })
+      this.operatorPrevMap = null
+    }
     const envelope = buildOperatorEnvelope(this.registry, this.buildTemplateContext())
-    this.operatorScope = createIsolatedScope()
     const hub = createLinkHub()
     const t = translateLegacy(envelope, { hub, graphScope: this.operatorScope })
+    // provident-ssr 0.4.1 — release the previous operator Supervisor's module-
+    // level finalize hook + node maps before replacing it (ENG-SUPERVISOR-HOOK-
+    // ACCUMULATION). Idempotent; a no-op on the first mount.
+    this.operatorSupervisor?.dispose()
     this.operatorSupervisor = new Supervisor({ events: new EventBridge(), graphScope: this.operatorScope })
     for (const n of t.nodes) this.operatorSupervisor.registerNode(n)
-    this.operatorAdapter = new DomAdapter(this.operatorMount, { onEvent: this.handleOperatorEvent })
     this.operatorRoot = t.root
     this.operatorNodes = t.nodes
-    this.operatorPrevMap = null
     this.renderOperator()
+  }
+
+  /** U-STATE-1c — re-render the EXISTING operator graph (no scope/adapter
+   *  re-create). Rebuilds the operator content so settings re-evaluate. */
+  refreshOperator(): void {
+    this.mountOperator()
   }
 
   /** Re-fetch the pane data (snapshot/backlinks/query/operator-settings) over
@@ -777,11 +841,17 @@ export class SidebarPanes {
   }
 
   /** The re-derive wiring: fetch the snapshot, buildTraversal (with the stored
-   *  template), assemble the pane-inclusive envelope, re-load it into the app
-   *  Runtime, repopulate the backRefs map. Async. */
-  async reDerive(): Promise<void> {
+   *  template), then apply the change. `kind` (U-STATE-1b):
+   *  - **content** — repopulate the document content roots ONLY via
+   *    `reconcileContentRoots` + `Runtime.applyContentReconcile` (no teardown,
+   *    no operator remount; node identity + graph-resident state survive).
+   *  - **operator** — re-render the operator pane + the app graph (editingMode).
+   *  - **template** — a full reload (the page structure changed).
+   *  Async. */
+  async reDerive(kind: RebuildKind = 'content'): Promise<void> {
     if (this.reDeriveInFlight) {
       this.reDeriveQueued = true
+      this.reDeriveQueuedKind = mergeRebuildKind(this.reDeriveQueuedKind, kind)
       return
     }
     this.reDeriveInFlight = true
@@ -834,7 +904,14 @@ export class SidebarPanes {
       // had just set on the prior render's elements (a real-browser bug the
       // dom-shim's persistent getElementById masked).
       this.lastTraversalEnvelope = traversalEnvelope
-      await this.refresh()
+      // U-STATE-1b — content changes repopulate the document content roots
+      // ONLY (no teardown, no operator remount); operator/template/boot keep the
+      // full reload path.
+      if (kind === 'content' && this.appLoaded) {
+        this.applyContentChange(traversalEnvelope)
+      } else {
+        await this.refresh()
+      }
       // Unit U4 §1.7 — after the re-derive's FINAL re-load of the pane-inclusive
       // envelope, restore the saved caret for each node with a saved caret, GATED
       // by the node's RENDERED control type (amendment 4 / U3 F2 / ADR-8). A
@@ -885,7 +962,9 @@ export class SidebarPanes {
       this.reDeriveInFlight = false
       if (this.reDeriveQueued) {
         this.reDeriveQueued = false
-        await this.reDerive()
+        const queuedKind = this.reDeriveQueuedKind ?? 'content'
+        this.reDeriveQueuedKind = null
+        await this.reDerive(queuedKind)
       }
     }
   }
@@ -912,14 +991,27 @@ export class SidebarPanes {
       return
     }
     if (payload.store !== this.lastStore) return
-    this.editController.requestRebuild()
+    // U-STATE-1b — ACCUMULATE the change descriptor (a coalesced content change
+    // may cover several broadcasts; overwriting would drop the earlier roots'
+    // ids and miss their repopulation — adversarial finding 2). A structural
+    // change is sticky.
+    const prev = this.pendingContentChange
+    this.pendingContentChange = {
+      kind: payload.kind === 'structural' || prev?.kind === 'structural' ? 'structural' : 'content',
+      nodeIds: [...new Set([...(prev?.nodeIds ?? []), ...(payload.nodeIds ?? [])])],
+      edgeIds: [...new Set([...(prev?.edgeIds ?? []), ...(payload.edgeIds ?? [])])],
+    }
+    this.editController.requestRebuild('content')
   }
 
   /** The template-changed handler: updates the stored template + routes through
-   *  the edit controller's dirty-edit guard (requestRebuild). */
+   *  the edit controller's dirty-edit guard (requestRebuild('template') — a
+   *  template change alters the page structure, so a full reload). */
   onTemplateChanged(payload: TemplateChangedPayload): void {
     this.template = payload.template
-    this.editController.requestRebuild()
+    // A template change supersedes any pending content change descriptor.
+    this.pendingContentChange = null
+    this.editController.requestRebuild('template')
   }
 
   /** Unit U1 §1.3 (amendment A) — the operator-settings-changed handler. The
@@ -940,7 +1032,10 @@ export class SidebarPanes {
     payload = (payload ?? { editingMode: 'contenteditable' }) as OperatorSettings
     this.lastOperatorSettings = payload
     this.editingMode = payload.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
-    this.editController.requestRebuild() // → reDerive (FRESH traversal — never refresh() over the cached envelope)
+    this.editController.requestRebuild('operator') // → reDerive('operator'): operator pane + app graph (editingMode)
+    // An operator rebuild is not a content change; drop any stale descriptor so
+    // it is not applied on a later content pass (adversarial finding 6).
+    this.pendingContentChange = null
   }
 
   // ---- private helpers ----------------------------------------------------

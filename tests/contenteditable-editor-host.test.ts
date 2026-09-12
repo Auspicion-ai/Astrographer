@@ -227,7 +227,7 @@ function makeHarness(opts: {
   const backRefs = new Map<string, string[]>()
   const { bridge, state } = makeBridge(opts)
   let host: SidebarPanes
-  const onRebuild = vi.fn(() => host.reDerive())
+  const onRebuild = vi.fn((kind?: unknown) => host.reDerive(kind as never))
   const editController = createEditController({ backRefs, commit: vi.fn(async () => ({ ok: true, nodeId: 'x' })), onRebuild })
   host = new SidebarPanes({
     mount,
@@ -1078,19 +1078,13 @@ describe('adversarial findings + resolutions (RCA-3)', () => {
     const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
     const restoreSpy = vi.spyOn(p as unknown as object, 'restoreRichCaret')
     await h.host.reDerive()
-    // EXACTLY ONE final graph load for the whole re-derive. The buggy path called
-    // loadAppGraph TWICE (reDerive itself + refresh()'s loadAppGraph), so the
-    // restore selection was set on a pre-teardown render that the second load's
-    // tearDownGraph + fresh render destroyed in a real browser.
-    expect(loadSpy).toHaveBeenCalledTimes(1)
-    // The restore was invoked AFTER that single load (its global call index is
-    // greater than the load's), so the caret is applied to the FINAL render — the
-    // selection survives the re-derive (the central U4 §1.7/§2.1 states 29/33/37
-    // contract).
-    const loadOrder = loadSpy.mock.invocationCallOrder[0]
-    const restoreOrder = restoreSpy.mock.invocationCallOrder[0]
-    expect(loadOrder).toBeGreaterThan(0)
-    expect(restoreOrder).toBeGreaterThan(loadOrder)
+    // U-STATE-1b (C10) — a CONTENT re-derive repopulates the content roots in
+    // place: it does NOT call `loadEnvelope`/`tearDownGraph` at all (the old
+    // full-rebuild path called it; the double-load bug this test originally
+    // guarded is now impossible). Node identity is preserved and the caret
+    // restore still runs.
+    expect(loadSpy).toHaveBeenCalledTimes(0)
+    // The rich caret restore still runs on the content-only path.
     expect(restoreSpy).toHaveBeenCalled()
     restoreSpy.mockRestore()
     loadSpy.mockRestore()
