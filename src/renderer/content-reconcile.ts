@@ -14,6 +14,7 @@
 // `changed` set alone cannot see a vanished id); R3/R4 malformed envelope shapes
 // never produce a raw TypeError (F1's guard is the only throw; F2/F3/F6 skip).
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
+import { plainRagId } from './cross-document-shared.js'
 
 /** A previously materialized content root, carrying its subtree so the
  *  full-subgraph fallback can compare shapes. The previous roots are passed as
@@ -69,10 +70,17 @@ const PANE_PREFIX = 'pane-'
  *  document subtree) OR a `pane-<id>` (an app-graph pane). Return its
  *  { cssId, ragNodeId } or null (F2 — non-string / missing id). */
 function asContentRoot(node: LegacyNodeData | null | undefined): MaterializedRoot | null {
-  const id = (node?.props as { id?: unknown } | undefined)?.id
+  const props = node?.props as Record<string, unknown> | undefined
+  const id = props?.id
   if (typeof id !== 'string') return null
   if (id.startsWith(RAG_PREFIX) && id.length > RAG_PREFIX.length) {
-    return { cssId: id, ragNodeId: id.slice(RAG_PREFIX.length) }
+    // §2.7 (H3/W2-N12) — the authored id may be document-scoped
+    // (`rag-<documentId>--<ragId>`); `data-rag-node-id` carries the PLAIN ragId
+    // (the payload-matching key). `plainRagId` falls back to the `id.slice(4)`
+    // parse when the data prop is absent (the unscoped single-document path) and
+    // rejects a non-root synthetic `rag-` id (the C20 owners box).
+    const ragNodeId = plainRagId(props) ?? id.slice(RAG_PREFIX.length)
+    return { cssId: id, ragNodeId }
   }
   // U-STATE-1b — pane roots (`pane-<id>`) are content roots too (reconciled so
   // their ctx-driven content refreshes without a full reload).
@@ -82,11 +90,14 @@ function asContentRoot(node: LegacyNodeData | null | undefined): MaterializedRoo
   return null
 }
 
-/** A node's authored id, if it is a `rag-<id>` (non-empty id part). */
+/** A node's PLAIN RAG id, if its authored id is a `rag-<id>` (non-empty id
+ *  part). §2.7 (H3/W2-N12) — a document-scoped authored id
+ *  (`rag-<documentId>--<ragId>`) recovers the plain ragId from its
+ *  `data-rag-node-id` prop; the `id.slice(4)` fallback covers an absent prop
+ *  (the unscoped single-document path). Non-`rag-` nodes (inline/textarea) stay
+ *  null so `collectRagIds` keeps walking through them. */
 function ragIdOf(node: LegacyNodeData | null | undefined): string | null {
-  const id = (node?.props as { id?: unknown } | undefined)?.id
-  if (typeof id !== 'string' || !id.startsWith(RAG_PREFIX) || id.length === RAG_PREFIX.length) return null
-  return id.slice(RAG_PREFIX.length)
+  return plainRagId(node?.props as Record<string, unknown> | undefined)
 }
 
 function childrenOf(node: LegacyNodeData | null | undefined): LegacyNodeData[] {

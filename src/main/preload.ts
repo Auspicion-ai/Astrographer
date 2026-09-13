@@ -34,6 +34,17 @@ export interface SidebarMethods {
   /** W1-N7 (U-PARITY-DOCNAV PG14) — the doc-nav folder toggle seam. The key is
    *  the folder's `data-folder-path`. */
   docNavToggle(key: string): void
+  /** U-SHELL-9b §2.8 (H2/H7) — the C20 owners-box collapse toggle seam (the
+   *  `OWNERS_BOX_TOGGLE_HANDLER` body reaches it). The ragId is the plain RAG
+   *  id carried by the owners box's `data-rag-node-id`. */
+  toggleOwnersBox(ragId: string): void
+  /** U-SHELL-9b §2.9 (H1/W2-N13) — the Option-C confirmation-strip seams (the
+   *  `SHARED_COMMIT_*_HANDLER` bodies reach them). `selectedOwnerIds` is the
+   *  >2-owner checklist selection (omitted ⇒ the editing document). */
+  sharedCommitFork(selectedOwnerIds?: string[]): void
+  sharedCommitMutateAll(content?: string): void
+  sharedCommitCancel(): void
+  sharedCommitToggleOwner(ownerId: string): void
   submitQuery(value: string): void
   /** W1-N11 (U-PARITY-C18) — the advanced-search disclosure toggle + submit
    *  seams the `pane-search-advanced-*` handler bodies reach. */
@@ -232,6 +243,11 @@ export interface ProvidentBridge {
 let sidebarHolder: SidebarMethods = {
   selectDocument: () => {},
   docNavToggle: () => {},
+  toggleOwnersBox: () => {},
+  sharedCommitFork: () => {},
+  sharedCommitMutateAll: () => {},
+  sharedCommitCancel: () => {},
+  sharedCommitToggleOwner: () => {},
   submitQuery: () => {},
   searchAdvancedToggle: () => {},
   submitAdvancedQuery: () => {},
@@ -508,6 +524,13 @@ const bridge: ProvidentBridge = {
   sidebar: {
     selectDocument: (id) => sidebarHolder.selectDocument?.(id),
     docNavToggle: (key) => sidebarHolder.docNavToggle?.(key),
+    // U-SHELL-9b §2.8 (H2/H7) — the C20 owners-box collapse toggle seam.
+    toggleOwnersBox: (ragId) => sidebarHolder.toggleOwnersBox?.(ragId),
+    // U-SHELL-9b §2.9 (H1/W2-N13) — the Option-C confirmation-strip seams.
+    sharedCommitFork: (selectedOwnerIds) => sidebarHolder.sharedCommitFork?.(selectedOwnerIds),
+    sharedCommitMutateAll: (content) => sidebarHolder.sharedCommitMutateAll?.(content),
+    sharedCommitCancel: () => sidebarHolder.sharedCommitCancel?.(),
+    sharedCommitToggleOwner: (ownerId) => sidebarHolder.sharedCommitToggleOwner?.(ownerId),
     submitQuery: (value) => sidebarHolder.submitQuery?.(value),
     // W1-N11 — the C18 advanced-search seams.
     searchAdvancedToggle: () => sidebarHolder.searchAdvancedToggle?.(),

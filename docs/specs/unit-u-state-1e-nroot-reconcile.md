@@ -16,7 +16,9 @@ for the live C20/Option-C behavior; it is now **unblocked**.
 `reconcileDocumentRoots` export + the `ScopedRoot` buckets absent) → Implementer
 green (the first landing omitted the out-of-scope-previous-root drop, so the
 blind run reported F2/F5/F8 FAIL) → adversarial pass (RCA-3, §9): H1/H2/L1
-FIXED, L3 RESOLVED (wording), H3 DEFERRED to U-SHELL-9b, L2 (the 1a-inherited
+FIXED, L3 RESOLVED (wording), H3 DEFERRED to U-SHELL-9b (**FIXED 2026-09-13** —
+9b's per-document id namespace, `unit-u-shell-9b-cross-document-shared.md`
+§2.6/§2.7), L2 (the 1a-inherited
 circular `content`/`children` RangeError) recorded → the stale-root drop nuance
 pinned in §4 F8 → blind re-run reconciled F2/F5/F8 to PASS → the documentation
 review (RCA-6) `archive/reviews/2026-09-12-u-state-1e-doc-review.md`.
@@ -208,7 +210,10 @@ export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconci
   node. The per-document **id-namespace/mount** is U-SHELL-9b's (§8 item 2);
   until 9b, a multi-document same-cssId identity replace is unsupported
   (single-active/single-document is the current live path). Recorded as a
-  9b-prerequisite.
+  9b-prerequisite. **RESOLVED 2026-09-13 (U-SHELL-9b H3 / W2-N12):** the
+  per-document id namespace landed (`unit-u-shell-9b-cross-document-shared.md`
+  §2.6/§2.7); scoped cssIds are globally unique, so the Runtime global
+  `destroyRoot`/`attachRoot` path is correct as-is.
 - `reconcileContentRoots` is kept (the single-root path, unchanged). The 1b host
   application must accept the scoped buckets and apply the per-document replace
   through the landed `attachRoot`/`destroyRoot` seams.
@@ -331,4 +336,4 @@ half; the host half is U-SHELL-9b's). All findings are on this repo's host code
 | L1 | LOW | Duplicate `documentIds` (`['A','A']`) produced duplicate scoped roots. | **FIXED** — `documentIds` de-duped first-occurrence before the ordered traverse. Blind H1b/L1 PASS. |
 | L2 | LOW | `collectRagIds`/`shapeProjection` recurse over `children` with no visited-set/depth cap, so a CIRCULAR (or pathologically deep) `content`/`children` structure throws `RangeError: Maximum call stack size exceeded`. **Inherited from U-STATE-1a** (the same recursion); not reachable from a well-formed traversal envelope. | **RECORDED (not fixed in 1e)** — a hardening follow-up (visited-set/depth guard, mirroring the Unit S `TOK-F1` / Unit U2 `ADR-4` stack-safety discipline) is tracked as **W2-N11** in `docs/specs/wave-2-open-decisions.md` §D. |
 | L3 | LOW | The §2.2 single-root no-regression pin claimed the N-root result equals `reconcileContentRoots` for one document, but an identity replace deliberately diverges (`identityReplaced` vs `removed`+`added`). | **RESOLVED (wording)** — the pin is amended to exempt identity: no-regression holds for NON-identity changes; an identity replace diverges into `identityReplaced`. Blind L3a/L3b PASS. |
-| H3 | HIGH (host) | `Runtime.applyContentReconcile` ignores `documentId`; `destroyRoot` resolves a `cssId` GLOBALLY, so a multi-scope same-`cssId` identity replace would destroy the wrong document's node. | **DEFERRED to U-SHELL-9b** — the per-document id-namespace/mount is U-SHELL-9b's (§8 item 2); recorded as a 9b-prerequisite (**W2-N12**). Until it lands, a multi-document same-`cssId` identity replace is unsupported (the current live path is single-active/single-document). |
+| H3 | HIGH (host) | `Runtime.applyContentReconcile` ignores `documentId`; `destroyRoot` resolves a `cssId` GLOBALLY, so a multi-scope same-`cssId` identity replace would destroy the wrong document's node. | **DEFERRED to U-SHELL-9b** — the per-document id-namespace/mount is U-SHELL-9b's (§8 item 2); recorded as a 9b-prerequisite (**W2-N12**). **RESOLVED 2026-09-13 (9b H3):** the per-document id namespace makes scoped cssIds globally unique (`unit-u-shell-9b-cross-document-shared.md` §2.6/§2.7). |

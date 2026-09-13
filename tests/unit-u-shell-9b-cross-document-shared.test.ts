@@ -750,3 +750,171 @@ describe('U-SHELL-9b — simultaneous multi-document render (spec §2.1/C14, §3
     expect(html).toContain('Doc B')
   })
 })
+
+// ===========================================================================
+// §2.6 adversarial hardening — H4/H5/H6 (2026-09-12 findings).
+// H4: planFork totality on a malformed subtree. H5: ownersFor dedupe.
+// H6: planFork validation (root ∈ subtree; a fork must leave an original owner).
+// ===========================================================================
+describe('U-SHELL-9b — adversarial hardening (spec §2.6 H4/H5/H6)', () => {
+  it('H5 — ownersFor de-dupes repeated owner ids (order-preserving)', async () => {
+    const { ownersFor, isShared, detectSharedCommit } = await mod()
+    expect(ownersFor({ X: ['A', 'A', 'B'] }, 'X')).toEqual(['A', 'B'])
+    expect(ownersFor({ X: ['A', '', 'A', 'B'] }, 'X')).toEqual(['A', 'B'])
+    // After dedupe a single distinct owner is NOT shared.
+    expect(isShared({ X: ['A', 'A'] }, 'X')).toBe(false)
+    expect(detectSharedCommit({ nodeId: 'X', editingDocumentId: 'A', owners: { X: ['A', 'A'] } })).toBeNull()
+  })
+
+  it('H4 — planFork is total on a malformed subtree (null/undefined entries never throw)', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const X = store.getNode('X')!
+      const plan = loadCrossDocSync().planFork({
+        root: X,
+        subtree: [X, null as never, undefined as never],
+        edges: store.listEdges(),
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        mintNodeId: counter('fork-n'),
+        mintEdgeId: counter('fork-e'),
+      })
+      expect(plan.forkRootId).not.toBe('X')
+      // The valid root was still copied; the malformed entries were ignored.
+      const putNodeOps = plan.ops.filter((o): o is Extract<BatchOp, { op: 'putNode' }> => o.op === 'putNode')
+      expect(putNodeOps.some((o) => o.node.id === plan.forkRootId)).toBe(true)
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H4 — planFork no-ops when the root is absent from the subtree', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const X = store.getNode('X')!
+      const plan = loadCrossDocSync().planFork({
+        root: X,
+        subtree: [n('other', 'p', 'other')],
+        edges: store.listEdges(),
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        mintNodeId: counter('fork-n'),
+        mintEdgeId: counter('fork-e'),
+      })
+      expect(plan.ops).toEqual([])
+      expect(plan.forkOwners).toEqual([])
+      expect(plan.originalOwners.slice().sort()).toEqual(['A', 'B'])
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H6 — planFork refuses to migrate EVERY owner (X would be left ownerless)', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const plan = planFor(store, {
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        migrateDocumentIds: ['A', 'B'],
+      })
+      expect(plan.ops).toEqual([])
+      expect(plan.forkOwners).toEqual([])
+      expect(plan.originalOwners.slice().sort()).toEqual(['A', 'B'])
+      // The store is untouched (no applyBatch run, nothing to apply).
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H6 — planFork ignores migrate ids that are not owners (never mints a phantom owner)', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const plan = planFor(store, {
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        migrateDocumentIds: ['A', 'ZZ'],
+      })
+      expect(plan.forkOwners).toEqual(['A'])
+      expect(plan.originalOwners).toEqual(['B'])
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H4 (adversarial) — planFork is total on malformed EDGE entries', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const X = store.getNode('X')!
+      const plan = loadCrossDocSync().planFork({
+        root: X,
+        subtree: [X],
+        edges: [null as never, undefined as never, ...store.listEdges()],
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        mintNodeId: counter('fork-n'),
+        mintEdgeId: counter('fork-e'),
+      })
+      expect(plan.forkRootId).not.toBe('X')
+      expect(plan.ops.length).toBeGreaterThan(0)
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H4 (adversarial) — planFork is total on a malformed ownedNodeIds field', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const X = { ...store.getNode('X')!, ownedNodeIds: 'not-an-array' as never }
+      const plan = loadCrossDocSync().planFork({
+        root: X,
+        subtree: [X],
+        edges: [],
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        mintNodeId: counter('fork-n'),
+        mintEdgeId: counter('fork-e'),
+      })
+      expect(plan.forkRootId).not.toBe('X')
+      const copy = plan.ops.find(
+        (o): o is Extract<BatchOp, { op: 'putNode' }> => o.op === 'putNode' && o.node.id === plan.forkRootId,
+      )
+      expect(copy?.node.ownedNodeIds).toEqual([])
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('H4 (adversarial) — planFork no-ops when the minters are not functions', async () => {
+    const { dir, store } = freshStore()
+    try {
+      await seedTwoOwner(store)
+      await mod()
+      const X = store.getNode('X')!
+      const plan = loadCrossDocSync().planFork({
+        root: X,
+        subtree: [X],
+        edges: store.listEdges(),
+        editingDocumentId: 'A',
+        owners: ['A', 'B'],
+        mintNodeId: undefined as never,
+        mintEdgeId: undefined as never,
+      })
+      expect(plan.ops).toEqual([])
+      expect(plan.forkOwners).toEqual([])
+    } finally {
+      cleanup(dir)
+    }
+  })
+})

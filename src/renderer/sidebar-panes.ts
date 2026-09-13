@@ -58,6 +58,21 @@ import {
 } from './pane-gutter.js'
 import type { EditController, CaretState, RichCaretEdge, RebuildKind } from './edit-controller.js'
 import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from './content-reconcile.js'
+import {
+  scopeDocumentIds,
+  plainRagId,
+  buildOwnersMap,
+  applySharedSubtreeDecoration,
+  isShared,
+  ownersFor,
+  detectSharedCommit,
+  planFork,
+  planMutateAll,
+  sharedCommitStripContent,
+  sharedCommitNoticeContent,
+  type SharedOwners,
+  type SharedCommitWarning,
+} from './cross-document-shared.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
 import { HoverPreviewController } from './hover-preview.js'
 import { createSnapshotStore } from '../main/adjacency.js'
@@ -80,7 +95,7 @@ import type {
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { LocalRagQueryFilters } from '../main/retrieval.js'
-import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
+import type { RagNodeType, RagNode, RagEdge, BatchOp, BatchResult } from '../main/rag-store.js'
 import { isRichEditableRoot } from './rich-eligibility.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
 import { type TabDefaultContext, type TabEntry, type TabSearchParams } from './tab-state.js'
@@ -115,6 +130,11 @@ export interface SidebarBridge {
       content: string,
       children: import('../main/rag-store.js').RagNodeChild[],
     ): Promise<import('../shared/types.js').RichCommitResult>
+    /** U-SHELL-9b §2.9 (H1/W2-N13) — the EXISTING atomic batch write-back the
+     *  Option-C fork/mutate-all apply through (`IPC_EDIT_BATCH` → `applyBatch`,
+     *  the SAME transaction primitive as the MCP `edit.batch` tool). Optional on
+     *  older host/test bridges (the commit interception degrades to no-write). */
+    batch?(ops: BatchOp[]): Promise<BatchResult>
   }
   rag: {
     /** U-MS5 — the third optional `store` param (MCP/UI mechanical symmetry,
@@ -372,7 +392,10 @@ const TEXTAREA_BLUR_BODY = `function (ctx, value) {
   // H6 — prefer a dispatch-provided value arg (MCP path) when present; fall
   // back to the DOM textarea's current value (UI path, M4).
   if (value === undefined) {
-    var el = document.getElementById('textarea-' + ragId);
+    // §2.7 (H3/W2-N12) — scope-agnostic: the authored textarea id may be
+    // document-scoped, so prefer the data-rag-node-id attribute selector and
+    // fall back to the legacy getElementById('textarea-' + ragId).
+    var el = (typeof document.querySelector === 'function' ? document.querySelector('textarea[data-rag-node-id="' + ragId + '"]') : null) || document.getElementById('textarea-' + ragId);
     value = el ? el.value : '';
   }
   s.textareaBlur(ragId, value);
@@ -397,7 +420,10 @@ const RAG_EDITOR_BLUR_BODY = `function (ctx, html) {
   // G — prefer a dispatch-provided html arg (MCP path); else read the DOM
   // contenteditable root's innerHTML (UI path).
   if (html === undefined) {
-    var el = document.getElementById('rag-' + ragId);
+    // §2.7 (H3/W2-N12) — scope-agnostic: the authored root id may be
+    // document-scoped, so prefer the data-rag-node-id attribute selector and
+    // fall back to the legacy getElementById('rag-' + ragId).
+    var el = (typeof document.querySelector === 'function' ? document.querySelector('[id^="rag-"][data-rag-node-id="' + ragId + '"]') : null) || document.getElementById('rag-' + ragId);
     html = el ? el.innerHTML : '';
   }
   s.editorBlur(ragId, html);
@@ -492,6 +518,30 @@ export class SidebarPanes {
    *  in place through the U-STATE-1e N-root reconcile. Empty / single-entry ⇒
    *  the landed single-active path is unchanged. */
   private mountedDocumentIds: string[] = []
+
+  /** U-SHELL-9b §2.8 (H2/H7) — the C20 owners-box collapse set (PLAIN rag ids
+   *  whose owners box the operator collapsed). Empty ⇒ every box is expanded
+   *  (the default). Flipped by `toggleOwnersBox`; applied at every decoration
+   *  seam. Host state only — never stored on a RAG node. */
+  private readonly collapsedOwnersBoxes = new Set<string>()
+
+  /** U-SHELL-9b §2.9 (H1/W2-N13) — the intercepted Option-C commit awaiting a
+   *  fork / mutate-all / cancel choice. Non-null ⇒ the confirmation strip is
+   *  authored into the graph and NO write has happened. */
+  private pendingSharedCommit: {
+    warning: SharedCommitWarning
+    /** The raw edited value (textarea value / contenteditable innerHTML). */
+    value: string
+    kind: 'textarea' | 'rich'
+    selectedOwnerIds: string[]
+  } | null = null
+
+  /** §2.9/F8 — the blocked-reverse-map notice the commit seam surfaces when the
+   *  owners reverse map is unavailable (no write, never a silent mutate). */
+  private sharedCommitNotice: string | null = null
+
+  /** §2.9 — the mint sequence for the fork's fresh node/edge ids. */
+  private forkMintSeq = 0
 
   /** The host's pane-data cache (M7/M9). */
   private lastSnapshot: RagSnapshotPayload | null = null
@@ -766,6 +816,238 @@ export class SidebarPanes {
     this.mountedStageKey = null // a multi/simultaneous mount — no single-active key
     if (this.runtime == null || this.lastSnapshot == null) return
     this.applyDocumentSet(this.lastSnapshot, ids, null)
+  }
+
+  /** U-SHELL-9b §2.8 (H2/H7) — the C20 owners-box collapse toggle. Flips the
+   *  host `collapsedOwnersBoxes` set for a SHARED ragId and re-derives so the
+   *  render-time owners box reflects the new state. An UNKNOWN/UNSHARED or empty
+   *  ragId is a NO-OP (the set is never touched). The host re-derives the
+   *  simultaneous multi-document set when several documents are mounted, else
+   *  re-renders the existing app graph. SYNCHRONOUS. */
+  toggleOwnersBox(ragId: string): void {
+    if (typeof ragId !== 'string' || ragId === '') return
+    const owners = buildOwnersMap(this.lastSnapshot?.edges ?? [])
+    if (!isShared(owners, ragId)) return // unknown/unshared — no-op
+    if (this.collapsedOwnersBoxes.has(ragId)) this.collapsedOwnersBoxes.delete(ragId)
+    else this.collapsedOwnersBoxes.add(ragId)
+    if (this.mountedDocumentIds.length > 1 && this.runtime != null && this.lastSnapshot != null) {
+      this.applyDocumentSet(this.lastSnapshot, this.mountedDocumentIds, null)
+      return
+    }
+    this.rerenderAppGraph()
+  }
+
+  // ---- U-SHELL-9b §2.9 (H1/W2-N13) — Option-C commit interception ---------
+
+  /** §2.9 — the document the edit targets: the current document when it owns
+   *  the node, else the first owner, else the first mounted document. */
+  private editingDocumentIdFor(owners: SharedOwners | null, ragId: string): string {
+    const nodeOwners = ownersFor(owners, ragId)
+    const current = this._currentDocumentId
+    if (current != null && current !== '' && nodeOwners.includes(current)) return current
+    if (nodeOwners.length > 0) return nodeOwners[0]
+    return this.mountedDocumentIds[0] ?? current ?? ''
+  }
+
+  /** §2.9 — re-author the app graph (with the pending strip / block notice) so
+   *  the confirmation is MCP-visible. Bypasses the dirty-edit re-render guard:
+   *  the intercepted commit leaves the node dirty, but the strip MUST render. */
+  private renderSharedCommitUi(): void {
+    if (this.runtime != null && this.lastTraversalEnvelope != null) {
+      try {
+        this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
+      } catch (e) {
+        console.error('[sidebar-panes] shared-commit UI render failed', e)
+      }
+    }
+  }
+
+  /** §2.9 (H1) — intercept a commit targeting a shared node BEFORE the write.
+   *  Returns true when the commit is INTERCEPTED (no write); false when the
+   *  caller should proceed with the normal commit (unshared/unknown). A blocked
+   *  reverse map (F8) surfaces a notice + no write; a warn (>1 owner) stashes the
+   *  pending commit + authors the confirmation strip. */
+  private interceptSharedCommit(ragId: string, value: string, kind: 'textarea' | 'rich'): boolean {
+    if (typeof ragId !== 'string' || ragId === '') return false
+    const owners: SharedOwners | null =
+      this.lastSnapshot == null || !Array.isArray(this.lastSnapshot.edges)
+        ? null
+        : buildOwnersMap(this.lastSnapshot.edges)
+    const editingDocumentId = this.editingDocumentIdFor(owners, ragId)
+    const warning = detectSharedCommit({ nodeId: ragId, editingDocumentId, owners })
+    if (warning == null) {
+      // Unshared/unknown — run the existing commit path unchanged.
+      this.pendingSharedCommit = null
+      this.sharedCommitNotice = null
+      return false
+    }
+    if (warning.blocked) {
+      // F8 — never a silent mutate: surface the reason, NO write.
+      this.pendingSharedCommit = null
+      this.sharedCommitNotice = warning.reason ?? 'shared commit blocked: owners unavailable'
+      this.renderSharedCommitUi()
+      return true
+    }
+    this.sharedCommitNotice = null
+    this.pendingSharedCommit = {
+      warning,
+      value,
+      kind,
+      selectedOwnerIds: [editingDocumentId],
+    }
+    this.renderSharedCommitUi()
+    return true
+  }
+
+  /** §2.9 — the shared node's owned-subtree closure (X + `ownedNodeIds`
+   *  recursively) from the cached snapshot. PURE w.r.t. the snapshot. */
+  private collectOwnedSubtree(snapshot: RagSnapshotPayload, root: RagNode): RagNode[] {
+    const nodes = (snapshot.nodes ?? []) as unknown as RagNode[]
+    const byId = new Map<string, RagNode>()
+    for (const node of nodes) {
+      if (node != null && typeof node.id === 'string') byId.set(node.id, node)
+    }
+    const out: RagNode[] = []
+    const seen = new Set<string>()
+    const visit = (node: RagNode | undefined): void => {
+      if (node == null || seen.has(node.id)) return
+      seen.add(node.id)
+      out.push(node)
+      for (const id of Array.isArray(node.ownedNodeIds) ? node.ownedNodeIds : []) visit(byId.get(id))
+    }
+    visit(root)
+    return out
+  }
+
+  /** §2.9 — apply a resolved shared-commit choice through the EXISTING atomic
+   *  `bridge.edit.batch` (`IPC_EDIT_BATCH` → `applyBatch`). On success clear the
+   *  pending state + re-derive; on failure (F7) keep the strip + store intact. */
+  private async applySharedCommitOps(ops: BatchOp[]): Promise<void> {
+    const batch = this.bridge.edit?.batch
+    if (typeof batch !== 'function') return // no atomic seam — no write, pending stays
+    let result: BatchResult | undefined
+    try {
+      result = await batch.call(this.bridge.edit, ops)
+    } catch (e) {
+      console.error('[sidebar-panes] shared-commit batch failed', e)
+      return // F7 — keep the pending state
+    }
+    if (result == null || result.ok !== true) return // F7 — store rolled back, warn remains
+    await this.resolveSharedCommit()
+  }
+
+  /** §2.9 — clear the pending state + re-derive so the strip disappears and any
+   *  change is reflected in every mounted root. */
+  private async resolveSharedCommit(): Promise<void> {
+    const pending = this.pendingSharedCommit
+    this.pendingSharedCommit = null
+    this.sharedCommitNotice = null
+    if (pending != null) this.editController.clearDirty(pending.warning.nodeId)
+    this.renderSharedCommitUi()
+    try {
+      await this.reDerive('content')
+    } catch (e) {
+      console.error('[sidebar-panes] shared-commit re-derive failed', e)
+    }
+  }
+
+  /** §2.9 — Option-C fork: deep-copy the shared node + its owned subtree into
+   *  the selected owners (default: the editing document), re-point their edges,
+   *  leave the other owners unchanged, all in ONE atomic batch. */
+  async sharedCommitFork(selectedOwnerIds?: string[]): Promise<void> {
+    const pending = this.pendingSharedCommit
+    if (pending == null) return
+    const snapshot = this.lastSnapshot
+    if (snapshot == null || !Array.isArray(snapshot.nodes)) return
+    const ragId = pending.warning.nodeId
+    const baseRoot = (snapshot.nodes as unknown as RagNode[]).find((node) => node != null && node.id === ragId)
+    if (baseRoot == null) {
+      await this.resolveSharedCommit()
+      return
+    }
+    // §2.3/§2.9 — the fork must PRESERVE the user's pending edit for the editing
+    // document (a fork that deep-copied the ORIGINAL content would silently drop
+    // the edit the user just made). Substitute the pending content/children onto
+    // the fork root before the deep copy; the other owners keep the original X.
+    const forkRoot: RagNode =
+      pending.kind === 'rich'
+        ? (() => {
+            const d = decomposeRichHtml(pending.value)
+            return d.ok ? { ...baseRoot, content: d.content, children: d.children } : { ...baseRoot, content: pending.value }
+          })()
+        : { ...baseRoot, content: pending.value }
+    const subtree = this.collectOwnedSubtree(snapshot, baseRoot).map((node) =>
+      node.id === ragId ? forkRoot : node,
+    )
+    const subtreeIds = new Set(subtree.map((node) => node.id))
+    const edges = ((snapshot.edges ?? []) as unknown as RagEdge[]).filter(
+      (edge) => subtreeIds.has(edge.source) || subtreeIds.has(edge.target),
+    )
+    const owners = ownersFor(buildOwnersMap(snapshot.edges ?? []), ragId)
+    const migrate = Array.isArray(selectedOwnerIds) ? selectedOwnerIds : pending.selectedOwnerIds
+    const plan = planFork({
+      root: forkRoot,
+      subtree,
+      edges,
+      editingDocumentId: pending.warning.editingDocumentId,
+      owners,
+      migrateDocumentIds: migrate,
+      // A fork id is namespaced by the source ragId so it cannot collide with
+      // an unrelated existing node/edge (the store owns id uniqueness).
+      mintNodeId: () => `fork-${ragId}-node-${++this.forkMintSeq}`,
+      mintEdgeId: () => `fork-${ragId}-edge-${++this.forkMintSeq}`,
+    })
+    // F10b — an empty selection (or a no-op plan) leaves the store unchanged.
+    if (plan.ops.length === 0) {
+      await this.resolveSharedCommit()
+      return
+    }
+    await this.applySharedCommitOps(plan.ops)
+  }
+
+  /** §2.9 — Option-C mutate-all: one same-id `putNode` through the atomic batch
+   *  (every owning document re-derives; no fork node). */
+  async sharedCommitMutateAll(content?: string): Promise<void> {
+    const pending = this.pendingSharedCommit
+    if (pending == null) return
+    const snapshot = this.lastSnapshot
+    if (snapshot == null || !Array.isArray(snapshot.nodes)) return
+    const root = (snapshot.nodes as unknown as RagNode[]).find(
+      (node) => node != null && node.id === pending.warning.nodeId,
+    )
+    if (root == null) {
+      await this.resolveSharedCommit()
+      return
+    }
+    let nextContent = content
+    if (nextContent === undefined) {
+      if (pending.kind === 'rich') {
+        const decomposed = decomposeRichHtml(pending.value)
+        nextContent = decomposed.ok ? decomposed.content : pending.value
+      } else {
+        nextContent = pending.value
+      }
+    }
+    await this.applySharedCommitOps(planMutateAll({ root, content: nextContent }))
+  }
+
+  /** §2.9 — Option-C cancel: NO write, just drop the pending state. */
+  async sharedCommitCancel(): Promise<void> {
+    if (this.pendingSharedCommit == null && this.sharedCommitNotice == null) return
+    await this.resolveSharedCommit()
+  }
+
+  /** §2.9 — flip one checklist owner's selection in the pending state (then
+   *  re-author the strip). An unknown/empty owner id is a no-op. */
+  sharedCommitToggleOwner(ownerId: string): void {
+    const pending = this.pendingSharedCommit
+    if (pending == null || typeof ownerId !== 'string' || ownerId === '') return
+    if (!pending.warning.owners.includes(ownerId)) return
+    const selected = pending.selectedOwnerIds
+    pending.selectedOwnerIds = selected.includes(ownerId)
+      ? selected.filter((id) => id !== ownerId)
+      : [...selected, ownerId]
+    this.renderSharedCommitUi()
   }
 
   /** The scoped single-document render for a `document` tab target (reuses the
@@ -1094,6 +1376,17 @@ export class SidebarPanes {
     }
   }
 
+  /** U-SHELL-9b §2.8 (H2/W2-N14) — the ONE C20 decoration seam. Every envelope
+   *  handed to the runtime passes through this BEFORE assemble/translate/
+   *  reconcile: the owners reverse map is built ONCE from the cached snapshot
+   *  edges (`buildOwnersMap`) and the host collapse set
+   *  (`collapsedOwnersBoxes`) is applied. PURE w.r.t. the input (the decorator
+   *  deep-copies); no RAG node gains a stored flag. */
+  private decorateShared(envelope: LegacyInitialData): LegacyInitialData {
+    const owners = buildOwnersMap(this.lastSnapshot?.edges ?? [])
+    return applySharedSubtreeDecoration(envelope, owners, this.collapsedOwnersBoxes)
+  }
+
   /** Assemble the pane-inclusive app-graph envelope from a traversal envelope
    *  + the enabled app-graph panes, recompute the backRefs from the ASSEMBLED
    *  envelope (M14), and LOAD it into the app Runtime. Returns the assembly
@@ -1105,7 +1398,11 @@ export class SidebarPanes {
       throw new Error('assembleAppGraphEnvelope: input/registry/ctx/traversalEnvelope required')
     }
     const result = assembleAppGraphEnvelope({
-      traversalEnvelope,
+      // §2.8 (H2/W2-N14) — decorate the traversal envelope ONCE here, before the
+      // assemble/translate/reconcile: the C20 class + owners box are a
+      // render-time materialization from the reverse map (`buildOwnersMap` of
+      // the cached snapshot edges), never a stored RAG flag.
+      traversalEnvelope: this.decorateShared(traversalEnvelope),
       registry: this.registry,
       ctx: this.buildTemplateContext(),
       sidebarZone: this.sidebarZone,
@@ -1156,7 +1453,8 @@ export class SidebarPanes {
     // panes are reconciled alongside the document roots (HOST-PANE-STALE-ON-
     // CONTENT-CHANGE) — not just the `rag-` document subtrees.
     const assembled = assembleAppGraphEnvelope({
-      traversalEnvelope,
+      // §2.8 (H2/W2-N14) — decorate before the assemble/reconcile (see loadAppGraph).
+      traversalEnvelope: this.decorateShared(traversalEnvelope),
       registry: this.registry,
       ctx: this.buildTemplateContext(),
       sidebarZone: this.sidebarZone,
@@ -1224,11 +1522,30 @@ export class SidebarPanes {
     if (this.runtime == null || documentIds.length === 0) return
     // The merged traversal envelope (the refresh() re-load source).
     const mergedTraversal = this.buildTraversalEnvelope(snapshot, documentIds)
-    // One envelope per document (the N-root `next` scoping).
+    // One SCOPED envelope per document (the N-root `next`): §2.7
+    // (H3/W2-N12) — scope the authored `props.id` per document so a shared RAG
+    // node materialized in two simultaneously-rendered documents yields two
+    // globally-unique roots (`rag-doc-a--X` / `rag-doc-b--X`) while
+    // `data-rag-node-id` stays the PLAIN ragId. This is additive at this
+    // multi-mount seam ONLY (boot/mountTab/refresh stay unscoped).
     const perDoc = documentIds.map((documentId) => ({
       documentId,
-      envelope: this.buildTraversalEnvelope(snapshot, [documentId]),
+      // §2.8 (H2/W2-N14) — decorate BEFORE the §2.7 scope: the C20 owners box is
+      // authored into the envelope, then `scopeDocumentIds` prefixes its
+      // `rag-`-prefixed id per document (so two mounted documents never share a
+      // duplicate DOM id). Decoration is render-time only (deep-copies).
+      envelope: scopeDocumentIds(
+        this.decorateShared(this.buildTraversalEnvelope(snapshot, [documentId])),
+        documentId,
+      ),
     }))
+    // The remaining documents' envelopes carry no panes, so run the same
+    // render-time transforms the assembled env gets (readOnly/editingMode) on
+    // each before they are unioned into the reconcile payload.
+    for (let i = 1; i < perDoc.length; i += 1) {
+      this.setTextareaReadOnly(perDoc[i].envelope)
+      this.applyEditingMode(perDoc[i].envelope, this.editingMode)
+    }
     const assembled = assembleAppGraphEnvelope({
       traversalEnvelope: perDoc[0].envelope,
       registry: this.registry,
@@ -1238,28 +1555,32 @@ export class SidebarPanes {
       revealedZones: this.revealedZones,
     })
     const env = assembled.envelope
-    // Append the remaining documents' content so `applyContentReconcile`'s
-    // `next` payload supplies every root's node data.
-    for (let i = 1; i < perDoc.length; i += 1) {
-      env.content = [...(env.content ?? []), ...(perDoc[i].envelope.content ?? [])]
-    }
     this.setTextareaReadOnly(env)
     this.applyEditingMode(env, this.editingMode)
     this.applyEditorToolbar(env, this.editingMode)
-    // The first document's envelope is the assembled env (it carries the panes
-    // so pane roots are in the reconcile set); the remaining are their scoped
-    // traversals. Panes are `pane-`-prefixed → reconciled globally by the
-    // N-root reconciler regardless of their tracked document scope.
+    // The first document's SCOPED envelope becomes the pane-inclusive assembled
+    // env (so pane roots are in the reconcile set) — but it must NOT absorb the
+    // sibling documents' content (that was the H3 mis-attribution bug:
+    // `materializedDocumentRoots()` attributed doc-b's roots to doc-a). The
+    // reconcile `next` is the assembled env UNIONED with every remaining
+    // document's scoped content, built SEPARATELY from `perDoc`.
     perDoc[0] = { documentId: perDoc[0].documentId, envelope: env }
+    const unionNext: LegacyInitialData = {
+      ...env,
+      content: [
+        ...(env.content ?? []),
+        ...perDoc.slice(1).flatMap((d) => d.envelope.content ?? []),
+      ],
+    }
     const result = reconcileDocumentRoots({
       previous: this.runtime.materializedDocumentRoots(),
       next: perDoc,
       change,
       documentIds,
     })
-    this.runtime.applyContentReconcile({ result, next: env, documents: perDoc })
+    this.runtime.applyContentReconcile({ result, next: unionNext, documents: perDoc })
     this.syncZoneMirrors(env)
-    const refs = this.recomputeBackRefs(env)
+    const refs = this.recomputeBackRefs(unionNext)
     this.backRefs.clear()
     for (const [k, v] of refs) this.backRefs.set(k, v)
     this.lastTraversalEnvelope = mergedTraversal
@@ -1616,7 +1937,7 @@ export class SidebarPanes {
           // The real indicator is `this.editingMode === 'contenteditable'` AND the
           // rendered root carrying the `contenteditable` attribute that
           // `applyEditingMode` authors ONLY for eligible roots in contenteditable mode.
-          const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+          const root = this.ragRootElement(ragId)
           const rootIsContenteditable =
             this.editingMode === 'contenteditable' &&
             !!root &&
@@ -1629,8 +1950,8 @@ export class SidebarPanes {
           // rich caret is DROPPED, never applied to a textarea/non-contenteditable
           // node (amendment 4 / U3 F2 / ADR-8).
         } else {
-          // Gate — ONLY restore a textarea caret into a `textarea-<ragId>` element.
-          const el = document.getElementById('textarea-' + ragId) as HTMLTextAreaElement | null
+          // Gate — ONLY restore a textarea caret into a textarea control.
+          const el = this.textareaElement(ragId)
           if (el) {
             el.selectionStart = caret.offset
             el.selectionEnd = caret.offset
@@ -1973,9 +2294,19 @@ export class SidebarPanes {
     const translated = translateLegacy(envelope)
     const rootsByRagId = new Map<string, Array<{ id: string; children: unknown[]; base?: { props?: { id?: unknown } } }>>()
     for (const n of translated.nodes) {
-      const pid = (n as { base?: { props?: { id?: unknown } } }).base?.props?.id
+      const props = (n as { base?: { props?: Record<string, unknown> } }).base?.props
+      const pid = props?.id
       if (typeof pid === 'string' && pid.startsWith('rag-')) {
-        const ragId = pid.slice(4)
+        // §2.8 (H2) — the C20 owners box is synthetic `rag-`-prefixed UI chrome
+        // (prefixed so the multi-document §2.7 scope keeps its id unique), not a
+        // RAG subtree root: it must not contribute a phantom backRefs entry.
+        if (props?.['data-shared'] === 'true') continue
+        // §2.7 (H3/W2-N12) — a document-scoped authored id
+        // (`rag-<documentId>--<ragId>`) recovers the PLAIN ragId from
+        // `data-rag-node-id` (the backRefs/backlink key); `id.slice(4)` is the
+        // unscoped single-document fallback. `plainRagId` rejects a non-root
+        // synthetic `rag-` id (the C20 owners box).
+        const ragId = plainRagId(props) ?? pid.slice(4)
         const arr = rootsByRagId.get(ragId) ?? []
         arr.push(n as never)
         rootsByRagId.set(ragId, arr)
@@ -2035,22 +2366,42 @@ export class SidebarPanes {
       if (!n) return // F3 (adversarial) — a malformed payload root must not throw
       const pid = n.props?.id
       if (typeof pid === 'string' && pid.startsWith('rag-')) {
-        const ragId = pid.slice(4)
+        // §2.7 (H3/W2-N12) — the PLAIN ragId (for the textarea match) comes from
+        // `data-rag-node-id`; the authored id may be document-scoped
+        // (`rag-<documentId>--<ragId>`), so `id.slice(4)` is only the fallback.
+        // `plainRagId` rejects a non-root synthetic `rag-` id (the C20 owners box).
+        const ragId = plainRagId(n.props as Record<string, unknown> | undefined) ?? pid.slice(4)
         // CONTENTEDITABLE MODE — do NOT produce the textarea editing overlay in
         // the render for ANY rag root (the user's requirement: no textareas in
         // contenteditable mode). The textarea is a textarea-mode artifact; in
         // contenteditable mode the rich editor (or plain text for non-eligible
         // roots) replaces it. Removed for ALL roots, not just rich-eligible ones.
-        n.children = (n.children ?? []).filter(
-          (child) => (child as LegacyNodeData).props?.id !== `textarea-${ragId}`,
-        )
+        // Match the textarea child by its OWN `data-rag-node-id` (scope-agnostic)
+        // — never a hard-coded `textarea-<ragId>` props.id, which is scoped in
+        // the simultaneous multi-document path. A textarea that carries no data
+        // id is matched by its type as the fallback.
+        n.children = (n.children ?? []).filter((child) => {
+          const c = child as LegacyNodeData
+          // Only a TEXTAREA child is the editing overlay — inline spans also
+          // carry the same `data-rag-node-id` and must survive the splice.
+          if (c.type !== 'textarea') return true
+          const cProps = c.props as Record<string, unknown> | undefined
+          const cRag = cProps?.['data-rag-node-id']
+          if (typeof cRag === 'string' && cRag !== '') return cRag !== ragId
+          return false // a data-id-less textarea is the root's own overlay
+        })
         // `ownsDocChildren` mirrors the traversal's `rag-`-prefix rule
         // (collectSubtreeIds / recomputeBackRefs): a DIRECT child whose
         // authored `props.id` is a `rag-`-prefixed string is a doc-child
         // subtree root. Inline children (`inline-…`) and the textarea
         // (`textarea-…`) are NOT `rag-`-prefixed → never doc-children.
+        // §2.8 (H2) — the C20 owners box is synthetic `rag-`-prefixed UI chrome
+        // (prefixed for the multi-document scope); it must NOT make its shared
+        // host read as a doc-child container (which would drop rich-eligibility).
         const ownsDocChildren = (n.children ?? []).some((c) => {
-          const cid = (c as LegacyNodeData).props?.id
+          const cn = c as LegacyNodeData
+          if ((cn.props as Record<string, unknown> | undefined)?.['data-shared'] === 'true') return false
+          const cid = cn.props?.id
           return typeof cid === 'string' && cid.startsWith('rag-')
         })
         if (isRichEditableRoot(n.type as RagNodeType, ownsDocChildren)) {
@@ -2093,6 +2444,30 @@ export class SidebarPanes {
   private applyEditorToolbar(envelope: LegacyInitialData, editingMode: EditingMode): void {
     if (!Array.isArray(envelope.content)) envelope.content = []
     envelope.content.push({ content: [editorToolbarContent(editingMode, this.zoneName)] })
+    // U-SHELL-9b §2.9 (H1) — while an Option-C commit is pending (or blocked),
+    // author the confirmation strip / block notice into the SAME app graph
+    // (MCP-visible) and remove it once resolved. `null` ⇒ nothing appended.
+    const commitUi = this.sharedCommitUiContent()
+    if (commitUi != null) {
+      commitUi.placement = { targetPlacement: [this.zoneName] }
+      envelope.content.push({ content: [commitUi] })
+    }
+  }
+
+  /** §2.9 — the pending Option-C UI (strip when a commit awaits a choice, the
+   *  block notice when the reverse map is unavailable). Null otherwise. PURE
+   *  authoring (the host state is read, the returned node is fresh). */
+  private sharedCommitUiContent(): LegacyNodeData | null {
+    if (this.pendingSharedCommit != null) {
+      return sharedCommitStripContent({
+        warning: this.pendingSharedCommit.warning,
+        selectedOwnerIds: this.pendingSharedCommit.selectedOwnerIds,
+      })
+    }
+    if (this.sharedCommitNotice != null) {
+      return sharedCommitNoticeContent(this.sharedCommitNotice)
+    }
+    return null
   }
 
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
@@ -2122,6 +2497,15 @@ export class SidebarPanes {
       // `pane-doc-nav-toggle` handler body reaches it; same add/remove
       // re-derive path as selectDocument).
       docNavToggle: (key: string) => this.docNavToggle(key),
+      // U-SHELL-9b §2.8 (H2/H7) — the C20 owners-box collapse toggle seam (the
+      // `OWNERS_BOX_TOGGLE_HANDLER` body reaches it via `window.provident.sidebar`).
+      toggleOwnersBox: (ragId: string) => this.toggleOwnersBox(ragId),
+      // U-SHELL-9b §2.9 (H1/W2-N13) — the Option-C confirmation-strip seams
+      // (the strip handler bodies reach them via `window.provident.sidebar`).
+      sharedCommitFork: (selectedOwnerIds?: string[]) => void this.sharedCommitFork(selectedOwnerIds),
+      sharedCommitMutateAll: (content?: string) => void this.sharedCommitMutateAll(content),
+      sharedCommitCancel: () => void this.sharedCommitCancel(),
+      sharedCommitToggleOwner: (ownerId: string) => this.sharedCommitToggleOwner(ownerId),
       submitQuery: (value: string) => void this.submitQuery(value),
       // U-PARITY-C18 — the advanced-search disclosure toggle + submit seams (the
       // `pane-search-advanced-*` handler bodies reach them).
@@ -2576,6 +2960,37 @@ export class SidebarPanes {
     })
   }
 
+  /** §2.7 (H3/W2-N12) — resolve the rendered contenteditable ROOT for a PLAIN
+   *  ragId, scope-agnostically. The authored id may be document-scoped
+   *  (`rag-<documentId>--<ragId>`), so `getElementById('rag-' + ragId)` fails in
+   *  the simultaneous multi-document path. Prefer the attribute selector
+   *  `[id^="rag-"][data-rag-node-id="<ragId>"]` (the subtree root, never an
+   *  inline span/textarea), falling back to the legacy unscoped
+   *  `getElementById` when the DOM has no `querySelector` (the dom-shim). */
+  private ragRootElement(ragId: string): HTMLElement | null {
+    const doc = typeof document === 'undefined' ? null : document
+    if (doc == null) return null
+    if (typeof doc.querySelector === 'function') {
+      const el = doc.querySelector(`[id^="rag-"][data-rag-node-id="${ragId}"]`)
+      if (el) return el as HTMLElement
+    }
+    const byId = typeof doc.getElementById === 'function' ? doc.getElementById('rag-' + ragId) : null
+    return (byId as HTMLElement | null) ?? null
+  }
+
+  /** §2.7 (H3/W2-N12) — resolve the rendered textarea control for a PLAIN
+   *  ragId, scope-agnostically (see `ragRootElement`). */
+  private textareaElement(ragId: string): HTMLTextAreaElement | null {
+    const doc = typeof document === 'undefined' ? null : document
+    if (doc == null) return null
+    if (typeof doc.querySelector === 'function') {
+      const el = doc.querySelector(`textarea[data-rag-node-id="${ragId}"]`)
+      if (el) return el as HTMLTextAreaElement
+    }
+    const byId = typeof doc.getElementById === 'function' ? doc.getElementById('textarea-' + ragId) : null
+    return (byId as HTMLTextAreaElement | null) ?? null
+  }
+
   /** Unit L §5.2 — `rag-textarea-input`: mark the RAG node's control dirty. A
    *  re-derive while dirty is QUEUED (the dirty-edit guard, Unit D §5.2). */
   private textareaInput(ragId: string): void {
@@ -2588,7 +3003,7 @@ export class SidebarPanes {
    *  the MCP `edit.set_content` tool (MCP/UI equivalence, §5.6). A non-dirty
    *  textarea is a no-op blur (no commit, no IPC). */
   private textareaBlur(ragId: string, value: string): void {
-    const el = document.getElementById('textarea-' + ragId) as HTMLTextAreaElement | null
+    const el = this.textareaElement(ragId)
     const offset = el && typeof el.selectionStart === 'number' ? el.selectionStart : 0
     // H3 — a non-dirty (no-op) blur saves the caret OFFSET but not focus, so a
     // re-derive restores the offset without stealing focus from the control the
@@ -2597,6 +3012,9 @@ export class SidebarPanes {
     this.editController.saveCaret(ragId, { kind: 'textarea', offset, focused: dirty })
     this.caretNodes.add(ragId)
     if (dirty) {
+      // U-SHELL-9b §2.9 (H1) — intercept a commit targeting a shared node
+      // BEFORE the write (the Option-C warn + fork/mutate-all choice).
+      if (this.interceptSharedCommit(ragId, value, 'textarea')) return
       void this.editController.commit(ragId, value).then((result) => {
         // commit clears the dirty flag on success (Unit D §5.2 L6), which may
         // trigger a queued rebuild. On a `deleted-node` result the controller
@@ -2645,6 +3063,9 @@ export class SidebarPanes {
     if (this.committingRagIds.has(ragId)) return // ADR-1 — a commit is already in flight for this node
     const result = decomposeRichHtml(html) // U2 — decompose ONCE (decision G)
     if (!result.ok) return // defensive fail-state — NO commit; the DOM content is preserved (§2.2)
+    // U-SHELL-9b §2.9 (H1) — intercept a commit targeting a shared node BEFORE
+    // the write (the Option-C warn + fork/mutate-all choice).
+    if (this.interceptSharedCommit(ragId, html, 'rich')) return
     this.committingRagIds.add(ragId) // ADR-1 — latch the in-flight commit BEFORE the async settle
     void this.bridge.edit.commitRich(ragId, result.content, result.children)
       .then((r) => {
@@ -2683,7 +3104,7 @@ export class SidebarPanes {
     if (this.pendingCommitRagId && this.pendingCommitRagId !== ragId) {
       const orphan = this.pendingCommitRagId
       this.pendingCommitRagId = null
-      const el = document.getElementById('rag-' + orphan) as HTMLElement | null
+      const el = this.ragRootElement(orphan)
       const html = el ? el.innerHTML : ''
       this.editorBlurCommit(orphan, html)
     }
@@ -2701,7 +3122,7 @@ export class SidebarPanes {
       // A blur was deferred mid-composition; run the deferred commit NOW
       // (the final commit happens on compositionend-then-blur).
       this.pendingCommitRagId = null
-      const el = document.getElementById('rag-' + ragId) as HTMLElement | null
+      const el = this.ragRootElement(ragId)
       const html = el ? el.innerHTML : ''
       this.editorBlurCommit(ragId, html)
     }
@@ -2717,7 +3138,7 @@ export class SidebarPanes {
     const sel = typeof window.getSelection === 'function' ? window.getSelection() : null
     const node = which === 'anchor' ? sel?.anchorNode : sel?.focusNode
     const offset = which === 'anchor' ? sel?.anchorOffset : sel?.focusOffset
-    const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+    const root = this.ragRootElement(ragId)
     if (!sel || !node || !root || !(typeof root.contains === 'function' ? root.contains(node) : false)) {
       return { path: [0], offset: 0 } // fallback — the start of the root's first text run
     }
@@ -2797,7 +3218,7 @@ export class SidebarPanes {
    *  dom-shim supplies neither `getSelection` nor `createRange`; their absence
    *  NO-OPs the restore (never throws). A path that no longer resolves → NO-OP. */
   private restoreRichCaret(ragId: string, caret: Extract<CaretState, { kind: 'rich' }>): void {
-    const root = document.getElementById('rag-' + ragId) as HTMLElement | null
+    const root = this.ragRootElement(ragId)
     if (!root) return // no contenteditable root — dropped (stale)
     const anchorNode = this.resolveDomPath(root, caret.anchor.path)
     const focusNode = this.resolveDomPath(root, caret.focus.path)

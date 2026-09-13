@@ -140,13 +140,13 @@ complete**.
 
 | # | Sev | Finding | Status |
 | --- | --- | --- | --- |
-| **H1** | HIGH | **Option-C commit warn + fork/mutate-all is unreachable** — `cross-document-shared.ts` has **zero `src/` importers**; the commit paths (`textareaBlur`/`editorBlurCommit`) write directly with no `detectSharedCommit` intercept, no confirmation strip, no fork/mutate apply. §3 states 1/5/6/7/8 + §5 unmet. | **OPEN** — needs a host commit seam + provident fork/mutate-all strip + the >2-owner checklist + `planFork→applyBatch`/`planMutateAll` apply. |
-| **H2** | HIGH | **C20 never materialized** — `applySharedSubtreeDecoration`/`ownersBoxContent` have no `src/` callers; `applyDocumentSet` never decorates. §3 states 2/4 + §5 unmet. | **OPEN** — decorate at assembly from the reverse map; register `toggleOwnersBox`. |
-| **H3** | HIGH | **W2-N12 unresolved** — shared `rag-X` in two docs renders **two `id="rag-X"`** elements (invalid DOM; ambiguous dispatch) and `materializedDocumentRoots()` mis-attributes doc-b's roots to doc-a. `Runtime.applyContentReconcile` ignores `ScopedRoot.documentId` (cssId last-wins; `destroyRoot`/`attachRoot` global); `applyDocumentSet` appends sibling content into `perDoc[0].envelope`. | **OPEN** — the per-document id-namespace/mount (W2-N12) must land before 9b is done. |
-| **H4** | MED | `planFork({subtree:[null]})` throws (`cross-document-shared.ts:233`). | **OPEN (fix next)** |
-| **H5** | LOW | `ownersFor` doesn't dedupe (`['A','A','B']` → shared/checklist wrong). | **OPEN** |
-| **H6** | LOW | `planFork` can emit invalid plans (`root ∉ subtree`; all-owner migration leaves X ownerless). | **OPEN** |
-| **H7** | LOW | owners-box toggle calls an uninstalled `window.provident.sidebar.toggleOwnersBox`. | **OPEN** |
+| **H1** | HIGH | **Option-C commit warn + fork/mutate-all is unreachable** — `cross-document-shared.ts` has **zero `src/` importers**; the commit paths (`textareaBlur`/`editorBlurCommit`) write directly with no `detectSharedCommit` intercept, no confirmation strip, no fork/mutate apply. §3 states 1/5/6/7/8 + §5 unmet. | **FIXED (2026-09-13)** — §2.9 host seams landed: `interceptSharedCommit` wired into `textareaBlur` + `editorBlurCommit`; `sharedCommitStripContent`/`sharedCommitNoticeContent`; `sharedCommitFork`/`sharedCommitMutateAll`/`sharedCommitCancel`/`sharedCommitToggleOwner` applied via the existing atomic `edit.batch` (`IPC_EDIT_BATCH`); block (F8)/F7/F10b handled. `tests/unit-u-shell-9b-h1-optionc-interception.test.ts` 15/15. Trio **4304 pass / 58 skip**. Adversarial AF1-1 (fork dropped the pending edit) found + fixed — see §2.6c. |
+| **H2** | HIGH | **C20 never materialized** — `applySharedSubtreeDecoration`/`ownersBoxContent` have no `src/` callers; `applyDocumentSet` never decorates. §3 states 2/4 + §5 unmet. | **FIXED (2026-09-13)** — §2.8 host seams landed: `buildOwnersMap(snapshot edges)`; the ONE `SidebarPanes.decorateShared(env)` seam applied at `loadAppGraph` (boot/refresh/mountTab), `applyContentChange`, and each scoped per-document envelope in `applyDocumentSet`; collapse state via `applySharedSubtreeDecoration(env, owners, collapsed)`. `tests/unit-u-shell-9b-h2-c20-materialization.test.ts` 14/14. Trio **4289 pass / 58 skip**. |
+| **H3** | HIGH | **W2-N12 unresolved** — shared `rag-X` in two docs renders **two `id="rag-X"`** elements (invalid DOM; ambiguous dispatch) and `materializedDocumentRoots()` mis-attributes doc-b's roots to doc-a. `Runtime.applyContentReconcile` ignores `ScopedRoot.documentId` (cssId last-wins; `destroyRoot`/`attachRoot` global); `applyDocumentSet` appends sibling content into `perDoc[0].envelope`. | **FIXED (2026-09-13)** — per-document id namespace landed per §2.7: `scopeDocumentIds` (pure deep-copy rewrite of `rag-`/`textarea-`/`inline-` authored ids to `<doc>--…`, `data-rag-node-id` stays PLAIN); `plainRagId` (data-prop-first RAG-id recovery, suffix-robust, imported by `content-reconcile`/`sidebar-panes`); `applyDocumentSet` scopes every per-doc envelope, unions the reconcile `next` SEPARATELY (no `perDoc[0]` contamination), passes uncontaminated `documents: perDoc`; scope-agnostic DOM lookups. New `tests/unit-u-shell-9b-h3-doc-namespace.test.ts` 13/13. Trio **4275 pass / 58 skip**. Adversarial separator hardening found + fixed (`--` legal in `sanitizeDocumentId`) — see §2.6b. **Residual follow-up W2-N15** (operator/template re-derive in multi-doc does not re-scope). |
+| **H4** | MED | `planFork({subtree:[null]})` throws (`cross-document-shared.ts:233`). | **FIXED (2026-09-13)** — `planFork` is total: malformed input / non-object subtree entries / malformed edge entries / a malformed `ownedNodeIds` / missing minters / `root ∉ subtree` all return the F10b no-op plan, never throw. Regressions: the "adversarial hardening" block in `tests/unit-u-shell-9b-cross-document-shared.test.ts` (malformed subtree, root-absent, malformed edge entries, malformed `ownedNodeIds`, missing minters). |
+| **H5** | LOW | `ownersFor` doesn't dedupe (`['A','A','B']` → shared/checklist wrong). | **FIXED (2026-09-13)** — `ownersFor` de-dupes order-preserving, so a repeated owner id cannot inflate the owner count (`isShared`/`detectSharedCommit` correct) or duplicate an owners-box/checklist entry. Regression: H5 test in the same block. |
+| **H6** | LOW | `planFork` can emit invalid plans (`root ∉ subtree`; all-owner migration leaves X ownerless). | **FIXED (2026-09-13)** — `planFork` rejects `root ∉ subtree` and refuses to migrate every owner (X must keep ≥1 original owner); non-owner `migrateDocumentIds` are ignored. Regressions: H6 tests in the same block. |
+| **H7** | LOW | owners-box toggle calls an uninstalled `window.provident.sidebar.toggleOwnersBox`. | **FIXED (2026-09-13, in H2)** — `SidebarPanes.toggleOwnersBox(ragId)` (flip `collapsedOwnersBoxes` + re-derive; unknown/unshared no-op) is registered on the `window.provident.sidebar` bridge surface (`preload.ts` `SidebarMethods`) alongside the H2 decoration. |
 
 **Confirmed-safe:** `detectSharedCommit` F8 blocked shape; no prototype
 pollution; `planMutateAll` same-id `putNode`; `rag-store.applyBatch` atomicity
@@ -155,11 +155,116 @@ per-doc edge `documentIds`; `mountTabs` dedupes + mounts all distinct documents
 (no `loadEnvelope`). **No new package findings** (the duplicate-id behavior is
 host-side authoring + runtime last-wins).
 
-**Verdict:** a UI/interception + per-document-namespace follow-up is REQUIRED.
-Do NOT mark 9b GREEN until H1/H2/H3 are fixed + regression-tested.
+**Verdict (2026-09-13):** H1/H2/H3/H4/H5/H6/H7 are **FIXED**; 9b is **GREEN** —
+the implementation is complete and independently verified (red→green→trio→
+adversarial per unit, then the **RCA-4 blind-greens** re-run:
+`docs/specs/unit-u-shell-9b-greens.md` — 23 PASS / 0 FAIL / 0 NOT-TESTED, trio
+185 files / 4327 pass + 58 skip). Residual follow-ups (outside the
+§2.7/§2.8/§2.9 seams): **W2-N15** (multi-doc operator/template re-derive scope),
+**AF3-3/AF1-2** (per-mount editing context for a shared node).
+
+### 2.6b H3 adversarial findings (2026-09-13)
+
+Post-green read-only adversarial pass on the H3 host surface:
+
+| # | Sev | Finding | Status |
+| --- | --- | --- | --- |
+| **AF3-1** | MED (host) | **Separator collision.** `sanitizeDocumentId` permits `[a-zA-Z0-9._-]`, so a document id (or a RAG id) may itself contain `--`. The first draft recovered the scoped plain ragId with `indexOf('--')`, mis-parsing e.g. `rag-foo--bar--X` → `bar--X`. | **FIXED** — `matchesRagRootId` uses a SUFFIX test (`tail === ragId` OR `tail.endsWith('--' + ragId)`), robust to `--` in either part. Regressions: the "adversarial separator hardening" block in `tests/unit-u-shell-9b-h3-doc-namespace.test.ts`. |
+| **AF3-2** | MED (host) | **Multi-document `operator`/`template` re-derive loses the scope.** `reDerive('content')` routes through the scoped `applyDocumentSet`, but a non-content re-derive falls to `refresh()` → `loadAppGraph(lastTraversalEnvelope)` where `lastTraversalEnvelope` is the UNSCOPED merged traversal — so after an operator/template change two shared roots can collapse back to duplicate `rag-X` ids. Pre-existing (not a regression); outside §2.7's stated `applyDocumentSet` scope. | **OPEN — W2-N15** (recorded in `wave-2-open-decisions.md` §D). |
+| **AF3-3** | LOW (host) | **Editor element resolution is first-match for a shared node.** `ragRootElement`/`textareaElement` select `[data-rag-node-id="<ragId>"]` (plain), which is duplicated across documents; in multi-doc the first DOM match is used. Harmless today (the shared node is one store node, and Option-C per-document editing is not wired until H1). | **ACCEPTED / documented** — revisit with H1 (Option-C per-document commit). |
+
+### 2.6c H1 adversarial findings (2026-09-13)
+
+Post-green read-only adversarial pass on the H1 host surface:
+
+| # | Sev | Finding | Status |
+| --- | --- | --- | --- |
+| **AF1-1** | MED (host) | **Fork dropped the user's pending edit.** `planFork` deep-copies the snapshot root, so a fork of an edited shared node produced X′ with the PRE-edit content — the editing document silently lost the edit it had just made. | **FIXED** — `sharedCommitFork` substitutes the pending content/children onto the fork root before `planFork` (textarea raw value; rich via `decomposeRichHtml`); the other owners keep the original X. Regressions: the `AF1-1 (adversarial)` test + the amended §3.5 fork assertion in `tests/unit-u-shell-9b-h1-optionc-interception.test.ts`. |
+| **AF1-2** | LOW (host) | **`editingDocumentId` for a shared node is resolved from the focused/current document**, not the specific mounted DOM root that emitted the blur. With the same shared node mounted in two docs, an edit in the non-current doc is attributed to the current owner. Inherent until per-root editing context exists (ties to AF3-3). | **ACCEPTED / documented** — revisit with a per-mount editing context. |
+
+### 2.7 Per-document id-namespace (H3/W2-N12) — pinned scheme (2026-09-13)
+
+Ruling (Architect): **scope the authored `props.id` per document; keep
+`data-rag-node-id` the plain RAG id.**
+
+- **Scope carrier:** in the SIMULTANEOUS multi-document path only
+  (`SidebarPanes.applyDocumentSet`), each document's envelope is rewritten so
+  every `rag-<ragId>` authored `props.id` becomes
+  `rag-<documentId>--<ragId>` (and the paired `textarea-<ragId>` /
+  `inline-<ragId>-<i>` ids gain the same `<documentId>--` scope) BEFORE
+  translate/attach. The single-document / boot paths are UNCHANGED (their ids
+  stay `rag-<ragId>`), so this is additive at the multi-mount seam.
+- **Addressing key:** `data-rag-node-id` stays the PLAIN `<ragId>` on every node.
+  Every consumer that today parses `props.id.slice(4)` to recover the RAG id
+  (`content-reconcile.ts` `asContentRoot`/`ragIdOf`, `sidebar-panes.ts`
+  `recomputeBackRefs`/`applyEditingMode`, `cross-document-shared.ts`
+  decoration) MUST derive the ragId from `data-rag-node-id` (falling back to
+  `id.slice(4)` only when absent). This keeps `collectRagIds`/payload matching
+  and all `data-rag-node-id`-addressed edit/backlink ops working.
+- **Runtime:** because scoped ids are globally unique, the existing global
+  `destroyRoot`/`attachRoot` cssId path is correct as-is; no `(documentId, cssId)`
+  keying is required in the Runtime. `extractContentRoots` keeps the `rag-`
+  prefix test (scoped ids still start with `rag-`).
+- **Attribution (H3 part 3):** `applyDocumentSet` must NOT mutate
+  `perDoc[0].envelope` with sibling content. Build the reconcile `next` as a
+  SEPARATE union envelope (assembled panes + every document's scoped content)
+  while `documents: perDoc` keeps one uncontaminated scoped envelope per
+  document, so `materializedDocumentRoots()` attributes each root to its own
+  document.
+- **Reconciler keys:** `reconcileDocumentRoots` already keys by
+  `(documentId, cssId)`; the scoped `cssId` makes the two shared roots distinct.
+  No bucket-shape change.
+
+### 2.8 Host seams — C20 materialization + owners box (H2 / W2-N14 / H7) — pinned 2026-09-13
+
+- **Owners reverse map (synchronous, authoritative):** add an exported PURE
+  helper `buildOwnersMap(edges)` in `cross-document-shared.ts` — `input` is the
+  snapshot edges (`{ target?: string; documentIds?: string[] }[]`); output is the
+  `SharedOwners` map `{ [ragNodeId]: documentId[] }` by unioning (dedup) each
+  edge's `documentIds` onto `owners[edge.target]`. Total on malformed input.
+  (Equivalent to the `rag.backlinks` reverse map; the snapshot is the same data
+  and is already cached as `lastSnapshot`.)
+- **Decorate at assembly:** every envelope handed to the runtime (boot /
+  `refresh` / `applyContentChange` / the scoped per-document envelopes and the
+  assembled env in `applyDocumentSet`) passes through
+  `applySharedSubtreeDecoration(env, owners)` BEFORE translate/reconcile, so the
+  C20 class + owners box are materialized in the graph (app-graph, MCP-visible).
+- **Collapse state:** `applySharedSubtreeDecoration(envelope, owners, collapsed?)`
+  gains an optional `ReadonlySet<string>` (or `(ragId)=>boolean`) of collapsed
+  owners-box ragIds; `ownersBoxContent({ expanded })` is authored from it.
+- **Toggle install (H7):** `SidebarPanes.toggleOwnersBox(ragId)` flips the host
+  `collapsedOwnersBoxes` set and re-derives (a `state-slice`/`reDerive`); the
+  method is registered on the `window.provident.sidebar` bridge surface (the
+  `OWNERS_BOX_TOGGLE_HANDLER` handler body already calls it). Unknown/empty
+  ragId is a no-op.
+
+### 2.9 Host seams — Option-C commit interception (H1 / W2-N13) — pinned 2026-09-13
+
+- **Intercept at the commit seam:** `SidebarPanes.editorBlurCommit` and
+  `textareaBlur` call `detectSharedCommit({ nodeId: ragId, editingDocumentId,
+  owners })` (owners from §2.8) BEFORE the write. `null` ⇒ the existing commit
+  path unchanged. `blocked: true` ⇒ surface the block reason, NO write.
+  Otherwise (warn) ⇒ stash the pending commit + render the provident
+  confirmation strip, NO write until the user chooses.
+- **Confirmation strip (provident-authored, app-graph, MCP-visible):** a content
+  root with `fork` / `mutate-all` / `cancel` buttons; when
+  `requireChecklist` (>2 owners) also render the sharing-document checklist
+  (one toggle per owner; default = the editing document). Authored via a pure
+  helper (e.g. `sharedCommitStripContent({ warning, selectedOwnerIds })`) in
+  `cross-document-shared.ts`.
+- **Apply handlers:** `sharedCommitFork(selectedOwnerIds?)` builds the subtree +
+  incident edges from `lastSnapshot`, calls `planFork`, and applies the plan via
+  the EXISTING atomic `bridge.edit.batch(ops)` (`IPC_EDIT_BATCH` →
+  `applyBatch`); `sharedCommitMutateAll(content)` applies `planMutateAll`;
+  `sharedCommitCancel()` clears the pending commit. All three empty the pending
+  state and re-derive. `editingDocumentId` = the document owning the edited
+  mounted root (`_currentDocumentId` / the mounted set); when ambiguous, the
+  first mounted document.
+- **F10b:** checklist selects none ⇒ fork is a no-op (accept: no ops / empty
+  `forkOwners`), matching `planFork`.
+- **No new IPC:** the fork reuses `IPC_EDIT_BATCH`; the strip is app-graph data.
 
 ## 3. States (TestWriter red set — valid paths)
-
 1. A commit on a shared node → the Option-C warn + fork/mutate-all choice; a
    fork re-points the editing document's edges and leaves other owners.
 2. A shared subtree renders the C20 background + the owners box lists the
