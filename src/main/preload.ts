@@ -39,6 +39,9 @@ export interface SidebarMethods {
    *  seams the `pane-search-advanced-*` handler bodies reach. */
   searchAdvancedToggle(): void
   submitAdvancedQuery(value: string, options: Omit<RagQueryPayload, 'query' | 'topK' | 'store'>): void
+  /** U-SHELL-9a §2.6 — the search pane-first expand-to-tab seam (open the
+   *  pane's current query as a full search tab). */
+  expandSearchTab(value: string): void
   /** W1-N11 (U-PARITY-C19) — the link hover-preview shell timing seams the
    *  `hover-preview-*` handler bodies reach. */
   hoverPreviewEnter(id: string): void
@@ -232,6 +235,7 @@ let sidebarHolder: SidebarMethods = {
   submitQuery: () => {},
   searchAdvancedToggle: () => {},
   submitAdvancedQuery: () => {},
+  expandSearchTab: () => {},
   hoverPreviewEnter: () => {},
   hoverPreviewLeave: () => {},
   hoverPreviewPopupEnter: () => {},
@@ -508,6 +512,7 @@ const bridge: ProvidentBridge = {
     // W1-N11 — the C18 advanced-search seams.
     searchAdvancedToggle: () => sidebarHolder.searchAdvancedToggle?.(),
     submitAdvancedQuery: (value, options) => sidebarHolder.submitAdvancedQuery?.(value, options),
+    expandSearchTab: (value) => sidebarHolder.expandSearchTab?.(value),
     // W1-N11 — the C19 hover-preview timing seams.
     hoverPreviewEnter: (id) => sidebarHolder.hoverPreviewEnter?.(id),
     hoverPreviewLeave: () => sidebarHolder.hoverPreviewLeave?.(),

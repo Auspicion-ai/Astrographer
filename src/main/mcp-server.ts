@@ -1746,6 +1746,9 @@ export class ProvidentMcpServer {
    *  §3). Kept in one place so registration + the gate agree. */
   static readonly ALL_TOOLS: string[] = [
     'provident.dispatch',
+    // Unit U-SHELL-9a §2.7 — the main-focus tab tool (find-or-open; UI focus
+    // only, `dispatch` group, no app-graph-changed).
+    'provident.focus',
     'provident.get_rendered_html',
     'provident.get_markdown',
     'provident.list_targets',
@@ -2169,6 +2172,36 @@ export class ProvidentMcpServer {
         },
       }, async (args: { target: unknown }) => {
         const value = await backend.invoke('nodeState', args.target)
+        return text(value)
+      }))
+    }
+
+    // Unit U-SHELL-9a §2.7 — the main-focus tab tool `provident.focus`. UI
+    // focus only (find-or-open), routed through the renderer's shared
+    // focus-selection seam via `backend.invoke('focus', …)`; NOT a graph/RAG
+    // mutation (no broadcast; not in MUTATING_METHODS).
+    if (allowed.includes('provident.focus')) {
+      registered.set('provident.focus', server.registerTool('provident.focus', {
+        title: 'Focus a tab',
+        description:
+          'Change the operator\'s main-focus tab: activate an existing tab for ' +
+          'the target, else open + activate; `newTab: true` forces a duplicate. ' +
+          '`tabId` activates an existing tab by id (an alternative to a target). ' +
+          'UI focus only — it persists nothing except the focused tab and mutates ' +
+          'no graph/RAG.',
+        inputSchema: {
+          target: z.union([
+            z.object({ kind: z.literal('document'), documentId: z.string().min(1) }),
+            z.object({ kind: z.literal('search'), queryId: z.string().min(1) }),
+            z.object({ kind: z.literal('graph'), view: z.string().min(1) }),
+            z.object({ kind: z.literal('template'), templateId: z.string().min(1) }),
+            z.object({ kind: z.literal('other'), id: z.string().min(1) }),
+          ]).optional().describe('The tab target (find-or-open)'),
+          tabId: z.string().min(1).optional().describe('Activate an existing tab by id (alternative to target)'),
+          newTab: z.boolean().optional().describe('Force a duplicate tab even when the target is already open'),
+        },
+      }, async (args) => {
+        const value = await backend.invoke('focus', args)
         return text(value)
       }))
     }

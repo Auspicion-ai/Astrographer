@@ -11,12 +11,19 @@ import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
 import { applyThemeToRoot } from './theme.js'
+import { applyLayoutToRoot, type LayoutState } from './layout-state.js'
+import { TabStrip } from './tab-strip.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
  *  (content/structural/re-derive). Only these trigger the app-graph-changed push
  *  AFTER the reply. Never triggered by the isolated SecurePanels graph. */
 const MUTATING_METHODS = new Set(['dispatch', 'load', 'op', 'teardown', 'code.load', 'code.loadBatch', 'journal'])
+
+/** Unit U-SHELL-9a §2.7 — the shell tab strip (the shared focus-selection
+ *  seam). Assigned in `main()`; the renderer's `focus` RPC method routes
+ *  `provident.focus` here. Null until boot (or in a no-DOM environment). */
+let tabStrip: TabStrip | null = null
 
 function handleRequest(runtime: Runtime, req: RpcRequest, notify: (p: { uri: string }) => void): Promise<RpcReply> {
   return (async (): Promise<RpcReply> => {
@@ -76,6 +83,11 @@ function handleRequest(runtime: Runtime, req: RpcRequest, notify: (p: { uri: str
           break
         case 'journal':
           value = runtime.journal((req.payload as { action?: 'undo' | 'redo' | 'replay' } | null)?.action as 'undo' | 'redo' | 'replay')
+          break
+        case 'focus':
+          // Unit U-SHELL-9a §2.7 — UI focus only (find-or-open). NOT a graph
+          // mutation: `focus` is not in MUTATING_METHODS (no app-graph-changed).
+          value = tabStrip ? tabStrip.focus(req.payload as never) : null
           break
         default:
           throw new Error(`unknown method: ${(req as { method: string }).method}`)
@@ -161,6 +173,41 @@ function installTheme(): void {
     })
 }
 
+/** W2-N3 (AF-3) — apply the persisted `OperatorSettings.layout` to the shell
+ *  grid's CSS custom properties (the shell chrome is not a provident node). The
+ *  tracks in `index.html` read these vars (§2.4); the geometry is re-applied
+ *  live when a layout mutation broadcasts an operator-settings change. Fail-soft:
+ *  a bridge error / absent `documentElement` never throws. */
+function installLayout(): void {
+  const layoutBridge = (window.provident ?? {}) as unknown as {
+    operatorSettings?: {
+      get(): Promise<{ layout?: LayoutState }>
+      onChanged?(handler: (settings: { layout?: LayoutState }) => void): () => void
+    }
+  }
+  const apply = (layout: unknown): void => {
+    applyLayoutToRoot(document.documentElement, layout as LayoutState)
+  }
+  // Live operator-settings changes carry the layout slice — re-apply.
+  try {
+    layoutBridge.operatorSettings?.onChanged?.((payload) => {
+      if (payload?.layout !== undefined) apply(payload.layout)
+    })
+  } catch {
+    // older bridge surface without onChanged — ignore
+  }
+  // Boot: read the persisted layout and apply. A bridge error keeps the
+  // index.html fallback geometry.
+  void layoutBridge.operatorSettings
+    ?.get?.()
+    .then((payload) => {
+      if (payload?.layout !== undefined) apply(payload.layout)
+    })
+    .catch(() => {
+      // keep the CSS fallback geometry on a bridge error
+    })
+}
+
 async function main(): Promise<void> {
   const mount = document.getElementById('app')
   if (!mount) throw new Error('mount #app missing')
@@ -168,6 +215,9 @@ async function main(): Promise<void> {
   // Unit U-SHELL-2 §2.4 (W1-N1) — apply the persisted theme + watch the OS
   // preference live (`system`) before any graph mount.
   installTheme()
+  // W2-N3 (AF-3) — apply the persisted layout geometry to the shell grid before
+  // any graph mount (the index.html fallbacks pin the defaults until then).
+  installLayout()
   // Read the persisted operator config (maxJournalLength) so the app Runtime's
   // Supervisor is constructed with the journal-condense threshold. The config
   // is manual-UI-only (never an MCP tool); the Runtime reads it at boot.
@@ -195,6 +245,51 @@ async function main(): Promise<void> {
   if (!bridge) {
     console.warn('[provident-renderer] no preload bridge — MCP endpoints unavailable (running as a plain page?)')
     return
+  }
+  // Unit U-SHELL-9a §2.7 — the shell top-bar tab strip (the shared
+  // focus-selection seam). Boot: read the persisted `OperatorSettings.tabs`
+  // (fail-soft), materialize the first-tab default when the set is empty, then
+  // render. The MCP `provident.focus` tool routes to `tabStrip.focus` (the
+  // renderer's `focus` RPC method — no app-graph-changed).
+  const tabMount = document.getElementById('tab-strip')
+  const tabBridge = (bridge as unknown as {
+    operatorSettings?: {
+      get?(): Promise<{ tabs?: unknown }>
+      set?(patch: { tabs?: unknown }): Promise<unknown>
+    }
+  }).operatorSettings
+  // U-SHELL-9a §2.3 (HOST-1) — the host owns the active tab's stage body. It is
+  // constructed below (after the tab strip); the closures read it lazily so the
+  // strip can be built first.
+  let host: SidebarPanes | null = null
+  tabStrip = new TabStrip({
+    mount: tabMount,
+    // HOST-2 — the REAL default-resolution context (the focused store's
+    // documents + the previous session's last-focused document), read from the
+    // host once it has booted. Empty until then (the first tab is materialized
+    // after boot — see `bootTabs`).
+    getContext: () => host?.getTabContext() ?? { hasStore: false, documents: [] },
+    persist: (tabs) => {
+      void tabBridge?.set?.({ tabs })
+    },
+    // HOST-1 — mount the active tab's body (and unmount the previous).
+    onActiveChange: (entry) => {
+      if (host) host.mountTab(entry)
+    },
+  })
+  // HOST-1/HOST-2 — the tab boot: load the persisted tab set, materialize the
+  // first-tab default from the REAL context, then mount the active body. Runs
+  // AFTER the host boot so the store/doc-heads snapshot is available.
+  const bootTabs = async (): Promise<void> => {
+    if (!tabStrip) return
+    try {
+      const settings = await tabBridge?.get?.()
+      tabStrip.load(settings?.tabs)
+    } catch {
+      tabStrip.load(undefined)
+    }
+    tabStrip.ensure()
+    if (host) host.mountTab(tabStrip.active())
   }
   // The operator-only Security + Debug panes render in their OWN isolated
   // provident graph (secure-panels.ts) — a separate GraphScope, so the MCP
@@ -257,14 +352,13 @@ async function main(): Promise<void> {
   // failure leaves the current backRefs in place (never a crash).
   const backRefs = new Map<string, string[]>()
   // Unit K §5.1 step 4 — the edit controller's `onRebuild` IS the host's
-  // `reDerive` (the pane-inclusive re-traversal). `host` is declared before the
-  // controller so the closure can reference it; the closure only runs after the
+  // `reDerive` (the pane-inclusive re-traversal). `host` is declared above (so
+  // the tab-strip closures can reference it); the closure only runs after the
   // host is constructed + booted (a store change → requestRebuild → reDerive).
-  let host: SidebarPanes
   const editController = createEditController({
     backRefs,
     commit: (nodeId, content) => bridge!.edit!.commit(nodeId, content),
-    onRebuild: (kind) => void host.reDerive(kind),
+    onRebuild: (kind) => void host?.reDerive(kind),
   })
   // Unit K §5.1 — the SidebarPanes host. The renderer constructs the host with
   // the app mount (#app), the operator mount (#operator-panes — a NEW element,
@@ -332,8 +426,21 @@ async function main(): Promise<void> {
       status: () => gnosisPanes.refreshStatus(),
       query: (value: string) => gnosisPanes.submitQuery(value),
     },
+    // Unit U-SHELL-9a §2.6 — the search-pane delegates: expand-to-tab
+    // (HOST-1 seam), result open → NEW document tab (HOST-4), and the in-tab
+    // query reuse (HOST-5).
+    tabs: {
+      expandSearchTab: (query: string) => { tabStrip?.expandSearchTab(query) },
+      openDocumentTab: (id: string) => { tabStrip?.openDocumentTab(id) },
+      editSearchQuery: (tabId: string, params) => { tabStrip?.editSearchQuery(tabId, params) },
+    },
   })
-  void host.boot(runtime)
+  // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
+  // available, then load the persisted tabs + materialize the default + mount
+  // the active body (the real default context). The host boot is not blocked.
+  void host.boot(runtime).then(() => bootTabs()).catch((e) => {
+    console.error('[provident-renderer] tab boot failed', e)
+  })
   void gnosisPanes.boot()
   void gnosisCrudPanes.boot()
   bridge.ready()

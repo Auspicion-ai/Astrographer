@@ -188,6 +188,47 @@ function rootsOf(envelope: LegacyInitialData | null | undefined): {
   return out
 }
 
+/** U-STATE-1e — a materialized content root scoped to its owning document (one
+ *  per open document tab). Document-scoped so two documents sharing a RAG node
+ *  are distinct roots. `.root` is the previously materialized root NODE
+ *  (`LegacyNodeData`) so the landed content shape-compare is preserved. */
+export interface DocumentRoot {
+  documentId: string
+  root: PreviousRoot
+}
+
+/** U-STATE-1e — the input to `reconcileDocumentRoots`. `next` is ONE traversal
+ *  envelope PER OPEN DOCUMENT (the host calls `buildTraversal` once per document
+ *  so each envelope is unambiguously scoped; `buildTraversal` unchanged). Render
+ *  order = `documentIds` order. */
+export interface NRootReconcileInput {
+  previous: DocumentRoot[]
+  next: { documentId: string; envelope: LegacyInitialData }[]
+  change: ReconcileChange | null
+  documentIds: string[]
+}
+
+/** U-STATE-1e — a result bucket entry scoped to its owning document (one per
+ *  open document tab). Carries `documentId` so the same `cssId` materialized in
+ *  two documents is unambiguous. Panes use `documentId: ''` (keyed by cssId
+ *  only, §2.2 RULED). */
+export interface ScopedRoot extends MaterializedRoot {
+  documentId: string
+}
+
+/** U-STATE-1e — the N-root result. The four buckets are `ScopedRoot[]` (each
+ *  entry carries its owning `documentId`); `identityReplaced` is the
+ *  per-document identity replace bucket (a fork changed only the editing
+ *  document's root). */
+export interface NRootReconcileResult {
+  added: ScopedRoot[]
+  replaced: ScopedRoot[]
+  removed: ScopedRoot[]
+  kept: ScopedRoot[]
+  usedFallback: boolean
+  identityReplaced: { documentId: string; from: MaterializedRoot; to: MaterializedRoot }[]
+}
+
 /** Reconcile the content roots of a new traversal envelope against the
  *  previously materialized roots. PURE. */
 export function reconcileContentRoots(input: ReconcileInput): ReconcileResult {
@@ -271,4 +312,238 @@ export function reconcileContentRoots(input: ReconcileInput): ReconcileResult {
   }
 
   return { added, replaced, removed, kept, usedFallback: useFallback }
+}
+
+/** U-STATE-1e — reconcile N document-scoped content roots (one group per open
+ *  document tab) + the per-root identity replace (the Option-C fork: the editing
+ *  document's root `rag-X` → `rag-X′`, other documents' `rag-X` kept). PURE.
+ *
+ *  Classification is keyed by `(documentId, cssId)`: `added`/`removed`/`kept`
+ *  are computed per document (`prevByDoc` vs `nextByDoc`), so a root moving A→B
+ *  is `removed` from A AND `added` to B (never a global `kept`), and a shared
+ *  RAG node materialized in two documents is two distinct roots (§3 state 5a).
+ *  The identity `consumed` payload suppression is global (a fork's payload ids
+ *  must not re-mark another document's shared root — state 6), while the
+ *  `identFrom`/`identTo` bucket filters are keyed by `(documentId, cssId)` so
+ *  A's identity replace never suppresses B's own same-cssId add (H2a) or remove
+ *  (H2b).
+ *
+ *  `documentIds` scopes the traversal envelopes (de-duped first-wins, L1): a
+ *  `next` entry for a non-open document is ignored (F5); a `documentId` in
+ *  `documentIds` absent from `next` yields no roots (F1, never throws). A
+ *  malformed considered envelope is the documented guard throw (F3, the 1a F1
+ *  precedent). Panes (`pane-`) are content roots reconciled separately
+ *  (shape-compared always, cssId-keyed, `documentId: ''`) and are never
+ *  attributed to a document (F7). */
+export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconcileResult {
+  if (input == null || input.next == null || !Array.isArray(input.next)) {
+    throw new Error('reconcileDocumentRoots: next envelopes array required')
+  }
+  // L1 — de-dupe documentIds (first occurrence wins) before the ordered traverse.
+  const documentIds = Array.isArray(input.documentIds)
+    ? [...new Set(input.documentIds.filter((d): d is string => typeof d === 'string'))]
+    : []
+  const openDocs = new Set(documentIds)
+  const prevList = Array.isArray(input.previous) ? input.previous.filter((r) => r != null) : []
+
+  const entries = input.next.filter(
+    (e): e is { documentId: string; envelope: LegacyInitialData } =>
+      e != null && openDocs.has(e.documentId),
+  )
+  // F3 — a malformed considered envelope is the documented guard throw (never a
+  // raw TypeError deeper in the shape walk).
+  for (const e of entries) {
+    const env = e.envelope as { template?: { root?: unknown }; content?: unknown } | null | undefined
+    if (
+      env == null ||
+      env.template == null ||
+      env.template.root == null ||
+      env.content === undefined
+    ) {
+      throw new Error('reconcileDocumentRoots: next envelope with template.root and content required')
+    }
+  }
+
+  // Previous roots: panes are `cssId`-keyed globally (never document-scoped,
+  // F7); document roots are keyed `(documentId, cssId)` first-wins (F4).
+  const panePrevByCssId = new Map<string, { root: MaterializedRoot; node: LegacyNodeData }>()
+  const prevByDoc = new Map<string, Map<string, { root: MaterializedRoot; node: LegacyNodeData }>>()
+  for (const r of prevList) {
+    const cd = asContentRoot(r.root as LegacyNodeData)
+    if (cd == null) continue
+    if (cd.cssId.startsWith(PANE_PREFIX)) {
+      if (!panePrevByCssId.has(cd.cssId)) {
+        panePrevByCssId.set(cd.cssId, { root: cd, node: r.root as LegacyNodeData })
+      }
+      continue
+    }
+    // U-STATE-1e §4 F2/F5/F8 — a previous document root whose non-empty
+    // `documentId` is NOT in `documentIds` is out of the N-root set: exclude it
+    // from ALL buckets (added/replaced/removed/kept), never emit it as
+    // `removed`. Panes (documentId `''`) are handled above and stay
+    // document-unscoped.
+    if (r.documentId !== '' && !openDocs.has(r.documentId)) continue
+    let docMap = prevByDoc.get(r.documentId)
+    if (docMap == null) {
+      docMap = new Map()
+      prevByDoc.set(r.documentId, docMap)
+    }
+    if (!docMap.has(cd.cssId)) docMap.set(cd.cssId, { root: cd, node: r.root as LegacyNodeData })
+  }
+
+  interface NextEntry {
+    documentId: string
+    root: MaterializedRoot
+    node: LegacyNodeData
+    isPane: boolean
+  }
+
+  // The ordered next roots: documentIds (de-duped) order, then next-entry order,
+  // then payload order (the render order — buckets follow `next`). Duplicate
+  // `(documentId, cssId)` roots are first-wins; panes are de-duped globally.
+  const orderedNext: NextEntry[] = []
+  const nextByDoc = new Map<string, Map<string, NextEntry>>()
+  const paneNextByCssId = new Map<string, NextEntry>()
+  for (const d of documentIds) {
+    for (const e of entries) {
+      if (e.documentId !== d) continue
+      for (const x of rootsOf(e.envelope)) {
+        const isPane = !x.root.cssId.startsWith(RAG_PREFIX)
+        if (isPane) {
+          if (paneNextByCssId.has(x.root.cssId)) continue
+          const entry: NextEntry = { documentId: '', root: x.root, node: x.node, isPane }
+          paneNextByCssId.set(x.root.cssId, entry)
+          orderedNext.push(entry)
+          continue
+        }
+        let docMap = nextByDoc.get(d)
+        if (docMap == null) {
+          docMap = new Map()
+          nextByDoc.set(d, docMap)
+        }
+        if (docMap.has(x.root.cssId)) continue
+        const entry: NextEntry = { documentId: d, root: x.root, node: x.node, isPane }
+        docMap.set(x.root.cssId, entry)
+        orderedNext.push(entry)
+      }
+    }
+  }
+
+  const raw = input.change as ReconcileChange | null | undefined
+  const change: ReconcileChange | null =
+    raw != null &&
+    Array.isArray(raw.nodeIds) &&
+    Array.isArray(raw.edgeIds) &&
+    (raw.kind === 'content' || raw.kind === 'structural')
+      ? raw
+      : null
+  const changed = new Set(change?.nodeIds ?? [])
+  const useFallback = change == null || change.kind === 'structural' || change.edgeIds.length > 0
+
+  // Per-root identity replace, DOCUMENT-SCOPED (F7 excludes panes; §3 state 6):
+  // a vanished same-document previous root paired with a new next root when the
+  // payload names BOTH ids. `consumed` suppresses the payload globally (state 6:
+  // a fork in A leaves B's shared `rag-X` kept); the bucket filters are keyed by
+  // `(documentId, cssId)` so A's identity replace never suppresses B's own add
+  // (H2a) or remove (H2b).
+  const identityReplaced: { documentId: string; from: MaterializedRoot; to: MaterializedRoot }[] = []
+  const consumed = new Set<string>()
+  const identFromKeys = new Set<string>()
+  const identToKeys = new Set<string>()
+  for (const d of documentIds) {
+    const prevDoc = prevByDoc.get(d)
+    const nextDoc = nextByDoc.get(d)
+    if (prevDoc == null || nextDoc == null) continue
+    const prevCss = new Set(prevDoc.keys())
+    const nextCssForDoc = new Set(nextDoc.keys())
+    const vanished = [...prevDoc.values()].filter((x) => !nextCssForDoc.has(x.root.cssId))
+    const appeared = [...nextDoc.values()].filter((x) => !prevCss.has(x.root.cssId))
+    const usedFrom = new Set<string>()
+    for (const to of appeared) {
+      if (!changed.has(to.root.ragNodeId)) continue
+      const from = vanished.find((v) => changed.has(v.root.ragNodeId) && !usedFrom.has(v.root.cssId))
+      if (from == null) continue
+      usedFrom.add(from.root.cssId)
+      identityReplaced.push({ documentId: d, from: from.root, to: to.root })
+      consumed.add(to.root.ragNodeId)
+      consumed.add(from.root.ragNodeId)
+      identFromKeys.add(`${d}|${from.root.cssId}`)
+      identToKeys.add(`${d}|${to.root.cssId}`)
+    }
+  }
+  const effectiveChanged = new Set<string>()
+  for (const id of changed) if (!consumed.has(id)) effectiveChanged.add(id)
+
+  const added: ScopedRoot[] = []
+  const replaced: ScopedRoot[] = []
+  const kept: ScopedRoot[] = []
+  for (const x of orderedNext) {
+    // The identity target is reported only through `identityReplaced`, not also
+    // as `added`/`replaced` (keyed by (documentId, cssId) — H2a).
+    const key = `${x.documentId}|${x.root.cssId}`
+    if (!x.isPane && identToKeys.has(key)) continue
+    const prev = x.isPane
+      ? panePrevByCssId.get(x.root.cssId)
+      : prevByDoc.get(x.documentId)?.get(x.root.cssId)
+    const scoped: ScopedRoot = {
+      cssId: x.root.cssId,
+      ragNodeId: x.root.ragNodeId,
+      documentId: x.documentId,
+    }
+    if (prev == null) {
+      added.push(scoped)
+      continue
+    }
+    const prevIds = new Set<string>()
+    collectRagIds(prev.node, prevIds)
+    const nextIds = new Set<string>()
+    collectRagIds(x.node, nextIds)
+    // R2 — a removed/added nested id (symmetric difference) is a change.
+    let idSetChanged = false
+    for (const id of prevIds) if (!nextIds.has(id)) { idSetChanged = true; break }
+    if (!idSetChanged) for (const id of nextIds) if (!prevIds.has(id)) { idSetChanged = true; break }
+    // Payload hit — any effective-changed id anywhere in either subtree.
+    let payloadHit = false
+    for (const id of effectiveChanged) if (prevIds.has(id) || nextIds.has(id)) { payloadHit = true; break }
+    // MEDIUM-5 — fallback is used IN ADDITION to the payload. Pane roots are
+    // ALWAYS shape-compared (their content is host-driven, not RAG-payload).
+    const shapeChanged = shapeOf(prev.node) !== shapeOf(x.node)
+    const isReplaced = payloadHit || idSetChanged || ((useFallback || x.isPane) && shapeChanged)
+    if (isReplaced) replaced.push(scoped)
+    else kept.push(scoped)
+  }
+
+  // removed — previous roots whose `(documentId, cssId)` key is not in `next`
+  // (per-document set difference), deduped first-wins, in `previous` order. A
+  // key consumed by an identity replace in the SAME document is excluded (H2b);
+  // another document's same-cssId key is not.
+  const removed: ScopedRoot[] = []
+  const removedKeys = new Set<string>()
+  for (const r of prevList) {
+    const cd = asContentRoot(r.root as LegacyNodeData)
+    if (cd == null) continue
+    const isPane = cd.cssId.startsWith(PANE_PREFIX)
+    // U-STATE-1e §4 F2/F5/F8 — a previous document root whose non-empty
+    // `documentId` is not open is DROPPED from the result (never emitted as
+    // `removed`) on a content/null reconcile: the host detaches/holds the stale
+    // mount (9b mount policy). A STRUCTURAL change that closed the document DOES
+    // report it as `removed` so the host destroys it (§3 state 4). Panes
+    // (documentId `''`) are not document-scoped and are classified as before.
+    if (!isPane && r.documentId !== '' && !openDocs.has(r.documentId)) {
+      const structuralClose = change != null && change.kind === 'structural'
+      if (!structuralClose) continue
+    }
+    const documentId = isPane ? '' : r.documentId
+    const key = `${documentId}|${cd.cssId}`
+    const inNext = isPane
+      ? paneNextByCssId.has(cd.cssId)
+      : (nextByDoc.get(r.documentId)?.has(cd.cssId) ?? false)
+    if (inNext) continue
+    if (identFromKeys.has(key)) continue
+    if (removedKeys.has(key)) continue
+    removedKeys.add(key)
+    removed.push({ cssId: cd.cssId, ragNodeId: cd.ragNodeId, documentId })
+  }
+
+  return { added, replaced, removed, kept, usedFallback: useFallback, identityReplaced }
 }

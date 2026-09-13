@@ -7,6 +7,8 @@
 // args). The renderer owns the producing graph; the main process owns the MCP
 // server and forwards tool calls over IPC (renderer DOM + IPC bridge).
 import type { BacklinkResult } from '../main/backlinks.js'
+import type { LayoutState } from '../renderer/layout-state.js'
+import type { TabState } from '../renderer/tab-state.js'
 import type { ContentWindowTemplate, TemplateSource } from '../main/template-shape.js'
 import type { BatchOp, RagNode, RagNodeChild } from '../main/rag-store.js'
 import type { LocalRagQueryFilters } from '../main/retrieval.js'
@@ -279,6 +281,7 @@ export type RpcMethod =
   | 'code.load'
   | 'code.loadBatch'
   | 'journal'
+  | 'focus'
   | 'module.install'
   | 'module.update'
   | 'module.list'
@@ -697,6 +700,17 @@ export interface TemplateChangedPayload {
 export interface OperatorSettings {
   /** The sidebar panes enabled for the operator view (subset of the pane ids). */
   enabledPanes: string[]
+  /** U-SHELL-8 §2.6 pin 1 — the ADDITIVE operator-scope enable set (C13). The
+   *  authoritative enabled set for `scope: 'operator'` panes; an empty list →
+   *  all operator panes enabled (registration defaults). Never an MCP tool. */
+  enabledOperatorPanes: string[]
+  /** U-SHELL-8 §2.7 H2 — true once the operator has made at least one
+   *  pane-visibility write (the C9 carrier write). ADDITIVE (default `false`).
+   *  When `true`, an EMPTY `enabledPanes`/`enabledOperatorPanes` means NONE
+   *  enabled (so "hide every pane" round-trips); when `false` (first run) an
+   *  empty list keeps the registration defaults (all enabled). Never an MCP
+   *  tool. */
+  panesInitialized: boolean
   /** The default document root id on boot (null = all documents). */
   defaultDocumentId: string | null
   /** The retrieval topK default. */
@@ -708,11 +722,24 @@ export interface OperatorSettings {
   /** Unit U-SHELL-2 §2.2 — the tri-state appearance setting (C1). The default
    *  is `'system'` (follow the OS preference live). */
   theme: ThemeSetting
+  /** Unit U-SHELL-1 §2.2 — the serialized layout/zone state (C4/C5/C7/C12;
+   *  the C9 carrier — operator-scoped, NEVER an MCP tool). */
+  layout: LayoutState
+  /** Unit U-SHELL-9a §2.5 — the serialized main-focus tab set (C14; the C9
+   *  carrier — operator-scoped). The ONE field the MCP `provident.focus` tool
+   *  persists (`tabs.activeId`); never a graph/RAG mutation. */
+  tabs: TabState
 }
 
 /** A partial patch applied by `bridge.operatorSettings.set`. */
 export interface OperatorSettingsPatch {
   enabledPanes?: string[]
+  /** U-SHELL-8 §2.6 pin 1 — a patch WITHOUT `enabledOperatorPanes` leaves the
+   *  stored operator-scope enable set unchanged. */
+  enabledOperatorPanes?: string[]
+  /** U-SHELL-8 §2.7 H2 — a patch WITHOUT `panesInitialized` leaves the stored
+   *  flag unchanged; the first visibility write sets it `true`. */
+  panesInitialized?: boolean
   defaultDocumentId?: string | null
   topK?: number
   /** Unit U1 §1.2 — a patch WITHOUT `editingMode` leaves the stored mode
@@ -721,6 +748,12 @@ export interface OperatorSettingsPatch {
   /** Unit U-SHELL-2 §2.2 — a patch WITHOUT `theme` leaves the stored theme
    *  unchanged. */
   theme?: ThemeSetting
+  /** Unit U-SHELL-1 §2.2 — a patch WITHOUT `layout` leaves the stored layout
+   *  unchanged (write-through on a layout mutation). */
+  layout?: LayoutState
+  /** Unit U-SHELL-9a §2.5 — a patch WITHOUT `tabs` leaves the stored tab set
+   *  unchanged (write-through on a focus/tab mutation). */
+  tabs?: TabState
 }
 
 export const IPC_OPERATOR_SETTINGS_GET = 'provident:operator-settings:get'

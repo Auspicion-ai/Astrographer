@@ -24,6 +24,17 @@ import {
   selectDocumentIdsByPathPrefix,
   type DocumentTreeNode,
 } from '../shared/document-tree.js'
+import {
+  LAYOUT_PANE_ZONES,
+  coerceLayout,
+  deriveLayout,
+  isLayoutZoneName,
+  type LayoutPaneSpec,
+  type LayoutState,
+  type LayoutZoneName,
+  type PaneLayoutEntry,
+} from './layout-state.js'
+import { zoneOrientation } from './pane-drag.js'
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
  *  MUST emit a `container`-role producer for this zone (the Unit C HARD
@@ -31,13 +42,165 @@ import {
  *  leaves the root `unplaced`, silently not render-eligible). */
 export const SIDEBAR_ZONE = 'sidebar'
 
-/** Wrap a pane's render output into a sidebar content root: enforce the stable
- *  pane id (`pane-<id>`) and the sidebar targetPlacement, OVERWRITING whatever
- *  `render` returned. PURE. */
+/** U-SHELL-3 (C5) — the ONE shared collapse-toggle handler name every pane
+ *  frame's control carries (spec §2.5 pin 2). The body is authored INLINE on
+ *  the control node (the `docNavContent` folder-toggle convention) so a DOM
+ *  click and `provident.dispatch` are equivalent; it routes to the SAME
+ *  `window.provident.sidebar.togglePaneCollapse` host seam. */
+export const PANE_COLLAPSE_HANDLER = 'togglePaneCollapse'
+
+/** The inline collapse-toggle body (a full function-expression string, the
+ *  same form `docNavContent`'s toggle body uses). It reads the pane's authored
+ *  `data-pane-id` and routes it to the host seam (which flips
+ *  `PaneLayoutEntry.collapsed` + persists `layout`). A malformed node is a
+ *  no-op — never a throw. */
+const PANE_COLLAPSE_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.togglePaneCollapse !== 'function') return;
+  var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-pane-id'];
+  if (id) s.togglePaneCollapse(String(id));
+}`
+
+/** The pane-frame body marker class (the collapsed frame chrome's hook). */
+export const PANE_FRAME_CLASS = 'pane-frame'
+/** The U-SHELL-3 `is-collapsed` mirror class (spec §2.5 pin 3). */
+export const PANE_COLLAPSED_CLASS = 'is-collapsed'
+
+/** U-SHELL-4 (C12) — the shared zone minimize/expand toggle handler name. The
+ *  body is authored INLINE on the zone container's control (mirrors the
+ *  U-SHELL-3 `PANE_COLLAPSE_HANDLER` convention) and routes to the SAME
+ *  `window.provident.sidebar.zoneMinimizeToggle` host seam, so a DOM click and
+ *  `provident.dispatch` are equivalent. */
+export const PANE_MINIMIZE_TOGGLE_HANDLER = 'pane-zone-minimize-toggle'
+
+/** The inline zone minimize/expand toggle body. It reads the zone from the
+ *  control's authored `data-zone` and routes it to the host seam. A malformed
+ *  node is a no-op — never a throw. */
+const PANE_MINIMIZE_TOGGLE_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.zoneMinimizeToggle !== 'function') return;
+  var zone = ctx && ctx.node && ctx.node.props && ctx.node.props['data-zone'];
+  if (zone) s.zoneMinimizeToggle(String(zone));
+}`
+
+/** U-SHELL-4 (C12) — the shared zone-tab expand/select handler name. Each tab
+ *  carries the SAME name (spec §2.4 "1 handler def per strip"); its inline body
+ *  reads the authored `data-zone`/`data-pane-id` and routes to the
+ *  `window.provident.sidebar.paneTabExpand` host seam, which expands the zone
+ *  (`minimized:false`) + identifies the selected pane. */
+export const PANE_TAB_EXPAND_HANDLER = 'pane-tab-expand'
+
+/** The inline tab expand/select body (a full function-expression string). A
+ *  malformed node is a no-op — never a throw. */
+const PANE_TAB_EXPAND_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.paneTabExpand !== 'function') return;
+  var props = ctx && ctx.node && ctx.node.props;
+  var zone = props && props['data-zone'];
+  var paneId = props && props['data-pane-id'];
+  if (zone && paneId) s.paneTabExpand(String(zone), String(paneId));
+}`
+
+/** A zone's contained pane (the assembler's resolved per-zone entry). */
+interface ZonePane {
+  def: PaneDefinition
+  order: number
+  collapsed: boolean
+  seq: number
+}
+
+/** U-SHELL-4 (C11, H1/H2) — resolve the enabled app-graph panes into their
+ *  placement zones, POST overlay + fallback: a persisted `PaneLayoutEntry` wins,
+ *  else the pane's additive `defaultZone`, else `left` (registration order as
+ *  the default order). This is the SINGLE enabled+placed census backing the
+ *  `is-empty` mirror (H1), the minimize acceptance (H2), and the C12 tab count
+ *  (spec §2.5 pin 8) — NOT the raw overlay. PURE. */
+function resolveEnabledZonePanes(
+  enabledAppGraph: ReadonlyArray<PaneDefinition>,
+  layout: LayoutState,
+): Record<LayoutZoneName, ZonePane[]> {
+  const byId = new Map<string, PaneLayoutEntry>()
+  for (const entry of layout.panes) byId.set(entry.id, entry)
+  const zonePanes: Record<LayoutZoneName, ZonePane[]> = { left: [], right: [], header: [], footer: [] }
+  enabledAppGraph.forEach((def, seq) => {
+    const entry = byId.get(def.id)
+    const zone: LayoutZoneName = entry?.zone ?? (isLayoutZoneName(def.defaultZone) ? def.defaultZone : 'left')
+    const order =
+      entry?.order ??
+      (typeof def.defaultOrder === 'number' && Number.isFinite(def.defaultOrder) ? def.defaultOrder : seq)
+    const collapsed = entry?.collapsed ?? false
+    zonePanes[zone].push({ def, order, collapsed, seq })
+  })
+  for (const zone of LAYOUT_PANE_ZONES) {
+    zonePanes[zone].sort((a, b) => a.order - b.order || a.seq - b.seq)
+  }
+  return zonePanes
+}
+
+/** U-SHELL-4 (C11/C12, H1/H2) — the per-zone enabled+placed pane census: the
+ *  count of enabled app-graph panes actually emitted into each zone AFTER the
+ *  overlay + default fallback resolution. This is the SINGLE census backing the
+ *  `is-empty` mirror, `zoneMinimizeToggle`'s acceptance, and the C12 tab count
+ *  (spec §2.5 pin 8). PURE. */
+export function enabledZonePaneCounts(
+  registry: PaneRegistry,
+  layout: LayoutState,
+): Record<LayoutZoneName, number> {
+  const enabledAppGraph = registry.listByScope('app-graph').filter((p) => registry.isEnabled(p.id))
+  const resolved = resolveEnabledZonePanes(enabledAppGraph, coerceLayout(layout))
+  const counts: Record<LayoutZoneName, number> = { left: 0, right: 0, header: 0, footer: 0 }
+  for (const zone of LAYOUT_PANE_ZONES) counts[zone] = resolved[zone].length
+  return counts
+}
+
+/** U-SHELL-4 (C12) — author the zone container's provident children. A
+ *  non-empty zone carries a minimize/expand toggle; a MINIMIZED non-empty zone
+ *  REPLACES its pane stack with a tab strip (one `data-pane-id` tab per
+ *  contained pane + a shared `on:click` expand handler). An empty zone has no
+ *  children (C11 empty-hidden wins — F5). PURE. */
+function zoneContainerChildren(
+  zone: LayoutZoneName,
+  panes: ZonePane[],
+  minimized: boolean,
+): LegacyNodeData[] {
+  if (panes.length === 0) return []
+  const toggle: LegacyNodeData = {
+    type: 'button',
+    props: { id: `zone-minimize-${zone}`, 'data-zone': zone, 'data-minimized': minimized ? 'true' : 'false' },
+    css: { classes: clickableClasses(['pane-zone-minimize']) },
+    content: minimized ? '▸' : '▾',
+    handlers: [{ name: PANE_MINIMIZE_TOGGLE_HANDLER, event: 'click', body: PANE_MINIMIZE_TOGGLE_BODY }],
+  }
+  if (!minimized) return [toggle]
+  const tabs: LegacyNodeData[] = panes.map((p) => ({
+    type: 'button',
+    props: { id: `zone-tab-${zone}-${p.def.id}`, 'data-pane-id': p.def.id, 'data-zone': zone },
+    css: { classes: clickableClasses(['pane-tab']) },
+    content: p.def.title,
+    handlers: [{ name: PANE_TAB_EXPAND_HANDLER, event: 'click', body: PANE_TAB_EXPAND_BODY }],
+  }))
+  return [toggle, ...tabs]
+}
+
+/** Wrap a pane's render output into a zone content root. The stable pane id
+ * (`pane-<id>`) + the zone `targetPlacement` always land on the FRAME root,
+ * OVERWRITING whatever `render` returned.
+ *
+ * U-SHELL-3 (C5) — when `collapsed` is supplied (a boolean), the frame also
+ * authors the provident collapse control (ONE shared `PANE_COLLAPSE_HANDLER`
+ * name) and the body. When `collapsed === true` the body nodes are NOT
+ * authored (header/handle only — spec §2.2/§2.5 pin 1); the frame root carries
+ * `is-collapsed` and keeps its stable identity so expanding restores the body.
+ *
+ * Backward compatibility: a caller that omits `collapsed` gets the pre-
+ * U-SHELL-3 shape (the render root IS the pane root — the Unit H
+ * `paneSubtreeRoot` contract). The app-graph assembler always supplies the
+ * boolean, so every assembled pane frame carries the control. PURE. */
 export function paneSubtreeRoot<C>(
   def: PaneDefinition<C>,
   ctx: C,
   sidebarZone: string,
+  collapsed?: boolean,
 ): LegacyNodeData {
   if (def == null || ctx == null || typeof sidebarZone !== 'string' || sidebarZone === '') {
     throw new Error('paneSubtreeRoot: def/ctx/sidebarZone required')
@@ -46,10 +209,46 @@ export function paneSubtreeRoot<C>(
   if (renderRoot == null) {
     throw new Error(`paneSubtreeRoot: pane "${def.id}" render returned nothing`)
   }
-  return {
+
+  // Pre-U-SHELL-3 shape (no collapse frame opted into): the render root IS the
+  // pane root (the Unit H `paneSubtreeRoot` contract).
+  if (collapsed === undefined) {
+    const existingCss = (renderRoot as { css?: { classes?: string[] } }).css
+    return {
+      ...renderRoot,
+      props: { ...(renderRoot.props ?? {}), id: `pane-${def.id}` },
+      placement: { targetPlacement: [sidebarZone] },
+      ...(existingCss !== undefined ? { css: existingCss } : {}),
+    }
+  }
+
+  // U-SHELL-3 (C5) pane frame: a header/handle control + the body (expanded).
+  const control: LegacyNodeData = {
+    type: 'button',
+    props: {
+      // H2 (adversarial) — a STABLE authored id (unique per pane, preserved
+      // across re-derives) so the control is addressable, not just by the
+      // volatile engine nodeId.
+      id: `pane-collapse-${def.id}`,
+      'data-pane-id': def.id,
+      'data-pane-collapse': collapsed === true ? 'true' : 'false',
+    },
+    css: { classes: clickableClasses(['pane-collapse-toggle']) },
+    content: collapsed === true ? '▸' : '▾',
+    handlers: [{ name: PANE_COLLAPSE_HANDLER, event: 'click', body: PANE_COLLAPSE_BODY }],
+  }
+  const body: LegacyNodeData = {
     ...renderRoot,
-    props: { ...(renderRoot.props ?? {}), id: `pane-${def.id}` },
+    props: { ...(renderRoot.props ?? {}) },
+  }
+  const frameClasses = collapsed === true ? [PANE_FRAME_CLASS, PANE_COLLAPSED_CLASS] : [PANE_FRAME_CLASS]
+  return {
+    type: 'div',
+    props: { id: `pane-${def.id}` },
     placement: { targetPlacement: [sidebarZone] },
+    css: { classes: frameClasses },
+    // Collapsed = header/handle only: the body nodes are NOT authored.
+    children: collapsed === true ? [control] : [control, body],
   }
 }
 
@@ -61,21 +260,77 @@ export interface AppGraphAssemblyInput {
   registry: PaneRegistry
   /** The pane data context (the host supplies it). */
   ctx: PaneContext
-  /** The sidebar zone name (default SIDEBAR_ZONE). */
+  /** The legacy sidebar zone name (default SIDEBAR_ZONE). Kept for backward
+   *  compatibility: the traversal content may still target it, and the legacy
+   *  tests pin its producer. Panes no longer target it — they target the
+   *  layout zones. */
   sidebarZone?: string
+  /** Unit U-SHELL-1 §2.3/§2.6 pin 2 — the serialized layout overlay. Optional;
+   *  omitted → the default is derived from the registry (`deriveLayout`). */
+  layout?: LayoutState
+  /** U-SHELL-4 (C11) — the provisional drop-target zones the shell drag
+   *  controller currently reveals. Marked `is-revealed` on the zone container.
+   *  Optional; omitted/empty → no zone reveals. */
+  revealedZones?: LayoutZoneName[]
 }
 
 export interface AppGraphAssemblyResult {
   /** The pane-inclusive envelope: the traversal content payloads + one
-   *  ContentPayload per ENABLED app-graph pane, with a `sidebar` container
-   *  producer in the template. */
+   *  ContentPayload per ENABLED app-graph pane (grouped by zone, ordered by
+   *  `PaneLayoutEntry.order`), with one `zone:<name>` container producer per
+   *  pane zone + one ContentPayload per pane in the template. */
   envelope: LegacyInitialData
   /** The enabled app-graph pane ids included (in registration order). */
   paneIds: string[]
 }
 
+interface ZoneContainerNode {
+  type?: string
+  props?: { id?: unknown; [key: string]: unknown }
+  placement?: { placementName?: unknown; [key: string]: unknown }
+  css?: { classes?: string[]; [key: string]: unknown }
+  [key: string]: unknown
+}
+
+/** The `zone:<name>` container producer anchored by `placement.placementName`
+ *  — the ONLY anchor the engine resolves a `targetPlacement` against, or
+ *  undefined. PURE. */
+function findZoneContainerByPlacement(
+  children: ZoneContainerNode[],
+  name: string,
+): ZoneContainerNode | undefined {
+  return children.find((c) => c.placement?.placementName === name)
+}
+
+/** The `zone:<name>` node matched by `props.id` alone. Such a node is NOT a
+ *  resolvable anchor (no `placementName`), so the assembler must repair it
+ *  rather than mistake it for the zone container (H1). PURE. */
+function findZoneContainerById(children: ZoneContainerNode[], name: string): ZoneContainerNode | undefined {
+  return children.find((c) => c.props?.id === `zone:${name}`)
+}
+
+/** The container node for `name` preferring the authoritative `placementName`
+ *  anchor, else the `props.id` match for repair. PURE. */
+function findZoneContainer(children: ZoneContainerNode[], name: string): ZoneContainerNode | undefined {
+  return findZoneContainerByPlacement(children, name) ?? findZoneContainerById(children, name)
+}
+
+/** The mirror classes a zone container carries (spec §2.6 pin 4): `is-empty`
+ *  when the zone has zero panes (C11), `is-minimized` when the zone is
+ *  minimized (C12) and `is-revealed` when the shell drag controller currently
+ *  reveals it as a provisional drop target (U-SHELL-4/C11). */
+function zoneMirrorClasses(paneCount: number, minimized: boolean, revealed: boolean): string[] {
+  const classes: string[] = []
+  if (paneCount === 0) classes.push('is-empty')
+  if (minimized) classes.push('is-minimized')
+  if (revealed) classes.push('is-revealed')
+  return classes
+}
+
 /** Assemble the pane-inclusive app-graph envelope from the traversal envelope
- *  + the enabled app-graph panes. PURE. */
+ *  + the enabled app-graph panes. Every pane zone always gets a stable
+ *  `zone:<name>` container producer (W2-Q3); panes are placed into their zone
+ *  in `PaneLayoutEntry.order` (spec §2.6 pin 3). PURE. */
 export function assembleAppGraphEnvelope(input: AppGraphAssemblyInput): AppGraphAssemblyResult {
   if (
     input == null ||
@@ -98,32 +353,118 @@ export function assembleAppGraphEnvelope(input: AppGraphAssemblyInput): AppGraph
     .listByScope('app-graph')
     .filter((p) => registry.isEnabled(p.id))
   const paneIds = enabledAppGraph.map((p) => p.id)
-  const panePayloads: LegacyContentPayload[] = enabledAppGraph.map((p) => ({
-    content: [paneSubtreeRoot(p, ctx, sidebarZone)],
-  }))
+
+  // The serialized layout overlay is authoritative; omitted → derive the
+  // default from the registry (W2-Q4). The overlay never invents panes: only
+  // enabled+registered panes are placed.
+  const layout: LayoutState =
+    input.layout != null ? coerceLayout(input.layout) : deriveLayout(enabledAppGraph as LayoutPaneSpec[])
+
+  // F2 — a persisted entry naming an unregistered pane is dropped (no phantom
+  // node) and reported over the host `console.warn` channel (spec §2.6 pin 6).
+  const registeredIds = new Set(registry.list().map((p) => p.id))
+  for (const entry of layout.panes) {
+    if (!registeredIds.has(entry.id)) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn(
+          `assembleAppGraphEnvelope: dropping layout entry for unregistered pane "${entry.id}"`,
+        )
+      }
+    }
+  }
+
+  // U-SHELL-4 (C11, H1/H2) — resolve each enabled pane's zone/order/collapsed
+  // into the SINGLE enabled+placed census (post overlay + default fallback).
+  // `is-empty` derives from THIS (`zonePanes[zone].length`), NOT the raw overlay:
+  // a fallback-placed pane makes its zone non-empty (spec §2.5 pin 8).
+  const zonePanes = resolveEnabledZonePanes(enabledAppGraph, layout)
+
+  // U-SHELL-4 (C11) — the shell's provisional drop-target zones (filtered to
+  // known zone names; junk entries are ignored).
+  const revealedSet = new Set<LayoutZoneName>(
+    Array.isArray(input.revealedZones) ? input.revealedZones.filter(isLayoutZoneName) : [],
+  )
+
+  // One ContentPayload per pane, grouped by zone (payload order is the
+  // `PaneLayoutEntry.order` observable — spec §2.6 pin 3). U-SHELL-4 (C12) — a
+  // MINIMIZED non-empty zone REPLACES its pane stack with the tab strip (below),
+  // so its pane payloads are not emitted.
+  const panePayloads: LegacyContentPayload[] = []
+  for (const zone of LAYOUT_PANE_ZONES) {
+    if (layout.zones[zone].minimized === true && zonePanes[zone].length > 0) continue
+    for (const p of zonePanes[zone]) {
+      panePayloads.push({ content: [paneSubtreeRoot(p.def, ctx, zone, p.collapsed)] })
+    }
+  }
 
   // Merge the traversal content payloads + the pane ContentPayloads (panes
   // appended after the traversal content).
   const content = [...(traversalEnvelope.content ?? []), ...panePayloads]
 
-  // Ensure the envelope template's root has a `container`-role producer for the
-  // sidebarZone (the HARD PRECONDITION). Keep an existing one; add it otherwise.
+  // Ensure the template root has one `container`-role producer per pane zone
+  // (the HARD PRECONDITION) with the state-derived mirror classes + the C12
+  // minimize/tab-strip subtree. Keep an existing producer for the same zone;
+  // add it otherwise.
   const templateRoot = traversalEnvelope.template.root
-  const children = [...(templateRoot.children ?? [])]
-  const hasProducer = children.some(
-    (c) => (c.placement as { placementName?: string } | undefined)?.placementName === sidebarZone,
-  )
-  if (!hasProducer) {
-    children.push({
-      type: 'div',
-      props: { id: `zone:${sidebarZone}` },
-      placement: { placementName: sidebarZone },
-    })
+  const children = [...((templateRoot.children ?? []) as ZoneContainerNode[])]
+  for (const zone of LAYOUT_PANE_ZONES) {
+    const minimized = layout.zones[zone].minimized === true
+    const classes = zoneMirrorClasses(zonePanes[zone].length, minimized, revealedSet.has(zone))
+    const authoredChildren = zoneContainerChildren(zone, zonePanes[zone], minimized)
+    // H1 — prefer the authoritative `placementName` anchor. A node matched only
+    // by `props.id` is NOT resolvable by the engine, so synthesize the missing
+    // `placementName` on it (the HARD PRECONDITION) rather than keeping it as-is.
+    const anchored = findZoneContainerByPlacement(children, zone)
+    const existing = findZoneContainer(children, zone)
+    if (existing != null) {
+      const existingClasses = existing.css?.classes ?? []
+      const merged = [...new Set([...existingClasses, ...classes])]
+      const repaired =
+        anchored != null
+          ? existing
+          : { ...existing, placement: { ...(existing.placement ?? {}), placementName: zone } }
+      const existingChildren = (existing.children ?? []) as LegacyNodeData[]
+      children[children.indexOf(existing)] = {
+        ...repaired,
+        props: { ...(repaired.props ?? {}), 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
+        css: { ...(existing.css ?? {}), classes: merged },
+        ...(authoredChildren.length > 0
+          ? { children: [...existingChildren, ...authoredChildren] }
+          : {}),
+      }
+    } else {
+      children.push({
+        type: 'div',
+        props: { id: `zone:${zone}`, 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
+        placement: { placementName: zone },
+        ...(classes.length > 0 ? { css: { classes } } : {}),
+        ...(authoredChildren.length > 0 ? { children: authoredChildren } : {}),
+      })
+    }
+  }
+
+  // Backward compatibility: keep/add the legacy sidebar producer (the traversal
+  // content may still target it; the legacy assembler tests pin it). An id-only
+  // `zone:sidebar` node gets its `placementName` synthesized too (H1).
+  if (findZoneContainerByPlacement(children, sidebarZone) == null) {
+    const byId = findZoneContainerById(children, sidebarZone)
+    if (byId != null) {
+      children[children.indexOf(byId)] = {
+        ...byId,
+        placement: { ...(byId.placement ?? {}), placementName: sidebarZone },
+      }
+    } else {
+      children.push({
+        type: 'div',
+        props: { id: `zone:${sidebarZone}` },
+        placement: { placementName: sidebarZone },
+      })
+    }
   }
 
   const envelope: LegacyInitialData = {
     ...traversalEnvelope,
-    template: { ...traversalEnvelope.template, root: { ...templateRoot, children } },
+    template: { ...traversalEnvelope.template, root: { ...templateRoot, children: children as LegacyNodeData[] } },
     content,
   }
   return { envelope, paneIds }
@@ -480,6 +821,23 @@ export const ADVANCED_SEARCH_TOGGLE_HANDLER = 'pane-search-advanced-toggle'
  *  `window.provident.sidebar.submitAdvancedQuery` seam. */
 export const ADVANCED_SEARCH_SUBMIT_HANDLER = 'pane-search-advanced-submit'
 
+/** U-SHELL-9a §2.6/§2.9 pin 8 — the pane-first expand-to-tab control: a SECOND
+ *  `on:click` control in `searchContent` (distinct from the advanced-search
+ *  disclosure toggle) that opens the current query as a full search tab. */
+export const SEARCH_EXPAND_TAB_HANDLER = 'pane-search-expand-tab'
+export const SEARCH_EXPAND_TAB_ID = 'pane-search-expand-tab'
+
+/** §2.6/HOST-4 — the search-result click handler: opens the result's document
+ *  in a NEW `document` tab (the search tab stays) through the host
+ *  `openDocumentTab` seam. */
+export const SEARCH_RESULT_OPEN_HANDLER = 'pane-search-result-open'
+
+/** §2.6/HOST-5 — the in-tab search body: the query input + the reuse-the-tab
+ *  submit control. */
+export const SEARCH_TAB_INPUT_ID = 'search-tab-input'
+export const SEARCH_TAB_SUBMIT_ID = 'search-tab-submit'
+export const SEARCH_TAB_SUBMIT_HANDLER = 'pane-search-tab-submit'
+
 /** The advanced-search authored ids (single source of truth for the render
  *  helpers + the submit body + the tests). */
 export const ADVANCED_SEARCH_IDS = {
@@ -535,6 +893,40 @@ const ADVANCED_SEARCH_TOGGLE_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s || typeof s.searchAdvancedToggle !== 'function') return;
   s.searchAdvancedToggle();
+}`
+
+// U-SHELL-9a §2.6 — the pane-first expand-to-tab control's inline body. It
+// reads the `search` pane's query input and routes it to the host seam, which
+// opens the SAME query as a full search tab (a NEW tab — §2.6). A malformed
+// node/bridge is a no-op — never a throw.
+const SEARCH_EXPAND_TAB_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.expandSearchTab !== 'function') return;
+  var el = document.getElementById('pane-search-input');
+  s.expandSearchTab(el && el.value != null ? String(el.value) : '');
+}`
+
+// HOST-4 — a result click routes the result's `data-document-id` to the host
+// `openDocumentTab` seam (a NEW `document` tab; the search tab stays). A
+// malformed node/bridge is a no-op.
+const SEARCH_RESULT_OPEN_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.openDocumentTab !== 'function') return;
+  var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-document-id'];
+  if (id) s.openDocumentTab(String(id));
+}`
+
+// HOST-5 — an in-tab query edit routes through the host `searchTabQuery` seam,
+// which REUSES the tab's own entry (`setSearchParams`) rather than opening a
+// new tab. The tab id travels on the button's `data-tab-id`; the query is read
+// from the in-tab input.
+const SEARCH_TAB_SUBMIT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.searchTabQuery !== 'function') return;
+  var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-tab-id'];
+  var el = document.getElementById(${JSON.stringify(SEARCH_TAB_INPUT_ID)});
+  var q = el && el.value != null ? String(el.value) : '';
+  if (id) s.searchTabQuery(String(id), q);
 }`
 
 // The inline submit body (a full function-expression string). It reads the
@@ -688,11 +1080,20 @@ export function searchContent(
     handlers: [{ name: ADVANCED_SEARCH_TOGGLE_HANDLER, event: 'click', body: ADVANCED_SEARCH_TOGGLE_BODY }],
   }
   const advanced: LegacyNodeData[] = expanded ? [advancedSearchFields(options?.documentFilters === true)] : []
+  // §2.6 — the pane-first expand-to-tab control (a second `on:click` control,
+  // distinct from the disclosure toggle; §2.9 pin 8).
+  const expandTab: LegacyNodeData = {
+    type: 'button',
+    props: { id: SEARCH_EXPAND_TAB_ID },
+    css: { classes: clickableClasses() },
+    content: 'Open in a tab',
+    handlers: [{ name: SEARCH_EXPAND_TAB_HANDLER, event: 'click', body: SEARCH_EXPAND_TAB_BODY }],
+  }
 
   // ---- result detail ----
   // Prefer the engine's `results` (documentId/nodeId/snippet); fall back to the
   // local `ranked` list. Both keep the top-level `li` + `data-node-id` shape.
-  const children: LegacyNodeData[] = [input, toggle, ...advanced]
+  const children: LegacyNodeData[] = [input, toggle, expandTab, ...advanced]
   const resultItems: unknown[] = (result?.results ?? result?.ranked ?? []) as unknown[]
   const lis: LegacyNodeData[] = resultItems.map((raw) => {
     const r = raw as { documentId?: string; nodeId?: string; score?: unknown; snippet?: string }
@@ -700,6 +1101,9 @@ export function searchContent(
       return {
         type: 'li',
         props: { 'data-document-id': r.documentId, 'data-node-id': r.nodeId ?? '', 'data-score': String(r.score) },
+        css: { classes: clickableClasses() },
+        // §2.6/HOST-4 — a result click opens the document in a NEW tab.
+        handlers: [{ name: SEARCH_RESULT_OPEN_HANDLER, event: 'click', body: SEARCH_RESULT_OPEN_BODY }],
         content: `${r.documentId}/${r.nodeId ?? ''} — ${String(r.score)} — ${String(r.snippet ?? '')}`,
       }
     }
@@ -771,6 +1175,84 @@ export function searchContent(
   }
 
   return { type: 'div', children }
+}
+
+// ===========================================================================
+// U-SHELL-9a §2.3/§2.6 (HOST-1/HOST-5) — the active-tab stage bodies. The
+// `mountTab` host seam renders exactly ONE of these into the central stage:
+// the landing/wikis listing (`other:landing`), the search-tab body (query input
+// + derived results), or the parked placeholder. Document targets reuse the
+// existing scoped single-document render. PURE.
+// ===========================================================================
+
+/** HOST-1 — the landing/wikis listing body (`other:landing`). Lists the
+ *  configured stores when present, else the document titles, degrading to
+ *  "Getting started" when neither exists. PURE. */
+export function landingContent(input?: {
+  documents?: Array<{ documentId: string; title?: string }>
+  stores?: Array<{ name: string }>
+}): LegacyNodeData {
+  const stores = input?.stores ?? []
+  const documents = input?.documents ?? []
+  const items: LegacyNodeData[] =
+    stores.length > 0
+      ? stores.map((s) => ({ type: 'li', props: { 'data-store-name': s.name }, content: s.name }))
+      : documents.map((d) => ({
+          type: 'li',
+          props: { 'data-document-id': d.documentId },
+          content: d.title ?? d.documentId,
+        }))
+  return {
+    type: 'div',
+    props: { id: 'stage-landing', 'data-stage': 'landing' },
+    children: [
+      { type: 'h2', content: stores.length > 0 ? 'Available wikis' : 'Getting started' },
+      ...(items.length > 0
+        ? [{ type: 'ul', children: items } as LegacyNodeData]
+        : [{ type: 'p', content: 'No documents yet.' } as LegacyNodeData]),
+    ],
+  }
+}
+
+/** HOST-5 — the search-tab body. Renders the tab's OWN stored query plus its
+ *  derived results; the submit control routes an in-tab edit through the host
+ *  `searchTabQuery` seam, which reuses this same tab (`setSearchParams`). PURE. */
+export function searchTabContent(
+  entry: { id: string; search?: { query?: string } },
+  opts?: { results?: unknown[]; error?: string | null },
+): LegacyNodeData {
+  const query = entry.search?.query ?? ''
+  const resultItems = opts?.results ?? []
+  const lis: LegacyNodeData[] = resultItems.map((raw) => {
+    const r = raw as { documentId?: string; nodeId?: string; score?: unknown; snippet?: string }
+    return {
+      type: 'li',
+      props: { 'data-document-id': r.documentId ?? '', 'data-node-id': r.nodeId ?? '' },
+      css: { classes: clickableClasses() },
+      handlers: [{ name: SEARCH_RESULT_OPEN_HANDLER, event: 'click', body: SEARCH_RESULT_OPEN_BODY }],
+      content: r.documentId !== undefined ? `${r.documentId}/${r.nodeId ?? ''}` : `${r.nodeId ?? ''}`,
+    }
+  })
+  const children: LegacyNodeData[] = [
+    { type: 'h2', content: 'Search results' },
+    { type: 'input', props: { id: SEARCH_TAB_INPUT_ID, value: query } },
+    {
+      type: 'button',
+      props: { id: SEARCH_TAB_SUBMIT_ID, 'data-tab-id': entry.id },
+      css: { classes: clickableClasses() },
+      content: 'Search',
+      handlers: [{ name: SEARCH_TAB_SUBMIT_HANDLER, event: 'click', body: SEARCH_TAB_SUBMIT_BODY }],
+    },
+  ]
+  if (lis.length === 0) {
+    children.push({ type: 'p', props: { 'data-empty': 'true' }, content: '(no results)' })
+  } else {
+    children.push(...lis)
+  }
+  if (opts?.error != null && opts.error !== '') {
+    children.push({ type: 'p', props: { id: 'stage-search-error' }, content: String(opts.error) })
+  }
+  return { type: 'div', props: { id: 'stage-search-tab', 'data-stage': 'search', 'data-tab-id': entry.id }, children }
 }
 
 // ===========================================================================

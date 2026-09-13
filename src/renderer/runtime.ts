@@ -33,7 +33,7 @@ import {
   type Payload,
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
-import type { ReconcileResult } from './content-reconcile.js'
+import type { DocumentRoot, MaterializedRoot, ReconcileResult } from './content-reconcile.js'
 import type {
   DispatchRequest,
   DispatchResult,
@@ -76,11 +76,21 @@ export interface RuntimeOptions {
 
 /** U-STATE-1b — the input to `Runtime.applyContentReconcile`. */
 export interface ApplyReconcileInput {
-  /** The reconcile buckets (from `reconcileContentRoots`). */
-  result: ReconcileResult
+  /** The reconcile buckets (from `reconcileContentRoots`, or the U-STATE-1e
+   *  `reconcileDocumentRoots` — which adds the optional `identityReplaced`
+   *  bucket applied through the same destroy/attach seams). */
+  result: ReconcileResult & {
+    identityReplaced?: { documentId: string; from: MaterializedRoot; to: MaterializedRoot }[]
+  }
   /** The fresh traversal envelope whose payload content supplies the
    *  added/replaced roots' node data. */
   next: LegacyInitialData
+  /** U-STATE-1e — the per-open-document envelopes (one per document tab). When
+   *  present, the runtime tracks the reconciled roots per document so a later
+   *  N-root reconcile can pass the scoped `previous` via
+   *  `materializedDocumentRoots()`. Omitted ⇒ the single-root path is unchanged
+   *  (roots are tracked with an empty document scope). */
+  documents?: { documentId: string; envelope: LegacyInitialData }[]
 }
 
 /** U-STATE-1b — the report from `Runtime.applyContentReconcile`. */
@@ -152,6 +162,11 @@ export class Runtime {
    *  nodes), maintained across content-only reconciles. NOT the panes. */
   private contentRoots: LegacyNodeData[] = []
 
+  /** U-STATE-1e — the content roots WITH their owning document scope (one entry
+   *  per document tab), maintained across a document-scoped reconcile. The
+   *  N-root reconciler's `previous`. */
+  private documentRoots: DocumentRoot[] = []
+
   /** U-STATE-1c — the ONE app-graph `LinkConfigNameHub`. Placement/component
    *  anchors resolve per hub, so a persistent hub lets U-STATE-1b translate a
    *  changed content root into the LIVE graph and `placement-attach` it to the
@@ -172,6 +187,7 @@ export class Runtime {
     this.adapter = new DomAdapter(opts.mount, { onEvent: this.handleDomEvent })
     this.payloads = this.buildPayloads(translated.content, opts.envelope.content)
     this.contentRoots = extractContentRoots(opts.envelope)
+    this.documentRoots = this.contentRoots.map((root) => ({ documentId: '', root }))
     this.rebuildIdIndex()
   }
 
@@ -395,6 +411,7 @@ export class Runtime {
     this.payloads = this.buildPayloads(translated.content, translated.userData)
     this.envelope = env
     this.contentRoots = extractContentRoots(env)
+    this.documentRoots = this.contentRoots.map((root) => ({ documentId: '', root }))
     this.warnings = translated.warnings ?? []
     this.rebuildIdIndex()
     this.resetRenderState()
@@ -419,6 +436,12 @@ export class Runtime {
    *  (the reconciler's `previous`). A copy; callers cannot mutate the store. */
   materializedContentRoots(): LegacyNodeData[] {
     return [...this.contentRoots]
+  }
+
+  /** U-STATE-1e — the currently materialized content roots WITH their owning
+   *  document scope (the N-root reconciler's `previous`). A copy. */
+  materializedDocumentRoots(): DocumentRoot[] {
+    return this.documentRoots.map((d) => ({ documentId: d.documentId, root: d.root }))
   }
 
   /** U-STATE-1b — apply a content reconcile WITHOUT tearing the graph down
@@ -508,8 +531,35 @@ export class Runtime {
       if (attachRoot(envNode)) applied.push(r.cssId)
       else warnings.push(`applyContentReconcile: replaced root produced no nodes: ${r.cssId}`)
     }
+    // U-STATE-1e — per-document identity replace (a fork changed only the
+    // editing document's root `rag-X` → `rag-X′`): destroy the old root and
+    // attach the new through the SAME seams (A3 whole-root replace).
+    for (const ir of input.result.identityReplaced ?? []) {
+      const envNode = nextById.get(ir.to.cssId)
+      if (destroyRoot(ir.from.cssId)) applied.push(ir.from.cssId)
+      else warnings.push(`applyContentReconcile: identity-replaced root not found: ${ir.from.cssId}`)
+      if (envNode == null) {
+        warnings.push(`applyContentReconcile: identity-replaced root missing from next: ${ir.to.cssId}`)
+        continue
+      }
+      if (attachRoot(envNode)) applied.push(ir.to.cssId)
+      else warnings.push(`applyContentReconcile: identity-replaced root produced no nodes: ${ir.to.cssId}`)
+    }
 
     this.contentRoots = extractContentRoots(input.next)
+    // U-STATE-1e — refresh the document-scoped tracking. A document-scoped call
+    // carries one envelope per open document; otherwise the flat path scopes
+    // every root to the empty document (the single-root no-regression).
+    if (Array.isArray(input.documents) && input.documents.length > 0) {
+      this.documentRoots = []
+      for (const d of input.documents) {
+        for (const root of extractContentRoots(d.envelope)) {
+          this.documentRoots.push({ documentId: d.documentId, root })
+        }
+      }
+    } else {
+      this.documentRoots = this.contentRoots.map((root) => ({ documentId: '', root }))
+    }
     // AF3 — keep the code-CRUD source of truth (`this.envelope`) in step with
     // the reconciled content (code.get/set/create/delete/validate read it).
     if (Array.isArray((input.next as { content?: unknown }).content)) {
@@ -974,6 +1024,7 @@ export class Runtime {
     // content reconcile does not use stale `previous` roots — adversarial
     // finding 3). `loadEnvelope`/`loadDoc` re-populate it after.
     this.contentRoots = []
+    this.documentRoots = []
     this.envelope = null
     // Re-render from an empty actionable set: the kept prevMaps make
     // diffMinimal emit removal ops for every prior element, emptying the mount

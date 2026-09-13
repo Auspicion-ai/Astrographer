@@ -488,8 +488,8 @@ describe('U-D6 §5.6.18 — the zod rows (SDK listTools)', () => {
     }
   })
 
-  it('§5.7.16 GUARD — ProvidentMcpServer.ALL_TOOLS is 57 (U-D6 added no tool; U-D7 added edit.set_doc_meta)', () => {
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(57)
+  it('§5.7.16 GUARD — ProvidentMcpServer.ALL_TOOLS is 58 (U-D6 added no tool; U-D7 added edit.set_doc_meta; U-SHELL-9a added provident.focus)', () => {
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(58)
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('rag.query')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('rag-stream')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('gnosis.query')

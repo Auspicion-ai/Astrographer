@@ -25,18 +25,39 @@ import type { PaneContext, PaneRegistry } from './pane-registry.js'
 import {
   assembleAppGraphEnvelope,
   buildOperatorEnvelope,
+  enabledZonePaneCounts,
   SIDEBAR_ZONE,
   docNavContent,
   crosslinksContent,
   searchContent,
+  landingContent,
+  searchTabContent,
   editorToolbarContent,
   EDITOR_TOOLBAR_TOGGLE_HANDLER,
   type AppGraphAssemblyResult,
+  type SearchResult,
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
 import { clickableClasses } from './render-shared.js'
+import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, type LayoutState, type LayoutZoneName } from './layout-state.js'
+import {
+  createDragController,
+  insertionIndexForPoint,
+  movePane,
+  setZoneMinimized,
+  type DragController,
+  type DragPoint,
+  type DropResult,
+  type ZoneBounds,
+} from './pane-drag.js'
+import {
+  createGutterController,
+  isGutterResizable,
+  setZoneSize,
+  type GutterController,
+} from './pane-gutter.js'
 import type { EditController, CaretState, RichCaretEdge, RebuildKind } from './edit-controller.js'
-import { reconcileContentRoots, type ReconcileChange } from './content-reconcile.js'
+import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from './content-reconcile.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
 import { HoverPreviewController } from './hover-preview.js'
 import { createSnapshotStore } from '../main/adjacency.js'
@@ -62,6 +83,7 @@ import type { LocalRagQueryFilters } from '../main/retrieval.js'
 import type { RagNodeType, RagNode, RagEdge } from '../main/rag-store.js'
 import { isRichEditableRoot } from './rich-eligibility.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
+import { type TabDefaultContext, type TabEntry, type TabSearchParams } from './tab-state.js'
 
 /** U-PARITY-C18 — the advanced-search args the `search` pane's disclosure
  *  collects. Mirrors the `rag.query` argument surface (W1-Q9): the extended
@@ -138,6 +160,10 @@ export interface SidebarBridge {
   /** Unit U-MENU-1 §2.2 — the renderer→main pane-catalog push. Optional so
    *  older host/test bridges (which predate the menu surface) still boot. */
   pushPaneCatalog?(catalog: PaneCatalogEntry[]): void
+  /** Unit U-MENU-1 §2.3 / U-SHELL-8 §2.6 pin 2 — subscribe to the
+   *  `IPC_PANE_VISIBILITY` action the native View → Panes checkbox sends.
+   *  Optional so older host/test bridges still boot. */
+  onPaneVisibility?(handler: (change: { id: string; enabled: boolean }) => void): () => void
 }
 
 export interface SidebarPanesOptions {
@@ -167,11 +193,30 @@ export interface SidebarPanesOptions {
   zoneName?: string
   /** The sidebar zone name (default SIDEBAR_ZONE). */
   sidebarZone?: string
+  /** Unit U-SHELL-9a §2.6 — the optional main-focus tab-strip delegate. The
+   *  search pane's `pane-search-expand-tab` handler reaches it to open the
+   *  current query as a full tab; a result click opens a NEW `document` tab
+   *  (HOST-4); an in-tab query edit reuses the search tab (HOST-5). Absent
+   *  (tests / pre-tabs hosts) → a no-op. */
+  tabs?: {
+    expandSearchTab(query: string): void
+    openDocumentTab?(documentId: string): void
+    editSearchQuery?(tabId: string, params: TabSearchParams): void
+  }
 }
 
 // ---- handler bodies (function-STRING data). They reach the IPC bridge via
 // `window.provident.sidebar` — NEVER an MCP tool. The host installs the
 // `window.provident.sidebar` surface at boot (M2).
+
+/** U-SHELL-8 (C11/V4-V5) — order-insensitive class-set equality (the zone
+ *  mirror classes are a set; the authored order is not semantically
+ *  significant). PURE. */
+function sameClassSet(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  for (const c of a) if (!b.includes(c)) return false
+  return true
+}
 
 /** U-STATE-1b — coalesce two rebuild kinds by precedence
  *  (template > operator > content). */
@@ -412,6 +457,14 @@ export class SidebarPanes {
   /** Unit GN-MCP-UI §5.5 — the optional gnosis GUI delegate (see the options
    *  doc). Null when not provided (the sidebar gnosis methods become no-ops). */
   private readonly gnosis: { status(): void; query(value: string): void } | null
+  /** Unit U-SHELL-9a §2.6 — the optional main-focus tab-strip delegate (the
+   *  search pane's pane-first expand-to-tab control + the result/open/edit
+   *  seams reach it; HOST-4/HOST-5). */
+  private readonly tabs: {
+    expandSearchTab(query: string): void
+    openDocumentTab?(documentId: string): void
+    editSearchQuery?(tabId: string, params: TabSearchParams): void
+  } | null
 
   /** U-PARITY-C19 — the shell hover-preview timing controller (W1-Q10: the
    *  content is provident, the 0.5 s dismissal is shell). onChange re-renders
@@ -426,6 +479,19 @@ export class SidebarPanes {
   /** Host-owned mutable state (M5). */
   private _currentDocumentId: string | null = null
   private _currentNodeId: string | null = null
+
+  /** U-SHELL-9a §2.3 (HOST-1) — the last mounted stage descriptor key (the
+   *  single active tab body). Guards the stage mount so a redundant
+   *  `onActiveChange` (e.g. a non-active tab close) never re-renders the
+   *  already-mounted body. */
+  private mountedStageKey: string | null = null
+
+  /** U-SHELL-9b §2.1 (C14) — the simultaneously mounted document ids. A
+   *  `mountTabs` call mounts ALL open document bodies (distinct roots) and
+   *  records them here so a later content change repopulates every mounted root
+   *  in place through the U-STATE-1e N-root reconcile. Empty / single-entry ⇒
+   *  the landed single-active path is unchanged. */
+  private mountedDocumentIds: string[] = []
 
   /** The host's pane-data cache (M7/M9). */
   private lastSnapshot: RagSnapshotPayload | null = null
@@ -443,6 +509,29 @@ export class SidebarPanes {
   private lastBacklinks: BacklinkResult | null = null
   private lastQueryResult: RagQueryResult | null = null
   private lastOperatorSettings: OperatorSettings | null = null
+  /** W2-N1 (§2.5) — the persisted serialized layout the app graph assembles
+   *  against. Set from `OperatorSettings.layout` at boot/refresh + on a settings
+   *  broadcast; omitted (`null`) → the assembler derives the registry default. */
+  private layout: LayoutState | null = null
+  /** U-SHELL-4 (C11) — the zones the shell drag controller currently reveals as
+   *  provisional drop targets. Passed to the assembler so the zone container
+   *  carries `is-revealed`; cleared by the controller's `onRevealChange`. */
+  private revealedZones: LayoutZoneName[] = []
+  /** U-SHELL-4 (C4/§3.1) — the last pointer position + zone bounds observed by
+   *  `movePaneDrag`. `commitPaneDrop` derives the within-zone insertion index
+   *  from this (so a drop lands where the pointer is, not always at the zone's
+   *  end); it is reset at the start/cancel/commit of each gesture. */
+  private lastDragPoint: DragPoint | null = null
+  private lastDragZones: readonly ZoneBounds[] = []
+  /** U-SHELL-4 — the shell pointer drag controller (C4 reorder/relocate + C11
+   *  proximity reveal). The `onRevealChange` write re-renders the app graph with
+   *  the fresh reveal set (ONE managed write per threshold-crossing — W2-Q7). */
+  private readonly dragController: DragController
+  /** U-SHELL-5 (C7) — the shell gutter resize controller. `onCommit` applies the
+   *  clamped `ZoneLayout.size` and writes ONCE through `setLayout` at gesture
+   *  end (W2-Q7/§2.1, never per-move); the `isResizable` gate is the §2.3
+   *  empty/minimized rule (a zone with no gutter). */
+  private readonly gutterController: GutterController
   /** U-PARITY-C18 — the advanced-search disclosure state (collapsed by default).
    *  Flipped by the `pane-search-advanced-toggle` handler → re-derive. */
   private advancedSearchOpen = false
@@ -519,6 +608,12 @@ export class SidebarPanes {
    *  for the content reconciler. */
   private pendingContentChange: ReconcileChange | null = null
 
+  /** U-SHELL-8 §2.7 H3 — set when a pane-visibility toggle lands; used to
+   *  suppress the boot `applyPersistedPaneVisibility` so a toggle that fired
+   *  while boot was awaiting the settings fetch is not clobbered by the stale
+   *  boot-fetched enable sets. Reset at the top of `boot`. */
+  private paneVisibilityTouched = false
+
   /** Unit L — the set of RAG node ids with a saved caret (the caret restore
    *  after a re-derive, §5.4). On `saveCaret` (in `textareaBlur`) the node id is
    *  added; on restore/clear it is removed. */
@@ -545,6 +640,10 @@ export class SidebarPanes {
   /** Unit U-MENU-1 — the PaneRegistry change subscription (re-push the catalog
    *  to the native menu on every enable/disable). Null until boot. */
   private unsubRegistry: (() => void) | null = null
+  /** U-SHELL-8 §2.6 pin 2 — the `IPC_PANE_VISIBILITY` subscription (the native
+   *  View → Panes checkbox apply seam). Null until boot / when the bridge
+   *  predates the menu surface. */
+  private unsubPaneVisibility: (() => void) | null = null
 
   constructor(opts: SidebarPanesOptions) {
     this.mount = opts.mount
@@ -556,6 +655,29 @@ export class SidebarPanes {
     this.zoneName = opts.zoneName ?? 'main'
     this.sidebarZone = opts.sidebarZone ?? SIDEBAR_ZONE
     this.gnosis = opts.gnosis ?? null
+    this.tabs = opts.tabs ?? null
+    // U-SHELL-4 — the shell drag controller. The scope of the dragged pane gates
+    // reveal + drop legality (an operator pane never targets an app-graph zone);
+    // each threshold-crossing commits ONE reveal write (W2-Q7/F4).
+    this.dragController = createDragController({
+      threshold: 24,
+      scopeOf: (paneId) => this.registry.get(paneId)?.scope ?? null,
+      onRevealChange: (zones) => {
+        this.revealedZones = [...zones]
+        this.rerenderAppGraph()
+      },
+    })
+    // U-SHELL-5 (C7) — the shell gutter controller. The commit seam applies the
+    // clamped size + persists via ONE `setLayout`; the resizability gate reads
+    // the same enabled+placed census the assembler uses for `is-empty` (§2.3).
+    this.gutterController = createGutterController({
+      onCommit: (zone, size) => this.commitGutterSize(zone, size),
+      isResizable: (zone) => {
+        const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+        const count = enabledZonePaneCounts(this.registry, base)[zone]
+        return isGutterResizable(count === 0, base.zones[zone]?.minimized === true)
+      },
+    })
   }
 
   /** Host-owned mutable state (M5): the host owns the current-document/node
@@ -568,6 +690,156 @@ export class SidebarPanes {
 
   setCurrentNodeId(id: string | null): void {
     this._currentNodeId = id
+  }
+
+  /** U-SHELL-9a §2.4 (HOST-2) — the REAL default-resolution context for the
+   *  first-tab default: the focused store's documents (the doc-heads snapshot)
+   *  + the previous session's most-recently-focused document. `hasStore` is
+   *  true once a store snapshot or any document is known. */
+  getTabContext(): TabDefaultContext {
+    const documents = (this.lastDocHeads ?? []).map((d) => ({ documentId: d.documentId, title: d.title }))
+    return {
+      hasStore: this.lastStore != null || documents.length > 0,
+      lastFocusedDocumentId: this.lastOperatorSettings?.defaultDocumentId ?? this._currentDocumentId,
+      documents,
+    }
+  }
+
+  /** U-SHELL-9a §2.3 (HOST-1) — the host stage-mount seam. Mounts the active
+   *  `TabEntry`'s provident body in the central stage and unmounts the previous
+   *  one (single-active render): a `document` target drives the existing
+   *  single-document render path (the scoped traversal); the landing target
+   *  renders the landing/wikis listing; a `search` target renders the search
+   *  body; parked kinds render a placeholder. `null` clears the mounted body. */
+  mountTab(entry: TabEntry | null): void {
+    if (entry == null) {
+      this.mountedStageKey = null
+      this.mountedDocumentIds = []
+      return
+    }
+    const key = JSON.stringify(entry)
+    if (key === this.mountedStageKey) return
+    const target = entry.target
+    if (target.kind === 'document') {
+      this.mountedStageKey = key
+      this.mountedDocumentIds = [target.documentId]
+      this.mountDocumentStage(target.documentId)
+      return
+    }
+    if (target.kind === 'search') {
+      this.mountedStageKey = key
+      this.mountedDocumentIds = []
+      void this.mountSearchStage(entry)
+      return
+    }
+    this.mountedStageKey = key
+    this.mountedDocumentIds = []
+    const isLanding = target.kind === 'other' && target.id === 'landing'
+    const body = isLanding
+      ? landingContent({
+          documents: this.lastDocHeads ?? [],
+          stores: this.lastStoreListing?.stores ?? [],
+        })
+      : { type: 'div', props: { id: 'stage-placeholder-' + target.kind, 'data-stage': 'placeholder' }, children: [{ type: 'p', content: `(${target.kind})` }] }
+    this.applyStageBody(body)
+  }
+
+  /** U-SHELL-9b §2.1 (C14) — mount ALL open document tabs simultaneously. The
+   *  9a single-active policy is superseded here: every open `document` tab's
+   *  body is materialized as a distinct root in the one graph (the
+   *  CROSS-DOCUMENT-SHARED prerequisite), and the mounted set is recorded so a
+   *  later content change repopulates every root in place through the
+   *  U-STATE-1e N-root reconcile (no `loadEnvelope`/teardown). Non-document
+   *  entries in the list are ignored (they are not document bodies). */
+  mountTabs(entries: TabEntry[]): void {
+    const ids: string[] = []
+    for (const e of Array.isArray(entries) ? entries : []) {
+      if (e?.target?.kind === 'document' && typeof e.target.documentId === 'string' && e.target.documentId !== '') {
+        if (!ids.includes(e.target.documentId)) ids.push(e.target.documentId)
+      }
+    }
+    this.mountedDocumentIds = ids
+    if (ids.length === 0) {
+      this.mountedStageKey = null
+      return
+    }
+    this.mountedStageKey = null // a multi/simultaneous mount — no single-active key
+    if (this.runtime == null || this.lastSnapshot == null) return
+    this.applyDocumentSet(this.lastSnapshot, ids, null)
+  }
+
+  /** The scoped single-document render for a `document` tab target (reuses the
+   *  same `buildTraversalEnvelope` scoping boot/re-derive use). Falls back to
+   *  the async `selectDocument` seam when no snapshot is cached yet. */
+  private mountDocumentStage(documentId: string): void {
+    if (this.lastSnapshot == null || !this.lastDocHeads?.some((d) => d.documentId === documentId)) {
+      // No cached snapshot or an unknown document — reuse the async scoped
+      // selection seam (it validates against the doc-heads and re-derives).
+      this.selectDocument(documentId)
+      return
+    }
+    if (this.runtime == null) return
+    this.setCurrentDocumentId(documentId)
+    const traversalEnvelope = this.buildTraversalEnvelope(this.lastSnapshot, [documentId])
+    this.loadAppGraph(this.runtime, traversalEnvelope)
+  }
+
+  /** The search-tab body: re-run the tab's stored query and render the derived
+   *  results (HOST-5). Re-runs in place; the tab is not re-created. */
+  private async mountSearchStage(entry: TabEntry): Promise<void> {
+    const params = entry.search
+    const query = params?.query ?? ''
+    let results: unknown[] = []
+    let error: string | null = null
+    if (query !== '') {
+      try {
+        const result = (await this.bridge.rag.query(query, params?.topK, undefined, {
+          mode: params?.mode,
+          maxHops: params?.maxHops,
+          expand: params?.expand,
+          maxParentContext: params?.maxParentContext,
+          filters: params?.filters as never,
+          stores: params?.stores,
+        })) as SearchResult
+        results = (result?.results ?? result?.ranked ?? []) as unknown[]
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e)
+      }
+    }
+    if (this.runtime == null) return
+    this.applyStageBody(searchTabContent(entry, { results, error }))
+  }
+
+  /** Wrap a stage body node in a content payload targeting the traversal zone
+   *  and assemble/load it into the app Runtime (panes included). */
+  private applyStageBody(body: LegacyNodeData): void {
+    if (this.runtime == null) return
+    const envelope: LegacyInitialData = {
+      template: this.template,
+      content: [{ content: [{ ...body, placement: { targetPlacement: [this.zoneName] } }] }],
+      clientConfig: { runInstantiation: true, runRendering: true },
+    }
+    this.loadAppGraph(this.runtime, envelope)
+  }
+
+  /** W2-N1 (§2.5) — the layout write-through seam. A layout mutation
+   *  (U-SHELL-3/4/5/8/9) calls this ONCE per gesture: the coerced layout is
+   *  cached for the next assemble AND committed through
+   *  `bridge.operatorSettings.set({ layout })` (the main store persists; the
+   *  broadcast drives the re-derive). A failed write still applies for the
+   *  session (F7 — the in-memory layout is authoritative until restart). */
+  setLayout(layout: LayoutState): void {
+    this.layout = coerceLayout(layout)
+    // H5 (adversarial) — the persist is best-effort: a bridge (or test host)
+    // that predates/lacks the `operatorSettings` surface must NOT throw — the
+    // in-memory layout stays authoritative for the session (F7). The guard
+    // wraps the property access AND the call (an absent/short surface).
+    const surface = this.bridge.operatorSettings
+    const set = surface?.set
+    if (typeof set !== 'function') return
+    void set.call(surface, { layout: this.layout }).catch((e) => {
+      console.error('[sidebar-panes] operator settings layout set failed', e)
+    })
   }
 
   /** Register the concrete panes (doc-nav/crosslinks/search/template-editor
@@ -639,6 +911,112 @@ export class SidebarPanes {
       push(this.paneCatalog())
     } catch {
       // never abort boot / a registry change on a bridge error
+    }
+  }
+
+  /** U-SHELL-8 §2.6 pin 1 — the scope-correct persisted enable sets, computed
+   *  from the live registry. `enabledPanes` = the enabled app-graph ids;
+   *  `enabledOperatorPanes` = the enabled operator ids. Both are written on
+   *  every visibility change so the C9 carrier round-trips regardless of scope. */
+  private persistEnabledPanes(): void {
+    const surface = this.bridge.operatorSettings
+    const set = surface?.set
+    if (typeof set !== 'function') return
+    const enabledPanes = this.registry
+      .listByScope('app-graph')
+      .filter((p) => this.registry.isEnabled(p.id))
+      .map((p) => p.id)
+    const enabledOperatorPanes = this.registry
+      .listByScope('operator')
+      .filter((p) => this.registry.isEnabled(p.id))
+      .map((p) => p.id)
+    const patch: OperatorSettingsPatch = { enabledPanes, enabledOperatorPanes, panesInitialized: true }
+    // F7 — the persist is best-effort: a failed/throwing write must NOT undo the
+    // in-memory enablement (the registry is already updated before this call).
+    try {
+      const result = set.call(surface, patch)
+      if (result != null && typeof (result as Promise<unknown>).catch === 'function') {
+        void (result as Promise<unknown>).catch((e) => {
+          console.error('[sidebar-panes] operator settings pane-visibility set failed', e)
+        })
+      }
+    } catch (e) {
+      console.error('[sidebar-panes] operator settings pane-visibility set failed', e)
+    }
+  }
+
+  /** U-SHELL-8 §2.6 pin 1 — apply the persisted scope enable sets at boot. An
+   *  EMPTY list for a scope keeps the registration defaults (all enabled) until
+   *  the operator's FIRST visibility write sets `panesInitialized`; from then on
+   *  an empty list means NONE enabled (H2 — so "hide every pane" round-trips).
+   *  A non-empty list is authoritative for that scope. An id that is not a
+   *  registered pane (F3/H1) or whose registry scope does not match the list
+   *  (H4) is dropped + warned BEFORE the authority computation — an unknown-only
+   *  list therefore drops to empty (defaults) instead of blinding the scope. */
+  private applyPersistedPaneVisibility(settings: OperatorSettings | null): void {
+    // H3 — a toggle that landed while boot awaited the settings fetch wins; do
+    // not overwrite it with the stale boot-fetched sets.
+    if (this.paneVisibilityTouched) return
+    const appDefs = this.registry.listByScope('app-graph')
+    const opDefs = this.registry.listByScope('operator')
+    const appIds = new Set(appDefs.map((p) => p.id))
+    const opIds = new Set(opDefs.map((p) => p.id))
+    const allIds = new Set(this.registry.list().map((p) => p.id))
+    const scopeList = (raw: unknown, scopeIds: Set<string>, scope: string): string[] => {
+      if (!Array.isArray(raw)) return []
+      const kept: string[] = []
+      for (const p of raw) {
+        if (typeof p !== 'string' || p === '') continue
+        if (scopeIds.has(p)) {
+          if (!kept.includes(p)) kept.push(p)
+          continue
+        }
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          // Distinguish a registered wrong-scope id (H4) from an unregistered id
+          // (F3) — both are dropped, but the diagnostic says which.
+          const reason = allIds.has(p) ? `registered in a different scope, not "${scope}"` : 'unregistered'
+          console.warn(`[sidebar-panes] dropping persisted pane-visibility id "${p}" (${reason})`)
+        }
+      }
+      return kept
+    }
+    const appList = scopeList(settings?.enabledPanes, appIds, 'app-graph')
+    const opList = scopeList(settings?.enabledOperatorPanes, opIds, 'operator')
+    // H2 — the first-run default is all-enabled; once `panesInitialized` is set
+    // the operator has expressed an explicit set, so empty means none.
+    const emptyMeansEnabled = settings?.panesInitialized !== true
+    for (const p of appDefs) {
+      this.registry.setEnabled(p.id, appList.length === 0 ? emptyMeansEnabled : appList.includes(p.id))
+    }
+    for (const p of opDefs) {
+      this.registry.setEnabled(p.id, opList.length === 0 ? emptyMeansEnabled : opList.includes(p.id))
+    }
+  }
+
+  /** U-SHELL-8 §2.6 pin 2 — the `IPC_PANE_VISIBILITY` handler (spec §2.2). A
+   *  malformed payload is ignored (F2); an unregistered id is ignored (F1). For
+   *  an app-graph pane the visibility toggle routes through the edit
+   *  controller's dirty-edit guard → the U-STATE-1 content reconcile
+   *  (pane-additive, no `loadEnvelope`); an operator pane re-mounts only its
+   *  isolated scope. The C9 carrier is persisted in both cases. */
+  private onPaneVisibilityChange = (change: unknown): void => {
+    if (change == null || typeof change !== 'object') return
+    const rec = change as { id?: unknown; enabled?: unknown }
+    if (typeof rec.id !== 'string' || rec.id === '') return
+    if (typeof rec.enabled !== 'boolean') return
+    const def = this.registry.get(rec.id)
+    if (def == null) return // F1 — an unregistered id is ignored (no phantom, no write)
+    // H3 — mark that a toggle landed so a boot apply still awaiting its stale
+    // settings fetch cannot clobber it.
+    this.paneVisibilityTouched = true
+    this.registry.setEnabled(rec.id, rec.enabled)
+    this.persistEnabledPanes()
+    if (def.scope === 'operator') {
+      this.refreshOperator()
+    } else {
+      // F4 — the dirty-edit guard queues the additive content reconcile while an
+      // edit is dirty (never a full `loadEnvelope`).
+      this.editController.requestRebuild('content')
     }
   }
 
@@ -731,6 +1109,10 @@ export class SidebarPanes {
       registry: this.registry,
       ctx: this.buildTemplateContext(),
       sidebarZone: this.sidebarZone,
+      // W2-N1 (§2.5) — the persisted layout overlay (null → derive the default).
+      layout: this.layout ?? undefined,
+      // U-SHELL-4 (C11) — the drag-time provisional drop-target zones.
+      revealedZones: this.revealedZones,
     })
     // Unit L §5.3 — the `readOnly` prop is HOST-SET at render time from
     // `editController.isEditable(ragId)` (the traversal is pure and cannot see
@@ -778,6 +1160,10 @@ export class SidebarPanes {
       registry: this.registry,
       ctx: this.buildTemplateContext(),
       sidebarZone: this.sidebarZone,
+      // W2-N1 (§2.5) — keep the persisted layout on a content-only repopulate.
+      layout: this.layout ?? undefined,
+      // U-SHELL-4 (C11) — keep the drag-time reveal set on a content repopulate.
+      revealedZones: this.revealedZones,
     })
     const env = assembled.envelope
     this.setTextareaReadOnly(env)
@@ -787,14 +1173,145 @@ export class SidebarPanes {
     // bucket; it must already be present from boot and survives the content-only
     // reconcile). Author it fresh so the reflected mode is current.
     this.applyEditorToolbar(env, this.editingMode)
-    const previous = this.runtime.materializedContentRoots()
-    const result = reconcileContentRoots({ previous, next: env, change: this.pendingContentChange })
-    this.runtime.applyContentReconcile({ result, next: env })
+    // U-STATE-1e — reconcile through the N-root (document-scoped) surface. The
+    // current document is the open-document scope; the merged pane-inclusive
+    // `env` is the runtime's `next` payload supply. (The simultaneous
+    // multi-document mount is U-SHELL-9b; this host path already accepts N
+    // scoped envelopes.)
+    const documentId = this._currentDocumentId ?? ''
+    const previous: DocumentRoot[] = this.runtime
+      .materializedContentRoots()
+      .map((root) => ({ documentId, root }))
+    const result = reconcileDocumentRoots({
+      previous,
+      next: [{ documentId, envelope: env }],
+      change: this.pendingContentChange,
+      documentIds: [documentId],
+    })
+    this.runtime.applyContentReconcile({
+      result,
+      next: env,
+      documents: [{ documentId, envelope: env }],
+    })
+    // U-SHELL-8 (C11/V4-V5) — the content reconcile refreshes the `rag-`/`pane-`
+    // content roots ONLY. A pane-visibility toggle that empties (or repopulates)
+    // a zone must also re-emit that zone container's state-derived
+    // `is-empty`/`is-minimized` mirror; otherwise the zone's mirror drifts from
+    // the census (V4/V5). The assembler computed the fresh classes into `env`'s
+    // template, so sync them onto the LIVE zone nodes through the managed
+    // state-slice channel — pane-additive, no `loadEnvelope`/teardown, stable
+    // `zone:*` identities (C10/§2.5).
+    this.syncZoneMirrors(env)
     const refs = this.recomputeBackRefs(env)
     this.backRefs.clear()
     for (const [k, v] of refs) this.backRefs.set(k, v)
     this.lastTraversalEnvelope = traversalEnvelope
     this.pendingContentChange = null
+  }
+
+  /** U-SHELL-9b §2.1 (C14) — the simultaneous multi-document mount/repopulate
+   *  path. Builds one traversal envelope PER open document (so each root is
+   *  unambiguously scoped), assembles the pane-inclusive envelope from the
+   *  first document (+ appends the remaining documents' content), and reconciles
+   *  ALL roots through the U-STATE-1e N-root `reconcileDocumentRoots` →
+   *  `Runtime.applyContentReconcile` (no `loadEnvelope`/teardown; every mounted
+   *  root survives a content change). */
+  private applyDocumentSet(
+    snapshot: RagSnapshotPayload,
+    documentIds: string[],
+    change: ReconcileChange | null,
+  ): void {
+    if (this.runtime == null || documentIds.length === 0) return
+    // The merged traversal envelope (the refresh() re-load source).
+    const mergedTraversal = this.buildTraversalEnvelope(snapshot, documentIds)
+    // One envelope per document (the N-root `next` scoping).
+    const perDoc = documentIds.map((documentId) => ({
+      documentId,
+      envelope: this.buildTraversalEnvelope(snapshot, [documentId]),
+    }))
+    const assembled = assembleAppGraphEnvelope({
+      traversalEnvelope: perDoc[0].envelope,
+      registry: this.registry,
+      ctx: this.buildTemplateContext(),
+      sidebarZone: this.sidebarZone,
+      layout: this.layout ?? undefined,
+      revealedZones: this.revealedZones,
+    })
+    const env = assembled.envelope
+    // Append the remaining documents' content so `applyContentReconcile`'s
+    // `next` payload supplies every root's node data.
+    for (let i = 1; i < perDoc.length; i += 1) {
+      env.content = [...(env.content ?? []), ...(perDoc[i].envelope.content ?? [])]
+    }
+    this.setTextareaReadOnly(env)
+    this.applyEditingMode(env, this.editingMode)
+    this.applyEditorToolbar(env, this.editingMode)
+    // The first document's envelope is the assembled env (it carries the panes
+    // so pane roots are in the reconcile set); the remaining are their scoped
+    // traversals. Panes are `pane-`-prefixed → reconciled globally by the
+    // N-root reconciler regardless of their tracked document scope.
+    perDoc[0] = { documentId: perDoc[0].documentId, envelope: env }
+    const result = reconcileDocumentRoots({
+      previous: this.runtime.materializedDocumentRoots(),
+      next: perDoc,
+      change,
+      documentIds,
+    })
+    this.runtime.applyContentReconcile({ result, next: env, documents: perDoc })
+    this.syncZoneMirrors(env)
+    const refs = this.recomputeBackRefs(env)
+    this.backRefs.clear()
+    for (const [k, v] of refs) this.backRefs.set(k, v)
+    this.lastTraversalEnvelope = mergedTraversal
+    this.pendingContentChange = null
+  }
+
+  /** U-SHELL-8 (C11/V4-V5) — re-emit the `zone:<name>` container mirror classes
+   *  after a pane-additive content reconcile. `applyContentReconcile` reconciles
+   *  only content roots (`rag-`/`pane-`), so a visibility toggle that empties or
+   *  repopulates a zone leaves that zone container's state-derived
+   *  `is-empty`/`is-minimized` mirror stale (a fresh boot renders it correctly;
+   *  the toggle path did not). The assembler authored the fresh classes into the
+   *  assembled template; apply them to the LIVE zone nodes through the managed
+   *  `state-slice` channel (pane-additive — no `loadEnvelope`/teardown, `zone:*`
+   *  identities stable). A zone whose mirror already matches is untouched (no
+   *  redundant managed write). */
+  private syncZoneMirrors(envelope: LegacyInitialData): void {
+    if (this.runtime == null) return
+    const children = (envelope.template?.root?.children ?? []) as Array<{
+      props?: { id?: unknown }
+      placement?: { placementName?: unknown }
+      css?: { classes?: unknown }
+    }>
+    for (const zone of LAYOUT_PANE_ZONES) {
+      const container = children.find(
+        (c) => c?.placement?.placementName === zone || c?.props?.id === `zone:${zone}`,
+      )
+      const desired = Array.isArray(container?.css?.classes)
+        ? (container.css.classes as unknown[]).map(String)
+        : []
+      if (sameClassSet(this.currentZoneMirror(zone), desired)) continue
+      this.runtime.applyCommand({
+        kind: 'state-slice',
+        node: `zone:${zone}`,
+        mutation: [{ targetProp: 'css.classes', mode: 'replace', value: desired }],
+      })
+    }
+  }
+
+  /** The live `zone:<name>` container's resolved mirror classes (empty when the
+   *  runtime/zone is not resolvable — never throws). */
+  private currentZoneMirror(zone: LayoutZoneName): string[] {
+    if (this.runtime == null) return []
+    try {
+      const states = this.runtime.nodeState(`zone:${zone}`).states as Array<{
+        css?: { classes?: unknown }
+      }>
+      const classes = states[0]?.css?.classes
+      return Array.isArray(classes) ? classes.map(String) : []
+    } catch {
+      return []
+    }
   }
 
   /** Mount the operator settings pane in its OWN isolated GraphScope (the
@@ -851,6 +1368,10 @@ export class SidebarPanes {
     }
     try {
       this.lastOperatorSettings = await this.bridge.operatorSettings.get()
+      // W2-N1 (§2.5) — refresh the layout overlay alongside the settings.
+      if (this.lastOperatorSettings.layout != null) {
+        this.layout = coerceLayout(this.lastOperatorSettings.layout)
+      }
     } catch {
       // keep the last-known operator settings on a bridge error
     }
@@ -873,9 +1394,18 @@ export class SidebarPanes {
   async boot(runtime: Runtime): Promise<void> {
     if (runtime == null) throw new Error('SidebarPanes.boot: runtime required')
     this.runtime = runtime
+    // H3 — a fresh boot: clear the toggle-during-boot guard before the pane
+    // registration + settings fetch below.
+    this.paneVisibilityTouched = false
     this.registerPanes()
     this.bindHandlers()
     this.installSidebarBridge()
+    // U-SHELL-8 §2.6 pin 2 — subscribe to the native View → Panes visibility
+    // action at boot (the `IPC_PANE_VISIBILITY` seam U-MENU-1 routes). Guarded
+    // for hosts/tests whose bridge predates the menu surface.
+    if (typeof this.bridge.onPaneVisibility === 'function') {
+      this.unsubPaneVisibility = this.bridge.onPaneVisibility((change) => this.onPaneVisibilityChange(change))
+    }
     // Unit U-MENU-1 §2.2 — push the pane catalog (boot) so the native
     // View → Panes submenu is data-driven, then re-push on every registry
     // change. Guarded for hosts/tests whose bridge predates the menu surface.
@@ -933,6 +1463,11 @@ export class SidebarPanes {
       const settings = await this.bridge.operatorSettings.get()
       this.lastOperatorSettings = settings
       this.editingMode = settings.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
+      // W2-N1 (§2.5) — honor the persisted layout from the very first assemble.
+      this.layout = settings.layout != null ? coerceLayout(settings.layout) : null
+      // U-SHELL-8 §3 state 1 — apply the persisted pane-visibility enable sets
+      // BEFORE the first assemble/mount so the first render reflects them.
+      this.applyPersistedPaneVisibility(settings)
     } catch {
       // keep the default editingMode (contenteditable) + null lastOperatorSettings
     }
@@ -960,6 +1495,9 @@ export class SidebarPanes {
     const current = this._currentDocumentId ?? documentIds[0] ?? null
     if (current) this.setCurrentDocumentId(current)
     const renderIds = current ? [current] : []
+    // U-SHELL-9b — record the boot-mounted document set (a single doc at boot;
+    // a later `mountTabs` supersedes it with the simultaneous set).
+    this.mountedDocumentIds = [...renderIds]
     const traversalEnvelope = this.buildTraversalEnvelope(snapshot, renderIds)
     this.loadAppGraph(runtime, traversalEnvelope)
     this.mountOperator()
@@ -978,7 +1516,7 @@ export class SidebarPanes {
   /** The re-derive wiring: fetch the snapshot, buildTraversal (with the stored
    *  template), then apply the change. `kind` (U-STATE-1b):
    *  - **content** — repopulate the document content roots ONLY via
-   *    `reconcileContentRoots` + `Runtime.applyContentReconcile` (no teardown,
+   *    `reconcileDocumentRoots` + `Runtime.applyContentReconcile` (no teardown,
    *    no operator remount; node identity + graph-resident state survive).
    *  - **operator** — re-render the operator pane + the app graph (editingMode).
    *  - **template** — a full reload (the page structure changed).
@@ -1024,8 +1562,16 @@ export class SidebarPanes {
         this.security = null
       }
       // M6 — the current-document state is the documentIds source.
+      // U-SHELL-9b §2.1 (C14) — when several documents are mounted
+      // simultaneously, they are ALL the document scope: a content change must
+      // repopulate every mounted root (never unmount a sibling tab).
+      const multi = this.mountedDocumentIds.length > 1
       const current = this._currentDocumentId
-      const documentIds = current ? [current] : this.deriveDocumentIds(snapshot)
+      const documentIds = multi
+        ? [...this.mountedDocumentIds]
+        : current
+          ? [current]
+          : this.deriveDocumentIds(snapshot)
       const traversalEnvelope = this.buildTraversalEnvelope(snapshot, documentIds)
       // CRITICAL #1 (adversarial) — a SINGLE final graph load. Stash the fresh
       // traversal envelope and let `refresh()` perform the ONE loadAppGraph
@@ -1043,7 +1589,8 @@ export class SidebarPanes {
       // ONLY (no teardown, no operator remount); operator/template/boot keep the
       // full reload path.
       if (kind === 'content' && this.appLoaded) {
-        this.applyContentChange(traversalEnvelope)
+        if (multi) this.applyDocumentSet(snapshot, documentIds, this.pendingContentChange)
+        else this.applyContentChange(traversalEnvelope)
       } else {
         await this.refresh()
       }
@@ -1167,6 +1714,9 @@ export class SidebarPanes {
     payload = (payload ?? { editingMode: 'contenteditable' }) as OperatorSettings
     this.lastOperatorSettings = payload
     this.editingMode = payload.editingMode === 'textarea' ? 'textarea' : 'contenteditable'
+    // W2-N1 (§2.5) — the broadcast is authoritative; a payload carrying the
+    // layout slice updates the overlay (a payload without it keeps the current).
+    if (payload.layout != null) this.layout = coerceLayout(payload.layout)
     this.editController.requestRebuild('operator') // → reDerive('operator'): operator pane + app graph (editingMode)
     // An operator rebuild is not a content change; drop any stale descriptor so
     // it is not applied on a later content pass (adversarial finding 6).
@@ -1202,7 +1752,7 @@ export class SidebarPanes {
       type: 'section',
       children: [
         { type: 'h2', content: 'Settings' },
-        { type: 'div', props: { id: 'operator-enabled-panes' }, content: (s?.enabledPanes ?? []).join(', ') },
+        { type: 'div', props: { id: 'operator-enabled-panes' }, content: (Array.isArray(s?.enabledPanes) ? s.enabledPanes : []).join(', ') },
         { type: 'div', props: { id: 'operator-default-document' }, content: s?.defaultDocumentId ?? '(all)' },
         { type: 'div', props: { id: 'operator-topk' }, content: `topK: ${s?.topK ?? 5}` },
         // Unit U1 §1.4 — the editingMode button-toggle. A text div shows the
@@ -1560,6 +2110,14 @@ export class SidebarPanes {
   private installSidebarBridge(): void {
     const methods = {
       selectDocument: (id: string) => this.selectDocument(id),
+      // U-SHELL-3 (C5) — the per-pane collapse toggle seam (the
+      // `togglePaneCollapse` handler body reaches it).
+      togglePaneCollapse: (id: string) => this.togglePaneCollapse(id),
+      // U-SHELL-4 (C12) — the zone minimize/expand + tab-expand/select seams
+      // (the inline `pane-zone-minimize-toggle`/`pane-tab-expand` handler bodies
+      // reach them). Each commits ONE `setLayout` write-through.
+      zoneMinimizeToggle: (zone: string) => this.zoneMinimizeToggle(zone),
+      paneTabExpand: (zone: string, paneId: string) => this.paneTabExpand(zone, paneId),
       // U-PARITY-DOCNAV — the doc-nav folder toggle seam (the
       // `pane-doc-nav-toggle` handler body reaches it; same add/remove
       // re-derive path as selectDocument).
@@ -1570,6 +2128,11 @@ export class SidebarPanes {
       searchAdvancedToggle: () => this.searchAdvancedToggle(),
       submitAdvancedQuery: (value: string, options: AdvancedSearchQueryOptions) =>
         void this.submitAdvancedQuery(value, options ?? {}),
+      // U-SHELL-9a §2.6 — the pane-first expand-to-tab seam.
+      expandSearchTab: (value: string) => this.expandSearchTab(value),
+      // HOST-4/HOST-5 — the search-result open + in-tab query edit seams.
+      openDocumentTab: (id: string) => { this.tabs?.openDocumentTab?.(id) },
+      searchTabQuery: (tabId: string, query: string) => { this.tabs?.editSearchQuery?.(tabId, { query }) },
       // U-PARITY-C19 — the link hover-preview shell seams (the
       // `hover-preview-*` handler bodies reach them). `enter`/`leave` cancel or
       // schedule the 0.5 s dismissal; the popup's own enter/leave are hoverable.
@@ -1633,6 +2196,183 @@ export class SidebarPanes {
     this.editController.requestRebuild()
   }
 
+  /** U-SHELL-3 (C5) — the per-pane collapse toggle. Flips
+   *  `PaneLayoutEntry.collapsed` for the pane in the coerced layout and commits
+   *  ONCE through the U-SHELL-1 `setLayout` write-through (the serialized
+   *  `layout` update + persist). A pane not in the registry is a NO-OP (a stale
+   *  id never mutates a sibling — F5). SYNCHRONOUS (the managed write fires; the
+   *  settings broadcast drives the re-render). */
+  private togglePaneCollapse(paneId: string): void {
+    if (typeof paneId !== 'string' || paneId === '') return
+    // F5 — a stale/unregistered pane id is a no-op (identity is stable).
+    const def = this.registry.get(paneId)
+    // H3 (adversarial) — only an ENABLED app-graph pane may write the persisted
+    // layout; an operator-scope (isolated, never app-graph) pane or a disabled
+    // pane is ignored, so it can never pollute the app-graph layout.
+    if (def == null || def.scope !== 'app-graph' || !this.registry.isEnabled(paneId)) return
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    const index = base.panes.findIndex((p) => p.id === paneId)
+    if (index >= 0) {
+      // H1 (adversarial) — an EXISTING entry is COLLAPSED-ONLY: its zone/order
+      // are preserved (the toggle must never relocate/reorder the pane).
+      const panes = base.panes.map((p, i) => (i === index ? { ...p, collapsed: p.collapsed !== true } : p))
+      this.setLayout({ ...base, panes })
+      return
+    }
+    // H1 (adversarial) — no entry yet: backfill the pane's DEFAULT placement
+    // from `defaultZone`/`defaultOrder` (via `deriveLayout`, the same source
+    // the assembler uses) instead of hardcoding `left`/`panes.length`.
+    const enabledAppGraph = this.registry
+      .listByScope('app-graph')
+      .filter((p) => this.registry.isEnabled(p.id))
+    const derived = deriveLayout(enabledAppGraph).panes.find((p) => p.id === paneId)
+    const panes = [
+      ...base.panes,
+      {
+        id: paneId,
+        zone: derived?.zone ?? ('left' as const),
+        order: derived?.order ?? base.panes.length,
+        collapsed: true,
+      },
+    ]
+    this.setLayout({ ...base, panes })
+  }
+
+  /** U-SHELL-4 (C12) — toggle a zone's stored `minimized` flag. A non-empty
+   *  zone minimizes to a tab strip; an empty zone ignores minimize (F5 — C11
+   *  empty-hidden wins). Commits ONCE through `setLayout`. A malformed zone is a
+   *  NO-OP. SYNCHRONOUS. */
+  private zoneMinimizeToggle(zone: string): void {
+    if (!isLayoutZoneName(zone)) return
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    // H2 (adversarial) — the acceptance census is the SAME enabled+placed count
+    // the assembler uses for `is-empty` (post overlay + default fallback), NOT
+    // the raw overlay: a fallback-placed pane makes the zone minimizable.
+    const count = enabledZonePaneCounts(this.registry, base)[zone]
+    this.setLayout(setZoneMinimized(base, zone, base.zones[zone].minimized !== true, count))
+  }
+
+  /** U-SHELL-4 (C12) — expand a minimized zone + select the clicked tab's pane.
+   *  Expands (`minimized:false`, restoring the retained `size`) and commits ONCE
+   *  through `setLayout`. The pane's `data-pane-id` identifies the selection (the
+   *  live selection highlight is deferred to the battery block — no
+   *  `LayoutState` selection field). A malformed zone is a NO-OP. SYNCHRONOUS. */
+  private paneTabExpand(zone: string, paneId: string): void {
+    if (!isLayoutZoneName(zone) || typeof paneId !== 'string' || paneId === '') return
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    const count = base.panes.filter((p) => p.zone === zone).length
+    this.setLayout(setZoneMinimized(base, zone, false, count))
+  }
+
+  /** U-SHELL-4 (C4) — the shell pointer wiring entry points. The renderer's
+   *  pointer listeners drive the drag controller through these; a commit
+   *  applies `movePane` and persists via ONE `setLayout` (spec §2.1 Table B). */
+  startPaneDrag(paneId: string): void {
+    // Re-hide any prior provisional reveal (one write if one was active), then
+    // begin the new gesture.
+    this.dragController.cancel()
+    this.lastDragPoint = null
+    this.lastDragZones = []
+    this.dragController.start(paneId)
+  }
+
+  movePaneDrag(point: DragPoint, zones: readonly ZoneBounds[]): void {
+    // U-SHELL-4 (C4/§3.1) — record the live pointer/zone geometry so the commit
+    // can derive the insertion index (a within-zone drop lands where the pointer
+    // is, not always at the end).
+    this.lastDragPoint = point
+    this.lastDragZones = Array.isArray(zones) ? zones : []
+    this.dragController.move(point, zones)
+  }
+
+  revealZones(): readonly LayoutZoneName[] {
+    return this.dragController.reveal()
+  }
+
+  cancelPaneDrag(): void {
+    this.lastDragPoint = null
+    this.lastDragZones = []
+    this.dragController.cancel()
+  }
+
+  /** Commit the active drop: resolve the controller's `DropResult`, derive the
+   *  within-zone insertion index from the recorded drop point (§3.1), apply
+   *  `movePane` to the current layout, and persist via ONE `setLayout`. A
+   *  self-drop that lands in the pane's current zone/order is a NO-OP (F2):
+   *  zero `operatorSettings.set` writes and no order change. Returns the
+   *  committed descriptor (null when the drop is rejected — no mutation). */
+  commitPaneDrop(payload?: unknown): DropResult | null {
+    const result = this.dragController.drop(payload)
+    if (result == null) return null
+    // A committed drop ends the gesture; clear the revealed drop-target mirror
+    // (the controller reset its internal set silently — no extra crossing write).
+    this.revealedZones = []
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    // U-SHELL-4 (C4/§3.1) — when the controller did not pin an order, derive it
+    // from the recorded drop point within the target zone's bounds. No recorded
+    // point (a synthetic/index-less drop) → append (the prior behavior).
+    let order = result.order
+    if (order === undefined && this.lastDragPoint != null) {
+      const bounds = this.lastDragZones.find((z) => z.zone === result.zone)
+      if (bounds != null) {
+        const slots =
+          base.panes.filter((p) => p.zone === result.zone && p.id !== result.paneId).length + 1
+        order = insertionIndexForPoint(this.lastDragPoint, bounds, slots)
+      }
+    }
+    this.lastDragPoint = null
+    this.lastDragZones = []
+    const next = movePane(base, result.paneId, result.zone, order)
+    // F2 — a drop of a pane onto its own current position changes neither the
+    // zone nor the effective order → a no-op (0 writes, no order change).
+    const before = base.panes.find((p) => p.id === result.paneId)
+    const after = next.panes.find((p) => p.id === result.paneId)
+    if (before != null && after != null && before.zone === after.zone && before.order === after.order) {
+      return result
+    }
+    this.setLayout(next)
+    return result
+  }
+
+  /** U-SHELL-5 (C7) — the shell gutter pointer wiring entry points. The
+   *  renderer's pointer listeners drive the controller through these; the ONE
+   *  commit at gesture end applies `setZoneSize` and persists via a single
+   *  `setLayout` (W2-Q7/§2.1 — no per-move stream). */
+  startGutter(zone: LayoutZoneName): void {
+    this.gutterController.start(zone)
+  }
+
+  moveGutter(size: number): void {
+    this.gutterController.move(size)
+  }
+
+  endGutter(): number | null {
+    return this.gutterController.end()
+  }
+
+  cancelGutter(): void {
+    this.gutterController.cancel()
+  }
+
+  resetGutter(zone?: LayoutZoneName): number | null {
+    return this.gutterController.reset(zone)
+  }
+
+  previewGutter(): number | null {
+    return this.gutterController.preview()
+  }
+
+  activeGutter(): LayoutZoneName | null {
+    return this.gutterController.active()
+  }
+
+  /** U-SHELL-5 (C7) — apply a committed gutter size to the current layout and
+   *  persist via ONE `setLayout` write-through (the U-SHELL-1 seam). */
+  private commitGutterSize(zone: LayoutZoneName, size: number): void {
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    this.setLayout(setZoneSize(base, zone, size))
+  }
+
   /** `pane-doc-nav-toggle` — flip a folder's expanded state + re-derive (the
    *  doc-nav tree re-renders from the refreshed state; the revealed children are
    *  real app-graph nodes). The key is the folder's `data-folder-path`
@@ -1669,6 +2409,13 @@ export class SidebarPanes {
   private searchAdvancedToggle(): void {
     this.advancedSearchOpen = !this.advancedSearchOpen
     this.editController.requestRebuild()
+  }
+
+  /** U-SHELL-9a §2.6 — the `pane-search-expand-tab` host seam: open the pane's
+   *  current query as a full search tab (the optional tab-strip delegate). A
+   *  missing delegate is a no-op (never throw). SYNCHRONOUS. */
+  private expandSearchTab(value: string): void {
+    this.tabs?.expandSearchTab(String(value ?? ''))
   }
 
   /** U-PARITY-C19 — re-render the EXISTING app graph after a hover-preview

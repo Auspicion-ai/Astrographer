@@ -10,6 +10,10 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'provident.code.get': 'read',
   'provident.code.validate': 'read',
   'provident.dispatch': 'dispatch',
+  // Unit U-SHELL-9a §2.7 — the UI-focus-only tab tool (find-or-open). It is in
+  // the `dispatch` action group and is NOT in the renderer MUTATING_METHODS (it
+  // mutates no graph/RAG, so it emits no app-graph-changed).
+  'provident.focus': 'dispatch',
   'provident.load': 'graph',
   'provident.op': 'graph',
   'provident.export': 'graph',

@@ -48,6 +48,12 @@ export interface PaneDefinition<C = PaneContext> {
   title: string
   scope: PaneScope
   render: (ctx: C) => LegacyNodeData
+  /** Unit U-SHELL-1 §2.1/W2-Q4 — the pane's additive default zone (the legacy
+   *  `[sidebar]` maps to `left`; omitted → the scope-derived `left`). */
+  defaultZone?: import('./layout-state.js').LayoutZoneName
+  /** Unit U-SHELL-1 §2.1/W2-Q4 — the pane's additive default order within its
+   *  zone (omitted → registration order). */
+  defaultOrder?: number
 }
 
 /** One enabled-state change notification. */
