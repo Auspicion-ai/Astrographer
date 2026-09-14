@@ -11,6 +11,7 @@ import { createPaneRegistry } from './pane-registry.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
+import { installSettingsModal } from './modal-state.js'
 import { createEditController } from './edit-controller.js'
 import { applyThemeToRoot } from './theme.js'
 import { applyLayoutToRoot, type LayoutState, type LayoutZoneName } from './layout-state.js'
@@ -869,6 +870,11 @@ async function main(): Promise<void> {
   // the host boot below populates the layout the gestures read. Shell chrome
   // only — the wiring never re-renders or writes the graph itself (§2.7).
   installShellPointers(host)
+  // Unit U-SHELL-7 (C3) — host the EXISTING operator-only mounts
+  // (`#panes` = SecurePanels, `#operator-panes` = the SidebarPanes operator
+  // graph) inside the settings modal + wire the toggle/Escape/scrim affordances.
+  // Runs AFTER installShellPointers and after both mounts exist (§2.6).
+  installSettingsModal(host, panels, { panes: 'panes', operatorPanes: 'operator-panes' })
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.

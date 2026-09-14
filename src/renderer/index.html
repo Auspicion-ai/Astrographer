@@ -178,6 +178,51 @@
     .tab-strip .tab.is-active { border-color: var(--accent); background: var(--hover); font-weight: 600; }
     .tab-strip .tab-close { opacity: 0.6; }
     .tab-strip .tab-new { flex: none; }
+    /* Unit U-SHELL-7 (C3) — the settings modal shell chrome. The frame is a
+       top-layer overlay carrying exactly one state class (is-open XOR is-closed,
+       the §2.3 wiring mirror); the dedicated scrim + body wrap the operator
+       mounts. Hidden by default via the `.is-closed` display rule. */
+    .settings-modal {
+      position: fixed; inset: 0;
+      z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .settings-modal.is-closed { display: none; }
+    #settings-modal-scrim {
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      cursor: pointer;
+      /* ADV1 — the parent `.settings-modal` sets `pointer-events: none` (so the
+         frame never intercepts); the scrim must RESET to `auto` or its
+         scrim-click-to-close is dead (clicks pass through to the page behind). */
+      pointer-events: auto;
+    }
+    #settings-modal-body {
+      position: relative;
+      z-index: 1;
+      background: var(--app-bg, #1b1f24);
+      border: 1px solid var(--border, #444);
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      max-width: min(880px, 92vw);
+      max-height: 88vh;
+      overflow: auto;
+      padding: 1.25rem;
+      pointer-events: auto;
+    }
+    .settings-toggle {
+      position: fixed; left: 1rem; bottom: 0.75rem;
+      z-index: 110;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.8rem;
+      border: 1px solid var(--border, #444);
+      border-radius: 999px;
+      background: var(--card-bg, #252a30);
+      color: var(--fg, #eee);
+      cursor: pointer;
+    }
+    .settings-toggle:hover { background: var(--hover, #2e343c); }
   </style>
 </head>
 <body>
@@ -200,6 +245,16 @@
     <div class="gutter" data-zone="header" data-axis="rows"></div>
     <div class="gutter" data-zone="footer" data-axis="rows"></div>
   </main>
+  <!-- Unit U-SHELL-7 (C3) — the settings modal shell chrome (plain authored
+       elements in <body>, OUTSIDE the <main class="layout"> grid; no on:*
+       handler; not MCP-visible). The dedicated scrim + body are the modal
+       container; installSettingsModal re-parents the EXISTING operator mounts
+       (#panes, #operator-panes) into #settings-modal-body. -->
+  <div id="settings-modal" class="settings-modal is-closed">
+    <div id="settings-modal-scrim"></div>
+    <div id="settings-modal-body"></div>
+  </div>
+  <button id="settings-toggle" class="settings-toggle" type="button">Settings</button>
   <script type="module" src="./renderer.js"></script>
 </body>
 </html>

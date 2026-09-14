@@ -132,8 +132,9 @@ verify the files actually landed (`git status`) rather than trusting a pass/fail
 | U-JR1 (host `provident.get_journal`) | ✅ **GREEN / DONE** | thin read over `Supervisor.journalEntries()`; `read` group; unit 35 + blind-greens 22/22; battery-host `journalEntries` HOST fix; live battery PARKED (running-app surface) |
 | PBT backfill (props-*.test.ts) | ✅ **GREEN / uncommitted** | §5.7 registers + property layers for the UI pure modules |
 | **U-SHELL-N7 (shell pointer-wiring, W2-N7)** | ✅ **GREEN / COMPLETE (2026-09-13)** | `installShellPointers` delegated wiring LANDED, closing HOST-1..5 + ADV1..5; four `.gutter[data-zone][data-axis]` authored + frame `data-pane-id` (`pane-graph.ts`); dom-shim extended (getters + delegated pointer dispatch + closest/setRect/setPointerCapture); trio 4527/58; tests 30 + 14 + 5 = 49; spec §3a/§3b; `docs/defects.md` HOST-SHELL-WIRING → FIXED |
+| **U-SHELL-7 (settings modal, C3)** | ✅ **GREEN / COMPLETE (2026-09-14)** | `modal-state.ts` (NEW — pure `createModalController` + `installSettingsModal`) + the `main()` call after `installShellPointers` + the `index.html` shell chrome (frame/scrim/body/toggle + `.is-closed{display:none}` + SH7-ADV1 `pointer-events:auto`); hosts `#panes`+`#operator-panes` (re-parent only — isolation preserved); tests 40 (red 37); blind-greens 31/0/2; live battery PARKED; decisions `MODAL-SETTINGS-REPARENT` + `MODAL-DEDICATED-SCRIM` ACTIVE; trio 4566/58; spec §3c |
 
-**Wave 3 (not started):** U-IMPORT-1 (C17), U-SHELL-7 (settings modal C3).
+**Wave 3 (remaining):** U-IMPORT-1 (C17). **U-SHELL-7 (settings modal C3) is now GREEN / COMPLETE (2026-09-14)** — see the §1 row + the Unit U-SHELL-7 DONE row in `docs/next-steps.md`.
 
 ---
 
@@ -283,8 +284,8 @@ context for a shared node).
 
 ## 6. Pending units
 
-- **Wave 3:** U-IMPORT-1 (C17, needs U-MENU-1 + the C14-lite import root),
-  U-SHELL-7 (settings modal C3).
+- **Wave 3:** **U-SHELL-7 (settings modal C3) is GREEN / COMPLETE (2026-09-14)** — no longer pending; the only remaining Wave-3 item is **U-IMPORT-1** (C17, needs U-MENU-1 + the C14-lite import root). The U-SHELL-7 live-scenario battery stays a PARKED artifact (running-app + UI/DOM-driver surface), documented in
+  `docs/specs/unit-u-shell-7-settings-modal-live-pending-battery.md`.
 - Accept-from-9b: AF3-3/AF1-2 (per-mount editing context for a shared node).
 - **U-JR1 is GREEN/DONE (2026-09-13)** — no longer pending; see §1 + the
   U-JR1 DONE row in `docs/next-steps.md`. Its live-scenario battery stays a

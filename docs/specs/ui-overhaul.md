@@ -1400,8 +1400,7 @@ supervisor's stack, `:602`).
 - **Wave 2:** `U-SHELL-1` (zones/layout on the C9 carrier) → then
   `U-SHELL-3/4/5/8/9` (each after U-SHELL-1); `U-EDIT-2` (C16, after
   U-STATE-1).
-- **Wave 3:** `U-IMPORT-1` (needs U-MENU-1 + U-STATE-1); `U-SHELL-7` (needs
-  U-STATE-1 + the mount).
+- **Wave 3:** `U-SHELL-7 (settings modal C3) — GREEN / COMPLETE (2026-09-14, CODE LANDED)` — spec `docs/specs/unit-u-shell-7-settings-modal.md`; shell frame/scrim/toggle in `index.html`, `createModalController` + `installSettingsModal` in `src/renderer/modal-state.ts` (NEW), the `main()` call after `installShellPointers`; hosts `#panes`+`#operator-panes` (re-parent, isolation preserved); tests 40, blind-greens 31/0/2, live battery PARKED. The only remaining Wave-3 item is `U-IMPORT-1` (needs U-MENU-1 + U-STATE-1).
 
 `U-PARITY` is chrome-independent, so it can run in Wave 1 **or** any later wave
 in parallel; it is placed in Wave 1 above to front-load the cheap coverage wins.
@@ -1420,7 +1419,7 @@ in parallel; it is placed in Wave 1 above to front-load the cheap coverage wins.
 5. **U-SHELL-4 — drag/reorder/relocate** (C4, scope-constrained; C11 empty-zone auto-hide + proximity reveal).
 6. **U-SHELL-5 — resizable gutters** (C7).
 7. **U-SHELL-6 — hover affordance** (C6).
-8. **U-SHELL-7 — settings modal** (C3; SG4; needs the isolation mount).
+8. **U-SHELL-7 — settings modal** (C3; SG4; needed the isolation mount) — **DONE (2026-09-14)**; spec `docs/specs/unit-u-shell-7-settings-modal.md`.
 9. **U-EDIT-1 — markdown/html editing toggle** (C8; consumes existing `editingMode`).
 10. **U-EDIT-2 — undo/redo + history sub-pane** (C16; editor-toolbar undo/redo **plus an interactive history list**; clicking an entry undoes the journal back to that point).
 11. **U-MENU-1 — application menus** (the File menu + View menu shell surface; prerequisite of U-IMPORT-1 + U-SHELL-8; SG3).
