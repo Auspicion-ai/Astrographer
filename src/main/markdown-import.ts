@@ -72,6 +72,7 @@ function sanitizeDocumentId(basenameNoExt: string): string {
     .replace(/\.md$/i, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
+  if (cleaned === '' || /^\.+$/.test(cleaned)) return ''
   return cleaned
 }
 

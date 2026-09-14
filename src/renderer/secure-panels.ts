@@ -97,7 +97,7 @@ const GROUP_LABELS: Record<string, string> = {
   graph: 'graph (load, op, export, validate, teardown)',
   code: 'code (code.set/create/delete/load — evaluates handler bodies)',
   module: 'module (module.install/update/list + module:<name>.<tool> extensions — trusted-equivalent to code)',
-  rag: 'rag (rag.query, get_document, list_nodes, get_edges, backlinks — read-only retrieval)',
+  rag: 'rag (rag.query, rag-stream, get_document, list_nodes, get_edges, backlinks, get_query_audit_log, list_documents — read-only retrieval)',
   edit: 'edit (edit.set_content/create_node/delete_node/split_node/merge_node/set_edge — mutating)',
   gnosis: 'gnosis (gnosis.query, gnosis.stream, gnosis.status + the read-only gnosis.document.*/gnosis.wiki.* — the Gnosis engine retrieval trio + document/wiki reads)',
   'gnosis-edit': 'gnosis-edit (gnosis.document.create/update/delete/publish/unpublish/archive + gnosis.wiki.create — mutating Gnosis document/wiki CRUD)',

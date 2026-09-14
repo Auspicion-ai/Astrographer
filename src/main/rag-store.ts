@@ -511,6 +511,7 @@ function isValidChildren(v: unknown): boolean {
     const child = c as { type?: unknown; content?: unknown; props?: unknown }
     if (typeof child.type !== 'string' || !RAG_NODE_CHILD_TYPES.has(child.type)) return false
     if (typeof child.content !== 'string') return false
+    if (hasDangerousKey(child)) return false
     if (child.props !== undefined && (child.props === null || typeof child.props !== 'object' || Array.isArray(child.props))) return false
     if (child.props !== undefined && hasDangerousKey(child.props)) return false
   }
@@ -820,7 +821,7 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
 
   // ---- public record copies (strip hash/quarantine, deep-copy mutable fields)
   function toPublicNode(n: StoredNode): RagNode {
-    return { id: n.id, type: n.type, content: n.content, nodeKind: n.nodeKind ?? 'content', children: n.children !== undefined ? deepCopy(n.children) : undefined, ...(n.documentPath !== undefined ? { documentPath: [...n.documentPath] } : {}), ...(n.tags !== undefined ? { tags: [...n.tags] } : {}), props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
+    return { id: n.id, type: n.type, content: n.content, nodeKind: n.nodeKind, children: n.children !== undefined ? deepCopy(n.children) : undefined, ...(n.documentPath !== undefined ? { documentPath: [...n.documentPath] } : {}), ...(n.tags !== undefined ? { tags: [...n.tags] } : {}), props: n.props !== undefined ? deepCopy(n.props) : undefined, ownedNodeIds: [...n.ownedNodeIds], createdAt: n.createdAt, updatedAt: n.updatedAt }
   }
   function toPublicEdge(e: StoredEdge): RagEdge {
     const edgeType = e.edgeType ?? 'link'
@@ -1046,10 +1047,11 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
       nodes.set(rec.id, rec)
       const at = new Date().toISOString()
       const typeChanged = existing.type !== rec.type
+      const nodeKindChanged = existing.nodeKind !== rec.nodeKind
       const ownedChanged = !sameStringArray(existing.ownedNodeIds, rec.ownedNodeIds)
       const documentPathChanged = !sameStringArray(existing.documentPath, rec.documentPath)
       const tagsChanged = !sameStringArray(existing.tags, rec.tags)
-      if (typeChanged || ownedChanged || documentPathChanged || tagsChanged) {
+      if (typeChanged || nodeKindChanged || ownedChanged || documentPathChanged || tagsChanged) {
         // journal the full before/after node so undo restores type/ownedNodeIds/metadata
         pushJournal({ kind: 'structural', op: { op: 'node-update', nodeId: rec.id, before: toPublicNode(existing), after: toPublicNode(rec) }, at })
       } else {

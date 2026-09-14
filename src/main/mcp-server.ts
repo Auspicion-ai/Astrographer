@@ -1485,7 +1485,7 @@ export async function handleEditTool(
       // entry is the default; `reservedNames` carries ONLY the non-default
       // store names (U-MS4 §5.4 A1-S7: the seam takes the list as GIVEN, so
       // the wiring must never include the default store's own name).
-      const files = Array.isArray(args.files) ? (args.files as unknown[]).filter((x): x is string => typeof x === 'string') : []
+      const files = Array.isArray(args.files) ? (args.files as string[]) : []
       const result = entry
         ? await importMarkdownCorpus(ctx, { files, corpusRoot: entry.corpusRoot }, {
             name: entry.name,
