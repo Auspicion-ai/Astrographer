@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagJournalPayload, type RagJournalOpResult, type RagJournalAction, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
@@ -80,6 +80,12 @@ export interface SidebarMethods {
   gnosisQuery(value: string): void
   gnosisDocuments(tool: string, args: Record<string, unknown>): void
   gnosisWikis(tool: string, args: Record<string, unknown>): void
+  /** Unit U-EDIT-2 (C16) §2.1/§2.2 — the project-journal seams the app-graph
+   *  Undo/Redo controls + history-entry clicks reach (`IPC_RAG_JOURNAL_OP`
+   *  through the host). A no-op until the host installs its methods. */
+  historyUndo(): void
+  historyRedo(): void
+  historyEntryClick(index: unknown): void
 }
 
 export interface ProvidentBridge {
@@ -179,6 +185,17 @@ export interface ProvidentBridge {
      *  never an MCP tool — an agent must not add/remove/rename/re-default a
      *  store (A-P2-6/A-P2-7). */
     manage(request: RagStoreManageRequest): Promise<RagStoreManageResult>
+    /** Unit U-EDIT-2 (C16) §2.5 — the SANITIZED project-journal read (the
+     *  undo/redo controls + history sub-pane data source). Sends the
+     *  `rag-journal` IPC to main, which projects the RAG store's PROJECT journal
+     *  (`before`/`after`/`ops`/`inverse` dropped). Manual-UI only: never an MCP
+     *  tool. */
+    journal(): Promise<RagJournalPayload>
+    /** Unit U-EDIT-2 (C16) §2.5 — the project-journal op (undo/redo). Sends the
+     *  `rag-journal-op` IPC to main, which calls `RagStore.undo()`/`redo()`,
+     *  emits the `rag-store-changed` broadcast on success, and returns
+     *  `{ ok, entryIndex }` (never throws on an empty stack). Manual-UI only. */
+    journalOp(action: RagJournalAction): Promise<RagJournalOpResult>
   }
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
    *  `code.template.*`-equivalent IPC to main, which delegates to
@@ -273,6 +290,9 @@ let sidebarHolder: SidebarMethods = {
   gnosisQuery: () => {},
   gnosisDocuments: () => {},
   gnosisWikis: () => {},
+  historyUndo: () => {},
+  historyRedo: () => {},
+  historyEntryClick: () => {},
 }
 
 const bridge: ProvidentBridge = {
@@ -424,6 +444,14 @@ const bridge: ProvidentBridge = {
     manage(request: RagStoreManageRequest): Promise<RagStoreManageResult> {
       return ipcRenderer.invoke(IPC_RAG_STORE_MANAGE, request)
     },
+    /** Unit U-EDIT-2 (C16) §2.5 — the sanitized project-journal read + the
+     *  undo/redo op. */
+    journal(): Promise<RagJournalPayload> {
+      return ipcRenderer.invoke(IPC_RAG_JOURNAL)
+    },
+    journalOp(action: RagJournalAction): Promise<RagJournalOpResult> {
+      return ipcRenderer.invoke(IPC_RAG_JOURNAL_OP, { action })
+    },
   },
   /** Unit I §5.4/§8.2 — the UI template surface. Each method sends the
    *  `code.template.*`-equivalent IPC to main, which delegates to
@@ -562,6 +590,10 @@ const bridge: ProvidentBridge = {
     // these; they DELEGATE to the installed holder (a no-op until installed).
     gnosisDocuments: (tool, args) => sidebarHolder.gnosisDocuments?.(tool, args),
     gnosisWikis: (tool, args) => sidebarHolder.gnosisWikis?.(tool, args),
+    // Unit U-EDIT-2 (C16) §2.1/§2.2 — the project-journal seams.
+    historyUndo: () => sidebarHolder.historyUndo?.(),
+    historyRedo: () => sidebarHolder.historyRedo?.(),
+    historyEntryClick: (index) => sidebarHolder.historyEntryClick?.(index),
   },
   installSidebar(methods) {
     sidebarHolder = methods

@@ -315,7 +315,12 @@ function decorateNodeInPlace(
       css.classes = classes
       node.css = css
       const children = Array.isArray(node.children) ? node.children : (node.children = [])
-      if (!children.some((c) => c?.props?.id === OWNERS_BOX_ID)) {
+      // §2.10 (W2-N15) — idempotent: recognise an EXISTING owners box by its
+      // `data-shared:'true'` marker, not the exact unscoped `OWNERS_BOX_ID`. The
+      // stored scoped union's box id is document-scoped
+      // (`rag-<documentId>--shared-owners-box`), so an id-only check would add a
+      // second box when the load path decorates the union again.
+      if (!children.some((c) => c?.props?.['data-shared'] === 'true')) {
         children.push(
           ownersBoxContent({ ragNodeId: ragId, owners: ownersFor(owners, ragId), expanded: !isCollapsed(collapsed, ragId) }),
         )

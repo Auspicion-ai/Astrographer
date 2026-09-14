@@ -170,7 +170,7 @@ Post-green read-only adversarial pass on the H3 host surface:
 | # | Sev | Finding | Status |
 | --- | --- | --- | --- |
 | **AF3-1** | MED (host) | **Separator collision.** `sanitizeDocumentId` permits `[a-zA-Z0-9._-]`, so a document id (or a RAG id) may itself contain `--`. The first draft recovered the scoped plain ragId with `indexOf('--')`, mis-parsing e.g. `rag-foo--bar--X` → `bar--X`. | **FIXED** — `matchesRagRootId` uses a SUFFIX test (`tail === ragId` OR `tail.endsWith('--' + ragId)`), robust to `--` in either part. Regressions: the "adversarial separator hardening" block in `tests/unit-u-shell-9b-h3-doc-namespace.test.ts`. |
-| **AF3-2** | MED (host) | **Multi-document `operator`/`template` re-derive loses the scope.** `reDerive('content')` routes through the scoped `applyDocumentSet`, but a non-content re-derive falls to `refresh()` → `loadAppGraph(lastTraversalEnvelope)` where `lastTraversalEnvelope` is the UNSCOPED merged traversal — so after an operator/template change two shared roots can collapse back to duplicate `rag-X` ids. Pre-existing (not a regression); outside §2.7's stated `applyDocumentSet` scope. | **OPEN — W2-N15** (recorded in `wave-2-open-decisions.md` §D). |
+| **AF3-2** | MED (host) | **Multi-document `operator`/`template` re-derive loses the scope.** `reDerive('content')` routes through the scoped `applyDocumentSet`, but a non-content re-derive falls to `refresh()` → `loadAppGraph(lastTraversalEnvelope)` where `lastTraversalEnvelope` is the UNSCOPED merged traversal — so after an operator/template change two shared roots can collapse back to duplicate `rag-X` ids. Pre-existing (not a regression); was outside §2.7's stated `applyDocumentSet` scope. | **FIXED (2026-09-13, W2-N15)** — §2.10: the multi-document `lastTraversalEnvelope` is now the scoped+decorated union (stored by both `applyDocumentSet` and `reDerive`), and `decorateNodeInPlace` is idempotent for a scoped owners box. `tests/unit-u-shell-9b-w2n15-rederive-scope.test.ts` 4/4. |
 | **AF3-3** | LOW (host) | **Editor element resolution is first-match for a shared node.** `ragRootElement`/`textareaElement` select `[data-rag-node-id="<ragId>"]` (plain), which is duplicated across documents; in multi-doc the first DOM match is used. Harmless today (the shared node is one store node, and Option-C per-document editing is not wired until H1). | **ACCEPTED / documented** — revisit with H1 (Option-C per-document commit). |
 
 ### 2.6c H1 adversarial findings (2026-09-13)
@@ -239,7 +239,6 @@ Ruling (Architect): **scope the authored `props.id` per document; keep
   ragId is a no-op.
 
 ### 2.9 Host seams — Option-C commit interception (H1 / W2-N13) — pinned 2026-09-13
-
 - **Intercept at the commit seam:** `SidebarPanes.editorBlurCommit` and
   `textareaBlur` call `detectSharedCommit({ nodeId: ragId, editingDocumentId,
   owners })` (owners from §2.8) BEFORE the write. `null` ⇒ the existing commit
@@ -263,6 +262,26 @@ Ruling (Architect): **scope the authored `props.id` per document; keep
 - **F10b:** checklist selects none ⇒ fork is a no-op (accept: no ops / empty
   `forkOwners`), matching `planFork`.
 - **No new IPC:** the fork reuses `IPC_EDIT_BATCH`; the strip is app-graph data.
+
+### 2.10 W2-N15 fix — multi-document non-content re-derive keeps the H3 scope (pinned 2026-09-13)
+
+`reDerive('content')` routes through the scoped `applyDocumentSet`, but a
+non-content (`operator`/`template`) re-derive falls to `refresh()` →
+`loadAppGraph(this.lastTraversalEnvelope)`, and `lastTraversalEnvelope` was the
+UNSCOPED merged traversal — so after such a re-derive two shared roots collapse
+back to duplicate `rag-X` ids.
+
+- **Fix:** in a simultaneous multi-document context (`mountedDocumentIds.length
+  > 1`), the envelope stored as `lastTraversalEnvelope` is the **scoped union**:
+  one `scopeDocumentIds(decorate(per-doc envelope), documentId)` per mounted
+  document, with the per-document content payloads unioned into a single
+  envelope (first document's template). Both `applyDocumentSet` and `reDerive`
+  store this form, so `refresh()`/`rerenderAppGraph()` render de-duplicated
+  scoped ids. Single-document paths stay unscoped.
+- **Idempotent decoration:** `decorateNodeInPlace` must not add a second owners
+  box when the node already carries one (recognise the existing box by
+  `data-shared: 'true'`, not only the unscoped id), because the stored scoped
+  union is decorated again by `decorateShared` on the load path.
 
 ## 3. States (TestWriter red set — valid paths)
 1. A commit on a shared node → the Option-C warn + fork/mutate-all choice; a

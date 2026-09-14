@@ -1,12 +1,14 @@
 # Unit U-EDIT-2 — Undo / Redo + Interactive History Sub-Pane (C16) — Spec
 
-**Status:** DRAFT 2026-09-12. **Document-only — no code; no tests.** Gate: the
-UI-overhaul umbrella gate (PROCEED-WITH-AMENDMENTS, A1). **Depends on
-U-STATE-1** (the `Supervisor` + journal stack must persist across a content
-change — `runtime.ts` used to construct a new `Supervisor` per `loadEnvelope`;
-SG1 landed, so this is unblocked). Resolved: Q14 **repeated `undo`**; `replay` is
-**not** a control. Open items in `docs/specs/wave-2-open-decisions.md`
-(W2-Q14/Q15). **Chrome-independent — does not need U-SHELL-1.**
+**Status:** **LANDED 2026-09-13** (was DRAFT 2026-09-12). Gate: the UI-overhaul
+umbrella gate (PROCEED-WITH-AMENDMENTS, A1). **Depends on U-STATE-1** (the
+`Supervisor` + journal stack persist across a content change — SG1 landed) and on
+the **§2.5 project-journal host seam** (pinned 2026-09-13). Resolved: Q14
+**repeated `undo`**; `replay` is **not** a control. Open items in
+`docs/specs/wave-2-open-decisions.md` (W2-Q14/Q15). **Chrome-independent — does
+not need U-SHELL-1.** **Cycle:** TestWriter red 29/31 → Implementer green 31/31
+(`tests/unit-u-edit-2-undo-redo-history.test.ts`); trio 187 files / 4362 pass +
+58 skip; doc-review `archive/reviews/2026-09-13-unit-u-edit-2-doc-review.md`.
 
 **TestWriter RED is the NEXT step (RCA-1):** author
 `tests/unit-u-edit-2-undo-redo-history.test.ts` from this spec ALONE and RUN it
@@ -32,12 +34,18 @@ journal back to that point** (multi-step undo, implemented as repeated `undo`).
 - Two editor-toolbar controls (G1, beside the C8 toggle): **Undo** and **Redo**,
   each a provident node with an `on:click` handler so `provident.dispatch`
   reaches it.
-- A click invokes the **same application seam** as the MCP
-  `provident.journal` tool (`Runtime.journal('undo'|'redo')`) — one operation,
-  two entry paths (MCP/UI equivalence). After the op, the app graph re-renders
-  (the Runtime already re-renders + drains pass-2 in `journal()`).
-- **Disabled state:** Undo is disabled when the undo stack is empty; Redo when
-  the redo stack is empty (reflects `stackTopKind`/`redoTopKind`; §2.3).
+- A click invokes the **project-journal seam** (§2.5) — `bridge.rag.journalOp
+  ('undo'|'redo')` → main `RagStore.undo()`/`redo()` — NOT the engine
+  `Runtime.journal`. §2.3's `DECIDED: C16-CONSUMES-PROJECT-JOURNAL` supersedes
+  the earlier engine-seam wording here; the MCP `provident.journal` tool remains
+  the **engine**-journal surface and is NOT C16's path (no new MCP tool in this
+  unit — the MCP/UI-equivalence carve-out for C16). After the op, the store
+  emits `rag-store-changed` and the app graph re-renders.
+- **Disabled state:** Undo is disabled when `undoDepth === 0`; Redo when
+  `redoDepth === 0` (from the §2.5 read).
+- **No-op / idempotence:** an empty-stack Undo/Redo is a no-op (F1/F2); the op
+  is serialized through the store's single-writer queue (F5 — no interleaved
+  double-undo).
 
 ### 2.2 Interactive history sub-pane (app-graph)
 
@@ -82,6 +90,35 @@ Prerequisite before red: the project-journal read seam (§2.5 / IPC).
 - Undo/redo route through the project-journal ops (`RagStore.undo()`/`redo()`),
   not the engine `Supervisor`; the per-entry label/position derives from
   `JournalEntry.kind` + the journal `at`/cursor.
+
+### 2.5 The project-journal host seam (pinned 2026-09-13 — the pre-red prerequisite)
+
+The project journal (`RagStore.journal()/undo()/redo()/undoDepth()/redoDepth()`,
+`src/main/rag-store.ts:262-265`) is main-process-only; C16 needs an additive
+renderer seam. Two channels, both following the existing `IPC_RAG_SNAPSHOT`
+pattern:
+
+- **`IPC_RAG_JOURNAL = 'provident:rag-journal'`** (renderer→main, request `{}`):
+  returns the **sanitized** journal read —
+  `RagJournalPayload { entries: Array<{ index: number; kind: 'content' | 'structural' | 'batch'; at: string }>; cursor: number; undoDepth: number; redoDepth: number }`.
+  The `before`/`after`/`ops`/`inverse` payloads are **dropped** (never sent to
+  the renderer).
+- **`IPC_RAG_JOURNAL_OP = 'provident:rag-journal-op'`** (renderer→main, request
+  `{ action: 'undo' | 'redo' }`): calls `RagStore.undo()`/`redo()`; returns
+  `{ ok: boolean; entryIndex: number | null }` (`ok:false`/`null` on an empty
+  stack — never throws). On a successful **content/structural** op it emits the
+  existing `rag-store-changed` broadcast so the renderer re-derives; a batch
+  entry's forward/inverse already covers both.
+- **Preload:** `bridge.rag.journal(): Promise<RagJournalPayload>` +
+  `bridge.rag.journalOp(action: 'undo' | 'redo'): Promise<RagJournalOpResult>`
+  (typed in `src/shared/types.ts`).
+- **UI parity:** the C16 controls/history pane are app-graph and call these
+  seams; there is **no** new MCP tool. `replay` is NOT exposed.
+
+**Click-to-undo-to-point** (§2.2): read the current `cursor` + entries, compute
+`N = cursor - targetIndex` (`N > 0`), then call `journalOp('undo')` N times,
+stopping early if `ok:false` (base boundary) — idempotent-safe, never throws
+(F3/F7/F8).
 
 ## 3. States (TestWriter red set — valid paths)
 
@@ -138,5 +175,5 @@ serialize the journal. Journal-entry introspection is provided by
 ## 8. Open items
 
 W2-Q14 (journal introspection — **RESOLVED: `provident-ssr@0.5.0`; C16 consumes the RAG project journal**), W2-Q15
-(entry labelling/condense semantics). **U-EDIT-2 is unblocked**; the prerequisite
-before red is the project-journal read seam (§2.3/§2.5).
+(entry labelling/condense semantics). **The project-journal host seam is PINNED
+(§2.5, 2026-09-13); U-EDIT-2 is READY FOR RED.**

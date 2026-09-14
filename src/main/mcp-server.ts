@@ -20,7 +20,7 @@ import type {
   ListTargetsResult,
   NodeStateResult,
 } from '../shared/types.js'
-import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagStoreManageOp } from '../shared/types.js'
+import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagStoreManageOp, type RagJournalPayload, type RagJournalOpResult } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
 import type { RagStore } from './rag-store.js'
@@ -938,6 +938,46 @@ export function handleRagDocHeadsIpc(store: RagStore | null): RagDocHeadsPayload
   }
   documents.sort((a, b) => a.documentId.localeCompare(b.documentId))
   return { documents }
+}
+
+/** Unit U-EDIT-2 (C16) §2.5 — the shared main-process handler for the SANITIZED
+ *  project-journal read (`IPC_RAG_JOURNAL`). The renderer's undo/redo controls +
+ *  history sub-pane read this. C16 consumes the RAG store's PROJECT journal
+ *  (`RagStore.journal()`), NOT the engine Supervisor journal
+ *  (DECIDED: C16-CONSUMES-PROJECT-JOURNAL). PURE read — no mutation. The
+ *  `before`/`after`/`ops`/`inverse` payloads are DROPPED (only `index`/`kind`/
+ *  `at` cross the boundary). A null store throws the documented fail-state.
+ *  Exported for direct unit testing. */
+export function handleRagJournalIpc(store: RagStore | null): RagJournalPayload {
+  if (!store) throw new Error('rag-journal: no rag store configured')
+  const entries = store.journal().map((e, index) => ({ index, kind: e.kind, at: e.at }))
+  const cursor = store.undoDepth()
+  return { entries, cursor, undoDepth: cursor, redoDepth: store.redoDepth() }
+}
+
+/** Unit U-EDIT-2 (C16) §2.5 — the shared main-process handler for the
+ *  project-journal op (`IPC_RAG_JOURNAL_OP`). Calls the store's single-writer
+ *  `undo()`/`redo()`; returns `{ ok, entryIndex }` — `ok:false`/`null` on an
+ *  empty stack or a malformed action (NEVER throws for a domain failure). The
+ *  caller (main) emits the existing `rag-store-changed` broadcast on `ok`.
+ *  `entryIndex` is the entry a successful undo reverted / redo reapplied.
+ *  Exported for direct unit testing. */
+export async function handleRagJournalOpIpc(
+  store: RagStore | null,
+  payload: { action?: unknown },
+): Promise<RagJournalOpResult> {
+  if (!store) throw new Error('rag-journal-op: no rag store configured')
+  const action = payload?.action
+  if (action !== 'undo' && action !== 'redo') return { ok: false, entryIndex: null }
+  const cursor = store.undoDepth()
+  if (action === 'undo') {
+    if (cursor <= 0) return { ok: false, entryIndex: null }
+    const entry = await store.undo()
+    return entry === null ? { ok: false, entryIndex: null } : { ok: true, entryIndex: cursor - 1 }
+  }
+  if (store.redoDepth() <= 0) return { ok: false, entryIndex: null }
+  const entry = await store.redo()
+  return entry === null ? { ok: false, entryIndex: null } : { ok: true, entryIndex: cursor }
 }
 
 /** U-MS5 §5.2 — the shared main-process handler for the read-only

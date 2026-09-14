@@ -33,6 +33,7 @@ import {
   landingContent,
   searchTabContent,
   editorToolbarContent,
+  historyPaneContent,
   EDITOR_TOOLBAR_TOGGLE_HANDLER,
   type AppGraphAssemblyResult,
   type SearchResult,
@@ -92,6 +93,9 @@ import type {
   RagStoreManageResult,
   RagStoreManageOp,
   PaneCatalogEntry,
+  RagJournalPayload,
+  RagJournalOpResult,
+  RagJournalAction,
 } from '../shared/types.js'
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { LocalRagQueryFilters } from '../main/retrieval.js'
@@ -164,6 +168,12 @@ export interface SidebarBridge {
      *  never an MCP tool — an agent must not add/remove/rename/re-default a
      *  store (A-P2-6/A-P2-7). */
     manage(request: RagStoreManageRequest): Promise<RagStoreManageResult>
+    /** Unit U-EDIT-2 (C16) §2.5 — the SANITIZED project-journal read + the
+     *  undo/redo op. OPTIONAL so older host/test bridges (which predate the
+     *  journal surface) still boot — the C16 controls then render disabled and
+     *  the history sub-pane renders empty (a no-op, never a throw). */
+    journal?(): Promise<RagJournalPayload>
+    journalOp?(action: RagJournalAction): Promise<RagJournalOpResult>
   }
   template: {
     get(): Promise<{ source: string; template: ContentWindowTemplate }>
@@ -596,6 +606,11 @@ export class SidebarPanes {
    *  Fetched ONCE at boot (D8 — boot-time-only registry); the operator pane
    *  re-renders this cache on every mount/refresh/re-derive, never re-fetching. */
   private lastStoreListing: RagStoreListingPayload | null = null
+  /** Unit U-EDIT-2 (C16) §2.4/§2.5 — the last SANITIZED project-journal read
+   *  (the editor-toolbar Undo/Redo disabled state + the history sub-pane data
+   *  source). Fetched at boot + on every re-derive; `null` until the first
+   *  successful fetch (or when the bridge predates the journal surface). */
+  private lastJournal: RagJournalPayload | null = null
   /** U-H8 — the pending destructive op awaiting the operator's provident-authored
    *  confirmation (the two-phase request step's result). null = nothing pending. */
   private pendingRegMgmt: { request: RagStoreManageRequest; summary: string } | null = null
@@ -1520,8 +1535,6 @@ export class SidebarPanes {
     change: ReconcileChange | null,
   ): void {
     if (this.runtime == null || documentIds.length === 0) return
-    // The merged traversal envelope (the refresh() re-load source).
-    const mergedTraversal = this.buildTraversalEnvelope(snapshot, documentIds)
     // One SCOPED envelope per document (the N-root `next`): §2.7
     // (H3/W2-N12) — scope the authored `props.id` per document so a shared RAG
     // node materialized in two simultaneously-rendered documents yields two
@@ -1539,6 +1552,16 @@ export class SidebarPanes {
         documentId,
       ),
     }))
+    // §2.10 (W2-N15) — the scoped+decorated UNION stored as the re-load source.
+    // A later NON-content re-derive (`refresh()` / `rerenderAppGraph()`) re-loads
+    // `lastTraversalEnvelope`, so in the simultaneous multi-document path it MUST
+    // be the scoped union (else two shared roots collapse back to duplicate
+    // unscoped `rag-X` ids). Content payloads are unioned; the first document's
+    // template is kept. Single-document paths stay unscoped.
+    const scopedUnion: LegacyInitialData = {
+      ...perDoc[0].envelope,
+      content: perDoc.flatMap((d) => d.envelope.content ?? []),
+    }
     // The remaining documents' envelopes carry no panes, so run the same
     // render-time transforms the assembled env gets (readOnly/editingMode) on
     // each before they are unioned into the reconcile payload.
@@ -1583,7 +1606,7 @@ export class SidebarPanes {
     const refs = this.recomputeBackRefs(unionNext)
     this.backRefs.clear()
     for (const [k, v] of refs) this.backRefs.set(k, v)
-    this.lastTraversalEnvelope = mergedTraversal
+    this.lastTraversalEnvelope = scopedUnion
     this.pendingContentChange = null
   }
 
@@ -1754,6 +1777,11 @@ export class SidebarPanes {
       console.error('[sidebar-panes] doc-heads fetch failed', e)
       return
     }
+    // Unit U-EDIT-2 (C16) §2.5 — fetch the SANITIZED project journal (the
+    // Undo/Redo disabled state + the history sub-pane). Best-effort: a bridge
+    // error/predating bridge does NOT abort the boot (the controls render
+    // disabled, the history sub-pane renders empty).
+    await this.fetchJournal()
     // Fetch the stored template (a bridge error ABORTS the boot).
     let template: ContentWindowTemplate
     try {
@@ -1882,6 +1910,10 @@ export class SidebarPanes {
       } catch {
         this.security = null
       }
+      // Unit U-EDIT-2 (C16) §2.4 — refresh the SANITIZED project journal so the
+      // toolbar disabled state + the history sub-pane reflect the fresh stack
+      // (the project journal survives a content change/re-derive). Best-effort.
+      await this.fetchJournal()
       // M6 — the current-document state is the documentIds source.
       // U-SHELL-9b §2.1 (C14) — when several documents are mounted
       // simultaneously, they are ALL the document scope: a content change must
@@ -1893,7 +1925,13 @@ export class SidebarPanes {
         : current
           ? [current]
           : this.deriveDocumentIds(snapshot)
-      const traversalEnvelope = this.buildTraversalEnvelope(snapshot, documentIds)
+      // §2.10 (W2-N15) — in the simultaneous multi-document path the stored
+      // re-load source MUST be the SCOPED union (the same form `applyDocumentSet`
+      // stores), so a non-content re-derive (`refresh()` / `rerenderAppGraph()`)
+      // keeps the H3 per-document id scope. Single-document paths stay unscoped.
+      const traversalEnvelope = multi
+        ? this.buildScopedUnionEnvelope(snapshot, documentIds)
+        : this.buildTraversalEnvelope(snapshot, documentIds)
       // CRITICAL #1 (adversarial) — a SINGLE final graph load. Stash the fresh
       // traversal envelope and let `refresh()` perform the ONE loadAppGraph
       // (re-assemble + re-load → `runtime.loadEnvelope` → `tearDownGraph` (destroys
@@ -2257,6 +2295,28 @@ export class SidebarPanes {
     }
   }
 
+  /** §2.10 (W2-N15) — the scoped+decorated UNION of the per-document traversal
+   *  envelopes (one `scopeDocumentIds(decorateShared(perDocEnvelope), documentId)`
+   *  per mounted document, content payloads unioned, the first document's
+   *  template). Stored as `lastTraversalEnvelope` in the simultaneous
+   *  multi-document path so a non-content re-derive
+   *  (`refresh()`/`rerenderAppGraph()`) renders de-duplicated scoped ids and
+   *  never re-materializes duplicate unscoped `rag-` roots. PURE w.r.t. the
+   *  snapshot (decorate/scope deep-copy). */
+  private buildScopedUnionEnvelope(snapshot: RagSnapshotPayload, documentIds: string[]): LegacyInitialData {
+    const perDoc = documentIds.map((documentId) =>
+      scopeDocumentIds(
+        this.decorateShared(this.buildTraversalEnvelope(snapshot, [documentId])),
+        documentId,
+      ),
+    )
+    if (perDoc.length === 0) return this.emptyStoreEnvelope()
+    return {
+      ...perDoc[0],
+      content: perDoc.flatMap((env) => env.content ?? []),
+    }
+  }
+
   /** Build the traversal envelope from the snapshot + document ids. When
    *  `documentIds` is empty, buildTraversal is SKIPPED (M1) and the empty-store
    *  envelope is used. Repopulates the backRefs map (provisional — loadAppGraph
@@ -2443,7 +2503,14 @@ export class SidebarPanes {
    *  provident data only, no hand-written DOM. */
   private applyEditorToolbar(envelope: LegacyInitialData, editingMode: EditingMode): void {
     if (!Array.isArray(envelope.content)) envelope.content = []
-    envelope.content.push({ content: [editorToolbarContent(editingMode, this.zoneName)] })
+    envelope.content.push({ content: [editorToolbarContent(editingMode, this.zoneName, this.lastJournal)] })
+    // Unit U-EDIT-2 (C16) §2.2/§2.5 — the interactive history sub-pane. A
+    // `pane-history` content root (so a content-only reconcile refreshes it in
+    // place) listing the SANITIZED project-journal entries with dispatchable
+    // click-to-undo-to-point handlers. Authored fresh on every assemble from the
+    // cached `lastJournal` (the project journal survives a re-derive/restart —
+    // §2.4). MCP-visible; no replay control.
+    envelope.content.push({ content: [historyPaneContent(this.lastJournal, this.zoneName)] })
     // U-SHELL-9b §2.9 (H1) — while an Option-C commit is pending (or blocked),
     // author the confirmation strip / block notice into the SAME app graph
     // (MCP-visible) and remove it once resolved. `null` ⇒ nothing appended.
@@ -2468,6 +2535,78 @@ export class SidebarPanes {
       return sharedCommitNoticeContent(this.sharedCommitNotice)
     }
     return null
+  }
+
+  /** Unit U-EDIT-2 (C16) §2.5 — fetch the SANITIZED project journal (best-effort;
+   *  a bridge error/predating bridge keeps the last-known value, never throws). */
+  private async fetchJournal(): Promise<void> {
+    const fn = this.bridge.rag?.journal
+    if (typeof fn !== 'function') return
+    try {
+      this.lastJournal = await fn.call(this.bridge.rag)
+    } catch {
+      // keep the last-known journal on a bridge error (never a crash)
+    }
+  }
+
+  /** Unit U-EDIT-2 (C16) §2.1 — the Undo control seam (the inline toolbar body
+   *  reaches it). Routes through the project-journal host seam, refreshes the
+   *  cached journal, and re-derives the app graph (a FULL reload — the toolbar
+   *  disabled state + the history sub-pane must reflect the fresh stack, and a
+   *  base-restore swaps node objects per Runtime J3). NEVER throws (F1/F5). */
+  async historyUndo(): Promise<void> {
+    await this.applyJournalOp('undo')
+  }
+
+  /** §2.1 — the Redo control seam. */
+  async historyRedo(): Promise<void> {
+    await this.applyJournalOp('redo')
+  }
+
+  /** §2.1 — issue ONE project-journal op through the bridge; on success refresh
+   *  the cached journal + re-derive. A no-op result (or an absent bridge) does
+   *  NOT re-derive (never a redundant re-render). */
+  private async applyJournalOp(action: RagJournalAction): Promise<void> {
+    const fn = this.bridge.rag?.journalOp
+    if (typeof fn !== 'function') return
+    try {
+      const result = await fn.call(this.bridge.rag, action)
+      if (result == null || result.ok !== true) return
+    } catch {
+      return // a bridge rejection is a safe no-op (never a throw)
+    }
+    await this.fetchJournal()
+    this.editController.requestRebuild('operator')
+  }
+
+  /** §2.2/§2.5 — the click-to-undo-to-point seam (the history entry body reaches
+   *  it). Undoes the journal back to `targetIndex` via N = `cursor - targetIndex`
+   *  successive `journalOp('undo')` calls, stopping early at the base boundary
+   *  (`ok:false`). `N <= 0` (target at/after the cursor) is a NO-OP (F3 — no
+   *  implicit redo); a malformed index is a no-op (F8); NEVER throws. */
+  async historyEntryClick(targetIndex: unknown): Promise<void> {
+    const target = typeof targetIndex === 'number' ? targetIndex : Number(targetIndex)
+    if (!Number.isInteger(target) || target < 0) return
+    const cursor = this.lastJournal != null && typeof this.lastJournal.cursor === 'number' ? this.lastJournal.cursor : 0
+    const steps = cursor - target
+    if (steps <= 0) return
+    const fn = this.bridge.rag?.journalOp
+    if (typeof fn !== 'function') return
+    let advanced = false
+    for (let i = 0; i < steps; i += 1) {
+      let ok = false
+      try {
+        const result = await fn.call(this.bridge.rag, 'undo')
+        ok = result != null && result.ok === true
+      } catch {
+        ok = false // a bridge rejection / desync aborts the walk safely (F7)
+      }
+      if (!ok) break // base boundary / unknown entry → safe stop
+      advanced = true
+    }
+    if (!advanced) return
+    await this.fetchJournal()
+    this.editController.requestRebuild('operator')
   }
 
   /** Install the `window.provident.sidebar` bridge surface (M2) the compiled
@@ -2555,6 +2694,13 @@ export class SidebarPanes {
       // `GnosisPanes` delegate (a no-op when no delegate is provided — never throw).
       gnosisStatus: () => { this.gnosis?.status?.() },
       gnosisQuery: (value: string) => { this.gnosis?.query?.(value) },
+      // Unit U-EDIT-2 (C16) §2.1/§2.2 — the project-journal seams the app-graph
+      // Undo/Redo controls + history-entry thumbs reach via
+      // `window.provident.sidebar` (the M2 pattern). Each delegates to the host
+      // method (which never throws; a no-op on an absent/older bridge).
+      historyUndo: () => void this.historyUndo(),
+      historyRedo: () => void this.historyRedo(),
+      historyEntryClick: (index: unknown) => void this.historyEntryClick(index),
     }
     const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
     const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar

@@ -43,6 +43,14 @@ export class ShimElement {
     return this.attrs[k] ?? null
   }
 
+  removeAttribute(k: string): void {
+    if (k === 'id') {
+      this.id = ''
+      return
+    }
+    delete this.attrs[k]
+  }
+
   addEventListener(evt: string, fn: (e: unknown) => void): void {
     ;(this.listeners[evt] ??= []).push(fn)
   }

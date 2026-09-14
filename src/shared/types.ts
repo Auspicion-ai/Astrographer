@@ -502,6 +502,45 @@ export interface RagSnapshotPayload {
   edges: Array<{ id: string; kind: string; source: string; target: string; order?: number; documentIds?: string[]; createdAt: string; updatedAt: string }>
 }
 
+// ---- Unit U-EDIT-2 (C16) project-journal IPC (docs/specs/
+// unit-u-edit-2-undo-redo-history.md §2.5) --------------------------------
+// C16 consumes the RAG store's PROJECT journal (DECIDED: C16-CONSUMES-PROJECT-
+// JOURNAL) — NOT the engine Supervisor journal. Two additive renderer→main
+// channels mirror the existing `IPC_RAG_SNAPSHOT` pattern. The journal read is
+// SANITIZED: the raw `before`/`after`/`ops`/`inverse` payloads NEVER cross the
+// IPC boundary.
+
+/** The renderer→main sanitized project-journal read (request `{}`). */
+export const IPC_RAG_JOURNAL = 'provident:rag-journal'
+
+/** The renderer→main project-journal op (request `{ action: 'undo' | 'redo' }`). */
+export const IPC_RAG_JOURNAL_OP = 'provident:rag-journal-op'
+
+/** One sanitized history entry — the `JournalEntry` with its payloads dropped. */
+export interface RagJournalEntry {
+  index: number
+  kind: 'content' | 'structural' | 'batch'
+  at: string
+}
+
+/** The sanitized project-journal read result. */
+export interface RagJournalPayload {
+  entries: RagJournalEntry[]
+  cursor: number
+  undoDepth: number
+  redoDepth: number
+}
+
+/** The project-journal op action. `replay` is deliberately NOT a member (§2.2). */
+export type RagJournalAction = 'undo' | 'redo'
+
+/** The project-journal op result. `ok:false`/`null` on an empty stack — never a
+ *  throw. `entryIndex` is the entry a successful undo reverted / redo reapplied. */
+export interface RagJournalOpResult {
+  ok: boolean
+  entryIndex: number | null
+}
+
 /** Unit U3 §1.3/§1.4 — the rich-text editing mode. Decision D: `'textarea'`
  *  is the safe default. Unit U1 later adds an `editingMode` field to
  *  `OperatorSettings` using this SAME type. */

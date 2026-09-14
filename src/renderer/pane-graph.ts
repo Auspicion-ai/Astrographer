@@ -18,7 +18,7 @@ import {
   hoverPreviewPopup,
   resolveHoverPreview,
 } from './hover-preview.js'
-import type { EditingMode } from '../shared/types.js'
+import type { EditingMode, RagJournalPayload } from '../shared/types.js'
 import {
   buildDocumentTree,
   selectDocumentIdsByPathPrefix,
@@ -1270,6 +1270,47 @@ export const EDITOR_TOOLBAR_ID = 'editor-toolbar'
 export const EDITOR_TOOLBAR_TOGGLE_ID = 'editor-toolbar-toggle'
 export const EDITOR_TOOLBAR_TOGGLE_HANDLER = 'editor-toolbar-editing-mode-toggle'
 
+/** Unit U-EDIT-2 (C16) §2.1 — the Undo/Redo control ids + handler names. These
+ *  are APP-GRAPH provident nodes authored with INLINE bodies (the `docNavContent`
+ *  folder-toggle convention), so `provident.dispatch` and a DOM click reach the
+ *  SAME `window.provident.sidebar.historyUndo`/`historyRedo` host seam. */
+export const EDITOR_TOOLBAR_UNDO_ID = 'editor-toolbar-undo'
+export const EDITOR_TOOLBAR_REDO_ID = 'editor-toolbar-redo'
+export const EDITOR_TOOLBAR_UNDO_HANDLER = 'editor-toolbar-undo'
+export const EDITOR_TOOLBAR_REDO_HANDLER = 'editor-toolbar-redo'
+
+/** Unit U-EDIT-2 (C16) §2.2 — the history sub-pane root id + the entry-click
+ *  handler name + the entry id prefix. */
+export const HISTORY_PANE_ID = 'pane-history'
+export const HISTORY_ENTRY_HANDLER = 'pane-history-entry'
+export const HISTORY_ENTRY_ID_PREFIX = 'pane-history-entry-'
+
+/** §2.1 — the inline Undo body. Routes to the project-journal seam; a missing
+ *  bridge method is a no-op (never a throw). */
+const EDITOR_TOOLBAR_UNDO_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.historyUndo !== 'function') return;
+  s.historyUndo();
+}`
+
+/** §2.1 — the inline Redo body. */
+const EDITOR_TOOLBAR_REDO_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.historyRedo !== 'function') return;
+  s.historyRedo();
+}`
+
+/** §2.2 — the inline history-entry body. Reads the entry's authored
+ *  `data-history-index` and routes it to the host's click-to-undo-to-point
+ *  seam; a malformed/missing index is a no-op (never a throw — F8). */
+const HISTORY_ENTRY_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.historyEntryClick !== 'function') return;
+  var idx = ctx && ctx.node && ctx.node.props && ctx.node.props['data-history-index'];
+  if (idx === undefined || idx === null || idx === '') return;
+  s.historyEntryClick(idx);
+}`
+
 /** The `editingMode` → representation label (W1-Q6: Markdown↔textarea,
  *  HTML↔contenteditable). PURE + TOTAL (junk coerces to the contenteditable
  *  default, mirroring the host/store coercion). */
@@ -1278,14 +1319,18 @@ export function editingModeLabel(editingMode: EditingMode): 'Markdown' | 'HTML' 
 }
 
 /** The central-stage editor toolbar content (app-graph). A `div` toolbar
- *  carrying a mode readout (`editor-toolbar-mode`) + a `button`
- *  (`editor-toolbar-toggle`) whose `data-mode` reflects the CURRENT mode and
- *  whose click handler (name-referenced) flips it. The appended
- *  `data-target-mode` documents the flip for agents. PURE. */
-export function editorToolbarContent(editingMode: EditingMode, zone = 'main'): LegacyNodeData {
+ *  carrying a mode readout (`editor-toolbar-mode`) + the C16 Undo/Redo controls
+ *  (`editor-toolbar-undo`/`editor-toolbar-redo`, disabled from the project-journal
+ *  `undoDepth`/`redoDepth`) + a `button` (`editor-toolbar-toggle`) whose
+ *  `data-mode` reflects the CURRENT mode and whose click handler flips it. The
+ *  appended `data-target-mode` documents the flip for agents. `replay` is NOT
+ *  offered (§2.2). PURE. */
+export function editorToolbarContent(editingMode: EditingMode, zone = 'main', journal?: RagJournalPayload | null): LegacyNodeData {
   const current: EditingMode = editingMode === 'textarea' ? 'textarea' : 'contenteditable'
   const label = editingModeLabel(current)
   const next: EditingMode = current === 'contenteditable' ? 'textarea' : 'contenteditable'
+  const undoDepth = journal != null && typeof journal.undoDepth === 'number' ? journal.undoDepth : 0
+  const redoDepth = journal != null && typeof journal.redoDepth === 'number' ? journal.redoDepth : 0
   return {
     type: 'div',
     props: { id: EDITOR_TOOLBAR_ID, 'data-mode': current, 'data-role': 'editor-toolbar' },
@@ -1294,11 +1339,74 @@ export function editorToolbarContent(editingMode: EditingMode, zone = 'main'): L
       { type: 'span', props: { id: 'editor-toolbar-mode' }, content: `Editing: ${label}` },
       {
         type: 'button',
+        props: { id: EDITOR_TOOLBAR_UNDO_ID, 'data-role': 'history-undo', disabled: undoDepth <= 0 },
+        css: { classes: clickableClasses() },
+        content: 'Undo',
+        handlers: [{ name: EDITOR_TOOLBAR_UNDO_HANDLER, event: 'click', body: EDITOR_TOOLBAR_UNDO_BODY }],
+      },
+      {
+        type: 'button',
+        props: { id: EDITOR_TOOLBAR_REDO_ID, 'data-role': 'history-redo', disabled: redoDepth <= 0 },
+        css: { classes: clickableClasses() },
+        content: 'Redo',
+        handlers: [{ name: EDITOR_TOOLBAR_REDO_HANDLER, event: 'click', body: EDITOR_TOOLBAR_REDO_BODY }],
+      },
+      {
+        type: 'button',
         props: { id: EDITOR_TOOLBAR_TOGGLE_ID, 'data-mode': current, 'data-target-mode': next },
         css: { classes: clickableClasses() },
         content: label,
         handlers: [{ name: EDITOR_TOOLBAR_TOGGLE_HANDLER, event: 'click' }],
       },
+    ],
+  }
+}
+
+/** Unit U-EDIT-2 (C16) §2.2/§2.5 — the interactive history sub-pane content
+ *  (app-graph + MCP-visible). Lists the SANITIZED project-journal entries in
+ *  order; each `li` carries `data-history-index` and a `pane-history-entry`
+ *  on:click handler (click-to-undo-to-point). The entry at `cursor - 1` is
+ *  marked `data-current`; entries at/after `cursor` are marked `data-redo`.
+ *  PURE + TOTAL: a null payload / malformed entry renders the kind/index
+ *  fallback and never throws (F6); an empty journal → `(no history)`. */
+export function historyPaneContent(payload: RagJournalPayload | null, zone = 'main'): LegacyNodeData {
+  const raw = payload != null && Array.isArray((payload as { entries?: unknown }).entries)
+    ? (payload as { entries: unknown[] }).entries
+    : []
+  const cursor = payload != null && typeof payload.cursor === 'number' && Number.isFinite(payload.cursor) ? payload.cursor : 0
+  const entries: LegacyNodeData[] = raw.map((item, i) => {
+    const e = item != null && typeof item === 'object' ? (item as { index?: unknown; kind?: unknown; at?: unknown }) : {}
+    const index = typeof e.index === 'number' && Number.isFinite(e.index) ? e.index : i
+    const kind = typeof e.kind === 'string' && e.kind !== '' ? e.kind : 'content'
+    const at = typeof e.at === 'string' ? e.at : ''
+    return {
+      type: 'li',
+      props: {
+        id: `${HISTORY_ENTRY_ID_PREFIX}${index}`,
+        'data-history-index': String(index),
+        'data-history-kind': kind,
+        'data-at': at,
+        ...(index >= cursor ? { 'data-redo': 'true' } : {}),
+        ...(index === cursor - 1 ? { 'data-current': 'true' } : {}),
+      },
+      css: { classes: clickableClasses() },
+      content: `${kind} #${index}`,
+      handlers: [{ name: HISTORY_ENTRY_HANDLER, event: 'click', body: HISTORY_ENTRY_BODY }],
+    }
+  })
+  return {
+    type: 'div',
+    props: {
+      id: HISTORY_PANE_ID,
+      'data-role': 'history',
+      ...(entries.length === 0 ? { 'data-empty': 'true' } : {}),
+    },
+    placement: { targetPlacement: [zone] },
+    children: [
+      { type: 'strong', content: 'History' },
+      ...(entries.length === 0
+        ? [{ type: 'p', content: '(no history)' } as LegacyNodeData]
+        : [{ type: 'ul', children: entries } as LegacyNodeData]),
     ],
   }
 }

@@ -4,7 +4,7 @@
 (+ uncommitted U-SHELL-9b hardening H4/H5/H6 in `src/renderer/cross-document-shared.ts`
 + its tests). · **Tree:** dirty (the U-SHELL-9b hardening is not yet committed).
 
-**Baseline (verified this pass):** `npm test` → **185 files / 4327 pass + 58 skip**;
+**Baseline (verified this pass):** `npm test` → **187 files / 4362 pass + 58 skip**;
 `npm run typecheck` → 0; `npm run build` → OK.
 
 **Objective:** implement the document-only UI-overhaul spec
@@ -23,8 +23,8 @@
 | U-SHELL-8 (View-menu visibility C13) | ✅ GREEN | |
 | U-SHELL-9a (tab strip + focus tool C14) | ✅ GREEN | |
 | U-STATE-1e (N-root reconcile + fork identity) | ✅ GREEN | unblocks 9b |
-| **U-SHELL-9b (multi-doc + C20 + Option-C)** | ✅ **GREEN / COMPLETE (H1–H7 FIXED)** | blind-greens 23/0/0; follow-ups W2-N15 + AF3-3/AF1-2 (§4) |
-| U-EDIT-2 (undo/redo + history C16) | ⬜ not started | C16 ruled; needs the project-journal read seam |
+| **U-SHELL-9b (multi-doc + C20 + Option-C)** | ✅ **GREEN / COMPLETE (H1–H7 FIXED)** | blind-greens 23/0/0; W2-N15 FIXED; follow-ups AF3-3/AF1-2 (§4) |
+| U-EDIT-2 (undo/redo + history C16) | ✅ GREEN | project-journal seam (§2.5); 187 files / 4362 pass |
 | U-JR1 (host `provident.get_journal`) | ⬜ spec re-authored | thin read over `Supervisor.journalEntries()` |
 
 **Wave 3 (not started):** U-IMPORT-1 (C17), U-SHELL-7 (settings modal C3).
@@ -33,6 +33,16 @@
 
 ## 2. What was done this session
 
+- **U-EDIT-2 (C16 undo/redo + history sub-pane) LANDED (2026-09-13):** the
+  project-journal host seam (§2.5: `IPC_RAG_JOURNAL`/`IPC_RAG_JOURNAL_OP` +
+  `bridge.rag.journal`/`journalOp`), the app-graph Undo/Redo toolbar controls
+  (disabled from the project-journal depths) and the `pane-history` sub-pane
+  with click-to-undo-to-point. Doc-review:
+  `archive/reviews/2026-09-13-unit-u-edit-2-doc-review.md`. Trio 187/4362.
+- **9b doc finding closed:** `HOST/U1-ENG` (boolean attributes) is **RESOLVED
+  upstream** (`BOOLEAN-ATTRS`, present in `provident-ssr@0.5.0`); it moved to the
+  RESOLVED table in `docs/HANDOFF.md` + `docs/defects.md`. This is what lets
+  U-EDIT-2 author `disabled: undoDepth <= 0` correctly.
 - **U-SHELL-9b H3/W2-N12 FIXED (2026-09-13; see §4 item 1):** the per-document
   id namespace (ratified scheme: scope `props.id`, keep `data-rag-node-id`
   plain). Delegated TestWriter→Implementer cycle + my adversarial pass (AF3-1
@@ -52,7 +62,7 @@
   regression tests.
 - **Trio after H1–H7: 185 files / 4327 pass + 58 skip, typecheck 0, build 0.**
   **U-SHELL-9b is GREEN** (blind-greens `docs/specs/unit-u-shell-9b-greens.md`
-  23/0/0). Remaining follow-ups: W2-N15 + AF3-3/AF1-2.
+  23/0/0; then W2-N15 FIXED per §2.10). Remaining follow-ups: AF3-3/AF1-2 only.
 - **Wave-2 spec resolution:** W2-Q1…Q17 all RESOLVED; the elaborated §E/§F in
   `wave-2-open-decisions.md`; the U-SHELL-9 split into **9a/9b**; new
   **U-STATE-1e** spec (label collision with the landed `1d` re-anchor resolved).
@@ -108,7 +118,8 @@ record the adversarial findings. All six integration fixes (H1–H7) landed
 2026-09-13, each as its own red→green→trio→adversarial cycle (RCA-2), then the
 RCA-4 **blind-greens** re-run by an independent agent:
 `docs/specs/unit-u-shell-9b-greens.md` — **23 PASS / 0 FAIL / 0 NOT-TESTED**.
-Remaining are follow-ups only (W2-N15; AF3-3/AF1-2).
+Remaining are the accepted AF3-3/AF1-2 follow-ups only (per-mount editing
+context for a shared node).
 
 1. **H3 first (id-namespace; W2-N12 — prerequisite): ✅ FIXED (2026-09-13, this
    session).** Per-document id namespace landed per spec §2.7
@@ -160,18 +171,17 @@ Remaining are follow-ups only (W2-N15; AF3-3/AF1-2).
 | W2-N12 | U-STATE-1e/9b | ~~MEDIUM — host identity apply ignores `documentId`~~ **FIXED (H3)** |
 | W2-N13 | U-SHELL-9b | ~~HIGH — Option-C commit warn/fork unreachable~~ **FIXED (H1)** |
 | W2-N14 | U-SHELL-9b | ~~HIGH — C20 never materialized~~ **FIXED (H2/H7)** |
-| W2-N15 | U-SHELL-9b | MEDIUM — multi-doc operator/template re-derive loses the H3 scope (AF3-2) |
+| W2-N15 | U-SHELL-9b | ~~MEDIUM — multi-doc operator/template re-derive loses the H3 scope~~ **FIXED (§2.10)** |
 
 ---
 
 ## 6. Pending units
 
-- **U-EDIT-2** (`unit-u-edit-2-undo-redo-history.md`): read seam for the RAG
-  **project journal** (`RagStore.journal(): JournalEntry[]`) before red; C16 ruled.
 - **U-JR1** (`unit-ujr1-get-journal.md`): 6-seam host read over
   `Supervisor.journalEntries()`; no host sanitization; group `dispatch`.
 - **Wave 3:** U-IMPORT-1 (C17, needs U-MENU-1 + the C14-lite import root),
   U-SHELL-7 (settings modal C3).
+- Accept-from-9b: AF3-3/AF1-2 (per-mount editing context for a shared node).
 
 ---
 
@@ -191,6 +201,14 @@ Remaining are follow-ups only (W2-N15; AF3-3/AF1-2).
 ## 8. Documentation-staleness review (this pass)
 
 Reconciled against the actual build at `8c67100` + the uncommitted 9b hardening:
+- **2026-09-13 (U-EDIT-2):** the spec §2.1/§2.5/§8 reconciled (project-journal
+  seam pinned) + status LANDED. **`HOST/U1-ENG` closed upstream** (`BOOLEAN-ATTRS`,
+  present in `provident-ssr@0.5.0`) — moved to RESOLVED in `docs/HANDOFF.md`,
+  marked RESOLVED in `docs/defects.md`. Doc-review:
+  `archive/reviews/2026-09-13-unit-u-edit-2-doc-review.md`.
+- **2026-09-13 (W2-N15):** 9b spec §2.10 pins the multi-doc non-content
+  re-derive scope fix; §2.6b AF3-2 → FIXED; `wave-2-open-decisions.md` §D
+  W2-N15 → FIXED. Doc-review: `archive/reviews/2026-09-13-w2n15-doc-review.md`.
 - **2026-09-13 (9b H1/H2):** the 9b spec §2.6 H1/H2/H7 rows are FIXED; new
   §2.6c (H1 adversarial) and §2.8/§2.9 host-seam pins; the §2.6 verdict now
   reads **9b GREEN** (blind-greens `docs/specs/unit-u-shell-9b-greens.md`
@@ -209,8 +227,8 @@ Reconciled against the actual build at `8c67100` + the uncommitted 9b hardening:
 - `docs/next-steps.md`, `docs/specs/wave-2-open-decisions.md` §C/§D, the unit
   specs, `decisions.md`, `defects.md`, `HANDOFF.md`, `pending.md` were kept
   current per-unit by the doc-review gates; this handover records the final
-  state (**U-SHELL-9b GREEN** — H1–H7 FIXED + blind-greens 23/0/0; W2-N12/N13/N14
-  FIXED; W2-N15 + AF3-3/AF1-2 OPEN).
+  state (**U-SHELL-9b GREEN** — H1–H7 FIXED + blind-greens 23/0/0; W2-N12/N13/N14/N15
+  all FIXED; AF3-3/AF1-2 OPEN).
 - **Stale claims fixed earlier this session:** the U-STATE-1d/1e label collision;
   the "host-side journal mirror" narrative (superseded by 0.5.0 + C16 ruling);
   the U-SHELL-9 split pointers; `DECIDED: MCP-FOCUS-TOOL` §9.2 → §2.7 citation;
