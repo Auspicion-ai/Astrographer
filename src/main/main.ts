@@ -4,7 +4,7 @@
 // IPC.
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MenuItemConstructorOptions } from 'electron'
 import { join, basename } from 'node:path'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type PaneCatalogEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, IPC_IMPORT_RESULT, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type ImportResultPayload, type PaneCatalogEntry } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleRagJournalIpc, handleRagJournalOpIpc, handleGnosisTool, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
@@ -12,7 +12,9 @@ import { createEngineConfigStore, setEngineConfigBaseUrl, getEngineConfigBaseUrl
 import { createModuleStore } from './module-store.js'
 import { type BatchOp, type BatchOpResult, type RagNode } from './rag-store.js'
 import { createTemplateStore } from './template-store.js'
-import { buildMenuTemplate, normalizePaneCatalog, importSelectionFromDialog, IMPORT_DIALOG_FILTERS, IMPORT_DIALOG_PROPERTIES, type AppMenuActions } from './app-menu.js'
+import { buildMenuTemplate, normalizePaneCatalog, importSelectionFromDialog, type AppMenuActions } from './app-menu.js'
+import { MAX_IMPORT_FILES, buildImportDialogOptions, resolveImportSelection } from './import-directory.js'
+import { importMarkdownCorpus } from './markdown-import.js'
 import { handleEditCommit, handleEditBatch, handleRichCommit, handleRichCommitIpc, deriveBatchBroadcast, deriveRichCommitBroadcast } from './edit-ops.js'
 import { parsePositiveIntEnv, type EmbeddingProvider, type EmbeddingProviderConfig } from './embeddings.js'
 import { warmUpEmbeddingProvider } from './vector-boot.js'
@@ -152,33 +154,124 @@ async function main(): Promise<void> {
   // (U-IMPORT-1 owns the directory expansion + handler).
   let latestPaneCatalog: PaneCatalogEntry[] = []
   let mainWindow: BrowserWindow | null = null
-  /** File → Import… — open the fs-only dialog and hand the raw selection to
-   *  U-IMPORT-1 (this unit only carries the selection across the boundary). A
-   *  cancel/dismiss is a no-op (§3.7/F3). */
+  /** Broadcast the import result payload exactly once (§2.5). */
+  const broadcastImportResult = (payload: ImportResultPayload): void => {
+    backend.broadcast(IPC_IMPORT_RESULT, payload)
+  }
+  /** Resolve a non-cancel dialog selection and route the outcome (U-IMPORT-1
+   *  §2.4 steps 3–5). The browse surface addresses the DEFAULT store only
+   *  (§8 W-Q5), with the default entry's server-fixed `corpusRoot` (§2.4). */
+  const runImportSelection = async (selection: string[]): Promise<void> => {
+    const resolution = resolveImportSelection(selection, { max: MAX_IMPORT_FILES })
+    if (!resolution.ok) {
+      if (resolution.reason === 'no-markdown-files') {
+        // FAIL-LOUD no-op: no import, no `IPC_RAG_STORE_CHANGED`.
+        broadcastImportResult({ ok: false, reason: 'no-markdown-files' })
+      } else if (resolution.reason === 'cap-exceeded') {
+        // FAIL-LOUD: no import at all — never a silently-truncated import.
+        broadcastImportResult({ ok: false, reason: 'cap-exceeded', cap: resolution.cap })
+      }
+      return
+    }
+    const files = resolution.files
+    // The boot already throws if the default entry is absent; re-guard for
+    // TS narrowing inside this closure (the browse surface is default-store
+    // ONLY — §8 W-Q5).
+    if (!defaultEntry) {
+      console.error('[provident-main] default store entry missing; import aborted')
+      return
+    }
+    try {
+      const ctx = { store: runtime.getDefaultStore() }
+      const result = await importMarkdownCorpus(
+        ctx,
+        { files, corpusRoot: defaultEntry.corpusRoot },
+        {
+          name: defaultEntry.name,
+          isDefault: true,
+          reservedNames: [...runtime.getDirectory().entries.keys()].filter((n) => n !== runtime.getDefaultName()),
+        },
+      )
+      if (result.ok) {
+        // On success fire the C10 re-traversal trigger (engine reconcile
+        // fire-and-forget, caught) + broadcast the import result exactly once.
+        void runtime.getDefaultEngine().onStoreChanged('structural', result.documentIds, []).catch((e) => {
+          console.error('[provident-main] retrieval index reconcile failed:', e)
+        })
+        const changedPayload: RagStoreChangedPayload = {
+          kind: 'structural',
+          nodeIds: result.documentIds,
+          edgeIds: [],
+          store: runtime.getDefaultName(),
+        }
+        backend.broadcast(IPC_RAG_STORE_CHANGED, changedPayload)
+        broadcastImportResult({
+          ok: true,
+          documentIds: result.documentIds,
+          nodeCount: result.nodeCount,
+          edgeCount: result.edgeCount,
+          resolvedCount: files.length,
+        })
+      } else {
+        // F12 — a domain failure: surfaced as the `import-failed` outcome; the
+        // engine is NOT reconciled; `IPC_RAG_STORE_CHANGED` fires 0 times.
+        broadcastImportResult({ ok: false, reason: 'import-failed', error: result.error, failedFile: result.failedFile })
+      }
+    } catch (e) {
+      // F15 — `importMarkdownCorpus` throws (a non-domain host/battery error):
+      // caught + logged; the operator is surfaced a failed outcome.
+      console.error('[provident-main] import failed:', e)
+      broadcastImportResult({
+        ok: false,
+        reason: 'import-failed',
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+  /** Handle a dialog result: a cancel/dismiss/empty selection is a no-op
+   *  (zero resolution, zero import, zero broadcast — §2.4 step 2 / F4). */
+  const handleDialogResult = (result: unknown): void => {
+    const selection = importSelectionFromDialog(result)
+    if (selection == null) return
+    void runImportSelection(selection)
+  }
+  /** File → Import… — open the platform-aware multi-file dialog
+   *  (buildImportDialogOptions) and route the non-cancel selection (§2.4). */
   const openImportDialog = (): void => {
+    const opts = buildImportDialogOptions(process.platform)
     const options = {
-      properties: [...IMPORT_DIALOG_PROPERTIES] as Array<'openFile' | 'openDirectory'>,
-      filters: IMPORT_DIALOG_FILTERS.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+      properties: [...opts.properties],
+      filters: opts.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
     }
     const pending = mainWindow
       ? dialog.showOpenDialog(mainWindow, options)
       : dialog.showOpenDialog(options)
     void pending
-      .then((result) => {
-        const selection = importSelectionFromDialog(result)
-        if (selection == null) return
-        // U-IMPORT-1 owns the directory → `.md` expansion + the import handler;
-        // this unit forwards the selection only.
-        console.error('[provident-main] import selection (U-IMPORT-1 pending):', selection)
-      })
+      .then((result) => handleDialogResult(result))
       .catch((e) => {
         console.error('[provident-main] import dialog failed:', e)
+      })
+  }
+  /** File → Import folder… (win/linux) — open the `['openDirectory']` dialog
+   *  for directory bulk upload (§2.3/§2.4 step 1). */
+  const openImportFolderDialog = (): void => {
+    const options: { properties: Array<'openFile' | 'openDirectory' | 'multiSelections'> } = {
+      properties: ['openDirectory'],
+    }
+    const pending = mainWindow
+      ? dialog.showOpenDialog(mainWindow, options)
+      : dialog.showOpenDialog(options)
+    void pending
+      .then((result) => handleDialogResult(result))
+      .catch((e) => {
+        console.error('[provident-main] import folder dialog failed:', e)
       })
   }
   /** Build the application menu from the latest catalog and install it. */
   const rebuildApplicationMenu = (): void => {
     const actions: AppMenuActions = {
       openImport: () => openImportDialog(),
+      openImportFolder: () => openImportFolderDialog(),
       togglePane: (id, enabled) => {
         const entry = latestPaneCatalog.find((p) => p.id === id)
         if (entry) entry.enabled = enabled

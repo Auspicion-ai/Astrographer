@@ -86,7 +86,7 @@ describe('U-MENU-1 · §3.1 the application menu shell', () => {
     const template = buildMenuTemplate([])
     expect(asItems(template).map((i) => i.label)).toEqual(['File', 'View'])
     const file = topByLabel(template, 'File')
-    expect(file.submenu?.map((i) => i.label ?? i.type)).toEqual(['Import…', 'separator', 'Quit'])
+    expect(file.submenu?.map((i) => i.label ?? i.type)).toEqual(['Import…', 'Import folder…', 'separator', 'Quit'])
     expect(file.submenu?.find((i) => i.label === 'Quit')?.role).toBe('quit')
   })
 

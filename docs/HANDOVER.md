@@ -1,14 +1,15 @@
 # Handover — Astrographer UI Overhaul (Wave 2)
 
-**Date:** 2026-09-14 (latest) · **Committed HEAD:** `fb96f58`
-(U-SHELL-7 settings modal — the Wave-3 C3 unit) · **Tree:** CLEAN except the
-untracked U-IMPORT-1 spec draft (`docs/specs/unit-u-import-1-import-surface.md`,
-the last Wave-3 unit, spec-only / not-implemented). The Wave-2 batch (PBT
-backfill + U-JR1 + W2-N11 + U-SHELL-N7 shell-wiring) and U-SHELL-7 are all
-**committed** (U-SHELL-N7 HOST-1..5 + ADV1..5 + U-SHELL-7 SH7-ADV1..3 fixes are in).
+**Date:** 2026-09-14 (latest) · **Tree:** the last Wave-3 unit
+(`docs/specs/unit-u-import-1-import-surface.md`, previously an untracked
+spec-only draft) is now **GREEN / COMPLETE / CODE LANDED** — **WAVE 3 COMPLETE:
+the UI-overhaul (C1–C20 wave decomposition) is ALL-LANDED** with U-IMPORT-1 (C17) +
+U-SHELL-7 (C3). The Wave-2 batch (PBT backfill + U-JR1 + W2-N11 + U-SHELL-N7
+shell-wiring), U-SHELL-7, and U-IMPORT-1 are all landed; the unit DONE rows are in
+`docs/next-steps.md`.
 
-**Baseline (confirmed on the current tree):**
-`npm test` → **4566 pass + 58 skip**; `npm run typecheck` → 0;
+**Baseline (recorded green state of the U-IMPORT-1 pass):**
+`npm test` → **4613 pass + 58 skip**; `npm run typecheck` → 0;
 `npm run build` → OK.
 
 **Objective:** implement the document-only UI-overhaul spec
@@ -133,8 +134,9 @@ verify the files actually landed (`git status`) rather than trusting a pass/fail
 | PBT backfill (props-*.test.ts) | ✅ **GREEN / uncommitted** | §5.7 registers + property layers for the UI pure modules |
 | **U-SHELL-N7 (shell pointer-wiring, W2-N7)** | ✅ **GREEN / COMPLETE (2026-09-13)** | `installShellPointers` delegated wiring LANDED, closing HOST-1..5 + ADV1..5; four `.gutter[data-zone][data-axis]` authored + frame `data-pane-id` (`pane-graph.ts`); dom-shim extended (getters + delegated pointer dispatch + closest/setRect/setPointerCapture); trio 4527/58; tests 30 + 14 + 5 = 49; spec §3a/§3b; `docs/defects.md` HOST-SHELL-WIRING → FIXED |
 | **U-SHELL-7 (settings modal, C3)** | ✅ **GREEN / COMPLETE (2026-09-14)** | `modal-state.ts` (NEW — pure `createModalController` + `installSettingsModal`) + the `main()` call after `installShellPointers` + the `index.html` shell chrome (frame/scrim/body/toggle + `.is-closed{display:none}` + SH7-ADV1 `pointer-events:auto`); hosts `#panes`+`#operator-panes` (re-parent only — isolation preserved); tests 40 (red 37); blind-greens 31/0/2; live battery PARKED; decisions `MODAL-SETTINGS-REPARENT` + `MODAL-DEDICATED-SCRIM` ACTIVE; trio 4566/58; spec §3c |
+| **U-IMPORT-1 (File → Import… FS/browse, C17)** | ✅ **GREEN / COMPLETE (2026-09-14)** | `import-directory.ts` (NEW — `MAX_IMPORT_FILES=512` + the pure TOTAL `expandImportDirectory`/`buildImportDialogOptions`/`resolveImportSelection`) + the win/linux `Import…`+`Import folder…` two-item File menu + `openImportFolder` seam (`app-menu.ts`) + the `main.ts` Import flow (→ `buildImportDialogOptions`/`['openDirectory']` → `resolveImportSelection` → `importMarkdownCorpus` with the default-store `corpusRoot` + `IPC_IMPORT_RESULT`/`IPC_RAG_STORE_CHANGED` broadcasts) + `IPC_IMPORT_RESULT`/`ImportResultPayload` (`types.ts`); tests 47 (red 43; +4 ADV pins); blind-greens 36/0/5; live battery PARKED; decisions `IMPORT-NO-SYMLINK-FOLLOW` + `IMPORT-FILE-COUNT-CAP` + `IMPORT-RESULT-BROADCAST` ACTIVE; trio 4613/58; spec §3c |
 
-**Wave 3 (remaining):** U-IMPORT-1 (C17). **U-SHELL-7 (settings modal C3) is now GREEN / COMPLETE (2026-09-14)** — see the §1 row + the Unit U-SHELL-7 DONE row in `docs/next-steps.md`.
+**Wave 3 COMPLETE (2026-09-14):** both Wave-3 units — **U-SHELL-7 (settings modal C3)** and **U-IMPORT-1 (File → Import… FS/browse C17)** — are GREEN / COMPLETE — the UI-overhaul (C1–C20 wave decomposition) is all-LANDED. No remaining Wave-3 item. The two live-scenario batteries stay PARKED artifacts (running-app + UI/OS-dialog driver surface), documented in their `...live-pending-battery.md` files.
 
 ---
 
@@ -284,8 +286,9 @@ context for a shared node).
 
 ## 6. Pending units
 
-- **Wave 3:** **U-SHELL-7 (settings modal C3) is GREEN / COMPLETE (2026-09-14)** — no longer pending; the only remaining Wave-3 item is **U-IMPORT-1** (C17, needs U-MENU-1 + the C14-lite import root). The U-SHELL-7 live-scenario battery stays a PARKED artifact (running-app + UI/DOM-driver surface), documented in
-  `docs/specs/unit-u-shell-7-settings-modal-live-pending-battery.md`.
+- **Wave 3 COMPLETE (2026-09-14):** **U-SHELL-7 (settings modal C3)** and **U-IMPORT-1 (File → Import… FS/browse C17)** are both GREEN / COMPLETE — the UI-overhaul (C1–C20 wave decomposition) is all-LANDED; no Wave-3 unit is pending. The U-SHELL-7 + U-IMPORT-1 live-scenario batteries stay PARKED artifacts (running-app + UI/DOM-driver / OS-dialog-driver surface), documented in
+  `docs/specs/unit-u-shell-7-settings-modal-live-pending-battery.md` and
+  `docs/specs/unit-u-import-1-import-surface-live-pending-battery.md`.
 - Accept-from-9b: AF3-3/AF1-2 (per-mount editing context for a shared node).
 - **U-JR1 is GREEN/DONE (2026-09-13)** — no longer pending; see §1 + the
   U-JR1 DONE row in `docs/next-steps.md`. Its live-scenario battery stays a
@@ -309,7 +312,18 @@ context for a shared node).
 
 ## 8. Documentation-staleness review (this pass)
 
-Reconciled against the actual build at `fb96f58` + the U-SHELL-N7/7 hardening:
+Reconciled against the actual build + the U-SHELL-N7/7/IMPORT-1 hardening:
+- **2026-09-14 (U-IMPORT-1):** the previously untracked spec-only draft is now
+  GREEN / COMPLETE / CODE LANDED — the status block + the §3c note updated
+  (IMPORT-ADV-1..3 host-fixed, no package finding); `next-steps.md` gained the
+  Unit U-IMPORT-1 DONE row (red 43 → green 47; 3 sanctioned re-pins; ADV-1..3 +
+  4 pins; blind-greens 36/0/5; live battery PARKED; trio 4613/58; the three
+  IMPORT-* decisions) + the CURRENT WORK lead + the Wave-3-COMPLETE status;
+  `pending.md` gained the U-IMPORT-1 parked-live-battery row; `defects.md`
+  correctly ABSENT (host findings only); `decisions.md` `IMPORT-NO-SYMLINK-FOLLOW`
+  / `IMPORT-FILE-COUNT-CAP` / `IMPORT-RESULT-BROADCAST` ACTIVE + dated.
+  Doc-review: `archive/reviews/2026-09-14-unit-u-import-1-import-surface-doc-review.md`.
+  **WAVE 3 COMPLETE — the UI-overhaul is all-LANDED.**
 - **2026-09-13 (U-JR1):** the U-JR1 spec §2.2/§5.7/§5.8 gained the battery-host
   "7th surface" notes (gate-6 HOST fix: `battery-host.ts` routes `journalEntries`,
   `RuntimeBackend` exported, auto-start main-only); the live-pending battery's §0.2

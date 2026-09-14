@@ -52,7 +52,7 @@ provident-authored.
   `enabledPanes` through the C9 serialized UI-config. (U-SHELL-8 owns the
   enable/disable + persistence; this unit owns the menu item + IPC.)
 - **File → Import…** — a **platform-aware** open dialog (W1-N2; U-IMPORT-1 owns the expansion + handler). **Multi-file upload is the DEFAULT on all platforms; Windows/Linux get a SEPARATE directory-bulk-upload item:**
-  - **All platforms — `Import files…` (DEFAULT):** `dialog.showOpenDialog({ properties: ['openFile','multiSelections'], filters: [{ name:'Markdown', extensions:['md','markdown'] }] })` — select one or more `.md` files.
+  - **All platforms — `Import…` (DEFAULT):** `dialog.showOpenDialog({ properties: ['openFile','multiSelections'], filters: [{ name:'Markdown', extensions:['md','markdown'] }] })` — select one or more `.md` files.
   - **macOS:** the default item may additionally allow directories in the SAME dialog (`['openFile','openDirectory','multiSelections']`).
   - **Windows/Linux (additional item) — `Import folder…`:** `dialog.showOpenDialog({ properties: ['openDirectory'] })` for directory **bulk** upload.
   - On confirm, a chosen **file list** passes straight through; a chosen **folder** expands to its `.md` files (U-IMPORT-1); both feed the same `importMarkdownCorpus` handler.

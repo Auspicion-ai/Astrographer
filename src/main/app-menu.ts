@@ -13,8 +13,11 @@ import type { PaneCatalogEntry } from '../shared/types.js'
 /** The action seam the template's click handlers route through — injected by
  *  `main.ts`. */
 export interface AppMenuActions {
-  /** File → Import… — open the fs-only dialog (U-IMPORT-1 owns the rest). */
+  /** File → Import… — open the multi-file fs dialog (U-IMPORT-1 owns the rest). */
   openImport(): void
+  /** File → Import folder… (win/linux only) — open the `['openDirectory']`
+   *  dialog for directory bulk upload (U-IMPORT-1, §2.3/§2.8). */
+  openImportFolder(): void
   /** View → Panes → `<title>` — route the toggle to the host (`IPC_PANE_VISIBILITY`). */
   togglePane(id: string, enabled: boolean): void
 }
@@ -90,6 +93,7 @@ export function importSelectionFromDialog(result: unknown): string[] | null {
 export function buildMenuTemplate(catalog: unknown, options: BuildMenuOptions = {}): unknown[] {
   const actions: AppMenuActions = options.actions ?? {
     openImport: () => {},
+    openImportFolder: () => {},
     togglePane: () => {},
   }
   const platform = options.platform ?? process.platform
@@ -111,6 +115,12 @@ export function buildMenuTemplate(catalog: unknown, options: BuildMenuOptions = 
     label: 'File',
     submenu: [
       { label: 'Import…', click: () => { actions.openImport() } },
+      // U-IMPORT-1 §2.3 — win/linux get a SEPARATE `Import folder…` item
+      // (the combined file+directory picker is macOS-only, W1-N2). darwin
+      // emits exactly ONE `Import…`.
+      ...(platform === 'darwin' ? [] : [
+        { label: 'Import folder…', click: () => { actions.openImportFolder() } },
+      ]),
       { type: 'separator' },
       { label: 'Quit', role: 'quit' },
     ],

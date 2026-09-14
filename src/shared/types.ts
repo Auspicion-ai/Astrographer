@@ -846,3 +846,24 @@ export const IPC_PANE_CATALOG = 'provident:pane-catalog'
  *  `{ id: string, enabled: boolean }` — sent when a View → Panes checkbox is
  *  toggled. U-SHELL-8 owns the apply + persistence. */
 export const IPC_PANE_VISIBILITY = 'provident:pane-visibility'
+
+// ---- Unit U-IMPORT-1 File → Import… result broadcast (docs/specs/
+// unit-u-import-1-import-surface.md §2.5) ------------------------------
+
+/** The main→renderer one-way import-result broadcast channel. Fired EXACTLY
+ *  ONCE per non-cancel browse import run (§2.4 steps 3/5); a cancelled dialog
+ *  fires ZERO times. Manual-UI ONLY — the MCP `edit.import_markdown` tool
+ *  handlers never route to this channel. */
+export const IPC_IMPORT_RESULT = 'provident:import-result'
+
+/** The `IPC_IMPORT_RESULT` payload — a JSON-serializable discriminated union
+ *  (the field names are PINNED, §8 W-Q7). The `ok:true` summary mirrors the
+ *  `ImportMarkdownResult` (`documentIds`/`nodeCount`/`edgeCount`);
+ *  `resolvedCount === resolved files.length` (the number of `.md`/`.markdown`
+ *  files passed to `importMarkdownCorpus`). The four discriminant outcomes are
+ *  the pinned set. */
+export type ImportResultPayload =
+  | { ok: true; documentIds: string[]; nodeCount: number; edgeCount: number; resolvedCount: number }
+  | { ok: false; reason: 'import-failed'; error: string; failedFile?: string }
+  | { ok: false; reason: 'cap-exceeded'; cap: number }
+  | { ok: false; reason: 'no-markdown-files' }

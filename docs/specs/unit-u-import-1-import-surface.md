@@ -1,12 +1,17 @@
 # Unit U-IMPORT-1 — File → Import… FS/Browse Surface (C17) — Spec
 
-**Status:** DRAFT 2026-09-11+. **Document-only — no code.** Gate: the UI-overhaul
-umbrella gate `docs/specs/ui-overhaul-review.md` (PROCEED-WITH-AMENDMENTS, A10:
-`U-IMPORT-1` follows `U-MENU-1` + `U-STATE-1`; ui-overhaul §8.1 Wave 3 — the only
-remaining Wave-3 item). **C17 is already ADJUDICATED** by the umbrella gate and is
-**NOT re-openable** here; Q17/Q18 are also adjudicated (ui-overhaul §7) and pinned
-verbatim below. Open items live in §8 (the `W-U-IMPORT-1-Q*` set) for the Architect.
-This is the per-unit spec required by AGENTS.md item 9 before any TestWriter red set.
+**Status:** GREEN / COMPLETE — CODE LANDED (2026-09-14) + DOC-REVIEWED 2026-09-14.
+Ratified as SPEC-RATIFIED / READY-FOR-TDD 2026-09-14+, then implemented.
+Gate: the UI-overhaul umbrella gate `docs/specs/ui-overhaul-review.md` (PROCEED-WITH-AMENDMENTS, A10:
+`U-IMPORT-1` follows `U-MENU-1` + `U-STATE-1`; ui-overhaul §8.1 Wave 3). **C17 was already
+ADJUDICATED** by the umbrella gate and was **NOT re-openable** here; Q17/Q18 were also
+adjudicated (ui-overhaul §7). **All open decisions W-Q1..Q7 are RESOLVED/RATIFIED
+(2026-09-14) — see §8 (+ the decision rows `IMPORT-NO-SYMLINK-FOLLOW` /
+`IMPORT-FILE-COUNT-CAP` / `IMPORT-RESULT-BROADCAST` in `docs/decisions.md`, all ACTIVE).**
+This is the per-unit spec required by AGENTS.md item 9 before any TestWriter red set; the
+full TestWriter red → Implementer green → adversarial → blind-greens → doc-review cycle
+has RUN under RCA-1/6 (see `docs/next-steps.md` Unit U-IMPORT-1 DONE row).
+**Wave 3 — and therefore the UI-overhaul — is COMPLETE (2026-09-14, U-IMPORT-1 + U-SHELL-7).**
 
 ---
 
@@ -134,12 +139,15 @@ rows drive):
    on-disk iteration order.
 6. **The cap (FAIL-LOUD)** — if the matching files would exceed `max` (default
    `MAX_IMPORT_FILES`), return `{ ok: false, reason: 'cap-exceeded', cap, count }`
-   where `count` is the number of matching files that were seen before the abort.
-   The cap is **never silently truncated** — a FAIL-LOUD signal is mandatory.
+   where **`count === N`, the TOTAL number of matching `.md`/`.markdown` files
+   present (`N > cap`)** — never the abort position, never a truncated subset. The
+   cap is **never silently truncated** — a FAIL-LOUD signal is mandatory.
 7. **TOTAL on a missing/empty/non-directory path — NEVER throws** (§4 F1):
    - `dir` that does not exist, `dir` that is a **file** (not a directory), or an
      empty/`''` path ⇒ `{ ok: false, reason: 'not-a-directory', path }` (deterministic
-     fail message, never a throw).
+     fail message, never a throw). **The `path` field echoes `dir` when `typeof
+     dir === 'string'`; for `undefined`/`null`/non-string `dir` the `path` field is
+     coerced to `''`** (deterministic + JSON-safe; §8 W-Q7).
    - a valid empty directory ⇒ `{ ok: true, files: [] }`.
    - `options.max` non-positive/`NaN`/non-number ⇒ coerced to `MAX_IMPORT_FILES`
      (fail-closed; never throws).
@@ -188,11 +196,19 @@ list. Pinned rules:
    (`MAX_IMPORT_FILES`), return `{ ok:false, reason:'cap-exceeded', cap }`.
 5. **No markdown at all** — if the (deduped) resolution is empty ⇒
    `{ ok:false, reason:'no-markdown-files' }` (an explicit no-op signal; never a
-   batch call). Otherwise `{ ok:true, files, directories }` where `directories` is
-   the count of directory selections expanded.
+   batch call). Otherwise `{ ok:true, files, directories }` where **`directories`
+   is the count of directory selections EXPANDED (a zero-`.md` directory still
+   counts — it was a directory selection that was expanded)** — §8 W-Q7.
 6. **TOTAL** — `null`, `undefined`, a non-array, an empty array, an array of
    non-string/`''` elements all **never throw**; they resolve to
    `{ ok:false, reason:'no-markdown-files' }` (§4 F3).
+7. **MIXED-ARRAY FAIL-CLOSED (a whole-poison rule, §8 W-Q7):** if the array
+   contains ANY non-string or `''` element together with a valid `.md`, the WHOLE
+   selection resolves to `{ ok:false, reason:'no-markdown-files' }` — a malformed
+   selection is NEVER silently partially-intaken. A non-string/`''` element is
+   **not** dropped per-element (unlike a dropped non-md file in rule 1); its
+   presence poisons the entire selection (consistent with the importer's strict
+   `markdown import: empty file path` fail-state).
 
 ### 2.2 The dialog options per platform (W1-N2)
 
@@ -250,7 +266,7 @@ flow driven by the menu actions:
      ctx,
      { files, corpusRoot: defaultEntry.corpusRoot },   // the default store's corpusRoot
      { name: defaultEntry.name, isDefault: true,
-       reservedNames: [...runtime.getDirectory().entries.keys()].filter(n => n !== defaultName) },
+       reservedNames: [...runtime.getDirectory().entries.keys()].filter(n => n !== runtime.getDefaultName()) },
    )
    ```
    - **server-fixed corpusRoot:** `corpusRoot = defaultEntry.corpusRoot` (the
@@ -282,16 +298,18 @@ broadcast** on a NEW channel:
 
 - **`IPC_IMPORT_RESULT = 'provident:import-result'`** (added to
   `src/shared/types.ts`, the §5.8 census).
-- Payload (a discriminated `ImportResultPayload` — JSON-serializable):
+- Payload (a discriminated `ImportResultPayload` — JSON-serializable; **the field
+  names are PINNED**, §8 W-Q7):
   ```
   | { ok: true; documentIds: string[]; nodeCount: number; edgeCount: number; resolvedCount: number }
   | { ok: false; reason: 'import-failed'; error: string; failedFile?: string }
   | { ok: false; reason: 'cap-exceeded'; cap: number }
   | { ok: false; reason: 'no-markdown-files' }
   ```
-  (Concretely: the `ImportMarkdownResult` summary on success/failed, or the
-  fail-loud markers. Field names Implementer-free but the four discriminant
-  outcomes are the pinned set.)
+  (The `ok:true` summary mirrors the `ImportMarkdownResult` (`documentIds`/
+  `nodeCount`/`edgeCount`); **`resolvedCount` is defined as the resolved
+  `files.length`** (the number of `.md`/`.markdown` files passed to
+  `importMarkdownCorpus`). The four discriminant outcomes are the pinned set.)
 - Fired EXACTLY ONCE per non-cancel selection that reaches §2.4 step 3/5 (A4-style);
   a cancelled dialog (§2.4 step 2) fires **ZERO** times.
 - Manual-UI only — the MCP tool handlers never route to this channel (an agent does
@@ -367,11 +385,42 @@ integration wiring** in `main.ts`. Both halves are MANDATORY for a green.
 10. **Cancelled dialog is a no-op:** `importSelectionFromDialog` returns `null`;
     NO resolution, NO import, NO broadcast.
 
-### 3c. Adversarial findings (RCA-3 — recorded post-green; none yet — this is the red
-set's precursor)
+### 3c. Adversarial findings (RCA-3 — post-green, 2026-09-14; all host-side, fixed here)
 
-The adversarial pass runs AFTER the green and its findings are recorded here
-(pending).
+The post-green adversarial re-audit found three host-side findings, all FIXED in
+`src/main/import-directory.ts` (+ 4 regression pins in
+`tests/unit-u-import-1-import-surface.test.ts`); no package (`provident-ssr`) finding
+(nothing for `docs/defects.md`):
+
+- **IMPORT-ADV-1 (LOW) — FIXED:** `buildImportDialogOptions('')` fell through to
+  `process.platform` (a darwin host would return the combined shape). Fixed: the
+  `''`/unknown-string case now coerces to the non-darwin multi-file shape, never
+  the darwin fallback (spec §4 F14); regression pin asserts the host-independent
+  non-darwin shape.
+- **IMPORT-ADV-2 (INFO) — FIXED:** a directory that lstat-classifies as a dir but
+  then races to `not-a-directory` previously still incremented `directories`.
+  Fixed: `dirs.add(path)` only after a successful `expandImportDirectory`
+  (`directories` counts only actually-EXPANDED directory selections; the
+  observable invariant — an expanded dir, incl. a zero-`.md` dir, always counts —
+  is regression-pinned).
+- **IMPORT-ADV-3 (INFO) — FIXED:** a fractional positive `max` (e.g. `2.5`) passed
+  through as a fractional cap. Fixed: `normalizeMax` floors a positive fractional
+  `max` to an integer (`Math.floor`) — deterministic; regression pins
+  `expandImportDirectory(dir,{max:2.5})` + `resolveImportSelection([dir],{max:2.5})`
+  ⇒ `cap-exceeded, cap:2`.
+
+**Clean (verified, no finding):** the symlink rule (W-Q1), path-escape containment
+(no `..`/separator escape; outside-corpus rejected by `importMarkdownCorpus`), the
+cap boundaries (`N===max` OK / `N>max` fail-loud with `count===N`), the rule-7
+whole-poison (vs per-element non-md drop), the cancellation zero-broadcast, the
+server-fixed `corpusRoot`, the `IPC_IMPORT_RESULT`/`IPC_RAG_STORE_CHANGED`
+exactly-once discipline, and no MCP-tool/double-routing change (`edit.import_markdown`
+untouched).
+
+The adversarial pass ran AFTER the green (2026-09-14) and its findings are
+recorded ABOVE (§3c: IMPORT-ADV-1..3, all host-side FIXED here + 4 regression
+pins in `tests/unit-u-import-1-import-surface.test.ts`). No package
+(`provident-ssr`) finding — nothing for `docs/defects.md`.
 
 ## 4. Fail-states / edge cases
 
@@ -483,9 +532,9 @@ broadcast `IPC_IMPORT_RESULT` / `IPC_RAG_STORE_CHANGED`), `src/shared/types.ts`
   `edit.import_markdown`'s UI home), **§5.4 SG3** (line 1123 — "no File menu" owner
   U-IMPORT-1), **§7 Q17** (line 1181 — top-level md+markdown, non-recursive, skip
   dot-dirs, no symlinks, cap with fail-loud) **+ Q18** (1182 — File menu primary,
-  optional in-pane control), **§8.1 Wave 3** (line 1403 — the only remaining Wave-3
-  item), §2.1 Table C (the `showOpenDialog` import browse = OS/file-dialog shell
-  carve-out, line 142).
+  optional in-pane control), **§8.1 Wave 3** (line 1403 — Wave 3 COMPLETE
+  2026-09-14, the UI-overhaul all-LANDED), §2.1 Table C (the `showOpenDialog`
+  import browse = OS/file-dialog shell carve-out, line 142).
 - `docs/specs/unit-u-menu-1-application-menus.md` — U-MENU-1 delivered the
   `AppMenuActions.openImport()` seam + the single `Import…` item + `IMPORT_DIALOG_*`
   + `importSelectionFromDialog`; its §2.3 (W1-N2) drafted the platform dialog split
@@ -551,36 +600,47 @@ The C17 text + the umbrella gate + ui-overhaul §7 Q17/Q18 resolve most decision
 (below, marked RESOLVED/PINNED). The genuine unknowns this draft **PINNED** are
 flagged for the Architect to ratify or overturn:
 
-- **W-U-IMPORT-1-Q1 (PINNED — conservative): the exact symlink rule.**
+- **W-U-IMPORT-1-Q1 (RATIFIED 2026-09-14 — Architect): the symlink rule.**
   `expandImportDirectory`/`resolveImportSelection` **SKIP all symlinks** (`lstat`
   says symlink ⇒ excluded, never dereferenced), whether the link targets a file or a
-  directory. This is the Q17 "no symlink follow" adjudication applied conservatively.
-  *Architect note: an alternative "follow a FILE symlink but not a dir symlink" was
-  considered and REJECTED for determinism/safety (a link named `.md` whose target is
-  unreadable/outside would inject nondeterminism and path-escape risk); confirm the
-  conservative skip.*
-- **W-U-IMPORT-1-Q2 (PINNED): the `expandImportDirectory` return shape.** The brief's
-  sketch (`): string[]`) cannot carry the FAIL-LOUD cap signal, so this spec pins a
-  **discriminated `ImportDirectoryOutcome`** (`{ ok:true, files }` | `{ ok:false,
-  reason:'not-a-directory'|'cap-exceeded', … }`). *Architect note: this is the pin
-  below; a flat `string[]`-with-throw alternative was rejected because it would
-  violate the "never throw" totality pin for the missing/empty path.*
-- **W-U-IMPORT-1-Q3 (PINNED): `MAX_IMPORT_FILES = 512`.** *Architect note: confirm
-  the value; a large corpus dir over 512 files fails LOUDLY rather than truncating —
-  the fail-loud behavior is binding regardless of the number.*
-- **W-U-IMPORT-1-Q4 (PINNED): the operator result surface.** A **one-way
-  main→renderer broadcast** `IPC_IMPORT_RESULT` (main drives the whole native-dialog
-  flow; there is no renderer invoke). *Architect note: confirm the renderer
-  renders this via the existing broadcast/IPC plumbing; whether the renderer shows a
-  status toast or a full pane is a renderer-side concern outside this unit's scope.*
-- **W-U-IMPORT-1-Q5 (PINNED): the fs import addresses the DEFAULT store only.**
-  `runtime.getDefaultStore()` + the default entry's `corpusRoot` (server-fixed).
-  *Architect note: a multi-store picker is out of scope; the MCP tool's `store`
-  addressing is NOT mirrored on the browse surface in v1.*
-- **W-U-IMPORT-1-Q6 (OPEN — doc hygiene): the spec filename.** This spec is
-  `unit-u-import-1-import-surface.md`; `unit-u-menu-1-application-menus.md` §6 cites
-  `unit-u-import-1-file-import.md`. *Flagged: when this unit's specs/tests propagate,
-  repoint that citation to this canonical filename.*
+  directory. This is the Q17 "no symlink follow" adjudication applied conservatively
+  (decision **IMPORT-NO-SYMLINK-FOLLOW**, `docs/decisions.md`). The alternative
+  "follow a FILE symlink but not a dir symlink" was considered and REJECTED for
+  determinism/safety (a link named `.md` whose target is unreadable/outside would
+  inject nondeterminism and path-escape risk).
+- **W-U-IMPORT-1-Q2 (RATIFIED 2026-09-14 — Architect): the `expandImportDirectory`
+  return shape.** The discriminated **`ImportDirectoryOutcome`** (`{ ok:true, files }`
+  | `{ ok:false, reason:'not-a-directory'|'cap-exceeded', … }`) is the pin — a flat
+  `string[]`-with-throw alternative would violate the "never throw" totality pin for
+  the missing/empty path.
+- **W-U-IMPORT-1-Q3 (RATIFIED 2026-09-14 — Architect): `MAX_IMPORT_FILES = 512`**
+  (decision **IMPORT-FILE-COUNT-CAP**, `docs/decisions.md`). A large corpus dir over
+  512 files fails LOUDLY rather than truncating — the fail-loud behavior is binding
+  regardless of the number.
+- **W-U-IMPORT-1-Q4 (RATIFIED 2026-09-14 — Architect): the operator result surface.**
+  A **one-way main→renderer broadcast** `IPC_IMPORT_RESULT` (decision
+  **IMPORT-RESULT-BROADCAST**, `docs/decisions.md`); main drives the whole
+  native-dialog flow. The renderer renders it via the existing broadcast/IPC plumbing
+  (a status toast/pane is a renderer-side concern outside this unit's scope).
+- **W-U-IMPORT-1-Q5 (RATIFIED 2026-09-14 — Architect): the fs import addresses the
+  DEFAULT store only.** `runtime.getDefaultStore()` + the default entry's `corpusRoot`
+  (server-fixed). A multi-store picker is out of scope; the MCP tool's `store`
+  addressing is NOT mirrored on the browse surface in v1.
+- **W-U-IMPORT-1-Q6 (RESOLVED 2026-09-14): the spec filename.** This spec is
+  `unit-u-import-1-import-surface.md`; the `unit-u-menu-1-application-menus.md` §6
+  citation was repointed to this canonical filename in the final-review pass.
+- **W-U-IMPORT-1-Q7 (RATIFIED 2026-09-14 — Architect, the spec-review findings):**
+  the pinned test-writability resolutions — (a) the **mixed-array failure is a
+  WHOLE-POISON** (`resolveImportSelection` rule 7: any non-string/`''` element
+  together with a valid `.md` ⇒ `no-markdown-files`, never a per-element drop);
+  (b) `directories` **counts every directory selection EXPANDED** (a zero-`.md`
+  directory still increments it — rule 5); (c) in a `cap-exceeded` outcome,
+  **`count === N` (the full number of matching files, `> cap`)** — rule 6;
+  (d) the non-directory `path` field **echoes `dir` when string, else `''`** for
+  `undefined`/`null`/non-string — rule 7; (e) the `ImportResultPayload`
+  **field names are PINNED** with `resolvedCount === resolved files.length` —
+  §2.5; (f) the default-name exclusion in `reservedNames` uses
+  **`runtime.getDefaultName()`** — §2.4.
 
 **Resolved (no adjudication needed):** the platform dialog split is `buildImportDialogOptions`
 binding (W1-N2); the menu labels are `Import…`/`Import folder…` (§2.3 — the 
