@@ -97,7 +97,7 @@ provident-authored.
 - `docs/specs/ui-overhaul.md` §2 Table C (File menu + `showOpenDialog` carve-out),
   §4 G10, §5.7 SG3 (no menus), §7 Q10/Q11.
 - `docs/specs/unit-u-shell-8-view-menu-pane-visibility.md` (the visibility
-  surface), `docs/specs/unit-u-import-1-file-import.md` (the import handler).
+  surface), `docs/specs/unit-u-import-1-import-surface.md` (the import handler).
 - `src/main/main.ts`, `src/main/preload.ts`, `src/renderer/sidebar-panes.ts`
   (`registerPanes` + `registry.onChanged`).
 - `docs/specs/wave-1-open-decisions.md` W1-Q1..Q3.

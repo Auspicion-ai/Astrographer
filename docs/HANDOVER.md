@@ -1,14 +1,14 @@
 # Handover — Astrographer UI Overhaul (Wave 2)
 
-**Date:** 2026-09-13 (latest) · **Committed HEAD:** `49079b9`
-(U-EDIT-2 + U-SHELL-9b W2-N15) · **Tree:** DIRTY — a large green-but-uncommitted
-batch (PBT backfill + U-JR1 + W2-N11 + **U-SHELL-N7 shell-wiring**) is in the
-working tree, and **U-SHELL-N7 (shell pointer-wiring, W2-N7) is now LANDED +
-CLOSED** — the HOST-1..5 + ADV1..5 fixes are in (see
-`docs/specs/unit-u-shell-shell-wiring.md` §3a/§3b and the CURRENT block below).
+**Date:** 2026-09-14 (latest) · **Committed HEAD:** `fb96f58`
+(U-SHELL-7 settings modal — the Wave-3 C3 unit) · **Tree:** CLEAN except the
+untracked U-IMPORT-1 spec draft (`docs/specs/unit-u-import-1-import-surface.md`,
+the last Wave-3 unit, spec-only / not-implemented). The Wave-2 batch (PBT
+backfill + U-JR1 + W2-N11 + U-SHELL-N7 shell-wiring) and U-SHELL-7 are all
+**committed** (U-SHELL-N7 HOST-1..5 + ADV1..5 + U-SHELL-7 SH7-ADV1..3 fixes are in).
 
-**Baseline (confirmed on the landed working tree):**
-`npm test` → **4527 pass + 58 skip**; `npm run typecheck` → 0;
+**Baseline (confirmed on the current tree):**
+`npm test` → **4566 pass + 58 skip**; `npm run typecheck` → 0;
 `npm run build` → OK.
 
 **Objective:** implement the document-only UI-overhaul spec
@@ -309,7 +309,7 @@ context for a shared node).
 
 ## 8. Documentation-staleness review (this pass)
 
-Reconciled against the actual build at `8c67100` + the uncommitted 9b hardening:
+Reconciled against the actual build at `fb96f58` + the U-SHELL-N7/7 hardening:
 - **2026-09-13 (U-JR1):** the U-JR1 spec §2.2/§5.7/§5.8 gained the battery-host
   "7th surface" notes (gate-6 HOST fix: `battery-host.ts` routes `journalEntries`,
   `RuntimeBackend` exported, auto-start main-only); the live-pending battery's §0.2
