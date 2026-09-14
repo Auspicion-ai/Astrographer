@@ -260,7 +260,56 @@ export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconci
 the host destroys it. Panes (`documentId: ''`) are never document-scoped and
 keep the prior classification.
 
-## 5. Census
+## 5.7 Property register (PBT)
+
+This register follows the **`docs/specs/unit-ujr1-get-journal.md` §5.7** (and its
+siblings `docs/specs/unit-gn-mcp-ui-wiring.md` §5.7,
+`docs/specs/unit-shell-integration.md` §5.7) convention: rows typed **P-IM**
+(input-model), **P-SM** (state-model), or **P-TP** (transform) — NEVER F-rows
+and NEVER §6/FS-n rows (this unit's fail-states already exist as §4 F1–F8). It
+covers the **U-STATE-1e N-root portion ONLY** — the single-root
+`reconcileContentRoots`/`ReconcileResult` surface (the 1a register) is NOT
+duplicated here. The register is genuinely invariant-bearing (per §2.2 RULED +
+the §3/§4 rows): `reconcileDocumentRoots` is a deterministic pure function, the
+`(documentId, cssId)` keying + per-document buckets are well-defined, the
+`identityReplaced` encoding is explicit and never merged, and bucket coverage
+is total over the §4 F4 first-wins / F1 non-open / F3 guard-throw domain.
+
+Every row is stated **over a well-formed input** (the §2.2 shape preconditions:
+`next` is an array of `{ documentId, envelope }`; each considered envelope has a
+`template.root` and a `content` array; every `documentId` on a non-pane
+`previous` root and on every `next` entry is in `documentIds`). Malformed
+envelopes are §4 F3 (the documented guard throw) and stale/closed documents are
+§4 F2/F5/F8 (drop-vs-`removed`), both OUT of the register's checkable domain.
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **Well-formed-input totality.** Over the well-formed domain, `reconcileDocumentRoots` returns a valid `NRootReconcileResult` (the 5 `ScopedRoot[]` buckets + `usedFallback` + `identityReplaced`); it NEVER throws beyond the §4 F3 documented guard, which fires only on a malformed considered envelope. | `strat:nroot-total` | ∀ well-formed input `I`: `reconcileDocumentRoots(I)` returns an object with the `added`/`replaced`/`removed`/`kept` `ScopedRoot[]` fields, a boolean `usedFallback`, and an `identityReplaced` array of `{ documentId, from, to }`, and does not throw. |
+| `P-IM-2` | IM | **Determinism.** The pure projection: identical well-formed inputs always yield the IDENTICAL deep-equal `NRootReconcileResult` (same buckets, same order, same `usedFallback`, same `identityReplaced`); no wallclock/global-state/sibling-run dependence. Bucket order is pinned: `added`/`replaced`/`kept` follow `next` order, `removed` follows `previous` order. | `strat:nroot-deterministic` | ∀ well-formed input `I`: calling `reconcileDocumentRoots(I)` twice in immediate succession returns two deep-equal results (equal element sets, per-bucket order, `usedFallback`, `identityReplaced`). |
+| `P-SM-1` | SM | **Per-document isolation** (the H3/W2-N12 scope discipline). Every non-pane `ScopedRoot` in the result carries `documentId` equal to the OWNING document of the node it was derived from, and its `cssId`/`ragNodeId` come from that same document's envelope/previous set. The `added`/`replaced`/`kept` classification of the key `(documentId, cssId)` compares only that document's previous node against that document's next node — never a sibling document's root. A shared RAG node materialized in documents A and B yields TWO distinct entries keyed `(A, rag-X)` and `(B, rag-X)` (§3 state 5a), never merged or cross-attributed; a fork in A leaves B's same-cssId root classified by B's own nodes. | `strat:nroot-perdoc-isolation` | ∀ well-formed input + generated shared-node setup: every non-pane result `ScopedRoot` has `documentId` identical to its source node's document; each `(A, rag-X)`/`(B, rag-X)` pair is two distinct entries, each classified from its own document's prev/next; no result entry carries a `documentId` other than its source's. |
+| `P-SM-2` | SM | **Identity-replace fork faithfulness.** A replaced root is DISTINCTLY marked through the explicit `identityReplaced` bucket — never silently merged into `removed`/`added` nor double-reported. Each entry's `to` is a newly-appeared next root absent from `added`/`replaced`; its `from` is a vanished previous root absent from `removed`; `from` and `to` are both derived from the entry `documentId`'s own previous/next sets; BOTH names are in the payload's `changed` set (`change.nodeIds`); panes never appear in the bucket (F7). A fork in A replaces only A's root; B's same-cssId shared root stays `kept` (§3 state 6) — the identity filtering is the document-scoped `identFromKeys`/`identToKeys` pair, not a global cssId collapse. | `strat:nroot-identity-faithful` | ∀ well-formed input where a fork names changed ids in document A: for every `e ∈ identityReplaced`, `e.to ∉ added ∪ replaced` and `e.from ∉ removed`, `e.to` and `e.from` both resolve within document `e.documentId`'s previous/next sets, `e.from.ragNodeId ∈ change.nodeIds ∧ e.to.ragNodeId ∈ change.nodeIds`, and no `e.documentId === ''`; a shared `rag-X` in B with A's fork does not emit a B entry. |
+| `P-TP-1` | TP | **Bucket coverage / root-count preservation.** Over the well-formed `documentIds` open-document set, the result materializes EXACTLY the input's document set with no loss and no duplication: every non-pane `next` root lands in EXACTLY ONE of `added`/`replaced`/`kept`/`identityReplaced.to`; every non-pane open `previous` root lands in EXACTLY ONE of `removed`/`replaced`/`kept`/`identityReplaced.from`; no `(documentId, cssId)` key appears twice in a single bucket. Each open document's roots are preserved, per document, on a content/structural change (§3 states 1–5). | `strat:nroot-coverage` | ∀ well-formed input: the non-pane result entries' `(documentId, cssId)` union over `added ∪ replaced ∪ kept ∪ { to }` equals the `next` open-document root set, and the union over `removed ∪ replaced ∪ kept ∪ { from }` equals the `previous` open-document root set; each bucket contains no key twice; `|added∪replaced∪kept∪{to}| === |{next open roots}|`. |
+
+**Class tally:** IM ×2, SM ×2, TP ×1 = **5 rows ≤ 8** ✔.
+
+The rows above are **NOT over-strength**: every proposition is directly
+observable from the pinned `NRootReconcileInput`/`NRootReconcileResult`/
+`ScopedRoot`/`DocumentRoot`/`identityReplaced` surface (§2.2) and the §3/§4 rows
+already pinned here — §3 states 5a (shared-root distinctness), 6 (per-document
+identity replace), 8 (no-regression), 9 (determinism), and §4 F1 (non-open doc),
+F3 (malformed envelope guard), F4 (first-wins), F5 (non-scoped root), F7 (panes) —
+into invariant form rather than adding any new fail-state surface or new seam.
+No row invents a result field, demands a new export, or reaches into
+`buildTraversal`/`Runtime` internals. Because every row is keyed off the actual
+`(documentId, cssId)` per-document buckets, the `identToKeys`/`identFromKeys`
+filters, the `changed`/`effectiveChanged` payload sets, and `pane` (`documentId:
+''`) handling, the register **cannot reject the landed module** — it restates
+the module's own classification discipline as checkable propositions. A correct
+(referentially-transparent, isolated, coverage-total) implementation must pass
+it; an implementation that globalized a key, silently merged an identity replace,
+dropped or doubled a root, or introduced nondeterminism would fail it.
+
+## 5.8 Census
 
 - **Pure module:** `src/renderer/content-reconcile.ts` gains the N-root
   reconciler — landed (2026-09-12): **+1 function** (`reconcileDocumentRoots`)
@@ -337,3 +386,5 @@ half; the host half is U-SHELL-9b's). All findings are on this repo's host code
 | L2 | LOW | `collectRagIds`/`shapeProjection` recurse over `children` with no visited-set/depth cap, so a CIRCULAR (or pathologically deep) `content`/`children` structure throws `RangeError: Maximum call stack size exceeded`. **Inherited from U-STATE-1a** (the same recursion); not reachable from a well-formed traversal envelope. | **RECORDED (not fixed in 1e)** — a hardening follow-up (visited-set/depth guard, mirroring the Unit S `TOK-F1` / Unit U2 `ADR-4` stack-safety discipline) is tracked as **W2-N11** in `docs/specs/wave-2-open-decisions.md` §D. |
 | L3 | LOW | The §2.2 single-root no-regression pin claimed the N-root result equals `reconcileContentRoots` for one document, but an identity replace deliberately diverges (`identityReplaced` vs `removed`+`added`). | **RESOLVED (wording)** — the pin is amended to exempt identity: no-regression holds for NON-identity changes; an identity replace diverges into `identityReplaced`. Blind L3a/L3b PASS. |
 | H3 | HIGH (host) | `Runtime.applyContentReconcile` ignores `documentId`; `destroyRoot` resolves a `cssId` GLOBALLY, so a multi-scope same-`cssId` identity replace would destroy the wrong document's node. | **DEFERRED to U-SHELL-9b** — the per-document id-namespace/mount is U-SHELL-9b's (§8 item 2); recorded as a 9b-prerequisite (**W2-N12**). **RESOLVED 2026-09-13 (9b H3):** the per-document id namespace makes scoped cssIds globally unique (`unit-u-shell-9b-cross-document-shared.md` §2.6/§2.7). |
+| W2 | HIGH (host) | In one broadcast where one document forks a shared `rag-X → X′` and a SIBLING document independently edits its shared `X`, the sibling's edit was LOST (the fork's `consumed` payload ids suppressed the sibling's own same-cssId write — the sibling root stayed `kept`). | **FIXED** — `reconcileDocumentRoots` now consults **shape** for a fork-consumed-id-carrying root: the sibling's independently-edited shared root is `replaced`, not `kept`. Regression: `tests/props-reconcile-1e.test.ts`. |
+| W1 | MED (accepted heuristic) | The identity matcher pairs ANY vanished+appeared changed-named root pair in a document as an identity-fork (no node-identity linkage), so a genuine NON-fork content swap is also classified via `identityReplace`. | **ACCEPTED (documented heuristic)** — the register's P-SM-2/P-TP-1 stay scoped to the fork-echo semantics; a deterministic-behavior negative generator pins the classification. No register-row change (register rows + class tally unchanged). |

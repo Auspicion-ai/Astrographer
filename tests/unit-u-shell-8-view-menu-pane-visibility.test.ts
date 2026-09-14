@@ -441,6 +441,62 @@ describe('U-SHELL-8 — boot applies persisted enabledPanes (spec §3 state 1, F
 })
 
 // ===========================================================================
+// W2-N9 — a pane hot-registered after boot (spec §2.7 H6), ADJUDICATED:
+// default-DISABLED + host-enables-to-appear.
+// ===========================================================================
+describe('W2-N9 — a pane hot-registered after boot defaults DISABLED + host-enables-to-appear (spec §2.7 H6)', () => {
+  it('H6 — a pane registered after boot defaults DISABLED and appears only when the host explicitly enables it', async () => {
+    // Adjudication (W2-N9): the registry `register` default is deliberately
+    // DISABLED (6 pre-existing tests pin it — default-off visibility). A pane
+    // hot-registered AFTER boot therefore defaults DISABLED and becomes visible
+    // ONLY when the host explicitly enables it via the onPaneVisibility enable
+    // path (registry.setEnabled → requestRebuild), NOT merely on registration.
+    // A persisted enabledPanes list governs ONLY the panes present at boot.
+    const h = makeHarness({ operatorSettings: { enabledPanes: ['doc-nav', 'settings'] } })
+    await h.host.boot(h.runtime)
+
+    // Pre-registration baseline: the id is unknown, so it is neither present
+    // nor enabled (the pane was absent at boot).
+    expect(h.registry.get('late-pane')).toBeUndefined()
+    expect(h.registry.isEnabled('late-pane')).toBe(false)
+    expect(hasPaneTarget(h, 'late-pane')).toBe(false)
+
+    // Register a NEW app-graph pane AFTER boot via the live registry.
+    h.registry.register({
+      id: 'late-pane',
+      title: 'Late Pane',
+      scope: 'app-graph',
+      render: (): LegacyNodeData => ({ type: 'div', props: { id: 'body-late-pane' } }),
+    })
+
+    // H6 pin 1 — a post-boot registration defaults DISABLED (register never
+    // enables). The persisted enabledPanes=['doc-nav','settings'] omitting
+    // 'late-pane' is not the governing fact: the registry default is DISABLED
+    // until the host explicitly enables the pane.
+    expect(h.registry.isEnabled('late-pane')).toBe(false)
+    // And DISABLED ⇒ not yet present in the app-graph (no re-derive on register).
+    expect(hasPaneTarget(h, 'late-pane')).toBe(false)
+
+    // H6 pin 2 — the host EXPLICITLY enables the hot-added pane through the
+    // onPaneVisibility enable path (the same seam the native View → Panes menu
+    // routes through): registry.setEnabled → requestRebuild → pane re-derive
+    // into its zone, pane-additive with NO loadEnvelope/teardown.
+    const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
+    const teardownSpy = vi.spyOn(h.runtime, 'teardown')
+    fireVisibility(h, 'late-pane', true)
+    await vi.waitFor(() => expect(h.registry.isEnabled('late-pane')).toBe(true))
+    await vi.waitFor(() => expect(hasPaneTarget(h, 'late-pane')).toBe(true))
+    expect(loadSpy).not.toHaveBeenCalled()
+    expect(teardownSpy).not.toHaveBeenCalled()
+
+    // The host-side enable round-trips into the persisted enabledPanes carrier.
+    const persisted = enabledPatchCall(h.bridge)
+    expect(persisted).toBeDefined()
+    expect(persisted).toContain('late-pane')
+  })
+})
+
+// ===========================================================================
 // §2.2 / §3 states 2–3 — toggle ON / OFF (apply + persist + re-derive)
 // ===========================================================================
 describe('U-SHELL-8 — apply + persist + re-derive on toggle (spec §2.2, states 2/3)', () => {

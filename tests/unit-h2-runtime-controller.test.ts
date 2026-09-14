@@ -1372,7 +1372,7 @@ describe('U-H2b — closure rewiring (B1–B13 / M1–M4 / refresh-on-apply)', (
 
   // -------------------------------------------------------------------------
   describe('Negative pins (D6 / D8 / A-P2-8) — must STAY GREEN', () => {
-    it('D6a — the MCP tool census is 58 (41 + the 3 gnosis.* names + the 11 A2 document/wiki names + rag.list_documents + U-D7 edit.set_doc_meta + U-SHELL-9a provident.focus); no hot-apply/runtime/registry tool added', async () => {
+    it('D6a — the MCP tool census is 59 (41 + the 3 gnosis.* names + the 11 A2 document/wiki names + rag.list_documents + U-D7 edit.set_doc_meta + U-SHELL-9a provident.focus + U-JR1 provident.get_journal); no hot-apply/runtime/registry tool added', async () => {
       const { ProvidentMcpServer } = await import('../src/main/mcp-server.js')
       const tools = ProvidentMcpServer.ALL_TOOLS
       // Census is 57, not 41: the gnosis.* MCP/UI wiring unit added gnosis.query /
@@ -1381,8 +1381,9 @@ describe('U-H2b — closure rewiring (B1–B13 / M1–M4 / refresh-on-apply)', (
       // (docs/specs/unit-a2-document-crud-wiring.md §5.10 — 11 new ALL_TOOLS rows),
       // Unit U-D5 added rag.list_documents (unit-ud5 §5.3), and Unit U-D7 added
       // edit.set_doc_meta (unit-ud7 §5.3), and Unit U-SHELL-9a added
-      // provident.focus (unit-u-shell-9a-main-focus-tabs.md §2.7).
-      expect(tools.length).toBe(58)
+      // provident.focus (unit-u-shell-9a-main-focus-tabs.md §2.7), and Unit
+      // U-JR1 added provident.get_journal (unit-ujr1-get-journal.md §2.2).
+      expect(tools.length).toBe(59)
       for (const t of tools) expect(t).not.toMatch(/apply|runtime|registry|hot[_-]/i)
       expect(tools).not.toContain('provident.hotApply')
     })

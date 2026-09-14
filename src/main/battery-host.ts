@@ -22,7 +22,15 @@ function rootOnlyEnvelope() {
 /** The Runtime-backed MCP backend: forwards each `provident.*` method to the
  *  live Runtime (battery mode). The Runtime boots root-only (C3); each load/
  *  teardown re-derives the graph. */
-class RuntimeBackend implements McpBackend {
+// The battery host auto-starts its MCP server ONLY when it is the process main
+// entry (spawned by scripts/mcp-cli.mjs or tests/e2e-battery.test.mjs). When
+// imported by the vitest suite it must stay inert so a regression test can
+// instantiate `RuntimeBackend` without spawning a listener.
+function isBatteryHostMain(): boolean {
+  return /battery-host/m.test(process.argv[1] ?? '')
+}
+
+export class RuntimeBackend implements McpBackend {
   readonly runtime: Runtime
 
   constructor(maxJournalLength?: number) {
@@ -56,6 +64,8 @@ class RuntimeBackend implements McpBackend {
         return this.runtime.teardownResult()
       case 'journal':
         return this.runtime.journal(p.action as 'undo' | 'redo' | 'replay')
+      case 'journalEntries':
+        return this.runtime.journalEntries(p as never)
       case 'code.get':
         return this.runtime.codeGet(p.path as string)
       case 'code.set':
@@ -82,20 +92,22 @@ const portArg = process.argv.find((a) => a.startsWith('--mcp-port='))
 const port = portArg ? Number(portArg.slice('--mcp-port='.length)) : 3789
 const journalArg = process.argv.find((a) => a.startsWith('--max-journal-length='))
 const maxJournalLength = journalArg ? Number(journalArg.slice('--max-journal-length='.length)) : undefined
-const backend = new RuntimeBackend(maxJournalLength && maxJournalLength > 0 ? maxJournalLength : undefined)
-// The battery host pre-enables ALL tool groups (a deterministic CI path with
-// no interactive UI): the full surface — read/dispatch/graph/code — is what the
-// battery drives. stdio is spawn-local (trusted).
-const gate = new SecurityGate({ token: null, enabled: ['read', 'dispatch', 'graph', 'code'] })
-const server = new ProvidentMcpServer({ backend, transport, port, gate })
-await server.start()
+if (isBatteryHostMain()) {
+  const backend = new RuntimeBackend(maxJournalLength && maxJournalLength > 0 ? maxJournalLength : undefined)
+  // The battery host pre-enables ALL tool groups (a deterministic CI path with
+  // no interactive UI): the full surface — read/dispatch/graph/code — is what the
+  // battery drives. stdio is spawn-local (trusted).
+  const gate = new SecurityGate({ token: null, enabled: ['read', 'dispatch', 'graph', 'code'] })
+  const server = new ProvidentMcpServer({ backend, transport, port, gate })
+  await server.start()
 
-// A spawned (non-interactive) server must exit when its stdio client
-// disconnects — otherwise a test run leaves an orphaned Node process holding
-// the runtime open on the machine. StdioServerTransport does not auto-exit.
-if (transport === 'stdio') {
-  process.stdin.on('end', () => {
-    void server.close().finally(() => process.exit(0))
-  })
-  process.stdin.on('error', () => process.exit(0))
+  // A spawned (non-interactive) server must exit when its stdio client
+  // disconnects — otherwise a test run leaves an orphaned Node process holding
+  // the runtime open on the machine. StdioServerTransport does not auto-exit.
+  if (transport === 'stdio') {
+    process.stdin.on('end', () => {
+      void server.close().finally(() => process.exit(0))
+    })
+    process.stdin.on('error', () => process.exit(0))
+  }
 }

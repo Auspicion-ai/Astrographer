@@ -52,10 +52,53 @@ export const GUTTER_ZONES: readonly LayoutZoneName[] = ['left', 'right', 'header
 const GUTTER_ROW_MIN = 32
 const GUTTER_ROW_MAX = 240
 
+/** A getter-shaped bounding rect (`getBoundingClientRect()` projection) — the
+ *  projection the shell wiring reads from a live rect. Declared structurally
+ *  HERE so `pane-gutter.ts` stays independent of `pane-drag.ts` (§2.2: "no
+ *  import from `pane-drag.ts` is added"). */
+export interface Rect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** A pointer position in the shell coordinate space (clientX/clientY). */
+interface Point2D {
+  x: number
+  y: number
+}
+
 /** The gutter orientation for a zone (§2.1). TOTAL: an unknown zone defaults to
  *  `'columns'` and never throws (F5). */
 export function gutterAxis(zone: unknown): GutterAxis {
   return zone === 'header' || zone === 'footer' ? 'rows' : 'columns'
+}
+
+/** §2.2.1 (P-IM-1) — the pointer→gutter-seam mapping helper. Maps a pointer
+ *  within the `.layout` bounding rect to a candidate gutter-seam track size in
+ *  px, measured from the layout rect's leading edge along the zone's axis
+ *  (§3 states 1/2): `left` → `point.x − rect.left`, `right` → `rect.right −
+ *  point.x`, `header` → `point.y − rect.top`, `footer` → `rect.bottom −
+ *  point.y` (F10). TOTAL + deterministic: an unknown zone, or a non-finite
+ *  `point`/`layoutRect` field → `0` (never a throw, never NaN/negative). The
+ *  wiring passes the result to `host.moveGutter`, whose controller clamps it to
+ *  the zone's bounds (a collapsed track is never committed). */
+export function gutterSizeForPoint(layoutRect: Rect, zone: LayoutZoneName, point: Point2D): number {
+  if (zone !== 'left' && zone !== 'right' && zone !== 'header' && zone !== 'footer') return 0
+  if (layoutRect == null || point == null) return 0
+  const fields = [layoutRect.left, layoutRect.top, layoutRect.right, layoutRect.bottom, point.x, point.y]
+  if (!fields.every((v) => typeof v === 'number' && Number.isFinite(v))) return 0
+  switch (zone) {
+    case 'left':
+      return point.x - layoutRect.left
+    case 'right':
+      return layoutRect.right - point.x
+    case 'header':
+      return point.y - layoutRect.top
+    default: // footer
+      return layoutRect.bottom - point.y
+  }
 }
 
 /** The clamp window for a zone (F5: an unknown zone falls back to the side

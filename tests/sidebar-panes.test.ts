@@ -50,6 +50,9 @@ import {
   docNavContent,
   crosslinksContent,
   searchContent,
+  PANE_COLLAPSE_HANDLER,
+  PANE_COLLAPSED_CLASS,
+  PANE_FRAME_CLASS,
   type AppGraphAssemblyInput,
   type AppGraphAssemblyResult,
 } from '../src/renderer/pane-graph.js'
@@ -337,18 +340,36 @@ describe('PaneRegistry — fail-states (§5.9 1-8)', () => {
 // paneSubtreeRoot — §5.8 8-9 happy + §5.9 9-10 fail-states.
 // ===========================================================================
 describe('paneSubtreeRoot (§5.8 8-9)', () => {
-  it('wraps a pane render output with id "pane-<id>" + targetPlacement [sidebar], preserving type/content/children', () => {
+  it('wraps a pane render output with id "pane-<id>" + targetPlacement [sidebar] in the U-SHELL-3 frame', () => {
     const render = (): ReturnType<PaneDefinition['render']> => ({
       type: 'ul',
       content: 'hello',
       children: [{ type: 'li', props: { id: 'li-1' } }],
     })
-    const wrapped = paneSubtreeRoot(def('doc-nav', 'app-graph', render), makeContext(), SIDEBAR_ZONE)
+    // W2-N5 — pass an explicit `collapsed: false`; the U-SHELL-3 frame is the
+    // ONLY code path, so the render root is now the frame BODY, not the pane root.
+    const wrapped = paneSubtreeRoot(def('doc-nav', 'app-graph', render), makeContext(), SIDEBAR_ZONE, false)
     expect(wrapped.props?.id).toBe('pane-doc-nav')
     expect(wrapped.placement).toEqual({ targetPlacement: [SIDEBAR_ZONE] })
-    expect(wrapped.type).toBe('ul')
-    expect(wrapped.content).toBe('hello')
-    expect(wrapped.children).toHaveLength(1)
+    // Frame shape: a `div` wrapper carrying the pane-frame class; is-collapsed ⟺
+    // collapsed===false (absent); collapse control always present.
+    expect(wrapped.type).toBe('div')
+    const cls = new Set<string>((wrapped.css as { classes?: string[] } | undefined)?.classes ?? [])
+    expect(cls.has(PANE_FRAME_CLASS)).toBe(true)
+    expect(cls.has(PANE_COLLAPSED_CLASS)).toBe(false)
+    expect(wrapped.content).toBeUndefined()
+    const children = (wrapped.children ?? []) as Array<Record<string, unknown>>
+    // The collapse control (header/handle) is present and carries the shared
+    // PANE_COLLAPSE_HANDLER; the render body is preserved inside the frame.
+    const hasCollapseHandler = children.some(
+      (c) =>
+        Array.isArray((c as { handlers?: unknown }).handlers) &&
+        (c as { handlers?: Array<{ name?: string }> }).handlers?.some(
+          (h) => h.name === PANE_COLLAPSE_HANDLER,
+        ),
+    )
+    expect(hasCollapseHandler).toBe(true)
+    expect(children).toHaveLength(2) // [collapse control, body]
   })
 
   it('overwrites a render-set id and targetPlacement with pane-<id> and [sidebarZone]', () => {

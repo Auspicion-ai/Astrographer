@@ -66,6 +66,21 @@ export interface ReconcileResult {
 const RAG_PREFIX = 'rag-'
 const PANE_PREFIX = 'pane-'
 
+/** W2-N11 — the deterministic stack-safety cap for the recursive content walks
+ *  (`collectRagIds` / `shapeProjection` / `canonical`), mirroring the ADR-4
+ *  / TOK-F1 stack-safety discipline. A hostile CIRCULAR or pathologically deep
+ *  `children` (or prop) graph is BOUNDED here rather than throwing
+ *  `RangeError: Maximum call stack size exceeded` — a deep walk returns a
+ *  partial/truncated result instead (spec U-STATE-1a/1e §9 L2). Not reachable
+ *  from a well-formed traversal envelope; this is the hostile-input DoS guard. */
+const MAX_RECONCILE_DEPTH = 256
+
+/** W2-N11 — the DETERMINISTIC sentinel a truncated shape projection returns once
+ *  the `MAX_RECONCILE_DEPTH` cap is crossed (a hostile circular/deep `children`
+ *  graph). A constant object keeps `shapeOf` (JSON.stringify) producing a
+ *  STABLE truncated string, so two identical inputs still compare equal. */
+const TRUNCATED_SHAPE: Record<string, boolean> = { __reconcileTruncated: true }
+
 /** A root is a content root iff its authored props.id is a `rag-<id>` (RAG
  *  document subtree) OR a `pane-<id>` (an app-graph pane). Return its
  *  { cssId, ragNodeId } or null (F2 — non-string / missing id). */
@@ -109,8 +124,13 @@ function childrenOf(node: LegacyNodeData | null | undefined): LegacyNodeData[] {
  *  `rag-` doc-child boundary. A nested `rag-` child's id IS added (so a change
  *  to a direct nested child marks its containing root), but its subtree is its
  *  own (collected via its own root entry). Non-rag descendants are walked
- *  through. Defensive against malformed `children` (never throws). */
-function collectRagIds(node: LegacyNodeData, out: Set<string>): void {
+ *  through. Defensive against malformed `children` (never throws).
+ *
+ *  W2-N11 — stack-safe: `depth` is threaded and capped at `MAX_RECONCILE_DEPTH`
+ *  so a hostile CIRCULAR or pathologically deep `children` graph is bounded
+ *  (returns a partial id set) instead of throwing `RangeError`. */
+function collectRagIds(node: LegacyNodeData, out: Set<string>, depth = 0): void {
+  if (depth > MAX_RECONCILE_DEPTH) return
   const self = ragIdOf(node)
   if (self != null) out.add(self)
   for (const c of childrenOf(node)) {
@@ -121,19 +141,24 @@ function collectRagIds(node: LegacyNodeData, out: Set<string>): void {
       out.add(cid)
       continue
     }
-    collectRagIds(c, out)
+    collectRagIds(c, out, depth + 1)
   }
 }
 
 /** Canonicalize a value for a stable JSON projection (sorted object keys), so
  *  key-order differences do not falsely report a change (LOW-8). Non-JSON
- *  values degrade to their `String()` form. */
-function canonical(value: unknown): unknown {
+ *  values degrade to their `String()` form.
+ *
+ *  W2-N11 — stack-safe: `depth` is threaded and capped at `MAX_RECONCILE_DEPTH`
+ *  so a hostile circular/deep prop/content value is bounded (returns a
+ *  truncated marker) instead of throwing `RangeError`. */
+function canonical(value: unknown, depth = 0): unknown {
+  if (depth > MAX_RECONCILE_DEPTH) return TRUNCATED_SHAPE
   if (value === null || typeof value !== 'object') return value === undefined ? null : value
-  if (Array.isArray(value)) return value.map((v) => canonical(v))
+  if (Array.isArray(value)) return value.map((v) => canonical(v, depth + 1))
   const obj = value as Record<string, unknown>
   const out: Record<string, unknown> = {}
-  for (const k of Object.keys(obj).sort()) out[k] = canonical(obj[k])
+  for (const k of Object.keys(obj).sort()) out[k] = canonical(obj[k], depth + 1)
   return out
 }
 
@@ -159,14 +184,20 @@ function projectionProps(node: LegacyNodeData): Record<string, unknown> {
 
 /** A stable normalized projection of a subtree for shape comparison (A3/§3.3):
  *  id + type + content + children + authored props, RECURSIVELY, in canonical
- *  (sorted) form. */
-function shapeProjection(node: LegacyNodeData): unknown {
+ *  (sorted) form.
+ *
+ *  W2-N11 — stack-safe: `depth` is threaded and capped at `MAX_RECONCILE_DEPTH`
+ *  so a hostile CIRCULAR or pathologically deep `children` graph is bounded
+ *  (returns the deterministic `TRUNCATED_SHAPE` sentinel for the capped tail)
+ *  instead of throwing `RangeError`. */
+function shapeProjection(node: LegacyNodeData, depth = 0): unknown {
+  if (depth > MAX_RECONCILE_DEPTH) return TRUNCATED_SHAPE
   return {
     id: (node?.props as { id?: unknown } | undefined)?.id ?? null,
     type: node?.type ?? null,
     content: canonical(node?.content ?? null),
     props: canonical(projectionProps(node)),
-    children: childrenOf(node).map((c) => shapeProjection(c)),
+    children: childrenOf(node).map((c) => shapeProjection(c, depth + 1)),
   }
 }
 
@@ -516,10 +547,22 @@ export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconci
     // Payload hit — any effective-changed id anywhere in either subtree.
     let payloadHit = false
     for (const id of effectiveChanged) if (prevIds.has(id) || nextIds.has(id)) { payloadHit = true; break }
+    // W2 (U-STATE-1e adversarial) — a root that is materialized from a subtree
+    // carrying a fork-consumed id (a CROSS-document fork-echo: ANOTHER document
+    // forked a shared root this root references, and its id is globally
+    // consumed) must NOT silently swallow an indepdentent content edit. In the
+    // echo (state 6) the root's own shape is UNCHANGED so it stays `kept`;
+    // consume the shape comparison when the root carries a consumed id so a
+    // genuine same-broadcast edit to the shared root in THIS document flips it
+    // to `replaced` instead of being lost.
+    let carriesConsumedId = false
+    for (const id of prevIds) if (consumed.has(id)) { carriesConsumedId = true; break }
+    if (!carriesConsumedId) for (const id of nextIds) if (consumed.has(id)) { carriesConsumedId = true; break }
     // MEDIUM-5 — fallback is used IN ADDITION to the payload. Pane roots are
     // ALWAYS shape-compared (their content is host-driven, not RAG-payload).
     const shapeChanged = shapeOf(prev.node) !== shapeOf(x.node)
-    const isReplaced = payloadHit || idSetChanged || ((useFallback || x.isPane) && shapeChanged)
+    const useShape = useFallback || x.isPane || carriesConsumedId
+    const isReplaced = payloadHit || idSetChanged || (useShape && shapeChanged)
     if (isReplaced) replaced.push(scoped)
     else kept.push(scoped)
   }

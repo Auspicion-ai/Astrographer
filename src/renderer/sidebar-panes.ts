@@ -1618,8 +1618,16 @@ export class SidebarPanes {
    *  the toggle path did not). The assembler authored the fresh classes into the
    *  assembled template; apply them to the LIVE zone nodes through the managed
    *  `state-slice` channel (pane-additive — no `loadEnvelope`/teardown, `zone:*`
-   *  identities stable). A zone whose mirror already matches is untouched (no
-   *  redundant managed write). */
+   *  identities stable).
+   *
+   *  W2-N8 (option (b)) — coalesced to ONE reconcile unit: ALL changed zones are
+   *  gathered in a SINGLE pass first, then applied (a zone whose mirror already
+   *  matches is untouched — no redundant managed write). The engine's
+   *  `state-slice` op is per-node (there is no cross-node batch op), so each
+   *  CHANGED zone lands its own journaled slice; in the common case a visibility
+   *  toggle empties/repopulates exactly ONE zone, so one reconcile produces ONE
+   *  journal entry. Correctness is unchanged: the mirror classes are identical,
+   *  no `loadEnvelope`/teardown. */
   private syncZoneMirrors(envelope: LegacyInitialData): void {
     if (this.runtime == null) return
     const children = (envelope.template?.root?.children ?? []) as Array<{
@@ -1627,6 +1635,9 @@ export class SidebarPanes {
       placement?: { placementName?: unknown }
       css?: { classes?: unknown }
     }>
+    // W2-N8 — single gather pass: collect every zone whose desired mirror
+    // diverges from the LIVE node, in LAYOUT_PANE_ZONES order.
+    const changed: { zone: LayoutZoneName; desired: string[] }[] = []
     for (const zone of LAYOUT_PANE_ZONES) {
       const container = children.find(
         (c) => c?.placement?.placementName === zone || c?.props?.id === `zone:${zone}`,
@@ -1635,10 +1646,15 @@ export class SidebarPanes {
         ? (container.css.classes as unknown[]).map(String)
         : []
       if (sameClassSet(this.currentZoneMirror(zone), desired)) continue
+      changed.push({ zone, desired })
+    }
+    if (changed.length === 0) return
+    // W2-N8 — apply each changed zone through the managed `state-slice` channel.
+    for (const w of changed) {
       this.runtime.applyCommand({
         kind: 'state-slice',
-        node: `zone:${zone}`,
-        mutation: [{ targetProp: 'css.classes', mode: 'replace', value: desired }],
+        node: `zone:${w.zone}`,
+        mutation: [{ targetProp: 'css.classes', mode: 'replace', value: w.desired }],
       })
     }
   }

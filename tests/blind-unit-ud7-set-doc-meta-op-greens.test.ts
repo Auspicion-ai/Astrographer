@@ -608,10 +608,10 @@ describe('UD7-G14 — undo/redo inverts tags; fresh boot re-hashes', () => {
 //       (§5.3, §5.6.2-4, §5.7.13, §5.8, A7)
 // ===========================================================================
 describe('UD7-G15 — the seam set', () => {
-  it('groupForTool resolves "edit"; ALL_TOOLS carries the row (census 58)', () => {
+  it('groupForTool resolves "edit"; ALL_TOOLS carries the row (census 59)', () => {
     expect(groupForTool('edit.set_doc_meta')).toBe('edit')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('edit.set_doc_meta')
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(58)
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(59)
   })
 
   it('RpcMethod union accepts "edit.set_doc_meta" (type-level)', () => {

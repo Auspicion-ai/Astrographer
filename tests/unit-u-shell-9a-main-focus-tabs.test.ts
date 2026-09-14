@@ -990,6 +990,69 @@ describe('U-SHELL-9a — HOST adversarial-fix regressions', () => {
 })
 
 // ===========================================================================
+// W2-N10 — non-document stage-mount settle (spec §2.10, node-testable part).
+// The spec deferred the async `search`-body mount (`mountSearchStage` →
+// `bridge.rag.query`) and the parked `graph`/`template` placeholder bodies as
+// "settled live" (spec §2.10 deferral). The NODE-testable half is that each
+// settles through the SAME `SidebarPanes.mountTab` single-active path HOST-1
+// made node-testable — no teardown, no throw — so a `search` tab's derived
+// results body routes through `rag.query`, and a parked graph/template target
+// renders its placeholder body. Live-runtime-only equivalence (dispatch /
+// get_rendered_html) stays in the battery-skip block below.
+// ===========================================================================
+describe('U-SHELL-9a — W2-N10 non-document stage-mount settle (§2.10)', () => {
+  it('W2-N10 — a `search` tab mount routes its derived body through `rag.query` (mountSearchStage) and renders', async () => {
+    const h = stageHarness({ documents: [{ documentId: 'doc-a', title: 'Doc A' }] })
+    await h.host.boot(h.runtime)
+    // Spy the harness bridge's `rag.query` so the routed params are observable.
+    // The host's `this.bridge` IS the same object as `globalThis.window.provident`
+    // (stageHarness sets both from one `bridge`), so replacing the method in
+    // place routes mountSearchStage through the spy.
+    const provident = (globalThis as unknown as { window: { provident: { rag?: Record<string, unknown> } } }).window.provident
+    const originalQuery = (provident.rag as { query?: (...a: unknown[]) => Promise<unknown> }).query
+    const querySpy = vi.fn(originalQuery)
+    ;(provident.rag as { query?: unknown }).query = querySpy as never
+
+    const searchEntry: TabEntry = {
+      id: 's1',
+      target: { kind: 'search', queryId: 'q1' },
+      title: 'Search: alpha',
+      search: { query: 'alpha', topK: 5 },
+    }
+    h.host.mountTab(searchEntry)
+    await new Promise((r) => setTimeout(r, 0))
+
+    // mountSearchStage → this.bridge.rag.query(query, topK, undefined, params)
+    expect(querySpy).toHaveBeenCalledTimes(1)
+    expect(querySpy.mock.calls[0]?.[0]).toBe('alpha')
+    expect(querySpy.mock.calls[0]?.[1]).toBe(5)
+    // The derived-results body is mounted in the stage — no teardown, no throw
+    // (the query round-trips into searchTabContent; the query input renders).
+    const html = (h.mount as { innerHTML: string }).innerHTML
+    expect(html).toContain('stage-search-tab')
+    expect(html).toContain('search-tab-input')
+  })
+
+  it('W2-N10 — a parked `graph` target renders its placeholder body without a teardown', async () => {
+    const h = stageHarness({ documents: [{ documentId: 'doc-a', title: 'Doc A' }] })
+    await h.host.boot(h.runtime)
+    h.host.mountTab({ id: 'g1', target: { kind: 'graph', view: 'knowledge' }, title: 'Graph' })
+    const html = (h.mount as { innerHTML: string }).innerHTML
+    expect(html).toContain('stage-placeholder-graph')
+    expect(html).toContain('data-stage')
+  })
+
+  it('W2-N10 — a parked `template` target renders its placeholder body without a teardown', async () => {
+    const h = stageHarness({ documents: [{ documentId: 'doc-a', title: 'Doc A' }] })
+    await h.host.boot(h.runtime)
+    h.host.mountTab({ id: 'tpl1', target: { kind: 'template', templateId: 'tpl-1' }, title: 'Template' })
+    const html = (h.mount as { innerHTML: string }).innerHTML
+    expect(html).toContain('stage-placeholder-template')
+    expect(html).toContain('data-stage')
+  })
+})
+
+// ===========================================================================
 // Live-runtime / battery equivalence — not node-testable (the U-SHELL-1 /
 // U-SHELL-3 convention). These require the live Runtime + `provident.dispatch`
 // / `provident.get_rendered_html`.

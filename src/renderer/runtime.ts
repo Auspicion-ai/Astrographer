@@ -31,6 +31,8 @@ import {
   type RenderOptions,
   type SerializedRenderDoc,
   type Payload,
+  type JournalViewOptions,
+  type JournalView,
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
 import type { DocumentRoot, MaterializedRoot, ReconcileResult } from './content-reconcile.js'
@@ -1424,6 +1426,16 @@ export class Runtime {
     // graph), so get_node_state survives JSON serialization over MCP.
     const projected = states.map((s) => this.projectedState(s as CompiledState))
     return { nodeId, states: projected as unknown[], census: this.census() }
+  }
+
+  /** Unit U-JR1 §2.2 — the read-only engine-journal introspection read
+   *  (`provident.get_journal`). A THIN synchronous projection over the engine's
+   *  `Supervisor.journalEntries(opts?)`: the engine sanitizes the payload and
+   *  clamps the window, so this host seam forwards the raw RPC payload (typed
+   *  `unknown` at the renderer seam) VERBATIM — it never mutates, drains,
+   *  awaits, re-renders, or flushes. */
+  journalEntries(opts?: unknown): JournalView {
+    return this.supervisor.journalEntries(opts as JournalViewOptions | undefined)
   }
 
   /** Build a JSON-safe compiled-state mirror: every scalar/binding field is

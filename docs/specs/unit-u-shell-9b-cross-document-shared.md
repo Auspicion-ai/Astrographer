@@ -147,6 +147,8 @@ complete**.
 | **H5** | LOW | `ownersFor` doesn't dedupe (`['A','A','B']` → shared/checklist wrong). | **FIXED (2026-09-13)** — `ownersFor` de-dupes order-preserving, so a repeated owner id cannot inflate the owner count (`isShared`/`detectSharedCommit` correct) or duplicate an owners-box/checklist entry. Regression: H5 test in the same block. |
 | **H6** | LOW | `planFork` can emit invalid plans (`root ∉ subtree`; all-owner migration leaves X ownerless). | **FIXED (2026-09-13)** — `planFork` rejects `root ∉ subtree` and refuses to migrate every owner (X must keep ≥1 original owner); non-owner `migrateDocumentIds` are ignored. Regressions: H6 tests in the same block. |
 | **H7** | LOW | owners-box toggle calls an uninstalled `window.provident.sidebar.toggleOwnersBox`. | **FIXED (2026-09-13, in H2)** — `SidebarPanes.toggleOwnersBox(ragId)` (flip `collapsedOwnersBoxes` + re-derive; unknown/unshared no-op) is registered on the `window.provident.sidebar` bridge surface (`preload.ts` `SidebarMethods`) alongside the H2 decoration. |
+| **F1** | LOW | (`buildOwnersMap` no-prototype-pollution / totality) A prototype-key `target` (`__proto__`/`constructor`) could be treated as an inherited key and throw, breaking the P-IM-2 "never throws" claim. | **FIXED (host) — NOTE:** `buildOwnersMap` uses a **null-prototype map**, so a prototype-key `target` is an **own** key, never inherited, never throws — the P-IM-2 register's totality/no-pollution clause is now truthful. Regression: `tests/props-cross-doc-shared.test.ts` (`__proto__`/`constructor` negative-target block). |
+| **F6** | LOW | `applySharedSubtreeDecoration(null)` / `undefined` throws at `clone.content`. | **§3a NOTE (do NOT register)** — a future register row over that decorator path would be **BROKEN** on these inputs; noted here only, no register row. |
 
 **Confirmed-safe:** `detectSharedCommit` F8 blocked shape; no prototype
 pollution; `planMutateAll` same-id `putNode`; `rag-store.applyBatch` atomicity
@@ -319,7 +321,54 @@ are **U-SHELL-9a** states, not this unit's red set.)*
 *(Original U-SHELL-9 F1–F6 + F9 — the tab-model fail-states — are
 **U-SHELL-9a** fail-states.)*
 
-## 5. Census
+## 5.7 Property register (PBT)
+
+**PBT backfill (2026-09-13).** This unit is ALREADY-GREEN (H1–H7 fixed,
+`docs/specs/unit-u-shell-9b-greens.md` — 23 PASS / 0 FAIL); this register is a
+MANDATORY typed-property backfill on the landed PURE module
+`src/renderer/cross-document-shared.ts` only. It follows the sibling convention
+(`docs/specs/unit-ujr1-get-journal.md` §5.7; itself adopting
+`unit-gn-mcp-ui-wiring.md` §5.7 / `unit-shell-integration.md` §5.7 — identical row
+typings, ≤8-row cap, class tally line, and the deterministic seeding /
+≤100-attempts-per-row / ≤400-total / stop-after-5 budget). Rows are typed **P-IM**
+(input-model), **P-SM** (state-model), or **P-TP** (transform) — NEVER F-rows, NEVER
+§4 Fn rows (the Option-C fail-states already exist as §4 F7/F8/F9b/F10b). The
+register pins the H4/H5/H6 adversarial fixes (totality of `planFork`, the
+`ownersFor` order-preserving de-dupe, the root ∈ subtree guard + ≥1-original-owner
+rule + non-owner-migration rejection) as INVARIANTS, so a regression re-opens one
+of them as a property failure. Every row was verified directly against the ACTUAL
+landed module (all signatures/paths below are the code's).
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **`ownersFor` is total + order-preserving de-duping + deterministic (H5).** Any carrier — `null`, `undefined`, a non-record, a record whose `owners[ragNodeId]` is absent or not an array, or an array with repeated / non-string / empty owner ids — yields a deterministic list, sorted in FIRST-ORDER of first occurrence; a repeated owner id collapses to ONE entry so it cannot inflate the owner count or duplicate an owners-box/checklist entry; an absent/invalid carrier or unknown id yields `[]`. NEVER throws. | `strat:owners-for-total-dedup` | ∀ generated `(owners, ragNodeId)`: `ownersFor` returns without throwing; the output is order-preserving across first occurrences; every output id is a non-empty string from the input's list with NO duplicates (repetition `['A','A','B',5,'']`-style collapses to `['A','B']`); `ownersFor(null|undefined|non-record, r) === []`, `ownersFor(record, unknownId) === []`, and a record entry holding a non-array value yields `[]`; two calls with deep-equal inputs return deep-equal outputs. |
+| `P-IM-2` | IM | **`buildOwnersMap` is total + deterministic over the edge list; foreign/malformed edges contribute nothing and the input is never mutated.** A non-array `edges` yields `{}` (never throws); a malformed edge (non-object, a non-string/empty `target`, or a non-array `documentIds`) is ignored; each edge's non-empty string `documentIds` are unioned (order-preserving de-duped) onto `owners[edge.target]`, so a key exists EXACTLY when at least one valid owner targets it. The SAME edge list always yields the IDENTICAL `SharedOwners`. | `strat:owners-map-total` | ∀ generated edge-list `E`: `buildOwnersMap(E)` is deterministic (two calls are deep-equal); `buildOwnersMap(non-array) === {}`; `buildOwnersMap(E)` is a `SharedOwners` whose `owners[target]` equals the order-preserving de-duped union of the non-empty `documentIds` across every edge with that `target`, and has NO key receiving only empty/foreign `documentIds`; the input `E` is deep-equal before and after the call. |
+| `P-IM-3` | IM | **`plainRagId` id-scope round-trip (scoped → plain) + rejection of non-`rag-` / too-short ids (H3/W2-N12).** A `rag-`-prefixed authored id (unscoped `rag-<ragId>` or document-scoped `rag-<documentId>--<ragId>`) whose `data-rag-node-id` is a non-empty string CONSISTENT with the id recovers the PLAIN ragId; the consistency test is SUFFIX-based (`tail === D` OR `tail.endsWith('--'+D)`), robust to `--` inside the document id OR the rag id (AF3-1). A non-`rag-`-prefixed id or one with `length ≤ 4` returns `null`; otherwise (a `rag-` id without a consistent data prop) it falls back to `id.slice(4)`. | `strat:rag-id-roundtrip` | ∀ generated props: `rag-doc--X` with `data-rag-node-id='X'` → `'X'`; `rag-X` with `data-rag-node-id='X'` → `'X'`; `rag-…--…` forms where the target `ragId` or the document id itself contains `--` (e.g. `rag-foo--bar--X` with `data-rag-node-id='X'`) → `'X'` (suffix, not `indexOf`); `id='pane-X'`, `id='rag-'`, `id='rag'`, `id=''`, or a missing/non-string `props.id` → `null`; a `rag-` id with `length > 4` and an absent/inconsistent `data-rag-node-id` → `id.slice(4)`. |
+| `P-SM-1` | SM | **`isShared` iff `ownersFor(...).length > 1` (CROSS-DOCUMENT-SHARED).** Sharing is EXACTLY the de-duped owner count exceeding 1; a repeated owner id cannot flip a node to shared (H5). | `strat:shared-iff-gt-one` | ∀ generated `(owners, ragNodeId)`: `isShared(owners, ragNodeId) === (ownersFor(owners, ragNodeId).length > 1)` — i.e. `true` exactly when the de-duped owner list has ≥2 entries, `false` for 0/1 owner. |
+| `P-SM-2` | SM | **`detectSharedCommit` is a total classifier: blocked / null / warn (`F8`/`W2-N13`/`F9b`).** A `null`/non-record reverse map → a warn object with `blocked: true` + a `reason` (never a silent mutate); a de-duped owner count ≤ 1 → `null`; a de-duped owner count > 1 → a warn with `options: ['fork','mutate-all']` and `requireChecklist === (count > 2)`. | `strat:detect-shared-classify` | ∀ generated `(nodeId, editingDocumentId, owners)`: non-record owners → `{blocked:true, reason:string}` (non-null); an owner list of ≤1 de-duped entries → `null`; a list of >1 de-duped entries → `{nodeId, editingDocumentId, owners, options:['fork','mutate-all'], requireChecklist === (owners.length > 2)}`. |
+| `P-TP-1` | TP | **`planFork` is TOTAL over malformed input/subtree/edge entries/missing minters + the `root ∈ subtree` guard + the H6 ≥1-original-owner + non-owner-migration rules + minted-id uniqueness.** Any malformed request (non-object/null input, non-object/id-less subtree entries, malformed edge entries, missing non-function minters, `root ∉ subtree`, all-owners migration, empty `forkOwners`) yields the F10b NO-OP plan (`ops:[]`, `forkRootId:''`, `forkNodeIds:{}`) and NEVER throws; a malformed (non-array) `ownedNodeIds` maps to `[]` and yields a **REAL** plan (never a no-op on that basis — the pinned test expects the mapped `[]`). A real plan mints ONE fresh node id per subtree node (pairwise-distinct when the minter is injective), maps `forkRootId = forkNodeIds[root.id]`, keeps ≥1 ORIGINAL owner (`originalOwners`), restricts `forkOwners` to OWNER members (a non-owner `migrateDocumentId` is ignored — H6), and leaves other owners' edges/ids untouched. | `strat:plan-fork-total` | ∀ generated `ForkPlanInput`: `planFork` returns a `ForkPlan` without throwing; for malformed inputs (null/non-object, filter-cleared `subtree`, `root.id ∉ subtree`, no minters, `forkOwners`/`originalOwners` empty) the plan is the no-op (`ops:[]`, `forkRootId:''`); for a real plan: every `subtree` node id has a distinct `forkNodeIds` entry (with an injective minter), `forkRootId === forkNodeIds[root.id]`, `forkOwners ⊆ ownerList`, `originalOwners = ownerList − forkOwners` with `originalOwners.length ≥ 1`, and `forkOwners ∩ originalOwners = ∅`. |
+
+**Class tally:** IM ×3, SM ×2, TP ×1 = **6 rows ≤ 8** ✔.
+
+**SPEC NOTE (P-IM-2 totality / no-prototype-pollution, F1):** the "total … never
+throws" claim now holds because **`buildOwnersMap` uses a null-prototype map** — a
+prototype-key `target` (`__proto__`/`constructor`) is an **own** key, never
+inherited, never throws. See the §2.6 F1 adversarial line (FIXED host).
+
+The rows above are **NOT over-strength**: every proposition is directly observable
+from the landed PURE module's exported surface (all six tested functions —
+`ownersFor`, `buildOwnersMap`, `plainRagId`, `isShared`, `detectSharedCommit`,
+`planFork` — are already in `src/renderer/cross-document-shared.ts` and this
+register was authored against the ACTUAL code, not an imagined one). None reaches
+into the store, the DOM, the reconciler, `sidebar-panes.ts`, or any other `src/`
+file; none invents an export or a return field; none demands a new seam. Each row
+mirrors exactly one pinned behavior already fixed/green (H5 de-dupe → P-IM-1 +
+P-SM-1; H3/W2-N12 + AF3-1 round-trip → P-IM-3; F8 classification → P-SM-2; H4
+totality + H6 guard/migration + F10b no-op → P-TP-1) as an invariant rather than
+adding new fail-state surface, so the register CANNOT reject the landed module —
+a correct module satisfies all six propositions by construction.
+
+## 5.8 Census
 
 - Provident: all open tab bodies mounted in the stage; the C20 shared-subtree
   class + owners box + handlers (app-graph, MCP-visible); the Option-C warn

@@ -192,10 +192,11 @@ function zoneContainerChildren(
  * authored (header/handle only — spec §2.2/§2.5 pin 1); the frame root carries
  * `is-collapsed` and keeps its stable identity so expanding restores the body.
  *
- * Backward compatibility: a caller that omits `collapsed` gets the pre-
- * U-SHELL-3 shape (the render root IS the pane root — the Unit H
- * `paneSubtreeRoot` contract). The app-graph assembler always supplies the
- * boolean, so every assembled pane frame carries the control. PURE. */
+ * W2-N5 — the pre-U-SHELL-3 test-only shape (a caller omitting `collapsed` got
+ * the render root as the pane root — the Unit H `paneSubtreeRoot` contract) is
+ * REMOVED: the U-SHELL-3 frame is the ONLY code path. The app-graph assembler
+ * always supplies the boolean, so every assembled pane frame carries the
+ * control; a 3-arg (no `collapsed`) caller is treated as expanded. PURE. */
 export function paneSubtreeRoot<C>(
   def: PaneDefinition<C>,
   ctx: C,
@@ -210,19 +211,10 @@ export function paneSubtreeRoot<C>(
     throw new Error(`paneSubtreeRoot: pane "${def.id}" render returned nothing`)
   }
 
-  // Pre-U-SHELL-3 shape (no collapse frame opted into): the render root IS the
-  // pane root (the Unit H `paneSubtreeRoot` contract).
-  if (collapsed === undefined) {
-    const existingCss = (renderRoot as { css?: { classes?: string[] } }).css
-    return {
-      ...renderRoot,
-      props: { ...(renderRoot.props ?? {}), id: `pane-${def.id}` },
-      placement: { targetPlacement: [sidebarZone] },
-      ...(existingCss !== undefined ? { css: existingCss } : {}),
-    }
-  }
-
   // U-SHELL-3 (C5) pane frame: a header/handle control + the body (expanded).
+  // W2-N5 — this is the ONLY shape (the pre-U-SHELL-3 test-only branch was
+  // removed): any caller, whether it passes an explicit boolean or omits
+  // `collapsed`, gets the U-SHELL-3 frame.
   const control: LegacyNodeData = {
     type: 'button',
     props: {
@@ -244,7 +236,10 @@ export function paneSubtreeRoot<C>(
   const frameClasses = collapsed === true ? [PANE_FRAME_CLASS, PANE_COLLAPSED_CLASS] : [PANE_FRAME_CLASS]
   return {
     type: 'div',
-    props: { id: `pane-${def.id}` },
+    // U-SHELL-N7 (HOST-1) — the frame ROOT carries the stable authored
+    // `data-pane-id` (matching the collapse-toggle's own) so the delegated
+    // `.pane-frame[data-pane-id='<id>']` pointer wiring actually matches.
+    props: { id: `pane-${def.id}`, 'data-pane-id': def.id },
     placement: { targetPlacement: [sidebarZone] },
     css: { classes: frameClasses },
     // Collapsed = header/handle only: the body nodes are NOT authored.

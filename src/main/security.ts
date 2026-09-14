@@ -7,6 +7,7 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   'provident.get_markdown': 'read',
   'provident.list_targets': 'read',
   'provident.get_node_state': 'read',
+  'provident.get_journal': 'read',
   'provident.code.get': 'read',
   'provident.code.validate': 'read',
   'provident.dispatch': 'dispatch',

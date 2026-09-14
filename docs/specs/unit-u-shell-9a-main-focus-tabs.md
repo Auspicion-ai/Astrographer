@@ -260,7 +260,51 @@ box — are **U-SHELL-9b** states, not this unit's red set.)*
 *(Original U-SHELL-9 F7 — a fork failure mid-commit — and F8 — a shared node
 whose reverse map is unavailable — are **U-SHELL-9b** fail-states.)*
 
-## 5. Census
+## 5.7 Property register (PBT)
+
+This is a **CODE-BEARING** unit, so the register is mandatory. Rows are typed
+**P-IM** (input-model), **P-SM** (state-model), or **P-TP** (transform) — NEVER
+F-rows, NEVER §4/FS-n rows (the unit's fail-states already exist as §4 F1–F6).
+**At most 8 rows.** The register follows the **`docs/specs/unit-shell-integration.md`
+§5.7** and **`docs/specs/unit-gn-mcp-ui-wiring.md` §5.7** convention (identical row
+typings, ≤8-row cap, class tally line, and the deterministic seeding /
+≤100-per-row / ≤400 total / stop-after-5 budget — see the siblings' PBT-gate
+note). The register is genuinely invariant-bearing: `coerceTabState` /
+`coerceTabTarget` are **TOTAL** pure fail-soft coercions over the C9 `tabs` slice;
+the open-set dedup + `order`-permutation + `activeId ∈ open` structural invariants
+(§2.2) hold **after** normalization; the version gate → default is total; and the
+focus-selection mutators (`focusTarget`/`closeTab`/`reorderTab`) preserve those
+invariants. The rows consolidate the §2.2 structural invariant (F1) and the §4
+fail-states (F1/F6, HOST-6) into invariant form rather than adding fail-state
+surface.
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **`coerceTabState` is total + idempotent.** Every input — a well-formed `TabState`, a record with junk `open`/`order`/`activeId`, a non-record, `null`/`undefined`/primitive, an array — yields a valid `TabState` and NEVER throws (a `version !== TAB_STATE_VERSION` or a non-record fails soft to the empty default set, F6). Coercion is idempotent: re-coercing any output is stable. | `strat:coerce-tab-total` | ∀ generated input `x`: `coerceTabState(x)` returns a `TabState` (never throws) with `version === TAB_STATE_VERSION`; and `coerceTabState(coerceTabState(x))` deep-equals `coerceTabState(x)`. |
+| `P-IM-2` | IM | **Target coercion is total + kind-discriminated (HOST-6).** `coerceTabTarget(x)` returns `null` for a non-record, an unknown `kind`, or an empty/missing/non-string kind-specific identity — it never emits a partial/phantom kind; otherwise it returns a target of EXACTLY that `kind` whose identity field (`documentId`/`queryId`/`view`/`templateId`/`id`) is a non-empty string. | `strat:coerce-target-total` | ∀ generated input `x`: `coerceTabTarget(x)` is either `null`, or a `TabTarget` whose `kind` is one of `document`/`search`/`graph`/`template`/`other` carrying the matching non-empty identity string; the five malformed classes (non-record, `kind` not in the union, empty id, missing id, non-string id) all map to `null`; no partial/phantom kind value is ever produced. |
+| `P-SM-1` | SM | **Open-set normalization: unique non-empty ids; `order` a permutation of `open[].id`.** After `coerceTabState`, `open[].id` values are unique and non-empty; each surviving entry's coerced target is non-`null`; duplicate ids keep the FIRST occurrence; entries with an empty/missing/non-string id, a `null` target, or a non-record shape are dropped; `order` is a permutation of `open[].id` — the same id set, no duplicates, every open id present once — built as the surviving `rawOrder` ids (those that name a coerced open member, in input-relative order, deduped) FOLLOWED BY the surviving open ids not already emitted (in `open`-relative order), so a supplied explicit `order` is honoured where well-formed and dangling/unknown ids are dropped. | `strat:coerce-open-normalized` | ∀ generated input `x`, with `s = coerceTabState(x)`: `|order| === |open|`; `new Set(order)` equals `new Set(open.map(e => e.id))` (same unique id set); every `open[].id` is a non-empty string; every `open[].target` is non-`null`; no id repeats in `open` or in `order`; a `rawOrder` id names a coerced open member only when it is in `s.open`; ordering the coerced `open` by the position each id takes in `s.order` yields the same sequence as `s.order` (i.e. every open id appears exactly once in `s.order`). |
+| `P-SM-2` | SM | **`activeId ∈ open` structural invariant (§2.2/F1) holds after coercion.** After `coerceTabState`, `activeId` is `null` OR a member of `open[].id`. A supplied valid `activeId` (a non-empty string naming a surviving open id) is PRESERVED; a supplied `activeId` that is non-string / missing / dangling (naming a dropped id or absent) falls back to the FIRST tab in `order`, else `null` (F1). | `strat:active-in-open` | ∀ generated input `x`, with `s = coerceTabState(x)`: `s.activeId === null` OR `s.open.some(e => e.id === s.activeId)`; for a generated `activeId` string naming a surviving open member, `s.activeId ===` that string; for a generated non-string / missing / dangling `activeId`, `s.activeId === s.order[0]` when `s.order.length > 0`, else `null`. |
+| `P-SM-3` | SM | **`focusTarget` find-or-open + `targetEquals` identity (dedup semantics, §2.7/F5).** `targetEquals(a, b)` is `true` iff same `kind` AND same kind-specific identity — a `document` target is never equal to a `search`/`graph`/`template`/`other` target. `focusTarget(state, target)` with `newTab` falsy either ACTIVATES an existing equal target (`open` unchanged, `activeId` = the existing id, no duplicate) OR appends a NEW entry (collision-free id; `open` and `order` each grow by one; `activeId` = the new id); with `newTab: true` it always appends a fresh entry. | `strat:focus-find-or-open` | ∀ valid `state` + `target`: if `state.open` has an entry `e` with `targetEquals(e.target, target)` and `newTab !== true`, then `focusTarget(state, target, {newTab:false}).open` deep-equals `state.open` and its `activeId === e.id`; else `focusTarget(...).open.length === state.open.length + 1` with a collision-free new id and `activeId` = the appended id; with `newTab: true`, `open.length` always grows by 1; and `targetEquals` is true iff the two targets share a `kind` and the matching identity string. |
+| `P-TP-1` | TP | **Version-gating → the empty default (F6) + `defaultTabState`/constant determinism.** `coerceTabState(x)` returns the empty default when `x` is NOT a record OR when `x.version !== TAB_STATE_VERSION` (a different/absent/stale schema fails soft to the empty set, never a partial migration). `defaultTabState()` returns a FRESH object per call with `version === TAB_STATE_VERSION`, `open === []`, `activeId === null`, `order === []`; `TAB_STATE_VERSION === 1`; `TAB_LANDING` is `{ kind: 'other', id: 'landing' }`. | `strat:version-gate-default` | ∀ generated non-record `x`: `coerceTabState(x)` deep-equals `defaultTabState()`; ∀ generated record `x` with `x.version !== 1`: `coerceTabState(x)` deep-equals `defaultTabState()`; ∀ call: `defaultTabState()` is a `version === 1` empty state (`open === order === []`, `activeId === null`); `TAB_STATE_VERSION === 1`; `TAB_LANDING` deep-equals `{ kind: 'other', id: 'landing' }`. |
+| `P-TP-2` | TP | **`closeTab` / `reorderTab` preserve the structural invariants (§2.2/F4).** `closeTab(state, id)` on a KNOWN id removes it from both `open` and `order`, leaving a valid `TabState` (`order` a permutation of the new `open[].id`); when the CLOSED tab was active, `activeId` falls to the LEFT neighbour, else the RIGHT, else `null` (F4); an UNKNOWN id is a no-op (returns `state` itself). `reorderTab(state, id, toIndex)` never changes `open`/`activeId`, keeps `order` a permutation of `open[].id` with `toIndex` clamped into the valid index range `[0, order.length]` (the post-removal `order`, i.e. `0 .. |open|−1`) before re-inserting the moved id; an unknown id is a no-op. | `strat:close-reorder-invariant` | ∀ valid `state` + id `i`: if `i ∈ state.order`, `s' = closeTab(state, i)` has `s'.order` = `state.order` minus `i`, `s'.open` = `state.open` minus the `i` entry, `s'.activeId === null` OR `∈ s'.open`, and when `i === state.activeId` the fallback is the LEFT neighbour id (the id at the preceding `order` index) if any, else the RIGHT if any, else `null`; if `i ∉ state.order`, `closeTab` returns `state` unchanged; ∀ `i`, `toIndex`: `s'' = reorderTab(state, i, toIndex)` has `s''.open` deep-equals `state.open`, `s''.activeId === state.activeId`, `|s''.order| === |state.open|`, and `s''.order` a permutation of `s''.open[].id`, with the moved id's final position = clamp of `toIndex` into `[0, |state.open| − 1]`; unknown reorder id → no-op. |
+
+**Class tally:** IM ×2, SM ×3, TP ×2 = **7 rows ≤ 8** ✔.
+
+The rows above are **NOT over-strength**: every proposition is directly observable
+from the pinned `src/renderer/tab-state.ts` export surface (§2.9 pin 1) — all seven
+are pure-coercion or pure-mutation truths over the `.d.ts`-visible types
+(`TabTarget`/`TabEntry`/`TabState`/`TabSearchParams`/`TabDefaultContext`) and the
+structural invariants already pinned in §2.2 (F1) / §2.5 (F1/F6) / §2.4 (F5)
+without inventing a new field, a new seam, or a new fail-state. They consolidate
+the §2/§4 rows into invariant form (open-set normalization + `order` permutation +
+`activeId ∈ open` are the F1 structural invariant; the version gate + non-record
+default are F6; the empty target → `null` is HOST-6; the left/right close fallback
+is F4; duplicate-target tolerance is F5), so the register cannot reject the landed
+module — every row is provably satisfying the existing `coerceTabState` /
+`coerceTabTarget` / `focusTarget` / `closeTab` / `reorderTab` / `defaultTabState`
+implementations (§2.9).
+
+## 5.8 Census
 
 - Shell: top-bar strip controller (active/close/reorder/new/overflow) + the
   `TabState` serialize path; provident: the **single active** tab body in the

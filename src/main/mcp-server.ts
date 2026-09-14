@@ -1793,6 +1793,7 @@ export class ProvidentMcpServer {
     'provident.get_markdown',
     'provident.list_targets',
     'provident.get_node_state',
+    'provident.get_journal',
     'provident.code.get',
     'provident.code.validate',
     'provident.load',
@@ -2212,6 +2213,29 @@ export class ProvidentMcpServer {
         },
       }, async (args: { target: unknown }) => {
         const value = await backend.invoke('nodeState', args.target)
+        return text(value)
+      }))
+    }
+
+    // Unit U-JR1 §2.2 — the read-only engine-journal introspection tool
+    // `provident.get_journal`. A THIN renderer-routed read over the engine's
+    // `Supervisor.journalEntries(opts?)` (mirrors the `get_node_state` read
+    // precedent — same `read` group, same backend.invoke dispatch, no mutation).
+    if (allowed.includes('provident.get_journal')) {
+      registered.set('provident.get_journal', server.registerTool('provident.get_journal', {
+        title: 'Read the engine journal',
+        description:
+          'Read a sanitized snapshot + position accessors of the engine ' +
+          'Supervisor journal (undo/redo stacks). Read-only: never mutates, ' +
+          'never drains, never re-renders. `afterIndex` is an absolute start ' +
+          'override (clamped to [0,total]); `limit` clamps to [1,1000] (default ' +
+          '500).',
+        inputSchema: {
+          afterIndex: z.number().optional(),
+          limit: z.number().optional(),
+        },
+      }, async (args) => {
+        const value = await backend.invoke('journalEntries', args)
         return text(value)
       }))
     }

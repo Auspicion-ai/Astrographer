@@ -191,6 +191,14 @@
     <div id="app" class="card"></div>
     <div id="panes"></div>
     <div id="operator-panes"></div>
+    <!-- Unit U-SHELL-N7 (HOST-1) — the four shell resize gutters (shell chrome,
+         plain authored elements, no on:* handler). Each carries a matching
+         `data-axis` so the `.layout .gutter[data-axis=…]` cursor rules apply AND
+         the delegated `.gutter[data-zone]` pointer wiring resolves it. -->
+    <div class="gutter" data-zone="left" data-axis="columns"></div>
+    <div class="gutter" data-zone="right" data-axis="columns"></div>
+    <div class="gutter" data-zone="header" data-axis="rows"></div>
+    <div class="gutter" data-zone="footer" data-axis="rows"></div>
   </main>
   <script type="module" src="./renderer.js"></script>
 </body>

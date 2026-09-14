@@ -1,16 +1,120 @@
 # Handover — Astrographer UI Overhaul (Wave 2)
 
-**Date:** 2026-09-13 · **Last commit:** `8c67100 "Additional shell UI overhaul"`
-(+ uncommitted U-SHELL-9b hardening H4/H5/H6 in `src/renderer/cross-document-shared.ts`
-+ its tests). · **Tree:** dirty (the U-SHELL-9b hardening is not yet committed).
+**Date:** 2026-09-13 (latest) · **Committed HEAD:** `49079b9`
+(U-EDIT-2 + U-SHELL-9b W2-N15) · **Tree:** DIRTY — a large green-but-uncommitted
+batch (PBT backfill + U-JR1 + W2-N11 + **U-SHELL-N7 shell-wiring**) is in the
+working tree, and **U-SHELL-N7 (shell pointer-wiring, W2-N7) is now LANDED +
+CLOSED** — the HOST-1..5 + ADV1..5 fixes are in (see
+`docs/specs/unit-u-shell-shell-wiring.md` §3a/§3b and the CURRENT block below).
 
-**Baseline (verified this pass):** `npm test` → **187 files / 4362 pass + 58 skip**;
-`npm run typecheck` → 0; `npm run build` → OK.
+**Baseline (confirmed on the landed working tree):**
+`npm test` → **4527 pass + 58 skip**; `npm run typecheck` → 0;
+`npm run build` → OK.
 
 **Objective:** implement the document-only UI-overhaul spec
 (`docs/specs/ui-overhaul.md`, C1–C20) as gated, per-unit TDD waves (RCA-2).
 
 ---
+
+## CURRENT HANDOVER STATE (2026-09-13 — U-SHELL-N7 LANDED/COMPLETE)
+
+> **Superseded (proofreader pass, 2026-09-13):** the U-SHELL-N7 host fix is now
+> LANDED and CLOSED — the section below is the PRE-FIX handover record. See the
+> updated `docs/specs/unit-u-shell-shell-wiring.md` (§3a/§3b: HOST-1..5 + ADV1..5),
+> the `docs/next-steps.md` CURRENT WORK block, and this handover's §1/§5 rows
+> (all now FIXED). `docs/defects.md` `HOST-SHELL-WIRING` → FIXED.
+
+**All Wave-2 OPEN items are RESOLVED/FIXED** (W2-N5/N7/N8/N9/N10/N11/N12/N13/
+N14/N15) per `docs/specs/wave-2-open-decisions.md` §D status line. The last
+uncommitted in-flight unit was **U-SHELL-N7** (`unit-u-shell-shell-wiring.md`,
+W2-N7 — the shell pointer-wiring integration pass), now **LANDED/COMPLETE**: the
+adversarial HOST-1..5 + re-audit ADV1..5 fixes shipped and the trio is green
+(4527 pass / 58 skip). The detailed PRE-FIX handover record follows (the
+superseded note above points to the post-fix records). Its gates were as follows.
+
+**Adversarial review (RCA-3) — RUN, findings CONFIRMED REAL (2026-09-13):**
+the wiring in `src/renderer/renderer.ts` `installShellPointers()` queries selectors
+that match **NO authored DOM** — the core deliverable (C4/C7/C11/C12 reachable in
+the live app) is **NOT met**, and the §2.8 source-string pin is a **false green**.
+Verified in code: `paneSubtreeRoot` (src/renderer/pane-graph.ts) frame root props
+are `{ id: \`pane-${def.id}\` }` with **no `data-pane-id`**; `index.html` authors only
+`.layout .gutter` **CSS** (no `.gutter[data-zone]` element); `installShellPointers`
+runs before `host.boot()`/each `rerenderAppGraph()` re-mounts the graph, so
+boot-snapshot element listeners get orphaned. Findings to FIX (all host-side,
+fix here, never package):
+- **HOST-1 (HIGH):** dead selectors `.gutter[data-zone]` + `.pane-frame[data-pane-id]`.
+- **HOST-2 (HIGH):** per-gesture `pointermove/up/cancel/dblclick` registered per
+  `pointerdown` on the shared element, never removed → duplicate/spurious commits
+  (a double-click → N `resetGutter` writes; a later gesture's stale handler re-commits
+  an OLDER paneId).
+- **HOST-3 (MEDIUM):** `isInteractiveControl(e.target)` inspects only the deepest
+  node → a click on an interactive control's nested child (svg/span) is mis-routed
+  as a drag start (F9 violation).
+- **HOST-4 (MEDIUM):** a reveal-driven re-render re-mounts the graph mid-gesture,
+  detaching the captured element (coupled with HOST-1's boot-snapshot wiring).
+- **HOST-5 (LOW):** `toZoneBounds` coerces unknown `[data-zone]` to `'left'` → a
+  malformed zone becomes a real drop target (fail-closed fix).
+
+**Read-only PBT audit (2026-09-13):** all 8 register rows (P-IM-1/-2/-3, P-SM-1/-2,
+P-TP-1/-2/-3) are **NOT over-strength** against the pinned helpers as driven. The
+gaps are **generator-coverage**: P-IM-1 (out-of-rect points — the helper legitimately
+returns a negative raw candidate), P-IM-2 (unknown-zone / non-object rect), P-SM-1
+(degenerate/inverted rects), P-TP-1 (overlapping-rect FIRST-match — currently
+unfalsifiable because the generator's zones are disjoint), P-TP-3 (random renumber
+correctness on interleaved/out-of-range orders).
+
+**Blind-greens (RCA-4) — RUN: `docs/specs/unit-u-shell-shell-wiring-greens.md` =
+35 PASS / 0 FAIL / 4 NOT-TESTABLE** (F5/F9/F11 need a live captured element / real
+pointerdown target / a boot; the pure-module + source-pin surface is fully green).
+The blind-greens does NOT exercise the live DOM, so it does not catch HOST-1.
+
+### THE FIX (unstarted — do this first)
+A TDD red→green cycle for the HOST-1..5 fixes + the PBT negative generators:
+1. **TestWriter RED** — extend `src/shared/dom-shim.ts` minimally (add `querySelectorAll`
+   for the concrete subset, a mount tree, element `getBoundingClientRect()`,
+   `setPointerCapture/releasePointerCapture` no-ops, and a synthetic pointer-event
+   dispatch helper), then write `tests/unit-u-shell-shell-wiring-adversarial.test.ts`
+   pinning HOST-1..5 (must fail red against the current broken wiring) + the PBT
+   negative-generator strategies (they may be partly green-on-arrival — coverage
+   closures are fine). Do NOT touch `src/renderer/*` or index.html logic.
+2. **Implementer GREEN** — rework `installShellPointers` to the fix shape:
+   - author the four `.gutter[data-zone][data-axis]` chrome elements;
+   - add `data-pane-id: def.id` to the frame root props in `paneSubtreeRoot`;
+   - **document-level DELEGATED** `pointerdown` listeners using
+     `e.target.closest('.gutter[data-zone], .pane-frame[data-pane-id]')`, applied
+     after the graph renders and re-attached across `loadEnvelope` re-mounts
+     (fixes HOST-1 + HOST-4);
+   - register move/up/cancel/dblclick ONCE or tear down per gesture
+     (`removeEventListener` / `{once:true}` / AbortController) routing through a
+     module-level active-gesture record (HOST-2);
+   - ancestor climb in `isInteractiveControl` (`closest('button,input,a,select,
+     textarea,[on:click],[on-click],[data-handler],[on:pointerdown]')`) (HOST-3);
+   - skip non-`LayoutZoneName` `data-zone` values (HOST-5).
+3. Re-run the adversarial pass (RCA-3) + the blind-greens (RCA-4) on the fixed wiring.
+
+### REMAINING GATES (after the fix)
+Proofreader → documentation review (RCA-6: reconcile `unit-u-shell-shell-wiring.md`
+**top status block is STALE — it still says "No src/ or tests/ change in this pass
+(spec-only…)"**, contradicting its own §5.7/§2.8; add the adversarial + doc-review
+records) → live-scenario (shell DOM wiring is not node/MCP-testable without a running
+app — park as a pending battery per gate 6) → **trio re-confirm** → tracker gate
+(`docs/next-steps.md` U-SHELL-N7 **DONE row** — currently ABSENT; `docs/HANDOVER.md`
+W2-N7 **line 166 still lists it PENDING**; reconcile `docs/defects.md` to record the
+HOST-1..5 host finding as FIXED) → commit the whole uncommitted green batch.
+
+### SUBAGENT-DELEGATION RELIABILITY (READ FIRST)
+The `role_test_writer` subagent **failed 4× with no output** when given the large
+shell-wiring fix task (3× in background, 1× in foreground), while a trivial foreground
+probe succeeded. Suspected flaky infra on heavy read+write+vitest runs. **Mitigation:**
+run the TestWriter in **foreground (`run_in_background: false`) with a SMALLER, single
+concern per delegation** (e.g. shim+HOST-1..2, then PBT generators, separately), and
+verify the files actually landed (`git status`) rather than trusting a pass/fail. The
+`role_adversarial_reviewer` and `role_blind_test_writer` delegations in this session
+**succeeded** in background.
+
+---
+
+## Older handover content (committed through U-SHELL-9b hardening; U-JR1 + PBT + W2-N11/N15 + shell-wiring are the newer uncommitted batch)
 
 ## 1. Status at a glance
 
@@ -19,13 +123,15 @@
 | U-SHELL-1 (layout/zones/C9) | ✅ GREEN | keystone; all gates |
 | U-SHELL-3 (collapse C5) | ✅ GREEN | |
 | U-SHELL-4 (drag/relocate + C11 + C12) | ✅ GREEN | |
-| U-SHELL-5 (gutters C7) | ✅ GREEN | C7 shell pointer wiring deferred → W2-N7 |
+| U-SHELL-5 (gutters C7) | ✅ GREEN | shell wiring delivered by **U-SHELL-N7** (below) |
 | U-SHELL-8 (View-menu visibility C13) | ✅ GREEN | |
 | U-SHELL-9a (tab strip + focus tool C14) | ✅ GREEN | |
 | U-STATE-1e (N-root reconcile + fork identity) | ✅ GREEN | unblocks 9b |
 | **U-SHELL-9b (multi-doc + C20 + Option-C)** | ✅ **GREEN / COMPLETE (H1–H7 FIXED)** | blind-greens 23/0/0; W2-N15 FIXED; follow-ups AF3-3/AF1-2 (§4) |
-| U-EDIT-2 (undo/redo + history C16) | ✅ GREEN | project-journal seam (§2.5); 187 files / 4362 pass |
-| U-JR1 (host `provident.get_journal`) | ⬜ spec re-authored | thin read over `Supervisor.journalEntries()` |
+| U-EDIT-2 (undo/redo + history C16) | ✅ GREEN | project-journal seam (§2.5); committed in `49079b9` |
+| U-JR1 (host `provident.get_journal`) | ✅ **GREEN / DONE** | thin read over `Supervisor.journalEntries()`; `read` group; unit 35 + blind-greens 22/22; battery-host `journalEntries` HOST fix; live battery PARKED (running-app surface) |
+| PBT backfill (props-*.test.ts) | ✅ **GREEN / uncommitted** | §5.7 registers + property layers for the UI pure modules |
+| **U-SHELL-N7 (shell pointer-wiring, W2-N7)** | ✅ **GREEN / COMPLETE (2026-09-13)** | `installShellPointers` delegated wiring LANDED, closing HOST-1..5 + ADV1..5; four `.gutter[data-zone][data-axis]` authored + frame `data-pane-id` (`pane-graph.ts`); dom-shim extended (getters + delegated pointer dispatch + closest/setRect/setPointerCapture); trio 4527/58; tests 30 + 14 + 5 = 49; spec §3a/§3b; `docs/defects.md` HOST-SHELL-WIRING → FIXED |
 
 **Wave 3 (not started):** U-IMPORT-1 (C17), U-SHELL-7 (settings modal C3).
 
@@ -163,7 +269,7 @@ context for a shared node).
 | ID | Unit | Sev |
 | --- | --- | --- |
 | W2-N5 | U-SHELL-3 | LOW — test-only `paneSubtreeRoot` 3-arg branch cleanup |
-| **W2-N7** | U-SHELL-4/5 | **MEDIUM — no shell `pointerdown/move/up` + rect wiring** (C4/C7 unreachable live) |
+| **W2-N7** | U-SHELL-4/5 | ~~MEDIUM — no shell `pointerdown/move/up` + rect wiring~~ **FIXED (2026-09-13 — U-SHELL-N7 `installShellPointers` delegated wiring landed)** |
 | W2-N8 | U-SHELL-8 | LOW — derived-mirror `state-slice` layer accumulation |
 | W2-N9 | U-SHELL-8 | LOW — hot-added-pane regression unexercised |
 | W2-N10 | U-SHELL-9a | LOW — non-document stage-mount live settle |
@@ -177,11 +283,13 @@ context for a shared node).
 
 ## 6. Pending units
 
-- **U-JR1** (`unit-ujr1-get-journal.md`): 6-seam host read over
-  `Supervisor.journalEntries()`; no host sanitization; group `dispatch`.
 - **Wave 3:** U-IMPORT-1 (C17, needs U-MENU-1 + the C14-lite import root),
   U-SHELL-7 (settings modal C3).
 - Accept-from-9b: AF3-3/AF1-2 (per-mount editing context for a shared node).
+- **U-JR1 is GREEN/DONE (2026-09-13)** — no longer pending; see §1 + the
+  U-JR1 DONE row in `docs/next-steps.md`. Its live-scenario battery stays a
+  PARKED artifact (running-app surface), documented in
+  `docs/specs/unit-ujr1-get-journal-live-pending-battery.md`.
 
 ---
 
@@ -201,6 +309,13 @@ context for a shared node).
 ## 8. Documentation-staleness review (this pass)
 
 Reconciled against the actual build at `8c67100` + the uncommitted 9b hardening:
+- **2026-09-13 (U-JR1):** the U-JR1 spec §2.2/§5.7/§5.8 gained the battery-host
+  "7th surface" notes (gate-6 HOST fix: `battery-host.ts` routes `journalEntries`,
+  `RuntimeBackend` exported, auto-start main-only); the live-pending battery's §0.2
+  `unknown method` finding is now **FIXED + regression-tested**; `next-steps.md`
+  CURRENT WORK + line-69 record say **GREEN/DONE**, the baseline is **189/4421**,
+  and the Unit U-JR1 DONE row is added. Doc-review:
+  `archive/reviews/2026-09-13-unit-ujr1-doc-review.md`.
 - **2026-09-13 (U-EDIT-2):** the spec §2.1/§2.5/§8 reconciled (project-journal
   seam pinned) + status LANDED. **`HOST/U1-ENG` closed upstream** (`BOOLEAN-ATTRS`,
   present in `provident-ssr@0.5.0`) — moved to RESOLVED in `docs/HANDOFF.md`,

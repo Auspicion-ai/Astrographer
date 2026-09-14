@@ -533,8 +533,8 @@ describe('UD6-G S13 — gnosis non-pollution (M8)', () => {
 // S14 — U-D6 adds no tool (census, §5.8)
 // ===========================================================================
 describe('UD6-G S14 — no new tool', () => {
-  it('ALL_TOOLS is still 58 and includes the rag + gnosis rows', () => {
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(58)
+  it('ALL_TOOLS is still 59 (U-JR1 added provident.get_journal) and includes the rag + gnosis rows', () => {
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(59)
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('rag.query')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('rag-stream')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('gnosis.query')

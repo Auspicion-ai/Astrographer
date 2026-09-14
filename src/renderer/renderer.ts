@@ -5,13 +5,15 @@ import { Runtime } from './runtime.js'
 import { SidebarPanes } from './sidebar-panes.js'
 import { GnosisPanes } from './gnosis-panes.js'
 import { GnosisCrudPanes } from './gnosis-crud-panes.js'
+import { gutterSizeForPoint } from './pane-gutter.js'
+import { toZoneBounds, dropZoneForPoint, type ZoneBounds } from './pane-drag.js'
 import { createPaneRegistry } from './pane-registry.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
 import { createEditController } from './edit-controller.js'
 import { applyThemeToRoot } from './theme.js'
-import { applyLayoutToRoot, type LayoutState } from './layout-state.js'
+import { applyLayoutToRoot, type LayoutState, type LayoutZoneName } from './layout-state.js'
 import { TabStrip } from './tab-strip.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
 
@@ -83,6 +85,9 @@ function handleRequest(runtime: Runtime, req: RpcRequest, notify: (p: { uri: str
           break
         case 'journal':
           value = runtime.journal((req.payload as { action?: 'undo' | 'redo' | 'replay' } | null)?.action as 'undo' | 'redo' | 'replay')
+          break
+        case 'journalEntries':
+          value = runtime.journalEntries(req.payload)
           break
         case 'focus':
           // Unit U-SHELL-9a §2.7 — UI focus only (find-or-open). NOT a graph
@@ -206,6 +211,429 @@ function installLayout(): void {
     .catch(() => {
       // keep the CSS fallback geometry on a bridge error
     })
+}
+
+/** U-SHELL-9a §2.7 — true when the pointerdown target is an interactive control
+ *  (an `input`/`button`/`a`/`select`/`textarea` or a node carrying `on:click`/
+ *  `on-click`/`data-handler`), so a click on a control is never hijacked into a
+ *  pane drag (F9). §2.4: the collapse-toggle, minimize-toggle and tab controls
+ *  are provident click handlers and stay clickable. TOTAL — never throws. */
+function isInteractiveControl(target: Element | null): boolean {
+  if (target == null) return false
+  const isInteractive = (node: unknown): boolean => {
+    const n = node as { tagName?: string; getAttribute?: (name: string) => string | null }
+    const tag = typeof n?.tagName === 'string' ? n.tagName.toLowerCase() : ''
+    if (tag === 'input' || tag === 'button' || tag === 'a' || tag === 'select' || tag === 'textarea') return true
+    // ADV5 — interactive WRAPPER controls: a `label`/`fieldset` and any
+    // `[contenteditable]` region are interactive, so a pointerdown on a label
+    // wrapping an input/select/textarea (or an editable region) inside a
+    // `.pane-frame` is never hijacked into a pane drag.
+    if (tag === 'label' || tag === 'fieldset') return true
+    if (typeof n?.getAttribute === 'function') {
+      for (const attr of ['on:click', 'on-click', 'data-handler', 'on:pointerdown']) {
+        if (n.getAttribute(attr) != null) return true
+      }
+      if (n.getAttribute('contenteditable') != null) return true
+    }
+    return false
+  }
+  // HOST-3 — walk TARGET AND ANCESTORS by DIRECT NODE INSPECTION (parentElement
+  // → parent fallback), so a `span` nested inside an interactive `button`/`input`
+  // returns true (never hijacked into a pane drag). Never a colon-bearing
+  // compound via shim `closest` (the dom-shim rejects `[on:click]` selectors).
+  let n: unknown = target
+  while (n) {
+    if (isInteractive(n)) return true
+    const cur = n as { parentElement?: unknown; parent?: unknown }
+    n = cur.parentElement ?? (cur as { parent?: unknown }).parent
+  }
+  return false
+}
+
+/** A `getBoundingClientRect()`-shaped rect (the gesture geometry the wiring
+ *  reads). */
+interface GestureRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** U-SHELL-N7 (HOST-2/HOST-4) — the module-level active-gesture record. ONE
+ *  in-flight gesture at a time; the document-level `move`/`up`/`cancel`/
+ *  `dblclick` listeners route through it, so a re-mount of the frame/gutter
+ *  mid-gesture NEVER orphans the gesture (HOST-4) and the per-gesture listeners
+ *  are torn down on end — never accumulated across consecutive gestures
+ *  (HOST-2 — a second gesture never re-commits an older zone). */
+type ActiveGesture =
+  | {
+      kind: 'gutter'
+      host: SidebarPanes
+      zone: LayoutZoneName
+      layoutRect: GestureRect
+      /** ADV2 — the originating pointer's id; a stale/lost pointer of a
+       *  DIFFERENT id must never act on this gesture. */
+      pointerId: number | null
+    }
+  | {
+      kind: 'pane'
+      host: SidebarPanes
+      paneId: string
+      lastZones: readonly ZoneBounds[]
+      moved: boolean
+      /** ADV2 — the originating pointer's id (see the gutter variant). */
+      pointerId: number | null
+    }
+
+/** The delegated gesture-element selector (HOST-1). Resolved per `pointerdown`
+ *  via `e.target.closest(...)` so gutters/frames authored AFTER install —
+ *  the real app authors them at render — still route. No colon-bearing
+ *  compound (the dom-shim `closest` rejects `[on:...]` selectors). */
+const GESTURE_SELECTOR = '.gutter[data-zone], .pane-frame[data-pane-id]'
+
+/** The delegated gutter element for the PERMANENT `dblclick` reset (ADV1) —
+ *  resolved separately from the pointerdown selector so a double-click is
+ *  decoupled from the gesture lifecycle. */
+const GUTTER_SELECTOR = '.gutter[data-zone]'
+
+/** The module-level active gesture (null when none — HOST-2/HOST-4). */
+let activeGesture: ActiveGesture | null = null
+
+/** ADV4 — the document instance `installShellPointers` is currently wired onto.
+ *  Tied to the DOCUMENT (not a bare boolean) so each fresh document/install
+ *  (per renderer boot, and per adversarial shim test) still registers exactly
+ *  once, while a redundant second call on the SAME document is a no-op. The
+ *  module-global `activeGesture` stays single-homed per wired document. */
+let shellWiredDoc: unknown = null
+
+/** True only for the four real layout zones. HOST-5 — a malformed `'bogus'`
+ *  value must never be coerced into a real `left` `ZoneBounds`. */
+function isLayoutZoneNameValue(value: unknown): value is LayoutZoneName {
+  return value === 'left' || value === 'right' || value === 'header' || value === 'footer'
+}
+
+/** HOST-2 — register the per-gesture move/up/cancel handlers EXACTLY ONCE for
+ *  the current gesture, removing any lingering prior handlers first so a second
+ *  gesture never accumulates stale ones. The `dblclick` reset is NOT here (ADV1):
+ *  it fires AFTER the second `pointerup` in a real two-click order, so tying it
+ *  to the gesture lifecycle made it unreachable — it is a PERMANENT
+ *  document-delegated listener registered in `installShellPointers` instead. */
+function beginGesture(): void {
+  if (typeof document?.addEventListener !== 'function') return
+  // reset-guard — a previous gesture's teardown already removed these; removing
+  // first is belt-and-suspenders against stale accumulation.
+  document.removeEventListener('pointermove', onGestureMove)
+  document.removeEventListener('pointerup', onGestureUp)
+  document.removeEventListener('pointercancel', onGestureCancel)
+  document.addEventListener('pointermove', onGestureMove)
+  document.addEventListener('pointerup', onGestureUp)
+  document.addEventListener('pointercancel', onGestureCancel)
+}
+
+/** HOST-2 — tear down the per-gesture listeners + clear the active gesture at
+ *  the end of a gesture. Called from the `up`/`cancel`/supersede/lost-pointer
+ *  paths. The permanent delegated `dblclick` is NOT torn down here (ADV1). */
+function clearGesture(): void {
+  activeGesture = null
+  if (typeof document?.removeEventListener !== 'function') return
+  document.removeEventListener('pointermove', onGestureMove)
+  document.removeEventListener('pointerup', onGestureUp)
+  document.removeEventListener('pointercancel', onGestureCancel)
+}
+
+/** The document-level `pointermove` — routes the active gesture's move through
+ *  the module-level record (HOST-4 survives a frame re-mount). ADV2: a move from
+ *  a DIFFERENT pointer than the one that started the gesture is ignored —
+ *  a stale/lost gesture never acts on an unrelated pointer's events. */
+function onGestureMove(e: { clientX?: number; clientY?: number; pointerId?: number } | null): void {
+  const g = activeGesture
+  if (g == null) return
+  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
+  try {
+    const x = typeof e?.clientX === 'number' ? e.clientX : 0
+    const y = typeof e?.clientY === 'number' ? e.clientY : 0
+    if (g.kind === 'gutter') {
+      g.host.moveGutter(gutterSizeForPoint(g.layoutRect, g.zone, { x, y }))
+    } else {
+      const point = { x, y }
+      const zones: ZoneBounds[] = []
+      const containers =
+        typeof document?.querySelectorAll === 'function' ? document.querySelectorAll('.layout [data-zone]') : []
+      for (let i = 0; i < containers.length; i++) {
+        const el = containers[i] as {
+          className?: unknown
+          getAttribute(name: string): string | null
+          getBoundingClientRect(): GestureRect
+        }
+        // The `.layout [data-zone]` set also matches the resize GUTTERS (they
+        // carry `data-zone` + `data-axis`, not `data-orientation`). A gutter is
+        // NOT a drop container — skip it so it is never projected as a zone.
+        const cls = typeof el.className === 'string' ? el.className : ''
+        if (cls.split(/\s+/).includes('gutter')) continue
+        // HOST-5 — fail-closed: project ONLY a real LayoutZoneName. A malformed
+        // `'bogus'` value is SKIPPED, never coerced into a `left` drop target.
+        const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('data-zone') : null
+        if (!isLayoutZoneNameValue(dataZone)) continue
+        if (typeof el.getBoundingClientRect === 'function') {
+          zones.push(toZoneBounds(dataZone, el.getBoundingClientRect()))
+        }
+      }
+      g.lastZones = zones
+      g.moved = true
+      g.host.movePaneDrag(point, zones)
+    }
+  } catch {
+    // fail-soft — a throwing move never breaks the gesture stream
+  }
+}
+
+/** The document-level `pointerup` — one commit (or abort) per gesture, then the
+ *  HOST-2 teardown. ADV2: a `pointerup` from a different/lost pointer is a no-op. */
+function onGestureUp(e: { clientX?: number; clientY?: number; pointerId?: number } | null): void {
+  const g = activeGesture
+  if (g == null) return
+  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
+  try {
+    if (g.kind === 'gutter') {
+      g.host.endGutter()
+    } else {
+      const point = {
+        x: typeof e?.clientX === 'number' ? e.clientX : 0,
+        y: typeof e?.clientY === 'number' ? e.clientY : 0,
+      }
+      if (!g.moved) {
+        g.host.cancelPaneDrag()
+        return
+      }
+      const zone = dropZoneForPoint(point, g.lastZones, 24)
+      if (zone == null) {
+        g.host.cancelPaneDrag() // F1 — outside any zone → abort, no mutation
+      } else {
+        g.host.commitPaneDrop({ paneId: g.paneId, zone })
+      }
+    }
+  } catch {
+    // fail-soft
+  } finally {
+    clearGesture()
+  }
+}
+
+/** The document-level `pointercancel` — revert the gesture (F4). ADV2: a
+ *  `pointercancel` from a different/lost pointer is a no-op. */
+function onGestureCancel(e: { pointerId?: number } | null): void {
+  const g = activeGesture
+  if (g == null) return
+  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
+  try {
+    if (g.kind === 'gutter') g.host.cancelGutter() // F4 — revert, no commit
+    else g.host.cancelPaneDrag() // re-hide with one final write, no mutation
+  } catch {
+    // fail-soft
+  } finally {
+    clearGesture()
+  }
+}
+
+/** ADV3 — a new gesture supersedes an in-flight one cleanly: revert the PRIOR
+ *  gesture (a pane drag → `cancelPaneDrag` so its reveal is re-hidden; a gutter
+ *  → `cancelGutter`), then fully clear it before the new gesture starts. */
+function revertPriorGesture(): void {
+  const prior = activeGesture
+  if (prior == null) return
+  try {
+    if (prior.kind === 'gutter') prior.host.cancelGutter()
+    else prior.host.cancelPaneDrag()
+  } catch {
+    // fail-soft — a throwing revert never breaks the wire-up
+  }
+  clearGesture()
+}
+
+/** ADV2 — the document-delegated `lostpointercapture` handler. A pointer
+ *  released without `pointerup`/`pointercancel` (dropped out of the window /
+ *  capture lost) must NOT leak a stale gesture: when the active gesture's
+ *  `pointerId` matches the event's, revert any gesture that actually MOVED
+ *  (a moved pane drag → `cancelPaneDrag` to re-hide its reveal; a gutter →
+ *  `cancelGutter`) and then `clearGesture()` — tearing down the per-gesture
+ *  listeners so a later UNRELATED event can never re-commit. A never-moved
+ *  dropped gesture is cleared cleanly without an extra seam write. */
+function onLostPointerCapture(e: { pointerId?: number } | null): void {
+  const g = activeGesture
+  if (g == null) return
+  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // not our pointer — leave it alone
+  try {
+    if (g.kind === 'gutter') g.host.cancelGutter()
+    else if (g.moved) g.host.cancelPaneDrag() // reveal re-hidden only if the drag actually moved
+  } catch {
+    // fail-soft
+  } finally {
+    clearGesture() // never leak the stale gesture or its listeners
+  }
+}
+
+/** The PERMANENT document-delegated `dblclick` (ADV1) — the gutter double-click
+ *  reset, decoupled from the gesture lifecycle. Resolves the gutter via
+ *  `.gutter[data-zone]` and, ONLY for a real layout zone, calls
+ *  `host.resetGutter(dataZone)`. Fail-soft, never throws. */
+function onGestureDblclick(host: SidebarPanes, e: unknown): void {
+  if (host == null) return
+  try {
+    const target = (e as { target?: unknown })?.target
+    if (target == null) return
+    const t = target as { closest?: (sel: string) => { getAttribute?: (name: string) => string | null } | null }
+    const gutterEl = typeof t.closest === 'function' ? t.closest(GUTTER_SELECTOR) : null
+    const dataZone = gutterEl && typeof gutterEl.getAttribute === 'function' ? gutterEl.getAttribute('data-zone') : null
+    // ONLY a real layout zone triggers the reset — a malformed `'bogus'` value
+    // is never coerced into a registry-default commit (HOST-5 fail-closed).
+    if (isLayoutZoneNameValue(dataZone)) host.resetGutter(dataZone)
+  } catch {
+    // fail-soft — a throwing reset never breaks the renderer
+  }
+}
+
+/**
+ * The document-level DELEGATED `pointerdown` — resolves the gesture element via
+ * `e.target.closest(GESTURE_SELECTOR)` (HOST-1: works for chrome authored AFTER
+ * install), then starts the gutter or pane gesture with exactly-once per-gesture
+ * move/up/cancel/dblclick listeners (HOST-2) routed through the module-level
+ * active-gesture record (HOST-4). TOTAL + fail-soft — never throws. */
+function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
+  if (host == null) return
+  try {
+    const target = (e as { target?: unknown })?.target
+    if (target == null) return
+    const t = target as { closest?: (sel: string) => unknown }
+    const gestureEl =
+      typeof t.closest === 'function'
+        ? (t.closest(GESTURE_SELECTOR) as {
+            getAttribute?(name: string): string | null
+            setPointerCapture?(pointerId: number): void
+          } | null)
+        : null
+    if (gestureEl == null) return
+    const dataZone = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('data-zone') : null
+    const dataPaneId = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('data-pane-id') : null
+    const pointerId = (e as { pointerId?: number })?.pointerId
+
+    // Gutter gesture — the matched element carries a real layout `data-zone`.
+    if (isLayoutZoneNameValue(dataZone)) {
+      // read the `.layout` rect ONCE per gesture
+      let layoutRect: GestureRect | null = null
+      if (typeof document?.querySelector === 'function') {
+        const layoutRoot = document.querySelector('.layout') as { getBoundingClientRect?: () => GestureRect } | null
+        if (layoutRoot && typeof layoutRoot.getBoundingClientRect === 'function') {
+          layoutRect = layoutRoot.getBoundingClientRect()
+        }
+      }
+      if (layoutRect == null) return
+      // ADV3 — a new gutter gesture supersedes any in-flight one first (a prior
+      // pane drag's reveal is re-hidden, a prior gutter is reverted).
+      revertPriorGesture()
+      host.startGutter(dataZone)
+      if (host.activeGutter() !== dataZone) return // §2.3 gate — empty/minimized zone: no gesture
+      try {
+        if (pointerId != null && typeof gestureEl.setPointerCapture === 'function') {
+          gestureEl.setPointerCapture(pointerId) // F5 fail-soft
+        }
+      } catch {
+        // capture unavailable/throws — proceed on the non-captured listeners
+      }
+      activeGesture = { kind: 'gutter', host, zone: dataZone, layoutRect, pointerId: pointerId ?? null }
+      beginGesture()
+      return
+    }
+
+    // Pane-drag gesture — the matched element carries a stable `data-pane-id`.
+    if (dataPaneId != null && dataPaneId !== '') {
+      if (isInteractiveControl(target as Element | null)) return // F9/HOST-3/ADV5 — never hijack a control
+      // ADV3 — a new pane drag supersedes any in-flight one first (a prior pane
+      // drag is cancelled so its reveal is re-hidden, a prior gutter is reverted).
+      revertPriorGesture()
+      host.startPaneDrag(dataPaneId)
+      try {
+        if (pointerId != null && typeof gestureEl.setPointerCapture === 'function') {
+          gestureEl.setPointerCapture(pointerId) // F5 fail-soft
+        }
+      } catch {
+        // capture unavailable/throws — degrade, never throw
+      }
+      activeGesture = { kind: 'pane', host, paneId: dataPaneId, lastZones: [], moved: false, pointerId: pointerId ?? null }
+      beginGesture()
+    }
+  } catch {
+    // fail-soft — a throwing gesture never breaks the renderer
+  }
+}
+
+/** Unit U-SHELL-N7 (W2-N7) — the shell pointer-wiring integration pass. Real
+ *  DOM pointer listeners (`pointerdown`/`pointermove`/`pointerup`/
+ *  `pointercancel` with `setPointerCapture`) + `getBoundingClientRect` rect math
+ *  that feed the EXISTING §2.1 host seams: the C7 gutter resize
+ *  (`startGutter`/`moveGutter`/`endGutter`/`cancelGutter`/`resetGutter`) and the
+ *  C4 pane drag/reorder/relocate with the C11 reveal + C12 minimize hooks
+ *  (`startPaneDrag`/`movePaneDrag`/`commitPaneDrop`/`cancelPaneDrag`). This is
+ *  SHELL CHROME (the one AGENTS.md exception to the provident-framework UI
+ *  constraint), so raw DOM wiring is permitted here and nowhere else. The
+ *  pointer→seam argument mapping rides the THREE NEW pure helpers (§2.2) —
+ *  `gutterSizeForPoint`/`toZoneBounds`/`dropZoneForPoint` — never inlined. The
+ *  wiring introduces ZERO graph writes: every gesture-state write flows through
+ *  the controllers (no per-move render/render, no direct `setLayout`).
+ *
+ *  Fail-soft (F5/F11): no host, an environment without the DOM surface, a thrown
+ *  `getBoundingClientRect`/`setPointerCapture`, or a throwing engine → the
+ *  gesture degrades or no-ops; `installShellPointers` itself never throws (the
+ *  app still boots). The DELEGATED `pointerdown` attaches ONCE at renderer boot
+ *  (after the host is constructed, HOST-1) and resolves the gesture element per
+ *  event, so the real app's render-time-authored `.gutter[data-zone]` /
+ *  `.pane-frame[data-pane-id]` chrome is always reachable (HOST-1). The
+ *  per-gesture move/up/cancel/dblclick listeners are registered exactly once and
+ *  torn down on gesture end (HOST-2), routed through the module-level
+ *  active-gesture record so a re-mount survives (HOST-4). */
+export function installShellPointers(host: SidebarPanes): void {
+  if (host == null) return // F11 — no host (no-bridge plain-page mode) → no-op
+  try {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return
+    // ADV4 — idempotent: a SECOND call on the SAME document is a no-op (no
+    // duplicate delegated `pointerdown`/`dblclick`/`lostpointercapture`
+    // registration), keeping the module-global `activeGesture` single-homed.
+    const currentDoc = document as unknown
+    if (shellWiredDoc === currentDoc) return
+    // HOST-1 — ONE document-level DELEGATED `pointerdown` listener. The gesture
+    // element is resolved per-event via `e.target.closest(GESTURE_SELECTOR)`,
+    // so gutters/frames authored AFTER install (the real app authors the `.gutter`
+    // elements and the frame `data-pane-id` only at render) still route.
+    document.addEventListener('pointerdown', (e) => {
+      try {
+        onDocumentPointerDown(host, e)
+      } catch {
+        // fail-soft — a throwing gesture never breaks the renderer
+      }
+    })
+    // ADV1 — a PERMANENT document-delegated `dblclick` (decoupled from the
+    // gesture lifecycle, so a real two-click order down→up→down→up still
+    // reaches it — the reset is reachable after the 2nd pointerup).
+    document.addEventListener('dblclick', (e) => {
+      try {
+        onGestureDblclick(host, e)
+      } catch {
+        // fail-soft — a throwing dblclick never breaks the renderer
+      }
+    })
+    // ADV2 — a document-delegated `lostpointercapture` so a pointer released
+    // without `pointerup`/`pointercancel` reverts + clears the gesture (never
+    // leaks a stale gesture or its listeners).
+    document.addEventListener('lostpointercapture', (e) => {
+      try {
+        onLostPointerCapture(e as { pointerId?: number } | null)
+      } catch {
+        // fail-soft — a throwing revert never breaks the renderer
+      }
+    })
+    shellWiredDoc = currentDoc // wired exactly once on THIS document
+  } catch {
+    // F11 — never break boot on any DOM/wiring failure
+  }
 }
 
 async function main(): Promise<void> {
@@ -435,6 +863,12 @@ async function main(): Promise<void> {
       editSearchQuery: (tabId: string, params) => { tabStrip?.editSearchQuery(tabId, params) },
     },
   })
+  // Unit U-SHELL-N7 (W2-N7) — attach the shell pointer wiring ONCE after the
+  // host is constructed. This hooks the C7 gutter resize + C4 drag/reorder/
+  // relocate gestures (with C11 reveal/C12 minimize) to the existing host seams;
+  // the host boot below populates the layout the gestures read. Shell chrome
+  // only — the wiring never re-renders or writes the graph itself (§2.7).
+  installShellPointers(host)
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.

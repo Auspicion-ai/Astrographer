@@ -37,7 +37,7 @@ root); resolved in favour of §3.1 and state 10 amended. Unit 18/18.
 | AF7 | LOW | `collectRagIds` diverges from the cited `collectSubtreeIds` (includes the nested root id) | **SPEC NOTE** — intentional (needed for direct nested-child changes); the citation is corrected to "adapted from" |
 | AF8 | LOW | `content` JSON projection: key-order false positives; `undefined`/`null` false negative | **FIXED** — canonical (sorted-key) projection (regression R6); non-JSON `content` is documented as out of scope |
 | AF9 | LOW | `usedFallback` wording contradiction (§3.2 "changes the outcome" vs §3.3 "always") | **SPEC RESOLVED** — `usedFallback` = true iff the fallback path ran (null/malformed change, structural, or edge-bearing); §3.2 reworded |
-| AF10 | LOW | §6 census said 4 types; 5 are exported (`PreviousRoot` omitted) | **FIXED** — census corrected to 1 function + 5 types |
+| AF10 | LOW | §5.8 census said 4 types; 5 are exported (`PreviousRoot` omitted) | **FIXED** — census corrected to 1 function + 5 types |
 
 Adversarial regressions: `tests/unit-u-state-1a-content-reconcile-adversarial.test.ts`
 (8 tests, all green). **Trio after the fixes: 157 files / 3788 pass + 43 skip,
@@ -247,7 +247,68 @@ export it). The TestWriter fixtures are therefore envelope nodes, not
 
 ---
 
-## 6. Numeric / census claims
+## 5.7 Property register (PBT)
+
+This register follows the **`docs/specs/unit-ujr1-get-journal.md` §5.7** and
+**`docs/specs/unit-shell-integration.md` §5.7** convention (identical row typings,
+≤8-row cap, class tally line, and the deterministic seeding/≤100-per-row/≤400
+total/stop-after-5 budget — see the siblings' PBT-gate note). Rows are typed
+**P-IM** (input-model), **P-SM** (state-model), or **P-TP** (transform) — NEVER
+F-rows, NEVER `§5 F1–F6` rows (this unit's fail-states already exist as the
+§5 table above). The register is scoped to the U-STATE-1a surface only —
+`reconcileContentRoots` and its pure helpers (`asContentRoot`/`plainRagId`,
+`canonical`, `shapeOf`/`shapeProjection`/`projectionProps`, `rootsOf`, and the
+`collectRagIds` membership walk). It does NOT reach into the U-STATE-1e N-root
+types (`reconcileDocumentRoots`, `DocumentRoot`, `NRootReconcile*`,
+`ScopedRoot`, `identityReplaced`), which are out of scope here.
+
+The register is genuinely invariant-bearing: `reconcileContentRoots` is total on
+well-formed input, deterministic, idempotent at the result level, and classifies
+roots into a lossless, non-duplicating four-bucket partition with no
+cross-contamination between roots; `canonical` is a stable sorted-key normal
+form; `shapeOf`/`projectionProps` exclude runtime markers while retaining
+authored props (AF1 R1/R1b); and `asContentRoot`/`plainRagId` give a faithful
+id-scoping round-trip.
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **`reconcileContentRoots` totality + determinism.** For ANY well-formed input (a `next` envelope carrying `template.root` + `content`, any `previous` roots array, `change` a valid `ReconcileChange` or `null`), the call RETURNS a `ReconcileResult` and never throws (the F1 guard is the only throw and fires only on an ill-formed `next`); the same input always yields a deep-equal result. | `strat:reconcile-total-deterministic` | ∀ generated well-formed `input` (`next` with `template.root` + `content`, previous roots, `change ∈ {valid, null}`): `reconcileContentRoots(input)` returns `{added, replaced, removed, kept}` (arrays of `{cssId, ragNodeId}`) + `usedFallback` a boolean, WITHOUT throwing; two calls in immediate succession return deep-equal results. |
+| `P-IM-2` | IM | **Idempotence at the result level.** Reconciling an envelope against ITSELF as `previous` (identical roots) under a no-op content change (`kind:'content'`, empty `nodeIds`/`edgeIds`) yields every root `kept` and the other buckets empty — re-applying the reconcile after materializing `next` is a no-op classification. | `strat:reconcile-idempotent` | ∀ generated envelope with content roots `R`: `reconcileContentRoots({previous: R-nodes, next: same envelope, change: {kind:'content', nodeIds:[], edgeIds:[]}})` → `added`/`replaced`/`removed` all `[]`, `kept` = all of `R` (in `next` order), `usedFallback === false`. |
+| `P-SM-1` | SM | **Bucket partition — every content root lands in exactly one bucket, with no loss and no duplication.** A cssId in BOTH `previous` and `next` is classified `kept` or `replaced` (exactly one); a cssId only in `next` → `added`; only in `previous` → `removed`. No cssId appears in two buckets. | `strat:reconcile-bucket-partition` | ∀ generated input (content roots only): the four result arrays are pairwise cssId-disjoint; every shared cssId ∈ `replaced ∪ kept` exactly once; every next-only cssId ∈ `added` exactly once; every prev-only cssId ∈ `removed` exactly once. |
+| `P-SM-2` | SM | **Faithful change projection — no cross-contamination between roots.** Payload/`idSet` classification is per-root-subtree: a `change.nodeIds` id that touches only root A's subtree does NOT mark an unrelated shared root B `replaced`. Under a clean content change (empty `edgeIds`, `usedFallback=false`), B is `kept` whenever its subtree shares no changed id and has no id-set/shape change. | `strat:reconcile-no-cross-contamination` | ∀ generated input with two disjoint shared subtrees A, B where B's subtree contains no id from `change.nodeIds`, B's shape is unchanged, and `change` is clean content (`kind:'content'`, empty `edgeIds`): B is `kept` (not `replaced`, not in any other bucket); only a root whose own subtree contains a changed id (or an id-set/shape change) is `replaced`. |
+| `P-TP-1` | TP | **`canonical` is a stable sorted-key normal form.** `canonical` is idempotent (`canonical(canonical(x))` deep-equals `canonical(x)`), structurally-equal values differing ONLY in object key order canonicalize to equal forms (key order is ignored), `undefined` canonicalizes to `null`, and arrays/objects recurse. | `strat:canonical-normal-form` | ∀ generated JSON-like value `x`: `deepEqual(canonical(canonical(x)), canonical(x))`; ∀ objects `a`, `b` equal up to key insertion order: `deepEqual(canonical(a), canonical(b))`; `canonical(undefined)` yields `null`; `canonical` preserves `null`/primitives. |
+| `P-TP-2` | TP | **`shapeOf`/`projectionProps` projection excludes runtime markers + includes authored props (AF1 R1/R1b).** The `props` projection DROPS the authored `id` (projected separately as the shape's `id`) and the runtime-minted `data-doc-head`/`data-node-id` markers, but KEEPS every other authored prop — including authored `data-*` markers (`data-current`, `data-document-id`, the doc-nav current-highlight); the whole node projection (`id`/`type`/`content`/`props`/`children`) is recursive + canonical. Two envelope nodes equal after that exclusion → equal `shapeOf`; a difference in any INCLUDED authored prop or content → different `shapeOf`. | `strat:shape-projection-runtime-excluded` | ∀ generated node: `shapeOf`'s `props` projection has NO key in `{id, data-doc-head, data-node-id}` and HAS every other authored `props` key; two nodes differing ONLY in a runtime marker or in key order → equal `shapeOf`; two nodes differing in an authored prop or `content` → different `shapeOf`. |
+| `P-TP-3` | TP | **Content-root id scoping round-trip via `asContentRoot`/`plainRagId`.** For every `rag-<id>` node, `asContentRoot` returns `{cssId, ragNodeId}` where `ragNodeId` is the PLAIN ragId recovered from the `data-rag-node-id` prop **when present AND consistent with the `rag-` id (`matchesRagRootId` — the §2.7/§3a consistency precondition), else `cssId.slice(4)`** (the unscoped single-document / inconsistent-id fallback); for a `pane-<id>` node it returns `{cssId, ragNodeId: cssId}`; for every other/malformed node (non-`rag-`/`pane-` id, missing or non-string id) it returns `null` — never a throw (the F2 skip). | `strat:content-root-id-roundtrip` | ∀ generated `rag-<id>` root WITHOUT `data-rag-node-id` (or with one that is INCONSISTENT with the `rag-` id per `matchesRagRootId`): `ragNodeId === cssId.slice(4)`; ∀ generated `rag-<id>` root WITH a `data-rag-node-id = P` that is consistent with the `rag-` id: `ragNodeId === P` only under that `matchesRagRootId` consistency precondition (an inconsistent `data-rag-node-id` falls back to `{id.slice(4)}`); ∀ generated `pane-<id>` root: `ragNodeId === cssId`; ∀ generated non-content/malformed node: `asContentRoot(node) === null` (never throws). |
+
+**Class tally:** IM ×2, SM ×2, TP ×3 = **7 rows ≤ 8** ✔.
+
+**SPEC NOTE (P-IM-1 totality domain):** "well-formed" here means
+**JSON-serializable + acyclic** `content`/`children`. A `BigInt`/function/**cyclic**
+`content` would hit a raw throw in `shapeOf` and is **OUT of the valid domain**
+(reference the §5.8 AF8 "non-JSON `content` … out of scope" row).
+
+**SPEC NOTE (P-TP-2 constant-key blind spot):** the property layer ALSO varies
+`data-doc-head` and the authored `id` across generated nodes to close the
+constant-key blind spot — the projection excludes both, so a difference in either
+is `kept` (equal `shapeOf`) — making the register's runtime-marker exclusion
+observable rather than vacuous.
+
+The rows above are **NOT over-strength**: every proposition is directly
+observable from the public `reconcileContentRoots` signature and its documented
+pure helpers (`asContentRoot`/`plainRagId`, `canonical`, `shapeOf`) as they
+exist in `src/renderer/content-reconcile.ts` — none reach into the U-STATE-1e
+N-root types, none invent a result field, none demand a new seam, and none
+resurrect a fail-state as an invariant (this unit's fail-states stay as `§5
+F1–F6`). They consolidate the §3/§4/§5 behaviors already pinned here — §3.5
+(determinism/order), §3.1/§3.2 (bucket classification + per-root set
+difference), §3.4/AF8 R6 (canonical projection), AF1 R1/R1b (runtime-marker
+exclusion), and §3.1 id scoping — into invariant form rather than adding new
+fail-state surface. The register does **not** expand the unit out of the
+U-STATE-1a pure-reconciler surface.
+
+---
+
+## 5.8 Census
 
 - The module exports **1** function (`reconcileContentRoots`) + **5** types
   (`PreviousRoot`, `MaterializedRoot`, `ReconcileChange`, `ReconcileInput`,
@@ -257,7 +318,7 @@ export it). The TestWriter fixtures are therefore envelope nodes, not
 
 ---
 
-## 7. Cross-references
+## 6. Cross-references
 
 - Gate `docs/specs/u-state-1-content-repopulation-review.md` (A1–A3, A10, ADV-1)
   + decision `U-STATE-1-CONTENT-REPOPULATION-GATE`.
@@ -272,7 +333,7 @@ export it). The TestWriter fixtures are therefore envelope nodes, not
 
 ---
 
-## 8. Delimitation
+## 7. Delimitation
 
 This unit lands **only** the pure reconciler. It does NOT: call any supervisor/
 managed op (U-STATE-1b), persist the journal or operator scope (U-STATE-1c),

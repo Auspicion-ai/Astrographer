@@ -281,6 +281,7 @@ export type RpcMethod =
   | 'code.load'
   | 'code.loadBatch'
   | 'journal'
+  | 'journalEntries'
   | 'focus'
   | 'module.install'
   | 'module.update'

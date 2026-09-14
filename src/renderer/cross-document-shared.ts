@@ -101,7 +101,13 @@ export function isShared(owners: SharedOwners | null | undefined, ragNodeId: str
  *  already cached as `lastSnapshot`). PURE + TOTAL: a malformed edge/id is
  *  ignored, the input is never mutated, and a non-array input yields `{}`. */
 export function buildOwnersMap(edges: unknown): SharedOwners {
-  const owners: SharedOwners = {}
+  // A null-prototype map: a `target` equal to an Object.prototype key
+  // (`'__proto__'`, `'constructor'`, `'toString'`, …) must be an ordinary own
+  // key, never a prototype lookup — otherwise `owners[target]` resolves to the
+  // inherited non-array value and `.includes` throws (a totality violation;
+  // U-SHELL-9b adversarial F1). Null-proto also means no prototype pollution
+  // from writing such a key.
+  const owners = Object.create(null) as SharedOwners
   if (!Array.isArray(edges)) return owners
   for (const edge of edges) {
     if (!isRecord(edge)) continue

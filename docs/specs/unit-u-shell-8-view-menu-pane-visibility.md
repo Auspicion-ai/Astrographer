@@ -108,7 +108,7 @@ Read-only adversarial pass; host findings fixed here, no package findings.
 | **H3** | low | Boot TOCTOU: a toggle during boot was clobbered by the stale boot-fetched enable sets. | **FIXED** — the `paneVisibilityTouched` in-flight guard suppresses the boot `applyPersistedPaneVisibility` once any toggle has landed. The subscription is in fact registered **before** the boot apply (`boot` wires `onPaneVisibility` at `sidebar-panes.ts:1166`, then awaits the settings fetch and applies at `:1230`); the guard, not the ordering, is the operative fix (verified by the blind H3 `subscribedBeforeApply=true` observation). |
 | **H4** | low | A wrong-scope persisted id silently blinded the other scope. | **FIXED** — filter/warn ids whose registry scope doesn't match the list. |
 | **H5** | low | (pre-existing) `settingsContent` throws on a non-array `enabledPanes`. | **FIXED** — `Array.isArray` guard. |
-| **H6** | low | A pane registered **after boot** named in persisted `enabledPanes` stayed disabled. | **PINNED** — persisted lists govern panes present at boot; a pane registered later defaults to **enabled** (registry default). |
+| **H6** | low | A pane registered **after boot** named in persisted `enabledPanes` stayed disabled. | **PINNED** — a pane hot-registered AFTER boot defaults to **DISABLED** (the registry's deliberate default-off visibility contract). Persisted lists govern only panes present at boot. A hot-added pane becomes visible when the **HOST** explicitly enables it (an app-graph pane the operator wants shown is enabled through the registry/host enable path; no automatic enable on registration). The **W2-N9** test now pins default-disabled + host-enables-to-appear. |
 
 **Confirmed-safe:** malformed/hostile `IPC_PANE_VISIBILITY` (non-object/non-string id/non-boolean/`__proto__`/`constructor`) all ignored, no throw, no prototype pollution, no phantom; scope isolation both directions; F1/F2/F7; no full reload (C10/§2.5 — `requestRebuild('content')` → `applyContentReconcile`, stable `zone:*`); MCP invisibility (§2.4/§6 — no pane tool in `ALL_TOOLS`, 57 entries); C11 cascade + retained size; restart persistence. **Correction (2026-09-12):** the "C11 cascade" half of this claim was recorded optimistically before the blind run. V4/V5 initially **FAILED** — the pane-additive toggle path detached the pane roots but did not refresh the `zone:*` `is-empty` mirror (a fresh boot rendered it correctly, the toggle path did not). **FIXED** by `syncZoneMirrors` (§2.6 pin 5); V4 (empty → `is-empty`) and V5 (un-hide → cleared `is-empty` + retained size) now **PASS** and the blind tally is **24/24**. No package findings.
 
@@ -138,7 +138,50 @@ Read-only adversarial pass; host findings fixed here, no package findings.
 | F6 | a toggle while the catalog is stale | registry is authoritative; catalog re-pushes after |
 | F7 | a settings write failure | the in-memory enablement still applies for the session |
 
-## 5. Census
+### 5.7 Property register (PBT)
+
+This is a CODE-BEARING unit, so the register is **mandatory**. It covers the PURE
+pane-layout + visibility-mirror helpers in `src/renderer/pane-graph.ts` (the ONLY
+pure module surface of this unit — the rest of U-SHELL-8 is the host wiring, not
+purely propositional). Rows are typed **P-IM** (input-model), **P-SM**
+(state-model), or **P-TP** (transform) — NEVER F-rows, NEVER §4/F-n rows (the
+unit's fail-states already exist as §4 F1–F7). At most 8 rows, following the
+**`docs/specs/unit-ujr1-get-journal.md` §5.7** convention (identical row typings,
+class-tally line, and the non-over-strength note). `resolveEnabledZonePanes` is
+module-private in `pane-graph.ts`, so its invariants are observed through the
+exported `assembleAppGraphEnvelope`/`enabledZonePaneCounts` surface — the register
+stays testable and never reaches into host wiring. **Relevance to the sibling
+U-PARITY pane group:** the U-PARITY app-graph panes (`doc-nav`, `crosslinks`,
+`search`, unit-u-parity-docnav / ·-c19-hover-preview / ·-c18-advanced-search) are
+registered panes whose zone placement is governed by exactly these helpers, so a
+property that pins the layout resolution also pins where every U-PARITY pane
+lands after a visibility toggle.
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **The pane-zone model + the mirror constants are stable.** `LayoutZoneName = {left, right, header, footer}`; `LAYOUT_PANE_ZONES` (layout-state.ts:60) covers exactly those four; `SIDEBAR_ZONE === 'sidebar'` (pane-graph.ts:43), `PANE_FRAME_CLASS === 'pane-frame'`, `PANE_COLLAPSED_CLASS === 'is-collapsed'`. After `coerceLayout`, every zone resolution in the pure helpers lands in `LayoutZoneName` — never a junk/stage/top-bar zone. | `strat:zone-constants` | ∀ generated (enabledAppGraph, layout): every key of a `resolveEnabledZonePanes` result is in `{left,right,header,footer}`; `Set(LAYOUT_PANE_ZONES) === {left,right,header,footer}`; `SIDEBAR_ZONE === 'sidebar'`, `PANE_COLLAPSED_CLASS === 'is-collapsed'`, `PANE_FRAME_CLASS === 'pane-frame'`. |
+| `P-TP-1` | TP | **`resolveEnabledZonePanes` is total + deterministic over the (registry-enabled × layout) grid.** For any enabled app-graph pane list + any (coerceLayout-valid) `LayoutState`, the result is a FULL `Record<LayoutZoneName, ZonePane[]>` (all four zones present — never a missing key); the SAME inputs always yield the IDENTICAL placement — deterministic output (identical re-call yields the same envelope/paneIds) with a deterministic within-zone sort by `order` then `seq`. (Deliberately NOT claiming "no side effects / no global-state": the F2 unmatched-layout-id path calls `console.warn`, a global write.) | `strat:zone-resolve-total-deterministic` | ∀ generated `(enabledAppGraph, layout)`: the result has exactly the four zone keys and is deep-equal across two immediate calls; each pane's zone is the overlay `entry.zone` when the pane has a layout entry, else `defaultZone` when it is a known zone name, else `'left'` (the fallback); each zone array is ordered by `order` then `seq` ascending. |
+| `P-SM-1` | SM | **Zone-membership is exact + disjoint; a disabled pane never appears.** Across all zones, the multiset union of resolved panes equals EXACTLY the enabled app-graph pane set — each enabled app-graph pane lands in exactly its declared zone, never duplicated across zones, and a disabled (or operator-scoped) pane never appears in any zone. | `strat:zone-membership-exact` | ∀ generated state: the pane-id union over all four zones is set-equal to the enabled app-graph id set (disjoint — `Σ zones.length == length(enabledAppGraph)`); every resolved pane is enabled and app-graph scoped; a registered-but-disabled pane id ∉ union. |
+| `P-SM-2` | SM | **`enabledZonePaneCounts` is the per-zone census that sums to the enabled set.** `counts[zone] === resolved[zone].length` (a non-negative integer per zone), and `Σ counts[zone] === ` the number of enabled app-graph panes — the SINGLE enabled+placed census backing `is-empty`, minimize acceptance, and the tab count (pane-graph.ts:145–154), not the raw overlay. | `strat:zone-counts-census` | ∀ generated registry+layout: every `counts[zone] ≥ 0`; `counts[zone]` equals the number of resolution-derived panes in that zone; `Σ ZonePanes counts === registry.listByScope('app-graph').filter(isEnabled).length`. |
+| `P-SM-3` | SM | **The visibility mirrors are deterministic functions of the layout state.** `is-collapsed` is authored on a pane frame EXACTLY when that pane's resolved `collapsed === true` (pane-graph.ts:244); `is-minimized` on a zone container EXACTLY when `layout.zones[zone].minimized === true` (:324–325); `is-revealed` EXACTLY when the zone is in `revealedZones` (:326); `is-empty` EXACTLY when `zonePanes[zone].length === 0` (:324). Same inputs → the IDENTICAL mirror-class set (`zoneMirrorClasses`, deterministic, no redundant/contradictory classes). | `strat:visibility-mirror-deterministic` | ∀ generated state + `revealedZones ⊆ {left,right,header,footer}`: the assembled `zone:<name>` container carries exactly `is-empty` / `is-minimized` / `is-revealed` **among the pane-mirror classes on the authored path** (additive — a future legitimate extra class is not rejected): `is-minimized` ⟺ `layout.zones[name].minimized`, `is-revealed` ⟺ `name ∈ revealedZones`, `is-empty` ⟺ zero panes in that zone; each pane frame carries `is-collapsed` ⟺ its resolved `collapsed === true`; re-assembling the same state yields the identical classes. |
+| `P-TP-2` | TP | **`paneSubtreeRoot` is total over its documented domain.** A non-null `def` + non-null `ctx` + non-empty-string `sidebarZone` → ALWAYS a total `LegacyNodeData` root with `props.id === 'pane-<def.id>'` and `placement.targetPlacement == [zone]`; for `collapsed ∈ {false, true, undefined}` the root ALWAYS carries the U-SHELL-3 frame — the `PANE_FRAME_CLASS` `'pane-frame'` wrapper + the single `PANE_COLLAPSE_HANDLER` control — with `is-collapsed` iff `collapsed === true` (the W2-N5 `collapsed === undefined` no-frame branch was REMOVED, so a 3-arg/undefined caller renders the frame as expanded; the frame is the ONLY code path). A null `def`/`ctx`, an empty `sidebarZone`, or a `render` that returns nothing throws the DOCUMENTED guard error — never an unguarded crash or phantom node (pane-graph.ts:205–211). | `strat:pane-subtree-root-total` | ∀ valid (def, ctx, zone): returns a root with `props.id === 'pane-<def.id>'` + `placement.targetPlacement == [zone]`; ∀ `collapsed ∈ {false,true,undefined}`: the root carries the `PANE_FRAME_CLASS` `'pane-frame'` wrapper + `PANE_COLLAPSE_HANDLER` control, and `is-collapsed` ⟺ `collapsed === true`; ∀ null def / null ctx / empty-string zone / render-returns-nothing: throws `Error('paneSubtreeRoot: …')` — no phantom, no unwrapped TypeError. |
+
+**Class tally:** IM ×1, SM ×3, TP ×2 = **6 rows ≤ 8** ✔.
+
+The rows above are **NOT over-strength**: every proposition is directly observable
+from the pinned pure surface (`pane-graph.ts` lines 43–67 [constants],
+118–154 [`resolveEnabledZonePanes`+`enabledZonePaneCounts`], 199–253
+[`paneSubtreeRoot`], 318–328 [`zoneMirrorClasses`]) or from the pinned
+`LayoutState`/`LayoutZoneName` model (`layout-state.ts:16,60`) — none reach into
+host wiring (the `onPaneVisibility` seam, the C9 store, the IPC), none invent a
+field, and none demand a new seam. They consolidate the §3 placement/mirror states
+and the §4 F3 (unknown-id dropped → the disabled-pane-never-appears consequence)
+into invariant form rather than adding new fail-state surface. Because every row
+faithfully mirrors the landed module's control flow, the register **cannot reject
+a correct module**: all six propositions hold on the current `pane-graph.ts`.
+The register does **not** expand the unit beyond its §2.4/§2.6 pure-helper set.
+
+## 5.8 Census
 
 - Reuse of U-MENU-1's `IPC_PANE_VISIBILITY` + catalog; new host wiring:
   `onPaneVisibility` subscription → apply/persist/re-derive; the pane-additive

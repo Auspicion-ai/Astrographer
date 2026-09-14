@@ -213,7 +213,74 @@ zones (unknown/`stage`/`top-bar` → `left`); MCP visibility (envelope carries n
 | F7 | a layout write fails | the in-memory layout still applies for the session |
 | F8 | a `targetPlacement` names a missing container | reassembled with its producer (the HARD PRECONDITION); never unplaced-silent |
 
-## 5. Census
+## 5. The exhaustive contract (layout-state module surface + PBT register)
+
+The pure module `src/renderer/layout-state.ts` — owner of the `LayoutState`
+types (`LayoutZoneName`/`RegionName`/`PaneLayoutEntry`/`ZoneLayout`/
+`LayoutPaneSpec`/`LayoutRoot`), the pinned constants (`LAYOUT_VERSION=1`,
+`LAYOUT_PANE_ZONES`, `LAYOUT_REGIONS`, `LAYOUT_ZONE_MIN=160`/`MAX=640`,
+`LAYOUT_REGION_MIN=120`/`MAX=1200`), and the helpers `isLayoutZoneName`,
+`defaultLayout`, `deriveLayout`, `coerceLayout`, `layoutCssVars`,
+`applyLayoutToRoot` — is a **CODE-BEARING unit**, so the property register below
+is mandatory (§2 is the pinned authoritative contract; the register backfills the
+invariant surface from the landed module).
+
+### 5.7 Property register (PBT)
+
+This register follows the **`docs/specs/unit-ujr1-get-journal.md` §5.7** and
+**`docs/specs/unit-shell-integration.md` §5.7** convention: the identical
+`| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |`
+row columns, the **P-IM** (input-model) / **P-SM** (state-model) / **P-TP**
+(transform) typings, a ≤8-row cap, a class-tally line, and the deterministic
+seeded property layer (≤100 generated cases / row, ≤400 total, stop-after-5 —
+see the siblings' PBT-gate note). Rows are **invariant-only — NEVER F-rows** and
+never §2.6/FS-n rows (this spec's fail-states already exist as §4 F1–F8). The
+register is genuinely invariant-bearing: `coerceLayout` is a total, idempotent
+fail-soft coercion; `isLayoutZoneName` is a total predicate;
+`deriveLayout` is a pure deterministic projection; and the version gate,
+coerced-state well-formedness, and pane-dedup rules are all observable from the
+module's exported surface. Each proposition pins a behavior the **landed module
+already has** — this is a backfill, so the register **cannot reject a correct
+module**.
+
+| Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
+|---|---|---|---|---|
+| `P-IM-1` | IM | **`isLayoutZoneName` is a total predicate.** It returns `true` exactly for the four pinned pane zones and `false` for every other value. | `strat:zone-name-total` | ∀ generated value `v`: `isLayoutZoneName(v) === (v === 'left' \|\| v === 'right' \|\| v === 'header' \|\| v === 'footer')` — `true` for exactly the four zone names; `false` for every other string (`'stage'`, `'top-bar'`, `'sidebar'`, `''`, garbage) and every non-string (`null`, `undefined`, numbers, booleans, objects, arrays). |
+| `P-IM-2` | IM | **`coerceLayout` is total — any input yields a valid `LayoutState` and never throws.** Null/undefined, a non-object, or a plain object carrying arbitrary deeply-nested junk all coerce to a well-formed state; no code path throws. | `strat:coerce-total` | ∀ generated (possibly malformed / deeply-nested) value `x`: `coerceLayout(x)` returns a `LayoutState` satisfying the §P-SM-2 shape and never throws. |
+| `P-TP-1` | TP | **`coerceLayout` is idempotent.** Coercing an already-coerced result reproduces it exactly. | `strat:coerce-idempotent` | ∀ value `x`: `coerceLayout(coerceLayout(x))` deep-equals `coerceLayout(x)` (identical `version`, `panes`, `zones`, `stage`, `topBar`; pane order preserved; the second pass changes nothing). |
+| `P-SM-1` | SM | **Version gating.** `coerceLayout` preserves/coerces the payload only when `version === LAYOUT_VERSION` (exactly 1); any other value — missing, non-integer, negative, zero, `> 1`, `NaN`, `±Infinity` — fails soft to `defaultLayout()`, never a newer-schema partial or a crash. | `strat:coerce-version-gate` | ∀ value `x` with a `version` field: a non-`LAYOUT_VERSION` version — missing, non-integer, negative, `> 1`, non-finite, or non-number — fails soft to `defaultLayout()` whenever `typeof version !== 'number'` OR `!Number.isInteger(version)` OR `version < 1` OR `version > LAYOUT_VERSION`; an exact-`LAYOUT_VERSION` payload is preserved — the output `.version === LAYOUT_VERSION` in BOTH cases (the fail-soft `defaultLayout()` result itself carries `.version === LAYOUT_VERSION === 1`, so no strict `⟺` biconditional on the gate). |
+| `P-SM-2` | SM | **The coerced `LayoutState` is well-formed — only known fields, no invalid field, no duplicate pane id.** Every zone `size` is finite-positive, every `minimized` is a boolean, `stage`/`topBar` sizes are finite-positive, every pane has a non-empty string `id`, a valid zone, a finite `order`, a boolean `collapsed`, and pane ids are unique (first-wins dedup). | `strat:coerce-state-model` | ∀ value `x`, let `L = coerceLayout(x)`: `L.version === 1`; for each zone `z ∈ {left,right,header,footer}`: `Number.isFinite(L.zones[z].size) && L.zones[z].size > 0` and `typeof L.zones[z].minimized === 'boolean'`; `Number.isFinite(L.stage.size) && L.stage.size > 0`; `Number.isFinite(L.topBar.size) && L.topBar.size > 0`; ∀ pane ∈ `L.panes`: `typeof pane.id === 'string' && pane.id !== ''`, `isLayoutZoneName(pane.zone)`, `Number.isFinite(pane.order)`, `typeof pane.collapsed === 'boolean'`; and all pane `id`s are pairwise distinct. |
+| `P-TP-2` | TP | **`deriveLayout` is a deterministic pure projection of the placement overlay.** The same specs yield the identical layout; each spec maps to exactly one pane, and the stated defaults (legacy `left` zone, registration-index `order`, `collapsed:false`) are applied. | `strat:derive-deterministic` | ∀ generated specs array `S` of length `N`: `deriveLayout(S)` twice returns deep-equal outputs; `panes.length === N`; for `i ∈ [0,N)`: `panes[i].id === S[i].id`, `panes[i].zone === (isLayoutZoneName(S[i].defaultZone) ? S[i].defaultZone : 'left')`, `panes[i].order === ((typeof S[i].defaultOrder === 'number' && Number.isFinite(S[i].defaultOrder)) ? S[i].defaultOrder : i)`, `panes[i].collapsed === false`; and `deriveLayout(S)` has `version === LAYOUT_VERSION` with `zones`/`stage`/`topBar` equal to `defaultLayout()`'s. |
+
+**Class tally:** IM ×2, SM ×2, TP ×2 = **6 rows ≤ 8** ✔.
+
+**SPEC NOTE (P-IM-2 totality scope):** the `coerceLayout` totality claim is scoped
+to **plain-JSON / decodable (getter-free)** inputs. An accessor/proxy object with
+a **throwing getter** can throw — a documented low seam (see the §2.7
+Confirmed-safe totality claim); this does **not** add a register row.
+
+**SPEC NOTE (extreme finite size):** an extremely large **finite** size (e.g.
+`1e308`) survives `coerceLayout` (no clamp — the deliberate §2.6 pin-5 preserve)
+and `layoutCssVars` renders invalid CSS `${1e+308}px`; a latent projection edge
+masked by the **U-SHELL-5** drag clamps (S2). Tracker note only — no register
+row.
+
+The rows above are **NOT over-strength**: every proposition is directly observable
+from the exported module surface (`isLayoutZoneName`, `coerceLayout`,
+`deriveLayout`, the `LayoutState`/`PaneLayoutEntry`/`ZoneLayout` shapes) and the
+pinned constants — none invents a field, none requires a new export, and none
+reaches beyond the documented contract. Note the deliberate **omission of any
+load-time clamp claim**: `coerceLayout` preserves finite-positive sizes
+byte-for-byte (spec §2.6 pin 5) and does **not** normalize them into
+`[LAYOUT_ZONE_MIN, LAYOUT_ZONE_MAX]` / `[LAYOUT_REGION_MIN, LAYOUT_REGION_MAX]` —
+the default `header`/`footer` zone sizes (48) and `topBar` (36) lie outside those
+ranges, and the constants are consumed only by the **U-SHELL-5** drag clamps
+(`src/renderer/pane-gutter.ts`), not by U-SHELL-1 load coercion. A row asserting
+`size ∈ [LAYOUT_ZONE_MIN, LAYOUT_ZONE_MAX]` after coerce would reject the landed
+module, so none is registered. The register therefore cannot reject a correct
+module.
+
+### 5.8 Census
 
 - 1 new layout module (`src/renderer/layout-state.ts` or `src/shared/`) with
   the `LayoutState` types + pure default/derive/coerce helpers.

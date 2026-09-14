@@ -137,11 +137,71 @@ export function insertionIndexForPoint(
   return Math.min(count - 1, Math.floor(fraction * count))
 }
 
+/** A getter-shaped bounding rect (`getBoundingClientRect()` projection) — the
+ *  projection the shell wiring reads on each `pointermove`. Declared here so the
+ *  three pure mapping helpers stay node-testable and independent of the DOM. */
+export interface Rect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** §2.2.2 (P-IM-2) — project a `getBoundingClientRect()`-shaped rect onto the
+ *  controller `ZoneBounds` surface: copies `left`/`top`/`right`/`bottom` as
+ *  finite floats (a non-finite/missing field coerces to `0`), preserving `zone`
+ *  (§3 state 7 / F6). TOTAL + deterministic: a malformed/`null` rect yields the
+ *  0-floored bound typed for `zone` without throwing. */
+export function toZoneBounds(zone: unknown, rect: Rect | null): ZoneBounds {
+  const z: LayoutZoneName = isLayoutZoneName(zone) ? zone : 'left'
+  const zero: ZoneBounds = { zone: z, left: 0, top: 0, right: 0, bottom: 0 }
+  if (rect == null || typeof rect !== 'object') return zero
+  const src = rect as unknown as Record<string, unknown>
+  for (const k of ['left', 'top', 'right', 'bottom'] as const) {
+    const v = src[k]
+    if (typeof v !== 'number' || !Number.isFinite(v)) return zero
+  }
+  return {
+    zone: z,
+    left: src.left as number,
+    top: src.top as number,
+    right: src.right as number,
+    bottom: src.bottom as number,
+  }
+}
+
+/** §2.2.3 (P-TP-1) — the drop-target hit-test. Geometry-first + scope-agnostic:
+ *  returns the FIRST `ZoneBounds` whose rect contains a point within the snap
+ *  threshold (`withinSnapThreshold`); `null` when no zone matches (F1). Legality
+ *  is enforced downstream by the drag controller's `drop`. TOTAL: a malformed
+ *  point, a non-array/empty `zones`, or a non-finite/non-positive `threshold`
+ *  → `null`, never a throw. */
+export function dropZoneForPoint(
+  point: DragPoint,
+  zones: readonly ZoneBounds[],
+  threshold: number,
+): LayoutZoneName | null {
+  if (point == null || typeof point !== 'object' || Array.isArray(point)) return null
+  if (!Array.isArray(zones) || zones.length === 0) return null
+  if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) return null
+  for (const zone of zones) {
+    if (zone != null && withinSnapThreshold(point, zone, threshold)) return zone.zone
+  }
+  return null
+}
+
 /** C11 — true when `point` is inside `zone` OR within the `threshold` band
  *  around it. TOTAL: a malformed point/zone/threshold yields false, never a
  *  throw. */
 export function withinSnapThreshold(point: DragPoint, zone: ZoneBounds, threshold: number): boolean {
   if (point == null || zone == null) return false
+  // §4 F6 — a zero/degenerate rect (a collapsed/empty track or hidden zone, zero
+  // or inverted span) never spuriously contains / reveals: `withinSnapThreshold`
+  // returns false, so neither `dropZoneForPoint` nor the controller's proximity
+  // reveal can accept it. TOTAL — a malformed zone with missing/inverted edges
+  // yields false, never a throw.
+  if (typeof zone.right === 'number' && typeof zone.left === 'number' && zone.right <= zone.left) return false
+  if (typeof zone.bottom === 'number' && typeof zone.top === 'number' && zone.bottom <= zone.top) return false
   const values = [point.x, point.y, zone.left, zone.top, zone.right, zone.bottom]
   if (!values.every((v) => typeof v === 'number' && Number.isFinite(v))) return false
   const t = typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0 ? threshold : 0
