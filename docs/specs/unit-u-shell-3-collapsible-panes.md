@@ -74,6 +74,16 @@ so a pane renders as its header/handle only, with the collapsed state persisted.
    collapsed frame chrome); the pane root carries the class.
 4. **§3.6 / F5** (live `dispatch`/`list_targets`, stale-id no-op) are covered by
    the skipped live-runtime battery (the U-SHELL-1 convention), not node tests.
+5. **Bridge-exposure invariant (NEW — U-LIVE11, LIVE-11 fix).** The `togglePaneCollapse`
+   seam MUST be a **function** on the real `contextBridge` `window.provident.sidebar`
+   after `installSidebar` — the preload default `sidebarHolder` and the exposed
+   `sidebar` proxy both must carry `togglePaneCollapse` (plus the sibling
+   `paneVisibilityToggle`/`zoneMinimizeToggle`/`paneTabExpand`). If it is `undefined`
+   at that boundary, the handler body's `typeof … !== 'function'` guard returns and
+   collapse is **silently inert live**. The dom-shim fallback attaches every method
+   directly, so the node suite is envelope-green while the assembled app is broken —
+   the LIVE-11 seam gap (RCA-12). Fixed by `docs/specs/unit-live11-bridge-seams.md`
+   (preload exposure + LIVE-5 H3 touch).
 
 ### 2.6 Adversarial findings (2026-09-12)
 
@@ -109,6 +119,7 @@ Post-green read-only adversarial pass; host findings fixed here, no package find
 | F3 | a pane with no body (empty render) | collapse is a visual no-op; never throws |
 | F4 | a malformed persisted `collapsed` | coerced to `false` (expanded) |
 | F5 | dispatch on a stale node id | **rejected by the host `dispatch` (`unresolved target` error result); never mutates a sibling** (identity is stable; ids are never reused). Not a silent no-op — the host dispatch contract surfaces an error; the safety property holds. (Adversarial H4.) |
+| F6 | **seam undefined at the preload boundary (NEW — the preload-exposure fix note).** `window.provident.sidebar.togglePaneCollapse` is `undefined` in the REAL contextBridge renderer (the preload `sidebarHolder`/`sidebar` proxy omit it; the dom-shim fallback does not). | **FAIL — collapse inert** (the handler-body guard no-ops). The preload must expose the seam as a function after `installSidebar`. Note: the node suite is envelope-green while the app is broken for this cause — the LIVE-11 seam gap, closed by `docs/specs/unit-live11-bridge-seams.md`. |
 
 ## 5. Census
 
@@ -123,6 +134,9 @@ Post-green read-only adversarial pass; host findings fixed here, no package find
   `unit-u-shell-4-drag-relocate.md` (C12 zone minimize).
 - Build: `src/renderer/sidebar-panes.ts` (pane frame), `src/renderer/pane-graph.ts`
   (`paneSubtreeRoot`), `src/renderer/index.html` (frame CSS).
+- Fix-spec: `docs/specs/unit-live11-bridge-seams.md` (U-LIVE11 — the preload
+  `sidebar` seam exposure for `togglePaneCollapse` + siblings, and the LIVE-5
+  `paneVisibilityTouched` hardening; the mandatory live battery).
 
 ## 7. Delimitation
 

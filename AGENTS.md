@@ -190,6 +190,35 @@ review finding.
     test-counts, phantom return fields, and renumbered sections across every
     spec — exactly the drift this step prevents when run per-unit instead of
     batched.
+    **RCA-11 (2026-09-14 — the live-bug green-pipeline miss,
+    `docs/specs/rca-live-bugs-green-pipeline.md`): the live-scenario battery is a
+    MANDATORY pre-DONE gate for UI-overhaul units, NOT parked-by-default.**
+    The LIVE-1..12 batch shipped green because every UI-overhaul feature passed
+    the node trio / blind-greens / doc-review gates while the ASSEMBLED, rendered
+    Electron app was broken in exactly the dimensions the overhaul was supposed
+    to deliver — the one gate built to see that (the live batteries) was authored
+    and PARKED the entire overhaul, and no rendered-DOM/assembly surface existed.
+    Comply: (a) a UI-overhaul / UI-rendering unit is not pre-DONE while its
+    `-live-pending-battery.md` set is parked on "no live session" — run it against
+    the app (`scripts/live-drive.mjs` on a usable display) before reporting the
+    unit complete; (b) park ONLY a structurally non-exercisable surface (an
+    OS-owned native dialog / a scope the MCP+CDP surface cannot reach) WITH the
+    recorded park reason; parked-by-default is the failure mode this rule closes.
+    **RCA-12 (2026-09-14, same RCA — verify the right layer): a node-suite green
+    is ENVELOPE-green, not APP-green.** The node suite + blind-greens verify the
+    provident-ENVELOPE authoring model (pure data/placements/handlers) + the docs.
+    The dom-shim is deliberately layout-less/CSS-less, so shell-CSS/grid/window
+    (`titleBarStyle`, `-webkit-app-region`), the runtime stage↔app-graph assembly,
+    and the live persistence round-trip are structurally unassertable in node.
+    Never report "the app works" from a node-green. Comply: (a) every DONE row /
+    handover states WHICH LAYER each verification covers (envelope/pure vs
+    assembled/renderer/app); (b) a UI-overhaul unit additionally needs a rendered-
+    DOM/assembly verification — an assembly/reconciliation test (stage body not
+    overwritten by the pane-inclusive envelope), shell-layout/window tests
+    (CA-3/CA-4), and the live-drive smoke blocks (empty-boot landing, panes in the
+    zone tracks, a toolbar click reaching its seam, persistence round-trip)
+    (CA-2); (c) the FINAL review includes a full-app boot + key-DOM check (CA-6),
+    not only docs + trio.
 
 ## Roles (imported, adapted)
 
@@ -222,3 +251,14 @@ batched (run once, late) rather than per-unit after the greens. RCA-6 makes
 the documentation review a MANDATORY per-unit gate (item 10d), importing the
 upstream Preempt-Providence archival loop's cleanup-pass discipline: the
 doc review is the archival loop applied AS A GATE, not an afterthought.
+
+**RCA-11 + RCA-12 (2026-09-14 — the live-bug green-pipeline miss)**: every
+UI-overhaul feature passed the node trio / blind-greens / doc-review gates
+while the assembled Electron app was broken in exactly the dimensions the
+overhaul was supposed to deliver (LIVE-1..12). The pipeline verified the
+provident-ENVELOPE authoring model + the docs, never the rendered/assembled
+app: the live-scenario batteries were PARKED the entire overhaul and no
+rendered-DOM/assembly/window surface existed. The guards are encoded as gate
+items 11 + 12 above; the RCA is `docs/specs/rca-live-bugs-green-pipeline.md`.
+The `docs/skills/process-guardrails.md` skill consolidates them for fresh
+sub-agents.

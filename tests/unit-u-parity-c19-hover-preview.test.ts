@@ -421,7 +421,13 @@ function crosslinkSnapshot(): RagSnapshotPayload {
 function makeBridge(snapshot: RagSnapshotPayload) {
   const state = {
     operatorSettings: {
-      enabledPanes: [],
+      // EXPLICIT NON-first-run persisted set (FIRST-RUN-ENABLED-DEFAULT /
+      // docs/defects.md LIVE-7): `panesInitialized: true` + a full app-graph
+      // `enabledPanes` so boot does NOT fire the first-run-only write-through.
+      // The suite's crosslinks pane must stay enabled on this non-first-run boot.
+      enabledPanes: ['doc-nav', 'crosslinks', 'search', 'template-editor'],
+      enabledOperatorPanes: ['settings'],
+      panesInitialized: true,
       defaultDocumentId: null,
       topK: 5,
       editingMode: 'textarea' as EditingMode,

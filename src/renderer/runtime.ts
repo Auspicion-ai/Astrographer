@@ -36,6 +36,7 @@ import {
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
 import type { DocumentRoot, MaterializedRoot, ReconcileResult } from './content-reconcile.js'
+import { EDITOR_TOOLBAR_ID } from './pane-graph.js'
 import type {
   DispatchRequest,
   DispatchResult,
@@ -103,8 +104,16 @@ export interface ApplyReconcileReport {
   warnings: string[]
 }
 
-/** U-STATE-1b — the content roots of an envelope: `rag-<id>` document subtrees
- *  AND `pane-<id>` app-graph panes, in payload order. Overlays are excluded. */
+/** U-LIVE4 — the pinned empty-store landing root id (the `content[0]` root
+ *  authored by `emptyStoreEnvelope`). Tracked as a content root so the boot
+ *  co-authored landing is observable through `materializedContentRoots()` AND
+ *  survives a still-empty content reconcile (INV-E2/E4). Pane-like root
+ *  (document-unscoped), never a `rag-` document subtree. */
+const LANDING_ROOT_ID = 'stage-landing'
+
+/** U-STATE-1b — the content roots of an envelope: `rag-<id>` document subtrees,
+ *  `pane-<id>` app-graph panes, the pinned `editor-toolbar`, and the pinned
+ *  empty-store `stage-landing` root, in payload order. Overlays are excluded. */
 function extractContentRoots(envelope: LegacyInitialData | null | undefined): LegacyNodeData[] {
   const out: LegacyNodeData[] = []
   const payloads = envelope?.content
@@ -116,7 +125,10 @@ function extractContentRoots(envelope: LegacyInitialData | null | undefined): Le
       const id = (node?.props as { id?: unknown } | undefined)?.id
       if (
         typeof id === 'string' &&
-        ((id.startsWith('rag-') && id.length > 4) || (id.startsWith('pane-') && id.length > 5))
+        ((id.startsWith('rag-') && id.length > 4) ||
+          (id.startsWith('pane-') && id.length > 5) ||
+          id === EDITOR_TOOLBAR_ID ||
+          id === LANDING_ROOT_ID)
       ) {
         out.push(node as LegacyNodeData)
       }
@@ -198,7 +210,20 @@ export class Runtime {
    *  trigger; the public `flush()` settles the cascade (the 0.1.1 shared
    *  surface — no hand-rolled tick loop), then we drain + re-emit. */
   private handleDomEvent = (wire: string, domEvent: Event): void => {
-    const node = this.supervisor.getNode(wire)
+    let node = this.supervisor.getNode(wire)
+    // LIVE-8/9/11 root cause (2026-09-15): the DOM `wire` from the package
+    // DomAdapter is a PATH-KEY (e.g. "root/left/node-663/node-857/node-858"),
+    // but `supervisor.getNode` is keyed by NODE.id — so a real DOM click on any
+    // non-root provident on:click control silently dropped (getNode(wire)=null).
+    // Resolve the actual node id from the event target's `data-node-id` before
+    // giving up (the rendered element always carries it). Synthetic
+    // provident.dispatch (resolved to node.id) already worked; this closes the
+    // real-DOM-click→dispatch seam.
+    if (!node) {
+      const el = domEvent?.target as HTMLElement | null
+      const dataNodeId = el?.getAttribute?.('data-node-id')
+      if (dataNodeId) node = this.supervisor.getNode(dataNodeId)
+    }
     if (!node) return
     const eventName = domEvent?.type ?? String(domEvent ?? '')
     const extra = domEvent?.target && 'value' in domEvent.target
@@ -465,10 +490,19 @@ export class Runtime {
     }
 
     const destroyRoot = (cssId: string): boolean => {
-      // AF2 — only reconcile content roots (`rag-` document subtrees or `pane-`
-      // panes); never let a malformed/hostile bucket entry destroy the
+      // AF2 — only reconcile content roots (`rag-` document subtrees, `pane-`
+      // panes, the pinned `editor-toolbar`, or the pinned empty-store
+      // `stage-landing`); never let a malformed/hostile bucket entry destroy the
       // template/zone nodes.
-      const isRoot = typeof cssId === 'string' && ((cssId.startsWith('rag-') && cssId.length > 4) || (cssId.startsWith('pane-') && cssId.length > 5))
+      // AD-2026-09-14-1 (Finding 1) — `LANDING_ROOT_ID` is admitted so a
+      // classified `removed`/`replaced` landing is actually destroyed (a phantom
+      // `#stage-landing` must not persist once a first document is imported).
+      const isRoot =
+        typeof cssId === 'string' &&
+        ((cssId.startsWith('rag-') && cssId.length > 4) ||
+          (cssId.startsWith('pane-') && cssId.length > 5) ||
+          cssId === EDITOR_TOOLBAR_ID ||
+          cssId === LANDING_ROOT_ID)
       if (!isRoot) return false
       const node = this.nodeByPropsId(cssId)
       if (!node) return false

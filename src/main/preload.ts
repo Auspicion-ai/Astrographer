@@ -86,6 +86,22 @@ export interface SidebarMethods {
   historyUndo(): void
   historyRedo(): void
   historyEntryClick(index: unknown): void
+  /** U-LIVE11 — the collapse/visibility seams the pane-graph + operator
+   *  handler bodies reach (LIVE-11/LIVE-12/C + C12 zone seams). A no-op until
+   *  the host installs its methods; the exposed proxy delegates with optional
+   *  call so a holder missing a key never throws. */
+  togglePaneCollapse(id: string): void
+  paneVisibilityToggle(id: string): void
+  zoneMinimizeToggle(zone: string): void
+  paneTabExpand(zone: string, paneId: string): void
+  /** HOST-4 (U-SHELL-9a §2.6) — the search-result open seam. The
+   *  `SEARCH_RESULT_OPEN_BODY` handler reaches it (the result's
+   *  `data-document-id`); opens a NEW `document` tab (the search tab stays). */
+  openDocumentTab(id: string): void
+  /** HOST-5 (U-SHELL-9a §2.6) — the in-tab query-edit seam. The
+   *  `SEARCH_TAB_SUBMIT_BODY` handler reaches it (`data-tab-id` + the in-tab
+   *  input); reuses the tab's own entry (`editSearchQuery` → `setSearchParams`). */
+  searchTabQuery(tabId: string, query: string): void
 }
 
 export interface ProvidentBridge {
@@ -293,6 +309,16 @@ let sidebarHolder: SidebarMethods = {
   historyUndo: () => {},
   historyRedo: () => {},
   historyEntryClick: () => {},
+  togglePaneCollapse: () => {},
+  paneVisibilityToggle: () => {},
+  zoneMinimizeToggle: () => {},
+  paneTabExpand: () => {},
+  // HOST-4/HOST-5 — the search-result open + in-tab query-edit seams
+  // (AD-2026-09-14-2 — exposed here so the renderer's holder keys have preload
+  // parity; the `SEARCH_RESULT_OPEN_BODY`/`SEARCH_TAB_SUBMIT_BODY` handlers
+  // reach them via `window.provident.sidebar`).
+  openDocumentTab: () => {},
+  searchTabQuery: () => {},
 }
 
 const bridge: ProvidentBridge = {
@@ -594,6 +620,19 @@ const bridge: ProvidentBridge = {
     historyUndo: () => sidebarHolder.historyUndo?.(),
     historyRedo: () => sidebarHolder.historyRedo?.(),
     historyEntryClick: (index) => sidebarHolder.historyEntryClick?.(index),
+    // U-LIVE11 — the four collapse/visibility seams exposed at the preload
+    // boundary (LIVE-11/LIVE-12/C + C12 zone seams). Delegate to the installed
+    // holder (a no-op until installed); a holder without a key falls through via
+    // optional-call and never throws (P-IM-2).
+    togglePaneCollapse: (id) => sidebarHolder.togglePaneCollapse?.(id),
+    paneVisibilityToggle: (id) => sidebarHolder.paneVisibilityToggle?.(id),
+    zoneMinimizeToggle: (zone) => sidebarHolder.zoneMinimizeToggle?.(zone),
+    paneTabExpand: (zone, paneId) => sidebarHolder.paneTabExpand?.(zone, paneId),
+    // HOST-4/HOST-5 — the search-result open + in-tab query-edit seams
+    // (AD-2026-09-14-2 — same style as the LIVE-11 seams; delegate to the
+    // installed holder, optional-call so a holder without the key never throws).
+    openDocumentTab: (id) => sidebarHolder.openDocumentTab?.(id),
+    searchTabQuery: (tabId, query) => sidebarHolder.searchTabQuery?.(tabId, query),
   },
   installSidebar(methods) {
     sidebarHolder = methods

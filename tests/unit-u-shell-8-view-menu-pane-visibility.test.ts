@@ -24,12 +24,15 @@
 //   1. The exact host apply-method NAME is NOT pinned (the spec only names the
 //      bridge `onPaneVisibility` subscription). Every test rides the bridge
 //      subscription captured at boot + the registry/runtime observables.
-//   2. Empty `enabledPanes` semantics: the spec §3 state 1 says persisted
-//      `enabledPanes` is applied, but the existing suite boots with
-//      `enabledPanes: []` and expects the panes rendered (e.g.
-//      tests/sidebar-panes-host.test.ts "empty-snapshot guard" expects
-//      `pane-doc-nav`). The regression test below pins `[]` → registration
-//      defaults (all enabled); flagged for the Architect.
+//   2. Empty `enabledPanes` semantics: RESOLVED by DECIDED:
+//      FIRST-RUN-ENABLED-DEFAULT (docs/decisions.md + docs/defects.md LIVE-7,
+//      2026-09-15). On FIRST boot (no persisted `enabledPanes` /
+//      `panesInitialized !== true`) the default ENABLED app-graph panes are
+//      ONLY `['search','doc-nav']` (NOT all panes), and the default is written
+//      through via `persistEnabledPanes()` (so `panesInitialized:true` + the
+//      census agree). A non-empty persisted `enabledPanes` stays authoritative;
+//      after `panesInitialized` an empty list still means NONE (H2 unchanged).
+//      Operator-scope first-run default stays all-enabled.
 //   3. `tests/sidebar-panes-host.test.ts` boots with `enabledPanes:['doc-nav']`
 //      and expects the OPERATOR settings pane rendered (line ~851). If a
 //      non-empty list is authoritative for BOTH scopes, that existing test
@@ -417,11 +420,15 @@ describe('U-SHELL-8 — boot applies persisted enabledPanes (spec §3 state 1, F
     expect(hasPaneTarget(h, 'crosslinks')).toBe(false)
   })
 
-  it('state 1 regression — an EMPTY persisted list keeps the registration defaults (all enabled)', async () => {
+  it('state 1 regression — an EMPTY first-run persisted list enables ONLY the first-run default (search + doc-nav)', async () => {
     const h = makeHarness({ operatorSettings: { enabledPanes: [] } })
     await h.host.boot(h.runtime)
-    for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor', 'settings']) {
+    // FIRST-RUN-ENABLED-DEFAULT: only search + doc-nav enabled (not all panes).
+    for (const id of ['doc-nav', 'search', 'settings']) {
       expect(h.registry.isEnabled(id)).toBe(true)
+    }
+    for (const id of ['crosslinks', 'template-editor']) {
+      expect(h.registry.isEnabled(id)).toBe(false)
     }
     expect(hasPaneTarget(h, 'doc-nav')).toBe(true)
   })
@@ -436,6 +443,38 @@ describe('U-SHELL-8 — boot applies persisted enabledPanes (spec §3 state 1, F
       expect(warn).toHaveBeenCalled()
     } finally {
       warn.mockRestore()
+    }
+  })
+
+  // DECIDED: FIRST-RUN-ENABLED-DEFAULT (docs/defects.md LIVE-7) — the new
+  // explicit contract pinned here (RED against the pre-fix code, which enables
+  // ALL app-graph panes on the empty-first-run branch and does NOT write the
+  // default through). On a first-run boot the registry has EXACTLY
+  // {search, doc-nav} enabled AND the implementer writes that default through
+  // via persistEnabledPanes() so the #operator-enabled-panes census and a
+  // subsequent boot agree (panesInitialized:true + the pinned set persisted).
+  it('state 1 — empty first-run persisted set ⇒ registry exactly {search,doc-nav} AND the default is WRITTEN THROUGH (panesInitialized:true)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ushell8-firstrun-'))
+    try {
+      const path = join(dir, 'settings.json')
+      // First-run: a real store with nothing persisted (panesInitialized undefined).
+      const h = makeHarness({ operatorStore: createOperatorSettingsStore({ path }) })
+      await h.host.boot(h.runtime)
+
+      // The registry ends up with EXACTLY the first-run default enabled.
+      expect(h.registry.isEnabled('doc-nav')).toBe(true)
+      expect(h.registry.isEnabled('search')).toBe(true)
+      expect(h.registry.isEnabled('crosslinks')).toBe(false)
+      expect(h.registry.isEnabled('template-editor')).toBe(false)
+
+      // And the implementer writes the default through (census + next boot agree).
+      const persisted = createOperatorSettingsStore({ path }).get()
+      expect(persisted.panesInitialized).toBe(true)
+      // Order is not pinned (spec §3 note); the persisted SET is exactly the default.
+      expect(persisted.enabledPanes).toHaveLength(2)
+      expect(persisted.enabledPanes?.sort()).toEqual(['doc-nav', 'search'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })
@@ -820,13 +859,17 @@ describe('U-SHELL-8 — fail-states / edge cases (spec §4)', () => {
 // §2.7 — adversarial findings H1–H5 regression (post-review fixes)
 // ===========================================================================
 describe('U-SHELL-8 §2.7 — adversarial findings H1–H5 (regression)', () => {
-  it('H1 — an unknown-only enabledPanes list drops to empty ⇒ all app-graph panes enabled (defaults)', async () => {
+  it('H1 — an unknown-only enabledPanes list drops to empty ⇒ first-run default (search + doc-nav) enabled', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const h = makeHarness({ operatorSettings: { enabledPanes: ['ghost'] } })
       await h.host.boot(h.runtime)
-      for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor']) {
+      // Unknown-only → drops to empty → empty-first-run branch (FIRST-RUN-ENABLED-DEFAULT).
+      for (const id of ['doc-nav', 'search']) {
         expect(h.registry.isEnabled(id)).toBe(true)
+      }
+      for (const id of ['crosslinks', 'template-editor']) {
+        expect(h.registry.isEnabled(id)).toBe(false)
       }
       expect(hasPaneTarget(h, 'doc-nav')).toBe(true)
       expect(warn).toHaveBeenCalled()
@@ -840,9 +883,17 @@ describe('U-SHELL-8 §2.7 — adversarial findings H1–H5 (regression)', () => 
     try {
       const h = makeHarness({ operatorSettings: { enabledPanes: ['settings'], enabledOperatorPanes: ['doc-nav'] } })
       await h.host.boot(h.runtime)
-      for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor', 'settings']) {
+      // enabledPanes=['settings'] is wrong-scope for app-graph → dropped → empty
+      // → first-run branch: search+doc-nav only (FIRST-RUN-ENABLED-DEFAULT).
+      for (const id of ['doc-nav', 'search']) {
         expect(h.registry.isEnabled(id)).toBe(true)
       }
+      for (const id of ['crosslinks', 'template-editor']) {
+        expect(h.registry.isEnabled(id)).toBe(false)
+      }
+      // enabledOperatorPanes=['doc-nav'] is wrong-scope for operator → dropped →
+      // empty → operator first-run default stays all-enabled (settings still on).
+      expect(h.registry.isEnabled('settings')).toBe(true)
       expect(warn).toHaveBeenCalled()
     } finally {
       warn.mockRestore()
@@ -855,9 +906,18 @@ describe('U-SHELL-8 §2.7 — adversarial findings H1–H5 (regression)', () => 
       const path = join(dir, 'settings.json')
       const h = makeHarness({ operatorStore: createOperatorSettingsStore({ path }) })
       await h.host.boot(h.runtime)
-      for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor']) {
+      // FIRST boot (empty persisted set, panesInitialized !== true): only the
+      // first-run default is enabled (search + doc-nav), NOT all app-graph panes.
+      for (const id of ['doc-nav', 'search']) {
         expect(h.registry.isEnabled(id)).toBe(true)
       }
+      for (const id of ['crosslinks', 'template-editor']) {
+        expect(h.registry.isEnabled(id)).toBe(false)
+      }
+      // Hide EVERY app-graph pane. crosslinks/template-editor are already off on
+      // first boot, so hiding them is a no-op; search + doc-nav now go off. The
+      // persisted result must still be an empty enabledPanes WITH panesInitialized
+      // true (so the SECOND boot reads empty = NONE, not first-run).
       for (const id of ['doc-nav', 'crosslinks', 'search', 'template-editor']) {
         fireVisibility(h, id, false)
       }

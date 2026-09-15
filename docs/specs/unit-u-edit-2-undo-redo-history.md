@@ -43,6 +43,18 @@ journal back to that point** (multi-step undo, implemented as repeated `undo`).
   emits `rag-store-changed` and the app graph re-renders.
 - **Disabled state:** Undo is disabled when `undoDepth === 0`; Redo when
   `redoDepth === 0` (from the §2.5 read).
+- **Disabled-state REFRESHED on the content re-derive path (U-LIVE8, LIVE-8
+  fix):** the Undo/Redo `disabled` reflects the FRESH projected
+  `undoDepth`/`redoDepth` on EVERY re-derive — including the **content-only**
+  re-derive (`onRagStoreChanged` → `requestRebuild('content')` →
+  `reDerive('content')` → `applyContentChange` →
+  `applyEditorToolbar(lastJournal, …)`, `sidebar-panes.ts:1501/:2552`), NOT only
+  the operator/`historyUndo` reload. The `editor-toolbar` **content root must be
+  re-materialized on that path** (pane-like reconcile candidate) so an edit-bumped
+  `undoDepth` (0→1) enables the Undo control LIVE (a kept `editor-toolbar` root
+  whose prop changed is otherwise dropped — `applyContentReconcile` destroys/
+  attaches only `rag-`/`pane-` roots, `runtime.ts:467-488`). Fix-spec:
+  `docs/specs/unit-live8-toolbar-undo-refresh.md`.
 - **No-op / idempotence:** an empty-stack Undo/Redo is a no-op (F1/F2); the op
   is serialized through the store's single-writer queue (F5 — no interleaved
   double-undo).
@@ -163,6 +175,9 @@ stopping early if `ok:false` (base boundary) — idempotent-safe, never throws
 - Decisions: `UI-CONFIG-CARRIER` (not used for the journal — process-local).
 - Build: `src/renderer/runtime.ts` (`journal`, `settleGate`),
   `src/renderer/sidebar-panes.ts` (editor toolbar/render), `src/renderer/pane-graph.ts`.
+- **U-LIVE8 fix-spec:** `docs/specs/unit-live8-toolbar-undo-refresh.md` — the
+  §2.1 "disabled-state refreshed on the content re-derive path" invariant; adds the
+  `editor-toolbar` root as a pane-like content-reconcile candidate.
 
 ## 7. Delimitation
 

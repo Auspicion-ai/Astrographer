@@ -69,14 +69,17 @@ application + persistence.
 
 ### 2.6 Pinned implementation details (post-TestWriter, 2026-09-12)
 
-1. **Scope authority model (W2-Q10):** `enabledPanes` (existing) is the
-   authoritative enabled set for **app-graph** panes. An **empty** `enabledPanes`
-   → all app-graph panes enabled (registration defaults). **Operator panes** are
+1. **Scope authority model (W2-Q10) + FIRST-RUN-ENABLED-DEFAULT (2026-09-15, LIVE-7):** `enabledPanes` (existing) is the
+   authoritative enabled set for **app-graph** panes. On a **FIRST boot** (an EMPTY persisted `enabledPanes` with `panesInitialized !== true`) the enabled app-graph panes default to **`['search','doc-nav']` ONLY** (NOT all panes — superseding the earlier "empty ⇒ all app-graph enabled" default), and that default is WRITTEN THROUGH via `persistEnabledPanes` so the census + a subsequent boot agree; a NON-EMPTY persisted list stays authoritative; after `panesInitialized` an empty list means **none** (H2). **Operator panes** are
    enabled by default and governed by a NEW additive
    `OperatorSettings.enabledOperatorPanes: string[]` (default `[]` → all operator
    panes enabled); the View menu lists + toggles them. This reconciles the
    existing host test that boots `enabledPanes:['doc-nav']` yet still expects the
    operator `settings` pane rendered (an empty operator list = operator default).
+   Pinned: decision `FIRST-RUN-ENABLED-DEFAULT` (`docs/decisions.md`),
+   defect LIVE-7 (`docs/defects.md`), and the re-derived
+   `tests/unit-u-shell-8-view-menu-pane-visibility.test.ts` (36 tests: state 1, H1,
+   H4, H2 first-boot expect only search+doc-nav on an empty first-run set).
 2. **Host apply seam:** subscribe at boot via `bridge.onPaneVisibility(({ id,
    enabled }) => …)` (U-MENU-1's IPC); the handler calls
    `registry.setEnabled(id, enabled)`, writes the C9 carrier

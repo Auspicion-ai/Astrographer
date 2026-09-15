@@ -89,6 +89,16 @@ TabState  = { version: number; open: TabEntry[]; activeId: string | null; order:
 - A tab body's content identity is stable across a RAG content change
   (U-STATE-1): a content re-derive never closes/reorders tabs, and the mounted
   active body is repopulated in place (no `loadEnvelope`/teardown).
+- **Empty-store landing co-authoring (INV-E1..E4, fix-spec U-LIVE4):** at a TRUE
+  empty-store boot, the central-stage **landing** (`#stage-landing` /
+  `data-stage='landing'`) is **authored INTO the same pane-inclusive envelope** as
+  `#editor-toolbar` and the `.pane-frame[data-pane-id]` panes — not a bare empty
+  content zone, and not a landing mounted by a second competing `loadAppGraph`. The
+  landing survives a still-empty RAG **content** re-derive (repopulated in place)
+  and is re-rendered by a template/operator re-derive / `refresh()` (reassembled
+  from `lastTraversalEnvelope`, which is the landing envelope after empty boot).
+  This contract is owned by `docs/specs/unit-live4-empty-store-landing.md` and
+  supersedes the empty-store-landing half of the §2.10 deferral caveat below.
 
 ### 2.4 New-tab / default rules (W2-Q11, refined 2026-09-12)
 
@@ -212,7 +222,13 @@ regressions" block. All are HOST-side (this repo); **no package finding**.
   mounted body stable across a content change (the U-STATE-1 path for the active
   tab) is the **U-SHELL-9b** work, **blocked on U-STATE-1e**. The model
   invariant (open set / active / order stable) is pinned (V6); the mounted-body
-  identity is the deferred half.
+  identity is the deferred half. *(Scope note, 2026-09-15: the **empty-store**
+  landing is now CLOSED by U-LIVE4 — `docs/specs/unit-live4-empty-store-landing.md`
+  INV-E1..E4 pin that the empty-store landing is co-authored into the
+  pane-inclusive envelope and survives a still-empty content/template re-derive
+  + `refresh()`. The remaining 9b deferral here is the **non-empty** active tab
+  body (a `document`/`search` tab) identity reconcile, still gated on
+  U-STATE-1e.)*
 - **Non-document stage mount (blind caveat).** The blind run observed that in
   the node harness a non-`document` `mountTab` left the stage without a
   `zone:main`. HOST-1 subsequently made the mount node-testable for the
@@ -241,6 +257,11 @@ regressions" block. All are HOST-side (this repo); **no package finding**.
    (find-or-open); no new tab; `activeId` persists.
 8. `provident.focus` with `newTab: true` → a duplicate tab opens + activates.
 9. Restart with a persisted tab set → the tabs + active restore.
+10. **Empty-store boot (U-LIVE4, INV-E1..E4):** at a TRUE empty store the central
+    stage shows the landing (`#stage-landing` / `data-stage='landing'`)
+    **co-authored in the same pane-inclusive envelope** as the editor-toolbar and
+    the panes; a still-empty content re-derive keeps it, and a
+    template/operator/refresh repopulates it (never a bare empty content zone).
 
 *(Original U-SHELL-9 states 7–8 — the Option-C fork and the C20 background/owners
 box — are **U-SHELL-9b** states, not this unit's red set.)*
@@ -319,6 +340,11 @@ implementations (§2.9).
 ## 6. Cross-references
 
 - Split source: `docs/specs/unit-u-shell-9-main-focus-tabs.md` (SPLIT pointer).
+- **Fix-spec U-LIVE4 (empty-store landing co-authoring):**
+  `docs/specs/unit-live4-empty-store-landing.md` (INV-E1..E4, §3 F-L4-1..6, the
+  9-test TestWriter red set — `tests/unit-live4-empty-store-landing.test.ts` holds 9
+  `RED` blocks, red → green 13 incl. `unit-live4-adversarial-fix.test.ts` 4 — and the
+  mandatory `boot_landing` live battery, **LIVE-CONFIRMED 2026-09-15**).
 - `docs/specs/unit-u-shell-9b-cross-document-shared.md` (the multi-document/C20/
   Option-C half).
 - `docs/specs/ui-overhaul.md` C14, C2, §3 (main-focus tabs), §4 G1 (document

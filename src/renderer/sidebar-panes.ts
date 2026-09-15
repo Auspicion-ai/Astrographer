@@ -1255,11 +1255,24 @@ export class SidebarPanes {
     }
   }
 
+  /** DECIDED: FIRST-RUN-ENABLED-DEFAULT (docs/decisions.md, docs/defects.md
+   *  LIVE-7) — on FIRST boot (an EMPTY persisted `enabledPanes` with
+   *  `panesInitialized !== true`) the default ENABLED app-graph panes are ONLY
+   *  `['search','doc-nav']` (NOT all app-graph panes), and that default is
+   *  written through via `persistEnabledPanes()` so the census + a subsequent
+   *  boot agree. Operator-scope first-run default stays all-enabled. A
+   *  non-empty persisted list stays authoritative; after `panesInitialized` an
+   *  empty list means NONE (H2 unchanged). */
+  private static readonly FIRST_RUN_DEFAULT_APP_PANES: ReadonlySet<string> = new Set(['search', 'doc-nav'])
+
   /** U-SHELL-8 §2.6 pin 1 — apply the persisted scope enable sets at boot. An
-   *  EMPTY list for a scope keeps the registration defaults (all enabled) until
-   *  the operator's FIRST visibility write sets `panesInitialized`; from then on
-   *  an empty list means NONE enabled (H2 — so "hide every pane" round-trips).
-   *  A non-empty list is authoritative for that scope. An id that is not a
+   *  EMPTY app-graph list enables the first-run default {search,doc-nav} on the
+   *  FIRST boot (`panesInitialized !== true`), WRITTEN THROUGH via
+   *  `persistEnabledPanes()`; once the operator's first visibility write sets
+   *  `panesInitialized`, an empty list means NONE enabled (H2 — so "hide every
+   *  pane" round-trips). For the operator scope an empty list keeps the
+   *  registration defaults (all enabled) until `panesInitialized`; then it means
+   *  NONE. A non-empty list is authoritative for that scope. An id that is not a
    *  registered pane (F3/H1) or whose registry scope does not match the list
    *  (H4) is dropped + warned BEFORE the authority computation — an unknown-only
    *  list therefore drops to empty (defaults) instead of blinding the scope. */
@@ -1292,14 +1305,33 @@ export class SidebarPanes {
     }
     const appList = scopeList(settings?.enabledPanes, appIds, 'app-graph')
     const opList = scopeList(settings?.enabledOperatorPanes, opIds, 'operator')
-    // H2 — the first-run default is all-enabled; once `panesInitialized` is set
-    // the operator has expressed an explicit set, so empty means none.
+    // H2 — the OPERATOR first-run default is all-enabled; once `panesInitialized`
+    // is set the operator has expressed an explicit set, so empty means none.
     const emptyMeansEnabled = settings?.panesInitialized !== true
+    // DECIDED: FIRST-RUN-ENABLED-DEFAULT (docs/defects.md LIVE-7) — on FIRST
+    // boot (an EMPTY persisted `enabledPanes` with `panesInitialized !== true`)
+    // the default ENABLED app-graph panes are ONLY {search, doc-nav}, not all.
+    // A non-empty list is authoritative; after `panesInitialized` empty = none.
+    const appFirstRunDefault = appList.length === 0 && settings?.panesInitialized !== true
     for (const p of appDefs) {
-      this.registry.setEnabled(p.id, appList.length === 0 ? emptyMeansEnabled : appList.includes(p.id))
+      this.registry.setEnabled(
+        p.id,
+        appList.length === 0
+          ? appFirstRunDefault
+            ? SidebarPanes.FIRST_RUN_DEFAULT_APP_PANES.has(p.id)
+            : false
+          : appList.includes(p.id),
+      )
     }
     for (const p of opDefs) {
       this.registry.setEnabled(p.id, opList.length === 0 ? emptyMeansEnabled : opList.includes(p.id))
+    }
+    // FIRST-RUN-ENABLED-DEFAULT — write the app-graph first-run default through
+    // via persistEnabledPanes() (panesInitialized:true + the pinned set persisted)
+    // so the #operator-enabled-panes census and a subsequent boot agree. Guarded to
+    // that first-run case only — NOT on every boot.
+    if (appFirstRunDefault) {
+      this.persistEnabledPanes()
     }
   }
 
@@ -2330,13 +2362,66 @@ export class SidebarPanes {
     return [...new Set(edges.filter((e) => e.kind === 'doc-head').map((e) => e.target))]
   }
 
-  /** The empty-store envelope (M1) — the placeholder/default content-window
-   *  template envelope (a bare `wiki-root` + one `main` zone container, NO
-   *  content payloads). */
-  private emptyStoreEnvelope(): LegacyInitialData {
+  /** AD-2026-09-14-4 (Finding 4) — ensure the targeted traversal zone
+   *  (`this.zoneName`, default `'main'`) has a container producer in the
+   *  envelope template, mirroring `buildTraversal`'s ZONE-CONSISTENCY-ENSURE
+   *  (src/main/traversal.ts:493-502). A `targetPlacement` that names a zone the
+   *  layout/template lacks resolves nowhere and the stage drops EMPTY silently;
+   *  this defense-in-depth adds the missing `zone:<zoneName>` producer (the same
+   *  shape the traversal adds on the non-empty path) before the empty path
+   *  authors `targetPlacement`. PURE — returns a deep-copied template, never
+   *  mutates `this.template`. */
+  private ensureTargetZoneTemplate(): ContentWindowTemplate {
+    const root = this.template?.root
+    if (root == null) return this.template
+    const children = [...((root.children ?? []) as LegacyNodeData[])]
+    const hasProducer = children.some(
+      (c) =>
+        (c?.placement as { placementName?: string } | undefined)?.placementName ===
+        this.zoneName,
+    )
+    if (hasProducer) return this.template
     return {
-      template: DEFAULT_CONTENT_WINDOW_TEMPLATE,
-      content: [],
+      root: {
+        ...root,
+        children: [
+          ...children,
+          { type: 'div', props: { id: `zone:${this.zoneName}` }, placement: { placementName: this.zoneName } },
+        ],
+      },
+    }
+  }
+
+  /** The empty-store envelope (M1) — the default content-window template
+   *  envelope WITH the landing stage body authored into `content` (U-LIVE4). At
+   *  a TRUE empty store (`documentIds.length === 0`) the traversal produces the
+   *  landing as a content payload in the SAME shape `applyStageBody` uses
+   *  (:1127-1131), so `assembleAppGraphEnvelope` yields landing + editor-toolbar
+   *  + panes in ONE graph at boot (INV-E1) and `lastTraversalEnvelope` carries
+   *  the landing payload (so a later content/template re-derive or `refresh()`
+   *  repopulates it — INV-E2/E3, never a bare `content: []` envelope).
+   *
+   *  AD-2026-09-14-3 (Finding 3) — the landing's `documents` come from the
+   *  snapshot's `doc-head` edges (`deriveDocumentIds`), the SAME authoritative
+   *  source the emptiness decision (`documentIds.length === 0`) uses — NOT the
+   *  possibly-stale `this.lastDocHeads` (the doc-nav IPC). The caller only
+   *  reaches this envelope when the snapshot has ZERO `doc-head` edges, so
+   *  `deriveDocumentIds(snapshot)` yields `[]` and a stale non-empty
+   *  `lastDocHeads` can never render `li[data-document-id]` for a document that
+   *  is not actually traversable on the empty path.
+   *
+   *  AD-2026-09-14-4 (Finding 4) — `targetPlacement` is authored only after the
+   *  target zone producer is ensured in the template (never an unresolvable
+   *  `[this.zoneName]` that drops the stage empty). */
+  private emptyStoreEnvelope(snapshot: RagSnapshotPayload): LegacyInitialData {
+    const body = landingContent({
+      // AD-2026-09-14-3 — the authoritatively-empty document set (see above).
+      documents: this.deriveDocumentIds(snapshot).map((documentId) => ({ documentId })),
+      stores: this.lastStoreListing?.stores ?? [],
+    })
+    return {
+      template: this.ensureTargetZoneTemplate(),
+      content: [{ content: [{ ...body, placement: { targetPlacement: [this.zoneName] } }] }],
       clientConfig: { runInstantiation: true, runRendering: true },
     }
   }
@@ -2356,7 +2441,7 @@ export class SidebarPanes {
         documentId,
       ),
     )
-    if (perDoc.length === 0) return this.emptyStoreEnvelope()
+    if (perDoc.length === 0) return this.emptyStoreEnvelope(snapshot)
     return {
       ...perDoc[0],
       content: perDoc.flatMap((env) => env.content ?? []),
@@ -2371,7 +2456,7 @@ export class SidebarPanes {
     if (documentIds.length === 0) {
       this.backRefs.clear()
       this.lastCrosslinks = []
-      return this.emptyStoreEnvelope()
+      return this.emptyStoreEnvelope(snapshot)
     }
     // The scoped walk reads the adjacency methods (edgesForDocument/edgesFrom/
     // edgesTo/docHeadForDocument), so the snapshot adapter MUST be
@@ -2753,6 +2838,25 @@ export class SidebarPanes {
     const provident = (globalThis as { window?: { provident?: Record<string, unknown> } }).window?.provident
     const install = provident && (provident as { installSidebar?: (m: typeof methods) => void }).installSidebar
     if (typeof install === 'function') {
+      // AD-2026-09-14-2 — the preload-boundary PARITY guard. Every method this
+      // holder registers must already be present as a function on the
+      // preload-exposed `sidebar` proxy, so a renderer seam forgotten on the
+      // preload side FAILS LOUD at boot instead of being silently inert at the
+      // live boundary (contextBridge freezes `window.provident`, so the renderer
+      // can never attach a missing `sidebar` key itself — a forgotten seam would
+      // throw at install with no way to register it). Runs before install.
+      const exposed = (provident as { sidebar?: Record<string, unknown> }).sidebar
+      if (exposed && typeof exposed === 'object') {
+        for (const key of Object.keys(methods)) {
+          if (typeof (exposed as Record<string, unknown>)[key] !== 'function') {
+            throw new Error(
+              `[installSidebarBridge] preload "sidebar" is missing seam "${key}" (not a ` +
+                `function on the exposed proxy) — a forgotten preload seam. Add "${key}" to ` +
+                `the preload SidebarMethods/holder/proxy so it is not inert at the live boundary.`,
+            )
+          }
+        }
+      }
       install(methods)
       return
     }
@@ -2825,8 +2929,26 @@ export class SidebarPanes {
     const def = this.registry.get(paneId)
     if (def == null) return
     this.registry.setEnabled(paneId, !this.registry.isEnabled(paneId))
+    // H3 — mark that a toggle landed so a boot apply still awaiting its stale
+    // settings fetch cannot clobber it (mirror `onPaneVisibilityChange`; LIVE-5).
+    this.paneVisibilityTouched = true
     this.persistEnabledPanes()
-    void this.refresh()
+    // AD-2026-09-14-1 — mirror the native seam `onPaneVisibilityChange`
+    // (:1312-1331) instead of an unconditional synchronous `void this.refresh()`
+    // (which re-runs `loadAppGraph` directly, BYPASSING the dirty-edit guard).
+    // Branch on scope: an operator pane re-mounts only its isolated scope; an
+    // app-graph pane routes through the dirty-edit guard
+    // (`requestRebuild('content')` — the same path the native seam uses), so a
+    // dirty edit QUEUES the additive content reconcile instead of firing a full
+    // `loadAppGraph` re-load while the edit is dirty. The flip's
+    // layout/backlink reads in `refresh()` are unneeded for a visibility flip.
+    if (def.scope === 'operator') {
+      this.refreshOperator()
+    } else {
+      // F4 — the dirty-edit guard queues the additive content reconcile while an
+      // edit is dirty (never a full `loadEnvelope`/`loadAppGraph` re-load).
+      this.editController.requestRebuild('content')
+    }
   }
 
   /** U-SHELL-4 (C12) — toggle a zone's stored `minimized` flag. A non-empty

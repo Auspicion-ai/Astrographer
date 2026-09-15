@@ -1,15 +1,18 @@
 # Skill — Process Guardrails for the Battery / Multi-Unit Deliverables
 
-Consolidates the RCA lessons (RCA-1..RCA-9) for a fresh sub-agent, so the
-battery B/C/D process miss and the narrative-as-action loop are not repeated.
-Canonical records: `archive/parent-project/2026-08-26-process-rca-battery.md`
-and `archive/parent-project/2026-08-27-process-rca-narrative-as-action.md`;
-the rules live in `AGENTS.md` items 2/3/7/10.
+Consolidates the RCA lessons (RCA-1..RCA-12) for a fresh sub-agent, so the
+battery B/C/D process miss, the narrative-as-action loop, and the live-bug
+green-pipeline miss are not repeated. Canonical records:
+`archive/parent-project/2026-08-26-process-rca-battery.md`,
+`archive/parent-project/2026-08-27-process-rca-narrative-as-action.md`, and
+`docs/specs/rca-live-bugs-green-pipeline.md` (RCA-11/12, 2026-09-14);
+the rules live in `AGENTS.md` items 2/3/7/10/11/12.
 
 ## When this applies
 
 Any source-code task. **Especially** a deliverable that spans 2+ spec'd units
-(a multi-unit deliverable), or a single unit with a non-trivial contract.
+(a multi-unit deliverable), or a single unit with a non-trivial contract, OR
+any UI-overhaul / UI-rendering unit (RCA-11/12).
 
 ## The miss (why this skill exists)
 
@@ -23,6 +26,16 @@ Net: the features worked and the trio passed, but the PROCESS compliance —
 the thing that lets a fresh sub-agent inherit an accurate, reviewable state —
 was absent at merge time. The RCA is
 `archive/parent-project/2026-08-26-process-rca-battery.md`.
+
+**RCA-11/12 add the LIVE-app miss (2026-09-14, `docs/specs/rca-live-bugs-green-pipeline.md`):**
+every UI-overhaul feature passed the node trio / blind-greens / doc-review gates
+while the ASSEMBLED, rendered Electron app was broken (LIVE-1..12). The pipeline
+verified the provident-ENVELOPE authoring model + the docs — never the rendered
+app. The node suite's dom-shim is layout-less/CSS-less, so shell/window/assembly/
+persistence are unassertable in node; the live batteries were PARKED the whole
+overhaul; no rendered-DOM/assembly surface existed. The unit-level guards below
+close exactly that: a UI-overhaul unit is not green until its live battery RUNS
+against the app, and a node-green is reported as ENVELOPE-green, never APP-green.
 
 ## The ten guards (RCA-1..RCA-10)
 
@@ -38,6 +51,8 @@ was absent at merge time. The RCA is
 | RCA-8 | **A delegation that fails with max-tokens must be re-delegated with a FUNDAMENTALLY different approach, not the same task with cosmetic prompt tweaks.** | The loop failure mode: a large task is delegated to a subagent, it hits max-tokens before producing output, and the supervisor re-delegates the SAME task with only prompt wording changes — repeating the identical failure. Root cause: the task exceeds a single subagent's context budget (it reads a large test/spec + writes a large module in one context), and re-delegating the same shape cannot succeed. Comply: (a) after a max-tokens failure, CHANGE the approach — split the task into small, self-contained pieces (each fitting one context), or do the work inline in focused increments, or use a workflow to fan it out; (b) do NOT re-delegate the same task more than once with only prompt tweaks; (c) if a task is too large for one subagent, it is too large to re-delegate whole — split it. **OCCURRED 2026-08-28 (Unit K implementer):** the `SidebarPanes` host (a ~917-line test file + a large module) was re-delegated 5+ times, each implementer hitting max-tokens before writing anything, with only prompt wording changes. The fix is to split the implementation into small method-group pieces, each delegated with a tiny context (read only the relevant test describe blocks), OR implement inline in focused increments. |
 | RCA-9 | **A supervisor loop that does not resolve must be broken by gathering NEW information, not by re-deriving the same conclusion.** | The loop failure mode: the supervisor fixates on one unresolved question and re-answers it identically across turns (same input → same reasoning → same output → no new fact → repeat), OR re-analyzes a contract instead of checking the actual repo/test state. Root cause: the loop adds no new information per pass, and the supervisor treats reading/analyzing as progress. Comply: (a) **empirical-first** — when a question is not resolving, run the failing test / read the actual assertion / check the real state, never re-derive the same dead-end; (b) **state-check-first** — after any interrupted or unknown-outcome tool call, verify external state (`git status`, test counts) before anything else; (c) **two-strikes rule** — if the same conclusion is reached twice, stop reasoning and change approach (empirical check, delegate, or ask the user); (d) **progress = state change** — count a pass as progress only if it changed the repo/test state, not the volume of analysis. **OCCURRED 2026-08-28 (Unit K supervisor):** the supervisor looped on "how can `buildContext().snapshot` equal the bridge snapshot without `boot()`?" — re-deriving the same reasoning verbatim across many turns instead of running the test (which answered it in one command: `expected null to deeply equal …`), and re-analyzed the contract after the implementer subagent was interrupted instead of checking `git status` + test counts (which showed 40/49 green, 0 stubs). The fix is the four comply rules above. |
 | RCA-10 | **A subagent that hits a clear spec/test conflict returns FAILURE to the supervisor — never loops, re-derives, or burns context reconciling it.** | The loop failure mode: a subagent (TestWriter/Implementer) hits a spec that is internally inconsistent, a test that cannot be derived from the spec, or a red test that asserts something the spec does not pin, and instead of reporting it, re-derives the same dead-end or re-delegates the same task — burning context. Root cause: no sanctioned exit for a clear conflict, so the subagent treats "keep trying" as the only option. Comply: (a) a clear spec conflict is a legitimate outcome — STOP and return a FAILURE report naming the exact conflict (spec section + contradiction + failing test); (b) the supervisor resolves it (amend the spec or the task), never re-delegates the same shape; (c) returning failure is always acceptable — never spin on it. **ENFORCED 2026-08-27:** the SPEC-CONFLICT ESCAPE clause was added to the `role_test_writer` and `role_implementer` personas in the Agent Harness gate preset (`~/.dsh/.agent-presets/gate/agent.cordis.yml`), so a clear conflict is an explicitly sanctioned failure outcome. |
+| RCA-11 | **The live-scenario battery is a MANDATORY pre-DONE gate for UI-overhaul units — NOT parked-by-default.** | The LIVE-1..12 miss: every UI-overhaul feature passed the node trio / blind-greens / doc-review gates while the assembled Electron app was broken — the live batteries were authored + PARKED the entire overhaul, and no rendered-DOM/assembly surface existed. Comply: (a) a UI-overhaul / UI-rendering unit is not pre-DONE while its `-live-pending-battery.md` set is parked on "no live session" — run it against the app (`scripts/live-drive.mjs` on a usable display) before reporting the unit complete; (b) park ONLY a structurally non-exercisable surface (an OS-owned native dialog / a scope the MCP+CDP surface cannot reach) WITH the recorded park reason. **RCA: `docs/specs/rca-live-bugs-green-pipeline.md` (CA-1).** |
+| RCA-12 | **A node-suite green is ENVELOPE-green, not APP-green — never report "the app works" from a node-green, and state the verified layer.** | The node suite + blind-greens verify the provident-ENVELOPE authoring model (pure data/placements/handlers) + the docs. The dom-shim is layout-less/CSS-less, so shell-CSS/grid/window, the runtime stage↔app-graph assembly, and the live persistence round-trip are structurally unassertable in node. Comply: (a) every DONE row / handover states WHICH LAYER each verification covers (envelope/pure vs assembled/renderer/app); (b) a UI-overhaul unit additionally needs a rendered-DOM/assembly verification — an assembly/reconciliation test (stage body not overwritten by the pane-inclusive envelope), shell-layout/window tests, and the live-drive smoke blocks (empty-boot landing, panes in the zone tracks, a toolbar click reaching its seam, persistence round-trip) (CA-2..CA-4); (c) the FINAL review includes a full-app boot + key-DOM check, not only docs + trio (CA-6). |
 
 ## The per-unit cadence (the gold path)
 
@@ -57,6 +72,8 @@ was absent at merge time. The RCA is
 - [ ] Each unit has a recorded adversarial pass with findings in the spec.
 - [ ] Each unit's greens were authored + run by a blind agent (no impl read).
 - [ ] Each unit has a recorded documentation-review pass (RCA-6): spec + trackers reconciled against the build, stale entries fixed in the same pass, record in `archive/reviews/` (gitignored — provenance only; findings land in the active trackers).
+- [ ] UI-overhaul units: the `-live-pending-battery.md` set was RUN against a running app (`scripts/live-drive.mjs`), not parked-on-absent-session; any park has a recorded structural reason (RCA-11).
+- [ ] Every DONE row / handover states WHICH LAYER each verification covers (envelope-green ≠ app-green); no node-green was reported as "the app works"; the final review included a full-app boot + key-DOM check (RCA-12/CA-6).
 - [ ] Multi-unit deliverables were split per unit (not one merged run).
 - [ ] Trio + battery + MCP e2e green.
 - [ ] Defect-catalogue: host findings fixed here; package findings → defects.md/HANDOFF.md.

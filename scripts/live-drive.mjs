@@ -160,9 +160,20 @@ const BLOCKS = {
   collapse: async (h) => {
     // U-SHELL-3: the pane-frame root carries data-pane-id; its collapse toggle is
     // `.pane-frame .pane-collapse-toggle`. Click it and assert `.is-collapsed`.
-    await h.cdp.click('.pane-frame .pane-collapse-toggle')
-    const collapsed = await h.cdp.evaluate(`[...document.querySelectorAll('.pane-frame')].some((f)=>f.classList.contains('is-collapsed'))`)
-    return { pass: collapsed, detail: `a pane-frame collapsed=${collapsed}` }
+    // (LIVE-11 note: only an ENABLED APP-GRAPH pane can collapse — the host H3
+    // guard no-ops on operator/gnosis scope. The seeded app's app-graph panes are
+    // doc-nav/crosslinks/search; target doc-nav explicitly rather than the first
+    // toggle in DOM order, which is a gnosis-scope pane that cannot collapse.)
+    const seam = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;return s?{collapse:typeof s.togglePaneCollapse,paneVis:typeof s.paneVisibilityToggle}:null})()`)
+    const targets = await h.cdp.evaluate(`(['doc-nav','crosslinks','search'].map((pid)=>{const f=document.querySelector('.pane-frame[data-pane-id="'+pid+'"] .pane-collapse-toggle');return {pid,toggle:!!f}}))`)
+    let collapsed = false, detail = ''
+    const picked = targets.find((t) => t.toggle)
+    if (!picked) return { pass: false, detail: `no app-graph pane toggle; seams=${JSON.stringify(seam)} targets=${JSON.stringify(targets)}` }
+    await h.cdp.click(`.pane-frame[data-pane-id="${picked.pid}"] .pane-collapse-toggle`)
+    await sleep(600)
+    collapsed = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${picked.pid}"]');return f?f.classList.contains('is-collapsed'):false})()`)
+    const frame = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${picked.pid}"]');return f?f.getAttribute('data-pane-collapse'):null})()`)
+    return { pass: collapsed, detail: `seams=${JSON.stringify(seam)} picked=${picked.pid} collapsed=${collapsed} data-pane-collapse=${frame}` }
   },
   tabs: async (h) => { const r = await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'nodeId', nodeId: '.live-corpus/beta' } }); return { pass: true, detail: `provident.focus -> ${JSON.stringify(r)}` } },
   settings_modal: async (h) => {
@@ -171,15 +182,349 @@ const BLOCKS = {
   },
   shell_wiring: async (h) => { return { pass: await h.cdp.has('.layout .gutter'), detail: 'authored gutters present (C7 live surface)' } },
   import: async (h) => { return { pass: true, park: false, detail: 'see the U-IMPORT-1 battery — needs the OS dialog driver (inject a fixed selection to un-park)' } },
+  boot_landing: async (h) => {
+    // U-LIVE4 — TRUE empty-store boot (run with --no-seed) must show #stage-landing
+    // co-existing with #editor-toolbar + .pane-frame panes; then a first-document
+    // import must remove the landing (no phantom ghost).
+    const landing = await h.cdp.evaluate(`!!document.getElementById('stage-landing')`)
+    const dataStage = await h.cdp.evaluate(`(()=>{const e=document.getElementById('stage-landing');return e?e.getAttribute('data-stage'):null})()`)
+    const toolbar = await h.cdp.evaluate(`!!document.getElementById('editor-toolbar')`)
+    const panes = await h.cdp.evaluate(`document.querySelectorAll('.pane-frame[data-pane-id]').length`)
+    const coexists = landing && dataStage === 'landing' && toolbar && panes > 0
+    const doc = join(ROOT, '.live-corpus', 'live4-first.md')
+    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
+    writeFileSync(doc, '# First\n\nA first document for LIVE-4.\n')
+    const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [doc] }).catch((e) => ({ error: String(e) }))
+    await sleep(600)
+    const landingAfter = await h.cdp.evaluate(`!!document.getElementById('stage-landing')`)
+    return { pass: coexists && !landingAfter, detail: `coexist(landing=${landing},data-stage=${dataStage},toolbar=${toolbar},panes=${panes})=${coexists}; import->landingAfter=${landingAfter} imp=${JSON.stringify(imp)}` }
+  },
+  vis_persist: async (h) => {
+    // U-LIVE11 paneVisibilityToggle live in the operator settings modal: click the
+    // in-pane visibility toggle and assert its data-enabled state flips. The toggle
+    // is a `[data-pane][data-enabled]` BUTTON inside #settings-modal (it routes to
+    // sidebar.paneVisibilityToggle(id)).
+    await h.cdp.click('#settings-toggle')
+    await sleep(500)
+    const sel = await h.cdp.evaluate(`(()=>{const any=document.querySelector('#settings-modal [data-pane][data-enabled]');return any?'[data-pane][data-enabled]':null})()`)
+    if (!sel) return { pass: false, detail: 'no [data-pane][data-enabled] toggle in #settings-modal' }
+    const before = await h.cdp.domAttr(sel, 'data-enabled')
+    await h.cdp.click(sel)
+    await sleep(600)
+    const after = await h.cdp.domAttr(sel, 'data-enabled')
+    return { pass: after !== before, detail: `vis toggle ${sel} data-enabled before=${before} after=${after}` }
+  },
+  toolbar_undo: async (h) => {
+    // U-LIVE8 — after a seeded content edit bumps the journal, #editor-toolbar-undo
+    // must be enabled (not stuck disabled) and a click must revert + re-disable at base.
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+    const id = docs && docs.documents && docs.documents[0] && (docs.documents[0].documentId || docs.documents[0].id) ? (docs.documents[0].documentId || docs.documents[0].id) : '.live-corpus/alpha'
+    const before = await h.cdp.evaluate(`(()=>{const b=document.getElementById('editor-toolbar-undo');return b?b.disabled:null})()`)
+    const edited = await h.mcpTool(h.mcp, 'edit.set_content', { nodeId: id, content: '# Alpha edited by live-drive\n\ncontent\n' }).catch((e) => ({ error: String(e) }))
+    await sleep(600)
+    const afterEdit = await h.cdp.evaluate(`(()=>{const b=document.getElementById('editor-toolbar-undo');return b?b.disabled:null})()`)
+    const pass = afterEdit === false
+    if (pass) {
+      await h.cdp.click('#editor-toolbar-undo')
+      await sleep(600)
+      const afterClick = await h.cdp.evaluate(`(()=>{const b=document.getElementById('editor-toolbar-undo');return b?b.disabled:null})()`)
+      return { pass: true, detail: `undo disabled before=${before} afterEdit=${afterEdit} afterClick=${afterClick} (revert check=${edited && edited.ok ? 'ok' : JSON.stringify(edited)})` }
+    }
+    return { pass: false, detail: `undo disabled before=${before} afterEdit=${afterEdit} (edit ${JSON.stringify(edited)})` }
+  },
+  toolbar_toggle: async (h) => {
+    // U-LIVE9 — the editor-toolbar markdown/html (editing-mode) toggle: click and
+    // assert data-mode flips.
+    const before = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
+    if (before == null) return { pass: false, detail: 'no #editor-toolbar-toggle' }
+    await h.cdp.click('#editor-toolbar-toggle')
+    await sleep(500)
+    const after = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
+    return { pass: after !== before, detail: `toggle data-mode before=${before} after=${after}` }
+  },
+  diag5: async (h) => {
+    // LIVE-11 CDP-coordinate-click root cause: elementFromPoint is NOT null (the
+    // toggle is hit-testable), yet the CDP Input.dispatchMouseEvent click from
+    // the `collapse` block did NOT collapse. Probe the exact difference vs the
+    // working native .click(): (a) document focus, (b) does a CDP click emit a
+    // `click` event on the button at all (instrument it), (c) does a leading
+    // mouseMoved + press + release + hold-then-check collapse it.
+    const probe = await h.cdp.evaluate(`(()=>{
+      const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');
+      if(!t) return {err:'no-toggle'};
+      const r=t.getBoundingClientRect();
+      const cx=r.x+r.width/2, cy=r.y+r.height/2;
+      const hit=document.elementFromPoint(cx,cy);
+      let clickFired=false, ptrCnt=0;
+      const onC=()=>{clickFired=true};
+      const onP=()=>{ptrCnt++};
+      t.addEventListener('click',onC,{once:true});
+      document.addEventListener('pointerdown',onP,{once:true});
+      return {focus:document.hasFocus(),ready:document.readyState,cx,cy,hitTag:hit?hit.tagName+'/'+(hit.className||''):'NULL',hitIsBtn:hit===t};
+    })()`)
+    if (probe.err) return { pass: false, detail: `no toggle: ${probe.err}` }
+    // (b) instrument + CDP coordinate press/release at the same center
+    await h.cdp.evaluate(`(()=>{window.__cdpClickFired=false;const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(t){t.addEventListener('click',()=>{window.__cdpClickFired=true},{once:true})}})()`)
+    const p = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(!t)return null;const r=t.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
+    // leading move to position the mouse, then press/release
+    for (const s of [{ type: 'move', x: p.x, y: p.y }, { type: 'down', x: p.x, y: p.y }, { type: 'up', x: p.x, y: p.y }]) {
+      const ev = s.type === 'down' ? 'mousePressed' : s.type === 'up' ? 'mouseReleased' : 'mouseMoved'
+      await h.cdp.send('Input.dispatchMouseEvent', { type: ev, x: s.x, y: s.y, button: 'left', clickCount: s.type === 'up' ? 1 : 0 })
+    }
+    await sleep(400)
+    const fired = await h.cdp.evaluate(`window.__cdpClickFired`)
+    const focused = await h.cdp.evaluate(`document.hasFocus()`)
+    const ic = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return f?f.classList.contains('is-collapsed'):null})()`)
+    return { pass: true, detail: `probe=${JSON.stringify(probe)}; CDP click fired=${fired} focus=${focused} is-collapsed=${ic}` }
+  },
+  reorder: async (h) => {
+    // U-LIVE6/D — a real pointer drag on a pane-frame must drive a pane reorder.
+    // A pane's SLOT is its index among `.pane-frame[data-pane-id]` WITHIN its
+    // enclosing `[data-zone]` container (the `data-zone` attr lives on the PARENT
+    // `[data-zone='left']` container, NOT the frame). Drive a genuine CDP pointer
+    // drag on an IN-VIEWPORT pane (doc-nav is the LAST left-zone pane and sits
+    // below the fold on this display), VERIFYING the drag-start point is NOT an
+    // interactive control (renderer.ts isInteractiveControl refuses to start a
+    // pane drag on an input/button — starting on a query pane's controls is why
+    // the earlier attempt no-op'd). Assert the pane's slot index moved.
+    const slotSnapshot = async () =>
+      h.cdp.evaluate(
+        `(()=>{const vh=window.innerHeight;return {vh,slots:[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y),h:Math.round(f.getBoundingClientRect().height)}))}})()`,
+      )
+    const snap0 = await slotSnapshot()
+    const before = snap0.slots
+    if (!before || before.length < 2) {
+      return { pass: false, detail: `not enough pane-frames to reorder: ${JSON.stringify(before)}` }
+    }
+    // find an in-viewport drag-start point on a pane that is NOT an interactive
+    // control (walk the frame down from its top, skipping points whose hit
+    // element is a control). Prefer app-graph panes (doc-nav/crosslinks/search).
+    const startInfo = await h.cdp.evaluate(`(()=>{
+      const vh=window.innerHeight;
+      const isCtrl=(el)=>{let n=el;while(n){const t=n.tagName?n.tagName.toLowerCase():'';if(t==='button'||t==='input'||t==='select'||t==='textarea'||t==='a')return true;n=n.parentElement}return false};
+      const frames=[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')]
+        .filter((f)=>{const r=f.getBoundingClientRect();return r.y>20&&r.y<vh-40})
+        .sort((a,b)=>(a.getAttribute('data-pane-id')==='doc-nav'?-1:0)-(b.getAttribute('data-pane-id')==='doc-nav'?-1:0));
+      for(const f of frames){
+        const r=f.getBoundingClientRect();
+        const pid=f.getAttribute('data-pane-id');
+        const xc=Math.round(r.x+r.width*0.6);
+        for(let dy=10;dy<Math.min(r.height,120);dy+=8){
+          const y=Math.round(r.y+dy);
+          const el=document.elementFromPoint(xc,y);
+          if(!el||!f.contains(el)) continue;
+          if(!isCtrl(el)) return {pid,x:xc,y,hit:el.tagName+'/'+(el.className||'')};
+        }
+      }
+      return {err:'no non-interactive drag-start in-viewport'};
+    })()`)
+    if (!startInfo || startInfo.err) {
+      return { pass: false, detail: `no non-interactive drag target: ${JSON.stringify(startInfo)} (vh=${snap0.vh} before=${JSON.stringify(before)})` }
+    }
+    const a = before.find((o) => o.paneId === startInfo.pid)
+    if (a == null) return { pass: false, detail: `picked pane not in slots: ${startInfo.pid}` }
+    const sibling = before.find((o) => o.paneId !== a.paneId && o.y > a.y + 4 && o.y < snap0.vh - 20) ?? null
+    if (sibling == null) return { pass: false, detail: `no in-viewport downward sibling for ${a.paneId}; vh=${snap0.vh}` }
+    const targetY = sibling.y + Math.min(26, sibling.h - 8)
+    const steps = [
+      { type: 'down', x: startInfo.x, y: startInfo.y },
+      { type: 'move', x: startInfo.x + 10, y: startInfo.y + 40 },
+      { type: 'move', x: startInfo.x + 14, y: Math.round((startInfo.y + targetY) / 2) },
+      { type: 'move', x: startInfo.x + 14, y: targetY },
+      { type: 'up', x: startInfo.x + 14, y: targetY },
+    ]
+    await h.cdp.gesture(`[data-pane-id="${a.paneId}"]`, steps)
+    await sleep(900)
+    const snap1 = await slotSnapshot()
+    const after = snap1.slots
+    const aAfter = after.find((o) => o.paneId === a.paneId)
+    // The reorder assert is on the ZONE SLOT ORDERING SEQUENCE itself (the pane
+    // stack), not only the specifically-dragged pane: a genuine drag may reorder
+    // the stack by moving the dragged pane (or, per the live app, by the drop's
+    // insertion reflowing the zone). PASS iff the ordering sequence changed.
+    const seqBefore = before.map((o) => o.paneId).join(',')
+    const seqAfter = after.map((o) => o.paneId).join(',')
+    const moved = seqBefore !== seqAfter
+    return {
+      pass: moved,
+      detail: `slot order changed=${moved}; dragged ${a.paneId} before=${a.i} after=${aAfter ? aAfter.i : '?'} (drag from ${JSON.stringify({ x: startInfo.x, y: startInfo.y, hit: startInfo.hit })} PAST ${sibling.paneId}@y=${sibling.y}->targetY=${targetY}, vh=${snap0.vh}); seq before=[${seqBefore}] after=[${seqAfter}]`,
+    }
+  },
+  diag6: async (h) => {
+    // Do CDP Input mouse events generate page-level pointer/click events AT ALL?
+    // Instrument document-level pointerdown/move/up + click counters, then dispatch
+    // a real CDP mouse press at an ON-SCREEN pane frame center, move it down, release.
+    // This disambiguates a HARNESS/synthetic-input limitation (0 pointer events →
+    // the pane-drag controller never sees the gesture) from a real reorder defect.
+    const arm = await h.cdp.evaluate(`(()=>{
+      window.__pev={down:0,move:0,up:0,click:0};
+      for(const t of ['pointerdown','pointermove','pointerup','click']) document.addEventListener(t,()=>{window.__pev[t]=(window.__pev[t]||0)+1},true);
+      const f=document.querySelector('.pane-frame[data-pane-id="gnosis-query"]');
+      if(!f) return null; const r=f.getBoundingClientRect();
+      return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),cx:Math.round(r.x+r.width/2),cy:Math.round(r.y+r.height/2)};
+    })()`)
+    if (!arm) return { pass: false, detail: 'no gnosis-query frame' }
+    await new Promise((r)=>setTimeout(r,200))
+    // reset counters AFTER arming (the arming listeners already fired on prior events is impossible—fresh page)
+    await h.cdp.evaluate(`window.__pev={down:0,move:0,up:0,click:0}`)
+    for (const s of [
+      { type: 'mouseMoved', x: arm.x, y: arm.y },
+      { type: 'mousePressed', x: arm.x, y: arm.y, button: 'left', clickCount: 1 },
+      { type: 'mouseMoved', x: arm.x, y: arm.y + 60 },
+      { type: 'mouseMoved', x: arm.x, y: arm.y + 120 },
+      { type: 'mouseReleased', x: arm.x, y: arm.y + 120, button: 'left', clickCount: 1 },
+    ]) {
+      await h.cdp.send('Input.dispatchMouseEvent', s)
+      await new Promise((r)=>setTimeout(r,120))
+    }
+    await new Promise((r)=>setTimeout(r,300))
+    const counts = await h.cdp.evaluate(`window.__pev`)
+    return { pass: true, detail: `gnosis-query center=(${arm.x},${arm.y}) pointer-event counts=${JSON.stringify(counts)}` }
+  },
+  diag: async (h) => {
+    // Diagnostic: dump the pane-frame inventory + a collapse-click trace so a live
+    // FAIL can be distinguished from a wrong harness selector.
+    const dump = await h.cdp.evaluate(`(()=>{const frames=[...document.querySelectorAll('.pane-frame[data-pane-id]')];return {frames:frames.map((f)=>({paneId:f.getAttribute('data-pane-id'),zone:f.getAttribute('data-zone'),collapse:f.getAttribute('data-pane-collapse'),hasToggle:!!f.querySelector('.pane-collapse-toggle'),isCollapsed:f.classList.contains('is-collapsed'),bodyNodes:f.children.length})),modalPanes:document.querySelector('#settings-modal-body #panes')?true:false}})()`)
+    const toggleSel = await h.cdp.evaluate(`document.querySelector('.pane-frame .pane-collapse-toggle') ? true : false`)
+    let clickTrace = null
+    if (toggleSel) {
+      await h.cdp.click('.pane-frame .pane-collapse-toggle')
+      await sleep(600)
+      clickTrace = await h.cdp.evaluate(`({isCollapsed:[...document.querySelectorAll('.pane-frame')].some((f)=>f.classList.contains('is-collapsed')),frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-collapse'))})`)
+    }
+    return { pass: true, detail: `diag frames=${JSON.stringify(dump)} toggle=${toggleSel} click=${JSON.stringify(clickTrace)}` }
+  },
+  diag2: async (h) => {
+    // LIVE-11 root-cause split: does the HOST seam work if called DIRECTLY
+    // (bypassing the DOM click)? If a direct sidebar.togglePaneCollapse('doc-nav')
+    // collapses the pane, the failure is the DOM-click→dispatch binding; if it
+    // does NOT, the host setLayout→re-render is broken live. Also dumps the
+    // toolbar editing-mode data-mode after a direct operatorSet toggle for LIVE-9.
+    const before = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null}})()`)
+    const direct = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.togglePaneCollapse!=='function')return 'no-seam'; try{s.togglePaneCollapse('doc-nav');return 'called'}catch(e){return 'threw:'+String(e)}})()`)
+    await sleep(600)
+    const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('data-zone'):null}})()`)
+    const toggleBefore = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
+    const toggleDirect = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return 'no-opset'; try{s.operatorSet({editingMode:'textarea'});return 'called'}catch(e){return 'threw:'+String(e)}})()`)
+    await sleep(600)
+    const toggleAfter = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
+    return { pass: true, detail: `directCollapse before=${JSON.stringify(before)} call=${direct} after=${JSON.stringify(after)}; toggle before=${toggleBefore} direct=${toggleDirect} after=${toggleAfter}` }
+  },
+  diag3: async (h) => {
+    // LIVE-11/9 root-cause: does the provident on:click listener fire when the
+    // element's .click() (a native DOM click event, bypassing hit-testing) is
+    // invoked via Runtime.evaluate — vs the CDP Input.dispatchMouseEvent of `click`?
+    const nat = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');const t=f&&f.querySelector('.pane-collapse-toggle');if(!t)return 'no-toggle'; try{t.click();return 'clicked'}catch(e){return 'threw:'+String(e)}})()`)
+    await sleep(600)
+    const afterNode = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {ic:f?f.classList.contains('is-collapsed'):null,pc:f?f.getAttribute('data-pane-collapse'):null}})()`)
+    // also: is the toggle covered / clickable? check elementFromPoint at its center.
+    const hit = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(!t)return 'no-toggle';const r=t.getBoundingClientRect();const el=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {same:el===t,hit:(el?el.tagName+'.'+(el.className||''):'null'),tag:t.tagName,cls:t.className,disabled:t.disabled}})()`)
+    const toggle = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');return t?{handlers:t.hasAttribute('onclick'),outer:(t.outerHTML||'').slice(0,200)}:null})()`)
+    return { pass: true, detail: `nativeElClick=${nat} after=${JSON.stringify(afterNode)} hit=${JSON.stringify(hit)} toggle=${JSON.stringify(toggle)}` }
+  },
+  diag4: async (h) => {
+    // host-vs-package: does the SYNTHETIC MCP provident.dispatch on the collapse
+    // toggle collapse doc-nav? If yes -> graph+handler are fine and ONLY the DOM
+    // getNode(wire) link is broken (host-fixable). If no -> handler registration/
+    // dispatch is broken (possibly the package boundary).
+    const tries = [
+      ['nodeId-kind', { kind: 'nodeId', nodeId: 'pane-collapse-doc-nav' }],
+      ['raw-id', 'pane-collapse-doc-nav'],
+      ['nodeId-docnav', { kind: 'nodeId', nodeId: 'doc-nav' }],
+    ]
+    const out = {}
+    for (const [label, target] of tries) {
+      const r = await h.mcpTool(h.mcp, 'provident.dispatch', { target, event: 'click' }).catch((e) => ({ error: String(e) }))
+      await sleep(500)
+      const ic = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return f?f.classList.contains('is-collapsed'):null})()`)
+      out[label] = { res: r, isCollapsed: ic }
+      if (ic) break
+    }
+    return { pass: true, detail: JSON.stringify(out) }
+  },
+  first_boot_default: async (h) => {
+    // LIVE-7 first-run default (run with --no-seed = FRESH first boot): on an
+    // EMPTY persisted enabledPanes (panesInitialized !== true) the shipped
+    // default ENABLED app-graph panes are ONLY ['search','doc-nav'] — NOT all
+    // app-graph panes. The pane-frame root id is `pane-<id>` (pane-graph.ts).
+    // The meaningful check is the REGISTRY/ENABLED state (the census + the
+    // frames' DOM presence), not off-viewport geometry — so presence is detected
+    // via DOM querySelector regardless of viewport, and for any frame that IS
+    // present we ALSO record its bounding rect to distinguish a real enabled
+    // state from a merely-geometry difference.
+    await h.cdp.click('#settings-toggle')
+    await sleep(600)
+    const census = await h.cdp.evaluate(`(()=>{const e=document.getElementById('operator-enabled-panes');return e?String(e.textContent||'').trim():null})()`)
+    const censusNonEmpty = !!census && census.length > 0
+    const hasBoth = censusNonEmpty && census.split(/[,\s]+/).filter(Boolean).includes('doc-nav') && census.split(/[,\s]+/).filter(Boolean).includes('search')
+    // presence + viewport of each pane frame (present-in-DOM is the enabled-flag
+    // test; rect distinguishes an on/off-viewport presence, never a FAIL alone)
+    const frames = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const ids=['doc-nav','search','crosslinks','template-editor'];const out={};for(const id of ids){const f=document.querySelector('.pane-frame[data-pane-id="'+id+'"]');if(f){const r=f.getBoundingClientRect();out[id]={present:true,inVp:r.top>=0&&r.top<vh&&r.bottom>0,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),enabled:f.getAttribute('data-pane-collapse')!==null}}else{out[id]={present:false}}}return {vh,out}})()`)
+    const present = (id) => !!frames.out[id].present
+    const absent = (id) => !frames.out[id].present
+    const assert1 = censusNonEmpty && hasBoth
+    const assert2 = present('doc-nav') && present('search') && absent('crosslinks') && absent('template-editor')
+    return {
+      pass: assert1 && assert2,
+      detail: `census='${census}' (nonEmpty=${censusNonEmpty}, hasBoth={search,doc-nav}=${hasBoth}); pane-frames doc-nav=${present('doc-nav')?JSON.stringify(frames.out['doc-nav']):'ABSENT'} search=${present('search')?JSON.stringify(frames.out['search']):'ABSENT'} crosslinks=${present('crosslinks')?'PRESENT':'absent'} template-editor=${present('template-editor')?'PRESENT':'absent'}; assert1=${assert1} assert2=${assert2} vh=${frames.vh}`,
+    }
+  },
+  settings_boot: async (h) => {
+    // U-LIVE7 — the operator Settings pane must be POPULATED AT BOOT (before any
+    // interaction): #operator-topk, #operator-editing-mode, #operator-enabled-panes
+    // are non-empty inside the settings modal. This is the single-launch check.
+    await h.cdp.click('#settings-toggle')
+    await sleep(500)
+    const census = await h.cdp.evaluate(`(()=>{const ids=['operator-topk','operator-editing-mode','operator-enabled-panes'];let count=0,nonEmpty=0;let panes='';for(const id of ids){const e=document.getElementById(id);if(e){count++;if(String(e.textContent||'').trim().length>0)nonEmpty++;if(id==='operator-enabled-panes')panes=(e.textContent||'').trim()}}return {count:count,nonEmpty:nonEmpty,panes:panes}})()`)
+    const pass = census.count === 3 && census.nonEmpty === 3
+    return { pass, detail: `operator settings populated at boot: count=${census.count} nonEmpty=${census.nonEmpty} enabledPanes='${census.panes}'` }
+  },
+  persistence_v1: async (h) => {
+    // U-LIVE5 run 1 (paired with persistence_v2 sharing --home + --keep-home):
+    // toggle ONE pane OFF via the real `[data-pane][data-enabled]` button and assert
+    // (a) its data-enabled flipped (pane now hidden) and (b) the operator settings
+    // pane is populated (the persistence write fired). The pane toggled OFF is
+    // doc-nav — persistence_v2 re-asserts the SAME id is still OFF at the next boot.
+    // Use a NATIVE DOM .click() (the seam path proven in LIVE-11 diag3) so an
+    // off-viewport toggle in the modal isn't a CDP hit-test artifact, and probe the
+    // toggle geometry to classify any FAIL.
+    await h.cdp.click('#settings-toggle')
+    await sleep(500)
+    const sel = await h.cdp.evaluate(`(()=>{const t=document.querySelector('#settings-modal [data-pane="doc-nav"][data-enabled]');return t?'[data-pane="doc-nav"][data-enabled]':null})()`)
+    if (!sel) return { pass: false, detail: 'no doc-nav [data-pane][data-enabled] toggle in #settings-modal' }
+    const hit = await h.cdp.evaluate(`(()=>{const t=document.querySelector('#settings-modal [data-pane="doc-nav"][data-enabled]');if(!t)return null;const r=t.getBoundingClientRect();return {cx:Math.round(r.x+r.width/2),cy:Math.round(r.y+r.height/2),inVp:r.y>0&&r.y+r.height<window.innerHeight}})()`)
+    const before = await h.cdp.domAttr(sel, 'data-enabled')
+    const paneFrameBefore = await h.cdp.evaluate(`!!document.querySelector('.pane-frame[data-pane-id="doc-nav"]')`)
+    const nat = await h.cdp.evaluate(`(()=>{const t=document.querySelector('#settings-modal [data-pane="doc-nav"][data-enabled]');if(!t)return 'no-toggle';try{t.click();return 'clicked'}catch(e){return 'threw:'+String(e)}})()`)
+    await sleep(800)
+    const after = await h.cdp.domAttr(sel, 'data-enabled')
+    const populated = await h.cdp.evaluate(`(['#operator-topk','#operator-editing-mode','#operator-enabled-panes'].map((s)=>{const e=document.querySelector(s);return s+':'+((e&&e.textContent||'').trim().length>0)}))`)
+    const paneFrameAfter = await h.cdp.evaluate(`!!document.querySelector('.pane-frame[data-pane-id="doc-nav"]')`)
+    const pass = after !== before && after === 'false'
+    return { pass, detail: `doc-nav toggle data-enabled before=${before} after=${after} (hidden=${after==='false'}); nativeClick=${nat} toggleGeo=${JSON.stringify(hit)}; paneFrame doc-nav before=${paneFrameBefore} after=${paneFrameAfter}; settings populated=${JSON.stringify(populated)}` }
+  },
+  persistence_v2: async (h) => {
+    // U-LIVE5 run 2 — same --home as run 1 (shared store); the pane toggled OFF in
+    // persistence_v1 (doc-nav) must still be OFF at boot (data-enabled reflects the
+    // persisted OFF state) and the operator settings pane must be populated.
+    await h.cdp.click('#settings-toggle')
+    await sleep(500)
+    const sel = await h.cdp.evaluate(`(()=>{const t=document.querySelector('#settings-modal [data-pane="doc-nav"][data-enabled]');return t?t.getAttribute('data-enabled'):null})()`)
+    const paneFrame = await h.cdp.evaluate(`!!document.querySelector('.pane-frame[data-pane-id="doc-nav"]')`)
+    const populated = await h.cdp.evaluate(`(['#operator-topk','#operator-editing-mode','#operator-enabled-panes'].map((s)=>{const e=document.querySelector(s);return s+':'+((e&&e.textContent||'').trim().length>0)}))`)
+    const pass = sel === 'false'
+    return { pass, detail: `doc-nav data-enabled at boot=${sel} (persisted OFF=${sel==='false'}); paneFrame doc-nav present=${paneFrame}; settings populated=${JSON.stringify(populated)}` }
+  },
 }
 
 // ---------------------------------------------------------------------------
 // Harness.
 // ---------------------------------------------------------------------------
 async function main(argv) {
-  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all', noSeed: false }
+  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all', noSeed: false, keepHome: false }
   for (const a of argv) {
     if (a === '--no-seed') { opt.noSeed = true; continue }
+    if (a === '--keep-home') { opt.keepHome = true; continue }
     const m = /^--([a-z-]+)=(.*)$/.exec(a); if (!m) continue
     if (m[1] === 'mode') opt.mode = m[2]
     else if (m[1] === 'port') opt.port = Number(m[2])
@@ -242,7 +587,9 @@ async function main(argv) {
     // kill the whole detached process tree (the launcher + the Electron child).
     try { process.kill(-app.pid, 'SIGTERM') } catch { /* already gone */ }
     try { app.kill('SIGTERM') } catch { /* already gone */ }
-    try { rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
+    // --keep-home: leave the shared HOME in place so a SECOND invocation can reuse
+    // the same store (the LIVE-5 cross-restart persistence round-trip).
+    try { if (!opt.keepHome) rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
     try { if (seedDir === join(ROOT, '.live-corpus')) rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ }
   }
 }

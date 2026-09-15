@@ -15,6 +15,7 @@
 // never produce a raw TypeError (F1's guard is the only throw; F2/F3/F6 skip).
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
 import { plainRagId } from './cross-document-shared.js'
+import { EDITOR_TOOLBAR_ID } from './pane-graph.js'
 
 /** A previously materialized content root, carrying its subtree so the
  *  full-subgraph fallback can compare shapes. The previous roots are passed as
@@ -66,6 +67,15 @@ export interface ReconcileResult {
 const RAG_PREFIX = 'rag-'
 const PANE_PREFIX = 'pane-'
 
+/** U-LIVE4 — the pinned empty-store landing root id (the `content[0]` root
+ *  authored by `emptyStoreEnvelope`, runtime.ts's `LANDING_ROOT_ID`). A
+ *  pane-like, document-unscoped content root (never a `rag-` document
+ *  subtree). AD-2026-09-14-1/-2 — the reconciler admits it so a removed/
+ *  replaced/kept landing is computed (Finding 1: the empty-boot landing is
+ *  destroyed when the store fills) and a still-empty listing change drives a
+ *  `replaced` (Finding 2). */
+const LANDING_ROOT_ID = 'stage-landing'
+
 /** W2-N11 — the deterministic stack-safety cap for the recursive content walks
  *  (`collectRagIds` / `shapeProjection` / `canonical`), mirroring the ADR-4
  *  / TOK-F1 stack-safety discipline. A hostile CIRCULAR or pathologically deep
@@ -102,7 +112,38 @@ function asContentRoot(node: LegacyNodeData | null | undefined): MaterializedRoo
   if (id.startsWith(PANE_PREFIX) && id.length > PANE_PREFIX.length) {
     return { cssId: id, ragNodeId: id }
   }
+  // U-LIVE8 — the pinned `editor-toolbar` root is a pane-like content root
+  // (reconciled always-shape-compared like a pane, so its fresh
+  // `disabled`/`data-mode` state re-materializes on the content re-derive).
+  if (id === EDITOR_TOOLBAR_ID) {
+    return { cssId: id, ragNodeId: id }
+  }
+  // AD-2026-09-14-1 (Finding 1) — the pinned empty-store `stage-landing` root
+  // is a pane-like root too (document-unscoped, always-shape-compared). So the
+  // reconcile computes removed/kept/replaced for it: on the natural first-import
+  // path (empty boot → first doc imported → reDerive('content') → the landing is
+  // in `previous` but NOT in `next`) it is emitted `removed` and destroyed —
+  // no phantom `#stage-landing` persists in a now non-empty store. Previously
+  // it was invisible to `asContentRoot` → never removed → a phantom ghost.
+  if (id === LANDING_ROOT_ID) {
+    return { cssId: id, ragNodeId: id }
+  }
   return null
+}
+
+/** AD-2026-09-14-1/-2 — true for the pane-like, document-unscoped content
+ *  roots that the N-root reconciler routes through the GLOBAL pane collections:
+ *  `pane-`-prefixed app-graph panes, the pinned `editor-toolbar`, and the pinned
+ *  empty-store `stage-landing`. Both the previous pass and the removed pass MUST
+ *  agree on this classification so a pane-like root present in BOTH passes is
+ *  `kept`/`replaced` (never `added`+`removed` — the pre-fix loop-order accident
+ *  on the toolbar, U-LIVE8 AD-finding 1). */
+function isPaneLikeRoot(cssId: string): boolean {
+  return (
+    (cssId.startsWith(PANE_PREFIX) && cssId.length > PANE_PREFIX.length) ||
+    cssId === EDITOR_TOOLBAR_ID ||
+    cssId === LANDING_ROOT_ID
+  )
 }
 
 /** A node's PLAIN RAG id, if its authored id is a `rag-<id>` (non-empty id
@@ -413,7 +454,19 @@ export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconci
   for (const r of prevList) {
     const cd = asContentRoot(r.root as LegacyNodeData)
     if (cd == null) continue
-    if (cd.cssId.startsWith(PANE_PREFIX)) {
+    // AD-2026-09-14-1 (Finding 1) — route the pinned `editor-toolbar` as a pane
+    // in the PREVIOUS pass too, so previous and next routing AGREE. Before this
+    // fix the toolbar (not `pane-`-prefixed) fell to `prevByDoc` in the previous
+    // pass while the NEXT pass routed it as a pane (`paneNextByCssId`), so `prev`
+    // was empty for it → `added` AND the removed pass failed to find it in next →
+    // `removed`: destroyed+reattached on EVERY content reconcile (violating
+    // P-TP-1/P-TP-2 "kept when unchanged" / "destroyed only on replaced").
+    // AD-2026-09-14-2/-3 — the empty-store `stage-landing` is pane-like here too
+    // (isPaneLikeRoot), so a landing present in BOTH previous/next (a still-empty
+    // re-derive with a changed stores/listing body) routes through the SAME
+    // global pane collection and becomes `replaced` when its shape changed —
+    // never `added`+`removed`.
+    if (isPaneLikeRoot(cd.cssId)) {
       if (!panePrevByCssId.has(cd.cssId)) {
         panePrevByCssId.set(cd.cssId, { root: cd, node: r.root as LegacyNodeData })
       }
@@ -576,7 +629,11 @@ export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconci
   for (const r of prevList) {
     const cd = asContentRoot(r.root as LegacyNodeData)
     if (cd == null) continue
-    const isPane = cd.cssId.startsWith(PANE_PREFIX)
+    // AD-2026-09-14-1 — the pinned `editor-toolbar` (+ the empty-store
+    // `stage-landing`, AD-2026-09-14-2/-3) is classified pane-like here too, so
+    // `inNext` checks `paneNextByCssId` (where the next pass routes it) and a
+    // kept toolbars/landing is never emitted `removed`.
+    const isPane = isPaneLikeRoot(cd.cssId)
     // U-STATE-1e §4 F2/F5/F8 — a previous document root whose non-empty
     // `documentId` is not open is DROPPED from the result (never emitted as
     // `removed`) on a content/null reconcile: the host detaches/holds the stale

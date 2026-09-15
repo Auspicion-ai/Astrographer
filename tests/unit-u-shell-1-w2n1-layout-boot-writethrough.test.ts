@@ -99,7 +99,15 @@ function makeHarness(opts: { layout?: unknown } = {}): Harness {
   }
   const state = {
     operatorSettings: {
-      enabledPanes: [],
+      // EXPLICIT NON-first-run persisted set (FIRST-RUN-ENABLED-DEFAULT /
+      // docs/decisions.md, docs/defects.md LIVE-7): `panesInitialized: true`
+      // plus a full `enabledPanes` so boot does NOT fire the first-run-only
+      // `persistEnabledPanes()` write-through. This harness boots a generic
+      // persisted operator (NOT a first run) — its intent is the layout
+      // write-through seam (`setLayout`), which must remain the SINGLE set call.
+      enabledPanes: ['doc-nav', 'crosslinks', 'search', 'template-editor'],
+      enabledOperatorPanes: ['settings'],
+      panesInitialized: true,
       defaultDocumentId: null,
       topK: 5,
       editingMode: 'contenteditable',
