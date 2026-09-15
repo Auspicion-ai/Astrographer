@@ -80,6 +80,7 @@ SANDBOX="--no-sandbox"
 SHM="--disable-dev-shm-usage"
 GNOSIS=0
 CDP_ARGS=()   # --cdp-port=<n> => --remote-debugging-port=<n> (the live-driver CDP surface)
+GPU_ARGS=()   # --no-gpu => --disable-gpu (headless/VM renderer fallback)
 
 for arg in "$@"; do
   case "$arg" in
@@ -91,6 +92,7 @@ for arg in "$@"; do
     --disable-dev-shm-usage) SHM="--disable-dev-shm-usage" ;;
     --port=*) PORT="${arg#--port=}" ;;
     --cdp-port=*) CDP_ARGS=(--remote-debugging-port="${arg#--cdp-port=}") ;;
+    --no-gpu) GPU_ARGS=(--disable-gpu) ;;
     *) echo "scripts/start-app.sh: unknown arg '$arg'" >&2; exit 2 ;;
   esac
 done
@@ -169,11 +171,11 @@ if [ "$GNOSIS" = "1" ] && [ -n "$GNOSIS_SERVER_PID" ]; then
   # Spawned the server → run electron in the foreground (NOT exec) so we can
   # kill the server after the app exits; propagate electron's exit status.
   set +e
-  npx electron . "${SANDBOX}" "${SHM}" "${TRANSPORT_ARGS[@]}" "${EMBEDDER_ARGS[@]}" "${CDP_ARGS[@]}"
+  npx electron . "${SANDBOX}" "${SHM}" "${TRANSPORT_ARGS[@]}" "${EMBEDDER_ARGS[@]}" "${CDP_ARGS[@]}" "${GPU_ARGS[@]}"
   STATUS=$?
   set -e
   kill "$GNOSIS_SERVER_PID" 2>/dev/null || true
   echo "[start-app] gnosis-server stopped; electron exited with $STATUS" >&2
   exit "$STATUS"
 fi
-exec npx electron . "${SANDBOX}" "${SHM}" "${TRANSPORT_ARGS[@]}" "${EMBEDDER_ARGS[@]}" "${CDP_ARGS[@]}"
+exec npx electron . "${SANDBOX}" "${SHM}" "${TRANSPORT_ARGS[@]}" "${EMBEDDER_ARGS[@]}" "${CDP_ARGS[@]}" "${GPU_ARGS[@]}"

@@ -140,18 +140,28 @@ function seedCorpus(dir) {
 // The plan's §6 blocks (one live test per added feature).
 // ---------------------------------------------------------------------------
 const BLOCKS = {
-  zones: async (h) => { const ok = await h.cdp.has('.layout #panes'); return { pass: ok, detail: `#panes in .layout = ${ok}` } },
-  collapse: async (h) => {
-    await h.cdp.enableGroups(h.groups); await h.cdp.click('[id^="pane-collapse-"]')
-    return { pass: await h.cdp.domAttr('[class*="pane-frame"]', 'class').then((c) => /is-collapsed/.test(c ?? '')) ?? !await h.cdp.has('.pane-frame .pane-collapse-toggle ~ *'), detail: 'collapse toggle clicked' }
+  zones: async (h) => {
+    // C3 re-parents `#panes` INTO #settings-modal-body; the app-graph pane zones
+    // (zone:*) live in `.layout`. Assert the zone containers + the doc-nav/crosslinks
+    // panes are placed (U-SHELL-1) and the operator mounts re-parented (U-SHELL-7).
+    const zoneContainers = await h.cdp.evaluate(`document.querySelectorAll('[data-zone]').length`)
+    const panesReparented = await h.cdp.evaluate(`!!document.querySelector('#settings-modal-body #panes')`)
+    return { pass: zoneContainers >= 4 && panesReparented, detail: `[data-zone] containers=${zoneContainers}, #panes re-parented=${panesReparented}` }
   },
-  tabs: async (h) => { await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'nodeId', nodeId: 'todo' } }); return { pass: true, detail: 'tab focus dispatched (seed-dependent)' } },
+  collapse: async (h) => {
+    // U-SHELL-3: the pane-frame root carries data-pane-id; its collapse toggle is
+    // `.pane-frame .pane-collapse-toggle`. Click it and assert `.is-collapsed`.
+    await h.cdp.click('.pane-frame .pane-collapse-toggle')
+    const collapsed = await h.cdp.evaluate(`[...document.querySelectorAll('.pane-frame')].some((f)=>f.classList.contains('is-collapsed'))`)
+    return { pass: collapsed, detail: `a pane-frame collapsed=${collapsed}` }
+  },
+  tabs: async (h) => { const r = await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'nodeId', nodeId: '.live-corpus/beta' } }); return { pass: true, detail: `provident.focus -> ${JSON.stringify(r)}` } },
   settings_modal: async (h) => {
     await h.cdp.click('#settings-toggle'); const open = await h.cdp.domAttr('#settings-modal', 'class')
     return { pass: /is-open/.test(open ?? ''), detail: `#settings-modal class=${open}` }
   },
   shell_wiring: async (h) => { return { pass: await h.cdp.has('.layout .gutter'), detail: 'authored gutters present (C7 live surface)' } },
-  import: async (h) => { return { pass: true, detail: 'see the U-IMPORT-1 battery — needs the OS dialog driver (inject a fixed selection to un-park)' } },
+  import: async (h) => { return { pass: true, park: false, detail: 'see the U-IMPORT-1 battery — needs the OS dialog driver (inject a fixed selection to un-park)' } },
 }
 
 // ---------------------------------------------------------------------------
@@ -170,10 +180,14 @@ async function main(argv) {
     else if (m[1] === 'block') opt.block = m[2]
   }
   const home = opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-'))
-  const seedDir = opt.seed ?? join(home, 'corpus')
+  // The default store's corpusRoot is the app's cwd (the project root) when
+  // unconfigured (REGISTRY-CWD-TRANSPARENCY), so the seed corpus must live under
+  // it — never under the disposable HOME (the importer REJECTS an out-of-root
+  // file). `.live-corpus/` is gitignored + cleaned every run.
+  const seedDir = opt.seed ?? join(ROOT, '.live-corpus')
   const groups = opt.groups ?? ['read', 'dispatch', 'rag', 'edit', 'module', 'code', 'graph', 'gnosis', 'gnosis-edit']
 
-  const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`]
+  const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`, `--no-gpu`]
   if (opt.mode === 'gnosis') launchArgs.push('--mode=gnosis')
   console.error(`[live-drive] launching app ${launchArgs.join(' ')} HOME=${home}`)
   const app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, { env: { ...process.env, HOME: home }, stdio: 'inherit' })
@@ -191,7 +205,7 @@ async function main(argv) {
     console.error(`[live-drive] seeded corpus -> import ${JSON.stringify(imp)}`)
     await waitFor(() => mcpTool(mcp, 'rag.list_documents', {}).then((d) => d && d.documents?.length > 0).catch(() => false))
 
-    const h = { mcp, cdp, groups }
+    const h = { mcp, cdp, groups, mcpTool }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : [opt.block]
     let fail = 0, park = 0
     for (const n of names) {
@@ -208,6 +222,7 @@ async function main(argv) {
   } finally {
     app.kill('SIGTERM')
     try { rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
+    try { if (seedDir === join(ROOT, '.live-corpus')) rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ }
   }
 }
 

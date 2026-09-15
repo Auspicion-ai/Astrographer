@@ -150,3 +150,6 @@ opencode.jsonc
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# live-driver disposable seed corpus (scripts/live-drive.mjs)
+.live-corpus/
