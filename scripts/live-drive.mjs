@@ -142,10 +142,16 @@ function seedCorpus(dir) {
 const BLOCKS = {
   shell_composition: async (h) => {
     const top = await h.cdp.evaluate(`(()=>{const b=document.body;const tab=document.getElementById('tab-strip');if(!tab)return 'no tab-strip';
-      const idx=[...b.children].map(c=>c.id||c.tagName).indexOf(tab.id||'-');const headerIdx=[...b.children].map(c=>c.id||c.tagName).indexOf(undefined)>=0?-1:[...b.children].findIndex(c=>c.tagName==='HEADER');
-      const tabBeforeHeader = headerIdx>-1 ? idx < headerIdx : true; return JSON.stringify({bodyKids:[...b.children].map(c=>c.id||c.tagName),tabBeforeHeader})})()`)
+      const headerIdx=[...b.children].findIndex(c=>c.tagName==='HEADER');const tabIdx=[...b.children].indexOf(tab);
+      return JSON.stringify({bodyKids:[...b.children].map(c=>c.id||c.tagName),tabBeforeHeader: tabIdx < headerIdx})})()`)
     const parsed = JSON.parse(top)
     return { pass: parsed.tabBeforeHeader === true, detail: top }
+  },
+  landing: async (h) => {
+    const r = await h.cdp.evaluate(`(()=>{const l=document.getElementById('stage-landing');if(!l)return JSON.stringify({present:false});
+      return JSON.stringify({present:true, text:(l.textContent||'').slice(0,80), dataLanding:l.getAttribute('data-stage')})})()`)
+    const p = JSON.parse(r)
+    return { pass: p.present === true && p.dataLanding === 'landing', detail: r }
   },
   probe_app: async (h) => {
     const dump = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');if(!app)return 'no #app';
@@ -188,7 +194,7 @@ const BLOCKS = {
 // Harness.
 // ---------------------------------------------------------------------------
 async function main(argv) {
-  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all' }
+  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all', noSeed: false }
   for (const a of argv) {
     const m = /^--([a-z-]+)=(.*)$/.exec(a); if (!m) continue
     if (m[1] === 'mode') opt.mode = m[2]
@@ -199,6 +205,7 @@ async function main(argv) {
     else if (m[1] === 'groups') opt.groups = m[2].split(',').filter(Boolean)
     else if (m[1] === 'block') opt.block = m[2]
     else if (m[1] === 'display') opt.display = m[2]
+    else if (m[1] === 'no-seed') opt.noSeed = true
   }
   const home = opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-'))
   // The default store's corpusRoot is the app's cwd (the project root) when
@@ -224,11 +231,13 @@ async function main(argv) {
     const cdp = await CDP.connect(opt.cdpPort)
     await cdp.enableGroups(groups)
     await waitFor(() => mcpTool(mcp, 'provident.list_targets', {}).then(() => true).catch(() => false))
-    // deterministic seed
-    const files = seedCorpus(seedDir)
-    const imp = await mcpTool(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, error: String(e) }))
-    console.error(`[live-drive] seeded corpus -> import ${JSON.stringify(imp)}`)
-    await waitFor(() => mcpTool(mcp, 'rag.list_documents', {}).then((d) => d && d.documents?.length > 0).catch(() => false))
+    // deterministic seed (skip with --no-seed to observe the fresh/landing state)
+    if (!opt.noSeed) {
+      const files = seedCorpus(seedDir)
+      const imp = await mcpTool(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, error: String(e) }))
+      console.error(`[live-drive] seeded corpus -> import ${JSON.stringify(imp)}`)
+      await waitFor(() => mcpTool(mcp, 'rag.list_documents', {}).then((d) => d && d.documents?.length > 0).catch(() => false))
+    }
 
     const h = { mcp, cdp, groups, mcpTool }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : [opt.block]
