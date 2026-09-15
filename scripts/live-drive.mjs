@@ -153,6 +153,14 @@ const BLOCKS = {
     const p = JSON.parse(r)
     return { pass: p.present === true && p.dataLanding === 'landing', detail: r }
   },
+  landing_debug: async (h) => {
+    const d = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');
+      return JSON.stringify({appChildren:(app?[...app.children].map(c=>c.id||c.tagName):'no#app'),
+        appText:(app?app.textContent.slice(0,120):''), stageLanding:!!document.getElementById('stage-landing'),
+        bodyStage:!!document.querySelector('[data-stage="landing"]')})})()`)
+    console.log('[live-drive] landing_debug:\n' + d)
+    return { pass: true, detail: d }
+  },
   probe_app: async (h) => {
     const dump = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');if(!app)return 'no #app';
       const kids=[...app.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4)}));
@@ -196,6 +204,7 @@ const BLOCKS = {
 async function main(argv) {
   const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all', noSeed: false }
   for (const a of argv) {
+    if (a === '--no-seed') { opt.noSeed = true; continue }
     const m = /^--([a-z-]+)=(.*)$/.exec(a); if (!m) continue
     if (m[1] === 'mode') opt.mode = m[2]
     else if (m[1] === 'port') opt.port = Number(m[2])
