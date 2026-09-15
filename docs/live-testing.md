@@ -52,6 +52,32 @@ on **`http://127.0.0.1:3787/mcp`** (default) and the retrieval-embedder mode.
 `ollama run embeddinggemma "test"`). The vector-boot warm-up + the W1–W5
 vector machinery were live-verified against real ollama on 2026-09-05.
 
+### 1.1 The automated live driver + the e2e/user-test-suite plan (2026-09-14)
+
+The consolidated live-testing handoff now has an **automated driver** +
+a plan:
+
+- **Plan:** `docs/specs/live-user-test-suite-plan.md` — spec the live e2e/user
+  suite for the UI-overhaul + Gnosis surfaces (missing configs/components §1,
+  query-response §3, RAG-graph edges §4, per-pane content §5, one live test per
+  added feature §6).
+- **Driver:** `scripts/live-drive.mjs` launches the app under a disposable
+  `HOME`, connects **both** surfaces (MCP via `StreamableHTTPClientTransport` +
+  **CDP** via WebSocket), **enables the tool groups** through the renderer
+  security bridge, seeds a deterministic corpus, and runs the §6 blocks
+  (`--block=<name>|all`), printing PASS/FAIL. The launcher exposes the CDP
+  surface via a new `--cdp-port=<n>` flag (→ `--remote-debugging-port`).
+  ```bash
+  node scripts/live-drive.mjs --mode=lexical --block=all
+  ```
+- **Gnosis status (corrected):** the Gnosis **integration is done** — the
+  `gnosis-server` P2 binary is **built** (`../Gnosis/target/debug/gnosis-server`)
+  and `--mode=gnosis` spawns it + waits for `/engine/status` Ready. The only
+  external prerequisite for the **live** Gnosis surface is a **RUNNING engine
+  backend** (ollama + `nomic-embed-text`, via `GNOSIS_SERVER_OLLAMA_URL`) +
+  the `gnosis`/`gnosis-edit` tool groups enabled; absent a backend, the
+  D2-fallback (`EngineUnavailable`) is still live-verifiable.
+
 ---
 
 ## 2. How to drive the MCP server

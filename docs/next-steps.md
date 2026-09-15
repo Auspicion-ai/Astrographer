@@ -21,6 +21,20 @@ one-way snapshot).
 
 ## CURRENT WORK / handover-state
 
+**LIVE SUITE (2026-09-14):** the live e2e/user-test-suite for the UI-overhaul +
+Gnosis surfaces now has an **automated driver + a plan** —
+`docs/specs/live-user-test-suite-plan.md` (the query-response §3 / RAG-graph-edge
+§4 / per-pane-content §5 / one-live-test-per-added-feature §6 expectations) +
+`scripts/live-drive.mjs` (launches the app under a disposable `HOME`, connects
+MCP + CDP, **enables the MCP tool groups** via the renderer security bridge,
+seeds a deterministic corpus, runs the plan's §6 blocks with PASS/FAIL; the
+launcher gained `--cdp-port=<n>`). This **un-parks** the `-live-pending-battery.md`
+set: each plan §6 PASS moves its battery scenario to CLOSED. See
+`docs/live-testing.md` §1.1. **Gnosis:** the integration is done (the P2
+`gnosis-server` binary is **built**); the only live-Gnosis prerequisite is a
+RUNNING engine backend (ollama + `nomic-embed-text`) + the `gnosis`/`gnosis-edit`
+groups enabled.
+
 **U-IMPORT-1 (File → Import… FS/browse surface, C17) — GREEN / COMPLETE (2026-09-14, CODE LANDED; see the Unit U-IMPORT-1 DONE row below):** `src/main/import-directory.ts` (NEW — `MAX_IMPORT_FILES=512` + the pure TOTAL `expandImportDirectory` / `buildImportDialogOptions` / `resolveImportSelection` §2.1), the `Import…` + `Import folder…` non-darwin two-item File menu + the `openImportFolder` seam (`app-menu.ts`), the reworked `main.ts` Import flow (→ `buildImportDialogOptions(platform)` / `['openDirectory']` → `resolveImportSelection` → `importMarkdownCorpus` with the default-store `corpusRoot` + `IPC_IMPORT_RESULT`/`IPC_RAG_STORE_CHANGED` broadcasts), and `IPC_IMPORT_RESULT='provident:import-result'` + `ImportResultPayload` (`src/shared/types.ts`). Tests `tests/unit-u-import-1-import-surface.test.ts` = **47** (TestWriter red 43 → green 47, incl. 4 IMPORT-ADV regression pins + 3 sanctioned re-pins). Blind-greens `docs/specs/unit-u-import-1-import-surface-greens.md` = **36 PASS / 0 FAIL / 5 NOT-TESTABLE**. Live battery PARKED `docs/specs/unit-u-import-1-import-surface-live-pending-battery.md`. Trio **4613 pass / 58 skip, typecheck 0, build 0**. Adversarial IMPORT-ADV-1..3 FIXED + recorded in spec §3c. Decisions `IMPORT-NO-SYMLINK-FOLLOW` + `IMPORT-FILE-COUNT-CAP` + `IMPORT-RESULT-BROADCAST` ACTIVE (`docs/decisions.md`). **WAVE 3 COMPLETE — with U-SHELL-7 (C3) + U-IMPORT-1 (C17) the UI-overhaul is all-LANDED.**
 
 **U-SHELL-7 (settings modal, C3) — GREEN / COMPLETE (2026-09-14, CODE LANDED; see the Unit U-SHELL-7 DONE row below):** `src/renderer/modal-state.ts` (NEW — the pure `createModalController` state machine §2.1 + `installSettingsModal` FAIL-SOFT/idempotent wiring §2.6), the `installSettingsModal(host, panels, mounts)` call in `renderer.ts` `main()` AFTER `installShellPointers` (§2.6 placement), and the `index.html` shell chrome (the `#settings-modal` frame + the dedicated `#settings-modal-scrim` + `#settings-modal-body` + the fixed bottom-left `#settings-toggle`, plus `#settings-modal.is-closed { display:none }` and the SH7-ADV1 `#settings-modal-scrim { pointer-events:auto }` fix). The modal hosts the two EXISTING operator-only mounts (`#panes` = SecurePanels, `#operator-panes` = the SidebarPanes operator graph) by re-parenting them into the modal body (isolation preserved — `MODAL-SETTINGS-REPARENT`). Tests `tests/unit-u-shell-7-settings-modal.test.ts` = **40** (TestWriter red 37 → green 40, incl. the SH7-ADV1..3 adversarial regression pins). Blind-greens `docs/specs/unit-u-shell-7-settings-modal-greens.md` = **31 PASS / 0 FAIL / 2 NOT-TESTABLE**. Live battery PARKED `docs/specs/unit-u-shell-7-settings-modal-live-pending-battery.md`. Trio **4566 pass / 58 skip, typecheck 0, build 0**. Adversarial SH7-ADV1..3 FIXED + regression-tested; SH7-ADV4..6 INFO-accepted (spec §3c). Decisions `MODAL-SETTINGS-REPARENT` + `MODAL-DEDICATED-SCRIM` ACTIVE (`docs/decisions.md`). Doc review `archive/reviews/2026-09-14-unit-u-shell-7-settings-modal-doc-review.md`.
