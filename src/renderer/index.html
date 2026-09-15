@@ -94,6 +94,27 @@
     }
     .layout .zone-header { grid-area: header; }
     .layout #app { grid-area: stage; }
+    /* LIVE-6 (2026-09-14) — the runtime mounts into #app, so the app-graph zone
+       containers live INSIDE #app's single `wiki-root`. Lay `#wiki-root` out as
+       the intended shell grid (header / left · main · right / footer) so the
+       panes render as a LEFT SIDEBAR and the stage (`zone:main`) content sits in
+       the center — fixing "panes populate the main canvas, not zones". */
+    #app > #wiki-root {
+      display: grid;
+      height: 100%;
+      grid-template-columns: minmax(0, var(--zone-left-size, 220px)) minmax(0, 1fr) minmax(0, var(--zone-right-size, 220px));
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "header header header"
+        "left   main   right"
+        "footer footer footer";
+    }
+    #app [data-zone="header"] { grid-area: header; }
+    #app [data-zone="left"]   { grid-area: left;   }
+    #app [id="zone:main"]     { grid-area: main;   }
+    #app [data-zone="right"]  { grid-area: right;  }
+    #app [data-zone="footer"] { grid-area: footer; }
+    #app [id="zone:sidebar"]  { display: none; }
     .layout #panes { grid-area: left; }
     /* W2-N4 (AF-4) — the operator panes are modal-confined (C3) and MUST NOT
        occupy an app pane zone. The former `.layout #operator-panes
