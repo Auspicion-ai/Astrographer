@@ -195,7 +195,8 @@
     .tab-strip .tab { -webkit-app-region: no-drag; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; border: 1px solid var(--border); background: var(--card-bg); color: var(--fg); border-radius: 6px 6px 0 0; padding: 0.25rem 0.5rem; cursor: pointer; }
     .tab-strip .tab.is-active { border-color: var(--accent); background: var(--hover); font-weight: 600; }
     .tab-strip .tab-close { opacity: 0.6; }
-    .tab-strip .tab-new { flex: none; }
+    .tab-strip .tab-new { flex: none; -webkit-app-region: no-drag; margin-left: 0.25rem; }
+    .tab-strip .tab-close { -webkit-app-region: no-drag; }
     /* Unit U-SHELL-7 (C3) — the settings modal shell chrome. The frame is a
        top-layer overlay carrying exactly one state class (is-open XOR is-closed,
        the §2.3 wiring mirror); the dedicated scrim + body wrap the operator

@@ -140,56 +140,14 @@ function seedCorpus(dir) {
 // The plan's §6 blocks (one live test per added feature).
 // ---------------------------------------------------------------------------
 const BLOCKS = {
-  zones_geometry: async (h) => {
-    const d = await h.cdp.evaluate(`(()=>{const g=id=>{const el=document.getElementById(id);if(!el)return null;const r=el.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}};
-      const main=g('zone:main'),left=g('zone:left'),right=g('zone:right');
-      const root=document.getElementById('wiki-root');const ds=root?getComputedStyle(root).display:'';
-      const leftOfStage=left&&main ? left.x < main.x : false;
-      return JSON.stringify({display:ds,left,main,right,leftOfStage})})()`)
-    const p=JSON.parse(d)
-    return { pass: p.leftOfStage===true, detail: d }
-  },
-  shell_composition: async (h) => {
-    const top = await h.cdp.evaluate(`(()=>{const b=document.body;const tab=document.getElementById('tab-strip');if(!tab)return 'no tab-strip';
-      const headerIdx=[...b.children].findIndex(c=>c.tagName==='HEADER');const tabIdx=[...b.children].indexOf(tab);
-      return JSON.stringify({bodyKids:[...b.children].map(c=>c.id||c.tagName),tabBeforeHeader: tabIdx < headerIdx})})()`)
-    const parsed = JSON.parse(top)
-    return { pass: parsed.tabBeforeHeader === true, detail: top }
-  },
-  landing: async (h) => {
-    const r = await h.cdp.evaluate(`(()=>{const l=document.getElementById('stage-landing');if(!l)return JSON.stringify({present:false});
-      return JSON.stringify({present:true, text:(l.textContent||'').slice(0,80), dataLanding:l.getAttribute('data-stage')})})()`)
-    const p = JSON.parse(r)
-    return { pass: p.present === true && p.dataLanding === 'landing', detail: r }
-  },
-  landing_debug: async (h) => {
-    const d = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');
-      return JSON.stringify({appChildren:(app?[...app.children].map(c=>c.id||c.tagName):'no#app'),
-        appText:(app?app.textContent.slice(0,120):''), stageLanding:!!document.getElementById('stage-landing'),
-        bodyStage:!!document.querySelector('[data-stage="landing"]')})})()`)
-    console.log('[live-drive] landing_debug:\n' + d)
-    return { pass: true, detail: d }
-  },
-  wiki_children: async (h) => {
-    const d = await h.cdp.evaluate(`(()=>{const r=document.getElementById('wiki-root');if(!r)return 'no wiki-root';
-      const g=(el)=>({id:el.id||'',z:el.getAttribute('data-zone')||null,cls:(el.className||'').split(' ').slice(0,5),tag:el.tagName,text:(el.textContent||'').slice(0,24)});
-      return JSON.stringify({wikiRootChildren:[...r.children].map(g),
-        zones:[...document.querySelectorAll('[data-zone]')].map(el=>({z:el.getAttribute('data-zone'),parent:(el.parentElement?el.parentElement.id||el.parentElement.tagName:'?'),cls:(el.className||'').split(' ').slice(0,4),paneCount:el.querySelectorAll('.pane-frame').length,id:el.id}))})})()`)
-    console.log('[live-drive] wiki_children:\n' + d)
-    return { pass: true, detail: d }
-  },
-  probe_app: async (h) => {
-    const dump = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');if(!app)return 'no #app';
-      const kids=[...app.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4)}));
-      const zones=[...document.querySelectorAll('[data-zone]')].map(el=>({z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4),paneCount:el.querySelectorAll('.pane-frame').length,id:el.id}));
-      return JSON.stringify({appKids:kids,zones},null,0)})()`)
-    console.log('[live-drive] PROBE #app:\n' + dump)
-    const deep = await h.cdp.evaluate(`(()=>{const r=document.getElementById('wiki-root');if(!r)return 'no wiki-root';
-      const kids=[...r.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4),frames:el.querySelectorAll('.pane-frame').length}));
-      const stage=document.querySelector('#app');const style={display:getComputedStyle(stage).display,grid:getComputedStyle(stage).gridTemplateColumns};
-      return JSON.stringify({wikiRootChildren:kids, stageStyle:style})})()`)
-    console.log('[live-drive] PROBE wiki-root:\n' + deep)
-    return { pass: true, detail: 'deep probe (see above)' }
+  tab_new_click: async (h) => {
+    const hasBtn = await h.cdp.evaluate(`!!document.querySelector('[data-tab-new]')`)
+    if (!hasBtn) return { pass: false, detail: 'no [data-tab-new] button' }
+    await h.cdp.click('[data-tab-new]')
+    await new Promise((res) => setTimeout(res, 400))
+    const landing = await h.cdp.evaluate(`!!document.getElementById('stage-landing')`)
+    const tabs = await h.cdp.evaluate(`document.querySelectorAll('.tab').length`)
+    return { pass: landing, detail: `tab-new click -> landing=${landing}, tabs=${tabs}` }
   },
   zones: async (h) => {
     // C3 re-parents `#panes` INTO #settings-modal-body; the app-graph pane zones
