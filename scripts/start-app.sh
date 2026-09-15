@@ -93,6 +93,7 @@ for arg in "$@"; do
     --port=*) PORT="${arg#--port=}" ;;
     --cdp-port=*) CDP_ARGS=(--remote-debugging-port="${arg#--cdp-port=}") ;;
     --no-gpu) GPU_ARGS=(--disable-gpu) ;;
+    --display=:*) export DISPLAY="${arg#--display=}" ;;
     *) echo "scripts/start-app.sh: unknown arg '$arg'" >&2; exit 2 ;;
   esac
 done

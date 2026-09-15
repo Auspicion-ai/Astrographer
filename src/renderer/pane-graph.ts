@@ -226,7 +226,7 @@ export function paneSubtreeRoot<C>(
       'data-pane-collapse': collapsed === true ? 'true' : 'false',
     },
     css: { classes: clickableClasses(['pane-collapse-toggle']) },
-    content: collapsed === true ? '▸' : '▾',
+    content: `${collapsed === true ? '▸' : '▾'} ${def.title}`,
     handlers: [{ name: PANE_COLLAPSE_HANDLER, event: 'click', body: PANE_COLLAPSE_BODY }],
   }
   const body: LegacyNodeData = {

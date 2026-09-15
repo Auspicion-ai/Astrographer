@@ -140,6 +140,14 @@ function seedCorpus(dir) {
 // The plan's §6 blocks (one live test per added feature).
 // ---------------------------------------------------------------------------
 const BLOCKS = {
+  probe_app: async (h) => {
+    const dump = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');if(!app)return 'no #app';
+      const kids=[...app.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4)}));
+      const zones=[...document.querySelectorAll('[data-zone]')].map(el=>({z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4),paneCount:el.querySelectorAll('.pane-frame').length,id:el.id}));
+      return JSON.stringify({appKids:kids,zones},null,0)})()`)
+    console.log('[live-drive] PROBE #app:\n' + dump)
+    return { pass: true, detail: 'probe dumped (see above)' }
+  },
   zones: async (h) => {
     // C3 re-parents `#panes` INTO #settings-modal-body; the app-graph pane zones
     // (zone:*) live in `.layout`. Assert the zone containers + the doc-nav/crosslinks
@@ -178,6 +186,7 @@ async function main(argv) {
     else if (m[1] === 'seed') opt.seed = m[2]
     else if (m[1] === 'groups') opt.groups = m[2].split(',').filter(Boolean)
     else if (m[1] === 'block') opt.block = m[2]
+    else if (m[1] === 'display') opt.display = m[2]
   }
   const home = opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-'))
   // The default store's corpusRoot is the app's cwd (the project root) when
@@ -190,7 +199,10 @@ async function main(argv) {
   const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`, `--no-gpu`]
   if (opt.mode === 'gnosis') launchArgs.push('--mode=gnosis')
   console.error(`[live-drive] launching app ${launchArgs.join(' ')} HOME=${home}`)
-  const app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, { env: { ...process.env, HOME: home }, stdio: 'inherit' })
+  const app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, {
+    env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}` }, // user-directed display :1 by default
+    stdio: 'inherit',
+  })
 
   try {
     const mcpBase = `http://127.0.0.1:${opt.port}/mcp`
