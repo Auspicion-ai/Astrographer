@@ -80,25 +80,22 @@
     header h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
     header p { margin: 0 0 1rem; color: var(--muted); font-size: 0.85rem; }
     .layout {
-      /* Unit U-SHELL-1 §2.4 (Table C shell grid) — the shell geometry: a
-         top-bar row → a header zone row → the main row (left | stage | right)
-         → a footer zone row. The tracks read `ZoneLayout.size`; an empty zone's
-         track collapses (derived from `is-empty`). U-SHELL-5 owns the gutters. */
+      /* LIVE-6/B (2026-09-14) — the runtime mounts into #app and its zone
+         containers are laid out INSIDE #app's wiki-root (below). The shell
+         `.layout` is now just a full-width frame that gives #app a definite
+         height — the old separate left/stage/right/header/footer shell columns
+         are gone (they were the "empty col-resize" dead element). */
       display: grid;
-      /* W2-N3 (AF-3) — the tracks read the persisted `ZoneLayout.size` /
-         `stage.size` / `topBar.size` via CSS custom properties (set from the
-         layout at boot + on change). The fallbacks pin the §2.1 defaults.
-         `stage.size` is the serialized 1fr weight; the rest are px tracks. */
-      grid-template-columns: var(--zone-left-track, minmax(160px, var(--zone-left-size, 220px))) minmax(0, var(--stage-weight, 1fr)) var(--zone-right-track, minmax(160px, var(--zone-right-size, 220px)));
-      grid-template-rows: var(--zone-header-track, var(--zone-header-size, 48px)) minmax(0, 1fr) var(--zone-footer-track, var(--zone-footer-size, 48px));
-      grid-template-areas:
-        "header  header  header"
-        "left    stage   right"
-        "footer  footer  footer";
-      gap: 1rem;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      grid-template-areas: "stage";
+      gap: 0;
     }
-    .layout .zone-header { grid-area: header; }
     .layout #app { grid-area: stage; }
+    /* LIVE-6/B — the old shell gutters don't align with the (now in-#app) zone
+       columns, so they were the empty col-resize strip. Hide them; C7 resize is
+       re-owned by the in-#app gutter wiring. */
+    .layout > .gutter { display: none; }
     /* LIVE-6 (2026-09-14) — the runtime mounts into #app, so the app-graph zone
        containers live INSIDE #app's single `wiki-root`. Lay `#wiki-root` out as
        the intended shell grid (header / left · main · right / footer) so the
@@ -107,7 +104,7 @@
     #app > #wiki-root {
       display: grid;
       height: 100%;
-      grid-template-columns: minmax(0, var(--zone-left-size, 220px)) minmax(0, 1fr) minmax(0, var(--zone-right-size, 220px));
+      grid-template-columns: minmax(0, var(--zone-left-size, 220px)) minmax(0, var(--stage-weight, 1fr)) minmax(0, var(--zone-right-size, 220px));
       grid-template-rows: auto minmax(0, 1fr) auto;
       grid-template-areas:
         "header header header"
