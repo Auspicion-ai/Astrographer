@@ -212,8 +212,9 @@ async function main(argv) {
   if (opt.mode === 'gnosis') launchArgs.push('--mode=gnosis')
   console.error(`[live-drive] launching app ${launchArgs.join(' ')} HOME=${home}`)
   const app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, {
-    env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}` }, // user-directed display :1 by default
+    env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}` }, // user-directed display (default :1, override --display=N)
     stdio: 'inherit',
+    detached: true, // so we can kill the WHOLE process tree on exit (user: exit after the test, not a timer)
   })
 
   try {
@@ -244,7 +245,10 @@ async function main(argv) {
     console.error(`[live-drive] done: ${names.length} blocks, ${fail} FAIL, ${park} PARKED`)
     process.exitCode = fail > 0 ? 1 : 0
   } finally {
-    app.kill('SIGTERM')
+    // Exit the app promptly after the tests complete (not waiting on a timer):
+    // kill the whole detached process tree (the launcher + the Electron child).
+    try { process.kill(-app.pid, 'SIGTERM') } catch { /* already gone */ }
+    try { app.kill('SIGTERM') } catch { /* already gone */ }
     try { rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
     try { if (seedDir === join(ROOT, '.live-corpus')) rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ }
   }
