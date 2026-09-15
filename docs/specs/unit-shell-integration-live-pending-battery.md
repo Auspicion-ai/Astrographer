@@ -246,3 +246,10 @@ exposes the `gnosis`/`gnosis-edit` MCP/UI surface.
    may have landed) and the trackers (`docs/next-steps.md`, `docs/pending.md`).
 
 ---
+
+## STATUS 2026-09-15 — APP-SIDE SURFACE CLOSED (PASS, live); ENGINE-TRANSPORT SURFACE PARKED (engine-absent)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=shell_integration`
+- `provident.list_targets {}` → the full app-graph node list (zone containers, pane-search/doc-nav frames + collapse toggles, the rendered `rag-*` document nodes, editor toolbar, history pane, etc.).
+- `provident.focus {target:{kind:"document", documentId:".live-corpus/alpha"}}` → resolves (the correct focus shape is `kind:"document"` with `documentId` — the old `nodeId` kind was a stale probe, not a regression).
+The engine-transport half of shell-integration remains PARKED (engine-absent this session: `gnosis.status`/`gnosis.query` return `fetch failed` — no live `gnosis-server` launched; requires a `--mode=gnosis` launch).

@@ -218,3 +218,10 @@ oversized name — it belongs to class L2, not here.)
 6. **P0 first:** re-confirm the dead-code state is gone (P0's inertness must
    FAIL after U-MS2 — the corrupt file must now produce LOG-1). If P0 still
    shows inertness, the wiring has not landed and the battery re-parks.
+## STATUS 2026-09-15 — SINGLE-DEFAULT-STORE SUBSET CLOSED (PASS, live); REGISTRY-ONLY SCENARIOS PARKED (structural)
+Un-parked and run against the running app (lexical, disposable HOME → single implicit `main` store). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=ms_store`
+- `rag.list_documents {store:"main"}` → the 2 seeded doc heads (default store serves omitted-`store` too).
+- `rag.query {store:"main", query:"alpha", topK:3}` → a result stamped `store:"main"`.
+- `rag.query {store:"nope", query:"alpha"}` → FAIL-LOUD `"rag.query: unknown store 'nope'"` (echoes only the caller's input).
+The multi-store-registry-only scenarios (a SECOND registered store → MS2 store-wiring routing / MS4 id-prefixing / registry-file load outcomes) remain PARKED: the app boots only the default single `main` store in this launch (no operator-configured second store / registry file). Park reason: multi-store-registry surface absent — needs the operator to configure/register a second store; NOT a failure.

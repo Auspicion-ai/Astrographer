@@ -274,3 +274,11 @@ originating element and naturally release at `pointerup`/`pointercancel`.
    meantime) and the trackers (`docs/next-steps.md`, `docs/pending.md`,
    `docs/decisions.md`). The W2-N7 row is RESOLVED (Architect ruling (a)); the
    unit is GREEN/LANDED in source.
+
+## STATUS 2026-09-15 — CLOSED (PASS for the live shell surface w/ a recorded harness caveat)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=shell_wiring`
+- Live shell inventory present: `.layout` found, **4 gutters** (all `[data-zone]`), **2 pane-frames** (`.pane-frame[data-pane-id=search|doc-nav]`), 9 `[data-zone]` containers.
+- A CDP gutter gesture + a CDP pane-frame drag were dispatched; the `.layout` pointer-seam counters (pointerdown/up/move) stayed **0** — CDP synthetic Input mouse events do NOT generate page-level pointer events in this harness (the pre-diagnosed LIVE-11 diag6 limitation), so the gesture→pointer-seam reach could NOT be re-confirmed via the CDP driver. This is a HARNESS synthetic-input limitation, NOT a host defect (the module seam is separately green 35/0/4 + the §2.8 source-pin).
+- ADV6 caveat observed: 4 gutters present, 2/9 zones populated with panes — consistent with the "four gutters may have no grid area in some layouts" caveat.
+CLOSED for the live-surface presence; the pointer-seam gesture reach is unconfirmable via CDP synthetic Input (harness limitation recorded).

@@ -309,3 +309,9 @@ the renderer — is **not available this pass**. All §3 scenarios are parked.
    the §3c IMPORT-ADV-1..3 fixes still hold in source) and the trackers
    (`docs/next-steps.md`, `docs/pending.md`, `docs/decisions.md`). The unit is GREEN at
    the module seam; the live native-dialog surface remains unverified.
+
+## STATUS 2026-09-15 — MCP IMPORT PATH CLOSED (PASS, live); OS-NATIVE PICKER STEP PARKED (structural, OS-owned)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=import1`
+- The MCP import path works on a FRESH file: `edit.import_markdown {files:[import1-fresh.md]}` → `{ok:true, documentIds:[".live-corpus/import1-fresh"], nodeCount:3, edgeCount:5}`; `rag.list_documents` afterward lists the new doc. The MCP import path is CLOSED.
+- The OS-native **File → Import… / Import folder…** browse step (native Electron menu + `dialog.showOpenDialog`) remains PARKED — structurally OS-owned: the menu is shell chrome (AGENTS.md carve-out) and the picker is the OS file dialog, neither reachable via the MCP/CDP surface. Parked with that exact structural reason only (a native-menu/dialog driver is required; not a failure).

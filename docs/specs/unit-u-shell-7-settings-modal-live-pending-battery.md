@@ -290,3 +290,8 @@ available this pass**. All §3 scenarios are parked.
    whether the SH7-ADV1/ADV2/ADV3 fixes still hold in source) and the trackers
    (`docs/next-steps.md`, `docs/pending.md`, `docs/decisions.md`). The unit is
    GREEN / LANDED in source.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=shell7`
+`#settings-toggle` click → `#settings-modal` class = `settings-modal is-open` (the `is-open` class contract holds); the operator mount is re-parented into the modal body (`#settings-modal-body #panes` present) and populated (`#operator-enabled-panes` text = "doc-nav, search" — the operator operator-panes render inside the modal). PASS (C3 modal + operator mount, live).

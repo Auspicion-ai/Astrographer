@@ -269,3 +269,8 @@ observable. **A live result that CONTRADICTS the greens or the spec is a FINDING
    have landed). The §0.2 finding is **FIXED (2026-09-13)** — its status stays
    CLOSED; see the trackers (`docs/next-steps.md`, `docs/pending.md`,
    `docs/defects.md`).
+
+## STATUS 2026-09-15 — CLOSED (PASS, live)
+Un-parked and run against the running app (lexical, seeded alpha+beta). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=ujr1_journal,v1_adjacency,v2_scoped,v3_docnav,x_flat,ms_store,shell_wiring,shell7,shell_integration,import1`
+`provident.get_journal {}` → a real `JournalView`: `entries:[{index,kind:"destroy",status:"applied"} x15], fromIndex:0, totalEntries:15, truncated:false, undoDepth:15, redoDepth:0, basePresent:false, undoTopKind:\"destroy\""` — never throws. The tool is registered and live (default `read` group). PASS.

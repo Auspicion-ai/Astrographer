@@ -255,3 +255,6 @@ for the transport run:
    live tool list — new tools may have landed) and the trackers
    (`docs/next-steps.md`, `docs/pending.md`). The greens' harness notes carry
    over for any direct-proxy probing.
+
+## STATUS 2026-09-15 — PARKED (engine-absent, re-verified live)
+Attempted per the revisit condition against the running app: no `gnosis-server` process and no engine listener on loopback (the P2 binary `../Gnosis/target/debug/gnosis-server` EXISTS but is not running); this session did NOT launch with `--mode=gnosis`. The gnosis tool surface live-returns engine-absent: `gnosis.status {}` → `fetch failed` and `gnosis.query {query:"alpha"}` → `fetch failed` (connection-refused to the un-launched engine base URL). The retrieval-trio + health happy path and the healthy-engine fail-states require a live engine on loopback — re-signed PARKED with that structural reason (run `--mode=gnosis` with the engine bound to 127.0.0.1 to end the park). NOT a failure; the module is green 63/63 at the module seam.

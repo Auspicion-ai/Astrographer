@@ -357,3 +357,5 @@ live:
    payload, dir)` — corrected 2026-09-05 by the doc review to the module's
    actual signature; F-BLIND-MS2-3: a stuffed IPC `store` field
    is dropped at U-MS2) carry over for any IPC-side probing.
+## STATUS 2026-09-15 — PARKED (structural: no second registered store in this launch)
+The `store` selector surface IS live and confirmed (see the MS1 STATUS): omitted-`store` hits the default `main`; `store:"main"` works; `store:"nope"` fails loud. But the multi-store WIRING scenarios (a second registered store exercising the registry→store resolution across >1 store, the 12-tool `store` ordering matrix, the R4/R5 failed-store matrix, the derived-path byte-equality across a real second store) are NOT exercisable this launch because the app boots only the default single `main` store (disposable HOME, no registry file / operator-configured second store). Recorded as PARKED (multi-store-registry surface absent), NOT a failure.

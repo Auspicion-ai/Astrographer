@@ -284,3 +284,6 @@ the live observable; a contradiction is a finding, never a pass.
    repo/build state (spec section numbers, byte-pinned strings, the live tool
    list) and the trackers (`docs/next-steps.md`, `docs/pending.md`,
    `docs/decisions.md`).
+
+## STATUS 2026-09-15 — PARKED (engine-absent, re-verified live); D2 engine-absent path re-confirmed
+The `gnosis.status`/`gnosis.query` MCP tools ARE registered (gnosis group) but the engine backend is NOT running this session (no `gnosis-server` process/listener; not launched with `--mode=gnosis`). Live probe: `gnosis.status {}` → `fetch failed`, `gnosis.query {query:"alpha"}` → `fetch failed` = the D2 engine-absent path (connection-refused → `EngineUnavailable` 503, also observed on the `provident:gnosis:status` IPC handler: `code:"engine_unavailable", httpStatus:503, cause:"connection-refused"`). The retrieval-trio happy path + the healthy-engine fail-states + the GUI-pane rendering remain PARKED — engine-absent structural reason (run `--mode=gnosis` with a live engine to end the park). NOT a failure.

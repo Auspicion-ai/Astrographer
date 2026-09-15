@@ -293,3 +293,6 @@ the transport run:
    list — new tools may have landed) and the trackers (`docs/next-steps.md`,
    `docs/pending.md`). The greens' harness notes carry over for any direct-proxy
    probing.
+
+## STATUS 2026-09-15 — PARKED (surface-absent: A2 CRUD wiring not landed + no live gnosis-server this session)
+The A1 proxy is still NOT wired into the app (`createEngineCrudRagStore` not imported by main.ts/mcp-server.ts — the A2 document-CRUD MCP/UI surface has not landed) and no live `gnosis-server` is running this session (`gnosis.status` → `fetch failed`). The 11 CRUD-method happy paths + READY-gate + P4-retry + transport fail-states + the app-MCP/UI drive remain PARKED — structural surface-absence (A2 pending + engine-absent). NOT a failure; the module seam is 26 PASS / 18 NOT-VERIFIED.

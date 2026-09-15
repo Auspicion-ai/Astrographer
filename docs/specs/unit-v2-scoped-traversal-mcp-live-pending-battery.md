@@ -187,3 +187,8 @@ Exercised **directly** through the `rag.get_document` MCP tool.
 5. **Doc-staleness:** when this battery is executed, reconcile it against the
    actual repo/build state (the V2/V3 specs may renumber sections or rename
    surfaces) before running.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live — the scoped traversal on the MCP surface)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=v2_scoped`
+`rag.query {store:"main", query:"alpha", topK:3, filters:{target:{documentId:".live-corpus/alpha", nodeId:".live-corpus/alpha:section:1"}}}` → a flat result (`engine:"local"`, `store:"main"`); `rag.query {..., filters:{documentPathPrefix:[".live-corpus"], nodeKind:"content"}}` → a scoped flat result. NOTE (probe shape): the `filters.target` filter REQUIRES both `documentId` AND `nodeId` (the zod seam rejects a documentId-only target with `-32602 expected string, received undefined at filters.target.nodeId`) — the correct scoped shape passes. PASS for the scoped-traversal surface.

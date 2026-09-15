@@ -377,3 +377,5 @@ re-attempted live:
    "U-MS2's recorded S39 staged red is now green") is already visible in
    SOURCE (§1.2's `:528-533`); the later iteration confirms it LIVE and the
    supervisor reconciles the U-MS2 DONE row/staged-red bookkeeping.
+## STATUS 2026-09-15 — PARKED (structural: no second registered store / multi-store id-prefix surface in this launch)
+The id-prefixing scenarios require ≥2 registered stores (a second store's node/edge ids must carry the store-qualified prefix distinct from `main`). This launch boots only the default single `main` store (disposable HOME, no registry file / operator-configured second store). Recorded as PARKED (multi-store-registry surface absent), NOT a failure.

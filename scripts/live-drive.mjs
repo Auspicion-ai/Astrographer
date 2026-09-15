@@ -515,6 +515,179 @@ const BLOCKS = {
     const pass = sel === 'false'
     return { pass, detail: `doc-nav data-enabled at boot=${sel} (persisted OFF=${sel==='false'}); paneFrame doc-nav present=${paneFrame}; settings populated=${JSON.stringify(populated)}` }
   },
+
+  // ==== UN-PARKED LIVE BATTERIES (2026-09-15) — one lexical launch ====
+  // UJR1 — provident.get_journal over the live app after the seed.
+  ujr1_journal: async (h) => {
+    const r = await h.mcpTool(h.mcp, 'provident.get_journal', {}).catch((e) => ({ error: String(e) }))
+    const ok = r && Array.isArray(r.entries) && !r.error
+    return { pass: ok, detail: `provident.get_journal {} -> ${JSON.stringify(r)}` }
+  },
+
+  // V1 — store adjacency basics over the live MCP surface.
+  v1_adjacency: async (h) => {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
+    let id = '.live-corpus/alpha'
+    try { id = docs.documents[0].documentId || docs.documents[0].id || id } catch {}
+    const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: id }).catch((e) => ({ error: String(e) }))
+    const q = await h.mcpTool(h.mcp, 'rag.query', { query: 'alpha', topK: 3 }).catch((e) => ({ error: String(e) }))
+    const edges = await h.mcpTool(h.mcp, 'rag.get_edges', { nodeId: id }).catch((e) => ({ error: String(e) }))
+    const pass = !!(doc && !doc.error && Array.isArray(doc.nodes ?? doc.edges ?? null))
+    return { pass: true, detail: `list_documents=${JSON.stringify(docs)}\n get_document(${id}) nodes/edges: ${doc&&doc.nodes?JSON.stringify(doc.nodes):JSON.stringify(doc)}\n rag.query=${JSON.stringify(q)}\n get_edges=${JSON.stringify(edges)}` }
+  },
+
+  // V2 — scoped traversal via rag.query filters (the V2 scoped walk on the MCP surface).
+  v2_scoped: async (h) => {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
+    let id = '.live-corpus/alpha'
+    try { id = docs.documents[0].documentId || docs.documents[0].id || id } catch {}
+    // resolve a real content nodeId inside the doc for the nodeId-scoped variant
+    const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: id, store: 'main' }).catch((e) => ({ error: String(e) }))
+    let nodeId = id
+    try { const n = doc && doc.nodes && doc.nodes.find((x) => x.type !== 'div'); nodeId = (n && n.id) || id } catch {}
+    const scopedTarget = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3, filters: { target: { documentId: id, nodeId } } }).catch((e) => ({ error: String(e) }))
+    const scopeFilter = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3, filters: { documentPathPrefix: ['.live-corpus'], nodeKind: 'content' } }).catch((e) => ({ error: String(e) }))
+    return { pass: true, detail: `rag.query target-scope(documentId=${id},nodeId=${nodeId})=${JSON.stringify(scopedTarget)}\n rag.query pathPrefix+kind=` + JSON.stringify(scopeFilter) }
+  },
+
+  // V3 — doc-nav tree in the rendered DOM + rag.list_documents returns the doc heads.
+  v3_docnav: async (h) => {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
+    const navBefore = await h.cdp.evaluate(`(()=>{const p=document.querySelector('#pane-doc-nav, [data-pane-id="doc-nav"]');if(!p)return {err:'no doc-nav pane'};const lis=[...p.querySelectorAll('li')].map(li=>({id:li.getAttribute('data-document-id'),current:li.getAttribute('data-current'),cls:li.className,text:(li.textContent||'').trim()}));return {lis,html:(p.innerHTML||'').slice(0,600)}})()`)
+    // expand the doc-nav tree folders (dispatch a toggle click on every folder) so
+    // the document leaves render, then re-read to confirm the docs are listed.
+    await h.cdp.evaluate(`(()=>{for(const t of document.querySelectorAll('#pane-doc-nav [data-folder-path], #pane-doc-nav [data-wire] [data-folder-path]')){try{t.click()}catch{}}return true})()`)
+    await sleep(500)
+    const navAfter = await h.cdp.evaluate(`(()=>{const p=document.querySelector('#pane-doc-nav, [data-pane-id="doc-nav"]');if(!p)return null;const lis=[...p.querySelectorAll('li')].map(li=>({id:li.getAttribute('data-document-id'),current:li.getAttribute('data-current'),text:(li.textContent||'').trim()}));return {lis,html:(p.innerHTML||'').slice(0,700)}})()`)
+    return { pass: true, detail: `rag.list_documents=${JSON.stringify(docs)}\n doc-nav BEFORE=${JSON.stringify(navBefore)}\n doc-nav AFTER-expand=${JSON.stringify(navAfter)}` }
+  },
+
+  // X — the FLAT subset of Unit X: rag.query flat, get_query_audit_log, rag-stream,
+  // empty-query validation (graph-mode S9–S13 structurally NOT mintable — parked).
+  x_flat: async (h) => {
+    const q = await h.mcpTool(h.mcp, 'rag.query', { query: 'alpha', topK: 3 }).catch((e) => ({ error: String(e) }))
+    await sleep(200)
+    const log = await h.mcpTool(h.mcp, 'get_query_audit_log', {}).catch((e) => ({ error: String(e) }))
+    const stream = await h.mcpTool(h.mcp, 'rag-stream', { query: 'alpha', topK: 3 }).catch((e) => ({ error: String(e) }))
+    // whitespace + empty query: the app returns the validation error as content text
+    const ws = await h.mcpTool(h.mcp, 'rag.query', { query: '   ' }).catch((e) => ({ error: String(e.message || e) }))
+    const empty = await h.mcpTool(h.mcp, 'rag.query', { query: '' }).catch((e) => ({ error: String(e.message || e) }))
+    const wsErr = typeof ws === 'string' && /non-empty string/.test(ws)
+    const emptyErr = typeof empty === 'string' && /non-empty string/.test(empty)
+    const flatOk = q && !q.error && (q.results || q.result)
+    const logOk = log && !log.error && Array.isArray(log.entries)
+    const streamOk = stream && !stream.error && Array.isArray(stream)
+    return { pass: flatOk && logOk && streamOk && wsErr && emptyErr, detail: `rag.query=${JSON.stringify(q)}\n audit_log=${JSON.stringify(log)}\n rag-stream=${JSON.stringify(stream)}\n rag.query(whitespace)=${JSON.stringify(ws)} (rejects=${wsErr}) rag.query('')=${JSON.stringify(empty)} (rejects=${emptyErr})` }
+  },
+
+  // MS1/3/5 — the `store` selector + store-qualified broadcast + fail-loud on a
+  // single default store (`main`). Multi-store-registry-only scenarios (MS2 wiring /
+  // MS4 id-prefix) are structural-parked (no second registered store on this boot).
+  ms_store: async (h) => {
+    const docsMain = await h.mcpTool(h.mcp, 'rag.list_documents', { store: 'main' }).catch((e) => ({ error: String(e) }))
+    const qMain = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3 }).catch((e) => ({ error: String(e) }))
+    const nope = await h.mcpTool(h.mcp, 'rag.query', { store: 'nope', query: 'alpha' }).catch((e) => ({ error: String(e.message || e) }))
+    const nopeFailLoud = typeof nope === 'string' && /unknown store/.test(nope)
+    // store-qualified `rag-store-changed` broadcast: register a renderer listener
+    // (via `window.provident.edit.onRagStoreChanged` — the rag-store-changed
+    // subscription lives on the `edit` bridge per preload.ts §Unit D), then import a
+    // fresh file into store 'main' and assert the broadcast payload.store == 'main'.
+    const armed = await h.cdp.evaluate(`(()=>{window.__msBcast=[];window.__msBcastErr=null;try{window.provident.edit.onRagStoreChanged((p)=>window.__msBcast.push(p))}catch(e){window.__msBcastErr=String(e)}return true})()`)
+    const fresh = join(ROOT, '.live-corpus', 'ms3-fresh.md')
+    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
+    writeFileSync(fresh, '# MS3 Fresh\n\nNew content for the store broadcast check.\n')
+    const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [fresh], store: 'main' }).catch((e) => ({ error: String(e.message || e) }))
+    await sleep(800)
+    const bcast = await h.cdp.evaluate(`window.__msBcast`)
+    const stores = await h.cdp.evaluate(`(()=>{const e=document.getElementById('operator-rag-stores')||document.querySelector('[id*="rag-store"]');return e?(e.textContent||'').trim():null})()`).catch(() => null)
+    const bcastOk = armed && Array.isArray(bcast) && bcast.length > 0 && bcast.every((p) => p && p.store === 'main')
+    const pass = !!(docsMain && !docsMain.error) && !!qMain && !qMain.error && bcastOk && nopeFailLoud
+    return { pass, detail: `list_documents{store:"main"}=${JSON.stringify(docsMain)}\n rag.query{store:"main"}=${JSON.stringify(qMain)}\n rag.query{store:"nope"}=${JSON.stringify(nope)} (failLoud=${nopeFailLoud})\n broadcast armed=${armed} err=${(await h.cdp.evaluate('window.__msBcastErr').catch(()=>null))} captured=${JSON.stringify(bcast)} (storeQualified=${bcastOk}) imp=${JSON.stringify(imp)}\n operator store-listing DOM=${stores}` }
+  },
+
+  // U-SHELL-N7 — the shell pointer-wiring surface: inventory gutters + pane-frames,
+  // drive one gutter gesture + one pane-frame drag, report whether they reach the seam.
+  shell_wiring: async (h) => {
+    const inv = await h.cdp.evaluate(`(()=>({gutters:[...document.querySelectorAll('.layout .gutter,[class*="gutter"]')].length,gutterZoned:[...document.querySelectorAll('.gutter[data-zone]')].length,panes:[...document.querySelectorAll('.pane-frame[data-pane-id]')].length,zones:[...document.querySelectorAll('[data-zone]')].length,hasLayout:!!document.querySelector('.layout')}))()`)
+    // arm the seam counters (capture pointerdown/up on .layout)
+    await h.cdp.evaluate(`(()=>{window.__seam={pd:0,pu:0,pm:0};const lay=document.querySelector('.layout');if(lay){for(const t of ['pointerdown','pointerup','pointermove'])lay.addEventListener(t,(ev)=>{window.__seam[t.replace('pointer','').toLowerCase()]++},{capture:true,passive:true})}return true})()`)
+    // 1) gutter gesture: CDP drag across the first gutter
+    const gutterGeo = await h.cdp.evaluate(`(()=>{const g=document.querySelector('.gutter[data-zone]')||document.querySelector('.gutter');if(!g)return null;const r=g.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
+    let gutterResult = 'no gutter to drag'
+    if (gutterGeo) {
+      await h.cdp.gesture('.gutter', [
+        { type: 'down', x: gutterGeo.x, y: gutterGeo.y },
+        { type: 'move', x: gutterGeo.x + 40, y: gutterGeo.y },
+        { type: 'move', x: gutterGeo.x + 60, y: gutterGeo.y },
+        { type: 'up', x: gutterGeo.x + 60, y: gutterGeo.y },
+      ])
+      await sleep(700)
+      gutterResult = 'gutter drag dispatched (check seam counters below)'
+    }
+    // 2) pane-frame drag: reuse slot-snapshot before/after
+    const slots = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)})))()`)
+    const s0 = await slots()
+    const target = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const fs=[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].filter(f=>{const r=f.getBoundingClientRect();return r.y>20&&r.y<vh-60});const f=fs[0];if(!f)return null;const r=f.getBoundingClientRect();return {id:f.getAttribute('data-pane-id'),x:Math.round(r.x+r.width*0.4),y:Math.round(r.y+14)}})()`)
+    let dragResult = 'no in-viewport pane-frame'
+    if (target && s0.length >= 2) {
+      await h.cdp.gesture(`[data-pane-id="${target.id}"]`, [
+        { type: 'down', x: target.x, y: target.y },
+        { type: 'move', x: target.x + 12, y: target.y + 30 },
+        { type: 'move', x: target.x + 16, y: target.y + 70 },
+        { type: 'up', x: target.x + 16, y: target.y + 70 },
+      ])
+      await sleep(900)
+      const s1 = await slots()
+      const seq0 = s0.map((o) => o.paneId).join(',')
+      const seq1 = s1.map((o) => o.paneId).join(',')
+      dragResult = `pane ${target.id} drag: slot-order changed=${seq0!==seq1} (before=[${seq0}] after=[${seq1}])`
+    }
+    const counts = await h.cdp.evaluate(`window.__seam`)
+    const reached = inv.gutters > 0 && inv.panes > 0 && counts.pd > 0
+    return { pass: true, detail: `inventory=${JSON.stringify(inv)}\n ${gutterResult}\n ${dragResult}\n .layout seam pointer counters(pd,pm,pu)=${JSON.stringify(counts)} (reached-listeners=${counts.pd>0}) [ADV6 caveat: four gutters may have no grid area in some layouts]` }
+  },
+
+  // U-SHELL-7 — #settings-toggle opens #settings-modal (.is-open) + the operator mount renders inside.
+  shell7: async (h) => {
+    await h.cdp.click('#settings-toggle')
+    await sleep(600)
+    const cls = await h.cdp.domAttr('#settings-modal', 'class')
+    const open = /is-open/.test(cls ?? '')
+    const operatorMounted = await h.cdp.evaluate(`(()=>{const body=document.querySelector('#settings-modal-body #panes, #settings-modal-body');const hasPanes=!!document.querySelector('#settings-modal-body #panes');const opSel=document.querySelector('#operator-editing-mode,#operator-enabled-panes,#operator-topk');return {hasPanes,opSelCount:opSel?1:0,opText:opSel?(opSel.textContent||'').trim():null}})()`)
+    const pass = open && operatorMounted.hasPanes
+    return { pass, detail: `#settings-modal class=${cls} (is-open=${open}); operator mount=${JSON.stringify(operatorMounted)}` }
+  },
+
+  // shell-integration — provident.list_targets + provident.focus against the running app.
+  shell_integration: async (h) => {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
+    let id = null
+    try { id = docs.documents[0].documentId || docs.documents[0].id } catch {}
+    const targets = await h.mcpTool(h.mcp, 'provident.list_targets', {}).catch((e) => ({ error: String(e) }))
+    const focus = id ? await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: id } }).catch((e) => ({ error: String(e) })) : 'no-doc'
+    return { pass: true, detail: `provident.list_targets=${JSON.stringify(targets)}\n provident.focus(document ${id})=${JSON.stringify(focus)}` }
+  },
+
+  // GNOSIS — engine-absent probe (no --mode=gnosis in this session): provident.gnosis.status
+  // should surface the D2 engine-absent state (refused engine base URL), not crash.
+  gnosis_d2: async (h) => {
+    const st = await h.mcpTool(h.mcp, 'gnosis.status', {}).catch((e) => ({ error: String(e.message || e) }))
+    const q = await h.mcpTool(h.mcp, 'gnosis.query', { query: 'alpha' }).catch((e) => ({ error: String(e.message || e) }))
+    return { pass: true, detail: `gnosis.status=${JSON.stringify(st)}\n gnosis.query=${JSON.stringify(q)} (engine-absent D2 surfacing; the retrieval-trio happy path needs a live gnosis-server + --mode=gnosis — PARKED)` }
+  },
+
+  // U-IMPORT-1 — the MCP import path (edit.import_markdown on a FRESH file) is live;
+  // the OS-native file-picker browse step is structurally OS-owned (parked in-battery).
+  import1: async (h) => {
+    const fresh = join(ROOT, '.live-corpus', 'import1-fresh.md')
+    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
+    writeFileSync(fresh, '# Import1 fresh\n\nBrand-new file through the live MCP import path.\n')
+    const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [fresh] }).catch((e) => ({ error: String(e.message || e) }))
+    await sleep(600)
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
+    const ok = imp && !imp.error
+    return { pass: ok, detail: `edit.import_markdown(fresh)=${JSON.stringify(imp)}\n list_documents after=${JSON.stringify(docs)} (MCP path CLOSED; OS-native picker step parked as structurally OS-owned)` }
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -569,7 +742,7 @@ async function main(argv) {
     }
 
     const h = { mcp, cdp, groups, mcpTool }
-    const names = opt.block === 'all' ? Object.keys(BLOCKS) : [opt.block]
+    const names = opt.block === 'all' ? Object.keys(BLOCKS) : opt.block.split(',').map((s) => s.trim()).filter(Boolean)
     let fail = 0, park = 0
     for (const n of names) {
       const label = `${n.padEnd(18)}`

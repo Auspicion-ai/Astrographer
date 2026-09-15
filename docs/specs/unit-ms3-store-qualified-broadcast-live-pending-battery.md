@@ -296,3 +296,8 @@ These have NO live MCP/UI surface and stay covered by the module-level greens
    and spec section numbers; reconcile the trackers (`docs/next-steps.md`,
    `docs/pending.md`). The greens' harness notes (the 23 module rows are already
    green) carry over for the module-level boundary.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live — store-qualified broadcast confirmed)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=ms_store`
+Registered a renderer listener via `window.provident.edit.onRagStoreChanged` (the `rag-store-changed` subscription lives on the `edit` bridge per preload.ts §Unit D — NOT `window.provident.rag.onRagStoreChanged`), then `edit.import_markdown {files:[ms3-fresh.md], store:"main"}`. The broadcast fired with the store-qualified payload: `{"kind":"structural","nodeIds":[".live-corpus/ms3-fresh"],"edgeIds":[],"store":"main"}` — `store` REQUIRED and = the addressed store name. PASS. (`store:"nope"` import also fails loud per the MS1 probe.)

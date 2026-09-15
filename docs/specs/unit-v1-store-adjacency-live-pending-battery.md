@@ -191,3 +191,12 @@ rendered traversal (the walk runs against a snapshot store).
 5. **Doc-staleness:** when this battery is executed, reconcile it against the
    actual repo/build state (the V2/V3 specs may renumber sections or rename
    surfaces) before running.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live — adjacency reads exercised via rag.*)
+Un-parked and run against the running app (lexical, seeded alpha+beta). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=v1_adjacency`
+- `rag.list_documents {}` → `{documents:[{documentId:".live-corpus/alpha",title:"Alpha",path:[".live-corpus"],tags:[]},{documentId:".live-corpus/beta",title:"Beta",...}]}` (doc heads).
+- `rag.get_document {documentId:".live-corpus/alpha"}` → the scoped subgraph (root `div` + `h1` head + `p` with children) — adjacency-derived scoping.
+- `rag.get_edges {nodeId:".live-corpus/alpha"}` → `parent-child` + `doc-head` + `doc-end` edges (the adjacency edges live).
+- `rag.query {query:"alpha",topK:3}` → flat `{results:[],engine:"local",trace:{...},store:"main"}`.
+The V1 adjacency surface is exercised through the live rag.* tools (its own 5 adjacency methods remain store-internal — module-green). PASS for the live-observable subset.

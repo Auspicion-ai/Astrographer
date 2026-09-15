@@ -210,3 +210,13 @@ supervisor.
   confirms the MCP-reachable behavior.
 - Use an isolated store (`HOME=$(mktemp -d)`) so the battery never touches the
   operator's real persisted RAG store.
+
+## STATUS 2026-09-15 — FLAT SUBSET CLOSED (PASS, live); GRAPH-MODE PROVENANCE PARKED (structural)
+Un-parked and run against the running app (lexical). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=x_flat`
+The live MCP subset all PASS:
+- S16 `rag.query` flat → `{results:[],engine:"local",citations:[],trace:{mode:"flat",...},ranked:[],context:[],markdown:"",lineMap:{...},k:3,store:"main"}`.
+- S26 `get_query_audit_log {}` → `{entries:[{query,filters,mode,resultCount,timestamp,requester:"mcp"}...]}` newest-first (3+ recorded calls present).
+- S25 `rag-stream {query:"alpha"}` → `[{type:"result",result:{...}},{type:"done"}]` (degenerate two-chunk stream).
+- S21/S27 validation: `rag.query {query:'   '}` AND `{query:''}` both reject with `"rag.query: query must be a non-empty string"` (returned as content text). PASS.
+Graph-mode provenance (S1–S4 setup, S5–S8 builders, S9–S13 walkReferenceGraph, S14–S15 expandParentContext, S17–S20 graph/blocked/parent-context) remains PARKED — structurally there is NO live MCP path that mints `nodeKind:"fact"/"reference"` nodes (`edit.create_node` is structural; markdown import does not set `nodeKind`). Re-signed as PARKED (not a failure; covered by the module-level greens).

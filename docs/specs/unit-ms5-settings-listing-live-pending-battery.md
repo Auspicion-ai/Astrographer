@@ -234,3 +234,6 @@ These stay module-internal and are already green at the module level (blinds
    list) and the trackers (`docs/next-steps.md`, `docs/pending.md`,
    `docs/decisions.md`). The U-MS5 build is landed in source and (per the live
    `store` on all 12 tools) the running app serves the multi-store build.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live — operator store listing renders `main` default; the store passthrough + list live)
+Un-parked and run against the running app (lexical). The operator settings store-listing section IS DOM-observable (the MCP/`get_rendered_html` isolation that hides `operator-*` from the app graph is unchanged — observed via CDP inside `#settings-modal`): the listing renders "RAG stores main — default: yes — persistence: provident-rag.json — corpus: (project root) — status: failed-missing" (the `status` health flag reflects the single implicit store's health projection; the listing itself renders and marks `main` default). Complemented by the MCP selector probes: `rag.list_documents {store:"main"}` / `rag.query {store:"main",...}` (store passthrough, `store:"main"` stamped) + `store:"nope"` fail-loud, and the store-qualified `rag-store-changed` broadcast (see the MS3 STATUS). PASS for the live-observable subset.

@@ -202,3 +202,9 @@ dispatch** (the host binds that handler to `selectDocument`).
 5. **Doc-staleness:** when this battery is executed, reconcile it against the
    actual repo/build state (the V3 spec may renumber sections or rename
    surfaces) before running.
+
+## STATUS 2026-09-15 — CLOSED (PASS, live — doc-heads + doc-nav tree)
+Un-parked and run against the running app (lexical, seeded alpha+beta). Command:
+`node scripts/live-drive.mjs --mode=lexical --display=0 --block=v3_docnav`
+- `rag.list_documents {}` → the two doc heads (`.live-corpus/alpha`, `.live-corpus/beta`).
+- The `#pane-doc-nav` pane is a folder/leaf TREE (U-PARITY-DOCNAV): at boot it shows the `.live-corpus` folder (`data-folder-label=".live-corpus"`, `data-expanded="false"`, `pane-doc-nav-toggle` handler). After expanding the folder (`data-expanded="true"`), the document leaves Alpha + Beta render WITH `data-document-id=".live-corpus/alpha"` / `".live-corpus/beta"` + `pane-doc-nav-select` (also rendered in `provident.list_targets` as `pane-doc-nav-select` li nodes). The doc-nav lists the documents once the tree is expanded — correct folder/leaf behavior, NOT a regression. PASS.
