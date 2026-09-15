@@ -52,6 +52,15 @@ on **`http://127.0.0.1:3787/mcp`** (default) and the retrieval-embedder mode.
 `ollama run embeddinggemma "test"`). The vector-boot warm-up + the W1–W5
 vector machinery were live-verified against real ollama on 2026-09-05.
 
+### 1.0 Live-fix handover + RCA (2026-09-14)
+
+`docs/HANDOVER-LIVE-BATCH-RCA.md` — the current-state handover of the live-app
+user-testing batch (LIVE-1..12 fixed/open) + the **RCA of why every UI-overhaul
+feature passed green unit/blind-green/doc-review gates yet was broken in the
+assembled Electron app** (the pipeline verified the provident-ENVELOPE authoring
+model but never the shell-CSS/grid/window, the runtime stage-app-graph assembly,
+or the live persistence round-trip; see §4/§5 there).
+
 ### 1.1 The automated live driver + the e2e/user-test-suite plan (2026-09-14)
 
 The consolidated live-testing handoff now has an **automated driver** +
