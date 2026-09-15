@@ -153,7 +153,12 @@ const BLOCKS = {
       const zones=[...document.querySelectorAll('[data-zone]')].map(el=>({z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4),paneCount:el.querySelectorAll('.pane-frame').length,id:el.id}));
       return JSON.stringify({appKids:kids,zones},null,0)})()`)
     console.log('[live-drive] PROBE #app:\n' + dump)
-    return { pass: true, detail: 'probe dumped (see above)' }
+    const deep = await h.cdp.evaluate(`(()=>{const r=document.getElementById('wiki-root');if(!r)return 'no wiki-root';
+      const kids=[...r.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4),frames:el.querySelectorAll('.pane-frame').length}));
+      const z=el=>document.querySelector(el);const stage=document.querySelector('#app');const style={display:getComputedStyle(stage).display,grid:getComputedStyle(stage).gridTemplateColumns};
+      return JSON.stringify({wikiRootChildren:kids, stageStyle:style})})()`)
+    console.log('[live-drive] PROBE wiki-root:\n' + deep)
+    return { pass: true, detail: 'deep probe (see above)' }
   },
   zones: async (h) => {
     // C3 re-parents `#panes` INTO #settings-modal-body; the app-graph pane zones

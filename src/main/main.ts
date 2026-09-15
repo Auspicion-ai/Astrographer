@@ -817,6 +817,12 @@ async function main(): Promise<void> {
   const win = new BrowserWindow({
     width: 980,
     height: 720,
+    // LIVE-2 (outer-chrome tabs): hide the native title bar and let the web
+    // content (the tab strip) BE the window's title bar, with the standard
+    // window controls (min/max/close) overlaid top-right (`titleBarOverlay`,
+    // Windows/Linux). The tab strip's drag region makes the bar draggable.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#1b1f24', symbolColor: '#e8eaed', height: 36 },
     webPreferences: {
       preload: join(here, 'preload.cjs'),
       contextIsolation: true,
