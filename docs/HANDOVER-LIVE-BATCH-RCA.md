@@ -1,5 +1,9 @@
 # Astrographer — Live-Fix Handover + RCA (why these bugs passed the green pipeline)
 
+> **The formal RCA is the dedicated document `docs/specs/rca-live-bugs-green-pipeline.md`**
+> (incident → root cause → concrete slips → corrective actions CA-1..CA-6). §4-§5 below
+> are the handover's summary of it.
+
 **Date:** 2026-09-14 · **Head:** `6ea9f9c` · **Tree:** CLEAN · **Trio:** 4625 pass / 58 skip, typecheck 0, build 0.
 
 This hands off the **live-app user-testing batch** (the UI-overhaul features passed green unit/blind-green/doc-review gates but were broken in the assembled Electron app) AND the RCA of how that happened. A fresh supervisor should read §1 (state), §2 (open items), §3 (the live harness), then §4 (the RCA) and §5 (process fixes).
