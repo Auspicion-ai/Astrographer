@@ -1063,3 +1063,24 @@ describe.skip('U-SHELL-9a — MCP-visible equivalence (battery / live host)', ()
   it.skip('§3.6 — `provident.dispatch` on a strip control reorders/closes through the shared focus seam', () => {})
   it.skip('§2.7 — `provident.focus` find-or-opens against the live renderer (no `app-graph-changed`)', () => {})
 })
+
+// ===========================================================================
+// LIVE-3 (2026-09-14) — a no-target NEW TAB with NO wiki opens the LANDING
+// (first-run guide); a focused store is deferred to the create-document draft.
+// ===========================================================================
+describe('LIVE-3 — newTab with no wiki opens the landing', () => {
+  it('opens a `landing` tab when no store/wiki is focused and tabs exist', () => {
+    const strip = new TabStrip({ mount: null, getContext: () => ({ hasStore: false, documents: [] }) })
+    strip.load({ version: 1, open: [{ id: 't1', title: 'A', target: { kind: 'other', id: 'some' } }], order: ['t1'], activeId: 't1' })
+    strip.newTab()
+    const s = strip.getState()
+    const landing = s.open.filter((e) => e.target && e.target.kind === 'other' && e.target.id === 'landing')
+    expect(landing.length).toBeGreaterThan(0)
+  })
+  it('keeps the prior HOST-3 no-op when a store IS focused (draft-doc deferred)', () => {
+    const strip = new TabStrip({ mount: null, getContext: () => ({ hasStore: true, documents: [{ documentId: 'doc-a', title: 'A' }] }) })
+    strip.load({ version: 1, open: [{ id: 't1', title: 'A', target: { kind: 'document', documentId: 'doc-a' } }], order: ['t1'], activeId: 't1' })
+    const before = strip.getState()
+    expect(strip.newTab()).toEqual(before)
+  })
+})

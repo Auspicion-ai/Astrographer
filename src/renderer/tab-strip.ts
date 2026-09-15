@@ -17,6 +17,7 @@ import {
   focusTarget,
   nextQueryId,
   openTab,
+  TAB_LANDING,
   reorderTab,
   setSearchParams,
   type TabEntry,
@@ -134,9 +135,14 @@ export class TabStrip {
       this.commit(openTab(this.state, target))
     } else if (this.state.open.length === 0) {
       this.commit(openTab(this.state, null, this.getContext()))
+    } else if (!this.getContext().hasStore) {
+      // LIVE-3 (design, 2026-09-14): a no-target NEW TAB with NO wiki opens the
+      // LANDING (the first-run guide: start a wiki / import / open / create).
+    this.commit(openTab(this.state, { ...TAB_LANDING }))
+      // With a focused store it would open a NEW/EMPTY document draft in that
+      // wiki (commit-on-edit, never persisted until the user edits) — deferred
+      // until the create-document (U-D9) path exists.
     }
-    // HOST-3 — a non-first `+` with no target is a no-op (the caller must
-    // supply an explicit target).
     return this.getState()
   }
 
