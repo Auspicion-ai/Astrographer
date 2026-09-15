@@ -140,6 +140,13 @@ function seedCorpus(dir) {
 // The plan's §6 blocks (one live test per added feature).
 // ---------------------------------------------------------------------------
 const BLOCKS = {
+  shell_composition: async (h) => {
+    const top = await h.cdp.evaluate(`(()=>{const b=document.body;const tab=document.getElementById('tab-strip');if(!tab)return 'no tab-strip';
+      const idx=[...b.children].map(c=>c.id||c.tagName).indexOf(tab.id||'-');const headerIdx=[...b.children].map(c=>c.id||c.tagName).indexOf(undefined)>=0?-1:[...b.children].findIndex(c=>c.tagName==='HEADER');
+      const tabBeforeHeader = headerIdx>-1 ? idx < headerIdx : true; return JSON.stringify({bodyKids:[...b.children].map(c=>c.id||c.tagName),tabBeforeHeader})})()`)
+    const parsed = JSON.parse(top)
+    return { pass: parsed.tabBeforeHeader === true, detail: top }
+  },
   probe_app: async (h) => {
     const dump = await h.cdp.evaluate(`(()=>{const app=document.querySelector('#app');if(!app)return 'no #app';
       const kids=[...app.children].map(el=>({t:el.tagName,id:el.id,z:el.getAttribute('data-zone'),cls:el.className.split(' ').slice(0,4)}));
