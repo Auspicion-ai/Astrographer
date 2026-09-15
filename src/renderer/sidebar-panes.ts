@@ -284,6 +284,19 @@ if (mode === 'textarea' || mode === 'contenteditable') s.operatorSet({ editingMo
 const OPERATOR_EDITING_MODE_TOGGLE_HANDLER = `function (ctx) {
 ${OPERATOR_EDITING_MODE_TOGGLE_BODY}
 }`
+// LIVE-12/C (2026-09-14) — the in-pane pane-visibility toggle. A per-pane
+// button in the operator Settings pane; click routes the pane id to the host
+// `sidebar.paneVisibilityToggle(id)` seam (flip + persist). This is an OPERATOR
+// ONLY control (never an MCP tool); it exists so a user can toggle several panes
+// without re-opening the natively-closing View menu.
+const OPERATOR_PANE_VISIBILITY_BODY = `var s = window && window.provident && window.provident.sidebar;
+if (!s || typeof s.paneVisibilityToggle !== 'function') return;
+var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-pane'];
+if (id) s.paneVisibilityToggle(String(id));`
+export const OPERATOR_PANE_VISIBILITY_HANDLER = 'operator-pane-visibility-toggle'
+export const OPERATOR_PANE_VISIBILITY_HANDLER_BODY = `function (ctx) {
+${OPERATOR_PANE_VISIBILITY_BODY}
+}`
 // Unit U-EDIT-1 (C8) — the APP-GRAPH editor-toolbar toggle handler. The toolbar
 // button's `data-mode` reflects the CURRENT mode (spec §2 reflection); the
 // handler FLIPS to the other union member and routes through the SAME shared
@@ -2123,11 +2136,28 @@ export class SidebarPanes {
               },
               content: `${s.name} — default: ${s.default ? 'yes' : 'no'} — persistence: ${s.persistenceFile} — corpus: ${s.corpusRoot ?? '(project root)'} — status: ${s.status}`,
             }))
+    const pv = this.registry.list()
+    const enAB = Array.isArray(s?.enabledPanes) ? (s.enabledPanes as string[]) : []
+    const enOP = Array.isArray(s?.enabledOperatorPanes) ? (s.enabledOperatorPanes as string[]) : []
+    const pvRows: LegacyNodeData[] = pv.map((p) => {
+      const list = p.scope === 'app-graph' ? enAB : enOP
+      const on = s?.panesInitialized === true ? list.includes(p.id) : true
+      return {
+        type: 'button',
+        props: { id: `operator-pane-visibility-${p.id}`, 'data-pane': p.id, 'data-enabled': on ? 'true' : 'false' },
+        css: { classes: clickableClasses(['operator-pane-visibility-toggle']) },
+        content: `${on ? '☑' : '☐'} ${p.title}`,
+        handlers: [{ name: OPERATOR_PANE_VISIBILITY_HANDLER, event: 'click', body: OPERATOR_PANE_VISIBILITY_HANDLER_BODY }],
+      }
+    })
     return {
       type: 'section',
       children: [
         { type: 'h2', content: 'Settings' },
+        // Keep the pinned enabled-panes census (tests assert this id) + add the
+        // LIVE-12/C in-pane toggle control alongside.
         { type: 'div', props: { id: 'operator-enabled-panes' }, content: (Array.isArray(s?.enabledPanes) ? s.enabledPanes : []).join(', ') },
+        { type: 'div', props: { id: 'operator-pane-visibility' }, children: [{ type: 'h3', content: 'Panes visibility' }, ...pvRows] },
         { type: 'div', props: { id: 'operator-default-document' }, content: s?.defaultDocumentId ?? '(all)' },
         { type: 'div', props: { id: 'operator-topk' }, content: `topK: ${s?.topK ?? 5}` },
         // Unit U1 §1.4 — the editingMode button-toggle. A text div shows the
@@ -2643,6 +2673,8 @@ export class SidebarPanes {
       // U-SHELL-3 (C5) — the per-pane collapse toggle seam (the
       // `togglePaneCollapse` handler body reaches it).
       togglePaneCollapse: (id: string) => this.togglePaneCollapse(id),
+      // LIVE-12/C — the in-pane pane-visibility toggle (flip + persist).
+      paneVisibilityToggle: (id: string) => this.togglePaneVisibility(id),
       // U-SHELL-4 (C12) — the zone minimize/expand + tab-expand/select seams
       // (the inline `pane-zone-minimize-toggle`/`pane-tab-expand` handler bodies
       // reach them). Each commits ONE `setLayout` write-through.
@@ -2782,6 +2814,19 @@ export class SidebarPanes {
       },
     ]
     this.setLayout({ ...base, panes })
+  }
+
+  /** LIVE-12/C — the in-pane pane-visibility toggle: flip ONE pane's enabled
+   *  state, persist through `persistEnabledPanes` (app-graph + operator sets +
+   *  `panesInitialized`), and re-render. The operator Settings pane's
+   *  `paneVisibilityToggle` control routes here. */
+  private togglePaneVisibility(paneId: string): void {
+    if (typeof paneId !== 'string' || paneId === '') return
+    const def = this.registry.get(paneId)
+    if (def == null) return
+    this.registry.setEnabled(paneId, !this.registry.isEnabled(paneId))
+    this.persistEnabledPanes()
+    void this.refresh()
   }
 
   /** U-SHELL-4 (C12) — toggle a zone's stored `minimized` flag. A non-empty
