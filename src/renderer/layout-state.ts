@@ -10,6 +10,15 @@
 // serialized geometry onto the shell grid's CSS custom properties (§2.4). The
 // projection is pure; the applier takes an injected root surface (no DOM
 // import) so it stays node-testable, mirroring `theme.ts`'s `applyThemeToRoot`.
+//
+// F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED, 2026-09-15) — additive:
+// `zoneTrackCssVars` projects the per-zone GRID TRACK (the persisted size, or
+// `0px` when the enabled+placed census says the zone is empty) onto the shell
+// grid. The census is duplicated here (see `isZoneEmpty`) rather than imported
+// from `pane-graph.ts`: `enabledZonePaneCounts` lives in the pane-assembly
+// module, which this pure geometry module is imported BY (and which is also
+// loaded from the MAIN process via `operator-settings-store.ts`).
+import type { PaneRegistry } from './pane-registry.js'
 
 /** The four pane zones a pane can be placed into (C4). `stage`/`top-bar` are
  *  regions (serialized geometry), NOT pane zones (W2-Q2). */
@@ -195,10 +204,13 @@ export function coerceLayout(value: unknown): LayoutState {
 
 /** W2-N3 (AF-3) — project the serialized layout onto the shell grid's CSS
  *  custom properties (the shell chrome is NOT a provident node). The four pane
- *  zones + `topBar` project to px tracks; `stage.size` is the serialized 1fr
+ *  zones + `topBar` project to px SIZES; `stage.size` is the serialized 1fr
  *  weight (§2.1) so it projects with an `fr` unit. TOTAL/fail-soft: the layout
  *  is re-coerced first, so a corrupt size can never emit `NaN`/`-Infinity`/
- *  negative geometry (a finite-positive track is always produced). PURE. */
+ *  negative geometry (a finite-positive track is always produced). PURE.
+ *
+ *  NOTE — the zone entries are the PERSISTED sizes, NOT the grid tracks: an
+ *  empty zone's track is `0px` (F-3; see `zoneTrackCssVars`). */
 export function layoutCssVars(layout: LayoutState): Record<string, string> {
   const l = coerceLayout(layout)
   return {
@@ -209,6 +221,70 @@ export function layoutCssVars(layout: LayoutState): Record<string, string> {
     '--stage-weight': `${l.stage.size}fr`,
     '--top-bar-size': `${l.topBar.size}px`,
   }
+}
+
+/** The §2.5 enabled+placed census for ONE zone — `true` when the zone holds
+ *  ZERO enabled `app-graph` panes after placement resolution (the persisted
+ *  overlay entry wins, else the pane's `defaultZone`, else `left`; §2.6 pin 7).
+ *  This mirrors `enabledZonePaneCounts` (`pane-graph.ts`, H1) — the count the
+ *  `is-empty` mirror is derived from — NOT the raw overlay, and NOT the runtime
+ *  overlay class (which lags a toggle until the managed reconcile lands).
+ *  TOTAL/fail-soft: a null/absent/malformed registry reads as "no panes". */
+function isZoneEmpty(
+  registry: PaneRegistry | null | undefined,
+  layout: LayoutState,
+  zone: LayoutZoneName,
+): boolean {
+  const reg = registry as PaneRegistry | null | undefined
+  if (reg == null || typeof reg.listByScope !== 'function' || typeof reg.isEnabled !== 'function') {
+    return true
+  }
+  let panes: unknown
+  try {
+    panes = reg.listByScope('app-graph')
+  } catch {
+    return true
+  }
+  if (!Array.isArray(panes)) return true
+  const placed = new Map<string, LayoutZoneName>()
+  for (const entry of layout.panes) placed.set(entry.id, entry.zone)
+  for (const pane of panes as ReadonlyArray<{ id?: unknown; defaultZone?: unknown }>) {
+    const id = pane?.id
+    if (typeof id !== 'string' || id === '') continue
+    let enabled = false
+    try {
+      enabled = reg.isEnabled(id) === true
+    } catch {
+      enabled = false
+    }
+    if (!enabled) continue
+    const resolved = placed.get(id) ?? (isLayoutZoneName(pane.defaultZone) ? pane.defaultZone : 'left')
+    if (resolved === zone) return false
+  }
+  return true
+}
+
+/** F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED) — project the shell
+ *  grid's per-zone TRACK custom properties: `0px` for a zone with ZERO
+ *  enabled+placed `app-graph` panes (the §2.5 census) that is NOT currently
+ *  revealed as a drag drop target (the C11 carve-out), else the persisted
+ *  `--zone-<zone>-size` value. `--stage-weight` stays the serialized `fr`
+ *  weight, so the stage — the remaining-space track — reclaims the collapsed
+ *  zone's space. Fail-soft (a null/malformed registry or layout never throws
+ *  and never emits `NaN`/`Infinity`/negative geometry) and PURE. */
+export function zoneTrackCssVars(
+  registry: PaneRegistry | null | undefined,
+  layout: LayoutState,
+  opts?: { revealedZones?: readonly LayoutZoneName[] },
+): Record<string, string> {
+  const l = coerceLayout(layout)
+  const revealed = Array.isArray(opts?.revealedZones) ? opts.revealedZones : []
+  const vars: Record<string, string> = { '--stage-weight': `${l.stage.size}fr` }
+  for (const zone of LAYOUT_PANE_ZONES) {
+    const collapsed = isZoneEmpty(registry, l, zone) && !revealed.includes(zone)
+    vars[`--zone-${zone}-track`] = collapsed ? '0px' : `${l.zones[zone].size}px`
+  }
+  return vars
 }
 
 /** The minimal root surface `applyLayoutToRoot` writes: anything whose `style`

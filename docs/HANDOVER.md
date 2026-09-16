@@ -25,6 +25,21 @@ shell-wiring), U-SHELL-7, and U-IMPORT-1 are all landed; the unit DONE rows are 
 > the `docs/next-steps.md` CURRENT WORK block, and this handover's §1/§5 rows
 > (all now FIXED). `docs/defects.md` `HOST-SHELL-WIRING` → FIXED.
 
+> **Later note (2026-09-15, user-flow-audit pass — doc review):** the U-SHELL-N7
+> wiring was FURTHER superseded in one dimension. Defect **F-1
+> PANE-BODY-GESTURE-SWALLOWED** (FIXED + LIVE-CONFIRMED, `docs/defects.md`) showed the
+> `.pane-frame[data-pane-id]` frame-wide pane-drag surface (plus the immediate
+> `setPointerCapture`) made every clickable row inside a pane body — and the pane
+> header's own collapse toggle — inert to a real user. The delegated selector is now
+> `'.gutter[data-zone], .pane-collapse-toggle'` with capture deferred past
+> `PANE_DRAG_CAPTURE_THRESHOLD` (4px): see `docs/decisions.md`
+> (PANE-DRAG-HEADER-ONLY + DEFERRED-POINTER-CAPTURE), `docs/specs/unit-u-shell-shell-wiring.md`
+> §2 note 1, and `docs/specs/user-flow-audit-coverage-2026-09-15.md` §4 F-1. Any
+> `.pane-frame[data-pane-id]` selector text below is the PRE-F-1 historical record.
+> The current queue (F-2 first, then the uncovered drivable checklist rows) is the
+> CURRENT WORK block in `docs/next-steps.md`; this handover file has no F-1/F-2/F-3
+> rows yet, so it is provenance only for the audit pass.
+
 **All Wave-2 OPEN items are RESOLVED/FIXED** (W2-N5/N7/N8/N9/N10/N11/N12/N13/
 N14/N15) per `docs/specs/wave-2-open-decisions.md` §D status line. The last
 uncommitted in-flight unit was **U-SHELL-N7** (`unit-u-shell-shell-wiring.md`,
@@ -84,7 +99,9 @@ A TDD red→green cycle for the HOST-1..5 fixes + the PBT negative generators:
    - **document-level DELEGATED** `pointerdown` listeners using
      `e.target.closest('.gutter[data-zone], .pane-frame[data-pane-id]')`, applied
      after the graph renders and re-attached across `loadEnvelope` re-mounts
-     (fixes HOST-1 + HOST-4);
+     (fixes HOST-1 + HOST-4); **[SUPERSEDED 2026-09-15 — the delegated selector is
+     now `'.gutter[data-zone], .pane-collapse-toggle'` (defect F-1; see the note at
+     the top of this file)]**
    - register move/up/cancel/dblclick ONCE or tear down per gesture
      (`removeEventListener` / `{once:true}` / AbortController) routing through a
      module-level active-gesture record (HOST-2);

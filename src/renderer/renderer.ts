@@ -284,18 +284,118 @@ type ActiveGesture =
       moved: boolean
       /** ADV2 — the originating pointer's id (see the gutter variant). */
       pointerId: number | null
+      /** F-1b (live 2026-09-15) — the pointer-capture ELEMENT for this gesture
+       *  (the pane frame) plus the pointerdown coordinates. Capture is DEFERRED
+       *  until the gesture actually MOVES past `PANE_DRAG_CAPTURE_THRESHOLD`: a
+       *  `setPointerCapture` issued AT the pointerdown on the frame RETARGETS the
+       *  gesture's own `click` to the capturing frame (per the pointer-capture
+       *  spec's click-target resolution), which made the pane HEADER's
+       *  collapse/expand toggle inert exactly as the body rows had been. A pure
+       *  click therefore never captures and always reaches its own target; a real
+       *  drag still captures, so the move/up routing is unchanged. */
+      captureEl: { setPointerCapture(pointerId: number): void } | null
+      downX: number | null
+      downY: number | null
     }
 
+/** F-1b — the pointer travel (px) at which a pane drag CLAIMS the pointer via
+ *  `setPointerCapture`. Below it the gesture is still a click (the toggle / a
+ *  row activation must reach its own handler). */
+const PANE_DRAG_CAPTURE_THRESHOLD = 4
+
 /** The delegated gesture-element selector (HOST-1). Resolved per `pointerdown`
- *  via `e.target.closest(...)` so gutters/frames authored AFTER install —
- *  the real app authors them at render — still route. No colon-bearing
- *  compound (the dom-shim `closest` rejects `[on:...]` selectors). */
-const GESTURE_SELECTOR = '.gutter[data-zone], .pane-frame[data-pane-id]'
+ *  via `e.target.closest(...)` so gutters/headers authored AFTER install —
+ *  the real app authors them at render — still route. TWO surface kinds:
+ *    - the gutter (`.gutter[data-zone]`, unchanged), and
+ *    - the pane HEADER (`.pane-collapse-toggle` — the frame's FIRST child in
+ *      `src/renderer/pane-graph.ts`, carrying the authored
+ *      `id="pane-collapse-<paneId>"`).
+ *  F-1 (2026-09-15): the `.pane-frame[data-pane-id]` element is NO LONGER a
+ *  surface — a `pointerdown` anywhere in the pane BODY (a provident row, a
+ *  paragraph, the body root) must never start a pane drag and never capture the
+ *  pointer on the frame, because that capture retargets the gesture's `click`
+ *  away from the control the operator actually pressed.
+ *
+ *  The header compound deliberately does NOT use the frame-anchored child form
+ *  (`.pane-frame[data-pane-id] > .pane-collapse-toggle`): the dom-shim CSS
+ *  subset REJECTS `>` anywhere in a selector (non-match, never a throw), so that
+ *  form would resolve NOTHING under the shim-covered tests. The un-anchored
+ *  compound is equivalent here (the frame ancestry is resolved separately, and
+ *  the `.pane-collapse-toggle` class is authored ONLY on the pane header). No
+ *  colon-bearing compound either (the dom-shim `closest` rejects `[on:...]`). */
+const GESTURE_SELECTOR = '.gutter[data-zone], .pane-collapse-toggle'
 
 /** The delegated gutter element for the PERMANENT `dblclick` reset (ADV1) —
  *  resolved separately from the pointerdown selector so a double-click is
  *  decoupled from the gesture lifecycle. */
 const GUTTER_SELECTOR = '.gutter[data-zone]'
+
+/** F-1 — the pane HEADER's class (the grab surface). */
+const PANE_HEADER_CLASS = 'pane-collapse-toggle'
+
+/** F-1 — the pane FRAME's class (the element carrying `data-pane-id` and owning
+ *  the pointer capture for a pane drag). */
+const PANE_FRAME_CLASS = 'pane-frame'
+
+/** F-1 — a class test that is TOTAL across a real DOM `className`
+ *  (string), a `DOMTokenList` and a shim element (string). Never throws. */
+function hasClass(el: unknown, cls: string): boolean {
+  const raw = (el as { className?: unknown })?.className
+  try {
+    if (typeof raw === 'string') return raw.split(/\s+/).includes(cls)
+    const list = raw as { contains?: (c: string) => boolean } | null | undefined
+    if (list && typeof list.contains === 'function') return list.contains(cls) === true
+  } catch {
+    // fail-soft — a throwing className never breaks the gesture resolution
+  }
+  return false
+}
+
+/** F-1 — the nearest `.pane-frame` ANCESTOR of `el` (a real `.pane-frame`; the
+ *  element itself is never its own ancestor). Returns `null` when the chain
+ *  holds no frame (a detached/foreign header) — the caller then degrades.
+ *  Direct node inspection (`parentElement` → `parent`), never a colon-bearing
+ *  shim `closest` compound. */
+function paneFrameAncestorOf(el: unknown): unknown | null {
+  let n: unknown = (el as { parentElement?: unknown; parent?: unknown })?.parentElement ?? (el as { parent?: unknown })?.parent
+  while (n) {
+    if (hasClass(n, PANE_FRAME_CLASS)) return n
+    const cur = n as { parentElement?: unknown; parent?: unknown }
+    n = cur.parentElement ?? cur.parent
+  }
+  return null
+}
+
+/** F-1 — the pane id for a pane drag. The **`.pane-frame` ancestor is the
+ *  DECISIVE source**: whenever a frame element exists, only the frame's
+ *  `data-pane-id` can supply the identity — a frame that carries the attribute
+ *  EMPTY, or does not carry it at all, resolves NOTHING (the header's own
+ *  attribute is never substituted for a malformed/foreign frame; a malformed
+ *  frame must degrade, never drag). Only a FRAME-LESS surface (no `.pane-frame`
+ *  ancestor at all) falls back to its own `data-pane-id` (order (a) of the
+ *  pinned resolution). The REAL app always authors the id on the frame
+ *  (`src/renderer/pane-graph.ts` paneSubtreeRoot carries `data-pane-id` on BOTH
+ *  the frame and the collapse toggle), so frame-decisive and header-first agree
+ *  there. A missing/empty/non-string value is NEVER a pane identity. Never
+ *  throws. */
+function resolvePaneId(gestureEl: unknown, frame: unknown | null): string | null {
+  const read = (el: unknown): unknown => {
+    const g = (el as { getAttribute?: (name: string) => string | null })?.getAttribute
+    return typeof g === 'function' ? g.call(el, 'data-pane-id') : null
+  }
+  const nonEmptyString = (v: unknown): v is string => typeof v === 'string' && v !== ''
+  try {
+    if (frame != null) {
+      const fromFrame = read(frame)
+      return nonEmptyString(fromFrame) ? fromFrame : null // the frame decides (empty/absent → no identity)
+    }
+    const own = read(gestureEl)
+    if (nonEmptyString(own)) return own // frame-less fallback: the surface's own attribute
+  } catch {
+    // fail-soft — a throwing attribute read resolves nothing
+  }
+  return null
+}
 
 /** The module-level active gesture (null when none — HOST-2/HOST-4). */
 let activeGesture: ActiveGesture | null = null
@@ -350,6 +450,26 @@ function onGestureMove(e: { clientX?: number; clientY?: number; pointerId?: numb
   const g = activeGesture
   if (g == null) return
   if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
+  // F-1b — DEFERRED pointer capture: claim the pointer only once the gesture has
+  // actually travelled past the threshold (a pure click never captures, so its
+  // own `click` reaches the control the operator pressed — the header toggle and
+  // every pane-body row). Fail-soft: a throwing/absent `setPointerCapture` is
+  // swallowed and the non-captured listeners carry the gesture.
+  if (g.kind === 'pane' && g.captureEl != null && g.pointerId != null && e?.pointerId === g.pointerId) {
+    const cx = typeof e.clientX === 'number' ? e.clientX : 0
+    const cy = typeof e.clientY === 'number' ? e.clientY : 0
+    const dx = g.downX == null ? 0 : cx - g.downX
+    const dy = g.downY == null ? 0 : cy - g.downY
+    if (Math.hypot(dx, dy) >= PANE_DRAG_CAPTURE_THRESHOLD) {
+      const el = g.captureEl
+      g.captureEl = null // claim exactly ONCE per gesture
+      try {
+        el.setPointerCapture(g.pointerId)
+      } catch {
+        // capture unavailable/throws — proceed on the non-captured listeners
+      }
+    }
+  }
   try {
     const x = typeof e?.clientX === 'number' ? e.clientX : 0
     const y = typeof e?.clientY === 'number' ? e.clientY : 0
@@ -496,9 +616,13 @@ function onGestureDblclick(host: SidebarPanes, e: unknown): void {
 /**
  * The document-level DELEGATED `pointerdown` — resolves the gesture element via
  * `e.target.closest(GESTURE_SELECTOR)` (HOST-1: works for chrome authored AFTER
- * install), then starts the gutter or pane gesture with exactly-once per-gesture
- * move/up/cancel/dblclick listeners (HOST-2) routed through the module-level
- * active-gesture record (HOST-4). TOTAL + fail-soft — never throws. */
+ * install), then starts the gutter or the pane HEADER gesture with exactly-once
+ * per-gesture move/up/cancel listeners (HOST-2) routed through the module-level
+ * active-gesture record (HOST-4). F-1: the two surface kinds are distinguished
+ * explicitly — a match carrying `data-zone` is the gutter (unchanged); a match
+ * carrying the pane-header class is the pane HEADER, whose pane id comes from
+ * its `.pane-frame` ancestor and whose pointer capture stays on that FRAME.
+ * TOTAL + fail-soft — never throws. */
 function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
   if (host == null) return
   try {
@@ -514,7 +638,6 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
         : null
     if (gestureEl == null) return
     const dataZone = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('data-zone') : null
-    const dataPaneId = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('data-pane-id') : null
     const pointerId = (e as { pointerId?: number })?.pointerId
 
     // Gutter gesture — the matched element carries a real layout `data-zone`.
@@ -545,23 +668,54 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
       return
     }
 
-    // Pane-drag gesture — the matched element carries a stable `data-pane-id`.
-    if (dataPaneId != null && dataPaneId !== '') {
-      if (isInteractiveControl(target as Element | null)) return // F9/HOST-3/ADV5 — never hijack a control
-      // ADV3 — a new pane drag supersedes any in-flight one first (a prior pane
-      // drag is cancelled so its reveal is re-hidden, a prior gutter is reverted).
-      revertPriorGesture()
-      host.startPaneDrag(dataPaneId)
-      try {
-        if (pointerId != null && typeof gestureEl.setPointerCapture === 'function') {
-          gestureEl.setPointerCapture(pointerId) // F5 fail-soft
-        }
-      } catch {
-        // capture unavailable/throws — degrade, never throw
-      }
-      activeGesture = { kind: 'pane', host, paneId: dataPaneId, lastZones: [], moved: false, pointerId: pointerId ?? null }
-      beginGesture()
+    // Pane-drag gesture — the matched element must be the pane HEADER surface
+    // (F-1). A BODY element inside the frame (a provident row/paragraph/root) is
+    // NOT a surface: it falls through here with no drag and no capture, so the
+    // control's own `click` is never retargeted. A header-LESS `.pane-frame` is
+    // not a surface either (the frame element itself never matches).
+    const isHeaderSurface = hasClass(gestureEl, PANE_HEADER_CLASS)
+    if (!isHeaderSurface) return
+    // The pane FRAME: the header's nearest `.pane-frame` ancestor. It is BOTH
+    // the pane-id source and the pointer-capture target (the move/up routing
+    // reads the frame). No frame (detached/foreign header) → no pane identity.
+    const frameEl = paneFrameAncestorOf(gestureEl)
+    const dataPaneId = resolvePaneId(gestureEl, frameEl)
+    if (dataPaneId == null || frameEl == null) return
+    // F9/HOST-3/ADV5 — never hijack a control. PINNED (supervisor decision, F-1
+    // 2026-09-15): the header is itself a `button.pane-collapse-toggle`, so the
+    // resolved HEADER surface is the pane's explicit GRAB SURFACE and is EXEMPT
+    // from this guard (otherwise the header would be inert exactly as the body
+    // was). The guard stays armed as the second line of defence for every other
+    // resolved target — i.e. any control inside the pane BODY.
+    // (Body pointerdowns never reach this line — a body resolves no header.)
+    if (!isHeaderSurface && isInteractiveControl(target as Element | null)) return
+    // ADV3 — a new pane drag supersedes any in-flight one first (a prior pane
+    // drag is cancelled so its reveal is re-hidden, a prior gutter is reverted).
+    revertPriorGesture()
+    host.startPaneDrag(dataPaneId)
+    // F-1b — the capture target is the FRAME (the existing pointermove/up/cancel
+    // routing stays on the frame element) but it is claimed LAZILY, once the
+    // gesture passes `PANE_DRAG_CAPTURE_THRESHOLD` (see `onGestureMove`). An
+    // immediate capture here retargets the gesture's own `click` to the frame,
+    // which is what made the header's collapse/expand toggle (and every pane-body
+    // row) inert to a real user. A pure click therefore never captures, while a
+    // real drag still does.
+    const captureEl =
+      pointerId != null && typeof (frameEl as { setPointerCapture?: unknown }).setPointerCapture === 'function'
+        ? (frameEl as { setPointerCapture(pointerId: number): void })
+        : null
+    activeGesture = {
+      kind: 'pane',
+      host,
+      paneId: dataPaneId,
+      lastZones: [],
+      moved: false,
+      pointerId: pointerId ?? null,
+      captureEl,
+      downX: typeof (e as { clientX?: number }).clientX === 'number' ? (e as { clientX: number }).clientX : null,
+      downY: typeof (e as { clientY?: number }).clientY === 'number' ? (e as { clientY: number }).clientY : null,
     }
+    beginGesture()
   } catch {
     // fail-soft — a throwing gesture never breaks the renderer
   }
@@ -586,11 +740,15 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
  *  gesture degrades or no-ops; `installShellPointers` itself never throws (the
  *  app still boots). The DELEGATED `pointerdown` attaches ONCE at renderer boot
  *  (after the host is constructed, HOST-1) and resolves the gesture element per
- *  event, so the real app's render-time-authored `.gutter[data-zone]` /
- *  `.pane-frame[data-pane-id]` chrome is always reachable (HOST-1). The
- *  per-gesture move/up/cancel/dblclick listeners are registered exactly once and
+ *  event, so the real app's render-time-authored `.gutter[data-zone]` and pane
+ *  HEADER (`.pane-collapse-toggle` inside its `.pane-frame[data-pane-id]`) chrome
+ *  is always reachable (HOST-1). The
+ *  per-gesture move/up/cancel listeners are registered exactly once and
  *  torn down on gesture end (HOST-2), routed through the module-level
- *  active-gesture record so a re-mount survives (HOST-4). */
+ *  active-gesture record so a re-mount survives (HOST-4). F-1: the pane-drag
+ *  surface is the pane HEADER only — a `pointerdown` in the pane BODY starts no
+ *  pane drag and captures nothing, so a body control's own `click` is never
+ *  retargeted to the frame. */
 export function installShellPointers(host: SidebarPanes): void {
   if (host == null) return // F11 — no host (no-bridge plain-page mode) → no-op
   try {
@@ -602,8 +760,8 @@ export function installShellPointers(host: SidebarPanes): void {
     if (shellWiredDoc === currentDoc) return
     // HOST-1 — ONE document-level DELEGATED `pointerdown` listener. The gesture
     // element is resolved per-event via `e.target.closest(GESTURE_SELECTOR)`,
-    // so gutters/frames authored AFTER install (the real app authors the `.gutter`
-    // elements and the frame `data-pane-id` only at render) still route.
+    // so gutters/headers authored AFTER install (the real app authors the
+    // `.gutter` elements and the pane chrome only at render) still route.
     document.addEventListener('pointerdown', (e) => {
       try {
         onDocumentPointerDown(host, e)

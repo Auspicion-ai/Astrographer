@@ -133,20 +133,34 @@ interface Shell {
   layout: ShimElement
   gutterLeft: ShimElement
   frame: ShimElement
+  /** F-1 RE-PIN (2026-09-15) — the pane HEADER region, the pane-drag GESTURE
+   *  SURFACE (docs/defects.md F-1; docs/specs/user-flow-audit.md §2 U-3). The
+   *  REAL app authors `button.pane-collapse-toggle` as the frame's FIRST child
+   *  (src/renderer/pane-graph.ts paneSubtreeRoot). A pane drag is started by a
+   *  `pointerdown` on THIS element; the frame BODY is never a surface. */
+  header: ShimElement
   zoneLeft: ShimElement
   zoneBogus: ShimElement | null
 }
 
 /** Author `.layout` containing `.gutter[data-zone='left']`, a
- *  `.pane-frame[data-pane-id='notes']`, a real `[data-zone='left']` zone
+ *  `.pane-frame[data-pane-id='notes']` (whose FIRST child is the
+ *  `button.pane-collapse-toggle` HEADER), a real `[data-zone='left']` zone
  *  container, and (optionally) the malformed `[data-zone='bogus']` container —
- *  all appended under `document.body` with rect geometry. */
+ *  all appended under `document.body` with rect geometry.
+ *
+ *  F-1 RE-PIN (2026-09-15): the shell now carries the header. The pane-drag
+ *  sites dispatch `pointerdown` on `header` (NOT on `frame`): the pinned design
+ *  makes the HEADER the gesture surface, so a frame-body dispatch is expected
+ *  to start NO drag (the complementary negative test in HOST-1 pins that). */
 function authorShell(opts: { bogus?: boolean } = {}): Shell {
   const body = shimDocument.body
   const layout = el('main', {}, 'layout').setRect({ left: 0, top: 0, right: 1000, bottom: 600 })
   const gutterLeft = el('div', { 'data-zone': 'left', 'data-axis': 'columns' }, 'gutter')
   const zoneLeft = el('div', { 'data-zone': 'left' }).setRect({ left: 10, top: 10, right: 300, bottom: 590 })
   const frame = el('section', { 'data-pane-id': 'notes' }, 'pane-frame')
+  const header = el('button', { 'data-pane-id': 'notes', 'data-pane-collapse': 'false' }, 'pane-collapse-toggle is-clickable')
+  frame.appendChild(header)
   body.appendChild(layout)
   layout.appendChild(gutterLeft)
   layout.appendChild(zoneLeft)
@@ -156,7 +170,7 @@ function authorShell(opts: { bogus?: boolean } = {}): Shell {
     zoneBogus = el('div', { 'data-zone': 'bogus' }).setRect({ left: 400, top: 10, right: 700, bottom: 590 })
     layout.appendChild(zoneBogus)
   }
-  return { layout, gutterLeft, frame, zoneLeft, zoneBogus }
+  return { layout, gutterLeft, frame, header, zoneLeft, zoneBogus }
 }
 
 function leftGesture(host: HostMock, gutter: ShimElement, n: number): void {
@@ -181,11 +195,38 @@ describe('HOST-1 — the wiring routes gutters/frames authored AFTER install (de
     installShellPointers(host) // install on an EMPTY body
     const shell = authorShell() // THEN author the chrome
     shell.gutterLeft.dispatchPointer('pointerdown', { pointerId: 1, clientX: 120, clientY: 300 })
-    shell.frame.dispatchPointer('pointerdown', { pointerId: 2, clientX: 200, clientY: 200 })
+    // F-1 RE-PIN (2026-09-15): the pane drag is started from the pane HEADER
+    // (the gesture surface), never from the frame body.
+    shell.header.dispatchPointer('pointerdown', { pointerId: 2, clientX: 200, clientY: 200 })
     // RED (current wiring): the install-time selector results were empty, so no
     // gutter/frame listener was attached — neither seam fires.
     expect(countCalls(host, 'startGutter:left'), 'startGutter(left) must fire from a deferred-authored gutter').toBe(1)
-    expect(countCalls(host, 'startPaneDrag:notes'), 'startPaneDrag(notes) must fire from a deferred-authored frame').toBe(1)
+    expect(countCalls(host, 'startPaneDrag:notes'), 'startPaneDrag(notes) must fire from a deferred-authored frame header').toBe(1)
+  })
+
+  it('does NOT start a pane drag from a pointerdown on the FRAME BODY (F-1: the surface is the header only)', () => {
+    const host = makeHost()
+    installShellPointers(host)
+    const { frame, header } = authorShell() // authored AFTER install
+    // The frame BODY (a provident-compiled element) — NEVER a gesture surface.
+    const row = el('div', { 'data-node-id': 'body-row' }, 'is-clickable')
+    frame.appendChild(row)
+    row.dispatchPointer('pointerdown', { pointerId: 3, clientX: 200, clientY: 200 })
+    // RED (current wiring): `.pane-frame[data-pane-id]` matches the ancestor
+    // frame → startPaneDrag fires + the frame captures the pointer (the F-1
+    // swallow, live-confirmed: the row's click retargets to `.pane-frame`).
+    expect(countCalls(host, 'startPaneDrag'), 'a pointerdown in the pane BODY must never start a pane drag (F-1)').toBe(0)
+    expect(frame.captureCalls, 'the frame must not capture the pointer from a BODY pointerdown').toBe(0)
+    expect(header.captureCalls, 'the header must not capture either').toBe(0)
+  })
+
+  it('does NOT start a pane drag from a pointerdown on the `.pane-frame` element itself', () => {
+    const host = makeHost()
+    installShellPointers(host)
+    const { frame } = authorShell()
+    frame.dispatchPointer('pointerdown', { pointerId: 4, clientX: 200, clientY: 200 })
+    expect(countCalls(host, 'startPaneDrag'), 'the frame element is no gesture surface — the header is').toBe(0)
+    expect(frame.captureCalls, 'the frame must not capture from a bare frame pointerdown').toBe(0)
   })
 
   it('attaches the wiring via the DOCUMENT-level delegated pointerdown path (≥1 listener)', () => {
@@ -254,6 +295,8 @@ describe('HOST-3 — pointerdown on a <span> inside an interactive <button> insi
     const button = el('button')
     const span = el('span')
     button.appendChild(span)
+    // F-1 RE-PIN: the interactive control lives in the pane BODY (a sibling of
+    // the header), so this pins the BODY half of the surface rule too.
     frame.appendChild(button)
     void layout
     installShellPointers(host)
@@ -286,21 +329,24 @@ describe('HOST-3 — pointerdown on a <span> inside an interactive <button> insi
 describe('HOST-4 — the gesture survives a re-mount between pointermove steps', () => {
   it('resolves the drop path even when the frame is re-authored mid-gesture', () => {
     const host = makeHost()
-    const { layout, frame } = authorShell()
+    const { layout, header } = authorShell()
     installShellPointers(host)
-    // pointerdown starts the drag on the ORIGINAL frame.
-    frame.dispatchPointer('pointerdown', { pointerId: 5, clientX: 200, clientY: 200 })
+    // F-1 RE-PIN: pointerdown starts the drag on the pane HEADER (the gesture
+    // surface); the resolved frame is the header's parent.
+    header.dispatchPointer('pointerdown', { pointerId: 5, clientX: 200, clientY: 200 })
     expect(countCalls(host, 'startPaneDrag:notes'), 'the drag must start').toBe(1)
     // SIMULATE a re-mount: remove the original frame + re-set the zone rect,
-    // then author a FRESH frame in its place.
-    frame.remove()
+    // then author a FRESH frame (with its own header) in its place.
+    header.parentElement?.remove()
     ;(shimDocument.querySelector('[data-zone="left"]') as ShimElement)?.setRect({ left: 10, top: 10, right: 300, bottom: 590 })
     const fresh = el('section', { 'data-pane-id': 'notes' }, 'pane-frame')
     layout.appendChild(fresh)
+    const freshHeader = el('button', { 'data-pane-id': 'notes', 'data-pane-collapse': 'false' }, 'pane-collapse-toggle is-clickable')
+    fresh.appendChild(freshHeader)
     const before = countCalls(host, 'commitPaneDrop') + countCalls(host, 'cancelPaneDrag')
-    // moves + up on the FRESH frame must still route through the active gesture.
-    fresh.dispatchPointer('pointermove', { pointerId: 5, clientX: 150, clientY: 150 })
-    fresh.dispatchPointer('pointerup', { pointerId: 5, clientX: 150, clientY: 150 })
+    // moves + up on the FRESH frame's header must still route through the active gesture.
+    freshHeader.dispatchPointer('pointermove', { pointerId: 5, clientX: 150, clientY: 150 })
+    freshHeader.dispatchPointer('pointerup', { pointerId: 5, clientX: 150, clientY: 150 })
     const after = countCalls(host, 'commitPaneDrop') + countCalls(host, 'cancelPaneDrag')
     // RED (current wiring): the move/up handlers were attached to the ORIGINAL
     // frame element at pointerdown; the fresh frame has none → neither the drop
@@ -316,11 +362,12 @@ describe('HOST-4 — the gesture survives a re-mount between pointermove steps',
 describe('HOST-5 — a malformed [data-zone=\'bogus\'] container is never projected as a real zone', () => {
   it('projects exactly ONE `left` zone bound (the real container), never the bogus one coerced to `left`', () => {
     const host = makeHost()
-    const { layout, frame } = authorShell({ bogus: true })
+    const { layout, header } = authorShell({ bogus: true })
     void layout
     installShellPointers(host)
-    frame.dispatchPointer('pointerdown', { pointerId: 7, clientX: 200, clientY: 200 })
-    frame.dispatchPointer('pointermove', { pointerId: 7, clientX: 150, clientY: 150 })
+    // F-1 RE-PIN: the drag starts from the pane HEADER.
+    header.dispatchPointer('pointerdown', { pointerId: 7, clientX: 200, clientY: 200 })
+    header.dispatchPointer('pointermove', { pointerId: 7, clientX: 150, clientY: 150 })
     expect(host.draggedZones.length, 'movePaneDrag must have received the zones array').toBeGreaterThan(0)
     const lastZones = host.draggedZones[host.draggedZones.length - 1]
     const realLeft = lastZones.filter((z) => z.zone === 'left')
@@ -393,12 +440,13 @@ describe('HOST-N7-ADV regression set — adversarial re-audit findings', () => {
   describe('ADV2 — a lost-pointer gesture is reverted + cleared, never re-committed by an unrelated event', () => {
     it('ADV2a — after lostpointercapture, a later UNRELATED pointerup on a different element/pointerId never commits/cancels/ends', () => {
       const host = makeHost()
-      const { frame } = authorShell()
+      const { frame, header } = authorShell()
       installShellPointers(host)
-      // Start a pane drag (a matching pane frame + geometry).
-      frame.dispatchPointer('pointerdown', { pointerId: 1, clientX: 200, clientY: 200 })
+      // Start a pane drag (F-1 RE-PIN: from the pane HEADER + geometry).
+      header.dispatchPointer('pointerdown', { pointerId: 1, clientX: 200, clientY: 200 })
       expect(countCalls(host, 'startPaneDrag:notes'), 'the pane drag must start').toBe(1)
-      // The pointer is dropped WITHOUT a pointerup/pointercancel → lostpointercapture.
+      // The pointer is dropped WITHOUT a pointerup/pointercancel → lostpointercapture
+      // (dispatched on the captured FRAME, the element holding the capture).
       frame.dispatchPointer('lostpointercapture', { pointerId: 1 })
       // An UNRELATED later pointerup on a DIFFERENT element + different pointerId.
       const other = el('div')
@@ -432,9 +480,10 @@ describe('HOST-N7-ADV regression set — adversarial re-audit findings', () => {
   describe('ADV3 — a gutter pointerdown superseding an in-flight PANE drag reverts it first', () => {
     it('calls host.cancelPaneDrag() (re-hides the reveal) BEFORE host.startGutter when a gutter gesture supersedes a pane drag', () => {
       const host = makeHost()
-      const { gutterLeft, frame } = authorShell()
+      const { gutterLeft, header } = authorShell()
       installShellPointers(host)
-      frame.dispatchPointer('pointerdown', { pointerId: 1, clientX: 200, clientY: 200 })
+      // F-1 RE-PIN: the in-flight PANE drag starts from the pane HEADER.
+      header.dispatchPointer('pointerdown', { pointerId: 1, clientX: 200, clientY: 200 })
       expect(countCalls(host, 'startPaneDrag:notes'), 'the in-flight pane drag must start').toBe(1)
       // A gutter pointerdown starts a NEW gesture OVER the in-flight pane drag.
       gutterLeft.dispatchPointer('pointerdown', { pointerId: 2, clientX: 120, clientY: 300 })

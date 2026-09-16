@@ -15,7 +15,10 @@ permitted. Depends on U-SHELL-4 (drag controller + host seams) and U-SHELL-5
 pass reworks `installShellPointers` (now a NAMED export of
 `src/renderer/renderer.ts`) as a document-level DELEGATED wiring that closes the
 confirmed adversarial findings — **HOST-1..5** (document-delegated `pointerdown`
-via `closest` on `.gutter[data-zone], .pane-frame[data-pane-id]` + the
+via `closest` on `.gutter[data-zone], .pane-frame[data-pane-id]` — **the pane half
+SUPERSEDED 2026-09-15 by F-1: the delegated selector is now
+`'.gutter[data-zone], .pane-collapse-toggle'` and pointer capture is deferred past a
+4px threshold; see §2 note 1** — plus the
 `.layout [data-zone]` move projection; exactly-once per-gesture move/up/cancel
 teardown; ancestor-climb interactive guard incl. `label`/`fieldset`/
 `[contenteditable]`; fail-closed non-`LayoutZoneName` zone skip; per-gesture
@@ -305,9 +308,25 @@ The TestWriter statically asserts the wiring in `src/renderer/renderer.ts` (the
 `installShellPointers(host)` NAMED export invoked from `main()` after the
 `SidebarPanes` host is constructed) registers, by literal call:
 
+> **SUPERSEDED 2026-09-15 — the pane-drag surface (defect F-1; `docs/decisions.md`
+> PANE-DRAG-HEADER-ONLY + DEFERRED-POINTER-CAPTURE).** Read the pins below with this
+> override: the pane-drag surface is **no longer the `.pane-frame[data-pane-id]`
+> element**. `GESTURE_SELECTOR` is now `'.gutter[data-zone], .pane-collapse-toggle'`
+> (the gutter half is unchanged) and pointer capture is DEFERRED past
+> `PANE_DRAG_CAPTURE_THRESHOLD` (4px) in `onGestureMove` instead of being claimed at the
+> pointerdown. The frame-wide surface + immediate capture made every clickable row inside
+> a pane body — and the pane header's own collapse toggle — inert to a real user.
+> `data-pane-id` on the frame root is still required (the frame is resolved from the
+> header for the pane id + the capture target). Live evidence:
+> `docs/specs/user-flow-audit-coverage-2026-09-15.md` §4 F-1 with the §5.U U-1/U-2/U-3
+> rows; the pins live in `tests/renderer-pane-drag-surface.test.ts` +
+> `tests/unit-u-shell-shell-wiring.test.ts` (F-1.1/F-1.2). Every
+> `.pane-frame[data-pane-id]` selector string below is the PRE-F-1 record.
+
 1. ONE document-level DELEGATED `pointerdown` (`addEventListener('pointerdown', …)`)
    that resolves the gesture element per event via
-   `e.target.closest(GESTURE_SELECTOR)` (`.gutter[data-zone], .pane-frame[data-pane-id]`):
+   `e.target.closest(GESTURE_SELECTOR)` (`.gutter[data-zone], .pane-frame[data-pane-id]`
+   — **the pane half SUPERSEDED: see the override note above**):
    a gutter gesture routes to `host.startGutter` (with `setPointerCapture`) and,
    inside the accepted gesture, `addEventListener('pointermove', …)` →
    `host.moveGutter(gutterSizeForPoint(...))`, `addEventListener('pointerup', …)`
@@ -402,7 +421,9 @@ pass (+ regression-tested in `tests/unit-u-shell-shell-wiring-adversarial.test.t
   `.pane-frame[data-pane-id]`), which the real app authors only at render →
   nothing matched, the gesture never routed. **Fixed:** ONE document-level
   DELEGATED `pointerdown`, resolved per event via
-  `e.target.closest(GESTURE_SELECTOR)` (`.gutter[data-zone], .pane-frame[data-pane-id]`),
+  `e.target.closest(GESTURE_SELECTOR)` (`.gutter[data-zone], .pane-frame[data-pane-id]` —
+  **the pane half SUPERSEDED 2026-09-15 by F-1: `GESTURE_SELECTOR` is now
+  `'.gutter[data-zone], .pane-collapse-toggle'`; see §2 note 1**),
   so chrome authored after install still routes; the four
   `.gutter[data-zone][data-axis]` elements + the frame `data-pane-id` are now
   authored (HOST-1/HOST-4).

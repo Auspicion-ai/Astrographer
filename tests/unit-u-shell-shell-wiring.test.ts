@@ -747,3 +747,68 @@ describe('U-SHELL-N7 §2.8 the source-pinned listener wiring (src/renderer/rende
   })
 })
 
+// ===========================================================================
+// F-1 PANE-BODY-GESTURE-SWALLOWED — the §2.8 SOURCE-PIN RE-PIN (2026-09-15).
+//
+// The §2.8 block above deliberately pins only EVENT-TYPE literals + seam
+// CALLERS (it names neither `GESTURE_SELECTOR` nor a selector string), so the
+// whole block stays green across the fix. The gesture-surface convention it had
+// implicitly frozen — "the `.pane-frame[data-pane-id]` element is a pane-drag
+// surface" — is now WRONG (docs/defects.md F-1, live-confirmed: a real click on
+// a row INSIDE a pane body is swallowed because the frame captures the pointer
+// and the gesture's `click` retargets to `.pane-frame`). These pins re-freeze
+// the corrected convention, statically, on the LIVE source:
+//
+//   F-1.1 the OLD frame-as-surface gesture selector is GONE;
+//   F-1.2 the pane HEADER region (`.pane-collapse-toggle`) is the surface the
+//         wiring names;
+//   F-1.3 the pane id is resolved from the HEADER's parent frame (never from a
+//         frame-level gesture element), so a BODY element can never resolve it.
+//
+// The BEHAVIOR of the re-pinned surface (header starts / body never starts) is
+// driven in `tests/renderer-pane-drag-surface.test.ts` +
+// `tests/unit-u-shell-shell-wiring-adversarial.test.ts` (both re-pinned in the
+// same pass). RED against the current source; green once the fix lands.
+// ===========================================================================
+describe('F-1 §2.8 re-pin — the pane-drag GESTURE SURFACE is the pane HEADER, never the frame body', () => {
+  const rendererSrc = readFileSync(join(process.cwd(), 'src/renderer/renderer.ts'), 'utf8')
+
+  it('F-1.1 — the OLD frame-as-gesture-surface selector is REMOVED (a `.pane-frame[data-pane-id]` pointerdown must no longer resolve a gesture element)', () => {
+    // RED: `const GESTURE_SELECTOR = '.gutter[data-zone], .pane-frame[data-pane-id]'`
+    // (renderer.ts :293) makes EVERY `pointerdown` inside the frame — the body
+    // included — start a pane drag that captures the pointer on the frame.
+    expect(
+      rendererSrc,
+      'the old `.gutter[data-zone], .pane-frame[data-pane-id]` gesture selector must be GONE (F-1 root cause: a body pointerdown resolved the frame)',
+    ).not.toContain("'.gutter[data-zone], .pane-frame[data-pane-id]'")
+    expect(
+      rendererSrc,
+      'the frame must no longer be a bare `closest` target for the pane gesture (the header region is the surface)',
+    ).not.toContain("closest('.pane-frame[data-pane-id]')")
+  })
+
+  it('F-1.2 — the wiring names the pane HEADER region (`.pane-collapse-toggle`) as the pane-drag gesture surface', () => {
+    // RED: `renderer.ts` never mentions the collapse toggle — the surface it
+    // freezes is the frame itself.
+    expect(
+      rendererSrc,
+      'the pane-drag gesture surface must be the pane header — the wiring must name `.pane-collapse-toggle`',
+    ).toContain('pane-collapse-toggle')
+  })
+
+  it('F-1.3 — the frame `data-pane-id` attribute is still READ by the wiring (the header→parent-frame id resolution survives the surface change)', () => {
+    // The design keeps the pane-id SOURCE unchanged (the `.pane-frame`'s
+    // `data-pane-id`) while moving the SURFACE to the header: a fix that
+    // resolved the id from the header's own attribute (or dropped the frame
+    // lookup) would break the real app, where the id lives on the frame
+    // (src/renderer/pane-graph.ts paneSubtreeRoot). GREEN-on-arrival — pinned
+    // so the surface change cannot silently drop the frame lookup. The id
+    // SOURCE (`parentElement`-resolved frame, not the header) is behaviorally
+    // pinned in `tests/renderer-pane-drag-surface.test.ts` S1b.
+    expect(
+      rendererSrc,
+      'the wiring must still read the frame `data-pane-id` (the pane-id source does not move to the header)',
+    ).toContain('data-pane-id')
+  })
+})
+

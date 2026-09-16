@@ -104,8 +104,21 @@
     #app > #wiki-root {
       display: grid;
       height: 100%;
-      grid-template-columns: minmax(0, var(--zone-left-size, 220px)) minmax(0, var(--stage-weight, 1fr)) minmax(0, var(--zone-right-size, 220px));
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      /* F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED) — the per-zone GRID
+         TRACK: the persisted size by default, `0px` for an empty zone. These
+         declarations are the base the empty-zone rules further below override,
+         so they must live on the SAME element those rules target (this one) —
+         a rule on the ancestor frame is only INHERITED and would lose to this
+         declaration. The grid templates consume the track, never the raw size
+         (which was the defect: every collapsed-track variable was declared but
+         never read, so an empty zone kept its track and the stage never
+         reclaimed the space). */
+      --zone-left-track: var(--zone-left-size, 220px);
+      --zone-right-track: var(--zone-right-size, 220px);
+      --zone-header-track: var(--zone-header-size, 48px);
+      --zone-footer-track: var(--zone-footer-size, 48px);
+      grid-template-columns: var(--zone-left-track) minmax(0, var(--stage-weight, 1fr)) var(--zone-right-track);
+      grid-template-rows: var(--zone-header-track) minmax(0, 1fr) var(--zone-footer-track);
       grid-template-areas:
         "header header header"
         "left   main   right"
@@ -123,15 +136,18 @@
        { grid-area: right }` (higher specificity) defeated the spanning rule
        below; operator-pane placement is owned by U-SHELL-3/9. */
     .layout .zone-footer { grid-area: footer; }
-    /* Unit U-SHELL-4 (C11, H6) — an empty zone's grid track collapses to zero,
-       UNLESS the drag controller currently reveals it as a provisional drop
-       target (`.is-revealed`). The state-derived `.is-empty` mirror is gated by
-       `:not(.is-revealed)`; a non-empty zone (no `.is-empty`) never matches, so
-       its persisted `--zone-*-size` track is retained. */
-    .layout:has([data-zone='left'].is-empty:not(.is-revealed)) { --zone-left-track: 0px; }
-    .layout:has([data-zone='right'].is-empty:not(.is-revealed)) { --zone-right-track: 0px; }
-    .layout:has([data-zone='header'].is-empty:not(.is-revealed)) { --zone-header-track: 0px; }
-    .layout:has([data-zone='footer'].is-empty:not(.is-revealed)) { --zone-footer-track: 0px; }
+    /* Unit U-SHELL-4 (C11, H6) / F-3 — an empty zone's grid track collapses to
+       zero, UNLESS the drag controller currently reveals it as a provisional
+       drop target (`.is-revealed`). The state-derived `.is-empty` mirror is
+       gated by `:not(.is-revealed)`; a non-empty zone (no `.is-empty`) never
+       matches, so its persisted size is retained through the base track
+       declaration. These rules must target the grid element ITSELF (it declares
+       the base track): same element + higher specificity wins the cascade,
+       which is what makes the declaration above actually collapse. */
+    #app > #wiki-root:has([data-zone='left'].is-empty:not(.is-revealed)) { --zone-left-track: 0px; }
+    #app > #wiki-root:has([data-zone='right'].is-empty:not(.is-revealed)) { --zone-right-track: 0px; }
+    #app > #wiki-root:has([data-zone='header'].is-empty:not(.is-revealed)) { --zone-header-track: 0px; }
+    #app > #wiki-root:has([data-zone='footer'].is-empty:not(.is-revealed)) { --zone-footer-track: 0px; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
     h2 { font-size: 1rem; margin: 0 0 0.75rem; }
     .counter-value { font-size: 2rem; font-weight: 700; margin: 0 0 0.75rem; }

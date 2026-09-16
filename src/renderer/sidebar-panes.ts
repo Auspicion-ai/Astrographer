@@ -40,7 +40,7 @@ import {
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
 import { clickableClasses } from './render-shared.js'
-import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, type LayoutState, type LayoutZoneName } from './layout-state.js'
+import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, zoneTrackCssVars, type LayoutState, type LayoutZoneName } from './layout-state.js'
 import {
   createDragController,
   insertionIndexForPoint,
@@ -1140,6 +1140,10 @@ export class SidebarPanes {
    *  session (F7 — the in-memory layout is authoritative until restart). */
   setLayout(layout: LayoutState): void {
     this.layout = coerceLayout(layout)
+    // F-3 — a committed geometry mutation can make a zone empty (the last pane
+    // relocated out) or populated again (a drop into it): re-project the shell
+    // grid's tracks from the census BEFORE the best-effort persist below.
+    this.applyZoneTracks()
     // H5 (adversarial) — the persist is best-effort: a bridge (or test host)
     // that predates/lacks the `operatorSettings` surface must NOT throw — the
     // in-memory layout stays authoritative for the session (F7). The guard
@@ -1150,6 +1154,49 @@ export class SidebarPanes {
     void set.call(surface, { layout: this.layout }).catch((e) => {
       console.error('[sidebar-panes] operator settings layout set failed', e)
     })
+  }
+
+  /** F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED, live `uf_layout_10`) —
+   *  project the shell grid's per-zone TRACK onto the LIVE grid element: a zone
+   *  with zero enabled+placed app-graph panes (§2.5 census) that is not being
+   *  revealed as a drag drop target gets its track COLLAPSED to `0px`, so the
+   *  stage reclaims the space. A populated/revealed zone gets NO write here —
+   *  its track resolves through the stylesheet's `var(--zone-<z>-size)`, so a
+   *  size commit still needs no host write (the non-empty geometry is
+   *  byte-identical to the pre-F-3 behavior).
+   *
+   *  WHY the host writes at all: the census is the authority (§2.5 — "zero
+   *  enabled+placed panes (post-overlay/fallback resolution)"), and unlike the
+   *  engine's `is-empty` mirror it is available SYNCHRONOUSLY — the managed
+   *  mirror reconcile is async/journaled (U-SHELL-8 W2-N8 `syncZoneMirrors`),
+   *  so a toggle that empties a zone would otherwise keep its track until that
+   *  reconcile lands. `index.html` mirrors the same decision declaratively in
+   *  its `:has(...)` empty rules (the pre-first-write / re-mount path).
+   *
+   *  Idempotent (a repeat writes the same `0px`) and fail-soft: an absent root,
+   *  a shim `style` without `setProperty`, or a DOM failure is a NO-OP. */
+  private applyZoneTracks(): void {
+    try {
+      const doc = typeof document === 'undefined' ? null : document
+      const grid =
+        doc != null && typeof doc.querySelector === 'function'
+          ? (doc.querySelector('#app > #wiki-root') as unknown as {
+              style?: { setProperty?: (name: string, value: string) => void; removeProperty?: (name: string) => void }
+            } | null)
+          : null
+      const style = grid?.style
+      if (style == null || typeof style.setProperty !== 'function') return
+      const vars = zoneTrackCssVars(this.registry, this.layout ?? defaultLayout(), {
+        revealedZones: this.revealedZones,
+      })
+      for (const zone of LAYOUT_PANE_ZONES) {
+        const name = `--zone-${zone}-track`
+        if (vars[name] === '0px') style.setProperty(name, '0px')
+        else if (typeof style.removeProperty === 'function') style.removeProperty(name)
+      }
+    } catch {
+      // F11 discipline — a DOM/style failure never breaks a render
+    }
   }
 
   /** Register the concrete panes (doc-nav/crosslinks/search/template-editor
@@ -1498,6 +1545,10 @@ export class SidebarPanes {
     this.lastTraversalEnvelope = traversalEnvelope
     runtime.loadEnvelope(result.envelope)
     this.appLoaded = true
+    // F-3 — the zone containers exist in the live DOM only after the load: an
+    // app-graph mount is where the empty-zone track collapse is (re-)projected
+    // (boot, refresh, re-derive, a registry/reveal-driven re-assemble).
+    this.applyZoneTracks()
     return result
   }
 
@@ -3137,6 +3188,11 @@ export class SidebarPanes {
    *  dirty-edit guard still applies (a re-render must not clobber an in-progress
    *  edit). SYNCHRONOUS. */
   private rerenderAppGraph(): void {
+    // F-3 — a registry (pane enable/disable) or drag-reveal change moves the
+    // zone census, so re-project the grid tracks BEFORE the dirty-edit guard
+    // (the collapsed track must follow the census even when the graph
+    // re-render is queued behind a dirty edit).
+    this.applyZoneTracks()
     if (this.editController.anyDirty()) return
     if (this.runtime && this.lastTraversalEnvelope) {
       this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)

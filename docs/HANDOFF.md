@@ -11,7 +11,9 @@ requests. NEVER patch the engine.
 
 ## OPEN handoff items
 
-**NONE** — every engine/foundation gap filed against the upstream project has
+**GNOSIS-ENGINE-QUERY-MODE-IGNORED (2026-09-15, filed by the vector/graph-enrichment live pass) — HANDOFF to the Gnosis repo (NOT `provident-ssr`).** The `gnosis-server`'s `POST /rag/query` drops the caller's retrieval `mode` and `topK`: it decodes only `payload.query` and calls `store.rag_query(&query, &RagQueryOptions::default())`, so `Flat`/`Vector`/`Graph`/`Hybrid` all return byte-identical results with `trace.Flat.mode="Flat"` + `top_k:10` (live proof: the same two results `n1` 2.6384988372299447 / `n2` 0.5897495348410585 for all four modes; `topK 3` vs `5` identical). The sibling `GET /rag/stream` handler DOES honor both (`mode=vector` → a `vector_index_unavailable` SSE error; `mode=graph` → a `Graph` trace), so the fix shape already exists in the same file (`../Gnosis/src/bin/gnosis_server.rs` `rag_query_handler` ~`:156` vs `rag_stream_handler` ~`:188`). Full row + repro: `docs/defects.md` → **GNOSIS-ENGINE-QUERY-MODE-IGNORED**. It blocks the app's gnosis **graph/vector/hybrid** retrieval parity over the engine's POST query endpoint (the app's own local `rag.query` legs are unaffected). **Do NOT patch the Gnosis repo from this project.**
+
+**NONE (against `provident-ssr` / Provident-Electron)** — every engine/foundation gap filed against the upstream project has
 been resolved upstream (`provident-ssr` 0.4.0/0.4.1) or made obsolete by the
 0.4.x design changes. The former OPEN rows (ENG-INLINE-ORDER,
 ENG-BODYRUNS-WIRE-REF-PATHSTATE, ENG-DESTROY-PLACEMENT-ANCHOR-RESIDUE,

@@ -38,6 +38,13 @@
 //       pointerdown→pointermove→pointerup through listeners the wiring stored
 //       on shim elements / the shim document.
 //
+//     - `parentElement` — F-1 (2026-09-15) ADDITION: the real DOM's
+//       `parentElement` alias for the internal `parent` pointer (the wiring
+//       already reads `parentElement ?? parent` for its ancestor climb; the
+//       pinned pane-drag-surface design resolves the frame id from the pane
+//       HEADER's `parentElement`). `null` at the root — minimal, no
+//       `documentElement` node is faked.
+//
 //   document (fresh per `installShim()`):
 //     - `readyState: 'loading'` — so importing src/renderer/renderer.ts (whose
 //       bottom guard schedules `main()` only when readyState !== 'loading')
@@ -76,6 +83,16 @@ export class ShimElement {
   value = ''
   parent: ShimElement | null = null
   removed = false
+
+  /** The DOM `parentElement` alias for the internal `parent` pointer (a real
+   *  element's `parentElement`). Added minimally for the F-1 pane-drag-surface
+   *  re-pin (2026-09-15): the pinned design resolves the frame id from the pane
+   *  HEADER's `parentElement` (the `.pane-frame[data-pane-id]`), and the
+   *  adversarial re-mount test detaches the frame through it. `null` at the
+   *  root — mirroring the real DOM (no `documentElement` shim). */
+  get parentElement(): ShimElement | null {
+    return this.parent
+  }
 
   /** U-SHELL-N7 — the configured rect for `getBoundingClientRect()` (default:
    *  all-zero). Tests set it via `setRect` to drive the wiring's rect math. */
@@ -399,7 +416,12 @@ export function shimDispatchPointer(
     type,
     target,
     currentTarget: target,
-    pointerId: 1,
+    // NOTE: NO fabricated `pointerId` default (F-1 harness fix). A real
+    // `PointerEvent` always carries a pointerId, so seeding a sentinel `1` here
+    // made the malformed/"no pointerId" state inexpressible in tests: the shim
+    // silently handed the wiring a pointerId the caller never passed. Callers
+    // that need one pass it explicitly; callers that omit it now exercise the
+    // wiring's `pointerId != null` guard.
     clientX: 0,
     clientY: 0,
     ...props,

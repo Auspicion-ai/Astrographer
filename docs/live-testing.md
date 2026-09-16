@@ -87,6 +87,42 @@ a plan:
   the `gnosis`/`gnosis-edit` tool groups enabled; absent a backend, the
   D2-fallback (`EngineUnavailable`) is still live-verifiable.
 
+### 1.2 Vector / graph enrichment with LOCAL OLLAMA — the VERIFIED configuration (2026-09-15)
+
+Confirmed live this pass on this host (both models pulled; `ollama` at
+`/usr/local/bin/ollama` serving `http://localhost:11434`):
+
+| Leg | Model / value | Config |
+| --- | --- | --- |
+| App RAG **vector** embedder | `embeddinggemma` (768-dim) | `PROVIDENT_RETRIEVAL_EMBEDDER=vector PROVIDENT_EMBEDDING_PROVIDER=ollama PROVIDENT_EMBEDDING_BASE_URL=http://127.0.0.1:11434 PROVIDENT_EMBEDDING_MODEL=embeddinggemma` — or the launcher shorthand `scripts/start-app.sh --mode=vector` (its defaults are exactly these). Node tests that run LIVE against it (not skipped): `tests/embeddings-ollama-integration.test.ts` (3), `tests/embeddings-batch.test.ts` (25, incl. the live batch), `tests/live-embed-cache.test.ts` (15) — all green. |
+| Gnosis **engine** embedding provider | `embeddinggemma` (override; the binary's default is `nomic-embed-text`) | `GNOSIS_SERVER_OLLAMA_URL=http://127.0.0.1:11434 GNOSIS_SERVER_OLLAMA_MODEL=embeddinggemma ../Gnosis/target/debug/gnosis-server --port 8080` (the launcher forwards both vars under `--mode=gnosis`). `GET /engine/status` → `state:Ready` + `{store,graph,lexical,vector,embedding,reranker}=true`. |
+| **LLM (text generation)** | `gemma4:e4b-it-q8_0` | VERIFIED SERVING via `POST /api/generate` (`{"model":"gemma4:e4b-it-q8_0","stream":false}` → `ENRICH-OK`). **NOT wired into any retrieval/enrichment path yet:** neither the app (`src/main/embeddings.ts` is an embed-only `EmbeddingProvider`) nor the gnosis-server (`OllamaProvider` is embed-only; its only LLM-ish knob is `GNOSIS_EVAL_OLLAMA_MODEL` on the eval harness, also embed-only) has a text-generation seam, so no automatic LLM enrichment can run today. LLM-mediated enrichment is the parked **F4-LLM** item (`../Gnosis/docs/pending.md`; contract `docs/specs/f4-llm-enrichment-integration.md`) — an LLM *host* drives the manual-override-authoritative surfaces (`declareCommunity`/`updateCommunitySummary`/`resolveEntities`/`mergeFacts`); revisit when a suite tool with a harnessed LLM lands a text-generation seam. |
+| Boot/index evidence | — | `vector boot: pending (born-lexical)` → `vector boot: build complete (embedded 3, cacheHits 1, skipped empty 2 …)` → `vector boot: promoted`; `provident-vector-cache.json` grows and `rag.query` returns ranked vector hits (cosine 0.60–0.85 on the probe corpus). **Known gap: an IMPORT does not re-embed the imported BODY nodes** (only the document roots reach the reconcile) — `docs/defects.md` **VECTOR-IMPORT-NO-BODY-VECTORS**; boot with the docs already present, or edit a node, indexes normally. |
+
+**Reproduce the whole configuration check:**
+```bash
+# models
+curl -s http://localhost:11434/api/embed -d '{"model":"embeddinggemma","input":"probe"}' | head -c 80
+curl -s http://localhost:11434/api/generate -d '{"model":"gemma4:e4b-it-q8_0","prompt":"ENRICH-OK","stream":false}' | head -c 80
+# vector-mode app (disposable HOME + its own ports, so it cannot disturb the operator session)
+HOME=$(mktemp -d) DISPLAY=:0 PROVIDENT_RETRIEVAL_EMBEDDER=vector PROVIDENT_EMBEDDING_PROVIDER=ollama \
+PROVIDENT_EMBEDDING_BASE_URL=http://127.0.0.1:11434 PROVIDENT_EMBEDDING_MODEL=embeddinggemma \
+npx electron . --no-sandbox --disable-dev-shm-usage --mcp-transport=http --mcp-port=3788 \
+  --retrieval-embedder=vector --remote-debugging-port=9223 --disable-gpu
+# gnosis engine with the embedding leg
+GNOSIS_SERVER_OLLAMA_URL=http://127.0.0.1:11434 GNOSIS_SERVER_OLLAMA_MODEL=embeddinggemma \
+  ../Gnosis/target/debug/gnosis-server --port 8080
+curl -s http://127.0.0.1:8080/engine/status
+# NOTE on the four retrieval modes over the engine's POST /rag/query: currently IGNORED
+# (see docs/defects.md GNOSIS-ENGINE-QUERY-MODE-IGNORED); GET /rag/stream honors them.
+```
+> **Launcher gotcha (cost this pass real time):** `scripts/start-app.sh` runs
+> `npm run build` INSIDE the launcher, so a restart can load a half-written
+> `dist/renderer/renderer.js`; and a stale Electron instance keeps CDP + the MCP
+> port bound, so a probe silently drives the OLD bundle. **Rebuild first, then
+> start, and verify the EXECUTING bundle** (compare the served `renderer.js` with
+> the on-disk file) before trusting a live verdict.
+
 ---
 
 ## 2. How to drive the MCP server
