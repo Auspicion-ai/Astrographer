@@ -11,7 +11,20 @@ requests. NEVER patch the engine.
 
 ## OPEN handoff items
 
+**HANDOVER DOCUMENT (2026-09-16): `docs/feature-requests/gnosis-engine-feature-requests.md`** — the
+consolidated **feature-request set for the Gnosis engine project** (GR-1..GR-9): the two P0 query-route
+defects (GR-1 the F2 envelope / masked 400, GR-2 `mode`+`topK` ignored), the vector-index build (GR-3), the
+**bulk projection-snapshot route with a monotonic revision** (GR-4) and the **store-change notification
+route** (GR-5) — the two routes that let the engine become the store source without the shell ever calling
+the store interface — plus the parked destination items (GR-6 bulk markdown ingestion with atomicity + cap +
+progress/cancel, GR-7 server-side persistence, GR-8 enrichment/traversal routes, GR-9 the machine-caller
+authority contract). Each request carries the live repro evidence, the proposed wire shape, testable
+acceptance criteria, the downstream impact and a priority. The items below remain the per-defect index.
+
+
 **GNOSIS-ENGINE-QUERY-MODE-IGNORED (2026-09-15, filed by the vector/graph-enrichment live pass) — HANDOFF to the Gnosis repo (NOT `provident-ssr`).** The `gnosis-server`'s `POST /rag/query` drops the caller's retrieval `mode` and `topK`: it decodes only `payload.query` and calls `store.rag_query(&query, &RagQueryOptions::default())`, so `Flat`/`Vector`/`Graph`/`Hybrid` all return byte-identical results with `trace.Flat.mode="Flat"` + `top_k:10` (live proof: the same two results `n1` 2.6384988372299447 / `n2` 0.5897495348410585 for all four modes; `topK 3` vs `5` identical). The sibling `GET /rag/stream` handler DOES honor both (`mode=vector` → a `vector_index_unavailable` SSE error; `mode=graph` → a `Graph` trace), so the fix shape already exists in the same file (`../Gnosis/src/bin/gnosis_server.rs` `rag_query_handler` ~`:156` vs `rag_stream_handler` ~`:188`). Full row + repro: `docs/defects.md` → **GNOSIS-ENGINE-QUERY-MODE-IGNORED**. It blocks the app's gnosis **graph/vector/hybrid** retrieval parity over the engine's POST query endpoint (the app's own local `rag.query` legs are unaffected). **Do NOT patch the Gnosis repo from this project.**
+
+**GNOSIS-ENGINE-ENRICHMENT-SURFACE-ABSENT (2026-09-15, same pass) — HANDOFF to the Gnosis repo.** (a) `GET /rag/stream?mode=vector` answers `event: error / data:{"code":"vector_index_unavailable","message":"vector index is not built"}` even though `/engine/status` reports `vector:true, embedding:true` — the embedding PROVIDER is wired (`OllamaProvider`) but the server's store never builds/adopts a vector index, so the vector leg is unreachable; (b) nine probed traversal/community/**enrichment** paths (`declareCommunity`/`updateCommunitySummary`/`resolveEntities`/`mergeFacts` — the surfaces the parked F4-LLM integration would drive) answer **404** — the enrichment surfaces are not routed. Full rows + repro: `docs/defects.md` → **GNOSIS-ENGINE-ENRICHMENT-SURFACE-ABSENT** (and **GNOSIS-ENGINE-QUERY-MODE-IGNORED** above). See also `docs/specs/gnosis-enrichment-live-report-2026-09-15.md`.
 
 **NONE (against `provident-ssr` / Provident-Electron)** — every engine/foundation gap filed against the upstream project has
 been resolved upstream (`provident-ssr` 0.4.0/0.4.1) or made obsolete by the

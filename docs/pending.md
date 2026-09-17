@@ -94,3 +94,22 @@ dir and do not ship in a fork (see `docs/FORKER.md` §1/§5).
 | **GUI audit panel (the `rag-query-audit` IPC + the D4-parity audit panel)** | 2026-09-08 | Parked from Unit X (RAG-surface provenance + multi-hop traversal). Unit X landed the query-audit LOG (`src/main/query-audit.ts` — `createQueryAuditLog` + the shared in-memory ring buffer) + the MCP `get_query_audit_log` tool + the `rag-query` IPC threading the SAME audit log through `handleRagTool`/`handleRagQueryIpc` (spec §5.7). The GUI AUDIT PANEL (the D4-parity UI surface that renders the `getQueryAuditLog` entries — `query`, `filters`, `mode`, `resultCount`, `timestamp`, `requester`) and its `rag-query-audit` IPC channel are NOT implemented — a parked GUI item. **Revisit condition:** a GUI audit-panel use case surfaces (a human/operator wants to inspect the query-audit log in the app UI, not just via the MCP tool). **RE-PARKED 2026-09-11 (user directive):** explicitly deferred in the UI overhaul (`docs/specs/ui-overhaul.md` §5.1 PG6) — the panel is parked until a real GUI audit use case surfaces; the MCP tool stays.|
 | **Gnosis mapping for document directories (directory → `wiki`)** | 2026-09-11 | Parked by the document-directory/category gate (Q6, `docs/specs/document-directory-category-review.md` §4): directories stay LOCAL metadata in v1 — a Gnosis wiki is a flat single-parent bucket with a single-string tag filter (`engine-crud-rag-store.ts:93-98,108,121-132`), so a local tree cannot round-trip. **Revisit condition:** the Gnosis CRUD wire/engine gains nested structure or the sync needs a wiki per top segment; map only the top segment and document the loss. |
 | **Document path rename op** | 2026-09-11 | Parked by the document-directory/category gate (Q8, M9): `documentPath` is import-minted and immutable in v1. A rename is a later unit with its own id/edge-rewrite contract (it changes a document root's `documentId`, so it must rewrite the doc-flow/`documentIds` references). **Revisit condition:** an operator/agent needs to move or rename an imported document. |
+
+## PARKED DESTINATION — the engine track (ARCH-GNOSIS-OFFLOAD O-6/O-7/O-8, 2026-09-16)
+
+The proposal gate (`docs/specs/gnosis-offload-review.md`, verdict PROCEED-WITH-AMENDMENTS) DEMOTED the
+engine-owns-document-handling ask to this parked track. These are **NOT shell units** and must not be
+sequenced as prerequisites for the scheduled shell work.
+
+| Item | What it is | Revisit trigger (external facts, not preferences) | Recorded constraints |
+| --- | --- | --- | --- |
+| **O-6 — query onto the engine** | route `rag.query` traffic to the engine's `/rag/query` with streamed results | the parked track is scheduled (below) | blocked by `HOST-ENGINE-QUERY-POST-NO-ENVELOPE` + `GNOSIS-ENGINE-QUERY-MODE-IGNORED` + result-shape parity (`ranked/context/markdown/lineMap/k` are missing engine-side) |
+| **O-7 — ingestion onto the engine** | engine-side markdown parse + doc-flow validate + bulk/batch-atomic ingest with progress/cancel/cap | the parked track is scheduled | the engine has NO markdown parser, NO bulk route, NO progress contract, and NO persistence; the shell's single atomic `applyBatch` + 512-file fail-loud cap + one-shot `IPC_IMPORT_RESULT` would all need engine equivalents (`BATCH-ATOMICITY-API`) |
+| **O-8 — authority switch / offline dual-path** | who owns the persisted corpus during/after a cutover; split-brain + offline-write reconciliation | **PREREQUISITE** of the track, not a tail unit | `SINGLE-WRITER-STORE`'s "main process owns all writes" clause must be amended there; the operator's existing local store + `--user-data-dir`/settings persistence (`SETTINGS-PERSIST-WRITE-SILENT`) must be addressed |
+
+**Track trigger (any one):** (a) a multi-user / remote-corpus requirement exists (the `pending.md`
+revisit condition — a declared network); (b) the operator corpus exceeds the local store's measured
+ceiling (a node-count threshold pinned by O-0's census); or (c) O-0 shows the derivation WALK ITSELF
+(not compile/emit/layout) exceeds the budget — the only case where an engine-side derive is the right
+lever. **Also parked with a precondition:** making the `RagStore` read surface ASYNC (today it is
+synchronous, and it stays that way for the scheduled work).

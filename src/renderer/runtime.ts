@@ -1045,6 +1045,27 @@ export class Runtime {
   // ---- internal teardown helpers -----------------------------------------
 
   private tearDownGraph(): void {
+    // F-2 / STALE-MOUNT-PUSHES-CANVAS (2026-09-16) — the previous graph's
+    // `#wiki-root` ELEMENT outlives its node: `loadEnvelope` replaces the
+    // supervisor, so the old root is never destroyed and its element stays in
+    // the mount as an in-flow grid box (a childless `#wiki-root` with a real
+    // height, pushing the live canvas — and the whole app — half-way down the
+    // page every time the app graph is re-assembled). Drop every element that
+    // carries a graph ROOT id BEFORE the new render; the diff-based render can
+    // only remove elements it tracks, and a root owned by a discarded
+    // supervisor is untracked by definition.
+    try {
+      const mountEl = this.mount as unknown as { querySelectorAll?: (s: string) => ArrayLike<{ remove?: () => void; parentElement?: unknown }> }
+      if (mountEl && typeof mountEl.querySelectorAll === 'function') {
+        for (const stale of Array.from(mountEl.querySelectorAll('#wiki-root'))) {
+          const parent = (stale as { parentElement?: { removeChild?: (c: unknown) => void } }).parentElement
+          if (parent && typeof parent.removeChild === 'function') parent.removeChild(stale)
+          else if (typeof stale.remove === 'function') stale.remove()
+        }
+      }
+    } catch {
+      // fail-soft — a missing/stale mount surface must never break a teardown
+    }
     // Destroy EVERY in-tree non-root node (family children + content-owned),
     // not just the root's direct children — otherwise they linger as
     // resolvable `unplaced` ghosts (the adversarial A2 fix). Use the destroy

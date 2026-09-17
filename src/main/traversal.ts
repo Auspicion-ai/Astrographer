@@ -145,9 +145,16 @@ function renderEnvelopeMarkdown(envelope: LegacyInitialData): string {
  *  are subtracted by the caller (`assignSubtreeRanges`) so each subtree's OWN
  *  line count is isolated. */
 function renderSubtreeMarkdown(subtree: LegacyNodeData, templateRoot: LegacyNodeData): string {
+  // DUPLICATE-MATERIALIZATION FIX (2026-09-16): only a PAYLOAD ROOT carries the
+  // zone `targetPlacement` in the delivered envelope (a nested subtree is
+  // reached through its owner's route — see buildSubtree). The line map, however,
+  // must still MEASURE every subtree's rendered lines, so the standalone
+  // measurement re-adds the placement anchor on a CLONE (never on the delivered
+  // envelope) before rendering it into the zone.
+  const measured: LegacyNodeData = { ...subtree, placement: { targetPlacement: ['main'] } }
   const miniEnvelope: LegacyInitialData = {
     template: { root: templateRoot },
-    content: [{ content: [subtree] }],
+    content: [{ content: [measured] }],
     clientConfig: { runInstantiation: true, runRendering: true },
   }
   return renderEnvelopeMarkdown(miniEnvelope)
@@ -373,7 +380,15 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
     // The `seen` set (per recursion path) breaks a `doc-child` cycle
     // (defense-in-depth, §5.1 step 9 — the `validateDocFlow` `cycle` verdict
     // already falls back to family pre-order, so this never throws).
-    const buildSubtree = (ragId: string, seen: Set<string>): LegacyNodeData => {
+    // DUPLICATE-MATERIALIZATION FIX (2026-09-16): `placed` marks the subtree
+    // that is emitted as ITS OWN payload root — that one must carry the zone
+    // `targetPlacement` (it is the route into the zone). A NESTED subtree is
+    // reached through its owner's route, so it must NOT announce a second
+    // `content` anchor for the same zone: two anchors made the path
+    // enumeration mint TWO routes for the same node (one via the section, one
+    // via the nested child), and the render emitted the child twice (once
+    // nested, once as a zone-level sibling) — the user-visible duplicate).
+    const buildSubtree = (ragId: string, seen: Set<string>, placed: boolean): LegacyNodeData => {
       materialized.add(ragId)
       const node = nodeById.get(ragId)!
       const children: LegacyNodeData[] = []
@@ -385,7 +400,9 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         for (const dc of docChildren) {
           if (seen.has(dc.target)) continue
           seen.add(dc.target)
-          children.push(buildSubtree(dc.target, seen))
+          // a NESTED doc-child subtree is reached through its owner's route —
+          // never an independent zone announcement (the duplicate fix above)
+          children.push(buildSubtree(dc.target, seen, false))
           seen.delete(dc.target)
         }
       }
@@ -410,7 +427,7 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         // 0.4.0 content-XOR-children — the subtree root carries NO scalar
         // `content`; its body is the interleaved `text` + inline-span children
         // (built from the full-projection `content` + child offsets).
-        placement: { targetPlacement: [zoneName] },
+        ...(placed ? { placement: { targetPlacement: [zoneName] } } : {}),
         children: [
           // The node's body: bare `text` children interleaved with the inline
           // spans (strong/em/a/img) in document order (0.4.0 `text` child).
@@ -448,7 +465,7 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
     // section roles are treated as mutually exclusive; documented as known
     // behavior, not changed.
     for (const sectionId of sections) {
-      content.push({ content: [buildSubtree(sectionId, new Set())] })
+      content.push({ content: [buildSubtree(sectionId, new Set(), true)] })
     }
 
     // MULTI-PARENT-DUPLICATE: a non-section, non-doc-child RAG node with ≥2
@@ -477,7 +494,7 @@ export function buildTraversal(input: TraversalInput): TraversalResult {
         .map((e) => e.source)
       if (parents.length >= 2) {
         for (let i = 0; i < parents.length; i++) {
-          content.push({ content: [buildSubtree(node.id, new Set())] })
+          content.push({ content: [buildSubtree(node.id, new Set(), true)] })
         }
       }
     }

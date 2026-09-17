@@ -1201,7 +1201,13 @@ export function landingContent(input?: {
     type: 'div',
     props: { id: 'stage-landing', 'data-stage': 'landing' },
     children: [
-      { type: 'h2', content: stores.length > 0 ? 'Available wikis' : 'Getting started' },
+      // U-DEMO-BRANDING (2026-09-16, user report) — the app NAME lives in the
+      // top-bar nameplate (shell chrome) and the tagline DESCRIPTION lives
+      // HERE, on the landing page only, so neither costs canvas space on a
+      // normal document view.
+      { type: 'h2', content: 'Astrographer' },
+      { type: 'p', content: 'Local graph-RAG wiki — document, link, and retrieve your knowledge base.' },
+      { type: 'h3', content: stores.length > 0 ? 'Available wikis' : 'Getting started' },
       ...(items.length > 0
         ? [{ type: 'ul', children: items } as LegacyNodeData]
         : [{ type: 'p', content: 'No documents yet.' } as LegacyNodeData]),

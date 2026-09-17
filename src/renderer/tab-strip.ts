@@ -215,7 +215,13 @@ export class TabStrip {
     const mount = this.mount
     if (!mount) return
     try {
-      mount.textContent = ''
+      // U-DEMO-BRANDING (2026-09-16) — the top-bar row also hosts the app
+      // NAMEPLATE (`h1.app-nameplate`), which must SURVIVE every re-render.
+      // Remove only the strip's OWN nodes (`.tab` / `.tab-new`) instead of
+      // clearing the mount wholesale.
+      for (const stale of Array.from(mount.querySelectorAll('.tab, .tab-new'))) {
+        stale.remove()
+      }
       for (const id of this.state.order) {
         const entry = this.state.open.find((e) => e.id === id)
         if (!entry) continue
