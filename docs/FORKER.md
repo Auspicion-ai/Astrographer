@@ -21,10 +21,23 @@ is the active defect list. `docs/pending.md` + `docs/next-steps.md` are the
 trackers. Everything landed is documented there; the archived gates in
 `archive/` are historical rationale only.
 
+**Which of your chrome is upstream-standard vs forked?** Read
+`docs/FORK-DIVERGENCE.md` BEFORE assuming a shell capability is foundation —
+it tabulates every chrome/layout capability this fork added (regions + mount
+safety, the gesture controllers, the overlay frame, the theme token layer, the
+zone-track contract, the focus/tab model, the app-menu catalog), each with its
+implementing `file:line` and the SC-n request that justifies it. The requests
+themselves are `docs/feature-requests/provident-electron-shell-chrome-requests.md`
+(SC-1..SC-7, against Provident-Electron) and
+`docs/feature-requests/provident-ssr-expressibility-requests.md` (PS-1, against
+the upstream `provident-ssr` docs). A fork change that is a MECHANISM belongs in
+an SC-n request; app behavior stays in the fork.
+
 ## 2. The dependency map (what to install / where upstream specs live)
 
 - **`provident-ssr`** — the only runtime dependency, published on npm. `npm i
-  provident-ssr@^0.2.1`. It is fully self-contained (ESM). Its bundled type defs
+  provident-ssr@^0.5.0` (the version this repo pins in `package.json`). It is
+  fully self-contained (ESM). Its bundled type defs
   (`node_modules/provident-ssr/dist/**/*.d.ts`) + the SDK docs are the engine
   surface.
 - **`@modelcontextprotocol/sdk`** — the MCP server SDK.
@@ -57,14 +70,18 @@ groups, all in `docs/specs/mcp-endpoint.md` §3):
 | `provident.get_markdown` | read | simplified text-only output |
 | `provident.list_targets` | read | addressable node vocabulary |
 | `provident.get_node_state` | read | a node's resolved states |
+| `provident.get_journal` | read | the engine journal view (`Supervisor.journalEntries`, 0.5.0) |
+| `provident.focus` | dispatch | find-or-open / activate a main-focus tab (C14; UI focus only, no graph mutation) |
+| `rag.*` (`rag.query`, `rag.get_document`, `rag.list_nodes`, `rag.get_edges`, `rag.backlinks`, `rag.list_documents`, `rag-stream`, `get_query_audit_log`) | rag (OFF) | the RAG read surface (query/traversal/audit — Astrographer-specific) |
+| `edit.*` (`edit.set_content`, `create_node`, `delete_node`, `split_node`, `merge_node`, `set_edge`, `set_doc_meta`, `import_markdown`) | edit (OFF) | the mutating RAG edit ops (Astrographer-specific) |
 | `provident.load` / `op` / `export` / `validate` / `teardown` | graph (OFF) | envelope/doc/commands load, managed-channel ops, export, validate, teardown |
 | `provident.journal` | graph (OFF) | undo/redo/replay (journal reversibility) |
 | `provident.code.*` | code (OFF) | envelope authoring (get/set/create/delete/validate/load/loadBatch) |
 | `module.install` / `module.update` / `module.list` | module+code (OFF) | the extension system (see `docs/specs/module-feature-list.md`) |
 
-**Tool groups OFF by default:** `graph`, `code`, `module` — a human enables them
-via the manual-UI Settings pane (main process owns the gate; an agent can never
-self-grant).
+**Tool groups OFF by default:** `graph`, `code`, `module`, `rag`, `edit` — a human
+enables them via the manual-UI Settings pane (main process owns the gate; an agent
+can never self-grant).
 
 ## 4. Reshape digest — the "why" behind the current shapes (recoverable without the archive)
 

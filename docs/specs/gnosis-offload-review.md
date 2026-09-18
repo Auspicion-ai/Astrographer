@@ -20,11 +20,16 @@
   `docs/specs/rca-live-bugs-green-pipeline.md` (RCA-11/12);
   `docs/specs/user-flow-audit.md` (D-GP-UFA-1..4, §5.U, §6.1/§6.2);
   `docs/specs/user-flow-audit-checklist.md`; `AGENTS.md` items 3/4/8/9/10.
-- **Status:** **PROCEED-WITH-AMENDMENTS** (GATED 2026-09-16). The architecture
-  review's split is adopted as the gate's shape. **Nothing is delegated to a
-  TestWriter until §5's spec-gate checklist is fully satisfied, and no unit lands
-  before O-0's committed artifact exists.** Only this passing review PLUS the
-  user's go-ahead opens the spec gate.
+- **Status:** **PROCEED-WITH-AMENDMENTS** (GATED 2026-09-16); **USER GO-AHEAD
+  GIVEN 2026-09-17 → the SPEC GATE IS OPEN** (`docs/next-steps.md` CURRENT WORK,
+  2026-09-17; this verdict's own condition at `:523-524`). The architecture
+  review's split is adopted as the gate's shape. **O-0's spec-gate artifact has
+  LANDED** (`docs/specs/unit-o-0-per-stage-measurement.md`, 2026-09-17 — the
+  §5 checklist item 1 closed as a SPEC, not as a run: the committed measurement
+  artifact `docs/specs/unit-o-0-per-stage-breakdown.md` does NOT exist yet).
+  **Nothing is delegated to a TestWriter until §5's spec-gate checklist is fully
+  satisfied, and no unit lands before O-0's committed artifact exists.** Only this
+  passing review PLUS the user's go-ahead opens the spec gate.
 
 ---
 
@@ -304,7 +309,7 @@ marked **[MISSING]** are absent from the proposal as amended.
 
 | # | Prerequisite | Status |
 | --- | --- | --- |
-| 1 | **O-0's committed artifact** — the per-stage breakdown + the GPU control + the track ablation, recorded in a committed file with the run command, at operator corpus size, **plus the snapshot-pull/serialization stage** (A-4) | **[MISSING]** — O-0 is an intention, not an artifact. HARD PRECONDITION. |
+| 1 | **O-0's committed artifact** — the per-stage breakdown + the GPU control + the track ablation, recorded in a committed file with the run command, at operator corpus size, **plus the snapshot-pull/serialization stage** (A-4) | **[MISSING]** — O-0 is an intention, not an artifact. HARD PRECONDITION. **2026-09-17 UPDATE — the SPEC half is CLOSED:** `docs/specs/unit-o-0-per-stage-measurement.md` pins the report shape, the closed 11-stage id set (incl. the A-4 `snapshot.pull`/`snapshot.clone` stages), the 5 driver blocks, the GPU + ablation controls, the bundle-identity requirement and every fail-state. **The RUN half stays MISSING** — the artifact `docs/specs/unit-o-0-per-stage-breakdown.md` is not written, so this item is NOT satisfied for delegation purposes. |
 | 2 | **O-5's harness + pinned thresholds** — the budget number derived *from* O-0, with the harness's own node contract (report schema + `reconcileMatrixRows` + a can-fail proof) | **[MISSING]** — "the number is pinned after O-0" is not a pin; the node contract is unnamed. |
 | 3 | **The per-unit layer declaration** (envelope vs assembled) written into each *unit spec*, not only the umbrella §5 table | **PARTLY** — the proposal's table names "assembled layer" for O-1/O-2; O-9/O-10's layer and every unit's RCA-12 statement are unwritten. |
 | 4 | **The per-unit falsifiable, user-visible end state** (D-class + oracle + `realInput` proof), mapped to a §5.U matrix slot or an extended row (cap is full) | **[MISSING]** — §5's acceptance rows are prose ("doc open < budget"), not falsifiable oracles; no row/slot mapping exists. |
@@ -521,4 +526,40 @@ The now-spec work is **five units + one precondition** — O-1, O-2, O-5, O-9(+O
 O-10 — landing **O-0 → O-5 → O-9 → O-10 → O-1 → O-2**, each its own
 red→green→adversarial→live→blind-greens→doc-review cycle. O-6/O-7/O-8 are parked
 with the §8 bookkeeping. Only this passing review **plus the user's go-ahead** may
-proceed to the spec gate.
+proceed to the spec gate (see §11, the 2026-09-17 addendum).
+
+---
+
+## 11. ADDENDUM — user go-ahead + the spec-gate status (2026-09-17)
+
+**The user's go-ahead is GIVEN (2026-09-17).** The condition in §10's last sentence is
+therefore satisfied and the **spec gate is OPEN** for this track. Landing record:
+`docs/next-steps.md` CURRENT WORK (2026-09-17).
+
+**What opened, and what did NOT:**
+
+1. **O-0's spec-gate artifact LANDED** —
+   `docs/specs/unit-o-0-per-stage-measurement.md` (2026-09-17). It is the contract
+   this verdict's §2.1(a) demanded: a **harness deliverable with a contract on the
+   report shape**, not on app behavior; layer **`assembled-renderer`** by
+   construction; the report-shape schema + the closed stage-id set + the
+   **unseparated-never-imputed** rule + the GPU/ablation controls + the
+   executing-bundle identity + a **derived, never hard-coded** verdict string; a
+   **6-row §5.x property register** (P-IM/P-SM/P-TP, ≤8 cap, no padding) whose
+   property layer is a PURE module under `npm test` while the measurement itself
+   runs live; and the full state/fail-state enumeration.
+2. **§5 checklist item 1 is closed as a SPEC, not as a run.** The committed
+   measurement artifact (`docs/specs/unit-o-0-per-stage-breakdown.md`) does **not**
+   exist, so the **hard precondition stands in full**: **no other unit — O-5,
+   O-9(+O-3), O-10, O-1, O-2, O-4 — may be delegated** (§2.1(a) `:97-110`; §6
+   `:361-366`; A-1 `:400-402`).
+3. **No other checklist item moves.** Items 6 (**`SNAPSHOT-REVISION-AUTHORITY`**) and
+   the implementation of the `revision` field + stale-drop remain **OWED**
+   (`:312` here; `docs/specs/astrographer-scope-realignment-review.md:411` and `:417`)
+   — O-0 neither lands them nor depends on them.
+4. **No decision row is owed for O-0.** The zero-row ruling and its reason are
+   recorded in the O-0 spec §9: the ACTIVE row `DECIDED: ARCH-GNOSIS-OFFLOAD`
+   (`docs/decisions.md:24`) already pins O-0 as a hard precondition, the report-shape
+   re-scope, and the landing order. `docs/decisions.md` is unchanged by this pass.
+5. **The historical verdict above is UNCHANGED.** This addendum records the go-ahead
+   and the checklist status only; §1-§10 stand as the 2026-09-16 record.

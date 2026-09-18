@@ -34,6 +34,7 @@ import type { RagStore, RagNode, RagEdge, RagNodeChild } from './rag-store.js'
 import { validateDocFlow } from './doc-flow.js'
 import { translateLegacy, renderProducingProcess, MarkdownAdapter } from 'provident-ssr'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate } from './template-shape.js'
+import { getO0HookRecorder } from '../shared/o0-hook.js'
 import type {
   LegacyInitialData,
   LegacyNodeData,
@@ -323,6 +324,13 @@ function buildInterleavedChildren(ragId: string, content: string, children: RagN
 }
 
 export function buildTraversal(input: TraversalInput): TraversalResult {
+  // §3.6 (the measurement-only hook allowance) — the recorder brackets the
+  // EXISTING body below and is INERT WHEN UNARMED (a pure pass-through: no mark,
+  // no measure, no record, no control-flow change). No work is reordered, added
+  // or removed: `buildTraversalBody` is the unchanged body, moved verbatim.
+  return getO0HookRecorder().record('traversal.build', () => buildTraversalBody(input))
+}
+function buildTraversalBody(input: TraversalInput): TraversalResult {
   if (
     input == null ||
     input.store == null ||

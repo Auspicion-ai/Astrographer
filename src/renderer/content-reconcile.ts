@@ -16,6 +16,7 @@
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
 import { plainRagId } from './cross-document-shared.js'
 import { EDITOR_TOOLBAR_ID } from './pane-graph.js'
+import { getO0HookRecorder } from '../shared/o0-hook.js'
 
 /** A previously materialized content root, carrying its subtree so the
  *  full-subgraph fallback can compare shapes. The previous roots are passed as
@@ -419,6 +420,13 @@ export function reconcileContentRoots(input: ReconcileInput): ReconcileResult {
  *  (shape-compared always, cssId-keyed, `documentId: ''`) and are never
  *  attributed to a document (F7). */
 export function reconcileDocumentRoots(input: NRootReconcileInput): NRootReconcileResult {
+  // §3.6 (the measurement-only hook allowance) — the recorder brackets the
+  // EXISTING body below and is INERT WHEN UNARMED (a pure pass-through: no mark,
+  // no measure, no record, no control-flow change). No work is reordered, added
+  // or removed: `reconcileDocumentRootsBody` is the unchanged body, verbatim.
+  return getO0HookRecorder().record('reconcile.roots', () => reconcileDocumentRootsBody(input))
+}
+function reconcileDocumentRootsBody(input: NRootReconcileInput): NRootReconcileResult {
   if (input == null || input.next == null || !Array.isArray(input.next)) {
     throw new Error('reconcileDocumentRoots: next envelopes array required')
   }

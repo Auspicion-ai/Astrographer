@@ -401,4 +401,5 @@ as row verdicts.
    pass recorded in `archive/reviews/2026-09-15-user-flow-audit-doc-review.md`. The
    runner's own evidence above is unchanged; only the tracker/report text was
    reconciled. **NEW-2's trigger and NEW-4's harness caveat are now recorded in the
-   OPEN F-2 row.**
+   F-2 row, which is now FIXED + LIVE-CONFIRMED** (`docs/defects.md`, the F-2 row —
+   the fix is the `Runtime.tearDownGraph` `#wiki-root` mount sweep).

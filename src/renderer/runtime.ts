@@ -64,6 +64,17 @@ import type {
 import type { TranslatedWarning } from 'provident-ssr/core/translate.js'
 import { handlerDef, compileHandlerBody } from 'provident-ssr/core/registry.js'
 import type { CapabilityRouter } from './extensions.js'
+import { getO0HookRecorder } from '../shared/o0-hook.js'
+
+// §3.6 (the measurement-only hook allowance) — the renderer's handle to the
+// app-wide O-0 recorder the five instrumented call sites share. The driver's
+// page-side hook (`window.__o0`, installed by `scripts/live-drive.mjs`) ARMS it;
+// a refused/absent arm leaves the five stages `unseparated`, never a silently
+// measured value. While unarmed the recorder is a pure pass-through, so this
+// handle changes no behavior (and it is never a measurement itself).
+if (typeof window !== 'undefined' && window !== null) {
+  ;(window as unknown as Record<string, unknown>).__o0recorder = getO0HookRecorder()
+}
 
 export interface RuntimeOptions {
   mount: HTMLElement
@@ -478,9 +489,22 @@ export class Runtime {
    *  v1 (A3). Content-only for document roots; pane re-attachment is the host's
    *  (U-STATE-1c). */
   applyContentReconcile(input: ApplyReconcileInput): ApplyReconcileReport {
-    if (input == null || input.result == null || input.next == null) {
-      throw new Error('applyContentReconcile: result/next required')
-    }
+    // §3.6 (the measurement-only hook allowance) — the recorder brackets the
+    // EXISTING work (the guard below + the whole body) and is INERT WHEN UNARMED
+    // (a pure pass-through: no mark, no measure, no record, no control-flow
+    // change). No work is reordered, added or removed: the guard still runs first
+    // and `applyContentReconcileBody` is the unchanged body, moved verbatim.
+    return getO0HookRecorder().record('reconcile.apply', () => {
+      if (input == null || input.result == null || input.next == null) {
+        throw new Error('applyContentReconcile: result/next required')
+      }
+      return this.applyContentReconcileBody(input)
+    })
+  }
+
+  /** U-STATE-1b — the unchanged `applyContentReconcile` body (the §3.6 hook wraps
+   *  it; the guard stays in the wrapper, inside the recorded span). */
+  private applyContentReconcileBody(input: ApplyReconcileInput): ApplyReconcileReport {
     const warnings: string[] = []
     const applied: string[] = []
     const nextById = new Map<string, LegacyNodeData>()

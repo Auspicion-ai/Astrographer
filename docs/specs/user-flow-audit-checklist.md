@@ -58,7 +58,7 @@ surfaces: `unit-u-shell-1-layout-zones.md` … `-9b-cross-document-shared.md`,
 > `.pane-frame`), **F-2 WIKI-ROOT-MOUNT-LEAK** (high — **7 `#wiki-root` mounts / 6 stale**,
 > page ≈209 473px on the running store; the trigger is now measured: the empty↔filled
 > pane-set transition, +1 mount each way), **F-3 EMPTY-ZONE-TRACK-NOT-COLLAPSED** (medium).
-> **F-1 and F-3 are FIXED + LIVE-CONFIRMED**; **F-2 is OPEN**.
+> **F-1, F-2 and F-3 are FIXED + LIVE-CONFIRMED** (F-2 via the `tearDownGraph` `#wiki-root` mount sweep, 2026-09-16 — see the F-2 row in `docs/defects.md`).
 > **(c) Row coverage is 24 rows executed this pass** — the **8 §5.U matrix rows**
 > (U-1..U-8: 6 PASS / 1 FAIL (U-4, F-2) / 1 PARKED (U-7, harness precondition)) plus the
 > **14 `ROW_EXTENDED` rows + 2 further checklist rows the driver also emitted**
@@ -66,6 +66,13 @@ surfaces: `unit-u-shell-1-layout-zones.md` … `-9b-cross-document-shared.md`,
 > 3 PASS / 10 FAIL / 3 PARKED**). The rows still not driven, and the reason each is
 > uncovered, are enumerated in the §6.1 report §3 (`docs/next-steps.md` CURRENT WORK
 > has the queue).
+> **U-4 STATUS UPDATE (2026-09-17):** the U-4 **FAIL** above was the **2026-09-15 PRE-FIX
+> run** — the F-2 mount leak is **NOW FIXED** (the `Runtime.tearDownGraph` `#wiki-root`
+> mount sweep, `src/renderer/runtime.ts:1047-1068`, 2026-09-16); the U-4 FAIL verdict and
+> the 7-mount / ≈209 473px numbers are retained here as **historical provenance** for the
+> pre-fix build. The remaining owed item is a live **U-4 row re-run against the CURRENT
+> build** (`singleRootMountAndStageInViewport` on the current `dist/`), **not an open
+> defect** — see the F-2 row in `docs/defects.md`.
 > **NOTE — this block is the current status for the ROWS BELOW:** several row cells still
 > read `confirmed defect` / `NONE` from the first run. Moved to live **PASS** this pass:
 > `UF-PANES-1/8/10`, `UF-TABS-1/3/4/7`, `UF-LAYOUT-10`, `UF-SETTINGS-1/2/3/4/5/7`,

@@ -10,6 +10,7 @@ import type { EngineRagResult, HealthReport, ConflictError } from '../main/engin
 import type { Document, DocumentList, Wiki } from '../main/engine-crud-rag-store.js'
 import type { PaneRegistry, PaneDefinition, PaneContext } from './pane-registry.js'
 import { clickableClasses } from './render-shared.js'
+import { getO0HookRecorder } from '../shared/o0-hook.js'
 import {
   HOVER_PREVIEW_ENTER_BODY,
   HOVER_PREVIEW_ENTER_HANDLER,
@@ -327,6 +328,13 @@ function zoneMirrorClasses(paneCount: number, minimized: boolean, revealed: bool
  *  `zone:<name>` container producer (W2-Q3); panes are placed into their zone
  *  in `PaneLayoutEntry.order` (spec §2.6 pin 3). PURE. */
 export function assembleAppGraphEnvelope(input: AppGraphAssemblyInput): AppGraphAssemblyResult {
+  // §3.6 (the measurement-only hook allowance) — the recorder brackets the
+  // EXISTING body below and is INERT WHEN UNARMED (a pure pass-through: no mark,
+  // no measure, no record, no control-flow change). No work is reordered, added
+  // or removed: `assembleAppGraphEnvelopeBody` is the unchanged body, verbatim.
+  return getO0HookRecorder().record('envelope.assemble', () => assembleAppGraphEnvelopeBody(input))
+}
+function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAssemblyResult {
   if (
     input == null ||
     input.registry == null ||

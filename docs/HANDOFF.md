@@ -26,13 +26,36 @@ acceptance criteria, the downstream impact and a priority. The items below remai
 
 **GNOSIS-ENGINE-ENRICHMENT-SURFACE-ABSENT (2026-09-15, same pass) — HANDOFF to the Gnosis repo.** (a) `GET /rag/stream?mode=vector` answers `event: error / data:{"code":"vector_index_unavailable","message":"vector index is not built"}` even though `/engine/status` reports `vector:true, embedding:true` — the embedding PROVIDER is wired (`OllamaProvider`) but the server's store never builds/adopts a vector index, so the vector leg is unreachable; (b) nine probed traversal/community/**enrichment** paths (`declareCommunity`/`updateCommunitySummary`/`resolveEntities`/`mergeFacts` — the surfaces the parked F4-LLM integration would drive) answer **404** — the enrichment surfaces are not routed. Full rows + repro: `docs/defects.md` → **GNOSIS-ENGINE-ENRICHMENT-SURFACE-ABSENT** (and **GNOSIS-ENGINE-QUERY-MODE-IGNORED** above). See also `docs/specs/gnosis-enrichment-live-report-2026-09-15.md`.
 
-**NONE (against `provident-ssr` / Provident-Electron)** — every engine/foundation gap filed against the upstream project has
+**FORMERLY NONE (against `provident-ssr` / Provident-Electron)** — **until 2026-09-17** this
+section read "NONE": every engine/foundation gap filed against the upstream project had
 been resolved upstream (`provident-ssr` 0.4.0/0.4.1) or made obsolete by the
 0.4.x design changes. The former OPEN rows (ENG-INLINE-ORDER,
 ENG-BODYRUNS-WIRE-REF-PATHSTATE, ENG-DESTROY-PLACEMENT-ANCHOR-RESIDUE,
 ENG-SUPERVISOR-HOOK-ACCUMULATION) now live in the
 `## SHELVED / CLOSED` table below; HOST/U1-ENG resolved via upstream
 `BOOLEAN-ATTRS` in `provident-ssr@0.5.0` (see `## RESOLVED / CLOSED`).
+
+**UPSTREAM INDEX UPDATE (2026-09-17) — the OPEN FOUNDATION SET is no longer NONE.** The
+scope-realignment proposal gate (`docs/specs/astrographer-scope-realignment-review.md`,
+PROCEED-WITH-AMENDMENTS, doc-only) landed the **shell-chrome / expressibility** request set:
+**SC-1 SHELL-CHROME-REGION-CONTRACT (P1)**, **SC-2 GESTURE-CONTROLLER (P1)**, **SC-3
+OVERLAY-FRAME-PRIMITIVE (P1)**, **SC-4 THEME-TOKEN-LAYER (P1)**, **SC-5 ZONE-TRACK-CONTRACT
+(P1)**, **SC-6 FOCUS-TAB-SEAM (P2)**, **SC-7 MENU-CATALOG-CONTRACT (P2)** in
+`docs/feature-requests/provident-electron-shell-chrome-requests.md` (target: the
+**Provident-Electron foundation**, `../Provident-Electron/`), plus **PS-1
+SHELL-MECHANICS-EXPRESSIBILITY-MATRIX (P2)** in
+`docs/feature-requests/provident-ssr-expressibility-requests.md` (target: the **upstream
+Preempt-Providence docs** — NOT a package patch). Each request carries its filing verdict /
+priority, its target project and its **fallback if upstream declines**; the per-request rows
+(priority / requested interface / fallback / revisit condition) are indexed in
+`docs/pending.md` §"UPSTREAM foundation requests". This follows the **GR-1..GR-9 precedent**:
+a request doc indexed from this HANDOFF document, **never** a package patch, **never** a
+`docs/defects.md` row set. The upstream-vs-fork delta that motivates the set (upstream ships
+no layout grid/zones/gutters/tabs/modal/theme tokens/application menu) is recorded in
+`docs/FORK-DIVERGENCE.md`. **Do NOT patch `node_modules/provident-ssr/` or
+`../Provident-Electron/` from this project.** **Filing verdicts:** SC-1..SC-7 FILE (P1/P1/P1/P1/P1/P2/P2);
+PS-1 FILE against upstream docs (P2); the DO-NOT-FILE list is
+`docs/specs/astrographer-scope-realignment-review.md` §5.2.
 
 **HANDOFF update (2026-09-12, Wave-2 Q14 → RESOLVED):** filed **ENG-JOURNAL-ENTRY-READ-API** (journal introspection). **RESOLVED upstream in `provident-ssr@0.5.0` (2026-09-12):** `Supervisor.journalEntries(opts?): JournalView` ships the sanitized, JSON-safe reader (`JournalEntryView {index,kind,status}` + `fromIndex`/`totalEntries`/`truncated`/`undoDepth`/`redoDepth`/`basePresent`/`undoBaseBoundary`/`undoTopKind?`/`redoTopKind?`/`maxJournalLength?`; window `afterIndex?`/`limit?` clamped `[1,1000]`). Upgrade verified (typecheck 0, build OK, 171 files / 3989 pass + 46 skip). The host consumes it via the **re-scoped U-JR1** `provident.get_journal` tool; **U-EDIT-2** is unblocked on the engine read surface (the C16-consumption ruling still applies). See `DECIDED: JOURNAL-READ-VIA-PACKAGE`.
 

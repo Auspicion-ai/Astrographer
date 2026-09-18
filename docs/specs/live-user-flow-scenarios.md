@@ -23,8 +23,12 @@ CDP `:9222`) — the corpus was seeded (`edit.import_markdown` of `.live-corpus/
 > retained as the reproduced-finding record. Live deltas from the wider pass:
 > **F-1 PANE-BODY-GESTURE-SWALLOWED** (NEW, high — a real click on any clickable row
 > INSIDE an app-graph pane is retargeted to `.pane-frame`, so the doc-nav/search rows are
-> inert to a real user), **F-2 WIKI-ROOT-MOUNT-LEAK** (NEW, high — duplicate `#wiki-root`
-> mounts on an empty↔filled pane-set transition), **F-3 EMPTY-ZONE-TRACK-NOT-COLLAPSED**
+> inert to a real user), **F-2 WIKI-ROOT-MOUNT-LEAK** (**FIXED +
+> LIVE-CONFIRMED 2026-09-16** — as observed 2026-09-15: NEW, high, duplicate `#wiki-root`
+> mounts on an empty↔filled pane-set transition; the fix is the `Runtime.tearDownGraph`
+> `#wiki-root` mount sweep, `src/renderer/runtime.ts:1047-1068`, recorded in the F-2 row at
+> `docs/defects.md` and live-confirmed via `STALE-MOUNT-PUSHES-CANVAS` — the original
+> observation is retained as history), **F-3 EMPTY-ZONE-TRACK-NOT-COLLAPSED**
 > (NEW, medium) — all three recorded in `docs/defects.md`; **seven** of the eight LIVE-UF
 > defects below (LIVE-UF1/5/6/7/8/9/10) were re-confirmed unchanged on the widened run,
 > while **LIVE-UF2 (`user2_pane_drag`) was CONTRADICTED and is now FIXED +

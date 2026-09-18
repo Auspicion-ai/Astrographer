@@ -75,6 +75,7 @@ import {
   type SharedCommitWarning,
 } from './cross-document-shared.js'
 import { buildTraversal, type CrosslinkWiring } from '../main/traversal.js'
+import { getO0HookRecorder } from '../shared/o0-hook.js'
 import { HoverPreviewController } from './hover-preview.js'
 import { createSnapshotStore } from '../main/adjacency.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE, type ContentWindowTemplate, type TemplateVerdict } from '../main/template-shape.js'
@@ -1490,8 +1491,15 @@ export class SidebarPanes {
    *  (`collapsedOwnersBoxes`) is applied. PURE w.r.t. the input (the decorator
    *  deep-copies); no RAG node gains a stored flag. */
   private decorateShared(envelope: LegacyInitialData): LegacyInitialData {
-    const owners = buildOwnersMap(this.lastSnapshot?.edges ?? [])
-    return applySharedSubtreeDecoration(envelope, owners, this.collapsedOwnersBoxes)
+    // §3.6 (the measurement-only hook allowance) — the recorder brackets the
+    // EXISTING two statements and is INERT WHEN UNARMED (a pure pass-through: no
+    // mark, no measure, no record, no control-flow change). No work is reordered,
+    // added or removed: the two statements are unchanged, and the 4 call sites
+    // stay 4 (each call site is one recorded span, summed by the aggregation).
+    return getO0HookRecorder().record('shared.decorate', () => {
+      const owners = buildOwnersMap(this.lastSnapshot?.edges ?? [])
+      return applySharedSubtreeDecoration(envelope, owners, this.collapsedOwnersBoxes)
+    })
   }
 
   /** Assemble the pane-inclusive app-graph envelope from a traversal envelope

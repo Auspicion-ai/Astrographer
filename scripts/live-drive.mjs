@@ -21,9 +21,10 @@
 // A block prints `PASS`/`FAIL` and the run exits non-zero on any FAIL. Blocks
 // needing a missing component (vector/gnosis backends) report PARKED (never FAIL).
 import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync } from 'node:fs'
+import { mkdir as mkdirAsync, writeFile as writeFileAsync } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -119,6 +120,13 @@ class CDP {
   /** Enable the MCP tool groups via the renderer security bridge (default-off
    *  groups on a fresh boot expose only read+dispatch otherwise). */
   async enableGroups(groups) {
+    // §3.6 (the repo ENV NOTE, docs/live-testing.md:119-124) — the O-0 bundle
+    // identity compares the SERVED `renderer.js` against the on-disk file via
+    // `Page.getResourceContent`, which REFUSES with `Page.getResourceContent:
+    // Agent is not enabled` unless the Page domain is enabled first. Enabling the
+    // domain adds no DOM work and no measurement effect; without it every O-0
+    // run's `driver.build.verified` is false (F2) for a HARNESS reason.
+    try { await this.send('Page.enable') } catch (e) { /* the identity check then reports itself unreadable (F2) */ }
     return this.evaluate(`window.provident.security.set({groups:${JSON.stringify(groups)}}).then((s)=>JSON.stringify(s))`)
   }
 }
@@ -471,6 +479,801 @@ function rowResult(row, assertion, dclass, evidence, opts = NO_EXTRA_FIELDS) {
  *  gesture) — its call sites are marked `[DIAG]`, and it feeds no verdict. */
 async function ufNativeClickDiag(h, selector) {
   return h.cdp.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return 'not-found';e.click();return 'native-click'})()`)
+}
+
+// ===========================================================================
+// UNIT O-0 — PER-STAGE FREEZE MEASUREMENT (PRECONDITION ARTIFACT)
+// Contract: docs/specs/unit-o-0-per-stage-measurement.md
+//   §2.1 the measured quantity (main-thread long-task total in the window + the
+//        DOM mutation count + the wall time), §2.2 the CLOSED 11-stage set,
+//        §2.3 the two hit-tested gestures, §2.4 the GPU control + track ablation,
+//   §3.1 the 5 closed `o0_*` blocks, §3.3 the pinned flags, §3.4 the seed,
+//        §3.6 the bundle identity + the inert measurement-only hook,
+//   §4 the report shape + the DERIVED verdict (never hard-coded), §6 F1..F10.
+//
+// LAYER (RCA-12): assembled-renderer — every number here comes from the EXECUTING
+// `dist/` bundle driving a real CDP gesture against a real Electron renderer. The
+// node twin of this contract is the PURE module `src/shared/o0-report.ts` (pinned
+// by tests/unit-o-0-report-contract.test.ts); the formulas below mirror it, and
+// §5's property layer is what keeps the two honest (schema-green ≠ app-green).
+// ===========================================================================
+const O0_ARTIFACT_ID = 'o-0-per-stage-breakdown'
+const O0_ARTIFACT_DOC = 'docs/specs/unit-o-0-per-stage-breakdown.md' // §4.1
+const O0_SPEC_PATH = 'docs/specs/unit-o-0-per-stage-measurement.md' // §4.2
+const O0_SEED = 'o0-2026-09-17' // §3.4 — the RECORDED constant, never a random value
+const O0_OPERATOR_DOCUMENTS = 226 // §3.4 — the operator corpus census
+const O0_STAGE_IDS = [
+  'snapshot.pull', 'snapshot.clone', 'docheads.pull', 'traversal.build', 'envelope.assemble',
+  'shared.decorate', 'reconcile.roots', 'reconcile.apply', 'render.dom', 'render.ssr', 'post.style',
+]
+const O0_STAGE_COUNT = O0_STAGE_IDS.length // 11 (§8.1)
+const O0_BLOCK_NAMES = ['o0_folder_row', 'o0_document_row', 'o0_gpu_control', 'o0_track_ablation', 'o0_repeat_determinism']
+const O0_REQUIRED_ROW_FIELDS = ['id', 'block', 'gesture', 'target', 'path', 'stageCount', 'stages', 'longTasks', 'longTaskTotalMs', 'mutations', 'wallMs', 'gpu', 'trackAblation', 'bundleVerified', 'pass', 'failReasons']
+const O0_DOCNAV = '#pane-doc-nav'
+const O0_FOLDER_SELECTOR = `${O0_DOCNAV} [data-folder-path]` // §2.3 (the v3_docnav selector)
+const O0_DOCUMENT_SELECTOR = `${O0_DOCNAV} [data-document-id]`
+const O0_QUIESCE_TIMEOUT_MS = 4000 // §2.1 — a RECORDED quiesce timeout, never an unrecorded sleep
+const O0_QUIESCE_FRAME_MS = 10
+const O0_RECONCILE_TOLERANCE_MS = 50 // §4.2 tolerance.reconcileMs (the residual band)
+const O0_HOOK_LONGTASK_TOLERANCE_MS = 40 // §3.6(c) — the recorded hook-inertness band
+// §3.5 — the pinned run command set the artifact must record.
+const O0_RUN_COMMANDS = [
+  'npm run build',
+  'node scripts/live-drive.mjs --connect --port=3787 --cdp-port=9222 --display=:0 --o0-out=<path> --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism',
+  'node scripts/live-drive.mjs --connect --port=3787 --cdp-port=9222 --gpu --display=:0 --o0-out=<path> --block=o0_gpu_control',
+]
+/** The O-0 accumulator for THIS invocation (runs/controls collected by the blocks). */
+const o0Acc = { runs: [], hookPairs: [], notes: [] } // controls[] is DERIVED from the runs (o0ControlRows)
+
+/** The stage → seam map for the FIVE render-path stages (§2.2 ids 4-8) the
+ *  measurement-only hook is permitted to bracket (§3.6). Each value names the
+ *  instrumented seam of that stage: `buildTraversal` (src/main/traversal.ts),
+ *  `assembleAppGraphEnvelope` (src/renderer/pane-graph.ts), `decorateShared`
+ *  (src/renderer/sidebar-panes.ts), `reconcileDocumentRoots`
+ *  (src/renderer/content-reconcile.ts), `Runtime.applyContentReconcile`
+ *  (src/renderer/runtime.ts). Those seams are INSIDE the renderer host, so the
+ *  page-side hook arms them through the handle the renderer exposes
+ *  (`window.__o0recorder`, the app-wide recorder of src/shared/o0-hook.ts): a
+ *  refused/absent handle leaves the stage `unseparated` (never a silent value). */
+const O0_HOOK_SEAMS = {
+  'traversal.build': 'buildTraversal',
+  'envelope.assemble': 'assembleAppGraphEnvelope',
+  'shared.decorate': 'decorateShared',
+  'reconcile.roots': 'reconcileDocumentRoots',
+  'reconcile.apply': 'Runtime.applyContentReconcile',
+}
+const O0_HOOK_STAGES = Object.keys(O0_HOOK_SEAMS)
+const O0_HOOK_RENDERER_HANDLE = 'window.__o0recorder'
+/** §3.6 — the page-side measurement-only hook. INERT WHEN UNARMED: the bridge
+ *  wrap is a pure pass-through while unarmed and the renderer recorder emits no
+ *  mark/measure and commits no record, so an unarmed run adds no DOM mutation and
+ *  no long task. An armed hook only records `performance.mark`/`measure` around
+ *  the EXISTING call sites (it reorders, adds and removes no work). A hook-induced
+ *  change to the mutation count or the long-task total is a falsifiable row (see
+ *  `o0_repeat_determinism`). */
+const O0_HOOK_SOURCE = `(()=>{
+  if (window.__o0) return true;
+  const state = { armed: false, measures: [], wraps: [], armCount: 0, disarmCount: 0, rendererArmed: false, refused: [] };
+  state.wrap = function (stage, path) {
+    const parts = String(path).split('.');
+    let obj = window.provident;
+    for (let i = 0; i < parts.length - 1; i++) obj = obj && obj[parts[i]];
+    const key = parts[parts.length - 1];
+    if (!obj || typeof obj[key] !== 'function' || obj[key].__o0Wrapped) return false;
+    const orig = obj[key];
+    const wrapped = function () {
+      if (state.armed !== true) return orig.apply(this, arguments); // INERT when unarmed
+      const t0 = performance.now();
+      const finish = (v) => {
+        try { performance.mark('o0:' + stage + ':end'); performance.measure('o0:' + stage, 'o0:' + stage + ':start', 'o0:' + stage + ':end') } catch (e) {}
+        state.measures.push({ stage: stage, ms: Math.round((performance.now() - t0) * 1000) / 1000 });
+        return v;
+      };
+      try { performance.mark('o0:' + stage + ':start') } catch (e) {}
+      const r = orig.apply(this, arguments);
+      if (r && typeof r.then === 'function') return r.then(finish);
+      finish(); return r;
+    };
+    wrapped.__o0Wrapped = true;
+    try { obj[key] = wrapped } catch (e) { return false }
+    // A bridge seam that refuses the wrap (a frozen/read-only surface) must NOT be
+    // recorded as measured: the stage then stays unseparated (§3.6's honest limit).
+    if (obj[key] !== wrapped) return false;
+    state.wraps.push(stage);
+    return true;
+  };
+  // §3.6 — the renderer-side half: stages 4-8 are bracketed by the recorder the
+  // renderer exposes, not by a preload wrap. An absent/refusing handle is RECORDED
+  // and leaves those stages unseparated (never a silently measured value).
+  state.renderer = function (stages) {
+    const rec = window.__o0recorder;
+    const list = (stages || []).slice();
+    state.rendererArmed = false;
+    state.refused = [];
+    if (!rec || typeof rec.arm !== 'function') {
+      state.refused.push({ stages: list, reason: 'window.__o0recorder absent — the executing bundle exposes no §3.6 hook seam (stages stay unseparated)' });
+      return false;
+    }
+    try {
+      // A clean measurement window: the recorder's records are cleared by the
+      // arm transition, so a still-armed recorder (a previous freeze) is disarmed
+      // first — an armed run never inherits another window's records.
+      if (typeof rec.disarm === 'function') { try { rec.disarm() } catch (e) {} }
+      rec.arm(list);
+      state.rendererArmed = typeof rec.isArmed === 'function' ? rec.isArmed() === true : true;
+    } catch (e) {
+      state.rendererArmed = false;
+      state.refused.push({ stages: list, reason: String(e) });
+    }
+    if (!state.rendererArmed && !state.refused.length) {
+      state.refused.push({ stages: list, reason: 'the renderer hook refused the arm (stages stay unseparated)' });
+    }
+    return state.rendererArmed;
+  };
+  state.arm = function (bridge, rendererStages) {
+    state.armed = true; state.armCount++; state.measures = [];
+    const keys = Object.keys(bridge || {});
+    for (let i = 0; i < keys.length; i++) state.wrap(keys[i], bridge[keys[i]]);
+    state.renderer(rendererStages);
+    return { bridge: state.wraps.slice(), rendererArmed: state.rendererArmed === true, refused: state.refused.slice() };
+  };
+  state.disarm = function () {
+    state.armed = false; state.disarmCount++;
+    const rec = window.__o0recorder;
+    if (rec && typeof rec.disarm === 'function') { try { rec.disarm() } catch (e) {} }
+    return true;
+  };
+  state.read = function () {
+    const rec = window.__o0recorder;
+    let records = [];
+    if (rec && typeof rec.records === 'function') { try { records = rec.records() || [] } catch (e) { records = [] } }
+    let dropped = null;
+    if (rec && typeof rec.state === 'function') { try { const s = rec.state(); dropped = s && typeof s.dropped === 'number' ? s.dropped : null } catch (e) {} }
+    return { armed: state.armed, measures: state.measures.slice(), records: records, wraps: state.wraps.slice(), rendererArmed: state.rendererArmed === true, refused: state.refused.slice(), dropped: dropped, armCount: state.armCount, disarmCount: state.disarmCount };
+  };
+  window.__o0 = state;
+  return true;
+})()`
+/** §2.2/§3.6 — the two stages a pure CDP probe already separates through the
+ *  preload bridge; the other nine are the renderer seams above or `unseparated`
+ *  when the hook cannot isolate them (§3.6's closing sentence). */
+const O0_BRIDGE_STAGES = { 'snapshot.pull': 'rag.snapshot', 'docheads.pull': 'rag.docHeads' }
+
+/** §3.6/§4.3 — the node twin of the stages 4-8 aggregation is the PURE
+ *  `stagesFromO0HookRecords` of `src/shared/o0-hook.ts` (pinned by
+ *  tests/unit-o-0-hook-contract.test.ts). The driver PREFERS the real module
+ *  (node ≥22.18 executes the `.ts` source directly, type-stripped); when that
+ *  import is unavailable it falls back to the strictly-equivalent mirror below,
+ *  and every freeze row RECORDS which one produced its stage rows
+ *  (`hook.stageRowsSource`) — a silent divergence is impossible. */
+let o0StagesFromHookRecordsReal = null
+try {
+  const o0Twin = await import(pathToFileURL(join(ROOT, 'src/shared/o0-hook.ts')).href)
+  if (o0Twin && typeof o0Twin.stagesFromO0HookRecords === 'function') o0StagesFromHookRecordsReal = o0Twin.stagesFromO0HookRecords
+} catch (e) {
+  o0StagesFromHookRecordsReal = null
+}
+const O0_HOOK_STAGE_ROWS_SOURCE = o0StagesFromHookRecordsReal ? 'src/shared/o0-hook.ts:stagesFromO0HookRecords' : 'driver-mirror:o0StagesFromHookRecords'
+/** §4.3 + §6 F4 — armed hook records → stage rows: a recorded stage's ms is the
+ *  SUM over its call sites (the `decorateShared` 4-call-site case — a single site
+ *  would under-report); an unrecorded stage is `ms:null` + `unseparated:true`
+ *  (never imputed from another stage). A malformed record is REJECTED loudly. */
+function o0StagesFromHookRecords(records, ids = O0_HOOK_STAGES) {
+  if (o0StagesFromHookRecordsReal) return o0StagesFromHookRecordsReal(records, ids)
+  if (!Array.isArray(records)) throw new Error(`O0_HOOK_RECORD_INVALID: the hook record set must be an array (got ${JSON.stringify(records) ?? String(records)}) — §6 F4`)
+  const sums = new Map()
+  for (const raw of records) {
+    const r = raw && typeof raw === 'object' ? raw : null
+    if (r === null) throw new Error(`O0_HOOK_RECORD_INVALID: ${JSON.stringify(raw)} is not a hook record object (§4.3)`)
+    if (typeof r.stage !== 'string' || O0_HOOK_STAGES.indexOf(r.stage) < 0) throw new Error(`O0_HOOK_RECORD_INVALID: stage ${JSON.stringify(r.stage)} is not one of ${O0_HOOK_STAGES.join(', ')} (§3.6: ids 4-8 ONLY)`)
+    if (!(typeof r.ms === 'number' && Number.isFinite(r.ms) && r.ms >= 0)) throw new Error(`O0_HOOK_RECORD_INVALID: stage ${r.stage} ms is ${String(r.ms)} (expected a non-negative finite number — §6 F4)`)
+    sums.set(r.stage, Math.round(((sums.get(r.stage) ?? 0) + r.ms) * 1000) / 1000)
+  }
+  const stages = ids.map((id) => {
+    const ms = sums.get(id)
+    if (ms === undefined) return { id: id, ms: null, unseparated: true, source: O0_HOOK_STAGES.indexOf(id) >= 0 ? 'hook' : id === 'post.style' ? 'derived' : 'mark' }
+    return { id: id, ms: ms, unseparated: false, source: 'hook' }
+  })
+  return { stages: stages, measured: stages.filter((s) => !s.unseparated).map((s) => s.id), unseparated: stages.filter((s) => s.unseparated).map((s) => s.id) }
+}
+
+function o0Num(v) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 'null'
+  return String(Math.round(v * 100) / 100)
+}
+function o0Hash(text) {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0
+  return h.toString(16)
+}
+function o0Date() {
+  return new Date().toISOString().slice(0, 10)
+}
+/** The §4.3 verdict of ONE freeze row — DERIVED from the row, never asserted. */
+function o0RowPass(row) {
+  const reasons = []
+  if (row.path !== 'cdp') reasons.push(`gesture path ${row.path} (not 'cdp') for ${row.target} — hit=${row.hit ?? 'null'}`)
+  if (row.realInput !== (row.path === 'cdp')) reasons.push(`realInput ${row.realInput} disagrees with path ${row.path} (realInput is DERIVED: path === 'cdp')`)
+  if (row.stageCount !== O0_STAGE_COUNT) reasons.push(`stageCount ${row.stageCount} ≠ ${O0_STAGE_COUNT}`)
+  const rowIds = row.stages.map((s) => s.id)
+  const missing = O0_STAGE_IDS.filter((id) => !rowIds.includes(id))
+  const extra = rowIds.filter((id) => !O0_STAGE_IDS.includes(id))
+  if (missing.length) reasons.push(`stage ${missing.join(', ')} missing from run ${row.id} (stageCount ${row.stageCount} ≠ ${O0_STAGE_COUNT})`)
+  if (extra.length) reasons.push(`unknown stage id ${extra.join(', ')} in run ${row.id} (not the closed §2.2 set)`)
+  for (const s of row.stages) {
+    const legal = (s.ms === null && s.unseparated === true) || (typeof s.ms === 'number' && Number.isFinite(s.ms) && s.ms >= 0)
+    if (!legal) reasons.push(`stage ${s.id} ms is ${String(s.ms)} (expected a non-negative finite number or null+unseparated)`)
+  }
+  for (const f of ['longTaskTotalMs', 'mutations', 'wallMs']) {
+    const v = row[f]
+    if (!(v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0))) reasons.push(`${f} is ${String(v)} (expected a non-negative finite number or null)`)
+  }
+  if (row.bundleVerified !== true) reasons.push(`executing bundle ≠ on-disk bundle (bundleVerified ${row.bundleVerified}, served ${row.bundle?.served})`)
+  if (row.trackAblation.applied === true && !row.trackAblation.mutation) reasons.push('trackAblation applied:true without the recorded style mutation (unverifiable ablation)')
+  row.pass = reasons.length === 0
+  row.failReasons = reasons
+  return row
+}
+/** §4.3 — the artifact reads exactly these fields; a gap is a loud FAIL. */
+function o0RequireRowFields(row, fields = O0_REQUIRED_ROW_FIELDS) {
+  const gaps = fields.filter((f) => !(f in row))
+  if (gaps.length) {
+    row.pass = false
+    row.failReasons = [...(row.failReasons ?? []), `§4.3 freeze row missing field(s) ${gaps.join(', ')}`]
+  }
+  return row
+}
+async function o0HookInstall(h) {
+  return h.cdp.evaluate(O0_HOOK_SOURCE)
+}
+/** Arm the hook (installing it first) for the FIVE §2.2 stages 4-8 plus the two
+ *  preload-bridge stages. Inertness is the §3.6(c) property: the armed and
+ *  unarmed freezes are compared by `o0_repeat_determinism`. */
+async function o0HookArm(h) {
+  await o0HookInstall(h)
+  return h.cdp.evaluate(`(()=>{
+    if (!window.__o0) return { armed:false, error:'hook absent', bridge:[], rendererArmed:false, refused:[{ stages:${JSON.stringify(O0_HOOK_STAGES)}, reason:'window.__o0 absent — the driver hook was not installed' }] };
+    const a = window.__o0.arm(${JSON.stringify(O0_BRIDGE_STAGES)}, ${JSON.stringify(O0_HOOK_STAGES)});
+    return { armed:true, bridge:a.bridge, wraps:a.bridge, rendererArmed:a.rendererArmed === true, refused:a.refused };
+  })()`)
+}
+async function o0HookState(h) {
+  return h.cdp.evaluate(`(()=>{ const s=window.__o0; return s?s.read():null })()`)
+}
+/** §2.1 — arm the window observers: the MutationObserver on `document.body`
+ *  (`childList`+`subtree`+`attributes`+`characterData`, the defects.md:36 method)
+ *  and the `longtask` PerformanceObserver. */
+async function o0ArmObservers(h) {
+  return h.cdp.evaluate(`(()=>{
+    const prev = window.__o0obs;
+    if (prev) { try { prev.mo.disconnect() } catch (e) {} try { prev.po.disconnect() } catch (e) {} }
+    const st = { mutations: 0, longTasks: [], armed: true, longtaskUnsupported: null };
+    const mo = new MutationObserver((recs) => { st.mutations += recs.length });
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
+    const po = new PerformanceObserver((list) => { for (const e of list.getEntries()) st.longTasks.push({ start: e.startTime, duration: e.duration }) });
+    try { po.observe({ type: 'longtask', buffered: false }) } catch (e) {
+      try { po.observe({ entryTypes: ['longtask'] }) } catch (e2) { st.longtaskUnsupported = String(e2) }
+    }
+    st.mo = mo; st.po = po; window.__o0obs = st;
+    return { longtaskUnsupported: st.longtaskUnsupported };
+  })()`)
+}
+async function o0Mark(h, name) {
+  return h.cdp.evaluate(`(()=>{ performance.mark(${JSON.stringify(name)}); const e=performance.getEntriesByName(${JSON.stringify(name)}).pop(); return e?e.startTime:performance.now() })()`)
+}
+/** §2.1 — quiesce on `requestAnimationFrame` with a RECORDED timeout (never an
+ *  unrecorded fixed sleep). Marks `o0:t1` when the renderer has settled. */
+async function o0Quiesce(h) {
+  return h.cdp.evaluate(`(async()=>{
+    const t0 = performance.now();
+    let smooth = 0, last = performance.now(), frames = 0;
+    while (performance.now() - t0 < ${O0_QUIESCE_TIMEOUT_MS}) {
+      await new Promise((r) => requestAnimationFrame(() => r()));
+      const now = performance.now();
+      const dt = now - last; last = now; frames++;
+      if (dt < ${O0_QUIESCE_FRAME_MS}) { smooth++; if (smooth >= 3) break } else { smooth = 0 }
+    }
+    performance.mark('o0:t1');
+    const t1 = performance.now();
+    return { frames: frames, quiesced: smooth >= 3, timedOut: (t1 - t0) >= ${O0_QUIESCE_TIMEOUT_MS}, timeoutMs: ${O0_QUIESCE_TIMEOUT_MS} };
+  })()`)
+}
+/** §2.1 — drain the observers and window the long tasks to [t0, t1]. */
+async function o0Drain(h) {
+  return h.cdp.evaluate(`(()=>{
+    const st = window.__o0obs;
+    if (!st) return null;
+    try { st.mo.disconnect() } catch (e) {}
+    try { st.po.disconnect() } catch (e) {}
+    const mark = (n) => { const e = performance.getEntriesByName(n).pop(); return e ? e.startTime : null };
+    const t0 = mark('o0:t0'), t1 = mark('o0:t1');
+    const longTasks = (st.longTasks || []).filter((e) => (t0 === null || e.start >= t0) && (t1 === null || e.start <= t1)).map((e) => ({ start: e.start, duration: e.duration }));
+    st.armed = false;
+    const hook = window.__o0 ? window.__o0.read() : null;
+    return {
+      mutations: st.mutations,
+      longTasks: longTasks,
+      longTaskTotalMs: longTasks.reduce((a, e) => a + e.duration, 0),
+      t0: t0, t1: t1,
+      hook: hook,
+      longtaskUnsupported: st.longtaskUnsupported || null,
+    };
+  })()`)
+}
+/** §2.3 — the hit-probe (scroll + `elementFromPoint`), BEFORE t0: the gesture is
+ *  dispatched at the probed coordinate and the recorded path is what the verdict
+ *  rests on (`cdp` only when the point resolves to the target or a descendant). */
+async function o0ProbeTarget(h, selector) {
+  const q = JSON.stringify(selector)
+  await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(e&&typeof e.scrollIntoView==='function')e.scrollIntoView({block:'center'});return true})()`)
+  await sleep(250)
+  const probe = async () => h.cdp.evaluate(`(()=>{
+    const e = document.querySelector(${q});
+    if (!e) return null;
+    const r = e.getBoundingClientRect();
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return { x: x, y: y, w: Math.round(r.width), h: Math.round(r.height), hit: hit ? (hit.id || hit.tagName) : null,
+             onTarget: !!(hit && (hit === e || e.contains(hit))),
+             inViewport: x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight };
+  })()`)
+  let p = await probe()
+  if (p && !p.onTarget) { await sleep(200); p = await probe() } // one re-probe (a reflow must not fake a miss)
+  if (!p) return { path: 'missing', detail: `not found: ${selector}` }
+  if (p.w === 0 || p.h === 0) return { path: 'zero-box', ...p, detail: `zero-size box ${p.w}x${p.h}` }
+  if (!p.inViewport) return { path: 'off-viewport', ...p, detail: `probe (${Math.round(p.x)},${Math.round(p.y)}) outside the viewport` }
+  if (!p.onTarget) return { path: 'native-fallback', ...p, detail: `hit=${p.hit} (not the target)` }
+  return { path: 'cdp', ...p, detail: `hit=${p.hit} at (${Math.round(p.x)},${Math.round(p.y)})` }
+}
+/** Dispatch the REAL CDP pointer gesture at the probed coordinate (the `ufRealClick`
+ *  event sequence), or the recorded fallback when the point is not on target. */
+async function o0DispatchGesture(h, selector, probe) {
+  if (probe.path === 'cdp') {
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: probe.x, y: probe.y, buttons: 0 })
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: probe.x, y: probe.y, button: 'left', buttons: 1, clickCount: 1 })
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: probe.x, y: probe.y, button: 'left', buttons: 0, clickCount: 1 })
+    const hitAtDispatch = await h.cdp.evaluate(`(()=>{const hit=document.elementFromPoint(${probe.x},${probe.y});return hit?(hit.id||hit.tagName):null})()`)
+    return { hitAtDispatch }
+  }
+  // A non-cdp path is RECORDED, never silently substituted: the native DOM click is
+  // only attribution evidence, and the row's `pass` is already false.
+  const ok = await h.cdp.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;e.click();return true})()`)
+  return { hitAtDispatch: null, fallbackClicked: ok }
+}
+/** §2.2/§3.6 — the 11 stage entries from the armed hook: the renderer-side
+ *  records (stages 4-8) go through `stagesFromO0HookRecords` (the node twin), the
+ *  two preload-bridge seams keep their measured wraps, and EVERY stage the hook
+ *  did not record is emitted `ms:null` + `unseparated:true` (never imputed). */
+function o0StagesFromMeasures(drained) {
+  const hookRecords = (drained?.hook?.records ?? []).filter((r) => r && O0_HOOK_STAGES.indexOf(r.stage) >= 0)
+  const hookRows = o0StagesFromHookRecords(hookRecords)
+  const byId = new Map(hookRows.stages.map((s) => [s.id, s]))
+  const bridgeMs = new Map()
+  for (const m of drained?.hook?.measures ?? []) {
+    if (!m || typeof m.ms !== 'number' || !Number.isFinite(m.ms)) continue
+    bridgeMs.set(m.stage, Math.round(((bridgeMs.get(m.stage) ?? 0) + m.ms) * 1000) / 1000)
+  }
+  return O0_STAGE_IDS.map((id) => {
+    const row = byId.get(id)
+    if (row) return row
+    if (id === 'post.style') return { id, ms: null, unseparated: true, source: 'derived' } // §2.2 stage 11 — DERIVED
+    const ms = bridgeMs.has(id) ? bridgeMs.get(id) : null
+    return ms === null
+      ? { id, ms: null, unseparated: true, source: 'mark' }
+      : { id, ms, unseparated: false, source: 'hook' }
+  })
+}
+/** §2.2 stage 11 + §5 P-TP-1 — the `post.style` residual is COMPUTED
+ *  (`longTaskTotalMs − Σ(named stages)`), never a timed probe. Any unseparated
+ *  stage makes the reconciliation fail (an unmeasured stage cannot be reconciled
+ *  away); the row still reports honestly rather than imputing a number. */
+function o0ApplyPostStyle(row) {
+  const separated = row.stages.filter((s) => s.unseparated !== true && typeof s.ms === 'number')
+  const unmeasured = row.stages.filter((s) => s.unseparated === true && s.id !== 'post.style').map((s) => s.id)
+  const sumMs = Math.round(separated.reduce((a, s) => a + s.ms, 0) * 1000) / 1000
+  const total = row.longTaskTotalMs
+  const residual = typeof total === 'number' && Number.isFinite(total) ? Math.round((total - sumMs) * 1000) / 1000 : null
+  const idx = row.stages.findIndex((s) => s.id === 'post.style')
+  if (unmeasured.length === 0 && residual !== null && residual >= 0) {
+    row.stages[idx] = { id: 'post.style', ms: residual, unseparated: false, source: 'derived' }
+    row.reconciliation = {
+      ok: residual <= O0_RECONCILE_TOLERANCE_MS,
+      residual: residual,
+      sumMs: sumMs,
+      toleranceMs: O0_RECONCILE_TOLERANCE_MS,
+      reason: residual <= O0_RECONCILE_TOLERANCE_MS ? null : `residual ${residual} ms > tolerance ${O0_RECONCILE_TOLERANCE_MS} ms`,
+    }
+  } else {
+    const ids = [...unmeasured, 'post.style']
+    row.unseparatedStages = ids
+    row.reconciliation = {
+      ok: false,
+      residual: residual,
+      sumMs: sumMs,
+      toleranceMs: O0_RECONCILE_TOLERANCE_MS,
+      reason: `unseparated stage(s) ${ids.join(', ')} cannot be reconciled`,
+    }
+  }
+  row.unseparatedStages = row.stages.filter((s) => s.unseparated === true).map((s) => s.id)
+  row.postStyle = row.reconciliation.ok ? { ms: residual, source: 'derived', timed: false } : { ms: null, source: 'derived', timed: false }
+  return row
+}
+/** §2 / §4.3 — ONE freeze: arm the observers, perform exactly one hit-tested
+ *  gesture, drain, and return the §4.3 row. No block stages two freezes; no block
+ *  re-uses a previous block's timing. */
+async function o0FreezeRow(h, spec) {
+  const o0 = h.o0 ?? {}
+  await ufEnsureAppClear(h)
+  await o0ArmObservers(h)
+  let hook = { armed: false, wraps: [] }
+  if (spec.hook === true && spec.disarmOnEntry !== true) hook = await o0HookArm(h)
+  const probe = await o0ProbeTarget(h, spec.target)
+  const t0 = await o0Mark(h, 'o0:t0')
+  const dispatch = await o0DispatchGesture(h, spec.target, probe)
+  const quiesce = await o0Quiesce(h)
+  const drained = await o0Drain(h)
+  // §3.6(a) — the measured window is closed: DISARM immediately, so no measurement
+  // wrapper stays armed outside the freeze (the installed wrapper is a pass-through
+  // while unarmed: no control-flow change, no DOM mutation, no long task).
+  if (drained && drained.hook && drained.hook.armed === true) await h.cdp.evaluate(`(()=>{ if(window.__o0) window.__o0.disarm(); return true })()`)
+  const wallMs = drained && drained.t0 !== null && drained.t1 !== null ? Math.round((drained.t1 - drained.t0) * 1000) / 1000 : null
+  const stages = o0StagesFromMeasures(drained)
+  const row = {
+    id: spec.id,
+    block: spec.block,
+    gesture: spec.gesture,
+    target: spec.target,
+    folderPath: spec.folderPath ?? null,
+    documentId: spec.documentId ?? null,
+    path: probe.path,
+    realInput: probe.path === 'cdp',
+    hit: probe.hit ?? null,
+    stageCount: O0_STAGE_COUNT,
+    stages: stages,
+    longTasks: drained ? drained.longTasks : [],
+    longTaskTotalMs: drained ? drained.longTaskTotalMs : null,
+    mutations: drained ? drained.mutations : null,
+    wallMs: wallMs,
+    t0: t0,
+    t1: drained ? drained.t1 : null,
+    quiesce: quiesce,
+    gpu: o0.gpuFlag === true,
+    trackAblation: spec.trackAblation ?? { applied: false, mutation: null },
+    paneFrames: Number.isFinite(spec.paneFrames) ? spec.paneFrames : null,
+    bundleVerified: o0.bundleVerified === true,
+    bundle: { renderer: o0.bundleRenderer ?? null, main: o0.bundleMain ?? null, served: o0.bundleServed ?? null },
+    hook: {
+      armed: hook.armed === true,
+      wraps: hook.wraps ?? [],
+      // §3.6 — the renderer-side half: which stages 4-8 the page-side hook
+      // actually armed, and (loudly) any handle that refused/was absent. A refused
+      // stage is emitted `unseparated` by `o0StagesFromMeasures` — never imputed.
+      rendererArmed: hook.rendererArmed === true,
+      refused: hook.refused ?? [],
+      records: (drained?.hook?.records ?? []).length,
+      seamMap: O0_HOOK_SEAMS,
+      rendererHandle: O0_HOOK_RENDERER_HANDLE,
+      stageRowsSource: O0_HOOK_STAGE_ROWS_SOURCE,
+      unarmedBaseline: spec.hook !== true,
+      longtaskUnsupported: drained ? drained.longtaskUnsupported : null,
+    },
+    dispatch: dispatch,
+    seed: O0_SEED,
+    corpusSource: o0.corpusSource ?? null,
+    pass: false,
+    failReasons: [],
+  }
+  o0ApplyPostStyle(row)
+  return o0RequireRowFields(o0RowPass(row))
+}
+/** §2.3 — enumerate the doc-nav folder rows (`data-folder-path`) with their
+ *  child-row census; the block then applies the PINNED pick below. */
+async function o0FolderRows(h) {
+  return h.cdp.evaluate(`(()=>{
+    const rows = [...document.querySelectorAll(${JSON.stringify(O0_FOLDER_SELECTOR)})];
+    const paths = rows.map((r) => r.getAttribute('data-folder-path'));
+    return rows.map((r) => {
+      const p = r.getAttribute('data-folder-path');
+      const nested = r.querySelectorAll('[data-folder-path],[data-document-id]').length;
+      const prefixed = paths.filter((x) => x && p && x !== p && x.indexOf(p + '/') === 0).length;
+      return { folderPath: p, childRowCount: nested + prefixed, nested: nested, prefixed: prefixed };
+    });
+  })()`)
+}
+/** §2.3 — the PINNED folder-row pick: largest child-row count, ties broken by
+ *  lexicographic `data-folder-path` ascending (the `o0-2026-09-17` seed). A
+ *  first-match pick would under-measure the operator corpus. Input-order
+ *  independent; an empty corpus has no pick (null), never a throw. */
+function o0PickFolderRow(rows) {
+  const list = Array.isArray(rows) ? rows.filter((r) => r && typeof r.folderPath === 'string' && r.folderPath !== '') : []
+  if (!list.length) return null
+  const sorted = [...list].sort((a, b) => (b.childRowCount - a.childRowCount) || (a.folderPath < b.folderPath ? -1 : a.folderPath > b.folderPath ? 1 : 0))
+  return sorted[0]
+}
+/** §2.3 — the target of a folder-row/document-row gesture is the EXACT CSS
+ *  selector that was clicked, so the attribute value must be a CSS-parseable
+ *  string. The seed/operator corpora have `data-folder-path` values that are
+ *  plain paths (`docs`, `docs/specs`, `.live-corpus`), but a path containing a
+ *  `"` (the importer renders a path with special characters as `[".live-corpus"]`)
+ *  makes the naive `[data-folder-path="<v>"]` an INVALID selector and the whole
+ *  block dies on a SyntaxError. Escaping the two CSS-string metas is the fix; the
+ *  recorded `target` field stays a real, resolving selector. */
+function o0AttrSelector(base, attr, value) {
+  const escaped = String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return `${base} [${attr}="${escaped}"]`
+}
+/** `--strict-seed` — every `*.md` under a directory tree, in a deterministic
+ *  (lexicographic, depth-first) order. The store's import root must be the same
+ *  directory (`--corpus-root=`), or the importer's containment guard rejects the
+ *  files (`markdown import: path outside corpus root`). */
+function o0MarkdownTree(dir, out = []) {
+  let entries = []
+  try { entries = readdirSync(dir, { withFileTypes: true }) } catch (e) { return out }
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+  for (const e of entries) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) o0MarkdownTree(p, out)
+    else if (e.isFile() && /\.md$/i.test(e.name)) out.push(p)
+  }
+  return out
+}
+/** The run id convention (§4.3 example id) — unique within this invocation. */
+function o0RunId(gesture, leg, block, taken) {
+  const prefix = block === 'o0_track_ablation' ? 'o0-fold-ablation' : `o0-${gesture}-gpu${leg}`
+  for (let i = 1; i < 100; i++) {
+    const id = `${prefix}-${block === 'o0_track_ablation' ? (leg === 'on' ? 'on' : 'off') : `r${i}`}`
+    if (!taken.includes(id)) return id
+  }
+  return `${prefix}-r${taken.length + 1}`
+}
+/** §8.1 — the leg a run belongs to (the controls[] grouping). */
+function o0LegOfRun(run) {
+  const id = String(run?.id ?? '').toLowerCase()
+  const applied = run?.trackAblation?.applied === true
+  if (/ablation/.test(id)) return /-?on$/.test(id) ? 'track-ablation-on' : 'track-ablation-off'
+  if (/gpu-?off/.test(id)) return 'gpu-off'
+  if (/gpu-?on/.test(id)) return 'gpu-on'
+  if (run?.block === 'o0_track_ablation') return applied ? 'track-ablation-on' : 'track-ablation-off'
+  return null
+}
+/** §4.2/§8.1 — the controls[] pairing record: ONE row per leg (4 in a full
+ *  artifact), naming the leg's runs. A counterpart leg emitted by the PAIRED
+ *  invocation is declared `cross-artifact` (the §3.5 command pair writes one
+ *  artifact per leg); when both legs are in this invocation the counterpart run
+ *  resolves and the pairing is verified here. */
+function o0ControlRows(runs) {
+  const groups = { 'gpu-off': [], 'gpu-on': [], 'track-ablation-off': [], 'track-ablation-on': [] }
+  for (const r of runs) {
+    const leg = o0LegOfRun(r)
+    if (leg && groups[leg]) groups[leg].push(r.id)
+  }
+  const counterpartOf = { 'gpu-off': 'gpu-on', 'gpu-on': 'gpu-off', 'track-ablation-off': 'track-ablation-on', 'track-ablation-on': 'track-ablation-off' }
+  const declared = []
+  for (const id of Object.keys(groups)) {
+    const ids = groups[id]
+    if (!ids.length) continue
+    const other = groups[counterpartOf[id]]
+    const crossArtifact = other.length === 0
+    declared.push({
+      id: id,
+      runRef: ids[0],
+      legRuns: ids,
+      pairedWith: crossArtifact
+        ? (id.indexOf('gpu-') === 0 ? `o0-${id === 'gpu-off' ? 'folder-row-gpuon' : 'folder-row-gpuoff'}-r1` : `o0-fold-ablation-${id.endsWith('on') ? 'on' : 'off'}`)
+        : other[0],
+      pairedWithStatus: crossArtifact ? 'cross-artifact' : null,
+      gpu: id.indexOf('gpu-') === 0 ? (id === 'gpu-on') : null,
+    })
+  }
+  return declared
+}
+/** §4.4 — the DERIVED stage verdict (the formula is pinned; the number is not). */
+function o0DeriveStageVerdict(row) {
+  const identified = row.stages.filter((s) => s.id !== 'post.style' && s.unseparated !== true && typeof s.ms === 'number' && Number.isFinite(s.ms))
+  let largest = null
+  for (const s of identified) if (largest === null || s.ms > largest.ms) largest = s
+  const total = typeof row.longTaskTotalMs === 'number' && Number.isFinite(row.longTaskTotalMs) ? row.longTaskTotalMs : null
+  const ms = largest ? largest.ms : null
+  const pct = ms !== null && total ? Math.round((ms / total) * 10000) / 100 : null
+  const fallback = row.path === 'cdp' && row.realInput === true ? '' : ` — gesture path ${row.path} with realInput ${row.realInput}: the row is not hit-tested evidence (§6 F7)`
+  return largest
+    ? `stage ${largest.id} is ${o0Num(ms)} ms of the ${o0Num(total)} ms long task (${o0Num(pct)}%) on ${row.gesture} — ${largest.id} is the largest identified stage${fallback}`
+    : `stage <none> is null ms of the ${o0Num(total)} ms long task (null%) on ${row.gesture} — no identified stage${fallback}`
+}
+/** §4.4 + A-4 — the whole-store `IPC_RAG_SNAPSHOT` discriminator. */
+function o0DeriveSnapshotVerdict(row, census) {
+  const snapshots = row.stages.filter((s) => s.id === 'snapshot.pull')
+  const reads = snapshots.filter((s) => s.unseparated !== true && typeof s.ms === 'number' && s.ms > 0)
+  const readMs = reads.reduce((a, s) => a + s.ms, 0)
+  return {
+    readCount: reads.length,
+    readMs: readMs,
+    verdict: `the ${row.gesture} performed ${reads.length} whole-store IPC_RAG_SNAPSHOT read(s) totalling ${o0Num(readMs)} ms (census ${o0Num(census.documents)} docs / ${o0Num(census.nodes)} nodes / ${o0Num(census.edges)} edges)`,
+  }
+}
+/** §3.6 — the executing-bundle identity: the SERVED renderer against the ON-DISK
+ *  file (`docs/live-testing.md:119-124`). A mismatch is `verified:false` and the
+ *  whole report is pass:false (F2) — never a provisional pass. */
+async function o0BundleIdentity(h) {
+  const disk = (rel) => {
+    try {
+      const buf = readFileSync(join(ROOT, rel))
+      const st = statSync(join(ROOT, rel))
+      return { mtimeMs: Math.round(st.mtimeMs), bytes: buf.length, hash: o0Hash(buf.toString('utf8')) }
+    } catch (e) {
+      return { mtimeMs: null, bytes: null, hash: null, error: String(e) }
+    }
+  }
+  const renderer = disk('dist/renderer/renderer.js')
+  const main = disk('dist/main/main.cjs')
+  let served = null
+  let servedError = null
+  try {
+    const tree = await h.cdp.send('Page.getResourceTree')
+    const frameId = tree && tree.frameTree && tree.frameTree.frame ? tree.frameTree.frame.id : null
+    const url = pathToFileURL(join(ROOT, 'dist', 'renderer', 'renderer.js')).href
+    const res = await h.cdp.send('Page.getResourceContent', { frameId: frameId, url: url })
+    const text = res.base64Encoded ? Buffer.from(res.content, 'base64').toString('utf8') : res.content
+    // §3.6 — the served identity is the file's BYTES + hash. Comparing
+    // `text.length` (UTF-16 code units) against the on-disk byte count
+    // under-reports every multi-byte character in the bundle (~1.2 kB of the
+    // 660 kB renderer here), so a byte-identical served bundle would be reported
+    // as a MISMATCH (F2) for a harness reason. The byte count is taken from the
+    // decoded UTF-8 and the hash (the primary identity) is unchanged.
+    served = { bytes: Buffer.byteLength(text, 'utf8'), lengthUnits: text.length, hash: o0Hash(text), url: url }
+  } catch (e) {
+    servedError = String(e)
+  }
+  // The HASH is the identity (§3.6 "mtime + byte length and/or a hash"): an
+  // identical hash with an identical byte count is a verified bundle.
+  const verified = !!(served && renderer.bytes === served.bytes && renderer.hash === served.hash)
+  return {
+    renderer: `${renderer.mtimeMs}+${renderer.bytes}+${renderer.hash}`,
+    main: `${main.mtimeMs}+${main.bytes}+${main.hash}`,
+    served: served ? `${served.bytes}+${served.hash}` : `unreadable (${servedError})`,
+    servedUrl: served ? served.url : null,
+    disk: { rendererBytes: renderer.bytes, rendererHash: renderer.hash },
+    verified: verified,
+  }
+}
+/** §3.4/§6 F8 — the OBSERVED census: `rag.list_documents` + the snapshot payload. */
+async function o0Census(h) {
+  const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ __error: String(e) }))
+  const snap = await h.cdp.evaluate(`(async()=>{ try { const s = await window.provident.rag.snapshot(); return { nodes: s && s.nodes ? s.nodes.length : null, edges: s && s.edges ? s.edges.length : null, keys: s ? Object.keys(s) : null } } catch (e) { return { error: String(e) } } })()`)
+  const status = await h.mcpTool(h.mcp, 'gnosis.status', {}).catch((e) => ({ __error: String(e.message || e) }))
+  const documents = Array.isArray(docs && docs.documents) ? docs.documents.length : null
+  const engine = status && !status.__error ? 'ready' : 'absent'
+  return {
+    documents: documents,
+    nodes: snap && !snap.error ? snap.nodes : null,
+    edges: snap && !snap.error ? snap.edges : null,
+    engine: engine,
+    engineEvidence: engine === 'ready' ? 'gnosis.status resolved' : `gnosis.status unavailable: ${String(status && status.__error)}`,
+  }
+}
+/** §6 F9 — a report-level forcing reason list, DERIVED (never a hard-coded pass). */
+function o0DeriveReportPass(report) {
+  const reasons = []
+  if (report.driver.build.verified !== true) reasons.push(`executing bundle ≠ on-disk bundle (renderer ${report.driver.build.served}) — §3.6/F2`)
+  const observed = report.corpus.documents
+  if (!Number.isFinite(observed)) reasons.push('corpus census unavailable (rag.list_documents did not resolve) — §6 F8')
+  else if (observed !== report.corpus.claimedDocuments) {
+    reasons.push(`corpus census mismatch: claimed ${report.corpus.claimedDocuments} document(s), observed ${observed} (nodes ${report.corpus.nodes}, edges ${report.corpus.edges}) — §6 F8`)
+  }
+  for (const r of report.runs) for (const m of r.failReasons ?? []) reasons.push(`run ${r.id}: ${m}`)
+  // §6 F4/§5 P-TP-1 — an unmeasured stage cannot be reconciled away: a freeze row
+  // that reports an unseparated stage makes the REPORT a fail-state (the residual
+  // band itself stays a RECORDED outcome, never a report-level forcing condition).
+  for (const r of report.runs) {
+    const unsep = Array.isArray(r.unseparatedStages) && r.unseparatedStages.length
+      ? r.unseparatedStages
+      : (r.stages || []).filter((s) => s.unseparated === true).map((s) => s.id)
+    if (unsep.length) {
+      reasons.push(`run ${r.id}: unseparated stage(s) ${unsep.join(', ')} cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)`)
+    }
+  }
+  const legs = new Set(report.controls.map((c) => c.id))
+  for (const c of report.controls) {
+    if (c.pairedWithStatus === 'cross-artifact') continue
+    const counterpart = report.runs.some((r) => r.id === c.pairedWith)
+    if (!counterpart) reasons.push(`comparison row emitted without its paired control row (${c.pairedWith}) — §6 F9`)
+  }
+  if (report.runs.some((r) => o0LegOfRun(r) === 'gpu-off') && report.runs.some((r) => o0LegOfRun(r) === 'gpu-on')) {
+    const off = report.runs.filter((r) => o0LegOfRun(r) === 'gpu-off')
+    const on = report.runs.filter((r) => o0LegOfRun(r) === 'gpu-on')
+    if (!legs.has('gpu-off') || !legs.has('gpu-on')) reasons.push('a GPU leg is present without its control row (§6 F9)')
+    if (off.length && on.length) {
+      const offPanes = off[0].paneFrames
+      const onPanes = on[0].paneFrames
+      if (offPanes !== onPanes) reasons.push(`paired runs differ in pane census: ${offPanes} vs ${onPanes} (§6 F9)`)
+    }
+  }
+  if (report.runs.length === 0) reasons.push('no freeze row was staged (§4.2: runs[] is non-empty)')
+  // §3.6(c)/§5 P-SM-2 — the hook inertness + the stage-id-set determinism are
+  // falsifiable report-level conditions (an armed hook that changes the numbers,
+  // or a re-run with a different stage set, can never be an O-0 pass).
+  for (const p of report.driver.hookInertness ?? []) {
+    if (!p.inert) reasons.push(`the measurement hook is NOT inert (armed-vs-unarmed Δmutations=${p.deltaMutations}, ΔlongTaskTotalMs=${p.deltaLongTaskMs} ms, tolerance ${p.toleranceMs} ms) — §3.6(c)`)
+    if (!p.setEqual) reasons.push(`the stage-id SET is not deterministic across the repeat runs of §5 P-SM-2 (${p.baselineRun} vs ${p.armedRun}) — the ms values are FREE, the SET is not`)
+  }
+  return { pass: reasons.length === 0, failReasons: reasons }
+}
+/** §4.2 — assemble the emitted report from the accumulated runs. */
+function o0BuildReport(h, opt, names, censusOverride) {
+  const census = censusOverride ?? { documents: null, nodes: null, edges: null, engine: 'absent' }
+  const runs = o0Acc.runs
+  const controls = o0ControlRows(runs)
+  const date = o0Date()
+  const claimed = Number.isFinite(opt.o0Corpus) ? opt.o0Corpus : O0_OPERATOR_DOCUMENTS
+  const verdicts = []
+  for (const r of runs) {
+    verdicts.push(o0DeriveStageVerdict(r))
+    verdicts.push(o0DeriveSnapshotVerdict(r, census).verdict)
+    if (r.reconciliation && !r.reconciliation.ok) verdicts.push(`run ${r.id}: reconciliation FAILED — ${r.reconciliation.reason}`)
+    if (r.unseparatedStages && r.unseparatedStages.length) verdicts.push(`run ${r.id}: unseparated stages [${r.unseparatedStages.join(', ')}]`)
+  }
+  const report = {
+    artifact: O0_ARTIFACT_ID,
+    spec: O0_SPEC_PATH,
+    unit: 'O-0',
+    date: date,
+    layer: 'assembled-renderer (RCA-12)',
+    commands: [`node scripts/live-drive.mjs ${opt.cliArgs.join(' ')}`],
+    pinnedCommands: O0_RUN_COMMANDS,
+    driver: {
+      build: opt.bundle ?? { renderer: null, main: null, served: null, verified: false },
+      gpuFlag: opt.gpu === true,
+      cliArgs: opt.cliArgs,
+      runMode: opt.connect ? 'connect' : 'spawn',
+      leg: opt.gpu === true ? 'gpu-on' : 'gpu-off',
+      blocks: names.filter((n) => n.startsWith('o0_')),
+      appFlag: opt.connect ? (opt.gpu === true ? 'app launched WITHOUT --no-gpu (GPU-on leg)' : 'app launched with --no-gpu (GPU-off leg)') : `app spawned by this driver (${opt.gpu === true ? 'gpu on' : '--no-gpu'})`,
+      artifactDoc: O0_ARTIFACT_DOC,
+      crossArtifactControlPairs: controls.filter((c) => c.pairedWithStatus === 'cross-artifact').map((c) => c.id),
+      hookInertness: o0Acc.hookPairs,
+      display: ':' + (opt.display ?? '1'),
+    },
+    tolerance: { reconcileMs: O0_RECONCILE_TOLERANCE_MS, source: `measured ${date}` },
+    corpus: {
+      source: Number.isFinite(opt.o0Corpus) ? '--o0-corpus' : (opt.connect ? 'operator-store' : 'seed'),
+      claimedDocuments: claimed,
+      documents: census.documents,
+      nodes: census.nodes,
+      edges: census.edges,
+      seed: O0_SEED,
+    },
+    env: {
+      mode: opt.mode,
+      gpu: opt.gpu === true,
+      engine: census.engine,
+      display: ':' + (opt.display ?? '1'),
+      paneFrames: runs.length ? runs[runs.length - 1].paneFrames : null,
+    },
+    stageIds: [...O0_STAGE_IDS],
+    runs: runs,
+    controls: controls,
+    verdicts: verdicts,
+    pass: false,
+    artifactPath: opt.o0Out ? opt.o0Out : null,
+  }
+  const derived = o0DeriveReportPass(report)
+  report.pass = derived.pass
+  report.driver.failReasons = derived.failReasons
+  report.driver.notes = o0Acc.notes
+  return report
+}
+/** §3.3/§4.1 — write the emitted report (`--o0-out`), or console-only with
+ *  `artifactPath: null` (a run without it CANNOT produce the committed artifact). */
+function o0WriteReport(report, opt) {
+  const json = JSON.stringify(report, null, 2)
+  if (opt.o0Out) {
+    writeFileSync(opt.o0Out, json + '\n', 'utf8')
+    console.error(`[live-drive] O-0 report written to ${opt.o0Out} (pass=${report.pass}, ${report.runs.length} run(s), ${report.controls.length} control(s), artifactPath=${report.artifactPath})`)
+  } else {
+    console.error(`[live-drive] O-0 report (console-only: no --o0-out ⇒ artifactPath=null, the committed artifact cannot be produced from this run)`)
+  }
+  console.log(`O0-REPORT ${json}`)
+  return report
 }
 
 // ---------------------------------------------------------------------------
@@ -2635,28 +3438,253 @@ const BLOCKS = {
     const readRefreshReassembled = JSON.stringify(s2) !== JSON.stringify(s3)
     return rowResult('UF-GNOSIS-6', "Each gnosis CRUD action's UI control is present and performs a REAL engine wire call (create/get/list/delete/publish/unpublish/archive)", 'D-interaction', `enable=${JSON.stringify(en.flips)}; rendered controls present=${JSON.stringify(present)} allPresentExceptUpdate=${allPresent} paintedBoxes=${JSON.stringify(boxes)} allPainted=${allPainted} → the delete/publish/unpublish/archive controls are NOT in the rendered DOM because they are conditionally rendered only when a document is SELECTED, and the selection seam is a no-op (below); the Update control is absent by design (HC1); REAL click on the wiki li in gnosis-documents → app-graph reassembled=${selectReassembled} (FALSE ⇒ the pane's handler seam did nothing: no gnosis.document.list wire call); REAL click #gnosis-documents-refresh → reassembled=${readRefreshReassembled} (FALSE ⇒ no gnosis.wiki.list wire call either); the ONLY live engine reads came from the host's BOOT path, not from any control: gnosis-wikis li[data-wiki-id=wiki-0]="${w && w.lis[0] ? w.lis[0].text : '?'}" and the gnosis-documents wiki selector li="${d && d.lis[0] ? d.lis[0].text : '?'}" readVerbsReachedEngine(boot-sourced)=${readVerbsReachedEngine}; MUTATING verbs over the SAME MCP handler: gnosis.document.delete {callerId:'operator'} → ${JSON.stringify(engineDeletes).slice(0, 130)}; gnosis.document.create {callerId:'operator'} → ${JSON.stringify(engineCreates).slice(0, 130)}; doc-1 survived=${!!(docStill && docStill.documentId)} (the mutating half is ALSO gated fail-closed: this app instance was booted without PROVIDENT_OPERATOR_CREDENTIAL, so the shell-side AuthorityStore denies before any engine wire call)`, { path: rf.path === 'cdp' ? 'cdp' : rf.path, ok: allPresent && allPainted && selectReassembled && readRefreshReassembled, surface: await ufSurfaceTarget(h) })
   },
+
+  // =========================================================================
+  // UNIT O-0 — the 5 closed measurement blocks (§3.1). Every block returns
+  // §3.2's `diagResult` NON-row shape (row/dclass null, realInput false,
+  // proxyPASS false, pass false, diagnostic true) with the §4.3 freeze row(s)
+  // under `extra.o0` — so no O-0 block can ever be promoted to a §5.U matrix
+  // verdict (§3.2: §5.U stays capped at 8) and its honesty rule stays
+  // `unseparated:true` rather than a user-visible PASS.
+  // =========================================================================
+
+  // ---- §3.1/§2.3/§2.4 — one FREEZE on a real folder-row disclosure gesture ----
+  o0_folder_row: async (h) => {
+    // §4.3 — the field contract this block emits, pinned at the emit site and
+    // drift-checked against the shared builder's list (a silent drift would emit a
+    // thinner artifact, which is exactly what D4/§4.3 forbid).
+    const REQUIRED = ['id', 'block', 'gesture', 'target', 'path', 'stageCount', 'stages', 'longTasks', 'longTaskTotalMs', 'mutations', 'wallMs', 'gpu', 'trackAblation', 'bundleVerified', 'pass', 'failReasons']
+    if (JSON.stringify(REQUIRED) !== JSON.stringify(O0_REQUIRED_ROW_FIELDS)) {
+      throw new Error('O-0 §4.3 row-field contract drifted from O0_REQUIRED_ROW_FIELDS')
+    }
+    const frames = (await ufPaneFrames(h)).length // §6 S5 — the pane-set census at the freeze
+    const enumerated = await o0FolderRows(h)
+    const pick = o0PickFolderRow(enumerated) // the PINNED pick (§2.3)
+    const leg = (h.o0 && h.o0.gpuFlag === true) ? 'on' : 'off'
+    const taken = o0Acc.runs.map((r) => r.id)
+    const row = await o0FreezeRow(h, {
+      id: o0RunId('folder-row', leg, 'o0_folder_row', taken),
+      block: 'o0_folder_row',
+      gesture: 'folder-row',
+      target: pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR,
+      folderPath: pick ? pick.folderPath : null,
+      documentId: null,
+      paneFrames: frames,
+      hook: true, // §3.6 — armed for stages 1-3; every other stage is emitted unseparated
+    })
+    row.folderRowCensus = { enumerated: enumerated.length, rows: enumerated.slice(0, 40), chosen: pick }
+    o0Acc.runs.push(row)
+    if (row.unseparatedStages && row.unseparatedStages.length) o0Acc.notes.push(`o0_folder_row: unseparated stages [${row.unseparatedStages.join(', ')}] — emitted ms:null + unseparated (never imputed, §6 F4)`)
+    return diagResult(
+      `folder-row freeze: chosen data-folder-path=${pick ? pick.folderPath : 'null'} (of ${enumerated.length} row(s), pinned pick = largest child-row count, ties lexicographic) path=${row.path} longTaskTotalMs=${row.longTaskTotalMs} mutations=${row.mutations} wallMs=${row.wallMs} hook=${JSON.stringify(row.hook)} unseparated=[${(row.unseparatedStages || []).join(',')}] pass=${row.pass}${row.failReasons.length ? ' reasons=' + JSON.stringify(row.failReasons) : ''}`,
+      { o0: row, freeze: { stageCount: row.stageCount, folderPath: row.folderPath, snapshotPullMs: (row.stages.find((s) => s.id === 'snapshot.pull') || {}).ms } },
+    )
+  },
+
+  // ---- §3.1/§2.3 — one FREEZE on a real document-row open gesture ----
+  o0_document_row: async (h) => {
+    await ufEnsureAppClear(h)
+    let rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll(${JSON.stringify(O0_DOCUMENT_SELECTOR)})].map((r)=>({documentId:r.getAttribute('data-document-id')})))()`)
+    if (!rows.length) {
+      // §2.3 precondition (NOT part of the measured window): reveal the document
+      // rows through the pinned folder-row disclosure, then re-enumerate.
+      const enumerated = await o0FolderRows(h)
+      const pick = o0PickFolderRow(enumerated)
+      if (pick) {
+        // PRECONDITION, not a measurement (§2 "one freeze per block"): the row is
+        // discarded and only the precondition path is recorded in the notes.
+        const reveal = await o0FreezeRow(h, { id: 'o0-docnav-reveal-precondition', block: 'o0_document_row', gesture: 'folder-row', target: o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath), folderPath: pick.folderPath, documentId: null, paneFrames: (await ufPaneFrames(h)).length, hook: false })
+        o0Acc.notes.push(`o0_document_row: the doc-nav disclosure of ${pick.folderPath} was driven as a PRECONDITION (${reveal.path}, not measured) so a document row existed to measure — the measured freeze is the document-row open only.`)
+        await sleep(400)
+      }
+      rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll(${JSON.stringify(O0_DOCUMENT_SELECTOR)})].map((r)=>({documentId:r.getAttribute('data-document-id')})))()`)
+    }
+    const documentId = rows.length ? rows[0].documentId : null
+    const leg = (h.o0 && h.o0.gpuFlag === true) ? 'on' : 'off'
+    const row = await o0FreezeRow(h, {
+      id: o0RunId('document-row', leg, 'o0_document_row', o0Acc.runs.map((r) => r.id)),
+      block: 'o0_document_row',
+      gesture: 'document-row', // the U-1 / uf_panes_12 gesture class
+      target: documentId ? `${O0_DOCNAV} [data-document-id="${documentId}"]` : O0_DOCUMENT_SELECTOR,
+      folderPath: null,
+      documentId: documentId,
+      paneFrames: (await ufPaneFrames(h)).length,
+      hook: true,
+    })
+    o0Acc.runs.push(row)
+    if (row.unseparatedStages && row.unseparatedStages.length) o0Acc.notes.push(`o0_document_row: unseparated stages [${row.unseparatedStages.join(', ')}]`)
+    return diagResult(
+      `document-row freeze: documentId=${documentId} (of ${rows.length} rendered document row(s)) path=${row.path} longTaskTotalMs=${row.longTaskTotalMs} mutations=${row.mutations} wallMs=${row.wallMs} unseparated=[${(row.unseparatedStages || []).join(',')}] pass=${row.pass}${row.failReasons.length ? ' reasons=' + JSON.stringify(row.failReasons) : ''}`,
+      { o0: row, freeze: { stageCount: row.stageCount, documentId: documentId } },
+    )
+  },
+
+  // ---- §3.1/§2.4/§3.3 — the GPU-on/off control: the SAME two gestures at this
+  //      invocation's flag, PAIRED with the counterpart leg (§3.5 runs one leg
+  //      per invocation; the app-side flag is recorded per leg). ----
+  o0_gpu_control: async (h) => {
+    const leg = (h.o0 && h.o0.gpuFlag === true) ? 'on' : 'off'
+    const frames = (await ufPaneFrames(h)).length
+    const enumerated = await o0FolderRows(h)
+    const pick = o0PickFolderRow(enumerated)
+    const taken = o0Acc.runs.map((r) => r.id)
+    const folder = await o0FreezeRow(h, { id: o0RunId('folder-row', leg, 'o0_gpu_control', taken), block: 'o0_gpu_control', gesture: 'folder-row', target: pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true })
+    const docRows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll(${JSON.stringify(O0_DOCUMENT_SELECTOR)})].map((r)=>({documentId:r.getAttribute('data-document-id')})))()`)
+    const documentId = docRows.length ? docRows[0].documentId : null
+    const doc = await o0FreezeRow(h, { id: o0RunId('document-row', leg, 'o0_gpu_control', [...taken, folder.id]), block: 'o0_gpu_control', gesture: 'document-row', target: documentId ? `${O0_DOCNAV} [data-document-id="${documentId}"]` : O0_DOCUMENT_SELECTOR, folderPath: null, documentId: documentId, paneFrames: frames, hook: true })
+    o0Acc.runs.push(folder, doc)
+    const counterpartLeg = leg === 'on' ? 'off' : 'on'
+    const pairedWith = [`o0-folder-row-gpu${counterpartLeg}-r1`, `o0-document-row-gpu${counterpartLeg}-r1`]
+    const pairing = [
+      { id: `gpu-${leg}`, runRef: folder.id, legRuns: [folder.id, doc.id], pairedWith: pairedWith[0], pairedWithStatus: 'cross-artifact', counterpartGesture: 'folder-row', counterpartRun: pairedWith[0] },
+      { id: `gpu-${leg}`, runRef: doc.id, legRuns: [folder.id, doc.id], pairedWith: pairedWith[1], pairedWithStatus: 'cross-artifact', counterpartGesture: 'document-row', counterpartRun: pairedWith[1] },
+    ]
+    const vacuous = o0Acc.runs.some((r) => o0LegOfRun(r) === `gpu-${counterpartLeg}`)
+    o0Acc.notes.push(vacuous
+      ? `o0_gpu_control: the counterpart gpu-${counterpartLeg} leg ran in the SAME invocation as this gpu-${leg} leg, so both legs were measured under ONE app-side flag — the control is vacuous and the report records it (§5.U-2.4: the paired legs must differ).`
+      : `o0_gpu_control: the gpu-${leg} leg is paired CROSS-ARTIFACT with gpu-${counterpartLeg} (${pairedWith.join(', ')}) — the §3.5 command pair emits one artifact per leg; only the merged artifact verifies the pairing.`)
+    const row = folder
+    return diagResult(
+      `gpu-control leg gpu-${leg}: folder-row path=${folder.path} longTaskTotalMs=${folder.longTaskTotalMs} mutations=${folder.mutations} | document-row path=${doc.path} longTaskTotalMs=${doc.longTaskTotalMs} mutations=${doc.mutations} | pairedWith=[${pairedWith.join(', ')}] appFlag=${h.o0 ? h.o0.appFlag : 'connect'} vacuous=${vacuous} unseparated=[${(row.unseparatedStages || []).join(',')}]`,
+      { o0: [folder, doc], freeze: { stageCount: folder.stageCount, pairing: pairing, gpu: h.o0 ? h.o0.gpuFlag : null } },
+    )
+  },
+
+  // ---- §3.1/§2.4 — the `display:block` ablation of the 12698.7 px grid track:
+  //      two paired freezes of the SAME gesture that differ ONLY in the mutation.
+  o0_track_ablation: async (h) => {
+    const frames = (await ufPaneFrames(h)).length
+    const enumerated = await o0FolderRows(h)
+    const pick = o0PickFolderRow(enumerated)
+    const target = pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR
+    const cell = await h.cdp.evaluate(`(()=>{
+      const root = document.getElementById('wiki-root');
+      const cellEl = document.getElementById('zone:main') || (root ? root.querySelector('[data-zone="main"]') : null);
+      const sel = cellEl ? (cellEl.id ? '#' + cellEl.id : cellEl.tagName.toLowerCase()) : '#zone:main';
+      if (!root || !cellEl) return { available: false, selector: sel, elId: cellEl && cellEl.id ? cellEl.id : null, computed: cellEl ? getComputedStyle(cellEl).display : null, rootDisplay: root ? getComputedStyle(root).display : null, detail: 'the stage cell or #wiki-root is absent in the executing bundle' };
+      const rootDisplay = getComputedStyle(root).display;
+      const computed = getComputedStyle(cellEl).display;
+      const inGrid = root.contains(cellEl) && rootDisplay === 'grid';
+      return { available: inGrid, selector: sel, elId: cellEl.id || null, computed: computed, rootDisplay: rootDisplay, previous: cellEl.style.display, detail: inGrid ? 'the stage cell is a grid item of #wiki-root' : 'the stage cell is not a grid item in the executing bundle (' + sel + ' computed display=' + computed + ')' };
+    })()`)
+    const leg = (h.o0 && h.o0.gpuFlag === true) ? 'on' : 'off'
+    const taken = o0Acc.runs.map((r) => r.id)
+    if (!cell.available) {
+      // §6 F5 — a DOCUMENTED FAIL-STATE, never a park: the paired run is emitted
+      // with applied:false + mutation:null and the unavailability is named.
+      const row = await o0FreezeRow(h, { id: o0RunId('folder-row', leg, 'o0_track_ablation', taken), block: 'o0_track_ablation', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, trackAblation: { applied: false, mutation: null } })
+      row.failReasons = [...row.failReasons, `track ablation unavailable: the stage cell is not a grid item in the executing bundle (${cell.selector} computed display=${cell.computed})`]
+      row.pass = false
+      row.trackAblationEvidence = cell
+      o0Acc.runs.push(row)
+      o0Acc.notes.push(`o0_track_ablation: unavailable — ${cell.detail}; the paired ablation control row is therefore absent (a documented fail-state, §6 F5/F9).`)
+      return diagResult(`track ablation UNAVAILABLE: ${cell.detail} rootDisplay=${cell.rootDisplay} → the run is emitted applied:false + mutation:null, pass:false (§6 F5) unseparated=[${(row.unseparatedStages || []).join(',')}]`, { o0: row, freeze: { ablation: cell } })
+    }
+    // §2.4 — the exact style mutation, recorded in the artifact: the stage's grid
+    // cell becomes a plain `display:block`, which removes the grid-track sizing
+    // (the 12698.7 px track) from the measurement path.
+    const mutation = `${cell.selector} (the stage grid cell of #wiki-root): display:block (removes the #wiki-root grid-track sizing from the measurement path)`
+    // The BASELINE freeze first (no mutation), then the ABLATED freeze — the same
+    // gesture, the same pane set, differing only in the recorded style mutation.
+    const baseline = await o0FreezeRow(h, { id: o0RunId('folder-row', 'off', 'o0_track_ablation', taken), block: 'o0_track_ablation', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, trackAblation: { applied: false, mutation: null } })
+    // NOTE: `#zone:main` is NOT a valid CSS selector (an unquoted id cannot
+    // carry `:`), so the ablation element is reached by `getElementById` — the
+    // recorded `cell.selector` stays the human-readable id it resolved.
+    const applied = await h.cdp.evaluate(`(()=>{ const el = document.getElementById(${JSON.stringify(cell.elId)}); if (!el) return false; el.style.display = 'block'; return true })()`)
+    const ablated = await o0FreezeRow(h, { id: o0RunId('folder-row', 'on', 'o0_track_ablation', [...taken, baseline.id]), block: 'o0_track_ablation', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, trackAblation: { applied: applied, mutation: applied ? mutation : null } })
+    // NEVER persisted: the measurement-only style mutation is reverted immediately.
+    const reverted = await h.cdp.evaluate(`(()=>{ const el = document.getElementById(${JSON.stringify(cell.elId)}); if (!el) return false; el.style.display = ''; return el.style.display === '' })()`)
+    baseline.trackAblationEvidence = { ...cell, mutation: null }
+    ablated.trackAblationEvidence = { ...cell, mutation: mutation, reverted: reverted }
+    ablated.trackAblationDelta = { longTaskTotalMs: Math.round(((ablated.longTaskTotalMs ?? 0) - (baseline.longTaskTotalMs ?? 0)) * 1000) / 1000, mutations: (ablated.mutations ?? 0) - (baseline.mutations ?? 0), baselineRun: baseline.id }
+    if (!applied || !reverted) {
+      ablated.failReasons = [...ablated.failReasons, `the ablation mutation could not be applied/reverted (applied=${applied} reverted=${reverted}) — §2.4/F5`]
+      ablated.pass = false
+    }
+    o0Acc.runs.push(baseline, ablated)
+    const pairing = [
+      { id: 'track-ablation-off', runRef: baseline.id, legRuns: [baseline.id], pairedWith: ablated.id, pairedWithStatus: null },
+      { id: 'track-ablation-on', runRef: ablated.id, legRuns: [ablated.id], pairedWith: baseline.id, pairedWithStatus: null },
+    ]
+    return diagResult(
+      `track ablation ${cell.detail}; mutation="${mutation}" applied=${applied} reverted=${reverted} | baseline: longTaskTotalMs=${baseline.longTaskTotalMs} mutations=${baseline.mutations} | ablated: longTaskTotalMs=${ablated.longTaskTotalMs} mutations=${ablated.mutations} | delta=${JSON.stringify(ablated.trackAblationDelta)} unseparated=[${(ablated.unseparatedStages || []).join(',')}]`,
+      { o0: [baseline, ablated], freeze: { ablation: { ...cell, mutation: mutation, applied: applied, reverted: reverted }, pairing: pairing } },
+    )
+  },
+
+  // ---- §3.1/§5 P-SM-2/§3.6(c) — re-run one gesture block and report the
+  //      stage-id SET of both runs (the determinism oracle), plus the armed-vs-
+  //      unarmed hook inertness (an armed hook that changes the numbers FAILS). ----
+  o0_repeat_determinism: async (h) => {
+    const frames = (await ufPaneFrames(h)).length
+    const enumerated = await o0FolderRows(h)
+    const pick = o0PickFolderRow(enumerated)
+    const target = pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR
+    const baseline = await o0FreezeRow(h, { id: 'o0-repeat-a-unarmed', block: 'o0_folder_row', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: false })
+    const armed = await o0FreezeRow(h, { id: 'o0-repeat-b-armed', block: 'o0_folder_row', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, disarmOnEntry: false })
+    const setA = [...baseline.stages.map((s) => s.id)].sort()
+    const setB = [...armed.stages.map((s) => s.id)].sort()
+    const setEqual = JSON.stringify(setA) === JSON.stringify(setB)
+    const deltaMutations = (armed.mutations ?? 0) - (baseline.mutations ?? 0)
+    const deltaLongTaskMs = Math.round(((armed.longTaskTotalMs ?? 0) - (baseline.longTaskTotalMs ?? 0)) * 1000) / 1000
+    const inert = deltaMutations === 0 && Math.abs(deltaLongTaskMs) <= O0_HOOK_LONGTASK_TOLERANCE_MS
+    const msFree = true // §5 P-SM-2: the ms values are explicitly FREE under the seed
+    o0Acc.hookPairs.push({ baselineRun: baseline.id, armedRun: armed.id, setEqual: setEqual, msFree: msFree, deltaMutations: deltaMutations, deltaLongTaskMs: deltaLongTaskMs, toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS, inert: inert })
+    const reasons = []
+    if (!setEqual) reasons.push(`the stage-id SET differs between the two runs of ${target} (${JSON.stringify(setA)} vs ${JSON.stringify(setB)}) — §5 P-SM-2 requires the SAME set`)
+    if (!inert) reasons.push(`the measurement hook is NOT inert: armed-vs-unarmed Δmutations=${deltaMutations}, ΔlongTaskTotalMs=${deltaLongTaskMs} ms (tolerance ${O0_HOOK_LONGTASK_TOLERANCE_MS} ms) — §3.6(c) forces pass:false`)
+    // The two repeat runs are reported as the determinism oracle, NOT as report
+    // rows (§8.1: the determinism block re-reports an existing run rather than
+    // adding a runs[] row).
+    return diagResult(
+      `repeat determinism: stage-id SET of both runs equal=${setEqual} (${setA.length} ids) msFree=${msFree} | hook inert=${inert} armed-mutations=${armed.mutations} unarmed-mutations=${baseline.mutations} Δmutations=${deltaMutations} ΔlongTaskTotalMs=${deltaLongTaskMs} tolerance=${O0_HOOK_LONGTASK_TOLERANCE_MS}ms | runs ${baseline.id} / ${armed.id} unseparated=[${(baseline.unseparatedStages || []).join(',')}]${reasons.length ? ' FAIL: ' + reasons.join('; ') : ''}`,
+      { o0: { setA: setA, setB: setB, setEqual: setEqual, msFree: msFree, runs: [{ id: baseline.id, stages: baseline.stages }, { id: armed.id, stages: armed.stages }], hookInert: { armed: true, inert: inert, deltaMutations: deltaMutations, deltaLongTaskMs: deltaLongTaskMs, toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS }, stageIds: setA, pass: reasons.length === 0, failReasons: reasons } },
+    )
+  },
 }
 
 // ---------------------------------------------------------------------------
 // Harness.
 // ---------------------------------------------------------------------------
 async function main(argv) {
-  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, groups: null, block: 'all', noSeed: false, keepHome: false, connect: false }
+  // §3.3 — the O-0 flags are DEFAULT-SAFE: `--gpu` off (today's sanctioned
+  // launch path is the GPU-OFF leg), `--o0-corpus` none, `--o0-out` none (a run
+  // without it is console-only and can never produce the committed artifact).
+  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, corpusRoot: null, strictSeed: false, groups: null, block: 'all', noSeed: false, keepHome: false, connect: false, gpu: false, o0Corpus: null, o0Out: null, display: null, cliArgs: argv }
   for (const a of argv) {
     if (a === '--no-seed') { opt.noSeed = true; continue }
     if (a === '--keep-home') { opt.keepHome = true; continue }
     if (a === '--connect') { opt.connect = true; continue }
-    const m = /^--([a-z-]+)=(.*)$/.exec(a); if (!m) continue
+    if (a === '--gpu') { opt.gpu = true; continue }
+    if (a === '--strict-seed') { opt.strictSeed = true; continue }
+    const m = /^--([a-z0-9-]+)=(.*)$/.exec(a); if (!m) continue
     if (m[1] === 'mode') opt.mode = m[2]
     else if (m[1] === 'port') opt.port = Number(m[2])
     else if (m[1] === 'cdp-port') opt.cdpPort = Number(m[2])
     else if (m[1] === 'home') opt.home = m[2]
     else if (m[1] === 'seed') opt.seed = m[2]
+    // `--corpus-root=<dir>` — the store's import root for the SEED corpus. The
+    // default store's corpusRoot is the app's cwd (the project root), so a seed
+    // corpus outside it is REJECTED by the importer's containment guard
+    // (`markdown import: path outside corpus root`). Pointing the store at the
+    // seed dir is what lets the O-0 operator-corpus census be reached through a
+    // driver-spawned app (a spec §3.4 operator-store census without the vanished
+    // operator store). Unset ⇒ the zero-config default (byte-equal today).
+    else if (m[1] === 'corpus-root') opt.corpusRoot = m[2]
     else if (m[1] === 'groups') opt.groups = m[2].split(',').filter(Boolean)
     else if (m[1] === 'block') opt.block = m[2]
-    else if (m[1] === 'display') opt.display = m[2]
+    // `--display=:0` is the documented form (spec §3.5) AND the form the
+    // operator passes; the spawn below prefixes a `:`, so a leading colon in
+    // the parsed value must be STRIPPED or the child gets `DISPLAY=::0` and
+    // Electron exits on `ozone_platform_x11.cc:245 Missing X server or
+    // $DISPLAY` (the spec's F6 symptom — but a harness defect, not a wrong
+    // display). Both `--display=:0` and `--display=0` now normalize to `:0`.
+    else if (m[1] === 'display') opt.display = m[2].replace(/^:+/, '')
     else if (m[1] === 'no-seed') opt.noSeed = true
+    else if (m[1] === 'o0-corpus') opt.o0Corpus = Number(m[2])
+    else if (m[1] === 'o0-out') opt.o0Out = m[2]
   }
+  o0Acc.runs.length = 0; o0Acc.hookPairs.length = 0; o0Acc.notes.length = 0
   const home = opt.connect ? (mkdtempSync(join(tmpdir(), 'astrolive-connect-')) ?? null) : (opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-')))
   // The default store's corpusRoot is the app's cwd (the project root) when
   // unconfigured (REGISTRY-CWD-TRANSPARENCY), so the seed corpus must live under
@@ -2673,7 +3701,25 @@ async function main(argv) {
   if (opt.connect) {
     console.error(`[live-drive] CONNECT mode: attaching to RUNNING app on :${opt.port}/mcp + CDP :${opt.cdpPort} (no spawn)`)
   } else {
-    const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`, `--no-gpu`]
+    // `--corpus-root=<dir>` (spec §3.4): the store's import containment root is
+    // an OPERATOR registry value, not an MCP argument (the importer reads the
+    // addressed store's configured corpusRoot; the tool schema is `files`-only).
+    // A seed corpus outside the project root is otherwise rejected by the
+    // containment guard (`markdown import: path outside corpus root`), so the
+    // flag writes the operator's registry file into the DISPOSABLE HOME's
+    // userData BEFORE the app boots — exactly the operator configuration path,
+    // no src change. Unset ⇒ no file is written (byte-equal today's behaviour:
+    // the implicit `{name:'main',default:true}` entry with the cwd root).
+    if (opt.corpusRoot) {
+      const userData = join(home, '.config', 'provident-electron')
+      await mkdirAsync(userData, { recursive: true })
+      await writeFileAsync(join(userData, 'provident-rag-stores.json'), JSON.stringify({
+        version: 1,
+        stores: [{ name: 'main', default: true, persistenceFile: join(userData, 'provident-rag.json'), corpusRoot: opt.corpusRoot }],
+      }, null, 2) + '\n')
+      console.error(`[live-drive] operator store registry written: ${join(userData, 'provident-rag-stores.json')} (corpusRoot=${opt.corpusRoot})`)
+    }
+    const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`, ...(opt.gpu ? [] : ['--no-gpu'])] // §3.3 — conditional: the GPU-ON leg is reproducible only this way
     console.error(`[live-drive] launching app ${launchArgs.join(' ')} HOME=${home}`)
     app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, {
       env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}` }, // user-directed display
@@ -2691,7 +3737,13 @@ async function main(argv) {
     await waitFor(() => mcpTool(mcp, 'provident.list_targets', {}).then(() => true).catch(() => false))
     // deterministic seed (skip with --no-seed to observe the fresh/landing state)
     if (!opt.noSeed) {
-      const files = seedCorpus(seedDir)
+      // `--strict-seed` (spec §3.4) — import the seed DIRECTORY's markdown corpus
+      // as the store's corpus, WITHOUT writing the driver's two synthetic seed
+      // files. `--seed=<dir>` + `--corpus-root=<dir>` + `--strict-seed` is how the
+      // O-0 operator-corpus census (226 documents) is reached through a
+      // driver-spawned app: `seedCorpus` writes `alpha.md`/`beta.md` (a 2-document
+      // S2 corpus by construction) and can never produce the operator census.
+      const files = opt.strictSeed ? o0MarkdownTree(seedDir) : seedCorpus(seedDir)
       const imp = await mcpTool(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, error: String(e) }))
       console.error(`[live-drive] seeded corpus -> import ${JSON.stringify(imp)}`)
       await waitFor(() => mcpTool(mcp, 'rag.list_documents', {}).then((d) => d && d.documents?.length > 0).catch(() => false))
@@ -2699,6 +3751,30 @@ async function main(argv) {
 
     const h = { mcp, cdp, groups, mcpTool }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : opt.block.split(',').map((s) => s.trim()).filter(Boolean)
+    // §3.5/§3.6 — the O-0 run context: the EXECUTING bundle identity (served vs
+    // on-disk) and the OBSERVED corpus census are read ONCE, before the block loop,
+    // so every freeze row records the same provenance. Nothing here mutates the DOM
+    // or the measured window (the freeze arms its own observers).
+    const o0Blocks = names.filter((n) => n.startsWith('o0_'))
+    let o0CensusObserved = { documents: null, nodes: null, edges: null, engine: 'absent' }
+    if (o0Blocks.length) {
+      const bundle = await o0BundleIdentity(h)
+      o0CensusObserved = await o0Census(h)
+      if (!bundle.verified) console.error(`[live-drive] O-0 BUNDLE NOT VERIFIED: served ${bundle.served} vs on-disk renderer ${bundle.disk.rendererBytes}+${bundle.disk.rendererHash} — every O-0 row is pass:false (§3.6/F2)`)
+      console.error(`[live-drive] O-0 context: blocks=${o0Blocks.join(',')} leg=gpu-${opt.gpu ? 'on' : 'off'} bundle.verified=${bundle.verified} census=${JSON.stringify({ documents: o0CensusObserved.documents, nodes: o0CensusObserved.nodes, edges: o0CensusObserved.edges, engine: o0CensusObserved.engine })} claimedDocuments=${Number.isFinite(opt.o0Corpus) ? opt.o0Corpus : O0_OPERATOR_DOCUMENTS} seed=${O0_SEED} artifactPath=${opt.o0Out ?? 'null (console-only: no --o0-out)'}`)
+      h.o0 = {
+        gpuFlag: opt.gpu === true,
+        bundleVerified: bundle.verified,
+        bundleRenderer: bundle.renderer,
+        bundleMain: bundle.main,
+        bundleServed: bundle.served,
+        bundle: bundle,
+        corpusSource: Number.isFinite(opt.o0Corpus) ? '--o0-corpus' : (opt.connect ? 'operator-store' : 'seed'),
+        appFlag: opt.connect ? (opt.gpu ? 'app launched WITHOUT --no-gpu (GPU-on leg)' : 'app launched with --no-gpu (GPU-off leg)') : `spawned by this driver (${opt.gpu ? 'gpu on' : '--no-gpu'})`,
+        census: o0CensusObserved,
+      }
+      opt.bundle = bundle
+    }
     let fail = 0, park = 0, diag = 0
     // §6.1 report material: the ROW blocks' structured results (matrix + extended)
     const reportRows = []
@@ -2713,6 +3789,17 @@ async function main(argv) {
         else if (r.park) { console.log(`PARK  ${label} ${r.detail ?? ''}`); park++ }
         else { console.log(`FAIL  ${label} ${r.detail ?? r.evidence ?? ''}`); fail++ }
       } catch (e) { console.log(`FAIL  ${label} ${String(e)}`); fail++ }
+    }
+    // §3.3/§4.1/§4.4 — emit the O-0 report (only when an O-0 block ran; a hard
+    // failure ABORTS before this point and writes NO partial artifact, §6 F6).
+    if (o0Blocks.length) {
+      if (o0Acc.runs.length === 0) console.error('[live-drive] O-0: no freeze row was staged — the report carries runs=[] and is pass:false (§4.2)')
+      const report = o0BuildReport(h, opt, names, o0CensusObserved)
+      o0WriteReport(report, opt)
+      console.error(`[live-drive] O-0 verdicts: ${report.verdicts.length ? report.verdicts.join(' | ') : '(none derived)'}`)
+      if (report.driver.failReasons.length) console.error(`[live-drive] O-0 forcing condition(s): ${report.driver.failReasons.join(' | ')}`)
+      if (report.driver.notes.length) console.error(`[live-drive] O-0 notes: ${report.driver.notes.join(' | ')}`)
+      for (const r of report.runs) console.error(`DIAG  O-0 run ${r.id}: pass=${r.pass} path=${r.path} stageCount=${r.stageCount} longTaskTotalMs=${r.longTaskTotalMs} mutations=${r.mutations} wallMs=${r.wallMs} unseparated=[${(r.unseparatedStages || []).join(',')}] reconciliation=${JSON.stringify(r.reconciliation)}`)
     }
     // §6.1 run summary: `total` is the §5.U matrix-row count (U-1..U-8), NEVER the
     // number of blocks; the extended (non-matrix) results are reported separately.

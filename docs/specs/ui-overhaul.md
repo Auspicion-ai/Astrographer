@@ -63,6 +63,11 @@ now so the gate reviews the right surface:
 the shell. Interactive controls inside a pane (including the C8 toggle and C3's
 open/close of a provident settings form) are provident nodes with handlers. The
 shell may own open/close of the modal *frame* and the layout mechanics.
+**C3 modal clarification (durable):** the modal frame / scrim / toggle
+(`#settings-modal`, `#settings-modal-scrim`, `#settings-toggle`) are SHELL chrome;
+the modal BODY (`#settings-modal-body`) is provident (an isolated operator scope) —
+**no decision row is owed** for this (see
+`docs/specs/astrographer-scope-realignment-review.md` §2.2 C1 / §4 C3).
 
 **Parity corollary:** an app-graph pane is MCP-visible by construction
 (`PANE-PROVIDENT-AUTHORING` / `APP-GRAPH-PANES-MCP-VISIBLE`). Operator
@@ -971,7 +976,7 @@ a coverage addition judged at the application seam (§4), not a
 | PG11 | Export/validate | `provident.export`/`validate` | — | **PARKED — app integrations** |
 | PG12 | `module:<name>.<tool>` runner | dynamic module tools | G7 | **DECIDE** — the module manager lists modules but does not invoke their tools; operator-only runner? Q15 |
 | PG13 | Assistant suggestions | none yet | G9 | **DECIDE** — UI-first carve-out vs a future MCP tool (item 5) |
-| PG14 | Doc-nav not dispatchable | (no MCP selection tool) | G2 | **NOT a parity defect** (§4) — coverage/ergonomics only; add a select handler if wanted |
+| PG14 | Doc-nav not dispatchable | (no MCP selection tool) | G2 | **NOT a parity defect** (§4) — coverage/ergonomics only; add a select handler if wanted. **STALE PREMISE (annotated 2026-09-17):** the "no MCP selection tool" premise is SUPERSEDED — MCP `provident.focus` now exists (`src/main/mcp-server.ts:1791` registration / `:2247` guard; `docs/specs/mcp-endpoint.md` §3 is DRIFTED for not listing it — recorded, not fixed); see `docs/specs/astrographer-scope-realignment-review.md` §4 C14 |
 
 **Active (unparked) gaps: none (PG1/PG2 closed — see below; PG6 parked).** PARKED:
 PG9–PG11 (plugin handling / app integrations), PG3–PG4 (post-MVP knowledge-graph

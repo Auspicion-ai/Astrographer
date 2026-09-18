@@ -22,6 +22,30 @@ dir and do not ship in a fork (see `docs/FORKER.md` §1/§5).
 | No network egress yet (the `connect-src` CSP allowlist for a declared network is an open tracked item) | foundation pending.md M-r12 | Retrieval is local-first (lexical BM25/tf-idf); the vector embedder (Unit F) is now implemented behind the `Embedder` interface. **PROVIDER-AGNOSTIC (2026-08-27):** the vector embedder (Unit F) is provider/model agnostic — local (ollama `embeddinggemma`) AND remote/cloud providers are in scope, so the `connect-src` CSP allowlist + API-key handling become a DESIGNED security surface (not just an open tracked item). A localhost ollama call is LOCAL (no external egress); a remote/cloud provider requires the CSP allowlist + API-key config. |
 | Agent Harness (DSH) loop-detection feature request | `docs/feature-requests/agent-harness-loop-detection.md` (RCA-7, 2026-08-27) | A feature request for the Agent Harness (DSH) project, NOT Astrographer — recorded here for discoverability; hand to the harness project's own feature-request tracker. |
 
+### UPSTREAM foundation requests — the shell-chrome / expressibility set (proposal gate 2026-09-17)
+
+Landed by the scope-realignment proposal gate (`docs/specs/astrographer-scope-realignment-review.md`
+§5). The requests target the **Provident-Electron foundation** (`../Provident-Electron/`) except
+**PS-1**, which targets the **upstream Preempt-Providence docs**. Filing convention: a request doc
+**indexed from `docs/HANDOFF.md`**, never a package patch and never a `docs/defects.md` row set (the
+GR-1..GR-9 precedent). Requests are verified by index presence + the revisit condition below, **never
+by a live row** (this doc set changes no code).
+
+| Id | Date | Target project | Priority | Requested interface (one-liner) | Fallback if upstream declines | Revisit condition |
+| --- | --- | --- | --- | --- | --- | --- |
+| **SC-1 SHELL-CHROME-REGION-CONTRACT** | 2026-09-17 | Provident-Electron foundation | P1 | A standard contract naming which regions are shell chrome vs provident-authored, so a host can declare the boundary instead of re-deriving it per element. | Keep the host-side convention recorded in `docs/specs/astrographer-scope-realignment-review.md` §4 (the C1..C20 decomposition) as the authority; `docs/FORK-DIVERGENCE.md` records the divergence. | The upstream project accepts/declines the request, or a fork-divergence decision supersedes it. |
+| **SC-2 GESTURE-CONTROLLER** | 2026-09-17 | Provident-Electron foundation | P1 | A standard pointer-gesture controller for shell mechanics (pane drag/resize/reorder) that leaves the provident-authored control nodes dispatchable. | The host keeps its own `installShellPointers` gesture surface (`src/renderer/renderer.ts:752-796`); parity then lives only at the application seam. | Upstream accepts/declines, or a fork-divergence decision. |
+| **SC-3 OVERLAY-FRAME-PRIMITIVE** | 2026-09-17 | Provident-Electron foundation | P1 | A standard overlay/modal frame primitive (frame + scrim + toggle) that hosts an isolated operator scope without making the body shell-owned. | The host keeps `#settings-modal`/scrim/toggle + `createModalController` (`src/renderer/index.html:297-301`, `src/renderer/modal-state.ts:42/116`) as pinned by `docs/specs/ui-overhaul.md:65` + Q2. | Upstream accepts/declines, or a fork-divergence decision. **The `inert` expressibility claim is VERIFIED (2026-09-17):** `inert` IS in the closed `BOOLEAN_ATTRS` set (`provident-ssr@0.5.0` `dist/core/adapters.js:25-53`, `'inert'` at `:37`; 27 members; the boolean presence/absence path at `:300-313` DOM / `:520-528` SSR) — so `inert` is expressible as a provident prop today. **What is missing is the OVERLAY PRIMITIVE** (the trap / top-layer / scrim mechanics), not attribute support. |
+| **SC-4 THEME-TOKEN-LAYER** | 2026-09-17 | Provident-Electron foundation | P1 | A standard theme-token layer as the shell's formatting mechanic (root tokens applied by the host, controls authored by the operator pane). | The host keeps `src/renderer/theme.ts:30` + the `index.html:15-73` token block. | Upstream accepts/declines, or a fork-divergence decision. |
+| **SC-5 ZONE-TRACK-CONTRACT** | 2026-09-17 | Provident-Electron foundation | P1 | A standard zone/track contract (grid tracks + gutters as shell geometry) with the place/format-only rule (shell may never author pane body content). | The host keeps the zone tracks + gutters (`src/renderer/index.html:283-290`, `src/renderer/pane-gutter.ts:151`). | Upstream accepts/declines, or a fork-divergence decision. |
+| **SC-6 FOCUS-TAB-SEAM** | 2026-09-17 | Provident-Electron foundation | P2 | A standard focus/tab seam so a shell tab strip and the MCP focus tool share one application seam. | The host keeps `provident.focus` (`src/main/mcp-server.ts:1791,2247`) + `TabStrip` (`src/renderer/tab-strip.ts:58`). | Upstream accepts/declines, or a fork-divergence decision. |
+| **SC-7 MENU-CATALOG-CONTRACT** | 2026-09-17 | Provident-Electron foundation | P2 | A standard application-menu catalog contract for shell-owned native menus (View/File) driven from a host catalog. | The host keeps `buildMenuTemplate` (`src/main/app-menu.ts:93-135`). | Upstream accepts/declines, or a fork-divergence decision. |
+| **PS-1 SHELL-MECHANICS-EXPRESSIBILITY-MATRIX** | 2026-09-17 | Preempt-Providence **docs** (NOT the package) | P2 | An expressibility matrix documenting which shell-mechanics patterns provident-ssr can and cannot express (so the shell/pane boundary is decidable from upstream docs, not by trial). | Keep the host-side decomposition table (`docs/specs/astrographer-scope-realignment-review.md` §4) as the working answer. | Upstream docs accept/decline, or a fork-divergence decision. |
+
+Request docs: `docs/feature-requests/provident-electron-shell-chrome-requests.md` (SC-1..SC-7),
+`docs/feature-requests/provident-ssr-expressibility-requests.md` (PS-1). **DO-NOT-FILE** list:
+`docs/specs/astrographer-scope-realignment-review.md` §5.2.
+
 ## DEFERRED (lower-value / parked)
 
 | Item | Date | Constraint / revisit condition |
@@ -113,3 +137,18 @@ ceiling (a node-count threshold pinned by O-0's census); or (c) O-0 shows the de
 (not compile/emit/layout) exceeds the budget — the only case where an engine-side derive is the right
 lever. **Also parked with a precondition:** making the `RagStore` read surface ASYNC (today it is
 synchronous, and it stays that way for the scheduled work).
+
+**O-0 schedule status (2026-09-17) — the rows' status is UNCHANGED.** The user's go-ahead landed the
+**O-0 spec** (`docs/specs/unit-o-0-per-stage-measurement.md`); O-0's **run** has not happened, so the
+artifact that fires **trigger (b)**'s node-count threshold and **trigger (c)**'s walk-share verdict
+does **not** exist. Nothing in this table changes state on this pass: **O-6 / O-7 / O-8 stay PARKED —
+destination work, not incentive-driven**, with O-8's authority-switch contract still the track's
+PREREQUISITE; triggers (a)(b)(c) are unchanged; and the O-0 spec adds **no new trigger**. A parked row
+may only change status when the O-0 artifact exists and one of the three triggers is shown to fire —
+`docs/specs/gnosis-offload-review.md` §11 (the 2026-09-17 addendum).
+
+**no new trigger asserted** — triggers (a)(b)(c) are unchanged and O-6/O-7/O-8 keep their status
+(the 2026-09-17 O-0 spec-gate pass and the earlier proposal gate both assert this). The scope-realignment record
+(`docs/specs/astrographer-scope-realignment-review.md` §1.2/§7.3) explicitly asserts **no new parked
+trigger**: the measured dominant cost of the observed freezes is style/layout/paint, so the engine
+legs are not the lever, and the track is neither re-opened nor re-litigated by this doc set.
