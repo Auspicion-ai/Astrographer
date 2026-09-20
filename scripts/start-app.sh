@@ -50,10 +50,17 @@
 #   GNOSIS_SERVER_PORT         the loopback port the server binds. DEFAULT 8080
 #                              (matches the shell's default PROVIDENT_ENGINE_BASE_URL).
 #                              The server binds loopback-only (127.0.0.1) by design.
-#   GNOSIS_SERVER_OLLAMA_URL   optional Ollama base URL so the server reaches
-#                              state:Ready and emits a real SSE stream (default
-#                              http://localhost:11434).
-#   GNOSIS_SERVER_OLLAMA_MODEL optional embed model (default nomic-embed-text).
+#   GNOSIS_SERVER_OLLAMA_URL   Ollama base URL so the server reaches state:Ready
+#                              and emits a real SSE stream. DEFAULT here is
+#                              http://localhost:11434 (the server itself wires NO
+#                              provider unless this is set). Set it to "" to boot
+#                              the server provider-free (status not-Ready).
+#   GNOSIS_SERVER_OLLAMA_MODEL embed model the server calls via /api/embed.
+#                              DEFAULT here is embeddinggemma:latest (the installed
+#                              local embedding model). NOTE: the server consumes
+#                              ONLY an embedding model — a generation/chat model
+#                              (e.g. gemma4:e2b) has no server env var and is not
+#                              wired by this launcher.
 #   PROVIDENT_ENGINE_BASE_URL  NOTE: in --mode=gnosis this is set automatically to
 #                              http://127.0.0.1:$GNOSIS_SERVER_PORT AFTER the shell's
 #                              config-seam priority (config seam wins if an operator
@@ -145,10 +152,13 @@ if [ "$GNOSIS" = "1" ]; then
   # CONFIG SEAM first (provident-engine-config.json), so an operator-set override
   # still wins over this export — by design.
   export PROVIDENT_ENGINE_BASE_URL="http://127.0.0.1:${GS_PORT}"
-  # Forward the optional Ollama wiring so the server can reach state:Ready (the
-  # server reads these env vars at ITS start). Unset → the server's own defaults.
-  if [ -n "${GNOSIS_SERVER_OLLAMA_URL:-}" ]; then export GNOSIS_SERVER_OLLAMA_URL; fi
-  if [ -n "${GNOSIS_SERVER_OLLAMA_MODEL:-}" ]; then export GNOSIS_SERVER_OLLAMA_MODEL; fi
+  # Wire the Ollama embedding provider so the server reaches state:Ready (the
+  # server reads these env vars at ITS start). The launcher applies local-model
+  # defaults only where the caller left the variable unset; an exported value
+  # wins. Set GNOSIS_SERVER_OLLAMA_URL="" to boot the server provider-free.
+  export GNOSIS_SERVER_OLLAMA_URL="${GNOSIS_SERVER_OLLAMA_URL-http://localhost:11434}"
+  export GNOSIS_SERVER_OLLAMA_MODEL="${GNOSIS_SERVER_OLLAMA_MODEL-embeddinggemma:latest}"
+  echo "[start-app] gnosis provider — url=${GNOSIS_SERVER_OLLAMA_URL:-<none>} model=${GNOSIS_SERVER_OLLAMA_MODEL}" >&2
   echo "[start-app] spawning gnosis-server (bin=$GS_BIN port=$GS_PORT) ..." >&2
   "$GS_BIN" --port "$GS_PORT" &
   GNOSIS_SERVER_PID=$!
