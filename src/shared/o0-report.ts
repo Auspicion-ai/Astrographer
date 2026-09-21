@@ -4,8 +4,11 @@
 //   §2.2 the CLOSED 11-stage id set     §3.1 the 5 closed block names
 //   §3.3 the pinned CLI flags           §3.4 the operator corpus + seed
 //   §4.2/§4.3 the report + freeze row   §4.4 the DERIVED verdict (never hard-coded)
-//   §5 the 6 typed property-register rows (P-IM-1/2, P-SM-1/2, P-TP-1/2)
-//   §6 the states S1..S7, the fail-states F1..F10, the throw patterns
+//   §3.6b the seam re-derivation (the caller-level round trip, the two recorder
+//         instances, the A-4 read count that stays UNMEASURED)
+//   §4.3 H3 the WINDOW BOUND + the armed-window rule + the structural marker
+//   §5 the typed property-register rows (P-IM-1/2, P-SM-1/2, P-TP-1/2 + P-TP-3)
+//   §6 the states S1..S7 + S14..S17, the fail-states F1..F10 + F13/F13a/F14..F17
 //
 // The MEASUREMENT runs LIVE (scripts/live-drive.mjs §3); this module validates the
 // REPORT SHAPE and its invariants only — the RCA-12 split: a property-green is
@@ -13,6 +16,11 @@
 // `{ ok, errors, failReasons }` result and NEVER throws on malformed input
 // (§6 "throw patterns"): a malformed row is an ok:false with the field path named.
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// NOTE (F16 discipline): this module has NO imports — the driver loads it as a `.ts`
+// twin through node's type-stripping (an import specifier cannot be resolved there),
+// and the two values it needs from §3.6 are derived from THIS module's own closed
+// §2.2 id set / written as literals rather than imported (a duplicated LIST would be
+// the drift surface §3.6b/F16 removes).
 
 // ---------------------------------------------------------------------------
 // §2.2 / §3.1 / §3.4 / §4.2 — the pinned constants (the report's join keys).
@@ -31,6 +39,13 @@ export const O0_STAGE_IDS: readonly string[] = [
   'post.style',
 ]
 export const O0_STAGE_COUNT = O0_STAGE_IDS.length // 11 (§8.1)
+/** §2.2/§3.6b (RUL-1) — the ids a page-side `arm()` may request: every closed §2.2
+ *  id EXCEPT `snapshot.clone` (the MAIN instance's, §6 F14's double-record guard) and
+ *  `post.style` (DERIVED, never armable). Derived from the closed set itself. */
+const O0_PAGE_ARMABLE_STAGES: readonly string[] = O0_STAGE_IDS.filter((id) => id !== 'snapshot.clone' && id !== 'post.style')
+/** §3.6 — the mark prefix (`O0_HOOK_MARK_PREFIX` in `src/shared/o0-hook.ts`); the
+ *  §6 F19 reason NAMES the mark, so the literal is pinned here too. */
+const O0_MARK_PREFIX = 'o0:'
 export const O0_BLOCK_NAMES: readonly string[] = [
   'o0_folder_row',
   'o0_document_row',
@@ -48,6 +63,9 @@ export const O0_UNIT = 'O-0'
 export const O0_LAYER = 'assembled-renderer (RCA-12)'
 /** §4.1 — the committed artifact the raw emitted JSON is embedded into. */
 export const O0_ARTIFACT_DOC = 'docs/specs/unit-o-0-per-stage-breakdown.md'
+/** §4.3 H3 / §3.6 — the RECORDED hook band the window bound is judged against
+ *  (the same 40 ms band as `O0_HOOK_LONGTASK_TOLERANCE_MS` / §5 P-TP-3's default). */
+export const O0_WINDOW_TOLERANCE_MS = 40
 
 export type O0StageSource = 'hook' | 'mark' | 'derived'
 export interface O0Stage {
@@ -116,12 +134,38 @@ export function pickO0FolderRow(rows: unknown): { folderPath: string; childRowCo
 }
 
 // ---------------------------------------------------------------------------
-// §6 F4 — the run's `unseparatedStages: [<ids>]` (an ADDITIVE run field).
+// §6 F4 / §3a finding 4 — the run's `unseparatedStages: [<ids>]` (an ADDITIVE run
+// field). A non-string / absent id is NEVER coerced (`String(undefined)` leaked a
+// literal `'undefined'` phantom stage id into the report AND into the derived
+// verdict's "largest identified stage"): such an entry is named by its INDEX by
+// `validateO0Run` instead (§4.3/F13).
 // ---------------------------------------------------------------------------
 export function unseparatedStageIds(run: unknown): string[] {
   return stageList(run)
-    .filter((s: any) => s && typeof s === 'object' && s.unseparated === true)
-    .map((s: any) => String(s.id))
+    .filter((s: any) => s && typeof s === 'object' && s.unseparated === true && typeof s.id === 'string' && s.id !== '')
+    .map((s: any) => s.id as string)
+}
+/** §4.3/§6 S14 (RUL-4) — the STRUCTURAL subset: a stage that cannot be separated
+ *  **by construction** (no seam exists in the executing bundle), distinct from a
+ *  stage that is merely unmeasured in this run (a seam exists but was not armed).
+ *  A structural row records `structural:true` + a `structuralReason`; it is a
+ *  recorded GAP of the harness, never a falsifiability failure — so it does not
+ *  force `pass:false` (§6 S14/F14, RUL-4). A merely-unmeasured stage still does. */
+export function structuralStageIds(run: unknown): string[] {
+  return stageList(run)
+    .filter(
+      (s: any) =>
+        s && typeof s === 'object' && s.unseparated === true && s.structural === true && typeof s.id === 'string' && s.id !== '',
+    )
+    .map((s: any) => s.id as string)
+}
+/** §4.3 H3 — the window bound is judged against the row's RECORDED armed interval
+ *  (`hook.armWindow` + the freeze it belongs to): a row that records no hook
+ *  window carries no recorded band, so only §6 F3's finiteness rule applies to its
+ *  stage values (the §5 P-IM-1 rows carry no hook block). */
+function o0WindowRecorded(run: any): boolean {
+  const h = run && typeof run === 'object' ? run.hook : null
+  return !!h && typeof h === 'object' && !!h.armWindow && typeof h.armWindow === 'object' && !!h.freezeWindow && typeof h.freezeWindow === 'object'
 }
 
 /** §6 F4 — a stage that cannot be separated is emitted `ms:null` + `unseparated:true`,
@@ -136,7 +180,10 @@ function o0ImputationCandidates(run: any): string[] {
 // ---------------------------------------------------------------------------
 // §4.3 — the freeze-row validator.
 // ---------------------------------------------------------------------------
-export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STAGE_IDS): O0Result & { warnings: string[] } {
+export function validateO0Run(
+  runInput: unknown,
+  ids: readonly string[] = O0_STAGE_IDS,
+): O0Result & { structuralReasons: string[]; derivedReasons: string[]; warnings: string[] } {
   const run: any = runInput && typeof runInput === 'object' ? runInput : {}
   const errors: string[] = []
   const failReasons: string[] = []
@@ -190,7 +237,7 @@ export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STA
   const counts = new Map<string, number>()
   for (const sid of rowIds) if (typeof sid === 'string') counts.set(sid, (counts.get(sid) ?? 0) + 1)
   const duplicated = [...counts.keys()].filter((sid) => (counts.get(sid) ?? 0) > 1)
-  const unknown = [...new Set(rowIds.filter((sid) => typeof sid !== 'string' || !ids.includes(sid)))].map(String)
+  const unknown = [...new Set(rowIds.filter((sid) => typeof sid === 'string' && !ids.includes(sid)))] as string[]
   if (missing.length) {
     err(`stage ${missing.join(', ')} missing from run ${id} (stageCount ${String(run.stageCount)} ≠ ${ids.length}) — §4.3/F1`)
   }
@@ -198,13 +245,20 @@ export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STA
   if (unknown.length) err(`unknown stage id ${unknown.join(', ')} in run ${id} (not in the closed §2.2 ${ids.length}-id set — F1)`)
   if (run.stageCount !== ids.length) err(`run ${id}: stageCount ${String(run.stageCount)} ≠ ${ids.length} (stageIds.length — §4.3/F1)`)
 
-  // --- §4.3 / §6 F3 / §5 P-IM-1: stage values ------------------------------
-  for (const s of stages) {
-    if (!s || typeof s !== 'object') {
-      err(`run ${id}: stage entry ${JSON.stringify(s)} is not an object (§4.3)`)
+  // --- §4.3 / §6 F3 / §5 P-IM-1: stage entries + values ---------------------
+  // An entry the row cannot use is named by its INDEX (`stages[<i>]`), never
+  // through a coerced stage id: the §4.4 falsifiability counterexample ("delete
+  // one `stages[]` entry") must be constructible from the reason alone (§3a finding 2).
+  for (let i = 0; i < stages.length; i++) {
+    const s: any = stages[i]
+    if (!s || typeof s !== 'object' || typeof s.id !== 'string' || s.id === '') {
+      err(
+        `run ${id}: stages[${i}] is ${JSON.stringify(s) ?? String(s)} — a stages[] entry must be an object carrying the stage id ` +
+          `it measures (§4.3/F13: named by index, never a coerced stage id)`,
+      )
       continue
     }
-    const sid = String(s.id)
+    const sid = s.id as string
     const legalValue = (s.ms === null && s.unseparated === true) || isNonNeg(s.ms)
     if (!legalValue) {
       err(`stage ${sid} ms is ${String(s.ms)} (expected a non-negative finite number or null + unseparated:true — §4.3/F3)`)
@@ -217,8 +271,14 @@ export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STA
     }
   }
 
-  // --- §4.3 / §6 F3: the counters ------------------------------------------
-  for (const f of ['longTaskTotalMs', 'mutations', 'wallMs']) {
+  // --- §4.3/R-2 — the PRIMARY ORACLE is required; the secondary counters are not
+  if (!isNonNeg(run.longTaskTotalMs)) {
+    err(
+      `run ${id}: longTaskTotalMs is ${String(run.longTaskTotalMs)} (the primary oracle must be a non-negative finite number — ` +
+        `§4.3/R-2: a total that cannot be computed from a measured value is a report-invalid measurement, never a tolerated null)`,
+    )
+  }
+  for (const f of ['mutations', 'wallMs']) {
     if (!(run[f] === null || isNonNeg(run[f]))) {
       err(`run ${id}: ${f} is ${String(run[f])} (expected a non-negative finite number or null — §4.3/F3)`)
     }
@@ -262,6 +322,118 @@ export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STA
     )
   }
 
+  // --- §4.3 H3 / §6 F13a — the WINDOW BOUND, judged on the row's RECORDED window
+  // AND its RECORDED band (`hook.toleranceMs`, §3.6 default 40 ms when absent —
+  // P-TP-3(a): the row field is the ONE band source, so this validator, the oracle
+  // and `deriveO0StageVerdict` can never judge three different tolerances).
+  if (o0WindowRecorded(run)) {
+    const wb = deriveO0WindowBound(run)
+    for (const m of wb.failReasons) err(m)
+  }
+
+  // --- §3.6b/S14 — the two recorder instances: ONE stage, ONE measurement source
+  const stageRecords: any[] = Array.isArray(run.hook?.stageRecords) ? run.hook.stageRecords : []
+  const instancesByStage = new Map<string, string[]>()
+  for (const rec of stageRecords) {
+    if (!rec || typeof rec !== 'object' || typeof rec.stage !== 'string') continue
+    const inst = typeof rec.instance === 'string' ? rec.instance : '<unrecorded>'
+    const seen = instancesByStage.get(rec.stage) ?? []
+    if (!seen.includes(inst)) seen.push(inst)
+    instancesByStage.set(rec.stage, seen)
+  }
+  for (const [stage, instances] of instancesByStage) {
+    if (instances.length > 1) {
+      err(
+        `stage ${stage} recorded by two instances (${instances.join(', ')}) in one freeze window — §6 S14/F14: one stage, ` +
+          `one measurement source`,
+      )
+    }
+  }
+
+  // --- §4.3/§6 S14 — a stage that cannot be separated: STRUCTURAL (no seam exists
+  // in the executing bundle) vs merely UNMEASURED (the seam exists but was not
+  // armed). Both are REPORTED (never imputed); neither is a schema error (§6 F4).
+  // RUL-4 — the two classes are also SEPARATED in the RESULT: the structural lines
+  // are recorded (in `failReasons`, so every reader sees them) AND listed in
+  // `structuralReasons`, the subset that a report must NOT gate on. A merely
+  // unmeasured stage stays a report-level forcing condition.
+  const structuralReasons: string[] = []
+  const derivedReasons: string[] = []
+  for (const s of stages) {
+    if (!s || typeof s !== 'object' || s.unseparated !== true || typeof s.id !== 'string' || s.id === '') continue
+    if (s.structural === true) {
+      const reason = typeof s.structuralReason === 'string' && s.structuralReason !== '' ? s.structuralReason : 'the seam does not exist in the executing bundle'
+      const line =
+        `stage ${s.id} is structurally unseparated — ${reason} (§6 S14: NO seam exists in the executing bundle, distinct from a ` +
+        `seam that merely was not armed)`
+      structuralReasons.push(line)
+      failReasons.push(line)
+    } else if (s.id === 'post.style' || s.source === 'derived') {
+      // §2.2 id 11 (RUL-4/RUL-5-L12) — `post.style` is the DERIVED residual: it has
+      // no seam to arm, so an unseparated `post.style` is a COMPUTED consequence of
+      // the stages above (it cannot exist while any of them is unseparated), recorded
+      // and non-gating — never confused with a seam that merely was not armed.
+      const line =
+        `stage ${s.id} is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from ` +
+        `longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is ` +
+        `unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)`
+      derivedReasons.push(line)
+      failReasons.push(line)
+    } else {
+      failReasons.push(
+        `stage ${s.id} is unmeasured in this run (the seam exists but the recorder was not armed for it — §4.3/§6 S14: this is ` +
+          `NOT a structural absence of the seam)`,
+      )
+    }
+  }
+
+  // --- §4.3/RUL-4 clause 2 / §6 F18 — the `structural` MARKER may not be abused.
+  // It is legal IFF the stage is `unseparated:true` AND carries a non-empty
+  // `structuralReason`. `post.style` is the DERIVED residual and is never
+  // structural; a SEPARATED stage carrying the marker is a contradiction; and a
+  // marker on a stage whose permitted seam the row RECORDS as armed
+  // (`hook.rendererArmed:true` ⇒ the executing bundle carries the page-armable
+  // seams) is a merely-UNMEASURED stage mislabeled as structural.
+  const pageArmable = O0_PAGE_ARMABLE_STAGES
+  const rendererArmed = run.hook && typeof run.hook === 'object' && run.hook.rendererArmed === true
+  for (let i = 0; i < stages.length; i++) {
+    const s: any = stages[i]
+    if (!s || typeof s !== 'object' || s.structural !== true) continue
+    const sid = typeof s.id === 'string' && s.id !== '' ? s.id : `stages[${i}]`
+    if (s.unseparated !== true) {
+      err(`stage ${sid} records structural:true while it is separated (ms ${String(s.ms)}) — §4.3/RUL-4: the marker describes an unmeasurable stage, never a measured one`)
+      continue
+    }
+    if (typeof s.structuralReason !== 'string' || s.structuralReason === '') {
+      err(`stage ${sid} records structural:true with no structuralReason — an unseparated stage must name the missing seam/transport (§4.3/RUL-4)`)
+      continue
+    }
+    if (sid === 'post.style') {
+      err(`stage post.style records structural:true — post.style is the DERIVED residual and is never structural (§4.3/RUL-4)`)
+      continue
+    }
+    if (rendererArmed && pageArmable.includes(sid)) {
+      err(
+        `stage ${sid} records structural:true although its permitted seam (§2.2's closed ten) exists in the executing bundle and ` +
+          `was merely not armed — this is UNMEASURED, not structural (§4.3/S14)`,
+      )
+    }
+  }
+
+  // --- §3.6/RUL-2 / §6 F19 — a committed span that left a DANGLING start mark. The
+  // row records the spans still OPEN when the freeze window closed (`hook.pendingSpans`):
+  // a span must close on BOTH settlement paths, and an OPEN one never becomes a value.
+  if (typeof run.hook === 'object' && run.hook !== null && Number.isFinite(run.hook.pendingSpans) && run.hook.pendingSpans > 0) {
+    for (const s of stageList(run)) {
+      const sid = s && typeof s === 'object' && typeof s.id === 'string' && s.id !== '' ? s.id : '<unrecorded>'
+      if (!s || typeof s !== 'object' || s.unseparated !== true) continue
+      err(
+        `stage ${sid} left a dangling ${O0_MARK_PREFIX}${sid}:start mark (no end mark/measure committed — the span must close ` +
+          `on BOTH settlement paths, §3.6/RUL-2)`,
+      )
+    }
+  }
+
   // --- §4.3 fail-loud: pass:false must name its forcing condition -----------
   const recorded = Array.isArray(run.failReasons)
     ? run.failReasons.filter((x: any) => typeof x === 'string' && x !== '')
@@ -275,7 +447,7 @@ export function validateO0Run(runInput: unknown, ids: readonly string[] = O0_STA
     )
   }
 
-  return { ok: errors.length === 0, errors, failReasons, warnings }
+  return { ok: errors.length === 0, errors, failReasons, structuralReasons, derivedReasons, warnings }
 }
 
 // ---------------------------------------------------------------------------
@@ -291,9 +463,23 @@ export function compareO0StageIdSets(a: unknown, b: unknown): { equal: boolean; 
     }
     return out.sort()
   }
+  // §3a finding 3 — the SET comparison must not de-dupe a divergence away: an id
+  // that REPEATS in either run is a set violation (§4.3/F1), so `equal` is false.
+  const duplicatedOf = (run: any): string[] => {
+    const counts = new Map<string, number>()
+    for (const s of stageList(run)) {
+      if (s && typeof s === 'object' && typeof s.id === 'string') counts.set(s.id, (counts.get(s.id) ?? 0) + 1)
+    }
+    return [...counts.keys()].filter((sid) => (counts.get(sid) ?? 0) > 1)
+  }
   const aIds = setOf(a)
   const bIds = setOf(b)
-  return { equal: aIds.length === bIds.length && aIds.every((x, i) => x === bIds[i]), aIds, bIds }
+  const duplicated = [...duplicatedOf(a), ...duplicatedOf(b)]
+  return {
+    equal: duplicated.length === 0 && aIds.length === bIds.length && aIds.every((x, i) => x === bIds[i]),
+    aIds,
+    bIds,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +532,16 @@ export function reconcileO0PostStyle(
   runInput: unknown,
   tolerance: unknown,
 ): O0Result & {
-  postStyle: { ms: number | null; timed: false; source: 'derived'; residual: number | null; unseparated: boolean }
+  postStyle: {
+    ms: number | null
+    timed: false
+    source: 'derived'
+    /** RUL-5/L12 — `post.style` is DERIVED everywhere it appears (§2.2 id 11). */
+    derived: true
+    derivedNote: string
+    residual: number | null
+    unseparated: boolean
+  }
   residual: number | null
   sumMs: number
   unseparatedStages: string[]
@@ -354,7 +549,8 @@ export function reconcileO0PostStyle(
 } {
   const run: any = runInput && typeof runInput === 'object' ? runInput : {}
   const tol: any = tolerance && typeof tolerance === 'object' ? tolerance : {}
-  const toleranceMs = isNonNeg(tol.reconcileMs) ? tol.reconcileMs : 0
+  const tolInput = tol.reconcileMs
+  const toleranceMs = isNonNeg(tolInput) ? tolInput : 0
   const stages = stageList(run)
   const unseparated = unseparatedStageIds(run)
   const sumMs = stages
@@ -367,10 +563,30 @@ export function reconcileO0PostStyle(
     errors.push(m)
     failReasons.push(m)
   }
+  if (!isNonNeg(tolInput)) {
+    err(
+      `tolerance.reconcileMs is ${String(tolInput)} (the recorded reconcile band must be a non-negative finite number — ` +
+        `§4.3/§5 P-TP-1: a non-numeric band is never silently assumed to be 0)`,
+    )
+  }
   if (unseparated.length) {
     err(
       `unseparated stage(s) ${unseparated.join(', ')} cannot be reconciled ` +
         `(§5 P-TP-1/§6 F4: an unmeasured stage cannot be imputed away)`,
+    )
+  }
+  // RUL-5/L12 — `post.style` is DERIVED EVERYWHERE it appears (a computed residual,
+  // §2.2 id 11 — never a timed probe): the branch that adds it to the unseparated
+  // set says so, and every returned/emitted `post.style` value carries
+  // `source:'derived'` + `timed:false` + `derived:true`.
+  const derivedNote = 'post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)'
+  // §6 F4/§5 P-TP-1 — a SEPARATED stage carrying a non-numeric ms would be summed
+  // as 0, absorbing its time into the residual: an imputation, not a reconciliation.
+  const imputed = stages.filter((s: any) => s && typeof s === 'object' && s.unseparated !== true && !isNonNeg(s.ms))
+  for (const s of imputed) {
+    err(
+      `stage ${typeof s.id === 'string' && s.id !== '' ? s.id : '<stages[] entry>'} is not unseparated but carries ms ` +
+        `${String(s.ms)} — a stage that was not measured cannot be summed as 0 (§6 F4/§5 P-TP-1: the imputation ban)`,
     )
   }
   if (!isNonNeg(total)) {
@@ -386,21 +602,38 @@ export function reconcileO0PostStyle(
         `[0, ${String(toleranceMs)}] (tolerance ${String(tol.source ?? 'unrecorded')} — §5 P-TP-1)`,
     )
   }
+  // §3a finding 2 — the branch the driver twin (`o0ApplyPostStyle`) takes: the
+  // DERIVED `post.style` is separated ONLY when the residual is non-negative AND
+  // every stage was actually measured; otherwise `ms:null` + `unseparated:true`
+  // (the two are ONE branch, never two) and `post.style` joins the unseparated set.
+  const separated = imputed.length === 0 && unseparated.length === 0 && residual !== null && residual >= 0
+  const unseparatedOut = separated ? unseparated : unseparated.includes('post.style') ? unseparated : [...unseparated, 'post.style']
+  // RUL-5/L12 — when the DERIVED residual joins the unseparated set, the record says
+  // WHY in the derived terms (a computed value, never a probe).
+  if (!separated && unseparatedOut.includes('post.style')) {
+    failReasons.push(
+      `${derivedNote}: on this branch the residual is not separable, so post.style is emitted ms:null + unseparated:true ` +
+        `(ONE branch, never two — §3a finding 2/§5 P-TP-1)`,
+    )
+  }
   return {
     ok: errors.length === 0,
     errors,
     failReasons,
     residual,
     sumMs,
-    unseparatedStages: unseparated,
+    unseparatedStages: unseparatedOut,
     toleranceMs,
-    // §2.2 stage 11 — DERIVED, never a timed probe: `timed:false` is pinned.
+    // §2.2 stage 11 — DERIVED, never a timed probe: `timed:false` is pinned, and the
+    // RUL-5/L12 marker names it as derived at the value itself.
     postStyle: {
-      ms: residual !== null && residual >= 0 && unseparated.length === 0 ? residual : null,
+      ms: separated ? residual : null,
       timed: false,
       source: 'derived',
+      derived: true,
+      derivedNote: derivedNote,
       residual,
-      unseparated: unseparated.length > 0,
+      unseparated: !separated,
     },
   }
 }
@@ -422,6 +655,16 @@ export function validateO0Census(
     failReasons.push(m)
   }
   for (const f of ['documents', 'nodes', 'edges'] as const) {
+    // §3a finding 9 — a PARTIAL triplet (a field absent on BOTH sides) compared
+    // "equal" and validated ok:true: the census fields must each be a non-negative
+    // finite number on BOTH sides before they can be reconciled at all.
+    if (!isNonNeg(recorded[f]) || !isNonNeg(observed[f])) {
+      err(
+        `corpus census ${f} is ${String(recorded[f])} recorded vs ${String(observed[f])} observed — §5 P-SM-1: the census field ` +
+          `must be a non-negative finite number on BOTH sides (a partial census cannot be reconciled)`,
+      )
+      continue
+    }
     if (recorded[f] !== observed[f]) {
       err(
         `corpus census mismatch: claimed ${f} ${String(recorded[f])} ≠ observed ${String(observed[f])} ` +
@@ -467,6 +710,69 @@ export function deriveO0CensusVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// §4.3 H3 / §5 P-TP-3 — WINDOW-BOUNDEDNESS. `violated:true` iff a SEPARATED stage
+// exceeds `longTaskTotalMs + tolerance` (the RECORDED hook band, default 40 ms)
+// OR the recorded armed window starts before the freeze `o0:t0` / ends after
+// `o0:t1` beyond that tolerance (an arm window is never a silent widening).
+// ---------------------------------------------------------------------------
+export function deriveO0WindowBound(
+  runInput: unknown,
+  opts: { hookToleranceMs?: number } = {},
+): {
+  ok: boolean
+  violated: boolean
+  failReasons: string[]
+  toleranceMs: number
+  armWindowOk: boolean
+  offenders: Array<{ stageId: string; ms: number; boundMs: number }>
+} {
+  const run: any = runInput && typeof runInput === 'object' ? runInput : {}
+  // The band: the caller's explicit tolerance, else the ROW's recorded band
+  // (`hook.toleranceMs`), else the §3.6 default 40 ms.
+  const optGiven = opts && typeof opts === 'object' ? opts.hookToleranceMs : undefined
+  const recordedBand = run.hook && typeof run.hook === 'object' ? run.hook.toleranceMs : undefined
+  const given = optGiven !== undefined ? optGiven : recordedBand
+  const toleranceMs = isNonNeg(given) ? (given as number) : O0_WINDOW_TOLERANCE_MS
+  const total = isNonNeg(run.longTaskTotalMs) ? run.longTaskTotalMs : null
+  const boundMs = total === null ? null : total + toleranceMs
+  const failReasons: string[] = []
+  const offenders: Array<{ stageId: string; ms: number; boundMs: number }> = []
+  if (boundMs !== null) {
+    const list = stageList(run)
+    for (let i = 0; i < list.length; i++) {
+      const s: any = list[i]
+      if (!s || typeof s !== 'object' || s.unseparated === true || !isNonNeg(s.ms)) continue
+      if (s.ms > boundMs) {
+        const stageId = typeof s.id === 'string' && s.id !== '' ? s.id : `stages[${i}]`
+        offenders.push({ stageId, ms: s.ms, boundMs })
+        failReasons.push(
+          `stage ${stageId} ms ${o0Num(s.ms)} exceeds the freeze it belongs to (${o0Num(total)} ms + ${o0Num(toleranceMs)} ms ` +
+            `tolerance = bound ${o0Num(boundMs)} ms) — a stage cannot be larger than the window it is measured in (§4.3/F13a)`,
+        )
+      }
+    }
+  }
+  // §4.3(b) — the ARMED window is recorded and judged against the freeze it belongs
+  // to: a hook armed before `o0:t0` (or disarmed after `o0:t1`) beyond the band is
+  // a violation, never a silently widened measurement.
+  const hook: any = run.hook && typeof run.hook === 'object' ? run.hook : null
+  const arm: any = hook && hook.armWindow && typeof hook.armWindow === 'object' ? hook.armWindow : null
+  const freeze: any = hook && hook.freezeWindow && typeof hook.freezeWindow === 'object' ? hook.freezeWindow : null
+  let armWindowOk = true
+  if (arm && freeze && isNonNeg(arm.t0) && isNonNeg(arm.t1) && isNonNeg(freeze.t0) && isNonNeg(freeze.t1)) {
+    if (arm.t0 < freeze.t0 - toleranceMs || arm.t1 > freeze.t1 + toleranceMs) {
+      armWindowOk = false
+      failReasons.push(
+        `the armed hook window [${o0Num(arm.t0)}, ${o0Num(arm.t1)}] does not equal the freeze it belongs to ` +
+          `[o0:t0 ${o0Num(freeze.t0)}, o0:t1 ${o0Num(freeze.t1)}] within the recorded ${o0Num(toleranceMs)} ms band — ` +
+          `§4.3/P-TP-3(b): an arming interval outside its freeze is never a silent widening`,
+      )
+    }
+  }
+  return { ok: failReasons.length === 0, violated: failReasons.length > 0, failReasons, toleranceMs, armWindowOk, offenders }
+}
+
+// ---------------------------------------------------------------------------
 // §4.4 — the DERIVED verdicts (never asserted true, never hard-coded).
 // ---------------------------------------------------------------------------
 export function deriveO0StageVerdict(runInput: unknown): {
@@ -476,16 +782,21 @@ export function deriveO0StageVerdict(runInput: unknown): {
   ms: number | null
   totalMs: number | null
   pct: number | null
+  /** §4.4/RUL-5-L8 — WHY no percentage was derived (`'zero-window'` on a 0 ms
+   *  window, `'non-finite-window'`, `'share-above-100'`, else `null`). */
+  pctReason: string | null
 } {
   const run: any = runInput && typeof runInput === 'object' ? runInput : {}
+  // §3a finding 4 — an entry whose `id` is not a string is NOT an identified stage:
+  // `String(undefined)` must never become the "largest identified stage".
   const identified = stageList(run).filter(
-    (s: any) => s && typeof s === 'object' && s.id !== 'post.style' && s.unseparated !== true && isNonNeg(s.ms),
+    (s: any) =>
+      s && typeof s === 'object' && typeof s.id === 'string' && s.id !== '' && s.id !== 'post.style' && s.unseparated !== true && isNonNeg(s.ms),
   )
   let largest: any = null
   for (const s of identified) if (largest === null || s.ms > largest.ms) largest = s // spec order wins a tie
   const totalMs = isNonNeg(run.longTaskTotalMs) ? run.longTaskTotalMs : null
   const ms = largest ? largest.ms : null
-  const pct = ms !== null && totalMs !== null && totalMs > 0 ? Math.round((ms / totalMs) * 10000) / 100 : null
   const gestureName = typeof run.gesture === 'string' && run.gesture !== '' ? run.gesture : '<gesture>'
   // §4.4/F7 — the truth stays visible in failure: a row whose gesture path was not
   // proven (path !== 'cdp', OR a realInput that disagrees with it) still gets its
@@ -494,11 +805,59 @@ export function deriveO0StageVerdict(runInput: unknown): {
   const fallback = hitTested
     ? ''
     : ` — gesture path ${String(run.path)} with realInput ${String(run.realInput)}: the row is not hit-tested evidence (§6 F7)`
+  // §4.4/F13a — the percentage is REFUSED on a violated window (the live
+  // `1698.82%` string is exactly what this branch replaces).
+  if (o0WindowRecorded(run)) {
+    const wb = deriveO0WindowBound(run)
+    if (wb.violated) {
+      const off = wb.offenders[0]
+      const head = off
+        ? `stage ${off.stageId} is ${o0Num(off.ms)} ms, which EXCEEDS the freeze window it belongs to (${o0Num(totalMs)} ms + ` +
+          `${o0Num(wb.toleranceMs)} ms tolerance)`
+        : `the armed hook window EXCEEDS the freeze window it belongs to (${o0Num(totalMs)} ms + ${o0Num(wb.toleranceMs)} ms tolerance)`
+      return {
+        ok: true,
+        verdict: `${head} — WINDOW-BOUND VIOLATED: no percentage verdict is emitted for this row${fallback}`,
+        largestStageId: largest ? String(largest.id) : null,
+        ms,
+        totalMs,
+        pct: null,
+        pctReason: null,
+      }
+    }
+  }
+  // §5 P-TP-3(c) — a percentage is derived only inside [0, 100]: a stage that is
+  // inside the band but larger than the raw total emits NO percentage (pct:null).
+  const pct = ms !== null && totalMs !== null && totalMs > 0 && ms <= totalMs ? Math.round((ms / totalMs) * 10000) / 100 : null
+  // RUL-5/L8 — a percentage is NEVER emitted without a finite positive window: the
+  // former `(null%)` literal (a zero/absent-`longTaskTotalMs` row) read as a
+  // measurement. The pct-less form below names WHY no percentage exists.
+  // §4.4/RUL-5-L8 — the pinned ZERO-WINDOW form (the `(null%)` literal is retired):
+  // `pct` is `null` AND `pctReason` names why, so a reader can never take an empty
+  // window for a measurement.
+  const pctReason: string | null =
+    pct !== null
+      ? null
+      : totalMs === 0
+        ? 'zero-window'
+        : totalMs === null
+          ? 'non-finite-window'
+          : 'share-above-100'
+  const noPct =
+    totalMs === 0
+      ? `no percentage is computed: the long-task window is zero (${o0Num(totalMs)} ms), so this row has no finite window to divide by`
+      : totalMs === null
+        ? 'no percentage is computed: longTaskTotalMs is not a finite non-negative number, so this row has no finite window to divide by'
+        : `${o0Num(ms)} ms exceeds the ${o0Num(totalMs)} ms window it was measured in, so no percentage is computed (a share above 100% is refused, §5 P-TP-3(c))`
   const verdict = largest
-    ? `stage ${String(largest.id)} is ${o0Num(ms)} ms of the ${o0Num(totalMs)} ms long task (${o0Num(pct)}%) on ` +
-      `${gestureName} — ${String(largest.id)} is the largest identified stage${fallback}`
-    : `stage <none> is null ms of the ${o0Num(totalMs)} ms long task (null%) on ${gestureName} — no identified stage${fallback}`
-  return { ok: true, verdict, largestStageId: largest ? String(largest.id) : null, ms, totalMs, pct }
+    ? pct !== null
+      ? `stage ${String(largest.id)} is ${o0Num(ms)} ms of the ${o0Num(totalMs)} ms long task (${o0Num(pct)}%) on ` +
+        `${gestureName} — ${String(largest.id)} is the largest identified stage${fallback}`
+      : `stage ${String(largest.id)} is ${o0Num(ms)} ms of the ${o0Num(totalMs)} ms long task on ${gestureName} — ` +
+        `${noPct}${fallback}`
+    : `no stage was identified in the row (every stage is unseparated or null ms) of the ${o0Num(totalMs)} ms long task on ` +
+      `${gestureName} — ${noPct}${fallback}`
+  return { ok: true, verdict, largestStageId: largest ? String(largest.id) : null, ms, totalMs, pct, pctReason }
 }
 
 /** §4.4 + A-4 — the whole-store `IPC_RAG_SNAPSHOT` discriminator: how many
@@ -512,14 +871,27 @@ export function deriveO0SnapshotVerdict(
   const run: any = runInput && typeof runInput === 'object' ? runInput : {}
   const census: any = censusInput && typeof censusInput === 'object' ? censusInput : {}
   const snapshots = stageList(run).filter((s: any) => s && typeof s === 'object' && s.id === 'snapshot.pull')
+  const unmeasured = snapshots.find((s: any) => s.unseparated === true) ?? null
   const reads = snapshots.filter((s: any) => s.unseparated !== true && isNonNeg(s.ms) && s.ms > 0)
   const readCount = reads.length
   const readMs = reads.reduce((acc: number, s: any) => acc + s.ms, 0)
   const gestureName = typeof run.gesture === 'string' && run.gesture !== '' ? run.gesture : '<gesture>'
-  const verdict =
-    `the ${gestureName} performed ${readCount} whole-store IPC_RAG_SNAPSHOT read(s) totalling ${o0Num(readMs)} ms ` +
-    `(census ${o0Num(census.documents)} docs / ${o0Num(census.nodes)} nodes / ${o0Num(census.edges)} edges)`
+  // §3.6b/§4.4 — the A-4 rule: a "NOT measured" 0 must never be emitted as a
+  // MEASURED zero. An `unseparated` `snapshot.pull` emits the UNMEASURED form
+  // instead of `performed 0 whole-store … read(s)` (the live §12 H2 string).
+  const verdict = unmeasured
+    ? `the ${gestureName}'s whole-store IPC_RAG_SNAPSHOT read count is UNMEASURED (${o0UnmeasuredDetail(unmeasured)})`
+    : `the ${gestureName} performed ${readCount} whole-store IPC_RAG_SNAPSHOT read(s) totalling ${o0Num(readMs)} ms ` +
+      `(census ${o0Num(census.documents)} docs / ${o0Num(census.nodes)} nodes / ${o0Num(census.edges)} edges)`
   return { ok: true, verdict, readCount, readMs, stageSeparated: snapshots.some((s: any) => s.unseparated !== true) }
+}
+/** §4.4 — the pinned UNMEASURED parenthetical: `snapshot.pull unseparated — <reason>`. */
+function o0UnmeasuredDetail(pull: any): string {
+  const reason =
+    typeof pull?.structuralReason === 'string' && pull.structuralReason !== ''
+      ? pull.structuralReason
+      : 'the caller-level seam was not armed for this run'
+  return reason.startsWith('snapshot.pull unseparated') ? reason : `snapshot.pull unseparated — ${reason}`
 }
 
 /** §4.4 — the per-row verdict pair, or the pinned schema-error verdict when a
@@ -658,11 +1030,83 @@ function o0CheckControls(
   return { errors, failReasons, notes }
 }
 
-export function validateO0Reports(runsInput: unknown, opts: any = {}): O0Result & { notes: string[]; runs: unknown[] } {
+/** §4.4 (RUL-4) — the DERIVED report status: a report whose ONLY recorded defects
+ *  are structurally-unmeasurable stages (seams that do not exist in the executing
+ *  bundle, each with a recorded reason) is `OPEN-structural`, NOT a failure — while
+ *  a genuinely unmeasured/illegally-imputed row, a falsifiability failure (a
+ *  non-`cdp` gesture, an unverified bundle, a hard-coded verdict) or a violated
+ *  window is `FAIL`. ONE implementation, shared by the pure validator and the
+ *  driver's own emit path. */
+export type O0ReportStatus = 'OK' | 'OPEN-structural' | 'FAIL'
+/** §4.2/RUL-4 — the DERIVED report STATUS. Exactly three legal values, and ONE
+ *  implementation shared by the pure validator and the driver:
+ *  - `"OK"` ⇔ `pass:true` (every stage measured or `derived`);
+ *  - `"OPEN-structural"` ⇔ `pass:false` whose every recorded reason is in the
+ *    STRUCTURAL FAMILY (a stage whose seam does not exist in the executing bundle
+ *    — `structural:true` + a reason — the DERIVED `post.style` residual that
+ *    therefore cannot be computed, and the reconciliation-incomplete line);
+ *  - `"FAIL"` — any reason outside that family (§6 F-state class).
+ *  `ok` (SCHEMA validity) is a DIFFERENT field: a structurally-open report is
+ *  `ok:true` with an empty `errors[]` while its `pass` stays `false` (the
+ *  measurement is incomplete, not malformed — §6 S19/F18). */
+export function deriveO0ReportStatus(result: {
+  ok?: unknown
+  gating?: unknown
+  failReasons?: unknown
+  structuralFamily?: unknown
+  structuralReasons?: unknown
+  derivedReasons?: unknown
+}): {
+  status: O0ReportStatus
+  gating: string[]
+  family: string[]
+  structural: string[]
+  derived: string[]
+  pass: boolean
+  statement: string
+} {
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === 'string' && x !== '') : [])
+  const structural = strings(result?.structuralReasons)
+  const derived = strings(result?.derivedReasons)
+  const family = [...new Set([...strings(result?.structuralFamily), ...structural, ...derived])]
+  const all = strings(result?.failReasons)
+  const gating =
+    result?.gating !== undefined
+      ? strings(result.gating)
+      : all.filter((m) => !family.includes(m))
+  const status: O0ReportStatus = gating.length > 0 ? 'FAIL' : family.length > 0 ? 'OPEN-structural' : result?.ok === true ? 'OK' : 'FAIL'
+  const pass = status === 'OK'
+  const statement =
+    status === 'FAIL'
+      ? `FAIL — ${gating.length || 1} forcing reason(s) outside the structural family (an unmeasured permitted stage, an ` +
+        `imputation, a falsifiability failure, a violated window, a broken control pairing or a census mismatch; §6 F-state class/RUL-4)`
+      : status === 'OPEN-structural'
+        ? `OPEN-structural — ${structural.length} structurally-unmeasurable stage(s) (no seam in the executing bundle) and ` +
+          `${derived.length} DERIVED-residual record(s): the report is SCHEMA-VALID and its residual cannot be computed; no ` +
+          `value was imputed (§3.6b RUL-4, §6 S14/S19)`
+        : 'OK — every stage is measured or derived, no forcing reason recorded (§4.2/RUL-4)'
+  return { status, gating, family, structural, derived, pass, statement }
+}
+
+export function validateO0Reports(
+  runsInput: unknown,
+  opts: any = {},
+): O0Result & {
+  notes: string[]
+  structural: string[]
+  derivedResidual: string[]
+  structuralFamily: string[]
+  gating: string[]
+  status: O0ReportStatus
+  runs: unknown[]
+} {
   const runs = Array.isArray(runsInput) ? (runsInput as any[]) : []
   const ids = Array.isArray(opts.ids) && opts.ids.length ? (opts.ids as string[]) : O0_STAGE_IDS
   const errors: string[] = []
   const failReasons: string[] = []
+  const structural: string[] = []
+  const derivedResidual: string[] = []
+  const notes: string[] = []
   const err = (m: string) => {
     errors.push(m)
     failReasons.push(m)
@@ -674,18 +1118,57 @@ export function validateO0Reports(runsInput: unknown, opts: any = {}): O0Result 
   runs.forEach((r, i) => {
     const v = validateO0Run(r, ids)
     for (const e of v.errors) errors.push(`runs[${i}]: ${e}`)
-    for (const e of v.failReasons) failReasons.push(`runs[${i}]: ${e}`)
+    // RUL-4 — the STRUCTURAL lines are recorded but never gating: a seam that does
+    // not exist in the executing bundle is a recorded harness gap, not a defect of
+    // the measurement. Every OTHER recorded reason stays a forcing condition.
+    for (const e of v.structuralReasons) {
+      structural.push(`runs[${i}]: ${e}`)
+      notes.push(`runs[${i}]: ${e}`)
+    }
+    for (const e of v.derivedReasons) {
+      derivedResidual.push(`runs[${i}]: ${e}`)
+      notes.push(`runs[${i}]: ${e}`)
+    }
+    for (const e of v.failReasons) {
+      if (v.structuralReasons.includes(e) || v.derivedReasons.includes(e)) continue
+      failReasons.push(`runs[${i}]: ${e}`)
+    }
   })
   const ctl = o0CheckControls(runs, opts.controls, { crossArtifactControlPairs: opts.crossArtifactControlPairs })
   errors.push(...ctl.errors)
   failReasons.push(...ctl.failReasons)
-  return { ok: errors.length === 0 && failReasons.length === 0, errors, failReasons, notes: ctl.notes, runs }
+  notes.push(...ctl.notes)
+  const family = [...new Set([...structural, ...derivedResidual])]
+  const gating = failReasons.filter((m) => !family.includes(m))
+  const derived = deriveO0ReportStatus({ ok: true, gating, failReasons: [...gating, ...family], structuralFamily: family })
+  const ok = errors.length === 0 && gating.length === 0
+  return {
+    ok,
+    errors,
+    failReasons: [...gating, ...family],
+    gating,
+    structuralFamily: family,
+    notes,
+    structural,
+    derivedResidual,
+    status: derived.status,
+    runs,
+  }
 }
 
 // ---------------------------------------------------------------------------
 // §4.2 / §6 F10 — the top-level report validator.
 // ---------------------------------------------------------------------------
-export function validateO0Report(repInput: unknown): O0Result & { verdicts: string[]; notes: string[] } {
+export function validateO0Report(repInput: unknown): O0Result & {
+  verdicts: string[]
+  notes: string[]
+  structural: string[]
+  derivedResidual: string[]
+  structuralFamily: string[]
+  gating: string[]
+  status: O0ReportStatus
+  statusStatement: string
+} {
   const rep: any = repInput && typeof repInput === 'object' ? repInput : {}
   const errors: string[] = []
   const failReasons: string[] = []
@@ -802,11 +1285,45 @@ export function validateO0Report(repInput: unknown): O0Result & { verdicts: stri
   // --- §4.3: every freeze row ----------------------------------------------
   const runs = Array.isArray(rep.runs) ? (rep.runs as any[]) : []
   if (!Array.isArray(rep.runs) || runs.length === 0) err('runs must be a non-empty array of §4.3 freeze rows (§4.2)')
+
+  // --- §6 S17/F17b — inertness measured but VACUOUS ------------------------
+  // A report whose runs ARMED the hook but carries NO inertness comparison cannot
+  // claim an inert hook: an unverified arm is not an inert arm (§3.6(c)).
+  const armedRunCount = runs.filter((r: any) => r && typeof r === 'object' && r.hook && r.hook.armed === true).length
+  const comparisons = drv && Array.isArray(drv.hookInertness) ? drv.hookInertness : []
+  if (armedRunCount > 0 && comparisons.length === 0) {
+    err(
+      `no hook inertness comparison was recorded although ${armedRunCount} run(s) armed the hook — an unverified arm is not ` +
+        `an inert arm (§3.6(c)/§6 S17/F17b)`,
+    )
+  }
+
   const validateIds = Array.isArray(rep.stageIds) && rep.stageIds.length === O0_STAGE_COUNT ? stageIds : O0_STAGE_IDS
+  const structural: string[] = []
+  const derivedResidual: string[] = []
   runs.forEach((r, i) => {
     const v = validateO0Run(r, validateIds)
     for (const e of v.errors) errors.push(`runs[${i}]: ${e}`)
-    for (const e of v.failReasons) failReasons.push(`runs[${i}]: ${e}`)
+    // RUL-4 — the STRUCTURAL subset is RECORDED (as a note + a `structural` marker)
+    // but is NOT a report-level forcing condition: a seam that does not exist in the
+    // executing bundle is a recorded GAP of the harness, never a failed
+    // measurement. Every other recorded reason (a genuinely unmeasured row, an
+    // illegal imputation, a falsifiability failure, a violated window) still gates.
+    for (const e of v.structuralReasons) {
+      structural.push(`runs[${i}]: ${e}`)
+      notes.push(`runs[${i}]: ${e}`)
+    }
+    // RUL-4/RUL-5-L12 — the DERIVED `post.style` residual is a computed consequence,
+    // not a seam that was not armed: recorded (as a note + a `derivedResidual`
+    // marker), never gating.
+    for (const e of v.derivedReasons) {
+      derivedResidual.push(`runs[${i}]: ${e}`)
+      notes.push(`runs[${i}]: ${e}`)
+    }
+    for (const e of v.failReasons) {
+      if (v.structuralReasons.includes(e) || v.derivedReasons.includes(e)) continue
+      failReasons.push(`runs[${i}]: ${e}`)
+    }
     // A freeze row that fails its OWN falsifiability requirements cannot be part
     // of a passing report — the row's verdict is propagated, never absorbed.
     if (r && typeof r === 'object' && r.pass === false) {
@@ -838,32 +1355,123 @@ export function validateO0Report(repInput: unknown): O0Result & { verdicts: stri
   if (tol && typeof tol === 'object') {
     for (const r of runs) {
       const rec = reconcileO0PostStyle(r, tol)
+      const structuralIds = structuralStageIds(r)
+      // RUL-4 — the precise reconciliation NOTE: which stages are structurally
+      // unmeasurable (with their reasons) and that `post.style` is the DERIVED
+      // residual that cannot exist while they are unseparated.
       notes.push(
         `run ${String(r?.id)}: post.style residual ${rec.postStyle.ms === null ? 'null' : String(rec.postStyle.ms)} ms ` +
           `(Σ named stages ${String(rec.sumMs)} of ${String(r?.longTaskTotalMs)} ms; reconciliation ${rec.ok ? 'ok' : 'FAILED'})` +
-          (rec.unseparatedStages.length ? ` — unseparated: [${rec.unseparatedStages.join(', ')}]` : ''),
+          (rec.unseparatedStages.length ? ` — unseparated: [${rec.unseparatedStages.join(', ')}]` : '') +
+          (structuralIds.length
+            ? ` — STRUCTURAL (no seam in the executing bundle): [${structuralIds.join(', ')}]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)`
+            : ''),
       )
       for (const m of rec.failReasons) notes.push(`run ${String(r?.id)}: ${m}`)
-      // §6 F4 — an unmeasured stage cannot be reconciled away, so a row that
-      // reports an unseparated stage makes the REPORT a fail-state (the residual
-      // band itself stays a recorded outcome, never a report-level forcing
-      // condition: §5 P-TP-1 is its own row).
-      if (rec.unseparatedStages.length) {
+      // §6 F4/RUL-4 — an unmeasured stage cannot be reconciled away, so a row that
+      // reports a NON-structural unmeasured stage makes the REPORT a fail-state. A
+      // row whose unseparated set is structural (its seams do not exist) plus the
+      // derived `post.style` residual is OPEN-structural instead: recorded, never a
+      // FAIL. The residual band itself stays a recorded outcome (§5 P-TP-1).
+      const nonStructural = rec.unseparatedStages.filter((id) => id !== 'post.style' && !structuralIds.includes(id))
+      if (nonStructural.length) {
         err(
-          `run ${String(r?.id)}: unseparated stage(s) ${rec.unseparatedStages.join(', ')} cannot be reconciled ` +
+          `run ${String(r?.id)}: unseparated stage(s) ${nonStructural.join(', ')} cannot be reconciled ` +
             `(§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)`,
         )
       }
     }
   }
-  if (rep.pass === false && failReasons.length === 0) {
+  // §4.2/RUL-4 clause 4/§6 F18 — `ok` (SCHEMA validity) is NOT the verdict: the
+  // structural family is a recorded FACT and is not gating. `gating` is every reason
+  // OUTSIDE the family, and the status is derived from exactly that split.
+  const family = [...new Set([...structural, ...derivedResidual])]
+  const gating = failReasons.filter((m) => !family.includes(m))
+  const derived = deriveO0ReportStatus({ ok: true, gating, failReasons: [...gating, ...family], structuralFamily: family })
+  const ok = errors.length === 0 && gating.length === 0
+
+  if (rep.pass === false && gating.length === 0 && family.length === 0) {
     err('the report records pass:false with no forcing reason (§4.3 fail-loud)')
   }
-  if (rep.pass === true && failReasons.length > 0) {
+  if (rep.pass === true && gating.length > 0) {
     failReasons.push(
-      `the report records pass:true but the harness derived ${failReasons.length} forcing condition(s) — a verdict is ` +
+      `the report records pass:true but the harness derived ${gating.length} forcing condition(s) — a verdict is ` +
         `NEVER asserted true (§4.4/D-GP-UFA-3)`,
     )
   }
-  return { ok: errors.length === 0 && failReasons.length === 0, errors, failReasons, verdicts, notes }
+  if (rep.pass === true && family.length > 0 && gating.length === 0) {
+    err(
+      `report pass:true with ${family.length} recorded structural fact(s) — the status of such a report is ` +
+        `"OPEN-structural", never "OK" (§4.2/RUL-4: OK ⇔ pass:true)`,
+    )
+  }
+  // A report that DECLARES a status must declare the DERIVED one, and its `pass` must
+  // agree with it (§4.2/RUL-4): `OK` ⇔ `pass:true`; `OPEN-structural` ⇔ a
+  // `pass:false` whose every forcing reason is in the structural family.
+  if (rep.status !== undefined && rep.status !== null) {
+    if (rep.status !== derived.status) {
+      err(
+        `report status ${JSON.stringify(rep.status)} disagrees with the status the recorded reasons DERIVE (${derived.status}) — ` +
+          `a status is COMPUTED from the reasons, never asserted (§4.4/D-GP-UFA-3/RUL-4)`,
+      )
+    }
+    if (rep.pass !== (derived.status === 'OK')) {
+      err(
+        `report status ${JSON.stringify(rep.status)} contradicts pass:${String(rep.pass)} (§4.2/RUL-4: OK ⇔ pass:true, ` +
+          `OPEN-structural ⇔ a pass:false whose reasons are all structural)`,
+      )
+    }
+    // §3.6b RUL-4 clause 5 / §6 F18 — the reconciliation note is MANDATORY on the
+    // OPEN-structural branch.
+    if (derived.status === 'OPEN-structural' && (typeof rep.reconciliation?.note !== 'string' || rep.reconciliation.note === '')) {
+      err(
+        `report status is "OPEN-structural" without a reconciliation.note naming the structural stages, the non-computable ` +
+          `residual and the no-imputation statement (§3.6b RUL-4 clause 5)`,
+      )
+    }
+  }
+
+  // §2.4/RUL-5-L9 + §6 S20/F20 — a GPU delta is PER RUN / PER CORPUS: a delta the
+  // report carries from another run as if it were this run's measurement is a
+  // forcing reason (the provenance form must name that run + corpus).
+  for (const d of Array.isArray(drv?.gpuDeltas) ? (drv.gpuDeltas as any[]) : []) {
+    if (d && d.carriedFromAnotherRun === true) {
+      err(
+        `the GPU control reports a delta carried from another run/corpus (${String(d.delta)} ms from ${String(d.provenanceRun)}) — ` +
+          `the GPU delta is reported per run/per corpus and is never carried across runs (§2.4/RUL-5)`,
+      )
+    }
+  }
+  // §3.4/RUL-5-L10 — the corpus SIZE is the gate; `nodes`/`edges`/bytes are recorded
+  // provenance. A corpus row that presents them as a pinned census is a forcing reason.
+  if (corpus && typeof corpus === 'object' && corpus.gate !== undefined && corpus.gate !== 'documents') {
+    err(
+      `the corpus row presents ${JSON.stringify(corpus.gate)} as the pinned census — the SIZE is the gate and the ` +
+        `bytes/counts are recorded provenance (§3.4/§4.3/RUL-5)`,
+    )
+  }
+  // §6 S17(b)/F21 (RUL-6) — an inertness pair whose long-task half is VACUOUS must
+  // state the MUTATION-HALF proof; the unqualified long-task-bounded claim is a defect.
+  for (const p of comparisons) {
+    if (p && typeof p === 'object' && p.nonVacuous === false && !/MUTATION-HALF/.test(String(p.proofStatement ?? ''))) {
+      err(
+        `the hook inertness pair is reported as a long-task-bounded proof while nonVacuous is false (both freezes totalled ` +
+          `${String(p.longTaskTotalMs?.unarmed ?? 'n/a')} ms) — a vacuous half proves nothing; report the MUTATION-HALF form ` +
+          `instead (§6 S17/RUL-6)`,
+      )
+    }
+  }
+  return {
+    ok,
+    errors,
+    failReasons: [...gating, ...family],
+    gating,
+    structuralFamily: family,
+    structural,
+    derivedResidual,
+    status: derived.status,
+    statusStatement: derived.statement,
+    verdicts,
+    notes,
+  }
 }

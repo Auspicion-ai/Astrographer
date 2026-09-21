@@ -1,18 +1,46 @@
 # Unit O-0 — Per-stage freeze measurement (PRECONDITION ARTIFACT) — Spec
 
-**Status:** **OPEN — the live battery RAN and FAILED; this is the SPEC RE-DERIVATION the
-next red→green cycle and the live re-run must follow (2026-09-17).** The spec LANDED and the
+**Status:** **DONE — ARTIFACT ACCEPTED (user DEC-1, 2026-09-20) WITH ONE RECORDED STRUCTURAL
+GAP; the report field stays `status:"OPEN-structural"`.** The live battery has now RAN THREE
+times (2026-09-17, 2026-09-20, 2026-09-20) and every leg was committed honestly; the THIRD run
+(`:0`, spawn mode, `driver.build.verified:true` both legs, census **226/226** pinned, §12.13)
+executed the RUL-1..RUL-6 fixes and produced BOTH legs at `status:"OPEN-structural"`,
+`pass:false`, **`selfValidation.ok:true` + `errors:[]` + `gatingReasons:[]`** — a COMPLETED
+MEASUREMENT WITH ONE RECORDED STRUCTURAL GAP: O-0 is **DONE** (the artifact is accepted as the
+ARCH-GNOSIS-OFFLOAD gate input) and the REPORT stays honest (`OPEN-structural`), so it is **a
+DONE unit with a recorded structural gap — never a FAIL and never a reported `"OK"`.** The spec LANDED and the
 harness LANDED (the 5 `o0_*` blocks + the §3.6 hook + the pure report module; red→green + trio
-history in §11). The committed artifact **now exists** —
-`docs/specs/unit-o-0-per-stage-breakdown.md`, written by the live pass — and it is
-**SUPERSEDED-PENDING-FIX**: 6 of the 11 stages came back `unseparated` (stages 1-3
-structurally, §12 H2), one measured stage exceeded its own freeze window (§12 H3), and the
-adversarial pass found 4 MUST-FIX host defects (§7). **The unit is NOT DONE.** The remaining
-cycle: **spec → red re-pins → host fixes → live re-run on the fixed bundle → doc-review.**
-The full record is **§12**; the re-derived measurement rules are §2.2 (the stage set and its
-seams), §3.4 (the corpus pin), §3.6b (the seam re-derivation), §4.3/§4.4 (finiteness,
-window-bound, the structural marker), §5 (`P-TP-3`), §6 (S14-S17 / F13-F17) and §7 (the
-adversarial record).
+history in §11). The committed artifact
+(`docs/specs/unit-o-0-per-stage-breakdown.md`) is written by the live pass — **now in its THIRD
+edition (run 3, host clock 2026-09-20; runs 1-2 named superseded inside it, raw JSON embedded)**:
+the first run left 6 of the 11 stages `unseparated` (stages 1-3 structurally — §12 H2) with one
+measured stage exceeding its own freeze window (§12 H3); the second run **fixed those two
+classes** (stages 1-3 measured at the caller level, the window bound passing on all six rows) and
+left **4** stages `unseparated` (`snapshot.clone`, `render.dom`, `render.ssr`, `post.style`) —
+the state §12.12 records and RUL-1/RUL-3/RUL-4 re-rule; the third run **closed the RUL-1 emit
+seams and the RUL-2 awaited round trip** (ids 9/10 now measured; `snapshot.pull` 85.9/179.2 ms
+GPU-OFF) and leaves exactly **ONE structural id — `snapshot.clone`** (no main-side transport AND
+the Electron IPC structured clone outside every host-side wrap) **plus the `derived` `post.style`
+residual**. The adversarial pass found 4 MUST-FIX host defects (§7, now with the second run's
+`L1`..`L12` dispositions in §7 §3c). **THE UNIT IS NOW DONE (DEC-1, 2026-09-20): the user ACCEPTED
+the `snapshot.clone` structural gap, and §3.6b RUL-4 clause 7 was AMENDED — an
+`OPEN-structural` report whose ONLY gap is the ACCEPTED structural set (`snapshot.clone` + the
+therefore-derived `post.style`), with `selfValidation.ok:true`, `gatingReasons:[]`, the
+window-bound check passing and the structural reasons recorded verbatim, DOES open the O-5
+delegation gate (see clause 7 and §11).** The SUPERSEDED clause ("ONLY `status:"OK"` ⇔
+`pass:true` opens the gate") is recorded in the decision row
+**`O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`** (`docs/decisions.md`). A future main-side transport
+carrying the main recorder's records remains a SEPARATE unit with its own gate; until it exists,
+every O-0 report MUST stay `status:"OPEN-structural"` and may never be quietly reported `"OK"`.
+Two OPEN defect rows the pass filed stay OPEN and are OWED (`docs/defects.md`:
+`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`, `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`) — the user
+accepted the STRUCTURAL gap, **not** these two. The full records are **§12** (first run), **§12.12**
+(second run) and **§12.13** (third run); the re-derived measurement rules are §2.2 (the stage set,
+its seams and the closed TEN-id seam set — RUL-1), §3.4 (the corpus pin — RUL-5), §3.6 (the
+awaited span — RUL-2) / §3.6b (the seam re-derivation, the main-transport ruling and the
+structural-vs-pass contract — RUL-3/RUL-4), §4.2-§4.4 (the report `status`, the verdict forms),
+§5 (`P-TP-3`, `P-HK-1`'s settlement clause), §6 (S14-S21 / F13-F22) and §7 (the adversarial
+record + §3c the `L`-findings).
 
 **Re-scoped per `docs/specs/gnosis-offload-review.md` §7 A-1 (`:400-402`):** O-0 is a
 **PRECONDITION ARTIFACT, not a unit.** It is a **harness deliverable with a contract
@@ -23,15 +51,15 @@ requirement is that the report be **falsifiable and non-imputable**.
 **Layer (RCA-12, mandatory declaration — `gnosis-offload-review.md:90`, checklist
 item 3 `:309`):** **`assembled-renderer`** — by construction. O-0 measures the
 **executing `dist/` bundle driving a real CDP gesture against a real Electron
-renderer** (`scripts/live-drive.mjs`'s `CDP` class, `live-drive.mjs:63-124`). This is
+renderer** (`scripts/live-drive.mjs`'s `CDP` class, `live-drive.mjs:64`). This is
 precisely the layer the node suite cannot see (`docs/specs/rca-live-bugs-green-pipeline.md`
 §5 CA-2 `:126`, RCA-12 `AGENTS.md` item 12). An envelope-green or a node-green is
 **not** O-0 evidence.
 
 **Delivered by:** new `scripts/live-drive.mjs` blocks (§3) **plus a COMMITTED
 artifact** (§4) — both now LANDED (§11) — **plus the measurement-only hook of §3.6,
-which is IMPLEMENTED** (`src/shared/o0-hook.ts`, NEW; the five wrap-only call sites;
-the guarded `window.__o0recorder` handle). **No `src/` behavior change:** the hook is
+which is IMPLEMENTED** (`src/shared/o0-hook.ts`, NEW; the five wrap-only call sites — **SEVEN
+after RUL-1**; the guarded `window.__o0recorder` handle). **No `src/` behavior change:** the hook is
 falsifiable and is inert when unarmed (no control-flow change, no reordering, no added
 work — §3.6, §5 P-HK-1). **The re-derivation of §3.6b ADDS three caller-level/main-side
 seams** (the H2 fix) — same discipline, still measurement-only, still inert when unarmed.
@@ -41,7 +69,10 @@ delegated before this artifact exists** (`gnosis-offload-review.md:70-71` "a har
 precondition, not a unit"; `:365-366` "No unit lands before O-0's artifact and O-5's
 budget row exist"; proposal §3.2 `:172-175`). The landing order is
 **O-0 → O-5 → O-9(+O-3) → O-10 → O-1 → O-2** (`gnosis-offload-review.md:363`), each a
-single-diff revert.
+single-diff revert. **SATISFIED (2026-09-20, DEC-1): the artifact exists and is ACCEPTED under
+the AMENDED §3.6b RUL-4 clause 7, so the precondition on O-5 is met and O-5 is the next queue
+item after the two OWED O-0-area defect rows and the DEC-2 vitest-5 migration unit
+(`docs/next-steps.md`).**
 
 **Depends on (upstream of this spec):** the proposal gate
 (`docs/specs/gnosis-offload-proposal.md`, O-0 row `:250`, §3.2 `:149-190`) and the
@@ -86,15 +117,16 @@ state and needs no store read at all**.
 
 | Measure | Value | Source |
 | --- | --- | --- |
-| Real doc-nav **document-row** click (open a document) | page unresponsive **~1 011 ms**; `PerformanceObserver` long tasks `[439, 439]` | `docs/defects.md:22`; proposal `:22`; `docs/next-steps.md:30` |
-| Real doc-nav **folder-row** click (pure disclosure) | **505 ms** long task, **39** DOM mutations, to reveal two rows | `docs/defects.md:22`; proposal `:23`; `docs/defects.md:48` (the generalized `PANE-SLOT-INSTABILITY-ON-DISCLOSURE` row) |
-| Pane collapse / zone minimize (a class flip) | **2 556** DOM mutations, long tasks `[465, 52]`, gesture 2.5–2.9 s; `Profiler` self-time `translateNodeData` **13 ms**, `renderTree` **8 ms**, `enumPathWalks` **8 ms** | `docs/defects.md:36` (`PANE-TOGGLE-FULL-REASSEMBLY`, which records "`Profiler` self-time shows the JS is small (`translateNodeData` 13ms, `renderTree` 8ms, `enumPathWalks` 8ms)"); `docs/next-steps.md:24` (≈29 ms of ≈517 ms) |
-| **Idle** window-resize round-trip (the control) | **6 ms** | `docs/defects.md:22`; proposal `:25` |
-| The stage grid track | `#wiki-root` computed `grid-template-rows: 0px 12698.7px 0px`, `grid-template-columns: 220px 1583.91px 0px` | `docs/defects.md:23`; proposal `:50` (`A14`) |
-| Every live run so far used `--no-gpu` | the GPU leg is **unmeasured** (listed as explicitly open in `A14`) | proposal `:49-53`; `scripts/live-drive.mjs:2676` (the hard-coded `--no-gpu`) |
+| Real doc-nav **document-row** click (open a document) | page unresponsive **~1 011 ms**; `PerformanceObserver` long tasks `[439, 439]` | `docs/defects.md:26`; proposal `:22`; `docs/next-steps.md:30` |
+| Real doc-nav **folder-row** click (pure disclosure) | **505 ms** long task, **39** DOM mutations, to reveal two rows | `docs/defects.md:26`; proposal `:23`; `docs/defects.md:52` (the generalized `PANE-SLOT-INSTABILITY-ON-DISCLOSURE` row) |
+| Pane collapse / zone minimize (a class flip) | **2 556** DOM mutations, long tasks `[465, 52]`, gesture 2.5–2.9 s; `Profiler` self-time `translateNodeData` **13 ms**, `renderTree` **8 ms**, `enumPathWalks` **8 ms** | `docs/defects.md:40` (`PANE-TOGGLE-FULL-REASSEMBLY`, which records "`Profiler` self-time shows the JS is small (`translateNodeData` 13ms, `renderTree` 8ms, `enumPathWalks` 8ms)"); `docs/next-steps.md:24` (≈29 ms of ≈517 ms) |
+| **Idle** window-resize round-trip (the control) | **6 ms** | `docs/defects.md:26`; proposal `:25` |
+| The stage grid track | `#wiki-root` computed `grid-template-rows: 0px 12698.7px 0px`, `grid-template-columns: 220px 1583.91px 0px` | `docs/defects.md:27`; proposal `:50` (`A14`) |
+| Every live run so far used `--no-gpu` | the GPU leg is **unmeasured** (listed as explicitly open in `A14`) | proposal `:49-53`; `scripts/live-drive.mjs:4397` (the `launchArgs` literal — `--no-gpu` unless `--gpu`; once `:2676`) |
 
 **The honest position this spec encodes:** the dominant cost is asserted to be DOM
-style/layout/paint (`docs/defects.md:36`, `:46`) — but the per-pass split has **never
+style/layout/paint (`docs/defects.md:40` — the `PANE-TOGGLE-FULL-REASSEMBLY` row, the
+style/layout/paint argument's home in the tracker) — but the per-pass split has **never
 been measured** (proposal `:44-46`, "the per-pass split is **NOT yet measured**").
 O-0 exists to replace that assertion with a number, or to report the stage as
 **unseparated** (§5).
@@ -115,12 +147,12 @@ measured window**: the sum of the `duration` of every `PerformanceObserver`
 (`t0` = the mark immediately before the gesture dispatch; `t1` = the mark after the
 renderer has quiesced — bounded by a poll on `requestAnimationFrame` + a
 **recorded** quiesce timeout, never an unrecorded fixed sleep). This is the same
-class of observation the motivating evidence used (`docs/defects.md:22`, `:36`), so
+class of observation the motivating evidence used (`docs/defects.md:26`, `:40`), so
 the O-0 numbers are comparable to it.
 
 Alongside it, every block records:
 - the **DOM mutation count** in the window (`MutationObserver` on `document.body`
-  with `childList`+`subtree`+`attributes`+`characterData` — the `:36` method), and
+  with `childList`+`subtree`+`attributes`+`characterData` — the `:40` method), and
 - the **wall time** from the gesture dispatch to the first responsive
   `requestAnimationFrame` probe.
 
@@ -132,16 +164,16 @@ present in **every** freeze row; a stage that cannot be separated is emitted wit
 
 | # | Stage id | What it is | Boundary / evidence source | Layer of the work |
 | --- | --- | --- | --- | --- |
-| 1 | `snapshot.pull` | the whole-store `IPC_RAG_SNAPSHOT` pull — the SHELL'S OWN CALL SITE → IPC → main handler (`listNodes()`/`listEdges()`) + structured clone → renderer promise resolution (the whole ROUND TRIP, **end-to-end at the caller**) | `snapshot.roundtrip` — the `record()` wrap of the `await this.bridge.rag.snapshot()` call site in `src/renderer/sidebar-panes.ts` (declaration symbol `loadEnvelopeCore`; today at `:2003`, with the second pre-existing call site at `:1883`); main handler `IPC_RAG_SNAPSHOT` in `src/main/main.ts` (`:751` today); payload shape `src/shared/types.ts:481-502` | **renderer caller + IPC + main** |
-| 2 | `snapshot.clone` | the **structured-clone / serialization cost (plus the store read) on the MAIN side alone** — isolated from the renderer's round trip and from the IPC queue | `snapshot.clone` — the `record()` wrap *inside* the `IPC_RAG_SNAPSHOT` handler (`src/main/main.ts:751-755`), armed by the MAIN-side recorder instance (§3.6); **stays `unseparated` if that instance cannot be armed** | main + IPC |
-| 3 | `docheads.pull` | the doc-heads payload fetch that rides the same path and aborts the re-derive on failure — the same CALLER-level round trip | `docheads.roundtrip` — the `record()` wrap of the `await this.bridge.rag.docHeads()` call site in `src/renderer/sidebar-panes.ts` (inside `:2003-2009`'s re-derive body; today at `:2013`, with the second pre-existing call site at `:1894`); `IPC_RAG_DOC_HEADS` `src/main/main.ts:627`; payload `RagDocHeadsPayload` `src/shared/types.ts:612-627` | **renderer caller + IPC + main** |
+| 1 | `snapshot.pull` | the whole-store `IPC_RAG_SNAPSHOT` pull — the SHELL'S OWN CALL SITE → IPC → main handler (`listNodes()`/`listEdges()`) + structured clone → renderer promise resolution (the whole ROUND TRIP, **end-to-end at the caller**) | `snapshot.roundtrip` — the `record()` wrap of the `await this.bridge.rag.snapshot()` call site in `src/renderer/sidebar-panes.ts` (symbols `loadEnvelopeCore` / the re-derive body; today at `:2009`, with the second pre-existing call site at `:1888`); main handler `IPC_RAG_SNAPSHOT` in `src/main/main.ts` (the `ipcMain.handle(IPC_RAG_SNAPSHOT, …)` body at `:785`, the recorder wrap `:786`); payload shape `src/shared/types.ts:481-502` | **renderer caller + IPC + main** |
+| 2 | `snapshot.clone` | the **main-side handler share** of the round trip: the `IPC_RAG_SNAPSHOT` handler's store read + reply-payload construction. **It is NOT the structured clone** — Electron's own serialization of the handler's return value happens inside the IPC internals, *after* the handler returns and outside any span this repo can wrap (RUL-3) | `snapshot.clone` — the `record()` wrap *inside* the `IPC_RAG_SNAPSHOT` handler (`src/main/main.ts`, the `ipcMain.handle(IPC_RAG_SNAPSHOT, …)` body — the wrap at `:773`, the body `o0MainRecorder.record('snapshot.clone', () => ({ nodes: …listNodes(), edges: …listEdges(), store: … }))` `:773-777`), armed by the MAIN-side recorder instance (§3.6); **stays `structural: true` until a transport carries the main instance's records out** (§3.6b, RUL-3) | main + IPC |
+| 3 | `docheads.pull` | the doc-heads payload fetch that rides the same path and aborts the re-derive on failure — the same CALLER-level round trip | `docheads.roundtrip` — the `record()` wrap of the `await this.bridge.rag.docHeads()` call site in `src/renderer/sidebar-panes.ts` (inside the same re-derive body; today at `:2019`, with the second pre-existing call site at `:1899`); `IPC_RAG_DOC_HEADS` `src/main/main.ts:653`; payload `RagDocHeadsPayload` `src/shared/types.ts:612-627` | **renderer caller + IPC + main** |
 | 4 | `traversal.build` | `buildTraversal` — the derivation walk | `src/main/traversal.ts:326` (`export function buildTraversal(input: TraversalInput): TraversalResult`; the §3.6 wrap at `:331`) | renderer (in-process) |
 | 5 | `envelope.assemble` | `assembleAppGraphEnvelope` — the pane-inclusive assembly | `src/renderer/pane-graph.ts:330` (`AppGraphAssemblyInput → AppGraphAssemblyResult`; the §3.6 wrap at `:335`) | renderer |
 | 6 | `shared.decorate` | the C20 cross-document-shared pass | `src/renderer/sidebar-panes.ts:1493` (`private decorateShared(envelope)`; called at `:1520`, `:1576`, `:1655`, `:2499`; the §3.6 wrap at `:1499`) | renderer |
 | 7 | `reconcile.roots` | `reconcileDocumentRoots` — the sole classifier | `src/renderer/content-reconcile.ts:422` (`NRootReconcileInput → NRootReconcileResult`; the §3.6 wrap at `:427`) | renderer |
-| 8 | `reconcile.apply` | `Runtime.applyContentReconcile` — destroy/attach/replace of the classified roots | `src/renderer/runtime.ts:491` (`ApplyReconcileInput → ApplyReconcileReport`; the §3.6 wrap at `:497`) | renderer |
-| 9 | `render.dom` | `render()` — the DOM emit (`compilePath` + `renderProducingProcess` on the `DomAdapter`) | `src/renderer/runtime.ts:253-298` (the emit at `:290`) | **assembled-renderer** |
-| 10 | `render.ssr` | the SSR mirror emit (`SSRFragmentAdapter`, `renderProducingProcess` second pass) | `src/renderer/runtime.ts:143` + `:295`; `ssrHtml()` at `:1421` | renderer |
+| 8 | `reconcile.apply` | `Runtime.applyContentReconcile` — destroy/attach/replace of the classified roots | `src/renderer/runtime.ts:521` (`ApplyReconcileInput → ApplyReconcileReport`; the §3.6 wrap at `:527`) | renderer |
+| 9 | `render.dom` | `render()` — the DOM emit: the `renderProducingProcess` call against the **`DomAdapter`** (`compilePath`/`rootNode.compile`/`mergePass2` are the *bootstrap* passes and are NOT inside this seam — RUL-1) | `src/renderer/runtime.ts` `render()`'s DOM emit — the `renderProducingProcess(liveActionable, byNode, this.adapter, this.domPrevMap, this.renderOptions)` call inside the `this.adapter.beginBatch()`/`endBatch()` pair (the `record()` wrap at `:324-325`; the `render()` body `:280-335`) | **assembled-renderer** |
+| 10 | `render.ssr` | the SSR mirror emit: the SECOND `renderProducingProcess` pass in the same `render()`, against the **`SSRFragmentAdapter`** (`:167`) with its own `ssrPrevMap` | `src/renderer/runtime.ts` `render()`'s SSR mirror emit — the `renderProducingProcess(…, this.ssr, this.ssrPrevMap, …)` call (`:334` today). **`ssrHtml()` (`:1474` today) is the MCP READ surface, NOT the mirror emit**: it renders a fresh Markdown adapter and is never a stage. | renderer |
 | 11 | `post.style` | post-render style/layout/paint inside the window — the residual after 1–10, derived from the long-task total | **derived** — see §5 P-TP-1; the residual is a computed field, never a timed probe | browser compositor (not separable by CDP) |
 
 **Why stages 1-3 moved their seam to the CALLER (H2 re-derivation, §12 finding H2).** The
@@ -161,6 +193,13 @@ splits the round trip's inside from its outside, never a precondition for the di
 value of an unseparated stage names where the value WOULD come from**, so an unseparated
 1/2/3 whose recorder is absent/refused stays `'mark'` with the reason recorded (§3.6, §6 S14).
 
+**RUL-1 — the closed seam set is TEN ids (was 8): `render.dom`/`render.ssr` get REAL seams, not `mark`-only.** The second live run reported ids 9/10 as `structural:true` with the reason "no seam exists in the executing bundle" (`L2s`) because the driver's `mark` source could never produce a value — **nothing marked the emit**. That is a **harness gap, not a structural absence**: the emit sites are ordinary calls in this repo's own code, so they are instrumented like every other seam. Pinned in §3.6 and the §3.6b seam table:
+- the recorder's **PERMITTED set** (`O0_HOOK_SEAM_STAGES`) grows 8 → **10**: `snapshot.pull`, `snapshot.clone`, `docheads.pull`, the five render-path ids (`traversal.build`, `envelope.assemble`, `shared.decorate`, `reconcile.roots`, `reconcile.apply`) **plus `render.dom` and `render.ssr`**;
+- the page-armable render-path set (`O0_RENDER_HOOK_STAGES`) grows 5 → **7** (the five + the two render emits), so the driver's page arm requests them — an armed id that is NOT in the armed set is off-set and DROPPED (§6 S9), which would otherwise leave ids 9/10 `unseparated` for a harness reason;
+- `snapshot.clone` stays OUT of the page-arm set (no renderer seam can produce it, and arming it invites a phantom double-record — §6 F14);
+- the boundary is a **closed set**: **for those ten stages only, and for no other id, may the hook bracket an existing call**. `post.style` (id 11) is `derived` and is never claimable by a recorder; an id outside the ten still throws `O0_HOOK_STAGE_NOT_ALLOWED` at construction AND at arm time (§3.6).
+After RUL-1, ids 9/10 are **`source: 'hook'` when measured**; a run that still reports them `structural:true` must name the *instrumentation* gap (a bundle without the wrap), never "no seam exists" — the artifact's `L2s` reason string is **retired with its fix**.
+
 **§2.3/§2.4 status after the live pass: UNCHANGED — the live run did not invalidate either**
 (one ADDITIVE sequencing rule lands in §4.3, not here: the hook's armed window must equal
 the freeze window — H3).
@@ -174,7 +213,7 @@ artifact's claim that the pick maximized child rows is **not** exercised by this
 so.
 
  the `Profiler` self-times
-(13 + 8 + 8 ms — `docs/defects.md:36`) already exist and are **smaller than the
+(13 + 8 + 8 ms — `docs/defects.md:40`) already exist and are **smaller than the
 freeze by an order of magnitude**, which is the whole point — a JS-self-time-only
 report is the mis-aimed lever the critique rejected (`docs/next-steps.md:24`).
 `Profiler` output is permitted as a **supporting** diagnostic column, never as a
@@ -188,7 +227,9 @@ as `ufHitProbe`/`ufRealClick` (`:169-206`), returning `path:'cdp'` only when the
 resolves to the target (or a descendant).
 
 1. **Folder row** — a `#pane-doc-nav [data-folder-path]` row (the selector the existing
-   `v3_docnav` block probes at `live-drive.mjs:1056-1058`). **Row selection is pinned:**
+   `v3_docnav` block probes at `live-drive.mjs:1056-1058`; **re-read at the DOC-REVIEW
+   pass: re-pin this anchor by symbol (`ufHitProbe`/`ufRealClick` + the `v3_docnav` block)
+   before quoting a line**). **Row selection is pinned:**
    the block enumerates every `[data-folder-path]` row, picks the one with the largest
    child-row count (ties broken by lexicographic `data-folder-path` ascending — the
    `o0-2026-09-17` seed), and **records the chosen path** in the row
@@ -197,10 +238,12 @@ resolves to the target (or a descendant).
    The stage-1 evidence for this gesture is the **A-4 discriminator**: the report must
    state, per freeze, the **`snapshot.pull` count and ms for the folder gesture**
    (`0` / `null`, or a non-zero read). **Today's code always reads**
-   (`sidebar-panes.ts:1995` is on the unconditional path); a report whose folder row
+   (the unconditional snapshot read in `src/renderer/sidebar-panes.ts`'s re-derive body —
+   cited by symbol, `loadEnvelopeCore` / the re-derive body); a report whose folder row
    shows a store read is the recorded proof of the A-4 finding, not a block failure.
 2. **Document row** — a real doc-nav document row that focuses that document (the
-   `U-1` / `uf_panes_12` gesture class, `live-drive.mjs:484`).
+   `U-1` / `uf_panes_12` gesture class — cited by symbol; the `MATRIX_ROWS` table no
+   longer resolves by line).
 
 Both gestures must be **hit-tested** (`path === 'cdp'`); a `native-fallback`,
 `missing`, `zero-box` or `off-viewport` path forces `pass:false` (§5 P-TP-2, §6 F7).
@@ -209,13 +252,14 @@ Both gestures must be **hit-tested** (`path === 'cdp'`); a `native-fallback`,
 
 - **GPU-on vs GPU-off.** Every O-0 run records the **GPU flag actually used** and the
   report must carry **both legs** for at least the two gesture blocks. Today the
-  driver **hard-codes `--no-gpu`** in its launch args (`live-drive.mjs:2676`), so the
+  driver **hard-codes `--no-gpu`** in its launch args (`live-drive.mjs:4397` — the
+  `launchArgs` literal), so the
   GPU-on leg is **not reproducible with the current driver**: the implementer adds a
   `--gpu` flag that makes the launch args conditional (`--no-gpu` unless `--gpu` is
   passed; default unchanged = safe). The flag name, default and effect are pinned
   here so the artifact is reproducible.
 - **The 12 698.7 px track ablation.** The stage track is `grid-template-rows: 0px
-  12698.7px 0px` (`docs/defects.md:23`); the ablation sets the stage's grid cell to a
+  12698.7px 0px` (`docs/defects.md:27`); the ablation sets the stage's grid cell to a
   plain `display:block` (i.e. removes the grid-track sizing from the measurement path)
   and re-runs the **same** freeze, recording the delta. The ablation is applied to the
   rendered DOM for the measurement run only, is recorded in the artifact
@@ -244,7 +288,8 @@ pairing, not a second measurement kind, is their point).
 
 ### 3.2 Block result shape (extends the §6.1 conventions, does NOT claim a row)
 
-Every O-0 block returns **`diagResult(detail, extra)`** (`live-drive.mjs:398-412`) —
+Every O-0 block returns **`diagResult(detail, extra)`** (`live-drive.mjs:406`, the
+`function diagResult(detail, extra = {})` at `:406`) —
 the driver's declared **non-row** shape for "measurement without a row verdict" —
 with `extra` carrying the O-0 report fragment:
 
@@ -254,36 +299,71 @@ with `extra` carrying the O-0 report fragment:
 
 Three consequences, all deliberate:
 1. **An O-0 block can never be promoted to a §5.U matrix verdict.** `MATRIX_ROWS` is
-   the capped 8-row U-1..U-8 table (`live-drive.mjs:483-492`) and `reconcileMatrixRows`
-   (`:510-545`) treats a reported `U-<n>` row as a matrix row — O-0 reports **no matrix
-   row and no extended row** (`ROW_EXTENDED`, `:552-567`), so §5.U's cap of 8
+   the capped 8-row U-1..U-8 table (**cited BY SYMBOL — `export const MATRIX_ROWS`, once
+   `:483-492`; it no longer resolves by line**) and `reconcileMatrixRows`
+   (`export function`, once `:510-545`) treats a reported `U-<n>` row as a matrix row — O-0 reports **no matrix
+   row and no extended row** (`ROW_EXTENDED`, `export const`, cited by symbol; once `:552-567`), so §5.U's cap of 8
    (`docs/specs/user-flow-audit.md:32`, `:94-103`) is untouched.
 2. **`proxyPASS` stays `false`** because O-0's verdict is not a proxy for a
    user-visible end state — it is a measurement whose honesty rule is
    `unseparated:true` (§5). It therefore cannot manufacture a `proxyPASS` finding.
 3. **A block that crashes is a loud FAIL**, not a silent skip: the driver's block loop
-   prints `FAIL` and increments `fail` on a throw (`live-drive.mjs:2707-2715`) and sets
-   a non-zero exit code (`:2746`).
+   prints `FAIL` and increments `fail` on a throw and sets
+   a non-zero exit code (`process.exitCode = fail > 0 || !recon.ok ? 1 : 0`, then
+   `process.exit(process.exitCode || 0)`; both cited by symbol — the block loop's numeric
+   anchors are unstable).
+
+#### 3.2.1 The driver's row assembly RECORDS the band it used (`hook.toleranceMs`)
+
+**Pinned by the P-TP-3 remand (the band-channel fix).** The driver emits each freeze
+row's `hook` block (`scripts/live-drive.mjs`'s O-0 row assembly, the `hook: {…}` literal
+that already records `armWindow`/`freezeWindow`/`armCount`/`disarmCount`/`stageRecords` —
+**cited by symbol**; once `:946-969`) and it MUST record, in that same block, the **exact band its own
+window-bound test used** as `hook.toleranceMs`:
+
+- the recorded value is the driver's configured band constant
+  (`O0_HOOK_LONGTASK_TOLERANCE_MS`, **40** ms — `scripts/live-drive.mjs:518`), so the
+  number written on the row and the number the driver judged the row with are **one
+  value**;
+- the band is **never** inferred from, or smuggled through, a **free-text** channel — not
+  `failReasons`, not a reason's prose, not any other string in the row. The oracle,
+  `deriveO0StageVerdict` and the validator read the **recorded field** (§4.3), never text;
+- the driver's own derived stage verdict calls `deriveO0WindowBound(row)` with **no
+  options** (`scripts/live-drive.mjs`'s `o0DeriveStageVerdict` — the `wb = …` line,
+  cited **by symbol** because its numeric anchor is unstable), so the driver *already*
+  depends on the row-recorded band; the
+  driver's **inline window rule** does the same (the `EXCEEDS the freeze window` reason
+  builder, also cited **by symbol**; it prints the row's recorded band). The pure module's
+  validator **was** the one consumer that did not — it once passed the constant explicitly
+  (the old `src/shared/o0-report.ts:298` call site) — and **the fix HAS LANDED**: the
+  validator now calls `deriveO0WindowBound(run)` with **no options** at `:329-332`
+  (see §8.2's band-source block), so all three consumers read ONE band.
+
+A row that carries **no** `hook.toleranceMs` is judged at the 40 ms **default** (§4.3), so a
+live run whose rows all omit the field is a **constant-inferred** band rather than a recorded
+one — recorded as a defect, never read as a pass (§4.3's band rule, §12.11).
 
 ### 3.3 Args and CLI (pinned)
 
 Existing flags honored unchanged: `--mode=` / `--port=` / `--cdp-port=` / `--home=` /
 `--seed=` / `--groups=` / `--block=` / `--display=` / `--no-seed` / `--keep-home` /
-`--connect` (`live-drive.mjs:2643-2659`). New for O-0 (both minimal, both default-safe):
+`--connect` (`live-drive.mjs`'s CLI parse inside `main(argv)` — cited by symbol; once
+`:2643-2659`). New for O-0 (both minimal, both default-safe):
 
 | Flag | Default | Effect |
 | --- | --- | --- |
-| `--gpu` | off | launch args carry `--no-gpu` **unless** `--gpu` is passed (`live-drive.mjs:2676` becomes conditional). Default behavior is unchanged. **In `--connect` mode the driver does not spawn** (`live-drive.mjs:2673-2674`), so the GPU-on leg is produced by running the operator's app **without** `--no-gpu` and attaching with `--connect`; the artifact records the app-side flag per leg. |
+| `--gpu` | off | launch args carry `--no-gpu` **unless** `--gpu` is passed (**`launchArgs`**, `live-drive.mjs:4397` — `...(opt.gpu ? [] : ['--no-gpu'])`; the "hard-coded `--no-gpu`" is now conditional). Default behavior is unchanged. **In `--connect` mode the driver does not spawn** (the `if (!opt.connect)` guard around the spawn — cited by symbol), so the GPU-on leg is produced by running the operator's app **without** `--no-gpu` and attaching with `--connect`; the artifact records the app-side flag per leg. |
 | `--o0-corpus=<n>` | none | the operator corpus census the artifact is claimed at; the block compares it against `rag.list_documents` and the snapshot census and forces `pass:false` on mismatch (§6 F8). |
 | `--o0-out=<path>` | none | **REQUIRED for an O-0 artifact run.** Writes the emitted report JSON to `<path>` (the driver today only prints; the artifact needs a file). A run without `--o0-out` produces console output only and **cannot** produce the committed artifact — recorded as a fail-state in the artifact's own provenance (`artifactPath: null`). |
 
-`--display` propagates through the spawn env (`live-drive.mjs:2679`,
-`DISPLAY: ':' + (opt.display ?? '1')`); the repo's env note requires a delegated
+`--display` propagates through the spawn env (the `spawn(...)` env object in `main()` —
+`DISPLAY: ':' + (opt.display ?? '1')`, `live-drive.mjs:4405`, and the leading-colon
+normalization at `:4351`); the repo's env note requires a delegated
 live-runner to propagate the display (`docs/next-steps.md:67`).
 
 ### 3.4 Corpus (operator size; the determinism seed)
 
-- **Size (THE PIN):** the **operator corpus — 226 documents** (`docs/defects.md:22`,
+- **Size (THE PIN):** the **operator corpus — 226 documents** (`docs/defects.md:26`,
   `gnosis-offload-review.md:153`, proposal `:18`). O-0's *quantitative* claim must be
   at operator size; the two other states (empty corpus, single document) are only
   structural checks on the report shape (§6 S1/S2), never a substitute. **The SIZE is
@@ -336,7 +416,7 @@ npm test && npm run typecheck && npm run build
 ```
 
 `DISPLAY` must be propagated (`--display=:0` or `DISPLAY=:0` in the env — the repo's
-env note, `docs/next-steps.md:67`; the spawn sets it at `live-drive.mjs:2679`). A
+env note, `docs/next-steps.md:67`; the spawn sets it at `live-drive.mjs:4405`). A
 run whose display is wrong cannot drive the rendered DOM and is a **documented
 fail-state** (§6 F6), not a park.
 
@@ -357,7 +437,7 @@ The renderer exposes **no handle to the app `Runtime` or the `SidebarPanes` host
 (traversal/assemble/decorate/reconcile) are **not** separable by a pure CDP probe. The
 allowance below is therefore no longer merely "permitted": it is **delivered** as
 `src/shared/o0-hook.ts` (NEW, PURE, node-testable — no `window`, no DOM, no import
-side effect) + **five wrap-only call sites** + the guarded `window.__o0recorder` arm
+side effect) + **five wrap-only call sites** (SEVEN after RUL-1 — the two render emits) + the guarded `window.__o0recorder` arm
 target. The three binding constraints are unchanged:
 (a) it is inert when unarmed and changes no control flow;
 (b) it may only record `performance.mark`/`performance.measure` around the existing
@@ -367,29 +447,86 @@ register row **§5 P-HK-1** (split out of P-TP-1's "the hook is inert" clause) �
 hook-induced change to the mutation count or the long-task total forces `pass:false`.
 
 **The recorder (exact landed semantics).** `createO0HookRecorder({ stages?, perf? })`
-(`src/shared/o0-hook.ts:136-211`) returns
+(`src/shared/o0-hook.ts:202`) returns
 `{ isArmed(), arm(stages?), disarm(), record<T>(stage, fn), records(), state(), reset() }`,
 with:
 
-- `O0_HOOK_STAGES` = the **five** render-path stages 4-8 in §2.2 order (`:27-33`);
-  `O0_HOOK_MARK_PREFIX = 'o0:'` (`:36`); `O0_HOOK_STAGE_NOT_ALLOWED` (`:39`);
-  `O0_HOOK_RECORD_INVALID` (`:42`); **`O0_HOOK_LONGTASK_TOLERANCE_MS = 40`** (`:45`) —
+- `O0_HOOK_STAGES` = the **five** render-path stages 4-8 in §2.2 order (`:29-47`);
+  `O0_HOOK_MARK_PREFIX = 'o0:'` (`:70`); `O0_HOOK_STAGE_NOT_ALLOWED` (`:73`);
+  `O0_HOOK_RECORD_INVALID` (`:76`); **`O0_HOOK_LONGTASK_TOLERANCE_MS = 40`** (`:79`) —
   the §3.6(c) band. It is **distinct** from `tolerance.reconcileMs`, the driver's
   residual band (`O0_RECONCILE_TOLERANCE_MS`, 50 ms).
-- **Unarmed `record()` is `return fn()`** (`:178-182`): no mark, no measure, no
+
+  **The 40 is the DEFAULT, not the band channel (the P-TP-3 field pin).** The band a
+  live run is judged with is the **RECORDED** row value `hook.toleranceMs` (an
+  **additive, optional** field on the run's `hook` block, §4.3), and the band rule has
+  exactly these semantics:
+  - `deriveO0WindowBound(run)` with **NO options** uses the **row-recorded** band —
+    `run.hook.toleranceMs` when it is a non-negative finite number, else the default
+    **40 ms** (`O0_WINDOW_TOLERANCE_MS`, `src/shared/o0-report.ts:68`);
+  - an explicit `{ hookToleranceMs }` argument **overrides** for the oracle's own tests
+    (the drawn `tol ∈ {0, 40}` case, §5 `P-TP-3`), and the row still RECORDS the same
+    band, so the argument and the row agree;
+  - the **three consumers must agree** on that one band source: `deriveO0WindowBound`'s
+    default, `deriveO0StageVerdict` (which takes **no** tolerance argument — so a band
+    that is not recorded on the row is unrecoverable, and §4.4's two verdict forms would
+    be undecidable for the same row), and the report validator (`validateO0Run`), which
+    MUST call `deriveO0WindowBound(run)` **without** an explicit tolerance — **LANDED at
+    `src/shared/o0-report.ts:329-332`** (§8.2's band-source block).
+  - **The defect this rule closed (FIXED — the band fix LANDED):** the validator used to
+    pass a hard-coded constant while the oracle honoured the recorded field
+    (`src/shared/o0-report.ts:330`, once the defect site at `:298`) — a **one-line host
+    defect**, so the two consumers judged the same row against **different** bands and a row
+    recorded at a 0 ms band validated against 40 ms (§12.11). **The validator now calls
+    `deriveO0WindowBound(run)` with NO options and reads the row-recorded field**, so all
+    three consumers agree on ONE band again. A free-text
+    band channel (the band recovered from a `failReasons` string) is **not** a legal
+    substitute: the band is a recorded row FIELD or it is absent.
+- **Unarmed `record()` is `return fn()`** (`:257-260`): no mark, no measure, no
   record, no throw, no control-flow change.
 - **Armed**, it brackets the EXISTING call: `mark('o0:<stage>:start')` → the call →
   `mark('o0:<stage>:end')` + `measure('o0:<stage>', start, end)`, committing the span
   (`ms`, rounded to µs-precision) on completion (`:183-193`). A **throw propagates
   untouched and commits nothing** — the hook never swallows or rewraps.
+- **The AWAITED span (RUL-2 — the `L5` fix, pinned HERE as the ONE shape).** A caller-level
+  seam whose call returns a promise MUST be recorded with the span covering the round
+  trip, not the promise's creation. `record` therefore gains an **overload** and the
+  caller sites use a `async` thunk:
+
+  > `record<T>(stage: string, fn: (() => T) | (() => Promise<T>)): T | Promise<T>`
+
+  with the pinned semantics: the start mark is taken before `fn()`; the end mark +
+  measure are committed **when the span settles** — on resolution, or on rejection. The
+  `ms` is therefore measured **across settlement** (start → the settling timestamp), and
+  the committed `O0HookRecord` keeps the same shape (`stage`/`ms`/`startMark`/`endMark`/
+  `measureName`). The record is committed by the module, not by the caller: the caller's
+  `await getO0HookRecorder().record('snapshot.pull', async () => this.bridge.rag.snapshot())`
+  returns the same value the bridge's promise resolves to (never a wrapper, never a copy).
+  - the **error path**: a rejected round trip **still closes the span** — end mark +
+    measure committed, the error recorded on the record (`error: '<the rejection's
+    message>'`) — and the rejection **propagates untouched** to the caller, so the
+    existing abort-on-failure control flow of the re-derive body is unchanged. **A
+    dangling start mark is a defect**: no arm/disarm, throw, rejection or refusal may
+    leave an `o0:<stage>:start` mark without its `end`+`measure` pair.
+  - an **unarmed** `record()` stays `return fn()`: it must NOT await, NOT wrap, and NOT
+    change the returned value's identity (the inert-when-unarmed contract, `P-HK-1`).
+  - **Which shape is pinned and which is rejected.** The rejected alternative is
+    `record(stage, () => { const p = call(); return p })` with a caller-side
+    `.finally()` closing the span: it moves the settlement semantics into every call
+    site (N sites, N chances to forget), it cannot commit the measured `ms` from the
+    module's own perf port, and it makes the error path a per-site concern. ONE shape is
+    pinned — the async thunk above — and a site that passes a promise-returning thunk
+    WITHOUT `async`/`await` is exactly the `L5` defect and is a review finding.
 - An **off-set** stage (armed, but not in the armed set) is a pass-through counted in
   `state().dropped` (`:179-181`) — dropped, never measured.
 - `arm()` on an already-armed recorder returns `false` and **never clears** the
   measurement window; `disarm()` on an unarmed recorder returns `false` — **double-arm
   / double-disarm are idempotent** and never double-count (`:157-172`).
-- A stage id outside stages 4-8 **throws** `O0_HOOK_STAGE_NOT_ALLOWED` at construction
+- A stage id outside the recorder's PERMITTED set — the **TEN** seam ids of §2.2 (RUL-1)
+  — **throws** `O0_HOOK_STAGE_NOT_ALLOWED` at construction
   AND at arm time (`:117-128`) — a mis-pinned stage is a loud config error, never a
-  silently inert recorder.
+  silently inert recorder. `post.style` (id 11) is NOT in the set: it is `derived` and
+  is never claimable by a recorder.
 - `stagesFromO0HookRecords(records, ids?)` → `{ stages, measured, unseparated }`
   (`:231-273`): a recorded stage's `ms` is the **SUM** over its call sites (the
   `decorateShared` 4-call-site case — one site would under-report); an **unrecorded**
@@ -407,9 +544,9 @@ with:
   each `createO0HookRecorder()` value is independent (per-run state), and
   `records()`/`state()` hand back **copies** (`:129-131`, `:196-201`).
 
-**The five sealed call sites (file:line).** Each wraps the EXISTING body verbatim in
-`getO0HookRecorder().record('<stage>', …)`; the body is moved unchanged and no work is
-reordered, added or removed:
+**The sealed call sites (file:line) — SEVEN after RUL-1.** Each wraps the EXISTING body
+verbatim in `getO0HookRecorder().record('<stage>', …)`; the body is moved unchanged and no
+work is reordered, added or removed:
 
 | Stage | Declaration | The `record()` wrap |
 | --- | --- | --- |
@@ -417,11 +554,20 @@ reordered, added or removed:
 | `envelope.assemble` | `src/renderer/pane-graph.ts:330` | `:335` |
 | `shared.decorate` | `src/renderer/sidebar-panes.ts:1493` | `:1499` — its **4** call sites stay 4 (`:1520`, `:1576`, `:1655`, `:2499`); each call site is one recorded span, summed by the aggregation |
 | `reconcile.roots` | `src/renderer/content-reconcile.ts:422` | `:427` |
-| `reconcile.apply` | `src/renderer/runtime.ts:491` | `:497` — the `result/next` guard stays inside the recorded span |
+| `reconcile.apply` | `src/renderer/runtime.ts:521` | `:527` — the `result/next` guard stays inside the recorded span |
+| **`render.dom`** (RUL-1) | `src/renderer/runtime.ts` `render()`'s DOM emit (the `record()` wrap at `:324-325`) | the wrap is the `renderProducingProcess(liveActionable, byNode, this.adapter, this.domPrevMap, this.renderOptions)` **call only** — **inside** the existing `this.adapter.beginBatch()`/`endBatch()` pair, which stays outside the span (`:316` / `:332` today); `this.domPrevMap = dom.prevMap` stays outside too |
+| **`render.ssr`** (RUL-1) | `src/renderer/runtime.ts` `render()`'s SSR mirror emit (the `record()` wrap at `:334`) | the wrap is the second `renderProducingProcess(…, this.ssr, this.ssrPrevMap, …)` **call only**; `this.ssrPrevMap = ssr.prevMap` stays outside. `ssrHtml()` (`:1474` today) is NOT instrumented — it is the MCP read surface (§2.2 id 10) |
+
+**The seven sites and the seven-stage split.** The five render-path ids 4-8 plus the two
+render emits 9/10 are the **seven** stages the renderer's own instrumented call sites
+produce; the three caller/main ids 1-3 come from the shell's `await … record(…, async () => …)`
+pulls and the main-side handler (§3.6b). Together: **10 recorder seams**, 11 stage ids
+(`post.style` is `derived`).
 
 **The arm target and `refused[]` (corrected contract — §3a finding 5 / §6 F15).** The renderer
 publishes a **hardened projection** of the app-wide recorder as the guarded
-**`window.__o0recorder`** (`src/renderer/runtime.ts`, published today at `:76`). The published
+**`window.__o0recorder`** (`src/renderer/runtime.ts`, published today at `:83`, inside
+`installO0RecorderHandle()` at `:80-90`). The published
 value exposes **exactly five keys — `{arm, disarm, isArmed, records, state}`** and **neither
 `record` nor `reset`**: a page script must not be able to commit a measurement or erase one. It
 is installed **on first arm, from inside a function** — never at module scope — so importing the
@@ -457,9 +603,11 @@ no work reordered/added/removed.
 
 | Seam (stage id) | Recorder instance | The wrapped existing call | What the span covers | `source` when measured | `source` when not measured |
 | --- | --- | --- | --- | --- | --- |
-| `snapshot.roundtrip` → **`snapshot.pull`** | the RENDERER app-wide recorder (`getO0HookRecorder()`) | the `await this.bridge.rag.snapshot()` call in `src/renderer/sidebar-panes.ts`'s re-derive body (symbol `loadEnvelopeCore`; `:2003` today, second pre-existing site `:1883`) | the whole ROUND TRIP at the CALLER: call → IPC → main handler → store read → structured clone → promise resolution. **This is the A-4 discriminator's ms.** | `'hook'` | `'mark'` |
-| `snapshot.clone` → **`snapshot.clone`** | the **MAIN-side** recorder instance (refinement) | the body of the `IPC_RAG_SNAPSHOT` handler in `src/main/main.ts` (`:751` today; `listNodes()`/`listEdges()` + the reply payload) | the MAIN-side share alone: store read + serialization into the IPC reply | `'hook'` | `'mark'` |
-| `docheads.roundtrip` → **`docheads.pull`** | the RENDERER app-wide recorder | the `await this.bridge.rag.docHeads()` call in the same re-derive body (`:2013` today, second site `:1894`) | the same CALLER-level round trip on the doc-heads payload | `'hook'` | `'mark'` |
+| `snapshot.roundtrip` → **`snapshot.pull`** | the RENDERER app-wide recorder (`getO0HookRecorder()`) | the `await this.bridge.rag.snapshot()` call site in `src/renderer/sidebar-panes.ts`'s re-derive body (symbol `loadEnvelopeCore`), rewritten **per RUL-2** to `await getO0HookRecorder().record('snapshot.pull', async () => this.bridge.rag.snapshot())` (`:2009` today, second pre-existing site `:1888`) | the whole ROUND TRIP at the CALLER: call → IPC → main handler → store read → **Electron's structured clone + IPC round trip** → promise resolution. **This is the A-4 discriminator's ms, and per RUL-2 it is the `ms` ACROSS SETTLEMENT, never the promise-creation time** | `'hook'` | `'mark'` |
+| `snapshot.clone` → **`snapshot.clone`** | the **MAIN-side** recorder instance (refinement) | the body of the `IPC_RAG_SNAPSHOT` handler in `src/main/main.ts` — the `record('snapshot.clone', () => ({nodes, edges, store}))` wrap (the `ipcMain.handle(IPC_RAG_SNAPSHOT, …)` body at `:785`, the wrap `:786`; `listNodes()`/`listEdges()` + the reply payload literal) | the MAIN-side **handler** share alone: the two store reads + the reply-payload construction. **NOT the structured clone** (RUL-3): the clone happens in Electron's IPC internals, after the handler returns, outside any wrap available to this repo | `'hook'` | `'mark'` |
+| `docheads.roundtrip` → **`docheads.pull`** | the RENDERER app-wide recorder | the `await this.bridge.rag.docHeads()` call site in the same re-derive body, rewritten **per RUL-2** (`:2019` today, second site `:1899`) | the same CALLER-level round trip on the doc-heads payload, `ms` across settlement | `'hook'` | `'mark'` |
+| **`render.dom`** (RUL-1) | the RENDERER app-wide recorder — the seam is **inside the bundle** (`src/renderer/runtime.ts` `render()`), so it needs no page-side wrap | the `renderProducingProcess(…, this.adapter, this.domPrevMap, …)` DOM emit (the `record()` wrap at `:324-325`), inside the existing `beginBatch()`/`endBatch()` pair | the DOM emit alone — the `DomAdapter` render pass, **not** `compilePath`/`rootNode.compile`/`mergePass2` and **not** the batch boundaries | `'hook'` | `'mark'` |
+| **`render.ssr`** (RUL-1) | the RENDERER app-wide recorder (same bundle-internal seam) | the second `renderProducingProcess(…, this.ssr, this.ssrPrevMap, …)` SSR mirror emit (the `record()` wrap at `:334`) | the SSR mirror emit alone (`SSRFragmentAdapter`); `ssrHtml()` is NOT in the span (§2.2 id 10) | `'hook'` | `'mark'` |
 
 **The A-4 discriminator is answered at the CALLER level.** The report's read count/ms is the
 count/ms of the shell's **own** `snapshot.roundtrip` records inside the freeze window — an
@@ -468,6 +616,21 @@ end-to-end observation that does not depend on any main-side seam. The main/rend
 main handler) from its *outside* (IPC + queue + the renderer's await), and a run without it
 still answers A-4 with a real number (and additionally reports `snapshot.clone` as
 structurally unseparated, §6 S14).
+
+**RUL-2 — the caller-level span MUST cover the AWAIT (the `L5` fix), and this is the ONE pinned shape.** The second live run measured `snapshot.pull`/`docheads.pull` at **0.0-0.2 ms** because the landed seam wrapped only the **synchronous call** — `snapshot = await getO0HookRecorder().record('snapshot.pull', () => this.bridge.rag.snapshot())` (`src/renderer/sidebar-panes.ts:2009`, second site `:1888`; doc-heads `:2019`/`:1899`) — so the span closed at promise creation while the whole-store payload (**6 102 nodes / 9 266 edges**) crossed IPC **outside** it. That `ms` is **not the round trip**, and the real IPC + structured-clone cost hid in the row's `112-126 ms` residual. The pinned contract:
+- the span is recorded **around the awaited expression**: `await getO0HookRecorder().record('<stage>', async () => this.bridge.rag.snapshot())` — the **async-thunk** shape of §3.6's widened `record()` signature;
+- the committed `ms` is measured **across settlement** (start mark → the settling timestamp), so it covers call → IPC → main handler → store read → structured clone → resolve;
+- the **error path** is explicit: a **rejected** round trip still **closes** the span (end mark + measure committed, the error recorded on the record) and the rejection **propagates untouched**, so the re-derive body's existing abort-on-failure path is unchanged. **A dangling start mark is a defect**;
+- the unarmed path is unchanged: `return fn()`, no await, no wrapper, no identity change (`P-HK-1`);
+- the rejected alternative (`record(stage, () => call())` with a caller-side settlement hook) is **NOT** the pin: it re-implements the settlement semantics at every call site and cannot commit the `ms` from the recorder's own perf port (§3.6).
+Consequence for the numbers: after RUL-2 the **A-4 ms is measured** (the count was already real — `L4`'s 1 folder-row / 2 document-row reads), and the residual stops absorbing the unmeasured round trip (`L12`'s "the residual is not cleanly style/layout/paint" caveat narrows accordingly, and must be restated in the artifact).
+
+**RUL-3 — the main-side transport: `snapshot.clone` stays `structural: true`, with the REASON corrected (and no reply-serialization seam is pinned).** The rule asks for the span that DOES measure the reply payload construction/serialization inside the `IPC_RAG_SNAPSHOT` handler, so `snapshot.clone` becomes a measured number. The audit result, pinned as the contract:
+- **What the landed wrap measures:** the main handler's `record('snapshot.clone', …)` (`src/main/main.ts:785-786`; once `:773-777`) brackets the handler body — `listNodes()` + `listEdges()` + the reply-payload literal. That IS the main-side **reply-payload construction** share, and it is the right site for it.
+- **What it canNOT measure, by construction:** Electron's **structured-clone serialization of the handler's return value** happens in the IPC internals *after* the handler returns. Nothing in `src/main/main.ts` (or any host code) is on that path, so no wrap in this repo can span it. The stage's §2.2 name therefore overstates the seam: the honest stage is the **main handler share** (store read + payload assembly), and the serialization share is named as **structurally unmeasurable from the host side**.
+- **Therefore:** `snapshot.clone` remains `{ ms: null, unseparated: true, source: 'hook', structural: true }` with `structuralReason` naming **exactly** this: (i) the MAIN instance's records are **not transported** out of the main process into the renderer/report (the observed `L3s` state: `driver.mainSeamArmed:false`, `hook.stageRecords` carries **no** `instance:"main"` entry), **and** (ii) the IPC structured clone itself is outside every host-side wrap. The reason must name BOTH, and the report's residual explanation must name `snapshot.clone` as one of the stages whose share the residual therefore absorbs.
+- **The one change that would make it measured** (not owed by O-0, recorded so the reason is falsifiable): a channel carrying the main instance's records into the report (or a preload/`ipcMain` hook on the reply path). Until such a channel exists in the executing bundle, the stage is structurally unseparated **and that is a legal, recorded outcome** under RUL-4 — never an imputed number.
+- **A note on the inside/outside split, restated honestly:** with RUL-2's caller span measured and this handler span unmeasured, the *measured* pair is the round trip (1) **and** the render-path stages (4-10); the split of the round trip into "handler body" vs "IPC serialization + queue" is **not offered** by this harness. The report must say so wherever it discusses the split.
 
 **The two recorder instances (arm/disarm, and the union).** The report carries ONE stage row
 per stage id; the records may come from two recorder instances — the renderer's app-wide one
@@ -482,28 +645,41 @@ measurement source.
 
 **The union is aggregated by ONE pinned call.** `stagesFromO0HookRecords(records, ids)` takes
 the **union of both instances' records** for the freeze window and emits exactly the ids it is
-given (§3.6's landed module, `src/shared/o0-hook.ts:231-273`); for the merged 11-row freeze
+given (§3.6's landed module, `src/shared/o0-hook.ts:335` — `stagesFromO0HookRecords`); for the merged 11-row freeze
 table it is called with the full `O0_STAGE_IDS` list, exactly as `tests/unit-o-0-hook-contract.test.ts`
 H9's explicit-id-list row pins. The recorded `hook.stageRecords[]` must carry, per record, the
 instance it came from (`'renderer' | 'main'`), so a reader can attribute every number.
 
-**The recorder's permitted stage set widens BY CONSTRUCTION, and the render-path set does not.**
-Two distinct constants, both recorded in the artifact:
-- `O0_HOOK_SEAM_STAGES` = the stage ids a recorder instance may be **configured** for:
+**The recorder's permitted stage set widens BY CONSTRUCTION, to TEN ids (RUL-1), and the render-path armable set widens to SEVEN.** Two distinct constants, both recorded in the artifact:
+- `O0_HOOK_SEAM_STAGES` = the **TEN** stage ids a recorder instance may be **configured** for:
   `snapshot.pull`, `snapshot.clone`, `docheads.pull` **plus** the five render-path ids
-  (§2.2 ids 4-8). The construction/arm-time guard
-  (`O0_HOOK_STAGE_NOT_ALLOWED`) accepts exactly this set.
-- `O0_RENDER_HOOK_STAGES` = the FIVE **render-path** stages ids 4-8 — unchanged, and still the
-  only stages a page-side `arm()` may request (§3.6's boundary: a page script may arm the
-  render path, never widen its own seam set; that is the §6 F15 hardening's runtime meaning).
+  (§2.2 ids 4-8) **plus the two render emits `render.dom` / `render.ssr`** (ids 9/10 — RUL-1).
+  The construction/arm-time guard (`O0_HOOK_STAGE_NOT_ALLOWED`) accepts exactly this set —
+  **10 ids, a closed set, for those stages only**; `post.style` (id 11) is never a recorder id.
+- `O0_RENDER_HOOK_STAGES` = the **SEVEN** stages a page-side `arm()` may request: the five
+  render-path ids 4-8 **plus** `render.dom` / `render.ssr`. Rationale: ids 9/10 are
+  bundle-internal seams on the same render path, so a page script arming the render path
+  arms them too; an armed id that is NOT requested is off-set and DROPPED (§6 S9), which
+  would leave ids 9/10 `unseparated` for a harness reason (`L2s`'s failure mode). The
+  boundary is unchanged: a page script may arm the render path, **never widen its own seam
+  set** (it can request no id outside the ten), which is the §6 F15 hardening's runtime meaning.
+- `snapshot.clone` stays in the **permitted** set (the main instance is created with it) but
+  OUT of `O0_RENDER_HOOK_STAGES` (no page-side arm of it — §6 F14's double-record guard).
 
 This is the **only** permitted change to §3.6's landed module: an ADDITIVE wider configuration
-constant plus the render-path subset; no new wrapper shape, no new emission, no new work.
+constant plus the render-path subset; no new wrapper shape (the async overload of §3.6 is the
+`L5` fix and is its own pinned change), no new emission, no new work.
 
 **If a sub-split stays impossible, say so — the exact `unseparated` reporting rule.** When the
-main-side instance is not armed (`--connect`, a refused arm, or a bundle without the main seam),
-`snapshot.clone` is emitted `{ "ms": null, "unseparated": true, "source": "mark" }` with
-`structural: true` and `structuralReason` naming the missing seam (§6 S14/S15). When the caller-level
+main-side records are not transported (`--connect`, a refused arm, or a bundle without the main
+seam), `snapshot.clone` is emitted `{ "ms": null, "unseparated": true, "structural": true }`
+with `structuralReason` naming the missing transport + the out-of-host IPC serialization
+(RUL-3, §6 S14/S15). Its `source` is **`'hook'`** — the stage IS a permitted seam id (§2.2),
+so an unseparated `snapshot.clone` is *unseparated at a permitted seam*, and `'mark'` would
+wrongly assert that no recorder could ever produce it (the second run's rows carried
+`source:'hook'` for `snapshot.clone` and `'mark'` for `render.dom`/`render.ssr`; after RUL-1
+all three are permitted seam ids, so `'mark'` survives only for a genuinely probe-only stage —
+of the 11 ids there is currently **none**). When the caller-level
 seam is missing, the same rule applies to `snapshot.pull`/`docheads.pull` — and, critically, the
 **A-4 read count stays UNMEASURED** (never `0`): the derived verdict must say
 `the <gesture> performed <n> whole-store IPC_RAG_SNAPSHOT read(s) … ` only from a measured
@@ -522,7 +698,7 @@ and a non-inert or set-divergent pair is a report-level forcing reason
 DELETED, not audited.** The driver's node-side aggregation **prefers the real module** — a
 guarded dynamic import of `src/shared/o0-hook.ts` (type-stripped by node ≥ 22.18) — and
 currently falls back to a **byte-equivalent mirror inside the driver** (the in-driver
-`o0StagesFromHookRecords`, `scripts/live-drive.mjs:661-678`) when that import is unavailable.
+`o0StagesFromHookRecords` — cited by symbol; once `scripts/live-drive.mjs:661-678`) when that import is unavailable.
 Two implementations of ONE contract is a drift surface that no recording field can close: a
 divergent mirror would silently produce different stage rows **and** a different `post.style`
 residual on exactly the runs where the import failed, and the `hook.stageRowsSource` field only
@@ -544,12 +720,102 @@ for every `runs[]` row and `validateO0Reports`/`validateO0Report` for the whole 
 through the **same guarded twin-import mechanism** the driver already uses (no mirror: §3.6b
 above) — and **append the validator's `failReasons` to its own**, so a report can never be
 written whose rows the pinned module would reject (`driver.selfValidation` records
-`{ ok, attempts, runIds, errors }`). Today `o0DeriveReportPass` (`scripts/live-drive.mjs:1155`)
-re-implements a SUBSET of the row rules inline (its `o0RowPass`, `:693-716`) and never calls the
-module: the two can — and on this unit did — disagree about which rows are acceptable, which is
+`{ ok, attempts, runIds, errors }`). `o0DeriveReportPass` (cited **by symbol** —
+`export function o0DeriveReportPass`; once `scripts/live-drive.mjs:1155`)
+re-implements a SUBSET of the row rules inline (its `o0RowPass` — cited **by symbol**; once
+`:693-716`) and never calls the
+module: `o0RowPass` still re-implements a SUBSET of the row rules inline while
+`o0ImportTwins()` + the `o0Twins.report.validateO0Report(report)` call in `o0DeriveReportPass`
+is the module's own (corrected) path — the two can — and on this unit did — disagree about
+which rows are acceptable, which is
 the exact class of defect the mirror deletion above removes. A self-validation failure is a
 report-level forcing reason (§6 F17); the report is still WRITTEN (the numbers stay
 inspectable), with `pass:false`.
+
+**RUL-4 — the structural-vs-pass contract (the decisive rule: what `ok`, `pass` and the report
+STATUS each mean).** The second run's `driver.selfValidation.ok: false` (**24** GPU-OFF / **12**
+GPU-ON validator errors) is **NOT** an honest FAIL: the emitted report was **SCHEMA-REJECTED
+because structurally unmeasurable stages were present**. The landed module pushes every
+`structural:true` stage into `errors` (`src/shared/o0-report.ts:329-341`), and `validateO0Run`'s
+`ok` is `errors.length === 0`, so four *correctly labeled* stages made each row `ok:false`. That
+conflates two different things; the re-derived contract is:
+
+1. **`ok` is SCHEMA validity, never a verdict.** `validateO0Run` returns `ok:true` for a row
+   whose only recorded defects are **structurally unmeasurable stages WITH a non-empty
+   `structuralReason`** — the same class as a `pass:false` row carrying genuine `failReasons`
+   (R-1, §7 row 1). The structural facts stay in `failReasons` (so the row's own verdict stays
+   visible) and are NOT `errors`. A validator that "fixes" an honest report by rejecting it is
+   the defect; the report was never malformed.
+2. **`structural` is a LEGAL marker, and it may not be abused.** `structural: true` is legal
+   **iff** the stage is `unseparated:true` AND carries a non-empty `structuralReason` naming the
+   missing seam/transport. `structural:true` on a **separated** stage, or with an empty/absent
+   reason, or on a stage a permitted seam could have produced in the executing bundle, is
+   `ok:false` naming the stage (§6 F14/F18).
+3. **`pass` remains `false` for the genuinely bad shapes — and ONLY those.** A row/report is
+   `pass:false` iff at least one of: (a) a stage is **genuinely unmeasured** (a permitted seam
+   exists in the executing bundle but was not armed — the row must NOT be labeled `structural`);
+   (b) an **imputed** value (an `ms` on an unseparated stage, a fabricated record attribution);
+   (c) a **falsifiability failure** (`path !== 'cdp'` / `realInput` disagreement, an unverified
+   bundle, a hard-coded verdict, a missing required field); (d) a **violated window** (F13a).
+   A report whose ONLY defects are structural stages is `pass:false` **because the measurement is
+   incomplete** — `pass` keeps its meaning; what changes is that `ok` no longer contradicts it.
+4. **`reconciliation.ok` vs the report STATUS — two fields, never merged.** P-TP-1's invariant
+   ("any unseparated stage makes the reconciliation `ok:false`") is UNCHANGED: the residual
+   arithmetic genuinely cannot close while a stage is unmeasured, so `reconciliation.ok` stays
+   `false` on such a row. The report therefore carries an ADDITIVE **`status`** field whose value
+   distinguishes the honest outcomes:
+   - `"OPEN-structural"` — every unseparated stage in every row carries a valid
+     `structural:true` + reason, `post.style` is `derived`/`unseparated` (never `structural` —
+     §4.3), and no forcing reason outside the structural family exists. A **legal, incomplete**
+     measurement — what O-0 produces while a structural seam is missing. **The O-5 gate
+     consequence of this value is AMENDED by clause 7 (DEC-1, 2026-09-20): the report value
+     stays the honest one, but the ACCEPTED structural set (`snapshot.clone` + the
+     therefore-derived `post.style`) opens the gate — any OTHER structural id does not**;
+   - `"FAIL"` — any forcing reason outside that family (an unmeasured permitted stage, an
+     imputation, a falsifiability failure, a window violation, a broken control pairing, a
+     census mismatch): the §6 F-state class;
+   - `"OK"` — `pass:true` (only when every stage is measured or `derived`, §6 S3).
+   `status` is a **derived** field (never hand-written) and is the ONE place the report states
+   whether it is DONE, OPEN-structural or FAILED.
+5. **The reconciliation note is mandatory and precise.** A report whose `status` is
+   `OPEN-structural` MUST carry `reconciliation.note` naming, in one sentence, (i) which stages
+   are structurally unseparated and why, (ii) that the residual is therefore **not computable**
+   and `post.style` is `unseparated` (not a number), and (iii) that no value was imputed.
+6. **`selfValidation.ok:true` is the required outcome for a structurally-open report.** After
+   RUL-4, a report whose only defects are structural stages shows `driver.selfValidation.ok: true`
+   with an **empty** `errors[]`, while the report's `status` is `"OPEN-structural"` and
+   `pass:false` remains for the incompleteness. The second run's `ok:false` with 24/12 structural
+   errors is therefore **a defect of the module, not evidence about the measurement** — the fix
+   is in `src/shared/o0-report.ts` (reclassify structural stages out of `errors`; add clause 2's
+   abuse check), with the driver changed only to record `status` + `reconciliation.note`.
+7. **The gate consequence (AMENDED 2026-09-20 by user DEC-1 —
+   `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`, `docs/decisions.md`).** O-0 may be reported
+   **DONE** at either of two report values:
+   - **`status:"OK"` ⇔ `pass:true`** (every stage measured or `derived`) — the original clause,
+     still sufficient; **or**
+   - **`status:"OPEN-structural"` whose ONLY gap is the ACCEPTED structural set** — i.e. the
+     report satisfies ALL of:
+     (i) `snapshot.clone` is the ONLY `structural:true` id and `post.style` is the
+     therefore-derived residual (`derived`, `ms:null`, `unseparated:true`) — the ACCEPTED
+     structural set, nothing more;
+     (ii) `driver.selfValidation.ok:true` with an EMPTY `errors[]`;
+     (iii) `gatingReasons:[]` (no FAIL class fired — §4.4);
+     (iv) the window-bound check PASSES on every row (§5 P-TP-3 / §6 F13a);
+     (v) the structural reasons are recorded VERBATIM in both places they are owed (the stage's
+     `structuralReason` and the run's forcing line — the RUL-3 reason: no channel carries the
+     main recorder's records + the Electron IPC structured clone happens inside the IPC after
+     the handler returns, outside every host-side wrap), plus the mandatory
+     `reconciliation.note` (§3.6b clause 5).
+   **The SUPERSEDED clause** ("ONLY `status:"OK"` ⇔ `pass:true` opens the O-5 delegation gate")
+   is recorded in the decision row; this clause AMENDS it. **The accepted-structural open is
+   NARROW:** an `OPEN-structural` report carrying ANY other structural id, an imputation, a
+   falsifiability failure, a missing reason, a missing note or a gating reason does NOT open the
+   gate, and the unit returns to OPEN with that id named as remaining work. **A FAIL is never a
+   pass** (`status:"FAIL"` is the §6 F-state class) and **an accepted-structural report is never
+   re-labelled `"OK"`** — the absence of a main-side transport must stay VISIBLE in every report
+   (`status:"OPEN-structural"`) until such a transport exists. That transport is a SEPARATE unit
+   with its own gate (its own red set, RCA-2); it is NOT a prerequisite of the O-5 gate any more,
+   and it is NOT a patch inside O-0.
 
 A stage that still cannot be isolated with the hook is reported **`unseparated`**
 (§6 F4) — never imputed.
@@ -591,10 +857,23 @@ the gate's item-1 evidence (`gnosis-offload-review.md:307`).
   "runs": [ <one freeze row per staged gesture, §4.3> ],
   "controls": [ { "id": "gpu-on|gpu-off|track-ablation-on|track-ablation-off",
                   "runRef": "<run.id>", "pairedWith": "<run.id>" } ],
+  "reconciliation": { "ok": true|false, "note": "<§3.6b RUL-4 clause 5 — mandatory when status is OPEN-structural>" },
   "verdicts": [ "<derived verdict string> per §4.4" ],
+  "status": "OK|OPEN-structural|FAIL",
   "pass": true|false
 }
 ```
+
+**`status` and `reconciliation` are the RUL-4 additions** (§3.6b): `status` is DERIVED
+(`"OK"` ⇔ `pass:true`; `"OPEN-structural"` ⇔ `pass:false` whose every forcing reason is in the
+structural family; `"FAIL"` otherwise), and `reconciliation.note` is mandatory whenever
+`status === "OPEN-structural"`. A report whose `status` is absent, inconsistent with `pass`, or
+whose `OPEN-structural` note is missing is `pass:false` (§6 F18). **What `status` decides for the
+O-5 DELEGATION GATE is clause 7's AMENDED rule (DEC-1, 2026-09-20): `"OK"` opens it, AND an
+`"OPEN-structural"` report whose only gap is the ACCEPTED structural set (`snapshot.clone` + the
+derived `post.style`) opens it too, subject to the five conditions listed in §3.6b clause 7;
+`"FAIL"` never opens it, and an `"OPEN-structural"` report carrying any OTHER structural id
+does not.**
 
 ### 4.3 `runs[]` — the freeze row
 
@@ -620,7 +899,10 @@ the gate's item-1 evidence (`gnosis-offload-review.md:307`).
   "gpu": false,
   "trackAblation": { "applied": false, "mutation": null },
   "bundleVerified": true,
-  "hook": { "armWindow": { "t0": <n>, "t1": <n>, "ms": <n> }, "armCount": 1, "disarmCount": 1,
+  "hook": { "armWindow": { "t0": <n>, "t1": <n>, "ms": <n> },
+            "freezeWindow": { "t0": <n>, "t1": <n> },
+            "toleranceMs": 40,
+            "armCount": 1, "disarmCount": 1,
             "stageRecords": [ { "stage": "<id>", "instance": "renderer|main" } ],
             "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords" },
   "pass": true|false,
@@ -636,7 +918,7 @@ the gate's item-1 evidence (`gnosis-offload-review.md:307`).
   forces `pass:false` (§6 F4). An entry the row cannot use is named by its **INDEX**
   (`stages[<i>]`) in the reason, never through a coerced stage id (§3a finding 2).
 - `path` is recorded from the hit-test; `realInput` is **derived** (`path === 'cdp'`),
-  exactly as `rowResult` derives it (`live-drive.mjs:429-432`).
+  exactly as `rowResult` derives it (cited **by symbol**; `live-drive.mjs:437`, once `:429-432`).
 - **Finiteness (R-2 — ONE rule for §4.3 and §4.4, stated once):**
   - `longTaskTotalMs` is the row's **PRIMARY ORACLE** and is **required**: it must be a
     **non-negative FINITE number**. `null`, `NaN`, `-1` (or any negative), or a string
@@ -661,19 +943,84 @@ the gate's item-1 evidence (`gnosis-offload-review.md:307`).
     `hook.disarmCount`. A row may instead **report the actual hook window** and be judged by
     the bound below; what is forbidden is an unreported window that is wider than the freeze.
   - **A stage cannot be larger than the freeze it belongs to:** a stage whose `ms` exceeds
-    `longTaskTotalMs + tolerance` (the recorded hook band, 40 ms — §3.6) forces `pass:false`
+    `longTaskTotalMs + tolerance` (the **row-recorded** hook band — `hook.toleranceMs`,
+    default 40 ms; §3.2.1) forces `pass:false`
     with a reason naming **both** numbers
     (`stage <id> ms <ms> exceeds the freeze it belongs to (<longTaskTotalMs> ms + <tol> ms
     tolerance) — a stage cannot be larger than the window it is measured in`).
   - **The derived percentage verdict is REFUSED on that branch** (there is no legitimate
     `1698.82%`): the harness emits the explicit **window-bound-violated** verdict instead
     (§4.4, §6 F13a) and never a percentage computed from a violated window.
-- **Structural marker (§6 S14).** A stage that cannot be separated **by construction** — no
-  seam exists in the executing bundle — carries `structural: true` plus a
+  - **Which band the bound is judged with (P-TP-3(a) — the band field).** The `<tol>` in the
+    bound above is the row's **RECORDED** band: the **additive, optional** field
+    **`hook.toleranceMs`**, defaulting to **40 ms** when absent (§3.6, `O0_WINDOW_TOLERANCE_MS`).
+    `deriveO0WindowBound(run)` with **NO options** reads that field; an explicit
+    `{ hookToleranceMs }` argument **overrides** it for the oracle's own tests (the generator
+    draws `tol ∈ {0, 40}` and records it per row, §5 `P-TP-3`). The **three consumers must
+    agree** on this one band source — `deriveO0WindowBound`'s default,
+    `deriveO0StageVerdict` (no tolerance argument, so an unrecorded band is unrecoverable)
+    and `validateO0Run` (which calls `deriveO0WindowBound(run)` **without** an explicit
+    tolerance — the fix LANDED at `src/shared/o0-report.ts:329-332`). A validator
+    hard-coding the 40 ms constant while the oracle honours the
+    field **was** the defect the remand exposed and it is **FIXED** (`src/shared/o0-report.ts`;
+    §12.11), and the
+    band is **never** recovered from a `failReasons` string — the reasons name the stage and
+    the freeze, the band is a field. A non-numeric / negative / non-finite `hook.toleranceMs`
+    is **not** a band: it falls back to the default 40 ms and is a finiteness finding named
+    by §6 F3.
+- **Structural marker (§6 S14; the marker's LEGALITY pinned by RUL-4).** A stage that cannot be separated **by construction** — no seam exists in the executing bundle — carries `structural: true` plus a
   `structuralReason` naming the missing seam, **distinct** from a stage that is merely
   **unmeasured** in this run (a seam exists but was not armed). The distinction is
   contractual: it is what makes a report's `pass:false` reason precise and keeps the A-4 gap
-  **visible** instead of laundered into a generic `unseparated`.
+  **visible** instead of laundered into a generic `unseparated`. Three legality rules (§3.6b
+  RUL-4 clauses 1-2, §6 F14/F18): `structural:true` is legal **iff** `unseparated:true` **and**
+  `structuralReason` is a non-empty string; it is `ok:false` on a **separated** stage, with an
+  empty reason, or on a stage whose permitted seam (§2.2's closed ten) exists in the executing
+  bundle but was not armed (that is *unmeasured*, and saying `structural` about it is a
+  mislabel — the second run made exactly this mistake in the opposite direction, calling ids
+  9/10 `mark`-only). After RUL-1 every one of the 11 ids except the `derived` `post.style` has a
+  permitted seam, so the **expected `structural` set is normally empty or `{snapshot.clone}`
+  (the RUL-3 transport gap) only** — a report claiming more must show the missing wrap per id.
+- **`post.style` is `derived` and is NEVER `structural` — and it is `derived` in every table, row and verdict (RUL-5/L12).** Its row is
+  `{ ms: null, unseparated: true, source: 'derived', structural: false, structuralReason: null }`
+  while any other stage is unseparated: the residual is a **computed remainder** (§5 P-TP-1),
+  not a stage whose seam is missing, so `structural:true` on id 11 is `ok:false` (§6
+  F18) — the second run's rows correctly carried `structural:false` for it, and the reason
+  field for it is the reconciliation note's job, not a `structuralReason`. Wherever the
+  artifact shows a residual — the per-stage table's Σ/residual column, answers (b)/(d), the
+  reconciliation note — the value is a **computed remainder**
+  (`longTaskTotalMs − Σ(named stages)`), never a timed probe, and it is labeled `derived`.
+  Concretely: the residual is **not** a stage measurement, it is **not** "style/layout/paint"
+  (it absorbs whatever the unmeasured stages and the un-instrumented work contributed), and it
+  may **never** be quoted as a style-cost figure. Any table cell or verdict presenting the
+  residual as a measurement is `pass:false` with the reason `post.style is presented as a
+  measurement (<value>) — the residual is a DERIVED remainder and must be labeled derived
+  (§4.3/RUL-5)`.
+- **The GPU delta + the cross-run rule (RUL-5/L9).** A `controls[]` GPU pair carries the deltas of
+  **this** invocation's two legs and nothing else; the pair record names both runs and the corpus
+  identity it was measured on. **A GPU delta is never carried across runs**: the first run's
+  `+2173 / +2419 ms` and the second run's `−36 / −23 ms` are two measurements of two
+  sessions/corpora, the second **contradicts** the first, and neither is a constant any unit may
+  rely on. Prose in the artifact may cite another run's delta only as labeled provenance, naming
+  that run and its corpus (§6 S20/F20).
+- **`env.engine` is DERIVED from a positive signal (RUL-5/L1).** The field is `'ready'` only
+  when the driver observed positive engine evidence (a live `gnosis-server`-backed status
+  reporting availability), else `'absent'` **with the evidence string recorded**. "The
+  `gnosis.status` MCP call resolved" is **not** evidence — an error payload also resolves, which
+  is exactly how the second run recorded `ready` on a host with no engine (§6 S21/F22). The
+  field never affects an O-0 stage (§6 S4).
+- **The corpus SIZE is the gate; the bytes/nodes/edges are recorded provenance (RUL-5/L10).** The
+  census gate is `corpus.documents === 226` (or `--o0-corpus=<n>`): the **size** is the pin. The
+  corpus **bytes** and the derived `nodes`/`edges` counts are **recorded provenance**, not pins —
+  the second run reached the pinned size with **6 102 / 9 266** nodes/edges where the first run
+  measured **10 170 / 18 758** from a different generator, and both are honest. A report may NOT
+  (a) claim byte-reproducibility across runs, (b) present a cross-run absolute ms comparison as a
+  measurement, or (c) feed a cross-run node/edge count into a threshold: the node-ceiling input
+  for the parked trigger (b) (§10) must be read **from the same run's corpus row** with the
+  byte-size gap named. A report that treats the counts as a fixed pin is `pass:false`
+  (`the corpus row presents <nodes>/<edges> as a pinned census — the SIZE is the gate and the
+  bytes/counts are recorded provenance (§3.4/§4.3/RUL-5)`), and a cross-run absolute comparison
+  is `pass:false` under §6 S20.
 - **A `pass:false` row carrying a genuine `failReasons` line is SCHEMA-VALID.** It is a
   **legitimate FAILING MEASUREMENT**, not a schema error: `validateO0Run` returns `ok:true`
   for it, and the row-level `pass:false` propagates to the report through
@@ -681,7 +1028,17 @@ the gate's item-1 evidence (`gnosis-offload-review.md:307`).
   architect's ruling **R-1**, recorded in §7 row 1 and §3b). The real defect class is the **opposite** shape — a `pass:false` row with an EMPTY
   `failReasons` — which is already caught (`src/shared/o0-report.ts`'s `pass !== true &&
   recorded.length === 0` branch). `failReasons` is **non-empty whenever `pass:false`**; a
-  `pass:false` row with no reason is itself a schema error.
+  `pass:false` row with no reason is itself a schema error. **RUL-4 clause 1 extends this
+  class**: a row whose only reasons are the structural family is `ok:true` too, and its report
+  carries `status: "OPEN-structural"` (§4.2).
+- **A record's error field (RUL-2).** A committed record may carry
+  `error: "<the rejection's message>"` in addition to `stage`/`ms`/`startMark`/`endMark`/`measureName`
+  — set when the recorded span settled by **rejection**. A record carrying `error` still carries a
+  finite non-negative `ms`; an `error`-bearing record is a legal record (never
+  `O0_HOOK_RECORD_INVALID`), and the **dangling-start-mark** case (no matching end/measure) is
+  what §6 F19 forbids. For `snapshot.pull`/`docheads.pull` an error-bearing record means the
+  re-derive abort path ran: the row must still name the read it attempted (the A-4 count comes
+  from the recorded attempt), and the stage's `ms` is the **aborted** span, recorded as such.
 
 ### 4.4 The DERIVED verdict (never hard-coded)
 
@@ -694,17 +1051,52 @@ and the discriminating verdict required by A-4:
 
 > `the <gesture> performed <n> whole-store IPC_RAG_SNAPSHOT read(s) totalling <ms> ms (census <documents> docs / <nodes> nodes / <edges> edges)`
 
-**Two further pinned verdict forms (added by H2/H3):**
+**Two further pinned verdict forms (added by H2/H3), plus the RUL-5/L8 and RUL-4 forms:**
 
 > `stage <id> is <ms> ms, which EXCEEDS the freeze window it belongs to (<longTaskTotalMs> ms + <tol> ms tolerance) — WINDOW-BOUND VIOLATED: no percentage verdict is emitted for this row`
 
 — emitted **instead of** the percentage form whenever §4.3's window-bound rule fires (the
-`1698.82%` line the live run printed is exactly the string this verdict replaces, §12 H3); and
+`1698.82%` line the live run printed is exactly the string this verdict replaces, §12 H3).
+The verdict's `<tol>` and its `(…) ms tolerance` clause are the **row-recorded** band
+(`hook.toleranceMs`, default 40 ms), read through the same single band source as the oracle
+and the validator (§3.2.1/§4.3, §12.11) — this string takes no tolerance argument of its
+own, which is precisely why the band must be a recorded field; and
 
 > `the <gesture>'s whole-store IPC_RAG_SNAPSHOT read count is UNMEASURED (snapshot.pull unseparated — <reason>)`
 
 — emitted **instead of** the A-4 `performed <n> read(s)` form whenever `snapshot.pull` is
 `unseparated`, so a **"not measured" 0 is never emitted as a measured zero** (§3.6b, §12 H2).
+
+**RUL-5/L8 — the ZERO-WINDOW form: no percentage without a FINITE window (`(null%)` is
+retired).** The second run printed
+`stage traversal.build is 5.3 ms of the 0 ms long task (null%) on folder-row …` on the two
+ablation rows: the `total > 0` guard refused the *division*, so the `%` slot emitted the literal
+`null%`, which a reader can misread as a measurement. Pinned replacement — whenever
+`longTaskTotalMs` is **0** (or the `longTaskTotalMs > 0` guard otherwise refuses):
+
+> `stage <id> is <ms> ms of the <longTaskTotalMs> ms long task on <gesture> — no percentage is computed: the long-task window is zero (<longTaskTotalMs> ms), so this row has no finite window to divide by`
+
+and the `pct` field for such a row is **`null`** with `pctReason: "zero-window"` recorded
+(never the string `null`, never `NaN`). Rules: **no verdict string may contain `null%`**;
+**no percentage is emitted without a finite, positive `longTaskTotalMs`**; and a row whose
+`longTaskTotalMs` is 0 is **not** a violation of §5 `P-TP-3` (the zero window is a legal
+measurement — `0` is the honest long-task total when nothing crossed the 50 ms threshold).
+The same guard covers the `NaN`/absent case, which is an `ok:false` field defect (§4.3 R-2),
+never a percentage.
+
+**RUL-4 — the structural-vs-FAIL verdict pair (the report-level forms).** Two additive report
+verdict strings make the §3.6b RUL-4 status readable without inspecting the JSON:
+
+> `O-0 REPORT OPEN — <n> stage(s) structurally unseparated (<ids>): <the missing seam/transport, per id> — the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed`
+
+— emitted (once, report-level) whenever `status === "OPEN-structural"`, and
+
+> `O-0 REPORT FAIL — <n> forcing reason(s) outside the structural family (<the first reason>, …) — the measurement or the report is not usable as evidence: <the F-state class(es) named>`
+
+— emitted whenever `status === "FAIL"`. A report carrying the OPEN form **and** any F-state
+class is `status: "FAIL"` and must not print the OPEN form (§6 F18). Neither form may be
+hard-coded; both are computed from the row/`pass` data exactly like every other verdict
+(D-GP-UFA-3).
 
 **The falsifiability rule (D-GP-UFA-3, `docs/decisions.md:17`):** a verdict is
 **never asserted `true`**. It is a string computed from the measured row; if the row's
@@ -761,12 +1153,45 @@ schema-green, never app-green.**
 | `P-SM-2` | SM | **Determinism of the stage-id SET.** Re-running the same block over the same corpus yields the **same stage-id set**; the `ms` values are explicitly FREE under the seed `o0-2026-09-17`. | `strat:o0-determinism` — pairs of run records: identical sets with different `ms` (must pass), same set with different order (must pass), a set missing one id (must fail) | `set(runA.stageIds) === set(runB.stageIds)` AND `runA.pass && runB.pass`; the oracle asserts the id-set comparison is order-insensitive and `ms`-insensitive by construction | report shape (pure) |
 | `P-TP-1` | TP | **Reconciliation + the `post.style` residual.** The identified stages' sum is reconciled with `longTaskTotalMs`: the residual `longTaskTotalMs − Σ(named stages)` is **computed** (never a timed probe), is non-negative within the recorded tolerance, and **any unseparated stage makes the reconciliation `ok:false`** (an unmeasured stage cannot be reconciled away). The measurement hook is inert when unarmed. | `strat:o0-reconcile` — rows from a generator over `{all separated, one unseparated, sum > total, sum ≪ total, negative residual}` | the oracle returns `ok:true` **iff** no stage is `unseparated` AND `0 ≤ residual ≤ tolerance.reconcileMs`; the "hook inert" clause asserts an unarmed run's mutation count and long-task total are byte-identical to the pre-instrumentation baseline fixture | transform (pure) + the live residual |
 | `P-TP-2` | TP | **An unproven gesture forces `pass:false`.** A freeze row whose recorded `path !== 'cdp'` (OR `realInput` computed independently disagrees with `path === 'cdp'`) is `pass:false`; the derived verdict is still emitted with the fallback path named. | `strat:o0-gesture-path` — rows over `{cdp, native-fallback, missing, zero-box, off-viewport}` × `{realInput true, false}` | `pass ⇒ (path === 'cdp' ∧ realInput === true)`; each of the four non-`cdp` paths must yield `pass:false` **and** a `failReasons` line naming the path | report shape + live gesture |
-| `P-HK-1` | TP | **The §3.6(c) hook is INERT under arm.** An ARMED recorder's `Δmutations` must be **0** and `\|ΔlongTaskTotalMs\|` must be **within the RECORDED tolerance** (the landed band is 40 ms — `src/shared/o0-hook.ts:45`); an **off-set** stage (armed, but outside the armed set) is **dropped, not measured** (`fn` runs exactly once, no mark/measure/record, counted in `state().dropped`); and a permitted stage with **no records** is `ms:null` + `unseparated:true` — **never a silent measured value** (the imputation ban). | `strat:o0-hook-inert` — generated `(unarmed, armed, tolerance)` triples: `tol ∈ {0,10,40,120}` ms, `Δmutations ∈ [-3,3]`, `ΔlongTaskTotalMs ∈ [-40,40]` in 10 ms steps, over counters `mutations 0..200` / `longTaskTotalMs 100..2000`; the off-set-stage and zero-record halves ride the same file's H3/FS3 + H9/FS4 rows | `inert === (Δmutations === 0 ∧ \|ΔlongTaskTotalMs\| ≤ tol)`; the signed deltas are returned verbatim; a non-inert pair carries ≥1 `failReasons` line **naming** `mutations` (when `Δmutations ≠ 0`) or `longTaskTotalMs` (otherwise); an inert pair carries **none**; an off-set stage yields no record and stays `unseparated`; a zero-record stage yields `ms:null` + `unseparated:true` | transform (pure) + the LIVE armed-vs-unarmed pair (§3.6, `o0_repeat_determinism`) |
-| `P-TP-3` | TP | **WINDOW-BOUNDEDNESS — no measured stage may exceed the freeze it belongs to, and no percentage may be derived from a violated window (H3).** For every row: (a) each **separated** stage satisfies `ms ≤ longTaskTotalMs + hookToleranceMs` (the recorded band, 40 ms); (b) the row's `hook.armWindow` (or the recorded actual hook window) **equals** the freeze window within that tolerance — an arming interval that starts before `o0:t0` or ends after `o0:t1` is a violation, never a silent widening; (c) a percentage verdict is emitted **iff** no violation holds — on a violation the harness emits the WINDOW-BOUND VIOLATED verdict instead, so the derived `pct` is never `> 100` and never negative. | `strat:o0-window-bound` — generated rows from a skeleton of 11 stages: `stage ms ∈ {0, tol, tol+0.1, total, total+1, total×20}`, `longTaskTotalMs ∈ {0, 10, 110, 2283}`, tolerance `∈ {0, 40}`, plus an `armWindow` starting 5/50/250 ms **before** `t0` and a pair with the window equal to the freeze | the oracle returns `violated:true` **iff** some separated stage `ms > total + tol` **or** the arm window starts before `t0` / ends after `t1` beyond tolerance; then `pass === false` **and** ≥1 `failReasons` line carrying **both** the stage `ms` and the `total + tol` bound; and the verdict string for that row matches the WINDOW-BOUND VIOLATED form and contains **no** `%`; an in-bound row emits the percentage form with `0 ≤ pct ≤ 100` | transform (pure) + the LIVE freeze window (§3.5's `o0:t0`/`o0:t1` marks) |
+| `P-HK-1` | TP | **The §3.6(c) hook is INERT under arm, and its recorded SPAN has settlement semantics (RUL-2, folded into this row).** An ARMED recorder's `Δmutations` must be **0** and `\|ΔlongTaskTotalMs\|` must be **within the RECORDED tolerance** (the landed band is 40 ms — `src/shared/o0-hook.ts:79`); an **off-set** stage (armed, but outside the armed set) is **dropped, not measured** (`fn` runs exactly once, no mark/measure/record, counted in `state().dropped`); a permitted stage with **no records** is `ms:null` + `unseparated:true` — **never a silent measured value** (the imputation ban); and for an **async thunk** (`record(stage, async () => …)`) the committed record's `ms` is measured **across settlement**, an **unarmed** `record()` returns `fn()`'s value **unawaited and unwrapped**, and a **rejection** commits the record (end mark + measure + `error`) while propagating untouched — **no dangling start mark**. | `strat:o0-hook-inert` — generated `(unarmed, armed, tolerance)` triples: `tol ∈ {0,10,40,120}` ms, `Δmutations ∈ [-3,3]`, `ΔlongTaskTotalMs ∈ [-40,40]` in 10 ms steps, over counters `mutations 0..200` / `longTaskTotalMs 100..2000`; the off-set-stage and zero-record halves ride the same file's H3/FS3 + H9/FS4 rows; the settlement half draws **promise bodies** over `{resolve after 0/1/25 ms, reject after 0/1/25 ms}` with a stub perf port whose `now()` advances per draw | `inert === (Δmutations === 0 ∧ \|ΔlongTaskTotalMs\| ≤ tol)`; the signed deltas are returned verbatim; a non-inert pair carries ≥1 `failReasons` line **naming** `mutations` (when `Δmutations ≠ 0`) or `longTaskTotalMs` (otherwise); an inert pair carries **none**; an off-set stage yields no record and stays `unseparated`; a zero-record stage yields `ms:null` + `unseparated:true`; for the settlement half: the async thunk's record `ms` equals the **stubbed settle delta** (NOT `≈0` at promise creation), a rejecting body yields exactly ONE record with a finite `ms` and a non-empty `error`, its rejection is observed by the caller, and `state().dropped`/`armCount` are unchanged by the await | transform (pure) + the LIVE armed-vs-unarmed pair (§3.6, `o0_repeat_determinism`) |
+| `P-TP-3` | TP | **WINDOW-BOUNDEDNESS — no measured stage may exceed the freeze it belongs to, and no percentage may be derived from a violated window (H3).** For every row: (a) each **separated** stage satisfies `ms ≤ longTaskTotalMs + hookToleranceMs`, where that band is the row's **RECORDED** `hook.toleranceMs` (an **additive, optional** field, default **40 ms** when absent — §3.2.1/§4.3); (b) the row's `hook.armWindow` (or the recorded actual hook window) **equals** the freeze window within that **same recorded** band — an arming interval that starts before `o0:t0` or ends after `o0:t1` beyond the band is a violation, never a silent widening; (c) a percentage verdict is emitted **iff** no violation holds — on a violation the harness emits the WINDOW-BOUND VIOLATED verdict instead, so the derived `pct` is never `> 100` and never negative. | `strat:o0-window-bound` — generated rows from a skeleton of 11 stages: `stage ms ∈ {0, tol, tol+0.1, total, total+1, total×20}`, `longTaskTotalMs ∈ {0, 10, 110, 2283}`, tolerance `∈ {0, 40}` **recorded on the row** as `hook.toleranceMs` (the drawn band is a row FACT — the generator writes what it draws, so the oracle's no-options default and the verdict read the same band the oracle's explicit `{hookToleranceMs}` argument got), plus an `armWindow` starting 5/50/250 ms **before** `t0` and a pair with the window equal to the freeze | the oracle returns `violated:true` **iff** some separated stage `ms > total + tol` **or** the arm window starts before `t0` / ends after `t1` beyond tolerance; then `pass === false` **and** ≥1 `failReasons` line carrying **both** the stage `ms` and the `total + tol` bound AND naming NEITHER the band nor the freeze through a free-text channel (the band is the recorded field, the invariant text is the reason shape); `deriveO0StageVerdict(row)` — which takes NO tolerance argument — must derive the SAME band from the row and emit the WINDOW-BOUND VIOLATED form with no `%`; and `validateO0Run` must apply that same recorded band (no hard-coded constant) so a drawn `tol = 0` row cannot validate against 40 ms; an in-bound row emits the percentage form with `0 ≤ pct ≤ 100` | transform (pure) + the LIVE freeze window (§3.5's `o0:t0`/`o0:t1` marks) |
 
 **Register count: 8 rows** (P-IM-1, P-IM-2, P-SM-1, P-SM-2, P-TP-1, P-TP-2, P-HK-1,
 P-TP-3) — **exactly AT the ≤8 cap**, with the budget restated as ≤100 attempts/row and
 `60×6 + 40 + 50 = 470` landed (≤800 at the ceiling).
+
+**RUL-2/RUL-4 register outcome: NO new row was added; ONE existing row was WIDENED, with the
+rationale recorded here (the cap did not grow, and nothing was folded silently).** The two
+candidate invariants the second run's findings produced were assessed against the register's
+own tests, and the outcomes are:
+1. **The async settled span (RUL-2) — FOLDED INTO `P-HK-1`.** The counter is real: the landed
+   row's oracles all concern the recorder's behaviour under arm, but none could fail on "the
+   span closed at promise creation". The row above now carries the settlement clause
+   (`ms` across settlement, unarmed = unawaited passthrough, rejection commits + propagates,
+   no dangling start mark) with its own generator draws and oracle. Folding is the honest
+   choice under the cap because the SUBJECT is one and the same object — **the recorder's
+   span semantics under arm** — and the added counterexample class is a *shape* defect of
+   the very function the row already pins (`record`), not a new invariant over a different
+   field set. A separate row would have carried the same generator and the same module.
+   `P-HK-1`'s existing clauses were NOT weakened, renumbered or removed; its budget constant
+   stays 40 (the TestWriter's addition to this row is the settlement draws, recorded in the
+   hook-contract file's constant).
+2. **The structural-vs-pass contract (RUL-4) — NOT entered as a register row, and that is
+   recorded as the deliberate outcome.** Two reasons: (a) the invariants are **cross-field
+   schema relations over the report document** (`ok` vs structural-with-reason vs `pass` vs
+   `status` vs `reconciliation.note`), which is the *input-model* domain already owned by
+   `P-IM-1`/`P-IM-2`'s validator oracle — extending `P-IM-1`'s `strat:o0-stage-values` draws
+   with the structural/`status` modes is the correct landing, not a ninth row; (b) a new row
+   would breach the cap of 8, and the register convention forbids breaching it silently.
+   The **full contract text is normative in §3.6b RUL-4 and §4.3/§4.4**, with the fail-states
+   in §6 F18 — a register row is not the only place an invariant may live, and this one is
+   already exercised by the schema rows with the modes added.
+3. **RUL-5's smaller fixes (`L1`, `L8`, `L9`, `L10`, `L12`) — NOT register rows.** Each is
+   either a *reporting-form* pin (L8's zero-window form, L12's `derived` marker: §4.4/§4.3),
+   a *provenance* pin (L10's size-vs-bytes, L9's per-run GPU delta: §3.4/§2.4/§4.3), or a
+   *derivation* pin (L1's engine state: §4.3). They are states/fail-states (§6 S18-S20,
+   F20-F21), not invariants over generated inputs — promoting one would be padding to the cap,
+   which is itself a review finding (§5's no-pad rationale).
 
 **Why `P-TP-3` is a row of its own (and why the cap did not force a fold).** The live pass
 produced a row whose largest stage (`traversal.build` **1868.7 ms**) was **larger than its
@@ -827,15 +1252,19 @@ is a restatement inside a row, not a saving).
 | **S6** | **GPU-on leg** / **GPU-off leg** | both legs present with the `gpu` flag recorded per run; a run whose `gpu` value disagrees with the flag the driver passed forces `pass:false` |
 | **S7** | **Ablation applied** / **not applied** | `trackAblation.applied` + the exact style mutation recorded; the paired runs differ only in that mutation |
 | **S8** | **Arm refused / recorder handle absent** (`window.__o0recorder` missing, or the handle refusing `arm()`) | the freeze row records `hook.rendererArmed: false` + a **non-empty** `hook.refused[]` carrying `{ stages, reason }`; the five hook stages (4-8) are emitted `ms:null` + `unseparated:true` — **stays `unseparated`, never a measured value** — so the reconciliation fails (§5 P-TP-1/§6 F4) and the report cannot pass. A PRELOAD seam that refuses the wrap follows the same rule (a refused wrap is not recorded as measured) |
-| **S9** | **Off-set stage** (the recorder is ARMED, but for a stage outside the armed set) | `fn` runs exactly **once**, **no** mark/measure/record is emitted, the pass-through is counted in `state().dropped`, and nothing throws (`src/shared/o0-hook.ts:178-182`) — the stage is **dropped, not measured**, and its row stays `unseparated` |
-| **S10** | **Double arm / double disarm** | **idempotent**: a redundant `arm()` returns `false` and does **not** clear the measurement window, reset `dropped`, or advance `armCount`; a `disarm()` on an unarmed recorder returns `false` and does not advance `disarmCount` (`src/shared/o0-hook.ts:157-172`). A recorder still armed from a previous freeze is disarmed before the next arm, so a freeze never inherits another window's records (the driver's `state.renderer` half) |
+| **S9** | **Off-set stage** (the recorder is ARMED, but for a stage outside the armed set) | `fn` runs exactly **once**, **no** mark/measure/record is emitted, the pass-through is counted in `state().dropped`, and nothing throws (`src/shared/o0-hook.ts:257-260`) — the stage is **dropped, not measured**, and its row stays `unseparated` |
+| **S10** | **Double arm / double disarm** | **idempotent**: a redundant `arm()` returns `false` and does **not** clear the measurement window, reset `dropped`, or advance `armCount`; a `disarm()` on an unarmed recorder returns `false` and does not advance `disarmCount` (`src/shared/o0-hook.ts:224-240`). A recorder still armed from a previous freeze is disarmed before the next arm, so a freeze never inherits another window's records (the driver's `state.renderer` half) |
 | **S11** | **Which aggregation produced the stage rows** (`hook.stageRowsSource`) — **now a closed field** | recorded on every freeze row, with **exactly ONE legal value**: `'src/shared/o0-hook.ts:stagesFromO0HookRecords'` (the real module, dynamically imported type-stripped). The former second value (`'driver-mirror:o0StagesFromHookRecords'`, the in-driver mirror) is **DELETED** (§3.6b finding 11 / F16), so a row carrying it — or any other value — is `pass:false`. There is no drift to audit because there is no second implementation (§3.6, §6 F16) |
 | **S12** | **`longtask` unsupported in the executing renderer** | `hook.longtaskUnsupported` carries the recorded error string (else `null`) and `longTasks`/`longTaskTotalMs` are `[]`/`0`. **A recorded audit input, not a forcing condition today**: a zero long-task total is a *legal* measurement, and only the recorded field distinguishes it from a genuinely tiny freeze — the adversarial pass must confirm it is never relied on as a silent zero |
 | **S13** | **A control leg emitted by the PAIRED invocation (cross-artifact pairing)** | the §3.5 command pair writes one artifact per leg, so a leg whose counterpart is not in this invocation declares `pairedWithStatus: 'cross-artifact'` (the driver's `o0ControlRows`, surfaced as `driver.crossArtifactControlPairs`); the counterpart is then verified only in the merged report and this is a **note**, not a forcing reason. A comparison row with **no** control row at all still forces `pass:false` (F9) |
-| **S14** | **A stage is STRUCTURALLY unmeasurable** (no seam exists in the executing bundle — the H2 class) | the stage is emitted `{ ms: null, unseparated: true, source: 'mark', structural: true, structuralReason: '<the missing seam>' }`, and the run's `unseparatedStages` distinguishes it from a merely-unmeasured stage. The report's `pass:false` reason names it as **structural** (`stage <id> is structurally unseparated — <reason>`), so a reader can tell "there is no seam" from "the seam was not armed". **This is the marker that keeps the A-4 gap visible rather than laundered** (§3.6b, §12 H2). When BOTH recorder instances record the same stage id in one freeze window, the row is `pass:false` with `stage <id> recorded by two instances (renderer, main) in one freeze window` |
-| **S15** | **The main-side refinement is absent** (`--connect`, a refused main-side arm, or a bundle without the main seam) | `snapshot.clone` is `ms:null` + `unseparated:true` + `structural:true` while `snapshot.pull` (the caller-level round trip) is still **measured** — the A-4 discriminator is answered and the inside/outside split is simply not offered. Recorded per leg: `driver.mainSeamArmed: true|false`. A report that claims the split without the seam is `pass:false` (§6 F14) |
+| **S14** | **A stage is STRUCTURALLY unmeasurable** (no seam exists in the executing bundle — the H2 class; after RUL-1 the expected membership is `snapshot.clone` only, §2.2/§3.6b) | the stage is emitted `{ ms: null, unseparated: true, source: 'hook', structural: true, structuralReason: '<the missing seam/transport>' }` — `source:'hook'` because every `structural`-capable id is a **permitted seam id** (§3.6b; `'mark'` would assert that no recorder could ever produce it) — and the run's `unseparatedStages` distinguishes it from a merely-unmeasured stage. The report's `pass:false` reason names it as **structural** (`stage <id> is structurally unseparated — <reason>`), so a reader can tell "there is no seam" from "the seam was not armed". **This is the marker that keeps the A-4 gap visible rather than laundered** (§3.6b, §12 H2) — and per **RUL-4** it is a LEGAL marker that does **not** make the row `ok:false` (§6 S19/F18). `post.style` (id 11) is `derived` and is never `structural`. When BOTH recorder instances record the same stage id in one freeze window, the row is `pass:false` with `stage <id> recorded by two instances (renderer, main) in one freeze window` |
+| **S15** | **The main-side transport is absent** (`--connect`, a refused main-side arm, or a bundle without a main-side channel) | `snapshot.clone` is `ms:null` + `unseparated:true` + `structural:true` (with the RUL-3 reason: no transport **and** the out-of-host IPC clone) while `snapshot.pull` (the caller-level round trip, now awaited per RUL-2) is still **measured** — the A-4 discriminator is answered and the inside/outside split is simply not offered. Recorded per leg: `driver.mainSeamArmed: true|false` (an **OBSERVED** fact — true only when a main-instance record was actually received, never inferred from the run mode, `L3`). A report that claims the split without the seam is `pass:false` (§6 F14) |
 | **S16** | **The window bound is VIOLATED** (a stage larger than its freeze — the H3 class) | the offending stage is `pass:false` with a reason naming **both** its `ms` and `longTaskTotalMs + tolerance`; the row's verdict is the explicit WINDOW-BOUND VIOLATED string, **never** a percentage; `hook.armWindow` reveals the wider interval. A row may be otherwise perfectly formed and still be this state — that is exactly why it needs a state of its own (§4.3, §5 P-TP-3, §12 H3) |
-| **S17** | **Inertness is measured but VACUOUS** (the repeat block was not in `--block`, so no armed/unarmed pair exists) | a report whose runs **armed** the hook but carries **no** inertness comparison is `pass:false` with `no hook inertness comparison was recorded although <n> run(s) armed the hook — an unverified arm is not an inert arm (§3.6(c)/§6 F17)`. `driver.hookInertness: []` is only legal when **no** run armed the hook (§3a finding 13) |
+| **S17** | **Inertness is measured but VACUOUS in its long-task HALF** (the repeat block was not in `--block`, so no armed/unarmed pair exists — OR the controlled pair carried no ≥50 ms task, so the comparison is 0-vs-0) | **Two distinct sub-states, each with its own record (RUL-6):** (a) **no pair at all** — a report whose runs **armed** the hook but carries **no** inertness comparison is `pass:false` with `no hook inertness comparison was recorded although <n> run(s) armed the hook — an unverified arm is not an inert arm (§3.6(c)/§6 F17)`. `driver.hookInertness: []` is only legal when **no** run armed the hook (§3a finding 13); (b) **a pair whose long-task half is vacuous** — the second run's real state: `nonVacuous: false` (both freezes carried `longTaskTotalMs: 0`, so the "within the 40 ms band" clause compared 0 to 0) while `Δmutations === 0` held. The pair is then a **MUTATION-HALF proof**, and the row/report MUST say which half carried it — the pinned form is `the hook inertness pair is a MUTATION-HALF proof: Δmutations <n> === 0 with <m> mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, `nonVacuous:false`), so no numeric long-task proof is claimed` — and the report may **never** print the unqualified form `Δmutations 0 and \|ΔlongTaskTotalMs\| 0 ≤ 40 ms → inert` for such a pair. `inert: true` stays the correct VALUE (the deltas did not move); what changes is the claim's precision (§4.4's falsifiability rule applied to the inertness sentence). A report that claims a long-task-bounded inertness proof while `nonVacuous:false` is `pass:false` (§6 F21) |
+| **S18** | **RUL-1's two render seams are ARMED and MEASURED** (the `L2s` fix landed) | `render.dom` / `render.ssr` carry finite non-negative `ms` with `source:'hook'`, `structural:false`, and the row's `hook.stageRecords[]` names them with their instance (`'renderer'`); a **single-pass** freeze therefore produces **11** records — one per stage id: the 2 caller-level pulls + the 5 render-path ids (with `shared.decorate`'s 4 call sites **summed into its one row**) + the **2** render emits + `reconcile.apply` — where the second run produced **7** (ids 9/10 had no seam). **Read at the artifact (third run): the folder row recorded `hook.records: 11` and the document row `22` (TWO re-derive passes — the `M1` finding, §12.13 (4)), so 11 is the ONE-pass count and 9 was the pre-fix arithmetic.** If the bundle lacks the wraps, the stages are instead `{ms:null, unseparated:true, structural:true}` with the reason naming the **missing wrap in the executing bundle** — never "no seam exists" (§2.2 RUL-1) |
+| **S19** | **The report is SCHEMA-VALID while structurally incomplete** (RUL-4's decisive state) | `driver.selfValidation.ok: true` with an empty `errors[]`, rows `ok:true`, `status: "OPEN-structural"`, `pass:false` whose every reason is in the structural family, `reconciliation.ok:false` with a `reconciliation.note` naming the stages + the non-computable residual, and the `O-0 REPORT OPEN …` verdict emitted (§3.6b RUL-4, §4.4). This is the state the **second run's `ok:false` (24/12 errors) must become**: the same numbers, the corrected classification. Any `status` inconsistent with `pass`, or an `OPEN-structural` report whose note is missing, is §6 F18 |
+| **S20** | **The GPU delta is reported PER RUN / PER CORPUS, never carried across runs** (RUL-5/L9) | the report's GPU control rows carry the **current** run's paired deltas and the pair's corpus + session identity, and any prose naming a delta states the run/corpus it belongs to. The first run's **+2173 / +2419 ms** is recorded as **contradicted** by the second run's **−36 / −23 ms** and may appear only as provenance ("the first run's delta is contradicted by this run and is NOT a finding any unit may rest on"), never as the current GPU effect. A report that carries a cross-run absolute delta as if it were this run's measurement is `pass:false` (§6 F20) |
+| **S21** | **The engine state is derived from a POSITIVE engine signal, not from "the MCP call resolved"** (RUL-5/L1) | `env.engine` is `'ready'` **iff** the driver observed a positive engine signal — a live `gnosis-server`-backed status whose payload reports the engine as available/connected — and `'absent'` otherwise; **an error payload satisfies "the call resolved" and is NOT evidence of readiness.** The second run recorded `engine: "ready"` on both legs while **no `gnosis-server` process existed** (`pgrep -af gnosis-server` → none) — a harness mis-derivation, and the honest state is engine-absent (§6 S4's legitimate degraded mode; no O-0 stage depends on the engine). A recorded `'ready'` with no positive signal is §6 F22 |
 
 ### FS — fail-states (each loud, each with an exact observable)
 
@@ -858,7 +1287,12 @@ is a restatement inside a row, not a saving).
 | **F14** | **A stage is structurally unmeasurable, or a stage is double-recorded** | `pass:false`; reason `stage <id> is structurally unseparated — <the missing seam> (§6 S14: the seam does not exist in the executing bundle)` **or** `stage <id> recorded by two instances (renderer, main) in one freeze window`. The row still emits `ms:null` + `structural:true` for it — this fail-state is about the **reason's precision**, never about imputing a value |
 | **F15** | **The page-global arm handle is missing, refused, or over-exposes the recorder** | three observables, all recorded: (a) `hook.rendererArmed:false` + a non-empty `hook.refused[]` when the handle is absent or refuses (the five render-path stages then stay `unseparated` — §6 S8); (b) the published value exposes **exactly `{arm, disarm, isArmed, records, state}`** — a handle reachable with `record` or `reset` is `pass:false` with `window.__o0recorder exposes <keys> (the page global must publish the sanctioned projection only — a page script must not be able to commit or erase a measurement)`; (c) a handle published at module scope (i.e. merely importing the renderer publishes it) is `pass:false` with `window.__o0recorder is installed at module scope — it must be installed on first arm, from inside a function` |
 | **F16** | **The driver's aggregation is not the pinned module's** | the mirror fallback is **deleted** (§3.6b): the driver imports `src/shared/o0-hook.ts` exactly as it imports `src/shared/o0-report.ts`, and an unavailable import is a **loud abort** — the `main()` catch prints `[live-drive] ERROR: <message>` and exits **2** with **no artifact written** (the F6 discipline). A report whose `hook.stageRowsSource` is anything other than `'src/shared/o0-hook.ts:stagesFromO0HookRecords'` is `pass:false`. **No second implementation of the stage-row contract may exist in the driver** |
-| **F17** | **The driver's self-validation failed, or the inertness comparison is vacuous** | (a) the driver runs `validateO0Run` over every emitted row and `validateO0Reports` over its own report **before** writing it and APPENDS their `failReasons` to `driver.failReasons`: a validator rejection that the driver's inline rules missed is `pass:false` with `driver self-validation rejected <n> row(s): <the validator's reason(s)> (§3.6b)`; (b) a report whose runs **armed** the hook but carries **no** inertness comparison (`driver.hookInertness: []`) is `pass:false` with `no hook inertness comparison was recorded although <n> run(s) armed the hook — an unverified arm is not an inert arm`. An empty `hookInertness` is legal **only** when no run armed the hook (§6 S17) |
+| **F17** | **The driver's self-validation failed, or the inertness comparison is vacuous** | (a) the driver runs `validateO0Run` over every emitted row and `validateO0Reports` over its own report **before** writing it and APPENDS their `failReasons` to `driver.failReasons`: a validator rejection that the driver's inline rules missed is `pass:false` with `driver self-validation rejected <n> row(s): <the validator's reason(s)> (§3.6b)`; (b) a report whose runs **armed** the hook but carries **no** inertness comparison (`driver.hookInertness: []`) is `pass:false` with `no hook inertness comparison was recorded although <n> run(s) armed the hook — an unverified arm is not an inert arm`. An empty `hookInertness` is legal **only** when no run armed the hook (§6 S17). **(c) RUL-4 clause 6 SUPERSEDES the second run's use of (a)**: a validator rejection whose ONLY content is the structural family (`stage <id> is structurally unseparated — <reason>`) is **not** a self-validation failure — it must be `ok:true`/empty `errors[]` with `status:"OPEN-structural"` (§3.6b RUL-4, §6 S19). A report that prints `driver self-validation rejected <n> row(s)` for structural-only content is itself a defect named by this row |
+| **F18** | **The structural marker is abused, or the report STATUS contradicts its own data** (RUL-4 clauses 2/4) | `pass:false`; reasons are exactly one of: `stage <id> records structural:true while it is separated (ms <ms>) — §4.3/RUL-4: the marker describes an unmeasurable stage, never a measured one`; `stage <id> records structural:true with no structuralReason — an unseparated stage must name the missing seam/transport (§4.3/RUL-4)`; `stage <id> records structural:true although its permitted seam (§2.2's closed ten) exists in the executing bundle and was merely not armed — this is UNMEASURED, not structural (§4.3/S14)`; `stage post.style records structural:true — post.style is the DERIVED residual and is never structural (§4.3/RUL-4)`; `report status "<status>" contradicts pass:<bool> (§4.2/RUL-4: OK ⇔ pass:true, OPEN-structural ⇔ a pass:false whose reasons are all structural)`; `report status is "OPEN-structural" without a reconciliation.note naming the structural stages, the non-computable residual and the no-imputation statement (§3.6b RUL-4 clause 5)`. The report is still WRITTEN with the numbers inspectable |
+| **F19** | **A committed span left a DANGLING start mark** (RUL-2's error path) | `pass:false`; the reason names the stage and the mark: `stage <id> left a dangling o0:<id>:start mark (no end mark/measure committed — the span must close on BOTH settlement paths, §3.6/RUL-2)`. Observable from the row: a `hook.stageRecordDetail` entry (or an `o0:*` performance entry) with a `start` mark and no matching record; the frozen recorder's `state().records` count for the stage is 0 while `armCount` advanced. An `error`-bearing record (a rejected round trip) is a **legal** record and never this fail-state |
+| **F20** | **A cross-run GPU delta (or a cross-run absolute) is reported as this run's measurement** (RUL-5/L9) | `pass:false`; reason `the GPU control reports a delta carried from another run/corpus (<Δ>) — the GPU delta is reported per run/per corpus and is never carried across runs (§2.4/RUL-5; the first run's +2173/+2419 ms is CONTRADICTED by this run's −36/−23 ms)`. The provenance form is legal and must be labeled as such: a prose mention of another run's delta must name that run and its corpus |
+| **F21** | **The inertness pair claims a long-task proof it does not have** (RUL-6) | `pass:false`; reason `the hook inertness pair is reported as a long-task-bounded proof while nonVacuous is false (both freezes totalled <n> ms) — a vacuous half proves nothing; report the MUTATION-HALF form instead (§6 S17/RUL-6)`. The correct observable is the mutation-half sentence of S17(b), which IS legal and does not force `pass:false` (the pair's `inert` value stands); only the unqualified claim is the fail-state |
+| **F22** | **`env.engine` claims `ready` without a positive engine signal** (RUL-5/L1) | `pass:false`; reason `env.engine is "ready" but no positive engine signal was observed (<the observed evidence: no gnosis-server process / an error payload from the status call>) — the engine state must be DERIVED from a positive signal, never from "the MCP call resolved" (§4.3/S21/RUL-5)`. The correct record is `env.engine: "absent"` (the legal degraded mode, §6 S4); the O-0 numbers are unaffected, so the row's other fields stand. A run whose engine state cannot be derived at all records `"absent"` **with the evidence string**, never a guess |
 
 **Throw patterns.** The driver's blocks never throw for a domain failure — they return
 the report fragment with `pass:false` + `failReasons` (the `rowResult`/`diagResult`
@@ -884,19 +1318,58 @@ Classified per `docs/specs/user-flow-audit.md:116-118` (`schema` / `imputation` 
 `not-a-real-gesture` / `verdict-contested`) plus this unit's `unauthorized-access` and
 `under-strong` classes. Every finding carries its site by **symbol** where the line drifted.
 
-**§3b (re-audit after the fixes):** `PENDING — owed before O-0 is reported done.` §3b must
+**§3b (re-audit after the fixes):** `PENDING in part — owed before O-0 is reported done.` §3b must
 confirm, at minimum: (i) the four MUST-FIX fixes are in the tree with their rows GREEN and a
 fresh trio; (ii) `R1` is **gone** (withdrawn) and no surviving row asserts it; (iii) the
 mirror deletion (finding 11 / F16) landed with a loud-abort test; (iv) the driver's
-self-validation (finding 12 / F17) runs the pure module over its own report; (v) the H3
-window-bound row (`P-TP-3`) is green and the armed window is recorded per freeze.
+self-validation (finding 12 / F17) runs the pure module over its own report — **with the
+RUL-4 classification (structural-only content is `ok:true`)**; (v) the H3
+window-bound row (`P-TP-3`) is green and the armed window is recorded per freeze; (vi) the
+**RUL-1 render seams** are instrumented and measured (S18); (vii) the **RUL-2 awaited span**
+is landed with the settlement/error semantics and its `P-HK-1` draws (S9/S17 unaffected);
+(viii) the **RUL-4 `status`/`reconciliation.note`** are emitted and the structural
+classification is the validator's (S19/F18); (ix) the **RUL-5 form pins** (`L1` engine
+derivation, `L8` zero-window verdict, `L10` provenance-vs-pin, `L12` `derived`) and the
+**RUL-6 mutation-half sentence** are observable in a fresh artifact.
+
+**§3c — the SECOND-RUN live findings (`L1`..`L12`) and their rulings (recorded here as the
+adversarial/audit record for the second run; the artifact's §11 is the evidence).** The
+second run's own table (artifact §11) is the finding record; this table is the **spec's
+disposition of each**, i.e. what the next red set must pin. Each row names its ruling and the
+section that now carries the contract:
+
+| L | Class | Finding (artifact §11) | Disposition in THIS spec |
+| --- | --- | --- | --- |
+| `L1` | `derivation` (harness) | `env.engine:"ready"` while **no `gnosis-server` process existed** — "the `gnosis.status` MCP call resolved" also matches an error payload | **RUL-5** → §6 **S21** + **F22**: the engine state is derived from a POSITIVE signal, `'absent'` + the evidence string otherwise. Does not affect any O-0 stage (§6 S4) |
+| `L2` | spec-vs-live contradiction (harness, FIXED in the driver) | the page arm set was the 5 render-path ids, so the shell's own `record('snapshot.pull', …)` calls were **off-set and DROPPED** (`hook.dropped: 2`) and §11 gate item 7 was unsatisfiable by construction | **RUL-1** → the arm set is re-derived: the page arm requests `O0_RENDER_HOOK_STAGES` (**7** ids after RUL-1), never `snapshot.clone`; §3.6b pins the two constants and §11 item 7 stays |
+| `L2s` | `schema` (harness gap, mislabeled as structural) | `render.dom`/`render.ssr` "have no seam at all" — nothing marked the emit | **RUL-1** → §2.2 + §3.6b: two REAL seams are added (ids 9/10 in the permitted set of **10**); after the fix, `structural:true` on them requires the *missing wrap* reason, never "no seam exists" (§6 S18/F14) |
+| `L3` | `harness` (FIXED: observed, not assumed) | `mainSeamArmed` was inferred from the run mode and a fabricated `{stage:'snapshot.clone', instance:'main'}` attribution was pushed | **kept** — the observed-fact rule is the contract: a report may not claim a record it never read (§6 F14/S14); §3.6b's union rule already requires per-record instance attribution |
+| `L3s` | `structural` | the MAIN instance is armed but **no channel transports its records** → the inside/outside split is structurally unavailable in `spawn` mode | **RUL-3** → §2.2 stage 2 + §3.6b: `snapshot.clone` stays `structural:true` with the reason naming the **transport gap + the out-of-host IPC clone**; the residual explanation must name it. **NOT** a new measurement |
+| `L4` | `harness` (FIXED) | the A-4 read count came from the aggregated stage row, so `1` and `2` reads were indistinguishable | **kept**: the count is derived from `hook.stageRecordDetail` (one entry per recorded span); §4.4's A-4 form + §11 item 7 depend on it. The second run's **1 (folder) / 2 (document)** reads are the first real count |
+| `L5` | `imputation` / `under-strong` (src-side) | the caller-level span wrapped only the **synchronous** call (`await` outside `record()`), so `snapshot.pull` measured `0.0-0.2 ms` and the real round trip hid in the 112-126 ms residual | **RUL-2** → §3.6: ONE pinned async/settled span shape (`ms` across settlement, rejection commits + propagates, no dangling start mark), §5 `P-HK-1` widened, §6 F19. The A-4 **ms** becomes measured; the count was already real |
+| `L6` | `harness` (FIXED) | the arm-window end was taken 1-2 CDP round trips late → a manufactured WINDOW-BOUND VIOLATED (71.6 ms overshoot) | **kept** — the fix (one page-side drain+disarm evaluate, the in-page disarm timestamp) is the landed shape; §4.3's window rule + §5 `P-TP-3` stand unchanged. Second run: every row's overshoot ≤ **0.8 ms**, `violated:false` on all six |
+| `L7` | `harness` (FIXED) | the repeat pair's freezes were not state-reset → a toggle no-op produced `Δmutations −166` "non-inert" and a vacuous 0-vs-0 pair | **kept** — the controlled pair (state reset before BOTH freezes + `controlledPair`/`stateReset`/`nonVacuous` recorded) is the landed shape; **RUL-6 closes the remaining claim gap** (§6 S17(b)/F21: a vacuous long-task half is a **mutation-half** proof and must say so) |
+| `L8` | `verdict` (harness) | the derived verdict printed the literal **`(null%)`** on a zero-window row | **RUL-5** → §4.4's zero-window form: no percentage without a finite positive window, `pct:null` + `pctReason:"zero-window"`, **no `null%` string anywhere** |
+| `L9` | `verdict` (harness/report) | the GPU delta is **CONTRADICTED** (+2173/+2419 → −36/−23) with identical mutation counts | **RUL-5** → §6 **S20** + **F20** + §4.3: the GPU delta is reported **per run/per corpus** and **never carried across runs**; the first run's delta may appear only as labeled, contradicted provenance. **No downstream conclusion may rest on it** |
+| `L10` | `corpus` (report) | the corpus is **not byte-reproducible**: 226 docs both runs, but **6 102 / 9 266** vs **10 170 / 18 758** nodes/edges | **RUL-5** → §3.4/§4.3: the **SIZE** is the gate; bytes/nodes/edges are **recorded provenance**; cross-run absolute comparisons are not claims; trigger (b)'s node-ceiling input is read from the same run's corpus row with the byte gap named (§10 item 2) |
+| `L12` | `derivation` (report) | `post.style` is a computed residual (`ms:null` + `unseparated:true` on every row) and the reconciliation cannot close; `selfValidation.ok:false` (24/12 errors) was read as "expected and correct" | **RUL-5 + RUL-4** → §4.3/§4.4 (`post.style` is `derived` in every table and verdict; the residual is never a measurement) **and** the decisive reclassification: `ok:false` for structural-only content is **a module defect, not correctness** (§3.6b RUL-4, §6 S19/F18); the report instead carries `status:"OPEN-structural"` with a reconciliation note |
+
+**Two further artifact observations recorded by this pass (documentation-review inputs, not
+rulings).** (1) The second run's rows label an unseparated `snapshot.clone` with
+`source:"hook"` while §3.6b's older text said an unseparated main-side stage is `'mark'` — the
+rows are right and the text was wrong: `snapshot.clone` IS a permitted seam id, so its
+unseparated `source` is `'hook'` (§3.6b, corrected here). (2) Every row's
+`disarmCount` is exactly one lower than its `armCount` (0/1, 1/2, 2/3, 3/4) because the
+driver's `arm()` for the NEXT freeze precedes the previous freeze's disarm — a legal
+sequencing artifact, **not** a defect, but the report should not present the pair as a
+same-freeze count without stating that the disarm for freeze *n* is recorded on freeze *n+1*.
 
 | # | Sev | Class | Site (verified against the tree) | Finding | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **REJECTED** | `verdict-contested` | `tests/unit-o0-report-contract.test.ts` row `R1` (`:610-625`), against `src/shared/o0-report.ts` `validateO0Run`'s fail-loud branch (`:265-276`) | The claim: `validateO0Run` accepting a `pass:false` row that carries a genuine `failReasons` line is a defect. | **REJECTED BY COUNTER-EVIDENCE (R-1).** A `pass:false` row carrying real reasons **is a legitimate FAILING MEASUREMENT** — the row's own verdict is what the row reports, and the report-level verdict is what aggregates it (`o0DeriveReportPass` pushes every row's reasons into `driver.failReasons`). Requiring `ok:false` here would make every honest failing row a *schema* error and destroy the distinction between "the measurement failed" and "the report is malformed". The existing row **`F5`** (`tests/unit-o-0-report-contract.test.ts:585-598`, asserting `r.ok === true` for a `pass:false` row with an ablation-unavailable reason) states the correct contract and **STANDS**. The adversarial `R1` has been **WITHDRAWN** (the TestWriter is removing it) and **must not be re-pinned**. **The real defect class is the opposite shape** — a `pass:false` row with an EMPTY `failReasons` — which the landed branch already catches; §4.3 now records that inversion explicitly so the class cannot be re-invented. |
-| 2 | **MUST-FIX** | `schema` | `src/shared/o0-report.ts` `reconcileO0PostStyle`'s return (`:389-405`), vs the driver twin `o0ApplyPostStyle` (`scripts/live-drive.mjs:870-899`); row `R3` (`:651-675`) | `postStyle` could be emitted as `{ ms: null, unseparated: false }` (when the residual is `null` from a non-finite total), and the module and the driver **twin disagree on the negative/over-tolerance branch**: the module leaves `post.style` out of `unseparatedStages` and reports it separated, while the twin pushes it into `unseparatedStages`. | **FIX (contract §4.3/§6 F13):** `postStyle.ms === null` **⇒** `postStyle.unseparated === true` (one branch, never two); a **negative or over-tolerance** residual is `ok:false` with a reason **naming the residual**; the module and the driver twin must agree on that branch (the twin's `post.style` insertion is the pinned shape). |
-| 3 | **MUST-FIX** | `under-strong` | `src/shared/o0-report.ts` `compareO0StageIdSets` (`:285-297`, the de-dupe at `:290`) and `unseparatedStageIds`'s `String(s.id)` (`:121-125`); row `R4` (`:677-706`) | The SET comparator de-dupes both sides, so a run carrying a **duplicated** stage id compares `equal:true` — the determinism oracle (P-SM-2) cannot see a set violation. `String(s.id)` leaks the literal **`'undefined'`** into `unseparatedStages` and into the derived verdict's "largest identified stage". | **FIX (contract §5 P-IM-2/§6 F13):** `compareO0StageIdSets` returns `equal:false` when any id **repeats** in either run (a SET comparison that cannot see a duplicate is under-strong); `unseparatedStageIds` (and every derived verdict) **skips non-string/`undefined` ids**, so no `'undefined'` phantom ever reaches a verdict. |
-| 4 | **MUST-FIX** | `unauthorized-access` | `src/renderer/runtime.ts` `:75-77` (the module-scope publish); row `B9` (`tests/unit-o-0-hook-contract.test.ts:808-852`) | The page global published the **FULL** recorder — `arm`/`disarm`/`record`/`reset` — at **module scope**, so any page script could commit a measurement (`record`) or wipe one (`reset`), and merely importing the renderer published the handle. | **FIX (contract §3.6/§6 F15):** the published value exposes **only `{arm, disarm, isArmed, records, state}`** (no `record`, no `reset`) and is installed **on first arm, from inside a function**. §3.6b pins the runtime meaning: a page-side `arm()` may request the render-path subset only. |
+| 1 | **REJECTED** | `verdict-contested` | `tests/unit-o0-report-contract.test.ts` row `R1` (`:610-625`), against `src/shared/o0-report.ts` `validateO0Run` (`:183`, the fail-loud branch) | The claim: `validateO0Run` accepting a `pass:false` row that carries a genuine `failReasons` line is a defect. | **REJECTED BY COUNTER-EVIDENCE (R-1).** A `pass:false` row carrying real reasons **is a legitimate FAILING MEASUREMENT** — the row's own verdict is what the row reports, and the report-level verdict is what aggregates it (`o0DeriveReportPass` pushes every row's reasons into `driver.failReasons`). Requiring `ok:false` here would make every honest failing row a *schema* error and destroy the distinction between "the measurement failed" and "the report is malformed". The existing row **`F5`** (`tests/unit-o-0-report-contract.test.ts:585-598`, asserting `r.ok === true` for a `pass:false` row with an ablation-unavailable reason) states the correct contract and **STANDS**. The adversarial `R1` has been **WITHDRAWN** (the TestWriter is removing it) and **must not be re-pinned**. **The real defect class is the opposite shape** — a `pass:false` row with an EMPTY `failReasons` — which the landed branch already catches; §4.3 now records that inversion explicitly so the class cannot be re-invented. |
+| 2 | **MUST-FIX** | `schema` | `src/shared/o0-report.ts` `reconcileO0PostStyle`'s return (`:531` — the function declaration; the return shape is its first branch), vs the driver twin `o0ApplyPostStyle` (`scripts/live-drive.mjs:1009`); row `R3` (`:651-675`) | `postStyle` could be emitted as `{ ms: null, unseparated: false }` (when the residual is `null` from a non-finite total), and the module and the driver **twin disagree on the negative/over-tolerance branch**: the module leaves `post.style` out of `unseparatedStages` and reports it separated, while the twin pushes it into `unseparatedStages`. | **FIX (contract §4.3/§6 F13):** `postStyle.ms === null` **⇒** `postStyle.unseparated === true` (one branch, never two); a **negative or over-tolerance** residual is `ok:false` with a reason **naming the residual**; the module and the driver twin must agree on that branch (the twin's `post.style` insertion is the pinned shape). |
+| 3 | **MUST-FIX** | `under-strong` | `src/shared/o0-report.ts` `compareO0StageIdSets` (`:457` — the declaration; the de-dupe is inside its body) and `unseparatedStageIds`'s `String(s.id)` (`:143`); row `R4` (`:677-706`) | The SET comparator de-dupes both sides, so a run carrying a **duplicated** stage id compares `equal:true` — the determinism oracle (P-SM-2) cannot see a set violation. `String(s.id)` leaks the literal **`'undefined'`** into `unseparatedStages` and into the derived verdict's "largest identified stage". | **FIX (contract §5 P-IM-2/§6 F13):** `compareO0StageIdSets` returns `equal:false` when any id **repeats** in either run (a SET comparison that cannot see a duplicate is under-strong); `unseparatedStageIds` (and every derived verdict) **skips non-string/`undefined` ids**, so no `'undefined'` phantom ever reaches a verdict. |
+| 4 | **MUST-FIX** | `unauthorized-access` | `src/renderer/runtime.ts` `:80-90` (the handle's install function; the assignment at `:83` — once the module-scope publish at `:75-77`); row `B9` (`tests/unit-o-0-hook-contract.test.ts:808-852`) | The page global published the **FULL** recorder — `arm`/`disarm`/`record`/`reset` — at **module scope**, so any page script could commit a measurement (`record`) or wipe one (`reset`), and merely importing the renderer published the handle. | **FIX (contract §3.6/§6 F15):** the published value exposes **only `{arm, disarm, isArmed, records, state}`** (no `record`, no `reset`) and is installed **on first arm, from inside a function**. §3.6b pins the runtime meaning: a page-side `arm()` may request the render-path subset only. |
 | 5 | **MUST-FIX** | `schema` | `scripts/live-drive.mjs` `o0DeriveReportPass` (`:1155-1200`) — it never imports/calls the pure validator; `o0RowPass` (`:693-716`) re-implements a subset inline; the ordering at `:966-967` | The driver never runs the **pure validator over its own report**: its inline rules can (and on this unit did) accept rows the pinned module would reject, and `o0ApplyPostStyle` runs **after** the reasons are computed, so a reconciliation-forced reason can be computed too late to be part of `failReasons`. | **FIX (contract §3.6b/§6 F17):** `o0BuildReport` must run `validateO0Run` per row and `validateO0Reports` per report **before writing**, through the **same guarded twin-import** (no mirror), and **append** their `failReasons` to `driver.failReasons`; `driver.selfValidation` records `{ok, attempts, runIds, errors}`. |
 | 6 | **SHOULD** | `under-strong` | row `R2` (`:627-649`) | A `stages[]` entry the row cannot use is reported through a **coerced stage id** (`'undefined'`) rather than its `stages[<i>]` **INDEX**, so the §4.4 falsifiability counterexample ("delete one `stages[]` entry") is not constructible from the reason. | **FIX (contract §4.3/§6 F13):** name the offending entry by index. |
 | 7 | **SHOULD** | `under-strong` | `tests/unit-o0-report-contract.test.ts` `P-IM-1` row's generator (`:720-802`) | The row text pins "every stage ms **and every counter**" but every draw perturbed only a stage value — a counter defect (`longTaskTotalMs`/`mutations`/`wallMs`) could not be exercised. | **FIX (TEST remand → now LANDED as modes 1-9).** Generator modes added; the `longTaskTotalMs === null` mode is additionally constrained by R-2 (§4.3: the primary oracle is required, so `null` is `ok:false`, not a legal unmeasured form). |
@@ -905,7 +1378,7 @@ window-bound row (`P-TP-3`) is green and the armed window is recorded per freeze
 | 10 | **SHOULD** | `under-strong` | `P-SM-2` / `P-TP-1` row generators (`:904-968`, `:969-1067`) | The determinism generator never drew a duplicate id, an unknown extra id, or an all-zero row (finding 9); the reconcile generator never drew the band edge, a zero/non-numeric tolerance, a **separated stage carrying `ms:null`** (silently summed as 0), or the `Σ > total` all-separated case (finding 10). | **FIX (TEST remand → LANDED as modes 3-5 and 5-10).** The `Σ > total` case is the one that exposed MUST-FIX finding 2's twin disagreement. |
 | 11 | **MUST-FIX** | `under-strong` | `scripts/live-drive.mjs` `o0StagesFromHookRecords` mirror (`:661-678`) + the guarded import (`:649-656`); §3.6's "mirror-fallback drift risk" paragraph | Two implementations of ONE contract: the in-driver mirror can diverge from `src/shared/o0-hook.ts` whenever the dynamic import is unavailable — and the divergence would move **every** stage row and the `post.style` residual on exactly those runs. The recorded `stageRowsSource` made divergence *visible*, never impossible. | **FIX (contract §3.6b/§6 F16): the MIRROR IS DELETED (option (b)), not audited (option (a)).** The driver imports the `.ts` twin the same way it imports `src/shared/o0-report.ts`; an unavailable import is a **loud abort** (`[live-drive] ERROR:` + exit 2, no artifact), never a fallback. Rationale recorded in §3.6b: this artifact is a *contract* artifact — a report from an unverifiable second implementation is worth less than no report, and an abort is unambiguous. Option (a) ("run both and fail on disagreement") was rejected because it keeps the second implementation alive and adds a third comparison surface. |
 | 12 | **MUST-FIX** | `verdict-contested` | `scripts/live-drive.mjs` `o0DeriveReportPass` (`:1192-1198`) + `o0Acc.hookPairs` | **Inertness is VACUOUS when the repeat block is not in `--block`**: the GPU-on leg ran `--block=o0_gpu_control` alone, so `driver.hookInertness` was `[]` while **both** runs were armed — the artifact then reports "the hook is inert" nowhere, and its `pass:false` reasons do not mention the unverified arm. | **FIX (contract §6 S17/F17):** a report whose runs **armed** the hook but carries **no** inertness comparison is `pass:false`; an empty `hookInertness` is legal **only** when no run armed the hook. §11's gate item 3 is restated accordingly. |
-| 13 | **TEST REMAND** | `schema` | `tests/unit-o-0-driver-contract.test.ts` (18 rows, `D1..D18`) | The driver-contract file pins the driver's **source text** but has no row for the four new contracts above (self-validation, non-vacuous inertness, mirror deletion/abort, the window-bound rule, the two-instance seam union). | **REMAND:** the TestWriter adds the rows for §3.6b/§4.3/§6 S14-S17 **before** the Implementer touches the driver (RCA-1: red first). The driver's own emitted report is validated by the pure module (§3.6b), which is the non-vacuous half. |
+| 13 | **TEST REMAND** | `schema` | `tests/unit-o-0-driver-contract.test.ts` (18 rows, `D1..D18`) | The driver-contract file pins the driver's **source text** but has no row for the four new contracts above (self-validation, non-vacuous inertness, mirror deletion/abort, the window-bound rule, the two-instance seam union). | **REMAND:** the TestWriter adds the rows for §3.6b/§4.3/§6 S14-S17 (**and, after the second run, S18-S21 / F18-F22 / the RUL-4 `status` + `reconciliation.note` schema rows — §12.12**) **before** the Implementer touches the driver (RCA-1: red first). The driver's own emitted report is validated by the pure module (§3.6b), which is the non-vacuous half. |
 
 **Superseded in-tree note (provenance).** The earlier edition of this section described the
 `R1`..`R4` rows as "RED … the module carries none of the four fixes yet" and left §3a/§3b at
@@ -922,27 +1395,32 @@ SHOULD TEST remands, and the fourth (`R1`) is **rejected and withdrawn**.
 | Deliverable | Count |
 | --- | --- |
 | Closed **stage** ids | **11** (§2.2) — **and the set is unchanged by the H2 re-derivation** (only the SEAMS moved, §3.6b) |
-| **Hook-permitted** stages | **5 render-path ids** (`O0_RENDER_HOOK_STAGES`, ids 4-8 — §3.6) **of 8 configurable seam ids** (`O0_HOOK_SEAM_STAGES` = the caller-level 1-3 + the render-path 4-8 — §3.6b) |
+| **Hook-permitted** stages | **10 configurable seam ids** (`O0_HOOK_SEAM_STAGES` = the caller-level 1-3 **+ the 5 render-path ids 4-8 + the 2 render emits 9/10** — §2.2 RUL-1/§3.6b), **7 of which a page-side `arm()` may request** (`O0_RENDER_HOOK_STAGES` = ids 4-10) |
 | New `live-drive.mjs` **blocks** | **5** (`o0_folder_row`, `o0_document_row`, `o0_gpu_control`, `o0_track_ablation`, `o0_repeat_determinism` — §3.1) |
-| **Property-register rows** | **8** (§5 — `P-HK-1` added with the §3.6 hook; `P-TP-3` added by the H3 re-derivation) — **AT the cap**, budget `60×6 + 40 + 50 = 470` (≤100/row) |
+| **Property-register rows** | **8** (§5 — `P-HK-1` added with the §3.6 hook; `P-TP-3` added by the H3 re-derivation; **`P-HK-1` WIDENED by RUL-2's settlement clause in the second-run pass, and NO ninth row added** — the RUL-4 structural contract and RUL-5's form pins land in §3.6b/§4.3/§4.4/§6 with their rationale recorded in §5) — **AT the cap**, budget `60×6 + 40 + 50 = 470` (≤100/row) |
 | New PURE source modules | **2** (`src/shared/o0-report.ts`, `src/shared/o0-hook.ts`) — §4/§3.6 |
-| Instrumented (`record()`-wrapped) call sites | **5 render-path** (§3.6) — the `shared.decorate` body keeps its **4** call sites — **+ 3 caller-level/main-side seams** (`snapshot.pull`, `snapshot.clone`, `docheads.pull` — §3.6b) = **8**, i.e. 5 sites inside the body + 3 new wraps |
-| New test files / tests | **3** files, **79** rows in the tree at this read: `tests/unit-o-0-report-contract.test.ts` **30** (26 at the reported trio + 4 §3a rows `R1`..`R4`); `tests/unit-o-0-driver-contract.test.ts` **18**; `tests/unit-o-0-hook-contract.test.ts` **31** (the reported 30 + the §3a row `B9` — the spec's earlier "30" was stale). **Counts move; re-read before quoting.** |
+| Instrumented (`record()`-wrapped) call sites | **7 render-path/emit sites** (§3.6 — the five 4-8 **plus the DOM emit and the SSR mirror emit**, RUL-1; the `shared.decorate` body keeps its **4** call sites) **+ 3 caller-level/main-side seams** (`snapshot.pull`, `snapshot.clone`, `docheads.pull` — §3.6b) = **10**, i.e. 7 sites inside the bundle + 3 wraps |
+| `snapshot.pull`/`docheads.pull` span shape | **async/settled** (RUL-2 — the span covers the awaited round trip, closing on resolution **or** rejection; §3.6) |
+| Structural stages in a legal report | **0 or 1** (`snapshot.clone` only, while the RUL-3 transport gap stands): after RUL-1 every other id has a permitted seam, and `post.style` is `derived` (never `structural`) — §4.3/§6 S14 |
+| Report `status` values | **3** (`"OK"`, `"OPEN-structural"`, `"FAIL"` — RUL-4, §4.2/§3.6b) |
+| New test files / tests | **3** files, **106** rows GREEN at the third-run read (**106 = report-contract 44 + hook-contract 39 + driver-contract 23** — `tests/unit-o-0-report-contract.test.ts` **44**, `tests/unit-o-0-hook-contract.test.ts` **39**, `tests/unit-o-0-driver-contract.test.ts` **23**, `D1`..`D23`). The earlier **99** rows were the **cycle-in-progress** reading at the pre-fix edit (report-contract 39 / hook-contract 37 / driver-contract 23) and the **95** was the second-run reading (23/37/35) — both provenance; the RUL-1..RUL-6 re-pin landed the remaining rows (`+11` over run 2). The `P-TP-3` band read is **GREEN**: the validator band fix **LANDED** (`src/shared/o0-report.ts:329-332` calls `deriveO0WindowBound(run)` with **no** options), so no cycle-in-progress red is owed in this file (§12.11). **Counts move; re-read before quoting.** |
 | `runs[]` rows in a full 4-block artifact | **6** (2 gesture freezes + 2 GPU-control freezes + 2 ablation freezes; the determinism block re-reports an existing run rather than adding a row) |
 | `controls[]` rows in a full artifact | **4** (`gpu-on`, `gpu-off`, `track-ablation-on`, `track-ablation-off`) |
 | New driver flags | **3** pinned (`--gpu`, `--o0-corpus=`, `--o0-out=`) (§3.3) **+ 2 landed by the live pass** (`--corpus-root=<dir>`, `--strict-seed`, both default-safe — §3.4/§12 H7) = **5** |
-| New committed artifact files | **1** (`docs/specs/unit-o-0-per-stage-breakdown.md`) (§4.1) — **WRITTEN by the live pass (2026-09-17) and SUPERSEDED-PENDING-FIX** (§12: the unit is OPEN, a re-run on the fixed bundle is mandatory) |
+| New committed artifact files | **1** (`docs/specs/unit-o-0-per-stage-breakdown.md`) (§4.1) — **re-committed by the THIRD live run (host clock 2026-09-20; the JSON stamps UTC 2026-09-21) and CURRENT per §12.13**: runs 1-2 are named SUPERSEDED **inside** the artifact, its raw JSON is embedded verbatim, and **no number in it is awaiting a fix**; what stays incomplete is the MEASUREMENT (`snapshot.clone` `structural:true`, the therefore-derived `post.style`) — the ACCEPTED structural set per DEC-1 |
 | New `$`-row in `MATRIX_ROWS` / `ROW_EXTENDED` | **0** (O-0 claims no §5.U row and no extended row — §3.2) |
-| Operator corpus census | **226 documents** pinned (`docs/defects.md:22`); **observed 226 / 10 170 nodes / 18 758 edges** (§12 §3) — seed **`o0-2026-09-17`** (§3.4) |
-| Trio | **NOT GREEN — measured at the live-battery read:** the harness trio's last recorded green is **214 files passed, 4 820 pass / 0 fail / 58 skipped (4 878)** (typecheck **0**, build clean, renderer ≈ **659.9 kb**), but the §3a set has since landed **RED**: **5** rows currently fail (**`R1`–`R4`** + **`B9`**) and **4** further red re-pins are owed for the new contracts (§3.6b/§4.3/§6 S14-S17) → the cycle's working figure is **9 failing by design** (§11) |
-| `src/` **behavior** change | **0** at the reported trio — the §3.6 hook is inert when unarmed (`P-HK-1`); the contact is 2 new pure modules + 5 wrap-only call sites + 1 guarded `window.__o0recorder` handle. **The next cycle's fixes DO touch `src/`** (3 module fixes + the handle hardening + the seam wraps + the main-side recorder), still measurement-only and still inert-when-unarmed |
+| Operator corpus census | **226 documents** pinned (`docs/defects.md:26`) — **the SIZE is the gate** (RUL-5/L10). The first run observed **226 / 10 170 / 18 758**; the second run observed **226 / 6 102 / 9 266** from a different generator — both legal, the bytes/nodes/edges being **recorded provenance, not pins** (§3.4/§4.3) — seed **`o0-2026-09-17`** (§3.4) |
+| Trio | **`npm test` IS RED — and NOT for O-0.** The **NON-O-0 toolchain regression** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`: the third-run read is `npm test` = **214 files / 25 failed / 4 820 pass / 58 skip** (**8 failed files of 214**, 206 passed), appearing with the user's `98ea185` vitest 2→5 / electron 33→44 / esbuild 0.24→0.28 bump; the first reading was **22 failed / 4 819 pass** in 7 files, and **run 2 also read 22**) is the blocker. **The 22 → 25 drift across runs is NON-O-0 — recorded as drift, never attributed to O-0.** **O-0's own leg is GREEN in the same reading: 106/106** (**report-contract 44 + hook-contract 39 + driver-contract 23**; run 2 read 95 = 23/37/35), all **8 register rows held** (the 470-attempt budget). **No unit may be reported DONE on a green-`npm test` claim while this regression stands** (AGENTS.md item 4; §11, `docs/next-steps.md`'s REGRESSION entry, `docs/pending.md`'s SCHEDULED DEC-2 row — the vitest-5 migration unit) |
+| `src/` **behavior** change | **0** at the reported trio — the §3.6 hook is inert when unarmed (`P-HK-1`); the contact is 2 new pure modules + 7 wrap-only call sites + 1 guarded `window.__o0recorder` handle (landed hardened: 5 keys, installed inside the runtime's construction). The RUL-1..RUL-6 **fixes HAVE LANDED** (the RUL-1 render wraps, the RUL-2 async span, the RUL-3 reason, the RUL-4 validator reclassification + `status`, the RUL-5 `L1`/`L8` derivations) and the third run executed on that bundle (§12.13); **still measurement-only and inert-when-unarmed**. The `src/` anchors for those wraps are re-pinned in §8.2 |
 
 ### 8.2 Cross-references
 
-- **`docs/specs/unit-o-0-per-stage-breakdown.md`** — the live artifact (written 2026-09-17).
-  Read it **with §12 below**, which is its record: the artifact is
-  **SUPERSEDED-PENDING-FIX** and the unit remains **OPEN** (§12's status block is
-  normative for the artifact's staleness).
+- **`docs/specs/unit-o-0-per-stage-breakdown.md`** — the live artifact (**re-committed by the
+  THIRD run, host clock 2026-09-20**; the first run's record is §12 below, the second run's
+  is §12.12, the third run's is §12.13).
+  Read it **with §12.13**, which is its record: the run-3 artifact is **CURRENT** (the runs it
+  supersedes are named SUPERSEDED INSIDE it, §12.13's status block is normative for that), and
+  the unit is **DONE** per DEC-1 with the one ACCEPTED structural gap (§12.13 (8)/(9)).
 - `docs/specs/gnosis-offload-proposal.md` — O-0 row `:250`, the staged stage list, §3.2
   architecture ruling `:149-190`, `A14` unmeasured alternatives `:49-53`, "what is NOT
   claimed" (§1's honest counter-consideration `:240-244`).
@@ -970,39 +1448,107 @@ SHOULD TEST remands, and the fourth (`R1`) is **rejected and withdrawn**.
   hard precondition, the report-shape re-scope, and the landing order), `D-GP-UFA-3`
   `:17` (falsifiability + real-input proof), `D-GP-UFA-4` `:18` (§6.1 report shape +
   row-set reconciliation).
-- `docs/defects.md` — `HEAVY-OPS-FREEZE-THE-PAGE` `:22`, `CANVAS-DIMENSIONS-JS-DRIVEN`
-  `:23`, `PANE-TOGGLE-FULL-REASSEMBLY` `:36`, `PANE-SLOT-INSTABILITY-ON-DISCLOSURE`
-  `:48` (the four rows whose numbers O-0 either reproduces or corrects).
+- `docs/defects.md` — `HEAVY-OPS-FREEZE-THE-PAGE` `:26`, `CANVAS-DIMENSIONS-JS-DRIVEN`
+  `:27`, `PANE-TOGGLE-FULL-REASSEMBLY` `:40`, `PANE-SLOT-INSTABILITY-ON-DISCLOSURE`
+  `:52` (the four rows whose numbers O-0 either reproduces or corrects; **re-pinned +4 at the
+  first defect re-pin and +22 after the two O-0 rows were inserted at the top of the OPEN table
+  — `:22 → :26`, `:23 → :27`, `:36 → :40`, `:48 → :52`, verified against the tree at this pass**).
 - `docs/live-testing.md` — the launcher/bundle gotcha `:119-124` (the ENV NOTE the
   bundle identity field enforces).
-- Build: `scripts/live-drive.mjs` (`CDP` `:63-124`, `ufHitProbe` `:169-172`,
-  `ufRealClick` `:180-206`, `diagResult` `:398-412`, `rowResult` `:429-468`,
-  `MATRIX_ROWS` `:483-492`, `reconcileMatrixRows` `:510-545`, `ROW_EXTENDED` `:552-567`,
-  `seedCorpus` `:129-137`, the CLI parse `:2643-2659`, the spawn `:2676-2683`, the block
-  loop `:2705-2716`); `src/renderer/sidebar-panes.ts:1492`, `:1995`, `:2003-2009`;
-  `src/main/main.ts:751-755`; `src/shared/types.ts:481-502`; `src/main/traversal.ts:325`;
-  `src/renderer/pane-graph.ts:329`; `src/renderer/content-reconcile.ts:421`;
-  `src/renderer/runtime.ts:143`, `:253-298`, `:480`; `src/main/preload.ts:578-642`
+- Build: `scripts/live-drive.mjs` (lines re-read against the file at the DOC-REVIEW pass,
+  2026-09-20 — **and where a line is unstable the anchor is cited BY SYMBOL ONLY**):
+  `class CDP` `:64`, `seedCorpus` `:137`, `ufHitProbe` `:177`, `ufRealClick` `:188`,
+  `diagResult` `:406`, `rowResult` `:437`;
+  **the §5.U matrix anchors are cited by symbol, NOT by line — they no longer resolve by
+  line and must not be quoted as numbers**: `MATRIX_ROWS` (**`export const`, the capped
+  8-row `U-1`..`U-8` table), `reconcileMatrixRows` (**`export function`**), `ROW_EXTENDED`
+  (**`export const`**) — the O-0 harness inserted blocks ahead of them, so any line number
+  for these three is stale by construction;
+  **the O-0 symbols**: `O0_STAGE_IDS` / `O0_STAGE_COUNT` / `O0_BLOCK_NAMES` / `O0_SEED`
+  (`o0-2026-09-17`) / `O0_OPERATOR_DOCUMENTS` (226) / `O0_DOCNAV` /
+  `O0_FOLDER_SELECTOR` / `O0_DOCUMENT_SELECTOR` / `O0_QUIESCE_TIMEOUT_MS` /
+  `O0_QUIESCE_FRAME_MS` / `O0_RECONCILE_TOLERANCE_MS` / **`O0_HOOK_LONGTASK_TOLERANCE_MS`**
+  (**40 ms**, `:518` — the recorded hook-inertness band, written into the row as
+  `hook.toleranceMs`: **the band emission** at `:1140`, `:1029`, `:1042`, `:4284`),
+  `O0_RUN_COMMANDS`, `O0_CORPUS_PROVENANCE_NOTE`, **`O0_HOOK_SEAMS`** (the 10
+  seam ids), `O0_HOOK_STAGES`, `O0_RENDER_EMIT_SEAMS`, `O0_RENDERER_ARM_STAGES`,
+  `O0_HOOK_RENDERER_HANDLE` (`window.__o0recorder`), **`O0_HOOK_SOURCE`** (the page-arm
+  source, `:579`), `O0_PAGE_ARM_STAGES`, **`O0_HOOK_STAGE_ROWS_SOURCE`**
+  (`'src/shared/o0-hook.ts:stagesFromO0HookRecords'`, `:690` — the no-mirror pin),
+  `O0_MAIN_SEAM_MISSING` / `O0_MAIN_SEAM_UNTRANSPORTED` / `O0_RENDERER_SEAM_MISSING`
+  (the RUL-3 reason strings), `O0_ENGINE_HEALTH_STATES`;
+  **the inline window rule** (the driver's own twin of the §4.3 bound — BY SYMBOL): the
+  `EXCEEDS the freeze window` reason builders (once `:1329-1330`);
+  **the derived-status call**: `o0DeriveReportPass` (`export`/`function`, `:1497`) →
+  `o0RowPass` (`:730`) → `o0BuildReport`/`o0WriteReport` (the last two BY SYMBOL);
+  **the `hook` block assembly** (once `:1130-1140`: `armWindow {t0,t1,ms}`, `freezeWindow`,
+  `records`, `stageRecords`, `stageRecordDetail`, `stageRowsSource`) and the §4.3
+  `toleranceMs` field at `:1140`;
+  the **CLI parse** (`main(argv)` and its `--block=`/`--gpu`/`--o0-*` option handling),
+  the **spawn** (`launchArgs` — `--no-gpu` unless `opt.gpu`, `:4397`), the **block loop**,
+  and the **exit sites** (`process.exitCode = fail > 0 || !recon.ok ? 1 : 0` then
+  `process.exit(process.exitCode || 0)`; the `main(...).catch` prints
+  `[live-drive] ERROR: …` and sets exit **2**);
+  `src/renderer/sidebar-panes.ts:1499` (**`shared.decorate`**, by symbol
+  `record('shared.decorate', …)`), `:1888`/`:1899` and `:2009`/`:2019` (**the two
+  caller-level `snapshot.pull`/`docheads.pull` pulls in their RUL-2 async shape**);
+  `src/main/main.ts:751-755` (the snapshot handler), `:785-786` (**the MAIN-side
+  `record('snapshot.clone', …)` wrap**, by symbol), the spawn arm `ASTROGRAPHER_O0_MAIN_ARM`
+  (`:42-46`); `src/shared/types.ts:481-502`; `src/main/traversal.ts:331` (**`traversal.build`
+  wrap**; the declaration `buildTraversal` sits directly above at `:326`);
+  `src/renderer/pane-graph.ts:335` (**`envelope.assemble`**; `assembleAppGraphEnvelope`
+  `:330`); `src/renderer/content-reconcile.ts:427` (**`reconcile.roots`**;
+  `reconcileDocumentRoots` `:422`); `src/renderer/runtime.ts:324` (**the DOM emit**,
+  `record('render.dom', …)`) and `:334` (**the SSR mirror emit**), `:527`
+  (**`reconcile.apply`**), the `window.__o0recorder` handle installed by
+  `installO0RecorderHandle()` (`:80-90`, called from the `Runtime` constructor),
+  `:143`/`:164` (`Runtime`), `:253-298`; `src/main/preload.ts:578-642`
   (there is no `Runtime` handle on `window` — §3.6).
-  **CITATION-STALENESS NOTE (owed re-pin).** Those `live-drive.mjs` anchors were written
-  BEFORE the O-0 section landed; the O-0 harness inserts ~850 lines ahead of
-  `MATRIX_ROWS`, so every driver anchor from `ufHitProbe` onward is stale by a growing
-  offset (the file moved 3 764 → 3 770 → 3 789 lines DURING this doc pass), and the
-  `src/` anchors for stages 1/3, 9 and 10 drifted with the §3.6 imports. The anchors this
-  spec's OWN new text depends on are cited **by symbol name** (§3.6/§6) for exactly that
-  reason. **The post-freeze doc-review pass must re-pin every driver line number in one
-  sweep** — it is explicitly NOT claimed accurate here. The O-0 additions to locate the
-  same way: `O0_STAGE_IDS`/`O0_BLOCK_NAMES`/`O0_SEED`/`O0_OPERATOR_DOCUMENTS`,
-  `O0_HOOK_SEAMS` + `O0_HOOK_SOURCE` + `O0_BRIDGE_STAGES` + `O0_HOOK_STAGE_ROWS_SOURCE`,
-  the `o0_*` blocks, `o0DeriveReportPass`, `o0BuildReport`/`o0WriteReport`, and the
-  `main()` O-0 arm/emit path.
+  **CITATION-STALENESS NOTE (the sweep is DONE at this pass).** Those `live-drive.mjs`
+  anchors were originally written BEFORE the O-0 section landed; the O-0 harness inserted
+  ~800 lines ahead of `MATRIX_ROWS`, so every driver anchor from `ufHitProbe` onward was
+  stale (the file moved 3 764 → 3 770 → 3 789 → **3 849** → ~4 548 lines across the passes),
+  and the `src/` anchors for stages 1/3, 9 and 10 drifted with the §3.6 imports. **This pass
+  re-pinned every driver anchor against the file AND converted the unstable ones to
+  symbol citations** (`MATRIX_ROWS`, `ROW_EXTENDED`, `reconcileMatrixRows`,
+  `o0DeriveReportPass`, `o0RowPass`, the inline window rule, `o0BuildReport`/`o0WriteReport`,
+  the CLI/spawn/block-loop/exit sites were never stable enough to quote by line).
+  The **unstable-by-construction `src/` anchors are cited by symbol too** (`Runtime`'s
+  emit/wrap call sites, `buildTraversal`, `assembleAppGraphEnvelope`,
+  `reconcileDocumentRoots`, the `installO0RecorderHandle` handle, the two caller-level
+  pulls, the `main.ts` arm + handler wrap).
 - Build (the §3.6 hook): `src/shared/o0-report.ts` (the pure report schema +
   reconciliation helpers), `src/shared/o0-hook.ts` (the pure recorder + the inertness
-  oracle), the five wraps (`src/main/traversal.ts:326`+`:331`,
+  oracle), the seven wraps (`src/main/traversal.ts:326`+`:331`,
   `src/renderer/pane-graph.ts:330`+`:335`, `src/renderer/sidebar-panes.ts:1493`+`:1499`,
   `src/renderer/content-reconcile.ts:422`+`:427`,
-  `src/renderer/runtime.ts:491`+`:497`), and the `window.__o0recorder` handle
-  (`src/renderer/runtime.ts:76`).
+  `src/renderer/runtime.ts` `applyContentReconcile` `:521`+`:527`, **`src/renderer/runtime.ts` `render()`'s DOM emit
+  `:324`-`:325` (RUL-1)** and **its SSR mirror emit `:334` (RUL-1)**), the `window.__o0recorder`
+  handle (`src/renderer/runtime.ts:80-90` — installed from inside
+  `installO0RecorderHandle()`, called by the runtime's construction; it publishes exactly
+  `{arm, disarm, isArmed, records, state}`), and the **two caller-level pulls in their
+  RUL-2 async shape** (`src/renderer/sidebar-panes.ts` `:1888`/`:1899` and `:2009`/`:2019`).
+  **The main-side seam** (RUL-3): `src/main/main.ts` — the instance
+  `createO0HookRecorder({ stages: ['snapshot.clone'] })` + the spawn arm
+  (`ASTROGRAPHER_O0_MAIN_ARM`, `:42-46`) and the handler wrap (`:785-786`).
+  **Line-anchor caveat:** this tree's line numbers were re-read at the DOC-REVIEW pass (the
+  `render()` emit pair `:324`/`:334`, the apply wrap `:521`/`:527`, the handle `:80-90`, the pulls `:1888`/`:1899`/
+  `:2009`/`:2019`, the main seam `:42-46`/`:785-786`); **the driver anchors were re-pinned in
+  the same pass** (§8.2 — the sweep is DONE, and every unstable anchor is now cited **by symbol**
+  rather than by line).
+- **The band source (§3.2.1/§4.3/§12.11 — the P-TP-3 field pin; the fix LANDED):**
+  `src/shared/o0-report.ts`'s **`O0_WINDOW_TOLERANCE_MS`** (`:68`, the 40 ms default constant),
+  **`deriveO0WindowBound`** (`export function`, `:718` — the no-options path reads
+  `run.hook.toleranceMs`, defaulting to the constant at `:735`), **`deriveO0StageVerdict`**
+  (`export function`, `:778` — it takes **no** tolerance argument; its internal read is at
+  `:811`), and the **validator call site** (`:329-332`: `validateO0Run`'s window-bound block
+  calls `deriveO0WindowBound(run)` with **NO options** — the P-TP-3 fix's landing site, once
+  the hard-coded `:298`),
+  plus the driver's row assembly that RECORDS the field
+  (`scripts/live-drive.mjs` — the `toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS` emission in the
+  `hook` block, `:1140`; the band constant itself at `:518`) with its own no-options reads
+  (`deriveO0WindowBound` / the inline window rule — cited by symbol; the numeric line anchors
+  for these are unstable, §8.2's staleness note).
 
 ---
 
@@ -1013,7 +1559,8 @@ only edit made to that file is a **citation re-pin, not a decision**: the five
 shell-keeps-the-render-path function lines in the existing ACTIVE
 `ASTROGRAPHER-SCOPE-REALIGNMENT` row (`docs/decisions.md:235`) had drifted by the §3.6
 import/wrap (e.g. `src/main/traversal.ts:325 → :326`, `src/renderer/runtime.ts:480 →
-:491`), so the row now names the declaration AND its instrumented wrap line.
+:521` — the declaration moved again after the 2026-09-20 doc-review re-read), so the row now
+names the declaration AND its instrumented wrap line.
 
 Reason. Every decision O-0 could be said to "pin" is **already carried** by the
 existing ACTIVE row `DECIDED: ARCH-GNOSIS-OFFLOAD` (`docs/decisions.md:24`), which
@@ -1039,6 +1586,19 @@ If, at O-5's spec gate, the harness contract is found to need a *separate* gover
 row (§6.1-style, as `D-GP-UFA-4` does — `docs/decisions.md:18`), that row is **O-5's**
 to land with its own report schema, not O-0's to pre-empt.
 
+**AMENDMENT (2026-09-20, DEC-1): the zero-row ruling above was the ruling of the MEASUREMENT
+pass, and it is superseded exactly once.** The `snapshot.clone` seam decision **has now been
+made by the user** (ACCEPT the structural gap), so the row the measurement pass said was OWED
+has LANDED: **`O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`** (ACTIVE, `docs/decisions.md:14`) — one row,
+recording the acceptance, the AMENDED O-5 gate condition (**this spec's §3.6b clause 7 is the
+canonical home of the amended clause**, which is why the decisions row does not restate the
+spec's measurement clauses), the uncomputable `post.style` residual, the visibility invariant
+(`status:"OPEN-structural"`, never quietly `"OK"`), the SUPERSEDED clause ("ONLY `status:"OK"`
+⇔ `pass:true` opens the gate") and the two OWED defect rows
+(`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`, `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`) which the
+acceptance does **not** close. The reasoning above is otherwise unchanged: no duplicate row was
+added, and the two rows in the list above stay OWED and unclosed by O-0.
+
 ---
 
 ## 10. The downstream contract (exactly what O-0's artifact feeds)
@@ -1049,20 +1609,36 @@ to land with its own report schema, not O-0's to pre-empt.
    (`gnosis-offload-proposal.md:162-166`; `docs/pending.md:134-139`). O-0's
    `traversal.build` stage measured against the long-task total is the **only** input
    that can fire it — so the engine track's re-opening is **gated on this artifact**,
-   and nothing else may claim trigger (c). **Status at the first run: trigger (c) is
-   CANDIDATE-FIRED for the folder-row disclosure** (`traversal.build` 1766.5 ms = 77.4% of
-   the 2283 ms GPU-ON window) and **not** for the document open (1.3%) — §12.7(e). It is
-   recorded as a **candidate** because the first run's stage spans were not window-bounded
-   (H3): the re-run under §5 P-TP-3 is what makes the figure final, and **no unit may treat
-   (c) as fired before it**.
+   and nothing else may claim trigger (c). **Status at the THIRD (accepted) run: trigger (c) stays
+   CANDIDATE-FIRED for the folder-row disclosure and NOT for the document open — with the
+   window bound PASSING** (`traversal.build` **684.2 ms of the 990 ms** GPU-OFF / **69.34 %**
+   GPU-ON folder window, the largest identified stage in both legs; document-row
+   `traversal.build` only **14.7 ms** where `reconcile.apply` dominates at **2 085.1 ms
+   (93.84 %)** and `render.ssr` is second at 1 742.5 ms — §12.13). It stays a **candidate**,
+   not final, for two recorded reasons: (i) the derived `post.style` residual stays
+   uncomputable (the ACCEPTED `snapshot.clone` gap, DEC-1), so `traversal.build`'s *share* is
+   measured against a window whose style/layout half is not separated; and (ii) the corpus bytes
+   are a recorded variable (**RUL-5/L10**). **The gate for reading (c) is O-0's ACCEPTED artifact
+   (DEC-1) — no unit may treat (c) as fired on any other artifact.**
 2. **The parked track's trigger (b) threshold.** `the operator corpus exceeds the local
    store's measured ceiling — the node-count threshold is pinned by O-0`
    (`gnosis-offload-review.md:445`; `docs/pending.md:135-136`). The artifact's
-   `corpus.nodes` census at operator size is the input to that pin.
-3. **O-5's budget number — which may NOT be pinned before O-0.** O-5's whole red set is
+   `corpus.nodes` census at operator size is the input to that pin — **read from the SAME run's
+   corpus row, with the byte-size gap named (RUL-5/L10)**: the three runs read **10 170**
+   (first) and **6 102** (second and third) nodes at the identical pinned size of 226 documents,
+   so a threshold pinned from any row is **corpus-specific**, and the pin must say which corpus
+   produced it. The third run's row (**6 102 nodes / 9 266 edges at 226 documents**) is the
+   current input (identical to the second run's — the third run's corpus row is the accepted
+   one, §12.13).
+3. **O-5's budget number — pinned FROM the accepted artifact (DEC-1: O-5 is now UNBLOCKED).**
+   O-5's whole red set is
    the harness's own node contract, and its **threshold comes from this artifact**
-   (`gnosis-offload-review.md:308`, `:112-120`; `docs/decisions.md:24` "pinned after
-   O-0"). A TestWriter that invents a threshold is the anti-pattern the review named.
+   (`gnosis-offload-review.md:308`, `:112-120`; `docs/decisions.md` `ARCH-GNOSIS-OFFLOAD`
+   "pinned after O-0"; the gate condition is the AMENDED §3.6b clause 7, DEC-1 —
+   `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`). The per-GPU-leg long-task totals are the input:
+   folder **990 ms** GPU-OFF / **1 032 ms** GPU-ON, document **2 222 / 2 213 ms** (§12.13), with
+   the §12 H8 caveat standing (the GPU-OFF legs do not reproduce the motivating 505/439 ms
+   freeze). A TestWriter that invents a threshold is the anti-pattern the review named.
 4. **O-4's conditional scheduling.** O-4 (traversal walk off the UI thread) is
    **conditional on O-0** and is not sequenced; if O-0 shows the walk is load-bearing,
    O-4 is re-decided then (worker vs engine route) — A-10,
@@ -1074,10 +1650,14 @@ to land with its own report schema, not O-0's to pre-empt.
    (`gnosis-offload-review.md:293-296`). If the folder row shows a non-zero store read
    today, O-1's spec gains that as an explicit accept criterion; if it shows zero,
    the amendment records that the cheap variant is **already true** and O-1's scope
-   shrinks accordingly. **Status at the first run: the read count is NOT YET OBSERVED**
-   (`snapshot.pull` was structurally unseparated — §12 H2), so this item stays **OPEN** and
-   the O-1 amendment must wait for the re-run's caller-level measurement (§3.6b). A
-   *"not measured"* `0` is explicitly **not** the "already true" finding this clause needs.
+   shrinks accordingly. **Status at the SECOND run: the A-4 read COUNT IS OBSERVED — 1
+   whole-store read for the folder-row disclosure and 2 for the document open** (both legs,
+   from `hook.stageRecordDetail`), so the cheap variant **"a doc-nav disclosure that performs
+   no store read at all" is REFUTED for both gestures** and O-1's spec gains that as an
+   explicit accept criterion. What is **still owed** for this item is the read's **ms**: the
+   caller-level span measured only the synchronous call (**RUL-2**), so the item stays OPEN on
+   its ms half until the awaited span ships and the third run re-measures. A *"not measured"*
+   `0` remains explicitly **not** the "already true" finding this clause needs.
 6. **The §6 live-risk demands on O-1/O-2.** The O-0 numbers (mutation counts, long-task
    totals, the slot census) are the baseline the O-1/O-2 duplication/slot/MCP-parity
    censuses are compared against (`gnosis-offload-review.md:368-394`).
@@ -1091,17 +1671,58 @@ to land with its own report schema, not O-0's to pre-empt.
 
 - **Delivery kind:** **doc + harness.** The spec (this file) + the new
   `scripts/live-drive.mjs` blocks (**LANDED**) + the committed artifact
-  (`docs/specs/unit-o-0-per-stage-breakdown.md`, **WRITTEN 2026-09-17 — SUPERSEDED-PENDING-FIX**,
-  §12) + the §3.6 hook (**IMPLEMENTED**, inert when unarmed — no behavior change).
-- **The CURRENT state (read this first): the unit is OPEN, not DONE.** The live battery
-  **RAN and FAILED** (§12), the adversarial pass **found 4 MUST-FIX host defects** (§7), and
-  the trio is **red by design at 9 failing** (5 rows already in the tree — `R1`–`R4` + `B9` —
-  plus 4 red re-pins owed for the new contracts of §3.6b/§4.3/§6 S14-S17). The remaining
-  cycle, in order: **spec (this pass) → red re-pins (TestWriter, incl. the `R1` withdrawal
-  per R-1) → host fixes (Implementer) → live re-run (the two §3.5 commands on the fixed
-  bundle) → doc-review (RCA-6)**. Nothing in this bullet is a park; the park rule (RCA-11 /
-  `AGENTS.md` item 11) is unchanged and no O-0 surface is structurally non-exercisable
-  except `post.style`'s residual (which is by construction a derived number, §2.2 id 11).
+  (`docs/specs/unit-o-0-per-stage-breakdown.md`, **RE-COMMITTED by the THIRD live run
+  (2026-09-20) and CURRENT for this measurement — it is NOT "superseded-pending-fix"
+  any more: the three runs it supersedes are named inside it, the raw JSON is embedded,
+  and no number in it is awaiting a fix. What is still incomplete is the MEASUREMENT
+  (`snapshot.clone` structural + `post.style` derived), not the artifact's accuracy**,
+  §12.12/§12.13) + the §3.6 hook (**IMPLEMENTED + HARDENED**, inert when unarmed — no
+  behavior change).
+- **The CURRENT state (read this first): the unit is DONE — THE ARTIFACT IS ACCEPTED (DEC-1,
+  2026-09-20) and the O-5 gate is OPEN.** The THIRD live run RAN on the RUL-1..RUL-6 bundle
+  (2026-09-20; §12.13) and produced a COMPLETED MEASUREMENT WITH ONE RECORDED STRUCTURAL GAP.
+  Both legs:
+  `status:"OPEN-structural"`, `pass:false`, `selfValidation.ok:true`, `errors:[]`,
+  `gatingReasons:[]` — **no FAIL class fired**; `snapshot.clone` is the one
+  `structural:true` id and `post.style` is `derived`. **Gate items now CLOSED by the
+  third run: 1, 2, 3, 5, 6, 8, 9, 10, and 7 in full** — bundle verified both legs;
+  both gestures `path:'cdp'`/`realInput:true`; inertness non-empty in BOTH legs
+  (`inert:true`, `Δmutations 0`, `carriedBy:["mutations"]`, the pinned MUTATION-HALF
+  sentence — the long-task half is vacuous 0-vs-0 and says so); stage-id SET equal (11
+  ids) with `ms` free; census **226/226** reached; **the window bound holds on all six
+  rows** (max 0.8 ms overshoot, no `null %`, no pct > 100 — item 8 stays CLOSED and must
+  not regress); the report STATUS is one of the three legal values, DERIVED and
+  consistent (`OPEN-structural`, `reconciliation.note` present, the `O-0 REPORT OPEN …`
+  verdict emitted) with an EMPTY `errors[]` — the second run's `ok:false` (24/12) is
+  gone (item 9); the RUL-5 form pins hold (no `null%`, `post.style` labeled `derived`,
+  the GPU delta per run/corpus only — this run reads **−42 ms folder / +9 ms document**,
+  never carried; the corpus size is the gate with nodes/edges as provenance; `env.engine`
+  derived as `"absent"` WITH the `fetch failed` evidence string) (item 10); and item 7 is
+  now COMPLETE — `snapshot.pull` is a **settled, non-null ms for BOTH gestures**
+  (**85.9 ms** folder / **179.2 ms** document, GPU-OFF; 83.6 / 172.2 GPU-ON), the awaited
+  round trip the second run's 0.0-0.2 ms sync-only seam missed (RUL-2). **Item 4's
+  completeness half is ACCEPTED-STRUCTURAL (DEC-1, 2026-09-20) — no longer an OPEN item:**
+  10 of the 11 stage ids are measured or `derived`, with `snapshot.clone` `structural:true`
+  (the RUL-3 transport gap: no channel carries the
+  main recorder's records out AND the IPC structured clone is outside every host-side
+  wrap) so the DERIVED `post.style` residual stays uncomputable (negative on every row:
+  the run-3 measurement shape, §12.13 `M1`). **THE DECISION THE UNIT OWED HAS BEEN MADE —
+  option (a): the structural set is ACCEPTED as a recorded structural gap, the derived
+  residual is recorded as UNCOMPUTABLE, and O-5 is gated on the `OPEN-structural` artifact
+  under the AMENDED §3.6b clause 7 conditions** (user **DEC-1** 2026-09-20; decision row
+  `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED` in `docs/decisions.md`; the SUPERSEDED clause is
+  recorded there too, and the spec is its canonical home). Option (b) — **building** the
+  main-side transport channel carrying the main recorder's records — remains available as a
+  SEPARATE unit (an engine/host seam, its own red set per RCA-2, never a patch inside O-0,
+  its own gate); its absence must stay VISIBLE in every report (`status:"OPEN-structural"`,
+  never quietly `"OK"`). **Nothing in this bullet is a park; the park rule (RCA-11 / `AGENTS.md`
+  item 11) is unchanged and no O-0 surface is structurally non-exercisable except
+  `post.style`'s residual (by construction a derived number, §2.2 id 11) and the RUL-3
+  out-of-host IPC clone. Two OPEN host/tracker rows remain filed and OWED from this pass
+  (§12.13) — the user accepted the STRUCTURAL gap, NOT these: `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`
+  (the validator's post-derivation
+  `failReasons`/`ok` snapshot — a cheap fix) and `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`
+  (`M1`/`M2`/`M3`).**
 - **The blind-greens artifact for O-0 is the §6.1 coverage report — NOT a greens doc.**
   Per `gnosis-offload-review.md:88` ("For O-0/O-5 the blind-greens artifact is the
   *coverage report* (`user-flow-audit.md` §6.1), not a greens doc") and §2.1(a)
@@ -1110,46 +1731,129 @@ to land with its own report schema, not O-0's to pre-empt.
 - **A merely-parked O-0 battery is not a pass** (RCA-11,
   `docs/specs/rca-live-bugs-green-pipeline.md:121-132`; `AGENTS.md` item 11), and a
   `-live-pending-battery.md` for O-0 is a review finding. **The live battery RAN on
-  2026-09-17 and returned `pass:false` on both legs** (§12): the harness is green-by-shape,
-  the ARTIFACT EXISTS, and the unit is **NOT DONE** — the run's numbers are
-  superseded-pending-fix because 6 of the 11 stages were `unseparated`. The live run
+  2026-09-17, on 2026-09-20 and again on 2026-09-20 (the RUL-1..RUL-6 bundle); all
+  three runs returned `pass:false` on both legs — the THIRD at
+  `status:"OPEN-structural"` with `selfValidation.ok:true`/`errors:[]`** (§12, §12.12,
+  §12.13): the harness is green-by-shape, the ARTIFACT EXISTS and is CURRENT, and the
+  unit is **DONE (artifact accepted, DEC-1)** — the third run leaves **ONE** stage `structural`
+  (`snapshot.clone`, ACCEPTED as a recorded structural gap)
+  plus the `derived` `post.style` (second run: 4 `unseparated`; first run: 6). The live run
   (`scripts/live-drive.mjs`, §3.5's two commands, on a usable display, against the operator
   app + its 226-doc persisted store **or** a seeded corpus of the pinned size, §3.4) must
-  prove, from the emitted report:
+  prove, from the emitted report — **items 1, 2, 3, 5, 6, 7, 8, 9 and 10 are CLOSED by the
+  third run as annotated below; item 4 is ACCEPTED-STRUCTURAL per DEC-1 (its completeness
+  half — `snapshot.clone` stays `structural:true` by the accepted RUL-3 gap and `post.style`
+  stays `derived`), NOT open**:
   1. `driver.build.verified === true` — the SERVED `dist/renderer/renderer.js` matches
      the on-disk file (byte length + hash) and `dist/main/main.cjs` is recorded;
+     **CLOSED (third run: `true` on both legs, renderer `1789952537561+678270+a25b03a9`
+     GPU-OFF / `1789952556962+678270+a25b03a9` GPU-ON)**;
   2. both gestures hit-tested: `path === 'cdp'` (hence `realInput:true`) on a real
-     folder-row click AND a real document-row click;
+     folder-row click AND a real document-row click; **CLOSED (third run: `cdp`/`true` in
+     every row of both legs)**;
   3. **hook inertness**: an ARMED run's `Δmutations === 0` and
      `|ΔlongTaskTotalMs| ≤ 40 ms` vs the unarmed baseline (`o0_repeat_determinism` →
      `driver.hookInertness[].inert === true`, §5 P-HK-1/§3.6(c)); **and the comparison must
      EXIST** — a report whose runs armed the hook but carries an empty
      `driver.hookInertness` is `pass:false` (§6 S17/F17: an unverified arm is not an inert
      arm). The 2026-09-17 GPU-on leg violated exactly this (it ran `--block=o0_gpu_control`
-     alone, §12 finding 12);
-  4. **non-null stage rows for the five hook stages 4-8** — i.e. the artifact actually
-     discriminates the render-path stages (`hook.rendererArmed:true`, `hook.refused`
-     empty, and `stages[i].ms !== null` for `traversal.build`/`envelope.assemble`/
-     `shared.decorate`/`reconcile.roots`/`reconcile.apply`); if the app's bundle does
-     not expose `window.__o0recorder` they stay `unseparated` and the artifact must say
-     so (§6 S8), not report a number;
+     alone, §12 finding 12). **RUL-6 adds the precision clause**: when the pair's
+     `nonVacuous` is false the report must state the **mutation-half** proof (§6 S17(b)) and
+     may not claim a long-task-bounded one (§6 F21) — the second run's pair is exactly this
+     shape (`nonVacuous:false`, both freezes 0 ms, `Δmutations 0` with 37 mutations each),
+     and **so is the third run's** (both legs: `Δmutations 0` with 37 mutations in each
+     freeze, `carriedBy:["mutations"]`, the pinned MUTATION-HALF sentence verbatim);
+     **CLOSED (third run: non-empty in BOTH legs, `inert:true`, `setEqual:true`,
+     `toleranceMs 40`)**;
+  4. **non-null stage rows for the render path — SEVEN stages after RUL-1** (ids 4-8 **plus**
+     `render.dom`/`render.ssr`): the artifact must discriminate every render-path stage
+     (`hook.rendererArmed:true`, `hook.refused` empty, and `stages[i].ms !== null` for
+     `traversal.build`/`envelope.assemble`/`shared.decorate`/`reconcile.roots`/
+     `reconcile.apply`/**`render.dom`**/**`render.ssr`**); if the app's bundle does
+     not expose `window.__o0recorder` (or lacks the two new wraps) the stages stay
+     `unseparated`, the reason names the **missing wrap**, and the artifact must say
+     so (§6 S8/S18), not report a number. The second run measured the five and reported ids
+     9/10 as "no seam exists" — the `L2s` reason this ruling retires. **Third run: 10 of the
+     11 ids are measured or `derived` — ids 4-10 all carry finite `ms` + `source:"hook"`
+     (`render.dom` 59.8/74.0, `render.ssr` 76.1/1742.5 GPU-OFF; `hook.refused:[]`,
+     `hook.rendererArmed:true`, `hook.dropped:0`, `stageRowsSource` = the real module).
+     ITEM 4 IS **ACCEPTED-STRUCTURAL** PER DEC-1, NOT OPEN: `snapshot.clone`
+     stays `structural:true` (RUL-3) and `post.style` stays `derived` — recorded in the
+     decision row `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED` (`docs/decisions.md`) and here —
+     see §12.13**;
   5. **stage-id-set determinism** across the repeat runs (`o0_repeat_determinism` →
-     `setEqual:true`; the `ms` values stay FREE under the seed, §5 P-SM-2);
+     `setEqual:true`; the `ms` values stay FREE under the seed, §5 P-SM-2); **CLOSED
+     (third run: `setEqual:true`, `msFree:true`, 11 ids, in BOTH legs)**;
   6. the census gate at operator size (`corpus.documents === 226`, or the
      `--o0-corpus=<n>` value) with `driver.build.verified:true` — otherwise the run is
-     a documented fail-state (§6 F2/F8), never a provisional pass;
-  7. **a non-null `snapshot.pull` for BOTH gestures** — the CALLER-level seam of §3.6b
-     (`hook.stageRowsSource` = the real module, no mirror; the row's `hook.stageRecords[]`
-     attributes each record to its instance) — so the A-4 discriminator is a **measured**
-     number and not a "not measured" 0; and every stage that remains `unseparated` carries
-     `structural:true` + `structuralReason` (§6 S14/S15) rather than a bare `unseparated`;
-     and
-  8. **the window bound holds** — no stage `ms` exceeds `longTaskTotalMs + 40 ms`, and no
-     row's verdict contains a percentage above 100 or a negative residual (§5 P-TP-3,
-     §6 F13a). The 2026-09-17 run violated this on `traversal.build` (1868.7 ms inside a
-     110 ms window, printed as `1698.82%`, §12 H3).
-  Only then may `docs/specs/unit-o-0-per-stage-breakdown.md` be committed and the
-  delegation gate for O-5 open (see the last bullet).
+     a documented fail-state (§6 F2/F8), never a provisional pass. **The SIZE is the gate;
+     the bytes/nodes/edges are recorded provenance (RUL-5/L10)** — a third run reaching 226
+     docs by any recorded source satisfies this item, and no cross-run node/edge comparison
+     may be treated as a claim. **CLOSED (third run: `corpus.documents` 226 = the claimed
+     226 in BOTH legs, `corpus.gate:"documents"`, no census mismatch reason; the nodes/edges
+     read 6 102 / 9 266 and are recorded provenance)**;
+  7. **a non-null, settled `snapshot.pull` ms for BOTH gestures** — the CALLER-level seam of
+     §3.6b in its **RUL-2 async shape** (`await … record(…, async () => …)`, so the `ms`
+     covers the round trip and not the promise creation; `hook.stageRowsSource` = the real
+     module, no mirror; the row's `hook.stageRecords[]` attributes each record to its
+     instance) — so the A-4 discriminator is a **measured** number and **measured** ms, and
+     not a "not measured" 0 and not the synchronous-call artifact `L5` found (0.0-0.2 ms).
+     Every stage that remains `unseparated` carries `structural:true` + a non-empty
+     `structuralReason` (§6 S14/S15) **only where a seam genuinely cannot exist** — the
+     RUL-1/RUL-3 set (`snapshot.clone` while the transport gap stands; nothing else) — and
+     `post.style` carries `derived`, never `structural` (§4.3). **CLOSED IN FULL (third run:
+     `snapshot.pull` = 85.9 ms folder / 179.2 ms document GPU-OFF, 83.6 / 172.2 GPU-ON —
+     the SETTLED round trip, so the run-2 112-126 ms residual collapsed into it;
+     the A-4 read COUNT is 1 folder / 2 document; and the only `unseparated` ids are
+     `snapshot.clone` (`structural:true` + the RUL-3 reason) and `post.style` (`derived`) —
+     the RUL-1/RUL-3 set exactly, nothing more)**; and
+  8. **the window bound holds** — no stage `ms` exceeds `longTaskTotalMs + <the band the row
+     RECORDS>`, and no row's verdict contains a percentage above 100 or a negative residual
+     (§5 P-TP-3, §6 F13a). The band is read from the row's recorded `hook.toleranceMs`
+     (default 40 ms) by the oracle, `deriveO0StageVerdict` and the validator alike
+     (§3.2.1/§4.3, §12.11) — never a constant in one consumer while another honours the
+     field. The 2026-09-17 run violated the bound on `traversal.build` (1868.7 ms inside a
+     110 ms window, printed as `1698.82%`, §12 H3); **the 2026-09-20 run PASSED it on all six
+     rows** (largest overshoot Δt0 **0.8 ms**, `violated:false` everywhere, §12.12), and this
+     item is therefore **CLOSED by the second run** — the third run must not regress it.
+     **Third run: NOT REGRESSED — `violated:false` on all six rows, largest overshoot
+     `armWindow.t0 − freezeWindow.t0` = 0.8 ms and largest shortfall 0.6 ms against the
+     recorded 40 ms band, zero `null %` strings and no pct > 100 in either leg (the two
+     zero-window ablation rows print the RUL-5/L8 "no percentage is computed: the long-task
+     window is zero (0 ms)" form instead), §12.13**;
+  9. **the report's own STATUS is one of the three legal values, DERIVED and consistent**
+     (RUL-4): `status:"OK"` ⇔ `pass:true`; `status:"OPEN-structural"` ⇔ a `pass:false` whose
+     every reason is in the structural family + a `reconciliation.note` + the report-level
+     `O-0 REPORT OPEN …` verdict; `status:"FAIL"` otherwise (§4.2/§4.4, §6 F18). A report
+     that is schema-**rejected** for structural-only content (`selfValidation.ok:false` with
+     structural errors) fails this item — that is the second run's `ok:false` (24/12) and the
+     defect RUL-4 closes. **CLOSED (third run: `status:"OPEN-structural"` in BOTH legs with
+     `selfValidation.ok:true`, `errors:[]` (0), `gatingReasons:[]`, `structuralErrors:0` /
+     `structuralFacts:4` GPU-OFF and `structuralFacts:2` GPU-ON, and the `reconciliation.note`
+     + the report-level `O-0 REPORT OPEN …` verdict emitted verbatim — §12.13)**; and
+  10. **the provenance/pin discipline of RUL-5 holds in the report's prose**: no `null%`
+     string (§4.4), `post.style` labeled `derived` wherever it appears, the GPU delta reported
+     per run/corpus and never carried across runs (§6 S20/F20), the corpus size presented as
+     the gate with bytes/nodes/edges as provenance, and `env.engine` derived from a positive
+     signal (§6 S21/F22). **CLOSED (third run: the GPU Δ is reported for THIS run only —
+     −42 ms folder / +9 ms document, with the earlier runs' deltas labelled provenance
+     and never carried; the two zero-window ablation rows print the no-percentage form; no
+     `null %` string exists in either leg; `post.style` is `derived` in every row, table and
+     verdict; the corpus row carries `gate:"documents"` + `provenanceOnly`; `env.engine` is
+     `"absent"` WITH the recorded `fetch failed` evidence string and `driver.engineError:null`
+     — §12.13)**.
+  Only then may `docs/specs/unit-o-0-per-stage-breakdown.md` be committed as **CURRENT**
+  and the delegation gate for O-5 open (see the last bullet). A run at
+  `status:"OPEN-structural"` is an **honest measurement**: committed, recorded, and — under
+  the AMENDED §3.6b RUL-4 clause 7 (DEC-1) — **ACCEPTED (hence O-0 DONE, gate open) when its
+  only gap is the accepted structural set, and OPEN (gate closed) otherwise**.
+  **The third run is the ACCEPTED case, and the user accepted it on 2026-09-20 (DEC-1,
+  `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`), so the gate is OPEN at this pass: O-5 is
+  UNBLOCKED.** Building the `snapshot.clone` seam (a main-side transport channel carrying the
+  main recorder's records — its own unit, its own gate) stays available as a separate unit and
+  is NOT owed to open the gate; until it exists every report must stay
+  `status:"OPEN-structural"` and the residual stays recorded as uncomputable (§11's
+  CURRENT-state bullet, §12.13).
 - **Red→green history (recorded — RCA-1).** The harness landed through THREE red sets,
   in order:
   1. **TestWriter red 41 failing** — 26 pure-module rows
@@ -1175,6 +1879,16 @@ to land with its own report schema, not O-0's to pre-empt.
   `dist/main/main.cjs` (the handle is renderer-only — §3.6). **A schema-green/node-green
   is ENVELOPE-green, NOT app-green (RCA-12): the trio proves the harness's contract, not
   one measured number.**
+  **CAVEAT (DEC-2, 2026-09-20 — the DONE row must be read with this): the trio above is the
+  HISTORICAL reading from the harness's own green. At the third run the same three legs read
+  `npm run typecheck` 0 / `npm run build` clean (bundle 678 270 B renderer / 2 419 392 B main,
+  both verified against disk) but `npm test` = **25 failed / 4 820 pass / 58 skip (8 failed
+  files of 214)** — **all 25 failures are the pre-existing NON-O-0 toolchain regression**
+  `SUITE-RED-AFTER-VITEST5-ELECTRON44` (vitest 2→5 / electron 33→44 / esbuild 0.24→0.28,
+  commit `98ea185`), while O-0's own three suites read **106/106**. The repo-wide trio's
+  `npm test` leg is therefore RED and O-0 is NOT reported on a green-trio claim; the vitest-5
+  migration unit is SCHEDULED as the user's **DEC-2** (`docs/pending.md` SCHEDULED row,
+  item (1) of the next queue in `docs/next-steps.md`).**
 - **Post-trio drift observed DURING the doc pass, now RESOLVED INTO THE RECORD.** While this
   spec was being reconciled against the build, the tree moved under it: (a) the driver grew
   **3 764 → 3 789 → 3 849 lines** (the `--display` colon normalization of §6 F12 plus the
@@ -1183,20 +1897,41 @@ to land with its own report schema, not O-0's to pre-empt.
   gained an ADDITIVE **§3a adversarial-regression set `R1`..`R4`** (30 rows total) while
   `tests/unit-o-0-hook-contract.test.ts` gained **`B9`** (31 total). **R1 is WITHDRAWN (R-1,
   §7 row 1) and `R2`/`R3`/`R4`/`B9` stand RED**, against the module/handle as they are today
-  (`src/shared/o0-report.ts` `:285-297`, `:389-405`, `:121-125`; `src/renderer/runtime.ts:75-77`).
+  (`src/shared/o0-report.ts` — `compareO0StageIdSets` `:457`, `reconcileO0PostStyle` `:531`,
+  `unseparatedStageIds` `:143`; `src/renderer/runtime.ts` `:80-90`, the handle at `:83`,
+  installed by `installO0RecorderHandle()`).
   The previous edition's "`R1`..`R4` are a NEW RED set" framing is superseded by §7's table
   (which records each finding's disposition) and by §12 (the live-run record).
 - **The red set is the property/pure-module red set** (§5), run and reported BEFORE
   the validator/harness implementation — that is O-0's TDD surface
   (`gnosis-offload-review.md:117-120` names exactly this precedent for O-5;
   O-0's is the report schema + reconciliation).
+- **The P-TP-3 band-channel remand (recorded in this cycle — NOT a green claim).** The
+  TestWriter's remand landed the **test-side** half: the drawn band is a **recorded row
+  field** (`hook.toleranceMs`, the generator writes `tol ∈ {0, 40}` per row) instead of a
+  hidden **free-text** channel, so `deriveO0WindowBound(run)` with no options, the oracle's
+  explicit `{hookToleranceMs}` argument and `deriveO0StageVerdict(row)` are pinned to ONE
+  band (§3.2.1/§4.3/§5 `P-TP-3`; `tests/unit-o-0-report-contract.test.ts`'s `P-TP-3` row
+  plus the §W `W1`–`W3` pins). **NO validator band fix is owed any more — it LANDED**:
+  the validator (`src/shared/o0-report.ts` `validateO0Run`) now calls
+  `deriveO0WindowBound(run)` with **no options** at `:329-332` and the band default constant
+  is `O0_WINDOW_TOLERANCE_MS = 40` at `:68`, so the validator, `deriveO0WindowBound` and
+  `deriveO0StageVerdict` read ONE band (the row's recorded `hook.toleranceMs`). The
+  **driver-side half** stands as a pin, not as owed work: the driver's row assembly already
+  emits `hook.toleranceMs` (`scripts/live-drive.mjs:1140`, at the band constant
+  `O0_HOOK_LONGTASK_TOLERANCE_MS`, `:518`), and every read stays on the recorded field for
+  every row path. §8.1's trio row carries the **run-3 reading (106/106 green)**; **no green is
+  claimed here for the doc pass** (§12.11).
 - **The adversarial pass (RCA-3) is RECORDED** — §7's table holds 13 findings (1 rejected,
   4 MUST-FIX, 5 SHOULD, 3 TEST remands) with sites verified against the tree. **The doc-review
-  (RCA-6) is OWED** and must run after the re-run, reconciling this spec's census claims, the
+  (RCA-6) RAN — record `archive/reviews/2026-09-20-unit-o-0-doc-review.md`** — reconciling this
+  spec's census claims, the
   stage ids, the block names, the driver's line anchors and the artifact's actual numbers
-  against the build.
+  against the build (§8.2's re-pinned anchors are its output).
 - **Doc-review record path convention:** `archive/reviews/<date>-unit-o-0-doc-review.md`
-  (the AGENTS.md item 10d / RCA-6 convention). Run after the FIXED live re-run, reconciling
+  (the AGENTS.md item 10d / RCA-6 convention) — **the O-0 record is
+  `archive/reviews/2026-09-20-unit-o-0-doc-review.md`** (hyphens, the tree's convention). It ran
+  after the FIXED live re-run (the third run) and reconciled
   this spec's census claims, the stage ids, the block names, the driver's line anchors and
   the artifact's actual numbers against the build.
 - **Evidence for the gate:** (a) this spec file; (b) the harness blocks in
@@ -1208,9 +1943,23 @@ to land with its own report schema, not O-0's to pre-empt.
 
 ## 12. THE LIVE-RUN RECORD (first run, 2026-09-17) — artifact status
 
-**STATUS (normative): the artifact `docs/specs/unit-o-0-per-stage-breakdown.md` is
-SUPERSEDED-PENDING-FIX. The unit O-0 is OPEN, not DONE. A re-run on the fixed bundle is
-MANDATORY before the delegation gate for O-5 may open.** The artifact below is the
+**STATUS (run-1/run-2 history — SUPERSEDED by the THIRD run; §12.13 is the run-3 record and
+governs the artifact's CURRENT status).** At the run-2 edit the artifact
+`docs/specs/unit-o-0-per-stage-breakdown.md` carried the **SECOND live run (host clock
+2026-09-20; the JSON stamps UTC 2026-09-21)** and was **SUPERSEDED-PENDING-FIX again**: the
+second run **superseded** the first run's record and **supersedes nothing in this spec** — its
+numbers were then the current measured values (the first run's numbers appear in §12 below only as
+provenance, and its GPU delta is **contradicted**, §7 `L9`/§6 S20). **The unit O-0 is OPEN, not
+DONE** *(SUPERSEDED — DEC-1 2026-09-20: the third run ran, and the accepted form of its report
+makes O-0 DONE and unblocks O-5; see §12.13 (8) and §11)*. A third live run on the bundle fixed for **RUL-1..RUL-6** was MANDATORY before the
+delegation gate for O-5 may open, and the `status` it had to reach was `"OK"` (§3.6b RUL-4 clause
+7) — `"OPEN-structural"` is honest but still keeps the gate closed *(SUPERSEDED — DEC-1: the
+third run reached `"OPEN-structural"` with the accepted structural set only, and the AMENDED
+clause 7 opens the gate on exactly that form)*. **The THIRD run then ran: it is §12.13's record,
+the artifact is CURRENT per §12.13, and the two run-2 statements above are retained only as
+history.** Where the artifact and this
+spec disagree, **this spec governs the contract** and the artifact governs the **measurement**;
+§7 §3c is the table of the places the two disagree (`L1`..`L12`, each with its ruling). The artifact below is the
 **first** live evidence in this repo for the O-0 stage question; it is recorded in full
 because its *numbers* are load-bearing (they are the only measured values the downstream
 units have) and its *gaps* are the next cycle's work list. Where the artifact and this
@@ -1283,7 +2032,9 @@ GPU-OFF leg (4 runs) / GPU-ON leg (2 runs), same corpus, same gestures:
 `hook.records:5`, `hook.stageRowsSource` = the real module — no mirror fallback).
 **Six stages were `unseparated` in every run**: 1/2/3 (the H2 seam defect), 9/10 (never
 instrumented) and 11 (`post.style`, by construction — its residual exists only when the
-reconciliation succeeds, which no run could satisfy).
+reconciliation succeeds, which no run could satisfy). **The second run fixed 1/3 (the caller
+seams) and left 2/9/10/11 — RUL-1 then instruments 9/10, RUL-3 keeps 2 structural with the
+corrected reason, and 11 stays `derived` (§12.12).**
 
 ### 12.4 Long tasks + mutations
 
@@ -1400,7 +2151,7 @@ hook stages measured), 7 (the A-4 seam) and 8 (the window bound).
   SOURCE as a variable** (§3.4's re-derivation).
 - **H8 — the GPU-OFF numbers are NOT the operator's numbers; the O-5 budget must be pinned
   PER LEG.** The GPU-OFF long tasks (110 / 192 ms) are far below the motivating live evidence
-  (505 ms / two 439 ms tasks — `docs/defects.md:22`), while the **identical gesture** under
+  (505 ms / two 439 ms tasks — `docs/defects.md:26`), while the **identical gesture** under
   GPU-ON reproduces that order (2283 / 2611 ms). The GPU-OFF leg ran `--disable-gpu` on a
   headless Xwayland session, where paint/composite work does not land on the renderer main
   thread as a long task. **Both legs are recorded, neither is preferred** (§2.4/S6), and the
@@ -1416,7 +2167,8 @@ hook stages measured), 7 (the A-4 seam) and 8 (the window bound).
 
 ### 12.10 The NOTE the measurement forces on the parked-track framing (`ARCH-GNOSIS-OFFLOAD`)
 
-**`docs/decisions.md` and `docs/pending.md` are deliberately NOT edited by this pass.** The
+**`docs/decisions.md` and `docs/pending.md` are deliberately NOT edited by this pass** (the
+second run's record reaches the SAME conclusion — see the ruling below). The
 ACTIVE row `DECIDED: ARCH-GNOSIS-OFFLOAD` (`docs/decisions.md:24`) and the proposal/critique
 prose that frames the problem as **"the measured dominant cost is DOM style/layout/paint"**
 (the critique's `29 ms of ≈517 ms` JS self-time argument) are **not contradicted outright but
@@ -1433,3 +2185,411 @@ derivation/reconcile path dominates the windows this run produced.** The **trigg
 is O-0's downstream output (§10) and the **engine track stays PARKED** (`docs/pending.md`'s
 named external triggers, unchanged): this NOTE records a measurement, not a re-opening. It is
 repeated in `docs/next-steps.md`'s O-0 entry so the next reader cannot miss it.
+
+**THE SECOND RUN'S RE-RULING ON `docs/decisions.md` — the row STAYS UNTOUCHED, and that choice
+is recorded here (the "which did you choose" answer).** The second run's numbers are **material**
+for the parked track's framing — the derivation walk IS load-bearing for the disclosure
+(`traversal.build` **694.5 ms of 997 ms = 69.66 %** GPU-OFF / **675.9 of 961 = 70.33 %** GPU-ON,
+the largest identified stage in both legs) while the document open is dominated by
+`reconcile.apply` (**2051.5 of 2180 = 94.11 %** / **2031.2 of 2157 = 94.17 %**) — which is
+strictly stronger than the first run's reading (the window bound now passes, so the shares are
+computed over a legal window). **It still adds NO decision row, for the §9 reason plus one
+more:** (a) nothing in those numbers **pins behavior or scope** — the existing ACTIVE row
+`DECIDED: ARCH-GNOSIS-OFFLOAD` (`docs/decisions.md:24`) already pins O-0 as the hard
+precondition and the landing order, and the two facts this unit adds (the report-shape contract
+and "no unit delegates before the artifact exists") are the re-scope of that same row; (b) the
+numbers are a **measurement of a precondition's incompleteness**, not a ruling — one stage is
+still structural (`snapshot.clone`), and
+`post.style` is a derived residual, so a decision row built on them would pin a **moving**
+number. *(The run-2 "the round trip's ms is not yet separated (RUL-2)" half is **CLOSED by the
+THIRD run**: the awaited span now measures **85.9 / 179.2 ms**, §12.13 (2).)* **The numbers feed the O-4 / O-1 trigger evaluation, which IS O-0's downstream output
+(§10 items 1/4/5)** — trigger (c) stays CANDIDATE (not fired) for the disclosure, trigger
+(b)'s node-ceiling input reads from the same run's corpus row, and O-1's amendment gains the
+**refuted** cheap variant (1 read folder / 2 reads document). **`docs/decisions.md` is
+therefore NOT edited by this pass either** — the same zero-row ruling as §9, restated with this
+run's numbers so a later reader can see it was re-decided rather than inherited.
+
+### 12.11 The band-channel defect found DURING this cycle, and its resolution
+
+**Defect (found by the TestWriter's remand on §5 `P-TP-3`): the window-bound band had no
+recorded field, and the three consumers read it differently.** §5 `P-TP-3(a)` and §4.3 named
+the band ("the recorded band, 40 ms"; the oracle param `hookToleranceMs`) but pinned **no row
+FIELD** for it, so:
+
+- the test side had a **hidden free-text channel** — the band was recoverable only from a
+  reason string, which is not a recorded fact; and
+- the **validator used to hard-code the 40 ms constant** while the oracle honoured the recorded
+  value (`src/shared/o0-report.ts` — the old call site at `:298` passed
+  `{ hookToleranceMs: O0_WINDOW_TOLERANCE_MS }`
+  into `deriveO0WindowBound`), so a row recorded at a **0 ms** band validated against **40 ms**
+  — two consumers judging ONE row against TWO bands. **THIS IS FIXED (landed): the validator
+  now calls `deriveO0WindowBound(run)` with NO options at `:329-332` and reads the row's
+  recorded field.**
+
+**Resolution (one recorded field, three agreeing consumers).** The band is the row's
+**RECORDED** `hook.toleranceMs` — an **additive, optional** field on the run's `hook` block,
+default **40 ms** when absent (§3.2.1/§4.3). `deriveO0WindowBound(run)` with **no options**
+reads it; an explicit `{ hookToleranceMs }` argument overrides **for the oracle's own tests**
+(the generator draws `tol ∈ {0, 40}` and **records what it drew**, so the argument and the row
+agree); and the **oracle, `deriveO0StageVerdict` and the report validator all read that one
+band**. The free-text channel is **deleted**: `failReasons` names the stage and the freeze, the
+band is a field. The driver already records the field in its row assembly
+(the `toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS` emission in the `hook` block,
+`scripts/live-drive.mjs:1140`, at the band constant `:518`, 40 ms)
+and its verdict + inline rules already call `deriveO0WindowBound(row)` with no options — cited
+**by symbol** (the inline window rule and the derived-status call; their numeric anchors are
+unstable, §8.2's staleness note) — so the live recorded band is **real** rather than
+constant-inferred.
+
+**Status at this edit — SUPERSEDED by the landing (kept for provenance).** Test-side fix
+**landed** (`tests/unit-o-0-report-contract.test.ts`'s `P-TP-3` row + the §W `W1`..`W3` pins
+assert the row-recorded band reaches the no-options oracle, the verdict and the validator), and
+the **validator fix at that time owed — `deriveO0WindowBound(run)` with no explicit tolerance —
+HAS SINCE LANDED** (`src/shared/o0-report.ts:329-332`, inside the `o0WindowRecorded(run)` block
+that once sat at `:300-303`). The **driver-side half** stands as a pin (§3.2.1: keep the
+driver's reads on the recorded field for every row path and re-record the band on any row the
+assembly bypasses) — its reads **are** on the recorded field, no re-record is outstanding.
+**Nothing is owed here now.** This doc pass ran **no** test/typecheck/build: the counts quoted
+in §8.1/§11 are the third run's recorded reading (**106/106 green**, with `npm test` red
+repo-wide for a NON-O-0 reason), never a claim made by this pass.
+
+**Status after the SECOND run (§12.12) → resolved by the THIRD run.** The second run's **live**
+rows carry `hook.toleranceMs: 40` on **every** row
+with the band written **once** (`O0_HOOK_LONGTASK_TOLERANCE_MS`, 40 ms) and the window bound
+passing on all six rows — so the *recorded-field* channel is a live-observed fact, not a
+constant-inferred one. **The validator fix named here as "the ONE remaining band item" HAS
+LANDED** (`src/shared/o0-report.ts:329-332`), closing the P-TP-3 remand: the oracle,
+`deriveO0StageVerdict` (which takes no tolerance argument — **§11 item 8**) and the validator
+now read the row's recorded band. The third run (§12.13) executed on that bundle and passed the
+window bound on all six rows.
+
+### 12.12 THE SECOND LIVE RUN (2026-09-20) — the honest FAIL, its numbers, and the rulings it forced
+
+**What ran.** The **second live run** on the **fixed** bundle (the seams re-derived from the
+first run's H2/H3 findings: the caller-level round-trip wraps, the recorded band
+`hook.toleranceMs`, the window-bound rule, the driver's self-validation). The artifact
+`docs/specs/unit-o-0-per-stage-breakdown.md` **is this run's record** and its §1-§12 are the
+verbatim evidence; this section is the spec's summary + disposition (the `L`-findings' rulings
+are tabulated in **§7 §3c**).
+
+**Command shape (spawn mode, `:0` — the operator store was again absent after `/tmp` was
+cleared, so §3.4's source 2 was used; the pinned SIZE was reached):**
+
+```bash
+npm run build          # dist/renderer/renderer.js 676469 B; dist/main/main.cjs 2417736 B
+# corpus: 226 *.md rebuilt deterministically (docs 200 + archive 20 + notes 6), seed o0-2026-09-17
+node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0b-gpuoff.json \
+  --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism
+node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0b-gpuon.json --block=o0_gpu_control,o0_repeat_determinism
+```
+
+**Bundle identity + census.** `driver.build.verified: true` in **both** legs (renderer
+`1789951042772+676469+a3e09c6a` GPU-OFF / `1789951140264+676469+a3e09c6a` GPU-ON, main
+`…+2417736+a6d687bc`; served `676469+a3e09c6a` = on-disk). Census **226 documents / 6 102 nodes
+/ 9 266 edges** — the pinned **size** reached, the counts **recorded provenance**, **not** the
+first run's 10 170 / 18 758 (`L10`/RUL-5). Pane frames **2** in every run; `env.mode: lexical`;
+`hook.stageRowsSource` = the real module on every row (no mirror).
+
+**The honest FAIL — what is still open (spec-side disposition).**
+1. **4 of 11 stages `unseparated` per row:** `snapshot.clone` (no main-side transport — `L3s`),
+   `render.dom`, `render.ssr` (`L2s`, "no seam exists at all") and `post.style` (the derived
+   residual). **RUL-1 closes ids 9/10 by instrumenting the two emits; RUL-3 records why
+   `snapshot.clone` stays structural; `post.style` stays `derived` by construction.**
+2. **`snapshot.pull`/`docheads.pull` measured `0.0-0.2 ms`** — the sync-call-only seam (`L5`);
+   the real IPC + clone cost sat in the **112-126 ms** residual. **RUL-2** pins the awaited
+   span.
+3. **`driver.selfValidation.ok:false` (24 GPU-OFF / 12 GPU-ON errors)** for **structural-only**
+   content. **RUL-4** reclassifies it: the report is schema-valid and must be
+   `status:"OPEN-structural"` (`ok:true`, empty `errors[]`), not schema-rejected.
+4. **`env.engine:"ready"` on a host with no engine** (`L1`) → **RUL-5** (`'absent'` + evidence).
+5. **`(null%)` on the two zero-window ablation rows** (`L8`) → **RUL-5** (no percentage without
+   a finite window).
+6. **The GPU delta `−36 / −23 ms` contradicts the first run's `+2173 / +2419 ms`** (`L9`) →
+   **RUL-5** (per-run/per-corpus only; no cross-run carry).
+7. **The corpus is not byte-reproducible** (`L10`) → **RUL-5** (size = gate; bytes/counts =
+   provenance).
+8. **The inertness pair's long-task half is vacuous** (`nonVacuous:false`) → **RUL-6**
+   (mutation-half proof, stated as such).
+
+**What the second run PROVED (the gate items it closed).**
+- **Item 8 — the window bound HOLDS on all six rows.** Largest overshoot:
+  `armWindow.t0 − freezeWindow.t0` = **0.8 ms** (GPU-OFF folder row: arm
+  `{t0 8582.6, t1 9651.8}` vs freeze `{t0 8581.8, t1 9651.5}`), far inside the recorded
+  **40 ms** band; `deriveO0WindowBound(…).violated === false` for all six. No `1698.82%` string:
+  the largest stage is `traversal.build` **694.5 ms of the 997 ms** GPU-OFF folder window
+  (**69.66 %**) and **675.9 ms of the 961 ms** GPU-ON folder window (70.33 %); `reconcile.apply`
+  is **2051.5 ms of the 2180 ms** GPU-OFF document window (**94.11 %**) and **2031.2 ms of the
+  2157 ms** GPU-ON document window (94.17 %). The intermediate-run violation (`t1` 71.6 ms past
+  `o:t1`) was a harness artifact of the disarm timestamp (`L6`) and is the fix's verification
+  record. **This item is CLOSED and must not regress.**
+- **Item 7's COUNT — the A-4 read count is REAL: 1 folder-row read vs 2 document-row reads**
+  (both legs), from `hook.stageRecordDetail` (`L4`). **A-4's cheapest variant — "a doc-nav
+  disclosure that performs no store read at all" — is REFUTED for both gestures** (the
+  disclosure pulls 6 102 nodes / 9 266 edges across IPC; the document open does it twice).
+  The **ms** of that read at the THIRD run IS the round trip (**85.9 / 179.2 ms**, §12.13), so
+  item 7's ms half is **CLOSED** (the run-2 "not yet the round trip" reading is superseded).
+- **Items 1/2/5/6** — bundle verified, both gestures hit-tested `path:'cdp'` (the hit probe
+  resolved inside a real `#pane-doc-nav [data-folder-path]` row and a real
+  `[data-document-id]` row), stage-id **SET equal (11
+  ids)** with `ms` free, census 226 reached.
+- **Item 3** — `driver.hookInertness` is **non-empty in BOTH legs** (`inert:true`,
+  `Δmutations 0`, `setEqual:true`, `toleranceMs 40`) — **as a mutation-half proof** (§6
+  S17(b)/RUL-6): each freeze performed the disclosure (37 mutations each) with the collapse
+  state reset in-page (`document rows 20 → 0`) before BOTH freezes, while the long-task half
+  compares 0 to 0 (`nonVacuous:false`, recorded and not hidden). The controlled-pair fix (`L7`)
+  is what makes this pair meaningful at all.
+- **The ablation** (`display:block` on the 12 698.7 px track): available + applied + reverted
+  with the exact mutation recorded, and **Δ long-task total 0 ms / Δ mutations 0** — on this
+  corpus the disclosure freeze never crosses the 50 ms threshold, so the ablation is **not shown
+  to be load-bearing at this scale** (the honest form: "no measurable effect here", never "no
+  effect"); the first run's `Δmutations −222` was the disclosure state change (`L7`), not the
+  ablation.
+- **The A/B split (the O-0 questions, answered):** separable JS path = **88.1 %** of the GPU-ON
+  folder window (`traversal.build` 675.9 + `envelope.assemble` 0.3 + `shared.decorate` 10.0 +
+  `reconcile.roots` 15.2 + `reconcile.apply` 145.4 = 846.8 ms of 961) and **94.6 %** of the
+  GPU-ON document window (`reconcile.apply` 2031.2 + `traversal.build` 6.1 + `shared.decorate`
+  0.3 + `reconcile.roots` 2.3 + `envelope.assemble` 0.3 = 2040.2 ms of 2157), residual
+  **114.0 / 116.6 ms**. **The emit-vs-style/layout split is still not separable** (RUL-1 gives
+  the emit half real seams; `post.style` stays derived), and the residual is **not** cleanly
+  style/layout/paint because the RUL-2 round trip was inside it. **The derivation WALK is
+  load-bearing for the disclosure (`traversal.build` ≈ 70 %) and NOT for the document open
+  (`reconcile.apply` ≈ 94 %)** — the second run's per-corpus reading of trigger (c), still
+  **CANDIDATE** until the RUL-2/RUL-1 fixes separate the round trip and the emits.
+- **The `--gpu` leg ran `o0_gpu_control` + `o0_repeat_determinism`** (the first run's vacuous
+  arm — finding 12 — is fixed), and the GPU-ON run's app-side flag is recorded
+  (`app spawned by this driver (gpu on)`, no `--disable-gpu`) with the pairing
+  `cross-artifact` (one artifact per leg, §3.5).
+- **Trio at the run (§11.1 of the artifact, recorded not claimed):** `npm run build` clean
+  (the exact bytes both legs verified), `npm run typecheck` clean (exit 0), `npm test` =
+  **7 failed files / 207 passed (214)**, **22 failed tests / 4 819 passed / 58 skipped (4 899)**
+  — the **non-O-0 toolchain regression** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`), with O-0's own
+  three suites green (**95** tests: driver-contract 23, report-contract 37, hook-contract 35).
+  **No O-0 test failed.** RCA-12 reminder: a trio green is envelope-green, not app-green — and
+  this artifact's numbers come from the **app**.
+
+**The rulings this record forces (all now normative above):** **RUL-1** §2.2/§3.6b (the closed
+ten-id seam set + the two render emits instrumented), **RUL-2** §3.6/§5 `P-HK-1`/§6 F19 (the
+awaited span, one shape, settlement + error semantics), **RUL-3** §2.2/§3.6b/§7 `L3s`
+(`snapshot.clone` = the main handler share; the out-of-host IPC clone is structurally
+unmeasurable; the stage stays `structural:true` with that exact reason), **RUL-4**
+§3.6b/§4.2/§4.3/§4.4/§6 (the structural-vs-pass contract, `status`, the reconciliation note,
+and the `ok`/`pass` split), **RUL-5** §3.4/§4.3/§4.4/§6 (`L1`/`L8`/`L9`/`L10`/`L12`), **RUL-6**
+§6 S17(b)/F21 (the mutation-half proof).
+
+**O-0 IS DONE (DEC-1, 2026-09-20).** The artifact is committed, honest and **structurally
+incomplete only in the ACCEPTED sense** (`snapshot.clone` structural + the therefore-derived
+`post.style`); the cycle **spec (this pass) → red re-pins → implementation of RUL-1..RUL-6 →
+the THIRD live run on the fixed bundle → doc-review (RCA-6)** is COMPLETE through the doc-review
+(RCA-6, `archive/reviews/2026-09-20-unit-o-0-doc-review.md` — hyphens, the tree's convention).
+The AMENDED §3.6b clause 7 **opens the O-5 delegation gate on the accepted `OPEN-structural`
+form** (§11); the SUPERSEDED clause ("only a run at `status:"OK"` opens the gate") is recorded in
+`docs/decisions.md` `O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`. **The THIRD run ran — §12.13
+below is its record.**
+
+### 12.13 THE THIRD LIVE RUN (2026-09-20, host clock; the JSON stamps UTC 2026-09-21) — the COMPLETED MEASUREMENT WITH ONE RECORDED STRUCTURAL GAP
+
+**What ran.** The **third live run**, on the bundle carrying the RUL-1..RUL-6 fixes (the two
+render-emit wraps, the awaited caller spans, the validator reclassification + `status`/note, the
+`L1`/`L8` derivations, the mutation-half form). The artifact
+`docs/specs/unit-o-0-per-stage-breakdown.md` **is this run's record** — its §1-§14 are the
+verbatim evidence, **runs 1-2 are named SUPERSEDED inside it**, and the raw JSON of both legs is
+embedded verbatim. This section is the spec's summary + disposition, in the shape of §12.12.
+
+**Command shape (spawn mode, `:0` — the operator store was again absent, so §3.4's source 2 was
+used and the pinned SIZE was reached; §1 of the artifact is the verbatim command set):**
+
+```bash
+npm run build     # dist/renderer/renderer.js 678270 B (662.4 kb); dist/main/main.cjs 2419392 B
+                  # renderer sha256[:8] a25b03a9 / main 955790a9 — both legs verified against disk
+node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0c-gpuoff.json \
+  --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism
+node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0c-gpuon.json --block=o0_gpu_control,o0_repeat_determinism
+npm test && npm run typecheck && npm run build   # the trio (recorded in §11.1 of the artifact)
+```
+
+**Bundle identity + census.** `driver.runMode:"spawn"` and `driver.build.verified:true` on
+**both** legs (renderer `1789952537561+678270+a25b03a9` GPU-OFF / `1789952556962+678270+a25b03a9`
+GPU-ON; main `…+2419392+955790a9`; served = on-disk). Census **226 documents / 6 102 nodes /
+9 266 edges**, `corpus.gate:"documents"`, seed `o0-2026-09-17` — the pinned **size** reached, the
+counts **recorded provenance** (RUL-5/L10). `env.mode: lexical`, `env.paneFrames: 2`,
+`env.engine:"absent"` with the `fetch failed` evidence, `driver.engineError:null`,
+`hook.stageRowsSource` = the real module on every row (no mirror), pairing `cross-artifact`.
+
+**(1) THE VERDICT — `status:"OPEN-structural"` in BOTH legs, and NOT a FAIL.** Both legs carry
+`pass:false`, `selfValidation.ok:true`, `errors:[]` (0), `gatingReasons:[]`,
+`structuralErrors:0`, `structuralFacts:4` (GPU-OFF) / `2` (GPU-ON), `reconciliation.ok:false`
+with the mandatory `reconciliation.note`, and the report-level `O-0 REPORT OPEN — …` verdict.
+**No FAIL class fired** (`gatingReasons:[]`), and the status is not `"OK"` because the derived
+residual is not computable. This is §6 S19 / RUL-4 clause 6 realised live — the run-2 `ok:false`
+(24/12 validator errors for structural-only content) is gone. **The one structural id is
+`snapshot.clone`**, with the RUL-3 reason verbatim in **both** places it is owed (the stage's
+`structuralReason` and the run's forcing line): no main-side transport exists (the MAIN instance
+IS armed via `ASTROGRAPHER_O0_MAIN_ARM=1` and wraps the `IPC_RAG_SNAPSHOT` handler, but
+`driver.mainSeamArmed:false`, `mainTransport.channel:null` and no `instance:"main"` entry exists
+in any `hook.stageRecords`) **AND** Electron's structured-clone serialization happens inside the
+IPC internals AFTER the handler returns, outside every host-side wrap. `post.style` is `derived`
+in every row/table/verdict (`source:"derived"`, `structural:false`, `structuralReason:null`,
+`residual < 0` on every row) — **never quoted as a style cost**.
+
+**(2) THE MEASUREMENT (GPU-OFF, folder-row / document-row, ms; §4.1-§4.2 of the artifact).**
+
+| stage id | folder-row | document-row |
+| --- | --- | --- |
+| `snapshot.pull` (the AWAITED round trip — RUL-2) | **85.9** | **179.2** |
+| `snapshot.clone` | `null (u, S)` | `null (u, S)` |
+| `docheads.pull` | 1.9 | **5.8** |
+| `traversal.build` | **684.2** | 14.7 |
+| `envelope.assemble` | 0.3 | 0.5 |
+| `shared.decorate` | 11.4 | **1.2** |
+| `reconcile.roots` | 16.5 | **4** |
+| `reconcile.apply` | 150.9 | **2085.1** |
+| `render.dom` | 59.8 | 74.0 |
+| `render.ssr` | 76.1 | **1742.5** |
+| `post.style` | `null (u, derived)` | `null (u, derived)` |
+| Σ named stages / long task / residual | 1087.5 / 990 / **−97.5** | 4107 / 2222 / **−1885** |
+
+**What moved and why — the A-4 question is CLOSED at the caller level.** `snapshot.pull` reads
+**85.9 ms (1 read)** for the disclosure and **179.2 ms (2 reads: 119.4 + 59.8)** for the document
+open, i.e. the **run-2 112-126 ms residual COLLAPSED into the awaited round trip** — it was never
+style/layout. **A-4 is answered: 1 whole-store `IPC_RAG_SNAPSHOT` read for a folder disclosure
+vs 2 for the document open**, so "a doc-nav disclosure that performs no store read at all" is
+**REFUTED** for both gestures and O-1's spec gains that as an explicit accept criterion (§10
+item 5). The two render emits are measured (`source:"hook"`) instead of "no seam exists" (RUL-1),
+and the unseparated set fell to **2 ids** — `snapshot.clone` (structural) plus the `derived`
+`post.style`.
+
+**(3) THE O-0 QUESTIONS (a)-(e), third-run reading.**
+- **(a)** above: 1 read / 2 reads, 85.9 ms / 179.2 ms.
+- **(b) The separable JS path DOMINATES: 87.25 %** of the folder window (`traversal.build` 684.2
+  + `envelope.assemble` 0.3 + `shared.decorate` 11.4 + `reconcile.roots` 16.5 + `reconcile.apply`
+  150.9 = 863.8 ms of 990) and **94.76 %** of the document window (`reconcile.apply` 2085.1 +
+  `traversal.build` 14.7 + `shared.decorate` 1.2 + `reconcile.roots` 4 + `envelope.assemble`
+  0.5 = 2090.4 ms of 2222 → **94.46 % on the GPU-ON window (2213 ms; the artifact's own
+  §9.5 row)**. **The emits carry 13.73 % (folder) / 81.75 % (document)** — the
+  emit-vs-style split is now PARTIALLY separable (RUL-1 delivered); the **`post.style` residual
+  is NOT separable** (negative: **−97.5 / −1885 ms**, §12.13 `M1`), so no style/layout figure is
+  offered and none may be quoted.
+- **(c) The GPU delta is THIS run's only, and it is SIGNED AS THE ARTIFACT RECORDS IT:
+  −42 ms folder / −9 ms document** — the document-row GPU difference is a **REDUCTION**
+  (long task **2213 ms GPU-ON vs 2222 ms GPU-OFF**, i.e. `2213 − 2222 = −9`; artifact
+  **§6.1**, the delta table's own **`-9 ms`** cell, restated at **§9.3** — the folder row's
+  **`42 ms`** cell is the same table's other gesture) (identical mutation
+  counts 37/11 758 in both legs; per-stage deltas all small) — **never carried across runs**
+  (RUL-5/L9; the first/second runs' deltas are labelled provenance only). No GPU effect is
+  claimed at this scale.
+- **(d) The track ablation Δ is 0 ms long-task total, 0 mutations, +1.6 ms wall** — available,
+  applied and reverted with the exact mutation recorded; **not shown to be load-bearing at this
+  scale**, stated in the honest form (the ablation rows carry a zero-window long-task total, so
+  their verdicts print no percentage at all — RUL-5/L8, `null %` retired).
+- **(e) THE O-4 TRIGGER — the traversal WALK is load-bearing for the folder-row DISCLOSURE
+  (69.11 % GPU-OFF / 69.34 % GPU-ON, the largest identified stage in both legs) and NOT for the
+  document open** (`reconcile.apply` 2085.1 ms of 2222 = **93.84 %**; `render.ssr` 1742.5 ms is
+  the second-largest id there, and `traversal.build` is only 14.7 ms). **Trigger (c) therefore
+  stays CANDIDATE-FIRED for the disclosure only**, and it is read as a LOWER BOUND (the measured
+  `hook` span), never as the whole freeze.
+
+**(4) THE TWO VERDICTS THE PASS RECORDS — `M1`/`M2`/`M3` (measurement shape, not softened).**
+- **`M1` — Σ named stages EXCEEDS the long-task window on the gesture rows** (folder 1 087.5 vs
+  990 ms; document 4 107 vs 2 222 ms), which is why the residual is negative and `post.style` is
+  unseparable. **Cause, from the per-record detail:** the DOCUMENT gesture records **TWO complete
+  re-derive passes** in one armed window (`hook.records: 22` vs the folder row's 11) — a light
+  pass (`render.dom` 26.8 / `render.ssr` 23.1 / a second `render.dom` 23.4 / `render.ssr` 23.0 /
+  `snapshot.pull` 119.4 ms, …) followed by the HEAVY pass (`render.ssr` **1 696.2** +
+  `reconcile.apply` **2 084.6** inside the 2 124 ms long task) — so the row's Σ double-counts one
+  gesture. Recorded honestly: this is measurement shape, not an imputed number, and the
+  reconciliation stays `openStructural` because of it.
+- **`M2` — `hook.armCount`/`disarmCount` are SESSION-cumulative** (1/0, 2/1, 3/2, 4/3 across the
+  GPU-OFF rows) because the recorder is a page-global singleton never reset between blocks.
+  `armCount − disarmCount = 1` (armed) in every row and each row's `armWindow` IS per-row and
+  in-band, so the window oracle is unaffected — recorded so the counts are never misread as a
+  per-row count.
+- **`M3` — the oracle sums the `duration`s of long tasks STARTING inside the window**
+  (a `start`-filtered list), so work between/outside long tasks is not in the primary oracle.
+  This is the §4.3 primary oracle as specified, and it is what makes `M1` possible.
+- Filed as the OPEN row **`O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`** in `docs/defects.md` (with
+  the disposition note saying why the tracker row exists in addition to this spec record).
+
+**(5) THE L1b HARNESS FIX (required to reach the run above; recorded, not hidden).** The GPU-OFF
+leg was first invoked against the same bundle and returned `status:"FAIL"` for exactly one
+reason: `gnosis.status` resolved with the plain STRING `"fetch failed"` (the main-process
+`EngineUnavailable` propagated as the tool's text), which the driver's `o0Census` `errorOf()`
+object-only probe could not recognise, so the probe was misclassified as an UNSUPPORTED payload
+and minted a forcing reason. §6 S4/S21/F22 pin the opposite: an engine ERROR payload is evidence
+of **ABSENCE** ("engine-absence is NOT a forcing condition"; a run whose engine state cannot be
+derived records `absent` **WITH the evidence string**). The one-line fix (`errorOf` also treats a
+non-empty STRING as error evidence) was applied, the leg re-run, and **both legs above ran on the
+identical build** (`renderer 678270+a25b03a9`). **No `src/**` or `tests/**` file was touched.**
+
+**(6) THE TRIO (recorded, not claimed — RCA-12: a node-green is envelope-green, not app-green,
+and every number above comes from the APP).** `npm run build` clean (the exact 678 270 B /
+2 419 392 B bundles both legs verified). `npm run typecheck` clean (exit 0). **O-0 IS GREEN:
+its own three suites 106/106** — `tests/unit-o-0-report-contract.test.ts` **44** +
+`tests/unit-o-0-hook-contract.test.ts` **39** + `tests/unit-o-0-driver-contract.test.ts` **23**
+(run 2 read 95: 23/37/35, so the RUL-1..RUL-6 re-pin landed +11 rows) — **all 8 register rows
+held** (P-IM-1/2, P-SM-1/2 and P-TP-1/2 at 60 attempts each, P-TP-3 at 50, P-HK-1 at 40 plus the
+settlement half = the 470 landed). **`npm test` = 25 failed / 4 820 pass / 58 skip (8 failed
+files / 206 passed of 214)** where **all 25 failures are the pre-existing NON-O-0
+toolchain-bump set** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`; run 2 read **22**). **The drift 22 →
+25 across runs is NON-O-0 and is reported as drift, not attributed to O-0 — no stable 22 is
+claimed.** Per AGENTS.md item 4 (and the REGRESSION row), **no unit may be reported DONE on a
+green-`npm test` claim while that regression stands**; O-0's own leg is green and its trio's
+`npm test` leg is red for a NON-O-0 reason.
+
+**(7) THE TWO OPEN DEFECT ROWS THIS PASS FILES (both in `docs/defects.md`, both OPEN).**
+1. **`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` (medium, HOST)** — `validateO0Report` computes
+   `gating`/`derived`/`ok` from a `failReasons` snapshot taken **before** the post-derivation
+   `err()`/push blocks (`src/shared/o0-report.ts` — the `gating` snapshot at `:1389`, inside
+   `validateO0Report` at `:1162`, ahead of the post-derivation blocks; the anchors
+   `:1389-1391` / `:1393-1463` / `:1464-1467` are the THIRD-RUN reading and drift with the
+   file), and
+   returns the stale `[...gating, ...family]` — so the **F18** forcing reason
+   never reaches the returned `failReasons` (probe: a clean report + `status:"OPEN-structural"`
+   returns `{ok:true, status:"OK", errors:[«status disagrees with the derived status»],
+   failReasons:[]}`), and the same drop hits the `pass:true` + gating, **F20** and **F21**
+   classes. Severity is **medium and stated honestly: the reason IS surfaced in `errors[]` today,
+   so there is no silent pass.** Fix shape: recompute `ok`/`failReasons` AFTER those blocks —
+   **then the TestWriter can move the F18 pins from the `errors[]` level to the `pass:false`
+   level.**
+2. **`O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE` (low/medium, measurement shape)** — `M1`/`M2`/`M3`
+   above, with the same content recorded here and in the row.
+
+**(8) THE GATE — O-5 IS UNBLOCKED (user DEC-1, 2026-09-20).** Per the AMENDED **§3.6b RUL-4
+clause 7**, the O-5 delegation gate opens at `status:"OK"` ⇔ `pass:true` **or** at an
+`status:"OPEN-structural"` report whose only gap is the ACCEPTED structural set
+(`snapshot.clone` + the therefore-derived `post.style`) provided `selfValidation.ok:true`,
+`gatingReasons:[]`, the window-bound check passes on every row, and the structural reasons are
+recorded verbatim (plus the mandatory `reconciliation.note`). **This run satisfies every one of
+those conditions** (§12.13 (1), (2), (7)), so the third-run artifact is the ACCEPTED
+ARCH-GNOSIS-OFFLOAD gate input and **O-5 may be delegated**. The SUPERSEDED clause ("only
+`status:"OK"` opens the gate") and the acceptance itself are recorded in the decision row
+**`O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`** (`docs/decisions.md`) — the spec's clause 7 is the
+canonical home of the amended condition. The `snapshot.clone` seam keeps its recorded shape:
+- **(a) ACCEPTED (DEC-1)** — the DERIVED residual is recorded **uncomputable**
+  (`snapshot.clone` named as the unsealed stage) and O-5 is gated on the `OPEN-structural`
+  artifact. The residual stays permanently non-attributable and the absence of the seam stays
+  VISIBLE in every report (`status:"OPEN-structural"`, never quietly `"OK"`).
+- **(b) NOT taken, and NOT owed** — BUILDING the main-side transport channel (a channel carrying
+  the main recorder's records into the renderer/report — §3.6b RUL-3's "one change that would
+  make it measured") remains a SEPARATE unit (an engine/host seam, its own red set per RCA-2,
+  its own gate), never a patch inside O-0.
+- Independent of (a)/(b): the **`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` fix is cheap**,
+  remains OWED (the user accepted the structural gap, NOT this row), and does not require the
+  seam decision — it is item (2) of the next queue in `docs/next-steps.md`.
+
+**O-0 is DONE — the artifact is ACCEPTED at `status:"OPEN-structural"` (a completed measurement
+with one recorded structural gap; no further O-0 code owed).** The artifact is committed,
+CURRENT for this measurement, honest and structurally incomplete by the accepted gap. **Caveat:
+the repo-wide trio's `npm test` leg is RED from the DEC-2 regression
+(`SUITE-RED-AFTER-VITEST5-ELECTRON44`)** — a NON-O-0 toolchain regression scheduled as its own
+migration unit; O-0's own three suites read **106/106** (item 6 of §12.13). The **doc-review
+(RCA-6, record: `archive/reviews/2026-09-20-unit-o-0-doc-review.md`)** runs concurrently and must
+re-pin this spec's driver line anchors and reconcile the census/test-count claims against the
+build.

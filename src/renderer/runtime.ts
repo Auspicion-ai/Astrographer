@@ -66,14 +66,27 @@ import { handlerDef, compileHandlerBody } from 'provident-ssr/core/registry.js'
 import type { CapabilityRouter } from './extensions.js'
 import { getO0HookRecorder } from '../shared/o0-hook.js'
 
-// §3.6 (the measurement-only hook allowance) — the renderer's handle to the
-// app-wide O-0 recorder the five instrumented call sites share. The driver's
-// page-side hook (`window.__o0`, installed by `scripts/live-drive.mjs`) ARMS it;
-// a refused/absent arm leaves the five stages `unseparated`, never a silently
+// §3.6/§6 F15 — the renderer's handle to the app-wide O-0 recorder the
+// instrumented call sites share. The driver's page-side hook (`window.__o0`,
+// installed by `scripts/live-drive.mjs`) ARMS it through the HARDENED projection
+// below; a refused/absent arm leaves the stages `unseparated`, never a silently
 // measured value. While unarmed the recorder is a pure pass-through, so this
 // handle changes no behavior (and it is never a measurement itself).
-if (typeof window !== 'undefined' && window !== null) {
-  ;(window as unknown as Record<string, unknown>).__o0recorder = getO0HookRecorder()
+/** Install the page-global handle — from INSIDE a function (the runtime's
+ *  construction), never at module scope: merely importing the renderer publishes
+ *  nothing. The published value is the sanctioned PROJECTION: `record`/`reset`
+ *  are NOT reachable, so a page script can neither commit nor erase a measurement
+ *  (§3a finding 4 / §6 F15). */
+function installO0RecorderHandle(): void {
+  if (typeof window === 'undefined' || window === null) return
+  const rec = getO0HookRecorder()
+  ;(window as unknown as Record<string, unknown>).__o0recorder = {
+    arm: (stages?: readonly string[]) => rec.arm(stages),
+    disarm: () => rec.disarm(),
+    isArmed: () => rec.isArmed(),
+    records: () => rec.records(),
+    state: () => rec.state(),
+  }
 }
 
 export interface RuntimeOptions {
@@ -201,6 +214,9 @@ export class Runtime {
 
   constructor(opts: RuntimeOptions) {
     this.mount = opts.mount
+    // §3.6/§6 F15 — the handle is installed HERE (inside a function, on the first
+    // construction of the production runtime), never at module scope.
+    installO0RecorderHandle()
     this.maxJournalLength = opts.maxJournalLength
     this.transformRouter = opts.transformRouter ?? null
     this.hub = createLinkHub()
@@ -298,12 +314,26 @@ export class Runtime {
     // The caller owns each per-tree prevMap (null on first render); the loop
     // prunes destroyed/not-in-tree nodes and never drains takePass2States.
     this.adapter.beginBatch()
-    const dom = renderProducingProcess(liveActionable as never, byNode as never, this.adapter, this.domPrevMap as never, this.renderOptions)
+    // RUL-1 (§2.2 stage 9) — the DOM EMIT seam: the `renderProducingProcess` pass on
+    // the `DomAdapter` (the `compilePath`/`rootNode.compile` bootstrap above + the
+    // whole batch pair below) is bracketed by the app-wide recorder, so the JS-emit
+    // vs style/layout/paint split §2.2/§10 asks for is MEASURABLE instead of
+    // structurally unavailable. Inert when unarmed: the body is moved nowhere
+    // (no reordering, no added/removed work — §3.6(a)/(b)); the returned row is the
+    // SAME object the body produced.
+    const dom = getO0HookRecorder().record('render.dom', () =>
+      renderProducingProcess(liveActionable as never, byNode as never, this.adapter, this.domPrevMap as never, this.renderOptions),
+    )
     this.adapter.endBatch()
     this.domPrevMap = dom.prevMap as unknown as Map<string, unknown>
     // Same actionable + options → identical els; the SSR adapter mirrors the
     // same element set (PAR-5 parity) through its own prevMap.
-    const ssr = renderProducingProcess(liveActionable as never, byNode as never, this.ssr, this.ssrPrevMap as never, this.renderOptions)
+    // RUL-1 (§2.2 stage 10) — the SSR MIRROR EMIT seam: the SECOND
+    // `renderProducingProcess` pass, bracketed by the same recorder (unarmed: a
+    // transparent pass-through).
+    const ssr = getO0HookRecorder().record('render.ssr', () =>
+      renderProducingProcess(liveActionable as never, byNode as never, this.ssr, this.ssrPrevMap as never, this.renderOptions),
+    )
     this.ssrPrevMap = ssr.prevMap as unknown as Map<string, unknown>
     return { els: dom.els, ops: dom.ops }
   }

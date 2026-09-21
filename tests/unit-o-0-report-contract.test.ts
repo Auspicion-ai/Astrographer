@@ -19,6 +19,10 @@
 //         armed-window rule and the `structural:true` + `structuralReason` marker
 //   §4.4  the two H2/H3 verdict forms (UNMEASURED read count; WINDOW-BOUND
 //         VIOLATED — never a percentage above 100)
+//   §4.2/§4.4 (RUL-4) the DERIVED report `status` + `reconciliation.note`
+//         (`OK` ⇔ pass:true; `OPEN-structural` ⇔ a pass:false whose reasons are all
+//         structural, WITH the note; `FAIL` otherwise) — the §6 F18 consistency
+//         pins (ST1..ST6) and the §6 F19 dangling-start observable (FS-ST7)
 //   §5    the typed property register — P-IM-1, P-IM-2, P-SM-1, P-SM-2,
 //         P-TP-1, P-TP-2, P-TP-3 (≤100 attempts/row, stop-after-5; this file
 //         carries 7 of the 8 rows; P-HK-1 lives in unit-o-0-hook-contract)
@@ -192,8 +196,12 @@ function assertHeld(rep: PbtReport): void {
 //            { ok, violated, failReasons, toleranceMs, armWindowOk,
 //              offenders: [{ stageId, ms, boundMs }] }
 //          — the §5 P-TP-3 oracle: `violated:true` iff some SEPARATED stage has
-//          `ms > longTaskTotalMs + hookToleranceMs` (default the recorded 40 ms
-//          band) OR the armed window widens the freeze beyond that tolerance
+//          `ms > longTaskTotalMs + hookToleranceMs`, where the band is the ROW's
+//          RECORDED `hook.toleranceMs` (the `opts.hookToleranceMs` parameter wins
+//          when given, else the recorded field, else the §3.6 default 40 ms) — so
+//          the SAME band reaches `deriveO0StageVerdict(row)`, which takes no
+//          tolerance argument and could otherwise not tell §4.4's two forms apart
+//          OR the armed window widens the freeze beyond that tolerance
 //          (the arm starts before the freeze `o0:t0` / ends after `o0:t1`);
 //            and `deriveO0StageVerdict` must emit §4.4's WINDOW-BOUND VIOLATED
 //          string (no `%`, `pct === null`) INSTEAD of the percentage form when
@@ -233,6 +241,16 @@ interface O0RunShape {
     armed?: boolean
     armWindow?: { t0: number; t1: number; ms?: number }
     freezeWindow?: { t0: number; t1: number }
+    /** §4.3/§5 P-TP-3(a) — **the RECORDED band the window bound is judged against**
+     *  (`longTaskTotalMs + hook.toleranceMs`), the row-recorded counterpart of the
+     *  oracle's `opts.hookToleranceMs` parameter (§3.6's `O0_HOOK_LONGTASK_TOLERANCE_MS`,
+     *  default 40 ms). The band is a ROW FACT, never a free-text `failReasons` string:
+     *  `deriveO0StageVerdict(row)` takes no tolerance argument, so a band that is not
+     *  recorded on the row is unrecoverable and the two branches (§4.4's percentage form
+     *  vs the WINDOW-BOUND VIOLATED form) become undecidable for the same recorded row.
+     *  ADDITIVE field pinned by this red set (see §0.2/§4.3: the spec names the band but
+     *  no row field for it — the same gap `freezeWindow` closes for P-TP-3(b)). */
+    toleranceMs?: number
     armCount?: number
     disarmCount?: number
     stageRecords?: Array<{ stage: string; instance: 'renderer' | 'main' }>
@@ -1266,7 +1284,10 @@ describe('O-0 §5 property register (the 8-row register; this file 7 rows, seede
           stages,
           longTaskTotalMs: total,
           pass: false,
-          failReasons: [`window-bound candidate: ${OFFENDER} ms ${String(ms)} of total ${String(total)} + tol ${String(tol)}`],
+          // The free-text reason names the stage and the freeze ONLY. The band is NOT
+          // smuggled through this string: it is a RECORDED row field below, and every
+          // call in this attempt reads the band from that one place (§5 P-TP-3(a)).
+          failReasons: [`window-bound candidate: ${OFFENDER} ms ${String(ms)} of total ${String(total)}`],
           hook: {
             armed: true,
             // §4.3/P-TP-3(b) — the armed interval is RECORDED and judged against the
@@ -1275,6 +1296,11 @@ describe('O-0 §5 property register (the 8-row register; this file 7 rows, seede
             // `hook.armWindow` but no freeze-window field).
             armWindow: { t0: FREEZE_T0 - armBefore, t1: FREEZE_T0 + total, ms: total + armBefore },
             freezeWindow: { t0: FREEZE_T0, t1: FREEZE_T0 + total },
+            // §4.3/P-TP-3(a) — THE BAND CHANNEL: the drawn tolerance ∈ {0, 40} is a
+            // RECORDED property of the row (`hook.toleranceMs`), so `deriveO0StageVerdict(row)`
+            // — which takes no tolerance argument — judges the same bound the oracle is
+            // called with below. This is the ONE band source every call in the attempt uses.
+            toleranceMs: tol,
             armCount: 1,
             disarmCount: 1,
           },
@@ -1283,8 +1309,19 @@ describe('O-0 §5 property register (the 8-row register; this file 7 rows, seede
         const stageViolation = ms > bound
         const armViolation = armBefore > tol
         const expectViolated = stageViolation || armViolation
-        const wb = api.deriveO0WindowBound(row, { hookToleranceMs: tol })
         const what = `total=${total} tol=${tol} ${OFFENDER}=${ms} armBefore=${armBefore} bound=${bound}`
+        // (0) the band is a RECORDED row fact and the ONLY source used below.
+        if ((row as any).hook?.toleranceMs !== tol) {
+          return `${what}: the drawn band is not RECORDED on the row (hook.toleranceMs=${String((row as any).hook?.toleranceMs)})`
+        }
+        const wb = api.deriveO0WindowBound(row, { hookToleranceMs: tol })
+        if (wb.toleranceMs !== tol) return `${what}: the oracle judged a different band (toleranceMs=${String(wb.toleranceMs)})`
+        // The row-recorded band alone must reach the same verdict (no hidden channel):
+        // the oracle with NO explicit tolerance reads `hook.toleranceMs`.
+        const wbRecorded = api.deriveO0WindowBound(row)
+        if (wbRecorded.violated !== expectViolated || wbRecorded.toleranceMs !== tol) {
+          return `${what}: the ROW-RECORDED band did not yield the pinned verdict (violated=${String(wbRecorded.violated)}, toleranceMs=${String(wbRecorded.toleranceMs)})`
+        }
         if (wb.violated !== expectViolated) {
           return `${what} → violated=${String(wb.violated)} (expected ${expectViolated}); reasons=${JSON.stringify(wb.failReasons)}`
         }
@@ -1601,5 +1638,192 @@ describe('O-0 §3.6b/§4.3 (H3) — the window bound, the structural marker and 
       JSON.stringify(compared.failReasons),
       '§6 S17: an armed report WITH a recorded comparison must not be forced by the vacuity rule',
     ).not.toMatch(/no hook inertness comparison/i)
+  })
+})
+
+// ===========================================================================
+// §4.2/§4.4 (RUL-4) + §6 F18/F19 — the DERIVED `status` vs the DECLARED one, the
+// OPEN-structural note, and the DANGLING-START observable.
+//
+// DATA STATES ENUMERATED (the report's status contract; §4.2 pins the closed three
+// values `"OK" | "OPEN-structural" | "FAIL"`):
+//   ST1. CONSISTENT OK — `status:"OK"` + `pass:true` on a structurally complete
+//        report: the ONE status that may accompany `pass:true`.
+//   ST2. DECLARED ≠ DERIVED — `"OPEN-structural"`/`"FAIL"` asserted on a report
+//        whose recorded reasons derive `"OK"`: the declaration is REFUSED and the
+//        result's own `status` stays the DERIVED one (a status is COMPUTED, never
+//        asserted — §4.4/D-GP-UFA-3).
+//   ST3. §6 S19 — `status:"OPEN-structural"` ⇔ `pass:false` whose every forcing
+//        reason is in the STRUCTURAL family, WITH a non-empty `reconciliation.note`
+//        (schema-valid: `ok:true` + an empty `errors[]`, the residual simply not
+//        computable).
+//   ST4. the SAME report WITHOUT the note ⇒ §6 F18 clause 5 (the exact reason).
+//   ST5. `pass` CONTRADICTS the declared status (`status:"OK"` + `pass:false`).
+//   ST6. `status` ABSENT = NOT-DECLARED (§4.2's `status` is a REPORT field; a
+//        `runs[]` row never carries one) — the level the landed fixtures live at,
+//        so the pin is the consistency of a DECLARED status, never a demand that
+//        every fixture declare one.
+//   FS-ST7 (§6 F19). A row whose committed span left a DANGLING START mark names
+//        the stage and the `o0:<id>:start` mark; an `error`-bearing record (a
+//        rejected round trip that CLOSED its span) is a LEGAL record instead.
+//
+// WHY THIS LEVEL: §6 F18's clause set is report-level, and the landed report
+// fixtures omit `status` (~30 otherwise-green rows would be turned red by a
+// "missing `status` ⇒ fail" reading). The missing-status clause is therefore pinned
+// as NOT-DECLARED, while the DECLARED-status consistency + the OPEN-structural note
+// requirement — the enforce-able half — are pinned exactly.
+// ===========================================================================
+describe('O-0 §4.2/§4.4 (RUL-4) — the DERIVED report `status`, the F18 consistency pins and the F19 dangling-start observable', () => {
+  const SEAM = 'no main-side transport: the IPC_RAG_SNAPSHOT handler records are not transported (§3.6b RUL-3)'
+  /** A report whose ONLY recorded defect is the STRUCTURAL family: one stage is
+   *  `structural:true` + a reason (§6 S14/S19), both rows otherwise complete. */
+  function structuralReport(ids: readonly string[], over: Record<string, any> = {}): Record<string, any> {
+    const { off, on } = gpuPair(ids)
+    const structuralRun = runFor(ids, {
+      id: off.id,
+      gpu: false,
+      stages: ids.map((id) =>
+        id === 'snapshot.clone'
+          ? ({ id, ms: null, unseparated: true, source: 'hook', structural: true, structuralReason: SEAM } as unknown as O0StageShape)
+          : ({ id, ms: 1, unseparated: false, source: id === 'post.style' ? 'derived' : 'mark' } as O0StageShape),
+      ),
+      failReasons: [`stage snapshot.clone is structurally unseparated — ${SEAM}`],
+    })
+    return reportFor([structuralRun, runFor(ids, { id: on.id, gpu: true })], ids, {
+      pass: false,
+      reconciliation: {
+        ok: false,
+        note:
+          `snapshot.clone is structurally unseparated (${SEAM}); the post.style residual therefore cannot be computed and ` +
+          `is OPEN-structural — no value was imputed (§3.6b RUL-4 clause 5)`,
+      },
+      ...over,
+    })
+  }
+
+  it('ST1 [§4.2/RUL-4] a report declaring `status:"OK"` with `pass:true` on a structurally complete report is consistent — the derived status IS "OK"', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    const v = api.validateO0Report(reportFor([off, on], ids, { status: 'OK', pass: true }))
+    expect(v.status, '§4.2: the result carries the DERIVED status').toBe('OK')
+    expect(JSON.stringify(v.errors), 'a CONSISTENT declaration must not be contradicted').not.toMatch(/status/i)
+    expect(v.ok, 'the consistent control case validates').toBe(true)
+  })
+
+  it('ST2 [§4.2/RUL-4/§6 F18] a DECLARED status that contradicts the derived one is refused LOUDLY — and the result still reports the DERIVED status, never the asserted string', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    for (const declared of ['OPEN-structural', 'FAIL'] as const) {
+      const v = api.validateO0Report(reportFor([off, on], ids, { status: declared, pass: declared === 'FAIL' }))
+      expect(v.status, `RUL-4: a status is COMPUTED from the reasons — the asserted '${declared}' must not become the result's status`).toBe('OK')
+      const blob = JSON.stringify({ errors: v.errors })
+      expect(
+        blob,
+        `§6 F18: the declaration must be refused with the pinned clause (got ${blob})`,
+      ).toMatch(/disagrees with the status the recorded reasons DERIVE/)
+      expect(blob, 'the reason must name the DERIVED status the claim contradicts').toContain('OK')
+      expect(blob, `the reason must name the declared status '${declared}'`).toContain(declared)
+    }
+  })
+
+  it('ST5 [§4.2/RUL-4] `pass` must AGREE with the declared status: `status:"OK"` with `pass:false` names the contradiction (OK ⇔ pass:true)', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    const v = api.validateO0Report(reportFor([off, on], ids, { status: 'OK', pass: false }))
+    const blob = JSON.stringify({ errors: v.errors })
+    expect(blob, '§4.2/RUL-4: `OK` ⇔ `pass:true` — a report declaring OK while recording pass:false must be refused').toMatch(
+      /contradicts pass:false/,
+    )
+    expect(blob, 'the reason must state the equivalence it enforces').toMatch(/OK ⇔ pass:true/)
+  })
+
+  it('ST3 [§6 S19/RUL-4] `status:"OPEN-structural"` ⇔ `pass:false` whose reasons are ALL structural, WITH the reconciliation note: SCHEMA-VALID, residual not computable, nothing imputed', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const v = api.validateO0Report(structuralReport(ids, { status: 'OPEN-structural' }))
+    expect(v.status, '§6 S19: the derived status of a structurally-incomplete-but-valid report is "OPEN-structural"').toBe('OPEN-structural')
+    expect(JSON.stringify(v.errors), '§6 S19: `ok:true` with an EMPTY `errors[]` is the decisive half — structural content is not a schema error').toBe('[]')
+    expect(v.ok, '§6 S19: a structurally-open report is SCHEMA-VALID (the measurement is incomplete, not malformed)').toBe(true)
+    expect(v.gating, '§4.4/RUL-4: every forcing reason must be IN the structural family — a gating reason would make the status "FAIL"').toEqual([])
+    expect(v.structuralFamily.length, 'the structural family must be recorded (the row + the non-computable residual)').toBeGreaterThan(0)
+    expect(
+      JSON.stringify(v.failReasons),
+      'the structural reason must still be READABLE (recorded, non-gating) so a reader can see which seam is missing',
+    ).toMatch(/structurally unseparated/)
+    expect(v.statusStatement, '§4.4 pins the report-level OPEN form').toMatch(/OPEN-structural/)
+  })
+
+  it('ST4 [§6 F18 clause 5] `OPEN-structural` without a `reconciliation.note` naming the structural stages + the non-computable residual + the no-imputation statement is refused', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const noNote = structuralReport(ids, { status: 'OPEN-structural', reconciliation: { ok: false } })
+    const v = api.validateO0Report(noNote)
+    const blob = JSON.stringify({ errors: v.errors })
+    expect(blob, '§6 F18: the OPEN-structural branch REQUIRES the note (§3.6b RUL-4 clause 5)').toMatch(/without a reconciliation\.note/)
+    expect(blob, 'the reason must name the three things the note owes').toMatch(/non-computable/)
+    expect(blob, 'the reason must name §3.6b RUL-4 clause 5 as its source').toMatch(/RUL-4/)
+  })
+
+  it('ST6 [§4.2/RUL-4 — the landed-fixture level] an ABSENT `status` is NOT-DECLARED: no status-consistency failure is derived, while a `runs[]` row fixture never carries one at all', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    // (a) the landed report fixtures: no `status` key anywhere ⇒ the declaration
+    // clause cannot fire (the pin is on a DECLARED status, never on its absence).
+    const clean = api.validateO0Report(reportFor([off, on], ids))
+    expect(clean.errors.filter((e: string) => /status/i.test(e)), '§4.2: an undeclared `status` is NOT a contradiction').toEqual([])
+    expect(clean.ok, 'the otherwise-green fixture stays valid').toBe(true)
+    // (b) …and the same holds on the STRUCTURAL branch: the derived status is still
+    // "OPEN-structural" while no status CLAIM is contradicted.
+    const structural = api.validateO0Report(structuralReport(ids))
+    expect(structural.errors, 'an undeclared status on a structurally-open report raises no status error').toEqual([])
+    expect(structural.status, 'the DERIVED status is reported regardless of declaration').toBe('OPEN-structural')
+    // (c) the level distinction: `status` is a REPORT field (§4.2) — a freeze-row
+    // fixture carries none, and no row-level status requirement exists (§6 F18's
+    // clause is report-level; `validateO0Run` never reads that field).
+    expect(Object.keys(off).includes('status'), 'a `runs[]` row fixture must not carry a `status` — it is a report-level field (§4.2)').toBe(false)
+    expect(api.validateO0Run(off).ok, '…and its absence is not a row-level failure').toBe(true)
+  })
+
+  it('FS-ST7 [§6 F19/RUL-2] a span that left a DANGLING start names the stage and its `o0:<id>:start` mark — while an `error`-bearing record that CLOSED is legal', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const unmeasuredStages = (id: string, ms: number | null) =>
+      ids.map((sid) =>
+        sid === id
+          ? ({ id: sid, ms, unseparated: ms === null, source: 'hook' } as unknown as O0StageShape)
+          : ({ id: sid, ms: 1, unseparated: false, source: sid === 'post.style' ? 'derived' : 'mark' } as O0StageShape),
+      )
+    // (a) the fail-state: the span never closed (`hook.pendingSpans` > 0) and the
+    // stage carries no value — the exact F19 observable (`records` count 0 for the
+    // stage while `armCount` advanced).
+    const dangling = runFor(ids, {
+      pass: false,
+      failReasons: ['stage snapshot.pull is unmeasured in this run (the seam exists but the recorder was not armed for it — §4.3)'],
+      hook: { armed: true, armCount: 1, disarmCount: 1, pendingSpans: 1, rendererArmed: true },
+      stages: unmeasuredStages('snapshot.pull', null),
+    })
+    const rv = api.validateO0Run(dangling)
+    const blob = JSON.stringify({ errors: rv.errors, failReasons: rv.failReasons })
+    expect(rv.ok, '§6 F19: an unclosed span cannot validate').toBe(false)
+    expect(blob, '§6 F19 pins the message: `stage <id> left a dangling o0:<id>:start mark (no end mark/measure committed …)`').toMatch(
+      /left a dangling o0:snapshot\.pull:start mark/,
+    )
+    expect(blob, 'the reason must name RUL-2’s both-paths rule').toMatch(/span must close on BOTH settlement paths/)
+    // (b) the LEGAL counterpart: the SAME stage with a closed span (an error-bearing
+    // record settles ⇒ `pendingSpans` 0) is not this fail-state.
+    const settled = runFor(ids, {
+      hook: { armed: true, armCount: 1, disarmCount: 1, pendingSpans: 0, rendererArmed: true, stageRecords: [{ stage: 'snapshot.pull', instance: 'renderer' }] },
+      stages: unmeasuredStages('snapshot.pull', 412.5),
+    })
+    const sv = api.validateO0Run(settled)
+    expect(
+      JSON.stringify({ errors: sv.errors, failReasons: sv.failReasons }),
+      '§6 F19: an `error`-bearing record (a rejected round trip that CLOSED its span) is a LEGAL record — never the dangling-start fail-state',
+    ).not.toMatch(/dangling/)
+    expect(sv.ok, 'the settled row validates').toBe(true)
   })
 })

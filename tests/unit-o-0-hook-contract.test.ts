@@ -58,21 +58,38 @@
 //       4-call-site case) + unseparated:false + source:'hook'.
 //  H10. the inertness verdict: identical pairs / mutation delta / long-task delta
 //       inside + outside the recorded tolerance / malformed input.
+//  H11. the ASYNC settled span (§3.6/RUL-2, §A1): (a) armed + fulfilled ⇒ one
+//       record whose ms is the SETTLE delta; (b) armed + REJECTED ⇒ the span still
+//       closes (one record with a finite ms + the `error` text) and the rejection
+//       propagates untouched, `state().pending` back to 0; (c) unarmed ⇒ the
+//       thenable is returned unwrapped/unawaited with no emission.
+//
+// RE-PINNED BY RUL-1 (this pass) — the pre-RUL-1 rows pinned the recorder's
+// permitted set as the FIVE render-path ids 4-8 and `{stage:'render.dom', ms:5}` as
+// an ILLEGAL record. §3.6b's closed TEN-id seam set (the five render-path ids +
+// `render.dom` + `render.ssr` + the three caller-level seams) and the SEVEN-id
+// page-armable set (`O0_RENDER_HOOK_STAGES`) are the re-ruled contract; the 5-id
+// render-path SUBSET stays pinned as its own constant (`O0_RENDER_PATH_STAGES`).
 //
 // FAIL-STATES PINNED (§3.6's three constraints as forcing conditions)
 //   FS1 arm/disarm are IDEMPOTENT (a double arm/disarm throws nothing and does
 //       not double-count, clear records, or flip state).
-//   FS2 a stage OUTSIDE the permitted stages 4-8 (§3.6: "for those stages only")
-//       is REJECTED LOUDLY at construction/arm time
+//   FS2 a stage OUTSIDE the permitted TEN-id seam set (§3.6/§3.6b RUL-1: "for
+//       those stages only" — the closed ten, `post.style` excluded) is REJECTED
+//       LOUDLY at construction/arm time
 //       (`O0_HOOK_STAGE_NOT_ALLOWED: <id>`) — a mis-pinned stage is a config error.
 //   FS3 record-time is INERT, never loud: a stage outside the armed set returns
 //       `fn()`'s value untouched (no throw → no control-flow change, §3.6(a)).
-//   FS4 a malformed/negative/non-finite record is REJECTED, never imputed into a
-//       stage `ms` (§6 F4: the imputation ban).
+//   FS4 a malformed/negative/non-finite record — or one for an id outside the
+//       permitted ten (`post.style`, an unknown id) — is REJECTED, never imputed
+//       into a stage `ms` (§6 F4: the imputation ban).
 //   FS5 the inertness verdict is FALSIFIABLE (§3.6(c)) and NAMES the offending
 //       field; a malformed pair is not silently inert.
 //   FS6 the returned `records()`/`state()` are COPIES (a caller cannot reach in
 //       and mutate the recorder's internal state).
+//   FS-A8 (§6 F19/RUL-2) a committed span must NEVER leave a dangling start mark:
+//       both settlement paths close it, and the synchronous throw path leaves
+//       `state().pending` at 0.
 //
 // LAYER (RCA-12): the module half is PURE/node (assertable here). The NUMERIC
 // live proof — that an ARMED hook changes neither the DOM mutation count nor the
@@ -142,15 +159,28 @@ const HOOK_MODULE_SPECIFIER = '../src/shared/o0-hook.js'
 const HOOK_MODULE_PATH = 'src/shared/o0-hook.ts'
 const REPORT_MODULE_SPECIFIER = '../src/shared/o0-report.js'
 
-/** §3.6 — the hook is permitted for the render-path stages ONLY: ids 4-8 of the
- *  closed §2.2 set (traversal / assemble / decorate / reconcile). */
+/** §3.6 — the FIVE render-path stages (ids 4-8 of the closed §2.2 set: traversal /
+ *  assemble / decorate / reconcile). This is the RENDER-PATH SUBSET constant
+ *  (`O0_RENDER_PATH_STAGES` after RUL-1) — NOT the recorder's whole permitted set. */
 const HOOK_STAGE_IDS = ['traversal.build', 'envelope.assemble', 'shared.decorate', 'reconcile.roots', 'reconcile.apply']
-/** §2.2 — the ids a pure CDP probe CAN separate; the hook may NEVER claim them. */
-const PROBE_STAGE_IDS = ['snapshot.pull', 'snapshot.clone', 'docheads.pull', 'render.dom', 'render.ssr', 'post.style']
+/** §2.2 (RUL-1, §3.6b) — the ONE closed id the hook may NEVER claim: `post.style`
+ *  (id 11) is the DERIVED residual, never a seam. Before RUL-1 the probe-only set
+ *  was ids 1/2/3/9/10/11; after RUL-1 every closed id except `post.style` is a
+ *  permitted recorder id, so this is what is left of the "never claimable" class. */
+const NEVER_HOOK_STAGE_IDS = ['post.style']
 /** §3.6b — the three CALLER-level seam ids (the H2 re-derivation): the shell’s
  *  own round trips, recorded by the renderer’s app-wide recorder inside the
  *  bundle (never by a page-side wrap of the frozen `provident.rag.*` props). */
 const CALLER_SEAM_STAGE_IDS = ['snapshot.pull', 'snapshot.clone', 'docheads.pull']
+/** §3.6b/§8.1 — RUL-1: the SEVEN ids a page-side `arm()` may request = the five
+ *  render-path ids 4-8 PLUS the two render emits `render.dom`/`render.ssr`
+ *  (ids 9/10, which RUL-1 gave REAL seams). This is the landed `O0_HOOK_STAGES`
+ *  (`src/shared/o0-hook.ts:44-47`) and the armable set of §8.1. */
+const RENDER_HOOK_STAGE_IDS = [...HOOK_STAGE_IDS, 'render.dom', 'render.ssr']
+/** §3.6b/§8.1 — RUL-1: the TEN ids a recorder instance may be CONFIGURED for =
+ *  the three caller-level seams + the seven armable ids (the §2.2 closed eleven
+ *  minus the DERIVED `post.style`). `O0_HOOK_SEAM_STAGES` is this constant. */
+const HOOK_SEAM_STAGE_IDS = [...CALLER_SEAM_STAGE_IDS, ...RENDER_HOOK_STAGE_IDS]
 
 interface O0HookRecord {
   stage: string
@@ -158,6 +188,9 @@ interface O0HookRecord {
   startMark: string
   endMark: string
   measureName: string
+  /** §3.6/RUL-2 — the recorded error text of a REJECTED async span (`null` when the
+   *  span was fulfilled). The rejection itself is re-thrown untouched. */
+  error?: string | null
 }
 interface O0HookPerf {
   now(): number
@@ -170,12 +203,24 @@ interface O0HookRecorder {
   disarm(): boolean
   record<T>(stage: string, fn: () => T): T
   records(): O0HookRecord[]
-  state(): { armed: boolean; records: O0HookRecord[]; armCount: number; disarmCount: number; dropped: number }
+  state(): {
+    armed: boolean
+    records: O0HookRecord[]
+    armCount: number
+    disarmCount: number
+    dropped: number
+    /** §3.6/RUL-2 — the spans currently OPEN (a thenable body that has not settled). */
+    pending: number
+  }
   reset(): void
 }
 interface O0HookApi {
   O0_HOOK_STAGES: readonly string[]
-  /** §3.6b — the ADDITIVE wider configuration constant (8 ids: 3 caller-level + 5 render-path). */
+  /** §3.6b (RUL-1) — the render-path SUBSET constant (the five ids 4-8 alone). */
+  O0_RENDER_PATH_STAGES?: readonly string[]
+  /** §3.6b (RUL-1) — the page-side armable set (7 ids: the 5 render-path ids + the 2 render emits). */
+  O0_RENDER_HOOK_STAGES?: readonly string[]
+  /** §3.6b (RUL-1) — the ADDITIVE wider configuration constant (10 ids: 3 caller-level + 5 render-path + 2 render emits). */
   O0_HOOK_SEAM_STAGES?: readonly string[]
   O0_HOOK_MARK_PREFIX: string
   O0_HOOK_STAGE_NOT_ALLOWED: string
@@ -417,26 +462,29 @@ describe('§A the pure measurement-only hook recorder (src/shared/o0-hook.ts)', 
     expect(r.isArmed()).toBe(false)
   })
 
-  it('FS2 §3.6/§3.6b "for those stages only": a stage outside the permitted seam set is REJECTED LOUDLY at construction AND at arm time', async () => {
+  it('FS2 §3.6/§3.6b "for those stages only": a stage outside the permitted TEN-id seam set is REJECTED LOUDLY at construction AND at arm time (RUL-1)', async () => {
     const api = await loadHook()
+    // §3.6b RE-DERIVATION, re-pinned by RUL-1: `O0_HOOK_SEAM_STAGES` is the TEN ids
+    // a recorder instance may be CONFIGURED for, `O0_RENDER_HOOK_STAGES` is the
+    // SEVEN a page-side `arm()` may request, and `O0_HOOK_STAGES` is the landed
+    // alias of the armable set. The FIVE-id render-path subset keeps its own
+    // constant (`O0_RENDER_PATH_STAGES`) — the three sets are distinct, not one
+    // widened one.
     expect(
       api.O0_HOOK_STAGES,
-      'the permitted hook stage set must be EXACTLY stages 4-8 (traversal/assemble/decorate/reconcile)',
+      'RUL-1: the recorder’s default/armable set is the SEVEN §3.6b ids (the 5 render-path ids + render.dom/render.ssr)',
+    ).toEqual(RENDER_HOOK_STAGE_IDS)
+    expect(
+      (api as any).O0_RENDER_PATH_STAGES,
+      'RUL-1: the FIVE-id render-path SUBSET (ids 4-8) is still pinned as its own constant',
     ).toEqual(HOOK_STAGE_IDS)
-    // §3.6b RE-DERIVATION (the H2 re-pin, §3.6b's "The recorder's permitted stage
-    // set widens BY CONSTRUCTION"): the CONFIGURABLE seam set is
-    // `O0_HOOK_SEAM_STAGES` = the three caller-level seams + the five render-path
-    // ids, and "the construction/arm-time guard (O0_HOOK_STAGE_NOT_ALLOWED)
-    // accepts exactly this set". `snapshot.pull` is therefore REMOVED from this
-    // row's rejected list — the caller-level wrap
-    // (`getO0HookRecorder().record('snapshot.pull', …)` in sidebar-panes.ts)
-    // cannot be configured otherwise. The invariant is UNCHANGED and still loud
-    // for every id OUTSIDE the widened set (`render.ssr`/`render.dom`/`post.style`
-    // remain probe stages the hook may never claim).
     const SEAM_STAGES: readonly string[] = Array.isArray((api as any).O0_HOOK_SEAM_STAGES)
       ? (api as any).O0_HOOK_SEAM_STAGES
-      : HOOK_STAGE_IDS
-    for (const seamStage of CALLER_SEAM_STAGE_IDS) {
+      : HOOK_SEAM_STAGE_IDS
+    // (a) the construction guard ACCEPTS exactly the TEN permitted ids — including
+    // `render.dom`/`render.ssr` (ids 9/10), which RUL-1 instrumented with REAL
+    // seams, and the three caller-level wraps the shell itself records.
+    for (const seamStage of HOOK_SEAM_STAGE_IDS) {
       let seamMsg = ''
       try {
         api.createO0HookRecorder({ stages: [seamStage] })
@@ -445,10 +493,12 @@ describe('§A the pure measurement-only hook recorder (src/shared/o0-hook.ts)', 
       }
       expect(
         seamMsg,
-        `§3.6b: a recorder must be CONFIGURABLE for the caller-level seam '${seamStage}' (the seam set is ${SEAM_STAGES.join(', ')}) — the app-wide recorder wraps that shell call site, and a refused configuration makes the measured round trip unreportable`,
+        `§3.6b/RUL-1: a recorder must be CONFIGURABLE for the permitted seam '${seamStage}' (the seam set is ${SEAM_STAGES.join(', ')}) — a refused configuration makes the measured span unreportable`,
       ).toBe('')
     }
-    for (const bad of ['render.dom', 'render.ssr', 'post.style', 'not.a.stage']) {
+    // (b) the invariant is UNCHANGED and still LOUD for every id OUTSIDE the ten:
+    // `post.style` (the DERIVED residual, §2.2 id 11) and any unknown id.
+    for (const bad of [...NEVER_HOOK_STAGE_IDS, 'not.a.stage']) {
       let msg = ''
       try {
         api.createO0HookRecorder({ stages: [bad] })
@@ -457,18 +507,205 @@ describe('§A the pure measurement-only hook recorder (src/shared/o0-hook.ts)', 
       }
       expect(msg, `createO0HookRecorder({stages:['${bad}']}) must throw §3.6's loud rejection`).toMatch(/O0_HOOK_STAGE_NOT_ALLOWED/)
       expect(msg, `the rejection must NAME the offending stage '${bad}'`).toContain(bad)
+      expect(
+        msg,
+        'the rejection must name the closed permitted set it enforces (a mis-pinned stage is a config error, never a silently inert recorder)',
+      ).toContain('render.dom')
     }
+    // (c) arm-time: the same closed TEN-id set. `arm(['render.ssr'])` is LEGAL after
+    // RUL-1 (the L2s fix — the render emit is on the render path a page may arm);
+    // an id outside the ten is still refused, at the same guard.
     const r = api.createO0HookRecorder()
     let armMsg = ''
+    let armedRenderEmit = false
     try {
-      r.arm(['render.ssr'])
+      armedRenderEmit = r.arm(['render.ssr'])
     } catch (e) {
       armMsg = String((e as Error).message)
     }
-    expect(armMsg, 'arm() with a non-permitted stage must throw the same loud rejection (a mis-pinned stage is a config error)').toMatch(
+    expect(
+      armMsg,
+      'RUL-1/§3.6b: `arm(["render.ssr"])` must be LEGAL — ids 9/10 are bundle-internal seams on the render path a page-side arm requests; a refusal would leave them off-set and DROPPED (§6 S9), the L2s failure mode',
+    ).toBe('')
+    expect(armedRenderEmit, 'the arm must report the unarmed→armed transition').toBe(true)
+    const r2 = api.createO0HookRecorder()
+    let badArmMsg = ''
+    try {
+      r2.arm(['post.style'])
+    } catch (e) {
+      badArmMsg = String((e as Error).message)
+    }
+    expect(badArmMsg, 'arm() with a non-permitted stage must throw the same loud rejection (a mis-pinned stage is a config error)').toMatch(
       /O0_HOOK_STAGE_NOT_ALLOWED/,
     )
-    expect(armMsg).toContain('render.ssr')
+    expect(badArmMsg, 'the arm-time rejection must NAME the offending stage').toContain('post.style')
+    expect(
+      r2.isArmed(),
+      'a REFUSED arm must not leave the recorder armed (the loud guard fires before any state change)',
+    ).toBe(false)
+  })
+})
+
+// ===========================================================================
+// §A1 — §3.6/RUL-2 the ASYNC SETTLED span + §6 F19 (NO dangling start mark).
+//      The `L5` fix: the caller-level round trip (`await <rec>.record('snapshot.pull',
+//      async () => this.bridge.rag.snapshot())`) must be measured ACROSS SETTLEMENT,
+//      not at promise creation — the live run measured 0.0-0.2 ms for a whole-store
+//      pull (6 102 nodes / 9 266 edges) because the span closed too early.
+// STATES / FAIL-STATES ENUMERATED (one assertion block per state):
+//   H11a. armed, async body FULFILS: exactly ONE record whose ms is the
+//         SETTLEMENT delta (a promise-creation span would be ~0), the settled value
+//         is returned unwrapped, `error` is null, `pending` is 0 again.
+//   H11b. armed, async body REJECTS: the span still CLOSES on settlement — ONE
+//         record carrying a finite `ms` + a non-empty `error`, the rejection is
+//         propagated UNTOUCHED to the caller, `pending` is 0 (no dangling start).
+//   H11c. UNARMED, async body: `fn()`'s promise is returned unawaited/unwrapped,
+//         no mark/measure, no record, `pending` stays 0.
+//   FS-A8 (§6 F19). A committed span that left a DANGLING START is a fail-state; the
+//         observable here is the ABSENCE of one: the pair (start mark, end mark +
+//         measure + record) always closes on BOTH settlement paths, and the
+//         synchronous throw path (H7) leaves `pending` at 0 too. A stage whose
+//         `state().records` count is 0 while `armCount` advanced, with an
+//         `o0:<id>:start` mark and no matching record, is exactly F19.
+// ===========================================================================
+describe('§A1 §3.6/RUL-2 the ASYNC settled span — §6 F19 (a rejected round trip closes its span, no dangling start)', () => {
+  /** A CONTROLLABLE clock: the body advances it, so a span measured across
+   *  settlement is distinguishable from one closed at promise creation. */
+  function clockPerf() {
+    const log: string[] = []
+    let t = 0
+    return {
+      log,
+      advance: (ms: number) => {
+        t += ms
+      },
+      port: {
+        now: (): number => t,
+        mark: (name: string): void => {
+          log.push(`mark:${name}`)
+        },
+        measure: (name: string, s: string, e: string): void => {
+          log.push(`measure:${name}:${s}:${e}`)
+        },
+      } as O0HookPerf,
+    }
+  }
+
+  it('H11a an armed ASYNC body is measured ACROSS SETTLEMENT: ms = the settle delta (never ~0 at promise creation), `pending` returns to 0', async () => {
+    const api = await loadHook()
+    const { log, advance, port } = clockPerf()
+    const r = api.createO0HookRecorder({ perf: port })
+    // §3.6b: the caller-level round trip is a PERMITTED seam, and the page-side
+    // handle arms it explicitly (`O0_PAGE_ARM_STAGES` = the two pulls + the seven
+    // armable ids — the driver's landed shape); the recorder's own default is the
+    // seven armable ids, so an unarmed-for-it pull is off-set and DROPPED (§6 S9).
+    expect(r.arm(['snapshot.pull']), 'the caller-level seam is a legal arm request (§3.6b’s closed ten)').toBe(true)
+    const out = await r.record('snapshot.pull', async () => {
+      await Promise.resolve()
+      advance(25)
+      return { nodes: 6102, edges: 9266 }
+    })
+    expect(out, 'the SETTLED value is returned unwrapped (§3.6/RUL-2: never a wrapper, never a copy)').toEqual({ nodes: 6102, edges: 9266 })
+    const recs = r.records()
+    expect(recs.length, 'an armed fulfilled span commits exactly ONE record').toBe(1)
+    expect(recs[0].stage).toBe('snapshot.pull')
+    expect(
+      recs[0].ms,
+      'RUL-2 (the L5 fix): the span must cover the AWAIT — a promise-creation span would report ~0 ms for a whole-store pull',
+    ).toBe(25)
+    expect(recs[0].error, 'a FULFILLED span records no error').toBeNull()
+    const p = api.O0_HOOK_MARK_PREFIX
+    expect(log, 'the start/end marks BRACKET the awaited call (the span closes on the end mark, never a dangling start)').toEqual([
+      `mark:${p}snapshot.pull:start`,
+      `mark:${p}snapshot.pull:end`,
+      `measure:${p}snapshot.pull:${p}snapshot.pull:start:${p}snapshot.pull:end`,
+    ])
+    expect(r.state().pending, '§6 F19: no span stays OPEN after settlement').toBe(0)
+    expect(r.state()).toMatchObject({ armCount: 1, dropped: 0 })
+  })
+
+  it('H11b/FS-A8 §6 F19 an armed async REJECTION still CLOSES the span: one record with a finite ms + the recorded `error`, the rejection propagates untouched, and NO dangling start is left', async () => {
+    const api = await loadHook()
+    const { log, advance, port } = clockPerf()
+    const r = api.createO0HookRecorder({ perf: port })
+    expect(r.arm(['snapshot.pull']), 'the caller-level round trip is armed explicitly (the driver’s `O0_PAGE_ARM_STAGES` shape)').toBe(true)
+    const boom = new Error('IPC_RAG_SNAPSHOT round trip failed: no handler')
+    let caught: unknown = null
+    try {
+      await r.record('snapshot.pull', async () => {
+        await Promise.resolve()
+        advance(12)
+        throw boom
+      })
+    } catch (e) {
+      caught = e
+    }
+    expect(caught, '§3.6/RUL-2: the rejection must PROPAGATE (the hook never swallows a failed round trip)').toBe(boom)
+    const recs = r.records()
+    expect(recs.length, '§6 F19: a rejected span commits its record (it is a LEGAL record, never the dangling-start fail-state)').toBe(1)
+    expect(recs[0].stage).toBe('snapshot.pull')
+    expect(Number.isFinite(recs[0].ms), `the committed ms must be a finite settled value (got ${String(recs[0].ms)})`).toBe(true)
+    expect(recs[0].ms, 'RUL-2: the span closes on SETTLEMENT, so the pre-rejection work is inside it (12 ms, not 0)').toBe(12)
+    expect(String(recs[0].error ?? ''), 'the record must CARRY the error text (the row’s §4.3 error field)').toContain('IPC_RAG_SNAPSHOT')
+    expect(recs[0].startMark).toBe(`${api.O0_HOOK_MARK_PREFIX}snapshot.pull:start`)
+    expect(
+      log.filter((x) => x === `mark:${api.O0_HOOK_MARK_PREFIX}snapshot.pull:end`).length,
+      '§6 F19: the end mark MUST be emitted — a start mark with no end mark/measure is the dangling-start fail-state',
+    ).toBe(1)
+    expect(log.some((x) => x.startsWith(`measure:${api.O0_HOOK_MARK_PREFIX}snapshot.pull`)), 'the measure must be committed on the rejection path too').toBe(true)
+    // The F19 observable, stated directly: the stage HAS a record while armCount
+    // advanced — i.e. it is NOT the `records count 0 + an open start` shape.
+    expect(r.state().pending, '§6 F19: an OPEN span at drain time is a span that did not fit its window — it must be 0').toBe(0)
+    expect(
+      r.state().records.filter((x) => x.stage === 'snapshot.pull').length,
+      '§6 F19: the frozen recorder’s per-stage record count must be ≥1 (0 while armCount advanced IS the dangling-start observable)',
+    ).toBe(1)
+    expect(r.state().armCount, 'an awaiting settle must not advance the arm count').toBe(1)
+  })
+
+  it('H11c an UNARMED async body is a pure pass-through: the promise is returned unrerewrapped and unawaited, with no mark/measure/record', async () => {
+    const api = await loadHook()
+    const { log, advance, port } = clockPerf()
+    const r = api.createO0HookRecorder({ perf: port })
+    let calls = 0
+    const out: any = r.record('snapshot.pull', async () => {
+      calls++
+      advance(7)
+      return 'settled'
+    })
+    expect(calls, 'the unarmed hook still invokes the instrumented call exactly once').toBe(1)
+    expect(typeof out?.then, '§3.6(a): the unarmed path returns `fn()`’s value itself (the thenable), never a wrapper/await').toBe('function')
+    expect(r.records(), 'an unarmed span is never tracked, so nothing is committed before (or after) settlement').toEqual([])
+    expect(await out).toBe('settled')
+    expect(log, 'an unarmed recorder emits no mark/measure (inert when unarmed)').toEqual([])
+    expect(r.records()).toEqual([])
+    expect(r.state().pending, 'an unarmed span is never tracked as pending').toBe(0)
+  })
+
+  it('FS-A8 §6 F19 the SYNCHRONOUS throw path also leaves NO dangling start: the same error propagates, nothing is committed, `pending` is 0', async () => {
+    const api = await loadHook()
+    const { log, port } = clockPerf()
+    const r = api.createO0HookRecorder({ perf: port })
+    r.arm()
+    const boom = new Error('synchronous render failure')
+    let caught: unknown = null
+    try {
+      r.record('traversal.build', () => {
+        throw boom
+      })
+    } catch (e) {
+      caught = e
+    }
+    expect(caught, 'a synchronous throw propagates with the SAME identity (H7)').toBe(boom)
+    expect(r.records(), 'a failed synchronous call is not a measurement — nothing is committed').toEqual([])
+    expect(
+      log.filter((x) => x === `mark:${api.O0_HOOK_MARK_PREFIX}traversal.build:end`).length,
+      '§6 F19: no end mark/measure is committed for the failed synchronous span — so the OPEN span must not be left counted either',
+    ).toBe(0)
+    expect(
+      r.state().pending,
+      '§6 F19: the synchronous throw path must decrement the open-span count (a leaked pending is exactly the dangling-start class)',
+    ).toBe(0)
   })
 })
 
@@ -476,17 +713,22 @@ describe('§A the pure measurement-only hook recorder (src/shared/o0-hook.ts)', 
 // §A2 — the pure stage-row aggregation (§4.3 source:'hook'; §6 F4 imputation ban)
 // ===========================================================================
 describe('§A2 stagesFromO0HookRecords — armed records → O0 stage rows (never imputed)', () => {
-  it('H9 zero records ⇒ every hook stage is ms:null + unseparated:true + source:hook (§6 F4)', async () => {
+  it('H9 zero records ⇒ every ARMABLE stage is ms:null + unseparated:true + source:hook (§6 F4, RUL-1 default list)', async () => {
     const hook = await loadHook()
     const out = hook.stagesFromO0HookRecords([])
-    expect(out.stages.map((s: any) => s.id)).toEqual(HOOK_STAGE_IDS)
+    // RUL-1/§3.6b: the default id list is the SEVEN armable ids (`O0_HOOK_STAGES`
+    // is the landed alias of `O0_RENDER_HOOK_STAGES`), not the pre-RUL-1 five.
+    expect(out.stages.map((s: any) => s.id)).toEqual(RENDER_HOOK_STAGE_IDS)
     for (const s of out.stages) {
       expect(s.ms, `stage ${s.id} must be ms:null when no record exists`).toBe(null)
       expect(s.unseparated, `stage ${s.id} must be unseparated when no record exists`).toBe(true)
-      expect(s.source).toBe('hook')
+      expect(
+        s.source,
+        `stage ${s.id} is a PERMITTED seam id (§3.6b’s closed ten) — its unseparated source is 'hook', never 'mark' (§4.3/RUL-1)`,
+      ).toBe('hook')
     }
     expect(out.measured).toEqual([])
-    expect(out.unseparated).toEqual(HOOK_STAGE_IDS)
+    expect(out.unseparated).toEqual(RENDER_HOOK_STAGE_IDS)
   })
 
   it('H9 a recorded stage is SEPARATED: ms = the SUM over its call sites (the 4-site `decorateShared` case), source:hook', async () => {
@@ -506,7 +748,10 @@ describe('§A2 stagesFromO0HookRecords — armed records → O0 stage rows (neve
     expect(by('envelope.assemble').ms, 'an unrecorded stage stays unseparated — never imputed').toBe(null)
     expect(by('envelope.assemble').unseparated).toBe(true)
     expect(out.measured.sort()).toEqual(['shared.decorate', 'traversal.build'])
-    expect(out.unseparated.sort()).toEqual(['envelope.assemble', 'reconcile.apply', 'reconcile.roots'])
+    // RUL-1: the default list is the seven armable ids, so the unrecorded remainder
+    // is the other five — including the two render emits, which are PERMITTED ids
+    // (a missing wrap is named in the row’s reason, never laundered as ‘no seam’).
+    expect(out.unseparated.sort()).toEqual(['envelope.assemble', 'reconcile.apply', 'reconcile.roots', 'render.dom', 'render.ssr'])
   })
 
   it('H9 an explicit id list (the 11-stage merged row) yields exactly those ids, hook stages measured and the rest unseparated', async () => {
@@ -525,8 +770,21 @@ describe('§A2 stagesFromO0HookRecords — armed records → O0 stage rows (neve
     expect(by('post.style').unseparated, 'post.style is DERIVED (§2.2 stage 11), never hook-measured').toBe(true)
   })
 
-  it('FS4 an off-set or malformed record is REJECTED, never imputed into a stage ms (§6 F4)', async () => {
+  it('FS4 an off-set or malformed record is REJECTED, never imputed into a stage ms (§6 F4) — while a RUL-1 render-emit record is LEGAL', async () => {
     const hook = await loadHook()
+    // RUL-1 re-pin: `{stage:'render.dom', ms:5}` is a LEGAL record — ids 9/10 are
+    // permitted seam ids after RUL-1 (§3.6b’s closed ten), so the aggregation must
+    // SUM them instead of rejecting them. The imputation ban is unchanged: only the
+    // DERIVED `post.style` and an unknown id remain rejected.
+    const legal = hook.stagesFromO0HookRecords([
+      { stage: 'render.dom', ms: 5, startMark: 'o0:render.dom:start', endMark: 'o0:render.dom:end', measureName: 'o0:render.dom' },
+      { stage: 'render.ssr', ms: 2.5, startMark: 'o0:render.ssr:start', endMark: 'o0:render.ssr:end', measureName: 'o0:render.ssr' },
+    ])
+    const legalBy = (id: string) => legal.stages.find((s: any) => s.id === id)
+    expect(legalBy('render.dom')?.ms, 'RUL-1: a render-emit record must be AGGREGATED (ms 5), never rejected').toBe(5)
+    expect(legalBy('render.dom')?.unseparated, 'RUL-1: a recorded render emit is SEPARATED').toBe(false)
+    expect(legalBy('render.dom')?.source, '§4.3: a recorded seam id is source:hook').toBe('hook')
+    expect(legalBy('render.ssr')?.ms, 'RUL-1: the SSR mirror emit record must be aggregated too').toBe(2.5)
     const cases: any[] = [
       null,
       'not-an-array',
@@ -535,7 +793,7 @@ describe('§A2 stagesFromO0HookRecords — armed records → O0 stage rows (neve
       [{ stage: 'traversal.build', ms: -1 }],
       [{ stage: 'traversal.build', ms: '12' }],
       [{ ms: 5 }], // no stage
-      [{ stage: 'render.dom', ms: 5 }], // a probe stage (§3.6: stages 4-8 only)
+      [{ stage: 'post.style', ms: 5 }], // the DERIVED residual (§2.2 id 11) is never a recorder id (RUL-1)
       [{ stage: 'not.a.stage', ms: 5 }],
     ]
     for (const bad of cases) {
@@ -665,6 +923,79 @@ describe('§A3 deriveO0HookInertness — §3.6(c) an armed hook that changes the
       return null
     })
     assertHeld(rep)
+    // §5 P-HK-1 (RUL-2) — the SETTLEMENT HALF, folded into THIS SAME row: promise
+    // bodies over {resolve after 0/1/25 ms, reject after 0/1/25 ms} with a stub perf
+    // port whose `now()` advances per draw. Checked per draw: the committed `ms` is
+    // the SETTLE delta (never ≈0 at promise creation), a rejection closes the span
+    // with a non-empty `error` and propagates untouched, the end mark/measure are
+    // committed on BOTH paths, and `state().pending` returns to 0 (§6 F19: never a
+    // dangling `o0:<id>:start` mark).
+    const SETTLE_DRAWS = [0, 1, 25].flatMap((ms) => [
+      { ms, reject: false },
+      { ms, reject: true },
+    ])
+    const settleFails: string[] = []
+    for (const draw of SETTLE_DRAWS) {
+      const tag = `settle=${draw.reject ? 'reject' : 'resolve'} after ${draw.ms} ms`
+      const log: string[] = []
+      let t = 0
+      const r = hook.createO0HookRecorder({
+        stages: ['snapshot.pull'],
+        perf: {
+          now: (): number => t,
+          mark: (n: string): void => {
+            log.push(`mark:${n}`)
+          },
+          measure: (n: string, s: string, e: string): void => {
+            log.push(`measure:${n}:${s}:${e}`)
+          },
+        },
+      })
+      r.arm()
+      const boom = new Error(`settle-reject after ${draw.ms} ms`)
+      let caught: unknown = null
+      let value: unknown = null
+      try {
+        value = await r.record('snapshot.pull', async () => {
+          await Promise.resolve()
+          t += draw.ms
+          if (draw.reject) throw boom
+          return `settled-${draw.ms}`
+        })
+      } catch (e) {
+        caught = e
+      }
+      if (r.state().pending !== 0) {
+        settleFails.push(`${tag}: state().pending=${r.state().pending} — a span left OPEN is the §6 F19 dangling-start class`)
+      }
+      const recs = r.records()
+      if (recs.length !== 1) {
+        settleFails.push(`${tag}: ${recs.length} committed record(s), expected exactly 1 (the span closes on BOTH settlement paths)`)
+        continue
+      }
+      if (recs[0].ms !== draw.ms) {
+        settleFails.push(`${tag}: committed ms=${String(recs[0].ms)} ≠ the settle delta ${draw.ms} — RUL-2 requires the span to cover the AWAIT`)
+      }
+      if (log.filter((x) => x === `mark:${hook.O0_HOOK_MARK_PREFIX}snapshot.pull:end`).length !== 1) {
+        settleFails.push(`${tag}: no end mark committed — the start mark would be DANGLING (§6 F19)`)
+      }
+      if (draw.reject) {
+        if (caught !== boom) settleFails.push(`${tag}: the rejection was not propagated untouched (got ${String(caught)})`)
+        if (typeof recs[0].error !== 'string' || recs[0].error === '') {
+          settleFails.push(`${tag}: the rejected span committed no \`error\` text (got ${JSON.stringify(recs[0].error)})`)
+        }
+      } else {
+        if (value !== `settled-${draw.ms}`) settleFails.push(`${tag}: the settled value was not returned unwrapped (got ${String(value)})`)
+        if (recs[0].error) settleFails.push(`${tag}: a FULFILLED span recorded an error ${JSON.stringify(recs[0].error)}`)
+      }
+    }
+    if (process.env.O0_PBT_REPORT) {
+      console.log(
+        `[pbt] P-HK-1 | strat:o0-hook-settlement (the SAME row's RUL-2 half) | attempts=${SETTLE_DRAWS.length} | ` +
+          `${settleFails.length ? `BROKEN x${settleFails.length}` : 'held'} | ${settleFails.slice(0, 3).join(' ;; ')}`,
+      )
+    }
+    expect(settleFails, JSON.stringify(settleFails)).toEqual([])
   })
 })
 
@@ -705,18 +1036,38 @@ function bodyOf(source: string, decl: string, stops: string[]): string {
 describe('§B source-contract: the five stages 4-8 call sites are instrumented without reordering', () => {
   const IMPORTS = /from\s+['"]\.\.\/shared\/o0-hook\.js['"]/
 
-  it('B0 §3.6 the pinned module exports the permitted stage set — exactly stages 4-8 of the closed §2.2 set, and never a probe stage', async () => {
+  it('B0 §3.6/§3.6b (RUL-1) the pinned module exports THREE distinct stage constants: the 7 armable ids, the 5-id render-path subset, the 10-id seam set — and never the DERIVED `post.style`', async () => {
     const hook = await loadHook()
     const reportApi = await loadReport()
     const all: string[] = [...reportApi.O0_STAGE_IDS]
     const hookStages: string[] = [...hook.O0_HOOK_STAGES]
-    for (const id of hookStages) {
+    const renderPath: string[] = Array.isArray((hook as any).O0_RENDER_PATH_STAGES) ? [...(hook as any).O0_RENDER_PATH_STAGES] : []
+    const renderHook: string[] = Array.isArray((hook as any).O0_RENDER_HOOK_STAGES) ? [...(hook as any).O0_RENDER_HOOK_STAGES] : []
+    const seams: string[] = Array.isArray((hook as any).O0_HOOK_SEAM_STAGES) ? [...(hook as any).O0_HOOK_SEAM_STAGES] : []
+    // Every id in every hook constant is a member of the CLOSED §2.2 eleven.
+    for (const id of [...hookStages, ...renderPath, ...renderHook, ...seams]) {
       expect(all.includes(id), `the hook stage '${id}' is not in the closed §2.2 set (${all.join(', ')})`).toBe(true)
     }
-    for (const id of PROBE_STAGE_IDS) {
-      expect(hookStages.includes(id), `'${id}' is probeable by CDP and must NOT be in the hook set (§3.6: stages 4-8 ONLY)`).toBe(false)
+    // RUL-1: the armable set is the SEVEN ids (§8.1) — the five render-path ids
+    // PLUS the two render emits; `O0_HOOK_STAGES` is the landed alias of it.
+    expect(hookStages, '§3.6b/§8.1 (RUL-1): `O0_HOOK_STAGES` is the SEVEN page-armable ids').toEqual(RENDER_HOOK_STAGE_IDS)
+    expect(renderHook, '§8.1 (RUL-1): `O0_RENDER_HOOK_STAGES` is the SEVEN page-armable ids').toEqual(RENDER_HOOK_STAGE_IDS)
+    // …while the five-id render-path SUBSET survives as its OWN constant (the page
+    // script may arm the render path; the subset is what the hook owns outright).
+    expect(renderPath, '§3.6b (RUL-1): the render-path SUBSET stays EXACTLY the five ids 4-8').toEqual(HOOK_STAGE_IDS)
+    // The ONE id the hook may never claim: the DERIVED residual.
+    for (const id of NEVER_HOOK_STAGE_IDS) {
+      for (const [name, list] of [['O0_HOOK_STAGES', hookStages], ['O0_RENDER_HOOK_STAGES', renderHook], ['O0_RENDER_PATH_STAGES', renderPath], ['O0_HOOK_SEAM_STAGES', seams]] as const) {
+        expect(
+          list.includes(id),
+          `'${id}' is the DERIVED residual (§2.2 id 11) and must NOT be in ${name} (§3.6: a computed value is never a recorded seam)`,
+        ).toBe(false)
+      }
     }
-    expect(hookStages).toEqual(HOOK_STAGE_IDS)
+    // The three sets are nested and DISTINCT (§8.1: 5 ⊂ 7 ⊂ 10) — never one widened set.
+    expect(seams.length, '§8.1: the seam set is the closed TEN').toBe(10)
+    expect(renderPath.every((id) => renderHook.includes(id)), '§3.6b: the 5-id subset is a SUBSET of the 7-id armable set').toBe(true)
+    expect(renderHook.every((id) => seams.includes(id)), '§3.6b: the 7-id armable set is a SUBSET of the 10-id seam set').toBe(true)
   })
 
   it('B1 §3.6 every instrumented module imports the PINNED pure recorder (no inlined marks at the call sites)', () => {
@@ -950,29 +1301,43 @@ describe('§B10 source-contract (§3.6b): the CALLER-level seams for stages 1/2/
     ).toBe(true)
   })
 
-  it('B10 §3.6b the recorder’s permitted stage set widens BY CONSTRUCTION (8 seam ids) while the render-path set stays the five ids 4-8', async () => {
+  it('B10 §3.6b/§8.1 (RUL-1) the recorder’s permitted stage set widens BY CONSTRUCTION to TEN ids while the page-side armable set is SEVEN and the render-path subset stays five', async () => {
     const hook = await loadHook()
     const reportApi = await loadReport()
     const all: string[] = [...reportApi.O0_STAGE_IDS]
     // `O0_HOOK_SEAM_STAGES` = the ids a recorder instance may be CONFIGURED for:
-    // the three caller-level seams + the five render-path ids (§3.6b, §8.1).
+    // the three caller-level seams + the five render-path ids + the TWO render
+    // emits (RUL-1: ids 9/10 got REAL seams, `src/renderer/runtime.ts`) = TEN of
+    // the closed eleven (§3.6b, §8.1).
     const seams: string[] = Array.isArray(hook.O0_HOOK_SEAM_STAGES) ? [...hook.O0_HOOK_SEAM_STAGES] : []
     expect(
       seams,
-      "the ADDITIVE wider configuration constant `O0_HOOK_SEAM_STAGES` is missing — §3.6b: \"the only permitted change to §3.6's landed module: an ADDITIVE wider configuration constant plus the render-path subset\"",
-    ).toEqual(all.filter((id) => CALLER_SEAM_STAGES.includes(id) || HOOK_STAGE_IDS.includes(id)))
-    expect(seams, '§8.1: the seam set is 3 caller-level + 5 render-path = 8 of the 11 closed ids').toHaveLength(8)
-    // The render-path SUBSET — the only stages a PAGE-SIDE `arm()` may request —
-    // is unchanged (§3.6b's boundary; B0 pins the landed name B0 uses, and
-    // §3.6b names it `O0_RENDER_HOOK_STAGES`: both denote ids 4-8, so either name
-    // satisfies this row).
-    const renderPath = (hook as any).O0_RENDER_HOOK_STAGES ?? hook.O0_HOOK_STAGES
-    expect(renderPath, '§3.6b: the render-path subset stays EXACTLY the five ids 4-8 (a page script may arm the render path, never widen its own seam set)').toEqual(
-      HOOK_STAGE_IDS,
+      "the ADDITIVE wider configuration constant `O0_HOOK_SEAM_STAGES` is missing or mis-scoped — §3.6b/RUL-1: the caller-level ids + the render-path ids + the two render emits",
+    ).toEqual(HOOK_SEAM_STAGE_IDS)
+    expect(seams.length, '§8.1 (RUL-1): the seam set is 3 caller-level + 5 render-path + 2 render emits = 10 of the 11 closed ids').toBe(10)
+    expect(
+      all.filter((id) => !seams.includes(id)),
+      '§8.1/§3.6b: exactly ONE closed id is outside the permitted ten — the DERIVED `post.style` (§2.2 id 11), which is never a recorder id',
+    ).toEqual(['post.style'])
+    // The page-side armable set (§8.1: SEVEN — the five render-path ids PLUS the
+    // two render emits): a page script may arm the render path, never widen its own
+    // seam set, so `snapshot.clone` stays OUT of it (§6 F14’s double-record guard).
+    const renderPath: string[] = Array.isArray((hook as any).O0_RENDER_HOOK_STAGES) ? [...(hook as any).O0_RENDER_HOOK_STAGES] : []
+    expect(renderPath, '§3.6b/§8.1 (RUL-1): `O0_RENDER_HOOK_STAGES` is the SEVEN page-armable ids (5 render-path ids + render.dom/render.ssr)').toEqual(
+      RENDER_HOOK_STAGE_IDS,
     )
-    // The two sets are distinct constants, not one widened one: the seam set must
-    // not have become the page-side armable set.
+    expect(renderPath, '§3.6b: the page-side arm of `snapshot.clone` stays excluded (one stage, one measurement source — §6 F14)').not.toContain(
+      'snapshot.clone',
+    )
+    expect([...hook.O0_HOOK_STAGES], '§3.6b: `O0_HOOK_STAGES` is the landed alias of the page-armable SEVEN').toEqual(renderPath)
+    expect(
+      [...(hook as any).O0_RENDER_PATH_STAGES],
+      '§3.6b: the render-path SUBSET stays EXACTLY the five ids 4-8 (a page script may arm the render path, never widen its own seam set)',
+    ).toEqual(HOOK_STAGE_IDS)
+    // The sets are DISTINCT constants, not one widened one: the seam set must not
+    // have become the page-side armable set.
     expect(seams).not.toEqual(renderPath)
+    expect(seams).not.toEqual([...hook.O0_HOOK_STAGES])
   })
 
   it('B10 §3.6b the ONE pinned aggregation call accepts the union of BOTH instances’ records with the full 11-id list', async () => {

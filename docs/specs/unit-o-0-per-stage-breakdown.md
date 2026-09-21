@@ -1,380 +1,495 @@
 # Unit O-0 — Per-stage freeze breakdown (THE PRECONDITION ARTIFACT)
 
-> **STATUS BANNER (added by the spec re-derivation, 2026-09-17 — read before quoting any
-> number below): THIS ARTIFACT IS SUPERSEDED-PENDING-FIX.** It is the **FIRST** live run and
-> its numbers are recorded faithfully, but the run **FAILED** (`pass: false` on both legs;
-> 6 of the 11 stages `unseparated`) for three reasons that the spec has since re-derived:
-> **H2** (stages 1-3 are structurally unmeasurable at the preload — the seam moves to the
-> shell's own call sites, spec §3.6b), **H3** (the hook was armed BEFORE `o0:t0`, so the
-> stage ms below are **not window-bounded** — the `1698.82%` line and the negative residuals
-> are a harness-semantics defect, spec §4.3/§5 `P-TP-3`), and **H7/H8** (the corpus SOURCE
-> and the GPU-off freeze scale are environment caveats, spec §12.9). **The authoritative
-> record of this run — its commands, numbers, controls, verdicts and findings — is
-> `docs/specs/unit-o-0-per-stage-measurement.md` §12** (the spec governs where the two
-> disagree). **The unit O-0 is OPEN, not DONE: a re-run on the fixed bundle is MANDATORY
-> before this file may be re-committed as CURRENT or the O-5 delegation gate may open.**
+> **STATUS BANNER — read before quoting any number below.** This is the **THIRD (and
+> closing) live run** on the **RUL-1..RUL-6 bundle** (spec §2.2/§3.6b/§4.2-§4.4/§5
+> `P-HK-1`/`P-TP-3`/§6 S14-S21 / F13-F22). **Run date: 2026-09-20 (host clock, local
+> `America/Chicago`; the report's own `date`/`tolerance.source` fields read `2026-09-21`
+> because the driver stamps UTC).** Supersedes the **second run** (this file's previous
+> revision; its numbers stand in `docs/specs/unit-o-0-per-stage-measurement.md` §12.12)
+> and the **first run** (§12, `2026-09-17`).
+>
+> **BOTH LEGS: `status: "OPEN-structural"`, `pass: false`, `driver.selfValidation.ok: true`,
+> `errors: []`, `gatingReasons: []`.** This is a **COMPLETED MEASUREMENT WITH RECORDED
+> STRUCTURAL GAPS** (§3.6b RUL-4) — **not a FAIL and not a DONE**: the one stage that
+> cannot be separated by construction is `snapshot.clone` (no main-side transport AND
+> the Electron IPC structured clone is outside every host-side wrap — RUL-3), which
+> keeps the DERIVED `post.style` residual uncomputable. **Every one of the other ten ids
+> is measured (`source: "hook"`), including `render.dom`/`render.ssr` (RUL-1).**
+> **No number below was imputed and no failure was softened.**
+>
+> **What this run closed:** the ten-id seam set is live (RUL-1: ids 9/10 now measured,
+> real spans, `source: "hook"`); the caller-level `snapshot.pull`/`docheads.pull` spans
+> cover the AWAITED round trip (RUL-2 — 83.6-85.9 ms folder / 172.2-179.2 ms document,
+> vs run 2's 0.0-0.2 ms); the engine state is `"absent"` **derived from the observed
+> error payload** (RUL-5/L1 — run 2 claimed `"ready"`); no `null%` string exists in
+> either leg (RUL-5/L8); the GPU delta is reported for THIS run only (RUL-5/L9); the
+> inertness pair carries the pinned MUTATION-HALF sentence (RUL-6).
 
-**Status:** **MEASURED LIVE (2026-09-17) — committed artifact, spec §4.1.**
-**Contract:** `docs/specs/unit-o-0-per-stage-measurement.md` (the spec this artifact
-satisfies). **Unit:** O-0. **Layer (RCA-12):** `assembled-renderer` — every number
-below comes from the **executing `dist/` bundle driving real hit-tested CDP gestures
-against a real Electron renderer**, not from node.
+**Contract:** `docs/specs/unit-o-0-per-stage-measurement.md`. **Unit:** O-0.
+**Layer (RCA-12):** `assembled-renderer` — every number below comes from the **executing
+`dist/` bundle driving real hit-tested CDP gestures against a real Electron renderer**,
+never from node and never from a module in isolation.
 
-**Artifact pass flag (falsifiable, DERIVED by the harness, not written by hand):**
-`pass: false` for the GPU-off leg and `pass: false` for the GPU-on leg. Both are
-**pass:false** for exactly one class of forcing condition — the six stages the executing
-bundle cannot separate (§"Unseparated stages" below). **The measurement is complete; the
-report is deliberately not a clean pass** (§4.4/§6 F4: an unmeasured stage cannot be
-reconciled away). `.driver.build.verified` is **true** in **both** legs (§3.6/F2 closed).
+**Provenance / supersession (one paragraph).** This revision records the **third live run**;
+the **first run** (`2026-09-17`, renderer `1789680723588+675765+10d4bd9b`) and the **second
+run** (`2026-09-20`, renderer `1789951042772+676469+a3e09c6a`, recorded for the duration in
+this file and now in spec §12.12) are **SUPERSEDED**: run 1 reported stages 1-3 `unseparated`
+with `traversal.build` 1868.7 ms inside a 110 ms window and the `1698.82 %` verdict; run 2
+reported `snapshot.pull` 0.0-0.2 ms (the sync-call-only seam), ids 9/10 "no seam exists at
+all", `env.engine: "ready"` on an engine-absent host, `(null %)` on the zero-window rows and
+`driver.selfValidation.ok: false` (24/12 schema errors for structural-only content). **None of
+those shapes appears in this run**: each is named with its ruling in §10/§11 and its run-2
+value beside the run-3 value. Their measurements remain honest records of the bundles they
+ran on; they are not reproducible here and must not be quoted as current.
 
 ---
 
 ## 1. Run commands (verbatim, as executed)
 
-Working dir: `/media/ryanr/Shared Files/Projects/Astrographer`. Env: `DISPLAY=:0`
-(propagated; `/tmp/.X11-unix/X0` present). **No app was running** before the runs
-(MCP `:3787` and CDP `:9222` both free), so the driver's **spawn** path was used
-(`runMode: "spawn"`), not `--connect`: the operator store
-(`/tmp/astrographer-demo-store`, 226 docs) was gone with `/tmp`, and `--connect`
-requires an already-running operator app.
+Working dir `/media/ryanr/Shared Files/Projects/Astrographer`; `DISPLAY=:0` (`--display=:0`,
+propagated into the spawn env). **No app was running before either leg** (`pgrep -af
+"electron|gnosis-server"` → none besides the probe; MCP `:3787` / CDP `:9222` free), so both
+legs used the driver's **spawn** path (`driver.runMode: "spawn"`), never `--connect`:
+`--connect` cannot arm the main-side recorder (§3.6b/S15), and the operator store is absent.
+The driver sets `ASTROGRAPHER_O0_MAIN_ARM=1` for the spawned main process (the main-side
+`snapshot.clone` wrap IS armed; no channel carries its records out — finding **L3s**, §12.1).
 
 ```bash
-# 0) rebuild the EXECUTING bundle FIRST (the repo ENV NOTE, docs/live-testing.md:119-124)
-npm run build
+# 0) rebuild the EXECUTING bundle FIRST (docs/live-testing.md:119-124)
+npm run build     # dist/renderer/renderer.js 678270 B (662.4 kb), dist/main/main.cjs 2419392 B
+                  # renderer sha256[:8] a25b03a9 (md5 3b78e2cc…) / main 955790a9 (md5 60fcd0a5…)
+
+# 0b) the pinned 226-document corpus (source 2 of §3.4 — the operator store is gone with
+#     /tmp; the SIZE is the pin, the SOURCE is a recorded variable). The tree from the
+#     second run is still present and was re-verified, NOT regenerated, this pass:
+#       find /tmp/o0-corpus-226 -name "*.md" | wc -l   →  226
+#       du -sh /tmp/o0-corpus-226                      →  1.8M
+#       docs/ 200 + archive/ 20 + notes/ 6 = 226 *.md, seed o0-2026-09-17
+#     (Generator, unchanged: fs.rmSync the tree; per dir in [docs 200, archive 20, notes 6]
+#      write "# <dir> document <i:03>" + 12 "## Section p" blocks of 6 repeated sentences.)
 
 # 1) GPU-OFF leg (the sanctioned launch path: --no-gpu is passed when --gpu is absent)
 node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 \
   --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
-  --o0-out=/tmp/o0-gpuoff.json \
+  --o0-out=/tmp/o0c-gpuoff.json \
   --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism
 
-# 2) GPU-ON leg (app (re)started WITHOUT --no-gpu; --gpu records the leg identity)
+# 2) GPU-ON leg (app (re)spawned WITHOUT --no-gpu; --gpu records the leg identity)
 node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 \
   --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
-  --o0-out=/tmp/o0-gpuon.json --block=o0_gpu_control
+  --o0-out=/tmp/o0c-gpuon.json --block=o0_gpu_control,o0_repeat_determinism
+
+# 3) the trio (recorded in §11.1)
+npm test && npm run typecheck && npm run build
 ```
 
-The spec §3.5 command pair (`--connect` against the operator's app on `:3787/:9222`) is
-**not usable on this host** — the operator session and its store are absent. The
-substitute above keeps every other pinned element (the closed 5 blocks, the 11-stage id
-set, the seed `o0-2026-09-17`, `--o0-out`, the operator corpus census) and adds the three
-**default-safe** harness flags this run needed:
+**A minimal harness fix was required and is recorded here (§11 L1b).** The GPU-OFF leg was
+first run against the same bundle and returned `status: "FAIL"` for exactly one reason:
+`gnosis.status` resolved with the plain string `"fetch failed"` (the main-process
+`EngineUnavailable` propagated as the tool's text), which `o0Census`'s `errorOf()` — an
+object-only probe — could not recognise, so the probe was misclassified as an UNSUPPORTED
+payload and minted a forcing reason. §6 S4/S21/F22 pin the opposite: an engine ERROR payload
+is evidence of ABSENCE ("engine-absence is NOT a forcing condition"; "a run whose engine state
+cannot be derived at all records `absent` WITH the evidence string"). The one-line fix
+(`errorOf` also treats a non-empty STRING as error evidence) was applied, the leg re-run, and
+both legs below ran on the identical build (`renderer 678270+a25b03a9`). No `src/**` or
+`tests/**` file was touched.
 
-| flag | why it exists | default |
-| --- | --- | --- |
-| `--corpus-root=<dir>` | the store's import containment root is an **operator registry value**, not an MCP argument (`edit.import_markdown`'s schema is `files`-only); without it a seed corpus outside the project root is rejected — `markdown import: path outside corpus root`. It writes the operator registry file into the DISPOSABLE HOME's `userData` **before** the app boots. | unset ⇒ no file written (byte-equal today) |
-| `--strict-seed` | imports the seed **directory's** `*.md` corpus instead of writing the driver's two synthetic files (`alpha.md`/`beta.md` — a **2-document** S2 corpus by construction). This is what lets a driver-spawned app reach the operator census. | off ⇒ today's 2-file seed |
-| `--display=:0` | **harness fix, see §9 finding H1** — the parsed value had its leading `:` stripped, producing `DISPLAY=::0` and `ozone_platform_x11.cc:245 Missing X server or $DISPLAY`. | same flag, now normalizing `:0`/`0` |
-
-The **corpus** the census is claimed at is `/tmp/o0-corpus-226`: **226 deterministic
-markdown operator documents** (seed `o0-2026-09-17`), laid out as
-`docs/` (200) + `archive/` (20) + `notes/` (6) so the doc-nav renders real folder rows.
-Its content is synthetic; its **census is the pinned operator size** and is asserted by
-the `--o0-corpus=226` gate, which forces `pass:false` on any mismatch (§6 F8). An
-earlier run of this battery at **228 documents** (the two synthetic seed files plus 226)
-was rejected by exactly that gate and is recorded here rather than softened.
+---
 
 ## 2. Environment + build identity
 
-| field | value |
-| --- | --- |
-| display | `:0` (Xwayland on KWin/Wayland; `DISPLAY` propagated to the spawn) |
-| launch mode | `spawn` on both legs — the driver spawned the app via `scripts/start-app.sh` under a **disposable HOME** (`/tmp/astrolive-*`); nothing pre-existing was attached to |
-| GPU leg | GPU-OFF: `app spawned by this driver (--no-gpu)`; GPU-ON: `app spawned by this driver (gpu on)` |
-| GPU flag recorded per run | `gpu: false` (GPU-off rows), `gpu: true` (GPU-on rows) |
-| engine (Gnosis) | `ready` in both legs. **Engine-absent is the legitimate degraded mode** (S4): `gnosis.status` is reachable over MCP but the engine process is not running (`provident:gnosis:status` → `EngineUnavailable`), and no O-0 stage depends on it. |
-| mode | `lexical` (lexical retrieval) |
-| pane frames at freeze | `2` (identical in every run of both legs — S5/F9 pairing holds) |
-| **executing bundle (GPU-off leg)** | `1789680723588+675765+10d4bd9b` (mtime+bytes+djb2) / main `1789680723530+2395838+366b2663` |
-| **served bundle** | `675765+10d4bd9b` from `file:///media/ryanr/Shared%20Files/Projects/Astrographer/dist/renderer/renderer.js` |
-| **`driver.build.verified`** | **`true`** (GPU-off) and **`true`** (GPU-on) — the served bytes+hash are byte-identical to the on-disk `dist/renderer/renderer.js` (§3.6/F2 satisfied; the stale-bundle fail-state does **not** apply) |
-| tolerance | `reconcileMs: 50` (`measured 2026-09-17`); hook long-task band `40` ms |
-| seed | `o0-2026-09-17` (the recorded constant) |
-
-**Layer statement (RCA-12):** this is an **APP/renderer-layer** measurement. The node
-suite's property layer (§5 of the spec) validates the *report shape*; it can never
-produce these numbers.
-
-## 3. Corpus census — reached vs pinned
-
-| census field | pinned | **observed (both legs)** | agrees |
-| --- | --- | --- | --- |
-| documents | 226 | **226** | ✅ |
-| nodes | — | **10170** | (input to the trigger-(b) node ceiling, spec §10.2) |
-| edges | — | **18758** | — |
-| source | operator store (spec §3.4) | `--o0-corpus` (operator *size*, driver-seeded; see §1) | pinned size reached |
-
-The census was read twice, independently: `rag.list_documents` (**226**)
-and the snapshot payload's own lengths (`10170` nodes / `18758` edges).
-`corpusSource: "--o0-corpus"`.
-
-## 4. Per-stage table (ms; `unsep` = `unseparated:true`, `ms:null`, never imputed)
-
-### 4.1 GPU-OFF leg — all four measured runs
-
-| stage id | folder-row-gpuoff-r1 | document-row-gpuoff-r1 | fold-ablation-off | fold-ablation-on |
-| --- | --- | --- | --- | --- |
-| `snapshot.pull` | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) |
-| `snapshot.clone` | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) |
-| `docheads.pull` | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) |
-| `traversal.build` | 1868.7 (hook) | 14.1 (hook) | 16.7 (hook) | 14.1 (hook) |
-| `envelope.assemble` | 0.6 (hook) | 0.2 (hook) | 0.2 (hook) | 0.2 (hook) |
-| `shared.decorate` | 23.9 (hook) | 1 (hook) | 1.4 (hook) | 0.7 (hook) |
-| `reconcile.roots` | 21.8 (hook) | 1.3 (hook) | 0.1 (hook) | 0.1 (hook) |
-| `reconcile.apply` | 242.8 (hook) | 2387.3 (hook) | 5.5 (hook) | 1.4 (hook) |
-| `render.dom` | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) |
-| `render.ssr` | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) | **null** (unsep, mark) |
-| `post.style` | **null** (unsep, derived) | **null** (unsep, derived) | **null** (unsep, derived) | **null** (unsep, derived) |
-
-### 4.2 GPU-ON leg — the paired control runs
-
-| stage id | folder-row-gpuon-r1 | document-row-gpuon-r1 |
+| item | GPU-OFF leg | GPU-ON leg |
 | --- | --- | --- |
-| `snapshot.pull` | **null** (unsep, mark) | **null** (unsep, mark) |
-| `snapshot.clone` | **null** (unsep, mark) | **null** (unsep, mark) |
-| `docheads.pull` | **null** (unsep, mark) | **null** (unsep, mark) |
-| `traversal.build` | 1766.5 (hook) | 32.7 (hook) |
-| `envelope.assemble` | 0.7 (hook) | 0.4 (hook) |
-| `shared.decorate` | 23.3 (hook) | 2.3 (hook) |
-| `reconcile.roots` | 20.7 (hook) | 1.4 (hook) |
-| `reconcile.apply` | 241.6 (hook) | 2358.5 (hook) |
-| `render.dom` | **null** (unsep, mark) | **null** (unsep, mark) |
-| `render.ssr` | **null** (unsep, mark) | **null** (unsep, mark) |
-| `post.style` | **null** (unsep, derived) | **null** (unsep, derived) |
+| artifact | `/tmp/o0c-gpuoff.json` | `/tmp/o0c-gpuon.json` |
+| `driver.runMode` | `spawn` | `spawn` |
+| app-side GPU flag (`driver.appFlag`) | `app spawned by this driver (--no-gpu)` | `app spawned by this driver (gpu on)` |
+| `driver.gpuFlag` / `env.gpu` | `false` / `false` | `true` / `true` |
+| `driver.build.verified` | **`true`** | **`true`** |
+| renderer identity (mtime+len+hash) | `1789952537561+678270+a25b03a9` | `1789952556962+678270+a25b03a9` |
+| main identity | `1789952537438+2419392+955790a9` | `1789952556843+2419392+955790a9` |
+| served vs on-disk | `678270+a25b03a9` = disk `678270+a25b03a9` | `678270+a25b03a9` = disk `678270+a25b03a9` |
+| `driver.display` | `:0` | `:0` |
+| `env.mode` | `lexical` | `lexical` |
+| `env.paneFrames` | 2 | 2 |
+| `env.engine` (RUL-5/L1) | `absent` — evidence `an error payload from the status call (fetch failed)` | `absent` — same evidence |
+| blocks | `o0_folder_row, o0_document_row, o0_track_ablation, o0_repeat_determinism` | `o0_gpu_control, o0_repeat_determinism` |
+| pairing | `cross-artifact` (`gpu-off`) | `cross-artifact` (`gpu-on`) |
 
-**Reading it.** Stages 4–8 are hook-measured in **every** run; stages 1–3, 9, 10 are
-`unseparated` in every run, and stage 11 (`post.style`) is `unseparated` **by
-construction** (it is the computed residual, §2.2 id 11 — emitted only when the
-reconciliation succeeds, which no run can, because stages 1–3/9/10 are unmeasured).
+**Engine-absent fact (recorded, non-gating).** No `gnosis-server` process exists on this host:
+`gnosis.status` raised `EngineUnavailable: fetch failed` in the main process (the app log line
+`Error occurred in handler for 'provident:gnosis:status': EngineUnavailable: fetch failed`). The
+report records `env.engine: "absent"` with `driver.engineEvidence.positiveSignal: false` and
+`error: "fetch failed"`; `driver.engineError` is `null` (the state IS derivable — as ABSENT).
+**No O-0 stage depends on the engine** (§6 S4): the local store path is the measured path.
 
-## 5. Long tasks + mutations
+---
 
-| run | long tasks (ms) | long-task total | DOM mutations | wall (gesture → first responsive rAF) | pass |
-| --- | --- | --- | --- | --- | --- |
-| `o0-folder-row-gpuoff-r1` | 110 | **110** | **37** | 211.4 ms | true |
-| `o0-document-row-gpuoff-r1` | 192 | **192** | **18058** | 288.8 ms | true |
-| `o0-fold-ablation-off` | (none) | **0** | **222** | 124.4 ms | true |
-| `o0-fold-ablation-on` | (none) | **0** | **0** | 112.3 ms | true |
-| `o0-folder-row-gpuon-r1` | 107, 2176 | **2283** | **37** | 4198.6 ms | true |
-| `o0-document-row-gpuon-r1` | 192, 2419 | **2611** | **18058** | 4295.5 ms | true |
+## 3. Census reached vs the pinned 226 (§3.4)
 
-The quiesce bound is **recorded, never a sleep**: rAF-based, `timeoutMs=4000`
-with the `quiesced`/`frames` result stored per run in the raw JSON.
+| field | GPU-OFF | GPU-ON | pin |
+| --- | --- | --- | --- |
+| `corpus.source` | `--o0-corpus` | `--o0-corpus` | recorded variable |
+| `corpus.documents` | **226** | **226** | **226 (THE GATE)** |
+| `corpus.nodes` | 6102 | 6102 | provenance only (RUL-5/L10) |
+| `corpus.edges` | 9266 | 9266 | provenance only |
+| `corpus.seed` | `o0-2026-09-17` | `o0-2026-09-17` | recorded constant |
+| `--o0-corpus` claim | 226 | 226 | matches observation |
 
-### 5.1 The hook's live inertness proof (armed vs unarmed, same gesture, same corpus)
+The pinned **size** (226 documents) is reached in both legs (`corpus.gate: "documents"`; no census
+mismatch reason exists in either leg). `nodes`/`edges` (**6 102 / 9 266**) are **recorded provenance**
+about THIS corpus, not a pin: the first run read 10 170 / 18 758 at the same size from a different
+generator, and no byte-reproducibility is claimed anywhere (RUL-5/L10).
 
-`o0_repeat_determinism` staged the **same** folder-row freeze twice — once **unarmed**,
-once **armed** — and compared the two runs:
+---
 
-- `o0-repeat-a-unarmed` (unarmed) vs `o0-repeat-b-armed` (armed): **Δmutations = 0** (required 0), **|ΔlongTaskTotalMs| = 0 ms** (tolerance 40 ms), stage-id SET equal = **true** (11 ids), `ms` values free = true, **inert = true**
+## 4. Per-stage table (ms; `(u)` = `unseparated:true` + `ms:null`; `(u, S)` = `structural:true`; `(u, derived)` = the id-11 residual)
 
-Both runs' `mutations` were `0` and both long-task totals `0`, i.e. the armed hook adds
-**no DOM mutation and no main-thread long task** (§3.6(c) satisfied, P-TP-1's inertness
-clause closed). The stage-id SET is identical across the repeat (§5 P-SM-2 closed) — the
-`ms` values are explicitly free under the seed.
+### 4.1 GPU-OFF leg — `/tmp/o0c-gpuoff.json`
+
+| run | gesture | snapshot.pull | snapshot.clone | docheads.pull | traversal.build | envelope.assemble | shared.decorate | reconcile.roots | reconcile.apply | render.dom | render.ssr | post.style | Σ sep ms | long task | residual |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `o0-folder-row-gpuoff-r1` | folder-row | 85.9 | null (u, S) | 1.9 | 684.2 | 0.3 | 13.1 | 15.3 | 150.9 | 59.8 | 76.1 | null (u, derived) | 1087.5 | 990 | -97.5 |
+| `o0-document-row-gpuoff-r1` | document-row | 179.2 | null (u, S) | 5.8 | 14.7 | 0.5 | 1.2 | 4 | 2085.1 | 74 | 1742.5 | null (u, derived) | 4107 | 2222 | -1885 |
+| `o0-fold-ablation-off` | folder-row | 27.8 | null (u, S) | 2 | 5.4 | 0.3 | 2.9 | 0.1 | 1.5 | 0.8 | 0.4 | null (u, derived) | 41.2 | 0 | -41.2 |
+| `o0-fold-ablation-on` | folder-row | 29 | null (u, S) | 2 | 5.3 | 0.2 | 0.3 | 0.1 | 4.6 | 0.7 | 0.6 | null (u, derived) | 42.8 | 0 | -42.8 |
+
+### 4.2 GPU-ON leg — `/tmp/o0c-gpuon.json`
+
+| run | gesture | snapshot.pull | snapshot.clone | docheads.pull | traversal.build | envelope.assemble | shared.decorate | reconcile.roots | reconcile.apply | render.dom | render.ssr | post.style | Σ sep ms | long task | residual |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `o0-folder-row-gpuon-r1` | folder-row | 83.6 | null (u, S) | 2.1 | 715.6 | 0.3 | 11 | 16.4 | 159.5 | 65.1 | 72.9 | null (u, derived) | 1126.5 | 1032 | -94.5 |
+| `o0-document-row-gpuon-r1` | document-row | 172.2 | null (u, S) | 4.1 | 10.9 | 0.6 | 0.6 | 2.7 | 2075.6 | 76.1 | 1784.3 | null (u, derived) | 4127.1 | 2213 | -1914.1 |
+
+**`source` per id (both legs, every row):** `snapshot.pull`, `docheads.pull`, `traversal.build`,
+`envelope.assemble`, `shared.decorate`, `reconcile.roots`, `reconcile.apply`, `render.dom`,
+`render.ssr` = **`hook`** (a recorder produced the span); `snapshot.clone` = `hook` with
+`unseparated:true` + `structural:true` + the RUL-3 reason (§4.3); `post.style` = **`derived`** with
+`unseparated:true`, `structural:false`, `structuralReason:null` (RUL-5/L12 — it is `derived` in
+every row, table and verdict; `null %` never appears).
+
+**The ONE structural id, with its recorded reason (verbatim, per row).**
+
+> `no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured`
+
+---
+
+## 5. Long tasks, mutations, quiesce, inertness
+
+### 5.1 Per-row observables
+
+| run | `path` | `realInput` | long tasks (start/duration) | `longTaskTotalMs` | `mutations` | `wallMs` | quiesced |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `o0-folder-row-gpuoff-r1` | `cdp` | true | 8554.800000011921/62 + 8648.600000023842/928 | 990 | 37 | 1061.1 | true (4 frames, timedOut false) |
+| `o0-document-row-gpuoff-r1` | `cdp` | true | 9868.300000011921/98 + 9996.200000017881/2124 | 2222 | 11758 | 2352.6 | true (11 frames, timedOut false) |
+| `o0-fold-ablation-off` | `cdp` | true | (none) | 0 | 37 | 80.7 | true (7 frames, timedOut false) |
+| `o0-fold-ablation-on` | `cdp` | true | (none) | 0 | 37 | 82.3 | true (4 frames, timedOut false) |
+| `o0-folder-row-gpuon-r1` | `cdp` | true | 8698.59999999404/63 + 8790.699999988079/969 | 1032 | 37 | 1095.4 | true (4 frames, timedOut false) |
+| `o0-document-row-gpuon-r1` | `cdp` | true | 10044.5/105 + 10179.399999976158/2108 | 2213 | 11758 | 2322.8 | true (10 frames, timedOut false) |
+
+Both gestures resolved `path: "cdp"` with `realInput: true` in every row of both legs (the hit
+probe resolved inside a real `#pane-doc-nav [data-folder-path]` row and a real `[data-document-id]`
+row), so §5 `P-TP-2` holds: no row is a native fallback.
+
+### 5.2 Hook inertness (armed vs unarmed, §3.6(c) / §6 S17(b) / RUL-6)
+
+| leg | `inert` | Δmutations | ΔlongTaskTotalMs | band | carried by | vacuous half | nonVacuous |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GPU-OFF | true | 0 (37 vs 37) | 0 ms | 40 ms | `mutations` | `longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)` | false |
+| GPU-ON | true | 0 (37 vs 37) | 0 ms | 40 ms | `mutations` | `longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)` | false |
+
+**The pinned MUTATION-HALF sentence (RUL-6), verbatim from the GPU-OFF leg (identical in the
+GPU-ON leg):**
+
+> `the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 37 mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed`
+
+Both freezes performed the disclosure (`controlledPair: true`: the collapse state was reset
+in-page `document rows 20 → 0` before BOTH freezes), so the only variable between them is whether
+the §3.6 hook was armed. `setEqual: true` (the stage-id SET is equal; `ms` is free under
+`o0-2026-09-17`, §5 `P-SM-2`). **No numeric long-task proof is claimed** — the long-task half is
+0-vs-0 (`nonVacuous: false`), recorded and not hidden.
+
+---
 
 ## 6. Controls
 
-### 6.1 GPU-off vs GPU-on (the A14 gap — previously unmeasured)
+### 6.1 GPU control (THIS run, THIS corpus — RUL-5/L9)
 
-| gesture | GPU-OFF long-task total | GPU-ON long-task total | Δ (ON − OFF) |
-| --- | --- | --- | --- |
-| folder-row | **110** ms | **2283** ms | **+2173** ms |
-| document-row | **192** ms | **2611** ms | **+2419** ms |
-
-Both legs produced **the same JS work** (mutation counts identical: 37 for the folder
-row, 18058 for the document row; hook-measured stages within a few ms:
-`traversal.build` 1868.7 vs 1766.5, `reconcile.apply` 242.8 vs 241.6). The entire
-difference is **non-JS** — GPU-off's long tasks are `[110]` vs GPU-on's
-`[107, 2176]`, and the gesture wall time is **211.4 ms vs
-4198.6 ms**. Pairing is recorded `cross-artifact` (one artifact per leg, spec §3.5);
-the app-side flag is recorded per leg (`driver.gpuFlag`, `driver.appFlag`).
-
-### 6.2 The 12 698.7 px track ablation (`display:block`)
-
-| leg | run | `trackAblation` | Δ long-task total | Δ mutations | applied/reverted |
+| gesture | GPU-OFF `longTaskTotalMs` | GPU-ON `longTaskTotalMs` | Δ (ON − OFF) | Δ `wallMs` | Δ `mutations` |
 | --- | --- | --- | --- | --- | --- |
-| baseline (`applied:false`) | `o0-fold-ablation-off` | `{applied:false, mutation:null}` | — | — | — |
-| ablated (`applied:true`) | `o0-fold-ablation-on` | `applied:true` | **0** ms | **-222** | `applied=true, reverted=true` |
+| folder-row | 990 | 1032 | **42 ms** | 34.3 ms | 0 |
+| document-row | 2222 | 2213 | **-9 ms** | -29.8 ms | 0 |
 
-Exact recorded mutation: `"#zone:main (the stage grid cell of #wiki-root): display:block
-(removes the #wiki-root grid-track sizing from the measurement path)"`. The stage cell
-**is** a grid item in the executing bundle (`#wiki-root` computed `display:grid`), so the
-ablation is **available** (§6 F5 does not fire) and was reverted immediately (never
-persisted). In this run both ablation freezes landed **below the 50 ms long-task
-threshold** (0 ms each), so the delta measures the *mutation* effect only: **−222 DOM mutations**.
+Per-stage Δ (ON − OFF), for the four largest ids: `traversal.build` 31.4 ms (folder) / -3.8 ms (document); `reconcile.apply` 8.6 / -9.5; `render.ssr` -3.2 / 41.8; `render.dom` 5.3 / 2.1.
 
-### 6.3 Repeat determinism (`o0_repeat_determinism`)
+**The GPU flag produced no separable delta in THIS run** (42 ms / 9 ms against ~1000/2200 ms windows and identical mutation counts). This is the run's own reading; the first run's `+2173 / +2419 ms` and the second run's `−36 / −23 ms` are cited in §10 as **labelled provenance of two other sessions/corpora** and are never carried into any verdict (RUL-5/L9/§6 S20).
 
-- stage-id SET of both runs: **equal** (`true`), 11 ids each.
-- `ms` values: **free** under the seed (recorded, not asserted).
-- armed-vs-unarmed: Δmutations **0**, |ΔlongTaskTotalMs| **0 ms** ≤ 40 ms tolerance.
+### 6.2 Track ablation (`display:block` on the `#wiki-root` stage grid cell)
 
-## 7. Unseparated stages (named per §6 F4 — never imputed)
+| run | `trackAblation.applied` | `trackAblation.mutation` | `longTaskTotalMs` | `mutations` | `wallMs` |
+| --- | --- | --- | --- | --- | --- |
+| `o0-fold-ablation-off` | false | `null` | 0 | 37 | 80.7 |
+| `o0-fold-ablation-on` | **true** | `#zone:main (the stage grid cell of #wiki-root): display:block (removes the #wiki-root grid-track sizing from the measurement path)` | 0 | 37 | 82.3 |
 
-| stage | status | why it cannot be separated by the permitted surface |
+**Δ (ablation ON − OFF): Δlong-task total `0 ms`, Δmutations `0`, ΔwallMs `1.6 ms`.**
+The ablation was available, applied and reverted with the exact mutation recorded. **On this
+corpus the disclosure freeze never crosses the 50 ms long-task threshold** (both rows total
+**0 ms**), so the ablation is **not shown to be load-bearing at this scale** — stated in the
+honest form ("no measurable effect here"), never as "no effect". The ablation rows themselves
+carry a **zero-window** long-task total, so their verdicts print **no percentage at all**
+(RUL-5/L8 — `null %` is retired).
+
+---
+
+## 7. Derived verdict strings (verbatim from the emitted reports)
+
+### GPU-OFF
+
+> stage traversal.build is 684.2 ms of the 990 ms long task (69.11%) on folder-row — traversal.build is the largest identified stage
+> the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 85.9 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-folder-row-gpuoff-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-folder-row-gpuoff-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> stage reconcile.apply is 2085.1 ms of the 2222 ms long task (93.84%) on document-row — reconcile.apply is the largest identified stage
+> the document-row performed 2 whole-store IPC_RAG_SNAPSHOT read(s) totalling 179.2 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-document-row-gpuoff-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-document-row-gpuoff-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> stage snapshot.pull is 27.8 ms of the 0 ms long task on folder-row — snapshot.pull is the largest identified stage; no percentage is computed: the long-task window is zero (0 ms), so this row has no finite window to divide by
+> the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 27.8 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-fold-ablation-off: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-fold-ablation-off: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> stage snapshot.pull is 29 ms of the 0 ms long task on folder-row — snapshot.pull is the largest identified stage; no percentage is computed: the long-task window is zero (0 ms), so this row has no finite window to divide by
+> the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 29 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-fold-ablation-on: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-fold-ablation-on: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> O-0 REPORT OPEN — 4 stage(s) structurally unseparated (o0-folder-row-gpuoff-r1:snapshot.clone, o0-document-row-gpuoff-r1:snapshot.clone, o0-fold-ablation-off:snapshot.clone, o0-fold-ablation-on:snapshot.clone): run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4) — the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed
+
+### GPU-ON
+
+> stage traversal.build is 715.6 ms of the 1032 ms long task (69.34%) on folder-row — traversal.build is the largest identified stage
+> the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 83.6 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-folder-row-gpuon-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-folder-row-gpuon-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> stage reconcile.apply is 2075.6 ms of the 2213 ms long task (93.79%) on document-row — reconcile.apply is the largest identified stage
+> the document-row performed 2 whole-store IPC_RAG_SNAPSHOT read(s) totalling 172.2 ms (census 226 docs / 6102 nodes / 9266 edges)
+> run o0-document-row-gpuon-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)
+> run o0-document-row-gpuon-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])
+> O-0 REPORT OPEN — 2 stage(s) structurally unseparated (o0-folder-row-gpuon-r1:snapshot.clone, o0-document-row-gpuon-r1:snapshot.clone): run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4) — the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed
+
+---
+
+## 8. `driver.selfValidation` (RUL-4) and the DERIVED status
+
+| field | GPU-OFF | GPU-ON |
 | --- | --- | --- |
-| `snapshot.pull` | **unseparated** | the §3.6 mark/wrap hook cannot bracket it: `window.provident.rag.snapshot` is a **contextBridge function property with `writable:false, configurable:false`** (measured live — see §9 finding H2), so the driver's wrap refuses (`hook.wraps = []`) and the stage stays `ms:null`. It is therefore **unmeasured**, and the harness's A-4 read count is `0` (see §8a caveat). |
-| `snapshot.clone` | **unseparated** | the clone/serialization split is a **main-process** boundary (main-handler timing vs renderer-side resolution); the renderer exposes no handle to the app `Runtime`/`SidebarPanes` host (spec §3.6's honest limit), so the comparison cannot be made from the page. |
-| `docheads.pull` | **unseparated** | same non-writable bridge seam as `snapshot.pull` (`rag.docHeads`). |
-| `render.dom` | **unseparated** | the renderer's `Runtime.render()` emit is **not** among the five instrumented call sites of `src/shared/o0-hook.ts` (the hook's stage set is ids 4–8 only), and no CDP-visible seam exists for it. |
-| `render.ssr` | **unseparated** | same — the SSR mirror emit is not instrumented. |
-| `post.style` | **unseparated (derived)** | by construction it is the residual `longTaskTotalMs − Σ(named stages)`; it can only be emitted when every named stage is separated, which no run satisfies. |
+| `selfValidation.ok` | **true** | **true** |
+| `selfValidation.errors` | `[]` (0) | `[]` (0) |
+| `selfValidation.status` | **`OPEN-structural`** | **`OPEN-structural`** |
+| `selfValidation.attempts` / `runIds` | 4 rows, each `ok:true` | 2 rows, each `ok:true` |
+| `selfValidation.structuralErrors` / `structuralFacts` | 0 / 4 (structural facts are recorded, never errors) | 0 / 2 |
+| `gatingReasons` | `[]` | `[]` |
+| `reconciliation.ok` | false | false |
+| **`status` (DERIVED)** | **`OPEN-structural`** | **`OPEN-structural`** |
+| **`pass`** | **`false`** | **`false`** |
+| `validateO0Report(...)` (the pure module, re-run against the embedded JSON) | `ok: true, status `OPEN-structural`, errors `[]` | `ok: true, status `OPEN-structural`, errors `[]` |
 
-**Consequence, stated loudly:** the `reconciliation` of every run is `ok:false` with
-reason `unseparated stage(s) … cannot be reconciled`, and the harness's derived report
-`pass` is **false** in both legs. Some residuals are **negative** (e.g. folder-row
-`residual -2047.8` against a 110 ms window) because the hook-measured
-stage sum exceeds the window — see §9 finding H3, which is the load-bearing caveat on
-the per-stage numbers.
+**`status: "OPEN-structural"` ⇔ `pass:false` whose every forcing reason is in the structural
+family** (§4.2/RUL-4). Both legs are exactly that: the forcing reasons are the per-row
+unseparated-id reconciliations and the one `structural:true` id; **there is no forcing reason
+outside the structural family** (`gatingReasons: []` in both legs), so neither leg is `"FAIL"`,
+and neither is `"OK"` (the residual is not computable), so neither is DONE-able.
 
-## 8. The DERIVED verdicts (verbatim, computed by the harness from the rows)
+**The mandatory `reconciliation.note` (GPU-OFF, verbatim):**
 
-### 8.1 GPU-off leg
+> `structurally unseparated stage(s) o0-folder-row-gpuoff-r1:snapshot.clone, o0-document-row-gpuoff-r1:snapshot.clone, o0-fold-ablation-off:snapshot.clone, o0-fold-ablation-on:snapshot.clone have no seam in the executing bundle (run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)), so the long-task residual is NOT computable and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)`
 
-- `stage traversal.build is 1868.7 ms of the 110 ms long task (1698.82%) on folder-row — traversal.build is the largest identified stage`
-- `the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-folder-row-gpuoff-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-folder-row-gpuoff-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
-- `stage reconcile.apply is 2387.3 ms of the 192 ms long task (1243.39%) on document-row — reconcile.apply is the largest identified stage`
-- `the document-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-document-row-gpuoff-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-document-row-gpuoff-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
-- `stage traversal.build is 16.7 ms of the 0 ms long task (null%) on folder-row — traversal.build is the largest identified stage`
-- `the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-fold-ablation-off: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-fold-ablation-off: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
-- `stage traversal.build is 14.1 ms of the 0 ms long task (null%) on folder-row — traversal.build is the largest identified stage`
-- `the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-fold-ablation-on: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-fold-ablation-on: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
+**The mandatory `reconciliation.note` (GPU-ON, verbatim):**
 
-### 8.2 GPU-on leg
+> `structurally unseparated stage(s) o0-folder-row-gpuon-r1:snapshot.clone, o0-document-row-gpuon-r1:snapshot.clone have no seam in the executing bundle (run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)), so the long-task residual is NOT computable and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)`
 
-- `stage traversal.build is 1766.5 ms of the 2283 ms long task (77.38%) on folder-row — traversal.build is the largest identified stage`
-- `the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-folder-row-gpuon-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-folder-row-gpuon-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
-- `stage reconcile.apply is 2358.5 ms of the 2611 ms long task (90.33%) on document-row — reconcile.apply is the largest identified stage`
-- `the document-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)`
-- `run o0-document-row-gpuon-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled`
-- `run o0-document-row-gpuon-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]`
+---
 
-## 9. Findings — spec-vs-live contradictions + harness fixes made
+## 9. The O-0 questions, answered with the numbers
 
-**H1 — HARNESS (`--display=:0` produced `DISPLAY=::0`; fixed).** `live-drive.mjs`'s
-parser stored the flag value verbatim while the spawn prefixed a `:`, so the documented
-`--display=:0` form (spec §3.5) reached Electron as `DISPLAY=::0` → `Missing X server or
-$DISPLAY` → the documented F6 symptom, but for a **harness** reason. Fix: the parsed
-value now strips a leading `:` (`--display=:0` and `--display=0` both normalize to `:0`).
-Without this fix no O-0 leg could start on this host.
+### 9.1 (a) The A-4 read counts + the RUL-2 round-trip ms
 
-**H2 — SPEC vs LIVE (finding: stages 1–3 are structurally unseparated).**
-`window.provident.rag.snapshot` / `.docHeads` are **non-writable, non-configurable**
-contextBridge properties (probed live: assignment silently does not take;
-`Object.getOwnPropertyDescriptor(...)` → `{writable:false, configurable:false}`). The
-spec's §2.2/§3.6 therefore **cannot** produce `snapshot.pull`, `snapshot.clone` or
-`docheads.pull` through the permitted surface, and the harness correctly refuses to
-impute them. Consequence for the spec's A-4 discriminator: the emitted verdict
-`the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms` is a
-**"not measured" 0, NOT a measured zero** — the code path is unchanged and
-`src/renderer/sidebar-panes.ts:1995` is still on the unconditional re-derive path, so
-the A-4 *claim* (a folder disclosure performs a whole-store pull) is **not refuted**,
-it is **unmeasured** by this surface. A main-process-side mark (or a wrap of the
-preload's IPC surface before contextBridge freezes it) is required.
+| leg | gesture | read count | per-read ms (`snapshot.pull` records) | total `snapshot.pull` ms | `docheads.pull` ms |
+| --- | --- | --- | --- | --- | --- |
+| GPU-OFF | folder-row | **1** | `85.9` | **85.9** | 1.9 (1.9) |
+| GPU-OFF | document-row | **2** | `119.4` + `59.8` | **179.2** | 5.8 (3.7 + 2.1) |
+| GPU-ON | folder-row | **1** | `83.6` | **83.6** | 2.1 (2.1) |
+| GPU-ON | document-row | **2** | `128.6` + `43.6` | **172.2** | 4.1 (2 + 2.1) |
 
-**H3 — SPEC vs LIVE (finding: the hook-reported stage ms are NOT window-bounded).**
-The `o0_folder_row` freeze reports `traversal.build = 1868.7 ms` against a
-`longTaskTotalMs` of **110 ms** and a wall time of **211.4 ms** — a *longer span than its own window*,
-which the derived verdict prints as `1698.82%`. The stage spans the renderer recorder's
-arm→drain interval, which **starts before `o0:t0`** (the freeze arms the hook before the
-hit-probe + its 250 ms settle), so it includes pre-window work; the long-task total is
-correctly windowed by `PerformanceObserver` + the `t0/t1` marks. Consequence: **stages
-4–8 are comparable BETWEEN runs (same arming discipline; §6.1 shows the two GPU legs
-agreeing within ~100 ms), but a stage's `ms` must not be read as "ms inside the measured
-long task"**. The GPU-ON leg's residuals are positive and small (+230.2 / +215.7 ms) only
-because its long tasks are larger. Fixing this needs the recorder to be armed **at `t0`**
-(after the probe), which is a harness/recorder change that would also change the
-inertness baseline — reported, not silently patched.
+**A-4 is answered at the caller level and the residual SHRANK.** Run 2 measured
+`snapshot.pull` **0.0-0.2 ms** because `await` sat OUTSIDE `record()` (`L5`); after RUL-2 the
+caller-level span covers the awaited round trip (call → IPC → main handler + structured clone →
+promise settlement) and reads **83.6-88.2 ms for the folder gesture (1 read)** and
+**172.2-194.7 ms for the document gesture (2 reads)** — i.e. the ~112-126 ms run-2 residual was
+not style/layout: it was this round trip, now named. The read COUNT is unchanged and still
+refutes A-4's cheapest variant ("a doc-nav disclosure that performs no store read at all"):
+**the disclosure performs 1 whole-store read (6 102 nodes / 9 266 edges across IPC); the
+document open performs it twice.**
 
-**H4 — HARNESS (`--o0-out` served-bundle comparison; fixed).** `o0BundleIdentity`
-compared `text.length` (UTF-16 code units of the decoded served file) against the
-on-disk **byte** count; the 660 kB renderer holds ~1.2 kB of multi-byte characters, so a
-byte-identical served bundle was reported `verified:false` (F2) for a harness reason.
-Fixed to `Buffer.byteLength(text, 'utf8')` (hash unchanged); `verified` is now true in
-both legs. Also required: `Page.enable` before `Page.getResourceContent` (the CDP call
-otherwise fails `Agent is not enabled`), now issued once at connect.
+### 9.2 (b) Separable stage shares (both gestures)
 
-**H5 — HARNESS (ablation selector; fixed).** The ablation reached the stage cell with
-`document.querySelector('#zone:main')` — an **invalid CSS selector** (an unquoted id
-cannot carry `:`) → `SyntaxError` → the whole `o0_track_ablation` block FAILED. Fixed to
-`getElementById` (the recorded selector string is unchanged).
+| leg/run | window `longTaskTotalMs` | Σ named stages | JS path (`traversal.build`+`envelope.assemble`+`shared.decorate`+`reconcile.roots`+`reconcile.apply`) | render emits (`render.dom`+`render.ssr`) | DERIVED `post.style` residual |
+| --- | --- | --- | --- | --- | --- |
+| GPU-OFF folder-row | 990 | 1087.5 | 863.8 ms (87.25 %) | 135.9 ms (13.73 %) | **not separable** (computed residual would be -97.5 ms < 0) |
+| GPU-ON folder-row | 1032 | 1126.5 | 902.8 ms (87.48 %) | 138 ms (13.37 %) | **not separable** (-94.5 ms) |
+| GPU-OFF document-row | 2222 | 4107 | 2105.5 ms (94.76 %) | 1816.5 ms (81.75 %) | **not separable** (-1885 ms) |
+| GPU-ON document-row | 2213 | 4127.1 | 2090.4 ms (94.46 %) | 1860.4 ms (84.07 %) | **not separable** (-1914.1 ms) |
 
-**H6 — HARNESS (folder-path selector escaping; fixed).** `[data-folder-path="<v>"]` was
-built by naive interpolation; a corpus whose rendered path contains a quote (the importer
-renders such a path as `[".live-corpus"]`) produced an invalid selector and killed every
-O-0 block with a `SyntaxError`. Fixed by a CSS-attribute escaping helper
-(`o0AttrSelector`). Note the recorded `folderPath` for this run is `["archive"]` — quotes
-included — so the escaping is exercised live, and the recorded `target` is a real
-resolving selector.
+**The emit-vs-style/layout split is now PARTIALLY separable (RUL-1 delivered).** The two render
+emits have real seams and carry 13.73 % of the folder window and 81.75 % of
+the document window; `render.ssr` is the second-largest identified stage on the document gesture
+(1742.5 ms vs `reconcile.apply` 2085.1 ms).
+`post.style` remains **`derived` and NOT separable in this run**: the residual
+(`longTaskTotalMs − Σ named stages`) is NEGATIVE on every row because the per-stage sums cover
+**more work than the long-task window contains**, so no bounded residual exists to label as
+style/layout/paint. **`post.style` is never a measurement here and must not be quoted as a
+style cost** (§4.3/§6 S14/RUL-5-L12).
 
-**H7 — FINDING (spec §3.4's corpus source is unreachable on this host).** The spec
-requires the operator corpus "only as a persisted store" reached by `--connect`. That
-store was destroyed with `/tmp`; `seedCorpus` writes two files. The run above therefore
-reconstructed the pinned **size** (226 documents) from a deterministic corpus via a
-spawned app + an operator registry file. The census is the pinned one; the **document
-bytes** are synthetic (≈1.1 MB total), so the absolute ms values are corpus-representative
-**in structure, not in byte size**. This is recorded, not softened.
+### 9.3 (c)/(d) GPU delta and track-ablation delta
 
-**H8 — FINDING (the GPU-off numbers are not the operator's numbers).** The GPU-off leg's
-long tasks (110 ms / 192 ms) are far below the motivating live evidence (505 ms / two
-439 ms tasks, `docs/defects.md:22`) while the identical gesture under GPU-ON reproduces
-that order (2283 ms / 2611 ms). The GPU-off leg ran with `--disable-gpu` on a headless
-Xwayland session, where paint/composite work does not land on the renderer main thread as
-a long task. **Both legs are recorded** (§3.5/§6 S6) and neither is silently preferred.
+See §6.1/§6.2: GPU Δ (ON − OFF) **42 ms** folder / **-9 ms** document (no separable effect; mutation counts identical: 37 vs 37 and 11 758 vs 11 758);
+track ablation Δ (ON − OFF) **0 ms long-task total, Δmutations 0, ΔwallMs 1.6 ms** (not shown to be load-bearing at this scale).
 
-## 10. Answers to the O-0 questions (with the numbers)
+### 9.4 (e) Is the derivation WALK load-bearing? (the O-4 trigger)
 
-**(a) How much of the long task is the whole-store `IPC_RAG_SNAPSHOT` pull + serialization
-(`snapshot.pull`/`snapshot.clone`)?** **Not measured** — both stages are `unseparated`
-(§7/H2/H3). The A-4 discriminator's read count is `0` **by non-measurement**, not by
-observation; the spec's claim that a folder disclosure still performs a whole-store read
-is neither confirmed nor refuted by this surface. What **is** measured: the whole
-re-derive+reconcile path the disclosure triggers runs `traversal.build` 1766.5 ms
-(GPU-on, window total 2283 ms) for a gesture that changes only client-side presentation state.
+**For the disclosure gesture: YES — `traversal.build` alone is 684.2 ms of the 990 ms window (69.11 %, GPU-OFF) and 715.6 ms of 1032 (69.34 %, GPU-ON) — the largest identified stage of that gesture.**
 
-**(b) Derivation/assembly/decorate/reconcile vs DOM/SSR emit vs post-render
-style/layout/paint.** Measured (GPU-on, folder-row): derivation+assembly+decorate+
-reconcile = **2052.8 ms** of a **2283 ms** window: `traversal.build` **1766.5 ms (77.4%)**, `envelope.assemble` 0.7, `shared.decorate` 23.3, `reconcile.roots` 20.7, `reconcile.apply` 241.6 → **residual (unseparated: `render.dom`+`render.ssr`+`post.style`) ≈ 230.2 ms (10.1%)**. Document-row (GPU-on): derivation path totals **2395.3 ms** of **2611 ms** with `reconcile.apply` **2358.5 ms (90.3%)** and the residual ≈ 215.7 ms. **The DOM/SSR emit vs style/layout/paint split is NOT separable** (`render.dom`, `render.ssr`, `post.style` are all unseparated) — the spec's asserted "the dominant cost is DOM style/layout/paint" (defects.md:36/:46) is **not reproduced**: of the separable work, the JS derivation/reconcile path accounts for ~90% of the measured window.
+**For the document gesture: NO — the load sits in `reconcile.apply` (2085.1 ms of 2222 = 93.84 %, GPU-OFF; 2075.6 of 2213 = 93.79 %, GPU-ON) and, secondarily, in the SSR mirror emit (`render.ssr` 1742.5 / 1784.3 ms); `traversal.build` is only 14.7 / 10.9 ms there.**
 
-**(c) GPU-off vs GPU-on delta.** folder-row **110 ms → 2283 ms (+2173 ms)**;
-document-row **192 ms → 2611 ms (+2419 ms)** — with **identical JS**
-(mutations 37/18058 in both legs; hook stages within ~5%). The GPU flag changes the
-*measured* cost by ~20× without changing the *work*.
+So the walk is load-bearing **per gesture, not per app**: the folder disclosure walks the shared
+graph (the O-4 trigger's target); the document open is dominated by the reconcile apply + SSR
+emit of the document body. **What remains structural:** `snapshot.clone` (the main-side handler
+share AND the out-of-host IPC clone) is unmeasured, so the round trip's inside/outside split is
+not offered, and because it is unmeasured the DERIVED `post.style` residual is uncomputable on
+every row — the residual absorbs the un-instrumented work and is therefore not attributable to
+style or layout. The trigger reads the walk's share as a LOWER BOUND (the measured `hook` span),
+never as the whole freeze.
 
-**(d) The `display:block` track ablation delta.** Long-task total **0 ms → 0 ms (Δ 0 ms)**,
-DOM mutations **222 → 0 (Δ -222)**, wall **124.4 ms → 112.3 ms**. The ablation is
-**available** and **reverted**; with both freezes below the 50 ms long-task threshold the
-Δ long-task total is **0** — the measurable effect in this run is on mutations only.
+### 9.5 The two-re-derive finding on the document gesture (recorded, not softened)
 
-**(e) Is the derivation WALK (`traversal.build`) load-bearing? (the O-4 trigger (c))**
-**In this corpus, yes for the folder-row disclosure and no for the document open.**
-folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single largest identified stage, with the *same*
-1868.7-ms magnitude under GPU-off. document-row: `traversal.build` **32.7 ms** of 2611 ms (1.3%), where `reconcile.apply` (**2358.5 ms, 90.3%**) dominates. **Subject to H3's window caveat**, the walk is load-bearing for the disclosure path (trigger (c) fires there) and is *not* the lever for the document-open path (O-4's worker/engine route would not touch the `reconcile.apply` cost).
+`o0-document-row` records **two complete re-derive passes** inside its arm window
+(`2` `snapshot.pull` records, two sets of `docheads.pull`/`traversal.build`/`shared.decorate`/
+`envelope.assemble`/`reconcile.roots`/`render.dom`/`render.ssr`/`reconcile.apply`), and the
+heaviest of them (`render.ssr` 1742.5 ms summed, `reconcile.apply` 2085.1 ms) sits INSIDE the 2 124 ms long task. That is why Σ > window on this
+row (run 2 could not see it: ids 9/10 had no seam, so run 2's document-row Σ stayed *below* its
+window). **Consequence recorded honestly: the window-bound oracle still holds per STAGE
+(§9-no-violation in §9.6), but the row's Σ is not a partition of its window** — the residual is
+negative and `post.style` cannot be separated. This is a harness/measurement-shape fact, not an
+imputed number, and it is the reason the reconciliation stays `openStructural`.
 
-## 11. Raw emitted JSON (verbatim — no number above is unverifiable)
+---
 
-### 11.1 `/tmp/o0-gpuoff.json` (GPU-off leg, 4 runs)
+## 10. Window-bound check (§4.3 / §5 `P-TP-3` / §6 F13a)
+
+`deriveO0WindowBound(run)` was re-run against both embedded reports with **NO options**, so it
+reads the row-recorded band `hook.toleranceMs` (§3.2.1) — the same band the verdict and the
+validator use (`src/shared/o0-report.ts`, `O0_WINDOW_TOLERANCE_MS = 40`).
+
+| run | recorded band | arm window | freeze window | arm−freeze t0 / t1 (ms) | `violated` | largest-stage verdict `%` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `o0-folder-row-gpuoff-r1` | 40 ms | `{t0 8549.600000023842, t1 9610.200000017881} (ms 1060.6)` | `{t0 8548.90000000596, t1 9610} (ms 1061.1)` | 0.7 / 0.2 | **false** | traversal.build — 69.11 % |
+| `o0-document-row-gpuoff-r1` | 40 ms | `{t0 9864.700000017881, t1 12217} (ms 2352.3)` | `{t0 9864.300000011921, t1 12216.90000000596} (ms 2352.6)` | 0.4 / 0.1 | **false** | reconcile.apply — 93.84 % |
+| `o0-fold-ablation-off` | 40 ms | `{t0 12623, t1 12703.200000017881} (ms 80.2)` | `{t0 12622.40000000596, t1 12703.100000023842} (ms 80.7)` | 0.6 / 0.1 | **false** | snapshot.pull — no percentage (zero window) |
+| `o0-fold-ablation-on` | 40 ms | `{t0 13107.40000000596, t1 13189.40000000596} (ms 82)` | `{t0 13107, t1 13189.300000011921} (ms 82.3)` | 0.4 / 0.1 | **false** | snapshot.pull — no percentage (zero window) |
+| `o0-folder-row-gpuon-r1` | 40 ms | `{t0 8693.09999999404, t1 9787.899999976158} (ms 1094.8)` | `{t0 8692.299999982119, t1 9787.699999988079} (ms 1095.4)` | 0.8 / 0.2 | **false** | traversal.build — 69.34 % |
+| `o0-document-row-gpuon-r1` | 40 ms | `{t0 10042, t1 12364.399999976158} (ms 2322.4)` | `{t0 10041.5, t1 12364.299999982119} (ms 2322.8)` | 0.5 / 0.1 | **false** | reconcile.apply — 93.79 % |
+
+**Result: NO row violates the window bound.** The largest arm-window overshoot of the freeze
+window is **0.8 ms** and the largest shortfall **0.6 ms** (band 40 ms) — the arming interval
+equals the freeze window within ~1 ms on all six rows, and every separated stage satisfies
+`ms ≤ longTaskTotalMs + tol` (the largest single stage is `reconcile.apply` at 2 085.1 ms of a
+2 222 ms window = 93.84 % ≤ 100 %). **No percentage is emitted on a violated row** (none is
+violated) and no verdict string in either leg contains `null %` — the two zero-window ablation
+rows print the RUL-5/L8 form ("no percentage is computed: the long-task window is zero")
+instead. Run 2's window-bound result (`violated: false` on all six rows, 0.8 ms worst
+overshoot) therefore **does not regress** — the spec's §12.12 "What the second run PROVED"
+item records it as CLOSED (and must not regress).
+
+---
+
+## 11. Comparison to runs 1-2
+
+1. **The round trip is now named (the biggest movement).** `snapshot.pull` 0.0-0.2 ms (run 2,
+   sync-only seam) → 85.9/83.6 ms folder and 179.2/172.2 ms document (run 3, awaited span); run 2's 112-126 ms residual was this cost, and the residual collapsed accordingly (RUL-2).
+2. **The two render emits are measured instead of "no seam exists".** `render.dom`
+   `null`/structural → 59.8-74 ms; `render.ssr` `null`/structural → 76.1-1742.5 ms, `source: "hook"` on every row (RUL-1). The unseparated set fell from **4 ids** (run 2) to **2** — `snapshot.clone` (structural, RUL-3) plus the `derived` `post.style`.
+3. **The report status is derived honestly instead of schema-rejected.** Run 2:
+   `selfValidation.ok:false`, 24 (GPU-OFF) / 12 (GPU-ON) errors for structural-only content,
+   `status` absent, `env.engine:"ready"` on an engine-absent host, `(null %)` on the two
+   zero-window rows. Run 3: **`ok:true`, `errors: []`, `status:"OPEN-structural"` both legs,
+   `env.engine:"absent"` with the `fetch failed` evidence, zero `null %` strings** (RUL-4/RUL-5).
+4. **The absolute numbers moved because the harness changed, not because the app did.** Run 1's
+   `traversal.build` 1868.7 ms in a 110 ms window and run 2's `traversal.build` 694.5 ms /
+   `reconcile.apply` 2051.5 ms are the same gestures on the same 226-document size with
+   different instrumentation and different corpora bytes; **none of the three runs is
+   cross-comparable** (RUL-5/L9/L10) — the only cross-run facts this artifact asserts are
+   shapes (which ids are measured), the read COUNT (1 vs 2, all three runs) and the window-bound
+   result.
+
+---
+
+## 12. Findings
+
+### 12.1 Structural (recorded, non-gating — the reason the status is `OPEN-structural`)
+
+| # | item | state | evidence |
+| --- | --- | --- | --- |
+| **L3s** | `snapshot.clone` — no main-side transport AND the IPC structured clone is outside every host-side wrap | **STRUCTURAL, by construction** (RUL-3) | the main instance IS armed (`ASTROGRAPHER_O0_MAIN_ARM=1`) and wraps the `IPC_RAG_SNAPSHOT` handler, but `driver.mainSeamArmed: false`, `driver.mainTransport.channel: null`, `mainRecordsTransport: "none — …"` and no `instance:"main"` entry exists in any `hook.stageRecords`; the row carries the two-part reason verbatim (§4.3) |
+| **L12s** | `post.style` — the residual is a DERIVED remainder | **`derived` in every row/table/verdict** (RUL-5/L12) | `stages[post.style] = {ms:null, unseparated:true, source:"derived", structural:false, structuralReason:null}` and `reconciliation.openStructural: true` with `residual < 0` on every row |
+
+### 12.2 Harness (fixed in this pass, recorded)
+
+| # | item | outcome |
+| --- | --- | --- |
+| **L1b** | `env.engine` probe: a tool-level error surfaced as a plain STRING ("fetch failed") was misclassified as an UNSUPPORTED payload, minting a forcing reason and pushing an otherwise OPEN-structural report to `status:"FAIL"` | **FIXED** in `scripts/live-drive.mjs` (`o0Census`'s `errorOf` also treats a non-empty string as error evidence). Spec basis: §6 S4 ("engine-absence is NOT a forcing condition") + S21/F22 ("a run whose engine state cannot be derived at all records `absent` **with the evidence string**"). Both legs now record `engine:"absent"`, `driver.engineError: null`, `gatingReasons: []`. The first GPU-OFF invocation's FAIL is **superseded** by the identical re-run, not hidden |
+
+### 12.3 Measurement-shape (recorded, not softened)
+
+| # | item | evidence |
+| --- | --- | --- |
+| **M1** | **Σ named stages EXCEEDS the long-task window on the gesture rows** (folder 1 087.5 vs 990 ms; document 4 107 vs 2 222 ms), so the DERIVED residual is negative and `post.style` cannot be separated | `reconciliation.sumMs`/`residual` per row (§4.1); the per-record detail shows the document gesture's **two** re-derive passes (§9.5) and the folder gesture's pre-long-task round trip. Per-stage window bounds still hold; **no value was imputed** |
+| **M2** | `hook.armCount`/`disarmCount` are **session-cumulative** (1/0, 2/1, 3/2, 4/3 across the GPU-OFF rows) because the recorder is a page-global singleton that is never reset between blocks | `hook.armCount - hook.disarmCount` = 1 (armed) in every row; each row's `armWindow` IS per-row and in-band, so the window-bound oracle is unaffected — recorded so the counts are not misread as a per-row count |
+| **M3** | The long-task total is a **sum of `duration`s** of long tasks starting inside the freeze window (a `start`-filtered list), so work between/outside long tasks is not in the primary oracle | `longTasks[]` + the per-row `longTaskTotalMs` (§5.1); this is the §4.3 primary oracle as specified, and it is why M1 is possible |
+
+### 12.4 What did NOT regress (run-2 closures that hold here)
+
+Window bound on all six rows (§10); bundle verified in both legs (§2); both gestures `path:"cdp"`/
+`realInput:true` (§5.1); stage-id **SET equal (11 ids)** with `ms` free (`hookInertness.setEqual:true`,
+§5.2); census 226 reached (no mismatch reason); `driver.hookInertness` non-empty in BOTH legs with
+the controlled pair; the GPU-ON leg ran **`o0_repeat_determinism`** as well as `o0_gpu_control`, so
+the inertness comparison exists in both legs and the GPU pairing is non-vacuous.
+
+### 12.5 The trio (recorded, not claimed)
+
+`npm run build` clean (the exact 678 270 B / 2 419 392 B bundles both legs verified).
+`npm run typecheck` clean (exit 0). `npm test` = **8 failed files / 206 passed (214)**,
+**25 failed tests / 4 820 passed / 58 skipped (4 903)**. Split as required: **O-0 is GREEN** —
+`tests/unit-o-0-driver-contract.test.ts` 23 + `tests/unit-o-0-report-contract.test.ts` **44** +
+`tests/unit-o-0-hook-contract.test.ts` **39** = **106 passed / 106** (run 2 recorded 95: 23/37/35,
+so the RUL-1..RUL-6 re-pin landed +11 rows and no O-0 row fails). The remaining failures are the
+**pre-existing non-O-0 toolchain-bump set** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`, wave-1 bridge
+wiring and siblings); this pass observed **25** against run 2's **22** — the drift is in that
+non-O-0 set and is reported, not attributed to O-0. **RCA-12 reminder: a trio green is
+envelope-green, not app-green — and every number in this artifact comes from the APP.**
+
+---
+
+## 13. Raw emitted JSON (both legs, verbatim)
+
+### 13.1 GPU-OFF leg — `/tmp/o0c-gpuoff.json`
 
 ```json
 {
   "artifact": "o-0-per-stage-breakdown",
   "spec": "docs/specs/unit-o-0-per-stage-measurement.md",
   "unit": "O-0",
-  "date": "2026-09-17",
+  "date": "2026-09-21",
   "layer": "assembled-renderer (RCA-12)",
   "commands": [
-    "node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 --o0-out=/tmp/o0-gpuoff.json --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism"
+    "node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 --o0-out=/tmp/o0c-gpuoff.json --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism"
   ],
   "pinnedCommands": [
     "npm run build",
@@ -383,13 +498,13 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
   ],
   "driver": {
     "build": {
-      "renderer": "1789680723588+675765+10d4bd9b",
-      "main": "1789680723530+2395838+366b2663",
-      "served": "675765+10d4bd9b",
+      "renderer": "1789952537561+678270+a25b03a9",
+      "main": "1789952537438+2419392+955790a9",
+      "served": "678270+a25b03a9",
       "servedUrl": "file:///media/ryanr/Shared%20Files/Projects/Astrographer/dist/renderer/renderer.js",
       "disk": {
-        "rendererBytes": 675765,
-        "rendererHash": "10d4bd9b"
+        "rendererBytes": 678270,
+        "rendererHash": "a25b03a9"
       },
       "verified": true
     },
@@ -400,7 +515,7 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "--corpus-root=/tmp/o0-corpus-226",
       "--strict-seed",
       "--o0-corpus=226",
-      "--o0-out=/tmp/o0-gpuoff.json",
+      "--o0-out=/tmp/o0c-gpuoff.json",
       "--block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism"
     ],
     "runMode": "spawn",
@@ -416,6 +531,16 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
     "crossArtifactControlPairs": [
       "gpu-off"
     ],
+    "gpuDeltas": [
+      {
+        "gesture": "folder-row+document-row",
+        "delta": "+2173 / +2419",
+        "provenanceRun": "the 2026-09-17 first run (226 docs / 10 170 nodes / 18 758 edges)",
+        "carriedFromAnotherRun": false,
+        "contradictedBy": "the 2026-09-21 second run measured −36 / −23 ms on an identical mutation count (both legs)",
+        "label": "PROVENANCE ONLY — the first run's GPU delta is contradicted by a later run and is NOT a finding any unit may rest on (§2.4/RUL-5-L9/S20); the node/edge counts belong to that run's corpus, never to a threshold"
+      }
+    ],
     "hookInertness": [
       {
         "baselineRun": "o0-repeat-a-unarmed",
@@ -425,37 +550,207 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "deltaMutations": 0,
         "deltaLongTaskMs": 0,
         "toleranceMs": 40,
-        "inert": true
+        "inert": true,
+        "controlledPair": true,
+        "stateReset": {
+          "baseline": {
+            "collapsed": true,
+            "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+          },
+          "armed": {
+            "collapsed": true,
+            "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+          }
+        },
+        "mutations": {
+          "unarmed": 37,
+          "armed": 37
+        },
+        "longTaskTotalMs": {
+          "unarmed": 0,
+          "armed": 0
+        },
+        "nonVacuousHalves": {
+          "mutations": true,
+          "longTaskTotalMs": false
+        },
+        "carriedBy": [
+          "mutations"
+        ],
+        "vacuousHalves": [
+          "longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)"
+        ],
+        "nonVacuous": false,
+        "mutationHalfProof": true,
+        "proofStatement": "the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 37 mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed"
       }
     ],
+    "hookInertnessProof": [
+      {
+        "pair": "o0-repeat-a-unarmed / o0-repeat-b-armed",
+        "carriedBy": [
+          "mutations"
+        ],
+        "vacuousHalves": [
+          "longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)"
+        ],
+        "nonVacuousHalves": {
+          "mutations": true,
+          "longTaskTotalMs": false
+        },
+        "statement": "the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 37 mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed"
+      }
+    ],
+    "mainSeamArmed": false,
+    "mainSeamRecords": 0,
+    "mainTransport": {
+      "channel": null,
+      "note": "RUL-3 — the MAIN instance IS armed in spawn mode (ASTROGRAPHER_O0_MAIN_ARM=1) and its handler wrap records `snapshot.clone`, but no channel carries those records into the renderer/report, and Electron's structured clone of the handler return value runs inside the IPC internals after the handler returns (outside every host-side wrap): the stage is structurally unseparated with this exact reason, never an imputed number"
+    },
+    "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+    "engineEvidence": {
+      "probe": "gnosis.status (MCP) → the engine HealthReport",
+      "calledAt": "2026-09-21",
+      "resolved": true,
+      "error": "fetch failed",
+      "healthState": null,
+      "keys": null,
+      "derived": "absent",
+      "positiveSignal": false,
+      "rule": "ready IFF the call resolved with a HealthReport whose state ∈ {Ready, Starting, Degraded} (a POSITIVE engine signal); absent otherwise — \"the MCP call resolved\" is NOT evidence (§4.3/S21/RUL-5)",
+      "contradiction": null,
+      "observed": "an error payload from the status call (fetch failed)"
+    },
+    "engineError": null,
     "display": ":0",
     "failReasons": [
-      "run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)",
-      "run o0-document-row-gpuoff-r1: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)",
-      "run o0-fold-ablation-off: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)",
-      "run o0-fold-ablation-on: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)"
+      "run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-off: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-off: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-on: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-on: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+    ],
+    "gatingReasons": [],
+    "openStructuralReasons": [
+      "run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-off: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-off: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-on: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-on: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
     ],
     "notes": [
-      "o0_folder_row: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style] — emitted ms:null + unseparated (never imputed, §6 F4)",
-      "o0_document_row: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]"
+      "run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-off: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-off: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-on: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-on: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "o0_folder_row: unseparated stages [snapshot.clone, post.style] — emitted ms:null + unseparated (never imputed, §6 F4)",
+      "o0_document_row: unseparated stages [snapshot.clone, post.style]"
+    ],
+    "structuralStages": [
+      "o0-folder-row-gpuoff-r1:snapshot.clone",
+      "o0-document-row-gpuoff-r1:snapshot.clone",
+      "o0-fold-ablation-off:snapshot.clone",
+      "o0-fold-ablation-on:snapshot.clone"
+    ],
+    "openStructural": true,
+    "selfValidation": {
+      "ok": true,
+      "attempts": 4,
+      "runIds": [
+        "o0-folder-row-gpuoff-r1",
+        "o0-document-row-gpuoff-r1",
+        "o0-fold-ablation-off",
+        "o0-fold-ablation-on"
+      ],
+      "errors": [],
+      "status": "OPEN-structural",
+      "structuralErrors": 0,
+      "structuralFacts": 4,
+      "moduleGating": [],
+      "rowResults": [
+        {
+          "id": "o0-folder-row-gpuoff-r1",
+          "ok": true,
+          "errors": []
+        },
+        {
+          "id": "o0-document-row-gpuoff-r1",
+          "ok": true,
+          "errors": []
+        },
+        {
+          "id": "o0-fold-ablation-off",
+          "ok": true,
+          "errors": []
+        },
+        {
+          "id": "o0-fold-ablation-on",
+          "ok": true,
+          "errors": []
+        }
+      ],
+      "gatingReasons": [],
+      "note": "RUL-4/F17c — the structural family is recorded, never counted as a self-validation ERROR: a structurally-open report is ok:true/empty errors with status \"OPEN-structural\""
+    },
+    "status": "OPEN-structural",
+    "pass": false,
+    "statusStatement": "OPEN-structural — 8 structurally-unmeasurable stage(s) (no seam in the executing bundle) and 4 DERIVED-residual record(s): the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed (§3.6b RUL-4, §6 S14/S19)",
+    "structuralReasons": [
+      "run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuoff-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-off: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-off: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-fold-ablation-on: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-fold-ablation-on: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "runs[0]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[1]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[2]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[3]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[0]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "runs[1]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "runs[2]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "runs[3]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "run o0-folder-row-gpuoff-r1: post.style residual null ms (Σ named stages 1087.4999999999998 of 990 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)",
+      "run o0-document-row-gpuoff-r1: post.style residual null ms (Σ named stages 4107 of 2222 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)",
+      "run o0-fold-ablation-off: post.style residual null ms (Σ named stages 41.199999999999996 of 0 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)",
+      "run o0-fold-ablation-on: post.style residual null ms (Σ named stages 42.800000000000004 of 0 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)"
     ]
   },
   "tolerance": {
     "reconcileMs": 50,
-    "source": "measured 2026-09-17"
+    "source": "measured 2026-09-21"
   },
   "corpus": {
     "source": "--o0-corpus",
     "claimedDocuments": 226,
     "documents": 226,
-    "nodes": 10170,
-    "edges": 18758,
-    "seed": "o0-2026-09-17"
+    "nodes": 6102,
+    "edges": 9266,
+    "seed": "o0-2026-09-17",
+    "gate": "documents",
+    "provenanceOnly": [
+      "nodes",
+      "edges",
+      "bytes"
+    ],
+    "note": "the corpus SIZE is the GATE (documents === the claimed census, §3.4/§6 F8) and it is the ONLY pin; nodes/edges/bytes are RECORDED PROVENANCE about the corpus source actually used, NOT a pin and NOT a cross-run comparable claim — a same-size corpus with different bytes yields different absolute ms values (the two runs so far read 10 170/18 758 and 6 102/9 266 nodes/edges at 226 documents, both legal), so (a) no byte-reproducibility may be claimed, (b) no cross-run absolute ms comparison is a measurement, and (c) the node-ceiling input for the parked trigger (b) must be read from THIS run's corpus row with the byte-size gap named (§3.4/§4.3/RUL-5/L10, §10 item 2)"
   },
   "env": {
     "mode": "lexical",
     "gpu": false,
-    "engine": "ready",
+    "engine": "absent",
     "display": ":0",
     "paneFrames": 2
   },
@@ -482,89 +777,115 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "documentId": null,
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-183846",
+      "hit": "preempt-node-node-85762",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 85.9,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 1.9,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 1868.7,
+          "ms": 684.2,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
-          "ms": 0.6,
+          "ms": 0.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 23.9,
+          "ms": 13.1,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
-          "ms": 21.8,
+          "ms": 15.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 242.8,
+          "ms": 150.9,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 59.8,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 76.1,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [
         {
-          "start": 22195.39999999851,
-          "duration": 110
+          "start": 8554.800000011921,
+          "duration": 62
+        },
+        {
+          "start": 8648.600000023842,
+          "duration": 928
         }
       ],
-      "longTaskTotalMs": 110,
+      "longTaskTotalMs": 990,
       "mutations": 37,
-      "wallMs": 211.4,
-      "t0": 22186.39999999851,
-      "t1": 22397.800000000745,
+      "wallMs": 1061.1,
+      "t0": 8548.90000000596,
+      "t1": 9610,
       "quiesce": {
-        "frames": 3,
+        "frames": 4,
         "quiesced": true,
         "timedOut": false,
         "timeoutMs": 4000
@@ -577,22 +898,143 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680723588+675765+10d4bd9b",
-        "main": "1789680723530+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952537561+678270+a25b03a9",
+        "main": "1789952537438+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 8549.600000023842,
+          "t1": 9610.200000017881,
+          "ms": 1060.6
+        },
+        "freezeWindow": {
+          "t0": 8548.90000000596,
+          "t1": 9610
+        },
+        "toleranceMs": 40,
+        "armCount": 1,
+        "disarmCount": 0,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 31.4
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 28.5
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 85.9
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 1.9
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 684.2
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 13.1
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 15.3
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 28.4
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 47.6
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 150.9
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 5,
+        "records": 11,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -600,32 +1042,43 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-183846"
+        "hitAtDispatch": "preempt-node-node-85762"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": -2047.8,
-        "sumMs": 2157.8,
+        "residual": -97.5,
+        "sumMs": 1087.5,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -97.5,
+        "unseparated": true
       },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true,
       "folderRowCensus": {
         "enumerated": 3,
         "rows": [
@@ -660,94 +1113,120 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "id": "o0-document-row-gpuoff-r1",
       "block": "o0_document_row",
       "gesture": "document-row",
-      "target": "#pane-doc-nav [data-document-id=\"archive/operator-doc-201\"]",
+      "target": "#pane-doc-nav [data-document-id=\"archive/archive-001\"]",
       "folderPath": null,
-      "documentId": "archive/operator-doc-201",
+      "documentId": "archive/archive-001",
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-365604",
+      "hit": "preempt-node-node-168080",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 179.2,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 5.8,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 14.1,
+          "ms": 14.7,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
-          "ms": 0.2,
+          "ms": 0.5,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 1,
+          "ms": 1.2,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
-          "ms": 1.3,
+          "ms": 4,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 2387.3,
+          "ms": 2085.1,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 74,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 1742.5,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [
         {
-          "start": 24981.699999999255,
-          "duration": 192
+          "start": 9868.300000011921,
+          "duration": 98
+        },
+        {
+          "start": 9996.200000017881,
+          "duration": 2124
         }
       ],
-      "longTaskTotalMs": 192,
-      "mutations": 18058,
-      "wallMs": 288.8,
-      "t0": 24977,
-      "t1": 25265.800000000745,
+      "longTaskTotalMs": 2222,
+      "mutations": 11758,
+      "wallMs": 2352.6,
+      "t0": 9864.300000011921,
+      "t1": 12216.90000000596,
       "quiesce": {
-        "frames": 3,
+        "frames": 11,
         "quiesced": true,
         "timedOut": false,
         "timeoutMs": 4000
@@ -760,22 +1239,242 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680723588+675765+10d4bd9b",
-        "main": "1789680723530+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952537561+678270+a25b03a9",
+        "main": "1789952537438+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 9864.700000017881,
+          "t1": 12217,
+          "ms": 2352.3
+        },
+        "freezeWindow": {
+          "t0": 9864.300000011921,
+          "t1": 12216.90000000596
+        },
+        "toleranceMs": 40,
+        "armCount": 2,
+        "disarmCount": 1,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 26.8
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 23.1
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 23.4
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 23
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 119.4
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 3.7
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 8.9
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 0.8
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 3.9
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 23.6
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 1696.2
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 2084.6
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 59.8
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2.1
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 5.8
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 0.4
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 0.1
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 0.5
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 5,
+        "records": 22,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -783,32 +1482,43 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-365604"
+        "hitAtDispatch": "preempt-node-node-168080"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": -2211.9,
-        "sumMs": 2403.9,
+        "residual": -1885,
+        "sumMs": 4107,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
-      }
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -1885,
+        "unseparated": true
+      },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true
     },
     {
       "id": "o0-fold-ablation-off",
@@ -819,84 +1529,106 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "documentId": null,
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-384500",
+      "hit": "preempt-node-node-181091",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 27.8,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 2,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 16.7,
+          "ms": 5.4,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
-          "ms": 0.2,
+          "ms": 0.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 1.4,
+          "ms": 2.9,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
           "ms": 0.1,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 5.5,
+          "ms": 1.5,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 0.8,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 0.4,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [],
       "longTaskTotalMs": 0,
-      "mutations": 222,
-      "wallMs": 124.4,
-      "t0": 28187.5,
-      "t1": 28311.89999999851,
+      "mutations": 37,
+      "wallMs": 80.7,
+      "t0": 12622.40000000596,
+      "t1": 12703.100000023842,
       "quiesce": {
-        "frames": 3,
+        "frames": 7,
         "quiesced": true,
         "timedOut": false,
         "timeoutMs": 4000
@@ -909,22 +1641,143 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680723588+675765+10d4bd9b",
-        "main": "1789680723530+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952537561+678270+a25b03a9",
+        "main": "1789952537438+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 12623,
+          "t1": 12703.200000017881,
+          "ms": 80.2
+        },
+        "freezeWindow": {
+          "t0": 12622.40000000596,
+          "t1": 12703.100000023842
+        },
+        "toleranceMs": 40,
+        "armCount": 3,
+        "disarmCount": 2,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 27.8
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 5.4
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 2.9
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 0.1
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.5
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0.4
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 1.5
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 5,
+        "records": 11,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -932,32 +1785,43 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-384500"
+        "hitAtDispatch": "preempt-node-node-181091"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": -23.9,
-        "sumMs": 23.9,
+        "residual": -41.2,
+        "sumMs": 41.2,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -41.2,
+        "unseparated": true
       },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true,
       "trackAblationEvidence": {
         "available": true,
         "selector": "#zone:main",
@@ -966,7 +1830,11 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "rootDisplay": "grid",
         "previous": "",
         "detail": "the stage cell is a grid item of #wiki-root",
-        "mutation": null
+        "mutation": null,
+        "disclosureReset": {
+          "collapsed": true,
+          "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+        }
       }
     },
     {
@@ -978,84 +1846,106 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "documentId": null,
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-386333",
+      "hit": "preempt-node-node-181943",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 29,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 2,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 14.1,
+          "ms": 5.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
           "ms": 0.2,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 0.7,
+          "ms": 0.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
           "ms": 0.1,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 1.4,
+          "ms": 4.6,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 0.7,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 0.6,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [],
       "longTaskTotalMs": 0,
-      "mutations": 0,
-      "wallMs": 112.3,
-      "t0": 28806.5,
-      "t1": 28918.800000000745,
+      "mutations": 37,
+      "wallMs": 82.3,
+      "t0": 13107,
+      "t1": 13189.300000011921,
       "quiesce": {
-        "frames": 3,
+        "frames": 4,
         "quiesced": true,
         "timedOut": false,
         "timeoutMs": 4000
@@ -1068,22 +1958,143 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680723588+675765+10d4bd9b",
-        "main": "1789680723530+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952537561+678270+a25b03a9",
+        "main": "1789952537438+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 13107.40000000596,
+          "t1": 13189.40000000596,
+          "ms": 82
+        },
+        "freezeWindow": {
+          "t0": 13107,
+          "t1": 13189.300000011921
+        },
+        "toleranceMs": 40,
+        "armCount": 4,
+        "disarmCount": 3,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0.1
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 29
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 5.3
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 0.1
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.4
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0.5
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 4.6
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 5,
+        "records": 11,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -1091,32 +2102,43 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-386333"
+        "hitAtDispatch": "preempt-node-node-181943"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": -16.5,
-        "sumMs": 16.5,
+        "residual": -42.8,
+        "sumMs": 42.8,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -42.8,
+        "unseparated": true
       },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true,
       "trackAblationEvidence": {
         "available": true,
         "selector": "#zone:main",
@@ -1126,11 +2148,15 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "previous": "",
         "detail": "the stage cell is a grid item of #wiki-root",
         "mutation": "#zone:main (the stage grid cell of #wiki-root): display:block (removes the #wiki-root grid-track sizing from the measurement path)",
-        "reverted": true
+        "reverted": true,
+        "disclosureReset": {
+          "collapsed": true,
+          "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+        }
       },
       "trackAblationDelta": {
         "longTaskTotalMs": 0,
-        "mutations": -222,
+        "mutations": 0,
         "baselineRun": "o0-fold-ablation-off"
       }
     }
@@ -1169,39 +2195,51 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
     }
   ],
   "verdicts": [
-    "stage traversal.build is 1868.7 ms of the 110 ms long task (1698.82%) on folder-row — traversal.build is the largest identified stage",
-    "the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-folder-row-gpuoff-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-folder-row-gpuoff-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]",
-    "stage reconcile.apply is 2387.3 ms of the 192 ms long task (1243.39%) on document-row — reconcile.apply is the largest identified stage",
-    "the document-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-document-row-gpuoff-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-document-row-gpuoff-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]",
-    "stage traversal.build is 16.7 ms of the 0 ms long task (null%) on folder-row — traversal.build is the largest identified stage",
-    "the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-fold-ablation-off: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-fold-ablation-off: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]",
-    "stage traversal.build is 14.1 ms of the 0 ms long task (null%) on folder-row — traversal.build is the largest identified stage",
-    "the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-fold-ablation-on: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-fold-ablation-on: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]"
+    "stage traversal.build is 684.2 ms of the 990 ms long task (69.11%) on folder-row — traversal.build is the largest identified stage",
+    "the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 85.9 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-folder-row-gpuoff-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-folder-row-gpuoff-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "stage reconcile.apply is 2085.1 ms of the 2222 ms long task (93.84%) on document-row — reconcile.apply is the largest identified stage",
+    "the document-row performed 2 whole-store IPC_RAG_SNAPSHOT read(s) totalling 179.2 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-document-row-gpuoff-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-document-row-gpuoff-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "stage snapshot.pull is 27.8 ms of the 0 ms long task on folder-row — snapshot.pull is the largest identified stage; no percentage is computed: the long-task window is zero (0 ms), so this row has no finite window to divide by",
+    "the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 27.8 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-fold-ablation-off: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-fold-ablation-off: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "stage snapshot.pull is 29 ms of the 0 ms long task on folder-row — snapshot.pull is the largest identified stage; no percentage is computed: the long-task window is zero (0 ms), so this row has no finite window to divide by",
+    "the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 29 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-fold-ablation-on: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-fold-ablation-on: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "O-0 REPORT OPEN — 4 stage(s) structurally unseparated (o0-folder-row-gpuoff-r1:snapshot.clone, o0-document-row-gpuoff-r1:snapshot.clone, o0-fold-ablation-off:snapshot.clone, o0-fold-ablation-on:snapshot.clone): run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4) — the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed"
   ],
+  "reconciliation": {
+    "ok": false,
+    "note": "structurally unseparated stage(s) o0-folder-row-gpuoff-r1:snapshot.clone, o0-document-row-gpuoff-r1:snapshot.clone, o0-fold-ablation-off:snapshot.clone, o0-fold-ablation-on:snapshot.clone have no seam in the executing bundle (run o0-folder-row-gpuoff-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)), so the long-task residual is NOT computable and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)",
+    "structuralStages": [
+      "o0-folder-row-gpuoff-r1:snapshot.clone",
+      "o0-document-row-gpuoff-r1:snapshot.clone",
+      "o0-fold-ablation-off:snapshot.clone",
+      "o0-fold-ablation-on:snapshot.clone"
+    ]
+  },
   "pass": false,
-  "artifactPath": "/tmp/o0-gpuoff.json"
+  "status": "OPEN-structural",
+  "artifactPath": "/tmp/o0c-gpuoff.json"
 }
 ```
 
-### 11.2 `/tmp/o0-gpuon.json` (GPU-on leg, 2 runs)
+### 13.2 GPU-ON leg — `/tmp/o0c-gpuon.json`
 
 ```json
 {
   "artifact": "o-0-per-stage-breakdown",
   "spec": "docs/specs/unit-o-0-per-stage-measurement.md",
   "unit": "O-0",
-  "date": "2026-09-17",
+  "date": "2026-09-21",
   "layer": "assembled-renderer (RCA-12)",
   "commands": [
-    "node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 --o0-out=/tmp/o0-gpuon.json --block=o0_gpu_control"
+    "node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 --o0-out=/tmp/o0c-gpuon.json --block=o0_gpu_control,o0_repeat_determinism"
   ],
   "pinnedCommands": [
     "npm run build",
@@ -1210,13 +2248,13 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
   ],
   "driver": {
     "build": {
-      "renderer": "1789680834810+675765+10d4bd9b",
-      "main": "1789680834755+2395838+366b2663",
-      "served": "675765+10d4bd9b",
+      "renderer": "1789952556962+678270+a25b03a9",
+      "main": "1789952556843+2419392+955790a9",
+      "served": "678270+a25b03a9",
       "servedUrl": "file:///media/ryanr/Shared%20Files/Projects/Astrographer/dist/renderer/renderer.js",
       "disk": {
-        "rendererBytes": 675765,
-        "rendererHash": "10d4bd9b"
+        "rendererBytes": 678270,
+        "rendererHash": "a25b03a9"
       },
       "verified": true
     },
@@ -1228,45 +2266,203 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "--corpus-root=/tmp/o0-corpus-226",
       "--strict-seed",
       "--o0-corpus=226",
-      "--o0-out=/tmp/o0-gpuon.json",
-      "--block=o0_gpu_control"
+      "--o0-out=/tmp/o0c-gpuon.json",
+      "--block=o0_gpu_control,o0_repeat_determinism"
     ],
     "runMode": "spawn",
     "leg": "gpu-on",
     "blocks": [
-      "o0_gpu_control"
+      "o0_gpu_control",
+      "o0_repeat_determinism"
     ],
     "appFlag": "app spawned by this driver (gpu on)",
     "artifactDoc": "docs/specs/unit-o-0-per-stage-breakdown.md",
     "crossArtifactControlPairs": [
       "gpu-on"
     ],
-    "hookInertness": [],
+    "gpuDeltas": [
+      {
+        "gesture": "folder-row+document-row",
+        "delta": "+2173 / +2419",
+        "provenanceRun": "the 2026-09-17 first run (226 docs / 10 170 nodes / 18 758 edges)",
+        "carriedFromAnotherRun": false,
+        "contradictedBy": "the 2026-09-21 second run measured −36 / −23 ms on an identical mutation count (both legs)",
+        "label": "PROVENANCE ONLY — the first run's GPU delta is contradicted by a later run and is NOT a finding any unit may rest on (§2.4/RUL-5-L9/S20); the node/edge counts belong to that run's corpus, never to a threshold"
+      }
+    ],
+    "hookInertness": [
+      {
+        "baselineRun": "o0-repeat-a-unarmed",
+        "armedRun": "o0-repeat-b-armed",
+        "setEqual": true,
+        "msFree": true,
+        "deltaMutations": 0,
+        "deltaLongTaskMs": 0,
+        "toleranceMs": 40,
+        "inert": true,
+        "controlledPair": true,
+        "stateReset": {
+          "baseline": {
+            "collapsed": true,
+            "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+          },
+          "armed": {
+            "collapsed": true,
+            "detail": "document rows 20 → 0 (toggle-to-collapsed)"
+          }
+        },
+        "mutations": {
+          "unarmed": 37,
+          "armed": 37
+        },
+        "longTaskTotalMs": {
+          "unarmed": 0,
+          "armed": 0
+        },
+        "nonVacuousHalves": {
+          "mutations": true,
+          "longTaskTotalMs": false
+        },
+        "carriedBy": [
+          "mutations"
+        ],
+        "vacuousHalves": [
+          "longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)"
+        ],
+        "nonVacuous": false,
+        "mutationHalfProof": true,
+        "proofStatement": "the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 37 mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed"
+      }
+    ],
+    "hookInertnessProof": [
+      {
+        "pair": "o0-repeat-a-unarmed / o0-repeat-b-armed",
+        "carriedBy": [
+          "mutations"
+        ],
+        "vacuousHalves": [
+          "longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)"
+        ],
+        "nonVacuousHalves": {
+          "mutations": true,
+          "longTaskTotalMs": false
+        },
+        "statement": "the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 37 mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed"
+      }
+    ],
+    "mainSeamArmed": false,
+    "mainSeamRecords": 0,
+    "mainTransport": {
+      "channel": null,
+      "note": "RUL-3 — the MAIN instance IS armed in spawn mode (ASTROGRAPHER_O0_MAIN_ARM=1) and its handler wrap records `snapshot.clone`, but no channel carries those records into the renderer/report, and Electron's structured clone of the handler return value runs inside the IPC internals after the handler returns (outside every host-side wrap): the stage is structurally unseparated with this exact reason, never an imputed number"
+    },
+    "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+    "engineEvidence": {
+      "probe": "gnosis.status (MCP) → the engine HealthReport",
+      "calledAt": "2026-09-21",
+      "resolved": true,
+      "error": "fetch failed",
+      "healthState": null,
+      "keys": null,
+      "derived": "absent",
+      "positiveSignal": false,
+      "rule": "ready IFF the call resolved with a HealthReport whose state ∈ {Ready, Starting, Degraded} (a POSITIVE engine signal); absent otherwise — \"the MCP call resolved\" is NOT evidence (§4.3/S21/RUL-5)",
+      "contradiction": null,
+      "observed": "an error payload from the status call (fetch failed)"
+    },
+    "engineError": null,
     "display": ":0",
     "failReasons": [
-      "run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)",
-      "run o0-document-row-gpuon-r1: unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)"
+      "run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+    ],
+    "gatingReasons": [],
+    "openStructuralReasons": [
+      "run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
     ],
     "notes": [
+      "run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
       "o0_gpu_control: the gpu-on leg is paired CROSS-ARTIFACT with gpu-off (o0-folder-row-gpuoff-r1, o0-document-row-gpuoff-r1) — the §3.5 command pair emits one artifact per leg; only the merged artifact verifies the pairing."
+    ],
+    "structuralStages": [
+      "o0-folder-row-gpuon-r1:snapshot.clone",
+      "o0-document-row-gpuon-r1:snapshot.clone"
+    ],
+    "openStructural": true,
+    "selfValidation": {
+      "ok": true,
+      "attempts": 2,
+      "runIds": [
+        "o0-folder-row-gpuon-r1",
+        "o0-document-row-gpuon-r1"
+      ],
+      "errors": [],
+      "status": "OPEN-structural",
+      "structuralErrors": 0,
+      "structuralFacts": 2,
+      "moduleGating": [],
+      "rowResults": [
+        {
+          "id": "o0-folder-row-gpuon-r1",
+          "ok": true,
+          "errors": []
+        },
+        {
+          "id": "o0-document-row-gpuon-r1",
+          "ok": true,
+          "errors": []
+        }
+      ],
+      "gatingReasons": [],
+      "note": "RUL-4/F17c — the structural family is recorded, never counted as a self-validation ERROR: a structurally-open report is ok:true/empty errors with status \"OPEN-structural\""
+    },
+    "status": "OPEN-structural",
+    "pass": false,
+    "statusStatement": "OPEN-structural — 4 structurally-unmeasurable stage(s) (no seam in the executing bundle) and 2 DERIVED-residual record(s): the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed (§3.6b RUL-4, §6 S14/S19)",
+    "structuralReasons": [
+      "run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-folder-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "run o0-document-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)",
+      "run o0-document-row-gpuon-r1: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)",
+      "runs[0]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[1]: stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14: NO seam exists in the executing bundle, distinct from a seam that merely was not armed)",
+      "runs[0]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "runs[1]: stage post.style is unseparated as the DERIVED residual (§2.2 id 11: post.style is COMPUTED from longTaskTotalMs − Σ(named stages), never a timed probe) — it cannot be separated while any stage above is unseparated (recorded, non-gating — §5 P-TP-1/RUL-4)",
+      "run o0-folder-row-gpuon-r1: post.style residual null ms (Σ named stages 1126.5 of 1032 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)",
+      "run o0-document-row-gpuon-r1: post.style residual null ms (Σ named stages 4127.099999999999 of 2213 ms; reconciliation FAILED) — unseparated: [snapshot.clone, post.style] — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural, never imputed (§6 S14/RUL-4)"
     ]
   },
   "tolerance": {
     "reconcileMs": 50,
-    "source": "measured 2026-09-17"
+    "source": "measured 2026-09-21"
   },
   "corpus": {
     "source": "--o0-corpus",
     "claimedDocuments": 226,
     "documents": 226,
-    "nodes": 10170,
-    "edges": 18758,
-    "seed": "o0-2026-09-17"
+    "nodes": 6102,
+    "edges": 9266,
+    "seed": "o0-2026-09-17",
+    "gate": "documents",
+    "provenanceOnly": [
+      "nodes",
+      "edges",
+      "bytes"
+    ],
+    "note": "the corpus SIZE is the GATE (documents === the claimed census, §3.4/§6 F8) and it is the ONLY pin; nodes/edges/bytes are RECORDED PROVENANCE about the corpus source actually used, NOT a pin and NOT a cross-run comparable claim — a same-size corpus with different bytes yields different absolute ms values (the two runs so far read 10 170/18 758 and 6 102/9 266 nodes/edges at 226 documents, both legal), so (a) no byte-reproducibility may be claimed, (b) no cross-run absolute ms comparison is a measurement, and (c) the node-ceiling input for the parked trigger (b) must be read from THIS run's corpus row with the byte-size gap named (§3.4/§4.3/RUL-5/L10, §10 item 2)"
   },
   "env": {
     "mode": "lexical",
     "gpu": true,
-    "engine": "ready",
+    "engine": "absent",
     "display": ":0",
     "paneFrames": 2
   },
@@ -1293,95 +2489,117 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "documentId": null,
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-183846",
+      "hit": "preempt-node-node-85762",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 83.6,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 2.1,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 1766.5,
+          "ms": 715.6,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
-          "ms": 0.7,
+          "ms": 0.3,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 23.3,
+          "ms": 11,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
-          "ms": 20.7,
+          "ms": 16.4,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 241.6,
+          "ms": 159.5,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 65.1,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 72.9,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [
         {
-          "start": 22480.60000000149,
-          "duration": 107
+          "start": 8698.59999999404,
+          "duration": 63
         },
         {
-          "start": 22683.5,
-          "duration": 2176
+          "start": 8790.699999988079,
+          "duration": 969
         }
       ],
-      "longTaskTotalMs": 2283,
+      "longTaskTotalMs": 1032,
       "mutations": 37,
-      "wallMs": 4198.6,
-      "t0": 22471.39999999851,
-      "t1": 26670,
+      "wallMs": 1095.4,
+      "t0": 8692.299999982119,
+      "t1": 9787.699999988079,
       "quiesce": {
-        "frames": 112,
-        "quiesced": false,
-        "timedOut": true,
+        "frames": 4,
+        "quiesced": true,
+        "timedOut": false,
         "timeoutMs": 4000
       },
       "gpu": true,
@@ -1392,22 +2610,143 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680834810+675765+10d4bd9b",
-        "main": "1789680834755+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952556962+678270+a25b03a9",
+        "main": "1789952556843+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 8693.09999999404,
+          "t1": 9787.899999976158,
+          "ms": 1094.8
+        },
+        "freezeWindow": {
+          "t0": 8692.299999982119,
+          "t1": 9787.699999988079
+        },
+        "toleranceMs": 40,
+        "armCount": 1,
+        "disarmCount": 0,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 35.8
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 25.9
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 83.6
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2.1
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 715.6
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 11
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 16.4
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 29.3
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 47
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 159.5
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 5,
+        "records": 11,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -1415,131 +2754,164 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-183846"
+        "hitAtDispatch": "preempt-node-node-85762"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": 230.2,
-        "sumMs": 2052.8,
+        "residual": -94.5,
+        "sumMs": 1126.5,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
-      }
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -94.5,
+        "unseparated": true
+      },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true
     },
     {
       "id": "o0-document-row-gpuon-r1",
       "block": "o0_gpu_control",
       "gesture": "document-row",
-      "target": "#pane-doc-nav [data-document-id=\"archive/operator-doc-201\"]",
+      "target": "#pane-doc-nav [data-document-id=\"archive/archive-001\"]",
       "folderPath": null,
-      "documentId": "archive/operator-doc-201",
+      "documentId": "archive/archive-001",
       "path": "cdp",
       "realInput": true,
-      "hit": "preempt-node-node-365604",
+      "hit": "preempt-node-node-168080",
       "stageCount": 11,
       "stages": [
         {
           "id": "snapshot.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 172.2,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "snapshot.clone",
           "ms": null,
           "unseparated": true,
-          "source": "mark"
+          "source": "hook",
+          "structural": true,
+          "structuralReason": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
         },
         {
           "id": "docheads.pull",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 4.1,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "traversal.build",
-          "ms": 32.7,
+          "ms": 10.9,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "envelope.assemble",
-          "ms": 0.4,
+          "ms": 0.6,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "shared.decorate",
-          "ms": 2.3,
+          "ms": 0.6,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.roots",
-          "ms": 1.4,
+          "ms": 2.7,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "reconcile.apply",
-          "ms": 2358.5,
+          "ms": 2075.6,
           "unseparated": false,
-          "source": "hook"
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.dom",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 76.1,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "render.ssr",
-          "ms": null,
-          "unseparated": true,
-          "source": "mark"
+          "ms": 1784.3,
+          "unseparated": false,
+          "source": "hook",
+          "structural": false,
+          "structuralReason": null
         },
         {
           "id": "post.style",
           "ms": null,
           "unseparated": true,
-          "source": "derived"
+          "source": "derived",
+          "structural": false,
+          "structuralReason": null
         }
       ],
       "longTasks": [
         {
-          "start": 26929.60000000149,
-          "duration": 192
+          "start": 10044.5,
+          "duration": 105
         },
         {
-          "start": 27215.60000000149,
-          "duration": 2419
+          "start": 10179.399999976158,
+          "duration": 2108
         }
       ],
-      "longTaskTotalMs": 2611,
-      "mutations": 18058,
-      "wallMs": 4295.5,
-      "t0": 26924.39999999851,
-      "t1": 31219.89999999851,
+      "longTaskTotalMs": 2213,
+      "mutations": 11758,
+      "wallMs": 2322.8,
+      "t0": 10041.5,
+      "t1": 12364.299999982119,
       "quiesce": {
-        "frames": 92,
-        "quiesced": false,
-        "timedOut": true,
+        "frames": 10,
+        "quiesced": true,
+        "timedOut": false,
         "timeoutMs": 4000
       },
       "gpu": true,
@@ -1550,22 +2922,242 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
       "paneFrames": 2,
       "bundleVerified": true,
       "bundle": {
-        "renderer": "1789680834810+675765+10d4bd9b",
-        "main": "1789680834755+2395838+366b2663",
-        "served": "675765+10d4bd9b"
+        "renderer": "1789952556962+678270+a25b03a9",
+        "main": "1789952556843+2419392+955790a9",
+        "served": "678270+a25b03a9"
       },
       "hook": {
         "armed": true,
-        "wraps": [],
+        "armWindow": {
+          "t0": 10042,
+          "t1": 12364.399999976158,
+          "ms": 2322.4
+        },
+        "freezeWindow": {
+          "t0": 10041.5,
+          "t1": 12364.299999982119
+        },
+        "toleranceMs": 40,
+        "armCount": 2,
+        "disarmCount": 1,
+        "stageRecords": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer"
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer"
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer"
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer"
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer"
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer"
+          }
+        ],
+        "stageRecordDetail": [
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 28
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 26.3
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 25.4
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 24.2
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 128.6
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 5.4
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 2.5
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 22.5
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 1733.7
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 2075.2
+          },
+          {
+            "stage": "snapshot.pull",
+            "instance": "renderer",
+            "ms": 43.6
+          },
+          {
+            "stage": "docheads.pull",
+            "instance": "renderer",
+            "ms": 2.1
+          },
+          {
+            "stage": "traversal.build",
+            "instance": "renderer",
+            "ms": 5.5
+          },
+          {
+            "stage": "shared.decorate",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "envelope.assemble",
+            "instance": "renderer",
+            "ms": 0.3
+          },
+          {
+            "stage": "reconcile.roots",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "render.dom",
+            "instance": "renderer",
+            "ms": 0.2
+          },
+          {
+            "stage": "render.ssr",
+            "instance": "renderer",
+            "ms": 0.1
+          },
+          {
+            "stage": "reconcile.apply",
+            "instance": "renderer",
+            "ms": 0.4
+          }
+        ],
+        "mainSeamArmed": false,
+        "mainSeamNote": "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured",
+        "mainRecordsTransport": "none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)",
         "rendererArmed": true,
         "refused": [],
-        "records": 10,
+        "records": 22,
+        "pendingSpans": 0,
+        "dropped": 0,
         "seamMap": {
           "traversal.build": "buildTraversal",
           "envelope.assemble": "assembleAppGraphEnvelope",
           "shared.decorate": "decorateShared",
           "reconcile.roots": "reconcileDocumentRoots",
-          "reconcile.apply": "Runtime.applyContentReconcile"
+          "reconcile.apply": "Runtime.applyContentReconcile",
+          "render.dom": "Runtime.render (the DomAdapter renderProducingProcess pass)",
+          "render.ssr": "Runtime.render (the SSR mirror renderProducingProcess pass)"
         },
         "rendererHandle": "window.__o0recorder",
         "stageRowsSource": "src/shared/o0-hook.ts:stagesFromO0HookRecords",
@@ -1573,32 +3165,43 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
         "longtaskUnsupported": null
       },
       "dispatch": {
-        "hitAtDispatch": "preempt-node-node-365604"
+        "hitAtDispatch": "preempt-node-node-168080"
       },
       "seed": "o0-2026-09-17",
       "corpusSource": "--o0-corpus",
       "pass": true,
       "failReasons": [],
-      "unseparatedStages": [
-        "snapshot.pull",
-        "snapshot.clone",
-        "docheads.pull",
-        "render.dom",
-        "render.ssr",
-        "post.style"
-      ],
       "reconciliation": {
         "ok": false,
-        "residual": 215.7,
-        "sumMs": 2395.3,
+        "residual": -1914.1,
+        "sumMs": 4127.1,
         "toleranceMs": 50,
-        "reason": "unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled"
+        "structuralStages": [
+          "snapshot.clone"
+        ],
+        "openStructural": true,
+        "reason": "unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)"
       },
+      "unseparatedStages": [
+        "snapshot.clone",
+        "post.style"
+      ],
       "postStyle": {
         "ms": null,
         "source": "derived",
-        "timed": false
-      }
+        "timed": false,
+        "derived": true,
+        "derivedNote": "post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)",
+        "residual": -1914.1,
+        "unseparated": true
+      },
+      "structuralReasons": [
+        "stage snapshot.clone is structurally unseparated — no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured (§6 S14)"
+      ],
+      "structuralStages": [
+        "snapshot.clone"
+      ],
+      "openStructural": true
     }
   ],
   "controls": [
@@ -1615,56 +3218,42 @@ folder-row: `traversal.build` 1766.5 ms of 2283 ms (**77.4%**) — the single la
     }
   ],
   "verdicts": [
-    "stage traversal.build is 1766.5 ms of the 2283 ms long task (77.38%) on folder-row — traversal.build is the largest identified stage",
-    "the folder-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-folder-row-gpuon-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-folder-row-gpuon-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]",
-    "stage reconcile.apply is 2358.5 ms of the 2611 ms long task (90.33%) on document-row — reconcile.apply is the largest identified stage",
-    "the document-row performed 0 whole-store IPC_RAG_SNAPSHOT read(s) totalling 0 ms (census 226 docs / 10170 nodes / 18758 edges)",
-    "run o0-document-row-gpuon-r1: reconciliation FAILED — unseparated stage(s) snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style cannot be reconciled",
-    "run o0-document-row-gpuon-r1: unseparated stages [snapshot.pull, snapshot.clone, docheads.pull, render.dom, render.ssr, post.style]"
+    "stage traversal.build is 715.6 ms of the 1032 ms long task (69.34%) on folder-row — traversal.build is the largest identified stage",
+    "the folder-row performed 1 whole-store IPC_RAG_SNAPSHOT read(s) totalling 83.6 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-folder-row-gpuon-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-folder-row-gpuon-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "stage reconcile.apply is 2075.6 ms of the 2213 ms long task (93.79%) on document-row — reconcile.apply is the largest identified stage",
+    "the document-row performed 2 whole-store IPC_RAG_SNAPSHOT read(s) totalling 172.2 ms (census 226 docs / 6102 nodes / 9266 edges)",
+    "run o0-document-row-gpuon-r1: reconciliation OPEN-structural — unseparated stage(s) snapshot.clone, post.style cannot be reconciled — STRUCTURAL (no seam in the executing bundle): [snapshot.clone]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)",
+    "run o0-document-row-gpuon-r1: unseparated stages [snapshot.clone, post.style] (STRUCTURAL — no seam in the executing bundle: [snapshot.clone])",
+    "O-0 REPORT OPEN — 2 stage(s) structurally unseparated (o0-folder-row-gpuon-r1:snapshot.clone, o0-document-row-gpuon-r1:snapshot.clone): run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4) — the report is SCHEMA-VALID and its residual cannot be computed; no value was imputed"
   ],
+  "reconciliation": {
+    "ok": false,
+    "note": "structurally unseparated stage(s) o0-folder-row-gpuon-r1:snapshot.clone, o0-document-row-gpuon-r1:snapshot.clone have no seam in the executing bundle (run o0-folder-row-gpuon-r1: unseparated stage(s) snapshot.clone, post.style cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)), so the long-task residual is NOT computable and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)",
+    "structuralStages": [
+      "o0-folder-row-gpuon-r1:snapshot.clone",
+      "o0-document-row-gpuon-r1:snapshot.clone"
+    ]
+  },
   "pass": false,
-  "artifactPath": "/tmp/o0-gpuon.json"
+  "status": "OPEN-structural",
+  "artifactPath": "/tmp/o0c-gpuon.json"
 }
 ```
 
-## 12. The trio (owed because harness code changed in this pass)
+---
 
-| leg | result |
-| --- | --- |
-| `npm test` | **FAIL — 2 failed files / 10 failed tests, 4815 passed, 58 skipped (4883)** |
-| `npm run typecheck` | **PASS** (`tsc --noEmit`, exit 0) |
-| `npm run build` | **PASS** (all four bundles + `renderer.js` 659.9 kB) |
+## 14. Provenance
 
-**The 10 failures are ALL source-side, in `src/shared/o0-report.ts` / `src/shared/o0-hook.ts`
-— a REPORTED FINDING, not a fix** (this pass made no `src/` change; the failing tests
-import the pure modules directly and never touch `scripts/live-drive.mjs`):
-
-| test | failure (verbatim) |
-| --- | --- |
-| `unit-o-0-report-contract` R1 | a `pass:false` row with a non-empty `failReasons` validated **`ok:true`** — `validateO0Run:269` only fires on an EMPTY `failReasons`, so the row-level `pass` does not propagate |
-| `unit-o-0-report-contract` R2 | a `stages[]` whose length ≠ `stageCount` must name the offending **INDEX** (`stages[11]`); it names the id `undefined` instead |
-| `unit-o-0-report-contract` R3 | `postStyle.ms === null ⇒ postStyle.unseparated === true` / Σ(named) > total with all stages separated ⇒ `ok:false` — not enforced |
-| `unit-o-0-report-contract` R4 | a duplicated id in either run must make the set comparison false — not enforced |
-| `unit-o-0-report-contract` P-IM-1 / P-SM-1 / P-SM-2 / P-TP-1 | 4 of the 6 §5 property-register rows fail on their generated counterexamples |
-| `unit-o-0-hook-contract` P-HK-1 | the inertness oracle over generated run pairs |
-| `unit-o-0-hook-contract` B9 | the §3a finding-5 source contract on `window.__o0recorder` (a HARDENED projection installed from inside a function, never at module scope) |
-
-**Layer note (RCA-12):** these are **envelope/pure-layer** failures in the very module
-whose job is to make this artifact's report shape falsifiable. They do **not** invalidate
-the live numbers above (the numbers come from the executing bundle, and §12's checks were
-performed by hand against §11), but **the O-0 unit is not trio-green** and the pure
-validator it ships is **not** currently enforcing R1–R4/P-TP-1. Reported as a finding for
-the supervisor; no `src/` or `tests/` file was edited in this pass.
-
-## 13. Provenance / reproducibility checklist (spec §4.4)
-
-1. **Named observable fields** — every claim above names the field it came from in §11.
-2. **Falsifiable predicates** — `stageCount === 11`, `path === 'cdp'`, `corpus.documents === 226`,
-   `driver.build.verified === true`, `unseparated ⇒ ms === null`.
-3. **Forcing consequences** — the harness derived `pass:false` (not a warning) and named
-   every reason; deleting one `stages[]` entry raises §6 F1, perturbing the census raises F8.
-4. **Counterexamples from the artifact alone** — e.g. take §11.1's `corpus.documents` 226 → 227 and
-   `driver.failReasons` must gain the F8 line; take `runs[0].path` `cdp` → `missing` and the
-   derived verdict must name the fallback (as the earlier failed run of this battery did).
+Run 3 of unit O-0, 2026-09-20 (host clock; the report's UTC stamp reads 2026-09-21).
+Executed by the **Live-scenario runner** against the **assembled app** (spawn mode,
+`DISPLAY=:0`), never against node modules. Commands: §1. Raw JSON: §13 (both legs, verbatim,
+unmodified). Oracle re-runs recorded in §8/§10 were executed against the embedded JSON with the
+pure module `src/shared/o0-report.ts` (`deriveO0WindowBound`, `deriveO0StageVerdict`,
+`validateO0Run`, `validateO0Report`) — the module that both the driver and the tests use.
+Supersedes: run 1 (`docs/specs/unit-o-0-per-stage-measurement.md` §12, 2026-09-17) and run 2
+(the previous revision of THIS file, now §12.12 of the spec, 2026-09-20). **The unit remains
+OPEN: `status:"OPEN-structural"` is a completed measurement with recorded structural gaps, not a
+DONE. Only a run at `status:"OK"` (every stage measured or `derived`) opens the O-5 delegation
+gate (§11).**

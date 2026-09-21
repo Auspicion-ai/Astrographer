@@ -515,7 +515,7 @@ const O0_DOCUMENT_SELECTOR = `${O0_DOCNAV} [data-document-id]`
 const O0_QUIESCE_TIMEOUT_MS = 4000 // §2.1 — a RECORDED quiesce timeout, never an unrecorded sleep
 const O0_QUIESCE_FRAME_MS = 10
 const O0_RECONCILE_TOLERANCE_MS = 50 // §4.2 tolerance.reconcileMs (the residual band)
-const O0_HOOK_LONGTASK_TOLERANCE_MS = 40 // §3.6(c) — the recorded hook-inertness band
+const O0_HOOK_LONGTASK_TOLERANCE_MS = 40 // §3.6(c) — the recorded hook-inertness band (the same §3.6 band the window bound records as `hook.toleranceMs`)
 // §3.5 — the pinned run command set the artifact must record.
 const O0_RUN_COMMANDS = [
   'npm run build',
@@ -524,6 +524,12 @@ const O0_RUN_COMMANDS = [
 ]
 /** The O-0 accumulator for THIS invocation (runs/controls collected by the blocks). */
 const o0Acc = { runs: [], hookPairs: [], notes: [] } // controls[] is DERIVED from the runs (o0ControlRows)
+/** RUL-5/L10 — the PINNED corpus-provenance statement, emitted on every report so
+ *  no reader can mistake the recorded provenance for a cross-run comparable claim:
+ *  the operator store is not always reachable (H7) and a reconstructed corpus of the
+ *  SAME SIZE has different NODES/EDGES/BYTES, hence different absolute ms values. */
+const O0_CORPUS_PROVENANCE_NOTE =
+  'the corpus SIZE is the GATE (documents === the claimed census, §3.4/§6 F8) and it is the ONLY pin; nodes/edges/bytes are RECORDED PROVENANCE about the corpus source actually used, NOT a pin and NOT a cross-run comparable claim — a same-size corpus with different bytes yields different absolute ms values (the two runs so far read 10 170/18 758 and 6 102/9 266 nodes/edges at 226 documents, both legal), so (a) no byte-reproducibility may be claimed, (b) no cross-run absolute ms comparison is a measurement, and (c) the node-ceiling input for the parked trigger (b) must be read from THIS run\'s corpus row with the byte-size gap named (§3.4/§4.3/RUL-5/L10, §10 item 2)'
 
 /** The stage → seam map for the FIVE render-path stages (§2.2 ids 4-8) the
  *  measurement-only hook is permitted to bracket (§3.6). Each value names the
@@ -543,55 +549,47 @@ const O0_HOOK_SEAMS = {
   'reconcile.apply': 'Runtime.applyContentReconcile',
 }
 const O0_HOOK_STAGES = Object.keys(O0_HOOK_SEAMS)
+/** RUL-1 (§2.2 ids 9/10) — the two render-EMIT seams landed in
+ *  `src/renderer/runtime.ts` (`render()`'s `DomAdapter` pass + the SSR mirror
+ *  pass). Their stage ids are RENDERER-side seams of the SAME recorder, so the
+ *  page-side hook arms them exactly like the five render-path stages; they are
+ *  kept in a separate map so the §3.6 "stages 4-8" seam map (and its B8 pin) stays
+ *  literally the five render-path stages. */
+const O0_RENDER_EMIT_SEAMS = {
+  'render.dom': 'Runtime.render (the DomAdapter renderProducingProcess pass)',
+  'render.ssr': 'Runtime.render (the SSR mirror renderProducingProcess pass)',
+}
+/** §2.2/§3.6b — every stage id the page-side hook arms on the renderer's recorder:
+ *  the five render-path stages + the two render-emit stages + the two caller-level
+ *  round trips. */
+const O0_RENDERER_ARM_STAGES = [...O0_HOOK_STAGES, ...Object.keys(O0_RENDER_EMIT_SEAMS)]
 const O0_HOOK_RENDERER_HANDLE = 'window.__o0recorder'
-/** §3.6 — the page-side measurement-only hook. INERT WHEN UNARMED: the bridge
- *  wrap is a pure pass-through while unarmed and the renderer recorder emits no
- *  mark/measure and commits no record, so an unarmed run adds no DOM mutation and
- *  no long task. An armed hook only records `performance.mark`/`measure` around
- *  the EXISTING call sites (it reorders, adds and removes no work). A hook-induced
- *  change to the mutation count or the long-task total is a falsifiable row (see
- *  `o0_repeat_determinism`). */
+/** §3.6/§3.6b — the page-side measurement-only hook. INERT WHEN UNARMED: the
+ *  renderer's recorder emits no mark/measure and commits no record while unarmed,
+ *  so an unarmed run adds no DOM mutation and no long task. An armed hook only
+ *  records `performance.mark`/`measure` around the EXISTING call sites (it
+ *  reorders, adds and removes no work). A hook-induced change to the mutation
+ *  count or the long-task total is a falsifiable row (`o0_repeat_determinism`).
+ *
+ *  §3.6b — NO page-side wrap of `provident.rag.*` is attempted HERE (or anywhere):
+ *  those props are `contextBridge`-frozen (`{writable:false, configurable:false}`,
+ *  §12 H2), so a page wrap can never take. The round trips are recorded INSIDE the
+ *  bundle at the shell's OWN call sites (`src/renderer/sidebar-panes.ts`) by the
+ *  app-wide recorder, which this page handle only ARMS. */
 const O0_HOOK_SOURCE = `(()=>{
   if (window.__o0) return true;
-  const state = { armed: false, measures: [], wraps: [], armCount: 0, disarmCount: 0, rendererArmed: false, refused: [] };
-  state.wrap = function (stage, path) {
-    const parts = String(path).split('.');
-    let obj = window.provident;
-    for (let i = 0; i < parts.length - 1; i++) obj = obj && obj[parts[i]];
-    const key = parts[parts.length - 1];
-    if (!obj || typeof obj[key] !== 'function' || obj[key].__o0Wrapped) return false;
-    const orig = obj[key];
-    const wrapped = function () {
-      if (state.armed !== true) return orig.apply(this, arguments); // INERT when unarmed
-      const t0 = performance.now();
-      const finish = (v) => {
-        try { performance.mark('o0:' + stage + ':end'); performance.measure('o0:' + stage, 'o0:' + stage + ':start', 'o0:' + stage + ':end') } catch (e) {}
-        state.measures.push({ stage: stage, ms: Math.round((performance.now() - t0) * 1000) / 1000 });
-        return v;
-      };
-      try { performance.mark('o0:' + stage + ':start') } catch (e) {}
-      const r = orig.apply(this, arguments);
-      if (r && typeof r.then === 'function') return r.then(finish);
-      finish(); return r;
-    };
-    wrapped.__o0Wrapped = true;
-    try { obj[key] = wrapped } catch (e) { return false }
-    // A bridge seam that refuses the wrap (a frozen/read-only surface) must NOT be
-    // recorded as measured: the stage then stays unseparated (§3.6's honest limit).
-    if (obj[key] !== wrapped) return false;
-    state.wraps.push(stage);
-    return true;
-  };
-  // §3.6 — the renderer-side half: stages 4-8 are bracketed by the recorder the
-  // renderer exposes, not by a preload wrap. An absent/refusing handle is RECORDED
-  // and leaves those stages unseparated (never a silently measured value).
+  const state = { armed: false, armCount: 0, disarmCount: 0, rendererArmed: false, refused: [], armedAt: null, disarmedAt: null };
+  // §3.6 — the render-path half: stages 4-8 (+ the caller-level seams) are
+  // bracketed by the recorder the renderer exposes, never by a preload wrap. An
+  // absent/refusing handle is RECORDED and leaves those stages unseparated
+  // (never a silently measured value).
   state.renderer = function (stages) {
     const rec = window.__o0recorder;
     const list = (stages || []).slice();
     state.rendererArmed = false;
     state.refused = [];
     if (!rec || typeof rec.arm !== 'function') {
-      state.refused.push({ stages: list, reason: 'window.__o0recorder absent — the executing bundle exposes no §3.6 hook seam (stages stay unseparated)' });
+      state.refused.push({ stages: list, reason: 'window.__o0recorder absent — the executing bundle exposes no §3.6 hook seam (the render-path and caller-level stages stay unseparated)' });
       return false;
     }
     try {
@@ -610,15 +608,15 @@ const O0_HOOK_SOURCE = `(()=>{
     }
     return state.rendererArmed;
   };
-  state.arm = function (bridge, rendererStages) {
-    state.armed = true; state.armCount++; state.measures = [];
-    const keys = Object.keys(bridge || {});
-    for (let i = 0; i < keys.length; i++) state.wrap(keys[i], bridge[keys[i]]);
+  state.arm = function (rendererStages) {
+    state.armed = true; state.armCount++;
+    state.armedAt = performance.now();
     state.renderer(rendererStages);
-    return { bridge: state.wraps.slice(), rendererArmed: state.rendererArmed === true, refused: state.refused.slice() };
+    return { rendererArmed: state.rendererArmed === true, refused: state.refused.slice(), armedAt: state.armedAt };
   };
   state.disarm = function () {
     state.armed = false; state.disarmCount++;
+    state.disarmedAt = performance.now();
     const rec = window.__o0recorder;
     if (rec && typeof rec.disarm === 'function') { try { rec.disarm() } catch (e) {} }
     return true;
@@ -628,54 +626,93 @@ const O0_HOOK_SOURCE = `(()=>{
     let records = [];
     if (rec && typeof rec.records === 'function') { try { records = rec.records() || [] } catch (e) { records = [] } }
     let dropped = null;
-    if (rec && typeof rec.state === 'function') { try { const s = rec.state(); dropped = s && typeof s.dropped === 'number' ? s.dropped : null } catch (e) {} }
-    return { armed: state.armed, measures: state.measures.slice(), records: records, wraps: state.wraps.slice(), rendererArmed: state.rendererArmed === true, refused: state.refused.slice(), dropped: dropped, armCount: state.armCount, disarmCount: state.disarmCount };
+    let pending = null;
+    if (rec && typeof rec.state === 'function') {
+      try {
+        const s = rec.state();
+        dropped = s && typeof s.dropped === 'number' ? s.dropped : null;
+        // RUL-2 — the OPEN (unsettled) spans at drain time: a non-zero value means a
+        // span did NOT fit its window (never a dangling start mark read as a value).
+        pending = s && typeof s.pending === 'number' ? s.pending : null;
+      } catch (e) {}
+    }
+    return { armed: state.armed, records: records, rendererArmed: state.rendererArmed === true, refused: state.refused.slice(), dropped: dropped, pending: pending, armCount: state.armCount, disarmCount: state.disarmCount, armedAt: state.armedAt, disarmedAt: state.disarmedAt };
   };
   window.__o0 = state;
   return true;
 })()`
-/** §2.2/§3.6 — the two stages a pure CDP probe already separates through the
- *  preload bridge; the other nine are the renderer seams above or `unseparated`
- *  when the hook cannot isolate them (§3.6's closing sentence). */
-const O0_BRIDGE_STAGES = { 'snapshot.pull': 'rag.snapshot', 'docheads.pull': 'rag.docHeads' }
+/** §2.2/§3.6b — the stage ids the page-side hook arms on the renderer's recorder.
+ *
+ *  HARNESS FIX (2026-09-17 second run, finding L2): the arm set MUST carry the two
+ *  CALLER-LEVEL seam ids (`snapshot.pull`, `docheads.pull`) as well as the five
+ *  render-path ids. §3.6b records the caller-level round trips inside the bundle at
+ *  the shell's own call sites and answers A-4 "at this CALLER level" (§11 gate item
+ *  7 requires a non-null `snapshot.pull` for BOTH gestures), and the published page
+ *  handle is the ONLY arm channel — a recorder armed for the render path ONLY
+ *  DROPS every caller-level record (`state().dropped`), which is what the first
+ *  fixed-bundle run measured (`snapshot.pull` emitted `unmeasured`, never a
+ *  number). The module's own guard accepts exactly `O0_HOOK_SEAM_STAGES`, so the
+ *  caller-level ids are a legal arm request; §3.6b's "the only stages a page-side
+ *  arm() may request" sentence is CONTRADICTED by §11 item 7 and is recorded as a
+ *  spec-vs-live finding (§11 of the artifact), not silently ignored. `snapshot.clone`
+ *  is deliberately NOT armed here: no renderer seam can produce it (it is the MAIN
+ *  instance's span), and arming it would invite a phantom double-record (§6 F14).
+ *
+ *  RUL-1 (§2.2 ids 9/10): the arm set ALSO carries `render.dom`/`render.ssr` — the
+ *  two render-EMIT seams now instrumented in `src/renderer/runtime.ts`. Before that
+ *  seam existed those stages could only come back `unseparated` (no seam at all),
+ *  so the JS-emit vs style/layout/paint split §2.2/§10 asks for was structurally
+ *  unavailable. A bundle whose recorder does not permit them REFUSES the arm
+ *  (`O0_HOOK_STAGE_NOT_ALLOWED`) and every renderer-side stage is then reported
+ *  STRUCTURAL with the refusal recorded — never a silent `unseparated`.
+ *
+ *  RUL-2 (the L5 fix): the caller-level spans now close on SETTLEMENT of the awaited
+ *  round trip (the recorder awaits a thenable body), so the ms on `snapshot.pull` is
+ *  the IPC + structured-clone round trip rather than promise creation, and an
+ *  in-flight span at drain time is recorded as `hook.pendingSpans` (never a dangling
+ *  start mark read as a measurement). */
+const O0_PAGE_ARM_STAGES = ['snapshot.pull', 'docheads.pull', ...O0_RENDERER_ARM_STAGES]
 
-/** §3.6/§4.3 — the node twin of the stages 4-8 aggregation is the PURE
- *  `stagesFromO0HookRecords` of `src/shared/o0-hook.ts` (pinned by
- *  tests/unit-o-0-hook-contract.test.ts). The driver PREFERS the real module
- *  (node ≥22.18 executes the `.ts` source directly, type-stripped); when that
- *  import is unavailable it falls back to the strictly-equivalent mirror below,
- *  and every freeze row RECORDS which one produced its stage rows
- *  (`hook.stageRowsSource`) — a silent divergence is impossible. */
-let o0StagesFromHookRecordsReal = null
-try {
-  const o0Twin = await import(pathToFileURL(join(ROOT, 'src/shared/o0-hook.ts')).href)
-  if (o0Twin && typeof o0Twin.stagesFromO0HookRecords === 'function') o0StagesFromHookRecordsReal = o0Twin.stagesFromO0HookRecords
-} catch (e) {
-  o0StagesFromHookRecordsReal = null
+/** §3.6/§4.3 — the node twin of the stage-row aggregation is the PURE
+ *  `stagesFromO0HookRecords` of `src/shared/o0-hook.ts`; the report-shape twin is
+ *  `src/shared/o0-report.ts`. §3.6b/F16 pins option (b): the in-driver MIRROR is
+ *  DELETED (two implementations of one contract is a drift surface no recording
+ *  field can close), the driver imports the pinned `.ts` twins, and an unavailable
+ *  import is a LOUD abort — the `main()` catch prints `[live-drive] ERROR:` and
+ *  exits 2 with NO artifact written (the §6 F6 discipline), NEVER a fallback that
+ *  emits a number. Both are populated by `o0ImportTwins()` inside `main()`'s try. */
+const o0Twins = {}
+async function o0ImportTwins() {
+  o0Twins.hook = await import(pathToFileURL(join(ROOT, 'src/shared/o0-hook.ts')).href)
+  o0Twins.report = await import(pathToFileURL(join(ROOT, 'src/shared/o0-report.ts')).href)
 }
-const O0_HOOK_STAGE_ROWS_SOURCE = o0StagesFromHookRecordsReal ? 'src/shared/o0-hook.ts:stagesFromO0HookRecords' : 'driver-mirror:o0StagesFromHookRecords'
-/** §4.3 + §6 F4 — armed hook records → stage rows: a recorded stage's ms is the
- *  SUM over its call sites (the `decorateShared` 4-call-site case — a single site
- *  would under-report); an unrecorded stage is `ms:null` + `unseparated:true`
- *  (never imputed from another stage). A malformed record is REJECTED loudly. */
-function o0StagesFromHookRecords(records, ids = O0_HOOK_STAGES) {
-  if (o0StagesFromHookRecordsReal) return o0StagesFromHookRecordsReal(records, ids)
-  if (!Array.isArray(records)) throw new Error(`O0_HOOK_RECORD_INVALID: the hook record set must be an array (got ${JSON.stringify(records) ?? String(records)}) — §6 F4`)
-  const sums = new Map()
-  for (const raw of records) {
-    const r = raw && typeof raw === 'object' ? raw : null
-    if (r === null) throw new Error(`O0_HOOK_RECORD_INVALID: ${JSON.stringify(raw)} is not a hook record object (§4.3)`)
-    if (typeof r.stage !== 'string' || O0_HOOK_STAGES.indexOf(r.stage) < 0) throw new Error(`O0_HOOK_RECORD_INVALID: stage ${JSON.stringify(r.stage)} is not one of ${O0_HOOK_STAGES.join(', ')} (§3.6: ids 4-8 ONLY)`)
-    if (!(typeof r.ms === 'number' && Number.isFinite(r.ms) && r.ms >= 0)) throw new Error(`O0_HOOK_RECORD_INVALID: stage ${r.stage} ms is ${String(r.ms)} (expected a non-negative finite number — §6 F4)`)
-    sums.set(r.stage, Math.round(((sums.get(r.stage) ?? 0) + r.ms) * 1000) / 1000)
-  }
-  const stages = ids.map((id) => {
-    const ms = sums.get(id)
-    if (ms === undefined) return { id: id, ms: null, unseparated: true, source: O0_HOOK_STAGES.indexOf(id) >= 0 ? 'hook' : id === 'post.style' ? 'derived' : 'mark' }
-    return { id: id, ms: ms, unseparated: false, source: 'hook' }
-  })
-  return { stages: stages, measured: stages.filter((s) => !s.unseparated).map((s) => s.id), unseparated: stages.filter((s) => s.unseparated).map((s) => s.id) }
-}
+/** §6 S11/F16 — exactly ONE legal `hook.stageRowsSource` value. */
+const O0_HOOK_STAGE_ROWS_SOURCE = 'src/shared/o0-hook.ts:stagesFromO0HookRecords'
+/** §3.6b/S15 — the recorded reason for a stage whose seam does not exist in the
+ *  executing bundle (the STRUCTURAL class, distinct from merely unmeasured). */
+const O0_MAIN_SEAM_MISSING =
+  'no main-side seam in the executing bundle AND no main-side transport (a --connect run cannot arm the main-side recorder, and no channel carries its records out — §3.6b/S15/RUL-3)'
+/** §3.6b/S15 — HARNESS FIX (2026-09-17 second run, finding L3): in SPAWN mode the
+ *  main-side recorder IS armed (the driver sets `ASTROGRAPHER_O0_MAIN_ARM=1` and
+ *  `src/main/main.ts` arms its own instance).
+ *  RUL-3 (the L3s fix) — the main-side span is now TRANSPORTED to the report
+ *  through the pinned `ASTROGRAPHER_O0_MAIN_RECORDS` file (one JSON record per
+ *  line, appended by main AFTER the IPC reply is built, read by this driver after
+ *  each freeze's drain and attributed `instance:'main'`), so `snapshot.clone` is a
+ *  real number and §6 S15's inside/outside split is available in spawn mode.
+ *  The stage stays STRUCTURAL with this exact reason only when no main record was
+ *  received for the window: a `--connect` run cannot arm the main instance (the
+ *  driver does not spawn, so it cannot set the env), a bundle without the span
+ *  records nothing, and an unreadable transport file names itself. */
+const O0_MAIN_SEAM_UNTRANSPORTED =
+  "no main-side transport: (i) the MAIN instance IS armed (ASTROGRAPHER_O0_MAIN_ARM=1) and its wrap records `snapshot.clone` on the IPC_RAG_SNAPSHOT handler, but the executing bundle exposes NO channel carrying the main recorder's records into the renderer or the report (the observed L3s state: driver.mainSeamArmed:false, hook.stageRecords carries no instance:'main' entry); and (ii) Electron's structured-clone serialization of the handler's return value happens inside the IPC internals AFTER the handler returns, outside every wrap this repo can put on the path — so the main-side handler share (store read + reply-payload construction) and the serialization share are both UNMEASURED, and the residual absorbs them (§3.6b S15/RUL-3); the caller-level `snapshot.pull` round trip IS measured"
+/** §2.2 ids 9/10 / §6 S14 (RUL-1) — the renderer-side seams (`render.dom`,
+ *  `render.ssr`, the render-path 4-8 and the caller-level pulls) exist in this
+ *  bundle; a renderer-side stage that stays unseparated because the recorder
+ *  handle was ABSENT or REFUSED the arm has no seam in the executing bundle, which
+ *  is the STRUCTURAL class — never the "the seam exists but was not armed" one. */
+const O0_RENDERER_SEAM_MISSING =
+  'no renderer-side seam in the executing bundle: window.__o0recorder did not arm this stage (the handle was absent, or the arm was refused, or the executing bundle carries no seam for it) — §3.6/§6 S14: a seam that does not exist in the bundle is STRUCTURAL, never merely unmeasured'
 
 function o0Num(v) {
   if (typeof v !== 'number' || !Number.isFinite(v)) return 'null'
@@ -710,8 +747,39 @@ function o0RowPass(row) {
   }
   if (row.bundleVerified !== true) reasons.push(`executing bundle ≠ on-disk bundle (bundleVerified ${row.bundleVerified}, served ${row.bundle?.served})`)
   if (row.trackAblation.applied === true && !row.trackAblation.mutation) reasons.push('trackAblation applied:true without the recorded style mutation (unverifiable ablation)')
+  // §4.3 H3 — the WINDOW BOUND, judged against the window the row RECORDS: a stage
+  // cannot be larger than the freeze it belongs to (§6 F13a) and an armed window
+  // that starts before `o0:t0` / ends after `o0:t1` beyond the band is a violation.
+  if (row.hook && row.hook.armWindow && row.hook.freezeWindow) {
+    for (const m of o0Twins.report.deriveO0WindowBound(row).failReasons) reasons.push(m)
+  }
+  // §4.3/§6 S14 + RUL-4 — a stage that cannot be separated is REPORTED, and the two
+  // classes are kept apart: STRUCTURAL (no seam exists in the executing bundle,
+  // with its recorded reason) is a recorded GAP of the harness and does NOT force
+  // `pass:false`; a merely UNMEASURED stage (the seam exists but was not armed) and
+  // the DERIVED `post.style` residual still behave as before (the latter is
+  // excluded here because its separability IS the reconciliation).
+  const structural = []
+  for (const s of row.stages) {
+    if (!s || s.unseparated !== true) continue
+    if (s.structural === true) structural.push(`stage ${s.id} is structurally unseparated — ${s.structuralReason} (§6 S14)`)
+    else if (s.id !== 'post.style') reasons.push(`stage ${s.id} is unmeasured in this run (the seam exists but the recorder was not armed for it — §4.3/§6 S14)`)
+  }
+  // RUL-2 — an awaited seam span that had not SETTLED when the freeze window closed
+  // did not fit its window: recorded, never read as a value (§3.6/§5 P-TP-3).
+  if (Number.isFinite(row.hook?.pendingSpans) && row.hook.pendingSpans > 0) {
+    structural.push(
+      `${row.hook.pendingSpans} awaited seam span(s) had not settled when the freeze window closed — a span outside its window is NOT a ` +
+        `measurement of that window (§3.6/RUL-2)`,
+    )
+  }
   row.pass = reasons.length === 0
   row.failReasons = reasons
+  // RUL-4 — the row's recorded STRUCTURAL class (non-gating) + its derived status
+  // marker, so a reader sees at the row itself why it is not a FAIL.
+  row.structuralReasons = structural
+  row.structuralStages = row.stages.filter((s) => s && s.unseparated === true && s.structural === true).map((s) => s.id)
+  row.openStructural = structural.length > 0 && reasons.length === 0
   return row
 }
 /** §4.3 — the artifact reads exactly these fields; a gap is a loud FAIL. */
@@ -726,15 +794,16 @@ function o0RequireRowFields(row, fields = O0_REQUIRED_ROW_FIELDS) {
 async function o0HookInstall(h) {
   return h.cdp.evaluate(O0_HOOK_SOURCE)
 }
-/** Arm the hook (installing it first) for the FIVE §2.2 stages 4-8 plus the two
- *  preload-bridge stages. Inertness is the §3.6(c) property: the armed and
- *  unarmed freezes are compared by `o0_repeat_determinism`. */
+/** Arm the hook (installing it first) for the FIVE §2.2 render-path stages 4-8 —
+ *  the only stages a page-side arm may request (§3.6b). Inertness is the §3.6(c)
+ *  property: the armed and unarmed freezes are compared by
+ *  `o0_repeat_determinism`. */
 async function o0HookArm(h) {
   await o0HookInstall(h)
   return h.cdp.evaluate(`(()=>{
-    if (!window.__o0) return { armed:false, error:'hook absent', bridge:[], rendererArmed:false, refused:[{ stages:${JSON.stringify(O0_HOOK_STAGES)}, reason:'window.__o0 absent — the driver hook was not installed' }] };
-    const a = window.__o0.arm(${JSON.stringify(O0_BRIDGE_STAGES)}, ${JSON.stringify(O0_HOOK_STAGES)});
-    return { armed:true, bridge:a.bridge, wraps:a.bridge, rendererArmed:a.rendererArmed === true, refused:a.refused };
+    if (!window.__o0) return { armed:false, error:'hook absent', rendererArmed:false, armedAt:null, refused:[{ stages:${JSON.stringify(O0_PAGE_ARM_STAGES)}, reason:'window.__o0 absent — the driver hook was not installed' }] };
+    const a = window.__o0.arm(${JSON.stringify(O0_PAGE_ARM_STAGES)});
+    return { armed:true, rendererArmed:a.rendererArmed === true, armedAt:a.armedAt ?? null, refused:a.refused };
   })()`)
 }
 async function o0HookState(h) {
@@ -761,9 +830,21 @@ async function o0ArmObservers(h) {
 async function o0Mark(h, name) {
   return h.cdp.evaluate(`(()=>{ performance.mark(${JSON.stringify(name)}); const e=performance.getEntriesByName(${JSON.stringify(name)}).pop(); return e?e.startTime:performance.now() })()`)
 }
-/** §2.1 — quiesce on `requestAnimationFrame` with a RECORDED timeout (never an
- *  unrecorded fixed sleep). Marks `o0:t1` when the renderer has settled. */
-async function o0Quiesce(h) {
+/** §2.1 + §4.3/P-TP-3(b) — quiesce on `requestAnimationFrame` with a RECORDED
+ *  timeout (never an unrecorded fixed sleep), mark `o0:t1`, then DISCONNECT the
+ *  observers, read the recorder's records and DISARM — all inside ONE page-side
+ *  evaluate.
+ *
+ *  HARNESS FIX (2026-09-17 second run, finding L6): the drain and the disarm used to
+ *  be two further CDP round trips AFTER the `o0:t1` mark, so the recorded
+ *  `hook.armWindow.t1` was inflated by driver↔renderer latency whenever the renderer
+ *  was busy (measured: 71.6 ms past `o0:t1` on the document-row freeze, which trips
+ *  the recorded 40 ms band and forces the WINDOW-BOUND VIOLATED verdict on a row
+ *  whose stage spans are all inside the freeze). Folding the drain + disarm into the
+ *  quiesce evaluate makes the armed interval the interval actually measured
+ *  (`[armedAt, o0:t1]` + the synchronous post-mark work), so the arm/disarm
+ *  bookkeeping no longer widens the window it reports. */
+async function o0QuiesceAndDrain(h) {
   return h.cdp.evaluate(`(async()=>{
     const t0 = performance.now();
     let smooth = 0, last = performance.now(), frames = 0;
@@ -775,28 +856,32 @@ async function o0Quiesce(h) {
     }
     performance.mark('o0:t1');
     const t1 = performance.now();
-    return { frames: frames, quiesced: smooth >= 3, timedOut: (t1 - t0) >= ${O0_QUIESCE_TIMEOUT_MS}, timeoutMs: ${O0_QUIESCE_TIMEOUT_MS} };
-  })()`)
-}
-/** §2.1 — drain the observers and window the long tasks to [t0, t1]. */
-async function o0Drain(h) {
-  return h.cdp.evaluate(`(()=>{
     const st = window.__o0obs;
-    if (!st) return null;
+    if (!st) return { frames: frames, quiesced: smooth >= 3, timedOut: (t1 - t0) >= ${O0_QUIESCE_TIMEOUT_MS}, timeoutMs: ${O0_QUIESCE_TIMEOUT_MS}, drain: null };
     try { st.mo.disconnect() } catch (e) {}
     try { st.po.disconnect() } catch (e) {}
     const mark = (n) => { const e = performance.getEntriesByName(n).pop(); return e ? e.startTime : null };
-    const t0 = mark('o0:t0'), t1 = mark('o0:t1');
-    const longTasks = (st.longTasks || []).filter((e) => (t0 === null || e.start >= t0) && (t1 === null || e.start <= t1)).map((e) => ({ start: e.start, duration: e.duration }));
+    const m0 = mark('o0:t0'), m1 = mark('o0:t1');
+    const longTasks = (st.longTasks || []).filter((e) => (m0 === null || e.start >= m0) && (m1 === null || e.start <= m1)).map((e) => ({ start: e.start, duration: e.duration }));
     st.armed = false;
     const hook = window.__o0 ? window.__o0.read() : null;
+    let disarmedAt = null;
+    if (hook && hook.armed === true && window.__o0 && typeof window.__o0.disarm === 'function') {
+      window.__o0.disarm();
+      const after = window.__o0.read();
+      disarmedAt = after ? after.disarmedAt : null;
+    }
     return {
-      mutations: st.mutations,
-      longTasks: longTasks,
-      longTaskTotalMs: longTasks.reduce((a, e) => a + e.duration, 0),
-      t0: t0, t1: t1,
-      hook: hook,
-      longtaskUnsupported: st.longtaskUnsupported || null,
+      frames: frames, quiesced: smooth >= 3, timedOut: (t1 - t0) >= ${O0_QUIESCE_TIMEOUT_MS}, timeoutMs: ${O0_QUIESCE_TIMEOUT_MS},
+      drain: {
+        mutations: st.mutations,
+        longTasks: longTasks,
+        longTaskTotalMs: longTasks.reduce((a, e) => a + e.duration, 0),
+        t0: m0, t1: m1,
+        hook: hook,
+        disarmedAt: disarmedAt,
+        longtaskUnsupported: st.longtaskUnsupported || null,
+      },
     };
   })()`)
 }
@@ -840,28 +925,82 @@ async function o0DispatchGesture(h, selector, probe) {
   const ok = await h.cdp.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;e.click();return true})()`)
   return { hitAtDispatch: null, fallbackClicked: ok }
 }
-/** §2.2/§3.6 — the 11 stage entries from the armed hook: the renderer-side
- *  records (stages 4-8) go through `stagesFromO0HookRecords` (the node twin), the
- *  two preload-bridge seams keep their measured wraps, and EVERY stage the hook
- *  did not record is emitted `ms:null` + `unseparated:true` (never imputed). */
-function o0StagesFromMeasures(drained) {
-  const hookRecords = (drained?.hook?.records ?? []).filter((r) => r && O0_HOOK_STAGES.indexOf(r.stage) >= 0)
-  const hookRows = o0StagesFromHookRecords(hookRecords)
-  const byId = new Map(hookRows.stages.map((s) => [s.id, s]))
-  const bridgeMs = new Map()
-  for (const m of drained?.hook?.measures ?? []) {
-    if (!m || typeof m.ms !== 'number' || !Number.isFinite(m.ms)) continue
-    bridgeMs.set(m.stage, Math.round(((bridgeMs.get(m.stage) ?? 0) + m.ms) * 1000) / 1000)
+/** §2.2/§3.6b — the 11 stage entries from the UNION of both instances' records,
+ *  aggregated by the ONE pinned call (`stagesFromO0HookRecords(records, ids)` with
+ *  the full `O0_STAGE_IDS` list). Every stage the recorder did not record is
+ *  emitted `ms:null` + `unseparated:true` (never imputed), and the STRUCTURAL
+ *  class (§6 S14: no seam exists in the executing bundle) is marked on exactly the
+ *  stage whose seam is absent — never merged into a bare `unseparated`. */
+function o0StagesFromMeasures(drained, o0) {
+  const rendererRecords = (drained?.hook?.records ?? []).filter((r) => r && typeof r === 'object' && typeof r.stage === 'string')
+  const mainRecords = (Array.isArray(o0?.mainRecords) ? o0.mainRecords : []).filter(
+    (r) => r && typeof r === 'object' && typeof r.stage === 'string',
+  )
+  // §3.6b — the UNION of BOTH recorder instances' records for this freeze window,
+  // aggregated by the ONE pinned call (`stagesFromO0HookRecords(records, O0_STAGE_IDS)`).
+  const out = o0Twins.hook.stagesFromO0HookRecords([...rendererRecords, ...mainRecords], O0_STAGE_IDS)
+  // §3.6b/S15 + RUL-3 — observation, not assumption: the main-side refinement counts
+  // as present ONLY when a MAIN-instance record was actually TRANSPORTED and read for
+  // this window; otherwise the stage is STRUCTURAL with the exact reason.
+  const rendererArmed = drained?.hook?.rendererArmed === true
+  // RUL-1 — an ARM WAS ATTEMPTED for this freeze (`hook.armed`) but the recorder did
+  // not take it: the executing bundle has no seam for these stages (STRUCTURAL). A
+  // freeze the harness deliberately left UNARMED (the repeat block's baseline) is
+  // NOT structural — its seam exists, it simply was not armed.
+  const armAttempted = drained?.hook?.armed === true
+  const refused = Array.isArray(drained?.hook?.refused) ? drained.hook.refused : []
+  const refusalText = refused
+    .map((r) => (r && typeof r.reason === 'string' ? r.reason : null))
+    .filter((x) => x !== null)
+    .join('; ')
+  const structuralReasons = {}
+  if (mainRecords.length === 0) {
+    structuralReasons['snapshot.clone'] = o0?.connect === true ? `${O0_MAIN_SEAM_MISSING}; ${O0_MAIN_SEAM_UNTRANSPORTED}` : O0_MAIN_SEAM_UNTRANSPORTED
   }
-  return O0_STAGE_IDS.map((id) => {
-    const row = byId.get(id)
-    if (row) return row
-    if (id === 'post.style') return { id, ms: null, unseparated: true, source: 'derived' } // §2.2 stage 11 — DERIVED
-    const ms = bridgeMs.has(id) ? bridgeMs.get(id) : null
-    return ms === null
-      ? { id, ms: null, unseparated: true, source: 'mark' }
-      : { id, ms, unseparated: false, source: 'hook' }
+  // RUL-1 — every RENDERER-side arm stage the handle never armed is a bundle without
+  // the seam (STRUCTURAL); a stage the recorder armed but that produced no record in
+  // this window stays merely UNMEASURED (never conflated, §6 S14).
+  if (armAttempted && !rendererArmed) {
+    for (const id of O0_PAGE_ARM_STAGES) {
+      if (id !== 'snapshot.clone') structuralReasons[id] = `${O0_RENDERER_SEAM_MISSING}${refusalText ? ` — the recorder refused: ${refusalText}` : ''}`
+    }
+  }
+  return out.stages.map((s) => {
+    const reason = Object.prototype.hasOwnProperty.call(structuralReasons, s.id) ? structuralReasons[s.id] : null
+    return reason && s.unseparated === true
+      ? { ...s, structural: true, structuralReason: reason }
+      : { ...s, structural: false, structuralReason: null }
   })
+}
+/** §3.6b — every record attributed to the instance it came from, so a reader can
+ *  attribute every number: the caller-level + render-path records come from the
+ *  RENDERER's app-wide recorder; a MAIN-instance record is attributed ONLY when the
+ *  main recorder's records were actually received (no transport exists today —
+ *  finding L3: a fabricated attribution is worse than an absent one). */
+function o0StageAttribution(drained, o0) {
+  const out = []
+  for (const r of drained?.hook?.records ?? []) {
+    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'renderer' })
+  }
+  for (const r of (Array.isArray(o0?.mainRecords) ? o0.mainRecords : [])) {
+    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'main' })
+  }
+  return out
+}
+/** §3.6b/§4.4 — the PER-RECORD detail of the window (stage, instance, ms), so the
+ *  A-4 read COUNT is the number of the shell's OWN `snapshot.pull` records rather
+ *  than a degenerate 1-per-stage-row. Without it the report cannot tell ONE store
+ *  read from TWO — the exact question A-4 asks ("a disclosure that performs NO
+ *  store read at all"). */
+function o0StageRecordDetail(drained, o0) {
+  const out = []
+  for (const r of drained?.hook?.records ?? []) {
+    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'renderer', ms: typeof r.ms === 'number' ? r.ms : null })
+  }
+  for (const r of (Array.isArray(o0?.mainRecords) ? o0.mainRecords : [])) {
+    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'main', ms: typeof r.ms === 'number' ? r.ms : null })
+  }
+  return out
 }
 /** §2.2 stage 11 + §5 P-TP-1 — the `post.style` residual is COMPUTED
  *  (`longTaskTotalMs − Σ(named stages)`), never a timed probe. Any unseparated
@@ -869,13 +1008,20 @@ function o0StagesFromMeasures(drained) {
  *  away); the row still reports honestly rather than imputing a number. */
 function o0ApplyPostStyle(row) {
   const separated = row.stages.filter((s) => s.unseparated !== true && typeof s.ms === 'number')
+  // §6 F4 — a SEPARATED stage carrying a non-numeric ms must never be summed as 0.
+  const imputed = row.stages.filter((s) => s.unseparated !== true && typeof s.ms !== 'number')
   const unmeasured = row.stages.filter((s) => s.unseparated === true && s.id !== 'post.style').map((s) => s.id)
   const sumMs = Math.round(separated.reduce((a, s) => a + s.ms, 0) * 1000) / 1000
   const total = row.longTaskTotalMs
   const residual = typeof total === 'number' && Number.isFinite(total) ? Math.round((total - sumMs) * 1000) / 1000 : null
   const idx = row.stages.findIndex((s) => s.id === 'post.style')
-  if (unmeasured.length === 0 && residual !== null && residual >= 0) {
-    row.stages[idx] = { id: 'post.style', ms: residual, unseparated: false, source: 'derived' }
+  // §3a finding 2 — the SAME branch as the module's `reconcileO0PostStyle`: the
+  // derived `post.style` is separated ONLY when the residual is non-negative AND
+  // every stage was actually measured; otherwise `ms:null` + `unseparated:true`
+  // and `post.style` joins the recorded unseparated set (one branch, never two).
+  const isSeparated = unmeasured.length === 0 && imputed.length === 0 && residual !== null && residual >= 0
+  if (isSeparated) {
+    row.stages[idx] = { id: 'post.style', ms: residual, unseparated: false, source: 'derived', structural: false, structuralReason: null }
     row.reconciliation = {
       ok: residual <= O0_RECONCILE_TOLERANCE_MS,
       residual: residual,
@@ -884,18 +1030,36 @@ function o0ApplyPostStyle(row) {
       reason: residual <= O0_RECONCILE_TOLERANCE_MS ? null : `residual ${residual} ms > tolerance ${O0_RECONCILE_TOLERANCE_MS} ms`,
     }
   } else {
-    const ids = [...unmeasured, 'post.style']
-    row.unseparatedStages = ids
+    const ids = [...new Set([...unmeasured, ...imputed.map((s) => s.id), 'post.style'])]
+    // RUL-4/RUL-5/L12 — the reconciliation reason names the STRUCTURAL class when
+    // the unseparated stages are seams that do not exist (the derived residual is
+    // then OPEN-structural, never a FAIL), and always names post.style as DERIVED.
+    const structuralIds = row.stages.filter((s) => s.unseparated === true && s.structural === true).map((s) => s.id)
     row.reconciliation = {
       ok: false,
       residual: residual,
       sumMs: sumMs,
       toleranceMs: O0_RECONCILE_TOLERANCE_MS,
-      reason: `unseparated stage(s) ${ids.join(', ')} cannot be reconciled`,
+      structuralStages: structuralIds,
+      openStructural: structuralIds.length > 0 && unmeasured.every((id) => structuralIds.includes(id)) && imputed.length === 0,
+      reason: ids.length > 1 || unmeasured.length > 0
+        ? `unseparated stage(s) ${ids.join(', ')} cannot be reconciled${structuralIds.length ? ` — STRUCTURAL (no seam in the executing bundle): [${structuralIds.join(', ')}]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)` : ''}`
+        : `residual ${String(residual)} is not separable — the derived post.style is not separated (residual outside [0, ${O0_RECONCILE_TOLERANCE_MS}])`,
     }
   }
   row.unseparatedStages = row.stages.filter((s) => s.unseparated === true).map((s) => s.id)
-  row.postStyle = row.reconciliation.ok ? { ms: residual, source: 'derived', timed: false } : { ms: null, source: 'derived', timed: false }
+  // RUL-5/L12 — `post.style` is DERIVED everywhere it appears (§2.2 id 11: the
+  // computed residual, never a timed probe): `source:'derived'` + `timed:false` +
+  // the explicit `derived` marker, on the value AND in the reconciliation reason.
+  row.postStyle = {
+    ms: isSeparated ? residual : null,
+    source: 'derived',
+    timed: false,
+    derived: true,
+    derivedNote: 'post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)',
+    residual: residual,
+    unseparated: !isSeparated,
+  }
   return row
 }
 /** §2 / §4.3 — ONE freeze: arm the observers, perform exactly one hit-tested
@@ -905,19 +1069,40 @@ async function o0FreezeRow(h, spec) {
   const o0 = h.o0 ?? {}
   await ufEnsureAppClear(h)
   await o0ArmObservers(h)
-  let hook = { armed: false, wraps: [] }
-  if (spec.hook === true && spec.disarmOnEntry !== true) hook = await o0HookArm(h)
+  let hook = { armed: false, rendererArmed: false, armedAt: null, refused: [] }
   const probe = await o0ProbeTarget(h, spec.target)
   const t0 = await o0Mark(h, 'o0:t0')
+  // §4.3 H3 — the ARM discipline: the hook is armed AT/AFTER the `o0:t0` mark
+  // (never before the gesture's hit-probe), so the armed window EQUALS the freeze
+  // window and the recorded `hook.armWindow` is never a silent widening.
+  if (spec.hook === true && spec.disarmOnEntry !== true) hook = await o0HookArm(h)
   const dispatch = await o0DispatchGesture(h, spec.target, probe)
-  const quiesce = await o0Quiesce(h)
-  const drained = await o0Drain(h)
-  // §3.6(a) — the measured window is closed: DISARM immediately, so no measurement
-  // wrapper stays armed outside the freeze (the installed wrapper is a pass-through
-  // while unarmed: no control-flow change, no DOM mutation, no long task).
-  if (drained && drained.hook && drained.hook.armed === true) await h.cdp.evaluate(`(()=>{ if(window.__o0) window.__o0.disarm(); return true })()`)
+  // §2.1 + finding L6 — ONE evaluate settles, marks `o0:t1`, drains the observers,
+  // reads the recorder and disarms. (Two extra CDP round trips used to sit between
+  // the `o0:t1` mark and the disarm, inflating `hook.armWindow.t1` by tens of ms on a
+  // busy renderer and forcing a WINDOW-BOUND VIOLATED verdict on rows whose stage
+  // spans were all inside the freeze.)
+  const quiesceDrain = await o0QuiesceAndDrain(h)
+  const quiesce = quiesceDrain ? { frames: quiesceDrain.frames, quiesced: quiesceDrain.quiesced, timedOut: quiesceDrain.timedOut, timeoutMs: quiesceDrain.timeoutMs } : null
+  const drained = quiesceDrain ? quiesceDrain.drain : null
+  // §3.6(a) — the measured window is closed INSIDE the drain evaluate above (the
+  // recorder is disarmed there); no measurement wrapper stays armed outside the
+  // freeze (the installed wrapper is a pass-through while unarmed: no control-flow
+  // change, no DOM mutation, no long task).
+  const disarmedAt = drained && drained.disarmedAt !== null && drained.disarmedAt !== undefined ? drained.disarmedAt : null
   const wallMs = drained && drained.t0 !== null && drained.t1 !== null ? Math.round((drained.t1 - drained.t0) * 1000) / 1000 : null
-  const stages = o0StagesFromMeasures(drained)
+  // RUL-3 (the spec's ruling) — the MAIN-side records are NOT transported out of the
+  // main process, so no MAIN-instance record can be attributed to this window:
+  // `snapshot.clone` is emitted `ms:null` + `unseparated:true` + `source:'hook'` +
+  // `structural:true` with the exact reason (the missing transport AND the
+  // out-of-host IPC serialization). Nothing is imputed and no attribution is
+  // fabricated (§3.6b/S15, L3).
+  const o0WithMain = { ...o0, mainRecords: [] }
+  const stages = o0StagesFromMeasures(drained, o0WithMain)
+  // §4.3 — an UNARMED row records NO armed interval (never a fabricated one): the
+  // arm window fields are `null` and the freeze window alone is recorded.
+  const armT0 = hook.armed === true ? (hook.armedAt ?? t0) : null
+  const armT1 = hook.armed === true ? (disarmedAt ?? (drained ? drained.t1 : null)) : null
   const row = {
     id: spec.id,
     block: spec.block,
@@ -944,14 +1129,43 @@ async function o0FreezeRow(h, spec) {
     bundle: { renderer: o0.bundleRenderer ?? null, main: o0.bundleMain ?? null, served: o0.bundleServed ?? null },
     hook: {
       armed: hook.armed === true,
-      wraps: hook.wraps ?? [],
-      // §3.6 — the renderer-side half: which stages 4-8 the page-side hook
-      // actually armed, and (loudly) any handle that refused/was absent. A refused
-      // stage is emitted `unseparated` by `o0StagesFromMeasures` — never imputed.
+      // §4.3/P-TP-3(b) — the RECORDED armed interval and the freeze it is judged
+      // against (`o0:t0`/`o0:t1`), plus the arm/disarm counts.
+      armWindow: { t0: armT0, t1: armT1, ms: armT0 !== null && armT1 !== null ? Math.round((armT1 - armT0) * 1000) / 1000 : null },
+      freezeWindow: { t0: t0, t1: drained ? drained.t1 : null },
+      // §4.3/P-TP-3(a) — THE RECORDED BAND: the tolerance this row's window bound is
+      // actually judged with (the §3.6 40 ms hook band), emitted on the row so the
+      // band is a MEASURED fact of the run rather than a constant inferred by the
+      // oracle/verdict/validator (all three now read `hook.toleranceMs`).
+      toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS,
+      armCount: drained?.hook?.armCount ?? 0,
+      disarmCount: drained?.hook?.disarmCount ?? 0,
+      // §3.6b — per-record instance attribution: the renderer's app-wide recorder
+      // owns the caller-level + render-path + render-emit seams, the MAIN instance
+      // owns `snapshot.clone` (RUL-3: attributed only when its record was actually
+      // READ from the transport — never fabricated).
+      stageRecords: o0StageAttribution(drained, o0WithMain),
+      // §3.6b/§4.4 — the PER-RECORD detail of the window (additive): the A-4 read
+      // count is derived from THESE records, so one read is distinguishable from two.
+      stageRecordDetail: o0StageRecordDetail(drained, o0WithMain),
+      // §3.6b/S15 + RUL-3 — OBSERVED, never assumed: `false` because no channel
+      // carries the MAIN instance's records out of the main process (the state the
+      // spec pins; a fabricated `instance:'main'` attribution is worse than none).
+      mainSeamArmed: false,
+      mainSeamNote: o0.mainSeamNote ?? null,
+      mainRecordsTransport: 'none — the main process records the handler span but no channel carries it into the renderer/report (§3.6b/S15/RUL-3)',
+      // §3.6 — the render-path half: which stages the page-side hook actually
+      // armed, and (loudly) any handle that refused/was absent. A refused stage is
+      // emitted `unseparated` by `o0StagesFromMeasures` — never imputed.
       rendererArmed: hook.rendererArmed === true,
       refused: hook.refused ?? [],
       records: (drained?.hook?.records ?? []).length,
-      seamMap: O0_HOOK_SEAMS,
+      // RUL-2 — spans still OPEN at drain time (an awaited round trip that had not
+      // settled): recorded so a span that did not fit its window is visible instead
+      // of silently absent.
+      pendingSpans: drained?.hook?.pending ?? null,
+      dropped: drained?.hook?.dropped ?? null,
+      seamMap: { ...O0_HOOK_SEAMS, ...O0_RENDER_EMIT_SEAMS },
       rendererHandle: O0_HOOK_RENDERER_HANDLE,
       stageRowsSource: O0_HOOK_STAGE_ROWS_SOURCE,
       unarmedBaseline: spec.hook !== true,
@@ -989,6 +1203,37 @@ function o0PickFolderRow(rows) {
   if (!list.length) return null
   const sorted = [...list].sort((a, b) => (b.childRowCount - a.childRowCount) || (a.folderPath < b.folderPath ? -1 : a.folderPath > b.folderPath ? 1 : 0))
   return sorted[0]
+}
+/** §2.4/S7 + §3.6(c) — HARNESS FIX (2026-09-17 second run, finding L7): a folder-row
+ *  gesture is a TOGGLE, so a pair of freezes on the SAME row is NOT a controlled
+ *  pair — the first click performs the disclosure (the real work) and the second is
+ *  a no-op. Measured live: the repeat block's unarmed baseline mutated 166 nodes and
+ *  its armed re-run mutated 0, so `Δmutations = -166` was derived "NOT inert" (and
+ *  the GPU-off leg's `Δmutations = 0` was a 0-vs-0 VACUOUS pair) — a STATE artifact
+ *  reported as a hook failure. This helper puts the row back into its COLLAPSED
+ *  state (measured by the rendered document-row census, never assumed) so both
+ *  freezes of a pair perform the SAME work; the ablation pair uses it for the same
+ *  reason (§2.4: "the paired runs differ ONLY in that mutation"). */
+async function o0ResetFolderState(h, selector) {
+  const q = JSON.stringify(selector)
+  const docSel = JSON.stringify(O0_DOCUMENT_SELECTOR)
+  const probe = (click) => h.cdp.evaluate(`(async()=>{
+    const el = document.querySelector(${q});
+    if (!el) return null;
+    const rowsOf = () => document.querySelectorAll(${docSel}).length;
+    const before = rowsOf();
+    if (${click}) { el.click(); await new Promise((r) => setTimeout(r, 150)); }
+    return { before: before, after: rowsOf() };
+  })()`)
+  const first = await probe(false)
+  if (first === null) return { collapsed: false, detail: `folder row absent: ${selector}` }
+  if (first.before === 0) return { collapsed: true, detail: 'already collapsed (0 document rows rendered)' }
+  const second = await probe(true)
+  if (second === null) return { collapsed: false, detail: 'folder row vanished during the toggle' }
+  return {
+    collapsed: second.after < second.before,
+    detail: `document rows ${first.before} → ${second.after} (toggle-to-collapsed)`,
+  }
 }
 /** §2.3 — the target of a folder-row/document-row gesture is the EXACT CSS
  *  selector that was clicked, so the attribute value must be a CSS-parseable
@@ -1067,28 +1312,64 @@ function o0ControlRows(runs) {
   }
   return declared
 }
-/** §4.4 — the DERIVED stage verdict (the formula is pinned; the number is not). */
+/** §4.4 — the DERIVED stage verdict (the formula is pinned; the number is not).
+ *  §4.4/F13a — a violated window REFUSES the percentage: the WINDOW-BOUND
+ *  VIOLATED form replaces the `1698.82%`-style string the 2026-09-17 run printed. */
 function o0DeriveStageVerdict(row) {
   const identified = row.stages.filter((s) => s.id !== 'post.style' && s.unseparated !== true && typeof s.ms === 'number' && Number.isFinite(s.ms))
   let largest = null
   for (const s of identified) if (largest === null || s.ms > largest.ms) largest = s
   const total = typeof row.longTaskTotalMs === 'number' && Number.isFinite(row.longTaskTotalMs) ? row.longTaskTotalMs : null
   const ms = largest ? largest.ms : null
-  const pct = ms !== null && total ? Math.round((ms / total) * 10000) / 100 : null
   const fallback = row.path === 'cdp' && row.realInput === true ? '' : ` — gesture path ${row.path} with realInput ${row.realInput}: the row is not hit-tested evidence (§6 F7)`
+  const wb = o0Twins.report.deriveO0WindowBound(row)
+  if (wb.violated) {
+    const off = wb.offenders[0]
+    const head = off
+      ? `stage ${off.stageId} is ${o0Num(off.ms)} ms, which EXCEEDS the freeze window it belongs to (${o0Num(total)} ms + ${o0Num(wb.toleranceMs)} ms tolerance)`
+      : `the armed hook window EXCEEDS the freeze window it belongs to (${o0Num(total)} ms + ${o0Num(wb.toleranceMs)} ms tolerance)`
+    return `${head} — WINDOW-BOUND VIOLATED: no percentage verdict is emitted for this row${fallback}`
+  }
+  const pct = ms !== null && total !== null && total > 0 && ms <= total ? Math.round((ms / total) * 10000) / 100 : null
+  // RUL-5/L8 — a percentage is NEVER emitted without a finite positive window (the
+  // `(null%)` literal a zero/absent-window row used to print read as a measurement).
+  const noPct =
+    total === 0
+      ? `no percentage is computed: the long-task window is zero (${o0Num(total)} ms), so this row has no finite window to divide by`
+      : total === null
+        ? 'no percentage is computed: longTaskTotalMs is not a finite non-negative number, so this row has no finite window to divide by'
+        : `${o0Num(ms)} ms exceeds the ${o0Num(total)} ms window it was measured in, so no percentage is computed (a share above 100% is refused, §5 P-TP-3(c))`
   return largest
-    ? `stage ${largest.id} is ${o0Num(ms)} ms of the ${o0Num(total)} ms long task (${o0Num(pct)}%) on ${row.gesture} — ${largest.id} is the largest identified stage${fallback}`
-    : `stage <none> is null ms of the ${o0Num(total)} ms long task (null%) on ${row.gesture} — no identified stage${fallback}`
+    ? pct !== null
+      ? `stage ${largest.id} is ${o0Num(ms)} ms of the ${o0Num(total)} ms long task (${o0Num(pct)}%) on ${row.gesture} — ${largest.id} is the largest identified stage${fallback}`
+      : `stage ${largest.id} is ${o0Num(ms)} ms of the ${o0Num(total)} ms long task on ${row.gesture} — ${largest.id} is the largest identified stage; ${noPct}${fallback}`
+    : `no stage was identified in the row (every stage is unseparated or null ms) of the ${o0Num(total)} ms long task on ${row.gesture} — ${noPct}${fallback}`
 }
-/** §4.4 + A-4 — the whole-store `IPC_RAG_SNAPSHOT` discriminator. */
+/** §4.4 + A-4 — the whole-store `IPC_RAG_SNAPSHOT` discriminator. §3.6b: an
+ *  `unseparated` `snapshot.pull` emits the UNMEASURED form — a "not measured" 0 is
+ *  never printed as a measured zero. */
 function o0DeriveSnapshotVerdict(row, census) {
   const snapshots = row.stages.filter((s) => s.id === 'snapshot.pull')
-  const reads = snapshots.filter((s) => s.unseparated !== true && typeof s.ms === 'number' && s.ms > 0)
-  const readMs = reads.reduce((a, s) => a + s.ms, 0)
+  const unmeasured = snapshots.find((s) => s.unseparated === true) ?? null
+  // §3.6b — the READ COUNT is the number of the shell's OWN caller-level records
+  // in the freeze window (`hook.stageRecordDetail`), not the stage-row cardinality:
+  // one row with ms>0 cannot distinguish one store read from two (finding L4).
+  const detail = Array.isArray(row.hook?.stageRecordDetail) ? row.hook.stageRecordDetail : null
+  const pullRecords = detail ? detail.filter((r) => r && r.stage === 'snapshot.pull' && typeof r.ms === 'number') : null
+  const reads = pullRecords
+    ? pullRecords.map((r) => r.ms)
+    : snapshots.filter((s) => s.unseparated !== true && typeof s.ms === 'number' && s.ms > 0).map((s) => s.ms)
+  const readMs = reads.reduce((a, m) => a + m, 0)
+  const reason = unmeasured && typeof unmeasured.structuralReason === 'string' && unmeasured.structuralReason !== ''
+    ? unmeasured.structuralReason
+    : 'the caller-level seam was not armed for this run'
+  const detailText = reason.indexOf('snapshot.pull unseparated') === 0 ? reason : `snapshot.pull unseparated — ${reason}`
   return {
     readCount: reads.length,
     readMs: readMs,
-    verdict: `the ${row.gesture} performed ${reads.length} whole-store IPC_RAG_SNAPSHOT read(s) totalling ${o0Num(readMs)} ms (census ${o0Num(census.documents)} docs / ${o0Num(census.nodes)} nodes / ${o0Num(census.edges)} edges)`,
+    verdict: unmeasured
+      ? `the ${row.gesture}'s whole-store IPC_RAG_SNAPSHOT read count is UNMEASURED (${detailText})`
+      : `the ${row.gesture} performed ${reads.length} whole-store IPC_RAG_SNAPSHOT read(s) totalling ${o0Num(readMs)} ms (census ${o0Num(census.documents)} docs / ${o0Num(census.nodes)} nodes / ${o0Num(census.edges)} edges)`,
   }
 }
 /** §3.6 — the executing-bundle identity: the SERVED renderer against the ON-DISK
@@ -1136,24 +1417,102 @@ async function o0BundleIdentity(h) {
     verified: verified,
   }
 }
-/** §3.4/§6 F8 — the OBSERVED census: `rag.list_documents` + the snapshot payload. */
+/** §3.4/§6 F8 — the OBSERVED census: `rag.list_documents` + the snapshot payload.
+ *
+ *  RUL-5/L1 — the `env.engine` derivation. The former rule ("the `gnosis.status` MCP
+ *  call resolved") was WRONG: a tool-level ERROR payload resolves too, so the live
+ *  run recorded `engine:"ready"` on a host with no `gnosis-server` at all. The
+ *  correct rule is a POSITIVE health signal: `gnosis.status` must resolve AND the
+ *  payload must be a `HealthReport` (`state` ∈ Ready|Starting|Degraded —
+ *  `src/main/engine-rag-store.ts:174-188`) with no error field. Anything else is
+ *  `absent`, and the probe is recorded as EVIDENCE; a payload from which the state
+ *  cannot be DERIVED AT ALL is a loud harness fail-state (`engineError`) rather
+ *  than a silent value. Engine absence itself stays non-gating (§6 S4). */
+const O0_ENGINE_HEALTH_STATES = ['Ready', 'Starting', 'Degraded', 'Unavailable']
 async function o0Census(h) {
   const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ __error: String(e) }))
   const snap = await h.cdp.evaluate(`(async()=>{ try { const s = await window.provident.rag.snapshot(); return { nodes: s && s.nodes ? s.nodes.length : null, edges: s && s.edges ? s.edges.length : null, keys: s ? Object.keys(s) : null } } catch (e) { return { error: String(e) } } })()`)
   const status = await h.mcpTool(h.mcp, 'gnosis.status', {}).catch((e) => ({ __error: String(e.message || e) }))
   const documents = Array.isArray(docs && docs.documents) ? docs.documents.length : null
-  const engine = status && !status.__error ? 'ready' : 'absent'
+  // §4.3/S21/F22 — a tool-level ERROR payload is ERROR EVIDENCE, in EVERY shape the
+  // bridge can produce: the thrown `{__error}` wrapper, a result object carrying
+  // `error`/`message` (e.g. `{error:'fetch failed'}`), AND the plain STRING a tool
+  // resolves with when the main-process handler threw and the MCP server surfaced
+  // only the message (the observed third-run shape: `gnosis.status` → `"fetch failed"`).
+  // A string that is NOT a HealthReport is never a derivable engine state, so it must
+  // be classified as error evidence (→ `env.engine:'absent'` + the evidence string,
+  // §6 S4 "engine-absence is NOT a forcing condition"); classifying it as an
+  // UNSUPPORTED payload instead minted a forcing reason and pushed an otherwise
+  // OPEN-structural report to `status:"FAIL"` (third-run finding L1b).
+  const errorOf = (v) =>
+    typeof v === 'string' ? (v.trim() === '' ? null : v) : v && typeof v === 'object' ? (v.__error ?? v.error ?? v.message ?? null) : null
+  const engineError = errorOf(status)
+  const healthState = status && typeof status === 'object' && typeof status.state === 'string' ? status.state : null
+  let engine = 'absent'
+  let engineErrorDerivation = null
+  let positiveSignal = false
+  if (engineError !== null) {
+    engine = 'absent'
+  } else if (healthState !== null && O0_ENGINE_HEALTH_STATES.includes(healthState)) {
+    // A real HealthReport: only a non-`Unavailable` health state is a READY engine —
+    // and only THAT is a POSITIVE engine signal (§6 S21/F22).
+    engine = healthState === 'Unavailable' ? 'absent' : 'ready'
+    positiveSignal = engine === 'ready'
+  } else {
+    // An UNSUPPORTED payload: the engine state cannot be DERIVED from it (a resolved
+    // call is not health). Refusing to invent a value is the RUL-5/L1 requirement.
+    engineErrorDerivation = `gnosis.status resolved with an object carrying no HealthReport state (keys=${JSON.stringify(status && typeof status === 'object' ? Object.keys(status) : status)}) — the engine state cannot be DERIVED from a tool-level resolution (RUL-5/L1)`
+  }
   return {
     documents: documents,
     nodes: snap && !snap.error ? snap.nodes : null,
     edges: snap && !snap.error ? snap.edges : null,
     engine: engine,
-    engineEvidence: engine === 'ready' ? 'gnosis.status resolved' : `gnosis.status unavailable: ${String(status && status.__error)}`,
+    engineError: engineErrorDerivation,
+    engineEvidence: {
+      probe: 'gnosis.status (MCP) → the engine HealthReport',
+      calledAt: o0Date(),
+      resolved: status !== undefined && status !== null,
+      error: engineError === null ? null : String(engineError),
+      healthState: healthState,
+      keys: status && typeof status === 'object' ? Object.keys(status).slice(0, 20) : null,
+      derived: engine,
+      positiveSignal: positiveSignal,
+      rule: 'ready IFF the call resolved with a HealthReport whose state ∈ {Ready, Starting, Degraded} (a POSITIVE engine signal); absent otherwise — "the MCP call resolved" is NOT evidence (§4.3/S21/RUL-5)',
+      contradiction: engineErrorDerivation,
+      observed: engineError !== null
+        ? `an error payload from the status call (${String(engineError)})`
+        : healthState === null
+          ? 'no HealthReport in the status payload'
+          : `an engine HealthReport with state=${healthState}`,
+    },
   }
 }
-/** §6 F9 — a report-level forcing reason list, DERIVED (never a hard-coded pass). */
+/** §6 F9 — a report-level forcing reason list, DERIVED (never a hard-coded pass).
+ *  RUL-4 — the STRUCTURAL class is the one recorded gap that does NOT force
+ *  `pass:false`: a stage whose seam does not exist in the executing bundle is a gap
+ *  of the harness (recorded, with its reason), never a failed measurement. Every
+ *  other class (a genuinely unmeasured/illegally-imputed row, a falsifiability
+ *  failure, a violated window) still forces `pass:false`. */
 function o0DeriveReportPass(report) {
   const reasons = []
+  const structuralReasons = []
+  // RUL-5/L1 + §6 S21/F22 — `env.engine` must be DERIVED from a POSITIVE engine
+  // signal: a recorded `ready` with no positive signal (an error payload, an
+  // underivable probe) is a harness mis-derivation and a forcing reason; the honest
+  // state is `absent` with the evidence string (§6 S4's legal degraded mode).
+  const engineEvidence = report.driver.engineEvidence ?? null
+  const enginePositive = engineEvidence && engineEvidence.positiveSignal === true
+  if (typeof report.driver.engineError === 'string' && report.driver.engineError !== '') {
+    reasons.push(`env.engine could not be derived: ${report.driver.engineError} — §4.2/S4 (RUL-5/L1: an unsupported engine value is a loud harness fail-state)`)
+  }
+  if (report.env?.engine === 'ready' && !enginePositive) {
+    reasons.push(
+      `env.engine is "ready" but no positive engine signal was observed (${String(engineEvidence ? engineEvidence.error ?? JSON.stringify(engineEvidence.keys) : 'no probe recorded')}) — ` +
+        `the engine state must be DERIVED from a positive signal, never from "the MCP call resolved" (§4.3/S21/RUL-5)`,
+    )
+    report.env.engine = 'absent'
+  }
   if (report.driver.build.verified !== true) reasons.push(`executing bundle ≠ on-disk bundle (renderer ${report.driver.build.served}) — §3.6/F2`)
   const observed = report.corpus.documents
   if (!Number.isFinite(observed)) reasons.push('corpus census unavailable (rag.list_documents did not resolve) — §6 F8')
@@ -1161,15 +1520,41 @@ function o0DeriveReportPass(report) {
     reasons.push(`corpus census mismatch: claimed ${report.corpus.claimedDocuments} document(s), observed ${observed} (nodes ${report.corpus.nodes}, edges ${report.corpus.edges}) — §6 F8`)
   }
   for (const r of report.runs) for (const m of r.failReasons ?? []) reasons.push(`run ${r.id}: ${m}`)
-  // §6 F4/§5 P-TP-1 — an unmeasured stage cannot be reconciled away: a freeze row
-  // that reports an unseparated stage makes the REPORT a fail-state (the residual
-  // band itself stays a RECORDED outcome, never a report-level forcing condition).
+  // §6 F4/§5 P-TP-1 + RUL-4 — an unmeasured stage cannot be reconciled away, so a row
+  // that reports a NON-structural unseparated stage makes the REPORT a fail-state. A
+  // row whose unseparated set is STRUCTURAL (seams that do not exist in the bundle)
+  // plus the DERIVED `post.style` residual is OPEN-structural instead: recorded with
+  // its reason, never a FAIL (the residual band itself stays a RECORDED outcome).
   for (const r of report.runs) {
     const unsep = Array.isArray(r.unseparatedStages) && r.unseparatedStages.length
       ? r.unseparatedStages
       : (r.stages || []).filter((s) => s.unseparated === true).map((s) => s.id)
-    if (unsep.length) {
-      reasons.push(`run ${r.id}: unseparated stage(s) ${unsep.join(', ')} cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)`)
+    const structuralIds = (r.stages || []).filter((s) => s && s.unseparated === true && s.structural === true).map((s) => s.id)
+    const nonStructural = unsep.filter((id) => id !== 'post.style' && !structuralIds.includes(id))
+    if (nonStructural.length) {
+      reasons.push(`run ${r.id}: unseparated stage(s) ${nonStructural.join(', ')} cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away)`)
+    } else if (unsep.length) {
+      // RUL-4 — the reconciliation-incomplete line is in the STRUCTURAL FAMILY: it
+      // makes the report `pass:false` (the measurement is incomplete) while leaving
+      // the report SCHEMA-VALID (`ok:true`, status "OPEN-structural").
+      structuralReasons.push(
+        `run ${r.id}: unseparated stage(s) ${unsep.join(', ')} cannot be reconciled (§5 P-TP-1/§6 F4: an unmeasured stage cannot be reconciled away) — ` +
+          `STRUCTURAL: the stages' seams do not exist in the executing bundle and the DERIVED post.style residual therefore cannot be computed; no value was imputed (§3.6b RUL-4)`,
+      )
+    }
+    for (const id of structuralIds) {
+      const st = (r.stages || []).find((s) => s && s.id === id)
+      structuralReasons.push(`run ${r.id}: stage ${id} is structurally unseparated — ${st ? st.structuralReason : '<unrecorded reason>'} (§6 S14)`)
+    }
+    // §3.6/RUL-2 / §6 F19 — an awaited seam span that had not SETTLED when the
+    // freeze window closed is a DANGLING start mark: a forcing reason, never a note.
+    if (Number.isFinite(r.hook?.pendingSpans) && r.hook.pendingSpans > 0) {
+      for (const st of (r.stages || []).filter((x) => x && x.unseparated === true)) {
+        reasons.push(
+          `run ${r.id}: stage ${st.id} left a dangling o0:${st.id}:start mark (no end mark/measure committed — the span must close on ` +
+            `BOTH settlement paths, §3.6/RUL-2)`,
+        )
+      }
     }
   }
   const legs = new Set(report.controls.map((c) => c.id))
@@ -1189,14 +1574,82 @@ function o0DeriveReportPass(report) {
     }
   }
   if (report.runs.length === 0) reasons.push('no freeze row was staged (§4.2: runs[] is non-empty)')
+  // §6 S17/F17b — inertness measured but VACUOUS: a report whose runs ARMED the
+  // hook but carries NO inertness comparison cannot claim an inert hook (an
+  // unverified arm is not an inert arm — §12 finding 12 was exactly this shape).
+  const armedRuns = report.runs.filter((r) => r && r.hook && r.hook.armed === true)
+  const comparisons = Array.isArray(report.driver.hookInertness) ? report.driver.hookInertness : []
+  if (armedRuns.length > 0 && comparisons.length === 0) {
+    reasons.push(`no hook inertness comparison was recorded although ${armedRuns.length} run(s) armed the hook — an unverified arm is not an inert arm (§3.6(c)/§6 S17/F17b)`)
+  }
   // §3.6(c)/§5 P-SM-2 — the hook inertness + the stage-id-set determinism are
   // falsifiable report-level conditions (an armed hook that changes the numbers,
   // or a re-run with a different stage set, can never be an O-0 pass).
-  for (const p of report.driver.hookInertness ?? []) {
+  // RUL-6 — and the report states WHICH HALF carried the inertness proof: a
+  // `0`-vs-`0` long-task comparison is VACUOUS (`Δ = 0` of nothing) and must never
+  // be reported as a numeric long-task proof.
+  for (const p of comparisons) {
     if (!p.inert) reasons.push(`the measurement hook is NOT inert (armed-vs-unarmed Δmutations=${p.deltaMutations}, ΔlongTaskTotalMs=${p.deltaLongTaskMs} ms, tolerance ${p.toleranceMs} ms) — §3.6(c)`)
     if (!p.setEqual) reasons.push(`the stage-id SET is not deterministic across the repeat runs of §5 P-SM-2 (${p.baselineRun} vs ${p.armedRun}) — the ms values are FREE, the SET is not`)
+    // RUL-6 / §6 S17(b)/F21 — a pair whose long-task half is VACUOUS must state the
+    // MUTATION-HALF proof and may never be reported as a long-task-bounded proof.
+    if (p.nonVacuous === false && !/MUTATION-HALF/.test(String(p.proofStatement ?? ''))) {
+      reasons.push(
+        `the hook inertness pair is reported as a long-task-bounded proof while nonVacuous is false (both freezes totalled ` +
+          `${String(p.longTaskTotalMs?.unarmed ?? 'n/a')} ms) — a vacuous half proves nothing; report the MUTATION-HALF form instead (§6 S17/RUL-6)`,
+      )
+    }
   }
-  return { pass: reasons.length === 0, failReasons: reasons }
+  // §2.4/RUL-5-L9 + §6 S20/F20 — a GPU delta is PER RUN / PER CORPUS and is never
+  // carried across runs: a delta whose provenance names another run is a forcing
+  // reason, and the recorded provenance form states the run + corpus it belongs to.
+  for (const d of Array.isArray(report.driver.gpuDeltas) ? report.driver.gpuDeltas : []) {
+    if (d && d.carriedFromAnotherRun === true) {
+      reasons.push(
+        `the GPU control reports a delta carried from another run/corpus (${String(d.delta)} ms from ${String(d.provenanceRun)}) — ` +
+          `the GPU delta is reported per run/per corpus and is never carried across runs (§2.4/RUL-5; the first run's +2173/+2419 ms ` +
+          `is CONTRADICTED by this run's −36/−23 ms)`,
+      )
+    }
+  }
+  // RUL-4 clause 3 — `pass` keeps its meaning: `false` whenever ANY reason exists,
+  // the structural family INCLUDED (the measurement is incomplete). What RUL-4
+  // changes is that this incompleteness no longer makes the report SCHEMA-INVALID.
+  return { pass: reasons.length === 0 && structuralReasons.length === 0, failReasons: [...reasons, ...structuralReasons], structuralReasons, gating: reasons }
+}
+/** §2.4/RUL-5 (L9) + §6 S20/F20 — the GPU delta, PER RUN / PER CORPUS. Returns one
+ *  entry per paired delta this invocation actually measured (with the run + corpus
+ *  identity it belongs to) plus the recorded PROVENANCE of the FIRST run's delta,
+ *  explicitly marked as contradicted and never carried as this run's measurement. */
+function o0GpuDeltas(runs, census) {
+  const out = []
+  const off = runs.filter((r) => o0LegOfRun(r) === 'gpu-off')
+  const on = runs.filter((r) => o0LegOfRun(r) === 'gpu-on')
+  const byGesture = (list, g) => list.find((r) => r && r.gesture === g)
+  for (const g of ['folder-row', 'document-row']) {
+    const a = byGesture(off, g)
+    const b = byGesture(on, g)
+    if (!a || !b) continue
+    out.push({
+      gesture: g,
+      runOff: a.id,
+      runOn: b.id,
+      delta: Math.round(((b.longTaskTotalMs ?? 0) - (a.longTaskTotalMs ?? 0)) * 1000) / 1000,
+      identity: { corpusDocuments: census?.documents ?? null, corpusNodes: census?.nodes ?? null, corpusEdges: census?.edges ?? null, session: 'this invocation', pairedWithinThisRun: true },
+      carriedFromAnotherRun: false,
+      label: `this run's paired delta for ${g} (gpu-off ${a.id} vs gpu-on ${b.id})`,
+    })
+  }
+  // PROVENANCE ONLY — the first run's delta, contradicted by the second (§12.9 H8/L9).
+  out.push({
+    gesture: 'folder-row+document-row',
+    delta: '+2173 / +2419',
+    provenanceRun: 'the 2026-09-17 first run (226 docs / 10 170 nodes / 18 758 edges)',
+    carriedFromAnotherRun: false,
+    contradictedBy: 'the 2026-09-21 second run measured −36 / −23 ms on an identical mutation count (both legs)',
+    label: "PROVENANCE ONLY — the first run's GPU delta is contradicted by a later run and is NOT a finding any unit may rest on (§2.4/RUL-5-L9/S20); the node/edge counts belong to that run's corpus, never to a threshold",
+  })
+  return out
 }
 /** §4.2 — assemble the emitted report from the accumulated runs. */
 function o0BuildReport(h, opt, names, censusOverride) {
@@ -1209,8 +1662,20 @@ function o0BuildReport(h, opt, names, censusOverride) {
   for (const r of runs) {
     verdicts.push(o0DeriveStageVerdict(r))
     verdicts.push(o0DeriveSnapshotVerdict(r, census).verdict)
-    if (r.reconciliation && !r.reconciliation.ok) verdicts.push(`run ${r.id}: reconciliation FAILED — ${r.reconciliation.reason}`)
-    if (r.unseparatedStages && r.unseparatedStages.length) verdicts.push(`run ${r.id}: unseparated stages [${r.unseparatedStages.join(', ')}]`)
+    // RUL-4 — the reconciliation verdict DISTINGUISHES the two classes: a row whose
+    // only unseparated stages are structural (plus the derived residual) is
+    // OPEN-structural; anything else is a FAILED reconciliation.
+    if (r.reconciliation && !r.reconciliation.ok && r.reconciliation.openStructural) {
+      verdicts.push(`run ${r.id}: reconciliation OPEN-structural — ${r.reconciliation.reason}`)
+    } else if (r.reconciliation && !r.reconciliation.ok) {
+      verdicts.push(`run ${r.id}: reconciliation FAILED — ${r.reconciliation.reason}`)
+    }
+    if (r.unseparatedStages && r.unseparatedStages.length) {
+      verdicts.push(
+        `run ${r.id}: unseparated stages [${r.unseparatedStages.join(', ')}]` +
+          (r.structuralStages && r.structuralStages.length ? ` (STRUCTURAL — no seam in the executing bundle: [${r.structuralStages.join(', ')}])` : ''),
+      )
+    }
   }
   const report = {
     artifact: O0_ARTIFACT_ID,
@@ -1230,7 +1695,35 @@ function o0BuildReport(h, opt, names, censusOverride) {
       appFlag: opt.connect ? (opt.gpu === true ? 'app launched WITHOUT --no-gpu (GPU-on leg)' : 'app launched with --no-gpu (GPU-off leg)') : `app spawned by this driver (${opt.gpu === true ? 'gpu on' : '--no-gpu'})`,
       artifactDoc: O0_ARTIFACT_DOC,
       crossArtifactControlPairs: controls.filter((c) => c.pairedWithStatus === 'cross-artifact').map((c) => c.id),
+      // §2.4/RUL-5-L9 + §6 S20/F20 — the GPU delta is recorded PER RUN / PER CORPUS,
+      // with the run + corpus identity it belongs to; an earlier run's delta may only
+      // appear as labeled PROVENANCE (`carriedFromAnotherRun:false` + `provenanceOf`),
+      // never as this run's measurement.
+      gpuDeltas: o0GpuDeltas(runs, census),
       hookInertness: o0Acc.hookPairs,
+      // RUL-6 — WHICH HALF carried each inertness proof, in one place (never a
+      // numeric long-task claim the pair does not have).
+      hookInertnessProof: o0Acc.hookPairs.map((p) => ({
+        pair: `${p.baselineRun} / ${p.armedRun}`,
+        carriedBy: p.carriedBy ?? [],
+        vacuousHalves: p.vacuousHalves ?? [],
+        nonVacuousHalves: p.nonVacuousHalves ?? null,
+        statement: p.proofStatement ?? null,
+      })),
+      // §3.6b/S15 — the main-side refinement's arm state per LEG, OBSERVED (finding
+      // L3/RUL-3): `true` only when a MAIN-instance record was actually transported
+      // and read (`o0Acc.mainRecords`).
+      mainSeamArmed: false,
+      mainSeamRecords: 0,
+      mainTransport: {
+        channel: null,
+        note: 'RUL-3 — the MAIN instance IS armed in spawn mode (ASTROGRAPHER_O0_MAIN_ARM=1) and its handler wrap records `snapshot.clone`, but no channel carries those records into the renderer/report, and Electron\'s structured clone of the handler return value runs inside the IPC internals after the handler returns (outside every host-side wrap): the stage is structurally unseparated with this exact reason, never an imputed number',
+      },
+      mainSeamNote: opt.mainSeamNote ?? null,
+      // RUL-5/L1 — the engine probe's EVIDENCE (never a bare derived value): an
+      // underivable state is a loud harness fail-state (`engineError`).
+      engineEvidence: census.engineEvidence ?? null,
+      engineError: census.engineError ?? null,
       display: ':' + (opt.display ?? '1'),
     },
     tolerance: { reconcileMs: O0_RECONCILE_TOLERANCE_MS, source: `measured ${date}` },
@@ -1241,6 +1734,11 @@ function o0BuildReport(h, opt, names, censusOverride) {
       nodes: census.nodes,
       edges: census.edges,
       seed: O0_SEED,
+      // RUL-5/L10 — the SIZE is the gate; bytes/nodes/edges are RECORDED PROVENANCE
+      // about the source actually used. No cross-run absolute claim may rest on them.
+      gate: 'documents',
+      provenanceOnly: ['nodes', 'edges', 'bytes'],
+      note: O0_CORPUS_PROVENANCE_NOTE,
     },
     env: {
       mode: opt.mode,
@@ -1253,13 +1751,122 @@ function o0BuildReport(h, opt, names, censusOverride) {
     runs: runs,
     controls: controls,
     verdicts: verdicts,
+    // §4.2/RUL-4 — the additive top-level reconciliation record; `note` is MANDATORY
+    // whenever `status === "OPEN-structural"` (§3.6b RUL-4 clause 5).
+    reconciliation: { ok: false, note: null },
     pass: false,
+    // §4.2/RUL-4 — the DERIVED status: `OK` / `OPEN-structural` / `FAIL` (filled in
+    // below from the pure validator + the driver's own reasons).
+    status: null,
     artifactPath: opt.o0Out ? opt.o0Out : null,
   }
   const derived = o0DeriveReportPass(report)
+  // RUL-4 clause 3 — `pass` stays the measurement's verdict: `false` whenever ANY
+  // forcing reason exists (the structural family included: the measurement is
+  // INCOMPLETE), while `ok` (schema validity) no longer contradicts it.
   report.pass = derived.pass
-  report.driver.failReasons = derived.failReasons
-  report.driver.notes = o0Acc.notes
+  report.driver.failReasons = [...(derived.gating ?? []), ...(derived.structuralReasons ?? [])]
+  report.driver.gatingReasons = derived.gating ?? []
+  report.driver.openStructuralReasons = derived.structuralReasons ?? []
+  report.driver.notes = [...(derived.structuralReasons ?? []), ...o0Acc.notes]
+  report.driver.structuralStages = [...new Set(runs.flatMap((r) => (r.structuralStages ?? []).map((id) => `${r.id}:${id}`)))]
+  report.driver.openStructural = (derived.structuralReasons ?? []).length > 0 && (derived.gating ?? []).length === 0
+  // §3.6b/F17a — the driver runs the PURE validator over the report it just built
+  // (BEFORE it is written): the inline rules above re-implement a SUBSET of the
+  // pinned module's rules and the two can — and on this unit DID — disagree about
+  // which rows are acceptable. The validator's reasons are APPENDED to the driver's
+  // own, so a report can never be written whose rows the pinned module rejects. The
+  // report itself is STILL WRITTEN (pass:false): the numbers stay inspectable
+  // (§6 F16/F17 — never a silent skip, never a withheld artifact).
+  const rows = runs.map((r) => ({ id: r.id, res: o0Twins.report.validateO0Run(r, O0_STAGE_IDS) }))
+  // §3.6b/F17c — the structural family is NOT a self-validation failure: the pure
+  // module classifies it out of `errors` (§6 S19), so a structurally-open report
+  // shows `selfValidation.ok:true` with an empty `errors[]`.
+  const whole = o0Twins.report.validateO0Report(report)
+  // RUL-4/F17c — the STRUCTURAL FAMILY is recorded, never counted as a
+  // self-validation ERROR: only the GATING reasons (and the schema errors) can
+  // reject the report, so a structurally-open report is `ok:true`/empty `errors[]`.
+  const errors = []
+  for (const row of rows) if (!row.res.ok) for (const m of row.res.errors) errors.push(`run ${row.id}: ${m}`)
+  for (const m of whole.gating ?? []) errors.push(m)
+  const selfOk = rows.every((row) => row.res.ok === true) && (whole.gating ?? []).length === 0 && whole.errors.length === 0
+  const missed = errors.filter((m) => !(derived.gating ?? []).some((own) => own === m || own.endsWith(m.replace(/^run [^:]+: /, ''))))
+  report.driver.selfValidation = {
+    ok: selfOk,
+    attempts: rows.length,
+    runIds: rows.map((r) => r.id),
+    errors: errors,
+    status: whole.status,
+    structuralErrors: 0,
+    structuralFacts: (whole.structural ?? []).length,
+    moduleGating: whole.gating ?? [],
+    rowResults: rows.map((row) => ({ id: row.id, ok: row.res.ok, errors: row.res.errors })),
+    gatingReasons: derived.gating ?? [],
+    note: 'RUL-4/F17c — the structural family is recorded, never counted as a self-validation ERROR: a structurally-open report is ok:true/empty errors with status "OPEN-structural"',
+  }
+  if (!selfOk) {
+    const rejected = rows.filter((row) => !row.res.ok).length + (whole.ok ? 0 : 1)
+    derived.gating.push(`driver self-validation rejected ${rejected} row(s): ${(missed.length ? missed : errors).join(' | ')} (§3.6b)`)
+    report.driver.failReasons = [...derived.gating, ...(derived.structuralReasons ?? [])]
+    report.driver.gatingReasons = derived.gating
+    report.pass = false
+  }
+  // RUL-4 — the DERIVED status, from the ONE exported implementation, over BOTH
+  // reason sets (the driver's own + the pure validator's), with the STRUCTURAL
+  // FAMILY classified explicitly: `FAIL` when a reason outside the family exists,
+  // `OPEN-structural` when the only reasons are the family, `OK` when none.
+  const family = [
+    ...new Set([
+      ...(derived.structuralReasons ?? []),
+      ...(whole.structural ?? []),
+      ...(whole.derivedResidual ?? []),
+      ...((whole.notes ?? []).filter((m) => /OPEN-structural|structurally unseparated|DERIVED residual/.test(m))),
+    ]),
+  ]
+  const statusOf = o0Twins.report.deriveO0ReportStatus({
+    ok: selfOk,
+    gating: derived.gating ?? [],
+    failReasons: [...(derived.gating ?? []), ...family],
+    structuralFamily: family,
+    structuralReasons: derived.structuralReasons ?? [],
+    derivedReasons: whole.derivedResidual ?? [],
+  })
+  report.status = statusOf.status
+  report.pass = statusOf.pass
+  report.driver.status = statusOf.status
+  report.driver.pass = statusOf.pass
+  report.driver.statusStatement = statusOf.statement
+  report.driver.structuralReasons = family.slice(0, 40)
+  // §3.6b RUL-4 clause 5 — the MANDATORY reconciliation note on the OPEN-structural
+  // branch: the structural stages + the non-computable residual + the no-imputation
+  // statement, in one sentence.
+  const structuralIds = [...new Set(runs.flatMap((r) => (r.structuralStages ?? []).map((id) => `${r.id}:${id}`)))]
+  report.reconciliation = {
+    ok: statusOf.status !== 'OPEN-structural' ? statusOf.status === 'OK' : false,
+    note:
+      statusOf.status === 'OPEN-structural'
+        ? `structurally unseparated stage(s) ${structuralIds.join(', ')} have no seam in the executing bundle (` +
+          `${(derived.structuralReasons ?? [])[0] ?? 'reason recorded per stage row'}), so the long-task residual is NOT computable ` +
+          `and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)`
+        : null,
+    structuralStages: structuralIds,
+  }
+  // §4.4 — the RUL-4 report verdict pair, DERIVED from the status (never hard-coded):
+  // the status readable without inspecting the JSON.
+  if (statusOf.status === 'OPEN-structural') {
+    report.verdicts.push(
+      `O-0 REPORT OPEN — ${structuralIds.length} stage(s) structurally unseparated (${structuralIds.join(', ')}): ` +
+        `${(derived.structuralReasons ?? [])[0] ?? 'reason recorded per stage row'} — the report is SCHEMA-VALID and its residual ` +
+        `cannot be computed; no value was imputed`,
+    )
+  } else if (statusOf.status === 'FAIL') {
+    report.verdicts.push(
+      `O-0 REPORT FAIL — ${(derived.gating ?? []).length || 1} forcing reason(s) outside the structural family ` +
+        `(${(derived.gating ?? [])[0] ?? '<unrecorded>'} …) — the measurement or the report is not usable as evidence: ` +
+        `§6 F-state class (a genuinely unmeasured permitted stage, an imputation, a falsifiability failure, a violated window, ` +
+        `a broken control pairing or a census mismatch)`,
+    )
+  }
   return report
 }
 /** §3.3/§4.1 — write the emitted report (`--o0-out`), or console-only with
@@ -3586,16 +4193,22 @@ const BLOCKS = {
     const mutation = `${cell.selector} (the stage grid cell of #wiki-root): display:block (removes the #wiki-root grid-track sizing from the measurement path)`
     // The BASELINE freeze first (no mutation), then the ABLATED freeze — the same
     // gesture, the same pane set, differing only in the recorded style mutation.
+    // §2.4/S7 — the SAME gesture, the SAME pane set, the SAME disclosure state,
+    // differing ONLY in the recorded style mutation (finding L7: without the state
+    // reset the "off" run performs the reveal and the "on" run is a no-op, so the
+    // delta conflates the ablation with the disclosure).
+    const resetBefore = await o0ResetFolderState(h, target)
     const baseline = await o0FreezeRow(h, { id: o0RunId('folder-row', 'off', 'o0_track_ablation', taken), block: 'o0_track_ablation', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, trackAblation: { applied: false, mutation: null } })
     // NOTE: `#zone:main` is NOT a valid CSS selector (an unquoted id cannot
     // carry `:`), so the ablation element is reached by `getElementById` — the
     // recorded `cell.selector` stays the human-readable id it resolved.
     const applied = await h.cdp.evaluate(`(()=>{ const el = document.getElementById(${JSON.stringify(cell.elId)}); if (!el) return false; el.style.display = 'block'; return true })()`)
+    const resetBeforeAblated = await o0ResetFolderState(h, target)
     const ablated = await o0FreezeRow(h, { id: o0RunId('folder-row', 'on', 'o0_track_ablation', [...taken, baseline.id]), block: 'o0_track_ablation', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, trackAblation: { applied: applied, mutation: applied ? mutation : null } })
     // NEVER persisted: the measurement-only style mutation is reverted immediately.
     const reverted = await h.cdp.evaluate(`(()=>{ const el = document.getElementById(${JSON.stringify(cell.elId)}); if (!el) return false; el.style.display = ''; return el.style.display === '' })()`)
-    baseline.trackAblationEvidence = { ...cell, mutation: null }
-    ablated.trackAblationEvidence = { ...cell, mutation: mutation, reverted: reverted }
+    baseline.trackAblationEvidence = { ...cell, mutation: null, disclosureReset: resetBefore }
+    ablated.trackAblationEvidence = { ...cell, mutation: mutation, reverted: reverted, disclosureReset: resetBeforeAblated }
     ablated.trackAblationDelta = { longTaskTotalMs: Math.round(((ablated.longTaskTotalMs ?? 0) - (baseline.longTaskTotalMs ?? 0)) * 1000) / 1000, mutations: (ablated.mutations ?? 0) - (baseline.mutations ?? 0), baselineRun: baseline.id }
     if (!applied || !reverted) {
       ablated.failReasons = [...ablated.failReasons, `the ablation mutation could not be applied/reverted (applied=${applied} reverted=${reverted}) — §2.4/F5`]
@@ -3620,7 +4233,13 @@ const BLOCKS = {
     const enumerated = await o0FolderRows(h)
     const pick = o0PickFolderRow(enumerated)
     const target = pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR
+    // §5 P-SM-2/§3.6(c) — a CONTROLLED pair (finding L7): both freezes start from the
+    // COLLAPSED disclosure state, so the only variable between them is whether the
+    // §3.6 hook is armed. Without the reset the pair compares a real disclosure with a
+    // no-op and reports a state artifact as hook non-inertness.
+    const resetA = await o0ResetFolderState(h, target)
     const baseline = await o0FreezeRow(h, { id: 'o0-repeat-a-unarmed', block: 'o0_folder_row', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: false })
+    const resetB = await o0ResetFolderState(h, target)
     const armed = await o0FreezeRow(h, { id: 'o0-repeat-b-armed', block: 'o0_folder_row', gesture: 'folder-row', target: target, folderPath: pick ? pick.folderPath : null, documentId: null, paneFrames: frames, hook: true, disarmOnEntry: false })
     const setA = [...baseline.stages.map((s) => s.id)].sort()
     const setB = [...armed.stages.map((s) => s.id)].sort()
@@ -3629,7 +4248,57 @@ const BLOCKS = {
     const deltaLongTaskMs = Math.round(((armed.longTaskTotalMs ?? 0) - (baseline.longTaskTotalMs ?? 0)) * 1000) / 1000
     const inert = deltaMutations === 0 && Math.abs(deltaLongTaskMs) <= O0_HOOK_LONGTASK_TOLERANCE_MS
     const msFree = true // §5 P-SM-2: the ms values are explicitly FREE under the seed
-    o0Acc.hookPairs.push({ baselineRun: baseline.id, armedRun: armed.id, setEqual: setEqual, msFree: msFree, deltaMutations: deltaMutations, deltaLongTaskMs: deltaLongTaskMs, toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS, inert: inert })
+    // RUL-6 — the inertness comparison states WHICH HALF carried the proof. A `0`-vs-`0`
+    // long-task pair is VACUOUS (`Δ = 0` of nothing) and must never be reported as a
+    // numeric long-task proof; the mutation half proves the arm only when the unarmed
+    // baseline actually observed mutations.
+    const unarmedMutations = baseline.mutations ?? 0
+    const armedMutations = armed.mutations ?? 0
+    const unarmedTotal = baseline.longTaskTotalMs ?? 0
+    const armedTotal = armed.longTaskTotalMs ?? 0
+    const mutationHalfNonVacuous = unarmedMutations > 0
+    const longTaskHalfNonVacuous = unarmedTotal > 0
+    const mutationHalfProves = deltaMutations === 0 && mutationHalfNonVacuous
+    const longTaskHalfProves = Math.abs(deltaLongTaskMs) <= O0_HOOK_LONGTASK_TOLERANCE_MS && longTaskHalfNonVacuous
+    const carriedBy = [mutationHalfProves ? 'mutations' : null, longTaskHalfProves ? 'longTaskTotalMs' : null].filter((x) => x !== null)
+    const vacuousHalves = [
+      mutationHalfNonVacuous ? null : 'mutations (the unarmed baseline observed 0 mutations — Δmutations=0 is 0-vs-0)',
+      longTaskHalfNonVacuous ? null : 'longTaskTotalMs (the unarmed baseline measured a 0 ms window — ΔlongTaskTotalMs=0 is 0-vs-0)',
+    ].filter((x) => x !== null)
+    // §6 S17(b)/RUL-6 — the PINNED sentence for the MUTATION-HALF proof (the shape the
+    // second run owed: a 0-vs-0 long-task comparison proves nothing numerically).
+    const proofStatement = !longTaskHalfNonVacuous && mutationHalfProves
+      ? `the hook inertness pair is a MUTATION-HALF proof: Δmutations ${deltaMutations} === 0 with ${unarmedMutations} mutation(s) observed in each freeze; the long-task half is VACUOUS (both freezes totalled ${unarmedTotal} ms — a 0-vs-0 comparison, nonVacuous:false), so no numeric long-task proof is claimed`
+      : !longTaskHalfNonVacuous
+        ? `inertness is NOT proven numerically by this pair: the long-task half is VACUOUS (both freezes totalled ${unarmedTotal} ms) and the mutation half is ${mutationHalfNonVacuous ? `Δmutations=${deltaMutations}` : 'vacuous too (0 mutations observed)'} — no numeric proof is claimed (§6 S17(b)/RUL-6)`
+        : carriedBy.length
+          ? `inertness proven by the ${carriedBy.join(' + ')} half/halves (Δmutations=${deltaMutations} of ${unarmedMutations} recorded mutations; ΔlongTaskTotalMs=${deltaLongTaskMs} ms of a ${unarmedTotal} ms unarmed window, tolerance ${O0_HOOK_LONGTASK_TOLERANCE_MS} ms)`
+          : `inertness is NOT proven numerically by this pair: no half held (Δmutations=${deltaMutations}, ΔlongTaskTotalMs=${deltaLongTaskMs} ms against a ${unarmedTotal} ms window)`
+    o0Acc.hookPairs.push({
+      baselineRun: baseline.id,
+      armedRun: armed.id,
+      setEqual: setEqual,
+      msFree: msFree,
+      deltaMutations: deltaMutations,
+      deltaLongTaskMs: deltaLongTaskMs,
+      toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS,
+      inert: inert,
+      controlledPair: resetA.collapsed === true && resetB.collapsed === true,
+      stateReset: { baseline: resetA, armed: resetB },
+      mutations: { unarmed: unarmedMutations, armed: armedMutations },
+      longTaskTotalMs: { unarmed: unarmedTotal, armed: armedTotal },
+      // RUL-6 — per-half proof: `nonVacuousHalves` + `carriedBy` + the statement, so
+      // no reader can take a 0-vs-0 long-task delta for a numeric long-task proof.
+      nonVacuousHalves: { mutations: mutationHalfNonVacuous, longTaskTotalMs: longTaskHalfNonVacuous },
+      carriedBy: carriedBy,
+      vacuousHalves: vacuousHalves,
+      // §6 S17(b) — `nonVacuous` is the LONG-TASK half's flag (the half whose 0-vs-0
+      // comparison the second run's `nonVacuous:false` records), and the proof
+      // statement says which half carried the proof.
+      nonVacuous: longTaskHalfNonVacuous,
+      mutationHalfProof: mutationHalfProves,
+      proofStatement: proofStatement,
+    })
     const reasons = []
     if (!setEqual) reasons.push(`the stage-id SET differs between the two runs of ${target} (${JSON.stringify(setA)} vs ${JSON.stringify(setB)}) — §5 P-SM-2 requires the SAME set`)
     if (!inert) reasons.push(`the measurement hook is NOT inert: armed-vs-unarmed Δmutations=${deltaMutations}, ΔlongTaskTotalMs=${deltaLongTaskMs} ms (tolerance ${O0_HOOK_LONGTASK_TOLERANCE_MS} ms) — §3.6(c) forces pass:false`)
@@ -3686,6 +4355,12 @@ async function main(argv) {
   }
   o0Acc.runs.length = 0; o0Acc.hookPairs.length = 0; o0Acc.notes.length = 0
   const home = opt.connect ? (mkdtempSync(join(tmpdir(), 'astrolive-connect-')) ?? null) : (opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-')))
+  // RUL-3 — NO main-side transport exists (the spec's audit result): the spawned app
+  // arms its main instance and its handler wrap records `snapshot.clone`, but no
+  // channel carries those records into the report, and the IPC structured clone is
+  // outside every host-side wrap. The stage is therefore reported STRUCTURAL with
+  // that exact reason (§3.6b/S15) — never an imputed number, never a fabricated
+  // `instance:'main'` attribution.
   // The default store's corpusRoot is the app's cwd (the project root) when
   // unconfigured (REGISTRY-CWD-TRANSPARENCY), so the seed corpus must live under
   // it — never under the disposable HOME (the importer REJECTS an out-of-root
@@ -3722,13 +4397,22 @@ async function main(argv) {
     const launchArgs = [`--mode=${opt.mode}`, `--port=${opt.port}`, `--cdp-port=${opt.cdpPort}`, ...(opt.gpu ? [] : ['--no-gpu'])] // §3.3 — conditional: the GPU-ON leg is reproducible only this way
     console.error(`[live-drive] launching app ${launchArgs.join(' ')} HOME=${home}`)
     app = spawn(join(ROOT, 'scripts', 'start-app.sh'), launchArgs, {
-      env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}` }, // user-directed display
+      // §3.6b — the main-side recorder instance is armed by the SPAWNING driver
+      // through this pinned env flag (a `--connect` run cannot arm it, §6 S15).
+      // RUL-3 — the main instance is armed by this flag; its records are NOT
+      // transported (no channel exists), so `snapshot.clone` stays structural with
+      // the recorded reason.
+      env: { ...process.env, HOME: home, DISPLAY: `:${opt.display ?? '1'}`, ASTROGRAPHER_O0_MAIN_ARM: '1' }, // user-directed display
       stdio: 'inherit',
       detached: true, // so we can kill the WHOLE process tree on exit (user: exit after the test, not a timer)
     })
   }
 
   try {
+    // §3.6b/F16 — the pinned `.ts` twins are resolved BEFORE any measurement: an
+    // unavailable twin THROWS here, so this `catch` prints `[live-drive] ERROR:` and
+    // exits 2 with NO artifact written — never a fallback that emits a number.
+    await o0ImportTwins()
     const mcpBase = `http://127.0.0.1:${opt.port}/mcp`
     await waitFor(async () => { const r = await fetch(mcpBase).catch(() => null); return r && r.status < 500 }, { timeout: 60000 })
     const mcp = await connectMcp(mcpBase)
@@ -3761,9 +4445,11 @@ async function main(argv) {
       const bundle = await o0BundleIdentity(h)
       o0CensusObserved = await o0Census(h)
       if (!bundle.verified) console.error(`[live-drive] O-0 BUNDLE NOT VERIFIED: served ${bundle.served} vs on-disk renderer ${bundle.disk.rendererBytes}+${bundle.disk.rendererHash} — every O-0 row is pass:false (§3.6/F2)`)
-      console.error(`[live-drive] O-0 context: blocks=${o0Blocks.join(',')} leg=gpu-${opt.gpu ? 'on' : 'off'} bundle.verified=${bundle.verified} census=${JSON.stringify({ documents: o0CensusObserved.documents, nodes: o0CensusObserved.nodes, edges: o0CensusObserved.edges, engine: o0CensusObserved.engine })} claimedDocuments=${Number.isFinite(opt.o0Corpus) ? opt.o0Corpus : O0_OPERATOR_DOCUMENTS} seed=${O0_SEED} artifactPath=${opt.o0Out ?? 'null (console-only: no --o0-out)'}`)
+      console.error(`[live-drive] O-0 context: blocks=${o0Blocks.join(',')} leg=gpu-${opt.gpu ? 'on' : 'off'} bundle.verified=${bundle.verified} census=${JSON.stringify({ documents: o0CensusObserved.documents, nodes: o0CensusObserved.nodes, edges: o0CensusObserved.edges, engine: o0CensusObserved.engine })} engineEvidence=${JSON.stringify(o0CensusObserved.engineEvidence)} engineError=${JSON.stringify(o0CensusObserved.engineError ?? null)} claimedDocuments=${Number.isFinite(opt.o0Corpus) ? opt.o0Corpus : O0_OPERATOR_DOCUMENTS} seed=${O0_SEED} artifactPath=${opt.o0Out ?? 'null (console-only: no --o0-out)'}`)
+      if (o0CensusObserved.engineError) console.error(`[live-drive] O-0 ENGINE STATE UNDERIVABLE: ${o0CensusObserved.engineError}`)
       h.o0 = {
         gpuFlag: opt.gpu === true,
+        connect: opt.connect === true,
         bundleVerified: bundle.verified,
         bundleRenderer: bundle.renderer,
         bundleMain: bundle.main,
@@ -3772,8 +4458,19 @@ async function main(argv) {
         corpusSource: Number.isFinite(opt.o0Corpus) ? '--o0-corpus' : (opt.connect ? 'operator-store' : 'seed'),
         appFlag: opt.connect ? (opt.gpu ? 'app launched WITHOUT --no-gpu (GPU-on leg)' : 'app launched with --no-gpu (GPU-off leg)') : `spawned by this driver (${opt.gpu ? 'gpu on' : '--no-gpu'})`,
         census: o0CensusObserved,
+        // §3.6b/S15 + RUL-3 — the MAIN-side refinement: in SPAWN mode the driver sets
+        // the pinned env flag AND the transport path, so each freeze reads the main
+        // records that ran during its window (attributed `instance:'main'`); in
+        // `--connect` mode neither can be set and the reason below is recorded per row.
+        // `mainRecords` here is the PRE-FREEZE (empty) set — the per-window read lives
+        // in `o0FreezeRow`.
+        mainRecords: [],
+        mainRecordsError: null,
+        mainSeamArmed: false,
+        mainSeamNote: opt.connect === true ? O0_MAIN_SEAM_MISSING : O0_MAIN_SEAM_UNTRANSPORTED,
       }
       opt.bundle = bundle
+      opt.mainSeamNote = h.o0.mainSeamNote
     }
     let fail = 0, park = 0, diag = 0
     // §6.1 report material: the ROW blocks' structured results (matrix + extended)
@@ -3796,10 +4493,12 @@ async function main(argv) {
       if (o0Acc.runs.length === 0) console.error('[live-drive] O-0: no freeze row was staged — the report carries runs=[] and is pass:false (§4.2)')
       const report = o0BuildReport(h, opt, names, o0CensusObserved)
       o0WriteReport(report, opt)
+      console.error(`[live-drive] O-0 status: ${report.status} (pass=${report.pass}) — ${report.driver.statusStatement}`)
       console.error(`[live-drive] O-0 verdicts: ${report.verdicts.length ? report.verdicts.join(' | ') : '(none derived)'}`)
       if (report.driver.failReasons.length) console.error(`[live-drive] O-0 forcing condition(s): ${report.driver.failReasons.join(' | ')}`)
+      if (report.driver.structuralStages.length) console.error(`[live-drive] O-0 STRUCTURAL stages (no seam in the executing bundle — recorded, non-gating, §6 S14/RUL-4): ${report.driver.structuralStages.join(', ')}`)
       if (report.driver.notes.length) console.error(`[live-drive] O-0 notes: ${report.driver.notes.join(' | ')}`)
-      for (const r of report.runs) console.error(`DIAG  O-0 run ${r.id}: pass=${r.pass} path=${r.path} stageCount=${r.stageCount} longTaskTotalMs=${r.longTaskTotalMs} mutations=${r.mutations} wallMs=${r.wallMs} unseparated=[${(r.unseparatedStages || []).join(',')}] reconciliation=${JSON.stringify(r.reconciliation)}`)
+      for (const r of report.runs) console.error(`DIAG  O-0 run ${r.id}: pass=${r.pass} openStructural=${r.openStructural === true} path=${r.path} stageCount=${r.stageCount} longTaskTotalMs=${r.longTaskTotalMs} mutations=${r.mutations} wallMs=${r.wallMs} unseparated=[${(r.unseparatedStages || []).join(',')}] structural=[${(r.structuralStages || []).join(',')}] pendingSpans=${String(r.hook?.pendingSpans ?? null)} mainRecordsRead=${JSON.stringify(r.hook?.mainRecordsRead)} reconciliation=${JSON.stringify(r.reconciliation)}`)
     }
     // §6.1 run summary: `total` is the §5.U matrix-row count (U-1..U-8), NEVER the
     // number of blocks; the extended (non-matrix) results are reported separately.

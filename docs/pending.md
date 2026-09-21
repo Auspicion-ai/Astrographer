@@ -46,6 +46,12 @@ Request docs: `docs/feature-requests/provident-electron-shell-chrome-requests.md
 `docs/feature-requests/provident-ssr-expressibility-requests.md` (PS-1). **DO-NOT-FILE** list:
 `docs/specs/astrographer-scope-realignment-review.md` §5.2.
 
+## SCHEDULED (dated work, not yet started)
+
+| Item | Date | Constraint / revisit condition |
+| --- | --- | --- |
+| **VITEST-5 / ELECTRON-44 TOOLCHAIN MIGRATION (the suite is RED until it runs — `docs/defects.md` `SUITE-RED-AFTER-VITEST5-ELECTRON44`)** | 2026-09-19 (**SCHEDULED 2026-09-20 by user DEC-2; promoted from DEFERRED**) | **SCHEDULED (DEC-2) — its own unit, its own cycle: the NEXT unit after the O-0 handover, and it BLOCKS the trio's `npm test` leg for EVERY unit** (no unit may be reported DONE on a green-`npm test` claim until it lands — AGENTS.md item 4). The devDependency bump `electron ^33.4.11 → ^44.4.3` / `esbuild ^0.24.0 → ^0.28.2` / `vitest ^2.0.0 → ^5.0.1` (commit `98ea185`) left the suite red — `SUITE-RED-AFTER-VITEST5-ELECTRON44`: **22 tests in 7 files** at the first measurement (`unit-wave-1-bridge-wiring` 7 / `unit-live11-bridge-seams` 5 / `unit-u5-rich-commit-ipc` 4 / `template-adversarial` 2 / `import-render-no-duplicates` 2 / `unit-u2-rich-decompose` 1 / `unit-s-paste-sanitization` 1; measured 214 files / 4 819 pass / 22 failed / 58 skip), drifting to **25 failing tests / 8 files** at the third O-0 run (drift recorded, NON-O-0, never attributed to O-0). **SCOPE (the unit's own spec + red set per RCA-1/RCA-2 — NOT the O-0 queue's remaining work, and never a fix attempted inline inside another unit):** (1) **re-derive the electron-mock harness pattern under vitest-5 mock semantics** — the `capturedBridge()` undefined class: `contextBridge.exposeInMainWorld` captured via `vi.hoisted(() => vi.fn())` + `vi.mock('electron', …)` before `import '../src/main/preload.js'` yields `exposeInMainWorld.mock.calls[0][1] === undefined` (`tests/unit-wave-1-bridge-wiring.test.ts:181-182` → `TypeError: Cannot read properties of undefined (reading 'rag')`); re-derive ONE sanctioned capture pattern and propagate it across the 4 bridge-mock files; (2) **re-check the recursion-depth totality tests under the v5 worker/pool defaults** — the two 10k-deep "never throws (stack-safety / totality)" rows (`tests/unit-u2-rich-decompose.test.ts:569`, `tests/unit-s-paste-sanitization.test.ts:469`), whose v2 stack headroom assumption may not hold under v5's pool defaults; (3) **re-baseline the counts** (files / pass / fail / skip) for the trio and record them; (4) its own **spec → red → green → adversarial → doc-review** cycle (AGENTS.md items 3/8/9/10, RCA-6). **CONSTRAINT while OPEN:** every unit's trio `npm test` leg is RED repo-wide (AGENTS.md item 4), so no unit may be reported DONE on a green-`npm test` claim — an entry that claims a green trio while this row is open is a review finding (O-0's DONE row states this split explicitly). **Revisit/closure condition:** the migration unit lands green and the trio's `npm test` leg is green repo-wide (then this row closes and the `SUITE-RED-AFTER-VITEST5-ELECTRON44` defect row moves to FIXED). Full repro, both failure classes, the leading (UNPROVEN) hypotheses and the O-0-isolation evidence: `docs/defects.md` → **SUITE-RED-AFTER-VITEST5-ELECTRON44**. |
+
 ## DEFERRED (lower-value / parked)
 
 | Item | Date | Constraint / revisit condition |
@@ -86,6 +92,12 @@ Request docs: `docs/feature-requests/provident-electron-shell-chrome-requests.md
 
 | **Gnosis document-graph editing (G1-routed) — the real `gnosis.document.update`** | 2026-09-11 | PARKED by W1-Q12 (UI-overhaul Wave 1). The G5 `gnosis-documents` pane's Update control sent a placeholder empty graph `{nodes:[],edges:[]}` — a fake update; it is now removed/disabled (no fake update), keeping the real verbs (create/delete/publish/unpublish/archive/list/get). The real edit routes Gnosis documents through the G1 editor, which needs (a) a **local `RagNode`/`RagEdge` ↔ Gnosis wire `graph:{nodes[],edges[]}` mapping** and (b) an **engine-aware commit seam** (the G1 editor currently commits to the local RAG store). Directionally endorsed by `GNOSIS-CRUD-SURFACE-CONFIRMED`. **Revisit condition:** the graph mapping + engine-aware commit seam is designed (likely with the deferred graph-ops surface, `GNOSIS-CRUD-MVP-SCOPE`). See `docs/specs/unit-u-parity-partials.md` §1.2 / `wave-1-open-decisions.md` §A. |
 | **`rag.get_document` scoped-subgraph UI (the G3 graph view)** | 2026-09-11 | PARKED by W1-Q13 (UI-overhaul Wave 1). The doc-nav selects a document but the UI exposes no scoped-subgraph options (focus/depth/expand). Deferred WITH the G3 knowledge-graph inspectors, which are themselves parked pending the post-MVP knowledge-graph tools. **Revisit condition:** the G3 node/edge/graph-neighborhood inspectors unpark. See `docs/specs/unit-u-parity-partials.md` §1.3 / `wave-1-open-decisions.md` §B. |
+
+## PARKED (recorded gap with a named revisit condition)
+
+| Item | Date | Constraint / revisit condition |
+| --- | --- | --- |
+| **O-0 `snapshot.clone` — the main-side transport channel (the ACCEPTED structural gap; its own unit)** | 2026-09-20 | **PARKED by user DEC-1** (`O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`, `docs/decisions.md`): the user ACCEPTED `snapshot.clone` as a recorded structural gap, so building a channel that carries the MAIN recorder's records out of the main process into the renderer/report is **NOT owed** to open the O-5 gate and is **NOT a patch inside O-0** — it is its own unit (an engine/host seam, its own spec + red set per RCA-2, its own gate). **Recorded shape:** the MAIN instance IS armed (`ASTROGRAPHER_O0_MAIN_ARM=1`) and its wrap records `snapshot.clone` on the `IPC_RAG_SNAPSHOT` handler, but the executing bundle exposes NO channel carrying those records out (`driver.mainSeamArmed:false`, `mainTransport.channel:null`, no `instance:"main"` entry), AND Electron's structured-clone serialization runs inside the IPC internals AFTER the handler returns — so the main-side handler share and the serialization share are both UNMEASURED and the DERIVED `post.style` residual is permanently uncomputable (`docs/specs/unit-o-0-per-stage-measurement.md` §2.2 id 2/§3.6b RUL-3/§12.13). **THE CONSTRAINT while parked:** every O-0 report MUST keep showing `status:"OPEN-structural"` (never quietly `"OK"`) so the absence of the transport stays visible, and no unit may quote the `post.style` residual as a style/layout number. **Revisit condition (either):** (a) a future need for the main-side **clone share** arises (e.g. a downstream unit needs the inside/outside split of the snapshot round trip to attribute the residual, or a budget decision depends on the serialization share), **or** (b) an **engine/host transport seam unit** is scheduled for another reason (a main→renderer measurement/telemetry channel reused for this purpose) — then the stage becomes measured, the residual computable, and a future O-0 report may reach `status:"OK"`. Parked, not dropped. |
 
 ## SPECULATIVE (future features)
 
@@ -139,14 +151,33 @@ ceiling (a node-count threshold pinned by O-0's census); or (c) O-0 shows the de
 lever. **Also parked with a precondition:** making the `RagStore` read surface ASYNC (today it is
 synchronous, and it stays that way for the scheduled work).
 
-**O-0 schedule status (2026-09-17) — the rows' status is UNCHANGED.** The user's go-ahead landed the
-**O-0 spec** (`docs/specs/unit-o-0-per-stage-measurement.md`); O-0's **run** has not happened, so the
-artifact that fires **trigger (b)**'s node-count threshold and **trigger (c)**'s walk-share verdict
-does **not** exist. Nothing in this table changes state on this pass: **O-6 / O-7 / O-8 stay PARKED —
-destination work, not incentive-driven**, with O-8's authority-switch contract still the track's
-PREREQUISITE; triggers (a)(b)(c) are unchanged; and the O-0 spec adds **no new trigger**. A parked row
-may only change status when the O-0 artifact exists and one of the three triggers is shown to fire —
-`docs/specs/gnosis-offload-review.md` §11 (the 2026-09-17 addendum).
+**O-0 schedule status (2026-09-20, DEC-1 — O-0 is DONE and its gate is OPEN; the O-6/O-7/O-8 rows'
+status stays UNCHANGED).** The user's go-ahead landed the **O-0 spec**
+(`docs/specs/unit-o-0-per-stage-measurement.md`) and O-0 has since **RUN THREE TIMES** (2026-09-17, 2026-09-20, 2026-09-20); the artifact that fires **trigger (b)**'s node-count
+threshold and **trigger (c)**'s walk-share verdict **EXISTS AND IS ACCEPTED**
+(`docs/specs/unit-o-0-per-stage-breakdown.md`, third edition, host clock 2026-09-20; spec §12.13) —
+it is a **COMPLETED MEASUREMENT WITH ONE RECORDED STRUCTURAL GAP** (`status:"OPEN-structural"`,
+the `snapshot.clone` seam + the derived `post.style` residual), and **per user DEC-1
+(`O0-SNAPSHOT-CLONE-STRUCTURAL-ACCEPTED`, `docs/decisions.md`, which AMENDS the spec's
+§3.6b RUL-4 clause 7) an accepted-structural report OPENS the O-5 delegation gate — so O-0 is DONE
+and O-5 is UNBLOCKED.** The parked `snapshot.clone` main-side transport is recorded above (its own
+row, its own revisit condition) and its absence must stay visible in every report
+(`status:"OPEN-structural"`, never quietly `"OK"`). The earlier sentences this paragraph supersedes
+read "… **NOT a `status:"OK"` DONE**" and "O-0's **run** has not happened, so the artifact … does
+**not exist**" — both are now false and are stated here rather than silently dropped. **Nothing in this
+table changes state on this pass: O-6 / O-7 / O-8 stay PARKED — destination work, not
+incentive-driven**, with O-8's authority-switch contract still the track's PREREQUISITE; and
+triggers (a)(b)(c) are unchanged **as pins** — but the accepted artifact supplies their INPUTS:
+**(c)** reads as CANDIDATE-FIRED for the folder-row disclosure only (`traversal.build` 69.11 % /
+69.34 % of the window, the largest identified stage) and NOT for the document open
+(`reconcile.apply` 93.84 %); **(b)**'s node-ceiling input is **6 102 nodes / 9 266 edges at 226
+documents from the third run's own corpus row**, with the byte-size gap named (the corpus is not
+byte-reproducible); **(a)** is untouched. **A candidate is NOT a fired trigger: a parked row may
+only change status when the O-0 artifact exists — it does — AND one of the three triggers is
+shown to fire.** The spec's §10 items 1/2 state exactly that discipline, and the third run's
+trigger reading is still **not final** because the accepted `snapshot.clone` gap keeps the residual
+uncomputable. See `docs/specs/gnosis-offload-review.md` §11 (the 2026-09-17 addendum) and
+`docs/specs/unit-o-0-per-stage-measurement.md` §10/§12.13.
 
 **no new trigger asserted** — triggers (a)(b)(c) are unchanged and O-6/O-7/O-8 keep their status
 (the 2026-09-17 O-0 spec-gate pass and the earlier proposal gate both assert this). The scope-realignment record

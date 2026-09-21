@@ -1878,9 +1878,14 @@ export class SidebarPanes {
       this.unsubRegistry = this.registry.onChanged(() => this.pushPaneCatalog())
     }
     // Fetch the RAG snapshot (a bridge error ABORTS the boot — caught + logged).
+    // §3.6b — the CALLER-level seam (§2.2 stage 1): the WHOLE round trip
+    // (call → IPC → main handler → store read → structured clone → resolution) is
+    // bracketed at the shell's OWN call site — `provident.rag.*` are frozen
+    // `contextBridge` props, so no page-side wrap can ever take (§12 H2). Inert
+    // when unarmed (`record()` runs the call exactly once, emits nothing).
     let snapshot: RagSnapshotPayload
     try {
-      snapshot = await this.bridge.rag.snapshot()
+      snapshot = await getO0HookRecorder().record('snapshot.pull', async () => this.bridge.rag.snapshot())
     } catch (e) {
       console.error('[sidebar-panes] snapshot fetch failed', e)
       return
@@ -1891,7 +1896,7 @@ export class SidebarPanes {
     // ABORTS the boot (the placeholder envelope stays rendered; caught + logged,
     // never a crash — the same discipline as the snapshot fetch).
     try {
-      const docHeads = await this.bridge.rag.docHeads()
+      const docHeads = await getO0HookRecorder().record('docheads.pull', async () => this.bridge.rag.docHeads())
       this.lastDocHeads = docHeads.documents
     } catch (e) {
       console.error('[sidebar-panes] doc-heads fetch failed', e)
@@ -2000,7 +2005,8 @@ export class SidebarPanes {
     try {
       let snapshot: RagSnapshotPayload
       try {
-        snapshot = await this.bridge.rag.snapshot()
+        // §3.6b — the same CALLER-level round trip on the re-derive path.
+        snapshot = await getO0HookRecorder().record('snapshot.pull', async () => this.bridge.rag.snapshot())
       } catch (e) {
         console.error('[sidebar-panes] re-derive snapshot fetch failed', e)
         return
@@ -2010,7 +2016,7 @@ export class SidebarPanes {
       // logged, never a crash).
       let docHeads: RagDocHeadsPayload
       try {
-        docHeads = await this.bridge.rag.docHeads()
+        docHeads = await getO0HookRecorder().record('docheads.pull', async () => this.bridge.rag.docHeads())
       } catch (e) {
         console.error('[sidebar-panes] re-derive doc-heads fetch failed', e)
         return

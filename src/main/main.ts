@@ -22,6 +22,32 @@ import { loadRagStoreRegistry } from './rag-store-registry.js'
 import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.js'
 import { createRagStoreRuntimeController } from './rag-store-runtime.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
+import { createO0HookRecorder } from '../shared/o0-hook.js'
+
+// §3.6b — the MAIN-side O-0 recorder (the optional `snapshot.clone` refinement): a
+// SECOND, INDEPENDENT instance — never the RENDERER's app-wide singleton. The driver
+// SPAWNS this app, so it arms the instance through the spawn env flag; a `--connect`
+// run cannot arm it (recorded per leg as `driver.mainSeamArmed:false`, §6 S15).
+// Unarmed it is a pure pass-through, so the handler's work, order and reply identity
+// are unchanged.
+//
+// RUL-3 (the ruling the spec pins) — this handler span IS the right site for the
+// main-side reply-payload CONSTRUCTION share, but its records are NOT transported out
+// of the main process: no channel carries them into the renderer/report, and
+// Electron's own structured-clone serialization of the handler's return value happens
+// in the IPC internals AFTER this function returns, outside every host-side wrap. So
+// `snapshot.clone` stays `structural:true` in the report with that exact reason (the
+// driver records it; no value is imputed). The one change that WOULD make it measured
+// (a transport channel or a reply-path hook) is not owed by O-0.
+const o0MainRecorder = createO0HookRecorder({ stages: ['snapshot.clone'] })
+const o0MainArmed = process.env.ASTROGRAPHER_O0_MAIN_ARM === '1'
+if (o0MainArmed) {
+  try {
+    o0MainRecorder.arm(['snapshot.clone'])
+  } catch (e) {
+    console.error('[main] O-0 main-side recorder refused the arm (§3.6b)', e)
+  }
+}
 import { syncModuleRouter } from './mcp-server.js'
 import { SecurityGate, type ToolGroup } from './security.js'
 import { createQueryAuditLog } from './query-audit.js'
@@ -748,11 +774,20 @@ async function main(): Promise<void> {
   // which live in MAIN (the single-writer store). This IPC returns a read-only
   // snapshot so the renderer can re-derive the graph + back-reference map after
   // a `rag-store-changed` broadcast.
-  ipcMain.handle(IPC_RAG_SNAPSHOT, () => ({
-    nodes: runtime.getDefaultStore().listNodes(),
-    edges: runtime.getDefaultStore().listEdges(),
-    store: runtime.getDefaultName(),
-  }))
+  // §3.6b — the MAIN-side recorder instance (the OPTIONAL `snapshot.clone`
+  // refinement): its one recorded span covers the round trip's INSIDE — the store
+  // read + the reply-payload CONSTRUCTION share (RUL-3: Electron's structured clone
+  // of the returned value is not on any host-side path, so it is named as
+  // structurally unmeasurable, never wrapped). Inert when unarmed: the handler body
+  // (the same two reads + the same reply payload) is unchanged, and the records are
+  // never transported out (the report records `snapshot.clone` structural with the
+  // exact reason, §3.6b/S15).
+  ipcMain.handle(IPC_RAG_SNAPSHOT, () =>
+    o0MainRecorder.record('snapshot.clone', () => ({
+      nodes: runtime.getDefaultStore().listNodes(),
+      edges: runtime.getDefaultStore().listEdges(),
+      store: runtime.getDefaultName(),
+    })))
 
   // Unit U-EDIT-2 (C16) §2.5 — the project-journal host seam. C16's undo/redo
   // controls + history sub-pane consume the RAG store's PROJECT journal

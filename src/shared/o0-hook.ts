@@ -24,18 +24,52 @@
 // ---------------------------------------------------------------------------
 // §3.6 / §2.2 — the pinned constants (the hook's permitted stage set is ids 4-8).
 // ---------------------------------------------------------------------------
-export const O0_HOOK_STAGES: readonly string[] = [
+/** §3.6/§3.6b — the FIVE render-path stages (ids 4-8) ALONE: the subset whose
+ *  unmeasured `source` is `'hook'` (the §2.2 ids a recorder owns outright). */
+export const O0_RENDER_PATH_STAGES: readonly string[] = [
   'traversal.build',
   'envelope.assemble',
   'shared.decorate',
   'reconcile.roots',
   'reconcile.apply',
 ]
+/** §3.6b (RUL-1) — the SEVEN stages a PAGE-SIDE `arm()` may request: the five
+ *  render-path ids 4-8 **plus the two render emits `render.dom`/`render.ssr`**
+ *  (ids 9/10). Rationale: ids 9/10 are bundle-internal seams on the same render
+ *  path, so a page script arming the render path arms them too; an armed id that
+ *  is not requested is off-set and DROPPED (§6 S9), which would leave them
+ *  `unseparated` for a harness reason (the `L2s` failure mode). The boundary is
+ *  unchanged: a page script may arm the render path, never widen its own seam set
+ *  (no id outside the permitted ten). */
+export const O0_RENDER_HOOK_STAGES: readonly string[] = [...O0_RENDER_PATH_STAGES, 'render.dom', 'render.ssr']
+/** §3.6 — the landed name of the render-path armable set (`O0_RENDER_HOOK_STAGES`
+ *  is the §3.6b name; both denote the same seven ids). */
+export const O0_HOOK_STAGES: readonly string[] = O0_RENDER_HOOK_STAGES
+/** §3.6b — the ADDITIVE wider CONFIGURATION set: the three caller-level/main-side
+ *  seams (recorded at the shell's own call sites — a page-side wrap of the frozen
+ *  `provident.rag.*` props can never take, §12 H2) + the five render-path ids +
+ *  the TWO render-EMIT ids (`render.dom`/`render.ssr`, §2.2 ids 9/10 — the
+ *  RUL-1 re-derivation: those emits are instrumented in `src/renderer/runtime.ts`
+ *  and carried NO seam before, so they could only ever come back `unseparated`).
+ *  The construction/arm-time guard (`O0_HOOK_STAGE_NOT_ALLOWED`) accepts exactly
+ *  this set: **10 of the 11 closed §2.2 ids** — `post.style` stays DERIVED. */
+export const O0_HOOK_SEAM_STAGES: readonly string[] = [
+  'snapshot.pull',
+  'snapshot.clone',
+  'docheads.pull',
+  'traversal.build',
+  'envelope.assemble',
+  'shared.decorate',
+  'reconcile.roots',
+  'reconcile.apply',
+  'render.dom',
+  'render.ssr',
+]
 /** §3.6(b) — every emitted mark/measure name is prefixed with this (the report's
  *  join key for the hook-recorded spans). */
 export const O0_HOOK_MARK_PREFIX = 'o0:'
-/** §3.6/§2.2 — the LOUD rejection of a stage outside ids 4-8 (a mis-pinned stage
- *  is a config error, never a silently inert recorder). */
+/** §3.6/§2.2 — the LOUD rejection of a stage outside the configurable seam set (a
+ *  mis-pinned stage is a config error, never a silently inert recorder). */
 export const O0_HOOK_STAGE_NOT_ALLOWED = 'O0_HOOK_STAGE_NOT_ALLOWED'
 /** §6 F4 — the loud rejection of a record that cannot become a stage `ms`
  *  (malformed/negative/non-finite) — the imputation ban. */
@@ -56,6 +90,11 @@ export interface O0HookRecord {
   startMark: string
   endMark: string
   measureName: string
+  /** RUL-2 — an ASYNC body that REJECTED still CLOSES its span (never a dangling
+   *  start mark): the record commits with the settled ms and this recorded error
+   *  text. `null` for a fulfilled span (and for every synchronous span, whose
+   *  throw path still commits nothing — §3.6(a)/(b) unchanged). */
+  error?: string | null
 }
 export interface O0HookSnapshot {
   armed: boolean
@@ -63,12 +102,18 @@ export interface O0HookSnapshot {
   armCount: number
   disarmCount: number
   dropped: number
+  /** RUL-2 — the spans currently OPEN (a thenable body that has not settled):
+   *  a non-zero value at drain time is a span that did NOT fit its window. */
+  pending: number
 }
 export interface O0HookRecorder {
   isArmed(): boolean
   arm(stages?: readonly string[]): boolean
   disarm(): boolean
+  /** §3.6 (RUL-2) — the ONE pinned record shape: a synchronous body, or an
+   *  `async` thunk whose span is closed on SETTLEMENT (never on promise creation). */
   record<T>(stage: string, fn: () => T): T
+  record<T>(stage: string, fn: () => Promise<T>): Promise<T>
   records(): O0HookRecord[]
   state(): O0HookSnapshot
   reset(): void
@@ -113,21 +158,42 @@ function o0PerfPort(): O0HookPerf {
   }
   return { now: () => Date.now(), mark: () => {}, measure: () => {} }
 }
-/** §3.6/§2.2 — the loud stage-set validation: ids 4-8 ONLY. */
+/** §3.6/§3.6b — the loud stage-set validation: the configurable seam set
+ *  (`O0_HOOK_SEAM_STAGES`) ONLY — a probe stage (`render.dom`/`render.ssr`/
+ *  `post.style`) is never claimable by the hook. */
 function o0AssertAllowed(requested: readonly string[], where: string): string[] {
   const list = Array.isArray(requested) ? [...requested] : []
   for (const id of list) {
-    if (typeof id !== 'string' || !O0_HOOK_STAGES.includes(id)) {
+    if (typeof id !== 'string' || !O0_HOOK_SEAM_STAGES.includes(id)) {
       throw new Error(
-        `${O0_HOOK_STAGE_NOT_ALLOWED}: ${String(id)} (${where}) — the measurement-only hook is permitted for the ` +
-          `render-path stages ${O0_HOOK_STAGES.join(', ')} ONLY (§3.6/§2.2: a probe-separable stage is never claimed by the hook)`,
+        `${O0_HOOK_STAGE_NOT_ALLOWED}: ${String(id)} (${where}) — a recorder may be configured for the seam stages ` +
+          `${O0_HOOK_SEAM_STAGES.join(', ')} ONLY (§3.6/§3.6b: a probe-separable stage is never claimed by the hook)`,
       )
     }
   }
   return list
 }
 function o0CopyRecords(records: readonly O0HookRecord[]): O0HookRecord[] {
-  return records.map((r) => ({ stage: r.stage, ms: r.ms, startMark: r.startMark, endMark: r.endMark, measureName: r.measureName }))
+  return records.map((r) => ({
+    stage: r.stage,
+    ms: r.ms,
+    startMark: r.startMark,
+    endMark: r.endMark,
+    measureName: r.measureName,
+    error: r.error ?? null,
+  }))
+}
+/** RUL-2 — the recorded error text of a REJECTED async span (never the error
+ *  object: the record is data, and the rejection itself is re-thrown untouched). */
+function o0ErrorText(err: unknown): string {
+  if (err === null || err === undefined) return 'rejected'
+  const m = (err as { message?: unknown })?.message
+  return typeof m === 'string' && m !== '' ? m : String(err)
+}
+/** RUL-2 — a thenable body: the span must cover the AWAIT (settlement), never
+ *  merely promise creation. */
+function o0IsThenable(v: any): boolean {
+  return !!v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function'
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +211,7 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
   let armCount = 0
   let disarmCount = 0
   let dropped = 0
+  let pending = 0
   let records: O0HookRecord[] = []
 
   return {
@@ -162,6 +229,7 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
       armedStages = new Set<string>(requested)
       records = []
       dropped = 0
+      pending = 0
       return true
     },
     disarm(): boolean {
@@ -172,10 +240,20 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
     },
     /** §3.6(a)/(b) — the ONE instrumented seam. Unarmed (or a stage outside the
      *  armed set) it is a pure pass-through: `fn()` once, no emission, no record,
-     *  no throw. Armed it brackets the EXISTING call with the mark pair and
-     *  commits the span on completion (a throw propagates untouched and commits
-     *  nothing — the hook never swallows or rewraps). */
-    record<T>(stage: string, fn: () => T): T {
+     *  no throw.
+     *
+     *  Armed it brackets the EXISTING call: `mark(start)` → the call → `mark(end)`
+     *  + `measure` + the committed span. A SYNCHRONOUS throw propagates untouched
+     *  and commits nothing (a failed synchronous call is not a measurement).
+     *
+     *  RUL-2 (the L5 fix) — an ASYNC body is awaited: the span closes on
+     *  SETTLEMENT, so a caller-level round trip (`await this.bridge.rag.snapshot()`)
+     *  is measured end-to-end (call → IPC → main handler → clone → resolution)
+     *  instead of closing at promise creation (the live run measured 0.0–0.2 ms
+     *  for a whole-store pull). A REJECTED body still closes its span — the record
+     *  commits with the settled ms and the recorded error text, never a dangling
+     *  start mark — and the rejection is re-thrown untouched. */
+    record<T>(stage: string, fn: (() => T) | (() => Promise<T>)): T | Promise<T> {
       if (!armed || !armedStages.has(stage)) {
         if (armed) dropped += 1
         return fn()
@@ -185,19 +263,44 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
       const measureName = `${O0_HOOK_MARK_PREFIX}${stage}`
       const start = perf.now()
       perf.mark(startMark)
-      const value = fn()
-      perf.mark(endMark)
-      perf.measure(measureName, startMark, endMark)
-      const ms = o0Round(perf.now() - start)
-      records.push({ stage, ms, startMark, endMark, measureName })
-      return value
+      const commit = (error: string | null): void => {
+        perf.mark(endMark)
+        perf.measure(measureName, startMark, endMark)
+        const ms = o0Round(perf.now() - start)
+        records.push({ stage, ms, startMark, endMark, measureName, error })
+        pending -= 1
+      }
+      pending += 1
+      let value: any
+      try {
+        value = fn()
+      } catch (e) {
+        pending -= 1
+        throw e
+      }
+      if (o0IsThenable(value)) {
+        // The caller's awaited value is the settled value itself (§3.6/RUL-2: "never a
+        // wrapper, never a copy"); the span closes on BOTH settlement paths.
+        return (value as Promise<any>).then(
+          (settled: any) => {
+            commit(null)
+            return settled
+          },
+          (err: any) => {
+            commit(o0ErrorText(err))
+            throw err
+          },
+        )
+      }
+      commit(null)
+      return value as T
     },
     /** FS6 — a COPY: a caller can never reach into the recorder's state. */
     records(): O0HookRecord[] {
       return o0CopyRecords(records)
     },
     state(): O0HookSnapshot {
-      return { armed, records: o0CopyRecords(records), armCount, disarmCount, dropped }
+      return { armed, records: o0CopyRecords(records), armCount, disarmCount, dropped, pending }
     },
     reset(): void {
       armed = false
@@ -205,6 +308,7 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
       armCount = 0
       disarmCount = 0
       dropped = 0
+      pending = 0
       records = []
     },
   }
@@ -239,10 +343,10 @@ export function stagesFromO0HookRecords(recordsInput: unknown, ids: readonly str
   for (const raw of recordsInput as any[]) {
     const r: any = raw && typeof raw === 'object' ? raw : null
     if (r === null) throw new Error(`${O0_HOOK_RECORD_INVALID}: ${JSON.stringify(raw)} is not a hook record object (§4.3)`)
-    if (typeof r.stage !== 'string' || !O0_HOOK_STAGES.includes(r.stage)) {
+    if (typeof r.stage !== 'string' || !O0_HOOK_SEAM_STAGES.includes(r.stage)) {
       throw new Error(
-        `${O0_HOOK_RECORD_INVALID}: stage ${JSON.stringify(r.stage)} is not one of the permitted hook stages ` +
-          `${O0_HOOK_STAGES.join(', ')} (§3.6: ids 4-8 ONLY — a record cannot attribute a probe stage)`,
+        `${O0_HOOK_RECORD_INVALID}: stage ${JSON.stringify(r.stage)} is not one of the recorded seam stages ` +
+          `${O0_HOOK_SEAM_STAGES.join(', ')} (§3.6/§3.6b — a record cannot attribute a probe stage)`,
       )
     }
     if (!o0IsNonNeg(r.ms)) {
@@ -257,10 +361,13 @@ export function stagesFromO0HookRecords(recordsInput: unknown, ids: readonly str
   const stages: O0HookStageRow[] = requested.map((id) => {
     const ms = sums.get(id)
     if (ms === undefined) {
-      // §4.3 — the source names where the value WOULD come from: `hook` for a
-      // permitted hook stage, `derived` for the §2.2 stage 11 residual, `mark`
-      // for a stage only the CDP probe can separate.
-      const source: O0HookStageRow['source'] = O0_HOOK_STAGES.includes(id) ? 'hook' : id === 'post.style' ? 'derived' : 'mark'
+      // §4.3/§3.6b — the source names where the value WOULD come from: `hook` for a
+      // PERMITTED seam id (the §3.6b/RUL-1 ten — after RUL-1 every one of the 11 ids
+      // except `post.style` is a permitted seam id, so `'mark'` survives only for a
+      // genuinely probe-only stage, of which there is currently NONE), `derived` for
+      // the §2.2 stage 11 residual, `mark` otherwise.
+      const source: O0HookStageRow['source'] =
+        O0_HOOK_SEAM_STAGES.includes(id) ? 'hook' : id === 'post.style' ? 'derived' : 'mark'
       return { id, ms: null, unseparated: true, source }
     }
     return { id, ms, unseparated: false, source: 'hook' as const }
