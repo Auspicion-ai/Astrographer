@@ -4,7 +4,8 @@
  *
  * Authored by the BLIND-TEST WRITER from the DOCUMENTATION ONLY:
  *   - docs/specs/unit-gn-engine-integration.md
- *   - ../Gnosis/docs/specs/engine-wire-contract.md
+ *   - docs/specs/unit-gn-engine-integration.md
+ *   - ../Gnosis/docs/specs/engine-wire-contract.md (the Gnosis sibling repo; NOT this tree's docs/specs/)
  *   - ../Gnosis/docs/integrations/astrographer-interface-implementation.md
  *
  * The implementation source (src/main/engine-rag-store.ts) and the unit's own

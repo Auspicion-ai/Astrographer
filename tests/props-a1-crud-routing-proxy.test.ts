@@ -3,7 +3,8 @@
 // (`src/main/engine-crud-rag-store.ts`).
 // (docs/specs/unit-a1-crud-routing-proxy.md §5.7 — the register; the frozen
 // wire shapes + golden vectors V-10..V-12 + §10 decode-then-validate in
-// ../Gnosis/docs/specs/p1a-document-crud-wire.md.)
+// ../Gnosis/docs/specs/p1a-document-crud-wire.md — the Gnosis sibling repo, NOT this
+// tree's docs/specs/.)
 //
 // Deterministic pinned seed 0xA1A1A1A1 (the unit's mnemonic "A1"), ≤100
 // attempts/row, ≤400 total, stop-after-5. Each row is reported held/broken

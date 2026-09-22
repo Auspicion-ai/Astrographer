@@ -1,5 +1,6 @@
 // tests/runtime-battery.test.ts — Unit C: the Runtime's battery + code-CRUD
-// surface (docs/specs/e2e-test-battery.md §3 + docs/specs/mcp-endpoint.md §4).
+// surface (archive/parent-project/2026-08-26-e2e-test-battery.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md) §3 + docs/specs/mcp-endpoint.md §4).
 // The 5 graph tools + 6 code tools map to Runtime methods that consume the
 // existing host capabilities (Unit A) + the envelope CRUD + warnings (R10).
 import { describe, it, expect, beforeAll } from 'vitest'

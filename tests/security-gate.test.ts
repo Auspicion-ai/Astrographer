@@ -1,5 +1,6 @@
 // tests/security-gate.test.ts — RED tests for the SecurityGate wiring unit
-// (docs/specs/mcp-security-gate.md §2-§5). Imports from ../src/main/security.js.
+// (archive/parent-project/2026-08-26-mcp-security-gate.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/unit-j-mcp-security-hardening.md) §2-§5). Imports from ../src/main/security.js.
 // These tests are RED because SecurityGate is NOT exported yet (the primitives
 // groupForTool/toolAllowed/defaultSecurityConfig/authorized/applyPatch exist,
 // but the class does not).

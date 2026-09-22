@@ -1,5 +1,6 @@
 // tests/adapter-parity-battery.test.mjs — the adapter parity probe battery
-// (docs/specs/adapter-parity-battery.md). Drives the battery host
+// (archive/parent-project/2026-08-26-adapter-parity-battery.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md). Drives the battery host
 // (dist/main/battery-host.mjs — a REAL Runtime under the DOM shim, both views
 // from the SAME renderProducingProcess op stream) over stdio + the SDK client,
 // and compares `provident.get_rendered_html`'s `renderedHtml` (DOM) vs

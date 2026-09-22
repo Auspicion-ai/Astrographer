@@ -1,7 +1,8 @@
 // tests/secure-panels.test.ts — the RED set for the SecurePanels isolated
 // graph (multi-graph isolation adoption, 2026-08-25).
 //
-// Contract (docs/specs/secure-panels.md):
+// Contract (archive/parent-project/2026-08-26-secure-panels.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/decisions.md#OPERATOR-ISOLATED-GRAPHSCOPE + docs/specs/unit-h-sidebar-panes.md):
 //   SecurePanels(mount, opts?) — an owner of a SECOND provident graph (its own
 //   `createIsolatedScope()` + hub + Supervisor + DomAdapter) that renders the
 //   operator-only Security Settings pane + Debug pane as provident data.

@@ -1,6 +1,8 @@
 // tests/blind-runtime-host.test.ts — BLIND-TEST WRITER artifact (AGENTS.md item 10a).
-// Produced from the DOCUMENTATION ONLY: docs/specs/runtime-host-greens.md (R1..R8,
-// scenarios 1-39) + docs/specs/runtime-host.md. The writer did NOT read the
+// Produced from the DOCUMENTATION ONLY: archive/parent-project/2026-08-26-runtime-host-greens.md (historical; archived 2026-08-26; successor:
+// the owning unit spec is docs/specs/unit-h-sidebar-panes.md) (R1..R8,
+// scenarios 1-39) + archive/parent-project/2026-08-26-runtime-host.md (historical; archived 2026-08-26; successor: the owning unit spec is
+// docs/specs/unit-h-sidebar-panes.md). The writer did NOT read the
 // implementation (src/renderer/runtime.ts). Only the names the docs name are
 // imported: Runtime, demoEnvelope, installShim, mountEl, translateLegacy,
 // serializeSlice. The userEnvelope/placementEnvelope fixtures are replicated

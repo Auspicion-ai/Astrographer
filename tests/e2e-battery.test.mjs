@@ -1,5 +1,6 @@
 // tests/e2e-battery.test.mjs — the END-TO-END MCP test battery
-// (docs/specs/e2e-test-battery.md §5/§6). Spawns the battery host
+// (archive/parent-project/2026-08-26-e2e-test-battery.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md) §5/§6). Spawns the battery host
 // (dist/main/battery-host.mjs), connects the SDK client ONCE, and runs the
 // scenarios in sequence in one process. Between scenarios only
 // `provident.teardown` resets (C4); after each teardown it asserts the mount

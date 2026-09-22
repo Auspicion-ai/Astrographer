@@ -1,5 +1,6 @@
 // tests/mcp-server-wiring.test.ts — RED tests for the A1-W2 MCP server wiring
-// unit (docs/specs/mcp-server-wiring.md §2/§3/§4/§5). Imports the NEW pure
+// unit (archive/parent-project/2026-08-26-mcp-server-wiring.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md) §2/§3/§4/§5). Imports the NEW pure
 // functions `toolForName` / `registeredToolNames` from ../src/main/mcp-server.js
 // and the existing `SecurityGate` from ../src/main/security.js.
 //

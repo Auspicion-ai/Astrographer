@@ -1,5 +1,6 @@
 // tests/journal-endpoint.test.ts — RED tests for the journal reversibility
-// MCP endpoint (docs/specs/journal-endpoint-review.md J3-J8). The Runtime must
+// MCP endpoint (docs/specs/mcp-endpoint.md §4 + docs/specs/unit-ujr1-get-journal.md
+// J3-J8; the journal-endpoint review doc was never committed in this tree). The Runtime must
 // expose a `journal(action)` method that drives the engine's
 // `Supervisor.undo()`/`redo()`/`replay()` (provident-ssr 0.2.1 UndoRedoReport
 // surface) and re-renders. The MCP server must register `provident.journal`

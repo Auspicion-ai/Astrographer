@@ -1,9 +1,13 @@
 // tests/blind-renderer-debug.test.ts — BLIND-TEST WRITER artifact (AGENTS.md
 // item 10a). Produced from the DOCUMENTATION ONLY:
-//   - docs/specs/renderer-backend-greens.md (R1..R10)
-//   - docs/specs/renderer-backend-hardening.md
-//   - docs/specs/debug-panel-greens.md (D1..D4)
-//   - docs/specs/debug-panel.md
+//   - archive/parent-project/2026-08-26-renderer-backend-greens.md (historical; archived 2026-08-26; successor: the owning unit spec is
+//     docs/specs/unit-h-sidebar-panes.md) (R1..R10)
+//   - archive/parent-project/2026-08-26-renderer-backend-hardening.md (historical; archived 2026-08-26; successor: the owning unit spec is
+//     docs/specs/unit-h-sidebar-panes.md)
+//   - archive/parent-project/2026-08-26-debug-panel-greens.md (historical; archived 2026-08-26; successor: the owning unit spec is
+//     docs/specs/unit-h-sidebar-panes.md) (D1..D4)
+//   - archive/parent-project/2026-08-26-debug-panel.md (historical; archived 2026-08-26; successor: the owning unit spec is
+//     docs/specs/unit-h-sidebar-panes.md)
 //
 // The implementation files were NOT read. Only the module names the docs name
 // are imported:

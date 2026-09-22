@@ -1,5 +1,5 @@
 // tests/blind-ci-divergence.test.ts — BLIND-TEST artifact for D2 (A3-b)
-// Encodes docs/specs/ci-divergence-greens.md D2.5-D2.7 from DOCUMENTATION ONLY.
+// Encodes archive/parent-project/2026-08-26-ci-divergence-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md) D2.5-D2.7 from DOCUMENTATION ONLY.
 // Produced by the blind-test writer; do not treat as the canonical A3-b pin
 // (that is tests/runtime-battery.test.ts). Read-only against implementation.
 

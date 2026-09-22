@@ -1,7 +1,9 @@
 // tests/blind-battery-hooks-handlers.test.ts — BLIND-TEST WRITER artifact
 // (AGENTS.md item 10a). Produced from the DOCUMENTATION ONLY:
-//   docs/specs/battery-hooks-greens.md + docs/specs/battery-hooks-unit.md
-//   docs/specs/battery-handlers-greens.md + docs/specs/battery-handlers-unit.md
+//   archive/parent-project/2026-08-26-battery-hooks-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
+//   + archive/parent-project/2026-08-26-battery-hooks-unit.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
+//   archive/parent-project/2026-08-26-battery-handlers-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
+//   + archive/parent-project/2026-08-26-battery-handlers-unit.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
 // The writer did NOT read the implementation (src/renderer/runtime.ts,
 // src/main/battery-host.ts, tests/e2e-battery.test.mjs). Only the names the
 // docs name are imported: the fixture envelope builders
@@ -35,7 +37,7 @@ function classFor(html: string, id: string): string {
 }
 
 // ============================================================================
-// Battery §5.3 — hooks-scenarios (docs/specs/battery-hooks-greens.md)
+// Battery §5.3 — hooks-scenarios (archive/parent-project/2026-08-26-battery-hooks-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
 // ============================================================================
 describe('Hooks-scenarios (battery-hooks-greens.md)', () => {
   let runtime: Runtime
@@ -157,7 +159,7 @@ describe('Hooks-scenarios (battery-hooks-greens.md)', () => {
 })
 
 // ============================================================================
-// Battery §5.5 — handler-scenarios (docs/specs/battery-handlers-greens.md)
+// Battery §5.5 — handler-scenarios (archive/parent-project/2026-08-26-battery-handlers-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md)
 // ============================================================================
 describe('Handler-scenarios — S1a/S1b auth (battery-handlers-greens.md)', () => {
   it('H1 — S1a anon (AUTH-SEAM): Sign In chip, no dropdown, no Log out', async () => {

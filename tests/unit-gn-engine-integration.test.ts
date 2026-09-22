@@ -4,7 +4,8 @@
 // (docs/specs/unit-gn-engine-integration.md §5.8 happy-path states + §5.9
 // fail-states + §5.2 golden-vector conformance + §5.7 PBT register; the frozen
 // wire shapes + golden vectors V-1..V-6/V-8 + §11 HTTP-status map + §7
-// decode-then-validate in ../Gnosis/docs/specs/engine-wire-contract.md).
+// decode-then-validate in ../Gnosis/docs/specs/engine-wire-contract.md — the Gnosis
+// sibling repo, NOT this tree's docs/specs/).
 //
 // The RED set for the NEW module `src/main/engine-rag-store.ts`:
 //   - the factory `createEngineRagStore(opts)` + the proxy surface

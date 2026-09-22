@@ -1,5 +1,6 @@
 // tests/security.test.ts — RED tests for the A1 MCP security gate & agent
-// permissions unit (docs/specs/mcp-security.md). Imports the to-be-implemented
+// permissions unit (archive/parent-project/2026-08-26-mcp-security.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/unit-j-mcp-security-hardening.md §5.2 + docs/decisions.md#RAG-EDIT-MCP-GROUPS). Imports the to-be-implemented
 // pure module at src/main/security.js. These tests are RED because that module
 // does not exist yet (module-not-found).
 import { describe, it, expect } from 'vitest'

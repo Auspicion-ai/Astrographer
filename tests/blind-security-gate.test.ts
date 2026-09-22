@@ -1,12 +1,18 @@
 // tests/blind-security-gate.test.ts — BLIND-TEST WRITER artifact (AGENTS.md item 10a).
 //
 // Produced from DOCUMENTATION ONLY:
-//   docs/specs/mcp-security-greens.md        (G1..G10, scenarios 1-38 + Part 2)
-//   docs/specs/mcp-server-gate-greens.md     (W1..W3, G4..G5)
-//   docs/specs/mcp-security.md
-//   docs/specs/mcp-security-gate.md
-//   docs/specs/mcp-server-wiring.md
-//   docs/specs/mcp-server-gate.md
+//   archive/parent-project/2026-08-26-mcp-security-greens.md        (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/unit-j-mcp-security-hardening.md + docs/specs/mcp-endpoint.md) (G1..G10, scenarios 1-38 + Part 2)
+//   archive/parent-project/2026-08-26-mcp-server-gate-greens.md     (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/unit-j-mcp-security-hardening.md) (W1..W3, G4..G5)
+//   archive/parent-project/2026-08-26-mcp-security.md              (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/unit-j-mcp-security-hardening.md + docs/specs/mcp-endpoint.md)
+//   archive/parent-project/2026-08-26-mcp-security-gate.md         (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/unit-j-mcp-security-hardening.md + docs/specs/mcp-endpoint.md)
+//   archive/parent-project/2026-08-26-mcp-server-wiring.md         (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/mcp-endpoint.md)
+//   archive/parent-project/2026-08-26-mcp-server-gate.md           (historical; archived 2026-08-26; successor: the live contract is
+//     docs/specs/unit-j-mcp-security-hardening.md)
 //
 // Imports ONLY the names the docs name. No implementation file was read.
 import { describe, it, expect } from 'vitest'

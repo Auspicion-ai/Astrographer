@@ -1,5 +1,6 @@
 // tests/renderer-backend.test.ts — RED tests for the A2/A6 RendererBackend
-// lifecycle hardening unit (docs/specs/renderer-backend-hardening.md §2/§3/§4).
+// lifecycle hardening unit (archive/parent-project/2026-08-26-renderer-backend-hardening.md (historical; archived 2026-08-26; successor: the owning
+// unit spec is docs/specs/unit-h-sidebar-panes.md) §2/§3/§4).
 //
 // These tests are RED because the current `RendererBackend`
 // (src/main/mcp-server.ts) does NOT implement the spec surface:

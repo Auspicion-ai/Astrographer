@@ -1,5 +1,6 @@
 // tests/journal-reversibility.test.ts — the journal reversibility stress battery
-// (docs/specs/journal-reversibility-battery.md). Drives the provident engine's
+// (archive/parent-project/2026-08-26-journal-reversibility-battery.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md §4 + docs/specs/unit-ud2-journal-invertibility.md). Drives the provident engine's
 // journal surface (Supervisor.apply → journal, then undo()/redo()/replay())
 // across the op matrix + mutation modes, and asserts reversibility (R1/R2),
 // replay idempotency (R3), and atomicity (R5). Findings are recorded via

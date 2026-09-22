@@ -1,5 +1,6 @@
 // tests/mcp-resources.test.ts — RED tests for the gated MCP resources
-// (docs/specs/mcp-resources-review.md R1-R5). The server must:
+// (docs/specs/mcp-endpoint.md — the resources leg, R1-R5; the mcp-resources review
+// doc was never committed in this tree). The server must:
 //   R1  register resources only when their group (`read`) is allowed — never
 //       always-registered (a `read`-off human grant must shut off the reads).
 //   R2  capture + live re-gate the resource handles alongside the tools.

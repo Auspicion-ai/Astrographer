@@ -1,5 +1,6 @@
 // tests/runtime-host.test.ts — the renderer Runtime's HOST-CAPABILITY surface
-// (docs/specs/runtime-host.md §2/§3/§4): the load/export/validate/teardown +
+// (archive/parent-project/2026-08-26-runtime-host.md (historical; archived 2026-08-26; successor: the owning unit spec is
+// docs/specs/unit-h-sidebar-panes.md) §2/§3/§4): the load/export/validate/teardown +
 // id-index operations the MCP tools + battery host consume. This file encodes
 // the NEW methods that do NOT yet exist on `Runtime` — `loadEnvelope`,
 // `loadDoc`, `applyCommand`, `exportLegacy`, `exportSerialized`,

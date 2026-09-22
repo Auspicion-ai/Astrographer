@@ -6,7 +6,8 @@
 // NEW-2 + RBAC caller + §5.5 transport + §5.6 READY observation + D2
 // engine-absent; the frozen wire shapes + golden vectors V-10..V-12 + §7
 // endpoint paths + §8 RBAC caller + §10 decode-then-validate in
-// ../Gnosis/docs/specs/p1a-document-crud-wire.md).
+// ../Gnosis/docs/specs/p1a-document-crud-wire.md — the Gnosis sibling repo, NOT this
+// tree's docs/specs/).
 //
 // The RED set for the NEW module `src/main/engine-crud-rag-store.ts`:
 //   - the factory `createEngineCrudRagStore(opts)` + the 11-method proxy surface

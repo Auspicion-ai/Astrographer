@@ -1,5 +1,5 @@
 // tests/blind-battery-verify.test.ts — BLIND verification of the GREEN
-// scenario set (docs/specs/battery-units-greens.md B1..D1, scenarios 1-39)
+// scenario set (archive/parent-project/2026-08-26-battery-units-greens.md (historical; archived 2026-08-26; successor: the live contract is docs/specs/mcp-endpoint.md) B1..D1, scenarios 1-39)
 // against the implementation, WITHOUT having read the implementation
 // (src/renderer/runtime.ts, src/main/battery-host.ts, src/shared/path-fork-cycle.ts).
 //

@@ -5,6 +5,10 @@ contract; it lands BEFORE the generator it specifies (the generator is *derived 
 reverse). The unit's DONE state is recorded in `docs/next-steps.md` §CURRENT WORK / handover-state by the
 landing pass (§10).
 
+**PARKED 2026-09-21 — REDUNDANT with the product feature (see docs/decisions.md DECIDED: DOCUMENT-CONSISTENCY-IS-A-PRODUCT-FEATURE); this spec is retained as the fallback record and nothing in it is scheduled.**
+
+**Body, register, fail-states and count claims are UNCHANGED by the park** — this dated line is the only status amendment.
+
 **Layer (RCA-12, mandatory declaration): DOC-TOOLING.** This unit adds **one Node `.mjs` generator**
 (`scripts/catalog-derive.mjs`) and **one doc-layer contract test**
 (`tests/requirement-catalog-contract.test.ts`). It changes **no** `src/**`, no envelope, no renderer, no

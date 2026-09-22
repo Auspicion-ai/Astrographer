@@ -1,5 +1,6 @@
 // tests/mcp-notify.test.ts — RED tests for the gated live-change-notification
-// surface (docs/specs/live-notification-review.md N1-N7). The server must:
+// surface (docs/specs/mcp-endpoint.md — the notify leg, N1-N7; the live-notification
+// review doc was never committed in this tree). The server must:
 //   N1  map a renderer "app graph changed" notify into a resource-updated
 //       notification (not a tool-list/list-changed — those are applyGatePatch-
 //       only).

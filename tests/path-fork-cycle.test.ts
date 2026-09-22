@@ -1,5 +1,6 @@
 // tests/path-fork-cycle.test.ts — Unit B: the CYCLE-variant static envelope
-// (docs/specs/e2e-test-battery.md §5.1.x + src/shared/path-fork-cycle.ts). The
+// (archive/parent-project/2026-08-26-e2e-test-battery.md (historical; archived 2026-08-26; successor: the live contract is
+// docs/specs/mcp-endpoint.md) §5.1.x + src/shared/path-fork-cycle.ts). The
 // upstream static trio (placement/values/link) has no cycle variant; this is
 // the NEW data-only module that cycles the three STATIC-capable mechanisms per
 // layer with zero handlers and zero clones.

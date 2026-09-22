@@ -2,8 +2,9 @@
 //
 // Produced from DOCUMENTATION ONLY:
 //   docs/specs/mcp-endpoint.md §4.1 (code.* CRUD + code.loadBatch row)
-//   docs/specs/loadbatch-review.md (B1-B8 reshapes)
-//   docs/specs/loadbatch-proposal.md (the proposal)
+//   docs/specs/mcp-endpoint.md §4.1/§6.2 — the live contract (the B1-B8 reshapes; the
+//   loadbatch review/proposal pair was never committed in this tree)
+//   docs/specs/mcp-endpoint.md §4.1/§6.2 — the live contract (the proposal half)
 //   docs/specs/mcp-endpoint.md §6.2 (tool groups)
 //
 // No implementation file was read.
