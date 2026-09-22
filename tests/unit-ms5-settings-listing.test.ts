@@ -174,7 +174,7 @@ function makeBridge(opts: {
     snapshot: opts.snapshot ?? emptySnapshot(),
     docHeads: opts.docHeads ?? { documents: [] },
     storeListing: opts.storeListing === undefined ? ({ stores: [] } as unknown) : opts.storeListing,
-    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' },
+    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, },
     security: opts.security ?? { token: null, enabled: ['read', 'dispatch'] },
   }
   const bridge = {

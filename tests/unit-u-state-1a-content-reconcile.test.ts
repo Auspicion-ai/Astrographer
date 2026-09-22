@@ -231,3 +231,41 @@ describe('U-STATE-1a — §5 fail-states', () => {
     expect(ids(r.replaced)).toEqual(['a'])
   })
 })
+
+// ---------------------------------------------------------------------------
+// U-EDIT-1 §3.5 item 6 — the warning/`commit-failed` state is HOST-SIDE state
+// keyed by tab id, never a rendered class/attribute/innerHTML, so a content
+// reconcile must not be able to carry it (a warning that exists only as a DOM
+// class is `FS17`). The reconciler half of that obligation is the RUNTIME-PROP
+// treatment pin: the renderer-owned editing props of the single surface
+// (`contenteditable`, the `data-edit-surface` marker) are NOT authored content
+// changes, while the RAG-authored addressing key (`data-rag-node-id`) and the
+// authored text ARE.
+// ---------------------------------------------------------------------------
+describe('U-STATE-1a — U-EDIT-1 §3.5 item 6 (the edit-surface runtime props never carry state)', () => {
+  it('a renderer-spliced `contenteditable` prop is NOT a diffed change (the removed per-node host cannot dirty a root)', () => {
+    // U-EDIT-1 §3.2 explicitly lists the renderer-minted runtime props
+    // (`data-node-id`, `style`, class lists, `contenteditable`, the
+    // `data-edit-surface` marker) as NOT diffed, and §2.1 removes the per-node
+    // `contenteditable` splice entirely. A reconcile whose ONLY difference is
+    // the runtime-spliced `contenteditable` prop must therefore be a no-op —
+    // RED today: the fallback shape projection compares props wholesale.
+    const prev = [{ type: 'div', props: { id: 'rag-a', contenteditable: true }, content: 'x' } as unknown as LegacyNodeData]
+    const next = envelope([
+      { type: 'div', props: { id: 'rag-a' }, content: 'x' } as unknown as LegacyNodeData,
+    ])
+    const r = run({ previous: prev, next, change: null })
+    expect(ids(r.kept)).toEqual(['a'])
+    expect(ids(r.replaced)).toEqual([])
+  })
+
+  it('the RAG-authored addressing key + authored content are STILL real changes (the diff is over content, §3.2)', () => {
+    const prevKeyless = [{ type: 'div', props: { id: 'rag-a' }, content: 'x' } as unknown as LegacyNodeData]
+    const withKey = envelope([{ type: 'div', props: { id: 'rag-a', 'data-rag-node-id': 'a' }, content: 'x' } as unknown as LegacyNodeData])
+    expect(ids(run({ previous: prevKeyless, next: withKey, change: null }).replaced)).toEqual(['a'])
+
+    const prevText = [{ type: 'div', props: { id: 'rag-a' }, content: 'x' } as unknown as LegacyNodeData]
+    const edited = envelope([{ type: 'div', props: { id: 'rag-a' }, content: 'edited' } as unknown as LegacyNodeData])
+    expect(ids(run({ previous: prevText, next: edited, change: null }).replaced)).toEqual(['a'])
+  })
+})

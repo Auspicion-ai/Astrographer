@@ -688,7 +688,7 @@ function makeBridge(opts: {
   const state = {
     snapshot: opts.snapshot ?? validSnapshot(),
     storeListing: opts.storeListing === undefined ? ({ stores: [] } as RagStoreListingPayload) : opts.storeListing,
-    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' },
+    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, },
     security: opts.security ?? { token: null, enabled: ['read', 'dispatch'] },
   }
   const manage = opts.manage ?? (async () => ({ ok: true, done: 'x' }))

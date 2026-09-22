@@ -119,4 +119,17 @@ describe('U-STATE-1a adversarial regressions', () => {
     const r = reconcileContentRoots({ previous: prev, next, change: { kind: 'content', nodeIds: [], edgeIds: [] } })
     expect(ids(r.kept)).toEqual(['pane-doc-nav'])
   })
+
+  it('R10. (U-EDIT-1 §3.2) the renderer-minted `contenteditable` runtime prop is not a diffed change either', () => {
+    // U-EDIT-1 §3.2's NOT-diffed list names the renderer-minted props by name —
+    // `contenteditable` included — and §2.1 removes the per-node splice that minted
+    // it. This is the R9 shape for the removed per-node host: a reconcile whose
+    // only difference is the runtime spliced prop must be a no-op (RED today —
+    // the fallback projection compares props wholesale).
+    const prev = [{ type: 'div', props: { id: 'rag-a', contenteditable: true }, content: 'x' } as unknown as LegacyNodeData]
+    const next = envelope([{ type: 'div', props: { id: 'rag-a' }, content: 'x' } as unknown as LegacyNodeData])
+    const r = reconcileContentRoots({ previous: prev, next, change: null })
+    expect(ids(r.kept)).toEqual(['a'])
+    expect(ids(r.replaced)).toEqual([])
+  })
 })

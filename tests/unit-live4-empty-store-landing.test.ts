@@ -86,7 +86,6 @@ function emptyHarness(): EmptyHarness {
     panesInitialized: true,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: 'contenteditable',
     theme: 'system',
   }
   const bridge = {

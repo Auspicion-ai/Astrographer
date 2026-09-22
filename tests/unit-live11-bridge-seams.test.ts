@@ -500,7 +500,6 @@ describe('U-LIVE11 (c) — togglePaneVisibility sets paneVisibilityTouched (LIVE
       panesInitialized: true,
       defaultDocumentId: null,
       topK: 5,
-      editingMode: 'contenteditable',
       theme: 'system',
       layout: coerceLayout(defaultLayout()),
     } as OperatorSettings)

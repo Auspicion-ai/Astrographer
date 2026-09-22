@@ -120,13 +120,11 @@ interface OperatorSettings {
   enabledPanes: string[]
   defaultDocumentId: string | null
   topK: number
-  editingMode: 'textarea' | 'contenteditable'
 }
 interface OperatorSettingsPatch {
   enabledPanes?: string[]
   defaultDocumentId?: string | null
   topK?: number
-  editingMode?: 'textarea' | 'contenteditable'
 }
 
 function makeBridge(opts: {
@@ -145,7 +143,7 @@ function makeBridge(opts: {
     queryResult: opts.queryResult ?? null,
     backlinksResult: opts.backlinksResult ?? null,
     security: opts.security ?? { token: null, enabled: ['read', 'dispatch'] },
-    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'textarea' },
+    operatorSettings: opts.operatorSettings ?? { enabledPanes: [], defaultDocumentId: null, topK: 5, },
   }
   const bridge = {
     security: {

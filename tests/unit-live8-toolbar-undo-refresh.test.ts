@@ -50,7 +50,6 @@ import type {
   RagSnapshotPayload,
   OperatorSettings,
   OperatorSettingsPatch,
-  EditingMode,
 } from '../src/shared/types.js'
 import type { BacklinkResult } from '../src/main/backlinks.js'
 
@@ -102,7 +101,6 @@ function makeBridge(opts: { journalState?: JournalState; journalOpImpl?: (action
       panesInitialized: true,
       defaultDocumentId: null,
       topK: 5,
-      editingMode: 'textarea' as EditingMode,
       theme: 'system',
     } as unknown as OperatorSettings,
   }
@@ -408,7 +406,7 @@ describe('U-LIVE8 AD-2026-09-14 — host finding regressions: single live toolba
   }
 
   it('(Finding 1/b) an UNCHANGED toolbar across an unrelated content change lands in `kept` — never added/removed/replaced (no destroy/attach)', () => {
-    const toolbar = editorToolbarContent('textarea', 'main', journalPayload(makeJournalState()))
+    const toolbar = editorToolbarContent('html', 'main', journalPayload(makeJournalState()))
     const result = reconcileDocumentRoots({
       previous: [{ documentId: '', root: toolbar }],
       next: [{ documentId: 'A', envelope: toolbarEnvelope(toolbar) }],
@@ -425,9 +423,9 @@ describe('U-LIVE8 AD-2026-09-14 — host finding regressions: single live toolba
   })
 
   it('(Finding 1/b) a `disabled` flip (undoDepth 0→1) lands the toolbar in a SINGLE `replaced` entry — never added/removed/duplicated', () => {
-    const prev = editorToolbarContent('textarea', 'main', journalPayload(makeJournalState()))
+    const prev = editorToolbarContent('html', 'main', journalPayload(makeJournalState()))
     const bumpedJournal: JournalState = { entries: [entry('content', 0)], cursor: 1 }
-    const nextToolbar = editorToolbarContent('textarea', 'main', journalPayload(bumpedJournal))
+    const nextToolbar = editorToolbarContent('html', 'main', journalPayload(bumpedJournal))
     const result = reconcileDocumentRoots({
       previous: [{ documentId: '', root: prev }],
       next: [{ documentId: 'A', envelope: toolbarEnvelope(nextToolbar) }],

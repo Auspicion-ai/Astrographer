@@ -38,7 +38,6 @@ import type {
   SecuritySettings,
   OperatorSettings,
   OperatorSettingsPatch,
-  EditingMode,
 } from '../src/shared/types.js'
 import type { BacklinkResult } from '../src/main/backlinks.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
@@ -149,7 +148,6 @@ function makeBridge(opts: { snapshot?: RagSnapshotPayload; docHeads?: RagDocHead
       enabledPanes: [],
       defaultDocumentId: null,
       topK: 5,
-      editingMode: 'textarea' as EditingMode,
     },
   }
   const bridge = {

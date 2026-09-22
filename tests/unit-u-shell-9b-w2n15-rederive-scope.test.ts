@@ -124,7 +124,6 @@ function sharedHarness() {
     panesInitialized: true,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: 'textarea',
     theme: 'system',
   }
   const bridge = {
@@ -185,7 +184,10 @@ function materializedIds(runtime: Runtime): string[] {
 }
 
 function duplicateRagIds(ids: string[]): string[] {
-  const ragIds = ids.filter((id) => /^(?:rag|textarea|inline)-/.test(id))
+  // U-EDIT-1 §2.1/§3.4 step 4 (R-C): the per-node `textarea-` id class is gone
+  // from the census — there are no per-node editing hosts to name. The
+  // surviving authored classes are the RAG roots + the inline spans.
+  const ragIds = ids.filter((id) => /^(?:rag|inline)-/.test(id))
   return ragIds.filter((id, i) => ragIds.indexOf(id) !== i)
 }
 

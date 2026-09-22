@@ -786,7 +786,6 @@ function stageHarness(opts: {
     panesInitialized: true,
     defaultDocumentId: opts.defaultDocumentId ?? null,
     topK: 5,
-    editingMode: 'contenteditable',
     theme: 'system',
   }
   const bridge = {

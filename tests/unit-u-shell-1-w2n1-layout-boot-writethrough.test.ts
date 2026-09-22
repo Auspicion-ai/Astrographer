@@ -110,7 +110,6 @@ function makeHarness(opts: { layout?: unknown } = {}): Harness {
       panesInitialized: true,
       defaultDocumentId: null,
       topK: 5,
-      editingMode: 'contenteditable',
       theme: 'system',
       ...(opts.layout !== undefined ? { layout: opts.layout } : {}),
     } as Record<string, unknown>,

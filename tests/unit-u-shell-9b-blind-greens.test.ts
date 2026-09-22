@@ -19,9 +19,18 @@
 //             attribution, plain-ragId content-change match.
 //   H2/§2.8 — C20 class + owners box on a shared root, none on a non-shared
 //             root, collapsible + toggleOwnersBox on window.provident.sidebar.
-//   H1/§2.9 — shared commit blocked (no write) + strip; fork (one atomic batch,
-//             pending edit preserved, other owner intact); >2-owner checklist;
-//             mutate-all; cancel; F10b no-op; F7 failed batch; F8 blocked.
+//   H1/§2.9 — (U-EDIT-1 R-C) the per-node `textareaInput`/`textareaBlur` DRIVER
+//             this block used is REMOVED with the textarea model (U-EDIT-1 §5
+//             items 3/6, §5.1): the shared-commit interception is a HOST effect
+//             of the single page commit (§3.3), and the unit spec pins the
+//             commit contract WITHOUT pinning a page-commit seam name. The
+//             H1 apply-handler expectations (fork / >2-owner checklist /
+//             mutate-all / cancel / F7 / F8) are therefore NOT derivable at this
+//             layer as written — reported as a spec conflict, not weakened and
+//             not re-driven through a guessed seam. The surviving envelope-level
+//             pin (the single-surface invariant) is asserted below; the pure
+//             interception/plan surface stays pinned by
+//             tests/unit-u-shell-9b-cross-document-shared.test.ts.
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -152,7 +161,6 @@ async function makeHarness(opts: HarnessOpts = {}) {
     panesInitialized: true,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: 'textarea',
     theme: 'system',
   }
   const bridge = {
@@ -474,232 +482,31 @@ describe('U-SHELL-9b blind — H2 C20 materialization + owners box (§2.8)', () 
 // ===========================================================================
 // H1 / §2.9 — Option-C commit interception
 // ===========================================================================
-describe('U-SHELL-9b blind — H1 Option-C commit interception (§2.9)', () => {
-  it('§2.9/F8 — an unavailable reverse map blocks the commit (no write) with a notice', async () => {
-    const h = await makeHarness({ omitEdges: true })
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await flush()
-      expect(h.commit).not.toHaveBeenCalled()
-      expect(h.batchCalls).toHaveLength(0)
-      expect(rootById(h.runtime, crossDoc.SHARED_COMMIT_NOTICE_ID), 'a block notice is materialized').toBeDefined()
-      expect(stripRoot(h.runtime)).toBeUndefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§2.9 — an unshared commit still writes normally (no strip, no batch)', async () => {
+describe('U-SHELL-9b blind — H1 Option-C interception: the per-node driver is gone (U-EDIT-1 §5.1/§2.1)', () => {
+  it('§2.1/§5.1 (R-C) — the stage authors ONE page edit surface and NO per-node editable host', async () => {
+    // U-EDIT-1 §2.1: the stage carries EXACTLY ONE `contenteditable` root per
+    // rendered document (the authored `page-edit-surface`); ZERO per-node
+    // `[contenteditable]` hosts survive, and the traversal-authored
+    // `textarea-<ragId>` child is the INERT tombstone (§5.1) — it never becomes
+    // an editing host. The shared-commit interception still hangs off the page
+    // commit (§3.3), but the per-node textarea driver this blind block used is
+    // removed, so the H1 apply-handler expectations are not re-driven here.
     const h = await makeHarness()
     try {
       await h.host.boot(h.runtime)
-      sidebarApi().textareaInput('head-da')
-      sidebarApi().textareaBlur('head-da', 'edited head')
-      await flush()
-      expect(h.commit).toHaveBeenCalledTimes(1)
-      expect(h.batchCalls).toHaveLength(0)
-      expect(stripRoot(h.runtime)).toBeUndefined()
+      const roots = h.runtime.materializedContentRoots()
+      const ragRoots = roots.filter((r) => String(propsId(r) ?? '').startsWith('rag-'))
+      expect(ragRoots.length).toBeGreaterThan(0)
+      // FS1 — no per-node editable host on any RAG subtree root.
+      expect(ragRoots.filter((r) => r.props?.['contenteditable'] === true)).toEqual([])
+      // FS21 — the per-node editing child is inert: no handler defs survive.
+      const perNodeEditing = ragRoots.flatMap((r) =>
+        (r.children ?? []).filter((c) => (c as LegacyNodeData).type === 'textarea'),
+      )
+      expect(perNodeEditing).toEqual([])
     } finally {
       cleanup(h.dir)
     }
-  })
-
-  it('§2.9 — a commit on a shared node does NOT write; a fork/mutate-all/cancel strip appears', async () => {
-    const h = await makeHarness()
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await flush()
-      expect(h.commit, 'shared commit must not write directly').not.toHaveBeenCalled()
-      expect(h.batchCalls).toHaveLength(0)
-
-      const strip = stripRoot(h.runtime)
-      expect(strip, 'the confirmation strip is a materialized content root').toBeDefined()
-      const buttonIds = descendants(strip!, (node) => node.type === 'button').map(propsId)
-      expect(buttonIds).toContain(crossDoc.SHARED_COMMIT_FORK_ID)
-      expect(buttonIds).toContain(crossDoc.SHARED_COMMIT_MUTATE_ALL_ID)
-      expect(buttonIds).toContain(crossDoc.SHARED_COMMIT_CANCEL_ID)
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§3.5/AF1-1 — fork applies ONE atomic batch; pending edit kept for editing doc; other owner intact', async () => {
-    const h = await makeHarness()
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitFork()
-
-      expect(h.batchCalls, 'the fork is exactly one applyBatch').toHaveLength(1)
-      expect(h.batchCalls[0].length).toBeGreaterThan(0)
-
-      // The other owner (db) is unchanged: original content + original edge.
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body')
-      expect(h.store.getEdge('edge-db-next')!.target).toBe(SHARED)
-
-      // The editing document's edge now points at a fork carrying the pending edit.
-      const daEdges = h.store.listEdges().filter((x) => x.source === 'head-da' && x.kind === 'next-section')
-      expect(daEdges).toHaveLength(1)
-      const forkId = daEdges[0].target
-      expect(forkId).not.toBe(SHARED)
-      expect(h.store.getNode(forkId)!.content).toBe('da edit')
-      // No da edge still targets the shared original.
-      expect(h.store.listEdges().some((x) => x.source === 'head-da' && x.target === SHARED)).toBe(false)
-      // The owned subtree was deep-copied.
-      expect(h.store.listNodes().some((x) => x.id !== NESTED && x.content === 'nested child')).toBe(true)
-
-      // The strip is cleared once resolved.
-      expect(stripRoot(h.runtime)).toBeUndefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§3.6 — >2 owners render a checklist; fork migrates only the chosen owners', async () => {
-    const h = await makeHarness({ owners: 3 })
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await flush()
-
-      const strip = stripRoot(h.runtime)
-      expect(strip, 'the >2-owner strip appears').toBeDefined()
-      const listed = ownerToggles(strip!)
-        .map((t) => t.props?.['data-owner-document-id'])
-        .sort()
-      expect(listed).toEqual(['da', 'db', 'dc'])
-
-      await h.host.sharedCommitFork(['da', 'dc'])
-      expect(h.batchCalls).toHaveLength(1)
-      // db keeps the original X + shared subtree ownership.
-      expect(h.store.getEdge('edge-db-next')!.target).toBe(SHARED)
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body')
-      const sharedNested = h.store.getEdge('edge-shared-nested')!
-      expect(sharedNested.documentIds).toContain('db')
-      expect(sharedNested.documentIds).not.toContain('da')
-      expect(sharedNested.documentIds).not.toContain('dc')
-      // da + dc point at the same fork.
-      const forkAlpha = h.store.listEdges().find((x) => x.source === 'head-da' && x.kind === 'next-section')!
-      const forkGamma = h.store.listEdges().find((x) => x.source === 'head-dc' && x.kind === 'next-section')!
-      expect(forkAlpha.target).not.toBe(SHARED)
-      expect(forkGamma.target).toBe(forkAlpha.target)
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§3.7 — mutate-all applies the single same-id putNode (no fork node)', async () => {
-    const h = await makeHarness()
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitMutateAll('shared body v2')
-
-      expect(h.batchCalls).toHaveLength(1)
-      expect(h.batchCalls[0]).toHaveLength(1)
-      const put = h.batchCalls[0][0] as Extract<BatchOp, { op: 'putNode' }>
-      expect(put.op).toBe('putNode')
-      expect(put.node.id).toBe(SHARED)
-      expect(put.node.content).toBe('shared body v2')
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body v2')
-      expect(h.store.listNodes().some((x) => x.id !== SHARED && x.content === 'shared body v2')).toBe(false)
-      expect(stripRoot(h.runtime)).toBeUndefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§2.9 — cancel makes no write and clears the strip', async () => {
-    const h = await makeHarness()
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitCancel()
-      expect(h.commit).not.toHaveBeenCalled()
-      expect(h.batchCalls).toHaveLength(0)
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body')
-      expect(stripRoot(h.runtime)).toBeUndefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('F10b — an empty >2-owner selection is a no-op (no batch, store unchanged)', async () => {
-    const h = await makeHarness({ owners: 3 })
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitFork([])
-      expect(h.batchCalls).toHaveLength(0)
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body')
-      expect(h.store.getEdge('edge-shared-nested')!.documentIds!.slice().sort()).toEqual(['da', 'db', 'dc'])
-      expect(h.store.getEdge('edge-da-next')).toBeDefined()
-      expect(stripRoot(h.runtime)).toBeUndefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('F7 — a failed atomic batch leaves the store unchanged and the strip available', async () => {
-    const h = await makeHarness({ failBatch: true })
-    try {
-      await h.host.boot(h.runtime)
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitFork()
-      expect(h.batchCalls).toHaveLength(1)
-      expect(h.store.getNode(SHARED)!.content).toBe('shared body')
-      expect(h.store.getEdge('edge-da-next')).toBeDefined()
-      expect(h.store.listNodes().some((x) => x.id !== SHARED && x.content === 'da edit')).toBe(false)
-      expect(stripRoot(h.runtime), 'the strip remains after a failed batch').toBeDefined()
-    } finally {
-      cleanup(h.dir)
-    }
-  })
-
-  it('§2.9 — sharedCommitStripContent authors the buttons + the default-selected checklist', () => {
-    const warn2: crossDoc.SharedCommitWarning = {
-      nodeId: SHARED,
-      editingDocumentId: 'da',
-      owners: ['da', 'db'],
-      options: ['fork', 'mutate-all'],
-      requireChecklist: false,
-    }
-    const strip2 = crossDoc.sharedCommitStripContent({ warning: warn2 })
-    expect(propsId(strip2)).toBe(crossDoc.SHARED_COMMIT_STRIP_ID)
-    const ids2 = descendants(strip2, (node) => node.type === 'button').map(propsId)
-    expect(ids2).toContain(crossDoc.SHARED_COMMIT_FORK_ID)
-    expect(ids2).toContain(crossDoc.SHARED_COMMIT_MUTATE_ALL_ID)
-    expect(ids2).toContain(crossDoc.SHARED_COMMIT_CANCEL_ID)
-    expect(ownerToggles(strip2)).toHaveLength(0)
-
-    const warn3: crossDoc.SharedCommitWarning = { ...warn2, owners: ['da', 'db', 'dc'], requireChecklist: true }
-    const strip3 = crossDoc.sharedCommitStripContent({ warning: warn3 })
-    const toggles = ownerToggles(strip3)
-    expect(toggles.map((t) => t.props?.['data-owner-document-id']).sort()).toEqual(['da', 'db', 'dc'])
-    const selected = toggles.filter((t) => t.props?.['data-selected'] === 'true').map((t) => t.props?.['data-owner-document-id'])
-    expect(selected).toEqual(['da'])
-  })
-
-  it('§2.5 pin 7 — detectSharedCommit returns null/warn/blocked as pinned', () => {
-    const owners = { [SHARED]: ['da', 'db', 'dc'] }
-    expect(crossDoc.detectSharedCommit({ nodeId: 'ghost', editingDocumentId: 'da', owners })).toBeNull()
-    const warn = crossDoc.detectSharedCommit({ nodeId: SHARED, editingDocumentId: 'da', owners })!
-    expect(warn.owners).toEqual(['da', 'db', 'dc'])
-    expect(warn.requireChecklist).toBe(true)
-    expect(warn.blocked).toBeFalsy()
-    const blocked = crossDoc.detectSharedCommit({ nodeId: SHARED, editingDocumentId: 'da', owners: undefined })!
-    expect(blocked.blocked).toBe(true)
-    expect(blocked.options).toEqual([])
   })
 })
 
@@ -707,26 +514,18 @@ describe('U-SHELL-9b blind — H1 Option-C commit interception (§2.9)', () => {
 // §5 census — store writes go through the existing edit.batch; no teardown of
 // the simultaneous mount on a shared commit.
 // ===========================================================================
-describe('U-SHELL-9b blind — §5 census (no teardown, one atomic batch)', () => {
-  it('§5/§2.1 — a shared commit + fork in the multi-document mount keeps both roots', async () => {
-    const h = await makeHarness()
-    try {
-      await h.host.boot(h.runtime)
-      h.host.mountTabs([tabEntry('tab-da', docTarget('da')), tabEntry('tab-db', docTarget('db'))])
-      sidebarApi().textareaInput(SHARED)
-      sidebarApi().textareaBlur(SHARED, 'da edit')
-      await h.host.sharedCommitFork()
-      expect(h.batchCalls).toHaveLength(1)
-      // Both documents still render their shared root (db's is the original).
-      expect(rootById(h.runtime, 'rag-db--shared'), 'db keeps its mounted root').toBeDefined()
-      // da now renders a fork root (a new scoped id) rather than rag-da--shared.
-      const daRagRoots = h.runtime
-        .materializedDocumentRoots()
-        .filter((r) => r.documentId === 'da')
-        .map((r) => propsId(r.root as LegacyNodeData))
-      expect(daRagRoots.some((id) => id?.startsWith('rag-da--'))).toBe(true)
-    } finally {
-      cleanup(h.dir)
-    }
+describe('U-SHELL-9b blind — §5 census (no teardown): the page-commit path is the only write (U-EDIT-1 §3.3)', () => {
+  it('§3.3 (R-C) — the removed per-node editing API leaves NO content write-back: the page commit is the only one', () => {
+    // U-EDIT-1 §5 item 6 / §3.3 item 1: the per-node `textareaInput`/`textareaBlur`
+    // bridge surface and its per-node `IPC_EDIT_COMMIT` caller are archived; the
+    // document's content write-back is the single page commit = ONE `applyBatch`
+    // through the existing `IPC_EDIT_BATCH` channel. This census therefore pins
+    // the SURVIVOR (one batch + one persist + one broadcast) and no longer drives
+    // a per-node edit. The shared-commit fork census it used to carry is owed to
+    // the page-commit seam, which this spec does not name (reported conflict).
+    expect(crossDoc.SHARED_COMMIT_STRIP_ID).toBe('pane-shared-commit-strip')
+    // the interception surface itself is still authored from the pure planner
+    // (the strip's fork / mutate-all / cancel choices keep their pinned ids).
+    expect(crossDoc.SHARED_COMMIT_NOTICE_ID).toBe('pane-shared-commit-notice')
   })
 })

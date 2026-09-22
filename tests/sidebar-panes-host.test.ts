@@ -655,7 +655,16 @@ describe('boot (§5.8.7)', () => {
     // installSidebar with the host's methods.
     expect(installed).not.toBeNull()
     expect(typeof (installed as Record<string, unknown>).selectDocument).toBe('function')
-    expect(typeof (installed as Record<string, unknown>).textareaBlur).toBe('function')
+    // U-EDIT-1 §5 item 6 / §6.3 row 24 (R-C) — the per-node textarea editing
+    // bridge surface (`SidebarApi.textareaInput` / `textareaBlur`) is ARCHIVED
+    // with the textarea model, so this assertion no longer names it: the only
+    // content write-back is the page commit (§3). The successor assertion (the
+    // page-commit seam's own exposure) is a LIVE / named-seam assertion — this
+    // spec pins the commit contract, NOT a page-commit seam NAME, so it is not
+    // written here as a guessed node-level proxy. What this test owns is the
+    // contextIsolation property: boot completes and the sidebar bridge is
+    // installed through `installSidebar`.
+    expect(typeof (installed as Record<string, unknown>).historyUndo).toBe('function')
   })
 })
 
@@ -1034,7 +1043,9 @@ describe('U-STATE-1b — content-only repopulation (host)', () => {
     await h.host.boot(h.runtime)
     const loadSpy = vi.spyOn(h.runtime, 'loadEnvelope')
     await h.host.reDerive('operator')
-    // The operator path still reloads the app graph (editingMode) — but the
+    // The operator path still reloads the app graph (the representation mode of
+    // §2.5 — the removed `editingMode` control swap is not a reload trigger any
+    // more; the mode-broadcast contract that survives is §2.5/§4.1) — but the
     // point of this test is that the operator pane re-rendered.
     const opHtml = (h.operatorMount as unknown as { innerHTML: string }).innerHTML
     expect(opHtml).toContain('operator-pane-settings')

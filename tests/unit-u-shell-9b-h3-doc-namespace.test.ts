@@ -6,9 +6,14 @@
 //
 // Contract exercised:
 //   1. `scopeDocumentIds(envelope, documentId)` is a PURE deep-copy rewrite:
-//      `rag-<id>` → `rag-<doc>--<id>`, `textarea-<id>` → `textarea-<doc>--<id>`,
-//      `inline-<id>-<i>` → `inline-<doc>--<id>-<i>`; `data-rag-node-id` stays the
-//      PLAIN id; non-RAG ids (pane-/zone:/template) unchanged; total on malformed.
+//      `rag-<id>` → `rag-<doc>--<id>`, `inline-<id>-<i>` → `inline-<doc>--<id>-<i>`;
+//      `data-rag-node-id` stays the PLAIN id; non-RAG ids
+//      (pane-/zone:/template) unchanged; total on malformed.
+//      U-EDIT-1 §6.3 row 1 (R-C): the `textarea-<id>` id-namespace class is NOT
+//      pinned here — the per-node textarea authoring path is removed (§5.1/§5
+//      item 3) and the namespace rule for that class is superseded by the single
+//      surface's own authored id (§2.1: `page-edit-surface` +
+//      `data-edit-surface`). Writing against the dying id class is forbidden.
 //   2. RAG-id derivation reads `data-rag-node-id` (fallback to `id.slice(4)`), so
 //      the reconciler's plain-ragId `changed`-set matching still hits scoped roots.
 //   3. `SidebarPanes.applyDocumentSet` scopes each document envelope and does NOT
@@ -69,12 +74,9 @@ function rootIds(env: LegacyInitialData): string[] {
 // ===========================================================================
 describe('U-SHELL-9b H3 — scopeDocumentIds (§2.7 scope carrier)', () => {
   function sampleEnvelope(): LegacyInitialData {
-    const child = ragRoot('rag-childX', 'childX', [
-      { type: 'textarea', props: { id: 'textarea-childX', 'data-rag-node-id': 'childX' } },
-    ])
+    const child = ragRoot('rag-childX', 'childX')
     const root = ragRoot('rag-X', 'X', [
       { type: 'span', props: { id: 'inline-X-0', 'data-rag-node-id': 'X' }, content: 'inline' },
-      { type: 'textarea', props: { id: 'textarea-X', 'data-rag-node-id': 'X' } },
       child,
     ])
     const pane: LegacyNodeData = { type: 'div', props: { id: 'pane-doc-nav' } }
@@ -82,7 +84,7 @@ describe('U-SHELL-9b H3 — scopeDocumentIds (§2.7 scope carrier)', () => {
     return env
   }
 
-  it('rewrites rag-/textarea-/inline- ids with a `<documentId>--` scope (literal separator)', () => {
+  it('rewrites rag-/inline- ids with a `<documentId>--` scope (literal separator)', () => {
     const out = scopeIds(sampleEnvelope(), 'DOC')
     const ids = rootIds(out)
     expect(ids).toContain('rag-DOC--X')
@@ -92,10 +94,7 @@ describe('U-SHELL-9b H3 — scopeDocumentIds (§2.7 scope carrier)', () => {
     expect(root.props!.id).toBe('rag-DOC--X')
     const kids = root.children as LegacyNodeData[]
     expect(kids[0].props!.id).toBe('inline-DOC--X-0')
-    expect(kids[1].props!.id).toBe('textarea-DOC--X')
-    expect(kids[2].props!.id).toBe('rag-DOC--childX')
-    const grandchild = (kids[2].children as LegacyNodeData[])[0]
-    expect(grandchild.props!.id).toBe('textarea-DOC--childX')
+    expect(kids[1].props!.id).toBe('rag-DOC--childX')
   })
 
   it('keeps `data-rag-node-id` the PLAIN ragId everywhere (the addressing key)', () => {
@@ -104,9 +103,7 @@ describe('U-SHELL-9b H3 — scopeDocumentIds (§2.7 scope carrier)', () => {
     expect(root.props!['data-rag-node-id']).toBe('X')
     const kids = root.children as LegacyNodeData[]
     expect(kids[0].props!['data-rag-node-id']).toBe('X')
-    expect(kids[1].props!['data-rag-node-id']).toBe('X')
-    expect(kids[2].props!['data-rag-node-id']).toBe('childX')
-    expect((kids[2].children as LegacyNodeData[])[0].props!['data-rag-node-id']).toBe('childX')
+    expect(kids[1].props!['data-rag-node-id']).toBe('childX')
   })
 
   it('leaves pane-/zone:/template ids unchanged', () => {
@@ -247,7 +244,6 @@ function sharedHarness() {
     panesInitialized: true,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: 'textarea',
     theme: 'system',
   }
   const bridge = {
@@ -334,7 +330,10 @@ describe('U-SHELL-9b H3 — simultaneous mount scopes the per-document id namesp
     // template root `wiki-root` can legitimately appear twice in the dom-shim's
     // accumulated mount across engine generations — an unrelated render artifact.)
     const allIds = [...html.matchAll(/(?<![-\w])id="([^"]*)"/g)].map((m) => m[1])
-    const ragIds = allIds.filter((id) => /^(?:rag|textarea|inline)-/.test(id))
+    // U-EDIT-1 §2.1 (R-C): the census runs over the SURVIVING authored id
+    // classes (RAG roots + inline spans) — the per-node `textarea-` class is
+    // removed with the per-node authoring path.
+    const ragIds = allIds.filter((id) => /^(?:rag|inline)-/.test(id))
     const dupes = ragIds.filter((id, i) => ragIds.indexOf(id) !== i)
     expect(dupes).toEqual([])
     expect(new Set(ragIds).size).toBe(ragIds.length)

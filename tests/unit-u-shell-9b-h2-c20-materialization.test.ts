@@ -188,7 +188,7 @@ function sharedSnapshot() {
   }
 }
 
-function sharedHarness(opts: { editingMode?: string } = {}) {
+function sharedHarness() {
   installShim()
   const mount = mountEl() as never
   const operatorMount = mountEl() as never
@@ -206,7 +206,6 @@ function sharedHarness(opts: { editingMode?: string } = {}) {
     panesInitialized: true,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: opts.editingMode ?? 'textarea',
     theme: 'system',
   }
   const bridge = {
@@ -307,15 +306,31 @@ describe('U-SHELL-9b H2 — C20 materialization in the graph (§2.8)', () => {
     }
   })
 
-  it('the synthetic owners box does not flip a shared root out of rich-eligibility (contenteditable)', async () => {
-    const h = sharedHarness({ editingMode: 'contenteditable' })
+  it('no RAG subtree root is a per-node editable host (the per-node rich-eligibility gate is gone)', async () => {
+    // U-EDIT-1 §2.1 (R-C): there is no per-node editing host and no per-node
+    // eligibility gate (`isRichEditableRoot` / `EDITABLE_TYPES` are retired —
+    // §5 item 4). Editability is no longer a per-root fact: it lives in the one
+    // page surface, so a shared RAG subtree root must never be spliced to
+    // `contenteditable` and must never carry a per-node editing child. The
+    // owners box is synthetic UI chrome and cannot change that — the assertion
+    // is the single-surface cardinality (§6.3 row 17), never an eligibility
+    // decision.
+    const h = sharedHarness()
     await h.host.boot(h.runtime)
     const x = rootById(h.runtime, 'rag-X')
     expect(x, 'the shared section materializes as rag-X').toBeDefined()
-    // The owners box is synthetic UI chrome: it must NOT make the shared `p`
-    // read as a doc-child container and lose its rich editor.
-    expect(x!.props?.contenteditable).toBe(true)
-    expect((x!.children ?? []).some((c) => c.type === 'textarea')).toBe(false)
+    const ragRoots = h.runtime
+      .materializedContentRoots()
+      .filter((r) => String((r.props as { id?: unknown } | undefined)?.id ?? '').startsWith('rag-'))
+    expect(ragRoots.length).toBeGreaterThan(0)
+    // FS1 — ZERO per-node editable hosts on RAG subtree roots.
+    expect(ragRoots.filter((r) => (r.props as Record<string, unknown> | undefined)?.contenteditable === true)).toEqual([])
+    // FS21 — and zero authored per-node editing children on those roots.
+    const perNodeEditingChildren = ragRoots.flatMap((r) =>
+      (r.children ?? []).filter((c) => (c as { type?: unknown }).type === 'textarea'),
+    )
+    expect(perNodeEditingChildren).toEqual([])
+    // the owners-box decoration itself is unaffected by the removal.
     expect(ownersBoxOf(x!)).toBeDefined()
   })
 })

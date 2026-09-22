@@ -88,8 +88,8 @@ describe('W1-N5 — template Validate host hook', () => {
         onTemplateChanged: () => () => {},
       },
       operatorSettings: {
-        get: async () => ({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable', theme: 'system' }),
-        set: async (p: Record<string, unknown>) => ({ enabledPanes: [], defaultDocumentId: null, topK: 5, editingMode: 'contenteditable', theme: 'system', ...p }),
+        get: async () => ({ enabledPanes: [], defaultDocumentId: null, topK: 5, theme: 'system' }),
+        set: async (p: Record<string, unknown>) => ({ enabledPanes: [], defaultDocumentId: null, topK: 5, theme: 'system', ...p }),
         onChanged: () => () => {},
       },
     }

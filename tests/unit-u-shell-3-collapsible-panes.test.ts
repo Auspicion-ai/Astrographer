@@ -545,7 +545,6 @@ describe('U-SHELL-3 — F2: a collapse/layout change while an edit is dirty is Q
       enabledPanes: [],
       defaultDocumentId: null,
       topK: 5,
-      editingMode: 'contenteditable',
       theme: 'system',
       layout: makeLayout({ panes: [collapsedEntry('doc-nav', true, 0)] }),
     })
