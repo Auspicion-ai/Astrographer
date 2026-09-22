@@ -20,8 +20,13 @@
 //   6. Decoration is render-time only — the source `lastSnapshot` is never
 //      mutated and no RAG node gains a stored flag.
 import { describe, it, expect, beforeAll } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
 import * as crossDoc from '../src/renderer/cross-document-shared.js'
+import { buildTraversal } from '../src/main/traversal.js'
+import { assembleAppGraphEnvelope } from '../src/renderer/pane-graph.js'
 import { installShim, mountEl } from '../src/shared/dom-shim.js'
 import { Runtime } from '../src/renderer/runtime.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
@@ -29,6 +34,8 @@ import { createPaneRegistry } from '../src/renderer/pane-registry.js'
 import { createEditController } from '../src/renderer/edit-controller.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../src/main/template-shape.js'
 import type { TabEntry, TabTarget } from '../src/renderer/tab-state.js'
+import type { RagNode } from '../src/main/rag-store.js'
+import { createJsonRagStore } from '../src/main/rag-store.js'
 
 beforeAll(() => {
   installShim()
@@ -265,6 +272,74 @@ function rootById(runtime: Runtime, id: string): LegacyNodeData | undefined {
 }
 
 // ===========================================================================
+// U-EDIT-1 §2.1/§11.7 (the 2026-09-21 amendment) — the app-graph / stage
+// render, the re-derived surface census. The single editable surface is
+// authored at the app-graph / stage-assembly layer (`assembleAppGraphEnvelope`),
+// NOT as a traversal-envelope payload: the census is taken over that render
+// (§8.1 `FS1`) AND the DOM the runtime mounts — never a traversal-level check.
+// ===========================================================================
+/** The focused document of this harness (`SidebarPanes._currentDocumentId`). */
+const FOCUSED_DOCUMENT_ID = 'doc-a'
+const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+const DATA_EDIT_SURFACE = 'data-edit-surface'
+
+function authoredIdOf(node: LegacyNodeData | undefined): unknown {
+  return (node?.props as Record<string, unknown> | undefined)?.id
+}
+
+/** The app-graph / stage render of the focused document (PURE assembly) from
+ *  the harness's own shared snapshot. */
+async function appGraphOfFocusedDoc(): Promise<LegacyNodeData[]> {
+  const dir = mkdtempSync(join(tmpdir(), 'ushell9b-h2-appgraph-'))
+  const store = createJsonRagStore({ path: join(dir, 'rag.json') })
+  const snap = sharedSnapshot()
+  try {
+    for (const node of snap.nodes) await store.putNode(node as unknown as RagNode)
+    for (const edge of snap.edges) await store.putEdge(edge as never)
+    const traversal = buildTraversal({ store, documentIds: [FOCUSED_DOCUMENT_ID], zoneName: 'main' })
+    const assembly = assembleAppGraphEnvelope({
+      traversalEnvelope: traversal.envelope,
+      registry: createPaneRegistry(),
+      ctx: {},
+      documentId: FOCUSED_DOCUMENT_ID,
+    })
+    const out: LegacyNodeData[] = []
+    for (const payload of assembly.envelope.content ?? []) {
+      for (const root of (payload.content ?? []) as LegacyNodeData[]) {
+        collectAuthoredNodes(root, out)
+      }
+    }
+    return out
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function collectAuthoredNodes(node: LegacyNodeData, out: LegacyNodeData[]): void {
+  out.push(node)
+  for (const c of (node.children ?? []) as LegacyNodeData[]) collectAuthoredNodes(c, out)
+}
+
+/** The ONE authored surface root of the app-graph render (§2.1 cardinality). */
+async function surfaceRootOfAppGraph(): Promise<LegacyNodeData | undefined> {
+  return (await appGraphOfFocusedDoc()).find((n) => authoredIdOf(n) === PAGE_EDIT_SURFACE_ID)
+}
+
+/** The `[contenteditable]` census of the DOM the runtime mounted. */
+function contenteditableCensus(mount: unknown) {
+  const el = mount as { querySelectorAll(sel: string): Array<{ getAttribute(k: string): string | null }> }
+  const editable = el.querySelectorAll('[contenteditable]')
+  return {
+    count: editable.length,
+    ids: editable.map((e) => e.getAttribute('id')),
+    markers: editable.map((e) => e.getAttribute(DATA_EDIT_SURFACE)),
+    ragHosts: el
+      .querySelectorAll('[data-rag-node-id]')
+      .filter((e) => e.getAttribute('contenteditable') !== null).length,
+  }
+}
+
+// ===========================================================================
 // §2.8 — decoration is materialized in the graph at assembly
 // ===========================================================================
 describe('U-SHELL-9b H2 — C20 materialization in the graph (§2.8)', () => {
@@ -314,22 +389,34 @@ describe('U-SHELL-9b H2 — C20 materialization in the graph (§2.8)', () => {
     // `contenteditable` and must never carry a per-node editing child. The
     // owners box is synthetic UI chrome and cannot change that — the assertion
     // is the single-surface cardinality (§6.3 row 17), never an eligibility
-    // decision.
+    // decision. Re-derived against the APP-GRAPH / STAGE render (§2.1's amended
+    // authoring row, §11.7): the surface is authored by the pure
+    // `assembleAppGraphEnvelope` builder — NOT as a traversal-envelope payload.
     const h = sharedHarness()
     await h.host.boot(h.runtime)
     const x = rootById(h.runtime, 'rag-X')
     expect(x, 'the shared section materializes as rag-X').toBeDefined()
-    const ragRoots = h.runtime
-      .materializedContentRoots()
-      .filter((r) => String((r.props as { id?: unknown } | undefined)?.id ?? '').startsWith('rag-'))
-    expect(ragRoots.length).toBeGreaterThan(0)
-    // FS1 — ZERO per-node editable hosts on RAG subtree roots.
-    expect(ragRoots.filter((r) => (r.props as Record<string, unknown> | undefined)?.contenteditable === true)).toEqual([])
-    // FS21 — and zero authored per-node editing children on those roots.
-    const perNodeEditingChildren = ragRoots.flatMap((r) =>
-      (r.children ?? []).filter((c) => (c as { type?: unknown }).type === 'textarea'),
+
+    // the app-graph / stage render of the focused document
+    const authored = await appGraphOfFocusedDoc()
+    const surfaces = authored.filter((n) => authoredIdOf(n) === PAGE_EDIT_SURFACE_ID)
+    expect(surfaces).toHaveLength(1)
+    expect((surfaces[0].props as Record<string, unknown>)[DATA_EDIT_SURFACE]).toBe(FOCUSED_DOCUMENT_ID)
+    expect((surfaces[0].props as Record<string, unknown>).contenteditable).toBe(true)
+    const authoredRagRoots = authored.filter(
+      (n) => typeof (n.props as Record<string, unknown> | undefined)?.['data-rag-node-id'] === 'string',
     )
-    expect(perNodeEditingChildren).toEqual([])
+    expect(authoredRagRoots.length).toBeGreaterThan(0)
+    // FS1 — ZERO per-node editable hosts in the assembled app graph.
+    expect(authoredRagRoots.filter((r) => (r.props as Record<string, unknown> | undefined)?.contenteditable === true)).toEqual([])
+
+    // …and the same census on the DOM the runtime mounted (§8.1 FS1's DOM half).
+    const census = contenteditableCensus(h.mount)
+    expect(census.count).toBe(1)
+    expect(census.ids).toEqual([PAGE_EDIT_SURFACE_ID])
+    expect(census.markers).toEqual([FOCUSED_DOCUMENT_ID])
+    expect(census.ragHosts).toBe(0)
+
     // the owners-box decoration itself is unaffected by the removal.
     expect(ownersBoxOf(x!)).toBeDefined()
   })

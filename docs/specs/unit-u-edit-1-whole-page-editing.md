@@ -124,8 +124,10 @@ the atomicity contract (§3.3).
 | Aspect | Pin |
 | --- | --- |
 | **Cardinality** | `1` `contenteditable` element in the stage's document region per open document tab. **Zero** `[contenteditable]` hosts on individual RAG subtree roots. |
-| **Authoring** | The surface is **provident-authored** — an envelope node with `props: { contenteditable: true }` plus its **name-referenced handler defs**, placed in the traversal's `zoneName`, exactly as the stage's other content roots are (`AGENTS.md`'s project-wide UI constraint: a UI element outside the provident graph is a review finding). No hand-written DOM, no `document.createElement`, no direct `innerHTML` write by host code. |
-| **Scope** | The surface's subtree **is** the document's rendered body: the doc-head/title element first, then the section headings and their blocks (including table cells), in document order. A body element outside the surface is `FS1`. |
+| **Authoring** | The surface is **provident-authored at the APP-GRAPH / STAGE-ASSEMBLY layer** — a provident node built by the pure app-graph builder **`src/renderer/pane-graph.ts` `assembleAppGraphEnvelope`** (the builder the renderer assembles the stage from: it is exported with `AppGraphAssemblyInput`/`AppGraphAssemblyResult` and hosts the `zone:<name>` containers), carried into the assembly by the host's stage-authoring seam **`src/renderer/sidebar-panes.ts` `applyEditorToolbar`** (`loadAppGraph`) — the same seam that already authors the stage's `editor-toolbar`/`pane-history` roots into the assembled app graph. It carries `props.id = 'page-edit-surface'`, `props['data-edit-surface'] = <documentId>`, `props.contenteditable = true` and its **name-referenced handler defs**, and is placed in the traversal's `zoneName` (`'main'`) as a provident content root. **It is NOT a node of the traversal envelope** — the traversal envelope keeps its one-payload-per-section shape (§11 amendment **11.7**; `DECIDED: PLACEMENT-ONLY-PAYLOAD-ROOT`). No hand-written DOM, no `document.createElement`, no direct `innerHTML` write by host code. |
+| **Subtree** | The surface's subtree **is the assembled document body as the stage renders it**: the doc-head/title element first, then the body blocks the stage renders (sections, their blocks, table cells and the rich blocks' inline children), in document order. Stated explicitly: the traversal still authors **six** payload roots for this document and their inner shape is unchanged — the app-graph assembly is what collects them under the one surface root, so `content[0].content[0]` in the **traversal** envelope remains the `rag-head` `h1`. |
+| **Invariant** | Exactly **ONE** such surface exists per **focused** document/tab. On a simultaneous multi-document mount (U-SHELL-9b) only the focused document's assembled body is surfaced; every other mounted document root stays a plain payload root. |
+| **Scope** | The surface's subtree **is** the document's rendered body: the doc-head/title element first, then the section headings and their blocks (including table cells), in document order. A body element outside the surface is `FS1`. **In app-graph/stage terms:** a document-body block that the assembled app-graph envelope does not place inside the surface root (or that the render materializes as a sibling of it in the stage's zone) is `FS1`. **No envelope-payload assertion may be used to detect it:** the detection surface is the **app-graph render** (the assembled envelope the renderer loads, `assembleAppGraphEnvelope`'s result) **plus the DOM**; the traversal envelope deliberately authors no payload per block, so a traversal-level census cannot see this fail-state in either direction (`FS1`'s restatement, §2.1/§8.1). |
 | **Stable authored id** | The surface root carries a stable authored `props.id` and a stable `data-*` marker (pinned here: `props.id = 'page-edit-surface'`, `props['data-edit-surface'] = <documentId>`), so the DOM census and the MCP `get_rendered_html` surface can name it without ambiguity. |
 | **Per-node hosts are GONE** | The per-root splice (`props.contenteditable = true` on a rich-eligible root) and its per-root handler attach are **removed** (§5 item 1). |
 | **The caret is page-scoped** | `src/renderer/edit-controller.ts` `type CaretState` is re-scoped to the page: the `kind: 'rich'` arm addresses the surface root with a path-based anchor/focus edge (`RichCaretEdge`), and there is **no** `kind: 'textarea'` arm. A caret addressed to a per-node root is `FS2`. |
@@ -547,8 +549,8 @@ is **moved, never edited**, and is a **rebuild input** — never a source of the
 
 | # | Dead-once-this-lands surface | Archive destination | Consumers that must land FIRST | Archive condition |
 | --- | --- | --- | --- | --- |
-| **1** | **The per-node contenteditable splice** — `src/renderer/sidebar-panes.ts`'s `applyEditingMode` (the private method that filters `textarea` children, computes `ownsDocChildren`, sets `props.contenteditable = true` and attaches `RAG_EDITOR_HANDLER_DEFS` to every rich-eligible root) | `archive/src/<date>-sidebar-panes-apply-editing-mode.ts` (**the method's own text**, extracted as a recorded artifact — the module itself is 3 670 lines and is **not** archived) | the single-surface authoring (§2.1) must be in place, **and** the host's re-derive paths (`reDerive`, the per-document assembly loop, the content-reconcile re-derive) must call the successor authoring instead | **A module with a live importer is never archived.** `sidebar-panes.ts` keeps live importers throughout (`src/renderer/renderer.ts`, the host tests), so the **whole module is NOT archived**; only the dead method text is. |
-| **2** | **The 4 per-node rich handler defs and their bodies** — `src/renderer/sidebar-panes.ts` `RAG_EDITOR_HANDLER_DEFS` (`rag-editor-input` / `-blur` / `-compositionstart` / `-compositionend`) + `RAG_EDITOR_INPUT_BODY` / `_BLUR_BODY` / `_COMPOSITIONSTART_BODY` / `_COMPOSITIONEND_BODY` + `restoreRichCaret` + the `saveCaret(nodeId, { kind: 'rich' … })` path | `archive/src/<date>-sidebar-panes-rag-editor-handlers.ts` | the page surface's own handler defs must be registered **and** the caret machinery re-scoped to the page (§2.1) | Registered handler defs are reachable by name from the app graph; removing them while the envelope still authors them breaks the graph (`provident.dispatch` would resolve a name with no def). **Order: the envelope authoring changes first.** |
+| **1** | **The per-node contenteditable splice** — `src/renderer/sidebar-panes.ts`'s `applyEditingMode` (the private method that filters `textarea` children, computes `ownsDocChildren`, sets `props.contenteditable = true` and attaches `RAG_EDITOR_HANDLER_DEFS` to every rich-eligible root) | `archive/src/<date>-sidebar-panes-apply-editing-mode.ts` (**the method's own text**, extracted as a recorded artifact — the module itself is 3 670 lines and is **not** archived) | the **app-graph/stage-assembly** authoring of the single surface (§2.1 — the `assembleAppGraphEnvelope` builder + the host's `applyEditorToolbar`/`loadAppGraph` seam) must be in place, **and** the host's re-derive paths (`reDerive`, the per-document assembly loop, the content-reconcile re-derive) must author the surface through that successor instead | **A module with a live importer is never archived.** `sidebar-panes.ts` keeps live importers throughout (`src/renderer/renderer.ts`, the host tests), so the **whole module is NOT archived**; only the dead method text is. |
+| **2** | **The 4 per-node rich handler defs and their bodies** — `src/renderer/sidebar-panes.ts` `RAG_EDITOR_HANDLER_DEFS` (`rag-editor-input` / `-blur` / `-compositionstart` / `-compositionend`) + `RAG_EDITOR_INPUT_BODY` / `_BLUR_BODY` / `_COMPOSITIONSTART_BODY` / `_COMPOSITIONEND_BODY` + `restoreRichCaret` + the `saveCaret(nodeId, { kind: 'rich' … })` path | `archive/src/<date>-sidebar-panes-rag-editor-handlers.ts` | the page surface's own handler defs must be registered **and** the caret machinery re-scoped to the page (§2.1) | Registered handler defs are reachable by name from the app graph; removing them while the **app-graph assembly** still authors them breaks the graph (`provident.dispatch` would resolve a name with no def). **Order: the app-graph/stage authoring changes first** (the successor authoring is the surface node of §2.1, authored through `assembleAppGraphEnvelope`/the host's `applyEditorToolbar` seam). |
 | **3** | **The per-node textarea editing overlay** — `src/main/traversal.ts` `buildSubtree`'s authored child `{ type: 'textarea', props: { id: \`textarea-<ragId>\`, … }, handlers: [{ name: 'rag-textarea-input' }, { name: 'rag-textarea-blur' }] }` | **NOT ARCHIVED — see the fence clause below** | — | **EXCEPTION, and the reason is a fence.** |
 | **4** | **`isRichEditableRoot`'s per-node gate** — `src/renderer/rich-eligibility.ts` (`isRichEditableRoot` + the closed `EDITABLE_TYPES` set) | `archive/src/<date>-rich-eligibility.ts` (**the whole module**) | `applyEditingMode` (item 1) is the module's **only** `src/` consumer; it must be deleted first, and the `EDITABLE_TYPES` census (9 members) must be superseded by the pane's closed set (§2.4) | The module's **only** importer is `src/renderer/sidebar-panes.ts`; once item 1 lands there is **zero** `src/` importer, so the whole module is archivable **in the same pass** (and its archived copy is the rebuild input, not a pin). |
 | **5** | **The editing-mode setting path** — `OperatorSettings.editingMode` (`src/shared/types.ts` `type EditingMode` + the field + its patch field), `src/main/operator-settings-store.ts`'s `coerceEditingMode`/`sanitize`/`set` handling of it, `src/renderer/pane-graph.ts`'s `editingModeLabel`, and the `settingsContent` button-toggle + its `sidebar.operatorSet({ editingMode })` bridge in `src/renderer/sidebar-panes.ts` | `archive/src/<date>-editing-mode-setting.ts` (the removed coercion + label helpers, as one artifact) | the successor representation-mode field (§2.5) must land **with** the removal in one diff (a boot that reads a removed field must not be reachable), and every test harness literal must move (§6.3) | The field is **persisted operator state** (`DECIDED: UI-CONFIG-CARRIER`): a stored `editingMode` from a previous session must be **ignored, not trusted** — the sanitizer drops it and the successor field defaults. A boot that restores `'textarea'` behaviour from the stale key is `FS20`. |
@@ -781,6 +783,25 @@ control.**
    removed `editingMode` field is **absent** from `OperatorSettings` while the successor mode is
    present and persists through `UI-CONFIG-CARRIER`.
 
+**The rows the 2026-09-21 amendment (surface's layer) re-derives (§11 amendment `11.7`).** The
+surface is authored at the app-graph/stage-assembly layer (§2.1), so every **envelope-shape** row
+that reads the **traversal envelope** for the surface is re-derived against the **app-graph render**:
+
+- `tests/single-editable-surface.test.ts` — the **surface-shape rows** (`surfaceRoots` /
+  `envelopeNodes` over a `buildTraversal` result, including the `state S5` authoring row and the
+  `FS1` unsurfaced-block row, and the `within`-the-surface subtree rows) are **re-derived** to
+  read the **`assembleAppGraphEnvelope` result** (the assembled app graph: registry + ctx + the
+  traversal envelope), not the traversal envelope;
+- the **per-node-host rows** in the following rewritten suites are re-derived to assert the
+  single-surface cardinality on that same app-graph render: `unit-u-shell-9b-h1-optionc-interception`,
+  `unit-u-shell-9b-h2-c20-materialization`, `unit-u-shell-9b-blind-greens`,
+  `unit-r-traversal-inline-children`.
+
+**The fence suites are NOT re-derived.** `tests/traversal.test.ts` is **EXEMPT BY NAME** and stays
+untouched; `tests/import-render-no-duplicates.test.ts` likewise. Nothing in this amendment licenses
+a fence re-derivation, and the traversal envelope keeps the shape the fence pins (§5.1; §6.4
+item 3; §8.4).
+
 **The fence as a control.** `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts`
 must appear in the red run as **GREEN controls**; writing either into the red set as a failure is a
 review finding (`docs/specs/unit-import-batch-persist.md` §5.2's control discipline for the same
@@ -852,7 +873,7 @@ control-draw reporting ✔.
 
 | # | Fail-state | Observable + the exact rule violated |
 | --- | --- | --- |
-| **`FS1`** | **More than one `contenteditable` root, or a body element outside the single surface** | the `[contenteditable]` census in the stage region and the un-surfaced block id are printed; **§2.1** |
+| **`FS1`** | **More than one `contenteditable` root, or a body element outside the single surface** | the `[contenteditable]` census in the stage region and the un-surfaced block id are printed; **§2.1**. **Restated in app-graph/stage terms:** the census is taken over the **assembled app-graph render** (the `assembleAppGraphEnvelope` result the renderer loads) **and the DOM** — the surface root must be the ONLY `contenteditable` authoring point in that assembled graph and must contain every document-body block the stage renders. **The traversal envelope is NOT an assertion surface for `FS1`** (it authors one payload root per section and no surface, so an envelope-level check neither proves nor disproves this fail-state — §2.1/§11 amendment **11.7**). |
 | **`FS2`** | **A caret addressed to a per-node root** (a `CaretState` whose target is not the page surface) | the node id and the caret's target are printed; **§2.1** (the caret is page-scoped) |
 | **`FS3`** | **A commit stripped `data-doc-head`** (a wholesale props write instead of a merge) | the node id before/after and the missing marker are printed; **§2.2 item 3** (`setProps` MERGES) |
 | **`FS4`** | **The element-type pane offered a type outside `RagNodeType`**, or applied a type the store rejects | the offered type and the closed union are printed; **§2.4 item 1** |
@@ -1074,7 +1095,7 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 | Layer | What is verified there | What is NOT | How |
 | --- | --- | --- | --- |
 | **PURE / ENVELOPE (node, `npm test`)** | the decode + diff (§3.2), the minimal-op rule, the new-block/edge representation, the op-list shape, the one-`applyBatch` contract and its journal/persist consequences, the `CommitFailure` shapes, the state machine's transitions, the warning's **survival across a re-derive driven at the envelope level**, the tombstone's shape, the removed/successor mode field, and all **7** §7 register rows | anything rendered; any selection; any painted style; any engine hop | the new `tests/unit-u-edit-1-*.test.ts` suites + `-adversarial` + `-pbt-generators`; plus the **26 rewrites** (§6.3) |
-| **ASSEMBLED / RENDERER** | the single surface's envelope authoring and its authored id/marker; the head/body sibling structure; the host's re-derive paths calling the successor authoring rather than `applyEditingMode`; the mode control's payload path | the actual paint and the caret (the dom-shim is layout-less/CSS-less and has no real selection — RCA-12) | the node assembly tests **plus** the live battery (§8.3 items 1/2/4/5/6) |
+| **ASSEMBLED / RENDERER** | the single surface's **app-graph authoring** (the `assembleAppGraphEnvelope` result: the one `page-edit-surface` root, its `data-edit-surface`/`contenteditable` props and its body subtree) and its authored id/marker; the head/body sibling structure; the host's re-derive paths authoring the surface through the app-graph/stage seam instead of `applyEditingMode`; the mode control's payload path. **The traversal envelope is asserted only for its OWN shape** (one payload per section) — never as the carrier of the surface (§2.1, §11 amendment `11.7`) | the actual paint and the caret (the dom-shim is layout-less/CSS-less and has no real selection — RCA-12) | the node assembly tests **plus** the live battery (§8.3 items 1/2/4/5/6) |
 | **ENGINE-DEPENDENT** | the commit's one-hop async write, the typed engine-absent failure, and the store-unchanged-on-failure property against an injected failure | the engine's own correctness (that is the Gnosis repo's; **no patch here** — `AGENTS.md` item 7) | injected-failure node tests + the live battery (§8.3 item 3) |
 | **APP-GREEN** | **nothing in this spec.** | — | RCA-12: a node-suite green is **ENVELOPE-green, not APP-GREEN**. No part of this unit is app-green until the live path is exercised (§8.3) **and** the item-10d review has run. |
 
@@ -1106,6 +1127,87 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 | **4** | **`docs/skills/designing-pages.md` does not exist** (verified by glob: `docs/skills/**` holds only `process-guardrails.md`), so the page-design skill, its test-use-case coverage matrix and its demo-page index cannot be updated. The design consequences this unit pins (§2.1–§2.5, §3.5 item 6, §8.3) must be carried into that skill **when it is authored**. | **OWED — recorded, not skipped** | the pass that authors the skill |
 | **5** | **The catalog's phantom-package row and this unit's catalog census.** `PRUNE-615`'s `statement` cell still reads "the provident-editable import tools"; `PRUNE-311`/`PRUNE-617` census rows for the textarea removal; and any new-row/count duty. The catalog is **cited, never edited** from a unit spec. | **OWED** to the catalog's own amendment pass (`docs/specs/design-extensions-review.md` §15.1) | the catalog amendment pass |
 | **6** | **`TAB-1`'s rendered symbol** is `C10`'s; this unit supplies the state and the typed record and pins the shared class (§3.5 item 4). If `C10` slips, the state exists with a stage-level warning only — **recorded so the two units do not each invent an affordance** | recorded interface | `C10 U-TAB-MERGE` |
+
+---
+
+### 11.7 AMENDMENT (2026-09-21 — the surface's layer) — the payload-shape escalation is RESOLVED: option (a)
+
+**The ruling (product owner, 2026-09-21): the single editable surface is authored at the
+APP-GRAPH / STAGE-ASSEMBLY layer, NOT as a traversal-envelope payload node.** Option **(a)** — the
+app-graph authoring — is the resolution; the alternative (author the surface in `buildTraversal`)
+is rejected.
+
+**Why the payload placement was never available (the contradiction, and the evidence).** The
+implementer's **four-placement proof** (the pass's recorded objection to the earlier wording) showed
+that a surface authored in the traversal admits **no valid placement**: (i) as a **new payload root**
+it becomes a **seventh** root for a document that must keep **six** (the fence pins one payload root
+per section, `content[0].content[0]` = the `rag-head` h1); (ii) as the payload root's own **child**
+it becomes a second payload-root-level node and breaks the same census; (iii) wrapping the section
+root changes `content[0]` and therefore the fence's own read; and (iv) wrapping the section roots
+**inside** the traversal authors a nested, unanchored container — the exact shape
+`DECIDED: PLACEMENT-ONLY-PAYLOAD-ROOT` forbids, which is what produced the duplicate render
+(`LIVE-UF6`) that the placement-path contract depends on. All four placements therefore either move
+a fence-pinned node or violate the placement-path/duplicate-render contract. **The provident-authoring
+rule still binds** (`AGENTS.md`: non-shell UI is provident-authored envelope nodes/handlers, never
+hand-written DOM) — so the only remaining place for the surface is a **provident node authored in the
+app graph**: the stage/graph assembly the renderer already builds.
+
+**Pinned (amends §2.1's authoring row).** The surface is authored by the pure app-graph builder
+`src/renderer/pane-graph.ts` `assembleAppGraphEnvelope`, carried into the assembly by the host's
+stage-authoring seam `src/renderer/sidebar-panes.ts` `applyEditorToolbar` (`loadAppGraph`) — the seam
+that already authors the stage's `editor-toolbar`/`pane-history` roots; `data-edit-surface` carries the
+**focused document id** (`SidebarPanes._currentDocumentId`, the same source §2.7/U-SHELL-9b scopes the
+multi-document mount by). It carries `props.id = 'page-edit-surface'`,
+`props['data-edit-surface'] = <documentId>`, `props.contenteditable = true` and its name-referenced
+handler defs. `data-edit-surface` is a **runtime marker** in the same class as `data-doc-head`/
+`data-node-id`: excluded from the diff (§3.2) and from the reconcile shape projection. Its **subtree is
+the assembled body of the focused document** — the doc-head node + the body blocks as the stage renders
+them (head first, then the sections/blocks including table cells and inline children). **The traversal
+envelope keeps its one-payload-per-section shape, unchanged: six payload roots for this document, and
+`content[0].content[0]` in the traversal envelope remains the `rag-head` h1.** The surface is **not a
+traversal-envelope node**, and the traversal authors no payload for it. **Invariant: exactly ONE surface
+per focused document/tab** (§2.1); on a simultaneous multi-document mount only the focused document's
+assembled body is surfaced.
+
+**Test disposition.** The **fence suite `tests/traversal.test.ts` is EXEMPT BY NAME and stays
+untouched** (and `tests/import-render-no-duplicates.test.ts` likewise). The **envelope-shape
+assertions in the rebuilt suites are re-derived against the app-graph/stage render**: the
+surface-shape rows of `tests/single-editable-surface.test.ts` (its `buildTraversal`-reading
+`surfaceRoots`/`envelopeNodes` assertions, including `state S5` and the `FS1` row) read the
+`assembleAppGraphEnvelope` result instead, and the **per-node-host rows** of
+`unit-u-shell-9b-h1-optionc-interception`, `unit-u-shell-9b-h2-c20-materialization`,
+`unit-u-shell-9b-blind-greens` and `unit-r-traversal-inline-children` are re-derived the same way
+(§6.5's re-derivation list).
+
+**The cost (recorded, not hidden).** (1) The surface becomes a **pane-like, document-unscoped
+app-graph root**, so a focused document's reconcile buckets change shape from six `rag-` document
+roots to one `page-edit-surface` root — the `page-edit-surface` **pane-like** classification in
+`src/renderer/content-reconcile.ts` `asContentRoot`/`isPaneLikeRoot` (beside `EDITOR_TOOLBAR_ID` and
+`LANDING_ROOT_ID`) is owed and must not be discovered late. (2) `assembleAppGraphEnvelope` is **PURE and takes no
+`documentId` today**, so the builder gains that input (or the host threads the document id through the
+`applyEditorToolbar` seam) — an input-shape change of a function with **three** host call sites in
+`sidebar-panes.ts` (`loadAppGraph`, `applyContentChange`, `applyDocumentSet` — recounted by the
+grep, never copied) plus the assembly suites. (3) `applyEditingMode` retires as the authoring path (§5 item 1), and every
+re-derive path must author the surface through the app-graph seam or the surface vanishes on a
+re-derive. (4) The node-level `FS1` check moves to the **app-graph render + DOM** (§2.1/§8.1), so a
+node test written against the traversal envelope cannot see it.
+
+**One clause that cannot be expressed at the envelope layer (recorded, with its reason).** For the
+document payload roots that reach the main zone through the **engine's placement path**
+(`placement: { targetPlacement: [zoneName] }` resolved by the engine, `DECIDED: PLACEMENT-ONLY-PAYLOAD-ROOT`),
+the assembly cannot see the final zone tree: it sees only `content` payloads + `template.root.children`.
+A pure builder can author the surface root and place it in the same zone, but it **cannot assert**
+that the engine's placement-path enumeration renders nothing else at that zone level (that is engine
+territory; a node suite cannot read it either). The **only expressible form is therefore the
+`applyEditorToolbar`-class authoring seam plus a DOM/render assertion**: the node-level obligation is
+the assembled envelope (one surface root, its props, its subtree), and the placement-level obligation
+is asserted **live** in the §8.3 battery. This is why no clause of this amendment is pinned as an
+engine-placement-path assertion.
+
+**Register/fail-state/supersession invariants: unchanged.** §7's register table, the `FS1`..`FS24`
+numbering, the §4.1 supersession set and the §5.1 textarea-tombstone resolution all stand — the
+tombstone's resolution **for the `textarea-<ragId>` child is NOT changed by this amendment**; it
+remains the implementer's obligation, and its escalation (§11 item **2**) stands as recorded.
 
 ---
 
@@ -1148,12 +1250,16 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 | `src/renderer/edit-controller.ts` `EditController` / `createEditController` / `CaretState` / `RichCaretEdge` | the surviving dirty-edit guard (whole interface kept) and the caret type's re-scope (§2.1, §6.4 item 1) |
 | `src/renderer/rich-eligibility.ts` `isRichEditableRoot` / `EDITABLE_TYPES` | the retired per-node gate (archived, §5 item 4) |
 | `src/renderer/sidebar-panes.ts` `applyEditingMode` / `RAG_EDITOR_HANDLER_DEFS` / `restoreRichCaret` / `applyEditorToolbar` / `textareaInput` / `textareaBlur` | the retired splice/handlers (archived, §5 items 1/2/6) and the surviving toolbar authoring (§2.3) |
-| `src/renderer/content-reconcile.ts` `reconcileContentRoots` / `reconcileDocumentRoots` | the re-derive identity the warning-state survival rides (§3.5 item 6) |
+| `src/renderer/pane-graph.ts` `assembleAppGraphEnvelope` / `AppGraphAssemblyInput` / `AppGraphAssemblyResult` / `AppGraphAssemblyResult.envelope` / `zoneContainerChildren` / `paneSubtreeRoot` | the **app-graph/stage assembly** that authors the single editable surface (§2.1, §11 amendment `11.7`): the builder the renderer assembles the stage from, its pure result (`envelope`), the `zone:<name>` containers and the pane frames |
+| `src/renderer/sidebar-panes.ts` `loadAppGraph` / `applyEditorToolbar` / `applyContentChange` / `applyDocumentSet` / `_currentDocumentId` / `applyEditingMode` | the host's stage-assembly seams: the successor surface authoring (§2.1, §11 amendment `11.7`), the retired per-node splice/`editingMode` authoring (§5 item 1), and the focused-document source of `data-edit-surface` |
+| `src/renderer/content-reconcile.ts` `reconcileContentRoots` / `reconcileDocumentRoots` / `asContentRoot` / `isPaneLikeRoot` | the re-derive identity the warning-state survival rides (§3.5 item 6) and the pane-like classification the surface root owes (§11 amendment `11.7`, the cost) |
 | `src/renderer/tab-state.ts` `TabState` / `TabEntry` / `TabTarget` / `closeTab` / `openTab` | the tab descriptor the per-tab dirty state is keyed by (§3.5 items 3/6) |
 | `src/main/operator-settings-store.ts` `sanitize` / `coerceEditingMode` / `set` / `get` | the persisted operator state path (the removed field + the successor mode) (§2.5, §5 item 5) |
 | `src/shared/types.ts` `IPC_EDIT_BATCH` / `EditBatchPayload` / `IPC_EDIT_COMMIT` / `EditCommitPayload` / `IPC_RAG_STORE_CHANGED` / `RagStoreChangedPayload` / `EditingMode` / `OperatorSettings` | the commit channel, the kept single-node channel, the broadcast, the removed type/field (§2.5, §3.3, §3.4) |
 | `src/renderer/pane-graph.ts` `editorToolbarContent` / `EDITOR_TOOLBAR_ID` / `editingModeLabel` | the toolbar authoring + the mode label (repointed, §2.3, §6.3 shape R-B) |
 | `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts` | the two FENCE suites — green unchanged, never re-derived (§5.1, §6.4 item 3, §8.4) |
+| `tests/single-editable-surface.test.ts` | the rebuilt suite whose **surface-shape rows** are re-derived against the app-graph/stage render (§2.1, §6.5, §11 amendment `11.7`) — its `buildTraversal`-reading rows no longer assert the surface |
+| `tests/unit-u-shell-9b-h1-optionc-interception.test.ts` / `unit-u-shell-9b-h2-c20-materialization` / `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` | the rewritten suites whose **per-node-host rows** are re-derived against the same app-graph/stage render (§6.3/§6.5, §11 amendment `11.7`) |
 | `scripts/live-drive.mjs` `BLOCKS` / `MATRIX_ROWS` / `ufRealClick` / the O-0 harness | the live battery's home and its oracle-identity consequence (§8.3) |
 | `src/shared/o0-report.ts` | the other half of the oracle pair — **not touched by this unit** (§8.3) |
 
@@ -1163,7 +1269,9 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 
 1. **Written:** `docs/specs/unit-u-edit-1-whole-page-editing.md` (this file) — the `C9 U-EDIT-1`
    contract for `WHOLE-PAGE-EDITING` + `ST-1`/`ST-3`/`ST-4`/`ST-5`/`ST-6` (+ the covered half of `ST-2`).
-2. **The editing model:** ONE `contenteditable` surface per document; the doc-head/body split with
+2. **The editing model:** ONE `contenteditable` surface per document, **authored at the
+   app-graph/stage-assembly layer** (`assembleAppGraphEnvelope` + the host `applyEditorToolbar` seam —
+   it is **not** a traversal-envelope payload node; §2.1, §11 amendment `11.7`); the doc-head/body split with
    arrow-key caret crossing and the title as the doc-head node's `content` (committed on blur, with
    `data-doc-head` preserved by `setProps`'s MERGE); markdown mode = plaintext in the same surface,
    monospace, no HTML formatting, live markdown formatting **parked**; the element-type pane applies
@@ -1211,3 +1319,12 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
    the citation duty (§9.4) discharged for this unit's ≈200-citation share.
 10. **Layer:** PURE + ASSEMBLED/RENDERER + ENGINE-DEPENDENT; **nothing app-green**, with the **MANDATORY
     live battery** (§8.3) as the pre-DONE gate.
+11. **The 2026-09-21 amendment (`11.1`) — the surface's layer:** the single editable surface is a
+    **provident node of the app graph/stage assembly** (built by `assembleAppGraphEnvelope`, authored
+    through the host's `applyEditorToolbar` seam), **not** a traversal-envelope payload node; the
+    implementer's four-placement proof is the recorded contradiction and the fence suite
+    `tests/traversal.test.ts` stays untouched, with the envelope-shape rows of
+    `tests/single-editable-surface.test.ts` and the per-node-host rows of
+    `unit-u-shell-9b-h1-optionc-interception` / `unit-u-shell-9b-h2-c20-materialization` /
+    `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` re-derived against the
+    app-graph/stage render.

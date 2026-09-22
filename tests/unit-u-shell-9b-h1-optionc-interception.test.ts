@@ -34,6 +34,8 @@ import {
   type BatchResult,
 } from '../src/main/rag-store.js'
 import * as crossDoc from '../src/renderer/cross-document-shared.js'
+import { buildTraversal } from '../src/main/traversal.js'
+import { assembleAppGraphEnvelope } from '../src/renderer/pane-graph.js'
 import { installShim, mountEl } from '../src/shared/dom-shim.js'
 import { Runtime } from '../src/renderer/runtime.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
@@ -292,6 +294,56 @@ function sidebarApi(): Record<string, (...args: unknown[]) => unknown> {
 }
 
 // ===========================================================================
+// U-EDIT-1 §2.1/§11.7 (the 2026-09-21 amendment) — the app-graph / stage
+// render, the re-derived surface census. The single editable surface is
+// authored at the app-graph / stage-assembly layer (`assembleAppGraphEnvelope`),
+// NOT as a traversal-envelope payload: the census is taken over that render
+// (§8.1 `FS1`) AND the DOM the runtime mounts — never a traversal-level check.
+// ===========================================================================
+/** The focused document of this harness's boot (`SidebarPanes._currentDocumentId`). */
+const FOCUSED_DOCUMENT_ID = 'doc-a'
+/** The pinned surface id + marker (§2.1's stable-authored-id row). */
+const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+const DATA_EDIT_SURFACE = 'data-edit-surface'
+
+function authoredIdOf(node: LegacyNodeData | undefined): unknown {
+  return (node?.props as Record<string, unknown> | undefined)?.id
+}
+
+/** The app-graph / stage render of the focused document (PURE assembly). */
+function appGraphOf(store: RagStore): LegacyNodeData[] {
+  const traversal = buildTraversal({ store, documentIds: [FOCUSED_DOCUMENT_ID], zoneName: 'main' })
+  const assembly = assembleAppGraphEnvelope({
+    traversalEnvelope: traversal.envelope,
+    registry: createPaneRegistry(),
+    ctx: {},
+    documentId: FOCUSED_DOCUMENT_ID,
+  })
+  const out: LegacyNodeData[] = []
+  for (const payload of assembly.envelope.content ?? []) {
+    for (const root of (payload.content ?? []) as LegacyNodeData[]) {
+      walkNode(root, (n) => out.push(n))
+    }
+  }
+  return out
+}
+
+/** The ONE authored surface root of the app-graph render (§2.1 cardinality). */
+function surfaceRootOfAppGraph(store: RagStore): LegacyNodeData | undefined {
+  return appGraphOf(store).find((n) => authoredIdOf(n) === PAGE_EDIT_SURFACE_ID)
+}
+
+/** The `[contenteditable]` census of the DOM the runtime mounted. */
+function contenteditableCensus(mount: { querySelectorAll(sel: string): Array<{ getAttribute(k: string): string | null }> }) {
+  const editable = mount.querySelectorAll('[contenteditable]')
+  return {
+    count: editable.length,
+    ids: editable.map((el) => el.getAttribute('id')),
+    markers: editable.map((el) => el.getAttribute(DATA_EDIT_SURFACE)),
+  }
+}
+
+// ===========================================================================
 // §2.9 — the bridge surface + interception
 // ===========================================================================
 describe('U-SHELL-9b H1 — commit interception (spec §2.9)', () => {
@@ -340,20 +392,38 @@ describe('U-SHELL-9b H1 — commit interception (spec §2.9)', () => {
       // FS1 — the stage authors NO per-node `contenteditable` host: the page
       // surface is the only editable root (§2.1), so a per-node edit can no
       // longer reach a commit and the interception has exactly ONE entry point.
-      const ragRoots = h.runtime
-        .materializedContentRoots()
-        .filter((r) => String((r.props as { id?: unknown } | undefined)?.id ?? '').startsWith('rag-'))
-      expect(ragRoots.length).toBeGreaterThan(0)
-      expect(ragRoots.filter((r) => (r.props as Record<string, unknown> | undefined)?.contenteditable === true)).toEqual([])
+      // Re-derived against the APP-GRAPH / STAGE render (§2.1's amended
+      // authoring row, §11.7): the surface is authored by the pure
+      // `assembleAppGraphEnvelope` builder — NOT as a traversal-envelope payload.
+      const authored = appGraphOf(h.store)
+      const surfaces = authored.filter((n) => authoredIdOf(n) === PAGE_EDIT_SURFACE_ID)
+      expect(surfaces).toHaveLength(1)
+      expect((surfaces[0].props as Record<string, unknown>)[DATA_EDIT_SURFACE]).toBe(FOCUSED_DOCUMENT_ID)
+      expect((surfaces[0].props as Record<string, unknown>).contenteditable).toBe(true)
+      const authoredRagRoots = authored.filter((n) => typeof (n.props as Record<string, unknown> | undefined)?.['data-rag-node-id'] === 'string')
+      expect(authoredRagRoots.length).toBeGreaterThan(0)
+      // FS1 — ZERO per-node editable hosts in the assembled app graph.
+      expect(authoredRagRoots.filter((r) => (r.props as Record<string, unknown> | undefined)?.contenteditable === true)).toEqual([])
+
+      // …and the same census on the DOM the runtime mounted (§8.1 FS1's DOM half):
+      // exactly ONE `[contenteditable]` root, and it is the authored surface.
+      const census = contenteditableCensus(h.mount as never)
+      expect(census.count).toBe(1)
+      expect(census.ids).toEqual([PAGE_EDIT_SURFACE_ID])
+      expect(census.markers).toEqual([FOCUSED_DOCUMENT_ID])
+      for (const el of (h.mount as never as { querySelectorAll(sel: string): Array<{ getAttribute(k: string): string | null }> }).querySelectorAll('[data-rag-node-id]')) {
+        expect(el.getAttribute('contenteditable')).toBeNull()
+      }
 
       // FS21 — the traversal-authored per-node editing child is an INERT
       // tombstone: no handler defs, so nothing can route a per-node edit.
-      const perNodeEditingChildren = ragRoots.flatMap((r) =>
+      const perNodeEditingChildren = authoredRagRoots.flatMap((r) =>
         (r.children ?? []).filter((c) => (c as { type?: unknown }).type === 'textarea'),
       )
       for (const child of perNodeEditingChildren) {
         expect(((child as { handlers?: unknown[] }).handlers ?? []) as unknown[]).toEqual([])
       }
+      expect(perNodeEditingChildren.length).toBeGreaterThan(0)
     } finally {
       cleanup(h.dir)
     }

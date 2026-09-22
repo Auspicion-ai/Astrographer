@@ -46,6 +46,8 @@ import {
 } from '../src/main/rag-store.js'
 import * as crossDoc from '../src/renderer/cross-document-shared.js'
 import { reconcileDocumentRoots } from '../src/renderer/content-reconcile.js'
+import { buildTraversal } from '../src/main/traversal.js'
+import { assembleAppGraphEnvelope } from '../src/renderer/pane-graph.js'
 import { installShim, mountEl } from '../src/shared/dom-shim.js'
 import { Runtime } from '../src/renderer/runtime.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
@@ -243,6 +245,51 @@ function propsId(node: LegacyNodeData | undefined): string | undefined {
 }
 function rootById(rt: Runtime, id: string): LegacyNodeData | undefined {
   return rt.materializedContentRoots().find((root) => propsId(root as LegacyNodeData) === id)
+}
+
+// ===========================================================================
+// U-EDIT-1 §2.1/§11.7 (the 2026-09-21 amendment) — the app-graph / stage
+// render, the re-derived surface census. The single editable surface is
+// authored at the app-graph / stage-assembly layer (`assembleAppGraphEnvelope`),
+// NOT as a traversal-envelope payload: the census is taken over that render
+// (§8.1 `FS1`) AND the DOM the runtime mounts — never a traversal-level check.
+// ===========================================================================
+/** The focused document of this harness (`SidebarPanes._currentDocumentId`). */
+const FOCUSED_DOCUMENT_ID = 'da'
+const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+const DATA_EDIT_SURFACE = 'data-edit-surface'
+
+/** The app-graph / stage render of the focused document (PURE assembly) from
+ *  the harness's own seeded store. */
+async function appGraphNodesOfFocusedDoc(store: RagStore): Promise<LegacyNodeData[]> {
+  const traversal = buildTraversal({ store, documentIds: [FOCUSED_DOCUMENT_ID], zoneName: 'main' })
+  const assembly = assembleAppGraphEnvelope({
+    traversalEnvelope: traversal.envelope,
+    registry: createPaneRegistry(),
+    ctx: {},
+    documentId: FOCUSED_DOCUMENT_ID,
+  })
+  const out: LegacyNodeData[] = []
+  for (const payload of assembly.envelope.content ?? []) {
+    for (const root of (payload.content ?? []) as LegacyNodeData[]) {
+      walk(root, (n) => out.push(n))
+    }
+  }
+  return out
+}
+
+/** The `[contenteditable]` census of the DOM the runtime mounted. */
+function contenteditableCensus(mount: unknown) {
+  const el = mount as { querySelectorAll(sel: string): Array<{ getAttribute(k: string): string | null }> }
+  const editable = el.querySelectorAll('[contenteditable]')
+  return {
+    count: editable.length,
+    ids: editable.map((e) => e.getAttribute('id')),
+    markers: editable.map((e) => e.getAttribute(DATA_EDIT_SURFACE)),
+    ragHosts: el
+      .querySelectorAll('[data-rag-node-id]')
+      .filter((e) => e.getAttribute('contenteditable') !== null).length,
+  }
 }
 function stripRoot(rt: Runtime): LegacyNodeData | undefined {
   return rootById(rt, crossDoc.SHARED_COMMIT_STRIP_ID)
@@ -484,26 +531,42 @@ describe('U-SHELL-9b blind — H2 C20 materialization + owners box (§2.8)', () 
 // ===========================================================================
 describe('U-SHELL-9b blind — H1 Option-C interception: the per-node driver is gone (U-EDIT-1 §5.1/§2.1)', () => {
   it('§2.1/§5.1 (R-C) — the stage authors ONE page edit surface and NO per-node editable host', async () => {
-    // U-EDIT-1 §2.1: the stage carries EXACTLY ONE `contenteditable` root per
-    // rendered document (the authored `page-edit-surface`); ZERO per-node
+    // U-EDIT-1 §2.1 (as amended 2026-09-21, §11.7): the stage carries EXACTLY
+    // ONE `contenteditable` root per rendered document, authored at the
+    // APP-GRAPH / STAGE-ASSEMBLY layer (the pure `assembleAppGraphEnvelope`
+    // builder) with the pinned authored id `page-edit-surface`; ZERO per-node
     // `[contenteditable]` hosts survive, and the traversal-authored
     // `textarea-<ragId>` child is the INERT tombstone (§5.1) — it never becomes
     // an editing host. The shared-commit interception still hangs off the page
     // commit (§3.3), but the per-node textarea driver this blind block used is
     // removed, so the H1 apply-handler expectations are not re-driven here.
+    // The census is read on the APP-GRAPH render + the mounted DOM (§8.1 FS1) —
+    // never on the traversal envelope, which authors no surface at all.
     const h = await makeHarness()
     try {
       await h.host.boot(h.runtime)
-      const roots = h.runtime.materializedContentRoots()
-      const ragRoots = roots.filter((r) => String(propsId(r) ?? '').startsWith('rag-'))
-      expect(ragRoots.length).toBeGreaterThan(0)
-      // FS1 — no per-node editable host on any RAG subtree root.
-      expect(ragRoots.filter((r) => r.props?.['contenteditable'] === true)).toEqual([])
-      // FS21 — the per-node editing child is inert: no handler defs survive.
-      const perNodeEditing = ragRoots.flatMap((r) =>
-        (r.children ?? []).filter((c) => (c as LegacyNodeData).type === 'textarea'),
+
+      const authored = await appGraphNodesOfFocusedDoc(h.store)
+      // the app-graph render of the focused document materializes its blocks
+      // (the census below is taken on THIS render, never on a traversal envelope)
+      expect(authored.filter((n) => typeof n.props?.['data-rag-node-id'] === 'string').length).toBeGreaterThan(0)
+      const surfaces = authored.filter((n) => propsId(n) === PAGE_EDIT_SURFACE_ID)
+      expect(surfaces).toHaveLength(1)
+      expect(surfaces[0].props?.[DATA_EDIT_SURFACE]).toBe(FOCUSED_DOCUMENT_ID)
+      expect(surfaces[0].props?.['contenteditable']).toBe(true)
+      const authoredRagRoots = authored.filter(
+        (n) => typeof (n.props as Record<string, unknown> | undefined)?.['data-rag-node-id'] === 'string',
       )
-      expect(perNodeEditing).toEqual([])
+      expect(authoredRagRoots.length).toBeGreaterThan(0)
+      // FS1 — no per-node editable host in the assembled app graph.
+      expect(authoredRagRoots.filter((r) => r.props?.['contenteditable'] === true)).toEqual([])
+
+      // …and the DOM the runtime mounted carries the same single surface.
+      const census = contenteditableCensus(h.mount)
+      expect(census.count).toBe(1)
+      expect(census.ids).toEqual([PAGE_EDIT_SURFACE_ID])
+      expect(census.markers).toEqual([FOCUSED_DOCUMENT_ID])
+      expect(census.ragHosts).toBe(0)
     } finally {
       cleanup(h.dir)
     }
