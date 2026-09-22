@@ -7,7 +7,7 @@
   minimize hooks), §2.6 (pointer-capture + rect rules), §3 valid-path states 1–10,
   §4 fail-states F1–F11, §2.8 (source-pinned listener-registration surface).
 - **Greens battery (blind-test, docs-only, already run against the live MODULES):**
-  `docs/specs/unit-u-shell-shell-wiring-greens.md` — **35 PASS / 0 FAIL /
+   `archive/greens/2026-09-21-unit-u-shell-shell-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-shell-wiring-greens.md) — **35 PASS / 0 FAIL /
   4 NOT-TESTABLE**. The 4 NT sub-scenarios (F5 `setPointerCapture` fail-soft
   degrade, F9 the interactive-control guard, F11 the absent-host no-op boot, and
   the `renderer.ts` node-import) require the live DOM/browser; their listener
@@ -65,7 +65,7 @@ gestures **cannot be exercised through the MCP endpoints**, because:
    **confirming the gestures against the real DOM**, which requires the running
    shell.
 
-The 4 NOT-TESTABLE sub-scenarios from the greens (`docs/specs/unit-u-shell-shell-wiring-greens.md`
+The 4 NOT-TESTABLE sub-scenarios from the greens ( `archive/greens/2026-09-21-unit-u-shell-shell-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-shell-wiring-greens.md)
 §"NOT-TESTABLE sub-scenarios") are the exact rows this battery re-expresses as
 live probes:
 - **F5** — `setPointerCapture` fail-soft degrade: needs a real captured element in
@@ -210,7 +210,7 @@ originating element and naturally release at `pointerup`/`pointercancel`.
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 35 PASS / 0 FAIL / 4 NOT-TESTABLE
-  (`docs/specs/unit-u-shell-shell-wiring-greens.md`).
+  ( `archive/greens/2026-09-21-unit-u-shell-shell-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-shell-wiring-greens.md)).
 - **Already green at the live MODULES (no live re-run needed):** M1–M3, S1–S10,
   F1, F2, F3, F4, F6, F7, F8, F10, P-IM-1..P-TP-3, and the §2.8 source-pin
   (`SP`, 6 sub-asserts) — all pass through the pure modules + the source-pin.

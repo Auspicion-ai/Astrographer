@@ -1,7 +1,7 @@
 # Spec — Unit F1: The Pure `mergeStoreResults` Module (Cross-Store Fan-Out)
 
 - **Status:** SPEC (the cross-store fan-out slice, Unit U-F1 of 3; execution
-  order **U-F1** → U-F2 → U-F3). Proposal gate: `docs/specs/multi-store-fanout-review.md`
+  order **U-F1** → U-F2 → U-F3). Proposal gate:  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md)
   (PROPOSAL GATE COMPLETE 2026-09-08 — four-agent gate: validity
   VALID-WITH-AMENDMENTS → critique UNSOUND-as-written → architecture
   PROCEED-WITH-AMENDMENTS, decisions D1–D8 → change-analysis
@@ -433,7 +433,7 @@ empty `stores`, a null/undefined entry, a non-string `name`, a non-array
 
 ### 5.11 Cross-references
 
-- The proposal gate: `docs/specs/multi-store-fanout-review.md` — D1 (merge
+- The proposal gate:  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) — D1 (merge
   policy), D2 (`storeContexts`/default-store block), D4 (flat-only), D6
   (skip-failed/empty), D7 (determinism), D8 (3-unit decomposition), A-F1 (the
   shape changes are U-F2's, gated to `stores:"all"`).
@@ -448,10 +448,10 @@ empty `stores`, a null/undefined entry, a non-string `name`, a non-array
 - The canonical order: `src/main/rag-store-directory.ts` — `RagStoreDirectory`
   (`entries: ReadonlyMap<string, RagStoreEntry>`, `defaultName`), the `Map` key
   order (D7), `RagStoreEntry` (`name`/`store`/`engine`/`corrupt`/`missing`).
-- The fan-out wiring (U-F3, NOT this unit): `docs/specs/multi-store-fanout-review.md`
+- The fan-out wiring (U-F3, NOT this unit):  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md)
   D5/D8 + A-F3/A-F4 — the `stores:"all"` schema, the flat-only guard, the
   mutual-exclusion, the audit `stores` field, the fan-out in `handleRagTool`.
-- The shape changes (U-F2, NOT this unit): `docs/specs/multi-store-fanout-review.md`
+- The shape changes (U-F2, NOT this unit):  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md)
   D2/D3 + A-F1 — `storeContexts` + the per-item/per-entry `store`, gated to
   `stores:"all"`.
 - Decisions: `docs/decisions.md` rows **RANK-INTERLEAVE-MERGE**,

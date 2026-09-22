@@ -1,7 +1,7 @@
 # Spec — Unit V1: Store Adjacency (`RagStore` adjacency methods + `createSnapshotStore`)
 
 - **Status:** SPEC (the scoped-load fix, Unit 1 of 3). Gate reference:
-  `docs/specs/load-bug-scoped-traversal-review.md` §5 (the amendments), §6
+   `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (the amendments), §6
   (the unit split — Unit 1 = store adjacency). Decisions:
   `docs/decisions.md` rows **RAG-AUTHORITATIVE**, **SINGLE-WRITER-STORE**,
   **SOURCE-SWITCHABLE**, **SUBTREE-OWNERSHIP**, **MULTI-PARENT-DUPLICATE**,
@@ -148,7 +148,7 @@ regression-tested in `tests/unit-v1-store-adjacency-adversarial.test.ts`.
 ### 3b. Proposal-review findings
 
 The proposal-review gate (three-agent: validity → critique → change-analysis)
-returned **PROCEED-WITH-AMENDMENTS** (`docs/specs/load-bug-scoped-traversal-review.md`).
+returned **PROCEED-WITH-AMENDMENTS** ( `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md)).
 The amendments this unit folds in:
 
 - **Amendment 3 (HIGH) — `createSnapshotStore` shares the adjacency
@@ -471,7 +471,7 @@ export function createSnapshotStore(nodes: RagNode[], edges: RagEdge[]): RagStor
 - Unit K: `docs/specs/unit-k-sidebar-panes-host.md` §5.1 (the snapshot adapter
   the host's `buildTraversalEnvelope` uses — replaced by `createSnapshotStore`
   in Unit V3).
-- Gate: `docs/specs/load-bug-scoped-traversal-review.md` §5 (amendments 3 + 4),
+- Gate:  `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (amendments 3 + 4),
   §6 (Unit 1 = store adjacency).
 - Decisions: `docs/decisions.md` rows **RAG-AUTHORITATIVE**,
   **SINGLE-WRITER-STORE**, **SOURCE-SWITCHABLE**, **SUBTREE-OWNERSHIP**,

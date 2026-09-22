@@ -2,7 +2,7 @@
 
 **Status:** COMPLETE (2026-09-14) · **Scope:** the Astrographer UI-overhaul Wave-1/2/3
 + the live-app user-testing batch (defects LIVE-1..12, `docs/defects.md`; handover:
-`docs/HANDOVER-LIVE-BATCH-RCA.md`). **Head:** `6ea9f9c` (RCA authored at `edb7d51`).
+ `archive/live-batch/2026-09-21-handover-live-batch-rca.md` (historical; archived 2026-09-21; successor docs/specs/rca-live-bugs-green-pipeline.md (the RCA of record))). **Head:** `6ea9f9c` (RCA authored at `edb7d51`).
 **Trio at each green:** 4625 pass / 58 skip, typecheck 0, build 0.
 
 ---

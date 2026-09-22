@@ -3,7 +3,7 @@
 > **STATE (2026-09-08): U-H7 IS LANDED.** This document is the landed behavior
 > contract for U-H7 (the gate's **HIGHEST-RISK unit** — the default reassignment,
 > D5 split out for teardown + accessor-backed IPC + vector re-warm —
-> `docs/specs/registry-hot-apply-review.md` §2 D5/A-P2-4). U-H5 (teardown
+>  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 D5/A-P2-4). U-H5 (teardown
 > primitives), U-H4 (hot-remove), U-H6 (hot-rename) are LANDED and this unit
 > CONSUMES their primitives/home (`drainAndReleaseEntry` + the `rag-store-remove.ts`
 > pattern + the U-H5 vector-boot `teardown()`). **Landed 2026-09-08: 29/29 via
@@ -23,7 +23,7 @@
   until U-H5/D5" ⇒ U-H7 is when the default becomes re-bindable), INCLUDING the
   default's rename (folds into U-H7 per D4) and the vector re-warm (the default
   store owns the at-most-ONE vector boot controller per A6/R10). Gate reference:
-  `docs/specs/registry-hot-apply-review.md` §2 **D1** (the "Default-bound consts
+   `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D1** (the "Default-bound consts
   stay until U-H5/**D5**" note — U-H7 is when the default becomes re-bindable),
   **D4** ("the DEFAULT's rename folds into **D5**" — U-H7), **D5** (default
   reassignment — SPLIT OUT, highest-risk: teardown + accessor-backed IPC + vector
@@ -317,7 +317,7 @@ the pass surfaced host findings that were FIXED + regression-tested here (all in
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D5 (binding):** default reassignment SPLIT OUT (highest-risk: teardown + accessor-backed
   IPC + vector re-warm); lands as its own unit after U-H5. Pinned §1/§4/§5.
 - **A-P2-4 (bound):** "U-H7 split off: teardown + accessor IPC + rebuild", per D5. Pinned §1/§4.
@@ -950,7 +950,7 @@ before the apply/teardown).
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D1** (the default becomes re-bindable in
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D1** (the default becomes re-bindable in
   U-H7), **D4** (the DEFAULT's rename folds into D5/U-H7), **D5** (default reassignment SPLIT OUT,
   highest-risk), **D6** (operator-UI IPC only — U-H7 mechanism, U-H8 IPC), **D7** (mid-flight
   consistency), **D8** (execution order … U-H4 → U-H6 → U-H7 → U-H8); §5 (A-P2-1, A-P2-2, A-P2-4,

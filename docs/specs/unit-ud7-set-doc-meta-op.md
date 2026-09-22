@@ -7,7 +7,7 @@
   (PROCEED-WITH-AMENDMENTS, RATIFIED 2026-09-11),
   `docs/specs/document-directory-category-review.md` §3 **M9** (write-op design)
   + **M11** (write validation/authorization) + §4 **Q5**/**Q8** + the **U-D7**
-  row in §5, and the GATED parent `docs/specs/document-directory-category.md`
+  row in §5, and the GATED parent  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md)
   §3.5 (the write surface). Sibling/precedent specs:
   `docs/specs/unit-o-edit-ops.md` (the edit-ops layer + the discrimated-result
   discipline + the edit-op census), `docs/specs/unit-ud1-document-metadata-fields.md`
@@ -745,7 +745,7 @@ NO listing/tree change; NO query-filter change; NO IPC/bridge; NO
   design) + M11 (write validation/authorization) + §4 Q5/Q8 + the U-D7 row in
   §5; `docs/decisions.md` row **DOC-DIRECTORY-CATEGORY-GATE**
   (PROCEED-WITH-AMENDMENTS, RATIFIED 2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` §3.5 (the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.5 (the
   write surface: `edit.set_doc_meta` writes `tags` only, outside the closed
   `BatchOp`, path immutable), §3.6 (security: the `edit` group), §3.8
   (creation ops — U-D7 is tags-only, not create).

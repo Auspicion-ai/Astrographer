@@ -2,7 +2,7 @@
 
 **Status:** GREEN / COMPLETE — CODE LANDED (2026-09-14) + DOC-REVIEWED 2026-09-14.
 Ratified as SPEC-RATIFIED / READY-FOR-TDD 2026-09-14+, then implemented.
-Gate: the UI-overhaul umbrella gate `docs/specs/ui-overhaul-review.md` (PROCEED-WITH-AMENDMENTS, A10:
+Gate: the UI-overhaul umbrella gate  `archive/gate-reviews/2026-09-21-ui-overhaul-review.md` (historical; archived 2026-09-21; successor docs/specs/ui-overhaul.md (MUST-NOT-EDIT, stays) + the per-unit DONE rows in docs/next-steps.md) (PROCEED-WITH-AMENDMENTS, A10:
 `U-IMPORT-1` follows `U-MENU-1` + `U-STATE-1`; ui-overhaul §8.1 Wave 3). **C17 was already
 ADJUDICATED** by the umbrella gate and was **NOT re-openable** here; Q17/Q18 were also
 adjudicated (ui-overhaul §7). **All open decisions W-Q1..Q7 are RESOLVED/RATIFIED

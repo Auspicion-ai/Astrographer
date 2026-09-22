@@ -29,7 +29,7 @@
   build clean)** — the
   registry hot-apply/removal/rename slice, Unit U-H6 (hot-rename, the
   drain-then-teardown upgrade of the rename path). Gate reference:
-  `docs/specs/registry-hot-apply-review.md` §2 **D4** (rename semantics —
+   `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D4** (rename semantics —
   restricted to NON-default stores with NO persisted `<name>:`-prefixed ids, no
   id rewrite; the DEFAULT's rename folds into **D5** / U-H7),
   **A-P2-5** ("rename restricted to non-default stores with no persisted
@@ -305,7 +305,7 @@ for the proofreader gate.
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D4 (binding):** rename semantics = restricted to NON-default stores with NO
   persisted `<name>:`-prefixed ids (no id rewrite); id-migration for populated
   non-default stores is a SEPARATE unit; the DEFAULT's rename folds into **D5**
@@ -836,7 +836,7 @@ Outcomes: **fail-loud** = the propagated `Error`; **live-untouched** =
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D4** (rename semantics —
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D4** (rename semantics —
   non-default-only, no persisted `<name>:` ids, no id rewrite; id-migration is a
   SEPARATE unit; the DEFAULT's rename folds into D5/U-H7), **A-P2-5** ("rename
   restricted to non-default stores with no persisted `<name>:` ids"), **D6**

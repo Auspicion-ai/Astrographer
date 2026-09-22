@@ -11,7 +11,7 @@
   (`decomposeRichHtml`, Unit U2) into `{content, children}` and commits via the
   `setRichText` write-back (Unit U5, `edit.commitRich`) + the dirty-edit guard +
   re-traversal (re-derive). Decisions **B**, **G**, **H**, **I** of
-  `docs/specs/editing-mode-toggle-review.md` §4/§5 + amendments 4 (the cross-unit
+   `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4/§5 + amendments 4 (the cross-unit
   textarea gate) and 6 (the first-materialization limitation).
 - **Scope:** `src/renderer/sidebar-panes.ts` (the 4 rich handler defs + the 4
   bridge methods + the composition-guard fields + the gated re-derive caret
@@ -881,7 +881,7 @@ node-testable):**
 
 ## 4. Cross-references + section numbers
 
-- **Proposal review:** `docs/specs/editing-mode-toggle-review.md` §4-B (the
+- **Proposal review:**  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-B (the
   discriminated `CaretState` = `{kind:'textarea'}` | `{kind:'rich'; ragId;
   anchor; focus; focused}` with path-based `RichCaretEdge`; restored after
   re-derive), §4-G (rich handler defs `rag-editor-input`/`blur`/

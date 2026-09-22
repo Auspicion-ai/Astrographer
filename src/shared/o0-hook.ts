@@ -95,6 +95,15 @@ export interface O0HookRecord {
    *  text. `null` for a fulfilled span (and for every synchronous span, whose
    *  throw path still commits nothing — §3.6(a)/(b) unchanged). */
   error?: string | null
+  /** O0-M1-M3 §3.1 — the record's OWN span in the page's `performance.now()` domain
+   *  (the same domain as the `o0:t0`/`o0:t1` marks and the long-task `start` fields):
+   *  `startMs` is the stamp taken immediately before the recorded body ran, `endMs`
+   *  the stamp taken at commit (so `endMs ≥ startMs` and `endMs − startMs` is the
+   *  record's `ms` within µs rounding). The M1 pass partition is positionally
+   *  underivable from the NON-unique mark names, so these two fields are what makes
+   *  it decidable at all. ADDITIVE and inert when unarmed (`P-HK-1`). */
+  startMs: number
+  endMs: number
 }
 export interface O0HookSnapshot {
   armed: boolean
@@ -181,6 +190,8 @@ function o0CopyRecords(records: readonly O0HookRecord[]): O0HookRecord[] {
     endMark: r.endMark,
     measureName: r.measureName,
     error: r.error ?? null,
+    startMs: r.startMs,
+    endMs: r.endMs,
   }))
 }
 /** RUL-2 — the recorded error text of a REJECTED async span (never the error
@@ -266,8 +277,12 @@ export function createO0HookRecorder(opts: { stages?: readonly string[]; perf?: 
       const commit = (error: string | null): void => {
         perf.mark(endMark)
         perf.measure(measureName, startMark, endMark)
-        const ms = o0Round(perf.now() - start)
-        records.push({ stage, ms, startMark, endMark, measureName, error })
+        // O0-M1-M3 §3.1 — the commit stamp is ALSO the record's `endMs`: the two
+        // stamps (`start` before the body, `perf.now()` at commit) ARE the record's
+        // own span, so `endMs − startMs` is its `ms` in the same clock domain.
+        const end = perf.now()
+        const ms = o0Round(end - start)
+        records.push({ stage, ms, startMark, endMark, measureName, error, startMs: start, endMs: end })
         pending -= 1
       }
       pending += 1

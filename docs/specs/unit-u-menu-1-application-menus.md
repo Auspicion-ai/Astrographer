@@ -1,7 +1,7 @@
 # Unit U-MENU-1 — Application Menus (File + View) — Spec
 
 **Status:** DRAFT 2026-09-11. **Document-only — no code.** Gate: the UI-overhaul
-umbrella gate `docs/specs/ui-overhaul-review.md` (PROCEED-WITH-AMENDMENTS, A10:
+umbrella gate  `archive/gate-reviews/2026-09-21-ui-overhaul-review.md` (historical; archived 2026-09-21; successor docs/specs/ui-overhaul.md (MUST-NOT-EDIT, stays) + the per-unit DONE rows in docs/next-steps.md) (PROCEED-WITH-AMENDMENTS, A10:
 `U-MENU-1` precedes `U-IMPORT-1` + `U-SHELL-8`). This is the per-unit spec
 required by AGENTS.md item 9 / umbrella amendment A1 before any TestWriter red
 set. Open items live in `docs/specs/wave-1-open-decisions.md` (W1-Q1..Q3).

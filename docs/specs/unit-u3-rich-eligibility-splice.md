@@ -2,7 +2,7 @@
 
 - **Status:** SPEC (the U3 unit of the editing-mode-toggle + contenteditable
   rich-text editor slice — decisions **C** and **E** of
-  `docs/specs/editing-mode-toggle-review.md` §4/§5, U3 row). Three related
+   `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4/§5, U3 row). Three related
   pieces: (1) a PURE eligibility gate that decides whether a RAG subtree root
   may host a `contenteditable` editor; (2) a host post-assembly splice
   (`applyEditingMode`) that swaps the traversal-authored textarea for the
@@ -359,7 +359,7 @@ nodes: Array<{
   `td`, `th` (5 → 23).
 - **`EDITABLE_TYPES` members:** **9** — `h1`–`h6` (6), `p`, `blockquote`, `div`.
   **Discrepancy flag (doc-review gate):** the proposal/review prose
-  (`editing-mode-toggle-review.md` §4-E, decision E) enumerated the set as
+  ( `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-E, decision E) enumerated the set as
   `{h1,h2,h3,h4,h5,h6,p,blockquote,div}` but a §3-style count of "7" was cited
   in the U3 brief. The ENUMERATED set has **9** members. This spec pins **9**
   (the set definition is authoritative); the "7" is a miscount to be corrected by
@@ -389,7 +389,7 @@ nodes: Array<{
 
 ## 4. Cross-references + section numbers
 
-- **Proposal review:** `docs/specs/editing-mode-toggle-review.md` §4-C (decision
+- **Proposal review:**  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-C (decision
   **C** — the host `applyEditingMode` splice in `loadAppGraph`, after
   `setTextareaReadOnly`, before `recomputeBackRefs`), §4-E / decision **E** (the
   pure `isRichEditableRoot` gate + `EDITABLE_TYPES`), §4 (the supporting change

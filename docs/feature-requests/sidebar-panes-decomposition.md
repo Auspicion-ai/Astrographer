@@ -25,7 +25,7 @@ The sidebar pane surface is concentrated in a small number of very large files:
 
 | File | Lines | What it holds |
 | --- | --- | --- |
-| `src/renderer/sidebar-panes.ts` | 3664 | the `SidebarPanes` host: registry, boot, reconcile, layout/zone wiring, pane-visibility, doc-switch, search, editor, operator settings, and every host seam |
+| `src/renderer/sidebar-panes.ts` | 3670 | the `SidebarPanes` host: registry, boot, reconcile, layout/zone wiring, pane-visibility, doc-switch, search, editor, operator settings, and every host seam |
 | `src/renderer/pane-graph.ts` | 1750 | the pure graph builders for every pane: `docNavContent`, `crosslinksContent`, `searchContent`, `landingContent`, `searchTabContent`, editor toolbar, pane frame/minimize/tab helpers, `assembleAppGraphEnvelope`, `buildOperatorEnvelope` |
 | `src/renderer/gnosis-crud-panes.ts` | 563 | the Gnosis CRUD pane host + builders |
 | `src/renderer/secure-panels.ts` | 516 | the isolated operator settings graph |
@@ -171,8 +171,8 @@ snapshot equality check, all failing against the current single-file layout beca
 
 ### Problem
 
-`src/main/mcp-server.ts` is **2873 lines** — the largest shipped source file in the
-repo. It is the entire MCP surface in one module:
+`src/main/mcp-server.ts` is **2874 lines** — among the largest shipped source files in the
+repo (`src/renderer/sidebar-panes.ts` is 3670). It is the entire MCP surface in one module:
 
 - the `provident.*` graph/tool implementations (`registerTools`, `mcp-server.ts:2102`),
 - the `rag.*` tool router (`handleRagTool`, `:200`) and its filter validation (`:163`),
@@ -249,7 +249,7 @@ status code) is a regression.
 ### Priority
 
 **P1** — the core deliverable's maintainability; every new tool currently widens a
-14-argument call and lands in an already-2873-line file.
+14-argument call and lands in an already-2874-line file.
 
 ### Target project
 
@@ -273,7 +273,7 @@ the rendered-output equivalence check fail against the current layout because
 
 ### Problem
 
-`src/renderer/runtime.ts` is **1564 lines** and holds the whole renderer-side
+`src/renderer/runtime.ts` is **1594 lines** and holds the whole renderer-side
 provident runtime: envelope load/admit (`loadEnvelope:433`, `admitContentNodes:464`),
 the content reconcile (`applyContentReconcile:491` + its `…Body:507`), doc loading
 (`loadDoc:636`), commands/ops (`applyCommand:687`, `op:892`), journal
@@ -344,7 +344,7 @@ receive the runtime's shared state via a narrow internal context (not `this`-spr
 ### Priority
 
 **P1** — the renderer runtime is the highest-traffic object in the renderer; it
-co-changes with `renderer.ts` (1052) and `sidebar-panes.ts` (FB-1).
+co-changes with `renderer.ts` (1053) and `sidebar-panes.ts` (FB-1).
 
 ### Target project
 
@@ -364,30 +364,31 @@ export byte-equivalence check fail against the current layout because
 
 ---
 
-## Scan table — every file ≥1000 lines (2026-09-19)
+## Scan table — every file ≥1000 lines (2026-09-19, **line counts re-scanned 2026-09-21**)
 
 For context; the actionable decomposition targets are FB-1 (pane surface), FB-2
 (`mcp-server.ts`), FB-3 (`runtime.ts`). The remaining rows are tracked here so a
 later pass has the full census and does not re-scan.
 
-**`src/` (8 files ≥1000; 71 source files, 35,149 lines total):**
+**`src/` (8 files ≥1000 — the file count stands; the 71-file / 35,149-line TOTAL is the
+2026-09-19 reading and was NOT re-summed in the 2026-09-21 pass):**
 
 | File | Lines | Disposition |
 | --- | --- | --- |
-| `src/renderer/sidebar-panes.ts` | 3664 | **FB-1** |
-| `src/main/mcp-server.ts` | 2873 | **FB-2** |
+| `src/renderer/sidebar-panes.ts` | 3670 | **FB-1** |
+| `src/main/mcp-server.ts` | 2874 | **FB-2** |
 | `src/renderer/pane-graph.ts` | 1750 | **FB-1** |
-| `src/renderer/runtime.ts` | 1564 | **FB-3** |
+| `src/renderer/runtime.ts` | 1594 | **FB-3** |
 | `src/main/retrieval.ts` | 1467 | candidate FB-4 (deferred) |
 | `src/main/rag-store.ts` | 1423 | candidate FB-4 (deferred) |
 | `src/main/engine-rag-store.ts` | 1093 | candidate FB-4 (deferred) |
-| `src/renderer/renderer.ts` | 1052 | residual after FB-1/FB-3 (boot/orchestration) |
+| `src/renderer/renderer.ts` | 1053 | residual after FB-1/FB-3 (boot/orchestration) |
 
 **`scripts/`:**
 
 | File | Lines | Disposition |
 | --- | --- | --- |
-| `scripts/live-drive.mjs` | 3849 | test driver, not shipped; no action |
+| `scripts/live-drive.mjs` | 4548 | test driver, not shipped; no action |
 
 **`tests/` (largest; one-file-per-unit by convention, not decomposition targets):**
 

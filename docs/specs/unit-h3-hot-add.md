@@ -11,7 +11,7 @@
 > NOT propose new code, and does NOT touch `src/` or `tests/`.
 
 - **Status: U-H3 hot-add — DELIVERED by U-H2a; NO new source code required; a
-  confirmatory/verification unit.** Gate reference: `docs/specs/registry-hot-apply-review.md`
+  confirmatory/verification unit.** Gate reference:  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN)
   §2 **D8** (the unit decomposition — "U-H3 hot-add"), **D7** (mid-flight
   consistency — add ATOMIC = construct-fully-then-insert), **D6/S5** (no new MCP
   tool, operator-UI IPC only in U-H8), **D8/D5/A-P2-4** (default reassignment is
@@ -91,7 +91,7 @@ missing behavior).
 > incremental teardown-aware apply") + §5.4 step 5–7 + §5.7 F17 + the §7 Architect
 > ruling item 2. The remaining slice units proceed as **U-H5 (teardown) → U-H4
 > (hot-remove) → U-H6 (hot-rename) → U-H7 (default reassignment) → U-H8
-> (operator-UI editor).** | 2026-09-08 (CONFIRMATORY) | `docs/specs/registry-hot-apply-review.md` §2 D7/D8/D6/A-P2-8/D5; `docs/specs/unit-h3-hot-add.md` §1/§2; `docs/specs/unit-h2-runtime-controller.md` §4 |
+> (operator-UI editor).** | 2026-09-08 (CONFIRMATORY) |  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 D7/D8/D6/A-P2-8/D5; `docs/specs/unit-h3-hot-add.md` §1/§2; `docs/specs/unit-h2-runtime-controller.md` §4 |
 
 ## 4. Explicitly OUT of range for U-H3 (belongs to later units)
 
@@ -118,7 +118,7 @@ missing behavior).
 
 ## 7. Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D7** (add atomic = construct-fully-then-insert), **D8** (unit decomposition "U-H3 hot-add"), **D6/S5** (no new MCP tool, operator-UI IPC only in U-H8), **D8/D5/A-P2-4** (default reassignment is U-H7), **A-P2-8** (teardown in U-H5); §4 (hot-add intent — re-running the boot flow: store + engine + boot-controller creation); §6 (live-scenario PARKED by user instruction).
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D7** (add atomic = construct-fully-then-insert), **D8** (unit decomposition "U-H3 hot-add"), **D6/S5** (no new MCP tool, operator-UI IPC only in U-H8), **D8/D5/A-P2-4** (default reassignment is U-H7), **A-P2-8** (teardown in U-H5); §4 (hot-add intent — re-running the boot flow: store + engine + boot-controller creation); §6 (live-scenario PARKED by user instruction).
 - **U-H2a delivery (consumed):** `docs/specs/unit-h2-runtime-controller.md` §4 **ATOMIC-APPLY** / **DEFAULT-STABLE-APPLY** / **REBUILD-ALL-OF-NON-DEFAULT**, §5.4 (apply ordering: validate → d4-inspect → `writeRegistryMutation` → construct-fully-then-insert into a STAGING map → one-pass swap → `{loaded, delta:{added}}`), §5.6 **H3**/H5/H9/H11/H12, §5.7 F12/F17/N1/N2, §5.8–§5.9 (**U-H2b** B1–B13/M1–M4), §5.11 (census).
 - **Source (read to confirm, NOT to re-spec):** `src/main/rag-store-runtime.ts` (`hotApply` `:186-257`; `buildLexicalEntry` `:262-274`; `syncLiveToLoaded` `:285-305`).
 - **Sibling slice units (cite-only):** U-H5 (teardown — A-P2-8), U-H4 (hot-remove after U-H5), U-H6 (hot-rename), U-H7 (default reassignment — OUT), U-H8 (operator-UI editor — the future `hotApply` IPC invoker). **Execution order proceeding: U-H5 → U-H4 → U-H6 → U-H7 → U-H8.**

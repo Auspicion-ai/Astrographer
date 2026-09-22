@@ -16,7 +16,7 @@
 - **Status: SPEC (LANDED 2026-09-08 — U-H2a + U-H2b)** — the registry hot-apply/removal/rename
   slice, Unit U-H2 of 8 — the SECOND unit in the pinned execution order
   U-H1 → **U-H2** → U-H3 → U-H5 → U-H4 → U-H6 → U-H8; U-H7 (default
-  reassignment) is split out. Gate reference:`docs/specs/registry-hot-apply-review.md`
+  reassignment) is split out. Gate reference: `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN)
   §2 **D1** (swap seam — a NEW registry-runtime controller owns a mutable live
   `RagStoreDirectory`; `main.ts`'s `plan.directory` becomes `runtime.directory`),
   **D2** (write path + supersession — persisted-and-live never diverge; supersedes
@@ -294,7 +294,7 @@ below are RECONCILED in the per-unit doc-review pass, 2026-09-08):**
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D1 (binding):** the swap seam — a NEW registry-runtime controller owns a
   mutable live `RagStoreDirectory`; `main.ts`'s `plan.directory` becomes
   `runtime.directory`; the MCP path already re-reads `dir` per call
@@ -1066,7 +1066,7 @@ legacy const fallback is byte-equal).
 
 ### 5.12 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D1** (swap seam —
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D1** (swap seam —
   runtime controller + mutable live directory; `plan.directory` →
   `runtime.directory`), **D2** (write path + supersession),
   **D3** (hot-remove = ORPHAN — U-H2 never deletes a store file),
@@ -1117,7 +1117,7 @@ legacy const fallback is byte-equal).
   fail-state 10 (A-P2-3's mechanical half), `docs/specs/unit-h1-registry-write.md`
   §5.10 (the designation), `docs/specs/unit-ms5-settings-listing.md` §5.5
   (the no-re-fetch pin) + §5.9 fail 10.
-- **Parked/context doc:** `docs/specs/registry-hot-apply-review.md` §6 (the
+- **Parked/context doc:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §6 (the
   live-scenario PARK — U-H2's live battery is parked by user instruction; a
   live-pending battery is authored later, §6 below).
 - **Test file (SpecWriter-pinned):** `tests/unit-h2-runtime-controller.test.ts`.

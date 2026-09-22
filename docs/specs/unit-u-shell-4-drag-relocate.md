@@ -14,7 +14,7 @@ host-side un-hardened regression, subsequently **FIXED** by the host
 `commitPaneDrop` no-op + `insertionIndexForPoint` work (see §2.6 and the greens
 §F2). Final unit file **49 pass + 4 skip**; full suite **176 files / 4068 pass +
 54 skip**, typecheck 0, build OK. **Blind-test**
-(`docs/specs/unit-u-shell-4-drag-relocate-greens.md` — **31 scenarios, 31 PASS**;
+( `archive/greens/2026-09-21-unit-u-shell-4-drag-relocate-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-4-drag-relocate-greens.md) — **31 scenarios, 31 PASS**;
 F2's initial FAIL reconciled) **+ documentation-review**
 (`archive/reviews/2026-09-12-u-shell-4-doc-review.md`) gates **DONE**.
 

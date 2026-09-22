@@ -1,7 +1,7 @@
 # Spec — Unit V2: Scoped Traversal + MCP Refactor
 
 - **Status:** SPEC (the scoped-load fix, Unit 2 of 3). Gate reference:
-  `docs/specs/load-bug-scoped-traversal-review.md` §5 (the amendments), §6
+   `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (the amendments), §6
   (the unit split — Unit 2 = scoped traversal + MCP refactor). Decisions:
   `docs/decisions.md` rows **RAG-AUTHORITATIVE**, **SUBTREE-OWNERSHIP**,
   **MULTI-PARENT-DUPLICATE**, **DERIVED-DOC-FLOW**, **DOC-CHILD**,
@@ -133,7 +133,7 @@ NOT fixed here.
 ### 3b. Proposal-review findings
 
 The proposal-review gate (three-agent: validity → critique → change-analysis)
-returned **PROCEED-WITH-AMENDMENTS** (`docs/specs/load-bug-scoped-traversal-review.md`).
+returned **PROCEED-WITH-AMENDMENTS** ( `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md)).
 The amendments this unit folds in:
 
 - **Amendment 1 (HIGH) — pin the `materialized`-set equivalence.** The scoped
@@ -161,9 +161,9 @@ The amendments this unit folds in:
   scopes internally). Pinned in §5.1 + §5.8 happy-path 18 (the verdict-match
   test).
 - **Amendment 8 (MEDIUM) — reconcile the greens docs + trackers (RCA-6).** The
-  scoped-walk behavior change drifts `unit-c-rendering-spine-greens.md`,
-  `unit-d-editing-greens.md`, `unit-g-crosslink-backlink-greens.md`,
-  `unit-r-traversal-inline-children-greens.md`, and the census claims in the
+  scoped-walk behavior change drifts  `archive/greens/2026-09-21-unit-c-rendering-spine-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-c-rendering-spine-greens.md),
+   `archive/greens/2026-09-21-unit-d-editing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-d-editing-greens.md), `archive/greens/2026-09-21-unit-g-crosslink-backlink-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-g-crosslink-backlink-greens.md),
+   `archive/greens/2026-09-21-unit-r-traversal-inline-children-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-r-traversal-inline-children-greens.md), and the census claims in the
   specs. These must be reconciled in the SAME pass as the code, and
   `docs/defects.md`/`docs/next-steps.md` updated. Pinned in §5.9.
 - **Amendment 9 (LOW) — document the snapshot-transfer limitation.** The
@@ -525,7 +525,7 @@ snapshot store via `createSnapshotStore` (the same amendment-4 replacement).
   children — unchanged).
 - Unit L: `docs/specs/unit-l-textarea-editing-ui.md` §5.1 (the textarea child —
   unchanged).
-- Gate: `docs/specs/load-bug-scoped-traversal-review.md` §5 (amendments 1, 2, 4,
+- Gate:  `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (amendments 1, 2, 4,
   6, 7, 8, 9), §6 (Unit 2 = scoped traversal + MCP refactor).
 - Decisions: `docs/decisions.md` rows **RAG-AUTHORITATIVE**,
   **SUBTREE-OWNERSHIP**, **MULTI-PARENT-DUPLICATE**, **DERIVED-DOC-FLOW**,
@@ -538,8 +538,8 @@ snapshot store via `createSnapshotStore` (the same amendment-4 replacement).
   `rag.get_document` refactor), `src/main/adjacency.ts` (the Unit V1 shared PURE
   adjacency core + `createSnapshotStore` — re-exported by `src/main/rag-store.ts`).
 - **Amendment 8 (RCA-6) — the greens docs + trackers to reconcile in the SAME
-  pass:** `unit-c-rendering-spine-greens.md`, `unit-d-editing-greens.md`,
-  `unit-g-crosslink-backlink-greens.md`, `unit-r-traversal-inline-children-greens.md`,
+  pass:**  `archive/greens/2026-09-21-unit-c-rendering-spine-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-c-rendering-spine-greens.md), `archive/greens/2026-09-21-unit-d-editing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-d-editing-greens.md),
+   `archive/greens/2026-09-21-unit-g-crosslink-backlink-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-g-crosslink-backlink-greens.md), `archive/greens/2026-09-21-unit-r-traversal-inline-children-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-r-traversal-inline-children-greens.md),
   and the census claims in the specs. `docs/defects.md`/`docs/next-steps.md`
   updated.
 - **Amendment 9 (LOW) — the snapshot-transfer limitation:** the boot/re-derive

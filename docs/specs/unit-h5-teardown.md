@@ -16,7 +16,7 @@
   continues U-H1 → U-H2 → U-H3 → **U-H5 (LANDED)** → U-H4 → U-H6 → U-H8; U-H7
   (default reassignment) is split out and CONSUMES U-H5's primitives. The next
   cycle is **U-H4 (hot-remove, drain-then-teardown)**. Gate reference:
-  `docs/specs/registry-hot-apply-review.md` §2 **D7** (mid-flight consistency —
+   `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D7** (mid-flight consistency —
   remove drain-then-teardown; **REQUIRES NEW `teardown()` primitives on
   `RagStore`/`RetrievalEngine`/`VectorBootController`**), **D8** (the unit
   decomposition — "U-H5 teardown"), **D3** (hot-remove ORPHAN — teardown must
@@ -253,7 +253,7 @@ code):**
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D7 (binding):** remove drain-then-teardown; **REQUIRES NEW `teardown()`
   primitives on `RagStore`/`RetrievalEngine`/`VectorBootController`.** Pinned in
   §4/§5.
@@ -679,7 +679,7 @@ construction-time side effect).
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D7** (remove
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D7** (remove
   drain-then-teardown — REQUIRES the new `teardown()` primitives), **D8**
   ("U-H5 teardown" — the unit decomposition), **D3** (hot-remove ORPHAN —
   teardown never deletes), **D5/D8/A-P2-4** (U-H7 default reassignment CONSUMES

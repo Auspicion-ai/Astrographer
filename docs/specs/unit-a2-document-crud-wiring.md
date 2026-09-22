@@ -1,7 +1,7 @@
 # Spec — Unit A2: Document-CRUD D4 Wiring — the `gnosis.document.*` / `gnosis.wiki.*` MCP Tools + the GUI Document-Editor/Wiki Screens (the 11 §4.1 Document-CRUD Methods over the LANDED A1 Proxy)
 
 - **Status:** **LANDED** — the FINAL MVP unit of the Gnosis
-  CRUD-unblock roadmap (the roadmap `docs/specs/unblock-gnosis-remaining-endpoints.md`
+  CRUD-unblock roadmap (the roadmap  `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units))
   §6.2, A2). Proposal gate: the roadmap's §6.2 (PASS — the A2 deliverable = the
   **document-CRUD D4 wiring**: the `gnosis.document.*`/`gnosis.wiki.*` MCP tools +
   the GUI document-editor/wiki screens, over the LANDED A1
@@ -1548,7 +1548,7 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
 ### 5.11 Cross-references
 
 - **The roadmap (the A2 scope + binding decisions):**
-  `docs/specs/unblock-gnosis-remaining-endpoints.md` — §6.2 (A2), §6.1 (A1), §7
+   `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) — §6.2 (A2), §6.1 (A1), §7
   (auth/TLS + RBAC handoff), §8 (the execution order), §11 (cross-refs).
 - **The A1 proxy surface (the client A2 consumes):**
   `docs/specs/unit-a1-crud-routing-proxy.md` — §5.1 (the factory + the 11-method

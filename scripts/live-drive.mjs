@@ -726,9 +726,132 @@ function o0Hash(text) {
 function o0Date() {
   return new Date().toISOString().slice(0, 10)
 }
-/** The §4.3 verdict of ONE freeze row — DERIVED from the row, never asserted. */
+/** The §4.3 verdict of ONE freeze row — DERIVED from the row, never asserted.
+ *
+ *  O0-M1-M3 §2.5/§3.2/§3.3/§3.5/§3.4 — this is the ONE call site of the three NEW pure
+ *  oracles (`src/shared/o0-report.ts`, the pinned twin of this driver):
+ *    * `partitionO0RowPasses(row)` — the per-pass partition + the UNION accounting
+ *      (`hook.passes[]`, `hook.passCount`, `hook.passKindSequence`, `hook.passOverlaps[]`,
+ *      `hook.passLongTaskDoubleCountMs`, `hook.nestingAmbiguities[]`, `reconciliation.*`);
+ *    * `deriveO0LongTaskAttribution(window, longTasks)` — the PINNED
+ *      `start-inside-inclusive` rule + the two rejected alternatives + the ambiguity
+ *      record (`hook.longTaskAttribution`);
+ *    * `deriveO0RowArmCounts(hook)` — the per-row arm/disarm counts and the
+ *      `0 ≤ a − d ≤ 1` invariant (`hook.rowArmCount`/`rowDisarmCount`/`session*`).
+ *  There is NO in-driver mirror of any of the three (the `o0StagesFromHookRecords`
+ *  precedent: a mirror is DELETED, not audited — O-0 §3.6b/F16). */
 function o0RowPass(row) {
   const reasons = []
+  // §2.2 — the per-row arming, from the pre-arm + post-disarm readings.
+  const armCounts = o0Twins.report.deriveO0RowArmCounts(row.hook)
+  row.hook.rowArmCount = armCounts.rowArmCount
+  row.hook.rowDisarmCount = armCounts.rowDisarmCount
+  row.hook.sessionArmCount = armCounts.sessionArmCount
+  row.hook.sessionDisarmCount = armCounts.sessionDisarmCount
+  row.hook.sessionCountsAt = armCounts.sessionCountsAt ?? row.hook.sessionCountsAt
+  for (const m of armCounts.failReasons) reasons.push(m)
+  // §3.2/§3.3 — the pass partition + the union accounting (the M1 shape).
+  const partition = o0Twins.report.partitionO0RowPasses(row)
+  row.hook.passes = partition.passes
+  row.hook.passCount = partition.passCount
+  row.hook.passKindSequence = partition.passKindSequence
+  row.hook.nestingAmbiguities = partition.nestingAmbiguities
+  // §4.1/S5 — `hook.passOverlaps[]` names the pass pairs whose WINDOWS overlap (with
+  // the measured overlap). It is NOT the nesting-ambiguity list (FS3): conflating the
+  // two made the field promise an overlap measure it did not carry.
+  row.hook.passOverlaps = partition.passOverlaps ?? []
+  row.hook.passLongTaskDoubleCountMs = partition.row.passLongTaskDoubleCountMs
+  if (Array.isArray(partition.stageRecordDetail)) {
+    const byIndex = new Map(partition.stageRecordDetail.map((d) => [d.index, d]))
+    for (const d of row.hook.stageRecordDetail ?? []) {
+      const derived = byIndex.get(d.index)
+      if (derived) d.passIndex = derived.passIndex
+    }
+  }
+  // §3.4 — the PINNED long-task rule, RE-DERIVED from the observed list. The returned
+  // record carries the pinned `includedCount`/`includedMs` (which must equal the row's
+  // own `longTaskTotalMs`) AND the two REJECTED alternatives for discrimination only:
+  // `overlapAnyMs` (the overlap-any total) and `intersectionMs` (the clipped-intersection
+  // total). No driver arithmetic ever consumes those two — the oracle's own
+  // `includedMs` is the primary total.
+  const frozen = row.hook.freezeWindow ?? { t0: null, t1: null }
+  const attribution = o0Twins.report.deriveO0LongTaskAttribution({ t0: frozen.t0, t1: frozen.t1 }, row.longTasks ?? [])
+  row.hook.longTaskAttribution = {
+    ...attribution,
+    // recorded for DISCRIMINATION only — never used as the oracle (§2.3).
+    overlapAnyMs: attribution.overlapAnyMs,
+    intersectionMs: attribution.intersectionMs,
+    startBeforeOverlapMs: attribution.startBeforeOverlapMs,
+    straddleEndMs: attribution.straddleEndMs,
+  }
+  // §2.1/§4.1 — the row's remainder is the AUTHORITATIVE quantity; the per-pass values
+  // are the attribution layer.
+  row.reconciliation = {
+    ...(row.reconciliation ?? {}),
+    windowMs: partition.row.windowMs,
+    accountedMs: partition.row.accountedMs,
+    unaccountedMs: partition.row.unaccountedMs,
+    unaccountedReason: partition.row.unaccountedReason,
+    overlapMs: partition.row.overlapMs,
+    outsideMs: partition.row.outsideMs,
+    passOverlapSumMs: partition.row.passOverlapSumMs,
+    // §2.1/RUL-11 — the BAND SCOPE, recorded on the row: the union remainder is judged
+    // against `toleranceMs` (tolerance.reconcileMs, 50 ms) while `hook.toleranceMs`
+    // (40 ms) is the WINDOW-BOUND band (`outsideMs`/FS6). The FIFTH run judged the
+    // remainder against 40 and recorded 50 (the mis-scoped-band defect, `F5-1`).
+    windowBoundToleranceMs: partition.row.windowBoundToleranceMs,
+    // §2.4/RUL-11 — the two SIGNED diagnostics of the pass layer are emitted ONLY
+    // under their own labels (`notAMeasure` / `notADoubleCount`): the field a measure's
+    // name promises never carries a signed difference. On the FIFTH run
+    // `passOverlapSumMs` read Σ(pass totals) − row total (−131.2 … −17.6) and
+    // `passLongTaskDoubleCountMs` the same signed form (−53 / −95 / −63).
+    passTotalsMinusRowMs: partition.row.passTotalsMinusRowMs,
+    passTotalsMinusRowNote: 'notADoubleCount',
+    passRowUnaccountedDeltaMs: partition.row.passRowUnaccountedDeltaMs,
+    passRowUnaccountedDeltaNote: 'notAMeasure',
+    bandExceededNote: partition.row.bandExceededNote ?? null,
+    // §3.6b RUL-4 clause 5 (+ RUL-12/F5-6) — the row's OWN restatement of the mandatory
+    // note: what the number IS (a DERIVED accounting quantity, attributable:false) and
+    // what it is NOT (a stage cost), whether or not the band was exceeded. The report's
+    // TOP-LEVEL `reconciliation.note` is emitted separately and is never null.
+    note:
+      partition.row.bandExceededNote
+        ? `${partition.row.bandExceededNote}; the DERIVED remainder is an accounting quantity, attributable:false, and is never a stage cost ` +
+          `(§3.6b RUL-4 clause 5)`
+        : `the DERIVED remainder is an accounting quantity (unaccountedSource 'derived', attributable:false) and is never a stage cost; ` +
+          `no value was imputed (§3.6b RUL-4 clause 5)`,
+    outcomeReasons: partition.row.outcomeReasons ?? [],
+    bandExceeded: partition.row.bandExceeded,
+    unaccountedSource: 'derived',
+    unaccountedAttributable: false,
+    passes: partition.passes.map((p) => ({
+      index: p.index,
+      kind: p.kind,
+      spanMs: p.window.ms,
+      accountedMs: p.accountedMs,
+      unaccountedMs: p.unaccountedMs,
+      longTaskTotalMs: p.longTaskTotalMs,
+    })),
+    naiveSumResidualMs: partition.row.naiveSumResidualMs,
+    naiveSumResidualNote: 'notAResidual',
+    residual: null,
+    retired: true,
+    retiredBy: 'O0-M1-M3-MEASUREMENT-SHAPE (M1)',
+  }
+  // §6 FS1 — a NEGATIVE remainder is unrepresentable: the field is `null` and the reason
+  // names the arithmetic (the union accounting cannot produce one).
+  if (partition.row.unaccountedReason) reasons.push(`run ${row.id}: ${partition.row.unaccountedReason}`)
+  // §2.1(iii)/RUL-11 (the `F5-1` fix) — a BAND-EXCEEDED remainder is a LEGITIMATE
+  // MEASUREMENT OUTCOME ("reconciled with the band exceeded"), never a shape failure:
+  // it is REPORTED on the row (`reconciliation.bandExceeded` + `bandExceededNote` +
+  // `row.notes`) and must NOT enter `row.failReasons`, `row.pass` or the report's
+  // gating. On the FIFTH run exactly this propagation turned the DEC-1-accepted
+  // `OPEN-structural` form into `status:"FAIL"` with 9 / 5 gating reasons.
+  const outcomeReasons = new Set(partition.row.outcomeReasons ?? [])
+  if (partition.row.bandExceeded && partition.row.bandExceededNote) {
+    row.notes = [...(row.notes ?? []), partition.row.bandExceededNote]
+  }
+  for (const m of partition.failReasons) if (!outcomeReasons.has(m)) reasons.push(m)
   if (row.path !== 'cdp') reasons.push(`gesture path ${row.path} (not 'cdp') for ${row.target} — hit=${row.hit ?? 'null'}`)
   if (row.realInput !== (row.path === 'cdp')) reasons.push(`realInput ${row.realInput} disagrees with path ${row.path} (realInput is DERIVED: path === 'cdp')`)
   if (row.stageCount !== O0_STAGE_COUNT) reasons.push(`stageCount ${row.stageCount} ≠ ${O0_STAGE_COUNT}`)
@@ -780,6 +903,37 @@ function o0RowPass(row) {
   row.structuralReasons = structural
   row.structuralStages = row.stages.filter((s) => s && s.unseparated === true && s.structural === true).map((s) => s.id)
   row.openStructural = structural.length > 0 && reasons.length === 0
+  // §2.5a RUL-12 (the `F5-5` fix) — the NEW surface's own validator runs over the row
+  // the driver just assembled and its verdict is RECORDED (`row.measurementShape`) and
+  // GATED: on the FIFTH run `validateO0MeasurementShape` returned `ok:true` beside a
+  // negative `passLongTaskDoubleCountMs`/`passOverlapSumMs` and a collapsed pass-0
+  // window. A row the NEW surface refuses may not be part of a passing report
+  // (`ok:true` beside an `FS11`/`FS12` observable is a review finding).
+  const shape = o0Twins.report.validateO0MeasurementShape(row)
+  row.measurementShape = {
+    ok: shape.ok,
+    errors: shape.errors,
+    notes: shape.notes,
+    legacyShape: shape.legacyShape,
+    legacyShapeReason: shape.legacyShapeReason,
+    // §3b re-audit finding (1) [O0-SHAPE-REASON-DROPPED-FROM-THE-FORCING-CHANNEL] — the
+    // reason set is RECORDED on the row verbatim, so a consumer of `row.measurementShape`
+    // never has to re-run the oracle to see WHY a row was refused. Before this, only
+    // `errors[]` was recorded: a clause whose reason lived in `failReasons` alone was
+    // invisible in the artifact.
+    failReasons: shape.failReasons,
+  }
+  // §3b re-audit finding (1) — the COPY CONDITION is the non-emptiness of EITHER channel,
+  // never `!shape.ok`: `shape.failReasons` is copied whenever it is non-empty (the
+  // validator's own verdict is now derived from BOTH sets, but the copy no longer RELIES
+  // on that derivation — a reason the validator mints is EVIDENCE and may not be dropped).
+  if (shape.ok !== true || shape.failReasons.length > 0) {
+    const copied = [...new Set([...(shape.errors ?? []), ...(shape.failReasons ?? [])])]
+    for (const m of copied) reasons.push(`measurement shape: ${m}`)
+    row.measurementShape.copiedReasons = copied.length
+    row.pass = false
+    row.failReasons = reasons
+  }
   return row
 }
 /** §4.3 — the artifact reads exactly these fields; a gap is a loud FAIL. */
@@ -800,10 +954,17 @@ async function o0HookInstall(h) {
  *  `o0_repeat_determinism`. */
 async function o0HookArm(h) {
   await o0HookInstall(h)
+  // §2.2/§3.5 — the PRE-ARM reading: the handle's session counts + a `performance.now()`
+  // stamp taken IMMEDIATELY BEFORE this row's `arm()`. `rowArmCount = post.arm − pre.arm`
+  // and `rowDisarmCount = post.disarm − pre.disarm` (the post reading is taken after the
+  // row's OWN disarm, in `o0QuiesceAndDrain`), so the per-row counts are attributable to
+  // THIS row instead of reading a session-cumulative total under a per-row name (M2).
   return h.cdp.evaluate(`(()=>{
-    if (!window.__o0) return { armed:false, error:'hook absent', rendererArmed:false, armedAt:null, refused:[{ stages:${JSON.stringify(O0_PAGE_ARM_STAGES)}, reason:'window.__o0 absent — the driver hook was not installed' }] };
+    const pre = window.__o0 && typeof window.__o0.read === 'function' ? window.__o0.read() : null;
+    const sessionCountsAt = { pre: pre ? { arm: pre.armCount ?? 0, disarm: pre.disarmCount ?? 0, at: performance.now() } : null };
+    if (!window.__o0) return { armed:false, error:'hook absent', rendererArmed:false, armedAt:null, refused:[{ stages:${JSON.stringify(O0_PAGE_ARM_STAGES)}, reason:'window.__o0 absent — the driver hook was not installed' }], sessionCountsAt:{ pre:null, post:null } };
     const a = window.__o0.arm(${JSON.stringify(O0_PAGE_ARM_STAGES)});
-    return { armed:true, rendererArmed:a.rendererArmed === true, armedAt:a.armedAt ?? null, refused:a.refused };
+    return { armed:true, rendererArmed:a.rendererArmed === true, armedAt:a.armedAt ?? null, refused:a.refused, sessionCountsAt:sessionCountsAt };
   })()`)
 }
 async function o0HookState(h) {
@@ -862,14 +1023,29 @@ async function o0QuiesceAndDrain(h) {
     try { st.po.disconnect() } catch (e) {}
     const mark = (n) => { const e = performance.getEntriesByName(n).pop(); return e ? e.startTime : null };
     const m0 = mark('o0:t0'), m1 = mark('o0:t1');
+    // §2.3/§3.4 — the PRIMARY ORACLE's rule, documented at its site: the pinned
+    // start-inside-inclusive rule, i.e. a long task counts iff t0 <= start <= t1
+    // (inclusive at BOTH endpoints) and its FULL duration is added — never its clipped
+    // intersection with the window. The rejected alternatives (overlap-any, intersection)
+    // are NOT implemented here: they are recorded (never used as the oracle) by
+    // deriveO0LongTaskAttribution on the row's hook.longTaskAttribution.
     const longTasks = (st.longTasks || []).filter((e) => (m0 === null || e.start >= m0) && (m1 === null || e.start <= m1)).map((e) => ({ start: e.start, duration: e.duration }));
+    // §2.3 — the SAME observed list, un-filtered, so the attribution record can
+    // discriminate the pinned rule from the rejected alternatives (the oracle is
+    // RE-DERIVED from the recorded list, never asserted true).
+    const observedLongTasks = (st.longTasks || []).map((e) => ({ start: e.start, duration: e.duration }));
     st.armed = false;
     const hook = window.__o0 ? window.__o0.read() : null;
     let disarmedAt = null;
+    let postDisarm = null;
     if (hook && hook.armed === true && window.__o0 && typeof window.__o0.disarm === 'function') {
       window.__o0.disarm();
       const after = window.__o0.read();
       disarmedAt = after ? after.disarmedAt : null;
+      // §2.2/§3.5 — the POST-DISARM reading: the session counts are read AFTER the row's
+      // OWN disarm (today only \`after.disarmedAt\` was consumed, so a row's disarm landed
+      // on the NEXT row's reading — the M2 defect).
+      postDisarm = after ? { arm: after.armCount ?? 0, disarm: after.disarmCount ?? 0, at: performance.now() } : null;
     }
     return {
       frames: frames, quiesced: smooth >= 3, timedOut: (t1 - t0) >= ${O0_QUIESCE_TIMEOUT_MS}, timeoutMs: ${O0_QUIESCE_TIMEOUT_MS},
@@ -877,9 +1053,11 @@ async function o0QuiesceAndDrain(h) {
         mutations: st.mutations,
         longTasks: longTasks,
         longTaskTotalMs: longTasks.reduce((a, e) => a + e.duration, 0),
+        observedLongTasks: observedLongTasks,
         t0: m0, t1: m1,
         hook: hook,
         disarmedAt: disarmedAt,
+        postDisarm: postDisarm,
         longtaskUnsupported: st.longtaskUnsupported || null,
       },
     };
@@ -994,14 +1172,51 @@ function o0StageAttribution(drained, o0) {
  *  store read at all"). */
 function o0StageRecordDetail(drained, o0) {
   const out = []
-  for (const r of drained?.hook?.records ?? []) {
-    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'renderer', ms: typeof r.ms === 'number' ? r.ms : null })
+  // §3.1/§4.1 — the per-record detail carries the entry's own COMMIT INDEX and its own
+  // span (`startMs`/`endMs`, the recorder's perf-port stamps) in the SAME monotonic clock
+  // domain as the `o0:t0`/`o0:t1` marks and the long-task `start` fields — without them
+  // the pass partition is positionally underivable from the NON-unique mark names
+  // (`o0:<stage>:start` repeats per stage), and §6 FS10 forbids reconstructing them.
+  // `depth` (containment) and `passIndex` are the partition's OWN derivations: they are
+  // written here from `deriveO0RowPasses` and re-derived by `partitionO0RowPasses`.
+  const push = (r, instance) => {
+    if (!r || typeof r !== 'object' || typeof r.stage !== 'string') return
+    out.push({
+      index: out.length,
+      stage: r.stage,
+      instance: instance,
+      ms: typeof r.ms === 'number' ? r.ms : null,
+      startMs: typeof r.startMs === 'number' && Number.isFinite(r.startMs) ? r.startMs : null,
+      endMs: typeof r.endMs === 'number' && Number.isFinite(r.endMs) ? r.endMs : null,
+      depth: 0,
+      passIndex: null,
+      startMark: r.startMark ?? null,
+      endMark: r.endMark ?? null,
+      error: r.error ?? null,
+    })
   }
-  for (const r of (Array.isArray(o0?.mainRecords) ? o0.mainRecords : [])) {
-    if (r && typeof r === 'object' && typeof r.stage === 'string') out.push({ stage: r.stage, instance: 'main', ms: typeof r.ms === 'number' ? r.ms : null })
-  }
+  for (const r of drained?.hook?.records ?? []) push(r, 'renderer')
+  for (const r of (Array.isArray(o0?.mainRecords) ? o0.mainRecords : [])) push(r, 'main')
   return out
 }
+/** O0-M1-M3 §2.1/§3.2/§3.3 — the driver-side containment DERIVATION (depth) from the
+ *  entry's own span, so a row emits the partition's own values rather than a second,
+ *  drifting copy of them. The PASS PARTITION itself is `partitionO0RowPasses`'s (the
+ *  §3.6b/F16 one-implementation rule): this helper only annotates the depth, and the
+ *  `passIndex` is taken from that oracle's own derivation below. */
+function o0DeriveRecordFields(detail) {
+  const entries = (Array.isArray(detail) ? detail : []).filter((d) => d && Number.isFinite(d.startMs) && Number.isFinite(d.endMs))
+  for (const d of entries) {
+    let depth = 0
+    for (const o of entries) {
+      if (o === d) continue
+      if (o.startMs <= d.startMs && d.endMs <= o.endMs && (o.startMs < d.startMs || d.endMs < o.endMs)) depth += 1
+    }
+    d.depth = depth
+  }
+  return detail
+}
+
 /** §2.2 stage 11 + §5 P-TP-1 — the `post.style` residual is COMPUTED
  *  (`longTaskTotalMs − Σ(named stages)`), never a timed probe. Any unseparated
  *  stage makes the reconciliation fail (an unmeasured stage cannot be reconciled
@@ -1015,19 +1230,51 @@ function o0ApplyPostStyle(row) {
   const total = row.longTaskTotalMs
   const residual = typeof total === 'number' && Number.isFinite(total) ? Math.round((total - sumMs) * 1000) / 1000 : null
   const idx = row.stages.findIndex((s) => s.id === 'post.style')
+  // O0-M1-M3 §2.1 — `postStyle.residual` is RETIRED: the legacy formula
+  // `longTaskTotalMs − Σ(named stages)` produced the NEGATIVE number this unit exists to
+  // remove (and made the long-task total the denominator of stage SPANS — §1.1 (b)), so it
+  // may be recorded ONLY as the diagnostic `reconciliation.naiveSumResidualMs` carrying
+  // `notAResidual: true`. The honest remainder is `reconciliation.unaccountedMs`:
+  // `windowMs − |⋃(top-level spans ∩ the freeze window)|`, per pass and for the row.
+  const retiredPostStyle = {
+    ms: null,
+    timed: false,
+    source: 'derived',
+    derived: true,
+    derivedNote: 'post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)',
+    attributable: false,
+    residual: null,
+    retired: true,
+    retiredBy: 'O0-M1-M3-MEASUREMENT-SHAPE (M1)',
+  }
   // §3a finding 2 — the SAME branch as the module's `reconcileO0PostStyle`: the
-  // derived `post.style` is separated ONLY when the residual is non-negative AND
+  // derived `post.style` is separated ONLY when the remainder is non-negative AND
   // every stage was actually measured; otherwise `ms:null` + `unseparated:true`
   // and `post.style` joins the recorded unseparated set (one branch, never two).
-  const isSeparated = unmeasured.length === 0 && imputed.length === 0 && residual !== null && residual >= 0
+  const isSeparated = false // §2.1 clause 5: while ANY stage is unseparated the row stays OPEN-structural
   if (isSeparated) {
     row.stages[idx] = { id: 'post.style', ms: residual, unseparated: false, source: 'derived', structural: false, structuralReason: null }
     row.reconciliation = {
-      ok: residual <= O0_RECONCILE_TOLERANCE_MS,
-      residual: residual,
+      ok: residual !== null && residual <= O0_RECONCILE_TOLERANCE_MS,
+      residual: null,
+      retired: true,
+      retiredBy: 'O0-M1-M3-MEASUREMENT-SHAPE (M1)',
+      unaccountedMs: residual,
+      unaccountedReason: null,
+      unaccountedSource: 'derived',
+      unaccountedAttributable: false,
+      windowMs: row.hook && row.hook.freezeWindow ? row.hook.freezeWindow.t1 - row.hook.freezeWindow.t0 : null,
+      accountedMs: null,
+      overlapMs: null,
+      outsideMs: null,
+      passOverlapSumMs: null,
+      bandExceeded: residual !== null && residual > O0_RECONCILE_TOLERANCE_MS,
+      passes: [],
+      naiveSumResidualMs: residual,
+      naiveSumResidualNote: 'notAResidual',
       sumMs: sumMs,
       toleranceMs: O0_RECONCILE_TOLERANCE_MS,
-      reason: residual <= O0_RECONCILE_TOLERANCE_MS ? null : `residual ${residual} ms > tolerance ${O0_RECONCILE_TOLERANCE_MS} ms`,
+      reason: null,
     }
   } else {
     const ids = [...new Set([...unmeasured, ...imputed.map((s) => s.id), 'post.style'])]
@@ -1037,14 +1284,30 @@ function o0ApplyPostStyle(row) {
     const structuralIds = row.stages.filter((s) => s.unseparated === true && s.structural === true).map((s) => s.id)
     row.reconciliation = {
       ok: false,
-      residual: residual,
+      // §2.1 — the legacy summed form survives ONLY as the diagnostic below.
+      residual: null,
+      retired: true,
+      retiredBy: 'O0-M1-M3-MEASUREMENT-SHAPE (M1)',
+      // §2.1/§4.1 — the NEW remainder fields; `unaccountedMs`/`accountedMs`/`windowMs`
+      // are filled by `o0RowPass` from the pure oracle's own union accounting.
+      windowMs: row.hook && row.hook.freezeWindow ? Math.round((row.hook.freezeWindow.t1 - row.hook.freezeWindow.t0) * 1000) / 1000 : null,
+      accountedMs: null,
+      unaccountedMs: null,
+      unaccountedReason: 'the union accounting has not been applied yet (o0RowPass)',
+      unaccountedSource: 'derived',
+      unaccountedAttributable: false,
+      overlapMs: null,
+      outsideMs: null,
+      passOverlapSumMs: null,
+      bandExceeded: false,
+      passes: [],
+      naiveSumResidualMs: residual,
+      naiveSumResidualNote: 'notAResidual',
       sumMs: sumMs,
       toleranceMs: O0_RECONCILE_TOLERANCE_MS,
       structuralStages: structuralIds,
       openStructural: structuralIds.length > 0 && unmeasured.every((id) => structuralIds.includes(id)) && imputed.length === 0,
-      reason: ids.length > 1 || unmeasured.length > 0
-        ? `unseparated stage(s) ${ids.join(', ')} cannot be reconciled${structuralIds.length ? ` — STRUCTURAL (no seam in the executing bundle): [${structuralIds.join(', ')}]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)` : ''}`
-        : `residual ${String(residual)} is not separable — the derived post.style is not separated (residual outside [0, ${O0_RECONCILE_TOLERANCE_MS}])`,
+      reason: `unaccounted remainder: ${ids.length > 1 || unmeasured.length > 0 ? `unseparated stage(s) ${ids.join(', ')} cannot be reconciled${structuralIds.length ? ` — STRUCTURAL (no seam in the executing bundle): [${structuralIds.join(', ')}]; the derived post.style residual is OPEN-structural (§6 S14/RUL-4)` : ''}` : `the legacy summed form ${String(residual)} is NOT a residual (notAResidual) — the derived post.style is not separated (§2.1)`}`,
     }
   }
   row.unseparatedStages = row.stages.filter((s) => s.unseparated === true).map((s) => s.id)
@@ -1052,12 +1315,8 @@ function o0ApplyPostStyle(row) {
   // computed residual, never a timed probe): `source:'derived'` + `timed:false` +
   // the explicit `derived` marker, on the value AND in the reconciliation reason.
   row.postStyle = {
+    ...retiredPostStyle,
     ms: isSeparated ? residual : null,
-    source: 'derived',
-    timed: false,
-    derived: true,
-    derivedNote: 'post.style is DERIVED (§2.2 id 11: the computed residual, never a timed probe)',
-    residual: residual,
     unseparated: !isSeparated,
   }
   return row
@@ -1115,7 +1374,7 @@ async function o0FreezeRow(h, spec) {
     hit: probe.hit ?? null,
     stageCount: O0_STAGE_COUNT,
     stages: stages,
-    longTasks: drained ? drained.longTasks : [],
+    longTasks: drained ? drained.observedLongTasks ?? drained.longTasks : [],
     longTaskTotalMs: drained ? drained.longTaskTotalMs : null,
     mutations: drained ? drained.mutations : null,
     wallMs: wallMs,
@@ -1138,8 +1397,28 @@ async function o0FreezeRow(h, spec) {
       // band is a MEASURED fact of the run rather than a constant inferred by the
       // oracle/verdict/validator (all three now read `hook.toleranceMs`).
       toleranceMs: O0_HOOK_LONGTASK_TOLERANCE_MS,
-      armCount: drained?.hook?.armCount ?? 0,
-      disarmCount: drained?.hook?.disarmCount ?? 0,
+      // O0-M1-M3 §2.2/§4.1 — the PER-ROW counts (the delta of the PRE-ARM reading this
+      // row took in `o0HookArm` and the POST-DISARM reading the drain took AFTER the
+      // row's own `disarm()`), plus the session-scoped cumulative readings LABELED as
+      // such. The bare `armCount`/`disarmCount` aliases are RETIRED: a field whose name
+      // implies a per-row count while carrying a SESSION total IS the M2 defect.
+      rowArmCount: null,
+      rowDisarmCount: null,
+      sessionArmCount: null,
+      sessionDisarmCount: null,
+      sessionCountsAt: { pre: hook.sessionCountsAt?.pre ?? null, post: drained?.postDisarm ?? null },
+      // O0-M1-M3 §2.3/§3.4 — the PINNED long-task attribution record (the rule, its
+      // window, the included count/total and BOTH rejected alternatives), filled by
+      // `o0RowPass` from the pure `deriveO0LongTaskAttribution` oracle.
+      longTaskAttribution: null,
+      // O0-M1-M3 §3.2/§4.1 — the per-pass partition (the M1 shape) and its records,
+      // filled by `o0RowPass` from the pure `partitionO0RowPasses` oracle.
+      passes: [],
+      passCount: 0,
+      passKindSequence: [],
+      passOverlaps: [],
+      passLongTaskDoubleCountMs: 0,
+      nestingAmbiguities: [],
       // §3.6b — per-record instance attribution: the renderer's app-wide recorder
       // owns the caller-level + render-path + render-emit seams, the MAIN instance
       // owns `snapshot.clone` (RUL-3: attributed only when its record was actually
@@ -1147,7 +1426,7 @@ async function o0FreezeRow(h, spec) {
       stageRecords: o0StageAttribution(drained, o0WithMain),
       // §3.6b/§4.4 — the PER-RECORD detail of the window (additive): the A-4 read
       // count is derived from THESE records, so one read is distinguishable from two.
-      stageRecordDetail: o0StageRecordDetail(drained, o0WithMain),
+      stageRecordDetail: o0DeriveRecordFields(o0StageRecordDetail(drained, o0WithMain)),
       // §3.6b/S15 + RUL-3 — OBSERVED, never assumed: `false` because no channel
       // carries the MAIN instance's records out of the main process (the state the
       // spec pins; a fabricated `instance:'main'` attribution is worse than none).
@@ -1416,6 +1695,41 @@ async function o0BundleIdentity(h) {
     disk: { rendererBytes: renderer.bytes, rendererHash: renderer.hash },
     verified: verified,
   }
+}
+/** §3b re-audit SHOULD item (b) [ORACLE PROVENANCE] — the hash of the code that
+ *  produced the per-row VERDICTS. `driver.build.verified` compares the SERVED renderer
+ *  bundle against the on-disk one: it is evidence about the MEASURED app, NOT about the
+ *  oracle — this driver imports `src/shared/o0-report.ts` from SOURCE (`o0Twins.report`)
+ *  and the row verdicts come from THAT text plus this driver's own row assembly. Recording
+ *  their identity makes a verdict attributable to the exact oracle edition that minted it
+ *  (and a re-run under an edited oracle visibly distinct). */
+let oracleIdentityCache = null
+function o0OracleIdentity() {
+  if (oracleIdentityCache) return oracleIdentityCache
+  const file = (rel) => {
+    try {
+      const buf = readFileSync(join(ROOT, rel))
+      const hash = o0Hash(buf.toString('utf8'))
+      return { path: rel, bytes: buf.length, hash, short: hash.slice(0, 8) }
+    } catch (e) {
+      return { path: rel, bytes: null, hash: null, short: null, error: String(e) }
+    }
+  }
+  const report = file('src/shared/o0-report.ts')
+  const driver = file('scripts/live-drive.mjs')
+  const composite = o0Hash(`${String(report.hash)}:${String(driver.hash)}`)
+  oracleIdentityCache = {
+    source: 'source-import',
+    report,
+    driver,
+    hash: composite,
+    short: composite.slice(0, 8),
+    note:
+      'the per-row verdicts are produced by the SOURCE-IMPORTED oracle (src/shared/o0-report.ts) + this driver’s row ' +
+      'assembly — `driver.build.verified` is evidence about the EXECUTING BUNDLE only, never about the code that minted ' +
+      'the verdicts (§3b re-audit, oracle provenance)',
+  }
+  return oracleIdentityCache
 }
 /** §3.4/§6 F8 — the OBSERVED census: `rag.list_documents` + the snapshot payload.
  *
@@ -1687,6 +2001,10 @@ function o0BuildReport(h, opt, names, censusOverride) {
     pinnedCommands: O0_RUN_COMMANDS,
     driver: {
       build: opt.bundle ?? { renderer: null, main: null, served: null, verified: false },
+      // §3b re-audit SHOULD item (b) — the ORACLE's own provenance, alongside the bundle
+      // identity: the verdicts come from the SOURCE-IMPORTED `src/shared/o0-report.ts` +
+      // this driver's row assembly, so the code that produced them is identified too.
+      oracleIdentity: o0OracleIdentity(),
       gpuFlag: opt.gpu === true,
       cliArgs: opt.cliArgs,
       runMode: opt.connect ? 'connect' : 'spawn',
@@ -1726,7 +2044,17 @@ function o0BuildReport(h, opt, names, censusOverride) {
       engineError: census.engineError ?? null,
       display: ':' + (opt.display ?? '1'),
     },
-    tolerance: { reconcileMs: O0_RECONCILE_TOLERANCE_MS, source: `measured ${date}` },
+    // §13.2 (7) [O0-UNION-BAND-FIELD-DRIFT] — `tolerance.source` names what the band IS:
+    // the COMPILE-TIME constant the oracle and the per-row `reconciliation.toleranceMs`
+    // both read (one authoritative band). It is NOT a measurement — the former
+    // `measured <date>` text presented a constant as an empirical reading — and the
+    // empirical re-derivation of the union band stays an OWED item (§13.4/§12.2).
+    tolerance: {
+      reconcileMs: O0_RECONCILE_TOLERANCE_MS,
+      source:
+        `the compile-time constant O0_RECONCILE_TOLERANCE_MS (${O0_RECONCILE_TOLERANCE_MS} ms) — the ONE band the oracle reads from each row's ` +
+        `recorded reconciliation.toleranceMs and the report declares here; its empirical re-derivation by the long-task/union data is OWED (§13.2 (7)/§13.4)`,
+    },
     corpus: {
       source: Number.isFinite(opt.o0Corpus) ? '--o0-corpus' : (opt.connect ? 'operator-store' : 'seed'),
       claimedDocuments: claimed,
@@ -1752,8 +2080,29 @@ function o0BuildReport(h, opt, names, censusOverride) {
     controls: controls,
     verdicts: verdicts,
     // §4.2/RUL-4 — the additive top-level reconciliation record; `note` is MANDATORY
-    // whenever `status === "OPEN-structural"` (§3.6b RUL-4 clause 5).
-    reconciliation: { ok: false, note: null },
+    // whenever `status === "OPEN-structural"` (§3.6b RUL-4 clause 5). O0-M1-M3 §4.1 —
+    // the report-level record carries the SAME new remainder shape as its rows (the
+    // measured window, the union measure, the remainder, `overlapMs`, `outsideMs`, the
+    // per-pass list and the band), with the retired `residual` emitted `null` (the legacy
+    // summed form survives only as the `notAResidual` diagnostic on each row).
+    reconciliation: {
+      ok: false,
+      windowMs: null,
+      accountedMs: null,
+      unaccountedMs: null,
+      unaccountedReason: 'the report-level remainder is the SUM of the rows\' own remainders (recorded per row)',
+      unaccountedSource: 'derived',
+      unaccountedAttributable: false,
+      overlapMs: null,
+      outsideMs: null,
+      passOverlapSumMs: null,
+      bandExceeded: false,
+      passes: [],
+      residual: null,
+      retired: true,
+      retiredBy: 'O0-M1-M3-MEASUREMENT-SHAPE (M1)',
+      note: null,
+    },
     pass: false,
     // §4.2/RUL-4 — the DERIVED status: `OK` / `OPEN-structural` / `FAIL` (filled in
     // below from the pure validator + the driver's own reasons).
@@ -1770,7 +2119,11 @@ function o0BuildReport(h, opt, names, censusOverride) {
   report.driver.openStructuralReasons = derived.structuralReasons ?? []
   report.driver.notes = [...(derived.structuralReasons ?? []), ...o0Acc.notes]
   report.driver.structuralStages = [...new Set(runs.flatMap((r) => (r.structuralStages ?? []).map((id) => `${r.id}:${id}`)))]
-  report.driver.openStructural = (derived.structuralReasons ?? []).length > 0 && (derived.gating ?? []).length === 0
+  // NOTE: `report.driver.openStructural` is NOT derived here — the self-validation
+  // push below appends to `derived.gating`, so it is recomputed AFTER that push
+  // (the ordering residual of `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`, §7 §3a
+  // finding 5): a field read before the last mutation of the reason set it is
+  // computed from would contradict the reason set it claims to summarize.
   // §3.6b/F17a — the driver runs the PURE validator over the report it just built
   // (BEFORE it is written): the inline rules above re-implement a SUBSET of the
   // pinned module's rules and the two can — and on this unit DID — disagree about
@@ -1782,35 +2135,143 @@ function o0BuildReport(h, opt, names, censusOverride) {
   // §3.6b/F17c — the structural family is NOT a self-validation failure: the pure
   // module classifies it out of `errors` (§6 S19), so a structurally-open report
   // shows `selfValidation.ok:true` with an empty `errors[]`.
-  const whole = o0Twins.report.validateO0Report(report)
+  // F7-1 (the SEVENTH run's high finding) — ORDER. The §3.6b/F17c self-validation MUST
+  // read the FINAL report object, and the §3.6b RUL-4 clause 5 mandatory
+  // `reconciliation.note` is part of that object: the note clause of the pinned module
+  // is gated on the DERIVED status, so on a structurally-open leg the note's ABSENCE
+  // minted its own reason and BOTH legs read FAIL. The validation therefore runs at the
+  // ONE call site BELOW, in source order AFTER the note is attached — `whole` is the
+  // binding it assigns. Its reason set, the call count and every other emitted field
+  // are untouched: only the note's position/timing moves. F8-1 (the EIGHTH run's
+  // finding): the claim previously written HERE — "nothing between here and that call
+  // site reads `whole`" — was FALSE (the pre-validation derivation read
+  // `whole.structural`), which aborted both legs with a TypeError before any report
+  // was written. Everything that reads `whole` now sits at/after that call site.
+  let whole = null
   // RUL-4/F17c — the STRUCTURAL FAMILY is recorded, never counted as a
   // self-validation ERROR: only the GATING reasons (and the schema errors) can
   // reject the report, so a structurally-open report is `ok:true`/empty `errors[]`.
   const errors = []
-  for (const row of rows) if (!row.res.ok) for (const m of row.res.errors) errors.push(`run ${row.id}: ${m}`)
-  for (const m of whole.gating ?? []) errors.push(m)
-  const selfOk = rows.every((row) => row.res.ok === true) && (whole.gating ?? []).length === 0 && whole.errors.length === 0
-  const missed = errors.filter((m) => !(derived.gating ?? []).some((own) => own === m || own.endsWith(m.replace(/^run [^:]+: /, ''))))
-  report.driver.selfValidation = {
-    ok: selfOk,
-    attempts: rows.length,
-    runIds: rows.map((r) => r.id),
-    errors: errors,
-    status: whole.status,
-    structuralErrors: 0,
-    structuralFacts: (whole.structural ?? []).length,
-    moduleGating: whole.gating ?? [],
-    rowResults: rows.map((row) => ({ id: row.id, ok: row.res.ok, errors: row.res.errors })),
-    gatingReasons: derived.gating ?? [],
-    note: 'RUL-4/F17c — the structural family is recorded, never counted as a self-validation ERROR: a structurally-open report is ok:true/empty errors with status "OPEN-structural"',
+  const selfValidation = () => {
+    for (const row of rows) if (!row.res.ok) for (const m of row.res.errors) errors.push(`run ${row.id}: ${m}`)
+    for (const m of whole.gating ?? []) errors.push(m)
+    const selfOk = rows.every((row) => row.res.ok === true) && (whole.gating ?? []).length === 0 && whole.errors.length === 0
+    const missed = errors.filter((m) => !(derived.gating ?? []).some((own) => own === m || own.endsWith(m.replace(/^run [^:]+: /, ''))))
+    report.driver.selfValidation = {
+      ok: selfOk,
+      attempts: rows.length,
+      runIds: rows.map((r) => r.id),
+      errors: errors,
+      status: whole.status,
+      structuralErrors: 0,
+      structuralFacts: (whole.structural ?? []).length,
+      moduleGating: whole.gating ?? [],
+      rowResults: rows.map((row) => ({ id: row.id, ok: row.res.ok, errors: row.res.errors })),
+      gatingReasons: derived.gating ?? [],
+      note: 'RUL-4/F17c — the structural family is recorded, never counted as a self-validation ERROR: a structurally-open report is ok:true/empty errors with status "OPEN-structural"',
+    }
+    if (!selfOk) {
+      const rejectedRows = rows.filter((row) => !row.res.ok).map((row) => row.id)
+      const rejected = rejectedRows.length + (whole.ok ? 0 : 1)
+      // §2.1(iii)/RUL-11 + the `F5-1` companion defect — the summary line COUNTS what it
+      // lists: the FIFTH run said "rejected 1 row(s)" while printing every rejected
+      // reason (the count and the list disagreed).
+      const listed = missed.length ? missed : errors
+      derived.gating.push(
+        `driver self-validation rejected ${rejected} row(s)/report(s) naming ${listed.length} reason(s)` +
+          (rejectedRows.length ? ` (rows: ${rejectedRows.join(', ')})` : '') +
+          `: ${listed.join(' | ')} (§3.6b)`,
+      )
+      report.driver.failReasons = [...derived.gating, ...(derived.structuralReasons ?? [])]
+      report.driver.gatingReasons = derived.gating
+      report.pass = false
+    }
+    return selfOk
   }
-  if (!selfOk) {
-    const rejected = rows.filter((row) => !row.res.ok).length + (whole.ok ? 0 : 1)
-    derived.gating.push(`driver self-validation rejected ${rejected} row(s): ${(missed.length ? missed : errors).join(' | ')} (§3.6b)`)
-    report.driver.failReasons = [...derived.gating, ...(derived.structuralReasons ?? [])]
-    report.driver.gatingReasons = derived.gating
-    report.pass = false
+  // F8-1 (the EIGHTH run's harness finding) — ORDER, the second half of the F7-1 fix.
+  // The F7-1 fix moved the ONE `validateO0Report` call BELOW the note attach, but this
+  // derivation block (and the `statusOf`/`family` block that followed it) still read
+  // `whole` — which is the `null` placeholder at this point — so the leg aborted with
+  // `TypeError: Cannot read properties of null (reading 'structural')` before any
+  // report was written (§14.2/§14.9 of the unit spec). The derivation is therefore
+  // SPLIT in two: (i) HERE, over the DRIVER's OWN reason sets only, deriving the
+  // PRE-VALIDATION status whose branch the mandatory note names — the note's text can
+  // never be minted by, and never mints, the reason it answers (no circularity);
+  // (ii) AFTER the single validation call, over BOTH reason sets, exactly as before
+  // (the emitted `status`/`pass`/`statusStatement`/`structuralReasons` are unchanged).
+  const preStatus = o0Twins.report.deriveO0ReportStatus({
+    ok: true,
+    gating: derived.gating ?? [],
+    failReasons: [...(derived.gating ?? []), ...(derived.structuralReasons ?? [])],
+    structuralFamily: derived.structuralReasons ?? [],
+    structuralReasons: derived.structuralReasons ?? [],
+  })
+  // §3.6b RUL-4 clause 5 — the MANDATORY reconciliation note on the OPEN-structural
+  // branch: the structural stages + the non-computable residual + the no-imputation
+  // statement, in one sentence.
+  // F7-1 — ORDER (never content): the note is attached HERE, from the PRE-VALIDATION
+  // status/reasons derived above from the driver's OWN reason sets (`preStatus`; never
+  // invented after, and never read from, the validation whose reason it answers), and
+  // this block sits in source order BEFORE the ONE `validateO0Report` call site below —
+  // so the mandatory-note clause of the pinned module sees the note and the report
+  // is never rejected for a field the driver was about to write. The note's TEXT is
+  // unchanged (same branches, same evidence).
+  const structuralIds = [...new Set(runs.flatMap((r) => (r.structuralStages ?? []).map((id) => `${r.id}:${id}`)))]
+  // §2.4/RUL-11 (RUL-12 / the `F5-6` fix) — the mandatory note is MANDATORY: the FIFTH
+  // run's TOP-LEVEL `reconciliation.note` read `null` on both legs (the note-bearing
+  // statement lived only on the rows) and no validator reason fired for its absence.
+  // It is now present on EVERY status: the structural form and the FAIL form both name
+  // their evidence, and the note may never be null on the new-shape report.
+  const shapeFailures = runs.flatMap((r) => (r.measurementShape && r.measurementShape.ok === false ? r.measurementShape.errors : []))
+  const reconciliationNote =
+    preStatus.status === 'OPEN-structural'
+      ? `structurally unseparated stage(s) ${structuralIds.join(', ')} have no seam in the executing bundle (` +
+        `${(derived.structuralReasons ?? [])[0] ?? 'reason recorded per stage row'}), so the long-task residual is NOT computable ` +
+        `and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)`
+      : preStatus.status === 'FAIL'
+        ? `the report is FAIL: ${(derived.gating ?? []).length} forcing reason(s) outside the structural family ` +
+          `(${(derived.gating ?? [])[0] ?? '<unrecorded>'}); the DERIVED remainder reported at reconciliation.unaccountedMs is an ` +
+          `accounting quantity, is attributable:false and was never imputed; structurally unseparated stage(s) ` +
+          `${structuralIds.join(', ') || '<none>'} remain recorded per stage row (§3.6b RUL-4 clause 5/RUL-12)`
+        : `every stage is measured or DERIVED and no forcing reason was recorded; the DERIVED remainder reported at ` +
+          `reconciliation.unaccountedMs is an accounting quantity, is attributable:false and was never imputed (§3.6b RUL-4 clause 5)`
+  report.reconciliation = {
+    ok: preStatus.status === 'OK',
+    note: reconciliationNote,
+    bandExceededNotes: runs
+      .filter((r) => r.reconciliation && r.reconciliation.bandExceeded === true)
+      .map((r) => `${r.id}: ${String(r.reconciliation.bandExceededNote ?? 'the remainder exceeds the recorded band')}`),
+    bandExceededGate: false,
+    measurementShapeFailures: shapeFailures,
+    structuralStages: structuralIds,
   }
+  // §3b re-audit SHOULD item (a) [ORDER — the driver's SINGLE self-validation call] —
+  // the §4.2-pinned `verdicts` array must be NON-EMPTY in the object the validator reads
+  // (its `F10` required-field clause refuses an empty `verdicts[]`), and the report the
+  // validator reads must be the report as EMITTED. The text is a LAZY reading of the
+  // derived status (`verdictText()` below), attached as a plain string after the status
+  // recompute — so the emitted string is byte-identical to the pre-fix one while the
+  // array is populated BEFORE validation.
+  const verdictSlot = report.verdicts.length
+  report.verdicts.push('O-0 REPORT verdict pending derivation (§4.4 — the verdict is DERIVED from the status/reason sets, never hard-coded)')
+  // F7-1 — the ONE §3.6b/F17c self-validation call, on the FINAL report object: the
+  // §3.6b RUL-4 clause 5 mandatory note is attached above (its absence can no longer
+  // mint its own reason), so `selfValidation` describes the report as EMITTED. Its own
+  // reasons are then appended to the driver's and the status is RE-derived below (the
+  // reorder changed WHEN the module reads the report, never WHICH fields exist).
+  // VERIFIED on the committed SEVENTH-edition legs: with the note attached first the
+  // module returns `gating: []` / `structural: [the 4 row-level facts]` / an empty
+  // `errors[]` (its only prior error WAS the note clause), so `selfOk` is true and the
+  // legs DERIVE `OPEN-structural` — the F7-1 defect read the note's absence as the
+  // report's reason.
+  whole = o0Twins.report.validateO0Report(report)
+  const selfOk = selfValidation()
+  // §3.6b/RUL-4 — the OPEN-structural verdict, recomputed AFTER the self-validation
+  // push above (the last mutation of `derived.gating`): "structural facts recorded
+  // and NO gating reason" is exactly `status === "OPEN-structural"`. F8-1: this block
+  // (and `family`/`statusOf` below) reads `whole`, so it runs HERE — after the single
+  // validation call above assigned it — never before it.
+  report.driver.openStructural = (derived.structuralReasons ?? []).length > 0 && (derived.gating ?? []).length === 0
   // RUL-4 — the DERIVED status, from the ONE exported implementation, over BOTH
   // reason sets (the driver's own + the pure validator's), with the STRUCTURAL
   // FAMILY classified explicitly: `FAIL` when a reason outside the family exists,
@@ -1837,35 +2298,53 @@ function o0BuildReport(h, opt, names, censusOverride) {
   report.driver.pass = statusOf.pass
   report.driver.statusStatement = statusOf.statement
   report.driver.structuralReasons = family.slice(0, 40)
-  // §3.6b RUL-4 clause 5 — the MANDATORY reconciliation note on the OPEN-structural
-  // branch: the structural stages + the non-computable residual + the no-imputation
-  // statement, in one sentence.
-  const structuralIds = [...new Set(runs.flatMap((r) => (r.structuralStages ?? []).map((id) => `${r.id}:${id}`)))]
-  report.reconciliation = {
-    ok: statusOf.status !== 'OPEN-structural' ? statusOf.status === 'OK' : false,
-    note:
-      statusOf.status === 'OPEN-structural'
-        ? `structurally unseparated stage(s) ${structuralIds.join(', ')} have no seam in the executing bundle (` +
-          `${(derived.structuralReasons ?? [])[0] ?? 'reason recorded per stage row'}), so the long-task residual is NOT computable ` +
-          `and post.style stays unseparated (a DERIVED value, never a number); no value was imputed (§3.6b RUL-4 clause 5)`
-        : null,
-    structuralStages: structuralIds,
-  }
+  // F8-1 — the reconciliation block is ATTACHED above (so the module's mandatory-note
+  // clause sees it, the F7-1 fix) but its `ok` is a reading of the FINAL status: the
+  // pre-validation attach cannot know about a reason the module itself mints, so the
+  // field is re-read from `statusOf` here (the emitted value is unchanged: `ok` ⇔ the
+  // report derives `OK`).
+  report.reconciliation.ok = statusOf.status === 'OK'
   // §4.4 — the RUL-4 report verdict pair, DERIVED from the status (never hard-coded):
-  // the status readable without inspecting the JSON.
-  if (statusOf.status === 'OPEN-structural') {
-    report.verdicts.push(
-      `O-0 REPORT OPEN — ${structuralIds.length} stage(s) structurally unseparated (${structuralIds.join(', ')}): ` +
+  // the status readable without inspecting the JSON. §3b SHOULD item (a): the slot was
+  // reserved BEFORE the validator read the report (see the push above) and is filled
+  // HERE from the FINAL derived status — the array the validator saw was non-empty and
+  // the emitted text is the pre-fix text, unchanged.
+  const verdictText =
+    statusOf.status === 'OPEN-structural'
+      ? `O-0 REPORT OPEN — ${structuralIds.length} stage(s) structurally unseparated (${structuralIds.join(', ')}): ` +
         `${(derived.structuralReasons ?? [])[0] ?? 'reason recorded per stage row'} — the report is SCHEMA-VALID and its residual ` +
-        `cannot be computed; no value was imputed`,
-    )
-  } else if (statusOf.status === 'FAIL') {
-    report.verdicts.push(
-      `O-0 REPORT FAIL — ${(derived.gating ?? []).length || 1} forcing reason(s) outside the structural family ` +
-        `(${(derived.gating ?? [])[0] ?? '<unrecorded>'} …) — the measurement or the report is not usable as evidence: ` +
-        `§6 F-state class (a genuinely unmeasured permitted stage, an imputation, a falsifiability failure, a violated window, ` +
-        `a broken control pairing or a census mismatch)`,
-    )
+        `cannot be computed; no value was imputed`
+      : statusOf.status === 'FAIL'
+        ? `O-0 REPORT FAIL — ${(derived.gating ?? []).length || 1} forcing reason(s) outside the structural family ` +
+          `(${(derived.gating ?? [])[0] ?? '<unrecorded>'} …) — the measurement or the report is not usable as evidence: ` +
+          `§6 F-state class (a genuinely unmeasured permitted stage, an imputation, a falsifiability failure, a violated window, ` +
+          `a broken control pairing or a census mismatch)`
+        : `O-0 REPORT OK — the report derives OK: no forcing reason outside the structural family and every self-validation row ` +
+          `passed (§4.4)`
+  report.verdicts[verdictSlot] = verdictText
+  // §3b re-audit SHOULD item (a) [ORDER — the object the oracle reads] — the report the
+  // validator read above was the report as it stood BEFORE `status`/`pass`/`verdicts`/
+  // `reconciliation.ok` were finalized, i.e. without the fields the §4.2/§4.4 shape pins
+  // as REQUIRED (an empty `verdicts[]`, an unset `status`). The single self-validation call
+  // is NOT re-run (its reason set, call count and record are untouched): the EMITTED object
+  // is re-validated here over a SHALLOW COPY (`validateO0Report` never writes to its
+  // argument), and any error the finalize introduced is appended to the driver's reason set
+  // — recorded, never silent. On a report whose rows are the module's own this is a no-op.
+  const emitted = o0Twins.report.validateO0Report({ ...report })
+  report.driver.selfValidationOfEmitted = {
+    ok: emitted.ok,
+    errors: emitted.errors,
+    gating: emitted.gating ?? [],
+    status: emitted.status,
+    verdicts: report.verdicts.length,
+    note:
+      'the FINAL report object (status/pass/verdicts/reconciliation.ok all attached) re-validated over a SHALLOW COPY — ' +
+      'the §3b re-audit order finding: the driver’s single self-validation call could not see the fields it writes LAST',
+  }
+  if (emitted.errors.length > 0) {
+    for (const m of emitted.errors) report.driver.gatingReasons.push(`emitted-report self-validation: ${m}`)
+    report.pass = false
+    report.driver.pass = false
   }
   return report
 }

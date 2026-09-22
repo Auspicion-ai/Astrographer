@@ -10,7 +10,7 @@
   F1–F13; the F14 live observable is the boot abort in §3.5-class fixtures
   (see the U-MS2 battery's Class B2).
 - **Greens battery (blind-test, already run against the live MODULE):**
-  `docs/specs/unit-ms1-store-registry-greens.md` — 35 scenarios,
+   `archive/greens/2026-09-21-unit-ms1-store-registry-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms1-store-registry-greens.md) — 35 scenarios,
   35 PASS / 0 FAIL after the F-BLIND-MS1-1 reconciliation (2026-09-05: the
   module's BigInt render IS the pinned `String(<value>)` fallback —
   ECMAScript `String(1n)` === `'1'`; the greens expectation `(got 1n)` was
@@ -161,7 +161,7 @@ oversized name — it belongs to class L2, not here.)
 
 ## 4. Parked-scenario census
 
-- **Total greens scenarios:** 35 (`docs/specs/unit-ms1-store-registry-greens.md`).
+- **Total greens scenarios:** 35 ( `archive/greens/2026-09-21-unit-ms1-store-registry-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms1-store-registry-greens.md)).
 - **Parked for the later live run (live-observable once U-MS2 lands):**
   S01–S11, S14–S30 (S28 by its LIVE linux half — §3.2), S32, S35 (+ S19's
   cap, within S19's abort message) = **30 scenario ids** across classes

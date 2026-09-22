@@ -40,7 +40,7 @@
   implementation. For the vector-boot units, the red set derives from
   §5.8/§5.9 + §5.12 (W1) / §5.13 (W4) ALONE — no code reading.
 - **Amended (2026-09-05 — the vector-boot amendment):** amended per
-  `docs/specs/ollama-vector-boot-review.md` (the four-agent gate verdict
+   `archive/gate-reviews/2026-09-21-ollama-vector-boot-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#PROVIDER-AGNOSTIC + docs/specs/unit-f-embeddings.md) (the four-agent gate verdict
   PROCEED-WITH-AMENDMENTS, §2 binding amendments A1–A6) + the USER GO-AHEAD
   for the CACHE-INCLUSIVE variant (review §4a, 2026-09-05 — the persisted
   embedding cache is IN-SCOPE core contract, unit W4). Amended in place:
@@ -190,7 +190,7 @@ tested (13 regression tests in `tests/embeddings-adversarial.test.ts`).
 - **F9 label disambiguation (2026-09-05 amendment, review A2):** §3a F9 (the
   `connect-src` extensibility finding, above) KEEPS the F9 label. The
   greens-file row that was labelled "F9 — Ollama provider malformed response"
-  (`docs/specs/unit-f-embeddings-greens.md` — the §5.9 #9 scenario) is RENAMED
+  ( `archive/greens/2026-09-21-unit-f-embeddings-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-f-embeddings-greens.md) — the §5.9 #9 scenario) is RENAMED
   **GREEN-OLLAMA-MALFORMED** so the two ids never collide.
 - **F10 (UNIT-F-SKIP-EMPTY)** — the empty/whitespace-content node skip in
   `createVectorIndex` (`src/main/embeddings.ts:309-313` pre-W2; `545-549` post-W2) existed only as a
@@ -1838,7 +1838,7 @@ new one-way `setEmbedder` promotion seam on `RetrievalEngine`).
   the `connect-src` CSP allowlist + API-key handling become a DESIGNED security
   surface; a localhost ollama call is LOCAL (no external egress); a remote/cloud
   provider requires the CSP allowlist + API-key config).
-- Vector-boot amendment: `docs/specs/ollama-vector-boot-review.md` (the
+- Vector-boot amendment:  `archive/gate-reviews/2026-09-21-ollama-vector-boot-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#PROVIDER-AGNOSTIC + docs/specs/unit-f-embeddings.md) (the
   four-agent gate record — §2 binding amendments A1–A8, §3 change inventory +
   risk register, §4a the user go-ahead for the cache-inclusive variant, §5 the
   live-verified premises); decisions **VECTOR-BOOT-BACKGROUND-PROMOTE** and
@@ -1846,7 +1846,7 @@ new one-way `setEmbedder` promotion seam on `RetrievalEngine`).
 
 ### 5.12 The vector-boot controller (W1 — BOOT MODEL B: warm-up gate → born-lexical pending → background build → reconcile → atomic one-way promotion)
 
-**[2026-09-05 amendment — source: `docs/specs/ollama-vector-boot-review.md` §2
+**[2026-09-05 amendment — source:  `archive/gate-reviews/2026-09-21-ollama-vector-boot-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#PROVIDER-AGNOSTIC + docs/specs/unit-f-embeddings.md) §2
 amendments A1/A3/A4, §4 (the W1 TestWriter brief), §4a (the user go-ahead,
 cache-inclusive variant).]**
 

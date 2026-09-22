@@ -2,7 +2,7 @@
 
 - **Status:** SPEC (the cross-store fan-out slice, Unit U-F2 of 3; execution
   order **U-F1** → **U-F2** → U-F3). Proposal gate:
-  `docs/specs/multi-store-fanout-review.md` (PROPOSAL GATE COMPLETE 2026-09-08 —
+   `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) (PROPOSAL GATE COMPLETE 2026-09-08 —
   four-agent gate: validity VALID-WITH-AMENDMENTS → critique UNSOUND-as-written
   → architecture PROCEED-WITH-AMENDMENTS, decisions D1–D8 → change-analysis
   PROCEED-WITH-AMENDMENTS, binding amendments A-F1..A-F4). **AWAITING the user's
@@ -542,7 +542,7 @@ them green.
 
 ### 5.12 Cross-references
 
-- The proposal gate: `docs/specs/multi-store-fanout-review.md` — D2
+- The proposal gate:  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) — D2
   (`storeContexts`/default-store block), D3 (result qualification — per-item/
   per-entry `store`; `<name>:` prefix secondary), D4 (FLAT-only; `engine`
   `'local'`), D5 (schema + IPC — U-F3's), D6 (skip-failed), D7 (determinism),
@@ -560,7 +560,7 @@ them green.
   §5.3 (`buildCitations` — the first-appearance dedup semantics the qualified
   citation re-derivation reuses), §5.6 (`ragQuery` — the single-store producer,
   UNCHANGED by A-F1), §5.2/§5.6 (`TraceUnavailable`/`engine` `'local'`).
-- The byte-equality surface: `docs/specs/multi-store-fanout-review.md` A-F1 +
+- The byte-equality surface:  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) A-F1 +
   the Phase-1 A4 contract (`docs/specs/unit-ms2-store-wiring.md` §5.9 F3 + the
   §4 byte-equality itemization). The tests kept green:
   `tests/unit-ms2-store-wiring.test.ts:1400,1458` and
@@ -570,7 +570,7 @@ them green.
   `LineNodeMap`, `RAG_ENGINE_ID` (`'local'`), `StoreContextBlock` (NEW).
 - The merge module: `src/main/merge-store-results.ts` — `StoreResultInput`,
   `mergeStoreResults` (U-F1).
-- Not-this-unit wiring (U-F3): `docs/specs/multi-store-fanout-review.md`
+- Not-this-unit wiring (U-F3):  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md)
   D5/D8 + A-F2/A-F3/A-F4 — the `stores:"all"` schema on
   `rag.query`/`rag-stream`/the `rag-query` IPC `RagQueryPayload`, the flat-only
   guard (`rag.query: stores:"all" is only valid in flat mode`), the

@@ -7,7 +7,7 @@
   AMENDMENTS, RATIFIED 2026-09-11), `docs/specs/document-directory-category-
   review.md` (M8 + the U-D6 row in §5; §4 Q1/Q3/Q6/Q7; §6 tracker
   reconciliation), and the GATED parent
-  `docs/specs/document-directory-category.md` §3.5. Sibling/precedent specs:
+   `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.5. Sibling/precedent specs:
   `docs/specs/unit-ud1-document-metadata-fields.md` (the LANDED
   `RagNode.documentPath?`/`tags?` fields the filters read),
   `docs/specs/unit-ud4-doc-heads-tree.md` (the LANDED root-node read + the
@@ -960,7 +960,7 @@ function edgePassesFilters(store: RagStore, e: RagEdge, filters: LocalRagQueryFi
   row in §5; Q1/Q3/Q6/Q7; §6 tracker reconciliation) and `docs/decisions.md`
   row **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` §3.5 (the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.5 (the
   `filters` extension + Q6 local-only gnosis mapping), §3.7 (the read-only
   migration discipline the root fields follow).
 - **Precedent / consumed (LANDED):** `docs/specs/unit-ud1-document-metadata-

@@ -3,7 +3,7 @@
 **Status: GREEN — COMPLETE (2026-09-12).** Implemented + tested. Unit file
 `tests/unit-u-shell-9a-main-focus-tabs.test.ts` — **62 pass + 4 skip** (the 4
 skips are the live-runtime/MCP-equivalence battery placeholders). Blind artifact
-`docs/specs/unit-u-shell-9a-main-focus-tabs-greens.md` — **32 scenarios — 32
+ `archive/greens/2026-09-21-unit-u-shell-9a-main-focus-tabs-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9a-main-focus-tabs-greens.md) — **32 scenarios — 32
 PASS** (live-battery caveats in §2.10 + the artifact's "not tested" notes).
 Trio: **179 files / 4197 pass + 58 skip**, typecheck 0, build OK. Documentation
 review (RCA-6): `archive/reviews/2026-09-12-u-shell-9a-doc-review.md`. Gate: the

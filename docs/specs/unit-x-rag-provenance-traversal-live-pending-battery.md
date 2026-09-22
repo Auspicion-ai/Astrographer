@@ -23,7 +23,7 @@ the validation fails) IS live. The graph-mode provenance is covered by the
 module-level greens and is parked here as not-live-exercisable (the V2-battery
 A10/A11/B5/B6/C5 pattern).
 
-**Source scenarios:** `docs/specs/unit-x-rag-provenance-traversal-greens.md`
+**Source scenarios:**  `archive/greens/2026-09-21-unit-x-rag-provenance-traversal-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-x-rag-provenance-traversal-greens.md)
 (27 scenarios) authored from `docs/specs/unit-x-rag-provenance-traversal.md`
 §5.1–§5.8. The Unit X MCP tools are implemented in `src/main/mcp-server.ts`
 (registered in the `rag` group, main-handled) but were not reachable because the

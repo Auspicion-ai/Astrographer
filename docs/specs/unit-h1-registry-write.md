@@ -4,7 +4,7 @@
   Unit U-H1 of 8 —
   the FIRST unit in the pinned execution order U-H1 → U-H2 → U-H3 → U-H5 → U-H4
   → U-H6 → U-H8; U-H7 (default reassignment) is split out). Gate reference:
-  `docs/specs/registry-hot-apply-review.md` §2 **D2** (write path + supersession),
+   `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D2** (write path + supersession),
   §2 **D3** (hot-remove policy — ORPHAN), §2 **D4** (rename semantics), §2 **D5**
   (default reassignment split out), §2 **D8** (unit decomposition — the U-H1
   row); §5 "Impact on existing contracts" (REGISTRY-NO-WRITE refined, not
@@ -44,7 +44,7 @@
 
 ## 1. What the proposal asks (the U-H1 slice)
 
-The registry hot-apply slice (`docs/specs/registry-hot-apply-review.md`) is the
+The registry hot-apply slice ( `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN)) is the
 reviewed Phase-2 extension of the boot-time-only multi-store registry: a
 mid-run registry change (add, remove, or rename a configured store) takes
 effect WITHOUT an app restart. Today the registry is BOOT-TIME-ONLY (U-MS1 D8,
@@ -196,7 +196,7 @@ ruled by the post-pass confirmations above):**
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 
 - **D2 (binding):** the NEW pure write module validates + atomic temp→rename,
   then re-load + apply the delta; the disk file IS re-read + re-applied
@@ -841,7 +841,7 @@ IPC-constant census, and it imports no `shared/types` constant (grep-level).
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D2** (the write
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D2** (the write
   module + supersession — THE load-bearing decision this unit implements),
   D3 (orphan remove), D4 (rename semantics — non-default/no-ids), D5 (default
   reassignment split out), D7 (mid-flight consistency — the registry part;
@@ -875,7 +875,7 @@ IPC-constant census, and it imports no `shared/types` constant (grep-level).
   tests 45–46 (stay green), `docs/decisions.md` MULTI-STORE-REGISTRY (the
   loader's sub-pins U-MS1 owns — REGISTRY-NO-WRITE refined per-module),
   `docs/pending.md:37` (the hot-apply row whose revisit condition is MET).
-- **Parked/context docs:** `docs/specs/multi-store-fanout-review.md` (the
+- **Parked/context docs:**  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) (the
   `stores:"all"` slice — the qualified-`store` mechanics the hot slice must not
   break; cite-only), `docs/specs/multi-document-store-config-review.md` §2 D8
   (the Phase-1 boot-time-only registry THE hot slice supersedes).

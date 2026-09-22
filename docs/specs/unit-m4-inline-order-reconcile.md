@@ -1,7 +1,7 @@
 # Spec — Unit M4: Reconciliation — Validation, Retrieval, Textarea, splitNode
 
 - **Status:** SPEC. This is M4 of the **Inline-Ordering Render Fix** program
-  (gate reference: `docs/specs/inline-order-render-fix-review.md`,
+  (gate reference:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md),
   **PROCEED-WITH-AMENDMENTS**, A1–A8, 2026-08-31). M4 is the **reconciliation**
   slice: it consumes the M1 model (`RagNodeChild.offset` + full-projection
   `content`) and reconciles every consumer that assumed the OLD `content`
@@ -103,7 +103,7 @@ recorded here; none are PACKAGE findings. (Pass TBD, RCA-3.)
 
 ### 3b. Proposal-review findings
 
-The gate (`docs/specs/inline-order-render-fix-review.md`, 2026-08-31) returned
+The gate ( `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md), 2026-08-31) returned
 **PROCEED-WITH-AMENDMENTS**, Design B. The amendments THIS unit resolves:
 
 - **A4 — Content-meaning reconciliation:** (i) `nodeText`/lexical index —
@@ -381,7 +381,7 @@ behavior (pinned):**
 
 ### 5.9 Cross-references
 
-- Gate: `docs/specs/inline-order-render-fix-review.md` §3 **A4** (content-meaning
+- Gate:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md) §3 **A4** (content-meaning
   reconciliation — nodeText/lexical index, textarea, setRichText atomic, splitNode
   inside-span fail-state), **A6** (offset optional, absent = append-after,
   validation bound-check), §4 (M4 last in the execution order), §5 (costs — the

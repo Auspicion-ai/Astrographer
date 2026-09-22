@@ -489,6 +489,13 @@ must be written, in these places:
    narrowing is bounded by the MCP-parity accept criterion — so a future agent
    reading the MCP contract knows the current shape is unchanged and *why*.
 
+**BOOKKEEPING STATUS (2026-09-21 reconciliation audit):** **items 1 and 2 are CLOSED** — item 1
+(the three parked rows in `docs/pending.md`, with the track trigger + O-8's prerequisite clause) is
+satisfied by `docs/pending.md` §"PARKED DESTINATION — the engine track"; item 2 (the O-7/O-8 pointer
+rows in `docs/HANDOFF.md` §"OPEN handoff items") is satisfied by the two pointer rows filed there in
+this pass (O-6's blockers are already covered by `GNOSIS-ENGINE-QUERY-MODE-IGNORED` +
+`GNOSIS-ENGINE-ENRICHMENT-SURFACE-ABSENT`). Items 3-7 are not touched by this pass.
+
 ---
 
 ## 9. STATEMENT FOR THE USER (plain language)

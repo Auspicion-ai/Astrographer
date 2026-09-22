@@ -420,3 +420,127 @@ describe(`O-0 §3.6b/§4.3 — driver self-validation, the mirror deletion, the 
     ).toMatch(/mainSeamArmed/)
   })
 })
+
+// ===========================================================================
+// §7 §3a finding 5 — THE DRIVER-SIDE ORDERING TWIN of the pure module's
+// `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` defect. A reason set that is
+// computed BEFORE a post-style/post-derivation application can be STALE: the
+// verdict fields (`pass`/`gap`/the emitted `driver.failReasons`) must be derived
+// from the FINAL reason set.
+//
+// RE-VERIFIED STATE OF THE TWIN (this pin, 2026-09-20):
+//   * `o0ApplyPostStyle(row)` is called at ROW CONSTRUCTION (`o0O0Row()`), INSIDE
+//     the freeze, and the row's `pass`/`failReasons` are set AFTER it by
+//     `o0RowPass`; the row-level verdict is therefore NOT stale.
+//   * `o0DeriveReportPass(report)` runs over the FINISHED rows, so the report-level
+//     gating/structural split is not computed ahead of the post-style application
+//     either.
+//   * `o0BuildReport` mutates `derived.gating` AFTER the pass is first recorded
+//     (`derived.gating.push('driver self-validation rejected …')`) and then
+//     RE-ASSIGNS `report.driver.failReasons` — i.e. the EMITTED forcing channel is
+//     recomputed from the post-mutation set. That is the invariant this pin holds.
+//
+// THE RESIDUAL (reported, not pinned as a red): `o0DeriveReportPass`'s returned
+// `failReasons` is a SNAPSHOT taken before that late `derived.gating.push`, so it
+// is stale by construction — but it is DEAD (no reader consumes it: the driver's
+// emitted facts are `report.driver.failReasons`/`gatingReasons`, which the build
+// re-assigns after the push, and `tests/**` never imports the helper — the driver
+// calls `main()` at module scope so it is not importable). `o0ApplyPostStyle` is
+// likewise invoked only at row construction, before any report-level derivation.
+// So the twin is an ORDERING HAZARD (dead stale local), not an observable defect.
+// ===========================================================================
+describe('O-0 §7 §3a finding 5 (driver twin) — the verdict fields are recomputed AFTER the post-style application', () => {
+  /** The `o0FreezeRow` body alone (the §4.3 freeze-row builder), cut at the next
+   *  top-level declaration — so the CALL ORDER inside the builder is what gets
+   *  asserted (a `toMatch(/a[\s\S]*b/)` over the whole file could not tell a call
+   *  site from a declaration site). */
+  function rowBuilderSpan(): string {
+    const at = SRC.indexOf('async function o0FreezeRow(')
+    if (at < 0) return ''
+    const rest = SRC.slice(at)
+    const next = rest.slice(1).search(/\n(?:async )?(?:function|const) [A-Za-z_$]/)
+    return next < 0 ? rest : rest.slice(0, next + 1)
+  }
+
+  it('D24 §3a finding 5 the REPORT-level verdict is derived over the FINISHED (post-style-applied) rows and the EMITTED forcing channel is recomputed after the late self-validation push', () => {
+    const rowSpan = rowBuilderSpan()
+    expect(rowSpan, '`async function o0FreezeRow(` not found — §4.3 pins it as the site that assembles a freeze row').not.toBe('')
+    const postStyleAt = rowSpan.indexOf('o0ApplyPostStyle(row)')
+    const rowPassAt = rowSpan.indexOf('o0RowPass(row)')
+    expect(postStyleAt, 'the freeze-row builder must apply the DERIVED `post.style` residual (`o0ApplyPostStyle`)').toBeGreaterThan(-1)
+    expect(rowPassAt, 'the freeze-row builder must derive the row verdict through `o0RowPass`').toBeGreaterThan(-1)
+    expect(
+      rowPassAt > postStyleAt,
+      'ORDERING (§3a finding 5): the row verdict is derived BEFORE `o0ApplyPostStyle(row)` — an `ms:null`/unseparated residual applied ' +
+        'afterwards leaves `row.pass`/`row.failReasons` stale (the driver twin of the dropped-postderivation-reason defect)',
+    ).toBe(true)
+    const build = fnSpan('o0BuildReport')
+    expect(build, '`o0BuildReport` not found — §3.6b/F17a pins it as the site that builds + self-validates the report').not.toBe('')
+    const deriveAt = build.indexOf('o0DeriveReportPass(')
+    expect(
+      deriveAt,
+      'o0BuildReport must derive the report-level pass through `o0DeriveReportPass` — and it must run over the assembled `runs` (the ' +
+        'already-post-style-applied rows), never over a pre-row-staging snapshot',
+    ).toBeGreaterThan(-1)
+    // The derivation consumes the ASSEMBLED rows: `report.runs` is populated
+    // before the call, and `o0DeriveReportPass` reads `report.runs` (the rows
+    // already post-style-applied by `o0FreezeRow`).
+    const runsKeyAt = build.indexOf('runs: runs')
+    expect(runsKeyAt, 'the report object literal must populate `runs` from the staged freeze rows').toBeGreaterThan(-1)
+    expect(
+      deriveAt > runsKeyAt,
+      'ORDERING (§3a finding 5): the report-level derivation runs BEFORE `report.runs` is populated — it would then derive a verdict over ' +
+        'no rows at all',
+    ).toBe(true)
+    expect(
+      fnSpan('o0DeriveReportPass'),
+      'the derivation must read the ASSEMBLED rows (`report.runs`) — a verdict derived from anything but the final rows is stale',
+    ).toMatch(/report\.runs/)
+
+    // The EMITTED forcing channel: re-assigned after the last late mutation.
+    const lastAssign = build.lastIndexOf('report.driver.failReasons =')
+    const lastPush = build.lastIndexOf('derived.gating.push(')
+    expect(lastAssign, 'the driver must publish its forcing reasons as `report.driver.failReasons` (§3.6b/F17a)').toBeGreaterThan(-1)
+    expect(
+      lastPush,
+      'the late `driver self-validation rejected …` reason is appended to `derived.gating` — the same reason set the emitted verdict reads',
+    ).toBeGreaterThan(-1)
+    expect(
+      lastAssign > lastPush,
+      'ORDERING (the twin of the pure-module defect): the emitted `report.driver.failReasons` is assigned BEFORE the late ' +
+        '`derived.gating.push(…)` — the forcing channel would then omit the self-validation reason (a stale snapshot). ' +
+        'Re-assign it after the last mutation to the reason set.',
+    ).toBe(true)
+    // …and the DERIVED verdict itself is computed over the post-push set.
+    const statusAt = build.lastIndexOf('o0Twins.report.deriveO0ReportStatus(')
+    expect(
+      statusAt > lastPush,
+      'the DERIVED `status`/`pass` must be computed from the POST-mutation reason set (after the self-validation push) — ' +
+        'a status derived from a pre-mutation snapshot contradicts the reasons it claims to derive from (§4.4/RUL-4)',
+    ).toBe(true)
+  })
+
+  it('D25 §3a finding 5 the emitted report’s status/pass/failReasons all read the SAME final reason set (no field carries a pre-block snapshot)', () => {
+    const build = fnSpan('o0BuildReport')
+    expect(build, '`o0BuildReport` not found').not.toBe('')
+    // `report.pass` is assigned from `statusOf.pass` (the derived one), never left
+    // at the first `derived.pass` snapshot.
+    expect(
+      build,
+      'the report’s `pass` must be the DERIVED one (`report.pass = statusOf.pass`) — leaving it at the first snapshot is the driver twin of the dropped-verdict defect',
+    ).toMatch(/report\.pass\s*=\s*statusOf\.pass/)
+    expect(
+      build,
+      'the emitted status must be the DERIVED one (`report.status = statusOf.status`), never the pre-derived `null` placeholder',
+    ).toMatch(/report\.status\s*=\s*statusOf\.status/)
+    expect(
+      build,
+      'both reason sets must be handed to the ONE derivation (`gating:` + `failReasons:` with the structural family included) so the ' +
+        'emitted status and the emitted reasons cannot disagree',
+    ).toMatch(/gating\s*:\s*derived\.gating[\s\S]{0,200}?failReasons\s*:/)
+    expect(
+      build,
+      'the structural family must be part of the derivation’s `failReasons` input (a structurally-open report is OPEN-structural, never "OK")',
+    ).toMatch(/structuralFamily\s*:\s*family/)
+  })
+})

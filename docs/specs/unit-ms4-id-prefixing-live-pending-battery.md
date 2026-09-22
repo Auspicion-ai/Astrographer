@@ -16,7 +16,7 @@
   (F-MS4-1..F-MS4-11); plus `unit-ms2-store-wiring.md` §5.6 (the F2 3-arg
   pass-through that activates the prefix in production).
 - **Greens battery (blind-test, already run against the live MODULES):**
-  `docs/specs/unit-ms4-id-prefixing-greens.md` — 43 scenario rows
+   `archive/greens/2026-09-21-unit-ms4-id-prefixing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms4-id-prefixing-greens.md) — 43 scenario rows
   (41 executable E01–E41 + 2 DEFERRED D1/D2): **41 PASS / 0 FAIL / 2
   DEFERRED** (the recorded run: 41/41 vitest tests, exit 0, ~0.35 s).
 - **Status:** **PARKED — NOT run against the live application.** Pattern
@@ -312,7 +312,7 @@ re-attempted live:
 ## 5. Parked-scenario census
 
 - **Total greens scenario rows:** 43 (41 executable E01–E41 + 2 DEFERRED
-  D1/D2 — `docs/specs/unit-ms4-id-prefixing-greens.md`, 41 PASS / 0 FAIL /
+  D1/D2 —  `archive/greens/2026-09-21-unit-ms4-id-prefixing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms4-id-prefixing-greens.md), 41 PASS / 0 FAIL /
   2 DEFERRED).
 - **LIVE-observable once the app is (re)started with the U-MS4 build:** E07,
   E08, E09, E10, E11, E13, E14, E15, E16, E17, E22, E23, E24, E25, E26, E27,

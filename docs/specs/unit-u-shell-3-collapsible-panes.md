@@ -12,7 +12,7 @@ ALONE and RUN red before the Implementer pass; after the Implementer it is
 battery placeholders (live `provident.dispatch`/`list_targets` + the F5
 `unresolved target` result). Adversarial pass H1/H2/H3/H5 **FIXED** with
 regression tests; H4 **RESOLVED (wording)**. Blind-greens
-`unit-u-shell-3-collapsible-panes-greens.md` (19 scenarios: 18 PASS / 1 FAIL —
+ `archive/greens/2026-09-21-unit-u-shell-3-collapsible-panes-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-3-collapsible-panes-greens.md) (19 scenarios: 18 PASS / 1 FAIL —
 the F2 mechanism-wording drift, reconciled in §4 F2). Doc-review
 `archive/reviews/2026-09-12-u-shell-3-doc-review.md`. Full trio at this unit:
 **175 files / 4019 pass + 50 skip**, typecheck 0, build OK.

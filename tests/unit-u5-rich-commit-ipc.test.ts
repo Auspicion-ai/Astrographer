@@ -30,10 +30,18 @@ import * as sharedTypes from '../src/shared/types.js'
 
 // ---- electron mock (hoisted BEFORE the preload import) ----------------------
 const invokeMock = vi.hoisted(() => vi.fn())
-const exposeInMainWorldMock = vi.hoisted(() => vi.fn())
+/** Holds the API object the preload exposed at MODULE EVALUATION. A box created
+ *  INSIDE vi.hoisted is in scope (and already initialised) when the hoisted
+ *  factory runs; a module-scope `let` is NOT (TDZ at preload evaluation). */
+const bridgeBox = vi.hoisted(() => ({ current: undefined as
+  Record<string, unknown> | undefined }))
 
 vi.mock('electron', () => ({
-  contextBridge: { exposeInMainWorld: exposeInMainWorldMock },
+  contextBridge: {
+    exposeInMainWorld: vi.fn((_name: string, api: Record<string, unknown>) => {
+      bridgeBox.current = api
+    }),
+  },
   ipcRenderer: {
     invoke: invokeMock,
     on: vi.fn(() => vi.fn()),
@@ -80,17 +88,21 @@ function expectFail<T extends { ok: boolean }>(result: T): Extract<T, { ok: fals
   return result as Extract<T, { ok: false }>
 }
 
-/** The `window.provident` bridge captured by contextBridge.exposeInMainWorld
- *  when the preload loads. */
-function capturedBridge(): {
+/** The `window.provident` bridge surface this file dereferences (the captured
+ *  API object is stored by the §2a C-2 factory implementation). */
+type BridgeSurface = {
   edit: {
     commitRich: ((nodeId: string, content: string, children: unknown[]) => Promise<unknown>) | undefined
     commit: unknown
     batch: unknown
     onRagStoreChanged: unknown
   }
-} {
-  return exposeInMainWorldMock.mock.calls[0]?.[1] as ReturnType<typeof capturedBridge>
+}
+
+/** The `window.provident` bridge captured by contextBridge.exposeInMainWorld
+ *  when the preload loads. */
+function capturedBridge(): BridgeSurface {
+  return bridgeBox.current as BridgeSurface
 }
 
 // ===========================================================================

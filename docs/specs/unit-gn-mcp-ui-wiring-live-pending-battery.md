@@ -12,7 +12,7 @@
   `src/main/engine-rag-store.ts`); the F2 wire shapes are pinned in
   `../Gnosis/docs/specs/engine-wire-contract.md` §4–§12.
 - **Greens battery (blind-test, already run against the LIVE MODULE):**
-  `docs/specs/unit-gn-mcp-ui-wiring-greens.md` — **39 / 39 PASS, 0 FAIL** (the
+   `archive/greens/2026-09-21-unit-gn-mcp-ui-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-gn-mcp-ui-wiring-greens.md) — **39 / 39 PASS, 0 FAIL** (the
   recorded run: `tests/blind-unit-gn-mcp-ui-wiring-greens.test.ts`, vitest, 31
   `it` blocks, exit 0; re-verified 2026-09-10 this session: 31/31 tests pass).
   Source under test: `src/main/mcp-server.js` (`handleGnosisTool`,
@@ -208,7 +208,7 @@ the live observable; a contradiction is a finding, never a pass.
 ## 5. Parked-scenario census
 
 - **Total greens scenario rows:** 39 (all PASS at the module level —
-  `docs/specs/unit-gn-mcp-ui-wiring-greens.md`, 39/39; re-verified this session:
+   `archive/greens/2026-09-21-unit-gn-mcp-ui-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-gn-mcp-ui-wiring-greens.md), 39/39; re-verified this session:
   31/31 vitest `it` blocks, exit 0).
 - **Parked for the later live run (require a live `gnosis-server` + engine + (for
   the GUI/MCP-app set) a running app):**

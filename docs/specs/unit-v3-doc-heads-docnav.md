@@ -1,7 +1,7 @@
 # Spec — Unit V3: Doc-Heads Doc-Nav (`rag-doc-heads` IPC + the doc-nav switch)
 
 - **Status:** SPEC (the scoped-load fix, Unit 3 of 3). Gate reference:
-  `docs/specs/load-bug-scoped-traversal-review.md` §5 (the amendments), §6
+   `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (the amendments), §6
   (the unit split — Unit 3 = doc-heads doc-nav). Decisions:
   `docs/decisions.md` rows **RAG-AUTHORITATIVE**, **SINGLE-WRITER-STORE**,
   **PANE-REGISTRY**, **PANE-PROVIDENT-AUTHORING**, **APP-GRAPH-PANES-MCP-VISIBLE**,
@@ -140,7 +140,7 @@ was found (nothing handed off to `docs/defects.md`).
 ### 3b. Proposal-review findings
 
 The proposal-review gate (three-agent: validity → critique → change-analysis)
-returned **PROCEED-WITH-AMENDMENTS** (`docs/specs/load-bug-scoped-traversal-review.md`).
+returned **PROCEED-WITH-AMENDMENTS** ( `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md)).
 The amendments this unit folds in:
 
 - **Amendment 5 (MEDIUM) — `selectDocument` validation source.** When the
@@ -150,8 +150,8 @@ The amendments this unit folds in:
   adversarial test (`unit-k-sidebar-panes-host.md` §3a F8) is updated
   accordingly. Pinned in §5.4 + §5.8 happy-path 12 + §5.9 fail-state 5.
 - **Amendment 8 (MEDIUM) — reconcile the greens docs + trackers (RCA-6).** The
-  doc-nav IPC drift affects `unit-h-sidebar-panes-greens.md` and
-  `unit-k-sidebar-panes-host-greens.md`, and the census claims in the specs.
+  doc-nav IPC drift affects  `archive/greens/2026-09-21-unit-h-sidebar-panes-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-h-sidebar-panes-greens.md) and
+   `archive/greens/2026-09-21-unit-k-sidebar-panes-host-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-k-sidebar-panes-host-greens.md), and the census claims in the specs.
   These must be reconciled in the SAME pass as the code, and
   `docs/defects.md`/`docs/next-steps.md` updated. Pinned in §5.9.
 - **Amendment 9 (LOW) — document the snapshot-transfer limitation.** The
@@ -491,7 +491,7 @@ in `docs/pending.md` as a follow-up (main-side traversal or a scoped snapshot).
   updated to validate against the doc-heads list).
 - Unit C: `docs/specs/unit-c-rendering-spine.md` §5.1 (`buildTraversal` — the
   rendering half that still fetches the full snapshot).
-- Gate: `docs/specs/load-bug-scoped-traversal-review.md` §5 (amendments 4, 5, 8,
+- Gate:  `archive/gate-reviews/2026-09-21-load-bug-scoped-traversal-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#SCOPED-LOAD + docs/specs/unit-v1-store-adjacency.md … unit-v3-doc-heads-docnav.md) §5 (amendments 4, 5, 8,
   9), §6 (Unit 3 = doc-heads doc-nav).
 - Decisions: `docs/decisions.md` rows **RAG-AUTHORITATIVE**,
   **SINGLE-WRITER-STORE**, **PANE-REGISTRY**, **PANE-PROVIDENT-AUTHORING**,
@@ -505,7 +505,7 @@ in `docs/pending.md` as a follow-up (main-side traversal or a scoped snapshot).
   `src/renderer/sidebar-panes.ts` (the host: `boot`, `reDerive`, `buildContext`,
   `buildTraversalEnvelope`, `selectDocument`).
 - **Amendment 8 (RCA-6) — the greens docs + trackers to reconcile in the SAME
-  pass:** `unit-h-sidebar-panes-greens.md`, `unit-k-sidebar-panes-host-greens.md`,
+  pass:**  `archive/greens/2026-09-21-unit-h-sidebar-panes-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-h-sidebar-panes-greens.md), `archive/greens/2026-09-21-unit-k-sidebar-panes-host-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-k-sidebar-panes-host-greens.md),
   and the census claims in the specs. `docs/defects.md`/`docs/next-steps.md`
   updated.
 - **Amendment 9 (LOW) — the snapshot-transfer limitation:** the boot/re-derive

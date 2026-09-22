@@ -19,7 +19,7 @@
   U-H3 (hot-add CONFIRMATORY, EMPTY red) → U-H5 (teardown PRIMITIVES, LANDED) →
   **U-H4 (this — hot-remove, drain-then-teardown, LANDED)** → U-H6 (hot-rename,
   NEXT) → U-H8 (operator-UI editor); U-H7 (default reassignment) is split out. Gate reference:
-  `docs/specs/registry-hot-apply-review.md` §2 **D3** (hot-remove = ORPHAN —
+   `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D3** (hot-remove = ORPHAN —
   unregister-only, strand the persistence file + journal/undo; operator
   confirmation via the operator-UI control (D8), NOT MCP), **D7** (mid-flight
   consistency — "remove drain-then-teardown"; **REQUIRES NEW `teardown()` on
@@ -256,7 +256,7 @@ clean):**
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D3 (binding):** hot-remove = ORPHAN — unregister-only, strand the persistence
   file + journal/undo; operator confirmation via the operator-UI control (D8),
   NOT MCP; data deletion is not a free op. Pinned §4/§5.4/§5.8.
@@ -698,7 +698,7 @@ step 2 EARLY return).
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D3** (hot-remove
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D3** (hot-remove
   ORPHAN — strand the file + journal, operator confirmation via the operator-UI
   control, NOT MCP), **D7** (remove drain-then-teardown — REQUIRES the U-H5
   teardown primitives), **A-P2-2** (`stores:"all"` drain-then-teardown so a

@@ -6,7 +6,7 @@
   `docs/decisions.md` row **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-
   AMENDMENTS, RATIFIED 2026-09-11), `docs/specs/document-directory-category-review.md`
   (M1/M4/M5/M6 + the U-D3 row in §5; Q1), and the GATED parent
-  `docs/specs/document-directory-category.md` §3.2/§3.3/§4. Precedent specs:
+   `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.2/§3.3/§4. Precedent specs:
   `docs/specs/unit-ud1-document-metadata-fields.md` (the LANDED
   `RagNode.documentPath?` field + `normalizeDocumentPath`; `[]`→omitted),
   `docs/specs/unit-ms4-id-prefixing.md` (the `<name>:` prefix + INV-3), and
@@ -281,7 +281,7 @@ pins (each cross-referenced to the section that resolves it):
 - **Q1 — path-qualified `/`-joined `documentId`** (§5.2): the ratified form.
 
 **Documentation reconciliation (RECONCILED 2026-09-11):** the GATED parent
-`docs/specs/document-directory-category.md` §3.2 line 107 now reads
+ `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.2 line 107 now reads
 `sanitizeSegment(segment)` (the `(M4 / U-D3)` annotation), so the earlier
 conflict with M4 and this spec's `sanitizeSegment` is resolved. The gate review
 (M4) and this spec remain authoritative.
@@ -717,7 +717,7 @@ NOT changed; every minted id inherits the `/`-bearing `documentId`):**
   the U-D3 row in §5) and `docs/decisions.md` row
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` §3.2 (the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.2 (the
   path-qualified id scheme), §3.3 (import derivation; flat byte-equality), §4
   (F2–F6/F9), §5 (the minting census + the no-relax-M4 risk). **RECONCILED
   2026-09-11:** §3.2 line 107 now reads `sanitizeSegment(segment)` (M4/U-D3);

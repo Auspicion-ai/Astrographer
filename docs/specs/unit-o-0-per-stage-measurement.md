@@ -1370,7 +1370,7 @@ same-freeze count without stating that the disarm for freeze *n* is recorded on 
 | 2 | **MUST-FIX** | `schema` | `src/shared/o0-report.ts` `reconcileO0PostStyle`'s return (`:531` — the function declaration; the return shape is its first branch), vs the driver twin `o0ApplyPostStyle` (`scripts/live-drive.mjs:1009`); row `R3` (`:651-675`) | `postStyle` could be emitted as `{ ms: null, unseparated: false }` (when the residual is `null` from a non-finite total), and the module and the driver **twin disagree on the negative/over-tolerance branch**: the module leaves `post.style` out of `unseparatedStages` and reports it separated, while the twin pushes it into `unseparatedStages`. | **FIX (contract §4.3/§6 F13):** `postStyle.ms === null` **⇒** `postStyle.unseparated === true` (one branch, never two); a **negative or over-tolerance** residual is `ok:false` with a reason **naming the residual**; the module and the driver twin must agree on that branch (the twin's `post.style` insertion is the pinned shape). |
 | 3 | **MUST-FIX** | `under-strong` | `src/shared/o0-report.ts` `compareO0StageIdSets` (`:457` — the declaration; the de-dupe is inside its body) and `unseparatedStageIds`'s `String(s.id)` (`:143`); row `R4` (`:677-706`) | The SET comparator de-dupes both sides, so a run carrying a **duplicated** stage id compares `equal:true` — the determinism oracle (P-SM-2) cannot see a set violation. `String(s.id)` leaks the literal **`'undefined'`** into `unseparatedStages` and into the derived verdict's "largest identified stage". | **FIX (contract §5 P-IM-2/§6 F13):** `compareO0StageIdSets` returns `equal:false` when any id **repeats** in either run (a SET comparison that cannot see a duplicate is under-strong); `unseparatedStageIds` (and every derived verdict) **skips non-string/`undefined` ids**, so no `'undefined'` phantom ever reaches a verdict. |
 | 4 | **MUST-FIX** | `unauthorized-access` | `src/renderer/runtime.ts` `:80-90` (the handle's install function; the assignment at `:83` — once the module-scope publish at `:75-77`); row `B9` (`tests/unit-o-0-hook-contract.test.ts:808-852`) | The page global published the **FULL** recorder — `arm`/`disarm`/`record`/`reset` — at **module scope**, so any page script could commit a measurement (`record`) or wipe one (`reset`), and merely importing the renderer published the handle. | **FIX (contract §3.6/§6 F15):** the published value exposes **only `{arm, disarm, isArmed, records, state}`** (no `record`, no `reset`) and is installed **on first arm, from inside a function**. §3.6b pins the runtime meaning: a page-side `arm()` may request the render-path subset only. |
-| 5 | **MUST-FIX** | `schema` | `scripts/live-drive.mjs` `o0DeriveReportPass` (`:1155-1200`) — it never imports/calls the pure validator; `o0RowPass` (`:693-716`) re-implements a subset inline; the ordering at `:966-967` | The driver never runs the **pure validator over its own report**: its inline rules can (and on this unit did) accept rows the pinned module would reject, and `o0ApplyPostStyle` runs **after** the reasons are computed, so a reconciliation-forced reason can be computed too late to be part of `failReasons`. | **FIX (contract §3.6b/§6 F17):** `o0BuildReport` must run `validateO0Run` per row and `validateO0Reports` per report **before writing**, through the **same guarded twin-import** (no mirror), and **append** their `failReasons` to `driver.failReasons`; `driver.selfValidation` records `{ok, attempts, runIds, errors}`. |
+| 5 | **MUST-FIX** | `schema` | `scripts/live-drive.mjs` `o0DeriveReportPass` (`:1155-1200`) — it never imports/calls the pure validator; `o0RowPass` (`:693-716`) re-implements a subset inline; the ordering at `:966-967` | The driver never runs the **pure validator over its own report**: its inline rules can (and on this unit did) accept rows the pinned module would reject, and `o0ApplyPostStyle` runs **after** the reasons are computed, so a reconciliation-forced reason can be computed too late to be part of `failReasons`. | **FIX (contract §3.6b/§6 F17):** `o0BuildReport` must run `validateO0Run` per row and `validateO0Reports` per report **before writing**, through the **same guarded twin-import** (no mirror), and **append** their `failReasons` to `driver.failReasons`; `driver.selfValidation` records `{ok, attempts, runIds, errors}`. **RESOLVED 2026-09-21 — as an INVARIANT PIN, not as a landed defect (the TestWriter's counter-evidence, `tests/unit-o-0-driver-contract.test.ts` `D24`/`D25`).** The ordering half of this finding was verified to be a **HAZARD, not an observable defect**: `report.driver.openStructural` was read before the self-validation `derived.gating.push`, and nothing in the driver or the report consumed the pre-push reading — the stale field was **DEAD**, so no emitted artifact ever contradicted itself. What the finding therefore owes is an **invariant pin** (D24/D25: the emitted report's `status`/`pass`/`failReasons` must all read the SAME final reason set, recomputed after the late self-validation push), which has landed. The **one residual is now FIXED** (`scripts/live-drive.mjs`: `report.driver.openStructural` is recomputed AFTER that push; §12.14 (driver residual), artifact §7.5/§10.3 — pre-push and post-push readings are equal on the fourth run's legs, which is why the defect was latent there). The OTHER half of this finding (running the pure validator over its own report before writing) landed with F17(a)/RUL-4. **No open driver-ordering defect remains.** |
 | 6 | **SHOULD** | `under-strong` | row `R2` (`:627-649`) | A `stages[]` entry the row cannot use is reported through a **coerced stage id** (`'undefined'`) rather than its `stages[<i>]` **INDEX**, so the §4.4 falsifiability counterexample ("delete one `stages[]` entry") is not constructible from the reason. | **FIX (contract §4.3/§6 F13):** name the offending entry by index. |
 | 7 | **SHOULD** | `under-strong` | `tests/unit-o0-report-contract.test.ts` `P-IM-1` row's generator (`:720-802`) | The row text pins "every stage ms **and every counter**" but every draw perturbed only a stage value — a counter defect (`longTaskTotalMs`/`mutations`/`wallMs`) could not be exercised. | **FIX (TEST remand → now LANDED as modes 1-9).** Generator modes added; the `longTaskTotalMs === null` mode is additionally constrained by R-2 (§4.3: the primary oracle is required, so `null` is `ok:false`, not a legal unmeasured form). |
 | 8 | **SHOULD** | `under-strong` | `P-IM-2` row's generator (`:803-852`) | No draw had `missing` and `extra` **both** non-empty, and no reversed-order legal row existed — the totality oracle was never exercised against a duplicate **plus** a removal. | **FIX (TEST remand → LANDED as modes 14/15).** |
@@ -1403,14 +1403,14 @@ SHOULD TEST remands, and the fourth (`R1`) is **rejected and withdrawn**.
 | `snapshot.pull`/`docheads.pull` span shape | **async/settled** (RUL-2 — the span covers the awaited round trip, closing on resolution **or** rejection; §3.6) |
 | Structural stages in a legal report | **0 or 1** (`snapshot.clone` only, while the RUL-3 transport gap stands): after RUL-1 every other id has a permitted seam, and `post.style` is `derived` (never `structural`) — §4.3/§6 S14 |
 | Report `status` values | **3** (`"OK"`, `"OPEN-structural"`, `"FAIL"` — RUL-4, §4.2/§3.6b) |
-| New test files / tests | **3** files, **106** rows GREEN at the third-run read (**106 = report-contract 44 + hook-contract 39 + driver-contract 23** — `tests/unit-o-0-report-contract.test.ts` **44**, `tests/unit-o-0-hook-contract.test.ts` **39**, `tests/unit-o-0-driver-contract.test.ts` **23**, `D1`..`D23`). The earlier **99** rows were the **cycle-in-progress** reading at the pre-fix edit (report-contract 39 / hook-contract 37 / driver-contract 23) and the **95** was the second-run reading (23/37/35) — both provenance; the RUL-1..RUL-6 re-pin landed the remaining rows (`+11` over run 2). The `P-TP-3` band read is **GREEN**: the validator band fix **LANDED** (`src/shared/o0-report.ts:329-332` calls `deriveO0WindowBound(run)` with **no** options), so no cycle-in-progress red is owed in this file (§12.11). **Counts move; re-read before quoting.** |
+| New test files / tests | **3** files, **114** rows GREEN at the FOURTH-run read (**114 = report-contract 50 + hook-contract 39 + driver-contract 25** — `tests/unit-o-0-report-contract.test.ts` **50**, `tests/unit-o-0-hook-contract.test.ts` **39**, `tests/unit-o-0-driver-contract.test.ts` **25**, `D1`..`D25`). The **106** (report-contract 44 + hook-contract 39 + driver-contract 23) was the third-run read and the **pre-fix** count: the `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` fix added **6** report-contract rows (`PD1`..`PD5` + the `PD5b` legal control; the moved `ST2`/`ST4`/`ST5` rows kept their identity and gained the `pass:false` half) and the driver's ordering-invariant pin added **2** (`D24`/`D25`). Earlier readings stay provenance: **99** at the pre-fix edit (39/37/23) and **95** at the second run (23/37/35). The `P-TP-3` band read is **GREEN**: the validator band fix **LANDED** (`src/shared/o0-report.ts` calls `deriveO0WindowBound(run)` with **no** options), so no cycle-in-progress red is owed in this file (§12.11). **Counts move; re-read before quoting.** |
 | `runs[]` rows in a full 4-block artifact | **6** (2 gesture freezes + 2 GPU-control freezes + 2 ablation freezes; the determinism block re-reports an existing run rather than adding a row) |
 | `controls[]` rows in a full artifact | **4** (`gpu-on`, `gpu-off`, `track-ablation-on`, `track-ablation-off`) |
 | New driver flags | **3** pinned (`--gpu`, `--o0-corpus=`, `--o0-out=`) (§3.3) **+ 2 landed by the live pass** (`--corpus-root=<dir>`, `--strict-seed`, both default-safe — §3.4/§12 H7) = **5** |
-| New committed artifact files | **1** (`docs/specs/unit-o-0-per-stage-breakdown.md`) (§4.1) — **re-committed by the THIRD live run (host clock 2026-09-20; the JSON stamps UTC 2026-09-21) and CURRENT per §12.13**: runs 1-2 are named SUPERSEDED **inside** the artifact, its raw JSON is embedded verbatim, and **no number in it is awaiting a fix**; what stays incomplete is the MEASUREMENT (`snapshot.clone` `structural:true`, the therefore-derived `post.style`) — the ACCEPTED structural set per DEC-1 |
+| New committed artifact files | **1** (`docs/specs/unit-o-0-per-stage-breakdown.md`) (§4.1) — **re-committed by the FOURTH live run (2026-09-21, the post-fix harness) and CURRENT per §12.14**: runs **1-3 are named SUPERSEDED** **inside** the artifact, its raw JSON is embedded verbatim (both legs, byte-exact round-trip verified), and **no number in it is awaiting a fix**; what stays incomplete is the MEASUREMENT (`snapshot.clone` `structural:true`, the therefore-derived `post.style`) — the ACCEPTED structural set per DEC-1. (§12.13 records the THIRD run, whose artifact revision is now SUPERSEDED by the fourth — RCA-11: a changed harness invalidates the prior live provenance.) |
 | New `$`-row in `MATRIX_ROWS` / `ROW_EXTENDED` | **0** (O-0 claims no §5.U row and no extended row — §3.2) |
 | Operator corpus census | **226 documents** pinned (`docs/defects.md:26`) — **the SIZE is the gate** (RUL-5/L10). The first run observed **226 / 10 170 / 18 758**; the second run observed **226 / 6 102 / 9 266** from a different generator — both legal, the bytes/nodes/edges being **recorded provenance, not pins** (§3.4/§4.3) — seed **`o0-2026-09-17`** (§3.4) |
-| Trio | **`npm test` IS RED — and NOT for O-0.** The **NON-O-0 toolchain regression** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`: the third-run read is `npm test` = **214 files / 25 failed / 4 820 pass / 58 skip** (**8 failed files of 214**, 206 passed), appearing with the user's `98ea185` vitest 2→5 / electron 33→44 / esbuild 0.24→0.28 bump; the first reading was **22 failed / 4 819 pass** in 7 files, and **run 2 also read 22**) is the blocker. **The 22 → 25 drift across runs is NON-O-0 — recorded as drift, never attributed to O-0.** **O-0's own leg is GREEN in the same reading: 106/106** (**report-contract 44 + hook-contract 39 + driver-contract 23**; run 2 read 95 = 23/37/35), all **8 register rows held** (the 470-attempt budget). **No unit may be reported DONE on a green-`npm test` claim while this regression stands** (AGENTS.md item 4; §11, `docs/next-steps.md`'s REGRESSION entry, `docs/pending.md`'s SCHEDULED DEC-2 row — the vitest-5 migration unit) |
+| Trio | **`npm test` IS RED — and NOT for O-0.** The **NON-O-0 toolchain regression** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`: the third-run read is `npm test` = **214 files / 25 failed / 4 820 pass / 58 skip** (**8 failed files of 214**, 206 passed), appearing with the user's `98ea185` vitest 2→5 / electron 33→44 / esbuild 0.24→0.28 bump; the first reading was **22 failed / 4 819 pass** in 7 files, and **run 2 also read 22**) is the blocker. **THE READINGS IN THIS CELL ARE HISTORICAL (third-run/O-0-record readings, kept as provenance): the blocker was CLOSED 2026-09-21. The current full-suite reading is 217 files passed (217) / 4 913 passed / 58 skipped / 0 failed (4 971 total), exit 0 (the 4 905 / 4 963 reading was the pre-fix tree; the O-0 fix adds the 6 report-contract + 2 driver-contract rows).** **The 22 → 25 drift across runs is NON-O-0 — recorded as drift, never attributed to O-0.** **O-0's own leg is GREEN in the same reading: 114/114** (**report-contract 50 + hook-contract 39 + driver-contract 25**; the third run read 106 = 44/39/23, run 2 read 95 = 23/37/35), all **8 register rows held** (the 470-attempt budget). **The AGENTS.md item 4 discipline this cell stated ("no unit may be reported DONE on a green-`npm test` claim while this regression stands") is SATISFIED as of 2026-09-21 — the regression is FIXED (see `docs/defects.md`), so it no longer blocks any unit** |
 | `src/` **behavior** change | **0** at the reported trio — the §3.6 hook is inert when unarmed (`P-HK-1`); the contact is 2 new pure modules + 7 wrap-only call sites + 1 guarded `window.__o0recorder` handle (landed hardened: 5 keys, installed inside the runtime's construction). The RUL-1..RUL-6 **fixes HAVE LANDED** (the RUL-1 render wraps, the RUL-2 async span, the RUL-3 reason, the RUL-4 validator reclassification + `status`, the RUL-5 `L1`/`L8` derivations) and the third run executed on that bundle (§12.13); **still measurement-only and inert-when-unarmed**. The `src/` anchors for those wraps are re-pinned in §8.2 |
 
 ### 8.2 Cross-references
@@ -1606,7 +1606,9 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
 1. **The parked engine track's trigger (c).** `O-0 shows the derivation WALK ITSELF
    (not compile/emit/layout) exceeds the budget` is trigger **(c)** of the three
    external triggers that would schedule O-6/O-7/O-8
-   (`gnosis-offload-proposal.md:162-166`; `docs/pending.md:134-139`). O-0's
+   (`gnosis-offload-proposal.md:162-166`; `docs/pending.md` §"PARKED DESTINATION — the engine track",
+   the **"Track trigger (any one)"** list — repointed 2026-09-21: the old `docs/pending.md:134-139`
+   line citation no longer resolves). O-0's
    `traversal.build` stage measured against the long-task total is the **only** input
    that can fire it — so the engine track's re-opening is **gated on this artifact**,
    and nothing else may claim trigger (c). **Status at the THIRD (accepted) run: trigger (c) stays
@@ -1622,7 +1624,9 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
    (DEC-1) — no unit may treat (c) as fired on any other artifact.**
 2. **The parked track's trigger (b) threshold.** `the operator corpus exceeds the local
    store's measured ceiling — the node-count threshold is pinned by O-0`
-   (`gnosis-offload-review.md:445`; `docs/pending.md:135-136`). The artifact's
+   (`gnosis-offload-review.md:445`; `docs/pending.md` §"PARKED DESTINATION — the engine track", the
+   **O-7 / O-8 rows** — repointed 2026-09-21: the old `docs/pending.md:135-136` line citation no
+   longer resolves). The artifact's
    `corpus.nodes` census at operator size is the input to that pin — **read from the SAME run's
    corpus row, with the byte-size gap named (RUL-5/L10)**: the three runs read **10 170**
    (first) and **6 102** (second and third) nodes at the identical pinned size of 226 documents,
@@ -1681,6 +1685,12 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
 - **The CURRENT state (read this first): the unit is DONE — THE ARTIFACT IS ACCEPTED (DEC-1,
   2026-09-20) and the O-5 gate is OPEN.** The THIRD live run RAN on the RUL-1..RUL-6 bundle
   (2026-09-20; §12.13) and produced a COMPLETED MEASUREMENT WITH ONE RECORDED STRUCTURAL GAP.
+  **UPDATE 2026-09-21 — the CURRENT accepted artifact is the artifact's FOURTH edition (§12.14):
+  the post-fix harness (validator recompute + the driver `openStructural` residual) re-ran both
+  legs and the same shape holds (both legs `status:"OPEN-structural"`, `pass:false`,
+  `selfValidation.ok:true`, `errors:[]`, `gatingReasons:[]`, `failReasons` = the structural family
+  only, NO newly surfaced reason); DEC-1's acceptance is re-affirmed UNCHANGED on that edition and
+  the report is still NOT `"OK"`.**
   Both legs:
   `status:"OPEN-structural"`, `pass:false`, `selfValidation.ok:true`, `errors:[]`,
   `gatingReasons:[]` — **no FAIL class fired**; `snapshot.clone` is the one
@@ -1694,7 +1704,11 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
   not regress); the report STATUS is one of the three legal values, DERIVED and
   consistent (`OPEN-structural`, `reconciliation.note` present, the `O-0 REPORT OPEN …`
   verdict emitted) with an EMPTY `errors[]` — the second run's `ok:false` (24/12) is
-  gone (item 9); the RUL-5 form pins hold (no `null%`, `post.style` labeled `derived`,
+  gone (item 9); **and a reason minted BEFORE the family/gating split can no longer leave
+  `ok`/`status`/`failReasons` behind (the `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` fix,
+  LANDED 2026-09-21: `ok` is read after the LAST post-derivation block and the F18 pins now
+  live at the `pass:false` level — §11's red→green row below; the FOURTH run re-confirms the
+  shape on the executed fixed bundle, §12.14);** the RUL-5 form pins hold (no `null%`, `post.style` labeled `derived`,
   the GPU delta per run/corpus only — this run reads **−42 ms folder / +9 ms document**,
   never carried; the corpus size is the gate with nodes/edges as provenance; `env.engine`
   derived as `"absent"` WITH the `fetch failed` evidence string) (item 10); and item 7 is
@@ -1718,11 +1732,15 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
   never quietly `"OK"`). **Nothing in this bullet is a park; the park rule (RCA-11 / `AGENTS.md`
   item 11) is unchanged and no O-0 surface is structurally non-exercisable except
   `post.style`'s residual (by construction a derived number, §2.2 id 11) and the RUL-3
-  out-of-host IPC clone. Two OPEN host/tracker rows remain filed and OWED from this pass
-  (§12.13) — the user accepted the STRUCTURAL gap, NOT these: `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`
-  (the validator's post-derivation
-  `failReasons`/`ok` snapshot — a cheap fix) and `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`
-  (`M1`/`M2`/`M3`).**
+  out-of-host IPC clone. **UPDATE 2026-09-21: of the two host/tracker rows filed and OWED by the
+  third-run pass (§12.13) — which the user's DEC-1 acceptance did NOT cover — the validator row is
+  now FIXED (`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`: the post-derivation reasons reach the
+  final `failReasons[]`/`ok`, §12.14), and the measurement-shape row remains OPEN and SCHEDULED as
+  the NEXT unit (`O0-M1-M3-MEASUREMENT-SHAPE` / `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`: `M1`/`M2`/
+  `M3`, re-witnessed unchanged by the fourth run).** **APPENDED 2026-09-21 (§12.15): the unit's
+  FIFTH live run RAN and FAILED — both legs `status:"FAIL"`/`pass:false`/`selfValidation.ok:false`
+  (`gatingReasons` 9 / 5), findings `F5-1`..`F5-6`, three test reds; the artifact's accepted
+  evidence remains the FOURTH edition and DEC-1 is unchanged.**
 - **The blind-greens artifact for O-0 is the §6.1 coverage report — NOT a greens doc.**
   Per `gnosis-offload-review.md:88` ("For O-0/O-5 the blind-greens artifact is the
   *coverage report* (`user-flow-audit.md` §6.1), not a greens doc") and §2.1(a)
@@ -1854,6 +1872,7 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
   is NOT owed to open the gate; until it exists every report must stay
   `status:"OPEN-structural"` and the residual stays recorded as uncomputable (§11's
   CURRENT-state bullet, §12.13).
+- **The validator-recompute fix is LANDED and the pin level moved (2026-09-21).** `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` — the third run's filed HOST row — is **FIXED**: `validateO0Report` (`src/shared/o0-report.ts`) runs its three post-derivation `err()` blocks (F20 carried cross-run GPU delta, the corpus-gate provenance clause, F21 vacuous-half) **AHEAD** of the family/gating/status split, takes the split from the FINAL `failReasons` (`family` = the recorded structural + derived-residual sets; `gating` = every reason outside the family), records the four verdict-consistency clauses in **BOTH** `errors[]` and the returned `failReasons[]` (via `errVerdict`, never feeding the split they are derived from), and reads **`ok` after every reason is minted** (`ok: errors.length === 0 && gating.length === 0`) — so a non-empty `errors[]` can never read `ok:true` again. The missing-`reconciliation.note` clause is a **genuine forcing reason** (it derives `FAIL`). **The F18 pins therefore move from the `errors[]` level to the `pass:false`/`failReasons[]` level** (`PD1`..`PD5` + `PD5b` in `tests/unit-o-0-report-contract.test.ts`; red 8 → green 50/50, O-0 114/114). The driver's ordering residual (`report.driver.openStructural` read before the self-validation `derived.gating.push`) is fixed in `scripts/live-drive.mjs` (§7 §3a finding 5, resolved as an invariant pin + that one residual). **The FOURTH live run (2026-09-21, §12.14) re-executed the harness on the fixed module: both legs `status:"OPEN-structural"`/`pass:false`/`selfValidation.ok:true`/`errors:[]`/`gatingReasons:[]` with `failReasons` = the structural family only, NO newly surfaced reason, and the fix proven load-bearing by an OLD-vs-NEW differential on the executed artifact (pre-fix: `ok:true` with the reason stranded; fixed: `ok:false` with the reason in BOTH channels, `FAIL` where it gates) — while the unperturbed legs mask nothing (the defect's live exposure was LATENT).** The defect row is **FIXED (2026-09-21)** in `docs/defects.md`; the unit record is §12.14 and `archive/reviews/2026-09-21-unit-o0-validator-reason-drop-doc-review.md`.
 - **Red→green history (recorded — RCA-1).** The harness landed through THREE red sets,
   in order:
   1. **TestWriter red 41 failing** — 26 pure-module rows
@@ -1870,6 +1889,16 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
   3. **A NEW red set — 30 failing** for the §3.6 hook (the `src/shared/o0-hook.ts`
      module + the five wraps + the driver's stage→seam map) →
      **Implementer green 30/30** (`tests/unit-o-0-hook-contract.test.ts`).
+  4. **A FOURTH red set (2026-09-21) — 8 failing for the post-derivation-reason fix**:
+      `PD1`..`PD5` NEW (`tests/unit-o-0-report-contract.test.ts`) + `ST2`/`ST4`/`ST5`
+      **MOVED** from the `errors[]` level to the final `failReasons[]`/`pass:false` level
+      (the same rows, the forcing half added) → **Implementer green: the report-contract
+      file 50/50, O-0's three suites 114/114, the full suite 217 / 4 913 / 58 / 0**, the
+      register 8/8 `held`, typecheck 0, build 0. The fix's red set was RUN and reported
+      before the implementation (RCA-1); the driver-contract `D24`/`D25`
+      ordering-invariant pin lands with it. **This red set belongs to the DEFECT's own
+      unit (§12.14), not to the measurement** — the measurement's own red set remains the
+      property/pure-module register of §5.
   The measurement itself has no red set and this spec does not claim one (§5; RCA-1 does
   not apply to a measurement — `gnosis-offload-review.md:84`).
 - **The trio (run by the Implementer after the green — `AGENTS.md` item 4):**
@@ -1886,9 +1915,15 @@ added, and the two rows in the list above stay OWED and unclosed by O-0.
   files of 214)** — **all 25 failures are the pre-existing NON-O-0 toolchain regression**
   `SUITE-RED-AFTER-VITEST5-ELECTRON44` (vitest 2→5 / electron 33→44 / esbuild 0.24→0.28,
   commit `98ea185`), while O-0's own three suites read **106/106**. The repo-wide trio's
-  `npm test` leg is therefore RED and O-0 is NOT reported on a green-trio claim; the vitest-5
-  migration unit is SCHEDULED as the user's **DEC-2** (`docs/pending.md` SCHEDULED row,
-  item (1) of the next queue in `docs/next-steps.md`).**
+  `npm test` leg was therefore RED and O-0 was NOT reported on a green-trio claim; the vitest-5
+  migration unit was SCHEDULED as the user's **DEC-2** (`docs/pending.md` SCHEDULED row,
+  item (1) of the next queue in `docs/next-steps.md`). **UPDATE 2026-09-21: the blocker was
+  CLOSED — DEC-2's unit and its Class-C sibling both LANDED; the final trio reads
+  `npm test` = 217 files passed (217) / 4 905 passed / 58 skipped / 0 failed (4 963 total),
+  exit 0, with typecheck 0 and build 0 (5 bundles). The 25/4 820/58 and 4 819/22 readings
+  above stay HISTORICAL provenance. That 4 905 / 106/106 reading was the PRE-fix tree —
+  **the CURRENT reading is 217 files passed (217) / 4 913 passed / 58 skipped / 0 failed (4 971
+  total), exit 0, with O-0's three suites at 114/114** (§12.14 (6)).**
 - **Post-trio drift observed DURING the doc pass, now RESOLVED INTO THE RECORD.** While this
   spec was being reconciled against the build, the tree moved under it: (a) the driver grew
   **3 764 → 3 789 → 3 849 lines** (the `--display` colon normalization of §6 F12 plus the
@@ -2541,7 +2576,23 @@ toolchain-bump set** (`SUITE-RED-AFTER-VITEST5-ELECTRON44`; run 2 read **22**). 
 25 across runs is NON-O-0 and is reported as drift, not attributed to O-0 — no stable 22 is
 claimed.** Per AGENTS.md item 4 (and the REGRESSION row), **no unit may be reported DONE on a
 green-`npm test` claim while that regression stands**; O-0's own leg is green and its trio's
-`npm test` leg is red for a NON-O-0 reason.
+`npm test` leg was red for a NON-O-0 reason. **UPDATE 2026-09-21: the blocker was CLOSED 2026-09-21
+(the migration + import-batch-persist units landed; final trio 217 files passed (217) /
+4 905 passed / 58 skipped / 0 failed (4 963 total), exit 0; O-0 106/106; typecheck 0;
+build 0). The 25 failed / 4 820 pass / 58 skip reading above is HISTORICAL.**
+
+**FIXED 2026-09-21 — the post-derivation reason drop is closed; the artifact is the FOURTH
+edition.** `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` is **FIXED (2026-09-21)** (the recompute
+shape + the `ok`-read-after-the-last-mint + the both-channel verdict clauses + the genuine
+forcing note clause + the driver `report.driver.openStructural` ordering residual) and the
+HARNESS CHANGED, so this record's artifact revision is invalidated as prior live provenance
+(RCA-11): **`docs/specs/unit-o-0-per-stage-breakdown.md` is now the FOURTH edition and runs 1-3
+are named SUPERSEDED inside it**; the fourth run's own record is **§12.14**. **The DEC-1
+acceptance (§12.13 (8)) is re-affirmed UNCHANGED on the fourth edition** — same accepted
+structural set (`snapshot.clone` + the therefore-derived `post.style`), same
+`status:"OPEN-structural"` / `pass:false` form, same five gate conditions — and the report is
+**not** relabeled `"OK"`. §12.13's numbers stay the THIRD run's record (labelled historical),
+never the current reading.
 
 **(7) THE TWO OPEN DEFECT ROWS THIS PASS FILES (both in `docs/defects.md`, both OPEN).**
 1. **`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` (medium, HOST)** — `validateO0Report` computes
@@ -2583,13 +2634,728 @@ canonical home of the amended condition. The `snapshot.clone` seam keeps its rec
 - Independent of (a)/(b): the **`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` fix is cheap**,
   remains OWED (the user accepted the structural gap, NOT this row), and does not require the
   seam decision — it is item (2) of the next queue in `docs/next-steps.md`.
+  **RESOLVED 2026-09-21: the fix LANDED (the recompute shape + the F18 pins moved to the
+  `pass:false` level + the driver ordering residual) and the FOURTH live run re-executed the
+  harness on the fixed module — the accepted artifact is now the FOURTH edition and the
+  acceptance above is re-affirmed UNCHANGED on it (`status:"OPEN-structural"`, `pass:false`,
+  `selfValidation.ok:true`, `errors:[]`, `gatingReasons:[]`, the same accepted structural set).
+  The defect row is FIXED (`docs/defects.md`); the unit record is §12.14 and
+  `archive/reviews/2026-09-21-unit-o0-validator-reason-drop-doc-review.md`. The OWED work of
+  this queue is now the M1-M3 measurement-shape unit (`O0-M1-M3-MEASUREMENT-SHAPE`).**
 
 **O-0 is DONE — the artifact is ACCEPTED at `status:"OPEN-structural"` (a completed measurement
 with one recorded structural gap; no further O-0 code owed).** The artifact is committed,
-CURRENT for this measurement, honest and structurally incomplete by the accepted gap. **Caveat:
-the repo-wide trio's `npm test` leg is RED from the DEC-2 regression
-(`SUITE-RED-AFTER-VITEST5-ELECTRON44`)** — a NON-O-0 toolchain regression scheduled as its own
-migration unit; O-0's own three suites read **106/106** (item 6 of §12.13). The **doc-review
+CURRENT for this measurement, honest and structurally incomplete by the accepted gap. **Caveat
+(historical — superseded 2026-09-21): the repo-wide trio's `npm test` leg was RED from the
+DEC-2 regression (`SUITE-RED-AFTER-VITEST5-ELECTRON44`) — the blocker was CLOSED 2026-09-21
+(final 217 files passed (217) / 4 905 passed / 58 skipped / 0 failed (4 963 total), exit 0)** —
+a NON-O-0 toolchain regression that was scheduled as its own
+migration unit; O-0's own three suites read **106/106 at the third run — 114/114 at the fourth
+(report 50 + hook 39 + driver 25), the CURRENT reading** (item 6 of §12.13; §12.14 (6)). The **doc-review
 (RCA-6, record: `archive/reviews/2026-09-20-unit-o-0-doc-review.md`)** runs concurrently and must
 re-pin this spec's driver line anchors and reconcile the census/test-count claims against the
-build.
+build. **(The post-fix doc-review is
+`archive/reviews/2026-09-21-unit-o0-validator-reason-drop-doc-review.md` — §12.14's record.)**
+
+---
+
+### 12.14 THE FOURTH LIVE RUN (2026-09-21) — the post-fix harness, the re-accepted FOURTH-edition artifact, and the defect proven load-bearing
+
+**What ran.** The **fourth live run**, executed on the bundle carrying the
+`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` fix (`src/shared/o0-report.ts` `validateO0Report`:
+the post-derivation blocks ahead of the split, the split from the FINAL `failReasons`, `ok` read
+after the last mint, the verdict-consistency clauses in BOTH channels, the note clause genuinely
+forcing) plus the driver's `report.driver.openStructural` ordering residual
+(`scripts/live-drive.mjs`: recomputed AFTER the self-validation `derived.gating.push`). **The
+harness changed, so the accepted artifact was REGENERATED (RCA-11)**:
+`docs/specs/unit-o-0-per-stage-breakdown.md` is now the **FOURTH edition**, whose §1-§13 are the
+verbatim evidence, whose **STATUS banner names runs 1-3 SUPERSEDED**, and whose §12 embeds the
+raw JSON of **both legs verbatim** (byte-exact round-trip verified; 89 211 B / 50 103 B). This
+section is the spec's summary + disposition, in the shape of §12.13.
+
+**Command shape (spawn mode, `:0` — the operator store was again absent, so §3.4's source 2 was
+used and the pinned SIZE was reached; artifact §1 is the verbatim command set):**
+
+```bash
+npm run build     # dist/renderer/renderer.js 678270 B; dist/main/main.cjs 2419531 B
+                  # renderer sha256[:8] a25b03a9 / main 04aceeff — both legs verified against disk
+node scripts/live-drive.mjs --display=:0 --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0d-gpuoff.json \
+  --block=o0_folder_row,o0_document_row,o0_track_ablation,o0_repeat_determinism
+node scripts/live-drive.mjs --display=:0 --gpu --seed=/tmp/o0-corpus-226 \
+  --corpus-root=/tmp/o0-corpus-226 --strict-seed --o0-corpus=226 \
+  --o0-out=/tmp/o0d-gpuon.json --block=o0_gpu_control,o0_repeat_determinism
+npm test && npm run typecheck && npm run build   # the trio (recorded in artifact §11.5)
+```
+
+**No harness fix was needed for this run.** The two harness changes under test were already in
+place; **no `src/**` or `tests/**` file was touched by the live pass**, and both legs ran on the
+identical `renderer 678270+a25b03a9` bundle.
+
+**Environment + bundle identity.** `driver.runMode:"spawn"` and `driver.build.verified:true` on
+**both** legs (renderer `1789969524598+678270+a25b03a9` GPU-OFF /
+`1789969551283+678270+a25b03a9` GPU-ON; main `…+2419531+dd1d5d0e`; served = on-disk);
+`driver.display:":0"`, `appFlag` = the driver-spawned `--no-gpu` leg vs the `gpu on` leg;
+`env.mode:"lexical"`, `env.paneFrames:2`; `env.engine:"absent"` with the evidence `an error
+payload from the status call (fetch failed)`, `driver.engineError:null` (the run-3 `L1b`
+`errorOf` fix re-confirmed); pairing `cross-artifact`; `driver.mainSeamArmed:false` /
+`mainSeamRecords:0` / `mainTransport.channel:null` on both legs; `hook.stageRowsSource` = the
+real module on every row (no mirror); row window band `hook.toleranceMs:40` (distinct from
+`tolerance.reconcileMs:50`, the residual band).
+
+**Census (artifact §3).** `corpus.documents` **226 = the claimed 226 on BOTH legs**,
+`corpus.gate:"documents"`, seed `o0-2026-09-17`; `corpus.nodes`/`edges` **6 102 / 9 266**
+recorded provenance (RUL-5/L10, identical to runs 2-3); the host-side `find` re-verification
+agrees (**226 `*.md` = docs 200 + archive 20 + notes 6, 1.8 M**), so all four runs are
+same-corpus-shape at the pinned size. **No census-mismatch reason exists in either leg.**
+
+**Per-stage table summary (artifact §4; ms, GPU-OFF folder-row / document-row).**
+`snapshot.pull` **79.9 / 162.4** (the AWAITED round trip — RUL-2; per-read 79.9 and
+118.3 + 44.1), `snapshot.clone` `null (u, S)` on every row, `docheads.pull` 2.1 / 4,
+`traversal.build` **701.9 / 11.5**, `envelope.assemble` 0.4 / 0.5, `shared.decorate` 10.7 / 0.8,
+`reconcile.roots` 17.4 / 3.1, `reconcile.apply` 150.1 / **2 030.4**, `render.dom` 58.4 / 73.2,
+`render.ssr` 70.6 / **1 739.5**, `post.style` `null (u, derived)` on every row; Σ named /
+long task / residual **1 091.5 / 1 007 / −84.5** (folder) and **4 025.4 / 2 162 / −1 863.4**
+(document). GPU-ON: folder `traversal.build` 659.1 in a 954 ms window, document
+`reconcile.apply` 2 050.2 in 2 177 ms, residual −87.3 / −1 860.4. **9 ids measured numerically,
+1 structural, 1 derived — in every row of both legs**; `hook.pendingSpans:0`, `hook.dropped:0`,
+`hook.refused:[]`, `quiesced:true` (`timedOut:false`) on every row.
+
+**Controls (artifact §5-§6).** Both gestures resolved `path:"cdp"` / `realInput:true` in every
+row (real hit-tested rows: a `#pane-doc-nav [data-folder-path]` row and a
+`[data-document-id="archive/archive-001"]` row). **Hook inertness (RUL-6):** `inert:true` in
+BOTH legs with `Δmutations 0` (37 vs 37), the long-task half VACUOUS (`nonVacuous:false`,
+0-vs-0), `carriedBy:["mutations"]` and the pinned **MUTATION-HALF** sentence verbatim — the
+**F21 clause therefore does not fire** (and its input, `driver.hookInertness[]`, is the array
+that carries `nonVacuous`/`proofStatement`; see (8) below). `setEqual:true`, `ms` free under the
+seed. **Track ablation (d):** 0 ms long-task total, Δmutations 0, ΔwallMs +1.9 ms — available,
+applied and reverted, with the two zero-window rows printing the RUL-5/L8 no-percentage form.
+**GPU control (c):** THIS run only — **−53 ms folder / +15 ms document** (mutation counts
+identical, 37/37 and 11 758/11 758) — **no separable GPU effect**; the first/second/third runs'
+deltas (+2173/+2419, −36/−23, +42/−9) appear only as labelled provenance with
+`carriedFromAnotherRun:false`, so the **F20 clause does not fire**.
+
+**The self-validation triple + the derived verdicts ((1), artifact §7.1-§7.3).** Both legs:
+`driver.selfValidation.ok:true`, `errors:[]` (0), `status:"OPEN-structural"`, `attempts` 4 / 2
+rows all `ok:true`, `structuralErrors:0` with `structuralFacts:4` / `2`, `moduleGating:[]`,
+`gatingReasons:[]`, `reconciliation.ok:false` with the mandatory `reconciliation.note` present
+verbatim, the derived `status:"OPEN-structural"` with `pass:false`, and the report-level
+`O-0 REPORT OPEN — …` verdict emitted (17 GPU-OFF / 9 GPU-ON verdict strings). **The pure
+module re-run over the embedded JSON** (`validateO0Report`, the module the driver executes):
+`ok:true`, `status:"OPEN-structural"`, `errors:[]`, **`failReasons` 8 (GPU-OFF) / 4 (GPU-ON)** =
+the structural family only (4 structural + 4 derived-residual / 2 + 2), `gating` 0; every row
+`ok:true` with `errors:[]`. **The one structural id is `snapshot.clone`** (the RUL-3 reason
+verbatim in both places it is owed), and `post.style` is `derived` in every row/table/verdict.
+
+**Window bound ((9), artifact §9).** `deriveO0WindowBound(run)` re-run with **NO options** over
+both embedded reports reading the row's recorded band (40 ms): **NO row violates the bound** —
+`violated:false` on all six rows, largest arm-window overshoot of the freeze window **+1.0 ms**,
+largest shortfall 0.0 ms, no pct > 100 and **no `null %` string anywhere** (the two zero-window
+ablation rows print the RUL-5/L8 form). Run 3's 0.8 ms result **does not regress**.
+
+**The O-0 questions ((2)-(3), artifact §8).**
+- **(a) A-4 is answered at the caller level: 1 read (folder disclosure, 79.9 ms) vs 2 reads
+  (document open, 162.4 ms)** — per-read 118.3 + 44.1 on the document row; `docheads.pull` 2.1 /
+  4 (2 + 2). The cheapest variant ("a doc-nav disclosure performs no store read at all") stays
+  **REFUTED for both gestures**, and the count is **1 / 2 in every one of the four runs' pinned
+  legs** (a stable shape).
+- **(b) The separable JS path DOMINATES: 87.44 %** of the folder window (880.5 ms of 1 007) and
+  **94.65 %** of the document window (2 046.3 of 2 162); the render emits carry 12.81 % / 83.84 %.
+  **The `post.style` residual is NOT separable** (negative on every row), so **no style/layout
+  figure is offered and none may be quoted**.
+- **(d)** above; **(c)** above; **(e) the walk is load-bearing for the DISCLOSURE ONLY**
+  (`traversal.build` 69.70 % GPU-OFF / 69.09 % GPU-ON, the largest identified stage in both legs)
+  and **NOT for the document open** (`reconcile.apply` 93.91 / 94.18 %), so trigger (c) stays
+  **CANDIDATE-FIRED for the disclosure only**, read as a LOWER BOUND.
+
+**(4) THE FIX, VALIDATED ON THE EXECUTED ARTIFACT (artifact §7.3 + §7.4 — the point of this
+run).**
+- **The check.** On BOTH embedded legs: **no post-derivation reason class is present ONLY in
+  `errors[]`** — the F18 status-vs-derivation and `pass:true`/`status`-contradiction clauses 0/0,
+  the missing-`reconciliation.note` clause 0/0 (the note IS present), F20
+  `carriedFromAnotherRun:true` 0 entries, the corpus-gate provenance reason 0/0, the F21
+  vacuous-half reason 0/0; `driver.failReasons` / `driver.openStructuralReasons` /
+  `derived.gating` read 8 / 8 / 0 (GPU-OFF) and 4 / 4 / 0 (GPU-ON) — consistent.
+- **The DIFFERENTIAL (pre-fix vs fixed, over the same perturbed fixtures; `git show
+  HEAD:src/shared/o0-report.ts` vs the fixed module).** As-executed (unperturbed): **identical**
+  (`ok:true | OPEN-structural | 0 | 8 | 0` in both modules) — **this run's legs mask nothing**.
+  `status := "OK"` (F18): pre-fix `ok:true` with 1 error and the reason **dropped** from
+  `failReasons` (8) → fixed `ok:false`, reason in BOTH (9). `pass := true` (F18, two clauses):
+  pre-fix stranded → fixed `ok:false` with both returned (10), still outside `gating` (the
+  self-referential rule). `gpuDeltas[0].carriedFromAnotherRun := true` (**F20**): pre-fix
+  `ok:true`, status left `OPEN-structural` → fixed `ok:false`, **`FAIL`**, reason in
+  `gating`/`failReasons` (10 / 1). `reconciliation.note := null` (**RUL-4 clause 5**): the same
+  shape → fixed **`FAIL`** with the reason gating. `corpus.documents := 225` (F8): both FAIL; the
+  fixed module adds the post-derivation corpus-gate clause to `failReasons` (10 vs 9).
+  `hookInertness[0].proofStatement` mutated with `nonVacuous:false` (**F21**): pre-fix stranded →
+  fixed **`FAIL`** with the reason in BOTH channels. **All five post-derivation classes were
+  exercised.** The second `errors[]` line in the fixed column is the F18 status-vs-derivation
+  clause itself (once a gating reason exists, the declared `"OPEN-structural"` no longer agrees
+  with the derived `FAIL`) — recorded in BOTH channels; on the pre-fix module that same line was
+  minted and dropped, which IS the defect (`ok:true` beside a non-empty `errors[]`).
+- **Reading.** The fix is **real and load-bearing in the module** and **inert on this run's
+  legs** — the required result: the legs were re-measured on the fixed harness and did **not**
+  acquire a reason the pre-fix validator had merely parked in `errors[]`. **The defect's live
+  exposure was LATENT** (run 3 masked nothing either); what the fix closes is the condition,
+  proven by the differential.
+- **The driver residual (artifact §7.5/§10.3).** `report.driver.openStructural` now reads the
+  POST-push reason set; on both legs pre-push = post-push = `true`, consistent with
+  `OPEN-structural` ⇔ `structuralReasons.length > 0 && gating.length === 0`. The ordering defect
+  could only bite on a leg whose self-validation REJECTS a row, so this equality is the
+  verification that the fix is latent here (§7 §3a finding 5: resolved as an invariant pin
+  `D24`/`D25`, with the one residual fixed).
+
+**(5) COMPARISON TO RUN 3 (artifact §10; numbers moved, SHAPES did not).** Folder window
+990 → **1 007 ms** (GPU-OFF) / 1 032 → **954** (GPU-ON); document 2 222 → **2 162** / 2 213 →
+**2 177**; `traversal.build` 684.2 → 701.9 and 715.6 → 659.1; `reconcile.apply` 2 085.1 → 2 030.4
+and 2 075.6 → 2 050.2; A-4 totals 85.9 → **79.9 ms** (folder) / 179.2 → **162.4** (document).
+**Stable shapes:** census 226 with the same 6 102 / 9 266 provenance, 9 measured ids, the same
+2-id unseparated set, A-4 **1 / 2**, window bound pass on all six rows, `selfValidation.ok:true`
+with `status:"OPEN-structural"`/`pass:false`, `env.engine:"absent"` + the same evidence, no
+`null %`. **The GPU delta flipped sign again** (−53 / +15 vs run 3's +42 / −9) — a fourth witness
+that there is **no separable GPU effect** at this scale, not a reversal. All absolute-ms movement
+is single-session readings of the SAME corpus shape on a NEWLY BUILT bundle: **no cross-run
+absolute comparison is a measurement** (RUL-5/L9/L10), and the app source is unchanged by this
+pass.
+
+**(6) THE TRIO + THE REGISTER (recorded, not claimed — RCA-12).** `npm test` = **217 files
+passed (217) / 4 913 passed / 58 skipped / 0 failed (4 971 total), exit 0**; `npm run typecheck`
+exit 0; `npm run build` exit 0 (the exact 678 270 B renderer / 2 419 531 B main bundles both legs
+verified). **O-0's own three suites read 114/114 = report-contract 50 + hook-contract 39 +
+driver-contract 25** (the pre-fix 106 = 44/39/23 is provenance), and all **8 register rows
+`held`** (the 470-attempt budget). **Layer (RCA-12): the O-0 numbers above are APP-layer /
+`assembled-renderer` evidence (real hit-tested CDP gestures against the executing `dist/`
+bundle); the suite-green is HARNESS/STORE layer and is NEVER app-green.**
+
+**(7) THE ARTIFACT IS THE FOURTH EDITION — runs 1-3 SUPERSEDED (RCA-11).** The harness changed
+(`O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS` FIXED + the driver ordering residual), so the prior
+live provenance is invalidated: the artifact's STATUS banner names **runs 1-3 SUPERSEDED**, its
+§13 records the supersession and the byte-exact embedded JSON, and this spec's §12.13 record is
+labelled historical. **What the fourth run changes about the ACCEPTANCE: nothing** — the accepted
+structural set, the `OPEN-structural` form and the five amended gate conditions are unchanged;
+**DEC-1 is re-affirmed, not re-ruled, and the report is NOT relabeled `"OK"`.**
+
+**(8) OPEN / OWED AFTER THIS RUN (explicitly not closed).**
+- **`O0-M1-M3-MEASUREMENT-SHAPE` remains OPEN and OWED as the NEXT unit** (artifact §11.4/§11.6):
+  the fourth run **reproduces** `M1` (Σ 1 091.5 vs 1 007 ms folder / 4 025.4 vs 2 162 ms
+  document; the document row's TWO re-derive passes in one armed window, `hook.records: 22` vs
+  11), `M2` (`armCount`/`disarmCount` session-cumulative, `armCount − disarmCount = 1` per row,
+  each `armWindow` in-band) and `M3` (the long-task total is a sum of `duration`s of long tasks
+  STARTING inside the window) — it is a **fourth witness, not a fix**.
+- **A consumer note on the F21 clause's input shape** (recorded, not softened): the clause reads
+  `driver.hookInertness[]` — correct, that is where `nonVacuous` and `proofStatement` live — while
+  the DERIVED `driver.hookInertnessProof[]` (the per-pair summary the report presents) emits
+  `statement` and **no** `nonVacuous`. A consumer must not expect the clause's inputs there; a
+  future pass wanting them in one place would emit `nonVacuous`/`proofStatement` aliases on the
+  proofs array (or have the clause read both shapes) and pin it red-first.
+- **The main-side `snapshot.clone` transport** remains a SEPARATE unit (DEC-1 clause 5, the
+  accepted structural gap) — never a patch inside O-0.
+- **No page-design artifact is owed:** this run changes no page design
+  (`docs/skills/designing-pages.md` does not exist in this tree).
+
+**THE FOURTH RUN ACCEPTED.** Both legs `status:"OPEN-structural"`, `pass:false`,
+`selfValidation.ok:true`, `errors:[]`, `gatingReasons:[]`, `failReasons` = the structural family
+only — **structurally capped, not a FAIL and not a DONE**, with **NO newly surfaced reason** and
+the fix proven load-bearing by the differential while the unperturbed legs mask nothing. **The
+O-5 delegation gate's amended conditions (DEC-1 clause 3) still hold on this edition**, so O-5
+stays UNBLOCKED on the FOURTH-edition artifact; the queue's next unit is the M1-M3
+measurement-shape unit. Unit record: this §12.14 + `docs/defects.md` (the row is **FIXED
+(2026-09-21)**) + `archive/reviews/2026-09-21-unit-o0-validator-reason-drop-doc-review.md`.
+
+---
+
+### 12.15 THE FIFTH LIVE RUN (2026-09-21) — a FAIL, and THE ARTIFACT-STATUS CAUTION (the accepted evidence is still the FOURTH edition)
+
+**What ran.** The **fifth live run**, on the bundle carrying the
+`O0-M1-M3-MEASUREMENT-SHAPE` harness (the per-pass emission shape: `hook.passes[]` + the union
+accounting, the per-row/session arm counters, the pinned long-task attribution record, the
+retired summed residual and the retired bare counters). The harness changed, so the artifact
+was REGENERATED (RCA-11): `docs/specs/unit-o-0-per-stage-breakdown.md` is now the **FIFTH
+edition**, whose **STATUS banner names runs 1-4 SUPERSEDED** and whose §14 embeds the raw JSON
+of **both legs verbatim** (byte-exact round-trip verified; renderer `678367+3e3f1b80` both
+legs, main `2419628+e1e652667`, `driver.build.verified:true`). **This §12.15 is the spec's
+summary + disposition, in the shape of §12.13/§12.14. The canonical, binding record (the
+findings, the test reds, the rulings `RUL-11`..`RUL-14` and the amendments they force) is
+`docs/specs/unit-o0-m1-m3-measurement-shape.md` §12.**
+
+**The outcome — a FAIL, not the accepted form.** **BOTH legs: `status:"FAIL"`,
+`pass:false`, `driver.selfValidation.ok:false`** (4 GPU-OFF / 2 GPU-ON errors),
+**`gatingReasons` 9 / 5**, `driver.openStructural:false`, `structuralErrors` 0 with
+`structuralFacts` 4 / 2. The forcing class is the new union-based row remainder
+`unaccountedMs` = **156.8 / 56.8 / 40.7 / 41.9 ms** (GPU-OFF) and **110.9 / 60.9 ms**
+(GPU-ON), which the partition oracle records as a row OUTCOME (`row.pass:false` + its reason)
+and the driver propagates into the report's gating reasons — so 4/4 (and 2/2) rows are
+`pass:false` and the report flips from `OPEN-structural` to `FAIL`. **Band caveat (verified
+against the committed JSON):** each row's reasons print the **40 ms** `hook.toleranceMs` band
+while the row RECORDS `reconciliation.toleranceMs` **50 ms** (`tolerance.reconcileMs`), so the
+two ablation rows (40.7 / 41.9 ms) are over 40 but WITHIN 50 — the band's SCOPE is part of the
+fix (RUL-11). The **structural facts are UNCHANGED**: `snapshot.clone` is the ONE
+`structural:true` id with the RUL-3 reason verbatim, `post.style` stays
+`derived`/`ms:null`/`unseparated`/`attributable:false` in every row, and **no report is
+relabelled `"OK"`** (the DEC-1 visibility invariant holds).
+
+**What the fifth run DID establish (positive — the M-closures).** The per-pass partition works
+(folder = 2 passes; document = **3** passes `["pre-pass-render","re-derive","re-derive"]`), the
+per-id aggregation identity holds on all six rows with **0 violations**, `unaccountedMs ≥ 0` on
+**6/6 rows and 15/15 passes**, the retired residual is `null` everywhere (the naive form survives
+only as `naiveSumResidualMs` + `notAResidual`), the retired bare `armCount`/`disarmCount` are
+**absent** with every row at `rowArmCount 1`/`rowDisarmCount 1`, every row carries
+`rule:"start-inside-inclusive"` with `includedMs === longTaskTotalMs`, the window bound is clean
+(worst **+1.2 ms** against the 40 ms band; `outsideOffenders[]` empty), inertness is
+`inert:true` in both legs, the GPU delta is **+39 / +119 ms** (no separable effect) and A-4
+reads **1 / 2**. **Full detail: spec `unit-o0-m1-m3-measurement-shape.md` §12.3.**
+
+**THE SIX OPEN FINDINGS (all UNPATCHED; owner = the NEXT CYCLE).** `F5-1` the band-exceeded
+outcome gates the report to FAIL (`rowOutcomeReasons` → `row.pass:false` → report gating) —
+the unit's exit condition, filed as its own defect row `O0-BAND-EXCEEDED-GATES-THE-REPORT`;
+`F5-2` `passLongTaskDoubleCountMs` NEGATIVE (−53 / −95 / −63); `F5-3` `passOverlapSumMs`
+NEGATIVE (−131.2 … −17.6) though described as a non-negative overlap measure; `F5-4` pass-0's
+window collapses to `{0,0}` and its span (51.4 / 93.8 / 0.5 / 0.3 / 61.1 / 100.3 ms) is counted
+by NO pass (a nesting crossing the pass boundary) — **the likely root cause of most of F5-1's
+band breach**; `F5-5` `validateO0MeasurementShape` returns `ok:true` beside `F5-2`/`F5-3`/`F5-4`;
+`F5-6` the top-level `reconciliation.note` is `null` in both legs. **Three TEST REDS remain as
+the TestWriter's counterexamples (owner = the next cycle): `RULE-2`, `FIX-TP1`, `FIX-TP3`** —
+two an ORACLE/Spec defect (the row remainder is computed from the RAW union while `accountedMs`
+uses the CLIPPED union, so `unaccountedMs ≠ windowMs − accountedMs`, violating
+`unit-o0-m1-m3-measurement-shape.md` §2.1) and one a SPEC CONFLICT (§3.4's cross-check vs
+§2.3/FS5's alternatives disjunct).
+
+**THE ARCHITECT'S BINDING RULINGS (recorded; canonical text in
+`docs/specs/unit-o0-m1-m3-measurement-shape.md` §12.6).**
+- **RUL-11 — `F5-4` first, then the band.** Fix the partition so pass-0's span IS accounted
+  (or the pass boundary/nesting rule is corrected so no top-level span falls outside every
+  pass) and fix `F5-2`/`F5-3`'s negative measures (both must be **non-negative MEASURES** with
+  the pinned semantics). Only then is the band question adjudicated on a re-run: the union-based
+  `unaccountedMs` is a **MEASUREMENT-QUALITY quantity** (unexplained time in the window), **not
+  an imputation**; if it still exceeds the band after `F5-4`, the spec must **re-derive the band
+  empirically for the NEW quantity**, or record the over-band case as a **reported quality
+  finding + a row-level note rather than a report-level `FAIL` gate** — a legitimate measurement
+  gap must not convert the DEC-1-accepted form into a FAIL. **The spec pins BOTH** (re-derive
+  the band empirically AND make the over-band case a reported finding + row note, never a
+  report-level gate), and makes the band's **SCOPE** explicit: the RETIRED summed residual has
+  **no band**; `tolerance.reconcileMs` (**50 ms**) is the band for the **union remainder**
+  `unaccountedMs`; `hook.toleranceMs` (**40 ms**) is the **WINDOW-BOUND** band (and the
+  hook-inertness band).
+- **RUL-12 — the validator must catch its own shape.** `validateO0MeasurementShape` must fail
+  (or record a forcing reason) on `F5-2`/`F5-3`/`F5-4` (a negative double-count/overlap
+  measure, an unaccounted top-level span, a collapsed pass-0 window) and the top-level
+  `reconciliation.note` must be present (`F5-5`/`F5-6`) — RUL-4 clause 5's mandatory note is not
+  satisfied by the row-level statements.
+- **RUL-13 — the spec conflict.** Amend `unit-o0-m1-m3-measurement-shape.md` **§3.4** to the
+  **OBSERVED-list** cross-check (`includedCount ≤ longTasks.length` AND
+  `includedMs === longTaskTotalMs`) and SCOPE the **§2.3/FS5 alternatives disjunct** to rows
+  whose observed list contains at least one EXCLUDED task (where the rule actually
+  discriminates) — the two clauses as written are **mutually unsatisfiable on a discriminating
+  list** (an excluded observation forces `longTasks.length > includedCount`, and whenever no task
+  straddles the window `overlapAnyMs = intersectionMs = includedMs`, so the disjunct fires on
+  every honest row).
+- **RUL-14 — the artifact status (see the caution below).** The fifth edition **STANDS as the
+  committed FAIL record**; the next cycle's fix + the **SIXTH** live run must reproduce the
+  DEC-1-accepted form (`OPEN-structural`, `pass:false`, `selfValidation.ok:true`,
+  `gatingReasons:[]`) — or, if the fix legitimately leaves a forcing reason, **DEC-1 must be
+  re-adjudicated by the USER, never silently relabelled.**
+
+> **THE ARTIFACT-STATUS CAUTION (record it explicitly): the ACCEPTED evidence under DEC-1 is the
+> FOURTH edition of `docs/specs/unit-o-0-per-stage-breakdown.md` (the `status:"OPEN-structural"`,
+> `pass:false`, `selfValidation.ok:true`, `gatingReasons:[]` reading recorded in §12.14). The
+> FIFTH edition — the currently COMMITTED file — reports `status:"FAIL"`, `pass:false`,
+> `selfValidation.ok:false` (4/2 errors), `gatingReasons` 9/5. THEREFORE THE ACCEPTED FORM IS
+> NOT CURRENTLY REPRODUCED BY THE COMMITTED ARTIFACT.** The fourth edition's raw JSON is
+> **recoverable from git history** (renderer `678270+a25b03a9`; its record is this spec's
+> §12.14) and the **DEC-1 acceptance ruling is UNCHANGED** — DEC-1 still accepts the fourth
+> edition's form, it is not relabelled, not re-ruled and not withdrawn, and the fifth edition
+> does not silently inherit it (a provenance clause to exactly this effect is appended to the
+> DEC-1 row in `docs/decisions.md`). **The fifth edition is a FAIL pending the fix + a SIXTH
+> run.** The **O-5 delegation gate** stays UNBLOCKED **on the FOURTH-edition form** (DEC-1
+> clause 3) and is **NOT** opened by the fifth edition (its `status:"FAIL"` never opens the gate
+> — §3.6b RUL-4 clause 7).
+
+**Open / owed after this run (explicitly not closed).**
+- **`O0-M1-M3-MEASUREMENT-SHAPE` remains OPEN** with `F5-1`..`F5-6`, the three reds and the
+  sixth-run acceptance path; **`O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE` stays OPEN** (a fifth
+  witness, not a fix) and the NEW row **`O0-BAND-EXCEEDED-GATES-THE-REPORT`** files `F5-1`.
+- **No app behavior changed** and **no page-design artifact is owed** (`docs/skills/designing-pages.md`
+  does not exist in this tree).
+- **The main-side `snapshot.clone` transport** remains a SEPARATE unit (DEC-1 clause 5).
+- **The F21 clause field-name coupling** noted in §12.14 (8) is unchanged and still inert on
+  real artifacts (the fifth run carries the MUTATION-HALF sentence in both legs).
+
+**Unit record:** this §12.15 + `docs/specs/unit-o0-m1-m3-measurement-shape.md` §12 (the full
+record) + the artifact's §7.1/§8.1-§8.3/§13.1/§14 (FIFTH edition — **NOTE: those "§14.x"
+embedded-JSON citations are the FIFTH edition's numbering; the SIXTH edition embeds both legs
+in its **§12.1/§12.2** with the round-trip record in **§12.3**) + `docs/defects.md`
+(`O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE`, `O0-BAND-EXCEEDED-GATES-THE-REPORT`) +
+`docs/decisions.md` (DEC-1 provenance) + `docs/next-steps.md` (the CURRENT WORK entry).
+**SUPERSEDED by §12.16: the fix cycle repaired `F5-1`..`F5-6`, the three reds went green and
+the SIXTH run reproduced the accepted form — the row and the gate defect are FIXED and the
+artifact is the SIXTH edition.**
+
+### 12.16 THE SIXTH LIVE RUN (2026-09-21) — the DEC-1-ACCEPTED FORM IS REPRODUCED; the artifact is the SIXTH edition; the DEC-1 caveat is RESOLVED
+
+**What ran.** The **sixth live run**, on the `O0-M1-M3-MEASUREMENT-SHAPE` harness AFTER the
+`F5-1`..`F5-6` fixes + the clipped-union remainder + the OBSERVED-list cross-check (the fixes
+the fifth run's FAIL forced). The harness changed, so the artifact was REGENERATED (RCA-11):
+`docs/specs/unit-o-0-per-stage-breakdown.md` is now the **SIXTH edition**, whose **STATUS
+banner names runs 1-5 SUPERSEDED** and whose §12 embeds the raw JSON of **both legs verbatim**
+(byte-exact round-trip verified: GPU-OFF 168 989 bytes embedded / 168 990 original, sha256
+`f2506c239061db6b`; GPU-ON 96 098 / 96 099, sha256 `4307f840993c8e2e`; `JSON.parse` of each
+extracted block deep-equals the original). Bundle identity: renderer
+`1789972671852+678367+3e3f1b80` / `1789972750760+678367+3e3f1b80`, main
+`1789972671735+2419628+1e652667` / `1789972750644+2419628+1e652667`,
+`driver.build.verified:true` on BOTH legs (served = on-disk), `driver.runMode:"spawn"` on both
+legs, DISPLAY `:0`, census **226 = 226** (6 102 nodes / 9 266 edges recorded as provenance),
+`env.engine:"absent"` with the same recorded evidence. **The bundle is byte-identical to the
+fifth run's — the harness is what changed**, which is the scope RCA-11's changed-harness
+invalidation covers. **The canonical, binding record (the sixth-run tables, the closure
+evidence, the vs-run-5 comparison and the carried items) is
+`docs/specs/unit-o0-m1-m3-measurement-shape.md` §12.9/§12.10.**
+
+**The outcome — the ACCEPTED FORM.** **BOTH legs: `status:"OPEN-structural"`, `pass:false`,
+`driver.selfValidation.ok:true` with `errors:[]`, `gatingReasons:[]`** — the fifth run's
+`FAIL` is GONE. `selfValidation.structuralErrors` 0 with `structuralFacts` **4 / 2**;
+`driver.openStructural:true`; `reconciliation.ok:false` / `openStructural:true`;
+`reconciliation.bandExceededGate:false`; `reconciliation.measurementShapeFailures:[]`;
+`reconciliation.note` PRESENT (716 / 640 chars) **plus** the row-level restatement; all six
+rows `pass:true` with an empty `failReasons[]` and `measurementShape.ok:true`. **The structural
+facts are UNCHANGED from runs 1-5:** `snapshot.clone` is the ONE `structural:true` id with the
+RUL-3 reason verbatim, `post.style` stays `derived`/`ms:null`/`unseparated`/`attributable:false`
+in every row, and **no report is relabelled `"OK"`** (the DEC-1 visibility invariant holds) —
+which is why `pass` is correctly `false` on an otherwise clean report.
+
+**The `F5-1`..`F5-6` closures, live (the sixth run's evidence, not this spec's claim).**
+`F5-1` the band-exceeded OUTCOME no longer gates: 4/6 rows record `bandExceeded:true` with a
+`bandExceededNote` + a `row.notes[]` + an `outcomeReasons[]` entry, the two ablation rows
+(43.1 / 41.4 ms) are INSIDE the recorded 50 ms union band and note-free, and **not one of them
+enters `row.pass`, `row.failReasons`, `gatingReasons` or `status`**. `F5-2`
+`passLongTaskDoubleCountMs` is a MEASURE reading **0 on all six rows** (the signed form is
+`passTotalsMinusRowMs` −54 / −95 / 0 / 0 / −69 / −89 with `notADoubleCount`). `F5-3`
+`passOverlapSumMs` is non-negative — **52.4 / 93.6 / 0.4 / 0.4 / 67.5 / 88.5** (the signed form
+is `passRowUnaccountedDeltaMs` −77.8 / −15.4 / −27.5 / −26.5 / −89.7 / −11.5 with
+`notAMeasure`). `F5-4` every top-level span is accounted by exactly ONE pass — the passes'
+clipped top-level union **=== the row's declared `accountedMs` on 6/6** with a **worst
+owner-coverage gap of 0.000 ms**, `Σ pass.records.count === hook.records` (11/11, 22/22,
+11/11, 11/11, 11/11, 22/22), and pass 0's collapsed `{0,0}` window GONE (a real span:
+52.4 / 93.6 / 0.4 / 0.4 / 67.5 / 88.5 ms). `F5-5` `validateO0MeasurementShape` returns
+`ok:true` on 6/6 **with `FS11`/`FS12` LIVE** (its `FS12` clause recomputes the owner coverage
+pass 0 now passes). `F5-6` the top-level `reconciliation.note` is present on every status.
+**The `FIX-TP1` identity holds on 6/6 rows — `unaccountedMs + accountedMs === windowMs`:**
+104.5 + 890.6 = 995.1; 59.9 + 2 271.1 = 2 331; 43.1 + 43.3 = 86.4; 41.4 + 40.6 = 82;
+116.8 + 947.8 = 1 064.6; 62.7 + 2 275.5 = 2 338.2. **The three test reds are GREEN**
+(`RULE-2`/`FIX-TP1`/`FIX-TP3`), the two M1-M3 files read **34/34**, and the O-0 suites read
+**114/114 unmodified**.
+
+**The trio + the register (the run's own reading).** `npm test` = **219 files passed (219) /
+4 947 passed / 58 skipped / 0 failed (5 005 total), exit 0**; `npm run typecheck` 0;
+`npm run build` 0. Register: the M1-M3 **6 rows all `held`** (360-attempt budget) plus the
+pre-existing O-0 **8 rows `held`**.
+
+**The identity, the band and the carried items — stated so nothing is over-read.**
+The window bound is CLEAN (worst arm-window overshoot **+0.1 ms** against the recorded 40 ms
+window-bound band, `outsideMs` 0, `outsideOffenders[]` empty). Inertness `inert:true` in BOTH
+legs (Δmutations 0 = 37 vs 37, the MUTATION-HALF sentence verbatim, the long-task half VACUOUS
+at 0-vs-0 with `nonVacuous:false`). GPU Δ **+59 / +13 ms** with identical mutation counts — **no
+separable effect** (the fourth run's −53 / +15 reading stands as provenance only). **A-4 reads
+1 / 2** (folder disclosure 76.6 / 90.3 ms; document open 173.9 / 165.3 ms). O-4 unchanged in
+substance: `traversal.build` is **68.891 % / 69.231 %** of the folder window (the largest
+identified stage) and `reconcile.apply` is **94.103 % / 94.337 %** of the document window.
+**Carried (NOT defects of this run):** (1) the union remainder still exceeds the 50 ms band on
+**4/6 rows** (104.5 / 59.9 / 116.8 / 62.7 ms) — a **reported quality finding + row note, never a
+gate**, with **RUL-11's band RE-DERIVATION still owed as a spec item** (its home: the OWED list
+in `docs/next-steps.md` NEXT QUEUE + `docs/defects.md`); (2) `snapshot.clone` stays structurally
+unseparated (DEC-1; the transport is a separate PARKED unit); (3) the attribution rule's
+DISCRIMINATION is not claimable from this corpus (`overlapAnyMs = intersectionMs = includedMs`
+on all six rows, no observed task straddles either endpoint — the discrimination stays
+`P-TP-3`'s generated-list job); (4) one geometry fact: on the document rows the passes' windows
+do not tile the freeze window (GPU-OFF pass 1 ends 12067.3 / pass 2 opens 12072.1 = a **4.8 ms**
+inter-pass gap; GPU-ON 12048.1 → 12048.6 = **0.5 ms**) — idle time inside the freeze window
+that legitimately lands in `unaccountedMs` and is NOT tabulated by the artifact (a derived
+reading from the embedded JSON, not a measured field; **the brief's "103.8 ms" could not be
+reproduced at either leg**).
+
+**THE DEC-1 CAVEAT IS RESOLVED (record it explicitly).** The **ACCEPTED evidence under DEC-1 is
+now the SIXTH edition** (`status:"OPEN-structural"` / `pass:false` / `selfValidation.ok:true` /
+`errors:[]` / `gatingReasons:[]`, window bound clean, structural reasons verbatim, the mandatory
+top-level `reconciliation.note` PRESENT) — i.e. **the accepted form IS reproduced by the
+committed artifact again.** The fifth edition's FAIL record is **not** deleted: it is preserved
+**inside the artifact's own supersession record and its git history as history** (its row in
+the §13 provenance table stays, marked SUPERSEDED), and no part of the fix hides or relabels it.
+**DEC-1's CONTENT IS UNCHANGED** — the accepted structural set, the AMENDED gate clause, the
+visibility invariant and the "no residual may be quoted as a style cost" rule are all
+untouched; the decision row carries only the two **provenance** clauses (the fifth-run caution
+and now its resolution) appended in `docs/decisions.md`. **The O-5 delegation gate is UNBLOCKED
+on the SIXTH-edition form** (DEC-1 clause 3). The unit `O0-M1-M3-MEASUREMENT-SHAPE` is **DONE
+(2026-09-21)** and the defect rows `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE` and
+`O0-BAND-EXCEEDED-GATES-THE-REPORT` are **FIXED (2026-09-21)**.
+
+**Layer (RCA-12, mandatory).** **`assembled-renderer` MEASUREMENT:** every number above comes
+from the executing `dist/` bundle driving real hit-tested CDP gestures against a real Electron
+renderer, never from node and never from a module in isolation; the node-side re-derivations in
+the artifact's §8/§9 are ORACLE re-runs over the embedded JSON, not app evidence. **A green here
+is a measurement-shape green, never app-green**, and no part of this record may be read as a
+claim about app behavior.
+
+**Open / owed after this run (explicitly NOT closed).**
+- **RUL-11's second half — the band for the NEW union-remainder quantity must be re-derived
+  empirically before any band-driven gate is re-pinned** (the sixth run does NOT re-pin it; the
+  over-band case is a reported finding). OWED as a spec item; home: `docs/next-steps.md` NEXT
+  QUEUE (the OWED list) + `docs/defects.md` (`O0-BAND-EXCEEDED-GATES-THE-REPORT` FIXED, this
+  being its remaining half).
+- **The unit spec's §7 `§3a`/`§3b` structured adversarial pass — `RAN 2026-09-21` (SUPERSEDED
+  as OWED, kept as the pre-pass state):** the RCA-3 pass over the three units landed in this goal
+  found **4 MUST-FIX + 5 SHOULD** and **RE-OPENED the unit** — the record is
+  `docs/specs/unit-o0-m1-m3-measurement-shape.md` **§13** (per-finding counterexamples +
+  dispositions: the asserted-not-derived row verdict, the demoted aggregation identity = the `M1`
+  symptom oracle, the trusted attribution fields, the text-probe live gate, and the SHOULDs incl.
+  the mandatory-note dodge and the `hook.reconcileToleranceMs` band drift) with the re-opened
+  statuses in `docs/defects.md` (the parent row `FIXED → OPEN` + 8 new rows) and the corrected
+  **O-5** condition in `docs/next-steps.md` ("unblocked ONCE the shape-oracle MUST-FIX set
+  lands"). The pre-pass record (this bullet as originally written) is
+  `archive/reviews/2026-09-21-unit-o0-m1-m3-doc-review.md` §3.
+- **The main-side `snapshot.clone` transport** remains a SEPARATE PARKED unit (DEC-1 clause 5;
+  `docs/pending.md`).
+- **No app behavior changed** and **no page-design artifact is owed**
+  (`docs/skills/designing-pages.md` does not exist in this tree).
+- **The F21 clause field-name coupling** noted in §12.14 (8) is unchanged and still inert on
+  real artifacts (the sixth run carries the MUTATION-HALF sentence in both legs).
+
+**Unit record:** this §12.16 + `docs/specs/unit-o0-m1-m3-measurement-shape.md` **§12.9/§12.10/
+§12.11** (the full sixth-run record) + **§13** (the 2026-09-21 RCA-3 adversarial pass: 4 MUST-FIX +
+5 SHOULD, the unit **RE-OPENED**, the live-evidence DOWNGRADE, the ordered next cycle) + the artifact (`docs/specs/unit-o-0-per-stage-breakdown.md`, SIXTH
+edition: banner, §7.1, §8.1-§8.7, §9, §10, §11, §12.1/§12.2, §12.3, §13) + `docs/defects.md`
+(both rows FIXED — **SUPERSEDED: the parent row `O0-MEASUREMENT-SHAPE-DOUBLE-REDERIVE` is OPEN
+again since the RCA-3 pass, and the SEVENTH run FAILED — see §12.17**) + `docs/decisions.md` (DEC-1 provenance) + `docs/next-steps.md` (the DONE row
++ the renumbered queue) + `archive/reviews/2026-09-21-unit-o0-m1-m3-doc-review.md`.
+
+### 12.17 THE SEVENTH LIVE RUN (2026-09-21) — a `FAIL` on `F7-1` (a harness ORDERING defect); the artifact is the SEVENTH edition; the accepted form is currently reproduced by the SIXTH edition ONLY
+
+**What ran.** The **seventh live run**, on the `O0-M1-M3-MEASUREMENT-SHAPE` harness **AFTER the
+RCA-3 ADVERSARIAL FIX SET** (spec `docs/specs/unit-o0-m1-m3-measurement-shape.md` §13.1 (1)-(3) +
+§13.2 (5)(7)(8): the DERIVED row verdict, the FORCING per-id aggregation identity, the re-derived
+attribution, the note clause gated on the DERIVED status, the recorded per-row band + the
+re-labelled `tolerance.source`, the validator clauses and the removed `passIndex` imputation) — the
+run the unit spec's §13.4 ordered cycle demanded. The harness + `src/shared/o0-report.ts` changed,
+so the artifact was REGENERATED (RCA-11): `docs/specs/unit-o-0-per-stage-breakdown.md` is now the
+**SEVENTH edition**, whose **STATUS banner names runs 1-6 SUPERSEDED** and whose §12 embeds the raw
+JSON of **both legs verbatim** (byte-exact round-trip re-verified). Bundle identity: renderer
+`1789974813483+678367+3e3f1b80` / `1789974856794+678367+3e3f1b80`; main
+`1789974813369+2419628+1e652667` / `1789974856683+2419628+1e652667`; `driver.build.verified:true`
+on BOTH legs, `driver.runMode:"spawn"` on both, `DISPLAY=:0`, census **226 = 226** (6 102 nodes /
+9 266 edges), `env.engine:"absent"`. **The recorded identity hash CHANGED from the sixth run while
+the byte COUNTS stayed `678367` / `2419628`** — the adversarial fixes landed in the **INLINED**
+`src/shared/o0-report.ts` (plus the harness) and shifted the bundle's content without changing its
+length: **this run measured DIFFERENT BYTES**, which is the scope RCA-11's invalidations cover.
+**The canonical, binding record (the FAIL, `F7-1`, the positive row/pass-oracle closures, the two
+strict-check OWED items, the live-pin edition item and the ordered next cycle) is
+`docs/specs/unit-o0-m1-m3-measurement-shape.md` §14.**
+
+**The outcome — the accepted form was NOT reached.** **BOTH legs: `status:"FAIL"`, `pass:false`,
+`driver.selfValidation.ok:false` with `errors` 1 and `gatingReasons` 1** — **`OPEN-structural` was
+NOT reached.** The ONE forcing reason, identical on both legs and verbatim: `report status is
+"OPEN-structural" without a reconciliation.note naming the structural stages, the non-computable
+residual and the no-imputation statement (§3.6b RUL-4 clause 5/§13.2 (5): the note clause is gated
+on the DERIVED status, so it cannot be dodged by omitting status)`. **The structural facts are
+UNCHANGED from runs 1-6** (`structuralErrors` 0, `structuralFacts` **4 / 2**, `snapshot.clone` the
+one `structural:true` id with the RUL-3 reason verbatim, `post.style` `derived`/`ms:null`/
+`unseparated`/`attributable:false`, no report relabelled `"OK"`).
+
+**The class: `F7-1` — a NEW HARNESS ORDERING DEFECT, NOT a structural change and NOT a measurement
+defect.** `o0BuildReport` calls `validateO0Report(report)` (`scripts/live-drive.mjs:~2087`, cited
+by symbol) **BEFORE** it attaches `report.reconciliation.note` (`~:2177`); the note clause
+(`src/shared/o0-report.ts:1482-1491`) is — correctly, per the `§13.2 (5)` anti-dodge fix — **gated
+on the status the recorded reasons DERIVE**, which at that moment is already `OPEN-structural`, so
+a note that does not exist yet is read as absent and the clause mints its own forcing reason, which
+the driver then re-derives into `FAIL`. **The clause is correct; the driver's ORDER makes the
+accepted form unsatisfiable by construction.** The fix is one-line-class (attach the reconciliation
+block or a provisional note BEFORE validating, or validate after it is attached) — **defect row
+`docs/defects.md` `O0-REPORT-VALIDATED-BEFORE-THE-NOTE-ATTACH` (high)**.
+
+**What the seventh run PROVED (record as POSITIVE — this was the unit's purpose).** The **row- and
+pass-level oracle is SOUND**: the artifact's §8 per-row oracle re-validation (executed over both
+legs' embedded JSON, per row, with the PURE module) reads **6/6 rows of both legs**
+`partitionO0RowPasses(row).row.pass ⇔ failReasons.length === 0` ✓, **every pass sub-row**
+`pass ⇔ failReasons.length === 0` ✓, `validateO0MeasurementShape(row).ok:true` / `errors:[]` /
+`legacyShape:false` ✓; the **per-id aggregation identity holds on all 9 finite ids** (e.g. the
+folder row's `traversal.build` **618.3 = Σ passes 618.3**; the document row's `reconcile.apply`
+**2146.5** and `render.ssr` **1801.9**); the **re-derived attribution equals the recorded one**
+(`startBeforeOverlapMs` / `straddleEndMs` re-derived = recorded = **0** ⇒ the recorded values never
+understate); the declared `unaccountedMs` **= window − accounted on 6/6** (108.8 / 59.7 / 38.0 /
+39.6 ms GPU-OFF; 114.4 / 57.1 ms GPU-ON); and **the outcome channel is separate** (no outcome
+reason in `failReasons`). Also clean on this emission: census **226/226**; `driver.build.verified:true`;
+the window bound CLEAN (`outsideMs` **0 on 6/6**, window-bound band **40**); the per-row union band
+`reconciliation.toleranceMs = 50` on all 6; `bandExceeded` **4/6** with **`bandExceededGate:false`**;
+inertness **Δmutations 0** (the mutation-half carries the proof; the long-task half vacuous and
+labelled); `tolerance.source` re-labelled to name the compile-time constant
+`O0_RECONCILE_TOLERANCE_MS` + the owed empirical re-derivation (**no value drift**); **A-4 reads 1**
+(93.3 ms) / **2** (175.7 ms); and the **O-4 discrimination** — the folder row is
+`traversal.build`-bound (**66.41 %** GPU-OFF / **70.14 %** GPU-ON) while the document row is
+`reconcile.apply`-bound (**94.39 %** / **94.03 %**). **The FAIL is report-level ONLY.**
+
+**THE ARTIFACT STATUS (record it verbatim — the honest current state).** The **committed artifact
+is the SEVENTH edition and it reports `FAIL` on both legs**; therefore **the DEC-1-accepted form is
+currently reproduced by the SIXTH edition ONLY** (its raw JSON is recoverable from git history; its
+record is §12.16 above, renderer `1789972671852+678367+3e3f1b80` / `1789972750760+678367+3e3f1b80`).
+**DEC-1's acceptance ruling and content are UNCHANGED and not relabelled** — the seventh edition is
+simply not the accepted evidence, and **its `status:"FAIL"` does NOT open the O-5 gate** (the gate
+reads the artifact's accepted live form). This is the same *class* of caution as §12.15's
+fifth-run caution, with a different cause: there, a legitimate measurement outcome was propagated
+as a failure (`F5-1`); here, **a correct gate clause is unsatisfiable in the driver's call order**.
+
+**Owed after this run (explicitly NOT closed).**
+- **`F7-1` (unit spec §14.2) + two STRICT-CHECK items in `validateO0Report` (§14.4):** (a) the
+  declared-vs-derived `unaccountedMs` clause (`src/shared/o0-report.ts:~3203-3215`) must be
+  **STRICT/SYMMETRIC** (`!agrees(...)` within the 0.1 ms recorded granularity whenever
+  `agrees(recon.windowMs, derivedRow.windowMs)`) instead of firing only on an understatement;
+  (b) the `windowMs` clause (`~:3193-3198`) must be **STRICT** for a new-shape row whose records
+  inhabit their window, instead of firing only when the declared window EXCEEDS the derived one.
+- **A TEST item: the live-pin EDITION PROBE (`F7-3`).** `LIVE-1` matches `/SIXTH|sixth edition/i`
+  and passes by PROSE against the seventh edition; it must be repointed to the current edition.
+  **`LIVE-2` (the per-row parse+validate pin) is the oracle the §13.1 (4) remand demanded and it
+  WORKS** — it is GREEN on all six rows of both legs and RED on the leg triple this edition did not
+  reach; the suite reads **`1 failed | 219 passed` files / `1 failed | 4 965 passed | 58 skipped`**
+  and the ONE failure is that correct red, not a fixture incoherence.
+- **THE EIGHTH RUN IS OWED** once `F7-1` and the two strict checks land (the driver + `src/`
+  change ⇒ the prior live provenance is invalidated, RCA-11), followed by the §7 `§3b` re-audit and
+  the mandatory documentation review. **O-5 leads the queue only after this closes** —
+  `docs/next-steps.md` CURRENT WORK states it, and the item stays gated meanwhile.
+- **RUL-11's second half stays OWED as a spec item** (the band for the NEW union-remainder
+  quantity re-derived empirically before any band-driven gate is re-pinned; §12.16's carried item
+  stands, and the seventh run does not re-pin it).
+- **The main-side `snapshot.clone` transport** remains a SEPARATE PARKED unit (DEC-1 clause 5;
+  `docs/pending.md`). **No app behavior changed** and **no page-design artifact is owed**
+  (`docs/skills/designing-pages.md` does not exist in this tree).
+
+**What this does to the records above.** §12.16's DONE-state sentences (DEC-1 caveat resolved; "the
+accepted form IS reproduced by the committed artifact again"; "the unit `O0-M1-M3-MEASUREMENT-SHAPE`
+is DONE"; "both rows FIXED") are **HISTORY** — superseded as STATUS by the RCA-3 re-opening (§13 of
+the unit spec) and then by this FAIL; **the sixth-run VALUES and the SIXTH edition's accepted form
+stand unchanged**. §12.15's fifth-run caution is likewise history. **Read §12.17 + the unit spec §14
+for the current state.**
+
+**Layer (RCA-12, mandatory).** **`assembled-renderer` MEASUREMENT:** every number above comes from
+the executing `dist/` bundle driving real hit-tested CDP gestures against a real Electron renderer;
+the node-side re-derivations in the artifact's §8/§9 are ORACLE re-runs over the embedded JSON, not
+app evidence. **A green here is a measurement-shape green, never app-green**, and no part of this
+record may be read as a claim about app behavior.
+
+**Unit record:** this §12.17 + `docs/specs/unit-o0-m1-m3-measurement-shape.md` **§14** (the
+canonical seventh-run record: `F7-1`, the closures, the two strict checks, the edition probe, the
+eighth-run requirement) + **§13** (the RCA-3 adversarial pass that re-opened the unit) + the
+artifact (`docs/specs/unit-o-0-per-stage-breakdown.md`, **SEVENTH edition**: banner, §7-§11, §12.1/
+§12.2, §13) + `docs/defects.md` (`O0-REPORT-VALIDATED-BEFORE-THE-NOTE-ATTACH` — **FIXED
+2026-09-21** (the eighth run carried the repair, the ninth verifies it); the parent M1-M3 row
+**FIXED (2026-09-21)**, the seventh-run note kept as history) + `docs/decisions.md` (DEC-1
+provenance) +
+`docs/next-steps.md` (the CURRENT WORK head + the ordered cycle). **SUPERSEDED AS STATUS by
+§12.18 below** (the ninth run): this section's "the committed artifact is the SEVENTH edition and
+it reports `FAIL`" and "the accepted form is reproduced by the SIXTH edition ONLY" readings are
+history — the committed artifact is the **NINTH** edition and it reproduces the accepted form.
+
+---
+
+## 12.18 THE NINTH RUN (2026-09-21) — the DEC-1-ACCEPTED form on the §3b-RE-AUDITED oracle, the artifact is the NINTH edition, and DEC-1's accepted form IS reproduced by it
+
+**Status of this section: CURRENT — the seventh-run caution/owed list above is HISTORY, resolved
+by the eighth and ninth runs.** The canonical, binding record is
+`docs/specs/unit-o0-m1-m3-measurement-shape.md` **§15** (the full ninth-run record: commands,
+bundle + oracle identity, census, the per-stage/per-pass/reconciliation tables, the controls, the
+two self-validation triples, the per-row re-validation incl. the four NEW §3b clauses, the window
+bound, the O-0 numbers, the vs-run-8 table, the findings) with **§13.6** (the per-finding LANDED
+table) and **§13.7** (the OWED list); the artifact is
+`docs/specs/unit-o-0-per-stage-breakdown.md` in its **NINTH edition**; the review record is
+`archive/reviews/2026-09-21-unit-o0-m1-m3-reaudit-doc-review.md`.
+
+**The outcome — the accepted form WAS reached on both legs.** **BOTH legs: `status:"OPEN-structural"`,
+`pass:false`, `driver.selfValidation.ok:true`, `driver.selfValidationOfEmitted.ok:true` (NEW — the
+emitted object re-validated over a shallow copy after the finalize), `errors:[]`,
+`gatingReasons:[]`** — i.e. exactly the DEC-1-accepted structural form, with `structuralFacts`
+**4 / 2**, `snapshot.clone` the one `structural:true` id (the RUL-3 reason verbatim), `post.style`
+`derived`/`ms:null`/`unseparated`/`attributable:false`, the mandatory top-level
+`reconciliation.note` present in the OPEN-structural form (it names the structural stages, the
+non-computable residual and the no-imputation statement), **no harness defect hit by this run**
+(both legs completed on the FIRST attempt; the `F7-1` ordering defect stays CLOSED and the eighth
+run's `F8-1` fix held), and **no report relabelled `"OK"`**.
+
+**THE ARTIFACT IS THE NINTH EDITION — and it reproduces DEC-1's accepted form** (the sixth,
+seventh and eighth editions' caveats are HISTORY): its banner reads "This is the **NINTH** live
+run" and **runs 1-8 are SUPERSEDED** inside it; both legs' raw JSON are embedded **verbatim**
+(byte-exact round-trip re-verified: GPU-OFF 164 414 bytes / `57a2ecfb508a4717`, GPU-ON 97 672 /
+`2e0d839a4c1da603`); its §13.2 provenance table names every prior edition (first…eighth) with its
+renderer identity and verdict, the FIFTH and SEVENTH marked **FAIL**, the eighth marked
+"`OPEN-structural` … **oracle identity NOT recorded**", and the **ninth marked CURRENT**. **The
+prior editions' raw JSON remain recoverable from git history** and the earlier cautions recorded
+in §12.14/§12.15/§12.16/§12.17 stand as their history, never as the current state.
+
+**THE ORACLE IDENTITY IS NOW RECORDED (the §3b re-audit's provenance gap — closed live).**
+`driver.build.verified` is evidence about the MEASURED app, never about the code that minted the
+verdicts (the driver imports `src/shared/o0-report.ts` **from source**), so the legs now carry
+`driver.oracleIdentity`: `src/shared/o0-report.ts` `b89d6f19` (200 143 B) +
+`scripts/live-drive.mjs` `194dfece` (395 314 B) = **`92a74b7d`, IDENTICAL on both legs**. **The
+ninth edition therefore differs from the eighth in the ORACLE, not in the bundle bytes** (content
+hash `3e3f1b80` / `1e652667`, UNCHANGED from runs 5-8 — only the `mtimeMs` prefix moves, because
+each leg's spawn rebuilds `dist/`). This **CORRECTS §14.6's "different bytes" claim** (the unit
+spec §13.7 (5) records the correction).
+
+**THE §3b CLAUSES WERE EXERCISED LIVE FOR THE FIRST TIME (the closure evidence):** per-row
+`row.pass ⇔ failReasons.length === 0` **both directions 6/6** (and on every pass sub-row);
+`validateO0MeasurementShape.ok:true` / `errors:[]` / `legacyShape:false` **6/6** with
+**`legacyShape` AGREEING across both surfaces 6/6**; the per-id aggregation identity on **all 9
+finite ids**; declared ≡ derived (**0.1 ms**) for window/accounted/unaccounted; the row `stages[]`
+closed-11 / finite / `ms:null ⇔ unseparated` checks **6/6**; **per-pass re-derivation drift 0 on
+14/14 passes**; `records.indices` strictly increasing, disjoint, union `0..n-1` **6/6**; the
+`null`-remainder-without-a-reason case absent; the `§14.4` (a)/(b) STRICT clauses live and SILENT;
+the outcome channel SEPARATE (3 band-exceeded rows, `failReasons` empty 6/6,
+`bandExceededGate:false`); the window bound CLEAN (`outsideMs` 0 on 6/6 against the **40 ms**
+window-bound band, worst arm-window overshoot +0.1 ms); inertness **Δmutations 0** (the
+mutation-half carries the proof, the long-task half VACUOUS and labelled).
+
+**The O-0 numbers (unchanged in substance; the gate input):** the A-4 read count is **1** for the
+folder-row disclosure (**85 ms** GPU-OFF / **88.9 ms** GPU-ON) and **2** for the document open
+(**173.6 ms** / **175.3 ms**), cross-checked against each row's own `hook.stageRecordDetail` +
+stage row (all six agree); the **O-4 discrimination holds** — the folder gesture is
+`traversal.build`-bound (**67.36 % / 68.98 %** of its long-task window) while the document gesture
+is `reconcile.apply`-bound (**94.38 % / 93.88 %**), i.e. two gestures with DIFFERENT dominant
+stages — so **O-4 stays CONDITIONAL on the disclosure-only trigger**; the census is **226 = 226**
+(6 102 nodes / 9 266 edges, provenance only).
+
+**The counts and the register (the run pass's own reading, artifact §1):** `npx vitest run` =
+**221 files passed (221) / 4 988 passed / 58 skipped / 0 failed, exit 0**; `npm run typecheck` 0;
+`npm run build` 0. The **O-0 suites read 114/114 UNMODIFIED** (report-contract 50 +
+hook-contract 39 + driver-contract 25) and the register lands **6 rows (360) + 4 EXTENDED rows
+(32) = 392 ≤ 400**. **Two test-side repoints were applied in the same pass** (the `RA-2c`
+fixture's duplicate id and the live-pin edition probe EIGHTH→NINTH — the FOURTH consecutive
+regeneration owing that repoint; the general form is its fix) — recorded in the unit spec §15.11.
+
+**Owed after this run (explicitly NOT closed; each with an owner — the canonical list is the unit
+spec §13.7).** (1) the `F7-1`-class **note-branch vs final-status semantics** (SPEC+HOST); (2) the
+**unarmed `0/0` baseline unreachable live** — `S3`/`P-SM-1` restated node-only or given readings
+(TEST/SPEC); (3) **four missing named reds** (TEST); (4) the **edition-probe general form**
+(TEST); (5) **RUL-11's empirical band re-derivation** for `unaccountedMs` (SPEC — the over-band
+remainder stays a reported finding + row note, never a gate); (6) the **`hook.reconcileToleranceMs`
+field-name residue** (HOST); (7) the Unit-1 `O0-CONFIG-CEILING-AND-IMPORTER-UNPINNED`
+pin-coverage gap (TEST, tracked in `docs/defects.md`); and (8) the **main-side `snapshot.clone`
+transport** as a SEPARATE PARKED unit (DEC-1 clause 5; `docs/pending.md`).
+
+**THE O-5 GATE IS UNBLOCKED.** DEC-1's clause reads the artifact's accepted LIVE form; the ninth
+edition carries it **and the oracle that certifies it is now named and was sound** (`92a74b7d`,
+with the §3b clauses exercised live), so the reviewer's condition ("fix items 1-4 then re-run") is
+satisfied and **O-5 leads the queue** (`docs/next-steps.md`; `docs/decisions.md` DEC-1's appended
+provenance clause). **This SUPERSEDES the earlier gate wordings** — the RCA-3 correction
+("unblocked once the shape-oracle MUST-FIX set lands"), the seventh-run correction ("gated on
+`F7-1` + the two strict checks + the EIGHTH run") and the §12.16 sentence "the O-5 gate is
+unblocked on the SIXTH-edition form" all described pre-ninth-run states. **DEC-1's content is
+UNCHANGED and not relabelled.**
+
+**Layer (RCA-12, mandatory).** **`assembled-renderer` MEASUREMENT:** every number above comes from
+the executing `dist/` bundle driving real hit-tested CDP gestures against a real Electron
+renderer, under a RECORDED oracle; the node-side re-derivations in the artifact's §8/§9 are ORACLE
+re-runs over the embedded JSON, not app evidence. **A green here is a measurement-shape green,
+never app-green**, and no part of this record may be read as a claim about app behavior.
+
+**Unit record:** this §12.18 + `docs/specs/unit-o0-m1-m3-measurement-shape.md` **§15** (canonical)
++ **§13.6/§13.7** + the artifact (`docs/specs/unit-o-0-per-stage-breakdown.md`, **NINTH edition**:
+banner, §1-§11, §12.1/§12.2, §12.3, §13) + `docs/defects.md` (the parent M1-M3 row FIXED with the
+NINTH-run closure note; `O0-REPORT-VALIDATED-BEFORE-THE-NOTE-ATTACH` FIXED; the §13-findings rows
+FIXED) + `docs/decisions.md` (DEC-1 provenance) + `docs/next-steps.md` (the DONE row + the queue
+leading with O-5).
+

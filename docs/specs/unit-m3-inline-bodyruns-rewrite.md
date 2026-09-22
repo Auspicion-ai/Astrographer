@@ -1,7 +1,7 @@
 # Spec — Unit M3: The Shared Host-Side `bodyRuns` Child-Ref → Path-Key-Wire Rewrite
 
 - **Status:** SPEC. This is M3 of the **Inline-Ordering Render Fix** program
-  (gate reference: `docs/specs/inline-order-render-fix-review.md`,
+  (gate reference:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md),
   **PROCEED-WITH-AMENDMENTS**, A1–A8, 2026-08-31). Per A1, M3 must land BEFORE
   M2 (the emit unit): M2 must never ship on an unmet rewrite (else it drops
   children). **M3 is a CAPABILITY with no observable behavior on its own — its
@@ -124,7 +124,7 @@ package defect is handoff `ENG-BODYRUNS-WIRE-REF-PATHSTATE`). (Pass TBD, RCA-3.)
 
 ### 3b. Proposal-review findings
 
-The gate (`docs/specs/inline-order-render-fix-review.md`, 2026-08-31) returned
+The gate ( `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md), 2026-08-31) returned
 **PROCEED-WITH-AMENDMENTS**, Design B. The amendments THIS unit resolves:
 
 - **A1 — Sequencing:** M3 lands BEFORE M2; M3's red set rides on M2.
@@ -346,7 +346,7 @@ it.
 
 ### 5.9 Cross-references
 
-- Gate: `docs/specs/inline-order-render-fix-review.md` §2 (feasibility #3 — the
+- Gate:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md) §2 (feasibility #3 — the
   host rewrite), §3 **A1/A2/A3**, §4 (execution order: M3 first), §8 (the host
   rewrite is forward-compatible with the upstream fix).
 - Defects: `docs/defects.md` **ENG-BODYRUNS-WIRE-REF-PATHSTATE** (the open handoff

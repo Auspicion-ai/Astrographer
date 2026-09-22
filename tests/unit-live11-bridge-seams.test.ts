@@ -75,10 +75,18 @@ import type { OperatorSettings } from '../src/shared/types.js'
 // code-under-test for the preload-surface sub-suite.
 // ---------------------------------------------------------------------------
 const invokeMock = vi.hoisted(() => vi.fn())
-const exposeInMainWorldMock = vi.hoisted(() => vi.fn())
+/** Holds the API object the preload exposed at MODULE EVALUATION. A box created
+ *  INSIDE vi.hoisted is in scope (and already initialised) when the hoisted
+ *  factory runs; a module-scope `let` is NOT (TDZ at preload evaluation). */
+const bridgeBox = vi.hoisted(() => ({ current: undefined as
+  Record<string, unknown> | undefined }))
 
 vi.mock('electron', () => ({
-  contextBridge: { exposeInMainWorld: exposeInMainWorldMock },
+  contextBridge: {
+    exposeInMainWorld: vi.fn((_name: string, api: Record<string, unknown>) => {
+      bridgeBox.current = api
+    }),
+  },
   ipcRenderer: {
     invoke: invokeMock,
     on: vi.fn(() => vi.fn()),
@@ -92,7 +100,7 @@ import '../src/main/preload.js'
 
 /** The `window.provident` bridge captured by contextBridge.exposeInMainWorld. */
 function capturedBridge(): any {
-  return exposeInMainWorldMock.mock.calls[0]?.[1]
+  return bridgeBox.current
 }
 
 beforeEach(() => {

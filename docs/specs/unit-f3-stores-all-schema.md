@@ -3,7 +3,7 @@
 - **Status:** SPEC → **LANDED (2026-09-08, Unit U-F3 — the cross-store fan-out slice's
   THIRD + FINAL unit; execution order **U-F1** → **U-F2** → **U-F3**, landed after the
   U-F1/U-F2 cycles).** Proposal gate:
-  `docs/specs/multi-store-fanout-review.md` (PROPOSAL GATE COMPLETE 2026-09-08 —
+   `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) (PROPOSAL GATE COMPLETE 2026-09-08 —
   four-agent gate: validity VALID-WITH-AMENDMENTS → critique UNSOUND-as-written →
   architecture PROCEED-WITH-AMENDMENTS, decisions D1–D8 → change-analysis
   PROCEED-WITH-AMENDMENTS, binding amendments A-F1..A-F4). Decisions consumed: **D4**
@@ -570,7 +570,7 @@ fail-states from this unit.
 
 ### 5.11 Cross-references
 
-- The proposal gate: `docs/specs/multi-store-fanout-review.md` — D1 (per-store
+- The proposal gate:  `archive/gate-reviews/2026-09-21-multi-store-fanout-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#FANOUT-INTERLEAVE-MERGE + docs/specs/unit-f1-merge-store-results.md … unit-f3-stores-all-schema.md) — D1 (per-store
   topK interleave — the merge policy U-F3 feeds), D4 (flat-only + `engine`
   `'local'` + the merged audit `resultCount`/`stores`), D5 (schema + IPC),
   D6 (skip-failed/empty), D7 (determinism — registry insertion order), D8 (3-unit

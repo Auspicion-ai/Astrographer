@@ -1,7 +1,7 @@
 # Spec — Unit U2: Contenteditable-Blur HTML → `RagNodeChild[]` Decomposition (Pure)
 
 - **Status:** SPEC (the U2 unit of the editing-mode-toggle + contenteditable
-  rich-text editor slice, decision **F** of `docs/specs/editing-mode-toggle-review.md`
+  rich-text editor slice, decision **F** of  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md)
   §4/§5). The pure, TOTAL, DOM-free converter that turns a contenteditable
   element's `innerHTML` (browser-authored rich text) back into the RAG store's
   `RagNodeChild[]` inline-children model + the node's plain-text `content`, so
@@ -527,7 +527,7 @@ i.e. `decomposeRichHtml(render(subtree).innerHTML)` reproduces the root's
 
 ## 5. Cross-references
 
-- `docs/specs/editing-mode-toggle-review.md` — §4 decision **F** (the PURE
+-  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) — §4 decision **F** (the PURE
   `decomposeRichHtml(rawHtml)` converter, reusing paste-sanitize's tokenizer +
   URL helpers exported additively; `b`/`i`→`strong`/`em`; unwrap
   `u`/`font`/`span`/`div`/`br`; re-validate `a` href / `img` src; emits

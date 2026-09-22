@@ -6,7 +6,7 @@
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11), `docs/specs/document-directory-category-review.md` §3 **M2** (the
   journal-invertibility must-fix) and §5 (the U-D2 row), and the GATED parent
-  spec `docs/specs/document-directory-category.md`. The LANDED predecessor is
+  spec  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md). The LANDED predecessor is
   **Unit U-D1** (`docs/specs/unit-ud1-document-metadata-fields.md`) — the
   additive `RagNode.documentPath?`/`tags?` fields, the shared
   `normalizeDocumentPath`/`normalizeTags` helpers, the 11-field `nodeSource`,
@@ -553,7 +553,7 @@ the `putNodeSync` classification condition.
   U-D1 → U-D2 → U-D3…) and `docs/decisions.md` row
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` (§3 the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) (§3 the
   additive model; §7 the U-D2 journal unit).
 - **Predecessor (LANDED):** `docs/specs/unit-ud1-document-metadata-fields.md`
   §5.1 (the `documentPath`/`tags` fields), §5.2 (the 11-field `nodeSource`), §5.3

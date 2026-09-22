@@ -2,7 +2,7 @@
 
 **Status: GREEN — COMPLETE (2026-09-12).** Implemented + tested. Unit file
 `tests/unit-u-shell-8-view-menu-pane-visibility.test.ts` — **34 pass**. Blind
-artifact `unit-u-shell-8-view-menu-pane-visibility-greens.md` — **24/24 PASS**
+artifact  `archive/greens/2026-09-21-unit-u-shell-8-view-menu-pane-visibility-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-8-view-menu-pane-visibility-greens.md) — **24/24 PASS**
 (V4/V5 were an initial run FAIL; the toggle-path `zone:*` `is-empty` mirror was
 fixed by `syncZoneMirrors` — see §2.6 pin 5 + the greens drift history). Trio:
 **178 files / 4135 pass + 54 skip**, typecheck 0, build OK. Documentation review

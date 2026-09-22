@@ -2,7 +2,7 @@
 
 **Status:** DRAFT 2026-09-11. **Document-only — no code.** Gates: UI-overhaul
 umbrella gate (PROCEED-WITH-AMENDMENTS); the existing
-`docs/specs/editing-mode-toggle-review.md` (the `editingMode` origin) may serve
+ `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) (the `editingMode` origin) may serve
 as the feature gate. Open items: `docs/specs/wave-1-open-decisions.md`
 W1-Q6/Q7.
 
@@ -69,7 +69,7 @@ editing representation and drives the existing `editingMode` seam + re-derive.
 ## 6. Cross-references
 
 - `docs/specs/ui-overhaul.md` C8, §4 G1, §6 (no new tool), §7 Q4.
-- `docs/specs/editing-mode-toggle-review.md`, `unit-u1-editing-mode-setting.md`,
+-  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md), `unit-u1-editing-mode-setting.md`,
   `unit-u4-contenteditable-editor.md`.
 - `src/renderer/sidebar-panes.ts` (`applyEditingMode`), `src/main/edit-ops.ts`,
   `src/main/operator-settings-store.ts`.

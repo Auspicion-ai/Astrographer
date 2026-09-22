@@ -2,7 +2,7 @@
 
 - **Status:** SPEC — **LANDED-GREEN (2026-09-10)** — the shell-side Gnosis-engine
   document-CRUD wire client, scoped per the roadmap
-  `docs/specs/unblock-gnosis-remaining-endpoints.md` §6.1 (A1). Proposal gate:
+   `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) §6.1 (A1). Proposal gate:
   the roadmap's §6.1 (PASS — the A1 deliverable = the **document-CRUD routing
   proxy client** routing the **11 §4.1 document-CRUD methods** over the frozen
   document-CRUD wire). **Gated on (P3):** **P1a-only for the unit** (the client
@@ -20,8 +20,8 @@
   (§3 FINDING). A1 green set: **60 unit + 8 PBT rows** (`tests/unit-a1-crud-routing-proxy.test.ts`
   + `tests/props-a1-crud-routing-proxy.test.ts` = 68 A1 test rows), trio green
   (**3356 pass / 43 skip**, 137 test files, typecheck + build clean); the greens
-  docs `docs/specs/unit-a1-crud-routing-proxy-greens.md` (26 PASS / 18
-  NOT-VERIFIED / 0 FAIL) and `docs/specs/unit-a1-crud-list-summary-decode-greens.md`
+  docs  `archive/greens/2026-09-21-unit-a1-crud-routing-proxy-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy-greens.md) (26 PASS / 18
+  NOT-VERIFIED / 0 FAIL) and  `archive/greens/2026-09-21-unit-a1-crud-list-summary-decode-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-list-summary-decode-greens.md)
   (8 PASS / 0 FAIL — the re-derivation + a §LIVE-LOCATION), and the live-pending
   battery `docs/specs/unit-a1-crud-routing-proxy-live-pending-battery.md` (parked
   on A2) are recorded.
@@ -1157,7 +1157,7 @@ the generators produce.
 ### 5.11 Cross-references
 
 - **The roadmap (the A1 scope):**
-  `docs/specs/unblock-gnosis-remaining-endpoints.md` — §6.1 (A1), §5.1 (P1a), §5.2
+   `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) — §6.1 (A1), §5.1 (P1a), §5.2
   (P2), §7.1 (the §11 map), §7.2 (auth/TLS), §7.3 (D2 engine-absent), §7.5
   (golden-vector conformance), §8 (the execution order).
 - **The document-CRUD wire contract (the frozen shapes):**

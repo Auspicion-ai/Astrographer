@@ -15,7 +15,7 @@
   `../Gnosis/docs/specs/p2-gnosis-server.md` §5.2 (the 11 CRUD endpoints) / §7
   (status rendering + NEW-2) / §8 (RBAC `caller` threading).
 - **Greens battery (blind-test, docs-only, already run against the LIVE MODULE):**
-  `docs/specs/unit-a1-crud-routing-proxy-greens.md` — **26 PASS, 18 NOT-VERIFIED,
+   `archive/greens/2026-09-21-unit-a1-crud-routing-proxy-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy-greens.md) — **26 PASS, 18 NOT-VERIFIED,
   0 FAIL** (a docs-only analysis; the run file
   `tests/blind-unit-a1-crud-routing-proxy-greens.test.ts` is a future artifact —
   the module-level pure scenarios are verified by the unit tests
@@ -202,7 +202,7 @@ the transport run:
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 44 (26 PASS, 18 NOT-VERIFIED, 0 FAIL —
-  `docs/specs/unit-a1-crud-routing-proxy-greens.md`).
+   `archive/greens/2026-09-21-unit-a1-crud-routing-proxy-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy-greens.md)).
 - **Parked for the later live run (require a live engine+server + the app's
   MCP/UI surface — the 11 CRUD methods + READY gate + P4 retry + transport
   fail-states over a real transport):** G6–G16 (the 11 CRUD-method happy paths,

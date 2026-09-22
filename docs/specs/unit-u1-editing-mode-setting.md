@@ -5,7 +5,7 @@
   `reDerive` mechanism), decision **D** (the supersession), amendment 1 (the
   control fallback test-first), amendment 2 (no re-derive loop by construction),
   amendment 4 (the cross-unit textarea gate), amendment 8 (the `contenteditable`
-  prop mapping) of `docs/specs/editing-mode-toggle-review.md` §4/§5, U1 row).
+  prop mapping) of  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4/§5, U1 row).
   Four pieces: (1) add `editingMode` to `OperatorSettings` +
   `OperatorSettingsPatch` + the store (`DEFAULT_SETTINGS`/`sanitize`/`set`) using
   the existing `EditingMode` type; (2) a NEW `operator-settings-changed`
@@ -450,7 +450,7 @@ broadcasts `operator-settings-changed` → host uses the payload (authoritative,
 amendment A — no re-fetch) → fresh re-derive; commit-on-blur, the dirty-edit
 guard, RAG-authoritative re-traversal, and all-UI-via-provident authoring are
 RETAINED.
-Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-review.md` §4-D + §3 amendments 1/2/4; `docs/specs/unit-u1-editing-mode-setting.md`).
+Date + source as per the existing rows (source:  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-D + §3 amendments 1/2/4; `docs/specs/unit-u1-editing-mode-setting.md`).
 
 ---
 
@@ -674,7 +674,7 @@ Date + source as per the existing rows (source: `docs/specs/editing-mode-toggle-
 
 ## 4. Cross-references + section numbers
 
-- **Proposal review:** `docs/specs/editing-mode-toggle-review.md` §4-C (decision
+- **Proposal review:**  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-C (decision
   **C** — the `operator-settings-changed` broadcast → `requestRebuild` →
   `reDerive` mechanism, the host `applyEditingMode` splice), §4-D / decision
   **D** (the supersession — one new DECIDED row; contenteditable is the default), §3

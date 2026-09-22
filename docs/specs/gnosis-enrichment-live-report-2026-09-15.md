@@ -374,7 +374,7 @@ delivers no enrichment either).
 **Scope gap (the battery's "graph/enrichment" legs).** There is **no engine endpoint** for
 traversal/community/enrichment/facts/consistency (9 probed paths → 404, §2.8); the live route
 table is the fixed 14. On the host side these are the deferred A3/A4/A5 units the roadmap
-explicitly records as **non-gates** (`docs/specs/unblock-gnosis-remaining-endpoints.md`
+explicitly records as **non-gates** ( `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units))
 §6.3-§6.5, P1b-P1e). So the graph/traversal/community/enrichment legs have **no live surface
 to verify** — recorded in §4 as a pending battery, not a behavior FAIL.
 **Proposed fix shape (engine).** Wire a vector-index build/`reSyncEmbed` path so the READY
@@ -421,7 +421,7 @@ claim. The row should read "engine stream MCP tool WORKS; no UI stream surface".
 
 ## 5. Cross-references
 
-- Contract/spec: `docs/specs/unblock-gnosis-remaining-endpoints.md` (§4.1 document CRUD,
+- Contract/spec:  `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) (§4.1 document CRUD,
   §6.2 A2 wiring, §6.3-§6.5 deferred graph/fact/consistency), `docs/specs/unit-gn-mcp-ui-wiring.md`,
   `docs/specs/unit-a2-document-crud-wiring.md`, `docs/specs/unit-gn-engine-integration.md:454`
   (the stale request-body pin), `docs/specs/ui-overhaul.md` §4 G5/§4.11/§5.7a.

@@ -1,7 +1,7 @@
 # Spec — Unit M2: The Traversal `bodyRuns` Emit + A7 Content-Equivalence Gate
 
 - **Status:** SPEC. This is M2 of the **Inline-Ordering Render Fix** program
-  (gate reference: `docs/specs/inline-order-render-fix-review.md`,
+  (gate reference:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md),
   **PROCEED-WITH-AMENDMENTS**, A1–A8, 2026-08-31). M2 is the **traversal emit**
   slice: `buildSubtree` (in `src/main/traversal.ts`) emits the engine's opt-in
   `bodyRuns` (alternating `{text: slice}` / `{child: <authoredInlineId>}` runs)
@@ -104,7 +104,7 @@ TBD, RCA-3.)
 
 ### 3b. Proposal-review findings
 
-The gate (`docs/specs/inline-order-render-fix-review.md`, 2026-08-31) returned
+The gate ( `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md), 2026-08-31) returned
 **PROCEED-WITH-AMENDMENTS**, Design B. The amendments THIS unit resolves:
 
 - **A1 — Sequencing:** M2 must never precede M3; M2's red set includes the M3-
@@ -317,7 +317,7 @@ referenced inline child's `content`, in run order. The gate asserts:
 
 ### 5.9 Cross-references
 
-- Gate: `docs/specs/inline-order-render-fix-review.md` §1 (the traversal builds
+- Gate:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md) §1 (the traversal builds
   `bodyRuns` on the subtree root), §2 #1/#2/#4 (the emit is sound; Design B cannot
   render by itself; the rewrite must not be renderer-only), §3 **A1** (sequencing),
   **A7** (content-`bodyRuns` equivalence gate), §4 (execution order M3 → M1 → M2 →

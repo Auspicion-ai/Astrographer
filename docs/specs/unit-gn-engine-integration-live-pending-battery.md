@@ -11,7 +11,7 @@
   wire shapes + golden vectors are pinned in
   `../Gnosis/docs/specs/engine-wire-contract.md` §4–§12 (V-1..V-9).
 - **Greens battery (blind-test, already run against the LIVE MODULE):**
-  `docs/specs/unit-gn-engine-integration-greens.md` — **63 / 63 PASS, 0 FAIL**
+   `archive/greens/2026-09-21-unit-gn-engine-integration-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-gn-engine-integration-greens.md) — **63 / 63 PASS, 0 FAIL**
   (the recorded run: `tests/blind-unit-gn-engine-integration-greens.test.ts`,
   vitest, exit 0; source under test `src/main/engine-rag-store.js`).
 - **Status:** **PARKED — NOT run against the live application.** Pattern
@@ -187,7 +187,7 @@ for the transport run:
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 63 (all PASS at the module level —
-  `docs/specs/unit-gn-engine-integration-greens.md`, 63/63).
+   `archive/greens/2026-09-21-unit-gn-engine-integration-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-gn-engine-integration-greens.md), 63/63).
 - **Parked for the later live run (require a live engine+server — the
   retrieval trio + health over a real transport):** G16, G17, F10–F23
   (`ragQuery`, 16); G18–G21, F24, F25 (`ragStream`, 6); G22, G23, F32, F33

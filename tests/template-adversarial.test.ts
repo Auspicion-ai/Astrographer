@@ -25,10 +25,18 @@ const invokeMock = vi.hoisted(() => vi.fn())
 const onMock = vi.hoisted(() => vi.fn())
 const removeListenerMock = vi.hoisted(() => vi.fn())
 const sendMock = vi.hoisted(() => vi.fn())
-const exposeInMainWorldMock = vi.hoisted(() => vi.fn())
+/** Holds the API object the preload exposed at MODULE EVALUATION. A box created
+ *  INSIDE vi.hoisted is in scope (and already initialised) when the hoisted
+ *  factory runs; a module-scope `let` is NOT (TDZ at preload evaluation). */
+const bridgeBox = vi.hoisted(() => ({ current: undefined as
+  Record<string, unknown> | undefined }))
 
 vi.mock('electron', () => ({
-  contextBridge: { exposeInMainWorld: exposeInMainWorldMock },
+  contextBridge: {
+    exposeInMainWorld: vi.fn((_name: string, api: Record<string, unknown>) => {
+      bridgeBox.current = api
+    }),
+  },
   ipcRenderer: {
     invoke: invokeMock,
     on: onMock,
@@ -78,6 +86,11 @@ function templateMissingMain(): ContentWindowTemplate {
   }
 }
 
+/** The `window.provident` bridge captured by contextBridge.exposeInMainWorld. */
+function capturedBridge(): Record<string, unknown> {
+  return bridgeBox.current as Record<string, unknown>
+}
+
 // ===========================================================================
 // I3 — bridge.template.validate payload shape (MCP/UI equivalence)
 // ===========================================================================
@@ -88,7 +101,7 @@ describe('I3 — bridge.template.validate sends { template: tpl } (MCP/UI equiva
 
   it('validate(tpl) invokes IPC_TEMPLATE_VALIDATE with the template WRAPPED as { template: tpl } (like set)', () => {
     // The bridge is captured by contextBridge.exposeInMainWorld at preload load.
-    const bridge = exposeInMainWorldMock.mock.calls[0][1] as {
+    const bridge = capturedBridge() as {
       template: { validate: (tpl: unknown) => Promise<unknown> }
     }
     const tpl = customTemplateWithMain()
@@ -98,7 +111,7 @@ describe('I3 — bridge.template.validate sends { template: tpl } (MCP/UI equiva
   })
 
   it('validate(undefined) still wraps the template (payload is { template: undefined }, not a bare undefined)', () => {
-    const bridge = exposeInMainWorldMock.mock.calls[0][1] as {
+    const bridge = capturedBridge() as {
       template: { validate: (tpl: unknown) => Promise<unknown> }
     }
     bridge.template.validate(undefined)

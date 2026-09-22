@@ -39,7 +39,7 @@
   resolves to the typed `DocumentList` (`items` of six-field `DocumentSummary[]`, `total:1,
   page:1, pageSize:20`) — no `malformed document`, no `-32602`; on an empty wiki → `items:[]`.
   The §2.2 `G2 / R1` residual `"malformed document"` row is now **FULLY PASS (live)**, no longer
-  a follow-up. See `docs/specs/unit-a1-crud-list-summary-decode-greens.md` §LIVE-LOCATION.
+  a follow-up. See  `archive/greens/2026-09-21-unit-a1-crud-list-summary-decode-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-list-summary-decode-greens.md) §LIVE-LOCATION.
 
 ### 2.1 Live PASSED (this iteration — engine Ready, operator credential `user:operator` set)
 
@@ -94,7 +94,7 @@
 
 ### 2.5 Net-status
 
-The **A2 mutating CRUD write surface is VERIFIED LIVE** (create→update-validated→publish→unpublish→archive + the RBAC caller deny + group gating). As of the **2026-09-11 re-drive**, BOTH previously-open host defects are now **FIXED and live-verified**: **(1)** the read class no longer fails on GET-with-body (`HOST-GET-WITH-BODY-SSE-CRUD` CLOSED) and **(2)** `gnosis.document.delete` returns `result:null` (no `-32602`; `HOST-CRUD-DELETE-RESULT-SERIALIZATION` CLOSED). The G6 happy path + the GUI-pane scenarios remain parked. **The prior `"malformed document"` live follow-up is now CLOSED** (2026-09-11, fresh relaunch): `gnosis.document.list` resolves to the typed `DocumentList` on populated (`items` six-field `DocumentSummary[]`, `total:1`) and empty (`items:[]`) wikis — `HOST-CRUD-LIST-SUMMARY-DECODE` fixed + live-verified (see `docs/specs/unit-a1-crud-list-summary-decode-greens.md` §LIVE-LOCATION).
+The **A2 mutating CRUD write surface is VERIFIED LIVE** (create→update-validated→publish→unpublish→archive + the RBAC caller deny + group gating). As of the **2026-09-11 re-drive**, BOTH previously-open host defects are now **FIXED and live-verified**: **(1)** the read class no longer fails on GET-with-body (`HOST-GET-WITH-BODY-SSE-CRUD` CLOSED) and **(2)** `gnosis.document.delete` returns `result:null` (no `-32602`; `HOST-CRUD-DELETE-RESULT-SERIALIZATION` CLOSED). The G6 happy path + the GUI-pane scenarios remain parked. **The prior `"malformed document"` live follow-up is now CLOSED** (2026-09-11, fresh relaunch): `gnosis.document.list` resolves to the typed `DocumentList` on populated (`items` six-field `DocumentSummary[]`, `total:1`) and empty (`items:[]`) wikis — `HOST-CRUD-LIST-SUMMARY-DECODE` fixed + live-verified (see  `archive/greens/2026-09-21-unit-a1-crud-list-summary-decode-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-list-summary-decode-greens.md) §LIVE-LOCATION).
 
 - **Author:** Live-scenario runner (delegated subagent). **Date: 2026-09-10.**
 - **Source contract:** `docs/specs/unit-a2-document-crud-wiring.md` — §5.1 (the 11
@@ -113,7 +113,7 @@ The **A2 mutating CRUD write surface is VERIFIED LIVE** (create→update-validat
   `../Gnosis/docs/specs/p2-gnosis-server.md` §5.2 (the 11 CRUD endpoints) / §7
   (status rendering + NEW-2) / §8 (RBAC `caller` threading).
 - **Greens battery (blind-test, docs-only, already run against the LIVE MODULE):**
-  `docs/specs/unit-a2-document-crud-wiring-greens.md` — **81 / 81 PASS, 0 FAIL**
+   `archive/greens/2026-09-21-unit-a2-document-crud-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a2-document-crud-wiring-greens.md) — **81 / 81 PASS, 0 FAIL**
   (33 G + 40 F + 8 P; the recorded run file
   `tests/blind-unit-a2-document-crud-wiring-greens.test.ts`, vitest). The greens
   exercise the wiring through the **real `createEngineCrudRagStore` proxy on a
@@ -374,7 +374,7 @@ do NOT require a live engine+server. They are NOT parked for the transport run:
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 81 (33 G + 40 F + 8 P — all PASS at the module
-  level, `docs/specs/unit-a2-document-crud-wiring-greens.md`).
+  level,  `archive/greens/2026-09-21-unit-a2-document-crud-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a2-document-crud-wiring-greens.md)).
 - **Parked for the later live run (require a live engine + the running app's
   MCP/UI surface):**
   - The 11 MCP-tool happy paths over a real transport: **G1–G11** (11).

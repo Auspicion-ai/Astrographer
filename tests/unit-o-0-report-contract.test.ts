@@ -1725,6 +1725,24 @@ describe('O-0 §4.2/§4.4 (RUL-4) — the DERIVED report `status`, the F18 consi
       ).toMatch(/disagrees with the status the recorded reasons DERIVE/)
       expect(blob, 'the reason must name the DERIVED status the claim contradicts').toContain('OK')
       expect(blob, `the reason must name the declared status '${declared}'`).toContain(declared)
+      // ---------------------------------------------------------------------
+      // MOVED TO THE FORCING LEVEL (O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS).
+      // The reason above reaches `errors[]`; §4.3's forcing channel is
+      // `failReasons[]` and `ok` is SCHEMA validity — a result whose `errors[]`
+      // is NON-EMPTY while `ok:true` says "valid" is the defect. Same clause,
+      // FINAL split (§4.4/RUL-4).
+      // ---------------------------------------------------------------------
+      const finalBlob = JSON.stringify({ errors: v.errors, failReasons: v.failReasons })
+      expect(
+        v.ok,
+        `§4.3/§6 F18: '${declared}' disagreement reached errors[] (${finalBlob}) yet ok=${String(v.ok)} — a non-empty errors[] ` +
+          `can never be ok:true (the post-derivation reason was DROPPED from the verdict)`,
+      ).toBe(false)
+      expect(
+        JSON.stringify(v.failReasons),
+        `§4.3: the F18 status disagreement must reach the FORCING channel failReasons[] (got ${JSON.stringify(v.failReasons)})`,
+      ).toMatch(/disagrees with the status the recorded reasons DERIVE/)
+      expect(v.status, 'the derived status is recomputed from the FINAL split — still the DERIVED "OK", never the asserted string').toBe('OK')
     }
   })
 
@@ -1738,6 +1756,21 @@ describe('O-0 §4.2/§4.4 (RUL-4) — the DERIVED report `status`, the F18 consi
       /contradicts pass:false/,
     )
     expect(blob, 'the reason must state the equivalence it enforces').toMatch(/OK ⇔ pass:true/)
+    // MOVED TO THE FORCING LEVEL — the contradiction + the "pass:false with no
+    // forcing reason" clause are BOTH post-derivation reasons (§4.3 fail-loud).
+    const finalBlob = JSON.stringify({ errors: v.errors, failReasons: v.failReasons })
+    expect(
+      v.ok,
+      `§4.3/§6 F18: the status/pass contradiction reached errors[] (${finalBlob}) yet ok=${String(v.ok)} — a dropped forcing reason`,
+    ).toBe(false)
+    expect(
+      JSON.stringify(v.failReasons),
+      `§4.3 fail-loud: the ` + '`pass:false` with no forcing reason' + ` clause must reach failReasons[] (got ${JSON.stringify(v.failReasons)})`,
+    ).toMatch(/records pass:false with no forcing reason/)
+    expect(
+      JSON.stringify(v.failReasons),
+      `§4.2/RUL-4: the status/pass contradiction must reach failReasons[] (got ${JSON.stringify(v.failReasons)})`,
+    ).toMatch(/contradicts pass:false/)
   })
 
   it('ST3 [§6 S19/RUL-4] `status:"OPEN-structural"` ⇔ `pass:false` whose reasons are ALL structural, WITH the reconciliation note: SCHEMA-VALID, residual not computable, nothing imputed', async () => {
@@ -1765,6 +1798,21 @@ describe('O-0 §4.2/§4.4 (RUL-4) — the DERIVED report `status`, the F18 consi
     expect(blob, '§6 F18: the OPEN-structural branch REQUIRES the note (§3.6b RUL-4 clause 5)').toMatch(/without a reconciliation\.note/)
     expect(blob, 'the reason must name the three things the note owes').toMatch(/non-computable/)
     expect(blob, 'the reason must name §3.6b RUL-4 clause 5 as its source').toMatch(/RUL-4/)
+    // MOVED TO THE FORCING LEVEL: this is the documented "a report missing the
+    // mandatory reconciliation.note where required ⇒ its reason in failReasons[]"
+    // regression row. The DECLARED status agrees with the DERIVED one, so the note
+    // clause is the ONLY violation — isolating the drop (no status-disagreement
+    // reason can mask it).
+    const finalBlob = JSON.stringify({ errors: v.errors, failReasons: v.failReasons })
+    expect(
+      v.ok,
+      `§4.3/§6 F18 clause 5: the missing-note reason reached errors[] (${finalBlob}) yet ok=${String(v.ok)} — dropped forcing reason`,
+    ).toBe(false)
+    expect(
+      JSON.stringify(v.failReasons),
+      `§3.6b RUL-4 clause 5: the missing reconciliation.note must reach failReasons[] (got ${JSON.stringify(v.failReasons)})`,
+    ).toMatch(/without a reconciliation\.note/)
+    expect(v.status, 'the derived status is recomputed from the FINAL split: the note clause is NON-structural, so the status is "FAIL"').toBe('FAIL')
   })
 
   it('ST6 [§4.2/RUL-4 — the landed-fixture level] an ABSENT `status` is NOT-DECLARED: no status-consistency failure is derived, while a `runs[]` row fixture never carries one at all', async () => {
@@ -1825,5 +1873,246 @@ describe('O-0 §4.2/§4.4 (RUL-4) — the DERIVED report `status`, the F18 consi
       '§6 F19: an `error`-bearing record (a rejected round trip that CLOSED its span) is a LEGAL record — never the dangling-start fail-state',
     ).not.toMatch(/dangling/)
     expect(sv.ok, 'the settled row validates').toBe(true)
+  })
+})
+
+// ===========================================================================
+// §4.3/§4.4 + §6 F18/F20/F21 — the POST-DERIVATION forcing reasons
+// (defect `O0-VALIDATOR-DROPS-POSTDERIVATION-REASONS`, docs/defects.md queue 2).
+//
+// DATA STATES ENUMERATED (where the reason is MINTED relative to the verdict
+// snapshot — this is the axis the defect lives on; every state below is a
+// report whose ONLY violation is minted by a block that runs AFTER `gating`/
+// `derived`/`ok` are computed from the `failReasons` snapshot):
+//   PD1. CLEAN report + `status:"OPEN-structural"` DECLARED while its reasons
+//        DERIVE `"OK"` (§4.4/D-GP-UFA-3) — the F18 status clause, no other defect.
+//   PD2. CLEAN report + `pass:true` and a GATING reason recorded (§4.3 fail-loud
+//        / §4.4: a verdict is never asserted true) — the F18 pass clause.
+//   PD3. The mandatory `reconciliation.note` MISSING while the DECLARED status
+//        (`"OPEN-structural"`) AGREES with the DERIVED one (§3.6b RUL-4 clause 5)
+//        — the note clause is the only violation, so nothing masks the drop.
+//   PD4. `driver.gpuDeltas[].carriedFromAnotherRun === true` — a cross-run GPU
+//        delta carried as this run's measurement (§2.4/RUL-5-L9, §6 S20/F20).
+//   PD5. Every run ARMED the hook and the inertness pair reports
+//        `nonVacuous:false` WITHOUT the pinned `MUTATION-HALF` sentence — the
+//        vacuous-half claim (§6 S17(b)/F21, RUL-6).
+//   PD5b. the LEGAL CONTROL for PD5: the SAME pair carrying the pinned
+//        MUTATION-HALF sentence (§6 S17(b): legal, never a forcing reason).
+//
+// FAIL-STATES PINNED (one forcing condition per row — §4.3/§6 F18/F20/F21):
+//   every pin asserts the FINAL triple `{ok, failReasons, status}` recomputed
+//   from the POST-BLOCK split: `ok:false`, ≥1 `failReasons[]` line naming the
+//   pinned clause, and the `status` the FINAL split derives (never the
+//   pre-block snapshot's "OK").
+// ===========================================================================
+describe('O-0 §4.3/§4.4/§6 F18/F20/F21 — post-derivation reasons reach the FORCING channel (failReasons[] + ok) and the status is recomputed from the FINAL split', () => {
+  const PD_SEAM = 'no main-side transport: the IPC_RAG_SNAPSHOT handler records are not transported (§3.6b RUL-3)'
+  /** A report whose ONLY recorded defect is the STRUCTURAL family (one stage
+   *  `structural:true` + its reason, both rows otherwise complete) — the fixture
+   *  the OPEN-structural / missing-note states are built on (§6 S14/S19). */
+  function structuralReport(ids: readonly string[], over: Record<string, any> = {}): Record<string, any> {
+    const { off, on } = gpuPair(ids)
+    const structuralRun = runFor(ids, {
+      id: off.id,
+      gpu: false,
+      stages: ids.map((id) =>
+        id === 'snapshot.clone'
+          ? ({ id, ms: null, unseparated: true, source: 'hook', structural: true, structuralReason: PD_SEAM } as unknown as O0StageShape)
+          : ({ id, ms: 1, unseparated: false, source: id === 'post.style' ? 'derived' : 'mark' } as O0StageShape),
+      ),
+      failReasons: [`stage snapshot.clone is structurally unseparated — ${PD_SEAM}`],
+    })
+    return reportFor([structuralRun, runFor(ids, { id: on.id, gpu: true })], ids, {
+      pass: false,
+      reconciliation: {
+        ok: false,
+        note:
+          `snapshot.clone is structurally unseparated (${PD_SEAM}); the post.style residual therefore cannot be computed and ` +
+          `is OPEN-structural — no value was imputed (§3.6b RUL-4 clause 5)`,
+      },
+      ...over,
+    })
+  }
+  /** A report whose only violation is minted after the verdict snapshot
+   *  (the PD* state), plus its legal control counterpart. */
+  function inertPairDriver(proofStatement: string): Record<string, any> {
+    return {
+      build: { renderer: 'mtime+len', main: 'mtime+len', served: 'mtime+len', verified: true },
+      gpuFlag: false,
+      cliArgs: ['--connect', '--o0-out=/tmp/o0-gpuoff.json'],
+      runMode: 'connect',
+      hookInertness: [
+        {
+          inert: true,
+          setEqual: true,
+          nonVacuous: false,
+          deltaMutations: 0,
+          deltaLongTaskMs: 0,
+          toleranceMs: 40,
+          longTaskTotalMs: { armed: 0, unarmed: 0 },
+          proofStatement,
+        },
+      ],
+    }
+  }
+  /** Both runs of a paired GPU leg with the §3.6(c) hook ARMED (the state the
+   *  vacuous-inertness rule counts — §6 S17(b)). */
+  function armedPair(ids: readonly string[]): O0RunShape[] {
+    const { off, on } = gpuPair(ids)
+    const hook = { armed: true, armCount: 1, disarmCount: 1, rendererArmed: true, stageRecords: [] }
+    return [
+      runFor(ids, { id: off.id, gpu: false, hook }),
+      runFor(ids, { id: on.id, gpu: true, hook }),
+    ]
+  }
+
+  it('PD1 [§4.4/D-GP-UFA-3/§6 F18] a CLEAN report DECLARING `status:"OPEN-structural"` while its reasons DERIVE "OK" is a FORCING reason: ok:false + ≥1 failReasons line (not merely an errors[] entry)', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    const v = api.validateO0Report(reportFor([off, on], ids, { status: 'OPEN-structural' }))
+    // the pre-existing (still-true) half: the declaration is refused and the
+    // result carries the DERIVED status, never the asserted string.
+    expect(v.status, 'a status is COMPUTED, never asserted — the result carries the DERIVED "OK"').toBe('OK')
+    expect(
+      JSON.stringify(v.errors),
+      'the F18 status clause still reaches errors[] (the diagnosis stays readable)',
+    ).toMatch(/disagrees with the status the recorded reasons DERIVE/)
+    // the FORCING half — the regression row the defect row owes.
+    expect(
+      v.ok,
+      `§4.3: errors[] carries the F18 status clause while ok=${String(v.ok)} and failReasons=${JSON.stringify(v.failReasons)} — ` +
+        `a non-empty errors[] can never be ok:true (the post-derivation reason was dropped from the verdict)`,
+    ).toBe(false)
+    const reasons = JSON.stringify(v.failReasons)
+    expect(
+      Array.isArray(v.failReasons) && v.failReasons.length > 0,
+      `§4.3 fail-loud: a forcing reason requires ≥1 failReasons line (got ${reasons})`,
+    ).toBe(true)
+    expect(reasons, `§6 F18: the failReasons line must name the status/derivation disagreement (got ${reasons})`).toMatch(
+      /disagrees with the status the recorded reasons DERIVE/,
+    )
+    expect(reasons, 'the failReasons line must name the DERIVED status the declared one contradicts').toContain('OK')
+    expect(reasons, 'the failReasons line must name the DECLARED status the report asserted').toContain('OPEN-structural')
+  })
+
+  it('PD2 [§4.3/§4.4/§6 F18] a `pass:true` report carrying a GATING reason: the disagreement reason reaches failReasons[] with ok:false and the FINAL split derives "FAIL"', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    // the gating reason is the PD5 vacuous-inertness clause (a non-structural,
+    // post-derivation forcing condition) so the row isolates the pass/gating
+    // disagreement from the status DECLARATION.
+    const v = api.validateO0Report(
+      reportFor(armedPair(ids), ids, {
+        pass: true,
+        status: 'OK',
+        driver: inertPairDriver('Δmutations 0 and |ΔlongTaskTotalMs| 0 ≤ 40 ms → inert'),
+      }),
+    )
+    expect(v.ok, `§4.4: pass:true with a gating reason is ok:false (got ok=${String(v.ok)}, errors=${JSON.stringify(v.errors)})`).toBe(false)
+    expect(
+      JSON.stringify(v.errors),
+      'the F18 pass/gating clause must name the asserted verdict (§4.4: a verdict is NEVER asserted true)',
+    ).toMatch(/records pass:true but the harness derived/)
+    const reasons = JSON.stringify(v.failReasons)
+    expect(
+      reasons,
+      `§4.3: the pass:true-with-a-gating-reason disagreement must reach failReasons[] (got ${reasons})`,
+    ).toMatch(/records pass:true but the harness derived|disagrees with the status the recorded reasons DERIVE/)
+    expect(
+      v.status,
+      'the derived status is recomputed from the FINAL split — a gating reason outside the structural family derives "FAIL", ' +
+        `never the pre-block snapshot's "OK" (got ${String(v.status)})`,
+    ).toBe('FAIL')
+  })
+
+  it('PD3 [§3.6b RUL-4 clause 5/§6 F18] a report missing the mandatory `reconciliation.note` (declared status AGREES with the derived one): its reason reaches failReasons[] with ok:false and status "FAIL"', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const v = api.validateO0Report(structuralReport(ids, { status: 'OPEN-structural', reconciliation: { ok: false } }))
+    expect(
+      JSON.stringify(v.errors),
+      'the F18 clause-5 reason must still be readable in errors[] (the note names the three things it owes)',
+    ).toMatch(/without a reconciliation\.note/)
+    expect(
+      v.ok,
+      `§4.3: the missing-note reason is recorded while ok=${String(v.ok)} and failReasons=${JSON.stringify(v.failReasons)} — dropped`,
+    ).toBe(false)
+    const reasons = JSON.stringify(v.failReasons)
+    expect(reasons, `§3.6b RUL-4 clause 5: the missing reconciliation.note must be a FORCING reason (got ${reasons})`).toMatch(
+      /without a reconciliation\.note/,
+    )
+    expect(reasons, 'the forcing reason must name the three things the note owes').toMatch(/non-computable/)
+    expect(reasons, 'the forcing reason must cite its source').toMatch(/RUL-4/)
+    expect(v.status, 'the note clause is NON-structural: the FINAL split derives "FAIL"').toBe('FAIL')
+  })
+
+  it('PD4 [§2.4 RUL-5-L9/§6 S20 F20] a carried-cross-run GPU delta (`carriedFromAnotherRun:true`) reaches failReasons[] with ok:false', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const { off, on } = gpuPair(ids)
+    const v = api.validateO0Report(
+      reportFor([off, on], ids, {
+        driver: {
+          build: { renderer: 'mtime+len', main: 'mtime+len', served: 'mtime+len', verified: true },
+          gpuFlag: false,
+          cliArgs: ['--connect'],
+          runMode: 'connect',
+          gpuDeltas: [{ delta: 2173, carriedFromAnotherRun: true, provenanceRun: 'o0-folder-row-gpuoff-r2' }],
+        },
+      }),
+    )
+    expect(v.ok, `§6 F20: a carried cross-run GPU delta is a forcing reason — ok must be false (got ok=${String(v.ok)})`).toBe(false)
+    const reasons = JSON.stringify(v.failReasons)
+    expect(reasons, `§2.4/RUL-5-L9: the F20 reason must reach failReasons[] (got ${reasons})`).toMatch(/carried from another run/)
+    expect(reasons, 'the F20 reason must name the delta it carried').toContain('2173')
+    expect(reasons, 'the F20 reason must name the run/corpus the delta belongs to').toContain('o0-folder-row-gpuoff-r2')
+    expect(reasons, 'the F20 reason must state the per-run/per-corpus rule it enforces').toMatch(/never carried across runs/)
+    expect(v.status, 'a non-structural forcing reason derives "FAIL" from the FINAL split').toBe('FAIL')
+  })
+
+  it('PD5 [§6 S17(b)/F21 RUL-6] a vacuous inertness half (`nonVacuous:false` without the pinned MUTATION-HALF sentence) reaches failReasons[] with ok:false', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const v = api.validateO0Report(
+      reportFor(armedPair(ids), ids, {
+        // a report that DOES claim the unqualified long-task-bounded form is the
+        // exact defect §6 F21 names (the pair's `inert` VALUE is not in question).
+        pass: true,
+        driver: inertPairDriver('Δmutations 0 and |ΔlongTaskTotalMs| 0 ≤ 40 ms → inert'),
+      }),
+    )
+    expect(
+      JSON.stringify(v.errors),
+      'the F21 clause must still be readable in errors[]',
+    ).toMatch(/reported as a long-task-bounded proof while nonVacuous is false/)
+    expect(v.ok, `§6 F21: a vacuous-half inertness claim forces ok:false (got ok=${String(v.ok)})`).toBe(false)
+    const reasons = JSON.stringify(v.failReasons)
+    expect(reasons, `§6 S17/RUL-6: the F21 reason must reach failReasons[] (got ${reasons})`).toMatch(
+      /long-task-bounded proof while nonVacuous is false/,
+    )
+    expect(reasons, 'the F21 reason must name the pinned MUTATION-HALF form the report owes').toMatch(/MUTATION-HALF/)
+    expect(reasons, 'the F21 reason must cite §6 S17/RUL-6').toMatch(/S17|RUL-6/)
+    expect(v.status, 'a non-structural forcing reason derives "FAIL" from the FINAL split').toBe('FAIL')
+  })
+
+  it('PD5b [§6 S17(b) — the LEGAL CONTROL] the SAME vacuous pair carrying the pinned MUTATION-HALF sentence is legal: no forcing reason, ok:true, status "OK"', async () => {
+    const api = await loadO0()
+    const ids = idsOf(api)
+    const v = api.validateO0Report(
+      reportFor(armedPair(ids), ids, {
+        driver: inertPairDriver(
+          'the hook inertness pair is a MUTATION-HALF proof: Δmutations 0 === 0 with 39 mutation(s) observed in each freeze; ' +
+            'the long-task half is VACUOUS (both freezes totalled 0 ms — a 0-vs-0 comparison, nonVacuous:false)',
+        ),
+      }),
+    )
+    expect(
+      JSON.stringify({ errors: v.errors, failReasons: v.failReasons }),
+      '§6 S17(b): the MUTATION-HALF form IS legal — it is a recorded fact, never a forcing reason (the pair\'s `inert` value stands)',
+    ).not.toMatch(/MUTATION-HALF form instead|nonVacuous is false/)
+    expect(v.ok, 'the legal MUTATION-HALF report stays SCHEMA-VALID').toBe(true)
+    expect(v.failReasons, 'the legal control carries NO forcing reason').toEqual([])
+    expect(v.status, 'with no reason at all the derived status is "OK"').toBe('OK')
   })
 })

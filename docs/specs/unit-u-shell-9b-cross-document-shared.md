@@ -160,7 +160,7 @@ host-side authoring + runtime last-wins).
 **Verdict (2026-09-13):** H1/H2/H3/H4/H5/H6/H7 are **FIXED**; 9b is **GREEN** —
 the implementation is complete and independently verified (red→green→trio→
 adversarial per unit, then the **RCA-4 blind-greens** re-run:
-`docs/specs/unit-u-shell-9b-greens.md` — 23 PASS / 0 FAIL / 0 NOT-TESTED, trio
+ `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md) — 23 PASS / 0 FAIL / 0 NOT-TESTED, trio
 185 files / 4327 pass + 58 skip). Residual follow-ups (outside the
 §2.7/§2.8/§2.9 seams): **W2-N15** (multi-doc operator/template re-derive scope),
 **AF3-3/AF1-2** (per-mount editing context for a shared node).
@@ -324,7 +324,7 @@ are **U-SHELL-9a** states, not this unit's red set.)*
 ## 5.7 Property register (PBT)
 
 **PBT backfill (2026-09-13).** This unit is ALREADY-GREEN (H1–H7 fixed,
-`docs/specs/unit-u-shell-9b-greens.md` — 23 PASS / 0 FAIL); this register is a
+ `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md) — 23 PASS / 0 FAIL); this register is a
 MANDATORY typed-property backfill on the landed PURE module
 `src/renderer/cross-document-shared.ts` only. It follows the sibling convention
 (`docs/specs/unit-ujr1-get-journal.md` §5.7; itself adopting

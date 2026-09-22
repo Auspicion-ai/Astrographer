@@ -8,7 +8,7 @@
 - **Reviewer:** change-analysis agent (step 3 of the proposal gate, AGENTS.md item
   8), grounded by the independent validity review (step 1) and critique review
   (step 2).
-- **Inputs:** `docs/specs/document-directory-category.md` (DRAFT at gate time;
+- **Inputs:**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) (DRAFT at gate time;
   now GATED); validity review
   (VALID-WITH-AMENDMENTS, 18 findings); critique review (UNSOUND-as-written, 24
   findings); `AGENTS.md`; `docs/decisions.md`; the build.
@@ -225,7 +225,7 @@ UI** — the ui-overhaul **G2** consumer, not part of this slice.
 
 ## 6. Tracker / documentation reconciliation (same pass)
 
-- **`docs/specs/document-directory-category.md`** — status → GATED
+- ** `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md)** — status → GATED
   2026-09-11 (this file); §3.1/§3.2/§3.3/§3.4/§3.7 reconciled to M1; §5 census
   corrected (M6); §6/§7 point here for the corrected units + resolved Q1–Q9.
 - **`docs/specs/ui-overhaul.md`** — amend §3.3 flat-id text and Q13 to
@@ -252,7 +252,7 @@ UI** — the ui-overhaul **G2** consumer, not part of this slice.
    doc-nav tree UI moves to **ui-overhaul G2** (this slice lands U-D1…U-D7).
 
 **All gate decisions are now ratified.** The next step is to fold M1–M16 into
-`docs/specs/document-directory-category.md` and decompose it into per-unit specs
+ `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) and decompose it into per-unit specs
 (`docs/specs/unit-ud1..ud7.md`), each with its own TestWriter red set before any
 implementation (AGENTS.md item 9).
 

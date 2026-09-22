@@ -2,7 +2,7 @@
 
 **Status: GREEN — COMPLETE (2026-09-12).** Implemented + tested. Unit file
 `tests/unit-u-state-1e-nroot-reconcile.test.ts` — **28 pass** (0 skip). Blind
-artifact `docs/specs/unit-u-state-1e-nroot-reconcile-greens.md` — **24
+artifact  `archive/greens/2026-09-21-unit-u-state-1e-nroot-reconcile-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-state-1e-nroot-reconcile-greens.md) — **24
 scenarios — 22 PASS + 2 NOT-TESTED** (the initial blind run was 19 PASS / 3
 FAIL / 2 NOT-TESTED; the F2/F5/F8 FAILs were the stale-root-scope drift, fixed
 by the Implementer — see §9 + the artifact's FAIL detail/drift note). Trio:

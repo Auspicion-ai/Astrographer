@@ -7,7 +7,7 @@
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11), `docs/specs/document-directory-category-review.md` (M7/M13/M16
   + the U-D4 row in §5; Q2/Q3/Q7), and the GATED parent
-  `docs/specs/document-directory-category.md` §3.4/§3.7. Precedent specs:
+   `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.4/§3.7. Precedent specs:
   `docs/specs/unit-ud1-document-metadata-fields.md` (the LANDED
   `RagNode.documentPath?`/`tags?` fields + `[]`→omitted), and
   `docs/specs/unit-ud3-import-path-id-scheme.md` (the LANDED path-qualified
@@ -771,7 +771,7 @@ All other payload usages pass `{ documents: [] }`, `null`, or use
   U-D4 row in §5; Q2/Q3/Q7; F8) and `docs/decisions.md` row
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` §3.4 (the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.4 (the
   listing + derived tree + category-scoped selection), §3.7 (read-surface-only
   backfill; no re-hash/rewrite), §4 (F8 + the added fail-states), §5 (the UI
   coupling risk).

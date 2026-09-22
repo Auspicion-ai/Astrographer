@@ -4,7 +4,7 @@
 - **Source contract:** `docs/specs/unit-shell-integration.md` (§5.1 the shared
   `engine-transport` module surface; §5.2 the fetch-based SSE client; §5.3 the
   bind/auth/TLS policy record; §5.5 the e2e transport test / live-battery
-  revisit; §5.8/§5.9 happy/fail states). **Greens set:** `unit-shell-integration-greens.md`
+  revisit; §5.8/§5.9 happy/fail states). **Greens set:**  `archive/greens/2026-09-21-unit-shell-integration-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-shell-integration-greens.md)
   — 41 scenarios (18 G + 14 F + 8 PB + 1 gated E1).
 - **Greens battery (blind, docs-only, already PASS against the LIVE MODULE):**
   all 40 non-gated scenarios PASS at the module level (deterministic mock

@@ -961,7 +961,7 @@ boundary):**
 
 **Post-green gates (per RCA-2/3/4/6, one cycle for this unit):** the
 adversarial pass registers findings in §3a (mandatory probes listed there);
-the blind-greens writer produces `docs/specs/unit-ms4-id-prefixing-greens.md`
+the blind-greens writer produces  `archive/greens/2026-09-21-unit-ms4-id-prefixing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms4-id-prefixing-greens.md)
 from the docs ONLY; the documentation review reconciles §5.11's superseded
 Unit T passages + `docs/decisions.md` STORE-ID-PREFIX's A1 clause +
 `docs/next-steps.md`'s DONE row (with the recorded red set) in the SAME

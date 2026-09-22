@@ -54,7 +54,7 @@ vector machinery were live-verified against real ollama on 2026-09-05.
 
 ### 1.0 Live-fix handover + RCA (2026-09-14)
 
-`docs/HANDOVER-LIVE-BATCH-RCA.md` — the current-state handover of the live-app
+ `archive/live-batch/2026-09-21-handover-live-batch-rca.md` (historical; archived 2026-09-21; successor docs/specs/rca-live-bugs-green-pipeline.md (the RCA of record)) — the current-state handover of the live-app
 user-testing batch (LIVE-1..12 fixed/open) + the **RCA of why every UI-overhaul
 feature passed green unit/blind-green/doc-review gates yet was broken in the
 assembled Electron app** (the pipeline verified the provident-ENVELOPE authoring

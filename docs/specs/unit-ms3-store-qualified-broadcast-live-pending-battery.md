@@ -14,7 +14,7 @@
   broadcast-count invariants), §3a-§3b (the adversarial record F-MS3-1..F-MS3-6
   — the F-MS3-1 warn diagnostic is renderer-internal).
 - **Greens battery (blind-test, already run against the live MODULES):**
-  `docs/specs/unit-ms3-store-qualified-broadcast-greens.md` — 27 scenario rows
+   `archive/greens/2026-09-21-unit-ms3-store-qualified-broadcast-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms3-store-qualified-broadcast-greens.md) — 27 scenario rows
   (23 executable S01–S52 + 4 RELEGATED R01–R04): **23 PASS / 0 FAIL / 4
   RELEGATED** (the recorded run: 23/23 vitest tests, exit 0; `npm run
   typecheck` exit 0). The four RELEGATED host states (`sidebar-panes.ts` §5.4)
@@ -235,7 +235,7 @@ These have NO live MCP/UI surface and stay covered by the module-level greens
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 27 (23 executable S01–S52 + 4 RELEGATED
-  R01–R04 — `docs/specs/unit-ms3-store-qualified-broadcast-greens.md`; the
+  R01–R04 —  `archive/greens/2026-09-21-unit-ms3-store-qualified-broadcast-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms3-store-qualified-broadcast-greens.md); the
   recorded run is 23 PASS / 0 FAIL / 4 RELEGATED).
 - **Live-observable once the revisit condition is met (a UI-interactive session
   or an operator-initiated edit, per the supervisor directive):** R01

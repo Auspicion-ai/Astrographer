@@ -5,7 +5,7 @@
   decomposition). Gate references: `docs/decisions.md` row
   **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-AMENDMENTS, RATIFIED
   2026-09-11), `docs/specs/document-directory-category-review.md` (M1–M16,
-  Q1–Q9), and `docs/specs/document-directory-category.md` (the GATED parent
+  Q1–Q9), and  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) (the GATED parent
   spec). This unit is the review's **U-D1** row: the additive store model +
   hash coverage + additive load/round-trip. It does NOT implement any other
   slice unit (see the exclusions below).
@@ -358,7 +358,7 @@ function nodeHash(n: RagNode): string { return sha256(nodeSource(n)) }
 > correctly refused to follow it. The ACTUAL code at
 > `src/main/rag-store.ts:373-383` serializes `nodeKind` (between `content` and
 > `children`), and the GATED parent spec
-> `docs/specs/document-directory-category.md` §1 documents the same:
+>  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §1 documents the same:
 > `id, type, content, nodeKind, children, props, ownedNodeIds, createdAt,
 > updatedAt`. Dropping `nodeKind` would change the hash of every existing
 > record that carries it and quarantine it at boot — directly violating this
@@ -667,7 +667,7 @@ validation, M3).
   gate outcome: M1–M16, Q1–Q9, the U-D1…U-D8 decomposition) and
   `docs/decisions.md` row **DOC-DIRECTORY-CATEGORY-GATE** (PROCEED-WITH-
   AMENDMENTS, RATIFIED 2026-09-11).
-- **Parent (GATED):** `docs/specs/document-directory-category.md` §3.1 (the
+- **Parent (GATED):**  `archive/notes/2026-09-21-document-directory-category.md` (historical; archived 2026-09-21; successor docs/specs/unit-ud1-document-metadata-fields.md … unit-ud7-set-doc-meta-op.md) §3.1 (the
   additive root-node model), §3.7 (migration — additive, no re-hash), §4
   (F1/F7/F10 fail-states), §5 (store hash + format risk).
 - **Precedent:** `docs/specs/unit-m-children-field.md` §5.1 (the additive

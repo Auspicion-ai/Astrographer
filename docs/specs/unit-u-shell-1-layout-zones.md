@@ -1,7 +1,7 @@
 # Unit U-SHELL-1 — Layout Model + Zones + Persistence (C4/C5/C7/C12 mechanics; C9 layout slice) — Spec
 
 **Status:** GREEN (IMPLEMENTED 2026-09-12). Gate: the
-UI-overhaul umbrella gate `docs/specs/ui-overhaul-review.md`
+UI-overhaul umbrella gate  `archive/gate-reviews/2026-09-21-ui-overhaul-review.md` (historical; archived 2026-09-21; successor docs/specs/ui-overhaul.md (MUST-NOT-EDIT, stays) + the per-unit DONE rows in docs/next-steps.md)
 (PROCEED-WITH-AMENDMENTS, A1: every unit needs its own spec + a TestWriter red
 set). Resolutions honoured: **OB2 = Reading 2** (`ui-overhaul.md` §7.3) and
 **C9 carrier = extend `OperatorSettings`** (`UI-CONFIG-CARRIER`, §7 Q24 / §3.2).
@@ -11,7 +11,7 @@ Open items live in `docs/specs/wave-2-open-decisions.md` (W2-Q1..).
 skip (`tests/unit-u-shell-1-layout-zones.test.ts`); adversarial pass found **H1**
 (id-only zone-container defeats the F8 HARD PRECONDITION; MCP-reachable) + **AF-2**
 (malformed `version`) — both **FIXED** with regression tests; **AF-3/AF-4** were
-deferred → W2-N3/W2-N4 and are now **FIXED (2026-09-12)**. Blind-greens `docs/specs/unit-u-shell-1-layout-zones-greens.md`
+deferred → W2-N3/W2-N4 and are now **FIXED (2026-09-12)**. Blind-greens  `archive/greens/2026-09-21-unit-u-shell-1-layout-zones-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-1-layout-zones-greens.md)
 (27 scenarios; P8's initial doc-side FAIL reconciled via the pin-8 amendment). Full
 suite **174 files / 3997 pass + 46 skip**, typecheck 0, build OK. Follow-ups
 **W2-N1** (host boot/write-through), **W2-N3** (apply `ZoneLayout.size`),

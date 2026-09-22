@@ -6,7 +6,7 @@ tracks + `LayoutState.zones[].size`). Open items in
 `docs/specs/wave-2-open-decisions.md` (W2-Q7/W2-Q9). **Final unit result:**
 `tests/unit-u-shell-5-resizable-gutters.test.ts` **33 pass** (0 skip); full suite
 `177 files / 4101 pass + 54 skip`; typecheck 0; build OK. **Blind artifact:**
-`docs/specs/unit-u-shell-5-resizable-gutters-greens.md` (24 scenarios — 24 PASS).
+ `archive/greens/2026-09-21-unit-u-shell-5-resizable-gutters-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-5-resizable-gutters-greens.md) (24 scenarios — 24 PASS).
 **Doc review:** `archive/reviews/2026-09-12-u-shell-5-doc-review.md`.
 
 ---

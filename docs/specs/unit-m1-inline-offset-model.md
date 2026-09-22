@@ -1,7 +1,7 @@
 # Spec — Unit M1: The `offset?: number` Model + the Full-Projection Producers
 
 - **Status:** SPEC. This is M1 of the four-unit **Inline-Ordering Render Fix**
-  program (gate reference: `docs/specs/inline-order-render-fix-review.md`,
+  program (gate reference:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md),
   **PROCEED-WITH-AMENDMENTS**, amendments A1–A8, 2026-08-31; user go-ahead
   REQUIRED before red→green work). This unit is the **design-B model +
   producers** slice (the reviewed shape: per-child numeric `offset?`, `content`
@@ -139,7 +139,7 @@ PACKAGE findings — none are catalogued in `docs/defects.md`/`docs/HANDOFF.md`.
 
 ### 3b. Proposal-review findings
 
-The proposal-review gate (`docs/specs/inline-order-render-fix-review.md`,
+The proposal-review gate ( `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md),
 2026-08-31) returned **PROCEED-WITH-AMENDMENTS** for the inline-ordering fix,
 **Design B** (per-child `offset` annotation, `content` stays the stored full
 scalar, host-side rewrite). The amendments THIS unit resolves:
@@ -447,7 +447,7 @@ The only fail-state is unchanged: a non-string input → `{ ok:false, error:
 
 ### 5.9 Cross-references
 
-- Gate: `docs/specs/inline-order-render-fix-review.md` §1 (Design B shape), §2
+- Gate:  `archive/inline-order/2026-09-21-inline-order-render-fix-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-m1-inline-offset-model.md … unit-m4-inline-order-reconcile.md) §1 (Design B shape), §2
   (feasibility), §3 amendments **A5** (producer consistency), **A6** (back-compat
   + validation), **A8** (process / exclusive shape change), §7 (Design A REJECTED).
 - Unit M: `docs/specs/unit-m-children-field.md` §5.1 (the `RagNodeChild`/`RagNode`

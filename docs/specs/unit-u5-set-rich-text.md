@@ -1,7 +1,7 @@
 # Spec — Unit U5: The Atomic Rich-Text Write-Back Op (`setRichText`) + `IPC_EDIT_RICH_COMMIT` + Preload `edit.commitRich`
 
 - **Status:** SPEC (the U5 unit of the editing-mode-toggle + contenteditable
-  rich-text editor slice — decision **A** of `docs/specs/editing-mode-toggle-review.md`
+  rich-text editor slice — decision **A** of  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md)
   §4, amendment 7 (UI-IPC-only rich commit), §5 U5 row). The write-back path the
   contenteditable editor's blur (Unit U4) uses: after the host decomposes the
   blurred contenteditable HTML into `{content, children}` ONCE (Unit U2
@@ -589,7 +589,7 @@ Imports added: `IPC_EDIT_RICH_COMMIT`, `EditRichCommitPayload`, `RichCommitResul
 
 ## 4. Cross-references + section numbers
 
-- **Proposal review:** `docs/specs/editing-mode-toggle-review.md` §4-A + §2 (decision
+- **Proposal review:**  `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-A + §2 (decision
   **A** — the NEW `setRichText(ctx,{nodeId,content,children})` op: ONE atomic
   `putNode` + ONE `content` journal entry + broadcast; `IPC_EDIT_RICH_COMMIT` +
   preload `edit.commitRich`; `applyBatch` untouched — still rejects the Unit O ops),
@@ -621,7 +621,7 @@ Imports added: `IPC_EDIT_RICH_COMMIT`, `EditRichCommitPayload`, `RichCommitResul
   U2's always-`[]`-children output.
 - **Unit U4:** the planned Unit U4 spec (the contenteditable handlers + `editorBlur`
   that decomposes ONCE via U2 and calls `edit.commitRich` ONCE — decision G of
-  `docs/specs/editing-mode-toggle-review.md` §4-G); the dirty-edit guard + caret keyed
+   `archive/gate-reviews/2026-09-21-editing-mode-toggle-review.md` (historical; archived 2026-09-21; successor docs/decisions.md#EDITING-MODE-SETTING + docs/specs/unit-u1-editing-mode-setting.md … unit-u5-set-rich-text.md) §4-G); the dirty-edit guard + caret keyed
   by ragId + first-materialization limitation (decision I) live in U4, NOT U5. (U4
   is the last unit in the plan and its spec is not yet written — when it lands it
   must cite this U5 spec as its commit path.)

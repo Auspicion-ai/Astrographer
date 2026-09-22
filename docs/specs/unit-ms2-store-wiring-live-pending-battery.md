@@ -11,7 +11,7 @@
   `unit-ms1-store-registry.md` §5.4 (the F14 self-collision) and §3a
   (F-MS2-1..F-MS2-11).
 - **Greens battery (blind-test, already run against the live MODULES):**
-  `docs/specs/unit-ms2-store-wiring-greens.md` — 46 scenario rows
+   `archive/greens/2026-09-21-unit-ms2-store-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms2-store-wiring-greens.md) — 46 scenario rows
   (43 executable + 3 DEFERRED): **43 PASS / 0 FAIL / 3 DEFERRED**
   (the recorded run: 46/46 vitest tests, exit 0).
 - **Status:** **PARKED — NOT run against the live application.** Pattern
@@ -304,7 +304,7 @@ live:
 ## 4. Parked-scenario census
 
 - **Total greens scenario rows:** 46 (43 executable + 3 DEFERRED —
-  `docs/specs/unit-ms2-store-wiring-greens.md`, 43 PASS / 0 FAIL / 3 DEFERRED).
+   `archive/greens/2026-09-21-unit-ms2-store-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms2-store-wiring-greens.md), 43 PASS / 0 FAIL / 3 DEFERRED).
 - **Parked for the later live run (live-observable once the app is restarted
   with the U-MS2 build):** S03, S05, S06, S08, S09 (served-hit half), S10
   (cache/controller halves), S11, S14 (serving half), S16, S19, S21, S22, S24,

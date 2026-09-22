@@ -17,7 +17,7 @@
 > NOT MCP-visible. U-H8 adds NO registry logic, NO MCP tool, NO census — it is the
 > operator surface over the LANDED `hotApply add` / `hotRemove` / `hotRename` /
 > `hotSetDefault` / `hotRenameDefault` seams. Gate reference:
-> `docs/specs/registry-hot-apply-review.md` §2 **D6** (operator-UI IPC — the ONE
+>  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D6** (operator-UI IPC — the ONE
 > exemption: the operator editor wiring; the five-seam gate untouched), **D3**
 > (hot-remove = ORPHAN via operator control, confirmation required, no MCP path),
 > **D7** (drain-then-teardown via the operator-controlled remove), **D8** (execution
@@ -281,7 +281,7 @@ each is fixed here + regression-tested in `tests/unit-h8-operator-editor.test.ts
 
 ### 3b. Proposal-review findings folded in
 
-From `docs/specs/registry-hot-apply-review.md`:
+From  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN):
 - **D6 (binding — the ONE exemption):** operator-UI IPC (the operator editor wiring),
   NO new MCP tool, the five-seam gate untouched. U-H8 adds EXACTLY the exempted
   `IPC_RAG_STORE_MANAGE` channel (§1/§4/§5.8).
@@ -1092,7 +1092,7 @@ accessor state) unchanged. The handler NEVER throws for a domain failure.
 
 ### 5.11 Cross-references
 
-- **Gate:** `docs/specs/registry-hot-apply-review.md` §2 **D6** ("Operator-UI IPC (not
+- **Gate:**  `archive/gate-reviews/2026-09-21-registry-hot-apply-review.md` (historical; archived 2026-09-21; successor docs/specs/unit-h1-registry-write.md … unit-h8-operator-editor.md (the landed U-H1..U-H8 units) + docs/decisions.md#HOT-REMOVE-DRAIN-TEARDOWN) §2 **D6** ("Operator-UI IPC (not
   group-gated), NO new MCP tool (the five-seam gate is untouched)" — this is the ONE
   exemption the operator editor lands), **D3** (hot-remove = ORPHAN via operator
   control, operator confirmation via the operator-UI control, NOT MCP; "data deletion is

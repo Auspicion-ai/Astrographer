@@ -15,7 +15,7 @@
   zero-config byte-equality rows), §5.8/§5.9 (the happy/fail red set), §3a
   (F-MS5-1..F-MS5-5).
 - **Greens battery (blind-test, already run against the live MODULES):**
-  `docs/specs/unit-ms5-settings-listing-greens.md` — 34 scenario rows
+   `archive/greens/2026-09-21-unit-ms5-settings-listing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms5-settings-listing-greens.md) — 34 scenario rows
   (**25 PASS / 0 FAIL / 9 DOCUMENTED-or-RELEGATED**; the recorded run: 25/25
   vitest tests, exit 0). All 25 executable rows drive the node-testable seams
   of the live modules — they are already green against the modules and need no
@@ -168,7 +168,7 @@ These stay module-internal and are already green at the module level (blinds
 
 ## 4. Parked-scenario census
 
-- **Total greens scenario rows:** 34 (`docs/specs/unit-ms5-settings-listing-greens.md`,
+- **Total greens scenario rows:** 34 ( `archive/greens/2026-09-21-unit-ms5-settings-listing-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-ms5-settings-listing-greens.md),
   **25 PASS / 0 FAIL / 9 DOCUMENTED-or-RELEGATED**).
 - **Already green at the live MODULES (no live re-run needed): A1–A11, B1–B3,
   C1–C2, D1–D4, E1–E2, F1–F2, W1** = 25 rows (the 25/25 vitest PASS; not MCP

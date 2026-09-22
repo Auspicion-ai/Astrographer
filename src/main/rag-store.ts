@@ -789,7 +789,24 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
   }
 
   // ---- persistence --------------------------------------------------------
+  // §2b seam (a) — the NAMED deferral guard (`persistDeferred`), pinned by
+  // docs/specs/unit-import-batch-persist.md §2b and asserted structurally in
+  // tests/unit-import-batch-persist-contract.test.ts.
+  //
+  // INVARIANT: **NO PER-OP FULL-STORE WRITE INSIDE A BATCH.** `applyBatchSync`
+  // sets `persistDeferred` for the duration of its op loop (and clears it in a
+  // `finally`, BEFORE its own single `persist()`), so `persist()` reached from
+  // anywhere inside a running batch is a NO-OP — a per-op full-store write inside
+  // a batch is IMPOSSIBLE by construction, not merely absent.
+  //
+  // This is a STRUCTURAL GUARD, not a cadence change: while the flag is false
+  // (every path except a batch's interior) `persist()` runs EXACTLY as before, so
+  // the per-op cadence of `putNode`/`putEdge`/`removeNode`/`removeEdge` (one
+  // atomic + durable full-store write per call — the single-writer durability
+  // model) and the `undo`/`redo` cadence are byte-for-byte unchanged.
+  let persistDeferred = false
   function persist(): void {
+    if (persistDeferred) return // §2b seam (a): a batch's interior never writes
     try {
       mkdirSync(dirname(opts.path), { recursive: true })
       const payload: RagStoreFile = {
@@ -1289,6 +1306,11 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
     const results: BatchOpResult[] = []
     const perOpInverse: BatchOp[][] = []
 
+    // §2b seam (a): open the deferral for the op loop ONLY. While it is set, a
+    // per-op full-store write inside the batch is impossible (persist() no-ops);
+    // the `finally` clears it BEFORE this batch's own single persist() below, so
+    // the batch still lands as ONE journal entry + ONE full-store write.
+    persistDeferred = true
     try {
       for (let i = 0; i < ops.length; i++) {
         const outcome = applyBatchOp(ops[i], i)
@@ -1317,6 +1339,11 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
       journal.push(...snapshotJournal)
       cursor = snapshotCursor
       return { ok: false, error: 'rag applyBatch: unexpected failure', failedIndex: -1 }
+    } finally {
+      // §2b seam (a): closed on EVERY path (success, domain failure, throw) —
+      // the rollback branches above return without persisting, so the flag only
+      // ever suppresses writes that would be inside the batch's interior.
+      persistDeferred = false
     }
 
     // success: land as a SINGLE `batch` journal entry + persist ONCE

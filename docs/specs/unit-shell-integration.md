@@ -882,7 +882,7 @@ rule.
   full 7-item unit; PROCEED-WITH-AMENDMENTS with the re-scoped Option B), the five
   deliverables, the three mandatory amendments, the residual risk.
 - **The roadmap (the MVP scope + the D2 fallback):**
-  `docs/specs/unblock-gnosis-remaining-endpoints.md` — §6.2 (A2), §7.2 (auth/TLS),
+   `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) — §6.2 (A2), §7.2 (auth/TLS),
   §7.3 (D2 engine-absent), §7.4 (the live-scenario battery), §8 (the execution
   order), §11 (cross-refs).
 - **The GN proxy (the retrieval-trio proxy):** `docs/specs/unit-gn-engine-integration.md`

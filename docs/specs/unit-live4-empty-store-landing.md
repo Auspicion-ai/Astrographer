@@ -209,7 +209,7 @@ bridge-seam behavior are preserved (all landed suites stay green).
 - Cross-references: owning spec `docs/specs/unit-u-shell-9a-main-focus-tabs.md`
   (§2.3 / §2.4 / HOST-1 / §2.10 landing deferral / §3 / §6); RCA
   `docs/specs/rca-live-bugs-green-pipeline.md` CA-2/CA-4 (LIVE-4 in the
-  "assembly/reconciliation" row); handover `docs/HANDOVER-LIVE-BATCH-RCA.md` §2
+  "assembly/reconciliation" row); handover  `archive/live-batch/2026-09-21-handover-live-batch-rca.md` (historical; archived 2026-09-21; successor docs/specs/rca-live-bugs-green-pipeline.md (the RCA of record)) §2
   (LIVE-4 open item) + §3 (stale battery names — see §7.2).
 
 ## 5.7 Property register (PBT)
@@ -319,7 +319,10 @@ The implementer **must** add a `boot_landing` block to the `BLOCKS` table in
 
 ### 7.2 Stale-doc note (must be fixed in the same unit)
 
-`docs/HANDOVER-LIVE-BATCH-RCA.md:43` (§3, the live-harness description) names
+`archive/live-batch/2026-09-21-handover-live-batch-rca.md` (historical; archived
+2026-09-21; successor docs/specs/rca-live-bugs-green-pipeline.md) §3 "the
+live-harness description" (title/section-anchored — the former line-number anchor
+`:43` is retired per the disposition's §D.5.2 N-11) names
 `zones_geometry`, `landing`, and `landing_debug` blocks that **do not exist** in
 `scripts/live-drive.mjs` — today only `tab_new_click` probes the landing
 (`live-drive.mjs:143-151`). The documentation-review gate (RCA-6) must correct that
