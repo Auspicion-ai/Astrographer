@@ -19,7 +19,7 @@ import {
   hoverPreviewPopup,
   resolveHoverPreview,
 } from './hover-preview.js'
-import type { EditingMode, RagJournalPayload } from '../shared/types.js'
+import type { RepresentationMode, RagJournalPayload } from '../shared/types.js'
 import {
   buildDocumentTree,
   selectDocumentIdsByPathPrefix,
@@ -268,6 +268,13 @@ export interface AppGraphAssemblyInput {
    *  controller currently reveals. Marked `is-revealed` on the zone container.
    *  Optional; omitted/empty → no zone reveals. */
   revealedZones?: LayoutZoneName[]
+  /** U-EDIT-1 (C9) §2.1/§11.7 — the FOCUSED document id. When supplied, the
+   *  builder authors the single page-edit surface (`page-edit-surface`) for that
+   *  document: the document's body roots move INSIDE the surface (the surface
+   *  carries the zone announcement) so exactly ONE editing host exists per
+   *  focused document (`FS1`). Omitted (the pre-C9 callers) → no surface is
+   *  authored and the body roots keep their own zone announcement. */
+  documentId?: string
 }
 
 export interface AppGraphAssemblyResult {
@@ -403,6 +410,44 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
   // Merge the traversal content payloads + the pane ContentPayloads (panes
   // appended after the traversal content).
   const content = [...(traversalEnvelope.content ?? []), ...panePayloads]
+
+  // U-EDIT-1 (C9) §2.1/§11.7 — THE SINGLE PAGE-EDIT SURFACE. Authored here (the
+  // app-graph / stage-assembly layer), in its OWN content payload ALONE — never
+  // appended to a section's body and never a second payload-root-level node
+  // (§11.7's rejected placements ii/iii/iv). The focused document's body roots
+  // move INSIDE the surface and lose their own zone announcement, so the
+  // document renders exactly once (`FS1`); every other content root (panes,
+  // the toolbar, another document's payloads) keeps its own announcement and is
+  // untouched. The traversal envelope itself is NOT mutated (§2.1).
+  if (typeof input.documentId === 'string' && input.documentId !== '') {
+    const bodyRoots = surfaceBodyRoots({ ...traversalEnvelope, content })
+    if (bodyRoots.length > 0) {
+      // The traversal's zone name is the one the body roots were announced into
+      // (the payload roots are placed in the SAME zone the surface takes over).
+      const traversalZone =
+        ((bodyRoots[0]?.placement as { targetPlacement?: string[] } | undefined)?.targetPlacement?.[0]) ?? 'main'
+      const surface = pageEditSurfaceRoot(bodyRoots, input.documentId, traversalZone)
+      const collected = new Set(bodyRoots)
+      const body: LegacyContentPayload[] = content.map((payload) => {
+        const nodes = (payload as { content?: unknown } | null | undefined)?.content
+        if (!Array.isArray(nodes)) return payload
+        return {
+          ...payload,
+          // The collected body roots keep their payload entry (the one-payload-
+          // per-section census is unchanged in the render) but drop the zone
+          // announcement — the surface is their route into the zone.
+          content: (nodes as LegacyNodeData[]).map((node) => {
+            if (node == null || !collected.has(node)) return node
+            const clone: LegacyNodeData = { ...node }
+            delete (clone as { placement?: unknown }).placement
+            return clone
+          }),
+        } as LegacyContentPayload
+      })
+      content.length = 0
+      content.push(...body, { content: [surface] })
+    }
+  }
 
   // Ensure the template root has one `container`-role producer per pane zone
   // (the HARD PRECONDITION) with the state-derived mirror classes + the C12
@@ -1265,12 +1310,105 @@ export function searchTabContent(
 }
 
 // ===========================================================================
-// Unit U-EDIT-1 (C8) — the central-stage editor-toolbar markdown/html toggle
-// (docs/specs/unit-u-edit-1-markdown-html-toggle.md §2). The control is
-// APP-GRAPH authored (MCP-visible) — unlike the OPERATOR-scoped settings
-// button. It reflects the CURRENT `editingMode` (`data-mode`/label) and its
-// `on:click` handler (registered in the host) FLIPS the mode through the
-// existing operator-settings seam. PURE.
+// U-EDIT-1 (C9) §2.1 — THE SINGLE PAGE-EDIT SURFACE (the app-graph / stage
+// assembly authoring, §11 amendment `11.7`). The surface is a provident node of
+// the APP GRAPH — built by this pure builder and carried into the host's
+// assembly seam (`SidebarPanes.applyEditorToolbar` / `loadAppGraph`). It is
+// NEVER a traversal-envelope payload node (§2.1/§11.7): the traversal keeps one
+// payload root per section and authors no surface. Exactly ONE surface is
+// authored per FOCUSED document (`AppGraphAssemblyInput.documentId`); its
+// subtree is the focused document's assembled body (the doc-head first, then
+// the sections/blocks including table cells and the rich blocks' inline
+// children), and the payload roots it collects lose their zone announcement so
+// the document renders exactly ONCE — inside the surface (`FS1`).
+// ===========================================================================
+
+/** §2.1's stable-authored-id row: the surface root's authored `props.id`. */
+export const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+/** §2.1's stable marker: `props['data-edit-surface'] = <focused documentId>`. */
+export const DATA_EDIT_SURFACE = 'data-edit-surface'
+/** §2.1's authoring row — the surface's OWN name-referenced handler names (the
+ *  per-node `rag-textarea-*` / `rag-editor-*` names are retired: §5 items 2/6). */
+export const PAGE_EDIT_SURFACE_INPUT_HANDLER = 'page-edit-surface-input'
+export const PAGE_EDIT_SURFACE_BLUR_HANDLER = 'page-edit-surface-blur'
+
+/** The surface's own inline handler bodies (the `PANE_COLLAPSE_BODY`
+ *  convention — full function-expression strings, so a DOM event and
+ *  `provident.dispatch` are equivalent). They route to the host's page-edit
+ *  seam (`window.provident.sidebar.pageSurfaceInput`/`pageSurfaceBlur`), which
+ *  holds the per-tab dirty/`commit-failed` state (host-side, §3.5 item 6). A
+ *  malformed node/bridge is a no-op — never a throw. The blur body reads the
+ *  surface's CURRENT text from the DOM (the typed text is the only copy until
+ *  the commit, §3.4 step 1). */
+export const PAGE_EDIT_SURFACE_INPUT_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.pageSurfaceInput !== 'function') return;
+  s.pageSurfaceInput();
+}`
+export const PAGE_EDIT_SURFACE_BLUR_BODY = `function (ctx) {
+  var s = window && window.provident && window.provident.sidebar;
+  if (!s || typeof s.pageSurfaceBlur !== 'function') return;
+  var el = document.getElementById('${PAGE_EDIT_SURFACE_ID}');
+  s.pageSurfaceBlur(el ? el.innerHTML : '');
+}`
+
+/** §2.1's authoring row — the surface root's name-referenced handler defs. */
+export const PAGE_EDIT_SURFACE_HANDLER_DEFS = [
+  { name: PAGE_EDIT_SURFACE_INPUT_HANDLER, event: 'input', body: PAGE_EDIT_SURFACE_INPUT_BODY },
+  { name: PAGE_EDIT_SURFACE_BLUR_HANDLER, event: 'blur', body: PAGE_EDIT_SURFACE_BLUR_BODY },
+] as const
+
+/** §2.1's Subtree row — the focused document's assembled body roots: every
+ *  content payload root of the assembled envelope (the sections, in payload
+ *  order, each already carrying its doc-children nested at their `order`). The
+ *  surface collects them as its OWN children; the zone announcement moves to
+ *  the surface so the body renders exactly once. PURE. */
+function surfaceBodyRoots(envelope: LegacyInitialData): LegacyNodeData[] {
+  const roots: LegacyNodeData[] = []
+  for (const payload of envelope.content ?? []) {
+    const nodes = (payload as { content?: unknown } | null | undefined)?.content
+    if (!Array.isArray(nodes)) continue
+    for (const node of nodes) {
+      if (node == null) continue
+      const root = node as LegacyNodeData
+      // Only RAG document-body roots belong to the surface: a `pane-` root, the
+      // `editor-toolbar`/`pane-history` roots and any other app-graph content
+      // root keep their own zone announcement (§2.1 Scope).
+      if (typeof root.props?.['data-rag-node-id'] !== 'string') continue
+      roots.push(root)
+    }
+  }
+  return roots
+}
+
+/** The ONE authored page-edit surface root of the focused document (§2.1).
+ *  PURE: the body roots are CLONED with their zone announcement stripped (the
+ *  surface carries the zone), so the caller's envelope is never mutated. */
+export function pageEditSurfaceRoot(bodyRoots: LegacyNodeData[], documentId: string, zone: string): LegacyNodeData {
+  return {
+    type: 'div',
+    props: {
+      id: PAGE_EDIT_SURFACE_ID,
+      [DATA_EDIT_SURFACE]: documentId,
+      contenteditable: true,
+    },
+    placement: { targetPlacement: [zone] },
+    handlers: [...PAGE_EDIT_SURFACE_HANDLER_DEFS],
+    children: bodyRoots.map((root) => {
+      const clone: LegacyNodeData = { ...root, props: { ...(root.props ?? {}) } }
+      delete (clone as { placement?: unknown }).placement
+      return clone
+    }),
+  }
+}
+
+// ===========================================================================
+// Unit U-EDIT-1 (C8) — the central-stage editor-toolbar representation toggle
+// (§2.3/§2.5, §6.3 shape R-B). The control is APP-GRAPH authored
+// (MCP-visible) — unlike the OPERATOR-scoped settings button. It reflects the
+// CURRENT representation mode (`'html' | 'markdown'`: `data-mode`/label) and
+// its `on:click` handler (registered in the host) FLIPS it through the existing
+// operator-settings seam. PURE.
 // ===========================================================================
 
 /** The app-graph editor-toolbar css/props ids + the registered toggle handler
@@ -1320,24 +1458,27 @@ const HISTORY_ENTRY_BODY = `function (ctx) {
   s.historyEntryClick(idx);
 }`
 
-/** The `editingMode` → representation label (W1-Q6: Markdown↔textarea,
- *  HTML↔contenteditable). PURE + TOTAL (junk coerces to the contenteditable
- *  default, mirroring the host/store coercion). */
-export function editingModeLabel(editingMode: EditingMode): 'Markdown' | 'HTML' {
-  return editingMode === 'textarea' ? 'Markdown' : 'HTML'
+/** The representation mode → toolbar label (§2.3/§2.5: `html` | `markdown`).
+ *  PURE + TOTAL (junk coerces to the html default, mirroring the host/store
+ *  coercion). The REMOVED `editingModeLabel` (a `textarea`/`contenteditable`
+ *  editing-CONTROL mapping) is retired: the successor names REPRESENTATIONS of
+ *  one control, never a control swap (§2.5). */
+export function representationModeLabel(mode: RepresentationMode): 'Markdown' | 'HTML' {
+  return mode === 'markdown' ? 'Markdown' : 'HTML'
 }
 
 /** The central-stage editor toolbar content (app-graph). A `div` toolbar
  *  carrying a mode readout (`editor-toolbar-mode`) + the C16 Undo/Redo controls
  *  (`editor-toolbar-undo`/`editor-toolbar-redo`, disabled from the project-journal
  *  `undoDepth`/`redoDepth`) + a `button` (`editor-toolbar-toggle`) whose
- *  `data-mode` reflects the CURRENT mode and whose click handler flips it. The
- *  appended `data-target-mode` documents the flip for agents. `replay` is NOT
- *  offered (§2.2). PURE. */
-export function editorToolbarContent(editingMode: EditingMode, zone = 'main', journal?: RagJournalPayload | null): LegacyNodeData {
-  const current: EditingMode = editingMode === 'textarea' ? 'textarea' : 'contenteditable'
-  const label = editingModeLabel(current)
-  const next: EditingMode = current === 'contenteditable' ? 'textarea' : 'contenteditable'
+ *  `data-mode` reflects the CURRENT representation and whose click handler flips
+ *  it. The appended `data-target-mode` documents the flip for agents. `replay`
+ *  is NOT offered (§2.2). NO form control is authored (§2.3 "No form controls",
+ *  `FS22`). PURE. */
+export function editorToolbarContent(representationMode: RepresentationMode, zone = 'main', journal?: RagJournalPayload | null): LegacyNodeData {
+  const current: RepresentationMode = representationMode === 'markdown' ? 'markdown' : 'html'
+  const label = representationModeLabel(current)
+  const next: RepresentationMode = current === 'html' ? 'markdown' : 'html'
   const undoDepth = journal != null && typeof journal.undoDepth === 'number' ? journal.undoDepth : 0
   const redoDepth = journal != null && typeof journal.redoDepth === 'number' ? journal.redoDepth : 0
   return {

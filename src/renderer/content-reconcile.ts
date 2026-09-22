@@ -15,7 +15,7 @@
 // never produce a raw TypeError (F1's guard is the only throw; F2/F3/F6 skip).
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
 import { plainRagId } from './cross-document-shared.js'
-import { EDITOR_TOOLBAR_ID } from './pane-graph.js'
+import { EDITOR_TOOLBAR_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
 import { getO0HookRecorder } from '../shared/o0-hook.js'
 
 /** A previously materialized content root, carrying its subtree so the
@@ -113,6 +113,13 @@ function asContentRoot(node: LegacyNodeData | null | undefined): MaterializedRoo
   if (id.startsWith(PANE_PREFIX) && id.length > PANE_PREFIX.length) {
     return { cssId: id, ragNodeId: id }
   }
+  // U-EDIT-1 (C9) §11.7 (the amendment's recorded cost) — the single page-edit
+  // surface is a pane-like, document-UNSCOPED app-graph content root (beside
+  // `pane-*`/`editor-toolbar`/`stage-landing`), so a content re-derive refreshes
+  // it in place and it is never emitted as added+removed.
+  if (id === PAGE_EDIT_SURFACE_ID) {
+    return { cssId: id, ragNodeId: id }
+  }
   // U-LIVE8 — the pinned `editor-toolbar` root is a pane-like content root
   // (reconciled always-shape-compared like a pane, so its fresh
   // `disabled`/`data-mode` state re-materializes on the content re-derive).
@@ -143,6 +150,7 @@ function isPaneLikeRoot(cssId: string): boolean {
   return (
     (cssId.startsWith(PANE_PREFIX) && cssId.length > PANE_PREFIX.length) ||
     cssId === EDITOR_TOOLBAR_ID ||
+    cssId === PAGE_EDIT_SURFACE_ID ||
     cssId === LANDING_ROOT_ID
   )
 }
@@ -205,8 +213,14 @@ function canonical(value: unknown, depth = 0): unknown {
 }
 
 /** Props that are RUNTIME-minted (not authored) and must be excluded from the
- *  shape projection so they do not cause false changes. */
-const RUNTIME_PROP_KEYS = new Set(['data-doc-head', 'data-node-id'])
+ *  shape projection so they do not cause false changes. `data-doc-head` is
+ *  derived by the traversal from `docHeadForDocument`; U-EDIT-1 (C9) §3.2 names
+ *  the renderer-minted runtime props explicitly — `data-node-id`, `style`,
+ *  class lists, `contenteditable` and the `data-edit-surface` marker of the
+ *  single page surface — and §2.1 removes the per-node `contenteditable` splice
+ *  that minted one, so a reconcile whose ONLY difference is a runtime prop is a
+ *  NO-OP (§3.5 item 6: a warning/state may never ride a rendered prop). */
+const RUNTIME_PROP_KEYS = new Set(['data-doc-head', 'data-node-id', 'contenteditable', 'data-edit-surface'])
 
 /** Authored props for the shape projection: all `props` EXCEPT the runtime
  *  markers and the authored `id` (already projected as `id`). Authored `data-*`

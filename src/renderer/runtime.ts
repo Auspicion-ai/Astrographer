@@ -36,7 +36,7 @@ import {
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
 import type { DocumentRoot, MaterializedRoot, ReconcileResult } from './content-reconcile.js'
-import { EDITOR_TOOLBAR_ID } from './pane-graph.js'
+import { EDITOR_TOOLBAR_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
 import type {
   DispatchRequest,
   DispatchResult,
@@ -152,6 +152,10 @@ function extractContentRoots(envelope: LegacyInitialData | null | undefined): Le
         ((id.startsWith('rag-') && id.length > 4) ||
           (id.startsWith('pane-') && id.length > 5) ||
           id === EDITOR_TOOLBAR_ID ||
+          // U-EDIT-1 (C9) §2.1 — the single page-edit surface is a content root
+          // (pane-like, document-unscoped) so a content-only reconcile refreshes
+          // it in place instead of destroying/reattaching it.
+          id === PAGE_EDIT_SURFACE_ID ||
           id === LANDING_ROOT_ID)
       ) {
         out.push(node as LegacyNodeData)

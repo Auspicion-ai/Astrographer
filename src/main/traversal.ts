@@ -440,26 +440,26 @@ function buildTraversalBody(input: TraversalInput): TraversalResult {
           // The node's body: bare `text` children interleaved with the inline
           // spans (strong/em/a/img) in document order (0.4.0 `text` child).
           ...buildInterleavedChildren(ragId, node.content ?? '', node.children ?? []),
-          // Unit L — the textarea child bound to the RAG node's content. Its
-          // OWN authored id is `textarea-<ragId>` (NOT `rag-`-prefixed —
-          // `collectSubtreeIds` treats a `rag-`-prefixed child as a doc-child
-          // subtree root and would exclude the textarea from the backRefs map).
-          // The `readOnly` prop is OMITTED (editable by default) — emitting
-          // `readOnly: false` would render as the `readonly` boolean attribute
-          // and make the textarea uneditable in a real DOM (adversarial H1).
-          // The HOST sets `readOnly: true` at render time when `!isEditable(ragId)`
-          // (§5.3).
+          // U-EDIT-1 (C9) §5.1 — the textarea child is the INERT TOMBSTONE. The
+          // traversal keeps ONE child at this position so
+          // `tests/traversal.test.ts`'s fence child-list assertion
+          // (`[undefined, 'textarea-ul', 'rag-li1', …]`) holds UNCHANGED, but the
+          // child is NON-RENDERED and NON-INTERACTIVE: `hidden: true`,
+          // `readOnly: true`, and NO handler defs. The per-node editing
+          // capability (`value` binding, `rag-textarea-*` handlers, the
+          // read-only-by-backref logic) is GONE — the single page surface is the
+          // only editing host (`FS21`; the rendered-DOM census is zero
+          // `<textarea>` in the stage region, asserted live, §8.3 item 6). The
+          // tombstone is EXCLUDED from the page decode/diff (§3.2 step 1 skips a
+          // `textarea`-typed child).
           {
             type: 'textarea',
             props: {
               id: `textarea-${ragId}`,
               'data-rag-node-id': ragId,
-              value: node.content,
+              hidden: true,
+              readOnly: true,
             },
-            handlers: [
-              { name: 'rag-textarea-input', event: 'input' },
-              { name: 'rag-textarea-blur', event: 'blur' },
-            ],
           },
           ...children,
         ],

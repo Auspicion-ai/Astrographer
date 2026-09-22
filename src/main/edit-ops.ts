@@ -42,7 +42,12 @@ export type SetDocMetaResult = { ok: true; node: RagNode } | { ok: false; error:
 
 // The closed unions (Unit A §5.1). Duplicated here as runtime sets because the
 // store does not export them; the store validates the same unions at write time.
-const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div'])
+// U-EDIT-1 (C9) §2.4 item 1 — the closed type set is the 23-member `RagNodeType`
+// union as it stands (the table family `table`/`thead`/`tr`/`td`/`th` included),
+// recounted from `src/main/rag-store.ts` — never copied from the retired 18-member
+// census. The per-node eligibility gate that made a `td`/`th`/`li`/`pre` root
+// inapplicable is retired with the single page surface (§2.4 item 2).
+const RAG_NODE_TYPES = new Set<string>(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th'])
 const RAG_EDGE_KINDS = new Set<string>(['parent-child', 'doc-head', 'next-section', 'doc-end', 'doc-child', 'crosslink'])
 // Unit M §5.1 — the inline rich-text child types (strong/em/a/img). `span` is
 // NOT a child type (a diff-matching artifact folded into the parent's content).

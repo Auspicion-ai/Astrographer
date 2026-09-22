@@ -8,7 +8,7 @@
 // view/retrieval defaults).
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { OperatorSettings, OperatorSettingsPatch, EditingMode, ThemeSetting } from '../shared/types.js'
+import type { OperatorSettings, OperatorSettingsPatch, RepresentationMode, ThemeSetting } from '../shared/types.js'
 import { coerceLayout, defaultLayout, type LayoutState } from '../renderer/layout-state.js'
 import { coerceTabState, defaultTabState, type TabState } from '../renderer/tab-state.js'
 
@@ -35,19 +35,23 @@ function defaultSettings(): OperatorSettings {
     panesInitialized: false,
     defaultDocumentId: null,
     topK: 5,
-    editingMode: 'contenteditable', // the default edit mode (rich-text contenteditable)
+    // U-EDIT-1 (C9) §2.5 — the successor representation mode. The removed
+    // `editingMode` field is NOT restored from a persisted legacy file (`FS20`).
+    representationMode: 'html',
     theme: 'system', // U-SHELL-2 §2.2 — default follows the OS preference
     layout: defaultLayout(), // U-SHELL-1 §2.2 — the C9 layout carve-out
     tabs: defaultTabState(), // U-SHELL-9a §2.5 — the C9 tab-set carve-out
   }
 }
 
-/** Unit U1 §1.2 — the pinned coercion rule (used identically in `sanitize` AND
- *  `set`): ONLY the exact string `'textarea'` passes through; ANY other value
- *  (undefined, null, '', 'contenteditable', junk) coerces to `'contenteditable'`
- *  (the default edit mode). TOTAL — never throws for any `src.editingMode` value. */
-function coerceEditingMode(value: unknown): EditingMode {
-  return value === 'textarea' ? 'textarea' : 'contenteditable'
+/** U-EDIT-1 (C9) §2.5 — the pinned coercion rule for the successor
+ *  REPRESENTATION mode (used identically in `sanitize` AND `set`): ONLY the
+ *  exact strings `'html'`/`'markdown'` pass through; ANY other value (undefined,
+ *  null, '', a junk token, the REMOVED `'textarea'`/`'contenteditable'`
+ *  literals) coerces to `'html'` (the default representation). TOTAL — never
+ *  throws for any value. */
+function coerceRepresentationMode(value: unknown): RepresentationMode {
+  return value === 'markdown' ? 'markdown' : 'html'
 }
 
 /** Unit U-SHELL-2 §2.2/F1 — the pinned theme coercion rule (used identically in
@@ -74,12 +78,12 @@ function sanitize(input: unknown): OperatorSettings {
   const defaultDocumentId =
     typeof src.defaultDocumentId === 'string' && src.defaultDocumentId !== '' ? src.defaultDocumentId : null
   const topK = typeof src.topK === 'number' && Number.isFinite(src.topK) && src.topK > 0 ? Math.floor(src.topK) : 5
-  const editingMode = coerceEditingMode(src.editingMode)
+  const representationMode = coerceRepresentationMode(src.representationMode)
   const theme = coerceTheme(src.theme)
   const layout = coerceLayout(src.layout)
   // U-SHELL-9a §2.5/§2.9 pin 9 — additive fail-soft tab slice (F1/F6).
   const tabs = coerceTabState(src.tabs)
-  return { enabledPanes, enabledOperatorPanes, panesInitialized, defaultDocumentId, topK, editingMode, theme, layout, tabs }
+  return { enabledPanes, enabledOperatorPanes, panesInitialized, defaultDocumentId, topK, representationMode, theme, layout, tabs }
 }
 
 /** Create an operator-settings store backed by `path`. A missing/empty file is
@@ -115,7 +119,7 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
         panesInitialized: current.panesInitialized,
         defaultDocumentId: current.defaultDocumentId,
         topK: current.topK,
-        editingMode: current.editingMode,
+        representationMode: current.representationMode ?? 'html',
         theme: current.theme,
         // Deep-copy the layout so a caller can never mutate the store's state.
         layout: coerceLayout(current.layout),
@@ -145,8 +149,10 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
         patch.topK !== undefined
           ? (typeof patch.topK === 'number' && Number.isFinite(patch.topK) && patch.topK > 0 ? Math.floor(patch.topK) : current.topK)
           : current.topK
-      const editingMode =
-        patch.editingMode !== undefined ? coerceEditingMode(patch.editingMode) : current.editingMode
+      const representationMode =
+        patch.representationMode !== undefined
+          ? coerceRepresentationMode(patch.representationMode)
+          : (current.representationMode ?? 'html')
       const theme = patch.theme !== undefined ? coerceTheme(patch.theme) : current.theme
       // U-SHELL-1 §2.2 — a patch WITHOUT `layout` leaves the stored layout
       // unchanged; a layout patch is fail-soft coerced (never corrupts boot).
@@ -154,7 +160,7 @@ export function createOperatorSettingsStore(opts: OperatorSettingsStoreOptions):
       // U-SHELL-9a §2.5 — a patch WITHOUT `tabs` leaves the stored tab set
       // unchanged; a tabs patch is fail-soft coerced (never corrupts boot).
       const tabs: TabState = patch.tabs !== undefined ? coerceTabState(patch.tabs) : current.tabs
-      current = { enabledPanes, enabledOperatorPanes, panesInitialized, defaultDocumentId, topK, editingMode, theme, layout, tabs }
+      current = { enabledPanes, enabledOperatorPanes, panesInitialized, defaultDocumentId, topK, representationMode, theme, layout, tabs }
       persist()
       return this.get()
     },

@@ -65,14 +65,13 @@ export interface SidebarMethods {
   templateRemove(zone: string): void
   templateReset(): void
   operatorSet(patch: OperatorSettingsPatch): void
-  textareaInput(ragId: string): void
-  textareaBlur(ragId: string, value: string): void
-  /** W1-N11 (Unit U4) — the contenteditable rich-text handler seams the
-   *  `rag-editor-*` handler bodies reach. */
-  editorInput(ragId?: string): void
-  editorBlur(ragId?: string, html?: string): void
-  editorCompositionStart(ragId?: string): void
-  editorCompositionEnd(ragId?: string): void
+  /** U-EDIT-1 (C9) §2.1/§3.4 — the SINGLE page-edit surface's own seams (the
+   *  `page-edit-surface-input`/`-blur` handler bodies reach them). The per-node
+   *  textarea/rich-editor seams (`textareaInput`/`textareaBlur` +
+   *  `editorInput`/`editorBlur`/`editorComposition*`) are RETIRED with the
+   *  per-node editing model (§5 items 2/3/6). */
+  pageSurfaceInput(): void
+  pageSurfaceBlur(html?: string): void
   /** U-H8 — the operator-registry manage dispatch. */
   registryManage(request: RagStoreManageRequest): void
   registryManageDismiss(): void
@@ -294,12 +293,8 @@ let sidebarHolder: SidebarMethods = {
   templateRemove: () => {},
   templateReset: () => {},
   operatorSet: () => {},
-  textareaInput: () => {},
-  textareaBlur: () => {},
-  editorInput: () => {},
-  editorBlur: () => {},
-  editorCompositionStart: () => {},
-  editorCompositionEnd: () => {},
+  pageSurfaceInput: () => {},
+  pageSurfaceBlur: () => {},
   registryManage: () => {},
   registryManageDismiss: () => {},
   gnosisStatus: () => {},
@@ -600,13 +595,10 @@ const bridge: ProvidentBridge = {
     templateRemove: (zone) => sidebarHolder.templateRemove?.(zone),
     templateReset: () => sidebarHolder.templateReset?.(),
     operatorSet: (patch) => sidebarHolder.operatorSet?.(patch),
-    textareaInput: (ragId) => sidebarHolder.textareaInput?.(ragId),
-    textareaBlur: (ragId, value) => sidebarHolder.textareaBlur?.(ragId, value),
-    // W1-N11 — the Unit U4 contenteditable rich-editor seams.
-    editorInput: (ragId) => sidebarHolder.editorInput?.(ragId),
-    editorBlur: (ragId, html) => sidebarHolder.editorBlur?.(ragId, html),
-    editorCompositionStart: (ragId) => sidebarHolder.editorCompositionStart?.(ragId),
-    editorCompositionEnd: (ragId) => sidebarHolder.editorCompositionEnd?.(ragId),
+    // U-EDIT-1 (C9) §2.1 — the page surface's own seams (the per-node
+    // textarea/rich-editor seams are retired with the per-node model).
+    pageSurfaceInput: () => sidebarHolder.pageSurfaceInput?.(),
+    pageSurfaceBlur: (html) => sidebarHolder.pageSurfaceBlur?.(html),
     registryManage: (request) => sidebarHolder.registryManage?.(request),
     registryManageDismiss: () => sidebarHolder.registryManageDismiss?.(),
     gnosisStatus: () => sidebarHolder.gnosisStatus?.(),

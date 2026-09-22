@@ -542,10 +542,15 @@ export interface RagJournalOpResult {
   entryIndex: number | null
 }
 
-/** Unit U3 §1.3/§1.4 — the rich-text editing mode. Decision D: `'textarea'`
- *  is the safe default. Unit U1 later adds an `editingMode` field to
- *  `OperatorSettings` using this SAME type. */
-export type EditingMode = 'textarea' | 'contenteditable'
+/** U-EDIT-1 (C9) §2.5 — the REPRESENTATION mode of the single page-edit
+ *  surface: `html` (the rich surface) or `markdown` (the markdown DATA as
+ *  plaintext inside the SAME surface — no HTML formatting, no form control).
+ *  This is the SUCCESSOR of the removed `EditingMode`
+ *  (`'textarea' | 'contenteditable'`, whose members named editing CONTROLS — the
+ *  per-node control swap the whole-page model voids, `ST-6`). The successor
+ *  names REPRESENTATIONS of ONE control and rides the persisted operator state
+ *  (`DECIDED: UI-CONFIG-CARRIER`); the removed token is NOT reused. */
+export type RepresentationMode = 'html' | 'markdown'
 
 /** Unit U-SHELL-2 §2.2 — the tri-state appearance setting (C1). `'system'`
  *  follows the OS preference live (resolved by the renderer's `resolveTheme`);
@@ -755,10 +760,10 @@ export interface OperatorSettings {
   defaultDocumentId: string | null
   /** The retrieval topK default. */
   topK: number
-  /** Unit U1 §1.2 — the rich-text editing mode. The safe default is
-   *  `'textarea'` (decision D); `'contenteditable'` is the operator opt-in
-   *  (the rich-eligible subtree-root splice target). */
-  editingMode: EditingMode
+  /** U-EDIT-1 (C9) §2.5 — the successor REPRESENTATION mode of the single
+   *  page-edit surface. Defaults to `'html'`; a persisted legacy `editingMode`
+   *  key is IGNORED, never trusted (`FS20`). */
+  representationMode?: RepresentationMode
   /** Unit U-SHELL-2 §2.2 — the tri-state appearance setting (C1). The default
    *  is `'system'` (follow the OS preference live). */
   theme: ThemeSetting
@@ -782,9 +787,9 @@ export interface OperatorSettingsPatch {
   panesInitialized?: boolean
   defaultDocumentId?: string | null
   topK?: number
-  /** Unit U1 §1.2 — a patch WITHOUT `editingMode` leaves the stored mode
-   *  unchanged. */
-  editingMode?: EditingMode
+  /** U-EDIT-1 (C9) §2.5 — a patch WITHOUT `representationMode` leaves the
+   *  stored representation unchanged. */
+  representationMode?: RepresentationMode
   /** Unit U-SHELL-2 §2.2 — a patch WITHOUT `theme` leaves the stored theme
    *  unchanged. */
   theme?: ThemeSetting

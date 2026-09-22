@@ -200,6 +200,11 @@ export type BatchOpResult =
   | { op: 'removeNode'; removed: boolean }
   | { op: 'putEdge'; edge: RagEdge }
   | { op: 'removeEdge'; removed: boolean }
+  // U-EDIT-1 (C9) §3.3 item 7 — the three rich-text ops are APPLIED inside a
+  // batch (they were forward-looking type-only members before this unit).
+  | { op: 'setProps'; nodeId: string; props: Record<string, unknown> }
+  | { op: 'setSubtree'; nodeId: string; children: RagNodeChild[] }
+  | { op: 'setType'; nodeId: string; type: RagNodeType }
 
 /** The batch result — a DISCRIMINATED result. `applyBatch` NEVER throws for a
  *  domain failure (invalid op, malformed payload, referential failure,
@@ -924,10 +929,32 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
         edges.delete(op.id)
         return true
       }
-      case 'setProps':
-      case 'setSubtree':
-      case 'setType':
-        return false // not supported in this unit
+      case 'setProps': {
+        // U-EDIT-1 (C9) §3.3 item 7 — the MERGE semantics (inverse/forward re-
+        // application of a batch entry; §2.2 item 3 keeps `data-doc-head`).
+        const existing = nodes.get(op.nodeId)
+        if (!existing) return false
+        const merged = { ...(existing.props ?? {}), ...op.props }
+        const next = { ...toPublicNode(existing), props: merged }
+        insertNode(next)
+        return true
+      }
+      case 'setSubtree': {
+        const existing = nodes.get(op.nodeId)
+        if (!existing) return false
+        const next = { ...toPublicNode(existing), children: op.children }
+        if (!validateNodeShape(next).ok) return false
+        insertNode(next)
+        return true
+      }
+      case 'setType': {
+        const existing = nodes.get(op.nodeId)
+        if (!existing) return false
+        if (!RAG_NODE_TYPES.has(op.type)) return false
+        const next = { ...toPublicNode(existing), type: op.type }
+        insertNode(next)
+        return true
+      }
     }
   }
 
@@ -1279,10 +1306,67 @@ export function createJsonRagStore(opts: RagStoreOptions): RagStore {
         edges.delete(o.id)
         return { ok: true, result: { op: 'removeEdge', removed: true }, inverse: [{ op: 'putEdge', edge: toPublicEdge(existing) }] }
       }
-      case 'setProps':
-      case 'setSubtree':
-      case 'setType':
-        return { ok: false, error: `rag applyBatch: op not supported: ${String(kind)} at index ${index}` }
+      case 'setProps': {
+        // U-EDIT-1 (C9) §3.3 item 7 / §2.2 item 3 — the props write MERGES: the
+        // node's existing props (including the traversal-derived `data-doc-head`
+        // marker) survive, so a commit can never strip the marker (`FS3`).
+        const o = op as Extract<BatchOp, { op: 'setProps' }>
+        const existing = nodes.get(o.nodeId)
+        if (!existing) return { ok: false, error: `rag applyBatch: node not found at index ${index}` }
+        const shape = validateNodeShape({ ...toPublicNode(existing), props: o.props })
+        if (!shape.ok) return { ok: false, error: `rag applyBatch: ${shape.field} required/invalid at index ${index}` }
+        const merged = { ...(existing.props ?? {}), ...o.props }
+        const nextWithProps = { ...toPublicNode(existing), props: merged }
+        const rec: StoredNode = { ...nextWithProps, hash: nodeHash(nextWithProps) }
+        nodes.set(rec.id, rec)
+        // The inverse is a FULL putNode snapshot (not a second merge): undo must
+        // restore the pre-commit record byte-for-byte, and a merge-shaped inverse
+        // could not UN-set a key the forward op added.
+        return {
+          ok: true,
+          result: { op: 'setProps', nodeId: rec.id, props: toPublicNode(rec).props ?? {} },
+          inverse: [{ op: 'putNode', node: toPublicNode(existing) }],
+        }
+      }
+      case 'setSubtree': {
+        // U-EDIT-1 (C9) §3.2 — the REPLACE semantics of `setSubtree`: the node's
+        // inline children are replaced wholesale; id/type/content/props are
+        // untouched.
+        const o = op as Extract<BatchOp, { op: 'setSubtree' }>
+        const existing = nodes.get(o.nodeId)
+        if (!existing) return { ok: false, error: `rag applyBatch: node not found at index ${index}` }
+        const shape = validateNodeShape({ ...toPublicNode(existing), children: o.children })
+        if (!shape.ok) return { ok: false, error: `rag applyBatch: ${shape.field} required/invalid at index ${index}` }
+        const nextWithChildren = { ...toPublicNode(existing), children: o.children }
+        const rec: StoredNode = { ...nextWithChildren, hash: nodeHash(nextWithChildren) }
+        nodes.set(rec.id, rec)
+        return {
+          ok: true,
+          result: { op: 'setSubtree', nodeId: rec.id, children: toPublicNode(rec).children ?? [] },
+          inverse: [{ op: 'putNode', node: toPublicNode(existing) }],
+        }
+      }
+      case 'setType': {
+        // U-EDIT-1 (C9) §2.4 item 4 / §2.4 item 5 — `setType`-class and NEVER
+        // delete + recreate: the node's id/createdAt/content/children/props/
+        // ownedNodeIds are preserved and ONLY `type` moves (`FS6`).
+        const o = op as Extract<BatchOp, { op: 'setType' }>
+        const existing = nodes.get(o.nodeId)
+        if (!existing) return { ok: false, error: `rag applyBatch: node not found at index ${index}` }
+        if (!RAG_NODE_TYPES.has(o.type)) {
+          return { ok: false, error: `rag applyBatch: invalid type at index ${index}` }
+        }
+        const nextWithType = { ...toPublicNode(existing), type: o.type }
+        const rec: StoredNode = { ...nextWithType, hash: nodeHash(nextWithType) }
+        nodes.set(rec.id, rec)
+        // The inverse is a FULL putNode snapshot so undo restores the pre-commit
+        // record exactly (`FS6`: identity, children, props, ownedNodeIds, edges).
+        return {
+          ok: true,
+          result: { op: 'setType', nodeId: rec.id, type: rec.type },
+          inverse: [{ op: 'putNode', node: toPublicNode(existing) }],
+        }
+      }
       default:
         return { ok: false, error: `rag applyBatch: invalid op at index ${index}` }
     }

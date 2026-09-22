@@ -30,12 +30,14 @@ export type CommitResult =
   | { ok: true; nodeId: string }
   | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
 
-/** The discriminated caret state (Unit U4 §1.2 — decision B). A `textarea`
- *  caret is the existing Unit L shape PLUS the `kind` discriminator; a `rich`
- *  caret carries the RAG node id + a path-based anchor/focus edge into the
- *  decomposed inline children. Restored after a re-derive, gated by the node's
- *  RENDERED control type (amendment 4 — a textarea caret is never applied to a
- *  contenteditable node and vice versa). */
+/** U-EDIT-1 (C9) §2.1 — the pinned authored id of the ONE page-edit surface.
+ *  A caret whose `ragId` is any OTHER id addresses a per-node editing root
+ *  (retired with the per-node host, §5 items 1/2) and is `FS2`: it is never
+ *  restorable as a page caret. */
+const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+
+/** One end of a page caret: a path from the surface root down to the target
+ *  text node. */
 export type RichCaretEdge = {
   /** The child-index path from the contenteditable root element down to the
    *  target text node in the rendered inline-children subtree (the decomposed
@@ -49,8 +51,12 @@ export type RichCaretEdge = {
   offset: number
 }
 
+/** The discriminated caret state (U-EDIT-1 §2.1 — the caret is PAGE-SCOPED).
+ *  There is NO `kind: 'textarea'` arm: the per-node editing control it addressed
+ *  is retired (§5 item 7), and a caret addressed to a per-node root is `FS2`.
+ *  The single `rich` arm addresses the ONE page surface root
+ *  (`page-edit-surface`) with a path-based anchor/focus edge (`RichCaretEdge`). */
 export type CaretState =
-  | { kind: 'textarea'; offset: number; focused: boolean }
   | { kind: 'rich'; ragId: string; anchor: RichCaretEdge; focus: RichCaretEdge; focused: boolean }
 
 export interface EditController {
@@ -76,14 +82,16 @@ export interface EditController {
   requestRebuild(kind?: RebuildKind): void
   /** Whether a rebuild is queued (waiting for the dirty-edit guard to clear). */
   hasQueuedRebuild(): boolean
-  /** Save caret/focus state keyed by RAG node id. */
-  saveCaret(nodeId: string, caret: CaretState): void
-  /** Restore caret/focus state after a rebuild. Returns the saved state, or
-   *  undefined if none was saved (or the node's back-reference is dangling —
-   *  the RAG node was deleted). */
-  restoreCaret(nodeId: string): CaretState | undefined
-  /** Clear saved caret/focus state for a node. */
-  clearCaret(nodeId: string): void
+  /** Save caret/focus state keyed by the PAGE subject id (the tab id / the one
+   *  surface root id — one page caret per tab, §2.1). */
+  saveCaret(subjectId: string, caret: CaretState): void
+  /** Restore caret/focus state after a re-derive. Returns the saved state, or
+   *  undefined if none was saved, the subject's back-reference is dangling (the
+   *  RAG node/document was deleted), or the saved caret addresses a per-node
+   *  root instead of the page surface (`FS2`). */
+  restoreCaret(subjectId: string): CaretState | undefined
+  /** Clear saved caret/focus state for a page subject. */
+  clearCaret(subjectId: string): void
 }
 
 export function createEditController(opts: EditControllerOptions): EditController {
@@ -169,21 +177,30 @@ export function createEditController(opts: EditControllerOptions): EditControlle
     hasQueuedRebuild(): boolean {
       return queuedRebuild
     },
-    saveCaret(nodeId: string, caret: CaretState): void {
-      carets.set(nodeId, caret)
+    saveCaret(subjectId: string, caret: CaretState): void {
+      carets.set(subjectId, caret)
     },
-    restoreCaret(nodeId: string): CaretState | undefined {
-      // A dangling back-reference (deleted node) clears the saved caret — no
+    restoreCaret(subjectId: string): CaretState | undefined {
+      const saved = carets.get(subjectId)
+      // A dangling back-reference (deleted document) clears the saved caret — no
       // restore. L5 — actually clear the stale caret from the map so a later
-      // re-created node with the same id does not restore a stale caret.
-      if (!opts.backRefs.has(nodeId)) {
-        carets.delete(nodeId)
+      // re-created subject with the same id does not restore a stale caret.
+      if (!opts.backRefs.has(subjectId)) {
+        carets.delete(subjectId)
         return undefined
       }
-      return carets.get(nodeId)
+      // U-EDIT-1 §2.1 — the caret is PAGE-SCOPED: a caret is addressed to the
+      // ONE surface root, and a caret saved against a per-node root is `FS2` —
+      // it is never restored as an editing caret (the per-node host it addressed
+      // is gone). The stale entry is dropped so it cannot resurface.
+      if (saved != null && saved.kind === 'rich' && saved.ragId !== PAGE_EDIT_SURFACE_ID) {
+        carets.delete(subjectId)
+        return undefined
+      }
+      return saved
     },
-    clearCaret(nodeId: string): void {
-      carets.delete(nodeId)
+    clearCaret(subjectId: string): void {
+      carets.delete(subjectId)
     },
   }
 }
