@@ -252,9 +252,14 @@ describe('W1-N9 — advanced-search args', () => {
 })
 
 // ===========================================================================
-// W1-N11 — preload forwards the C18/C19 + rich-editor sidebar seams
+// W1-N11 — preload forwards the C18/C19 + page-surface sidebar seams
 // ===========================================================================
-describe('W1-N11 — preload sidebar forwards the C18/C19 + rich-editor seams', () => {
+describe('W1-N11 — preload sidebar forwards the C18/C19 + page-surface seams', () => {
+  // §5 items 2/6 of docs/specs/unit-u-edit-1-whole-page-editing.md: the per-node
+  // `editorInput`/`editorBlur`/`editorComposition*` seams are RETIRED with the
+  // per-node editing model, and §2.1/§11.7 replaces them with the single page
+  // surface's own seams (`pageSurfaceInput`/`pageSurfaceBlur`) — the retired
+  // names are NOT forwarded on the preload boundary any more.
   const SEAMS = [
     'searchAdvancedToggle',
     'submitAdvancedQuery',
@@ -262,10 +267,8 @@ describe('W1-N11 — preload sidebar forwards the C18/C19 + rich-editor seams', 
     'hoverPreviewLeave',
     'hoverPreviewPopupEnter',
     'hoverPreviewPopupLeave',
-    'editorInput',
-    'editorBlur',
-    'editorCompositionStart',
-    'editorCompositionEnd',
+    'pageSurfaceInput',
+    'pageSurfaceBlur',
   ] as const
 
   it('exposes every seam + delegates the call through installSidebar', () => {
@@ -286,10 +289,8 @@ describe('W1-N11 — preload sidebar forwards the C18/C19 + rich-editor seams', 
     bridge.sidebar.hoverPreviewLeave()
     bridge.sidebar.hoverPreviewPopupEnter()
     bridge.sidebar.hoverPreviewPopupLeave()
-    bridge.sidebar.editorInput('r1')
-    bridge.sidebar.editorBlur('r1', '<p>x</p>')
-    bridge.sidebar.editorCompositionStart('r1')
-    bridge.sidebar.editorCompositionEnd('r1')
+    bridge.sidebar.pageSurfaceInput()
+    bridge.sidebar.pageSurfaceBlur('<p>x</p>')
 
     expect(seen.searchAdvancedToggle).toEqual([[]])
     expect(seen.submitAdvancedQuery).toEqual([['q', { mode: 'graph' }]])
@@ -297,9 +298,7 @@ describe('W1-N11 — preload sidebar forwards the C18/C19 + rich-editor seams', 
     expect(seen.hoverPreviewLeave).toEqual([[]])
     expect(seen.hoverPreviewPopupEnter).toEqual([[]])
     expect(seen.hoverPreviewPopupLeave).toEqual([[]])
-    expect(seen.editorInput).toEqual([['r1']])
-    expect(seen.editorBlur).toEqual([['r1', '<p>x</p>']])
-    expect(seen.editorCompositionStart).toEqual([['r1']])
-    expect(seen.editorCompositionEnd).toEqual([['r1']])
+    expect(seen.pageSurfaceInput).toEqual([[]])
+    expect(seen.pageSurfaceBlur).toEqual([['<p>x</p>']])
   })
 })

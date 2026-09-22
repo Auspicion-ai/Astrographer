@@ -79,8 +79,14 @@ function traversalEnvelope(): LegacyInitialData {
   return buildTraversal({ store, documentIds: ['doc-a'], zoneName: 'main' }).envelope
 }
 
-/** The pinned page-surface handler-name prefix (§2.1's name-referenced defs). */
-const PAGE_SURFACE_HANDLER_PREFIX = 'page-surface'
+/** The page surface's own name-referenced handler def names (§2.1's authoring
+ *  row: the surface carries its handler defs; §5 item 2's ordering rule is that
+ *  a registered def must be reachable BY NAME from the app graph). */
+const PAGE_SURFACE_HANDLER_NAMES = ['page-edit-surface-input', 'page-edit-surface-blur'] as const
+/** The page surface's own `window.provident.sidebar` seams (§2.1/§11.7's
+ *  adopted names — the successor of the retired `textareaInput`/`textareaBlur`
+ *  pair). */
+const PAGE_SURFACE_SEAM_NAMES = ['pageSurfaceInput', 'pageSurfaceBlur'] as const
 /** The retired per-node handler names (§5 items 2/6). */
 const RETIRED_HANDLER_NAMES = [
   'rag-textarea-input',
@@ -170,12 +176,35 @@ describe('§2.1/§5 — the host registers the PAGE SURFACE handler defs, not th
     expect(handlerDef('pane-search-submit')).toBeDefined()
   })
 
-  it('S1 — the host exposes at least one page-surface handler def (the successor authoring is registered)', () => {
+  it('S1 — the host registers the page surface\'s OWN handler defs (the successor authoring is reachable by name)', () => {
     const h = makeHarness()
     h.host.bindHandlers()
-    const proto = Object.getOwnPropertyNames(SidebarPanes.prototype)
-    const surfaceHandler = proto.filter((n) => n.toLowerCase().startsWith(PAGE_SURFACE_HANDLER_PREFIX))
-    expect(surfaceHandler.length).toBeGreaterThan(0)
+    // §2.1's authoring row pins name-referenced handler defs for the one
+    // surface; §5 item 2's ordering rule is that a name the app graph authors
+    // must resolve to a registered def. Asserted BY NAME (a prototype-method
+    // name-shape filter is not the contract: the def names are the surface's
+    // own, never a lowercase `page-surface*` identifier).
+    for (const name of PAGE_SURFACE_HANDLER_NAMES) {
+      expect(handlerDef(name), `the page surface's handler def ${name} must be registered`).toBeDefined()
+    }
+  })
+
+  it('S1 — the host installs the page surface\'s own M2 bridge seams, not the retired per-node ones', async () => {
+    const h = makeHarness()
+    await h.host.boot(h.runtime)
+    const provident = (globalThis as unknown as { window?: { provident?: Record<string, unknown> } }).window?.provident
+    const sidebar = provident?.sidebar as Record<string, unknown> | undefined
+    expect(sidebar, 'the host must install its sidebar seam holder at boot').toBeDefined()
+    // §2.1/§11.7: the surface's own seams — the adopted, case-sensitive names
+    // the `page-edit-surface-input`/`-blur` handler bodies call.
+    for (const seam of PAGE_SURFACE_SEAM_NAMES) {
+      expect(typeof sidebar?.[seam], `the page surface seam sidebar.${seam} must be installed`).toBe('function')
+    }
+    // §5 items 2/6: the per-node textarea + rich-editor seams are retired —
+    // neither the holder nor the surface may keep a live token for them.
+    for (const retired of ['textareaInput', 'textareaBlur', 'editorInput', 'editorBlur', 'editorCompositionStart', 'editorCompositionEnd']) {
+      expect(sidebar, `the retired per-node seam ${retired} must not be installed`).not.toHaveProperty(retired)
+    }
   })
 
   it('FS21 — the host no longer offers the per-node textarea bridge surface (textareaInput/textareaBlur)', () => {

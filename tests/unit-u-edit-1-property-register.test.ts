@@ -25,10 +25,12 @@
 // A row's verdict is written by an AUDIT that did not author the rows (RCA-3 /
 // AGENTS.md item 10) — this file produces the evidence (per-row cases, the
 // counterexample, the control) so the audit can report `held`/`broken` with its
-// attempt count. The register rows that need the commit's §3.2 diff and §3.3
-// one-`applyBatch` apply are RED today against the real store, which is the
-// recorded red obligation of §3.3 item 7 (`applyBatchOp` returns
-// `op not supported` for `setProps`/`setSubtree`/`setType`).
+// attempt count. The rows that needed the commit's §3.2 diff and §3.3
+// one-`applyBatch` apply were the recorded red obligation of §3.3 item 7
+// (`applyBatchOp` returned `op not supported` for
+// `setProps`/`setSubtree`/`setType` at the red pass); the implementation landed
+// at commit `15cbc6c`, so these rows are the GREEN verification of that
+// obligation now.
 import { describe, it, expect } from 'vitest'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -284,10 +286,25 @@ describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-
       const nodes = Array.from({ length: intBetween(rng, 1, 6) }, (_, k) => makeNode(`n${k}`, 'p', `body-${k}`))
       await seedNodes(store, nodes)
       const overrides = new Map<string, { inner: string }>()
-      for (const node of nodes) {
-        if (rng() % 2 === 0) overrides.set(node.id, { inner: `${node.content}-edited` })
+      for (const [k, node] of nodes.entries()) {
+        // §7 `P-IM-2`'s AMENDED PROPOSITION (§11 amendment `11.8` item 4, remedy
+        // (a) — the population is restricted to NON-EMPTY mutation subsets):
+        // "for ANY draw whose mutation subset is `S ≠ ∅`, after a successful
+        // commit `journal()` gained exactly one entry of kind `batch`". The
+        // `S = ∅` draw is this row's CONTROL below and `P-TP-2`'s proposition
+        // (`strat:empty-diff-idempotent`: an empty op list ⇒ journal delta 0,
+        // persist delta 0, state `clean`) — so the draw forces `S ≠ ∅` and the
+        // two rows no longer state contradictory oracles. The invariant is NOT
+        // weakened: only the out-of-population draw is excluded, and the
+        // exclusion is recorded in the spec AND here.
+        if (k === 0 || rng() % 2 === 0) overrides.set(node.id, { inner: `${node.content}-edited` })
       }
       const ops = diff(decode(pageFor(nodes, overrides)), store)
+      if (ops.length === 0) {
+        failures++
+        counterexample = counterexample ?? 'a non-empty mutation subset produced an EMPTY op list (no commit to journal)'
+        continue
+      }
       const before = JSON.stringify(store.listNodes())
       const journalBefore = store.journal().length
       const result = await store.applyBatch(ops)

@@ -75,7 +75,8 @@
 //   S3. Batch of N = 1 (the boundary: still ONE persist, not two).
 //   S4. Empty batch `applyBatch([])`: {ok:true, results:[]}, 0 persists, file
 //       bytes untouched.
-//   S5. Failed batch (missing endpoint / unsupported setProps / null op /
+//   S5. Failed batch (missing endpoint / an op outside the closed `BatchOp`
+//       union (`setDocMeta`) / null op /
 //       malformed node at k ∈ {0, mid, N-1}): never throws, {ok:false}, 0
 //       persists, file byte-identical, in-memory state restored.
 //   S6. Persist failure is non-fatal (an unwritable store directory): the batch
@@ -372,6 +373,26 @@ function rmFileSyncSafe(dir: string): void {
   rmSync(dir, { recursive: true, force: true })
 }
 
+/**
+ * An op GENUINELY OUTSIDE the closed `BatchOp` union — the "unsupported op"
+ * failure draw of S5 / the `P-IM-2 (strat:failed-batch)` row.
+ *
+ * RECOUNTED, never copied: `src/main/rag-store.ts` `type BatchOp` is CLOSED at
+ * the 7 members `putNode`/`removeNode`/`putEdge`/`removeEdge`/`setProps`/
+ * `setSubtree`/`setType` (`DECIDED: BATCH-ATOMICITY-API`; `C9 U-EDIT-1` §3.3
+ * item 7 makes the store APPLY the three rich-text ops inside a batch, so
+ * `setProps` is a SUPPORTED member and can no longer carry this failure mode).
+ * The document-metadata write is the pinned member-OUTSIDE case:
+ * `edit.set_doc_meta` is "OUTSIDE the closed `BatchOp` union and outside this
+ * unit" (`unit-u-edit-1-whole-page-editing.md` §3.2's closed-field-set table;
+ * `DECIDED: DOC-DIRECTORY-CATEGORY-GATE` Q5; `DECIDED: SET-DOC-META-TAG-WRITE`).
+ * `applyBatchOp`'s `default` arm rejects it: `{ ok: false, error: 'rag
+ * applyBatch: invalid op at index <i>' }`, with the op's own index reported.
+ */
+function unsupportedOp(): BatchOp {
+  return { op: 'setDocMeta', nodeId: 'n0', tags: ['outside-the-closed-union'] } as unknown as BatchOp
+}
+
 /** The source with every COMMENT blanked IN PLACE (length + line structure
  *  preserved), using the PARSER's own comment ranges
  *  (`ts.getLeadingCommentRanges`/`getTrailingCommentRanges`) walked over every
@@ -474,7 +495,7 @@ describe('§3 states — the persist census, the boundaries and the durability o
   })
 
   it('S5/FS3/FS5/P-IM-2 — a batch that fails at k performs 0 persists and leaves the file BYTE-IDENTICAL', async () => {
-    const modes = ['putEdge-missing-target', 'unsupported-setProps', 'malformed-node', 'null-op'] as const
+    const modes = ['putEdge-missing-target', 'unsupported-setDocMeta', 'malformed-node', 'null-op'] as const
     for (const mode of modes) {
       for (const where of ['first', 'mid', 'last'] as const) {
         await withStore(async ({ file: storePath, store }) => {
@@ -490,8 +511,8 @@ describe('§3 states — the persist census, the boundaries and the durability o
           const badOp: BatchOp =
             mode === 'putEdge-missing-target'
               ? ({ op: 'putEdge', edge: mkEdge('bad-edge', 'n0', 'ghost-node') } as BatchOp)
-              : mode === 'unsupported-setProps'
-                ? ({ op: 'setProps', nodeId: 'n0', props: {} } as BatchOp)
+              : mode === 'unsupported-setDocMeta'
+                ? unsupportedOp()
                 : mode === 'malformed-node'
                   ? ({ op: 'putNode', node: { ...mkNode(''), id: '' } } as BatchOp)
                   : (null as unknown as BatchOp)
@@ -764,7 +785,7 @@ describe('§4 register — the persist invariant, its controls and its anti-regr
   })
 
   it('P-IM-2 (strat:failed-batch) — a failed batch performs ZERO visible persists, leaves the file byte-identical, and reports the pinned failedIndex', async () => {
-    const modes = ['putEdge-missing-target', 'unsupported-setProps', 'malformed-node', 'null-op'] as const
+    const modes = ['putEdge-missing-target', 'unsupported-setDocMeta', 'malformed-node', 'null-op'] as const
     const rep = await runProperty('P-IM-2', 'strat:failed-batch', async (i, rng) => {
       const nNodes = int(rng, 2, 12)
       const { ops: good } = mkOps(nNodes, Math.max(1, nNodes - 1))
@@ -773,8 +794,8 @@ describe('§4 register — the persist invariant, its controls and its anti-regr
       const badOp: BatchOp =
         mode === 'putEdge-missing-target'
           ? ({ op: 'putEdge', edge: mkEdge('bad-edge', 'n0', 'ghost-node') } as BatchOp)
-          : mode === 'unsupported-setProps'
-            ? ({ op: 'setProps', nodeId: 'n0', props: {} } as BatchOp)
+          : mode === 'unsupported-setDocMeta'
+            ? unsupportedOp()
             : mode === 'malformed-node'
               ? ({ op: 'putNode', node: { ...mkNode(''), id: '' } } as BatchOp)
               : (null as unknown as BatchOp)

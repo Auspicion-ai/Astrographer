@@ -285,15 +285,27 @@ describe('§3.3 item 4 — the commit\'s undo granularity is COARSE (one commit,
     await store.putNode(makeNode('p2', { type: 'p', content: 'before-2' }))
     await store.putNode(makeNode('p3', { content: 'before-3' }))
     const snapshot = JSON.stringify(store.listNodes())
+    // §3.3 item 3/4 — the baseline is taken AFTER the seeding writes: each seed
+    // `putNode` is itself a journaled edit, so the commit's delta is measured
+    // against that baseline. The clause is "one commit = ONE `applyBatch` = the
+    // journal gains EXACTLY ONE invertible `batch` entry" (`FS11`), and COARSE
+    // undo means ONE undo step consumes that single entry — not that the whole
+    // journal empties.
+    const depthBefore = store.undoDepth()
+    const journalBefore = store.journal().length
     await store.applyBatch([
       { op: 'putNode', node: makeNode('p1', { content: 'after-1' }) },
       { op: 'setType', nodeId: 'p2', type: 'h3' },
       { op: 'setSubtree', nodeId: 'p3', children: [{ type: 'strong', content: 'after-3', offset: 0 }] },
     ])
     expect(store.getNode('p1')?.content).toBe('after-1')
+    // three changed blocks, ONE journal entry, ONE undo step (§3.3 items 3/4)
+    expect(store.journal().length - journalBefore).toBe(1)
+    expect(store.journal()[store.journal().length - 1].kind).toBe('batch')
+    expect(store.undoDepth()).toBe(depthBefore + 1)
     await store.undo()
     expect(JSON.stringify(store.listNodes())).toBe(snapshot)
-    expect(store.undoDepth()).toBe(0)
+    expect(store.undoDepth()).toBe(depthBefore)
   })
 
   it('S7 — a redo re-applies the whole commit as one unit', async () => {

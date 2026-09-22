@@ -9,7 +9,9 @@
 //        dependence on `mock.calls[]` history
 //   §3.2 Pin 2 — the capture is NON-EMPTY after a `beforeEach`, and the REAL
 //        `src/main/preload.ts` ran against the mock (sidebar census > 0 + the
-//        named seams the sibling rows depend on; 41 keys measured today)
+//        named seams the sibling rows depend on; 37 keys measured — 41 before
+//        the `C9 U-EDIT-1` retirement of the 6 per-node editing seams, which
+//        §2.1/§11.7 replaces with the 2 page-surface seams)
 //   §4   the property register rows P-IM-1 / P-IM-2 / P-SM-1 / P-TP-3 (the
 //        capture-box semantics — exercised against a LOCAL harness mirroring
 //        §2a; no src-side module is imported that does not exist)
@@ -33,8 +35,8 @@
 //       leave it undefined and the row must fail at the ASSERTION, never crash.
 //   S5  a SECOND exposure: last-write-wins AND the exposure counter is 2 (a
 //       double exposure is a preload defect the harness must surface).
-//   S7  the preload census: > 0 sidebar keys + the named seams; 41 is the
-//       recorded measurement (a preload grown past 41 is NOT a red row).
+//   S7  the preload census: > 0 sidebar keys + the named seams; 37 is the
+//       recorded measurement (a preload grown past 37 is NOT a red row).
 //
 // RED-FIRST NOTE (honest record): `clearMocks: true` is a NEW vitest-5 default
 // (the §1.1 Class-A cause). This file reproduces that semantics EXPLICITLY
@@ -125,8 +127,12 @@ describe('Pin 2 — the capture survives the beforeEach boundary (the Class-A fa
     const sidebar = (bridge as Record<string, unknown>).sidebar as Record<string, unknown> | undefined
     expect(sidebar, 'the captured bridge carries no `sidebar` namespace — the REAL preload did not run').toBeDefined()
     const keys = Object.keys(sidebar!)
-    expect(keys.length, 'the sidebar census must be > 0 (the measured surface is 41 keys today; a grown surface is not a red row)').toBeGreaterThan(0)
-    for (const seam of ['selectDocument', 'togglePaneCollapse', 'editorBlur']) {
+    expect(keys.length, 'the sidebar census must be > 0 (the measured surface is 37 keys after the U-EDIT-1 seam retirement; a grown surface is not a red row)').toBeGreaterThan(0)
+    // §5 items 2/6 of docs/specs/unit-u-edit-1-whole-page-editing.md: the
+    // per-node `editorBlur` seam is RETIRED with the per-node editing model;
+    // §2.1/§11.7 replaces it with the single page surface's own seam
+    // (`pageSurfaceBlur`), which is the named seam read here.
+    for (const seam of ['selectDocument', 'togglePaneCollapse', 'pageSurfaceBlur']) {
       expect(typeof (sidebar as Record<string, unknown>)[seam], `the named seam sidebar.${seam} must be present on the real bridge`).toBe('function')
     }
     const edit = (bridge as Record<string, unknown>).edit as Record<string, unknown> | undefined
@@ -134,14 +140,16 @@ describe('Pin 2 — the capture survives the beforeEach boundary (the Class-A fa
     expect(typeof (edit as Record<string, unknown>).commitRich, 'the named seam edit.commitRich must be present on the real bridge').toBe('function')
   })
 
-  it('RED-TODAY: the runtime census AGREES with the preload source census (recorded, never hard-coded to 41)', () => {
+  it('RED-TODAY: the runtime census AGREES with the preload source census (recorded, never hard-coded to 37)', () => {
     const bridge = capturedBridge() as Record<string, unknown> | undefined
     expect(bridge, 'no exposure captured').toBeDefined()
     const runtimeKeys = Object.keys(((bridge as Record<string, unknown>).sidebar ?? {}) as object)
     // The source census is DERIVED from src/main/preload.ts (no constant of our
     // own): the `sidebar: { … }` object literal is sliced out and its immediate
-    // 4-space-indented members are counted. 41 at the probe pass; the assertion
-    // is an equality between two MEASUREMENTS, not against an invented number.
+    // 4-space-indented members are counted. 41 at the probe pass, 37 after the
+    // `C9 U-EDIT-1` retirement of the 6 per-node editing seams (replaced by the
+    // 2 page-surface seams, §2.1/§11.7); the assertion is an equality between
+    // two MEASUREMENTS, not against an invented number.
     const start = PRELOAD_SRC.indexOf('  sidebar: {')
     const end = PRELOAD_SRC.indexOf('  installSidebar(', start)
     expect(start, 'src/main/preload.ts: the `sidebar: {` literal was not found').toBeGreaterThan(-1)
@@ -150,7 +158,7 @@ describe('Pin 2 — the capture survives the beforeEach boundary (the Class-A fa
     expect(sourceKeys.length, 'the source census must be > 0').toBeGreaterThan(0)
     expect(
       runtimeKeys.length,
-      `the runtime sidebar census (${runtimeKeys.length}) must equal the source census (${sourceKeys.length}) — recorded: 41 at the probe pass`,
+      `the runtime sidebar census (${runtimeKeys.length}) must equal the source census (${sourceKeys.length}) — recorded: 41 at the probe pass, 37 after the U-EDIT-1 seam retirement`,
     ).toBe(sourceKeys.length)
     for (const k of sourceKeys) expect(runtimeKeys, `runtime sidebar surface is missing the source key ${k}`).toContain(k)
   })
@@ -382,7 +390,7 @@ describe('§4 register — capture-box harness rows', () => {
       Object.fromEntries(Array.from({ length: 41 }, (_, k) => [`k${k}`, k])),
       { only: 1 },
       {},
-      { sidebar: { selectDocument: () => {}, togglePaneCollapse: () => {}, editorBlur: () => {} } },
+      { sidebar: { selectDocument: () => {}, togglePaneCollapse: () => {}, pageSurfaceBlur: () => {} } },
     ]
     const sequences = [
       [] as string[],
@@ -399,7 +407,7 @@ describe('§4 register — capture-box harness rows', () => {
         const api = h.capturedBridge() as Record<string, unknown> | undefined
         if (api === undefined) return 'UNDEFINED'
         const sidebar = (api.sidebar ?? {}) as Record<string, unknown>
-        return `${Object.keys(api).length}:${['selectDocument', 'togglePaneCollapse', 'editorBlur'].filter((s) => typeof sidebar[s] === 'function').join('+')}`
+        return `${Object.keys(api).length}:${['selectDocument', 'togglePaneCollapse', 'pageSurfaceBlur'].filter((s) => typeof sidebar[s] === 'function').join('+')}`
       }
       const before = read()
       for (const mode of seq) {

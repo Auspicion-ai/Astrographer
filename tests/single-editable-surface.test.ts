@@ -270,12 +270,42 @@ function textareaChildren(env: LegacyInitialData): LegacyNodeData[] {
   return appGraphNodes(env).filter(isTextareaChild)
 }
 
-/** The RAG ids present inside the surface subtree's children (§2.1 Scope). */
+/**
+ * The RAG ids of the surface's DIRECT children, in document order — the
+ * document-payload roots the assembly collected under the one surface
+ * (§2.1's Subtree/Scope rows: the doc-head first, then the assembled body
+ * blocks). A `doc-child` block (a table cell, a nested table) is NOT a direct
+ * child of the surface: the scoped walk nests it inside its containing block
+ * (`DECIDED: SCOPED-WALK`/`DOC-CHILD`), so it is read by
+ * `ragIdsInSubtree` below.
+ */
 function ragIdsWithin(surface: LegacyNodeData | undefined): string[] {
   if (surface == null) return []
   const ids: string[] = []
   for (const child of (surface.children ?? []) as LegacyNodeData[]) {
     if (typeof ragIdOf(child) === 'string') ids.push(ragIdOf(child) as string)
+  }
+  return ids
+}
+
+/**
+ * The RAG ids reachable ANYWHERE inside the surface's subtree (§2.1's Subtree
+ * row: "the doc-head/title element first, then the body blocks the stage
+ * renders (sections, their blocks, table cells and the rich blocks' inline
+ * children), in document order"; the Scope row repeats "including table
+ * cells"). De-duplicated in first-seen order: the `textarea-<ragId>` tombstone
+ * carries the SAME `data-rag-node-id` as the block it sits in (§5.1), so the
+ * raw walk yields duplicates.
+ */
+function ragIdsInSubtree(surface: LegacyNodeData | undefined): string[] {
+  if (surface == null) return []
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const n of collectAuthored(surface)) {
+    const id = ragIdOf(n)
+    if (typeof id !== 'string' || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
   }
   return ids
 }
@@ -393,14 +423,22 @@ describe('§2.1 ST-1 — the app-graph render authors EXACTLY ONE editable surfa
     const r = await render({ table: true, rich: true })
     try {
       const surface = surfaceRoots(r.envelope)[0]
-      const within = ragIdsWithin(surface)
-      expect(within).toContain('title')
-      expect(within).toContain('p1')
-      expect(within).toContain('end')
-      expect(within).toContain('t')
-      expect(within).toContain('c1')
-      expect(within).toContain('c2')
-      expect(within).toContain('rich')
+      // §2.1 Subtree/Scope: the surface's DIRECT children are the assembled
+      // document's payload roots (head first, then the body sections, in
+      // document order) — the fixture's sections are `title`/`p1`/`end`/`rich`.
+      expect(ragIdsWithin(surface)).toEqual(['title', 'p1', 'end', 'rich'])
+      // §2.1 Subtree row: the surface's SUBTREE (transitively) is the whole
+      // rendered body — "their blocks, table cells and the rich blocks' inline
+      // children". The fixture hangs the table `t` and its cells `c1`/`c2` off
+      // `p1` as `doc-child` edges (the scoped walk nests them at their `order`
+      // inside the containing block), so the clause is asserted on the
+      // SUBTREE, never on the surface's direct children.
+      const inSubtree = ragIdsInSubtree(surface)
+      expect(inSubtree).toEqual(expect.arrayContaining(['title', 'p1', 't', 'c1', 'c2', 'end', 'rich']))
+      // and the census is complete: no rag-bound block of this document is
+      // missing from the surface's subtree (§2.1 Scope's "body element outside
+      // the surface is FS1" read on the positive side).
+      for (const id of ['t', 'c1', 'c2']) expect(inSubtree).toContain(id)
     } finally {
       release(r)
     }
@@ -440,11 +478,15 @@ describe('§2.1 ST-1 — the app-graph render authors EXACTLY ONE editable surfa
     const r = await render({ table: true, rich: true })
     try {
       const surface = surfaceRoots(r.envelope)[0]
-      const within = new Set<string>()
-      for (const child of (surface?.children ?? []) as LegacyNodeData[]) {
-        for (const n of collectAuthored(child)) {
-          if (typeof ragIdOf(n) === 'string') within.add(ragIdOf(n) as string)
-        }
+      // §2.1 Scope / §8.1 FS1: the census is over the ASSEMBLED app graph, and
+      // it is TRANSITIVE — every rag-bound node the stage renders (the table
+      // `t` and its cells `c1`/`c2` are `doc-child` blocks nested in `p1`) must
+      // sit inside the one surface.
+      const within = new Set(ragIdsInSubtree(surface))
+      // NON-VACUITY: the nested doc-children are in the census, so the
+      // exclusion below is not satisfied by an empty surface subtree.
+      for (const id of ['title', 'p1', 't', 'c1', 'c2', 'end', 'rich']) {
+        expect(within, `the census must contain ${id} before the outside-check can discriminate`).toContain(id)
       }
       const outside = ragRoots(r.envelope)
         .map((n) => ragIdOf(n) as string)

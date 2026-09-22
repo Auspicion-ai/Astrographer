@@ -124,7 +124,7 @@ the atomicity contract (§3.3).
 | Aspect | Pin |
 | --- | --- |
 | **Cardinality** | `1` `contenteditable` element in the stage's document region per open document tab. **Zero** `[contenteditable]` hosts on individual RAG subtree roots. |
-| **Authoring** | The surface is **provident-authored at the APP-GRAPH / STAGE-ASSEMBLY layer** — a provident node built by the pure app-graph builder **`src/renderer/pane-graph.ts` `assembleAppGraphEnvelope`** (the builder the renderer assembles the stage from: it is exported with `AppGraphAssemblyInput`/`AppGraphAssemblyResult` and hosts the `zone:<name>` containers), carried into the assembly by the host's stage-authoring seam **`src/renderer/sidebar-panes.ts` `applyEditorToolbar`** (`loadAppGraph`) — the same seam that already authors the stage's `editor-toolbar`/`pane-history` roots into the assembled app graph. It carries `props.id = 'page-edit-surface'`, `props['data-edit-surface'] = <documentId>`, `props.contenteditable = true` and its **name-referenced handler defs**, and is placed in the traversal's `zoneName` (`'main'`) as a provident content root. **It is NOT a node of the traversal envelope** — the traversal envelope keeps its one-payload-per-section shape (§11 amendment **11.7**; `DECIDED: PLACEMENT-ONLY-PAYLOAD-ROOT`). No hand-written DOM, no `document.createElement`, no direct `innerHTML` write by host code. |
+| **Authoring** | The surface is **provident-authored at the APP-GRAPH / STAGE-ASSEMBLY layer** — a provident node built by the pure app-graph builder **`src/renderer/pane-graph.ts` `assembleAppGraphEnvelope`** (the builder the renderer assembles the stage from: it is exported with `AppGraphAssemblyInput`/`AppGraphAssemblyResult` and hosts the `zone:<name>` containers), carried into the assembly by the host's stage-authoring seam **`src/renderer/sidebar-panes.ts` `applyEditorToolbar`** (`loadAppGraph`) — the same seam that already authors the stage's `editor-toolbar`/`pane-history` roots into the assembled app graph. It carries `props.id = 'page-edit-surface'`, `props['data-edit-surface'] = <documentId>`, `props.contenteditable = true` and its **name-referenced handler defs** (**PINNED — §11 amendment `11.8`:** the handler defs `page-edit-surface-input` (event `input`) and `page-edit-surface-blur` (event `blur`), whose bodies route to the host's own page seam methods **`pageSurfaceInput()` / `pageSurfaceBlur(html?)`** on the `SidebarApi` surface; the retired per-node seam names are enumerated in §5 item 6, and §11 amendment `11.8` item 1 states the same set), and is placed in the traversal's `zoneName` (`'main'`) as a provident content root. **It is NOT a node of the traversal envelope** — the traversal envelope keeps its one-payload-per-section shape (§11 amendment **11.7**; `DECIDED: PLACEMENT-ONLY-PAYLOAD-ROOT`). No hand-written DOM, no `document.createElement`, no direct `innerHTML` write by host code. |
 | **Subtree** | The surface's subtree **is the assembled document body as the stage renders it**: the doc-head/title element first, then the body blocks the stage renders (sections, their blocks, table cells and the rich blocks' inline children), in document order. Stated explicitly: the traversal still authors **six** payload roots for this document and their inner shape is unchanged — the app-graph assembly is what collects them under the one surface root, so `content[0].content[0]` in the **traversal** envelope remains the `rag-head` `h1`. |
 | **Invariant** | Exactly **ONE** such surface exists per **focused** document/tab. On a simultaneous multi-document mount (U-SHELL-9b) only the focused document's assembled body is surfaced; every other mounted document root stays a plain payload root. |
 | **Scope** | The surface's subtree **is** the document's rendered body: the doc-head/title element first, then the section headings and their blocks (including table cells), in document order. A body element outside the surface is `FS1`. **In app-graph/stage terms:** a document-body block that the assembled app-graph envelope does not place inside the surface root (or that the render materializes as a sibling of it in the stage's zone) is `FS1`. **No envelope-payload assertion may be used to detect it:** the detection surface is the **app-graph render** (the assembled envelope the renderer loads, `assembleAppGraphEnvelope`'s result) **plus the DOM**; the traversal envelope deliberately authors no payload per block, so a traversal-level census cannot see this fail-state in either direction (`FS1`'s restatement, §2.1/§8.1). |
@@ -186,7 +186,7 @@ writes.
 | **The content is plaintext** | The surface's subtree is the document's **markdown data as plain text**: one text run (plus the block boundaries the caret needs), **no HTML formatting output at all** — no inline `strong`/`em`/`a`/`img` elements, no headings rendered at heading scale, no table markup. The rendered text of a markdown-mode body matches the markdown source's text content. |
 | **Monospace** | The mode is rendered in a **monospace font family**, owned by CSS, asserted as a **painted** computed family live (§8.3 item 4) — never computed-style-only without a painted box (`DECIDED: D-GP-UFA-2`). |
 | **Live markdown formatting is LATER** | No token highlighting, no live re-formatting, no preview pane, no markdown-to-HTML round trip in the surface. This is the **parked** half (`§3.3 C` item `C14`) and it must not be scheduled by implementation drift. |
-| **The switch is a mode, not an editing control** | The toolbar's mode control reflects `html` \| `markdown` and flips the mode. The **removed** `editingMode: 'textarea' \| 'contenteditable'` field and its `settingsContent` button-toggle (§5 item 3) are **not** the carrier; the successor representation control is pinned in §2.5. |
+| **The switch is a mode, not an editing control** | The toolbar's mode control reflects `html` \| `markdown` and flips the mode. The **removed** `editingMode: 'textarea' \| 'contenteditable'` field and its `settingsContent` button-toggle (§5 item 3) are **not** the carrier; the successor representation control is pinned in §2.5, where its field name is pinned as **`representationMode: 'html' | 'markdown'`** (§11 amendment `11.8`). |
 | **No form controls** | No `<textarea>`, no `<input>`, no form-control affordance anywhere in the stage region — in either mode. |
 
 ### 2.4 The element-type apply contract (`ST-2` covered half)
@@ -227,8 +227,12 @@ writes.
 The `editingMode` `OperatorSettings` field, its `settingsContent` button-toggle and its
 `operator-settings-changed` broadcast path are **removed** (§5 item 3). **Pinned successor:** the
 representation mode is carried by the **`OperatorSettings` carrier** (the existing persisted operator
-state, `DECIDED: UI-CONFIG-CARRIER`) as a **new field with a new name and a two-member union**
-(`'html' | 'markdown'`), **not** by reusing the removed token. Rationale recorded so a later pass
+state, `DECIDED: UI-CONFIG-CARRIER`) as the **new field `representationMode`** with the two-member union **`'html' | 'markdown'`**
+(**PINNED — §11 amendment `11.8`:** `RepresentationMode = 'html' | 'markdown'`,
+`representationMode?: RepresentationMode` on both `OperatorSettings` and `OperatorSettingsPatch`,
+coerced by `src/main/operator-settings-store.ts` `coerceRepresentationMode` with an `'html'` default,
+and a patch without the field leaves the stored representation unchanged), **not** by reusing the
+removed token. Rationale recorded so a later pass
 does not re-derive it: the removed union's members named **editing controls** (`textarea` vs
 `contenteditable`); the successor names **representations** of one control. Reusing the old name
 would keep a live token whose meaning the supersession voids — the exact drift class `ST-6` exists to
@@ -390,7 +394,7 @@ reversal at **§12.7(a)**, which names **this unit** as the one that must restat
 | Step | What happens | Source of the pin |
 | --- | --- | --- |
 | 1 | The user edits the single surface. The rendered document is the **only** copy of the edit; the **store and the cache are NOT modified** (no optimistic apply). The tab's state becomes `uncommitted`. | §3.3 item 1; `docs/specs/unit-reads-pivot-tab-cache.md` §6.3 step 1 |
-| 2 | **Blur** (or an explicit commit action) triggers the commit: the surface is decoded, diffed (§3.2) and the op list is built. The op list is a **pure function** of (decoded page, store snapshot) — no I/O. | this spec §3.2 |
+| 2 | **Blur** — the pinned `page-edit-surface-blur` handler def, whose body reads the surface's current text and calls the host seam **`pageSurfaceBlur(html)`** (§2.1; §11 amendment `11.8`) — or an explicit commit action, triggers the commit: the surface is decoded, diffed (§3.2) and the op list is built. The op list is a **pure function** of (decoded page, store snapshot) — no I/O. | this spec §3.2 |
 | 3 | The op list is sent as **one** `IPC_EDIT_BATCH` payload. The tab moves to a **committing** (in-flight) state. | §3.3 items 1/2 |
 | 4 | Main validates the payload (`handleEditBatch` returns a domain result for a non-array `ops`) and calls **one** `applyBatch`. On `{ ok: true }`, main derives and broadcasts `rag-store-changed` (`RagStoreChangedPayload`, `store`-qualified) **exactly once**, and the index reconcile runs. | `src/main/edit-ops.ts` `handleEditBatch`; `src/shared/types.ts` `IPC_RAG_STORE_CHANGED`; `docs/specs/unit-import-batch-persist.md` §2d (IPC-EDIT-BATCH: one batch entry, one persist, one broadcast) |
 | 5 | **Success:** the store holds the committed values; the journal gained one `batch` entry; the tab becomes `clean`; the warning (if any) clears; the pending re-derive renders the committed content, which is textually equal to what the user typed. | §3.3 items 3/6; `docs/specs/design-extensions-review.md` §12.4 |
@@ -441,7 +445,7 @@ reversal at **§12.7(a)**, which names **this unit** as the one that must restat
    state stored only in transient DOM does not satisfy this"). Pinned here: the dirty/`commit-failed`
    state lives in **host-side state keyed by tab id** — the same `EditController` dirty machinery the
    host already threads through `src/renderer/sidebar-panes.ts` and the tab descriptor's own store
-   (§5 item 4) — and **never** in a rendered element's class/attribute/innerHTML. Any re-derive path
+   (§5 item 4) — and **never** in a rendered element's class/attribute/innerHTML. **ADOPTED (the landed carrier, pinned in §11 amendment `11.8`): the `commit-failed` record is a host-side `Map<tabId, failure>` in the `SidebarPanes` host** (`src/renderer/sidebar-panes.ts`, keyed by the same page subject the dirty machinery is keyed by), and **never** the DOM. **Why it is host state — the two obligations this spec already imposes, now pinned to that carrier:** (i) the warning must **survive a re-derive** — no re-derive path reads or writes that map, so it survives by construction; (ii) it must **not be a diffed content change** — being host state it can never enter §3.2's closed compared-field set, so it can never be read back as a page edit (`FS8`) and can never be lost to a content reconcile (`FS17`). Any re-derive path
    (`reDerive`, `content-reconcile`'s `reconcileContentRoots`/`reconcileDocumentRoots`, a template or
    operator re-derive) must therefore preserve it by construction. A warning that disappears when the
    envelope is rebuilt is `FS17`; a warning that **only** exists as a DOM class is `FS17` too.
@@ -462,7 +466,7 @@ reversal at **§12.7(a)**, which names **this unit** as the one that must restat
 **Pinned:** when the commit cannot be attempted at all — the document is **not resident**
 (`CacheMiss`'s class, `docs/specs/unit-reads-pivot-tab-cache.md` §3.3), the store is torn down, or the
 engine is absent — the commit returns the **typed** failure, leaves the store untouched, and sets the
-same `commit-failed` state. **A commit that reports success without an acknowledged write is the
+same `commit-failed` state — the **same host-side per-tab carrier §3.5 item 6 pins** (a `Map<tabId, failure>` in the `SidebarPanes` host, §11 amendment `11.8`), never a DOM class or attribute. **A commit that reports success without an acknowledged write is the
 worst outcome in this unit** (`FS19`) — it is the "clean with an unchanged entry" case the read model
 forbids (`docs/specs/unit-reads-pivot-tab-cache.md` §7 `P-SM-3`).
 
@@ -480,7 +484,7 @@ writing them earlier would supersede a live model with an unimplemented one"*).
 
 | Target row (`docs/decisions.md` §ACTIVE) | Form | The clause at issue | Surviving clause(s) |
 | --- | --- | --- | --- |
-| **`DECIDED: EDITING-MODE-SETTING`** | **SUPERSEDED** | the **editing-control swap** — that `editingMode: 'textarea' \| 'contenteditable'` selects the per-node control (a rich-eligible root splices to `contenteditable`; ineligible roots render as plain text), and that a mode change re-derives to swap controls | **The mode-broadcast contract SURVIVES and is kept** (§2.5): a mode/operator change writes the operator store → main broadcasts `operator-settings-changed` with the store's result as the **authoritative payload** → the host uses the **payload directly** (no re-fetch; no async race with the sync `requestRebuild`) → **fresh re-derive**, never `refresh()` over a cached spliced envelope. Also surviving: **commit-on-blur**, **the dirty-edit guard**, **RAG-authoritative re-traversal**, and **all-UI-via-provident authoring**. The `settingsContent` button-toggle and the `?? 'contenteditable'` fallback do **not** survive (the field is gone). |
+| **`DECIDED: EDITING-MODE-SETTING`** | **SUPERSEDED** | the **editing-control swap** — that `editingMode: 'textarea' \| 'contenteditable'` selects the per-node control (a rich-eligible root splices to `contenteditable`; ineligible roots render as plain text), and that a mode change re-derives to swap controls | **The mode-broadcast contract SURVIVES and is kept** (§2.5): a mode/operator change writes the operator store → main broadcasts `operator-settings-changed` with the store's result as the **authoritative payload** → the host uses the **payload directly** (no re-fetch; no async race with the sync `requestRebuild`) → **fresh re-derive**, never `refresh()` over a cached spliced envelope. Also surviving: **commit-on-blur**, **the dirty-edit guard**, **RAG-authoritative re-traversal**, and **all-UI-via-provident authoring**. The `settingsContent` button-toggle and the `?? 'contenteditable'` fallback do **not** survive (the field is gone). **Also surviving (§11 amendment `11.8`), the successor carrier of the same persisted slot:** the representation-mode field **`representationMode: 'html' | 'markdown'`** (§2.5) — it reuses the removed field's `OperatorSettings` slot while naming **representations** of one control, never editing controls. |
 | **`DECIDED: FORM-CONTROL-EDITING`** | **SUPERSEDED** | the **form-control model** — that editing "is a form control (textarea/input) committed on blur, writing back to the source RAG object"; and its `NOT contenteditable` clause (which `DECIDED: RICH-TEXT-EDITING-GATE` had already relaxed) | **commit-on-blur SURVIVES**; **the write-back is to the RAG store, then a re-traversal** SURVIVES (`DECIDED: CONTENT-EDIT-RE-TRAVERSAL` is the successor carrier and stays ACTIVE); **the dirty-edit guard queues rather than executes a rebuild** SURVIVES; the caret-is-host-side-state-keyed-by-RAG-node-id clause is **re-scoped** (the caret is now page-scoped, §2.1). |
 | **`DECIDED: WHOLE-PAGE-EDITING`** | **status moves from `REQUIREMENT, not yet implemented` to IMPLEMENTED-BY-THIS-UNIT** — the row **stays ACTIVE** | its own text already declares the supersession *"once implemented"* and owes *"a spec re-derivation + a live row (whole-page edit commits 1-1)"* | The row's **RAG-store-authoritative** clause is read through its successor `DECIDED: ENGINE-AUTHORITATIVE-DOCUMENT-CRUD` (the `GN-1` ruling moved the authority engine-side while the host keeps the temporary authority until P2, §3.4 step 8). The **live row it owes is recorded as this unit's live battery** (§8.3) with its identifier pinned as **`U-EDIT-1-LIVE`** and its §5.U disposition stated (§8.3 item 6). |
 | **the textarea half of `DECIDED: EDITING-MODE-SETTING`** | covered by the supersession above | — | — |
@@ -543,18 +547,18 @@ archive-not-adapt rule applied to `src/**`, with the same ordering discipline).
 (the `archive/<topic>/<date>-<name>.<ext>` convention of `AGENTS.md` item 6, with a **`src/`** topic).
 `archive/README.md`'s topic table gains the **`src/`** row in the same pass that creates the first
 file (its own rule: *"a topic dir is created only by an executed archive"*). An archived source file
-is **moved, never edited**, and is a **rebuild input** — never a source of the new contract.
+is **moved, never edited**, and is a **rebuild input** — never a source of the new contract. **REALIZED in this unit's landing pass (§11 amendment `11.8`):** two moves landed, each **importer-free at the move** — `archive/src/2026-09-21-sidebar-panes-apply-editing-mode.ts` (item 1) and `archive/src/2026-09-21-rich-eligibility.ts` (item 4). **The two files' coverage, recorded so this section and `archive/src/` agree:** item 1's artifact additionally carries items **2**/**6**/**7**'s dead text (its own numbered sections name the spec items — `RAG_EDITOR_HANDLER_DEFS`, the four `RAG_EDITOR_*_BODY`s, `restoreRichCaret`, the per-node bridge surface, the `kind: 'textarea'` caret arm), so **no** `<date>-sidebar-panes-rag-editor-handlers.ts` and **no** `<date>-textarea-editing-bridge.ts` file exists; item **3** is the fence exception (**NOT ARCHIVED**, §5.1); and item **5**'s artifact **was NOT executed** — the removed `coerceEditingMode`/`editingModeLabel` helpers are **not** in `archive/src/` and survive only as prose comments in the successor code (`src/renderer/pane-graph.ts`, `src/main/operator-settings-store.ts`), **recorded as OWED** (§11 amendment `11.8` item 6). **Every other item's destination stays conditional** on its own archive-condition cell.
 
 **Per item: the path, its consumers that must change FIRST, and the archive condition.**
 
 | # | Dead-once-this-lands surface | Archive destination | Consumers that must land FIRST | Archive condition |
 | --- | --- | --- | --- | --- |
-| **1** | **The per-node contenteditable splice** — `src/renderer/sidebar-panes.ts`'s `applyEditingMode` (the private method that filters `textarea` children, computes `ownsDocChildren`, sets `props.contenteditable = true` and attaches `RAG_EDITOR_HANDLER_DEFS` to every rich-eligible root) | `archive/src/<date>-sidebar-panes-apply-editing-mode.ts` (**the method's own text**, extracted as a recorded artifact — the module itself is 3 670 lines and is **not** archived) | the **app-graph/stage-assembly** authoring of the single surface (§2.1 — the `assembleAppGraphEnvelope` builder + the host's `applyEditorToolbar`/`loadAppGraph` seam) must be in place, **and** the host's re-derive paths (`reDerive`, the per-document assembly loop, the content-reconcile re-derive) must author the surface through that successor instead | **A module with a live importer is never archived.** `sidebar-panes.ts` keeps live importers throughout (`src/renderer/renderer.ts`, the host tests), so the **whole module is NOT archived**; only the dead method text is. |
+| **1** | **The per-node contenteditable splice** — `src/renderer/sidebar-panes.ts`'s `applyEditingMode` (the private method that filters `textarea` children, computes `ownsDocChildren`, sets `props.contenteditable = true` and attaches `RAG_EDITOR_HANDLER_DEFS` to every rich-eligible root) | `archive/src/2026-09-21-sidebar-panes-apply-editing-mode.ts` — **MOVED at this pass, importer-free at the move** (§11 amendment `11.8`; **the method's own text**, extracted as a recorded artifact — the module itself is 3 670 lines and is **not** archived) | the **app-graph/stage-assembly** authoring of the single surface (§2.1 — the `assembleAppGraphEnvelope` builder + the host's `applyEditorToolbar`/`loadAppGraph` seam) must be in place, **and** the host's re-derive paths (`reDerive`, the per-document assembly loop, the content-reconcile re-derive) must author the surface through that successor instead | **A module with a live importer is never archived.** `sidebar-panes.ts` keeps live importers throughout (`src/renderer/renderer.ts`, the host tests), so the **whole module is NOT archived**; only the dead method text is. |
 | **2** | **The 4 per-node rich handler defs and their bodies** — `src/renderer/sidebar-panes.ts` `RAG_EDITOR_HANDLER_DEFS` (`rag-editor-input` / `-blur` / `-compositionstart` / `-compositionend`) + `RAG_EDITOR_INPUT_BODY` / `_BLUR_BODY` / `_COMPOSITIONSTART_BODY` / `_COMPOSITIONEND_BODY` + `restoreRichCaret` + the `saveCaret(nodeId, { kind: 'rich' … })` path | `archive/src/<date>-sidebar-panes-rag-editor-handlers.ts` | the page surface's own handler defs must be registered **and** the caret machinery re-scoped to the page (§2.1) | Registered handler defs are reachable by name from the app graph; removing them while the **app-graph assembly** still authors them breaks the graph (`provident.dispatch` would resolve a name with no def). **Order: the app-graph/stage authoring changes first** (the successor authoring is the surface node of §2.1, authored through `assembleAppGraphEnvelope`/the host's `applyEditorToolbar` seam). |
 | **3** | **The per-node textarea editing overlay** — `src/main/traversal.ts` `buildSubtree`'s authored child `{ type: 'textarea', props: { id: \`textarea-<ragId>\`, … }, handlers: [{ name: 'rag-textarea-input' }, { name: 'rag-textarea-blur' }] }` | **NOT ARCHIVED — see the fence clause below** | — | **EXCEPTION, and the reason is a fence.** |
-| **4** | **`isRichEditableRoot`'s per-node gate** — `src/renderer/rich-eligibility.ts` (`isRichEditableRoot` + the closed `EDITABLE_TYPES` set) | `archive/src/<date>-rich-eligibility.ts` (**the whole module**) | `applyEditingMode` (item 1) is the module's **only** `src/` consumer; it must be deleted first, and the `EDITABLE_TYPES` census (9 members) must be superseded by the pane's closed set (§2.4) | The module's **only** importer is `src/renderer/sidebar-panes.ts`; once item 1 lands there is **zero** `src/` importer, so the whole module is archivable **in the same pass** (and its archived copy is the rebuild input, not a pin). |
+| **4** | **`isRichEditableRoot`'s per-node gate** — `src/renderer/rich-eligibility.ts` (`isRichEditableRoot` + the closed `EDITABLE_TYPES` set) | `archive/src/2026-09-21-rich-eligibility.ts` — **MOVED at this pass, importer-free at the move** (§11 amendment `11.8`; **the whole module**) | `applyEditingMode` (item 1) is the module's **only** `src/` consumer; it must be deleted first, and the `EDITABLE_TYPES` census (9 members) must be superseded by the pane's closed set (§2.4) | The module's **only** importer is `src/renderer/sidebar-panes.ts`; once item 1 lands there is **zero** `src/` importer, so the whole module is archivable **in the same pass** (and its archived copy is the rebuild input, not a pin). |
 | **5** | **The editing-mode setting path** — `OperatorSettings.editingMode` (`src/shared/types.ts` `type EditingMode` + the field + its patch field), `src/main/operator-settings-store.ts`'s `coerceEditingMode`/`sanitize`/`set` handling of it, `src/renderer/pane-graph.ts`'s `editingModeLabel`, and the `settingsContent` button-toggle + its `sidebar.operatorSet({ editingMode })` bridge in `src/renderer/sidebar-panes.ts` | `archive/src/<date>-editing-mode-setting.ts` (the removed coercion + label helpers, as one artifact) | the successor representation-mode field (§2.5) must land **with** the removal in one diff (a boot that reads a removed field must not be reachable), and every test harness literal must move (§6.3) | The field is **persisted operator state** (`DECIDED: UI-CONFIG-CARRIER`): a stored `editingMode` from a previous session must be **ignored, not trusted** — the sanitizer drops it and the successor field defaults. A boot that restores `'textarea'` behaviour from the stale key is `FS20`. |
-| **6** | **The per-node textarea handler defs + the per-node edit IPC bridge surface** — `rag-textarea-input` / `rag-textarea-blur` defs and the `SidebarApi.textareaInput` / `textareaBlur` surface in `src/renderer/sidebar-panes.ts`, plus the per-node `IPC_EDIT_COMMIT` (`{ nodeId, content }`) **renderer** caller | `archive/src/<date>-textarea-editing-bridge.ts` | the page commit path (§3) must be the only content write-back, and the host must stop registering the textarea handler names | `IPC_EDIT_COMMIT` **itself is not removed** — it is the MCP/UI-equivalent single-node content write (`src/shared/types.ts` `EditCommitPayload`) and `src/main/edit-ops.ts` `handleEditCommit` stays the MCP `edit.set_content` counterpart; **only the renderer's per-node textarea caller dies** (a main-side handler without a UI caller is legal; a UI caller with no handler is not). |
+| **6** | **The per-node textarea handler defs + the per-node edit IPC bridge surface** — `rag-textarea-input` / `rag-textarea-blur` defs and the `SidebarApi.textareaInput` / `textareaBlur` surface in `src/renderer/sidebar-panes.ts`, plus the per-node `IPC_EDIT_COMMIT` (`{ nodeId, content }`) **renderer** caller | `archive/src/<date>-textarea-editing-bridge.ts` | the page commit path (§3) must be the only content write-back, and the host must stop registering the textarea handler names | `IPC_EDIT_COMMIT` **itself is not removed** — it is the MCP/UI-equivalent single-node content write (`src/shared/types.ts` `EditCommitPayload`) and `src/main/edit-ops.ts` `handleEditCommit` stays the MCP `edit.set_content` counterpart; **only the renderer's per-node textarea caller dies** (a main-side handler without a UI caller is legal; a UI caller with no handler is not). **The surviving-seam census (pinned here and restated in §11 amendment `11.8`, so §2.1 and this item agree on the exact set):** the retired per-node seam set is exactly **six handler defs** — `rag-textarea-input`/`rag-textarea-blur` (this item) + `rag-editor-input`/`rag-editor-blur`/`rag-editor-compositionstart`/`rag-editor-compositionend` (item 2) — and exactly **six `SidebarApi` bridge methods** — `textareaInput`/`textareaBlur` (this item) + `editorInput`/`editorBlur`/`editorCompositionStart`/`editorCompositionEnd` (item 2's rich-editor seam class; `src/main/preload.ts`'s `SidebarApi` comment names the same six as retired). The **surviving** page seams are exactly **two handler defs** (`page-edit-surface-input`/`page-edit-surface-blur`) and exactly **two bridge methods** (`pageSurfaceInput`/`pageSurfaceBlur`); a pass that leaves any retired name registered, or that re-exposes a per-node editing seam under a new name, is a review finding. |
 | **7** | **The per-node caret model** — `src/renderer/edit-controller.ts` `type CaretState`'s `kind: 'textarea'` arm | folded into item 2's artifact (the same type's re-scope is a supersession, not a move) | the page caret type (§2.1) must land with the re-scope | `src/renderer/edit-controller.ts` **the module is NOT archived**: its `EditController` interface is **kept whole** (§6.4 item 1) — it is the surviving dirty-edit guard used by **both** the content path and the template editor, and `src/renderer/sidebar-panes.ts` is a live importer. |
 
 ### 5.1 The textarea authoring, the fence, and the ESCALATED CONFLICT
@@ -840,7 +844,7 @@ fence).
 | # | Class | Invariant | Strategy | Oracle (what a draw asserts) |
 | --- | --- | --- | --- | --- |
 | **`P-IM-1`** | IM | **The op list is a function of the diff, and it names only changed nodes.** For ANY (page, store) draw, for every node id in the op list there is a compared field (§3.2) whose value differs; and for every block whose compared fields are all equal, **no** op names it. | `strat:diff-minimality` — draw a store of N blocks (N ∈ {1, 2, 7, 40}) and a page derived from it by mutating a random **subset** S of blocks over the closed field set (empty S allowed) | every op's node id ∈ S (or is a minted new-block id, or is the containment edge of one); **zero** op ids name an unchanged block; `S = ∅ ⇒ ops = []` (the **control**: a draw with S = ∅ must produce an empty list, proving the row is not vacuous) | pure |
-| **`P-IM-2`** | IM | **One commit = one `batch` journal entry, and the entry is invertible to the pre-commit state.** For ANY draw, after a successful commit `journal()` gained exactly one entry of kind `batch`, and applying its `inverse` (in order) restores the store's nodes/edges **deep-equal** to the pre-commit snapshot. | `strat:commit-journal-invertibility` — draw a diff over the §3.2 field set (including a new block and a removed block), commit it against a real temp store, snapshot before/after, then undo | journal delta == 1 and its kind == `batch`; `undo()`-equivalent inverse application yields a store deep-equal to the snapshot; the **control** is a commit whose op list is empty (journal delta must be **0**) | store (real temp fs) |
+| **`P-IM-2`** | IM | **One commit = one `batch` journal entry, and the entry is invertible to the pre-commit state.** **AMENDED PROPOSITION (§11 amendment `11.8`, remedy (a) — the population is restricted to NON-EMPTY mutation subsets):** for ANY draw **whose mutation subset is `S ≠ ∅`**, after a successful commit `journal()` gained exactly one entry of kind `batch`, and applying its `inverse` (in order) restores the store's nodes/edges **deep-equal** to the pre-commit snapshot. The `S = ∅` draw is **outside this row's population** — it is this row's **control**, and it is `P-TP-2`'s proposition (an empty op list ⇒ journal delta 0, persist delta 0, state `clean`), so the two rows no longer state contradictory oracles. **The invariant itself is NOT weakened:** on its (non-empty) population the row is exactly as strong as before; only an out-of-population draw is excluded, and the exclusion is recorded here, never silently relaxed. | `strat:commit-journal-invertibility` — draw a **non-empty** mutation subset `S ≠ ∅` over the §3.2 field set (including a new block and a removed block), commit it against a real temp store, snapshot before/after, then undo | journal delta == 1 and its kind == `batch` for `S ≠ ∅`; `undo()`-equivalent inverse application yields a store deep-equal to the snapshot; the **control** is a commit whose op list is empty (`S = ∅` — journal delta must be **0**: the `P-TP-2` proposition, not a violation of this row) | store (real temp fs) |
 | **`P-IM-3`** | IM | **The type apply never delete+recreates.** For ANY type change draw, the target node's `id`, `createdAt`, `children`, `props` and `ownedNodeIds` are unchanged and **only** `type` moves; no `removeNode` op for the target appears in the op list. | `strat:settype-preservation` — draw a node (every `RagNodeType` member × a props/children-carrying variant) and a target type ≠ its current one (including a `td`→`th` change and a type change on a node with inline children) | post-commit node: `id`/`createdAt`/`children`/`props`/`ownedNodeIds` deep-equal the pre-commit values; `type` == the drawn target; **no** `removeNode` or fresh-id `putNode` for that node; the **negative generator** is a delete+recreate implementation, which MUST fail the row | store (real temp fs) |
 | **`P-SM-1`** | SM | **A failed commit is atomic and loud.** For ANY failing outcome (store returns `{ ok: false }` at any `failedIndex` / a decompose `{ ok: false }` / a `CacheMiss`-class refusal / `EngineUnavailable`), the store is deep-equal to its pre-commit state, **zero** persists occurred, the journal is unchanged, the tab is `commit-failed` with a typed `CommitFailure`, and the page's text is preserved. | `strat:commit-failure-atomicity` — draw the failure mode × the `failedIndex` × a page/store pair; each draw reads the store file's bytes before and after | bytes before == bytes after; `persist` count == 0; journal delta == 0; state == `commit-failed`; `failure.kind` is the drawn class; the text is still on the page; the **control** is the success draw, which MUST change the bytes | store (real temp fs) + pure |
 | **`P-SM-2`** | SM | **The warning survives every re-derive.** For ANY commit-failed state and ANY re-derive path (a store-change-driven re-derive, a content reconcile, an operator/template re-derive), the tab's state is still `commit-failed` with the same `CommitFailure`, **and** the page's text is unchanged. | `strat:warning-rederive-survival` — draw a failure, then drive each re-derive path (including one that replaces the envelope wholesale) and re-read the state | state unchanged after every path; failure record deep-equal; the rendered text still carries the user's marker; the **control** is a *successful* commit, after which the state must be `clean` (proving the oracle reads the state, not a constant) | pure + assembled (envelope-level) |
@@ -850,6 +854,14 @@ fence).
 **Class tally:** IM ×3 (`P-IM-1`..3), SM ×2 (`P-SM-1`..2), TP ×2 (`P-TP-1`..2) = **7 rows ≤ 8** ✔.
 **Budget tally:** 63 × 6 + 22 = **400 attempts total**, every row ≤ 100 ✔, stop-after-5 ✔,
 control-draw reporting ✔.
+
+**Register adjudication (§11 amendment `11.8` — `P-IM-2` vs `P-TP-2`).** `P-IM-2`'s population is
+restricted to the **non-empty** mutation subset (`S ≠ ∅`), stated in the row's own proposition. The
+remedy taken is **(a) — restrict**, not **(b) split**, so the row count stays **7**, the seed stays
+**`0xED170001`**, the stop-after-5 rule is unchanged, and **the budget does NOT re-tally**:
+`63 × 6 + 22 = 400`, with `P-IM-2` keeping its **63** attempts (the restriction removes an
+out-of-population draw, never a row, and no attempt is moved between rows). `P-TP-2` is **unchanged**
+and is the authority for the `S = ∅` draw.
 
 **Rows considered and REJECTED (recorded so a later pass does not re-add them):**
 
@@ -1103,7 +1115,13 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 
 1. **This spec performs no shell work and no live run.** Every live figure in §8.3 is an **owed
    assertion**, not a measurement; the oracle before/after hash re-read and the live run are owed to
-   the unit's shell-bearing pass.
+   the unit's shell-bearing pass. **RESTATED after the unit's landing (§11 amendment `11.8` item 5):** the
+   landed unit's green is an **envelope/store-green** — a node-suite green over the pure diff/commit
+   model and the provident-envelope authoring, never the assembled app (RCA-12). **`U-EDIT-1-LIVE` is
+   still UN-RUN and OWED**: the caret's crossing of the heading/body boundary (§8.3 item 2), the
+   painted monospace/HTML-free markdown mode (§8.3 item 4), the painted divider (§8.3 item 5), the
+   failure warning's painted survival across a re-derive (§8.3 item 3), the zero-`<textarea>` rendered
+   census (§8.3 item 6) and the commit-1-1 row (§8.3 item 7) have **no live measurement** in this pass.
 2. **Every count in this file is a READING with its stated method** (§6.1's probes, §8.4's import
    scan, the `RagNodeType` union read, the two fence files' names) and **must be recounted, never
    copied** — the count-drift class has already cost this repo two fix cycles
@@ -1208,6 +1226,147 @@ engine-placement-path assertion.
 numbering, the §4.1 supersession set and the §5.1 textarea-tombstone resolution all stand — the
 tombstone's resolution **for the `textarea-<ragId>` child is NOT changed by this amendment**; it
 remains the implementer's obligation, and its escalation (§11 item **2**) stands as recorded.
+(**§11 amendment `11.8` below amends only §7's `P-IM-2` proposition and the names it pins; the
+`FS1`..`FS24` numbering, the §4.1 supersession **set** and the §5.1 tombstone resolution are unchanged
+by it too.**)
+
+---
+
+### 11.8 AMENDMENT (2026-09-21 — adopted names + the register adjudication)
+
+**Why this amendment exists.** The `C9 U-EDIT-1` implementation landed (commit `15cbc6c`) against this
+spec, and **four items had to be decided during the landing because this file left them unpinned or
+unsatisfiable as written**: the page-commit **seam names** (§2.1 pinned "name-referenced handler defs"
+without naming them), the successor **representation-mode field's name** (§2.5 pinned the shape and the
+union, not the name), the **`commit-failed` carrier** (§3.5 item 6 pinned "host-side state keyed by tab
+id", not the concrete carrier), and one **register row** (`P-IM-2`) whose population contradicted
+`P-TP-2`. Items 1–3 **pin an adopted name**; item 4 **adjudicates a row without weakening it**; items
+5–6 **record** the landed verification layer and the executed archive. Nothing else changes: the
+`FS1`..`FS24` numbering, §6.1's class census and §7's row count are untouched.
+
+1. **The page-commit seam names (adopted) — serving §2.1's Authoring row, §3.4 step 2, and §3.5
+   items 1/3/6.** The pinned seam is: the handler defs **`page-edit-surface-input`** (event `input`)
+   and **`page-edit-surface-blur`** (event `blur`), authored as the surface root's name-referenced
+   defs (`src/renderer/pane-graph.ts` `PAGE_EDIT_SURFACE_HANDLER_DEFS` with the
+   `PAGE_EDIT_SURFACE_INPUT_HANDLER`/`PAGE_EDIT_SURFACE_BLUR_HANDLER` names and their inline bodies),
+   whose bodies route to the host's own bridge methods **`pageSurfaceInput()`** and
+   **`pageSurfaceBlur(html?)`** on the `SidebarApi` surface (`src/main/preload.ts`;
+   `src/renderer/sidebar-panes.ts`'s page-edit seam). `pageSurfaceInput` marks the **PAGE** dirty (one
+   dirty page per tab, §3.5 item 3); `pageSurfaceBlur` performs the §3.4 commit — **one
+   `IPC_EDIT_BATCH` payload**, never a per-node write (§3.3 items 1/2).
+   **The surviving-seam census rule (binding; §5 item 6 now states the same set).** The **surviving**
+   content seams are exactly **two handler defs** and exactly **two bridge methods** — the page pair
+   above — while the **retired** set is exactly **six per-node handler defs**
+   (`rag-textarea-input`, `rag-textarea-blur`, `rag-editor-input`, `rag-editor-blur`,
+   `rag-editor-compositionstart`, `rag-editor-compositionend`; §5 items 2/6) and exactly **six per-node
+   bridge methods** (`textareaInput`, `textareaBlur`, `editorInput`, `editorBlur`,
+   `editorCompositionStart`, `editorCompositionEnd`), plus the per-node gate module
+   `src/renderer/rich-eligibility.ts` (§5 item 4, archived). A registration of a retired name, or a
+   per-node editing seam re-exposed under a new name, is a review finding — the two clauses may never
+   disagree on this set.
+
+2. **The successor representation-mode field (adopted) — serving §2.3's switch row, §2.5, and §4.1's
+   surviving-clause list.** The successor is **`representationMode: 'html' | 'markdown'`**
+   (`src/shared/types.ts` `type RepresentationMode = 'html' | 'markdown'`, `OperatorSettings.representationMode?`,
+   `OperatorSettingsPatch.representationMode?`), coerced by `src/main/operator-settings-store.ts`
+   `coerceRepresentationMode` with an **`'html'` default**; a patch **without** the field leaves the
+   stored representation unchanged, and a **persisted legacy `editingMode` key is IGNORED, never
+   trusted** (§5 item 5 → `FS20`). The toolbar reads it through
+   `src/renderer/pane-graph.ts` `editorToolbarContent(representationMode, …)`, and the superseded
+   `editingModeLabel`'s successor is `representationModeLabel` (§6.3 rewrite shape **R-B** — the old
+   label semantics are **not** preserved under the new name).
+
+3. **The `commit-failed` carrier (adopted) — serving §3.5 items 3/6 and §3.6.** The carrier is a
+   **host-side `Map<tabId, failure>` in the `SidebarPanes` host** (`src/renderer/sidebar-panes.ts`),
+   keyed by the same page subject the dirty machinery is keyed by, and written **only** by the
+   page-commit seam — **never the DOM** (no class, no attribute, no `innerHTML`). **Why it is host
+   state, not a rendered element:** (i) the warning must **survive a re-derive** — no re-derive path
+   (`reDerive`, `reconcileContentRoots`, `reconcileDocumentRoots`, a template or operator re-derive)
+   reads or writes that map, so it survives **by construction**; (ii) it must **not be a diffed content
+   change** — as host state it can never enter §3.2's **closed compared-field set**, so it can never be
+   read back as a page edit (`FS8`) and can never be lost to a content reconcile (`FS17`). A successful
+   commit **deletes** the entry and a failed one **sets** it while the dirty flag is **kept** (§3.5
+   items 1/2); the record is the state `C10 U-TAB-MERGE` binds its `TAB-1` symbol to (§3.5 item 4), with
+   **no second affordance** invented.
+
+4. **The register adjudication (`P-IM-2` vs `P-TP-2`) — remedy (a): the population is restricted.**
+   **The contradiction, exactly as the landing found it.** `P-IM-2`'s draw could produce an **empty**
+   mutation subset (`S = ∅`), yet the row's oracle required `journal delta === 1`; `applyBatch([])`
+   returns `{ ok: true }` with a delta of **0**, which is precisely what `P-TP-2` pins as correct
+   (`S = ∅ ⇒` empty op list, journal delta 0, persist delta 0, state `clean`). The implementation
+   therefore reported **`P-IM-2` BROKEN test-side**
+   (`tests/unit-u-edit-1-property-register.test.ts`'s `P-IM-2` row — its draw loop measured against its
+   own empty-op-list control). **The row's population was wrong, not the journal and not the store:**
+   no store defect exists here, and **no fail-state and no new row are added**.
+   **The chosen remedy: (a) — restrict `P-IM-2`'s population to NON-EMPTY mutation subsets**, and state
+   the restriction in the row's own proposition (§7; the row also records that the `S = ∅` draw is its
+   **control** and is `P-TP-2`'s proposition). Remedy **(b) — splitting the row — is rejected**: a split
+   would re-tally the register for no contract gain, because the empty case is already fully pinned by
+   `P-TP-2` and already drawn by `P-IM-1`'s `S = ∅ ⇒ ops = []` control.
+   **The amended proposition text** (now in §7, verbatim): *"**One commit = one `batch` journal entry,
+   and the entry is invertible to the pre-commit state.** **AMENDED PROPOSITION (§11 amendment `11.8`,
+   remedy (a) — the population is restricted to NON-EMPTY mutation subsets):** for ANY draw **whose
+   mutation subset is `S ≠ ∅`**, after a successful commit `journal()` gained exactly one entry of kind
+   `batch`, and applying its `inverse` (in order) restores the store's nodes/edges **deep-equal** to the
+   pre-commit snapshot. The `S = ∅` draw is **outside this row's population** — it is this row's
+   **control**, and it is `P-TP-2`'s proposition (an empty op list ⇒ journal delta 0, persist delta 0,
+   state `clean`), so the two rows no longer state contradictory oracles."*
+   **The invariant itself is NOT weakened** (`AGENTS.md`: an amended invariant is **recorded, never
+   silently relaxed**): on its (non-empty) population the row is exactly as strong as before, only an
+   out-of-population draw is excluded, the exclusion is recorded here **and in the row itself**, and
+   the row's negative generator is unchanged. `P-TP-2` is **unchanged** and remains the authority for
+   the `S = ∅` draw.
+   **Budget: NO re-tally.** The remedy removes an out-of-population **draw**, not a row and not an
+   attempt: the count stays **7 rows**, the seed stays **`0xED170001`**, the per-row ceiling stays
+   **≤100**, and the total stays **`63 × 6 + 22 = 400`** — with `P-IM-2` keeping its **63** attempts.
+   **Red-set consequence:** a TestWriter re-deriving §7 from this file filters `P-IM-2`'s draws to
+   `S ≠ ∅` and keeps the empty-op-list draw as that row's **control**; a draw that still demands
+   `journal delta === 1` over an `S = ∅` case is the row's own defect re-introduced — a row reported
+   `broken` for it is **not** a store finding.
+
+5. **Layer honesty restatement (recorded — RCA-12).** The landed unit's green is a **node-green**, i.e.
+   an **ENVELOPE/STORE-green**: it covers the pure decode/diff/commit model, the provident-envelope
+   authoring and the host-side state — **never the assembled app**. **`U-EDIT-1-LIVE` (§8.3) is still
+   UN-RUN and OWED**, with **no live measurement** in the landing pass for any of its assertions: the
+   caret crossing the heading↔body boundary without a re-mount (§8.3 item 2), the painted
+   monospace/HTML-free markdown mode (§8.3 item 4), the painted divider (§8.3 item 5), the failure
+   warning's **painted** survival across a re-derive (§8.3 item 3), the zero-`<textarea>` **rendered**
+   census (§8.3 item 6), and the commit-1-1 store round-trip (§8.3 item 7). **No pass may read the node
+   trio as this unit's app-green**, and per RCA-11/RCA-12 the unit is not pre-DONE while
+   `U-EDIT-1-LIVE` is un-run.
+
+6. **Archive record (recorded — so §5 and the actual archive agree).** The landing executed **two**
+   `src/` archive moves, each **importer-free at the move**:
+   `archive/src/2026-09-21-sidebar-panes-apply-editing-mode.ts` (§5 item 1 — the `applyEditingMode`
+   method's own text, extracted from the still-live `src/renderer/sidebar-panes.ts`) and
+   `archive/src/2026-09-21-rich-eligibility.ts` (§5 item 4 — the whole `rich-eligibility.ts` module,
+   whose only `src/` importer was the retired splice). §5's destination cells and its
+   destination-convention paragraph now name both realized paths, `archive/README.md`'s `src/` topic row
+   (created by the same pass) cites §5 of this file, and **every other §5 item remains conditional** on
+   its own archive-condition cell — a module with a live importer is still never archived.
+   **The realized coverage of the other §5 items (recorded, so §5's plan and `archive/src/` agree):**
+   item **2**'s handler defs/bodies + `restoreRichCaret`, item **6**'s per-node bridge surface, and
+   item **7**'s `kind: 'textarea'` caret text are **folded into item 1's SINGLE artifact**
+   (`archive/src/2026-09-21-sidebar-panes-apply-editing-mode.ts`, whose own numbered sections cite §5
+   items 2/6/7) — the separate `archive/src/<date>-sidebar-panes-rag-editor-handlers.ts` and
+   `<date>-textarea-editing-bridge.ts` files **do not exist**; item **3** is the fence exception and is
+   **NOT archived** (§5.1); and **item 5's artifact `archive/src/<date>-editing-mode-setting.ts` was NOT
+   executed** — the removed `coerceEditingMode`/`editingModeLabel` helpers survive only as prose
+   comments in the successor code (`src/renderer/pane-graph.ts`,
+   `src/main/operator-settings-store.ts`), which is **recorded as OWED** to the unit's next pass
+   (`DECIDED: REBUILD-ARCHIVE-POLICY`: the archived copy is the durable rebuild input, so a removed
+   helper with **no** archived copy is a recorded gap, never a discard).
+
+**Invariants this amendment does NOT change.** The `FS1`..`FS24` numbering and text (§8.1), §6.1's
+class census (`17 + 26 + 137 = 180`) — cited as §6.1 states it, with a **RECORDED pre-existing
+disagreement this amendment does NOT re-tally** (the item-10d review must adjudicate it): §8.2 item 7
+reads `17/32/131/0`, §8.4 reads `136 KEEP`, and §13 item 6 reads `REWRITE 27 · KEEP 136` — the four
+figures all sum to 180 yet do not agree on the classes; §6.3's per-file table remains the work list and
+the authority — §6.2's 17-suite rebuild list, §7's row count / seed / budget, the
+§4.1 supersession **set** (item 2 adds to that row's *surviving-clause* list — it writes **no** new
+supersession), the §5.1 textarea-tombstone resolution and its escalation (§11 item 2), and §11's
+escalation table all stand as recorded. This amendment **pins names and adjudicates one row**; it
+authors no new contract surface and no new fail-state.
 
 ---
 
@@ -1249,14 +1408,15 @@ remains the implementer's obligation, and its escalation (§11 item **2**) stand
 | `src/main/markdown-parse.ts` `parseMarkdown` / `ParsedMarkdown` / `nextId` | the id scheme the new-block minting follows (§3.3 item 8) |
 | `src/renderer/edit-controller.ts` `EditController` / `createEditController` / `CaretState` / `RichCaretEdge` | the surviving dirty-edit guard (whole interface kept) and the caret type's re-scope (§2.1, §6.4 item 1) |
 | `src/renderer/rich-eligibility.ts` `isRichEditableRoot` / `EDITABLE_TYPES` | the retired per-node gate (archived, §5 item 4) |
-| `src/renderer/sidebar-panes.ts` `applyEditingMode` / `RAG_EDITOR_HANDLER_DEFS` / `restoreRichCaret` / `applyEditorToolbar` / `textareaInput` / `textareaBlur` | the retired splice/handlers (archived, §5 items 1/2/6) and the surviving toolbar authoring (§2.3) |
+| `src/renderer/sidebar-panes.ts` `applyEditingMode` / `RAG_EDITOR_HANDLER_DEFS` / `restoreRichCaret` / `applyEditorToolbar` / `textareaInput` / `textareaBlur` / `pageSurfaceInput` / `pageSurfaceBlur` / `pageEditSurfaceInput` / `pageEditSurfaceBlur` / the `commit-failed` `Map<tabId, failure>` | the retired splice/handlers (archived, §5 items 1/2/6), the surviving toolbar authoring (§2.3), the **adopted page-commit seam and its host-side `commit-failed` carrier** (§11 amendment `11.8` items 1/3) |
 | `src/renderer/pane-graph.ts` `assembleAppGraphEnvelope` / `AppGraphAssemblyInput` / `AppGraphAssemblyResult` / `AppGraphAssemblyResult.envelope` / `zoneContainerChildren` / `paneSubtreeRoot` | the **app-graph/stage assembly** that authors the single editable surface (§2.1, §11 amendment `11.7`): the builder the renderer assembles the stage from, its pure result (`envelope`), the `zone:<name>` containers and the pane frames |
+| `src/renderer/pane-graph.ts` `PAGE_EDIT_SURFACE_ID` / `DATA_EDIT_SURFACE` / `PAGE_EDIT_SURFACE_HANDLER_DEFS` / `PAGE_EDIT_SURFACE_INPUT_HANDLER` / `PAGE_EDIT_SURFACE_BLUR_HANDLER` / `PAGE_EDIT_SURFACE_INPUT_BODY` / `PAGE_EDIT_SURFACE_BLUR_BODY` | the surface root's stable authored id/marker and the **adopted page-commit seam defs and their bodies** (§2.1; §11 amendment `11.8` item 1) |
 | `src/renderer/sidebar-panes.ts` `loadAppGraph` / `applyEditorToolbar` / `applyContentChange` / `applyDocumentSet` / `_currentDocumentId` / `applyEditingMode` | the host's stage-assembly seams: the successor surface authoring (§2.1, §11 amendment `11.7`), the retired per-node splice/`editingMode` authoring (§5 item 1), and the focused-document source of `data-edit-surface` |
 | `src/renderer/content-reconcile.ts` `reconcileContentRoots` / `reconcileDocumentRoots` / `asContentRoot` / `isPaneLikeRoot` | the re-derive identity the warning-state survival rides (§3.5 item 6) and the pane-like classification the surface root owes (§11 amendment `11.7`, the cost) |
 | `src/renderer/tab-state.ts` `TabState` / `TabEntry` / `TabTarget` / `closeTab` / `openTab` | the tab descriptor the per-tab dirty state is keyed by (§3.5 items 3/6) |
-| `src/main/operator-settings-store.ts` `sanitize` / `coerceEditingMode` / `set` / `get` | the persisted operator state path (the removed field + the successor mode) (§2.5, §5 item 5) |
-| `src/shared/types.ts` `IPC_EDIT_BATCH` / `EditBatchPayload` / `IPC_EDIT_COMMIT` / `EditCommitPayload` / `IPC_RAG_STORE_CHANGED` / `RagStoreChangedPayload` / `EditingMode` / `OperatorSettings` | the commit channel, the kept single-node channel, the broadcast, the removed type/field (§2.5, §3.3, §3.4) |
-| `src/renderer/pane-graph.ts` `editorToolbarContent` / `EDITOR_TOOLBAR_ID` / `editingModeLabel` | the toolbar authoring + the mode label (repointed, §2.3, §6.3 shape R-B) |
+| `src/main/operator-settings-store.ts` `sanitize` / `coerceRepresentationMode` / `coerceEditingMode` (removed) / `set` / `get` | the persisted operator state path — the removed `editingMode` field and the **adopted successor `representationMode`** (§2.5, §5 item 5; §11 amendment `11.8` item 2) |
+| `src/shared/types.ts` `IPC_EDIT_BATCH` / `EditBatchPayload` / `IPC_EDIT_COMMIT` / `EditCommitPayload` / `IPC_RAG_STORE_CHANGED` / `RagStoreChangedPayload` / `EditingMode` (removed) / `RepresentationMode` (adopted successor) / `OperatorSettings` | the commit channel, the kept single-node channel, the broadcast, the removed type/field and its **adopted successor** (§2.5, §3.3, §3.4; §11 amendment `11.8` item 2) |
+| `src/renderer/pane-graph.ts` `editorToolbarContent` / `EDITOR_TOOLBAR_ID` / `representationModeLabel` (the successor of the removed `editingModeLabel`) | the toolbar authoring + the adopted representation-mode label (repointed, §2.3, §6.3 shape R-B; §11 amendment `11.8` item 2) |
 | `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts` | the two FENCE suites — green unchanged, never re-derived (§5.1, §6.4 item 3, §8.4) |
 | `tests/single-editable-surface.test.ts` | the rebuilt suite whose **surface-shape rows** are re-derived against the app-graph/stage render (§2.1, §6.5, §11 amendment `11.7`) — its `buildTraversal`-reading rows no longer assert the surface |
 | `tests/unit-u-shell-9b-h1-optionc-interception.test.ts` / `unit-u-shell-9b-h2-c20-materialization` / `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` | the rewritten suites whose **per-node-host rows** are re-derived against the same app-graph/stage render (§6.3/§6.5, §11 amendment `11.7`) |
@@ -1309,6 +1469,9 @@ remains the implementer's obligation, and its escalation (§11 item **2**) stand
    rewritten).
 7. **The register:** 7 rows (`P-IM-1`..3, `P-SM-1`..2, `P-TP-1`..2), seed `0xED170001`, budget
    `63 × 6 + 22 = 400`, stop-after-5, `held`/`broken` per row, **control-draw reporting mandatory**.
+   **Adjudicated at the landing (§11 amendment `11.8` item 4):** `P-IM-2`'s population is restricted to
+   **non-empty** mutation subsets (remedy (a), against `P-TP-2`'s `S = ∅ ⇒ 0`); the row count, the seed
+   and the budget are **unchanged** (`63 × 6 + 22 = 400`).
 8. **The escalations:** the **fence/`ST-6` conflict** (pinned inert-tombstone interim + escalation);
    the **engine batch route** (OWED to `U-AUTHORITY-SWITCH`); the **`applyBatchOp` rich-op gap** (a
    red obligation, not a new union member); the **missing `docs/skills/designing-pages.md`** (owed);
@@ -1319,7 +1482,7 @@ remains the implementer's obligation, and its escalation (§11 item **2**) stand
    the citation duty (§9.4) discharged for this unit's ≈200-citation share.
 10. **Layer:** PURE + ASSEMBLED/RENDERER + ENGINE-DEPENDENT; **nothing app-green**, with the **MANDATORY
     live battery** (§8.3) as the pre-DONE gate.
-11. **The 2026-09-21 amendment (`11.1`) — the surface's layer:** the single editable surface is a
+11. **The 2026-09-21 amendment (`11.7`) — the surface's layer:** the single editable surface is a
     **provident node of the app graph/stage assembly** (built by `assembleAppGraphEnvelope`, authored
     through the host's `applyEditorToolbar` seam), **not** a traversal-envelope payload node; the
     implementer's four-placement proof is the recorded contradiction and the fence suite
@@ -1328,3 +1491,17 @@ remains the implementer's obligation, and its escalation (§11 item **2**) stand
     `unit-u-shell-9b-h1-optionc-interception` / `unit-u-shell-9b-h2-c20-materialization` /
     `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` re-derived against the
     app-graph/stage render.
+12. **The 2026-09-21 amendment (`11.8`) — adopted names + the register adjudication:** the page-commit
+    seam is pinned as **`page-edit-surface-input`/`page-edit-surface-blur`** (handler defs) →
+    **`pageSurfaceInput`/`pageSurfaceBlur`** (bridge methods), with the **surviving-seam census rule**
+    (§5 item 6 states the same set: **six** retired per-node defs + **six** retired per-node bridge
+    methods; **two + two** surviving); the successor mode field as
+    **`representationMode: 'html' | 'markdown'`** (§2.3/§2.5/§4.1); the `commit-failed` carrier as a
+    **host-side `Map<tabId, failure>` in the `SidebarPanes` host** — host state precisely so the warning
+    survives a re-derive and is **never a diffed content change**; **`P-IM-2`** adjudicated by remedy
+    **(a)** — its population restricted to **non-empty** mutation subsets, the invariant **not weakened**
+    (recorded, never silently relaxed), **no re-tally** (7 rows, seed `0xED170001`,
+    `63 × 6 + 22 = 400`); plus the **layer honesty restatement** (the landed green is
+    envelope/store-green; **`U-EDIT-1-LIVE` is un-run and owed**) and the **archive record** (two
+    `archive/src/2026-09-21-*.ts` moves, importer-free at the move) — so §5 and the actual archive
+    agree.

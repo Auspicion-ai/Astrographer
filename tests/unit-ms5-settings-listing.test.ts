@@ -754,15 +754,26 @@ describe('§5.9 fail 8 — NO listing handlers / NO switcher (the operator pane 
     expect(args).toHaveLength(2) // (value, topK) — NEVER a store arg
   })
 
-  it('GREEN-guard (fail 8 / §5.10 census) — the handler-def census is 13: U-MS5 added none on any listing node, and U-EDIT-1 (C8) adds exactly ONE app-graph editor-toolbar toggle (src/renderer/sidebar-panes.ts: no new registerHandlerDef on any listing node)', () => {
+  it('GREEN-guard (fail 8 / §5.10 census) — the handler-def census is 9: U-MS5 added none on any listing node, and the U-EDIT-1 landing retires the 6 per-node editing defs while adding the 2 page-surface defs (src/renderer/sidebar-panes.ts: no new registerHandlerDef on any listing node)', () => {
     const src = readFileSync(
       fileURLToPath(new URL('../src/renderer/sidebar-panes.ts', import.meta.url)),
       'utf8',
     )
     const count = src.match(/registerHandlerDef\(/g)?.length ?? 0
-    // 12 (pre-U-EDIT-1) + 1 (U-EDIT-1 `editor-toolbar-editing-mode-toggle`, the
-    // app-graph editor toolbar — NOT a listing node / NOT an operator control).
-    expect(count).toBe(13)
+    // RECOUNTED from the `U-EDIT-1` (C9) clauses, not copied (the census rule):
+    //   13 (pre-U-EDIT-1)
+    //     − 6  the per-node editing defs the unit RETIRES
+    //          (`rag-textarea-input`/`-blur` + `rag-editor-input`/`-blur`/
+    //          `-compositionstart`/`-compositionend`; §5 items 2/6)
+    //     + 2  the single page surface's own name-referenced defs
+    //          (`page-edit-surface-input`/`page-edit-surface-blur`; §2.1)
+    //     ± 0  §2.5's successor representation-mode toggle RENAMES
+    //          `operator-editing-mode-toggle` → `operator-representation-mode-toggle`
+    //          (one for one — the removed token is not reused, so the count is
+    //          unchanged)
+    //     = 9
+    // None of the 9 registers on a listing node, and no switcher was added.
+    expect(count, 'the handler-def census is 13 − 6 retired per-node defs + 2 added page-surface defs = 9').toBe(9)
   })
 })
 
