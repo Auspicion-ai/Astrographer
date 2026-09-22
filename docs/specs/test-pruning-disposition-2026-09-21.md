@@ -720,6 +720,18 @@ half), `ST-3`, `ST-4`, `ST-5`, **`ST-6`**; *"the biggest unit — store + envelo
 | 18 | `tests/edit-ops.test.ts` | the Unit D write-back (`setContent`/`createNode`/`deleteNode`/`split_node`/`merge_node`/`setEdge`) |
 | 19 | `tests/edit-adversarial.test.ts` | the same write-back's adversarial battery (H4/M1/M2/M3/L1-L4): it pins those per-node ops **and** the `rag-store-changed` broadcast *through* them, so it retires with the model they belong to |
 
+> **EXECUTED 2026-09-21 (the archive-rebuild pass) — read the appended §9 before this table.** The product
+> owner ruled this a **rebuild pass** (correcting drift + enforcing spec compliance, a **BREAKING** change)
+> and ordered this `HOLD` class archived **now**, ahead of the implementing units, so the suites can be
+> **rebuilt in their own gated passes**. **Status: all 19 ARCHIVED 2026-09-21** →
+> `archive/tests/2026-09-21-<name>.test.ts`, with two of them **restored in-pass** because a protected
+> file pinned them by name (`unit-u2-rich-decompose.test.ts`; see §9.3). The audit's own
+> **do-not-archive-before-the-unit-lands** rule (§3.3 head) is **SUPERSEDED by the user ruling** recorded
+> in `docs/decisions.md` `DECIDED: REBUILD-ARCHIVE-POLICY`, and the retired pins are **re-derived from
+> the spec** in the owning unit's cycle (§9.4's rebuild map) — the archive is that re-derivation's input.
+> The 19 files were **moved, never edited** (`md5sum`-verified byte-identical), so each archived file is
+> available to its unit as a **rebuild input**, not a discard.
+
 **Waits on:** **C9 `U-EDIT-1`** for all **19**. This block is the largest single retirement in the program:
 the per-node editing model is exactly what `ST-1`/`ST-4` replace and `ST-6` removes, so each of the 19
 files is a pin on a surface the unit deletes — **archiving any of them now deletes the only pin on live
@@ -730,6 +742,12 @@ code and reddens the suite.**
 | # | File | What it pins that is still live |
 | ---: | --- | --- |
 | 1 | `tests/unit-u-shell-8-view-menu-pane-visibility.test.ts` | View → Panes catalog, `IPC_PANE_VISIBILITY`, `applyPersistedPaneVisibility`, `persistEnabledPanes`, the `#operator-enabled-panes` census, the first-run default `FIRST_RUN_APP_DEFAULT = {search, doc-nav}` |
+
+> **EXECUTED 2026-09-21 → `ARCHIVED 2026-09-21 → archive/tests/2026-09-21-unit-u-shell-8-view-menu-pane-visibility.test.ts`.**
+> **Consequence recorded, not hidden:** this is the file `docs/decisions.md`
+> `DECIDED: FIRST-RUN-ENABLED-DEFAULT` names as its pin, so that row's *"Pinned by …"* pointer is now
+> **stale-until-rebuilt** — the owner of the re-derived pin is **C11 `U-SEARCH`** (§9.4), and restoring
+> the decision row's pointer belongs to that unit's landing pass. See §9.3 (no exclusion applied).
 
 **Waits on:** **C11 `U-SEARCH`** — whose `PN-1` visibility half is subordinated to
 `DECIDED: C13-PANE-VISIBILITY-SUPERSEDED-BY-REMOVAL` (`docs/specs/design-extensions-review.md` §3.6 F
@@ -772,6 +790,10 @@ file"*). **S1 forbids any pass from stating the contract as if the cutover had a
 §D.1b.2/§D.1b.1 rule the **operator/manage and import-UI surfaces host-owned and untouched**; they stay
 **KEEP-LIVE**.
 
+> **EXECUTED 2026-09-21: all 17 ARCHIVED 2026-09-21 → `archive/tests/2026-09-21-<name>.test.ts`**
+> (under the same user ruling as §3.3.1; the `P2 U-AUTHORITY-SWITCH` unit owns their re-derivation —
+> §9.4). The `unit-h8`/`unit-u-import-1` KEEP-LIVE note above still holds: **neither moved.**
+
 #### §3.3.4 The read-path block — waits on **P2 `U-READS-PIVOT`** — **7 files**
 
 **The unit:** `docs/specs/design-extensions-review.md` §13.1 **P2** `U-READS-PIVOT` (*"this ruling's read
@@ -788,6 +810,16 @@ model, §12"*), §14.1 **C-2** (*"with no resident cache entry there is no rende
 | 7 | `tests/unit-import-batch-persist-contract.test.ts` | the host persist census + the depth-10 000 totality rows (**a 15 000 ms-budget tenant**, §5.3) |
 
 **Waits on:** **P2 `U-READS-PIVOT`** for all **7**.
+
+> **EXECUTED 2026-09-21: 6 of 7 ARCHIVED 2026-09-21 → `archive/tests/2026-09-21-<name>.test.ts`; row 7
+> EXCLUDED AND KEPT IN PLACE.** `tests/unit-import-batch-persist-contract.test.ts` is named on the
+> executing pass's **absolute-exclusion** list, and the exclusion is **substantiated**, not arbitrary:
+> `tests/unit-v5-migration-contract.test.ts` (§5.3's budget tenant, itself protected) pins it **by path
+> and by name** — `join(TESTS_DIR, 'unit-import-batch-persist-contract.test.ts')` (Pin 4, §3.2 of that
+> file's header) and, in the §2a C-4 note, *"§2a of `docs/specs/unit-import-batch-persist.md` … is pinned
+> at `tests/unit-import-batch-persist-contract.test.ts` — never re-timed here"*. Moving it would redden a
+> protected file. It therefore stays a **live pin** and its re-derivation obligation stays **with the
+> file**, not with `U-READS-PIVOT`. See §9.3.
 
 #### §3.3.5 The engine-absent / `GN-4` note — **0 files, and that is the finding**
 
@@ -1119,3 +1151,141 @@ shared-helper trap this audit found.
 - **What this file does NOT do:** it does not lift a freeze, release a catalog row, sign anything off, or
   name a disposition authority other than the user's ruling (§7) plus the owning tracker row
   (`docs/specs/requirement-catalog.md` §C.0 rule 2).
+
+---
+
+## §9 — EXECUTION RECORD: the archive-rebuild pass (2026-09-21, appended)
+
+**§9.1 — the ruling this section executes, and what it supersedes.** The product owner ruled this a
+**REBUILD pass** to correct drift and enforce feature compliance with the specs — an explicitly
+**BREAKING** change — and ordered the `HOLD-UNTIL-IMPLEMENTED` class **archived now**, ahead of the
+implementing units, so the suites can be **rebuilt in proper gated passes later**. That ruling
+**supersedes this audit's §3.3 head rule** (*"a file in this class must NOT be archived before its
+implementing unit lands"*) and §6.1 clauses 2-3. The normative record is `docs/decisions.md`
+`DECIDED: REBUILD-ARCHIVE-POLICY` (**ACTIVE**): *a test whose subject the specs supersede is
+**ARCHIVED, not adapted**; the archive is the **rebuild's input**; the coverage hole is **recorded, not
+hidden**; and no archived file may be restored except through its owning unit's cycle with a **fresh red
+set**.*
+
+**Layer (RCA-12, mandatory declaration): REPO-TEST-SURFACE change — NOT app-green.** This pass moved
+test files and updated docs. It wrote **no `src/**`**, changed **no test content**, and its green reading
+proves **the suite still collects and passes over the reduced surface** — it proves nothing about the
+assembled Electron app, and it is **not** a claim that the archived behaviours work or do not work.
+
+**§9.2 — the work list, reconciled (the per-file list wins over the class table).** The executing pass
+took the work list from the **per-file blocks** (§3.3.1/§3.3.2/§3.3.3/§3.3.4), which total
+**19 + 1 + 17 + 7 = 44**. **This document's §1.1 inventory class column and its §3.0 per-family table
+DISAGREE with that count and with each other**, and the discrepancy is recorded here rather than
+silently used:
+
+- §3.0's total row says **44** `HOLD`; its per-family column sums to **50** (`A` 12 + `B` 13 + `C` 18 +
+  `D` 1 = 44 … **but** §1.1's class column actually marks **A 10 / B 13 / C 20 / D 1 = 44**). The
+  **`A` count (12 vs 10)** and the **`C` count (18 vs 20)** are both wrong in §3.0; §1.1's own rows and
+  §3.3.1's own reconciliation note (*"the editing block is 19, not 18"*) agree with the per-file blocks.
+- **Rule applied:** *the per-file list wins* — the audited §3.3 blocks were treated as the work list, and
+  every file was re-verified individually (existence + import safety) before moving. **No file was moved
+  on the strength of a class-table row.**
+
+**§9.3 — the executed moves, the exclusions, and the two in-pass restores.** **43 files moved**, each to
+`archive/tests/2026-09-21-<original-basename>`, via `git mv`, **bytes preserved** (`md5sum` before/after:
+**43/43 identical; 0 files deleted**). The count is **44 − 1 exclusion**.
+
+*Excluded from the work list (not moved, with the reason):*
+
+| Excluded file | Work-list block | Reason |
+| --- | --- | --- |
+| `tests/unit-import-batch-persist-contract.test.ts` | §3.3.4 row 7 | On the executing pass's **absolute-exclusion** list; **substantiated** — `tests/unit-v5-migration-contract.test.ts` pins it **by path + by name** (Pin 4 and the §2a C-4 note). Moving it reddens a protected file. |
+
+*Restored in-pass (moved, found red, moved back with `git mv`; bytes re-verified):*
+
+| Restored file | The red it caused | The pin that forced it |
+| --- | --- | --- |
+| `tests/unit-u2-rich-decompose.test.ts` | 2 failing rows: *"RED-TODAY: unit-u2-rich-decompose.test.ts ADR-4 builds its input at depth exactly 10000"* + *"… asserts the totality contract"* (a missing file ⇒ `readDepth` returns `null`) | `tests/unit-v5-migration-contract.test.ts` `DEEP_ROWS` pins the file path as the **depth-10 000 budget tenant** (§5.3) |
+| `tests/unit-u5-rich-commit-ipc.test.ts` | 1 failing row: *"RED-TODAY: the derived census is NON-EMPTY"* (the derived electron-mock census dropped to 4) | the same file's Pin 1 pins the census to **exactly** `['template-adversarial', 'unit-live11-bridge-seams', 'unit-u5-rich-commit-ipc', 'unit-v5-bridge-capture', 'unit-wave-1-bridge-wiring']` |
+
+**§9.3a — absolute exclusions honoured (never moved, verified after the moves):**
+`tests/fixtures/**` (all 5 files: the two `*-scenarios-data.mjs` fixtures remain shared with the
+KEEP-LIVE `tests/gemma4-blind-battery.test.ts`); the two **fence** files
+(`tests/traversal.test.ts`, `tests/import-render-no-duplicates.test.ts` — §14.2); the O-0 suites
+(`tests/unit-o-0-*.test.ts`, `tests/unit-o0-m1-m3-*.test.ts`); `tests/unit-v5-migration-contract.test.ts`;
+`tests/import-batch-persist-contract.test.ts`; the three `.test.mjs` files (outside
+`vitest.config.ts`'s `include:`; `e2e-battery.test.mjs` owns the `npm run battery` leg). The work list
+contained **none** of them except the exclusions named above, and every file verified as
+`KEEP-LIVE`/`ORPHANED-PIN` by §1.1 was left in place.
+
+**§9.4 — THE REBUILD MAP (for every archived file: the unit that owns its re-derivation, and the spec
+the rebuilt suite must be derived from).** The general derivation rule, binding on all four units: the
+rebuilt suite is derived from **`docs/specs/design-extensions-review.md`** (§13.1/§13.3 the program +
+the one-unit-one-cycle rule; §14.2 the re-derivation discipline *"explicitly scoped, not deleted"*) +
+**the owning unit's own spec** + **the affected `docs/decisions.md` rows** — **never** from the archived
+file's assertions (the archive is an input to *what the old pin covered*, not the source of the new
+contract). Each rebuilt suite lands through its unit's own gate cycle: **spec → TestWriter red (reported)
+→ Implementer green → RCA-3 adversarial / PBT → item-10d doc review → DONE row naming the layer**.
+
+| Owning unit | Archived files | Count |
+| --- | ---: | ---: |
+| **C9 `U-EDIT-1`** (`WHOLE-PAGE-EDITING`; closes defect `EDIT-MODE-TEXTAREA-UI`) | `unit-l-textarea-editing-ui` · `contenteditable-editor-host` · `contenteditable-caret` · `editing-mode-broadcast-host` · `operator-settings-editing-mode` · `rich-splice` · `rich-eligibility` · `unit-u-edit-1-markdown-html-toggle` · `unit-u5-set-rich-text` · `unit-m1-inline-offset-model` · `unit-o-edit-ops` · `unit-p-ipc-edit-batch` · `unit-n-batch-atomicity` · `unit-u-edit-2-undo-redo-history` · `edit-controller` · `edit-ops` · `edit-adversarial` | **17** |
+| **C11 `U-SEARCH`** (the `C13`-removal half of `PN-1`) | `unit-u-shell-8-view-menu-pane-visibility` | **1** |
+| **P2 `U-AUTHORITY-SWITCH` (`O-8`)** | `rag-store` · `rag-store-adversarial` · `unit-ms1-store-registry` · `unit-ms2-store-wiring` · `unit-ms3-store-qualified-broadcast` · `unit-ms4-id-prefixing` · `unit-ms4-id-prefixing-adversarial` · `unit-h1-registry-write` · `unit-h2-runtime-controller` · `unit-h4-hot-remove` · `unit-h5-teardown` · `unit-h6-hot-rename` · `unit-h7-default-reassign` · `unit-ud1-document-metadata-fields` · `unit-ud1-document-metadata-fields-adversarial` · `unit-ud3-import-path-id-scheme` · `unit-ud3-import-path-id-scheme-adversarial` | **17** |
+| **P2 `U-READS-PIVOT`** | `unit-ud2-journal-invertibility` · `unit-ud4-doc-heads-tree` · `unit-ud5-list-documents-tool` · `unit-ud6-query-document-filters` · `unit-ud7-set-doc-meta-op` · `unit-ujr1-get-journal` | **6** |
+| | **total archived** | **41** |
+
+**Two files of the §3.3.1 block do not appear above:** `unit-u2-rich-decompose.test.ts` and
+`unit-u5-rich-commit-ipc.test.ts` were **restored in-pass** (§9.3) and keep their pins live, so they
+carry **no** rebuild obligation — 44 − 1 exclusion − 2 restores = **41 archived**. Per-unit spec
+ownership of the re-derived suites follows the unit files named in §3.3.1-§3.3.4's own headings
+(`docs/specs/design-extensions-review.md` §3.3 C row `C9` and §3.6 F item 8; §13.1 P2 `unit-authority-switch`
+/ `U-READS-PIVOT` spec obligations in `docs/specs/unit-authority-switch.md` and §12's read-model).
+
+**§9.5 — COVERAGE DELTA (a READING, never a prediction — `npm test`, this pass's own output).**
+
+| Reading | Before the moves | After the moves | Delta |
+| --- | ---: | ---: | ---: |
+| Test **files** collected | **221** | **180** | **−41** |
+| **Passed** rows | **4 988** | **3 846** | **−1 142** |
+| **Skipped** rows | **58** | **44** | **−14** |
+| **Failed** rows | **0** | **0** | **0** |
+| `npm run typecheck` | exit 0 | **exit 0** | — |
+| `npm run build` | exit 0 | **exit 0** | — |
+
+**The skip delta is a finding, read not assumed.** The 14 lost skips are the
+`describe.skip('renderer-dependent (verified by code review … not node-testable)')` blocks that live
+**inside the moved files** (`contenteditable-editor-host`, `unit-l-textarea-editing-ui`, and the
+`unit-ms*`/`unit-h*` blocks §5.4 names) — a moved file takes its own skips with it. **No run-to-skip or
+skip-to-run conversion occurred**, and the §5.3 depth-row budget is untouched by construction: the two
+depth-10 000 rows were **restored** (§9.3), and the first (red) run of this pass is what proved the
+budget's tenant had to stay.
+
+**§9.6 — the red the moves produced, and its cause (reported, not hidden).** The first post-move run was
+**RED**: `npm test` = **178 files / 1 failed / 3 failed rows / 3 761 passed / 44 skipped**, all three
+failures in **one kept, protected file** — `tests/unit-v5-migration-contract.test.ts`. Cause: that file
+**pins two of the movers by path and/or by name** (§9.3's table) — exactly the failure mode the executing
+brief anticipated (*"a moved file that a kept file imported is the likely cause"*). **Fix applied per the
+brief: `git mv` both files back**, re-verified byte-identical, and the file went green (21/21) before the
+full trio was re-run. **No test content was edited to make the suite pass.**
+
+**§9.7 — citation debt this pass CREATES (recorded, not left dangling).** `AGENTS.md` item 6(c) forbids
+leaving a citation pointing at a moved file. This pass had a **narrow write set** (this audit,
+`archive/**`, `docs/decisions.md`, `docs/next-steps.md`, `docs/pending.md`), so the following is
+**recorded debt, owned by the named unit at its landing**:
+
+- **`tests/**` prose references (9 hits, all comments — no imports):** `unit-live8-toolbar-undo-refresh`
+  → `unit-u-edit-2-undo-redo-history`; `unit-x-rag-provenance-traversal`, `retrieval`,
+  `unit-f1-merge-store-results`, `unit-v1-store-adjacency` → `rag-store`; `unit-f3-stores-all-schema` →
+  `unit-ms2-store-wiring`; `blind-unit-ud3-…-greens` → `unit-ud3-import-path-id-scheme`;
+  `unit-ud4-doc-heads-tree-adversarial` → `unit-ud4-doc-heads-tree`; `blind-unit-ud5-…-greens` →
+  `unit-ud5-list-documents-tool`; `unit-ud6-query-document-filters-adversarial` →
+  `unit-ud6-query-document-filters`; `props-layout-state` / `props-tab-state` → `unit-ujr1-get-journal`;
+  plus `src/main/rag-store-directory.ts` (a comment). **No test breaks; all are stale-comment repoints**
+  for the owning unit's doc-review, and they are the same class as §3.4's 85-file stale-header batch.
+  *(The two restored files' references — `unit-v5-migration-contract.test.ts` → `unit-u5-rich-commit-ipc`
+  / `unit-u2-rich-decompose` — are **live and correct** again.)*
+- **`docs/**` citations (≈200 file-citations across ~40 unit specs + `docs/decisions.md` /
+  `docs/defects.md` rows).** These are the pins of the **retired** suites, so each is **stale until its
+  unit rebuilds**; repointing them is the **owning unit's landing duty** (the unit rewrites the citation
+  to its re-derived suite), and in the interim `docs/next-steps.md` + `docs/pending.md` carry the
+  obligation so a later pass does not read the stale spec citation as a live pin. **This pass repointed
+  the citations inside its own write set only**; the remainder is recorded, not hidden.
+- **`docs/decisions.md` `DECIDED: FIRST-RUN-ENABLED-DEFAULT`** names
+  `tests/unit-u-shell-8-view-menu-pane-visibility.test.ts` as its pin — **stale until `C11 U-SEARCH`
+  rebuilds it**; that unit's landing restores the pointer (§3.3.2's note).
