@@ -79,7 +79,7 @@ returns a negative raw candidate), P-IM-2 (unknown-zone / non-object rect), P-SM
 unfalsifiable because the generator's zones are disjoint), P-TP-3 (random renumber
 correctness on interleaved/out-of-range orders).
 
-**Blind-greens (RCA-4) — RUN:  `archive/greens/2026-09-21-unit-u-shell-shell-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-shell-wiring-greens.md) =
+**Blind-greens (RCA-4) — RUN:  `archive/greens/2026-09-21-unit-u-shell-shell-wiring-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec + the DONE row carrying the verification; archived basename unit-u-shell-shell-wiring-greens.md) =
 35 PASS / 0 FAIL / 4 NOT-TESTABLE** (F5/F9/F11 need a live captured element / real
 pointerdown target / a boot; the pure-module + source-pin surface is fully green).
 The blind-greens does NOT exercise the live DOM, so it does not catch HOST-1.
@@ -187,7 +187,7 @@ verify the files actually landed (`git status`) rather than trusting a pass/fail
   `cross-document-shared.ts` module (dedupe, totality, fork validation). +8
   regression tests.
 - **Trio after H1–H7: 185 files / 4327 pass + 58 skip, typecheck 0, build 0.**
-  **U-SHELL-9b is GREEN** (blind-greens  `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md)
+  **U-SHELL-9b is GREEN** (blind-greens  `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec + the DONE row carrying the verification; archived basename unit-u-shell-9b-greens.md)
   23/0/0; then W2-N15 FIXED per §2.10). Remaining follow-ups: AF3-3/AF1-2 only.
 - **Wave-2 spec resolution:** W2-Q1…Q17 all RESOLVED; the elaborated §E/§F in
   `wave-2-open-decisions.md`; the U-SHELL-9 split into **9a/9b**; new
@@ -243,7 +243,7 @@ Spec `docs/specs/unit-u-shell-9b-cross-document-shared.md`; §2.6/§2.6b/§2.6c
 record the adversarial findings. All six integration fixes (H1–H7) landed
 2026-09-13, each as its own red→green→trio→adversarial cycle (RCA-2), then the
 RCA-4 **blind-greens** re-run by an independent agent:
- `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md) — **23 PASS / 0 FAIL / 0 NOT-TESTED**.
+ `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec + the DONE row carrying the verification; archived basename unit-u-shell-9b-greens.md) — **23 PASS / 0 FAIL / 0 NOT-TESTED**.
 Remaining are the accepted AF3-3/AF1-2 follow-ups only (per-mount editing
 context for a shared node).
 
@@ -358,7 +358,7 @@ Reconciled against the actual build + the U-SHELL-N7/7/IMPORT-1 hardening:
   W2-N15 → FIXED. Doc-review: `archive/reviews/2026-09-13-w2n15-doc-review.md`.
 - **2026-09-13 (9b H1/H2):** the 9b spec §2.6 H1/H2/H7 rows are FIXED; new
   §2.6c (H1 adversarial) and §2.8/§2.9 host-seam pins; the §2.6 verdict now
-  reads **9b GREEN** (blind-greens  `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md)
+  reads **9b GREEN** (blind-greens  `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec + the DONE row carrying the verification; archived basename unit-u-shell-9b-greens.md)
   23/0/0). `wave-2-open-decisions.md` §D W2-N13/N14 → FIXED; `next-steps.md`
   updated. Doc-reviews: `archive/reviews/2026-09-13-unit-9b-h1-doc-review.md` +
   `...-h2-doc-review.md`.
