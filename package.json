@@ -24,11 +24,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "provident-editable": "^0.2.0",
     "provident-ssr": "^0.5.1",
     "undici": "^6.28.1"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^24.13.6",
     "electron": "^44.4.3",
     "esbuild": "^0.28.2",
     "typescript": "^5.5.0",
