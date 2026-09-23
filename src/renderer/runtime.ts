@@ -36,7 +36,7 @@ import {
 } from 'provident-ssr'
 import type { CompiledState } from 'provident-ssr/core/types.js'
 import type { DocumentRoot, MaterializedRoot, ReconcileResult } from './content-reconcile.js'
-import { EDITOR_TOOLBAR_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
+import { EDITOR_TOOLBAR_ID, PAGE_COMMIT_WARNING_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
 import type {
   DispatchRequest,
   DispatchResult,
@@ -136,8 +136,19 @@ export interface ApplyReconcileReport {
 const LANDING_ROOT_ID = 'stage-landing'
 
 /** U-STATE-1b — the content roots of an envelope: `rag-<id>` document subtrees,
- *  `pane-<id>` app-graph panes, the pinned `editor-toolbar`, and the pinned
- *  empty-store `stage-landing` root, in payload order. Overlays are excluded. */
+ *  `pane-<id>` app-graph panes, the pinned `editor-toolbar`, the pinned
+ *  page-edit surface (`PAGE_EDIT_SURFACE_ID`), the authored per-tab
+ *  page-commit warning (`PAGE_COMMIT_WARNING_ID`) and the pinned empty-store
+ *  `stage-landing` root, in payload order. Overlays are excluded.
+ *
+ *  U-EDIT-1 §3.5 item 4/6 (`M5`) — this predicate admits the SAME closed
+ *  SIX-CLASS SET `applyContentReconcileBody`'s `destroyRoot` whitelist admits
+ *  (§A.1.2: the two functions are the same root-set owner). The warning class
+ *  was omitted here while the whitelist admitted it, so the failure path's
+ *  content reconcile emitted `added: ['page-commit-warning']` and then REFUSED
+ *  it ("added root missing from next") — the `commit-failed` warning could never
+ *  materialize through the reconcile path, and the clear-on-success prune was
+ *  dishonest. Parity only: the whitelist is never widened beyond these six. */
 function extractContentRoots(envelope: LegacyInitialData | null | undefined): LegacyNodeData[] {
   const out: LegacyNodeData[] = []
   const payloads = envelope?.content
@@ -156,6 +167,11 @@ function extractContentRoots(envelope: LegacyInitialData | null | undefined): Le
           // (pane-like, document-unscoped) so a content-only reconcile refreshes
           // it in place instead of destroying/reattaching it.
           id === PAGE_EDIT_SURFACE_ID ||
+          // U-EDIT-1 (C9) §3.5 item 4/6 (`M5`) — the authored per-tab page-commit
+          // warning is a content root of the SAME closed class set as the
+          // `destroyRoot` whitelist below (a `commit-failed` warning must attach
+          // on the reconcile path and detach once the failure clears).
+          id === PAGE_COMMIT_WARNING_ID ||
           id === LANDING_ROOT_ID)
       ) {
         out.push(node as LegacyNodeData)
@@ -555,11 +571,22 @@ export class Runtime {
       // AD-2026-09-14-1 (Finding 1) — `LANDING_ROOT_ID` is admitted so a
       // classified `removed`/`replaced` landing is actually destroyed (a phantom
       // `#stage-landing` must not persist once a first document is imported).
+      // U-STAGE-ACTIVE-TAB §A.1.2 — the classifier admits EXACTLY the set
+      // `extractContentRoots` admits (the two functions are the same root-set
+      // owner). `PAGE_EDIT_SURFACE_ID` + `PAGE_COMMIT_WARNING_ID` are added: a
+      // `replaced` page-edit surface (or a warning root the new assembly no
+      // longer authors) was computed, handed to this step, REFUSED here, and left
+      // LIVE — the duplicate `#page-edit-surface` root (`domSurfaces: 2`) that
+      // breaks the §A.1.1 census. The whitelist stays CLOSED (never a wildcard),
+      // the destroy-then-attach order is unchanged, and a root still authored by
+      // `next` is never destroyed (it is `kept`, not `removed`/`replaced`).
       const isRoot =
         typeof cssId === 'string' &&
         ((cssId.startsWith('rag-') && cssId.length > 4) ||
           (cssId.startsWith('pane-') && cssId.length > 5) ||
           cssId === EDITOR_TOOLBAR_ID ||
+          cssId === PAGE_EDIT_SURFACE_ID ||
+          cssId === PAGE_COMMIT_WARNING_ID ||
           cssId === LANDING_ROOT_ID)
       if (!isRoot) return false
       const node = this.nodeByPropsId(cssId)
@@ -787,7 +814,18 @@ export class Runtime {
       // focused-slice compile. mirroring `Supervisor.runPass2AndFlush` is what
       // makes the placement-routed mutation visible to the render + resolved
       // state (the silent no-op this defect fixes).
-      const placementRouted = node.anchors.some((a) => a.role === 'content')
+      //
+      // U-STAGE-ACTIVE-TAB §A.4.2 (the pane-additive stage collapse) — the HOST
+      // must follow the GRAPH-level mode `render()` chose for its bootstrap, not
+      // the per-node anchor alone: this map feeds `render()`'s emit, and a
+      // path-routed graph's `prevStates` holds PATH states (`wire = pathKey`).
+      // A focused-slice compile of a NON-content-anchored dirty node (a
+      // `zone:<name>` container — exactly what `syncZoneMirrors` state-slices on
+      // a pane-visibility flip) yields node-wired states for that node's
+      // ancestors too, so `diffMinimal` sees the whole previous wire set as gone:
+      // it emits `remove:root` + re-creates a bare-wired root, and the mount
+      // collapses to the template skeleton (0 surfaces, 0 bodies, `stage=unknown`).
+      const placementRouted = this.isPlacementRouted() || node.anchors.some((a) => a.role === 'content')
       const cr = placementRouted
         ? node.compilePath()
         : node.compile(this.focusedSlice(node), { focusNodeId: node.id })

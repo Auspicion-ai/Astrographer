@@ -275,6 +275,11 @@ invented API).**
 | **`text` runs** | `text` is the package's own content-only leaf type (no children, no props) used for the runs **between** inline children; it is **not** a `RagNodeType` member and must never be minted as a RAG node |
 | Totality (read from the dist, not assumed) | `htmlToTree`/`diffTrees` are pure and **do not throw for malformed HTML** (their own docs: "The conversion returns a tree, never throws"; the comparison "NEVER throws"), **but both DO throw a typed `Error` for a non-object / malformed INPUT SHAPE** (`htmlToTree: html must be a string`, `opts must be an object`, `opts.idPrefix must be a string`; `diffTrees: prev/next must be a ProvidentTree`, plus a malformed node field at any depth) → the adapter's guard, below |
 
+**SUPERSEDED (2026-09-22 — §11 amendment `11.10` item 1): this table's reading of what the decode
+CARRIES is superseded in one respect — the package's converter is ATTRIBUTE-BLIND, so the decoded tree
+cannot carry `data-rag-node-id`/`data-rag-props` and cannot carry the RAG identity the clauses below
+assume.** The table's own shape/version/export/throw readings are **not** affected.
+
 **The adapter contract (`src/main/page-diff.ts`) — PINNED.** The adapter is the **only** module that
 imports the package; every other consumer (the commit seam, the tests) goes through it. Its pinned
 surface, two entry points:
@@ -287,6 +292,13 @@ surface, two entry points:
    `content`/`children` from the projection, `props` = the block's **RAG-owned** props only, `text` =
    `providentPlainText` of the block's package node (used for the `FS14` "did the user empty it?"
    read and for the live battery's text compare — **never** for a compared field, `FS8`).
+   **SUPERSEDED (2026-09-22 — §11 amendment `11.10` item 1): this item's "`htmlToTree(html)` … the
+   decode is" sentence and its `PageBlock` projection clause are RESTATED — the page's RAG identity
+   (`ragId`) and RAG-owned props are read from the RAW PAGE SOURCE, never from the decoded tree (the
+   package drops every attribute except an `img`'s `src`/`alt` and an `a`'s `href`), and the decode is
+   PER SURFACE-LEVEL BLOCK ELEMENT (the package decodes each block's own fragment), not one call over
+   the whole surface HTML. The returned shape, the refusal arm, and the `text` field's role are
+   unchanged.**
 2. **`buildPageOps(decoded: PageDecodeResult, snapshot: PageDiffSnapshot, documentId: string): PageOpsResult`** —
    `PageDiffSnapshot` is the document's **read-only node/edge view** taken from the store's own
    snapshot seam (`DECIDED: RAG-SNAPSHOT-PRESERVED`; the adapter adds **no** `RagStore` member and no
@@ -312,6 +324,20 @@ surface, two entry points:
 `putNode` + the `doc-child` `putEdge` from the containing section, and never invents an update against
 a node that does not exist (§3.3 item 8's id scheme and edge shape are **unchanged** by this
 amendment).
+
+**The table consequence on the page path (ADDED 2026-09-22 — §11 amendment `11.10` item 3).** The
+package's `BLOCK_TAGS` carries **no `table`/`thead`/`tr`/`td`/`th`** and its converter **flattens a
+table silently** (the table, its rows and its cells are not block elements to the converter — their
+text is folded into a paragraph/run), so a stored table node's structure is **inexpressible** on the
+page path. **Consequence for the op mapping:** a `table`/`thead`/`tr` block **is REFUSED** (the
+`decompose-failed` class of this section's last mapping row) and **cannot round-trip** — no op may
+retype, remove or flatten a stored table structure on the strength of a decode that cannot see it
+(`FS14`'s data-loss class). The adapter's own tag sets state this split (the container tags
+`table`/`thead`/`tr` refuse; `td`/`th` are decoded as standalone cell LEAVES, so a cell's text can be
+read but its row/table containment is never reconstructed). **Cross-referenced:** the capability gap is
+the ESCALATED handoff row **`PROVIDENT-EDITABLE-NO-TABLE-ELEMENTS`** (`docs/defects.md` — an
+UPSTREAM/dependency gap, **never patched here**, `AGENTS.md` item 7), which §11 item **9** records; the
+verification anchors are §11 amendment `11.10` item 3.
 
 **Props differences** — **the adversarial pass's finding, closed here:** the last population could not
 express a `props` difference at all, so the mapping row had no oracle. The adapter's `props` mapping is
@@ -380,7 +406,15 @@ none of which is a `ProvidentNodeType` member; the package's block set is
 `h1`..`h6`/`p`/`ul`/`ol`/`li`/`blockquote`/`pre`/`div`) is a RECORDED capability gap**: the adapter must
 **refuse** (the `decompose-failed` warning class, §3.1's mapping table's last row) rather than retype,
 remove or flatten a stored `td`/`th`/`tr`/`table` node on the strength of a decode that cannot see it
-(`FS14`'s data-loss class).
+(`FS14`'s data-loss class). **AMENDED IN PLACE (2026-09-22 — §11 amendment `11.10` items 1 and 3): the
+three sentences above are SUPERSEDED where they read block identity off the tree — the adapter reads
+`data-rag-node-id`/`data-rag-props` from the RAW page source and decodes each block's own fragment
+(the package is attribute-blind), so "a block-level element with no `data-rag-node-id`" is decided by
+the SOURCE scan, not by the decode; and this paragraph's table clause now names the exact split — the
+package's `BLOCK_TAGS` carries no table tag at all (it flattens a table), the adapter's container set
+refuses `table`/`thead`/`tr`, and a stored table structure therefore cannot round-trip (§3.1's table
+consequence note; the escalated defect row `PROVIDENT-EDITABLE-NO-TABLE-ELEMENTS`). The paragraph's
+rule — REFUSE, never retype/remove/flatten — is NOT weakened.**
 
 **The compared fields — the CLOSED set (`FS8` if the set is widened silently):**
 
@@ -568,6 +602,96 @@ engine is absent — the commit returns the **typed** failure, leaves the store 
 same `commit-failed` state — the **same host-side per-tab carrier §3.5 item 6 pins** (a `Map<tabId, failure>` in the `SidebarPanes` host, §11 amendment `11.8`), never a DOM class or attribute. **A commit that reports success without an acknowledged write is the
 worst outcome in this unit** (`FS19`) — it is the "clean with an unchanged entry" case the read model
 forbids (`docs/specs/unit-reads-pivot-tab-cache.md` §7 `P-SM-3`).
+
+---
+
+### 3a. Adversarial findings (RCA-3 — HOST: fixed here + regression-tested)
+
+**Why this section exists (the process violation it closes).** `AGENTS.md`'s RCA-3 guard and this file's §8.2
+item 5 require the unit's read-only adversarial pass to be **recorded here**, at §3a/§3b, with every **host**
+finding fixed in this repo and regression-tested. `C9 U-EDIT-1`'s RCA-3 pass ran **twice** — an **ORIGINAL**
+pass whose five MUST-FIX items (`M1`..`M5`) were remanded, and a **SECOND** pass whose four residuals
+(`N1`..`N4`) were remanded after the first fix batch — and until this section the file carried **no §3a/§3b at
+all** while §8.2 item 5 promised them. **That absence is the recorded process violation this section closes:**
+the findings, their fix status, the measured non-findings and the open residual are now pinned so no later
+pass re-derives them.
+
+**The verification convention for §3a/§3b (the §11.10 anchor rule, applied here).** This file cites `path` +
+symbol / row id / `§section`, and its head matter pins that no line number appears in it
+(`docs/specs/requirement-catalog.md` §3.4 rule 7). §11.10 already records the stated exception: an
+**adversarial / landed-verification anchor** is a **tree reading taken at the stated pass** — the **path +
+SYMBOL is the citation**, and the line number is recorded **only** because the finding pins a drift between a
+document and one specific tree state (any edit of the named files shifts it). **Every anchor below was read in
+the tree at this pass (2026-09-22);** anything this pass could not verify is marked **UNVERIFIED**, never
+asserted.
+
+#### The ORIGINAL pass — the five MUST-FIX findings and their resolution
+
+| # | Finding (as filed) | Disposition + evidence (read at this pass) |
+| --- | --- | --- |
+| **`M1`** | **Foreign / unowned-node writes unguarded** — a page could name a node of another document and have it written. | **FIXED.** Three guards, all in `src/main/page-diff.ts`: the **surface-root marker read** (`PAGE_EDIT_SURFACE_ROOT_ID` 107; the root-authoritative marker loop 365–378 — a marker anywhere else can only fill in when the root authored none, never override it), the **marker-disagreement refusal** (`buildPageOps` 882–890: a page naming another document is refused with **no** op list), and the **foreign-node refusal** (`foreignNodeIds` 674–698, with its ownership-guard comment 715–716, and the per-block refusal inside `buildOps` 727–734). Regression rows: `tests/page-diff.test.ts` — `F1` a block whose `ragId` belongs to ANOTHER document is REFUSED (331), `F1` a page whose `data-edit-surface` DISAGREES with the committing document is REFUSED (364), `F1 (control)` (388). |
+| **`M2`** | **The commit must be ONE `applyBatch`, with the `BatchResult` READ** (not a per-op loop, not an unchecked `ok`). | **FIXED.** The store side is one call returning one `BatchOpResult` per op (`src/main/rag-store.ts` `BatchResult` 195–197/212–217; `applyBatchSync` 1375–1453; the per-op application `applyBatchOp` 1244, emitting its result at 1258/1262/1267/1279); the host sends **exactly one** payload and reads it — `src/renderer/sidebar-panes.ts` `commitPageEdit` 3679–3690 (`bridge.edit.batch` once, `await`ed) and 3706–3714 (`isAcknowledgedBatch` / `storeRejectedFailure`). Regression rows: `tests/page-commit-failure-visibility.test.ts` `T1`/`T2` 499/514 (an unchanged page ⇒ **ZERO** `edit.batch` calls; one compared-field change ⇒ exactly **ONE** call) and `tests/page-diff.test.ts` §3.3 item 1 (857 — one `applyBatch` call, never a per-op loop). |
+| **`M3`** | **A simultaneous type + content edit silently DROPPED the text** — the type branch `continue`d before the content write. | **FIXED.** `src/main/page-diff.ts` `buildOps` 835–847: a type difference emits the block's `putNode` when `contentDiffers` (705–707) **and then** the `setType` — **both** ops in the one op list, `putNode` first (so the content write and the retype cannot race). Regression row: `tests/page-diff.test.ts` 552 (`a block whose TYPE and CONTENT BOTH change commits BOTH (the text is never dropped)`). **The §3.2 minimal-op rule is NOT weakened** — its subject is one op per DIFFERENT FIELD SET, as §11.10 item 4(c) pins. |
+| **`M4`** | **The `U-EDIT-1-LIVE` battery** — the RCA-11 MANDATORY pre-DONE live gate (§8.3 items 1–8). | **IN PROGRESS / OWED — never "done".** The battery's rows and blocks now EXIST in `scripts/live-drive.mjs` (`U-EDIT-1-LIVE-1`..`-8` in the extended-row table 2882–2893; the block implementations from 4984, with the `u_edit_1_live_*` handlers), but **no run result is recorded anywhere in this tree**, so the unit still has **no live measurement**. **Status: OWED** (§8.3; §11 items **7**/**8** — the O-0 oracle-identity re-run is likewise still owed), and per RCA-11/RCA-12 the unit is **not pre-DONE** while this holds (§11 item 8's "the blocks do not exist" clause is superseded in place by §11.11 item 2). |
+| **`M5`** | **The failure warning was not VISIBLE at failure time** — the record existed, but the operator saw nothing until some unrelated later re-assembly. | **FIXED.** `src/renderer/sidebar-panes.ts` `recordPageFailure` 3624–3627 writes the host-side record **and immediately re-authors the graph** through `reauthorPageCommitWarning` 3568–3575 — the **content-reconcile** path, where document roots are COMPARED rather than rebuilt, so the user's DOM text (their only copy) is never discarded (`FS16`); the warning is authored as provident data by `src/renderer/pane-graph.ts` `PAGE_COMMIT_WARNING_ID` 1467 / `pageCommitWarningContent` 1472–1490. A later **SUCCESS** clears it: `clearPageState` 3609–3614 deletes the map entry and re-authors the graph. Regression rows: `tests/page-commit-failure-visibility.test.ts` `W1` 423 (authored at failure, no later re-assembly required) and `W3` 476 (cleared on a later success). **⟨ANNOTATED 2026-09-22 (item-10d documentation review) — this row's `FIXED` is CONDITIONALLY TRUE, not an unqualified FIXED; the original reading is kept above.⟩** The reconcile-path authoring holds **only if `applyContentReconcile` can actually ATTACH the `page-commit-warning` root**, and on the tree this review read it could not: **`Runtime.extractContentRoots` admitted FIVE id classes** (`src/renderer/runtime.ts`, admission test read at this pass — `rag-*`, `pane-*`, `EDITOR_TOOLBAR_ID`, `PAGE_EDIT_SURFACE_ID`, `LANDING_ROOT_ID`) and **omitted `PAGE_COMMIT_WARNING_ID`**, while `destroyRoot` and the pure reconciler (`src/renderer/content-reconcile.ts` `asContentRoot` / `isPaneLikeRoot`) DO admit it; `nextById` is built from the extractor, so the `added` warning root was refused on the added/replaced arms of `applyContentReconcileBody` with **`applyContentReconcile: added root missing from next: page-commit-warning`** and `attachRoot` was never called. **Node evidence (REPORTED at the last reading — NOT re-run by this review, whose wall is read/search + doc writes only):** `W1` 423 / `W2` 448 / `W3` 476 are **RED** for exactly this reason (each row asserts the warning is present in the **rendered** graph — `warningPresent` reads `Runtime.renderedHtmlResult().renderedHtml`, helper 273–275). **Live evidence (the row's live half, from `docs/specs/live-battery-2026-09-22-page-commit-and-stage.md` §3.2/§4.2):** `U-EDIT-1-LIVE-3` **PASSES** — a failed commit's warning is `painted=true` with geometry and still present after a real re-derive — **but that reading is taken from the DOM and does not attribute the observed root to the RECONCILE path** (a full `loadAppGraph`/`applyEditorToolbar` assembly also authors the warning root), so it does **not** by itself establish this row's reconcile-only claim; recorded here as a **limitation of the live oracle**, never as a pass of `W1`/`W2`/`W3`. **FIX IN FLIGHT — OBSERVED LANDING DURING THIS REVIEW:** `extractContentRoots` now admits `PAGE_COMMIT_WARNING_ID` with the omission and the refusal recorded in its own doc comment (`src/renderer/runtime.ts`, closing re-read of this pass), and the same correction is annotated at `docs/specs/unit-stage-active-tab-display.md` §A.1.2 (whose `destroyRoot` contract owns the parity clause). **With that landed, the reconcile path can attach the root and this row may return to an unconditional `FIXED` — the node rows are OWED a re-run by the owning unit; this review records the state, it does not flip the row.** **Anchor drift (symbols are the citation; `src/renderer/sidebar-panes.ts` was EDITED concurrently during this review, 3 921 → 4 016 lines across the review's own reads, so the numbers in the text above — `3624–3627`, `3568–3575`, `3609–3614` — and `pane-graph.ts` `1467`/`1472–1490` are pre-edit pins):** `pageEditSurfaceHandlerSubject` (`this.activeTabId ?? PAGE_EDIT_SURFACE_ID`), `recordPageFailure`, `reauthorPageCommitWarning`, `clearPageState`, and `src/renderer/pane-graph.ts` `PAGE_COMMIT_WARNING_ID` (`:1500`)/`pageCommitWarningContent` (`:1505-1527`) are the current addresses. |
+
+#### The SECOND pass — the four residuals and their fixes
+
+| # | Residual (as filed) | Disposition + evidence (read at this pass) |
+| --- | --- | --- |
+| **`N1`** | **The commit scope was `_currentDocumentId`, which a doc-nav `selectDocument` moves independently of the mounted tab** — a blur could therefore write into, or refuse against, a document the user was not editing. | **FIXED.** The scope is now the stage/surface scope seam `stageDocumentScope()` (`src/renderer/sidebar-panes.ts` 3517–3520: the ACTIVE TAB's document, with the retained doc-nav focus only when NO tab is mounted), read by `commitPageEdit` at 3649 — with the reason recorded in the seam's own comment (3646–3648). Regression rows: `tests/page-commit-scope-ack-race.test.ts` `N1a` 367 (with doc-1 mounted and active, a doc-nav selection of doc-3 must not re-scope or refuse the doc-1 commit) and `N1b` 403 (the no-tab legacy fallback — the discriminating control). |
+| **`N2`** | **`documentBlocks`' scoping made deletions NEVER commit on the production import shape**: the importer authors `doc-child` edges WITHOUT `documentIds`, so a `documentIds`-only filter read an imported document as block-less, no removal was ever emitted, and the deleted block reappeared after the re-derive. | **FIXED.** The membership rule now mirrors the traversal's own derivation: `src/main/page-diff.ts` `documentBlocks` 545–590 derives the document's members the way `src/main/traversal.ts` `computeDocumentSubgraph` does — the document root plus the endpoints of the edges this snapshot SCOPES to the document, **then the transitive `doc-child` closure from those nodes** (569–586), with an unscoped `doc-child` edge whose SOURCE is outside the closure excluded (so a global edge never makes another document's blocks deletable). Regression rows on the PRODUCTION shape: `tests/page-diff-production-commit.test.ts` `SP1` 148 (`removeEdge` + `removeNode` through `handleEditBatch`), `SP2` 188 (the re-derive no longer renders the block), `SP3` 209 (the `FS14` guard), `SP4` 225 (the minted new block + its `doc-child` edge), with `SC0` 246 (the test-local scoped-edge shape — the discriminating control) and `SC1`. |
+| **`N3`** | **`isAcknowledgedBatch` accepted `>=` with NO per-entry validation** — an over-long or junk `results` array read as an acknowledged write (the `FS19` silent-success class). | **FIXED.** `src/renderer/sidebar-panes.ts` `isAcknowledgedBatch` 481–487 now requires a boolean `ok: true`, a `results` array whose length **equals** the op count (`results.length !== ops.length` is a refusal), and **every** entry agreeing with its op through `acknowledgesOp` 448–486 — the op's own `op` kind, and any identity the entry carries (`acknowledgedRecordId` 437–439: `node.id` / `edge.id`) must be the acknowledged op's own. Regression rows: `tests/page-commit-scope-ack-race.test.ts` `N3` 425 (over-long junk, over-long plausible, and an entry acknowledging ANOTHER op are typed failures that KEEP the dirty flag) with its control 462; `tests/page-commit-failure-visibility.test.ts` `C1` 282 and `C2` 311. |
+| **`N4`** | **No generation guard on the async page commit** — a close (or a tab-id REUSE) during a flight could resolve into a re-minted subject: a failure could attach a `commit-failed` warning to a fresh tab, and a success could clear a fresh tab's dirty flag (so its text never commits). | **FIXED.** A per-subject sequence discards every resolution arriving after a drain: `src/renderer/sidebar-panes.ts` `pageSubjectSeq` 796 (with its guard class documented 785–795), `pageSubjectStamp` 3593–3595, the drain `invalidatePageSubject` 3600–3602 (called by the close/prune paths 3550/3583), the stamp taken **before** the write plus the `superseded()` predicate 3653–3654, and the post-`await` discards at 3692 (the throw arm) and 3705 (the resolution arm). Regression rows: `tests/page-commit-scope-ack-race.test.ts` `N4a` 479 (a FAILING flight + a close must not attach a failure to the drained/reused subject), `N4b` 514 (a SUCCEEDING flight must not clear a fresh tab's dirty flag), `N4c` 541 (a plain SWITCH is the control — the other tab's state is untouched). |
+
+#### Measured NON-FINDINGS (recorded so they are not re-derived)
+
+1. **The REMOVAL half of the foreign-write vector is NOT REPRODUCIBLE.** The pass hypothesised that the
+   deletion scan could name another document's blocks; it does not. `src/main/page-diff.ts` `documentBlocks`
+   (545–590) returns an edge as a block of THIS document only when the edge is scoped to the committing
+   document **or** its source is inside the document's transitive `doc-child` closure (586), so another
+   document's blocks are never returned and never removed. The regression/control row is
+   `tests/page-diff.test.ts` 388–413 (`F1 (control)` — **no** removal names another document's blocks, with
+   the discriminating own-block removal asserted live in the same row, 410–412).
+2. **The raw-source scan's comment/script blindness — a HOST RESIDUAL, status OPEN (NOT fixed); its
+   reproduction is UNVERIFIED.** The adapter reads block identity off the RAW page source (§11.10 item 1), and
+   its scanner has **no comment/script/style skip**: `scanPageElements` (`src/main/page-diff.ts` 224–244)
+   matches every `<tag …>` start tag with a bare regex, and `findElementEnd` (201–220) walks the same raw text
+   for the matching close tag. A read of `src/main/page-diff.ts` at this pass finds **no** comment (`<!--`),
+   `script`, `style` or CDATA handling anywhere — the only `comment`/`style` matches in the module are the
+   non-diffed-runtime-prop comment (43) and the `style` key of `RUNTIME_PROP_KEYS` (95). **Consequence, stated
+   as narrowly as the reading supports:** a start tag appearing inside an HTML comment or inside a
+   `<script>`/`<style>` text body is scanned like a real element, and `decodePage` (383–395) then treats it as
+   a surface artifact, a minted NEW block, or — for a tag outside the closed block/`RagNodeType` set — a
+   **whole-page refusal**. **Status: OPEN (host, unfixed at this pass).** **UNVERIFIED:** whether the
+   production surface's HTML can carry such a fragment at all (paste-sanitization path, authored content) —
+   this pass measured no reproduction, and the residual is recorded with that limitation rather than as an
+   asserted exploit.
+
+### 3b. Adversarial findings (PACKAGE — recorded, never patched)
+
+**Cross-reference only — no package finding is patched here, or anywhere in this repo** (`AGENTS.md` item 7: a
+package defect is **catalogued + handed off**). The pass surfaced **three `provident-editable@0.2.0` rows**,
+each re-verified against the installed `dist/**` before filing: `docs/defects.md`
+**`PROVIDENT-EDITABLE-ATTRS-DROPPED`**, **`PROVIDENT-EDITABLE-TABLE-FLATTENED`** (the runtime half of the
+already-filed type-union row) and **`PROVIDENT-EDITABLE-DEPTH-CAP-SILENT-DROP`**; the matching handoff rows
+are `docs/HANDOFF.md`'s OPEN handoff items.
+
+| Row (`docs/defects.md`) | The gap | This unit's consumer-side handling (the ONLY permitted form — workaround/refusal, never a patch) |
+| --- | --- | --- |
+| `PROVIDENT-EDITABLE-ATTRS-DROPPED` | `htmlToTree` keeps **no** attribute except an `img`'s `src`/`alt` and an `a`'s `href`, so the package's tree can never carry `data-rag-node-id` / `data-rag-props` / `data-edit-surface`. | The adapter reads them off the **raw source**: `src/main/page-diff.ts` `ATTR_RAG_PROPS` 99, `parseAttrs` 187–196, `scanPageElements` 224–244, and the marker reads 365–378 (recorded as a WORKAROUND; §11.10 item 1 records the same fact and owes the upstream row). |
+| `PROVIDENT-EDITABLE-TABLE-FLATTENED` | `BLOCK_TAGS` carries no table family and the converter silently **FLATTENS** an unknown element — no throw, no warning, no dropped-content report. | The adapter **REFUSES**: `UNEXPRESSIBLE_BLOCK_TAGS` (`table`/`thead`/`tr`) 79 + the refusal in `decodePage` 387–392, the `decompose-failed` class of §3.1's last mapping row. |
+| `PROVIDENT-EDITABLE-DEPTH-CAP-SILENT-DROP` | The converter's private `MAX_DEPTH` drops content past the cap with no report, and the constant is not importable. | The adapter mirrors the boundary it cannot import (`PACKAGE_MAX_DEPTH = 512` 253; `maxNestingDepth` 260–276) and **REFUSES** an over-deep block fragment (414–419). **The boundary relation between the two measures is UNVERIFIED and OWED** — §11.10 item 2, and §11.11's `SN-4`. |
+
+**The recorded CONSEQUENCE (cross-referenced, never softened).** A document that contains a table **cannot
+commit any edit** through the whole-page surface: one inexpressible block refuses the **whole** page decode
+(387–392), so no op list exists and the commit is a typed `decompose-failed` failure with the store untouched.
+`docs/HANDOFF.md`'s `PROVIDENT-EDITABLE-NO-TABLE-ELEMENTS` handoff row states exactly this — *"the whole-page
+editing surface cannot commit an edit to any document that contains a table"* — and the type-union half is
+`docs/defects.md` `PROVIDENT-EDITABLE-NO-TABLE-ELEMENTS`. **It is a user-visible capability hole in a
+dependency: ESCALATED, never patched here** (§11 item 9). The split's other half: `td`/`th` are decoded as
+standalone cell **LEAVES** (`PAGE_BLOCK_TAGS` 74, `NEW_BLOCK_TAGS` 87), so a cell's text can be read but its
+row/table containment is never reconstructed.
 
 ---
 
@@ -1319,7 +1443,7 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 | **5** | **The catalog's phantom-package row and this unit's catalog census.** `PRUNE-615`'s `statement` cell still reads "the provident-editable import tools"; `PRUNE-311`/`PRUNE-617` census rows for the textarea removal; and any new-row/count duty. The catalog is **cited, never edited** from a unit spec. | **OWED** to the catalog's own amendment pass (`docs/specs/design-extensions-review.md` §15.1) | the catalog amendment pass |
 | **6** | **`TAB-1`'s rendered symbol** is `C10`'s; this unit supplies the state and the typed record and pins the shared class (§3.5 item 4). If `C10` slips, the state exists with a stage-level warning only — **recorded so the two units do not each invent an affordance** | recorded interface | `C10 U-TAB-MERGE` |
 | **7** | **The O-0 oracle-identity re-run owed by the live blocks (ADDED 2026-09-21 — §11 amendment `11.9` item 6).** `U-EDIT-1-LIVE`'s blocks must be added to `scripts/live-drive.mjs`, one half of the oracle-hash pair; **the block addition invalidates the recorded oracle identity and owes an O-0 re-run per RCA-11**, with the before/after hash re-read recorded. | **OWED — named, not a side effect** | the unit's shell-bearing live pass (`U-EDIT-1-LIVE`) + the O-0 harness's owner |
-| **8** | **`U-EDIT-1-LIVE` is UN-RUN (RCA-11).** The battery's blocks do not exist in `scripts/live-drive.mjs` yet, so **no live measurement exists** for §8.3 items 1–8; the unit is **not pre-DONE** while this holds. | **OWED — MANDATORY pre-DONE gate** | this unit's shell-bearing live pass |
+| **8** | **`U-EDIT-1-LIVE` is UN-RUN (RCA-11) — IN PROGRESS / OWED.** **[SUPERSEDED IN PLACE 2026-09-22 — §11.11 item 2: the clause "the battery's blocks do not exist in `scripts/live-drive.mjs` yet" is NO LONGER TRUE — the `U-EDIT-1-LIVE-1`..`-8` rows and their blocks EXIST in the driver (the row table 2882–2893; the block implementations from 4984), so the authoring half of this row is DONE and the RUN half is not.]** So: the blocks now exist, but **no live run result exists** for §8.3 items 1–8, and **no live measurement exists**; the unit is **not pre-DONE** while this holds. | **OWED — MANDATORY pre-DONE gate (authoring done, RUN owed)** | this unit's shell-bearing live pass |
 | **9** | **The package's table-element capability gap (ADDED 2026-09-21 — §11 amendment `11.9` item 1).** `provident-editable@0.2.0`'s closed `ProvidentNodeType` has **no `table`/`thead`/`tr`/`td`/`th`** member, so a stored table node's structure is not expressible in the package's tree and the adapter must **refuse** rather than flatten (§3.2). This is a **capability/requirement gap in a dependency** — a `docs/defects.md` + `docs/HANDOFF.md` item, **never** a patch here (`AGENTS.md` item 7). | **ESCALATED (handoff)** | `docs/defects.md` + `docs/HANDOFF.md` (the package's own repo) |
 
 ---
@@ -1829,3 +1953,314 @@ authored**.
     envelope/store-green; **`U-EDIT-1-LIVE` is un-run and owed**) and the **archive record** (two
     `archive/src/2026-09-21-*.ts` moves, importer-free at the move) — so §5 and the actual archive
     agree.
+
+---
+
+### 11.10 AMENDMENT (2026-09-22 — the adapter's decode source, the depth guard, and the table split: the drifted clauses of §3.1/§3.2, corrected against the landed adapter)
+
+**Why this amendment exists.** The unit's adapter **landed** (`src/main/page-diff.ts`, the module §3.1
+pins), and reading it against the ADOPTED package's dist shows **three facts §3.1/§3.2 recorded
+otherwise**, plus **four behaviours the landed adapter depends on that a reader would otherwise have to
+re-derive from the code**. This amendment **corrects the drifted clauses in place** (each supersession is
+marked at the clause, above, and cross-referenced here) and **records the landed facts with their
+verification anchors**. It authors **no new contract surface and no new fail-state**: the
+`FS1`..`FS24` numbering is untouched, §7's register (7 rows / seed `0xED170001` /
+`63 × 6 + 22 = 400`) is untouched, §6.1's census is untouched, §4.1's supersession **set** is
+untouched, and the §3.3 one-`applyBatch`/journal/persist clauses are untouched.
+
+**The verification convention for this section (so the file's own citation rule is not broken).** The
+head matter above pins that this file cites `path` + symbol / row id / `§section` and that **no line
+number appears in it** (`docs/specs/requirement-catalog.md` §3.4 rule 7). This amendment's claims are
+**verification anchors — a tree reading taken at the stated date, not citations to be followed**: the
+**path + SYMBOL is the citation**, and a line number is recorded **only** because the amendment exists
+to pin a drift between a document and a specific tree state (any edit of those files shifts it). Every
+anchor below was read in the tree at this pass: `src/main/page-diff.ts` (the landed adapter),
+`node_modules/provident-editable/dist/html-to-tree.js` (the ADOPTED converter),
+`node_modules/provident-editable/dist/parse.js`, `src/renderer/sidebar-panes.ts` (the landed commit
+seam), `src/main/rag-store.ts` (`BatchResult`) and `src/main/edit-ops.ts` (`handleEditBatch`'s
+`EditBatchPayload` validation).
+
+| Anchor | Symbol (the citation) | Line (the anchor) |
+| --- | --- | --- |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `MAX_DEPTH` (the recursion cap) + its doc-comment | 9, 3–8 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `BLOCK_TAGS` (the converter's closed block tag set) | 11–14 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `buildChildren`'s `if (d > MAX_DEPTH) return` (the silent subtree drop) | 329–330 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `buildBlock`'s `if (depth > MAX_DEPTH)` cap-depth node | 439–442 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `extractPreText` / `buildInline` depth guards | 463, 487–488 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `isPlainLeaf`'s `if (depth >= MAX_DEPTH)` early return | 432–433 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `getAttr` — the ONLY attribute reader | 55–61 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `buildInline` `img` arm (`getAttr(node,'src')`/`'alt'`) | 492–493 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | `buildInline` `a` arm (`getAttr(node,'href')`) | 529–533 |
+| `node_modules/provident-editable/dist/html-to-tree.js` | the unknown-element flatten rule (`buildChildren` / `buildTopLevel`) | 391–395, 558–574 |
+| `node_modules/provident-editable/dist/parse.js` | `parseHtml` (`parseFragment`) — no attribute projection | 7–9 |
+| `src/main/page-diff.ts` | `PACKAGE_MAX_DEPTH` (the adapter's mirror of the package cap) | 253 |
+| `src/main/page-diff.ts` | `maxNestingDepth` + the decode's depth refusal | 260–276, 414–419 |
+| `src/main/page-diff.ts` | `decodePage`'s surface-root marker read (the `PAGE_EDIT_SURFACE_ROOT_ID` branch) | 107, 365–378 |
+| `src/main/page-diff.ts` | `UNEXPRESSIBLE_BLOCK_TAGS` / `PAGE_BLOCK_TAGS` / `NEW_BLOCK_TAGS` | 79, 74, 87 |
+| `src/main/page-diff.ts` | `scanPageElements` / `parseAttrs` (the raw-source read) + the per-block fragment decode | 224–244, 187–196, 413–431 |
+| `src/main/page-diff.ts` | `buildPageOps`'s marker-agreement refusal; `foreignNodeIds` + the build refusal | 844–854; 638–662, 689–698 |
+| `src/main/page-diff.ts` | the type+content branch (BOTH ops: `putNode` then `setType`) | 799–811 |
+| `src/renderer/sidebar-panes.ts` | `isAcknowledgedBatch` / `storeRejectedFailure` | 434–439, 446–460 — **[SUPERSEDED ANCHORS 2026-09-22 — §11.11 item 1: `acknowledgedRecordId` 437–439, `acknowledgesOp` 448–486, `isAcknowledgedBatch` 481–487, `storeRejectedFailure` 494–508]** |
+| `src/main/rag-store.ts` / `src/main/edit-ops.ts` | `BatchResult`'s one-result-per-op arm; the `ops must be an array` payload guard | 195, 217; 445, 1377 |
+
+1. **The decode's source: the adapter reads RAG identity/props from the RAW PAGE SOURCE; the decoded
+   tree CANNOT carry them (the package is attribute-blind).** Read from the installed dist: the
+   converter's **only** attribute reader is `getAttr` (`dist/html-to-tree.js` 55–61), called in exactly
+   **three** places — the `img` arm (`src`/`alt`, 492–493) and the `a` arm (`href`, 529–533). Every
+   other element yields a node with **no `props` at all**, and `parseHtml` projects no attribute map
+   either (`dist/parse.js` 7–9). **Therefore `data-rag-node-id`/`data-rag-props`/`data-edit-surface`
+   are DROPPED by `htmlToTree`, and the decoded tree cannot carry block identity or RAG-owned props.**
+   **Landed adapter (the restatement §3.1 now needs):** `decodePage` scans the page's **raw HTML** for
+   every element start tag with its attributes (`scanPageElements`/`parseAttrs`, `src/main/page-diff.ts`
+   224–244 / 187–196), reads `data-rag-node-id`, `data-rag-props` and the surface marker off the
+   **source**, and then decodes **each block element's own fragment** through `htmlToTree` (413–431), so
+   a surface artifact between two blocks cannot shift a block's projection. The per-node ids the
+   adapter mints for the package-side trees (`next-<i>`/`prev-<i>` and the `-r`/`-c` run/child ids) are
+   the adapter's **own reconciliation keys**, never RAG ids (§3.2's non-diffed bullet already states
+   this). **Clauses marked superseded in place:** §3.1's table note, §3.1 item 1, and §3.2's decode
+   step-1 paragraph. **Upstream defect row (OWED, named here so it is not lost):** the attribute drop is
+   a **package limitation** — a converter that cannot carry its consumer's own authored identity — and
+   belongs in `docs/defects.md` + `docs/HANDOFF.md` as an UPSTREAM/dependency row of the same class as
+   the table gap (`AGENTS.md` item 7: catalogue + handoff, **never** a patch here). **It is NOT filed at
+   this pass** (a SpecDoc pass writes no tracker, and this pass's scope is this file only): the **row is
+   OWED**. **Not a workaround:** the adapter must not re-encode the identity into a tag the converter
+   happens to keep.
+2. **The converter's depth cap silently DROPS content past `MAX_DEPTH` — so the adapter refuses an
+   over-deep page instead of reading a truncated tree.** Read from the dist: `MAX_DEPTH = 512`
+   (`dist/html-to-tree.js` 9) and the cap is **not** an error path — `buildChildren` returns early
+   (`if (d > MAX_DEPTH) return`, 329–330), `buildBlock` returns a content-less cap-depth node
+   (`if (depth > MAX_DEPTH) return { id: '', type: tag, content: '', build: '' }`, 439–442),
+   `extractPreText`/`buildInline` return empty for a too-deep element (463, 487–488), and `isPlainLeaf`
+   refuses to fold a cap-depth block's text into an ancestor (`if (depth >= MAX_DEPTH) return false`,
+   432–433). The converter's own doc-comment states it as intended ("Content at/below this depth is
+   truncated/dropped deterministically", 3–8). **Landed adapter:** `PACKAGE_MAX_DEPTH = 512`
+   (`src/main/page-diff.ts` 253) and `decodePage` REFUSES the page when a block fragment's maximum
+   element-nesting depth exceeds it (`maxNestingDepth` 260–276; the refusal 414–419 — the
+   `decompose-failed` class, store untouched, `FS7`), **never** reading the truncated tree the package
+   would have produced. **RECORDED LIMITATION + OWED VERIFICATION (pinned so no later pass reads the
+   guard as exact):** the adapter's guard and the package cap are **different measures** — the package's
+   `MAX_DEPTH` is a **per-node recursion depth** inside its own parsed tree, while the adapter's
+   `maxNestingDepth` is a **raw-markup element-nesting count** over the block's **own fragment** (every
+   non-void, non-self-closing start tag opens a level; no tag-closure validation, no account of parse5's
+   implicit elements). The **boundary between the two is UNVERIFIED**: this pass established neither
+   (a) whether a page the adapter ACCEPTS can still be truncated by the package, nor (b) whether the
+   adapter REFUSES a page the package would decode faithfully (the guard is conservative in the
+   raw-markup direction). **Owed:** a boundary draw — the `P-TP-1` deep-totality row's territory, which
+   already pins that the draw must terminate through the adapter's **typed failure arm, never a stack
+   exhaustion** — must establish the relation, and §3.1's depth sentence must then be corrected to what
+   it finds. **Not a fail-state:** the refusal is the pinned behaviour; what is unverified is the exact
+   **boundary**, not the contract.
+3. **`BLOCK_TAGS` carries no `table`/`thead`/`tr`/`td`/`th`, and the converter flattens a table
+   silently — a stored table node is structurally inexpressible on the page path.** Read from the dist:
+   `BLOCK_TAGS` = `h1`..`h6`, `p`, `ul`, `ol`, `li`, `blockquote`, `pre`, `div`
+   (`dist/html-to-tree.js` 11–14) — **no table-family member** — and there is **no table-specific
+   handling anywhere in the converter** (`table` reaches the unknown-element rule: "skip it, keep its
+   text (flatten into the run)", 391–395 / 558–574). **The consequence for the op mapping is now stated
+   in §3.1** (a table block **is refused** — the `decompose-failed` class — and **cannot round-trip**):
+   a `setType` to `table`/`thead`/`tr` cannot be honoured, a stored table structure cannot be
+   re-decoded, and **no op may retype, remove or flatten it** (`FS14`'s data-loss class). **The landed
+   split (pinned so a test cannot over-claim "every table tag refuses"):** the adapter's
+   `UNEXPRESSIBLE_BLOCK_TAGS` = `table`/`thead`/`tr` (refused, `src/main/page-diff.ts` 79) while
+   `PAGE_BLOCK_TAGS` = the package set **+ `code` + `td`/`th`** (74) and `NEW_BLOCK_TAGS` includes
+   `td`/`th` (87) — so a **cell** element is decoded as a standalone **leaf block**, never as a table
+   structure (its row/table containment is not reconstructed). **Cross-reference:** the ESCALATED
+   handoff row **`PROVIDENT-EDITABLE-NO-TABLE-ELEMENTS`** (`docs/defects.md` — UPSTREAM/dependency,
+   never patched here) and §11 item **9**.
+4. **Landed behaviours this spec now depends on (recorded, with their evidence) — and where a clause
+   already says the same.**
+   - **(a) The decode takes the SURFACE ROOT's `data-edit-surface`, not the first marker anywhere:**
+     `decodePage` assigns the page's document id only from the element whose `id` is the pinned
+     `page-edit-surface` root (`PAGE_EDIT_SURFACE_ROOT_ID`, `src/main/page-diff.ts` 107; the read
+     365–378); a marker found anywhere else is a **fallback only when the root authored none** and can
+     never override the root's id. **UNPINNED by §3.1/§3.2 — pinned here.**
+   - **(b) `buildPageOps` refuses a marker that disagrees with the committing document** (844–854) and
+     **refuses any block the snapshot scopes to another document** (`foreignNodeIds` 638–662; the build
+     refusal 689–698) — so a **foreign/unowned node is never written**. §3.6 already pins that an
+     un-attemptable commit leaves the store untouched and `FS19`/`FS7` cover the silent-success and
+     partial-write classes, but this **ownership refusal is STRICTER than §3.1's wording** (which said
+     only that an **out-of-document difference is not diffed**, §3.2's non-diffed bullet): a foreign
+     page is refused **with no op list at all**, not merely skipped.
+   - **(c) A type + content change on ONE block emits BOTH ops** — the landed branch emits the node's
+     `putNode` (which preserves the store node's `type`, so the write and the retype cannot race) **and
+     then** the `setType` (799–811), where §3.1's mapping table listed the two rows separately and §3.2's
+     minimal-op rule ("exactly one write for that node") could be read as demanding a **single** op.
+     **The minimal-op rule is NOT weakened:** its subject is one op per **DIFFERENT FIELD SET**, and a
+     simultaneous type+content edit is two fields — a **type-ONLY** edit still emits **one** `setType`
+     and touches nothing else (`FS6`), and both ops land inside the **one** `applyBatch` (§3.3 items
+     1/2, so the atomicity pin is untouched).
+   - **(d) Success requires an ACKNOWLEDGED one-result-per-op `BatchResult`:** `isAcknowledgedBatch`
+     requires a boolean `ok: true` **and** a `results` array at least as long as the op count **[SUPERSEDED IN PLACE 2026-09-22 — §11.11 item 1: this reading and the anchors below record the reader as it stood at §11.10, not the LANDED contract, which is STRICTER: EXACTLY one agreeing `BatchOpResult` per op with per-entry agreement; landed anchors `src/renderer/sidebar-panes.ts` `isAcknowledgedBatch` 481–487, `acknowledgesOp` 448–486, `acknowledgedRecordId` 437–439, `storeRejectedFailure` 494–508]**
+     (`src/renderer/sidebar-panes.ts` 434–439 **[SUPERSEDED ANCHOR 2026-09-22 — §11.11 item 1: the landed `isAcknowledgedBatch` is 481–487, `acknowledgesOp` 448–486, `acknowledgedRecordId` 437–439]**; `src/main/rag-store.ts` pins the success arm as "one
+     `BatchOpResult` per op, in order"), and a **partial or absent acknowledgement is a typed
+     failure — `kind: 'store-rejected'`, carrying the record's own message and NO fabricated
+     `failedIndex`** (`storeRejectedFailure` 446–460 **[SUPERSEDED ANCHOR 2026-09-22 — §11.11 item 1: `storeRejectedFailure` is now 494–508]**, covering `undefined`/`null`/`{}`/`{ ok: 'yes' }`
+     and `{ ok: true }` with no `results`). §3.6's closing sentence already pins the class ("a commit
+     that reports success without an acknowledged write is the worst outcome in this unit", `FS19`):
+     **the one-result-per-op acknowledgement is what "acknowledged" MEANS at the carrier**, recorded
+     here so the TestWriter derives the partial-acknowledgement case from `FS19` rather than
+     re-deriving the threshold from the code. (`src/main/edit-ops.ts` `handleEditBatch` pins the
+     mirror-image payload guard: a non-array `ops` is a domain failure with `failedIndex: 0`.)
+
+**What this amendment does NOT change.** The `FS1`..`FS24` numbering and text (§8.1) — **no fail-state
+is added, restated or renumbered**; §7's register rows / seed / budget; §6.1's class census and §6.3's
+per-file work list; §4.1's supersession **set**; §3.3 items 1–6 (one `applyBatch`, the single `batch`
+journal entry, one persist, the checked result) and item 8 (the new-block id/edge shape); §3.4's write
+sequence and its OWED engine route; §3.5's `CommitFailure` shape and the host-side
+`Map<tabId, failure>` carrier; and §9's sequencing gates. **Exactly three clause groups change** —
+§3.1's decode source and depth sentence, §3.2's decode step-1 paragraph and its table clause, and the
+landed behaviours of item 4 above — and **every one is marked at the clause, not only here.**
+
+---
+
+### 11.11 AMENDMENT (2026-09-22 — the OUTSTANDING adversarial record for `C9 U-EDIT-1`, and the acknowledgement correction)
+
+**Why this amendment exists.** The unit's RCA-3 adversarial pass ran **twice** — an **ORIGINAL** pass with a
+five-item MUST-FIX set and a **SECOND** pass with four residuals — and **neither its findings nor their fix
+status had been recorded in this file**, while §8.2 item 5 promises them at §3a/§3b. **That is the process
+violation this amendment closes.** It (1) corrects the one landed behaviour that is **STRICTER** than
+§11.10 item 4(d) recorded, (2) fixes the live battery's status, (3) adds the **§3a/§3b** adversarial sections
+above §4, and (4) records the register's residual gaps as **SPEC-NOTES** so a later pass does not re-derive
+them. It authors **no new contract surface and no new fail-state**: the `FS1`..`FS24` numbering and text,
+§7's register rows / seed / budget, §6.1's class census, §6.3's per-file work list, §4.1's supersession
+**set**, §3.3's one-`applyBatch` / journal / persist clauses, §3.4's write sequence and its OWED engine
+route, and §3.5/§3.6's carriers are all **unchanged**. The verification convention is §3a's (the §11.10
+anchor rule): **path + SYMBOL is the citation**, a line number is a tree reading taken at this pass.
+
+1. **The §11.10 item 4(d) correction — the landed acknowledgement reader is STRICTER than recorded.**
+   §11.10 item 4(d) recorded the reader as requiring *"a boolean `ok: true` **and** a `results` array **at
+   least as long as the op count**"*; **that is SUPERSEDED IN PLACE** (marked at the clause above, with both
+   of its now-stale anchors). **The landed contract is: exactly ONE agreeing `BatchOpResult` per op.** Read
+   in the tree at this pass:
+   - `src/renderer/sidebar-panes.ts` `isAcknowledgedBatch` **481–487** — a boolean `ok: true`, a `results`
+     array whose length **equals** the op count (`results.length !== ops.length` ⇒ refusal, so an OVER-LONG
+     array is no longer success), and `ops.every((op, index) => acknowledgesOp(results[index], op))` (486);
+   - `acknowledgesOp` **448–486** — **per-entry agreement**: the entry's `op` kind must equal the op's own
+     (`r.op !== op.op` ⇒ false, 451), and every identity the entry carries must be that of the op it
+     acknowledges — `acknowledgedRecordId` **437–439** reads `node.id` / `edge.id`, and an absent identity
+     "carries no contrary claim" (452–455);
+   - `storeRejectedFailure` **494–508** — the failing path's typed `store-rejected`, carrying the
+     `BatchResult`'s `error`/`failedIndex` **verbatim** and fabricating neither (a `{ ok: true }` with no
+     acknowledged write for every op gets the message at 500, **no** `failedIndex`).
+   **The store-side shape this reads against** (`src/main/rag-store.ts`): `BatchResult` pins the success arm
+   as *"one `BatchOpResult` per op, in order"* (195–197, 212–217) and `applyBatchOp` **1244** emits exactly
+   one result per applied op (1258 / 1262 / 1267 / 1279 — `BatchOpResult` itself 198–207). **Derived
+   fail-state class (unchanged, not new):** a partial, over-long, junk or mis-acknowledging `results` array
+   is `FS19`'s silent-success class — it KEEPS the dirty flag and records the typed failure (regression rows
+   `tests/page-commit-failure-visibility.test.ts` `C1` 282 / `C2` 311, and
+   `tests/page-commit-scope-ack-race.test.ts` `N3` 425 with its control 462).
+
+2. **`U-EDIT-1-LIVE` status: IN PROGRESS / OWED — never "done".** The battery's **authoring** obligation
+   (§8.3, §11.9 item 6) is **satisfied**: the driver carries the `U-EDIT-1-LIVE-1`..`-8` extended rows
+   (`scripts/live-drive.mjs` 2882–2893) and their block implementations (from 4984, the `u_edit_1_live_*`
+   handlers, including the table-refusal row and the caret round-trip row). **The RUN obligation is NOT
+   satisfied:** no run result is recorded in this tree, so **no live measurement exists** for §8.3 items
+   1–8 and the unit is **not pre-DONE** (RCA-11/RCA-12). **Consequences recorded:** (a) §11 item **8**'s
+   *"the battery's blocks do not exist in `scripts/live-drive.mjs` yet"* clause is **SUPERSEDED IN PLACE**
+   (the row now reads *authoring done, RUN owed*); (b) §11 item **7**'s **O-0 oracle-identity re-run** stays
+   **OWED** — the driver is half of the oracle-hash pair, so the block addition invalidated the recorded
+   identity and the before/after hash re-read is still owed to the pass that actually runs it; (c) this
+   amendment makes **no live claim** and performed no hash computation.
+
+3. **The §3a/§3b adversarial record — ADDED (§8.2 item 5 is now satisfied, not merely promised).** §11.11
+   adds, immediately above §4: **§3a** (the ten HOST findings — the ORIGINAL pass's `M1`..`M5` MUST-FIX set
+   with each resolution and regression row, and the SECOND pass's `N1`..`N4` residuals with each fix and
+   regression row; plus the **measured NON-FINDINGS** and the one **open host residual**), and **§3b** (the
+   PACKAGE findings, cross-referenced, never patched). **What that record fixes, in one line each:** `M1`
+   foreign/unowned-node writes are now refused (the surface-root marker read + the marker-disagreement
+   refusal + the foreign-node refusal, all in `src/main/page-diff.ts`); `M2` the commit is ONE `applyBatch`
+   whose `BatchResult` is read; `M3` a simultaneous type+content edit emits BOTH ops; `M4` is recorded
+   IN PROGRESS/OWED (item 2 above); `M5` the warning is authored at failure time through the content
+   reconcile and cleared on a later success; `N1` the commit scope is `stageDocumentScope()`; `N2` the
+   deletion scan's membership mirrors `computeDocumentSubgraph`; `N3` the acknowledgement is one agreeing
+   result per op; `N4` a per-subject sequence discards post-`await` resolutions after a drain. **No
+   fail-state is added, restated or renumbered** by §3a/§3b: each finding is mapped to an EXISTING class
+   (`FS1`..`FS24`) and each fix is pinned by an existing regression row.
+
+4. **SPEC-NOTES — the register's residual gaps (recorded, with status).** These are **records, not
+   relaxations**: no register row, budget or proposition is weakened, and each note names what a later pass
+   must still do.
+   - **`SN-1` — the props arm's PRODUCTION REACHABILITY is unestablished.** `data-rag-props` has **no
+     production authoring**: a `grep` over `src/**` for the attribute finds **only the adapter's own reader**
+     (`src/main/page-diff.ts` `ATTR_RAG_PROPS` 99, its projection note 130, the raw-source comment 170) and
+     **no writer** — nothing in `src/**` authors the marker onto a rendered page. The consequence is exact:
+     §3.1's `setProps` mapping row and §7 `P-IM-1`'s amended **props arm** are exercised only by
+     harness-authored pages, so a RAG-owned-prop difference cannot arise on a production surface as the code
+     stands. **Status: SPEC-NOTE — reachability UNVERIFIED in production** (the arm is contract-pinned and
+     test-exercised; its production path is not). Not a fail-state, and **not** a reason to drop the arm.
+   - **`SN-2` — `P-TP-1`'s duplicate-`ragId` semantics are UNPINNED in §7's proposition.** The row's draw
+     matrix contains *"a page with duplicated ids"* but pins **only** totality/determinism for it; the spec
+     states no semantics for a page that renders the same `ragId` twice (a double write of one block, or a
+     typed refusal). The **test side has been repaired**: `tests/unit-u-edit-1-property-register.test.ts`
+     asserts the draw is non-vacuous (1249) and that the op list carries **at most ONE** write per duplicated
+     `ragId` (1243–1258, counterexample 1255). **Status: SPEC-NOTE — repaired test-side only; §7's `P-TP-1`
+     proposition and draw still do not state the rule**, so the TestWriter must read it from the regression
+     row, not from §7 (owed to the next §7 amendment; no budget or row change is implied).
+   - **`SN-3` — `P-TP-1`'s "quarantined node" member was MISLABELLED; the real mechanism is the store's
+     boot hash-mismatch quarantine.** §7's row reads *"a store with a quarantined node"*, but the earlier
+     member did not construct a genuine quarantine. **The real mechanism** is the store's own: a record whose
+     stored SHA-256 hash no longer verifies is marked `quarantined` at boot and excluded from the active set
+     (`src/main/rag-store.ts` 701–702 / 715–716, and the edge cascade 718–724; surfaced through
+     `status().quarantined`, 1464–1473). The **test side has been repaired**: the row now draws a
+     **tampered-record-hash** store and asserts the quarantine set is real (1173–1190), that no op names the
+     quarantined id, and that the quarantine set survives the draw (1259–1274). **Status: SPEC-NOTE —
+     repaired test-side; §7's wording is unchanged and still names the mechanism only as "a store with a
+     quarantined node"** (the mechanism is now pinned HERE so it is not re-derived).
+   - **`SN-4` — the DEPTH-BOUNDARY verification is still OWED and UNVERIFIED.** §11.10 item 2 records that
+     the adapter's `maxNestingDepth` (a raw-markup element-nesting count over a block's own fragment,
+     `src/main/page-diff.ts` 260–276) and the package's `MAX_DEPTH` (a per-node recursion depth,
+     `PACKAGE_MAX_DEPTH = 512` mirrored at 253, the refusal at 414–419) are **different measures**, and that
+     **neither** (a) whether an adapter-ACCEPTED page can still be truncated by the package, **nor** (b)
+     whether the adapter REFUSES a page the package would decode faithfully, has been established. **Status
+     unchanged at this pass — OWED (UNVERIFIED).** Read in the tree: the page suites carry **no** row over
+     either measure (a `grep` of `tests/**` for `maxNestingDepth` / `PACKAGE_MAX_DEPTH` / `nests beyond` /
+     `depth guard` returns **no match**), so the boundary draw is still owed to `P-TP-1`'s deep-totality
+     territory (§7's row pins only that the draw must terminate through the adapter's **typed failure arm,
+     never a stack exhaustion**).
+   - **`SN-5` — MIS-ATTRIBUTED adversarial rows, with the production equivalents named.** The adversarial
+     rows in `tests/edit-adversarial.test.ts` are **mislabelled in their subject**: the FS10/FS11/FS12/FS15/
+     FS19/FS24 rows drive **`store.applyBatch` DIRECTLY** (232, 272, 278, 315, 347, and the
+     `FS10/FS11/FS12/FS15` block 419–471 incl. 431, the `FS19` row 544, the `FS24` row 551), and the
+     FS16/FS18/FS17 rows drive **`EditController.commit`** (590, 606, 624) — a seam whose **only** callers
+     are tests: `src/renderer/edit-controller.ts`'s `commit` (171) has **no production caller** (a `grep` of
+     `src/**` finds no `editController.commit(`; `src/renderer/renderer.ts` 947 only **injects** the delegate
+     the controller would call). **The production equivalents that DO exist** (they are the rows those
+     subjects must be read through): `tests/page-commit-failure-visibility.test.ts` — `C1` 282 / `C2` 311
+     (an unacknowledged or partial batch is NOT success: `FS19`), `C5` 334 (the acknowledged-success
+     control), `C3` 357 (absent/malformed, no fabricated `failedIndex`), `C4` 395 (the engine cause class),
+     `W1` 423 / `W2` 448 / `W3` 476 (`FS17`: authored at failure, survives a real re-derive, cleared on
+     success), `T1`/`T2` 499/514 (**ZERO** `edit.batch` calls for an unchanged page; exactly **ONE** for one
+     change — `FS10`/`FS15`), `S1` 522 / `S2` 576 (`FS24`'s `not-resident` through the seam) / `S3` 592
+     (`not-authorized` has no commit seam in this build — asserted as the recorded gap);
+     `tests/page-commit-tab-ownership.test.ts` — `T1` 391 … `T7` 579 (the per-tab subject, the `FS16`/`FS17`
+     production rows `T6` 546 / `T7` 579, the close row `T5` 486); `tests/page-diff.test.ts` — the `F1` rows
+     331/364/388 (the foreign/ownership refusals), the type+content row 552 (`M3`/`FS19`'s silent-drop
+     class), §3.3 item 1 857 (one `applyBatch`), and the refusal's ZERO journal-delta row 794–810.
+     **`FS18`'s production equivalent** is the single-attempt assertion at
+     `tests/page-commit-failure-visibility.test.ts` 548 (*"the rejected batch was attempted exactly once
+     (§3.5 item 7: no auto-retry)"*). **One residual gap, stated so it is not read as covered:** **`FS11`'s
+     forward claim — a SUCCESSFUL page commit lands exactly ONE `batch` journal entry — has NO
+     production-path row**: a `grep` of `tests/page-*.test.ts` for `journal` matches only
+     `tests/page-diff.test.ts`'s ZERO-delta refusal rows (794–810), so the one-entry forward assertion exists
+     only in the directly-driven row (`tests/edit-adversarial.test.ts` 431 — which itself asserts the
+     REJECTED case). **Status: SPEC-NOTE — the production half of `FS11` is owed a row** (no contract change).
+
+5. **Owed edits OUTSIDE this file (recorded so they are not lost; this pass writes this file only).**
+   (a) `docs/defects.md`'s `PAGE-STATE-NOT-TAB-OWNED` and `STAGE-FOREIGN-DOC-RE-DERIVE` rows still describe
+   `pageEditSurfaceHandlerSubject()` as returning `this._currentDocumentId` at `:3138-3140`; the landed seam
+   returns the **ACTIVE TAB id** (`src/renderer/sidebar-panes.ts` 3477–3484, with the reason in its comment)
+   — the rows' citations are **stale** and are owed a repoint/re-read by the tracker's own pass.
+   (b) `docs/defects.md`'s `MOUNT-TABS-CONTRADICTS-SINGLE-ACTIVE` cites
+   `tests/page-commit-tab-ownership.test.ts:326/335/355` as driving `mountTabs`; that file's own header
+   records the harness fiction as **REMOVED** in the second remand (the T5 close row now drives
+   `TabStrip.close`), so the citation is stale. (c) The two package rows' cross-refs (`PROVIDENT-EDITABLE-*`)
+   and the O-0 oracle re-run remain the trackers' own work (items 2/7 above). **None of these is a contract
+   change in this file.**
+
+**What this amendment does NOT change.** The `FS1`..`FS24` numbering and text (§8.1) — no fail-state is
+added, restated or renumbered; §7's register rows / seed `0xED170001` / budget `63 × 6 + 22 = 400`; §6.1's
+class census (`17/26/137/0`) and §6.3's per-file work list; §4.1's supersession **set**; §3.3 items 1–8;
+§3.4's write sequence and its OWED engine route; §3.5's `CommitFailure` shape and the host-side
+`Map<tabId, failure>` carrier; §3.6; and §9's sequencing gates. **Exactly two things change:** the
+**acknowledgement reader's recorded contract** (item 1, marked at §11.10 item 4(d) and at its anchor table)
+and the **live battery's status** (item 2, marked at §11 item 8), plus the **addition** of §3a/§3b and the
+SPEC-NOTES above.

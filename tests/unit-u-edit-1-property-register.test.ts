@@ -52,20 +52,71 @@
 //     control that must produce NO op.
 // The row count stays 7, the seed stays `0xED170001`, the per-row ceiling stays
 // ≤100 and the total stays `63 × 6 + 22 = 400`.
-import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync } from 'node:fs'
+//
+// HARDENED 2026-09-22 (RCA-3 ADVERSARIAL-FIX REMAND — the PBT audit's vacuity
+// set). The rows' ORACLES are unchanged; what changes is that each now DRIVES the
+// seam it claims to measure instead of constructing its own evidence:
+//   - `P-IM-1` gains a TYPE+CONTENT arm on one drawn block (a simultaneous type
+//     and content change must commit BOTH — the text was silently dropped) and
+//     the negative `≤0 setProps` control for a page WITHOUT props;
+//   - `P-SM-1` / `P-SM-2` / `P-TP-2`'s HOST-DRIVEN halves (the host's own commit
+//     path, a REAL re-derive with the warning read from the assembled envelope,
+//     and the host-path "unchanged page ⇒ ZERO `edit.batch` calls" negative) live
+//     in `tests/page-commit-failure-visibility.test.ts`, because they need the
+//     real `SidebarPanes`/`Runtime` assembly this file deliberately does not
+//     carry (this file is the PURE adapter/store layer, §10). The row ids are
+//     asserted there under the same `§7` headings, so the audit reads ONE row per
+//     id across the two files.
+// RE-DERIVED AGAIN 2026-09-22 (RCA-3 SECOND REMAND — the vacuity set the
+// previous green did not close). `P-IM-2`, `P-TP-1`, `P-SM-1` and `P-SM-2` were
+// still SELF-REFERENTIAL: they built their own carriers/maps and their "re-derive"
+// was a `JSON.stringify` over test-authored data (P-SM-1/P-SM-2), their `P-IM-2`
+// draws carried no EDGES and drove no HOST commit, and `P-TP-1`'s duplicated-id
+// arm asserted only determinism (a double write passed) while its "quarantined
+// node" matrix member was MISLABELLED (it drew an ordinary page). What changed:
+//   - `P-IM-2` — draws now CREATE a block + its `doc-child` edge and REMOVE a
+//     block + its edge, compares `listEdges()` (sorted) before/after `undo()`,
+//     and its host half drives the REAL commit seam (ONE batch call ⇒ ONE journal
+//     entry, read off a real temp store behind the bridge);
+//   - `P-TP-1` — a real QUARANTINED node is drawn (a tampered record hash, read
+//     off the store's own `status().quarantined`) instead of the mislabelled
+//     member, and the duplicated-id arm asserts ≤1 op per duplicated ragId OR a
+//     typed refusal (a double write now FAILS the row);
+//   - `P-SM-1` / `P-SM-2` — both now drive the PRODUCTION seam: `pageSurfaceBlur`
+//     through the host, `pageEditSurfaceFailure`/`pageEditSurfaceCommitState` as
+//     the readers, a REAL store as the bytes/journal/persist oracle, and the
+//     host's real `reDerive`/`onRagStoreChanged`/`applyContentChange` paths with
+//     the witness tabs read per subject. The test-authored `TabCarriers` map is
+//     GONE from those rows (it was the vacuity: an oracle over its own fixture).
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { decodePage, buildPageOps, type PageDiffSnapshot } from '../src/main/page-diff.js'
-import type { RagSnapshotPayload } from '../src/shared/types.js'
+import { handleEditBatch } from '../src/main/edit-ops.js'
+import { parseMarkdown } from '../src/main/markdown-parse.js'
+import { installShim, mountEl } from '../src/shared/dom-shim.js'
+import { Runtime } from '../src/renderer/runtime.js'
+import { createPaneRegistry } from '../src/renderer/pane-registry.js'
+import { createEditController, type EditController } from '../src/renderer/edit-controller.js'
+import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
+import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../src/main/template-store.js'
+import type { RagSnapshotPayload, OperatorSettings } from '../src/shared/types.js'
+import type { TabEntry } from '../src/renderer/tab-state.js'
 import {
   createJsonRagStore,
   type RagStore,
   type RagNode,
   type RagNodeChild,
   type RagNodeType,
+  type RagEdge,
   type BatchOp,
+  type BatchResult,
 } from '../src/main/rag-store.js'
+
+beforeAll(() => {
+  installShim()
+})
 
 // ===========================================================================
 // §7 shared machinery — the pinned seed, the PRNG, the budget, stop-after-5
@@ -253,6 +304,220 @@ async function seedNodes(store: RagStore, nodes: RagNode[]): Promise<void> {
   for (const n of nodes) await store.putNode(n)
 }
 
+function makeEdge(id: string, kind: RagEdge['kind'], source: string, target: string, overrides: Partial<RagEdge> = {}): RagEdge {
+  const now = '2026-01-01T00:00:00.000Z'
+  return { id, kind, source, target, createdAt: now, updatedAt: now, ...overrides }
+}
+
+/** A stable ordering for the edge comparison (`listEdges()` order is insertion
+ *  order, which a batch+undo need not reproduce byte-for-byte). */
+function sortById<T extends { id: string }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+function edgesSnapshot(store: RagStore): string {
+  return JSON.stringify(sortById(store.listEdges()))
+}
+function nodesSnapshot(store: RagStore): string {
+  return JSON.stringify(sortById(store.listNodes()))
+}
+
+/** The page a section's blocks render to — the containment shape `P-IM-2`'s
+ *  edge draws need (`doc-child` from the section, `documentIds` scoped so the
+ *  removal scan can see them: the PRODUCTION edge shape is pinned by
+ *  `tests/page-diff-production-commit.test.ts`). */
+function sectionPage(blocks: [id: string, text: string][], doc = 'doc'): string {
+  const body = blocks.map(([id, text]) => `<p data-rag-node-id="${id}">${text}</p>`).join('')
+  return `<div id="page-edit-surface" data-edit-surface="${doc}" contenteditable="true"><div data-rag-node-id="sec">Section</div>${body}</div>`
+}
+
+// ===========================================================================
+// the HOST harness (the seam-driven half the second remand requires): the real
+// `SidebarPanes` + `Runtime`, a mount, and a REAL temp store behind the bridge
+// — so the store's bytes / journal / persist are the oracle and the commit goes
+// through `pageSurfaceBlur` → `commitPageEdit` → ONE `bridge.edit.batch` →
+// `handleEditBatch` exactly as production does.
+// ===========================================================================
+const HOST_DOC = 'doc-host'
+
+/** The page the single surface renders for the host fixture (§2.1: the surface
+ *  root carries `id = page-edit-surface` + `data-edit-surface = <documentId>`). */
+function hostPage(bodyText: string): string {
+  return (
+    `<div id="page-edit-surface" data-edit-surface="${HOST_DOC}" contenteditable="true">` +
+    `<h1 data-rag-node-id="${HOST_DOC}:head">Title</h1>` +
+    `<p data-rag-node-id="${HOST_DOC}:body">${bodyText}</p>` +
+    `</div>`
+  )
+}
+
+interface HostHarness {
+  host: SidebarPanes
+  runtime: Runtime
+  store: RagStore
+  file: string
+  batch: ReturnType<typeof vi.fn>
+  editController: EditController
+  tabId: string
+  /** The store's bytes/journal AT BOOT — the "unchanged on failure" oracle. */
+  bytesBefore: string
+  journalBefore: number
+  /** A row may override what the bridge answers (junk/failing results). `null`
+   *  ⇒ the REAL `handleEditBatch(store, payload)` path. */
+  answer: { run: ((ops: BatchOp[]) => unknown) | null }
+  /** `engine-unavailable`: remove the batch seam from the bridge entirely. */
+  dropBatchSeam: () => void
+}
+
+async function makeHostHarness(opts: { snapshotFails?: boolean } = {}): Promise<HostHarness> {
+  const dir = mkdtempSync(join(tmpdir(), 'provident-u-edit-1-host-'))
+  const file = join(dir, 'rag.json')
+  const store = createJsonRagStore({ path: file })
+  await store.putNode(makeNode(`${HOST_DOC}:head`, 'h1', 'Title'))
+  await store.putNode(makeNode(`${HOST_DOC}:body`, 'p', 'body one'))
+  // NOTE: a real `applyBatch`-validated store rejects an edge whose endpoints are
+  // not nodes (`putEdge` refuses a missing/quarantined endpoint), so the
+  // `doc-flow` edges (which target the DOCUMENT id) are not seeded here: the
+  // commit path needs only the containment edges + the surface marker.
+  await store.putEdge(makeEdge(`e-${HOST_DOC}-next`, 'next-section', `${HOST_DOC}:head`, `${HOST_DOC}:body`, { documentIds: [HOST_DOC] }))
+  await store.putEdge(makeEdge(`e-${HOST_DOC}-child`, 'doc-child', `${HOST_DOC}:head`, `${HOST_DOC}:body`, { order: 0, documentIds: [HOST_DOC] }))
+
+  const mount = mountEl() as never
+  const operatorMount = mountEl() as never
+  const registry = createPaneRegistry()
+  const h: HostHarness = {
+    host: null as never,
+    runtime: null as never,
+    store,
+    file,
+    batch: null as never,
+    editController: null as never,
+    tabId: 'tab-host',
+    bytesBefore: storeBytes(file),
+    journalBefore: store.journal().length,
+    answer: { run: null },
+    dropBatchSeam: () => {},
+  }
+  h.batch = vi.fn(async (ops: BatchOp[]): Promise<BatchResult> => {
+    if (h.answer.run != null) return h.answer.run(ops) as BatchResult
+    // the PRODUCTION path: the existing `IPC_EDIT_BATCH` channel's main-side
+    // handler, against the real store (§3.3 item 2).
+    return handleEditBatch(store, { ops })
+  })
+  const snapshot = vi.fn(async () => {
+    if (opts.snapshotFails === true) throw new Error('no resident store')
+    return {
+      store: 'main',
+      nodes: store.listNodes(),
+      edges: store.listEdges(),
+    }
+  })
+  const state = { settings: { enabledPanes: [], defaultDocumentId: null, topK: 5, representationMode: 'html' } }
+  const bridge = {
+    security: { get: vi.fn(async () => ({ token: null, enabled: ['read', 'dispatch'] })) },
+    edit: {
+      onRagStoreChanged: vi.fn(() => () => {}),
+      commitRich: vi.fn(async () => ({ ok: true, nodeId: 'x' })),
+      batch: h.batch,
+    },
+    rag: {
+      query: vi.fn(async () => ({ query: '', ranked: [], context: [], markdown: '', lineMap: { ranges: [] }, k: 5 })),
+      snapshot,
+      backlinks: vi.fn(async () => ({ nodeId: '', backlinks: [], outlinks: [], crosslinkBacklinks: [], crosslinkOutlinks: [] })),
+      docHeads: vi.fn(async () => ({ documents: [{ documentId: HOST_DOC, title: 'Title', path: [], tags: [] }] })),
+      stores: vi.fn(async () => ({ stores: [] })),
+      manage: vi.fn(async () => ({ ok: true })),
+    },
+    template: {
+      get: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
+      validate: vi.fn(async () => ({ ok: true })),
+      set: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
+      create: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
+      delete: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
+      reset: vi.fn(async () => ({ source: 'default', template: DEFAULT_CONTENT_WINDOW_TEMPLATE })),
+      onTemplateChanged: vi.fn(() => () => {}),
+    },
+    operatorSettings: {
+      get: vi.fn(async () => ({ ...state.settings }) as unknown as OperatorSettings),
+      set: vi.fn(async (patch: Record<string, unknown>) => {
+        Object.assign(state.settings, patch)
+        return { ...state.settings } as unknown as OperatorSettings
+      }),
+      onChanged: vi.fn(() => () => {}),
+    },
+  }
+  const backRefs = new Map<string, string[]>()
+  const onRebuild = vi.fn((kind?: unknown) => void h.host.reDerive(kind as never))
+  h.editController = createEditController({
+    backRefs,
+    commit: async () => ({ ok: true, nodeId: 'x' }),
+    onRebuild,
+  })
+  h.host = new SidebarPanes({
+    mount,
+    operatorMount,
+    registry,
+    bridge: bridge as never,
+    backRefs,
+    editController: h.editController,
+  })
+  h.runtime = new Runtime({
+    mount,
+    envelope: {
+      template: DEFAULT_CONTENT_WINDOW_TEMPLATE,
+      content: [],
+      clientConfig: { runInstantiation: true, runRendering: true },
+    } as never,
+  })
+  ;(globalThis as unknown as { window?: unknown }).window = { provident: bridge }
+  h.dropBatchSeam = () => {
+    delete (bridge.edit as { batch?: unknown }).batch
+  }
+  await h.host.boot(h.runtime)
+  const entry: TabEntry = { id: h.tabId, target: { kind: 'document', documentId: HOST_DOC }, title: 'Title' }
+  h.host.mountTab(entry)
+  return h
+}
+
+/** The page seam (`window.provident.sidebar`, §11.8 item 1). */
+function sidebarApi(): Record<string, (...args: unknown[]) => unknown> {
+  const w = (globalThis as unknown as { window?: { provident?: { sidebar?: unknown } } }).window
+  const sidebar = w?.provident?.sidebar
+  if (sidebar == null) throw new Error('window.provident.sidebar not installed (the page seam must be installed at boot)')
+  return sidebar as Record<string, (...args: unknown[]) => unknown>
+}
+
+function pageInput(): void {
+  const seam = sidebarApi().pageSurfaceInput
+  expect(typeof seam, 'the page seam sidebar.pageSurfaceInput must be installed (§11.8 item 1)').toBe('function')
+  ;(seam as () => void)()
+}
+
+async function pageBlur(html: string): Promise<void> {
+  const seam = sidebarApi().pageSurfaceBlur
+  expect(typeof seam, 'the page seam sidebar.pageSurfaceBlur must be installed (§11.8 item 1)').toBe('function')
+  ;(seam as (h: string) => void)(html)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/** §3.5 item 6/§11.8 item 3 — the host's DECLARED per-subject failure reader. */
+function hostFailure(host: SidebarPanes, subject: string): CommitFailure | undefined {
+  const reader = (host as unknown as { pageEditSurfaceFailure?: (s: string) => CommitFailure | undefined })
+    .pageEditSurfaceFailure
+  if (typeof reader !== 'function') return undefined
+  return reader.call(host, subject)
+}
+
+/** §3.5 item 3/§11.8 item 3 — the host's DECLARED per-subject state reader
+ *  (`{ subject, dirty, failure? }`), the reader the witness tabs are compared
+ *  through. */
+function hostCommitState(host: SidebarPanes, subject: string): { subject: string; dirty: boolean; failure?: CommitFailure } {
+  const reader = (host as unknown as {
+    pageEditSurfaceCommitState?: (s: string) => { subject: string; dirty: boolean; failure?: CommitFailure }
+  }).pageEditSurfaceCommitState
+  expect(typeof reader, 'the host must expose `pageEditSurfaceCommitState(subject)` (§11.8 item 3)').toBe('function')
+  return reader!.call(host, subject)
+}
+
 // ===========================================================================
 // P-IM-1 — the op list is a function of the DIFF and names only changed nodes
 // ===========================================================================
@@ -266,10 +531,26 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
      *  RAG-owned and its runtime-only form, so neither can be sampled away. */
     let propsOnlyDrawn = 0
     let runtimeOnlyDrawn = 0
+    /** RCA-3 remand: the TYPE+CONTENT arm's draw count (N ≥ 2 draws only), tracked
+     *  so a collapsed population fails LOUDLY instead of silently narrowing. */
+    let dualDrawn = 0
+    /** §7's block-count pool `N ∈ {1, 2, 7, 40}` — the drawn N values, tracked so
+     *  a collapsed population fails LOUDLY instead of silently narrowing. */
+    const N_POOL = [1, 2, 7, 40] as const
+    const nsDrawn = new Set<number>()
     for (let i = 0; i < ROW_BUDGETS['P-IM-1'] && failures < STOP_AFTER; i++) {
       cases++
       const { store } = newStore()
-      const n = pick(rng, [1, 2, 7, 40])
+      // N is drawn from §7's pool by STRATIFICATION (the case index), not by an
+      // rng read: measured, the pinned stream is sampled at a fixed stride whose
+      // low-bit pattern is a CONSTANT — `rng() % 4` yielded N = 1 in all 63
+      // draws and at every budget up to the ≤100 ceiling (a fixed point, not a
+      // short-run accident), leaving the spec's own N pool unreachable AND
+      // making `S ≠ ∅` undrawable. Index stratification covers the whole pool
+      // (measured 16/16/16/15 over the 63 attempts) and makes `S ≠ ∅` reachable
+      // (measured 33 draws), without touching any oracle.
+      const n = N_POOL[i % N_POOL.length]
+      nsDrawn.add(n)
       const nodes = Array.from({ length: n }, (_, k) => makeNode(`n${k}`, pick(rng, PAGE_TYPE_POOL), `text-${k}`))
       await seedNodes(store, nodes)
       // S \u2286 the blocks, mutated over the closed field set (empty S allowed)
@@ -279,7 +560,20 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
       // of its two forms on EVERY draw (RAG-owned vs runtime-only)
       const propNode = nodes[0]
       const propKey = pick(rng, ['align', 'tone', 'role'])
-      const runtimeOnly = rng() % 2 === 0
+      // The arm is drawn by STRATIFICATION (the case index), NOT by a coin flip
+      // on the pinned stream. Measured: with the arm read as `rng() % 2 === 0`
+      // the population consumed an even, fixed number of rng calls per draw, and
+      // the LCG's low bits advance by a fixed 4-cycle — so a stride-4 sample of
+      // `rng() % 4` / `rng() % 2` is a CONSTANT (`pick(...)` always 1,
+      // `runtimeOnly` always false, over 500 draws and over every budget up to
+      // ≤100: the degeneracy is a FIXED POINT, not a short-run accident). That
+      // made the amended §11.9 item 5 control arm unreachable, i.e. VACUOUS.
+      // Alternating on the case index draws BOTH arms in every run — the
+      // stratification §7's strategy requires ("the props arm drawn in BOTH its
+      // RAG-owned and its runtime-only form") — and does not weaken either arm's
+      // oracle. Measured draw counts under the pinned seed `0xED170001` and the
+      // row's pinned 63-attempt budget: props-only 31, runtime-only 32.
+      const runtimeOnly = i % 2 === 0
       const propValue = runtimeOnly ? 'runtime' : 'rag-owned'
       overrides.set(propNode.id, {
         attrs: runtimeOnly
@@ -295,6 +589,25 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
         if (rng() % 3 !== 0) continue
         mutated.add(node.id)
         overrides.set(node.id, { inner: `${node.content}!` })
+      }
+      // the TYPE+CONTENT arm (RCA-3 ADVERSARIAL-FIX REMAND): the SECOND block draws
+      // a SIMULTANEOUS type change AND content change on EVERY draw with N ≥ 2 —
+      // stratified on the draw like the props arm, so it cannot be sampled away. A
+      // type-only write (the measured defect: `continue` after `setType`) silently
+      // drops the user's text, which is exactly what this arm's oracle detects.
+      const dual = nodes.length > 1 ? nodes[1] : null
+      let dualNewType: RagNodeType | null = null
+      let dualNewContent = ''
+      if (dual !== null) {
+        dualNewType = pick(
+          rng,
+          PAGE_TYPE_POOL.filter((t) => t !== dual.type),
+        )
+        dualNewContent = `${dual.content}#`
+        mutated.add(dual.id)
+        // set AFTER the content loop above so the tag override is not overwritten
+        overrides.set(dual.id, { tag: dualNewType, inner: dualNewContent })
+        dualDrawn++
       }
       const page = pageFor(nodes, overrides)
       const ops = diff(page, store)
@@ -326,7 +639,29 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
         failures++
         counterexample = counterexample ?? `the drawn props change was not a difference at all (${propKey})`
       }
-      // (3) the empty-subset control (S = \u2205 AND an uncompared props draw)
+      // (3) the TYPE+CONTENT arm's oracle (§3.2's closed field set): a block whose
+      //     type AND content both changed must carry BOTH — the new content (never
+      //     dropped) and the new type (either as a `setType` op or inside the
+      //     `putNode` that expresses the difference, so both fix shapes pass).
+      if (dual !== null && dualNewType !== null) {
+        const dualOps = ops.filter((op) => nodeIdsOf([op]).includes(dual.id))
+        const contentCarried = dualOps.some(
+          (op) => ((op as { node?: { content?: string } }).node?.content ?? null) === dualNewContent,
+        )
+        const typeCarried = dualOps.some(
+          (op) =>
+            (op as { type?: string }).type === dualNewType ||
+            (op as { node?: { type?: string } }).node?.type === dualNewType,
+        )
+        if (!contentCarried) {
+          failures++
+          counterexample = counterexample ?? `a simultaneous type+content change on ${dual.id} did not carry the new content ('${dualNewContent}') — the user's text is dropped`
+        } else if (!typeCarried) {
+          failures++
+          counterexample = counterexample ?? `a simultaneous type+content change on ${dual.id} did not carry the new type (${dualNewType})`
+        }
+      }
+      // (4) the empty-subset control (S = \u2205 AND an uncompared props draw)
       if (mutated.size === 0 && runtimeOnly && ops.length !== 0) {
         failures++
         counterexample = counterexample ?? `an empty mutation subset produced ${ops.length} ops`
@@ -336,9 +671,22 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
         counterexample = counterexample ?? 'a non-empty mutation subset produced no op'
       }
     }
-    // NON-VACUITY of the amended population: both props arms were drawn
+    // NON-VACUITY of the amended population: both props arms were DRAWN (the
+    // measured split under the index stratification is 31 RAG-owned / 32
+    // runtime-only of the 63 attempts) — neither arm can be sampled away.
     expect(propsOnlyDrawn).toBeGreaterThan(0)
     expect(runtimeOnlyDrawn).toBeGreaterThan(0)
+    // and both arms' oracles actually RAN: the RAG-owned arm must have asserted
+    // its exactly-one-`setProps`, the runtime-only arm its zero-op control
+    expect(propsOnlyDrawn + runtimeOnlyDrawn).toBe(cases)
+    expect(propsOnlyDrawn).toBeGreaterThanOrEqual(2)
+    expect(runtimeOnlyDrawn).toBeGreaterThanOrEqual(2)
+    // the RCA-3 TYPE+CONTENT arm really ran (a collapsed population would leave
+    // the simultaneous-edit defect undrawn again)
+    expect(dualDrawn).toBeGreaterThan(0)
+    // the §7 N pool was actually drawn (a collapsed population is a harness
+    // defect, not a `held` verdict)
+    expect([...nsDrawn].sort((a, b) => a - b)).toEqual([1, 2, 7, 40])
     const controlStore = newStore().store
     await controlStore.putNode(makeNode('c1', 'p', 'k'))
     const controlOps = diff(pageFor([makeNode('c1', 'p', 'k')], new Map()), controlStore)
@@ -346,43 +694,96 @@ describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff
     report({ row: 'P-IM-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'S = \u2205 + runtime-only \u21d2 ops = []', discriminated: controlOps.length === 0 } })
     expect(counterexample ?? null).toBeNull()
   })
+
+  it('P-IM-1 — the negative `≤0 setProps` control: a page WITHOUT props produces NO `setProps` op', async () => {
+    // The audit's vacuity finding for this row: the POSITIVE props arm above is
+    // reachable only through the TEST-LOCAL `data-rag-props` authoring. Measured:
+    // `grep -rn 'data-rag-props' src/` returns ONE hit — `src/main/page-diff.ts`,
+    // the adapter's READER (`ATTR_RAG_PROPS`) — and NO producer, so a production
+    // page form carries a node's own props as ordinary attributes (the traversal
+    // merges them onto the subtree root) and never as `data-rag-props`. This
+    // control pins the discriminating negative; it does NOT claim the production
+    // page can express a props difference (that authoring is not pinned by
+    // §3.1/§3.2 — recorded as a gap, never silently worked around).
+    const { store } = newStore()
+    await seedNodes(store, [makeNode('p1', 'p', 'one'), makeNode('p2', 'p', 'two', { props: { align: 'center' } })])
+    // (a) the props-free / production-form page (no `data-rag-props` anywhere),
+    //     equal to the store ⇒ NO op at all, and certainly no `setProps`
+    const plain = `<p data-rag-node-id="p1">one</p><p data-rag-node-id="p2" align="center">two</p>`
+    const ops = diff(plain, store)
+    expect(setPropsOps(ops), 'a page WITHOUT props must produce NO `setProps` op').toEqual([])
+    expect(ops, 'the props-free page equal to the store is a no-op (the row is not vacuous by refusing to map)').toEqual([])
+    // (b) the same form with ONE content change still writes its content op — so
+    //     the ZERO-`setProps` reading above is not an artifact of an empty list
+    const changed = `<p data-rag-node-id="p1">one!</p><p data-rag-node-id="p2" align="center">two</p>`
+    const changedOps = diff(changed, store)
+    expect(setPropsOps(changedOps), 'a content-only change must never be reported as a props change (FS8)').toEqual([])
+    expect(changedOps.length, 'the content change IS written (the control discriminates)').toBe(1)
+    // (c) and the test-local `data-rag-props` carrier DOES write one — so the
+    //     negative above is discriminating rather than an always-empty oracle
+    const withProps = `<p data-rag-node-id="p1">one</p><p data-rag-node-id="p2" data-rag-props='{"align":"left"}'>two</p>`
+    expect(
+      setPropsOps(diff(withProps, store)).length,
+      'the test-local `data-rag-props` carrier DOES write one `setProps` (the negative discriminates)',
+    ).toBe(1)
+  })
 })
 
 // ===========================================================================
 // P-IM-2 — one commit = one invertible `batch` journal entry
 // ===========================================================================
 describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-commit state', () => {
-  it('P-IM-2 — a successful commit gains exactly ONE batch entry and its inverse restores the store', async () => {
+  it('P-IM-2 — a successful commit gains exactly ONE batch entry and its inverse restores the NODES and the EDGES', async () => {
     const rng = makeRng(SEED ^ 0x11)
     let failures = 0
     let counterexample: string | undefined
     let cases = 0
+    /** §7 `P-IM-2`'s population amendment (2026-09-22 second remand): the draw
+     *  must contain at least one block CREATION with its edge and one block
+     *  REMOVAL with its edge, else the edge half of the invertibility oracle is
+     *  never exercised (the previous form drew content edits over a store with
+     *  NO edges at all). */
+    let createdDrawn = 0
+    let removedDrawn = 0
+    const arms = new Set<string>()
     for (let i = 0; i < ROW_BUDGETS['P-IM-2'] && failures < STOP_AFTER; i++) {
       cases++
       const { store } = newStore()
-      const nodes = Array.from({ length: intBetween(rng, 1, 6) }, (_, k) => makeNode(`n${k}`, 'p', `body-${k}`))
-      await seedNodes(store, nodes)
-      const overrides = new Map<string, { inner: string }>()
-      for (const [k, node] of nodes.entries()) {
-        // §7 `P-IM-2`'s AMENDED PROPOSITION (§11 amendment `11.8` item 4, remedy
-        // (a) — the population is restricted to NON-EMPTY mutation subsets):
-        // "for ANY draw whose mutation subset is `S ≠ ∅`, after a successful
-        // commit `journal()` gained exactly one entry of kind `batch`". The
-        // `S = ∅` draw is this row's CONTROL below and `P-TP-2`'s proposition
-        // (`strat:empty-diff-idempotent`: an empty op list ⇒ journal delta 0,
-        // persist delta 0, state `clean`) — so the draw forces `S ≠ ∅` and the
-        // two rows no longer state contradictory oracles. The invariant is NOT
-        // weakened: only the out-of-population draw is excluded, and the
-        // exclusion is recorded in the spec AND here.
-        if (k === 0 || rng() % 2 === 0) overrides.set(node.id, { inner: `${node.content}-edited` })
-      }
-      const ops = diff(pageFor(nodes, overrides), store)
+      // the containment fixture: a section + two `doc-child` blocks, so a draw
+      // can create a block (minted putNode + its doc-child putEdge) and remove a
+      // block (removeEdge + removeNode) — both with EDGES.
+      await seedNodes(store, [
+        makeNode('sec', 'div', 'Section'),
+        makeNode('b1', 'p', 'body-1'),
+        makeNode('b2', 'p', 'body-2'),
+      ])
+      await store.putEdge(makeEdge('e-child-1', 'doc-child', 'sec', 'b1', { order: 0, documentIds: ['doc'] }))
+      await store.putEdge(makeEdge('e-child-2', 'doc-child', 'sec', 'b2', { order: 1, documentIds: ['doc'] }))
+      // the arm by STRATIFICATION of the case index (the pinned LCG's low bits
+      // are a measured fixed point, so a coin flip on the stream samples one arm
+      // only — the same recorded hazard the sibling rows document)
+      const arm = i % 3
+      const page =
+        arm === 0
+          ? sectionPage([['b1', 'body-1-edited'], ['b2', 'body-2']])
+          : arm === 1
+            ? sectionPage([['b1', 'body-1'], ['b2', 'body-2'], ['typed', 'typed text']])
+            : sectionPage([['b1', 'body-1']])
+      // §7 `P-IM-2`'s AMENDED PROPOSITION (§11 amendment `11.8` item 4, remedy
+      // (a) — the population is restricted to NON-EMPTY mutation subsets). Every
+      // arm above mutates, so the draw is in-population by construction; the
+      // `S = ∅` draw is this row's CONTROL below and `P-TP-2`'s proposition.
+      const ops = diff(page, store)
+      arms.add(arm === 0 ? 'content' : arm === 1 ? 'create+edge' : 'remove+edge')
+      if (arm === 1 && ops.some((op) => op.op === 'putEdge')) createdDrawn++
+      if (arm === 2 && ops.some((op) => op.op === 'removeNode') && ops.some((op) => op.op === 'removeEdge')) removedDrawn++
       if (ops.length === 0) {
         failures++
         counterexample = counterexample ?? 'a non-empty mutation subset produced an EMPTY op list (no commit to journal)'
         continue
       }
-      const before = JSON.stringify(store.listNodes())
+      const nodesBefore = nodesSnapshot(store)
+      const edgesBefore = edgesSnapshot(store)
       const journalBefore = store.journal().length
       const result = await store.applyBatch(ops)
       if (!result.ok) {
@@ -390,6 +791,7 @@ describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-
         counterexample = counterexample ?? `the store rejected the commit: ${result.error} (failedIndex ${result.failedIndex})`
         continue
       }
+      // §3.3 item 3: exactly ONE journal entry, of kind `batch`
       const journalAfter = store.journal()
       if (journalAfter.length - journalBefore !== 1) {
         failures++
@@ -402,12 +804,31 @@ describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-
         counterexample = counterexample ?? `journal entry kind ${entry.kind}, expected batch`
         continue
       }
-      await store.undo()
-      if (JSON.stringify(store.listNodes()) !== before) {
+      // the entry carries the forward ops AND a non-empty reverse-ordered inverse
+      const inverse = (entry as { inverse?: BatchOp[] }).inverse
+      if (!Array.isArray(inverse) || inverse.length !== ops.length) {
         failures++
-        counterexample = counterexample ?? 'undo did not restore the pre-commit nodes'
+        counterexample = counterexample ?? `the batch entry's inverse carries ${Array.isArray(inverse) ? inverse.length : 'no'} ops for ${ops.length} forward ops`
+        continue
+      }
+      // the invertibility oracle over BOTH halves of the store (§3.3 item 3)
+      await store.undo()
+      if (nodesSnapshot(store) !== nodesBefore) {
+        failures++
+        counterexample = counterexample ?? `undo() did not restore the pre-commit NODES (${arm === 1 ? 'create+edge' : arm === 2 ? 'remove+edge' : 'content'} arm)`
+        continue
+      }
+      if (edgesSnapshot(store) !== edgesBefore) {
+        failures++
+        counterexample = counterexample ?? `undo() did not restore the pre-commit EDGES (${arm === 1 ? 'create+edge' : arm === 2 ? 'remove+edge' : 'content'} arm)`
       }
     }
+    // NON-VACUITY of the amended population: every arm ran, and the edge draws
+    // really produced the edge ops (a collapsed population is a harness defect,
+    // not a `held` verdict)
+    expect([...arms].sort()).toEqual(['content', 'create+edge', 'remove+edge'])
+    expect(createdDrawn, 'a block CREATION with its edge was really drawn').toBeGreaterThan(0)
+    expect(removedDrawn, 'a block REMOVAL with its edge was really drawn').toBeGreaterThan(0)
     // the CONTROL: an EMPTY op list must produce a journal delta of 0
     const { store: cs } = newStore()
     await cs.putNode(makeNode('c1', 'p', 'k'))
@@ -418,6 +839,27 @@ describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-
     report({ row: 'P-IM-2', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'empty op list ⇒ journal delta 0', discriminated: controlDelta === 0 } })
     expect(controlDelta).toBe(0)
     expect(counterexample ?? null).toBeNull()
+  })
+
+  it('P-IM-2 (HOST HALF) — ONE commit through the production seam issues exactly ONE batch for the whole page', async () => {
+    // The audit's vacuity finding: the row above drove the STORE directly, so a
+    // commit path that split the page into N batches (a per-op loop, §3.3 item 1
+    // / `FS10`) was invisible. This half drives the REAL seam —
+    // `pageSurfaceBlur` → `commitPageEdit` → ONE `bridge.edit.batch` — with a
+    // real temp store behind the bridge, and reads the journal off that store.
+    const h = await makeHostHarness()
+    const before = h.store.journal().length
+    pageInput()
+    await pageBlur(hostPage('edited body'))
+    expect(h.batch.mock.calls.length, 'ONE commit ⇒ exactly ONE batch call (§3.3 item 1; N batches is FS10)').toBe(1)
+    const ops = h.batch.mock.calls[0][0] as BatchOp[]
+    expect(ops.length, 'the drawn page really diffs to at least one op (non-vacuous)').toBeGreaterThan(0)
+    expect(
+      h.store.journal().length - before,
+      'the whole page landed as exactly ONE journal entry (§3.3 item 3)',
+    ).toBe(1)
+    expect(h.store.journal()[h.store.journal().length - 1].kind, 'the entry is a `batch` entry').toBe('batch')
+    expect(h.editController.isDirty(h.tabId), 'the acknowledged commit clears the page').toBe(false)
   })
 })
 
@@ -498,307 +940,219 @@ describe('§7 P-IM-3 — a type change preserves id/createdAt/children/props/own
 })
 
 // ===========================================================================
-// P-SM-1 — a failed commit is atomic and loud
+// P-SM-1 — a failed commit is atomic and loud (SEAM-DRIVEN)
 // ===========================================================================
-/** The pinned typed failure record (\u00a73.5 item 5). */
+/** The pinned typed failure record (\u00a73.5 item 5) — the closed five-member union. */
 type CommitFailure = {
   kind: 'not-authorized' | 'not-resident' | 'engine-unavailable' | 'store-rejected' | 'decompose-failed'
   message: string
   failedIndex?: number
   engineCause?: 'connection-refused' | 'engine-not-spawned' | 'not-ready' | 'unavailable-state'
 }
-/** The pinned per-tab dirty machine (\u00a73.5 item 3). */
-type TabEditState = 'clean' | 'uncommitted' | 'committing' | 'commit-failed' | 'closing-dirty'
-/** \u00a73.5 item 5/6 — the host-side per-tab carriers (NEVER the DOM): the state
- *  and the typed failure record, both keyed by tab id. */
-interface TabCarriers {
-  states: Map<string, TabEditState>
-  failures: Map<string, CommitFailure>
-}
-function newTabCarriers(): TabCarriers {
-  return { states: new Map<string, TabEditState>(), failures: new Map<string, CommitFailure>() }
-}
-/** The commit's outcome, as the commit path must report it. */
-type CommitOutcome = { ok: true } | { ok: false; failure: CommitFailure }
+const COMPOSE_HEAD_FAILURE_KINDS: CommitFailure['kind'][] = [
+  'not-authorized',
+  'not-resident',
+  'engine-unavailable',
+  'store-rejected',
+  'decompose-failed',
+]
+describe('\u00a77 P-SM-1 \u2014 a failed commit is atomic and loud, driven through the PRODUCTION seam', () => {
+  it('P-SM-1 (SEAM) \u2014 every seam-drivable failure kind is constructed at `commit-failed` with a real store left byte-identical', async () => {
+    const observed = new Map<string, CommitFailure>()
+    /** Each draw returns the store's PRE-COMMIT bytes/journal, captured AFTER its
+     *  own fixture setup and immediately before the blur (a draw whose setup
+     *  touches the store — the `store-rejected` draw removes the node whose
+     *  `setType` must fail — otherwise measures its own setup). */
+    const draws: {
+      label: string
+      run: () => Promise<{ h: HostHarness; subject: string; bytes: string; journal: number }>
+    }[] = [
+      {
+        label: 'decompose-failed \u2014 the adapter refuses the page (a stored table cannot round-trip, \u00a73.2)',
+        run: async () => {
+          const h = await makeHostHarness()
+          pageInput()
+          const bytes = storeBytes(h.file)
+          const journal = h.store.journal().length
+          await pageBlur('<table data-rag-node-id="t"><tr><td>cell</td></tr></table>')
+          return { h, subject: h.tabId, bytes, journal }
+        },
+      },
+      {
+        label: 'store-rejected \u2014 the REAL store rejects the batch and rolls back',
+        run: async () => {
+          const h = await makeHostHarness()
+          pageInput()
+          // the page retypes the body; the node is removed from the store AFTER
+          // the snapshot, so the batch's `setType` names a missing node and the
+          // store rejects it mid-batch (its own rollback path).
+          await h.store.removeNode(`${HOST_DOC}:body`)
+          const bytes = storeBytes(h.file)
+          const journal = h.store.journal().length
+          await pageBlur(hostPage('body one').replace('<p ', '<h2 ').replace('</p>', '</h2>'))
+          return { h, subject: h.tabId, bytes, journal }
+        },
+      },
+      {
+        label: 'not-resident \u2014 no store snapshot is loaded (the CacheMiss class, \u00a73.6)',
+        run: async () => {
+          const h = await makeHostHarness({ snapshotFails: true })
+          pageInput()
+          const bytes = storeBytes(h.file)
+          const journal = h.store.journal().length
+          await pageBlur(hostPage('edited body'))
+          return { h, subject: h.tabId, bytes, journal }
+        },
+      },
+      {
+        label: 'engine-unavailable \u2014 the edit-batch seam is absent on the bridge',
+        run: async () => {
+          const h = await makeHostHarness()
+          pageInput()
+          h.dropBatchSeam()
+          const bytes = storeBytes(h.file)
+          const journal = h.store.journal().length
+          await pageBlur(hostPage('edited body'))
+          return { h, subject: h.tabId, bytes, journal }
+        },
+      },
+    ]
 
-describe('\u00a77 P-SM-1 \u2014 a failed commit leaves the store byte-identical and raises the typed failure', () => {
-  it('P-SM-1 \u2014 ALL FIVE CommitFailure kinds are constructed and observed at commit-failed, with bytes/persists/journal unchanged', async () => {
-    const rng = makeRng(SEED ^ 0x33)
-    /** \u00a711 amendment `11.9` item 5 \u2014 the FULL enumerated set, never sampled away. */
-    const KINDS: CommitFailure['kind'][] = ['not-authorized', 'not-resident', 'engine-unavailable', 'store-rejected', 'decompose-failed']
-    /** the pinned engine causes (\u00a73.5 item 5) \u2014 \u22652 of the four are drawn */
-    const ENGINE_CAUSES: NonNullable<CommitFailure['engineCause']>[] = ['connection-refused', 'engine-not-spawned', 'not-ready', 'unavailable-state']
-    /** the internal re-tally of this row's own 22 attempts (4 \u00d7 5 kinds + 2 controls) */
-    const DRAWS_PER_KIND = 4
-    const BUDGET = DRAWS_PER_KIND * KINDS.length + 2
-    expect(BUDGET).toBe(ROW_BUDGETS['P-SM-1'])
-    expect(BUDGET).toBe(22)
-
-    let failures = 0
-    let counterexample: string | undefined
-    let cases = 0
-    const observedKinds = new Set<CommitFailure['kind']>()
-    const observedIndices = new Set<number>()
-    const observedCauses = new Set<string>()
-
-    for (let kindIndex = 0; kindIndex < KINDS.length; kindIndex++) {
-      const kind = KINDS[kindIndex]
-      for (let draw = 0; draw < DRAWS_PER_KIND; draw++) {
-        cases++
-        const { store, file } = newStore()
-        const nodes = Array.from({ length: intBetween(rng, 1, 4) }, (_, k) => makeNode(`n${k}`, 'p', `body-${k}`))
-        await seedNodes(store, nodes)
-        const bytesBefore = storeBytes(file)
-        const journalBefore = store.journal().length
-        const nodesBefore = JSON.stringify(store.listNodes())
-        const carriers = newTabCarriers()
-        const tabId = `tab-${kindIndex}-${draw}`
-        // the user's only copy of the edit: the page's text (\u00a73.5 item 2)
-        const pageText = `the text the user typed (${tabId})`
-        carriers.states.set(tabId, 'uncommitted')
-        const batchCallsBefore = store.journal().length
-
-        // ---- CONSTRUCT the drawn failure through the path that owns it ----
-        let outcome: CommitOutcome
-        if (kind === 'decompose-failed') {
-          // the ADAPTER's typed refusal arm (\u00a73.1 \u2014 a package throw / an
-          // unmappable input), never a partial write
-          const decoded = decodePage(42 as never)
-          outcome = decoded.ok
-            ? { ok: true }
-            : { ok: false, failure: { kind: 'decompose-failed', message: decoded.message } }
-        } else if (kind === 'store-rejected') {
-          // a REAL batch failure at a drawn index (\u22652 distinct values, incl. a non-zero one)
-          const failedIndex = draw % 4
-          observedIndices.add(failedIndex)
-          const ops: BatchOp[] = []
-          for (let k = 0; k < 4; k++) {
-            ops.push(
-              k === failedIndex
-                ? { op: 'setType', nodeId: 'no-such-node', type: 'h2' }
-                : { op: 'putNode', node: makeNode(`n${k % nodes.length}`, 'p', `edit-${k}`) },
-            )
-          }
-          const result = await store.applyBatch(ops)
-          outcome = result.ok
-            ? { ok: true }
-            : { ok: false, failure: { kind: 'store-rejected', message: result.error, failedIndex: result.failedIndex } }
-        } else if (kind === 'engine-unavailable') {
-          const engineCause = ENGINE_CAUSES[draw % ENGINE_CAUSES.length]
-          observedCauses.add(engineCause)
-          outcome = { ok: false, failure: { kind: 'engine-unavailable', message: `engine unavailable: ${engineCause}`, engineCause } }
-        } else if (kind === 'not-resident') {
-          outcome = { ok: false, failure: { kind: 'not-resident', message: 'the document is not resident in this store' } }
-        } else {
-          outcome = { ok: false, failure: { kind: 'not-authorized', message: 'the commit is not authorized for this document' } }
-        }
-
-        // ---- the commit path's obligation (\u00a73.5 items 1/3): read `ok` ----
-        if (!outcome.ok) {
-          carriers.states.set(tabId, 'commit-failed')
-          carriers.failures.set(tabId, outcome.failure)
-        } else {
-          carriers.states.set(tabId, 'clean')
-          carriers.failures.delete(tabId)
-        }
-
-        // ---- the invariants of a FAILED commit ----
-        if (outcome.ok) {
-          failures++
-          counterexample = counterexample ?? `the ${kind} failure was reported as a success (a silent success is FS19)`
-          continue
-        }
-        observedKinds.add(outcome.failure.kind)
-        if (outcome.failure.kind !== kind) {
-          failures++
-          counterexample = counterexample ?? `the recorded kind ${outcome.failure.kind} != the drawn kind ${kind}`
-        }
-        // the STATE is commit-failed in EVERY draw \u2014 a draw that ends `clean` is broken
-        if (carriers.states.get(tabId) !== 'commit-failed') {
-          failures++
-          counterexample = counterexample ?? `the tab ended ${carriers.states.get(tabId)} on a ${kind} failure`
-        }
-        // the typed record is present in the HOST-SIDE map (never a DOM class)
-        if (JSON.stringify(carriers.failures.get(tabId)) !== JSON.stringify(outcome.failure)) {
-          failures++
-          counterexample = counterexample ?? `the host-side failure map did not carry the ${kind} record`
-        }
-        // the store is deep-equal, the journal did not move, nothing persisted
-        if (storeBytes(file) !== bytesBefore) {
-          failures++
-          counterexample = counterexample ?? `the store file changed across a ${kind} failure`
-        }
-        if (store.journal().length !== journalBefore || store.journal().length !== batchCallsBefore) {
-          failures++
-          counterexample = counterexample ?? `the journal moved across a ${kind} failure (delta ${store.journal().length - journalBefore})`
-        }
-        if (JSON.stringify(store.listNodes()) !== nodesBefore) {
-          failures++
-          counterexample = counterexample ?? `the node set changed across a ${kind} failure`
-        }
-        // no persist at all \u2014 the file's bytes are the persist oracle
-        if (readFileSync(file, 'utf8') !== bytesBefore) {
-          failures++
-          counterexample = counterexample ?? `a ${kind} failure persisted`
-        }
-        // the page's text is preserved (the failed commit did not discard it)
-        if (!pageText.includes(tabId)) {
-          failures++
-          counterexample = counterexample ?? `the page text vanished across a ${kind} failure`
-        }
-        // the record carries a typed, non-empty message
-        if (typeof outcome.failure.message !== 'string' || outcome.failure.message.length === 0) {
-          failures++
-          counterexample = counterexample ?? `the ${kind} record carried no typed message`
-        }
-        // the failure record never leaves the pinned union
-        if (!KINDS.includes(outcome.failure.kind)) {
-          failures++
-          counterexample = counterexample ?? `the failure kind ${outcome.failure.kind} left the pinned union`
-        }
-      }
+    for (const draw of draws) {
+      const { h, subject, bytes, journal } = await draw.run()
+      const bytesAfter = storeBytes(h.file)
+      const failure = hostFailure(h.host, subject)
+      expect(failure, `${draw.label}: the commit must record a typed failure (never a silent success)`).toBeDefined()
+      const record = failure as CommitFailure
+      observed.set(record.kind, record)
+      expect(
+        COMPOSE_HEAD_FAILURE_KINDS.includes(record.kind),
+        `${draw.label}: the kind must be one of the pinned five (\u00a73.5 item 5), got ${record.kind}`,
+      ).toBe(true)
+      expect(typeof record.message, `${draw.label}: the record carries a typed message`).toBe('string')
+      expect(record.message.length, `${draw.label}: the message is non-empty`).toBeGreaterThan(0)
+      // \u00a73.5 items 1/2 \u2014 the page stays dirty (the text is the user's only copy)
+      expect(h.editController.isDirty(subject), `${draw.label}: a failed commit KEEPS the dirty flag (FS16/FS19)`).toBe(true)
+      const state = hostCommitState(h.host, subject)
+      expect(state.dirty, `${draw.label}: the host state reader reports the SAME dirty flag`).toBe(true)
+      expect(state.failure, `${draw.label}: the host state reader reports the SAME typed record`).toEqual(record)
+      // \u00a73.5 item 1 \u2014 the store is untouched (bytes + journal), read off the REAL store
+      expect(bytesAfter, `${draw.label}: a failed commit must leave the store's bytes unchanged`).toBe(bytes)
+      expect(h.store.journal().length, `${draw.label}: a failed commit adds ZERO journal entries`).toBe(journal)
     }
 
-    // ---- the amended population's NON-VACUITY ----
-    expect([...observedKinds].sort()).toEqual([...KINDS].sort())
-    expect(observedKinds.size).toBe(5)
-    expect(observedIndices.size).toBeGreaterThanOrEqual(2)
-    expect([...observedIndices].some((i) => i > 0)).toBe(true)
-    expect(observedCauses.size).toBeGreaterThanOrEqual(2)
+    // NON-VACUITY: the seam really drove every kind it owns. `not-authorized`
+    // is NOT drivable (RECORDED GAP, re-pointed rather than demanded): the commit
+    // path has NO authorization gate in this build, and this unit's spec pins no
+    // authorization seam \u2014 so demanding one would need a spec amendment. The
+    // member stays pinned by \u00a73.5 item 5 and is asserted as a fact below.
+    expect([...observed.keys()].sort()).toEqual(['decompose-failed', 'engine-unavailable', 'not-resident', 'store-rejected'])
+    const proto = Object.getOwnPropertyNames(SidebarPanes.prototype)
+    expect(
+      proto.filter((n) => /authoriz|authoris|authorityGrant/i.test(n)),
+      'RECORDED GAP: no authorization seam exists on the host \u2014 `not-authorized` has no commit seam to drive',
+    ).toEqual([])
 
-    // ---- CONTROL 1: the SAME page/store on a SUCCESSFUL commit MUST change the bytes ----
-    cases++
-    const { store: okStore, file: okFile } = newStore()
-    await okStore.putNode(makeNode('c1', 'p', 'k'))
-    const okCarriers = newTabCarriers()
-    const okTab = 'tab-success'
-    okCarriers.states.set(okTab, 'uncommitted')
-    const okBytesBefore = storeBytes(okFile)
-    const ok = await okStore.applyBatch([{ op: 'putNode', node: makeNode('c1', 'p', 'edited') }])
-    if (ok.ok) {
-      okCarriers.states.set(okTab, 'clean')
-      okCarriers.failures.delete(okTab)
-    }
-    const controlOne = ok.ok && storeBytes(okFile) !== okBytesBefore && okCarriers.states.get(okTab) === 'clean' && !okCarriers.failures.has(okTab)
-
-    // ---- CONTROL 2 (the NEGATIVE generator): a commit that PERSISTS on failure
-    //      (or that clears the state) MUST be caught by this row's oracle ----
-    cases++
-    const { store: negStore, file: negFile } = newStore()
-    await negStore.putNode(makeNode('c1', 'p', 'k'))
-    const negBytesBefore = storeBytes(negFile)
-    const neg = await negStore.applyBatch([{ op: 'setType', nodeId: 'ghost', type: 'h2' }])
-    const persistedOnFailure = neg.ok === false && storeBytes(negFile) !== negBytesBefore
-    const negativeGeneratorCaught = neg.ok === false && !persistedOnFailure
-
-    expect(controlOne).toBe(true)
-    expect(negativeGeneratorCaught).toBe(true)
-    expect(cases).toBe(BUDGET)
-    report({ row: 'P-SM-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'a successful commit changes the bytes and clears the state; a failure that persists is caught', discriminated: controlOne && negativeGeneratorCaught } })
-    expect(counterexample ?? null).toBeNull()
+    // the CONTROL (the SAME page/store on a SUCCESSFUL commit MUST change the bytes
+    // and the journal \u2014 proving the oracle discriminates)
+    const okDraw = await makeHostHarness()
+    pageInput()
+    await pageBlur(hostPage('edited body'))
+    expect(hostFailure(okDraw.host, okDraw.tabId), 'CONTROL: the successful commit records no failure').toBeUndefined()
+    expect(storeBytes(okDraw.file), 'CONTROL: the successful commit CHANGED the store bytes').not.toBe(okDraw.bytesBefore)
+    expect(okDraw.store.journal().length - okDraw.journalBefore, 'CONTROL: the success landed ONE journal entry').toBe(1)
+    expect(okDraw.editController.isDirty(okDraw.tabId), 'CONTROL: the success clears the page').toBe(false)
   })
 })
 
 // ===========================================================================
-// P-SM-2 — the warning survives every re-derive
+// P-SM-2 — the warning survives every re-derive (SEAM-DRIVEN)
 // ===========================================================================
-describe('\u00a77 P-SM-2 \u2014 the commit-failed state survives every re-derive path (strat:warning-rederive-survival)', () => {
-  it('P-SM-2 \u2014 the CONSTRUCTED record survives every re-derive, against concurrently clean/uncommitted witness tabs', async () => {
-    const rng = makeRng(SEED ^ 0x44)
-    const KINDS: CommitFailure['kind'][] = ['not-authorized', 'not-resident', 'engine-unavailable', 'store-rejected', 'decompose-failed']
-    const paths = ['store-change re-derive', 'content reconcile', 'operator re-derive', 'template re-derive', 'wholesale envelope replacement'] as const
-    let failures = 0
-    let counterexample: string | undefined
-    let cases = 0
-    const observedKinds = new Set<CommitFailure['kind']>()
-    for (let i = 0; i < ROW_BUDGETS['P-SM-2'] && failures < STOP_AFTER; i++) {
-      cases++
-      // the CONSTRUCTED failure record \u2014 a value the oracle cannot guess
-      const kind = i < KINDS.length ? KINDS[i] : pick(rng, KINDS)
-      observedKinds.add(kind)
-      const record: CommitFailure = {
-        kind,
-        message: `commit rejected (draw ${i})`,
-        ...(kind === 'store-rejected' ? { failedIndex: i % 3 } : {}),
-        ...(kind === 'engine-unavailable' ? { engineCause: pick(rng, ['connection-refused', 'engine-not-spawned', 'not-ready', 'unavailable-state'] as const) } : {}),
-      }
-      const carriers = newTabCarriers()
-      const failedTab = `tab-failed-${i}`
-      const cleanTab = `tab-clean-${i}`
-      const dirtyTab = `tab-uncommitted-${i}`
-      // the DISCRIMINATING WITNESS (\u00a711 amendment `11.9` item 5): a `clean` and
-      // an `uncommitted` tab live in the SAME draw as the constructed
-      // `commit-failed` tab, so an oracle that returns the constructed state
-      // unconditionally reads the WRONG value for both witnesses and fails.
-      carriers.states.set(failedTab, 'commit-failed')
-      carriers.failures.set(failedTab, record)
-      carriers.states.set(cleanTab, 'clean')
-      carriers.states.set(dirtyTab, 'uncommitted')
-      const path = pick(rng, paths)
-      // drive the re-derive: a fresh envelope replaces the RENDERED page \u2014 the
-      // state/failure carriers are host-side maps keyed by tab id and are NOT
-      // the DOM (\u00a73.5 item 6), so no re-derive path reads or writes them.
-      const envelope = { path, rebuilt: true, roots: [`page-edit-surface`, `rag-head`] }
-      const rebuilt = JSON.stringify(envelope)
+describe('\u00a77 P-SM-2 \u2014 the commit-failed state survives every re-derive path, read per witness subject', () => {
+  it('P-SM-2 (SEAM) \u2014 the constructed record survives the host\'s real re-derive paths against clean/uncommitted witnesses', async () => {
+    const h = await makeHostHarness()
+    // the FAILED tab: a real `store-rejected` failure through the seam
+    pageInput()
+    await h.store.removeNode(`${HOST_DOC}:body`)
+    await pageBlur(hostPage('body one').replace('<p ', '<h2 ').replace('</p>', '</h2>'))
+    const failed = hostFailure(h.host, h.tabId)
+    expect(failed, 'the failed tab carries the constructed record (non-vacuous: the state is not the default)').toBeDefined()
+    const record = failed as CommitFailure
+    expect(record.kind, 'the constructed failure is `store-rejected`').toBe('store-rejected')
+    expect(record.failedIndex, 'the record carries the store\'s own `failedIndex` verbatim (\u00a73.5 item 5)').toBeDefined()
 
-      // the oracle reads the carriers (a value, never a constant)
-      const failedState = carriers.states.get(failedTab)
-      const failedRecord = carriers.failures.get(failedTab)
-      const cleanState = carriers.states.get(cleanTab)
-      const dirtyState = carriers.states.get(dirtyTab)
-      if (failedState !== 'commit-failed') {
-        failures++
-        counterexample = counterexample ?? `the state was lost across the ${path} (observed ${failedState})`
-        continue
-      }
-      if (JSON.stringify(failedRecord) !== JSON.stringify(record)) {
-        failures++
-        counterexample = counterexample ?? `the failure record changed across the ${path}`
-        continue
-      }
-      // the witnesses must NOT read the constructed state (a constant oracle
-      // would return `commit-failed` for them and fail here)
-      if (cleanState !== 'clean') {
-        failures++
-        counterexample = counterexample ?? `the clean witness read ${cleanState} across the ${path}`
-        continue
-      }
-      if (dirtyState !== 'uncommitted') {
-        failures++
-        counterexample = counterexample ?? `the uncommitted witness read ${dirtyState} across the ${path}`
-        continue
-      }
-      if (carriers.failures.has(cleanTab) || carriers.failures.has(dirtyTab)) {
-        failures++
-        counterexample = counterexample ?? `a witness tab gained a failure record across the ${path}`
-        continue
-      }
-      // the rendered text still carries the user's marker (the re-derive did not
-      // discard the page)
-      if (!rebuilt.includes('page-edit-surface')) {
-        failures++
-        counterexample = counterexample ?? `the re-derive dropped the surface root (${path})`
-      }
+    // the WITNESS tabs (the discriminating control): a `clean` tab and an
+    // `uncommitted` tab in the SAME host
+    const witnessClean: TabEntry = { id: 'tab-clean', target: { kind: 'document', documentId: HOST_DOC }, title: 'clean' }
+    const witnessDirty: TabEntry = { id: 'tab-uncommitted', target: { kind: 'document', documentId: HOST_DOC }, title: 'uncommitted' }
+    h.host.mountTab(witnessClean)
+    expect(hostCommitState(h.host, witnessClean.id).dirty, 'the clean witness is not dirty').toBe(false)
+    h.host.mountTab(witnessDirty)
+    pageInput()
+    expect(hostCommitState(h.host, witnessDirty.id).dirty, 'the uncommitted witness is dirty').toBe(true)
+
+    // the host's REAL re-derive paths, each driven in turn
+    const envelope = (h.host as unknown as { lastTraversalEnvelope: unknown }).lastTraversalEnvelope
+    const applyContentChange = (h.host as unknown as {
+      applyContentChange?: (env: unknown, scope?: string | null) => void
+    }).applyContentChange
+    expect(typeof applyContentChange, 'the host\'s content-reconcile path must exist').toBe('function')
+    const paths: { label: string; run: () => Promise<void> | void }[] = [
+      { label: 'reDerive(content)', run: () => h.host.reDerive('content') },
+      { label: 'reDerive(template)', run: () => h.host.reDerive('template') },
+      {
+        label: 'onRagStoreChanged (the store-change broadcast)',
+        run: () => {
+          h.host.onRagStoreChanged({ store: 'main', kind: 'structural', nodeIds: [`${HOST_DOC}:body`], edgeIds: [] } as never)
+        },
+      },
+      {
+        label: 'applyContentChange (the content reconcile)',
+        run: () => applyContentChange!.call(h.host, envelope, HOST_DOC),
+      },
+      {
+        label: 'a WHOLESALE envelope replacement',
+        run: () => {
+          h.runtime.loadEnvelope(envelope as never)
+          ;(h.host as unknown as { rerenderAppGraph?: () => void }).rerenderAppGraph?.call(h.host)
+        },
+      },
+    ]
+    for (const path of paths) {
+      await path.run()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      const state = hostCommitState(h.host, h.tabId)
+      expect(state.failure, `the failure record must survive ${path.label} (\u00a73.5 item 6, FS17)`).toEqual(record)
+      expect(state.dirty, `the failed tab is still dirty after ${path.label}`).toBe(true)
+      // the witnesses must NOT read the failed tab's value (a constant oracle
+      // returning the constructed state fails HERE)
+      expect(hostCommitState(h.host, witnessClean.id), `the clean witness is still clean after ${path.label}`).toEqual({
+        subject: witnessClean.id,
+        dirty: false,
+      })
+      const dirtyWitness = hostCommitState(h.host, witnessDirty.id)
+      expect(dirtyWitness.dirty, `the uncommitted witness is still dirty after ${path.label}`).toBe(true)
+      expect(dirtyWitness.failure, `the uncommitted witness gained NO failure record after ${path.label}`).toBeUndefined()
     }
-    // NON-VACUITY of the amended population: all five kinds were constructed
-    expect([...observedKinds].sort()).toEqual([...KINDS].sort())
 
-    // the CONTROL: a SUCCESSFUL commit on the same tab must leave the state
-    // `clean` AND DELETE the map entry
-    const okCarriers = newTabCarriers()
-    const okTab = 'tab-ok'
-    okCarriers.states.set(okTab, 'commit-failed')
-    okCarriers.failures.set(okTab, { kind: 'store-rejected', message: 'before' })
-    // the successful commit
-    okCarriers.states.set(okTab, 'clean')
-    okCarriers.failures.delete(okTab)
-    const controlDiscriminates =
-      okCarriers.states.get(okTab) === 'clean' && !okCarriers.failures.has(okTab)
-    expect(controlDiscriminates).toBe(true)
-    report({ row: 'P-SM-2', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'a successful commit leaves the state clean and DELETES the map entry', discriminated: controlDiscriminates } })
-    expect(counterexample ?? null).toBeNull()
+    // the USER-VISIBLE half (\u00a73.5 item 4, FS17): with the failed tab active the
+    // warning is authored into the assembled graph, still, after every re-derive
+    h.host.mountTab({ id: h.tabId, target: { kind: 'document', documentId: HOST_DOC }, title: 'failed' })
+    const html = h.runtime.renderedHtmlResult().renderedHtml
+    expect(html.includes('page-commit-warning') && html.includes('commit-failed'), 'the warning is STILL authored after the re-derives (FS17)').toBe(true)
+
+    // the CONTROL: a SUCCESSFUL commit on the same tab leaves it `clean` AND
+    // DELETES the map entry (\u00a711.8 item 3)
+    pageInput()
+    await pageBlur(hostPage('body one again'))
+    expect(hostFailure(h.host, h.tabId), 'CONTROL: the success DELETES the record').toBeUndefined()
+    expect(hostCommitState(h.host, h.tabId), 'CONTROL: the success leaves the subject clean with no failure').toEqual({
+      subject: h.tabId,
+      dirty: false,
+    })
   })
 })
+
 
 // ===========================================================================
 // P-TP-1 — the decode + diff are TOTAL and DETERMINISTIC
@@ -812,11 +1166,35 @@ describe('\u00a77 P-TP-1 \u2014 the pipeline terminates with a discriminated res
     let cases = 0
     let refusedDraws = 0
     let mappedDraws = 0
+    /** The matrix members actually drawn (stratified, so none can be sampled
+     *  away — the pinned LCG's low bits are a measured fixed point). */
+    const drawnShapes = new Set<string>()
+
+    // ---- the REAL quarantined fixture (the second remand's repair of the
+    // mislabelled member): a record whose STORED hash disagrees with its derived
+    // hash is quarantined at boot and excluded from `listNodes()` — so a page
+    // naming it draws the genuine "quarantined node" state instead of an
+    // ordinary page carrying that label.
+    const qDir = mkdtempSync(join(tmpdir(), 'provident-u-edit-1-q-'))
+    const qFile = join(qDir, 'rag.json')
+    const qSeed = createJsonRagStore({ path: qFile })
+    await qSeed.putNode(makeNode('b2', 'p', 'second'))
+    const rawFile = JSON.parse(readFileSync(qFile, 'utf8')) as { nodes: { id: string; hash?: string }[] }
+    rawFile.nodes.find((n) => n.id === 'b2')!.hash = 'deadbeef'
+    writeFileSync(qFile, JSON.stringify(rawFile))
+    const quarantinedStore = createJsonRagStore({ path: qFile })
+    expect(
+      quarantinedStore.status().quarantined,
+      'the drawn "quarantined node" state is REAL (the tampered record hash quarantines at boot) — the previous member was mislabelled',
+    ).toContain('b2')
+    expect(quarantinedStore.listNodes().some((n) => n.id === 'b2'), 'a quarantined node is never reported active').toBe(false)
+
     for (let i = 0; i < ROW_BUDGETS['P-TP-1'] && stopNeeded(failures); i++) {
       cases++
-      const { store } = newStore()
-      await seedNodes(store, [makeNode('b1', 'p', 'known'), makeNode('b2', 'p', 'second')])
-      const shape = pick(rng, shapes)
+      const shape = shapes[i % shapes.length]
+      drawnShapes.add(shape)
+      const { store } = shape === 'quarantined node' ? { store: quarantinedStore } : newStore()
+      if (shape !== 'quarantined node') await seedNodes(store, [makeNode('b1', 'p', 'known'), makeNode('b2', 'p', 'second')])
       const page = pageForShape(shape, i)
       try {
         // the DECODE through the adapter is a discriminated result, never a throw
@@ -862,6 +1240,38 @@ describe('\u00a77 P-TP-1 \u2014 the pipeline terminates with a discriminated res
             counterexample = counterexample ?? `the op-builder's refusal arm carried no message (${shape})`
           }
         }
+        // ---- the DUPLICATED-ID semantics (the second remand's repair: the old
+        // member asserted only determinism/no-throw, so a DOUBLE WRITE of the same
+        // block passed). A page that renders the same ragId twice may not produce
+        // two ops naming it: at most ONE write per ragId, or the typed refusal.
+        if (shape === 'duplicated ids') {
+          const dupBlocks = decodedA.blocks.filter((b) => b.ragId === 'b1')
+          expect(dupBlocks.length, 'the duplicated-id draw really renders the SAME ragId twice (non-vacuous)').toBe(2)
+          if (opsA.ok) {
+            const names = opsA.ops.flatMap((op) => nodeIdsOf([op]))
+            const writes = names.filter((id) => id === 'b1').length
+            if (writes > 1) {
+              failures++
+              counterexample = counterexample ?? `a page rendering the SAME ragId twice produced ${writes} ops naming it (a double write)`
+            }
+          }
+        }
+        // ---- the QUARANTINED-NODE semantics: the pipeline must never write into
+        // a quarantined id (nor resurrect a quarantined record), and the store's
+        // quarantine set survives the draw untouched.
+        if (shape === 'quarantined node') {
+          if (opsA.ok) {
+            const names = opsA.ops.flatMap((op) => nodeIdsOf([op]))
+            if (names.includes('b2')) {
+              failures++
+              counterexample = counterexample ?? 'an op named the QUARANTINED node id (a quarantined record must never be written or resurrected)'
+            }
+          }
+          if (!quarantinedStore.status().quarantined.includes('b2')) {
+            failures++
+            counterexample = counterexample ?? 'the draw dropped the store\'s quarantine set (a quarantined record was resurrected)'
+          }
+        }
       } catch (err) {
         failures++
         counterexample = counterexample ?? `a native throw escaped the pipeline (${shape}): ${(err as Error).name}`
@@ -887,9 +1297,11 @@ describe('\u00a77 P-TP-1 \u2014 the pipeline terminates with a discriminated res
     const controlOps = controlDecoded.ok ? buildPageOps(controlDecoded, snapshotOf(controlStore), 'doc') : null
     const controlDiscriminates = controlOps !== null && controlOps.ok && controlOps.ops.length === 0
     expect(controlDiscriminates).toBe(true)
-    // NON-VACUITY: the population really did exercise BOTH arms
+    // NON-VACUITY: the population really did exercise BOTH arms, and EVERY matrix
+    // member (including the duplicated-id and the real quarantine draws) was drawn
     expect(mappedDraws).toBeGreaterThan(0)
     expect(refusedDraws).toBeGreaterThan(0)
+    expect([...drawnShapes].sort()).toEqual([...shapes].sort())
     report({ row: 'P-TP-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'valid unchanged page \u21d2 ok with an empty op list', discriminated: controlDiscriminates } })
     expect(deepThrew).toBe(false)
     expect(counterexample ?? null).toBeNull()

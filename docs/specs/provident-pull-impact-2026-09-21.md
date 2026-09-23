@@ -4,7 +4,7 @@
 the two upstream updates *mean* for this repo's editing surface **before** anything is adopted.
 No `package.json`, no lockfile, no `src/**`, and no tracker (`docs/decisions.md`,
 `docs/pending.md`, `docs/next-steps.md`, `docs/defects.md`, `docs/HANDOFF.md`) was edited by this
-pass — every tracker change this review implies is stated as an **owed row** in §7. The only file
+pass — every tracker change this review implies is stated as an **owed row** in §6. The only file
 written is this one.
 
 **Date:** 2026-09-21 (the review's own date; the upstream 0.5.1 tag/commit is dated 2026-09-22 and
@@ -21,7 +21,7 @@ oracles are vacuous — each verified here, §5).
 **Layer honesty (RCA-12, declared up front).** This review is a **DOCUMENT + SOURCE** review: every
 claim is read from a file in one of the three trees, and **no test, build, smoke or live run was
 executed by this pass**. Every reading below is marked with the artifact it was read from. Where a
-claim could not be read, it is recorded as **UNDETERMINED** (§8) rather than asserted.
+claim could not be read, it is recorded as **UNDETERMINED** (§5) rather than asserted.
 
 **Citation convention.** `path` + symbol / row id / `§section` — **no line number appears
 anywhere in this file** (the rule `docs/specs/requirement-catalog.md` §3.4 rule 7 establishes;
@@ -33,6 +33,8 @@ document's text, never adopted as this file's convention.
 `../../Preempt-Providence/` (the `provident-ssr` source + docs; `AGENTS.md` item 1 names it) and
 `../../Provident-Editable/` (the `provident-editable` package).
 
+**POST-ADOPTION STATUS (2026-09-22 — added by the package-defects + citations review pass; READ THIS BEFORE ACTING ON §1's and §4.1's ledger rows).** **The pull LANDED, and this file's §1 ledger is a PRE-PULL reading whose "NOT INSTALLED" row is now false.** Verified at this pass (`package.json` + `node_modules/**`): `dependencies` pin **`provident-ssr: ^0.5.1`** and **`provident-editable: ^0.2.0`**; **`provident-editable` 0.2.0 IS INSTALLED** (`node_modules/provident-editable/dist/**` resolves — `html-to-tree.js`, `diff.js`, `types.d.ts`, `index.js`) and the installed engine is **`provident-ssr` 0.5.1** (`node_modules/provident-ssr/package.json` `version`). So **§1's rows "Installed `provident-ssr` = `0.5.0`" / "This repo's dependency spec = `^0.5.0`" / "`provident-editable` in THIS repo = NOT INSTALLED" are PROVENANCE ONLY**, and so is §4.1's "the diff is `package-lock.json` only" phrasing — a **range bump to `^0.5.1`** landed instead of this file's recommended lockfile-only option (the landing pass recorded the whole toolchain change as `docs/defects.md` **`DEPENDENCY-GRAPH-DEFECT`**, and **O-6's tracker row** is `docs/HANDOFF.md`'s "THE CURRENT UNIT AND THE UPSTREAM PULL" paragraph; the range-decision reasoning sits with the dependency-graph row). **The adoption half is stronger than this file's cautious recommendation:** `provident-editable@0.2.0` is the **ADOPTED production decomposer**, not the test-only cross-check §Q3 weighed — `docs/specs/unit-u-edit-1-whole-page-editing.md` §11 amendment `11.9` item 1 carries the adoption, and the adapter `src/main/page-diff.ts` is the **only** `src/**` importer of the package (`:54-56`, grep-verified). **Three `provident-editable` defects were filed from that adapter's build (2026-09-22, same day as this note) — none of them appears in this file, so its ledger must NOT be read as the package's complete capability picture:** `PROVIDENT-EDITABLE-ATTRS-DROPPED` (§2.2's API table is silent on the converter's attribute blindness: `htmlToTree` keeps only `img` `src`/`alt` and `a` `href`, so the adapter reads the RAG markers off the raw page source), `PROVIDENT-EDITABLE-TABLE-FLATTENED` (the runtime half of `C9` §3.2's recorded capability gap: `BLOCK_TAGS` carries no table family and an unknown BLOCK is FLATTENED silently) and `PROVIDENT-EDITABLE-DEPTH-CAP-SILENT-DROP` (the private `MAX_DEPTH = 512` drops content silently, which is why `src/main/page-diff.ts:246-253` mirrors the literal and refuses past it). All three are catalogued in `docs/defects.md` and handed off in `docs/HANDOFF.md` (`AGENTS.md` item 7 — never patched). **Still owed and unchanged by this pass:** O-1, O-3a/O-3b and O-7 (**O-5 is RESOLVED** — the tombstone was DROPPED, `C9` §11.9 item 2; **O-6's row landed**); and this file's own **citation convention** (the header block: `path` + symbol / row id / `§section`) now has a better source for §2.2: an installed **`dist/**`** exists in this repo, so the API table's source-derived reading (`§5` item 4) can be re-anchored to it on the next pass.
+
 ---
 
 ## 1. THE VERSION LEDGER (read, not assumed)
@@ -40,7 +42,7 @@ document's text, never adopted as this file's convention.
 | Artifact | Version | Where read from | Status of the reading |
 | --- | --- | --- | --- |
 | **Installed `provident-ssr`** | **`0.5.0`** | `node_modules/provident-ssr/package.json` (`name`/`version`) | **READ — CONFIRMED.** Matches the task's established fact. |
-| **This repo's dependency spec** | **`provident-ssr: ^0.5.0`** | `package.json` `dependencies` | **READ — CONFIRMED.** `^0.5.0` **admits `0.5.1`** (it is a compatible patch in the same major), so the pull is a **lockfile/install resolution**, not a range edit — see §6. |
+| **This repo's dependency spec** | **`provident-ssr: ^0.5.0`** | `package.json` `dependencies` | **READ — CONFIRMED.** `^0.5.0` **admits `0.5.1`** (it is a compatible patch in the same major), so the pull is a **lockfile/install resolution**, not a range edit — see §4.1. |
 | **Upstream `provident-ssr` working tree** | **`0.5.1`** | `../../Preempt-Providence/package.json` `version` | **READ — CONFIRMED.** |
 | **Upstream release record** | tag **`v0.5.1`**, release commit `abd9a458fa26e11bb19c0c23420c2d89287e4b1c`, commit date **2026-09-22**, **published 2026-09-23** (`dist-tags.latest = 0.5.1`) | `../../Preempt-Providence/docs/releases.md` (the top index row + the 0.5.1 row) and `../../Preempt-Providence/docs/decisions.md` `RELEASE-0.5.1` | **READ — CONFIRMED**, including the release's own caveat that it was **published-and-propagated on 2026-09-23** while committing on 2026-09-22. |
 | **`provident-editable`** | **`0.2.0`**, `type: module` (ESM), `main` → `dist/index.js`, `types` → `dist/index.d.ts`, `files: ["dist"]`, license AGPL-3.0 | `../../Provident-Editable/package.json` | **READ — CONFIRMED.** |
@@ -67,7 +69,7 @@ invariant, and it adds no runtime behaviour.**
 
 | Release item | Runtime behaviour change? | Seen by this repo? |
 | --- | --- | --- |
-| **W4 `BODYRUNS-DROP-DIAGNOSTICS`** | **YES, and it is the only one** — a `console.warn` diagnostic layer at the emit resolver (`bodyruns-child-unresolved` / `bodyruns-child-duplicate` / `text-node-children-ignored`) + the C2 containment clamp in `emitElements` | **MEASURED ABSENT today, so the bump WOULD deliver it.** A read of this repo's installed engine for those exact codes found **no match** under `node_modules/provident-ssr/dist/**`; the codes are present in the upstream source at `src/core/render-helpers.ts` (symbol `warnBodyRunsDiagnostic`, called at the `bodyruns-child-unresolved` and `text-node-children-ignored` sites). Consequence for the surface at stake: **none directly** — this repo authors **no `bodyRuns` at all** (its traversal authors interleaved bare `text` children, `src/main/traversal.ts` `buildInterleavedChildren`), so the diagnostics are expected to fire **never** on this app's documents; see §6 risk R3 for why "expected never" still needs a check. |
+| **W4 `BODYRUNS-DROP-DIAGNOSTICS`** | **YES, and it is the only one** — a `console.warn` diagnostic layer at the emit resolver (`bodyruns-child-unresolved` / `bodyruns-child-duplicate` / `text-node-children-ignored`) + the C2 containment clamp in `emitElements` | **MEASURED ABSENT today, so the bump WOULD deliver it.** A read of this repo's installed engine for those exact codes found **no match** under `node_modules/provident-ssr/dist/**`; the codes are present in the upstream source at `src/core/render-helpers.ts` (symbol `warnBodyRunsDiagnostic`, called at the `bodyruns-child-unresolved` and `text-node-children-ignored` sites). Consequence for the surface at stake: **none directly** — this repo authors **no `bodyRuns` at all** (its traversal authors interleaved bare `text` children, `src/main/traversal.ts` `buildInterleavedChildren`), so the diagnostics are expected to fire **never** on this app's documents; see §4.3 risk R3 for why "expected never" still needs a check. |
 | **`NO-CLONE-ENFORCEMENT` / `NO-CLONE-HARNESS-OPS` / `NO-CLONE-TEST-PHASE-ISOLATION`** | **NO** — test/harness/registry-side only | Not applicable to this repo's runtime; it changes the **upstream's** `npm test` shape (`"test": "vitest run && vitest run --config vitest.smoke.config.ts"` — read in `../../Preempt-Providence/package.json` `scripts`). Answering **Q2** in full. |
 | **`DATA-DRIVEN-FAMILY-PATH-ENUMERATION` + its closeout** | **NO** — a `demo/fork-stress-data.js` page re-expression + the sanctioned-clone pin | Not applicable (a demo family; this repo imports no demo). |
 | **`PASS2-FIT-REFERENCE-SLICE-SCOPE` (R1)** | **NO — output-preserving by contract** | **WOULD be delivered by the bump**, and it is the one engine-path change in the release: `src/core/resolve.ts` `fitReference`'s descendant walk is bounded to slice membership (`sliceSet`/bounded seed/bounded push). Upstream pins it output-preserving by **descendant-closure** and records the measured saving as ≈258 ms / 15.9 %. This repo is a *host*, not a fork-stress page, so the expected effect here is **performance-only and unmeasured by this pass**. |
@@ -118,7 +120,7 @@ is **not document-scoped** — so the guarantee is **one warn per (code, wire, i
 per document**. A host rendering several documents in one process can be **silently denied** a
 diagnostic it never saw, and an **absent line must never be read as "nothing was dropped."** This
 repo is exactly such a host (multi-document tabs), so if it ever comes to rely on these warnings it
-must route/wrap `console.warn` per document — recorded as an owed note (§7, O-4).
+must route/wrap `console.warn` per document — recorded as an owed note (§6, O-4).
 
 ### 2.2 What `provident-editable@0.2.0` provides — the exported API, in full
 
@@ -277,7 +279,7 @@ exactly what `C9` pins: the body roots **keep** their payload entries and their 
 **route** (the placement announcement) moves to the surface. So the construct is already in the
 sanctioned *spirit*; what must change is the **citation**, not the code.
 
-**What this review therefore requires of `C9` (a documentation obligation, filed in §7 as O-1).**
+**What this review therefore requires of `C9` (a documentation obligation, filed in §6 as O-1).**
 `C9`'s §2.1 authoring row / §11.7 must state **by name** that (i) the "clone" is a **plain-object
 envelope copy** (`{ ...root }` + `delete clone.placement`), (ii) it is **not** a `Node.clone()` /
 `clone-instance` path, (iii) the enforced invariant is upstream-scoped to **engine placement/component
@@ -295,7 +297,7 @@ always ships"*) — and the engine keys nodes by its own minted id internally, s
 failure. But it is a **host-visible duplicate-id exposure**: any consumer that selects by
 `props.id`/`data-rag-node-id` (this repo's MCP `get_rendered_html`/`get_markdown` surfaces, a DOM
 census, a `document.querySelector`) can match an element that is not the one it believes it has. It is
-**filed as an owed finding** (§7, O-2) because it is exactly the class of thing that turns into a
+**filed as an owed finding** (§6, O-2) because it is exactly the class of thing that turns into a
 "phantom edit target" once the decode/diff lands. **It is not caused by 0.5.1 and the update neither
 fixes nor worsens it.**
 
@@ -362,7 +364,7 @@ package does not exist**"*, with a whole-tree `grep` as its evidence). **⇒ the
 (no package is installed here, so the commit may not import one) is still the recorded contract.**
 The row is therefore **not superseded by this update** — it is **owed a re-verification**, and if the
 supervisor adopts the package the supersession is a **named new row** with the surviving clauses
-enumerated. **Two candidate supersession rows are drafted in §7 (O-3a / O-3b) — and per the
+enumerated. **Two candidate supersession rows are drafted in §6 (O-3a / O-3b) — and per the
 `C9` §4.2 rule (*"the `SUPERSEDED` rows land in this unit's own landing pass — never before"*) this
 review writes NEITHER: it names them and leaves them to the pass that changes the code.**
 
@@ -472,7 +474,7 @@ traversal (e.g. as a non-rendered envelope annotation rather than a child) — w
 four-placement proof already ruled out for the surface and which the fence's child-list assertion
 (`[undefined, 'textarea-ul', 'rag-li1', …]`) would reject anyway. **The update does not change which
 of these is available; it removes the hope that the engine would provide a fourth.** Recorded as
-O-5 in §7.
+O-5 in §6.
 
 ### Q5 — The other `C9` findings under the new versions: does the update change the fix shape of the adversarial MUST-FIX list?
 
@@ -515,7 +517,7 @@ described as a version-policy change.
 test-only engine leg — `devDependencies: { "provident-ssr": "0.5.1" }`). **The exact pin is the choice
 this review would make if reproducibility of the *rendered* surface outranks upgrade convenience**,
 and it is consistent with the neighbouring package's own practice. **Either way, record the choice and
-its reason in the pass's tracker row** (§7, O-6) — a silent range change is exactly the drift
+its reason in the pass's tracker row** (§6, O-6) — a silent range change is exactly the drift
 `docs/decisions.md`'s VERSIONING-SCHEME-class rows exist to prevent.
 
 **Not recommended now:** adding `provident-editable`. If it is ever added it should be a
@@ -554,7 +556,7 @@ sequenced AROUND it, not inside it — for one structural reason and one process
    its conclusion (no package installed ⇒ the commit may not import one) intact.
 4. **`provident-editable` LAST and only if adopted deliberately** (§Q3) — and if adopted, as a
    `devDependency` cross-check oracle first, with adoption-as-decomposer decided as a **named
-   supersession** of `DECIDED: RICH-TEXT-EDITING-GATE` (§7, O-3a/O-3b).
+   supersession** of `DECIDED: RICH-TEXT-EDITING-GATE` (§6, O-3a/O-3b).
 
 ### 4.3 The risks, and the checks to run
 
@@ -565,7 +567,7 @@ sequenced AROUND it, not inside it — for one structural reason and one process
 | **R3** | **The W4 warning channel could fire on this app's documents and be read as a regression** | The diagnostic is new *here* (measured absent in the installed 0.5.0, §1.1) and its dedup is **process-scoped and never cleared** with **no per-document completeness guarantee** (`docs/decisions.md` `BODYRUNS-DIAGNOSTIC-DEDUP-SCOPE`, residual `R-W4-5`). This repo authors **no `bodyRuns`**, so the expected count is **0 — but "expected 0" must be measured, not assumed**, and an **absent** line must never be read as "nothing was dropped" (the row's own host expectation). | **Run the suite with `console.warn` captured and assert the census**: the three codes (`bodyruns-child-unresolved`, `bodyruns-child-duplicate`, `text-node-children-ignored`) must appear **zero** times. If any appears, it is a **DEFECT DISCOVERY** → `docs/defects.md` + `docs/HANDOFF.md`, **never** a licence to patch the package (AGENTS.md item 7). The upstream's `no-clone-invariants.md` §2.2 row 1 states the same discipline for its own side: *"A test written from §8 that finds a violation is a **DEFECT DISCOVERY** … and **never** a licence to patch `src/**`."* |
 | **R4** | **The fence suites are this repo's most likely red under any engine bump** | `C9` §5.1/§8.4 name the fences and their standing pin: **`tests/traversal.test.ts`** and **`tests/import-render-no-duplicates.test.ts`** — *"must stay green UNCHANGED"* / *"may not be re-derived"* — and the first **pins the authored child list `[undefined, 'textarea-ul', 'rag-li1', …]`**, i.e. exactly the envelope shape the tombstone preserves on purpose. | **Keep the two fence suites green UNCHANGED across the bump** and treat any fence movement as a **gate decision**, never an adaptation (`C9` §5.1 / §11 item 2; `docs/specs/design-extensions-review.md` §14.2). Report them by name in the pull's reading. |
 | **R5** | **The engine-hop suite and the divergence leg are the bump's other exposed legs** | `package.json` `scripts` includes `battery` (`tests/e2e-battery.test.mjs`) and `divergence` (`scripts/electron-divergence.mjs`) — both exercise the engine through the real shell, which is where a diagnostic or an emit-path change would show. | **Run both, before and after.** They are the closest thing this repo has to an "assembled" check that a node suite cannot provide (RCA-12's layer warning applies: a node-green is **envelope-green**, not app-green). |
-| **R6** | **A silent range change is drift** | The recommended pull edits **no `package.json`** (§4.1), so a later reader cannot tell from the manifest that the engine moved — only the lockfile shows it. | **Record the version pair (`0.5.0 → 0.5.1`) and the resolution reasoning in the pull's tracker row** (§7, O-6), exactly as `docs/decisions.md`'s release rows and `docs/releases.md`'s index do upstream. |
+| **R6** | **A silent range change is drift** | The recommended pull edits **no `package.json`** (§4.1), so a later reader cannot tell from the manifest that the engine moved — only the lockfile shows it. | **Record the version pair (`0.5.0 → 0.5.1`) and the resolution reasoning in the pull's tracker row** (§6, O-6), exactly as `docs/decisions.md`'s release rows and `docs/releases.md`'s index do upstream. |
 | **R7** | **The packages must NEVER be patched here** | `AGENTS.md` item 1 (*"Agents MUST NOT make direct changes to the package code (`node_modules/provident-ssr/` or the upstream folder)"*) and item 7's **catalogue + handoff rule**, reinforced by `no-clone-invariants.md` §2.2 row 1's identical discipline on the upstream side. | **Every bump-induced failure is classified first**: **host-side** (`src/**`) → fixed here with a regression test; **package-side** → `docs/defects.md` row (observed symptom, reproduction, suspected root cause, proposed fix shape — upstream-owned) **+ `docs/HANDOFF.md`**, and **never** patched. |
 
 **The trio readings to capture (the deliverable of the pull pass, per RCA-12's layer rule):** for
@@ -604,7 +606,7 @@ after-reading has not performed this review's checks.**
    over `archive/reviews/**` and `docs/reviews/**` returned no `C9`/`U-EDIT-1` adversarial record), so
    the four findings are carried as the **task's report** and each was **independently re-verified
    against the code** (§5's table). **If that report exists somewhere this pass could not see, the
-   findings' provenance should be repointed to it** — an owed citation, §7 O-7.
+   findings' provenance should be repointed to it** — an owed citation, §6 O-7.
 
 ---
 

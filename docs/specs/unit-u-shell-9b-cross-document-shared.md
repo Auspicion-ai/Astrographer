@@ -1,6 +1,35 @@
 # Unit U-SHELL-9b — Cross-Document Shared (C20 + Option C) — Spec
 
-**Status:** DRAFT 2026-09-12. **Document-only — no code; no tests.** Gate: the
+**Status:** DRAFT 2026-09-12 → **CODE + TESTS LIVE / unit GREEN (reconciled 2026-09-22** by the
+package-defects + citations doc-review pass). **The 2026-09-12 line *"Document-only — no code; no tests"*
+is SUPERSEDED and must not be quoted** — the tree holds both halves:
+- **code:** `src/renderer/cross-document-shared.ts` exists (the §2.5 item 1 module: `detectSharedCommit`,
+  `planFork`, `planMutateAll`, `SHARED_SUBTREE_CLASS`, `ownersBoxContent`, `applySharedSubtreeDecoration`
+  — plus the §2.7 `scopeDocumentIds`/`plainRagId` and the H2 seams `ownersFor`/`buildOwnersMap`, imported
+  by `content-reconcile.ts`/`sidebar-panes.ts` and by this unit's suites);
+- **tests:** all **six** `tests/unit-u-shell-9b-*.test.ts` suites exist — `unit-u-shell-9b-cross-document-shared`
+  (the founding suite: **37 `it` blocks, counted at this pass**, and the recorded reading is **37/37**
+  — `docs/HANDOVER.md` §4's `U-SHELL-9b — GREEN / COMPLETE` row and `docs/pending.md`'s 2026-09-22
+  NARROWED note), `unit-u-shell-9b-h1-optionc-interception` (15/15, §2.6 H1), `unit-u-shell-9b-h2-c20-materialization`
+  (14/14, §2.6 H2), `unit-u-shell-9b-h3-doc-namespace` (13/13, §2.6 H3), `unit-u-shell-9b-w2n15-rederive-scope`
+  (4/4, §2.6b AF3-2) and `unit-u-shell-9b-blind-greens` (the RCA-4 artifact, **23 PASS / 0 FAIL /
+  0 NOT-TESTED**, §2.6's verdict).
+- **the unit's own verdict stands (§2.6):** **H1/H2/H3/H4/H5/H6/H7 ALL FIXED (2026-09-13)**, so the "**BLOCKED — NOT the TestWriter-next step**" paragraph that FOLLOWS this status block, and §8 item 1, are **HISTORICAL for the delegation/TDD gate** — 9b's own
+  red→green→adversarial→blind-greens cycle HAS RUN. **What is still open is NOT that gate but the unit's
+  production WIRING, and the two records of it DISAGREE (both stated, neither smoothed):** this repo's
+  `docs/next-steps.md` Wave-2 row records **U-STATE-1e GREEN**, while the sibling stage/active-tab spec
+  still reads the 9b multi-mount as **BLOCKED on U-STATE-1e** (`docs/specs/unit-stage-active-tab-display.md`
+  §2's V6 row / §3 "gaps left open" item 4 / its §4 cross-ref table), and the TREE agrees with the latter
+  on the outcome: the seam `SidebarPanes.mountTabs` has **no production caller** (the renderer still mounts
+  one tab at a time) — recorded as `docs/defects.md` **`MOUNT-TABS-CONTRADICTS-SINGLE-ACTIVE`**.
+  **This pass did NOT adjudicate that divergence** (a status question for the sibling pass); what it
+  verifies is that the module + the six suites exist and that the multi-mount is unbuilt in production.
+  `AF3-3`/`AF1-2` stay ACCEPTED/documented (§2.6b/§2.6c).
+- **layer honesty (RCA-12):** this status is a **TREE READING by a documentation role** — no test was
+  executed by that pass; the counts quoted are the recorded ones (and the 37 `it` blocks recounted from
+  the file). It is **envelope/pure + host-state green**, never "the app works".
+
+Gate: the
 UI-overhaul umbrella gate (PROCEED-WITH-AMENDMENTS, A1). **Depends on
 U-SHELL-9a** (the tab strip + `TabState` + the focus-descriptor model) and
 **U-STATE-1e** (the N-root multi-document reconcile + per-root identity
@@ -22,7 +51,7 @@ render and the per-root fork-identity replace require the N-root reconciler
 single-active-only shortcut"). **A TestWriter red set must NOT be authored for
 9b until U-STATE-1e is green** (RCA-1/RCA-2: 9b is its own red→green→
 adversarial→greens cycle after 9a and 1d land). This spec exists so the contract
-is pinned; it is not delegable yet.
+is pinned; it is not delegable yet. **CLEARED (2026-09-22 — the reconciliation note at this file's head):** the DELEGATION gate this paragraph imposed is SPENT — 9b's own red→green→adversarial→blind-greens cycle HAS RUN to GREEN (**H1–H7 FIXED 2026-09-13**, §2.6) — while the DEPENDENCY's status reads differently in the two records (`docs/next-steps.md` records U-STATE-1e GREEN; `docs/specs/unit-stage-active-tab-display.md` still reads the 9b multi-mount as BLOCKED on it, and `mountTabs` has no production caller). The half still open is the unit's **production multi-mount wiring** (`docs/defects.md` `MOUNT-TABS-CONTRADICTS-SINGLE-ACTIVE`), not this delegation gate; the divergence is NOT adjudicated here.
 
 ---
 
@@ -160,7 +189,7 @@ host-side authoring + runtime last-wins).
 **Verdict (2026-09-13):** H1/H2/H3/H4/H5/H6/H7 are **FIXED**; 9b is **GREEN** —
 the implementation is complete and independently verified (red→green→trio→
 adversarial per unit, then the **RCA-4 blind-greens** re-run:
- `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md) — 23 PASS / 0 FAIL / 0 NOT-TESTED, trio
+ `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec (`docs/specs/unit-u-shell-9b-cross-document-shared.md` §2.6) + the DONE row carrying the verification (`docs/HANDOVER.md` §4 `U-SHELL-9b — GREEN / COMPLETE`; `docs/next-steps.md`'s 9b status row)) — 23 PASS / 0 FAIL / 0 NOT-TESTED, trio
 185 files / 4327 pass + 58 skip). Residual follow-ups (outside the
 §2.7/§2.8/§2.9 seams): **W2-N15** (multi-doc operator/template re-derive scope),
 **AF3-3/AF1-2** (per-mount editing context for a shared node).
@@ -324,7 +353,7 @@ are **U-SHELL-9a** states, not this unit's red set.)*
 ## 5.7 Property register (PBT)
 
 **PBT backfill (2026-09-13).** This unit is ALREADY-GREEN (H1–H7 fixed,
- `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9b-greens.md) — 23 PASS / 0 FAIL); this register is a
+ `archive/greens/2026-09-21-unit-u-shell-9b-greens.md` (historical; archived 2026-09-21; successor: the owning unit spec (`docs/specs/unit-u-shell-9b-cross-document-shared.md` §2.6) + the DONE row carrying the verification (`docs/HANDOVER.md` §4 `U-SHELL-9b — GREEN / COMPLETE`; `docs/next-steps.md`'s 9b status row)) — 23 PASS / 0 FAIL); this register is a
 MANDATORY typed-property backfill on the landed PURE module
 `src/renderer/cross-document-shared.ts` only. It follows the sibling convention
 (`docs/specs/unit-ujr1-get-journal.md` §5.7; itself adopting
@@ -385,7 +414,11 @@ a correct module satisfies all six propositions by construction.
 - `docs/specs/unit-u-shell-9a-main-focus-tabs.md` (the tab strip + focus tool
   dependency).
 - `docs/specs/unit-u-state-1e-nroot-reconcile.md` (the N-root + per-root
-  identity-replace dependency — **BLOCKING**).
+  identity-replace dependency — **BLOCKING → CLEARED FOR THE TDD/DELEGATION GATE
+  (2026-09-22):** 9b's own cycle has run (H1–H7 FIXED, §2.6); the dependency's own
+  status READS DIFFERENTLY in the two records — GREEN in `docs/next-steps.md`,
+  BLOCKED in `docs/specs/unit-stage-active-tab-display.md` — and the head status
+  block of this file records both rather than smoothing them).
 - `docs/specs/ui-overhaul.md` C14, C20, §3 (main-focus tabs), §4 G3
   (shared-subtree background + owners box), §7.2 (OB1: warn + choose).
 - `docs/specs/wave-2-open-decisions.md` W2-Q13, W2-Q17 (§B), §E.5 (W2-Q11).
@@ -409,7 +442,13 @@ dependency). It does not build the pane zones (U-SHELL-1), pane drag
 ## 8. Open items
 
 1. **BLOCKED on U-STATE-1e** (W2-Q17=(a)): no red set, no delegation until the
-   N-root reconcile + per-root identity replace is green.
+   N-root reconcile + per-root identity replace is green. — **CLOSED FOR THE
+   TDD/DELEGATION GATE (2026-09-22):** this gate is SPENT (9b's own
+   red→green cycle ran to GREEN — H1–H7 FIXED 2026-09-13, §2.6); the U-STATE-1e
+   status itself READS DIFFERENTLY in the two records (`docs/next-steps.md` GREEN
+   vs `docs/specs/unit-stage-active-tab-display.md` BLOCKED — see this file's head
+   note). What remains open is the production multi-mount WIRING, not this gate
+   (`docs/defects.md` `MOUNT-TABS-CONTRADICTS-SINGLE-ACTIVE`).
 2. **Root-identity disambiguation across simultaneous documents** (found in the
    source; see the U-STATE-1e spec): `buildTraversal` authors a subtree root's
    css.id as `rag-<ragId>` **without a document scope** (`traversal.ts`), so the

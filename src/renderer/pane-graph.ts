@@ -20,6 +20,7 @@ import {
   resolveHoverPreview,
 } from './hover-preview.js'
 import type { RepresentationMode, RagJournalPayload } from '../shared/types.js'
+import type { CommitFailure } from './edit-controller.js'
 import {
   buildDocumentTree,
   selectDocumentIdsByPathPrefix,
@@ -420,14 +421,19 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
   // the toolbar, another document's payloads) keeps its own announcement and is
   // untouched. The traversal envelope itself is NOT mutated (§2.1).
   if (typeof input.documentId === 'string' && input.documentId !== '') {
+    // The stage's document body roots (the authoring gate: the stage carries a
+    // document body) and — among them — the ones the FOCUSED DOCUMENT owns
+    // (§6 `P-IM-2`: a foreign document's root is never adopted by this surface,
+    // and a stage whose roots are all foreign still authors its own surface).
     const bodyRoots = surfaceBodyRoots({ ...traversalEnvelope, content })
+    const focusedRoots = surfaceBodyRoots({ ...traversalEnvelope, content }, input.documentId)
     if (bodyRoots.length > 0) {
       // The traversal's zone name is the one the body roots were announced into
       // (the payload roots are placed in the SAME zone the surface takes over).
       const traversalZone =
         ((bodyRoots[0]?.placement as { targetPlacement?: string[] } | undefined)?.targetPlacement?.[0]) ?? 'main'
-      const surface = pageEditSurfaceRoot(bodyRoots, input.documentId, traversalZone)
-      const collected = new Set(bodyRoots)
+      const surface = pageEditSurfaceRoot(focusedRoots, input.documentId, traversalZone)
+      const collected = new Set(focusedRoots)
       const body: LegacyContentPayload[] = content.map((payload) => {
         const nodes = (payload as { content?: unknown } | null | undefined)?.content
         if (!Array.isArray(nodes)) return payload
@@ -1323,6 +1329,10 @@ export function searchTabContent(
 // the document renders exactly ONCE — inside the surface (`FS1`).
 // ===========================================================================
 
+/** The authored `rag-` id prefix of a traversal content root (`buildTraversal`
+ *  mints `rag-<ragId>`; `scopeDocumentIds` document-scopes it). */
+const RAG_ID_PREFIX = 'rag-'
+
 /** §2.1's stable-authored-id row: the surface root's authored `props.id`. */
 export const PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
 /** §2.1's stable marker: `props['data-edit-surface'] = <focused documentId>`. */
@@ -1362,8 +1372,28 @@ export const PAGE_EDIT_SURFACE_HANDLER_DEFS = [
  *  content payload root of the assembled envelope (the sections, in payload
  *  order, each already carrying its doc-children nested at their `order`). The
  *  surface collects them as its OWN children; the zone announcement moves to
- *  the surface so the body renders exactly once. PURE. */
-function surfaceBodyRoots(envelope: LegacyInitialData): LegacyNodeData[] {
+ *  the surface so the body renders exactly once. PURE.
+ *
+ *  §5.3.3 sub-rule 1 / `FS-2`'s envelope twin (§6 `P-IM-2`) — a root that
+ *  DECLARES a different owning document is never collected into the focused
+ *  document's surface: the declaration is the authored document marker
+ *  (`props['data-doc']`) or the §2.7 document-scoped authored id
+ *  (`rag-<documentId>--<ragId>`, `scopeDocumentIds` in
+ *  `src/renderer/cross-document-shared.ts`). A root that declares NOTHING is the
+ *  unscoped single-document traversal's own body and belongs to the focused
+ *  document (so the single-document paths are unchanged). */
+function declaredDocumentOf(root: LegacyNodeData): string | null {
+  const props = root.props as Record<string, unknown> | undefined
+  const declared = props?.['data-doc']
+  if (typeof declared === 'string' && declared !== '') return declared
+  const id = props?.id
+  if (typeof id === 'string' && id.startsWith(RAG_ID_PREFIX)) {
+    const boundary = id.indexOf('--', RAG_ID_PREFIX.length)
+    if (boundary > RAG_ID_PREFIX.length) return id.slice(RAG_ID_PREFIX.length, boundary)
+  }
+  return null
+}
+function surfaceBodyRoots(envelope: LegacyInitialData, documentId?: string): LegacyNodeData[] {
   const roots: LegacyNodeData[] = []
   for (const payload of envelope.content ?? []) {
     const nodes = (payload as { content?: unknown } | null | undefined)?.content
@@ -1375,6 +1405,10 @@ function surfaceBodyRoots(envelope: LegacyInitialData): LegacyNodeData[] {
       // `editor-toolbar`/`pane-history` roots and any other app-graph content
       // root keep their own zone announcement (§2.1 Scope).
       if (typeof root.props?.['data-rag-node-id'] !== 'string') continue
+      if (typeof documentId === 'string' && documentId !== '') {
+        const declared = declaredDocumentOf(root)
+        if (declared != null && declared !== documentId) continue
+      }
       roots.push(root)
     }
   }
@@ -1457,6 +1491,41 @@ const HISTORY_ENTRY_BODY = `function (ctx) {
   if (idx === undefined || idx === null || idx === '') return;
   s.historyEntryClick(idx);
 }`
+
+/** U-EDIT-1 (C9) §3.5 item 4/6 — the authored per-TAB page-commit warning root.
+ *  The `TAB-1` class's stage half: a failed page commit is USER-VISIBLE, and the
+ *  warning is re-authored from the HOST-SIDE record on every assembly, so it
+ *  survives every re-derive by construction (§3.5 item 6 — host state, never a
+ *  DOM class; `FS17`). */
+export const PAGE_COMMIT_WARNING_ID = 'page-commit-warning'
+
+/** The warning's authored content — a `div` carrying the warning class marker +
+ *  the typed failure's kind/message (§3.5 item 5; the affordance itself is NOT
+ *  pinned, the STATE and the typed record are). PURE + TOTAL. */
+export function pageCommitWarningContent(failure: CommitFailure, zone = 'main'): LegacyNodeData {
+  const kind = typeof failure?.kind === 'string' ? failure.kind : 'store-rejected'
+  const message = typeof failure?.message === 'string' && failure.message !== '' ? failure.message : kind
+  const detail =
+    typeof failure?.failedIndex === 'number' ? ` (index ${failure.failedIndex})` : ''
+  return {
+    type: 'div',
+    props: {
+      id: PAGE_COMMIT_WARNING_ID,
+      'data-role': 'page-commit-warning',
+      'data-warning-class': 'commit-failed',
+      'data-failure-kind': kind,
+    },
+    placement: { targetPlacement: [zone] },
+    children: [
+      { type: 'span', props: { id: 'page-commit-warning-symbol', 'data-role': 'warning-symbol' }, content: '⚠' },
+      {
+        type: 'span',
+        props: { id: 'page-commit-warning-message', 'data-role': 'warning-message' },
+        content: `Commit failed (${kind}): ${message}${detail}`,
+      },
+    ],
+  }
+}
 
 /** The representation mode → toolbar label (§2.3/§2.5: `html` | `markdown`).
  *  PURE + TOTAL (junk coerces to the html default, mirroring the host/store

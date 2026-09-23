@@ -222,15 +222,25 @@ describe('FS3 — a props write merges and preserves the doc-head marker', () =>
   })
 
   it('FS3 — a batch setProps merges rather than replacing the props object', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form read `if (result.ok) {
+    // …merge… } else { expect(result.ok).toBe(true) }`, so BOTH branches passed
+    // and a wholesale-props write was never caught. The failure arm is now
+    // asserted FIRST, and the merge itself is the discriminator: a replacement
+    // write would drop `data-doc-head` and `a`.
     const { store } = newStore()
     await store.putNode(makeNode('title', { props: { 'data-doc-head': true, a: 1 } }))
     const result = await store.applyBatch([{ op: 'setProps', nodeId: 'title', props: { b: 2 } }])
-    if (result.ok) {
-      expect(store.getNode('title')?.props).toEqual({ 'data-doc-head': true, a: 1, b: 2 })
-    } else {
-      // the red obligation: the store must accept the merge inside a batch
-      expect(result.ok).toBe(true)
-    }
+    expect(result.ok, 'the store must APPLY a `setProps` inside a batch (§3.3 item 7 — the red obligation this unit closed)').toBe(true)
+    if (!result.ok) return
+    expect(store.getNode('title')?.props, 'the merge preserves every unnamed key (a replacement write is FS3)').toEqual({
+      'data-doc-head': true,
+      a: 1,
+      b: 2,
+    })
+    // the discriminating control: a WHOLESALE write (the fail-state) really does
+    // drop the marker — so the assertion above is not vacuous
+    await store.putNode(makeNode('title', { props: { b: 2 } }))
+    expect(store.getNode('title')?.props?.['data-doc-head'], 'CONTROL: a wholesale props write drops the doc-head marker').toBeUndefined()
   })
 })
 
@@ -238,25 +248,62 @@ describe('FS3 — a props write merges and preserves the doc-head marker', () =>
 // FS4 / FS5 / FS6 — the type apply
 // ===========================================================================
 describe('FS4/FS5/FS6 — the element-type apply is setType-class over the closed union', () => {
-  it('FS4 — a type outside the 23-member RagNodeType union is refused and nothing is written', async () => {
+  it('FS4 — a type outside the 23-member RagNodeType union is REFUSED at BOTH seams, and nothing is written', async () => {
+    // REPAIRED (RCA-3 second remand): the row pinned only the store's rejection,
+    // so an APPLY seam that offered/applied an out-of-union type (the §2.4 item 1
+    // proposition) was invisible. The adapter's own closed-set guard is now
+    // driven as well, and the in-union change is the discriminating control.
+    const RAG_NODE_TYPES = [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote',
+      'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th',
+    ]
+    expect(RAG_NODE_TYPES.length, 'the closed union is the 23-member `RagNodeType` census (§2.4 item 1)').toBe(23)
     const { store, file } = newStore()
-    await store.putNode(makeNode('n1'))
+    await store.putNode(makeNode('n1', { content: 'payload' }))
     const before = bytes(file)
+    const journalBefore = store.journal().length
+    // (a) the ADAPTER refuses a block element outside the closed set (never
+    //     retypes it — a `section` is not expressible)
+    const refused = pageOps(`<section data-rag-node-id="n1">payload</section>`, store)
+    expect(refused.ok, 'an element outside the closed RagNodeType set is REFUSED by the adapter, never mapped').toBe(false)
+    if (!refused.ok) expect(refused.kind, 'the refusal is the typed `decompose-failed` class').toBe('decompose-failed')
+    expect(bytes(file), 'a refused page writes nothing').toBe(before)
+    // (b) the STORE rejects an out-of-union `setType`
     const result = await store.applyBatch([{ op: 'setType', nodeId: 'n1', type: 'section' as never }])
-    expect(result.ok).toBe(false)
+    expect(result.ok, 'the store rejects a type outside the closed union (enforced at the write too)').toBe(false)
     expect(store.getNode('n1')?.type).toBe('p')
-    expect(bytes(file)).toBe(before)
+    expect(bytes(file), 'a rejected type apply leaves the store byte-identical').toBe(before)
+    expect(store.journal().length, 'a rejected type apply adds no journal entry').toBe(journalBefore)
+    // (c) the CONTROL: an IN-UNION type change IS applied (the oracle discriminates)
+    const okResult = await store.applyBatch([{ op: 'setType', nodeId: 'n1', type: 'h2' }])
+    expect(okResult.ok, 'an in-union type change is applied').toBe(true)
+    expect(store.getNode('n1')?.type).toBe('h2')
   })
 
-  it('FS5 — an apply with no resolvable target writes nothing (the pinned no-op, never an arbitrary node)', async () => {
-    const { store } = newStore()
+  it('FS5 — an apply with NO resolvable target is a typed refusal that writes to no node (never an arbitrary one)', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form applied an EMPTY op list
+    // and asserted nothing changed — it never invoked the unresolvable-target
+    // path at all. This row drives the real apply seam (`edit-ops.ts` `setProps`)
+    // with a target that resolves to no node.
+    const { store, file } = newStore()
     await store.putNode(makeNode('n1'))
     await store.putNode(makeNode('n2'))
-    const snapshot = JSON.stringify(store.listNodes())
-    // an op list for an unresolvable caret is EMPTY: nothing is written
-    const result = await store.applyBatch([])
-    expect(result.ok).toBe(true)
-    expect(JSON.stringify(store.listNodes())).toBe(snapshot)
+    const before = JSON.stringify(store.listNodes())
+    const beforeBytes = bytes(file)
+    const journalBefore = store.journal().length
+    const result = await setProps({ store }, { nodeId: 'ghost-target', props: { align: 'center' } })
+    expect(result.ok, 'an unresolvable target is a TYPED refusal').toBe(false)
+    if (!result.ok) expect(result.error, 'the refusal names the missing target').toContain('node not found')
+    expect(
+      JSON.stringify(store.listNodes()),
+      'NO node was written — the refusal never falls back to an arbitrary node (FS5)',
+    ).toBe(before)
+    expect(bytes(file)).toBe(beforeBytes)
+    expect(store.journal().length, 'a refusal adds no journal entry').toBe(journalBefore)
+    // the discriminating CONTROL: the SAME call against a resolvable target WRITES
+    const ok = await setProps({ store }, { nodeId: 'n1', props: { align: 'center' } })
+    expect(ok.ok, 'the same seam DOES write for a resolvable target').toBe(true)
+    expect(store.getNode('n1')?.props?.align).toBe('center')
   })
 
   it('FS6 — a type change preserves the node identity and its edges', async () => {
@@ -277,9 +324,32 @@ describe('FS4/FS5/FS6 — the element-type apply is setType-class over the close
     }
   })
 
-  it('FS6 — the op list for a type change never contains a removeNode for the target', () => {
-    const ops: BatchOp[] = [{ op: 'setType', nodeId: 'n1', type: 'h2' }]
-    expect(ops.some((op) => op.op === 'removeNode')).toBe(false)
+  it('FS6 — the ADAPTER\'s own op list for a type change carries one `setType` and no `removeNode` for the target', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form built a literal
+    // `[{ op: 'setType' }]` array and asserted it contained no `removeNode` — a
+    // tautology over test-authored data. The op list is now the ADAPTER's own,
+    // and the write is driven through the store; the identity-preservation
+    // proposition is additionally carried by draws in
+    // `tests/unit-u-edit-1-property-register.test.ts` (`P-IM-3`).
+    const { store } = newStore()
+    const children = [{ type: 'strong' as const, content: 'inline', offset: 0 }]
+    await store.putNode(makeNode('n1', { content: 'payload', children, props: { 'data-doc-head': true } }))
+    const built = pageOps(`<h2 data-rag-node-id="n1">payload</h2>`, store)
+    expect(built.ok, 'a type change maps to an op list').toBe(true)
+    if (!built.ok) return
+    expect(
+      built.ops.filter((op) => op.op === 'removeNode'),
+      'a type change is NEVER expressed as a removal (setType is never delete+create, §2.4 item 4)',
+    ).toEqual([])
+    const setTypeOps = built.ops.filter((op) => op.op === 'setType')
+    expect(setTypeOps.length, 'a type-ONLY change is exactly ONE `setType`').toBe(1)
+    expect((setTypeOps[0] as { nodeId: string }).nodeId, 'the op names the SAME node id (never a fresh id)').toBe('n1')
+    const applied = await store.applyBatch(built.ops)
+    expect(applied.ok, 'the type change applies').toBe(true)
+    const after = store.getNode('n1')!
+    expect(after.type).toBe('h2')
+    expect(after.children, 'the inline children survive the retype').toEqual(children)
+    expect(after.props?.['data-doc-head'], 'the doc-head marker survives the retype').toBe(true)
   })
 })
 
@@ -291,6 +361,10 @@ describe('FS7/FS8/FS9 — malformed input is typed, uncompared fields never ente
     const { store } = newStore()
     await store.putNode(makeNode('b1', { content: 'alpha' }))
     const before = JSON.stringify(store.listNodes())
+    // The seed's own `putNode` journals one `structural` entry (measured), so
+    // the refusal's obligation is a ZERO DELTA — an absolute
+    // `journal().length === 0` measured the seed, not the refusal.
+    const journalBefore = store.journal().length
     const decoded = decodePage(null as never)
     expect(decoded.ok).toBe(false)
     if (!decoded.ok) {
@@ -302,7 +376,9 @@ describe('FS7/FS8/FS9 — malformed input is typed, uncompared fields never ente
     expect(result.ok).toBe(false)
     if (!result.ok) expect('ops' in result).toBe(false)
     expect(JSON.stringify(store.listNodes())).toBe(before)
-    expect(store.journal().length).toBe(0)
+    // the DISCRIMINATING assertion of FS7: the typed refusal ADDED no journal
+    // entry (a partial write would have added one)
+    expect(store.journal().length).toBe(journalBefore)
   })
 
   it('FS7 — no op list escapes a refused page (there is no phantom successful edit)', async () => {
@@ -372,17 +448,30 @@ describe('FS10/FS11/FS12/FS15 — one commit, one call, one entry, one result', 
   })
 
   it('FS15 — a batch that fails partway leaves no partial write behind (no chunk boundaries)', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form wrapped every assertion in
+    // `if (!result.ok)`, so a batch that reported SUCCESS (or that left the first
+    // chunk applied) satisfied the row. The failure is now asserted.
     const { store, file } = newStore()
     await store.putNode(makeNode('a', { content: 'A' }))
     const before = bytes(file)
+    const nodesBefore = JSON.stringify(store.listNodes())
+    const journalBefore = store.journal().length
     const result = await store.applyBatch([
       { op: 'putNode', node: makeNode('c', { content: 'C' }) },
       { op: 'setProps', nodeId: 'ghost', props: { x: 1 } },
     ])
-    if (!result.ok) {
-      expect(store.getNode('c')).toBeUndefined()
-      expect(bytes(file)).toBe(before)
-    }
+    expect(result.ok, 'a mid-batch failure is a discriminated `{ok:false}` (never a throw, never a success)').toBe(false)
+    if (result.ok) return
+    expect(result.failedIndex, 'the failing op is the SECOND one (the chunk boundary)').toBe(1)
+    expect(store.getNode('c'), 'the first op was ROLLED BACK — no chunk boundary left a partial write').toBeUndefined()
+    expect(JSON.stringify(store.listNodes())).toBe(nodesBefore)
+    expect(bytes(file), 'a failed batch performs ZERO persists').toBe(before)
+    expect(store.journal().length, 'a failed batch adds no journal entry').toBe(journalBefore)
+    // the discriminating CONTROL: the same first op ALONE succeeds and persists
+    const okResult = await store.applyBatch([{ op: 'putNode', node: makeNode('c', { content: 'C' }) }])
+    expect(okResult.ok).toBe(true)
+    expect(store.getNode('c'), 'the control really wrote (the oracle discriminates)').toBeDefined()
+    expect(bytes(file), 'the control changed the store bytes').not.toBe(before)
   })
 })
 
@@ -390,21 +479,66 @@ describe('FS10/FS11/FS12/FS15 — one commit, one call, one entry, one result', 
 // FS13/FS14/FS19/FS24 — identity, deletion and the silent-success bounds
 // ===========================================================================
 describe('FS13/FS14/FS19/FS24 — no id collision, no phantom deletion, no silent success', () => {
-  it('FS13 — a commit never mints an id that a node already holds', async () => {
+  it('FS13 — the minted id of a typed block never collides, driven through the ADAPTER\'s mint', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form asserted a HARD-CODED id
+    // (`doc:p:2`) was absent from the id set without ever calling the mint — it
+    // would pass against any implementation, including one that reused ids. This
+    // row drives `buildPageOps`' own mint over a page the user typed into.
     const { store } = newStore()
     await store.putNode(makeNode('doc:p:1', { content: 'existing' }))
     const existing = new Set(store.listNodes().map((n) => n.id))
-    // the minting rule: n greater than every present n for the (document, type) pair
-    const minted = 'doc:p:2'
-    expect(existing.has(minted)).toBe(false)
+    const createdAt = store.getNode('doc:p:1')!.createdAt
+    const built = pageOps(`<p data-rag-node-id="doc:p:1">existing</p><p data-rag-node-id="brand-new">typed</p>`, store)
+    expect(built.ok, 'the page with a typed block maps to an op list').toBe(true)
+    if (!built.ok) return
+    const minted = built.ops.find((op) => op.op === 'putNode' && op.node.content === 'typed')
+    expect(minted, 'the typed block is a MINTED `putNode` (§3.3 item 8)').toBeDefined()
+    const mintedId = (minted as { node: RagNode }).node.id
+    expect(existing.has(mintedId), `the minted id ${mintedId} must not collide with an existing node (FS13)`).toBe(false)
+    expect(mintedId, 'the mint follows `documentId:type:n` above every present n for that pair').toBe('doc:p:2')
+    const applied = await store.applyBatch(built.ops)
+    expect(applied.ok, 'the commit lands').toBe(true)
+    expect(store.getNode(mintedId), 'the minted node is written').toBeDefined()
+    expect(store.getNode('doc:p:1')?.createdAt, 'the pre-existing node is untouched by the mint (no id reuse)').toBe(createdAt)
+    expect(store.getNode('doc:p:1')?.content).toBe('existing')
   })
 
-  it('FS14 — a block still rendered is never expressed as a removeNode', async () => {
+  it('FS14 — a block the page still RENDERS is never expressed as a removal (the removal path is really invoked)', async () => {
+    // REPAIRED (RCA-3 second remand): the previous form applied a `putNode` for a
+    // node that was never removed and asserted it still existed — it never
+    // invoked the removal path, so a scan that treated every unmounted block as a
+    // deletion passed. This row drives the adapter's removal scan over a real
+    // containment shape. CROSS-REFERENCE: this row uses the TEST-LOCAL scoped-edge
+    // shape (edges carrying `documentIds`); the PRODUCTION edge shape (the
+    // importer's `doc-child` edges carry none, so the scan is EMPTY in production)
+    // is pinned by `tests/page-diff-production-commit.test.ts` `SP1`/`SP2`.
     const { store } = newStore()
-    await store.putNode(makeNode('kept', { content: 'still on the page' }))
-    const result = await store.applyBatch([{ op: 'putNode', node: makeNode('kept', { content: 'still on the page' }) }])
-    expect(result.ok).toBe(true)
-    expect(store.getNode('kept')).toBeDefined()
+    await store.putNode(makeNode('sec', { type: 'div', content: 'Section' }))
+    await store.putNode(makeNode('b1', { content: 'one' }))
+    await store.putNode(makeNode('b2', { content: 'two' }))
+    await store.putEdge(makeEdge('e-child-1', 'doc-child', 'sec', 'b1', { order: 0, documentIds: ['doc'] }))
+    await store.putEdge(makeEdge('e-child-2', 'doc-child', 'sec', 'b2', { order: 1, documentIds: ['doc'] }))
+    // every block is still rendered (one with an edited content)
+    const built = pageOps(
+      `<div data-rag-node-id="sec">Section</div><p data-rag-node-id="b1">one-edited</p><p data-rag-node-id="b2">two</p>`,
+      store,
+    )
+    expect(built.ok, 'the page maps').toBe(true)
+    if (!built.ok) return
+    expect(
+      built.ops.filter((op) => op.op === 'removeNode'),
+      'a block still rendered is NEVER a deletion, even when a sibling block changed (FS14)',
+    ).toEqual([])
+    // NON-VACUITY: the scan is LIVE — the same store with b2 gone from the page
+    // DOES emit the removal pair, so the empty list above is not a dead scan.
+    const withRemoval = pageOps(`<div data-rag-node-id="sec">Section</div><p data-rag-node-id="b1">one-edited</p>`, store)
+    expect(withRemoval.ok).toBe(true)
+    if (!withRemoval.ok) return
+    expect(
+      withRemoval.ops.some((op) => op.op === 'removeNode' && op.id === 'b2'),
+      'b2, genuinely gone from the page, IS removed (the removal path really runs)',
+    ).toBe(true)
+    expect(store.getNode('b2'), 'the adapter is PURE — it emits ops, it does not write').toBeDefined()
   })
 
   it('FS19 — a commit that cannot write reports a failure, never a success', async () => {
@@ -414,16 +548,31 @@ describe('FS13/FS14/FS19/FS24 — no id collision, no phantom deletion, no silen
     expect(store.getNode('no-such-node')).toBeUndefined()
   })
 
-  it('FS24 — a non-resident target is refused with a typed result, not a silent whole-store write', async () => {
+  it('FS24 — a commit scoped to a document the PAGE is not scoped to is refused with a typed result, no op list', async () => {
+    // REPAIRED / RE-POINTED (RCA-3 second remand): the previous form had BOTH
+    // branches of `if (!result.ok)` passing (a store-level upsert is legal, so
+    // the row asserted nothing either way) and never reached the non-resident
+    // refusal. The PRODUCTION row carrying the `not-resident` half is the host
+    // seam row (`tests/page-commit-failure-visibility.test.ts` `S2` and the
+    // seam-driven `P-SM-1` in `tests/unit-u-edit-1-property-register.test.ts`),
+    // where the store snapshot is absent and the typed `not-resident` record is
+    // asserted. THIS row carries the adapter's own refusal half: a page whose
+    // surface is scoped to a DIFFERENT document than the commit is refused with
+    // no op list (§3.6/§11.10 item 4(b)) — a silent cross-document write is the
+    // fail-state.
     const { store, file } = newStore()
-    await store.putNode(makeNode('elsewhere', { content: 'other document' }))
+    await store.putNode(makeNode('b1', { content: 'alpha' }))
     const before = bytes(file)
-    const result = await store.applyBatch([{ op: 'putNode', node: makeNode('ghost-doc-block', { content: 'x' }) }])
-    // a putNode for an unknown node is legal (an upsert) — what is pinned is that
-    // a FAILED commit leaves the file untouched; a success means the target was
-    // addressed explicitly, never inferred by a whole-store read.
-    if (!result.ok) expect(bytes(file)).toBe(before)
-    else expect(store.getNode('ghost-doc-block')).toBeDefined()
+    const journalBefore = store.journal().length
+    const foreign = `<div id="page-edit-surface" data-edit-surface="doc-other" contenteditable="true"><p data-rag-node-id="b1">alpha</p></div>`
+    const built = pageOps(foreign, store, 'doc')
+    expect(built.ok, 'a page scoped to another document is REFUSED (typed, with no op list)').toBe(false)
+    if (!built.ok) expect(built.kind, 'the refusal is the typed `decompose-failed` class').toBe('decompose-failed')
+    expect(bytes(file), 'the refusal writes nothing').toBe(before)
+    expect(store.journal().length, 'the refusal journals nothing').toBe(journalBefore)
+    // the discriminating CONTROL: the SAME page scoped to its OWN document maps
+    const own = pageOps(foreign, store, 'doc-other')
+    expect(own.ok, 'the same page scoped to its own document IS accepted (the oracle discriminates)').toBe(true)
   })
 })
 
@@ -520,21 +669,44 @@ describe('FS20/FS22/FS23 — the removed mode token, the plaintext representatio
     }
   })
 
-  it('FS23 — a dirty page is never cleared by a rebuild request (the guard queues instead)', () => {
+  it('FS23 — the DIRTY-ENTRY rule: a rebuild is deferred while ANY page is dirty, and no other page\'s clear runs it', () => {
+    // REPAIRED / RE-POINTED (RCA-3 second remand): the two previous rows pinned
+    // the controller's queue flag and a `clearDirty` on a page that was never
+    // dirty — neither could fail against a production that ran the queued rebuild
+    // on ANY clear. This row drives the rule with discriminating transitions:
+    //   (a) a dirty page defers the rebuild and keeps its text (queued, not run);
+    //   (b) clearing a CLEAN sibling does NOT run the queued rebuild;
+    //   (c) only when the LAST dirty page clears does the coalesced rebuild run.
+    // CARRIER NOTE (re-point, recorded rather than demanded): the read model's
+    // §5.1 dirty-entry EVICTION rule (`unit-reads-pivot-tab-cache`) has no module
+    // in this build — no `tab-cache`/`evict` surface exists under `src/**` — so
+    // the eviction half is carried by the host rows
+    // (`tests/page-commit-tab-ownership.test.ts` T2/T4/T5,
+    // `tests/page-commit-scope-ack-race.test.ts` N4b/N4c), which drive a real
+    // close/switch and assert that no other tab's dirty page is dropped.
     const rebuilds: string[] = []
-    const controller = createEditController({ backRefs: new Map([['tab-1', ['p1']]]), commit: async () => ({ ok: true, nodeId: 'tab-1' }), onRebuild: (k) => rebuilds.push(k) })
+    const controller = createEditController({
+      backRefs: new Map([['tab-1', ['p1']], ['tab-2', ['p2']]]),
+      commit: async () => ({ ok: true, nodeId: 'tab-1' }),
+      onRebuild: (k) => rebuilds.push(k),
+    })
     controller.markDirty('tab-1')
     controller.requestRebuild('content')
-    controller.requestRebuild('template')
-    expect(rebuilds).toEqual([])
+    // (a) the rebuild is QUEUED, never run, and the dirty page survives
+    expect(rebuilds, 'a dirty page defers the rebuild (the guard queues)').toEqual([])
+    expect(controller.hasQueuedRebuild()).toBe(true)
     expect(controller.isDirty('tab-1')).toBe(true)
-  })
-
-  it('FS23 — a dirty page survives a re-derive while another page is clean', () => {
-    const controller = createEditController({ backRefs: new Map([['tab-1', ['p1']], ['tab-2', ['p2']]]), commit: async () => ({ ok: true, nodeId: 'x' }), onRebuild: () => {} })
-    controller.markDirty('tab-1')
+    // (b) clearing a CLEAN sibling must not run it
+    controller.requestRebuild('template') // coalesced: template > content
     controller.clearDirty('tab-2')
-    expect(controller.isDirty('tab-1')).toBe(true)
+    expect(rebuilds, 'another page\'s clear must NOT run the queued rebuild while this page is dirty').toEqual([])
+    expect(controller.hasQueuedRebuild()).toBe(true)
+    expect(controller.isDirty('tab-1'), 'the dirty page SURVIVES (its text is the only copy — FS23).').toBe(true)
     expect(controller.anyDirty()).toBe(true)
+    // (c) the LAST dirty page clearing runs the coalesced rebuild, exactly once
+    controller.clearDirty('tab-1')
+    expect(rebuilds, 'the deferred rebuild runs once, coalesced by precedence (template)').toEqual(['template'])
+    expect(controller.hasQueuedRebuild()).toBe(false)
+    expect(controller.isDirty('tab-1')).toBe(false)
   })
 })

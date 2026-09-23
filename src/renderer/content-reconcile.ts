@@ -15,7 +15,7 @@
 // never produce a raw TypeError (F1's guard is the only throw; F2/F3/F6 skip).
 import type { LegacyInitialData, LegacyNodeData } from 'provident-ssr'
 import { plainRagId } from './cross-document-shared.js'
-import { EDITOR_TOOLBAR_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
+import { EDITOR_TOOLBAR_ID, PAGE_COMMIT_WARNING_ID, PAGE_EDIT_SURFACE_ID } from './pane-graph.js'
 import { getO0HookRecorder } from '../shared/o0-hook.js'
 
 /** A previously materialized content root, carrying its subtree so the
@@ -120,6 +120,13 @@ function asContentRoot(node: LegacyNodeData | null | undefined): MaterializedRoo
   if (id === PAGE_EDIT_SURFACE_ID) {
     return { cssId: id, ragNodeId: id }
   }
+  // U-EDIT-1 (C9) §3.5 item 4/6 (`M3`) — the authored per-tab page-commit warning
+  // is a pane-like, document-UNSCOPED root too: authored on an assembly where the
+  // active tab carries a failure and gone once it is cleared, so a content
+  // re-derive must see it added/removed rather than leave a phantom warning.
+  if (id === PAGE_COMMIT_WARNING_ID) {
+    return { cssId: id, ragNodeId: id }
+  }
   // U-LIVE8 — the pinned `editor-toolbar` root is a pane-like content root
   // (reconciled always-shape-compared like a pane, so its fresh
   // `disabled`/`data-mode` state re-materializes on the content re-derive).
@@ -151,6 +158,7 @@ function isPaneLikeRoot(cssId: string): boolean {
     (cssId.startsWith(PANE_PREFIX) && cssId.length > PANE_PREFIX.length) ||
     cssId === EDITOR_TOOLBAR_ID ||
     cssId === PAGE_EDIT_SURFACE_ID ||
+    cssId === PAGE_COMMIT_WARNING_ID ||
     cssId === LANDING_ROOT_ID
   )
 }

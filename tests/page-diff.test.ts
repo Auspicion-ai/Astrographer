@@ -236,10 +236,23 @@ describe('§3.1 decodePage — the package decode projected onto the C9 `PageBlo
     if (decoded.ok) expect(decoded.blocks).toEqual([])
   })
 
-  it('state S1 — the decoded page carries the document id the ops are scoped by', () => {
-    const decoded = decodePage(`<p data-rag-node-id="b1">alpha</p>`)
+  it('state S1 — the decoded page carries the SURFACE ROOT\'s `data-edit-surface` document id (§2.1/§3.1)', () => {
+    // §2.1/§11.7: the surface ROOT carries `data-edit-surface = <documentId>`
+    // (with `id = page-edit-surface` + `contenteditable`). The decoded page's
+    // document id is the id the ops are scoped by — asserted EXACTLY, not merely
+    // as "a string": the previous form of this row accepted `typeof === 'string'`
+    // and therefore accepted an empty or foreign id.
+    const page = `<div id="page-edit-surface" data-edit-surface="doc-1" contenteditable="true"><p data-rag-node-id="b1">alpha</p></div>`
+    const decoded = decodePage(page)
     expect(decoded.ok).toBe(true)
-    if (decoded.ok) expect(typeof decoded.documentId).toBe('string')
+    if (!decoded.ok) return
+    expect(decoded.documentId, 'the decoded page must carry the surface root\'s own document id').toBe('doc-1')
+    // and a page whose surface root names ANOTHER document reports that document
+    const other = decodePage(
+      `<div id="page-edit-surface" data-edit-surface="doc-2" contenteditable="true"><p data-rag-node-id="b1">alpha</p></div>`,
+    )
+    expect(other.ok, 'the decode of the doc-2 page must succeed').toBe(true)
+    if (other.ok) expect(other.documentId).toBe('doc-2')
   })
 
   it('state S5 — a block-level element with NO `data-rag-node-id` (incl. a `textarea`) is never a block', () => {
@@ -280,6 +293,123 @@ describe('§3.1 decodePage — the package decode projected onto the C9 `PageBlo
     // package's own XOR shape would read '')
     expect(block.content).toBe('alpha  tail')
     expect(block.children).toEqual([{ type: 'strong', content: 'bold', offset: 6 }])
+  })
+})
+
+// ===========================================================================
+// §3.1/§3.2 — the page belongs to the COMMITTING document
+// (a foreign/unowned node is REFUSED, never written)
+// ===========================================================================
+const OTHER_DOC = 'other-doc'
+
+describe('§3.1/§3.2 — the page belongs to the COMMITTING document (a foreign/unowned node is REFUSED)', () => {
+  /** A WHOLE-STORE snapshot holding TWO documents, each with its own section and
+   *  its own `doc-child` blocks. §3.1 pins the snapshot as "the document's
+   *  read-only node/edge view" — the store's own seam payload is the WHOLE store,
+   *  which is exactly why the adapter must scope every op by the committing
+   *  document. */
+  async function seeded(): Promise<RagStore> {
+    const { store } = newStore()
+    await seed(
+      store,
+      [
+        makeNode('sec-doc', { type: 'div', content: '' }),
+        makeNode('sec-other', { type: 'div', content: '' }),
+        makeNode(`${DOC}:body`, { content: 'body one' }),
+        makeNode(`${OTHER_DOC}:head`, { type: 'h1', content: 'Other head' }),
+        makeNode(`${OTHER_DOC}:body`, { content: 'other body' }),
+      ],
+      [
+        makeEdge('e-doc-body', 'doc-child', 'sec-doc', `${DOC}:body`, { order: 0, documentIds: [DOC] }),
+        makeEdge('e-other-head', 'doc-child', 'sec-other', `${OTHER_DOC}:head`, { order: 0, documentIds: [OTHER_DOC] }),
+        makeEdge('e-other-body', 'doc-child', 'sec-other', `${OTHER_DOC}:body`, { order: 1, documentIds: [OTHER_DOC] }),
+      ],
+    )
+    return store
+  }
+
+  it('F1 — a block whose ragId belongs to ANOTHER document is REFUSED (typed), never written', async () => {
+    const store = await seeded()
+    const before = JSON.stringify(store.listNodes())
+    // the repro: the document's own rendered block PLUS a block of a foreign
+    // document (the foreign node EXISTS in the whole-store snapshot, so a
+    // ragId-only pairing writes to it).
+    const page = pageOf([
+      { ragId: `${DOC}:body`, tag: 'p', inner: 'body one' },
+      { ragId: `${OTHER_DOC}:head`, tag: 'h1', inner: 'hijacked' },
+    ])
+    const decoded = decodePage(page)
+    expect(decoded.ok, 'the page decodes — the refusal must come from the OWNERSHIP guard, not from the decode').toBe(true)
+    const result = buildPageOps(decoded, snapshotOf(store), DOC)
+    expect(
+      result.ok,
+      'a page naming a node of ANOTHER document must be REFUSED, never mapped onto ops that write it',
+    ).toBe(false)
+    if (!result.ok) {
+      expect(result.kind).toBe('decompose-failed')
+      expect(result.message.length).toBeGreaterThan(0)
+      expect('ops' in result, 'a refusal carries NO op list (never a partial write — FS7)').toBe(false)
+    }
+    expect(JSON.stringify(store.listNodes()), 'the refusal wrote nothing').toBe(before)
+
+    // the DISCRIMINATING CONTROL: the SAME page SHAPE carrying only the
+    // committing document's own nodes still maps (the guard is ownership, not a
+    // blanket refusal).
+    const own = pageOf([{ ragId: `${DOC}:body`, tag: 'p', inner: 'body one!' }])
+    const control = buildPageOps(decodePage(own), snapshotOf(store), DOC)
+    expect(control.ok, 'an own-document page must still map').toBe(true)
+    if (control.ok) expect(putNodes(control.ops).map((n) => n.id)).toEqual([`${DOC}:body`])
+  })
+
+  it('F1 — a page whose `data-edit-surface` DISAGREES with the committing document is REFUSED', async () => {
+    const store = await seeded()
+    const page =
+      `<div id="page-edit-surface" data-edit-surface="${OTHER_DOC}" contenteditable="true">` +
+      `<p data-rag-node-id="${DOC}:body">body one-edited</p></div>`
+    const decoded = decodePage(page)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.documentId, 'the decode reports the surface root\'s own marker').toBe(OTHER_DOC)
+    const result = buildPageOps(decoded, snapshotOf(store), DOC)
+    expect(
+      result.ok,
+      'a page whose surface names a DIFFERENT document than the committing one must be refused (§3.1/§3.6 — never a silent write)',
+    ).toBe(false)
+    if (!result.ok) expect('ops' in result, 'a refusal carries no op list').toBe(false)
+
+    // the CONTROL: the SAME page with the committing document's own marker maps
+    const agreed =
+      `<div id="page-edit-surface" data-edit-surface="${DOC}" contenteditable="true">` +
+      `<p data-rag-node-id="${DOC}:body">body one-edited</p></div>`
+    const control = buildPageOps(decodePage(agreed), snapshotOf(store), DOC)
+    expect(control.ok, 'the same page with the agreeing marker must map').toBe(true)
+  })
+
+  it('F1 (control) — no removal ever names a block of ANOTHER document', async () => {
+    const store = await seeded()
+    const page = pageOf([{ ragId: `${DOC}:body`, tag: 'p', inner: 'body one' }])
+    const ops = opsFor(page, store, DOC)
+    expect(removalOps(ops), "the other document's blocks are absent from the page but are NOT this document's blocks").toEqual([])
+    expect(nodeIdsOf(ops).filter((id) => id.startsWith(`${OTHER_DOC}:`)), 'no op may name a node of another document').toEqual([])
+
+    // the discriminating control for THIS row: the committing document's OWN
+    // absent block IS still removed (the removal branch is live, not disabled).
+    const { store: s2 } = newStore()
+    await seed(
+      s2,
+      [
+        makeNode('sec-doc', { type: 'div', content: '' }),
+        makeNode(`${DOC}:body`, { content: 'body one' }),
+        makeNode(`${DOC}:gone`, { content: '' }),
+      ],
+      [
+        makeEdge('e-c1', 'doc-child', 'sec-doc', `${DOC}:body`, { order: 0, documentIds: [DOC] }),
+        makeEdge('e-c2', 'doc-child', 'sec-doc', `${DOC}:gone`, { order: 1, documentIds: [DOC] }),
+      ],
+    )
+    const ownRemovals = removalOps(opsFor(pageOf([{ ragId: `${DOC}:body`, tag: 'p', inner: 'body one' }]), s2, DOC))
+    expect(ownRemovals.length, 'a genuinely removed OWN block is still removed (the oracle discriminates)').toBeGreaterThan(0)
+    expect(JSON.stringify(ownRemovals)).toContain(`${DOC}:gone`)
   })
 })
 
@@ -419,6 +549,41 @@ describe('§3.1 — the closed change-kind → op mapping', () => {
     expect(opsFor(page, store)).toEqual([{ op: 'setType', nodeId: 'b1', type: 'h2' }])
   })
 
+  it('§3.1/§3.2 — a block whose TYPE and CONTENT BOTH change commits BOTH (the text is never dropped)', async () => {
+    const { store } = newStore()
+    await seed(store, [makeNode('b1', { type: 'p', content: 'alpha' })])
+    // the simultaneous edit: the user retypes the block AND changes its element
+    // type. §3.2's closed field set names `type` AND `content` as compared fields,
+    // and the minimal-op rule requires "the single op that expresses the
+    // difference" — a type-only write drops the user's text (the silent-data-loss
+    // class), so BOTH differences must reach the store in the ONE commit.
+    const page = pageOf([{ ragId: 'b1', tag: 'h2', inner: 'alphax' }])
+    const ops = opsFor(page, store)
+    expect(new Set(nodeIdsOf(ops)), 'exactly ONE node is written, and no unrelated node appears (§3.2 churn rule)').toEqual(
+      new Set(['b1']),
+    )
+    const applied = await store.applyBatch(ops)
+    expect(applied.ok, 'the commit applies through the same ONE applyBatch').toBe(true)
+    const after = store.getNode('b1')
+    expect(after?.type, 'the TYPE change must be committed').toBe('h2')
+    expect(
+      after?.content,
+      'the CONTENT change must be committed TOO — a simultaneous type+content edit must never drop the user\'s text',
+    ).toBe('alphax')
+    expect(after?.createdAt, 'the type write preserved identity (never delete+recreate — FS6)').toBe(NOW)
+
+    // the DISCRIMINATING CONTROL: the same block with a type-only change still
+    // commits (the oracle is not a blanket "content must always move").
+    const { store: s2 } = newStore()
+    await seed(s2, [makeNode('b1', { type: 'p', content: 'alpha' })])
+    const typeOnly = pageOf([{ ragId: 'b1', tag: 'h2', inner: 'alpha' }])
+    const typeOnlyOps = opsFor(typeOnly, s2)
+    const typeOnlyApplied = await s2.applyBatch(typeOnlyOps)
+    expect(typeOnlyApplied.ok).toBe(true)
+    expect(s2.getNode('b1')?.type).toBe('h2')
+    expect(s2.getNode('b1')?.content, 'a type-only change leaves the content untouched').toBe('alpha')
+  })
+
   it('§3.1 — a `content` difference maps to ONE `putNode` carrying the projected content (identity preserved)', async () => {
     const { store } = newStore()
     await seed(store, [makeNode('b1', { content: 'before' })])
@@ -519,7 +684,18 @@ describe('§3.3 item 8 — a NEW block commits as a minted putNode + a doc-child
   it('FS13 — a minted id never collides with an existing node (`${documentId}:${type}:${n}` above every present n)', async () => {
     const { store } = newStore()
     const existing = [makeNode('doc:p:1', { content: 'one' }), makeNode('doc:p:2', { content: 'two' })]
-    await seed(store, existing, [makeEdge('e-c0', 'doc-child', 'sec', 'doc:p:2', { order: 0, documentIds: [DOC] })])
+    // The containment edge's SOURCE must exist: the store's pinned referential
+    // integrity REJECTS a `putEdge` to an un-put node (the same throw pinned
+    // green at `tests/crosslink-backlink.test.ts:232`), so without `sec` this
+    // row's own seed threw before the adapter ran. `sec` is the containing
+    // section the `doc-child` edge hangs from (the S4 row above seeds it too).
+    await seed(
+      store,
+      [makeNode('sec', { type: 'div', content: '' }), ...existing],
+      [makeEdge('e-c0', 'doc-child', 'sec', 'doc:p:2', { order: 0, documentIds: [DOC] })],
+    )
+    expect(store.getNode('sec')).toBeTruthy()
+    expect(store.getEdge('e-c0')).toBeTruthy()
     const page = pageOf([{ tag: 'p', inner: 'brand new' }])
     const ops = opsFor(page, store)
     const minted = putNodes(ops)[0]
@@ -613,6 +789,12 @@ describe('§3.1 — an unmappable input is REFUSED with a typed result, never a 
     const { store, file } = newStore()
     await seed(store, [makeNode('b1', { content: 'alpha' })])
     const before = JSON.stringify(store.listNodes())
+    // The seed's own `putNode` is a JOURNALED structural edit (measured: one
+    // `structural` entry per `putNode`), so this row's obligation is the
+    // DELTA the refusal adds — zero — never an absolute `journal().length === 0`
+    // (which measured the seed, not the refusal). Same idiom as
+    // `tests/batch-atomicity.test.ts`'s `journalBefore` rows.
+    const journalBefore = store.journal().length
     const decoded = decodePage(undefined as never)
     expect(decoded.ok).toBe(false)
     if (!decoded.ok) {
@@ -623,7 +805,9 @@ describe('§3.1 — an unmappable input is REFUSED with a typed result, never a 
     expect(result.ok).toBe(false)
     if (!result.ok) expect('ops' in result).toBe(false)
     expect(JSON.stringify(store.listNodes())).toBe(before)
-    expect(store.journal().length).toBe(0)
+    // the DISCRIMINATING assertion of FS7: the typed refusal ADDED no journal
+    // entry (a partial write / a silent op list would add one)
+    expect(store.journal().length).toBe(journalBefore)
     expect(file.length).toBeGreaterThan(0)
   })
 

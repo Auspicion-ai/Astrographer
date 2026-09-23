@@ -20,6 +20,21 @@ export interface EditControllerOptions {
    *  change re-renders the operator pane + the app graph (editingMode); a
    *  **template** change is a full reload. Injected for testability. */
   onRebuild: (kind: RebuildKind) => void
+  /** U-STAGE-ACTIVE-TAB §5.3.2 — the surface document a PAGE SUBJECT belongs to.
+   *  Supplied by the HOST (the active tab's document id, or null when the active
+   *  target is not a document) and used ONLY by `restoreCaret`'s
+   *  deleted-document guard, in place of `backRefs.has(subjectId)` (a page
+   *  subject is a TAB id, which is not a RAG node id, so the legacy guard
+   *  rejected every tab-keyed caret). Optional + additive: ABSENT ⇒ the legacy
+   *  `backRefs.has(subjectId)` behavior is preserved verbatim. */
+  pageSubjectDocument?: (subjectId: string) => string | null
+  /** U-STAGE-ACTIVE-TAB §A.3.2 (ruling C2) — the DOCUMENT-LIVENESS carrier:
+   *  `true` iff that document exists in the host's current store snapshot. It owns
+   *  `restoreCaret`'s deleted-document check, so `backRefs` keeps its documented
+   *  `Map<ragNodeId, nodeId[]>` invariant verbatim (no document id is ever its
+   *  key). Optional + additive and total: ABSENT ⇒ the legacy
+   *  `backRefs.has(<document id>)` fallback is preserved byte-for-byte. */
+  isDocumentLive?: (documentId: string) => boolean
 }
 
 /** The rebuild kind (U-STATE-1b change-kind discrimination). Precedence when
@@ -28,7 +43,21 @@ export type RebuildKind = 'content' | 'operator' | 'template'
 
 export type CommitResult =
   | { ok: true; nodeId: string }
-  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string }
+  | { ok: false; reason: 'deleted-node' | 'store-error'; error?: string; failedIndex?: number }
+
+/** U-EDIT-1 (C9) §3.5 item 5 — the TYPED page-commit failure record. It is the
+ *  value of the host-side per-tab carrier (`SidebarPanes`' `Map<subject,
+ *  CommitFailure>`, §3.5 item 6/§11 amendment `11.8` item 3): `store-rejected`
+ *  carries the `BatchResult`'s `error`/`failedIndex` VERBATIM, `decompose-failed`
+ *  carries the adapter's `{ ok: false }` message (§3.1), and `engine-unavailable`
+ *  carries the engine cause. The record is never a rendered element's class or
+ *  attribute (`FS17`). */
+export type CommitFailure = {
+  kind: 'not-authorized' | 'not-resident' | 'engine-unavailable' | 'store-rejected' | 'decompose-failed'
+  message: string
+  failedIndex?: number
+  engineCause?: 'connection-refused' | 'engine-not-spawned' | 'not-ready' | 'unavailable-state'
+}
 
 /** U-EDIT-1 (C9) §2.1 — the pinned authored id of the ONE page-edit surface.
  *  A caret whose `ragId` is any OTHER id addresses a per-node editing root
@@ -92,6 +121,20 @@ export interface EditController {
   restoreCaret(subjectId: string): CaretState | undefined
   /** Clear saved caret/focus state for a page subject. */
   clearCaret(subjectId: string): void
+  /** U-STAGE-ACTIVE-TAB §5.3.2 — the HOST's late-binding seam for the optional
+   *  `pageSubjectDocument` hook (the host owns the active-tab state and is
+   *  constructed with an ALREADY-built controller in the shipped renderer and in
+   *  every existing harness, so the hook cannot be passed at construction).
+   *  Additive and total: a host that never calls it keeps the legacy guard. */
+  setPageSubjectDocument?(resolve: (subjectId: string) => string | null): void
+  /** §A.3.2 (ruling C2) — the HOST's late-binding seam for the optional
+   *  `isDocumentLive` carrier (the `setPageSubjectDocument` pattern: the shipped
+   *  renderer and every existing harness construct the controller before the host,
+   *  so the carrier cannot always be passed at construction). Additive and total:
+   *  a host that never calls it keeps the absent-carrier legacy fallback, and the
+   *  pinned 11-member public census is preserved (the seam is attached
+   *  NON-ENUMERABLY). */
+  setDocumentLiveness?(resolve: (documentId: string) => boolean): void
 }
 
 export function createEditController(opts: EditControllerOptions): EditController {
@@ -99,6 +142,12 @@ export function createEditController(opts: EditControllerOptions): EditControlle
   let queuedRebuild = false
   let queuedKind: RebuildKind = 'content'
   const carets = new Map<string, CaretState>()
+  /** U-STAGE-ACTIVE-TAB §5.3.2 — the host-supplied page-subject → document
+   *  resolver (late-binding; see `setPageSubjectDocument`). */
+  let pageSubjectDocument: ((subjectId: string) => string | null) | undefined = opts.pageSubjectDocument
+  /** U-STAGE-ACTIVE-TAB §A.3.2 — the host-supplied DOCUMENT-LIVENESS carrier
+   *  (late-binding; see `setDocumentLiveness`). */
+  let isDocumentLive: ((documentId: string) => boolean) | undefined = opts.isDocumentLive
 
   const RANK: Record<RebuildKind, number> = { content: 0, operator: 1, template: 2 }
   const mergeKind = (a: RebuildKind, b: RebuildKind): RebuildKind => (RANK[b] > RANK[a] ? b : a)
@@ -107,7 +156,7 @@ export function createEditController(opts: EditControllerOptions): EditControlle
     queuedKind = 'content'
   }
 
-  return {
+  const controller: EditController = {
     markDirty(nodeId: string): void {
       dirty.add(nodeId)
     },
@@ -182,10 +231,41 @@ export function createEditController(opts: EditControllerOptions): EditControlle
     },
     restoreCaret(subjectId: string): CaretState | undefined {
       const saved = carets.get(subjectId)
-      // A dangling back-reference (deleted document) clears the saved caret — no
-      // restore. L5 — actually clear the stale caret from the map so a later
-      // re-created subject with the same id does not restore a stale caret.
-      if (!opts.backRefs.has(subjectId)) {
+      // U-STAGE-ACTIVE-TAB §5.3.2 / §A.1.4 clause 1 — the PINNED order: the
+      // caret is read FIRST. A caret-less read returns `undefined` and does NOT
+      // consult the hook (a read with nothing saved cannot be changed by the
+      // hook's answer, so consulting it would be an unobservable host-state side
+      // effect the harness must be able to forbid).
+      if (saved == null) return undefined
+      // A dangling back-reference (the page's DOCUMENT was deleted) clears the
+      // saved caret — no restore. L5 — actually clear the stale caret from the
+      // map so a later re-created subject with the same id does not restore a
+      // stale caret. With the host hook supplied the liveness is the SUBJECT'S
+      // DOCUMENT (`pageSubjectDocument(subjectId)`, a tab id being no RAG id), so
+      // a tab id is no longer rejected merely for not being a `rag-` id. An empty
+      // answer is NO document (never a live one): `backRefs` is a
+      // `Map<ragNodeId, nodeId[]>`, and an empty id is not a RAG node id — only a
+      // non-empty document id can be validated.
+      const hook = pageSubjectDocument
+      let live: boolean
+      if (typeof hook === 'function') {
+        // §A.3.2 — the PINNED order: the subject's DOCUMENT is resolved first;
+        // `doc === null` (a non-document active tab) clears. The liveness of that
+        // document is the HOST's carrier when supplied, and `backRefs.has(doc)` ONLY
+        // as the absent-carrier legacy fallback (no document id is a `backRefs` key
+        // after ruling C2). An empty/non-string answer is NO document (never a live
+        // one), so it clears.
+        const doc = hook(subjectId)
+        live =
+          typeof doc === 'string' && doc !== ''
+            ? typeof isDocumentLive === 'function'
+              ? isDocumentLive(doc)
+              : opts.backRefs.has(doc)
+            : false
+      } else {
+        live = opts.backRefs.has(subjectId)
+      }
+      if (!live) {
         carets.delete(subjectId)
         return undefined
       }
@@ -203,4 +283,31 @@ export function createEditController(opts: EditControllerOptions): EditControlle
       carets.delete(subjectId)
     },
   }
+  // U-STAGE-ACTIVE-TAB §5.3.2 — the late-binding seam is attached NON-ENUMERABLY:
+  // the controller's PUBLIC member census is pinned at exactly 11 members
+  // (`tests/edit-controller.test.ts` S1 — `Object.keys(controller).sort()`), and
+  // the host is the only caller. Defining it hidden keeps both contracts true:
+  // the hook is supplyable by a host that received an already-built controller,
+  // and the pinned census is unchanged (an absent/foreign controller keeps the
+  // legacy guard — the interface member is optional).
+  Object.defineProperty(controller, 'setPageSubjectDocument', {
+    value: (resolve: (subjectId: string) => string | null): void => {
+      pageSubjectDocument = resolve
+    },
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  })
+  // §A.3.2 (ruling C2) — the document-liveness late-bind twin, attached the same
+  // NON-ENUMERABLE way so the pinned 11-member public census
+  // (`tests/edit-controller.test.ts` S1) stays exactly true.
+  Object.defineProperty(controller, 'setDocumentLiveness', {
+    value: (resolve: (documentId: string) => boolean): void => {
+      isDocumentLive = resolve
+    },
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  })
+  return controller
 }

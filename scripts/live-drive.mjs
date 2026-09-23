@@ -187,7 +187,7 @@ async function ufHitProbe(h, selector) {
  *  only when the hit-tested path was proven). */
 async function ufRealClick(h, selector, opts = {}) {
   const q = JSON.stringify(selector)
-  if (opts.scroll !== false) {
+  if (opts.scroll !== false && opts.settle !== 0) {
     await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(e&&typeof e.scrollIntoView==='function')e.scrollIntoView({block:'center'});return true})()`)
     await sleep(250) // let the scroll/relayout settle before the hit-test
   }
@@ -233,9 +233,26 @@ async function ufKey(h, key, code, vk) {
 }
 
 /** A stable render oracle for the mounted stage (length + rolling hash + the
- *  mounted document-head id) so a content revert/restore is byte-checkable. */
+ *  mounted document-head id) so a content revert/restore is byte-checkable.
+ *
+ *  EXTENDED 2026-09-22 (U-STAGE-ACTIVE-TAB §8.3, the audit's §4.2 requirement):
+ *  the reading now also carries the stage's IDENTITY — the page-edit surface's
+ *  `data-edit-surface` marker, whether the SEARCH stage roots are present
+ *  (`#stage-search-tab` / `#search-tab-input`) and the DERIVED `stageKind`
+ *  ('document' | 'search' | 'landing' | 'placeholder' | 'unknown') — because the
+ *  text/hash alone cannot distinguish "the active tab's page" from "another
+ *  tab's page". This is an ORACLE-IDENTITY change
+ *  (`docs/specs/requirement-catalog.md` §2.2 fact 3). */
 async function ufStageSig(h) {
-  return h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const t=m?(m.textContent||''):'';let hash=0;for(let i=0;i<t.length;i++){hash=(hash*31+t.charCodeAt(i))|0}const h1=m?m.querySelector('h1'):null;return {len:t.length,hash:hash,docId:h1?h1.id:null,landing:!!document.getElementById('stage-landing')}})()`)
+  return h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const t=m?(m.textContent||''):'';let hash=0;for(let i=0;i<t.length;i++){hash=(hash*31+t.charCodeAt(i))|0}const h1=m?m.querySelector('h1'):null;
+    const marker=m?m.querySelector('[data-edit-surface]'):null;
+    const searchStage=!!document.getElementById('stage-search-tab');
+    const searchInput=!!document.getElementById('search-tab-input');
+    const landing=!!document.getElementById('stage-landing');
+    const kind=searchStage?'search':(landing?'landing':((m&&(m.querySelector('[data-doc-head]')||m.querySelector('#page-edit-surface')||h1))?'document':((m&&m.querySelector('[data-stage=\"placeholder\"]'))?'placeholder':'unknown')));
+    return {len:t.length,hash:hash,docId:h1?h1.id:null,landing:landing,
+      editSurface:marker?marker.getAttribute('data-edit-surface'):null,
+      searchStage:searchStage,searchInput:searchInput,stageKind:kind}})()`)
 }
 
 /** The rendered app-graph pane frames (identity, box, body-node census). */
@@ -423,6 +440,433 @@ function diagResult(detail, extra = {}) {
 async function ufSurfaceTarget(h) {
   const present = await h.cdp.evaluate(`!!document.getElementById('app') && !!document.querySelector('.layout')`).catch(() => null)
   return { target: 'assembled-renderer', liveSurfacePresent: present === true }
+}
+
+// ===========================================================================
+// U-EDIT-1-LIVE (C9 whole-page editing, spec §8.3 items 1-8) + U-STAGE-ACTIVE-
+// TAB (the stage always displays the page owned by the ACTIVE tab, spec §8.3)
+// — the MANDATORY live batteries (RCA-11). Their blocks are added below; the
+// `ufStageSig` oracle extension the read-only audit names (archive/reviews/
+// 2026-09-22-tab-page-ownership-audit.md §4.2) is here: the stage's IDENTITY —
+// which tab's target kind/page is PAINTED — is asserted, never just its text.
+//
+// LAYER (RCA-12): assembled-renderer — every reading comes from the EXECUTING
+// `dist/` renderer driving real CDP gestures/keys. The node twin
+// (docs/specs/unit-u-edit-1-greens.md) is ENVELOPE/STORE-green only.
+// ===========================================================================
+
+/** The search-tab stage ids (`src/renderer/pane-graph.ts` `SEARCH_TAB_INPUT_ID`). */
+const UF_SEARCH_TAB_INPUT_ID = 'search-tab-input'
+const UF_STAGE_SEARCH_TAB_ID = 'stage-search-tab'
+
+/** The surface/marker/state ids of the whole-page editing surface (§2.1). */
+const UF_PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
+const UF_PAGE_COMMIT_WARNING_ID = 'page-commit-warning'
+
+/** The stage-kind reading (§A.1.1 I2-R) + the active-tab identity pair.
+ *  `kind` is DERIVED from the painted stage: the search stage root / the landing
+ *  root / the document head or the surface marker ⇒ document. A marker WITHOUT
+ *  the surface element (or vice versa) is reported — the two discriminators must
+ *  AGREE, so `agree` is part of the reading, not a post-hoc filter. */
+const UF_STAGE_KIND_SRC = `(()=>{
+  const m=document.getElementById('zone:main');
+  if(!m) return {kind:'unknown',surface:0,marker:0,markerVal:null,agree:false,mainBox:null};
+  const mr=m.getBoundingClientRect();
+  const roots=m.querySelectorAll('#'+${JSON.stringify(UF_PAGE_EDIT_SURFACE_ID)});
+  const markers=m.querySelectorAll('[data-edit-surface]');
+  const markerVal=markers.length?markers[0].getAttribute('data-edit-surface'):null;
+  const search=!!m.querySelector('#'+${JSON.stringify(UF_STAGE_SEARCH_TAB_ID)});
+  const landing=!!m.querySelector('#stage-landing');
+  const docHead=m.querySelector('[data-doc-head]')!=null;
+  const h1=m.querySelector('h1')!=null;
+  const kind=search?'search':(landing?'landing':((docHead||h1||roots.length>0)?'document':(m.querySelector('[data-stage="placeholder"]')?'placeholder':'unknown')));
+  return {kind:kind,surface:roots.length,marker:markers.length,markerVal:markerVal,
+    agree:roots.length===markers.length && (roots.length===0||(roots[0]===markers[0])),
+    mainBox:[Math.round(mr.x),Math.round(mr.y),Math.round(mr.width),Math.round(mr.height)]}})()`
+
+/** The ACTIVE tab's own target kind + id, read from the rendered strip. */
+const UF_ACTIVE_TAB_SRC = `(()=>{
+  const t=[...document.querySelectorAll('#tab-strip .tab')].find((x)=>x.classList.contains('is-active'));
+  const all=[...document.querySelectorAll('#tab-strip .tab')];
+  const tabIds=all.map((x)=>({id:x.getAttribute('data-tab-id'),kind:x.getAttribute('data-target-kind'),active:x.classList.contains('is-active'),title:(x.textContent||'').trim().slice(0,24)}));
+  return {activeTabId:t?t.getAttribute('data-tab-id'):null,activeTabKind:t?t.getAttribute('data-target-kind'):null,
+    tabCount:all.length,openIds:all.map((x)=>x.getAttribute('data-tab-id')),tabIds:tabIds}})()`
+
+/** The DERIVED identity verdict the spec pins beside `ufTabState`: the concrete
+ *  (activeTabKind, stageKind) pair plus one boolean. */
+async function ufStageVerdict(h) {
+  const stage = await h.cdp.evaluate(UF_STAGE_KIND_SRC)
+  const active = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  const match = active.activeTabId === null
+    ? stage.kind !== 'search' && (stage.kind === 'document' ? false : true)
+    : (active.activeTabKind === 'other'
+        ? (stage.kind === 'landing' || stage.kind === 'placeholder')
+        : active.activeTabKind === stage.kind)
+  const editSurface = stage.markerVal
+  // I2-R's second half: when exactly one surface is live it carries the ACTIVE
+  // DOCUMENT's id. The document id is read from the stage's own `data-doc-head`
+  // node id (`<documentId>:section:1`) by the caller, which also holds the MCP
+  // target census — so the census+marker agreement is computed there and
+  // `identityOk` is `null` (not claimed) here.
+  const activeDocId = await h.cdp.evaluate(`(()=>{const t=[...document.querySelectorAll('#tab-strip .tab')].find((x)=>x.classList.contains('is-active'));return t?t.getAttribute('data-document-id'):null})()`)
+  const identityOk = active.activeTabKind === 'document'
+    ? (stage.surface === 1 && stage.marker === 1 && stage.agree && stage.markerVal != null)
+    : (stage.surface === 0 && stage.marker === 0)
+  return {
+    activeDocId,
+    activeTabId: active.activeTabId,
+    activeTabKind: active.activeTabKind,
+    stageKind: stage.kind,
+    stageMatchesActiveTab: match,
+    editSurface,
+    searchStage: stage.kind === 'search',
+    surfaceCensus: stage.surface,
+    markerCensus: stage.marker,
+    markersAgree: stage.agree,
+    mainBox: stage.mainBox,
+    tabCount: active.tabCount,
+    openIds: active.openIds,
+    tabIds: active.tabIds,
+    identityOk,
+  }
+}
+
+/** The §A.1.1 I2-R census over the STAGE region, counted by BOTH
+ *  discriminators (the authored id AND the runtime marker), which must agree. */
+async function ufSurfaceCensus(h) {
+  return h.cdp.evaluate(`(()=>{
+    const zones=['main','left','right'].map((z)=>document.getElementById('zone:'+z)).filter(Boolean);
+    const inStage=(list)=>list.filter((e)=>zones.some((z)=>z.contains(e)));
+    const byId=inStage([...document.querySelectorAll('#'+${JSON.stringify(UF_PAGE_EDIT_SURFACE_ID)})]);
+    const byMarker=inStage([...document.querySelectorAll('[data-edit-surface]')]);
+    const bx=(e)=>{const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const same=byId.length===byMarker.length&&byId.every((e,i)=>e===byMarker[i]);
+    return {byId:byId.length,byMarker:byMarker.length,agree:same,
+      ids:byId.map((e)=>e.getAttribute('data-edit-surface')),boxes:byId.map(bx),
+      painted:byId.length===0?null:byId.every((e)=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0}),
+      warnings:inStage([...document.querySelectorAll('#'+${JSON.stringify(UF_PAGE_COMMIT_WARNING_ID)})]).map((e)=>({box:bx(e),kind:e.getAttribute('data-failure-kind'),text:(e.textContent||'').replace(/\\s+/g,' ').slice(0,140)}))}})()`)
+}
+
+/** The whole-page editing surface's APP-VISIBLE state (§2.1/§8.3 items 1-8):
+ *  painted box, marker, contenteditable, identity token, inline/heading census,
+ *  the rendered `<textarea>` census and the surface's own committed text. */
+async function ufEditSurfaceState(h) {
+  return h.cdp.evaluate(`(()=>{
+    const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+    const m=document.getElementById('zone:main');
+    const textareas=m?m.querySelectorAll('textarea').length:null;
+    const globalTextareas=document.querySelectorAll('textarea').length;
+    if(!s)return {present:false,textareas:textareas,globalTextareas:globalTextareas,
+      textareasInBothModes:globalTextareas,
+      warning:!!document.getElementById('${UF_PAGE_COMMIT_WARNING_ID}')};
+    const r=s.getBoundingClientRect();
+    const t=s.textContent||'';
+    let hash=0;for(let i=0;i<t.length;i++){hash=(hash*31+t.charCodeAt(i))|0}
+    s.setAttribute('data-identity-token',String(hash)+':'+String(Math.round(r.width))+'x'+String(Math.round(r.height)));
+    const blocks=[...s.children].map((e)=>({tag:e.tagName,rid:e.getAttribute('data-rag-node-id'),head:e.hasAttribute('data-doc-head'),len:(e.textContent||'').length,box:(()=>{const b=e.getBoundingClientRect();return [Math.round(b.x),Math.round(b.y),Math.round(b.width),Math.round(b.height)]})()}));
+    return {present:true,marker:s.getAttribute('data-edit-surface'),contenteditable:s.getAttribute('contenteditable'),
+      box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],len:t.length,hash:hash,
+      identityToken:s.getAttribute('data-identity-token'),blocks:blocks,blockCount:blocks.length,
+      textareas:textareas,globalTextareas:globalTextareas,
+      inlineFormatting:s.querySelectorAll('strong,em,a,img').length,
+      headings:s.querySelectorAll('h1,h2,h3').length,
+      headingScale:[...s.querySelectorAll('h1,h2,h3')].map((e)=>parseFloat(getComputedStyle(e).fontSize)),
+      fontFamily:getComputedStyle(s).fontFamily,
+      warning:!!document.getElementById('${UF_PAGE_COMMIT_WARNING_ID}'),
+      warningText:(()=>{const w=document.getElementById('${UF_PAGE_COMMIT_WARNING_ID}');return w?String(w.textContent||'').replace(/\\s+/g,' ').slice(0,140):null})()}})()`)
+}
+
+/** Focus the surface and place the caret at the END of its `idx`-th block (a
+ *  real Selection on the rendered element — the input path a user's click
+ *  creates). Returns the caret's resolved container for evidence. */
+async function ufCaretAt(h, idx) {
+  return h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+    if(!s)return {ok:false,why:'no surface'};
+    const b=s.children[${idx}];if(!b)return {ok:false,why:'no block '+${idx}};
+    s.focus();
+    const r=document.createRange();r.selectNodeContents(b);r.collapse(false);
+    const sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);
+    const nm=(n)=>n?(n.nodeType===3?('text@'+(n.parentElement?n.parentElement.tagName:'?')):(n.tagName+'#'+(n.getAttribute('data-rag-node-id')||n.id))):'null';
+    return {ok:true,blockTag:b.tagName,blockRid:b.getAttribute('data-rag-node-id'),anchor:nm(sel.anchorNode),collapsed:sel.getRangeAt(0).collapsed,
+      activeElement:(document.activeElement&&(document.activeElement.id||document.activeElement.tagName))||null}})()`)
+}
+
+/** The resolved caret/selection reading: both the Selection's own anchors and
+ *  the Range's containers, name-resolved to the owning block element. */
+async function ufCaret(h) {
+  return h.cdp.evaluate(`(()=>{const sel=window.getSelection();
+    const nm=(n)=>n?(n.nodeType===3?('text@'+(n.parentElement?(n.parentElement.tagName+'#'+(n.parentElement.getAttribute('data-rag-node-id')||n.parentElement.id)):'?')):(n.tagName+'#'+(n.getAttribute('data-rag-node-id')||n.id))):'null';
+    if(!sel||sel.rangeCount===0)return {none:true};
+    const r=sel.getRangeAt(0);
+    const surface=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+    const blockOf=(n)=>{const e=n&&n.nodeType===3?n.parentElement:n;if(!e)return null;const b=e.closest?e.closest('#${UF_PAGE_EDIT_SURFACE_ID} > *'):null;return b?(b.tagName+'#'+(b.getAttribute('data-rag-node-id')||b.id)):null};
+    return {none:false,rangeCount:sel.rangeCount,collapsed:r.collapsed,
+      startContainer:nm(r.startContainer),endContainer:nm(r.endContainer),
+      anchor:nm(sel.anchorNode),focus:nm(sel.focusNode),
+      startBlock:blockOf(r.startContainer),endBlock:blockOf(r.endContainer),
+      insideSurface:!!(surface&&r.startContainer&&surface.contains(r.startContainer.nodeType===3?r.startContainer.parentElement:r.startContainer))}})()`)
+}
+
+/** A REAL text insertion at the current caret (the documented live typing
+ *  gesture: CDP `Input.insertText` into the focused contenteditable, the same
+ *  path a user's keystrokes take). */
+async function ufType(h, text) {
+  await h.cdp.send('Input.insertText', { text })
+  await sleep(400)
+  return true
+}
+
+/** The REAL commit-on-blur: blur the surface so the authored
+ *  `page-edit-surface-blur` handler runs its page commit. Returns the painted
+ *  end state (the surface's text + the warning root, when one was authored). */
+async function ufBlurSurface(h) {
+  await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');if(!s)return false;s.blur();const ae=document.activeElement;if(ae&&s.contains(ae)&&ae.blur)ae.blur();return true})()`)
+  await sleep(2500)
+  return h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+    const w=document.getElementById('${UF_PAGE_COMMIT_WARNING_ID}');
+    const wr=w?w.getBoundingClientRect():null;
+    return {surfacePresent:!!s,marker:s?s.getAttribute('data-edit-surface'):null,
+      surfaceLen:s?(s.textContent||'').length:null,
+      warning:!!w,warningKind:w?w.getAttribute('data-failure-kind'):null,
+      warningClass:w?w.getAttribute('data-warning-class'):null,
+      warningText:w?String(w.textContent||'').replace(/\\s+/g,' ').slice(0,160):null,
+      warningBox:wr?[Math.round(wr.x),Math.round(wr.y),Math.round(wr.width),Math.round(wr.height)]:null,
+      warningPainted:!!wr&&wr.width>0&&wr.height>0,
+      activeElement:(document.activeElement&&(document.activeElement.id||document.activeElement.tagName))||null}})()`)
+}
+
+/** The stage's own rendered store read-back for the active document (the
+ *  app-visible half of the 1-1 commit claim): the `data-doc-head` node id and
+ *  the rendered first paragraph. */
+async function ufStageDocReadback(h) {
+  return h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');
+    if(!m)return {noMain:true};
+    const h1=m.querySelector('h1');const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+    const heads=[...m.querySelectorAll('h1,h2,h3')].map((e)=>e.getAttribute('data-rag-node-id'));
+    return {docHead:h1?h1.id:null,heads:heads.slice(0,6),surfaceText:s?(s.textContent||'').slice(0,120):null,
+      firstBlock:s&&s.children[0]?(s.children[0].textContent||'').slice(0,80):null,
+      marker:s?s.getAttribute('data-edit-surface'):null}})()`)
+}
+
+/** A real click on a TAB (the strip is in the SCROLLED page — the tab strip is
+ *  not fixed, `docs/defects.md` TABBAR-SCROLLS-AWAY — so the page is scrolled
+ *  to its origin first and the click is dispatched at a hit-tested coordinate
+ *  inside the viewport; never a synthetic `.click()`). */
+async function ufRealClickTab(h, tabId, opts = {}) {
+  if (opts.scroll !== false) {
+    await h.cdp.evaluate(`window.scrollTo(0,0)`)
+    await sleep(500)
+  }
+  const sel = `.tab[data-tab-id=${JSON.stringify(tabId)}]`
+  const p = await ufHitProbe(h, sel)
+  if (!p) return { path: 'missing', realInput: false, detail: `no tab ${tabId}` }
+  return ufRealClick(h, sel, { scroll: false, settle: 0 })
+}
+
+/** Ensure a DOCUMENT tab is the ACTIVE tab (the standing precondition of the
+ *  document-surface blocks): when the active tab is a non-document tab, a REAL
+ *  click activates the first document tab (never a synthetic activation). */
+async function ufEnsureDocumentTabActive(h) {
+  const v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  if (v.activeTabKind === 'document') return { changed: false, path: 'already-document', activeTabId: v.activeTabId }
+  const doc = (v.tabIds || []).find((t) => t.kind === 'document')
+  if (!doc) return { changed: false, path: 'no-document-tab', activeTabId: v.activeTabId }
+  const r = await ufRealClickTab(h, doc.id)
+  await sleep(2000)
+  const v2 = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  return { changed: true, path: r.path, activeTabId: v2.activeTabId, activeTabKind: v2.activeTabKind }
+}
+
+/** Guarantee a LIVE document page in the stage (the document-surface blocks'
+ *  precondition): when no document tab is active, REAL-click a doc-nav row
+ *  (the product's "show me this document" gesture — it also materializes the
+ *  first document TAB via the sidebar's own focus seam); when a document tab
+ *  exists but is inactive, REAL-click that tab. Returns the full record. */
+async function ufEnsureDocumentSurface(h) {
+  const docNavRow = async () => h.cdp.evaluate(`(()=>{const rows=[...document.querySelectorAll('#pane-doc-nav [data-document-id]')];for(const li of rows){const r=li.getBoundingClientRect();if(r.width>0&&r.height>0&&r.top>=-20&&r.top<=700)return li.getAttribute('data-document-id')}return rows.length?rows[0].getAttribute('data-document-id'):null})()`)
+  const out = { focusDoc: null, focusPath: null, tabPath: null, tabId: null, surfaceAtStart: null, surfaceAfter: null, folderExpands: [] }
+  out.surfaceAtStart = await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`)
+  if (out.surfaceAtStart) return out
+  // A fresh store's doc-nav renders FOLDER rows with their children collapsed, so
+  // a document row may not exist until the disclosure is opened (a REAL click on
+  // the folder row — the pane's own gesture).
+  for (let i = 0; i < 4; i += 1) {
+    const state = await h.cdp.evaluate(`(()=>{const rows=[...document.querySelectorAll('#pane-doc-nav [data-document-id]')];return {docs:rows.length,folds:[...document.querySelectorAll('#pane-doc-nav [data-folder-path]')].map((f)=>({path:f.getAttribute('data-folder-path'),expanded:f.getAttribute('data-expanded')}))}})()`)
+    if (state.docs > 0) break
+    const closed = state.folds.find((f) => f.expanded !== 'true')
+    if (!closed) break
+    await ufEnsurePaneExpanded(h, 'doc-nav')
+    const r = await ufRealClick(h, `#pane-doc-nav [data-folder-path=${JSON.stringify(closed.path)}]`)
+    out.folderExpands.push({ path: closed.path, path0: r.path })
+    await sleep(1500)
+  }
+  const doc = await docNavRow()
+  if (doc) {
+    await h.cdp.evaluate(`window.scrollTo(0,0)`)
+    await sleep(400)
+    const r = await ufRealClick(h, `#pane-doc-nav [data-document-id=${JSON.stringify(doc)}]`)
+    out.focusDoc = doc
+    out.focusPath = r.path
+    await sleep(4000)
+  }
+  // A fresh boot whose ACTIVE tab is the LANDING has NO document tab, and the
+  // doc-nav focus seam alone does not materialize one (it sets the sidebar's
+  // focused document + requests a rebuild — it never activates/opens a tab).
+  // The product's own document-TAB opening gestures are the search pane's result
+  // rows (`#pane-search li[data-document-id]` → HOST-4 → a NEW document tab), so
+  // the fallback drives the REAL search pane and REAL-clicks its first result.
+  if (!(await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`)) && !(await h.cdp.evaluate(`!!document.querySelector('#pane-doc-nav [data-document-id]')`))) {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+    if (docs && Array.isArray(docs.documents) && docs.documents.length > 0) {
+      const pane = await ufPaneSearch(h, 'the')
+      out.searchDrive = { toggle: pane.togglePath, focus: pane.focusPath, submit: pane.submitPath, rows: pane.rows.length }
+      const first = (pane.rows || []).find((r) => r.box[2] > 0)
+      if (first) {
+        const r = await ufRealClick(h, `#pane-search li[data-document-id=${JSON.stringify(first.doc)}]`)
+        out.resultClickPath = r.path
+        out.resultDoc = first.doc
+        await sleep(4000)
+      }
+    }
+  }
+  // A fresh boot whose ACTIVE tab is the LANDING has NO document tab, and the
+  // two product seams that reach one are BOTH closed on this build:
+  //   * the doc-nav row's select handler routes to the SIDEBAR focus seam
+  //     (`selectDocument` → `setCurrentDocumentId` → `requestRebuild`) — with a
+  //     LANDING tab active the re-derive scope is null, so a document row click
+  //     changes no stage body at all (measured: rows appear, the stage does not);
+  //   * the landing stage's own `li[data-document-id]` rows are authored with NO
+  //     handler, and `rag.query` returns `[]` for this store, so no
+  //     search-result → document-tab path is available either.
+  // The only live seam left is the RENDERER BRIDGE's `openDocumentTab`
+  // (`renderer.ts` → `tabStrip.openDocumentTab` → the tab strip's real
+  // `focusTarget(..., {newTab:true})`), which the app-graph's search-result
+  // handler body itself calls — a SYNTHETIC activation, recorded as such in the
+  // evidence (never claimed as a real gesture).
+  if (!(await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`))) {
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+    const firstDoc = docs && Array.isArray(docs.documents) && docs.documents[0] ? docs.documents[0].documentId : null
+    if (firstDoc) {
+      out.bridgeOpen = await h.cdp.evaluate(`(async()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(firstDoc)});return {available:true,doc:${JSON.stringify(firstDoc)}}})()`)
+      out.bridgeOpenDoc = firstDoc
+      await sleep(4000)
+    }
+  }
+  if (!(await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`))) {
+    const v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+    const docTab = (v.tabIds || []).find((t) => t.kind === 'document')
+    if (docTab) {
+      const rr = await ufRealClickTab(h, docTab.id)
+      out.tabPath = rr.path
+      out.tabId = docTab.id
+      await sleep(3000)
+    } else {
+      const doc2 = await docNavRow()
+      if (doc2) {
+        const r2 = await ufRealClick(h, `#pane-doc-nav [data-document-id=${JSON.stringify(doc2)}]`, { scroll: false })
+        out.focusDoc = out.focusDoc ?? doc2
+        out.focusPath = r2.path
+        await sleep(4000)
+      }
+    }
+  }
+  out.surfaceAfter = await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`)
+  out.tabIds = (await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds
+  return out
+}
+
+
+/** The U-EDIT-1 live FIXTURE (§8.3 items 1/2/7/8 need a document whose surface
+ *  is expressible by the adopted decomposer AND carries >= 2 renderable block
+ *  roots): a real `edit.import_markdown` of a plain fixture (no inline
+ *  formatting, no tables), then the document tab opened + activated with REAL
+ *  gestures. Returns the fixture's id + the surface's block census. */
+async function ufEnsureEditFixture(h, minBlocks = 1) {
+  // two sibling SECTIONS give the surface more than one top-level block root
+  const name = 'live-page-edit-fixture.md'
+  const text = '# Live Page Edit Fixture\n\nFirst editable paragraph of the live fixture.\n\n## Second Section\n\nSecond editable paragraph, in the fixture second section.\n'
+  const file = join(ROOT, '.live-page-edit-fixture.md')
+  try { writeFileSync(file, text, 'utf8') } catch { /* the import below reports it */ }
+  const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [file] }).catch((e) => ({ ok: false, error: String(e) }))
+  const docId = imp && Array.isArray(imp.documentIds) && imp.documentIds[0] ? imp.documentIds[0] : 'live-page-edit-fixture'
+  const cur = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  const existing = (cur.tabIds || []).find((t) => t.kind === 'document' && (t.title.indexOf('live-page-edit-fixture') >= 0 || t.title.indexOf('Live Page Edit Fixture') >= 0))
+  if (existing && (await h.cdp.evaluate(`!!document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}')`))) {
+    await ufRealClickTab(h, existing.id)
+    await sleep(3000)
+    return { docId, import: imp, reused: true, active: await h.cdp.evaluate(UF_ACTIVE_TAB_SRC), surface: await ufEditSurfaceState(h) }
+  }
+  const opened = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(docId)});return {available:true}})()`)
+  await sleep(4000)
+  let v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  // the tab strip's title for an opened document is the document's TITLE, which
+  // for an inline import is the fixture name without the extension
+  let tab = (v.tabIds || []).find((t) => t.kind === 'document' && /live-page-edit-fixture/.test(t.title))
+  if (!tab) tab = (v.tabIds || []).filter((t) => t.kind === 'document').pop()
+  if (tab && tab.active !== true) {
+    await ufRealClickTab(h, tab.id)
+    await sleep(3000)
+    v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  }
+  const surface = await ufEditSurfaceState(h)
+  // MULTI-BLOCK fallback (items 1/2 need a surface with >= 2 renderable block
+  // roots): a document whose head element CONTAINS its own children renders as
+  // ONE block, so a candidate corpus is searched for a document that renders
+  // >= `minBlocks` direct block roots. The census is recorded, never asserted.
+  const tried = [{ docId, tab: tab ? tab.id : null, blocks: surface.blockCount }]
+  if (minBlocks > 1 && (surface.blockCount || 0) < minBlocks) {
+    const all = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+    const list = all && Array.isArray(all.documents) ? all.documents.map((d) => d.documentId) : []
+    for (const id of list.slice(0, 20)) {
+      const opened2 = await ufOpenDocumentById(h, id)
+      const st2 = await ufEditSurfaceState(h)
+      tried.push({ docId: id, blocks: st2.blockCount })
+      if ((st2.blockCount || 0) >= minBlocks) {
+        return { docId: id, import: imp, bridge: opened, tab: opened2.tabId, active: await h.cdp.evaluate(UF_ACTIVE_TAB_SRC), surface: st2, fallback: true, tried }
+      }
+    }
+    return { docId, import: imp, bridge: opened, tab: tab ? tab.id : null, active: v, surface: surface, tried, noMultiBlock: true }
+  }
+  return { docId, import: imp, bridge: opened, tab: tab ? tab.id : null, active: v, surface: surface, tried }
+}
+
+/** Open a SPECIFIC document in its own tab + make it active. `openDocumentTab`
+ *  is the RENDERER BRIDGE seam the app-graph's search-result handler body itself
+ *  calls (`renderer.ts` → `tabStrip.openDocumentTab` → `focusTarget(newTab)`);
+ *  the activation is then a REAL tab click. Recorded as a synthetic open, never
+ *  claimed as a real gesture. */
+async function ufOpenDocumentById(h, docId) {
+  const v0 = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  const existing = (v0.tabIds || []).slice().reverse().find((t) => t.kind === 'document' && t.title && t.title.indexOf(docId.split('/').pop()) >= 0)
+  if (existing) {
+    const r = await ufRealClickTab(h, existing.id)
+    await sleep(2500)
+    return { docId, via: 'existing-tab', tabId: existing.id, path: r.path, marker: (await ufEditSurfaceState(h)).marker }
+  }
+  const opened = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(docId)});return {available:true}})()`)
+  await sleep(4000)
+  const v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  const tab = (v.tabIds || []).slice().reverse().find((t) => t.kind === 'document')
+  let path = null
+  if (tab && tab.active !== true) { path = (await ufRealClickTab(h, tab.id)).path; await sleep(2500) }
+  return { docId, via: 'bridge-openDocumentTab', bridge: opened, tabId: tab ? tab.id : null, path, marker: (await ufEditSurfaceState(h)).marker }
+}
+
+/** The REAL search-pane drive that opens the pane's current query as a NEW
+ *  search tab (`#pane-search-expand-tab` → `expandSearchTab` → the tab's own
+ *  async `rag.query`). Returns the click's proven path + the tab set before it,
+ *  so the race block can act INSIDE the async window. */
+async function ufExpandSearchTab(h) {
+  const before = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+  const r = await ufRealClick(h, '#pane-search-expand-tab', { nativeFallback: false })
+  return { path: r.path, hit: r.rect ? r.rect.hit : null, before }
+}
+
+/** The doc-nav row for a document id, as its painted geometry (used to open a
+ *  document tab by a REAL row click). */
+async function ufDocNavRow(h, documentId) {
+  const q = JSON.stringify(`#pane-doc-nav [data-document-id=${JSON.stringify(documentId)}]`)
+  return h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(!e)return null;const r=e.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],text:(e.textContent||'').trim().slice(0,40)}})()`)
 }
 
 /**
@@ -2453,6 +2897,28 @@ export const ROW_EXTENDED = [
   { row: 'UF-STAGE-4', block: 'repro_nbsp' },
   { row: 'UF-HIST-2', block: 'toolbar_undo' },
   { row: 'UF-STAGE-6', block: 'toolbar_toggle' },
+  // U-EDIT-1-LIVE — the C9 whole-page-editing live battery (spec §8.3 items 1-8,
+  // §11 items 7/8; `docs/defects.md` C9-U-EDIT-1-ADVERSARIAL-MUST-FIX-SET M4).
+  // EXTENDED (non-matrix) rows: `docs/specs/unit-u-edit-1-whole-page-editing.md`
+  // §8.3 "The §5.U matrix disposition (pinned)" — MATRIX_ROWS must NOT change.
+  { row: 'U-EDIT-1-LIVE-1', block: 'u_edit_1_live_selection_span' },
+  { row: 'U-EDIT-1-LIVE-2', block: 'u_edit_1_live_caret_head_body' },
+  { row: 'U-EDIT-1-LIVE-3', block: 'u_edit_1_live_commit_failure_warning' },
+  { row: 'U-EDIT-1-LIVE-4', block: 'u_edit_1_live_representation_mode' },
+  { row: 'U-EDIT-1-LIVE-5', block: 'u_edit_1_live_head_split_and_textarea_census' },
+  { row: 'U-EDIT-1-LIVE-6', block: 'u_edit_1_live_package_table_limitation' },
+  { row: 'U-EDIT-1-LIVE-7', block: 'u_edit_1_live_typed_commit_one_batch' },
+  { row: 'U-EDIT-1-LIVE-8', block: 'u_edit_1_live_caret_roundtrip' },
+  // U-STAGE-ACTIVE-TAB — the stage/active-tab live battery (spec §8.3 items 1-5,
+  // §A.1.1 I2-R). EXTENDED rows: the unit claims NO §5.U matrix slot (§9 item 4).
+  { row: 'UF-STAGE-AT-1', block: 'stage_surface_census_i2r' },
+  { row: 'UF-STAGE-AT-2', block: 'stage_document_tab_paints_its_document' },
+  { row: 'UF-STAGE-AT-3', block: 'stage_async_mount_race_v1' },
+  { row: 'UF-STAGE-AT-4', block: 'stage_foreign_rederive_v2' },
+  { row: 'UF-STAGE-AT-5', block: 'stage_refresh_survival_v5' },
+  { row: 'UF-STAGE-AT-6', block: 'stage_tabs_persist_roundtrip' },
+  { row: 'UF-STAGE-AT-7', block: 'stage_multimount_reachability' },
+  { row: 'UF-STAGE-AT-8', block: 'stage_docnav_switch_inside_async' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -3503,7 +3969,14 @@ const BLOCKS = {
     const activeTabTitle = afterTabs[activeIdx] ? afterTabs[activeIdx].txt : null
     const content = await h.cdp.evaluate(`(()=>{
       const main=document.getElementById('zone:main'); const bodyText=main?(main.textContent||''):'';
-      const searchInput=!!(main&&(main.querySelector('input[type="text"]')||main.querySelector('[contenteditable="plaintext-only"]')||main.querySelector('#advanced-search-toggle')||main.querySelector('[placeholder*="search" i]')));
+      // ORACLE NOTE (U-STAGE-ACTIVE-TAB §8.3 item 1 re-run): the search tab's
+      // stage authors its OWN roots (pane-graph.ts searchTabContent:
+      // #stage-search-tab + #search-tab-input + #stage-search-tab-submit),
+      // so the pre-existing detector — which only looked for the search PANE's
+      // control ids — read the (correct) search stage as "no search shown" and
+      // FAILED on a stale oracle. The pinned ids are read here; every other
+      // assertion of this block is unchanged.
+      const searchInput=!!(main&&(main.querySelector('#stage-search-tab')||main.querySelector('#search-tab-input')||main.querySelector('input[type="text"]')||main.querySelector('[contenteditable="plaintext-only"]')||main.querySelector('#advanced-search-toggle')||main.querySelector('[placeholder*="search" i]')));
       const ragResults=!!document.querySelector('[class*="result" i],[data-rag-results],[data-search-result]');
       const isDocBody=/Settings modal/i.test(bodyText)||/document alpha/.test(bodyText)||/^Alpha/.test(bodyText.trim());
       return {hasSearchInput:searchInput, hasRagResults:ragResults, isDocumentBody:isDocBody, bodySnippet:bodyText.replace(/\\s+/g,' ').slice(0,90)};
@@ -4526,6 +4999,633 @@ const BLOCKS = {
   },
 
   // =========================================================================
+  // UNIT C9 `U-EDIT-1` — THE `U-EDIT-1-LIVE` LIVE BATTERY (spec §8.3 items 1-8;
+  // MANDATORY pre-DONE per RCA-11, and the row whose un-run state is
+  // `docs/defects.md` `C9-U-EDIT-1-ADVERSARIAL-MUST-FIX-SET` M4). LAYER (RCA-12):
+  // assembled-renderer — the node greens (docs/specs/unit-u-edit-1-greens.md) are
+  // ENVELOPE/STORE-green; every row here drives a REAL gesture/key against the
+  // RUNNING app and pins the painted/visible end state (`proxyPASS:false`).
+  // =========================================================================
+
+  // ---- §8.3 item 1 — a real drag selects ACROSS two block elements of the ONE
+  // contenteditable root (the discriminator the node suite cannot see). ----
+  u_edit_1_live_selection_span: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const fixture = await ufEnsureEditFixture(h, 2)
+    const surface = await ufSurfaceTarget(h)
+    const st = await ufEditSurfaceState(h)
+    if (!st.present || st.blockCount < 2) {
+      return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects from a position in one paragraph/block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', 'D-interaction', `no usable surface: present=${st.present} blockCount=${st.blockCount}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })} — a document whose head element CONTAINS its children renders as ONE block root, so no corpora in this store presents the 2-block surface this item needs`, { path: 'missing', ok: false, surface })
+    }
+    // Two adjacent block children that BOTH have a hit-testable slice in the
+    // viewport (the drag's two endpoints must be real coordinates).
+    const pickSrc = `(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+      const bs=[...s.children];const vh=window.innerHeight;
+      const vis=(e)=>{const r=e.getBoundingClientRect();const top=Math.max(r.top,0),bot=Math.min(r.bottom,vh);return {r:r,top:top,bot:bot,h:bot-top}};
+      for(let i=0;i+1<bs.length;i++){const a=vis(bs[i]),b=vis(bs[i+1]);
+        if(a.h>=24&&b.h>=24&&a.r.width>0&&b.r.width>0)return {i:i,aTag:bs[i].tagName,bTag:bs[i+1].tagName,
+          aBox:[Math.round(a.r.x),Math.round(a.r.y),Math.round(a.r.width),Math.round(a.r.height)],
+          bBox:[Math.round(b.r.x),Math.round(b.r.y),Math.round(b.r.width),Math.round(b.r.height)],
+          ax:Math.round(a.r.x+Math.min(a.r.width-12,40)),ay:Math.round(a.top+Math.min(a.h/2,Math.max(8,a.h-8))),
+          bx:Math.round(b.r.x+Math.min(b.r.width-12,Math.max(20,b.r.width/2))),by:Math.round(b.top+Math.min(b.h/2,Math.max(8,b.h-8))),
+          aRid:bs[i].getAttribute('data-rag-node-id'),bRid:bs[i+1].getAttribute('data-rag-node-id')};}
+      return null})()`
+    let pick = await h.cdp.evaluate(pickSrc)
+    if (!pick) {
+      // fall back: scroll the surface's origin into view, then re-pick
+      await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');if(s&&s.scrollIntoView)s.scrollIntoView({block:'start'});return true})()`)
+      await sleep(800)
+      pick = await h.cdp.evaluate(pickSrc)
+    }
+    if (!pick) {
+      return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects across two block elements of the ONE contenteditable root', 'D-interaction', `no two adjacent blocks have a >=24px hit-testable slice in the ${await h.cdp.evaluate('window.innerHeight')}px viewport: ${JSON.stringify(st.blocks)}`, { path: 'zero-box', ok: false, surface })
+    }
+    await h.cdp.evaluate(`window.getSelection().removeAllRanges()`)
+    // the start point: inside block A; the end point: inside block B
+    const x = pick.ax
+    const y1 = pick.ay
+    const x2 = pick.bx
+    const y2 = pick.by
+    const hit1 = await h.cdp.evaluate(`(()=>{const e=document.elementFromPoint(${x},${y1});return e?(e.id||e.tagName):null})()`)
+    const hit2 = await h.cdp.evaluate(`(()=>{const e=document.elementFromPoint(${x2},${y2});return e?(e.id||e.tagName):null})()`)
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: y1, buttons: 0 })
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y: y1, button: 'left', buttons: 1, clickCount: 1 })
+    for (let i = 1; i <= 8; i += 1) {
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(x + ((x2 - x) * i) / 8), y: Math.round(y1 + ((y2 - y1) * i) / 8), button: 'left', buttons: 1 })
+      await sleep(40)
+    }
+    await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: x2, y: y2, button: 'left', buttons: 0, clickCount: 1 })
+    await sleep(500)
+    const caret = await ufCaret(h)
+    const spanOk = caret && !caret.none && caret.rangeCount === 1 && caret.collapsed === false &&
+      caret.startBlock != null && caret.endBlock != null && caret.startBlock !== caret.endBlock && caret.insideSurface === true
+    return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects from a position in one block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', 'D-interaction',
+      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount} ${JSON.stringify(st.blocks.slice(0, 4))}; picked adjacent pair i=${pick.i} ${pick.aTag}#${pick.aRid} box=${JSON.stringify(pick.aBox)} -> ${pick.bTag}#${pick.bRid} box=${JSON.stringify(pick.bBox)}; drag (${x},${y1}) hit=${hit1} -> (${x2},${y2}) hit=${hit2}; Selection after the drag: ${JSON.stringify(caret)}; ONE range whose startContainer(${caret ? caret.startContainer : '?'}) and endContainer(${caret ? caret.endContainer : '?'}) are different blocks of the same root=${spanOk}`,
+      { path: 'cdp', ok: spanOk, surface })
+  },
+
+  // ---- §8.3 item 2 — head->body->head caret movement by ARROW KEYS with an
+  // unchanged surface identity/box (no re-mount). ----
+  u_edit_1_live_caret_head_body: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const fixture = await ufEnsureEditFixture(h, 2)
+    const surface = await ufSurfaceTarget(h)
+    const before = await ufEditSurfaceState(h)
+    if (!before.present || before.blockCount < 2) {
+      return rowResult('U-EDIT-1-LIVE-2', 'ArrowDown from the end of the doc-head lands the caret in the body block (ArrowUp returns it), with the surface element identity and box UNCHANGED across both movements', 'D-interaction', `no usable surface: ${JSON.stringify({ present: before.present, blocks: before.blockCount })}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })}`, { path: 'missing', ok: false, surface })
+    }
+    const placed = await ufCaretAt(h, 0)
+    await sleep(250)
+    const sel0 = await ufCaret(h)
+    const idBefore = before.identityToken
+    // REAL ArrowDown
+    await h.cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40 })
+    await h.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowDown', code: 'ArrowDown', windowsVirtualKeyCode: 40, nativeVirtualKeyCode: 40 })
+    await sleep(400)
+    const selDown = await ufCaret(h)
+    const mid = await ufEditSurfaceState(h)
+    // REAL ArrowUp
+    await h.cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 })
+    await h.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 })
+    await sleep(400)
+    const selUp = await ufCaret(h)
+    const after = await ufEditSurfaceState(h)
+    const downIntoBody = !!(selDown && !selDown.none && selDown.startBlock != null && selDown.startBlock !== (sel0 ? sel0.startBlock : null))
+    const upBackIntoHead = !!(selUp && !selUp.none && selUp.startBlock === (sel0 ? sel0.startBlock : '?'))
+    const identityStable = before.identityToken === mid.identityToken && mid.identityToken === after.identityToken
+    const boxStable = JSON.stringify(before.box) === JSON.stringify(after.box)
+    return rowResult('U-EDIT-1-LIVE-2', 'ArrowDown from the end of the doc-head lands the caret inside the body block, ArrowUp returns it into the head, and the surface element identity+box are UNCHANGED across both (no re-mount)', 'D-interaction',
+      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${before.marker} blocks=${JSON.stringify(before.blocks.map((b) => `${b.tag}#${b.rid}`))} box=${JSON.stringify(before.box)}; caret placed in block 0: ${JSON.stringify(placed)} => ${JSON.stringify(sel0)}; after REAL ArrowDown: ${JSON.stringify(selDown)} (moved into the body=${downIntoBody}); after REAL ArrowUp: ${JSON.stringify(selUp)} (returned to the head=${upBackIntoHead}); surface identity token before/down/up = ${idBefore} / ${mid.identityToken} / ${after.identityToken} unchanged=${identityStable}; box ${JSON.stringify(before.box)} -> ${JSON.stringify(after.box)} unchanged=${boxStable}`,
+      { path: 'cdp', ok: downIntoBody && upBackIntoHead && identityStable && boxStable, surface })
+  },
+
+  // ---- §8.3 item 7 — a REAL typed edit + blur commits 1-1 to the STORE
+  // (store read-back AND the rendered DOM agree), in ONE batch. ----
+  u_edit_1_live_typed_commit_one_batch: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const fixture = await ufEnsureEditFixture(h)
+    const surface = await ufSurfaceTarget(h)
+    const st = await ufEditSurfaceState(h)
+    if (!st.present) return rowResult('U-EDIT-1-LIVE-7', 'A real typed edit in one block, blurred, commits to the store in ONE batch and the store read-back and rendered DOM AGREE; an unrelated block is unchanged', 'D-state', `no page-edit-surface in the stage: fixture=${JSON.stringify({ docId: fixture.docId, import: fixture.import, bridge: fixture.bridge, tab: fixture.tab, active: fixture.active, surface: fixture.surface })}`, { path: 'missing', ok: false, surface })
+    const documentId = st.marker
+    const journalPre = await h.mcpTool(h.mcp, 'provident.get_journal', {}).catch(() => null)
+    const journalBefore = journalPre && typeof journalPre.undoDepth === 'number' ? journalPre.undoDepth : 0
+    const journalPreDetail = journalPre && Array.isArray(journalPre.entries) ? { entries: journalPre.entries.length, kinds: journalPre.entries.map((e) => e.kind).slice(-6) } : null
+    const docBefore = await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) }))
+    const beforeText = JSON.stringify(docBefore)
+    // the block to edit: the LAST block (usually a body paragraph) — the first is
+    // the doc-head, which DOC-HEAD-CONTAINS-FIRST-PARAGRAPH already owns
+    const idx = st.blockCount > 1 ? st.blockCount - 1 : 0
+    const placed = await ufCaretAt(h, idx)
+    await sleep(250)
+    const selBefore = await ufCaret(h)
+    const marker = `LIVEUEDIT${Date.now() % 100000}`
+    await ufType(h, marker)
+    const typed = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');const t=(s.textContent||'');return {hasMarker:t.includes(${JSON.stringify(marker)}),len:t.length}})()`)
+    const dirtyBeforeBlur = await h.cdp.evaluate(`(()=>{const b=window.provident&&window.provident.rag;return true})()`)
+    const blur = await ufBlurSurface(h)
+    const docAfter = await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) }))
+    const afterText = JSON.stringify(docAfter)
+    const storeChanged = beforeText !== afterText
+    const storeHasMarker = afterText.includes(marker)
+    const domHasMarker = (await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?(s.textContent||'').includes(${JSON.stringify(marker)}):false})()`)) === true
+    const journal = await h.mcpTool(h.mcp, 'provident.get_journal', {}).catch((e) => ({ __error: String(e) }))
+    const jStr = JSON.stringify(journal)
+    const journalDelta = journal && typeof journal.undoDepth === 'number' ? journal.undoDepth - journalBefore : null
+    const journalPostDetail = journal && Array.isArray(journal.entries)
+      ? { entries: journal.entries.length, batches: journal.entries.filter((e) => e && e.kind === 'batch').length, kindCounts: journal.entries.reduce((a, e) => { const k = (e && e.kind) || '?'; a[k] = (a[k] || 0) + 1; return a }, {}) }
+      : null
+    const ok = typed.hasMarker && storeChanged && storeHasMarker && domHasMarker && !blur.warning
+    return rowResult('U-EDIT-1-LIVE-7', 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged', 'D-state',
+      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind})`,
+      { path: 'cdp', ok, surface })
+  },
+
+  // ---- §8.3 item 3 — a FAILED commit is USER-VISIBLE (painted, typed) AND
+  // survives a re-derive; the store read-back is unchanged. ----
+  u_edit_1_live_commit_failure_warning: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const st = await ufEditSurfaceState(h)
+    // this row needs a document whose page commit REFUSES (§3.5's failure path):
+    // the seeded `alpha` document carries an inline `<strong>`, outside the
+    // adopted decomposer's closed node-type set
+    const failDoc = await ufOpenDocumentById(h, '.live-corpus/alpha')
+    const stFail = await ufEditSurfaceState(h)
+    if (!stFail.present) return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning', 'D-visual', `no surface on the failure fixture ${JSON.stringify(failDoc)}`, { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning (the tab/stage warning class) that SURVIVES a re-derive, and the store read-back is unchanged', 'D-visual', 'no page-edit-surface in the stage', { path: 'missing', ok: false, surface })
+    const stUse = stFail
+    const documentId = stUse.marker
+    const before = JSON.stringify(await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) })))
+    const idx = stUse.blockCount > 1 ? stUse.blockCount - 1 : 0
+    const placed = await ufCaretAt(h, idx)
+    await ufType(h, `WARN${Date.now() % 10000}`)
+    const blur = await ufBlurSurface(h)
+    const census1 = await ufSurfaceCensus(h)
+    const after = JSON.stringify(await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) })))
+    const storeUnchanged = before === after
+    // the re-derive: the gnosis host's `onChanged()` → `host.refresh()` seam —
+    // the reachable full re-derive caller (the pane's own refresh control)
+    const reassemble = await h.cdp.evaluate(`(()=>{const g=(s)=>{const e=document.querySelector(s);return e?e.getAttribute('data-node-id'):null};return {root:g('#wiki-root'),surface:g('#page-edit-surface'),warning:g('#page-commit-warning')}})()`)
+    const gs = await h.cdp.evaluate(`(async()=>{try{await window.provident.sidebar.gnosisStatus();return {called:true}}catch(e){return {called:false,err:String(e)}}})()`)
+    await sleep(3000)
+    const census2 = await ufSurfaceCensus(h)
+    const st2 = await ufEditSurfaceState(h)
+    const reassemble2 = await h.cdp.evaluate(`(()=>{const g=(s)=>{const e=document.querySelector(s);return e?e.getAttribute('data-node-id'):null};return {root:g('#wiki-root'),surface:g('#page-edit-surface'),warning:g('#page-commit-warning')}})()`)
+    const reassembled = JSON.stringify(reassemble) !== JSON.stringify(reassemble2)
+    const warningSurvives = census2.warnings.length === 1 && census2.warnings[0].box[2] > 0 && census2.warnings[0].box[3] > 0
+    const ok = blur.warning === true && blur.warningPainted === true && warningSurvives && storeUnchanged && census2.byId === 1 && census2.agree === true
+    return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning (the `TAB-1` class / the stage warning) and that warning SURVIVES a real re-derive, with the store read-back UNCHANGED', 'D-visual',
+      `failure fixture=${JSON.stringify(failDoc)}; documentId=${documentId}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} PAINTED box=${JSON.stringify(blur.warningBox)} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; the real re-derive seam ('gnosisStatus()' -> the pane host's 'onChanged()' -> 'host.refresh()') called=${gs.called} app-graph re-assembled=${reassembled} (node ids ${JSON.stringify(reassemble)} -> ${JSON.stringify(reassemble2)}); warning census AFTER the re-derive=${JSON.stringify(census2.warnings)} (present+painted=${warningSurvives}); surface census after=${census2.byId}/${census2.byMarker} agree=${census2.agree} marker=${st2.marker} (pre-derive warning census ${JSON.stringify(census1.warnings)})`,
+      { path: 'cdp', ok, surface })
+  },
+
+  // ---- §8.3 item 4 — the representation toggle: markdown mode must render
+  // PLAIN TEXT + monospace, no inline formatting, and the surface stays
+  // contenteditable. ----
+  u_edit_1_live_representation_mode: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const read = () => h.cdp.evaluate(`(()=>{const t=document.getElementById('editor-toolbar');const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');const m=document.getElementById('zone:main');
+      return {mode:t?t.getAttribute('data-mode'):null,toolbarText:t?(t.textContent||'').replace(/\\s+/g,' ').slice(0,60):null,
+        surfacePresent:!!s,marker:s?s.getAttribute('data-edit-surface'):null,contenteditable:s?s.getAttribute('contenteditable'):null,
+        surfaceFont:s?getComputedStyle(s).fontFamily:null,
+        inline:s?s.querySelectorAll('strong,em,a,img').length:null,headings:s?s.querySelectorAll('h1,h2,h3').length:null,
+        headingSizes:s?[...s.querySelectorAll('h1,h2,h3')].map((e)=>parseFloat(getComputedStyle(e).fontSize)):null,
+        pre:s?s.querySelectorAll('pre').length:null,bodyFont:s&&s.querySelector('p')?getComputedStyle(s.querySelector('p')).fontFamily:null,
+        textareas:m?m.querySelectorAll('textarea').length:null,globalTextareas:document.querySelectorAll('textarea').length,
+        markerText:s?(s.textContent||'').slice(0,60):null}})()`)
+    const before = await read()
+    const c1 = await ufRealClick(h, '#editor-toolbar-toggle')
+    await sleep(3000)
+    const md = await read()
+    const c2 = await ufRealClick(h, '#editor-toolbar-toggle')
+    await sleep(3000)
+    const back = await read()
+    const isMonospace = (ff) => typeof ff === 'string' && /mono|courier|consolas|menlo|monaco/i.test(ff)
+    const mdPlain = md.inline === 0 && md.headings === 0
+    const mdMono = isMonospace(md.surfaceFont) || isMonospace(md.bodyFont)
+    const mdEditable = md.surfacePresent === true && md.contenteditable === 'true'
+    // The PAINTED requirement (D-GP-UFA-2/DECIDED: D-GP-UFA-2): a computed-style
+    // family alone is the proxy — the row FAILS unless the painted rendering
+    // actually lost the HTML formatting.
+    const paintedOk = mdPlain && mdMono && mdEditable
+    const toggled = before.mode !== md.mode && md.mode === 'markdown' && back.mode === before.mode
+    const ok = toggled && paintedOk && md.textareas === 0 && back.textareas === 0
+    return rowResult('U-EDIT-1-LIVE-4', 'A real click on the representation control puts the stage in markdown mode: PLAIN TEXT rendered (0 inline-formatting elements, 0 headings at heading scale), a monospace family, the surface still contenteditable, and 0 <textarea> in either mode', 'D-visual',
+      `REAL click #editor-toolbar-toggle path=${c1.path} (hit=${c1.rect ? c1.rect.hit : '?'}); before=${JSON.stringify({ mode: before.mode, toolbar: before.toolbarText, ff: before.surfaceFont, inline: before.inline, headings: before.headings, sizes: before.headingSizes, ce: before.contenteditable, textareas: before.textareas, pre: before.pre })}; after toggle 1=${JSON.stringify({ mode: md.mode, toolbar: md.toolbarText, ff: md.surfaceFont, bodyFf: md.bodyFont, inline: md.inline, headings: md.headings, sizes: md.headingSizes, ce: md.contenteditable, textareas: md.textareas, pre: md.pre })}; after toggle 2 (REAL click path=${c2.path})=${JSON.stringify({ mode: back.mode, ff: back.surfaceFont, inline: back.inline, headings: back.headings, ce: back.contenteditable, textareas: back.textareas })}; markdown-mode PLAIN TEXT (inline=0 AND headings=0)=${mdPlain}; monospace family=${mdMono}; still contenteditable=${mdEditable}; toggled html->markdown->html=${toggled}; zero-textarea in BOTH modes=${md.textareas === 0 && back.textareas === 0} (global textarea census now ${md.globalTextareas})`,
+      { path: c1.path === 'cdp' ? 'cdp' : c1.path, ok, surface })
+  },
+
+  // ---- §8.3 items 5 + 6 + the caret round trip — the head/body split, the
+  // RENDERED zero-textarea census in both modes, and the caret's survival across
+  // a re-derive. ----
+  u_edit_1_live_head_split_and_textarea_census: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const st = await ufEditSurfaceState(h)
+    if (!st.present) return rowResult('U-EDIT-1-LIVE-5', 'The doc-head and the first paragraph are SIBLINGS (the paragraph is not a descendant of the head) at body scale; the RENDERED stage carries ZERO <textarea> in both representation modes and after a re-derive', 'D-visual', 'no page-edit-surface', { path: 'missing', ok: false, surface })
+    const split = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+      const head=s.querySelector('[data-doc-head]')||s.querySelector('h1');
+      if(!head)return {head:false};
+      const kids=[...s.children];
+      const headIsChild=kids.includes(head);
+      const firstP=s.querySelector('p');
+      const parentOfP=firstP?firstP.parentElement:null;
+      const pInsideHead=!!(firstP&&head.contains(firstP));
+      const pSiblingOfHead=!!(firstP&&parentOfP===s);
+      const hr=head.getBoundingClientRect();const pr=firstP?firstP.getBoundingClientRect():null;
+      return {head:true,headTag:head.tagName,headRid:head.getAttribute('data-rag-node-id'),headBox:[Math.round(hr.x),Math.round(hr.y),Math.round(hr.width),Math.round(hr.height)],
+        headChildCount:head.children.length,headIsDirectChild:headIsChild,
+        firstP:pFirst(firstP),pInsideHead:pInsideHead,pSiblingOfHead:pSiblingOfHead,pParent:parentOfP?parentOfP.tagName+'#'+(parentOfP.getAttribute('data-rag-node-id')||parentOfP.id):null,
+        headFont:parseFloat(getComputedStyle(head).fontSize),headWeight:getComputedStyle(head).fontWeight,
+        pFont:firstP?parseFloat(getComputedStyle(firstP).fontSize):null,pBox:pr?[Math.round(pr.x),Math.round(pr.y),Math.round(pr.width),Math.round(pr.height)]:null};
+      function pFirst(e){return e?(e.textContent||'').slice(0,50):null}})()`)
+    // mode toggle for the second half of the census + then back
+    const c1 = await ufRealClick(h, '#editor-toolbar-toggle', { nativeFallback: false })
+    await sleep(2500)
+    const mdCensus = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return {mode:(document.getElementById('editor-toolbar')||{getAttribute:()=>null}).getAttribute?document.getElementById('editor-toolbar').getAttribute('data-mode'):null, stageTextareas:m?m.querySelectorAll('textarea').length:null, global:document.querySelectorAll('textarea').length}})()`)
+    // re-derive (the real gnosis onChanged -> host.refresh() caller)
+    const gs = await h.cdp.evaluate(`(async()=>{try{await window.provident.sidebar.gnosisStatus();return {called:true}}catch(e){return {called:false,err:String(e)}}})()`)
+    await sleep(2500)
+    const reCensus = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return {mode:(document.getElementById('editor-toolbar')||{}).getAttribute?document.getElementById('editor-toolbar').getAttribute('data-mode'):null, stageTextareas:m?m.querySelectorAll('textarea').length:null,global:document.querySelectorAll('textarea').length,surface:!!s}})()`)
+    const c2 = await ufRealClick(h, '#editor-toolbar-toggle', { nativeFallback: false })
+    await sleep(2500)
+    const backCensus = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return {mode:(document.getElementById('editor-toolbar')||{}).getAttribute?document.getElementById('editor-toolbar').getAttribute('data-mode'):null,stageTextareas:m?m.querySelectorAll('textarea').length:null,global:document.querySelectorAll('textarea').length}})()`)
+    // caret round-trip is item 8's own row (a separate assertion, separate verdict)
+    const splitOk = split.head === true && split.pInsideHead === false && split.pSiblingOfHead === true &&
+      typeof split.pFont === 'number' && split.headFont > split.pFont
+    const censusOk = mdCensus.stageTextareas === 0 && reCensus.stageTextareas === 0 && backCensus.stageTextareas === 0 &&
+      mdCensus.global === 0 && reCensus.global === 0 && backCensus.global === 0
+    return rowResult('U-EDIT-1-LIVE-5', 'The doc-head and the first paragraph are SIBLINGS (the paragraph is NOT a descendant of the head) and the paragraph paints at BODY scale; the RENDERED stage carries ZERO <textarea> in markdown mode, after a real re-derive, and back in html mode', 'D-visual',
+      `doc-head split: ${JSON.stringify(split)} => paragraph inside the head=${split.pInsideHead} sibling of the head=${split.pSiblingOfHead} head font-size=${split.headFont}px vs paragraph ${split.pFont}px (head > body scale=${split.headFont > split.pFont}); RENDERED <textarea> census in #zone:main: markdown mode=${JSON.stringify(mdCensus)} after the real re-derive=${JSON.stringify(reCensus)} (gnosisStatus called=${gs.called}) back in html mode=${JSON.stringify(backCensus)}`,
+      { path: c1.path === 'cdp' ? 'cdp' : c2.path, ok: splitOk && censusOk, surface })
+  },
+
+  // ---- §8.3 item 8 (the caret half) — the page-scoped caret survives the page
+  // commit + a real re-derive (the page subject is the TAB, not the document). ----
+  u_edit_1_live_caret_roundtrip: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const fixture = await ufEnsureEditFixture(h)
+    const surface = await ufSurfaceTarget(h)
+    const st = await ufEditSurfaceState(h)
+    if (!st.present) return rowResult('U-EDIT-1-LIVE-8', 'The page-scoped caret survives a page commit + a real re-derive: after typing in a block, blurring and re-deriving, the caret is still a live Range inside the SAME contenteditable surface', 'D-state', 'no page-edit-surface', { path: 'missing', ok: false, surface })
+    const placed = await ufCaretAt(h, st.blockCount > 1 ? st.blockCount - 1 : 0)
+    await ufType(h, `CARE${Date.now() % 1000}`)
+    const afterType = await ufCaret(h)
+    const blur = await ufBlurSurface(h)
+    const afterBlur = await ufCaret(h)
+    const gs = await h.cdp.evaluate(`(async()=>{try{await window.provident.sidebar.gnosisStatus();return {called:true}}catch(e){return {called:false,err:String(e)}}})()`)
+    await sleep(3000)
+    const afterDerive = await ufCaret(h)
+    const st2 = await ufEditSurfaceState(h)
+    const ok = !!(afterDerive && afterDerive.none === false && afterDerive.rangeCount === 1 && afterDerive.insideSurface === true) &&
+      st2.present === true && st2.marker === st.marker
+    return rowResult('U-EDIT-1-LIVE-8', 'The caret round-trip: a caret placed in a block, a typed edit, the page-commit blur and a real re-derive leave a LIVE Range inside the same contenteditable surface (the page subject is the ACTIVE TAB id, so the caret is not dropped by the re-derive)', 'D-state',
+      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount}; caret placed at block ${st.blockCount > 1 ? st.blockCount - 1 : 0}: ${JSON.stringify(placed)}; after the REAL typed edit: ${JSON.stringify(afterType)}; after the REAL blur (page commit => warning=${blur.warning} kind=${blur.warningKind}): ${JSON.stringify(afterBlur)}; the real re-derive ('gnosisStatus()' called=${gs.called}) => caret ${JSON.stringify(afterDerive)} surface still present=${st2.present} marker=${st2.marker}`,
+      { path: 'cdp', ok, surface })
+  },
+
+  // ---- §8.3 item 8 / §11.9 item 1 — the package-adoption evidence: a stored
+  // TABLE node cannot be expressed by the adopted decomposer, so the commit
+  // REFUSES (typed) rather than flattening/retyping it. ----
+  u_edit_1_live_package_table_limitation: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    // this row needs a document whose surface ACTUALLY carries table elements:
+    // the corpus is searched for one (the operator store's `defects` document,
+    // or any document whose rendered surface has a table)
+    const candidates = ['.live-corpus/alpha', 'defects']
+    let tableDoc = null
+    for (const c of candidates) {
+      const opened = await ufOpenDocumentById(h, c)
+      const census = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?s.querySelectorAll('table').length:-1})()`)
+      if (census > 0) { tableDoc = { opened, tables: census }; break }
+    }
+    if (!tableDoc) {
+      const all = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+      const list = all && Array.isArray(all.documents) ? all.documents.map((d) => d.documentId) : []
+      for (const id of list.slice(0, 12)) {
+        const opened = await ufOpenDocumentById(h, id)
+        const census = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?s.querySelectorAll('table').length:-1})()`)
+        if (census > 0) { tableDoc = { opened, tables: census }; break }
+      }
+    }
+    if (!tableDoc) {
+      return parkRow('U-EDIT-1-LIVE-6', 'The package-adoption evidence: a stored TABLE makes the page commit REFUSE (typed) rather than flattening the stored td/th/tr nodes', 'D-state',
+        `NO document in this store renders a table on its page-edit surface (candidates tried: ${JSON.stringify(candidates)} + up to 12 of rag.list_documents) — the row's precondition cannot be met in this corpus, so it is PARKED with this reason (never a silent pass and never a fabricated refusal)`,
+        { row: 'U-EDIT-1-LIVE-6', assertion: 'table-adoption refusal (precondition unmet)', dclass: 'D-state', realInput: false, evidence: '', proxyPASS: false, surface })
+    }
+    const st = await ufEditSurfaceState(h)
+    if (!st.present) return rowResult('U-EDIT-1-LIVE-6', 'A stored table element is REFUSED (typed `decompose-failed`) by the adopted decomposer rather than flattened/retyped, and the stored table nodes are byte-unchanged after the refused commit', 'D-state', `no page-edit-surface after opening the table fixture ${JSON.stringify(tableDoc)}`, { path: 'missing', ok: false, surface })
+    const documentId = st.marker
+    const tableCensus = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
+      const tables=[...s.querySelectorAll('table')];
+      return {tables:tables.length,trs:s.querySelectorAll('table tr').length,tds:s.querySelectorAll('table td,table th').length,
+        tableRids:tables.map((t)=>t.getAttribute('data-rag-node-id')),boxes:tables.map((t)=>{const r=t.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})}})()`)
+    const before = JSON.stringify(await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) })))
+    const placed = await ufCaretAt(h, st.blockCount > 1 ? st.blockCount - 1 : 0)
+    await ufType(h, `TBL${Date.now() % 10000}`)
+    const blur = await ufBlurSurface(h)
+    const after = JSON.stringify(await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) })))
+    const storeUnchanged = before === after
+    const tableStill = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?s.querySelectorAll('table').length:null})()`)
+    const refused = blur.warning === true && typeof blur.warningKind === 'string' && blur.warningKind.length > 0
+    const ok = refused && storeUnchanged && tableStill === tableCensus.tables && tableCensus.tds > 0
+    return rowResult('U-EDIT-1-LIVE-6', 'The package-adoption evidence: a stored TABLE on the surface makes the page commit REFUSE with a typed failure (never flatten/retype the stored td/th/tr nodes), the warning is visible, and the store + the rendered table are unchanged', 'D-state',
+      `table fixture=${JSON.stringify(tableDoc)}; documentId=${documentId}; rendered table census on the surface=${JSON.stringify(tableCensus)}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; rendered tables after the refused commit=${tableStill} (census-preserved=${tableStill === tableCensus.tables}); note: the refusal path is the ADAPTER's recorded capability gap (provident-editable has no table/thead/tr/td/th node type)`,
+      { path: 'cdp', ok, surface })
+  },
+
+  // =========================================================================
+  // UNIT `U-STAGE-ACTIVE-TAB` — the MANDATORY live battery (spec §8.3): the stage
+  // always displays the page owned by the ACTIVE tab, asserted by IDENTITY
+  // (activeTabKind vs stageKind + the surface's `data-edit-surface`), not text.
+  // =========================================================================
+
+  // ---- §8.3 item 5 / §A.1.1 I2-R — the census predicate in every reachable
+  // state: exactly ONE live surface iff a document tab is active. ----
+  stage_surface_census_i2r: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const v = await ufStageVerdict(h)
+    const census = await ufSurfaceCensus(h)
+    const expect = v.activeTabKind === 'document' ? 1 : 0
+    const censusOk = census.byId === expect && census.byMarker === expect && census.agree === true
+    const identityOk = expect === 1 ? census.ids[0] === v.editSurface : census.ids.length === 0
+    const paintedOk = census.painted === null ? expect === 0 : census.painted === true
+    // the marker must equal the ACTIVE DOCUMENT's id: the MCP target census names
+    // the rag document node ids the RENDERED graph carries
+    const targets = await h.mcpTool(h.mcp, 'provident.list_targets', {}).catch((e) => ({ __error: String(e) }))
+    const tStr = JSON.stringify(targets)
+    const docHead = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const h=m?m.querySelector('[data-doc-head]'):null;return h?h.getAttribute('data-rag-node-id')||h.id:null})()`)
+    const markerInTargets = v.editSurface == null ? null : tStr.includes(`rag-${v.editSurface}`)
+    const ok = censusOk && identityOk && paintedOk
+    return rowResult('UF-STAGE-AT-1', 'The stage region carries exactly ONE live `#page-edit-surface` iff a document tab is active (else ZERO), the two discriminators agree, and the marker equals the active document id', 'D-visual',
+      `activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; census over the stage region: byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)} boxes=${JSON.stringify(census.boxes)} painted=${census.painted}; OTHER authored roots live in the stage (recorded, non-gating here): commit-warning census=${census.warnings.length} ${JSON.stringify(census.warnings)}; expected surface census for this active kind=${expect} => ${censusOk}; marker==documentId: marker=${v.editSurface} stage doc-head rid=${docHead} rendered-graph targets carry rag-${v.editSurface}=${markerInTargets}; identityOk=${identityOk}`,
+      { path: 'not-gesture', gesture: false, ok, surface })
+  },
+
+  // ---- §8.3 item 1 — a document tab paints ITS document (identity, not text). ----
+  stage_document_tab_paints_its_document: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const before = await ufStageVerdict(h)
+    const st = await ufEditSurfaceState(h)
+    if (!st.present) return rowResult('UF-STAGE-AT-2', 'A document tab paints ITS document: the active document tab is active, stageKind=document, and `data-edit-surface` equals the rendered document id', 'D-state', `no surface: activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}`, { path: 'missing', ok: false, surface })
+    // a REAL click on a doc-nav row for a DIFFERENT document opens ITS tab
+    const rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#pane-doc-nav [data-document-id]')].map((li)=>({doc:li.getAttribute('data-document-id'),box:(()=>{const r=li.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})()})))()`)
+    const other = rows.find((r) => r.doc !== st.marker && r.box[2] > 0 && r.box[3] > 0)
+    let click = { path: 'no-second-doc' }
+    if (other) {
+      click = await ufRealClick(h, `#pane-doc-nav [data-document-id=${JSON.stringify(other.doc)}]`)
+      await sleep(3000)
+    }
+    const after = await ufStageVerdict(h)
+    const st2 = await ufEditSurfaceState(h)
+    const matches = after.stageMatchesActiveTab === true && after.stageKind === 'document' && after.surfaceCensus === 1 &&
+      after.markersAgree === true && st2.present === true && st2.marker === after.editSurface
+    const painted = st2.present === true && st2.box[2] > 0 && st2.box[3] > 0
+    // the marker's IDENTITY: the surface's document must be the one the RENDERED
+    // graph carries a rag-<id> root for (the MCP target census), and the stage's
+    // own doc-head must belong to it (`<documentId>:section:1`)
+    const targets = await h.mcpTool(h.mcp, 'provident.list_targets', {}).catch((e) => ({ __error: String(e) }))
+    const markerInGraph = after.editSurface == null ? null : JSON.stringify(targets).includes(`rag-${after.editSurface}`)
+    const headOwned = (await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const h=m?m.querySelector('[data-doc-head]'):null;return h?h.getAttribute('data-rag-node-id')||h.id:null})()`)) || ''
+    const headMatchesMarker = after.editSurface != null && headOwned.startsWith(after.editSurface + ':')
+    const ok = matches && painted && headMatchesMarker && markerInGraph !== false && (other ? click.path === 'cdp' : true)
+    return rowResult('UF-STAGE-AT-2', 'A document tab paints ITS document: after a real doc-nav row click the active tab is a document tab, stageKind is document, exactly one surface is live and its `data-edit-surface` equals the ACTIVE document id', 'D-state',
+      `ensured a document tab is active: ${JSON.stringify(ensured)}; before: activeTabId=${before.activeTabId} kind=${before.activeTabKind} stageKind=${before.stageKind} marker=${before.editSurface} tabs=${JSON.stringify(before.tabIds)}; doc-nav rows=${rows.length} picked=${other ? other.doc : 'none'} REAL click path=${click.path} (hit=${click.rect ? click.rect.hit : '?'}); after: activeTabId=${after.activeTabId} kind=${after.activeTabKind} stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} surfaceCensus=${after.surfaceCensus} markersAgree=${after.markersAgree} marker=${after.editSurface} box=${JSON.stringify(st2.box)} painted=${painted} tabCount=${after.tabCount} tabs=${JSON.stringify(after.tabIds)}; IDENTITY: the rendered graph carries a rag-${after.editSurface} root=${markerInGraph}; the stage doc-head rid="${headOwned}" starts with "<marker>:"=${headMatchesMarker}`,
+      { path: click.path === 'cdp' ? 'cdp' : 'missing', ok, surface })
+  },
+
+  // ---- §8.3 item 1 / the historical `LIVE-UF9` repro — "open in a tab" must
+  // produce a SEARCH page in the NEW tab. ----
+  stage_search_open_in_tab: async (h) => {
+    await ufEnsureAppClear(h)
+    const surface = await ufSurfaceTarget(h)
+    const before = await ufStageVerdict(h)
+    const censusBefore = await ufSurfaceCensus(h)
+    const ex = await ufExpandSearchTab(h)
+    await sleep(3000)
+    const v = await ufStageVerdict(h)
+    const census = await ufSurfaceCensus(h)
+    const stageRead = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');
+      const s=document.getElementById('${UF_STAGE_SEARCH_TAB_ID}');
+      const i=document.getElementById('${UF_SEARCH_TAB_INPUT_ID}');
+      const sr=s?s.getBoundingClientRect():null;
+      return {searchStage:!!s,searchInput:!!i,searchStageText:s?(s.textContent||'').replace(/\\s+/g,' ').slice(0,80):null,
+        searchStageBox:sr?[Math.round(sr.x),Math.round(sr.y),Math.round(sr.width),Math.round(sr.height)]:null,
+        painted:!!sr&&sr.width>0&&sr.height>0,
+        documentBody:m?m.querySelector('[data-doc-head]')!=null:null,
+        mainText:(m?m.textContent:'').replace(/\\s+/g,' ').slice(0,120)}})()`)
+    const newTab = v.tabCount > before.tabCount
+    const ok = newTab && v.stageMatchesActiveTab === true && v.stageKind === 'search' &&
+      stageRead.searchStage === true && stageRead.painted === true &&
+      census.byId === 0 && census.byMarker === 0 && stageRead.documentBody === false
+    return rowResult('UF-DEFECT-7', '"Open in a tab" creates a tab whose stage shows the SEARCH view (its search input painted in `#zone:main`), NOT the already-open document body; zero edit surfaces while the search tab is active', 'D-interaction',
+      `REAL click #pane-search-expand-tab path=${ex.path} (hit=${ex.hit}); tabs ${before.tabCount}->${v.tabCount} (newTab=${newTab}); ACTIVE tab=${v.activeTabId} kind=${v.activeTabKind} vs stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; the search stage: present=${stageRead.searchStage} input=${stageRead.searchInput} PAINTED box=${JSON.stringify(stageRead.searchStageBox)} painted=${stageRead.painted} text="${stageRead.searchStageText}"; document body in the stage=${stageRead.documentBody} (a foreign document body must NOT appear); surface census ${censusBefore.byId}->${census.byId} byMarker ${censusBefore.byMarker}->${census.byMarker} agree=${census.agree}; #zone:main text="${stageRead.mainText}"`,
+      { path: ex.path === 'cdp' ? 'cdp' : ex.path, ok, surface })
+  },
+
+  // ---- §8.3 item 2 (V1 race) — a slow `rag.query` + a document tab switched
+  // INSIDE that real async window: the stage must end on the ACTIVE tab's page. ----
+  stage_async_mount_race_v1: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    // (i) the query the search tab will re-run on its OWN async mount — typed
+    //     into the SEARCH PANE's input with a REAL focus + REAL text insertion
+    //     (this store returns zero query results, so the pane's own submit is not
+    //     required for the query to be carried into the tab)
+    const paneFocus = await ufRealClick(h, '#pane-search-input')
+    await sleep(300)
+    await h.cdp.evaluate(`(()=>{const e=document.getElementById('pane-search-input');if(e)e.value='';return true})()`)
+    await h.cdp.send('Input.insertText', { text: 'the' })
+    const pane = { togglePath: 'n/a', focusPath: paneFocus.path, submitPath: 'n/a', rows: [] }
+    // (ii) open the search tab: its own `rag.query` starts (the V1 window)
+    const ex = await ufExpandSearchTab(h)
+    // (iii) INSIDE that window, switch to a DOCUMENT tab with a REAL strip click
+    //       (no settle-scroll: the window is milliseconds wide)
+    const docTabs = (await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds.filter((t) => t.kind === 'document')
+    const switchTab = docTabs.length ? docTabs[docTabs.length - 1] : null
+    if (!switchTab) return rowResult('UF-STAGE-AT-3', 'The V1 race (real tab switch inside the async window)', 'D-interaction', `no document tab in the strip (tabs=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds)})`, { path: 'missing', ok: false, surface })
+    const sw = await ufRealClickTab(h, switchTab.id, { scroll: false })
+    await sleep(5000)
+    const v = await ufStageVerdict(h)
+    const st = await ufEditSurfaceState(h)
+    const census = await ufSurfaceCensus(h)
+    const noStaleSearch = (await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return {searchStage:m?!!m.querySelector('#${UF_STAGE_SEARCH_TAB_ID}'):null}})()`)).searchStage === false
+    const ok = sw.path === 'cdp' && v.activeTabKind === 'document' && v.stageKind === 'document' &&
+      v.stageMatchesActiveTab === true && noStaleSearch === true && st.present === true &&
+      census.byId === 1 && census.agree === true && st.marker === v.editSurface
+    return rowResult('UF-STAGE-AT-3', 'The V1 race: with the search tab\'s own real `rag.query` in flight, a REAL tab-strip switch to a document tab lands the stage on the ACTIVE document tab — the stale search completion is discarded (no `#stage-search-tab`), one surface carries its marker', 'D-interaction',
+      `search-pane REAL drive (query typed+submitted)=${JSON.stringify({ toggle: pane.togglePath, focus: pane.focusPath, submit: pane.submitPath, rows: pane.rows.length })}; REAL click #pane-search-expand-tab path=${ex.path} (tabs ${ex.before.tabCount}->${ex.before.tabCount + 1}); the async window's tab is the SEARCH tab (tabs now=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).openIds)}); INSIDE the window: REAL tab-strip click on ${switchTab.id} path=${sw.path} (hit=${sw.rect ? sw.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} stale-search-stage-present=${!noStaleSearch} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker} box=${JSON.stringify(st.box)}; ensuredDocumentActive=${JSON.stringify(ensured)}`,
+      { path: sw.path === 'cdp' ? 'cdp' : sw.path, ok, surface })
+  },
+
+  // ---- §8.3 item 2 (V1, second trigger pinned by the spec: "a real click on a
+  // search-result row OR a doc-nav row") — the DOC-NAV trigger, which the app
+  // routes through the sidebar focus seam instead of the tab seam. ----
+  stage_docnav_switch_inside_async: async (h) => {
+    await ufEnsureAppClear(h)
+    const surface = await ufSurfaceTarget(h)
+    const pane = await ufPaneSearch(h, 'the')
+    const ex = await ufExpandSearchTab(h)
+    const rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#pane-doc-nav [data-document-id]')].map((li)=>({doc:li.getAttribute('data-document-id'),box:(()=>{const r=li.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})()})))()`)
+    const target = rows.find((r) => r.box[2] > 0 && r.box[3] > 0 && r.box[1] >= -20 && r.box[1] <= 700)
+    if (!target) return rowResult('UF-STAGE-AT-8', 'A real doc-nav row click inside the async window switches the active tab to that DOCUMENT (the spec §8.3 item 2 trigger: "a real click on a search-result row or a doc-nav row")', 'D-interaction', `no hit-testable doc-nav row (rows=${rows.length})`, { path: 'zero-box', ok: false, surface })
+    const clicked = await ufRealClick(h, `#pane-doc-nav [data-document-id=${JSON.stringify(target.doc)}]`, { scroll: false })
+    await sleep(5000)
+    const v = await ufStageVerdict(h)
+    const st = await ufEditSurfaceState(h)
+    const census = await ufSurfaceCensus(h)
+    const ok = clicked.path === 'cdp' && v.activeTabKind === 'document' && v.stageKind === 'document' &&
+      v.stageMatchesActiveTab === true && v.searchStage === false && st.present === true && st.marker === v.editSurface
+    return rowResult('UF-STAGE-AT-8', 'The V1 race, DOC-NAV trigger: a real doc-nav row click inside the search tab\'s async window leaves the stage on the ACTIVE tab\'s page — i.e. that click must ACTIVATE the document tab for the clicked document', 'D-interaction',
+      `search-pane REAL drive rows=${pane.rows.length}; REAL click #pane-search-expand-tab path=${ex.path}; INSIDE the window: REAL doc-nav click on "${target.doc}" path=${clicked.path} (hit=${clicked.rect ? clicked.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} surfaceCensus byId=${census.byId}/${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker}; tabs=${JSON.stringify(v.tabIds)} — the app's doc-nav handler routes to the SIDEBAR focus seam (selectDocument -> setCurrentDocumentId -> requestRebuild), which never activates/opens a document TAB`,
+      { path: clicked.path === 'cdp' ? 'cdp' : clicked.path, ok, surface })
+  },
+
+  // ---- §8.3 item 3 (V2 broadcast) — a real store-changed broadcast while a
+  // NON-document tab is active must not paint a foreign document body/surface. ----
+  stage_foreign_rederive_v2: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const start = await ufStageVerdict(h)
+    const st0 = await ufEditSurfaceState(h)
+    if (!st0.present) return rowResult('UF-STAGE-AT-4', 'A store-changed broadcast while a NON-document tab is active does not paint a foreign document body or an edit surface', 'D-state', `no document surface to start from: activeTabKind=${start.activeTabKind} stageKind=${start.stageKind}`, { path: 'missing', ok: false, surface })
+    // 1. REAL page edit + blur on the ACTIVE DOCUMENT tab (the commit broadcast)
+    const placed = await ufCaretAt(h, st0.blockCount > 1 ? st0.blockCount - 1 : 0)
+    await ufType(h, `BC${Date.now() % 10000}`)
+    const blur = await ufBlurSurface(h)
+    // 2. a REAL click opens the search tab (the non-document active tab)
+    const ex = await ufExpandSearchTab(h)
+    await sleep(2600)
+    const midV = await ufStageVerdict(h)
+    // 3. drive ANOTHER real broadcast while the search tab is active: the
+    //    gnosis host's `onChanged()` → `host.refresh()` + the content re-derive
+    const gs1 = await h.cdp.evaluate(`(async()=>{try{await window.provident.sidebar.gnosisStatus();return {called:true}}catch(e){return {called:false,err:String(e)}}})()`)
+    await sleep(2500)
+    const v = await ufStageVerdict(h)
+    const census = await ufSurfaceCensus(h)
+    const stageRead = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');
+      return {docHead:m?m.querySelector('[data-doc-head]')!=null:null,h1:m?m.querySelector('h1')!=null:null,
+        searchStage:!!document.getElementById('${UF_STAGE_SEARCH_TAB_ID}'),
+        mainText:(m?m.textContent:'').replace(/\\s+/g,' ').slice(0,120)}})()`)
+    const foreignBody = stageRead.docHead === true || (v.editSurface != null && v.editSurface !== st0.marker)
+    const ok = midV.stageKind === 'search' && v.activeTabKind === 'search' && v.stageKind === 'search' &&
+      v.stageMatchesActiveTab === true && census.byId === 0 && census.byMarker === 0 && census.agree === true &&
+      foreignBody === false && stageRead.searchStage === true
+    return rowResult('UF-STAGE-AT-4', 'The V2 broadcast variant: with a SEARCH tab active, a real broadcast/re-derive (main→preload→renderer ordering) keeps the stage on the search page — no foreign document body, no edit surface, zero surfaces', 'D-state',
+      `ensured a document tab is active: ${JSON.stringify(ensured)}; start: document tab ${start.activeTabId} marker=${st0.marker}; caret at block ${st0.blockCount > 1 ? st0.blockCount - 1 : 0} + typed + REAL blur => warning=${blur.warning} kind=${blur.warningKind}; REAL click #pane-search-expand-tab path=${ex.path}; after the search tab mounted: activeTabKind=${midV.activeTabKind} stageKind=${midV.stageKind} stageMatchesActiveTab=${midV.stageMatchesActiveTab}; then the real re-derive ('gnosisStatus()' called=${gs1.called}): activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} editSurface=${v.editSurface} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)}; foreign document body in the stage=${foreignBody} (docHead=${stageRead.docHead}); #zone:main text="${stageRead.mainText}"`,
+      { path: ex.path === 'cdp' ? 'cdp' : ex.path, ok, surface })
+  },
+
+  // ---- §8.3 item 4 (V5) — `refresh()` survival of the surface + toolbar. ----
+  stage_refresh_survival_v5: async (h) => {
+    await ufEnsureAppClear(h)
+    const ensured = await ufEnsureDocumentSurface(h)
+    const surface = await ufSurfaceTarget(h)
+    const before = await ufStageVerdict(h)
+    const st1 = await ufEditSurfaceState(h)
+    const tb1 = await h.cdp.evaluate(`!!document.getElementById('editor-toolbar')`)
+    const identity1 = await h.cdp.evaluate(`(()=>{const s=document.getElementById('editor-toolbar');return s?s.getAttribute('data-node-id'):null})()`)
+    const gs = await h.cdp.evaluate(`(async()=>{try{await window.provident.sidebar.gnosisStatus();return {called:true}}catch(e){return {called:false,err:String(e)}}})()`)
+    await sleep(3500)
+    const after = await ufStageVerdict(h)
+    const st2 = await ufEditSurfaceState(h)
+    const tb2 = await h.cdp.evaluate(`!!document.getElementById('editor-toolbar')`)
+    const identity2 = await h.cdp.evaluate(`(()=>{const s=document.getElementById('editor-toolbar');return s?s.getAttribute('data-node-id'):null})()`)
+    const reassembled = identity1 !== identity2
+    const ok = before.stageKind === 'document' && st1.present === true && st2.present === true &&
+      st2.marker === st1.marker && after.stageMatchesActiveTab === true && tb1 === true && tb2 === true &&
+      after.surfaceCensus === 1
+    return rowResult('UF-STAGE-AT-5', "The V5 refresh survival: a real re-derive via the pane host's onChanged()/host.refresh() keeps the page-edit surface (same marker, still exactly one) AND the #editor-toolbar in the stage", 'D-state',
+      `ensured a document tab is active: ${JSON.stringify(ensured)}; activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}; before: surface present=${st1.present} marker=${st1.marker} box=${JSON.stringify(st1.box)} toolbar=${tb1} (node ${identity1}); the real re-derive seam ('gnosisStatus()' -> onChanged() -> host.refresh()) called=${gs.called}; after: surface present=${st2.present} marker=${st2.marker} box=${JSON.stringify(st2.box)} toolbar=${tb2} (node ${identity2}, re-assembled=${reassembled}) stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} census=${after.surfaceCensus}/${after.markerCensus} agree=${after.markersAgree}`,
+      { path: 'not-gesture', gesture: false, ok, surface })
+  },
+
+  // ---- §A.1.1 / A.1.2 — the mountTabs multi-mount reachability + census. ----
+  stage_multimount_reachability: async (h) => {
+    await ufEnsureAppClear(h)
+    const surface = await ufSurfaceTarget(h)
+    // R7's static reading, re-derived live: is `mountTabs` reachable from any
+    // renderer-exposed surface? (the spec pins it UNREACHABLE FROM PRODUCTION.)
+    const probes = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar||{};
+      const hosts=[['sidebar',Object.keys(s)],['host',window.__sidebarPanes?Object.keys(window.__sidebarPanes):null]];
+      const hits=[...document.querySelectorAll('[data-mount-tabs],[id*="mount-tabs"],[id*="mounttabs"]')].map((e)=>e.id||e.tagName);
+      return {sidebarKeys:hosts[0][1].filter((k)=>/mount/i.test(k)),windowKeys:Object.keys(window).filter((k)=>/mountTabs|sidebarPanes/i.test(k)),domHits:hits}})()`)
+    const v = await ufStageVerdict(h)
+    const census = await ufSurfaceCensus(h)
+    const unreachable = probes.sidebarKeys.length === 0 && probes.windowKeys.length === 0 && probes.domHits.length === 0
+    // A STRUCTURAL park with the recorded reason — never a silent one, and never
+    // parked by default: the seam is named, its absence is proven live, and the
+    // I2-R census it would stress is asserted in every REACHABLE state instead.
+    return parkRow('UF-STAGE-AT-7', '`mountTabs([A,B])` leaves exactly ONE live surface (the active document\'s) and destroys the stale root (A.1.2 `destroyRoot`)', 'D-visual',
+      `no production/live reachability: the sidebar bridge exposes NO mount* seam (keys matching /mount/ = ${JSON.stringify(probes.sidebarKeys)}), no window-level host object (${JSON.stringify(probes.windowKeys)}), no DOM affordance (${JSON.stringify(probes.domHits)}) — the spec pins the seam UNREACHABLE FROM PRODUCTION until U-STATE-1e lands (sidebar-panes.ts mountTabs REACHABILITY PIN; the audit §4.1 R7). The census it would stress is asserted in every REACHABLE state instead: activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} surface census byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree}`,
+      { row: 'UF-STAGE-AT-7', assertion: 'mountTabs multi-mount census (structurally unreachable seam)', dclass: 'D-visual', realInput: false, evidence: '', proxyPASS: false, surface })
+  },
+
+  // ---- §8.3 item 5 — the PERSISTED tab round-trip (the LIVE-5 pattern). The
+  // block records the state; the two-launch comparison is the run record's
+  // before/after readings under a SHARED `--home`. ----
+  stage_tabs_persist_roundtrip: async (h) => {
+    await ufEnsureAppClear(h)
+    const surface = await ufSurfaceTarget(h)
+    const v = await ufStageVerdict(h)
+    const persisted = await h.cdp.evaluate(`(async()=>{try{const s=await window.provident.operatorSettings.get();return {ok:true,activeId:s&&s.tabs?s.tabs.activeId:null,order:s&&s.tabs?s.tabs.order:null,openCount:s&&s.tabs?s.tabs.open.length:null}}catch(e){return {ok:false,err:String(e)}}})()`)
+    const openMatches = Array.isArray(persisted.order) && Array.isArray(v.openIds) && JSON.stringify(persisted.order) === JSON.stringify(v.openIds)
+    const activeMatches = persisted.activeId === v.activeTabId
+    const ok = persisted.ok === true && openMatches && activeMatches && v.stageMatchesActiveTab === true
+    return rowResult('UF-STAGE-AT-6', 'The persisted tab set (operator settings `tabs`) equals the RENDERED open set and active tab, and the boot stage satisfies stageMatchesActiveTab — the node suite can only assert TabState coercion', 'D-state',
+      `rendered strip: activeTabId=${v.activeTabId} kind=${v.activeTabKind} openIds=${JSON.stringify(v.openIds)} tabCount=${v.tabCount} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} surfaceCensus=${v.surfaceCensus}; persisted operator settings tabs=${JSON.stringify(persisted)}; rendered set == persisted order=${openMatches}; persisted activeId == rendered active=${activeMatches}. The BOOT half of the round trip is the second launch's reading (same --home, --no-seed): see the run record's before/after pair.`,
+      { path: 'not-gesture', gesture: false, ok, surface })
+  },
+
+  // ---- a DIAGNOSTIC reading of the document-surface precondition itself (the
+  // steps `ufEnsureDocumentSurface` takes), so a FAILED document-surface block's
+  // precondition is never a mystery and never a silent park. ----
+  stage_doc_surface_precondition_diag: async (h) => {
+    await ufEnsureAppClear(h)
+    const before = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+    const docNav = await h.cdp.evaluate(`(()=>{const dn=document.getElementById('pane-doc-nav');return {exists:!!dn,rows:document.querySelectorAll('#pane-doc-nav [data-document-id]').length,
+      folderRows:document.querySelectorAll('#pane-doc-nav [data-folder-path]').length,
+      text:dn?(dn.textContent||'').replace(/\s+/g,' ').slice(0,120):null,
+      paneBox:(()=>{const p=document.getElementById('pane-doc-nav');if(!p)return null;const r=p.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})()}})()`)
+    const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ __error: String(e) }))
+    const ensured = await ufEnsureDocumentSurface(h)
+    const after = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
+    const st = await ufEditSurfaceState(h)
+    return diagResult(`[U-STAGE-ACTIVE-TAB precondition] tabs before=${JSON.stringify(before.tabIds)} active=${before.activeTabId}/${before.activeTabKind}; doc-nav exists=${docNav.exists} rows=${docNav.rows} folders=${docNav.folderRows} box=${JSON.stringify(docNav.paneBox)} text="${docNav.text}"; rag.list_documents=${Array.isArray(docs.documents) ? docs.documents.length : JSON.stringify(docs).slice(0,120)}; ufEnsureDocumentSurface=${JSON.stringify(ensured)}; tabs after=${JSON.stringify(after.tabIds)} active=${after.activeTabId}/${after.activeTabKind}; surface present=${st.present} marker=${st.marker} blocks=${st.blockCount}`, { ensured: ensured, docNav: docNav })
+  },
+
+  // ---- the empty-boot landing (§8.3 item 1) as a DIAGNOSTIC reading: the
+  // boot state of a fresh store (no tabs, no documents) cannot be produced in a
+  // battery that seeds a corpus first, so it is recorded, never asserted. ----
+  stage_boot_landing_diag: async (h) => {
+    const v = await ufStageVerdict(h)
+    const census = await ufSurfaceCensus(h)
+    const read = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return {landing:!!document.getElementById('stage-landing'),
+      stageAttrs:m?[...m.children].map((c)=>c.id||c.getAttribute('data-stage')||c.tagName):[],
+      mainText:(m?m.textContent:'').replace(/\\s+/g,' ').slice(0,120)}})()`)
+    const consistent = (v.activeTabKind === 'document' ? census.byId === 1 : census.byId === 0) && v.stageMatchesActiveTab === true
+    return diagResult(`[U-STAGE-ACTIVE-TAB §8.3 item 1 — boot/landing reading] activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} landing=${read.landing} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} stageChildren=${JSON.stringify(read.stageAttrs)} #zone:main="${read.mainText}" — census predicate holds in this reachable state=${consistent}`, { bootConsistent: consistent })
+  },
+
+
+  // =========================================================================
   // UNIT O-0 — the 5 closed measurement blocks (§3.1). Every block returns
   // §3.2's `diagResult` NON-row shape (row/dclass null, realInput false,
   // proxyPASS false, pass false, diagnostic true) with the §4.3 freeze row(s)
@@ -5016,6 +6116,9 @@ async function main(argv) {
       try { app.kill('SIGTERM') } catch { /* already gone */ }
       if (!opt.keepHome) try { rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
     }
+    // the U-EDIT-1 live fixture file (written by `ufEnsureEditFixture`) is the
+    // driver's OWN artifact — removed with the seed corpus it sits beside
+    try { rmSync(join(ROOT, '.live-page-edit-fixture.md'), { force: true }) } catch { /* best-effort */ }
     // --connect: the running app owns `.live-corpus` — leave it in place.
     if (!opt.connect && seedDir === join(ROOT, '.live-corpus')) { try { rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ } }
   }

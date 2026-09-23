@@ -19,7 +19,9 @@ export type SanitizePasteResult =
       ok: true
       /** The SANITIZED HTML string — safe, order-preserving, containing ONLY
        *  `strong`/`em`/`a`/`img` + text (no script/iframe/svg/on* / unsafe-URL).
-       *  Ready to feed to the `provident-editable@0.1.0` converter. */
+       *  Ready to feed to the `provident-editable@0.2.0` converter (the
+       *  ADOPTED production decomposer — docs/specs/unit-u-edit-1-whole-page-
+       *  editing.md §11.9 item 1). */
       html: string
       /** The plain-text content (text nodes + unwrapped-element text), in
        *  document order. This is the RAG node's `content`. */

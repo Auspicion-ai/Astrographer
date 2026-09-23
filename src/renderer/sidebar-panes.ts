@@ -40,6 +40,7 @@ import {
   PAGE_EDIT_SURFACE_BLUR_HANDLER,
   PAGE_EDIT_SURFACE_INPUT_BODY,
   PAGE_EDIT_SURFACE_BLUR_BODY,
+  pageCommitWarningContent,
   type AppGraphAssemblyResult,
   type SearchResult,
 } from './pane-graph.js'
@@ -62,7 +63,8 @@ import {
   setZoneSize,
   type GutterController,
 } from './pane-gutter.js'
-import type { EditController, CaretState, RichCaretEdge, RebuildKind } from './edit-controller.js'
+import type { EditController, CaretState, RichCaretEdge, RebuildKind, CommitFailure } from './edit-controller.js'
+import { decodePage, buildPageOps } from '../main/page-diff.js'
 import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from './content-reconcile.js'
 import {
   scopeDocumentIds,
@@ -107,7 +109,10 @@ import type { BacklinkResult } from '../main/backlinks.js'
 import type { LocalRagQueryFilters } from '../main/retrieval.js'
 import type { RagNode, RagEdge, BatchOp, BatchResult } from '../main/rag-store.js'
 import { decomposeRichHtml } from '../main/rich-decompose.js'
-import { type TabDefaultContext, type TabEntry, type TabSearchParams } from './tab-state.js'
+import { type TabDefaultContext, type TabEntry, type TabSearchParams, type TabTarget } from './tab-state.js'
+// §3.5 item 3 — the strip's OWN close seam publishes the closed tab ids the host
+// drains in `mountTab` (the pruner's production caller).
+import { drainClosedTabIds } from './tab-strip.js'
 
 /** U-PARITY-C18 — the advanced-search args the `search` pane's disclosure
  *  collects. Mirrors the `rag.query` argument surface (W1-Q9): the extended
@@ -200,6 +205,12 @@ export interface SidebarBridge {
    *  Optional so older host/test bridges still boot. */
   onPaneVisibility?(handler: (change: { id: string; enabled: boolean }) => void): () => void
 }
+
+/** U-STAGE-ACTIVE-TAB §5.2 — the ACTIVE target's kind. The five-member
+ *  `TabTarget.kind` union PLUS the raw-string arm (a malformed/hostile entry's
+ *  unknown kind is stored verbatim so the readers stay TOTAL and
+ *  side-effect-free instead of coercing a foreign value into a known kind). */
+export type ActiveTargetKind = TabTarget['kind'] | (string & {})
 
 export interface SidebarPanesOptions {
   /** The app graph mount (#app) — the app Runtime renders the pane-inclusive
@@ -401,6 +412,101 @@ const TEMPLATE_RESET_BODY = `function (ctx) {
   if (!s) return;
   s.templateReset();
 }`
+/** §3.5 item 5 (`src/main/engine-rag-store.ts` `EngineUnavailable.cause`) — the
+ *  four-member engine-cause union the typed record preserves VERBATIM. The check
+ *  is STRUCTURAL (name/code + cause), never an `instanceof`: the renderer bundle
+ *  is built for the browser platform and must not import the main-process engine
+ *  module, and a cause crossing the IPC bridge is a deserialized plain error. */
+const ENGINE_UNAVAILABLE_CAUSES = ['connection-refused', 'engine-not-spawned', 'not-ready', 'unavailable-state'] as const
+
+/** The engine's OWN cause class off a rejected bridge call, or `undefined` when
+ *  the rejection is not an `EngineUnavailable` (never a fabricated cause). */
+function engineUnavailableCause(err: unknown): CommitFailure['engineCause'] {
+  const e = err as { name?: unknown; code?: unknown; cause?: unknown } | null | undefined
+  if (e == null || typeof e !== 'object') return undefined
+  const isEngineUnavailable = e.name === 'EngineUnavailable' || e.code === 'engine_unavailable'
+  if (!isEngineUnavailable) return undefined
+  const cause = e.cause
+  return typeof cause === 'string' && (ENGINE_UNAVAILABLE_CAUSES as readonly string[]).includes(cause)
+    ? (cause as CommitFailure['engineCause'])
+    : undefined
+}
+
+/** The id a `BatchOpResult` echoes for the record it acknowledges (`putNode`
+ *  echoes the applied node, `putEdge` the applied edge). */
+function acknowledgedRecordId(value: unknown): unknown {
+  return value != null && typeof value === 'object' ? (value as { id?: unknown }).id : undefined
+}
+
+/** §3.3 item 6 — does this result ACKNOWLEDGE this op? `rag-store.ts` pins the
+ *  success arm as "one `BatchOpResult` per op, **in order**", so the result must
+ *  name the SAME op, and every identity it carries must be the op's own: a
+ *  result naming another op kind, or another node/edge, acknowledges nothing of
+ *  this write (`FS19`'s silent-success class — an acknowledgement of a DIFFERENT
+ *  write is not an acknowledgement of this one). An identity the result does not
+ *  carry is not fabricated into a disagreement. */
+function acknowledgesOp(result: unknown, op: BatchOp): boolean {
+  if (result == null || typeof result !== 'object') return false
+  const r = result as Record<string, unknown>
+  if (r.op !== op.op) return false
+  // the identity a result carries for the record it acknowledges must be the
+  // op's own; an absent identity carries no contrary claim
+  const nodeId = acknowledgedRecordId(r.node)
+  const edgeId = acknowledgedRecordId(r.edge)
+  switch (op.op) {
+    case 'putNode':
+      return nodeId === undefined || nodeId === op.node.id
+    case 'putEdge':
+      return edgeId === undefined || edgeId === op.edge.id
+    case 'setProps':
+    case 'setSubtree':
+    case 'setType':
+      return r.nodeId === undefined || r.nodeId === op.nodeId
+    case 'removeNode':
+    case 'removeEdge':
+      return r.removed === undefined || typeof r.removed === 'boolean'
+    default:
+      return false
+  }
+}
+
+/** §3.3 item 6 / §3.6 (`FS19`) — a `BatchResult` is SUCCESS only when the write is
+ *  ACKNOWLEDGED: a BOOLEAN `ok: true` **and** EXACTLY one `BatchOpResult` per op
+ *  of the batch, **in order**, each agreeing with the op it acknowledges
+ *  (`rag-store.ts` pins the success arm as "one `BatchOpResult` per op, in
+ *  order"). A bare `{ ok: true }` (no `results`), a PARTIAL acknowledgement
+ *  (fewer results than ops) and an over-long/junk acknowledgement (more results
+ *  than ops, or entries acknowledging another op) are silent partial writes —
+ *  never read as success. */
+function isAcknowledgedBatch(result: unknown, ops: BatchOp[]): boolean {
+  const r = result as { ok?: unknown; results?: unknown } | null | undefined
+  if (r == null || typeof r !== 'object' || r.ok !== true) return false
+  const results = (r as { results?: unknown }).results
+  if (!Array.isArray(results) || results.length !== ops.length) return false
+  return ops.every((op, index) => acknowledgesOp(results[index], op))
+}
+
+/** §3.5 item 5 — the typed `store-rejected` record for a batch that did NOT
+ *  succeed. The `BatchResult`'s own `error`/`failedIndex` are carried VERBATIM
+ *  when it carried them; an absent/malformed answer (`undefined`, `null`, `{}`,
+ *  `{ ok: 'yes' }`, `{ ok: true }` with no `results`) is typed with a message of
+ *  its own and **no** fabricated `failedIndex`. */
+function storeRejectedFailure(result: unknown): CommitFailure {
+  const r = result as { ok?: unknown; error?: unknown; failedIndex?: unknown } | null | undefined
+  const error = typeof r?.error === 'string' && r.error !== '' ? r.error : undefined
+  const failedIndex = typeof r?.failedIndex === 'number' ? r.failedIndex : undefined
+  let message: string
+  if (r == null) message = 'the edit batch returned no result (the bridge resolved nothing)'
+  else if (r.ok === true) message = 'the edit batch reported ok without an acknowledged write for every op'
+  else if (r.ok === false) message = error ?? 'the edit batch was rejected without a message'
+  else message = 'the edit batch result is malformed (no boolean `ok`)'
+  return {
+    kind: 'store-rejected',
+    message,
+    ...(failedIndex !== undefined ? { failedIndex } : {}),
+  }
+}
+
 /** Collect a translated node's subtree node ids (root-first, tree order),
  *  STOPPING at each doc-child subtree root (a child carrying the stable
  *  authored `rag-<id>` id — the same rule `buildTraversal` uses). */
@@ -634,9 +740,94 @@ export class SidebarPanes {
   private representationMode: RepresentationMode = 'html'
 
   /** U-EDIT-1 (C9) §3.5 item 6 — the per-TAB page-commit failure record
-   *  (host-side state keyed by tab id, NEVER a rendered class/attribute: a
-   *  warning that exists only as a DOM class is `FS17`). */
-  private pageCommitFailure = new Map<string, string>()
+   *  (host-side state keyed by the PAGE SUBJECT = the active TAB id, NEVER a
+   *  rendered class/attribute: a warning that exists only as a DOM class is
+   *  `FS17`). A successful commit DELETES its entry; a failed one SETS it and
+   *  keeps the tab dirty (§3.5 items 1/2). */
+  private pageCommitFailure = new Map<string, CommitFailure>()
+
+  /** U-EDIT-1 (C9) §6.4 item 1 (`design-extensions-review` §12.4: every dirty
+   *  state is PER TAB, never per document) — the ACTIVE tab id, threaded from
+   *  the tab ownership the renderer already holds (`mountTab`/`mountTabs`). It is
+   *  the page subject the dirty machinery + the failure map are keyed by, so two
+   *  tabs on the SAME document share neither. Null ⇒ no tab is mounted and the
+   *  page subject falls back to the focused document. */
+  private activeTabId: string | null = null
+
+  /** U-STAGE-ACTIVE-TAB §5.2 — the ACTIVE target's kind, mirrored with
+   *  `activeTabId` for the non-document gate (§5.3.3) and the surface census
+   *  (§5.3.5). `null` only when no tab is mounted (the 9a §4 F1/F3 states). */
+  private activeTargetKind: ActiveTargetKind | null = null
+
+  /** U-STAGE-ACTIVE-TAB §5.2 — the ACTIVE DOCUMENT TAB's document id, or null.
+   *  The ONLY sanctioned document scope at every stage-mount / re-derive /
+   *  surface seam after this unit (`_currentDocumentId` is retained for the
+   *  doc-nav selection + the persisted default context, and is no longer a scope
+   *  source at those seams). */
+  private activeDocumentId: string | null = null
+
+  /** U-STAGE-ACTIVE-TAB §5.3.1 — the monotonic stage-mount generation, stamped
+   *  at the START of every `mountTab` attempt (and at `mountTab(null)`, which
+   *  invalidates every outstanding attempt). A completion whose stamp is stale
+   *  is DISCARDED, never applied. */
+  private stageMountSeq = 0
+
+  /** U-STAGE-ACTIVE-TAB §5.3.1 consequence 2 — the count of discarded
+   *  (superseded) async mount completions. A counted drop, never an inferred
+   *  absence. */
+  private stageMountDropped = 0
+
+  /** U-STAGE-ACTIVE-TAB §A.3.1 — whether the host has been handed ANY tab state
+   *  (`mountTab` or `mountTabs`). MONOTONIC: `false` only until the first such
+   *  call. The PRE-TAB state is the BOOT CARVE-OUT (exactly one surface, owned by
+   *  `getPreTabDocumentId()`); once any tab state exists the census predicate is
+   *  STRICT forever — the pre-tab arm is never re-entered. */
+  private tabStateHanded = false
+
+  /** U-STAGE-ACTIVE-TAB §A.3.2 ruling C2 — the host's DOCUMENT-LIVENESS carrier
+   *  (the `doc-head` document ids of the last committed snapshot). It is SEPARATE
+   *  from `backRefs`, whose documented invariant (`Map<ragNodeId, nodeId[]>`) is
+   *  never relaxed: no document id is ever a `backRefs` key. Recomputed wherever
+   *  the snapshot is committed (boot + the re-derive). */
+  private liveDocumentIds = new Set<string>()
+
+  /** U-STAGE-ACTIVE-TAB §5.3.1 consequence 3 + §6 `P-IM-1` — the ONE outstanding
+   *  async search mount that a de-duped identical re-mount RE-ARMS (the query is
+   *  never re-issued: the de-dupe is unchanged). It carries the generation the
+   *  settle-time guard reads, so the re-armed newest attempt's outcome is the one
+   *  that lands, while the attempt it superseded is counted ONCE (`counted`). */
+  private pendingSearchMount: { key: string; entry: TabEntry; seq: number; counted: boolean } | null = null
+
+  /** U-STAGE-ACTIVE-TAB §5.3.3/§6 `P-SM-1` (`H-1`/`H-2`) — whether the tab
+   *  ownership has DECLARED a document open set (the `mountTabs` seam). Once
+   *  declared, that open set owns the re-derive's document scope in the
+   *  no-active-tab states (`[]` when it carries no document: no document body may
+   *  be re-materialized and no surface authored). Undeclared ⇒ the retained
+   *  doc-nav selection focus the pinned §5.8.29/M6 rows assert. */
+  private openSetDeclared = false
+
+  /** U-STAGE-ACTIVE-TAB §6 `P-IM-1` — the last SETTLED result per entry key: a
+   *  de-duped repeat whose query already settled re-establishes that entry's body
+   *  from here instead of re-issuing the query (the row's `issued` identity). */
+  private readonly searchResults = new Map<string, { results: unknown[]; error: string | null }>()
+
+  /** U-EDIT-1 (C9) §3.5 item 3/§11.8 item 3 — the page subjects this host has
+   *  marked dirty, so a tab CLOSE (the `mountTabs` open-set seam) drops EXACTLY
+   *  the closed tab's page state and no other tab's. */
+  private pageSubjects = new Set<string>()
+
+  /** U-EDIT-1 (C9) §3.5 item 3/§11.8 item 3 — the per-SUBJECT generation stamp
+   *  of the page state: the same class of guard `stageMountSeq` is for the mount
+   *  path (U-STAGE-ACTIVE-TAB §5.3.1: "a completion whose stamp is stale is
+   *  DISCARDED, never applied"). A commit stamps its subject before the write;
+   *  a DRAIN of that subject (a close, or an open-set prune) bumps the stamp, so
+   *  a resolution arriving after the tab was drained — or after its id was
+   *  REUSED by a new tab — can never re-enter `recordPageFailure`/
+   *  `clearPageState` for the new subject (`FS17`'s carrier class: a
+   *  `commit-failed` warning on a tab that never failed; `FS23`'s class: a fresh
+   *  tab's dirty flag cleared, its text never committed). A plain SWITCH bumps
+   *  nothing: the abandoned tab's own state is still its own. */
+  private pageSubjectSeq = new Map<string, number>()
 
   /** The subscription cleanup handles. */
   private unsubRag: (() => void) | null = null
@@ -657,6 +848,23 @@ export class SidebarPanes {
     this.bridge = opts.bridge
     this.backRefs = opts.backRefs
     this.editController = opts.editController
+    // U-STAGE-ACTIVE-TAB §5.3.2 "Host side" — supply the `pageSubjectDocument`
+    // hook so the controller's caret guard validates the page subject's DOCUMENT
+    // (the active tab's document, or null when the active target is not a
+    // document) instead of `backRefs.has(subjectId)` (a tab id is not a RAG node
+    // id). The host owns `activeTabId`/`activeDocumentId` and is constructed with
+    // an already-built controller, so the hook is late-bound. OPTIONAL on the
+    // controller (an older/foreign controller keeps the legacy guard).
+    this.editController.setPageSubjectDocument?.((subject) =>
+      subject === this.activeTabId ? this.activeDocumentId : null,
+    )
+    // §A.3.2 ruling C2 — the SAME late-bind seam supplies the document-LIVENESS
+    // carrier, so the caret's deleted-document guard reads `isDocumentLive(doc)`
+    // instead of a document id keyed into `backRefs` (whose documented invariant is
+    // `Map<ragNodeId, nodeId[]>` — the deleted `seedActiveDocumentRef()` violated
+    // it). Non-enumerable + optional on the controller: an older/foreign controller
+    // keeps the absent-carrier legacy fallback.
+    this.editController.setDocumentLiveness?.((documentId) => this.isDocumentLive(documentId))
     this.zoneName = opts.zoneName ?? 'main'
     this.sidebarZone = opts.sidebarZone ?? SIDEBAR_ZONE
     this.gnosis = opts.gnosis ?? null
@@ -697,6 +905,93 @@ export class SidebarPanes {
     this._currentNodeId = id
   }
 
+  // ---- U-STAGE-ACTIVE-TAB §5.2 — the pinned identity readers ---------------
+
+  /** §5.2 — the ACTIVE tab's id, or `null` when no tab is mounted (the
+   *  boot-precedence / empty-set states). TOTAL and side-effect-free; NEVER a
+   *  document id. */
+  getActiveTabId(): string | null {
+    return this.activeTabId
+  }
+
+  /** §5.2 — the ACTIVE target's kind, or `null` when no tab is mounted. TOTAL
+   *  and side-effect-free. */
+  getActiveTargetKind(): ActiveTargetKind | null {
+    return this.activeTargetKind
+  }
+
+  /** §5.2 — the ACTIVE DOCUMENT TAB's document id, or `null` (a non-document
+   *  active target, or no tab at all). The ONLY sanctioned stage/re-derive/
+   *  surface document scope after this unit. TOTAL and side-effect-free. */
+  getActiveDocumentId(): string | null {
+    return this.activeDocumentId
+  }
+
+  /** §5.3.1 consequence 2 — the number of DISCARDED (superseded) async stage
+   *  mount completions. TOTAL and side-effect-free. */
+  getStageMountDropped(): number {
+    return this.stageMountDropped
+  }
+
+  // ---- U-STAGE-ACTIVE-TAB §A.3 — the additive pre-tab / liveness readers ----
+
+  /** §A.3.1 — `true` **iff** the host has been handed NO tab state: neither
+   *  `mountTab` nor `mountTabs` has been called. MONOTONIC: once any tab state is
+   *  handed it is `false` forever (the pre-tab arm of the census predicate is
+   *  never re-entered). TOTAL and side-effect-free. */
+  isPreTabState(): boolean {
+    return !this.tabStateHanded
+  }
+
+  /** §A.3.1 — in the PRE-TAB state, the document the pre-tab stage displays: the
+   *  boot seam's retained default-context document (`_currentDocumentId`, else the
+   *  alphabetically-first doc-head of the last snapshot). `null` when the state is
+   *  NOT pre-tab, or when no document is known (the empty-store/landing boot —
+   *  clause (g): census `0`). TOTAL and side-effect-free. */
+  getPreTabDocumentId(): string | null {
+    if (this.tabStateHanded) return null
+    if (this._currentDocumentId != null && this._currentDocumentId !== '') return this._currentDocumentId
+    const heads = this.lastSnapshot == null ? [] : this.deriveDocumentIds(this.lastSnapshot)
+    const sorted = [...heads].sort((a, b) => a.localeCompare(b))
+    return sorted[0] ?? null
+  }
+
+  /** §A.3.1 — the public projection of the pinned `stageDocumentScope()` BODY
+   *  seam (its semantics are UNCHANGED: with no tab mounted the retained doc-nav
+   *  selection is the scope, pinned by §5.8.7/§5.8.29/M6 + N1b). It is NOT the
+   *  SURFACE scope: the surface is authored from the `stageOwner` predicate alone
+   *  (`stageOwnerDocumentScope()`), so a no-tab state that keeps this body scope
+   *  authors no surface (clause (e)). TOTAL and side-effect-free. */
+  getStageDocumentScope(): string | null {
+    return this.stageDocumentScope()
+  }
+
+  /** §A.3.2 ruling C2 — the host's DOCUMENT-LIVENESS carrier: `true` iff the
+   *  last committed snapshot's `doc-head` document ids contain `documentId`.
+   *  TOTAL and side-effect-free: `false` for `''`, a non-string, junk/`__proto__`
+   *  keys and before any snapshot. It is SEPARATE from `backRefs` (never relaxed:
+   *  no document id is a `backRefs` key). */
+  isDocumentLive(documentId: string): boolean {
+    return typeof documentId === 'string' && documentId !== '' && this.liveDocumentIds.has(documentId)
+  }
+
+  /** §A.3.1 clause (a) — the document OWNING the stage for the current state:
+   *  the ACTIVE document tab's document, else the PRE-TAB document while the host
+   *  has no tab state, else `null`. This is the SURFACE scope (`stageOwner(s).id`)
+   *  and is a predicate DISTINCT from `stageDocumentScope()` (the body scope,
+   *  clause (e)). TOTAL and side-effect-free. */
+  private stageOwnerDocumentScope(): string | null {
+    if (this.activeTabId !== null) return this.activeTargetKind === 'document' ? this.activeDocumentId : null
+    return this.isPreTabState() ? this.getPreTabDocumentId() : null
+  }
+
+  /** §5.2/§5.3.6 — the mounted document set (one entry per simultaneously
+   *  mounted document; the single-active path keeps `[activeDocumentId]`). A
+   *  copy; callers cannot mutate the host state. */
+  getMountedDocumentIds(): readonly string[] {
+    return [...this.mountedDocumentIds]
+  }
+
   /** U-SHELL-9a §2.4 (HOST-2) — the REAL default-resolution context for the
    *  first-tab default: the focused store's documents (the doc-heads snapshot)
    *  + the previous session's most-recently-focused document. `hasStore` is
@@ -717,13 +1012,53 @@ export class SidebarPanes {
    *  renders the landing/wikis listing; a `search` target renders the search
    *  body; parked kinds render a placeholder. `null` clears the mounted body. */
   mountTab(entry: TabEntry | null): void {
+    // U-STAGE-ACTIVE-TAB §A.3.1 clause (d) — ANY `mountTab` (including
+    // `mountTab(null)`) hands the host tab state: the pre-tab arm of the census
+    // predicate is unavailable from here on, so a no-tab state authors NO surface.
+    this.tabStateHanded = true
+    // U-EDIT-1 (C9) §3.5 item 3 — a CLOSE through the strip's OWN seam publishes
+    // the closed tab id (the strip's only other signal, `onActiveChange`, cannot
+    // name a tab that was not active — the tab-ownership audit's §1.1); drop
+    // EXACTLY that tab's page state, before the mount the close itself triggers.
+    this.dropClosedPageState(drainClosedTabIds())
+    // U-STAGE-ACTIVE-TAB §5.3.1 — the mount generation. Stamped at the ENTRY of
+    // every attempt (including a `mountTab(entry)` that the JSON de-dupe would
+    // make a no-op: it is still the newest attempt, and an outstanding async body
+    // may no longer apply).
+    const seq = ++this.stageMountSeq
+    // U-EDIT-1 (C9) §3.5 item 6/§6.4 item 1 — the page subject follows the ACTIVE
+    // TAB, set BEFORE the redundant-key guard: `mountTab(sameEntry)` is still the
+    // active tab (and the single-active render is what is guarded, not the state).
+    // U-STAGE-ACTIVE-TAB §5.3.1 — the identity is set SYNCHRONOUSLY for EVERY
+    // kind (so it is correct even while an async body is still pending), and
+    // `entry === null` clears it totally (§5.4 state 19).
+    this.activeTabId = entry != null && typeof entry.id === 'string' && entry.id !== '' ? entry.id : null
+    this.activeTargetKind = entry != null ? entry.target?.kind ?? null : null
+    this.activeDocumentId =
+      entry != null && entry.target?.kind === 'document' && typeof entry.target.documentId === 'string'
+        ? entry.target.documentId
+        : null
     if (entry == null) {
+      // §5.3.1 — a `null` mount clears the stage + the mounted set. The generation
+      // HAS been stamped, so an outstanding search completion is discarded by the
+      // stamp check alone (its `entry.id` also no longer matches).
       this.mountedStageKey = null
       this.mountedDocumentIds = []
+      this.applyStageBody({ type: 'div', props: { id: 'stage-empty', 'data-stage': 'empty' } })
       return
     }
     const key = JSON.stringify(entry)
-    if (key === this.mountedStageKey) return
+    if (key === this.mountedStageKey) {
+      // §5.3.1 consequence 3 / §6 `P-IM-1` (the dominance clause) — an identical
+      // re-mount is still a NO-OP for the graph and issues NO second query, but it
+      // IS the newest attempt: an outstanding search mount for this entry is
+      // SUPERSEDED (counted once) and RE-ARMED onto this generation, so its
+      // settlement is the one that lands; an already-settled one re-establishes the
+      // entry's body from the last result — never a stale other entry's body and
+      // never an empty stage.
+      this.reattachStage(entry, key, seq)
+      return
+    }
     const target = entry.target
     if (target.kind === 'document') {
       this.mountedStageKey = key
@@ -734,7 +1069,16 @@ export class SidebarPanes {
     if (target.kind === 'search') {
       this.mountedStageKey = key
       this.mountedDocumentIds = []
-      void this.mountSearchStage(entry)
+      // U-STAGE-ACTIVE-TAB §A.3.1 clause (d) + §5.1 I2 clause 3 — the previous
+      // tab's body (and its surface) may not survive until the ASYNC search body
+      // lands: from the first `mountTab` on, a non-document tab authors ZERO
+      // surfaces and holds ZERO document body roots. Author the search tab's own
+      // body NOW (its last SETTLED result when one exists — the same body a
+      // de-duped re-mount re-establishes — else the empty-results shape) and let
+      // the completion replace it. The query is still issued below, once.
+      const settled = this.searchResults.get(key)
+      this.applyStageBody(searchTabContent(entry, settled ?? { results: [], error: null }))
+      void this.mountSearchStage(entry, seq, key)
       return
     }
     this.mountedStageKey = key
@@ -749,23 +1093,68 @@ export class SidebarPanes {
     this.applyStageBody(body)
   }
 
+  /** U-STAGE-ACTIVE-TAB §A.1.1 (`I2-R`) — clear the stage for the NO-ACTIVE-TAB
+   *  state (the `mountTab(null)` shape, §5.3.1): the pinned empty stage body, an
+   *  empty mounted set and no document scope, so the seam leaves no document body
+   *  root and ZERO surfaces. Used by the open-set prune; a production close always
+   *  follows with the strip's own `mountTab` of the next active tab. */
+  private clearStageForNoActiveTab(): void {
+    this.mountedStageKey = null
+    this.mountedDocumentIds = []
+    this.applyStageBody({ type: 'div', props: { id: 'stage-empty', 'data-stage': 'empty' } })
+  }
+
   /** U-SHELL-9b §2.1 (C14) — mount ALL open document tabs simultaneously. The
    *  9a single-active policy is superseded here: every open `document` tab's
    *  body is materialized as a distinct root in the one graph (the
    *  CROSS-DOCUMENT-SHARED prerequisite), and the mounted set is recorded so a
    *  later content change repopulates every root in place through the
    *  U-STATE-1e N-root reconcile (no `loadEnvelope`/teardown). Non-document
-   *  entries in the list are ignored (they are not document bodies). */
+   *  entries in the list are ignored (they are not document bodies).
+   *
+   *  **REACHABILITY PIN (U-STAGE-ACTIVE-TAB §5.3.6 rule 3).** This seam is
+   *  UNREACHABLE FROM PRODUCTION until `U-STATE-1e` lands: `U-SHELL-9b` is
+   *  PARKED on `U-STATE-1e`, and a static census over `src/renderer/**` finds NO
+   *  production caller (no `window.provident` bridge seam, no handler body,
+   *  `renderer.ts`'s tab wiring and every `SidebarPanes` public method reach
+   *  `mountTab`, never this). It is retained — not deleted — because the 9b wave
+   *  owns the seam and its test suites call it directly. The 9b SUPERSESSION of
+   *  9a §2.3's single-active render therefore applies to the parked wave ONLY:
+   *  for the shipped shell the invariant is §5.1 I2, and even at THIS seam the
+   *  live page-edit surface census must equal the active-tab predicate (at most
+   *  the ACTIVE document's surface — a stale surface root is destroyed by the
+   *  reconcile, §A.1.1/§A.1.2).
+   *
+   *  Calling it directly (tests only) and then `mountTab(entry)` restores
+   *  single-active exactly.
+   */
   mountTabs(entries: TabEntry[]): void {
+    // U-STAGE-ACTIVE-TAB §A.3.1 clause (d) — ANY `mountTabs` hands the host tab
+    // state (the open-set seam sets NO active identity of its own): the pre-tab
+    // arm ends here forever, so `mountTabs` with no active entry authors no
+    // surface and destroys a stale pre-tab one.
+    this.tabStateHanded = true
     const ids: string[] = []
+    const openTabIds: string[] = []
     for (const e of Array.isArray(entries) ? entries : []) {
+      if (typeof e?.id === 'string' && e.id !== '' && !openTabIds.includes(e.id)) openTabIds.push(e.id)
       if (e?.target?.kind === 'document' && typeof e.target.documentId === 'string' && e.target.documentId !== '') {
         if (!ids.includes(e.target.documentId)) ids.push(e.target.documentId)
       }
     }
+    // U-EDIT-1 (C9) §3.5 item 3/§11.8 item 3 — the open set IS the tab-close seam
+    // for the PER-TAB page state: a tab that is no longer open drops ONLY its own
+    // dirty flag + failure record (no other tab's page state is touched).
+    this.openSetDeclared = true
+    this.prunePageState(openTabIds)
     this.mountedDocumentIds = ids
     if (ids.length === 0) {
       this.mountedStageKey = null
+      // §A.1.1 `I2-R` (H-1/The H-1 state) — the open set carries no document body
+      // AND the prune left NO active tab: the stage may not keep a page no tab owns
+      // (a document body root / a surface with no owning tab). A still-open
+      // non-document tab keeps its own body.
+      if (this.activeTabId === null) this.clearStageForNoActiveTab()
       return
     }
     this.mountedStageKey = null // a multi/simultaneous mount — no single-active key
@@ -1021,11 +1410,38 @@ export class SidebarPanes {
     this.loadAppGraph(this.runtime, traversalEnvelope)
   }
 
+  /** U-STAGE-ACTIVE-TAB §5.3.1 consequence 3 / §6 `P-IM-1` — the de-duped
+   *  identical re-mount. It is the NEWEST attempt, so the stage must end up
+   *  displaying it (the dominance clause), while the attempt it superseded is
+   *  counted as ONE drop (the count identity `drops === superseded`). It never
+   *  issues a second query: a still-pending search mount for this key is re-armed
+   *  onto the new generation; a settled one re-applies its cached body. A
+   *  `document`/parked entry's body is already the stage's (the synchronous mount
+   *  applied it), so its de-dupe stays the total no-op §5.3.1 pins. */
+  private reattachStage(entry: TabEntry, key: string, seq: number): void {
+    if (entry.target?.kind !== 'search') return
+    const pending = this.pendingSearchMount
+    if (pending != null && pending.key === key) {
+      if (!pending.counted) {
+        pending.counted = true
+        this.stageMountDropped += 1
+      }
+      pending.seq = seq
+      return
+    }
+    const cached = this.searchResults.get(key)
+    if (cached == null) return
+    if (this.runtime == null || seq !== this.stageMountSeq || this.activeTabId !== entry.id) return
+    this.applyStageBody(searchTabContent(entry, cached))
+  }
+
   /** The search-tab body: re-run the tab's stored query and render the derived
    *  results (HOST-5). Re-runs in place; the tab is not re-created. */
-  private async mountSearchStage(entry: TabEntry): Promise<void> {
+  private async mountSearchStage(entry: TabEntry, seq: number, key: string): Promise<void> {
     const params = entry.search
     const query = params?.query ?? ''
+    const record = { key, entry, seq, counted: false }
+    this.pendingSearchMount = record
     let results: unknown[] = []
     let error: string | null = null
     if (query !== '') {
@@ -1043,7 +1459,27 @@ export class SidebarPanes {
         error = e instanceof Error ? e.message : String(e)
       }
     }
+    if (this.pendingSearchMount === record) this.pendingSearchMount = null
+    // §6 `P-IM-1` — the settled result is cached even when THIS completion is
+    // discarded, so a later de-duped repeat of the same entry can re-establish its
+    // body without re-issuing the query.
+    this.searchResults.set(key, { results, error })
     if (this.runtime == null) return
+    // U-STAGE-ACTIVE-TAB §5.3.1 — the ASYNC GUARD (V1). A superseded attempt
+    // NEVER applies its body: an older completion must not overwrite a newer
+    // active tab's stage. Two independent discriminators, both required:
+    //   (a) the generation — a later `mountTab` (or a `mountTab(null)`) stamped a
+    //       newer sequence, so this attempt is stale;
+    //   (b) the identity — the active tab moved to another entry.
+    // A discarded completion is SILENT at the DOM and a COUNTED drop at the host
+    // (§5.3.1 consequence 2): never a throw, never a console error, never a
+    // rejection. The query itself was still issued (consequence 4).
+    if (record.seq !== this.stageMountSeq || this.activeTabId !== entry.id) {
+      // A re-armed attempt (`reattachStage`) was already counted when the
+      // de-duped repeat superseded it — never twice for one completion.
+      if (!record.counted) this.stageMountDropped += 1
+      return
+    }
     this.applyStageBody(searchTabContent(entry, { results, error }))
   }
 
@@ -1446,7 +1882,15 @@ export class SidebarPanes {
       revealedZones: this.revealedZones,
       // U-EDIT-1 §2.1 (`SidebarPanes._currentDocumentId`) — the surface is
       // authored for the FOCUSED document; `data-edit-surface` carries its id.
-      documentId: this._currentDocumentId ?? undefined,
+      // U-STAGE-ACTIVE-TAB §5.3.3 sub-rule 2 / §5.3.5 — FOCUSED is the ACTIVE
+      // TAB's document, so on a NON-document tab the input is `undefined` and
+      // ZERO surfaces are authored (the §A.1.1 census predicate).
+      // `_currentDocumentId` is NOT a scope source for a mounted tab.
+      // ⟨A.3.1⟩ — the SURFACE is authored from the `stageOwner` predicate alone
+      // (`stageOwnerDocumentScope()`): the ACTIVE document tab's document, or the
+      // PRE-TAB document while no tab state has been handed. The BODY scope
+      // (`stageDocumentScope()`) is a DISTINCT predicate and keeps its semantics.
+      documentId: this.stageOwnerDocumentScope() ?? undefined,
     })
     // Unit L §5.3 — the `readOnly` prop is HOST-SET at render time from
     // `editController.isEditable(ragId)` (the traversal is pure and cannot see
@@ -1481,8 +1925,21 @@ export class SidebarPanes {
    *  only the changed roots via `Runtime.applyContentReconcile` — no teardown,
    *  node identity + graph-resident state survive, the operator pane untouched.
    *  backRefs is recomputed from the new content (Decision 3). */
-  private applyContentChange(traversalEnvelope: LegacyInitialData): void {
+  private applyContentChange(traversalEnvelope: LegacyInitialData, scopedDocumentId?: string | null): void {
     if (!this.runtime) return
+    // U-STAGE-ACTIVE-TAB §5.3.3 — ONE document scope for this seam: the ACTIVE
+    // TAB's document (`null` for a non-document active tab — then no surface and
+    // no document root is authored), else the retained doc-nav selection (the
+    // boot / no-tab states). The SAME value must reach the surface input, the
+    // reconciler's previous/next document ids and the `documents` scope — a
+    // divergence is exactly the stale/foreign scope `FS-7` names.
+    const documentId = (scopedDocumentId !== undefined ? scopedDocumentId : this.stageDocumentScope()) ?? ''
+    // ⟨A.3.1⟩ clause (e) — the SURFACE scope is the DISTINCT `stageOwner`
+    // predicate: on a non-document tab AND on any no-tab state reached after tab
+    // state was handed (`mountTab(null)`) it is `null`, so no surface is authored
+    // (a stale one is destroyed by the reconcile below). The document scope above
+    // stays the BODY/root scope the pinned rows assert.
+    const surfaceScope = this.stageOwnerDocumentScope() ?? ''
     // Assemble the PANE-INCLUSIVE envelope (documents + app-graph panes) so the
     // panes are reconciled alongside the document roots (HOST-PANE-STALE-ON-
     // CONTENT-CHANGE) — not just the `rag-` document subtrees.
@@ -1498,7 +1955,13 @@ export class SidebarPanes {
       revealedZones: this.revealedZones,
       // U-EDIT-1 §2.1 — the surface is re-authored on the content re-derive (a
       // re-derive path that did not author it would make the surface vanish).
-      documentId: this._currentDocumentId ?? undefined,
+      // U-STAGE-ACTIVE-TAB §5.3.3 sub-rule 2 — the re-derive's surface scope is
+      // the ACTIVE TAB's document (§5.3.5's FOCUSED definition); `undefined` when
+      // the active target is not a document.
+      // ⟨A.3.1⟩ clause (e) — the SURFACE scope (the `stageOwner` predicate), NOT
+      // the BODY scope above: they are distinct, and only the former authors a
+      // surface.
+      documentId: surfaceScope === '' ? undefined : surfaceScope,
     })
     const env = assembled.envelope
     // Unit U-EDIT-1 (C8) — keep the app-graph editor toolbar in the reconciled
@@ -1511,7 +1974,6 @@ export class SidebarPanes {
     // `env` is the runtime's `next` payload supply. (The simultaneous
     // multi-document mount is U-SHELL-9b; this host path already accepts N
     // scoped envelopes.)
-    const documentId = this._currentDocumentId ?? ''
     const previous: DocumentRoot[] = this.runtime
       .materializedContentRoots()
       .map((root) => ({ documentId, root }))
@@ -1555,6 +2017,14 @@ export class SidebarPanes {
     change: ReconcileChange | null,
   ): void {
     if (this.runtime == null || documentIds.length === 0) return
+    // U-STAGE-ACTIVE-TAB §A.1.1 — `mountTabs` sets NO active identity of its own:
+    // the surface this seam authors is the ACTIVE document tab's (when it is one
+    // of the open set). With no active document tab it authors NO surface at all
+    // — never "the first document in the list" (the pre-unit reading, and exactly
+    // the `H-3`/`H-1b` census violation).
+    const activeScope = this.stageOwnerDocumentScope()
+    const surfaceDocumentId =
+      activeScope != null && documentIds.includes(activeScope) ? activeScope : null
     // One SCOPED envelope per document (the N-root `next`): §2.7
     // (H3/W2-N12) — scope the authored `props.id` per document so a shared RAG
     // node materialized in two simultaneously-rendered documents yields two
@@ -1590,12 +2060,14 @@ export class SidebarPanes {
       layout: this.layout ?? undefined,
       revealedZones: this.revealedZones,
       // §2.1 Invariant — the FOCUSED document's body is surfaced; every other
-      // mounted document root stays a plain payload root.
-      documentId: perDoc[0].documentId,
+      // mounted document root stays a plain payload root. U-STAGE-ACTIVE-TAB
+      // §A.1.1 — FOCUSED is the ACTIVE document tab (never merely the first
+      // entry of the open set).
+      documentId: surfaceDocumentId ?? undefined,
     })
     const env = assembled.envelope
     // U-EDIT-1 §2.1 Invariant — exactly ONE surface per FOCUSED document: the
-    // assembly authors it for `perDoc[0]` (the focused document) only.
+    // assembly authors it for `surfaceDocumentId` (the active document) only.
     this.applyEditorToolbar(env, this.representationMode)
     // The first document's SCOPED envelope becomes the pane-inclusive assembled
     // env (so pane roots are in the reconcile set) — but it must NOT absorb the
@@ -1611,8 +2083,35 @@ export class SidebarPanes {
         ...perDoc.slice(1).flatMap((d) => d.envelope.content ?? []),
       ],
     }
+    const prevRoots = this.runtime.materializedDocumentRoots()
+    // §A.1.2/§A.4.2 — the reconcile's `previous` MUST carry the per-document
+    // attribution the host AUTHORED. A full re-load (`refresh()`, a non-content
+    // re-derive) attributes every root to the EMPTY document scope
+    // (`src/renderer/runtime.ts:502`), and a stale empty scope makes
+    // `reconcileDocumentRoots` treat a root `next` still authors as
+    // REMOVED (its empty-scope bucket has no next counterpart) — the ACTIVE document's body root
+    // is then DESTROYED while its surface survives ("a pane flip can never excuse
+    // a missing page", §A.4.2 option (ii) rejected). Re-stamp each previous root
+    // from the host's OWN per-document payloads (never from id parsing);
+    // pane-like roots (`pane-*`/`editor-toolbar`/`page-edit-surface`) route
+    // through the reconcile's global cssId bucket regardless of this stamp.
+    const ownerByCssId = new Map<string, string>()
+    const collectRootIds = (envelope: LegacyInitialData, documentId: string): void => {
+      for (const cluster of envelope.content ?? []) {
+        for (const node of (cluster as { content?: { props?: { id?: unknown } }[] }).content ?? []) {
+          const cssId = node?.props?.id
+          if (typeof cssId === 'string' && cssId !== '' && !ownerByCssId.has(cssId)) ownerByCssId.set(cssId, documentId)
+        }
+      }
+    }
+    for (const d of perDoc) collectRootIds(d.envelope, d.documentId)
+    const previous = prevRoots.map((p) => {
+      const cssId = (p.root as unknown as { props?: { id?: unknown } })?.props?.id
+      const owner = typeof cssId === 'string' ? ownerByCssId.get(cssId) : undefined
+      return owner == null || owner === p.documentId ? p : { documentId: owner, root: p.root }
+    })
     const result = reconcileDocumentRoots({
-      previous: this.runtime.materializedDocumentRoots(),
+      previous,
       next: perDoc,
       change,
       documentIds,
@@ -1804,6 +2303,7 @@ export class SidebarPanes {
     }
     this.lastSnapshot = snapshot
     this.lastStore = snapshot.store
+    this.refreshLiveDocumentIds(snapshot)
     // Unit V3 — fetch the doc-heads (the doc-nav's data source). A bridge error
     // ABORTS the boot (the placeholder envelope stays rendered; caught + logged,
     // never a crash — the same discipline as the snapshot fetch).
@@ -1877,6 +2377,12 @@ export class SidebarPanes {
     // doc-head edges (the authoritative source), not `lastDocHeads` (the doc-nav
     // IPC can be empty even when the snapshot has documents). A persisted/
     // selected current document (set before boot) is honored.
+    //
+    // U-STAGE-ACTIVE-TAB §5.2/§A.1.1 — the retained selection IS the boot seam's
+    // document body (the pinned §5.8.7 SCOPED-LOAD + §5.8.29/M6 rows), but it is
+    // NOT a SURFACE scope: the boot seam has NO active tab, so it authors ZERO
+    // surfaces (`I2-R` is total at boot; a surface sourced from the persisted
+    // default is `FS-7`) — see `stageDocumentScope()`.
     const documentIds = this.deriveDocumentIds(snapshot).sort((a, b) => a.localeCompare(b))
     const current = this._currentDocumentId ?? documentIds[0] ?? null
     if (current) this.setCurrentDocumentId(current)
@@ -1940,6 +2446,9 @@ export class SidebarPanes {
       this.lastSnapshot = snapshot
       this.lastDocHeads = docHeads.documents
       this.lastStore = snapshot.store
+      // §A.3.2 ruling C2 — the document-liveness carrier follows the committed
+      // snapshot (a document imported/deleted by the re-derive flips its liveness).
+      this.refreshLiveDocumentIds(snapshot)
       // F2 — refresh the M13 security cache on each re-derive so a runtime
       // security tightening (a group turned OFF after boot) is honored by the
       // handler gates. A bridge error leaves the gate fail-closed (null).
@@ -1957,16 +2466,46 @@ export class SidebarPanes {
       // simultaneously, they are ALL the document scope: a content change must
       // repopulate every mounted root (never unmount a sibling tab).
       const multi = this.mountedDocumentIds.length > 1
+      // U-STAGE-ACTIVE-TAB §5.3.3 (V2/the FS-7 scope gate) — the re-derive's
+      // document scope is the SAME pinned predicate every other seam reads
+      // (`stageDocumentScope()`): the ACTIVE document tab's document, `[]` for
+      // every non-document kind AND for no tab at all. `_currentDocumentId` is
+      // the retained doc-nav selection and is NOT a scope source (H-2: with two
+      // predicates the re-derive and `refresh()` disagreed about the scope in the
+      // pruned state). A `null` activeTargetKind (no tab — the boot / U-LIVE4
+      // landing states) therefore materializes NO document root and NO surface:
+      // the stage keeps its own (landing/empty) body.
+      const nonDocumentActiveTab = this.activeTargetKind != null && this.activeTargetKind !== 'document'
+      // §A.3.1 clause (d) — the STRICT TAB-STATE arm. Once the host has been
+      // handed tab state (`mountTab`/`mountTabs`), a NO-TAB state owns NO stage
+      // document: the pre-tab arm (`_currentDocumentId`) is unavailable FOREVER,
+      // so a content re-derive there must author NO document body root either
+      // (clause (b): `stageOwner(s).kind = 'none'` ⇒ 0 bodies; the pinned
+      // `mountTab(null)` row destroys a stale root). The retained doc-nav
+      // selection keeps its pinned BODY scope (`stageDocumentScope()` — rows
+      // §5.8.7/§5.8.29/M6/N1b), it is simply not a STAGE document: `[]` here
+      // makes `applyContentChange`/`refresh()` re-author nothing and DESTROY the
+      // stale document root instead of resurrecting it. The PRE-TAB state
+      // (`isPreTabState()`) keeps the retained document — the carve-out arm.
+      const noTabStrictArm = this.activeTabId === null && !this.isPreTabState()
       const current = this._currentDocumentId
       const documentIds = multi
         ? [...this.mountedDocumentIds]
-        : current
-          ? [current]
-          : this.deriveDocumentIds(snapshot)
+        : nonDocumentActiveTab
+          ? []
+          : this.openSetDeclared && this.activeTabId === null
+            ? [...this.mountedDocumentIds]
+            : noTabStrictArm
+              ? []
+              : current
+                ? [current]
+                : this.deriveDocumentIds(snapshot)
       // §2.10 (W2-N15) — in the simultaneous multi-document path the stored
       // re-load source MUST be the SCOPED union (the same form `applyDocumentSet`
       // stores), so a non-content re-derive (`refresh()` / `rerenderAppGraph()`)
       // keeps the H3 per-document id scope. Single-document paths stay unscoped.
+      if (this.activeTabId === null) {
+      }
       const traversalEnvelope = multi
         ? this.buildScopedUnionEnvelope(snapshot, documentIds)
         : this.buildTraversalEnvelope(snapshot, documentIds)
@@ -1981,13 +2520,25 @@ export class SidebarPanes {
       // `tearDownGraph` + fresh `render()` destroyed the selection the restore loop
       // had just set on the prior render's elements (a real-browser bug the
       // dom-shim's persistent getElementById masked).
-      this.lastTraversalEnvelope = traversalEnvelope
+      // U-STAGE-ACTIVE-TAB §5.3.3/§5.3.4 — a NON-document active tab has NO
+      // document scope at this seam, so this pass must NOT replace the stored
+      // re-load source: `buildTraversalEnvelope(snapshot, [])` is the EMPTY-STORE
+      // landing envelope, and storing it would make the re-assemble branch below
+      // overwrite the active tab's own body with the landing (V2's mirror-image on
+      // the re-derive seam). The stage keeps the active tab's body (`refresh()`
+      // re-loads the EXISTING stored envelope, which is that body's).
+      const replacesStoredEnvelope = multi || !nonDocumentActiveTab
+      if (replacesStoredEnvelope) this.lastTraversalEnvelope = traversalEnvelope
       // U-STATE-1b — content changes repopulate the document content roots
       // ONLY (no teardown, no operator remount); operator/template/boot keep the
       // full reload path.
       if (kind === 'content' && this.appLoaded) {
+        // §5.3.3 — `applyContentChange` (the SINGLE-document content-only path) is
+        // entered only when a document scope exists; a non-document active tab
+        // reaches the re-assemble branch instead (never a foreign document body).
         if (multi) this.applyDocumentSet(snapshot, documentIds, this.pendingContentChange)
-        else this.applyContentChange(traversalEnvelope)
+        else if (documentIds.length > 0) this.applyContentChange(traversalEnvelope, documentIds[0])
+        else await this.refresh()
       } else {
         await this.refresh()
       }
@@ -2003,11 +2554,16 @@ export class SidebarPanes {
         // id, gated by the rendered control type) is retired with the per-node
         // host: a caret addressed to a per-node root is `FS2` and is dropped by
         // the controller.
-        const pageSubject = this._currentDocumentId ?? PAGE_EDIT_SURFACE_ID
-        const caret = this.editController.restoreCaret(pageSubject)
-        if (caret !== undefined) {
-          const surface = typeof document === 'undefined' ? null : document.getElementById(PAGE_EDIT_SURFACE_ID)
-          if (surface) this.restorePageCaret(surface as HTMLElement, caret)
+        // U-STAGE-ACTIVE-TAB §5.3.5 item 3 — the page subject is the TAB id
+        // (§5.3.2), and the restore is attempted ONLY when the surface actually
+        // exists in the DOM (targeting a missing `#page-edit-surface` was a silent
+        // no-op — the audit's V4 note; on a non-document tab there IS no surface,
+        // so nothing is attempted).
+        const pageSubject = this.activeTabId ?? PAGE_EDIT_SURFACE_ID
+        const surface = typeof document === 'undefined' ? null : document.getElementById(PAGE_EDIT_SURFACE_ID)
+        if (surface) {
+          const caret = this.editController.restoreCaret(pageSubject)
+          if (caret !== undefined) this.restorePageCaret(surface as HTMLElement, caret)
         }
       }
     } finally {
@@ -2313,6 +2869,17 @@ export class SidebarPanes {
     return [...new Set(edges.filter((e) => e.kind === 'doc-head').map((e) => e.target))]
   }
 
+  /** §A.3.2 ruling C2 — recompute the DOCUMENT-LIVENESS carrier from a committed
+   *  snapshot (the `doc-head` document ids, the same source `deriveDocumentIds`
+   *  reads). Called wherever the snapshot is committed (boot + the re-derive), so
+   *  `isDocumentLive()` never depends on `backRefs` — whose invariant
+   *  (`Map<ragNodeId, nodeId[]>`) stays unrelaxed. Malformed entries are ignored. */
+  private refreshLiveDocumentIds(snapshot: RagSnapshotPayload): void {
+    this.liveDocumentIds = new Set(
+      this.deriveDocumentIds(snapshot).filter((id): id is string => typeof id === 'string' && id !== ''),
+    )
+  }
+
   /** AD-2026-09-14-4 (Finding 4) — ensure the targeted traversal zone
    *  (`this.zoneName`, default `'main'`) has a container producer in the
    *  envelope template, mirroring `buildTraversal`'s ZONE-CONSISTENCY-ENSURE
@@ -2487,6 +3054,18 @@ export class SidebarPanes {
     if (commitUi != null) {
       commitUi.placement = { targetPlacement: [this.zoneName] }
       envelope.content.push({ content: [commitUi] })
+    }
+    // U-EDIT-1 (C9) §3.5 item 4/6 (`M3`) — the per-TAB page-commit warning's
+    // RENDERED consumer: the ACTIVE tab's host-side failure record is re-authored
+    // into the app graph on EVERY assembly (provident data, never hand-written
+    // DOM), so a failed page commit is user-visible and survives every re-derive
+    // path by construction — and it can never enter §3.2's closed compared-field
+    // set, because being host state it is not a RAG node at all (`FS8`/`FS17`).
+    // No second warning affordance is invented: this is the `TAB-1` class's
+    // stage half, bound to the same named `commit-failed` state (§4.5).
+    const pageFailure = this.pageCommitFailure.get(this.pageEditSurfaceHandlerSubject())
+    if (pageFailure !== undefined) {
+      envelope.content.push({ content: [pageCommitWarningContent(pageFailure, this.zoneName)] })
     }
   }
 
@@ -3128,55 +3707,256 @@ export class SidebarPanes {
 
   /** U-EDIT-1 (C9) §2.1/§3.4 — THE PAGE SURFACE SEAMS. The single surface's
    *  `page-edit-surface-input`/`-blur` handler bodies reach these. The dirty
-   *  state is keyed by the PAGE SUBJECT (the focused document / its tab id) —
-   *  one page dirty per tab — and the blur commits the page through the SAME
-   *  one-batch path (`bridge.edit.batch`), never a per-node write. §3.5 item 1/2:
-   *  a FAILED commit leaves the store untouched, KEEPS the dirty flag (the text
-   *  is the user's only copy), records the typed failure in HOST-SIDE state
-   *  (§3.5 item 6 — never a rendered class) and is NEVER auto-retried (§3.5
-   *  item 7). */
+   *  state is keyed by the PAGE SUBJECT — the ACTIVE TAB id (§6.4 item 1: "one
+   *  page dirty per tab"; `design-extensions-review` §12.4: every dirty state is
+   *  per tab, never per document, so two tabs on the SAME document share
+   *  neither), falling back to the focused document when no tab is mounted — and
+   *  the blur commits the page through the SAME one-`applyBatch` path
+   *  (`bridge.edit.batch`, §3.3 items 1/2), never a per-node write. §3.5
+   *  item 1/2: a FAILED commit leaves the store untouched, KEEPS the dirty flag
+   *  (the text is the user's only copy), records the typed failure in HOST-SIDE
+   *  state (§3.5 item 6 — never a rendered class) and is NEVER auto-retried
+   *  (§3.5 item 7). */
   private pageEditSurfaceHandlerSubject(): string {
-    return this._currentDocumentId ?? PAGE_EDIT_SURFACE_ID
+    // U-STAGE-ACTIVE-TAB §5.3.2 — the subject is the ACTIVE TAB id, falling back
+    // to `PAGE_EDIT_SURFACE_ID` iff there is no active tab. NEVER a document id:
+    // two tabs on the SAME document therefore share neither the dirty flag, nor
+    // the failure record, nor the caret slot (the I1 identity + isolation
+    // clauses); `_currentDocumentId` is not a subject source.
+    return this.activeTabId ?? PAGE_EDIT_SURFACE_ID
   }
 
   /** §3.5 item 6 — the per-tab page-commit state (HOST-SIDE state keyed by tab
    *  id, never a rendered class/attribute/innerHTML: a warning that exists only
    *  as a DOM class is `FS17`). Read by the tab-strip warning (C10 `TAB-1`) and
-   *  by the stage's own typed warning; both survive every re-derive by
+   *  by the stage's own authored warning; both survive every re-derive by
    *  construction. The `subject` is the tab id (the per-page dirty key). */
-  private pageEditSurfaceCommitState(subject: string): { subject: string; dirty: boolean; failure?: string } {
+  private pageEditSurfaceCommitState(subject: string): { subject: string; dirty: boolean; failure?: CommitFailure } {
+    const failure = this.pageCommitFailure.get(subject)
     return {
       subject,
       dirty: this.editController.isDirty(subject),
-      ...(this.pageCommitFailure.has(subject) ? { failure: this.pageCommitFailure.get(subject) } : {}),
+      ...(failure !== undefined ? { failure } : {}),
     }
   }
 
   /** §3.5 item 6 — the per-tab page-commit FAILURE record (host-side state;
-   *  never a DOM class). Read by the `TAB-1` warning (C10) and the stage's typed
-   *  warning; it survives every re-derive by construction because no re-derive
-   *  path touches this map. */
-  private pageEditSurfaceFailure(subject: string): string | undefined {
+   *  never a DOM class). Read by the `TAB-1` warning (C10) and re-authored into
+   *  the app graph as the stage's typed warning (`pageCommitWarningContent`); it
+   *  survives every re-derive by construction because no re-derive path touches
+   *  this map. */
+  private pageEditSurfaceFailure(subject: string): CommitFailure | undefined {
     return this.pageCommitFailure.get(subject)
+  }
+
+  /** U-STAGE-ACTIVE-TAB §5.3.3/§5.3.5 — the DOCUMENT SCOPE of the stage/surface
+   *  seams. When a tab IS mounted the scope follows the ACTIVE TAB's kind: its
+   *  document for a `document` tab, `null` for EVERY other kind (so a non-document
+   *  tab authors no surface and materializes no document body). With NO tab
+   *  mounted (`activeTabId === null` — the boot / pre-tab states) the RETAINED
+   *  legacy focus applies (the doc-nav selection / persisted default), which is
+   *  what the app graph is assembled for at boot: that no-tab boot behavior is
+   *  PINNED by `tests/sidebar-panes-host.test.ts` §5.8.7/§5.8.29 and by the
+   *  `unit-u-shell-9b-*` boot censuses, and §A.1.1's boot census of ZERO surfaces
+   *  contradicts them (a reported spec/pinned-green conflict, NOT resolvable in
+   *  this unit without re-deriving those listed greens — §7.2/§7.4). */
+  private stageDocumentScope(): string | null {
+    if (this.activeTabId == null) return this._currentDocumentId
+    return this.activeTargetKind === 'document' ? this.activeDocumentId : null
   }
 
   /** `page-edit-surface-input`: mark the PAGE dirty (one dirty page per tab). */
   private pageEditSurfaceInput(): void {
-    this.editController.markDirty(this.pageEditSurfaceHandlerSubject())
+    const subject = this.pageEditSurfaceHandlerSubject()
+    this.pageSubjects.add(subject)
+    this.editController.markDirty(subject)
   }
 
-  /** `page-edit-surface-blur`: the page commit. §3.4 step 3 — ONE batch payload;
-   *  success clears the dirty flag + the failure record, a failure keeps both. */
-  private pageEditSurfaceBlur(_html: string): void {
+  /** §3.5 item 3/§11.8 item 3 — a tab that is no longer open drops ONLY its own
+   *  page state (its dirty flag + its failure record); every other tab's page
+   *  state survives verbatim (`FS23`'s class: another tab's activity must never
+   *  clear or replace this one's). The page subject then follows the open set. */
+  private prunePageState(openTabIds: string[]): void {
+    for (const subject of [...this.pageSubjects]) {
+      if (openTabIds.includes(subject)) continue
+      this.invalidatePageSubject(subject)
+      this.editController.clearDirty(subject)
+      this.pageSubjects.delete(subject)
+      this.pageCommitFailure.delete(subject)
+    }
+    // §5.2/§A.1.1 — the identity is ONE triple (`H-1`): a pruned ACTIVE tab
+    // clears `activeTabId` AND its kind/document mirror, so "no tab + a non-null
+    // kind" is not representable and no seam can read a stale document scope. The
+    // open set holds tab IDS only, so no identity is re-pointed here: the strip's
+    // own `mountTab` establishes the next active tab (§5.4 state 4).
+    if (this.activeTabId !== null && !openTabIds.includes(this.activeTabId)) {
+      this.activeTabId = null
+      this.activeTargetKind = null
+      this.activeDocumentId = null
+    }
+  }
+
+  /** §3.5 item 4/§11.8 item 3 — re-author the app graph so the per-tab
+   *  `commit-failed` warning is VISIBLE where it stands (the `TAB-1` class's stage
+   *  half), instead of waiting for some unrelated later assembly to author it.
+   *  The path is the CONTENT reconcile: the document roots are COMPARED, not
+   *  rebuilt, so the page's own DOM text — the user's only copy after a failure —
+   *  is never discarded (`FS16`), while the warning root is attested/detached in
+   *  place through the managed channel (provident data, never a hand-written DOM
+   *  node, `FS17`). */
+  private reauthorPageCommitWarning(): void {
+    if (this.runtime == null || !this.appLoaded || this.lastTraversalEnvelope == null) return
+    // the simultaneous multi-document mount reconciles per document
+    // (`applyDocumentSet`, driven by the RAG broadcast): the warning is authored
+    // by that path's next assembly rather than mis-scoped here.
+    if (this.mountedDocumentIds.length > 1) return
+    this.applyContentChange(this.lastTraversalEnvelope, this.stageDocumentScope() ?? '')
+  }
+
+  /** §3.5 item 3/§11.8 item 3 — drop the page state of the tabs a CLOSE actually
+   *  dropped (the strip's `close` seam publishes each closed id, drained by
+   *  `mountTab`): exactly those subjects, never another tab's (`FS23`'s class).
+   *  The surviving tabs keep their dirty flag AND their failure record verbatim. */
+  private dropClosedPageState(closedTabIds: string[]): void {
+    for (const subject of closedTabIds) {
+      this.invalidatePageSubject(subject)
+      this.editController.clearDirty(subject)
+      // H-4/§5.1 I1 caret-viability (`FS-6`, `P-TP-2`'s wrong-document
+      // discriminator): the closed tab's page CARET is its page state too — the
+      // strip's id allocator re-mints a closed LAST tab's id, so a surviving caret
+      // under that id would be restored against the NEW tab's document. Dropped
+      // with the dirty flag + the failure record, and only for the closed subject.
+      this.editController.clearCaret(subject)
+      this.pageSubjects.delete(subject)
+      this.pageCommitFailure.delete(subject)
+    }
+    if (this.activeTabId !== null && closedTabIds.includes(this.activeTabId)) this.activeTabId = null
+  }
+
+  /** U-EDIT-1 (C9) §11.8 item 3 — the subject's current page-state generation
+   *  (`0` for a subject that never had a page state). */
+  private pageSubjectStamp(subject: string): number {
+    return this.pageSubjectSeq.get(subject) ?? 0
+  }
+
+  /** U-EDIT-1 (C9) §11.8 item 3 — DRAIN this subject: bump its generation so
+   *  every commit still in flight for it is discarded on resolution instead of
+   *  re-entering the state of a drained (or id-reused) tab. */
+  private invalidatePageSubject(subject: string): void {
+    this.pageSubjectSeq.set(subject, this.pageSubjectStamp(subject) + 1)
+  }
+
+  /** §3.4 step 5 — a successful commit (or a no-op commit, §7 `P-TP-2`) clears
+   *  the page state: the tab is `clean` and the warning's map entry is DELETED
+   *  (§3.5 item 6). A warning that was actually present is re-authored OUT of the
+   *  graph in the same step (the post-commit re-render), so the host state and the
+   *  assembled graph never disagree (`FS17`). */
+  private clearPageState(subject: string): void {
+    const hadWarning = this.pageCommitFailure.delete(subject)
+    this.editController.clearDirty(subject)
+    this.pageSubjects.delete(subject)
+    if (hadWarning) this.rerenderAppGraph()
+  }
+
+  /** §3.5 items 1/2 + §3.6 — a failed commit KEEPS the dirty flag (the text is
+   *  the user's only copy) and records the typed failure for THAT tab only. The
+   *  record is HOST-SIDE STATE — no element/class/attribute is touched anywhere
+   *  (`FS17`), which is why this seam's name carries no DOM-shaped verb. The
+   *  record is re-authored into the app graph IMMEDIATELY (§3.5 item 4: the state
+   *  is user-visible where it stands) through `reauthorPageCommitWarning`, which
+   *  is also what makes it survive every later re-derive by construction
+   *  (§3.5 item 6). */
+  private recordPageFailure(subject: string, failure: CommitFailure): void {
+    this.pageSubjects.add(subject)
+    this.pageCommitFailure.set(subject, failure)
+    this.reauthorPageCommitWarning()
+  }
+
+  /** `page-edit-surface-blur`: the page commit. §3.4 step 2/3 — the surface is
+   *  decoded and diffed by the ADAPTER (`src/main/page-diff.ts`: `decodePage` +
+   *  `buildPageOps` over the store snapshot) and the op list is sent as ONE
+   *  `bridge.edit.batch` payload. The returned `BatchResult` is READ (§3.3
+   *  item 6): success clears the page state, failure keeps the dirty flag + the
+   *  text and records the typed failure — never a retry (§3.5 item 7). */
+  private pageEditSurfaceBlur(html: string): void {
     const subject = this.pageEditSurfaceHandlerSubject()
     if (!this.editController.isDirty(subject)) return
-    void this.editController.commit(subject, _html).then((result) => {
-      if (result.ok) {
-        this.pageCommitFailure.delete(subject)
-      } else {
-        this.pageCommitFailure.set(subject, result.error ?? result.reason)
-      }
-    })
+    void this.commitPageEdit(subject, html)
+  }
+
+  private async commitPageEdit(subject: string, html: string): Promise<void> {
+    // §3.4 step 2/3 + U-STAGE-ACTIVE-TAB §5.3.3 — the committing DOCUMENT is the
+    // stage/surface scope: the ACTIVE TAB's document (the documented legacy
+    // focus only when NO tab is mounted). The doc-nav selection moves
+    // `_currentDocumentId` independently of the active tab, so reading it here
+    // would refuse the user's own page ("names doc-1 but the commit is scoped to
+    // doc-3") or write the page into a document the user is not editing.
+    const documentId = this.stageDocumentScope() ?? ''
+    // §11.8 item 3 — the subject's generation at the moment the commit starts.
+    // Every resolution after the await is DROPPED when the tab was drained (or
+    // its id reused) in flight — never applied to the fresh subject.
+    const stamp = this.pageSubjectStamp(subject)
+    const superseded = (): boolean => this.pageSubjectStamp(subject) !== stamp
+    const decoded = decodePage(html)
+    if (!decoded.ok) {
+      this.recordPageFailure(subject, { kind: 'decompose-failed', message: decoded.message })
+      return
+    }
+    const snapshot = this.lastSnapshot
+    if (snapshot == null) {
+      this.recordPageFailure(subject, {
+        kind: 'not-resident',
+        message: 'the document is not resident in this store (no store snapshot is loaded)',
+      })
+      return
+    }
+    const built = buildPageOps(decoded, snapshot, documentId)
+    if (!built.ok) {
+      this.recordPageFailure(subject, { kind: 'decompose-failed', message: built.message })
+      return
+    }
+    if (built.ops.length === 0) {
+      // §7 `P-TP-2` — a commit of an unchanged page is a NO-OP: no batch is sent
+      // and the tab is `clean` (a no-op commit never sets `commit-failed`).
+      this.clearPageState(subject)
+      return
+    }
+    const batch = this.bridge.edit?.batch
+    if (typeof batch !== 'function') {
+      this.recordPageFailure(subject, {
+        kind: 'engine-unavailable',
+        message: 'the edit-batch seam is unavailable on this bridge',
+        engineCause: 'unavailable-state',
+      })
+      return
+    }
+    let result: BatchResult
+    try {
+      result = await batch.call(this.bridge.edit, built.ops)
+    } catch (err) {
+      if (superseded()) return
+      // §3.5 item 5 — an engine rejection keeps the ENGINE's OWN cause class
+      // (`EngineUnavailable.cause`), never a fabricated one.
+      const engineCause = engineUnavailableCause(err)
+      this.recordPageFailure(subject, {
+        kind: 'engine-unavailable',
+        message: err instanceof Error ? err.message : String(err),
+        ...(engineCause !== undefined ? { engineCause } : {}),
+      })
+      return
+    }
+    // §11.8 item 3 — a resolution whose subject was drained/reused in flight is
+    // discarded, never applied to the fresh tab holding that id.
+    if (superseded()) return
+    // §3.3 item 6/§3.6 (`FS19`) — read the result, never `ok` alone: success
+    // requires an ACKNOWLEDGED write (exactly one agreeing `BatchOpResult` per op).
+    if (isAcknowledgedBatch(result, built.ops)) {
+      this.clearPageState(subject)
+      return
+    }
+    // §3.5 item 5 — `store-rejected` carries the `BatchResult`'s `error` /
+    // `failedIndex` VERBATIM, and fabricates neither on an absent/malformed one.
+    this.recordPageFailure(subject, storeRejectedFailure(result))
   }
 
   /** Re-resolve a `RichCaretEdge.path` (child-index steps) from `root`. Returns

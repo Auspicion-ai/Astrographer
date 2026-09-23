@@ -55,6 +55,26 @@ const EMPTY_CONTEXT: TabStripContext = { hasStore: false, documents: [] }
 
 /** The shell tab-strip controller. DOM-touching but fail-soft: an absent mount
  *  still holds valid `TabState` (node/test environments never throw). */
+
+/** `C9 U-EDIT-1` §3.5 item 3/§11.8 item 3 — the ONE production CLOSE seam's
+ *  publication of the closed tab id. The strip never tells the host "tab X
+ *  closed": `close()` re-fires `onActiveChange(this.active())`, so closing a
+ *  NON-active tab is invisible on the active-entry seam alone (the tab-ownership
+ *  audit's §1.1). The closed id is published here and drained by the host's
+ *  `mountTab` — the very next observation the strip makes on every commit —
+ *  which then drops EXACTLY that tab's page state (its dirty flag + its failure
+ *  record) and no other tab's. */
+const closedTabIds: string[] = []
+
+/** Publish a closed tab id to the host's per-tab page-state reconciliation. */
+export function notifyTabClosed(id: string): void {
+  if (typeof id === 'string' && id !== '') closedTabIds.push(id)
+}
+
+/** Drain the tab ids closed since the last drain (the host's `mountTab` seam). */
+export function drainClosedTabIds(): string[] {
+  return closedTabIds.splice(0, closedTabIds.length)
+}
 export class TabStrip {
   private readonly mount: HTMLElement | null
   private readonly getContext: () => TabStripContext
@@ -153,9 +173,12 @@ export class TabStrip {
     return this.getState()
   }
 
-  /** Close a tab; when the set empties, re-default the first tab (§2.4/F4). */
+  /** Close a tab; when the set empties, re-default the first tab (§2.4/F4). The
+   *  closed id is published to the host's page-state seam (§3.5 item 3): an
+   *  unknown id is a no-op and publishes nothing. */
   close(id: string): TabState {
     const closed = closeTab(this.state, id)
+    if (closed !== this.state) notifyTabClosed(id)
     this.commit(closed.open.length === 0 ? ensureFirstTab(closed, this.getContext()) : closed)
     return this.getState()
   }
