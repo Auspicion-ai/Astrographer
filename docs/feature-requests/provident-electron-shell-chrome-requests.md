@@ -5,6 +5,12 @@
 **Companion handoffs:** `docs/HANDOFF.md` (the index), `docs/specs/astrographer-scope-realignment-review.md` (the gate ruling),
 `docs/feature-requests/gnosis-engine-feature-requests.md` (the sibling engine set GR-1..GR-9), `docs/FORK-DIVERGENCE.md`,
 `docs/pending.md`.
+**Implementation-side companion (2026-09-22):** `docs/feature-requests/provident-electron-shell-chrome-handoff.md` — the
+`SCH-1..SCH-13` work package that turns this request set into an ordered, adoptable queue of foundation mechanisms with
+per-item acceptance criteria and the Astrographer-side adoption path. It **adds no prose to this document's requests**:
+each `SCH-n` cites its `SC-n` and supplies only the implementation/queue/adoption layer. Of its thirteen items, **six are
+marked `NEW — NOT GATED`** (`SCH-6/7/8/9/10/11`) — they are filed as separate, declinable units because no `SC-n` clause
+covers them, and each needs its own filing decision rather than a silent extension of the set below.
 
 > **Target project:** `Provident-Electron` — the Electron/MCP **foundation build** this repo forked, shipped at
 > `/media/ryanr/Shared Files/Projects/Provident-Electron` (adjacent folder, not a dependency). Its work queue
