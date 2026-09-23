@@ -27,10 +27,16 @@
 //     carries the traversal-derived `data-doc-head` marker and its own authored
 //     id, and it is NOT re-parented into a section
 //     (`DOC-HEAD-CONTAINS-FIRST-PARAGRAPH`).
-//   - §5.1 the textarea tombstone (UNCHANGED by the amendment, §11.7's closing
-//     clause): the traversal keeps ONE child at the `textarea-<ragId>` position
-//     so the fence's child list holds unchanged, but the child is INERT
-//     (`hidden: true`, `readOnly: true`, NO handler defs) — `FS21`.
+//   - §5.1 as AMENDED 2026-09-21 (§11 amendment `11.9` item 2): **the tombstone
+//     is DROPPED.** `src/main/traversal.ts` `buildSubtree` stops authoring the
+//     `type: 'textarea'` child ENTIRELY — no `textarea-<ragId>` id, no
+//     `hidden`/`readOnly` props, no authoring slot, no handler. **No textarea
+//     child is authored at all**, so the rendered-DOM census is zero `<textarea>`
+//     in the stage region and `ST-6`'s user-visible outcome becomes TRUE rather
+//     than asserted-around. `FS21` is RESTATED accordingly (§8.1): an authored
+//     `type: 'textarea'` child, a `textarea-<ragId>` id, a `rag-textarea-*`
+//     handler name, or a rendered `<textarea>` in the stage region is now ITSELF
+//     the fail-state — there is no "inert artifact" to tolerate.
 //   - §6.5 item 1 (the red-set obligation: the single surface) and §6.5 item 4
 //     (the textarea removal).
 //
@@ -44,10 +50,12 @@
 //   S3  a document whose block owns doc-children (a table with cells)
 //   S4  a rich block carrying inline children (strong/a)
 //   S5  a document materialized into a zone that also carries panes
-//   S6  the tombstone child at its authored position (fence-compatible)
+//   S6  the post-tombstone child list at the position the removal emptied
 //   S7  a simultaneous MULTI-document mount (only the focused document surfaced)
 // Fail-states covered: `FS1` (more than one editable root / a body element
-//   outside the surface), `FS21` (a rendered or handler-carrying tombstone).
+//   outside the surface), `FS21` (AN authored `type: 'textarea'` child /
+//   `textarea-<ragId>` id / `rag-textarea-*` handler name, or a rendered
+//   `<textarea>` in the stage region).
 //
 // The head↔body ARROW-KEY caret crossing (§2.2 item 4), the painted monospace
 // markdown mode (§8.3 item 4) and the zero-rendered-textarea LIVE census (§8.3
@@ -260,14 +268,38 @@ function docHeadRoot(env: LegacyInitialData): LegacyNodeData | undefined {
   return appGraphNodes(env).find((n) => (n.props as Record<string, unknown> | undefined)?.['data-doc-head'] === true)
 }
 
-/** True when the authored node is a textarea (the §5.1 tombstone position). */
+/** True when the authored node is a textarea (§5.1/§11.9 item 2: nothing is). */
 function isTextareaChild(node: LegacyNodeData): boolean {
   return node.type === 'textarea'
 }
 
-/** Every authored textarea child in the assembled app graph. */
+/** Every authored textarea child in the assembled app graph — the `FS21` census,
+ *  whose pinned value is ZERO. */
 function textareaChildren(env: LegacyInitialData): LegacyNodeData[] {
   return appGraphNodes(env).filter(isTextareaChild)
+}
+
+/** Every authored textarea child in the TRAVERSAL envelope — the authoring site
+ *  the tombstone used to live at (`buildSubtree`). `FS21` reads the authored
+ *  envelope AND the DOM, so both are censused. */
+function traversalTextareaChildren(env: LegacyInitialData): LegacyNodeData[] {
+  const out: LegacyNodeData[] = []
+  for (const payload of env.content ?? []) {
+    for (const root of payload.content ?? []) collectAuthored(root, out)
+  }
+  return out.filter(isTextareaChild)
+}
+
+/** Every authored `textarea-<ragId>` / `rag-textarea-*` token anywhere in an
+ *  authored envelope's serialized shape — the retired id-namespace class and the
+ *  retired handler names (§5 item 6, §6.3 row 19). */
+function retiredTextareaTokens(env: LegacyInitialData): string[] {
+  const serialized = JSON.stringify(env)
+  const tokens: string[] = []
+  const re = /textarea-[^"\\]*|rag-textarea-[^"\\]*/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(serialized)) !== null) tokens.push(m[0])
+  return tokens
 }
 
 /**
@@ -293,9 +325,9 @@ function ragIdsWithin(surface: LegacyNodeData | undefined): string[] {
  * row: "the doc-head/title element first, then the body blocks the stage
  * renders (sections, their blocks, table cells and the rich blocks' inline
  * children), in document order"; the Scope row repeats "including table
- * cells"). De-duplicated in first-seen order: the `textarea-<ragId>` tombstone
- * carries the SAME `data-rag-node-id` as the block it sits in (§5.1), so the
- * raw walk yields duplicates.
+ * cells"). De-duplicated in first-seen order. (Under the DROPPED tombstone the
+ * walk no longer sees the duplicated `textarea-<ragId>` mirror at all —
+ * §11 amendment `11.9` item 2 — so the de-duplication is defensive only.)
  */
 function ragIdsInSubtree(surface: LegacyNodeData | undefined): string[] {
   if (surface == null) return []
@@ -585,56 +617,70 @@ describe('§2.2 ST-3 — the doc-head is a sibling of the body blocks, inside th
 })
 
 // ===========================================================================
-// §5.1 — the textarea tombstone (`FS21`, the fence-compatible interim).
-// UNCHANGED by the 2026-09-21 amendment (§11.7's closing clause): the
-// tombstone's resolution for the `textarea-<ragId>` child is not re-derived,
-// and the tombstone row STAYS.
+// §5.1 — the DROPPED textarea tombstone (`FS21`, restated 2026-09-21).
+// §11 amendment `11.9` item 2: the removal, not the disguise — the traversal
+// authors NO textarea child at all, the `textarea-<ragId>` id class retires,
+// and the rendered-DOM census is zero. The fence row this tombstone existed to
+// satisfy is RE-PLANNED (§6.5; `tests/traversal.test.ts`, one row, one file).
 // ===========================================================================
-describe('§5.1 — the traversal textarea child is an inert tombstone', () => {
-  it('state S6 — the tombstone is authored at its child position so the fence child list holds', async () => {
+describe('§5.1/FS21 — no textarea child is authored at all, in the traversal envelope or the app graph', () => {
+  it('state S6 — the child list at the retired `textarea-<ragId>` position carries NO textarea entry', async () => {
     const r = await render()
     try {
       const titleRoot = ragRoots(r.envelope).find((n) => ragIdOf(n) === 'title')
       const childIds = ((titleRoot?.children ?? []) as LegacyNodeData[]).map((c) => authoredId(c))
-      expect(childIds).toContain('textarea-title')
+      // the position the tombstone occupied is now simply empty of it
+      expect(childIds).not.toContain('textarea-title')
+      expect(childIds.filter((id): id is string => typeof id === 'string' && id.startsWith('textarea-'))).toEqual([])
+      // NON-VACUITY: the child list itself is not empty, so the absence above
+      // discriminates (the root still authors its body).
+      expect(childIds.length).toBeGreaterThan(0)
     } finally {
       release(r)
     }
   })
 
-  it('FS21 — every tombstone is hidden AND readOnly (a non-rendered, non-interactive artifact)', async () => {
-    const r = await render()
+  it('FS21 — ZERO authored `type: \'textarea\'` children in the assembled app graph', async () => {
+    const r = await render({ table: true, rich: true })
     try {
-      const tombstones = textareaChildren(r.envelope)
-      expect(tombstones.length).toBeGreaterThan(0)
-      for (const t of tombstones) {
-        const props = t.props as Record<string, unknown>
-        expect(props.hidden).toBe(true)
-        expect(props.readOnly).toBe(true)
+      expect(textareaChildren(r.envelope)).toEqual([])
+    } finally {
+      release(r)
+    }
+  })
+
+  it('FS21 — ZERO authored textarea children in the TRAVERSAL envelope (the authoring site is cleared too)', async () => {
+    const r = await render({ table: true, rich: true })
+    try {
+      expect(traversalTextareaChildren(r.traversal.envelope as LegacyInitialData)).toEqual([])
+    } finally {
+      release(r)
+    }
+  })
+
+  it('FS21 — no authored node carries the retired `textarea-<ragId>` id or a `rag-textarea-*` handler name', async () => {
+    const r = await render({ table: true, rich: true })
+    try {
+      expect(retiredTextareaTokens(r.envelope)).toEqual([])
+      expect(retiredTextareaTokens(r.traversal.envelope as LegacyInitialData)).toEqual([])
+      for (const node of appGraphNodes(r.envelope)) {
+        const names = ((node.handlers ?? []) as Array<{ name?: unknown }>).map((h) => String(h.name))
+        for (const name of names) expect(name).not.toMatch(/^rag-textarea-/)
       }
     } finally {
       release(r)
     }
   })
 
-  it('FS21 — no tombstone carries a handler def (the per-node editing capability is gone)', async () => {
-    const r = await render()
+  it('FS21 — the RENDERED DOM census is ZERO `<textarea>` in the stage region', async () => {
+    const r = await render({ table: true, rich: true })
     try {
-      const handlers = textareaChildren(r.envelope).flatMap((t) => (t.handlers ?? []) as unknown[])
-      expect(handlers).toEqual([])
-    } finally {
-      release(r)
-    }
-  })
-
-  it('FS21 — no tombstone binds a per-node value/props id outside the tombstone id namespace', async () => {
-    const r = await render()
-    try {
-      for (const t of textareaChildren(r.envelope)) {
-        const props = t.props as Record<string, unknown>
-        expect(String(props.id).startsWith('textarea-')).toBe(true)
-        expect(props.value).toBeUndefined()
-      }
+      const { mount } = mountAppGraph(r.envelope)
+      expect(mount.querySelectorAll('textarea')).toHaveLength(0)
+      // NON-VACUITY: the mount really did materialize the document, so the zero
+      // census is not an empty-render artifact.
+      expect(mount.querySelectorAll('[data-rag-node-id]').length).toBeGreaterThan(0)
+      expect(mount.querySelectorAll('[contenteditable]')).toHaveLength(1)
     } finally {
       release(r)
     }

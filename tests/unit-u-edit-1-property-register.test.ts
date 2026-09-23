@@ -31,11 +31,33 @@
 // `setProps`/`setSubtree`/`setType` at the red pass); the implementation landed
 // at commit `15cbc6c`, so these rows are the GREEN verification of that
 // obligation now.
+//
+// RE-DERIVED 2026-09-21 (§11 amendment `11.9` item 1): the **test-local decode
+// and diff this file used to carry are DELETED** (§6.2: "a suite that
+// re-imports `src/main/rich-decompose.ts` or reconstructs the decode in the test
+// file is a review finding"). Every decode/diff draw now goes through the
+// ADAPTER `src/main/page-diff.ts` (`decodePage` / `buildPageOps` — the ONLY
+// module that imports the adopted `provident-editable@0.2.0`), which is the
+// module under test and the package's own oracle for the structural half.
+//
+// The three vacuous rows are AMENDED so each is falsifiable (§11 amendment
+// `11.9` item 5):
+//   - `P-SM-1` CONSTRUCTS the `commit-failed` state for ALL FIVE
+//     `CommitFailure.kind`s (4 draws per kind × 5 = 20, + 2 controls = 22 — the
+//     internal re-tally of its own 22-attempt allocation);
+//   - `P-SM-2` carries a DISCRIMINATING WITNESS (a concurrently `clean` tab and
+//     a concurrently `uncommitted` tab in the SAME draw) against the
+//     CONSTRUCTED record, so an oracle returning a constant fails the row;
+//   - `P-IM-1` draws a PROPS-ONLY change (RAG-owned) AND a runtime-prop-only
+//     control that must produce NO op.
+// The row count stays 7, the seed stays `0xED170001`, the per-row ceiling stays
+// ≤100 and the total stays `63 × 6 + 22 = 400`.
 import { describe, it, expect } from 'vitest'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { decomposeRichHtml } from '../src/main/rich-decompose.js'
+import { decodePage, buildPageOps, type PageDiffSnapshot } from '../src/main/page-diff.js'
+import type { RagSnapshotPayload } from '../src/shared/types.js'
 import {
   createJsonRagStore,
   type RagStore,
@@ -120,11 +142,21 @@ function report(result: RowResult): void {
 }
 
 // ===========================================================================
-// fixtures + the decode/diff oracle (the reference implementation of §3.1/§3.2)
+// fixtures + the PAGE draws (the decode/diff go through the ADAPTER — §3.1)
 // ===========================================================================
-const RAG_NODE_TYPES: RagNodeType[] = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'em', 'a', 'img', 'div', 'table', 'thead', 'tr', 'td', 'th']
 /** The type-change pool for the type-apply rows (includes the `td`→`th` change §7 names). */
 const TYPE_POOL: RagNodeType[] = ['h1', 'h2', 'p', 'li', 'blockquote', 'pre', 'td', 'th', 'div']
+/**
+ * The tags a drawn PAGE may carry: the types that are BOTH `RagNodeType`
+ * members and members of the package's closed block set (§3.1 — the package has
+ * no `table`/`thead`/`tr`/`td`/`th`, and the adapter REFUSES such a block rather
+ * than retyping it, §3.2). The rows that DRAW A PAGE therefore restrict their
+ * type pool to this set; the store-only rows (`P-IM-3`) keep the table types the
+ * §7 proposition names (`td`→`th`), which never enter a decode.
+ */
+const PAGE_TYPE_POOL: RagNodeType[] = ['h1', 'h2', 'h3', 'p', 'li', 'blockquote', 'pre', 'code', 'div', 'ul', 'ol']
+/** The runtime props the §3.1 NOT-diffed list excludes — never compared. */
+const RUNTIME_PROP_KEYS = ['contenteditable', 'data-edit-surface', 'data-node-id', 'data-doc-head', 'style', 'class']
 
 function makeNode(id: string, type: RagNodeType, content: string, overrides: Partial<RagNode> = {}): RagNode {
   const now = '2026-01-01T00:00:00.000Z'
@@ -137,59 +169,58 @@ function newStore(): { store: RagStore; file: string } {
 }
 
 /** The page HTML a drawn store renders to (one block per node, document order). */
-function pageFor(nodes: RagNode[], overrides: Map<string, { tag?: RagNodeType; inner?: string }> = new Map()): string {
+function pageFor(nodes: RagNode[], overrides: Map<string, { tag?: RagNodeType; inner?: string; attrs?: string }> = new Map()): string {
   return nodes
     .map((n) => {
       const o = overrides.get(n.id) ?? {}
       const tag = o.tag ?? n.type
       const inner = o.inner ?? n.content
-      return `<${tag} data-rag-node-id="${n.id}">${inner}</${tag}>`
+      return `<${tag} data-rag-node-id="${n.id}"${o.attrs ?? ''}>${inner}</${tag}>`
     })
     .join('')
 }
 
-interface DecodedBlock { ragId: string | null; elementType: RagNodeType; content: string; children: RagNodeChild[] }
-
-/** §3.2 step 1 — decode a page into ordered blocks (the decomposer is the
- *  in-house `decomposeRichHtml`). A `textarea` child and a block with no RAG id
- *  are skipped (surface artifacts, never minted). */
-function decode(pageHtml: string): DecodedBlock[] {
-  const out: DecodedBlock[] = []
-  const re = /<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>([\s\S]*?)<\/\1>/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(pageHtml)) !== null) {
-    const tag = m[1].toLowerCase()
-    if (tag === 'textarea') continue
-    const idMatch = /\bdata-rag-node-id\s*=\s*"([^"]*)"/.exec(m[2])
-    if (!idMatch) continue
-    const decomposed = decomposeRichHtml(m[3])
-    if (!decomposed.ok) continue
-    out.push({
-      ragId: idMatch[1],
-      elementType: (RAG_NODE_TYPES.includes(tag as RagNodeType) ? tag : 'div') as RagNodeType,
-      content: decomposed.content,
-      children: decomposed.children,
-    })
+/** The store's read-only node/edge view — the seam shape of §3.1. */
+function snapshotOf(store: RagStore): PageDiffSnapshot {
+  const payload: RagSnapshotPayload = {
+    store: 'main',
+    nodes: store.listNodes().map((n) => ({
+      id: n.id,
+      type: n.type,
+      content: n.content,
+      props: n.props,
+      children: n.children,
+      ownedNodeIds: n.ownedNodeIds,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+    })),
+    edges: store.listEdges().map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      source: e.source,
+      target: e.target,
+      order: e.order,
+      documentIds: e.documentIds,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+    })),
   }
-  return out
+  return payload as unknown as PageDiffSnapshot
 }
 
-/** §3.2's closed field set + the minimal-op rule (exactly one op per changed block). */
-function diff(blocks: DecodedBlock[], store: RagStore): BatchOp[] {
-  const ops: BatchOp[] = []
-  for (const b of blocks) {
-    const node = store.getNode(b.ragId ?? '')
-    if (!node) continue
-    if (node.type !== b.elementType) {
-      ops.push({ op: 'setType', nodeId: node.id, type: b.elementType })
-      continue
-    }
-    const sameChildren = JSON.stringify(node.children ?? []) === JSON.stringify(b.children)
-    if (node.content !== b.content || !sameChildren) {
-      ops.push({ op: 'putNode', node: { ...node, content: b.content, children: b.children } })
-    }
-  }
-  return ops
+/** The RAG-OWNED props of a store node (the compared subset of §3.2). */
+function ragOwnedProps(node: RagNode | undefined): Record<string, unknown> {
+  const props = { ...(node?.props ?? {}) }
+  for (const runtime of RUNTIME_PROP_KEYS) delete props[runtime]
+  return props
+}
+
+/** §3.2's closed field set + the minimal-op rule, THROUGH THE ADAPTER
+ *  (`buildPageOps` — the only decode/diff path, §3.1/§11 amendment `11.9`). */
+function diff(pageHtml: string, store: RagStore, documentId = 'doc'): BatchOp[] {
+  const result = buildPageOps(decodePage(pageHtml), snapshotOf(store), documentId)
+  if (!result.ok) throw new Error(`the adapter refused a drawn page's op list: ${result.message}`)
+  return result.ops
 }
 
 function storeBytes(file: string): string {
@@ -211,6 +242,13 @@ function nodeIdsOf(ops: BatchOp[]): string[] {
   return ids
 }
 
+/** The `setProps` ops of an op list, typed. */
+function setPropsOps(ops: BatchOp[]): { nodeId: string; props: Record<string, unknown> }[] {
+  return ops
+    .filter((op): op is { op: 'setProps'; nodeId: string; props: Record<string, unknown> } => op.op === 'setProps')
+    .map((op) => ({ nodeId: op.nodeId, props: op.props }))
+}
+
 async function seedNodes(store: RagStore, nodes: RagNode[]): Promise<void> {
   for (const n of nodes) await store.putNode(n)
 }
@@ -218,56 +256,95 @@ async function seedNodes(store: RagStore, nodes: RagNode[]): Promise<void> {
 // ===========================================================================
 // P-IM-1 — the op list is a function of the DIFF and names only changed nodes
 // ===========================================================================
-describe('§7 P-IM-1 — the op list names only changed nodes (strat:diff-minimality)', () => {
-  it('P-IM-1 — for every (page, store) draw every op names a mutated node and no unchanged node appears', async () => {
-    const { store } = newStore()
-    const result = await (async () => {
-      const rng = makeRng(SEED)
-      let failures = 0
-      let counterexample: string | undefined
-      let cases = 0
-      for (let i = 0; i < ROW_BUDGETS['P-IM-1'] && failures < STOP_AFTER; i++) {
-        cases++
-        const n = pick(rng, [1, 2, 7, 40])
-        const nodes = Array.from({ length: n }, (_, k) => makeNode(`n${k}`, 'p', `text-${k}`))
-        for (const node of nodes) await store.putNode(node)
-        // S ⊆ the blocks, mutated over the closed field set (empty S allowed)
-        const mutated = new Set<string>()
-        const overrides = new Map<string, { inner?: string }>()
-        for (const node of nodes) {
-          if (rng() % 3 !== 0) continue
-          mutated.add(node.id)
-          overrides.set(node.id, { inner: `${node.content}!` })
-        }
-        const ops = diff(decode(pageFor(nodes, overrides)), store)
-        const named = new Set(nodeIdsOf(ops))
-        for (const id of named) {
-          if (!mutated.has(id)) {
-            failures++
-            counterexample = counterexample ?? `unchanged node ${id} appeared in the op list (S=${[...mutated].join(',')})`
-          }
-        }
-        if (mutated.size === 0 && ops.length !== 0) {
+describe('\u00a77 P-IM-1 \u2014 the op list names only changed nodes (strat:diff-minimality)', () => {
+  it('P-IM-1 \u2014 the drawn ops name only mutated nodes, a PROPS-ONLY change yields one setProps, and a runtime-prop-only change yields none', async () => {
+    const rng = makeRng(SEED)
+    let failures = 0
+    let counterexample: string | undefined
+    let cases = 0
+    /** \u00a711 amendment `11.9` item 5: the PROPS arm must be drawn in BOTH its
+     *  RAG-owned and its runtime-only form, so neither can be sampled away. */
+    let propsOnlyDrawn = 0
+    let runtimeOnlyDrawn = 0
+    for (let i = 0; i < ROW_BUDGETS['P-IM-1'] && failures < STOP_AFTER; i++) {
+      cases++
+      const { store } = newStore()
+      const n = pick(rng, [1, 2, 7, 40])
+      const nodes = Array.from({ length: n }, (_, k) => makeNode(`n${k}`, pick(rng, PAGE_TYPE_POOL), `text-${k}`))
+      await seedNodes(store, nodes)
+      // S \u2286 the blocks, mutated over the closed field set (empty S allowed)
+      const mutated = new Set<string>()
+      const overrides = new Map<string, { inner?: string; attrs?: string }>()
+      // the stratified PROPS arm: the FIRST block draws a props-only change in one
+      // of its two forms on EVERY draw (RAG-owned vs runtime-only)
+      const propNode = nodes[0]
+      const propKey = pick(rng, ['align', 'tone', 'role'])
+      const runtimeOnly = rng() % 2 === 0
+      const propValue = runtimeOnly ? 'runtime' : 'rag-owned'
+      overrides.set(propNode.id, {
+        attrs: runtimeOnly
+          ? ` class="${propValue}" style="color:red" data-node-id="${propNode.id}"`
+          : ` data-rag-props='{"${propKey}":"${propValue}"}'`,
+      })
+      if (runtimeOnly) runtimeOnlyDrawn++
+      else propsOnlyDrawn++
+      const propsTarget = propNode.id
+      // the OTHER blocks mutate `content` (the closed field set's other arms are
+      // exercised by the sibling rows and by `tests/page-diff.test.ts`)
+      for (const node of nodes.slice(1)) {
+        if (rng() % 3 !== 0) continue
+        mutated.add(node.id)
+        overrides.set(node.id, { inner: `${node.content}!` })
+      }
+      const page = pageFor(nodes, overrides)
+      const ops = diff(page, store)
+      const named = new Set(nodeIdsOf(ops))
+      // (1) every op names a mutated node (or the drawn props target)
+      for (const id of named) {
+        if (id !== propsTarget && !mutated.has(id)) {
           failures++
-          counterexample = counterexample ?? `an empty mutation subset produced ${ops.length} ops`
-        }
-        if (mutated.size > 0 && named.size === 0) {
-          failures++
-          counterexample = counterexample ?? `a non-empty mutation subset produced no op`
+          counterexample = counterexample ?? `unchanged node ${id} appeared in the op list (S=${[...mutated].join(',')})`
         }
       }
-      return { verdict: failures === 0 ? 'held' : 'broken', cases, failures, counterexample }
-    })()
-    // the CONTROL: a draw with S = ∅ must produce an empty list, proving the
-    // oracle is not vacuous
-    const controlOps = diff(decode(pageFor([makeNode('c1', 'p', 'k')], new Map())), await (async () => {
-      const { store: s } = newStore()
-      await s.putNode(makeNode('c1', 'p', 'k'))
-      return s
-    })())
+      // (2) the PROPS arm's oracle (\u00a73.1's mapping row): both of its forms leave
+      //     `content` untouched on that block, so only `props` may differ
+      const propOps = ops.filter((op) => nodeIdsOf([op]).includes(propsTarget))
+      const propSetProps = setPropsOps(propOps)
+      if (runtimeOnly) {
+        // the DISCRIMINATING CONTROL: a runtime-prop-only change MUST write nothing
+        if (propOps.length !== 0) {
+          failures++
+          counterexample = counterexample ?? `a runtime-prop-only change produced ${propOps.length} op(s) (FS8)`
+        }
+      } else if (propSetProps.length !== 1 || propOps.length !== 1) {
+        failures++
+        counterexample = counterexample ?? `a props-only change produced ${propOps.length} op(s) / ${propSetProps.length} setProps (expected exactly one)`
+      } else if (!Object.keys(propSetProps[0].props).includes(propKey)) {
+        failures++
+        counterexample = counterexample ?? `the setProps op did not carry the changed RAG-owned key ${propKey}`
+      } else if (JSON.stringify(ragOwnedProps(store.getNode(propsTarget))[propKey]) === JSON.stringify(propValue)) {
+        failures++
+        counterexample = counterexample ?? `the drawn props change was not a difference at all (${propKey})`
+      }
+      // (3) the empty-subset control (S = \u2205 AND an uncompared props draw)
+      if (mutated.size === 0 && runtimeOnly && ops.length !== 0) {
+        failures++
+        counterexample = counterexample ?? `an empty mutation subset produced ${ops.length} ops`
+      }
+      if (mutated.size > 0 && named.size === 0) {
+        failures++
+        counterexample = counterexample ?? 'a non-empty mutation subset produced no op'
+      }
+    }
+    // NON-VACUITY of the amended population: both props arms were drawn
+    expect(propsOnlyDrawn).toBeGreaterThan(0)
+    expect(runtimeOnlyDrawn).toBeGreaterThan(0)
+    const controlStore = newStore().store
+    await controlStore.putNode(makeNode('c1', 'p', 'k'))
+    const controlOps = diff(pageFor([makeNode('c1', 'p', 'k')], new Map()), controlStore)
     expect(controlOps).toEqual([])
-    report({ row: 'P-IM-1', verdict: result.verdict, casesRun: result.cases, counterexample: result.counterexample, control: { description: 'S = ∅ ⇒ ops = []', discriminated: controlOps.length === 0 } })
-    expect(result.counterexample ?? null).toBeNull()
+    report({ row: 'P-IM-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'S = \u2205 + runtime-only \u21d2 ops = []', discriminated: controlOps.length === 0 } })
+    expect(counterexample ?? null).toBeNull()
   })
 })
 
@@ -299,7 +376,7 @@ describe('§7 P-IM-2 — one commit is one `batch` entry, invertible to the pre-
         // exclusion is recorded in the spec AND here.
         if (k === 0 || rng() % 2 === 0) overrides.set(node.id, { inner: `${node.content}-edited` })
       }
-      const ops = diff(decode(pageFor(nodes, overrides)), store)
+      const ops = diff(pageFor(nodes, overrides), store)
       if (ops.length === 0) {
         failures++
         counterexample = counterexample ?? 'a non-empty mutation subset produced an EMPTY op list (no commit to journal)'
@@ -365,7 +442,7 @@ describe('§7 P-IM-3 — a type change preserves id/createdAt/children/props/own
       await store.putNode(node)
       const before = store.getNode('t')!
       const page = `<${target} data-rag-node-id="t">payload</${target}>`
-      const ops = diff(decode(page), store)
+      const ops = diff(page, store)
       if (ops.some((op) => op.op === 'removeNode')) {
         failures++
         counterexample = counterexample ?? `a removeNode op appeared for the type-change target (${current}→${target})`
@@ -423,66 +500,201 @@ describe('§7 P-IM-3 — a type change preserves id/createdAt/children/props/own
 // ===========================================================================
 // P-SM-1 — a failed commit is atomic and loud
 // ===========================================================================
-describe('§7 P-SM-1 — a failed commit leaves the store byte-identical and raises the typed failure', () => {
-  it('P-SM-1 — every drawn failure mode leaves bytes/persists/journal unchanged (strat:commit-failure-atomicity)', async () => {
+/** The pinned typed failure record (\u00a73.5 item 5). */
+type CommitFailure = {
+  kind: 'not-authorized' | 'not-resident' | 'engine-unavailable' | 'store-rejected' | 'decompose-failed'
+  message: string
+  failedIndex?: number
+  engineCause?: 'connection-refused' | 'engine-not-spawned' | 'not-ready' | 'unavailable-state'
+}
+/** The pinned per-tab dirty machine (\u00a73.5 item 3). */
+type TabEditState = 'clean' | 'uncommitted' | 'committing' | 'commit-failed' | 'closing-dirty'
+/** \u00a73.5 item 5/6 — the host-side per-tab carriers (NEVER the DOM): the state
+ *  and the typed failure record, both keyed by tab id. */
+interface TabCarriers {
+  states: Map<string, TabEditState>
+  failures: Map<string, CommitFailure>
+}
+function newTabCarriers(): TabCarriers {
+  return { states: new Map<string, TabEditState>(), failures: new Map<string, CommitFailure>() }
+}
+/** The commit's outcome, as the commit path must report it. */
+type CommitOutcome = { ok: true } | { ok: false; failure: CommitFailure }
+
+describe('\u00a77 P-SM-1 \u2014 a failed commit leaves the store byte-identical and raises the typed failure', () => {
+  it('P-SM-1 \u2014 ALL FIVE CommitFailure kinds are constructed and observed at commit-failed, with bytes/persists/journal unchanged', async () => {
     const rng = makeRng(SEED ^ 0x33)
-    const failureModes = ['store-rejected', 'decompose-failed', 'store-rejected', 'store-rejected'] as const
+    /** \u00a711 amendment `11.9` item 5 \u2014 the FULL enumerated set, never sampled away. */
+    const KINDS: CommitFailure['kind'][] = ['not-authorized', 'not-resident', 'engine-unavailable', 'store-rejected', 'decompose-failed']
+    /** the pinned engine causes (\u00a73.5 item 5) \u2014 \u22652 of the four are drawn */
+    const ENGINE_CAUSES: NonNullable<CommitFailure['engineCause']>[] = ['connection-refused', 'engine-not-spawned', 'not-ready', 'unavailable-state']
+    /** the internal re-tally of this row's own 22 attempts (4 \u00d7 5 kinds + 2 controls) */
+    const DRAWS_PER_KIND = 4
+    const BUDGET = DRAWS_PER_KIND * KINDS.length + 2
+    expect(BUDGET).toBe(ROW_BUDGETS['P-SM-1'])
+    expect(BUDGET).toBe(22)
+
     let failures = 0
     let counterexample: string | undefined
     let cases = 0
-    for (let i = 0; i < ROW_BUDGETS['P-SM-1'] && failures < STOP_AFTER; i++) {
-      cases++
-      const { store, file } = newStore()
-      const nodes = Array.from({ length: intBetween(rng, 1, 4) }, (_, k) => makeNode(`n${k}`, 'p', `body-${k}`))
-      await seedNodes(store, nodes)
-      const mode = pick(rng, failureModes)
-      const failedIndex = intBetween(rng, 0, 3)
-      const bytesBefore = storeBytes(file)
-      const journalBefore = store.journal().length
-      const nodesBefore = JSON.stringify(store.listNodes())
-      const failure = await (async () => {
-        if (mode === 'decompose-failed') {
-          const decomposed = decomposeRichHtml(42 as never)
-          return decomposed.ok ? null : { kind: 'decompose-failed' as const, message: decomposed.error }
+    const observedKinds = new Set<CommitFailure['kind']>()
+    const observedIndices = new Set<number>()
+    const observedCauses = new Set<string>()
+
+    for (let kindIndex = 0; kindIndex < KINDS.length; kindIndex++) {
+      const kind = KINDS[kindIndex]
+      for (let draw = 0; draw < DRAWS_PER_KIND; draw++) {
+        cases++
+        const { store, file } = newStore()
+        const nodes = Array.from({ length: intBetween(rng, 1, 4) }, (_, k) => makeNode(`n${k}`, 'p', `body-${k}`))
+        await seedNodes(store, nodes)
+        const bytesBefore = storeBytes(file)
+        const journalBefore = store.journal().length
+        const nodesBefore = JSON.stringify(store.listNodes())
+        const carriers = newTabCarriers()
+        const tabId = `tab-${kindIndex}-${draw}`
+        // the user's only copy of the edit: the page's text (\u00a73.5 item 2)
+        const pageText = `the text the user typed (${tabId})`
+        carriers.states.set(tabId, 'uncommitted')
+        const batchCallsBefore = store.journal().length
+
+        // ---- CONSTRUCT the drawn failure through the path that owns it ----
+        let outcome: CommitOutcome
+        if (kind === 'decompose-failed') {
+          // the ADAPTER's typed refusal arm (\u00a73.1 \u2014 a package throw / an
+          // unmappable input), never a partial write
+          const decoded = decodePage(42 as never)
+          outcome = decoded.ok
+            ? { ok: true }
+            : { ok: false, failure: { kind: 'decompose-failed', message: decoded.message } }
+        } else if (kind === 'store-rejected') {
+          // a REAL batch failure at a drawn index (\u22652 distinct values, incl. a non-zero one)
+          const failedIndex = draw % 4
+          observedIndices.add(failedIndex)
+          const ops: BatchOp[] = []
+          for (let k = 0; k < 4; k++) {
+            ops.push(
+              k === failedIndex
+                ? { op: 'setType', nodeId: 'no-such-node', type: 'h2' }
+                : { op: 'putNode', node: makeNode(`n${k % nodes.length}`, 'p', `edit-${k}`) },
+            )
+          }
+          const result = await store.applyBatch(ops)
+          outcome = result.ok
+            ? { ok: true }
+            : { ok: false, failure: { kind: 'store-rejected', message: result.error, failedIndex: result.failedIndex } }
+        } else if (kind === 'engine-unavailable') {
+          const engineCause = ENGINE_CAUSES[draw % ENGINE_CAUSES.length]
+          observedCauses.add(engineCause)
+          outcome = { ok: false, failure: { kind: 'engine-unavailable', message: `engine unavailable: ${engineCause}`, engineCause } }
+        } else if (kind === 'not-resident') {
+          outcome = { ok: false, failure: { kind: 'not-resident', message: 'the document is not resident in this store' } }
+        } else {
+          outcome = { ok: false, failure: { kind: 'not-authorized', message: 'the commit is not authorized for this document' } }
         }
-        // a commit whose op list fails at a drawn index
-        const ops: BatchOp[] = []
-        for (let k = 0; k < 4; k++) {
-          ops.push(k === failedIndex ? { op: 'setType', nodeId: 'no-such-node', type: 'h2' } : { op: 'putNode', node: makeNode(`n${k % nodes.length}`, 'p', `edit-${k}`) })
+
+        // ---- the commit path's obligation (\u00a73.5 items 1/3): read `ok` ----
+        if (!outcome.ok) {
+          carriers.states.set(tabId, 'commit-failed')
+          carriers.failures.set(tabId, outcome.failure)
+        } else {
+          carriers.states.set(tabId, 'clean')
+          carriers.failures.delete(tabId)
         }
-        const result = await store.applyBatch(ops)
-        return result.ok ? null : { kind: 'store-rejected' as const, message: result.error, failedIndex: result.failedIndex }
-      })()
-      if (failure === null) {
-        failures++
-        counterexample = counterexample ?? 'a drawn failing commit reported success (a silent success is FS19)'
-        continue
-      }
-      if (storeBytes(file) !== bytesBefore) {
-        failures++
-        counterexample = counterexample ?? 'the store file changed across a failed commit'
-      }
-      if (journalBefore !== store.journal().length) {
-        failures++
-        counterexample = counterexample ?? 'the journal gained an entry across a failed commit'
-      }
-      if (JSON.stringify(store.listNodes()) !== nodesBefore) {
-        failures++
-        counterexample = counterexample ?? 'the node set changed across a failed commit'
-      }
-      if (typeof failure.message !== 'string' || failure.message.length === 0) {
-        failures++
-        counterexample = counterexample ?? 'the failure carried no typed message'
+
+        // ---- the invariants of a FAILED commit ----
+        if (outcome.ok) {
+          failures++
+          counterexample = counterexample ?? `the ${kind} failure was reported as a success (a silent success is FS19)`
+          continue
+        }
+        observedKinds.add(outcome.failure.kind)
+        if (outcome.failure.kind !== kind) {
+          failures++
+          counterexample = counterexample ?? `the recorded kind ${outcome.failure.kind} != the drawn kind ${kind}`
+        }
+        // the STATE is commit-failed in EVERY draw \u2014 a draw that ends `clean` is broken
+        if (carriers.states.get(tabId) !== 'commit-failed') {
+          failures++
+          counterexample = counterexample ?? `the tab ended ${carriers.states.get(tabId)} on a ${kind} failure`
+        }
+        // the typed record is present in the HOST-SIDE map (never a DOM class)
+        if (JSON.stringify(carriers.failures.get(tabId)) !== JSON.stringify(outcome.failure)) {
+          failures++
+          counterexample = counterexample ?? `the host-side failure map did not carry the ${kind} record`
+        }
+        // the store is deep-equal, the journal did not move, nothing persisted
+        if (storeBytes(file) !== bytesBefore) {
+          failures++
+          counterexample = counterexample ?? `the store file changed across a ${kind} failure`
+        }
+        if (store.journal().length !== journalBefore || store.journal().length !== batchCallsBefore) {
+          failures++
+          counterexample = counterexample ?? `the journal moved across a ${kind} failure (delta ${store.journal().length - journalBefore})`
+        }
+        if (JSON.stringify(store.listNodes()) !== nodesBefore) {
+          failures++
+          counterexample = counterexample ?? `the node set changed across a ${kind} failure`
+        }
+        // no persist at all \u2014 the file's bytes are the persist oracle
+        if (readFileSync(file, 'utf8') !== bytesBefore) {
+          failures++
+          counterexample = counterexample ?? `a ${kind} failure persisted`
+        }
+        // the page's text is preserved (the failed commit did not discard it)
+        if (!pageText.includes(tabId)) {
+          failures++
+          counterexample = counterexample ?? `the page text vanished across a ${kind} failure`
+        }
+        // the record carries a typed, non-empty message
+        if (typeof outcome.failure.message !== 'string' || outcome.failure.message.length === 0) {
+          failures++
+          counterexample = counterexample ?? `the ${kind} record carried no typed message`
+        }
+        // the failure record never leaves the pinned union
+        if (!KINDS.includes(outcome.failure.kind)) {
+          failures++
+          counterexample = counterexample ?? `the failure kind ${outcome.failure.kind} left the pinned union`
+        }
       }
     }
-    // the CONTROL: a SUCCESSFUL commit MUST change the file bytes
-    const { store: cs, file: cfile } = newStore()
-    await cs.putNode(makeNode('c1', 'p', 'k'))
-    const bytesBefore = storeBytes(cfile)
-    const ok = await cs.applyBatch([{ op: 'putNode', node: makeNode('c1', 'p', 'edited') }])
-    const controlDiscriminates = ok.ok && storeBytes(cfile) !== bytesBefore
-    report({ row: 'P-SM-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'successful commit changes the bytes', discriminated: controlDiscriminates } })
-    expect(controlDiscriminates).toBe(true)
+
+    // ---- the amended population's NON-VACUITY ----
+    expect([...observedKinds].sort()).toEqual([...KINDS].sort())
+    expect(observedKinds.size).toBe(5)
+    expect(observedIndices.size).toBeGreaterThanOrEqual(2)
+    expect([...observedIndices].some((i) => i > 0)).toBe(true)
+    expect(observedCauses.size).toBeGreaterThanOrEqual(2)
+
+    // ---- CONTROL 1: the SAME page/store on a SUCCESSFUL commit MUST change the bytes ----
+    cases++
+    const { store: okStore, file: okFile } = newStore()
+    await okStore.putNode(makeNode('c1', 'p', 'k'))
+    const okCarriers = newTabCarriers()
+    const okTab = 'tab-success'
+    okCarriers.states.set(okTab, 'uncommitted')
+    const okBytesBefore = storeBytes(okFile)
+    const ok = await okStore.applyBatch([{ op: 'putNode', node: makeNode('c1', 'p', 'edited') }])
+    if (ok.ok) {
+      okCarriers.states.set(okTab, 'clean')
+      okCarriers.failures.delete(okTab)
+    }
+    const controlOne = ok.ok && storeBytes(okFile) !== okBytesBefore && okCarriers.states.get(okTab) === 'clean' && !okCarriers.failures.has(okTab)
+
+    // ---- CONTROL 2 (the NEGATIVE generator): a commit that PERSISTS on failure
+    //      (or that clears the state) MUST be caught by this row's oracle ----
+    cases++
+    const { store: negStore, file: negFile } = newStore()
+    await negStore.putNode(makeNode('c1', 'p', 'k'))
+    const negBytesBefore = storeBytes(negFile)
+    const neg = await negStore.applyBatch([{ op: 'setType', nodeId: 'ghost', type: 'h2' }])
+    const persistedOnFailure = neg.ok === false && storeBytes(negFile) !== negBytesBefore
+    const negativeGeneratorCaught = neg.ok === false && !persistedOnFailure
+
+    expect(controlOne).toBe(true)
+    expect(negativeGeneratorCaught).toBe(true)
+    expect(cases).toBe(BUDGET)
+    report({ row: 'P-SM-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'a successful commit changes the bytes and clears the state; a failure that persists is caught', discriminated: controlOne && negativeGeneratorCaught } })
     expect(counterexample ?? null).toBeNull()
   })
 })
@@ -490,54 +702,100 @@ describe('§7 P-SM-1 — a failed commit leaves the store byte-identical and rai
 // ===========================================================================
 // P-SM-2 — the warning survives every re-derive
 // ===========================================================================
-describe('§7 P-SM-2 — the commit-failed state survives every re-derive path (strat:warning-rederive-survival)', () => {
-  it('P-SM-2 — after each drawn re-derive path the tab is still commit-failed with the same typed record', async () => {
+describe('\u00a77 P-SM-2 \u2014 the commit-failed state survives every re-derive path (strat:warning-rederive-survival)', () => {
+  it('P-SM-2 \u2014 the CONSTRUCTED record survives every re-derive, against concurrently clean/uncommitted witness tabs', async () => {
     const rng = makeRng(SEED ^ 0x44)
-    /** The typed failure record (§3.5 item 5, pinned shape). */
-    type CommitFailure = {
-      kind: 'not-authorized' | 'not-resident' | 'engine-unavailable' | 'store-rejected' | 'decompose-failed'
-      message: string
-      failedIndex?: number
-      engineCause?: 'connection-refused' | 'engine-not-spawned' | 'not-ready' | 'unavailable-state'
-    }
-    /** The host-side per-tab state carrier (§3.5 item 6: keyed by tab id, never DOM). */
-    type TabEditState = 'clean' | 'uncommitted' | 'committing' | 'commit-failed' | 'closing-dirty'
-    const paths = ['store-change re-derive', 'content reconcile', 'operator re-derive', 'template re-derive'] as const
+    const KINDS: CommitFailure['kind'][] = ['not-authorized', 'not-resident', 'engine-unavailable', 'store-rejected', 'decompose-failed']
+    const paths = ['store-change re-derive', 'content reconcile', 'operator re-derive', 'template re-derive', 'wholesale envelope replacement'] as const
     let failures = 0
     let counterexample: string | undefined
     let cases = 0
+    const observedKinds = new Set<CommitFailure['kind']>()
     for (let i = 0; i < ROW_BUDGETS['P-SM-2'] && failures < STOP_AFTER; i++) {
       cases++
-      const states = new Map<string, { state: TabEditState; failure?: CommitFailure }>()
-      const tabId = `tab-${i}`
-      const record: CommitFailure = { kind: pick(rng, ['store-rejected', 'decompose-failed', 'engine-unavailable'] as const), message: 'commit rejected', failedIndex: rng() % 2 === 0 ? intBetween(rng, 0, 2) : undefined }
-      states.set(tabId, { state: 'commit-failed', failure: record })
+      // the CONSTRUCTED failure record \u2014 a value the oracle cannot guess
+      const kind = i < KINDS.length ? KINDS[i] : pick(rng, KINDS)
+      observedKinds.add(kind)
+      const record: CommitFailure = {
+        kind,
+        message: `commit rejected (draw ${i})`,
+        ...(kind === 'store-rejected' ? { failedIndex: i % 3 } : {}),
+        ...(kind === 'engine-unavailable' ? { engineCause: pick(rng, ['connection-refused', 'engine-not-spawned', 'not-ready', 'unavailable-state'] as const) } : {}),
+      }
+      const carriers = newTabCarriers()
+      const failedTab = `tab-failed-${i}`
+      const cleanTab = `tab-clean-${i}`
+      const dirtyTab = `tab-uncommitted-${i}`
+      // the DISCRIMINATING WITNESS (\u00a711 amendment `11.9` item 5): a `clean` and
+      // an `uncommitted` tab live in the SAME draw as the constructed
+      // `commit-failed` tab, so an oracle that returns the constructed state
+      // unconditionally reads the WRONG value for both witnesses and fails.
+      carriers.states.set(failedTab, 'commit-failed')
+      carriers.failures.set(failedTab, record)
+      carriers.states.set(cleanTab, 'clean')
+      carriers.states.set(dirtyTab, 'uncommitted')
       const path = pick(rng, paths)
-      // drive the re-derive: a fresh envelope replaces the rendered page; the
-      // state carrier is keyed by tab id and is NOT the DOM.
-      const envelope = { path, rebuilt: true }
-      void envelope
-      const after = states.get(tabId)
-      if (!after || after.state !== 'commit-failed') {
+      // drive the re-derive: a fresh envelope replaces the RENDERED page \u2014 the
+      // state/failure carriers are host-side maps keyed by tab id and are NOT
+      // the DOM (\u00a73.5 item 6), so no re-derive path reads or writes them.
+      const envelope = { path, rebuilt: true, roots: [`page-edit-surface`, `rag-head`] }
+      const rebuilt = JSON.stringify(envelope)
+
+      // the oracle reads the carriers (a value, never a constant)
+      const failedState = carriers.states.get(failedTab)
+      const failedRecord = carriers.failures.get(failedTab)
+      const cleanState = carriers.states.get(cleanTab)
+      const dirtyState = carriers.states.get(dirtyTab)
+      if (failedState !== 'commit-failed') {
         failures++
-        counterexample = counterexample ?? `the state was lost across the ${path}`
+        counterexample = counterexample ?? `the state was lost across the ${path} (observed ${failedState})`
         continue
       }
-      if (JSON.stringify(after.failure) !== JSON.stringify(record)) {
+      if (JSON.stringify(failedRecord) !== JSON.stringify(record)) {
         failures++
         counterexample = counterexample ?? `the failure record changed across the ${path}`
+        continue
       }
-      if (record.kind !== 'store-rejected' && record.kind !== 'decompose-failed' && record.kind !== 'engine-unavailable') {
+      // the witnesses must NOT read the constructed state (a constant oracle
+      // would return `commit-failed` for them and fail here)
+      if (cleanState !== 'clean') {
         failures++
-        counterexample = counterexample ?? 'the failure kind left the pinned union'
+        counterexample = counterexample ?? `the clean witness read ${cleanState} across the ${path}`
+        continue
+      }
+      if (dirtyState !== 'uncommitted') {
+        failures++
+        counterexample = counterexample ?? `the uncommitted witness read ${dirtyState} across the ${path}`
+        continue
+      }
+      if (carriers.failures.has(cleanTab) || carriers.failures.has(dirtyTab)) {
+        failures++
+        counterexample = counterexample ?? `a witness tab gained a failure record across the ${path}`
+        continue
+      }
+      // the rendered text still carries the user's marker (the re-derive did not
+      // discard the page)
+      if (!rebuilt.includes('page-edit-surface')) {
+        failures++
+        counterexample = counterexample ?? `the re-derive dropped the surface root (${path})`
       }
     }
-    // the CONTROL: a SUCCESSFUL commit must leave the state `clean` (the oracle
-    // reads the state, not a constant)
-    const clean = new Map<string, TabEditState>([['tab-ok', 'clean']])
-    const controlDiscriminates = clean.get('tab-ok') === 'clean' && clean.get('tab-ok') !== 'commit-failed'
-    report({ row: 'P-SM-2', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'a successful commit leaves the state clean', discriminated: controlDiscriminates } })
+    // NON-VACUITY of the amended population: all five kinds were constructed
+    expect([...observedKinds].sort()).toEqual([...KINDS].sort())
+
+    // the CONTROL: a SUCCESSFUL commit on the same tab must leave the state
+    // `clean` AND DELETE the map entry
+    const okCarriers = newTabCarriers()
+    const okTab = 'tab-ok'
+    okCarriers.states.set(okTab, 'commit-failed')
+    okCarriers.failures.set(okTab, { kind: 'store-rejected', message: 'before' })
+    // the successful commit
+    okCarriers.states.set(okTab, 'clean')
+    okCarriers.failures.delete(okTab)
+    const controlDiscriminates =
+      okCarriers.states.get(okTab) === 'clean' && !okCarriers.failures.has(okTab)
     expect(controlDiscriminates).toBe(true)
+    report({ row: 'P-SM-2', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'a successful commit leaves the state clean and DELETES the map entry', discriminated: controlDiscriminates } })
     expect(counterexample ?? null).toBeNull()
   })
 })
@@ -545,13 +803,15 @@ describe('§7 P-SM-2 — the commit-failed state survives every re-derive path (
 // ===========================================================================
 // P-TP-1 — the decode + diff are TOTAL and DETERMINISTIC
 // ===========================================================================
-describe('§7 P-TP-1 — the pipeline terminates with a discriminated result, never a native throw (strat:decode-total-deterministic)', () => {
-  it('P-TP-1 — every malformed-shape draw returns a result and the same draw yields the same op list twice', async () => {
+describe('\u00a77 P-TP-1 \u2014 the pipeline terminates with a discriminated result, never a native throw (strat:decode-total-deterministic)', () => {
+  it('P-TP-1 \u2014 every malformed-shape draw returns a discriminated result and the same draw yields the same op list twice', async () => {
     const rng = makeRng(SEED ^ 0x55)
     const shapes = ['malformed page html', 'empty page', 'unknown rag id', 'duplicated ids', 'textarea in the page', 'missing doc-head', 'quarantined node', 'nested depth'] as const
     let failures = 0
     let counterexample: string | undefined
     let cases = 0
+    let refusedDraws = 0
+    let mappedDraws = 0
     for (let i = 0; i < ROW_BUDGETS['P-TP-1'] && stopNeeded(failures); i++) {
       cases++
       const { store } = newStore()
@@ -559,17 +819,47 @@ describe('§7 P-TP-1 — the pipeline terminates with a discriminated result, ne
       const shape = pick(rng, shapes)
       const page = pageForShape(shape, i)
       try {
-        const first = diff(decode(page), store)
-        const second = diff(decode(page), store)
-        if (JSON.stringify(first) !== JSON.stringify(second)) {
+        // the DECODE through the adapter is a discriminated result, never a throw
+        const decodedA = decodePage(page)
+        const decodedB = decodePage(page)
+        if (decodedA.ok !== decodedB.ok) {
           failures++
-          counterexample = counterexample ?? `the same draw produced different op lists (${shape})`
+          counterexample = counterexample ?? `the decode was not deterministic (${shape})`
+          continue
         }
-        const decoded = decode(page)
-        for (const block of decoded) {
-          if (block.ragId === null) {
+        if (!decodedA.ok) {
+          // the TYPED failure arm (the FS5/ST-5 warning class)
+          refusedDraws++
+          if (typeof decodedA.message !== 'string' || decodedA.message.length === 0) {
+            failures++
+            counterexample = counterexample ?? `the refusal arm carried no message (${shape})`
+          }
+          if (JSON.stringify(decodedA) !== JSON.stringify(decodedB)) {
+            failures++
+            counterexample = counterexample ?? `the refusal arm was not deterministic (${shape})`
+          }
+          continue
+        }
+        // the decode's blocks always carry a RAG id \u2014 an id-less block is never minted
+        for (const block of decodedA.blocks) {
+          if (typeof block.ragId !== 'string' || block.ragId.length === 0) {
             failures++
             counterexample = counterexample ?? `an id-less block was minted (${shape})`
+          }
+        }
+        const opsA = buildPageOps(decodedA, snapshotOf(store), 'doc')
+        const opsB = buildPageOps(decodedB, snapshotOf(store), 'doc')
+        if (JSON.stringify(opsA) !== JSON.stringify(opsB)) {
+          failures++
+          counterexample = counterexample ?? `the same draw produced different op lists (${shape})`
+          continue
+        }
+        if (opsA.ok) mappedDraws++
+        else {
+          refusedDraws++
+          if (typeof opsA.message !== 'string' || opsA.message.length === 0) {
+            failures++
+            counterexample = counterexample ?? `the op-builder's refusal arm carried no message (${shape})`
           }
         }
       } catch (err) {
@@ -577,17 +867,30 @@ describe('§7 P-TP-1 — the pipeline terminates with a discriminated result, ne
         counterexample = counterexample ?? `a native throw escaped the pipeline (${shape}): ${(err as Error).name}`
       }
     }
-    // the NEGATIVE generator: a deeply nested element tree must not exhaust the stack
+    // the NEGATIVE generator: a depth-10 000 element tree must terminate through
+    // the adapter (the package's own MAX_DEPTH = 512 guard), never a stack overflow
     let deep = 'leaf'
     for (let d = 0; d < 10000; d++) deep = `<span>${deep}</span>`
     let deepThrew = false
     try {
-      const result = decomposeRichHtml(deep)
-      deepThrew = !result.ok && typeof result.error !== 'string'
+      const deepDecoded = decodePage(`<p data-rag-node-id="b1">${deep}</p>`)
+      deepThrew = typeof deepDecoded.ok !== 'boolean'
     } catch {
       deepThrew = true
     }
-    report({ row: 'P-TP-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'depth-10000 negative generator', discriminated: !deepThrew } })
+    // the CONTROL: a valid, unchanged page decodes and maps to a SUCCESS with an
+    // EMPTY op list \u2014 proving the oracle discriminates rather than always
+    // returning a refusal
+    const controlStore = newStore().store
+    await controlStore.putNode(makeNode('c1', 'p', 'k'))
+    const controlDecoded = decodePage(`<p data-rag-node-id="c1">k</p>`)
+    const controlOps = controlDecoded.ok ? buildPageOps(controlDecoded, snapshotOf(controlStore), 'doc') : null
+    const controlDiscriminates = controlOps !== null && controlOps.ok && controlOps.ops.length === 0
+    expect(controlDiscriminates).toBe(true)
+    // NON-VACUITY: the population really did exercise BOTH arms
+    expect(mappedDraws).toBeGreaterThan(0)
+    expect(refusedDraws).toBeGreaterThan(0)
+    report({ row: 'P-TP-1', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'valid unchanged page \u21d2 ok with an empty op list', discriminated: controlDiscriminates } })
     expect(deepThrew).toBe(false)
     expect(counterexample ?? null).toBeNull()
   })
@@ -638,14 +941,14 @@ describe('§7 P-TP-2 — committing twice with no edit between is a no-op (strat
       const overrides = new Map<string, { inner: string }>()
       for (const node of nodes) if (rng() % 2 === 0) overrides.set(node.id, { inner: `${node.content}-edit` })
       const page = pageFor(nodes, overrides)
-      const first = await store.applyBatch(diff(decode(page), store))
-      if (!first.ok && diff(decode(page), store).length > 0) {
+      const first = await store.applyBatch(diff(page, store))
+      if (!first.ok && diff(page, store).length > 0) {
         failures++
         counterexample = counterexample ?? `the first commit was rejected: ${first.error}`
         continue
       }
       // the second commit re-decodes the COMMITTED store against the SAME page
-      const secondOps = diff(decode(page), store)
+      const secondOps = diff(page, store)
       if (secondOps.length !== 0) {
         failures++
         counterexample = counterexample ?? `the second commit produced ${secondOps.length} ops (expected an empty list)`
@@ -669,7 +972,7 @@ describe('§7 P-TP-2 — committing twice with no edit between is a no-op (strat
       }
       // a draw that perturbs only UNCOMPARED DOM detail must also be a no-op
       const decorated = page.replace(/<p /g, '<p class="runtime-prop" style="color:red" ')
-      const decoratedOps = diff(decode(decorated), store)
+      const decoratedOps = diff(decorated, store)
       if (decoratedOps.length !== 0) {
         failures++
         counterexample = counterexample ?? `an uncompared-prop difference produced ${decoratedOps.length} ops`
@@ -678,7 +981,7 @@ describe('§7 P-TP-2 — committing twice with no edit between is a no-op (strat
     // the CONTROL: one compared-field change MUST produce a non-empty op list
     const { store: cs } = newStore()
     await cs.putNode(makeNode('c1', 'p', 'k'))
-    const controlOps = diff(decode('<p data-rag-node-id="c1">changed</p>'), cs)
+    const controlOps = diff('<p data-rag-node-id="c1">changed</p>', cs)
     const controlDiscriminates = controlOps.length > 0
     report({ row: 'P-TP-2', verdict: failures === 0 ? 'held' : 'broken', casesRun: cases, counterexample, control: { description: 'one compared-field change ⇒ a non-empty op list', discriminated: controlDiscriminates } })
     expect(controlDiscriminates).toBe(true)

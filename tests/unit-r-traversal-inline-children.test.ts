@@ -6,17 +6,20 @@
 //
 // RED SET: the inline-children rendering in `buildSubtree` does NOT exist yet —
 // the current `buildSubtree` authors only [textarea, doc-children] as the subtree
-// root's children. Every test that asserts inline children appear in the
-// envelope / backRefs / lineMap FAILS. That is the expected red set.
+// root's children (and U-EDIT-1 §5.1 as amended DROPS the textarea child, so the
+// post-fix list is [interleaved body, doc-children]). Every test that asserts
+// inline children appear in the envelope / backRefs / lineMap FAILS. That is the
+// expected red set.
 //
 // STATE ENUMERATION (from the spec):
 //   §5.6 HAPPY-PATH STATES (15):
 //     1.  inline-children rendering happy (one strong child)
 //     2.  all four inline child types (strong/em/a/img) with props merged
-//     3.  authored ids `inline-<ragId>-<index>` (NOT rag-, distinct from textarea)
-//     4.  ordering [inline children, textarea TOMBSTONE, doc-children subtrees]
-//         (U-EDIT-1 §5.1 — the child stays at that position so the fence's
-//          child-list assertion holds UNCHANGED; it is INERT)
+//     3.  authored ids `inline-<ragId>-<index>` (NOT rag-, and never a retired
+//         `textarea-<ragId>` id — that id class no longer exists)
+//     4.  ordering [inline children, doc-children subtrees] (U-EDIT-1 §5.1 as
+//         amended 2026-09-21 — §11 amendment `11.9` item 2: the textarea child
+//         is DROPPED entirely, so the position it occupied is simply absent)
 //     5.  node WITHOUT inline children (children: undefined) → no inline children
 //     6.  empty children array (children: []) → no inline children
 //     7.  disambiguation — inline children NOT in `materialized`
@@ -27,14 +30,15 @@
 //     10. `collectSubtreeIds` collects inline children into the node's OWN subtree
 //     11. `assignSubtreeRanges` does NOT recurse inline children (part of own lines)
 //     12. doc-children still disambiguated (node with BOTH inline + doc-children)
-//     13. the textarea child is the INERT TOMBSTONE — non-rendered (hidden +
-//         readOnly), NO handlers (U-EDIT-1 §5.1 / FS21; the per-node editing
-//         capability is gone)
+//     13. NO textarea child is authored at all — no `type: 'textarea'` child, no
+//         `textarea-<ragId>` id, no `rag-textarea-*` handler, no rendered
+//         `<textarea>` (U-EDIT-1 §5.1 / FS21 as restated 2026-09-21: the
+//         tombstone exception is RETIRED; the rendered census is zero)
 //     14. `rebuildBackRefs` unchanged (routes through buildTraversal)
 //     15. fallback path (nestDocChildren: false) — inline children STILL rendered
 //   §5.7 FAIL-STATES (8):
 //     1.  inline child authored id NOT `rag-`-prefixed (A1)
-//     2.  inline child authored id distinct from the tombstone's `textarea-<ragId>` (A2)
+//     2.  inline child authored id is never a retired `textarea-<ragId>` id (A2)
 //     3.  inline child NOT added to `materialized` (A6)
 //     4.  inline child does NOT mint a backRefs entry (A6)
 //     5.  inline child does NOT mint a lineMap range (A6/A7)
@@ -214,18 +218,16 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       expect(inline[1].props?.id).toBe('inline-rich-1')
       // NOT rag- prefixed (A1)
       for (const c of inline) expect(String(c.props?.id)).not.toMatch(/^rag-/)
-      // distinct from the textarea id (A2)
-      // the tombstone keeps the `textarea-<ragId>` authored id at its own
-      // position; an inline child never takes it (A2).
-      expect(inline[0].props?.id).not.toBe('textarea-rich')
+      // the retired `textarea-<ragId>` id class is gone entirely
+      // (§5.1 as amended; §11 amendment `11.9` item 2), so an inline child can
+      // never collide with it (A2).
       for (const c of inline) expect(String(c.props?.id)).not.toMatch(/^textarea-/)
-      expect(inline[1].props?.id).not.toBe('textarea-rich')
     } finally {
       rmSyncSafe(dir)
     }
   })
 
-  it('4. ordering — the subtree root children array is [inline children, textarea tombstone, doc-children subtrees]', async () => {
+  it('4. ordering — the subtree root children array is [inline children, doc-children subtrees]', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -248,15 +250,18 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
 
       const childIds = (root.children ?? []).map((c) => c.props?.id)
       // 0.4.0 content-XOR-children — the ordering is [interleaved body (a bare
-      // `text` child for the node's content 'Rich' + the inline span), the textarea tombstone,
-      // overlay, doc-children subtrees].
-      expect(childIds).toEqual([undefined, 'inline-rich-0', 'textarea-rich', 'rag-li1'])
+      // `text` child for the node's content 'Rich' + the inline span), then the
+      // doc-children subtrees]. U-EDIT-1 §5.1 as amended 2026-09-21: the
+      // textarea child that used to sit between them is DROPPED, so the list
+      // carries no `textarea-<ragId>` entry (the re-planned fence row's shape,
+      // §6.5).
+      expect(childIds).toEqual([undefined, 'inline-rich-0', 'rag-li1'])
     } finally {
       rmSyncSafe(dir)
     }
   })
 
-  it('5. node WITHOUT inline children (children: undefined) → NO inline children; children array is [tombstone, doc-children]', async () => {
+  it('5. node WITHOUT inline children (children: undefined) → NO inline children; children array carries no textarea', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -268,14 +273,14 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       expect(inlineChildren(root)).toHaveLength(0)
       const childIds = (root.children ?? []).map((c) => c.props?.id)
       // 0.4.0 content-XOR-children — the node's body is a bare `text` child
-      // (its content), then the textarea tombstone.
-      expect(childIds).toEqual([undefined, 'textarea-rich'])
+      // (its content); the textarea child is DROPPED (§5.1 as amended 2026-09-21).
+      expect(childIds).toEqual([undefined])
     } finally {
       rmSyncSafe(dir)
     }
   })
 
-  it('6. empty children array (children: []) → NO inline children; children array is [tombstone, doc-children]', async () => {
+  it('6. empty children array (children: []) → NO inline children; children array carries no textarea', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -287,8 +292,8 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       expect(inlineChildren(root)).toHaveLength(0)
       const childIds = (root.children ?? []).map((c) => c.props?.id)
       // 0.4.0 content-XOR-children — the node's body is a bare `text` child
-      // (its content), then the textarea tombstone.
-      expect(childIds).toEqual([undefined, 'textarea-rich'])
+      // (its content); the textarea child is DROPPED (§5.1 as amended 2026-09-21).
+      expect(childIds).toEqual([undefined])
     } finally {
       rmSyncSafe(dir)
     }
@@ -414,9 +419,10 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
-      // ordering: [interleaved body (text + inline), textarea tombstone, doc-child]
+      // ordering: [interleaved body (text + inline), doc-child] — the textarea
+      // child is DROPPED, so no `textarea-<ragId>` entry appears (§5.1 as amended)
       const childIds = (root.children ?? []).map((c) => c.props?.id)
-      expect(childIds).toEqual([undefined, 'inline-rich-0', 'textarea-rich', 'rag-li1'])
+      expect(childIds).toEqual([undefined, 'inline-rich-0', 'rag-li1'])
 
       // backRefs: one entry for rich (including inline, excluding li1) + one for li1
       expect(result.backRefs.has('rich')).toBe(true)
@@ -430,7 +436,7 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
     }
   })
 
-  it('13. the textarea child is the INERT TOMBSTONE — non-rendered (hidden + readOnly), NO handlers (U-EDIT-1 §5.1, FS21)', async () => {
+  it('13. NO textarea child is authored at all — no type/id/handler, and the rendered census is zero (U-EDIT-1 §5.1, FS21)', async () => {
     const dir = freshDir()
     try {
       const store: RagStore = createJsonRagStore({ path: join(dir, 'rag.json') })
@@ -439,19 +445,24 @@ describe('Unit R — inline-children rendering in buildSubtree (§5.6)', () => {
       const result: TraversalResult = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
       const root = findPayloadByRootId(result.envelope, 'rich')!.content[0]
 
+      // §11 amendment `11.9` item 2 — the tombstone is DROPPED: the child is no
+      // longer authored in ANY form (the "inert artifact" is itself the
+      // fail-state now, `FS21`).
       const textarea = (root.children ?? []).find((c) => c.type === 'textarea')
-      expect(textarea, 'the fence-compatible tombstone child stays authored at its position').toBeDefined()
-      expect(textarea!.props?.id).toBe('textarea-rich')
-      expect(textarea!.props?.['data-rag-node-id']).toBe('rich')
-      // U-EDIT-1 §5.1 — the tombstone is INERT: authored `hidden` + `readOnly`,
-      // so it renders nothing and binds nothing (FS21).
-      expect(textarea!.props?.hidden).toBe(true)
-      expect(textarea!.props?.readOnly).toBe(true)
-      // FS21 — and it carries NO handler defs (the per-node editing capability
-      // is gone; a handler-carrying tombstone is the fail-state).
-      expect(textarea!.handlers ?? []).toEqual([])
-      // the per-node editing props are GONE (no `value` binding).
-      expect(textarea!.props?.value).toBeUndefined()
+      expect(textarea, 'no textarea child is authored at all — the tombstone exception is retired').toBeUndefined()
+      // NON-VACUITY: the node's own body IS authored, so the absence above is
+      // not an empty-children artifact.
+      expect((root.children ?? []).length).toBeGreaterThan(0)
+      // the retired id class and handler names appear nowhere in the envelope
+      expect(JSON.stringify(result.envelope)).not.toContain('textarea-')
+      expect(JSON.stringify(result.envelope)).not.toContain('rag-textarea-')
+
+      // and the RENDERED DOM census is zero `<textarea>` (§8.3 item 6's node half)
+      const mount = mountEl()
+      const runtime = new Runtime({ mount: mount as never, envelope: result.envelope as never })
+      runtime.loadEnvelope(result.envelope as never)
+      expect(mount.querySelectorAll('textarea')).toHaveLength(0)
+      expect(mount.querySelectorAll('[data-rag-node-id]').length).toBeGreaterThan(0)
     } finally {
       rmSyncSafe(dir)
     }
@@ -540,7 +551,8 @@ describe('Unit R — fail-states (§5.7)', () => {
 
       const inline = inlineChildren(root)
       expect(inline).toHaveLength(1)
-      expect(inline[0].props?.id).not.toBe('textarea-rich')
+      // never a retired `textarea-<ragId>` id (A2) — the id class no longer exists
+      expect(inline[0].props?.id).not.toMatch(/^textarea-/)
     } finally {
       rmSyncSafe(dir)
     }

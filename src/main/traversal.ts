@@ -440,27 +440,12 @@ function buildTraversalBody(input: TraversalInput): TraversalResult {
           // The node's body: bare `text` children interleaved with the inline
           // spans (strong/em/a/img) in document order (0.4.0 `text` child).
           ...buildInterleavedChildren(ragId, node.content ?? '', node.children ?? []),
-          // U-EDIT-1 (C9) §5.1 — the textarea child is the INERT TOMBSTONE. The
-          // traversal keeps ONE child at this position so
-          // `tests/traversal.test.ts`'s fence child-list assertion
-          // (`[undefined, 'textarea-ul', 'rag-li1', …]`) holds UNCHANGED, but the
-          // child is NON-RENDERED and NON-INTERACTIVE: `hidden: true`,
-          // `readOnly: true`, and NO handler defs. The per-node editing
-          // capability (`value` binding, `rag-textarea-*` handlers, the
-          // read-only-by-backref logic) is GONE — the single page surface is the
-          // only editing host (`FS21`; the rendered-DOM census is zero
-          // `<textarea>` in the stage region, asserted live, §8.3 item 6). The
-          // tombstone is EXCLUDED from the page decode/diff (§3.2 step 1 skips a
-          // `textarea`-typed child).
-          {
-            type: 'textarea',
-            props: {
-              id: `textarea-${ragId}`,
-              'data-rag-node-id': ragId,
-              hidden: true,
-              readOnly: true,
-            },
-          },
+          // U-EDIT-1 (C9) §5.1 / §11 amendment `11.9` item 2 — NO textarea child
+          // is authored at all. The tombstone exception is RETIRED: the adapter
+          // creates the `<textarea>` element unconditionally, so `hidden` never
+          // made it non-rendered, and the rendered-DOM census (§8.3 item 6) can
+          // only read zero if nothing is authored. The single page surface is
+          // the only editing host (`FS21`).
           ...children,
         ],
       }

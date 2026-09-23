@@ -96,9 +96,13 @@ Turn the per-node editing model into **one page-local editing model**:
 2. **the doc-head visually divided from the body**, with the caret able to cross the boundary by
    arrow key, and the title committed to the doc-head node's `content` on blur (§2.2);
 3. **an element-type pane** whose apply write is **`setType`-class** — never delete + recreate (§2.4);
-4. **a diff-on-blur commit**: the page's content is decomposed with the **in-house**
-   `src/main/rich-decompose.ts` `decomposeRichHtml`, diffed against the store, and only the changed
-   sub-elements are written (§3);
+4. **a diff-on-blur commit**: the page's content is decomposed with the **ADOPTED package
+   `provident-editable@0.2.0`** (`htmlToTree` for the decode) and diffed against the store by the
+   **adapter** `src/main/page-diff.ts` (`diffTrees` over the package tree, mapped onto the closed
+   `{type, content, children, props}` field set and the `BatchOp` op set), and only the changed
+   sub-elements are written (§3). **AMENDED 2026-09-21 (§11 amendment `11.9` item 1): the in-house
+   `decomposeRichHtml` premise is superseded by this adoption — see §3.1, which names the package and
+   pins the adapter contract.**
 5. **the commit is ONE `applyBatch`** — one invertible `batch` project-journal entry, one persist
    (§3.3);
 6. **an async engine write** with a **failure model that leaves the store unchanged and surfaces a
@@ -246,66 +250,156 @@ never `refresh()` over a cached spliced envelope) (§4.2).
 
 ## 3. THE COMMIT CONTRACT (`ST-4` / `ST-5`)
 
-### 3.1 The decomposer — the in-house module, VERIFIED
+### 3.1 The decomposer — `provident-editable@0.2.0`, ADOPTED and VERIFIED (the adapter)
 
-**Pinned: the diff's decomposer is `src/main/rich-decompose.ts` `decomposeRichHtml`.** This is the
-condition `docs/specs/design-extensions-review.md` §3.6 F.2 item 4 (and §3.3 C item `C9`) places on
-this unit: `ST-4`'s literal text says "the **provident-editable** import tools", and **that package
-does not exist**.
+**Pinned: the decode is the package's `htmlToTree`, the diff is the package's `diffTrees`, and the
+mapping onto C9's op set is the ADAPTER `src/main/page-diff.ts`.** **AMENDED 2026-09-21 (§11 amendment
+`11.9` item 1): `provident-editable@0.2.0` is ADOPTED as the production decomposer and SUPERSEDES the
+in-house-build premise of this section as drafted** (`DECIDED: RICH-TEXT-EDITING-GATE`'s in-house
+clause is thereby superseded — §4.1's new row). This spec is now the **carrier of the mapping
+contract**: the package supplies the tree and the structural diff; **it supplies no RAG op set, no
+`BatchOp`, no `applyBatch` and no journal semantics** — those remain this unit's, unchanged.
 
-**The verification, stated as a verification (no shell was needed):**
-`grep -r provident-editable` over the whole tracked tree returns **only prose and comments** — the
-proposal (`docs/feature-requests/design-extensions-2026-09-21.md` §1/§2.4), the gate record, the
-catalog row `PRUNE-615`, four unit specs quoting the replacement, and one **stale source comment**
-(`src/main/paste-sanitize.ts`, above `sanitizePastedHtml`'s return, which still says the result is
-"ready to feed to the `provident-editable@0.1.0` converter"). `package.json`'s dependencies list
-**`provident-ssr: ^0.5.0` only**, and `node_modules/` contains **no `provident-editable`**
-(`node_modules/provident-ssr/package.json` is the only `provident-*` package). `DECIDED:
-RICH-TEXT-EDITING-GATE` records the same fact: *"the `provident-editable@0.1.0` import plan was
-replaced by the in-house build"*. **Consequences pinned:** (a) the commit may **never** import,
-require or reference a `provident-editable` package; (b) the stale comment in
-`src/main/paste-sanitize.ts` is repointed to `src/main/rich-decompose.ts` in this unit's landing pass
-(citation hygiene, `AGENTS.md` item 6c); (c) the catalog row `PRUNE-615`'s `statement` cell still
-carries the phantom package name and belongs to the catalog's own amendment pass — **cited, never
-edited here** (`docs/requirement-catalog.md` §C.0; recorded as owed in §11).
+**The verification, stated as a verification (read from the installed package, never assumed; no
+invented API).**
 
-**The decomposer's pinned shape** (read from the module, not assumed):
-`decomposeRichHtml(rawHtml: string): DecomposeRichResult` is **PURE** and **TOTAL** (it never throws
-for a string input), returning the discriminated
-`{ ok: true; content: string; children: RagNodeChild[] } | { ok: false; error: string }`. `content`
-is the root's own text plus the text of unwrapped elements plus the text **between** inline children,
-in document order; `children` is the inline set (`strong`/`em`/`a`/`img`, with `b`→`strong` and
-`i`→`em` mapped; `span` folded into the parent's `content`). **A malformed input is the `{ ok: false }`
-arm — a typed failure, never a partial write** (`FS7`).
+| What | Verified reading (the file read) |
+| --- | --- |
+| Installed version | `node_modules/provident-editable/package.json` — `"version": "0.2.0"`, `"type": "module"`, `"main"/"types"` → `./dist/index.js` / `./dist/index.d.ts`, `"sideEffects": false`, `engines.node >= 16` |
+| Declared deps | `dependencies`: **`parse5 ^7.1.2` only**. `peerDependencies`: **`provident-ssr >= 0.4.0 <1.0.0`** (`optional: true`) — satisfied by the installed **`provident-ssr` 0.5.1** (`node_modules/provident-ssr/package.json`) |
+| No DOM | the package declares **no** DOM/browser dependency and **no** `jsdom`; its parser is `parse5` (`dist/parse.d.ts` `parseHtml`), so the decode is **node-safe** (`htmlToTree`'s own doc: "Pure, deterministic, no DOM, no network") |
+| Exports (6 names) | `dist/index.d.ts`: **`htmlToTree`**, **`diffTrees`**, **`providentPlainText`** + the **5 types** `ProvidentNode`, `ProvidentTree`, `StructuralDiff`, `ProvidentNodeType`, `ConvertOptions`. `dist/index.js` exports exactly those **three** runtime bindings |
+| Signatures | `htmlToTree(html: string, opts?: ConvertOptions): ProvidentTree` (`ConvertOptions.idPrefix?: string`, default `'n'`); `diffTrees(prev: ProvidentTree, next: ProvidentTree): StructuralDiff`; `providentPlainText(node: ProvidentNode): string` |
+| **Its OWN shape** | `ProvidentTree = { root: ProvidentNode }`; `ProvidentNode = { id; type: ProvidentNodeType; content; props?; children? }` with the **PER-NODE XOR rule** (a node with `children` carries `content: ''`); `ProvidentNodeType` is a **19-member** union (`h1`..`h6`, `p`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`, `strong`, `em`, `a`, `img`, `div`, **`text`**). `StructuralDiff` = `{ nodeChanges: { add: ProvidentNode[]; remove: ProvidentNode[]; update: NodeUpdate[] }, edgeChanges: { add: EdgeChange[]; remove: EdgeChange[] } }`, with `NodeUpdate = { prevId; nextId; type?; content?; props? }` and `EdgeChange = { parentId; childId }` |
+| **NOT C9's shape** | the package's tree/diff is **not** `{ content, children }` + `RagNodeType` and **not** the `BatchOp` set: `NodeUpdate.props` carries the **FULL new props object** (never a delta), `add`/`remove` carry **whole subtrees** (subtree-granular), and the package populates **no `ownedNodeIds`**, **no `RagNodeChild`**, **no `documentPath`/`tags`** — those are the consumer's |
+| **`text` runs** | `text` is the package's own content-only leaf type (no children, no props) used for the runs **between** inline children; it is **not** a `RagNodeType` member and must never be minted as a RAG node |
+| Totality (read from the dist, not assumed) | `htmlToTree`/`diffTrees` are pure and **do not throw for malformed HTML** (their own docs: "The conversion returns a tree, never throws"; the comparison "NEVER throws"), **but both DO throw a typed `Error` for a non-object / malformed INPUT SHAPE** (`htmlToTree: html must be a string`, `opts must be an object`, `opts.idPrefix must be a string`; `diffTrees: prev/next must be a ProvidentTree`, plus a malformed node field at any depth) → the adapter's guard, below |
+
+**The adapter contract (`src/main/page-diff.ts`) — PINNED.** The adapter is the **only** module that
+imports the package; every other consumer (the commit seam, the tests) goes through it. Its pinned
+surface, two entry points:
+
+1. **`decodePage(html: string): PageDecodeResult`** — `html` is the surface's HTML; the decode is
+   `htmlToTree(html)` followed by the C9 **field-set projection** below. Returns the discriminated
+   `{ ok: true; blocks: PageBlock[]; documentId: string } | { ok: false; kind: 'decompose-failed'; message: string }`.
+   `PageBlock = { ragId; elementType; content; children; text; props }` — `ragId` from the block
+   element's `data-rag-node-id`, `elementType` = the block's tag **intersected with `RagNodeType`**,
+   `content`/`children` from the projection, `props` = the block's **RAG-owned** props only, `text` =
+   `providentPlainText` of the block's package node (used for the `FS14` "did the user empty it?"
+   read and for the live battery's text compare — **never** for a compared field, `FS8`).
+2. **`buildPageOps(decoded: PageDecodeResult, snapshot: PageDiffSnapshot, documentId: string): PageOpsResult`** —
+   `PageDiffSnapshot` is the document's **read-only node/edge view** taken from the store's own
+   snapshot seam (`DECIDED: RAG-SNAPSHOT-PRESERVED`; the adapter adds **no** `RagStore` member and no
+   store method); the adapter builds the **package-side** `next` tree from the decoded page and the
+   `prev` tree from that snapshot, calls **`diffTrees(prev, next)`**, and maps the result onto the
+   closed `BatchOp` op set. Returns `{ ok: true; ops: BatchOp[] } | { ok: false; kind: 'decompose-failed'; message: string }`. **Pure**: no I/O, no clock (the commit's single timestamp is passed in by the caller), and deterministic — the same `(decoded, snapshot)` draw yields the same op list (`P-TP-1`).
+
+**The change-kind → op mapping (CLOSED; an unmapped kind is a fail-state, never a silent drop):**
+
+| Package change | Adapter mapping (the op) |
+| --- | --- |
+| `nodeChanges.update[i].type` | `{ op: 'setType', nodeId: prevId, type }` — **one** op; id/`createdAt`/`children`/`props`/`ownedNodeIds` untouched (`FS6`) |
+| `nodeChanges.update[i].content` | `{ op: 'putNode', node }` carrying the **projected `content`** (the store's node with `content` replaced) |
+| `nodeChanges.update[i].props` | `{ op: 'setProps', nodeId: prevId, props: <the RAG-owned DELTA only> }` — the package's FULL object is diffed against the store node's props by the adapter, and only the changed RAG-owned keys are sent, because `setProps` **MERGES** (§3.2's `props` row; `data-doc-head` therefore survives, `FS3`) |
+| a run/children difference inside a block (`text` runs + inline children reorder) | `{ op: 'setSubtree', nodeId: prevId, children }` **or** the same node's single `putNode` carrying `content` **and** `children` — **exactly ONE** op for that node (the minimal-op rule, §3.2) |
+| `nodeChanges.add[j]` (no structural match) | a **new block**: **id-minted `putNode`** + the **`doc-child` `putEdge`**, per §3.3 item 8 (subtree-granular in the package, flattened to the **surface-level** blocks the user actually created; a package `add` for a wrapper the mode needs is **not** minted) |
+| `nodeChanges.remove[j]` | `{ op: 'removeEdge', id }` for its now-absent containment edge + `{ op: 'removeNode', id }`, **only** when the block is genuinely gone from the page (`FS14`: a transiently unmounted block is **not** a deletion) |
+| `edgeChanges.add` / `edgeChanges.remove` | the containment edge write/removal **only** — a package edge between two non-RAG nodes is adapter-internal and maps to **no** op (an edge op for a non-RAG node id is `FS9`'s churn class) |
+| **any other / unrecognized kind, or a package throw** | **REFUSED**, not dropped: the adapter returns `{ ok: false; kind: 'decompose-failed' }` → the **`FS5`/`ST-5` warning class** as the ruling names it — the §3.5 typed `CommitFailure` `kind: 'decompose-failed'`, carried by the `ST-5` warning obligation (this is the class, **not** the type-pane `FS5` fail-state) — with the store untouched (`FS7`). **A silent partial write is the fail-state this row exists to forbid.** |
+
+**New blocks** — a typed paragraph with **no** node (the ruling's case) is exactly a package
+`nodeChanges.add` whose element carries **no** `data-rag-node-id`: the adapter mints the id, emits
+`putNode` + the `doc-child` `putEdge` from the containing section, and never invents an update against
+a node that does not exist (§3.3 item 8's id scheme and edge shape are **unchanged** by this
+amendment).
+
+**Props differences** — **the adversarial pass's finding, closed here:** the last population could not
+express a `props` difference at all, so the mapping row had no oracle. The adapter's `props` mapping is
+now the **only** writer of `setProps` on the commit path, and it is exercised by a **prop-difference
+draw** in `P-IM-1` (§7) whose population includes a RAG-owned prop change **and** a runtime-prop change
+(which must produce **no** op — the discriminating control).
+
+**Structural changes (split / merge) — how they are detected.** The package reports a split as an
+**`update`** on the original node (its `content` shortens) plus an **`add`** of the new sibling, and a
+merge as an **`update`** on the surviving node (its `content` grows) plus a **`remove`** of the absorbed
+node; there is no dedicated split/merge kind, and the adapter **must not synthesize one** (a bespoke
+kind is `FS8`'s "field outside the closed set" class). Two documented package limitations are
+**inherited and recorded, not worked around**: (i) a **pure reorder of two same-type + same-content
+siblings is NOT detected** (the diff is empty — a documented limitation of the package's tier-(a)
+matching), and (ii) a **re-parent/reorder of distinct nodes is reported as `remove` + `add`**, which the
+adapter must read as such rather than as a delete+create of the same node (`FS14`'s guard). Both are
+pinned here so an implementer does not "fix" the package from this repo (`AGENTS.md` item 7: the package
+is **never** patched; a capability gap is a `docs/defects.md` + `docs/HANDOFF.md` item).
+
+**Deliberately NOT diffed (unchanged in substance; restated against the package shape).** The
+renderer-minted **runtime props** — `contenteditable`, `data-edit-surface`, `data-node-id`, and the
+head's **`data-doc-head` as a written prop** — plus `style`, class lists, the surface root's own
+authored props, anything about the representation mode, a node outside the rendered document, and a node
+whose only difference is `updatedAt`. Because the package's `update.props` carries a **FULL** object,
+this exclusion is **the adapter's own filter**, not the package's: a difference that survives the filter
+is `FS8`.
+
+**`text`-run semantics (pinned).** The package's `text` leaves carry the runs **between** inline
+children and the text of a leaf block. The projection **flattens them into the owning block's `content`**
+(C9's own field), in document order, so a `text` run never becomes a node, never becomes a
+`RagNodeChild`, and never becomes an op id. For a block **with** inline children the package's node
+content is `''` (the XOR rule) while C9's `content` is the run text around the children — the adapter
+must project the run text (via `providentPlainText`, then the C9 inline split) so an unchanged block
+compares **equal** and yields **no** op; a projection that reads the raw package `content` would emit a
+spurious op on every block that has inline children (`FS9`).
+
+**The stale comment, repointed.** `src/main/paste-sanitize.ts`'s comment above `sanitizePastedHtml`'s
+return ("ready to feed to the `provident-editable@0.1.0` converter") is repointed in this unit's landing
+pass to the **adopted entry point** `provident-editable@0.2.0` `htmlToTree` / the adapter
+(`AGENTS.md` item 6c). The catalog row `PRUNE-615`'s `statement` cell is still **cited, never edited
+here** — but it now names a package that **exists**, so the row's amendment is a **correction of
+version**, not a phantom removal (recorded as owed, §11 amendment `11.9` item 4).
+
+**The toolchain this adoption required (recorded, `11.9` item 3).** `package.json` now pins
+**`provident-editable: ^0.2.0`**, **`@types/node: ^24`**, **`vite: ^8.3.0`** (vitest 5's peer, previously
+missing from the lock) and **`provident-ssr: ^0.5.1`**; **`--legacy-peer-deps` is retired** — the
+dependency graph installs without it. The build/trio obligations (§8.2 item 4) are unchanged.
 
 ### 3.2 The diff granularity (`ST-4`)
 
 **Pinned: the diff is per RAG block, over a CLOSED field set, with a defined minimal-op rule.**
 
-**Decoding the surface (step 1).** The surface's subtree is decoded into an ordered list of
-`PageBlock` records: `{ ragId, elementType, content, children, text }`, where `ragId` comes from the
-block element's `data-rag-node-id`, `elementType` from the element's tag (intersected with
-`RagNodeType`), and `(content, children)` from `decomposeRichHtml` applied to that block element's
-HTML. A block whose `data-rag-node-id` matches no RAG node in the document is a **new block** (step 4
-below). A block-level element with **no** `data-rag-node-id` is a **surface artifact** (a wrapper the
-mode's rendering needs) and contributes to its **parent block's** `content` — it is never minted as a
-RAG node.
+**Decoding the surface (step 1).** The surface's subtree is decoded by the adapter's `decodePage`
+(§3.1) — `provident-editable@0.2.0`'s `htmlToTree` plus the C9 projection — into an ordered list of
+`PageBlock` records: `{ ragId, elementType, content, children, text, props }`, where `ragId` comes from
+the block element's `data-rag-node-id`, `elementType` from the element's tag (intersected with
+`RagNodeType`), `props` from the block's RAG-owned props, `text` from `providentPlainText`, and
+`(content, children)` from the projection (§3.1's `text`-run semantics — the package's own `content` is
+**not** used raw, because a block with inline children carries `content: ''` in the package's shape).
+**A block whose `data-rag-node-id` matches no RAG node in the document is a **new block** (step 4
+below). A block-level element with **no** `data-rag-node-id` — including a `textarea` element, now
+that no textarea child is authored (§5.1) — is a **surface artifact** (a wrapper the mode's rendering
+needs) and contributes to its **parent block's** `content` — it is never minted as a RAG node. **A
+block-level element the package's own tag set cannot express (`table`, `thead`, `tr`, `td`, `th` —
+none of which is a `ProvidentNodeType` member; the package's block set is
+`h1`..`h6`/`p`/`ul`/`ol`/`li`/`blockquote`/`pre`/`div`) is a RECORDED capability gap**: the adapter must
+**refuse** (the `decompose-failed` warning class, §3.1's mapping table's last row) rather than retype,
+remove or flatten a stored `td`/`th`/`tr`/`table` node on the strength of a decode that cannot see it
+(`FS14`'s data-loss class).
 
 **The compared fields — the CLOSED set (`FS8` if the set is widened silently):**
 
 | Field | Source on the page | Store counterpart | What a difference writes |
 | --- | --- | --- | --- |
-| `type` | the block element's tag | `RagNode.type` | `{ op: 'setType', nodeId, type }` |
-| `content` | `decomposeRichHtml` `content` | `RagNode.content` | `{ op: 'putNode', node }` with the new `content` |
-| `children` | `decomposeRichHtml` `children` | `RagNode.children` (optional) | `{ op: 'putNode', node }` with the new `children` (the op-level equivalent of `setSubtree`'s replace semantics) |
-| `props` | only the block's **RAG-owned** props, never DOM/runtime props | `RagNode.props` | `{ op: 'setProps', nodeId, props }` — **MERGE**, so `data-doc-head` and every unnamed key survive |
+| `type` | the block element's tag, via the adapter's `PageBlock.elementType` (intersected with `RagNodeType`) | `RagNode.type` | `{ op: 'setType', nodeId, type }` |
+| `content` | the adapter's `PageBlock.content` (the C9 projection of the package tree, §3.1) | `RagNode.content` | `{ op: 'putNode', node }` with the new `content` |
+| `children` | the adapter's `PageBlock.children` (the inline set the projection derives) | `RagNode.children` (optional) | `{ op: 'putNode', node }` with the new `children` (the op-level equivalent of `setSubtree`'s replace semantics) |
+| `props` | only the block's **RAG-owned** props (the adapter's `PageBlock.props`) — **never** the package's FULL `update.props` and **never** DOM/runtime props | `RagNode.props` | `{ op: 'setProps', nodeId, props }` — the adapter sends only the **changed RAG-owned keys**, so the store's **MERGE** preserves `data-doc-head` and every unnamed key |
 | `documentPath` / `tags` | **not compared** | `RagNode.documentPath`/`tags` | nothing — a document-metadata edit is `edit.set_doc_meta`'s (`DECIDED: DOC-DIRECTORY-CATEGORY-GATE` Q5), OUTSIDE the closed `BatchOp` union and outside this unit |
 
-**Explicitly NOT diffed** (each is a review finding if it appears in the op list): runtime
-props minted by the renderer (`data-node-id`, `style`, class lists, `contenteditable`, the
-`data-edit-surface` marker, the head's `data-doc-head` **as a written prop**); anything about the
-`editingMode`/representation mode; the surface root's own authored props; a node outside the
-rendered document; a node whose only difference is `updatedAt`.
+**Explicitly NOT diffed** (each is a review finding if it appears in the op list) — **and, because the
+package's `update.props` carries the FULL new props object, this exclusion is the ADAPTER's own filter
+(§3.1), never the package's**: runtime props minted by the renderer (`contenteditable`,
+`data-edit-surface`, `data-node-id`, and the head's `data-doc-head` **as a written prop**), `style`,
+class lists, anything about the `editingMode`/representation mode; the surface root's own authored
+props; a node outside the rendered document; a node whose only difference is `updatedAt`; and the
+package's own bookkeeping ids (a `ProvidentNode.id` is a **reconciliation key**, never a RAG id — an op
+naming a package id is `FS9`).
 
 **The minimal-op rule (pinned, and the subject of a register row).** For every block whose compared
 fields differ, the op list carries **exactly one** write for that node (the single op that expresses
@@ -321,7 +415,10 @@ unrelated node id appears).
 1. **One commit = one `store.applyBatch(ops)` call.** Not a loop, not `store.enqueue`, not per-node
    `putNode` calls. The precedent is `docs/specs/unit-import-batch-persist.md` §2a ("ONE
    `await store.applyBatch(ops)`", result checked) and its §2b invariant (**exactly one persist per
-   batch**, `FS1` there): a per-op loop inside the commit is this unit's `FS10`.
+   batch**, `FS1` there): a per-op loop inside the commit is this unit's `FS10`. **The `ops` array is
+   the adapter's output (§3.1) — the package supplies the tree and the diff, never the ops; the
+   one-`applyBatch` clause here and the journal clause below are unchanged by the 2026-09-21 adoption
+   (§11 amendment `11.9` item 1).**
 2. **The channel is the existing `IPC_EDIT_BATCH`** (`src/shared/types.ts` `IPC_EDIT_BATCH` /
    `EditBatchPayload { ops: BatchOp[] }`) → `src/main/edit-ops.ts` `handleEditBatch(store, payload)`
    → `store.applyBatch(payload.ops)` → `src/main/rag-store.ts` `applyBatchSync`. **This unit adds no
@@ -359,7 +456,9 @@ unrelated node id appears).
    it is the reason the type pane's apply contract (§2.4) and the commit (§3.3) share one primitive.
 8. **A NEW block has no node to diff against — the structural representation is PINNED:**
    - A paragraph/block the user **created** by typing in the surface matches no `data-rag-node-id`.
-     It is committed as **`{ op: 'putNode', node }`** with a **host-minted id**, followed by
+     It arrives as a package `nodeChanges.add` (§3.1) and is committed as **`{ op: 'putNode', node }`**
+     with a **host-minted id** (minted by the **adapter**, never the package's own reconciliation id),
+     followed by
      **`{ op: 'putEdge', edge }`** of kind **`doc-child`** from the **containing section node** to the
      new node, carrying `order` (its position among that section's `doc-child` children) and
      `documentIds: [documentId]`; `createdAt`/`updatedAt` are the commit's single timestamp, and
@@ -394,7 +493,7 @@ reversal at **§12.7(a)**, which names **this unit** as the one that must restat
 | Step | What happens | Source of the pin |
 | --- | --- | --- |
 | 1 | The user edits the single surface. The rendered document is the **only** copy of the edit; the **store and the cache are NOT modified** (no optimistic apply). The tab's state becomes `uncommitted`. | §3.3 item 1; `docs/specs/unit-reads-pivot-tab-cache.md` §6.3 step 1 |
-| 2 | **Blur** — the pinned `page-edit-surface-blur` handler def, whose body reads the surface's current text and calls the host seam **`pageSurfaceBlur(html)`** (§2.1; §11 amendment `11.8`) — or an explicit commit action, triggers the commit: the surface is decoded, diffed (§3.2) and the op list is built. The op list is a **pure function** of (decoded page, store snapshot) — no I/O. | this spec §3.2 |
+| 2 | **Blur** — the pinned `page-edit-surface-blur` handler def, whose body reads the surface's current text and calls the host seam **`pageSurfaceBlur(html)`** (§2.1; §11 amendment `11.8`) — or an explicit commit action, triggers the commit: the surface is decoded (`decodePage`), diffed (`diffTrees` through the adapter, §3.1) and the op list is built (`buildPageOps`). The op list is a **pure function** of (decoded page, store snapshot) — no I/O. | this spec §3.1/§3.2 |
 | 3 | The op list is sent as **one** `IPC_EDIT_BATCH` payload. The tab moves to a **committing** (in-flight) state. | §3.3 items 1/2 |
 | 4 | Main validates the payload (`handleEditBatch` returns a domain result for a non-array `ops`) and calls **one** `applyBatch`. On `{ ok: true }`, main derives and broadcasts `rag-store-changed` (`RagStoreChangedPayload`, `store`-qualified) **exactly once**, and the index reconcile runs. | `src/main/edit-ops.ts` `handleEditBatch`; `src/shared/types.ts` `IPC_RAG_STORE_CHANGED`; `docs/specs/unit-import-batch-persist.md` §2d (IPC-EDIT-BATCH: one batch entry, one persist, one broadcast) |
 | 5 | **Success:** the store holds the committed values; the journal gained one `batch` entry; the tab becomes `clean`; the warning (if any) clears; the pending re-derive renders the committed content, which is textually equal to what the user typed. | §3.3 items 3/6; `docs/specs/design-extensions-review.md` §12.4 |
@@ -487,13 +586,18 @@ writing them earlier would supersede a live model with an unimplemented one"*).
 | **`DECIDED: EDITING-MODE-SETTING`** | **SUPERSEDED** | the **editing-control swap** — that `editingMode: 'textarea' \| 'contenteditable'` selects the per-node control (a rich-eligible root splices to `contenteditable`; ineligible roots render as plain text), and that a mode change re-derives to swap controls | **The mode-broadcast contract SURVIVES and is kept** (§2.5): a mode/operator change writes the operator store → main broadcasts `operator-settings-changed` with the store's result as the **authoritative payload** → the host uses the **payload directly** (no re-fetch; no async race with the sync `requestRebuild`) → **fresh re-derive**, never `refresh()` over a cached spliced envelope. Also surviving: **commit-on-blur**, **the dirty-edit guard**, **RAG-authoritative re-traversal**, and **all-UI-via-provident authoring**. The `settingsContent` button-toggle and the `?? 'contenteditable'` fallback do **not** survive (the field is gone). **Also surviving (§11 amendment `11.8`), the successor carrier of the same persisted slot:** the representation-mode field **`representationMode: 'html' | 'markdown'`** (§2.5) — it reuses the removed field's `OperatorSettings` slot while naming **representations** of one control, never editing controls. |
 | **`DECIDED: FORM-CONTROL-EDITING`** | **SUPERSEDED** | the **form-control model** — that editing "is a form control (textarea/input) committed on blur, writing back to the source RAG object"; and its `NOT contenteditable` clause (which `DECIDED: RICH-TEXT-EDITING-GATE` had already relaxed) | **commit-on-blur SURVIVES**; **the write-back is to the RAG store, then a re-traversal** SURVIVES (`DECIDED: CONTENT-EDIT-RE-TRAVERSAL` is the successor carrier and stays ACTIVE); **the dirty-edit guard queues rather than executes a rebuild** SURVIVES; the caret-is-host-side-state-keyed-by-RAG-node-id clause is **re-scoped** (the caret is now page-scoped, §2.1). |
 | **`DECIDED: WHOLE-PAGE-EDITING`** | **status moves from `REQUIREMENT, not yet implemented` to IMPLEMENTED-BY-THIS-UNIT** — the row **stays ACTIVE** | its own text already declares the supersession *"once implemented"* and owes *"a spec re-derivation + a live row (whole-page edit commits 1-1)"* | The row's **RAG-store-authoritative** clause is read through its successor `DECIDED: ENGINE-AUTHORITATIVE-DOCUMENT-CRUD` (the `GN-1` ruling moved the authority engine-side while the host keeps the temporary authority until P2, §3.4 step 8). The **live row it owes is recorded as this unit's live battery** (§8.3) with its identifier pinned as **`U-EDIT-1-LIVE`** and its §5.U disposition stated (§8.3 item 6). |
+| **`DECIDED: RICH-TEXT-EDITING-GATE`** (**ADDED 2026-09-21 — §11 amendment `11.9` item 1**) | **SUPERSEDED at this unit's landing** — **only its in-house-build clause** | that the rich-text decompose/diff is an **in-house** build (`src/main/rich-decompose.ts` `decomposeRichHtml`), and its recorded fact *"the `provident-editable@0.1.0` import plan was replaced by the in-house build"* | **Every other clause of the row SURVIVES and stays binding:** the 9-member rich-editability/eligible-type gate's supersession path, the `setProps` **MERGE** semantics that preserve `data-doc-head`, the **`setType` never delete+create** rule, the `children` field's inline model, and the census rows it pins (§2.2 item 3, §2.4 item 4, §3.2's props row all still cite it). The supersession is by the **package adoption**: `provident-editable@0.2.0`'s `htmlToTree`/`diffTrees` are the production decomposer/diff, with the **mapping contract carried by §3.1 of THIS spec** (the adapter `src/main/page-diff.ts`) — so no clause of the row is left without a successor. This row writes **no** `SUPERSEDED` mark on any other row. |
 | **the textarea half of `DECIDED: EDITING-MODE-SETTING`** | covered by the supersession above | — | — |
 
 ### 4.2 The `SUPERSEDED` rows are written AT LANDING, and only then
 
 **Rule (binding):** the two `SUPERSEDED` rows land **in this unit's own landing pass** — the same
 pass that archives the code (§5) and the tests (§6) — and **not** in the pass that authored this
-spec. A pass that writes them earlier contradicts `docs/specs/design-extensions-review.md` §6.2 and
+spec. **A THIRD row was added to that set by the owner ruling of 2026-09-21 and lands in the same
+pass, under the same rule: `DECIDED: RICH-TEXT-EDITING-GATE`'s in-house-build clause**
+(§4.1's added row; §11 amendment `11.9` item 1). The set is therefore **three** rows at landing, and
+the sentence above is read with that addition — recorded here rather than left for a later pass to
+re-tally silently. A pass that writes them earlier contradicts `docs/specs/design-extensions-review.md` §6.2 and
 §9.2 (a supersession is *"reversible in form, not in effect"*). Each row carries, in its own text:
 the date, the gate-record pointer (`§11.1`/`§12.7(a)` do **not** apply here — the pointer is
 `§3.3 C item C9` + `§6.2`), the **surviving clauses enumerated** (the table above), and the statement
@@ -555,44 +659,50 @@ is **moved, never edited**, and is a **rebuild input** — never a source of the
 | --- | --- | --- | --- | --- |
 | **1** | **The per-node contenteditable splice** — `src/renderer/sidebar-panes.ts`'s `applyEditingMode` (the private method that filters `textarea` children, computes `ownsDocChildren`, sets `props.contenteditable = true` and attaches `RAG_EDITOR_HANDLER_DEFS` to every rich-eligible root) | `archive/src/2026-09-21-sidebar-panes-apply-editing-mode.ts` — **MOVED at this pass, importer-free at the move** (§11 amendment `11.8`; **the method's own text**, extracted as a recorded artifact — the module itself is 3 670 lines and is **not** archived) | the **app-graph/stage-assembly** authoring of the single surface (§2.1 — the `assembleAppGraphEnvelope` builder + the host's `applyEditorToolbar`/`loadAppGraph` seam) must be in place, **and** the host's re-derive paths (`reDerive`, the per-document assembly loop, the content-reconcile re-derive) must author the surface through that successor instead | **A module with a live importer is never archived.** `sidebar-panes.ts` keeps live importers throughout (`src/renderer/renderer.ts`, the host tests), so the **whole module is NOT archived**; only the dead method text is. |
 | **2** | **The 4 per-node rich handler defs and their bodies** — `src/renderer/sidebar-panes.ts` `RAG_EDITOR_HANDLER_DEFS` (`rag-editor-input` / `-blur` / `-compositionstart` / `-compositionend`) + `RAG_EDITOR_INPUT_BODY` / `_BLUR_BODY` / `_COMPOSITIONSTART_BODY` / `_COMPOSITIONEND_BODY` + `restoreRichCaret` + the `saveCaret(nodeId, { kind: 'rich' … })` path | `archive/src/<date>-sidebar-panes-rag-editor-handlers.ts` | the page surface's own handler defs must be registered **and** the caret machinery re-scoped to the page (§2.1) | Registered handler defs are reachable by name from the app graph; removing them while the **app-graph assembly** still authors them breaks the graph (`provident.dispatch` would resolve a name with no def). **Order: the app-graph/stage authoring changes first** (the successor authoring is the surface node of §2.1, authored through `assembleAppGraphEnvelope`/the host's `applyEditorToolbar` seam). |
-| **3** | **The per-node textarea editing overlay** — `src/main/traversal.ts` `buildSubtree`'s authored child `{ type: 'textarea', props: { id: \`textarea-<ragId>\`, … }, handlers: [{ name: 'rag-textarea-input' }, { name: 'rag-textarea-blur' }] }` | **NOT ARCHIVED — see the fence clause below** | — | **EXCEPTION, and the reason is a fence.** |
+| **3** | **The per-node textarea editing overlay — the WHOLE textarea path** — `src/main/traversal.ts` `buildSubtree`'s authored child `{ type: 'textarea', props: { id: \`textarea-<ragId>\`, … }, handlers: [{ name: 'rag-textarea-input' }, { name: 'rag-textarea-blur' }] }`, its `hidden`/`readOnly` tombstone form, and every remaining consumer of a `type: 'textarea'` child (the decode/diff skip rows, the `textarea-<ragId>` id-namespace class, the child-list expectations built on it) | `archive/src/<date>-traversal-textarea-overlay.ts` — the **authored-child text** extracted from the still-live `src/main/traversal.ts` (the module itself keeps live importers and is **NOT** archived) | the **package decode + adapter** path (§3.1/§3.2) must be the only content read-back, and the fence row below must be re-planned **first** (§5.1) | **MOVED in this unit's landing pass — the tombstone exception is RETIRED (§11 amendment `11.9` item 2).** The adapter creates the element **unconditionally**, so `hidden` never made it non-rendered; the child must therefore stop being authored **entirely**, and the fence row is re-planned. |
 | **4** | **`isRichEditableRoot`'s per-node gate** — `src/renderer/rich-eligibility.ts` (`isRichEditableRoot` + the closed `EDITABLE_TYPES` set) | `archive/src/2026-09-21-rich-eligibility.ts` — **MOVED at this pass, importer-free at the move** (§11 amendment `11.8`; **the whole module**) | `applyEditingMode` (item 1) is the module's **only** `src/` consumer; it must be deleted first, and the `EDITABLE_TYPES` census (9 members) must be superseded by the pane's closed set (§2.4) | The module's **only** importer is `src/renderer/sidebar-panes.ts`; once item 1 lands there is **zero** `src/` importer, so the whole module is archivable **in the same pass** (and its archived copy is the rebuild input, not a pin). |
 | **5** | **The editing-mode setting path** — `OperatorSettings.editingMode` (`src/shared/types.ts` `type EditingMode` + the field + its patch field), `src/main/operator-settings-store.ts`'s `coerceEditingMode`/`sanitize`/`set` handling of it, `src/renderer/pane-graph.ts`'s `editingModeLabel`, and the `settingsContent` button-toggle + its `sidebar.operatorSet({ editingMode })` bridge in `src/renderer/sidebar-panes.ts` | `archive/src/<date>-editing-mode-setting.ts` (the removed coercion + label helpers, as one artifact) | the successor representation-mode field (§2.5) must land **with** the removal in one diff (a boot that reads a removed field must not be reachable), and every test harness literal must move (§6.3) | The field is **persisted operator state** (`DECIDED: UI-CONFIG-CARRIER`): a stored `editingMode` from a previous session must be **ignored, not trusted** — the sanitizer drops it and the successor field defaults. A boot that restores `'textarea'` behaviour from the stale key is `FS20`. |
 | **6** | **The per-node textarea handler defs + the per-node edit IPC bridge surface** — `rag-textarea-input` / `rag-textarea-blur` defs and the `SidebarApi.textareaInput` / `textareaBlur` surface in `src/renderer/sidebar-panes.ts`, plus the per-node `IPC_EDIT_COMMIT` (`{ nodeId, content }`) **renderer** caller | `archive/src/<date>-textarea-editing-bridge.ts` | the page commit path (§3) must be the only content write-back, and the host must stop registering the textarea handler names | `IPC_EDIT_COMMIT` **itself is not removed** — it is the MCP/UI-equivalent single-node content write (`src/shared/types.ts` `EditCommitPayload`) and `src/main/edit-ops.ts` `handleEditCommit` stays the MCP `edit.set_content` counterpart; **only the renderer's per-node textarea caller dies** (a main-side handler without a UI caller is legal; a UI caller with no handler is not). **The surviving-seam census (pinned here and restated in §11 amendment `11.8`, so §2.1 and this item agree on the exact set):** the retired per-node seam set is exactly **six handler defs** — `rag-textarea-input`/`rag-textarea-blur` (this item) + `rag-editor-input`/`rag-editor-blur`/`rag-editor-compositionstart`/`rag-editor-compositionend` (item 2) — and exactly **six `SidebarApi` bridge methods** — `textareaInput`/`textareaBlur` (this item) + `editorInput`/`editorBlur`/`editorCompositionStart`/`editorCompositionEnd` (item 2's rich-editor seam class; `src/main/preload.ts`'s `SidebarApi` comment names the same six as retired). The **surviving** page seams are exactly **two handler defs** (`page-edit-surface-input`/`page-edit-surface-blur`) and exactly **two bridge methods** (`pageSurfaceInput`/`pageSurfaceBlur`); a pass that leaves any retired name registered, or that re-exposes a per-node editing seam under a new name, is a review finding. |
 | **7** | **The per-node caret model** — `src/renderer/edit-controller.ts` `type CaretState`'s `kind: 'textarea'` arm | folded into item 2's artifact (the same type's re-scope is a supersession, not a move) | the page caret type (§2.1) must land with the re-scope | `src/renderer/edit-controller.ts` **the module is NOT archived**: its `EditController` interface is **kept whole** (§6.4 item 1) — it is the surviving dirty-edit guard used by **both** the content path and the template editor, and `src/renderer/sidebar-panes.ts` is a live importer. |
 
-### 5.1 The textarea authoring, the fence, and the ESCALATED CONFLICT
+### 5.1 The textarea authoring, the RE-PLANNED fence row, and the DROPPED tombstone
 
-**The conflict, stated exactly.** `ST-6`/`PRUNE-311` require that textarea editing be **removed**
-("no `<textarea>` editors are materialized, and no duplicate textarea ids exist"). **But
-`tests/traversal.test.ts` — one of the two FENCE suites — asserts the authored child list
-`[undefined, 'textarea-ul', 'rag-li1', …]` for a `ul` subtree root**, i.e. it pins the presence of the
-traversal-authored `textarea-<ragId>` child. The fence's standing pin is that it **"must stay green
-UNCHANGED"** and **"may not be re-derived"** (`docs/specs/design-extensions-review.md` §3.1/§3.2 B.4,
-§14.2; the fence exemption is EXEMPT BY NAME), and the archived-test pass recorded both files on its
-**absolute-exclusion** list (`docs/specs/test-pruning-disposition-2026-09-21.md` §9.3a).
+**The conflict, stated exactly — and its RESOLUTION (2026-09-21).** `ST-6`/`PRUNE-311` require that
+textarea editing be **removed** ("no `<textarea>` editors are materialized, and no duplicate textarea
+ids exist"). **`tests/traversal.test.ts` — one of the two FENCE suites — asserted the authored child
+list `[undefined, 'textarea-ul', 'rag-li1', …]` for a `ul` subtree root**, i.e. it pinned the presence
+of the traversal-authored `textarea-<ragId>` child, and the fence's standing pin was that it **"must
+stay green UNCHANGED"** and **"may not be re-derived"** (`docs/specs/design-extensions-review.md`
+§3.1/§3.2 B.4, §14.2; the fence exemption is EXEMPT BY NAME), with both files on the archived-test
+pass's **absolute-exclusion** list (`docs/specs/test-pruning-disposition-2026-09-21.md` §9.3a).
 
-**This is a genuine contract conflict between `ST-6` and a fence, and it is ESCALATED** (§11 item 2).
+**The escalation this section previously carried is RESOLVED by an owner ruling (2026-09-21; §11
+amendment `11.9` item 2). The interim tombstone is DROPPED, and that one fence row is RE-PLANNED.**
+The tombstone never satisfied its own purpose: **the adapter creates the `<textarea>` element
+unconditionally**, so `{ hidden: true, readOnly: true }` never made the child non-rendered, and the
+"inert" artifact was a rendered form control in the stage — the exact outcome `ST-6` forbids. The
+resolution is therefore the removal, not the disguise:
 
-**Pinned resolution, taken so the unit is implementable and reversible (the choice and why).**
-The traversal keeps authoring **one** child at that position so the fence's child-list assertion holds
-**unchanged**, but the child is **inert**:
-
-- it is authored **`{ type: 'textarea', props: { id: 'textarea-<ragId>', 'data-rag-node-id': ragId, hidden: true, readOnly: true } }`**
-  with **no handler defs** — so the envelope carries a non-rendered, non-interactive tombstone;
-- the **rendered DOM contains zero `<textarea>` elements** in the stage region, in **both** modes;
-- the per-node editing capability (`value` binding, `rag-textarea-*` handlers, read-only-by-backref
+- **`src/main/traversal.ts` `buildSubtree` stops authoring the `type: 'textarea'` child ENTIRELY** — no
+  `textarea-<ragId>` id, no `hidden`/`readOnly` props, no `data-rag-node-id` mirror, **no authoring
+  slot at all** (the id-namespace class `textarea-` therefore retires with it, §6.3 row 19);
+- **the one fence row it existed to satisfy is RE-PLANNED under this explicit ruling** — the fence was
+  **exempt BY NAME**, and the owner has authorized **re-planning that row**. The authorization is
+  scoped: **`tests/traversal.test.ts` is the ONLY fence file this unit may edit, and the child-list row
+  is the ONLY row it may edit there** (§6.5's fence paragraph). `tests/import-render-no-duplicates.test.ts`
+  is **NOT** licensed for any change;
+- **the per-node editing capability** (`value` binding, `rag-textarea-*` handlers, read-only-by-backref
   logic) is **gone**;
-- the child is **excluded from the diff** (§3.2's closed field set never reads it) and from the
-  page-decode (§3.2 step 1 skips a `textarea`-typed child).
+- **no `textarea`-typed child is excluded from the decode or the diff any more**: the adapter's
+  compared-field set (§3.2) has nothing to skip, because the child is never authored. A `textarea`
+  element appearing on the page is now a **surface artifact** folded into its parent block's `content`
+  exactly like any other non-RAG element (§3.2).
 
-*Why this and not a fence edit:* the fence may not be re-derived, and `ST-6`'s own user-visible
-outcome is **"no textarea editors are materialized"** — a zero-count `<textarea>` census in the
-rendered DOM (asserted live, §8.3 item 7), not the absence of a non-rendered envelope authoring slot.
-*Why not a DOM-shaped fence edit:* moving the fence's child list is exactly the re-derivation the
-exemption forbids. **The tombstone is a deliberate, recorded, single-purpose artifact** — it is
-**not** "keeping a textarea": it renders nothing, binds nothing, diffs nothing, and is named in
-`FS21` so the two conditions (`hidden` + no handlers) are mechanically checkable.
+*Why the drop and not the tombstone:* the tombstone's whole justification was that the fence could not
+be edited. That premise is gone (the row is re-planned), and the artifact it produced defeated `ST-6`'s
+user-visible outcome — a zero-count `<textarea>` census in the rendered DOM (§8.3 item 6), which is now
+**TRUE** rather than asserted-around. `FS21` below is restated accordingly: it no longer names a
+tombstone at all.
 
 ---
 
@@ -668,7 +778,17 @@ same holds for `template`, whose only editing references are prose comments plus
 **The derivation rule (binding, and it is the general rule of §9.4):** each rebuilt suite is derived
 from **`docs/specs/design-extensions-review.md`** (§13.1/§13.3 the program and the one-unit-one-cycle
 rule; §14.2 the re-derivation discipline) **+ this spec + the affected `docs/decisions.md` rows** —
-**never** from the archived file's assertions. The archived file is consulted only as an input to
+**never** from the archived file's assertions.
+
+**The test-local reference decode/diff is DELETED (2026-09-21 amendment, `11.9` item 1).** The rebuilt
+diff suites had carried a **test-local** reference implementation of the decode and the diff (the
+oracle in `tests/page-diff.test.ts`, which imported the in-house `src/main/rich-decompose.ts` and
+documented the decode/diff itself). **That is deleted**: the package is the path, so a suite that
+asserts the diff re-derives **through the adapter (`src/main/page-diff.ts`) + the package**
+(`htmlToTree`/`diffTrees`) — the adapter is the module under test, and the package is the oracle for
+the structural half. **A suite that re-imports `src/main/rich-decompose.ts` or reconstructs the decode
+in the test file is a review finding** (it would pin a superseded premise and drift from §3.1). The
+archived file is consulted only as an input to
 **what the old pin covered**; its assertions are **never copied back**. **Two subjects the archived
 `edit-controller`/`edit-ops`/`edit-adversarial` suites covered are deliberately NOT rebuilt here** and
 must be stated as gaps, not silently dropped:
@@ -694,8 +814,9 @@ relaxation to keep a suite green):**
 - **R-C — drop the removed textarea API.** A suite calling `sidebarApi().textareaInput/textareaBlur`
   (or asserting `type: 'textarea'` children, `rag-textarea-*` defs, `textarea-<ragId>` ids) is
   re-derived to drive **the page surface's** own handler names and to assert the **single surface**
-  plus the **zero-rendered-textarea** invariant (§5.1's tombstone is asserted as *non-rendered*, not
-  as *absent from the envelope*).
+  plus the **zero-rendered-textarea** invariant (§5.1's resolution is now **no textarea child is
+  authored at all**, so the assertion is on **absence** — an authored `type: 'textarea'` child is
+  `FS21`, not an "inert" artifact to be tolerated).
 - **R-D — keep the subject, change the harness only.** A suite whose **subject is unaffected** (a pane
   layout test, a doc-nav test, a settings-listing test) keeps its assertions **verbatim** and changes
   only the construction literal/token that the removal breaks. **This is the ONLY rewrite shape that
@@ -704,7 +825,7 @@ relaxation to keep a suite green):**
 
 | # | File | Shape | The clause it is re-derived from |
 | --- | --- | --- | --- |
-| 1 | `unit-u-shell-9b-h3-doc-namespace` | R-C | §5.1 (the tombstone is non-rendered; the id-namespace rule for `textarea-` ids is superseded by the single surface's own id) |
+| 1 | `unit-u-shell-9b-h3-doc-namespace` | R-C | §5.1 (no textarea child is authored at all; the id-namespace rule for `textarea-` ids is superseded by the single surface's own id) |
 | 2 | `unit-live8-toolbar-undo-refresh` | R-B | §2.3/§2.5 (the toolbar's mode control + `editorToolbarContent`'s argument) |
 | 3 | `unit-live11-bridge-seams` | R-A/R-D | §6.4 item 1 (the surviving dirty-edit guard's behaviour is unchanged; only the literal moves) |
 | 4 | `unit-v3-doc-heads-docnav-adversarial` | R-A/R-D | same |
@@ -726,7 +847,7 @@ relaxation to keep a suite green):**
 | 20 | `unit-u-shell-9b-h1-optionc-interception` | R-C | §5.1 + §3.3 (every per-node textarea edit becomes a page commit) |
 | 21 | `unit-u-parity-c19-hover-preview` | R-A/R-D | same (hover preview is untouched by the mode field) |
 | 22 | `unit-u-shell-9b-blind-greens` | R-C | §5.1 + §3.3 (the largest rewrite: every `textareaInput/Blur` edit becomes a page edit + commit) |
-| 23 | `unit-r-traversal-inline-children` | R-C | §5.1's tombstone + `DECIDED: RICH-TEXT-EDITING-GATE` item (the inline-children ordering pin survives as `[inline children, tombstone, doc-children]`) |
+| 23 | `unit-r-traversal-inline-children` | R-C | §5.1's removal + `DECIDED: RICH-TEXT-EDITING-GATE` item (the inline-children ordering pin survives as `[inline children, doc-children]` — the `textarea` child **no longer exists at that position**, per the re-planned fence row) |
 | 24 | `sidebar-panes-host` | R-C/R-D | §5.1 + §6.4 item 1 (the `textareaBlur`-is-a-function assertion is replaced by the page-commit seam's own assertion) |
 | 25 | `unit-u-state-1a-content-reconcile` | R-D | §3.5 item 6 (the warning/state carrier is host-side; a content reconcile preserves it) |
 | 26 | `unit-u-state-1a-content-reconcile-adversarial` | R-D | same |
@@ -757,9 +878,12 @@ figure: REWRITE 26 / KEEP 137 / REBUILD 17 / DELETE 0** (17 + 26 + 137 = 180).)*
 2. **No rewrite may relax an assertion to make a suite green.** The four shapes in §6.3 are the only
    permitted changes; a `skip`/`todo`/loosened matcher is a review finding (`DECIDED:
    REBUILD-ARCHIVE-POLICY` clause 1: archived, not adapted).
-3. **The two fence suites are not in the rewrite set** (`tests/traversal.test.ts`,
-   `tests/import-render-no-duplicates.test.ts`): they stay **green unchanged** and are **never**
-   cited as this unit's green (`docs/specs/design-extensions-review.md` §14.2).
+3. **The fence suites are not in the rewrite set** (`tests/traversal.test.ts`,
+   `tests/import-render-no-duplicates.test.ts`): they stay **green** and are **never** cited as this
+   unit's green (`docs/specs/design-extensions-review.md` §14.2) — **with the single authorized
+   exception of `tests/traversal.test.ts`'s child-list row, which is RE-PLANNED under the 2026-09-21
+   ruling (§5.1; §6.5; §11 amendment `11.9` item 2). The exception is one row in one file and licenses
+   nothing else.**
 
 ### 6.5 The RED-SET plan (RCA-1: tests FIRST, red RUN and REPORTED)
 
@@ -771,21 +895,25 @@ control.**
    headings).** New suites assert: EXACTLY ONE `[contenteditable]` root in the stage region per open
    document tab; the surface's authored id/marker; the head element as a sibling of the body's first
    block; no `contenteditable` prop on any RAG subtree root.
-2. **The diff + the one-batch commit (red: no diff module exists; and `src/main/rag-store.ts`
+2. **The diff + the one-batch commit (red: no adapter module exists — nothing imports the ADOPTED
+   package yet, the decode/diff is test-local (`tests/page-diff.test.ts`); and `src/main/rag-store.ts`
    `applyBatchOp` returns `op not supported` for `setProps`/`setSubtree`/`setType`, so a whole-page
    commit containing a type change cannot succeed today).** New suites assert §3.2's closed field set,
-   the minimal-op rule, the new-block/new-node representation, the one-`applyBatch` call, the single
+   the minimal-op rule, the new-block/new-node representation, the **adapter's change-kind→op mapping
+   and its refusal of an unmappable kind into the `FS5`/`ST-5` warning class** (§3.1), the
+   one-`applyBatch` call, the single
    `batch` journal entry, the one persist, and the rollback on `{ ok: false }`.
 3. **The state machine + the warning (red: no `commit-failed` state, no typed failure record, no
    warning).** New suites assert the four-state machine, the typed `CommitFailure`, the store
    unchanged on failure, the text preserved, and the warning's **survival across a re-derive** (the
    re-derive is driven in the test; the state must be unchanged after it).
 4. **The textarea removal + the successor mode (red: textarea editing is live — `EDIT-MODE-TEXTAREA-UI`
-   is OPEN; the mode control swaps controls).** New suites assert: the tombstone is **non-rendered**
-   and carries no handlers, the rendered-DOM-count assertion is **zero `<textarea>`** in the stage
-   region in both modes, markdown mode is plaintext with **no** inline formatting elements, and the
-   removed `editingMode` field is **absent** from `OperatorSettings` while the successor mode is
-   present and persists through `UI-CONFIG-CARRIER`.
+   is OPEN; the mode control swaps controls).** New suites assert: **no `type: 'textarea'` child is
+   authored anywhere** (and no `textarea-<ragId>` id, no `rag-textarea-*` handler name — §5.1), the
+   rendered-DOM-count assertion is **zero `<textarea>`** in the stage region in both modes, markdown
+   mode is plaintext with **no** inline formatting elements, and the removed `editingMode` field is
+   **absent** from `OperatorSettings` while the successor mode is present and persists through the
+   `DECIDED: UI-CONFIG-CARRIER` operator state.
 
 **The rows the 2026-09-21 amendment (surface's layer) re-derives (§11 amendment `11.7`).** The
 surface is authored at the app-graph/stage-assembly layer (§2.1), so every **envelope-shape** row
@@ -801,13 +929,21 @@ that reads the **traversal envelope** for the surface is re-derived against the 
   `unit-u-shell-9b-h2-c20-materialization`, `unit-u-shell-9b-blind-greens`,
   `unit-r-traversal-inline-children`.
 
-**The fence suites are NOT re-derived.** `tests/traversal.test.ts` is **EXEMPT BY NAME** and stays
-untouched; `tests/import-render-no-duplicates.test.ts` likewise. Nothing in this amendment licenses
-a fence re-derivation, and the traversal envelope keeps the shape the fence pins (§5.1; §6.4
-item 3; §8.4).
+**The fence suites: one is NOT re-derived, one row IS (the authorized re-plan).** `tests/traversal.test.ts`'s
+**child-list assertion** (`[undefined, 'textarea-ul', 'rag-li1', …]`) is the row the owner has
+**authorized re-planning** (§5.1; §11 amendment `11.9` item 2) — and it is the **ONLY** fence change
+this unit may make: **that file and that row, nothing else**, so the fence's other pins and the whole of
+`tests/import-render-no-duplicates.test.ts` stay untouched. The **recorded re-plan shape** (pinned):
+the row asserts the authored child list **without the `textarea-<ragId>` entry** — `[undefined, 'rag-li1', …]`
+for the `ul` subtree root — because the traversal authors **no** textarea child at all; the row's
+*subject* (the child ordering at that position) is unchanged, only the removed artifact leaves the list.
+A pass that instead **rewrites the fence's other assertions, edits the other fence file, or re-derives a
+different row** is a review finding. `tests/import-render-no-duplicates.test.ts` **stays untouched** and
+remains a pure control.
 
-**The fence as a control.** `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts`
-must appear in the red run as **GREEN controls**; writing either into the red set as a failure is a
+**The fence as a control.** `tests/import-render-no-duplicates.test.ts` **and every
+non-child-list row of `tests/traversal.test.ts`** must appear in the red run as **GREEN controls**;
+writing either suite into the red set as a failure — outside the one authorized child-list row — is a
 review finding (`docs/specs/unit-import-batch-persist.md` §5.2's control discipline for the same
 fence).
 
@@ -843,12 +979,12 @@ fence).
 
 | # | Class | Invariant | Strategy | Oracle (what a draw asserts) |
 | --- | --- | --- | --- | --- |
-| **`P-IM-1`** | IM | **The op list is a function of the diff, and it names only changed nodes.** For ANY (page, store) draw, for every node id in the op list there is a compared field (§3.2) whose value differs; and for every block whose compared fields are all equal, **no** op names it. | `strat:diff-minimality` — draw a store of N blocks (N ∈ {1, 2, 7, 40}) and a page derived from it by mutating a random **subset** S of blocks over the closed field set (empty S allowed) | every op's node id ∈ S (or is a minted new-block id, or is the containment edge of one); **zero** op ids name an unchanged block; `S = ∅ ⇒ ops = []` (the **control**: a draw with S = ∅ must produce an empty list, proving the row is not vacuous) | pure |
+| **`P-IM-1`** | IM | **The op list is a function of the diff, and it names only changed nodes.** For ANY (page, store) draw, for every node id in the op list there is a compared field (§3.2 — `type`, `content`, `children` **or `props`**) whose value differs; and for every block whose compared fields are all equal, **no** op names it. **AMENDED PROPOSITION (§11 amendment `11.9` item 5 — the adversarial pass found the population could not express a `props` difference AT ALL): the population MUST contain at least one PROPS-ONLY change** (a RAG-owned prop added / changed / removed on exactly one block, page text unchanged), so the `setProps` mapping (§3.1) has an oracle; and it MUST contain at least one **runtime-prop-only** change, which is the discriminating control. | `strat:diff-minimality` — draw a store of N blocks (N ∈ {1, 2, 7, 40}) and a page derived from it by mutating a random subset S of blocks over the closed field set (empty S allowed), **stratified so that each of the four compared fields is exercised at least once per run, with the props arm drawn in BOTH its RAG-owned and its runtime-only form** | every op's node id ∈ S (or is a minted new-block id, or is the containment edge of one); **zero** op ids name an unchanged block; **a props-only change on a block yields exactly one `setProps` op naming that block** (the amended arm — a props difference with no op is the row's `broken` finding); a **runtime-prop-only** change yields **no** op (`FS8`); `S = ∅ ⇒ ops = []` (the **control**: a draw with S = ∅ must produce an empty list, proving the row is not vacuous) | pure |
 | **`P-IM-2`** | IM | **One commit = one `batch` journal entry, and the entry is invertible to the pre-commit state.** **AMENDED PROPOSITION (§11 amendment `11.8`, remedy (a) — the population is restricted to NON-EMPTY mutation subsets):** for ANY draw **whose mutation subset is `S ≠ ∅`**, after a successful commit `journal()` gained exactly one entry of kind `batch`, and applying its `inverse` (in order) restores the store's nodes/edges **deep-equal** to the pre-commit snapshot. The `S = ∅` draw is **outside this row's population** — it is this row's **control**, and it is `P-TP-2`'s proposition (an empty op list ⇒ journal delta 0, persist delta 0, state `clean`), so the two rows no longer state contradictory oracles. **The invariant itself is NOT weakened:** on its (non-empty) population the row is exactly as strong as before; only an out-of-population draw is excluded, and the exclusion is recorded here, never silently relaxed. | `strat:commit-journal-invertibility` — draw a **non-empty** mutation subset `S ≠ ∅` over the §3.2 field set (including a new block and a removed block), commit it against a real temp store, snapshot before/after, then undo | journal delta == 1 and its kind == `batch` for `S ≠ ∅`; `undo()`-equivalent inverse application yields a store deep-equal to the snapshot; the **control** is a commit whose op list is empty (`S = ∅` — journal delta must be **0**: the `P-TP-2` proposition, not a violation of this row) | store (real temp fs) |
 | **`P-IM-3`** | IM | **The type apply never delete+recreates.** For ANY type change draw, the target node's `id`, `createdAt`, `children`, `props` and `ownedNodeIds` are unchanged and **only** `type` moves; no `removeNode` op for the target appears in the op list. | `strat:settype-preservation` — draw a node (every `RagNodeType` member × a props/children-carrying variant) and a target type ≠ its current one (including a `td`→`th` change and a type change on a node with inline children) | post-commit node: `id`/`createdAt`/`children`/`props`/`ownedNodeIds` deep-equal the pre-commit values; `type` == the drawn target; **no** `removeNode` or fresh-id `putNode` for that node; the **negative generator** is a delete+recreate implementation, which MUST fail the row | store (real temp fs) |
-| **`P-SM-1`** | SM | **A failed commit is atomic and loud.** For ANY failing outcome (store returns `{ ok: false }` at any `failedIndex` / a decompose `{ ok: false }` / a `CacheMiss`-class refusal / `EngineUnavailable`), the store is deep-equal to its pre-commit state, **zero** persists occurred, the journal is unchanged, the tab is `commit-failed` with a typed `CommitFailure`, and the page's text is preserved. | `strat:commit-failure-atomicity` — draw the failure mode × the `failedIndex` × a page/store pair; each draw reads the store file's bytes before and after | bytes before == bytes after; `persist` count == 0; journal delta == 0; state == `commit-failed`; `failure.kind` is the drawn class; the text is still on the page; the **control** is the success draw, which MUST change the bytes | store (real temp fs) + pure |
-| **`P-SM-2`** | SM | **The warning survives every re-derive.** For ANY commit-failed state and ANY re-derive path (a store-change-driven re-derive, a content reconcile, an operator/template re-derive), the tab's state is still `commit-failed` with the same `CommitFailure`, **and** the page's text is unchanged. | `strat:warning-rederive-survival` — draw a failure, then drive each re-derive path (including one that replaces the envelope wholesale) and re-read the state | state unchanged after every path; failure record deep-equal; the rendered text still carries the user's marker; the **control** is a *successful* commit, after which the state must be `clean` (proving the oracle reads the state, not a constant) | pure + assembled (envelope-level) |
-| **`P-TP-1`** | TP | **The decode + diff are TOTAL and DETERMINISTIC.** For ANY input — a malformed page HTML, an empty page, a page with a block whose `data-rag-node-id` is unknown, a page with duplicated ids, a page containing a `<textarea>`, a store missing the doc-head, a store with a quarantined node — the pipeline terminates with either a valid op list or a typed failure, **never** a throw of a native `TypeError`, and the **same** (page, store) draw yields the **same** op list on a second run. | `strat:decode-total-deterministic` — draw the malformed-shape matrix over the page HTML and the store state; run each draw twice | every draw returns a discriminated result (op list or `CommitFailure`); `expect(() => …).not.toThrow()` holds; run-1 ops deep-equal run-2 ops; the **negative generator** is a nested-10 000-deep element tree, which must not exhaust the stack (the decomposer is iterative — ADR-4; the depth draw is the **boundary** and is capped by the row's budget) | pure |
+| **`P-SM-1`** | SM | **A failed commit is atomic and loud.** For ANY failing outcome, the store is deep-equal to its pre-commit state, **zero** persists occurred, the journal is unchanged, the tab is `commit-failed` with a typed `CommitFailure`, and the page's text is preserved. **AMENDED PROPOSITION (§11 amendment `11.9` item 5 — the adversarial pass found this row never CONSTRUCTED a `commit-failed` state and never DREW three of the five pinned failure kinds): the population is the FULL enumerated `CommitFailure.kind` set — ALL FIVE kinds** — `not-authorized`, `not-resident`, `engine-unavailable`, `store-rejected`, `decompose-failed` — **each constructed and observed at least once**, with `store-rejected` drawn over **≥2 distinct `failedIndex` values** (including a non-zero index) and `engine-unavailable` drawn over **≥2 of its four `engineCause` members**; **a run that does not construct the `commit-failed` state for every one of the five kinds has not exercised the row** (the previous form's vacuity). | `strat:commit-failure-atomicity` — draw the failure **kind** (all five, enumerated, never sampled away) × the `failedIndex` (for `store-rejected`) × the `engineCause` (for `engine-unavailable`) × a page/store pair; each draw reads the store file's bytes before and after, and re-reads the host-side `Map<tabId, failure>` after the commit | bytes before == bytes after; `persist` count == 0; journal delta == 0; **state == `commit-failed` in EVERY draw** (a draw that ends `clean` is the row's `broken` finding); `failure.kind` **equals** the drawn class and the record is present in the host-side map; the text is still on the page; the **control** is the SAME page/store with the **success** draw, which MUST change the bytes; the **negative generator** is a commit that persists (or that clears the state) on failure, which MUST fail the row | store (real temp fs) + pure |
+| **`P-SM-2`** | SM | **The warning survives every re-derive.** For ANY commit-failed state and ANY re-derive path (a store-change-driven re-derive, a content reconcile, an operator/template re-derive), the tab's state is still `commit-failed` with the same `CommitFailure`, **and** the page's text is unchanged. **AMENDED PROPOSITION (§11 amendment `11.9` item 5 — the adversarial pass found this row was a TAUTOLOGY with a CONSTANT control: the state was never made distinguishable from the default, so "unchanged" could not fail and the "successful commit ⇒ `clean`" control read the same constant): the row now carries a DISCRIMINATING WITNESS** — the assertion is over the **full failure-record equality** (`kind` + `message` + `failedIndex`/`engineCause` where present) of the **constructed** `commit-failed` state, **against a tab that is concurrently `clean` and a tab that is concurrently `uncommitted`**, so an oracle that returns a constant fails the row. | `strat:warning-rederive-survival` — draw the failure **kind** (all five, §`P-SM-1`) × each re-derive path (including one that replaces the envelope wholesale), plus the two concurrent witness tabs (`clean`, `uncommitted`) in the SAME draw; re-read the state after every path | state after the re-derive == the constructed state, **and the full failure record deep-equals the constructed record**; the `clean` witness tab is still `clean` and the `uncommitted` witness is still `uncommitted` (**the discriminating control**: an oracle that returns the constructed state unconditionally reads the wrong value for the two witnesses and MUST fail the row); the rendered text still carries the user's marker; the **control** is a *successful* commit on the same tab, after which the state must be `clean` **and the map entry must be DELETED** | pure + assembled (envelope-level) |
+| **`P-TP-1`** | TP | **The decode + diff are TOTAL and DETERMINISTIC.** For ANY input — a malformed page HTML, an empty page, a page with a block whose `data-rag-node-id` is unknown, a page with duplicated ids, a page containing a `<textarea>`, a store missing the doc-head, a store with a quarantined node — the pipeline terminates with either a valid op list or a typed failure, **never** a throw of a native `TypeError`, and the **same** (page, store) draw yields the **same** op list on a second run. | `strat:decode-total-deterministic` — draw the malformed-shape matrix over the page HTML and the store state; run each draw twice | every draw returns a discriminated result (op list or `CommitFailure`); `expect(() => …).not.toThrow()` holds; run-1 ops deep-equal run-2 ops; the **negative generator** is a nested-10 000-deep element tree, which must not exhaust the stack (the decomposer is iterative — ADR-4; the depth draw is the **boundary** and is capped by the row's budget; **the decomposer reached through the adapter is the PACKAGE**, whose own read guard is the pinned `MAX_DEPTH = 512` in `provident-editable`'s converter — so the draw must terminate through the adapter's typed failure arm, never a stack exhaustion) | pure |
 | **`P-TP-2`** | TP | **Idempotence: a commit of an unchanged page is a no-op.** Committing twice with no edit between leaves the store deep-equal after the second commit, with **zero** additional journal entries and **zero** additional persists; and a no-op commit never sets `commit-failed`. | `strat:empty-diff-idempotent` — draw a page, commit, then re-decode the committed store and commit again (the second op list must be empty); plus a draw that perturbs only *uncompared* DOM detail (whitespace between blocks, a class list, a runtime prop) | second commit: op list `[]`, journal delta 0, persist delta 0, state `clean`; the **control** is a commit with one compared-field change, which MUST produce a non-empty op list | store (real temp fs) |
 
 **Class tally:** IM ×3 (`P-IM-1`..3), SM ×2 (`P-SM-1`..2), TP ×2 (`P-TP-1`..2) = **7 rows ≤ 8** ✔.
@@ -863,6 +999,18 @@ remedy taken is **(a) — restrict**, not **(b) split**, so the row count stays 
 out-of-population draw, never a row, and no attempt is moved between rows). `P-TP-2` is **unchanged**
 and is the authority for the `S = ∅` draw.
 
+**Register amendments for the three rows the adversarial pass found VACUOUS (§11 amendment `11.9`
+item 5).** The pass recorded three vacuity findings — **`P-SM-1` never constructed a `commit-failed`
+state and never drew three of the five pinned failure kinds; `P-SM-2` was a tautology whose `clean`
+control read a constant; `P-IM-1`'s population could not express a `props` difference at all** — and
+the three propositions/populations above are amended so each is **falsifiable**. **The row count stays
+7; the seed stays `0xED170001`; the per-row ceiling stays ≤100; the total is unchanged at
+`63 × 6 + 22 = 400`.** The **allocation is re-tallied WITHIN `P-SM-1`'s 22 attempts** (an internal
+re-allocation: 4 draws per failure kind × 5 kinds = 20, plus 2 controls), so **no row gains or loses
+attempts and no other row's budget moves** — this is a recorded re-tally of the *allocation*, **not** of
+the total; `P-SM-2` keeps **63** and `P-IM-1` keeps **63**. Each amended row's **negative generator** is
+stated inside the row, and each row is `held` only if its control **discriminates**.
+
 **Rows considered and REJECTED (recorded so a later pass does not re-add them):**
 
 - *"markdown mode renders monospace and no html formatting"* as a register row — **rejected**: it is a
@@ -875,7 +1023,8 @@ and is the authority for the `S = ∅` draw.
   is a **census over a fixed artifact set** (envelope + rendered DOM), not a generated property; it is
   pinned as `FS21`, asserted by §6.5 item 4 and the live battery's §8.3 item 7.
 - *"a commit writes only changed sub-elements"* — **KEPT** as `P-IM-1` (it is the diff's own invariant
-  and has a clean generated oracle).
+  and has a clean generated oracle; its population was amended on 2026-09-21 to draw a **props**
+  difference — §11 amendment `11.9` item 5).
 
 ---
 
@@ -891,7 +1040,7 @@ and is the authority for the `S = ∅` draw.
 | **`FS4`** | **The element-type pane offered a type outside `RagNodeType`**, or applied a type the store rejects | the offered type and the closed union are printed; **§2.4 item 1** |
 | **`FS5`** | **An element-type apply with no resolvable target wrote to an arbitrary node** (instead of the pinned no-op) | the caret path, the resolved id and the written id are printed; **§2.4 item 3** |
 | **`FS6`** | **A type change implemented as delete + recreate** (id/`createdAt`/children/edges lost) | the old id, the new id and the lost fields are printed; **§2.4 item 4** (`setType` never delete+create) |
-| **`FS7`** | **A malformed page input produced a partial write** (a `{ ok: false }` decompose was treated as an empty edit) | the decompose error and the op list are printed; **§3.1** (a typed failure, never a partial write) |
+| **`FS7`** | **A malformed page input produced a partial write** (a typed failure was treated as an empty edit) | the failure arm's error/message and the op list are printed; **§3.1** (the adapter's typed failure — a package throw or an unmappable change kind ⇒ the `FS5`/`ST-5` warning class, **never** a partial write; §11 amendment `11.9` item 1) |
 | **`FS8`** | **A compared field outside §3.2's closed set** (a runtime prop / `updatedAt` / a representation-mode difference entered the diff) | the field name and the op are printed; **§3.2** |
 | **`FS9`** | **An unrelated node appeared in the op list** (churn on nodes the user did not touch) | the untouched node id, its op and the diff that excluded it are printed; **§3.2's minimal-op rule** |
 | **`FS10`** | **The commit was not one `applyBatch`** (a per-op loop, `store.enqueue`, or per-node `putNode` calls) | the observed call count and the store method names are printed; **§3.3 item 1** |
@@ -905,7 +1054,7 @@ and is the authority for the `S = ∅` draw.
 | **`FS18`** | **A failed commit was auto-retried** (a retry loop with no user action) | the tab id and the retry count are printed; **§3.5 item 7** |
 | **`FS19`** | **A commit reported success without an acknowledged write** (a silent success; the worst outcome in this unit) | the reported outcome and the store's actual state are printed; **§3.6** |
 | **`FS20`** | **A stale persisted `editingMode` restored the removed behaviour** (a boot read the removed key and rendered a textarea/legacy control) | the stored key, its value and the rendered control are printed; **§5 item 5** |
-| **`FS21`** | **A rendered `<textarea>` in the stage region, or a textarea-tombstone child that is rendered OR carries a handler** | the element's id, its parent and its handler names are printed; **§5.1** (the tombstone is non-rendered, `hidden`, `readOnly`, handler-less, and excluded from the diff/decode) |
+| **`FS21`** | **A rendered `<textarea>` in the stage region, or ANY authored `type: 'textarea'` child / `textarea-<ragId>` id / `rag-textarea-*` handler name anywhere in the authored envelope or the DOM** | the element's id, its parent, its handler names and the authoring site are printed; **§5.1** (the whole textarea path is removed: **no** textarea child is authored at all, and the rendered census is zero — the tombstone exception is retired, §11 amendment `11.9` item 2) |
 | **`FS22`** | **A markdown-mode surface rendered HTML formatting** (an inline `strong`/`em`/`a`/`img` element, a heading at heading scale, table markup, or a form control in the stage) | the element, its computed family/style and the mode are printed; **§2.3** |
 | **`FS23`** | **A dirty page was evicted, invalidated or replaced** (the user's only copy of the text was discarded by the cache's rules) | the tab id, its dirty state and the offending event are printed; **§4.5** / `docs/specs/unit-reads-pivot-tab-cache.md` §5.1's dirty-entry rule |
 | **`FS24`** | **A commit reached a non-resident document without the typed `CacheMiss`-class refusal** (a silent whole-store read on the commit path) | the key, the path and the outcome are printed; **§3.6** / `docs/specs/unit-reads-pivot-tab-cache.md` §3.3 |
@@ -932,20 +1081,28 @@ and is the authority for the `S = ∅` draw.
    `data-doc-head`; a delete+recreate type change; an unrelated node in the op list; a per-op loop or
    a second persist; a journal delta ≠ 1; an ignored `BatchResult`; a new-block id collision; a
    transient unmount read as a deletion; a chunked engine write; a discarded text; a DOM-only warning;
-   an auto-retry; a silent success; a stale persisted mode; a rendered textarea or a handler-carrying
-   tombstone; an HTML-formatted markdown mode; a dirty page replaced by the cache; a silent
-   non-resident commit; **and the register's negative generators.** Findings are recorded in this
+   an auto-retry; a silent success; a stale persisted mode; **any authored `type: 'textarea'` child,
+   `textarea-<ragId>` id or `rag-textarea-*` name (the tombstone path is dropped — §5.1, §11 amendment
+   `11.9` item 2)**; a rendered `<textarea>`; an HTML-formatted markdown mode; a dirty page replaced by the cache; a silent
+   non-resident commit; **an adapter that silently drops an unmappable package change kind or a
+   package throw instead of raising the `FS5`/`ST-5` warning class; a `props` difference that produces
+   no op; a block with inline children producing a spurious op (the raw-package-`content` projection
+   error); a stored `td`/`th`/`tr`/`table` node retyped or removed on the strength of a decode that
+   cannot see it**; **and the register's negative generators.** Findings are recorded in this
    file's §3a/§3b (appended) and **every host-side finding is fixed here + regression-tested**; a
    `provident-ssr` package finding is a **handoff** item (`docs/defects.md` + `docs/HANDOFF.md`,
-   `AGENTS.md` item 7) and is **never** patched. **Its PBT-audit half reports each §7 row
+   `AGENTS.md` item 7) and is **never** patched — **and a finding in the ADOPTED
+   `provident-editable@0.2.0` is the same handoff class, never a patch here** (§11 item 9). **Its PBT-audit half reports each §7 row
    `held`/`broken` with its attempt count and its control draw (stop-after-5).**
 6. **RCA-4 blind greens** by an agent that did not implement: a `-greens.md` artifact derived from
    **this spec only** (no implementation read).
 7. **item-10d documentation review** (RCA-6), recorded at
    **`archive/reviews/<date>-unit-u-edit-1-doc-review.md`**: it reconciles every symbol, signature,
    return shape, throw pattern and census claim here against the actual build (notably the
-   `decomposeRichHtml` result shape, the `BatchOp` union, the **23-member `RagNodeType`** census, the
-   `EditorController` interface, the **17/32/131/0** test-disposition counts and their stated probes),
+   `decomposeRichHtml` result shape — **superseded: the doc review now reconciles the ADAPTER
+   (`src/main/page-diff.ts`) + the package signatures (§3.1)** — the `BatchOp` union, the
+   **23-member `RagNodeType`** census, the
+   `EditorController` interface, the **17/26/137/0** test-disposition counts and their stated probes),
    reconciles the active trackers (including the `SUPERSEDED` rows of §4.1 having landed **with** the
    code), reconciles cross-references and section numbers, **repoints the stale citations this unit
    owns** (§9.4), and **fixes stale entries in the same pass**.
@@ -960,6 +1117,17 @@ mode's rendering, the warning's visibility), so per RCA-11 the live battery is *
 parked and not recommended**. Parking is legal only for a **structurally non-exercisable** surface
 with the recorded reason; **there is no such surface here**: the stage, the tab surface and the
 document DOM are all reachable through `scripts/live-drive.mjs`'s MCP + CDP path on a usable display.
+
+**The blocks MUST be authored, and that is an OWED item — not a side effect (§11 amendment `11.9`
+item 6).** Every assertion below must be **added to `scripts/live-drive.mjs`** as its own block(s)
+(the battery's identifier is **`U-EDIT-1-LIVE`**, per item 8). **The consequence, stated explicitly:**
+`scripts/live-drive.mjs` is **half of the O-0 oracle-hash pair** (`docs/specs/requirement-catalog.md`
+§2.2 fact 3; `docs/specs/design-extensions-review.md` §6.2/§7.2), so **adding blocks invalidates the
+recorded oracle identity and owes an O-0 re-run per RCA-11** — the pair's before/after hash re-read must
+be re-recorded by a pass that **actually runs it**. That obligation is recorded as an **owed item**
+(§11 amendment `11.9` item 6): it is **not** this spec's measurement, **not** an incidental edit inside
+this unit's diff, and **not** a reason to defer the battery. `src/shared/o0-report.ts` — the other half
+of the pair — **must not be touched at all** by this unit (the oracle-identity paragraph below).
 
 **What the live battery asserts (in `scripts/live-drive.mjs`'s existing block discipline):**
 
@@ -990,8 +1158,11 @@ document DOM are all reachable through `scripts/live-drive.mjs`'s MCP + CDP path
 6. **No `<textarea>` exists in the rendered DOM.** A census over the **rendered** document
    (`document.querySelectorAll('textarea').length === 0` across the stage region, in **both** modes,
    after switching modes and after a re-derive) — the user-visible content of `ST-6`/`PRUNE-311`.
-   *The envelope-level tombstone of §5.1 is asserted as non-rendered here; the two assertions are
-   different layers and must not be conflated.*
+   **THIS OUTCOME IS NOW TRUE (§11 amendment `11.9` item 2):** the traversal authors **no**
+   `textarea` child at all (§5.1), so the census reads zero **honestly** rather than being asserted
+   around an authored artifact. The envelope-level assertion (no `type: 'textarea'` child authored,
+   §6.5 item 4) and this rendered census are **different layers, and both must pass** — neither may
+   be used to excuse the other.
 7. **Whole-page edit commits 1-1 to the store.** The owed live row of `DECIDED: WHOLE-PAGE-EDITING`:
    a real typed edit in one paragraph, blurred, read back through `rag.get_document` **and** through
    the rendered DOM — the two agree, and an unrelated paragraph's stored bytes are unchanged. This is
@@ -1026,8 +1197,9 @@ row. **This spec performs no hash computation and makes no live claim** (§10 it
 `tests/unit-import-batch-persist-contract.test.ts`) including their pinned censuses and the depth-10 000
 budget tenant; the **§5.U matrix** (`MATRIX_ROWS` unchanged); `docs/specs/mcp-endpoint.md`;
 `scripts/live-drive.mjs`'s `BLOCKS`/`MATRIX_ROWS` **literals** except this unit's own new block
-(recorded as an oracle-identity change); and the **136 KEEP** files' assertions, which are their own
-pin.
+(recorded as an oracle-identity change); and the **137 KEEP** files' assertions, which are their own
+pin (the count is §6.1's class census, **recounted, never copied**; the pre-existing
+§8.2/§8.4/§13 disagreement is **closed** by §11 amendment `11.9` item 7).
 
 **The blast-radius reading (a READING with its method — recount, never copy).** Files under
 `tests/**` that import or reference a module this unit touches (`src/renderer/edit-controller.ts`,
@@ -1094,7 +1266,8 @@ does not read a stale spec citation as a live pin. Named in this unit's set, at 
 - `docs/defects.md` `EDIT-MODE-TEXTAREA-UI`'s proposed-fix cell, which names
   `docs/specs/unit-l1-editing-mode-setting.md` — **a path that does not exist**
   (`docs/defects.md` `CATALOG-CITES-NONEXISTENT-UNIT-SPEC`, OPEN) — repointed to this spec;
-- `src/main/paste-sanitize.ts`'s `provident-editable` comment (§3.1).
+- `src/main/paste-sanitize.ts`'s `provident-editable` comment (§3.1) — **now a repoint to the ADOPTED
+  entry point (`htmlToTree`) and the adapter, not to `rich-decompose`** (§11 amendment `11.9` item 1).
 
 **Not this unit's duty:** the catalog's own phantom-package row (`PRUNE-615`'s `statement` cell) and
 the other catalog cells — the catalog is **cited, never edited** (`docs/specs/design-extensions-review.md`
@@ -1106,7 +1279,7 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 
 | Layer | What is verified there | What is NOT | How |
 | --- | --- | --- | --- |
-| **PURE / ENVELOPE (node, `npm test`)** | the decode + diff (§3.2), the minimal-op rule, the new-block/edge representation, the op-list shape, the one-`applyBatch` contract and its journal/persist consequences, the `CommitFailure` shapes, the state machine's transitions, the warning's **survival across a re-derive driven at the envelope level**, the tombstone's shape, the removed/successor mode field, and all **7** §7 register rows | anything rendered; any selection; any painted style; any engine hop | the new `tests/unit-u-edit-1-*.test.ts` suites + `-adversarial` + `-pbt-generators`; plus the **26 rewrites** (§6.3) |
+| **PURE / ENVELOPE (node, `npm test`)** | the decode + diff (§3.2) **through the adapter + the package** (§3.1), the minimal-op rule, the new-block/edge representation, the op-list shape, the one-`applyBatch` contract and its journal/persist consequences, the `CommitFailure` shapes, the state machine's transitions, the warning's **survival across a re-derive driven at the envelope level**, the **absence** of any authored `textarea` child (the tombstone is dropped, §5.1), the removed/successor mode field, and all **7** §7 register rows | anything rendered; any selection; any painted style; any engine hop | the new `tests/unit-u-edit-1-*.test.ts` suites + `-adversarial` + `-pbt-generators`; plus the **26 rewrites** (§6.3) |
 | **ASSEMBLED / RENDERER** | the single surface's **app-graph authoring** (the `assembleAppGraphEnvelope` result: the one `page-edit-surface` root, its `data-edit-surface`/`contenteditable` props and its body subtree) and its authored id/marker; the head/body sibling structure; the host's re-derive paths authoring the surface through the app-graph/stage seam instead of `applyEditingMode`; the mode control's payload path. **The traversal envelope is asserted only for its OWN shape** (one payload per section) — never as the carrier of the surface (§2.1, §11 amendment `11.7`) | the actual paint and the caret (the dom-shim is layout-less/CSS-less and has no real selection — RCA-12) | the node assembly tests **plus** the live battery (§8.3 items 1/2/4/5/6) |
 | **ENGINE-DEPENDENT** | the commit's one-hop async write, the typed engine-absent failure, and the store-unchanged-on-failure property against an injected failure | the engine's own correctness (that is the Gnosis repo's; **no patch here** — `AGENTS.md` item 7) | injected-failure node tests + the live battery (§8.3 item 3) |
 | **APP-GREEN** | **nothing in this spec.** | — | RCA-12: a node-suite green is **ENVELOPE-green, not APP-GREEN**. No part of this unit is app-green until the live path is exercised (§8.3) **and** the item-10d review has run. |
@@ -1140,11 +1313,14 @@ the other catalog cells — the catalog is **cited, never edited** (`docs/specs/
 | # | Item | Status | Owner |
 | --- | --- | --- | --- |
 | **1** | **The engine batch route does not exist.** `src/main/engine-crud-rag-store.ts` `EngineCrudRagStore` is an 11-method document-CRUD interface with **no batch call** and is **not** a `RagStore`; under `GN-1` the commit must eventually be one engine write. The store-level `applyBatch` is the pinned interim (§3.4 step 8). | **ESCALATED** — an engine-request/handoff shape for `U-AUTHORITY-SWITCH` (O-8); **no patch to the Gnosis repo** (`AGENTS.md` item 7) | P1 handoff rows (`docs/HANDOFF.md`) + `U-AUTHORITY-SWITCH`'s spec |
-| **2** | **The fence/`ST-6` conflict:** `tests/traversal.test.ts` pins the authored `textarea-ul` child, while `ST-6`/`PRUNE-311` require textarea editing to be removed, and the fence "must stay green UNCHANGED" / "may not be re-derived". This spec pins the **inert tombstone** resolution (§5.1) and escalates the conflict. **If the supervisor prefers a fence edit, that is a gate decision** (`docs/specs/design-extensions-review.md` §14.2: *"A unit that cannot stay green under the fence is not an implementation … it is a new proposal re-entering this gate"*) and this unit stops until it is made. | **ESCALATED** | the supervisor / the gate |
+| **2** | **The fence/`ST-6` conflict — RESOLVED 2026-09-21 (§11 amendment `11.9` item 2).** The conflict was real: `tests/traversal.test.ts` pinned the authored `textarea-ul` child while `ST-6`/`PRUNE-311` require textarea editing to be removed, and the fence "must stay green UNCHANGED" / "may not be re-derived". **The owner has authorized RE-PLANNING that one fence row**, and the resolution is the **REMOVAL** of the `textarea` child (the interim "inert tombstone" of the earlier form of §5.1 is **DROPPED** — the adapter creates the element unconditionally, so it never was non-rendered). **Scope of the authorization: `tests/traversal.test.ts`'s child-list row ONLY**; the other fence file and every other fence row stay untouched. The former gate question ("if the supervisor prefers a fence edit…") is **answered**: the fence edit is the ruling, and it is one row in one file. | **RESOLVED — recorded, with the re-plan shape pinned in §6.5** | the owner (ruling) + this unit's landing pass |
 | **3** | **`applyBatchOp` rejects `setProps`/`setSubtree`/`setType`** while `DECIDED: BATCH-ATOMICITY-API` pins them in the closed union. This is a genuine **RED obligation** of this unit (§3.3 item 7), **not** a new union member and **not** a reason to split the commit. | **RED-BY-DESIGN** — recorded so the red set's cause is not mis-read as a missing contract | this unit's Implementer |
 | **4** | **`docs/skills/designing-pages.md` does not exist** (verified by glob: `docs/skills/**` holds only `process-guardrails.md`), so the page-design skill, its test-use-case coverage matrix and its demo-page index cannot be updated. The design consequences this unit pins (§2.1–§2.5, §3.5 item 6, §8.3) must be carried into that skill **when it is authored**. | **OWED — recorded, not skipped** | the pass that authors the skill |
 | **5** | **The catalog's phantom-package row and this unit's catalog census.** `PRUNE-615`'s `statement` cell still reads "the provident-editable import tools"; `PRUNE-311`/`PRUNE-617` census rows for the textarea removal; and any new-row/count duty. The catalog is **cited, never edited** from a unit spec. | **OWED** to the catalog's own amendment pass (`docs/specs/design-extensions-review.md` §15.1) | the catalog amendment pass |
 | **6** | **`TAB-1`'s rendered symbol** is `C10`'s; this unit supplies the state and the typed record and pins the shared class (§3.5 item 4). If `C10` slips, the state exists with a stage-level warning only — **recorded so the two units do not each invent an affordance** | recorded interface | `C10 U-TAB-MERGE` |
+| **7** | **The O-0 oracle-identity re-run owed by the live blocks (ADDED 2026-09-21 — §11 amendment `11.9` item 6).** `U-EDIT-1-LIVE`'s blocks must be added to `scripts/live-drive.mjs`, one half of the oracle-hash pair; **the block addition invalidates the recorded oracle identity and owes an O-0 re-run per RCA-11**, with the before/after hash re-read recorded. | **OWED — named, not a side effect** | the unit's shell-bearing live pass (`U-EDIT-1-LIVE`) + the O-0 harness's owner |
+| **8** | **`U-EDIT-1-LIVE` is UN-RUN (RCA-11).** The battery's blocks do not exist in `scripts/live-drive.mjs` yet, so **no live measurement exists** for §8.3 items 1–8; the unit is **not pre-DONE** while this holds. | **OWED — MANDATORY pre-DONE gate** | this unit's shell-bearing live pass |
+| **9** | **The package's table-element capability gap (ADDED 2026-09-21 — §11 amendment `11.9` item 1).** `provident-editable@0.2.0`'s closed `ProvidentNodeType` has **no `table`/`thead`/`tr`/`td`/`th`** member, so a stored table node's structure is not expressible in the package's tree and the adapter must **refuse** rather than flatten (§3.2). This is a **capability/requirement gap in a dependency** — a `docs/defects.md` + `docs/HANDOFF.md` item, **never** a patch here (`AGENTS.md` item 7). | **ESCALATED (handoff)** | `docs/defects.md` + `docs/HANDOFF.md` (the package's own repo) |
 
 ---
 
@@ -1228,7 +1404,10 @@ tombstone's resolution **for the `textarea-<ragId>` child is NOT changed by this
 remains the implementer's obligation, and its escalation (§11 item **2**) stands as recorded.
 (**§11 amendment `11.8` below amends only §7's `P-IM-2` proposition and the names it pins; the
 `FS1`..`FS24` numbering, the §4.1 supersession **set** and the §5.1 tombstone resolution are unchanged
-by it too.**)
+by it too.**) **BOTH of the last two sentences are SUPERSEDED IN PART by §11 amendment `11.9` item 2:
+the tombstone resolution is **REPLACED** (the child is no longer authored at all, §5.1) and §11 item 2's
+escalation is **RESOLVED**; §4.1's supersession **set** gains **one** row (item 1's
+`DECIDED: RICH-TEXT-EDITING-GATE`), and the `FS1`..`FS24` numbering still holds.**
 
 ---
 
@@ -1361,12 +1540,120 @@ id", not the concrete carrier), and one **register row** (`P-IM-2`) whose popula
 class census (`17 + 26 + 137 = 180`) — cited as §6.1 states it, with a **RECORDED pre-existing
 disagreement this amendment does NOT re-tally** (the item-10d review must adjudicate it): §8.2 item 7
 reads `17/32/131/0`, §8.4 reads `136 KEEP`, and §13 item 6 reads `REWRITE 27 · KEEP 136` — the four
-figures all sum to 180 yet do not agree on the classes; §6.3's per-file table remains the work list and
-the authority — §6.2's 17-suite rebuild list, §7's row count / seed / budget, the
+figures all sum to 180 yet do not agree on the classes — **SUPERSEDED IN PART by §11 amendment `11.9`
+item 7, which closes the disagreement to §6.1's `17/26/137/0` in all three places** (the item-10d review
+now **recounts** §6.1's figures rather than adjudicating four variants); §6.3's per-file table remains
+the work list and the authority — §6.2's 17-suite rebuild list, §7's row count / seed / budget, the
 §4.1 supersession **set** (item 2 adds to that row's *surviving-clause* list — it writes **no** new
-supersession), the §5.1 textarea-tombstone resolution and its escalation (§11 item 2), and §11's
+supersession), the §5.1 textarea-**tombstone** resolution and its escalation (§11 item 2) — **that
+resolution is RETIRED by §11 amendment `11.9` item 2: the tombstone is dropped and the fence row is
+re-planned** — and §11's
 escalation table all stand as recorded. This amendment **pins names and adjudicates one row**; it
 authors no new contract surface and no new fail-state.
+
+---
+
+### 11.9 AMENDMENT (2026-09-21 — the decomposer adoption, the tombstone drop, the fence re-plan)
+
+**Why this amendment exists.** Three **owner rulings of 2026-09-21** supersede premises this file pinned
+before the package existed and before the fence exemption could be re-planned. It **re-derives** the
+affected clauses: §3.1/§3.2/§3.3 (the decomposer + the diff contract, now the package + the adapter),
+§4.1 (one added supersession row), §5/§5.1 (the tombstone drop and the fence re-plan), §6 (the deleted
+test-local reference decode/diff, the fence row, the tombstone rows), §7 (three vacuous register rows
+amended), §8.2/§8.3/§8.4 (the live battery's owed blocks, the counts), §11 (the new owed items),
+§12/§13 (the new symbols/facts). **The rulings, recorded:**
+
+1. **`provident-editable@0.2.0` is ADOPTED as the production decomposer — it SUPERSEDES the
+   `DECIDED: RICH-TEXT-EDITING-GATE` in-house build.** The package is **installed** (`dependencies:
+   provident-editable ^0.2.0`; peer `provident-ssr >=0.4.0 <1.0.0` satisfied by the installed 0.5.1;
+   **ESM**, **no DOM**, `parse5` only). Its exports are **`htmlToTree`**, **`diffTrees`** and
+   **`providentPlainText`** (plus **5 types**). **`diffTrees` returns ITS OWN `ProvidentTree`/
+   `StructuralDiff` shape** — a **19-member** `ProvidentNodeType` (**including `text` runs**) with
+   `{nodeChanges:{add,remove,update}, edgeChanges:{add,remove}}` — and **it is NOT C9's
+   `{content, children}`/`RagNodeType` shape**, and it supplies **no `BatchOp`, no `applyBatch` and no
+   journal semantics**. **Consequences re-derived into the contract:** §3.1 now names the exact entry
+   points (`htmlToTree` for the decode, `diffTrees` for the diff) and **pins the ADAPTER**
+   (**`src/main/page-diff.ts`**: `decodePage`/`buildPageOps` + `PageBlock`/`PageDecodeResult`/
+   `PageOpsResult`/`PageDiffSnapshot`) — the ONLY module that imports the package — mapping the package
+   onto C9's **closed field set `{type, content, children, props}`** and the op set
+   (`putNode`/`setProps`/`setSubtree`/`setType`/`putEdge`, with `removeNode`/`removeEdge` for
+   deletions); **which package change kind maps to which op** (the mapping table in §3.1); **how a NEW
+   block** (a typed paragraph with no node) becomes an **id-minted `putNode` + the `doc-child`
+   `putEdge`**; **how a PROPS difference is represented** (the adapter diffs the package's FULL
+   `update.props` against the store's RAG-owned props and sends **only the changed keys** into the
+   MERGING `setProps` — **the adversarial pass found the last population could not express a `props`
+   difference at all**, so the mapping had no oracle; §7's `P-IM-1` population is amended to draw one);
+   **how a STRUCTURAL change (split/merge) is detected** (the package reports it as an `update` + an
+   `add` / an `update` + a `remove` — no dedicated kind, and the adapter must not synthesize one); **what
+   is deliberately NOT diffed** (the renderer-minted runtime props — `contenteditable`,
+   `data-edit-surface`, `data-node-id`, `data-doc-head` as a written prop — plus `style`/classes, the
+   surface root's props, the mode, out-of-document nodes, `updatedAt`-only differences, and the
+   package's own reconciliation ids); and the **`text`-run semantics** (the package's `text` leaves are
+   flattened into the owning block's `content` — the raw package `content` must not be compared, or
+   every block with inline children emits a spurious op, `FS9`). **The adapter's failure modes are
+   pinned: a package throw or an unmappable change kind ⇒ the `FS5`/`ST-5` warning class, never a silent
+   partial write** — and the package's throw surface is **recorded, not assumed** (§3.1's table: it does
+   **not** throw for malformed HTML, but it **does** throw a typed `Error` for a malformed **input
+   shape**). **The one-`applyBatch`-per-commit clause and the journal clause are UNCHANGED** (§3.3
+   items 1/3 — the package supplies the tree and the diff, never the ops). The **stale
+   `src/main/paste-sanitize.ts` comment** is repointed to the adopted entry point; §9.4's citation duty
+   and §4.1's new supersession row carry the rest.
+2. **The textarea tombstone is DROPPED.** `src/main/traversal.ts` `buildSubtree` must **stop authoring
+   the `type: 'textarea'` child entirely** — the adapter creates the element **unconditionally**, so
+   `hidden` never made it non-rendered — and the one **fence** row it existed to satisfy
+   (`tests/traversal.test.ts`'s child-list assertion `[undefined, 'textarea-ul', 'rag-li1', …]`) is
+   **RE-PLANNED under this explicit ruling** (the fence was **exempt by name**; the owner has authorized
+   **re-planning that row**). **Consequences re-derived:** §5.1 is rewritten (the resolution is the
+   REMOVAL, not the disguise; the tombstone, its `hidden`/`readOnly` props and its decode/diff
+   exclusions are all gone), §5's dead-code list now covers **the whole textarea path** (item 3's
+   destination is `archive/src/<date>-traversal-textarea-overlay.ts` — the authored-child text extracted
+   from the still-live `src/main/traversal.ts`), §6.3/§6.4/§6.5 record the **fence re-plan**
+   (one file, one row, nothing else) and the **"no textarea is authored at all"** tombstone-row flip,
+   and **the `ST-6` outcome** (no `<textarea>` in the rendered DOM, **both modes**) **becomes TRUE**, so
+   **§8.3's census reads zero honestly** instead of being asserted around an authored artifact.
+   **`FS21`** is restated (an authored `type: 'textarea'` child is now itself the fail-state).
+3. **The toolchain fix is recorded.** `package.json` now pins **`@types/node ^24`**, **`vite ^8.3.0`**
+   (vitest 5's peer, **previously missing from the lock**), and **`provident-ssr ^0.5.1`**;
+   **`--legacy-peer-deps` is retired** — the dependency graph installs without it (§3.1's toolchain
+   paragraph). The trio obligations (§8.2 item 4) and the protected 15 000 ms suite budget are
+   unchanged.
+
+**The consequences recorded as OWED (named, never left as side effects).**
+
+4. **The catalog row `PRUNE-615`.** Its `statement` cell named the **phantom** package
+   (`provident-editable` "does not exist"); it now names a package that **exists at 0.2.0**, so its
+   amendment is a **version/statement correction**, not a phantom removal. The catalog is still
+   **cited, never edited from this spec** (`docs/requirement-catalog.md` §C.0) — owed to the catalog's
+   own amendment pass (§11 items 4/5 unchanged in form).
+5. **The three vacuous register rows are amended so each is falsifiable** (§7's amended
+   propositions + the re-tally paragraph): **`P-SM-1`** must **construct** the `commit-failed` state and
+   draw **all five** `CommitFailure.kind`s (the last population never constructed the state and never
+   drew three of the five kinds); **`P-SM-2`** must carry a **discriminating witness** (a `clean` and an
+   `uncommitted` tab in the same draw) against a **constructed** record (the last form was a tautology
+   with a constant control); **`P-IM-1`** must draw a **`props`-only** change (RAG-owned) **and** a
+   runtime-prop-only control (the last population could not express a props difference at all). **The
+   seed stays `0xED170001`, the row count stays 7, the total stays `63 × 6 + 22 = 400`**, and the
+   allocation is re-tallied **within `P-SM-1`'s own 22** (4 × 5 kinds + 2 controls) — a recorded
+   re-tally of the allocation, not of the total.
+6. **`U-EDIT-1-LIVE` MUST gain its blocks in `scripts/live-drive.mjs`, and that owes an O-0 re-run.**
+   `scripts/live-drive.mjs` is **half of the O-0 oracle-hash pair**, so adding blocks **invalidates the
+   recorded oracle identity** and owes an **O-0 re-run per RCA-11**, with the before/after hash re-read
+   reported by the pass that runs it. This is an **owed item** (recorded in §8.3 and in §11's new rows
+   7/8), **not** a side effect of an edit and **not** a deferral of the battery;
+   `src/shared/o0-report.ts` stays untouched.
+7. **The test-disposition count disagreement is closed** (§6.1's `17/26/137/0` now reads the same in
+   §8.2 item 7, §8.4 and §13 item 6 — §6.1 remains the reading and §6.3's per-file table the work list);
+   it is a **correction of three stale restatements to the existing census**, not a re-count of the
+   tree, and §8.2 item 7's doc-review duty is **recounting**, never copying.
+
+**What this amendment does NOT change.** The `FS1`..`FS24` numbering (only `FS21` is **restated** in
+place, §8.1), §6.1's class census figures, §7's row count / seed / total budget, §4.1's **other** rows,
+the one-`applyBatch`/journal/persist clauses (§3.3 items 1–3/5/6), the `CommitFailure` shape (§3.5
+item 5), the host-side `Map<tabId, failure>` carrier (§3.5 item 6, §3.6), and the §9 sequencing gates
+all stand as recorded. Exactly **two** contract surfaces change: the **decomposer + the diff's
+provenance** (§3.1/§3.2/§3.3 item 8) and the **textarea authoring** (§5 item 3/§5.1). Exactly **one**
+supersession row is added (§4.1's `DECIDED: RICH-TEXT-EDITING-GATE` row), and **no new fail-state is
+authored**.
 
 ---
 
@@ -1377,7 +1664,7 @@ authors no new contract surface and no new fail-state.
 | `docs/decisions.md` `DECIDED: WHOLE-PAGE-EDITING` | the requirement this unit implements; its owed "spec re-derivation + a live row"; its "SUPERSEDES … once implemented" clause |
 | `docs/decisions.md` `DECIDED: EDITING-MODE-SETTING` | the superseded control-swap model; the **surviving** mode-broadcast contract (§2.5, §4.1) |
 | `docs/decisions.md` `DECIDED: FORM-CONTROL-EDITING` | the superseded form-control model and its surviving commit-on-blur/re-traversal/dirty-guard clauses |
-| `docs/decisions.md` `DECIDED: RICH-TEXT-EDITING-GATE` | the in-house `decomposeRichHtml` decision; `setProps` MERGES (`data-doc-head`); `setType` never delete+create; the `children` field; the census 6→9 |
+| `docs/decisions.md` `DECIDED: RICH-TEXT-EDITING-GATE` | the **superseded** in-house `decomposeRichHtml` clause (its surviving clauses: `setProps` MERGES (`data-doc-head`); `setType` never delete+create; the `children` field; the census 6→9) — §4.1's added row; §11 amendment `11.9` item 1 |
 | `docs/decisions.md` `DECIDED: RICH-TEXT-EDIT-OPS` / `DECIDED: EDIT-OP-CENSUS` | the 9→10→11 op census; the three rich-text ops; `setDocMeta` outside the closed union |
 | `docs/decisions.md` `DECIDED: BATCH-ATOMICITY-API` | the closed 7-member `BatchOp` union; one batch = one invertible `batch` entry; one persist; rollback; never-throws |
 | `docs/decisions.md` `DECIDED: PROJECT-JOURNAL` / `DECIDED: C16-CONSUMES-PROJECT-JOURNAL` | invertible journal entries; the project journal (not the engine journal) is the undo/redo carrier; `JournalEntry` kinds |
@@ -1401,8 +1688,12 @@ authors no new contract surface and no new fail-state.
 | `docs/specs/gnosis-offload-review.md` §7 A-5/A-6 | the parked `revision` field; the §5.U matrix cap (re-pin/extended row only) |
 | `docs/requirement-catalog.md` | `PRUNE-300`, `PRUNE-310`, `PRUNE-311`, `PRUNE-314`, `PRUNE-601`, `PRUNE-613`..`PRUNE-617` (cited as pointers, never as status) |
 | `docs/defects.md` | `WHOLE-PAGE-EDITING-REQUIREMENT`, `EDIT-MODE-TEXTAREA-UI`, `DOC-TITLE-NOT-EDITABLE`, `TABLE-CELLS-NOT-EDITABLE`, `DOC-HEAD-CONTAINS-FIRST-PARAGRAPH`, `CATALOG-CITES-NONEXISTENT-UNIT-SPEC` |
-| `src/main/rich-decompose.ts` `decomposeRichHtml` / `DecomposeRichResult` | the decomposer's shape and totality (§3.1) |
-| `src/main/traversal.ts` `buildTraversal` / `buildSubtree` / `computeDocumentSubgraph` / `DocumentSubgraph` | the traversal authoring, the doc-child nesting, the `data-doc-head` derivation, the textarea tombstone (§2.2, §3.3 item 8, §5 item 3) |
+| `src/main/rich-decompose.ts` `decomposeRichHtml` / `DecomposeRichResult` | the **superseded** in-house decomposer (§3.1) — cited as the rebuild input of the archived suites, **never** as this unit's contract; the package + adapter replace it (2026-09-21, §11 amendment `11.9` item 1) |
+| `node_modules/provident-editable/package.json` / `dist/index.d.ts` (`htmlToTree` / `diffTrees` / `providentPlainText` / `ProvidentNode` / `ProvidentTree` / `StructuralDiff` / `ProvidentNodeType` / `ConvertOptions`) / `dist/types.d.ts` / `dist/html-to-tree.d.ts` / `dist/diff.d.ts` / `dist/plain-text.d.ts` | the **ADOPTED decomposer**: version **0.2.0**, `type: module`, `parse5`-only, peer `provident-ssr >=0.4.0 <1.0.0`; the three runtime exports and the five types; the exact signatures, the 19-member `ProvidentNodeType` (with `text`), the `{root}` tree shape, the `StructuralDiff`/`NodeUpdate`/`EdgeChange` shapes, the XOR rule, the no-throw-for-malformed-HTML + throws-for-malformed-INPUT-SHAPE facts, and the two documented diff limitations (reorder of same-type+same-content siblings undetected; re-parent/reorder = `remove`+`add`) — all read from the installed dist (§3.1) |
+| `node_modules/provident-ssr/package.json` | the **installed 0.5.1** that satisfies the adopted package's peer range (§3.1) |
+| `package.json` (`dependencies` / `devDependencies`) | the adopted toolchain: `provident-editable ^0.2.0`, `provident-ssr ^0.5.1`, `@types/node ^24`, `vite ^8.3.0` (vitest 5's peer), `vitest ^5.0.1`; `--legacy-peer-deps` **retired** (§3.1; §11 amendment `11.9` item 3) |
+| `src/main/page-diff.ts` `decodePage` / `buildPageOps` / `PageBlock` / `PageDecodeResult` / `PageOpsResult` / `PageDiffSnapshot` | the **ADAPTER** this unit pins: the ONLY importer of `provident-editable`; the decode (`htmlToTree` + the C9 field projection), the op builder (`diffTrees` + the change-kind→op mapping), the closed change-kind set, the refusal of an unmappable kind into the `FS5`/`ST-5` warning class, and the `text`-run/props projection rules (§3.1, §3.2) |
+| `src/main/traversal.ts` `buildTraversal` / `buildSubtree` / `computeDocumentSubgraph` / `DocumentSubgraph` | the traversal authoring, the doc-child nesting, the `data-doc-head` derivation, and the **removed** textarea authoring (no `type: 'textarea'` child is authored at all — §5 item 3, §5.1; §11 amendment `11.9` item 2) |
 | `src/main/rag-store.ts` `BatchOp` / `BatchResult` / `BatchOpResult` / `JournalEntry` / `applyBatch` / `applyBatchOp` / `RagNode` / `RagNodeType` / `RagEdge` / `RagNodeChild` / `docHeadForDocument` | the op unions, the journal kinds, the batch primitives, the node/edge/child shapes, the 23-member type census (§2.4, §3.2, §3.3) |
 | `src/main/edit-ops.ts` `setType` / `setProps` / `setSubtree` / `createNode` / `handleEditBatch` / `handleEditCommit` / `EditOpContext` | the apply primitives, the batch handler, the single-node content write (kept for the MCP counterpart), the id-minting precedent (§2.4, §3.3, §5 item 6) |
 | `src/main/markdown-parse.ts` `parseMarkdown` / `ParsedMarkdown` / `nextId` | the id scheme the new-block minting follows (§3.3 item 8) |
@@ -1417,7 +1708,8 @@ authors no new contract surface and no new fail-state.
 | `src/main/operator-settings-store.ts` `sanitize` / `coerceRepresentationMode` / `coerceEditingMode` (removed) / `set` / `get` | the persisted operator state path — the removed `editingMode` field and the **adopted successor `representationMode`** (§2.5, §5 item 5; §11 amendment `11.8` item 2) |
 | `src/shared/types.ts` `IPC_EDIT_BATCH` / `EditBatchPayload` / `IPC_EDIT_COMMIT` / `EditCommitPayload` / `IPC_RAG_STORE_CHANGED` / `RagStoreChangedPayload` / `EditingMode` (removed) / `RepresentationMode` (adopted successor) / `OperatorSettings` | the commit channel, the kept single-node channel, the broadcast, the removed type/field and its **adopted successor** (§2.5, §3.3, §3.4; §11 amendment `11.8` item 2) |
 | `src/renderer/pane-graph.ts` `editorToolbarContent` / `EDITOR_TOOLBAR_ID` / `representationModeLabel` (the successor of the removed `editingModeLabel`) | the toolbar authoring + the adopted representation-mode label (repointed, §2.3, §6.3 shape R-B; §11 amendment `11.8` item 2) |
-| `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts` | the two FENCE suites — green unchanged, never re-derived (§5.1, §6.4 item 3, §8.4) |
+| `tests/traversal.test.ts` + `tests/import-render-no-duplicates.test.ts` | the two FENCE suites — green, never re-derived, **except** `traversal.test.ts`'s child-list row, **RE-PLANNED by the 2026-09-21 ruling** (§5.1, §6.5, §11 amendment `11.9` item 2); the other file and every other row are pure controls |
+| `tests/page-diff.test.ts` | the rebuilt diff suite: its **test-local reference decode/diff is DELETED** — it re-derives through the adapter (`src/main/page-diff.ts`) + the package (§6.2; §11 amendment `11.9` item 1) |
 | `tests/single-editable-surface.test.ts` | the rebuilt suite whose **surface-shape rows** are re-derived against the app-graph/stage render (§2.1, §6.5, §11 amendment `11.7`) — its `buildTraversal`-reading rows no longer assert the surface |
 | `tests/unit-u-shell-9b-h1-optionc-interception.test.ts` / `unit-u-shell-9b-h2-c20-materialization` / `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` | the rewritten suites whose **per-node-host rows** are re-derived against the same app-graph/stage render (§6.3/§6.5, §11 amendment `11.7`) |
 | `scripts/live-drive.mjs` `BLOCKS` / `MATRIX_ROWS` / `ufRealClick` / the O-0 harness | the live battery's home and its oracle-identity consequence (§8.3) |
@@ -1436,16 +1728,27 @@ authors no new contract surface and no new fail-state.
    `data-doc-head` preserved by `setProps`'s MERGE); markdown mode = plaintext in the same surface,
    monospace, no HTML formatting, live markdown formatting **parked**; the element-type pane applies
    `setType`-class writes over the closed 23-member `RagNodeType` set, never delete+create.
-3. **The commit contract:** the decomposer is the **in-house** `src/main/rich-decompose.ts`
-   `decomposeRichHtml` (**VERIFIED**: `provident-editable` is absent from `package.json` and
-   `node_modules/`, and appears only in prose + one stale `src/main/paste-sanitize.ts` comment); the
-   diff is per RAG block over a **closed field set**; a new block is a `putNode` + a `doc-child`
-   `putEdge` with a host-minted, collision-free `${documentId}:${type}:${n}` id; the commit is
-   **ONE `applyBatch` = one invertible `batch` journal entry = one persist** (`COARSE` undo, an
-   explicit decision); the write sequence is the §12.7(a) reversal restated with the engine batch
-   route **OWED**; a failed commit leaves the store unchanged (bytes equal, 0 persists) and sets the
-   per-tab `commit-failed` state with a typed `CommitFailure` surfaced through the `TAB-1` class, and
-   **the warning survives a re-derive because it is host-side state, never DOM**.
+3. **The commit contract:** the decomposer is **`provident-editable@0.2.0`**, **ADOPTED as the
+   production decomposer** (`htmlToTree` for the decode, `diffTrees` for the diff) with
+   **`src/main/page-diff.ts` as the pinned ADAPTER** — the only module that imports the package, mapping
+   its own `ProvidentTree`/`StructuralDiff` shape (19-member type union incl. `text` runs — **not**
+   C9's `{content, children}`/`RagNodeType`, and **no** `BatchOp`/`applyBatch`/journal) onto the
+   **closed field set `{type, content, children, props}`** and the op set
+   (`putNode`/`setProps`/`setSubtree`/`setType`/`putEdge` + `removeNode`/`removeEdge`), with the
+   change-kind→op table, the **new-block** `putNode` + `doc-child` `putEdge`, the **props** mapping
+   (changed RAG-owned keys into a MERGING `setProps`), the **split/merge** detection (package
+   `update`+`add` / `update`+`remove`), the explicit **non-diffed** runtime props
+   (`contenteditable`, `data-edit-surface`, `data-node-id`, `data-doc-head`), the **`text`-run**
+   flattening, and the adapter's **failure modes** (a package throw / an unmappable kind ⇒ the
+   **`FS5`/`ST-5` warning class**, never a silent partial write); a new block is
+   a `putNode` + a `doc-child` `putEdge` with a host-minted, collision-free `${documentId}:${type}:${n}`
+   id; the commit is **ONE `applyBatch` = one invertible `batch` journal entry = one persist** (`COARSE`
+   undo, an explicit decision — **unchanged by the adoption**); the write sequence is the §12.7(a)
+   reversal restated with the engine batch route **OWED**; a failed commit leaves the store unchanged
+   (bytes equal, 0 persists) and sets the per-tab `commit-failed` state with a typed `CommitFailure`
+   surfaced through the `TAB-1` class, and **the warning survives a re-derive because it is host-side
+   state, never DOM**. **The in-house `decomposeRichHtml` premise (and `DECIDED:
+   RICH-TEXT-EDITING-GATE`'s in-house clause) is SUPERSEDED — §11 amendment `11.9` item 1.**
 4. **Supersessions:** `DECIDED: EDITING-MODE-SETTING` and `DECIDED: FORM-CONTROL-EDITING` →
    **SUPERSEDED at THIS unit's landing** (not before), each enumerating its **surviving clauses** (the
    mode-broadcast contract; commit-on-blur; the re-traversal; the dirty-edit guard); `DECIDED:
@@ -1461,21 +1764,26 @@ authors no new contract surface and no new fail-state.
    `src/renderer/edit-controller.ts` are NOT archived** (35 live harness importers; the interface is
    kept whole).
 6. **Test disposition:** **REBUILD 17** (the archived suites of the `C9` rebuild-map row, re-derived
-   from this spec, never from their old assertions) · **REWRITE 27** (§6.3's per-file table, which is
+   from this spec, never from their old assertions) · **REWRITE 26** (§6.3's per-file table, which is
    the work list and the authority, under the four pinned rewrite shapes R-A…R-D — never a
-   relaxation) · **KEEP 136** · **DELETE 0** (retirement is an archive move, never a hard delete) —
+   relaxation) · **KEEP 137** · **DELETE 0** (retirement is an archive move, never a hard delete) —
    summed against the current 180-file tree with the two probes stated in §6.1, and with the
    deliberate non-break named there (the `≈35` `createEditController` harness files are **not**
-   rewritten).
+   rewritten). **The four figures are §6.1's census, now stated identically in §8.2 item 7 / §8.4 /
+   §13 (§11 amendment `11.9` item 7), and the diff suites re-derive through the adapter + the package
+   (the test-local reference decode/diff is deleted, §6.2).**
 7. **The register:** 7 rows (`P-IM-1`..3, `P-SM-1`..2, `P-TP-1`..2), seed `0xED170001`, budget
    `63 × 6 + 22 = 400`, stop-after-5, `held`/`broken` per row, **control-draw reporting mandatory**.
    **Adjudicated at the landing (§11 amendment `11.8` item 4):** `P-IM-2`'s population is restricted to
    **non-empty** mutation subsets (remedy (a), against `P-TP-2`'s `S = ∅ ⇒ 0`); the row count, the seed
    and the budget are **unchanged** (`63 × 6 + 22 = 400`).
-8. **The escalations:** the **fence/`ST-6` conflict** (pinned inert-tombstone interim + escalation);
+8. **The escalations:** the **fence/`ST-6` conflict — RESOLVED 2026-09-21** (the tombstone is dropped
+   and `tests/traversal.test.ts`'s child-list row is re-planned, §11 item 2/§11.9 item 2);
    the **engine batch route** (OWED to `U-AUTHORITY-SWITCH`); the **`applyBatchOp` rich-op gap** (a
    red obligation, not a new union member); the **missing `docs/skills/designing-pages.md`** (owed);
-   the **catalog's phantom-package row** (owed to the catalog pass).
+   the **catalog's phantom-package row** (owed to the catalog pass, now a **version correction**);
+   the **O-0 oracle-identity re-run** the live blocks owe (§11 items 7/8); and the **package's
+   table-element capability gap** (§11 item 9 — a handoff item, never a patch here).
 9. **Sequencing:** before `TAB-1`/`TAB-2`; not re-opening O-9/O-10 or the O-5 chain; not touching the
    O-0 oracle pair (`src/shared/o0-report.ts`) — except `scripts/live-drive.mjs`'s own new block,
    recorded as an **oracle-identity change with its own live re-run**; the fence suites unchanged; and
@@ -1486,12 +1794,28 @@ authors no new contract surface and no new fail-state.
     **provident node of the app graph/stage assembly** (built by `assembleAppGraphEnvelope`, authored
     through the host's `applyEditorToolbar` seam), **not** a traversal-envelope payload node; the
     implementer's four-placement proof is the recorded contradiction and the fence suite
-    `tests/traversal.test.ts` stays untouched, with the envelope-shape rows of
+    `tests/traversal.test.ts` stays untouched (**read with §11 amendment `11.9` item 2: the fence's
+    **child-list row alone** is RE-PLANNED by the 2026-09-21 ruling; §11.7's "untouched" statement
+    otherwise stands**), with the envelope-shape rows of
     `tests/single-editable-surface.test.ts` and the per-node-host rows of
     `unit-u-shell-9b-h1-optionc-interception` / `unit-u-shell-9b-h2-c20-materialization` /
     `unit-u-shell-9b-blind-greens` / `unit-r-traversal-inline-children` re-derived against the
     app-graph/stage render.
-12. **The 2026-09-21 amendment (`11.8`) — adopted names + the register adjudication:** the page-commit
+13. **The 2026-09-21 amendment (`11.9`) — the decomposer adoption, the tombstone drop, the fence
+    re-plan:** the decomposer is **`provident-editable@0.2.0`** (`htmlToTree`/`diffTrees`, verified from
+    the installed dist) with the **adapter `src/main/page-diff.ts`** pinned as the mapping contract,
+    and `DECIDED: RICH-TEXT-EDITING-GATE`'s in-house clause **SUPERSEDED at landing** (§4.1's added
+    row); the **textarea tombstone DROPPED** — no `textarea` child is authored at all, **the
+    `tests/traversal.test.ts` child-list row is RE-PLANNED as the single authorized fence change**, and
+    §8.3's zero-`<textarea>` census reads zero **honestly**; the test-local reference decode/diff
+    **deleted** (the diff suites re-derive through the adapter + the package); the three vacuous
+    register rows (`P-SM-1`, `P-SM-2`, `P-IM-1`) **amended to be falsifiable** (seed and the
+    `63 × 6 + 22 = 400` total unchanged, the re-tally internal to `P-SM-1`); the toolchain
+    (`@types/node ^24`, `vite ^8.3.0`, `provident-ssr ^0.5.1`, `--legacy-peer-deps` retired) recorded;
+    and **two owed items named**: `U-EDIT-1-LIVE`'s blocks **must be added to `scripts/live-drive.mjs`
+    and therefore owe an O-0 re-run** (RCA-11 — the oracle identity is invalidated by the addition),
+    and the package's **table-element capability gap** is a handoff item (`AGENTS.md` item 7).
+14. **The 2026-09-21 amendment (`11.8`) — adopted names + the register adjudication:** the page-commit
     seam is pinned as **`page-edit-surface-input`/`page-edit-surface-blur`** (handler defs) →
     **`pageSurfaceInput`/`pageSurfaceBlur`** (bridge methods), with the **surviving-seam census rule**
     (§5 item 6 states the same set: **six** retired per-node defs + **six** retired per-node bridge

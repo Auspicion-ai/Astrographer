@@ -402,8 +402,14 @@ describe('buildTraversal — happy paths (§5.7)', () => {
       expect(ulRoot.props?.id).toBe('rag-ul')
       const childIds = (ulRoot.children ?? []).map((c) => c.props?.id)
       // 0.4.0 content-XOR-children — the ul's body is a bare `text` child (its
-      // content 'List'), then the textarea editing overlay, then the doc-children.
-      expect(childIds).toEqual([undefined, 'textarea-ul', 'rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
+      // content 'List'), then its doc-children. RE-PLANNED 2026-09-21 under the
+      // owner's explicit ruling (U-EDIT-1 §5.1 / §6.5 / §11 amendment `11.9`
+      // item 2): the traversal-authored `textarea-<ragId>` child is DROPPED
+      // entirely, so the `'textarea-ul'` entry this row used to pin at that
+      // position is gone. The row's SUBJECT (the child ordering at that
+      // position) is unchanged — only the removed artifact leaves the list.
+      // This is the ONE fence row this unit is authorized to edit.
+      expect(childIds).toEqual([undefined, 'rag-li1', 'rag-li2', 'rag-li3', 'rag-li4'])
 
       // backRefs: one entry for the ul (its owned nodes, excluding the lis) +
       // one per li doc-child RAG object

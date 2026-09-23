@@ -415,15 +415,17 @@ describe('U-SHELL-9b H1 — commit interception (spec §2.9)', () => {
         expect(el.getAttribute('contenteditable')).toBeNull()
       }
 
-      // FS21 — the traversal-authored per-node editing child is an INERT
-      // tombstone: no handler defs, so nothing can route a per-node edit.
+      // FS21 — NO textarea child is authored at all: the traversal-authored
+      // per-node editing child is DROPPED entirely (§5.1 as amended 2026-09-21 —
+      // §11 amendment `11.9` item 2), so no "inert" artifact is left to route a
+      // per-node edit and the census is ZERO.
       const perNodeEditingChildren = authoredRagRoots.flatMap((r) =>
         (r.children ?? []).filter((c) => (c as { type?: unknown }).type === 'textarea'),
       )
-      for (const child of perNodeEditingChildren) {
-        expect(((child as { handlers?: unknown[] }).handlers ?? []) as unknown[]).toEqual([])
-      }
-      expect(perNodeEditingChildren.length).toBeGreaterThan(0)
+      expect(perNodeEditingChildren).toEqual([])
+      // NON-VACUITY: the document's authored subtree really was collected, so
+      // the zero census is not an empty-walk artifact.
+      expect(authoredRagRoots.length).toBeGreaterThan(0)
     } finally {
       cleanup(h.dir)
     }

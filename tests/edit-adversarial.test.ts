@@ -24,7 +24,10 @@
 //   `FS18` a failed commit was auto-retried (§3.5 item 7)
 //   `FS19` a commit reported success without an acknowledged write (§3.6)
 //   `FS20` a stale persisted `editingMode` restored the removed behaviour (§5 item 5)
-//   `FS21` a rendered `<textarea>` or a handler-carrying tombstone (§5.1)
+//   `FS21` ANY authored `type: 'textarea'` child / `textarea-<ragId>` id /
+//        `rag-textarea-*` name, or a rendered `<textarea>` (§5.1 as amended
+//        2026-09-21 — §11 amendment `11.9` item 2: no textarea child is
+//        authored at all, and the rendered census is zero)
 //   `FS22` a markdown-mode surface rendered HTML formatting (§2.3)
 //   `FS23` a dirty page was evicted, invalidated or replaced (§4.5)
 //   `FS24` a commit reached a non-resident document without the typed refusal (§3.6)
@@ -32,25 +35,81 @@
 // This battery hunts the fail-states that are node-assertable: the store/journal
 // half is exercised against a real temp store; the rendered half (`FS21`/`FS22`'s
 // painted assertions, `FS1`'s live census) is the live battery's (§8.3) and is
-// asserted here only at the AUTHORED level.
-import { describe, it, expect } from 'vitest'
+// asserted here at the AUTHORED level plus the mounted-DOM census. The
+// decode/diff rows read the ADAPTER `src/main/page-diff.ts` (`decodePage` /
+// `buildPageOps` — the ONLY module that imports the adopted package, §3.1 /
+// §11 amendment `11.9` item 1): there is NO test-local decode/diff in this file.
+import { describe, it, expect, beforeAll } from 'vitest'
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as editControllerModule from '../src/renderer/edit-controller.js'
 import { createEditController } from '../src/renderer/edit-controller.js'
 import { setProps } from '../src/main/edit-ops.js'
-import { decomposeRichHtml } from '../src/main/rich-decompose.js'
 import { buildTraversal } from '../src/main/traversal.js'
 import { createSnapshotStore } from '../src/main/adjacency.js'
+import { decodePage, buildPageOps, type PageDiffSnapshot } from '../src/main/page-diff.js'
+import type { RagSnapshotPayload } from '../src/shared/types.js'
+import { installShim, mountEl } from '../src/shared/dom-shim.js'
+import { Runtime } from '../src/renderer/runtime.js'
 import {
   createJsonRagStore,
   type RagStore,
   type RagNode,
   type RagEdge,
   type BatchOp,
-  type RagNodeType,
 } from '../src/main/rag-store.js'
+
+beforeAll(() => {
+  installShim()
+})
+
+/** The store's read-only node/edge view — the seam shape of §3.1. */
+function snapshotOf(store: RagStore): PageDiffSnapshot {
+  const payload: RagSnapshotPayload = {
+    store: 'main',
+    nodes: store.listNodes().map((n) => ({
+      id: n.id,
+      type: n.type,
+      content: n.content,
+      props: n.props,
+      children: n.children,
+      ownedNodeIds: n.ownedNodeIds,
+      createdAt: n.createdAt,
+      updatedAt: n.updatedAt,
+    })),
+    edges: store.listEdges().map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      source: e.source,
+      target: e.target,
+      order: e.order,
+      documentIds: e.documentIds,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+    })),
+  }
+  return payload as unknown as PageDiffSnapshot
+}
+
+/** Every node id an op names (`nodeId`, `node.id`, `edge.source`/`target`). */
+function opNodeIds(ops: BatchOp[]): string[] {
+  const ids: string[] = []
+  for (const op of ops) {
+    const anyOp = op as { nodeId?: string; node?: RagNode; id?: string; edge?: RagEdge }
+    if (typeof anyOp.nodeId === 'string') ids.push(anyOp.nodeId)
+    if (typeof anyOp.node?.id === 'string') ids.push(anyOp.node.id)
+    if (typeof anyOp.id === 'string') ids.push(anyOp.id)
+    if (typeof anyOp.edge?.source === 'string') ids.push(anyOp.edge.source)
+    if (typeof anyOp.edge?.target === 'string') ids.push(anyOp.edge.target)
+  }
+  return ids
+}
+
+/** The adapter's op list for a page against a store, or its typed refusal. */
+function pageOps(html: string, store: RagStore, documentId = 'doc') {
+  return buildPageOps(decodePage(html), snapshotOf(store), documentId)
+}
 
 function makeNode(id: string, overrides: Partial<RagNode> = {}): RagNode {
   const now = new Date().toISOString()
@@ -110,7 +169,7 @@ describe('FS1/FS2 — exactly one editable surface, and the caret is page-scoped
     expect(names.filter((n) => /textarea|ragEditor|ragTextarea/i.test(n))).toEqual([])
   })
 
-  it('FS21 — every authored textarea child is a hidden, read-only, handler-less tombstone', () => {
+  it('FS21 — NO textarea child is authored anywhere in the traversal envelope (§11 amendment 11.9 item 2)', () => {
     const store = createSnapshotStore(
       [makeNode('title', { type: 'h1', content: 'Title' })],
       [makeEdge('e-hd', 'doc-head', 'title', 'doc', { documentIds: ['doc'] })],
@@ -122,13 +181,32 @@ describe('FS1/FS2 — exactly one editable surface, and the caret is page-scoped
       return out
     }
     const all = result.envelope.content.flatMap((p) => p.content.flatMap((r) => find(r)))
-    const textareas = all.filter((n) => n.type === 'textarea')
-    expect(textareas.length).toBeGreaterThan(0)
-    for (const t of textareas) {
-      expect(t.props?.hidden).toBe(true)
-      expect(t.props?.readOnly).toBe(true)
-      expect(t.handlers ?? []).toEqual([])
-    }
+    // the census is ZERO — an authored `type: 'textarea'` child is itself the
+    // fail-state now (the tombstone exception is retired)
+    expect(all.filter((n) => n.type === 'textarea')).toEqual([])
+    // NON-VACUITY: the walk really did collect the document's authored nodes
+    expect(all.length).toBeGreaterThan(1)
+    // and no retired id / handler name survives anywhere in the envelope
+    expect(JSON.stringify(result.envelope)).not.toContain('textarea-')
+    expect(JSON.stringify(result.envelope)).not.toContain('rag-textarea-')
+  })
+
+  it('FS21 — the RENDERED DOM census is ZERO `<textarea>` in the stage region', () => {
+    const store = createSnapshotStore(
+      [makeNode('title', { type: 'h1', content: 'Title' }), makeNode('p1', { content: 'body' })],
+      [
+        makeEdge('e-hd', 'doc-head', 'title', 'doc', { documentIds: ['doc'] }),
+        makeEdge('e-n1', 'next-section', 'title', 'p1', { documentIds: ['doc'] }),
+        makeEdge('e-end', 'doc-end', 'p1', 'doc', { documentIds: ['doc'] }),
+      ],
+    )
+    const result = buildTraversal({ store, documentIds: ['doc'], zoneName: 'main' })
+    const mount = mountEl()
+    const runtime = new Runtime({ mount: mount as never, envelope: result.envelope as never })
+    runtime.loadEnvelope(result.envelope as never)
+    expect(mount.querySelectorAll('textarea')).toHaveLength(0)
+    // NON-VACUITY: the document really did materialize
+    expect(mount.querySelectorAll('[data-rag-node-id]').length).toBeGreaterThan(0)
   })
 })
 
@@ -209,37 +287,52 @@ describe('FS4/FS5/FS6 — the element-type apply is setType-class over the close
 // FS7 / FS8 / FS9 — the diff's closed field set and minimal-op rule
 // ===========================================================================
 describe('FS7/FS8/FS9 — malformed input is typed, uncompared fields never enter, and no churn appears', () => {
-  it('FS7 — a malformed page input produces a typed failure, never a partial write', () => {
-    const bad = decomposeRichHtml(null as never)
-    expect(bad.ok).toBe(false)
-    if (!bad.ok) expect(bad.error).toContain('must be a string')
-  })
-
-  it('FS7 — a malformed page never yields a phantom successful op list', () => {
-    const bad = decomposeRichHtml(undefined as never)
-    // the failure arm carries no content/children — there is nothing to write
-    expect('content' in bad).toBe(false)
-    expect('children' in bad).toBe(false)
-  })
-
-  it('FS8 — a runtime-only difference is not a diff input (style/class/contenteditable are not compared)', async () => {
+  it('FS7 — a malformed page input produces the ADAPTER\'s typed refusal, never a partial write', async () => {
     const { store } = newStore()
-    await store.putNode(makeNode('b1', { content: 'same' }))
-    const page = `<p data-rag-node-id="b1" style="color:red" class="is-editable" contenteditable="true">same</p>`
-    const decomposed = decomposeRichHtml(/<p\b[^>]*>([\s\S]*?)<\/p>/.exec(page)![1])
-    expect(decomposed.ok).toBe(true)
-    // the RAG-owned comparison sees only `content`
-    if (decomposed.ok) expect(decomposed.content).toBe(store.getNode('b1')?.content)
+    await store.putNode(makeNode('b1', { content: 'alpha' }))
+    const before = JSON.stringify(store.listNodes())
+    const decoded = decodePage(null as never)
+    expect(decoded.ok).toBe(false)
+    if (!decoded.ok) {
+      expect(decoded.kind).toBe('decompose-failed')
+      expect(typeof decoded.message).toBe('string')
+      expect('blocks' in decoded).toBe(false)
+    }
+    const result = buildPageOps(decoded, snapshotOf(store), 'doc')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect('ops' in result).toBe(false)
+    expect(JSON.stringify(store.listNodes())).toBe(before)
+    expect(store.journal().length).toBe(0)
+  })
+
+  it('FS7 — no op list escapes a refused page (there is no phantom successful edit)', async () => {
+    const { store } = newStore()
+    await store.putNode(makeNode('b1', { content: 'alpha' }))
+    const result = buildPageOps(decodePage(undefined as never), snapshotOf(store), 'doc')
+    expect(result.ok).toBe(false)
+    expect(JSON.stringify(result)).not.toContain('"op"')
+  })
+
+  it('FS8 — a runtime-only difference never enters the op list (style/class/contenteditable are not compared)', async () => {
+    const { store } = newStore()
+    await store.putNode(makeNode('b1', { content: 'same', props: { 'data-node-id': 'b1' } }))
+    const result = pageOps(
+      `<p data-rag-node-id="b1" style="color:red" class="is-editable" contenteditable="true">same</p>`,
+      store,
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.ops).toEqual([])
   })
 
   it('FS9 — an untouched block produces no op (a one-character edit names one node)', async () => {
     const { store } = newStore()
     await store.putNode(makeNode('a', { content: 'one' }))
     await store.putNode(makeNode('b', { content: 'two' }))
-    const ops: BatchOp[] = [{ op: 'putNode', node: makeNode('a', { content: 'one!' }) }]
-    const named = new Set(ops.map((op) => (op as { node?: RagNode }).node?.id))
-    expect([...named]).toEqual(['a'])
-    expect([...named]).not.toContain('b')
+    const result = pageOps(`<p data-rag-node-id="a">one!</p><p data-rag-node-id="b">two</p>`, store)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.ops).toHaveLength(1)
+    expect(new Set(opNodeIds(result.ops))).toEqual(new Set(['a']))
   })
 })
 
@@ -396,16 +489,27 @@ describe('FS20/FS22/FS23 — the removed mode token, the plaintext representatio
     expect(Object.keys(paneGraph)).not.toContain('EditingMode')
   })
 
-  it('FS22 — the markdown representation carries the document text as plaintext (no inline formatting in the decomposed shape)', () => {
-    // the markdown-mode surface's text is the markdown DATA; the decomposer sees
-    // no inline formatting elements in it
+  it('FS22 — the markdown representation carries the document text as plaintext (no inline formatting in the decoded page)', () => {
+    // the markdown-mode surface's text is the markdown DATA — read through the
+    // ADAPTER (the only decode path, §3.1): a plaintext surface decodes to one
+    // block whose content is the markdown text and whose inline set is EMPTY
     const source = '# Title\n\nSome *plain* markdown text.\n'
-    const decomposed = decomposeRichHtml(source)
-    expect(decomposed.ok).toBe(true)
-    if (decomposed.ok) {
-      expect(decomposed.children).toEqual([])
-      expect(decomposed.content).toContain('Some *plain* markdown text.')
-    }
+    const decoded = decodePage(`<p data-rag-node-id="b1">${source}</p>`)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.blocks).toHaveLength(1)
+    expect(decoded.blocks[0].children ?? []).toEqual([])
+    expect(decoded.blocks[0].content).toContain('Some *plain* markdown text.')
+  })
+
+  it('FS22 — a markdown-mode surface decodes WITHOUT minting HTML formatting nodes', () => {
+    // the markdown text is DATA: `*plain*` and `# Title` are literal characters,
+    // so no inline (`strong`/`em`) child and no heading-shaped block is derived
+    const decoded = decodePage(`<p data-rag-node-id="b1"># Title\n\nSome *plain* markdown text.</p>`)
+    expect(decoded.ok).toBe(true)
+    if (!decoded.ok) return
+    expect(decoded.blocks.map((b) => b.elementType)).toEqual(['p'])
+    expect(decoded.blocks[0].children ?? []).toEqual([])
   })
 
   it('FS22 — a markdown-representation surface authors no form control', async () => {
