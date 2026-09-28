@@ -68,9 +68,21 @@
 //  A-6  `''` and a boxed `String` join the precedence GRID and the HOSTILE list; the two
 //       affected terms GROW and are printed with their new sums (IM-1 20 → 28, TP-1 59 →
 //       67) in this file's rows and in the register file's arithmetic.
-//  A-7  the removal branch is DRIVEN under BOTH readings the spec leaves open (SKIP /
-//       DELETE) and a `writes ''` corpus must FAIL both — the spec's `§2.1` item 3 is the
-//       ruling site and rules NEITHER, so this is ESCALATED, never decided here.
+//  A-7  ⟨RULED 2026-09-28 — unit spec `§0B` item 2; `§2.1` item 3 (the ruling site) with
+//       item 6, `§3.2` item 5, `§9` item 1 item (e).⟩ THE REMOVAL BRANCH IS DRIVEN AGAINST
+//       THE RULING: honouring a `removal: true` record MEANS THE ATTRIBUTE IS REMOVED, so
+//       the landed adapter's SKIP is the DIVERGENT reading and a HOST-FIX on
+//       `src/renderer/theme.ts` → `applyThemeToRoot` is OWED. The superseded row drove
+//       BOTH readings (SKIP / DELETE) and — because the ruling had not been made — asserted
+//       that the spec matched NEITHER `skip` NOR `delet` and that the adapter's bytes carried
+//       no removal call. BOTH limbs now contradict the corrected contract and are REPLACED
+//       (never deleted: this row is the record that the ruling was made): the drive requires
+//       the REMOVE reading to hold, a LEAVE-IN-PLACE corpus and a `writes ''` corpus FAIL it,
+//       and the source limb is re-scoped so what it FORBIDS is a removal performed on an
+//       element the adapter was NOT handed (`§0B` item 2: *"not the removal itself"*), not
+//       the removal the ruling requires. THE DRIVE IS INJECTED, never reachable: `§3.2` item 5
+//       fixes the removal arm as UNREACHABLE through the fork's own resolver, so NO live claim
+//       is made anywhere in this row.
 //  A-9  the stale "recorded as a nit in §2.1" comment now cites the DATED CORRECTION.
 //  A-12 the imported member must appear in a VALUE-BEARING, non-`void` position
 //       (`importedMemberUseOracle`) — an unused binding or a `void` reference MUST fail.
@@ -380,8 +392,13 @@ const INVERTED_RECORD_STUB: AdoptedStub = {
   },
 }
 
-/** `A-7`'s generator: a `removal: true` record on a REACHABLE call (§3.2 item 5 declares the
- *  branch unreachable through the resolver, so it can only be driven by injecting the record). */
+/** `A-7`'s generator — THE REMOVAL RECORD, as RULED (`§0B` item 2, 2026-09-28). The record the
+ *  mechanism returns for a removal is `{name:'theme', value:'', removal:true}` (`§3.1` item 15),
+ *  and the fork's adapter is the consumer that OWNS the root it is handed (`§0B` item 2 clause 3),
+ *  so the record's declared outcome is that the attribute is GONE. It is driven ONLY by injecting
+ *  the record: `§3.2` item 5 fixes the removal arm as UNREACHABLE through the fork's own resolver
+ *  (`resolveTheme` returns `'light' | 'dark'`, always a non-empty string), so no reachable path
+ *  can produce it and NO live claim may ride on this drive. */
 const REMOVAL_RECORD_STUB: AdoptedStub = {
   resolveTheme: (setting, env) => vendoredResolveTheme(setting, env),
   applyThemeDeclaration: (attributeName) => ({ name: typeof attributeName === 'string' && attributeName !== '' ? attributeName : null, value: '', removal: true }),
@@ -457,6 +474,41 @@ const FALSE_GREEN_SOURCE = [
   '',
 ].join('\n')
 
+/** ⟨A-7 RULED 2026-09-28 — `§0B` item 2's fix shape / `§2.1` item 6.⟩ THE RULED FIX, as a
+ *  corpus: the write site's OTHER ARM, on the SAME member (`root.dataset.theme`), guarded
+ *  identically and inside the same `try`, with the total/fail-soft contract and the returned
+ *  resolution untouched. It is the POSITIVE control of the `⟨A-7 RULED⟩` row: both oracles must
+ *  ACCEPT it, which is what proves the row is achievable — and that its red is the divergence
+ *  (the landed SKIP), not a shape no adapter could satisfy.
+ *
+ *  The removal is performed through the `dataset` surface the adapter already owns (never by
+ *  `root.removeAttribute`, which `§0B` item 2 DECLINES because it would widen `ThemeRoot`). */
+const RULED_FIX_SOURCE = [
+  "import { resolveTheme as adoptedResolveTheme, applyThemeDeclaration } from '../shared/theme.js'",
+  '',
+  "export type ResolvedTheme = 'light' | 'dark'",
+  'export interface ThemeRoot { dataset: { theme?: string } }',
+  '',
+  'export function resolveTheme(setting: unknown, prefersDark: boolean): ResolvedTheme {',
+  '  const resolution = adoptedResolveTheme(setting, { prefersDark })',
+  "  const followsOs: ResolvedTheme = resolution.prefersDark === true ? 'dark' : 'light'",
+  "  if (setting === 'light') return 'light'",
+  "  if (setting === 'dark') return 'dark'",
+  '  return followsOs',
+  '}',
+  '',
+  'export function applyThemeToRoot(root: ThemeRoot, setting: unknown, prefersDark: boolean): ResolvedTheme {',
+  '  const resolved = resolveTheme(setting, prefersDark)',
+  "  const write = applyThemeDeclaration('theme', resolved)",
+  '  try {',
+  '    if (write.removal) delete root.dataset.theme',
+  '    else root.dataset.theme = write.value',
+  '  } catch {}',
+  '  return resolved',
+  '}',
+  '',
+].join('\n')
+
 /** `A-4` — the write-site AST oracle: EVERY assignment to `<root>.dataset.theme` must take its
  *  RHS from the write RECORD's `value` member, where the record is the binding initialised by
  *  a call to `applyThemeDeclaration`. An `resolved`-RHS corpus MUST fail. */
@@ -510,6 +562,87 @@ function writeSiteOracle(src: string): WriteSiteReading {
   return { recordNames, sites: rhs.length, rhs, badRhs }
 }
 
+/** ⟨A-7 RULED 2026-09-28 — `§0B` item 2 / `§2.1` item 3 (KEPT clause).⟩ THE RE-SCOPED SOURCE
+ *  LIMB'S ORACLE. The ruling's words for what the limb must forbid: *"re-scope the source limb so
+ *  that the PROHIBITED form is 'a removal performed on an element the adapter was not handed' —
+ *  NOT the removal itself."* The oracle therefore enumerates every REMOVAL ACT in a corpus and
+ *  sorts it by its TARGET, never by the act:
+ *   · `acts`            — `delete <X>.<key>` / `delete <X>[…]` / `Reflect.deleteProperty(<X>, …)`,
+ *                         each read with the TARGET expression and the member it removes, and with
+ *                         `handed` true only when the target IS the member the adapter was handed
+ *                         (`<applyThemeToRoot's own first parameter>.dataset` — the one write site
+ *                         `§2.1` item 3 names, never a re-typed name);
+ *   · `foreign`         — the targets of the acts that are NOT the handed root: an ambient
+ *                         `document.documentElement`, a sibling module's element, ANOTHER
+ *                         function's parameter;
+ *   · `elementRemovals` — `<recv>.removeAttribute(…)`, the mechanic `§0B` item 2 DECLINES because
+ *                         it *"would require WIDENING the `ThemeRoot` contract"* (`D-5`), and the
+ *                         element-level form of exactly the foreign removal the limb forbids. */
+interface RemovalAct {
+  /** the TARGET expression's own text, e.g. `root.dataset` */
+  target: string
+  /** the member removed, e.g. `theme` */
+  member: string
+  /** is the target the root `applyThemeToRoot` was HANDED? */
+  handed: boolean
+}
+interface RemovalSiteReading {
+  /** `applyThemeToRoot`'s own first parameter — the element the adapter was handed, or `null` */
+  param: string | null
+  acts: RemovalAct[]
+  foreign: string[]
+  elementRemovals: string[]
+}
+function removalSiteOracle(src: string): RemovalSiteReading {
+  const sf = ts.createSourceFile('removal-site-corpus.ts', src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+  const unwrap = (node: ts.Expression): ts.Expression => (ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node)
+  let param: string | null = null
+  const findParam = (node: ts.Node): void => {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'applyThemeToRoot') {
+      const first = node.parameters[0]
+      if (first !== undefined && ts.isIdentifier(first.name)) param = first.name.text
+    }
+    ts.forEachChild(node, findParam)
+  }
+  findParam(sf)
+  const isHanded = (obj: ts.Expression): boolean => {
+    const o = unwrap(obj)
+    if (!ts.isPropertyAccessExpression(o) || o.name.text !== 'dataset') return false
+    const base = unwrap(o.expression)
+    return ts.isIdentifier(base) && base.text === param
+  }
+  const keyText = (node: ts.Expression | undefined): string => (node === undefined ? '<none>' : unwrap(node).getText(sf).replace(/^['"`]|['"`]$/g, ''))
+  const targetOf = (arg: ts.Expression): RemovalAct => {
+    const access = unwrap(arg)
+    if (ts.isPropertyAccessExpression(access)) {
+      return { target: access.expression.getText(sf), member: access.name.text, handed: isHanded(access.expression) }
+    }
+    if (ts.isElementAccessExpression(access)) {
+      return { target: access.expression.getText(sf), member: keyText(access.argumentExpression), handed: isHanded(access.expression) }
+    }
+    return { target: access.getText(sf), member: '<none>', handed: false }
+  }
+  const acts: RemovalAct[] = []
+  const elementRemovals: string[] = []
+  const walk = (node: ts.Node): void => {
+    if (ts.isDeleteExpression(node)) acts.push(targetOf(node.expression))
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const callee = node.expression
+      if (callee.name.text === 'removeAttribute') elementRemovals.push(callee.expression.getText(sf))
+      else if (callee.name.text === 'deleteProperty') {
+        const first = node.arguments[0]
+        if (first !== undefined) {
+          const targetExpr = unwrap(first)
+          acts.push({ target: targetExpr.getText(sf), member: keyText(node.arguments[1]), handed: isHanded(targetExpr) })
+        }
+      }
+    }
+    ts.forEachChild(node, walk)
+  }
+  walk(sf)
+  return { param, acts, foreign: acts.filter((a) => !a.handed).map((a) => a.target), elementRemovals }
+}
+
 /** `A-12` — the imported-member USE oracle: each member of the vendored module imported by the
  *  corpus must appear as the CALLEE of a call whose RESULT IS USED (a value-bearing position).
  *  A `void adoptedResolveTheme(...)`, a bare discarded call, or an unused binding yields no
@@ -547,21 +680,47 @@ function importedMemberUseOracle(src: string): ImportedUseReading {
   return { imported: [...locals.values()], valueBearing, voidOrDiscarded }
 }
 
-/** `A-7` — the reading of ONE removal-record observation, against the TWO readings the spec's
- *  `§2.1` item 3 leaves open (SKIP / DELETE). The observation is the post-state of a root that
- *  PRE-CARRIED `data-theme='light'` plus the events the root's recording traps saw. Anything
- *  else — a write of `''`, of the resolution, of any other value — is `neither`, i.e. no
- *  reading the spec carries, and MUST fail. */
-function removalReading(o: { after: unknown; events: Array<{ key: string; value: unknown }> }): 'skip' | 'delete' | 'neither' {
-  const deleted = o.events.some((e) => e.value === '<delete>')
-  if (deleted && o.after === undefined) return 'delete'
-  if (o.events.length === 0 && o.after === 'light') return 'skip'
+/** ⟨A-7 RULED 2026-09-28 — `§0B` item 2 / `§2.1` items 3+6.⟩ THE RULED READING of ONE
+ *  removal-record observation — the replacement for the superseded both-readings classifier
+ *  (SKIP / DELETE), which accepted an outcome the corrected contract calls a THIRD outcome the
+ *  record does not declare. The ruling's own words: *"a record whose `removal` member is `true`
+ *  means the attribute is REMOVED — the adapter must NOT leave a pre-existing `data-theme` in
+ *  place"*, and *"A consumer that skips the write leaves a pre-existing attribute in place, which
+ *  is a THIRD outcome the record does not declare."*
+ *
+ *  ONE reading passes and THREE fail, each named so a red says WHICH divergence was observed:
+ *   `removed`       — the attribute is GONE: EXACTLY ONE act at the one write site, a removal, and
+ *                     the pre-carried attribute is no longer PRESENT (`§2.1` item 3: *"exactly one
+ *                     write of the record's decision"*; `§0B` item 2: the same site's other arm);
+ *   `left-in-place` — NO act at all: the landed SKIP — the third outcome, and the divergence the
+ *                     owed `HOST-FIX` repairs;
+ *   `wrote-value`   — an assignment occurred: `''` is a VALUE (the `value` member is what carries
+ *                     it, `§3.1` item 15), not a removal, and the attribute is still PRESENT after;
+ *   `neither`       — anything else: more than one act (a set-then-delete), or an absent attribute
+ *                     that no recorded act explains.
+ *
+ *  The OBSERVATION is the post-state of a root that PRE-CARRIED `data-theme='light'` — the
+ *  attribute's PRESENCE and its value — plus the events the root's recording traps saw, so the
+ *  outcome is READ, never inferred from the return. */
+type RemovalOutcome = 'removed' | 'left-in-place' | 'wrote-value' | 'neither'
+function removalOutcome(o: { present: boolean; after: unknown; events: Array<{ key: string; value: unknown }> }): RemovalOutcome {
+  const removed = o.events.filter((e) => e.key === 'theme' && e.value === '<delete>')
+  const assigned = o.events.filter((e) => e.key === 'theme' && e.value !== '<delete>')
+  if (o.events.length === 1 && removed.length === 1 && !o.present && o.after === undefined) return 'removed'
+  if (o.events.length === 0 && o.present && o.after === 'light') return 'left-in-place'
+  if (o.events.length === 1 && assigned.length === 1 && o.present) return 'wrote-value'
   return 'neither'
 }
 
-/** The `A-7` drive: a root that already carries the attribute, recorded through the SAME
- *  counting traps the grid uses (so a delete is observable as a `<delete>` event). */
-function preThemedRoot(): { root: ThemeRoot; events: Array<{ key: string; value: unknown }>; state: () => unknown } {
+/** The `A-7` drive's root: the attribute is PRE-CARRIED (`theme: 'light'`), so "leaves a
+ *  pre-existing `data-theme` in place" is observable as `present() === true`, and the removal is
+ *  observable BOTH as a `<delete>` event and as the attribute's ABSENCE. */
+function preThemedRoot(): {
+  root: ThemeRoot
+  events: Array<{ key: string; value: unknown }>
+  state: () => unknown
+  present: () => boolean
+} {
   const record: { theme?: unknown } = { theme: 'light' }
   const events: Array<{ key: string; value: unknown }> = []
   const dataset = new Proxy(record, {
@@ -574,7 +733,7 @@ function preThemedRoot(): { root: ThemeRoot; events: Array<{ key: string; value:
       return Reflect.deleteProperty(t, key)
     },
   })
-  return { root: { dataset } as ThemeRoot, events, state: () => record.theme }
+  return { root: { dataset } as ThemeRoot, events, state: () => record.theme, present: () => 'theme' in record }
 }
 
 /** The spec's `§2.1` item 3 paragraph — the RULING SITE for the removal branch (`A-7`). Read so
@@ -1059,10 +1218,15 @@ describe('PD-UI-1 §2.1/§3.2 — the adapter’s totality', () => {
 //   `A-2`  the DIVERGENT-RECORD generator: the declaration's `value` DIFFERS from the
 //          resolution, so "wrote the record" and "wrote the resolution" are separated
 //          BEHAVIOURALLY at the one write site;
-//   `A-7`  the removal branch is DRIVEN (it was only ever asserted by a source regex) under
-//          BOTH readings the spec leaves open, and a `writes ''` corpus must fail both —
-//          the spec's `§2.1` item 3 is the ruling site and rules NEITHER: ESCALATED.
-// The term therefore GROWS by the 4 removal-branch drives: 20 → 24.
+//   `A-7`  the removal branch is DRIVEN (it was only ever asserted by a source regex) — and, since
+//          2026-09-28, driven AGAINST THE RULING: `§0B` item 2 rules that honouring a
+//          `removal: true` record MEANS THE ATTRIBUTE IS REMOVED, so the row requires the REMOVE
+//          reading to hold and the LEAVE-IN-PLACE and `writes ''` corpora to FAIL. ⟨The superseded
+//          row drove BOTH readings and asserted the spec ruled NEITHER: that limb is REPLACED by
+//          the ruling, never deleted.⟩
+// The term is UNMOVED at 4 removal-branch drives: 1 landed drive + 3 corpus controls
+// (DELETE / leave-in-place / `writes ''`) — the two negatives `§0B` item 2 names, plus the
+// positive control that proves the classifier can produce its own passing reading.
 // ===========================================================================
 describe('PD-UI-1 §2.1/§3.2 — the one write, and the write’s discrimination', () => {
   const SETTINGS: Array<{ label: string; value: unknown }> = [
@@ -1106,7 +1270,11 @@ describe('PD-UI-1 §2.1/§3.2 — the one write, and the write’s discriminatio
         const returned = applyThemeToRoot(root, s.value, reading)
         cells.push(`${s.label} × ${reading}`)
         observations += 2 // write count+value / return identity
-        expect(returned, '§2.1 item 4: the resolved theme is RETURNED (the caller uses it to decide whether the OS listener stays live)').toBe(resolved)
+        // ⟨A-11 RULED 2026-09-28 (`§0B` item 3, amending `§2.2` item 4): the RETURN is required and
+        // stays (`D-5` UNMOVED, and this assertion pins it), but the superseded parenthetical
+        // use-case is FALSE — `installTheme`'s `apply()` DISCARDS the return and the liveness
+        // predicate is SETTING-based, so the return has NO consumer in `src/**`.⟩
+        expect(returned, '§2.1 item 4: the resolved theme is RETURNED (the caller-consumption parenthetical is SUPERSEDED — ⟨A-11⟩ ruled the predicate setting-based and the discarded return CORRECT; what is pinned here is the RETURN itself, `D-5` UNMOVED)').toBe(resolved)
         expect(writes.map((w) => w.key), `§2.1 item 3: the one write site is \`root.dataset.theme\` (${s.label} × ${reading})`).toEqual(['theme'])
         expect(writes[0]!.value, `§2.1 item 3: the value written is the record’s decision (${s.label} × ${reading})`).toBe(write.value)
         // …and it is the RESOLUTION too, on this reachable path (the observation the superseded
@@ -1219,64 +1387,224 @@ describe('PD-UI-1 §2.1/§3.2 — the one write, and the write’s discriminatio
     expect(falseGreenObserved.length, '…and the rejection is over all 8 cells, not a sample').toBe(8)
   })
 
-  it('⟨A-7 + A-2⟩ P-TH-TP-2 — the removal branch: DRIVEN under BOTH readings the spec leaves open, and a `writes \'\'` corpus FAILS both (the spec’s §2.1 item 3 rules NEITHER — ESCALATED, never decided here)', () => {
-    // ---- (i) THE TRIPWIRE: the spec's `§2.1` item 3 is the RULING SITE (`A-7`'s correction
-    //      says so explicitly: "rule in §2.1 item 3 whether honouring means SKIP or DELETE").
-    //      It rules NEITHER today, so this row drives BOTH readings instead of inventing one.
-    //      If the spec is amended to rule, this assertion reds LOUDLY and the row must be
-    //      replaced by the ruling — which is the point: no invented semantic survives.
+  it('⟨A-7 RULED + A-2⟩ P-TH-TP-2 — the removal branch: an injected `removal: true` record must leave the pre-carried attribute GONE, and a LEAVE-IN-PLACE or `writes \'\'` corpus MUST FAIL the ruling (the spec’s `§0B` item 2 rules it; `§2.1` items 3+6 are the ruling site)', () => {
+    // ⟨THE REPLACEMENT THIS ROW OWES — `§0B` item 2's consistency statement.⟩ The superseded row
+    // drove the removal branch under BOTH readings the spec then left open (SKIP / DELETE) and
+    // LOCKED IN THE SKIP READING in two limbs: it asserted the spec's `§2.1` item 3 matched NEITHER
+    // `skip` NOR `delet`, and that the adapter's bytes carried no `removeAttribute` /
+    // `delete …dataset.theme` / `deleteProperty`. `§0B` item 2 RULED the semantic on 2026-09-28 —
+    // honouring the record means THE ATTRIBUTE IS REMOVED, and the landed SKIP is the DIVERGENT
+    // reading — so both limbs now contradict the corrected contract. They are REPLACED (never
+    // deleted: this row is the record that the ruling was made), and this row is the FORCING RED
+    // of the owed `HOST-FIX`: it FAILS while the adapter still skips the write.
+    // ---- (i) THE RULING SITE, read back. The tripwire is inverted rather than removed: it now
+    //      DEMANDS the ruling (a revert of the spec's ruling reds this limb, loudly) instead of
+    //      demanding the ambiguity.
     const item3 = specItem3Text()
     expect(item3, '§2.1 item 3 must be the clause that declares the removal branch').toMatch(/removal/)
     expect(
-      /(?:\bskip\w*\b|\bdelet\w*\b)/i.test(item3),
-      '⟨A-7⟩ the spec’s `§2.1` item 3 now RULES the removal semantic — replace this both-readings drive with the ruling (the ESCALATED ambiguity is resolved)',
-    ).toBe(false)
-    // ---- (ii) the vendored record's own contract, unchanged (§3.1 item 15)
+      item3,
+      '⟨A-7 RULED⟩ §2.1 item 3 must rule that the removal branch IS the removal of the attribute — not a branch the adapter is free to represent as "no write"',
+    ).toMatch(/the removal of the attribute/)
+    expect(
+      item3,
+      '⟨A-7 RULED⟩ §2.1 item 6 must carry the ruling in its own word: the attribute is REMOVED, and a consumer that skips leaves a third outcome the record does not declare',
+    ).toMatch(/the attribute is REMOVED/)
+    const specText = readFileSync(REGISTER_SPEC_PATH, 'utf8')
+    expect(specText, '⟨A-7 RULED⟩ the amendment ledger (`§0B` item 2) must declare the owed `HOST-FIX` — the fix is the contract’s, not this row’s invention').toMatch(/HOST-FIX/)
+    expect(specText, '⟨A-7 RULED⟩ …at the named site, so the shape this row drives is the shape the spec owes').toMatch(/applyThemeToRoot/)
+    expect(
+      specText,
+      '⟨A-7 RULED / §0B item 2 DECLINED⟩ …and it must record that calling `root.removeAttribute` is DECLINED (it would widen `ThemeRoot`) — the mechanic this row’s re-scoped source limb forbids',
+    ).toMatch(/removeAttribute/)
+    // ---- (ii) the vendored record's own contract, unchanged (§3.1 item 15): the removal case is
+    //      signalled by the `removal` member ONLY, and the `value` member carries `''`.
     const removalRecord = vendoredApplyThemeDeclaration('theme', '') as { name: unknown; value: string; removal: boolean }
     expect(removalRecord, '§3.1 item 15: the removal case is signalled by the `removal` member ONLY, and the `name` is still echoed independently').toEqual({ name: 'theme', value: '', removal: true })
-    // ---- (iii) THE LANDED ADAPTER, driven under the removal record (unreachable through the
-    //      resolver, §3.2 item 5, so it can only be driven by injecting the record): the
-    //      observation is classified against the TWO readings, and anything else FAILS.
-    const gen = instantiateAdapter(readAdapter(), REMOVAL_RECORD_STUB)
+    // ---- (iii) THE LANDED DRIVE (the term’s "1 landed drive"), SET UP here and VERDICTED at the
+    //      end of this row: the record can only be INJECTED (§3.2 item 5: the removal arm is
+    //      unreachable through the fork's own resolver, so NO live claim is made here), and the
+    //      observation is read off a root that PRE-CARRIED the attribute. ⟨The verdict is the LAST
+    //      assertion of the row ON PURPOSE: every limb before it — the record contract, the corpus
+    //      controls, the re-scoped source limb — is thereby MEASURED at the red head instead of
+    //      being unreachable behind this red.⟩
+    const declarationCalls: Array<{ attributeName: unknown; resolved: unknown }> = []
+    const removalStub: AdoptedStub = {
+      resolveTheme: REAL_STUB.resolveTheme,
+      applyThemeDeclaration: (attributeName, resolved) => {
+        declarationCalls.push({ attributeName, resolved })
+        return REMOVAL_RECORD_STUB.applyThemeDeclaration(attributeName, resolved)
+      },
+    }
+    const gen = instantiateAdapter(readAdapter(), removalStub)
     const drive = preThemedRoot()
     const returned = gen.applyThemeToRoot(drive.root, 'dark', false)
-    const reading = removalReading({ after: drive.state(), events: drive.events })
-    // eslint-disable-next-line no-console -- `A-7`’s reading is PRINTED, never smoothed
-    console.log(`PD-UI-1 §3a A-7: the removal record is honoured by the ${reading.toUpperCase()} reading (root that pre-carried 'light' ⇒ ${String(drive.state())}); §2.1 item 3 rules neither SKIP nor DELETE — ESCALATED to the architect`)
-    expect(['skip', 'delete'], '⟨A-7⟩ honouring the removal record MUST be one of the two readings the spec leaves open — a write of `\' \'`/the resolution/anything else is no reading at all').toContain(reading)
-    expect(returned, '§2.1 item 4: the resolved theme is STILL returned while the removal arm is taken').toBe('dark')
-    // ---- (iv) THE CONTROLS: the classifier is driven over synthetic corpora, so it is shown
-    //      to SEE a delete and to REJECT a `writes ''` corpus and a resolution-writing corpus.
+    const observed = { present: drive.present(), after: drive.state(), events: drive.events }
+    const outcome = removalOutcome(observed)
+    // eslint-disable-next-line no-console -- `A-7`'s reading is PRINTED, never smoothed
+    console.log(`PD-UI-1 §0B item 2 ⟨A-7 RULED⟩: the injected record {name:'theme', value:'', removal:true} is honoured by the ${outcome.toUpperCase()} reading on a root that pre-carried 'light' (attribute present=${String(observed.present)}, value=${String(observed.after)}) — the RULED reading is REMOVED, and the landed adapter’s SKIP is the DIVERGENT one`)
+    expect(
+      declarationCalls,
+      '⟨A-2 record-following⟩ the adapter must obtain the write AS DATA from the RECORD: EXACTLY ONE `applyThemeDeclaration` call for the drive, carrying the fork’s own `\'theme\'` token (§2.1 item 2) — so the removal being driven is the RECORD’s, not this row’s',
+    ).toEqual([{ attributeName: 'theme', resolved: 'dark' }])
+    expect(
+      returned,
+      '§2.1 item 4 (`D-5` UNMOVED): the resolved theme is STILL returned while the removal arm is taken — the return is required; ⟨A-11⟩/`§0B` item 3 rule only that no `src/**` caller must CONSUME it',
+    ).toBe('dark')
+    // ---- (iv) THE 3 CORPUS CONTROLS (the term’s "3 corpus controls"), so the oracle is shown to
+    //      discriminate BOTH ways rather than asserted: the positive control that proves the
+    //      classifier can produce its own passing reading, and the TWO negatives `§0B` item 2 names
+    //      by name (*"require the remove reading to hold while the leave-in-place and `writes ''`
+    //      corpora FAIL"*).
     const deleteCorpus = (root: ThemeRoot): string => {
       delete (root.dataset as { theme?: string }).theme
+      return 'dark'
+    }
+    /** The landed SKIP, verbatim in substance: a record whose `removal` is true performs NO write. */
+    const leaveInPlaceCorpus = (root: ThemeRoot, removal: boolean): string => {
+      if (!removal) root.dataset.theme = 'dark'
       return 'dark'
     }
     const emptyWriteCorpus = (root: ThemeRoot): string => {
       root.dataset.theme = ''
       return 'dark'
     }
+    const observe = (fn: (root: ThemeRoot) => string): { present: boolean; after: unknown; events: Array<{ key: string; value: unknown }> } => {
+      const rec = preThemedRoot()
+      fn(rec.root)
+      return { present: rec.present(), after: rec.state(), events: rec.events }
+    }
+    expect(
+      removalOutcome(observe(deleteCorpus)),
+      '⟨A-7 RULED⟩ CONTROL 1 (the DELETE corpus): the classifier must SEE the RULED outcome — a corpus that removes the attribute at the handed root’s one write site is the ONLY passing reading, and this control proves the oracle can produce one',
+    ).toBe('removed')
+    expect(
+      removalOutcome(observe((r) => leaveInPlaceCorpus(r, true))),
+      '⟨A-7 RULED⟩ CONTROL 2 (the LEAVE-IN-PLACE corpus — the landed SKIP): no act at all MUST FAIL the ruling ("a THIRD outcome the record does not declare", §0B item 2)',
+    ).toBe('left-in-place')
+    expect(
+      removalOutcome(observe(emptyWriteCorpus)),
+      '⟨A-7 RULED⟩ CONTROL 3 (the `writes \'\'` corpus): `\'\'` is a VALUE — the `value` member is what carries it (§3.1 item 15) — so the attribute is still PRESENT afterwards and the corpus MUST FAIL the ruling',
+    ).toBe('wrote-value')
+    // ---- (iv-b) TWO DECLARED DIAGNOSTICS of the same classifier (oracle discrimination reads,
+    //      NOT attempt-term factors — §4's declared accounting). `A-2`: a corpus that follows its
+    //      own RETURN instead of the record's removal leaves the attribute PRESENT and must FAIL;
+    //      §2.1 item 3: two acts at the one write site are not "exactly one write of the record’s
+    //      decision" and must FAIL.
     const resolutionWriteCorpus = (root: ThemeRoot, resolution: string): string => {
       root.dataset.theme = resolution
       return resolution
     }
-    const observe = (fn: (root: ThemeRoot) => string): { after: unknown; events: Array<{ key: string; value: unknown }> } => {
-      const rec = preThemedRoot()
-      fn(rec.root)
-      return { after: rec.state(), events: rec.events }
+    expect(
+      removalOutcome(observe((r) => resolutionWriteCorpus(r, 'dark'))),
+      '⟨A-2 record-following⟩ DIAGNOSTIC: a corpus writing the RESOLUTION on the removal arm (following its own return, not the record) MUST FAIL the ruling — it leaves the attribute PRESENT',
+    ).toBe('wrote-value')
+    const setThenDeleteCorpus = (root: ThemeRoot): string => {
+      root.dataset.theme = 'dark'
+      delete (root.dataset as { theme?: string }).theme
+      return 'dark'
     }
-    expect(removalReading(observe(deleteCorpus)), '⟨A-7⟩ the classifier must SEE a DELETE corpus as the DELETE reading').toBe('delete')
-    expect(removalReading(observe(emptyWriteCorpus)), '⟨A-7⟩ a `writes \'\'` corpus MUST fail BOTH readings (it is not a removal — the `value` member is what carries `\'\'`)').toBe('neither')
-    expect(removalReading(observe((r) => resolutionWriteCorpus(r, 'dark'))), '⟨A-7⟩ a corpus writing the RESOLUTION on the removal arm MUST fail BOTH readings').toBe('neither')
-    // ---- (v) the source limb, retained: the removal branch is represented by the RECORD and
-    //      never by a call the adapter makes on an element it does not own (§2.1 item 3).
+    expect(
+      removalOutcome(observe(setThenDeleteCorpus)),
+      '§2.1 item 3 DIAGNOSTIC: TWO acts at the one write site are not "exactly one write of the record’s decision" — the corpus MUST FAIL, so the classifier is a reading and not a "did anything happen" test',
+    ).toBe('neither')
+    // ---- (v) THE SOURCE LIMB, RE-SCOPED — never dropped. `§0B` item 2: *"re-scope the source limb
+    //      so that the PROHIBITED form is 'a removal performed on an element the adapter was not
+    //      handed' — NOT the removal itself."* So the limb's subject is the TARGET of every removal
+    //      act: the handed root’s own `dataset` member (the one write site) is REQUIRED, and any
+    //      other element — an ambient `document`, a sibling, another function’s parameter — is
+    //      FORBIDDEN. The `removeAttribute` mechanic is DECLINED separately (§0B item 2).
     const text = readAdapterCode()
     expect(text, '§2.1 item 3: the adapter must READ the record’s `removal` member — an unread record is a silent divergence').toMatch(/\.removal\b/)
+    const landedRemoval = removalSiteOracle(text)
     expect(
-      text,
-      '§2.1 item 3: the removal branch is represented by the record and NEVER by a call the adapter makes on an element it does not own',
-    ).not.toMatch(/removeAttribute|delete\s+\w+\.dataset\.theme|deleteProperty/)
-    // ---- (vi) the row's DECLARED removal-branch term: 1 landed drive + 3 corpus controls = 4
-    expect(1 + 3, '§4 P-TH-TP-2 (⟨A-7⟩-added term): 1 landed removal drive + 3 corpus controls (DELETE / `writes \'\'` / resolution-writing) = 4').toBe(4)
+      landedRemoval.param,
+      'the handed root is `applyThemeToRoot`’s own FIRST PARAMETER — read by name out of the corpus, never re-typed in this row',
+    ).toBe('root')
+    expect(
+      landedRemoval.foreign,
+      '§2.1 item 3 (as filed, KEPT) / §0B item 2: a removal performed on an element the adapter was NOT handed MUST fail — the handed `root`’s own `dataset` is the ONLY element the ruling’s removal may touch. ⟨The positive half is behavioural, and it is the drive’s: the attribute can only be GONE if the removal reached the handed root’s member — a removal on any other element leaves it in place and FAILS the verdict below.⟩',
+    ).toEqual([])
+    expect(
+      landedRemoval.elementRemovals,
+      '⟨§0B item 2 — DECLINED⟩ the `removeAttribute` mechanic MUST be absent: it "would require WIDENING the `ThemeRoot` contract" (`D-5`), and the element-level form is exactly the foreign removal the limb above forbids',
+    ).toEqual([])
+    // …and the limb is shown to DISCRIMINATE, over synthetic corpora, in both directions:
+    const corpusOf = (lines: string[]): string => lines.join('\n')
+    const handedDelete = removalSiteOracle(
+      corpusOf(['export function applyThemeToRoot(root: ThemeRoot): void {', '  delete root.dataset.theme', '}']),
+    )
+    expect(
+      handedDelete.acts,
+      '⟨A-7 RULED⟩ positive control: the corpus performing the ruling’s removal on the HANDED root must be SEEN as a handed act — otherwise this limb is vacuous',
+    ).toEqual([{ target: 'root.dataset', member: 'theme', handed: true }])
+    expect(handedDelete.foreign, '…and the limb must NOT forbid it: this is the removal the ruling REQUIRES').toEqual([])
+    expect(handedDelete.elementRemovals, '…and it is not the DECLINED mechanic, so nothing is recorded there').toEqual([])
+    expect(
+      removalSiteOracle(
+        corpusOf(['export function applyThemeToRoot(root: ThemeRoot): void {', '  delete document.documentElement.dataset.theme', '}']),
+      ).foreign,
+      '§2.1 item 3 (KEPT clause): a removal on an AMBIENT element the adapter was not handed MUST fail the re-scoped limb',
+    ).toEqual(['document.documentElement.dataset'])
+    expect(
+      removalSiteOracle(
+        corpusOf([
+          'export function applyThemeToRoot(root: ThemeRoot): void {',
+          '  void root',
+          '}',
+          'export function helper(node: ThemeRoot): void {',
+          '  delete node.dataset.theme',
+          '}',
+        ]),
+      ).foreign,
+      '§2.1 item 3 (KEPT clause): …and so MUST a removal performed on ANOTHER function’s parameter — the element the adapter was handed is `applyThemeToRoot`’s own first parameter',
+    ).toEqual(['node.dataset'])
+    expect(
+      removalSiteOracle(
+        corpusOf(['export function applyThemeToRoot(root: ThemeRoot): void {', "  root.removeAttribute('data-theme')", '}']),
+      ).elementRemovals,
+      '⟨§0B item 2 DECLINED⟩ …and the `removeAttribute` mechanic is recorded EVEN ON THE HANDED ROOT, because taking it would widen `ThemeRoot` — the limb above requires this reading to be EMPTY',
+    ).toEqual(['root'])
+    expect(
+      removalSiteOracle(
+        corpusOf(['export function applyThemeToRoot(root: ThemeRoot): void {', "  Reflect.deleteProperty(root.dataset, 'theme')", '}']),
+      ).acts,
+      '⟨A-7 RULED⟩ …while the `Reflect.deleteProperty(<handed>.dataset, <key>)` form is the SAME removal at the SAME member and is SEEN as handed (the limb forbids the TARGET, never the form)',
+    ).toEqual([{ target: 'root.dataset', member: 'theme', handed: true }])
+    // ---- (v-a) THE POSITIVE DIRECTION, through the SAME compile path the drive uses: the ruling's
+    //      fix shape (`RULED_FIX_SOURCE` — the write site's other arm, on the SAME member) must be
+    //      ACCEPTED by both oracles. This is what proves the row is ACHIEVABLE — that it reds for
+    //      the divergence and not for a shape no adapter could satisfy — and it is a DECLARED
+    //      DIAGNOSTIC, never a term factor.
+    const fixedReading = removalSiteOracle(RULED_FIX_SOURCE)
+    expect(
+      fixedReading.acts,
+      '⟨A-7 RULED⟩ positive control (source limb): the ruling’s fix — a removal at the SAME one write site’s member, `<param>.dataset.theme` — must be SEEN, so the re-scoped limb does NOT forbid the removal the ruling REQUIRES',
+    ).toEqual([{ target: 'root.dataset', member: 'theme', handed: true }])
+    expect(fixedReading.foreign, '…and the ruling’s fix performs no removal on an element the adapter was not handed').toEqual([])
+    expect(fixedReading.elementRemovals, '…and it does not take the DECLINED `removeAttribute` mechanic').toEqual([])
+    const fixedDrive = instantiateAdapter(RULED_FIX_SOURCE, REMOVAL_RECORD_STUB)
+    const fixedRoot = preThemedRoot()
+    const fixedReturned = fixedDrive.applyThemeToRoot(fixedRoot.root, 'dark', false)
+    expect(
+      removalOutcome({ present: fixedRoot.present(), after: fixedRoot.state(), events: fixedRoot.events }),
+      '⟨A-7 RULED⟩ positive control (drive): the SAME injected record against a corpus carrying the ruling’s fix MUST read `removed` — so this row goes GREEN for the ruled fix and for nothing weaker',
+    ).toBe('removed')
+    expect(fixedReturned, '…and the fixed corpus still returns the resolution (§2.1 item 4, `D-5`)').toBe('dark')
+    // ---- (v-b) THE DRIVE’S VERDICT — the FORCING RED of this row, and the owed `HOST-FIX`’s
+    //      acceptance test. It is asserted LAST so that every limb above it is MEASURED at the red
+    //      head; at a fixed head it is the one assertion that can only pass by REMOVING the
+    //      attribute the record declares removed.
+    expect(
+      outcome,
+      `⟨A-7 RULED 2026-09-28 — §0B item 2 / §2.1 item 6⟩ honouring a \`removal: true\` record MEANS THE ATTRIBUTE IS REMOVED. The root PRE-CARRIED \`theme='light'\`, the injected record declares \`{name:'theme', value:'', removal:true}\`, and afterwards the attribute must be GONE (exactly ONE act at the one write site, a removal, with the attribute no longer PRESENT). Observed: ${outcome} (present=${String(observed.present)}, value=${String(observed.after)}, events=${JSON.stringify(observed.events)}). The landed adapter’s SKIP is the DIVERGENT reading this row forces the owed HOST-FIX to repair — the removal branch is LATENT here (§3.2 item 5), so this is a CONTRACT red and NOT a reproduced live defect.`,
+    ).toBe('removed')
+    // ---- (vi) the row's DECLARED removal-branch term — UNMOVED at 4 (`§4`'s growth table prints
+    //      it as `1 landed drive + 3 corpus controls`), with the three controls named.
+    expect(
+      1 + 3,
+      '§4 P-TH-TP-2 (⟨A-7⟩-added term): 1 landed removal drive + 3 corpus controls (DELETE / leave-in-place / `writes \'\'`) = 4 — the two negatives §0B item 2 names, plus the positive DELETE control',
+    ).toBe(4)
   })
 
   it('P-TH-TP-2 CONTROLS — the oracle discriminates BOTH ways: a mismatched return, a double write, a removal-on-a-reachable-call and a no-write corpus all FAIL it', () => {

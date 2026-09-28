@@ -712,14 +712,19 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
    *  Declared diagnostics, per row (in-row, counted): `P-TH-IM-1` 1 (the coercing corpus over
    *  the grid), `P-TH-IM-2` 3 (faithfulness · the 11-shape false-green rejection · the 11-shape
    *  indistinguishability read), `P-TH-TP-1` 1 (the coercing corpus over the added shapes),
-   *  `P-TH-TP-2` 7 (4 AST corpora · the write-path faithfulness pass · the 8-cell divergent-
-   *  record grid · the 8-cell false-green rejection), `P-TH-TP-3` 2 (the silent-skip pair),
-   *  `P-TH-IM-4` 3 (the ⟨A-12⟩ void / unused / discarded corpora), `P-TH-SM-1` 1 (⟨A-1⟩'s
-   *  synthetic COMMITTED change) = 18 diagnostics, declared and NOT attempt-term factors.
+   *  `P-TH-TP-2` 15 (4 AST write-site corpora · the write-path faithfulness pass · the 8-cell
+   *  divergent-record grid · the 8-cell false-green rejection · ⟨A-7 RULED⟩ 2 classifier
+   *  diagnostics (the resolution-writing corpus · the set-then-delete corpus) · 5 re-scoped
+   *  source-limb corpora (handed delete · ambient `document` · another function’s parameter ·
+   *  the DECLINED `removeAttribute` · `Reflect.deleteProperty`) · the ⟨A-7 RULED⟩ positive
+   *  control corpus `RULED_FIX_SOURCE`, accepted by BOTH oracles), `P-TH-TP-3` 2 (the
+   *  silent-skip pair), `P-TH-IM-4` 3 (the ⟨A-12⟩ void / unused / discarded corpora),
+   *  `P-TH-SM-1` 1 (⟨A-1⟩'s synthetic COMMITTED change) = 26 diagnostics, declared and NOT
+   *  attempt-term factors.
    *
    *  The eight rows of §4's register table, with the file each row's drives land in.
    *
-   *  ⟨A-6 / A-7 / A-3 CORRECTIONS 2026-09-28 (gate-4 remand).⟩ THREE terms GREW, because three
+   *  ⟨A-6 / A-7 / A-3 CORRECTIONS 2026-09-28 (gate-4 remand).⟩ FOUR terms GREW, because four
    *  corrections oblige drives the filed terms did not carry:
    *   · `P-TH-IM-1` 20 → 28  — ⟨A-6⟩ `''` and a boxed `String` join the precedence GRID
    *                             (+2 shapes × 2 readings × 2 observations = +8);
@@ -731,10 +736,14 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
    *                             the write) proves the new attempt oracle discriminates (+1).
    *  `P-TH-IM-2` (26) and `P-TH-TP-3`'s 24 observations are UNCHANGED IN COUNT and now EXACT
    *  (⟨A-5⟩/⟨A-8⟩: the executed counts are the printed ones, with no floor and no bonus drive).
-   *  The total is `194`; the SPEC's §4 table still prints `173` and is SUPERSEDED — the spec is
-   *  not this unit's write set, so the divergence is DECLARED here and ESCALATED to the
-   *  supervisor as the amendment `§4` owes (`REGISTER-ATTEMPT-TOTALS-PRINT-THEIR-TERMS`: the
-   *  total is the sum of its own printed terms; a superseded figure stays VISIBLE).
+   *  The total is `194`. **⟨AMENDED 2026-09-28 (`§0B` item 1, the spec's `§4`): the SPEC's `§4`
+   *  table is now TRUTHFUL at `194` — its eight printed terms are the executed ones, so the
+   *  divergence this file used to DECLARE is CLOSED. The superseded figures (`20 + 26 + 59 + 20 +
+   *  26 + 6 + 8 + 8 = 173`) are KEPT VISIBLE and DATED in the spec's `§4` AS-FILED block, with
+   *  their finding ids, and this file reads BOTH back: the current total must be the sum of the
+   *  table's own printed terms, and the `173` must still be present AS the superseded figure.
+   *  A pass that reverted the spec's table to `173` would RE-FILE the defect the amendment
+   *  closes — the table is the contract and the test follows it, never the reverse.⟩**
    *  `generator: false` on every row is ⟨A-8⟩'s DECLARED route: NO row is generator-backed. */
   const REGISTER_TERMS: Array<{ row: string; file: string; terms: string; total: number; generator: boolean }> = [
     { row: 'P-TH-IM-1', file: 'pd-ui-1-theme-adoption.test.ts', terms: '6 setting shapes × 2 prefersDark values × 2 observations (identity + domain) = 24, + 4 controls', total: 6 * 2 * 2 + 4, generator: false },
@@ -747,9 +756,12 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
     { row: 'P-TH-SM-2', file: 'pd-ui-1-theme-register.test.ts', terms: '3 facts × 2 readings = 6, + 2 controls', total: 3 * 2 + 2, generator: false },
   ]
 
-  /** §4's register table AS FILED at this head — the SUPERSEDED printed terms, kept visible so
-   *  the divergence between the spec's table and the executed register is a READING, never a
-   *  silent replacement. The spec's own table is read back and re-summed in the row below. */
+  /** §4's register table AS FILED before the 2026-09-28 amendment — the SUPERSEDED printed terms.
+   *  ⟨RECONCILED (`§0B` item 1 / `§9` item 9): the spec's `§4` table is now TRUTHFUL at `194`, so
+   *  these figures are no longer what the table PRINTS as current — they are the figures the spec
+   *  KEEPS VISIBLE, dated, in its AS-FILED block. This array is the reading that block is checked
+   *  against: the superseded terms must remain VISIBLE and dated, and must NOT be asserted as
+   *  current.⟩ */
   const SUPERSEDED_SPEC_TERMS: Array<{ row: string; printed: number }> = [
     { row: 'P-TH-IM-1', printed: 20 },
     { row: 'P-TH-IM-2', printed: 26 },
@@ -764,7 +776,7 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
   it('§4 — the eight rows, each with its own term; every row ≤ 100; the total is the SUM OF ITS OWN TERMS', () => {
     expect(REGISTER_TERMS.length, '§4: the register is FULL at eight rows — the cap is ≤8 and a further row requires retiring one').toBe(8)
     const perRow = REGISTER_TERMS.map((r) => `${r.row}: ${r.terms} = ${r.total}`)
-    expect(perRow, '§4: the per-row terms, printed in register order (three grew under ⟨A-6⟩/⟨A-7⟩/⟨A-3⟩; the superseded figures are in `SUPERSEDED_SPEC_TERMS`)').toEqual([
+    expect(perRow, '§4: the per-row terms, printed in register order (four grew under ⟨A-6⟩/⟨A-7⟩/⟨A-3⟩; those superseded figures are now KEPT VISIBLE and DATED in the spec’s §4 AS-FILED block — see `SUPERSEDED_SPEC_TERMS`)').toEqual([
       'P-TH-IM-1: 6 setting shapes × 2 prefersDark values × 2 observations (identity + domain) = 24, + 4 controls = 28',
       'P-TH-IM-2: 11 env shapes × 2 observations = 22, + 4 controls = 26',
       'P-TH-TP-1: 14 setting shapes × 4 non-boolean readings = 56, + 3 root shapes × 3 settings = 9, + 2 controls = 67',
@@ -785,10 +797,10 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
       '§4 (⟨A-6⟩/⟨A-7⟩/⟨A-3⟩-corrected terms): `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8 = 194` — the total is the SUM OF ITS OWN PRINTED TERMS. The superseded total was `20 + 26 + 59 + 20 + 26 + 6 + 8 + 8 = 173`',
     ).toBe(194)
     const supersededTotal = SUPERSEDED_SPEC_TERMS.reduce((a, r) => a + r.printed, 0)
-    expect(supersededTotal, '§4: the SUPERSEDED total (the spec’s §4 table as filed) is still `173` — kept VISIBLE, never silently replaced').toBe(173)
+    expect(supersededTotal, '§4: the SUPERSEDED total (the §4 table AS FILED) is still `173` — kept VISIBLE and DATED in the spec’s AS-FILED block, never silently replaced and never asserted as current').toBe(173)
     expect(
       total - supersededTotal,
-      '§4: the divergence is EXACTLY the corrections’ added drives — ⟨A-6⟩ +8 (IM-1: 2 shapes × 2 readings × 2 observations) +8 (TP-1: 2 shapes × 4 readings), ⟨A-7⟩ +4 (TP-2 removal-branch drives), ⟨A-3⟩ +1 (TP-3 silent-skip control) = 21. `194 = 173 + 21`',
+      '§4: the composition is unchanged and still declared by the spec — ⟨A-6⟩ +8 (IM-1: 2 shapes × 2 readings × 2 observations) +8 (TP-1: 2 shapes × 4 readings), ⟨A-7⟩ +4 (TP-2 removal-branch drives), ⟨A-3⟩ +1 (TP-3 silent-skip control) = 21. The spec prints `` `194` = `173 + 21` ``; the AMENDMENT moves the figure, never the composition',
     ).toBe(21)
     expect(total, '§4 route (b) (carried): the declared total is over the ≤120 cap — stated, not smoothed').toBeGreaterThan(120)
   })
@@ -838,45 +850,92 @@ describe('§4 — the register’s arithmetic, printed with its terms', () => {
       namesControlsExplicitly,
       '§4: the rows whose attempts cell names its `controls` term explicitly — the complement is the IMPLICIT-controls set (a spec-table nit, recorded, never a row weakened)',
     ).toEqual(['P-TH-IM-1', 'P-TH-IM-2', 'P-TH-TP-2', 'P-TH-TP-3', 'P-TH-IM-4', 'P-TH-SM-1', 'P-TH-SM-2'])
-    // …and the spec’s own printed total is the SUM OF ITS OWN TERMS: the eight printed counts
-    // are added up and must equal `173`, so a term silently trimmed from a cell moves this
-    // reading. The cell is located from the RIGHT — a `|` inside a property cell’s table makes
-    // a naive split yield a ragged row, so the last cell is `\`(bounded)?\`` and the one
-    // before it is `Attempts`. The emphasis (`**\`20\`**`, `**20**`, a bare `20`) is not pinned;
-    // the COUNT is.
+    // …and each printed term must be the SUM OF ITS OWN FACTORS, and the spec’s own printed total
+    // the sum of its own terms (`REGISTER-ATTEMPT-TOTALS-PRINT-THEIR-TERMS`).
+    // ⟨RECONCILED 2026-09-28 (`§0B` item 1 / `§9` item 9): the spec’s `§4` table is now TRUTHFUL at
+    // `194` (`28 + 26 + 67 + 24 + 27 + 6 + 8 + 8`), the four superseded row terms and the `173`
+    // total are KEPT VISIBLE and DATED in the spec’s AS-FILED block, and NO printed term is
+    // superseded. This row therefore asserts the AMENDMENT instead of the divergence it used to
+    // declare — and it still fails LOUDLY if the table drifts again.⟩
+    // The cell is located by its own FORM — a `|` inside a property cell’s markdown table makes a
+    // positional read ragged, so the attempts cell is found by `` `N`** = `` and never by an index.
+    // The emphasis (`**\`28\`**`, `**28**`, a bare `28`) is not pinned; the COUNT is.
     const leadingCount = (cell: string): number => {
       const firstRun = (/\d+/.exec(cell) ?? [])[0]
       return firstRun === undefined ? NaN : Number(firstRun)
+    }
+    /** The FACTORS a cell prints after its `=`, read only up to the amendment annotation (`⟨…⟩`) so
+     *  the AS-FILED figures an annotation keeps visible are never mistaken for the term’s factors. */
+    const printedFactors = (cell: string): number[] => {
+      const head = cell.split('⟨')[0] ?? ''
+      const eq = head.indexOf('=')
+      if (eq < 0) return []
+      return [...head.slice(eq + 1).matchAll(/\d+/g)].map((m) => Number(m[0]))
     }
     const specPrintedCounts = rows.map((r) => leadingCount(attemptsCell(r.cells)))
     expect(specPrintedCounts.some((n) => Number.isNaN(n)), '§4: every register row’s attempts cell must open with its count').toBe(false)
     const specTotal = specPrintedCounts.reduce((a, n) => a + n, 0)
     // eslint-disable-next-line no-console -- the spec’s total is PRINTED with its terms (§4)
-    console.log(`PD-UI-1 register (spec §4, SUPERSEDED): ${rows.map((r, i) => `${r.id}=${specPrintedCounts[i]}`).join(' + ')} = ${specTotal} attempts`)
-    expect(specTotal, '§4: the spec’s eight printed terms must sum to `173` — a total quoted without its terms, or one that is not the sum of its own terms, is a review finding').toBe(173)
-    expect(readFileSync(REGISTER_SPEC_PATH, 'utf8'), '§4: the spec DECLARES its over-cap total and the route taken').toMatch(/`173` attempts/)
-    // ⟨A-6 / A-7 / A-3⟩ THE DECLARED DIVERGENCE, printed and asserted rather than smoothed: this
-    // row's own per-row cells are the SUPERSEDED figures for exactly three rows (the corrections
-    // grew three terms), so the executed register and the spec's table differ by a figure that is
-    // the SUM OF THE CORRECTIONS' DRIVES — and this unit may NOT edit the spec, so the amendment
-    // is ESCALATED to the supervisor and the superseded numbers stay visible in both directions.
+    console.log(`PD-UI-1 register (spec §4, AMENDED 2026-09-28): ${rows.map((r, i) => `${r.id}=${specPrintedCounts[i]}`).join(' + ')} = ${specTotal} attempts`)
+    expect(
+      specPrintedCounts,
+      '§4 (⟨AMENDED 2026-09-28 — `§0B` item 1⟩): the spec’s §4 table must print the EXECUTED terms, in register order — `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8`. A printed count that is not what runs is the filed defect `A-8`; a cell drifted back to a superseded figure fails HERE',
+    ).toEqual(REGISTER_TERMS.map((r) => r.total))
+    const factorSumMismatch = rows
+      .map((r, i) => ({ id: r.id, printed: specPrintedCounts[i]!, factors: printedFactors(attemptsCell(r.cells)) }))
+      .filter((r) => r.factors.length === 0 || r.factors.reduce((a, n) => a + n, 0) !== r.printed)
+    expect(
+      factorSumMismatch,
+      '§4 `REGISTER-ATTEMPT-TOTALS-PRINT-THEIR-TERMS`: EVERY cell must print its count as the SUM OF ITS OWN FACTORS (the addends after its `=` must add up to its leading count) — a count quoted without its terms, or one that is not their sum, is a review finding',
+    ).toEqual([])
+    expect(
+      specTotal,
+      '§4 (⟨AMENDED 2026-09-28⟩): the spec’s eight printed terms must sum to `194` = `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8` — the total is the SUM OF ITS OWN PRINTED TERMS, and each moved term is printed as the sum of its own factors in its own cell',
+    ).toBe(194)
+    const specText = readFileSync(REGISTER_SPEC_PATH, 'utf8')
+    // The spec’s own printed eight-term tally, REBUILT from this file’s executed terms, so a term
+    // dropped from the tally (or a figure moved back to a superseded one) reds here.
+    const tally = new RegExp(
+      REGISTER_TERMS.map((r) => `\`${r.total}\` \\(\`${r.row}\`\\)`).join('[\\s\\S]{0,40}') + '[\\s\\S]{0,40}= `194` attempts',
+    )
+    expect(
+      specText,
+      '§4: the spec’s AMENDED attempt tally — its eight terms in register order, each followed by its row id, summing to `194` — is REBUILT here and matched, so a term silently dropped from the tally is a LOUD failure',
+    ).toMatch(tally)
+    expect(specText, '§4: the spec DECLARES the composition of the amendment (`194 = 173 + 21`), not only its total').toMatch(/`194` = `173 \+ 21`/)
+    // ⟨THE SUPERSEDED FIGURES STAY VISIBLE AND DATED — and are NEVER asserted as current.⟩
+    expect(
+      specText,
+      '§4: the superseded total must still be present AS the AS-FILED figure — `173` inside the kept-visible, dated block (deleting it would erase the record that the amendment was made)',
+    ).toMatch(/⟨AS FILED, KEPT VISIBLE \(the superseded figure[\s\S]{0,500}`173` attempts/)
+    expect(
+      specText,
+      '§4: …and it must be DATED with the finding ids its amendment came from, so no reader can take it for a current figure',
+    ).toMatch(/superseded 2026-09-28[\s\S]{0,160}A-6[\s\S]{0,40}A-7[\s\S]{0,40}A-3/)
+    const asFiledStart = specText.lastIndexOf('⟨AS FILED, KEPT VISIBLE', specText.indexOf('`173` attempts'))
+    const asFiledBlock = specText.slice(asFiledStart, specText.indexOf('`173` attempts') + 120)
+    // the term is matched WHITESPACE-TOLERANTLY: the spec's AS-FILED block wraps one term pair
+    // across a line break, and a line break is not a vanished figure.
+    const supersededPresent = (row: string, printed: number): boolean =>
+      new RegExp(`\`${printed}\`\\s*\\(\\s*\`${row}\`\\s*\\)`).test(asFiledBlock)
+    const missingSuperseded = SUPERSEDED_SPEC_TERMS.filter((r) => !supersededPresent(r.row, r.printed)).map((r) => r.row)
+    expect(
+      missingSuperseded,
+      '§4: every SUPERSEDED row term must stay VISIBLE in the AS-FILED block, carrying its printed figure AND its row id — a superseded term that vanishes is a review finding, and none of them may be asserted as current (`specPrintedCounts` above)',
+    ).toEqual([])
+    // ⟨NO PRINTED TERM IS SUPERSEDED ANY MORE: the table and the executed register agree, row by row.⟩
     const grew = rows
       .map((r, i) => ({ id: r.id, spec: specPrintedCounts[i]!, executed: REGISTER_TERMS[i]!.total }))
       .filter((r) => r.spec !== r.executed)
     expect(
       grew,
-      '§4 (⟨A-6⟩/⟨A-7⟩/⟨A-3⟩): the rows whose EXECUTED term now exceeds the spec’s printed one — each is a correction that obliges drives the filed term did not carry, NOT a trimmed term',
-    ).toEqual([
-      { id: 'P-TH-IM-1', spec: 20, executed: 28 },
-      { id: 'P-TH-TP-1', spec: 59, executed: 67 },
-      { id: 'P-TH-TP-2', spec: 20, executed: 24 },
-      { id: 'P-TH-TP-3', spec: 26, executed: 27 },
-    ])
+      '§4 (⟨AMENDED 2026-09-28 — `§0B` item 1⟩): NO row’s executed term differs from the spec’s printed one — the four superseded figures (`P-TH-IM-1` 20 · `P-TH-TP-1` 59 · `P-TH-TP-2` 20 · `P-TH-TP-3` 26) live in the spec’s AS-FILED block, dated, while the table is the contract',
+    ).toEqual([])
     const executedTotal = REGISTER_TERMS.reduce((a, r) => a + r.total, 0)
     expect(
       executedTotal - specTotal,
-      '§4: `194 - 173 = 21` — the declared divergence is exactly the correction drives (+8 +8 +4 +1), so the two accountings are consistent and the spec’s `§4` table is OWED AN AMENDMENT (escalated, never silently edited here)',
-    ).toBe(21)
+      '§4: the executed register and the spec’s §4 table now differ by ZERO — the amendment closed the divergence this row used to declare, and the composition `194 = 173 + 21` is asserted in the arithmetic row above',
+    ).toBe(0)
   })
 
   // ===========================================================================
