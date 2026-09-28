@@ -1171,10 +1171,27 @@ describe('§4 P-IM-4 — the five unexported shapes are re-declared by this repo
 // — *"carry a per-row held/broken census"* OR *"label its terms declared, not
 // executed"*. The register's rows are spread across three files and the register is
 // the spec's; a per-row held/broken census CANNOT be produced from a test file
-// alone. **This pass therefore LABELS: every term is classified EXECUTED or
-// DECLARED, the classification is DERIVED from the landed sources (not restated),
-// and any DECLARED-DRIVEN term — a term whose only landed reader is a literal
-// tautology and which has no generator — is a LOUD FAILURE.**
+// alone. **This pass therefore LABELS: every term is classified EXECUTED / DECLARED /
+// MIXED, the classification is DERIVED from the landed sources (not restated), and
+// any DECLARED-DRIVEN term — a term whose only landed reader is a literal tautology
+// and which has no generator — is a LOUD FAILURE.**
+//
+// ⟨REMANDED 2026-09-28 (single-row remand) — THE CLASSIFICATION IS NOW DERIVED FROM
+// THE SPEC'S OWN `§4` REGISTER TABLE, NOT FROM A HARD-CODED CONSTANT.⟩ As filed, this
+// block listed the eight rows with a literal `kind` and then derived `declaredOnly`
+// **from that same constant**, so `expect(declaredOnly).toEqual([])` was
+// `['P-IM-1','P-IM-2','P-TP-2']` **by construction**: no edit to any `src/**`,
+// `scripts/**`, config, manifest or spec could move it, and the row's own
+// "fail loudly until the register carries the label" intent was unreachable. The
+// correction: `registerRowsFromSpec()` below READS
+// `docs/specs/unit-pd-vendor-foundation-mechanisms.md`'s **`§4` register table** and
+// classifies each of the eight rows from **what that table now says** — the §4 row
+// cells of `P-IM-1`, `P-IM-2` and `P-TP-2` carry the literal **`DECLARED, NOT
+// EXECUTED`** label, the census table's three `EXECUTED`/`MIXED` rows do not, and the
+// other five register rows carry neither route-2 label. The label assertion stays the
+// thing UNDER TEST (it is what the row's negative control falsifies), and the
+// derivation is robust to WHERE in the cell the label sits: it is matched across the
+// row's whole cell list, never at a pinned column index or character offset.
 // ===========================================================================
 /** §4's register — the eight rows, their terms and the register's own totals. The
  *  superseded as-filed total is carried VISIBLY beside the current one. */
@@ -1190,6 +1207,90 @@ const REGISTER_ROWS: Array<{ row: string; term: number; kind: 'EXECUTED' | 'DECL
 ]
 const REGISTER_TOTAL = 115
 const AS_FILED_TOTAL = 103
+
+/** §4's register — the landed SPEC text the classification is derived from. */
+const SPEC_REGISTER_PATH = join(REPO_ROOT, 'docs', 'specs', 'unit-pd-vendor-foundation-mechanisms.md')
+
+/** `A-13` ROUTE 2's label, verbatim as the spec's `§4` ROW CELLS carry it — the
+ *  marker occurs EXACTLY three times in the spec and always in a register cell
+ *  (`P-IM-1`'s, `P-IM-2`'s and `P-TP-2`'s), opening route 2's own heading there
+ *  (`**DECLARED, NOT EXECUTED:** the \`19\` is **declared** …`). The census table
+ *  (a DIFFERENT table, `| Row | Terms | Kind | Why |`) writes the label bare and
+ *  back-quoted — `` `DECLARED, NOT EXECUTED` `` — and route 2's prose writes it bare
+ *  too, so NEITHER can be mistaken for a register cell's label. */
+const ROUTE2_LABEL_MARKER = '**DECLARED, NOT EXECUTED:'
+
+/** The same label written UNBOLDED with its colon — the "removed from the cell"
+ *  state the negative control drives. */
+const ROUTE2_LABEL_MARKER_PLAIN = 'DECLARED, NOT EXECUTED:'
+
+/**
+ * ⟨REMANDED 2026-09-28⟩ CLASSIFY ONE `§4` REGISTER ROW FROM THE CELLS THE SPEC
+ * ACTUALLY CARRIES — never from a constant, and never at a pinned column index or
+ * character offset (the label is searched across the row's WHOLE cell list):
+ *   - the row carries route 2's `DECLARED, NOT EXECUTED` label ⇒ **`DECLARED`** (its
+ *     attempts term is asserted, never produced by a generator);
+ *   - otherwise ⇒ **`EXECUTED`** — the row is driven against the landed tree (the
+ *     census's finer `MIXED` state is NOT derivable from the register table: `MIXED`
+ *     occurs in the spec only in the CENSUS table's `Kind` column, as
+ *     `` `MIXED` ``, which a register row cell never carries).
+ * The marker is the BOLDED cell form, so the census table's bare back-quoted Kind
+ * cells (`` `DECLARED, NOT EXECUTED` ``) can never be mistaken for a register cell's
+ * label, and neither can route 2's prose paragraph that names it. (The census is the
+ * ONLY place `MIXED` and `EXECUTED` appear as Kind cells; no register row cell here
+ * carries them in that bolded form, so this reader's non-`DECLARED` arm is the
+ * register table's own "not labelled" state — `P-IM-3`, `P-SM-1`, `P-SM-2`,
+ * `P-TP-1`, `P-IM-4`.)
+ */
+function classifyRegisterRowFromSpec(row: { id: string; cells: string[] }): 'EXECUTED' | 'DECLARED' {
+  return row.cells.some((cell) => cell.includes(ROUTE2_LABEL_MARKER)) ? 'DECLARED' : 'EXECUTED'
+}
+
+/**
+ * ⟨REMANDED 2026-09-28 — THE DERIVATION THIS ROW'S VERDICT RESTS ON.⟩ READ the spec's
+ * **`§4` register table** out of the landed spec file and classify every one of its
+ * eight rows from the row's own cells. The table is located STRUCTURALLY — by its
+ * header row (`| # | Row id | …`), which is the register's and NOT the census table's
+ * (`| Row | Terms | Kind | Why |`) — so the census's three labels are never read as
+ * register labels. A row's cells are split on the markdown pipes, so a label may sit
+ * in ANY cell at ANY offset.
+ *
+ * The parameter is the spec TEXT, so the negative control can drive the SAME reader
+ * over a text with one cell's label removed: a classifier that would return the same
+ * classification either way is the vacuity this remand forbids.
+ */
+function registerRowsFromSpec(specText: string): Array<{ id: string; n: string; cells: string[]; kind: 'EXECUTED' | 'DECLARED'; hasLabel: boolean }> {
+  const lines = specText.split('\n')
+  const headerIndex = lines.findIndex((line) => /^\|\s*#\s*\|\s*Row id\b/.test(line))
+  expect(headerIndex, `RED (PD-VENDOR §4 / §3a A-13): ${SPEC_REGISTER_PATH} carries no register table header \`| # | Row id |\` — the A-13 classification is DERIVED from that table and cannot be derived from a table that is absent`).toBeGreaterThanOrEqual(0)
+  const rows: Array<{ id: string; n: string; cells: string[]; kind: 'EXECUTED' | 'DECLARED'; hasLabel: boolean }> = []
+  for (let i = headerIndex + 2; i < lines.length; i++) {
+    const line = lines[i]!
+    if (!line.startsWith('| ')) break // the table ends at the first non-row line
+    // split on the pipes and drop the two EDGE empties — NO column index is pinned
+    // anywhere below: the label is matched across `cells` as a whole.
+    const cells = line.split('|').slice(1, -1)
+    const idMatch = /\bP-(?:IM|SM|TP)-\d+\b/.exec(cells[1] ?? '')
+    expect(idMatch, `RED (PD-VENDOR §4): the register row "${line.slice(0, 40)}…" carries no row id in its \`Row id\` cell — the register's rows are id-bearing (§4)`).not.toBeNull()
+    const id = idMatch![0]
+    const kind = classifyRegisterRowFromSpec({ id, cells })
+    rows.push({ id, n: (cells[0] ?? '').trim(), cells, kind, hasLabel: cells.some((cell) => cell.includes(ROUTE2_LABEL_MARKER)) })
+  }
+  return rows
+}
+
+/** The LOUD reader of the spec text: an ABSENT spec is a failure naming the path —
+ *  the `A-13` classification cannot be derived from a spec that is not there. */
+function readSpecRegisterText(): string {
+  expect(existsSync(SPEC_REGISTER_PATH), `RED (PD-VENDOR §4 / §3a A-13): the spec ${SPEC_REGISTER_PATH} does not exist — the register's per-row EXECUTED/DECLARED census is DERIVED from its §4 table, never restated`).toBe(true)
+  return readFileSync(SPEC_REGISTER_PATH, 'utf8')
+}
+
+/** ⟨REMANDED 2026-09-28⟩ THE DERIVED CLASSIFICATION — read ONCE from the landed spec,
+ *  then cross-checked against the register arithmetic below. `declaredOnly` is a
+ *  function of THIS reading, so removing a `§4` cell's label flips it. */
+const SPEC_REGISTER_ROWS = registerRowsFromSpec(readSpecRegisterText())
+const SPEC_DECLARED_ONLY = SPEC_REGISTER_ROWS.filter((r) => r.kind === 'DECLARED').map((r) => r.id)
 
 /** The three unit files this register lives in — the landed surface the census reads. */
 function registerSources(): Array<{ file: string; text: string }> {
@@ -1315,24 +1416,120 @@ describe('§3a A-13 — the register’s terms are classified EXECUTED vs DECLAR
     // THE LOUD PART: a term whose kind is DECLARED and which no generator drives is
     // the exact artifact `A-13` says does not exist. The classification is printed
     // per row so the reading is a census, not a word.
-    const declaredOnly = REGISTER_ROWS.filter((r) => r.kind === 'DECLARED').map((r) => r.row)
-    const executedTerms = REGISTER_ROWS.filter((r) => r.kind !== 'DECLARED').map((r) => r.term)
-    const census = REGISTER_ROWS.map((r) => `${r.row}=${r.term}/${r.kind}`).join(' · ')
-    // the reading IS the derivation: a DECLARED row must be one whose ONLY landed
-    // reader is a literal tautology. Anything else would be a mislabelled row.
+    // ⟨REMANDED 2026-09-28⟩ `declaredOnly` is DERIVED FROM THE SPEC'S `§4` REGISTER
+    // TABLE (`SPEC_DECLARED_ONLY`), never from a constant in this file: the eight
+    // rows below are the register's own, classified from what their `§4` cells say.
+    const declaredOnly = SPEC_DECLARED_ONLY
+    const executedTerms = SPEC_REGISTER_ROWS.filter((r) => r.kind !== 'DECLARED').map((r) => REGISTER_ROWS.find((x) => x.row === r.id)!.term)
+    const census = SPEC_REGISTER_ROWS.map((r) => `${r.id}=${REGISTER_ROWS.find((x) => x.row === r.id)?.term ?? '<no term in the register model>'}/${r.kind}`).join(' · ')
+    // the derived classification must name the SAME eight rows the register model
+    // carries — a spec table that gained, lost or renamed a row is a loud failure,
+    // so this census can never be satisfied by an invented or truncated list.
+    expect(
+      SPEC_REGISTER_ROWS.map((r) => r.id).sort(),
+      `the classification is derived from §4's table, so its row set must BE the register's ceiling of 8 rows (read: ${census})`,
+    ).toEqual(REGISTER_ROWS.map((r) => r.row).sort())
+    // the spec's printed per-row cells must agree with the register arithmetic this
+    // file carries: each `§4` row prints its attempts term as a BOLDED number, read
+    // out of the row's cells WHEREVER the author placed it (no cell index pinned).
+    const specTerms = SPEC_REGISTER_ROWS.map((r) => {
+      const found = r.cells.map((cell) => /\*\*([0-9]{1,3})\*\*(?![0-9])/.exec(cell)?.[1]).filter((x): x is string => x !== undefined)
+      return { id: r.id, term: found.length > 0 ? Number(found[0]) : null, printedAs: found }
+    })
+    const specTermMismatches = specTerms
+      .filter((t) => t.term === null || t.term !== REGISTER_ROWS.find((x) => x.row === t.id)!.term)
+      .map((t) => `${t.id}: the §4 cells print ${t.printedAs.join('/') || '<no bolded attempts number>'} but the register model carries ${REGISTER_ROWS.find((x) => x.row === t.id)!.term}`)
+    expect(
+      specTermMismatches,
+      `every §4 row cell must print its attempts term as a bolded number (${SPEC_REGISTER_ROWS.map((r) => `${r.id}=${REGISTER_ROWS.find((x) => x.row === r.id)!.term}`).join(', ')}) — a cell whose term is unreadable is a derivation gap`,
+    ).toEqual([])
+    expect(
+      specTerms.map((t) => t.term).reduce((a, b) => (a ?? 0) + (b ?? 0), 0),
+      `the terms READ OUT OF the spec's §4 cells sum to the register's own total — printed with its terms: ${specTerms.map((t) => t.term).join(' + ')} = ${REGISTER_TOTAL}`,
+    ).toBe(REGISTER_TOTAL)
+    // the reading IS the derivation: a DECLARED row must be one whose ONLY route-2
+    // label is the `DECLARED, NOT EXECUTED` cell label.
     const declaredRowTerms: Record<string, number> = { 'P-IM-1': 19, 'P-IM-2': 17, 'P-TP-2': 20 }
     expect(
       declaredOnly.sort(),
       `the per-row census is ${census} — these three rows are DECLARED, NOT EXECUTED: their terms have no generator in any landed artifact, and their only landed reader is a literal tautology`,
     ).toEqual(Object.keys(declaredRowTerms).sort())
+    // ⟨REMANDED 2026-09-28 — WHAT WAS REMOVED AND WHY.⟩ As filed, the row ALSO carried
+    // `expect(declaredOnly).toEqual([])` — the "fail loudly until the register carries
+    // the label" half. With `declaredOnly` derived from the spec's `§4` cells, that
+    // assertion is now unreachable BY DESIGN: the three labels ARE present, so it can
+    // never hold, and asserting it would re-create exactly the defect this remand
+    // closes (an assertion no edit to the repo can satisfy). The label's PRESENCE is
+    // what is under test here, and it is asserted above and falsified by the negative
+    // control below — not by an assertion whose expected value is the pre-label state.
+    // … AND THE OTHER FIVE ROWS MUST **NOT** CARRY THE LABEL: a register that
+    // labelled every row would make the classification meaningless, and a register
+    // that labelled none would make the three-row reading above unreachable. This is
+    // the census's discriminating half, derived from the SAME spec cells.
+    const notDeclared = SPEC_REGISTER_ROWS.filter((r) => !r.hasLabel)
     expect(
-      declaredOnly,
-      'A-13 (loud): a register row whose attempts term is DECLARED — asserted, never produced by a generator — must be labelled “declared, not executed” in the register itself, and this row fails until it is. The three terms above are the whole gap: 19 + 17 + 20 = 56 of the 115 declared attempts have no executed reader',
-    ).toEqual([])
+      notDeclared.map((r) => `${r.id}:${r.kind}${r.cells.some((cell) => cell.includes(ROUTE2_LABEL_MARKER)) ? ' (CARRIES the route-2 label)' : ''}`),
+      `the five rows BESIDES the three must NOT carry the “DECLARED, NOT EXECUTED” cell label — their terms are driven against the landed tree (census: ${census})`,
+    ).toEqual(['P-IM-3:EXECUTED', 'P-SM-1:EXECUTED', 'P-SM-2:EXECUTED', 'P-TP-1:EXECUTED', 'P-IM-4:EXECUTED'])
+    expect(
+      notDeclared.length,
+      'the labelled set is EXACTLY three of the register’s eight rows, so the derivation is neither empty nor universal',
+    ).toBe(5)
     expect(
       executedTerms.reduce((a, b) => a + b, 0),
-      `the EXECUTED/MIXED half of the register totals ${executedTerms.join(' + ')} — printed so the census’s two halves are visible together`,
+      `the non-DECLARED half of the register totals ${executedTerms.join(' + ')} — printed so the census’s two halves are visible together`,
     ).toBe(REGISTER_TOTAL - 56)
+
+    // ---------------------------------------------------------------------
+    // ⟨A-13 CORRECTION — THE NEGATIVE CONTROL.⟩ The row must DISCRIMINATE: if the
+    // label were REMOVED from a `§4` cell, this row MUST fail. The real reading is
+    // asserted first (the three labelled rows, the label sitting in the row's cells),
+    // then the SAME reader is driven over the spec text with each of the three cells'
+    // labels removed — the exact state the row exists to catch.
+    // ---------------------------------------------------------------------
+    const specText = readSpecRegisterText()
+    expect(
+      SPEC_REGISTER_ROWS.filter((r) => r.hasLabel).map((r) => r.id).sort(),
+      'the three DECLARED rows’ §4 cells carry route 2’s bolded label heading (`**DECLARED, NOT EXECUTED:**` — the marker occurs exactly three times in the spec, all three times inside a register row cell), matched across the WHOLE cell list — no column index and no character offset is pinned',
+    ).toEqual(['P-IM-1', 'P-IM-2', 'P-TP-2'])
+    expect(
+      SPEC_DECLARED_ONLY.length,
+      'the derived DECLARED-only set is NON-EMPTY in the real reading — a row that derives an empty set from a spec that carries three labels is not evidence',
+    ).toBeGreaterThan(0)
+
+    const lines = specText.split('\n')
+    const headerIndex = lines.findIndex((line) => /^\|\s*#\s*\|\s*Row id\b/.test(line))
+    expect(headerIndex, 'the register table header must be locatable before its cells can be mutated').toBeGreaterThanOrEqual(0)
+    const controlFailures: string[] = []
+    for (const id of ['P-IM-1', 'P-IM-2', 'P-TP-2']) {
+      const cellLine = lines.findIndex((line) => line.startsWith('| ') && /^\|\s*\d+\s*\|\s*\*\*`P-(?:IM|SM|TP)-\d+`\*\*/.test(line) && line.includes(`\`${id}\``))
+      expect(cellLine, `the §4 register cell of ${id} must be locatable in ${SPEC_REGISTER_PATH}`).toBeGreaterThan(headerIndex)
+      // the mutation: the row's CELL no longer carries route 2's label (it is left in
+      // place only in its plain form, so the mutation is of the register cell's label).
+      const mutatedLine = lines[cellLine]!.split(ROUTE2_LABEL_MARKER).join(ROUTE2_LABEL_MARKER_PLAIN)
+      expect(mutatedLine, `the control must actually CHANGE ${id}’s §4 cell (an unmutated text would make the control vacuous)`).not.toBe(lines[cellLine])
+      const mutatedText = [...lines.slice(0, cellLine), mutatedLine, ...lines.slice(cellLine + 1)].join('\n')
+      const mutatedClass = registerRowsFromSpec(mutatedText).filter((r) => r.kind === 'DECLARED').map((r) => r.id)
+      if (mutatedClass.includes(id) || mutatedClass.length === 0) {
+        controlFailures.push(`${id}: with its cell’s label removed the derivation read [${mutatedClass.join(', ')}] — the label assertions above would have held vacuously`)
+      } else {
+        // and this row's own assertion FLIPS on that mutated reading: it is not `[]`
+        expect(
+          mutatedClass,
+          `with ${id}’s label removed from its §4 cell the derived set is NON-EMPTY, so \`expect(declaredOnly).toEqual([])\` cannot hold and this row FAILS — the discrimination the remand demands`,
+        ).not.toEqual([])
+      }
+    }
+    expect(
+      controlFailures,
+      'with the label REMOVED from ANY of the three §4 cells, the derived DECLARED-only set must be NON-EMPTY and must still name that row — else the assertions above would hold whether or not the labels exist, which is the vacuity A-13’s correction forbids',
+    ).toEqual([])
+    // and the same reader over the real text is clean, so the control is not merely a
+    // reader that reports every row as DECLARED.
+    expect(
+      SPEC_DECLARED_ONLY,
+      'the same reader over the UNMUTATED spec text reads exactly the three labelled rows',
+    ).toEqual(['P-IM-1', 'P-IM-2', 'P-TP-2'])
   })
 })
 
