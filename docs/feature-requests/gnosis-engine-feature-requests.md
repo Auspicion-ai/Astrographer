@@ -187,8 +187,10 @@ each imported document carries its path segments.
 
 ## GR-7 — Server-side persistence for the engine store (P2, destination)
 
+**⟶ STATUS CORRECTION 2026-09-28 (`X-7`, the `W0` dossier-and-decision pass).** **This REQUEST IS ANSWERED AND LANDED ENGINE-SIDE — read the section below as the as-filed record only, never as current state.** The engine's own trackers record **`D-D1`** (the durable store: format, the atomic temp → `fsync` → `rename` commit, recovery, retention/floor, the `durability` axis on `HealthReport`, §11's 22nd row) and **`D-D2`** (the retention trim + numeric bound) as **DONE — LANDED-GREEN + ALL GATES RUN (2026-09-22)**, and this request's trigger as **DISCHARGED** (*"The shell doesn't own it."*) — `../Gnosis/docs/next-steps.md` §DONE rows `D-D1`/`D-D2`; `../Gnosis/docs/pending.md` `GR-7`; `../Gnosis/docs/specs/durable-store-spec.md` §8A (the shell-facing format/config/interface); `docs/decisions.md` `DURABLE-STORE-LANDED`. **LAYER: ENGINE-green — never app-green, store-green or live-green in THIS repo, which has NOT verified the engine's durability live.** Also note this file's own status caveat (`docs/HANDOFF.md`'s `GR INVENTORY STATUS` row): a request document is not a status source. **The engine-side work that IS still owed is GR-6's ingest/record-copy half (`GR-6a`, PARKED, trigger UNDISCHARGED).**
+
 **Problem.** The engine's server constructs an **in-memory** store and persists nothing, so an engine-owned
-corpus would not survive a restart and there is no "who owns the durable corpus" answer.
+corpus would not survive a restart and there is no "who owns the durable corpus" answer. *(As-filed 2026-09-16 — **superseded in fact by the status correction above.**)*
 
 **Live evidence.** `../Gnosis/src/bin/gnosis_server.rs:324` → `let store = Arc::new(Store::new());` with
 only `--port` in the CLI; the store trait's persistence seam is a trait with no disk implementation shipped

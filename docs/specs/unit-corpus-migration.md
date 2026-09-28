@@ -40,7 +40,7 @@ A cutover makes the **Gnosis engine** the authority for the operator's persisted
 authority is a local JSON file per store (`createJsonRagStore` over each registry entry's
 `persistenceFile`), and the engine **persists nothing** (`docs/HANDOFF.md` O-7 pointer row: "the engine
 has **NO markdown parser, NO bulk route, NO progress contract, and NO persistence**"; §PARKED
-DESTINATION O-7's `Recorded constraints` cell). A cutover without a migration story and without a
+DESTINATION O-7's `Recorded constraints` cell). **⟨CORRECTED 2026-09-28 (`X-7`) — THE PREMISE OF THIS SENTENCE IS STALE AND THE UNIT'S OWN BLOCKER IS NOT: the *"NO persistence"* half is answered engine-side (`D-D1`+`D-D2` = DONE, LANDED-GREEN + ALL GATES RUN 2026-09-22; `GR-7`'s trigger DISCHARGED — `../Gnosis/docs/next-steps.md` §DONE rows; `../Gnosis/docs/pending.md` `GR-7`; `docs/decisions.md` `DURABLE-STORE-LANDED`) — ENGINE-green, never app-green, and UNVERIFIED LIVE from this repo. What stands is the other half: **NO markdown parser, NO bulk route, NO progress contract** — the INGEST half — plus this unit's own owed capability, the record-copy route with caller-supplied ids (`GR-6a`/`GRQ-6`, PARKED, trigger UNDISCHARGED). §10.3's `BLOCKED (FS-CM-1)` reading is therefore UNCHANGED and re-sourced.⟩** A cutover without a migration story and without a
 rollback story is the single least-reversible action in the design-extensions input
 (`docs/specs/design-extensions-review.md` §9.2, the reversibility row "An operator-corpus cutover"):
 "the local corpus is a whole-store JSON file whose rewrite is a one-way operation on the operator's
@@ -683,7 +683,7 @@ Padding a register with rows that cannot fail is itself a finding.
   migration never deletes a rollback artifact** (it has no removal primitive for them). Retention is an
   **operator** action recorded in the ledger (§8.3). Rationale: the corpus file is the *only* durable
   copy of the corpus while the engine persists nothing (§2.2) — deleting the artifact on a timer would
-  recreate the restart-loss condition with a delay.
+  recreate the restart-loss condition with a delay. **⟨CORRECTED 2026-09-28 (`X-7`): *"the engine persists nothing"* is STALE (engine-side `D-D1`+`D-D2` LANDED-GREEN, `GR-7` trigger DISCHARGED — ENGINE-green, UNVERIFIED LIVE here). The RATIONALE still holds and is strengthened: the corpus file is the only durable copy **this app actually reads and writes today** because NO CUTOVER HAS HAPPENED and this repo has not verified the engine's durability live — so the artifact-retention rule below is UNCHANGED.⟩**
 - **A second artifact is retained too:** the **vector cache is NOT copied into the artifact** (§3.2c — it
   is left in place, so a rollback finds it exactly where it was). The **report + ledger entry** are the
   third retained thing (§8.3).
@@ -857,7 +857,7 @@ as the source of truth for a live store (that would be a status authority).
 
 | Dependency | Status | What it gates |
 | --- | --- | --- |
-| **`U-ENGINE-PERSIST` (the Gnosis handoff) — GR-7 server-side durability** | **OWED** — the engine persists nothing today (`docs/HANDOFF.md` O-7 pointer row) | the existence of an engine authority at all |
+| **`U-ENGINE-PERSIST` (the Gnosis handoff) — GR-7 server-side durability** | **OWED — AMENDED 2026-09-28 (`X-7`): the DURABILITY leg is NO LONGER owed by the engine — its own trackers record `D-D1`+`D-D2` DONE, LANDED-GREEN + ALL GATES RUN (2026-09-22), and `GR-7`'s trigger DISCHARGED (ENGINE-green only; UNVERIFIED LIVE from this repo). What remains owed to THIS unit is the INGEST / RECORD-COPY route (`GR-6a`/`GRQ-6`, PARKED, trigger UNDISCHARGED), which is what keeps §10.3's `FS-CM-1` BLOCKED. The as-written citation (`docs/HANDOFF.md` O-7 pointer row, "the engine persists nothing today") is kept as the dated record and is the STALE half.** | the existence of an engine authority at all |
 | **`O-7` / GR-6 bulk ingest (parse + doc-flow validate + atomic commit + progress/cancel/cap)** | **OWED** — no route exists (`docs/pending.md` §PARKED DESTINATION O-7; `src/main/engine-rag-store.ts` `EngineRagStore` has no write method) | the engine destination leg |
 | **`O-8` / GR-4 + GR-5 authority switch + change notification + bulk read** | **OWED** — "PREREQUISITE of the track, not a tail unit" (`docs/pending.md` §PARKED DESTINATION O-8) | §7.3's single-authority rule; without it the cutover has **two writers and no reconciliation story** |
 | **the record-copy route with CALLER-SUPPLIED ids** | **OWED — and not yet filed.** §2.3's fourth row: a markdown-parsing ingest **cannot** honour id preservation (**O2**) | honouring §3.3 for an engine destination |

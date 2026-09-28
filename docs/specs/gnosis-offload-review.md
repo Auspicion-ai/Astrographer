@@ -457,7 +457,7 @@ must be written, in these places:
    pointer rows for O-7/O-8). Each entry: what the engine must gain (**O-6** the
    POST-envelope fix + `mode`/`topK`; **O-7** a bulk markdown parse + batch-atomic
    ingest route + a progress/cancel/512-cap contract + **persistence** (the engine
-   server persists NOTHING today) + the node-model mapping; **O-8** store-change
+   server persists NOTHING today) **⟨CORRECTED 2026-09-28 (`X-7`): the *persistence* conjunct is STALE and LANDED engine-side (`D-D1`+`D-D2` DONE — LANDED-GREEN + ALL GATES RUN 2026-09-22; `GR-7`'s trigger DISCHARGED; `../Gnosis/docs/next-steps.md` §DONE rows; `docs/decisions.md` `DURABLE-STORE-LANDED`) — ENGINE-green, never app-green, and UNVERIFIED LIVE from this repo. The bulk markdown PARSE, the batch-atomic ingest route and the progress/cancel/512-cap contract remain OWED and PARKED (`GR-6a`, trigger UNDISCHARGED) and are now the load-bearing blocker.⟩** + the node-model mapping; **O-8** store-change
    notification/adjacency reads + the single-writer/authority-switch contract), the
    observed symptom, the repro, and the standing **"Do NOT patch the Gnosis repo
    from this project"** rule. Keep them OUT of the `provident-ssr` rows.
