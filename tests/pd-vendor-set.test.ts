@@ -266,12 +266,38 @@ function allSrcConsumerEdges(): DerivedEdge[] {
   return [...listSrcFiles(join(REPO_ROOT, 'src'))].sort().flatMap((f) => derivedConsumerEdges(readFileSync(join(REPO_ROOT, f), 'utf8'), f))
 }
 
+/** ⟨TEST-DEFECT CORRECTED 2026-09-28 (remand 2 of 2 on unit `PD-UI-1`).⟩ Is the SOURCE file of
+ *  an edge itself one of the pin's FIFTEEN VENDORED MEMBERS? An edge whose source is a vendored
+ *  member is an **INTRA-VENDORED** edge — the vendored set's own internal wiring
+ *  (`src/shared/<one of the fifteen>.ts`, repo-relative and POSIX-shaped). */
+function isVendoredMemberFile(file: string): boolean {
+  return (PINNED_FIFTEEN as readonly string[]).some((n) => file === `src/shared/${n}.ts`)
+}
+
 /** THE RE-STATED PIN'S ORACLE — the exact set of VENDORED-RESOLVING hits that are NOT on
  *  the declared consumer-edge allow-list. Non-vendored hits (the stem-collision sites) are
- *  not this oracle's subject; they are asserted by the pin's own array limb. */
+ *  not this oracle's subject; they are asserted by the pin's own array limb.
+ *
+ *  ⟨THE INTRA-VENDORED EXCLUSION — the correction this oracle owed (`unit-pd-vendor-foundation-mechanisms.md`
+ *  §9 item 1, and this row's OWN derivation above).⟩ The pin is about edges **FROM this repo's
+ *  CONSUMERS INTO the vendored set**. An edge whose SOURCE FILE is itself a vendored member
+ *  (the five recorded `(from, to)` internal edges: `census.ts → ./zones.js`,
+ *  `gutter-affordance.ts → ./gutter.js` + `./gesture-session.js` (×2 statements),
+ *  `gutter.ts → ./gesture-session.js`, `relocate.ts → ./gesture-session.js`) is an
+ *  **INTRA-VENDORED** edge — the Phase-0 spec's §9 item 1 assigns it to **`P-IM-3`**
+ *  (`importCensus.internalEdges`), **not** to this consumer-edge pin. The row's own derivation
+ *  already states exactly this (`allSrcConsumerEdges` is fed the whole `src/**` tree, while the
+ *  row's grep limb filters `/shared/` out as "the P-IM-3 rows' subject, not this row's"), but
+ *  this oracle never filtered on the SOURCE file being a vendored member — so the six
+ *  intra-vendored STATEMENTS (five distinct edges) red it. At the Phase-0 baseline that was
+ *  UNREACHABLE (the declared-edge limb threw first, before this assertion); the re-statement
+ *  made it reachable, so the re-statement was INCOMPLETE rather than wrong. The exclusion is
+ *  applied here, and the consumer-edge limbs below are NOT weakened by it: a hit whose source is
+ *  a CONSUMER file and which resolves to a vendored member still fails unless it is on the
+ *  allow-list (the NEGATIVE CONTROL row drives exactly that). */
 function unlistedVendoredEdges(edges: DerivedEdge[], declared: ReadonlyArray<{ file: string; specifier: string }> = DECLARED_CONSUMER_EDGES): DerivedEdge[] {
   const listed = new Set(declared.map((d) => `${d.file} ${d.specifier}`))
-  return edges.filter((e) => e.member !== null && !listed.has(`${e.file} ${e.spec}`))
+  return edges.filter((e) => !isVendoredMemberFile(e.file) && e.member !== null && !listed.has(`${e.file} ${e.spec}`))
 }
 
 /** §3.5 item 2 — the ELEVEN included suites. */
@@ -846,6 +872,34 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
     const forkThemeEdge = derivedConsumerEdges(`import { applyThemeToRoot } from './theme.js'\n`, 'src/renderer/renderer.ts')
     expect(forkThemeEdge.map((e) => e.member), '`./theme.js` from `src/renderer/` resolves to the FORK module — never to a vendored member').toEqual([null])
     expect(oracle(forkThemeEdge), 'a stem-collision edge is not this oracle’s subject: it passes the VENDORED limb and is asserted by the pin’s own array limb').toEqual([])
+
+    // (6) ⟨THE INTRA-VENDORED EXCLUSION, DRIVEN (`unit-pd-vendor-foundation-mechanisms.md` §9
+    //     item 1).⟩ An edge whose SOURCE FILE is itself a vendored member is `P-IM-3`’s subject —
+    //     the vendored set’s OWN internal wiring — and is NOT this consumer-edge pin’s. The
+    //     exclusion must therefore NOT red the corrected oracle, while the consumer edge of (2)
+    //     (a NON-member source) still does. Both limbs are driven through the SAME oracle.
+    const intraVendored = derivedConsumerEdges(`import type { GestureHandle } from './gesture-session.js'\n`, 'src/shared/gutter.ts')
+    expect(intraVendored.map((e) => e.member), 'the synthetic intra-vendored edge must REALLY resolve to a vendored member, else this limb proves nothing').toEqual(['gesture-session'])
+    expect(
+      isVendoredMemberFile('src/shared/gutter.ts'),
+      'the exclusion must recognise a vendored member as a SOURCE file (the five recorded internal edges’ sources: census, gutter-affordance, gutter, relocate)',
+    ).toBe(true)
+    expect(
+      isVendoredMemberFile('src/renderer/other.ts'),
+      'and it must NOT swallow a CONSUMER source — otherwise the whole consumer-edge pin would pass for any adoption',
+    ).toBe(false)
+    expect(
+      oracle(intraVendored),
+      'AN INTRA-VENDORED EDGE IS NOT THIS ROW’S SUBJECT (§9 item 1): it is `P-IM-3`’s, and it must NOT red the corrected consumer-edge oracle',
+    ).toEqual([])
+    expect(
+      oracle(unListedSameSpelling),
+      '…while the SAME oracle STILL FAILS an un-listed CONSUMER edge (2), re-driven AFTER the exclusion: the correction discriminates on the SOURCE file, never on the target',
+    ).toEqual(['src/renderer/other.ts ../shared/theme.js'])
+    expect(
+      oracle(derivedConsumerEdges(`import { POINTER_TYPES } from '../shared/gesture-session.js'\n`, 'src/renderer/other.ts')),
+      'and an un-listed CONSUMER file importing the SAME member the intra-vendored edge targets MUST still fail — the exclusion is by source, not by member',
+    ).toEqual(['src/renderer/other.ts ../shared/gesture-session.js'])
   })
 
 })

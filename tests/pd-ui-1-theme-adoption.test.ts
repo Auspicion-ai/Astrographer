@@ -791,18 +791,68 @@ describe('PD-UI-1 §2.1/§2.4 — the vendored module is CONSUMED (imported), ne
     expect(text, '§2.4 / `R-4`/`R-6`: the vendored module is never copied, shadowed or re-exported by the adapter').not.toMatch(/export\s+\{[^}]*\}\s+from\s+['"][^'"]*shared\/theme/)
   })
 
-  it('P-TH-IM-4 (d) — the adapter’s import census is EXACTLY ONE statement, resolving to src/shared/theme.ts', () => {
+  it('P-TH-IM-4 (d) — the adapter’s import census is EXACTLY ONE statement, RESOLVING to the vendored member src/shared/theme.ts', () => {
+    // ⟨TEST-DEFECT CORRECTED 2026-09-28 (remand 2 of 2 on this unit).⟩ This row pinned the
+    // LITERAL spelling `'../../shared/theme.js'` — and that spelling is UNSATISFIABLE together
+    // with the sibling register row (`tests/pd-ui-1-theme-register.test.ts` `P-TH-IM-4 (d)`),
+    // which pins `'../shared/theme.js'`: from `src/renderer/`, `../shared/theme.ts` RESOLVES to
+    // `src/shared/theme.ts`, while `../../shared/theme.ts` escapes `src/` and resolves to
+    // `<repo>/shared/theme.ts`, which does not exist. NO single statement satisfies both rows.
+    // §2.1's own normative clause is the binding one — *"the implementer may write the EQUIVALENT
+    // form the bundler/typechecker accepts, and the row asserts the RESOLVED PATH, NEVER A
+    // SPELLING"* — so the spelling literal is DROPPED from the expectation and the row asserts
+    // the RESOLVED member. The sibling `tests/pd-vendor-set.test.ts` allow-lists BOTH spellings
+    // for the same reason and records `../../shared/theme.js` as a documentation nit in
+    // `unit-pd-ui-1-theme.md` §2.1.
+    //
+    // STILL DISCRIMINATING, in four ways (the negative controls are driven below, not asserted
+    // in prose): (i) the adapter must REALLY import the vendored module — zero imports reds the
+    // RESOLUTION limb, because the vendored-resolving set reads empty; (ii) the import must
+    // resolve to the vendored `theme` member and NOT to a DIFFERENT member — the expectation
+    // names `src/shared/theme.ts` exactly, so a `zones`/`census`-resolving edge reds it though it
+    // is vendored-resolving too; (iii) the census is EXACTLY ONE statement, so a second vendored
+    // edge (or any `electron`/`node:*`/`provident-ssr`/sibling import) reds the length limb; and
+    // (iv) the one edge must be the STATIC `from '...'` form, never one of the three refused
+    // evasions (§9 item 1 item (b) / §3a `ADV-T7`).
     const hits = adapterImportHits()
     const resolvedToVendored = hits.filter((h) => VENDORED_PATHS.has(resolveSpecifier(h.file, h.specifier)))
     expect(
-      resolvedToVendored.map((h) => `${h.file} ${h.specifier} → ${relative(REPO_ROOT, resolveSpecifier(h.file, h.specifier))} (${h.kind})`).sort(),
-      'RED (PD-UI-1 §2.1 import census): the adapter must import the vendored module EXACTLY ONCE — at this head the census reads 0, and a `await import(…)`/`require(…)`/`new URL(…)` indirection would be an EVASION (§9 item 1 / §3a `ADV-T7`)',
-    ).toEqual(['src/renderer/theme.ts ../../shared/theme.js → src/shared/theme.ts (static-from)'])
+      resolvedToVendored.map((h) => `${relative(REPO_ROOT, resolveSpecifier(h.file, h.specifier))} (${h.kind})`).sort(),
+      'RED (PD-UI-1 §2.1 import census): the adapter must import the vendored module EXACTLY ONCE — at this head the census reads 0, and an `await import(...)`/`require(...)`/`new URL(...)` indirection would be an EVASION (§9 item 1 / §3a `ADV-T7`). The expectation asserts the RESOLVED path (§2.1: “the row asserts the RESOLVED path, never a spelling”), so either equivalent spelling passes and a DIFFERENT vendored member cannot',
+    ).toEqual(['src/shared/theme.ts (static-from)'])
+    expect(
+      resolvedToVendored.map((h) => h.kind),
+      '§9 item 1 item (b) / §3a `ADV-T7`: the ONE consumer edge must be the STATIC `from \'...\'` form — an `await import(...)`/`require(...)`/`new URL(...)` spelling matches no pattern in the `PD-VENDOR` pin and would hide the very edge this census exists to declare',
+    ).toEqual(['static-from'])
     expect(hits, '§2.1: the adapter’s import census is exactly ONE statement — no `electron`, no `node:*`, no `provident-ssr`, no sibling `src/renderer/**` module').toHaveLength(1)
     expect(
       hits.filter((h) => resolveSpecifier(h.file, h.specifier).startsWith('<bare:')),
       '§2.1: no bare (out-of-repo) specifier may appear in the adapter',
     ).toEqual([])
+
+    // ── THE NEGATIVE CONTROLS this row relies on, DRIVEN through the SAME oracle
+    //    (`resolveSpecifier` + `VENDORED_PATHS`) and the SAME derivation (`importHits`):
+    // (i) the same file with ZERO imports — §3a `ADV-T4`’s corpus, which satisfies the
+    //     OUTCOME while ignoring the ADOPTION. It MUST red the resolution limb.
+    expect(
+      importHits('export function resolveTheme(): \'light\' | \'dark\' { return \'light\' }\n', 'src/renderer/theme.ts', PINNED_FIFTEEN),
+      'NEGATIVE CONTROL (i): an adapter with ZERO imports MUST red the resolution limb — its vendored-resolving set reads empty, never the required one-element reading',
+    ).toEqual([])
+    // (ii) an import of a DIFFERENT vendored MEMBER — vendored-resolving, so the row cannot be
+    //      satisfied by “something under `src/shared/`”. It MUST fail the expectation, which
+    //      names the `theme` member exactly.
+    const differentMember = importHits(`import { isEmpty } from '../shared/zones.js'\n`, 'src/renderer/theme.ts', PINNED_FIFTEEN)
+    expect(
+      differentMember.map((h) => `${relative(REPO_ROOT, resolveSpecifier(h.file, h.specifier))} (${h.kind})`),
+      'NEGATIVE CONTROL (ii): an import of a DIFFERENT vendored member MUST produce a reading that is NOT the required `src/shared/theme.ts` — “resolves to some vendored member” is not the property',
+    ).toEqual(['src/shared/zones.ts (static-from)'])
+    // (iii) the SAME edge written through one of the three refused evasions — the resolution
+    //       limb would otherwise be satisfiable by a form the pin cannot see.
+    const evading = importHits(`const later = () => import('../shared/theme.js')\n`, 'src/renderer/theme.ts', PINNED_FIFTEEN)
+    expect(
+      evading.map((h) => h.kind),
+      'NEGATIVE CONTROL (iii): the refused evasion forms are still SEEN by the derivation (the kind limb reds them), so the corrected expectation is not satisfiable by hiding the edge',
+    ).toEqual(['dynamic-import'])
   })
 
   it('P-TH-IM-4 CONTROLS — the digest oracle discriminates a ONE-BYTE perturbation, and the census oracle discriminates an adapter with zero imports; the two limbs are INDEPENDENTLY falsifiable', () => {
