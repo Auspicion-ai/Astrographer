@@ -51,14 +51,24 @@ export function applyThemeToRoot(root: ThemeRoot, setting: unknown, prefersDark:
   const resolved = resolveTheme(setting, prefersDark)
   const write = applyThemeDeclaration('theme', resolved)
   try {
-    // The record's decision, applied at the ONE write site. Its `removal` member is
-    // HONOURED, never ignored: a removal record is the declared way of saying "no
-    // appearance attribute", and the adapter represents it as exactly that — no write —
-    // rather than by a removal call on a root it does not own. On the reachable path the
-    // member is always `false` (§3.2 item 5), so the write below always occurs.
-    if (!write.removal) root.dataset.theme = write.value
+    // The record's decision, applied at the ONE write site — `root.dataset.theme`, the member
+    // of the root this adapter was HANDED, and the only element a write here may touch. Its
+    // `removal` member is HONOURED with the meaning the contract RULES (`A-7` RULED 2026-09-28,
+    // `§2.1` item 6): a removal record means THE ATTRIBUTE IS REMOVED — the record's own
+    // outcome, not a third outcome it does not declare — so the SAME member carries the removal
+    // instead of the assignment, and only ever one of the two arms runs. The element-level
+    // attribute-removal mechanic is NOT taken: it would require WIDENING `ThemeRoot`, and this
+    // adapter removes only from the root it owns. Both arms sit inside this one guarded path, so
+    // a frozen/absent/refusing root is still absorbed below and can never break boot. On the
+    // REACHABLE path the member is always `false` (`§3.2` item 5: `resolveTheme` returns
+    // `'light'`/`'dark'`, always non-empty), so a reachable call always writes `write.value`.
+    if (write.removal) {
+      delete root.dataset.theme
+    } else {
+      root.dataset.theme = write.value
+    }
   } catch {
-    // never throw — a frozen/absent root must not break boot
+    // never throw — a frozen/absent root must not break boot, and a refused removal is absorbed here
   }
   return resolved
 }
