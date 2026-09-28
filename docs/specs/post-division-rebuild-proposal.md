@@ -526,3 +526,43 @@ open rulings are answered AND the product owner gives the go-ahead.**
   while `docs/pending.md` still carries `SCH-6..SCH-11` as `NEW — NOT GATED` (*"no Astrographer unit may
   be sequenced against them"*). **That tracker conflict is the architect's to resolve, and it gates W0.**
 
+### 7.4 THE ARCHITECT'S RULINGS (2026-09-27) AND THE MEASURED BASELINES
+
+**Five rulings were returned, each recorded as an ACTIVE row in `docs/decisions.md`:**
+
+| Id | Ruling | Decision row |
+| --- | --- | --- |
+| **`Q-A`** | **`A3` monitor + a machine-readable manifest (`vendor/foundation.lock.json`), owned by a NEW vendoring unit** | `DECIDED: POST-DIVISION-REBUILD-VENDORING-AND-PHASE-SHAPE` |
+| **`Q-D(a)`** | **ADOPT the model's activate-matching semantics** — a repeat open focuses the existing entry and appends nothing; the fork's duplicate policy is **replaced** | `DECIDED: TAB-FOCUS-ACTIVATE-MATCHING-SEMANTICS` |
+| **`Q-D(b)`** | **ADOPT the foundation's `provident.focus` contract** — `tabId` **dropped**, `target` **re-typed to a string**; a BREAKING caller-visible change with a same-commit `mcp-endpoint.md` §3 amendment | `DECIDED: PROVIDENT-FOCUS-ADOPTS-THE-FOUNDATION-CONTRACT` |
+| **`Q-F`** | **RULE THE WITHDRAWAL NOW** — `SCH-2`/`SCH-5`/`SCH-8`/`SCH-11` withdrawn with the `H-r9` note; `W0` records it and the waves unblock | `DECIDED: POST-DIVISION-REBUILD-VENDORING-AND-PHASE-SHAPE` clause (5) |
+| **Phase 0** | **the vendoring/pin unit PLUS the baseline measurements** — not the `PD-UI-9` spike | same row, clause (6) |
+
+**STILL OPEN (the architect's; they block Phase 1, not Phase 0):** **`Q-C`** the carried baseline red
+(`PANE-TOGGLE-STAGE-COLLAPSE`) — dispose before, or carry as the recorded baseline — and **`Q-E`**
+`PD-UI-12`'s boundary (the keystone; seven rows share `src/renderer/sidebar-panes.ts`), which `A-10` rules
+must be taken at the HEAD of Phase 1.
+
+### 7.5 THE BASELINE MEASUREMENTS — RUN AT THIS PASS, and they change `G-1`
+
+**Phase 0's second deliverable was executed rather than deferred.** Both legs had gone **unmeasured by
+every prior pass** (`X-6`), and one of them is now a recorded finding:
+
+| Leg | Reading | Layer |
+| --- | --- | --- |
+| **`npm run battery`** | **`BATTERY RESULT: 184 checks, 0 failures` — GREEN** | harness / `[H]` (the battery host, not the assembled app) |
+| **`npm run divergence`** | **`R13 RESULT: 1 checks, 2 failures` — RED, and the cause is ENVIRONMENTAL, not the app's diff:** the real-Electron leg dies at bootstrap with `Creating shared memory in /dev/shm/.org.chromium.Chromium.* failed: Permission denied (13)` → `exited with signal SIGTRAP`, and the harness reports `electron connect/drive failed: MCP error -32000: Connection closed` | harness / `[D]` — the DOM-shim host leg ran; the **real-DOM Electron leg did not** |
+
+**Consequences, recorded rather than smoothed:**
+
+1. **`G-1` is EXTENDED, per `X-6`:** the branch baseline now reads `npm test` (the one carried red) ·
+   `typecheck` 0 · `build` 0 · **`battery` 184/0 GREEN** · **`divergence` RED on the Electron leg**.
+2. **The divergence red is a PRECONDITION for every UI unit's live battery** (`A-7` makes
+   `npm run divergence` mandatory pre-live). **A live battery cannot be honestly claimed green while this
+   leg is red**, so either the harness's Electron spawn is fixed in this environment (`/dev/shm` is
+   unavailable here; the foundation's own harness landed `--disable-dev-shm-usage` + a fresh scratch
+   `--user-data-dir` for exactly this class) **or every UI unit's live pass is `PRECONDITION-FAILED` with
+   this reading attached** — never silently parked (`RCA-11`).
+3. **The fix belongs to its own unit** (a harness unit touching `scripts/**`): it is **not** part of this
+   gate, it has no spec and no red set, and it is therefore **recorded as owed** — the exact discipline
+   that keeps a red precondition from being "fixed" inside a docs pass.
