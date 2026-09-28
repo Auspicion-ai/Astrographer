@@ -66,7 +66,7 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -97,10 +97,20 @@ const PINNED_FIFTEEN = [
 
 const PINNED_COMMIT = '8f193a8d1446ed1e64c4ab6c569941e988f82459'
 
-/** §2.1 item 5 — FIVE files carry any import; the other FIFTEEN carry none. */
+/** §2.1 item 5 — FIVE files carry any import at all; the other TEN of the fifteen
+ *  carry none. ⟨Corrected per §12.3(d) (`C-AM-4`, DOC-DRIFT, LOW): the clause's
+ *  *"the other FIFTEEN carry ZERO import statements"* counts the foundation
+ *  `src/shared/` DIRECTORY's twenty files (`5` with imports + `15` without), never
+ *  the fifteen-module set (where the split is `5` + `10`). The two must not be
+ *  collapsed (§2.1 item 5's arithmetic block).⟩ */
 const FILES_WITH_IMPORTS = ['census', 'gutter-affordance', 'gutter', 'relocate', 'path-fork-cycle'] as const
 
-/** §2.1 item 5 / §2.2 — the three set-internal edges and their FIVE statements. */
+/** §2.1 item 5 (arithmetic block) / §2.2 rule 8 / §12.3(b) — the FIVE DISTINCT
+ *  `(from, to)` edges the manifest's `internalEdges` records. The files carry SIX
+ *  set-internal import STATEMENTS (see the separately named statement row below);
+ *  the extra statement is `gutter-affordance.ts` importing `./gesture-session.js`
+ *  twice (once as a VALUE — `POINTER_TYPES` — once TYPE-ONLY — `GestureHandle`),
+ *  and it is ONE edge. */
 const RECORDED_INTERNAL_EDGES: Array<[string, string]> = [
   ['census', 'zones'],
   ['gutter-affordance', 'gutter'],
@@ -303,25 +313,54 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
     expect([...withImports].sort()).toEqual([...FILES_WITH_IMPORTS].filter((f) => (PINNED_FIFTEEN as readonly string[]).includes(f)).sort())
   })
 
-  it('§2.1 item 5 / §2.2 rule 4 — `importCensus.outOfSetImports` is EMPTY and the recorded internal edges are EXACTLY the set-internal edges', () => {
+  it('§2.1 item 5 / §2.2 rule 4+8 — `importCensus.outOfSetImports` is EMPTY and the manifest’s FIVE DISTINCT `(from,to)` records equal the DISTINCT-edge set read from the files', () => {
     const manifest = requireManifest()
     const census = manifest.importCensus as Record<string, unknown>
     expect(census, 'the manifest carries no importCensus object (§2.2)').toBeDefined()
     expect(census.outOfSetImports, '`outOfSetImports` MUST be empty (§2.2 rule 4)').toEqual([])
 
-    // the edges READ OFF THE FILES
-    const readEdges: string[] = []
+    // THE EDGES READ OFF THE FILES, keyed as the `(from, to)` PAIR (§2.2 rule 8;
+    // §12.3(b)): the two `gutter-affordance.ts → './gesture-session.js'` STATEMENTS
+    // (a value import + a type-only import) are ONE distinct edge, so a DEDUPE here
+    // is the contract — never a statement list of 6.
+    const readEdges = new Set<string>()
     for (const name of PINNED_FIFTEEN) {
       for (const spec of importSpecifiers(requireShipped(name))) {
         const m = /^\.\/([a-z-]+)\.js$/.exec(spec)
-        if (m !== null) readEdges.push(`${name}->${m[1]}`)
+        if (m !== null) readEdges.add(`${name}->${m[1]}`)
       }
     }
+    const distinctReadEdges = [...readEdges].sort()
     // the edges RECORDED in the manifest
     const recorded = (census.internalEdges as Array<Record<string, unknown>>).map((e) => `${String(e.from)}->${String(e.to)}`)
+    expect(
+      recorded.length,
+      '`importCensus.internalEdges` carries EXACTLY FIVE records — a DISTINCT-EDGE set keyed by (from, to) (§2.2 rule 8); a SIXTH record (the duplicate statement) and a DROPPED record both fail',
+    ).toBe(5)
+    expect(distinctReadEdges.length, 'the files’ set-internal DISTINCT edges number 5 (§2.1 item 5 arithmetic block)').toBe(5)
     // a MISSING edge and an EXTRA edge both fail (§4 P-IM-3)
-    expect([...recorded].sort()).toEqual([...readEdges].sort())
-    expect([...readEdges].sort()).toEqual(RECORDED_INTERNAL_EDGES.map(([f, t]) => `${f}->${t}`).sort())
+    expect([...recorded].sort(), 'the manifest’s five records must be SET-EQUAL to the DISTINCT edges the files carry (§2.2 rule 8)').toEqual(distinctReadEdges)
+    expect(distinctReadEdges).toEqual(RECORDED_INTERNAL_EDGES.map(([f, t]) => `${f}->${t}`).sort())
+  })
+
+  it('§2.1 item 5 (arithmetic block) / §12.3(b) — SEPARATELY NAMED: the files carry SIX set-internal import STATEMENTS forming FIVE DISTINCT edges', () => {
+    // This row exists so the two quantities are NEVER conflated (§12.3(b)): the
+    // statement count is asserted HERE, as its own named row, and never as the
+    // equality with the manifest (whose `internalEdges` carries 5 records).
+    const statements: string[] = []
+    for (const name of PINNED_FIFTEEN) {
+      for (const spec of importSpecifiers(requireShipped(name))) {
+        const m = /^\.\/([a-z-]+)\.js$/.exec(spec)
+        if (m !== null) statements.push(`${name}->${m[1]}`)
+      }
+    }
+    expect(statements.length, 'the fifteen files carry SIX set-internal import STATEMENTS (§2.1 item 5’s arithmetic block)').toBe(6)
+    expect(new Set(statements).size, 'and FIVE DISTINCT edges — the two counts are different quantities').toBe(5)
+    const duplicates = statements.filter((e, i) => statements.indexOf(e) !== i)
+    expect(
+      duplicates,
+      'the duplicated statement is `gutter-affordance.ts → ./gesture-session.js`, twice: once a VALUE import (`POINTER_TYPES`) and once TYPE-ONLY (`GestureHandle`) — §2.1 item 5',
+    ).toEqual(['gutter-affordance->gesture-session'])
   })
 
   it('P-IM-3 CONTROL — a synthetic edge `theme → dom-shim` MUST fail, and a dropped in-set edge MUST fail', () => {
@@ -347,20 +386,54 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
     expect(notes).toMatch(/provident-ssr/)
   })
 
-  it('§2.1 item 6 / §5 item 5 — NO vendored module is imported by this repo today (the vendoring is INERT; no consumer-correctness claim)', () => {
+  it('§2.1 item 6 / §5 item 5 / §12.3(c) — NO vendored module is imported by this repo today: the hit set is EXACTLY the three stem-collision sites, and NONE resolves to a vendored member', () => {
+    // The spec’s own recorded read (§2.1 item 6): *"A read of `src/**` for
+    // `from '…/<name>.js'` over the fifteen names"* — the `…` is the whole specifier
+    // prefix, so the pattern is `from '[^']*<name>\.js'` (the stem-SUFFIX form).
     const r = spawnSync(
       'grep',
-      ['-rnE', PINNED_FIFTEEN.map((n) => `from '[^']*/${n}\\.js'`).join('|'), join(REPO_ROOT, 'src')],
+      ['-rnE', PINNED_FIFTEEN.map((n) => `from '[^']*${n}\\.js'`).join('|'), join(REPO_ROOT, 'src')],
       { encoding: 'utf8' },
     )
     const hits = (r.stdout ?? '')
       .split('\n')
       .filter((l) => l.trim() !== '')
+      // the `/shared/` exclusion is KEPT: the set-internal edges (census→zones,
+      // gutter-affordance→gutter + gesture-session, gutter/relocate→gesture-session)
+      // live in `src/shared/` and are the P-IM-3 rows’ subject, not this row’s.
       .filter((l) => !/\/shared\//.test(l))
+    // derive each hit’s FILE, its verbatim SPECIFIER, and the module the specifier
+    // actually RESOLVES TO (§12.3(c): “deriving each hit’s specifier”).
+    const parsed = hits.map((line) => {
+      const m = /^(.+?):(\d+):(.*)$/.exec(line)!
+      const file = m[1]!
+      const text = m[3]!
+      const spec = /from\s+['"]([^'"]+)['"]/.exec(text)![1]!
+      return { file: relative(REPO_ROOT, file), spec, resolved: resolve(dirname(file), spec.replace(/\.js$/, '.ts')) }
+    })
+    // THE PREDICATE IS “no hit resolves to a VENDORED MEMBER”, STATED AS AN EXACT SET
+    // (§12.3(c)) — never an emptiness: a zero-hit form would require editing
+    // `src/renderer/renderer.ts`, which §3.6 / `C-7` forbid.
     expect(
-      hits,
-      '§2.1 item 6: the only recorded `from …/<name>.js` matches are `./pane-gutter.js` + `./theme.js` (renderer) — none is a vendored member',
+      parsed.map((h) => `${h.file} ${h.spec}`).sort(),
+      '§2.1 item 6 MEASURES exactly three legitimate hits: `./pane-gutter.js` ×2 (renderer.ts, sidebar-panes.ts) + `./theme.js` (renderer.ts) — the stem collision `C-7`',
+    ).toEqual([
+      'src/renderer/renderer.ts ./pane-gutter.js',
+      'src/renderer/renderer.ts ./theme.js',
+      'src/renderer/sidebar-panes.ts ./pane-gutter.js',
+    ])
+    // …and NONE of the three resolves to a vendored member: the collision is by STEM,
+    // never by SPECIFIER (`./theme.js` from `src/renderer/` resolves to the FORK module
+    // `src/renderer/theme.ts`, never to the vendored `src/shared/theme.ts`).
+    const vendoredPaths = new Set(PINNED_FIFTEEN.map((n) => shippedPath(n)))
+    expect(
+      parsed.filter((h) => vendoredPaths.has(h.resolved)),
+      'no hit may resolve to one of the pin’s fifteen `src/shared/<name>.ts` files (§2.1 item 6 / §5 item 5 — the vendoring is INERT)',
     ).toEqual([])
+    // the three hits are real fork modules: each resolves to an existing file under
+    // `src/renderer/`, and every one of them exists.
+    expect(parsed.map((h) => h.resolved).every((p) => /[/\\]src[/\\]renderer[/\\]/.test(p))).toBe(true)
+    expect(parsed.map((h) => h.resolved).every((p) => existsSync(p)), 'each hit must resolve to a real fork module').toBe(true)
   })
 })
 

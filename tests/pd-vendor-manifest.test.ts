@@ -1,5 +1,19 @@
 // tests/pd-vendor-manifest.test.ts — unit `PD-VENDOR`, the `A2` HASH ROW and the
-// register rows `P-IM-1` / `P-IM-2` / `P-TP-1`.
+// register rows `P-IM-1` / `P-IM-2` / `P-TP-1` / `P-SM-1` / **`P-IM-4`**.
+//
+// ⟨REMANDED 2026-09-28 (spec §12.3(a) `C-AM-1` / §12.4 `O-7`).⟩ Two rows changed:
+//   · `P-TP-1` now implements the CORRECTED property of the spec’s **`§4.1`** — ONE
+//     drawn module, the SHIPPED oracle on the shipped path, and the discrimination
+//     stated as a **PAIR OF ORACLES ON ONE PERTURBED CLOSURE** (`oracleShipped` MUST
+//     fail, `oracleCopy` MUST still pass against its own UNPERTURBED bytes). The
+//     as-filed row demanded one oracle FAIL and PASS on the SAME closure — a strict
+//     contradiction, unsatisfiable for any manifest. Row id and term `8` are KEPT.
+//   · **`P-IM-4`** is ADDED (the register row the amendment mints): the five
+//     foundation shapes declared WITHOUT `export` must be re-declared TYPE-ONLY at
+//     `src/shared/foundation-return-shapes.ts` (§2.1 item 7b; §12.4). 12 = 5 × 2 + 2.
+// Register arithmetic (printed with its terms): `19 + 17 + 17 + 12 + 10 + 8 + 20 + 12
+// = 115` attempts — the as-filed `103` is KEPT visible as provenance (§4’s amended
+// tally).
 //
 // SOURCE OF EVERY ASSERTION (spec ONLY):
 //   docs/specs/unit-pd-vendor-foundation-mechanisms.md
@@ -43,7 +57,8 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 // `typescript` is an EXISTING devDependency (§4's machinery forbids a NEW one) and
@@ -483,10 +498,17 @@ describe('§4 P-IM-2 — the pin reproduces (strat:pin-reproduction)', () => {
 })
 
 // ===========================================================================
-// §4 `P-TP-1` — THE A2 ROW DISCRIMINATES THE SHIPPED FILE FROM THE COPY
+// §4 `P-TP-1` (CORRECTED — the spec’s `§4.1`) — THE A2 ROW DISCRIMINATES THE
+// SHIPPED FILE FROM THE COPY
 // ===========================================================================
+/** §4.1 item 3 — the copy target the row COMPUTES: the `vendor/`-tree copy at the
+ *  path derived below **iff it exists as a separate file**; otherwise a SYNTHETIC
+ *  copy target (a temp path holding the UNPERTURBED shipped bytes). The row records
+ *  which arm it took and never claims a copy reading it did not take. */
+const VENDOR_COPY_ROOT = join(REPO_ROOT, 'vendor', 'Provident-Electron', 'src', 'shared')
+
 describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy (strat:hash-target-discrimination)', () => {
-  it('P-TP-1 — 1 drawn module × 2 perturbation targets × 2 readings × 2 runs = 8 attempts, all discriminating', () => {
+  it('P-TP-1 — 1 drawn module × 2 perturbation targets × 2 readings × 2 runs = 8 attempts; the (FAIL, PASS) oracle PAIR is the falsifiable content (§4.1)', () => {
     const manifest = requireManifest()
     const modules = manifest.modules as Array<Record<string, unknown>>
 
@@ -496,35 +518,151 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0
       return state
     }
-    const results: Array<{ module: string; shippedPerturbed: boolean; copyPerturbed: boolean }> = []
-    for (let run = 0; run < 2; run++) {
-      const entry = modules[draw() % modules.length]!
-      const name = String(entry.name)
-      const declared = String(entry.md5)
-
-      // the REQUIRED oracle, parameterised by its file reader so the two targets are
-      // distinguishable in one paired comparison (§4 P-TP-1).
-      const oracleOver = (readBytes: () => string | null): boolean => {
-        const bytes = readBytes()
-        return bytes !== null && md5OfBytes(bytes) === declared
-      }
-
-      // reading 1 — perturb ONE byte of the SHIPPED file ⇒ the required oracle FAILS
-      const shippedVerdictFails = !oracleOver(() => `${entry.name}\n// perturbed by one byte\n`)
-
-      // reading 2 — perturb the vendor-tree COPY only ⇒ the shipped-file oracle's
-      // verdict is UNCHANGED (a copy-reading oracle would be self-satisfying: §0A
-      // note 4, ADV-VD-2)
-      const copyVerdict = oracleOver(() => `${entry.name}\n// perturbed by one byte\n`)
-
-      results.push({ module: name, shippedPerturbed: shippedVerdictFails, copyPerturbed: copyVerdict })
+    /** ONE byte perturbed — the row’s single perturbation of a closure (§4.1 item 1/2). */
+    const perturbOneByte = (bytes: Buffer): Buffer => {
+      const out = Buffer.from(bytes)
+      out[0] = out[0]! ^ 0x01
+      return out
+    }
+    /**
+     * The oracle FACTORY of §4.1 item 2: the discrimination is a property of a PAIR
+     * OF ORACLES, never of two verdicts of one — each oracle hashes ITS OWN TARGET
+     * against the manifest’s declared digest, and the two targets are DIFFERENT FILES.
+     *   `oracleShipped` — hash target = the SHIPPED path (§0A note 4 / §2.4 item 3);
+     *   `oracleCopy`    — hash target = the `vendor/`-tree copy (here: the synthetic
+     *                     copy target, §4.1 item 3).
+     */
+    const oracleOverTarget = (declaredMd5: string, readTarget: () => Buffer | null): boolean => {
+      const bytes = readTarget()
+      return bytes !== null && md5OfBytes(bytes) === declaredMd5
     }
 
-    const undiscriminating = results.filter((r) => !(r.shippedPerturbed && r.copyPerturbed))
-    expect(undiscriminating, 'a one-byte perturbation of the SHIPPED file must change the verdict while a copy mutation must NOT (§4 P-TP-1)').toEqual([])
+    interface RunReading {
+      module: string
+      copyTarget: string
+      copyTargetSynthetic: boolean
+      shippedReal: boolean
+      shippedOnPerturbedShipped: boolean
+      copyOnPerturbedShipped: boolean
+      shippedOnPerturbedCopy: boolean
+      copyOnPerturbedCopy: boolean
+    }
 
-    // the row's real reading: the A2 oracle reads `src/shared/<x>.ts`, and the
-    // vendor-tree copy is NOT its target.
+    const syntheticCopyDirs: string[] = []
+    const runs: RunReading[] = []
+    try {
+      for (let run = 0; run < 2; run++) {
+        const entry = modules[draw() % modules.length]!
+        const name = String(entry.name)
+        const declared = String(entry.md5)
+
+        // §4.1 items 1/2 — THE ONE DRAWN MODULE, and the SHIPPED path is the oracle’s target.
+        const shippedPath = shippedPathFor(name)
+        expect(existsSync(shippedPath), `RED (PD-VENDOR §2.4 item 3 / §3.2 item 3): the shipped file ${shippedPath} does not exist`).toBe(true)
+        const shippedBytes = readFileSync(shippedPath) // UNPERTURBED
+
+        // §4.1 item 3 — the COPY TARGET: the `vendor/`-tree copy if it exists as a
+        // separate file, else a synthetic copy path holding the UNPERTURBED shipped bytes.
+        const realCopyPath = join(VENDOR_COPY_ROOT, `${name}.ts`)
+        let copyPath: string
+        let copyTargetSynthetic: boolean
+        if (existsSync(realCopyPath)) {
+          copyPath = realCopyPath
+          copyTargetSynthetic = false
+        } else {
+          const dir = mkdtempSync(join(tmpdir(), 'pd-vendor-copy-target-'))
+          syntheticCopyDirs.push(dir)
+          copyPath = join(dir, `${name}.ts`)
+          writeFileSync(copyPath, shippedBytes)
+          copyTargetSynthetic = true
+        }
+        const copyBytes = readFileSync(copyPath) // UNPERTURBED — the perturbation never touches it
+        expect(resolve(copyPath), 'the copy oracle’s target must be a DIFFERENT FILE from the shipped oracle’s (§4.1 item 2)').not.toBe(resolve(shippedPath))
+        expect(
+          md5OfBytes(copyBytes),
+          `the copy target (§4.1 item 3: ${copyTargetSynthetic ? 'a SYNTHETIC copy path holding the unperturbed shipped bytes' : 'the real vendor-tree copy'}) must carry the pinned bytes for the copy-reading’s PASS to be meaningful`,
+        ).toBe(declared)
+
+        const oracleShipped = (): boolean => oracleOverTarget(declared, () => shippedBytes)
+        const oracleCopy = (): boolean => oracleOverTarget(declared, () => copyBytes)
+
+        // READING 1 — THE REAL READING, on the UNPERTURBED tree: the required oracle
+        // reads the SHIPPED file and returns PASS **iff** md5(shippedBytes) === declared
+        // (§4.1 item 1). This is the only reading that says the shipped file is pinned.
+        const shippedReal = oracleShipped()
+        expect(shippedReal, 'the required oracle’s verdict must be exactly `md5(shippedBytes) === declared` (§4.1 item 1)').toBe(
+          md5OfBytes(shippedBytes) === declared,
+        )
+        expect(shippedReal, 'the shipped file IS the pin (§2.4 item 3) — the A2 oracle PASSES on the unperturbed tree').toBe(true)
+
+        // THE PERTURBED CLOSURE — ONE byte perturbed in `src/shared/<x>.ts` (§4.1 item 1/2).
+        const perturbedShipped = perturbOneByte(shippedBytes)
+        expect(
+          md5OfBytes(perturbedShipped),
+          'the perturbation must actually CHANGE the closure — a no-op perturbation would make the pair vacuous',
+        ).not.toBe(declared)
+
+        // THE DISCRIMINATION PAIR, on that ONE closure (§4.1 item 2): `oracleShipped`
+        // MUST FAIL, and `oracleCopy` MUST still PASS against the UNPERTURBED copy
+        // bytes — because the mutation is of the file the first one reads and NOT of
+        // the file the second one reads. THAT PAIR is the falsifiable content.
+        const shippedOnPerturbedShipped = oracleOverTarget(declared, () => perturbedShipped)
+        const copyOnPerturbedShipped = oracleCopy()
+        expect(
+          shippedOnPerturbedShipped,
+          'oracleShipped MUST FAIL when ONE byte of `src/shared/<x>.ts` is perturbed (§4.1 item 2) — a copy-reading oracle or a hard-coded constant fails to produce this verdict',
+        ).toBe(false)
+        expect(
+          copyOnPerturbedShipped,
+          'oracleCopy MUST still PASS on the SAME perturbed closure, against its own UNPERTURBED bytes (§4.1 item 2)',
+        ).toBe(true)
+
+        // THE SECOND PERTURBATION TARGET, driven the other way (the pairing is symmetric
+        // and both directions are readings of the same row: 2 targets × 2 readings).
+        const perturbedCopy = perturbOneByte(copyBytes)
+        expect(md5OfBytes(perturbedCopy), 'the copy-side perturbation must change the copy closure').not.toBe(declared)
+        const copyOnPerturbedCopy = oracleOverTarget(declared, () => perturbedCopy)
+        const shippedOnPerturbedCopy = oracleShipped()
+        expect(copyOnPerturbedCopy, 'oracleCopy MUST FAIL when one byte of ITS OWN target is perturbed').toBe(false)
+        expect(shippedOnPerturbedCopy, 'and oracleShipped MUST still PASS — the mutation is not of the file it reads').toBe(true)
+
+        runs.push({
+          module: name,
+          copyTarget: copyPath,
+          copyTargetSynthetic,
+          shippedReal,
+          shippedOnPerturbedShipped,
+          copyOnPerturbedShipped,
+          shippedOnPerturbedCopy,
+          copyOnPerturbedCopy,
+        })
+      }
+    } finally {
+      for (const dir of syntheticCopyDirs) rmSync(dir, { recursive: true, force: true })
+    }
+
+    expect(runs.length, '2 runs, ONE drawn module each (§4.1 item 4 — the term is unchanged at 8)').toBe(2)
+    const undiscriminating = runs.filter(
+      (r) =>
+        !(
+          r.shippedReal &&
+          !r.shippedOnPerturbedShipped &&
+          r.copyOnPerturbedShipped &&
+          !r.copyOnPerturbedCopy &&
+          r.shippedOnPerturbedCopy
+        ),
+    )
+    expect(
+      undiscriminating,
+      'every run must produce the pair (oracleShipped FAIL, oracleCopy PASS) on ONE perturbed closure, and the mirror pair on the copy-side perturbation (§4.1 item 2)',
+    ).toEqual([])
+    // the tally, printed with its terms: 1 drawn module × 2 perturbation targets ×
+    // 2 readings × 2 runs = 8
+    expect(1 * 2 * 2 * 2, 'P-TP-1’s attempts term is UNCHANGED at 8 (§4’s amended tally / §12.3(a))').toBe(8)
+    expect(runs.map((r) => r.module).length, 'each run names the module it drew').toBe(2)
+
+    // §4.1 item 4 — the two source-text assertions RETAINED from the as-filed row,
+    // which pin `§0A` note 4’s discrimination in the row’s own source.
     const src = readFileSync(fileURLToPath(import.meta.url), 'utf8')
     expect(src, 'the row must hash the SHIPPED path (§2.4 item 3)').toMatch(/shippedPathFor/)
     expect(src, 'the A2 row must never read the vendor-tree copy as its hash target (§0A note 4)').not.toMatch(/vendor['"]\)?,\s*['"][^'"]*shared/)
@@ -639,5 +777,179 @@ describe('§4 P-SM-1 — nothing G-9/X-9 pins is disturbed (strat:protected-pin-
     const pinClasses = ['bridge-mock-census', 'vitest.config.testTimeout', 'package.json test scripts', 'baseline-file bytes']
     expect(pinClasses.length).toBe(4)
     expect(4 * 2 + 4).toBe(12)
+  })
+})
+
+// ===========================================================================
+// §4 `P-IM-4` — ADDED 2026-09-28 (the `O-7` obligation became ROW-BEARING).
+// THE FIVE UNEXPORTED SHAPES ARE RE-DECLARED BY THIS REPO — AND THE VENDORED
+// BYTES STILL DO NOT EXPORT THEM.
+//
+//   §0A note 7 / §1.1 item 6 / §1.2 / D-11  the RULED re-declaration path is
+//     `src/shared/foundation-return-shapes.ts` (fork-local, TYPE-ONLY)
+//   §2.1 item 7b rules 1–5                  the five declaration rules this row asserts
+//   §4 `P-IM-4`                             12 = 5 shapes × 2 facts + 2 controls, and
+//     the controls discriminate BOTH ways: a synthetic re-declaration missing ONE of
+//     the five MUST fail the first half, a synthetic ADDED `export` on a vendored
+//     shape MUST fail the second half, and no ONE synthetic text satisfies both.
+//   §9 item 8                               the foundation’s export gap is HANDED OFF
+//     (the foundation is never patched — `G-8`)
+//
+// RED-FIRST (RCA-1): `src/shared/foundation-return-shapes.ts` DOES NOT EXIST at this
+// head — THAT IS THIS ROW’S RED, and it is the red that forces the file to exist
+// (§12.4: the obligation was stated at filing but nothing forced the file).
+// ===========================================================================
+/** §2.1 item 7b rule 1 / D-11 / `§0A` note 7 — THE RULED re-declaration path. */
+const RE_DECLARATION_PATH = join(REPO_ROOT, 'src', 'shared', 'foundation-return-shapes.ts')
+
+/** §2.1 item 7 / §9 item 8 — each unexported shape and the vendored module that
+ *  declares it WITHOUT `export`. */
+const SHAPE_OWNER_MODULE: Record<string, string> = {
+  GestureSession: 'gesture-session',
+  RelocateResetResult: 'relocate',
+  FocusResult: 'focus-model',
+  FocusRefusal: 'focus-model',
+  FocusTransitionArg: 'focus-model',
+}
+
+/** The `P-IM-4` half-1 oracle: whether a text EXPORTS the named shape (a direct
+ *  `export interface|type|class` declaration, or a type-only `export { … }` list). */
+function shapeExportedIn(text: string, shape: string): boolean {
+  return (
+    new RegExp(`export\\s+(?:interface|type|class)\\s+${shape}\\b`).test(text) ||
+    new RegExp(`export\\s+(?:type\\s+)?\\{[^}]*\\b${shape}\\b[^}]*\\}`).test(text)
+  )
+}
+
+/** Whether a text DECLARES the named shape at all — exported or not (§2.1 item 7b
+ *  rule 4: the vendored bytes must still declare the five, WITHOUT `export`). */
+function shapeDeclaredIn(text: string, shape: string): boolean {
+  return new RegExp(`(?:^|\\n)[ \\t]*(?:export\\s+)?(?:interface|type|class)\\s+${shape}\\b`).test(text)
+}
+
+/** The shapes the re-declaration text EXPORTS — the half-1 reading, and the oracle
+ *  both controls are driven through. */
+function exportedShapeDeclarations(text: string): string[] {
+  return RE_DECLARED_SHAPES.filter((shape) => shapeExportedIn(text, shape))
+}
+
+/** The LOUD reader of the ruled path: an ABSENT file is a failure NAMING the path and
+ *  the five shapes, never a skip and never a vacuous pass (§2.1 item 7b rule 1). */
+function requireReDeclaration(): string {
+  if (!existsSync(RE_DECLARATION_PATH)) {
+    throw new Error(
+      `RED (PD-VENDOR §2.1 item 7b rule 1 / §4 P-IM-4 / D-11): the re-declaration file ${RE_DECLARATION_PATH} does not exist — ${RE_DECLARED_SHAPES.join(', ')} are returned by values and taken by callbacks and cannot be imported from the vendored bytes, so this repo must re-declare them, TYPE-ONLY, at the ruled path`,
+    )
+  }
+  return readFileSync(RE_DECLARATION_PATH, 'utf8')
+}
+
+/** The vendored module's bytes, read loudly (§2.1 item 1). */
+function requireShippedText(name: string): string {
+  const path = shippedPathFor(name)
+  if (!existsSync(path)) {
+    throw new Error(`RED (PD-VENDOR §2.1 item 1 / §3.1): the vendored module ${path} does not exist`)
+  }
+  return readFileSync(path, 'utf8')
+}
+
+/** The absent-file message both controls carry, so neither can pass on a missing file. */
+const RE_DECLARATION_ABSENT =
+  `RED (PD-VENDOR §2.1 item 7b rule 1 / §4 P-IM-4): the re-declaration file ${RE_DECLARATION_PATH} does not exist — the fork-side mirror is the row’s precondition, and a row that would pass whether or not the file existed is vacuous`
+
+describe('§4 P-IM-4 — the five unexported shapes are re-declared by this repo, and the vendored bytes still do not export them (strat:return-shape-redeclaration)', () => {
+  // --- 5 shapes × FACT 1 — the file exists and EXPORTS the shape ----------------
+  for (const shape of RE_DECLARED_SHAPES) {
+    it(`P-IM-4 fact 1/5 — \`${shape}\` is RE-DECLARED (and exported) at src/shared/foundation-return-shapes.ts`, () => {
+      const text = requireReDeclaration()
+      expect(
+        exportedShapeDeclarations(text),
+        `§2.1 item 7b rule 1: ${RE_DECLARATION_PATH} must declare ALL FIVE shapes — a PARTIAL file is the same failure as a missing one, and \`${shape}\` is missing from its exported declarations`,
+      ).toContain(shape)
+    })
+  }
+
+  // --- 5 shapes × FACT 2 — still NON-EXPORTED in its vendored module ------------
+  for (const shape of RE_DECLARED_SHAPES) {
+    const owner = SHAPE_OWNER_MODULE[shape]!
+    it(`P-IM-4 fact 2/5 — \`${shape}\` remains NON-EXPORTED in src/shared/${owner}.ts (the vendored bytes stay UNMODIFIED)`, () => {
+      // The row's own precondition, asserted FIRST so this half cannot be satisfied by
+      // an empty repo: the non-exported fact is evidence of the RE-DECLARATION
+      // OBLIGATION only while the fork-side mirror exists (§2.1 item 7b rule 1).
+      expect(existsSync(RE_DECLARATION_PATH), RE_DECLARATION_ABSENT).toBe(true)
+      const moduleText = requireShippedText(owner)
+      expect(
+        shapeDeclaredIn(moduleText, shape),
+        `\`${shape}\` must be DECLARED in ${owner}.ts (§2.1 item 7) even though it is not exported`,
+      ).toBe(true)
+      expect(
+        shapeExportedIn(moduleText, shape),
+        `\`${shape}\` must remain NON-EXPORTED in its vendored module — adding an \`export\` would break P-IM-1’s byte-identity (§2.1 item 7b rule 4; §3.1 V-5). The foundation is NOT patched (G-8): the gap is the HANDOFF item of §9 item 8`,
+      ).toBe(false)
+    })
+  }
+
+  // --- CONTROL 1 — a synthetic re-declaration missing ONE of the five ----------
+  it('P-IM-4 CONTROL 1 — a synthetic re-declaration MISSING ONE of the five FAILS the same oracle; the real file’s TYPE-ONLY surface and non-membership are asserted here', () => {
+    const text = requireReDeclaration() // RED while the file is absent — never a pass
+    expect(
+      exportedShapeDeclarations(text).sort(),
+      'the real file must export ALL FIVE (§2.1 item 7b rule 1)',
+    ).toEqual([...RE_DECLARED_SHAPES].sort())
+
+    // the DISCRIMINATING control: the SAME oracle over a synthetic text missing exactly one
+    const syntheticMissingOne = RE_DECLARED_SHAPES.filter((s) => s !== 'FocusRefusal')
+      .map((s) => `export interface ${s} { readonly ok: boolean }`)
+      .join('\n')
+    expect(
+      RE_DECLARED_SHAPES.filter((s) => !exportedShapeDeclarations(syntheticMissingOne).includes(s)),
+      'a synthetic re-declaration MISSING ONE of the five MUST fail the same oracle (§4 P-IM-4 control)',
+    ).toEqual(['FocusRefusal'])
+    expect(
+      exportedShapeDeclarations(RE_DECLARED_SHAPES.map((s) => `export interface ${s} { readonly ok: boolean }`).join('\n')).length,
+      'and the control discriminates the other way: the FULL synthetic text passes the same oracle',
+    ).toBe(5)
+
+    // §2.1 item 7b rule 2 — TYPE-ONLY: no import of ANY kind, and no runtime value
+    expect(text, 'the re-declaration file must carry NO import of any kind — it may not become a sixteenth edge (§2.1 item 7b rule 2 / P-IM-3)').not.toMatch(/(?:^|\n)[ \t]*import\b/)
+    expect(text, 'no `from` specifier may appear — the file is not an import-graph member').not.toMatch(/\bfrom\s+['"]/)
+    expect(text, 'no dynamic `import(…)` and no `require(…)` — both would be runtime edges').not.toMatch(/\b(?:import\s*\(|require\s*\()/)
+    expect(text, 'no RUNTIME export: the surface is TYPE-ONLY (§2.1 item 7b rule 2 — interface/type/class-type only)').not.toMatch(/(?:^|\n)[ \t]*export\s+(?:const|function|let|var)\b/)
+
+    // §2.1 item 7b rule 5 — NOT a vendored member and NOT a baseline file
+    const manifest = requireManifest()
+    const moduleNames = (manifest.modules as Array<Record<string, unknown>>).map((e) => String(e.name))
+    expect(moduleNames.length, 'the manifest’s `modules` still carries EXACTLY fifteen entries (§2.1 item 7b rule 5)').toBe(15)
+    expect(moduleNames, 'the re-declaration file is NOT a sixteenth vendored member').not.toContain('foundation-return-shapes')
+    expect(manifest.baselineFilesNotReplaced as string[], 'and it is NOT one of the four baseline files').not.toContain(
+      'src/shared/foundation-return-shapes.ts',
+    )
+
+    // §4’s amended tally — P-IM-4’s attempts term, printed with its terms
+    expect(RE_DECLARED_SHAPES.length * 2 + 2, 'P-IM-4’s term: 12 = 5 shapes × 2 facts + 2 controls (§4’s amended tally / §12.4)').toBe(12)
+  })
+
+  // --- CONTROL 2 — a synthetic ADDED `export` on a vendored shape --------------
+  it('P-IM-4 CONTROL 2 — a synthetic ADDED `export` on a vendored shape FAILS the non-exported half, and NO ONE synthetic text satisfies both halves', () => {
+    expect(existsSync(RE_DECLARATION_PATH), RE_DECLARATION_ABSENT).toBe(true)
+
+    // the real reading of the second half
+    const exportedByBytes = RE_DECLARED_SHAPES.filter((shape) => shapeExportedIn(requireShippedText(SHAPE_OWNER_MODULE[shape]!), shape))
+    expect(exportedByBytes, 'no vendored module may export any of the five (§2.1 item 7b rule 4)').toEqual([])
+
+    // the DISCRIMINATING control, the other way: an ADDED `export` on a vendored shape
+    const syntheticExported = 'export interface FocusResult { readonly accepted: boolean }'
+    expect(shapeExportedIn(syntheticExported, 'FocusResult'), 'the half-2 oracle must catch an ADDED `export` on a vendored shape').toBe(true)
+    expect(shapeExportedIn(requireShippedText('focus-model'), 'FocusResult'), 'and the real bytes must NOT carry it').toBe(false)
+
+    // THE NON-VACUITY CLAUSE (§4 P-IM-4): the two halves are keyed to DIFFERENT FILES,
+    // so ONE AND THE SAME synthetic text cannot satisfy both — the mirror text that
+    // satisfies half 1 (all five exported) VIOLATES half 2 (it exports all five).
+    const mirrorText = RE_DECLARED_SHAPES.map((s) => `export interface ${s} { readonly ok: boolean }`).join('\n')
+    expect(exportedShapeDeclarations(mirrorText).sort(), 'the mirror text satisfies half 1 …').toEqual([...RE_DECLARED_SHAPES].sort())
+    expect(
+      RE_DECLARED_SHAPES.filter((s) => shapeExportedIn(mirrorText, s)).sort(),
+      '… and violates half 2 in all five — the same text cannot satisfy both halves, which is what makes the row non-vacuous',
+    ).toEqual([...RE_DECLARED_SHAPES].sort())
   })
 })
