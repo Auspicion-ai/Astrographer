@@ -44,7 +44,7 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -84,14 +84,23 @@ function md5(text: string): string {
 /** A synthetic manifest whose EVERY module's md5 equals the digest of its synthetic
  *  vendored bytes, so the comparator's verdict is decided ONLY by the foundation
  *  arm under test. */
-function syntheticManifest(vendoredBody: (name: string) => string): Record<string, unknown> {
+function syntheticManifest(
+  vendoredBody: (name: string) => string,
+  opts: { foundationCommit?: string; foundationPath?: string } = {},
+): Record<string, unknown> {
   return {
     schema: 'foundation-lock/1',
     foundation: {
-      path: '../Provident-Electron',
+      // `⟨A-6 CORRECTION⟩` The synthetic MANIFEST is this suite's own fixture and is
+      // a TEMP-TREE artifact, so its `foundation.path` is `./foundation` — a sibling
+      // INSIDE the temp root. That is what makes the suite HERMETIC: the temp-tree
+      // arm writes only beneath its own root and removes only what it created
+      // (§12's `A-6` correction). The REAL manifest keeps `../Provident-Electron`
+      // (§2.2's normative shape), and `syntheticManifest` still ACCEPTS it.
+      path: opts.foundationPath ?? './foundation',
       remote: 'https://github.com/LittleKingsguard/Provident-Electron',
       ref: 'main',
-      commit: PINNED_COMMIT,
+      commit: opts.foundationCommit ?? PINNED_COMMIT,
       measuredAt: '2026-09-27',
       digestCommand: 'md5sum src/shared/*.ts',
       byteIdentity: 'byte-identical to the pinned commit’s blob at `commit`',
@@ -115,12 +124,24 @@ function bytesMap(body: (name: string) => string): Record<string, string> {
   return Object.fromEntries(PINNED_FIFTEEN.map((n) => [n, body(n)]))
 }
 
-/** §6.1 item 2 — the pure comparator the monitor MUST expose, loaded by name. */
-type Comparator = (input: { manifest: unknown; vendoredBytes: Record<string, string>; foundationBytes: Record<string, string> | null }) => {
+/** §6.1 item 2 — the pure comparator the monitor MUST expose, loaded by name.
+ *  `⟨A-3/A-5 EXTENSION⟩` The input carries the two arms the adversarial pass
+ *  found MISSING: `foundationRevision` (the pin's instrument — the tree's own
+ *  `rev-parse HEAD`, which the manifest's `foundation.commit` must be compared
+ *  against) and `vendoredFlags` (the per-module regular-file reading, so a
+ *  SYMLINKED vendored module is rejected rather than dereferenced). */
+type Comparator = (input: {
+  manifest: unknown
+  vendoredBytes: Record<string, string>
+  foundationBytes: Record<string, string> | null
+  vendoredFlags?: Record<string, { symlink?: boolean }>
+  foundationRevision?: string | null
+}) => {
   status: string
   checks: number
   differences: Array<{ name: string; vendoredDigest?: string; foundationDigest?: string; reason?: string }>
   reason?: string
+  distinctModules?: number
 }
 
 async function loadComparator(): Promise<Comparator> {
@@ -148,14 +169,25 @@ interface TempTree {
 /**
  * A temp "repo" carrying `scripts/foundation-drift.mjs` (a copy), a
  * `node_modules` symlink so the copy's own resolution behaves identically, and
- * NOTHING else. Its `../Provident-Electron` sibling is created ONLY when asked, so
- * the absent-tree situation is driven from a real tree state (§2.3 row 1).
+ * NOTHING else.
+ *
+ * `⟨A-6 CORRECTION (MED, `TEST-DEFECT`) — THE SUITE IS HERMETIC AGAIN.⟩` The
+ * synthetic foundation tree lives at `<root>/foundation` — a sibling INSIDE the
+ * temp root — and the synthetic manifest's `foundation.path` is `./foundation`.
+ * The previous form wrote to `join(root,'..','Provident-Electron')` (a SHARED
+ * GLOBAL path under `tmpdir()`) and a row's `finally` removed that path
+ * recursively: a test that ran first could delete a directory it never created,
+ * and two concurrent runs of this suite raced over one path. Nothing here reads
+ * or removes any path the test did not itself create.
  */
 function makeTempTree(): TempTree {
   const root = mkdtempSync(join(tmpdir(), 'pd-vendor-drift-'))
   mkdirSync(join(root, 'scripts'), { recursive: true })
   mkdirSync(join(root, 'vendor'), { recursive: true })
   mkdirSync(join(root, 'src', 'shared'), { recursive: true })
+  // The synthetic foundation sibling lives INSIDE the root (A-6) but is created
+  // ONLY when a row asks for it, so the ABSENT-tree situation is still driven from
+  // a real tree state (§2.3 row 1).
   if (existsSync(MONITOR_PATH)) writeFileSync(join(root, 'scripts', 'foundation-drift.mjs'), readFileSync(MONITOR_PATH))
   try {
     symlinkSync(join(REPO_ROOT, 'node_modules'), join(root, 'node_modules'), 'dir')
@@ -171,13 +203,36 @@ function makeTempTree(): TempTree {
       writeFileSync(join(root, 'src', 'shared', `${name}.ts`), bytes)
     },
     writeFoundation(name, bytes) {
-      mkdirSync(join(root, '..', 'Provident-Electron', 'src', 'shared'), { recursive: true })
-      writeFileSync(join(root, '..', 'Provident-Electron', 'src', 'shared', `${name}.ts`), bytes)
+      mkdirSync(join(root, 'foundation', 'src', 'shared'), { recursive: true })
+      writeFileSync(join(root, 'foundation', 'src', 'shared', `${name}.ts`), bytes)
     },
     rm() {
       rmSync(root, { recursive: true, force: true })
     },
   }
+}
+
+/** `⟨A-3⟩` The synthetic foundation repository: `<root>/foundation` as a REAL git
+ *  repository, so the monitor's pin arm has a revision to read. Returns its HEAD
+ *  (empty when `git init` is unavailable — the row then reports the gap rather
+ *  than inventing a revision). */
+function initFoundationRepo(tree: TempTree): string {
+  const repo = join(tree.root, 'foundation')
+  const run = (args: string[]): { code: number; out: string } => {
+    const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
+    return { code: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` }
+  }
+  run(['init', '-q', '.'])
+  run(['-c', 'user.email=pd-vendor@local', '-c', 'user.name=pd-vendor', 'add', '-A'])
+  run(['-c', 'user.email=pd-vendor@local', '-c', 'user.name=pd-vendor', 'commit', '-q', '-m', 'foundation fixture'])
+  const rev = run(['rev-parse', 'HEAD'])
+  return rev.code === 0 ? rev.out.trim() : ''
+}
+
+/** The foundation tree's OWN revision, read the way a pin arm must read it. */
+function foundationRevisionOf(tree: TempTree): string {
+  const r = spawnSync('git', ['-C', join(tree.root, 'foundation'), 'rev-parse', 'HEAD'], { encoding: 'utf8' })
+  return r.status === 0 ? (r.stdout ?? '').trim() : ''
 }
 
 /** Run the monitor with the temp tree as cwd and report stdout+stderr+exit code. */
@@ -293,6 +348,263 @@ describe('§4 P-TP-2 — the monitor is total over its five declared situations 
 })
 
 // ===========================================================================
+// §3a `A-3` — THE PIN IS AN INSTRUMENT, NOT A RECORD (HOST-FIX; RED at HEAD)
+// §3a `A-4` — THE MANIFEST ARM CHECKS NAMES, NOT COUNTS (HOST-FIX; RED at HEAD)
+// §3a `A-5` — A SYMLINKED VENDORED MODULE IS REJECTED (HOST-FIX; RED at HEAD)
+//
+// EVERY ROW IN THIS BLOCK IS EXPECTED **RED** AT THIS HEAD AND IS THE POINT OF
+// THE REMAND: each one forces the least host change that makes the finding's
+// probe fail loudly (`§3a`'s dispositions are `HOST-FIX`; `§3b`'s `owner` column
+// is `IMPLEMENTER`). NONE of them is softened to pass.
+// ===========================================================================
+describe('§3a A-3/A-4/A-5 — the monitor: the pin arm, the name set, the regular-file arm (HOST-FIX regression rows; RED at HEAD by design)', () => {
+  it('⟨A-3 CORRECTION⟩ the pin arm reads the tree’s REVISION: EQUAL BYTES at a DIFFERENT commit are NOT the pinned state (the strongest false-green §3a records)', async () => {
+    const compare = await loadComparator()
+    const body = (n: string) => `${n}\n`
+    const bytes = bytesMap(body)
+    // the synthetic foundation tree's OWN revision, and a DIFFERENT commit recorded
+    // as the pin. `§3a` `A-3`: a foundation tree at a different commit with equal
+    // bytes reads CLEAN today, because nothing ever compares the revision.
+    const treeRevision = '1'.repeat(40)
+    const differentPinnedCommit = '2'.repeat(40)
+    const report = compare({
+      manifest: syntheticManifest(body, { foundationCommit: differentPinnedCommit }),
+      vendoredBytes: bytes,
+      foundationBytes: bytes, // EQUAL BYTES
+      vendoredFlags: Object.fromEntries(PINNED_FIFTEEN.map((n) => [n, { symlink: false }])),
+      foundationRevision: treeRevision, // …AT A DIFFERENT COMMIT
+    })
+    expect(
+      report.status,
+      'the report MUST distinguish "the adjacent tree is at the pinned commit" from "a tree is present with equal bytes at a different commit" (§3a `A-3` `HOST-FIX`: a read-only `git -C <foundation> rev-parse HEAD` equality check against the manifest’s `foundation.commit`, or a `git -C <foundation> show <commit>:src/shared/<x>.ts` blob arm). Today this reads CLEAN — the exact false-green §3a’s "strongest false-green" paragraph constructs',
+    ).not.toBe('CLEAN')
+    expect(
+      `${report.reason ?? ''} ${report.differences.map((d) => d.reason ?? '').join(' ')}`,
+      'the reading must SAY that the bytes are equal but the tree is not at the pinned commit — a bare non-CLEAN word does not distinguish the two states (§3a `A-3`; §2.3’s rule that a `SKIPPED` reading proves nothing about the pin applies to a byte-equal non-pinned tree too)',
+    ).toMatch(/revision|commit|pin/i)
+  })
+
+  it('⟨A-3 CORRECTION⟩ the manifest’s `foundation.commit` is CONSUMED: the monitor’s source reads it, and the CLEAN path requires the tree to equal it', async () => {
+    const compare = await loadComparator()
+    expect(existsSync(MONITOR_PATH), `RED (PD-VENDOR §2.3): the A3 monitor ${MONITOR_PATH} does not exist`).toBe(true)
+    const monitorSrc = readFileSync(MONITOR_PATH, 'utf8')
+    expect(
+      /foundation\.commit|foundationCommit|pinnedCommit|PinnedCommit/.test(monitorSrc),
+      'the monitor must READ `manifest.foundation.commit` — §3a `A-3`: "nothing in the repo ever checks the pinned commit"; the sole commit read is a tautology when the tree is absent. A manifest key no instrument consumes is a RECORD, not a pin',
+    ).toBe(true)
+    // the discriminating pair: at the PINNED revision the byte-equal tree is CLEAN …
+    const body = (n: string) => `${n}\n`
+    const bytes = bytesMap(body)
+    const pinnedRevision = 'a'.repeat(40)
+    const atPin = compare({
+      manifest: syntheticManifest(body, { foundationCommit: pinnedRevision }),
+      vendoredBytes: bytes,
+      foundationBytes: bytes,
+      vendoredFlags: Object.fromEntries(PINNED_FIFTEEN.map((n) => [n, { symlink: false }])),
+      foundationRevision: pinnedRevision,
+    })
+    expect(atPin.status, 'at the PINNED revision with equal bytes the reading is CLEAN (§2.3 row 2) — the pin arm must not break the declared situation').toBe('CLEAN')
+    // … and the SAME bytes at another revision are NOT (the row above); this pair is
+    // what makes the arm an instrument rather than a wording (§3a `A-3`).
+    const offPin = compare({
+      manifest: syntheticManifest(body, { foundationCommit: pinnedRevision }),
+      vendoredBytes: bytes,
+      foundationBytes: bytes,
+      vendoredFlags: Object.fromEntries(PINNED_FIFTEEN.map((n) => [n, { symlink: false }])),
+      foundationRevision: 'b'.repeat(40),
+    })
+    expect(offPin.status, 'the SAME bytes at a DIFFERENT revision must NOT read CLEAN — the pair is the falsifiable content of the pin arm (§3a `A-3`)').not.toBe('CLEAN')
+  })
+
+  it('⟨A-4 CORRECTION⟩ the manifest arm checks the NAMES: fifteen DUPLICATE entries are a set violation, never CLEAN (counts are not the assertion)', async () => {
+    const compare = await loadComparator()
+    const body = (n: string) => `${n}\n`
+    // `§3a` `A-4`’s exact false-green: fifteen entries that are the SAME module
+    // fifteen times. `moduleCount === 15` and `modules.length === 15` both hold, so
+    // the count arm passes while FOURTEEN modules are never compared.
+    const duplicated: Record<string, unknown> = {
+      ...syntheticManifest(body),
+      modules: Array.from({ length: 15 }, () => ({
+        name: 'census',
+        source: 'src/shared/census.ts',
+        vendored: 'src/shared/census.ts',
+        md5: md5('census\n'),
+        lineCount: 1,
+        provenance: 'synthetic',
+        proposalTableAgreement: 'REPRODUCED',
+        excludedFromVendorSet: false,
+        rowStatus: 'NONE (no wave owned yet)',
+      })),
+      moduleCount: 15,
+    }
+    const report = compare({ manifest: duplicated, vendoredBytes: bytesMap(body), foundationBytes: bytesMap(body) })
+    expect(
+      report.status,
+      'fifteen duplicate entries pass the COUNT arm (15 === 15) while fourteen modules are never compared — the declared name set must be SET-EQUAL to the pin’s fifteen (§3a `A-4` `HOST-FIX`). Today this reads CLEAN, which is §3a’s quoted false-green',
+    ).not.toBe('CLEAN')
+    expect(
+      report.distinctModules,
+      'the reading must report a DISTINCT-FILE count, not an entry count: fifteen entries naming ONE module is 1 compared file, never 15 (§3a `A-4`: "report distinct-file counts, not entry counts")',
+    ).toBe(1)
+  })
+
+  it('⟨A-5 CORRECTION⟩ a SYMLINKED vendored module is REJECTED — byte-identity is satisfied by a symlink today, and a symlink is not "copied in as source"', async () => {
+    const compare = await loadComparator()
+    const body = (n: string) => `${n}\n`
+    const bytes = bytesMap(body)
+    // the SYMLINKED module’s bytes are IDENTICAL — that is exactly why every read
+    // (`existsSync` + `readFileSync`) stays green while the fork stops being
+    // standalone (`R-1`: "copied in as source").
+    const flags = Object.fromEntries(PINNED_FIFTEEN.map((n) => [n, { symlink: n === 'theme' }]))
+    const report = compare({ manifest: syntheticManifest(body), vendoredBytes: bytes, foundationBytes: bytes, vendoredFlags: flags })
+    expect(
+      report.status,
+      'a symlinked vendored module MUST be rejected as NOT "copied in as source" — a per-module `lstat(...).isSymbolicLink() === false` reading in the monitor’s LOCAL arm (§3a `A-5` `HOST-FIX`). Today byte-identity is satisfied by the symlink and every row stays green',
+    ).not.toBe('CLEAN')
+    const named = report.differences.map((d) => d.name).join(' ')
+    expect(named, 'the symlinked module must be NAMED in the report (§2.3’s naming discipline)').toContain('theme')
+  })
+
+  it('⟨A-5 CORRECTION⟩ the regular-file arm is an EXPORTED, DISCRIMINATING oracle (the monitor’s own `lstat` rule, driven on a real symlink and a real file)', async () => {
+    expect(existsSync(MONITOR_PATH), `RED (PD-VENDOR §2.3): the A3 monitor ${MONITOR_PATH} does not exist`).toBe(true)
+    const mod = (await import(/* @vite-ignore */ pathToFileURL(MONITOR_PATH).href)) as Record<string, unknown>
+    const oracle = (mod.isRegularFile ?? (mod.default as Record<string, unknown> | undefined)?.isRegularFile) as
+      | ((path: string) => boolean)
+      | undefined
+    expect(
+      typeof oracle,
+      'RED (PD-VENDOR §3a `A-5`): the monitor must EXPORT its regular-file oracle (`isRegularFile(path)`) so the local arm’s rule is a driven function and not a wording. Without it, nothing in the repo asserts `!lstat(p).isSymbolicLink()` for the fifteen modules',
+    ).toBe('function')
+    const dir = mkdtempSync(join(tmpdir(), 'pd-vendor-regular-file-'))
+    try {
+      const real = join(dir, 'real.ts')
+      const link = join(dir, 'link.ts')
+      writeFileSync(real, 'theme\n')
+      symlinkSync(real, link)
+      expect(lstatSync(real).isSymbolicLink(), 'the fixture’s control file must NOT be a symlink').toBe(false)
+      expect(lstatSync(link).isSymbolicLink(), 'the fixture’s symlink must be a symlink (the control discriminates)').toBe(true)
+      expect(oracle!(real), 'a REGULAR vendored file passes the arm').toBe(true)
+      expect(
+        oracle!(link),
+        'a SYMLINKED vendored module FAILS the arm — `readFileSync` dereferences, which is exactly why the byte rows cannot see it (§3a `A-5`)',
+      ).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+// ===========================================================================
+// §3a `A-3` (CLI arm) / `A-6` — the monitor driven against a REAL temp tree
+// ===========================================================================
+describe('PD-VENDOR §3a A-3 — the A3 monitor CLI: the pin arm driven from a real temp repository', () => {
+  it('⟨A-3 CORRECTION⟩ a real foundation tree at a DIFFERENT commit with EQUAL BYTES does NOT read CLEAN', () => {
+    const tree = makeTempTree()
+    try {
+      seedManifest(tree)
+      for (const name of PINNED_FIFTEEN) tree.writeFoundation(name, `${name}\n`)
+      const treeRevision = initFoundationRepo(tree)
+      expect(treeRevision, 'the temp foundation repository must carry a revision, else this row cannot drive the pin arm').not.toBe('')
+      expect(treeRevision, 'the fixture revision must be exactly 40 lowercase hex, as `foundation.commit` requires (§2.2)').toMatch(/^[0-9a-f]{40}$/)
+      expect(treeRevision, 'the fixture’s revision must DIFFER from the pinned commit it records — equal bytes, a different commit, which is §3a’s false-green construction').not.toBe(PINNED_COMMIT)
+      // the manifest records the PIN, not the tree’s revision
+      tree.writeManifest(JSON.stringify(syntheticManifest((n) => `${n}\n`, { foundationCommit: PINNED_COMMIT }), null, 2))
+      const { code, out } = runMonitor(tree)
+      expect(
+        code,
+        'a tree at the pinned commit EQUAL-BYTES-WISE but not at the pinned commit is NOT the pinned state: the monitor must read the tree’s revision and refuse (§3a `A-3` `HOST-FIX`). Today this prints CLEAN with exit 0',
+      ).not.toBe(0)
+      expect(
+        out,
+        'the reading must distinguish "the adjacent tree is at the pinned commit" from "a tree is present with equal bytes at a different commit" (§3a `A-3`)',
+      ).toMatch(/revision|commit|pin/i)
+      expect(out, 'the equal-bytes fact must still be stated — the two faults are different and both are reported (§2.3 row 3’s discipline)').toMatch(/byte|CLEAN/i)
+    } finally {
+      tree.rm()
+    }
+  })
+
+  it('⟨A-3 CORRECTION⟩ the declared CLEAN situation still reads CLEAN: the tree IS at the manifest’s pinned commit (the pin arm must not break §2.3 row 2)', () => {
+    const tree = makeTempTree()
+    try {
+      seedManifest(tree)
+      for (const name of PINNED_FIFTEEN) tree.writeFoundation(name, `${name}\n`)
+      const treeRevision = initFoundationRepo(tree)
+      expect(treeRevision).toMatch(/^[0-9a-f]{40}$/)
+      // the manifest records THE TREE’S OWN revision — the pinned state
+      tree.writeManifest(JSON.stringify(syntheticManifest((n) => `${n}\n`, { foundationCommit: treeRevision }), null, 2))
+      expect(foundationRevisionOf(tree), 'the revision the monitor must read is the tree’s own HEAD').toBe(treeRevision)
+      const { code, out } = runMonitor(tree)
+      expect(out, 'the CLEAN reading carries its check count (§2.3 row 2)').toMatch(/15\s*checks/)
+      expect(out).toMatch(/CLEAN/)
+      expect(code, 'a tree at the pinned commit with equal bytes is the declared CLEAN situation — exit 0').toBe(0)
+    } finally {
+      tree.rm()
+    }
+  })
+
+  it('⟨A-4 CORRECTION⟩ fifteen DUPLICATE manifest entries are a loud failure NAMING the set violation, never CLEAN', () => {
+    const tree = makeTempTree()
+    try {
+      // a manifest whose fifteen entries all name ONE module; the vendored tree
+      // carries all fifteen files, so every file read succeeds and only the NAME
+      // SET can catch it (§3a `A-4`).
+      const body = (n: string) => `${n}\n`
+      for (const name of PINNED_FIFTEEN) tree.writeVendored(name, body(name))
+      const duplicated = {
+        ...syntheticManifest(body),
+        modules: Array.from({ length: 15 }, () => ({
+          name: 'census',
+          source: 'src/shared/census.ts',
+          vendored: 'src/shared/census.ts',
+          md5: md5(body('census')),
+          lineCount: 1,
+          provenance: 'synthetic',
+          proposalTableAgreement: 'REPRODUCED',
+          excludedFromVendorSet: false,
+          rowStatus: 'NONE (no wave owned yet)',
+        })),
+        moduleCount: 15,
+      }
+      tree.writeManifest(JSON.stringify(duplicated, null, 2))
+      const { code, out } = runMonitor(tree)
+      expect(
+        code,
+        'the monitor’s manifest arm must assert the declared name set is SET-EQUAL to the pin’s fifteen — fifteen duplicate entries print CLEAN today while fourteen modules are never compared (§3a `A-4` `HOST-FIX`)',
+      ).not.toBe(0)
+      expect(out, 'the failure must NAME the set violation (§2.3 row 4: a loud failure, never a silent skip)').toMatch(/name|set|census|duplicate|distinct/i)
+      expect(out, 'a name-set violation must never print CLEAN').not.toMatch(/— CLEAN/)
+    } finally {
+      tree.rm()
+    }
+  })
+
+  it('⟨A-5 CORRECTION⟩ a SYMLINKED vendored module is rejected by the monitor’s LOCAL arm', () => {
+    const tree = makeTempTree()
+    try {
+      seedManifest(tree)
+      // `theme.ts` is a symlink to bytes that are IDENTICAL — the byte rows cannot see it
+      mkdirSync(join(tree.root, 'foundation', 'src', 'shared'), { recursive: true })
+      const target = join(tree.root, 'foundation', 'src', 'shared', 'theme.ts')
+      writeFileSync(target, 'theme\n')
+      const vendoredTheme = join(tree.root, 'src', 'shared', 'theme.ts')
+      rmSync(vendoredTheme)
+      symlinkSync(target, vendoredTheme)
+      expect(lstatSync(vendoredTheme).isSymbolicLink(), 'the fixture must really be a symlink (the control discriminates)').toBe(true)
+      expect(readFileSync(vendoredTheme, 'utf8'), 'and its bytes must be the pinned ones — which is why the byte arm stays green today').toBe('theme\n')
+      const { code, out } = runMonitor(tree)
+      expect(
+        code,
+        'a vendored module that is a SYMLINK is not "copied in as source" (R-1) and must fail the local arm (§3a `A-5` `HOST-FIX`)',
+      ).not.toBe(0)
+      expect(out, 'the symlinked path must be NAMED').toMatch(/theme/)
+      expect(out, 'the reading must say the fault is a SYMLINK rather than a digest mismatch — otherwise the report cannot distinguish the two faults').toMatch(/symlink|symbolic|regular file/i)
+    } finally {
+      tree.rm()
+    }
+  })
+})
+// ===========================================================================
 // §2.3 — the CLI's exit-code contract, driven from a REAL temp tree
 // ===========================================================================
 describe('PD-VENDOR §2.3 — the A3 monitor CLI: the six situations and their exit codes', () => {
@@ -392,15 +704,17 @@ describe('PD-VENDOR §2.3 — the A3 monitor CLI: the six situations and their e
       seedManifest(tree)
       // A directory where a file is expected is readable-as-a-path but unreadable
       // as bytes (EISDIR) — the arm §2.3 row 6 declares.
+      // `⟨A-6 CORRECTION⟩` the synthetic foundation now lives INSIDE the temp root,
+      // so removing the ROOT removes it; this row may never `rm` a path it did not
+      // create (the previous form removed `join(root,'..','Provident-Electron')`).
       for (const name of PINNED_FIFTEEN) tree.writeFoundation(name, `${name}\n`)
-      rmSync(join(tree.root, '..', 'Provident-Electron', 'src', 'shared', 'theme.ts'))
-      mkdirSync(join(tree.root, '..', 'Provident-Electron', 'src', 'shared', 'theme.ts'), { recursive: true })
+      rmSync(join(tree.root, 'foundation', 'src', 'shared', 'theme.ts'))
+      mkdirSync(join(tree.root, 'foundation', 'src', 'shared', 'theme.ts'), { recursive: true })
       const { code, out } = runMonitor(tree)
       expect(code).not.toBe(0)
       expect(out).toMatch(/theme/)
     } finally {
       tree.rm()
-      rmSync(join(tree.root, '..', 'Provident-Electron'), { recursive: true, force: true })
     }
   })
 

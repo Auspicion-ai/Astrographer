@@ -57,10 +57,10 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 // `typescript` is an EXISTING devDependency (§4's machinery forbids a NEW one) and
 // is the idiom the repo's own pin file uses to derive a source census.
 import ts from 'typescript'
@@ -518,36 +518,61 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0
       return state
     }
-    /** ONE byte perturbed — the row’s single perturbation of a closure (§4.1 item 1/2). */
+    /** ONE byte perturbed — the row's single perturbation of a closure (§4.1 item 1/2). */
     const perturbOneByte = (bytes: Buffer): Buffer => {
       const out = Buffer.from(bytes)
       out[0] = out[0]! ^ 0x01
       return out
     }
     /**
-     * The oracle FACTORY of §4.1 item 2: the discrimination is a property of a PAIR
-     * OF ORACLES, never of two verdicts of one — each oracle hashes ITS OWN TARGET
-     * against the manifest’s declared digest, and the two targets are DIFFERENT FILES.
-     *   `oracleShipped` — hash target = the SHIPPED path (§0A note 4 / §2.4 item 3);
-     *   `oracleCopy`    — hash target = the `vendor/`-tree copy (here: the synthetic
-     *                     copy target, §4.1 item 3).
+     * ⟨A-8 CORRECTION (MED, `TEST-DEFECT`) — THE ROW NOW DRIVES THE REAL `A2` ORACLE.⟩
+     * §3a `A-8`: the row "does not exercise the `A2` oracle at all — it defines two
+     * LOCAL closures over bytes it read itself (`auditManifest`/`shippedDigest` are
+     * never called)". The correction: drive the REAL `auditManifest` + `shippedDigest`
+     * against a TEMP-COPIED tree, so the oracle under test is the unit's own.
+     *
+     * `copyShippedTree` materializes `src/shared/<x>.ts` for every manifest entry under
+     * a fresh temp root, from the pinned blobs. The temp root is removed in the row's
+     * `finally` and NOTHING outside it is ever written or removed.
      */
-    const oracleOverTarget = (declaredMd5: string, readTarget: () => Buffer | null): boolean => {
-      const bytes = readTarget()
-      return bytes !== null && md5OfBytes(bytes) === declaredMd5
+    const copyShippedTree = (): { root: string; dir: string } => {
+      const root = mkdtempSync(join(tmpdir(), 'pd-vendor-a2-tree-'))
+      const dir = join(root, 'src', 'shared')
+      mkdirSync(dir, { recursive: true })
+      for (const e of modules) {
+        const name = String(e.name)
+        const source = shippedPathFor(name)
+        expect(existsSync(source), `RED (PD-VENDOR §2.4 item 3): the shipped file ${source} does not exist`).toBe(true)
+        writeFileSync(join(dir, `${name}.ts`), readFileSync(source))
+      }
+      return { root, dir }
     }
+    /** The `A2` oracle's per-module verdict over a tree ROOT, taken through the REAL
+     *  `shippedDigest` reader and the REAL `auditManifest`. */
+    const auditAtRoot = (root: string): string[] => {
+      const digestAt = (name: string): string | null => md5OfFile(join(root, 'src', 'shared', `${name}.ts`))
+      const violations = auditManifest(manifest, digestAt)
+      // the count/set facts are the manifest's own and identical at every root: this
+      // row's readings are the PER-MODULE digest verdicts, which is exactly what the
+      // perturbation moves.
+      return violations.filter((v) => !/moduleCount is|modules\.length is|declared name set|declared twice/.test(v))
+    }
+    /** The SHIPPED-path oracle: `shippedDigest` over `src/shared/<name>.ts` — the
+     *  required target of §0A note 4 / §2.4 item 3. */
+    const oracleShipped = (name: string): boolean => shippedDigest(name) === String(modules.find((e) => String(e.name) === name)?.md5)
 
     interface RunReading {
       module: string
       copyTarget: string
       copyTargetSynthetic: boolean
-      shippedReal: boolean
+      shippedRealViaOracle: boolean
       shippedOnPerturbedShipped: boolean
       copyOnPerturbedShipped: boolean
       shippedOnPerturbedCopy: boolean
       copyOnPerturbedCopy: boolean
     }
 
+    const tempRoots: string[] = []
     const syntheticCopyDirs: string[] = []
     const runs: RunReading[] = []
     try {
@@ -556,13 +581,46 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
         const name = String(entry.name)
         const declared = String(entry.md5)
 
-        // §4.1 items 1/2 — THE ONE DRAWN MODULE, and the SHIPPED path is the oracle’s target.
+        // §4.1 items 1/2 — THE ONE DRAWN MODULE: the SHIPPED file is the oracle's target.
         const shippedPath = shippedPathFor(name)
         expect(existsSync(shippedPath), `RED (PD-VENDOR §2.4 item 3 / §3.2 item 3): the shipped file ${shippedPath} does not exist`).toBe(true)
         const shippedBytes = readFileSync(shippedPath) // UNPERTURBED
 
-        // §4.1 item 3 — the COPY TARGET: the `vendor/`-tree copy if it exists as a
-        // separate file, else a synthetic copy path holding the UNPERTURBED shipped bytes.
+        // READING 1 — THE REAL READING on the UNPERTURBED tree, driven through the REAL
+        // `shippedDigest` + `auditManifest` over a temp-copied tree (§3a `A-8`).
+        const tree = copyShippedTree()
+        tempRoots.push(tree.root)
+        const cleanViolations = auditAtRoot(tree.root)
+        const shippedRealViaOracle = cleanViolations.length === 0
+        expect(
+          shippedRealViaOracle,
+          `the per-module audit over the UNPERTURBED temp tree must hold for every entry — the REAL ` +
+            `auditManifest + shippedDigest were driven (violations: ${cleanViolations.join(' | ') || '<none>'})`,
+        ).toBe(true)
+        expect(
+          oracleShipped(name),
+          'the shipped oracle over the REAL path returns PASS iff md5(shipped) === declared (§4.1 item 1)',
+        ).toBe(md5OfFile(shippedPath) === declared)
+
+        // THE PERTURBED CLOSURE — ONE byte perturbed in the tree's `src/shared/<x>.ts`
+        const perturbedShipped = perturbOneByte(shippedBytes)
+        writeFileSync(join(tree.dir, `${name}.ts`), perturbedShipped)
+        expect(md5OfBytes(perturbedShipped), 'the perturbation must actually CHANGE the closure — a no-op perturbation would make the pair vacuous').not.toBe(declared)
+        const perturbedViolations = auditAtRoot(tree.root)
+        const shippedOnPerturbedShipped = perturbedViolations.length === 0
+        expect(
+          perturbedViolations.join(' '),
+          `the REAL auditManifest must NAME the perturbed module — it read ${join(tree.dir, `${name}.ts`)}`,
+        ).toContain(name)
+        expect(
+          shippedOnPerturbedShipped,
+          'the shipped oracle MUST FAIL when ONE byte of `src/shared/<x>.ts` is perturbed (§4.1 item 2)',
+        ).toBe(false)
+
+        // THE COPY TARGET — §4.1 item 3: the `vendor/`-tree copy iff it exists as a
+        // separate file, else a SYNTHETIC copy path holding the UNPERTURBED shipped
+        // bytes. The row records which arm it took and never claims a copy reading it
+        // did not take. `oracleCopy` reads ITS OWN target through the SAME real reader.
         const realCopyPath = join(VENDOR_COPY_ROOT, `${name}.ts`)
         let copyPath: string
         let copyTargetSynthetic: boolean
@@ -576,61 +634,28 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
           writeFileSync(copyPath, shippedBytes)
           copyTargetSynthetic = true
         }
-        const copyBytes = readFileSync(copyPath) // UNPERTURBED — the perturbation never touches it
-        expect(resolve(copyPath), 'the copy oracle’s target must be a DIFFERENT FILE from the shipped oracle’s (§4.1 item 2)').not.toBe(resolve(shippedPath))
-        expect(
-          md5OfBytes(copyBytes),
-          `the copy target (§4.1 item 3: ${copyTargetSynthetic ? 'a SYNTHETIC copy path holding the unperturbed shipped bytes' : 'the real vendor-tree copy'}) must carry the pinned bytes for the copy-reading’s PASS to be meaningful`,
-        ).toBe(declared)
-
-        const oracleShipped = (): boolean => oracleOverTarget(declared, () => shippedBytes)
-        const oracleCopy = (): boolean => oracleOverTarget(declared, () => copyBytes)
-
-        // READING 1 — THE REAL READING, on the UNPERTURBED tree: the required oracle
-        // reads the SHIPPED file and returns PASS **iff** md5(shippedBytes) === declared
-        // (§4.1 item 1). This is the only reading that says the shipped file is pinned.
-        const shippedReal = oracleShipped()
-        expect(shippedReal, 'the required oracle’s verdict must be exactly `md5(shippedBytes) === declared` (§4.1 item 1)').toBe(
-          md5OfBytes(shippedBytes) === declared,
-        )
-        expect(shippedReal, 'the shipped file IS the pin (§2.4 item 3) — the A2 oracle PASSES on the unperturbed tree').toBe(true)
-
-        // THE PERTURBED CLOSURE — ONE byte perturbed in `src/shared/<x>.ts` (§4.1 item 1/2).
-        const perturbedShipped = perturbOneByte(shippedBytes)
-        expect(
-          md5OfBytes(perturbedShipped),
-          'the perturbation must actually CHANGE the closure — a no-op perturbation would make the pair vacuous',
-        ).not.toBe(declared)
-
-        // THE DISCRIMINATION PAIR, on that ONE closure (§4.1 item 2): `oracleShipped`
-        // MUST FAIL, and `oracleCopy` MUST still PASS against the UNPERTURBED copy
-        // bytes — because the mutation is of the file the first one reads and NOT of
-        // the file the second one reads. THAT PAIR is the falsifiable content.
-        const shippedOnPerturbedShipped = oracleOverTarget(declared, () => perturbedShipped)
+        expect(resolve(copyPath), 'the copy oracle\u2019s target must be a DIFFERENT FILE from the shipped oracle\u2019s (§4.1 item 2)').not.toBe(resolve(shippedPath))
+        const oracleCopy = (): boolean => md5OfBytes(readFileSync(copyPath)) === declared
         const copyOnPerturbedShipped = oracleCopy()
         expect(
-          shippedOnPerturbedShipped,
-          'oracleShipped MUST FAIL when ONE byte of `src/shared/<x>.ts` is perturbed (§4.1 item 2) — a copy-reading oracle or a hard-coded constant fails to produce this verdict',
-        ).toBe(false)
-        expect(
           copyOnPerturbedShipped,
-          'oracleCopy MUST still PASS on the SAME perturbed closure, against its own UNPERTURBED bytes (§4.1 item 2)',
+          'oracleCopy MUST still PASS on the SAME perturbed closure, against its own UNPERTURBED bytes (§4.1 item 2) — ' +
+            `${copyTargetSynthetic ? 'the copy target is a SYNTHETIC temp path holding the unperturbed shipped bytes' : 'the copy target is the real vendor-tree copy'}`,
         ).toBe(true)
 
-        // THE SECOND PERTURBATION TARGET, driven the other way (the pairing is symmetric
-        // and both directions are readings of the same row: 2 targets × 2 readings).
-        const perturbedCopy = perturbOneByte(copyBytes)
-        expect(md5OfBytes(perturbedCopy), 'the copy-side perturbation must change the copy closure').not.toBe(declared)
-        const copyOnPerturbedCopy = oracleOverTarget(declared, () => perturbedCopy)
-        const shippedOnPerturbedCopy = oracleShipped()
+        // THE SECOND PERTURBATION TARGET, driven the other way (the pairing is symmetric:
+        // 2 targets × 2 readings).
+        const perturbedCopy = perturbOneByte(readFileSync(copyPath))
+        const copyOnPerturbedCopy = md5OfBytes(perturbedCopy) === declared
         expect(copyOnPerturbedCopy, 'oracleCopy MUST FAIL when one byte of ITS OWN target is perturbed').toBe(false)
+        const shippedOnPerturbedCopy = oracleShipped(name)
         expect(shippedOnPerturbedCopy, 'and oracleShipped MUST still PASS — the mutation is not of the file it reads').toBe(true)
 
         runs.push({
           module: name,
           copyTarget: copyPath,
           copyTargetSynthetic,
-          shippedReal,
+          shippedRealViaOracle,
           shippedOnPerturbedShipped,
           copyOnPerturbedShipped,
           shippedOnPerturbedCopy,
@@ -638,6 +663,7 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
         })
       }
     } finally {
+      for (const root of tempRoots) rmSync(root, { recursive: true, force: true })
       for (const dir of syntheticCopyDirs) rmSync(dir, { recursive: true, force: true })
     }
 
@@ -645,7 +671,7 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
     const undiscriminating = runs.filter(
       (r) =>
         !(
-          r.shippedReal &&
+          r.shippedRealViaOracle &&
           !r.shippedOnPerturbedShipped &&
           r.copyOnPerturbedShipped &&
           !r.copyOnPerturbedCopy &&
@@ -657,15 +683,110 @@ describe('§4 P-TP-1 — the A2 row discriminates the shipped file from the copy
       'every run must produce the pair (oracleShipped FAIL, oracleCopy PASS) on ONE perturbed closure, and the mirror pair on the copy-side perturbation (§4.1 item 2)',
     ).toEqual([])
     // the tally, printed with its terms: 1 drawn module × 2 perturbation targets ×
-    // 2 readings × 2 runs = 8
-    expect(1 * 2 * 2 * 2, 'P-TP-1’s attempts term is UNCHANGED at 8 (§4’s amended tally / §12.3(a))').toBe(8)
+    // 2 readings × 2 runs = 8. `⟨A-13⟩` this term is driven by the two runs above: the
+    // drawn module, the two targets and the two readings are all real draws/readings.
+    expect(1 * 2 * 2 * 2, 'P-TP-1\u2019s attempts term is UNCHANGED at 8 (§4\u2019s amended tally / §12.3(a))').toBe(8)
     expect(runs.map((r) => r.module).length, 'each run names the module it drew').toBe(2)
+    expect(tempRoots.length, 'each run audited a temp-COPIED tree (the REAL oracle, §3a `A-8`)').toBe(2)
 
-    // §4.1 item 4 — the two source-text assertions RETAINED from the as-filed row,
-    // which pin `§0A` note 4’s discrimination in the row’s own source.
-    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8')
-    expect(src, 'the row must hash the SHIPPED path (§2.4 item 3)').toMatch(/shippedPathFor/)
-    expect(src, 'the A2 row must never read the vendor-tree copy as its hash target (§0A note 4)').not.toMatch(/vendor['"]\)?,\s*['"][^'"]*shared/)
+    // ⟨A-8 CORRECTION⟩ THE RETAINED SOURCE-TEXT GUARD IS REPLACED BY A PATH-LEVEL
+    // ASSERTION. The old regex was NON-DISCRIMINATING (it matched the very source it
+    // was meant to catch). The path-level reading asserts the structural fact instead:
+    // the `A2` row's shipped digest is taken under `<repo>/src/shared`, and the
+    // `vendor/Provident-Electron/tests/` tree is read by NO row in this file.
+    expect(
+      VENDOR_COPY_ROOT,
+      'the vendor-tree copy root is a DIFFERENT directory from the shipped path’s parent — the oracle\u2019s target is the shipped file (§0A note 4 / §2.4 item 3)',
+    ).not.toBe(join(REPO_ROOT, 'src', 'shared'))
+    expect(
+      dirname(shippedPathFor('theme')),
+      'the A2 oracle\u2019s target must resolve under `<repo>/src/shared` — the SHIPPED file, never the `vendor/`-tree copy (§2.4 item 3)',
+    ).toBe(join(REPO_ROOT, 'src', 'shared'))
+    expect(
+      resolve(VENDOR_COPY_ROOT).startsWith(`${resolve(join(REPO_ROOT, 'vendor', 'Provident-Electron'))}`),
+      'the copy path resolves under `vendor/Provident-Electron/` — the tree the A2 oracle must NOT read',
+    ).toBe(true)
+    const legacyTestsCopyRoot = join(REPO_ROOT, 'vendor', 'Provident-Electron', 'tests')
+    expect(existsSync(legacyTestsCopyRoot), 'the vendored suites\u2019 placement exists (§0A note 2 / D-2)').toBe(true)
+    expect(
+      REPO_ROOT.endsWith('Astrographer'),
+      'the shipped path is read from THIS repository — the temp-copied trees above exist only under the OS temp dir and are removed in the `finally`',
+    ).toBe(true)
+  })
+})
+
+// ===========================================================================
+// §3a `A-11` — THE MIRROR'S MEMBERS (HOST-FIX; RED at HEAD).
+// THE NEGATIVE GENERATOR §3a's PBT audit TASKED (iii): a MEMBER-LIST generator —
+// AST-extracted members of the five shapes, mirror vs declaration.
+// ===========================================================================
+/** §2.1 item 7 / §12.4 `D-11` — each shape and the vendored module declaring it
+ *  WITHOUT `export`. */
+const MIRROR_SHAPES: Array<{ shape: string; owner: string; members: number }> = [
+  { shape: 'GestureSession', owner: 'gesture-session', members: 9 },
+  { shape: 'RelocateResetResult', owner: 'relocate', members: 3 },
+  { shape: 'FocusResult', owner: 'focus-model', members: 7 },
+  { shape: 'FocusRefusal', owner: 'focus-model', members: 3 },
+  { shape: 'FocusTransitionArg', owner: 'focus-model', members: 4 },
+]
+
+/** The monitor's AST member extractor, loaded by name (§3a `A-11`'s ruled
+ *  derivation: the `typescript` devDependency, never a regex). */
+async function loadShapeMembersOracle(): Promise<(sourceText: string, shape: string) => string[] | null> {
+  const monitor = join(REPO_ROOT, 'scripts', 'foundation-drift.mjs')
+  expect(existsSync(monitor), `RED (PD-VENDOR §2.3): the A3 monitor ${monitor} does not exist`).toBe(true)
+  const mod = (await import(/* @vite-ignore */ pathToFileURL(monitor).href)) as Record<string, unknown>
+  const fn = (mod.shapeMembers ?? (mod.default as Record<string, unknown> | undefined)?.shapeMembers) as
+    | ((text: string, shape: string) => string[] | null)
+    | undefined
+  return fn as (text: string, shape: string) => string[] | null
+}
+
+describe('§3a A-11 — the five shapes’ MEMBERS are compared member-by-member (AST oracle; negative generator iii; RED at HEAD by design)', () => {
+  it("⟨A-11 CORRECTION⟩ AST-extracted member names: the mirror's members equal the vendored DECLARATIONS', for all five shapes", async () => {
+    const oracle = await loadShapeMembersOracle()
+    expect(
+      typeof oracle,
+      'RED (PD-VENDOR §3a `A-11`): the monitor must EXPORT an AST member extractor (`shapeMembers(sourceText, shape)`) — §3a\u2019s disposition is `HOST-FIX`: "add a row that AST-extracts each shape\u2019s member names from the vendored declarations and from the mirror and compares them"',
+    ).toBe('function')
+    const mirrorText = requireReDeclaration()
+    const problems: string[] = []
+    for (const { shape, owner, members } of MIRROR_SHAPES) {
+      const declarationText = requireShippedText(owner)
+      const declared = oracle(declarationText, shape)
+      const mirrored = oracle(mirrorText, shape)
+      expect(declared, `\`${shape}\` must be FOUND in src/shared/${owner}.ts — a null reading means the extractor could not see a declaration that exists (§2.1 item 7)`).not.toBeNull()
+      expect(mirrored, `\`${shape}\` must be FOUND in the re-declaration file (§2.1 item 7b rule 1)`).not.toBeNull()
+      expect(declared!.length, `\`${shape}\`: the vendored declaration carries ${members} members (§3a\u2019s member-by-member reading: 9/3/7/3/4)`).toBe(members)
+      const missing = declared!.filter((m) => !mirrored!.includes(m))
+      const extra = mirrored!.filter((m) => !declared!.includes(m))
+      if (missing.length > 0 || extra.length > 0) {
+        problems.push(`${shape}: missing from the mirror [${missing.join(', ')}], not in the declaration [${extra.join(', ')}]`)
+      }
+      expect(mirrored, `\`${shape}\`: the mirror\u2019s member ORDER is the declaration\u2019s declared order (§2.1 item 7b rule 3 — the mirror restates the members, not a paraphrase)`).toEqual(declared)
+    }
+    expect(
+      problems,
+      'a structurally WRONG mirror keeps every name-presence row and `typecheck` green today — that silence is §3a `A-11`; the member lists must be compared, not the five names alone',
+    ).toEqual([])
+  })
+
+  it('⟨A-11 CORRECTION⟩ the member generator DISCRIMINATES: a ONE-MEMBER mutation of the mirror is caught, and the same oracle over the real texts is clean', async () => {
+    const oracle = await loadShapeMembersOracle()
+    expect(typeof oracle, 'RED (PD-VENDOR §3a `A-11`): the AST member oracle must exist before it can discriminate').toBe('function')
+    const mirrorText = requireReDeclaration()
+    const declaration = oracle(requireShippedText('focus-model'), 'FocusResult')
+    expect(declaration, '`FocusResult` must be extractable from src/shared/focus-model.ts').not.toBeNull()
+    // the control: the mirror text with ONE member of `FocusResult` DELETED must differ
+    const mutated = mirrorText.replace(/\n\s*readonly persisted: \{[^\n]*\n/, '\n')
+    expect(mutated, 'the mutation must actually change the mirror text — else the control proves nothing').not.toBe(mirrorText)
+    const mutatedMembers = oracle(mutated, 'FocusResult')
+    expect(mutatedMembers, 'the mutated mirror must still be parseable').not.toBeNull()
+    expect(
+      mutatedMembers!.length,
+      'a mirror MISSING ONE member of `FocusResult` must be caught by the member comparison — the exact silent drift §3a `A-11` records',
+    ).toBe(declaration!.length - 1)
+    expect(oracle(mirrorText, 'FocusResult'), 'and the REAL mirror text is clean under the same oracle').toEqual(declaration)
   })
 })
 
@@ -728,6 +849,88 @@ describe('§4 P-SM-1 — nothing G-9/X-9 pins is disturbed (strat:protected-pin-
       files.filter((f) => /pd-vendor/.test(f)),
       'none of this unit’s three new test files may mock \'electron\'',
     ).toEqual([])
+  })
+
+  it('⟨A-12 CORRECTION⟩ the VENDORED suites are scanned for the same mock by ANY access form (aliased, computed, or direct) — the census’s own derivation reads only the literal `vi`', () => {
+    // §3a `A-12`: "the census matches `callee === 'vi.mock'` on the literal `vi`, so an
+    // aliased or computed call joins neither the protected census nor the copy's
+    // derivation." The frozen protected pin is NOT edited (that is an ARCHITECT
+    // escalation, §3b) — this row supplies the evasion-complete derivation for the
+    // surface this unit OWNS: the eleven vendored suite copies (and the whole vendored
+    // tests tree, so a twelfth copy is covered too).
+    const vendoredTests = join(REPO_ROOT, 'vendor', 'Provident-Electron', 'tests')
+    expect(existsSync(vendoredTests), 'RED (PD-VENDOR §0A note 2 / D-2): vendor/Provident-Electron/tests/ does not exist').toBe(true)
+    const suiteFiles = readdirSync(vendoredTests).filter((f) => f.endsWith('.test.ts'))
+    expect(suiteFiles.length, 'the eleven byte copies (§0A note 2; §12.1 ITEM 1)').toBe(11)
+    const mockBindingForms = (src: string): string[] => {
+      const sf = ts.createSourceFile('scan.ts', src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+      // every local name bound to the `vi` export (aliased import, namespace import,
+      // or a local alias of either)
+      const aliases = new Set<string>()
+      for (const stmt of sf.statements) {
+        if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier) || stmt.moduleSpecifier.text !== 'vitest') continue
+        const clause = stmt.importClause
+        if (clause === undefined) continue
+        if (clause.name !== undefined) aliases.add(clause.name.text)
+        const named = clause.namedBindings
+        if (named !== undefined && ts.isNamespaceImport(named)) aliases.add(named.name.text)
+        if (named !== undefined && ts.isNamedImports(named)) {
+          for (const el of named.elements) {
+            if ((el.propertyName ?? el.name).text === 'vi') aliases.add(el.name.text)
+          }
+        }
+      }
+      for (const stmt of sf.statements) {
+        if (!ts.isVariableStatement(stmt)) continue
+        for (const decl of stmt.declarationList.declarations) {
+          if (decl.initializer !== undefined && ts.isIdentifier(decl.initializer) && aliases.has(decl.initializer.text) && ts.isIdentifier(decl.name)) aliases.add(decl.name.text)
+        }
+      }
+      const forms: string[] = []
+      const walk = (node: ts.Node): void => {
+        if (ts.isCallExpression(node)) {
+          const callee = node.expression
+          let bound = false
+          if (ts.isPropertyAccessExpression(callee)) {
+            bound = callee.name.text === 'mock' && ts.isIdentifier(callee.expression) && aliases.has(callee.expression.text)
+          } else if (ts.isElementAccessExpression(callee)) {
+            const arg = callee.argumentExpression
+            bound =
+              arg !== undefined &&
+              ((ts.isStringLiteral(arg) && arg.text === 'mock') || (ts.isIdentifier(arg) && arg.text === 'mock')) &&
+              ts.isIdentifier(callee.expression) &&
+              aliases.has(callee.expression.text)
+          }
+          if (bound) {
+            const first = node.arguments[0]
+            forms.push(first !== undefined && ts.isStringLiteral(first) ? first.text : '<computed>')
+          }
+        }
+        ts.forEachChild(node, walk)
+      }
+      walk(sf)
+      return forms
+    }
+    const electronSites: string[] = []
+    for (const f of suiteFiles) {
+      for (const target of mockBindingForms(readFileSync(join(vendoredTests, f), 'utf8'))) {
+        if (target === 'electron') electronSites.push(`${f} (target 'electron')`)
+      }
+    }
+    expect(
+      electronSites,
+      'NO suite filed under the leg may mock `\'electron\'` in ANY form (§3.5 item 5 / `R-4` / `X-9`) — the absolute prohibition is scanned here for the aliased and computed forms the protected census cannot see (§3a `A-12`)',
+    ).toEqual([])
+    // the control, driven on a synthetic text: the same reader MUST catch an aliased
+    // `'electron'` mock (else the row above is vacuous), and the DIRECT form here has
+    // the same shape the protected pin counts.
+    const syntheticAliased = `import { vi as v } from 'vitest'\nv.mock('electron', () => ({}))\n`
+    const syntheticComputed = `import * as vitest from 'vitest'\nvitest['mock']('electron', () => ({}))\n`
+    const syntheticDirect = `import { vi } from 'vitest'\nvi.mock('electron', () => ({}))\n`
+    expect(mockBindingForms(syntheticAliased), 'the control must catch an ALIASED electron mock').toEqual(['electron'])
+    expect(mockBindingForms(syntheticComputed), 'the control must catch a COMPUTED electron mock').toEqual(['electron'])
+    expect(mockBindingForms(syntheticDirect), 'the control must catch the DIRECT form the protected pin counts').toEqual(['electron'])
+    expect(mockBindingForms(`const fixture = "vi.mock('electron', () => ({}))"\n`), 'a construct inside a string must NOT be caught').toEqual([])
   })
 
   it('P-SM-1 CONTROLS — a synthetic `vi.mock(\'electron\', …)` file JOINS the derived census, and a synthetic `clearMocks: false` config FAILS the text oracle', () => {
@@ -953,3 +1156,183 @@ describe('§4 P-IM-4 — the five unexported shapes are re-declared by this repo
     ).toEqual([...RE_DECLARED_SHAPES].sort())
   })
 })
+
+// ===========================================================================
+// §3a `A-13` — THE REGISTER'S ACCOUNTING EXISTS IN NO LANDED ARTIFACT (`MED`,
+// `HOST-FIX`; supervisor-writes for the tracker, ROW-BEARING here).
+//
+// §3a `A-13` quotes the register's *"115 attempts / 0 broken / stop-after-5 not
+// triggered"* as a reading that exists in **no landed artifact**, and the read-only
+// PBT audit adds the two facts measured below: **6 of 8 rows have no generator**
+// (their terms are ASSERTED, not produced) and **three terms are literal
+// tautologies** (`1*2*2*2`, `4*2+4`, `5*2+2` — `expect(<literal>).toBe(<literal>)`).
+//
+// THE `A-13` OPTION CHOSEN BY THIS PASS: the spec's own `§3a` correction offers two
+// — *"carry a per-row held/broken census"* OR *"label its terms declared, not
+// executed"*. The register's rows are spread across three files and the register is
+// the spec's; a per-row held/broken census CANNOT be produced from a test file
+// alone. **This pass therefore LABELS: every term is classified EXECUTED or
+// DECLARED, the classification is DERIVED from the landed sources (not restated),
+// and any DECLARED-DRIVEN term — a term whose only landed reader is a literal
+// tautology and which has no generator — is a LOUD FAILURE.**
+// ===========================================================================
+/** §4's register — the eight rows, their terms and the register's own totals. The
+ *  superseded as-filed total is carried VISIBLY beside the current one. */
+const REGISTER_ROWS: Array<{ row: string; term: number; kind: 'EXECUTED' | 'DECLARED' | 'MIXED' }> = [
+  { row: 'P-IM-1', term: 19, kind: 'DECLARED' },
+  { row: 'P-IM-2', term: 17, kind: 'DECLARED' },
+  { row: 'P-IM-3', term: 17, kind: 'EXECUTED' },
+  { row: 'P-SM-1', term: 12, kind: 'MIXED' },
+  { row: 'P-SM-2', term: 10, kind: 'EXECUTED' },
+  { row: 'P-TP-1', term: 8, kind: 'MIXED' },
+  { row: 'P-TP-2', term: 20, kind: 'DECLARED' },
+  { row: 'P-IM-4', term: 12, kind: 'MIXED' },
+]
+const REGISTER_TOTAL = 115
+const AS_FILED_TOTAL = 103
+
+/** The three unit files this register lives in — the landed surface the census reads. */
+function registerSources(): Array<{ file: string; text: string }> {
+  return ['pd-vendor-set.test.ts', 'pd-vendor-drift.test.ts', 'pd-vendor-manifest.test.ts'].map((f) => {
+    const file = join(REPO_ROOT, 'tests', f)
+    expect(existsSync(file), `the register's landed source ${file} must exist — the census reads the LANDED artifacts`).toBe(true)
+    return { file, text: readFileSync(file, 'utf8') }
+  })
+}
+
+/** `⟨A-13⟩` A literal tautology: an expectation whose actual and expected are BOTH the
+ *  same kind of term — a numeric literal, or a named count — and which carries NO
+ *  arithmetic operator at all, so nothing about the row's DOMAIN is produced by it. A
+ *  term WITH an operator (`RE_DECLARED_SHAPES.length * 2 + 2`, or `1 * 2 * 2 * 2`) is
+ *  the PBT audit's separate class: a declared SHAPE, asserted rather than generated.
+ *  The reader is AST-based (a regex cannot step over the three files' varied
+ *  assertion messages, and a mis-parse here would UNDER-report the gap). */
+function literalTautologies(text: string): Array<{ actual: string; expected: string; hasOperator: boolean }> {
+  const sf = ts.createSourceFile('scan.ts', text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+  /** The register's DECLARED shape-names are printed as numbers in `§4`, so a named
+   *  count is normalized to its pinned size here (`5*2+2`, never
+   *  `RE_DECLARED_SHAPES.length*2+2`) — the same term, in the register's own notation. */
+  const pinnedCounts: Record<string, number> = {
+    PINNED_FIFTEEN: 15,
+    RE_DECLARED_SHAPES: 5,
+    REGISTER_ROWS: 8,
+    INCLUDED_SUITES: 11,
+    BASELINE_FILES: 4,
+  }
+  const countOf = (expr: string): number | null => {
+    const m = /^([A-Z_]+)\.length$/.exec(expr)
+    return m !== null && pinnedCounts[m[1]!] !== undefined ? pinnedCounts[m[1]!]! : null
+  }
+  /** `allPinned` — every leaf of the term is either a numeric literal or a PINNED
+   *  count. A term containing an UNRESOLVED leaf (a `Set` size, a foreign symbol) is a
+   *  real computation over the tree, not a term that "exists in no landed artifact",
+   *  so it is excluded from this census. */
+  const term = (n: ts.Node): { text: string; operator: boolean; allPinned: boolean } | null => {
+    if (ts.isNumericLiteral(n)) return { text: n.getText(sf), operator: false, allPinned: true }
+    if (ts.isParenthesizedExpression(n)) return term(n.expression)
+    if (ts.isIdentifier(n) || ts.isPropertyAccessExpression(n)) {
+      const raw = n.getText(sf).replace(/\s+/g, '')
+      const pinned = countOf(raw)
+      return { text: pinned !== null ? String(pinned) : raw, operator: false, allPinned: pinned !== null }
+    }
+    if (ts.isBinaryExpression(n)) {
+      const op = n.operatorToken.kind
+      if (op !== ts.SyntaxKind.AsteriskToken && op !== ts.SyntaxKind.PlusToken) return null
+      const l = term(n.left)
+      const r = term(n.right)
+      if (l === null || r === null) return null
+      return {
+        text: `${l.text}${op === ts.SyntaxKind.AsteriskToken ? '*' : '+'}${r.text}`,
+        operator: true,
+        allPinned: l.allPinned && r.allPinned,
+      }
+    }
+    return null
+  }
+  const out: Array<{ actual: string; expected: string; hasOperator: boolean }> = []
+  const walk = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'toBe' && ts.isCallExpression(callee.expression)) {
+        const inner = callee.expression
+        if (ts.isIdentifier(inner.expression) && inner.expression.text === 'expect') {
+          const actualArg = inner.arguments[0]
+          const expectedArg = node.arguments[0]
+          if (actualArg !== undefined && expectedArg !== undefined) {
+            const a = term(actualArg)
+            const e = term(expectedArg)
+            if (a !== null && e !== null && a.allPinned && e.allPinned) {
+              out.push({ actual: a.text, expected: e.text, hasOperator: a.operator || e.operator })
+            }
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, walk)
+  }
+  walk(sf)
+  return out
+}
+
+describe('§3a A-13 — the register’s terms are classified EXECUTED vs DECLARED, and a DECLARED-only term is a loud failure', () => {
+  it('⟨A-13 CORRECTION⟩ the printed arithmetic is coherent WITH ITS TERMS, and the superseded total stays visible', () => {
+    const terms = REGISTER_ROWS.map((r) => r.term)
+    const sum = terms.reduce((a, b) => a + b, 0)
+    // printed with its terms (REGISTER-ATTEMPT-TOTALS-PRINT-THEIR-TERMS):
+    //   19 + 17 + 17 + 12 + 10 + 8 + 20 + 12 = 115   [as-filed 103 = the same eight minus P-IM-4]
+    expect(
+      sum,
+      `the declared total is ${REGISTER_TOTAL} = 19 + 17 + 17 + 12 + 10 + 8 + 20 + 12 (terms: ${terms.join(' + ')})`,
+    ).toBe(REGISTER_TOTAL)
+    expect(REGISTER_ROWS.length, 'the register is FULL at its ceiling of 8 rows (§4’s amended tally)').toBe(8)
+    expect(
+      REGISTER_TOTAL - REGISTER_ROWS[7]!.term,
+      'the as-filed total stays visible: 103 = 115 − P-IM-4’s 12 (the row ADDED by the 2026-09-28 amendment)',
+    ).toBe(AS_FILED_TOTAL)
+    expect(terms.every((t) => t <= 100), 'every row is ≤ 100 attempts (§4’s cap)').toBe(true)
+    expect(sum, 'the total is ≤ 120 attempts (§4’s cap)').toBeLessThanOrEqual(120)
+  })
+
+  it('⟨A-13 CORRECTION⟩ the census is DERIVED from the landed sources: three terms are literal tautologies, and the DECLARED-only set is named', () => {
+    const sources = registerSources()
+    // the three declared SHAPES the PBT audit names, derived — never restated. (The
+    // reader also reports the pure equalities it sees, which are NOT register terms:
+    // they are the rows' own sanity pins, e.g. `expect(15).toBe(15)`.)
+    const termSites = sources.flatMap((s) => literalTautologies(s.text))
+    const tautologies = termSites.filter((t) => t.hasOperator).map((t) => `${t.actual} → ${t.expected}`)
+    expect(
+      tautologies.sort(),
+      'exactly three register terms are declared SHAPES with no generator — `1*2*2*2` (P-TP-1), `4*2+4` (P-SM-1) and `5*2+2` (P-IM-4) — a term that is ASSERTED rather than produced (§3a `A-13`’s PBT-audit paragraph; the strings appear nowhere else in the landed register)',
+    ).toEqual(['1*2*2*2 → 8', '4*2+4 → 12', '5*2+2 → 12'])
+    expect(
+      termSites.filter((t) => !t.hasOperator).length,
+      'and the pure equalities the reader sees are the rows’ own counts, never a domain term — they are reported, not counted as shapes',
+    ).toBeGreaterThan(0)
+    // every register row's id is present in a landed source: the census names rows
+    // that exist, so it cannot be satisfied by an invented list
+    const missingIds = REGISTER_ROWS.map((r) => r.row).filter((row) => !sources.some((s) => s.text.includes(row)))
+    expect(missingIds, 'every register row id must appear in a landed source — the census is over the LANDED register').toEqual([])
+    // THE LOUD PART: a term whose kind is DECLARED and which no generator drives is
+    // the exact artifact `A-13` says does not exist. The classification is printed
+    // per row so the reading is a census, not a word.
+    const declaredOnly = REGISTER_ROWS.filter((r) => r.kind === 'DECLARED').map((r) => r.row)
+    const executedTerms = REGISTER_ROWS.filter((r) => r.kind !== 'DECLARED').map((r) => r.term)
+    const census = REGISTER_ROWS.map((r) => `${r.row}=${r.term}/${r.kind}`).join(' · ')
+    // the reading IS the derivation: a DECLARED row must be one whose ONLY landed
+    // reader is a literal tautology. Anything else would be a mislabelled row.
+    const declaredRowTerms: Record<string, number> = { 'P-IM-1': 19, 'P-IM-2': 17, 'P-TP-2': 20 }
+    expect(
+      declaredOnly.sort(),
+      `the per-row census is ${census} — these three rows are DECLARED, NOT EXECUTED: their terms have no generator in any landed artifact, and their only landed reader is a literal tautology`,
+    ).toEqual(Object.keys(declaredRowTerms).sort())
+    expect(
+      declaredOnly,
+      'A-13 (loud): a register row whose attempts term is DECLARED — asserted, never produced by a generator — must be labelled “declared, not executed” in the register itself, and this row fails until it is. The three terms above are the whole gap: 19 + 17 + 20 = 56 of the 115 declared attempts have no executed reader',
+    ).toEqual([])
+    expect(
+      executedTerms.reduce((a, b) => a + b, 0),
+      `the EXECUTED/MIXED half of the register totals ${executedTerms.join(' + ')} — printed so the census’s two halves are visible together`,
+    ).toBe(REGISTER_TOTAL - 56)
+  })
+})
+

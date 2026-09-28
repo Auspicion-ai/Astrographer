@@ -65,16 +65,27 @@
 
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+// `typescript` is an EXISTING devDependency (§4's machinery forbids a NEW one) and is
+// the idiom the sibling `pd-vendor-manifest.test.ts` row uses to derive a census.
+import ts from 'typescript'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(HERE, '..')
 const MANIFEST_PATH = join(REPO_ROOT, 'vendor', 'foundation.lock.json')
+const MONITOR_PATH = join(REPO_ROOT, 'scripts', 'foundation-drift.mjs')
 
-/** The branch head this red set is authored against — the PRE-VENDORING tree. */
-const PRE_VENDORING_HEAD = 'cf19d4e'
+/** The branch head this red set is authored against — the PRE-VENDORING tree.
+ *  `⟨A-7 CORRECTION⟩` This constant is now only the recorded FALLBACK: the rows read
+ *  the pre-vendoring revision from the MANIFEST at run time (`preVendoringRevision()`
+ *  consumes `foundation.commit` and the `baselines` block's recorded red-set revision)
+ *  and use this literal only when the manifest records none. The two revisions agree
+ *  on all four baseline files (byte-identical at `cf19d4e` and `7d3b55c`, measured
+ *  this pass), so the fallback is a provenance note, not the anchor. */
+const PRE_VENDORING_HEAD_FALLBACK = 'cf19d4e'
 
 /** §2.1 item 1 — the pin's fifteen-name list. */
 const PINNED_FIFTEEN = [
@@ -185,11 +196,46 @@ function requireShipped(name: string): string {
   return bytes
 }
 
-/** The pre-vendoring bytes of a repo file, read from the branch head this red set
- *  is authored against (`git` is the durable record of the unit's first red run). */
-function preVendoringBytes(path: string): string | null {
-  const r = spawnSync('git', ['-C', REPO_ROOT, 'show', `${PRE_VENDORING_HEAD}:${path}`], { encoding: 'utf8' })
+/** The pre-vendoring bytes of a repo file, read from the RECORDED revision (`git` is
+ *  the durable record of the unit's first red run). */
+function preVendoringBytes(path: string, revision: string = preVendoringRevision()): string | null {
+  const r = spawnSync('git', ['-C', REPO_ROOT, 'show', `${revision}:${path}`], { encoding: 'utf8' })
   return r.status === 0 ? (r.stdout as string) : null
+}
+
+/** `⟨A-7`/`A-3 CORRECTION⟩` THE RECORDED pre-vendoring revision — read from the MANIFEST
+ *  rather than hard-coded: the manifest's own `foundation.commit`, then any
+ *  `baselines` row that records the red-set revision, then the named fallback. A row
+ *  that anchors on a MUTABLE literal is what `A-7` rules out; this keeps the reading
+ *  driven by the manifest while never inventing a revision. */
+function preVendoringRevision(): string {
+  const m = loadManifest()
+  if (m !== null) {
+    const baselines = m.baselines as Record<string, Record<string, unknown>> | undefined
+    if (baselines !== undefined) {
+      for (const row of Object.values(baselines)) {
+        const text = `${String(row?.measuredBy ?? '')} ${String(row?.reading ?? '')}`
+        const hex = /\b([0-9a-f]{7,40})\b/.exec(text)
+        if (hex !== null && /red|pre-vendoring|baseline/i.test(text)) return hex[1]!
+      }
+    }
+    const commit = (m.foundation as Record<string, unknown> | undefined)?.commit
+    if (typeof commit === 'string' && /^[0-9a-f]{40}$/.test(commit)) return commit
+  }
+  return PRE_VENDORING_HEAD_FALLBACK
+}
+
+/** The adjacent foundation tree (§2.2's `foundation.path` neighbourhood). */
+const FOUNDATION = join(REPO_ROOT, '..', 'Provident-Electron')
+
+/** The foundation's `src/shared/` directory — the cross-tree readings' source. */
+function foundationSharedDir(): string {
+  return join(FOUNDATION, 'src', 'shared')
+}
+
+/** `node:crypto`'s md5, the algorithm the manifest records (§3.2 item 2 / §3.3). */
+function md5(text: string): string {
+  return createHash('md5').update(text).digest('hex')
 }
 
 /** Every `import`/`export … from '…'` specifier in a source text (§2.1 item 5's
@@ -200,6 +246,103 @@ function importSpecifiers(src: string): string[] {
   let m: RegExpExecArray | null
   while ((m = re.exec(src)) !== null) out.push(m[1]!)
   return out
+}
+
+/** §2.2 / `§3a` `A-10` — the monitor's AST-based closure oracle, loaded by name.
+ *  The row that drives it is the NEGATIVE GENERATOR §3a's PBT audit tasked: the
+ *  single-line REGEX at `importSpecifiers` above misses four statement SHAPES. */
+async function loadImportSpecifiersOracle(): Promise<(sourceText: string) => string[]> {
+  expect(existsSync(MONITOR_PATH), `RED (PD-VENDOR §2.3): the A3 monitor ${MONITOR_PATH} does not exist`).toBe(true)
+  const mod = (await import(/* @vite-ignore */ pathToFileURL(MONITOR_PATH).href)) as Record<string, unknown>
+  const fn = (mod.importSpecifiers ?? (mod.default as Record<string, unknown> | undefined)?.importSpecifiers) as
+    | ((text: string) => string[])
+    | undefined
+  return fn as (text: string) => string[]
+}
+
+/** The single-line REGEX the landed row uses — kept here as the DISCRIMINATING
+ *  control, so the row shows the four shapes it misses rather than asserting it. */
+const SINGLE_LINE_IMPORT_RE = /^\s*(?:import|export)\s+.*?from\s+['"]([^'"]+)['"]/gm
+
+function regexImportSpecifiers(src: string): string[] {
+  return [...src.matchAll(SINGLE_LINE_IMPORT_RE)].map((m) => m[1]!)
+}
+
+/** `§3a` `A-12` — every BINDING of the vitest mock API in a source text, by any
+ *  access form: `vi.mock(...)`, `vi['mock'](...)`, or a call through a name that
+ *  resolves to `vi` (an aliased import, or a local alias). The protected census
+ *  matches `callee === 'vi.mock'` on the literal `vi`, so an aliased or computed
+ *  call joins NEITHER the census NOR the copy's derivation. */
+interface MockBindingSite {
+  /** the access form that was bound, e.g. `vi.mock` / `v.mock` / `vitest['mock']` */
+  binding: string
+  /** the first argument's literal text, or `null` when it is not a string literal */
+  target: string | null
+}
+
+function mockBindingSites(src: string): MockBindingSite[] {
+  const sf = ts.createSourceFile('scan.ts', src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+  const aliases = new Set<string>()
+  const sites: MockBindingSite[] = []
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier) || stmt.moduleSpecifier.text !== 'vitest') continue
+    const clause = stmt.importClause
+    if (clause === undefined) continue
+    if (clause.name !== undefined) aliases.add(clause.name.text)
+    const named = clause.namedBindings
+    if (named !== undefined && ts.isNamespaceImport(named)) aliases.add(named.name.text)
+    if (named !== undefined && ts.isNamedImports(named)) {
+      for (const el of named.elements) {
+        const imported = (el.propertyName ?? el.name).text
+        if (imported === 'vi') aliases.add(el.name.text)
+      }
+    }
+  }
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue
+    for (const decl of stmt.declarationList.declarations) {
+      if (decl.initializer !== undefined && ts.isIdentifier(decl.initializer) && aliases.has(decl.initializer.text) && ts.isIdentifier(decl.name)) {
+        aliases.add(decl.name.text)
+      }
+    }
+  }
+  const walk = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+      let binding: string | null = null
+      if (ts.isPropertyAccessExpression(callee)) {
+        if (callee.name.text === 'mock' && ts.isIdentifier(callee.expression) && aliases.has(callee.expression.text)) {
+          binding = `${callee.expression.text}.mock`
+        }
+      } else if (ts.isElementAccessExpression(callee)) {
+        const arg = callee.argumentExpression
+        if (
+          arg !== undefined &&
+          ((ts.isStringLiteral(arg) && arg.text === 'mock') || (ts.isIdentifier(arg) && arg.text === 'mock')) &&
+          ts.isIdentifier(callee.expression) &&
+          aliases.has(callee.expression.text)
+        ) {
+          binding = `${callee.expression.text}['mock']`
+        }
+      }
+      if (binding !== null) {
+        const first = node.arguments[0]
+        sites.push({ binding, target: first !== undefined && ts.isStringLiteral(first) ? first.text : null })
+      }
+    }
+    ts.forEachChild(node, walk)
+  }
+  walk(sf)
+  return sites
+}
+
+/** Every `tests/**\/*.test.ts` path in this repo. */
+function listTestFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) return listTestFiles(p)
+    return e.name.endsWith('.test.ts') ? [p] : []
+  })
 }
 
 function loadManifest(): Record<string, unknown> | null {
@@ -305,11 +448,23 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
     ).toEqual([])
   })
 
-  it('P-IM-3 — exactly FIVE module files carry any import at all; the other TEN carry ZERO', () => {
+  it('P-IM-3 — 4 OF THE FIFTEEN carry imports; 11 carry ZERO (5 of the directory’s 20, one a non-member) ⟨A-9: title and terms corrected — the assertion is unchanged⟩', () => {
     const withImports: string[] = []
     for (const name of PINNED_FIFTEEN) {
       if (importSpecifiers(requireShipped(name)).length > 0) withImports.push(name)
     }
+    // ⟨CORRECTED 2026-09-28 per §3a `A-9` (`TEST-DEFECT`, MED) / §2.1 item 5’s
+    // arithmetic block.⟩ The arithmetic is `4 + 11 = 15`, NOT `5 + 10 = 15`: the
+    // directory’s five import-carrying files are `census` · `gutter-affordance` ·
+    // `gutter` · `relocate` · `path-fork-cycle`, and `path-fork-cycle.ts` is a
+    // NON-MEMBER (it is the out-of-set import §2.1 item 5 records and §2.2 records
+    // under `nonMemberNotes`). So of the FIFTEEN-MODULE SET: **4 carry imports**
+    // and **11 carry zero**. The `5`/`15` split is the DIRECTORY’s 20 files
+    // (`5` with imports + `15` without), which is what §2.1 item 5 measures and
+    // what the `FILES_WITH_IMPORTS` doc-comment above counts. The two scopes must
+    // not be collapsed (`C-AM-4`).
+    expect(withImports.length, 'exactly 4 of the fifteen carry any import statement').toBe(4)
+    expect(PINNED_FIFTEEN.length - withImports.length, 'the other 11 of the fifteen carry ZERO import statements').toBe(11)
     expect([...withImports].sort()).toEqual([...FILES_WITH_IMPORTS].filter((f) => (PINNED_FIFTEEN as readonly string[]).includes(f)).sort())
   })
 
@@ -442,13 +597,82 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
 // ===========================================================================
 describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendored member is a baseline file (strat:baseline-non-replacement)', () => {
   for (const name of BASELINE_FILES) {
-    it(`P-SM-2 / V-4 — src/shared/${name}.ts is BYTE-UNCHANGED against its pre-vendoring bytes (a vendoring edit here is a REGRESSION)`, () => {
-      const before = preVendoringBytes(`src/shared/${name}.ts`)
-      expect(before, `could not read the pre-vendoring bytes of src/shared/${name}.ts at ${PRE_VENDORING_HEAD}`).not.toBeNull()
+    it(`P-SM-2 / V-4 ⟨A-7 retitled⟩ — src/shared/${name}.ts is BYTE-IDENTICAL to the MANIFEST-RECORDED PRE-VENDORING BLOB (a vendoring edit here is a REGRESSION)`, () => {
+      // ⟨CORRECTED 2026-09-28 per §3a `A-7` (`TEST-DEFECT`, MED).⟩ The title now says
+      // what the row DRIVES: a byte comparison against the recorded pre-vendoring blob
+      // of the manifest's RED-SET commit — not a claim about `dom-shim`/`types` being
+      // "strictly larger" (that premise is asserted in its OWN row below), and not an
+      // anchor on a mutable hard-coded SHA (the revision is read from the manifest at
+      // run time; `cf19d4e` survives only as the recorded FALLBACK for a manifest that
+      // predates the red-set commit, and its provenance is stated in the header).
+      const revision = preVendoringRevision()
+      expect(revision, 'the recorded pre-vendoring revision must be read, never invented').toMatch(/^[0-9a-f]{7,40}$/)
+      const before = preVendoringBytes(`src/shared/${name}.ts`, revision)
+      expect(before, `could not read the pre-vendoring bytes of src/shared/${name}.ts at ${revision}`).not.toBeNull()
       const now = readFileSync(join(REPO_ROOT, 'src', 'shared', `${name}.ts`), 'utf8')
       expect(now, `src/shared/${name}.ts was MODIFIED by the vendoring pass — V-4 is a REGRESSION, not a cleanup (R-3 clause (2))`).toBe(before)
+      // the digest, not only the text, is compared — and it is the DIGEST the row
+      // records, so a later reader sees the reading as a value
+      expect(md5(now), `src/shared/${name}.ts: the md5 of the current bytes must equal the md5 of the recorded pre-vendoring blob`).toBe(md5(before!))
     })
   }
+
+  it('⟨A-7 CORRECTION⟩ the divergence PREMISE is asserted, not just named in a title: the fork’s dom-shim / types / demo-envelope DIFFER from the pinned foundation blobs, and path-fork-cycle does not', () => {
+    // §3.3 item 4's recorded reading (fork first, foundation second):
+    // dom-shim 508 vs 238 · types 874 vs 328 · demo-envelope 131 vs 434 ·
+    // path-fork-cycle 101 vs 101. The row asserts the RELATION (differ / do not
+    // differ) and says why the single-line deltas are not asserted.
+    const foundation = foundationSharedDir()
+    const differs: string[] = []
+    const identical: string[] = []
+    for (const name of BASELINE_FILES) {
+      const ourBytes = readFileSync(join(REPO_ROOT, 'src', 'shared', `${name}.ts`), 'utf8')
+      const theirPath = join(foundation, `${name}.ts`)
+      expect(existsSync(theirPath), `the foundation's ${name}.ts must exist at ${foundation} — the divergence reading has no meaning without it`).toBe(true)
+      const theirBytes = readFileSync(theirPath, 'utf8')
+      if (ourBytes === theirBytes) identical.push(name)
+      else differs.push(name)
+    }
+    expect(differs.sort(), 'the three files the R-3 divergence records as DIFFERENT must really differ').toEqual(['demo-envelope', 'dom-shim', 'types'])
+    expect(identical, 'and `path-fork-cycle.ts` does NOT differ (101 vs 101) — both readings are asserted, so the premise cannot be quoted without being driven').toEqual(['path-fork-cycle'])
+  })
+
+  it('⟨A-7 CORRECTION / A-3⟩ the manifest’s `foundation.commit` is CONSUMED: every vendored module equals the BLOB AT THE RECORDED COMMIT, and the adjacent working tree is not consulted', () => {
+    // §3a `A-3`: "the manifest's `foundation.commit` must be actually consumed by
+    // something". This is the read-only `git -C <foundation> show <commit>:<path>` arm
+    // the finding authorises, run over the FIFTEEN VENDORED MODULES (the paths that
+    // exist at the pinned commit — the four baseline files are FORK files and do not
+    // exist in the foundation at all, so they are pinned by §3.3 item 4's recorded
+    // values instead, in the rows above). It is deliberately independent of the
+    // adjacent WORKING TREE, which is the arm `A-3` shows can move unnoticed.
+    const manifest = requireManifest()
+    const commit = String((manifest.foundation as Record<string, unknown>).commit)
+    expect(commit, 'the manifest records no `foundation.commit`').toMatch(/^[0-9a-f]{40}$/)
+    const r = spawnSync('git', ['-C', FOUNDATION, 'rev-parse', '--verify', `${commit}^{commit}`], { encoding: 'utf8' })
+    if (r.status !== 0) {
+      // the foundation tree is absent / not a repository: this row CANNOT be taken
+      // (§2.3 honesty rule 1 — a SKIP is not a pass), so it fails loudly rather than
+      // reporting a reading it did not take
+      throw new Error(
+        `RED (PD-VENDOR §3a A-7/A-3): the recorded commit ${commit} could not be read from ${FOUNDATION} — ${(r.stderr ?? '').trim()} — the commit would then be a RECORD here rather than an instrument; run this row where the foundation tree is present`,
+      )
+    }
+    const mismatches: string[] = []
+    for (const name of PINNED_FIFTEEN) {
+      const rel = `src/shared/${name}.ts`
+      const blob = spawnSync('git', ['-C', FOUNDATION, 'show', `${commit}:${rel}`], { encoding: 'utf8' })
+      if (blob.status !== 0) {
+        mismatches.push(`${rel}: not present at the recorded commit ${commit}`)
+        continue
+      }
+      const current = readFileSync(join(REPO_ROOT, rel))
+      if (!current.equals(Buffer.from(blob.stdout as string))) mismatches.push(`${rel}: the local bytes differ from the blob at the recorded commit ${commit}`)
+    }
+    expect(
+      mismatches,
+      'every vendored module must equal the blob at the manifest’s recorded `foundation.commit` — a comparison against the adjacent WORKING TREE is exactly the arm §3a `A-3` shows to be evadable',
+    ).toEqual([])
+  })
 
   it('P-SM-2 — the four baseline names are ABSENT from the manifest’s `modules`, and no set member appears in `baselineFilesNotReplaced`', () => {
     const modules = requireManifest().modules as Array<Record<string, unknown>>
@@ -463,17 +687,28 @@ describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendor
     expect(listed).toEqual(BASELINE_FILES.map((b) => `src/shared/${b}.ts`))
   })
 
-  it('P-SM-2 — the four baseline files EXIST and the R-3 divergence reading still holds (the fork’s dom-shim/types are strictly larger)', () => {
-    // §3.3 item 4: dom-shim 508 vs 238 · types 874 vs 328 · demo-envelope 131 vs 434 ·
-    // path-fork-cycle 101 vs 101 (fork first) — the three files DIFFER and
-    // path-fork-cycle does not. Only the RELATION is asserted here (the three differ),
-    // because the single-line deltas are a newline-counting convention difference.
+  it('⟨A-7 retitled⟩ P-SM-2 — the current baseline LINE COUNTS equal the MANIFEST-RECORDED values read beside the pin (the recorded values, never a hard-coded SHA)', () => {
+    // §3.3 item 4's recorded FORK-side line counts — dom-shim 508 · types 874 ·
+    // demo-envelope 131 · path-fork-cycle 101 — are the `read` tool's total-line
+    // figure, a CONVENTION this row must not re-invent: `demo-envelope.ts` carries no
+    // trailing newline, so `split('\n').length` reads it 132 and a naive count would
+    // report a false regression. THE ASSERTED FACT is therefore the RECORDED INVARIANT
+    // and not the counting convention: the current line count equals the line count of
+    // the MANIFEST-RECORDED pre-vendoring BLOB (read at the manifest's recorded
+    // revision), and each file's own recorded figure is carried as a documented
+    // reading. The byte-identity row above is the stronger, convention-free assertion.
+    const recordedForkLineCounts: Record<string, number> = { 'dom-shim': 508, types: 874, 'demo-envelope': 131, 'path-fork-cycle': 101 }
     const lineCount = (text: string): number => text.split('\n').length
+    const revision = preVendoringRevision()
+    const problems: string[] = []
     for (const name of BASELINE_FILES) {
       const nowText = readFileSync(join(REPO_ROOT, 'src', 'shared', `${name}.ts`), 'utf8')
-      const preText = preVendoringBytes(`src/shared/${name}.ts`)!
-      expect(lineCount(nowText), `the pre-vendoring line count of ${name}.ts changed`).toBe(lineCount(preText))
+      const preText = preVendoringBytes(`src/shared/${name}.ts`, revision)!
+      if (lineCount(nowText) !== lineCount(preText)) {
+        problems.push(`${name}.ts: the line count moved against the recorded pre-vendoring blob at ${revision} (recorded fork figure: ${recordedForkLineCounts[name]})`)
+      }
     }
+    expect(problems, 'the fork-side line counts are RECORDED values (§3.3 item 4) and a vendoring edit must not move them').toEqual([])
     expect(PINNED_FIFTEEN as readonly string[]).not.toContain('dom-shim' as never)
   })
 
@@ -622,5 +857,124 @@ describe('PD-VENDOR §3.5 — the scoped conformance leg, registered by PLACEMEN
     const r = spawnSync('git', ['-C', foundation, 'rev-parse', 'HEAD'], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect((r.stdout ?? '').trim()).toBe(PINNED_COMMIT)
+  })
+})
+
+// ===========================================================================
+// §3a `A-10` — THE CLOSURE ORACLE IS AST-BASED (HOST-FIX; RED at HEAD).
+// THE NEGATIVE GENERATOR §3a’s PBT audit TASKED (i): a generator over synthetic
+// IMPORT-STATEMENT SHAPES. The single-line regex the landed row uses misses a
+// bare side-effect import, a MULTI-LINE statement, a dynamic `import(…)` and a
+// `require(…)` — §3a’s prose counterexample (a) — so `P-IM-3`’s closure claim is
+// asserted by a PROXY. The row is RED until the monitor derives the import set
+// with the `typescript` devDependency (AST `ImportDeclaration` /
+// `ImportExpression` / a `require` `CallExpression`).
+// ===========================================================================
+describe('§3a A-10 — the import-closure oracle is AST-based, over every statement SHAPE (negative generator i; RED at HEAD by design)', () => {
+  /** The synthetic SHAPES. Each targets one of the pin’s fifteen, so the closure
+   *  oracle must see it; `./dom-shim.js` is the OUT-OF-SET control. */
+  const SHAPES: Array<{ shape: string; source: string; expectedSpecifier: string }> = [
+    { shape: 'a BARE side-effect import', source: `import './zones.js'\n`, expectedSpecifier: './zones.js' },
+    {
+      shape: 'a MULTI-LINE `import type { … } from`',
+      source: `import type {\n  TrackSpec,\n  ZoneId,\n} from '../zones.js'\n`,
+      expectedSpecifier: '../zones.js',
+    },
+    { shape: 'a DYNAMIC `import(…)`', source: `const later = () => import('./census.js')\n`, expectedSpecifier: './census.js' },
+    { shape: 'a `require(…)`', source: `const legacy = require('./theme.js')\n`, expectedSpecifier: './theme.js' },
+  ]
+
+  it('⟨A-10 CORRECTION⟩ the single-line REGEX is shown missing all four SHAPES — the proxy §3a’s prose counterexample names', () => {
+    const missed = SHAPES.filter((s) => !regexImportSpecifiers(s.source).includes(s.expectedSpecifier)).map((s) => s.shape)
+    expect(
+      missed,
+      'the landed oracle is a single-line regex: it must be shown to MISS the bare, multi-line, dynamic and `require` forms (this is the control that makes the row below non-vacuous)',
+    ).toEqual(['a BARE side-effect import', 'a MULTI-LINE `import type { … } from`', 'a DYNAMIC `import(…)`', 'a `require(…)`'])
+    // …and the regex is not vacuous: it DOES catch the plain single-line form
+    expect(regexImportSpecifiers(`import { isEmpty } from './zones.js'\n`), 'the regex must still catch the plain form, else this control proves nothing').toContain('./zones.js')
+  })
+
+  it('⟨A-10 CORRECTION⟩ a generator over the four SHAPES: the monitor’s AST oracle detects EVERY one (RED until the monitor exports it)', async () => {
+    const oracle = await loadImportSpecifiersOracle()
+    expect(
+      typeof oracle,
+      'RED (PD-VENDOR §3a `A-10` / §2.2 rule 8): the monitor must EXPORT its AST-based `importSpecifiers(text)` so the closure oracle is a driven function rather than a single-line regex. §3a’s disposition is `HOST-FIX`: derive the import set with the `typescript` devDependency already used by `P-SM-1`',
+    ).toBe('function')
+    const missedByOracle = SHAPES.filter((s) => !oracle(s.source).includes(s.expectedSpecifier)).map((s) => s.shape)
+    expect(missedByOracle, 'the AST oracle must detect ALL FOUR forms — bare · multi-line · dynamic · `require`').toEqual([])
+    for (const s of SHAPES) {
+      const spec = oracle(s.source)[0]!
+      const internal = /\.\.?\/?([a-z-]+)\.js$/.exec(spec)
+      expect(internal, `${s.shape}: the oracle must yield a specifier the closure rule can resolve, got ${spec}`).not.toBeNull()
+    }
+    // the CONTROL, the other way: an out-of-set specifier must be YIELDED (so the
+    // closure rule can then refuse it) and a construct inside a STRING must not be.
+    const outOfSet = oracle(`import type { X } from './dom-shim.js'\n`)
+    expect(outOfSet, 'an out-of-set specifier must still be YIELDED by the oracle — the closure rule, not the extractor, is what refuses it').toContain('./dom-shim.js')
+    expect(
+      oracle(`const fixture = "import { X } from './zones.js'"\n`),
+      'a construct inside a string literal must NOT be yielded — an AST oracle is not a text scan',
+    ).toEqual([])
+  })
+})
+
+// ===========================================================================
+// §3a `A-12` — THE `'electron'`-MOCK PROHIBITION IS EVADABLE BY AN ALIASED OR
+// COMPUTED CALL (TEST-DEFECT; the frozen pin is NOT edited — that is an
+// ARCHITECT escalation, §3b). This row flags any BINDING of the vitest mock API
+// in `tests/**` by any access form.
+// ===========================================================================
+describe('§3a A-12 — no test file binds the vitest mock API (aliased or computed forms included)', () => {
+  it('⟨A-12 CORRECTION⟩ every `vi.mock` / `vi[\'mock\']` / aliased BINDING in tests/** is flagged; the control discriminates', () => {
+    // the control, driven on SYNTHETIC texts — never by writing a file into tests/**
+    const syntheticDirect = `import { vi } from 'vitest'\nvi.mock('electron', () => ({}))\n`
+    const syntheticAliased = `import { vi as v } from 'vitest'\nv.mock('electron', () => ({}))\n`
+    const syntheticComputed = `import * as vitest from 'vitest'\nvitest['mock']('electron', () => ({}))\n`
+    const syntheticLocalAlias = `import { vi } from 'vitest'\nconst m = vi\nm.mock('electron', () => ({}))\n`
+    const syntheticFixture = `const fixture = "vi.mock('electron', () => ({}))"\n`
+    const bindings = (text: string): string[] => mockBindingSites(text).map((s) => s.binding)
+    expect(bindings(syntheticDirect), 'the direct form must be flagged').toContain('vi.mock')
+    expect(bindings(syntheticAliased), 'an ALIASED import binding must be flagged — §3a `A-12`: the census matches `callee === \'vi.mock\'` on the literal `vi`, so this form joins nothing today').toContain('v.mock')
+    expect(bindings(syntheticComputed), 'a COMPUTED access must be flagged').toContain("vitest['mock']")
+    expect(bindings(syntheticLocalAlias), 'a LOCAL alias of the binding must be flagged').toContain('m.mock')
+    expect(bindings(syntheticFixture), 'a construct inside a string fixture must NOT be flagged').toEqual([])
+    expect(
+      mockBindingSites(syntheticAliased).map((s) => s.target),
+      'the row reads the mock TARGET too, so an aliased `\'electron\'` mock can be named as such',
+    ).toEqual(['electron'])
+
+    // THE REAL READING — three facts, so a legitimate non-`'electron'` mock in the
+    // wider suite is not miscounted as an evasion of THIS prohibition:
+    const testFiles = listTestFiles(join(REPO_ROOT, 'tests'))
+    const rel = (f: string): string => relative(REPO_ROOT, f).split('\\').join('/')
+    const electronBinders = testFiles.filter((f) => mockBindingSites(readFileSync(f, 'utf8')).some((s) => s.target === 'electron')).map(rel).sort()
+    // (1) every `'electron'` mock in the tree, in ANY access form, is one of the
+    //     protected five — an aliased sixth form would be the evasion §3a names.
+    expect(
+      electronBinders,
+      'the set of test files that mock `\'electron\'` — by `vi.mock`, `vi[\'mock\']` or an alias — must still be EXACTLY the five protected census names; a sixth (in any form) reds the protected census, and an aliased form evades the census’s own derivation (§3a `A-12`)',
+    ).toEqual([
+      'tests/template-adversarial.test.ts',
+      'tests/unit-live11-bridge-seams.test.ts',
+      'tests/unit-u5-rich-commit-ipc.test.ts',
+      'tests/unit-v5-bridge-capture.test.ts',
+      'tests/unit-wave-1-bridge-wiring.test.ts',
+    ])
+    // (2) every file that binds the mock API AT ALL is NAMED here, so a later pass
+    //     can see the evasion surface rather than a count (§3a `A-12`).
+    const allBinders = testFiles.filter((f) => mockBindingSites(readFileSync(f, 'utf8')).length > 0).map(rel).sort()
+    expect(
+      allBinders.length,
+      'the mock-binding census is EMPTY — a prohibition that scans nothing is not evidence',
+    ).toBeGreaterThan(0)
+    expect(
+      allBinders.filter((f) => !electronBinders.includes(f)),
+      'these files bind the mock API for a NON-`\'electron\'` module — recorded as the named evasion surface (the prohibition is scoped to `\'electron\'`: §2.4 item 1 / `R-4` / `X-9`)',
+    ).toEqual(['tests/blind-unit-shell-integration-greens.test.ts', 'tests/props-shell-integration.test.ts', 'tests/unit-import-batch-persist-contract.test.ts', 'tests/vector-cache.test.ts'])
+    // (3) none of THIS unit’s three files binds the mock API in any form.
+    expect(
+      allBinders.filter((f) => /pd-vendor/.test(f)),
+      'none of this unit’s three test files may bind the mock API in any form',
+    ).toEqual([])
   })
 })
