@@ -1,0 +1,269 @@
+{
+  "schema": "foundation-lock/1",
+  "foundation": {
+    "path": "../Provident-Electron",
+    "remote": "https://github.com/LittleKingsguard/Provident-Electron",
+    "ref": "main",
+    "commit": "8f193a8d1446ed1e64c4ab6c569941e988f82459",
+    "measuredAt": "2026-09-28",
+    "digestCommand": "git -C ../Provident-Electron show 8f193a8d1446ed1e64c4ab6c569941e988f82459:src/shared/<name>.ts | md5sum   # cross-checked with: (cd ../Provident-Electron && md5sum src/shared/census.ts src/shared/container.ts src/shared/focus-model.ts src/shared/gesture-session.ts src/shared/gutter.ts src/shared/gutter-affordance.ts src/shared/layout-projection.ts src/shared/menu-template.ts src/shared/mount-invariant-guard.ts src/shared/overlay.ts src/shared/owned-list-host.ts src/shared/relocate.ts src/shared/slot-host.ts src/shared/theme.ts src/shared/zones.ts)",
+    "byteIdentity": "byte-identical to the pinned commit's blob at `commit` (verified per module by md5, 15/15 REPRODUCED against the proposal §2 table)"
+  },
+  "modules": [
+    {
+      "name": "census",
+      "source": "src/shared/census.ts",
+      "vendored": "src/shared/census.ts",
+      "md5": "550d9d6fb1285e23062b3cd9e3691179",
+      "lineCount": 143,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-2 (U-CENSUS)"
+    },
+    {
+      "name": "container",
+      "source": "src/shared/container.ts",
+      "vendored": "src/shared/container.ts",
+      "md5": "33071ff8a2453edb4febe52e9cba38a2",
+      "lineCount": 85,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-3"
+    },
+    {
+      "name": "focus-model",
+      "source": "src/shared/focus-model.ts",
+      "vendored": "src/shared/focus-model.ts",
+      "md5": "8ae4a59ca853c3dad14e1e07cc73477a",
+      "lineCount": 463,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-7 (BLOCKED-ON-SEMANTICS)"
+    },
+    {
+      "name": "gesture-session",
+      "source": "src/shared/gesture-session.ts",
+      "vendored": "src/shared/gesture-session.ts",
+      "md5": "50eb2dcc3e9e29427f7ae38716ddae90",
+      "lineCount": 622,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-4a"
+    },
+    {
+      "name": "gutter",
+      "source": "src/shared/gutter.ts",
+      "vendored": "src/shared/gutter.ts",
+      "md5": "7cb67bfef8e4b3750994e3b33846055f",
+      "lineCount": 444,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-4b"
+    },
+    {
+      "name": "gutter-affordance",
+      "source": "src/shared/gutter-affordance.ts",
+      "vendored": "src/shared/gutter-affordance.ts",
+      "md5": "90dae03fc92eb2c65e43f79843c3f0ef",
+      "lineCount": 898,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-5"
+    },
+    {
+      "name": "layout-projection",
+      "source": "src/shared/layout-projection.ts",
+      "vendored": "src/shared/layout-projection.ts",
+      "md5": "a507ea116d304e5f32241c63d2182196",
+      "lineCount": 415,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-2 (U-PROJ)"
+    },
+    {
+      "name": "menu-template",
+      "source": "src/shared/menu-template.ts",
+      "vendored": "src/shared/menu-template.ts",
+      "md5": "98952f69f7c39bbabca0458a69258b4b",
+      "lineCount": 330,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-9"
+    },
+    {
+      "name": "mount-invariant-guard",
+      "source": "src/shared/mount-invariant-guard.ts",
+      "vendored": "src/shared/mount-invariant-guard.ts",
+      "md5": "a8ca65a5cd46ad7500d467d6355aaeb3",
+      "lineCount": 268,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-10"
+    },
+    {
+      "name": "overlay",
+      "source": "src/shared/overlay.ts",
+      "vendored": "src/shared/overlay.ts",
+      "md5": "931339d71ac0220e400190296d408ee5",
+      "lineCount": 62,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-6"
+    },
+    {
+      "name": "owned-list-host",
+      "source": "src/shared/owned-list-host.ts",
+      "vendored": "src/shared/owned-list-host.ts",
+      "md5": "d576f0017747d4fa6dacab3e9fb27ccb",
+      "lineCount": 410,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-11 (KEEP — §4.1 row status, never set membership: §2.1 item 3)"
+    },
+    {
+      "name": "relocate",
+      "source": "src/shared/relocate.ts",
+      "vendored": "src/shared/relocate.ts",
+      "md5": "83707f14ec249fa46fec45825d6b9be9",
+      "lineCount": 741,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-4c"
+    },
+    {
+      "name": "slot-host",
+      "source": "src/shared/slot-host.ts",
+      "vendored": "src/shared/slot-host.ts",
+      "md5": "bb53cdedad4f8f4359f603fe7e4ea86d",
+      "lineCount": 643,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-12 (deferred pending its own boundary spec — Q-E; §4.1 row status, never set membership: §2.1 item 3)"
+    },
+    {
+      "name": "theme",
+      "source": "src/shared/theme.ts",
+      "vendored": "src/shared/theme.ts",
+      "md5": "c4b4d4c4127158d14bc035e58d857597",
+      "lineCount": 73,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-1"
+    },
+    {
+      "name": "zones",
+      "source": "src/shared/zones.ts",
+      "vendored": "src/shared/zones.ts",
+      "md5": "91fb829d2a2be580538c7719b3f4bef0",
+      "lineCount": 77,
+      "provenance": "foundation blob at the pinned commit (recomputed by the PD-VENDOR landing pass) + proposal §2 table",
+      "proposalTableAgreement": "REPRODUCED",
+      "excludedFromVendorSet": false,
+      "rowStatus": "PD-UI-2 (U-ZONES)"
+    }
+  ],
+  "moduleCount": 15,
+  "baselineFilesNotReplaced": [
+    "src/shared/dom-shim.ts",
+    "src/shared/types.ts",
+    "src/shared/demo-envelope.ts",
+    "src/shared/path-fork-cycle.ts"
+  ],
+  "importCensus": {
+    "internalEdges": [
+      { "from": "census", "to": "zones" },
+      { "from": "gutter-affordance", "to": "gutter" },
+      { "from": "gutter-affordance", "to": "gesture-session" },
+      { "from": "gutter", "to": "gesture-session" },
+      { "from": "relocate", "to": "gesture-session" }
+    ],
+    "outOfSetImports": [],
+    "nonMemberNotes": [
+      "path-fork-cycle (NOT a member of the vendored fifteen) imports type-only from provident-ssr — the directory's ONLY out-of-set import, and it belongs to a non-member (unit spec §2.1 item 5)"
+    ]
+  },
+  "conformance": {
+    "leg": "conformance",
+    "config": "vitest.conformance.config.ts",
+    "placement": "vendor/Provident-Electron/tests/",
+    "included": [
+      "theme.test.ts",
+      "zones.test.ts",
+      "container.test.ts",
+      "overlay.test.ts",
+      "menu-template.test.ts",
+      "gutter.test.ts",
+      "relocate.test.ts",
+      "census.test.ts",
+      "focus-model.test.ts",
+      "gutter-ui.test.ts",
+      "gesture-session.test.ts"
+    ],
+    "excluded": [
+      {
+        "suite": "layout-projection.test.ts",
+        "reason": "X-1 EXCLUSION — installShim/mountEl/ShimElement come from ../src/shared/dom-shim.js, which resolves to THIS repo's divergent dom-shim.ts (508 lines vs the foundation's 238); the suite also reads dom-shim.ts by path and ../package.json, and drives git status --porcelain against the repo."
+      },
+      {
+        "suite": "owned-list-host.test.ts",
+        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (the fork's divergent copy). The U-LISTHOST module itself stays vendored (§2.1 item 4)."
+      },
+      {
+        "suite": "slot-host.test.ts",
+        "reason": "X-1 EXCLUSION — dom-shim.js as above, PLUS a second out-of-set import: ../src/main/security.js and ../src/main/mcp-server.js by dynamic import (the foundation's own src/main modules). The U-SLOTHOST module itself stays vendored."
+      },
+      {
+        "suite": "mount-invariant-guard.test.ts",
+        "reason": "X-1 EXCLUSION — THREE out-of-set imports: ../src/shared/dom-shim.js (installShim/mountEl), ../src/renderer/runtime.js (Runtime) and ../src/shared/demo-envelope.js (demoEnvelope, 131 vs 434 lines). The U-MOUNTGUARD module stays vendored; its reconcileMount fix is not in the set (PD-UI-10)."
+      }
+    ]
+  },
+  "baselines": {
+    "npmTest": {
+      "reading": "RED SET (this unit's red run at 7d3b55c): 4 failed files / 200 passed (204 files); 97 failed / 4210 passed / 45 skipped (4352 tests)",
+      "layer": "harness/[T]",
+      "measuredBy": "Implementer pass, PD-VENDOR landing — `npx vitest run` at the red-set commit 7d3b55c; reproduces the TestWriter's recorded reading exactly",
+      "readingBeforeVendoring": "204 files (4 failed / 200 passed) · 4352 tests (97 failed / 4210 passed / 45 skipped) — the red set is 96 rows in the three pd-vendor files plus the carried pre-existing red P-SM-1",
+      "readingAfterVendoring": "recorded in this unit's DONE row (same commit as the vendoring)"
+    },
+    "typecheck": {
+      "reading": "exit 0",
+      "layer": "harness",
+      "measuredBy": "Implementer pass, PD-VENDOR landing — `npm run typecheck`"
+    },
+    "build": {
+      "reading": "exit 0",
+      "layer": "harness",
+      "measuredBy": "Implementer pass, PD-VENDOR landing — `npm run build`"
+    },
+    "battery": {
+      "reading": "184 checks, 0 failures — GREEN (harness-green, NOT app-green)",
+      "layer": "harness/[H]",
+      "measuredBy": "proposal §7.5 reading, re-run by the Implementer pass of the PD-VENDOR landing"
+    },
+    "divergence": {
+      "reading": "1 checks, 2 failures — RED (ENVIRONMENTAL: /dev/shm denial → Electron SIGTRAP)",
+      "layer": "harness/[D]",
+      "measuredBy": "proposal §7.5 (NOT re-run by this unit: the unit spec §5 item 2 forbids claiming this leg)"
+    },
+    "collectedSuiteCensus": {
+      "reading": "204 collected files before and after the vendoring — the conformance leg adds ZERO collected files (its placement is outside tests/**)",
+      "layer": "harness/[T]",
+      "measuredBy": "Implementer pass, PD-VENDOR landing — `npx vitest run` before and after the vendoring"
+    }
+  }
+}

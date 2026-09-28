@@ -20,6 +20,8 @@
     "test:watch": "vitest",
     "battery": "npm run build && node tests/e2e-battery.test.mjs",
     "divergence": "npm run build && node scripts/electron-divergence.mjs",
+    "conformance": "vitest run --config vitest.conformance.config.ts",
+    "drift": "node scripts/foundation-drift.mjs",
     "mcp": "npm run build && node scripts/mcp-cli.mjs"
   },
   "dependencies": {
