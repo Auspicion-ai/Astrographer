@@ -133,6 +133,147 @@ const RECORDED_INTERNAL_EDGES: Array<[string, string]> = [
 /** §2.2 rule 5 / clause (2) of `R-3` — the four baseline files NOT replaced. */
 const BASELINE_FILES = ['dom-shim', 'types', 'demo-envelope', 'path-fork-cycle'] as const
 
+/** ⟨RE-STATED 2026-09-28 — unit `PD-UI-1` §9 item 1 (the escalated blocking pin
+ *  re-statement); spec shape at §9 item 1 item (b).⟩ THE DECLARED CONSUMER-EDGE
+ *  ALLOW-LIST — the explicit, PER-ROW set of `(file, specifier)` pairs that the
+ *  re-pointed consumer units deliberately import a VENDORED MEMBER through. It grows by
+ *  ONE ROW PER ADOPTING UNIT, with the vendored member it targets named.
+ *
+ *  The two limbs of the pin stay DISTINGUISHABLE: a hit that resolves to a vendored
+ *  member and is NOT on this list STILL FAILS (the row's negative control proves it), and
+ *  a hit on this list must still be a REAL, statically-declared edge of the tree — a
+ *  dynamic `import(...)`, a `require(...)` or a `new URL(...)` spelling of the SAME edge
+ *  is NOT this row, because a form the pin cannot SEE would make the pin green by hiding
+ *  the very consumer edge it exists to declare (§0A note 2; §3a `ADV-T7`).
+ *
+ *  NOT on this list, and never will be: the three Phase-0 stem-collision sites
+ *  (`renderer.ts ./theme.js`, `renderer.ts|sidebar-panes.ts ./pane-gutter.js`) — they
+ *  resolve to FORK modules, which is exactly what makes the `theme` collision by STEM and
+ *  never by SPECIFIER (`C-7`), and `importCensus.outOfSetImports` stays EMPTY. */
+const DECLARED_CONSUMER_EDGES: Array<{ file: string; specifier: string; member: string; unit: string }> = [
+  // ⟨READING TAKEN, so it is visible rather than silent: the unit spec `§2.1` records the
+  //   specifier as `'../../shared/theme.js'` AND says, in the same paragraph, *"(`../../shared/theme.js`
+  //   is the correct relative form from `src/renderer/`; the implementer may write the equivalent
+  //   form the bundler/typechecker accepts, and the row asserts the RESOLVED path, never a
+  //   spelling)"*. From `src/renderer/` the SPECIFIER THAT RESOLVES to `src/shared/theme.ts` is
+  //   `'../shared/theme.js'` — `dirname('src/renderer/theme.ts') = 'src/renderer'`, and
+  //   `src/renderer/../../shared/theme.ts` escapes `src/` entirely. The SPEC'S OWN RESOLUTION
+  //   CLAUSE is therefore the binding one: this allow-list names BOTH spellings, a row is
+  //   satisfied by whichever the tree carries, and the row asserts the RESOLVED path. The
+  //   divergence is REPORTED to the supervisor as a documentation nit in `unit-pd-ui-1-theme.md`
+  //   `§2.1` (no behaviour depends on it — the vendored member is the same either way).⟩
+  { file: 'src/renderer/theme.ts', specifier: '../../shared/theme.js', member: 'theme', unit: 'PD-UI-1' },
+  { file: 'src/renderer/theme.ts', specifier: '../shared/theme.js', member: 'theme', unit: 'PD-UI-1' },
+]
+
+/** The vendored member a specifier stem names (`./theme.js` → `theme`), or `null`. */
+function vendoredStemOf(spec: string): string | null {
+  const m = /(?:^|\/)([a-z-]+)\.js$/.exec(spec)
+  return m !== null && (PINNED_FIFTEEN as readonly string[]).includes(m[1]!) ? m[1]! : null
+}
+
+/** The stem-SUFFIX pattern the pin's own recorded `grep -rnE` used (§2.1 item 6): it
+ *  matches the STATIC `from '…<name>.js'` form ONLY — never a dynamic `import(...)`, a
+ *  `require(...)` or a `new URL(...)` spelling. Kept as the DISCRIMINATING control's
+ *  subject, so the four shapes it misses are shown rather than asserted. */
+function staticTextDerivation(src: string): string[] {
+  const re = new RegExp(`from\\s+['"]([^'"]*(?:${PINNED_FIFTEEN.join('|')})\\.js)['"]`, 'g')
+  return [...src.matchAll(re)].map((m) => m[1]!)
+}
+
+interface DerivedEdge {
+  file: string
+  spec: string
+  /** 'static-from' is the form the pin's recorded grep matched; the other three are the
+   *  refused evasion forms, CAUGHT here rather than hidden behind (§9 item 1). */
+  kind: 'static-from' | 'dynamic-import' | 'require' | 'new-URL'
+  /** the module the specifier RESOLVES to, or `<bare:…>` for an out-of-repo specifier */
+  resolved: string
+  /** the vendored member the RESOLVED path names, or `null` */
+  member: string | null
+}
+
+/** THE DERIVATION, extended from the pin's `grep` arm to an AST arm so the four statement
+ *  SHAPES that match no `from '…'` pattern are CATCHABLE. A construct inside a STRING is
+ *  never a hit (an AST reader is not a text scan), and the TYPE-position `import('./x.js').T`
+ *  form the repo's renderer files carry is a type reference, not an edge. */
+function derivedConsumerEdges(src: string, file: string): DerivedEdge[] {
+  const sf = ts.createSourceFile(file, src, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS)
+  const out: DerivedEdge[] = []
+  const push = (spec: string, kind: DerivedEdge['kind']): void => {
+    const stem = vendoredStemOf(spec)
+    if (stem === null) return
+    // THE RESOLVED PATH IS THE PREDICATE (§2.1's own census clause: "the row asserts the
+    // RESOLVED path, never a spelling") — the specifier is resolved relative to the file's
+    // own directory, never to a fixed depth.
+    const resolved = spec.startsWith('.') ? resolve(dirname(resolve(REPO_ROOT, file)), spec.replace(/\.js$/, '.ts')) : ''
+    const member = resolved !== '' && resolved === shippedPath(stem) ? stem : null
+    out.push({ file, spec, kind, resolved: resolved === '' ? `<bare:${spec}>` : resolved, member })
+  }
+  const walk = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) push(node.moduleSpecifier.text, 'static-from')
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined && ts.isStringLiteralLike(node.moduleSpecifier)) push(node.moduleSpecifier.text, 'static-from')
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+      if (ts.isIdentifier(callee) && callee.text === 'require') {
+        const arg = node.arguments[0]
+        if (arg !== undefined && ts.isStringLiteralLike(arg)) push(arg.text, 'require')
+      }
+      // an indirection by a `URL`-shaped helper — BOTH shapes: a call whose CALLEE reads
+      // `.resolve`/`.href` (`URL.resolve('…')`), and a call that is the OBJECT of a `.href`
+      // property access (`pathToFileURL('…').href`, the `import.meta.url` + `fileURLToPath`
+      // route §3a `ADV-T7` names).
+      const calleeReadsUrl = ts.isPropertyAccessExpression(callee) && (callee.name.text === 'resolve' || callee.name.text === 'href')
+      const parentNode = node.parent as ts.Node | undefined
+      const calledThenHref = parentNode !== undefined && ts.isPropertyAccessExpression(parentNode) && parentNode.expression === node && parentNode.name.text === 'href'
+      if (calleeReadsUrl || calledThenHref) {
+        const arg = node.arguments[0]
+        if (arg !== undefined && ts.isStringLiteralLike(arg)) push(arg.text, 'new-URL')
+      }
+    }
+    if (ts.isNewExpression(node)) {
+      const callee = node.expression
+      if (ts.isIdentifier(callee) && callee.text === 'URL') {
+        const arg = node.arguments?.[0]
+        if (arg !== undefined && ts.isStringLiteralLike(arg)) push(arg.text, 'new-URL')
+      }
+    }
+    // `import('…')` parses as an ImportExpression whose expression is the `import` keyword —
+    // a RUNTIME edge. The TYPE-position form (`import('./x.js').T` inside a type annotation,
+    // which `sidebar-panes.ts`/`renderer.ts` carry) is a type reference and NOT an edge.
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const arg = node.arguments[0]
+      if (arg !== undefined && ts.isStringLiteralLike(arg)) push(arg.text, 'dynamic-import')
+    }
+    ts.forEachChild(node, walk)
+  }
+  walk(sf)
+  return out
+}
+
+/** Every `src/**\/*.ts` file in the repo, repo-relative and POSIX-shaped. */
+function listSrcFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) return listSrcFiles(p)
+    return e.name.endsWith('.ts') ? [relative(REPO_ROOT, p).split('\\').join('/')] : []
+  })
+}
+
+/** The pin's derivation over the WHOLE `src/**` tree: every import-shaped hit that names
+ *  one of the pin's fifteen stems, by any statement shape. */
+function allSrcConsumerEdges(): DerivedEdge[] {
+  return [...listSrcFiles(join(REPO_ROOT, 'src'))].sort().flatMap((f) => derivedConsumerEdges(readFileSync(join(REPO_ROOT, f), 'utf8'), f))
+}
+
+/** THE RE-STATED PIN'S ORACLE — the exact set of VENDORED-RESOLVING hits that are NOT on
+ *  the declared consumer-edge allow-list. Non-vendored hits (the stem-collision sites) are
+ *  not this oracle's subject; they are asserted by the pin's own array limb. */
+function unlistedVendoredEdges(edges: DerivedEdge[], declared: ReadonlyArray<{ file: string; specifier: string }> = DECLARED_CONSUMER_EDGES): DerivedEdge[] {
+  const listed = new Set(declared.map((d) => `${d.file} ${d.specifier}`))
+  return edges.filter((e) => e.member !== null && !listed.has(`${e.file} ${e.spec}`))
+}
+
 /** §3.5 item 2 — the ELEVEN included suites. */
 const INCLUDED_SUITES = [
   'theme.test.ts',
@@ -541,10 +682,21 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
     expect(notes).toMatch(/provident-ssr/)
   })
 
-  it('§2.1 item 6 / §5 item 5 / §12.3(c) — NO vendored module is imported by this repo today: the hit set is EXACTLY the three stem-collision sites, and NONE resolves to a vendored member', () => {
-    // The spec’s own recorded read (§2.1 item 6): *"A read of `src/**` for
-    // `from '…/<name>.js'` over the fifteen names"* — the `…` is the whole specifier
-    // prefix, so the pattern is `from '[^']*<name>\.js'` (the stem-SUFFIX form).
+  it('§2.1 item 6 / §5 item 5 / §12.3(c) ⟨RE-STATED 2026-09-28, unit PD-UI-1 §9 item 1⟩ — the stem-collision hit set is STILL EXACTLY the three hits, and every VENDORED-RESOLVING hit is a DECLARED CONSUMER EDGE named per row', () => {
+    // ⟨THE RE-STATEMENT, and why it is not a relaxation.⟩ As filed, this row asserted BOTH
+    // (a) the exact sorted three-hit array of `src/**` consumer edges AND (b) that NO hit
+    // resolves to a vendored member — a fact that is TRUE at the Phase-0 head and FALSE the
+    // moment a `SUBSET+ADAPTER` unit’s adapter imports the vendored module it adopts. Unit
+    // `PD-UI-1`’s adapter is that first consumer, and its import resolves to the vendored
+    // `src/shared/theme.ts`, so both limbs red. The pin’s subject changed with a later unit’s
+    // landing, so the pin is RE-STATED to the shape `unit-pd-ui-1-theme.md` §9 item 1 asks for:
+    // the exact set of `(file, specifier)` pairs PLUS an explicit allow-list of consumer edges
+    // (`DECLARED_CONSUMER_EDGES`, top of this file), and the assertion that every hit resolving
+    // to a vendored member is a DECLARED edge — with an UN-listed vendored-resolving hit still
+    // failing (the control row below proves it). The derivation is also EXTENDED (AST) so a
+    // dynamic `import(...)`, a `require(...)` or a `new URL(...)` spelling of the same consumer
+    // edge is CAUGHT rather than hidden behind — the rejected evasion route (§0A note 2; §3a
+    // `ADV-T7`), whose remedy is this re-statement and never a spelling change.
     const r = spawnSync(
       'grep',
       ['-rnE', PINNED_FIFTEEN.map((n) => `from '[^']*${n}\\.js'`).join('|'), join(REPO_ROOT, 'src')],
@@ -566,30 +718,136 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
       const spec = /from\s+['"]([^'"]+)['"]/.exec(text)![1]!
       return { file: relative(REPO_ROOT, file), spec, resolved: resolve(dirname(file), spec.replace(/\.js$/, '.ts')) }
     })
-    // THE PREDICATE IS “no hit resolves to a VENDORED MEMBER”, STATED AS AN EXACT SET
-    // (§12.3(c)) — never an emptiness: a zero-hit form would require editing
-    // `src/renderer/renderer.ts`, which §3.6 / `C-7` forbid.
+    // LIMB 1 (kept, narrowed to its own subject): the THREE PHASE-0 STEM-COLLISION HITS are
+    // unchanged as the pin recorded them — the `./theme.js` and `./pane-gutter.js` sites that
+    // resolve to FORK modules. They are NOT on the allow-list, and they must NOT be: what makes
+    // the `theme` collision by STEM and never by SPECIFIER (`C-7`) is exactly that
+    // `./theme.js` from `src/renderer/` resolves to `src/renderer/theme.ts`.
+    const stemCollisionHits = parsed
+      .filter((h) => h.resolved === join(REPO_ROOT, 'src', 'renderer', 'theme.ts') || h.resolved === join(REPO_ROOT, 'src', 'renderer', 'pane-gutter.ts'))
+      .map((h) => `${h.file} ${h.spec}`)
+      .sort()
     expect(
-      parsed.map((h) => `${h.file} ${h.spec}`).sort(),
-      '§2.1 item 6 MEASURES exactly three legitimate hits: `./pane-gutter.js` ×2 (renderer.ts, sidebar-panes.ts) + `./theme.js` (renderer.ts) — the stem collision `C-7`',
+      stemCollisionHits,
+      '§2.1 item 6 MEASURES exactly three legitimate stem-collision hits: `./pane-gutter.js` ×2 (renderer.ts, sidebar-panes.ts) + `./theme.js` (renderer.ts) — the `C-7` collision',
     ).toEqual([
       'src/renderer/renderer.ts ./pane-gutter.js',
       'src/renderer/renderer.ts ./theme.js',
       'src/renderer/sidebar-panes.ts ./pane-gutter.js',
     ])
-    // …and NONE of the three resolves to a vendored member: the collision is by STEM,
-    // never by SPECIFIER (`./theme.js` from `src/renderer/` resolves to the FORK module
-    // `src/renderer/theme.ts`, never to the vendored `src/shared/theme.ts`).
-    const vendoredPaths = new Set(PINNED_FIFTEEN.map((n) => shippedPath(n)))
+    // each of the three stem-collision hits resolves to a real FORK module under
+    // `src/renderer/`, and it exists. (The `src/**`-wide derivation below carries the
+    // VENDORED-resolving hits, which are a different subject: this limb is the collision’s.)
+    const stemCollisionResolved = parsed
+      .filter((h) => h.resolved === join(REPO_ROOT, 'src', 'renderer', 'theme.ts') || h.resolved === join(REPO_ROOT, 'src', 'renderer', 'pane-gutter.ts'))
+      .map((h) => h.resolved)
+    expect(stemCollisionResolved.length, 'the three stem-collision hits resolve to exactly two FORK modules (`theme.ts` once via renderer.ts, `pane-gutter.ts` twice)').toBe(3)
+    expect(stemCollisionResolved.every((p) => /[/\\]src[/\\]renderer[/\\]/.test(p))).toBe(true)
+    expect(stemCollisionResolved.every((p) => existsSync(p)), 'each stem-collision hit must resolve to a real fork module').toBe(true)
+
+    // LIMB 2 (RE-STATED): every hit that RESOLVES to one of the pin’s fifteen members must be
+    // a DECLARED CONSUMER EDGE, named per row with the vendored member it targets. The reading
+    // is driven over the WHOLE `src/**` tree, not only the grep’s static-form hits, so the four
+    // SHAPES the recorded pattern cannot see are caught rather than hidden behind.
+    const declared = DECLARED_CONSUMER_EDGES.filter((d) => d.unit === 'PD-UI-1')
+    expect(declared.length, 'the allow-list is not empty: a pin that would pass for ANY consumer is worthless (§9 item 1 item (b))').toBeGreaterThan(0)
+    for (const d of DECLARED_CONSUMER_EDGES) {
+      expect((PINNED_FIFTEEN as readonly string[]).includes(d.member), `the allow-list row ${d.file} ${d.specifier} must name one of the pin’s fifteen members as its target`).toBe(true)
+    }
+    // the DECLARED edge must be a REAL, statically-declared edge of the tree — never a row
+    // that exists only on paper, and never one hidden behind a dynamic form.
+    const allEdges = allSrcConsumerEdges()
+    for (const d of DECLARED_CONSUMER_EDGES) {
+      expect(existsSync(shippedPath(d.member)), `the vendored member \`${d.member}\` must exist at the pin’s path`).toBe(true)
+      // a declared row is satisfied by whichever equivalent spelling the tree carries (§2.1's
+      // resolution clause) — a row with NO edge behind it in ANY of its spellings is a
+      // fabricated declaration and must fail.
+      const spellings = DECLARED_CONSUMER_EDGES.filter((x) => x.file === d.file && x.member === d.member).map((x) => x.specifier)
+      const matching = allEdges.filter((e) => e.file === d.file && spellings.includes(e.spec))
+      // RED-FIRST (RCA-1): at the PRE-LANDING head the edge does not exist yet, so an EMPTY
+      // reading is the declaration's red state — a LOUD one, naming the file and the member.
+      // The reading is a real assertion of the tree, not a vacuous pass: it reds today and can
+      // be taken only once the declared edge is really there.
+      expect(
+        matching.length,
+        `RED (PD-UI-1 §9 item 1 / §2.1): the declared consumer edge \`${d.file} <${spellings.join('|')}>\` → \`${d.member}\` does not exist in the tree yet — a declaration with no edge behind it is a fabricated row, and the adopting unit’s adapter is the edge this allow-list exists to declare`,
+      ).toBeGreaterThan(0)
+      // a NON-EMPTY reading must be the static `from '…'` form, never one of the refused evasions.
+      expect(
+        matching.filter((e) => e.kind !== 'static-from').map((e) => `${e.spec} (${e.kind})`),
+        `the declared consumer edge \`${d.file} <${spellings.join('|')}>\` must use the STATIC \`from '…'\` form — a \`await import(...)\`/\`require(...)\`/\`new URL(...)\` spelling would match no pattern in this pin and would hide the consumer edge it exists to declare (§0A note 2; §3a \`ADV-T7\`)`,
+      ).toEqual([])
+      expect(matching[0]!.member, `the declared edge must resolve to the vendored member the row names (\`${d.member}\`)`).toBe(d.member)
+      expect(existsSync(matching[0]!.resolved), `the declared edge must resolve to a real file: ${relative(REPO_ROOT, matching[0]!.resolved)}`).toBe(true)
+    }
+    // …and NO hit outside the allow-list resolves to a vendored member: the two limbs stay
+    // distinguishable, and this is the limb a fourth, un-declared adoption would red.
     expect(
-      parsed.filter((h) => vendoredPaths.has(h.resolved)),
-      'no hit may resolve to one of the pin’s fifteen `src/shared/<name>.ts` files (§2.1 item 6 / §5 item 5 — the vendoring is INERT)',
+      unlistedVendoredEdges(allEdges).map((e) => `${e.file} ${e.spec} (${e.kind}) → ${relative(REPO_ROOT, e.resolved)}`),
+      '§2.1 item 6 / §5 item 5: a hit that resolves to a vendored member and is NOT on the declared consumer-edge allow-list STILL FAILS — an un-declared adoption cannot ride this pin green',
     ).toEqual([])
-    // the three hits are real fork modules: each resolves to an existing file under
-    // `src/renderer/`, and every one of them exists.
-    expect(parsed.map((h) => h.resolved).every((p) => /[/\\]src[/\\]renderer[/\\]/.test(p))).toBe(true)
-    expect(parsed.map((h) => h.resolved).every((p) => existsSync(p)), 'each hit must resolve to a real fork module').toBe(true)
   })
+
+  it('⟨RE-STATED 2026-09-28 — the NEGATIVE CONTROL the re-statement must carry⟩ an un-listed vendored-resolving edge FAILS the same oracle, and the four refused EVASION forms are CAUGHT by the extended derivation', () => {
+    // The control exists because a pin that passes for ANY consumer is worthless. It is driven
+    // through the SAME oracle the row above uses (`unlistedVendoredEdges`) and the SAME AST
+    // derivation (`derivedConsumerEdges`) — never through a copy of either.
+    const oracle = (edges: DerivedEdge[]): string[] => unlistedVendoredEdges(edges).map((e) => `${e.file} ${e.spec}`)
+
+    // (1) the DECLARED edge passes: it is the one row on the allow-list.
+    const declaredEdge = derivedConsumerEdges(`import { resolveTheme } from '../shared/theme.js'\n`, 'src/renderer/theme.ts')
+    expect(declaredEdge.map((e) => e.member), 'the declared edge must be recognised as resolving to the vendored `theme` member').toEqual(['theme'])
+    expect(oracle(declaredEdge), 'the DECLARED consumer edge must PASS the oracle — otherwise the allow-list is inert').toEqual([])
+
+    // (2) a synthetic UN-LISTED, vendored-resolving edge FAILS. `src/renderer/other.ts`
+    //     importing the vendored module is exactly the shape a fourth adoption would
+    //     produce, and it is not on the list.
+    const unListedSameSpelling = derivedConsumerEdges(`import { resolveTheme } from '../shared/theme.js'\n`, 'src/renderer/other.ts')
+    expect(unListedSameSpelling.map((e) => e.member), 'the synthetic edge must really resolve to a vendored member, else the control proves nothing').toEqual(['theme'])
+    expect(
+      oracle(unListedSameSpelling),
+      'AN UN-LISTED VENDORED-RESOLVING EDGE MUST FAIL — this is the discriminating control of the re-stated pin',
+    ).toEqual(['src/renderer/other.ts ../shared/theme.js'])
+
+    // (3) the SAME edge RE-SPELLED through one of the three refused evasion routes is ALSO an
+    //     un-listed, vendored-resolving edge: the extended derivation CATCHES it, so the
+    //     re-statement cannot be satisfied by hiding the consumer edge from the pin.
+    const refusalForms: Array<{ form: string; source: string; kind: DerivedEdge['kind'] }> = [
+      { form: 'a dynamic `import(...)`', source: `const later = () => import('../shared/theme.js')\n`, kind: 'dynamic-import' },
+      { form: 'a `require(...)`', source: `const legacy = require('../shared/theme.js')\n`, kind: 'require' },
+      { form: 'a `new URL(...)` indirection', source: `const p = new URL('../shared/theme.js', import.meta.url)\n`, kind: 'new-URL' },
+      { form: 'a `pathToFileURL(...).href` indirection', source: `const p = pathToFileURL('../shared/theme.js').href\n`, kind: 'new-URL' },
+    ]
+    for (const f of refusalForms) {
+      const hits = derivedConsumerEdges(f.source, 'src/renderer/other.ts')
+      expect(hits.map((h) => h.kind), `${f.form} MUST be caught by the extended derivation (§9 item 1: the pin is EXTENDED to catch those forms rather than hide behind them)`).toEqual([f.kind])
+      expect(hits.map((h) => h.member), `${f.form} must be recognised as resolving to the vendored member`).toEqual(['theme'])
+      expect(oracle(hits), `${f.form} written from an UN-listed file MUST still fail — the evasion route is refused, never green`).toEqual(['src/renderer/other.ts ../shared/theme.js'])
+    }
+
+    // (4) the recorded single-line grep pattern is shown MISSING all four shapes — the proxy
+    //     §3a `A-10` named — so this row’s extension is driven, not merely asserted.
+    for (const f of refusalForms) {
+      expect(
+        staticTextDerivation(f.source),
+        `the pin’s recorded \`from '…'\` pattern must be shown to MISS ${f.form} — that is WHY the derivation is extended`,
+      ).toEqual([])
+      expect(staticTextDerivation(`import { resolveTheme } from '../shared/theme.js'\n`), 'the recorded pattern must still catch the static form, else this control proves nothing').toEqual(['../shared/theme.js'])
+    }
+
+    // (5) the three stem-collision edges are NOT vendored-resolving, so they are outside this
+    //     oracle’s subject and the allow-list must never grow to cover them (they are FORK
+    //     modules — `C-7`).
+    // `pane-gutter` is the OTHER stem collision and it is NOT one of the pin's fifteen — the
+    // derivation must see NO vendored stem in it, which is exactly why its two hits are absent
+    // from the allow-list and why `importCensus.outOfSetImports` stays EMPTY.
+    expect(vendoredStemOf('./theme.js'), '`./theme.js` names the pin’s stem `theme`, so the derivation MUST see it').toBe('theme')
+    expect(vendoredStemOf('./pane-gutter.js'), '`pane-gutter` is the stem collision’s OTHER side and is NOT one of the pin’s fifteen').toBeNull()
+    const forkThemeEdge = derivedConsumerEdges(`import { applyThemeToRoot } from './theme.js'\n`, 'src/renderer/renderer.ts')
+    expect(forkThemeEdge.map((e) => e.member), '`./theme.js` from `src/renderer/` resolves to the FORK module — never to a vendored member').toEqual([null])
+    expect(oracle(forkThemeEdge), 'a stem-collision edge is not this oracle’s subject: it passes the VENDORED limb and is asserted by the pin’s own array limb').toEqual([])
+  })
+
 })
 
 // ===========================================================================
