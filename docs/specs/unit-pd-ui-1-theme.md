@@ -43,6 +43,193 @@ is this pass's own measurement of a run** — this pass ran nothing.
 
 ---
 
+## 0B. THE GATE-4 REMAND AMENDMENT LEDGER (2026-09-28) — the FOUR escalations the unit's gate-4 remand left open, each now DISPOSED, plus the ONE it deliberately leaves OPEN
+
+**What this pass is, stated honestly first.** It **amends THIS file only** (plus the two anchored tracker appends `AGENTS.md`
+item 6 owes). It runs **no leg, no suite, no `tsc`, no build, no Electron boot and no register row** — it holds a
+read/search/doc-write wall and **NO SHELL** — so **every figure below is either a READING of the landed tree taken this
+pass (VERIFIED-BY-READ, with its reader named) or a figure the remand's own test file prints (quoted, labelled
+RECORDED READING)**. **No code, no test file, no `src/**` byte (the vendored bytes least of all), no `package.json`, no
+vitest config and no foundation file is touched by this pass.** **The as-filed text each amendment supersedes is KEPT
+VISIBLE beside it, dated, with its finding id** — annotate, never rewrite.
+
+**The four escalations, and where each lands:**
+
+| # | The finding | The disposal | Its landing site |
+| --- | --- | --- | --- |
+| **A-1 / A-6 / A-7 / A-3 (arithmetic)** | the `§4` register prints **`173`**, which the remand's executed terms superseded | **`§4`'s terms and total are AMENDED to `194` with its eight terms and the `+21` composition; the superseded `173` (and the four superseded row terms) stay VISIBLE, dated, with the finding ids** (`§0B` item 1) | `§4`'s table cells, `§4`'s attempt tally, `§4`'s `(bounded)` note, `§9` item 5, `§10` item 4, `§11` |
+| **A-7 (semantics)** | *"the `removal` branch is claimed 'implemented and honoured' but is NEITHER DRIVEN NOR DEFINED"* | **RULED — the record's removal means the attribute is REMOVED, not left in place; a HOST-FIX is owed on `src/renderer/theme.ts`** (`§0B` item 2), and **the tripwire it must stay consistent with is named** | a RULING PARAGRAPH at `§2.1` item 3 (the site `A-7`'s own correction names), `§3.2` item 5, `§9` item 1 item (e) |
+| **A-11** | *"`§2.2` item 4's parenthetical is falsified by the landing — `installTheme`'s `apply()` discards the return, so it has no consumer in `src/**`"* | **RULED — the predicate STAYS setting-based, `apply()` discards the return, and the returned resolution is NOT the liveness input** (`§0B` item 3) | `§2.2` item 4 (annotate-beside), `§9` item 4, `§9` item 7 |
+| **A-2 / A-4 (mechanism)** | the adversarial audit's literal recipe `vi.mock('../src/shared/theme.js', …)` was measured to red the frozen `tests/pd-vendor-set.test.ts` `A-12` census (the exact four-binder set — the recipe adds a FIFTH) | **RECORDED AS AN OPEN ARCHITECT QUESTION with both options and their costs — NOT decided by this pass** (`§0B` item 4) | `§9` item 8 |
+
+### 0B item 1 — THE REGISTER ARITHMETIC AS AMENDED (`A-6`, `A-7`, `A-3`; the finding ids carried)
+
+**THE MEASURED POSITION, printed by the register's own accounting block (`tests/pd-ui-1-theme-register.test.ts` →
+`REGISTER_TERMS` / its `§4` arithmetic row, RECORDED READING):**
+
+> `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8 = 194 = 173 + 21`
+
+**THE GROWTH, BY FINDING ID, exactly as the remand's own `§4` arithmetic prints it:**
+
+| Finding | The correction | The drive it obliges | The term it moves |
+| --- | --- | --- | --- |
+| **`A-6`** | `''` and a **boxed `String`** join the precedence GRID and the hostile list — the two shapes `§2.1` clause 3 names first and the grid omitted | `2 shapes × 2 readings × 2 observations` | **`P-TH-IM-1` `20 → 28`** (`+8`) |
+| **`A-6`** | the same two shapes join the HOSTILE setting list | `2 shapes × 4 non-boolean readings` | **`P-TH-TP-1` `59 → 67`** (`+8`) |
+| **`A-7`** | the removal branch is **driven** (`1 landed drive + 3 corpus controls`) instead of asserted only by a source regex | `1 + 3` | **`P-TH-TP-2` `20 → 24`** (`+4`) |
+| **`A-3`** | a **third control** (a silent-skip corpus that never attempts the write) proves the recording-Proxy oracle discriminates | `+1` | **`P-TH-TP-3` `26 → 27`** (`+1`) |
+
+**THE SUPERSEDED FIGURES, KEPT VISIBLE (dated `2026-09-28`, with the finding ids):** the total **`173`** and its terms
+**`20 + 26 + 59 + 20 + 26 + 6 + 8 + 8`** are the FILE-AS-FILED position this amendment supersedes; the four superseded
+row terms are `P-TH-IM-1` `20`, `P-TH-TP-1` `59`, `P-TH-TP-2` `20`, `P-TH-TP-3` `26`. **`173 + 21 = 194`**, and **`194`
+is still `>` the `≤120` total cap** — **route (b) (keep the rows, declare the overshoot with its terms) is UNMOVED and
+is re-declared at `§4`.**
+
+**THE `A-8` DECLARED CHOICE, recorded here because it governs how every term above must be read (`§9` item 6):**
+
+1. **NO register row is generator-backed.** The terms are **exact counts asserted in-row** — **each row drives a
+   CLOSED, PINNED shape enumeration that its property text matches exactly**, so **a drawn subset would falsify the
+   very count the term prints**.
+2. **The seed (`0x20260928`) and its hand-rolled LCG remain in the register as their own determinism check** — the
+   drawn sequence is asserted with a different-seed control — **and they govern no row's attempts.**
+3. **`≤100` per row / `≤120` in total / `STOP AFTER 5 CONSECUTIVE FAILURES` are DECLARED INAPPLICABLE to this
+   register**, because **no row runs a bounded attempt loop** for them to govern. **The rule stays IN THE CONTRACT
+   (`§4`'s machinery block) and is NOT deleted** — it is declared to have **no subject here**.
+4. **Every term is therefore an EXACT count**, and **a printed count that is not what runs is the filed defect this
+   declaration closes** (`A-8`); the `(bounded)` marking remains the honest form for a property whose text outruns its
+   finite table (**one row, `P-TH-SM-2` on limb (b)**).
+
+### 0B item 2 — THE `A-7` RULING: **HONOURING THE `removal` MEMBER MEANS THE ATTRIBUTE IS REMOVED — THE SKIP READING IS DIVERGENT**
+
+**The escalation's substance, restated before the ruling:** the landed adapter performs the write only when
+`write.removal` is false, so **a removal record leaves a pre-existing `data-theme` in place** — **which is NOT the
+record's declared outcome.**
+
+**THE CITED AUTHORITY (read this pass, VERIFIED-BY-READ; the foundation is readable and never modified, `R-10`):**
+
+| # | The reading | Where |
+| --- | --- | --- |
+| **①** | *"A second function takes that resolution and returns, **as data, the attribute write a consumer would perform** — it writes nothing."* And the applier *"returns the attribute write it **would** perform, with the attribute name caller-supplied and **the removal case represented as a data member**."* | `../Provident-Electron/docs/guide/theme.md` — the opening paragraph and **What it is** |
+| **②** | **THE APPLIED-WRITE RECIPE, in the foundation's own runnable code:** *"`// nothing was written: your code applies it —` `//   if (write.removal) el.removeAttribute(write.name) else el.setAttribute(write.name, write.value)`"*, and UC-2's own words: *"You have decided the attribute name (yours, not the mechanism's) and **you need the value to set, or the fact that the attribute should be removed**. The mechanism hands you the write as a record; **your own code performs it** — this is also the shape a fork author **implements when replacing the write path**."* | `../Provident-Electron/docs/guide/theme.md` → the **Code, runnable** block's UC-2 comment and **Use cases** UC-2 |
+| **③** | *"**THE `H-r7` `removeAttribute` CLASS IS REPRESENTED AS DATA AND IS NEVER CALLED** … **the returned record is exactly what a CONSUMER needs in order to perform the write on an element it owns**"*; and **why the third member exists**: *"a two-member record forces the consumer to infer the removal case from a value's emptiness … **`removal: true` is the DECLARED discrimination**."* | `../Provident-Electron/docs/specs/theme.md` §0A note 2 |
+| **④** | *"**a DECLARED RETURN SHAPE, not a call — the value a consumer would use to remove the attribute**"*; and item 2's own title: *"THE REMOVAL CASE IS DATA, AND `removal` IS THE DISCRIMINATION."* | `../Provident-Electron/docs/specs/theme.md` §2.2 (D)'s `removal` / removal-case rows and §2.4 item 2 |
+| **⑤** | the applier's own doc comment in the vendored bytes this repo carries: *"`removal` — `true` when the write is **the REMOVAL case** (the `H-r7` `removeAttribute` class …)"* — the bytes are the pin, read here for the member's meaning only (**never edited**, `R-4`) | `src/shared/theme.ts` → `ThemeAttributeWrite` |
+
+**THE RULE (this filing's, derived from ①–⑤ and stated so the red set can falsify it).** **A removal record's declared
+outcome is that the attribute named by `write.name` is NOT PRESENT after the consumer has applied the write.**
+
+1. **`write.removal === false` ⇒ the consumer sets `write.name` to `write.value`.**
+2. **`write.removal === true` ⇒ the consumer REMOVES the attribute `write.name`.** *"Honouring"* the member therefore
+   means **the removal is performed**; **it does NOT mean "perform no write".** **A consumer that skips the write
+   leaves a pre-existing attribute in place, which is a THIRD outcome the record does not declare** — the record's
+   value arm, its removal arm and its echoed `name` are its whole vocabulary, and **the foundation states at ③ that a
+   removal's `name` is still echoed precisely because the record is what a consumer acts on.**
+3. **The fork's adapter IS that consumer and DOES own the root it writes to** — `ThemeRoot` is its own parameter and
+   `root.dataset.theme` is its own write site (`§2.2` item 6). **The clause *"never by a call the adapter makes on an
+   element it does not own"* is KEPT as filed** and **it does not forbid this ruling**: the `root` it is handed is the
+   element it owns; what that clause forbids is reaching for an element the adapter is **not** given.
+4. **THE RULING IS ON `removal`-AS-A-RECORD, and the removal branch stays UNREACHABLE through the fork's own resolver**
+   (`resolveTheme` returns `'light' | 'dark'`, always a non-empty string — **UNMOVED**, `§3.2` item 5).
+
+**THE CONSEQUENCE FOR THE LIVE / PINNED SURFACES (stated in full, because the escalation asks for it):**
+
+| Surface | The reading under the ruling |
+| --- | --- |
+| **the token block's `:root` default** (`src/renderer/index.html`) | with `data-theme` **absent**, only `:root`'s own declarations (and the `@media` fallback below) apply. **The mechanism's removal outcome is exactly the state in which the token block's DEFAULT is the authority** — so a consumer that skips leaves the block's **explicit** attribute selectors in charge instead |
+| **the `@media (prefers-color-scheme: dark)` fallback** | it is keyed on the attribute's **ABSENCE** (`src/renderer/index.html`'s token-block comment: *"until the renderer boot applies an explicit attribute"*). **Under the skip reading a stale attribute can never fall back to it; under this ruling a removal returns the document to the fallback's domain.** **The fallback's own live observability window is UNMOVED and still narrow** (`§7.2` item 3) |
+| **can a stale `data-theme` outlive a settings change on a reachable path?** | **NO on every path reachable through this adapter today**: every reachable call hands the applier a non-empty resolution, so every reachable call **rewrites** the attribute (`write.value`). **The skip-vs-remove difference is therefore UNOBSERVABLE in the fork's live app at this head** — it is a **latent divergence in a branch the resolver cannot enter**, not a reproduced visual defect. **Stated plainly so this ruling is not read as a repaired live bug** |
+
+**IS THE LANDED ADAPTER CORRECT? NO — A `HOST-FIX` IS OWED. Its exact shape and its owner:**
+
+- **The site:** `src/renderer/theme.ts` → `applyThemeToRoot`'s one write site (**the adapter this unit owns**; `§1.4`).
+- **The change:** in the `try` block, **when `write.removal` is `true` the attribute is REMOVED from the same
+  `dataset` surface the value arm writes to** (the mirror of `root.dataset.theme = write.value`, performed on the
+  **same** member, guarded identically); **when it is `false` the write is exactly as landed.** **One write site
+  stands** — the removal is the same site's other arm, not a second site.
+- **What it must NOT do:** widen `src/**`'s surface (`§1.4`), add a second authority, ask the mechanism for a default
+  (`P-TH-3`/`P-TH-5`), or drop the total/fail-soft contract (`§3.2` items 2/3/4/5): **a missing/frozen/throwing
+  `dataset` still never throws and the resolved theme is still returned.**
+- **A mechanic note, and NOT a widening of the surface:** the removal can be performed **through the `dataset`
+  surface the adapter already owns** (the landed test's own DELETE corpus already expresses it that way —
+  `tests/pd-ui-1-theme-adoption.test.ts`, the `deleteCorpus` classifier control). **An alternative — calling
+  `root.removeAttribute('theme')` — would require WIDENING the `ThemeRoot` contract beyond `{ dataset: { theme?: string } }`
+  and is DECLINED here**: `ThemeRoot` is `§2.1`'s pinned exported type (`D-5`) and **the landing is not permitted to
+  widen it** (`§1.4`). **Whether `dataset`-level deletion is the correct mechanic against a REAL `DOMStringMap` is
+  UNVERIFIED by this pass (`§9` item 7) — it is a `[U]`-class question and it belongs to the live pass.**
+- **Owner / pass:** **the next `PD-UI-1` landing pass (the Implementer) — the SAME pass that replaces the `A-7`
+  both-readings drive** (see the tripwire paragraph). **The fix CANNOT be driven by a reachable-path row** (`§3.2` item
+  5), so its row is the injected-record drive the remand already authored; **a spec-only amendment would leave the
+  adapter violating the corrected contract**, which is why the two land together.
+- **Is this a foundation gap?** **NO.** **The foundation DOES settle the mechanism's half** — ①–⑤ above fix the
+  record's declared outcome and name the consumer's action — and **the foundation deliberately owns no part of what the
+  fork's adapter does with it**. **No `docs/defects.md` → `docs/HANDOFF.md` row is owed by this ruling** (`R-10`'s
+  handoff rule is for a defect or gap **in the package/foundation**; this one is **HOST-side**). **What the foundation
+  does NOT define — and must not be invented here — is the ATTRIBUTE's meaning** (`P-TH-7`: the mechanism may not
+  document its name or what it means); **that meaning stays the fork's own `'theme'` token and the token block's**.
+
+**WHICH READING THE REMAND'S TRIPWIRE LOCKS IN — stated so the two are consistent, because they are NOT the same
+reading.** The tripwire is `tests/pd-ui-1-theme-adoption.test.ts`'s `⟨A-7 + A-2⟩ P-TH-TP-2` row. **It locks in the SKIP
+reading, in two limbs, and both now contradict this ruling:**
+
+1. **its content limb** takes the spec's own `§2.1` item 3 paragraph as its input (`specItem3Text()`) and asserts that
+   the paragraph does **NOT** match `/(?:\bskip\w*\b|\bdelet\w*\b)/i` — *"the spec's `§2.1` item 3 now RULES the removal
+   semantic — replace this both-readings drive with the ruling (the ESCALATED ambiguity is resolved)"*, asserted `false`.
+   **This ruling is therefore the pre-committed trip: the read the test demands is a ruling, and the ruling is made.**
+2. **its source limb** asserts the adapter's bytes do **NOT** match
+   `/removeAttribute|delete\s+\w+\.dataset\.theme|deleteProperty/` — i.e. **that the adapter performs no removal**,
+   with the message *"the removal branch is represented by the record and NEVER by a call the adapter makes on an
+   element it does not own."* **That limb reads the removal as data the adapter does not act on.**
+
+**THE CONSISTENCY STATEMENT, in one paragraph:** **the tripwire's reading is SUPERSEDED by this ruling and its two limbs
+must be replaced at the same time as the host fix — a both-readings drive and a no-removal source limb are inconsistent
+with a contract that rules the attribute removed.** **The replacement (a TestWriter act, NOT this pass's, and NOT
+performed here):** drive the injected removal record **once**, against the RULING, and require the **remove** reading to
+hold while the **leave-in-place** and **writes-`''`** corpora **FAIL**; and re-scope the source limb so that the
+**prohibited** form is *"a removal performed on an element the adapter was not handed"* — **not** the removal itself.
+**Until that pass lands, the tripwire is RED BY DESIGN and its failure message is the remediation:** *"replace this
+both-readings drive with the ruling."* **A pass that silently deletes the tripwire instead of replacing it is a review
+finding** — it would erase the record that the ruling was made.
+
+### 0B item 3 — THE `A-11` RULING: **THE LIVENESS PREDICATE STAYS SETTING-BASED, AND THE RETURN IS DISCARDED**
+
+**The escalation's substance:** `§2.2` item 4 as filed says *"the `applyThemeToRoot` return feeds it [the liveness
+predicate]"*. **The landing falsifies that clause**, and the falsification is VERIFIED-BY-READ this pass:
+`src/renderer/renderer.ts` → `installTheme`'s `apply()` is the single call site and its body is
+**`applyThemeToRoot(document.documentElement, setting, prefersDark())`** — **the return is DISCARDED** — while the
+`change` handler's guard is the **setting** re-tested: **`if (setting !== 'light' && setting !== 'dark') apply()`**.
+**The adapter's own doc comment claims the opposite use-case** (*"Returns the resolved theme **so the caller can decide
+whether the OS listener is live**"*, `src/renderer/theme.ts` → `applyThemeToRoot`) — **and it too has no consumer:
+`applyThemeToRoot`'s return has NO consumer anywhere in `src/**`.**
+
+**THE RULING — (b), the SETTING-BASED predicate is the contract, and `apply()` discarding the return is CORRECT:**
+
+| # | Clause |
+| --- | --- |
+| **1** | **The liveness predicate is the wiring's, and it is `setting`-based: the OS listener applies only while the setting is NEITHER `'light'` NOR `'dark'`.** It is the **same strict-identity test against the same two literals** the kept precedence rule applies (`§2.1` clauses 1/2) — **so the wiring holds no second precedence rule, it holds the same one** (`§2.2` item 7) |
+| **2** | **The returned resolution is NOT the liveness input, and `apply()` discarding it is CORRECT — not a defect.** **Why, in the contract's own terms:** the adapter's return is **redundant by construction** with a value the wiring already holds — `applyThemeToRoot` returns **the resolution it computed from the same `(setting, prefersDark())` pair the wiring passes** — so a return-based predicate would read **the same datum by a longer route**, and would be a **weaker** authority: it would silently invert (an explicit `'light'` making the listener LIVE) if the resolution were ever computed differently. **The setting is the authority** |
+| **3** | **`§2.1` item 4's *"and it is still implemented"* is CARRIED** and **`D-5` is UNMOVED**: `applyThemeToRoot` **still must return** the same resolved theme it wrote (**the four exports and the return type are the kept surface**, `§1.2` (d)). **What is ruled is only that no `src/**` caller must CONSUME it** — a return with no consumer is a contract, not a defect, and **the row that pins it stays** |
+| **4** | **The stale text is amended ANNOTATE-BESIDE** (as-filed clause kept visible at `§2.2` item 4), **and `A-11`'s second half is discharged by the same ruling:** the adapter's doc comment (*"so the caller can decide whether the OS listener is live"*) **is a stale claim** — the next landing pass **drops or corrects it**, because **there is no such caller** |
+| **5** | **The observability item is NARROWED, not closed:** the *"return has no consumer"* fact **compounds `A-2`'s finding** — the adoption's discriminators are already instrumented at the **test** side. **`§9` item 4 is the owed item; nothing about the return type changes here** |
+
+### 0B item 4 — THE MECHANISM DECISION IS RECORDED AS AN **OPEN ARCHITECT QUESTION** (NOT decided by this pass)
+
+**THE MEASURED FACT:** the gate-4 adversarial audit's literal recipe (`A-2`/`A-4`) — **`vi.mock('../src/shared/theme.js', …)`**
+— was **NOT usable by the remand**: it was **measured to red the frozen `tests/pd-vendor-set.test.ts` `A-12` census**,
+which **pins an EXACT set of four non-electron mock binders**, while the literal recipe **adds a FIFTH**.
+**THE SUBSTITUTION THE REMAND TOOK, recorded as this pass read it:** the remander **compiles the LANDED ADAPTER'S OWN
+BYTES with ONLY its import declaration replaced by a stub bind** — **the same discrimination** (the adapter is made to
+follow a record whose members contradict the raw argument), **and NO pin is touched.**
+**THE QUESTION, with both options and their costs — the tradeoff STATED, NOT PICKED (`§9` item 8):**
+
+| Option | What it costs |
+| --- | --- |
+| **(a) keep the literal `vi.mock` recipe** and **amend `tests/pd-vendor-set.test.ts`'s `A-12` census to admit a fifth binder** | **a PIN CHANGE with its OWN GATE** — the census is a frozen, independently-owned pin (`PD-VENDOR`'s), and changing it moves a pin the program has already adjudicated. **What it buys:** the instrumentation is the standard, readable vitest form, applied to the real import edge rather than to a compiled copy of the bytes |
+| **(b) the compile-the-adapter-bytes substitution as the PERMANENT shape** | **no pin is touched and no gate is opened** — the cost is **distance from the runtime form**: the drive reads a compiled/instantiated copy with a substituted import declaration rather than the module graph vitest resolves, so **the instrument is one step further from the landed artifact** (and a future bundler/resolver change would not be caught by it) |
+
+**RECORDED — NOT DECIDED.** **Owner: the architect.** **A pass that picks one without that ruling is choosing a pin's
+fate, which is not this unit's to choose.**
+
+---
+
 ## 0. The rulings this unit derives from (recorded, NOT re-opened)
 
 | # | Ruling, and its source | Carried here as |
@@ -81,7 +268,9 @@ is this pass's own measurement of a run** — this pass ran nothing.
    (`await import(...)`, `require(...)`, a `new URL(...)` indirection) are **rejected here with their
    reason**: the pin's pattern matches the static `from '…'` form, so those forms would **evade** the very
    assertion whose subject the adoption falsifies. **The re-statement shape this unit owes is stated at
-   `§9` item 1 item (b).**
+   `§9` item 1 item (b).** **⟨2026-09-28: read this note with `§0B`'s amendment ledger — it amends nothing here, and
+   it disposes of the four gate-4 escalations this note's own cycle left behind (the arithmetic, the `removal`
+   semantic, the liveness predicate, and the ONE question it leaves OPEN).⟩**
 
 ---
 
@@ -269,10 +458,23 @@ record's **`prefersDark`** member. **Consequences, all pinned:**
    and a record the adapter does not honour is a silent divergence.
 4. It returns the resolved theme (`§1.2` (d) — the caller uses that return to decide whether the OS listener
    stays live; dropping it is the `PD-THEME-1` named collision risk, `docs/specs/post-division-local-elimination-inventory.md`
-   §2.1).
+   §2.1). **⟨PARTLY SUPERSEDED 2026-09-28 (`A-11` RULED — `§0B` item 3): the RETURN is required and stays
+   (`D-5` UNMOVED), but the CLAIM THAT A CALLER CONSUMES IT IS FALSE — `installTheme`'s `apply()` discards it, and
+   the liveness predicate is SETTING-based. `PD-THEME-1`'s collision risk is therefore NOT this state: what that
+   item warns against is DROPPING the return, and the return is kept. What is superseded is only the parenthetical
+   use-case, which is amended annotate-beside at `§2.2` item 4.⟩**
 5. **TOTAL/fail-soft, unchanged:** a missing, `undefined`, `null`, non-object, or **frozen** `dataset`, or a
    root whose `dataset` member read throws, ⇒ **nothing throws and the resolved theme is still returned.**
    The existing implementation's `try { root.dataset.theme = resolved } catch { … }` shape is the contract.
+6. **THE `removal` ARM, RULED (`A-7`, 2026-09-28 — this paragraph is the ruling site `A-7`'s own correction names):
+   a record whose `removal` member is `true` means the attribute is REMOVED — the adapter must NOT leave a
+   pre-existing `data-theme` in place.** **The cited authority, the full consequence for the live/pinned surfaces, the
+   `HOST-FIX` this obliges on this very function, and the tripwire's reading are at `§0B` item 2** (with
+   `../Provident-Electron/docs/guide/theme.md` → **Use cases** UC-2 and its **Code, runnable** comment as the settled
+   citation). **The clause *"never by a call the adapter makes on an element it does not own"* STANDS as filed**, and
+   it does not forbid this: **the `root` parameter IS the element the adapter owns.** **The removal arm remains
+   UNREACHABLE through the fork's own resolver** (`§3.2` item 5) — **the ruling fixes the record's meaning, not a
+   reachable behaviour.**
 
 **Import census of the adapter (post-adoption, pinned):** exactly **one** import statement —
 `from '../../shared/theme.js'` (the vendored module), whose specifier resolves to `src/shared/theme.ts`. **⟨CORRECTED 2026-09-28 (gate-4 finding `A-9`, HOST-FIX): THE SPELLING ABOVE IS WRONG AND IS KEPT VISIBLE.** **`src/renderer/../../shared/theme.ts` escapes `src/` entirely and resolves to `<repo>/shared/theme.ts` — a path that does not exist.** **The correct relative form from `src/renderer/` is `'../shared/theme.js'`**, which is also the form the landed adapter uses and the form the re-stated pin's allow-list carries. **No adapter could ever use the spelling this clause as-filed named**, and the two test-file comments that cite *"recorded as a nit in §2.1"* are therefore **stale as written**: the nit was reported but **this clause was never amended** — this annotation is that amendment.⟩
@@ -288,7 +490,7 @@ asserts the RESOLVED path, never a spelling.)*
 | 1 | **Name, signature, visibility** | **`installTheme(): void`** — a module-private function, **not exported** (unchanged; it is called once from the boot path). Its call site and its position in the boot order are **unchanged**. |
 | 2 | **The `matchMedia` read** | `window.matchMedia('(prefers-color-scheme: dark)')`, guarded by `typeof window.matchMedia === 'function'` inside a `try`; **a thrown or absent `matchMedia` ⇒ `media = null`** and the reading degrades to `false`. **This read STAYS in the wiring** — it is the adapter's environment READ, and it is the source of the `env` record the adapter consumes. |
 | 3 | **The reading accessor** | `prefersDark(): boolean` — `media ? media.matches : false`, wrapped in `try`/`catch` **returning `false` on a throw**. **A `false` reading is a NORMAL reading, never a degradation** (the foundation's own rule, `../Provident-Electron/docs/specs/theme.md` §2.3 item 2 row (2)). |
-| 4 | **The live listener** | **attached ONCE**, inside `try`, via `media.addEventListener('change', …)`; its handler calls the apply path **only while the setting is neither `'light'` nor `'dark'`** (the explicit choice makes the listener inert). A `matchMedia` without `addEventListener` **degrades silently, never throws**. **The listener's liveness predicate STAYS the wiring's** (the `applyThemeToRoot` return feeds it) — `PD-THEME-1`'s named collision risk. |
+| 4 | **The live listener** | **attached ONCE**, inside `try`, via `media.addEventListener('change', …)`; its handler calls the apply path **only while the setting is neither `'light'` nor `'dark'`** (the explicit choice makes the listener inert). A `matchMedia` without `addEventListener` **degrades silently, never throws**. **THE LIVENESS PREDICATE IS SETTING-BASED, AND THAT IS THE CONTRACT (`A-11`, RULED 2026-09-28 — `§0B` item 3).** **⟨AS FILED, KEPT VISIBLE: *"The listener's liveness predicate STAYS the wiring's (the `applyThemeToRoot` return feeds it) — `PD-THEME-1`'s named collision risk."* — THIS CLAUSE IS FALSIFIED BY THE LANDING AND IS SUPERSEDED: VERIFIED-BY-READ this pass, `src/renderer/renderer.ts` → `installTheme`'s `apply()` is the ONE call site and its body DISCARDS `applyThemeToRoot`'s return, while the handler re-tests the SETTING (`setting !== 'light' && setting !== 'dark'`), so the return has NO consumer in `src/**`.⟩** **THE RULING: the predicate STAYS setting-based and `apply()` discarding the return is CORRECT** — the return is redundant by construction with a datum the wiring already holds (the same `(setting, prefersDark())` pair), so a return-based predicate would read the same value by a longer route and would silently invert if the resolution were computed differently. **The `resolveTheme`/`applyThemeToRoot` return contract itself is UNMOVED** (`§2.1` item 4, `D-5`); **what is ruled is that no `src/**` caller must consume it.** **The adapter's own stale doc comment** (*"Returns the resolved theme so the caller can decide whether the OS listener is live"*, `src/renderer/theme.ts` → `applyThemeToRoot`) **is owed a drop-or-correct by the next landing pass** — there is no such caller. |
 | 5 | **The seam** | `window.provident?.operatorSettings?.get()` → `Promise<{ theme?: unknown }>` and `onChanged?(handler)` → unsubscribe, **both optional-chained and both inside `try`**: an absent bridge, an absent `operatorSettings`, an absent `onChanged`, a rejected `get()` ⇒ **the setting keeps its `'system'` default and nothing throws** (`src/main/preload.ts` → the `operatorSettings` bridge declares `get(): Promise<OperatorSettings>`, `set(patch)`, `onChanged(handler): () => void`). **No IPC change is owed or permitted** (`§1.4`). |
 | 6 | **The apply path** | `applyThemeToRoot(document.documentElement, setting, prefersDark())`. **THE ONE WRITE SITE for the appearance attribute in this repo** — no other `src/**` file writes it (VERIFIED-BY-READ: `src/renderer/theme.ts` is the only module whose contract declares the `dataset.theme` write, and `renderer.ts`'s single call is its one invocation). |
 | 7 | **What the wiring may NOT do** | read `theme` from anywhere other than the persisted setting / the `onChanged` payload / its own `'system'` default · hold a store, a cache or a memo · write a custom property (the token block is CSS, `§1.2` (c)) · resolve the precedence itself (that is the adapter's rule) · add a second DOM write of the appearance attribute · add an MCP/IPC surface. |
@@ -357,7 +559,7 @@ not expose it** (`§2.1`; `§9` item 4).
 | 2 | **`root.dataset` is FROZEN** (`Object.freeze({ dataset: Object.freeze({}) })`) | **nothing throws**; the assignment fails silently-or-throws and is **absorbed**; the resolved theme is still returned |
 | 3 | **`root` is `{}`** (no `dataset` member) — or `null`/`undefined`/a primitive at runtime | **nothing throws**; the resolved theme is still returned; **no attribute is written** |
 | 4 | **`root.dataset` is a member whose READ throws** | **nothing throws**; the resolved theme is still returned |
-| 5 | **The `removal` branch of the write** | **UNREACHABLE under this adapter's invariants, and still implemented.** Why unreachable: `resolveTheme` returns `'light'`/`'dark'` — **always a non-empty string** — so the vendored `applyThemeDeclaration(attributeName, resolved)` takes its **non-removal** arm on every reachable call. **A red row must NOT assert a removal write** (it could only pass by breaking the resolver); the row asserts instead (a) that the removal arm is **honoured if a record carries it** (driven with a synthetic record through the adapter's decision, or asserted as the implemented branch), and (b) that the **reachable** path always writes `write.value`. |
+| 5 | **The `removal` branch of the write** | **UNREACHABLE under this adapter's invariants, and still implemented — AND ITS MEANING IS RULED (`§0B` item 2, 2026-09-28, `A-7`): a removal record means the attribute is REMOVED, so the landed "perform no write" reading is DIVERGENT and a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED.** Why unreachable: `resolveTheme` returns `'light'`/`'dark'` — **always a non-empty string** — so the vendored `applyThemeDeclaration(attributeName, resolved)` takes its **non-removal** arm on every reachable call. **A red row must NOT assert a removal write on a REACHABLE call** (it could only pass by breaking the resolver); the row asserts instead (a) that the removal arm is **honoured if a record carries it** (driven with a synthetic record through the adapter's decision, or asserted as the implemented branch), and (b) that the **reachable** path always writes `write.value`. **⟨`A-7` correction: "honoured" now has a RULED meaning — the attribute is removed — so limb (a)'s drive asserts the REMOVAL, and a leave-in-place or `writes ''` corpus must FAIL it (`§0B` item 2).⟩** |
 | 6 | **`setting` is a hostile value** (a revoked `Proxy`, an object with a throwing `toString`, a `Symbol`) | the precedence rule reads it by **strict identity** only, so the hostile members are **never touched**; the outcome is the OS-following one; **nothing throws** |
 | 7 | **`prefersDark` is not a boolean at runtime** (`1`, `'true'`) | **`'light'`** (only `=== true` yields `'dark'`, `§2.1` clause 4) — **never a coercion of the caller's value** |
 | 8 | **The vendored call itself** | **cannot throw** (`§3.1` item 16); if a future revision did, the adapter's totality would be **broken and that is a finding, not a silent absorb** — the register's `P-TH-TP-3` drives every shape and asserts no-throw |
@@ -441,11 +643,11 @@ the zero-row exemption for a code-bearing unit**, and **no superseded `§5.5.0` 
 
 | # | Row id | Property (falsifiable) | Domain / strategy | Attempts (printed as the sum of its terms) | `(bounded)`? |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **`P-TH-IM-1`** | **THE PRECEDENCE RULE IS KEPT, AND IT IS EVALUATED IN THE ADAPTER.** For every `(setting, prefersDark)` pair in the row's grid: an explicit `'light'`/`'dark'` returns **that** arm **regardless of `prefersDark`**; every other setting returns **`prefersDark === true ? 'dark' : 'light'`**; and **the returned value is a member of the closed two-member domain `'light' \| 'dark'` in EVERY cell**. **The discriminating cell, named: `('light', true) ⇒ 'light'` and `('dark', false) ⇒ 'dark'` — an implementation that delegated the precedence to the vendored resolver (which decides nothing) would return the OS arm in both.** **Control:** a corpus implementing *"the OS wins over an explicit choice"* **MUST fail** the same oracle, and a corpus returning the vendored record's `setting` member (`null` for a non-string) **MUST fail**. | **strategy `strat:theme-precedence`** — **`4` setting shapes × `2` `prefersDark` values = `8` cells**, each **read twice** (identity + domain) = `16`; **plus `4` synthetic controls** (OS-wins corpus, record-`setting` corpus, a corpus returning a third state, a corpus returning a non-member string) | **`20`** = `16` + `4` controls | **NO** — the grid is the declared extent and the property text matches it exactly |
+| 1 | **`P-TH-IM-1`** | **THE PRECEDENCE RULE IS KEPT, AND IT IS EVALUATED IN THE ADAPTER.** For every `(setting, prefersDark)` pair in the row's grid: an explicit `'light'`/`'dark'` returns **that** arm **regardless of `prefersDark`**; every other setting returns **`prefersDark === true ? 'dark' : 'light'`**; and **the returned value is a member of the closed two-member domain `'light' \| 'dark'` in EVERY cell**. **The discriminating cells, named: `('light', true) ⇒ 'light'` and `('dark', false) ⇒ 'dark'` — an implementation that delegated the precedence to the vendored resolver (which decides nothing) would return the OS arm in both; and `('', true)` / `(new String('light'), true)` ⇒ `'dark'`, because `''` and a boxed `String` are NOT explicit choices by strict identity (`A-6`).** **Control:** a corpus implementing *"the OS wins over an explicit choice"* **MUST fail** the same oracle, and a corpus returning the vendored record's `setting` member (`null` for a non-string) **MUST fail**. | **strategy `strat:theme-precedence`** — **`6` setting shapes × `2` `prefersDark` values = `12` cells**, each **read twice** (identity + domain) = `24`; **plus `4` synthetic controls** (OS-wins corpus, record-`setting` corpus, a corpus returning a third state, a corpus returning a non-member string) — **`A-6`: the `''` and boxed-`String` shapes, +2 shapes = +8 drives** | **`28`** = `24` + `4` controls **⟨amended 2026-09-28, `§0B` item 1: AS FILED this cell read `20` = `4` setting shapes × `2` × `2` = `16` + `4` controls — SUPERSEDED and kept visible; `A-6`⟩** | **NO** — the grid is the declared extent and the property text matches it exactly |
 | 2 | **`P-TH-IM-2`** | **THE ENV READING IS DELEGATED, AND THE ADAPTER'S READING AGREES WITH THE MECHANISM'S DECLARED RULE.** For every env shape in the row's table (`undefined` · `null` · a primitive · `{}` · `{prefersDark: true}` · `{prefersDark: false}` · an **inherited** `true` · a **trap-only** `Proxy` · `{prefersDark: 1}` · a **throwing** accessor · a genuine own accessor): the **vendored** `resolveTheme(setting, env)` returns the declared record of `§3.1`, **nothing throws**, and the adapter's `resolveTheme(setting, prefersDark)` returns **the same appearance** for `prefersDark` **taken from that record** as it does for the raw boolean. **Control:** a corpus reading `env` **truthily** (`if (env.prefersDark)`) **MUST fail** for shapes `{prefersDark: 1}`, the inherited `true` and the trap-only `Proxy`; a corpus calling `env.prefersDark` through a coercion hook **MUST fail** the zero-count assertion. | **strategy `strat:theme-env-reading`** — **`11` env shapes × `2` observations** (the declared record + the adapter's agreement) = `22`; **plus `4` controls** | **`26`** = `22` + `4` controls | **NO** — `§3.1`'s table is a closed, pinned enumeration matched exactly |
-| 3 | **`P-TH-TP-1`** | **THE ADAPTER'S SURFACE IS TOTAL AND ITS TYPES ARE PRESERVED.** For every one of the row's `12` hostile/absent `setting` shapes and every one of the `4` non-boolean `prefersDark` shapes: `resolveTheme` **does not throw**, returns a member of `'light' \| 'dark'`, and **consults no coercion hook** (`toString`/`valueOf` invocation counts `0`); and `applyThemeToRoot(root, setting, prefersDark)` **does not throw** for every `(root, setting)` pair of the row's `3 × 3` root grid. **Control:** a corpus whose resolver calls `String(setting)` **MUST** record a non-zero invocation count and fail; a corpus throwing for a `Symbol` setting **MUST** fail the totality limb. | **strategy `strat:theme-total-surface`** — **`12` setting shapes × `4` non-boolean readings = `48` resolver drives**, **plus `3` root shapes × `3` settings = `9` applier drives** = `57`; **plus `2` controls** | **`59`** = `48` + `9` + `2` | **NO** — the shapes are a closed, pinned enumeration |
-| 4 | **`P-TH-TP-2`** | **THE ADAPTER PERFORMS EXACTLY ONE WRITE, AT ONE SITE, WITH THE RECORD'S DECISION, AND RETURNS THE RESOLVED THEME.** For every `(setting, prefersDark)` cell of the row's grid, the **write observed at the root is exactly ONE**, its value is the `'light'`/`'dark'` member the function returns, and the function's return **equals** its own resolution. **And in the opposite direction:** the removal arm is honoured **if** a record carries it (driven by injecting a `removal: true` record), while the **reachable** path **never** produces one. **Control (discriminating both ways):** a corpus that writes the **`writing`** decision but returns a **different** theme **MUST fail**; a corpus that performs the write **twice** **MUST fail**; a corpus that takes the removal branch on a reachable call **MUST fail**. | **strategy `strat:theme-write-discrimination`** — **`4` setting shapes × `2` readings × `2` observations** (write count+value / return identity) = `16`; **plus `4` controls** (mismatched return · double write · removal-on-reachable · no write at all) | **`20`** = `16` + `4` controls | **NO** — one paired comparison per cell over a closed grid |
-| 5 | **`P-TH-TP-3`** | **THE APPLIER IS FAIL-SOFT OVER EVERY ROOT SHAPE AND NEVER LEAKS A THROW.** For every `(root, setting, prefersDark)` triple in the row's `3 × 2 × 2` grid — root = a `dataset`-carrying object · a **frozen** root (`Object.freeze`) · an **absent/throwing** `dataset` — **nothing throws**, the return is a member of `'light' \| 'dark'`, and for the two failing shapes **no write is observed**. **Control:** a corpus that lets the assignment's throw escape **MUST fail** the no-throw limb; a corpus that returns `undefined` on the absent-root arm **MUST fail** the return limb. | **strategy `strat:theme-fail-soft`** — **`3` root shapes × `2` settings × `2` readings = `12` drives**, each with **2 observations** (no-throw / return-domain) = `24`; **plus `2` controls** | **`26`** = `24` + `2` controls | **NO** — the three root shapes are the declared degradation set (`§3.2`) |
+| 3 | **`P-TH-TP-1`** | **THE ADAPTER'S SURFACE IS TOTAL AND ITS TYPES ARE PRESERVED.** For every one of the row's `14` hostile/absent `setting` shapes and every one of the `4` non-boolean `prefersDark` shapes: `resolveTheme` **does not throw**, returns a member of `'light' \| 'dark'`, and **consults no coercion hook** (`toString`/`valueOf` invocation counts `0`); and `applyThemeToRoot(root, setting, prefersDark)` **does not throw** for every `(root, setting)` pair of the row's `3 × 3` root grid. **Control:** a corpus whose resolver calls `String(setting)` **MUST** record a non-zero invocation count and fail; a corpus throwing for a `Symbol` setting **MUST** fail the totality limb. | **strategy `strat:theme-total-surface`** — **`14` setting shapes × `4` non-boolean readings = `56` resolver drives**, **plus `3` root shapes × `3` settings = `9` applier drives** = `65`; **plus `2` controls** — **`A-6`: `''` and a boxed `String` join the hostile list, +2 shapes = +8 drives** | **`67`** = `56` + `9` + `2` **⟨amended 2026-09-28, `§0B` item 1: AS FILED this cell read `59` = `12` setting shapes × `4` = `48`, + `9` + `2` — SUPERSEDED and kept visible; `A-6`⟩** | **NO** — the shapes are a closed, pinned enumeration |
+| 4 | **`P-TH-TP-2`** | **THE ADAPTER PERFORMS EXACTLY ONE WRITE, AT ONE SITE, WITH THE RECORD'S DECISION, AND RETURNS THE RESOLVED THEME.** For every `(setting, prefersDark)` cell of the row's grid, the **write observed at the root is exactly ONE**, its value is the `'light'`/`'dark'` member the function returns, and the function's return **equals** its own resolution. **And in the opposite direction:** the removal arm is honoured **if** a record carries it (driven by injecting a `removal: true` record), while the **reachable** path **never** produces one. **Control (discriminating both ways):** a corpus that writes the **`writing`** decision but returns a **different** theme **MUST fail**; a corpus that performs the write **twice** **MUST fail**; a corpus that takes the removal branch on a reachable call **MUST fail**. | **strategy `strat:theme-write-discrimination`** — **`4` setting shapes × `2` readings × `2` observations** (write count+value / return identity) = `16`; **plus `4` controls** (mismatched return · double write · removal-on-reachable · no write at all) — **`A-7`: the removal branch is DRIVEN (1 landed drive + 3 corpus controls) = +4** | **`24`** = `16` + `4` controls + `4` removal-branch drives **⟨amended 2026-09-28, `§0B` item 1: AS FILED this cell read `20` = `16` + `4` controls — SUPERSEDED and kept visible; `A-7`⟩** | **NO** — one paired comparison per cell over a closed grid |
+| 5 | **`P-TH-TP-3`** | **THE APPLIER IS FAIL-SOFT OVER EVERY ROOT SHAPE AND NEVER LEAKS A THROW.** For every `(root, setting, prefersDark)` triple in the row's `3 × 2 × 2` grid — root = a `dataset`-carrying object · a **frozen** root (`Object.freeze`) · an **absent/throwing** `dataset` — **nothing throws**, the return is a member of `'light' \| 'dark'`, and for the two failing shapes **no write is observed**. **Control:** a corpus that lets the assignment's throw escape **MUST fail** the no-throw limb; a corpus that returns `undefined` on the absent-root arm **MUST fail** the return limb. | **strategy `strat:theme-fail-soft`** — **`3` root shapes × `2` settings × `2` readings = `12` drives**, each with **2 observations** (no-throw / return-domain) = `24`; **plus `2` controls** — **`A-3`: a THIRD control (a silent-skip corpus that never attempts the write) proves the recording-Proxy oracle discriminates, +1** | **`27`** = `24` + `3` controls **⟨amended 2026-09-28, `§0B` item 1: AS FILED this cell read `26` = `24` + `2` controls — SUPERSEDED and kept visible; `A-3`⟩** | **NO** — the three root shapes are the declared degradation set (`§3.2`) |
 | 6 | **`P-TH-IM-4`** | **THE VENDORED MODULE IS CONSUMED, NOT TOUCHED, AND ITS PROHIBITIONS SURVIVE THE ADOPTION.** Simultaneously: (a) `src/shared/theme.ts`'s **digest equals the manifest's `md5`** for `theme` and equals its recorded pre-vendoring blob (the Phase-0 pin, unchanged); (b) the vendored file still carries **ZERO import statements** and **no `data-theme` literal, no `matchMedia`, no store token, no ambient `document`/`window`/`localStorage`/`fs`**; (c) the fork's adapter **does not pass a fork token into the mechanism as a decision** and **does not import a sibling into it**; (d) the adapter's **import census is exactly one statement**, resolving to `src/shared/theme.ts`. **Control:** a synthetic perturbation of ONE byte in the vendored file **MUST fail** (a) and **MUST NOT** change (c)/(d)'s readings (the two limbs must be independently falsifiable). | **strategy `strat:theme-vendored-consumption`** — **`4` facts × `1` reading** = `4`; **plus `2` independent controls** (a vendored-byte perturbation; an adapter that stops importing the module) | **`6`** = `4` + `2` controls | **NO** — the module and its prohibition set are closed, pinned objects |
 | 7 | **`P-TH-SM-1`** | **NO `G-9`-PINNED ARTIFACT AND NO PROTECTED FILE IS DISTURBED, AND NOTHING OUTSIDE THIS UNIT'S SURFACE CHANGES.** Simultaneously: (a) `vitest.config.ts`'s `testTimeout` reads exactly `15_000` and its text carries no forbidden override; (b) `package.json`'s `scripts.test`/`scripts.test:watch` are the pinned values with **no `--testTimeout`**; (c) the electron-mock census derived by scanning `tests/**/*.test.ts` for a top-level `vi.mock('electron', …)` call is **exactly the five pinned names** and **no file this unit adds joins it**; (d) `src/main/markdown-import.ts` satisfies its source contract; (e) `src/renderer/index.html`'s **15 token names** and the two `html[data-theme='…']` selectors and the `@media` fallback are **unchanged**; (f) the persisted `theme` carrier (`src/shared/types.ts` `ThemeSetting`, `coerceTheme`) is **byte-unchanged**. **Control:** a synthetic config carrying `clearMocks: false` **MUST fail** (a); a synthetic `tests/**` file containing `vi.mock('electron', …)` **MUST** join the census (proving (c) is derived, not hard-coded). | **strategy `strat:theme-protected-pin-safety`** — **`6` pin classes × `1` reading** = `6`; **plus `2` controls** | **`8`** = `6` + `2` controls | **NO** — the pin classes are enumerated exactly |
 | 8 | **`P-TH-SM-2`** | **THE TOKEN BLOCK AND THE PERSISTENCE CONTRACT ARE UNTOUCHED, AND THE THEME IS NOT REPERSISTED BY THIS UNIT.** Simultaneously: (a) the `:root` block declares **exactly the 15 pinned custom-property names** and each is also declared in the `html[data-theme='dark']` block (a **census, not a value claim**); (b) no `src/**` file in this unit's write set names `localStorage`/`sessionStorage`/a store object/a cache/a memo in connection with the theme; (c) `installTheme` reads the setting from the bridge and **writes nothing back** (no `operatorSettings.set(...)` call on the theme path — a store addition is a **new gate**, `R-5`). **Control:** a synthetic `index.html` corpus dropping one token name **MUST fail** (a); a synthetic theme path calling `operatorSet({ theme })` **MUST fail** (c). | **strategy `strat:theme-token-and-persistence-safety`** — **`3` facts × `2` readings** (the census + the value-independence; the no-store scan + the no-write-back scan; the persistence-surface absence + the carrier's byte-identity) = `6`; **plus `2` controls** | **`8`** = `6` + `2` controls | **NO** for the token census (a closed 15-name set); **`(bounded) ON (b)`** — the no-store scan is a **token scan over this unit's write set**, not a runtime proof that no store exists |
@@ -458,12 +660,23 @@ property**; a reader must not read the gap as an omission) · `P-TH-SM` ×2 · `
 **`8` rows = the register's ceiling, exactly** ✔. **The cap is `≤8` and it is FULL: a further row requires
 retiring one, and no further row is proposed here.**
 
-**Attempt tally, printed with its terms:**
-**`20` (`P-TH-IM-1`) + `26` (`P-TH-IM-2`) + `59` (`P-TH-TP-1`) + `20` (`P-TH-TP-2`) + `26` (`P-TH-TP-3`) +
-`6` (`P-TH-IM-4`) + `8` (`P-TH-SM-1`) + `8` (`P-TH-SM-2`) = `173` attempts.** **Every row ≤ `100`** ✔
-(`P-TH-TP-1` is the largest at `59`). **Stop-after-5** ✔. **The total is `173`, and `173 ≤ 120` is FALSE — the
-register OVERSHOOTS the `≤120` cap.** **This is DECLARED rather than smoothed, with the two routes and the
+**Attempt tally, printed with its terms (AMENDED 2026-09-28 — `§0B` item 1; the as-filed line is kept visible
+immediately below it):**
+**`28` (`P-TH-IM-1`) + `26` (`P-TH-IM-2`) + `67` (`P-TH-TP-1`) + `24` (`P-TH-TP-2`) + `27` (`P-TH-TP-3`) +
+`6` (`P-TH-IM-4`) + `8` (`P-TH-SM-1`) + `8` (`P-TH-SM-2`) = `194` attempts** — **and the same total in its own
+corrected terms: `24 + 4` + `22 + 4` + `56 + 9 + 2` + `16 + 4 + 4` + `24 + 3` + `4 + 2` + `6 + 2` + `6 + 2` =
+`194`.** **Every row ≤ `100`** ✔ (`P-TH-TP-1` is the largest at `67`). **Stop-after-5: DECLARED INAPPLICABLE — no
+row runs a bounded attempt loop (`§0B` item 1; `§9` item 6).** **The amended total is `194` = `173 + 21`, where the
+`21` is the correction drives `A-6` (`+8` + `+8`) + `A-7` (`+4`) + `A-3` (`+1`) — and `194 ≤ 120` is FALSE, so the
+register STILL OVERSHOOTS the `≤120` cap.** **This is DECLARED rather than smoothed, with the two routes and the
 route taken:**
+
+**⟨AS FILED, KEPT VISIBLE (the superseded figure and its terms, dated with the finding ids its amendment came from):**
+*"**`20` (`P-TH-IM-1`) + `26` (`P-TH-IM-2`) + `59` (`P-TH-TP-1`) + `20` (`P-TH-TP-2`) + `26` (`P-TH-TP-3`) + `6`
+(`P-TH-IM-4`) + `8` (`P-TH-SM-1`) + `8` (`P-TH-SM-2`) = `173` attempts.** **Every row ≤ `100`** ✔ (`P-TH-TP-1` is the
+largest at `59`). **Stop-after-5** ✔. **The total is `173`, and `173 ≤ 120` is FALSE — the register OVERSHOOTS the
+`≤120` cap.**"* — **superseded 2026-09-28 by the `A-6`/`A-7`/`A-3` correction drives, and the superseded total stays
+visible in BOTH directions (`tests/pd-ui-1-theme-register.test.ts` prints it as the pre-correction reading).⟩**
 
 1. **Why the overshoot exists:** the unit's central claims are quantifications over **four independent
    finite shape sets** (settings, envs, roots, write records) and the cap was authored for a unit with one or
@@ -475,17 +688,32 @@ route taken:**
    non-touch · protected-pin safety · token/persistence safety). **Retiring one would leave a property
    unenumerated** — the failure mode the ruling exists to prevent.
 3. **Route (b) — keep the rows and declare the overshoot with its terms: TAKEN.** **The unit's DONE row MUST
-   print the total `173` with its eight terms and MUST state the overshoot and the route taken** — *"a total
+   print the total `194` with its eight terms and MUST state the overshoot and the route taken** — *"a total
    that is not the sum of its own terms, or a total quoted without its terms, is a review finding"*
    (`REGISTER-ATTEMPT-TOTALS-PRINT-THEIR-TERMS`), and **the honest form of an over-cap register is a declared
    over-cap register.** **Escalated to the architect** as a cap question (`§9` item 5) — **never resolved by
    silently dropping a row or trimming a term.**
 
+**THE DECLARED DIVERGENCE THIS AMENDMENT CLOSES, and the ONE it OPENS — stated so no later pass reads either as an
+accident.** **CLOSED:** the spec's `§4` and the executed register now print the **same** eight terms and the **same**
+total (`194`); `tests/pd-ui-1-theme-register.test.ts`'s own `§4` arithmetic row already declares this amendment
+OWED (*"the SPEC's `§4` table still prints `173` and is SUPERSEDED — the spec is not this unit's write set, so the
+divergence is DECLARED here and ESCALATED to the supervisor as the amendment `§4` owes"*), **and this pass lands
+it.** **OPENED, and DECLARED:** the same file's **spec-table limbs** were authored against the **superseded** table
+— it reads the spec's `§4` cells back and asserts the eight printed counts sum to `173`, names `173` in the file,
+and expects four rows whose executed term exceeds the printed one. **Those limbs are now RED BY DESIGN and must be
+re-pointed by the pass that owns tests: the asserted total becomes `194`, the `173` reading becomes the SUPERSEDED
+one, and the "four rows grew" expectation empties** (no printed term is superseded once the table is truthful).
+**A pass that "fixes" this by reverting the spec's table to `173` is re-filing a defect — the table is the
+contract, and the test follows it, never the reverse.**
+
 **THE `(bounded)` MARKINGS, and what they do NOT prove.** **`7` of the `8` rows are `NO`** — each drives a
 closed enumeration matching its property text exactly — **with one carve-out: `P-TH-SM-2` carries
 `(bounded) ON (b)`**, because a **token scan over the unit's write set cannot prove the absence of a store at
 runtime** (a store reached through an alias, a computed property or a helper would not be seen). **The bound is
-stated, not hidden.**
+stated, not hidden.** **⟨NOTE 2026-09-28: the count is UNMOVED at `7 NO` + `1 (bounded) ON (b)`, and the marking is
+UNMOVED from `P-TH-SM-2` to any other row — no correction in `§0B` item 1 changes a property's quantifier, only the
+drives that execute it.⟩**
 
 **Rows considered and REJECTED (recorded so a later pass does not re-add them):**
 
@@ -667,7 +895,10 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
 | **D-8** | Whether this unit writes a new `docs/decisions.md` row | **NO.** Every clause here derives from an existing row or from the gate record |
 | **D-9** | Whether this unit edits `docs/skills/designing-pages.md` | **NO — the file DOES NOT EXIST in this repo** (VERIFIED-BY-READ: a glob of `docs/skills/*` returns `process-guardrails.md` alone), so there is **no test-use-case coverage matrix and no demo-page index to update**. **This unit renders a themed shell surface but authors NO page and NO UI element** (`§1.3`), so the honest form of that row is an **ABSENCE row** — recorded at `§9` item 6 |
 | **D-10** | Whether the register's row ids use a bare `P-SM-` prefix | **NO** — every row carries the unit token (`P-TH-SM-1`/`P-TH-SM-2`) because a bare `P-SM-1` **already names the carried baseline red** (`§4`'s machinery note) |
-| **D-11** | Whether the register may overshoot the `≤120` cap | **YES, DECLARED, with its terms and its route** (`§4`; `§9` item 5) |
+| **D-11** | Whether the register may overshoot the `≤120` cap | **YES, DECLARED, with its terms and its route** (`§4`; `§9` item 5). **The figure is `194` since the 2026-09-28 amendment (`§0B` item 1); the as-filed `173` is kept visible at `§4`** |
+| **D-12** | **⟨ADDED 2026-09-28 (`A-7`)⟩** What "honouring" the write record's `removal` member means | **THE ATTRIBUTE IS REMOVED.** The alternative reading — *"perform no write, leave a pre-existing attribute in place"* — is **REJECTED as a third outcome the record does not declare**. **Consequence: a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED** (`§0B` item 2; `§9` item 1 item (e)) |
+| **D-13** | **⟨ADDED 2026-09-28 (`A-8`)⟩** Whether any register row is generator-backed, and whether the caps/stop rule govern | **NO row is generator-backed; the terms are EXACT in-row counts; the seed/LCG remain as the register's own determinism check; and `≤100`/`≤120`/`STOP AFTER 5 CONSECUTIVE FAILURES` are DECLARED INAPPLICABLE (no bounded attempt loop exists).** The rule and the seed **stay in the contract** (`§0B` item 1; `§9` item 6) |
+| **D-14** | **⟨ADDED 2026-09-28 (`A-11`)⟩** Whether the returned resolution is the liveness input | **NO — the predicate stays SETTING-based and `apply()` discarding the return is CORRECT.** The return contract itself is unmoved (`§0B` item 3; `§2.2` item 4) |
 
 ---
 
@@ -704,6 +935,14 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
    - **Owner:** the `PD-VENDOR` pin's owning unit + the supervisor (the same-commit amendment) + **the
      architect, if the re-statement is read as a `G-9`-class pin change.** **Until it is disposed, this unit's
      landing would leave one red file whose cause is correct and whose fix is not this unit's to author.**
+   - **(e) ⟨ADDED 2026-09-28 (`A-7`), and it is the SECOND host item this unit's landing owes: the
+     `§0B` item 2 RULING makes the landed adapter's removal arm DIVERGENT (`src/renderer/theme.ts` leaves a
+     pre-existing `data-theme` in place where the record declares the attribute removed), so a `HOST-FIX` on
+     `src/renderer/theme.ts` → `applyThemeToRoot` is OWED in the SAME pass as the `A-7` tripwire's
+     replacement, and the `tests/pd-ui-1-theme-adoption.test.ts` `⟨A-7 + A-2⟩ P-TH-TP-2` row's two limbs are
+     RED BY DESIGN until both land. Owner: the next `PD-UI-1` landing pass (Implementer) + the pass that owns
+     tests. This is a HOST item, NOT a foundation gap: the foundation DOES settle the record's meaning
+     (`§0B` item 2 cites it), and no `docs/defects.md` → `docs/HANDOFF.md` row is owed for it.⟩**
 2. **`E-2` — THE FOUNDATION IS NEVER PATCHED (`R-10`), and this unit has no foundation gap to hand off.** The
    vendored `theme.ts` is read this pass and its contract holds (`§3.1`); **no defect row is owed by this
    unit.** *(`docs/specs/post-division-foundation-adoption-surface.md` §7's `G-1`..`G-12` findings are other
@@ -719,13 +958,27 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
    adapter reads it and exposes nothing** (`§1.2` (d)). **Owner:** the architect (whether the fork's
    appearance surface should report the degradation) — **`UNVERIFIED` today, and deliberately NOT resolved
    here, because changing the adapter's return type would break the kept surface (`D-5`).**
-5. **`E-5` — THE REGISTER OVERSHOOTS THE `≤120` CAP AT `173`.** Declared with its terms and its route
+   **⟨NARROWED 2026-09-28 (`A-11`, `§0B` item 3; VERIFIED-BY-READ): the unobservability is now DOUBLE — the
+   `source` member is read-and-not-exposed, AND the `applyThemeToRoot` RETURN has NO consumer anywhere in
+   `src/**` (the wiring's `apply()` discards it), so no fork-side surface consumes the adapter's resolution
+   either. The owed item is unchanged and its owner is unchanged; what is added is the second, measured reason
+   it cannot be observed today.⟩**
+5. **`E-5` — THE REGISTER OVERSHOOTS THE `≤120` CAP AT `194`.** Declared with its terms and its route
    (`§4`). **Owner:** the architect (a cap question for a four-shape-set unit). **Never resolved by dropping a
-   row or trimming a term.**
+   row or trimming a term.** **⟨AMENDED 2026-09-28 (`§0B` item 1): the figure was `173` as filed and the
+   corrected, executed total is `194` = `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8`; the superseded `173` stays
+   visible at `§4`, and `194 > 120` is still the declared overshoot — the ITEM does not change, only its
+   figure.⟩**
 6. **`E-6` — `docs/skills/designing-pages.md` DOES NOT EXIST IN THIS REPO.** VERIFIED-BY-READ this pass. **No
    coverage-matrix row and no demo-page entry is owed by this unit; the honest form is this absence row**
    (`D-9`). **This unit authors no page and no UI element** (`§1.3`), so even a written skill would not be
    touched.
+   **⟨NOTE 2026-09-28 (`A-8`'s declared choice, `§0B` item 1): this amendment does NOT re-open this row. What
+   it clarifies is the register's MACHINERY — the `STOP AFTER 5 CONSECUTIVE FAILURES` rule stays IN the
+   contract (`§4`'s machinery block) and is DECLARED INAPPLICABLE to this register because NO row runs a
+   bounded attempt loop for it to govern; the seed (`0x20260928`) and its hand-rolled LCG also stay, exercised
+   as the register's OWN determinism check and governing no row's attempts. A later pass may NOT delete the
+   rule or the seed from `§4` — it may only carry this declaration.⟩**
 7. **`E-7` — EVERY `UNVERIFIED` ITEM OF THIS FILING, named so none is read as settled:**
    - whether the `§9` item 1 pin re-statement is a **unit-commit** act or an **architect** act — what would
      settle it: the architect's read of its `G-9`-class status;
@@ -738,7 +991,48 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
      `X-3` ledger's `M-static` reading is the authority, and this pass did not re-run its exact command**;
    - whether the **applied-`data-theme`** live claim can be carried inside the frozen `MATRIX_ROWS` at all
      (`§7.2` item 3);
-   - the **`@media` fallback window's** observability in a live run (`§7.2` item 3).
+   - the **`@media` fallback window's** observability in a live run (`§7.2` item 3);
+   - **⟨ADDED 2026-09-28 (`A-7`, `§0B` item 2): whether `dataset`-level deletion is the correct REMOVAL mechanic
+     against a REAL `DOMStringMap`.** The ruling fixes the record's MEANING; **the mechanic the owed `HOST-FIX`
+     uses to remove the attribute is not settled by any record this pass read.** The landed test's own DELETE
+     corpus expresses the removal as a `dataset`-key deletion, and **the adapter's `ThemeRoot` type is
+     `{ dataset: { theme?: string } }`** — **what would settle it: the live pass (`[U]`), where a real
+     `document.documentElement.dataset` can be driven and the attribute's ABSENCE observed.**
+   - **⟨ADDED 2026-09-28 (`A-7`, `§0B` item 2): whether a spec-only amendment is admissible for a HOST-fix that
+     no reachable path can drive.** This filing rules the semantics and names the fix; **whether the fix may land
+     alone (with its row being the injected-record drive) or must wait for a reachable removal path is the
+     architect's call** — what would settle it: that ruling.
+   - **⟨ADDED 2026-09-28 (`§0B` items 2/3): whether the two RED-BY-DESIGN test limbs (the `A-7` tripwire's two
+     limbs, and the register test's superseded spec-table limbs) are repaired in ONE pass or in two.** Both are
+     `[T]`-side reconciliations to this amendment; **what would settle it: the supervisor's pass split** — neither
+     is performed by this doc pass.
+8. **`E-8` ⟨ADDED 2026-09-28 (`A-2`/`A-4`; `§0B` item 4)⟩ — THE MECHANISM DECISION IS AN OPEN ARCHITECT
+   QUESTION, RECORDED WITH BOTH OPTIONS AND NEITHER PICKED.** **The measured fact:** the adversarial audit's
+   literal recipe **`vi.mock('../src/shared/theme.js', …)`** was **measured to red the frozen
+   `tests/pd-vendor-set.test.ts` `A-12` census**, which pins an **EXACT set of FOUR non-electron mock binders** —
+   the literal recipe **adds a FIFTH**. **The substitution the remand took instead:** compile **the landed
+   adapter's own bytes** with **only its import declaration replaced by a stub bind** — the same discrimination,
+   **no pin touched**.
+   - **(a) keep the literal `vi.mock` recipe** and **amend the `A-12` census to admit a fifth binder** — **cost: a
+     PIN CHANGE with its OWN GATE** (a frozen, independently-owned pin moves). **Buys:** the standard,
+     readable vitest instrumentation applied to the real import edge rather than to a compiled copy of the bytes.
+   - **(b) the compile-the-adapter-bytes substitution as the PERMANENT shape** — **cost: distance from the runtime
+     form** (the instrument reads an instantiated copy with a substituted import declaration, one step away from
+     the module graph vitest resolves, so a future resolver/bundler change would not be caught by it).
+     **Buys:** **no pin touched and no gate opened.**
+   - **THE TRADEOFF IS STATED AND NOT PICKED.** **Owner: the architect.** **A pass that picks one without that
+     ruling is choosing a pin's fate, which is not this unit's to choose.**
+9. **`E-9` ⟨ADDED 2026-09-28 (`§0B` item 1)⟩ — THE REGISTER TEST'S SPEC-TABLE LIMBS ARE NOW RED BY DESIGN AND
+   NEED RE-POINTING (a `[T]`-side act, never this pass's).** `tests/pd-ui-1-theme-register.test.ts`'s `§4`
+   arithmetic row reads the spec's `§4` cells back; it asserts the eight printed counts **sum to `173`**, that the
+   spec file matches **`` `173` attempts ``**, and that **the executed term EXCEEDS the printed one for exactly
+   four rows**. **This amendment makes all three of those readings the SUPERSEDED ones** — the printed counts now
+   sum to **`194`**, and no printed term is superseded once the table is truthful. **Owner: the pass that owns
+   tests (TestWriter/remand), SAME pass as `§9` item 1 item (e)'s host fix.** **The re-pointing is a
+   reconciliation to the amendment, NOT a relaxation: the truthfulness assertion (every cell = the sum of its own
+   factors; the total = the sum of the terms) stays, and the `173` reading becomes the SUPERSEDED one it is.**
+   **A pass that reverts the spec's table to `173` to keep these limbs green is RE-FILING the defect this
+   amendment closes.**
 
 ---
 
@@ -774,6 +1068,20 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
 **Arithmetic: CORRECT as printed.** The printed totals equal the sum of their own printed factors row by row (`16+4`, `22+4`, `48+9+2`, `16+4`, `24+2`, `4+2`, `6+2`, `6+2`), every row is ≤100, the aggregate `173 = 20+26+59+20+26+6+8+8`, and the `173 > 120` overshoot is declared. **WHAT IS NOT REAL IS THE GENERATOR FRAMING:** **no row carries a generator**, the pinned LCG is exercised only in the arithmetic block, the stop-after-5 rule is **unimplemented (a comment only)**, and the executed counts differ from the declared terms in `P-TH-IM-2` (22 vs 24) and `P-TH-TP-3` (printed 12, run 16, asserted as a floor). **The terms are drive/assertion counts over closed hand-picked tables, not PBT attempts.** **Over-strength rows:** `P-TH-IM-2` (a tautological agreement limb), `P-TH-TP-2` (the write/record discrimination is not discriminating), `P-TH-TP-3` (two limbs assert a hard-coded `[]`), `P-TH-SM-1 (f)`/`P-TH-SM-2 (c)` (vacuous on a clean committed tree), `P-TH-IM-4 (c)` (regex-only). **The negative generators tasked to the TestWriter:** the **mocked-record** generator (`A-2`, record `prefersDark` inverted against the raw argument); the **RHS AST oracle** (`A-4`); the **recording-Proxy root** (`A-3`); **per-file digest constants** (`A-1`); and the `''` + boxed-`String` shapes (`A-6`).
 
 **PACKAGE / FOUNDATION DEFECTS: NONE.** The pass read the foundation's `resolveTheme`/`applyThemeDeclaration`/`envReading`/`strictReading` and found the resolver total for null/non-object/missing/inherited/trap-only-Proxy/non-boolean/throwing-accessor/revoked-Proxy environments and the applier total for `''`/non-string/omitted inputs — **no `docs/defects.md` → `docs/HANDOFF.md` row is owed by this unit.**
+
+**⟨RECONCILED 2026-09-28 BY THE GATE-4 REMAND AMENDMENT (`§0B` items 1/2; the audit paragraph ABOVE is KEPT as the
+gate-4 pass's own reading and NONE of it is rewritten):** **(i) THE ARITHMETIC MOVED** — the executed and now-declared
+total is **`194` = `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8`**, with the audit's `173` kept visible as the superseded
+figure (`§0B` item 1, `§4`). **(ii) THE GENERATOR FRAMING IS NO LONGER A DEFECT BUT A DECLARED CHOICE** — `A-8`'s route
+(i): **NO row is generator-backed**, the terms are **EXACT in-row counts**, the seed/LCG stay as the register's own
+determinism check, and the caps + the stop rule are **DECLARED INAPPLICABLE** (`§0B` item 1; `§9` item 6). **(iii) THE
+TWO MISCOUNTED TERMS ARE CLOSED BY EXACTNESS** — the remand's `REGISTER_TERMS` asserts each printed count EXACTLY, so
+the *"`P-TH-IM-2` 22 vs 24"* and *"`P-TH-TP-3` printed 12, run 16, asserted as a floor"* readings are the filed ones
+and are superseded. **(iv) THE FIVE NAMED NEGATIVE GENERATORS WERE AUTHORED — EXCEPT ONE, WHICH IS THE OPEN
+QUESTION** — the mocked-record generator is the item `§9` item 8 records as an OPEN ARCHITECT QUESTION (the literal
+`vi.mock` recipe reds a frozen pin's `A-12` census; the remand's substitute compiles the adapter's bytes with the
+import declaration replaced). **(v) THE `removal` HALF OF THE STRONGEST FALSE-GREEN IS NOW RULED, NOT MERELY DRIVEN**
+— `§0B` item 2 rules what honouring the record means and owes the adapter a `HOST-FIX`.⟩**
 
 **`RCA-3` compliance: the pass HAS RUN and its findings are recorded here; the test-side corrections go to a one-pass remand, `A-9`'s spec fix landed in this pass, and the reporting items (`A-10`) are the supervisor's.**
 
@@ -827,14 +1135,20 @@ full stop.**
    block, the persistence), and **what is deleted (nothing)** (`§1.2`).
 3. **The `U-THEME-CONTROL` ruling and its evidence** (`§1.3`) — **DECLINED by this unit, deferred with a named
    owner and a named constraint**, on four reasons and four readings (`E-1`..`E-4`).
-4. **The register** — **`8` rows** (the cap, FULL), **`173` attempts printed with its eight terms**, the
-   declared **over-cap** and the route taken, and the one `(bounded)` carve-out (`§4`).
+4. **The register** — **`8` rows** (the cap, FULL), **`194` attempts printed with its eight terms `28 + 26 + 67 +
+   24 + 27 + 6 + 8 + 8`** (the superseded `173` and its terms kept visible, dated, with the finding ids
+   `A-6`/`A-7`/`A-3` — `§0B` item 1), the declared **over-cap** and the route taken, the **`A-8` declared choice**
+   (no generator-backed row; the caps and the stop rule INAPPLICABLE), and the one `(bounded)` carve-out (`§4`).
 5. **The dossier's status tally** — the number of `defined` rows, and **every `undefined-until-answered` row
    named as an escalation** (the dossier's own §1 tally).
 6. **The collision block's outcome** — every hit reconciled **by row id**, or none (the dossier's §2).
 7. **The protected pins touched, and their same-commit re-derivation** (`§3.4`, `§9` item 1) — **including the
    one pin this unit deliberately reds.**
-8. **Every `UNVERIFIED` item** (`§9` item 7), with the blocking `E-1` named first.
+8. **Every `UNVERIFIED` item** (`§9` item 7), with the blocking `E-1` named first. **⟨2026-09-28: `§9` items 7/8/9
+   carry the amendment's own additions — the two RED-BY-DESIGN `[T]`-side reconciliations (`E-9`), the removal
+   mechanic's live-layer question, and the OPEN ARCHITECT QUESTION on the mocked-record instrumentation (`E-8`) —
+   and the architect QUESTION is reported WITHOUT a recommendation, because this pass does not pick it (`§0B`
+   item 4).⟩**
 9. **The live pass's status** (`§7.2`) — the command shape attempted and the divergence reading attached, or
    the reading itself if the precondition has been fixed by then.
 
@@ -862,7 +1176,10 @@ full stop.**
 `docs/FORK-DIVERGENCE.md` §2 row 4 / §3 rule 2 ·
 `../Provident-Electron/docs/specs/theme.md` §0A / §1 / §2.1 / §2.2 (`P-TH-1`, `P-TH-7`, `P-TH-8`, `P-TH-9`,
 `P-TH-10`) / §2.3 / §2.4 / §3.1 / §3.2 / §3.3 / §3.4 (`R-1`, `R-2`, `R-4`, `R-7`, `R-8`, `R-10`) / §5.5.1
-(`P-TH-IM-3`) · `../Provident-Electron/docs/guide/theme.md` · `../Provident-Electron/docs/guide/seams.md`
+(`P-TH-IM-3`) · `../Provident-Electron/docs/guide/theme.md` **→ the opening paragraph, *What it is*, *Use cases*
+UC-2, the *Code, runnable* applied-write recipe and *Gotchas* (THE `A-7` RULING'S SETTLED CITATION, `§0B` item 2)** ·
+`../Provident-Electron/docs/specs/theme.md` **§0A note 2, §2.2 (D)'s `removal` row and removal-case row, §2.4
+item 2 (`A-7`'s contract half)** · `../Provident-Electron/docs/guide/seams.md`
 (the last row: the EMPTY seam set) · `../Provident-Electron/docs/specs/theme-control.md` §2.1 ·
 `../Provident-Electron/docs/specs/theme-greens.md` ·
 `../Provident-Electron/docs/specs/gsession.md` §2.2 `P-1`/`P-5`/`P-7`, §3.4 `R-1` ·
@@ -873,4 +1190,10 @@ block) · `src/shared/theme.ts` (**the vendored module**) · `src/shared/types.t
 `src/main/operator-settings-store.ts` → `coerceTheme` · `src/main/preload.ts` → `operatorSettings` ·
 `src/renderer/sidebar-panes.ts` → `settingsContent`, `OPERATOR_REPRESENTATION_MODE_TOGGLE_HANDLER` ·
 `vendor/foundation.lock.json` (`theme`) · `tests/unit-u-shell-2-theme.test.ts` · `tests/pd-vendor-set.test.ts` ·
-`tests/pd-vendor-manifest.test.ts` · `tests/unit-v5-migration-contract.test.ts`.
+`tests/pd-vendor-manifest.test.ts` · `tests/unit-v5-migration-contract.test.ts` ·
+**⟨ADDED 2026-09-28 (the gate-4 remand amendment, `§0B`): `tests/pd-ui-1-theme-adoption.test.ts` → its `⟨A-7 + A-2⟩
+P-TH-TP-2` row (the tripwire whose TWO limbs lock the SKIP reading and are now RED BY DESIGN, `§0B` item 2) and its
+`specItem3Text()` reading (the `§2.1` item 3 ruling site) · `tests/pd-ui-1-theme-register.test.ts` → its `§4`
+arithmetic row and its `REGISTER_TERMS`/`SUPERSEDED_SPEC_TERMS` accountings (the executed terms `194` and the
+superseded `173`, `§0B` item 1) and its `§9` spec-table limbs (now RED BY DESIGN, `§9` item 9) · the `A-12`
+binder census in `tests/pd-vendor-set.test.ts` (the OPEN ARCHITECT QUESTION, `§9` item 8)⟩** ·
