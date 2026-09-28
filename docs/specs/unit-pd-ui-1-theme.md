@@ -1,6 +1,24 @@
 # Unit `PD-UI-1` — THE THEME UNIT (wave `W1` of the post-division rebuild): the foundation's `U-THEME` DECLARATION + ENV READING adopted onto the fork's KEPT precedence resolver — Spec
 
-**Status: SPEC — authored 2026-09-28. NO CODE LANDED, NO TEST LANDED, NOTHING RUN by this pass. No red set
+**⟨STATUS AMENDED 2026-09-28 (item-10d documentation review; annotate-beside — the as-filed status paragraph is
+KEPT VERBATIM immediately below this annotation and is NOT rewritten — `RCA-8(c)`).⟩ THIS IS THE STATUS OF AN
+EARLIER, SPEC-ONLY PASS AND IT IS FALSE AT THIS HEAD.** The branch head this review read is
+`post-division-rebuild` (the hash is **QUOTED from the supervisor's handoff, not re-verified by this pass** —
+this review re-derived no revision of its own). **CODE HAS LANDED AND TESTS HAVE LANDED at that head**: the
+adapter `src/renderer/theme.ts` imports the vendored module (`§2.1`'s import census = one statement, resolving
+to `src/shared/theme.ts`) and performs the `A-7` removal arm; the wiring
+`src/renderer/renderer.ts` → `installTheme` is landed; and the unit's two test files exist and were RUN
+(`tests/pd-ui-1-theme-adoption.test.ts` = **19 `it` rows**, `tests/pd-ui-1-theme-register.test.ts` = **23 `it`
+rows** — VERIFIED-BY-READ of this review, and the row counts match the blind-greens artifact's `G4` readings,
+`docs/specs/unit-pd-ui-1-theme-greens.md`). **The finding id for this staleness is `X-4` of that artifact.**
+**WHAT REMAINS TRUE AS FILED, stated so this annotation is not read as a blanket discharge:** this review ran
+**no leg of its own** (no `npm test`, no `typecheck`, no `build`, no `battery`, no `divergence`, no live
+pass) — every count it quotes is a VERIFIED-BY-READ of the tree or a RECORDED READING of the greens artifact —
+and the unit's **live/assembled status is `PRECONDITION-FAILED`** with the environmental divergence reading
+attached (`§7.2` item 2), never a park. See `§9` item 10 for the owed `[T]`-side and `src/**` items this
+landing left, and `docs/decisions.md`'s `POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS` row for the
+`A-7`/`A-11` rulings this pass recorded.**
+**Status (AS FILED, 2026-09-28 — KEPT VISIBLE as the superseded reading): SPEC — authored 2026-09-28. NO CODE LANDED, NO TEST LANDED, NOTHING RUN by this pass. No red set
 has been authored or run. No leg, trio, `tsc` invocation, Electron boot, live battery or divergence leg was
 executed. This filing is ONE step of the unit's cycle and authorises the NEXT one (the TestWriter's red set),
 never the implementation.**
@@ -53,12 +71,39 @@ RECORDED READING)**. **No code, no test file, no `src/**` byte (the vendored byt
 vitest config and no foundation file is touched by this pass.** **The as-filed text each amendment supersedes is KEPT
 VISIBLE beside it, dated, with its finding id** — annotate, never rewrite.
 
+**⟨PLACEMENT NOTE, 2026-09-28 (item-10d documentation review; annotate-beside — nothing here is rewritten).⟩
+THIS SECTION SITS BEFORE `§0`/`§0A` BY DESIGN, not by a renumbering accident.** `§0B` is this file's **newest
+amendment block appended at the head of the amendment region** — the same placement discipline the file already
+records for its register (`§4`'s own *"Section-number note"*: the block keeps the id its content was minted
+under, because `§3` is this unit's mechanics block and `§4` is the house `§5.x`-class register). **The ordering
+is left AS IS rather than renumbered**, with the reason stated: **`§0B` is cited by id from `§2.1` items 3/6,
+`§2.2` item 4, `§3.2` item 5, `§9` items 1(e)/4/7/8/9/10, `D-12`/`D-13`/`D-14`, from the unit's two test files
+and from three active trackers (`docs/next-steps.md`, `docs/pending.md`, `docs/decisions.md`)** — a renumber
+would break every one of those citations, which `AGENTS.md` item 6(c) forbids. **`§0`, `§0A`, `§0B` are three
+distinct addresses and each is present exactly once; every `§`-citation made anywhere in the unit's doc set
+resolves to a real section** (VERIFIED-BY-READ of this file's section list by this review; the one citation
+this review found that did NOT resolve is filed as a finding — see `§3a-seed`'s `ADV-T1`/`ADV-T3` reference in
+`docs/specs/unit-pd-ui-1-theme-greens.md`, whose correct address is `§4` `P-TH-IM-1`'s control requirement plus
+the seed table here).**
+
+**⟨STATE AT THIS HEAD, 2026-09-28 (added by the item-10d documentation review; the ledger above and below is
+KEPT as the amendment pass wrote it).⟩ EVERY LANDING SITE THIS LEDGER LISTED AS OWED HAS SINCE LANDED, and the
+blind-greens artifact `docs/specs/unit-pd-ui-1-theme-greens.md` filed the staleness as **five contradictions
+`X-1`..`X-5`**. In one line each, with the site this review annotated: **`X-1`** — the `A-7` `HOST-FIX` **LANDED**
+(see `§2.1` item 6, `§3.2` item 5, `§9` item 1(e), `§9` item 7, `D-12`); **`X-2`** — the `PD-VENDOR` inert-vendoring
+pin is **RE-STATED, not red** (see `§0A` note 2, `§3.4` item 1, `§9` item 1 `E-1`); **`X-3`** — the register test's
+spec-table limbs are **GREEN, not red by design** (see `§0B` item 1's `OPENED, and DECLARED` paragraph, `§9` item
+9); **`X-4`** — this file's status block (see the status annotation at the head of this file); **`X-5`** — the
+recorded `9202dc8` leg baseline has moved (see `§7.1`, `§7.3`). **The arithmetic escalation `E-5` and the
+mechanism question `E-8` are NOT among them and keep their status: `E-5` is the architect's cap question (still
+open) and `E-8` is recorded as an OPEN ARCHITECT QUESTION and was NOT picked by any pass.**⟩
+
 **The four escalations, and where each lands:**
 
 | # | The finding | The disposal | Its landing site |
 | --- | --- | --- | --- |
 | **A-1 / A-6 / A-7 / A-3 (arithmetic)** | the `§4` register prints **`173`**, which the remand's executed terms superseded | **`§4`'s terms and total are AMENDED to `194` with its eight terms and the `+21` composition; the superseded `173` (and the four superseded row terms) stay VISIBLE, dated, with the finding ids** (`§0B` item 1) | `§4`'s table cells, `§4`'s attempt tally, `§4`'s `(bounded)` note, `§9` item 5, `§10` item 4, `§11` |
-| **A-7 (semantics)** | *"the `removal` branch is claimed 'implemented and honoured' but is NEITHER DRIVEN NOR DEFINED"* | **RULED — the record's removal means the attribute is REMOVED, not left in place; a HOST-FIX is owed on `src/renderer/theme.ts`** (`§0B` item 2), and **the tripwire it must stay consistent with is named** | a RULING PARAGRAPH at `§2.1` item 3 (the site `A-7`'s own correction names), `§3.2` item 5, `§9` item 1 item (e) |
+| **A-7 (semantics)** | *"the `removal` branch is claimed 'implemented and honoured' but is NEITHER DRIVEN NOR DEFINED"* | **RULED — the record's removal means the attribute is REMOVED, not left in place; a HOST-FIX is owed on `src/renderer/theme.ts`** (`§0B` item 2), and **the tripwire it must stay consistent with is named** — **⟨`X-1` DISCHARGED AT THIS HEAD 2026-09-28: the `HOST-FIX` LANDED and the tripwire was REPLACED, so this row reads OWED-THEN-LANDED, not OPEN. The landed reading: `src/renderer/theme.ts` → `applyThemeToRoot` takes `write.removal` and performs `delete root.dataset.theme` in the value arm's place (`§2.1` item 6); `tests/pd-ui-1-theme-adoption.test.ts` drives it (`⟨A-7 RULED + A-2⟩ P-TH-TP-2`, 19 `it` rows). The ruling itself still STANDS — it is the contract the landing satisfies.⟩** | a RULING PARAGRAPH at `§2.1` item 3 (the site `A-7`'s own correction names), `§3.2` item 5, `§9` item 1 item (e) |
 | **A-11** | *"`§2.2` item 4's parenthetical is falsified by the landing — `installTheme`'s `apply()` discards the return, so it has no consumer in `src/**`"* | **RULED — the predicate STAYS setting-based, `apply()` discards the return, and the returned resolution is NOT the liveness input** (`§0B` item 3) | `§2.2` item 4 (annotate-beside), `§9` item 4, `§9` item 7 |
 | **A-2 / A-4 (mechanism)** | the adversarial audit's literal recipe `vi.mock('../src/shared/theme.js', …)` was measured to red the frozen `tests/pd-vendor-set.test.ts` `A-12` census (the exact four-binder set — the recipe adds a FIFTH) | **RECORDED AS AN OPEN ARCHITECT QUESTION with both options and their costs — NOT decided by this pass** (`§0B` item 4) | `§9` item 8 |
 
@@ -139,6 +184,18 @@ outcome is that the attribute named by `write.name` is NOT PRESENT after the con
 | **can a stale `data-theme` outlive a settings change on a reachable path?** | **NO on every path reachable through this adapter today**: every reachable call hands the applier a non-empty resolution, so every reachable call **rewrites** the attribute (`write.value`). **The skip-vs-remove difference is therefore UNOBSERVABLE in the fork's live app at this head** — it is a **latent divergence in a branch the resolver cannot enter**, not a reproduced visual defect. **Stated plainly so this ruling is not read as a repaired live bug** |
 
 **IS THE LANDED ADAPTER CORRECT? NO — A `HOST-FIX` IS OWED. Its exact shape and its owner:**
+**⟨`X-1` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the heading above is KEPT as the
+amendment pass filed it — `RCA-8(c)`).⟩ THE `HOST-FIX` HAS LANDED.** VERIFIED-BY-READ of `src/renderer/theme.ts`
+by this review: the write site now reads `if (write.removal) { delete root.dataset.theme } else
+{ root.dataset.theme = write.value }`, both arms inside the same `try`/`catch`, so the **one write site stands**,
+the `ThemeRoot` contract is **NOT widened** (no `removeAttribute` call), and the total/fail-soft shape is
+unchanged. The blind-greens artifact's injected-record drive (`docs/specs/unit-pd-ui-1-theme-greens.md` row `B5`)
+reads: `deleteProperty('theme')` once, **0 sets**, attribute **ABSENT** after the call, the resolution still
+returned. **The tripwire was REPLACED in the same landing** — `tests/pd-ui-1-theme-adoption.test.ts`'s
+`⟨A-7 RULED + A-2⟩ P-TH-TP-2` row now DRIVES the ruling (a LEAVE-IN-PLACE corpus and a `writes ''` corpus must
+FAIL it); VERIFIED-BY-READ of that file by this review — the row exists by name, and the file carries 19 `it`
+rows, which the greens artifact's `G4` reads **19 PASS**. **So this section's
+"OWED"/"RED BY DESIGN" clauses are the file-as-filed position and are SUPERSEDED here, not deleted.**
 
 - **The site:** `src/renderer/theme.ts` → `applyThemeToRoot`'s one write site (**the adapter this unit owns**; `§1.4`).
 - **The change:** in the `try` block, **when `write.removal` is `true` the attribute is REMOVED from the same
@@ -188,6 +245,19 @@ hold while the **leave-in-place** and **writes-`''`** corpora **FAIL**; and re-s
 **Until that pass lands, the tripwire is RED BY DESIGN and its failure message is the remediation:** *"replace this
 both-readings drive with the ruling."* **A pass that silently deletes the tripwire instead of replacing it is a review
 finding** — it would erase the record that the ruling was made.
+**⟨`X-1`, SECOND SITE — DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the two limbs above are
+KEPT as the amendment pass read them at the pre-landing head).⟩ THAT PASS LANDED, AND IT REPLACED THE TRIPWIRE
+RATHER THAN DELETING IT (which is what this paragraph demanded).** VERIFIED-BY-READ of
+`tests/pd-ui-1-theme-adoption.test.ts` by this review: the row now exists as
+`⟨A-7 RULED + A-2⟩ P-TH-TP-2 — the removal branch: an injected removal: true record must leave the pre-carried
+attribute GONE, and a LEAVE-IN-PLACE or writes '' corpus MUST FAIL the ruling`, and the file's header comment
+records that **both** former limbs were replaced — *"the source limb is re-scoped so what it FORBIDS is a removal
+performed on an element the adapter was NOT handed … not the removal the ruling requires"* — and that **"THE
+DRIVE IS INJECTED, never reachable"**, so no live claim is made by the row. **The blind-greens artifact's `G4`
+reads the file 19 PASS, and its `B5`/`B7` rows falsify the leave-in-place reading with an independent
+instrument.** **What is NOT claimed here:** this review did not run that file (see the report's UNVERIFIED list),
+and the `[U]`-class question — whether `dataset`-level deletion is the right mechanic against a real
+`DOMStringMap` — remains **UNCHANGED and parked** (`§9` item 7).⟩**
 
 ### 0B item 3 — THE `A-11` RULING: **THE LIVENESS PREDICATE STAYS SETTING-BASED, AND THE RETURN IS DISCARDED**
 
@@ -207,7 +277,7 @@ whether the OS listener is live**"*, `src/renderer/theme.ts` → `applyThemeToRo
 | **1** | **The liveness predicate is the wiring's, and it is `setting`-based: the OS listener applies only while the setting is NEITHER `'light'` NOR `'dark'`.** It is the **same strict-identity test against the same two literals** the kept precedence rule applies (`§2.1` clauses 1/2) — **so the wiring holds no second precedence rule, it holds the same one** (`§2.2` item 7) |
 | **2** | **The returned resolution is NOT the liveness input, and `apply()` discarding it is CORRECT — not a defect.** **Why, in the contract's own terms:** the adapter's return is **redundant by construction** with a value the wiring already holds — `applyThemeToRoot` returns **the resolution it computed from the same `(setting, prefersDark())` pair the wiring passes** — so a return-based predicate would read **the same datum by a longer route**, and would be a **weaker** authority: it would silently invert (an explicit `'light'` making the listener LIVE) if the resolution were ever computed differently. **The setting is the authority** |
 | **3** | **`§2.1` item 4's *"and it is still implemented"* is CARRIED** and **`D-5` is UNMOVED**: `applyThemeToRoot` **still must return** the same resolved theme it wrote (**the four exports and the return type are the kept surface**, `§1.2` (d)). **What is ruled is only that no `src/**` caller must CONSUME it** — a return with no consumer is a contract, not a defect, and **the row that pins it stays** |
-| **4** | **The stale text is amended ANNOTATE-BESIDE** (as-filed clause kept visible at `§2.2` item 4), **and `A-11`'s second half is discharged by the same ruling:** the adapter's doc comment (*"so the caller can decide whether the OS listener is live"*) **is a stale claim** — the next landing pass **drops or corrects it**, because **there is no such caller** |
+| **4** | **The stale text is amended ANNOTATE-BESIDE** (as-filed clause kept visible at `§2.2` item 4), **and `A-11`'s second half is discharged by the same ruling:** the adapter's doc comment (*"so the caller can decide whether the OS listener is live"*) **is a stale claim** — the next landing pass **drops or corrects it**, because **there is no such caller**. **⟨ITEM-10d DOCUMENTATION REVIEW, 2026-09-28 (`X-1`-class check; the clause above is KEPT as the amendment pass filed it).⟩ THE DOC COMMENT IS STILL UNCORRECTED AT THIS HEAD — VERIFIED-BY-READ of `src/renderer/theme.ts` by this review: `applyThemeToRoot`'s comment still closes *"Returns the resolved theme so the caller can decide whether the OS listener is live."* **This is an OWED `src/**` edit, and `src/**` is OUTSIDE the documentation reviewer's write set — it is NOT fixed here; it is carried as `§9` item 10 with its owner named.** The SPEC half IS corrected (this ruling paragraph, `§2.2` item 4's dated annotate-beside, and the `docs/decisions.md` row `POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS`). **One refinement of this clause's own reasoning, recorded rather than assumed:** *"there is no such caller"* is TRUE of `src/**` (`installTheme`'s `apply()` discards the return — re-read this pass), but `applyThemeToRoot` is an **exported** function, so the sentence is also the fork's **published contract** for an outside consumer. The owed edit is therefore **a CORRECTED form (the return is required by `D-5`, the liveness claim is removed), not a bare deletion** — deleting it outright would leave an exported function's return documented by nothing. |
 | **5** | **The observability item is NARROWED, not closed:** the *"return has no consumer"* fact **compounds `A-2`'s finding** — the adoption's discriminators are already instrumented at the **test** side. **`§9` item 4 is the owed item; nothing about the return type changes here** |
 
 ### 0B item 4 — THE MECHANISM DECISION IS RECORDED AS AN **OPEN ARCHITECT QUESTION** (NOT decided by this pass)
@@ -228,6 +298,19 @@ follow a record whose members contradict the raw argument), **and NO pin is touc
 **RECORDED — NOT DECIDED.** **Owner: the architect.** **A pass that picks one without that ruling is choosing a pin's
 fate, which is not this unit's to choose.**
 
+**THE RE-STATEMENT IS PERFORMED — AND IT IS A RE-STATEMENT, NEVER A RELAXATION.** VERIFIED-BY-READ of
+`tests/pd-vendor-set.test.ts` by this review: the row now reads *"§2.1 item 6 / §5 item 5 / §12.3(c)
+⟨RE-STATED 2026-09-28, unit PD-UI-1 §9 item 1⟩ — the stem-collision hit set is STILL EXACTLY the three hits, and
+every VENDORED-RESOLVING hit is a DECLARED CONSUMER EDGE named per row"*, and the file carries the
+`DECLARED_CONSUMER_EDGES` allow-list with **one row per adopting unit** (`{ file: 'src/renderer/theme.ts',
+specifier: '../shared/theme.js', member: 'theme', unit: 'PD-UI-1' }`) — the shape this note requested at `§9`
+item 1 item (b). The two limbs stay distinguishable: the file also carries the re-statement's **NEGATIVE CONTROL**
+row (*"an un-listed vendored-resolving edge FAILS the same oracle, and the four refused EVASION forms are CAUGHT by
+the extended derivation"*). **`§9` item 1 `E-1` carries this review's full reading, including the census shape
+(four hits over three files, one of them vendored-resolving); this note is annotated here so a reader of `§0A`
+alone is not told the re-statement is still owed.** **NO EVASION FORM was taken** (`await import`/`require`/
+`new URL` are refused and are CATCHABLE by the extended derivation — verified by that control row's reading).⟩**
+
 ---
 
 ## 0. The rulings this unit derives from (recorded, NOT re-opened)
@@ -247,6 +330,27 @@ fate, which is not this unit's to choose.**
 | **R-11** | **No settled adjudication is re-opened** — not gate 1's verdict, not the architect's `Q-A`..`Q-F`, not `PD-VENDOR`'s cycle, not the two pd-vendor spec amendments, not `B-1`, not `W0`'s outcome, not `X-3`. | throughout; a **new** contradiction is filed with evidence (`§9` item 1) |
 
 ### 0A. The dated ruling note — the ONE clause this filing DECIDES, and the ONE it ESCALATES (2026-09-28)
+
+**⟨`X-2` ANNOTATION, 2026-09-28 (item-10d documentation review; both notes below are KEPT as filed — `RCA-8(c)`;
+the reader is told here so that a reader of `§0A` alone is not left with the pre-landing position).⟩**
+**NOTE 2's PIN HAS BEEN RE-STATED AND NOTE 1's SURFACE LANDED, BOTH IN THE SAME LANDING.** **VERIFIED-BY-READ of
+`tests/pd-vendor-set.test.ts` by this review:** the pin row's title now carries *"⟨RE-STATED 2026-09-28, unit PD-UI-1
+§9 item 1⟩"* and its two original assertions are **KEPT + EXTENDED** rather than relaxed — *"the stem-collision hit
+set is STILL EXACTLY the three hits, and every VENDORED-RESOLVING hit is a DECLARED CONSUMER EDGE named per row"*
+— with the `DECLARED_CONSUMER_EDGES` allow-list carrying exactly the one `PD-UI-1` row
+(`src/renderer/theme.ts` → `member: 'theme'`) and a **NEGATIVE CONTROL** row proving an un-listed
+vendored-resolving edge still FAILS. **VERIFIED-BY-READ of `src/**` by this review:** the
+specifier census over `src/**` for the fifteen vendored names is **4 hits over 3 files** —
+`src/renderer/renderer.ts ./pane-gutter.js`, `src/renderer/renderer.ts ./theme.js`,
+`src/renderer/sidebar-panes.ts ./pane-gutter.js` (the three Phase-0 stem-collision sites, none vendored-resolving)
+plus `src/renderer/theme.ts → src/shared/theme.ts` (the one vendored-resolving edge, on the allow-list). **NOTE 1's
+"two new duties" also reproduce:** the adapter imports the vendored module once and calls both exports. **Detail of
+the reading, stated because it is a documentation-relevant fact:** the landed adapter imports only the two
+**values**; it reads the vendored **types** by structural compatibility rather than by an `import type`, so
+`§2.3`'s row *"the vendored `ThemeEnv`/`ThemeResolution`/`ThemeAttributeWrite` types become the shapes the fork's
+adapter reads"* is true of the shapes and **NOT an import claim** — `§2.1`'s import census (exactly ONE import
+statement) is the binding clause and is satisfied. **`tests/pd-vendor-set.test.ts` reads 69 PASS in the blind-greens
+artifact's `G4` reading — no red file remains.** `§9` item 1 `E-1` carries the full annotation.⟩**
 
 1. **DECIDED — THE ADAPTER SURFACE IS `src/renderer/theme.ts`, AND ITS DELEGATION TARGETS ARE THE VENDORED
    MODULE'S TWO EXPORTS.** The unit's `SUBSET+ADAPTER` classification requires *"a named adapter
@@ -455,7 +559,13 @@ record's **`prefersDark`** member. **Consequences, all pinned:**
    the removal of the attribute — represented by the record as `removal: true`, never by a call the adapter
    makes on an element it does not own.** **Under this adapter's invariants the `removal` branch is
    UNREACHABLE** (`§3.2` item 5), **and it is still implemented**, because the vendored contract declares it
-   and a record the adapter does not honour is a silent divergence.
+   and a record the adapter does not honour is a silent divergence. **⟨`X-1` — THE ARM AS IMPLEMENTED, READ THIS
+   2026-09-28 (item-10d documentation review):** the landed `src/renderer/theme.ts` performs the removal **on the
+   same `dataset` surface — `delete root.dataset.theme` — inside the same `try`, as the other arm of the ONE write
+   site**, so **"the removal of the attribute"** above is now the code's literal reading and not only the ruling's
+   requirement. **The clause *"never by a call the adapter makes on an element it does not own"* still STANDS and
+   is the form the landed source limb enforces. Nothing in this item is rewritten; see `§0B` item 2 for the
+   landing record and `§2.1` item 6 for the ruling.⟩**
 4. It returns the resolved theme (`§1.2` (d) — the caller uses that return to decide whether the OS listener
    stays live; dropping it is the `PD-THEME-1` named collision risk, `docs/specs/post-division-local-elimination-inventory.md`
    §2.1). **⟨PARTLY SUPERSEDED 2026-09-28 (`A-11` RULED — `§0B` item 3): the RETURN is required and stays
@@ -474,14 +584,40 @@ record's **`prefersDark`** member. **Consequences, all pinned:**
    citation). **The clause *"never by a call the adapter makes on an element it does not own"* STANDS as filed**, and
    it does not forbid this: **the `root` parameter IS the element the adapter owns.** **The removal arm remains
    UNREACHABLE through the fork's own resolver** (`§3.2` item 5) — **the ruling fixes the record's meaning, not a
-   reachable behaviour.**
+   reachable behaviour.** **⟨`X-1` — LANDED AT THIS HEAD 2026-09-28 (item-10d documentation review): the
+   `HOST-FIX` this paragraph obliges HAS BEEN PERFORMED** — `src/renderer/theme.ts` now reads
+   `if (write.removal) { delete root.dataset.theme } else { root.dataset.theme = write.value }`, both arms inside
+   the one `try`. **The ruling itself is UNMOVED and now has decision-log provenance: `docs/decisions.md`
+   `DECIDED: POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS` clause (1).** The `[U]`-class question the ruling
+   leaves — whether `dataset`-level deletion is the correct mechanic against a real `DOMStringMap` — is
+   **UNCHANGED and still parked** (`§9` item 7).⟩**
 
 **Import census of the adapter (post-adoption, pinned):** exactly **one** import statement —
 `from '../../shared/theme.js'` (the vendored module), whose specifier resolves to `src/shared/theme.ts`. **⟨CORRECTED 2026-09-28 (gate-4 finding `A-9`, HOST-FIX): THE SPELLING ABOVE IS WRONG AND IS KEPT VISIBLE.** **`src/renderer/../../shared/theme.ts` escapes `src/` entirely and resolves to `<repo>/shared/theme.ts` — a path that does not exist.** **The correct relative form from `src/renderer/` is `'../shared/theme.js'`**, which is also the form the landed adapter uses and the form the re-stated pin's allow-list carries. **No adapter could ever use the spelling this clause as-filed named**, and the two test-file comments that cite *"recorded as a nit in §2.1"* are therefore **stale as written**: the nit was reported but **this clause was never amended** — this annotation is that amendment.⟩
+**⟨CENSUS CONFIRMED AT THIS HEAD, 2026-09-28 (item-10d documentation review; annotate-beside — the corrected clause
+above is KEPT).⟩ VERIFIED-BY-READ of `src/renderer/theme.ts` by this review: the clause's **corrected** form is what
+the tree carries — exactly **one** `import` statement, `import { resolveTheme as adoptedResolveTheme,
+applyThemeDeclaration } from '../shared/theme.js'`, and **no other import of any kind** (no `electron`, no `node:*`,
+no `provident-ssr`, no `dom-shim`, no sibling `src/renderer/**` module). The **resolved** path is
+`src/shared/theme.ts` (the vendored member), and the **`A-12` value-position requirement** is satisfied — both
+bound names are called in value-bearing positions (`adoptedResolveTheme(setting, { prefersDark })` and
+`applyThemeDeclaration('theme', resolved)`), not `void`-referenced. **The two "stale as written" test-file comments
+this annotation named are now RESOLVABLE, which is the whole of what they needed:**
+`tests/pd-vendor-set.test.ts`'s `DECLARED_CONSUMER_EDGES` block comment reports the divergence and points at
+*"`unit-pd-ui-1-theme.md` `§2.1` (a documentation nit)"* — VERIFIED-BY-READ this review — and **that citation now
+lands on the dated correction above rather than on an un-amended clause**, which is what `A-9` required.
+`tests/pd-ui-1-theme-adoption.test.ts`'s remand block is the stronger form and records **`A-9` as DONE with the
+dated correction cited**. **Neither comment claims the nit is still owed, and `A-9`'s debt is discharged on this
+side.**⟩**
 **No other import of any kind, and no import of `electron`, `node:*`, `provident-ssr`, `dom-shim`, or any
 sibling `src/renderer/**` module.** *(`../../shared/theme.js` is the correct relative form from
 `src/renderer/`; the implementer may write the equivalent form the bundler/typechecker accepts, and the row
 asserts the RESOLVED path, never a spelling.)*
+**⟨LAST-SENTENCE CORRECTION, 2026-09-28 (item-10d documentation review).⟩ The parenthetical above is WRONG TWICE
+and is kept visible: `../../shared/theme.js` is **NOT** the correct relative form from `src/renderer/` (it escapes
+`src/`), and the correct form is `'../shared/theme.js'`. It is the SAME as-filed spelling the `A-9` correction
+above supersedes; the row asserts the RESOLVED path, which is the clause that survives. Nothing depends on the
+spelling — the vendored member is identical either way.⟩**
 
 ### 2.2 The boot wiring `src/renderer/renderer.ts` → `installTheme`
 
@@ -490,7 +626,7 @@ asserts the RESOLVED path, never a spelling.)*
 | 1 | **Name, signature, visibility** | **`installTheme(): void`** — a module-private function, **not exported** (unchanged; it is called once from the boot path). Its call site and its position in the boot order are **unchanged**. |
 | 2 | **The `matchMedia` read** | `window.matchMedia('(prefers-color-scheme: dark)')`, guarded by `typeof window.matchMedia === 'function'` inside a `try`; **a thrown or absent `matchMedia` ⇒ `media = null`** and the reading degrades to `false`. **This read STAYS in the wiring** — it is the adapter's environment READ, and it is the source of the `env` record the adapter consumes. |
 | 3 | **The reading accessor** | `prefersDark(): boolean` — `media ? media.matches : false`, wrapped in `try`/`catch` **returning `false` on a throw**. **A `false` reading is a NORMAL reading, never a degradation** (the foundation's own rule, `../Provident-Electron/docs/specs/theme.md` §2.3 item 2 row (2)). |
-| 4 | **The live listener** | **attached ONCE**, inside `try`, via `media.addEventListener('change', …)`; its handler calls the apply path **only while the setting is neither `'light'` nor `'dark'`** (the explicit choice makes the listener inert). A `matchMedia` without `addEventListener` **degrades silently, never throws**. **THE LIVENESS PREDICATE IS SETTING-BASED, AND THAT IS THE CONTRACT (`A-11`, RULED 2026-09-28 — `§0B` item 3).** **⟨AS FILED, KEPT VISIBLE: *"The listener's liveness predicate STAYS the wiring's (the `applyThemeToRoot` return feeds it) — `PD-THEME-1`'s named collision risk."* — THIS CLAUSE IS FALSIFIED BY THE LANDING AND IS SUPERSEDED: VERIFIED-BY-READ this pass, `src/renderer/renderer.ts` → `installTheme`'s `apply()` is the ONE call site and its body DISCARDS `applyThemeToRoot`'s return, while the handler re-tests the SETTING (`setting !== 'light' && setting !== 'dark'`), so the return has NO consumer in `src/**`.⟩** **THE RULING: the predicate STAYS setting-based and `apply()` discarding the return is CORRECT** — the return is redundant by construction with a datum the wiring already holds (the same `(setting, prefersDark())` pair), so a return-based predicate would read the same value by a longer route and would silently invert if the resolution were computed differently. **The `resolveTheme`/`applyThemeToRoot` return contract itself is UNMOVED** (`§2.1` item 4, `D-5`); **what is ruled is that no `src/**` caller must consume it.** **The adapter's own stale doc comment** (*"Returns the resolved theme so the caller can decide whether the OS listener is live"*, `src/renderer/theme.ts` → `applyThemeToRoot`) **is owed a drop-or-correct by the next landing pass** — there is no such caller. |
+| 4 | **The live listener** | **attached ONCE**, inside `try`, via `media.addEventListener('change', …)`; its handler calls the apply path **only while the setting is neither `'light'` nor `'dark'`** (the explicit choice makes the listener inert). A `matchMedia` without `addEventListener` **degrades silently, never throws**. **THE LIVENESS PREDICATE IS SETTING-BASED, AND THAT IS THE CONTRACT (`A-11`, RULED 2026-09-28 — `§0B` item 3).** **⟨AS FILED, KEPT VISIBLE: *"The listener's liveness predicate STAYS the wiring's (the `applyThemeToRoot` return feeds it) — `PD-THEME-1`'s named collision risk."* — THIS CLAUSE IS FALSIFIED BY THE LANDING AND IS SUPERSEDED: VERIFIED-BY-READ this pass, `src/renderer/renderer.ts` → `installTheme`'s `apply()` is the ONE call site and its body DISCARDS `applyThemeToRoot`'s return, while the handler re-tests the SETTING (`setting !== 'light' && setting !== 'dark'`), so the return has NO consumer in `src/**`.⟩** **THE RULING: the predicate STAYS setting-based and `apply()` discarding the return is CORRECT** — the return is redundant by construction with a datum the wiring already holds (the same `(setting, prefersDark())` pair), so a return-based predicate would read the same value by a longer route and would silently invert if the resolution were computed differently. **The `resolveTheme`/`applyThemeToRoot` return contract itself is UNMOVED** (`§2.1` item 4, `D-5`); **what is ruled is that no `src/**` caller must consume it.** **The adapter's own stale doc comment** (*"Returns the resolved theme so the caller can decide whether the OS listener is live"*, `src/renderer/theme.ts` → `applyThemeToRoot`) **is owed a drop-or-correct by the next landing pass** — there is no such caller. **⟨ITEM-10d DOCUMENTATION REVIEW, 2026-09-28 (annotate-beside; the sentence above is KEPT as the amendment pass filed it).⟩ THE OWED `src/**` EDIT HAS **NOT** LANDED: VERIFIED-BY-READ of `src/renderer/theme.ts` by this review, `applyThemeToRoot`'s doc comment still closes *"Returns the resolved theme so the caller can decide whether the OS listener is live."* **`src/**` is OUTSIDE the documentation reviewer's write set, so it is carried, not fixed: `§9` item 10 names the item and its owner.** The owed edit is a **CORRECTED** comment (the return stays per `D-5`; only the liveness claim goes), **not a bare deletion** — `applyThemeToRoot` is exported, so deleting the sentence would leave an exported function's return undocumented. **Everything else in this item reproduces at this head:** `installTheme`'s single call site, the discarded return, and the setting-based guard `if (setting !== 'light' && setting !== 'dark') apply()` are all VERIFIED-BY-READ this review.⟩**
 | 5 | **The seam** | `window.provident?.operatorSettings?.get()` → `Promise<{ theme?: unknown }>` and `onChanged?(handler)` → unsubscribe, **both optional-chained and both inside `try`**: an absent bridge, an absent `operatorSettings`, an absent `onChanged`, a rejected `get()` ⇒ **the setting keeps its `'system'` default and nothing throws** (`src/main/preload.ts` → the `operatorSettings` bridge declares `get(): Promise<OperatorSettings>`, `set(patch)`, `onChanged(handler): () => void`). **No IPC change is owed or permitted** (`§1.4`). |
 | 6 | **The apply path** | `applyThemeToRoot(document.documentElement, setting, prefersDark())`. **THE ONE WRITE SITE for the appearance attribute in this repo** — no other `src/**` file writes it (VERIFIED-BY-READ: `src/renderer/theme.ts` is the only module whose contract declares the `dataset.theme` write, and `renderer.ts`'s single call is its one invocation). |
 | 7 | **What the wiring may NOT do** | read `theme` from anywhere other than the persisted setting / the `onChanged` payload / its own `'system'` default · hold a store, a cache or a memo · write a custom property (the token block is CSS, `§1.2` (c)) · resolve the precedence itself (that is the adapter's rule) · add a second DOM write of the appearance attribute · add an MCP/IPC surface. |
@@ -559,7 +695,7 @@ not expose it** (`§2.1`; `§9` item 4).
 | 2 | **`root.dataset` is FROZEN** (`Object.freeze({ dataset: Object.freeze({}) })`) | **nothing throws**; the assignment fails silently-or-throws and is **absorbed**; the resolved theme is still returned |
 | 3 | **`root` is `{}`** (no `dataset` member) — or `null`/`undefined`/a primitive at runtime | **nothing throws**; the resolved theme is still returned; **no attribute is written** |
 | 4 | **`root.dataset` is a member whose READ throws** | **nothing throws**; the resolved theme is still returned |
-| 5 | **The `removal` branch of the write** | **UNREACHABLE under this adapter's invariants, and still implemented — AND ITS MEANING IS RULED (`§0B` item 2, 2026-09-28, `A-7`): a removal record means the attribute is REMOVED, so the landed "perform no write" reading is DIVERGENT and a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED.** Why unreachable: `resolveTheme` returns `'light'`/`'dark'` — **always a non-empty string** — so the vendored `applyThemeDeclaration(attributeName, resolved)` takes its **non-removal** arm on every reachable call. **A red row must NOT assert a removal write on a REACHABLE call** (it could only pass by breaking the resolver); the row asserts instead (a) that the removal arm is **honoured if a record carries it** (driven with a synthetic record through the adapter's decision, or asserted as the implemented branch), and (b) that the **reachable** path always writes `write.value`. **⟨`A-7` correction: "honoured" now has a RULED meaning — the attribute is removed — so limb (a)'s drive asserts the REMOVAL, and a leave-in-place or `writes ''` corpus must FAIL it (`§0B` item 2).⟩** |
+| 5 | **The `removal` branch of the write** | **UNREACHABLE under this adapter's invariants, and still implemented — AND ITS MEANING IS RULED (`§0B` item 2, 2026-09-28, `A-7`): a removal record means the attribute is REMOVED, so the landed "perform no write" reading is DIVERGENT and a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED.** Why unreachable: `resolveTheme` returns `'light'`/`'dark'` — **always a non-empty string** — so the vendored `applyThemeDeclaration(attributeName, resolved)` takes its **non-removal** arm on every reachable call. **A red row must NOT assert a removal write on a REACHABLE call** (it could only pass by breaking the resolver); the row asserts instead (a) that the removal arm is **honoured if a record carries it** (driven with a synthetic record through the adapter's decision, or asserted as the implemented branch), and (b) that the **reachable** path always writes `write.value`. **⟨`A-7` correction: "honoured" now has a RULED meaning — the attribute is removed — so limb (a)'s drive asserts the REMOVAL, and a leave-in-place or `writes ''` corpus must FAIL it (`§0B` item 2).⟩** **⟨`X-1` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the `HOST-FIX`-OWED clause above is KEPT as the amendment pass filed it — `RCA-8(c)`).⟩ THE `HOST-FIX` HAS LANDED: `src/renderer/theme.ts` → `applyThemeToRoot` now removes the attribute on the removal arm (`delete root.dataset.theme`, the value arm's counterpart inside the same `try`), so this row's *"the landed 'perform no write' reading is DIVERGENT"* is the PRE-LANDING position and is SUPERSEDED. **What is UNMOVED:** the removal arm is still **UNREACHABLE through the fork's own resolver** (that is why the row is INJECTED), the arm is still `UNREACHABLE` *and implemented*, and **the ruling has decision-log provenance — `docs/decisions.md` `DECIDED: POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS` clause (1).** The blind-greens artifact's `B5` reads the removal drive (0 sets, attribute ABSENT), and its `B7`/value-record control keeps the value arm distinguishable.⟩** |
 | 6 | **`setting` is a hostile value** (a revoked `Proxy`, an object with a throwing `toString`, a `Symbol`) | the precedence rule reads it by **strict identity** only, so the hostile members are **never touched**; the outcome is the OS-following one; **nothing throws** |
 | 7 | **`prefersDark` is not a boolean at runtime** (`1`, `'true'`) | **`'light'`** (only `=== true` yields `'dark'`, `§2.1` clause 4) — **never a coercion of the caller's value** |
 | 8 | **The vendored call itself** | **cannot throw** (`§3.1` item 16); if a future revision did, the adapter's totality would be **broken and that is a finding, not a silent absorb** — the register's `P-TH-TP-3` drives every shape and asserts no-throw |
@@ -588,11 +724,11 @@ seam set"*; §2.1 item 3's derivation).
 
 | # | The pin / obligation | Status for **this** unit |
 | --- | --- | --- |
-| **1** | **`tests/pd-vendor-set.test.ts`'s "no vendored module is imported by this repo today" row** (the exact three-hit set) | **THIS UNIT REDS IT, deliberately and correctly** — the adapter's vendored import is the fourth hit. **The re-statement is ESCALATED (`§9` item 1) with its shape, never performed here, and never evaded.** |
+| **1** | **`tests/pd-vendor-set.test.ts`'s "no vendored module is imported by this repo today" row** (the exact three-hit set) | **THIS UNIT REDS IT, deliberately and correctly** — the adapter's vendored import is the fourth hit. **The re-statement is ESCALATED (`§9` item 1) with its shape, never performed here, and never evaded.** **⟨`X-2` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review): THE RE-STATEMENT HAS BEEN PERFORMED AND THE ROW IS GREEN — NOTHING REDS.** VERIFIED-BY-READ: the row now reads *"⟨RE-STATED 2026-09-28, unit PD-UI-1 §9 item 1⟩ — the stem-collision hit set is STILL EXACTLY the three hits, and every VENDORED-RESOLVING hit is a DECLARED CONSUMER EDGE named per row"*, the `DECLARED_CONSUMER_EDGES` allow-list carries **one row per adopting unit** (`src/renderer/theme.ts` → `member: 'theme'`) plus a **NEGATIVE CONTROL** row, and **no evasion form was taken** (the `await import`/`require`/`new URL` forms are CAUGHT by the extended derivation and shown missing from the recorded single-line grep). `tests/pd-vendor-set.test.ts` reads **69 PASS**. The `§9` item 1 `E-1` clause below carries the full reading.⟩**
 | **2** | **`tests/unit-v5-migration-contract.test.ts`'s electron-mock census** (exact 5-name set) | **not brushed** — this unit adds no test file that mocks `'electron'`, and adds no file at all unless the TestWriter authors one, which **must not** mock electron (`K-2`) |
 | **3** | **`tests/unit-v5-migration-contract.test.ts`'s `vitest.config.ts` / `package.json` / `markdown-import.ts` / `DEEP_ROWS` / fixture / `ui-overhaul.md` pins** | **not brushed** — none is in this unit's write set (`§1.4`) |
 | **4** | **`tests/unit-u-shell-2-theme.test.ts` — 10 literal rows, the ONLY importer of `src/renderer/theme.js`** (MEASURED, `X-3` §2 row #1) | **the file this unit's adapter serves.** It is **`SPLIT`**: its **precedence/root rows keep their observable contract** (the adoption preserves every asserted value — `§1.2` (b)/(d)), and its **token-block rows are `KEEP`** (`PD-THEME-2`). **Its `resolveTheme`/`applyThemeToRoot` rows should be GREEN-and-guarding after the landing, not archived** — `§5`'s `A-3`/`D-3` states how a red for them is handled. **The TestWriter adds the delegation rows in a NEW file, so the pinned file's count is not disturbed more than the adoption requires.** |
-| **5** | **`tests/unit-u-shell-shell-wiring.test.ts`'s source-text pin over `src/renderer/renderer.ts`** (a `G-9`-named pin set member) | **BRUSHED — this unit edits `renderer.ts`.** Its subject is the **pointer/listener wiring** (`installShellPointers`'s surface), **not the theme boot**, so a theme-only body change should not red it; **UNVERIFIED whether it reds** — what would settle it: the unit's own reported red set. **It is named here because `G-9` requires the name.** |
+| **5** | **`tests/unit-u-shell-shell-wiring.test.ts`'s source-text pin over `src/renderer/renderer.ts`** (a `G-9`-named pin set member) | **BRUSHED — this unit edits `renderer.ts`.** Its subject is the **pointer/listener wiring** (`installShellPointers`'s surface), **not the theme boot**, so a theme-only body change should not red it; **UNVERIFIED whether it reds** — what would settle it: the unit's own reported red set. **It is named here because `G-9` requires the name.** **⟨DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the `UNVERIFIED` clause is KEPT as filed — `RCA-8(c)`).⟩ THE READING EXISTS: the blind-greens artifact `docs/specs/unit-pd-ui-1-theme-greens.md` `G4` reports `tests/unit-u-shell-shell-wiring.test.ts` = **33 PASS** after this unit's theme-body edit, so **the source-text pin does NOT red on a theme-only body change** — i.e. it does **not** red, which is the answer this clause asked for. **This review did not re-run that file** (see the report's UNVERIFIED list); the reading is the greens artifact's and is labelled as its measurer's.⟩** |
 | **6** | the five further `G-9` source-text pin sets (`unit-u-shell-7-settings-modal`, `unit-u-shell-9a-main-focus-tabs`, `unit-h8-operator-editor`, the two `blind-unit-ujr1-*`, the two `blind-unit-ud7-*`) and the O-0 hook-contract wrappers | **not brushed by name** — none pins `theme.ts` or `installTheme`; the O-0 wrappers pin `renderer.ts`'s traversal/envelope/reconcile hooks, and a theme-body edit does not touch them. **Named so the obligation is discharged by name rather than by assumption.** *(VERIFIED-BY-READ: no `theme` occurrence in `tests/unit-u-shell-shell-wiring.test.ts`'s pinned surfaces or in the O-0 hook-contract targets.)* |
 | **7** | **the two fence files** | **not brushed** — neither imports `theme.ts`. |
 | **8** | **the `K-6` non-test pins** (`vitest.config.ts`, `package.json`'s test scripts) | **not brushed** (`§1.4`). |
@@ -706,6 +842,14 @@ re-pointed by the pass that owns tests: the asserted total becomes `194`, the `1
 one, and the "four rows grew" expectation empties** (no printed term is superseded once the table is truthful).
 **A pass that "fixes" this by reverting the spec's table to `173` is re-filing a defect — the table is the
 contract, and the test follows it, never the reverse.**
+**⟨`X-3` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the paragraph above is KEPT as the
+amendment pass wrote it).⟩ THE RE-POINTING LANDED: `tests/pd-ui-1-theme-register.test.ts` now carries
+`REGISTER_TERMS` and `SUPERSEDED_SPEC_TERMS`, asserts the spec's eight printed terms sum to **`194`**, and asserts
+the superseded total is still **`173` and still VISIBLE in this file's AS-FILED block** (`§4`) — VERIFIED-BY-READ
+of that test file by this review (23 `it` rows). The blind-greens artifact's `G4` reads that file **23 PASS**, so
+**no spec-table limb is red at this head**; the limbs are GREEN-and-guarding. **The superseded readings
+(`173` total, its four superseded row terms `20`/`59`/`20`/`26`, the "four rows grew" expectation) remain in this
+file exactly as required — annotated, dated, with the finding ids — and `§4`'s `194` remains the contract.**⟩
 
 **THE `(bounded)` MARKINGS, and what they do NOT prove.** **`7` of the `8` rows are `NO`** — each drives a
 closed enumeration matching its property text exactly — **with one carve-out: `P-TH-SM-2` carries
@@ -778,6 +922,22 @@ spec plus a TestWriter red set that has been RUN and REPORTED**.
 | **③** | **A baseline reading of `tests/unit-u-shell-2-theme.test.ts` is taken** (its 10 rows' colour at this head) so the split's two halves are distinguishable in the red run | the TestWriter's first run |
 | **④** | the unit's **own** new-file name is fixed (so the register's rows have a home) — proposed: **`tests/pd-ui-1-theme-adoption.test.ts`** | the TestWriter |
 
+**⟨PRE-RED OBLIGATIONS AT THIS HEAD, 2026-09-28 (item-10d documentation review; the table above is KEPT as filed — `RCA-8(c)`).⟩**
+**① IS DISCHARGED** (`X-2`): the `PD-VENDOR` pin was re-stated with the requested shape and `tests/pd-vendor-set.test.ts`
+is green (69 PASS, greens artifact `G4`) — see `§9` item 1 `E-1` and `§3.4` item 1.
+**④ IS DISCHARGED AS PROPOSED:** the file exists as `tests/pd-ui-1-theme-adoption.test.ts` (VERIFIED-BY-READ) and the
+register's rows also live in `tests/pd-ui-1-theme-register.test.ts`.
+**③ IS PARTLY DISCHARGED AND PARTLY OWED:** `tests/unit-u-shell-2-theme.test.ts` has been **read** at this head (its
+10 rows' colour: the greens artifact `G4` reads **10 PASS**), so the split's two halves are distinguishable — but
+**the file has NOT been re-pointed at this head** (the same 10 rows, unchanged), which is what the *"no archive,
+kept as a regression guard"* disposition (`§6.3`, `D-3`) requires and which is currently satisfied.
+**② IS NOT DISCHARGED AND IS THE ONE STILL-OPEN PRE-RED OBLIGATION WITH A TRACKER OWNER:** the `§1.3` deferral is
+**named in this file and in the dossier** (`PD-THEME-4 / the authored appearance control`, `§9` item 3 / dossier
+`A-2`) but **has NO row in `docs/next-steps.md`, `docs/pending.md` or `docs/decisions.md`** — VERIFIED-BY-READ by this
+review (a search for `PD-THEME-4` in `docs/**` returns only this file). **Owner: the supervisor's writes + the
+architect's ruling on whether the row exists** (`§9` item 3); the documentation reviewer may not mint an architect's
+unit row. **This is filed, not fixed — see `§9` item 10.**
+
 **A red set authored before ① is a review finding** — not because the red would be wrong, but because the
 `PD-VENDOR` pin's red would be **indistinguishable from this unit's own red** in the reported reading.
 
@@ -809,6 +969,17 @@ the reason. **A DONE row claiming an archive under this unit is a review finding
 claiming the file was *kept* without stating that its resolver rows **pass unchanged** as a **deliberate**
 choice rather than an oversight. **The landed before → after READING (`REBUILD-ARCHIVE-POLICY` clause (3)) is
 still owed**: files / rows / skips, taken **at the landing** by `npm test`.
+**⟨ITEM-10d DOCUMENTATION REVIEW, 2026-09-28 (annotate-beside; the sentence above is KEPT as filed).⟩ THE READING
+EXISTS, AS A RECORDED READING, AND THE TRACKER ROW THAT MUST CARRY IT DOES NOT — `X-5`.** The blind-greens
+artifact `docs/specs/unit-pd-ui-1-theme-greens.md` `G3` takes it at this head: `npm test` = **206 files (1 failed /
+205 passed) · 4427 tests (1 failed / 4381 passed / 45 skipped)** against the recorded `9202dc8` baseline of **204
+files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)** — a **+2 files / +43 tests**
+delta, the unit's own two files. **What is OWED is the LANDED DONE ROW that prints it** (`REBUILD-ARCHIVE-POLICY`
+clause (3) requires the reading *in the same commit*): **no `PD-UI-1` landing DONE row exists in
+`docs/next-steps.md`** — the newest `PD-UI-1` row still reads *"the unit's next action is … one pass that lands"* —
+VERIFIED-BY-READ by this review. **This review ran no leg**, so it quotes the greens artifact's reading and
+**does not** certify it; it files the missing DONE row as `§9` item 10 and reconciles the tracker `DONE`/`OPEN`
+status by an anchored append to `docs/next-steps.md`. **No archive is owed** (this unit retires no test, as filed).⟩**
 
 ### 6.4 The `[T]`-side obligations the red set carries by name
 
@@ -827,8 +998,8 @@ still owed**: files / rows / skips, taken **at the landing** by `npm test`.
 
 | Leg | What it covers | Layer | This unit's obligation |
 | --- | --- | --- | --- |
-| **`npm test`** (`vitest run`) | the register's rows, the unit's new rows, and the **unchanged** existing suite | harness/`[T]` | the DONE row prints the **before → after** file/test/skip counts **in the same commit** (`REBUILD-ARCHIVE-POLICY` clause (3)), and **states the delta against the recorded baseline**: at `9202dc8` the supervisor read `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)` with the **one carried red** being the baseline `PANE-TOGGLE-STAGE-COLLAPSE` (`P-SM-1`, defect `PANE-TOGGLE-STAGE-COLLAPSE`) — **a RECORDED READING quoted as input, not this pass's measurement.** **This unit MAY NOT claim a clean trio while the carried red stands** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1)) |
-| **`npm run typecheck`** | `tsc --noEmit -p tsconfig.json` — `src/**` only (`tests/` is excluded) | harness | **exit 0**. **The adapter's new import must resolve** — this is the leg that catches a wrong relative path (`../../shared/theme.js`) |
+| **`npm test`** (`vitest run`) | the register's rows, the unit's new rows, and the **unchanged** existing suite | harness/`[T]` | the DONE row prints the **before → after** file/test/skip counts **in the same commit** (`REBUILD-ARCHIVE-POLICY` clause (3)), and **states the delta against the recorded baseline**: at `9202dc8` the supervisor read `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)` with the **one carried red** being the baseline `PANE-TOGGLE-STAGE-COLLAPSE` (`P-SM-1`, defect `PANE-TOGGLE-STAGE-COLLAPSE`) — **a RECORDED READING quoted as input, not this pass's measurement.** **This unit MAY NOT claim a clean trio while the carried red stands** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1)) **⟨`X-5` ANNOTATION 2026-09-28 (item-10d documentation review; the `9202dc8` figure above is KEPT VISIBLE, dated, as the superseded baseline — `RCA-8(c)`).⟩ THE FIGURE HAS MOVED: the current reading is `206 files (1 failed / 205 passed) · 4427 tests (1 failed / 4381 passed / 45 skipped)` at the branch head this unit landed on (RECORDED READING — `docs/specs/unit-pd-ui-1-theme-greens.md` `G3`; **this review ran no leg and certifies no count**). The **carried red is UNCHANGED** — the single red file is `tests/unit-stage-active-tab-display-pbt-generators.test.ts` (`7 tests | 1 failed`) on the `P-SM-1` `strat:stage-seam-schedule-single-active` row, i.e. defect `PANE-TOGGLE-STAGE-COLLAPSE`, **so clause (1)'s *"no unit may claim a clean trio"* binds exactly as before and this unit claims no clean trio.** The delta is **+2 files / +43 tests**, this unit's own two test files. **The reading is NOT yet carried by a landed DONE row — that is `§9` item 10 and it is the supervisor's write.**⟩** |
+| **`npm run typecheck`** | `tsc --noEmit -p tsconfig.json` — `src/**` only (`tests/` is excluded) | harness | **exit 0**. **The adapter's new import must resolve** — this is the leg that catches a wrong relative path (`../../shared/theme.js`) **⟨`X-5` note 2026-09-28: the reading at this head is `exit 0` (greens artifact `G2`, RECORDED READING) — `src/renderer/theme.ts` imports `'../shared/theme.js'`, the corrected spelling (`§2.1`'s `A-9` annotation), and the import resolves. This review re-ran nothing.⟩** |
 | **`npm run build`** | the bundles | harness | **exit 0**, and the DONE row states **which bundle the adapter now lands in** (before this unit, `src/shared/theme.ts` was in **no** bundle; after it, the vendored module is reachable from the renderer entry through the adapter — **a bundle-census delta this unit must report, not hide**) |
 | **`npm run battery`** | `184 checks` at the baseline (`[H]`, GREEN) | harness/`[H]` | **run it and report the reading.** **`A-7`/`G-5`: every UI unit's trio gains `npm run battery`** — the three `.mjs` batteries sit **outside** `vitest.config.ts`'s `include`, so a rebuild that breaks the battery is invisible to the trio |
 | **`npm run divergence`** | the real-Electron identity leg | harness/`[D]` | **run it and report the reading.** At this head it is **RED for an ENVIRONMENTAL reason** (`/dev/shm` denial → `SIGTRAP`) and `A-7` makes it **mandatory pre-live**. **This unit does NOT fix it and does NOT claim it green** (`R-8`) |
@@ -848,6 +1019,15 @@ claims that only a live/assembled pass can take:
 | **L-4** | The `@media (prefers-color-scheme: dark)` fallback fires when **no** explicit attribute is present | requires a real media-query evaluation |
 
 **THE HONEST INTERIM STATE, recorded rather than smoothed (this is a condition of the entry, not an excuse):**
+**⟨STATE AT THIS HEAD, 2026-09-28 (item-10d documentation review; the three items below are KEPT as filed — they are
+NOT superseded by the landing).⟩ THE LIVE MANDATE IS STILL **UNTAKEN**, and the landing did not change that: the
+blind-greens artifact `docs/specs/unit-pd-ui-1-theme-greens.md` declares its own rows to be
+**ENVELOPE/`[T]`-layer only** (`G5`: *"this artifact claims no app-green, no envelope-green and no live-green"*), and
+its `G1` reproduces the **documented environmental precondition** for the red divergence leg (`/dev/shm` not
+writable — `touch /dev/shm/…` ⇒ `Permission denied`) **without running the leg**. **So this unit's live status is
+`PRECONDITION-FAILED` with the reading attached (`G1` is the attachment), owned by `U-DIVERGENCE-SPAWN` for the
+harness fix and by the supervisor for the live pass — NEVER a silent park, and NEVER an app-green claim.** **This
+review ran no live pass and no divergence leg** (`npm run divergence` was explicitly NOT run — see `§9` item 10).⟩**
 
 1. **`npm run divergence` is RED at this head for an ENVIRONMENTAL reason** — the real-Electron leg dies at
    bootstrap with `Creating shared memory in /dev/shm/.org.chromium.Chromium.* failed: Permission denied (13)`
@@ -878,6 +1058,16 @@ claims that only a live/assembled pass can take:
 **0** · `battery` **`184 checks, 0 failures` GREEN** `[H]` · `divergence` **RED on the Electron leg
 (ENVIRONMENTAL)** `[D]`. **Every unit's DONE row states its delta against these five legs and may not claim a
 clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1)).
+**⟨`X-5` ANNOTATION, 2026-09-28 (item-10d documentation review; the five-leg baseline above is KEPT as the recorded
+input).⟩ THE EXTENDED BASELINE'S FIGURES AT THIS HEAD, per leg, with which leg was re-taken by the blind pass and
+which was NOT:** `npm test` — **counts MOVED** to `206 files (1 failed / 205 passed) · 4427 tests (1 failed / 4381
+passed / 45 skipped)` (greens artifact `G3`, RECORDED READING); **the one carried red is UNCHANGED** (same file,
+same `P-SM-1` row, same defect `PANE-TOGGLE-STAGE-COLLAPSE`). · `typecheck` — **0** (greens `G2`). · `build` —
+**0** (greens `G2`). · `battery` — **`184 checks, 0 failures`**, i.e. **reproduces exactly** (greens `G2`). ·
+`divergence` — **NOT RUN by the blind pass** (it declares this explicitly, `G1`/`G5`); its status stays the recorded
+**environmental RED** with the `U-DIVERGENCE-SPAWN` owner. **This review ran NONE of the five** — the figures are
+quoted and labelled, and `§9` item 10 carries the two consequences: the leg counts are superseded where they moved
+and the DONE row that must print them is still owed.⟩**
 
 ---
 
@@ -892,12 +1082,12 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
 | **D-5** | Whether `resolveTheme`'s signature/return type may change | **NO.** `resolveTheme(setting: unknown, prefersDark: boolean): ResolvedTheme` is the contract; **`ResolvedTheme`/`ThemeRoot` stay exported by name** (`§1.2` (d)) |
 | **D-6** | Whether the adapter may expose `ThemeResolution`/`source` | **NO** in this unit — the four exports stand (`§2.1`); the observability question is an **owed item** (`§9` item 4) |
 | **D-7** | Whether this unit authors the appearance control | **NO — DECLINED, with the named deferral** (`§1.3`) |
-| **D-8** | Whether this unit writes a new `docs/decisions.md` row | **NO.** Every clause here derives from an existing row or from the gate record |
+| **D-8** | Whether this unit writes a new `docs/decisions.md` row | **NO.** Every clause here derives from an existing row or from the gate record **⟨SUPERSEDED IN PART 2026-09-28 (item-10d documentation review; the `NO` is KEPT visible — `RCA-8(c)`).⟩ TWO CLAUSES OF THIS UNIT ARE **NOT** DERIVED FROM AN EXISTING ROW AND DO NOT RIDE THE GATE RECORD: (1) `A-7`/`D-12`'s **removal semantics** (`§0B` item 2), which is a fork-adapter CONTRACT change derived from the foundation's guidance rather than from any row in `docs/decisions.md`; and (2) `A-11`/`D-14`'s **setting-based liveness predicate + the discarded return** (`§0B` item 3), which is the fork's boot-wiring contract and which the gate record does not reach. **This review therefore MINTED one row — `docs/decisions.md` `DECIDED: POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS` — for those two clauses, and recorded that `D-13` (`A-8`, the register's declared machinery) does NOT warrant one** (it governs the register's own execution design inside this unit, changes no caller-visible contract, and is fully carried by `§4`/`§0B` item 1/D-13 — see that row's own judgement clause). **Nothing else in this table changes: `D-1`..`D-7`, `D-9`..`D-11` remain derived-from-existing.**⟩** |
 | **D-9** | Whether this unit edits `docs/skills/designing-pages.md` | **NO — the file DOES NOT EXIST in this repo** (VERIFIED-BY-READ: a glob of `docs/skills/*` returns `process-guardrails.md` alone), so there is **no test-use-case coverage matrix and no demo-page index to update**. **This unit renders a themed shell surface but authors NO page and NO UI element** (`§1.3`), so the honest form of that row is an **ABSENCE row** — recorded at `§9` item 6 |
 | **D-10** | Whether the register's row ids use a bare `P-SM-` prefix | **NO** — every row carries the unit token (`P-TH-SM-1`/`P-TH-SM-2`) because a bare `P-SM-1` **already names the carried baseline red** (`§4`'s machinery note) |
 | **D-11** | Whether the register may overshoot the `≤120` cap | **YES, DECLARED, with its terms and its route** (`§4`; `§9` item 5). **The figure is `194` since the 2026-09-28 amendment (`§0B` item 1); the as-filed `173` is kept visible at `§4`** |
-| **D-12** | **⟨ADDED 2026-09-28 (`A-7`)⟩** What "honouring" the write record's `removal` member means | **THE ATTRIBUTE IS REMOVED.** The alternative reading — *"perform no write, leave a pre-existing attribute in place"* — is **REJECTED as a third outcome the record does not declare**. **Consequence: a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED** (`§0B` item 2; `§9` item 1 item (e)) |
-| **D-13** | **⟨ADDED 2026-09-28 (`A-8`)⟩** Whether any register row is generator-backed, and whether the caps/stop rule govern | **NO row is generator-backed; the terms are EXACT in-row counts; the seed/LCG remain as the register's own determinism check; and `≤100`/`≤120`/`STOP AFTER 5 CONSECUTIVE FAILURES` are DECLARED INAPPLICABLE (no bounded attempt loop exists).** The rule and the seed **stay in the contract** (`§0B` item 1; `§9` item 6) |
+| **D-12** | **⟨ADDED 2026-09-28 (`A-7`)⟩** What "honouring" the write record's `removal` member means | **THE ATTRIBUTE IS REMOVED.** The alternative reading — *"perform no write, leave a pre-existing attribute in place"* — is **REJECTED as a third outcome the record does not declare**. **Consequence: a `HOST-FIX` on `src/renderer/theme.ts` → `applyThemeToRoot` is OWED** (`§0B` item 2; `§9` item 1 item (e)) **⟨`X-1` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the `OWED` clause is KEPT as filed).⟩ THE `HOST-FIX` LANDED — `src/renderer/theme.ts` → `applyThemeToRoot` now performs `delete root.dataset.theme` on the removal arm (VERIFIED-BY-READ; blind-greens `B5`: 0 sets, attribute ABSENT). **The DECISION STANDS — this row is the contract the landing satisfies, and it now has decision-log provenance: `docs/decisions.md` `DECIDED: POST-DIVISION-REBUILD-PD-UI-1-ADAPTER-CONTRACTS` clause (1).**⟩** |
+| **D-13** | **⟨ADDED 2026-09-28 (`A-8`)⟩** Whether any register row is generator-backed, and whether the caps/stop rule govern | **NO row is generator-backed; the terms are EXACT in-row counts; the seed/LCG remain as the register's own determinism check; and `≤100`/`≤120`/`STOP AFTER 5 CONSECUTIVE FAILURES` are DECLARED INAPPLICABLE (no bounded attempt loop exists).** The rule and the seed **stay in the contract** (`§0B` item 1; `§9` item 6) **⟨ITEM-10d DOCUMENTATION REVIEW JUDGEMENT, 2026-09-28: **NO `docs/decisions.md` ROW IS MINTED FOR THIS CLAUSE**, and the reason is recorded rather than left implicit: `A-8`/`D-13` **declares how this unit's own register executes** (no generator-backed row; the caps and the stop rule have no subject) — it **changes no caller-visible contract, no shared artifact and no other unit's obligation**, and it is fully carried inside the contract by `§4`'s machinery block, `§0B` item 1 and this row. The decision log's subject is a **program/adapter contract** (that is what `A-7` and `A-11` are and why they were minted); a register's execution design is this unit's own. **A later pass that wants it in the log needs a reason this judgement lacks, not a citation of this row.**⟩** |
 | **D-14** | **⟨ADDED 2026-09-28 (`A-11`)⟩** Whether the returned resolution is the liveness input | **NO — the predicate stays SETTING-based and `apply()` discarding the return is CORRECT.** The return contract itself is unmoved (`§0B` item 3; `§2.2` item 4) |
 
 ---
@@ -907,6 +1097,31 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
 1. **`E-1` [BLOCKING FOR THIS UNIT'S LANDING] — `PD-VENDOR`'s "THE VENDORING IS INERT" PIN MUST BE RE-STATED
    IN THE SAME COMMIT AS THIS UNIT'S ADAPTER.** **This is a NEW contradiction, found by this pass
    (`§0A` note 2), and it is filed with its evidence rather than absorbed:**
+   **⟨`X-2` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; every clause of `E-1` below is KEPT
+   as filed, dated, with its finding id — `RCA-8(c)`).⟩ THE BLOCKING PREREQUISITE IS DISPOSED: THE PIN WAS
+   RE-STATED, IN THE SHAPE `E-1` ITEM (b) REQUESTED, AND NO RED FILE REMAINS.** **VERIFIED-BY-READ of
+   `tests/pd-vendor-set.test.ts` by this review:** the row's title now reads *"§2.1 item 6 / §5 item 5 / §12.3(c)
+   ⟨RE-STATED 2026-09-28, unit PD-UI-1 §9 item 1⟩ — the stem-collision hit set is STILL EXACTLY the three hits, and
+   every VENDORED-RESOLVING hit is a DECLARED CONSUMER EDGE named per row"*; **both original limbs are KEPT** (the
+   exact three-hit stem-collision set; and *"no hit resolves to a vendored member"* is replaced by the
+   **allow-list** form, so an un-listed vendored-resolving hit still FAILS); the allow-list
+   `DECLARED_CONSUMER_EDGES` carries **exactly one `PD-UI-1` row** (`{ file: 'src/renderer/theme.ts', specifier:
+   '../shared/theme.js', member: 'theme', unit: 'PD-UI-1' }` — plus the as-filed `'../../shared/theme.js'` spelling
+   admitted by the same block's recorded `A-9` reasoning), the row asserts the allow-list is **non-empty**
+   (*"a pin that would pass for ANY consumer is worthless (§9 item 1 item (b))"*), asserts each row names one of
+   the pin's **fifteen** members, and **drives a NEGATIVE CONTROL** (*"an un-listed vendored-resolving edge FAILS
+   the same oracle, and the four refused EVASION forms are CAUGHT by the extended derivation"*). **The census
+   itself — MEASURED by this review over `src/**` — is 4 hits over 3 files:** the three Phase-0 stem-collision sites
+   (`src/renderer/renderer.ts ./pane-gutter.js`, `src/renderer/renderer.ts ./theme.js`,
+   `src/renderer/sidebar-panes.ts ./pane-gutter.js` — **none vendored-resolving**) plus the adoption's own
+   `src/renderer/theme.ts → src/shared/theme.ts` (**the fourth hit, and the only vendored-resolving one, on the
+   allow-list**) — exactly the fourth hit `E-1`'s "falsification" paragraph predicted. **`tests/pd-vendor-set.test.ts`
+   reads 69 PASS in the blind-greens artifact's `G4`**, and **no evasion form was taken** (`await import(...)`,
+   `require(...)`, `new URL(...)` are refused AND are caught by the extended derivation, i.e. they cannot make the
+   pin green by hiding the edge). **So `E-1` is DISCHARGED — the clause below that calls the re-statement
+   "never performed here" describes the SPEC pass, not this head.** **Owner confirmation of the shape:** the
+   allow-list is **one row per adopting unit**, so the next adoption adds its own row rather than re-opening this
+   one — that is the maintenance route `E-1` item (a) claimed, and it holds.⟩**
    - **The pin:** `tests/pd-vendor-set.test.ts`, the row titled *"§2.1 item 6 / §5 item 5 / §12.3(c) — NO
      vendored module is imported by this repo today: the hit set is **EXACTLY the three stem-collision sites**,
      and NONE resolves to a vendored member"*. It derives every `src/**` specifier hit matching
@@ -968,7 +1183,11 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
    row or trimming a term.** **⟨AMENDED 2026-09-28 (`§0B` item 1): the figure was `173` as filed and the
    corrected, executed total is `194` = `28 + 26 + 67 + 24 + 27 + 6 + 8 + 8`; the superseded `173` stays
    visible at `§4`, and `194 > 120` is still the declared overshoot — the ITEM does not change, only its
-   figure.⟩**
+   figure.⟩** **⟨STATUS AT THIS HEAD 2026-09-28 (item-10d documentation review): STILL OPEN, and NOT re-opened by
+   this review.** The landing changed nothing about the cap question: `§4` still prints `194` as the sum of its
+   own eight terms, the register's executed total is the same `194`, and the route taken is still route (b)
+   (keep the rows, declare the overshoot). **This review neither reduced a term nor declared the overshoot
+   resolved** — the architect's question (`§9` item 5's owner) stands as filed.⟩**
 6. **`E-6` — `docs/skills/designing-pages.md` DOES NOT EXIST IN THIS REPO.** VERIFIED-BY-READ this pass. **No
    coverage-matrix row and no demo-page entry is owed by this unit; the honest form is this absence row**
    (`D-9`). **This unit authors no page and no UI element** (`§1.3`), so even a written skill would not be
@@ -980,6 +1199,22 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
    as the register's OWN determinism check and governing no row's attempts. A later pass may NOT delete the
    rule or the seed from `§4` — it may only carry this declaration.⟩**
 7. **`E-7` — EVERY `UNVERIFIED` ITEM OF THIS FILING, named so none is read as settled:**
+   **⟨`X-2`-CLASS STATUS AT THIS HEAD, 2026-09-28 (item-10d documentation review; the list below is KEPT as
+   filed).⟩ Two of the `UNVERIFIED` items below are **DISCHARGED** and **four remain UNVERIFIED, plus two whose
+   subject the landing made moot**:** (a) the first bullet — *"whether the `§9` item 1 pin re-statement is a
+   unit-commit act or an architect act"* — is **ANSWERED BY THE LANDING**: the re-statement was performed as a
+   **unit-commit/test-side act** (see `E-1`'s annotation), so no architect read of its `G-9`-class status was
+   needed. (b) the second bullet — *"whether `tests/unit-u-shell-shell-wiring.test.ts` reds on a theme-only body
+   change"* — is **DISCHARGED**: the greens artifact `G4` reads it **33 PASS** after this unit's edit
+   (`§3.4` item 5's annotation). **(c) The two `A-7` bullets about the `HOST-FIX` are MOOT AS *OWED* QUESTIONS but
+   their SUBSTANCE is unchanged and still open at the `[U]` layer:** the `HOST-FIX` landed (so *"whether a
+   spec-only amendment is admissible"* no longer has a subject), while *"whether `dataset`-level deletion is the
+   correct mechanic against a real `DOMStringMap`"* **stays `UNVERIFIED`** and is the live pass's question.
+   **(d) Still UNVERIFIED, all four:** any other `tests/**` importer of the fork's `theme.js` (the search-level
+   measurement stands; this review did not re-run its command); the applied-`data-theme` live claim inside the
+   frozen `MATRIX_ROWS`; the `@media` fallback window's live observability; and the **`E-8` mechanism question**,
+   which is an OPEN ARCHITECT QUESTION and was **NOT** picked by this review (nothing in this pass changed it).
+   **This review adds its own two UNVERIFIED items — see item 10, clause (c).**⟩**
    - whether the `§9` item 1 pin re-statement is a **unit-commit** act or an **architect** act — what would
      settle it: the architect's read of its `G-9`-class status;
    - whether `tests/unit-u-shell-shell-wiring.test.ts`'s **source-text pin over `renderer.ts`** reds on a
@@ -1032,11 +1267,70 @@ clean trio** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1
    reconciliation to the amendment, NOT a relaxation: the truthfulness assertion (every cell = the sum of its own
    factors; the total = the sum of the terms) stays, and the `173` reading becomes the SUPERSEDED one it is.**
    **A pass that reverts the spec's table to `173` to keep these limbs green is RE-FILING the defect this
-   amendment closes.**
+   amendment closes.** **⟨`X-3` DISCHARGED AT THIS HEAD 2026-09-28 (item-10d documentation review; the clause above
+   is KEPT as the amendment pass filed it).⟩ THE RE-POINTING LANDED.** VERIFIED-BY-READ of
+   `tests/pd-ui-1-theme-register.test.ts` by this review: it carries `REGISTER_TERMS` (the executed terms) and
+   `SUPERSEDED_SPEC_TERMS` (the as-filed `173` terms), asserts the spec's eight printed terms **sum to `194`**, and
+   asserts the **superseded total is still `173` and still VISIBLE in the spec's `§4` AS-FILED block** (the same
+   limbs `§0B` item 1's `OPENED, and DECLARED` paragraph called *"RED BY DESIGN"*). **So no spec-table limb is red
+   at this head: the blind-greens artifact's `G4` reads the file 23 PASS.** The `173` reading and its four
+   superseded row terms remain in this file exactly as required — **annotated, dated, with the finding ids** — and
+   `§4`'s `194` remains the contract. **The `(bounded)`/`NO` markings and the terms themselves are UNTOUCHED by
+   this reconciliation** (the register's arithmetic is UNMOVED). **This review did not run the file** — see item
+   10 clause (c).⟩**
+10. **`E-10` ⟨ADDED 2026-09-28 BY THE ITEM-10d DOCUMENTATION REVIEW (`AGENTS.md` item 10d / `RCA-6`)⟩ — WHAT THIS
+    REVIEW RECONCILED, WHAT IT FIXED, AND WHAT IT COULD NOT.** The full record is
+    `archive/reviews/2026-09-28-PD-UI-1-doc-review.md` (the gitignored archive). **THE REVIEW FIXED, IN THIS FILE,
+    the five staleness contradictions the blind-greens artifact filed (`X-1`..`X-5`), each as a dated
+    annotate-beside with every superseded reading left visible:** the `A-7` landing (`§0B` item 2's head, `§0B`
+    item 2's tripwire paragraph, `§2.1` items 3/6, `§3.2` item 5, `§9` item 1(e), `D-12`); the `PD-VENDOR` pin
+    re-statement (`§0A`, `§3.4` item 1, `§9` item 1 `E-1`); the register test's green spec-table limbs (`§0B` item
+    1, `§9` item 9); the status block (this file's head); and the moved leg counts (`§7.1`, `§7.3`, `§6.3`) —
+    **plus** the section-placement note for `§0B`'s position before `§0`/`§0A`, the `§2.1` import-census
+    last-sentence correction, `§6.1`'s pre-red obligations (② and ③), and the `D-8`/`D-13` decision-log judgement.
+    **WHAT IT COULD NOT FIX, with its owner — stated so no reader mistakes an owed item for a done one:**
+    - **(a) THE `src/**` DOC COMMENT.** `src/renderer/theme.ts` → `applyThemeToRoot`'s comment still carries the
+      `A-11`-falsified *"so the caller can decide whether the OS listener is live"* sentence. **Owner: the next
+      `PD-UI-1` landing pass (Implementer).** `src/**` is read-only to a documentation reviewer, and the owed edit
+      is a **corrected** comment, not a deletion (`§0B` item 3, clause 4).
+    - **(b) THE MISSING LANDED DONE ROW AND THE MISSING TRACKER ROW.** No `PD-UI-1` landing DONE row exists in
+      `docs/next-steps.md` (its newest `PD-UI-1` row still reads *"the unit's next action is … one pass that
+      lands"*), so the before → after leg reading `REBUILD-ARCHIVE-POLICY` clause (3) requires is not carried by any
+      landed row; and the `§1.3` `U-THEME-CONTROL` deferral (`E-3`, proposed `PD-THEME-4`) exists **only in this
+      file and in the dossier** — no tracker row in `docs/next-steps.md`, `docs/pending.md` or `docs/decisions.md`.
+      **Owner: the supervisor's writes + the architect (whether the deferral row exists).** This review may not
+      mint an architect's unit row; it reconciled what it could by an **anchored append** to `docs/next-steps.md`.
+    - **(c) THE LEGS.** This review **ran none of the five legs and no live pass** — no `npm test`, no `typecheck`,
+      no `build`, no `battery`, **no `npm run divergence`** (explicitly excluded) — and it re-derived no revision
+      hash. Every count it quotes is a **VERIFIED-BY-READ** of the tree or a **RECORDED READING** of the
+      blind-greens artifact, labelled at its site. **UNVERIFIED here: `tests/pd-vendor-set.test.ts` = 69 PASS ·
+      `tests/pd-ui-1-theme-adoption.test.ts` = 19 PASS · `tests/pd-ui-1-theme-register.test.ts` = 23 PASS ·
+      `tests/unit-u-shell-shell-wiring.test.ts` = 33 PASS · the `206 files / 4427 tests` figure.** The **row/file
+      counts** it *did* verify (19 and 23 `it` rows) match the greens artifact's readings, which is corroboration,
+      not a substitute. **The `[U]`/live layer is `PRECONDITION-FAILED`** and stays so (`§7.2`).
+11. **`E-11` ⟨ADDED 2026-09-28 BY THE SAME REVIEW⟩ — THE ONE CITATION THIS REVIEW FOUND THAT DOES NOT RESOLVE.**
+    `docs/specs/unit-pd-ui-1-theme-greens.md`'s row `A7` cites its control requirement as *"`§4`
+    `P-TH-IM-1`'s control requirement (`§3a-seed` `ADV-T1`/`ADV-T3`)"*. **`§3a-seed` is the SEED table and carries
+    the probes; the control requirement itself is this file's `§4` `P-TH-IM-1` row.** **The greens artifact's
+    citation is loose, not wrong** (the probes are adjacent in subject), and **the greens artifact is NOT this
+    review's write set — it is the blind pass's artifact and its text is kept as that pass's reading.** **Recorded
+    here so a later pass can repair it in the artifact's own pass, and so no reader treats `§3a-seed` as the
+    control requirement's home.** **Owner: the pass that owns the greens artifact.** **No active tracker cited it,
+    so nothing else is affected.**
 
 ---
 
 ## 3a. Adversarial findings — **THE PASS HAS RUN (2026-09-28): `PASS-WITH-FINDINGS`, thirteen findings (`A-1`..`A-13`), NO BLOCKING. The seed set below STANDS as filed, each probe dispositioned here.**
+
+**⟨SCOPE NOTE, 2026-09-28 (item-10d documentation review; the block below is KEPT as the gate-4 pass wrote it —
+`RCA-8(c)`).⟩ THIS BLOCK IS THE **GATE-4 ADVERSARIAL PASS'S OWN READING** AND IS NOT RE-RUN, RE-ADJUDICATED OR
+RE-OPENED BY THIS REVIEW.** Its `A-7` row's disposition (*"rule in `§2.1` item 3 whether honouring means SKIP or
+DELETE, then drive it…"*) is **DISCHARGED**: the ruling is at `§0B` item 2 and the landing is recorded there and at
+`§2.1` items 3/6 — **the row is kept exactly as the adversarial pass filed it, and a reader arriving here should
+follow `§0B` item 2 for the landed state.** The `A-1`/`A-3`/`A-4`/`A-5`/`A-6`/`A-8`/`A-12` test-side corrections are
+the one-pass remand's (`tests/pd-ui-1-theme-adoption.test.ts`'s header block records each by id); the `A-8` row's
+generator framing is now the **DECLARED CHOICE** (`§0B` item 1, `D-13`), not an unimplemented machinery; and
+`A-2`/`A-4`'s instrument remains the **OPEN ARCHITECT QUESTION** (`§9` item 8), **unpicked by this review.**⟩**
 
 **The pass was `role_adversarial_reviewer`, read-only, and it also performed the mandatory read-only PBT audit.** Its verdict, quoted: *"No BLOCKING finding: the precedence arms win in every input I could construct by reading (strict identity only), the adapter is total for every hostile shape I could construct, there is exactly one write site and one reading of the OS value, and no vendored byte differs from the foundation. The HIGH findings are vacuous/false-strength test oracles, not behaviour regressions."*
 
@@ -1151,6 +1445,28 @@ full stop.**
    item 4).⟩**
 9. **The live pass's status** (`§7.2`) — the command shape attempted and the divergence reading attached, or
    the reading itself if the precondition has been fixed by then.
+   **⟨STATUS AT THIS HEAD, 2026-09-28 (item-10d documentation review; annotate-beside).⟩ UNTAKEN, and the landing
+   did not change that: the status is **`PRECONDITION-FAILED` with the environmental divergence reading attached**
+   (greens artifact `G1` reproduces the `/dev/shm` denial without running the leg; the harness fix is
+   `U-DIVERGENCE-SPAWN`'s) — **never a silent park and never an app-green claim.** `L-1`..`L-4` remain `UNTAKEN`.
+   **This review ran no live pass and NOT `npm run divergence`.**⟩**
+10. **⟨ADDED 2026-09-28 BY THE ITEM-10d DOCUMENTATION REVIEW⟩ THE DONE ROW — `REBUILD-ARCHIVE-POLICY` clause (3)
+    requires the before → after leg reading, and `§7.1`'s `npm test` row requires the delta against the recorded
+    baseline.** **THE LANDED DONE ROW DOES NOT EXIST YET** (VERIFIED-BY-READ: the newest `PD-UI-1` row in
+    `docs/next-steps.md` and in `docs/pending.md` still says the unit's next action is the pass that has now
+    landed). **What the DONE row must carry, so the supervisor's write is mechanical:** the **layer** (RCA-12:
+    `[T]` node/pure + `[H]` source-text census; **NOT app-green**); the **before → after reading**
+    (`204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)` at `9202dc8` → the
+    current `206 files (1 failed / 205 passed) · 4427 tests (1 failed / 4381 passed / 45 skipped)`, i.e.
+    **+2 files / +43 tests**, the unit's own two files), with its **measurer named**; the **one carried red**
+    (`tests/unit-stage-active-tab-display-pbt-generators.test.ts`, row `P-SM-1`
+    `strat:stage-seam-schedule-single-active`, defect `PANE-TOGGLE-STAGE-COLLAPSE`) and the statement that **no clean
+    trio is claimed** (`DECIDED: POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1)); the `typecheck`/`build`/
+    `battery` readings; the **live status `PRECONDITION-FAILED` with its divergence reading attached** (`§7.2`);
+    the register's **`194` attempts printed with its eight terms and the declared over-cap**; the **protected pins
+    touched and their same-commit re-derivation** (`§9` item 1); and **this review's record**
+    (`archive/reviews/2026-09-28-PD-UI-1-doc-review.md`). **Owner: the supervisor's writes.** **Filed as
+    `§9` item 10 clause (b)'s sibling — the same gap seen from the report's side.**
 
 ---
 
