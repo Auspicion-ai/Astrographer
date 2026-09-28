@@ -45,8 +45,10 @@ export interface ThemeRoot {
  *  pure + node-testable. The write is obtained AS DATA from the vendored
  *  `applyThemeDeclaration(attributeName, resolved)` — the fork supplies the attribute
  *  name, the mechanism owns no name. TOTAL/fail-soft (F2): a missing or frozen `dataset`
- *  is left untouched and never throws. Returns the resolved theme so the caller can
- *  decide whether the OS listener is live. */
+ *  is left untouched and never throws. Returns the resolved theme; the caller currently
+ *  DISCARDS that return, and per `docs/specs/unit-pd-ui-1-theme.md` the liveness predicate
+ *  stays SETTING-based — a return-based predicate would be a weaker second authority, so
+ *  the return is redundant by construction rather than the liveness input. */
 export function applyThemeToRoot(root: ThemeRoot, setting: unknown, prefersDark: boolean): ResolvedTheme {
   const resolved = resolveTheme(setting, prefersDark)
   const write = applyThemeDeclaration('theme', resolved)
