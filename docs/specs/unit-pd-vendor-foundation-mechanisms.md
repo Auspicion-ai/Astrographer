@@ -1159,7 +1159,96 @@ is NOT claimed (§5 item 7).**
 
 ---
 
-## 3a. Adversarial findings — **status as filed: `OWED`; this table is the SEED SET for the pass that will run**
+## 3a. Adversarial findings — **THE PASS HAS RUN (2026-09-28): `PASS-WITH-FINDINGS`, thirteen findings (`A-1`..`A-13`), NO BLOCKING. The seed table below STANDS as filed, with each probe now dispositioned in §3b.**
+
+**The pass was `role_adversarial_reviewer`, read-only, and it also performed the mandatory read-only PBT audit. Its
+verdict, quoted: *"the vendoring itself re-derives, but the pin's mechanism, the leg's pass condition, and three
+register rows are weaker than their claims"*.** Its own re-derivations: the fifteen modules exist with the manifest's
+declared line counts (15/15); the same fifteen in the foundation tree match on line count and first line (15/15); one
+file (`overlay.ts`) is textually identical in full; the import census is **6 statements / 5 distinct edges** with **no
+out-of-set import** (so `internalEdges` = 5 and `outOfSetImports` = `[]` both hold); the row count **is 129**; the
+register's printed total **equals the sum of its own terms** (`19+17+17+12+10+8+20+12 = 115`, the as-filed `103` being
+the same eight-minus-one); and `foundation-return-shapes.ts`'s five shapes **match the vendored declarations
+member-by-member today** (`GestureSession` 9, `RelocateResetResult` 3, `FocusResult` 7, `FocusRefusal` 3,
+`FocusTransitionArg` 4) — **so `ADV-VD-10`'s suspected drift is an INSTRUMENT gap, not a live defect.**
+
+**WHAT THE PASS COULD NOT RE-DERIVE, stated so no later pass reads it as verified:** the **md5 equality itself** (the
+reviewer's tool wall has no `md5sum`/`diff`/`git`; its strongest check was line counts, first lines and one full-file
+comparison, which **cannot see** CRLF/BOM/trailing-whitespace deltas) — so `P-IM-1`'s central claim **remains a
+run-reading**, not an independently reproduced one; and the **leg's colour** (not runnable read-only).
+
+### The findings, with dispositions
+
+| Id | Sev | The finding (abridged) | Disposition | Correction |
+| --- | --- | --- | --- | --- |
+| **`A-3`** | **HIGH** | **THE PIN IS A RECORD, NOT AN INSTRUMENT — nothing in the repo ever checks the pinned commit.** `P-IM-1` drives `md5(shipped) === manifest.md5` against a manifest **the same pass authored** (circular); the monitor compares to the adjacent **working tree** and never reads `foundation.commit`; the only commit read is a tautology when the tree is absent. A foundation tree at **a different commit with equal bytes, or a dirty tree, reads CLEAN** | **HOST-FIX** | add a read-only pin arm (`git -C <foundation> show <commit>:src/shared/<x>.ts`, or a `rev-parse HEAD` equality check) to the monitor **plus a register row**, and state that a `SKIPPED` reading proves nothing about the pin |
+| **`A-1`** | **HIGH** | the leg's pass condition (class (i) evidence rows MUST PASS) is **unsatisfiable as written**: every suite reaches its module through a **relative** specifier, so from `vendor/Provident-Electron/tests/` it resolves under `vendor/Provident-Electron/src/` — a directory the tree does not carry | **SPEC-AMBIGUITY** | read the per-suite tally before any DONE row; if class (i) is red, restate `§3.5` item 7's bound from three modules to **all fifteen** (no behaviour evidence) and escalate — **never report a green subset** |
+| **`A-4`** | MED | the monitor's manifest-validity arm checks only **counts** (`15`), never the declared **names**: fifteen duplicate entries (`census` ×15) print `CLEAN` while fourteen modules are never compared | **HOST-FIX** | assert the declared name set is **set-equal to the pin's fifteen** inside the monitor, and report **distinct-file** counts, not entry counts |
+| **`A-5`** | MED | **byte-identity is satisfied by a SYMLINK** — every read is `existsSync` + `readFileSync` (dereferencing), so `src/shared/census.ts → ../Provident-Electron/src/shared/census.ts` keeps every row and the monitor green while `R-1`'s *"copied in as source"* and *"the fork must work standalone"* are violated | **HOST-FIX** | a per-module `lstat(...).isSymbolicLink() === false` (regular-file) assertion in the `A2` row **and** in the monitor's local arm |
+| **`A-6`** | MED | **the drift suite is non-hermetic and can delete a directory it did not create**: `makeTempTree` targets `join(root,'..','Provident-Electron')` and a row's `finally` `rmSync(..., {recursive:true, force:true})` removes whatever sits at that shared global path | **TEST-DEFECT** | place the sibling **inside** the temp root and set the synthetic `foundation.path` to `./foundation`; never `rm` a path the test did not create |
+| **`A-7`** | MED | `P-SM-2` **over-claims in its title and under-asserts in its body**: the divergence premise (*"the fork's `dom-shim`/`types` are strictly larger"*) is asserted **nowhere**, the row anchors on a **mutable hard-coded SHA** (`cf19d4e`) that disagrees with the manifest's red-set commit (`7d3b55c`), and its term (`10 = 4 + 1 + 5`) matches neither its Domain cell nor its executed rows | **TEST-DEFECT** | assert the four files against the foundation's **recorded** values held in the manifest beside `baselineFilesNotReplaced`, and retitle the row to what it drives |
+| **`A-8`** | MED | `P-TP-1` **does not exercise the `A2` oracle at all** — it defines two local closures over bytes it read itself (`auditManifest`/`shippedDigest` are never called) — and its retained source-text guard is **non-discriminating** (the file itself contains the join the guard names, and the regex does not match it) | **TEST-DEFECT** | drive the real `shippedDigest`/`auditManifest` against a temp-copied tree, and replace the regex with a **path-level** assertion |
+| **`A-9`** | MED | an **off-by-one in the census arithmetic**, repeated from this spec into the landed row: `§2.1` item 5 and `§12.3(d)` say *"5 files with imports + 10 without = the fifteen"*, but one of the five (`path-fork-cycle.ts`) is a **NON-MEMBER**, so the set splits **4 + 11** — the assertion is right and the **terms** are wrong | **TEST-DEFECT (+ SPEC-AMBIGUITY on the amendment's own annotation)** | state *"4 of the fifteen carry imports; 11 carry zero (5 of the directory's 20, one a non-member)"* and fix the title/comment |
+| **`A-10`** | MED | `P-IM-3`'s closure oracle is a **single-line regex**, so it misses bare side-effect imports (`import './x.js'`), **multi-line** statements, dynamic `import(...)` and `require(...)` — the property is checked by a **proxy**, disclosed only as `(bounded)` | **HOST-FIX** | derive the import set with the `typescript` devDependency already used by `P-SM-1` (AST `ImportDeclaration` / `ImportExpression` / `require` `CallExpression`) instead of a regex |
+| **`A-11`** | MED | `P-IM-4`'s oracle is **name-presence over a text**, and the file is **imported by nothing**, so a structurally wrong mirror keeps all 129 rows and `typecheck` green — the drift is silent (no live mismatch today) | **HOST-FIX** | add a row that **AST-extracts each shape's member names** from the vendored declarations and from the mirror and compares them (or a type-level assignability check in a typechecked location) |
+| **`A-12`** | LOW | the `'electron'`-mock prohibition is **evadable in both derivations**: the census matches `callee === 'vi.mock'` on the literal `vi`, so an aliased or computed call joins neither the protected census nor the copy's derivation | **TEST-DEFECT** (the frozen pin must **NOT** be edited; that is an `ARCHITECT` escalation) | a new row flagging any **binding** of `vi.mock`/`vi['mock']`/an alias in `tests/**`, plus the escalation for the protected pin's own derivation |
+| **`A-13`** | MED | **reporting is stale and the adversarial record was empty** (this section read `OWED`), no DONE/tracker row cited an adversarial pass, `docs/next-steps.md`'s row reports the **pre-remand** reading, and the register's *"115 attempts / 0 broken / stop-after-5 not triggered"* exists in **no landed artifact** — 6 of 8 rows have **no generator** and three terms are asserted as **literal tautologies** | **HOST-FIX (supervisor writes)** | **this section is the record**; the tracker row is restated at the current head; **and the register must either carry a per-row held/broken census or label its terms "declared, not executed"** |
+| **`A-2`** | MED | a **fourth row class** exists in the vendored suites and is unnamed: **ABSENCE-BRANCH rows that PASS because the module is unreachable** (the foundation's RED-first cycles), inflating the leg's `61 passed` while evidencing nothing | **SPEC-AMBIGUITY** | add class (iv) `ABSENCE-BRANCH — not evidence` to `§3.5` item 4 and require the tally to label it; a row passing on an absent module must never count toward class (i) |
+
+### The seed probes, dispositioned
+
+| Probe | Outcome |
+| --- | --- |
+| `ADV-VD-1` (normalized-view evasion) | **NOT reproduced as a defect** — the rows compare raw digests; but the reviewer notes its own inability to re-derive md5, so the probe's residual risk is **the normalization gap is unmeasurable read-only** |
+| `ADV-VD-2` (`A2` reads what it should not) | **CONFIRMED as `A-8`** |
+| `ADV-VD-3` (`SKIPPED` a disguised pass?) | **NOT a finding** — the report text and the exit code distinguish `SKIPPED` from `CLEAN` |
+| `ADV-VD-4` (smuggled baseline edit) | **CONFIRMED as `A-7`'s weak form** — the row drives bytes against a hard-coded SHA rather than the recorded values |
+| `ADV-VD-5` (leg leaks into `npm test`) | **NOT a finding** — collected-file count is unchanged |
+| `ADV-VD-6` (the "eleven included" claim) | **CONFIRMED as `A-1`/`ADV-VD-9`** — the 8+3 split is required in the tally |
+| `ADV-VD-7` (out-of-set import / `'electron'` in the copies) | **NOT a finding** — the census is 6 statements / 5 edges, no out-of-set import |
+| `ADV-VD-8` (protected-pin re-derivation real?) | **PARTLY — see `A-12`**: the direct-call form is caught, an aliased call is not |
+| `ADV-VD-9` (the leg's suite list after the split) | **CONFIRMED as `A-1`/`A-2`** |
+| `ADV-VD-10` (silent drift of the mirror) | **CONFIRMED as an INSTRUMENT gap (`A-11`)** — no live mismatch today |
+
+### The PBT audit (read-only — NO generator was run, by rule)
+
+**Rows: 8. Over-strength judgements:** `P-IM-1` **over-strength** (*"byte-identical to the PIN"* against a
+same-pass-authored manifest — `A-3`); `P-IM-3` **over-strength** (*"resolved import graph"* for a line regex —
+`A-10`); `P-SM-2` **over-strength** (its term matches neither its Domain cell nor its rows — `A-7`); `P-TP-1`
+**over-strength and `(bounded)` by 2 draws while the property quantifies over every module**, driving local closures
+rather than the `A2` oracle (`A-8`); `P-IM-4` **over-strength** (*"re-declared"* ≈ five exported **names**). `P-IM-2`,
+`P-SM-1`, `P-TP-2` hold. **Arithmetic: the printed total equals the sum of its own printed terms ✓, every row ≤100,
+total ≤120 ✓ — but the `broken`/executed accounting is NOT coherent with the row list, because no row or artifact
+carries an executed/broken/stop census at all** (6 of 8 rows have no generator; the seed is used by `P-TP-1` alone;
+three terms are literal tautologies: `1*2*2*2`, `4*2+4`, `5*2+2`).
+
+**Prose counterexamples the rows would NOT catch (prose only — the reviewer wrote and ran nothing):**
+(a) `import './types.js'`, a **multi-line** `import type … from '../x.js'`, or a `require(...)` in a vendored file
+passes `P-IM-3` untouched; (b) a `census.ts` replaced by a **symlink** to the foundation passes `P-IM-1`/`P-SM-2`;
+(c) `focus-model` and `gutter-affordance` behaviour **cannot be exercised by any row at all**.
+
+**THE NEGATIVE GENERATORS TASKED TO THE TESTWRITER (one-pass remand):** (i) a synthetic **import-statement-shape**
+generator (bare · multi-line · dynamic · `require`) asserting the closure oracle catches each; (ii) an `lstat`-based
+**symlink** generator, per module; (iii) a **member-list** generator for `P-IM-4` (AST-extracted members of the five
+shapes: mirror vs declaration).
+
+### THE STRONGEST FALSE-GREEN THE PASS COULD CONSTRUCT (kept verbatim in substance)
+
+*Take the foundation tree at a DIFFERENT commit (or dirty) whose `src/shared/*.ts` bytes are the ones this fork
+vendored: `npm run drift` prints `DRIFT RESULT: 15 checks, 0 differences — CLEAN`, exit 0, and every row stays green —
+because nothing in the repo ever hashes the pinned commit; `P-IM-1` compares the shipped file to a manifest this same
+pass wrote, and the sole commit check is unreachable in a standalone checkout. Symmetrically, replace any vendored
+module with a symlink into the foundation — `P-IM-1`'s "byte-identical to the pinned commit" is satisfied by whatever
+bytes the manifest declares, the 129 rows stay green, and the unit's central claim is at that moment unevidenced:
+THE PIN IS A RECORD, NOT AN INSTRUMENT.*
+
+**`RCA-3` compliance: the adversarial pass HAS RUN and its findings are recorded here; its host fixes and its
+test-side reminders are the unit's next cycle, and the foundation-side items are handoff rows (`G-8`) written to
+`docs/defects.md` + `docs/HANDOFF.md` — never patched.**
+
+---
+
+## 3a-seed. The seed table (as filed — kept visible; every probe is dispositioned above)
 
 `RCA-3` requires a read-only adversarial pass per completed unit, its findings recorded here. **This spec has
 run none.** The seed set (each is a question to *falsify*, not a claim):
