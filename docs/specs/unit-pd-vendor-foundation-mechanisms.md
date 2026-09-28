@@ -16,6 +16,59 @@ app-green, no store-green and no live-green.** **Findings this amendment adjudic
 pass condition — now DECIDED, not escalated), `O-5` (**ANSWERED NEGATIVELY** — the falsification of
 `§0A` note 2's resolution claim), `O-7` (not discharged — now a row-bearing obligation), and the three
 contract-vs-row contradictions `C-AM-1`/`C-AM-2`/`C-AM-3`. **Its amendment ledger is §12.**
+**⟨AMENDED 2026-09-28 — SECOND AMENDMENT, AFTER THE UNIT'S BLIND-GREENS PASS: `C3`, `C4`, `X-2`, `X-4`,
+`X-5` ADJUDICATED — AND THE BLIND PASS'S `A-3` PIN VERIFICATION RECORDED. The blocks above are KEPT as
+their passes' readings; nothing above is deleted or reworded.⟩** **The authority for every measurement
+below is `docs/specs/unit-pd-vendor-foundation-mechanisms-greens.md`** — a **blind** artifact, authored
+from the DOCUMENTATION ONLY (its writer never read `src/shared/**`, the monitor, the manifest or the unit's
+test files) and then **RUN**. **Its scenario table carries the readings and its contradictions list carries
+`X-1`…`X-6`; this amendment RE-MEASURED NOTHING** (`§13`), so **every figure it introduces is a
+RUN-READING quoted as input, not this pass's own verification.** **This amendment's layer: DOC-LAYER —
+envelope/tooling at most, NEVER app** (`RCA-12`; the conformance leg, the monitor and the trio are not app
+evidence, and `npm run divergence` is RED at this head for an environmental `/dev/shm` reason and is not
+this unit's to fix). **Five amendments are owed and all five are taken:** **(1) `C3` — the ZERO-COLLECTION
+suite list and `§3.5` item 2's `8 + 3` split are corrected in MEMBERSHIP** (`census.test.ts`,
+`gutter-ui.test.ts` and **`gutter.test.ts`** collect zero — `gutter.test.ts` reading as a **`Failed
+Suites`** entry on an `ENOENT` for `vendor/Provident-Electron//src` — while **`focus-model.test.ts`
+COLLECTS 78 tests / 70 failed**); **(2) `C4` — CLASS (i), THE LEG'S ENTIRE EVIDENCE, IS EMPTY**: all eight
+collected suites fail their module drives, so **`§3.5` item 7's bound is RESTATED from three modules to ALL
+FIFTEEN as `§3a` `A-1` pre-committed, and the leg's pass condition is now VACUOUS AS EVIDENCE**; **(3)
+`X-2` — the resolution defect is DEEPER than `§0A` note 2 recorded: THREE resolution forms (the static
+relative specifier, a `new URL('../src/shared/<x>.ts', import.meta.url)` form, and the protected dynamic
+`@vite-ignore` import) all resolve under `vendor/Provident-Electron/src/shared/`**; **(4) `X-4` — the
+counts are STALE**: the unit's own rows are now measured **`148/148` green**, not `113 pass / 3 fail` of
+`116`, and `npm test` now reads **`4384 tests / 1 failed`**, not `4352 / 4`; **(5) `X-5` — the monitor
+CONSUMES the `typescript` devDependency** (without it, `ERR_MODULE_NOT_FOUND` in a bare root), now recorded
+in the surface/mechanics and the dependency posture. **AND THE STRONGEST EVIDENCE THIS UNIT HAS, recorded
+because it is the opposite of a finding:** the **`A-3` pin fix was INDEPENDENTLY VERIFIED by an agent that
+never read the implementation** — a `git init` tree at **another revision with equal bytes** produced
+`FAIL — … the revision <X> is NOT the pinned commit 8f193a8d… — equal bytes at a different commit are NOT
+the pinned state`, **exit 1, no `CLEAN`**; the `SKIPPED` arm read exit `0` **with its honesty statement**;
+and `CLEAN` read when the foundation is present and matches (`§3a` `A-3`; `§8`). **Its layer is
+envelope/tooling — NEVER app.** **This amendment widens NOTHING:** it authorises no edit under
+`../Provident-Electron/**`, to a test file, to `vitest.config.ts`, to the four divergent baseline files, to
+`package.json`'s six pinned keys, or to the vendored bytes (`§1.2`; `D-12`). **Its ledger is §13.**
+
+**⟨AMENDED 2026-09-28 — THE STATUS BLOCK'S OWN TWO FIGURES ARE SUPERSEDED (`X-4`), AND BOTH READINGS STAY
+VISIBLE WITH THEIR DATES. The as-filed RUN-READING quoted above — *"READING `113 pass / 3 fail` of
+`116`"*, *"full suite `204 files (3 failed / 201 passed) · 4352 tests (4 failed / 4303 passed / 45
+skipped)`"* — is KEPT above exactly as the supervisor's 2026-09-28 pass recorded it. THE CORRECTED
+READINGS, MEASURED by the blind pass's own re-run at the artifact's head
+(`ddde29c409e302d14e925f8285819757a6c23bc2`, 2026-09-28), are:⟩** **(a) the unit's OWN rows are
+`148 passed (148)`, `0 failed`** — i.e. the `§12.3` remands **have LANDED** and the row count grew
+**`116 → 148`**, so **`113 pass / 3 fail` of `116` is a SUPERSEDED reading of an earlier tree state, not a
+false claim** (it was correctly labelled a RUN-READING and the amendment said it re-ran nothing); and
+**(b) `npm test` reads `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45
+skipped)`** — **one** red, the **carried branch baseline** `PANE-TOGGLE-STAGE-COLLAPSE`
+(`POST-DIVISION-REBUILD-PHASE1-ENTRY-CONDITIONS` clause (1); proposal §7.5), **NOT** the three
+`pd-vendor` files. **ARITHMETIC, printed with its terms:** `4338 + 45 + 1 = 4384` ✔ and
+`203 + 1 = 204` ✔; and against the superseded reading the deltas are `+32 tests`
+(`4384 − 4352`) and `−3 failed tests` (`1 − 4`) — **the `3` reds were the unit's own red set, now green.**
+**A DONE row or tracker row that still quotes `113/3` of `116` or `4352 / 4` is WRONG at this head**
+(`§12.5` item 1's UNVERIFIED is thereby **PARTLY DISCHARGED**; the superseded figures remain visible here
+and there). **Every figure in this block is a RUN-READING of the blind artifact; this amendment pass
+re-ran nothing (`§13.7`'s UNVERIFIED item 1).**
+
 **Pass kind:** SPEC (the contract only). **Program:** `docs/specs/post-division-rebuild-proposal.md` (its
 §2 measured vendoring model, §4.1 corrected row set, §4.7 architecture amendment, §7.4/§7.5 rulings and
 measured baselines). **Gate record:** `docs/specs/post-division-rebuild-proposal-review.md` (verdict
@@ -25,6 +78,10 @@ authored, together with `DECIDED: REBUILD-ARCHIVE-POLICY` (ACTIVE, clauses (1)/(
 
 **Layer (RCA-12, mandatory declaration).** **DOC-LAYER for every claim in this file.** This spec asserts
 **nothing** that is app-green, envelope-green, store-green, engine-green or live-green. Per deliverable:
+**⟨SECOND AMENDMENT 2026-09-28 — THE LEG ROW'S *"EIGHT collected"* READING IS CORRECTED TO `9 COLLECTED / 2
+ZERO-COLLECTION`, AND THE LEG SUPPLIES **ZERO** BEHAVIOUR EVIDENCE FOR **ALL FIFTEEN** MODULES: the blind
+pass measured every collected suite failing its module drives (`C4`), so the pass condition is **VACUOUS AS
+EVIDENCE** and no green subset may be reported. See `§13` and `§3.5` items 4/7.⟩**
 
 | Deliverable | The layer its evidence covers | What that layer does NOT prove |
 | --- | --- | --- |
@@ -32,7 +89,8 @@ authored, together with `DECIDED: REBUILD-ARCHIVE-POLICY` (ACTIVE, clauses (1)/(
 | `vendor/foundation.lock.json` | **DOC/MACHINE-DATA layer** — a provenance record | that the bytes it names exist until a row reads them |
 | the `A2` hash row | **`[T]` / node-suite** (an ENVELOPE-green instrument) | drift upstream; IPC; layout; the assembled app |
 | the `A3` cross-tree monitor | **`[D]`-class local instrument** (harness/script layer) | that the app works; it compares **files**, never behaviour |
-| the conformance leg | **`[T]`/`[H]` — the foundation's OWN node suites**, re-run against the vendored copies — **but only EIGHT of the eleven are COLLECTED** (`O-5`'s negative answer, §3.5 items 4/7): the other three fail to collect by construction | that the fork USES the modules correctly, or that the shell behaves (`G-6`); and **nothing at all about the three uncollected suites' modules** (`census`, `focus-model`, `gutter-affordance`/its session edge) |
+| the conformance leg | **`[T]`/`[H]` — the foundation's OWN node suites**, re-run against the vendored copies — **but their MODULE DRIVES all fail: measured `11 files · 572 tests · 511 failed / 61 passed`, with NO green subset and THREE suites collecting ZERO tests** (`C3`/`C4`; `O-5`'s negative answer; `§3.5` items 2/4/7; `§13`) | that the fork USES the modules correctly, or that the shell behaves (`G-6`); and, at this head, **NOTHING about the vendored modules' behaviour at all — all FIFTEEN are uncovered, not three** (`§3.5` item 7's restated bound; `§3a` `A-1` discharged) |
+| **⟨ADDED 2026-09-28⟩ the `A-3` pin arm — the `git`/`rev-parse` arm of the monitor** | **`[D]`-class local instrument / tooling** — a REVISION read compared to the manifest's `foundation.commit` | **app, envelope or behaviour of any kind**: it verifies the PIN, never the modules — **and the blind pass's independent verification of it (`§3a` `A-3`; `§8`) is envelope/tooling-grade, NEVER app evidence** |
 | anything about the Electron app | **NOT CLAIMED ANYWHERE IN THIS FILE** | — |
 
 **A node-suite green is ENVELOPE-green, not APP-green** (`docs/specs/rca-live-bugs-green-pipeline.md`
@@ -105,6 +163,14 @@ either a decision this filing is entitled to take, or a named escalation.
      `import * as delegate from '../src/shared/zones.js'` (a **value namespace**); and
      `vendor/Provident-Electron/tests/focus-model.test.ts` (**the third zero-collection suite**, whose
      **mechanism is NOT established by this amendment pass — see the UNVERIFIED note in §12**).
+     **⟨ANNOTATED 2026-09-28 (`C3`; `X-1`; `X-6`) — THIS MEMBERSHIP IS WRONG AND IS KEPT AS FILED.
+     `focus-model.test.ts` is NOT a zero-collection suite: MEASURED it COLLECTS `78 tests` (`70 failed`).
+     The suite misidentified here as its mechanism's third member does not exist: the third
+     zero-collection suite is `gutter.test.ts`, whose mechanism is established (a `REPO_ROOT`/`new URL`
+     source-file walk under `vendor/Provident-Electron/`), NOT a static value import; and this item's
+     claim that `focus-model.test.ts`'s mechanism could not be reconciled with its type-only import is
+     **ANSWERED** — nothing about it is uncollectible (§12.5 item 2's UNVERIFIED, discharged; `§3.5`
+     item 2's corrected membership and `§13.5`).⟩**
      **(VERIFIED-BY-READ at the paths named, this amendment pass)** — the two imports quoted are static
      **value** imports; the other **NINE files' `../src/shared/*.js` statements are `import type` only**
      (erased at transform), so they never reach a resolver.
@@ -117,6 +183,25 @@ either a decision this filing is entitled to take, or a named escalation.
      arm**: it yields `vendor/Provident-Electron/src/shared/<x>.ts`. **So the placement preserves relative
      depth but does NOT preserve what the depth must resolve TO**, and note 2's claim that the placement
      keeps the specifiers working is **falsified by measurement**, not by argument.
+     **⟨ANNOTATED 2026-09-28 (`X-2`) — THE MECHANISM CLAIM ABOVE IS SUPERSEDED BY A FULLER MEASUREMENT.
+     The sentence *"the `new URL('../src/shared/<x>.ts', import.meta.url)` form named in the finding is the
+     same resolution fault seen from the file-system arm"* treated the `new URL` form as a second VIEW of
+     the static one and left the guarded dynamic import as the working route. MEASURED: THREE separate
+     resolution forms ALL land on the SAME wrong target `vendor/Provident-Electron/src/shared/`, and the
+     third is the one the suites actually use.⟩** **(a) STATIC RELATIVE** — `'../src/shared/<x>.js'`, as
+     above. **(b) STATIC `new URL(…)`** — `new URL('../src/shared/<x>.ts', import.meta.url)`, a suite-level
+     `MODULE_SRC`, **and** `gutter.test.ts`'s `REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))`
+     source-file walk, which is what produces the measured **`Error: ENOENT: no such file or directory,
+     scandir '…/Astrographer/vendor/Provident-Electron//src'`** and makes that suite a **`Failed Suites`**
+     entry — **it resolves under `vendor/Provident-Electron/src/shared/`, the same absent target.**
+     **(c) PROTECTED DYNAMIC** — `import(/* @vite-ignore */ MODULE_SPECIFIER)`, which **fails with `Cannot
+     find module` even though the target module EXISTS two levels further up**; so item 2's as-filed
+     rationale clause *"their module is reached through the guarded dynamic
+     `import(/* @vite-ignore */ MODULE_SPECIFIER)`"* **is NOT what happens** and the earlier claim is
+     **superseded**. **All three forms are ONE fault with three faces, and NO form resolves** (RUN-READING,
+     the blind artifact's `X-2`; `§13.2 · §13.3`; the per-suite red tally in `§3.5` item 2). **This note's
+     PLACEMENT RULING below is UNAFFECTED** — it rests on byte-identity and on `G-9`'s pin, never on the
+     resolution claim.
    - **THE PLACEMENT RULING (this amendment DECIDES it; it was `O-2`/`O-5`, escalated at filing).**
      **The eleven vendored suites STAY where they are, as BYTE COPIES.** Reason, in the order that binds:
      (i) **the bytes may not be edited** — a rewritten specifier breaks `§4` `P-IM-1`'s byte-identity and
@@ -130,7 +215,17 @@ either a decision this filing is entitled to take, or a named escalation.
      all-green instrument** — its pass condition is therefore the **NAMED SUBSET** of §3.5 item 4, never
      the leg's colour. **Consequence 2:** `gutter-affordance` and `focus-model` and `census` — three of the
      fifteen — carry **reduced copy-fidelity coverage** (the `gutter-ui` edge into `gesture-session` is
-     uncollected with it), recorded as the leg's own bound at §3.5 item 7. **Consequence 3:** a **future
+     uncollected with it), recorded as the leg's own bound at §3.5 item 7. **⟨ANNOTATED 2026-09-28 (`C3`
+     + `C4`) — THIS AS-FILED SENTENCE IS SUPERSEDED, NEVER REWRITTEN. Its `8 + 3` SPLIT IS WRONG IN ITS
+     MEMBERSHIP and its three-module list is WRONG. MEASURED: the three ZERO-COLLECTION suites are
+     `census.test.ts`, `gutter-ui.test.ts` and `gutter.test.ts` (the last as a `Failed Suites` entry on the
+     `ENOENT` for `vendor/Provident-Electron//src`) — while **`focus-model.test.ts` COLLECTS `78 tests`
+     (`70 failed`)**, so the corrected split is **`9 collected / 2 zero-collection`**; and `focus-model.ts`
+     therefore carries the SAME (absent) behaviour coverage as every other module: **`C4` shows every
+     collected suite failing its module drives, so the bound is not three modules but ALL FIFTEEN.** The
+     `9/2` split and the per-suite red tally are carried at `§3.5` items 2/4/7, and the `focus-model.test.ts`
+     *"static value import"* claim above is **WRONG** as to the mechanism while the first amendment's
+     UNVERIFIED note (§12.5 item 2) is **ANSWERED** by the same measurement.⟩** **Consequence 3:** a **future
      green** of this leg requires either a **foundation-side** change (the bytes carrying resolvable
      specifiers — handed off, never patched here) or an **architect ruling that amends `G-9`'s pin set**
      so a resolver may live in a config the pin does not freeze. **Neither is this unit's to take, and
@@ -248,11 +343,11 @@ because `O-5` — `§0A` note 2's resolution claim — was an unnamed escalation
 
 | # | Escalation | Why it is escalated, not decided | **⟨Amendment status (2026-09-28)⟩** |
 | --- | --- | --- | --- |
-| **`O-1`** | **The md5 table is UNVERIFIED by this pass.** This session had **no shell tool** — `md5sum` could not be run — so the proposal's §2 table is **neither reproduced nor falsified** here (§1.3). | The instruction to *"recompute every md5 yourself and report any disagreement"* **cannot be discharged in this session**; the recomputation is a **named, mandatory pre-red obligation** (§3.3 item 1). | **DISCHARGED BY THE RUN** — the supervisor's run read the reconciliation **15/15 REPRODUCED** (RUN-READING, §12 item 1). **NOT re-verified by this amendment pass.** |
+| **`O-1`** | **The md5 table is UNVERIFIED by this pass.** This session had **no shell tool** — `md5sum` could not be run — so the proposal's §2 table is **neither reproduced nor falsified** here (§1.3). | The instruction to *"recompute every md5 yourself and report any disagreement"* **cannot be discharged in this session**; the recomputation is a **named, mandatory pre-red obligation** (§3.3 item 1). | **DISCHARGED BY THE RUN** — the supervisor's run read the reconciliation **15/15 REPRODUCED** (RUN-READING, §12 item 1). **NOT re-verified by this amendment pass.** **⟨2026-09-28, second amendment: the blind pass's `A2` row independently RE-READ the manifest and recomputed all fifteen digests — `15/15` equal to the manifest, so this discharge is CONFIRMED by a non-authoring agent at the envelope/`[T]` layer (`§13.4`: the `A2`-family rows read `148 passed (148)`).⟩** |
 | **`O-2`** | **The vendored suites' placement deviates from the letter of `A-8`** (`vendor/Provident-Electron/tests/` instead of `tests/`), for the pinned-config reason in §0A note 2. | The architect may prefer `tests/` with a config the pin does not forbid; **that would require amending `G-9`'s pin set or the frozen config**, which is the architect's ruling, not a spec's. | **RULED — the placement STANDS** (byte copies at `vendor/Provident-Electron/tests/`; `G-9` forbids collecting them under the main config). The route that would amend `G-9` stays the architect's. **§0A note 2.** |
-| **`O-3`** | **The eleven candidate suites are NOT byte-portable as green legs.** Every one carries foundation-repo audit rows (§0A note 3); **their module-under-test imports are closed, but their assertions are not**. | Choosing between (a) filing every audit row **red and labelled**, (b) a row-level filter, or (c) filing only the four import-closed-and-otherwise-clean **sub-trees of the module rows** is a **contract decision about what the leg is FOR** — escalated per §0A note 3. | **DECIDED — route (a), with a NAMED SUBSET pass condition** (§3.5 item 4). Both red classes measured and named. **§0A note 3; §3.5 items 4/7.** |
+| **`O-3`** | **The eleven candidate suites are NOT byte-portable as green legs.** Every one carries foundation-repo audit rows (§0A note 3); **their module-under-test imports are closed, but their assertions are not**. | Choosing between (a) filing every audit row **red and labelled**, (b) a row-level filter, or (c) filing only the four import-closed-and-otherwise-clean **sub-trees of the module rows** is a **contract decision about what the leg is FOR** — escalated per §0A note 3. | **DECIDED — route (a), with a NAMED SUBSET pass condition** (§3.5 item 4). Both red classes measured and named. **§0A note 3; §3.5 items 4/7.** **⟨2026-09-28, second amendment: route (a) STANDS as the ruling, but its NAMED SUBSET IS NOW EMPTY — class (i) is red for every collected suite (`C4`), so `§3.5` item 4's *"MUST PASS, or the unit is not green"* has NO satisfiable instance at this head and `§3.5` item 7's bound is restated to ALL FIFTEEN modules. The ruling is unchanged in form; its evidentiary content is ZERO (§13.2/§13.4).⟩** |
 | **`O-4`** | **`V-13` owed `A1`'s durable pin record a home.** §0A note 5 decides it is the manifest + the existing decision clause, and **writes no new decision row**. | If the architect wants a per-module figure in `docs/decisions.md` too, that **contradicts `A-8`** and is the architect's call. | **STANDS ESCALATED — unchanged by this amendment.** The landed manifest is the record (VERIFIED-BY-READ). |
-| **`O-5`** | **Whether the vendored suites' specifiers resolve from `vendor/Provident-Electron/tests/`** (§1.3). | **ADDED 2026-09-28:** the filing asserted the resolution **in `§0A` note 2** without a run, so the claim was **unfalsified rather than verified** — an escalation that was never named as one. | **ANSWERED NEGATIVELY — the claim is FALSIFIED.** 3 of 11 suites collect **ZERO** tests; the leg reads **11 files · 572 tests · 511 failed / 61 passed**. **§0A note 2.** |
+| **`O-5`** | **Whether the vendored suites' specifiers resolve from `vendor/Provident-Electron/tests/`** (§1.3). | **ADDED 2026-09-28:** the filing asserted the resolution **in `§0A` note 2** without a run, so the claim was **unfalsified rather than verified** — an escalation that was never named as one. | **ANSWERED NEGATIVELY — the claim is FALSIFIED.** 3 of 11 suites collect **ZERO** tests; the leg reads **11 files · 572 tests · 511 failed / 61 passed**. **§0A note 2.** **⟨AMENDED 2026-09-28: the totals REPRODUCE and the MEMBERSHIP does not — the three zero-collection suites are `census.test.ts`, `gutter-ui.test.ts` and `gutter.test.ts`, and `focus-model.test.ts` COLLECTS 78 (70 failed). The resolved set is measured as `9 collected / 2 zero-collection`, the fault has THREE forms (`X-2`), and NO green subset exists (`C4`; `§3.5` items 2/4/7; `§13.1 · §13.3`).⟩** **AND THE SEPARATE QUESTION THE FIRST AMENDMENT LEFT OPEN (`§12.5` item 4, *"whether the eight collected suites' class (i) rows are green today"*) IS NOW ANSWERED TOO: they are RED for EVERY collected suite** — `theme 46/58` · `container 57/68` · `zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` · `gesture-session 83/87` · `focus-model 70/78` (**collected|failed**), each labelled `src/shared/<x>.ts does not exist (…/vendor/Provident-Electron/src/shared/<x>.ts)` — so **class (i)'s evidence set is EMPTY**, `§3a` `A-1`'s pre-committed restatement is taken as **CONTRACT** (`§3.5` item 7), and **no green subset may ever be reported from this leg** (`C4`; `§13.2`). |
 
 **What this unit is NOT.** It is **not** the harness fix for the red divergence leg (§9 item 1) · **not** the
 `PD-UI-9` Phase-0 spike (`R-8`) · **not** any `PD-UI-*` renderer wave · **not** the `PD-UI-12` boundary ruling
@@ -268,7 +363,7 @@ behaviour, no host code, no IPC, no MCP tool, no store, no engine surface.**
 | `src/shared/<x>.ts` ×15 | **NEW** (copied bytes) | source/`[T]` |
 | **`src/shared/foundation-return-shapes.ts`** | **NEW ⟨ADDED 2026-09-28 by this amendment's `O-7` ruling — the re-declaration path the filing left UNNAMED.⟩** — fork-local TYPE re-declarations ONLY (§2.1 item 7; §4 `P-IM-4`) | source/`[T]` |
 | `vendor/foundation.lock.json` | **NEW** (the manifest) | machine data |
-| `vendor/Provident-Electron/tests/<x>.test.ts` ×N | **NEW** (byte copies of the included suites, `N` = §3.5 item 2) — **and, per the `O-5` ruling, the placement STANDS: three of those suites are uncollectible there BY CONSTRUCTION** (§0A note 2) | `[T]`/`[H]` |
+| `vendor/Provident-Electron/tests/<x>.test.ts` ×N | **NEW** (byte copies of the included suites, `N` = §3.5 item 2) — **and, per the `O-5` ruling, the placement STANDS: three of those suites are uncollectible there BY CONSTRUCTION** (§0A note 2) — **⟨2026-09-28: the three are `census.test.ts`, `gutter-ui.test.ts`, `gutter.test.ts` (`C3`), and the remaining EIGHT collect but ALL fail their module drives (`C4`) — no `vendor/**` file is collected by `npm test`, so the leg stays invisible to it (`§3.5` item 6; §13).⟩** | `[T]`/`[H]` |
 | `tests/foundation-vendor-manifest.test.ts` | **NEW** (the `A2` hash row) — **⟨AMENDED 2026-09-28: landed as THREE files, `tests/pd-vendor-set.test.ts` + `tests/pd-vendor-drift.test.ts` + `tests/pd-vendor-manifest.test.ts`; the planned name is kept as the as-filed reading, and the split satisfies every obligation of §2.4 (see that section's note and §12.5 item 9)⟩** | `[T]` |
 | `scripts/foundation-drift.mjs` | **NEW** (the `A3` monitor) | `[D]`-class local instrument |
 | `vitest.conformance.config.ts` | **NEW** (the leg's own config) — **⟨AMENDED 2026-09-28: NO RESOLVER is added to it; the generated-resolver route is ESCALATED, not taken (§0A note 2 consequence 3).⟩** | harness |
@@ -294,7 +389,7 @@ architect ruling.
 | **`O-2`** | **The vendored-suite placement** (§0A note 2) and whether a `tests/**` placement is achievable under the frozen `vitest.config.ts`. | The architect's ruling, or a re-reading of `G-9`'s pin scope. **⟨AMENDED 2026-09-28 — RULED: the placement STANDS as byte copies; a `tests/**` placement is NOT achievable without amending `G-9`'s pin set, which is the architect's alone. §0A note 2.⟩** |
 | **`O-3`** | **Whether the conformance leg can be green at all** in this repo (§0A note 3) — and, if it cannot, whether the leg is (a) filed with audit rows red, (b) filtered by row title, or (c) reduced to the module rows. | A **run** of the leg after vendoring: `npx vitest run --config vitest.conformance.config.ts`, with the per-suite pass/fail tally recorded. **Nothing in this file predicts that tally.** **⟨AMENDED 2026-09-28 — DECIDED: route (a), with a NAMED-SUBSET pass condition; the run was taken (`11 files · 572 tests · 511 failed / 61 passed`, 3 suites collecting zero tests). §3.5 items 4/7.⟩** |
 | **`O-4`** | The durable-home question for `V-13`'s pin record (§0A note 5). | The architect's confirmation that the manifest is the home. |
-| **`O-5`** | **Whether `import(/* @vite-ignore */ '../../src/shared/<x>.js')` resolves to `src/shared/<x>.ts` under this repo's Vite/vitest.** The foundation's guide states the **static** form is **`unverified`** (`../Provident-Electron/docs/guide/seams.md` *Code, runnable* + *Gotchas measured in this repo*), and the dynamic+`@vite-ignore` form is the one the fifteen suites actually use — but **this pass ran nothing**. | One run of a single vendored suite (or of one smoke row) under `npx vitest run` in this repo. **⟨AMENDED 2026-09-28 — ANSWERED NEGATIVELY, and the specifier in the question is not even the operative one. The operative specifier is the RELATIVE `'../src/shared/<x>.js'`, which from `vendor/Provident-Electron/tests/` resolves to `vendor/Provident-Electron/src/shared/<x>.js` — ABSENT. Measured: 3 of 11 suites collect ZERO tests; the leg reads 11 files · 572 tests · 511 failed / 61 passed. The as-filed `O-2` placement claim in `§0A` note 2 is FALSIFIED; the placement ruling and its three consequences are in `§0A` note 2.⟩** |
+| **`O-5`** | **Whether `import(/* @vite-ignore */ '../../src/shared/<x>.js')` resolves to `src/shared/<x>.ts` under this repo's Vite/vitest.** The foundation's guide states the **static** form is **`unverified`** (`../Provident-Electron/docs/guide/seams.md` *Code, runnable* + *Gotchas measured in this repo*), and the dynamic+`@vite-ignore` form is the one the fifteen suites actually use — but **this pass ran nothing**. | One run of a single vendored suite (or of one smoke row) under `npx vitest run` in this repo. **⟨AMENDED 2026-09-28 — ANSWERED NEGATIVELY, and the specifier in the question is not even the operative one. The operative specifier is the RELATIVE `'../src/shared/<x>.js'`, which from `vendor/Provident-Electron/tests/` resolves to `vendor/Provident-Electron/src/shared/<x>.js` — ABSENT. Measured: 3 of 11 suites collect ZERO tests; the leg reads 11 files · 572 tests · 511 failed / 61 passed. The as-filed `O-2` placement claim in `§0A` note 2 is FALSIFIED; the placement ruling and its three consequences are in `§0A` note 2.⟩** **⟨2026-09-28, second amendment (`X-2`) — THE MECHANISM IS THREE-FORM, NOT ONE: the STATIC RELATIVE specifier, a STATIC `new URL('../src/shared/<x>.ts', import.meta.url)` form AND the guarded dynamic `import(/* @vite-ignore */ …)` ALL resolve under `vendor/Provident-Electron/src/shared/`.** The dynamic form — the very form this row's question names as *"the one the fifteen suites actually use"* — **fails with `Cannot find module` although the module exists two levels up**, so the row's premise is doubly superseded (§0A note 2's annotation; `§13.3`). |
 | **`O-6`** | **`G-4`'s scope** — this filing carries the scoping ruling (R-9) but **cannot test it**; the corpus-write question belongs to `PD-UI-2`'s rows. | `PD-UI-2`'s own spec gate. |
 | **`O-7`** | **The unexported return shapes** (§0A note 7): `GestureSession`, `RelocateResetResult`, `FocusResult`, `FocusRefusal`, `FocusTransitionArg`. | Nothing to settle — this is a **recorded consumer cost**; the fork re-declares. Recorded so no unit claims the shapes are importable. **⟨AMENDED 2026-09-28 — NOT DISCHARGED AT FILING: the obligation named no PATH and the landed tree carries no re-declaration file. RULED: the path is `src/shared/foundation-return-shapes.ts`, the obligation is now ROW-BEARING (§2.1 item 7; §4 `P-IM-4`), and the foundation-side export gap is a HANDOFF item (§9 item 8).⟩** |
 | **`O-8`** | **The suite-count disagreement** the gate carried unresolved (*"the `201`-vs-`221` suite-count disagreement"*, gate §5's residual ledger). **This pass did not recount the fork's collected suite**; it read the proposal's `201 .test.ts` figure and, separately, enumerated fork `tests/**` paths by glob (209 paths, of which the `.ts` files are within the `201`-class) — **two readings that do not reconcile into a single figure here**. | A `npx vitest list`/run reading at this branch head, **before** the vendored suites land, recorded as the baseline (§3.6 item 1). |
@@ -568,6 +663,27 @@ failure** — the fork must work standalone (the architect's `A3` wording). (2) 
 compares BYTES; it asserts nothing about behaviour, imports, types or the app.** Its layer is `[D]`-class
 **local instrument**, and a `CLEAN` reading is **not** app evidence.
 
+**⟨ADDED 2026-09-28 — THE MONITOR'S RUNTIME DEPENDENCY, and the exact scope of *"standalone"* (`X-5`).⟩**
+**The monitor CONSUMES the `typescript` devDependency** — its import-closure oracle derives the vendored
+files' imports with the TypeScript **AST** (the `§3a` `A-10` HOST-FIX: `ImportDeclaration` /
+`ImportExpression` / `require` `CallExpression`, replacing the old single-line regex), so `typescript` is a
+**runtime** dependency of `scripts/foundation-drift.mjs`, not only a build-time one. **MEASURED:** in a bare
+root (a temp tree with **no `node_modules`**) the script **CANNOT START**:
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from …/scripts/foundation-drift.mjs
+```
+
+and it starts normally once the repo's `node_modules` is reachable. **THE SCOPE OF THE STANDALONE CLAIM,
+stated so it is never over-read:** *"the fork must work standalone"* (§2.3 row 1; decision clause (1)'s
+vendoring model) is satisfied **for the ABSENT-FOUNDATION situation** — a missing
+`<foundation.path>/src/shared/` yields `SKIPPED`, exit `0`, **with no dependency on the adjacent tree
+whatsoever**. **It is NOT and never was a claim that the script runs with NO INSTALLED DEPENDENCIES**: the
+instrument lives in the repo and runs from the repo (or from a copy of it) with the repo's
+`devDependencies` installed. **`typescript` is ALREADY a devDependency of this repo and this amendment
+ADDS NO DEPENDENCY, moves no pinned key and edits no `package.json` value** (§2.5; §3.4; `D-12`;
+`§13.7`).
+
 ### 2.4 `tests/foundation-vendor-manifest.test.ts` — the `A2` hash row (placement, and why) **(LANDED AS `tests/pd-vendor-manifest.test.ts` + `tests/pd-vendor-set.test.ts` + `tests/pd-vendor-drift.test.ts` — the as-filed heading is KEPT; see the amendment note in this section)**
 
 **It is a `tests/**` row (the architect's `A-8` wording) and it is therefore COLLECTED by `npm test`'s
@@ -607,6 +723,16 @@ item 9). Consequences, stated because two of them are `G-9`-protected:
 
 **A `package.json` edit that changes ANY pinned value, or a `vitest.config.ts` edit of ANY kind, is a
 protected-pin violation and a review finding** (`R-7`; `G-9` extended by `X-9`).
+
+**⟨ADDED 2026-09-28 — THE UNIT'S DEPENDENCY POSTURE (`X-5`), stated so no reader over-reads
+*"standalone"*.⟩** **This unit adds NO dependency and edits NO dependency key.** Its two runtime consumers
+of the existing `devDependencies` are: **`scripts/foundation-drift.mjs` → `typescript`** (the AST import-
+closure oracle and the `§3a` `A-10` HOST-FIX; **without it the script cannot start** — `ERR_MODULE_NOT_FOUND`
+in a bare root, §2.3's added note), and **the `tests/pd-vendor-*.test.ts` family → `node:*` builtins plus
+`vitest` only**. **The `A2` family imports nothing else** (§2.4 item 1), and **no new package, no PBT
+library and no sixth leg is added** (§4's shared machinery). **A row that requires `node_modules` to be
+installed is NOT a row that violates "the fork works standalone":** that property is about the **ABSENT
+FOUNDATION TREE** (§2.3 row 1), never about a dependency-free checkout.
 
 ---
 
@@ -726,6 +852,37 @@ COLLECTIBILITY; the run split the eleven into 8 + 3 (`O-5`; `§0A` note 2).⟩**
 amendment pass** — recorded as UNVERIFIED in §12 item 2). **All three collect ZERO tests**, so **their
 module rows are not evidence of anything** (§3.5 item 4's class (ii); item 7's coverage bound).
 
+**⟨AMENDED 2026-09-28 (SECOND AMENDMENT) — THE `8 + 3` SPLIT ABOVE IS SUPERSEDED: its STRUCTURE holds (`3`
+of the `11` collect ZERO) and its MEMBERSHIP is WRONG (`C3`; `X-1`; `X-3`). THE CORRECTED SPLIT IS
+`9 COLLECTED / 2 ZERO-COLLECTION`, and every figure below is MEASURED.⟩**
+**ZERO-COLLECTION: 2 — `census.test.ts`** (its static value namespace `import * as delegate from
+'../src/shared/zones.js'` — **the mechanism this spec named, and it REPRODUCES**) and
+**`gutter-ui.test.ts`** (its static value import `import { POINTER_TYPES, createGestureSession } from
+'../src/shared/gesture-session.js'` — **also reproduces**). **Both mechanisms the first amendment named for
+those two suites are CORRECT; both are wrong only about the THIRD member.** **THE THIRD ZERO-COLLECTION
+ENTRY IS `gutter.test.ts`, NOT `focus-model.test.ts`** — and its mechanism is a **third, different** one: a
+`REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))` **source-file walk** that resolves under
+`vendor/Provident-Electron/`, surfacing as a **`Failed Suites`** entry with `Error: ENOENT: no such file or
+directory, scandir '…/Astrographer/vendor/Provident-Electron//src'` — **it appears in the run's `Failed
+Suites` list and NOT among the collected suites** (`X-2` item (b)). **`focus-model.test.ts` IS COLLECTED AND
+IS DRIVEN — `78 tests`, `70 failed`** — so the first amendment's label *"the third zero-collection suite"*
+and its *"static value import"* mechanism for that file are **BOTH WRONG**, and its UNVERIFIED item
+(`§12.5` item 2) is **ANSWERED: nothing about `focus-model.test.ts` is uncollectible** (`X-6`).
+**THE COLLECTED SET CARRIES NINE SUITES, AND EVERY ONE FAILS ITS MODULE DRIVES (`C4`).** **The measured
+per-suite tally at the blind artifact's head, printed as `collected|failed` — the `§10` item 9 DONE-row
+obligation taken as a READING:** **`theme 46|58` · `zones 54|58` · `container 57|68` · `overlay 57|69` ·
+`menu-template 54|60` · `relocate 90|94` · `gesture-session 83|87` · `focus-model 70|78`** (**eight
+collected suites, ALL FAILING their module drives**; the failure label is `<x>: src/shared/<x>.ts does not
+exist (…/vendor/Provident-Electron/src/shared/<x>.ts)`) · **`gutter 0|0`**, **`census 0|0`**,
+**`gutter-ui 0|0`** (**the two zero-collection suites plus the `Failed Suites` entry: their rows never run,
+so they report NO row at all**). **THE SUMMED TERMS RECONCILE:** the eight failing suites contribute
+`58 + 58 + 68 + 69 + 60 + 94 + 87 + 78 = 572` collected tests and
+`46 + 54 + 57 + 57 + 54 + 90 + 83 + 70 = 511` failures, the remaining three contribute `0 + 0 + 0`, and
+**`572 − 511 = 61` passed ✔** — the `61` being **class (iii) audit and absence-branch residue, NEVER a
+copy-fidelity count** (§12.2's caveat stands). **The leg's totals are unchanged and reproduce exactly:
+`11 files · 572 tests · 511 failed / 61 passed`, exit `1`.** **(EVERY FIGURE IN THIS ANNOTATION IS A
+RUN-READING OF THE BLIND ARTIFACT; this amendment pass re-ran nothing and read no run log — `§13.7`'s UNVERIFIED item 1.)**
+
 **3. THE EXCLUDED SET — four suites, each with its OWN reason (the architect's `X-1` class plus one).**
 
 | Suite | Import that is outside the vendored set (`X-1`'s class) | The divergence it would resolve to | Reason recorded |
@@ -763,8 +920,8 @@ falls into exactly ONE of three classes, and **the classes are the pass conditio
 
 | Class | Which rows | Status | Is it copy-fidelity evidence? |
 | --- | --- | --- | --- |
-| **(i) EVIDENCE ROWS** | rows of the **eight collected** suites that **drive the vendored module** (the dynamic `MODULE_SPECIFIER` import and the assertions over it) and make **no** assertion about another repository's tree | **MUST PASS, or the unit is not green** | **YES — this is the whole of the leg's evidence** |
-| **(ii) RED-BY-CONSTRUCTION, structural (`O-5`)** | **all rows of the three uncollected suites** — `gutter-ui.test.ts`, `census.test.ts`, `focus-model.test.ts` (they report **no rows at all**; the file itself fails to collect) | **RED BY CONSTRUCTION — the placement is RULED (byte copies, §0A note 2) and this red can never be cleared without a foundation-side change or a `G-9` amendment** | **NO — a zero-collection suite is evidence about NOTHING** |
+| **(i) EVIDENCE ROWS** | rows of the **eight collected** suites that **drive the vendored module** (the dynamic `MODULE_SPECIFIER` import and the assertions over it) and make **no** assertion about another repository's tree | **MUST PASS, or the unit is not green** — **⟨SUPERSEDED 2026-09-28 (`C4`): MEASURED, the class is RED FOR EVERY COLLECTED SUITE — `theme 46/58` · `container 57/68` · `zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` · `gesture-session 83/87` · `focus-model 70/78` as `failed/collected`, each failing on the labelled module absence. The as-filed condition is KEPT and is now VACUOUS — see the restated clause below.⟩** | **YES — this is the whole of the leg's evidence** — **⟨SUPERSEDED 2026-09-28: the evidence set is EMPTY at this head, so the class supplies ZERO copy-fidelity evidence and `§3.5` item 7's bound is restated to ALL FIFTEEN modules; NO green subset may ever be reported from this leg (`C4`; `§3a` `A-1` discharged; `§13.2`).⟩** |
+| **(ii) RED-BY-CONSTRUCTION, structural (`O-5`)** | **all rows of the three uncollected suites** — `gutter-ui.test.ts`, `census.test.ts`, `focus-model.test.ts` (they report **no rows at all**; the file itself fails to collect). **⟨CORRECTED 2026-09-28 (`C3`): the three are `gutter-ui.test.ts`, `census.test.ts` and `gutter.test.ts` (the last as a `Failed Suites` `ENOENT` entry) — `focus-model.test.ts` COLLECTS (`78 tests` / `70 failed`) and belongs to the class (i) row above, where it also fails.⟩** | **RED BY CONSTRUCTION — the placement is RULED (byte copies, §0A note 2) and this red can never be cleared without a foundation-side change or a `G-9` amendment** | **NO — a zero-collection suite is evidence about NOTHING** |
 | **(iii) RED-BY-CONSTRUCTION, foundation-repo audit (`X-1` class; §0A note 3 (R-A))** | rows asserting the **foundation repo's own state** — the `git status --porcelain` diff-scope/allow-list audit, reads of the foundation's own `docs/specs/<unit>.md`/`-review.md`/`-greens.md`, the `docs/skills/designing-pages.md` **absence** probe, the foundation's frozen `src/shared/dom-shim.ts` read, the `../package.json` script census | **RED BY CONSTRUCTION with its reason RECORDED per row** | **NO — it measures another repository, not this copy** |
 
 **What a future GREEN would mean, and what it would NOT.** A green of class (i) means **the vendored bytes
@@ -777,6 +934,39 @@ an unfrozen config. **Class (iii) becomes green only** in the foundation's own t
 **named** list of the two red-by-construction classes with their reasons — and **a DONE row that reports the
 leg as a single green/red word, or that counts a class (ii)/(iii) red as copy-fidelity evidence, is a review
 finding.**
+
+**⟨ADDED 2026-09-28 (SECOND AMENDMENT) — THE `§3a` `A-1` RESTATEMENT, WRITTEN AS A NORMATIVE CLAUSE: THE
+LEG'S PASS CONDITION IS NOW VACUOUS AS EVIDENCE, AND THIS IS THE CONTRACT (`C4`; `X-2`; `§3a` `A-1`
+DISCHARGED).⟩** **`A-1` pre-committed: *"read the per-suite tally before any DONE row; if class (i) is red,
+restate `§3.5` item 7's bound from three modules to all fifteen (no behaviour evidence) and escalate —
+never report a green subset."* The tally HAS been read and class (i) IS red, so the branch is TAKEN. The
+following four clauses are CONTRACT, not commentary:**
+
+1. **CLASS (i) IS EMPTY, AND THE PASS CONDITION IS VACUOUS.** Every suite that collects fails its module
+   drives (`C4`), so the class (i) set has **no satisfiable instance** at this head: the condition *"class
+   (i) rows MUST PASS, or the unit is not green"* is **true and vacuous** — **it can neither be satisfied
+   nor violated by anything this leg does.** **The leg's pass condition therefore carries ZERO evidentiary
+   weight, and a DONE row, a tracker row, a blind-greens artifact or a wave spec that treats it as met
+   (or as evidence about the vendored modules) is a REVIEW FINDING.**
+2. **NO GREEN SUBSET MAY EVER BE REPORTED FROM THIS LEG** — not *"the eight collected suites are green
+   except their module rows"*, not *"the `61 passed` are the evidence rows"*, and not any per-suite
+   qualification. **The measured reading is the whole reading: `11 files · 572 tests · 511 failed / 61
+   passed`, and the `61` is class (iii) audit and absence-branch residue that evidences NOTHING about
+   copy fidelity** (§12.2's caveat). **A green subset is unimplementable evidence, not a stylistic
+   restraint.**
+3. **THE COVERAGE BOUND IS ALL FIFTEEN, NOT THREE.** The bound restated at item 7 below is **normative**:
+   **all fifteen vendored modules carry NO behaviour/copy-fidelity evidence from this leg.** Item 7's
+   *"three modules"* form is **superseded, kept visible there**.
+4. **WHAT WOULD MAKE THE LEG EVIDENCE AGAIN — the complete list, and nothing outside it does:** (a) a
+   **foundation-side** change so the vendored bytes carry **resolvable** specifiers (handed off, **never**
+   patched here — `G-8`); **or** (b) an **architect ruling that amends `G-9`'s pin set** so a resolver may
+   live in a config the pin does not freeze (the generated-resolver route is **RECORDED, NOT TAKEN** —
+   `§0A` note 2 consequence 3 — because it would widen this unit's surface); **or** (c) a **moved
+   placement** that reaches a resolvable depth, which is refused because it would move the copies **out of**
+   the byte-identity the manifest's `vendored` path records. **Absent (a)/(b)/(c), the leg is RED BY
+   CONSTRUCTION FOR ALL FIFTEEN MODULES and stays that way — and NO unit may quote it as copy-fidelity
+   evidence in the meantime.** **`npm run divergence`'s red is unrelated and environmental** (proposal
+   §7.5) and does not enter this clause.
 
 **5. THE ABSOLUTE PROHIBITION ON THE LEG.** **No suite filed under the leg may contain `vi.mock('electron', …)`**
 (`R-4`; the protected census pins five names). **MEASURED: none of the fifteen candidates contains an
@@ -810,6 +1000,39 @@ the adjacent tree; the **register** (`§4` `P-IM-3`) proves their **import closu
 repo proves their runtime behaviour.** **A DONE row, a blind-greens artifact or a wave spec that claims
 `census`/`focus-model`/`gutter-affordance` behaviour was conformance-verified BY THIS UNIT is a review
 finding.** The bound is discharged only by the two routes of item 4's class (ii).
+
+**⟨RESTATED 2026-09-28 (SECOND AMENDMENT) — THE BOUND IS NOW NORMATIVE AND ITS SCOPE IS ALL FIFTEEN
+MODULES. The paragraph above is KEPT as the first amendment's reading; its *"three of the fifteen"* form is
+SUPERSEDED and its three-member list is WRONG IN MEMBERSHIP (`C3`/`C4`; `§3a` `A-1` DISCHARGED).⟩**
+**THE CLAUSE (normative):**
+
+1. **ALL FIFTEEN vendored modules carry NO behaviour/copy-fidelity evidence from the conformance leg at
+   this head.** The measured reason is not three uncollectible suites but **the resolution fault itself
+   (`X-2`: three resolution forms, one wrong target)**: the three zero-collection suites contribute **no
+   rows at all** (`census.test.ts`, `gutter-ui.test.ts`, **`gutter.test.ts`** — the last as a `Failed
+   Suites` entry), and **every suite that does collect fails its module drives** (`C4`: `theme 46/58` ·
+   `container 57/68` · `zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` ·
+   `gesture-session 83/87` · `focus-model 70/78`, `failed/collected`). **The corrected membership of the
+   ZERO-COLLECTION set — the as-filed *"`census.ts`, `focus-model.ts`, `gutter-affordance.ts`"* — is
+   therefore `census.ts`, `gutter-affordance.ts` and `gutter.ts` for the zero-collection cause, and ALL
+   FIFTEEN for the evidence cause.** **`focus-model.ts` is NOT one of the zero-collection three** (its
+   suite collects `78 tests` and is driven), and **`focus-model.ts`'s mechanism claim in the first
+   amendment is wrong** (`X-1`; `X-3`; `X-6`).
+2. **What still covers the fifteen, at their own layers, and NOTHING else does:** the `A2` hash row (`§4`
+   `P-IM-1`/`P-IM-2`) proves their **bytes**; the `A3` monitor (`§2.3`) proves their **bytes** against the
+   adjacent tree; the monitor's revision arm (`§3a` `A-3`) proves the **pin**; the **register** (`§4`
+   `P-IM-3`) proves their **import closure**; and **NOTHING IN THIS REPO PROVES THEIR RUNTIME BEHAVIOUR.**
+3. **The prohibition is now ALL-FIFTEEN-WIDE, not three-module-wide.** A DONE row, a tracker row, a
+   blind-greens artifact or a wave spec that claims **ANY** vendored module's behaviour was
+   conformance-verified **BY THIS UNIT** — whether `census`/`gutter-affordance`/`gutter`, `focus-model`,
+   `theme`, `zones`, `container`, `overlay`, `menu-template`, `relocate` or `gesture-session` — is a
+   **review finding**. **A green subset may not be reported** (item 4's added clause 2).
+4. **The bound is discharged ONLY by item 4's clause 4 routes (a)/(b)/(c)** — a foundation-side specifier
+   change (handed off, never patched), a `G-9` pin-set amendment (the architect's), or a moved placement
+   (refused: it breaks the byte-identity the manifest records). **`gutter-ui.test.ts`'s loss of the only
+   collected-suite edge into `gesture-session.ts` remains a REAL loss inside this bound** (the other
+   suites reach that module by **type-only** statements), but it is **no longer the operative
+   distinction**: at this head **no** suite supplies behaviour evidence.
 
 ### 3.6 The protected pins this unit brushes — and how each is re-derived **in the same commit**
 
@@ -1025,15 +1248,31 @@ not re-add them, and so the register's FULL cap is not read as an oversight).⟩
    **⟨AMENDED 2026-09-28 — this clause is now the PASS CONDITION, not only a disclaimer: the leg's colour is
    `RED` by construction on two named classes (§3.5 item 4), its evidence is the class (i) subset, and
    THREE modules (`census`, `focus-model`, `gutter-affordance`) carry no behaviour evidence at all (§3.5
-   item 7). A green word here is impossible and would be a review finding.⟩**
+   item 7). A green word here is impossible and would be a review finding.⟩** **⟨AMENDED 2026-09-28
+   (SECOND AMENDMENT, `C4`) — STRONGER AND SIMPLER: the class (i) subset is **EMPTY**, so the leg carries
+   **ZERO** copy-fidelity evidence and **ALL FIFTEEN** modules carry no behaviour evidence (§3.5 item 7's
+   restated normative bound); the three-member list above is SUPERSEDED in both membership and scope
+   (`census`, `gutter-affordance`, `gutter` for the zero-collection cause; **all fifteen** for the evidence
+   cause). **No green subset may be reported from this leg, and this clause's own claim is a layer
+   declaration — envelope/tooling, never app.**⟩**
 7. **⟨ADDED 2026-09-28.⟩ No claim that the five re-declared shapes MATCH the foundation's actual returned
    values.** `P-IM-4` asserts **declaration presence and the five-name set**; structural equivalence to the
    returned values is the **vendored suites'** envelope-layer reading and is **partly uncollected**
    (`focus-model.test.ts` is one of the three, §3.5 item 2) — so this unit claims the **declaration**, never
-   the equivalence.
+   the equivalence. **⟨CORRECTED 2026-09-28 (SECOND AMENDMENT) — `focus-model.test.ts` is **NOT** one of the
+   three (`C3`): the three are `census.test.ts`, `gutter-ui.test.ts` and `gutter.test.ts`, and
+   `focus-model.test.ts` **COLLECTS** (`78 tests` / `70 failed`). The clause's CONCLUSION is stronger than
+   it was filed: **no suite in the leg supplies behaviour evidence for ANY module** — all fifteen are
+   uncovered (`C4`; `§3.5` items 2/7) — so the equivalence is unclaimed for a larger reason than this
+   parenthesis states.⟩**
 8. **⟨ADDED 2026-09-28.⟩ No claim that the three row corrections of §12 item 3 are LANDED.** They are
    **REMANDS to the TestWriter**; while they stand unimplemented, the landed reading `113 pass / 3 fail` is
-   the honest figure and **the unit is not green**.
+   the honest figure and **the unit is not green**. **⟨AMENDED 2026-09-28 (SECOND AMENDMENT, `X-4`) — THE
+   REMANDS HAVE LANDED AND THIS CLAUSE IS THEREFORE SATISFIED, NOT OPEN: the three landed
+   `tests/pd-vendor-*.test.ts` files now read `148 passed (148)` / `0 failed`, so the row count is `148`
+   (not `116`) and the *"unit is not green"* consequence **no longer attaches to any unimplemented remand**.
+   The clause's FORM stays binding: a future remand that stands unimplemented makes this clause
+   operative again. The `113/3`-of-`116` reading is KEPT as the earlier tree state's reading.⟩**
 
 ---
 
@@ -1082,6 +1321,11 @@ amendment** — the pass condition is the **named subset** (§3.5 item 4). ⑥ *
 post-landing reading; the **pre-vendoring** baseline reading is the proposal's recorded
 `1 failed file / 200 passed (201 files)` (§3.6's table), and **`O-8`'s suite-count disagreement is NOT
 resolved by this amendment — the two figures above are different tree states, not a reconciliation**
+**⟨2026-09-28 (SECOND AMENDMENT, `X-4`) — obligation ⑥'s post-landing figure is SUPERSEDED: the blind pass
+read `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)`, the one red
+being the CARRIED BRANCH BASELINE, and the unit's own `pd-vendor` rows `148 passed (148)`. `O-8` remains
+UNRESOLVED and this amendment does not reconcile it either — the figures now number five from at least
+three tree states.⟩**
 (UNVERIFIED, §12 item 5). **The order obligation ④⑤ states was met in NEITHER direction cleanly, and that is
 recorded rather than smoothed: the red set was authored and RUN before this amendment took the ④/⑤
 rulings, so the first run is the evidence that MADE the rulings necessary** — which is why the corrections
@@ -1113,10 +1357,10 @@ finding, and it does not apply here: ①–③ were discharged by the run that p
 
 | Leg | What it covers | Layer | This unit's obligation |
 | --- | --- | --- | --- |
-| **`npm test`** (`vitest run`) | the `A2` row, the register's rows, and the **unchanged** existing suite | harness/`[T]` | the DONE row prints the **BEFORE → AFTER** file/test/skip counts **in the same commit** (§3.6). **⟨AMENDED 2026-09-28: the AFTER reading is `204 files (3 failed / 201 passed) · 4352 tests (4 failed / 4303 passed / 45 skipped)` — the 3 red FILES are the `PD-VENDOR` red set's own (`113 pass / 3 fail` of `116` rows) and the 1 carried red is the branch baseline (`G-1`); `4303 + 45 + 4 = 4352` ✔ and `201 + 3 = 204` ✔.⟩** |
+| **`npm test`** (`vitest run`) | the `A2` row, the register's rows, and the **unchanged** existing suite | harness/`[T]` | the DONE row prints the **BEFORE → AFTER** file/test/skip counts **in the same commit** (§3.6). **⟨AMENDED 2026-09-28: the AFTER reading is `204 files (3 failed / 201 passed) · 4352 tests (4 failed / 4303 passed / 45 skipped)` — the 3 red FILES are the `PD-VENDOR` red set's own (`113 pass / 3 fail` of `116` rows) and the 1 carried red is the branch baseline (`G-1`); `4303 + 45 + 4 = 4352` ✔ and `201 + 3 = 204` ✔.⟩** **⟨SUPERSEDED 2026-09-28 (SECOND AMENDMENT, `X-4`) — the corrected AFTER reading is `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)`; the ONE red is the CARRIED BRANCH BASELINE (`PANE-TOGGLE-STAGE-COLLAPSE`) and the unit's own three `pd-vendor` files now read `148 passed (148)` / `0 failed`, so the as-filed *"3 red FILES are the PD-VENDOR red set's own"* and the `113/3`-of-`116` row census are BOTH superseded. Arithmetic of the corrected reading: `4338 + 45 + 1 = 4384` ✔ · `203 + 1 = 204` ✔.⟩** |
 | **`npm run typecheck`** | `tsc --noEmit -p tsconfig.json` — **`src/**` only**; `tests/` is `exclude`d | harness | **exit 0**, and the vendored `src/shared/**` modules must typecheck **unmodified** (their zero/external imports are what makes this possible). **⟨AMENDED 2026-09-28: the run read `exit 0` — and the NEW `src/shared/foundation-return-shapes.ts` (a `src/**` file) is inside that reading, so the `P-IM-4` file, **when it lands**, must keep it at 0.⟩** |
 | **`npm run build`** | the five bundles (`package.json`'s `build`) | harness | **exit 0**. **The vendored modules are in NO bundle** unless a bundle's entry imports them (the foundation's own reading: *"in no shipped bundle"*, `../Provident-Electron/docs/guide/seams.md` *Gotchas*) |
-| **`npm run conformance`** *(new)* | the **eleven included suites — of which THREE collect ZERO tests** | `[T]`/`[H]` | **a per-suite tally with the audit rows named** (§3.5 item 4) — **no green word**. **⟨AMENDED 2026-09-28: the run read `11 files · 572 tests · 511 failed / 61 passed` with 3 suites collecting zero tests; the leg is RED BY CONSTRUCTION and its PASS CONDITION is the class (i) subset of §3.5 item 4, with the coverage bound of §3.5 item 7 (three modules carry no behaviour evidence).⟩** |
+| **`npm run conformance`** *(new)* | the **eleven included suites — of which THREE collect ZERO tests** | `[T]`/`[H]` | **a per-suite tally with the audit rows named** (§3.5 item 4) — **no green word**. **⟨AMENDED 2026-09-28: the run read `11 files · 572 tests · 511 failed / 61 passed` with 3 suites collecting zero tests; the leg is RED BY CONSTRUCTION and its PASS CONDITION is the class (i) subset of §3.5 item 4, with the coverage bound of §3.5 item 7 (three modules carry no behaviour evidence).⟩** **⟨SUPERSEDED 2026-09-28 (SECOND AMENDMENT, `C3`/`C4`): the totals REPRODUCE exactly, but the three zero-collection suites are `census.test.ts`, `gutter-ui.test.ts`, `gutter.test.ts` (split `9 collected / 2 zero-collection`), the two-member *"eight collected"* wording above is the then-reading, **NO green subset exists** (class (i) is red for every collected suite), and `§3.5` item 7's bound is **ALL FIFTEEN** modules — **the leg reports a per-suite tally with class labels, never a colour**, and this cell's three-module claim is superseded. LAYER: `[T]`/`[H]` **envelope/tooling — never app** (`§13.2`).⟩** |
 | **`node scripts/foundation-drift.mjs`** *(new)* | the `A3` monitor | `[D]`-class local instrument | a **`CLEAN` or `SKIPPED`** reading with the tree state named |
 | **`npm run battery`** | 184 checks | harness/`[H]` | **run it** (the branch baseline reading is `GREEN`, proposal §7.5) — and **state that a battery green is harness-green**, not app-green |
 | **`npm run divergence`** | the real-Electron divergence leg | harness/`[D]` | **run it and report the reading.** At this branch head it is **RED for an ENVIRONMENTAL reason** (`/dev/shm` denial → `SIGTRAP`; proposal §7.5) and `A-7` makes it **mandatory pre-live**. **This unit does NOT fix it, does NOT claim it green, and does NOT claim an app boot** |
@@ -1127,6 +1371,38 @@ red** (`P-SM-1`/`strat:stage-seam-schedule-single-active`, the APP-layer residua
 · **`typecheck` 0** · **`build` 0** · **`battery` 184/0 GREEN** · **`divergence` RED on the Electron leg**
 (ENVIRONMENTAL). **Every figure above is a RECORDED reading taken by the proposal's pass; this unit re-runs
 each leg and reports its own delta** — never a prediction, and never a copy.
+
+**⟨ADDED 2026-09-28 (SECOND AMENDMENT) — WHAT THE BLIND PASS INDEPENDENTLY VERIFIED, stated as the unit's
+verification set because it is the strongest evidence this unit has.⟩** The blind-greens pass
+(`docs/specs/unit-pd-vendor-foundation-mechanisms-greens.md`) was authored **from the documentation only**
+and then **RUN**; its author **never read `src/shared/**`, the monitor, the manifest or the unit's test
+files**. It verified, at **envelope/tooling layer ONLY — NEVER app**:
+
+1. **THE `A-3` PIN ARM — independently verified by an agent that never read the implementation.** A
+   `git init` tree built at **another revision with EQUAL bytes** produced
+   **`FAIL — 1 PIN fault(s): the adjacent foundation tree's revision <X> is NOT the pinned commit
+   8f193a8d… — … equal bytes at a different commit are NOT the pinned state`**, **exit `1`**, **NO
+   `CLEAN`** — i.e. **the strongest false-green the adversarial pass constructed (`§3a`'s verbatim
+   block: *"THE PIN IS A RECORD, NOT AN INSTRUMENT"*) is FALSIFIED.** The report states the bytes are
+   equal **while still refusing `CLEAN`**, which is the discrimination the fix was for.
+2. **THE `SKIPPED` ARM** — foundation absent ⇒ `SKIPPED` **with its honesty statement** and **exit `0`**,
+   `NOT a failure` (`§2.3` row 1; `ADV-VD-3`'s question answered by measurement).
+3. **`CLEAN` WHEN PRESENT AND MATCHING** — `DRIFT RESULT: 15 checks, 0 differences — CLEAN`, exit `0`.
+4. **The `A2`-family rows** — the three landed `tests/pd-vendor-*.test.ts` files read **`148 passed
+   (148)` / `0 failed`** (the `§12.3` remands LANDED; `X-4`), the fifteen manifest digests recomputed
+   `15/15` equal, and the `§2.1` item 5 census arithmetic (`5 + 10 = 15`; `6` statements / `5` distinct
+   edges) reproduced.
+5. **The trio as this unit's obligations need it** — `npm test` `204 files (1 failed / 203 passed) ·
+   4384 tests (1 failed / 4338 passed / 45 skipped)` with the ONE red being the carried branch baseline ·
+   `typecheck` exit `0` · `build` exit `0` · `battery` `184 checks, 0 failures` (**harness-green, NOT
+   app-green**).
+
+**What NONE of the above is:** **app evidence, rendered-DOM evidence, live evidence, or copy-fidelity
+evidence for the vendored modules.** Items 1–3 are **tooling**; item 4 is **`[T]`/source-and-manifest
+layer** (`A1`–`A6`); item 5 is **`[T]`/`[H]`/`[D]`**. **The unit still renders nothing, and the conformance
+leg still supplies ZERO behaviour evidence for all fifteen modules** (`§3.5` item 7). **`npm run divergence`
+was NOT run by this amendment pass and remains RED at this head for the environmental `/dev/shm` reason**
+(proposal §7.5) — **not this unit's to fix, and not claimed.**
 
 **Honest statements, recorded so no later pass over-reads this unit.**
 
@@ -1211,7 +1487,8 @@ run-reading**, not an independently reproduced one; and the **leg's colour** (no
 | Id | Sev | The finding (abridged) | Disposition | Correction |
 | --- | --- | --- | --- | --- |
 | **`A-3`** | **HIGH** | **THE PIN IS A RECORD, NOT AN INSTRUMENT — nothing in the repo ever checks the pinned commit.** `P-IM-1` drives `md5(shipped) === manifest.md5` against a manifest **the same pass authored** (circular); the monitor compares to the adjacent **working tree** and never reads `foundation.commit`; the only commit read is a tautology when the tree is absent. A foundation tree at **a different commit with equal bytes, or a dirty tree, reads CLEAN** | **HOST-FIX** | add a read-only pin arm (`git -C <foundation> show <commit>:src/shared/<x>.ts`, or a `rev-parse HEAD` equality check) to the monitor **plus a register row**, and state that a `SKIPPED` reading proves nothing about the pin |
-| **`A-1`** | **HIGH** | the leg's pass condition (class (i) evidence rows MUST PASS) is **unsatisfiable as written**: every suite reaches its module through a **relative** specifier, so from `vendor/Provident-Electron/tests/` it resolves under `vendor/Provident-Electron/src/` — a directory the tree does not carry | **SPEC-AMBIGUITY** | read the per-suite tally before any DONE row; if class (i) is red, restate `§3.5` item 7's bound from three modules to **all fifteen** (no behaviour evidence) and escalate — **never report a green subset** |
+| **`A-1`** | **HIGH** | the leg's pass condition (class (i) evidence rows MUST PASS) is **unsatisfiable as written**: every suite reaches its module through a **relative** specifier, so from `vendor/Provident-Electron/tests/` it resolves under `vendor/Provident-Electron/src/` — a directory the tree does not carry | **SPEC-AMBIGUITY → DISCHARGED (measured)** | read the per-suite tally before any DONE row; if class (i) is red, restate `§3.5` item 7's bound from three modules to **all fifteen** (no behaviour evidence) and escalate — **never report a green subset**. **⟨2026-09-28: the tally WAS read — class (i) IS red for every collected suite, so the pre-committed branch is TAKEN: the bound is restated to ALL FIFTEEN (normative, `§3.5` item 7) and the leg's pass condition is VACUOUS AS EVIDENCE. `§3.5` items 4/7; `§13.2`.⟩** |
+| **`A-3`** | **HIGH → ⟨2026-09-28: VERIFIED-CLOSED (tooling layer)⟩** | **THE PIN IS A RECORD, NOT AN INSTRUMENT — nothing in the repo ever checks the pinned commit** (the strongest false-green the pass could construct: a foundation tree at a **different commit with equal bytes** reads `CLEAN`). | **HOST-FIX (applied) → the disposition is now EVIDENCE, not an intention.** | the pin arm lives in `scripts/foundation-drift.mjs`, and **the blind pass — an agent that never read the implementation — independently VERIFIED it: a `git` tree at ANOTHER revision with EQUAL bytes read `FAIL — … the revision <X> is NOT the pinned commit 8f193a8d… — equal bytes at a different commit are NOT the pinned state`, exit `1`, and NO `CLEAN`; the `SKIPPED` arm read exit `0` with its honesty statement; `CLEAN` read when the foundation is present and matches.** **LAYER: envelope/tooling (`[D]`-class local instrument) — NEVER app evidence** (`§5`; `§8`; `§13.6`). |
 | **`A-4`** | MED | the monitor's manifest-validity arm checks only **counts** (`15`), never the declared **names**: fifteen duplicate entries (`census` ×15) print `CLEAN` while fourteen modules are never compared | **HOST-FIX** | assert the declared name set is **set-equal to the pin's fifteen** inside the monitor, and report **distinct-file** counts, not entry counts |
 | **`A-5`** | MED | **byte-identity is satisfied by a SYMLINK** — every read is `existsSync` + `readFileSync` (dereferencing), so `src/shared/census.ts → ../Provident-Electron/src/shared/census.ts` keeps every row and the monitor green while `R-1`'s *"copied in as source"* and *"the fork must work standalone"* are violated | **HOST-FIX** | a per-module `lstat(...).isSymbolicLink() === false` (regular-file) assertion in the `A2` row **and** in the monitor's local arm |
 | **`A-6`** | MED | **the drift suite is non-hermetic and can delete a directory it did not create**: `makeTempTree` targets `join(root,'..','Provident-Electron')` and a row's `finally` `rmSync(..., {recursive:true, force:true})` removes whatever sits at that shared global path | **TEST-DEFECT** | place the sibling **inside** the temp root and set the synthetic `foundation.path` to `./foundation`; never `rm` a path the test did not create |
@@ -1337,9 +1614,20 @@ escalation, full stop.**
 9. **⟨ADDED 2026-09-28.⟩ The leg's report must carry** the **8 + 3 split** of the eleven suites, the **three
    named uncollected suites**, the **per-class row counts** of §3.5 item 4, and the **coverage bound** of
    §3.5 item 7 (**three modules with no behaviour evidence**). **A report that omits any of the four is a
-   review finding** (`O-5`'s consequence).
+   review finding** (`O-5`'s consequence). **⟨AMENDED 2026-09-28 (SECOND AMENDMENT) — ALL FOUR OBLIGATIONS
+   STAND IN FORM, AND TWO MOVE IN SUBSTANCE: the split is MEASURED `9 collected / 2 zero-collection`; the
+   per-class row counts are MEASURED with **class (i) EMPTY**; and the coverage bound is **ALL FIFTEEN**
+   modules. **So of the four carried terms, the second (the suite split) and the fourth (the three-module
+   bound) are WRONG as filled above** — `focus-model.test.ts` is NOT one of the zero-collection suites
+   (`C3`), and no suite supplies behaviour evidence (`C4`). **The report MUST carry the corrected split and
+   the all-fifteen bound, MUST label the classes, and MUST NEVER report a green subset** (`§3.5` items 2/4/7;
+   `§13.1 · §13.2`).⟩**
 
 ## 11. Cross-references (path + symbol / row id / `§section` — never a line number)
+
+`docs/specs/unit-pd-vendor-foundation-mechanisms-greens.md` (**the blind-greens artifact — the authority for
+every figure quoted in `§13`; its scenario table `A`–`F`, its `NOT-TESTABLE` set and its contradictions
+`X-1`…`X-6`**) ·
 
 `docs/decisions.md` `DECIDED: POST-DIVISION-REBUILD-VENDORING-AND-PHASE-SHAPE` (clauses (1)/(2)/(5))
 `DECIDED: REBUILD-ARCHIVE-POLICY` (clauses (1)/(2)/(3)) · `DECIDED: PANE-DRAG-HEADER-ONLY +
@@ -1366,6 +1654,155 @@ follows) · `../Provident-Electron/docs/specs/gsession.md` §2.2 `P-1`/`P-5`/`P-
 
 ---
 
+## 13. THE SECOND AMENDMENT LEDGER (2026-09-28) — the five measured amendments, the `A-3` verification, and the tracker rows
+
+**Placement note (so a citation resolves, and so the file's section order is stated rather than smoothed):**
+**`§13` is the CURRENT-READING ledger and it is printed AHEAD of `§12`** (the first amendment's ledger, which
+follows it below) **because a reader must meet the corrected readings before the ledger they correct** —
+the same discipline by which this file's `§3a`/`§3b` follow `§9`. **Both are CONTRACT; where they disagree,
+`§13` is the later measurement and says so item by item.** **`§12` is NOT renumbered, and no clause of it is
+deleted: it is the first amendment's own record, kept as that pass's reading.**
+
+**This section is CONTRACT, not commentary.** It is the current-reading index for the five amendments this
+pass owes, **so a TestWriter, an Implementer, a blind-greens writer or a later doc reviewer sees which
+reading is current without re-deriving it.** **Its layer is DOC-LAYER; the unit renders nothing, and
+everything it records is envelope/tooling at most — NEVER app** (`RCA-12`: the conformance leg, the monitor
+and the trio are **not app evidence**). **Authority for every figure below: the blind-greens artifact
+`docs/specs/unit-pd-vendor-foundation-mechanisms-greens.md`, authored from the DOCUMENTATION ONLY by an
+agent that never read `src/shared/**`, the monitor, the manifest or the unit's test files, and then RUN.**
+**This pass re-ran NOTHING and read no run log** — every figure is a **RUN-READING quoted as input**.
+**This amendment changes no code, no test, no config, no vendored byte, nothing under
+`../Provident-Electron/**`, and no pinned `package.json` key** (`§1.2`; `D-12`).
+
+**13.1 ITEM A — `C3`: THE ZERO-COLLECTION SUITE LIST IS WRONG, AND WITH IT `§3.5` ITEM 2's `8 + 3` SPLIT.**
+**Amended clauses:** `§0A` note 2 (Consequence 2's annotation; the *"third zero-collection suite"* item) ·
+the layer table's conformance-leg row · `§1.1` `O-5` · `§1.2` (the vendored-suites row) · `§3.5` items 2/4/7
+· `§5` item 6 · `§8` (both leg cells) · `§10` item 9 · `§12.1`/`§12.2`/`§12.5` items 2/3/4.
+**MEASURED: the three ZERO-COLLECTION suites are `census.test.ts`, `gutter-ui.test.ts` and
+`gutter.test.ts`** — the last appearing as a **`Failed Suites`** entry with
+`Error: ENOENT: no such file or directory, scandir '…/Astrographer/vendor/Provident-Electron//src'`, **where
+the spec listed it as COLLECTED** — **while `focus-model.test.ts` COLLECTS `78 tests` (`70 failed`).**
+**THE CORRECTED SPLIT IS `9 COLLECTED / 2 ZERO-COLLECTION`** (the `8 + 3` **structure** holds, its
+**membership** does not), and the corrected **zero-collection module list** is `census.ts`,
+`gutter-affordance.ts`, **`gutter.ts`** — **`focus-model.ts` is NOT among them.** **The `census` and
+`gutter-ui` mechanisms the first amendment named REPRODUCE verbatim; its mechanism for the third member is
+WRONG** (the real one is a `REPO_ROOT`/`new URL` source-file walk). **THE EARLIER `8 + 3` FORM IS
+SUPERSEDED AND STAYS VISIBLE, dated, beside the corrected one** (`§0A` note 2; `§3.5` item 2) — **never
+silently rewritten.** **No test file is edited by this amendment** (`D-12`): the corrected membership is a
+**contract reading**, and any row that asserts the old membership is a **REMAND** to the TestWriter.
+
+**13.2 ITEM B — `C4`: CLASS (i), THE LEG'S ENTIRE EVIDENCE, IS EMPTY — `§3a` `A-1` IS DISCHARGED AND
+`§3.5` ITEM 7's BOUND IS RESTATED TO ALL FIFTEEN AS A NORMATIVE CLAUSE.** **Amended clauses:** `§0A` note 2
+(Consequence 2) · the layer table · `§1.1` `O-1`/`O-3`/`O-5` · `§1.3` `O-5` · `§3.5` items 2/4/7 · `§5`
+item 6 · `§8` · `§10` item 9 · `§12.1` · `§12.5` item 4 · `§3a` `A-1`'s disposition cell.
+**MEASURED: all eight then-collected suites FAIL their module drives** — `theme 46/58` · `container 57/68` ·
+`zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` · `gesture-session 83/87` ·
+`focus-model 70/78` (`failed/collected`) — **each labelled
+`<x>: src/shared/<x>.ts does not exist (…/vendor/Provident-Electron/src/shared/<x>.ts)`**; the leg's totals
+are **`11 files · 572 tests · 511 failed / 61 passed`, exit `1`**, and **the blind pass reported NO green
+subset.** **`A-1`'s pre-committed branch is therefore TAKEN, as a CONTRACT CHANGE TO A BOUND and not as a
+doc note:** **all fifteen vendored modules carry NO behaviour/copy-fidelity evidence from this leg**
+(`§3.5` item 7's restated clause 1), **the leg's pass condition is VACUOUS AS EVIDENCE** (item 4's added
+clause 1: class (i) has **no satisfiable instance**, so *"MUST PASS, or the unit is not green"* can neither
+be satisfied nor violated), **NO GREEN SUBSET MAY EVER BE REPORTED FROM THIS LEG** (added clause 2), and
+**the leg becomes evidence again ONLY by the three routes of added clause 4** — a foundation-side
+resolvable-specifier change (handed off, `G-8`), a `G-9` pin-set amendment (the architect's), or a moved
+placement (refused: it breaks the byte-identity the manifest records). **The `61 passed` is class (iii)
+audit and absence-branch residue, NEVER a copy-fidelity count.** **The per-suite red tally the artifact
+carries is recorded at `§3.5` item 2, with its terms summing to the leg's totals** (`572` collected /
+`511` failed / `61` passed).
+
+**13.3 ITEM C — `X-2`: THE DEFECT IS DEEPER THAN THE SPEC RECORDED — THREE RESOLUTION FORMS, ONE WRONG
+TARGET.** **Amended clauses:** `§0A` note 2 (its mechanism annotation) · `§1.3` `O-5` · `§2.3` (the added
+dependency note's neighbourhood) · `§3.5` item 2's corrected mechanism · `§3.5` item 7.
+**The first amendment claimed a module is reached *"through the protected dynamic import"*. MEASURED, that
+is NOT what happens: the STATIC form, a `new URL('../src/shared/<x>.ts', import.meta.url)` form AND the
+protected dynamic `@vite-ignore` import ALL resolve under `vendor/Provident-Electron/src/shared/`** — the
+static and `new URL` forms resolving to that absent path, the **dynamic** form failing with
+`Cannot find module` although the module exists two levels up. **The amendment's as-filed sentence about the
+`new URL` form is SUPERSEDED and is kept visible beside the corrected mechanism** (`§0A` note 2) — the
+placement ruling there is unaffected, because it rests on byte-identity and on `G-9`'s pin, never on the
+resolution claim. **The third form's failure is what makes `gutter.test.ts` a `Failed Suites` entry**
+(`C3`).
+
+**13.4 ITEM D — `X-4`: THE COUNTS ARE STALE, AND EVERY AFFECTED CELL IS RECONCILED WITH BOTH READINGS
+VISIBLE.** **Amended clauses:** the status block · `§5` item 8 · `§6.4`'s ⑥ · `§8` (the `npm test` and leg
+cells) · `§12.1`'s consequence (1) · `§12.5` items 1/3. **The as-filed figures stay visible with their
+dates; the corrected readings sit beside them:** **the unit's own rows are now `148 passed (148)` /
+`0 failed`** (the as-filed `113 pass / 3 fail` of `116` is a SUPERSEDED earlier-tree-state reading — **the
+`§12.3` remands have LANDED**, and `116 → 148`), and **`npm test` is now
+`204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)`** (the as-filed
+`204 files (3 failed / 201 passed) · 4352 tests (4 failed / 4303 passed / 45 skipped)` is superseded; **its
+one red is the CARRIED BRANCH BASELINE `PANE-TOGGLE-STAGE-COLLAPSE`, NOT the unit's own files**).
+**Arithmetic, printed with its terms:** `4338 + 45 + 1 = 4384` ✔ · `203 + 1 = 204` ✔ · deltas against the
+superseded reading `+32 tests` and `−3 failed tests`. **`§12.5` item 1's UNVERIFIED is thereby PARTLY
+DISCHARGED** (the legs were re-run by a non-authoring agent) **and NOT CLOSED** (this pass re-ran nothing).
+**A tracker or DONE row still quoting `113/3` of `116` or `4352 / 4` is WRONG at this head.** **`O-8`'s
+suite-count disagreement is NOT resolved by this amendment** (five figures now, from at least three tree
+states).
+
+**13.5 ITEM E — `X-5`: THE MONITOR NEEDS THE `typescript` DEVDEPENDENCY.** **Amended clauses:** `§2.3` (the
+added runtime-dependency note) · `§2.5` (the added dependency-posture note) · `§3.4`'s neighbourhood.
+**MEASURED: in a bare root the monitor cannot start** —
+`Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'typescript' imported from …/scripts/foundation-drift.mjs`
+— **it starts once the repo's `node_modules` is reachable.** **Reason: the `§3a` `A-10` HOST-FIX derives the
+import closure with the TypeScript AST**, so `typescript` is a **runtime** dependency of the script.
+**Scope, stated so nothing is over-read:** *"the fork must work standalone"* (§2.3 row 1; decision clause
+(1)) is satisfied **for the ABSENT-FOUNDATION situation** and is **never** a claim of a dependency-free
+checkout. **This unit adds no dependency, moves no pinned key and edits no `package.json` value.**
+
+**13.6 ITEM F — WHAT THE BLIND PASS CONFIRMED, AT ITS LAYER.** The `A-3` pin fix is recorded as
+**independently verified by an agent that never read the implementation** (`§3a` `A-3`'s row; `§8`'s
+verification block): a `git init` tree at **another revision with equal bytes** read
+`FAIL — … the revision <X> is NOT the pinned commit 8f193a8d… — equal bytes at a different commit are NOT
+the pinned state`, **exit 1, no `CLEAN`**; the `SKIPPED` arm read **exit 0 with its honesty statement**;
+`CLEAN` read when the foundation is present and matches. **Its layer is ENVELOPE/TOOLING (`[D]`-class local
+instrument) — NEVER APP**, and it is **not** copy-fidelity evidence for any vendored module. **ALSO
+INDEPENDENTLY CONFIRMED BY THE SAME BLIND PASS, at the same non-app layers, because a reader should see the
+cleared set as well as the contradicted one:** the manifest **key by key** (`moduleCount 15` · set-equal
+names · `vendored === source` · `proposalTableAgreement: REPRODUCED` · the four `baselineFilesNotReplaced`
+excluded · `outOfSetImports: []` · **five** distinct `internalEdges`) and the fifteen recomputed digests ·
+**`§2.1` item 5's census arithmetic** (`5` files with imports / `10` without = the fifteen-set reading;
+`6` statements / `5` distinct edges) · **`§2.1` item 6**'s exactly-**three** inert-vendoring hits, none of
+them a vendored member · **`§3.3` item 4**'s line-count convention · **`§2.1` item 7b**'s mirror
+(existence, all five names, type-only, not a manifest member) · **`§3.6`'s pins and its "NOT touched"
+list** · and the **ABSENCE of any app/live row** in the artifact. **All of it `[T]`/`[H]`/`[D]`/DOC-layer;
+none of it app evidence.**
+
+**13.7 WHAT THIS AMENDMENT COULD NOT VERIFY (each UNVERIFIED, with what would settle it).** **No item here
+is smoothed into a claim, and `§12.5`'s items remain open except where marked answered above.**
+
+| # | UNVERIFIED | What would settle it |
+| --- | --- | --- |
+| **1** | **Every figure in `§13` is a RUN-READING of the blind artifact.** This pass held **no shell** and **re-ran nothing**; it also read **no run log**. The corrected readings (`148/148` · `204 files / 4384 tests / 1 failed` · the per-suite red tally · `CLEAN`/`SKIPPED`/`FAIL` texts) are **quoted, never checked by this pass.** | Re-running the three legs at a named head and reading the output verbatim, or reading the supervisor's run record. |
+| **2** | **The tracker rows' final wording.** `docs/next-steps.md`'s CURRENT-WORK block and `docs/pending.md`'s POST-DIVISION row are **supervisor-owned**; this pass **appends an anchored annotation** and does **not** rewrite a row (`RCA-8(c)`). | The supervisor's tracker pass reading the appended annotations and restating any row it prefers to own. |
+| **3** | **Whether any LANDED test row still asserts the old membership or the old three-module bound** (e.g. a row asserting `focus-model.test.ts` collects zero, or a `§3.5` item 2 `8 + 3` literal). This pass **did not read** `tests/pd-vendor-*.test.ts` (it read only counts already published in the artifact) — **reading them to decide would be the failure mode the blind gate exists to catch.** | The TestWriter's / documentation-reviewer's cross-check of `§13.1`/`§13.2` against the landed rows — **a REMAND, not this spec's edit.** |
+| **4** | **`O-8`'s suite-count reconciliation** (still open; now five figures from at least three tree states). | A `npx vitest list`/run reading at a **named** commit, with the vendored suites **excluded**, so the delta is attributable. |
+| **5** | **The `typescript`-AST oracle's own behaviour under a hostile input** (`§3a` `ADV-VD-1`'s normalization residual, `A-11`'s mirror gap) — unchanged by this amendment and **not** exercised here. | The negative generators already tasked to the TestWriter (`§3a`'s PBT-audit block) plus a documentation review of their results. |
+| **6** | **`npm run divergence`'s colour.** Quoted as **RED for an ENVIRONMENTAL reason** (`/dev/shm` denial → `SIGTRAP`); **the blind pass did not run it by instruction and neither did this pass.** **This unit claims nothing live and is not the harness fix** (`§9` item 1). | The leg's own output on a display with a usable `/dev/shm`. |
+| **7** | **`docs/skills/designing-pages.md`.** Re-confirmed **ABSENT** as of the first amendment and **re-checked by nobody in this pass**; **this unit renders nothing**, so no coverage-matrix row and no demo-page entry are owed — **the honest form is the ABSENCE row at `§9` item 5** (`D-9`). | The page-design skill's own unit if one is ever authored; **this amendment does not create it.** |
+
+**13.8 REGISTER ARITHMETIC — NOTHING MOVED.** **No figure in
+`§4` changes: the register stays `8` rows, its class tally stays `4 + 2 + 2`, its total stays
+`115` attempts printed with its terms (`19 + 17 + 17 + 12 + 10 + 8 + 20 + 12 = 115`), `P-TP-1`'s term stays
+`8`, and the seed `0x20260927`, the `≤100`/`≤120` caps and the stop-after-5 rule are untouched.** **No row
+id, no term, no seed and no cap is moved by this amendment** (`§4`; `D-8`). **The figures that DID move in
+this document are row counts of LANDED TESTS, not register attempts: `116 → 148` unit rows and
+`4352 → 4384` suite tests — both printed above with their terms and both kept visible in their superseded
+form** (`§13.4`; the status block; `§8`). **A reader who finds a superseded reading anywhere in this
+file must treat the `§13.1`–`§13.7` clause that names it as the current one.**
+
+**13.9 THE TRACKER ROWS THIS AMENDMENT TOUCHED** (`AGENTS.md` item 6; **anchored edits only — never a
+whole-file write**, `RCA-8(c)`; the supervisor owns the tracker rows and may restate them): (1)
+**`docs/next-steps.md`** — the **post-division-rebuild CURRENT WORK area** carries an appended
+**AMENDMENT LANDED** paragraph above the PD-VENDOR gate-5 row, stating that the five owed amendments are
+written and naming the `§13` ledger, the discharged `A-1` restatement, the superseded readings and the
+`A-3` verification **at its envelope/tooling layer**; and (2) **`docs/pending.md`** — the
+**POST-DIVISION REBUILD** row carries an appended 2026-09-28 annotation naming the same amendment and the
+restated leg bound. **Neither edit rewrites a row or moves a row id.**
+
+---
+
 ## 12. The amendment ledger (2026-09-28) — the four adjudicated items, each with its layer and its evidence
 
 **This section is CONTRACT, not commentary.** It exists so a TestWriter, an Implementer, a blind-greens
@@ -1373,7 +1810,11 @@ writer or a later doc reviewer can see **which reading is current** without re-d
 DOC-LAYER**; **every measurement in it is a RUN-READING of the supervisor's run of 2026-09-28 or a
 VERIFIED-BY-READ of this amendment pass, marked per clause; this pass ran nothing.** The four items below are
 the four the amendment was authorised to adjudicate — **it adjudicates nothing else, and it widens no other
-surface.**
+surface.** **⟨SUPERSEDED IN PART 2026-09-28 (SECOND AMENDMENT) — `§13`, printed ABOVE this section, is the
+CURRENT-reading ledger: it corrects this section's suite membership (`C3`), its class-(i) evidence reading
+and coverage bound (`C4`), its resolution mechanism (`X-2`), its run counts (`X-4`) and its dependency
+posture (`X-5`), item by item. Every clause below is KEPT as this pass's reading; where the two disagree,
+**`§13` is the later measurement.**⟩**
 
 **12.1 ITEM 1 — `O-5` IS ANSWERED NEGATIVELY; `§0A` note 2's resolution claim is FALSIFIED, and the leg's
 placement is RULED.** **Amended clauses:** the layer table's conformance-leg row · `§1.1` `O-5` (added as the
@@ -1387,7 +1828,12 @@ the manifest records**; and the **generated-resolver route is ESCALATED, NOT TAK
 unit's surface beyond the four authorised items). **Consequences recorded:** (1) the pass condition is a
 **named subset** (§3.5 item 4); (2) **three modules lose behaviour coverage** — `census`, `focus-model`,
 `gutter-affordance` (§3.5 item 7); (3) a future green needs **a foundation-side change** (handed off,
-`G-8`) **or a `G-9` pin-set amendment** (the architect's).
+`G-8`) **or a `G-9` pin-set amendment** (the architect's). **⟨AMENDED 2026-09-28 (SECOND AMENDMENT) —
+CONSEQUENCES (1) AND (2) ARE SUPERSEDED IN SUBSTANCE: the "named subset" is now **EMPTY** (class (i) is red
+for every collected suite — `C4`), and (2)'s three-module list is wrong in membership (`census`,
+`gutter-affordance`, **`gutter`** for the zero-collection cause; **ALL FIFTEEN** for the evidence cause),
+with `focus-model` **not** among them (`C3`; `§3.5` item 7; `§13.1 · §13.5`). Consequence (3) stands
+unchanged and is now the **complete** discharge list (`§3.5` item 4's added clause 4).⟩**
 
 **12.2 ITEM 2 — `O-3` IS DECIDED: the leg's pass condition is a NAMED SUBSET, and both red classes are
 measured and named.** **Amended clauses:** `§0A` note 3 (classes `R-A`/`R-B`) · `§1.1` `O-3`'s status column ·
@@ -1478,10 +1924,10 @@ here is smoothed into a claim.**
 
 | # | UNVERIFIED | What would settle it |
 | --- | --- | --- |
-| **1** | **The run readings themselves.** Every figure quoted from 2026-09-28 (`113/3` of `116` · `204 files / 4352 tests / 4 failed / 4303 passed / 45 skipped` · `typecheck` 0 · `build` 0 · `battery 184/0` · `15/15 REPRODUCED` · `11 files / 572 / 511 failed / 61 passed` · `CLEAN`/`SKIPPED`) is a **RUN-READING quoted as input**; **this pass held no shell and re-ran nothing**, and it did not read a run log. | Re-running the three legs at this head, or reading the supervisor's run record verbatim. |
-| **2** | **`focus-model.test.ts`'s collection failure MECHANISM.** That it collects **ZERO** tests is a RUN-READING; **why** it does is **NOT established here** — its only `../src/shared/*.js` statement this pass could read is **type-only** (`import type { … } from '../src/shared/focus-model.js'`), which does not obviously explain an uncollectible file. The other two suites' mechanism **is** read (static **value** imports of `gesture-session.js` / `zones.js`). | The leg's own error output for that file, or a focused run of it alone. **Recorded as UNVERIFIED rather than asserted** — the placement ruling does not depend on it, but a later pass must not quote a mechanism this file did not measure. |
-| **3** | **The per-suite/per-row tally's composition.** **Which** of the `116` rows are the `3` red and **which** of the leg's `572` rows pass/fail per suite is **NOT read here**; the `8 collected / 3 uncollected` split is a **derivation from the brief's own statement** (*"a suite's `new URL(…)`… so three suites collect zero tests"*) plus this pass's read of the three files' import forms — **not** a re-measurement. | The leg's per-suite report. **A DONE row must quote it, not this table.** |
-| **4** | **Whether the eight collected suites' class (i) rows are green today.** The brief names the leg's red classes (`O-3`) and not a per-row tally; **no claim in this file asserts a pass count for class (i)**, and §3.5 item 4's *"MUST PASS"* is a **condition**, not a reading. | The leg's per-row tally, with the class labels. |
+| **1** | **The run readings themselves.** Every figure quoted from 2026-09-28 (`113/3` of `116` · `204 files / 4352 tests / 4 failed / 4303 passed / 45 skipped` · `typecheck` 0 · `build` 0 · `battery 184/0` · `15/15 REPRODUCED` · `11 files / 572 / 511 failed / 61 passed` · `CLEAN`/`SKIPPED`) is a **RUN-READING quoted as input**; **this pass held no shell and re-ran nothing**, and it did not read a run log. | Re-running the three legs at this head, or reading the supervisor's run record verbatim. **⟨AMENDED 2026-09-28 (SECOND AMENDMENT) — PARTLY DISCHARGED, NOT CLOSED. The blind pass ran the legs itself and its readings are: the unit's own rows `148 passed (148)` / `0 failed` (so `113/3` of `116` is **SUPERSEDED** — the remands landed and the count grew `116 → 148`); `npm test` `204 files (1 failed / 203 passed) · 4384 tests (1 failed / 4338 passed / 45 skipped)` (so `4352 / 4` is **SUPERSEDED**); `typecheck` exit `0` · `build` exit `0` · `battery 184 checks, 0 failures`; the leg `11 files / 572 / 511 failed / 61 passed` (the **totals reproduce exactly**); and `CLEAN` / `SKIPPED` both read as documented. STILL UNVERIFIED IN THIS FILE: those figures are a RUN-READING of the blind artifact — **the second-amendment pass re-ran nothing and read no run log**, so the superseded figures are kept visible with their dates beside the corrected ones (status block; `§8`; `§13.4`).⟩** |
+| **2** | **`focus-model.test.ts`'s collection failure MECHANISM.** That it collects **ZERO** tests is a RUN-READING; **why** it does is **NOT established here** — its only `../src/shared/*.js` statement this pass could read is **type-only** (`import type { … } from '../src/shared/focus-model.js'`), which does not obviously explain an uncollectible file. The other two suites' mechanism **is** read (static **value** imports of `gesture-session.js` / `zones.js`). | The leg's own error output for that file, or a focused run of it alone. **Recorded as UNVERIFIED rather than asserted** — the placement ruling does not depend on it, but a later pass must not quote a mechanism this file did not measure. **⟨ANSWERED 2026-09-28 (SECOND AMENDMENT) — THE ITEM IS MOOT: `focus-model.test.ts` DOES **NOT** fail to collect. MEASURED it COLLECTS `78 tests` (`70 failed`) and IS DRIVEN; the third zero-collection suite is **`gutter.test.ts`** (a `REPO_ROOT`/`new URL` source-file walk surfacing as a `Failed Suites` `ENOENT`), and the "static value import" mechanism the first amendment attached to `focus-model.test.ts` is WRONG. The `census`/`gutter-ui` mechanisms it recorded **DO** reproduce (`X-1`; `X-6`; `§3.5` item 2; `§13.1`).⟩** |
+| **3** | **The per-suite/per-row tally's composition.** **Which** of the `116` rows are the `3` red and **which** of the leg's `572` rows pass/fail per suite is **NOT read here**; the `8 collected / 3 uncollected` split is a **derivation from the brief's own statement** (*"a suite's `new URL(…)`… so three suites collect zero tests"*) plus this pass's read of the three files' import forms — **not** a re-measurement. | The leg's per-suite report. **A DONE row must quote it, not this table.** **⟨AMENDED 2026-09-28 (SECOND AMENDMENT) — THE LEG'S PER-SUITE REPORT HAS BEEN QUOTED: `theme 46/58` · `container 57/68` · `zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` · `gesture-session 83/87` · `focus-model 70/78` (`failed/collected`) + `gutter`/`census`/`gutter-ui` `0/0`, with the split corrected to `9 collected / 2 zero-collection` — carried at `§3.5` item 2. The row-count note above is likewise superseded: the `116` rows are now `148` (§13.4).⟩** |
+| **4** | **Whether the eight collected suites' class (i) rows are green today.** The brief names the leg's red classes (`O-3`) and not a per-row tally; **no claim in this file asserts a pass count for class (i)**, and §3.5 item 4's *"MUST PASS"* is a **condition**, not a reading. | The leg's per-row tally, with the class labels. **⟨ANSWERED 2026-09-28 (SECOND AMENDMENT) — THEY ARE **RED FOR EVERY COLLECTED SUITE** (`theme 46/58` · `container 57/68` · `zones 54/58` · `overlay 57/69` · `menu-template 54/60` · `relocate 90/94` · `gesture-session 83/87` · `focus-model 70/78`), each on the labelled module absence, so **class (i)'s evidence set is EMPTY**. The *"MUST PASS"* clause is thereby **VACUOUS AS EVIDENCE** and `§3.5` item 4's added clause 1 states the consequence normatively (`C4`; `§3a` `A-1` discharged; `§13.2`).⟩** |
 | **5** | **`O-8`'s suite-count disagreement** (`§1.3`) — **still unresolved**: the proposal's `201 .test.ts` reading, this pass's `209`-path glob, the as-filed baseline `201 files`, and the post-landing `204 files` are **four figures from at least three tree states**, and **this amendment reconciles none of them**. | A `npx vitest list`/run reading at a **named** commit, taken with the vendored suites **excluded** as well as included, so the delta is attributable. |
 | **6** | **The manifest's own content beyond the two reads made here.** This pass read `vendor/foundation.lock.json`'s `internalEdges` (**5 records**, correct per §12.3(b)) and `byteIdentity`; **it did not read the fifteen `md5` values, the `proposalTableAgreement` cells, or the `baselineFilesNotReplaced` list** — so **`15/15 REPRODUCED` is quoted, never checked**, and `P-IM-1`/`P-IM-2`'s current colour is **unknown to this pass**. | Reading the manifest in full, or re-running the `A2` row. |
 | **7** | **Whether the vendored suites are BYTE COPIES of the pinned commit's files.** The brief states it (11 byte copies) and this pass read **their content and import forms**, but **no digest was compared by this pass** (`md5sum` was available to the supervisor, not used here on the vendored tree). | The manifest's per-module digests against the foundation tree, or the `A3` monitor's `CLEAN` reading **with its output read**, not summarised. |
