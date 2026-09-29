@@ -8,6 +8,21 @@ Electron was booted and no `scripts/live-drive.mjs` block was driven. Reading, `
 cited verbatim with its source and its measurer; or (b) a VERIFIED-BY-READ statement about the source text
 at this head — named as such, with its reader named. Nothing else is claimed.**
 
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE) — THE PASS-DATE
+MISMATCH THIS FILE CARRIES IS NOW RECORDED AT ITS OWN DATE-LITERAL, AND THE LITERAL IS **NOT** REWRITTEN.⟩**
+**THE READING:** this as-filed block reads **`authored 2026-09-30`**, and the amendment ledgers at `§0A`/`§0B`
+read **`2026-10-05`**, against **this session's measured pass date `2026-09-29`** and the program's own
+recorded pass dates (the branch's `PD-VENDOR` 2026-09-27; `PD-UI-*`/pin-refresh 2026-09-28; the divergence-leg
+and app-side landings plus the tracker pass 2026-09-29). **THE MISMATCH IS THEREFORE ~1 DAY AHEAD FOR THE
+FILING AND ~6 DAYS AHEAD FOR THE AMENDMENT**, and it is filed independently in `docs/pending.md`'s
+`DOC-HYGIENE DEFECT — THE TWO NEW SPECS CARRY FUTURE DATES …` row and in `docs/defects.md`
+`SPEC-DATE-MISMATCH-TWO-NEW-SPECS`. **WHAT THIS ANNOTATION DOES *NOT* DO:** it does **not** substitute a date
+(a date is a reading of when a pass ran, and this review did not run those passes), **does not** decide
+between the row's two admissible explanations (date drift vs a deliberately plan-dated literal), and **does
+not** re-date any cited reading. **THE DISPOSITION OWED is `§10.5` `R-1`'s — THE SPEC-WRITER's act, on this
+file and on `docs/specs/unit-app-harness-readiness.md`.** **LAYER (`RCA-12`): DOC-LAYER / provenance
+integrity only; no behaviour claim and no green of any layer is touched by this note.**
+
 **⟨AMENDED 2026-10-05 — POST-LANDING AMENDMENT; the as-filed status block above is KEPT as the filing's own
 reading, never deleted.⟩** The unit has since been **implemented and run**, so its status is now:
 **CLASS (a) LANDED AND GREEN** — the red set `tests/unit-divergence-fixture-contract.test.ts` reads **class (a)
@@ -48,6 +63,20 @@ contract any ROW actually holds.** **GATES 7 (proofreader/blind-greens, `AGENTS.
 review) REMAIN OWED FOR THIS UNIT — no review record exists for it at this head** (`archive/reviews/**` carries
 none), and the `T-1` amendment itself recorded the trio/adversarial/doc-review halves as the landing pass's
 (`§9` `T-4`'s amendment note).⟩**
+
+**⟨DISCHARGED 2026-09-29 — `RCA-8(c)`, ANNOTATE-BESIDE: THE PARAGRAPH ABOVE IS KEPT VERBATIM AS ITS PASS'S
+READING, AND THE OWED HALF IT NAMES IS NOW MET.⟩** **GATES 7 (PROOFREADER / BLIND-GREENS, `AGENTS.md` item
+10b) AND 8 (ITEM-10d DOCUMENTATION REVIEW, `RCA-6`) HAVE RUN IN ONE PASS — RECORDED HONESTLY AS ONE PASS —
+and the review record now EXISTS where the paragraph above says none did:
+**`archive/reviews/2026-09-29-U-DIVERGENCE-FIXTURE-doc-review.md`** (the gitignored archive). **LAYER
+(`RCA-12`): DOC-LAYER ONLY — the pass ran no leg, no suite, no `typecheck`, no `build` and no Electron boot,
+so nothing in it is app-green, envelope-green or harness-green.** **Its reconciliation is this file's
+`§10.5`** (what it reconciled, what it fixed, what stays owed and its owners, and what it could not verify);
+**`§10.5`'s `R-1`…`R-6` are the items that remain OWED, with their owners named.** **The gate-4 findings'
+BLOCKING disposition recorded above is UNCHANGED by this discharge: `A-1`'s app-side fix has LANDED (see the
+annotation at `§0B.1` item 3 / `§0B.3` item 7), and `A-2`/`A-3`/`A-10`'s coverage holes are now HELD by the
+landed rows — but the coverage was closed on the TESTWRITER's side, and the register amendments it implies
+remain the SPEC-WRITER's (§10.5 `R-2`).**
 
 **Pass kind:** SPEC (the contract only). **Unit id:** `U-DIVERGENCE-FIXTURE` (a HARNESS unit; the id is
 minted by this filing) — **the id this unit's own predecessor already reserved for exactly this class**:
@@ -339,7 +368,22 @@ run's figures, quoted as measured, each with its own provenance:
 3. **THE BOUNDED BOOT WAIT READ AND SATISFIED (`§0B.3`):** **`boot wait: status=installed (epoch=1,
    generation=1) after 2 poll(s)/105 ms — the app's own boot install is complete BEFORE the load step (a
    state read, never a sleep)`**. **The measured cost (`105 ms`, `2` polls) is a READING about this host and
-   is NEVER a budget** (`§0B.3` item 5).
+   is NEVER a budget** (`§0B.3` item 5). **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW
+   (`RCA-8(c)`, ANNOTATE-BESIDE; THE AS-FILED SENTENCE IS KEPT) — THE OVER-READ THE GATE-4 PASS NAMED
+   (`A-1`; `§3b` `S-1`) IS NOW CORRECTED BY THE APP-SIDE FIX, AND THE CLAUSE READS ON A DIFFERENT FOOTING
+   THAN WHEN IT WAS FILED:⟩** the gate-4 pass recorded that *"the app's own boot install is complete BEFORE
+   the load step"* was **ONE RACE OUTCOME, not a property**, because `bootTabs()` was un-awaited and a second
+   whole-graph install could land after the settle signal. **THE HOST FIX HAS SINCE LANDED** (RECORDED
+   READING; measurer: the supervisor's post-remand tracker pass, `docs/next-steps.md`'s head-of-region insert
+   — *"the chain now awaits the tab chain before `bridge.bootSettled?.({ok:true})`, so `installed` means no
+   further boot-time graph install follows"*), and the same recorded pass reads the wait at **`2` polls** —
+   **the fix biting**, because the first poll legitimately sees `pending`. **So at this head the sentence is a
+   PROPERTY of the settled chain rather than one race outcome — with one residual the recorded reading keeps
+   open and does NOT smooth: `host.mountTab`'s own async branches (a search tab, an uncached document) still
+   install after the settle, and sequencing them is a `src/renderer/sidebar-panes.ts` item outside that fix's
+   file wall.** **LAYER (`RCA-12`): HARNESS/`[D]` + the APP-side fix's own recorded reading; no layer's green
+   is claimed here, and `A-7`'s clause-vs-instrument gap (`§0B.3` item 4 has no re-poll mechanism) remains
+   OPEN — this annotation does not close it** (`docs/defects.md` `GATE4-LEG-CLAUSE-vs-INSTRUMENT-GAPS`).
 4. **THE SHARED LOAD STEP LANDED, IN THE REFINED ORDER:** **`load: the demo envelope landed … (the shared
    step, run AFTER the boot wait and BEFORE the readiness probe)`** — `C-1` items 2/3 as refined.
 5. **THE READINESS PROBE WAS SATISFIED (`C-2`, `§0B.3` item 6):** **`inc`, `counter`, `echo-out` addressable
@@ -358,6 +402,28 @@ run's figures, quoted as measured, each with its own provenance:
    **the leg's full label set, of which 9 fire on a green run**. **`§2.3` `C-3` item 1's correction (`F-4`) is
    therefore confirmed, NOT moved: the leg adds no `ok()` call, and its labels and their order are
    unchanged.**
+
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE) — THE TWO COVERAGE
+CLAIMS `§3b` `T-1`/`S-2` RECORDED AS **OWED** ARE NOW **HELD**, AND THE OWED ITEMS THEY NAMED ARE DISCHARGED
+ON THE TESTWRITER'S SIDE (VERIFIED-BY-READ this pass, `tests/unit-divergence-fixture-contract.test.ts`):⟩**
+**(a) THE BOUNDED WAIT (`A-2`) IS HELD BY THE NEW ROW `P-SM-4`** — the wait's **existence on leg 1's path**,
+its **`F-7` position** (`connect → wait → load → probe → drive`), its **two pinned constants**, and **its FIVE
+NAMED STOP ARMS DRIVEN AGAINST THE REAL FUNCTION** (the missing `boot` member, `status: 'failed'` with its own
+`error` text, a status outside the declared three-state set, the deadline with the status still `pending`, and
+`A-5`'s refused readiness read), plus `NEG-wait-absent` / `NEG-wait-after-load`. **(b) THE ENV MEMBER (`A-3`)
+IS HELD BY THE NEW ROW `P-SM-5`** — `PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` **at BOTH Electron sites**, its
+**absence from the shim transport**, and the **nine-member vector** (driving `siteArgs`'s own throw on a tenth
+member), plus its two negative draws. **WHAT THIS DOES *NOT* DO — stated so the discharge is not over-read:
+(i) it does NOT rewrite `§0B.2` `F-6` or `§0B.3` `F-7` — their landed text stands and only their COVERAGE
+changed; (ii) it does NOT close `A-7`'s clause-vs-instrument gap, `A-6`'s failure-channel item, or the
+`§3a.4` PBT re-derivation's remaining items — see this review's `§10.5` `R-5`; and (iii) it does NOT move the
+register's FILED terms — the TEN-row/`101` arithmetic this coverage produces is recorded at `§4.2`/`§4.1`
+and its amendment is OWED to the SPEC-WRITER (`§10.5` `R-2`).** **THE `held × 8` / `78/78` READING ABOVE (F-1
+item 5, and the whole of `§3a.4`'s audit note) IS THEREFORE AN EARLIER HEAD'S REGISTER: the landed register
+declares TEN rows and `101` attempts, and its report row asserts `held` per row with
+`executed == declared`.** **LAYER (`RCA-12`): HARNESS `[D]` — a coverage claim about the instrument, never
+app-green; THIS REVIEW RAN NO SUITE and the register's held/broken state at this head is the TESTWRITER's
+recorded reading, not this pass's measurement.**
 
 **HONEST BOUND ON `F-5` (BINDING, and this is the whole of `§5` `L-1`…`L-5` restated for the green).** The
 green is **HARNESS/`[D]`-layer and NOTHING ELSE** (`RCA-12`). **It proves that the leg boots a real Electron,
@@ -450,7 +516,18 @@ between `connect` and the shared load step**. **VERIFIED-BY-READ, this pass, `sc
 7. **WHAT THE REFINEMENT RETIRES, EXACTLY:** the **`O-1` race as a hazard this leg must survive** — the
    wait is the leg's half of the app-side unit's protocol, and the app-side unit's own `F-5` names this
    ordering as its demand on the client. **`§1.5` `O-1`'s as-filed row is KEPT above** with `§0A`'s
-   annotation, and this item does not rewrite either.
+   annotation, and this item does not rewrite either. **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION
+   REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE) — `§3b` `S-1` IS NOW DISPOSED ON ITS OWED HALF, AND THE OVER-READ IS
+   NAMED HERE IN THIS ITEM'S OWN TERMS:⟩** this item's **`installed` reading was the one the gate-4 pass
+   found OVER-READ** — *"the leg waits on the state the app publishes"* was, at the gate-4 head, **one race
+   outcome** (`bootTabs()` un-awaited ⇒ a second whole-graph install could land after the settle). **The
+   app-side fix has since landed** (RECORDED READING; measurer: the supervisor's post-remand tracker pass —
+   the chain awaits the tab chain before `bridge.bootSettled?.({ok:true})`, and the leg's boot wait now reads
+   `2` polls, **the fix biting**), **so this item's own claim holds as a PROPERTY at this head**, with the
+   recorded residual (`host.mountTab`'s async branches) stated beside the fix and **not smoothed**. **The
+   as-filed text above is KEPT; the amendment's as-filed `OWED` disposition at `§3b` `S-1` carries the
+   annotation beside it.** **`A-7` (no re-poll mechanism) is recorded and NOT relaxed** (`docs/defects.md`
+   `GATE4-LEG-CLAUSE-vs-INSTRUMENT-GAPS`).
 
 ### 0B.4 `F-8` — WHAT IS **UNCHANGED** (recorded, so the green cannot be over-read)
 
@@ -817,7 +894,62 @@ stop loudly.**
    the ambiguity this clause carried was that it reads as the emitted total. **Nothing in this item's
    normative content moves**: no `ok()` call is added, the labels and their order are unchanged, and
    `§0.3`'s `F-1a` (a new check is a PIN DRIFT) is honoured. **`§10.3` item 3 carries the same correction**;
-   the register's `78` is unmoved (`§0A.4` `F-4`).⟩**
+   the register's `78` is unmoved (`§0A.4` `F-4`).⟩** **⟨`A-4`, RECORDED 2026-09-29 BY THE GATE-7/8
+   DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE; the as-filed item above is KEPT) — THE PRESERVED SET'S
+   PROXIES OVER-CLAIM AND THE SET IS **NOT** CHANGED.⟩** The gate-4 adversarial pass's `A-4` measured three
+   weaknesses in this item's preserved set: **(1)** the label `counter increment rendered in BOTH` passes on
+   `renderedHtml.includes('counter')`, **so a NO-OP `inc` handler still satisfies it** — the row asserts the
+   **SURFACE**, never the increment's **effect**; **(2)** `dispatch results non-empty in BOTH (R7)` asserts
+   the dispatch's **non-emptiness**, never its `results` **CONTENT**; **(3)** the `nodeId vocabulary matches`
+   row **collapses the ids to one normalized COUNT**, so two different id sets of the same size compare equal.
+   **THE CORRECTION IS A PROSE/PROXY ACT AND IS OWED TO THE TESTWRITER (`§3b` `A-4`), WITH THE `C-3`-CLASS
+   NOTE OWED TO THE SPEC-WRITER — the SET does not move, because this item forbids it.** **The landed red set
+   carries the `A-4` prose bound in its own header (VERIFIED-BY-READ this pass,
+   `tests/unit-divergence-fixture-contract.test.ts`: *"the preserved set's own proxies OVER-CLAIM in three
+   measured ways … A reader citing the eight comparison rows must cite them as SURFACE rows, not as semantic
+   ones"*) — so the TestWriter's half has LANDED and the spec-side `C-3`-class note is the half this
+   annotation records as owed.** **No comparison row's colour changes, and this item's normative content is
+   unmoved.**⟩**
+
+   **⟨`A-4`, DISCHARGED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE; this is the SPEC-WRITER half
+   of `§3b`'s `A-4` row — the TestWriter's prose half is recorded at the end of this note) — THE PRESERVED SET'S
+   PROXIES ARE RULED **SURFACE** PROXIES, READ BY POSITION, AND THE SET IS **NOT** CHANGED.⟩** This is the
+   **`C-3`-CLASS** note the gate-4 audit owed this clause (`§3a.4`; `§3b` `A-4`), written **at the clause the
+   audit named**. **THE THREE MEASURED PROXIES, IN THE EIGHT COMPARISON ROWS' OWN POSITION** (the order the
+   comparison block emits, and the order `tests/unit-divergence-fixture-contract.test.ts`'s `COMPARISON_LABELS`
+   carries — VERIFIED-BY-READ this pass in `scripts/electron-divergence.mjs`'s `drive()` and its comparison
+   block):
+
+   1. **ROW 6 — `nodeId vocabulary matches (structural)` COLLAPSES THE IDS TO ONE NORMALIZED COUNT/STRING.** The
+      row's condition is `shimOut.nodeIds === electronOut.nodeIds`, and that member is minted as
+      `norm(list.nodes.map((n) => n.nodeId).sort().join('|'))` — normalized (`node-N` → `node#`), sorted,
+      joined. **So two DIFFERENT id sets of the SAME size compare EQUAL**: the row asserts the vocabulary's
+      **shape**, never its **identity**.
+   2. **ROW 7 — `counter increment rendered in BOTH` PASSES ON A NO-OP `inc` HANDLER.** The row's condition is
+      `shimOut.counterPresent && electronOut.counterPresent`, where `counterPresent` is
+      `after.renderedHtml.includes('counter')`. **The row asserts the increment's SURFACE (a substring is
+      present), never its EFFECT (that a counter actually moved).**
+   3. **ROW 8 — `dispatch results non-empty in BOTH (R7)` ASSERTS RENDERED-ATTRIBUTE NON-EMPTINESS, NOT THE
+      DISPATCH'S `results`.** The row's condition is the conjunction of `renderedNonEmpty !== false`, where
+      `renderedNonEmpty` counts `data-node-id="…"` matches in the POST-dispatch render. **The `drive()` member
+      the LABEL names — `resultsNonEmpty: Array.isArray(d.results) && d.results.length > 0` — is computed and
+      read by NO comparison row** (VERIFIED-BY-READ, both the `drive()` body and the comparison block).
+
+   **THE ROW-NUMBER PRECISION A READER MUST NOT CONFLATE (recorded rather than smoothed over):** the eighth
+   row's **label text itself carries the suffix `(R7)`** — that is the **label's own text**, never the row's
+   position; **positionally the dispatch row is the EIGHTH of the eight comparison labels** and the `counter
+   increment` row is the SEVENTH. This note numbers **by position** (rows 6/7/8), exactly as the landed red set's
+   own header does (its `A-4` prose-correction block says *"row 6 (`nodeId vocabulary matches`)"*), and `§3b`'s
+   `A-4` row names the same three rows. **WHAT THIS NOTE IS, AND WHAT IT IS NOT:** it is a **prose/proxy bound**
+   — *"a reader citing the eight comparison rows must cite them as SURFACE rows, not as semantic ones"* — and it
+   is **not** a re-scope: **no comparison row's condition, label, order or colour moves, no `ok()` call is
+   added, no census changes, and this item's *"NO NEW CHECK; THE COMPARISON SET IS UNCHANGED"* stands exactly as
+   filed** (`§0A.4` `F-4`'s `10`-call count correction is a different, earlier act and is unaffected). **THE
+   TESTWRITER'S HALF, RECORDED AS LANDED** (so both halves are visible together): the same bound is carried
+   verbatim in the landed red set's own header (`tests/unit-divergence-fixture-contract.test.ts`), whose readers
+   now drive the mutated-literal and commented-invocation negatives through the instrument. **LAYER (`RCA-12`):
+   DOC-LAYER — a bound on what a HARNESS/`[D]` instrument's green is evidence OF; it proves, retires and changes
+   nothing at any layer, and this pass ran no leg.**
 2. **THE DEMO ENVELOPE LITERAL IS UNCHANGED** — the same 12 nodes, the same authored ids, the same handler
    bodies, the same `clientConfig`. **The load step CONSUMES it; it does not move it** (`S-7`'s two-copies
    observation is escalated, not harmonised: §8 `E-2`).
@@ -1015,7 +1147,14 @@ no leg, no battery; **no measurement below is this record's own.** Every figure 
 with its measurer** (the gate-4 adversarial pass; the leg's run reading the implementer's `T-1` pass; the live
 figures the **live-scenario runner**) or a **VERIFIED-BY-READ** statement named as such. **No contract clause is
 rewritten on the basis of a finding** (`RCA-8(c)`): the one clause a finding bears on (`§0B.3`'s `installed`
-over-read) is recorded as **OWED**, in `§3b` `S-1`.
+over-read) is recorded as **OWED**, in `§3b` `S-1`. **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION
+REVIEW — `RCA-8(c)`, ANNOTATE-BESIDE: the paragraph above is KEPT as this pass's reading, AND THE TWO THINGS
+THIS RECORD NAMED AS OWED ARE NOW DISPOSED: `§3b` `S-1`'s over-read note is WRITTEN at both clauses it names
+(`§0B.1` item 3 / `§0B.3` item 7 — the app-side fix has since landed, so the sentence reads as a PROPERTY,
+with the residual recorded), and `S-2`'s coverage items are HELD by the new rows `P-SM-4`/`P-SM-5`
+(VERIFIED-BY-READ in `tests/unit-divergence-fixture-contract.test.ts`). This section's findings, verdict and
+per-finding dispositions are OTHERWISE UNCHANGED, and no finding is withdrawn. The gate-7/8 reconciliation
+record is this file's `§10.5`.⟩**
 
 **VERDICT: `PASS-WITH-FINDINGS`, `A-1`…`A-11`.** **EVERY FINDING IS HARNESS / `[D]`-LAYER, AND NO
 FOUNDATION/PACKAGE ROW IS OWED** (RECORDED READING; measurer: the gate-4 adversarial pass — *"every finding is
@@ -1163,8 +1302,8 @@ confirmed · seed import ok):
 | **`A-8`** (env member per-child only; **the app-side custody basis is wrong — `embeddings.ts`'s `execFileSync('curl', …)` inherits `process.env`, so a GRANDCHILD INHERITS THE GRANT**) | **CORRECTION — APP-SIDE** | **THE APP-SIDE UNIT** (its `F-7`/`A-1` item 3 item 2 custody premise) |
 | **`A-9`** (`§3.5` probes `RESERVED`; no `§3a`/`§3b` existed) | **DISPOSITIONED BY THIS PASS** — `§3a`/`§3b` are the record; **the probes were NOT DRIVEN, and an undriven probe is not a pass** | **the gate-4 pass's record** (this spec) |
 | **`A-11`** (the brief's per-row register terms quoted the PREDECESSOR's register) | **RECORDED — DOC/CITATION DEFECT IN THE BRIEF**; `§4.2`'s `78` is the landed arithmetic and is unmoved | **THE SUPERVISOR** (tracker/citation reconciliation) |
-| **`S-1` — THE OWED AMENDMENT ON THE OVER-READ (`A-1`)** | **OWED, NOT APPLIED.** `§0B.3` item 7 / `§0B.1` item 3's *"the app's own boot install is complete BEFORE the load step"* is **one race outcome**; the amendment must say so **beside** the as-filed text and record that **the app-side fix is what makes it a property.** | **THE SPEC-WRITER** (this file) |
-| **`S-2` — `T-1`'s COVERAGE ITEMS, ADDED TO WHAT `T-1` OWES** | **OWED** — the two zero-coverage steps (`waitForBootInstalled`, the env member) are **NEW OWED ITEMS THIS PASS ADDS** to `§9` `T-1`'s landing record, and they are the reason the register's `held × 8`, `78/78` may **never** be read as coverage of them. | **THE TESTWRITER** |
+| **`S-1` — THE OWED AMENDMENT ON THE OVER-READ (`A-1`)** | **OWED, NOT APPLIED.** `§0B.3` item 7 / `§0B.1` item 3's *"the app's own boot install is complete BEFORE the load step"* is **one race outcome**; the amendment must say so **beside** the as-filed text and record that **the app-side fix is what makes it a property.** **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE) — THE OWED NOTE IS NOW WRITTEN AT BOTH CLAUSES, AND THE APP-SIDE FIX HAS LANDED:⟩** the annotation sits **at `§0B.1` item 3 and at `§0B.3` item 7** (the two clauses it names), each recording that *"complete BEFORE the load step"* was **one race outcome at the gate-4 head**, that **`bootTabs()` is now awaited via the tab chain before `bridge.bootSettled?.({ok:true})`** (RECORDED READING; measurer: the supervisor's post-remand tracker pass, with the leg's boot wait re-read at `2` polls), so the clause now reads as a **PROPERTY** — with the residual `host.mountTab` async branches recorded beside it and **NOT smoothed**. **What remains OWED on the amendment's own account is only the as-filed text's own visibility, which is preserved.** **`A-7`'s no-re-poll gap stays OPEN** (`§10.5` `R-5`). | **THE SPEC-WRITER** (this file) |
+| **`S-2` — `T-1`'s COVERAGE ITEMS, ADDED TO WHAT `T-1` OWES** | **OWED** — the two zero-coverage steps (`waitForBootInstalled`, the env member) are **NEW OWED ITEMS THIS PASS ADDS** to `§9` `T-1`'s landing record, and they are the reason the register's `held × 8`, `78/78` may **never** be read as coverage of them. **⟨DISCHARGED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW — THE NEGATIVES LANDED: `P-SM-4` holds the bounded wait (existence, `F-7` position, the constants, the FIVE stop arms DRIVEN against the real function, and `NEG-wait-absent`/`NEG-wait-after-load`), and `P-SM-5` holds the env member (both sites, the value, the shim transport, the nine-member vector, plus its two negatives) — VERIFIED-BY-READ in `tests/unit-divergence-fixture-contract.test.ts`. The register is now TEN rows / `101` declared, so the `held × 8`, `78/78` figure this cell warns about is an EARLIER HEAD's reading (`§0B.1`'s annotation; `§4.2`'s note).⟩** | **THE TESTWRITER** |
 | **`S-3` — THE PBT RE-DERIVATION** (`P-IM-1`/`P-IM-3`'s cannot-fail negatives; `P-SM-2`'s hardcoded `calls: 1`; `P-SM-3`'s near-vacuous shim arms; `P-TP-1`'s in-test model of the contract) | **OWED — re-derivation against the DECLARED terms** (`§4.3` item 4) | **THE TESTWRITER** |
 | **`S-4` — NO FOUNDATION/PACKAGE ROW** | **RECORDED: NO ROW OWED** (`E-7`'s honest-empty-search discipline; `AGENTS.md` item 7). **`A-8`'s correction is APP-SIDE, not upstream.** | — (none) |
 
@@ -1199,7 +1338,57 @@ vitest tables suffice (the in-repo precedent executed 8 of 8 rows with tables an
 `tests/unit-divergence-spawn-contract.test.ts`'s `P-IM-1..3`/`P-SM-1..3`/`P-TP-1..2` (that file is
 **DENIED** to this unit: §1.5). **`P-IM-4` and `P-TH-*` do NOT exist in this register.**
 
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE;
+VERIFIED-BY-READ: `tests/unit-divergence-fixture-contract.test.ts`'s `DECLARED_REGISTER` + the §4.2 report
+row) — THE TEN-ROW CAP IS NOW THE LANDED FACT, AND THIS PARAGRAPH'S `8` IS THE FILED CAP.⟩** The landed file
+carries **TEN declared rows** and its own report row asserts *"the register is exactly the TEN declared rows
+(the gate EIGHT + the two zero-coverage rows the remand added)"*. **The two added rows are `P-SM-4` and
+`P-SM-5` (the gate-4 remand's `A-2`/`A-3` coverage closers, `§3b` `T-1`/`S-2`); the cap sentence above is a
+FILED CAP and its amendment is OWED to the SPEC-WRITER (this review's `§10.5` `R-2`).** **`P-IM-4` and
+`P-TH-*` still do not exist — that half of the paragraph holds at the landed head (VERIFIED-BY-READ: the
+report row asserts it).**
+
+**⟨AMENDED 2026-09-29 BY THE SPEC-WRITER — `§10.5`'s `R-2` IS DISCHARGED ON THE ROW CAP: **THE CAP IS TEN**, AND
+THE FILED `8` ABOVE IS KEPT VISIBLE, DATED AND UNREWRITTEN (`RCA-8(c)`).⟩** **THE AMENDMENT, EXACTLY:** the
+paragraph above and `§4.2`'s arithmetic paragraph cap the register at **`8` rows** (`§4.2`'s words: *"8 rows, at
+the house cap of ≤8"* — cited by the landed red set as *"the spec's `§4.1` cap (≤8)"*,
+`tests/unit-divergence-fixture-contract.test.ts`'s report-row comment); **the register's DECLARED column is the
+CONTRACT's, and it is now RE-DERIVED TO THE LANDED REALITY — TEN rows** (the `8` gate rows **+** the `2`
+zero-coverage rows the gate-4 remand added). **THE AUTHORITATIVE TABLE IS `§4.2`'s dated ADJACENT table** (the
+re-derived declared column: every row's terms, its strategy id and the two new rows' subjects, with the
+superseded `8 rows` / `78` kept visible beside it); **this note is the row-cap half of that ONE amendment, and it
+moves no other clause.** **WHY THE CAP MOVED RATHER THAN THE TWO STEPS BEING FOLDED AWAY — the coverage holes, in
+the audit's own terms (`§3a.4`; `§3b` `T-1`/`S-2`):** the gate-4 audit measured that **deleting the bounded boot
+wait (`waitForBootInstalled`), moving it AFTER the load, zeroing its deadline, or deleting
+`PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` from BOTH spawn sites each left `npm test` GREEN** (the register read
+`held × 8`, `78/78` with the step or the member gone) — **so the contract's `§0B.2`/`§0B.3` clauses had ZERO
+instrument coverage**, and the two rows exist to close exactly those holes (`A-2`/`A-3`). **Folding them into an
+existing row would have hidden the hole the audit found, which is what `§4.3` item 4 forbids.** **THE CAP'S
+DISCIPLINE IS HONOURED, NOT RELAXED:** every row still reports against its **DECLARED** term (`§4.3` item 4);
+**≤100 attempts per row** and **≤400 total** still hold (`101` total); **stop-after-5** on every row; and the
+namespace rules still hold — **`P-IM-`/`P-SM-`/`P-TP-` rows only, NO `F-` row, NO `P-IM-4`, NO `P-TH-*`**
+(VERIFIED-BY-READ: the landed report row asserts each). **THE SITES THAT READ THIS AMENDMENT AS OWED** (`§0A.1`'s
+closing sentence, `§0B.1`'s annotation, `§3a.4`'s note and `§10.5` `R-2`) are **each pass's own reading and are
+KEPT**; the note beside `§10.5` `R-2` records the discharge.
+
 ### 4.2 The register (8 rows — every term printed as the sum of its factors)
+
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`AGENTS.md` item 10d / `RCA-6`) — `RCA-8(c)`,
+ANNOTATE-BESIDE: the heading above and every row/term below are KEPT VERBATIM as the FILED contract, AND
+THE DECLARED-VS-ACTUAL MISMATCH IS NOW RECORDED HERE SO THE NEXT READER DOES NOT HAVE TO RE-DERIVE IT.
+WHAT THE LANDED FILE DECLARES (VERIFIED-BY-READ this review, `tests/unit-divergence-fixture-contract.test.ts`'s
+`DECLARED_REGISTER`): **TEN rows · `101` declared attempts** — `P-IM-1` `2*2+4 = 8` · `P-IM-2` `4+8+8+2+1 = 23`
+· `P-IM-3` `12+1+2 = 15` · `P-SM-1` `3*2+2 = 8` · `P-SM-2` `2*2+3 = 7` · `P-SM-3` `2*2+2 = 6` · `P-TP-1`
+`3*2+1+1 = 8` · `P-TP-2` `2*2+2+1 = 7` · **NEW `P-SM-4` `1*3+5+2 = 10`** (the bounded boot-install wait —
+`A-2`) · **NEW `P-SM-5` `2*3+1+2 = 9`** (the spawn `env` member — `A-3`) — i.e. the live arithmetic reads
+**`8 + 23 + 15 + 8 + 7 + 6 + 8 + 7 + 10 + 9 = 101`** against this section's as-filed
+**`6+23+15+8+6+6+7+7 = 78`**, which STAYS VISIBLE ABOVE as the filed contract. **THE FIVE TERM MOVES ARE THE
+GATE-4 REMAND'S, NOT A RE-SCOPE:** three terms moved (`P-IM-1` `6 → 8`, `P-SM-2` `6 → 7`, `P-TP-1` `7 → 8`)
+and two rows were ADDED, so the register's own honesty clause (`§4.3` item 4 — a row is reported against its
+DECLARED term, never silently re-scoped) is what makes this section a STALE FILED TEXT until the SPEC-WRITER's
+amendment lands. **LAYER (`RCA-12`): DOC-LAYER — HARNESS/`[D]` at most; nothing here is app-green, and THIS
+REVIEW RAN NO LEG.** **THE AMENDMENT IS OWED TO THE SPEC-WRITER — see this review's `§10.5` `R-2`, which lists
+it with its owner; the section's normative text is NOT rewritten by this review.**⟩
 
 | Row | Kind | The property | The terms of its attempt budget | Attempts |
 | --- | --- | --- | --- | --- |
@@ -1207,7 +1396,7 @@ vitest tables suffice (the in-repo precedent executed 8 of 8 rows with tables an
 | **`P-IM-2`** | **INVARIANT** | **THE COMPARISON SET, THE `drive()` SURFACE AND THE EXIT CONTRACT ARE STRUCTURALLY IDENTICAL TO THE PRE-FIX HEAD** — the same four `drive()` calls in order, the same eight returned members, the same eight comparison labels in the same order (plus the leg-1 boot check and the failure branch), `ok()`'s `checks`/`failures` arithmetic, and `exitCodeFor`'s `{0,1}`. | 4 `drive()` calls + 8 returned members + 8 comparison labels + 2 arithmetic/exit draws + 1 normalization draw (`node-N` → `node#`) | **`4+8+8+2+1 = 23`** |
 | **`P-IM-3`** | **INVARIANT** | **THE DEMO LITERAL IS UNCHANGED AND STILL TRACKS THE FORK'S SOURCE OF TRUTH** — 12 nodes, the same authored ids and the same authored `props.id` members as `src/shared/demo-envelope.ts`'s `template.root` (`S-7`). | 12 authored node positions + 1 node-count draw + 2 negative draws (a dropped node; a re-spelled authored id) | **`12+1+2 = 15`** |
 | **`P-SM-1`** | **STATE-MACHINE** | **THE DRIVE READINESS IS OBSERVABLE, AND ITS FAILURE IS LOUD** — three states (the load not yet requested · the load requested and in effect · the load requested and superseded/refused): the in-effect state proceeds to `drive` **silently** (no `ok()` call, no census change); the superseded/refused state **stops before any comparison row** and **names the missing surface / quotes the tool error**; the not-yet-requested state is unreachable in the landed sequence (a draw asserts `drive` is never reached without the load). | 3 states × 2 arms (silent-on-success, loud-on-failure) + 2 negative draws (a probe that fires but lets the leg continue; a probe that reds a comparison row instead of stopping) | **`3*2+2 = 8`** |
-| **`P-SM-2`** | **STATE-MACHINE** | **EXACTLY TWO HOSTS AND EXACTLY ONE LOAD PER HOST** — the run spawns 2 children (one real-Electron pair-site vector; one `process.execPath` shim host), the load is issued **once per leg**, and no leg loads twice or drives before loading. **⟨2026-10-05: the landed pass recorded that *"the one unscorable negative in `P-SM-2` was re-shaped — the declared terms unmoved"* (`§0A.1` `F-1` item 8). **The property above and the attempt budget below are the DECLARED terms and are UNMOVED** (`3*2+2 = 8`); the re-shape is a body-level act recorded in that pass, not a clause amendment here.⟩** | 2 hosts × 2 arms (host count; loads per host) + 2 negative draws (a third host; a zero-load leg) | **`2*2+2 = 6`** |
+| **`P-SM-2`** | **STATE-MACHINE** | **EXACTLY TWO HOSTS AND EXACTLY ONE LOAD PER HOST** — the run spawns 2 children (one real-Electron pair-site vector; one `process.execPath` shim host), the load is issued **once per leg**, and no leg loads twice or drives before loading. **⟨2026-10-05: the landed pass recorded that *"the one unscorable negative in `P-SM-2` was re-shaped — the declared terms unmoved"* (`§0A.1` `F-1` item 8). **The property above and the attempt budget below are the DECLARED terms and are UNMOVED** (`3*2+2 = 8`); the re-shape is a body-level act recorded in that pass, not a clause amendment here.⟩** **⟨CITATION DEFECT, RECORDED 2026-09-29 BY THE SPEC-WRITER AND NOT SMOOTHED: THIS NOTE'S `3*2+2 = 8` MATCHES NO HEAD.** The as-filed cell to its RIGHT reads **`2*2+2 = 6`** (the filed term) and the landed register declares **`2*2+3 = 7`** (`DECLARED_REGISTER`; `§0A.1` `F-1` item 8's *"the declared terms unmoved"* is about the ROW-BODY re-shape of that pass, not about this figure) — so **`3*2+2 = 8` is neither the filed nor the landed term and is quoted by no cell of this register elsewhere.** **The as-filed sentence and its wrong figure are KEPT VISIBLE (annotate-beside, `RCA-8(c)`); the authoritative figures are this table's cell (`2*2+2 = 6`) and the re-derived term at the AMENDED table below (`2*2+3 = 7`).** Any reader deriving `P-SM-2`'s budget must use one of those two, **never this note's `8`.**⟩** | 2 hosts × 2 arms (host count; loads per host) + 2 negative draws (a third host; a zero-load leg) | **`2*2+2 = 6`** |
 | **`P-SM-3`** | **STATE-MACHINE** | **THE APP'S OWN `provident.load` ROUTE IS THE ONE THE LEG USES, AND IT EXISTS AT BOTH ENDS** — the tool name is registered (`ALL_TOOLS`), group-gated (`TOOL_GROUPS` → `graph`), routed (`dispatch(name)` ⇒ the renderer's `load` method) and handled (`Runtime.load` → `loadEnvelope`); and the shim host answers the same tool name through its own runtime. **⟨AMENDED 2026-10-05 (`F-2` item 2) — THE ROUTE EXISTS AT BOTH ENDS, BUT AT THE APP END IT IS **REGISTERED-BUT-NOT-SERVED** through the leg's own spawn contract: the tool NAME is in `ALL_TOOLS`, yet `tools/list` on the booted app returns `9` tools with `provident.load` ABSENT, because the `graph` group is OFF under the fresh per-spawn scratch profile's default config. **This row's property (the name is registered; the route reaches that host's runtime) is UNCHANGED and NO term of it moves**; the enablement is APP-SIDE (`§0A.3` `F-3`). **This row is HARNESS/`[D]` only, as `§4.3` item 2 states.**⟩** | 2 hosts × 2 arms (the name is registered; the route reaches that host's runtime) + 2 negative draws (an unregistered name; a load routed to a method the renderer does not carry) | **`2*2+2 = 6`** |
 | **`P-TP-1`** | **TOTALITY** | **NO INPUT SHAPE THROWS WHERE A NAMED STOP IS CONTRACT** — a load refusal (a gate error, a malformed envelope payload), a load that lands but leaves the demo surface absent, and a transport-level error during the load each produce a **named** stop (never an unhandled rejection, never a bare `undefined`, never a silent skip into `drive`). | 3 failure shapes × 2 report arms (a named cause; the honest "no cause captured" form) + 1 draw asserting the existing leg-1 `try`/`catch` still records its failure | **`3*2+1 = 7`** |
 | **`P-TP-2`** | **TOTALITY** | **THE SPAWN/SCRATCH CONTRACT THIS FIX RIDES ON IS UNTOUCHED** — the nine-member vector at both sites, one `--user-data-dir=` member per spawn, the cleanup hook armed at creation, the bounded delete-and-verify sweep's report shape, and the module's entry-point guard (import boots nothing). | 2 sites × 2 arms (the vector; the profile member) + 2 draws (the cleanup report shape; import-safety) + 1 sweep-bound draw | **`2*2+2+1 = 7`** |
@@ -1215,10 +1404,71 @@ vitest tables suffice (the in-repo precedent executed 8 of 8 rows with tables an
 **ARITHMETIC, printed with its terms:** `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78` attempts total — **under the
 ≤400 cap**; **the largest single row is `P-IM-2` at 23**, **under the ≤100 cap**; **8 rows**, at the
 house cap of ≤8. **stop-after-5** on every row (`≤5` distinct counterexamples reported, then the row stops).
-**Seed `0x20260930`; strategy ids:** `strat:divergence-fixture-symmetry` · `strat:divergence-fixture-preserved-surfaces` ·
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE; the paragraph
+above is KEPT as the FILED arithmetic) — THE LANDED ARITHMETIC IS `8 + 23 + 15 + 8 + 7 + 6 + 8 + 7 + 10 + 9 =
+101` OVER **TEN** ROWS, so this paragraph's `78` / **`8 rows`** are the FILED totals, `P-IM-2` remains the
+largest single row at `23` (still under the ≤100 cap), and the ≤400 total cap still holds; the row's own
+report prints each row's declared-vs-executed term. The amendment is OWED to the SPEC-WRITER (`§10.5`
+`R-2`); the as-filed text above is NOT rewritten and `§4.3` item 4's DECLARED-term rule is untouched.⟩** **Seed
+`0x20260930`; strategy ids:** `strat:divergence-fixture-symmetry` · `strat:divergence-fixture-preserved-surfaces` ·
 `strat:divergence-fixture-literal` · `strat:divergence-fixture-readiness` · `strat:divergence-fixture-hosts` ·
 `strat:divergence-fixture-load-route` · `strat:divergence-fixture-totality` · `strat:divergence-fixture-spawn-untouched`.
-**Every row reports `held`/`broken`; the report prints each row's declared-vs-executed term.**
+**Every row reports `held`/`broken`; the report prints each row's declared-vs-executed term.** **⟨ANNOTATED
+2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW — the strategy-id list above is CORRECTED BESIDE ITSELF and
+NOT rewritten: the landed register carries TWO MORE strategy ids, `strat:divergence-fixture-boot-wait`
+(`P-SM-4`) and `strat:divergence-fixture-spawn-env-member` (`P-SM-5`) — VERIFIED-BY-READ in
+`tests/unit-divergence-fixture-contract.test.ts`'s `DECLARED_REGISTER` — so the list is TEN, not eight. This is
+the SAME owed amendment (`§10.5` `R-2`, THE SPEC-WRITER), not a second one.⟩**
+
+**⟨AMENDED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE) — `§10.5`'s `R-2` DISCHARGED: THE
+REGISTER'S **DECLARED COLUMN IS THE CONTRACT's**, AND IT IS HEREBY **RE-DERIVED TO THE LANDED REALITY — TEN ROWS ·
+`101` DECLARED ATTEMPTS** — WHILE THE AS-FILED heading, table, `6+23+15+8+6+6+7+7 = 78` arithmetic and the filed
+`8` strategy ids ABOVE ARE ALL KEPT VISIBLE, DATED, WITH THEIR FINDING IDS. **NOTHING IS DELETED, NO ROW IS
+RENUMBERED, AND NO ROW'S SUBJECT MOVES.**⟩**
+
+**THE RE-DERIVED DECLARED COLUMN — this is the table the unit's contract now declares; the terms are the landed
+red set's own (`tests/unit-divergence-fixture-contract.test.ts`'s `DECLARED_REGISTER`, VERIFIED-BY-READ this pass
+— NOT a run by this pass):**
+
+| Row | The re-derived declared term | The subject the term belongs to (unmoved unless the cell says so) |
+| --- | --- | --- |
+| **`P-IM-1`** | **`2*2+4 = 8`** (**MOVED `6 → 8`**) | the shared load step, as filed; the four negative draws are the gate-4 remand's |
+| **`P-IM-2`** | **`4+8+8+2+1 = 23`** | the comparison set / `drive()` surface / exit contract |
+| **`P-IM-3`** | **`12+1+2 = 15`** | the demo literal |
+| **`P-SM-1`** | **`3*2+2 = 8`** | the drive-readiness precondition |
+| **`P-SM-2`** | **`2*2+3 = 7`** (**MOVED `6 → 7`**) | exactly two hosts, one load per host |
+| **`P-SM-3`** | **`2*2+2 = 6`** | the app's own `provident.load` route at both ends |
+| **`P-TP-1`** | **`3*2+1+1 = 8`** (**MOVED `7 → 8`**) | no input shape throws where a named stop is contract |
+| **`P-TP-2`** | **`2*2+2+1 = 7`** | the spawn/scratch contract this fix rides on |
+| **`P-SM-4`** | **`1*3+5+2 = 10`** (**NEW — the `A-2` coverage closer**) | **THE BOUNDED BOOT WAIT (`waitForBootInstalled`): its EXISTENCE on leg 1's path; its POSITION (`connect → wait → load → probe → drive`; `§0B.3` `F-7`); its TWO PINNED CONSTANTS (`BOOT_POLL_INTERVAL_MS = 100`, `BOOT_POLL_DEADLINE_MS = 20_000`); and its FIVE NAMED STOP ARMS DRIVEN AGAINST THE REAL FUNCTION** (the missing `boot` member · `status: 'failed'` carrying its own `error` text · a status outside the declared three-state set · the deadline with the status still `pending` · a refused readiness read), **plus `NEG-wait-absent` / `NEG-wait-after-load`.** |
+| **`P-SM-5`** | **`2*3+1+2 = 9`** (**NEW — the `A-3` coverage closer**) | **THE SPAWN ENV MEMBER `PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` AT BOTH ELECTRON SITES** (`§0B.2` `F-6`); **the shim transport carrying NONE**; **the NINE-MEMBER VECTOR** (driving `siteArgs`'s own throw on a tenth member), **plus its two negative draws.** |
+
+**THE ARITHMETIC, PRINTED WITH ITS TERMS:** **`8 + 23 + 15 + 8 + 7 + 6 + 8 + 7 + 10 + 9 = 101` attempts total**
+(**SUPERSEDED, KEPT VISIBLE:** `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78`), **under the ≤400 cap**; **the largest
+single row is still `P-IM-2` at `23`**, **under the ≤100 cap**; **TEN rows**. **stop-after-5** on every row.
+**Seed `0x20260930` (unmoved); the strategy-id list is TEN** — the filed eight **plus**
+**`strat:divergence-fixture-boot-wait`** (`P-SM-4`) and **`strat:divergence-fixture-spawn-env-member`** (`P-SM-5`).
+
+**THE REGISTER'S OWN LANDS-HEAD READING, AS THE FILE'S REPORT ROW DECLARES IT (VERIFIED-BY-READ this pass in the
+test's source; THIS PASS RAN NO SUITE, so the register's held/broken state is the TestWriter's recorded reading,
+never this pass's measurement):** **all TEN rows are `held`** — `held` is the file's own
+`run.counterexamples.length === 0 && run.attempts === declared.declaredTotal` — so **`executed == declared` on
+every row** and the executed total is **`101`**; **`stoppedAt: null` on every row** (a row stops only after **5**
+consecutive counterexamples, and `held` implies none); **counterexamples `0`**. **THIS SUPERSEDES THE EARLIER
+HEAD'S `held × 8` / `78/78` READING QUOTED AT `§0A.1` `F-1` item 5 AND `§3a.4`** — that reading is **an earlier
+head's register**, and those sentences are KEPT as their own pass's reading.
+
+**WHY THE TWO NEW ROWS EXIST — STATED AT THE REGISTER, BECAUSE IT IS THIS AMENDMENT'S WHOLE JUSTIFICATION:** they
+close the adversarial **`A-2`/`A-3` COVERAGE HOLES** — the audit's finding that **deleting the wait step or the
+env member kept `npm test` GREEN**, i.e. the contract's own `§0B.2`/`§0B.3` clauses were carried by **no row at
+all** (the `A-2`/`A-3` rows of `§3a.4` and `§3b`'s disposition table; `§3b` `T-1`/`S-2`). **THE LANDED FILE'S OWN
+HEADERS RECORD THE SAME MOVEMENT** — `DECLARED_REGISTER`'s per-row comments name each superseded figure and say
+*"the spec's `§4.2` … must be amended"* — **so the test and this table now agree in words AND in numbers.**
+
+**LAYER (`RCA-12`, MANDATORY): DOC-LAYER for this whole amendment.** It is a **re-derivation of the DECLARED
+column from the landed red set's own text**; **it ran no suite, no leg and no Electron, it re-scopes no row's
+subject, it adds no check to the leg (`§0.3`'s `F-1a`), and it changes no comparison row's colour.** The register
+is **HARNESS/`[D]`-layer at most**, and **a held register is never app-green**.
 
 **⟨ANNOTATED 2026-10-05 — THE GATE-4 PBT AUDIT OF THIS REGISTER (RECORDED READING; measurer: the gate-4
 adversarial pass; `§3a.4`; `RCA-8(c)` — the DECLARED terms above are UNMOVED and no row is re-scoped, so a
@@ -1304,7 +1554,17 @@ each with its measurer) and the reads are `S-1`…`S-8` (**VERIFIED-BY-READ this
 trio is owed and reported: **`npm test`** (the new row file green; **the carried baseline red
 `PANE-TOGGLE-STAGE-COLLAPSE` / `P-SM-1` remains carried** and is **not** this unit's to fix) ·
 **`npm run typecheck`** exit 0 · **`npm run build`** exit 0. **`npm run battery` is HARNESS-green, never
-app-green**, and is quoted as such if it is run.
+app-green**, and is quoted as such if it is run. **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW
+(`RCA-8(c)`, ANNOTATE-BESIDE; the requirement above is KEPT as filed) — THE TRIO'S FIGURES AT THIS HEAD ARE
+NOW RECORDED HERE WITH THEIR MEASURER, SO NO LATER PASS HAS TO RE-DERIVE THEM:⟩** **RECORDED READING; measurer:
+the supervisor's trio run at this head — `npm test` = `212 files (1 failed / 211 passed) · 4578 tests
+(1 failed / 4520 passed / 57 skipped)`; `npm run typecheck` = `0`; `npm run build` = `0`** — **the single red
+is the CARRIED BASELINE `P-SM-1` named above, and NO OTHER FILE CHANGED COLOUR** (so the new row file is
+green and this unit introduces no red). **THE FOUR PIN-SUITE RE-STATEMENT READINGS the app-side unit's pin
+re-statements produced — `23 / 69 / 55 / 62` passed — are RECORDED READINGS of that unit's pass, quoted here
+as input, NOT this review's measurement and NOT this unit's rows.** **LAYER (`RCA-12`): the trio is the
+ENVELOPE/`[T]`-side suite plus the two tooling legs for a HARNESS unit — a green here is never app-green, and
+the leg's own class (b) colour is a separate instrument (`V-3`/`V-4`).**
 
 **`V-3`.** **THE UNIT'S OWN GATE IS THE CLASS (b) RUN** (`C-8`): `npm run divergence` reaching **`R13
 RESULT: <n> checks, 0 failures` with exit `0`** — on a display, with **isolated ports** and
@@ -1321,7 +1581,16 @@ the DONE row** with its exit code and is **not** made into a new pinned constant
 
 **`V-6`.** **The DONE row also carries** the red tally + red reasons (`C-11`), the adversarial disposition
 (`RCA-3`), the item-10d documentation review's record (`RCA-6`, per-unit and after the greens), the live-run
-discipline statement (`M-6`), and the **layer on every line**.
+discipline statement (`M-6`), and the **layer on every line**. **⟨ANNOTATED 2026-09-29 BY THE GATE-7/8
+DOCUMENTATION REVIEW (`RCA-8(c)`, ANNOTATE-BESIDE; the requirement above is KEPT as filed) — THE ITEM-10d
+HALF IS NOW MET AND IS CITED WHERE IT EXISTS:⟩** the documentation review ran in this pass (`AGENTS.md` item
+10d / `RCA-6`), its record is
+**`archive/reviews/2026-09-29-U-DIVERGENCE-FIXTURE-doc-review.md`** (the gitignored archive), **its
+reconciliation is this file's `§10.5`, and its discharge of the status block's "gates 7/8 owed" sentence sits
+beside that sentence**; the tracker-side recording is the anchored annotation the review wrote in
+`docs/next-steps.md`'s `CURRENT WORK` region. **The other `V-6` items (the red tally, the adversarial
+disposition, the live-run discipline statement and the layer lines) are the DONE row's and are KEPT as it
+wrote them.**
 
 ---
 
@@ -1492,3 +1761,84 @@ file's `§8` `E-4` names a **pass CLASS**, never a section of this file (`§0C` 
 their as-filed numbers; `§0B` adds a section, it moves none.**⟩** **The
 unit id `U-DIVERGENCE-FIXTURE` is minted by §9.1 `T-4` of `docs/specs/unit-divergence-harness-precondition.md`
 and adopted here; no other document owns it.**
+
+**⟨ADDED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW — `§3a`/`§3b` ARE SECTIONS OF THIS FILE, TOO, AND
+THE SECTION LIST ABOVE IS CORRECTED BESIDE ITSELF (`RCA-8(c)`: the as-filed sentence is KEPT).⟩** The
+citation-discipline paragraph above enumerates this file's own numbers as `§0`…§10 plus the amendment
+ledgers; **at this head the file additionally carries `§3a` and `§3b`, placed immediately after §3.6 (the
+gate-4 adversarial record and its disposition table).** They are named and addressed as `§3a`/`§3b`
+throughout this file and in the trackers, **so no citation moves and no section is renumbered** — the
+enumeration is the only thing that was incomplete, and this sentence completes it. **`§10.5` below is this
+review's own reconciliation section, placed after `§10.4`.**
+
+### 10.5 The gate-7/8 documentation review's record (2026-09-29) — what this pass reconciled, what it fixed, what stays OWED, and what it could NOT verify
+
+**⟨ADDED 2026-09-29 — THE PASS ITSELF, RECORDED IN THE FILE IT REVIEWS. GATES 7 (PROOFREADER /
+BLIND-GREENS, `AGENTS.md` item 10b) AND 8 (ITEM-10d DOCUMENTATION REVIEW, `RCA-6`) RAN IN ONE PASS AND ARE
+RECORDED HONESTLY AS ONE PASS; the full record is
+`archive/reviews/2026-09-29-U-DIVERGENCE-FIXTURE-doc-review.md` (the gitignored archive).⟩**
+
+**LAYER (`RCA-12`): DOC-LAYER ONLY — every figure this pass quotes is a `VERIFIED-BY-READ` of this repo's
+tree at this head or a `RECORDED READING` labelled with its measurer. THIS PASS RAN NO LEG: no
+`npm run divergence`, no `npm test`, no `typecheck`, no `build`, no `battery`, no live battery, no Electron
+boot — so nothing here is app-green, envelope-green, store-green, engine-green or harness-green.**
+**No code, no test, no script, no `src/**` byte, no `package.json`/`vitest` byte, no decision row and no DONE
+row was written by this pass.**
+
+**WHAT IT RECONCILED (all `VERIFIED-BY-READ` this pass):** the leg's landed shape in
+`scripts/electron-divergence.mjs` (the single shared `loadFixture` site; `waitForBootInstalled` with
+`BOOT_POLL_INTERVAL_MS = 100` / `BOOT_POLL_DEADLINE_MS = 20_000` and its five named stops; the additive
+`PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` member at both Electron sites; `loadFixture`/`checkCount` exported
+behind the import guard) · the red set's declared register (`DECLARED_REGISTER` — **TEN rows, `101` declared**,
+the five term moves) · the gate-4 remand's landing in the test bodies (`P-SM-4`'s five stop arms DRIVEN
+against the real function; `P-SM-5`'s both-sites/shim/vector arms; `loadStepInvocations` now reading
+`stripLiteralsAndComments`; the `A-4` prose correction carried in the file; the in-test `stopReport` model
+replaced by the leg's own stop paths) · and every `§`-citation this file makes to the sibling artifacts.
+
+**FIXED IN THIS PASS (documentation only):** the register's declared-vs-actual arithmetic is now recorded at
+`§4.2`/`§4.1` (`8/78` as filed vs **TEN rows/`101`** as landed) with the amendment flagged as OWED · the
+`§0B.1`/`§0B.3` `installed` over-read is annotated with the host fix that makes it a PROPERTY (and the `§3b`
+`S-1` disposition updated beside its as-filed `OWED`) · the `§2.3 C-3` item 1 `A-4` proxy note is recorded
+at the clause · the status block's "gates 7/8 owed" sentence is discharged beside itself · the `§10.4`
+section enumeration is completed (`§3a`/`§3b`) · and the tracker reconciliation is recorded in
+`docs/next-steps.md` and `docs/defects.md` (anchored annotations, no row rewritten).
+
+**OWED, NOT FIXED HERE (each with its owner; a contract change is not this pass's to make):**
+**`R-1` — THE SPEC-DATE MISMATCH (DOC):** this file's as-filed block reads `authored 2026-09-30` and its
+amendment ledgers read `2026-10-05`, while the session's measured pass date is **`2026-09-29`**; the mismatch
+is filed in `docs/pending.md`'s `DOC-HYGIENE DEFECT` row and in `docs/defects.md`
+`SPEC-DATE-MISMATCH-TWO-NEW-SPECS`, **and the annotations are now beside the dates — the as-filed literals are
+NOT rewritten** (`RCA-8(c)`; owner: the SPEC-WRITER, on this file and on
+`docs/specs/unit-app-harness-readiness.md`). · **`R-2` — THE REGISTER AMENDMENTS (SPEC-WRITER):** `§4.1`'s
+row cap `8 → 10`, `§4.2`'s five term changes (`P-IM-1` `6→8`, `P-SM-2` `6→7`, `P-TP-1` `7→8`, plus the two
+added rows `P-SM-4`/`P-SM-5`) and the `101` total — **recorded above as landed; NOT rewritten here, because
+the register is the unit's DECLARED contract and its amendment is the spec-writer's act** (`§4.3` item 4).
+**⟨DISCHARGED 2026-09-29 BY THE SPEC-WRITER — `R-2` IS TAKEN AT ITS OWN CLAUSES: `§4.1`'s row-cap note
+(`8 → TEN`) and `§4.2`'s ADJACENT re-derived declared table record the TEN rows / `101` declared with the
+superseded `8`/`78` KEPT VISIBLE, and the strategy-id list is re-derived beside the filed eight (`RCA-8(c)`: the
+as-filed contract text is NOT rewritten).** **`R-4` — THE APP-SIDE `T-2` AMENDMENTS — IS TAKEN IN THE SAME PASS,
+on `docs/specs/mcp-endpoint.md`** (its launch-scoped tool-group enablement clause and its conditional `boot`
+member clause, each written beside that file's own as-filed `§3.4`/`§6.4` text) — **recorded here so a reader does
+not look for it as owed.** **`R-1`, `R-3`, `R-5` and `R-6` STAND EXACTLY AS THIS REVIEW FILED THEM** (the
+spec-date literal; the predecessor's own `E-4` amendment; the harness-shape items `A-6`/`A-7`; the live-battery
+re-run).⟩** ·
+**`R-3` — THE PREDECESSOR SPEC'S `E-4` AMENDMENT (SPEC-WRITER, on
+`docs/specs/unit-divergence-harness-precondition.md`):** the entry-guard/export-surface ruling and the four
+row-body reconciliations remain owed (`§0C` item 1; this file may not edit that file). · **`R-4` — THE
+APP-SIDE `T-2` AMENDMENTS (SPEC-WRITER, on `docs/specs/mcp-endpoint.md`):** `§6.2`/`§6.3`'s widenings and
+`§3`'s conditional `boot` member remain owed (the app-side unit's `§9 T-2`). · **`R-5` — THE HARNESS-SHAPE
+ITEMS THE GATE-4 PASS RECORDED (HARNESS UNIT'S OWNER):** `A-6` (leg 2 has no `try`/`catch`; the failure
+channel belongs to leg 1's shape) and `A-7` (`§0B.3` item 4's post-install-regression clause has no mechanism
+— a re-poll needs a ruling) remain **recorded, not relaxed** (`docs/defects.md`
+`GATE4-LEG-CLAUSE-vs-INSTRUMENT-GAPS`). · **`R-6` — THE LIVE BATTERY RE-RUN (EVERY LIVE-BATTERY UNIT):**
+`§8` `E-8` item (i) was discharged by the gate-4 round's re-run (`§3a.6`), **and the app-layer reading remains
+the live layer's own** (`RCA-11`; no unit's live row is retired by any green cited here).
+
+**COULD NOT VERIFY (and what would settle each):** **the trio figures quoted in the DONE row's companion
+records, and the pin-suite re-statement readings** — this pass holds no shell, so the trio's file/test counts,
+the four pin-suite readings (`23 / 69 / 55 / 62` passed), and the leg's own `R13 RESULT: 9 checks, 0 failures`
+are **RECORDED READINGS of their measuring passes, not this pass's measurements**; a shell-bearing pass
+re-running the trio and `npm run divergence` settles them, and the leg's green is never this pass's to
+re-take. **The `32` app-layer `[U]` FAIL count** is likewise quoted input, under `§0B.5` item 3's own
+discipline (the LIVE pass's recorded reading). **Nothing in this section is a substitute for those runs, and
+this section claims no green for any layer.**

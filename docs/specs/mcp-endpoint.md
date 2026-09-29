@@ -127,6 +127,79 @@ node's nodeId, authored css.id, authored props.id, type, content, state,
 in-tree flag, and declared handlers (event/phase/name). Exposes both id
 vocabularies per node (REQ-GAP-3).
 
+> **Astrographer-extension note (2026-09-29, unit `U-APP-HARNESS-READINESS`;
+> `RCA-8(c)`, annotate-beside — the §3 table row above and this `§3.4` paragraph are KEPT
+> as the base contract's text, and this note is the landed extension beside them.
+> Decided: `docs/decisions.md` `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS`
+> clause (iii).)**
+>
+> **THE OPT-IN `boot` READINESS MEMBER — LANDED.** Under a launch that requested tool
+> groups (the launch-route note beside `§6.4` below), the `provident.list_targets` reply
+> — **and therefore its resource mirror `mcp://provident/targets` (`§3.7`'s row; same
+> `read` group, same `listTargets` read)** — carries ONE additional member. Under a
+> launch that made **no request**, the reply is **exactly this `§3` row's shape** —
+> `{ nodes: [...] }`, member-for-member, **no `boot` key at all** (never `boot: null`,
+> never a partial object).
+>
+> **THE SHAPE — FIVE MEMBERS** (`VERIFIED-BY-READ` at `src/main/mcp-server.ts`'s
+> `RendererBackend.bootState()`; the same five `docs/specs/unit-app-harness-readiness.md`
+> `§2.2 B-1` item 2 defines):
+> `boot: { installed: boolean, status: 'pending' | 'installed' | 'failed', epoch: number, generation: number, error: string | null }`
+> — **`installed`** true once the app's own initial boot-graph install has completed (it
+> means *"the app finished installing its own boot graph"* — **never** *"the app is
+> functional"*, and **never** *"a client's own `provident.load` landed"*); **`status`**
+> the single member a client branches on, with **`installed === (status === 'installed')`**
+> always; **`epoch`** ≥ 1, incremented by each renderer reload (which also RESETS `status`
+> to `pending` and `generation` to `0`); **`generation`** ≥ 0, incremented by each
+> successful install inside the epoch; **`error`** non-null **iff**
+> `status === 'failed'`, carrying the boot chain's own failure text.
+>
+> **THE `pending` READ IS ANSWERED FROM MAIN-PROCESS STATE WITHOUT AWAITING THE RENDERER**
+> (`B-5`): in that state the reply is
+> `{ nodes: [], boot: { installed: false, status: 'pending', epoch, generation: 0, error: null } }`
+> — the empty list is the truth (no graph is installed yet), and the short-circuit exists
+> ONLY under the opt-in, **so no default-launch client can ever observe `nodes: []` from
+> it**. After `'installed'`, the handler is today's handler plus the member.
+>
+> **THE BOUNDED-WAIT PROTOCOL A CLIENT MUST IMPLEMENT — FOUR NAMED STOPS, NO SLEEP, NO
+> UNBOUNDED RETRY:** (1) the member is **MISSING** ⇒ stop: *the app did not opt in*;
+> (2) **`status: 'failed'`** ⇒ stop, carrying `boot.error`; (3) **a status OUTSIDE the
+> declared vocabulary** (`pending` / `installed` / `failed`) ⇒ **FAIL CLOSED** — refuse to
+> wait on a state the client cannot read (the divergence leg's `waitForBootInstalled` fails
+> closed here); (4) **the deadline passing with `status` still `pending`** ⇒ stop, naming
+> the deadline. **After satisfaction, MUST NOT re-wait: a regression observed after
+> `installed` (a status leaving `installed`, or an epoch advance) is a NAMED failure.**
+> **The interval and the deadline are the CLIENT's constants** — the divergence leg's are
+> `BOOT_POLL_INTERVAL_MS = 100` / `BOOT_POLL_DEADLINE_MS = 20_000`
+> (`docs/specs/unit-divergence-drive-fixture.md` `§0B.3` `F-7`) — and **no observed timing
+> (`~250–540 ms`; `105 ms` / `2` polls) is EVER a budget**.
+>
+> **THE MEASURED READINGS, AS RECORDED (RECORDED READING; measurer: the implementer's
+> hand/script runs — the unit's DONE row, `docs/next-steps.md`):** **DEFAULT ⇒ `9` tools
+> with `provident.load` ABSENT, `provident.list_targets` keys exactly `['nodes']`, and NO
+> `boot` member. OPT-IN ⇒ `15` tools with `provident.load` PRESENT, `boot` from
+> `{status:'pending', epoch 1, generation 0}` to `{status:'installed', epoch 1, generation 1}`,
+> and the target list from `0` nodes (the `pending` short-circuit) to `32`.**
+> **⟨INSTRUMENT NOTE, DECLARED AND NOT SMOOTHED: this pass's `read` tool caps a single
+> line's length and could not read that DONE row past `{installed, epoch 1, generation …`;
+> the `nodes 0 → 32` half is quoted from the SAME recorded row as this pass's input and is
+> NOT re-measured here.⟩**
+>
+> **ROW-ID RECONCILIATION — WHAT THIS MEMBER TOUCHES AND WHAT IT DOES NOT (no prohibition
+> relaxed):** §3's `provident.list_targets` **Returns** cell above is **unchanged in the
+> default case**, and its `{ nodes: [...] }` enumeration is **unchanged under the opt-in**
+> (the member is ADDITIVE); **P-E7** (authored ids exposed) is **untouched** — the member
+> carries no id vocabulary; **P-E6** (the JSON-safe boundary) holds — the member is plain
+> JSON-scalar data; **P-E3** (two transports, one tool surface) holds — the member is served
+> on both; `§3.7`'s `mcp://provident/targets` keeps its `application/json` mimeType and gains
+> the same conditional member, while `mcp://provident/app` and
+> `mcp://provident/node/{nodeId}` are **NOT** touched; `§6.1`'s *"the gate is OFF-by-default
+> for anything a human hasn't explicitly enabled"* and `§6.4`'s *"manual-UI-only by
+> construction"* **stand** — a client can **READ** this member and can never **SET** it, and
+> no MCP tool grants a group (see the launch-route note beside `§6.4`). **LAYER:** the member
+> is MAIN-PROCESS `[T]`-class state surfaced on a `read`-group tool; it says nothing about
+> rendering, layout, panes, CSS or any live battery row.
+
 ### 3.5 `provident.get_node_state`
 
 The node's pass-2 resolved compiled states (read-only snapshot via
@@ -439,6 +512,77 @@ Design: the renderer settings pane talks to main over IPC
 re-wires the MCP server tool-gating on change. The settings surface is
 **manual-UI-only by construction**: the IPC channel is main→renderer→main and
 the MCP tool handlers never route to it.
+
+> **Astrographer-extension note (2026-09-29, unit `U-APP-HARNESS-READINESS`;
+> `RCA-8(c)`, annotate-beside — `§6.1`'s sentence, `§6.2`'s table and closing sentence,
+> `§6.3`'s token bullets and everything in `§6.4` above are KEPT VERBATIM as the base
+> contract's text; this note is the landed route beside them, and it WIDENS `§6.1`'s
+> scope sentence exactly as `docs/specs/unit-app-harness-readiness.md` `§9` `T-2` item (i)
+> owed. Decided: `docs/decisions.md` `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS`
+> clauses (i)/(ii).)**
+>
+> **THE LAUNCH-SCOPED TOOL-GROUP ENABLEMENT ROUTE — LANDED.** Enabled by
+> **`--enable-tool-groups=<g1,g2,…>`** at launch, with the **ENV FALLBACK
+> `PROVIDENT_ENABLE_TOOL_GROUPS=<g1,g2,…>`**; **argv WINS when both are present.** It
+> follows `§2`'s own convention (a `=`-joined `--`-member with an env fallback, as
+> `--mcp-transport=`/`PROVIDENT_MCP_TRANSPORT` and `--mcp-port=`/`PROVIDENT_MCP_PORT` are).
+> The vocabulary is the build's own nine group names (`read`, `dispatch`, `graph`, `code`,
+> `module`, `rag`, `edit`, `gnosis`, `gnosis-edit`); members are separated by a single
+> `,`; **no trimming, no case folding, no alias**; duplicates are deduplicated; the default
+> restatement (`read,dispatch`) is a no-op.
+>
+> **ITS PROPERTIES, EACH LOAD-BEARING:** **ADDITIVE to the persisted config** —
+> `effective = union(base, persisted, requested)`, resolved ONCE at boot **before** the
+> `SecurityGate` and the MCP server are constructed, so the FIRST `tools/list` already
+> reflects it (never a post-hoc re-gate, which would leave a boot window in which a
+> requested group is still unregistered); **LAUNCH-SCOPED AND NEVER PERSISTED** — the route
+> writes no security-config byte, so `provident-security.json` is unchanged (absent where it
+> was absent) and a later default launch behaves exactly as before; **NEVER SUBTRACTIVE** —
+> a grant can only add groups, so no group the default granted can be turned OFF and no
+> unrequested group comes ON; **THE DEFAULT IS UNMOVED** — a launch with neither flag nor
+> env member registers exactly today's set (`read` + `dispatch`, hence the recorded
+> `9` tools with `provident.load` ABSENT and `list_targets` keys exactly `['nodes']`).
+>
+> **FAIL-CLOSED:** a malformed value (an empty flag value; an empty token in a list; leading
+> / trailing / doubled `,`; whitespace inside a name; a space-separated or value-less flag
+> form; the flag appearing twice), an **unknown group name**, or a **case variant** ⇒
+> **THE LAUNCH IS REFUSED with ONE named stderr line naming the offending token and printing
+> the vocabulary the build DOES have, and exits `2` BEFORE ANY MCP SURFACE EXISTS** — the
+> check runs after the config is read and **before `new SecurityGate(...)`, before the window
+> and before `mcp.start()`** — so a client's connect fails at the transport and the child's
+> stderr tail carries the refusal.
+>
+> **NO MCP TOOL GRANTS TOOL GROUPS — REFUSED BY DESIGN (a self-escalation hole):** **no
+> tool, no resource, no tool-argument schema and no notification enables or disables a group,
+> and none writes the security config.** A *"grant-me-the-group"* tool is refused **by name**
+> (`docs/specs/unit-app-harness-readiness.md` `§2.3` `R-2`, asserted there as `P-TP-2`).
+> **The only writers of the gate remain `§6.4`'s manual-UI IPC handler and this process-input
+> read at launch.**
+>
+> **RECONCILED BY ROW ID, AND NO PROHIBITION RELAXED:** **`§6.1`'s** *"The manual-UI settings
+> are how the HUMAN sets up the gate"* now reads *"the HUMAN — in the Settings pane **or** at
+> launch"*; **`§6.1`'s next sentence** (*"the gate is OFF-by-default for anything a human
+> hasn't explicitly enabled"*) is **UNCHANGED and honoured** — the launch flag **IS** the
+> human's pre-launch grant; **`§6.2`'s table rows for `graph` and `code`** stay
+> **OFF** (manual) and **`§6.2`'s closing sentence** (*"Enabling `graph`/`code` is an
+> explicit human grant"*) **STANDS** — the flag is such a grant, made at launch, which is
+> why the route is pre-surface and never MCP-reachable; **`§6.3`'s** *"A token alone does NOT
+> enable `code`/`graph` — those need the group grant"* **STANDS and is unchanged** (this
+> route grants groups only: it neither sets nor clears the token, bypasses no `authorized`
+> check, and does not touch the `module`+`code` invocation two-gate); **`§6.4`'s** pane, its
+> persistence, its one-toggle-per-group rows and its *"manual-UI-only by construction"*
+> claims are **UNCHANGED** (the route is a second, launch-time path, never a replacement and
+> never an MCP path); and **`§6.5`'s `A1` row is reconciled rather than relaxed** — its
+> sentence *"`--mcp-allow` can pre-enable at launch"* names a flag that **does not exist
+> anywhere in this tree at this head** (**VERIFIED-BY-READ**: a repo-wide search for
+> `mcp-allow` / `MCP_ALLOW` returns that clause's own text and nothing else), so **the
+> landed spelling of the launch grant is `--enable-tool-groups=` with the
+> `PROVIDENT_ENABLE_TOOL_GROUPS` fallback, and `A1`'s INTENT — the `code`/`graph` groups OFF
+> by default, the human as the gate — is preserved as written.** **`§8`'s Non-goals are
+> untouched** (this route adds no notification, no push and no engine change).
+> **LAYER:** the route is MAIN-PROCESS `[T]`-class (the app's own launch path); it makes no
+> claim about rendering, panes, CSS or any live battery row, and it is not a substitute for
+> any live gate.
 
 ### 6.5 The A1..A6 host-side hardening (folded in)
 

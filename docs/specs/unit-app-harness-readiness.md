@@ -23,6 +23,37 @@ doc-review record — **owed**; item **(5)**, the adversarial disposition of `§
 `§3a` (which records its own finding set; see `§3a.7` for the id-set distinction)**. **`§3a` IS THIS SPEC'S
 GATE-4 RECORD; `§3b` IS ITS DISPOSITION TABLE.**⟩**
 
+**⟨ANNOTATED 2026-09-29 — THE UNIT'S GATES 7 (PROOFREADER AUDIT, `AGENTS.md` item 10b) AND 8 (ITEM-10d
+DOCUMENTATION REVIEW, `RCA-6`) HAVE RUN IN ONE PASS, RECORDED HONESTLY AS ONE PASS (`RCA-8(c)`,
+ANNOTATE-BESIDE: NOTHING ABOVE IS REWRITTEN). THE REVIEW RECORD IS
+`archive/reviews/2026-09-29-U-APP-HARNESS-READINESS-doc-review.md` (the gitignored archive).** **ITS
+RECONCILIATION OF THIS FILE IS `§3c` (what it reconciled against the ACTUAL build — the LANDED reality,
+with the register's arithmetic as the file's own test states it) AND `§3d` (what remains OWED, each item
+with its owner).** **THIS ADDITION MOVES NO CITATION:** `§0`…`§11` keep the numbers their filing gave them,
+and the two new sections sit **after `§3b`, before `§4`**. **THE AS-FILED OWED LISTS ABOVE (`§10 C-11`
+items (5)/(6)/(8)) ARE KEPT VERBATIM AS THAT PASS'S READING AND ARE **DISCHARGED IN PART** AT THIS HEAD:
+item (6) is DISCHARGED by this pass; items (5) and (8) are DISPOSED in `§3c`/`§3d` with their remaining
+owners named.**⟩**
+
+**⟨PROVENANCE NOTE 2026-09-29 — THIS FILING'S OWN DATE, ANNOTATED AND NOT SUBSTITUTED (`RCA-8(c)`; the
+finding is filed as `docs/defects.md` `SPEC-DATE-MISMATCH-TWO-NEW-SPECS` and parked in `docs/pending.md`).
+THE EVIDENCE, so no reader has to guess:** **the status block above reads `authored 2026-10-15`** (this
+file's own as-filed literal, KEPT **verbatim** and **never** silently replaced), **while the program's
+other recorded pass dates sit `2026-09-27`…`2026-09-29`** (`PD-VENDOR` · `PD-UI-*` / the pin refresh · the
+two landings and the tracker passes), **and this review pass's own measured session date is
+`2026-09-29`**. **THE TREE IS THE DECIDING EVIDENCE, AND IT AGREES WITH THE SESSION:** the unit's own
+**two** test files and the **four** re-stated pin sites carry dated re-statement notes reading
+**`⟨RE-STATED 2026-09-29 — unit U-APP-HARNESS-READINESS⟩`**, and **the pin notes record the same conflict
+in their own words** — *"that unit's spec is filed 2026-10-15, so the note's date is the PASS date and
+not the spec's filing date"* (`tests/pd-ui-1-theme-register.test.ts` · `tests/pd-vendor-set.test.ts` ·
+`tests/pd-vendor-manifest.test.ts` · `tests/pd-ui-6-modal-state-adoption.test.ts`).
+**THE DISPOSITION, STATED SO IT IS NOT OVER-READ: this review DID NOT and MAY NOT rewrite the date** — a
+date is a READING of when a pass ran, and the as-filed literal stays visible as that filing's record. **A
+future SPEC-WRITER pass may reconcile it beside the literal.** The sibling spec's own dates
+(`docs/specs/unit-divergence-drive-fixture.md`: `authored 2026-09-30`, amendment `2026-10-05`) belong to
+**that** file's review and are **not** touched here — they are recorded, with the finding, in the
+`docs/defects.md` row and in `§3c`.**⟩**
+
 **Every claim about the app's or the harness's CURRENT behaviour below is one of: (a) a RECORDED READING of a
 prior pass, quoted verbatim with its source and its measurer named; or (b) a VERIFIED-BY-READ statement about
 the source text at this head — named as such, with its reader named (the SpecDoc). Nothing else is claimed.**
@@ -490,6 +521,71 @@ provident.list_targets  →  {
    from the same `listTargets` read): a client reading the resource sees `{ nodes, boot }` under the opt-in and
    `{ nodes }` otherwise. **`mcp://provident/app` and the other read tools are NOT touched.**
 
+**⟨RULED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE; this is the `A-4` ruling, taken at the clause
+the audit named — the item 1 above, whose as-filed predicate is KEPT VISIBLE and NOT deleted) — THE CLAUSE'S
+PRESENCE PREDICATE IS CORRECTED TO THE BUILD'S, BECAUSE THE BUILD IS THE LANDED SURFACE AND THIS CLAUSE MUST
+DESCRIBE IT TRUTHFULLY. `§3b`'s `S-1` IS DISCHARGED — BY CORRECTING THE CLAUSE, NOT THE BUILD. `§3d`'s `R-3` IS
+TAKEN.⟩**
+
+**THE CORRECTED PRESENCE RULE, which a TestWriter derives rows from:** **the `boot` member is present IFF the
+launch made a NON-EMPTY request — `requested.length > 0`** — and the reply is `{ nodes: [...] }` EXACTLY
+(member-for-member, **no `boot` key at all**) **IFF the request was EMPTY** (no flag and no env member; a
+non-string or absent env value; an unset or exported-empty env var — all of which the landed parser folds to
+`requested: []`, `source: 'none'`). **The as-filed wording above — *"present IFF the launch opted into the `A-1`
+route (a well-formed request, i.e. `source === 'argv'` or `'env'`)"* — is KEPT VISIBLE as the filing's own
+reading** and is corrected here **beside itself**.
+
+**THE REASON, IN THE AUDIT'S OWN TERMS (`§3a.2` `A-4`; `§3c.2` item 2; `§3c.6`):** the landed build reads **`const
+optedIn = requested.length > 0`** in `src/main/main.ts`'s `main()` (**VERIFIED-BY-READ**, this pass) and
+**`new RendererBackend(optedIn ? { bootObservable: true } : {})`** is the ONLY presence switch. The two predicates
+**agree on every request the landed parser can produce** — `enablementRequestFrom` tags `source: 'argv'`/`'env'`
+ONLY on a non-empty well-formed value, and every other path yields `requested: []` with `source: 'none'` — so
+**they disagree ONLY on the shape `EnablementRequest`'s TYPE admits but NO landed producer emits: `{ ok: true,
+requested: [], source: 'argv' | 'env' }`** (an EMPTY request carrying a source). On that shape the two answer
+differently — **code: NOT present; the as-filed clause: present** — and the ruling is that **the CODE's answer
+governs**, because the code is what a client actually observes and because a contract that describes a surface
+nobody ships is the defect the doc-review gates exist to catch (`RCA-6`; `AGENTS.md` item 10d).
+
+**THE DIVERGENCE'S PRACTICAL FACE — THE NO-OP REQUEST, NAMED AS INTENDED BEHAVIOUR:** a well-formed request whose
+union equals the default (`--enable-tool-groups=read,dispatch`, `§2.1 A-1` item 2 item 2 / item 6 row 10) **IS a
+request made, so the reply GAINS the `boot` member** — this is exactly the case `A-4` measured. Under the corrected
+predicate that outcome is **intended**: *"opted in"* means **"a request was made"**, not **"a group was added"**.
+**`P-6` IS THEREFORE READ — and its as-filed text is NOT amended, because it needs no amendment:** *"with no
+opt-in, the reply carries no `boot` member and is `{ nodes: [...] }` exactly"* is **LITERALLY TRUE** once *"no
+opt-in"* means the **NO-REQUEST** launch, which is the only launch whose reply is byte-for-byte today's.
+**THE HONEST COST, RECORDED SO IT IS NOT SMOOTHED:** a client that passes the route but requests nothing new
+**does** see one added member in a default tool's reply; a client that needs today's byte-identical reply must
+**not pass the route at all.**
+
+**WHAT THIS RULING DOES *NOT* DO (stated so it cannot be over-read):** it does **not** change the build, does
+**not** move `P-6`'s subject or its as-filed text, does **not** touch `A-1`'s additivity, refusal, precedence or
+non-persistence rules, does **not** re-scope `§2.2 B-1` item 2's five-member shape, and does **not** retire the
+generator that holds it. **A FUTURE PASS THAT WANTS THE AS-FILED SEMANTICS** (presence gated on
+`source === 'argv' | 'env'`, i.e. an empty-but-sourced request still presenting the member) **MUST CHANGE THE BUILD
+— A NEW UNIT, WITH ITS OWN CONTRACT, ITS OWN ROWS AND ITS OWN CLASS (b) READING — and may NEVER restate this row
+to get there.** **`§3b`'s `S-1`, whose prescription was to name the clause's predicate as the rule, is SUPERSEDED
+ON THAT POINT BY THIS RULING** (its own words are KEPT at `§3b` and at `§3c.6` as that pass's reading, and the
+disposition beside `S-1` records this discharge).
+
+**THE DECLARED LIMIT ON THIS ROW'S OBSERVABILITY (`RCA-12`-class honesty, stated because it bounds what any row can
+prove):** **`optedIn` is a LOCAL of the NON-EXPORTED `main()`** — VERIFIED-BY-READ this pass:
+`src/main/main.ts` **exports nothing**, declares `async function main(): Promise<void>` and reaches it only through
+its own module-entry guard — **so the REPLY-LEVEL presence rule is NOT observable by a node row that imports a
+name; it is observable only at CLASS (b)/live** (a real launch's `provident.list_targets` reply read under each
+launch shape). What the node suite CAN and DOES drive is the `RendererBackend` option through a **fake backend**
+(`P-SM-2`'s presence arms), which is the register's own declared limit (`§4.3` item 3). **A TestWriter's rows for
+this correction must therefore assert the PREDICATE'S SHAPE and the backend's presence behaviour, and must not
+claim a reply-level reading they cannot take in node.** **THE GENERATOR THAT RIDES THIS ROW, AND WHAT IT NOW MEANS:** the remand's
+`neg-presence-under-optin-source` drives the **no-op request** (`--enable-tool-groups=read,dispatch` ⇒
+`effective === base`) as its discriminating case, and its own title quotes **both** predicates and says they
+*"disagree on the empty-request shape"* (`tests/unit-app-harness-readiness-register.test.ts`, that generator's
+title; **QUOTED AS THAT FILE'S OWN TEXT — this pass does not edit tests**). **THE DISCRIMINATING CASE AND ITS
+OUTCOME ARE UNCHANGED BY THIS RULING** — a no-op request still reds if the presence rule stops reading
+`requested.length > 0` — **but the half of that title which describes the CONTRACT is now the AS-FILED reading**:
+the clause at item 1 above has been corrected, so **a reader must not cite that title as the contract's current
+predicate**. **RECONCILING THE GENERATOR'S PROSE IS THE TESTWRITER'S ACT ON ITS OWN FILE (a prose/proxy act, not a
+term change — its declared term stays `1`), and it is RECORDED HERE AS OWED rather than smoothed.**
+
 #### `B-1` item 4 — THE LAYER, AND WHY THE RENDERER IS NOT TOUCHED
 
 1. **The signal's source already exists in the app.** The renderer's boot chain is
@@ -698,8 +794,8 @@ AMENDMENTS OWED (§3b). `A-6`/`A-7` ARE ACCEPTED WITH REASON.**
 | **`A-1`** | **BLOCKING — THE UN-AWAITED `bootTabs()`, THE SETTLE GAP, AND `pending` FOREVER.** `src/renderer/renderer.ts`'s **`void host.boot(runtime).then(() => { bootTabs(); bridge.bootSettled?.({ok:true}) })`** leaves **`bootTabs()` un-awaited**, so **a throw inside `bootTabs()` never reaches the chain's `.catch`** — **and that `.catch` is the ONLY `ok:false` sender**. **Consequence, exactly: the observable stays `pending` FOREVER**, which **violates the contract's own `§3.2 F-4`** (*"a boot that fails with **no** graph installed **must report `failed`, not `pending` forever"*). **The register cannot see it:** `P-SM-1`'s `failed` arms **call `markBootSettled({ok:false})` directly**, so the row tests the STATE OWNER and never the production sender. | **APP / renderer call site + the `[T]` observable's honesty** | **BLOCKING — A FIX IS LANDING IN THIS SAME ROUND** (the host boot chain: the `.then` body must await/`catch` `bootTabs()` so a throw reaches the chain's failure sender). **Owner: the app-side host fix's landing pass** — **the same round**; the tracker row is `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` (which names **BOTH** citations, this one and the sibling's `A-1`). **`§3.2 F-4` itself is NOT rewritten by this finding** — it is the clause `A-1` proves violated. |
 | **`A-2`** | **THE SETTLE GUARD HONOURS A SETTLE ON AN UNARMED, STILL-`pending` EPOCH.** `markBootSettled`'s guard accepts a settle in that state, **contradicting its own comment**. **UNREACHABLE TODAY — LATENT**, and the register's **draw 16 is NON-DISCRIMINATING** (it does not distinguish the armed from the unarmed epoch). | **`[T]` (the state owner, `src/main/mcp-server.ts`'s backend)** | **ACCEPTED WITH REASON — LATENT, recorded as a defect-side note rather than a fix demand**; **the register draw's non-discrimination is recorded under `P-SM-1`'s audit note (§4.2)** and is **part of what the owed re-derivation must address** (§3b). |
 | **`A-3`** | **`markReady()` RE-ARMS WITHOUT ADVANCING THE EPOCH**, so **a second `IPC_READY` in the SAME epoch after a `failed`** lets a **later `ok:true` resurrect `failed → installed`** — the illegal transition `P-SM-1` claims is *"not produced by the state owner"*. | **`[T]` (the state owner)** | **A FINDING AGAINST THE UNIT'S OWN TRANSITION SET — recorded, owner `THE STATE OWNER'S FIX PASS` (the boot-chain fix's neighbourhood)**, and **the `P-SM-1` illegal-transition claim is NOT relaxed**: the row's claim stands and this finding says **the landed code can produce the state the row forbids**, which is exactly what a non-discriminating arm cannot see. |
-| **`A-4`** | **THE ENABLEMENT PREDICATE DIVERGES FROM THE CONTRACT.** `main.ts`'s **`optedIn = requested.length > 0`** against the contract's **`§2.2 B-1` item 3 item 1** (*present **iff** `source === 'argv'` or `'env'`*). **The measured divergent case:** **`--enable-tool-groups=read,dispatch`** yields **`effective === base`** (the additivity no-op of `§2.1 A-1` item 2 item 2 / row 10) **yet the reply GAINS the `boot` member** — so a launch that requested nothing new is treated as opted-in. | **`[T]` — a CONTRACT-TEXT vs implementation predicate divergence** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE.** **The predicate to be named by the amendment is `source === 'argv' \| 'env'` (the contract's own `§2.2 B-1` item 3 item 1 predicate), and the amendment must ALSO rule what `P-6`'s *"a normal launch is byte-for-byte today's behaviour"* means for a request that is a no-op.** **Owner: THE SPEC-WRITER** (§3b `S-1`); **filing**: `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE`. **No clause is rewritten by this pass.** |
-| **`A-5`** | **DOC DRIFT WITHIN THIS FILE, MEASURED BY COUNT: `§8` `D-3` says a FOUR-member state shape while `§2.2 B-1` item 2 defines FIVE** (`installed`, `status`, `epoch`, `generation`, `error`). | **DOC-LAYER (this file's own text)** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE** (the clause `D-3` is the one whose count reads wrong; the five-member shape of `§2.2 B-1` item 2 is the one the landed code and the tests carry). **Owner: THE SPEC-WRITER** (§3b `S-2`); **filing**: `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT`. |
+| **`A-4`** | **THE ENABLEMENT PREDICATE DIVERGES FROM THE CONTRACT.** `main.ts`'s **`optedIn = requested.length > 0`** against the contract's **`§2.2 B-1` item 3 item 1** (*present **iff** `source === 'argv'` or `'env'`*). **The measured divergent case:** **`--enable-tool-groups=read,dispatch`** yields **`effective === base`** (the additivity no-op of `§2.1 A-1` item 2 item 2 / row 10) **yet the reply GAINS the `boot` member** — so a launch that requested nothing new is treated as opted-in. | **`[T]` — a CONTRACT-TEXT vs implementation predicate divergence** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE.** **The predicate to be named by the amendment is `source === 'argv' \| 'env'` (the contract's own `§2.2 B-1` item 3 item 1 predicate), and the amendment must ALSO rule what `P-6`'s *"a normal launch is byte-for-byte today's behaviour"* means for a request that is a no-op.** **Owner: THE SPEC-WRITER** (§3b `S-1`); **filing**: `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE` **⟨THE ID AS FILED BY THIS PASS — AT THIS HEAD THE ROW THIS CITATION LANDS ON READS `SPEC-AMENDMENT-OWED-APP-ENABLEMENT-PREDICATE-DIVERGENCE`; the as-filed id is KEPT and the live one annotated beside it (`RCA-8(c)`), and the repair is recorded at `§3c.5`⟩**. **No clause is rewritten by this pass.** |
+| **`A-5`** | **DOC DRIFT WITHIN THIS FILE, MEASURED BY COUNT: `§8` `D-3` says a FOUR-member state shape while `§2.2 B-1` item 2 defines FIVE** (`installed`, `status`, `epoch`, `generation`, `error`). | **DOC-LAYER (this file's own text)** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE** (the clause `D-3` is the one whose count reads wrong; the five-member shape of `§2.2 B-1` item 2 is the one the landed code and the tests carry). **Owner: THE SPEC-WRITER** (§3b `S-2`); **filing**: `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT` **⟨THE ID AS FILED BY THIS PASS — AT THIS HEAD THE ROW THIS CITATION LANDS ON READS `SPEC-AMENDMENT-OWED-APP-D3-READINESS-MEMBER-COUNT-DRIFT`; the as-filed id is KEPT and the live one annotated beside it (`RCA-8(c)`), and the repair is recorded at `§3c.5`⟩**. |
 | **`A-6`** | **ACCEPTED WITH REASON — a SOURCE-INDEX/ORDER instrument** (the finding concerns the pass's source-index reading, not a behaviour). | **PROCESS / instrument** | **ACCEPTED — no defect row owed.** |
 | **`A-7`** | **ACCEPTED WITH REASON — THE FOUR RE-STATED PIN SITES WERE AUDITED SITE BY SITE: each retains its DISCRIMINATING LIMB, each keeps an UNRECORDED MOVE FAILING, and NO RELAXATION WAS FOUND.** This is the pass's audit of the *"pins re-stated, never relaxed"* clause (`docs/decisions.md` `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS` clause (v)). | **`[T]` — the pinned/audited rows** | **ACCEPTED — the positive half of the pass; recorded so the DONE row's pin claim is backed by an audit and not by assertion.** |
 
@@ -759,8 +855,8 @@ exactly as the pass found them**.
 | **`A-1`** (un-awaited `bootTabs()`; `pending` forever; `§3.2 F-4` violated) | **BLOCKING — FIX LANDING IN THIS SAME ROUND** (the host boot chain's `.then` body must route a `bootTabs()` throw to the settle path) | **THE APP-SIDE HOST FIX'S LANDING PASS** (this round) | `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` (one row, **both** citations) · this `§3a.2`/`§3a.3` |
 | **`A-2`** (unarmed-epoch settle accepted; latent) | **ACCEPTED WITH REASON — LATENT**; the register draw's non-discrimination is part of the owed re-derivation | **THE STATE OWNER'S FIX PASS** (recorded; no separate fix demanded at this head) | this `§3a.2`; `§4.2`'s `P-SM-1` audit note |
 | **`A-3`** (`markReady()` re-arms without advancing the epoch; `failed → installed` resurfaces) | **FINDING — recorded, not relaxed**; the illegal-transition claim stands | **THE STATE OWNER'S FIX PASS** | this `§3a.2` |
-| **`A-4`** (enablement predicate divergence: `requested.length > 0` vs `source === 'argv' \| 'env'`) | **SPEC AMENDS — OWED, NOT APPLIED** | **THE SPEC-WRITER** (this file) | `§3b` `S-1` · `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE` |
-| **`A-5`** (`§8 D-3`'s four-member count vs `§2.2 B-1` item 2's five) | **SPEC AMENDS — OWED, NOT APPLIED** (doc drift) | **THE SPEC-WRITER** (this file) | `§3b` `S-2` · `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT` |
+| **`A-4`** (enablement predicate divergence: `requested.length > 0` vs `source === 'argv' \| 'env'`) | **SPEC AMENDS — OWED, NOT APPLIED** | **THE SPEC-WRITER** (this file) | `§3b` `S-1` · `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE` **⟨the row at this head reads `SPEC-AMENDMENT-OWED-APP-ENABLEMENT-PREDICATE-DIVERGENCE`; both ids are kept (`§3c.5`)⟩** · **`§3c.6`/`§3d` `R-3`** |
+| **`A-5`** (`§8 D-3`'s four-member count vs `§2.2 B-1` item 2's five) | **SPEC AMENDS — OWED, NOT APPLIED** (doc drift) | **THE SPEC-WRITER** (this file) | `§3b` `S-2` · `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT` **⟨the row at this head reads `SPEC-AMENDMENT-OWED-APP-D3-READINESS-MEMBER-COUNT-DRIFT`; both ids are kept (`§3c.5`)⟩** · **`§3d` `R-2`** |
 | **`A-6`** (source-index/order instrument) | **ACCEPTED WITH REASON** | — (none owed) | this `§3a.2` |
 | **`A-7`** (the four re-stated pin sites, audited site by site: discriminating limb held, unrecorded move still fails, **no relaxation found**) | **ACCEPTED — the positive audit** | — (none owed) | this `§3a.2` |
 | **`P-SM-3`** under-strength (regression branch unreachable; `3` of `5` branches distinct) | **RE-DERIVATION OWED — declared terms UNMOVED** (`§4.3` item 4's rule) | **THE TESTWRITER** (with the negative generators) | this `§3a.4` |
@@ -821,6 +917,181 @@ ok — `DECIDED: LIVE-GATE-RUN-DISCIPLINE` honoured):
 
 ---
 
+## §3c. THE GATE-7 / GATE-8 RECONCILIATION RECORD (`AGENTS.md` items 10b + 10d; `RCA-6`, `RCA-8(c)`) — WHAT THIS PASS CHECKED AGAINST THE ACTUAL BUILD
+
+**PASS KIND, STATED FIRST.** **GATES 7 AND 8 RAN IN ONE PASS, RECORDED HONESTLY AS ONE PASS** (the house
+convention — `docs/next-steps.md`'s `PD-UI-1`/`PD-UI-6`/`PD-VENDOR-PIN-REFRESH` blocks do the same). **A
+DOC-LAYER pass: read / `glob` / `grep` and doc-writes only — NO shell, NO leg, NO suite, NO Electron and NO
+battery was run, and this pass took no measurement of its own.** **EVERY figure below is either a
+`VERIFIED-BY-READ` of `src/**`, `tests/**` or `docs/**` at this head, or a RECORDED READING quoted with the
+measurer that took it** (`RCA-12`; the layer is named on each line). **THE RECORD IS
+`archive/reviews/2026-09-29-U-APP-HARNESS-READINESS-doc-review.md` (the gitignored archive).** **LAYER OF
+THE UNIT'S OWN EVIDENCE (`RCA-12`, MANDATORY): this unit is `src/**` APP-LAYER — its evidence is the node
+suite plus the class (b) launches, and NOTHING HERE MAKES THE REST OF THE APP WORK.**
+
+### §3c.1 THE REGISTER'S ARITHMETIC — `78 + 11 = 89` DECLARED, `held × 6`, `executed == declared`
+
+**THE LANDED REALITY, as the file's own test states it (`VERIFIED-BY-READ`:** `tests/unit-app-harness-readiness-register.test.ts`**):**
+**`§4.2`'s SIX-ROW DECLARED COLUMN IS UNMOVED AND AUTHORITATIVE** — `P-IM-1` `9` · `P-SM-1` `16` · `P-SM-2` `7`
+· `P-SM-3` `12` · `P-TP-1` `24` · `P-TP-2` `10` ⇒ **`9 + 16 + 7 + 12 + 24 + 10 = 78`** — **and the
+**`11` NEGATIVE GENERATORS `§3a.4` ITEM 3 TASKED ARE A SEPARATE, DECLARED TABLE** (each generator **one
+declared attempt**), yielding the **file's own head arithmetic: `78 + 11 = 89` declared attempts**, each
+reported `held`/`broken` with `executed == declared`. **THE `11`:**
+`neg-armed-second-install` · `neg-unarmed-settle` · `neg-regression-after-satisfaction` ·
+`neg-satisfied-then-absent` · `neg-refusal-names-itself` · `neg-partial-apply` · `neg-extreme-values` ·
+`neg-presence-under-optin-source` · `neg-second-writer` · `neg-escalation-name` · `neg-default-list-drift`.
+**THE RE-DERIVATIONS LANDED AGAINST THEIR DECLARED TERMS (`§4.3` item 4's rule — declared terms UNMOVED,
+no row re-scoped):** **`P-TP-1`**'s **vacuous `raw.length >= 0` limb is REPLACED** by a real property (a
+refusal must **quote what it refused**), and **`P-SM-3`**'s **unreachable regression branch is now
+REACHABLE** (only `3` of its `5` declared branches were distinct; the protocol now polls **once** after a
+satisfaction, so the `5 * 2` term is honest). **WHAT THIS PASS DID *NOT* DO:** it **did not** re-run the
+register, **did not** re-derive any term, and **did not** move the spec's declared column. **THE OWED
+AMENDMENT IS RECORDED, NOT APPLIED: `§4.1`/`§4.2` still print the PRE-REMAND arithmetic (`78`, `6` rows)
+and the owed amendment (an `RCA-8(c)` annotation beside them, on the `§4.2` audit note's pattern) belongs
+to the **SPEC-WRITER** — see `§3d` `R-1`.** **A READER MUST THEREFORE READ `§4.2`'s `78` AS *"the register's
+declared column"* and the **`89`** as *"the register + its negative-generator table, at this head"*: BOTH
+NUMBERS ARE TRUE, OF DIFFERENT TABLES.**
+
+### §3c.2 THE CONTRACT-VS-CODE ROWS THIS PASS RE-MEASURED BY READING
+
+| # | The claim | `VERIFIED-BY-READ` at this head | State |
+| --- | --- | --- | --- |
+| **1** | `§2.2 B-1` item 2's **five** member names | `src/main/mcp-server.ts` → `RendererBackend.bootState()` returns **exactly** `{ installed, status, epoch, generation, error }`; the register's `P-SM-2` arm 1 asserts the boot member's key set as **`['epoch','error','generation','installed','status']`** | **MATCHES — five, as `§2.2 B-1` item 2 defines.** `§8 D-3`'s *"four-member"* is the stale text (`§3d` `R-2`) |
+| **2** | `§2.2 B-1` item 3's presence rule vs the landed predicate (`A-4`) | `src/main/main.ts` → **`const optedIn = requested.length > 0`**, and **`new RendererBackend(optedIn ? { bootObservable: true } : {})`**; the contract's clause reads **`source === 'argv' \| 'env'`** | **DIVERGENT — as `A-4` measured; the two agree on every request the landed parser can produce, and disagree only on the EMPTY-request-with-a-source shape the pure surface can express.** **OWED (`§3d` `R-3`)** |
+| **3** | `§3.2 F-4` / `A-1`'s blocking fix | `src/renderer/renderer.ts` → **`void host.boot(runtime).then(async () => { await bootTabs(); bridge.bootSettled?.({ ok: true }) }).catch(…)`** — the tab chain is **awaited INSIDE the chain**, so a throw reaches the **only `ok:false` sender** | **FIXED — the `.then` body awaits `bootTabs()` and the `.catch` carries the failure text** |
+| **4** | `A-2`/`A-3`'s two latent state-machine findings | `src/main/mcp-server.ts` → **`bootArmedEpoch`** (an epoch STAMP, not a flag) and **`markBootSettled`**'s guard **`if (!armed && (ok \|\| this.bootStatus !== 'pending')) return`** | **ADDRESSED IN THE SAFE DIRECTION, AND RECORDED AS A SEMANTICS SHIFT RATHER THAN A SILENT FIX:** an **unarmed `ok:true` is REFUSED**; an **unarmed `ok:false` from `pending` IS recorded** — the `F-4` fail-safe, which the remand's `neg-unarmed-settle` generator asserts **as the FIXED semantics**, explicitly **not as `A-2`'s literal wording** (that generator's own note says so). **`§3a.2` `A-2`'s wording is therefore NOT the reading to quote for the landed guard** |
+| **5** | `§4.2`'s **six** rows / no `F-` row / seed / stop rule | the register test's structural rows: `DECLARED_REGISTER.length === 6`, the ids, **no `F-` row**, `SEED === 0x20261015`, `STOP_AFTER === 5`, and each declared term **the value of its own printed factors** | **MATCHES `§4.1`/`§4.2`** |
+| **6** | `§2.1` item 5's three signatures | `src/main/security.ts` exports **`parseToolGroupList`**, **`enablementRequestFrom`**, **`effectiveEnabledGroups`** with the declared parameter and return shapes (**`EnablementRequest`**, whose `ok:false` arm carries **no `requested` member**) | **MATCHES** — and the `offender: null` on the empty-flag refusal is why `neg-refusal-names-itself` asserts that shape's token against `raw`/`reason` rather than `offender` |
+| **7** | `§9 T-3`'s tracker rows | `docs/decisions.md` `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS`; the unit's DONE row + the gate-4 annotations at the head of `docs/next-steps.md`'s `CURRENT WORK / handover-state`; `docs/pending.md`'s owed-gates row; `docs/defects.md`'s gate-4 section | **LANDED** (`T-3`'s `(i)`/`(iii)`/`(iv)` discharged; `(ii)` discharged by `pending.md`'s rows) |
+
+### §3c.3 THE FOUR PIN RE-STATEMENTS — AUDITED SITE BY SITE (`A-7`'s positive half, RE-CONFIRMED)
+
+**`VERIFIED-BY-READ` (this pass; four sites, each with a discriminating limb):**
+
+1. **`tests/pd-ui-1-theme-register.test.ts` → `UNTOUCHED_DIGESTS`** — the **re-recording is ANNOTATED, the
+   superseded value is KEPT and the teeth are intact**: `src/shared/types.ts` and `src/main/preload.ts`
+   each carry a **new recorded md5 with `superseded` + `restated: 'U-APP-HARNESS-READINESS'`**, and the
+   reader's mechanism (**per-file recorded-md5 equality**, with the **`⟨A-1⟩` committed-change detector**)
+   and the **weaker superseded working-tree limb** both stand.
+2. **`tests/pd-vendor-set.test.ts` → the baseline byte-identity rows and the line-count row** — the
+   `A-7`-retitled titles are **RE-STATED for `types` ONLY**, with *"the as-filed title and claim stand for
+   the other three"*, and the failing case is spelled out: *"an UNRECORDED move of this file still FAILS
+   this row"*.
+3. **`tests/pd-vendor-manifest.test.ts` → the four baseline files' byte-identity row** — same shape: the
+   **recorded** value moves, the **as-filed** value is quoted beside it, the **superseded reading is named**.
+4. **`tests/pd-ui-6-modal-state-adoption.test.ts` → the `renderer.ts` boot-call form** — the row's readers
+   now match the **chained, multi-line, awaited** form of `host.boot(...)` (whose bytes this unit moved),
+   with the re-statement dated and signed.
+
+**NO RELAXATION WAS FOUND BY THE GATE-4 AUDIT (`§3a.2` `A-7`) AND NONE IS PRESENT AT THIS HEAD (`RCA-8(c)`
+is what licenses the re-recording — the decision row `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS` clause
+(v) is *"RE-STATED, NEVER RELAXED"*, and each site above names its unit and its reason).** **THE SUITES'
+OWN COUNTS ARE RECORDED READINGS, NOT RE-MEASURED HERE: `23 / 69 / 55 / 62` passed** (measurer: the
+landing/supervisor pass; **this pass holds no shell**). **WHAT WOULD SETTLE THEM: a shell-bearing pass
+running the four files.**
+
+### §3c.4 THE TRIO, THE LIVE RE-RUN, AND THE STALE FIGURES THIS PASS CORRECTED
+
+- **THE TRIO AT THIS HEAD (`RECORDED READING`, quoted with its measurer — the supervisor's run; this pass
+  ran no leg):** **`npm test` = `212 files (1 failed / 211 passed) · 4578 tests (1 failed / 4520 passed /
+  57 skipped)`**; **`typecheck` exit `0`**; **`build` exit `0`**. **THE SINGLE RED IS THE CARRIED
+  `P-SM-1`** (defect `PANE-TOGGLE-STAGE-COLLAPSE`), **not this unit's** — the carried-baseline discipline
+  of `§7 V-2` holds. **STALE FIGURES CORRECTED, BOTH KEPT VISIBLE IN THEIR OWN ROWS (`RCA-8(c)`):** the
+  `208 files (1 failed / 207 passed) · 4472 tests (1 failed / 4426 passed / 45 skipped)` reading carried by
+  `docs/next-steps.md`'s fresh-session pickup block **predates the app-side landing and the pin
+  re-statements**; the same block's **`2 873`-line `src/main/mcp-server.ts` count** (`docs/pending.md`'s
+  FB-2 row) is likewise a reading of an earlier head.
+- **THE LIVE RE-RUN (`RECORDED READING`; measurer: the LIVE-SCENARIO RUNNER):** **`100 blocks, 31 PASS /
+  39 FAIL / 3 PARKED / 27 DIAG` — IDENTICAL to the pre-change reading.** **THE DEFAULT-BRANCH ARGUMENT,
+  STATED PLAINLY: the driver passes no `--enable-tool-groups` and no env member and never reads `boot`, so
+  it takes the default branch — exactly what `§0.2 S-9` / `§7 V-3` item 2 predicted for a
+  default-preserving change.** **IT IS A DEFAULT-BRANCH READING AND SAYS NOTHING ABOUT THE OPT-IN BRANCH OR
+  ABOUT THE APP'S HEALTH.** **THE `§5.U` MATRIX DEFECT WAS RE-CONFIRMED ON IT** (only `2` of `8` rows
+  returned a verdict while the driver still printed `OK`; already filed as
+  `docs/defects.md` `LIVE-DRIVER-MATRIX-MAPPING-INCOMPLETE`). **`PD-UI-6`'s four live claims were
+  re-confirmed ADDITIVELY** (**their own row's reading, not this unit's**).
+- **THE `sha256` AND LINE COUNT `§10 C-11` ITEM (8) OWED: STILL OWED — THIS PASS HELD NO SHELL AND
+  PRODUCES NEITHER.** **WHAT WOULD SETTLE IT: any shell-bearing pass running a digest over this file.**
+
+### §3c.5 CROSS-REFERENCES — EVERY CITATION RESOLVES, NONE POINTS AT A MOVED FILE
+
+**`grep` over `docs/**` for `U-APP-HARNESS-READINESS` and for `docs/specs/unit-app-harness-readiness.md`
+resolves every citing site at this head:** `docs/decisions.md` (the `DECIDED:` row) · `docs/next-steps.md`
+(the DONE row + its gate-4 annotation) · `docs/pending.md` (the owed-gates row and the date row) ·
+`docs/defects.md` (the gate-4 section's rows) · `docs/specs/unit-divergence-drive-fixture.md` (`§0B.1`,
+`§0B.2` `F-6`, `§0B.3` `F-7`, `§3a`/`§3b`, `§9` `T-1`/`E-1`/`E-3`, `§10.3`/`§11.3` — **the sibling's `§0B`
+amendment ledger IS landed and cites this file by symbol and §, never by line**) · this file's own `§9`
+`T-1`…`T-4`. **NO citation in that set points at a moved, renamed or archived file.** **The id sets are
+kept apart exactly as `§3a.7` requires** (`§5.4`'s pre-registered `A-1`…`A-10` probes · `§3a`'s OWN
+`A-1`…`A-7` findings · `§3.2`'s `F-1`…`F-9` fail-states · `§3b`'s `S-1`…`S-3` owed ids · **this `§3c`/`§3d`
+adds NO id to any of those sets**). **THE ONE CITATION THIS PASS REPAIRED IS IN `§3a.2`/`§3a.4`/`§3b`:** the
+two `docs/defects.md` rows owe the ids `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE` and
+`APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT`, while the rows **FILED** read
+`SPEC-AMENDMENT-OWED-APP-ENABLEMENT-PREDICATE-DIVERGENCE` and
+`SPEC-AMENDMENT-OWED-APP-D3-READINESS-MEMBER-COUNT-DRIFT` — **the as-filed citing sentences are KEPT and the
+live row ids are annotated beside them** (`RCA-8(c)`; a reader following the citation now lands on a row).
+
+### §3c.6 THE TWO SPEC-MARKER OWED ITEMS (`§3b` `S-1`/`S-2`) AND THE `A-4`/`A-5` DISPOSITION
+
+**`S-1` (the `A-4` enablement predicate) — OWED, NOT APPLIED, AND THE AMENDMENT WAS *NOT* DECIDED HERE.**
+**THE BUILD DID NOT MOVE, AND THE CLAUSE DID NOT MOVE: the two still answer the EMPTY-request-with-a-source
+shape differently** (`src/main/main.ts`'s `requested.length > 0` vs `§2.2 B-1` item 3 item 1's
+`source === 'argv' | 'env'`), **and the remand's own generator asserts the divergence as still real**
+(`neg-presence-under-optin-source`, whose discrimination proof reds if either side moves). **THE OPEN
+ITEM, WITH ITS SHAPE: (i) which predicate NAMES the `boot` member's presence rule, and (ii) what `P-6`'s
+*"a normal launch is byte-for-byte today's behaviour"* means for a NO-OP request
+(`--enable-tool-groups=read,dispatch`, which today GAINS the member while requesting nothing new).**
+**OWNER: THE SPEC-WRITER.** **THE COST OF LEAVING IT, STATED PLAINLY: a client reading the contract
+literally would expect `boot` ABSENT on that launch and find it PRESENT.** **NOT SETTLED BY READING — what
+would settle it: a spec-writer ruling, or an implementer change that makes `main.ts` read the contract's
+predicate (a `src/**` act, out of this pass's wall).**
+**`S-2` (the `§8 D-3` member count) — OWED, NOT APPLIED: `§8 D-3`'s *"exactly four-member state shape"*
+still stands beside `§2.2 B-1` item 2's FIVE members, and the five are what the code and the tests
+carry.** **OWNER: THE SPEC-WRITER** (an `RCA-8(c)` correction beside the as-filed text). **This is a
+ONE-LINE doc defect and it is left unfixed ONLY because `§8` is another pass's contract text — the review
+record flags it as a FINDING, and it is filed in `docs/defects.md`.** **BOTH owed items are recorded, with
+their owners, in `§3d` `R-2`/`R-3` and in `docs/defects.md`'s two rows.**
+
+---
+
+## §3d. WHAT REMAINS OWED AFTER THE GATE-7/8 PASS — ONE ROW PER ITEM, EACH WITH ITS OWNER
+
+**LAYER: a DOC-LAYER record of OPEN items. No item below is taken here (this pass writes no code, no test,
+no script and no `src/**` byte), and no item above is closed by being listed.**
+
+| # | The item | OWNER | Its current state, and what would settle it |
+| --- | --- | --- | --- |
+| **`R-1`** | **THE `§4.1`/`§4.2` ARITHMETIC AMENDMENT** — the file still prints the pre-remand `78`/6-row form while its own register test declares **`78 + 11 = 89`** with the `11` generators as a separate declared table | **THE SPEC-WRITER** (this file) | **OWED. NOT APPLIED HERE** — `§3c.1` records it and names the shape (an `RCA-8(c)` annotation beside `§4.2`'s as-filed arithmetic, on the audit note's own pattern). **Settled by: the spec-writer's annotation; this pass may not rewrite the declared column** |
+| **`R-2`** | **`§8 D-3`'s member count (`A-5` / `§3b` `S-2`)** — *"four-member"* vs `§2.2 B-1` item 2's **five** | **THE SPEC-WRITER** | **OWED. NOT APPLIED HERE. The five are what the code (`bootState()`) and the register (`P-SM-2` arm 1) carry.** `docs/defects.md` `SPEC-AMENDMENT-OWED-APP-D3-READINESS-MEMBER-COUNT-DRIFT` |
+| **`R-3`** | **THE `A-4` PREDICATE (`§3b` `S-1`)** — `requested.length > 0` vs `source === 'argv' \| 'env'`, and the un-ruled `P-6` reading for a NO-OP request | **THE SPEC-WRITER** | **OWED. NOT APPLIED HERE; the divergence is STILL LIVE in the build** (`§3c.6`). `docs/defects.md` `SPEC-AMENDMENT-OWED-APP-ENABLEMENT-PREDICATE-DIVERGENCE` |
+| **`R-4`** | **`§9 T-2`'s `docs/specs/mcp-endpoint.md` amendments (two)** — the launch-time grant's scope sentence and the `list_targets` row's conditional `boot` member | **THE SPEC-WRITER, on `docs/specs/mcp-endpoint.md`** | **OWED at this head: `docs/specs/mcp-endpoint.md` is unchanged by this unit, and this review may not amend another unit's contract text.** **Settled by: that spec's own pass** |
+| **`R-5`** | **THE `mountTab` ASYNC-BRANCH RESIDUAL — NOT this unit's, and deliberately not fixed by it.** `host.mountTab`'s own async branches (a search tab, an uncached document) **still install a graph AFTER the settle signal**, so `installed` means *"no further BOOT-time install follows"* and **not** *"no install ever follows"* | **THE UNIT THAT OWNS `src/renderer/sidebar-panes.ts`** (named in `docs/next-steps.md`'s gate-4-remand insert, which records it as *"outside that pass's file wall"*) | **OPEN — A NAMED RESIDUAL, NOT A SILENT ONE.** **Settled by: a unit that sequences those mounts before the settle (a `src/renderer/**` change), with the boot-chain contract unchanged** |
+| **`R-6`** | **THE ENV-GRANT INHERITED BY A GRANDCHILD — `src/main/embeddings.ts`'s `execFileSync('curl', […], { stdio, timeout })` INHERITS `process.env`, so the `PROVIDENT_ENABLE_TOOL_GROUPS` grant reaches the child AND its children** — **a correction to `§2.1 A-1` item 3 item 2 / `F-7`'s custody premise as written** | **THE APP-SIDE UNIT (a future pass over `§2.1 A-1` item 3 item 2 / `F-7`)** — filed as `docs/defects.md` `APP-ENV-GRANT-INHERITED-BY-GRANDCHILD` | **OPEN. `F-7`'s own standing obligation is what it fires: *"a future child-spawn that forwards env MUST re-open this row"* — and the finding shows the CURRENT spawn already carries the class.** **THIS PASS DID NOT VERIFY THE INHERITANCE EMPIRICALLY** (`execFileSync`'s env default is read from the call shape, not measured — **what would settle it: a run that prints the child's `PROVIDENT_ENABLE_TOOL_GROUPS`**) |
+| **`R-7`** | **THE DATE RECONCILIATION** — the `2026-10-15` filing literal vs this pass's measured `2026-09-29` | **THE SPEC-WRITER** (an `RCA-8(c)` annotation beside the literal; **the literal is NOT replaced**) | **RECORDED AND ANNOTATED IN THIS FILE'S HEAD BLOCK AT THIS PASS; the finding stays OPEN in `docs/defects.md` `SPEC-DATE-MISMATCH-TWO-NEW-SPECS` until a spec-writer lands the beside-annotation.** **The sibling spec's dates are that file's own review's item** |
+| **`R-8`** | **THE `sha256` / LINE COUNT of this spec file (`§10 C-11` item (8))** | **THE LANDING/SUPERVISOR PASS (a shell act)** | **STILL OWED — this pass holds no shell and produces neither** |
+| **`R-9`** | **THE FOUR PIN SUITES' PASS COUNTS (`23 / 69 / 55 / 62`) and THE TRIO'S `212 / 4578` FIGURES** | **A SHELL-BEARING PASS** (the supervisor's trio) | **RECORDED READINGS, not re-measured here** (`§3c.3`/`§3c.4`). **Settled by: one trio run; the pin figures by running the four files** |
+
+**⟨ANNOTATED 2026-09-29 BY THE SPEC-WRITER — FOUR OF THE NINE ROWS ABOVE ARE TAKEN BY THIS PASS, AND EVERY ROW
+ABOVE IS KEPT VERBATIM AS ITS PASS'S READING (`RCA-8(c)`: no row is rewritten and nothing is renumbered).⟩**
+**`R-1` — DISCHARGED:** `§4.1`/`§4.2`'s declared column is re-derived beside the as-filed `78`/`6`-row text (the
+six terms UNMOVED plus the separate `11`-entry generator table; `78 + 11 = 89`). **`R-2` — DISCHARGED:** `§8`
+`D-3`'s member count is corrected to **FIVE** beside its as-filed *"four-member"*. **`R-3` — DISCHARGED BY A
+RULING, NOT BY A BUILD CHANGE:** `§2.2 B-1` item 3 item 1's presence predicate is corrected to the build's
+`requested.length > 0` beside its as-filed `source === 'argv' | 'env'` wording — with the disagreeing shape named,
+the no-op request ruled intended, the `P-6` reading stated, and **the limit that a future pass wanting the
+as-filed semantics must change the build (a new unit), never restate the row**. **`R-4` — DISCHARGED, ON ANOTHER
+FILE:** the two `docs/specs/mcp-endpoint.md` amendments are landed **by this same pass** at that file's launch-route
+clause (beside its `§6.4`) and at its `§3.4` `boot`-member clause; **recorded here so this row does not read
+*OWED*.** **`R-8` — PARTLY DISCHARGED:** the **line count** is taken (a declared `read`-tool reading — **NOT**
+`wc -l`) and the **`sha256` STAYS OWED**; the figures, the instrument note and a citation finding are at **`§10`'s
+note after `C-12`**. **THE OTHER ROWS ARE UNTOUCHED BY THIS PASS:** `R-5` (the `mountTab` async-branch residual),
+`R-6` (the env grant inherited by a grandchild) and `R-9` (the pin/trio counts) **each stand with their own
+owner**; **`R-7`** (the date literal) **stands as the review filed it — and `R-7`'s own settle condition (a
+beside-annotation at the literal) exists at this head in the head provenance block; whether the row is closed is a
+TRACKER act, not this pass's, so it is REPORTED here and not assumed.**
+
+---
+
 ## 4. The typed Property register (code-bearing unit — no exemption is available)
 
 ### 4.1 Is this unit code-bearing? YES
@@ -843,6 +1114,24 @@ namespaced to this unit's own files** and do **not** collide with the sibling un
 (`tests/unit-divergence-spawn-contract.test.ts`'s `P-IM-1..3`/`P-SM-1..3`/`P-TP-1..2`;
 `tests/unit-divergence-fixture-contract.test.ts`'s `P-IM-1..3`/`P-SM-1..3`/`P-TP-1..2`) — **this unit's files are
 separate files, and it edits NEITHER sibling**.
+
+**⟨ANNOTATED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE) — TWO CENSUS CLAIMS IN THIS PARAGRAPH
+ARE RE-DERIVED BESIDE THEMSELVES; THE AS-FILED SENTENCES ABOVE ARE KEPT UNREWRITTEN.⟩** **`(a)` THE ROW-NAMESPACE
+CLAIM:** *"Only `P-IM-` / `P-SM-` / `P-TP-` rows appear. No `F-` row."* — **TRUE OF THE REGISTER, AND NOW TRUE OF
+THE REGISTER ONLY.** At the landed head the unit's register test declares **exactly SIX
+`P-IM-`/`P-SM-`/`P-TP-` rows and no `F-` row** (VERIFIED-BY-READ: `DECLARED_REGISTER.length === 6` plus the
+`F-`-row assertion) **and, SEPARATELY, an ELEVEN-ENTRY NEGATIVE-GENERATOR TABLE whose ids are `neg-<slug>`** —
+**not register rows, not `F-` rows, and not a second register** (the `11` are the gate-4 remand's generators,
+`§3a.4` item 3; `§4.2`'s amendment block below carries them by name). **A reader must not read *"only `P-*`
+rows"* as covering that table, and must not read that table as eleven new register rows.** **`(b)` THE SIBLING'S
+ROW-ID CENSUS:** the paragraph above enumerates `tests/unit-divergence-fixture-contract.test.ts`'s ids as
+**`P-IM-1..3`/`P-SM-1..3`/`P-TP-1..2`** — **that sibling's register now reads `P-IM-1..3` / `P-SM-1..5` /
+`P-TP-1..2`** (its own gate-4 remand added `P-SM-4`/`P-SM-5`; VERIFIED-BY-READ in that file's
+`DECLARED_REGISTER`) — **and the NON-COLLISION the sentence claims STILL HOLDS** (no id of either unit's register
+is shared, because each register namespaces its ids to its own file). **The as-filed enumeration is KEPT; this
+note is the correct one.** **NO OTHER PART OF `§4.1` MOVES:** the pinned seed `0x20261015`, the caps
+(≤100/row · ≤400 total), the stop-after-5 rule and the *"every row reports `held`/`broken`"* requirement all
+stand exactly as filed.
 
 ### 4.2 The register (`6` rows — every term printed as the sum of its factors)
 
@@ -882,6 +1171,69 @@ OWES:**
 above is not rewritten by the audit**: a row whose arm cannot fail is **re-derived against its DECLARED terms**
 (`§4.3` item 4), never silently re-scoped. **The audit's own limit, recorded:** it was taken **read-only over the
 landed test bodies**, so a weakness it did not measure is **not** thereby certified sound.
+
+**⟨ANNOTATED 2026-09-29 BY THE GATE-7/8 DOCUMENTATION REVIEW — `RCA-8(c)`, ANNOTATE-BESIDE: THE DECLARED COLUMN
+ABOVE (`9 + 16 + 7 + 12 + 24 + 10 = 78`, `6` ROWS), ITS TERMS AND ITS AUDIT NOTE ARE ALL KEPT VERBATIM AS THEIR
+PASSES' READINGS AND NOTHING IN THEM IS REWRITTEN. THE LANDED REALITY AT THIS HEAD, `VERIFIED-BY-READ` FROM THIS
+UNIT'S OWN REGISTER TEST (`tests/unit-app-harness-readiness-register.test.ts`), IS:** **the `11` NEGATIVE
+GENERATORS `§3a.4` ITEM 3 TASKED LANDED AS A SEPARATE, DECLARED TABLE — `neg-armed-second-install` ·
+`neg-unarmed-settle` · `neg-regression-after-satisfaction` · `neg-satisfied-then-absent` ·
+`neg-refusal-names-itself` · `neg-partial-apply` · `neg-extreme-values` · `neg-presence-under-optin-source` ·
+`neg-second-writer` · `neg-escalation-name` · `neg-default-list-drift` — each **one declared attempt**, each
+reported `held`/`broken` with `executed == declared`, so THE FILE'S OWN HEAD ARITHMETIC IS
+**`9 + 16 + 7 + 12 + 24 + 10 = 78`, PLUS `11` ⇒ `78 + 11 = 89` DECLARED ATTEMPTS AT THIS HEAD**, with the register
+still **exactly six rows** and `held × 6`.** **THE TWO UNDER-STRENGTH ROWS WERE RE-DERIVED AGAINST THEIR DECLARED
+TERMS (never re-scoped): `P-TP-1`'s VACUOUS `raw.length >= 0` limb is REPLACED by a real property (a refusal must
+QUOTE what it refused), and `P-SM-3`'s UNREACHABLE regression branch is now REACHABLE (the protocol polls once
+after a satisfaction, so its declared `5 * 2` is distinct).** **THE OWED AMENDMENT ON THE AS-FILED TEXT ABOVE IS
+RECORDED, NOT APPLIED: `§4.1`/`§4.2`'s declared column stays as filed, and the beside-annotation belongs to THE
+SPEC-WRITER (`§3d` `R-1`).** **NO TERM IS MOVED, NO ROW IS ADDED TO THE SIX, AND NO CITATION MOVES:** the `89`
+is the **register-plus-generators** figure, the `78` is the **register's own**, and a reader must not collapse
+them.**⟩**
+
+**⟨AMENDED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE) — `§3d`'s `R-1` DISCHARGED: THE DECLARED
+COLUMN IS THE CONTRACT's, AND IT IS HEREBY RE-DERIVED TO THE LANDED REALITY, WITH THE SUPERSEDED `78` / `6` ROWS
+KEPT VISIBLE ABOVE, DATED, UNREWRITTEN. **NOTHING IS DELETED, NO ROW IS RE-SCOPED, NO TERM OF THE SIX IS
+MOVED.**⟩**
+
+**THE RE-DERIVED DECLARED VIEW AT THE LANDED HEAD — TWO SEPARATE DECLARED TABLES, NEVER COLLAPSED:**
+
+| Table | Entries | The declared terms, with their subjects |
+| --- | --- | --- |
+| **THE REGISTER itself (filed terms, UNMOVED)** | **exactly `6` rows** | **`P-IM-1` `2+2+4+1 = 9`** (the default is unmoved; the request is additive) · **`P-SM-1` `4*3+2+2 = 16`** (the readiness observable's transitions are total and consistent) · **`P-SM-2` `2+3+2 = 7`** (presence is gated by the opt-in; the `pending` read never blocks) · **`P-SM-3` `5*2+2 = 12`** (the client's wait protocol always terminates) · **`P-TP-1` `10*2+3+1 = 24`** (no malformed request crashes; every refusal is named) · **`P-TP-2` `4*2+2 = 10`** (no self-escalation route exists) ⇒ **`9 + 16 + 7 + 12 + 24 + 10 = 78`** — **the six rows' terms are UNMOVED and the register stays SIX rows.** |
+| **THE NEGATIVE-GENERATOR TABLE (NEW at the gate-4 remand; SEPARATE; each generator ONE declared attempt)** | **`11` generators** | `neg-armed-second-install` · `neg-unarmed-settle` · `neg-regression-after-satisfaction` · `neg-satisfied-then-absent` · `neg-refusal-names-itself` · `neg-partial-apply` · `neg-extreme-values` · `neg-presence-under-optin-source` · `neg-second-writer` · `neg-escalation-name` · `neg-default-list-drift` ⇒ **`11`** |
+| **THE FILE'S HEAD ARITHMETIC** | **`6` register rows + `11` generators = `17` declared entries** | **`78 + 11 = 89` DECLARED ATTEMPTS** (**the file's own head line**), each reported `held`/`broken` with **`executed == declared`** |
+
+**THE TWO RE-DERIVED ROWS (`§3a.4`'s under-strength findings; `§3b`'s re-derivation row) — THE DECLARED TERMS ARE
+UNMOVED AND THE ROWS WERE RE-DERIVED AGAINST THEM (`§4.3` item 4):**
+
+1. **`P-SM-3` — ITS REGRESSION BRANCH IS NOW REACHABLE, AND OBSERVABLE BY THE PROTOCOL ITSELF, NOT ONLY BY A PURE
+   HELPER.** At the audit head only **`3` of its `5` declared branches were distinct**; the landed row drives the
+   post-satisfaction case **through the protocol** (the client polls **once** after a satisfaction, so the
+   `regression-after-satisfaction` branch is a real, discriminating draw and the declared `5 * 2` term is honest).
+   Verified by the generator `neg-regression-after-satisfaction`, whose own title states the discipline: *"after
+   `installed`, an absent / a regressed / a failed read is a NAMED stop and NEVER a re-wait, driven through the
+   protocol (not only the pure helper)"*.
+2. **`P-TP-1` — ITS VACUOUS LIMB IS REPLACED BY A REAL PROPERTY.** The audit measured that its
+   **`raw.length >= 0` limb asserted nothing** (a tautology, true of every string including the empty one); the
+   landed row replaces it with **a refusal must QUOTE what it refused** — so a refusal naming a *different*
+   problem fails, and `neg-refusal-names-itself` (carrying its own offender and its position) is the draw that
+   holds it. **The declared term `10*2+3+1 = 24` is unmoved.**
+
+**THE REGISTER'S AND THE GENERATORS' LANDS-HEAD READING, AS THEIR OWN REPORT ROWS DECLARE IT (VERIFIED-BY-READ
+this pass in `tests/unit-app-harness-readiness-register.test.ts`; THIS PASS RAN NO SUITE — the held/broken state
+is the TestWriter's recorded reading, never this pass's measurement):** **`held × 6`** for the register
+(`held` is the file's own `counterexamples.length === 0 && attempts === declaredTotal`, and its report row asserts
+every row `held`) and **every one of the `11` generators `held` with `executed == declaredTotal`** (the generator
+report row's own assertion), **so `executed == declared` throughout**; **no counterexamples**, and therefore
+**`stoppedAt: null`** on every reported row (a row stops only after **5** consecutive counterexamples). **THE
+`89` AND THE `78` ARE BOTH TRUE, OF DIFFERENT TABLES** (§3c.1's own sentence, kept); **a reader must not collapse
+them into one register figure.**
+
+**LAYER (`RCA-12`, MANDATORY): DOC-LAYER for this amendment.** It **re-derives the DECLARED column from the
+landed register test's own text**; **it ran no suite, no leg, no Electron and no battery, it re-scopes no row's
+subject, it moves no declared term of the six, and it adds no row to the register.** The register is
+**MAIN-PROCESS `[T]`**-layer, and **a held register is never app-green** (`L-2`).
 
 ### 4.3 The register's own honesty limits
 
@@ -1110,6 +1462,24 @@ the epoch/generation semantics, and the no-blocking pending reply** (§2.2 `B-1`
 tool, a new resource, gating the serve/accept (deadlock), and a notification as the contract carrier**
 (`B-1` item 1's table).
 
+**⟨CORRECTED 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE; the `A-5` doc-drift finding, `§3b`
+`S-2`; `§3d` `R-2` DISCHARGED) — THE MEMBER COUNT ABOVE IS CORRECTED TO **FIVE**, AND THE AS-FILED
+*"exactly four-member state shape"* IS KEPT VISIBLE, DATED, UNREWRITTEN.⟩** **THE SHAPE `D-3` RULES IS THE
+FIVE-MEMBER ONE `§2.2 B-1` item 2 defines — `installed` · `status` · `epoch` · `generation` · `error`** — so
+`D-3` now reads: *"…present IFF the launch opted in (as corrected at `§2.2 B-1` item 3 item 1), with the exactly
+FIVE-member state shape, the three-status projection, the epoch/generation semantics, and the no-blocking pending
+reply"*. **THE EVIDENCE THE CORRECTION RESTS ON (each VERIFIED-BY-READ at this head, or a RECORDED READING with
+its measurer named):** `src/main/mcp-server.ts`'s **`RendererBackend.bootState()` returns exactly those five
+members** (VERIFIED-BY-READ; and the gate-7/8 review's §3c.2 item 1 records the same reading); the register's
+**`P-SM-2` presence arm asserts the boot member's key set as
+`['epoch','error','generation','installed','status']`** (VERIFIED-BY-READ); and **`§3a.2` `A-5` measured the drift
+BY COUNT — four in `D-3` against five in `§2.2 B-1` item 2** (RECORDED READING; measurer: the gate-4 adversarial
+pass). **NO OTHER PART OF `D-3` MOVES:** the ruled carrier (`provident.list_targets` + its resource mirror), the
+opt-in presence rule (as corrected at `§2.2 B-1` item 3 item 1), the three-status projection, the
+epoch/generation semantics, the no-blocking `pending` reply and the refused-carrier list all stand exactly as
+filed. **LAYER (`RCA-12`): DOC-LAYER — a count in this file's own text; no behaviour, no row, no declared term
+and no green moves.**
+
 **`D-4` — THE WAIT IS THE CLIENT'S, BOUNDED, AND NEVER A SLEEP** (§2.2 `B-1` item 5): the contract pins the
 **protocol and its termination conditions**, the **client pins its own interval/deadline**, and **a regression
 after satisfaction is a named failure, never a re-wait**.
@@ -1163,6 +1533,37 @@ this spec file** — **this pass held no shell and produces neither.**
 **`C-12`.** **`docs/next-steps.md`'s DONE row must carry the two readings an app-side unit can be tempted to
 overstate:** *"the leg is green"* **is NOT this unit's claim** (§6.3 `R-3`), and *"the app works"* is **never** a
 claim of this unit (`L-2`).
+
+**⟨DISCHARGED IN PART 2026-09-29 BY THE SPEC-WRITER (`RCA-8(c)`, ANNOTATE-BESIDE; the same pass that takes
+`§3d`'s `R-1`/`R-2`/`R-3`/`R-4`) — `C-11` ITEM (10)'s OWED `sha256` / LINE COUNT, TAKEN AS FAR AS THIS PASS'S
+TOOL WALL ALLOWS, WITH THE INSTRUMENT NAMED AND THE REMAINDER STILL OWED.⟩**
+
+**WHAT WAS TAKEN, AND WITH WHICH TOOL — STATED SO NO FIGURE IS MISTAKEN FOR A MEASUREMENT THIS PASS DID NOT
+MAKE:**
+
+1. **LINE COUNTS: TAKEN, BUT NOT BY `wc -l`.** **This pass held NO SHELL** (its wall is read/search/doc-write
+   only), so **neither `sha256sum` nor `wc -l` was available.** The counts below are **this pass's `read` tool's
+   own end-of-file reading** (`read`, with an offset past each file's end → *"End of file - total N lines"*),
+   taken **AFTER this pass's writes and therefore at the AMENDED head**:
+   **`docs/specs/unit-app-harness-readiness.md` — 1608 lines** ·
+   **`docs/specs/unit-divergence-drive-fixture.md` — 1844 lines** ·
+   **`docs/specs/mcp-endpoint.md` — 705 lines**. **THE INSTRUMENT DIFFERENCE IS DECLARED, NOT SMOOTHED:** a
+   `read`-tool line count and a `wc -l` count can differ by a trailing-newline convention, so these are
+   **`read`-tool readings** — a shell-bearing pass may re-take them — and **no claim is made that they equal a
+   `wc -l` figure.**
+2. **`sha256`: STILL OWED, IN FULL, FOR ALL THREE FILES.** **No digest of any file, of any length, is produced
+   by this pass** — it has no hashing tool and ran no command. **`C-11` item (10)'s digest half therefore STAYS
+   OPEN**, and **what would settle it is any shell-bearing pass running a digest (`sha256sum`) over the three
+   spec files. NO FIGURE IS INVENTED AND NO DIGEST IS APPROXIMATED.**
+3. **A CITATION FINDING, RECORDED BECAUSE THREE SITES CITE THIS ITEM (a finding, never a rewrite):** `C-11`'s
+   own as-filed list puts **the digest/line-count obligation at item (10)** (VERIFIED-BY-READ this pass), while
+   **this file's head status block, `§3c.4` and `§3d` `R-8` each cite *"`§10` item 8"* / *"`§10 C-11`
+   item (8)"*** — and **item (8) is, as filed, *"the two `T-2` amendments' disposition"*.** **The as-filed
+   citations are KEPT (nothing is renumbered); this note is the pointer a reader needs: the OWED digest item is
+   `C-11` item (10)** — and its owner is unchanged (`§3d` `R-8`: a shell act).
+
+**LAYER (`RCA-12`): DOC-LAYER / INSTRUMENT-BOUNDED. These figures describe DOC FILES only: they prove no
+behaviour, retire no gate, and say nothing about any layer of the app, the harness or the live surface.**
 
 ---
 
