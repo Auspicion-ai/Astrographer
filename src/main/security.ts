@@ -237,6 +237,130 @@ export function applyPatch(
   }
 }
 
+// ---------------------------------------------------------------------------
+// U-APP-HARNESS-READINESS §2.1 `A-1` — THE LAUNCH-SCOPED ENABLEMENT ROUTE.
+// `--enable-tool-groups=<g1,g2,…>` (argv) with `PROVIDENT_ENABLE_TOOL_GROUPS`
+// as the ENV FALLBACK; argv WINS. PURE and TOTAL: a malformed/unknown/empty
+// request is a NAMED refusal (`ok:false`), NEVER a throw. This route is a
+// PRE-LAUNCH operator grant: it is ADDITIVE (never subtractive), launch-scoped,
+// and it NEVER writes the persisted config (`P-1`/`P-5`). The vocabulary is the
+// SAME nine `ToolGroup` literals (`VALID_GROUPS`) — no alias, no case folding,
+// no trimming. `defaultSecurityConfig()` above reads NOTHING (`P-1`).
+// ---------------------------------------------------------------------------
+
+const TOOL_GROUP_FLAG = '--enable-tool-groups='
+const TOOL_GROUP_ENV = 'PROVIDENT_ENABLE_TOOL_GROUPS'
+/** The vocabulary, printed in the refusal text so an omission is visible. */
+const GROUP_VOCABULARY = 'read, dispatch, graph, code, module, rag, edit, gnosis, gnosis-edit'
+
+/** The launch-scoped enablement request, parsed. TOTAL: never throws. */
+export type EnablementRequest =
+  | { ok: true; requested: ToolGroup[]; source: 'argv' | 'env' | 'none'; raw: string | null }
+  | { ok: false; reason: string; raw: string; offender: string | null }
+
+function refusal(reason: string, raw: string, offender: string | null): EnablementRequest {
+  return { ok: false, reason, raw, offender }
+}
+
+/** The malformed-FORM refusal (no `=`, a space-separated member, a doubled
+ *  flag) — the house's flag convention is `=`-joined (`§2.1` item 6 row 5/6). */
+export function toolGroupFlagFormRefusal(detail: string): string {
+  return `the flag must be '${TOOL_GROUP_FLAG}<g1,g2,…>' (a space-separated or value-less form is not a member of this surface): ${detail}`
+}
+
+/** Parse ONE comma-separated value into the nine-name vocabulary.
+ *  `null`/`undefined`/`''` ⇒ ok, an EMPTY request, source 'none' (`§2.1` item 5:
+ *  the empty VALUE is "no request", not a refusal). A malformed value ⇒
+ *  `ok:false` (never a throw). */
+export function parseToolGroupList(raw: string | null | undefined): EnablementRequest {
+  if (raw === null || raw === undefined) return { ok: true, requested: [], source: 'none', raw: null }
+  if (typeof raw !== 'string') return { ok: true, requested: [], source: 'none', raw: null }
+  if (raw === '') return { ok: true, requested: [], source: 'none', raw: null }
+  const tokens = raw.split(',')
+  const requested: ToolGroup[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!
+    if (token === '') {
+      return refusal(
+        `the value '${raw}' contains an EMPTY group name at position ${i + 1} (a leading, trailing or doubled ',' is a malformed request)`,
+        raw,
+        '',
+      )
+    }
+    if (!VALID_GROUPS.has(token)) {
+      return refusal(
+        `the value '${raw}' contains '${token}', which is not a tool group (${GROUP_VOCABULARY}; lowercase names only, no whitespace)`,
+        raw,
+        token,
+      )
+    }
+    if (!requested.includes(token as ToolGroup)) requested.push(token as ToolGroup)
+  }
+  return { ok: true, requested, source: 'none', raw }
+}
+
+/** Read the TWO launch inputs and apply the house precedence (argv WINS over
+ *  env). Reads nothing else; writes nothing; never throws. */
+export function enablementRequestFrom(
+  argv: readonly string[],
+  env: Record<string, string | undefined>,
+): EnablementRequest {
+  const args = Array.isArray(argv) ? argv : []
+  const flagMembers = args.filter((a) => typeof a === 'string' && a.startsWith(TOOL_GROUP_FLAG))
+  const formOffenders = args.filter(
+    (a) => typeof a === 'string' && a !== TOOL_GROUP_FLAG && (a === TOOL_GROUP_FLAG.slice(0, -1) || a.startsWith(TOOL_GROUP_FLAG.slice(0, -1))),
+  )
+  if (flagMembers.length > 1) {
+    return refusal(
+      toolGroupFlagFormRefusal(`'${TOOL_GROUP_FLAG}' appears ${flagMembers.length} times in argv; exactly one is required`),
+      flagMembers.join(' '),
+      TOOL_GROUP_FLAG,
+    )
+  }
+  if (flagMembers.length === 1) {
+    const value = flagMembers[0]!.slice(TOOL_GROUP_FLAG.length)
+    if (value === '') {
+      return refusal(
+        'the value is EMPTY (a present flag with no value is a malformed request, not a default)',
+        '',
+        null,
+      )
+    }
+    const parsed = parseToolGroupList(value)
+    // A present-but-REFUSED argv value NEVER falls through to env (a typo must
+    // not be masked by another input).
+    return parsed.ok ? { ...parsed, source: 'argv' } : parsed
+  }
+  if (formOffenders.length > 0) {
+    return refusal(toolGroupFlagFormRefusal(`argv carries '${formOffenders[0]}'`), String(formOffenders[0]), String(formOffenders[0]))
+  }
+  const envRaw: unknown = env === null || env === undefined ? undefined : (env as Record<string, unknown>)[TOOL_GROUP_ENV]
+  // A non-string env value (a hostile/foreign input) is treated as ABSENT —
+  // never a throw; an unset var and an exported empty one both mean "no request".
+  if (typeof envRaw !== 'string' || envRaw === '') return { ok: true, requested: [], source: 'none', raw: null }
+  const parsed = parseToolGroupList(envRaw)
+  return parsed.ok ? { ...parsed, source: 'env' } : parsed
+}
+
+/** base ∪ persisted ∪ requested — order-preserving, deduplicated. PURE.
+ *  A name outside the nine-literal vocabulary is DROPPED (a persisted config is
+ *  an input, never an authority on the vocabulary). */
+export function effectiveEnabledGroups(
+  base: readonly ToolGroup[],
+  persisted: readonly string[],
+  requested: readonly ToolGroup[],
+): ToolGroup[] {
+  const out: ToolGroup[] = []
+  const add = (name: unknown): void => {
+    if (typeof name !== 'string' || !VALID_GROUPS.has(name)) return
+    if (!out.includes(name as ToolGroup)) out.push(name as ToolGroup)
+  }
+  for (const g of Array.isArray(base) ? base : []) add(g)
+  for (const g of Array.isArray(persisted) ? persisted : []) add(g)
+  for (const g of Array.isArray(requested) ? requested : []) add(g)
+  return out
+}
+
 export interface SecurityConfig { token: string | null; enabled: ToolGroup[] }
 
 export class SecurityGate {

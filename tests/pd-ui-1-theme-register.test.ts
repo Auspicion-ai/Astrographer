@@ -118,10 +118,25 @@ const PINNED_BRIDGE_MOCK_CENSUS = [
  *  any of these files passed VACUOUSLY). The recorded digests below were taken from the landed
  *  bytes at this head (`7bbc1d7`), so a COMMITTED change to any of these files now FAILS. The
  *  superseded working-tree reading is RETAINED, labelled as the weaker limb it is. */
-const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string }> = [
-  { file: 'src/shared/types.ts', md5: '303e63d28ec430920aebf0d4a8f3fd3f' },
+const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string; restated?: string }> = [
+  // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (this pass's date; that unit's spec is
+  //  filed 2026-10-15, so the note's date is the PASS date and not the spec's filing date).⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the vendoring/theme landing
+  //  did not move these bytes — and its MECHANISM is unchanged (per-file RECORDED md5 equality, the
+  //  ⟨A-1⟩ committed-change detector above). WHAT MOVED IS THE RECORDED VALUE: a LATER, RECORDED unit
+  //  legitimately moved two of the seven files — `src/shared/types.ts` gains the boot-install
+  //  observable's channel constant (`U-APP-HARNESS-READINESS` §2.2 `B-1` item 4) and
+  //  `src/main/preload.ts` gains the bridge half of that same report — so their CURRENT bytes are
+  //  re-recorded below, and each row's as-filed digest is KEPT VISIBLE beside the new one.
+  //  THE SUPERSEDED VALUES, as filed (kept, never deleted): types `303e63d28ec430920aebf0d4a8f3fd3f`
+  //  · preload `76d2299070d4333e0e66189359baad22`. THE TEETH ARE NOT RELAXED: `md5` stays a RECORDED
+  //  value, so an UNRECORDED move of EITHER file still FAILS this row — a later pass may move the file
+  //  only by re-stating it here, with its reason and its unit named, exactly as this note does.
+  //  (Both new digests MEASURED by this pass at this head: types `ff8c0b9a7cfb2f37cc94c6b018c1f756` ·
+  //  preload `00dba3cdd5e1eb3c7de632a838e3d28b`.)⟩
+  { file: 'src/shared/types.ts', md5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', superseded: '303e63d28ec430920aebf0d4a8f3fd3f', restated: 'U-APP-HARNESS-READINESS' },
   { file: 'src/main/operator-settings-store.ts', md5: '11841179e004f22dd758edbe927f1a40' },
-  { file: 'src/main/preload.ts', md5: '76d2299070d4333e0e66189359baad22' },
+  { file: 'src/main/preload.ts', md5: '00dba3cdd5e1eb3c7de632a838e3d28b', superseded: '76d2299070d4333e0e66189359baad22', restated: 'U-APP-HARNESS-READINESS' },
   { file: 'src/renderer/sidebar-panes.ts', md5: 'df1930a3d6cac72796cc6c42609dd6c6' },
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
@@ -148,6 +163,29 @@ function digestReading(): Array<{ file: string; recorded: string; actual: string
 function committedChangeCorpus(file: string): Buffer {
   const bytes = readFileSync(join(REPO_ROOT, file))
   return Buffer.concat([bytes.subarray(0, 5), Buffer.from(bytes[5] === 0x58 ? 'Y' : 'X'), bytes.subarray(6)])
+}
+/** ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS`.⟩ THE RE-SCOPED READER for the weaker,
+ *  superseded working-tree limb of `P-TH-SM-1 (f)`: a `git status --porcelain` reading over the
+ *  seven pinned paths is ADMISSIBLE iff every path it names (a) carries a RECORDED re-statement in
+ *  `UNTOUCHED_DIGESTS` and (b) reads the RECORDED status code — an unstaged modification (` M`),
+ *  never a deletion, a rename or a staged change. ANY OTHER PATH IN THE READING IS A FAILURE, so an
+ *  unrecorded uncommitted change to any of the seven still reds the row. The oracle is driven BOTH
+ *  ways in the row itself (the empty, fully-committed reading is admissible; an unrecorded path and
+ *  a non-recorded status code both fail), so its discrimination is shown rather than asserted. */
+function unrecordedWorkingTreeChanges(porcelain: string): string[] {
+  const restated = new Set(UNTOUCHED_DIGESTS.filter((d) => d.restated !== undefined).map((d) => d.file))
+  const problems: string[] = []
+  for (const line of porcelain.split('\n')) {
+    if (line.trim() === '') continue
+    const code = line.slice(0, 2)
+    const path = line.slice(3).trim()
+    if (!restated.has(path)) {
+      problems.push(`${path}: no RECORDED re-statement in §4 \`P-TH-SM-1\` (f)`)
+      continue
+    }
+    if (code !== ' M') problems.push(`${path}: status code "${code}" is not the recorded unstaged modification (" M")`)
+  }
+  return problems
 }
 
 // ===========================================================================
@@ -552,12 +590,42 @@ describe('§4 P-TH-SM-1 — nothing G-9-pinned is disturbed (strat:theme-protect
     ).toBe(true)
     // THE SUPERSEDED LIMB, RETAINED AND LABELLED: it catches an UNCOMMITTED working-tree edit
     // (`A-1` removes its vacuous CLAIM, never an assertion the register already carried).
+    // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (reason and unit named; the values are
+    //  in the `UNTOUCHED_DIGESTS` note above).⟩ AS FILED this expectation was the EMPTY reading `''`
+    // over ALL SEVEN paths, taken against a head at which the vendoring/theme landing is COMMITTED.
+    // The two paths `U-APP-HARNESS-READINESS` legitimately moved are UNCOMMITTED at THIS head, so
+    // that reading is no longer `''` — the SUPERSEDED READING (`''`) is therefore KEPT VISIBLE here
+    // as a DRIVEN VALUE (the first control below) instead of being asserted as the whole expectation.
+    // THE MECHANISM IS UNCHANGED (the same `git status --porcelain` over the same seven paths) and
+    // THE MEMBERSHIP IS UNCHANGED (all seven are still scanned), and THE TEETH ARE NARROWED, NOT
+    // LOOSENED: any path this reading names must carry a RECORDED re-statement AND its recorded
+    // status code (` M`, an unstaged modification — never a deletion, a rename or a staged change),
+    // so an UNRECORDED uncommitted change to ANY of the seven still FAILS, while the CONTENT of the
+    // two re-stated files stays pinned by the recorded digests in the limb above. The oracle is
+    // driven BOTH ways below, so the remaining teeth are shown rather than asserted.
     const status = spawnSync('git', ['-C', REPO_ROOT, 'status', '--porcelain', '--', ...UNTOUCHED_BY_THE_LANDING], { encoding: 'utf8' })
     expect(status.status, `could not read \`git status\` for the untouched surface — ${(status.stderr ?? '').trim()}`).toBe(0)
     expect(
-      (status.stdout as string).trim(),
-      '§1.2 (c) / §1.4: (the WEAKER, superseded limb — an uncommitted working-tree change) the persisted carrier (`ThemeSetting`, `coerceTheme`, the `operatorSettings` bridge) and the denied files must carry no uncommitted change against this head',
-    ).toBe('')
+      unrecordedWorkingTreeChanges(status.stdout as string),
+      '§1.2 (c) / §1.4: (the WEAKER, superseded limb — an uncommitted working-tree change) ⟨RE-STATED 2026-09-29, unit U-APP-HARNESS-READINESS⟩ every path this reading names must carry a RECORDED re-statement at its recorded status code — an UNRECORDED uncommitted change to ANY of the seven still fails',
+    ).toEqual([])
+    // THE CONTROLS — the SAME reader driven both ways (the ⟨A-1⟩ pattern: one oracle, a synthetic corpus).
+    expect(
+      unrecordedWorkingTreeChanges(''),
+      'the SUPERSEDED reading (EMPTY — a fully committed tree) stays ADMISSIBLE, exactly as filed: the re-statement does not red a committed head',
+    ).toEqual([])
+    expect(
+      unrecordedWorkingTreeChanges(' M src/renderer/sidebar-panes.ts\n'),
+      '…an UNRECORDED path in the same reading must FAIL — the re-statement is a RECORDED exception, never a relaxation',
+    ).toEqual(['src/renderer/sidebar-panes.ts: no RECORDED re-statement in §4 `P-TH-SM-1` (f)'])
+    expect(
+      unrecordedWorkingTreeChanges(' D src/shared/types.ts\n'),
+      '…and even a RE-STATED path fails on a status code that is not the recorded unstaged modification',
+    ).toEqual(['src/shared/types.ts: status code " D" is not the recorded unstaged modification (" M")'])
+    expect(
+      unrecordedWorkingTreeChanges(' M src/shared/types.ts\n'),
+      '…while the recorded re-statement itself IS admissible, else the two controls above would prove nothing',
+    ).toEqual([])
   })
 
   it('P-TH-SM-1 — the register’s term is printed as the sum of its factors: 6 pin classes × 1 reading + 2 controls = 8', () => {

@@ -30,6 +30,48 @@
 // The comparison set, the demo envelope, the `ok()` labels and the exit
 // contract are UNCHANGED (§3.7 `C-7`), and this unit adds no check.
 //
+// U-DIVERGENCE-FIXTURE — THE DRIVE FIXTURE MISMATCH, AND ITS RULED FIX
+// (docs/specs/unit-divergence-drive-fixture.md §2.1 `C-1` / §2.2 `C-2`):
+//   `C-1` BOTH legs install the SAME demo envelope through ONE SHARED STEP
+//        (`loadFixture`). leg 1 used to rely on the app's boot wiring, which no
+//        longer serves the demo (`S-1`/`S-4`), so its dispatch died with
+//        `unresolved target: {"kind":"cssId","cssId":"inc"}` (`M-2`). The
+//        sequence per leg is exactly: connect → load → [readiness probe] → drive
+//        (a load after the first read would make the census/SSR half compare a
+//        different graph — `C-1` item 3).
+//   `C-2` the load's EFFECT is read back through the leg's OWN tool surface
+//        (`provident.list_targets`, the `read`-group tool this leg already
+//        drives) and a demo surface that did NOT land STOPS the leg loudly
+//        BEFORE any dispatch. It is a PRECONDITION: it emits no comparison row
+//        and moves no census (`D-5`) — and it is never a sleep, because a
+//        timing guess in a leg whose whole value is determinism is a review
+//        finding.
+// The comparison set, the `ok()` labels/order, the demo literal, the `{0,1}`
+// exit contract and the spawn/scratch discipline are UNCHANGED (`C-3`), and
+// this unit adds no check.
+//
+// ⟨T-1 LANDED — the leg's use of the APP-SIDE unit's two capabilities
+// (docs/specs/unit-app-harness-readiness.md §2.1 `A-1` / §2.2 `B-1` item 5; that
+// spec's §9 `T-1` owes THIS file's own amendment, a `§12`-class doc pass).⟩
+//   (i) THE ENABLEMENT MEMBER IS AN ENV ONE, at BOTH Electron spawn sites:
+//       `PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'`, beside the pinned `DISPLAY` /
+//       `ELECTRON_DISABLE_SANDBOX` pair. It MUST be the env spelling: this leg's
+//       argument vector is PINNED at nine members and `siteArgs` THROWS on a
+//       tenth (the sibling unit's `§3.1 C-1`), so a `--enable-tool-groups=` flag
+//       would be a tenth member. Nothing else about the vector, the profiles or
+//       the cleanup moves.
+//   (ii) THE BOUNDED BOOT-INSTALL WAIT, BEFORE the shared load step: the
+//       sequence per leg is now connect → WAIT for `boot.status === 'installed'`
+//       → load → probe → drive. `C-1` item 3's *"after `connect`, BEFORE the
+//       first `drive` read"* is REFINED, not contradicted (the load still sits
+//       after the connect and before the first drive read). The wait reads a
+//       STATE the app publishes; it is NOT a sleep and NOT a timing guess, and
+//       `O-1`'s measured `250`–`540` ms is never a budget. Every arm terminates
+//       in a NAMED LOUD STOP: a missing `boot` member, `status: 'failed'`
+//       (carrying its `error`), an unrecognized status, or the deadline.
+// The readiness PROBE (`C-2`) is unchanged and is NOT replaced by the wait: the
+// wait reads the APP's install, the probe reads the LOAD's own effect.
+//
 // IMPORTING THIS MODULE BOOTS NOTHING (§3.1 `C-1` item 6): the leg runs only
 // when this file is the process's own entry point (the guard at the foot), so
 // the contract above is inspectable without a real Electron boot.
@@ -320,6 +362,13 @@ export function ok(label, cond, extra = '') {
 export function failureCount() {
   return failures
 }
+/** The `checks` counter the comparison helper increments (`§2.3 C-3` item 1),
+ *  exposed so a contract row can show that the `C-2` readiness precondition
+ *  moves NEITHER counter: the probe is a precondition, never a comparison row
+ *  (`C-2` item 2 / `D-5`). Read-only — nothing in the leg's arithmetic changes. */
+export function checkCount() {
+  return checks
+}
 /** The exit contract, `{0,1}` (§3.6 item 6): a clean run exits `0`; any recorded
  *  failure — a boot failure included — exits `1`, whatever the count. */
 export function exitCodeFor(failureTotal) {
@@ -328,6 +377,147 @@ export function exitCodeFor(failureTotal) {
 async function call(client, name, args = {}) {
   const r = await client.callTool({ name, arguments: args })
   return JSON.parse(r.content[0].text)
+}
+
+// ===========================================================================
+// §2.1 `C-1` — THE ONE SHARED LOAD STEP, and §2.2 `C-2` — the drive-readiness
+// read-back.
+// ===========================================================================
+
+/** THE SHARED STEP (`C-1` items 1/2): leg 1 (the real Electron app) and leg 2
+ *  (the DOM-shim battery host) install the SAME demo envelope through this ONE
+ *  helper — the leg passes its OWN client, and this is the module's ONLY load
+ *  call site, so the asymmetry `S-1` measured (one leg loaded, the other relying
+ *  on its host's boot) cannot re-appear as two hand-maintained copies.
+ *
+ *  §2.2 `C-2` item 4 — A REFUSAL NAMES ITSELF. The MCP surface answers a gated /
+ *  unknown tool with an `isError` RESULT, not a throw; discarding it would report
+ *  a refusal as "the demo surface is absent after the load", conflating «the
+ *  group is off» with «the load landed and was superseded». The tool's own error
+ *  text is therefore QUOTED into a named stop. */
+async function loadFixture(client) {
+  const reply = await client.callTool({ name: 'provident.load', arguments: { kind: 'envelope', envelope: demoEnvelope() } })
+  if (reply !== null && reply !== undefined && reply.isError === true) {
+    const text = Array.isArray(reply.content) && reply.content[0] !== undefined ? String(reply.content[0].text) : '(no error text returned)'
+    throw new Error(`the load step was REFUSED by the tool surface: ${text}`)
+  }
+  return reply
+}
+
+/** §2.2 `C-2` item 1 — the ids only the DEMO graph authors (`S-8`): `inc` is the
+ *  dispatch target, `counter` the value an increment lands on, `echo-out` the
+ *  echo sink. A graph that is not the demo cannot carry all three. */
+const DEMO_READBACK_IDS = ['inc', 'counter', 'echo-out']
+
+/** §2.2 `C-2` item 1 — read the load's EFFECT back through this leg's OWN tool
+ *  surface (`FINDING-1` item 5: `provident.list_targets` is a `read`-group tool
+ *  this leg already drives). The app's `Runtime.listTargets()` walks the live
+ *  supervisor's IN-TREE nodes and is SYNCHRONOUS, so this is a read-back —
+ *  never a sleep and never a timing guess (`C-2` item 3). A tool refusal is
+ *  CAPTURED, never swallowed: its own text is what the stop below QUOTES, so the
+ *  reading distinguishes «the group is off» from «the load landed and was
+ *  superseded» from «the load never landed» (`C-2` item 4). */
+async function readSurface(client, tool) {
+  try {
+    const listed = await call(client, tool, {})
+    const nodes = Array.isArray(listed?.nodes) ? listed.nodes : []
+    const ids = nodes.flatMap((n) => [n?.cssId, n?.propsId]).filter((v) => typeof v === 'string')
+    return { ids, error: null }
+  } catch (e) {
+    return { ids: [], error: e && e.message ? String(e.message) : String(e) }
+  }
+}
+
+/** The demo ids the read-back did NOT find, in the contract's own order. */
+function absentDemoIds(read) {
+  return DEMO_READBACK_IDS.filter((id) => !read.ids.includes(id))
+}
+
+/** §2.2 `C-2` items 2/4 — the LOUD stop the leg throws BEFORE any dispatch: it
+ *  NAMES the missing surface and QUOTES the tool error when the read itself was
+ *  refused. A stop is what keeps a `shim = real` row from ever being computed
+ *  over two different graphs — the false green this clause forbids. */
+function readinessStop(leg, read) {
+  const why = read.error === null
+    ? `the demo surface ${absentDemoIds(read).join(', ')} is ABSENT from this leg's live graph after the load`
+    : `the read-back was refused by the tool: ${read.error}`
+  return new Error(
+    `${leg} readiness precondition FAILED (docs/specs/unit-divergence-drive-fixture.md §2.2 C-2): ${why}. ` +
+      `The leg STOPS before any dispatch and emits no comparison row; ids read back: ${JSON.stringify(read.ids)}`,
+  )
+}
+
+// ===========================================================================
+// ⟨T-1 LANDED⟩ THE BOUNDED BOOT-INSTALL WAIT — the CLIENT's half of the
+// app-side unit's protocol (docs/specs/unit-app-harness-readiness.md §2.2 `B-1`
+// item 5), run on leg 1's path BEFORE the shared step under `C-1`.
+//
+// WHY IT EXISTS: the app's own boot install is fire-and-forget and is not
+// sequenced behind `renderer ready` (`U-DIVERGENCE-FIXTURE` §0.1 `S-5`/`O-1`),
+// so an install that lands AFTER this leg's load REPLACES the demo graph — the
+// measured `O-1` race. The app now PUBLISHES its install state, so the leg
+// WAITS ON THE STATE rather than guessing a delay: a sleep would be the timing
+// guess `C-2` item 3 forbids, and this is not one.
+// ===========================================================================
+
+/** THE CLIENT'S OWN POLL CONSTANTS (`… §2.2 B-1` item 5 item 2: the interval and
+ *  the deadline are the CLIENT's to pin, never the app contract's). `O-1`'s
+ *  measured `250`–`540` ms is an OBSERVATION and is NEVER a budget (`F-6`): the
+ *  wait is bounded by the deadline below, whatever this host's install costs. */
+const BOOT_POLL_INTERVAL_MS = 100
+const BOOT_POLL_DEADLINE_MS = 20_000
+
+/** §2.2 `B-1` item 5 — poll the STATE the app publishes on
+ *  `provident.list_targets` until it reads `installed`, and STOP LOUDLY on every
+ *  other arm. Every branch terminates and none of them retries an exhausted
+ *  condition: a reply with NO `boot` member (this launch did not take the
+ *  enablement route), `status: 'failed'` (carrying its own `error` text), a
+ *  status outside the declared three-state set (fail closed, never continue),
+ *  or the deadline with the state still `pending`. On `installed` the caller
+ *  proceeds ONCE — a post-satisfaction re-wait is never taken, and one observed
+ *  regression would be a named failure rather than a re-wait (§2.2 `B-1` item 5
+ *  item 4). */
+async function waitForBootInstalled(client) {
+  const startedAt = Date.now()
+  let polls = 0
+  for (;;) {
+    polls += 1
+    let reply
+    try {
+      reply = await call(client, 'provident.list_targets', {})
+    } catch (e) {
+      throw new Error(
+        `leg 1 boot-install wait FAILED (docs/specs/unit-app-harness-readiness.md §2.2 B-1 item 5): the readiness read was REFUSED by the tool surface: ${e && e.message ? String(e.message) : String(e)}`,
+      )
+    }
+    const boot = reply !== null && typeof reply === 'object' ? reply.boot : null
+    if (boot === null || typeof boot !== 'object') {
+      throw new Error(
+        `leg 1 boot-install wait FAILED (docs/specs/unit-app-harness-readiness.md §2.2 B-1 item 5): the reply carries NO \`boot\` member after ${polls} poll(s), so this launch did NOT take the enablement route and the app publishes no install state to wait on. The launch must enable the \`graph\` group through the env member this leg sets (PROVIDENT_ENABLE_TOOL_GROUPS)`,
+      )
+    }
+    if (boot.status === 'installed') {
+      console.log(`  boot wait: status=installed (epoch=${boot.epoch}, generation=${boot.generation}) after ${polls} poll(s)/${Date.now() - startedAt} ms — the app's own boot install is complete BEFORE the load step (a state read, never a sleep)`)
+      return boot
+    }
+    if (boot.status === 'failed') {
+      throw new Error(
+        `leg 1 boot-install wait FAILED (docs/specs/unit-app-harness-readiness.md §2.2 B-1 item 5): the app's boot chain reported status 'failed' after ${polls} poll(s): ${boot.error === null || boot.error === undefined ? '(no error text was carried)' : String(boot.error)}; the leg STOPS before the load step and emits no comparison row`,
+      )
+    }
+    if (boot.status !== 'pending') {
+      throw new Error(
+        `leg 1 boot-install wait FAILED (docs/specs/unit-app-harness-readiness.md §2.2 B-1 item 5): the published status reads ${JSON.stringify(boot.status)}, which is outside the declared three-state set (pending|installed|failed) — the leg fails CLOSED rather than waiting on a state it cannot read`,
+      )
+    }
+    const waited = Date.now() - startedAt
+    if (waited >= BOOT_POLL_DEADLINE_MS) {
+      throw new Error(
+        `leg 1 boot-install wait FAILED (docs/specs/unit-app-harness-readiness.md §2.2 B-1 item 5): the deadline of ${BOOT_POLL_DEADLINE_MS} ms expired with the status still 'pending' after ${polls} poll(s) (waited ${waited} ms); the leg STOPS before the load step and before any dispatch`,
+      )
+    }
+    await new Promise((resolve) => setTimeout(resolve, BOOT_POLL_INTERVAL_MS))
+  }
 }
 
 // The SAME demo envelope both hosts bootstrap (the renderer's demoEnvelope —
@@ -417,7 +607,7 @@ async function main() {
     '--disable-dev-shm-usage',
     '--user-data-dir=' + electronProfile.path + '',
   ], electronProfile.path, 'direct-spawn'), {
-    cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0', ELECTRON_DISABLE_SANDBOX: '1' },
+    cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0', ELECTRON_DISABLE_SANDBOX: '1', PROVIDENT_ENABLE_TOOL_GROUPS: 'graph' },
   })
   liveChildren.add(electron)
   electron.stdout.resume()
@@ -443,13 +633,30 @@ async function main() {
       '--user-data-dir=' + transportProfile.path + '',
     ], transportProfile.path, 'sdk-stdio-transport'),
     cwd: root,
-    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0', ELECTRON_DISABLE_SANDBOX: '1' },
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0', ELECTRON_DISABLE_SANDBOX: '1', PROVIDENT_ENABLE_TOOL_GROUPS: 'graph' },
   })
   trackTransportChild(eTransport)
   const eClient = new Client({ name: 'r13-electron', version: '0.1.0' })
   let electronOut
   try {
     await eClient.connect(eTransport)
+    // ⟨T-1 LANDED⟩ THE BOUNDED WAIT, BEFORE THE LOAD (`C-1` item 3 refined): the
+    // app's own boot install is fire-and-forget and REPLACES the graph when it
+    // lands (`S-5`/`O-1`), so leg 1 reads the app's published install state until
+    // it reads `installed` — or stops loudly, named, before anything is loaded.
+    await waitForBootInstalled(eClient)
+    // §2.1 `C-1` items 2/3 — the leg's OWN load of the SAME demo envelope leg 2
+    // loads, through the ONE shared step, AFTER `connect` and BEFORE the first
+    // `drive` read (the asymmetry `S-1` measured is closed here).
+    await loadFixture(eClient)
+    console.log('  load: the demo envelope landed on this leg\'s live graph (the shared step, run AFTER the boot wait and BEFORE the readiness probe)')
+    // §2.2 `C-2` items 1/3 — read the load's EFFECT back and STOP LOUDLY if the
+    // demo did not land. The app's host boot is fire-and-forget and is NOT
+    // sequenced behind `renderer ready` (`S-5`/`O-1`), so a dispatch that
+    // assumed the load had landed would race it — and a sleep would only guess.
+    const eRead = await readSurface(eClient, 'provident.list_targets')
+    if (absentDemoIds(eRead).length > 0) throw readinessStop('leg 1', eRead)
+    console.log(`  readiness probe: ${DEMO_READBACK_IDS.join(', ')} addressable in this leg's live graph — the load was IN EFFECT before the first dispatch (no sleep, no timing guess)`)
     electronOut = await drive(eClient)
     ok('electron: dispatch renderedNonEmpty', electronOut.renderedNonEmpty ?? true)
   } catch (e) {
@@ -464,8 +671,9 @@ async function main() {
   const shimTransport = new StdioClientTransport({ command: process.execPath, args: [batteryHost, '--mcp-transport=stdio'] })
   const shimClient = new Client({ name: 'r13-shim', version: '0.1.0' })
   await shimClient.connect(shimTransport)
-  // the battery host boots root-only; load the same demo envelope so both are equal
-  await shimClient.callTool({ name: 'provident.load', arguments: { kind: 'envelope', envelope: demoEnvelope() } })
+  // the battery host boots root-only; the SAME shared step loads the SAME demo
+  // envelope (its own client, one call site for both legs) so both are equal
+  await loadFixture(shimClient)
   const shimOut = await drive(shimClient)
 
   // ---- compare the shim-stable surfaces ---------------------------------------

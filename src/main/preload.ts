@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagJournalPayload, type RagJournalOpResult, type RagJournalAction, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type BootInstallSignal, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagJournalPayload, type RagJournalOpResult, type RagJournalAction, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
@@ -105,6 +105,12 @@ export interface SidebarMethods {
 
 export interface ProvidentBridge {
   ready(): void
+  /** U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — the renderer's BOOT-INSTALL
+   *  signal. Sent once from the boot chain's `.then(...)` boundary (the app's
+   *  initial graph install completed) and from its `.catch(...)` (with the
+   *  chain's own failure text). Main turns it into the boot-install observable,
+   *  which only exists under the `§2.1` `A-1` launch opt-in. */
+  bootSettled(signal: BootInstallSignal): void
   onRequest(handler: (req: RpcRequest) => void): void
   sendReply(reply: RpcReply): void
   notify(payload: NotifyPayload): void
@@ -319,6 +325,12 @@ let sidebarHolder: SidebarMethods = {
 const bridge: ProvidentBridge = {
   ready(): void {
     ipcRenderer.send(IPC_READY)
+  },
+  // U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — the boot-chain completion/failure
+  // signal. One-way (renderer → main); it carries no authority — main only
+  // attaches the state to a read it already serves.
+  bootSettled(signal: BootInstallSignal): void {
+    ipcRenderer.send(IPC_BOOT_READY, signal)
   },
   onRequest(handler: (req: RpcRequest) => void): void {
     ipcRenderer.on(IPC_INVOKE, (_event, req: RpcRequest) => {

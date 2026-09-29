@@ -921,9 +921,37 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
 // ===========================================================================
 // §4 `P-SM-2` — the four baseline files are NOT replaced
 // ===========================================================================
+
+/** ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (this pass's date; that unit's spec is
+ *  filed 2026-10-15, so the note carries the PASS date, never an invented one).⟩
+ *
+ *  WHY: a LATER, RECORDED unit legitimately moved ONE of the four baseline files —
+ *  `src/shared/types.ts` gains the boot-install observable's channel constant
+ *  (`U-APP-HARNESS-READINESS` §2.2 `B-1` item 4) — so this row's AS-FILED current-bytes limb
+ *  (`now === the pre-vendoring blob`) now reads as a FALSE red against a byte-identity claim whose
+ *  SUBJECT is a PAST ACT of the VENDORING: *that* pass did not replace these bytes.
+ *
+ *  WHAT IS KEPT, VERBATIM AND STILL DRIVEN (never relaxed):
+ *   (1) THE VENDORING CLAIM, as the row filed it: the MANIFEST-RECORDED PRE-VENDORING BLOB still
+ *       reads at the manifest's recorded revision with its RECORDED md5 — the SUPERSEDED pin value
+ *       `303e63d28ec430920aebf0d4a8f3fd3f` stays VISIBLE below as a recorded, asserted value, so a
+ *       history rewrite (or a moved recorded revision) still FAILS;
+ *   (2) THE V-4 REGRESSION CLAIM itself, still LIVE for the re-stated file: the current bytes are
+ *       still the FORK's file and NOT the foundation's blob at the manifest's recorded
+ *       `foundation.commit` — a vendoring-style REPLACEMENT of the fork file by the foundation's
+ *       copy FAILS here (the fork's `types.ts` and the foundation's differ: 888 vs 328 lines);
+ *   (3) THE CURRENT-BYTES LIMB, RE-STATED ONLY: it now asserts the NEW RECORDED md5 of the current
+ *       bytes, so an UNRECORDED move of `types.ts` still FAILS — a later pass may move the file only
+ *       by re-stating it here.
+ *  The other three baseline files are UNTOUCHED by this re-statement and keep the as-filed
+ *  byte-identity + digest limbs exactly. */
+const BASELINE_CURRENT_BYTES_RE_STATEMENTS: Record<string, { supersededPreVendoringMd5: string; restatedMd5: string }> = {
+  types: { supersededPreVendoringMd5: '303e63d28ec430920aebf0d4a8f3fd3f', restatedMd5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756' },
+}
+
 describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendored member is a baseline file (strat:baseline-non-replacement)', () => {
   for (const name of BASELINE_FILES) {
-    it(`P-SM-2 / V-4 ⟨A-7 retitled⟩ — src/shared/${name}.ts is BYTE-IDENTICAL to the MANIFEST-RECORDED PRE-VENDORING BLOB (a vendoring edit here is a REGRESSION)`, () => {
+    it(`P-SM-2 / V-4 ⟨A-7 retitled⟩ — src/shared/${name}.ts is BYTE-IDENTICAL to the MANIFEST-RECORDED PRE-VENDORING BLOB (a vendoring edit here is a REGRESSION) ⟨RE-STATED 2026-09-29 for \`types\` ONLY — unit U-APP-HARNESS-READINESS; the as-filed title and claim stand for the other three⟩`, () => {
       // ⟨CORRECTED 2026-09-28 per §3a `A-7` (`TEST-DEFECT`, MED).⟩ The title now says
       // what the row DRIVES: a byte comparison against the recorded pre-vendoring blob
       // of the manifest's RED-SET commit — not a claim about `dom-shim`/`types` being
@@ -936,10 +964,38 @@ describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendor
       const before = preVendoringBytes(`src/shared/${name}.ts`, revision)
       expect(before, `could not read the pre-vendoring bytes of src/shared/${name}.ts at ${revision}`).not.toBeNull()
       const now = readFileSync(join(REPO_ROOT, 'src', 'shared', `${name}.ts`), 'utf8')
-      expect(now, `src/shared/${name}.ts was MODIFIED by the vendoring pass — V-4 is a REGRESSION, not a cleanup (R-3 clause (2))`).toBe(before)
-      // the digest, not only the text, is compared — and it is the DIGEST the row
-      // records, so a later reader sees the reading as a value
-      expect(md5(now), `src/shared/${name}.ts: the md5 of the current bytes must equal the md5 of the recorded pre-vendoring blob`).toBe(md5(before!))
+      const restated = BASELINE_CURRENT_BYTES_RE_STATEMENTS[name]
+      if (restated === undefined) {
+        expect(now, `src/shared/${name}.ts was MODIFIED by the vendoring pass — V-4 is a REGRESSION, not a cleanup (R-3 clause (2))`).toBe(before)
+        // the digest, not only the text, is compared — and it is the DIGEST the row
+        // records, so a later reader sees the reading as a value
+        expect(md5(now), `src/shared/${name}.ts: the md5 of the current bytes must equal the md5 of the recorded pre-vendoring blob`).toBe(md5(before!))
+        return
+      }
+      // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS`⟩ the file this unit legitimately moved:
+      // the VENDORING claim (limb 1) and the V-4 REGRESSION claim (limb 2) are re-asserted over the
+      // recorded values, and ONLY the current-bytes limb is re-stated to a NEW RECORDED digest.
+      expect(
+        md5(before!),
+        `src/shared/${name}.ts: the VENDORING claim stays LIVE and UNRELAXED — the recorded pre-vendoring blob still reads at ${revision} as the RECORDED (SUPERSEDED) digest ${restated.supersededPreVendoringMd5}; a history rewrite fails here`,
+      ).toBe(restated.supersededPreVendoringMd5)
+      expect(
+        md5(now),
+        `src/shared/${name}.ts: ⟨RE-STATED 2026-09-29, unit U-APP-HARNESS-READINESS: the file gains the boot-install observable's channel constant; superseded current-bytes value ${restated.supersededPreVendoringMd5} (== the pre-vendoring blob's, the as-filed reading)⟩ the CURRENT bytes must equal the NEW RECORDED md5 — an UNRECORDED move of this file still FAILS this row`,
+      ).toBe(restated.restatedMd5)
+      // limb 2 — V-4's OWN regression, still live: the fork's file is NOT the foundation's copy.
+      const m = loadManifest()
+      const commit = (m?.foundation as Record<string, unknown> | undefined)?.commit
+      expect(commit, 'the manifest records no `foundation.commit` — the V-4 replacement limb cannot be taken').toMatch(/^[0-9a-f]{40}$/)
+      const blob = spawnSync('git', ['-C', FOUNDATION, 'show', `${String(commit)}:src/shared/${name}.ts`], { encoding: 'utf8' })
+      expect(
+        blob.status,
+        `RED (PD-VENDOR §4 P-SM-2): the foundation's src/shared/${name}.ts could not be read at the manifest's recorded commit ${String(commit)} — ${(blob.stderr ?? '').trim()} — the V-4 REPLACEMENT limb would then be a record here rather than an instrument`,
+      ).toBe(0)
+      expect(
+        md5(now),
+        `src/shared/${name}.ts: the V-4 REGRESSION claim stays LIVE — the current bytes must still be the FORK's file and NOT the foundation's blob at ${String(commit)} (a vendoring-style REPLACEMENT fails here)`,
+      ).not.toBe(md5(blob.stdout as string))
     })
   }
 
@@ -1013,7 +1069,7 @@ describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendor
     expect(listed).toEqual(BASELINE_FILES.map((b) => `src/shared/${b}.ts`))
   })
 
-  it('⟨A-7 retitled⟩ P-SM-2 — the current baseline LINE COUNTS equal the MANIFEST-RECORDED values read beside the pin (the recorded values, never a hard-coded SHA)', () => {
+  it('⟨A-7 retitled⟩ P-SM-2 — the current baseline LINE COUNTS equal the MANIFEST-RECORDED values read beside the pin (the recorded values, never a hard-coded SHA) ⟨RE-STATED 2026-09-29 for `types` ONLY — unit U-APP-HARNESS-READINESS⟩', () => {
     // §3.3 item 4's recorded FORK-side line counts — dom-shim 508 · types 874 ·
     // demo-envelope 131 · path-fork-cycle 101 — are the `read` tool's total-line
     // figure, a CONVENTION this row must not re-invent: `demo-envelope.ts` carries no
@@ -1025,13 +1081,38 @@ describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendor
     // reading. The byte-identity row above is the stronger, convention-free assertion.
     const recordedForkLineCounts: Record<string, number> = { 'dom-shim': 508, types: 874, 'demo-envelope': 131, 'path-fork-cycle': 101 }
     const lineCount = (text: string): number => text.split('\n').length
+    // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (the unit's spec is filed 2026-10-15;
+    //  this note carries the PASS date).⟩ `src/shared/types.ts` legitimately gains the boot-install
+    //  observable's channel constant, so its line count moves +14 (as filed `read` 874 → now 888;
+    //  this row's `split('\n').length` convention reads it 875 → 889). The SUPERSEDED VALUES STAY
+    //  VISIBLE (`recordedForkLineCounts` above and `supersededPreVendoring` below, both still
+    //  ASSERTED against the pre-vendoring blob), and the CURRENT count is re-recorded — an
+    //  UNRECORDED move of `types.ts` still FAILS, the file being then neither 889 nor 875.
+    //  The other three baseline files keep the as-filed invariant limb exactly.
+    const restatedLineCounts: Record<string, { supersededPreVendoring: number; restatedCurrent: number }> = {
+      types: { supersededPreVendoring: 875, restatedCurrent: 889 },
+    }
     const revision = preVendoringRevision()
     const problems: string[] = []
     for (const name of BASELINE_FILES) {
       const nowText = readFileSync(join(REPO_ROOT, 'src', 'shared', `${name}.ts`), 'utf8')
       const preText = preVendoringBytes(`src/shared/${name}.ts`, revision)!
-      if (lineCount(nowText) !== lineCount(preText)) {
-        problems.push(`${name}.ts: the line count moved against the recorded pre-vendoring blob at ${revision} (recorded fork figure: ${recordedForkLineCounts[name]})`)
+      const restated = restatedLineCounts[name]
+      if (restated === undefined) {
+        if (lineCount(nowText) !== lineCount(preText)) {
+          problems.push(`${name}.ts: the line count moved against the recorded pre-vendoring blob at ${revision} (recorded fork figure: ${recordedForkLineCounts[name]})`)
+        }
+        continue
+      }
+      if (lineCount(preText) !== restated.supersededPreVendoring) {
+        problems.push(
+          `${name}.ts: the RECORDED PRE-VENDORING line count moved (recorded ${restated.supersededPreVendoring} in this row's convention, read ${lineCount(preText)} at ${revision}) — the historical claim is not relaxed, it is asserted`,
+        )
+      }
+      if (lineCount(nowText) !== restated.restatedCurrent) {
+        problems.push(
+          `${name}.ts: ⟨RE-STATED 2026-09-29, unit U-APP-HARNESS-READINESS: the superseded reading was 875 (this row's convention) / 874 (\`read\`), the as-filed \`now === pre-vendoring\` limb⟩ the CURRENT line count must equal the NEW RECORDED value ${restated.restatedCurrent} — an UNRECORDED move of this file still fails`,
+        )
       }
     }
     expect(problems, 'the fork-side line counts are RECORDED values (§3.3 item 4) and a vendoring edit must not move them').toEqual([])

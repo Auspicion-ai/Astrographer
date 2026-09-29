@@ -1619,6 +1619,28 @@ function text(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] }
 }
 
+/** U-APP-HARNESS-READINESS §2.2 `B-5` — the `provident.list_targets` READ (and
+ *  its `mcp://provident/targets` resource mirror, which shares it).
+ *
+ *  A backend that exposes the boot-install observable (`§2.2` `B-1`) gets the
+ *  `boot` member ATTACHED to the runtime's own value — the value itself is
+ *  never changed, so `Runtime.listTargets()` and every non-opted-in caller see
+ *  exactly today's `{ nodes }` (`P-6`).
+ *
+ *  While the state is `pending` the read is answered FROM MAIN STATE ALONE —
+ *  it does NOT await the renderer, whose readiness/per-request timeouts are
+ *  30 s/60 s, so the poll cannot block on the very install it waits for. The
+ *  empty target list is the truth in that state (the app has no installed graph
+ *  to address) and is never returned once the install is observed. */
+async function listTargetsRead(backend: McpBackend): Promise<unknown> {
+  const boot = (backend as { bootState?: () => BootInstallState | null }).bootState?.() ?? null
+  if (boot === null) return backend.invoke('listTargets', {})
+  if (boot.status === 'pending') return { nodes: [], boot }
+  const value = await backend.invoke('listTargets', {})
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) return { ...(value as Record<string, unknown>), boot }
+  return { nodes: Array.isArray(value) ? value : [], boot }
+}
+
 /** U5 (M-r4) — format an MCP IMAGE content block from a data-URI. The MCP SDK
  *  supports `{ type: 'image', data: <base64>, mimeType: <mime> }`. Parses the
  *  `data:<mime>;base64,<data>` URI into the data + mimeType. A non-data-URI
@@ -2192,7 +2214,7 @@ export class ProvidentMcpServer {
           'the addressable vocabulary for provident.dispatch.',
         inputSchema: {},
       }, async () => {
-        const value = await backend.invoke('listTargets', {})
+        const value = await listTargetsRead(backend)
         return text(value)
       }))
     }
@@ -2507,7 +2529,10 @@ export class ProvidentMcpServer {
           uri,
           { title: `provident.${def.name}`, description: def.description, mimeType: def.mimeType },
           async (u) => {
-            const value = await backend.invoke(def.method, {})
+            // §2.2 `B-1` item 3 item 4 — the `listTargets` resource mirror
+            // carries the same `boot` member as the tool (present under the
+            // opt-in only). Every other resource is untouched.
+            const value = def.method === 'listTargets' ? await listTargetsRead(backend) : await backend.invoke(def.method, {})
             return { contents: [{ uri: u.href, text: JSON.stringify(value, null, 2), mimeType: def.mimeType }] }
           },
         ) as RegisteredResource)
@@ -2636,6 +2661,31 @@ export interface RendererBackendOptions {
   readyTimeoutMs?: number
   invokeTimeoutMs?: number
   largePayloadBytes?: number
+  /** U-APP-HARNESS-READINESS §2.2 `B-1` — OPT IN to the boot-install
+   *  observable. Present IFF the launch took the `§2.1` `A-1` enablement route
+   *  (a well-formed request); a default launch leaves it absent, so the
+   *  `provident.list_targets` reply stays exactly `{ nodes }` (`P-6`). */
+  bootObservable?: boolean
+}
+
+/** §2.2 `B-1` item 2 — the boot-install observable's exact shape. A STATE, not
+ *  a delay: `installed === (status === 'installed')`, `error` is non-null iff
+ *  `status === 'failed'`, `epoch` ≥ 1, `generation` ≥ 0 (0 while not
+ *  installed). */
+export interface BootInstallState {
+  installed: boolean
+  status: 'pending' | 'installed' | 'failed'
+  epoch: number
+  generation: number
+  error: string | null
+}
+
+/** §2.2 `B-1` item 4 — the boot chain's own signal: `ok:true` from its
+ *  `.then(...)` (the install completed) and `ok:false` + the chain's error text
+ *  from its `.catch(...)`. */
+export interface BootInstallSignal {
+  ok: boolean
+  error?: string | null
 }
 
 /** A minimal webContents/window event-target shape (so the backend is testable
@@ -2669,11 +2719,23 @@ export class RendererBackend implements McpBackend {
     timer: ReturnType<typeof setTimeout>
   }>()
   private window: WindowLike | null = null
+  /** §2.2 `B-1` — the boot-install observable. `bootObservable` is a PUBLIC
+   *  field so the opt-in is readable off the instance (the red set's seam).
+   *  `bootArmed` is the per-epoch arm: a settle is honoured only after the
+   *  renderer signalled ready, so a repeated signal in the SAME epoch cannot
+   *  resurrect a failed boot (`F-4`) — only a reload (`epoch++`) can. */
+  readonly bootObservable: boolean
+  private bootStatus: 'pending' | 'installed' | 'failed' = 'pending'
+  private bootEpoch = 1
+  private bootGeneration = 0
+  private bootError: string | null = null
+  private bootArmed = false
 
   constructor(opts: RendererBackendOptions = {}) {
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30000
     this.invokeTimeoutMs = opts.invokeTimeoutMs ?? 60000
     this.largePayloadBytes = opts.largePayloadBytes ?? 1_000_000
+    this.bootObservable = opts.bootObservable === true
     this.readyPromise = this.newReadyPromise()
   }
 
@@ -2723,7 +2785,49 @@ export class RendererBackend implements McpBackend {
   markReady(): void {
     if (this.ready) return
     this.ready = true
+    // §2.2 `B-1` — the renderer's ready signal ARMS this epoch's boot-install
+    // observation (the boot chain's signal follows it).
+    this.bootArmed = true
     this.resolveReady?.()
+  }
+
+  /** §2.2 `B-1` item 2 — the boot-install observable's CURRENT state, or null
+   *  when this launch did not opt in (`§2.2` `B-1` item 3: the member is
+   *  present IFF the launch took the `A-1` route). PURE read: never awaits the
+   *  renderer, so a pending poll cannot block on the install it waits for
+   *  (`B-5`). */
+  bootState(): BootInstallState | null {
+    if (!this.bootObservable) return null
+    return {
+      installed: this.bootStatus === 'installed',
+      status: this.bootStatus,
+      epoch: this.bootEpoch,
+      generation: this.bootGeneration,
+      error: this.bootError,
+    }
+  }
+
+  /** §2.2 `B-1` item 4 — the boot chain's completion (`ok:true`) or its failure
+   *  (`ok:false`, carrying the chain's own text). A successful install
+   *  increments `generation`; a failure is NAMED and is never reported as
+   *  `installed`, and never falls back to `pending`-forever (`F-4`). */
+  markBootSettled(signal: BootInstallSignal): void {
+    if (!this.bootObservable) return
+    const ok = signal?.ok === true
+    // A settle is honoured only when this epoch is armed (a ready signal has
+    // arrived) — an unarmed settle cannot resurrect a terminal state.
+    if (!this.bootArmed && this.bootStatus !== 'pending') return
+    this.bootArmed = false
+    if (ok) {
+      this.bootStatus = 'installed'
+      this.bootError = null
+      this.bootGeneration += 1
+      return
+    }
+    const text = typeof signal?.error === 'string' && signal.error !== '' ? signal.error : 'the renderer boot chain failed'
+    this.bootStatus = 'failed'
+    this.bootError = text
+    this.bootGeneration = 0
   }
 
   /** H5 (§5.1.9) — broadcast a main→renderer event (e.g. the `rag-store-changed`
@@ -2750,6 +2854,14 @@ export class RendererBackend implements McpBackend {
     }
     this.pending.clear()
     this.ready = false
+    // §2.2 `B-1` item 3 item 3 / `O-5` — a renderer reload DESTROYS the graph,
+    // so the pre-reload install must not be read as current: `epoch` advances
+    // and the state re-arms at `pending` with `generation` 0.
+    this.bootEpoch += 1
+    this.bootStatus = 'pending'
+    this.bootGeneration = 0
+    this.bootError = null
+    this.bootArmed = false
     // release any awaiter on the current gate with the reset reason
     this.rejectReady?.(new Error(reason))
     this.readyPromise = this.newReadyPromise()

@@ -963,14 +963,45 @@ describe('§4 P-SM-1 — nothing G-9/X-9 pins is disturbed (strat:protected-pin-
     expect(pkg.scripts['test:watch']!).not.toMatch(/--testTimeout/)
   })
 
-  it('P-SM-1(d) — the four baseline files are BYTE-UNCHANGED against their PRE-VENDORING bytes', () => {
+  it('P-SM-1(d) — the four baseline files are BYTE-UNCHANGED against their PRE-VENDORING bytes ⟨RE-STATED 2026-09-29 for `src/shared/types.ts` ONLY — unit U-APP-HARNESS-READINESS⟩', () => {
+    // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (that unit's spec is filed 2026-10-15;
+    //  this note carries the PASS date).⟩ WHY: this row's SUBJECT is a PAST ACT of the vendoring pass
+    //  ("the vendoring did not replace the four baseline files"), but its MECHANISM was a LIVE
+    //  byte-equality against the pre-vendoring blob, so a LATER, RECORDED change to one of the four
+    //  reads as a false red. `src/shared/types.ts` gains the boot-install observable's channel
+    //  constant (`U-APP-HARNESS-READINESS` §2.2 `B-1` item 4).
+    //  WHAT IS KEPT (never relaxed): the three untouched files keep the as-filed limb EXACTLY
+    //  (`current bytes === the pre-vendoring blob at the recorded revision`); for the re-stated file
+    //  the pre-vendoring blob is still READ at the recorded revision and must still equal its
+    //  RECORDED (SUPERSEDED) digest `303e63d28ec430920aebf0d4a8f3fd3f`, which stays VISIBLE here.
+    //  WHAT IS RE-STATED: only the CURRENT-bytes limb — now a NEW RECORDED md5, so an UNRECORDED move
+    //  of `types.ts` still FAILS (a later pass may move it only by re-stating this row). An
+    //  unrecorded move of any of the other three still fails the as-filed limb.
+    const RESTATED_BASELINE_BYTES: Record<string, { supersededPreVendoringMd5: string; restatedCurrentMd5: string }> = {
+      'src/shared/types.ts': {
+        supersededPreVendoringMd5: '303e63d28ec430920aebf0d4a8f3fd3f',
+        restatedCurrentMd5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756',
+      },
+    }
     for (const rel of BASELINE_FILES_NOT_REPLACED) {
       const r = spawnSync('git', ['-C', REPO_ROOT, 'show', `cf19d4e:${rel}`], { encoding: 'utf8' })
       expect(r.status, `could not read the pre-vendoring bytes of ${rel}`).toBe(0)
+      const restated = RESTATED_BASELINE_BYTES[rel]
+      if (restated === undefined) {
+        expect(
+          readFileSync(join(REPO_ROOT, rel), 'utf8'),
+          `${rel} was modified — V-4/P-SM-1(d): a vendoring pass that touches a baseline file is a REGRESSION`,
+        ).toBe(r.stdout as string)
+        continue
+      }
       expect(
-        readFileSync(join(REPO_ROOT, rel), 'utf8'),
-        `${rel} was modified — V-4/P-SM-1(d): a vendoring pass that touches a baseline file is a REGRESSION`,
-      ).toBe(r.stdout as string)
+        md5OfBytes(r.stdout as string),
+        `${rel}: the VENDORING claim stays LIVE — the recorded pre-vendoring blob still reads at cf19d4e as the RECORDED (SUPERSEDED) digest ${restated.supersededPreVendoringMd5}`,
+      ).toBe(restated.supersededPreVendoringMd5)
+      expect(
+        md5OfFile(join(REPO_ROOT, rel)),
+        `${rel}: ⟨RE-STATED 2026-09-29, unit U-APP-HARNESS-READINESS: the file gains the boot-install observable's channel constant; superseded current-bytes value ${restated.supersededPreVendoringMd5} == the pre-vendoring blob's, the as-filed reading⟩ the CURRENT bytes must equal the NEW RECORDED md5 — an UNRECORDED move of this file still FAILS`,
+      ).toBe(restated.restatedCurrentMd5)
     }
   })
 

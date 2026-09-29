@@ -33,6 +33,10 @@ declare global {
   interface Window {
     provident?: {
       ready(): void
+      /** U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — the renderer's boot-chain
+       *  completion/failure signal to main (the boot-install observable's only
+       *  source). Optional: an older bridge without it must not throw. */
+      bootSettled?(signal: { ok: boolean; error?: string | null }): void
       onRequest(handler: (req: RpcRequest) => void): void
       sendReply(reply: RpcReply): void
       notify(payload: { uri: string }): void

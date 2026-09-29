@@ -49,7 +49,8 @@ if (o0MainArmed) {
   }
 }
 import { syncModuleRouter } from './mcp-server.js'
-import { SecurityGate, type ToolGroup } from './security.js'
+import { SecurityGate, defaultSecurityConfig, enablementRequestFrom, effectiveEnabledGroups, type ToolGroup } from './security.js'
+import { IPC_BOOT_READY, type BootInstallSignal } from '../shared/types.js'
 import { createQueryAuditLog } from './query-audit.js'
 import { createEngineRagStore } from './engine-rag-store.js'
 import { createEngineCrudRagStore } from './engine-crud-rag-store.js'
@@ -151,11 +152,36 @@ function loadAuthorityMapping(): Record<string, string> {
   return mapping
 }
 
+/** U-APP-HARNESS-READINESS §2.1 `A-1` item 6 — print the effective tool-group
+ *  set at boot. The line is emitted in BOTH cases (a request present or absent)
+ *  so its presence is not itself a flag-detector; it carries no request
+ *  semantics and is a LOG LINE ONLY, never a reply member. */
+function logEffectiveToolGroups(
+  base: readonly string[],
+  persisted: readonly string[],
+  requested: readonly string[],
+  effective: readonly string[],
+  source: string,
+): void {
+  console.error(
+    `[provident-main] tool groups: base=[${base.join(', ')}] persisted=[${persisted.join(', ')}] ` +
+      `requested=[${requested.join(', ')}] effective=[${effective.join(', ')}] (source=${source})`,
+  )
+}
+
 async function main(): Promise<void> {
   console.error(`[provident-main] node ${process.versions.node} electron ${process.versions.electron} crypto=${typeof globalThis.crypto}`)
   const transport = transportFromArgs(process.argv.slice(1))
   const port = portFromArgs(process.argv.slice(1))
 
+  // U-APP-HARNESS-READINESS §2.1 `A-1` — the LAUNCH-SCOPED tool-group
+  // enablement route (`--enable-tool-groups=<g1,g2,…>`, env fallback
+  // `PROVIDENT_ENABLE_TOOL_GROUPS`, argv wins). It is a PRE-LAUNCH operator
+  // grant: ADDITIVE (never subtractive), launch-scoped, and it NEVER writes the
+  // persisted config (`P-1`/`P-5`). A malformed/unknown/empty request is a
+  // NAMED FAIL-CLOSED ABORT (§2.1 item 6) — the launch ends BEFORE the window
+  // and BEFORE `mcp.start()`, so no MCP surface exists on that path.
+  const launchGroups = enablementRequestFrom(process.argv.slice(1), process.env)
   // The manual-UI security settings (mcp-endpoint.md §6.4): persisted to
   // userData so a restart restores them. The MCP server gate is built from the
   // persisted config (read+dispatch ON by default on first run).
@@ -163,7 +189,23 @@ async function main(): Promise<void> {
     path: join(app.getPath('userData'), 'provident-security.json'),
   })
   const persisted = securityStore.get()
-  const gate = new SecurityGate({ token: persisted.token, enabled: persisted.enabled as ToolGroup[] })
+  if (!launchGroups.ok) {
+    console.error(
+      `[provident-main] --enable-tool-groups REFUSED: ${launchGroups.reason}; ` +
+        'the launch is aborted before the MCP surface starts',
+    )
+    app.exit(2)
+    return
+  }
+  // §2.1 item 2 — `effective = union(base, persisted, requested)`, resolved
+  // ONCE, before the gate and the MCP server exist, so the very first
+  // `tools/list` already reflects it (a post-hoc `applyGatePatch` would leave a
+  // boot window in which a requested group is still unregistered).
+  const base = defaultSecurityConfig().enabled
+  const requested = launchGroups.requested
+  const effective = effectiveEnabledGroups(base, persisted.enabled, requested)
+  logEffectiveToolGroups(base, persisted.enabled, requested, effective, launchGroups.source)
+  const gate = new SecurityGate({ token: persisted.token, enabled: effective })
   // L3 (adversarial) — track the last-known persisted enabled set so the live
   // gate is re-patched from the STORE's FILTERED result (not the raw IPC patch).
   // The store drops unknown/invalid groups; if the live gate consumed the raw
@@ -171,7 +213,12 @@ async function main(): Promise<void> {
   // divergence on restart. Deriving the add/remove diff from the store's result
   // keeps the live gate exactly in sync with what is persisted.
   let currentEnabled = persisted.enabled
-  const backend = new RendererBackend()
+  // §2.2 `B-1` item 3 item 2 — the readiness observable's PRESENCE is enforced
+  // here, in MAIN, from the SAME resolved request the gate used: only a launch
+  // that opted into the `A-1` route arms it, so a default launch's
+  // `provident.list_targets` reply carries no `boot` member at all (`P-6`).
+  const optedIn = requested.length > 0
+  const backend = new RendererBackend(optedIn ? { bootObservable: true } : {})
   // Unit U-MENU-1 §2 — the native application-menu surface. The renderer pushes
   // the live pane catalog over `IPC_PANE_CATALOG` (boot + registry change); main
   // rebuilds the View → Panes submenu from the latest catalog. The menu bar is
@@ -837,6 +884,13 @@ async function main(): Promise<void> {
   ipcMain.on(IPC_READY, () => {
     backend.markReady()
     console.error('[provident-main] renderer ready — MCP backend armed')
+  })
+  // §2.2 `B-1` item 4 — the renderer boot chain's COMPLETION signal (its own
+  // `.then(...)` boundary: "the app's initial graph install has completed") and
+  // its FAILURE signal (the `.catch(...)` text). The renderer's boot chain is
+  // the only source; a default launch's backend ignores it (no observable).
+  ipcMain.on(IPC_BOOT_READY, (_event, signal: BootInstallSignal) => {
+    backend.markBootSettled(signal ?? { ok: false, error: 'the renderer boot chain failed without a signal' })
   })
   ipcMain.on(IPC_REPLY, (_event, reply: RpcReply) => {
     backend.handleReply(reply)

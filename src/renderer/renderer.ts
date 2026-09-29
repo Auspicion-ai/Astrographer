@@ -1036,9 +1036,22 @@ async function main(): Promise<void> {
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.
-  void host.boot(runtime).then(() => bootTabs()).catch((e) => {
-    console.error('[provident-renderer] tab boot failed', e)
-  })
+  // U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — this `.then(...)` boundary IS
+  // the app's own definition of "the initial graph install completed", so the
+  // SAME boundary reports it to main (the boot-install observable), and the
+  // `.catch(...)` reports the failure BY NAME (`F-4`). The renderer does not
+  // wait for anything: the signal is fire-and-forget, and main's observable is
+  // a state a client polls.
+  void host
+    .boot(runtime)
+    .then(() => {
+      bootTabs()
+      bridge.bootSettled?.({ ok: true })
+    })
+    .catch((e) => {
+      console.error('[provident-renderer] tab boot failed', e)
+      bridge.bootSettled?.({ ok: false, error: `tab boot failed: ${e instanceof Error ? e.message : String(e)}` })
+    })
   void gnosisPanes.boot()
   void gnosisCrudPanes.boot()
   bridge.ready()

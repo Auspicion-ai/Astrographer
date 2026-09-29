@@ -1894,11 +1894,42 @@ describe("PD-UI-6 §2.1 / §2.6 — the adopted-dependence and the corrected sig
     ).toBe('')
     const installAt = rendererSrc.indexOf('installSettingsModal(')
     const pointersAt = rendererSrc.indexOf('installShellPointers(host)')
-    const bootAt = rendererSrc.search(/void\s+host\.boot\(/)
+    // ⟨RE-STATED 2026-09-29 — unit `U-APP-HARNESS-READINESS` (that unit's spec is filed 2026-10-15;
+    //  this note carries the PASS date).⟩ WHY: this row's SUBJECT — the ONE `installSettingsModal()`
+    //  call site, UNCHANGED in its source form, still positioned AFTER `installShellPointers(host)`
+    //  and BEFORE the boot call — is intact. What moved is a NEIGHBOUR the row reads only for
+    //  POSITION: `U-APP-HARNESS-READINESS` §2.2 `B-1` item 4 hangs the boot-install observable on the
+    //  app's own "initial graph install completed" boundary, so the boot call site is now a
+    //  `.then(...)`/`.catch(...)` CHAIN written across lines (`void host` ⏎ `  .boot(runtime)`), and
+    //  the AS-FILED single-line source form `/void\s+host\.boot\(/` no longer matches it.
+    //  ANNOTATE-BESIDE (`RCA-8(c)`): BOTH recorded forms stay VISIBLE below — the as-filed one first —
+    //  and the position limbs are UNCHANGED. TEETH KEPT: only these RECORDED forms are admissible,
+    //  so an UNRECORDED further move of the boot call (a different form) still FAILS: the oracle is
+    //  driven BOTH ways in the controls below, over synthetic corpora, rather than asserted.
+    const RECORDED_BOOT_CALL_FORMS = [
+      /void\s+host\.boot\(/, // AS FILED (superseded source form, kept visible)
+      /void\s+host\s*\.\s*boot\s*\(/, // ⟨RE-STATED 2026-09-29, unit U-APP-HARNESS-READINESS⟩ the chained multi-line form
+    ] as const
+    const bootCallAt = (src: string): number => {
+      let at = -1
+      for (const form of RECORDED_BOOT_CALL_FORMS) {
+        const i = src.search(form)
+        if (i > -1 && (at === -1 || i < at)) at = i
+      }
+      return at
+    }
+    const bootAt = bootCallAt(rendererSrc)
     expect(pointersAt, '§2.2 item 1: `installShellPointers(host)` must be present').toBeGreaterThan(-1)
-    expect(bootAt, '§2.2 item 1: the boot call must be present').toBeGreaterThan(-1)
+    expect(bootAt, '§2.2 item 1: the boot call must be present in one of the RECORDED source forms (as filed `void host.boot(runtime)`, or the re-stated chained `void host` ⏎ `.boot(runtime)`)').toBeGreaterThan(-1)
     expect(installAt, '§2.2 item 1: the call sits AFTER `installShellPointers(host)` — the POSITION is unchanged').toBeGreaterThan(pointersAt)
     expect(installAt, '§2.2 item 1: …and BEFORE the boot call — the POSITION is unchanged').toBeLessThan(bootAt)
+    // THE CONTROLS — the SAME oracle driven both ways, so the re-stated form is shown to be
+    // non-vacuous and its refusal of an UNRECORDED form is shown rather than asserted.
+    expect(bootCallAt('void host.boot(runtime)\n'), 'the AS-FILED single-line form stays RECORDED (a head that has not yet moved is still green)').toBeGreaterThan(-1)
+    expect(bootCallAt('void host\n  .boot(runtime)\n  .then(() => undefined)\n'), 'the RE-STATED chained form is matched, else this re-statement would be vacuous').toBeGreaterThan(-1)
+    expect(bootCallAt('const p = host.boot(runtime)\n'), 'an UNRECORDED form (the boot call is not `void`-ed) must NOT match — the re-statement is a recorded pair of forms, never "any boot call"').toBe(-1)
+    expect(bootCallAt('void host?.boot(runtime)\n'), 'an UNRECORDED optional-call form must NOT match').toBe(-1)
+    expect(bootCallAt('await host.boot(runtime)\n'), 'an UNRECORDED `await`-ed form must NOT match').toBe(-1)
   })
 
   it('§2.6 clauses 4(b)/4(c) — the three dropped parameters are NOT consumed (`host`/`panels` are never read) and the `renderer.ts` import statement stays', () => {

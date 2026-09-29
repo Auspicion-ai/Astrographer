@@ -331,6 +331,20 @@ export interface RpcReply {
 export const IPC_INVOKE = 'provident:invoke'
 export const IPC_REPLY = 'provident:reply'
 export const IPC_READY = 'provident:ready'
+/** U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — the renderer→main BOOT-INSTALL
+ *  signal: sent from the renderer's existing boot chain at its `.then(...)`
+ *  boundary (the app's initial graph install completed) and from its
+ *  `.catch(...)` (carrying the chain's own failure text). Main maps it into the
+ *  `RendererBackend`'s boot-install observable, which is armed ONLY under the
+ *  launch's `§2.1` `A-1` opt-in. It is inert data — no tool, resource or
+ *  argument can write it back. */
+export const IPC_BOOT_READY = 'provident:boot-ready'
+/** The boot chain's own signal shape (`ok:true` = installed; `ok:false` + the
+ *  chain's error text = failed, `F-4`). */
+export interface BootInstallSignal {
+  ok: boolean
+  error?: string | null
+}
 /** N4 (live-notification-review.md) — the renderer→main "app graph changed"
  *  push channel. Sourced ONLY from the app Runtime re-render (never the
  *  isolated SecurePanels graph — an operator action must not leak to the
