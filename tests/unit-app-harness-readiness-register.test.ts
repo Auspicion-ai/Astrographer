@@ -13,6 +13,34 @@
 //   P-TP-2  strat:app-harness-no-escalation         4*2+2      = 10
 //                                              9 + 16 + 7 + 12 + 24 + 10 = 78 attempts
 //
+// ⟨GATE-4 REMAND — THE DECLARED TERMS, OLD AND NEW (`§3a.4` items 1-3, `§3b` `T-1`; annotate-beside,
+// nothing is re-scoped and NO DECLARED TERM IS REDUCED).⟩
+//
+//   OLD ARITHMETIC (the register's declared column, `§4.2` — UNMOVED, and every row still executes
+//   EXACTLY its declared term):                            9 + 16 + 7 + 12 + 24 + 10 = 78
+//   NEW ARITHMETIC (the NEGATIVE-GENERATOR TABLE, a SEPARATE declared table, 11 generators of one
+//   declared attempt each — declared by name in the table below, never hand-counted):       = 11
+//   TOTAL AT THIS HEAD:                                        78 + 11 = 89 declared attempts
+//
+// THE 11 NEGATIVE GENERATORS (`§3a.4` item 3; each is a negative the register must be able to FAIL):
+//   neg-armed-second-install · neg-unarmed-settle · neg-regression-after-satisfaction ·
+//   neg-satisfied-then-absent · neg-refusal-names-itself · neg-partial-apply · neg-extreme-values ·
+//   neg-presence-under-optin-source · neg-second-writer · neg-escalation-name · neg-default-list-drift
+//
+// RE-DERIVATIONS APPLIED IN PLACE (the declared terms of `P-SM-3` and `P-TP-1` are UNMOVED; the ARMS
+// were re-derived so each can FAIL, which is what `§4.3` item 4 requires):
+//   * `P-TP-1` — the VACUOUS `raw.length >= 0` limb is REPLACED by a real property (a refusal must
+//     quote what it refused: its non-empty `offender` appears in the reason, or the reason names the
+//     emptiness and the refusal carries no `requested` member).
+//   * `P-SM-3` — the `regression-after-satisfaction` branch was UNREACHABLE (only 3 of 5 declared
+//     branches were distinct); `waitForBoot` now polls ONCE after a satisfaction, so the branch is a
+//     distinguishable outcome and the declared `5 * 2` is honest. The other four branches are
+//     unchanged in behaviour.
+//
+// THE SPEC CLAUSES THESE AMENDMENTS OWE (named, NOT decided here): `§3b` `S-1` (the `A-4` enablement
+// predicate — the code's `requested.length > 0` vs the contract's `source === 'argv' | 'env'`) and
+// `§3b` `S-2` (the `§8` `D-3` member-count drift). NEITHER is applied by this test file.
+//
 // EXECUTION DISCIPLINE (§4.1): deterministic plain tables (NO PBT library, NO new devDependency),
 // pinned seed `0x20261015`, caps `≤ 100 attempts per row · ≤ 400 total`, STOP AFTER 5 CONSECUTIVE
 // counterexamples (the abandonment is REPORTED through `stoppedAt`, never hidden), each row reports
@@ -34,13 +62,15 @@
 //   `did-finish-load` events, then a further `markReady()`), so no name is invented for it.
 // A missing seam is a COUNTEREXAMPLE (a broken row), never a collection error.
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import * as securityNs from '../src/main/security.js'
 import { groupForTool, SecurityGate, defaultSecurityConfig, type ToolGroup } from '../src/main/security.js'
+import { createSecurityStore } from '../src/main/security-store.js'
 import {
   ProvidentMcpServer,
   RendererBackend,
@@ -63,6 +93,17 @@ function readText(rel: string): string {
 const SECURITY_SRC = readText('src/main/security.ts')
 const MCP_SRC = readText('src/main/mcp-server.ts')
 const MAIN_SRC = readText('src/main/main.ts')
+
+/** `NEG-SECOND-WRITER` — the writer of the security store. The scan refuses ANY module other than
+ *  `main.ts` that IMPORTS the store module: the offence is the module IDENTITY (the import
+ *  specifier), so a renamed or aliased binding (`import { createSecurityStore as makeStore }` or
+ *  `import * as store` + `store.createSecurityStore(...)`) is caught by the same limb — which is
+ *  exactly the evasion the audit found the landed source-text COUNT could not see. */
+const STORE_MODULE = 'security-store.ts'
+const ALLOWED_WRITER_MODULE = 'main.ts'
+/** The store-writer names looked for in a NON-`main.ts` module's BINDINGS (defence in depth for an
+ *  aliased re-export). `createSecurityStore` is the module's store factory at this head. */
+const STORE_WRITER_NAMES: string[] = ['createSecurityStore']
 
 /** The balanced body of the bracket pair opening at `openIndex` (a SHAPE read, never a line). */
 function balancedBody(src: string, openIndex: number): string | null {
@@ -448,6 +489,171 @@ async function registerRow(id: string, body: (run: RowRun) => Promise<void> | vo
 }
 
 // ===========================================================================
+// ⟨GATE-4 REMAND — THE NEGATIVE GENERATORS THE PBT AUDIT TASKED (`§3a.4` items 1-3; `§3b` `T-1`).⟩
+//
+// THE REGISTER'S OWN ARITHMETIC IS UNMOVED: `§4.2`'s declared column (6 rows · 9+16+7+12+24+10 =
+// 78) remains the authority and every one of its rows still executes EXACTLY its declared term
+// (`finish()`'s `executed == declared`). The generators below are a SEPARATE, DECLARED table,
+// reported with their own declared-vs-executed accounting — the house rule is "re-derive a row
+// against its DECLARED terms, never silently re-scope it" (`§4.3` item 4), so a generator arm is
+// NOT folded into a row's count:
+//
+//   OLD ARITHMETIC (the register's declared terms, UNMOVED):   P-IM-1 9 · P-SM-1 16 · P-SM-2 7 ·
+//     P-SM-3 12 · P-TP-1 24 · P-TP-2 10                       ⇒ executed 78
+//   NEW ARITHMETIC (printed with its own terms; the table below is the authority — no term is
+//     hand-counted here):                                      ⇒ declared = executed = 11 generators
+//   TOTAL AT THIS HEAD: 78 + 11 = 89 declared attempts, each reported `held`/`broken`.
+//
+// Each generator exists BECAUSE an arm could not fail (`§3a.4`): `P-SM-1`'s draw 16 did not
+// distinguish the armed from the unarmed epoch; `P-SM-3`'s regression branch was UNREACHABLE;
+// `P-TP-1`'s `named()` accepted any non-empty reason and its `raw.length >= 0` limb was VACUOUS;
+// `P-TP-2`'s writer check was a source-text COUNT and its escalation limb was satisfied by an
+// `enable|grant` regex alone; `P-IM-1`'s default-surface arm compared against a hand-written list
+// that duplicated the pinned tests' own authority. The discrimination proof for each row is stated
+// in its own comment (what reds it) and is ALSO asserted where a self-red drive is possible.
+// ===========================================================================
+interface NegGenerator {
+  id: string
+  subject: string
+  declared: string
+  declaredTotal: number
+  body: () => Promise<void> | void
+}
+
+interface NegReport {
+  id: string
+  subject: string
+  declared: string
+  declaredTotal: number
+  executed: number
+  held: boolean
+  counterexample: string | null
+}
+
+const NEG_REPORTS: NegReport[] = []
+
+/** The generator harness: the DECLARED term of each row below is `1` (one generator, driven once,
+ *  asserted several ways), and `held` additionally requires the body to have raised nothing — so a
+ *  generator that throws is a COUNTEREXAMPLE and never a silent pass. */
+async function negativeGenerator(row: NegGenerator): Promise<void> {
+  const counterexample = await attemptOf(async () => {
+    await row.body()
+  })
+  const executed = 1
+  const report: NegReport = {
+    id: row.id,
+    subject: row.subject,
+    declared: row.declared,
+    declaredTotal: row.declaredTotal,
+    executed,
+    held: counterexample === null && executed === row.declaredTotal,
+    counterexample,
+  }
+  NEG_REPORTS.push(report)
+  expect(
+    report.held,
+    `NEGATIVE GENERATOR ${report.id} (${report.subject}): ${report.held ? 'held' : 'broken'} · declared ${report.declared} = ${report.declaredTotal} · ` +
+      `executed ${report.executed}` +
+      (report.counterexample !== null ? ` · counterexample: ${report.counterexample}` : ''),
+  ).toBe(true)
+}
+
+// ---------------------------------------------------------------------------
+// `NEG-SECOND-WRITER`'s instrument: the import graph of `src/main/**`, read as MODULE IDENTITY.
+// ---------------------------------------------------------------------------
+/** `A.ts` / `A.js` are the same module specifier in this repo's ESM style. */
+function moduleId(fileName: string): string {
+  return fileName.replace(/\.(ts|tsx|js|mjs|cjs)$/, '')
+}
+
+interface ParsedModule {
+  /** `fileName` → the module id of every module it imports (relative specifiers only). */
+  imports: string[]
+  /** The names it binds from each imported module id. */
+  bindings: Map<string, string[]>
+  src: string
+}
+
+function parseModule(fileName: string, src: string): ParsedModule {
+  const imports: string[] = []
+  const bindings = new Map<string, string[]>()
+  const addBinding = (id: string, name: string): void => {
+    const list = bindings.get(id) ?? []
+    if (!list.includes(name)) list.push(name)
+    bindings.set(id, list)
+  }
+  // `import … from '<spec>'` — the BOUND names come from the clause BEFORE `from`.
+  for (const decl of src.match(/^[ \t]*import[^\n;]*?from\s*['"][^'"]+['"]/gm) ?? []) {
+    const spec = /from\s*['"]([^'"]+)['"]/.exec(decl)
+    if (spec === null) continue
+    const id = moduleId(spec[1]!.replace(/^\.\//, ''))
+    if (!imports.includes(id)) imports.push(id)
+    const clause = decl.slice(0, decl.indexOf('from')).replace(/^[ \t]*import\s*/, '')
+    for (const name of clause.split(/[{},\s]+/).map((t) => t.trim()).filter((t) => t !== '' && t !== 'as' && t !== '*')) addBinding(id, name)
+  }
+  // `import '<spec>'` — a SIDE-EFFECT import of the store module still receives it.
+  for (const decl of src.match(/^[ \t]*import\s*['"][^'"]+['"]/gm) ?? []) {
+    const spec = /['"]([^'"]+)['"]/.exec(decl)
+    if (spec === null) continue
+    const id = moduleId(spec[1]!.replace(/^\.\//, ''))
+    if (!imports.includes(id)) imports.push(id)
+  }
+  return { imports, bindings, src }
+}
+
+/** The names a module REFERENCES as an identifier (import lines excluded, so a binding declaration
+ *  is never mistaken for a use). */
+function referencedNames(mod: ParsedModule): string[] {
+  const body = mod.src.replace(/^[ \t]*import[^\n]*$/gm, '')
+  return STORE_WRITER_NAMES.filter((n) => new RegExp(`\\b${n}\\b`).test(body))
+}
+
+/** Fixed point over the import graph: the store module's id is seeded and every module that imports
+ *  an already-reached module joins the set — so an ALIASED or INDIRECT write is caught by module
+ *  IDENTITY, which is exactly what the landed source-text COUNT could not see. */
+function storeWriterClosure(entries: Map<string, ParsedModule>): Set<string> {
+  const reached = new Set<string>([moduleId(STORE_MODULE)])
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const [id, mod] of entries) {
+      if (reached.has(id)) continue
+      if (mod.imports.some((imp) => reached.has(imp))) {
+        reached.add(id)
+        grew = true
+      }
+    }
+  }
+  return reached
+}
+
+/** Every module under `dir` that imports `security-store.ts` (by module IDENTITY) or binds — i.e.
+ *  every module that could WRITE the security store — except the one sanctioned writer. */
+function securityStoreImporters(dir: string): string[] {
+  const files = readdirSync(dir).filter((f) => f.endsWith('.ts'))
+  const entries = new Map<string, ParsedModule>(
+    files.map((f) => [moduleId(f), parseModule(f, readFileSync(join(dir, f), 'utf8'))]),
+  )
+  const reached = storeWriterClosure(entries)
+  const offenders: string[] = []
+  for (const [id, mod] of entries) {
+    // The store module itself is the WRITER's definition site, not a receiver of it; and `main.ts`
+    // is the ONE sanctioned writer. Every OTHER module that reaches the store is an offender.
+    if (id === moduleId(ALLOWED_WRITER_MODULE) || id === moduleId(STORE_MODULE)) continue
+    if (reached.has(id)) {
+      offenders.push(`${id}.ts imports the security store (module identity: ${STORE_MODULE})`)
+      continue
+    }
+    const bound = [...mod.bindings.values()].flat().filter((b) => STORE_WRITER_NAMES.includes(b))
+    const referenced = referencedNames(mod)
+    if (bound.length > 0 || referenced.length > 0) {
+      offenders.push(`${id}.ts receives the store: ${[...bound, ...referenced].join(', ')}`)
+    }
+  }
+  return offenders
+}
+
+// ===========================================================================
 // §4.2 `P-IM-1` — THE DEFAULT IS UNMOVED, AND THE REQUEST IS ADDITIVE.
 // 2 inputs-absent arms (argv; env) + 2 default-surface arms (the default config's value; the
 // default tool set's membership against a captured pre-change list) + 4 union draws (empty
@@ -775,13 +981,30 @@ interface WaitOutcome {
 }
 
 /** §2.2 `B-1` item 5's protocol, implemented as a CLIENT: every branch terminates, no branch
- *  retries an exhausted condition, and a regression after satisfaction is a NAMED failure. */
+ *  retries an exhausted condition, and a regression after satisfaction is a NAMED failure.
+ *
+ *  ⟨`§3a.4` item 1 — THE REGRESSION BRANCH MADE REACHABLE.⟩ The audit measured that this row's
+ *  `regression-after-satisfaction` branch was UNREACHABLE: a client that `return`s on the first
+ *  `installed` read never looks again, so only `3` of the `5` declared branches were distinct. The
+ *  protocol below is the contract's OWN (`B-1` item 5 item 4: a satisfied client must stop on a
+ *  regression rather than re-wait), with the observation point made explicit: the satisfaction
+ *  returns, and a client that polls ONCE more consults `regressionVerdict` — so the branch is a
+ *  real, distinguishable outcome and the declared `5 * 2` term is honest. The extra poll is
+ *  BOUNDED (exactly one read) and is never a re-wait loop. */
 function waitForBoot(read: (tick: number) => BootRead, deadlineTicks: number): WaitOutcome {
   let calls = 0
   let satisfied = false
   for (let tick = 0; tick < deadlineTicks; tick++) {
     const r = read(tick)
     calls++
+    if (satisfied) {
+      // THE POST-SATISFACTION POLL — the branch the audit found unreachable. A state that is STILL
+      // `installed` is not a regression (the client is satisfied and stops); a state that has LEFT
+      // `installed` (or lost its opt-in, or failed to read) is the contract's NAMED stop.
+      const verdict = regressionVerdictAfterSatisfaction(r)
+      if (verdict === null) return { ok: true, reason: 'satisfied: the install is complete', calls, callsAfterSatisfaction: 1 }
+      return { ok: false, reason: `REGRESSION after satisfaction: ${verdict}`, calls, callsAfterSatisfaction: 1 }
+    }
     if (r.kind === 'absent') {
       return {
         ok: false,
@@ -800,13 +1023,23 @@ function waitForBoot(read: (tick: number) => BootRead, deadlineTicks: number): W
     }
     if (status === 'installed') {
       satisfied = true
-      return { ok: true, reason: 'satisfied: the install is complete', calls, callsAfterSatisfaction: 0 }
-    }
-    if (satisfied) {
-      return { ok: false, reason: 'REGRESSION after satisfaction: a re-wait is forbidden (B-1 item 5 item 4)', calls, callsAfterSatisfaction: 1 }
+      if (tick + 1 >= deadlineTicks) return { ok: true, reason: 'satisfied: the install is complete', calls, callsAfterSatisfaction: 0 }
+      continue
     }
   }
+  if (satisfied) return { ok: true, reason: 'satisfied: the install is complete', calls, callsAfterSatisfaction: 0 }
   return { ok: false, reason: "the deadline passed with status still 'pending'", calls, callsAfterSatisfaction: 0 }
+}
+
+/** The regression verdict a client owes for a read that follows a SATISFIED boot: never a re-wait,
+ *  never an infinite loop — `null` when the state is still `installed`, otherwise a NAMED failure
+ *  (a status that left `installed`, an opt-in that is gone, or a read that failed). */
+function regressionVerdictAfterSatisfaction(r: BootRead): string | null {
+  if (r.kind === 'absent') return 'the app no longer reports its boot state (the `boot` member is gone)'
+  if (r.kind === 'error') return `the read failed after satisfaction: ${r.message}`
+  const status = String(r.boot['status'])
+  if (status === 'installed') return null
+  return `status left 'installed' (observed '${status}')`
 }
 
 /** The regression verdict a client owes AFTER satisfaction: never a re-wait, never an infinite
@@ -843,12 +1076,16 @@ const SM3_BRANCHES: Array<{ id: string; read: (tick: number) => BootRead; expect
   },
   {
     id: 'regression-after-satisfaction',
+    // ⟨`§3a.4` item 1 — THIS BRANCH IS NOW REACHABLE.⟩ `waitForBoot` polls ONCE after the
+    // satisfaction, so a state that leaves `installed` is observed and stops the client with a NAMED
+    // failure. Under the OLD branch table this entry read `expectOk: true` and returned on tick 0 —
+    // identical to the `installed` branch, which is exactly the non-distinctness the audit measured.
     read: (tick) =>
       tick === 0
         ? { kind: 'boot', boot: { installed: true, status: 'installed', epoch: 1, generation: 1, error: null } }
         : { kind: 'boot', boot: { installed: false, status: 'pending', epoch: 2, generation: 0, error: null } },
-    expectOk: true,
-    expectInReason: 'satisfied',
+    expectOk: false,
+    expectInReason: 'REGRESSION',
   },
 ]
 
@@ -879,7 +1116,20 @@ describe('U-APP-HARNESS-READINESS §4.2 P-SM-3 — THE CLIENT\'S WAIT PROTOCOL A
         await check(run, i, () => {
           must(outcome.calls >= 1, `branch ${branch.id}: the client must READ, never sleep (§F-6)`)
           must(outcome.calls <= SM3_CEILING, `branch ${branch.id}: the client issued ${outcome.calls} calls — the wait must be BOUNDED`)
-          must(outcome.callsAfterSatisfaction === 0, `branch ${branch.id}: a client must NOT re-wait after satisfaction (F-5)`)
+          // ⟨`§3a.4` item 1 — the arm that makes the declared branches DISTINCT.⟩ Exactly ONE of the
+          // five branches observes a read AFTER which the state has LEFT `installed` (the regression
+          // branch); the others see a steady state (or stop before satisfaction) — so the branch set
+          // is 5 genuinely distinguishable outcomes instead of the 3 the audit measured.
+          const regressed = branch.id === 'regression-after-satisfaction'
+          const reachesPostSatisfactionPoll = branch.expectOk || branch.id === 'installed' || regressed
+          must(
+            outcome.callsAfterSatisfaction === (reachesPostSatisfactionPoll ? 1 : 0),
+            `branch ${branch.id}: the protocol polls exactly once after a satisfaction (the post-satisfaction observation the audit found missing) and NEVER re-waits after that — observed ${outcome.callsAfterSatisfaction}`,
+          )
+          must(
+            regressed ? !outcome.ok : true,
+            `branch ${branch.id}: the regression branch must be the STOPPING one (observed ok=${outcome.ok})`,
+          )
           return null
         })
       }
@@ -987,7 +1237,25 @@ describe('U-APP-HARNESS-READINESS §4.2 P-TP-1 — NO MALFORMED REQUEST CRASHES,
           const res = shape.run() // arm (b): the outcome is NAMED
           if (shape.refusing) {
             named(res, `shape ${shape.id}`)
-            must(res.raw.length >= 0, `shape ${shape.id}: the raw value is echoed`)
+            if (!res.ok) {
+              // ⟨THE VACUOUS LIMB REPLACED (the audit's `§3a.4` item 2 (ii): `raw.length >= 0` is a
+              // tautology, true for every string INCLUDING the empty one, so that arm asserted
+              // nothing). The limb below asserts a REAL property of a named refusal: it must quote
+              // the value it refused (or carry a non-empty `offender`), and its `offender` member
+              // must be well formed — so a refusal that reports a DIFFERENT problem, or that
+              // reports none at all, reds this arm.⟩
+              const offender = res.offender
+              must(
+                offender === null || typeof offender === 'string',
+                `shape ${shape.id}: \`offender\` must be a string or null (observed ${JSON.stringify(offender)})`,
+              )
+              must(
+                typeof offender === 'string' && offender !== ''
+                  ? res.reason.includes(offender)
+                  : res.raw !== '' || res.reason.includes('EMPTY'),
+                `shape ${shape.id}: the refusal must QUOTE what it refused — a non-empty \`offender\` must appear in the reason; when there is no offender token, the refusal must echo the refused value or name the emptiness itself (observed offender=${JSON.stringify(offender)}, raw=${JSON.stringify(res.raw)}, reason=${JSON.stringify(res.reason)})`,
+              )
+            }
           } else if (res.ok) {
             must(res.source === 'none', `shape ${shape.id}: the non-request reading must name its source 'none' (observed '${res.source}')`)
             eq(res.requested, [], `shape ${shape.id}: a hostile non-string/absent value must grant NO group`)
@@ -1162,6 +1430,632 @@ describe('U-APP-HARNESS-READINESS §4.2 P-TP-2 — NO SELF-ESCALATION ROUTE EXIS
         return null
       })
     })
+  })
+})
+
+// ===========================================================================
+// §4.2 — THE REGISTER REPORT (declared vs executed, `held`/`broken`, `stoppedAt`,
+// counterexamples) + the register's own structural rows.
+// ===========================================================================
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-ARMED-SECOND-INSTALL — a second `ok:true` in the SAME armed epoch after a `failed` cannot resurrect `installed` (`§3a.2` A-3; the `bootArmedEpoch` stamp; `§3.2 F-4`)', () => {
+  it('neg-armed-second-install — the second settle in the refused epoch leaves the status `failed` (never `installed`, never `pending`)', async () => {
+    await negativeGenerator({
+      id: 'neg-armed-second-install',
+      subject: 'the armed-epoch stamp (P-SM-1 draw 16\'s non-discriminating arm)',
+      declared: '1',
+      declaredTotal: 1,
+      body: async () => {
+        const b = optInBackend({ listReply: { nodes: [] } })
+        // ARM the epoch exactly as the production sender does: `IPC_READY` → `markReady()`.
+        b.markReady()
+        seamSettle(b, { ok: false, error: '[provident-renderer] tab boot failed: boom' })
+        const afterFail = bootOf(replied(await readTargets(b), 'neg-armed-second-install (after the failure)'), 'after the failure')
+        expect(afterFail['status'], 'the failure is reported by name').toBe('failed')
+        expect(afterFail['installed'], 'a failed boot is not `installed`').toBe(false)
+        // THE GENERATOR: a SECOND `ok:true` inside the SAME epoch (the production sender's shape).
+        seamSettle(b, { ok: true })
+        const afterSecond = bootOf(replied(await readTargets(b), 'neg-armed-second-install (after the second signal)'), 'after the second signal')
+        expect(
+          afterSecond['status'],
+          'DISCRIMINATION PROOF — this is the arm that can FAIL: the audit\'s `A-3` (`markReady()` re-arms WITHOUT advancing the epoch`) produced `installed` here. ' +
+            'A re-arm that carries the epoch stamp forward (or a guard that honours an unarmed settle) reds this row.',
+        ).toBe('failed')
+        expect(afterSecond['installed'], 'the illegal `failed → installed` transition is NOT produced').toBe(false)
+        expect(afterSecond['installed'], '`installed === (status === \'installed\')` still holds').toBe(afterSecond['status'] === 'installed')
+        expect(afterSecond['error'], 'the failure text is preserved, not overwritten by the refused settle').toContain('tab boot failed')
+        expect(afterSecond['generation'], 'nothing was installed, so `generation` stays 0').toBe(0)
+        expect(afterSecond['epoch'], 'the epoch did NOT advance (no reload occurred)').toBe(afterFail['epoch'])
+        // THE CONVERSE — the LEGAL path is still open: a SECOND `markReady()` in the same epoch is a
+        // no-op, but a RELOAD (`did-finish-load` ×2 → epoch++) re-arms, and THEN an `ok:true` is
+        // honoured. Without this limb the row above could be satisfied by refusing every settle.
+        const legal = optInBackend({ listReply: { nodes: [{ nodeId: 'reloaded-graph' }] } })
+        legal.markReady()
+        seamSettle(legal, { ok: false, error: '[provident-renderer] tab boot failed: first epoch' })
+        const { fire } = attachFakeWindow(legal)
+        fire('did-finish-load')
+        fire('did-finish-load')
+        legal.markReady()
+        seamSettle(legal, { ok: true })
+        const afterReload = bootOf(replied(await readTargets(legal), 'neg-armed-second-install (after a reload)'), 'after a reload')
+        expect(afterReload['status'], 'a RELOAD advances the epoch and re-arms, so the next `ok:true` IS honoured (the fix must not close the legal path)').toBe('installed')
+        expect(afterReload['epoch'], 'the epoch advanced with the reload').toBeGreaterThan(Number(afterFail['epoch']))
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-UNARMED-SETTLE — a settle arriving BEFORE any `markReady()` cannot produce `installed`; the UNARMED `ok:false` arm is INTENDED (`§3a.2` A-2; `§3.2 F-4`\'s fail-safe)', () => {
+  it('neg-unarmed-settle — an unarmed `ok:true` is refused and the state is untouched; an unarmed `ok:false` IS recorded (the `F-4` fail-safe, asserted as the FIXED semantics and NOT as `A-2`\'s literal wording)', async () => {
+    await negativeGenerator({
+      id: 'neg-unarmed-settle',
+      subject: 'the unarmed epoch (A-2: an unarmed settle)',
+      declared: '1',
+      declaredTotal: 1,
+      body: async () => {
+        // (a) AN UNARMED `ok:true` — no `markReady()` has occurred, so nothing ever reported the
+        // renderer ready: the member must NOT report an install, and the state must be UNTOUCHED.
+        const b = optInBackend({ listReply: { nodes: [{ nodeId: 'never-installed' }] } })
+        const before = bootOf(replied(await readTargets(b), 'neg-unarmed-settle (before)'), 'before')
+        expect(before['status'], 'a fresh opt-in launch is `pending`').toBe('pending')
+        expect(before['epoch'], 'an unarmed, still-`pending` epoch (A-2\'s state)').toBe(1)
+        seamSettle(b, { ok: true })
+        const afterOk = bootOf(replied(await readTargets(b), 'neg-unarmed-settle (unarmed ok:true)'), 'unarmed ok:true')
+        expect(
+          afterOk['status'],
+          'DISCRIMINATION PROOF — an unarmed `ok:true` must NOT produce `installed`: the landed guard (`bootArmedEpoch === bootEpoch`) refuses it. ' +
+            'An implementation that honours a settle on an unarmed epoch (the pre-fix behaviour `A-2` measured) reds this row.',
+        ).toBe('pending')
+        expect(afterOk['installed'], 'the unarmed settle granted nothing').toBe(false)
+        expect(afterOk['generation'], 'no install was recorded, so `generation` stays 0').toBe(0)
+        expect(afterOk['error'], 'an unarmed `ok:true` is refused SILENTLY — it is not a failure, so no error text is manufactured').toBeNull()
+        expect(afterOk['epoch'], 'the refusal does not advance the epoch').toBe(before['epoch'])
+
+        // (b) THE UNARMED `ok:false` ARM IS INTENDED — the `F-4` FAIL-SAFE. Recorded here so the row
+        // asserts the FIXED semantics (`§3b` `S-1`-class: the spec's `F-4` demands a failure be
+        // reported rather than hidden behind `pending` FOREVER) and NOT the auditor's literal
+        // wording (`A-2` read the guard as honouring an unarmed settle; the landed guard honours an
+        // unarmed FAILURE only, and only from `pending`, which is the safe direction).
+        const c = optInBackend({ listReply: { nodes: [] } })
+        seamSettle(c, { ok: false, error: '[provident-renderer] tab boot failed: boot threw before the ready signal' })
+        const afterFail = bootOf(replied(await readTargets(c), 'neg-unarmed-settle (unarmed ok:false)'), 'unarmed ok:false')
+        expect(
+          afterFail['status'],
+          'THE F-4 FAIL-SAFE, ASSERTED AS INTENDED: a boot chain that failed BEFORE the ready signal still reports `failed` — never `pending` forever',
+        ).toBe('failed')
+        expect(afterFail['installed'], 'the fail-safe never reports an install').toBe(false)
+        expect(afterFail['error'], 'the fail-safe carries the chain\'s own text').toContain('tab boot failed')
+        expect(afterFail['generation'], 'nothing was installed').toBe(0)
+
+        // (c) THE FAIL-SAFE IS NOT A BACK DOOR: an unarmed `ok:false` arriving when the state is
+        // ALREADY terminal is refused, so no second failure can rewrite a settled epoch.
+        seamSettle(c, { ok: false, error: 'a LATER, unrelated failure' })
+        const afterSecond = bootOf(replied(await readTargets(c), 'neg-unarmed-settle (a second unarmed failure)'), 'second unarmed failure')
+        expect(
+          afterSecond['error'],
+          'a second unarmed failure must NOT overwrite the first failure\'s text (the guard is `this.bootStatus !== \'pending\'`)',
+        ).toContain('boot threw before the ready signal')
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-REGRESSION-AFTER-SATISFACTION — the PROTOCOL observes a post-satisfaction regression (`§3a.4` item 1: `P-SM-3`\'s branch was UNREACHABLE; `§2.2 B-1` item 5 item 4)', () => {
+  it('neg-regression-after-satisfaction — after `installed`, an absent / a regressed / a failed read is a NAMED stop and NEVER a re-wait, driven through the protocol (not only the pure helper)', async () => {
+    await negativeGenerator({
+      id: 'neg-regression-after-satisfaction',
+      subject: 'the post-satisfaction regression (P-SM-3\'s unreachable branch)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const INSTALLED: BootRead = { kind: 'boot', boot: { installed: true, status: 'installed', epoch: 1, generation: 1, error: null } }
+        const REGRESSED: BootRead = { kind: 'boot', boot: { installed: false, status: 'pending', epoch: 2, generation: 0, error: null } }
+        const FAILED_NOW: BootRead = { kind: 'boot', boot: { installed: false, status: 'failed', epoch: 2, generation: 0, error: 'tab boot failed: after satisfaction' } }
+        const ABSENT_NOW: BootRead = { kind: 'absent' }
+        const sequence: BootRead[] = [INSTALLED, REGRESSED, FAILED_NOW, ABSENT_NOW, INSTALLED]
+        const seen: number[] = []
+        // THE PROTOCOL IS DRIVEN, not the pure helper: every read after the first satisfaction is
+        // counted, so a re-wait is observable.
+        const outcome = waitForBoot((tick) => {
+          seen.push(tick)
+          return sequence[Math.min(tick, sequence.length - 1)]!
+        }, 8)
+        expect(
+          seen,
+          'DISCRIMINATION PROOF — the OLD `regression-after-satisfaction` branch returned on tick 0 and never read tick 1, which is why only 3 of `P-SM-3`\'s 5 declared branches were distinct (`§3a.4` item 1). ' +
+            'This drive READS PAST the satisfaction, so a protocol that returns on `installed` without checking afterwards leaves `seen == [0]` and reds here.',
+        ).toEqual([0, 1])
+        expect(outcome.ok, 'the protocol must NOT report success once the state regressed').toBe(false)
+        expect(
+          outcome.reason,
+          'the post-satisfaction regression must be a NAMED stop, carrying its own cause',
+        ).toMatch(/REGRESSION/)
+        expect(outcome.calls, 'the protocol terminates (it does not poll on)').toBe(2)
+        expect(outcome.callsAfterSatisfaction, 'a read happened AFTER the satisfaction — that is what makes the branch reachable').toBeGreaterThan(0)
+        expect(outcome.calls, 'the wait stays BOUNDED (§F-6: the client\'s own constants, never a sleep)').toBeLessThanOrEqual(SM3_CEILING)
+        // The REGRESSED-TO-`failed` case takes the failure branch's own named text, and the
+        // REGRESSED-TO-ABSENT case takes the absent branch's — both are named stops, never waits.
+        const toFailed = waitForBoot((t) => (t === 0 ? INSTALLED : FAILED_NOW), 8)
+        expect(toFailed.ok, 'a post-satisfaction failure is not a satisfaction').toBe(false)
+        expect(toFailed.reason, 'the regression names the status it left, so the failure text is carried through').toContain("observed 'failed'")
+        const toAbsent = waitForBoot((t) => (t === 0 ? INSTALLED : ABSENT_NOW), 8)
+        expect(toAbsent.ok, 'a post-satisfaction absence is not a satisfaction').toBe(false)
+        expect(toAbsent.reason, 'the absence is named as the opt-in loss it is').toContain('no longer reports its boot state')
+        // THE CONVERSE — the row cannot be satisfied by refusing everything: a steady `installed`
+        // read after the satisfaction is NOT a regression.
+        const steady = waitForBoot(() => INSTALLED, 8)
+        expect(steady.ok, 'a steady `installed` state is satisfied').toBe(true)
+        expect(steady.calls, 'and it terminates after the single post-satisfaction observation (never a re-wait loop)').toBe(2)
+        expect(steady.callsAfterSatisfaction, 'that observation is the one that proves the read did not loop').toBe(1)
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-SATISFIED-THEN-ABSENT — `absent` is a NAMED stop in BOTH positions (`§3.2 F-3`; `§3a.4` item 1)', () => {
+  it('neg-satisfied-then-absent — the pre-satisfaction `absent` stop and the POST-satisfaction `absent` stop are distinct and both NAMED', async () => {
+    await negativeGenerator({
+      id: 'neg-satisfied-then-absent',
+      subject: '`absent` before and after satisfaction',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        // (a) `absent` from the FIRST read (F-3: the app did not opt in).
+        const first = waitForBoot(() => ({ kind: 'absent' }), 8)
+        expect(first.ok, '`absent` is NEVER read as `installed` (F-3)').toBe(false)
+        expect(first.reason, 'the pre-satisfaction absence names itself').toContain('did not opt in')
+        expect(first.calls, 'and terminates on the first read').toBe(1)
+        // (b) `absent` AFTER a satisfaction — the SAME named stop, reached from a different state,
+        // which `disposition`/`absent-then-satisfied` must not conflate: a protocol that treats a
+        // post-satisfaction absence as "keep waiting" would deadlock a client whose app lost its
+        // opt-in (the false green `§3a.3` describes). Driven through the PROTOCOL (the
+        // post-satisfaction poll), not through a pure helper.
+        const reads: BootRead[] = [
+          { kind: 'boot', boot: { installed: true, status: 'installed', epoch: 1, generation: 1, error: null } },
+          { kind: 'absent' },
+        ]
+        const ticks: number[] = []
+        const after = waitForBoot((t) => {
+          ticks.push(t)
+          return reads[Math.min(t, reads.length - 1)]!
+        }, 8)
+        expect(ticks, 'DISCRIMINATION PROOF — the post-satisfaction absence is actually READ (two ticks), so the branch is reachable').toEqual([0, 1])
+        expect(after.ok, 'a post-satisfaction absence is a stop, not a satisfaction').toBe(false)
+        expect(after.reason, 'and it is NAMED as a regression, carrying the lost-opt-in cause').toContain('no longer reports its boot state')
+        expect(after.callsAfterSatisfaction, 'exactly one read happened after satisfaction').toBe(1)
+        expect(after.calls, 'and the protocol terminated — it did not loop on the absence').toBe(2)
+        // (c) THE CONVERSE — `absent` must not be reached by a client that never read at all: the
+        // protocol always issues at least one read before it can stop.
+        expect(first.calls, 'the pre-satisfaction stop still READ (never a sleep-equivalent)').toBeGreaterThanOrEqual(1)
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-REFUSAL-NAMES-ITSELF — every refusal QUOTES what it refused (`§3a.4` item 2 (i): `named()` was a tautology; `§2.1` item 6 rows 1-8)', () => {
+  it('neg-refusal-names-itself — each malformed shape\'s refusal carries ITS OWN offender (and its position), so a refusal quoting a different problem fails', async () => {
+    await negativeGenerator({
+      id: 'neg-refusal-names-itself',
+      subject: 'the named-refusal claim (P-TP-1\'s tautological `named()`)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const request = requestOf
+        const parse = parseOf
+        interface Shape {
+          id: string
+          run: () => EnablementRequest
+          mustMention: string[]
+          offender?: string | null
+        }
+        const shapes: Shape[] = [
+          { id: 'unknown name (`graph,typo`)', run: () => request(['--enable-tool-groups=graph,typo'], {}), mustMention: ["'typo'", "'graph,typo'"], offender: 'typo' },
+          { id: 'case variant (`Graph`)', run: () => request(['--enable-tool-groups=Graph'], {}), mustMention: ["'Graph'"], offender: 'Graph' },
+          { id: 'empty token (`graph,,rag`)', run: () => parse('graph,,rag'), mustMention: ['EMPTY group name at position 2'], offender: '' },
+          { id: 'trailing comma (`graph,`)', run: () => parse('graph,'), mustMention: ['EMPTY group name at position 2'], offender: '' },
+          { id: 'whitespace token (`graph, rag`)', run: () => parse('graph, rag'), mustMention: ["' rag'"], offender: ' rag' },
+          { id: 'leading space (` graph`)', run: () => parse(' graph'), mustMention: ["' graph'"], offender: ' graph' },
+          { id: 'whitespace-only suffix (`graph `)', run: () => parse('graph '), mustMention: ["'graph '"], offender: 'graph ' },
+          { id: 'empty flag value', run: () => request(['--enable-tool-groups='], {}), mustMention: ['EMPTY'], offender: null },
+          // The value-less form's offender is the flag WITHOUT its `=` (measured): assert the token
+          // the landed refusal actually carries, not the spelling the row's author expected.
+          { id: 'value-less form', run: () => request(['--enable-tool-groups'], {}), mustMention: ['--enable-tool-groups'], offender: '--enable-tool-groups' },
+          { id: 'doubled flag', run: () => request(['--enable-tool-groups=graph', '--enable-tool-groups=rag'], {}), mustMention: ['appears 2 times in argv'], offender: '--enable-tool-groups=' },
+        ]
+        const failures: string[] = []
+        for (const shape of shapes) {
+          const res = shape.run()
+          if (res.ok) {
+            failures.push(`${shape.id}: expected a refusal, observed ok:true with requested ${JSON.stringify(res.requested)}`)
+            continue
+          }
+          if (res.reason.length === 0) {
+            failures.push(`${shape.id}: the refusal carries an EMPTY reason`)
+            continue
+          }
+          for (const token of shape.mustMention) {
+            if (!res.reason.includes(token)) failures.push(`${shape.id}: the reason does NOT name the offender — expected ${JSON.stringify(token)} inside ${JSON.stringify(res.reason)}`)
+          }
+          if (shape.offender !== undefined && (res.offender ?? null) !== shape.offender) {
+            failures.push(`${shape.id}: \`offender\` must carry the offending token — expected ${JSON.stringify(shape.offender)}, observed ${JSON.stringify(res.offender ?? null)}`)
+          }
+          if (shape.offender !== null && res.raw.length === 0) failures.push(`${shape.id}: \`raw\` must echo the refused value (observed the EMPTY string)`)
+        }
+        expect(
+          failures,
+          'DISCRIMINATION PROOF — the OLD `named()` accepted ANY non-empty reason, so all ten shapes passed vacuously. Each entry above pins THE SHAPE\'S OWN offender text: a refusal quoting another shape\'s problem reds its entry.',
+        ).toEqual([])
+        // The SELF-RED limb: the checker must reject a refusal whose reason names a DIFFERENT
+        // problem — asserted against the real shape-1 refusal, so the discrimination proof is not a
+        // claim about the checker but a measured one.
+        const realRefusal = request(['--enable-tool-groups=graph,typo'], {})
+        expect(realRefusal.ok, 'the shape-1 refusal exists to test against').toBe(false)
+        if (!realRefusal.ok) {
+          const wrongToken = "'Graph'"
+          expect(
+            realRefusal.reason.includes(wrongToken),
+            'the checker\'s `mustMention` limb is DISCRIMINATING: shape 1\'s reason does NOT mention shape 2\'s offender',
+          ).toBe(false)
+        }
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-PARTIAL-APPLY — a refused `graph,typo` applies NO group and leaves the gate\'s effective set UNTOUCHED (`§2.1` item 2 item 2 / `A-1` item 3 item 2: "no partially-applied set before the refusal")', () => {
+  it('neg-partial-apply — the refusal carries NO requested group, the gate stays at its effective set, and no gate is built on the refusal path', async () => {
+    await negativeGenerator({
+      id: 'neg-partial-apply',
+      subject: 'the no-partially-applied-set clause (never driven by P-TP-1)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const effective = effectiveOf
+        const base = ['read', 'dispatch'] as ToolGroup[]
+        /** `main()`'s launch decision, in the landed ORDER (request → effective → gate), and the
+         *  refusal branch's own consequence: a refused launch never builds a gate at all. */
+        const launch = (argv: string[]) => {
+          const resolved = requestOf(argv, {})
+          const requested: ToolGroup[] = resolved.ok ? resolved.requested : []
+          const effectiveSet = effective(base, [], requested)
+          const gate = new SecurityGate({ token: null, enabled: effectiveSet })
+          return { resolved, requested, effectiveSet, gate }
+        }
+        const refused = launch(['--enable-tool-groups=graph,typo'])
+        expect(refused.resolved.ok, '`graph,typo` is REFUSED (a good group beside a bad one)').toBe(false)
+        expect(
+          refused.requested,
+          'DISCRIMINATION PROOF — NO PARTIALLY-APPLIED SET: the refusal must carry NO requested group, so `graph` never survives alone. A parser that applied the good group before refusing reds this row.',
+        ).toEqual([])
+        expect(refused.effectiveSet, 'the gate\'s effective set is UNTOUCHED by the refusal').toEqual(base)
+        expect(refused.gate.enabled.has('graph' as ToolGroup), 'the refused launch grants nothing').toBe(false)
+        expect(refused.gate.enabled.size, 'the gate holds exactly the base groups').toBe(base.length)
+        // The second malformed family, and the refusal's OWN shape (no `requested` member at all).
+        const refusedEmpty = launch(['--enable-tool-groups=graph,,rag'])
+        expect(refusedEmpty.resolved.ok, 'the empty-token family is refused').toBe(false)
+        if (!refusedEmpty.resolved.ok) {
+          expect('requested' in refusedEmpty.resolved, 'a refusal carries NO `requested` member a caller could apply').toBe(false)
+        }
+        expect(refusedEmpty.gate.enabled.has('graph' as ToolGroup), 'nor does it grant `graph`').toBe(false)
+        // THE CONVERSE — the rule must not be satisfied by granting nothing ever.
+        const granted = launch(['--enable-tool-groups=graph'])
+        expect(granted.resolved.ok, 'a well-formed request is accepted').toBe(true)
+        expect(granted.gate.enabled.has('graph' as ToolGroup), 'and DOES grant its group (additivity)').toBe(true)
+        expect(granted.gate.enabled.has('read' as ToolGroup), 'while the defaults stay on').toBe(true)
+        // THE PLACEMENT — the refusal precedes any gate construction in `main()` (a source property,
+        // never a line number): on the refusal path the process exits before the gate site.
+        const mainBody = MAIN_SRC.slice(MAIN_SRC.indexOf('async function main('))
+        const exitAt = mainBody.indexOf('app.exit(2)')
+        const gateAt = mainBody.indexOf('new SecurityGate(')
+        expect(exitAt, 'the refusal\'s exit site exists').toBeGreaterThan(-1)
+        expect(gateAt, 'the gate site exists').toBeGreaterThan(-1)
+        expect(exitAt, 'the refusal exits BEFORE the gate construction, so `main()` never gates a refused request').toBeLessThan(gateAt)
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-EXTREME-VALUES — the extreme malformed shapes are refused BY NAME, with no throw and no partial grant (`§3a.4` item 3)', () => {
+  it('neg-extreme-values — a ~10 000-character list, an embedded NUL, `graph,Graph`, `graph,gnosis_edit`, `edit `, and two valid-form flags plus a malformed one', async () => {
+    await negativeGenerator({
+      id: 'neg-extreme-values',
+      subject: 'the extreme malformed shapes',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const longValue = 'graph,'.repeat(1_999) + 'typo'
+        expect(longValue.length, 'the long shape is ~10 000 characters').toBeGreaterThan(9_000)
+        const cases: Array<{ id: string; res: EnablementRequest; offender: string }> = [
+          { id: 'a ~10 000-character list', res: parseOf(longValue), offender: 'typo' },
+          { id: 'an embedded NUL', res: parseOf('graph\u0000,rag'), offender: 'graph\u0000' },
+          { id: '`graph,Graph`', res: parseOf('graph,Graph'), offender: 'Graph' },
+          { id: '`graph,gnosis_edit`', res: parseOf('graph,gnosis_edit'), offender: 'gnosis_edit' },
+          { id: '`edit ` (a trailing space)', res: parseOf('edit '), offender: 'edit ' },
+        ]
+        const failures: string[] = []
+        for (const c of cases) {
+          if (c.res.ok) {
+            failures.push(`${c.id}: expected a refusal, observed ok:true with requested ${JSON.stringify(c.res.requested)}`)
+            continue
+          }
+          if (!c.res.reason.includes(c.offender)) failures.push(`${c.id}: the refusal must NAME ${JSON.stringify(c.offender)} — observed ${JSON.stringify(c.res.reason.slice(0, 160))}`)
+          if (c.res.offender !== c.offender) failures.push(`${c.id}: \`offender\` must be ${JSON.stringify(c.offender)}, observed ${JSON.stringify(c.res.offender ?? null)}`)
+          if (!('requested' in c.res)) continue
+          failures.push(`${c.id}: a refusal must carry NO \`requested\` member (no partial grant)`)
+        }
+        expect(
+          failures,
+          'DISCRIMINATION PROOF — each entry names ITS OWN extreme offender, so a refusal that reports a generic "invalid" (or truncates at the NUL, or complains only about the length) reds its entry.',
+        ).toEqual([])
+        // TWO valid-form flags PLUS a malformed one — the count refusal names the flag and the count.
+        const twoFlags = requestOf(
+          ['--enable-tool-groups=graph', '--enable-tool-groups=rag', '--enable-tool-groups=edit '],
+          {},
+        )
+        expect(twoFlags.ok, 'the malformed member is not dropped so the two good ones can win').toBe(false)
+        if (!twoFlags.ok) {
+          expect(twoFlags.reason, 'the refusal names the flag').toContain('--enable-tool-groups=')
+          expect(twoFlags.reason, 'and the count it observed').toContain('3 times')
+          expect(twoFlags.reason, 'and the house form it requires').toContain('<g1,g2,…>')
+        }
+        // NO THROW at any extreme (a throw would have landed as this generator's counterexample).
+        // And the `exit(2)` path is the ONE launch-abort exit in `main()`.
+        const exits = MAIN_SRC.match(/app\.exit\((\d+)\)/g) ?? []
+        expect(exits, 'the launch-abort path exits with `2` (§2.1 item 6)').toContain('app.exit(2)')
+        expect(exits.filter((e) => e === 'app.exit(2)').length, 'exactly ONE launch-abort exit site').toBe(1)
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-PRESENCE-UNDER-OPTIN-SOURCE — which presence predicate the code follows, and where it diverges from the contract (`§3a.2` A-4; `§3b` S-1 OWED — NOT decided here)', () => {
+  it('neg-presence-under-optin-source — `--enable-tool-groups=read,dispatch` is a no-op request (`effective === base`); the code\'s predicate is `requested.length > 0` and the contract\'s is `source === \'argv\' | \'env\'`, which disagree on the empty-request shape', async () => {
+    await negativeGenerator({
+      id: 'neg-presence-under-optin-source',
+      subject: 'the A-4 enablement-predicate divergence',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const resolved = requestOf(['--enable-tool-groups=read,dispatch'], {})
+        expect(resolved.ok, 'the default-restatement request is ACCEPTED (item 6 row 10)').toBe(true)
+        const requested: ToolGroup[] = resolved.ok ? resolved.requested : []
+        expect(requested, 'the request names the default groups').toEqual(['read', 'dispatch'])
+        expect(resolved.ok && resolved.source, 'the source is `argv`').toBe('argv')
+        expect(effectiveOf(defaultSecurityConfig().enabled, [], requested), 'the additivity no-op: `effective === base`').toEqual(
+          defaultSecurityConfig().enabled,
+        )
+        // WHICH PREDICATE THE LANDED CODE FOLLOWS — a SOURCE PROPERTY of `main.ts`, asserted so it
+        // cannot drift silently.
+        const mainBody = MAIN_SRC.slice(MAIN_SRC.indexOf('async function main('))
+        expect(
+          /const\s+optedIn\s*=\s*requested\.length\s*>\s*0/.test(mainBody),
+          'A-4: the landed presence predicate is `const optedIn = requested.length > 0` — if this reds, the code moved to the contract\'s predicate and the owed amendment (`§3b` S-1) can be closed',
+        ).toBe(true)
+        // THE TWO PREDICATES on the same reading.
+        const codeSaysPresent = requested.length > 0
+        const contractSaysPresent = resolved.ok && (resolved.source === 'argv' || resolved.source === 'env')
+        expect(codeSaysPresent, 'the code\'s predicate (observed)').toBe(true)
+        expect(
+          contractSaysPresent,
+          'A-4 AS OBSERVED: on the audit\'s own case the CONTRACT\'s predicate is ALSO true — so the two agree HERE, and the divergence the audit measured is not visible at this input',
+        ).toBe(true)
+        // THE DIVERGENCE, PINNED TO THE SHAPE WHERE IT IS REAL: an EMPTY request whose source is
+        // `'argv'` (a shape the PURE surface can express — `parseToolGroupList(null)` is
+        // `{ok:true, requested:[], source:'none'}` and a caller that stamps a source on it yields
+        // this; `enablementRequestFrom` does not produce it, because it returns early on an empty
+        // value). There the code reports the member PRESENT and the contract's rule NOT PRESENT.
+        const emptyFromSource: EnablementRequest = { ok: true, requested: [], source: 'argv', raw: '' }
+        const codeOnEmpty = emptyFromSource.ok && emptyFromSource.requested.length > 0
+        const contractOnEmpty = emptyFromSource.ok && (emptyFromSource.source === 'argv' || emptyFromSource.source === 'env')
+        expect(codeOnEmpty, 'the code\'s predicate on an empty request with source `argv`').toBe(false)
+        expect(contractOnEmpty, 'the contract\'s predicate on the same shape').toBe(true)
+        expect(
+          codeOnEmpty !== contractOnEmpty,
+          'DISCRIMINATION PROOF — A-4: the two predicates MUST disagree on the empty-request shape. If this reds, one side moved and the divergence named here is stale; the amendment owes the ruling (`§3b` S-1).',
+        ).toBe(true)
+        // ⟨DECLARED LIMIT: the REPLY\'s own presence is NOT node-observable.⟩ `main()`\'s `optedIn` is
+        // a local of a non-exported function, so no node row can inject it and read
+        // `provident.list_targets` — the class (b) `B-1`/`B-2` row owns that reading (`§5.1`). This
+        // generator asserts the predicate from the source and the request from the pure surface.
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-SECOND-WRITER — an IMPORT-GRAPH control: no `src/main/**` module other than `main.ts` imports or receives the security store (`§3a.4` item 3; `§4.2` P-TP-2)', () => {
+  it('neg-second-writer — the scan is module-identity based (an aliased/renamed writer is caught) and it is DRIVEN against a synthetic offender it must reject', async () => {
+    await negativeGenerator({
+      id: 'neg-second-writer',
+      subject: 'the store-writer control (P-TP-2\'s source-text COUNT)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        expect(STORE_WRITER_NAMES, 'the store-writer name set is non-empty (the control has something to look for)').toContain('createSecurityStore')
+        // (a) THE REAL TREE — the control, at this head.
+        const offenders = securityStoreImporters(join(REPO_ROOT, 'src', 'main'))
+        expect(
+          offenders,
+          `DISCRIMINATION PROOF (offenders: ${JSON.stringify(offenders)}) — the landed check was a SOURCE-TEXT COUNT (\`securityStore.set(\` occurrences), which a renamed/aliased second writer evades. This scan refuses any module other than \`main.ts\` that imports the store module BY IDENTITY.`,
+        ).toEqual([])
+        // (b) THE DRIVE — a synthetic offender, so the control is measured and not merely written:
+        // the fixture lives OUTSIDE the repo (its specifier resolves to the real module, so the scan
+        // is driven end to end) and is removed in the `finally`.
+        const dir = mkdtempSync(join(tmpdir(), 'app-harness-neg-second-writer-'))
+        try {
+          writeFileSync(
+            join(dir, 'main.ts'),
+            "import { createSecurityStore } from 'security-store.js'\nexport const store = createSecurityStore\n",
+            'utf8',
+          )
+          writeFileSync(
+            join(dir, 'evil.ts'),
+            [
+              "import * as store from 'security-store.js'",
+              'export function makeStore() {',
+              '  return store.createSecurityStore({ path: "nowhere" })',
+              '}',
+            ].join('\n'),
+            'utf8',
+          )
+          const driven = securityStoreImporters(dir)
+          expect(driven.length, 'the synthetic second writer MUST be caught — a control that cannot fail is the finding this generator exists to close').toBe(1)
+          expect(driven[0], 'and the offender is named by module identity').toContain('evil.ts')
+          expect(driven[0], 'the offence is the store module, named in the report').toContain('security store')
+        } finally {
+          rmSync(dir, { recursive: true, force: true })
+        }
+        // (c) THE ALIASED VARIANT — the audit's named evasion (`import { createSecurityStore as
+        // makeStore }`), driven on the same instrument: the module IDENTITY catches it even though
+        // no `createSecurityStore` binding survives.
+        const dir2 = mkdtempSync(join(tmpdir(), 'app-harness-neg-second-writer-alias-'))
+        try {
+          writeFileSync(join(dir2, 'main.ts'), 'export const ok = true\n', 'utf8')
+          writeFileSync(
+            join(dir2, 'aliased.ts'),
+            "import { createSecurityStore as makeStore } from 'security-store.js'\nexport const made = makeStore\n",
+            'utf8',
+          )
+          const driven = securityStoreImporters(dir2)
+          expect(driven.length, 'the ALIASED writer is caught by module identity (the binding name is gone)').toBe(1)
+          expect(driven[0], 'and it is named').toContain('aliased.ts')
+        } finally {
+          rmSync(dir2, { recursive: true, force: true })
+        }
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-ESCALATION-NAME — a synthetic `provident.grant_group` fails through the UNGROUPED-NAME limb (`§3a.4` item 3; `§4.2` P-TP-2)', () => {
+  it('neg-escalation-name — the census check refuses an `enable|grant`-shaped name that resolves to NO group, even though the regex limb is satisfied', async () => {
+    await negativeGenerator({
+      id: 'neg-escalation-name',
+      subject: 'the ungrouped-name limb (P-TP-2\'s `enable|grant` regex alone)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        /** The census check: an `enable|grant|escalat`-shaped name is an offence UNLESS it is a
+         *  module-registry toggle AND resolves to one of the nine groups. A name that satisfies the
+         *  REGEX but resolves to no group is an un-gated hole. */
+        const censusOffences = (names: string[]): string[] => {
+          const offenders: string[] = []
+          for (const name of names) {
+            const escalationShaped = /enable|grant|escalat/i.test(name)
+            if (!escalationShaped) continue
+            const group = groupForTool(name)
+            const moduleToggle = MODULE_REGISTRY_TOGGLES.includes(name) && group === 'module'
+            if (!moduleToggle) offenders.push(`${name} (regex-shaped, group=${JSON.stringify(group)})`)
+          }
+          return offenders
+        }
+        const real = ProvidentMcpServer.ALL_TOOLS
+        expect(
+          censusOffences(real),
+          'the REAL census must be clean at this head — the real `module.enable`/`module.disable` are module-registry toggles and resolve to the `module` group',
+        ).toEqual([])
+        // THE SYNTHETIC ESCALATION.
+        const synthetic = 'provident.grant_group'
+        expect(/enable|grant|escalat/i.test(synthetic), 'the synthetic name SATISFIES the regex limb the audit found sufficient on its own').toBe(true)
+        expect(groupForTool(synthetic), 'and it resolves to NO group — so only the ungrouped-name limb can catch it').toBeNull()
+        const driven = censusOffences([...real, synthetic])
+        expect(
+          driven.length,
+          'DISCRIMINATION PROOF — the synthetic escalation MUST be refused. The landed check was the regex ALONE (`/enable|grant|escalat/i`), which this name satisfies; the ungrouped-name limb is what catches it, so removing that limb reds this generator.',
+        ).toBe(1)
+        expect(driven[0], 'and the offence NAMES the offending tool').toContain(synthetic)
+        expect(driven[0], 'and reports the group it resolved to (null — the hole)').toContain('group=null')
+        // THE CONVERSE — the limb must not fire on the two legitimate toggles.
+        expect(censusOffences(MODULE_REGISTRY_TOGGLES), 'the module-registry toggles are NOT offences (they resolve to `module`)').toEqual([])
+        // Every name in the REAL census resolves to one of the nine groups (the other half of the
+        // ungrouped-name limb, kept here so the generator's instrument is the same one).
+        const ungrouped = real.filter((n) => groupForTool(n) === null)
+        expect(ungrouped, 'no tool name in the census may be un-gated').toEqual([])
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ NEG-DEFAULT-LIST-DRIFT — `P-IM-1`\'s default surface is derived from the pinned tests\' OWN authority, so a name added to both sides cannot pass vacuously (`§3a.4` item 3; `§4.2` P-IM-1)', () => {
+  it('neg-default-list-drift — the default allowed set is EXACTLY the `read`+`dispatch` slice of `ALL_TOOLS`, is a strict subset of `ALL_TOOLS`, and `provident.load` stays out', async () => {
+    await negativeGenerator({
+      id: 'neg-default-list-drift',
+      subject: 'the hand-written default list (P-IM-1 arm 4)',
+      declared: '1',
+      declaredTotal: 1,
+      body: () => {
+        const server = new ProvidentMcpServer({
+          backend: { invoke: async () => ({ nodes: [] }) },
+          transport: 'stdio',
+          gate: new SecurityGate(),
+        })
+        const allowed = server.allowedToolNames().slice().sort()
+        // THE DERIVATION — from the census the pinned tests own (`ALL_TOOLS`) plus the group mapping
+        // the gate itself uses. No hand-written list appears in this row: a name added to `ALL_TOOLS`
+        // under `read`/`dispatch` moves the DERIVED side, so the row reds unless the gate also moved.
+        const derived = ProvidentMcpServer.ALL_TOOLS.filter((n) => {
+          const g = groupForTool(n)
+          return g === 'read' || g === 'dispatch'
+        }).sort()
+        expect(
+          allowed,
+          'DISCRIMINATION PROOF — the OLD arm compared against a HAND-WRITTEN 10-name list that duplicated this authority; adding a name to BOTH that list and the pinned test would have passed vacuously. The derived side cannot be edited by hand.',
+        ).toEqual(derived)
+        expect(derived.length, 'the derived default surface is non-empty (the row is not vacuous the other way)').toBeGreaterThan(0)
+        // THE SUBSET PROPERTY — a strict subset of the census, so the row cannot be satisfied by
+        // "everything is allowed".
+        for (const name of allowed) {
+          expect(ProvidentMcpServer.ALL_TOOLS, `${name} is part of the census (the default set is a SUBSET of it)`).toContain(name)
+        }
+        expect(allowed.length, 'the default surface is a STRICT subset of the census').toBeLessThan(ProvidentMcpServer.ALL_TOOLS.length)
+        // THE FENCE — `provident.load` (the `graph`-group tool this whole unit exists to enable) must
+        // stay ABSENT at the default gate, and it must be absent FOR THE RIGHT REASON (its group).
+        expect(groupForTool('provident.load'), '`provident.load` is a `graph`-group tool, so the gate is why it is absent').toBe('graph')
+        expect(allowed, '`provident.load` stays EXCLUDED at the default gate').not.toContain('provident.load')
+        expect(derived, 'and the derivation agrees (a `graph` name cannot appear on the derived side)').not.toContain('provident.load')
+      },
+    })
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ — THE NEGATIVE-GENERATOR REPORT (declared vs executed, held/broken, counterexamples)', () => {
+  it('the negative-generator table is DECLARED, complete and every row HELD — and the register\'s own six rows keep their declared terms (`§4.2` UNMOVED; `§3a.4` item 3)', () => {
+    const DECLARED_GENERATORS = [
+      'neg-armed-second-install',
+      'neg-unarmed-settle',
+      'neg-regression-after-satisfaction',
+      'neg-satisfied-then-absent',
+      'neg-refusal-names-itself',
+      'neg-partial-apply',
+      'neg-extreme-values',
+      'neg-presence-under-optin-source',
+      'neg-second-writer',
+      'neg-escalation-name',
+      'neg-default-list-drift',
+    ]
+    const missing = DECLARED_GENERATORS.filter((id) => !NEG_REPORTS.some((r) => r.id === id))
+    expect(missing, 'every generator the audit tasked must have RUN and reported').toEqual([])
+    const unexpected = NEG_REPORTS.filter((r) => !DECLARED_GENERATORS.includes(r.id)).map((r) => r.id)
+    expect(unexpected, 'and no UNDECLARED generator may appear').toEqual([])
+    const lines = NEG_REPORTS.map(
+      (r) =>
+        `${r.id} [${r.subject}]: ${r.held ? 'held' : 'broken'} · declared ${r.declared} = ${r.declaredTotal} · executed ${r.executed}` +
+        (r.counterexample !== null ? ` · counterexample: ${r.counterexample}` : ''),
+    )
+    // eslint-disable-next-line no-console
+    console.log('U-APP-HARNESS-READINESS NEGATIVE-GENERATOR REPORT\n' + lines.join('\n'))
+    // ARITHMETIC, printed with its terms: the register's declared column is UNMOVED (78), the
+    // negative table adds 11 generators of 1 declared attempt each ⇒ 78 + 11 = 89.
+    const registerTotal = DECLARED_REGISTER.reduce((a, r) => a + r.declaredTotal, 0)
+    const generatorTotal = NEG_REPORTS.reduce((a, r) => a + r.declaredTotal, 0)
+    expect(registerTotal, 'OLD ARITHMETIC (kept visible): the register\'s declared terms are UNMOVED — `9 + 16 + 7 + 12 + 24 + 10 = 78`').toBe(78)
+    expect(DECLARED_REGISTER.length, 'still exactly six register rows').toBe(6)
+    expect(generatorTotal, 'NEW: the negative-generator table\'s declared terms sum to 11').toBe(11)
+    expect(registerTotal + generatorTotal, 'the combined declared arithmetic at this head: `78 + 11 = 89`').toBe(89)
+    expect(
+      NEG_REPORTS.every((r) => r.held && r.executed === r.declaredTotal),
+      `every generator must hold with \`executed == declared\`; broken: ${NEG_REPORTS.filter((r) => !r.held)
+        .map((r) => `${r.id} (${String(r.counterexample)})`)
+        .join(', ')}\nU-APP-HARNESS-READINESS NEGATIVE-GENERATOR REPORT\n${lines.join('\n')}`,
+    ).toBe(true)
   })
 })
 

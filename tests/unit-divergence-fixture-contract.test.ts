@@ -3,6 +3,33 @@
 // wiring serves its `#wiki-root`/`zone:main` template): THE RED SET, authored RED-FIRST from the
 // contract below and RUN BEFORE any implementation (`RCA-1`/`AGENTS.md` item 3).
 //
+// ⟨GATE-4 REMAND (2026-10-05) — THIS PASS CLOSES `A-2`/`A-3`/`A-10` AND THE FOUR UNDER-STRENGTH
+//  ROWS THE ADVERSARIAL PASS NAMED (`§3a.4`/`§3b` `S-3`, findings `A-2`/`A-3`/`A-5`/`A-10`). Every
+//  change is ADDITIVE or a RE-DERIVATION; NO existing assertion is weakened, the comparison set the
+//  `ok()` labels and their order (TEN calls) are untouched, and the leg adds no check. The items:
+//    `A-10` — `loadStepInvocations` ran a RAW comment-blind regex, so a COMMENTED
+//            `// await loadFixture(eClient)` read as leg 1's traversal and the PRE-FIX ASYMMETRY was
+//            accepted with `R-1`/`R-3`/`P-IM-1`/`P-SM-2` green. The reader now reads
+//            `stripLiteralsAndComments(src)`, and `NEG-commented-invocation` (with the pre-fix
+//            reader asserted as a SUBJECT) is the draw that holds it.
+//    `A-2` — the bounded wait had ZERO coverage: NEW row `P-SM-4` reads its existence, its `F-7`
+//            position, its two pinned constants, and DRIVES its five stop arms against the REAL
+//            function (extracted from the harness source; see `waitCallables`) plus
+//            `NEG-wait-absent`/`NEG-wait-after-load`.
+//    `A-3` — the env member had ZERO coverage: NEW row `P-SM-5` reads `PROVIDENT_ENABLE_TOOL_GROUPS:
+//            'graph'` at BOTH spawn sites, its absence from the shim transport, and the NINE-member
+//            vector (driving `siteArgs`'s own throw on a tenth member).
+//    `S-3` — `P-IM-1`'s second negative is now the REAL PRE-FIX ASYMMETRY; `P-IM-3`'s two negatives
+//            now MUTATE THE LITERAL THROUGH THE INSTRUMENT; `P-SM-2`'s `calls` is a REAL count with
+//            `NEG-duplicate-invocation`; `P-SM-3`'s shim arms read the SHIM'S OWN route with
+//            `NEG-shim-load-route-removed`/`NEG-unregistered-load`; `P-TP-1` drives the LEG'S OWN
+//            stop paths instead of the in-test `stopReport` model.
+//  DECLARED-TERM MOVEMENT (printed in `DECLARED_REGISTER`, in each row's title/body, and in the
+//  report): `P-IM-1` `2*2+2 = 6` → `2*2+4 = 8` · `P-SM-2` `2*2+2 = 6` → `2*2+3 = 7` ·
+//  `P-TP-1` `3*2+1 = 7` → `3*2+1+1 = 8` · NEW `P-SM-4` `1*3+5+2 = 10` · NEW `P-SM-5` `2*3+1+2 = 9`.
+//  TOTAL `78` → `101`. The superseded `6+23+15+8+6+6+7+7 = 78` stays visible everywhere it stood.
+//  NO DECLARED TERM IS REDUCED.⟩
+//
 // SOURCE OF EVERY ASSERTION (spec ONLY):
 //   docs/specs/unit-divergence-drive-fixture.md
 //     §0.2 `S-1`…`S-8`  the drive surface as read at this head: leg 1 = `connect` → `drive` with
@@ -22,6 +49,16 @@
 //                 itself by quoting the tool error (item 4), and the failure still counts in the
 //                 existing `{0,1}` arithmetic (item 5).
 //     §2.3 `C-3`  PRESERVED BY NAME (`U-DIVERGENCE-SPAWN` §3.7 `C-7`): no new check and the same
+//                 ⟨`A-4` PROSE CORRECTION (the TestWriter's half of `§3b`'s `A-4` row; the SET is NOT
+//                 changed — `C-3` item 1 forbids it): the preserved set's own proxies OVER-CLAIM in
+//                 three measured ways, and the rows below are read with that bound. (1) the label
+//                 `counter increment rendered in BOTH` passes on `renderedHtml.includes('counter')`,
+//                 so a NO-OP `inc` handler still satisfies it — the row asserts the SURFACE, never
+//                 the increment's effect; (2) `dispatch results non-empty in BOTH (R7)` asserts the
+//                 dispatch's non-emptiness, never its `results` CONTENT; (3) row 6
+//                 (`nodeId vocabulary matches`) COLLAPSES the ids to one normalized COUNT/string,
+//                 so two different id sets of the same size compare equal. A reader citing the
+//                 eight comparison rows must cite them as SURFACE rows, not as semantic ones.⟩
 //                 eight comparison rows + leg-1 boot check + failure branch, the same demo
 //                 literal (12 nodes), the same shared `drive()` (4 calls / 8 members / `norm`),
 //                 the same `{0,1}` exit contract, the same two-leg structure, the harness's
@@ -37,10 +74,13 @@
 //                 mock, no `G-9`-frozen artefact as an oracle, NO line-number assertion, no
 //                 weakened row, no edit to the sibling unit's red set.
 //     §3.6 `C-11` the readings the DONE row must carry.
-//     §4.2        the typed register: EIGHT rows — `P-IM-1` `P-IM-2` `P-IM-3` `P-SM-1` `P-SM-2`
-//                 `P-SM-3` `P-TP-1` `P-TP-2` — `P-IM-`/`P-SM-`/`P-TP-` ONLY, NO `F-` row, declared
-//                 terms printed as the sum of their own factors (`6 + 23 + 15 + 8 + 6 + 6 + 7 + 7
-//                 = 78`), deterministic plain tables, no new devDependency, seed `0x20260930`,
+//     §4.2        the typed register: EIGHT rows as filed — `P-IM-1` `P-IM-2` `P-IM-3` `P-SM-1`
+//                 `P-SM-2` `P-SM-3` `P-TP-1` `P-TP-2` — `P-IM-`/`P-SM-`/`P-TP-` ONLY, NO `F-` row,
+//                 declared terms printed as the sum of their own factors. The gate-4 remand moved
+//                 three of those terms and added the two zero-coverage rows (`P-SM-4`/`P-SM-5`), so
+//                 the live arithmetic is `8 + 23 + 15 + 8 + 7 + 6 + 8 + 7 + 10 + 9 = 101` and the
+//                 superseded `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78` stays recorded beside it.
+//                 Deterministic plain tables, no new devDependency, seed `0x20260930`,
 //                 stop-after-5, ≤100/row and ≤400 total.
 //     §4.3        the register's honesty limits: no row asserts the leg's COLOUR, no row asserts
 //                 the APP, every row reads the SAME instrument the class-(a) rows read, and a row
@@ -204,8 +244,48 @@ const CONTRACT_FLAG_MEMBERS: string[] = [
 
 interface Span { start: number; end: number }
 
-/** Skip a string literal (`'`, `"`, `` ` ``) starting at `i`; returns the index of its closing
- *  delimiter (or `src.length` when unterminated). */
+/** `A-10` — MASK every STRING/TEMPLATE literal and every COMMENT, keeping the source's LENGTH and
+ *  every offset (a masked character becomes a newline, so the line of a code character is
+ *  unchanged), so a TEXT-SHAPE scanner cannot read a COMMENTED or QUOTED mention as CODE.
+ *
+ *  WHY (the gate-4 adversarial finding `A-10`, BLOCKING): the harness's own `callSites()` skips a
+ *  callee named inside a comment, but the shared step's invocation reader (`loadStepInvocations`)
+ *  was a RAW regex over the whole source with NO comment stripping — so a commented
+ *  `// await loadFixture(eClient)` in leg 1's block READ AS THAT LEG'S TRAVERSAL (`via:
+ *  'shared-step'`, `calls: 1`, ordering satisfied) and the PRE-FIX ASYMMETRY was accepted with
+ *  `R-1`/`R-3`/`P-IM-1`/`P-SM-2` all green. The reader now reads THIS mask, so prose and quoted
+ *  text can never be a call. */
+function stripLiteralsAndComments(src: string): string {
+  const out = src.split('')
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]!
+    if (c === "'" || c === '"' || c === '`') {
+      const end = skipLiteral(src, i)
+      for (let k = i; k <= end && k < src.length; k++) if (out[k] !== '\n') out[k] = '\n'
+      i = end + 1
+      continue
+    }
+    if (c === '/' && src[i + 1] === '/') {
+      let e = src.indexOf('\n', i)
+      if (e < 0) e = src.length
+      for (let k = i; k < e; k++) out[k] = '\n'
+      i = e
+      continue
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      const close = src.indexOf('*/', i + 2)
+      const e = close < 0 ? src.length : close + 2
+      for (let k = i; k < e; k++) if (out[k] !== '\n') out[k] = '\n'
+      i = e
+      continue
+    }
+    i++
+  }
+  return out.join('')
+}
+const HARNESS_CODE = stripLiteralsAndComments(HARNESS_SRC)
+
 /** Skip a STRING or TEMPLATE literal starting at `i` (a `'`/`"`/`` ` ``): returns the index of its
  *  closing delimiter, or the source end when unterminated. A template literal's `${ … }` body is
  *  skipped as part of the literal, so a `{`/`}` inside an authored handler body is never counted. */
@@ -453,6 +533,23 @@ function literalNodes(lit: DemoLiteral): AuthoredNode[] {
 const HARNESS_NODES = literalNodes(HARNESS_LITERAL)
 const MODULE_NODES = literalNodes(MODULE_LITERAL)
 
+/** `P-IM-3`'s OWN comparison predicate — the twelve position draws' rule, extracted so a MUTATED
+ *  literal drawn from the source text is scored by the SAME predicate the row runs (the
+ *  `NEG-literal-mutated-through-instrument` draws: a mutation must be seen BY THE INSTRUMENT and
+ *  must BREAK this rule, not merely differ from an array the row built for the occasion). Returns
+ *  the first position that breaks, or `null` when the drawn literal still agrees position for
+ *  position with `src/shared/demo-envelope.ts`. */
+function droppedPositionBreak(lit: DemoLiteral): number | null {
+  const drawn = literalNodes(lit)
+  for (let k = 0; k < DEMO_NODE_COUNT; k++) {
+    const mine = drawn[k] ?? null
+    const theirs = MODULE_NODES[k] ?? null
+    const same = mine !== null && theirs !== null && mine.type === theirs.type && mine.cssId === theirs.cssId && mine.propsId === theirs.propsId
+    if (!same) return k
+  }
+  return null
+}
+
 /** `C-1` items 1/3 — the shared load step AS REACHED ON ONE LEG'S PATH, read from the source text.
  *
  *  ⟨ATTRIBUTION, repaired on the implementer's measurement (`R-3` vs `R-1`/`R-2`/`P-IM-1`/`P-SM-2`):
@@ -467,6 +564,9 @@ interface LegSequence {
   name: string
   client: string
   connectAt: number | null
+  /** `A-2` / §0B.3 `F-7` — the leg's coordinate of `waitForBootInstalled(client)` (`null` when the
+   *  leg never waits, which is the `NEG-wait-absent` draw). */
+  waitAt: number | null
   loadAt: number | null
   /** `'shared-step'` = this leg's traversal of the ONE shared step (`C-1` item 2), `'own-site'` =
    *  a load call site textually inside this leg's own block, `null` = no load on this leg's path. */
@@ -474,9 +574,13 @@ interface LegSequence {
   loadKind: string | null
   envelopeValue: string | null
   usesDemoEnvelope: boolean
+  /** `C-2` item 1 — the leg's own READ-BACK coordinate (its `readSurface` call), i.e. the probe
+   *  between the load and `drive` (`null` when the leg never reads anything back). */
+  probeAt: number | null
   driveAt: number | null
-  /** `C-1` items 1/2 — ONE traversal of the load step per leg (a second traversal of the shared
-   *  step on the SAME client is a double load; a hand-written per-leg site counts as its leg's). */
+  /** `C-1` items 1/2 — the number of times this leg's path TRAVERSES the load step (`A-10`/`P-SM-2`
+   *  made this a REAL count: a second invocation of the shared step with this leg's own client is
+   *  two traversals, which the pre-fix `calls: 1` hardcode could never see). */
   calls: number
 }
 interface LoadSite extends CallSite { leg: string; kind: string | null; envelope: string | null }
@@ -491,6 +595,10 @@ interface HarnessShape {
   loadSitesInHelper: string | null
   leg1: LegSequence | null
   leg2: LegSequence | null
+  /** `A-2` — the app-launch sites' `env` object literals (the direct `spawn(…)` site and the SDK
+   *  `StdioClientTransport` site), read as source text: `text` is the literal, `shim` is true for
+   *  the battery host's own transport (which must carry NO `PROVIDENT_ENABLE_TOOL_GROUPS` member). */
+  envObjects: Array<{ index: number; text: string; shim: boolean }>
   spawnSites: number
   sdkSites: number
   shimSites: number
@@ -519,6 +627,9 @@ function harnessShape(src: string): HarnessShape {
   const drives = callSites(src, /\b(drive)\s*\(/).filter((site) => !DRIVE_DECL_RE.test(src.slice(Math.max(0, site.index - 32), site.index + 'drive'.length)))
   const shimAt = indexOfShimHeader(src)
   const violations: string[] = []
+  // ⟨`A-10` — the MASKED source (comments and string/template literals blanked, offsets preserved).
+  //   Every CALLEE census below reads it, so a commented or quoted mention can never be a call.⟩
+  const code = stripLiteralsAndComments(src)
 
   const loadHelperNames: string[] = []
   for (const [name, region] of fns) {
@@ -588,7 +699,9 @@ function harnessShape(src: string): HarnessShape {
     if (helpers.length !== 1 || loadSites.length !== 1) return null
     const helper = helpers[0]!
     const region = fns.get(helper)!
-    const callCount = (src.match(new RegExp(`\\b${helper}\\s*\\(`, 'g')) ?? []).length
+    // the declaration + one invocation per leg = 3 (read from the MASKED source, so a comment that
+    // NAMES the helper is not an invocation — `A-10`)
+    const callCount = (code.match(new RegExp(`\\b${helper}\\s*\\(`, 'g')) ?? []).length
     // the declaration + one invocation per leg = 3
     return callCount >= 3 && region.body.includes('callTool') ? helper : null
   })()
@@ -597,16 +710,27 @@ function harnessShape(src: string): HarnessShape {
   // invocation of the helper with the LEG'S OWN CLIENT on that leg's path. This is what a per-leg
   // row can assert about a ONE-site design, and it is exactly what discriminates a leg that skips
   // the load: its client is never passed to the step.
+  //
+  // ⟨`A-10`, BLOCKING (RED-SET HOLE) — FIXED HERE: this reader ran a RAW regex over the WHOLE source
+  // with NO comment stripping, so a COMMENTED `// await loadFixture(eClient)` in leg 1's block read
+  // as that leg's traversal and the PRE-FIX ASYMMETRY was accepted with `R-1`/`R-3`/`P-IM-1`/
+  // `P-SM-2` all green. It now reads `stripLiteralsAndComments(src)` — the same discipline the
+  // harness's own `callSites()` applies — so a comment or a quoted string can never be a call.
+  // The discriminating draw is `NEG-commented-invocation` (`P-IM-1` draw 3 / `P-SM-2`).⟩
   const loadStepInvocations: Array<{ client: string; index: number }> = ((): Array<{ client: string; index: number }> => {
     if (sharedLoadHelper === null) return []
     const re = new RegExp(`\\b${sharedLoadHelper}\\s*\\(\\s*([A-Za-z_$][\\w$]*)`, 'g')
     const out: Array<{ client: string; index: number }> = []
     let m: RegExpExecArray | null
-    while ((m = re.exec(src)) !== null) out.push({ client: m[1]!, index: m.index })
+    while ((m = re.exec(code)) !== null) out.push({ client: m[1]!, index: m.index })
     return out
   })()
   const invocationOf = (leg: 'leg1' | 'leg2', client: string): { client: string; index: number } | null =>
     loadStepInvocations.filter((v) => legOf(v.index) === leg && v.client === client).sort((a, b) => a.index - b.index)[0] ?? null
+  /** `A-10`/`P-SM-2` — how many times THIS leg passes its OWN client to the shared step (a REAL
+   *  count, not a hardcoded 1: two invocations are two loads). */
+  const invocationCountOf = (leg: 'leg1' | 'leg2', client: string): number =>
+    loadStepInvocations.filter((v) => legOf(v.index) === leg && v.client === client).length
 
   // EACH LEG'S LOAD COORDINATE. A leg whose own block carries the `provident.load` call site reads
   // that site (`own-site`); a leg that reaches the ONE shared step reads the step's invocation on
@@ -619,16 +743,35 @@ function harnessShape(src: string): HarnessShape {
       .filter((s) => s.leg === leg && !(sharedLoadHelper !== null && fns.get(sharedLoadHelper) !== undefined && s.index >= fns.get(sharedLoadHelper)!.start && s.index <= fns.get(sharedLoadHelper)!.end))
       .sort((a, b) => a.index - b.index)
     const inv = own.length === 0 && sharedLoadHelper !== null && loadSites.length === 1 ? invocationOf(leg, clientOf(leg)) : null
+    // ⟨`A-10`/`P-SM-2` — `calls` is a REAL traversal count (this leg's own sites PLUS its
+    //   traversals of the shared step with its own client). The pre-fix body returned a hardcoded
+    //   `calls: 1` on this branch, so a DUPLICATE load on one leg was invisible to every row.⟩
+    const calls = own.length + (sharedLoadHelper === null ? 0 : invocationCountOf(leg, clientOf(leg)))
     if (inv === null) {
       const site = own[0] ?? null
-      return { at: site === null ? null : site.index, via: site === null ? null : 'own-site', kind: site === null ? null : site.kind, envelope: site === null ? null : site.envelope, calls: own.length }
+      return { at: site === null ? null : site.index, via: site === null ? null : 'own-site', kind: site === null ? null : site.kind, envelope: site === null ? null : site.envelope, calls }
     }
     const site = loadSites[0]!
-    return { at: inv.index, via: 'shared-step', kind: site.kind, envelope: site.envelope, calls: 1 }
+    return { at: inv.index, via: 'shared-step', kind: site.kind, envelope: site.envelope, calls }
   }
 
   const decl = fns.get('drive')
   const driveInvocations = drives.filter((d) => decl === undefined || d.index !== decl.start)
+
+  // ⟨`A-2` (BLOCKING, COVERAGE) — §0B.3 `F-7`'s REFINED ORDERING, read as a coordinate: the leg's
+  //   `waitForBootInstalled(client)` call site and its own read-back (`readSurface`) call site.
+  //   Nothing else in this file read them, so deleting the wait, moving it AFTER the load, or
+  //   zeroing the deadline left `npm test` green. Both are read from the MASKED source, so a
+  //   commented mention of either can never be a call (`A-10`'s discipline, applied here too).⟩
+  const codeCalls = (re: RegExp): CallSite[] => callSites(code, re).filter((s) => code.slice(s.index, s.index + 4) !== '\n\n\n\n')
+  const waitAtOf = (client: string): number | null => {
+    const site = codeCalls(/\b(waitForBootInstalled)\s*\(/).filter((s) => src.slice(s.index, s.index + 60).includes(client))[0]
+    return site === undefined ? null : site.index
+  }
+  const probeAtOf = (client: string): number | null => {
+    const site = codeCalls(/\b(readSurface)\s*\(/).filter((s) => src.slice(s.index, s.index + 60).includes(client))[0]
+    return site === undefined ? null : site.index
+  }
 
   const legs: LegSequence[] = (['leg1', 'leg2'] as const).map((name) => {
     const client = clientOf(name)
@@ -638,11 +781,13 @@ function harnessShape(src: string): HarnessShape {
       name,
       client,
       connectAt: connectAtOf(name, client),
+      waitAt: waitAtOf(client),
       loadAt: load.at,
       loadVia: load.via,
       loadKind: load.kind,
       envelopeValue: load.envelope,
       usesDemoEnvelope: load.at !== null && envelopesDemo(load.envelope),
+      probeAt: probeAtOf(client),
       driveAt: myDrives.length > 0 ? myDrives[0]!.index : null,
       calls: load.calls,
     }
@@ -659,6 +804,30 @@ function harnessShape(src: string): HarnessShape {
   const shimSites = sdkSites.filter((s) => src.slice(s.index, s.index + 120).includes(SHIM_HOST_MARKER))
   const appTransports = sdkSites.filter((s) => src.slice(s.index, s.index + 400).includes('electronBin'))
   const hostSites = spawnCalls.length + appTransports.length
+
+  // ⟨`A-3` (BLOCKING, COVERAGE) — THE SPAWN `env` OBJECTS, read as source text. `F-6`/`§0B.2` names
+  //   `PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` at BOTH Electron sites, and NOTHING in either
+  //   divergence file read an `env` object — deleting the member from both sites kept `held × 8`
+  //   and `78/78` green. The literal's own text is captured (every `env: { …process.env, … }`
+  //   object), and its `shim` flag is decided by the marker rule the transport census already uses:
+  //   the battery host's transport carries no `env` member at all (`S-1`), and a transport whose
+  //   own window names the shim marker is the SHIM host — which must carry no grant.⟩
+  const envObjects: Array<{ index: number; text: string; shim: boolean }> = (() => {
+    const out: Array<{ index: number; text: string; shim: boolean }> = []
+    const re = /env\s*:\s*/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(src)) !== null) {
+      const open = m.index + m[0].length
+      const text = balancedBody(src, open)
+      if (text === null) continue
+      // the site this object belongs to is the nearest transport construction IN FRONT of it: a
+      // transport whose own command is the battery host is the SHIM host, which must carry no grant.
+      const before = src.slice(0, m.index)
+      const shim = before.lastIndexOf(`command: process.execPath`) > before.lastIndexOf(`command: electronBin`)
+      out.push({ index: m.index, text, shim })
+    }
+    return out
+  })()
 
   if (loadSites.length === 0) {
     violations.push('no `provident.load` call site exists anywhere in the module (C-1 items 1/2)')
@@ -703,6 +872,7 @@ function harnessShape(src: string): HarnessShape {
     spawnSites: hostSites,
     sdkSites: appTransports.length,
     shimSites: shimSites.length,
+    envObjects,
     loadCalls: loadSites.length,
     violations,
   }
@@ -896,6 +1066,76 @@ function envelopeExprFor(load: 'canonical' | 'none' | 'other-envelope' | 'wrong-
  *  counter-variant, with another client. */
 function loadStepInvocation(client: string, opts: { wrongClient?: boolean }): string {
   return `await loadFixture(${opts.wrongClient === true ? 'otherClient' : client})\n`
+}
+
+// ---------------------------------------------------------------------------
+// ⟨`A-10` (BLOCKING RED-SET HOLE) — THE COMMENTED-INVOCATION DRAW AND ITS DISCRIMINATION PROOF.⟩
+//
+// `A-10`, as the gate-4 pass measured it: `loadStepInvocations` was a RAW regex over the whole
+// source with NO comment stripping (unlike the harness's own `callSites()`), so a COMMENTED
+// `// await loadFixture(eClient)` in leg 1's block READ AS THAT LEG'S TRAVERSAL (`via:
+// 'shared-step'`, `calls: 1`, ordering satisfied) — and `R-1`/`R-3`/`P-IM-1`/`P-SM-2` all passed
+// WITH THE PRE-FIX ASYMMETRY RESTORED (leg 1's real load commented out).
+//
+// The reader is FIXED (`harnessShape` now reads `stripLiteralsAndComments(src)`); the draws below
+// are what HOLD that fix. Both halves are asserted for every draw: the OLD reader's verdict and
+// the NEW one's, so a draw is a DISCRIMINATION PROOF rather than a restatement of the new shape.
+
+/** THE PRE-FIX READING, kept in this file as a SUBJECT — never as an instrument: the raw
+ *  comment-blind regex `A-10` measured. A draw proves discrimination only when THIS reader says
+ *  something DIFFERENT about it than the fixed one does. */
+function commentBlindInvocations(text: string, helper: string, leg: 'leg1' | 'leg2'): Array<{ client: string; index: number }> {
+  const shimAt = indexOfShimHeader(text)
+  const re = new RegExp(`\\b${helper}\\s*\\(\\s*([A-Za-z_$][\\w$]*)`, 'g')
+  const out: Array<{ client: string; index: number }> = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    if ((m.index > shimAt ? 'leg2' : 'leg1') === leg) out.push({ client: m[1]!, index: m.index })
+  }
+  return out
+}
+
+/** `NEG-commented-invocation` — THE REAL PRE-FIX ASYMMETRY with leg 1's load COMMENTED OUT: leg 2
+ *  still traverses the ONE shared step, leg 1's only "traversal" is a comment. A reader that
+ *  cannot strip comments reads this as SYMMETRIC (which is the false green `A-10` measured). */
+function commentedInvocationModule(): string {
+  return `async function main() {\nawait eClient.connect(t)\n// await loadFixture(eClient)\nout1 = await drive(eClient)\n${SHIM_HEADER}await shimClient.connect(s)\n${loadStepInvocation('shimClient', {})}out2 = await drive(shimClient)\n}\n` +
+    SHARED_HELPER('canonical')
+}
+
+/** `NEG-duplicate-invocation` — `P-SM-2`'s owed generator: leg 1's path traverses the ONE shared
+ *  step TWICE with its own client (a DOUBLE LOAD), while the module still holds exactly ONE
+ *  `provident.load` call site — so a shape-only reading cannot see it, and the pre-fix hardcoded
+ *  `calls: 1` reported «exactly one load per host» no matter what the body said. */
+function duplicateInvocationModule(): string {
+  return `async function main() {\nawait eClient.connect(t)\n${loadStepInvocation('eClient', {})}${loadStepInvocation('eClient', {})}out1 = await drive(eClient)\n${SHIM_HEADER}await shimClient.connect(s)\n${loadStepInvocation('shimClient', {})}out2 = await drive(shimClient)\n}\n` +
+    SHARED_HELPER('canonical')
+}
+
+/** The `waitForBootInstalled` coordinates of a drawn module's OWN client (`null` when the module
+ *  never waits) — the same call-site rule `harnessShape` uses for a leg's `waitAt`. */
+function waitCallAt(text: string, client: string): number | null {
+  const site = callSites(stripLiteralsAndComments(text), /\b(waitForBootInstalled)\s*\(/)
+    .filter((s) => text.slice(s.index, s.index + 60).includes(client))[0]
+  return site === undefined ? null : site.index
+}
+
+/** `NEG-wait-absent` — the contract's own sequence with the WAIT deleted: leg 1 goes
+ *  `connect` → load → drive, exactly the ordering `T-1`'s `F-7` refinement replaced. */
+function waitAbsentModule(): string {
+  return `async function main() {\nawait eClient.connect(t)\n${loadStepInvocation('eClient', {})}out1 = await drive(eClient)\n${SHIM_HEADER}await shimClient.connect(s)\n${loadStepInvocation('shimClient', {})}out2 = await drive(shimClient)\n}\n` +
+    SHARED_HELPER('canonical')
+}
+
+/** The wait's own declaration, as a drawn module that uses the wait must carry it (so the draw is
+ *  about ORDERING and never about a missing function). */
+const WAIT_FN_TEXT = `async function waitForBootInstalled(client) {\n  await client.callTool({ name: 'provident.list_targets', arguments: {} })\n}\n`
+
+/** `NEG-wait-after-load` — the wait MOVED AFTER THE LOAD: the app's own fire-and-forget install can
+ *  then land after the demo load and REPLACE it (the `O-1` race the wait exists to close). */
+function waitAfterLoadModule(): string {
+  return `async function main() {\nawait eClient.connect(t)\n${loadStepInvocation('eClient', {})}await waitForBootInstalled(eClient)\nout1 = await drive(eClient)\n${SHIM_HEADER}await shimClient.connect(s)\n${loadStepInvocation('shimClient', {})}out2 = await drive(shimClient)\n${WAIT_FN_TEXT}}\n` +
+    SHARED_HELPER('canonical')
 }
 
 // ===========================================================================
@@ -1346,7 +1586,8 @@ describe('U-DIVERGENCE-FIXTURE §3.3 class (b) B-1..B-5 — THE REAL RUN (the un
 })
 
 // ===========================================================================
-// §4.2 — THE TYPED REGISTER (EIGHT rows, `P-IM-`/`P-SM-`/`P-TP-` ONLY, NO `F-` row).
+// §4.2 — THE TYPED REGISTER (the gate's EIGHT rows + the two the gate-4 remand ADDED for the
+// zero-coverage steps `A-2`/`A-3`; `P-IM-`/`P-SM-`/`P-TP-` ONLY, NO `F-` row).
 // Deterministic plain tables, no PBT library, no new devDependency (§4.1). Caps: ≤100 attempts
 // per row · ≤400 in total · STOP AFTER 5 distinct counterexamples; every row reports its strategy
 // id, its DECLARED term printed as the sum of its own factors, its EXECUTED term, `held`/`broken`,
@@ -1380,14 +1621,34 @@ interface RowReport {
 const REPORTS: RowReport[] = []
 
 const DECLARED_REGISTER: Array<{ row: string; strategyId: string; declared: string; declaredTotal: number }> = [
-  { row: 'P-IM-1', strategyId: 'strat:divergence-fixture-symmetry', declared: '2*2+2', declaredTotal: 6 },
+  // ⟨AMENDED 2026-10-05 (gate-4 remand, `A-10`/`A-2`/`A-3` + the `S-3` re-derivation): the row's
+  //   second, EMPTY-MODULE negative draw was replaced by the audit's own generators, so the DECLARED
+  //   term moves `2*2+2 = 6` → `2*2+4 = 8`. The superseded figure stays visible HERE, in the spec's
+  //   §4.2 (which must be amended), and in the row's own title/body.⟩
+  { row: 'P-IM-1', strategyId: 'strat:divergence-fixture-symmetry', declared: '2*2+4', declaredTotal: 8 },
   { row: 'P-IM-2', strategyId: 'strat:divergence-fixture-preserved-surfaces', declared: '4+8+8+2+1', declaredTotal: 23 },
   { row: 'P-IM-3', strategyId: 'strat:divergence-fixture-literal', declared: '12+1+2', declaredTotal: 15 },
   { row: 'P-SM-1', strategyId: 'strat:divergence-fixture-readiness', declared: '3*2+2', declaredTotal: 8 },
-  { row: 'P-SM-2', strategyId: 'strat:divergence-fixture-hosts', declared: '2*2+2', declaredTotal: 6 },
+  // ⟨AMENDED 2026-10-05 (gate-4 remand, `A-10`/`S-3`): `NEG-duplicate-invocation` is added, so the
+  //   DECLARED term moves `2*2+2 = 6` → `2*2+3 = 7`. The superseded figure stays visible here and
+  //   in the spec's §4.2, which must be amended.⟩
+  { row: 'P-SM-2', strategyId: 'strat:divergence-fixture-hosts', declared: '2*2+3', declaredTotal: 7 },
   { row: 'P-SM-3', strategyId: 'strat:divergence-fixture-load-route', declared: '2*2+2', declaredTotal: 6 },
-  { row: 'P-TP-1', strategyId: 'strat:divergence-fixture-totality', declared: '3*2+1', declaredTotal: 7 },
+  // ⟨AMENDED 2026-10-05 (gate-4 remand, `A-5`): the auditor's REFUSED-READ arm is added, so the
+  //   DECLARED term moves `3*2+1 = 7` → `3*2+1+1 = 8`. The superseded figure stays visible here and
+  //   in the spec's §4.2, which must be amended.⟩
+  { row: 'P-TP-1', strategyId: 'strat:divergence-fixture-totality', declared: '3*2+1+1', declaredTotal: 8 },
   { row: 'P-TP-2', strategyId: 'strat:divergence-fixture-spawn-untouched', declared: '2*2+2+1', declaredTotal: 7 },
+  // ⟨ADDED 2026-10-05 (gate-4 remand, `A-2`): THE BOUNDED BOOT-INSTALL WAIT HAD ZERO COVERAGE — no
+  //   row in either divergence file mentioned `waitForBootInstalled` / `BOOT_POLL_*` / `boot.status`,
+  //   so deleting the wait, moving it after the load, or zeroing the deadline each left `npm test`
+  //   green. This row is NEW (the register was EIGHT rows at the gate; the spec's §4.1 row cap must
+  //   be amended to NINE/TEN — see the report).⟩
+  { row: 'P-SM-4', strategyId: 'strat:divergence-fixture-boot-wait', declared: '1*3+5+2', declaredTotal: 10 },
+  // ⟨ADDED 2026-10-05 (gate-4 remand, `A-3`): THE SPAWN ENV MEMBER HAD THE SAME ZERO COVERAGE —
+  //   deleting `PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'` from BOTH sites kept `held × 8` and `78/78`
+  //   green. NEW row.⟩
+  { row: 'P-SM-5', strategyId: 'strat:divergence-fixture-spawn-env-member', declared: '2*3+1+2', declaredTotal: 9 },
 ]
 
 interface RowRun {
@@ -1443,6 +1704,239 @@ function registerRow(id: string, body: (run: RowRun) => void): void {
 }
 
 // ---------------------------------------------------------------------------
+// ⟨`A-2`/`A-5` — THE WAIT'S OWN ORDERING, ITS BUDGET, AND ITS REAL STOP ARMS.⟩
+//
+// `A-2` (BLOCKING, COVERAGE) measured that NO row in either divergence file mentioned
+// `waitForBootInstalled` / `BOOT_POLL_*` / `boot.status`: deleting the wait, moving it AFTER the
+// load, or zeroing the deadline each left `npm test` green. `A-5` adds the refused-read arm the
+// pass recorded (the wait never inspects `isError`; `call()`'s `JSON.parse` is unguarded).
+//
+// HOW THE ARMS DRIVE THE **REAL** FUNCTION WITHOUT TOUCHING `scripts/**`: `waitForBootInstalled` is
+// module-private (the harness exports only `registerCleanup`/`createScratchProfile`/
+// `cleanupScratchProfiles`/`composeArgs`/`classifyBootFailure`/`ok`/`failureCount`/`checkCount`/
+// `exitCodeFor`/`demoEnvelope`) and `C-10` forbids booting Electron from this file, so the arms
+// extract the function's OWN SOURCE TEXT and its OWN named lexical dependencies (`call`, the two
+// pinned poll constants) from `scripts/electron-divergence.mjs` and execute THAT text: every arm
+// runs the leg's real branches, its real messages and its real deadline arithmetic, and a
+// deleted/renamed/moved wait is a LOUD row failure rather than a green. A MISSING dependency is a
+// counterexample (BROKEN), never a silent skip.
+
+/** The `{ … }` BODY span of a function whose parameter list opens at `paren`, found by SEARCHING
+ *  forward for the body's opener rather than by arithmetic: a declaration may write `(a, b) {`,
+ *  `(a: T) {` or `(a, b)\n{`, and the first CODE bracket after the parameter list is the body in
+ *  every one of those forms. Returns the span's opener and closer, or `null` when there is none. */
+function functionBody(src: string, paren: number): { open: number; end: number } | null {
+  const close = findMatching(src, paren)
+  if (close < 0) return null
+  // SCAN FORWARD over whitespace and comments only, looking for the body's opener. `nextCode` is
+  // NOT used here: it also SKIPS string literals, so starting inside a body whose first statement
+  // begins with a literal would step over the opener and miss the declaration entirely.
+  let k = close + 1
+  for (;;) {
+    if (k >= src.length) return null
+    const c = src[k]!
+    if (/\s/.test(c)) { k++; continue }
+    if (c === '/' && src[k + 1] === '/') { const nl = src.indexOf('\n', k); k = nl < 0 ? src.length : nl + 1; continue }
+    if (c === '/' && src[k + 1] === '*') { const e = src.indexOf('*/', k + 2); k = e < 0 ? src.length : e + 2; continue }
+    break
+  }
+  if (src[k] !== '{') return null
+  const end = findMatching(src, k)
+  return end < 0 ? null : { open: k, end }
+}
+
+/** The FULL source text of a TOP-LEVEL `[export] [async] function <name>(…) { … }` declaration,
+ *  read by a direct scan that (a) never looks inside a string/template literal or a comment
+ *  (`nextCode`), and (b) requires the match to be the declaration itself — so a mention of the name
+ *  in prose can never be mistaken for it. `null` when the module carries no such declaration, which
+ *  is a COUNTEREXAMPLE in every row that needs it. */
+function declText(src: string, name: string): string | null {
+  let at = 0
+  for (;;) {
+    at = src.indexOf(`function ${name}(`, at + 1)
+    if (at < 0) return null
+    if (at > 0 && /[\w$.]/.test(src[at - 1]!)) continue
+    // the declaration must be TOP-LEVEL and it must be THIS match: the same line carries nothing
+    // but the optional `export`/`async` modifiers in front of the `function` keyword
+    const lineStart = src.lastIndexOf('\n', at) + 1
+    if (!/^[ \t]*(export\s+)?(async\s+)?$/.test(src.slice(lineStart, at))) continue
+    // (the line carries NOTHING but `export`/`async` before `function`, i.e. this match is the
+    //  declaration itself and not a mention of it inside an expression)
+    const paren = at + `function ${name}`.length
+    if (src[paren] !== '(') continue
+    const span = functionBody(src, paren)
+    if (span === null) continue
+    // INCLUDE the declaration's own `async` modifier (a `async function …` body is not valid in a
+    // plain function: it contains `await`), but DROP `export`, which is a module-level keyword the
+    // sandbox cannot carry.
+    return src.slice(lineStart, span.end + 1).replace(/^\s*export\s+/, '')
+  }
+}
+
+/** The WHOLE TEXT of a NAMED top-level `const <name> = [ … ]` array literal (multi-line, unlike
+ *  `constRhs`), read by balanced braces. `null` when the module carries no such array. */
+function constArrayText(src: string, name: string): string | null {
+  const re = new RegExp(`(?:^|\\n)\\s*const\\s+${name}\\s*=\\s*\\[`)
+  const m = re.exec(src)
+  if (m === null) return null
+  const open = src.indexOf('[', m.index)
+  const inner = open < 0 ? null : balancedBody(src, open)
+  return inner === null ? null : `[${inner}]`
+}
+
+/** The RIGHT-HAND SIDE of a NAMED top-level `const` (the pinned poll constants), as source text. */
+function constRhs(src: string, name: string): string | null {
+  const re = new RegExp(`(?:^|\\n)\\s*const\\s+${name}\\s*=\\s*`)
+  const m = re.exec(src)
+  if (m === null) return null
+  const from = m.index + m[0].length
+  const eol = src.indexOf('\n', from)
+  return src.slice(from, eol < 0 ? src.length : eol).trim().replace(/;\s*$/, '')
+}
+
+/** A stub MCP client for the arms: it answers `callTool` in-process (no transport, no Electron, no
+ *  mock API of any kind), counts what was asked, and lets an arm reject the call. */
+interface StubClient {
+  loadCalls: number
+  dispatchCalls: number
+  listCalls: number
+  calls: Array<{ name: string }>
+  callTool(req: { name: string; arguments?: unknown }): Promise<unknown>
+}
+function stubClient(handler: (name: string, stub: StubClient) => Promise<unknown>): StubClient {
+  const stub: StubClient = {
+    loadCalls: 0,
+    dispatchCalls: 0,
+    listCalls: 0,
+    calls: [],
+    async callTool(req: { name: string; arguments?: unknown }): Promise<unknown> {
+      stub.calls.push({ name: req.name })
+      if (req.name === 'provident.load') stub.loadCalls++
+      if (req.name === 'provident.dispatch') stub.dispatchCalls++
+      if (req.name === 'provident.list_targets') stub.listCalls++
+      return handler(req.name, stub)
+    },
+  }
+  return stub
+}
+
+/** A reply in the MCP result shape the harness's `call()` parses (`content[0].text` is JSON). */
+function toolReply(value: unknown, isError = false): unknown {
+  return { isError, content: [{ type: 'text', text: JSON.stringify(value) }] }
+}
+
+/** THE REAL INSTRUMENT: `waitForBootInstalled` (with the harness's own `call` and its own two pinned
+ *  constants), extracted from the harness's source text and executed. `Date.now` is INJECTED and
+ *  passed into the sandbox AS `Date`, so the deadline arm exercises the SOURCE'S OWN arithmetic over
+ *  the SOURCE'S OWN constants — `BOOT_POLL_DEADLINE_MS` is never re-declared here (a re-declared
+ *  constant would be a MODEL of the contract, which is exactly what `P-TP-1`'s pre-fix `stopReport`
+ *  was, and the reason the audit found the named-cause arm unable to fail). */
+function waitCallables(opts: { tickPerNow?: number } = {}): { wait: (client: StubClient) => Promise<unknown>; logs: string[]; injected: { interval: string; deadline: string; intervalValue: number; deadlineValue: number; step: number } } {
+  const fn = declText(HARNESS_SRC, 'waitForBootInstalled')
+  const callFn = declText(HARNESS_SRC, 'call')
+  const interval = constRhs(HARNESS_SRC, 'BOOT_POLL_INTERVAL_MS')
+  const deadline = constRhs(HARNESS_SRC, 'BOOT_POLL_DEADLINE_MS')
+  if (fn === null) throw new Error('the harness carries no `waitForBootInstalled` declaration — A-2\'s instrument is absent, so no arm below can be driven')
+  if (callFn === null) throw new Error('the harness carries no `call` helper, which the wait binds through')
+  if (interval === null || deadline === null) throw new Error('the harness no longer declares BOTH pinned poll constants (BOOT_POLL_INTERVAL_MS / BOOT_POLL_DEADLINE_MS)')
+  // THE INJECTED CLOCK. `tickPerNow` is the number of MILLISECONDS one `Date.now()` call advances:
+  // `1` for the ordinary arms (so the wait's own poll count is realistic), and the SOURCE'S OWN
+  // `BOOT_POLL_DEADLINE_MS` for the deadline arm (so that arm reaches the source's own deadline
+  // comparison without waiting 20 real seconds — the constant is READ, never re-declared).
+  const logs: string[] = []
+  const step = opts.tickPerNow ?? 1
+  let tick = Date.now()
+  const sandboxDate = { now: () => (tick += step) }
+  const build = new Function(
+    'call',
+    'BOOT_POLL_INTERVAL_MS',
+    'BOOT_POLL_DEADLINE_MS',
+    'console',
+    'Date',
+    'Error',
+    'JSON',
+    'String',
+    'Array',
+    'Number',
+    'Object',
+    `${callFn}\n${fn}\nreturn waitForBootInstalled`,
+  )
+  // the source's own constant EXPRESSIONS are EVALUATED (so `20_000` reaches the sandbox as the
+  // number 20000 — a string would make the wait's `waited >= BOOT_POLL_DEADLINE_MS` a comparison
+  // that is never true, which is exactly the silent-non-termination this extraction must not have)
+  const intervalValue = new Function(`return (${interval})`)() as number
+  const deadlineValue = new Function(`return (${deadline})`)() as number
+  const wait = build(
+    callFn ? callFn : null,
+    intervalValue,
+    deadlineValue,
+    { log: (line: unknown) => logs.push(String(line)) },
+    sandboxDate,
+    Error,
+    JSON,
+    String,
+    Array,
+    Number,
+    Object,
+  ) as (client: StubClient) => Promise<unknown>
+  return { wait, logs, injected: { interval, deadline, intervalValue, deadlineValue, step } }
+}
+
+/** `F-7`'s order check on ONE leg: `connect → wait → load → probe → drive`. A module whose wait is
+ *  ABSENT, or whose wait sits anywhere but between `connect` and the load, violates BY NAME. */
+function waitOrderViolations(text: string, leg: LegSequence | null): string[] {
+  const out: string[] = []
+  if (leg === null) return [': no leg on this path']
+  const client = leg.client
+  const at = waitCallAt(text, client)
+  if (at === null) {
+    out.push(`${leg.name} (${client}): NO \`waitForBootInstalled(${client})\` call exists on this leg's path — F-7's refined ordering is connect → wait (bounded) → load → probe → drive, and a deleted wait must RED (A-2)`)
+    return out
+  }
+  if (leg.connectAt !== null && at < leg.connectAt) out.push(`${leg.name}: the wait precedes its \`connect\` (F-7)`)
+  if (leg.loadAt !== null && at > leg.loadAt) out.push(`${leg.name}: the wait FOLLOWS the shared load step — the app's own fire-and-forget install can then land after the demo load and REPLACE it (F-7 / O-1; NEG-wait-after-load)`)
+  if (leg.probeAt !== null && at > leg.probeAt) out.push(`${leg.name}: the wait follows the readiness read-back (F-7: the wait precedes the load, hence the probe)`)
+  if (leg.driveAt !== null && at > leg.driveAt) out.push(`${leg.name}: the wait follows the first \`drive\` read (F-7)`)
+  return out
+}
+
+/** §0B.3 item 5 / `F-6` — the deadline is the CLIENT's pinned constant, and `O-1`'s measured
+ *  `250`–`540` ms is an OBSERVATION that must NEVER be used as a budget: no literal deadline, no
+ *  sleep of an observed-ms length, and the interval used as the sleep. */
+function waitBudgetViolations(text: string): string[] {
+  const out: string[] = []
+  const body = declText(text, 'waitForBootInstalled')
+  if (body === null) return ["the harness carries no `waitForBootInstalled` declaration (A-2)"]
+  if (constRhs(text, 'BOOT_POLL_INTERVAL_MS') === null) out.push("BOOT_POLL_INTERVAL_MS is not declared (the interval is the CLIENT's to pin)")
+  if (constRhs(text, 'BOOT_POLL_DEADLINE_MS') === null) out.push("BOOT_POLL_DEADLINE_MS is not declared (the deadline is the CLIENT's to pin)")
+  if (!/waited\s*>=\s*BOOT_POLL_DEADLINE_MS/.test(body)) out.push('the deadline check no longer compares against BOOT_POLL_DEADLINE_MS — a literal or a zeroed deadline is not the pinned constant')
+  if (!/setTimeout\s*\(\s*resolve\s*,\s*BOOT_POLL_INTERVAL_MS\s*\)/.test(body)) out.push('the sleep no longer waits BOOT_POLL_INTERVAL_MS')
+  if (/setTimeout\s*\(\s*resolve\s*,\s*(250|540)\s*\)/.test(body) || /waited\s*>=\s*(250|540)\b/.test(body)) out.push("`O-1`'s measured 250–540 ms is used as a BUDGET — it is an OBSERVATION (F-6), never a budget")
+  if (!/installed/.test(body) || !/pending/.test(body) || !/failed/.test(body)) out.push('the declared three-state set (pending|installed|failed) is no longer read')
+  return out
+}
+
+/** The top-level members of a spawn `env` object literal, as `name` → raw value text. */
+function envMembers(envText: string): Array<{ name: string; value: string }> {
+  const out: Array<{ name: string; value: string }> = []
+  for (const member of splitTopLevel(envText)) {
+    // an object member is `name: value`; a SHIM env literal written as a bare object literal inside
+    // another expression is still a member list, so an `=` (an assignment-looking form) is accepted
+    // too — the row's own subject is the MEMBER NAME, whatever punctuation the site's house style uses
+    const m = /^\s*([A-Za-z_$][\w$]*)\s*[:=]\s*([\s\S]*)$/.exec(member)
+    if (m === null) continue
+    out.push({ name: m[1]!, value: m[2]!.trim() })
+  }
+  return out
+}
+
+/** The member's raw value in an env literal's SOURCE text, or `null` when the member is absent. */
+function envMemberValue(envText: string, member: string): string | null {
+  const hit = envMembers(envText).find((m) => m.name === member)
+  return hit === undefined ? null : hit.value
+}
+
+// ---------------------------------------------------------------------------
 // The register's own reading of the app-side source files the route rows need (§4.3 item 2: a
 // source fact about the ROUTE, never a claim that the app renders or works).
 // ---------------------------------------------------------------------------
@@ -1466,7 +1960,27 @@ const APP_ROUTE = (() => {
   const runtimeLoad = functionRegions(RUNTIME_SRC).get('load')?.body ?? ''
   const runtimeLoadOk = runtimeLoad.includes("'envelope'") && runtimeLoad.includes('loadEnvelope')
   const mutating = /MUTATING_METHODS\s*=\s*new\s+Set\(\s*\[[^\]]*'load'/.test(RENDERER_SRC)
-  return { loadRegistered, groupRow, rendererLoadCase, dispatchSlice, runtimeLoad, runtimeLoadOk, mutating }
+  // ⟨`P-SM-3` — THE SHIM ARMS READ THE SHIM'S OWN ROUTE (the pre-fix arm 1 was near-vacuous
+  //  — `includes('provident') || includes('Runtime')` — and arm 2 was asserted through the APP's
+  //  `renderer.ts` `case 'load'`, a CROSS-SUBJECT read that re-asserted the positive). The battery
+  //  host (leg 2) is a Node MCP server whose backend OWNS a real Runtime: it registers
+  //  `provident.load` through the SAME `ProvidentMcpServer` tool surface and routes the name to its
+  //  OWN backend method (`switch (method) { case 'load': ⇒ this.runtime.load(p) }`).⟩
+  const shimRegistersTool = /ProvidentMcpServer/.test(BATTERY_HOST_SRC) && /SecurityGate/.test(BATTERY_HOST_SRC)
+  const shimLoadMethodCase = /case\s+'load'\s*:[\s\S]{0,120}?runtime\.load\s*\(/.test(BATTERY_HOST_SRC)
+  const shimMethodRouting = /invoke\s*\(\s*method\s*:/.test(BATTERY_HOST_SRC) && /invoke\(method/.test(MCP_SERVER_SRC)
+  const shimRuntimeLoadOk = /loadEnvelope/.test(RUNTIME_SRC) && /runtime\.load\s*\(/.test(BATTERY_HOST_SRC)
+  // THE NEGATIVE DRAWS' SUBJECTS (fabricated SOURCE TEXT, never written and never executed): a
+  // battery host whose `case 'load'` has been REMOVED, and a tool registry whose `ALL_TOOLS` has
+  // lost the name. Each must be seen by the SAME predicate the corresponding positive arm uses.
+  const shimCaseRemovedSrc = BATTERY_HOST_SRC.replace(/case\s+'load'\s*:[\s\S]{0,120}?runtime\.load\s*\(p as never\)/, "case 'not-load':\n        return null")
+  const shimLoadRouteRemoved = !/case\s+'load'\s*:[\s\S]{0,120}?runtime\.load\s*\(/.test(shimCaseRemovedSrc)
+  const unregisteredAllTools = allToolsBlock.replace(/['"]provident\.load['"]\s*,?/, '')
+  const unregisteredLoad = !/['"]provident\.load['"]/.test(unregisteredAllTools)
+  return {
+    loadRegistered, groupRow, rendererLoadCase, dispatchSlice, runtimeLoad, runtimeLoadOk, mutating,
+    shimRegistersTool, shimLoadMethodCase, shimMethodRouting, shimRuntimeLoadOk, shimLoadRouteRemoved, unregisteredLoad,
+  }
 })()
 
 /** The exported-surface probes of `P-IM-2`, read from the SOURCE TEXT (so no row needs an import
@@ -1489,15 +2003,9 @@ const NORM_HOLDS = ((): boolean => {
 /** `P-TP-1` — a load that FAILS must produce a NAMED stop. Three declared shapes; the report is
  *  modelled as the pure function the contract describes, and the row asserts it never returns an
  *  unhandled `undefined` and never leaves the cause unnamed. */
-function stopReport(shape: string, detail: string): { named: boolean; text: string } {
-  if (shape === 'gate refusal') return { named: true, text: `provident.load refused by the tool gate: ${detail}` }
-  if (shape === 'malformed envelope payload') return { named: true, text: `provident.load refused the payload: ${detail}` }
-  if (shape === 'load landed, demo surface absent') return { named: true, text: `the load landed but the demo surface is absent from the live graph: ${detail}` }
-  return { named: true, text: `no cause line captured — the load failed with EMPTY evidence: ${detail}` }
-}
 
 describe('U-DIVERGENCE-FIXTURE §4.2 P-IM-1 — BOTH LEGS LOAD THE SAME DEMO ENVELOPE BEFORE THEY DRIVE (strat:divergence-fixture-symmetry)', () => {
-  it('P-IM-1 — 2 legs × 2 arms (the load is present; its position precedes `drive`) + 2 negative draws = 6 attempts', () => {
+  it('P-IM-1 — 2 legs × 2 arms (the load is present; its position precedes `drive`) + 4 negative draws = 8 attempts', () => {
     registerRow('P-IM-1', (run) => {
       const legs = SHAPE.legs
       let i = 0
@@ -1512,14 +2020,51 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-IM-1 — BOTH LEGS LOAD THE SAME DEMO ENV
           ? null
           : `${leg?.name ?? `leg ${s + 1}`} · arm 2 (its position precedes \`drive\`): the sequence must be connect → load → [probe] → drive (C-1 item 3); read connect=${leg === null || leg.connectAt === null ? 'ABSENT' : 'present'} load=${leg === null || leg.loadAt === null ? 'ABSENT' : 'present'} drive=${leg === null || leg.driveAt === null ? 'ABSENT' : 'present'}`)
       }
-      // THE TWO NEGATIVE DRAWS (§4.2 `P-IM-1`'s own terms): (a) a leg 1 with NO load — THIS HEAD;
-      // (b) a leg 1 loaded with a DIFFERENT envelope value. Both must be REJECTED by the instrument.
-      attempt(run, i++, harnessShape(fabricatedModule({ load: 'none' })).violations.length > 0
-        ? null
-        : 'NEGATIVE (a): a leg 1 with NO load was ACCEPTED — this row cannot detect the defect it exists for (that shape is THIS HEAD)')
+      // THE FOUR NEGATIVE DRAWS (§4.2 `P-IM-1`'s declared "2 negative draws", re-derived on the
+      // gate-4 audit `S-3`/`A-10`: the row's SECOND draw, an EMPTY module that scored only on the
+      // global "no load site" violation, was replaced by the three audit-named generators below, so
+      // the declared term moves 6 → 8 (`2*2+4`) and the superseded `2*2+2 = 6` stays recorded in the
+      // spec's §4.2 table and in this file's own `DECLARED_REGISTER` table):
+      // (a) a leg 1 loaded with a DIFFERENT envelope value (the row's original FIRST draw, KEPT);
+      // (b) THE REAL PRE-FIX ASYMMETRY — leg 2 traverses the ONE shared step and leg 1 does not.
+      //     The replaced draw was an EMPTY module (`load: 'none'`), which scored only on the global
+      //     "no load site" violation and did NOT reproduce the asymmetry it named;
+      // (c) `NEG-commented-invocation` (`A-10`), with its discrimination proof;
+      // (d) `NEG-duplicate-invocation` (`P-SM-2`'s owed generator): the ONE step traversed TWICE by
+      //     one leg with its own client — a DOUBLE LOAD the pre-fix hardcoded `calls: 1` could not see.
       attempt(run, i++, harnessShape(fabricatedModule({ load: 'other-envelope' })).violations.length > 0
         ? null
-        : 'NEGATIVE (b): a leg 1 loaded with a DIFFERENT envelope value was ACCEPTED — `shim = real` over two different fixtures is the false green C-2 item 2 forbids')
+        : 'NEGATIVE (a): a leg 1 loaded with a DIFFERENT envelope value was ACCEPTED — `shim = real` over two different fixtures is the false green C-2 item 2 forbids')
+      const skipsStep = harnessShape(
+        `async function main() {\nawait eClient.connect(t)\nout1 = await drive(eClient)\n${SHIM_HEADER}await shimClient.connect(s)\n${loadStepInvocation('shimClient', {})}out2 = await drive(shimClient)\n}\n` +
+          SHARED_HELPER('canonical') +
+          `async function alsoLoads(client) {\n  ${loadStepInvocation('client', {})}}\n`,
+      )
+      attempt(run, i++, skipsStep.leg2 !== null && skipsStep.leg2.loadAt !== null && skipsStep.leg1 !== null && skipsStep.leg1.loadAt === null &&
+        skipsStep.violations.filter((v) => v.startsWith('leg1')).length > 0
+        ? null
+        : `NEGATIVE (b) (the REAL PRE-FIX ASYMMETRY — leg 2 loads, leg 1 does not): the draw must be read as leg 2 LOADED (${skipsStep.leg2 === null || skipsStep.leg2.loadAt === null ? 'NO' : 'yes'}) and leg 1 with NO load (${skipsStep.leg1 === null || skipsStep.leg1.loadAt === null ? 'yes' : 'NO'}), and must RED against leg 1 by NAME; read violations ${JSON.stringify(skipsStep.violations)}`)
+
+      // ⟨`A-10` — `NEG-commented-invocation`, WITH ITS DISCRIMINATION PROOF: the SAME shape, with
+      //   leg 1's real invocation written as a COMMENT. The PRE-FIX (comment-blind) reader counts
+      //   it as leg 1's traversal — which is the false green `A-10` measured; the FIXED reader
+      //   (which strips comments/strings, as the harness's own `callSites()` does) does not. Both
+      //   verdicts are asserted, so the draw cannot be satisfied by either shape alone.⟩
+      const commentedSrc = commentedInvocationModule()
+      const commentedShape = harnessShape(commentedSrc)
+      const helper = SHAPE.sharedLoadHelper
+      const oldLeg1 = helper === null ? -1 : commentBlindInvocations(commentedSrc, helper, 'leg1').length
+      const oldLeg2 = helper === null ? -1 : commentBlindInvocations(commentedSrc, helper, 'leg2').length
+      const newLeg1 = commentedShape.leg1 === null ? -1 : (commentedShape.leg1.loadAt === null ? 0 : commentedShape.leg1.calls)
+      attempt(run, i++, helper !== null && oldLeg1 > 0 && oldLeg2 > 0 && newLeg1 === 0 && commentedShape.leg1 !== null && commentedShape.leg1.loadAt === null &&
+        commentedShape.leg2 !== null && commentedShape.leg2.loadAt !== null && commentedShape.violations.filter((v) => v.startsWith('leg1')).length > 0
+        ? null
+        : `NEGATIVE (c) (NEG-commented-invocation): a COMMENTED \`// await loadFixture(eClient)\` must NOT read as leg 1's traversal. Read — the pre-fix comment-blind reader: leg1=${oldLeg1} leg2=${oldLeg2} invocation(s) (it accepts the commented form, which is the false green A-10 measured); the fixed reader: leg1 loadAt=${JSON.stringify(commentedShape.leg1 === null ? null : commentedShape.leg1.loadAt)} calls=${String(newLeg1)} leg2 loadAt=${JSON.stringify(commentedShape.leg2 === null ? null : commentedShape.leg2.loadAt)}, violations ${JSON.stringify(commentedShape.violations)}`)
+
+      const dupes = harnessShape(duplicateInvocationModule())
+      attempt(run, i++, dupes.leg1 !== null && dupes.leg1.calls === 2 && dupes.leg2 !== null && dupes.leg2.calls === 1
+        ? null
+        : `NEGATIVE (d) (NEG-duplicate-invocation): TWO call sites on one leg must read calls: 2 for that leg and 1 for the other (C-1 items 1/2 — "exactly one load per host"); read leg1=${String(dupes.leg1 === null ? null : dupes.leg1.calls)} leg2=${String(dupes.leg2 === null ? null : dupes.leg2.calls)} (the pre-fix body returned a hardcoded calls: 1, under which a double load was INVISIBLE)`)
     })
   })
 })
@@ -1559,7 +2104,7 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-IM-2 — THE COMPARISON SET, THE `drive()
 })
 
 describe('U-DIVERGENCE-FIXTURE §4.2 P-IM-3 — THE DEMO LITERAL IS UNCHANGED AND STILL TRACKS THE FORK\'S SOURCE OF TRUTH (strat:divergence-fixture-literal)', () => {
-  it('P-IM-3 — 12 authored node positions + 1 node-count draw + 2 negative draws (a dropped node; a re-spelled authored id) = 15 attempts', () => {
+  it('P-IM-3 — 12 authored node positions + 1 node-count draw + 2 negative draws MUTATED THROUGH THE INSTRUMENT (a dropped node; a re-spelled authored id) = 15 attempts', () => {
     registerRow('P-IM-3', (run) => {
       let i = 0
       for (let n = 0; n < DEMO_NODE_COUNT; n++) {
@@ -1576,16 +2121,32 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-IM-3 — THE DEMO LITERAL IS UNCHANGED AN
       attempt(run, i++, HARNESS_LITERAL.types.length === DEMO_NODE_COUNT && MODULE_LITERAL.types.length === DEMO_NODE_COUNT
         ? null
         : `the node-count draw reads ${HARNESS_LITERAL.types.length} (harness) against ${MODULE_LITERAL.types.length} (the fork's source of truth); both are TWELVE (S-7 / §10.3 item 2)`)
-      // NEGATIVE 1 — a DROPPED node: the count draw must reject a literal missing a node
-      const droppedTypes = HARNESS_LITERAL.types.slice(0, -1)
-      attempt(run, i++, droppedTypes.length !== MODULE_LITERAL.types.length
+      // ⟨PBT re-derivation (`S-3`), `NEG-literal-mutated-through-instrument`: the two pre-fix
+      //   negatives were ARITHMETIC OVER ARRAYS THIS ROW BUILT ITSELF (`droppedTypes.length !==
+      //   MODULE_LITERAL.types.length`, a re-spelled-id `JSON.stringify` compare) — the instrument
+      //   never saw the mutated literal, so neither draw could fail for the reason it named. Both now
+      //   MUTATE THE DEMO LITERAL'S SOURCE TEXT and RE-RUN THE INSTRUMENT: the instrument
+      //   (`authoredLiteral`) must READ the mutation, and the row's OWN position predicate — the one
+      //   the twelve draws above use — must break on it.⟩
+      const dropOne = HARNESS_SRC.replace(/\{\s*type:\s*'h1'[^}]*\},/, '')
+      const droppedLiteral = authoredLiteral(dropOne)
+      const droppedBreak = droppedPositionBreak(droppedLiteral)
+      const droppedCaughtByInstrument = droppedBreak !== null && (literalNodes(droppedLiteral)[droppedBreak]?.type ?? null) !== (MODULE_NODES[droppedBreak]?.type ?? null)
+      attempt(run, i++, dropOne !== HARNESS_SRC && droppedLiteral.types.length === DEMO_NODE_COUNT - 1 && droppedBreak !== null && droppedCaughtByInstrument
         ? null
-        : "NEGATIVE (a dropped node): removing one node from the literal must be DETECTED — a node count that survives a dropped node cannot see the fixture move D-4 forbids")
-      // NEGATIVE 2 — a RE-SPELLED authored id: the id draw must reject a mutated vocabulary
-      const respelled = [...HARNESS_LITERAL.cssIds.slice(0, -1), `${HARNESS_LITERAL.cssIds[HARNESS_LITERAL.cssIds.length - 1] ?? ''}X`]
-      attempt(run, i++, JSON.stringify(respelled) !== JSON.stringify(MODULE_LITERAL.cssIds)
+        : `NEGATIVE (a dropped node, MUTATED THROUGH THE INSTRUMENT): the drawn literal must be READ by the instrument (12 → ${droppedLiteral.types.length} authored node(s)) and must break the row's OWN position predicate; read ${JSON.stringify(droppedLiteral.types)}`)
+
+      const respellOne = HARNESS_SRC.replace("css: { id: 'echo-out'", "css: { id: 'echo-outX'")
+      const respelledLiteral = authoredLiteral(respellOne)
+      const respelledBreak = droppedPositionBreak(respelledLiteral)
+      // the instrument READ the renamed id AND the row's own position predicate breaks ON THAT ID —
+      // which is the two-sided proof the arithmetic-over-own-arrays draw could not give
+      const respellCaughtByInstrument = respelledBreak !== null && (literalNodes(respelledLiteral)[respelledBreak]?.cssId ?? null) === 'echo-outX' &&
+        (literalNodes(respelledLiteral)[respelledBreak]?.cssId ?? null) !== (MODULE_NODES[respelledBreak]?.cssId ?? null)
+      attempt(run, i++, respellOne !== HARNESS_SRC && respelledLiteral.types.length === DEMO_NODE_COUNT &&
+        respelledLiteral.cssIds.includes('echo-outX') && respelledBreak !== null && respellCaughtByInstrument
         ? null
-        : 'NEGATIVE (a re-spelled authored id): renaming one authored id must be DETECTED — the fixture\'s identity surface is its id vocabulary (C-3 item 2)')
+        : `NEGATIVE (a re-spelled authored id, MUTATED THROUGH THE INSTRUMENT): the instrument must READ the renamed id (read ${JSON.stringify(respelledLiteral.cssIds)}) and the row's OWN position predicate must break on it; read break at position ${String(respelledBreak)}`)
     })
   })
 })
@@ -1649,7 +2210,7 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-1 — THE DRIVE READINESS IS OBSERVABL
 })
 
 describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-2 — EXACTLY TWO HOSTS AND EXACTLY ONE LOAD PER HOST (strat:divergence-fixture-hosts)', () => {
-  it('P-SM-2 — 2 hosts × 2 arms (host count; loads per host) + 2 negative draws (a third host; a zero-load leg) = 6 attempts', () => {
+  it('P-SM-2 — 2 hosts × 2 arms (host count; loads per host) + 3 negative draws (a third host; a duplicated load on one leg; a zero-load leg) = 7 attempts', () => {
     registerRow('P-SM-2', (run) => {
       let i = 0
       const hosts = [
@@ -1660,11 +2221,14 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-2 — EXACTLY TWO HOSTS AND EXACTLY ON
         attempt(run, i++, h.countOk
           ? null
           : `${h.name} · arm 1 (host count): the run must hold exactly TWO spawn sites and no third child (C-3 item 5); read spawn sites=${SHAPE.spawnSites}, SDK transports=${SHAPE.sdkSites}, shim hosts=${SHAPE.shimSites}`)
-        // ⟨ATTRIBUTION (arm 2, repaired on the implementer's measurement): `C-1` item 2 pins ONE
-        //   load call SITE shared by both legs, so "exactly one load PER HOST" cannot be a per-leg
-        //   call-site count — one site cannot be both legs'. The arm asserts what the clause does
-        //   state: this leg's PATH traverses the step exactly once (a second traversal on the same
-        //   client is a double load; a leg that never reaches it reads 0 and reds).⟩
+        // ⟨ATTRIBUTION (arm 2, repaired on the implementer's measurement; the AUDIT's `P-SM-2`
+        //   finding was that `calls: 1` was HARDCODED and only the FIRST traversal was read, so
+        //   "exactly one load per host" was measured NOWHERE): `C-1` item 2 pins ONE load call SITE
+        //   shared by both legs, so the arm cannot be a per-leg call-SITE count — one site cannot be
+        //   both legs'. It asserts what the clause does state, over a REAL traversal count: this
+        //   leg's PATH traverses the step exactly once (a SECOND invocation with this leg's own
+        //   client reads 2 and reds — see the duplicate draw below; a leg that never reaches it
+        //   reads 0 and reds).⟩
         attempt(run, i++, h.loads === 1
           ? null
           : `${h.name} · arm 2 (loads per host): this leg's path must traverse the load step exactly ONCE (C-1 item 2 — one shared step, one call site, reached once per leg); read ${h.loads} traversal(s) for this leg (via ${String((h.name.startsWith('leg 1') ? SHAPE.leg1 : SHAPE.leg2)?.loadVia ?? null)}, shared step = ${String(SHAPE.sharedLoadHelper)})`)
@@ -1682,7 +2246,16 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-2 — EXACTLY TWO HOSTS AND EXACTLY ON
       attempt(run, i++, thirdShape.spawnSites === 3 && thirdShape.spawnSites !== SHAPE.spawnSites
         ? null
         : `NEGATIVE (a third host): the detector read app-launch sites=${thirdShape.spawnSites} (the fabricated shape carries 2 direct app spawns + 1 app transport = 3 — a third host beside the two-leg pattern) — a run that grows a third host must be VISIBLE, and the host census must not be read from a single site`)
-      // NEGATIVE 2 — a ZERO-LOAD leg must be rejected
+      // NEGATIVE 2 — `NEG-duplicate-invocation`: TWO traversals of the ONE shared step on the SAME
+      // leg with the SAME client must read `calls: 2`. The module still holds exactly ONE
+      // `provident.load` call site, so nothing but the REAL traversal count can see it — under the
+      // pre-fix hardcoded `calls: 1` this draw was UNREACHABLE and the row's own arm 2 was a
+      // tautology in the landed design.
+      const duplicated = harnessShape(duplicateInvocationModule())
+      attempt(run, i++, duplicated.leg1 !== null && duplicated.leg1.calls === 2 && duplicated.leg2 !== null && duplicated.leg2.calls === 1 && duplicated.loadCalls === 1
+        ? null
+        : `NEGATIVE (a duplicated load on one leg): TWO invocations of the ONE shared step with this leg's own client must read calls: 2 on that leg and 1 on the other, with the module still holding ONE \`provident.load\` call site; read leg1=${String(duplicated.leg1 === null ? null : duplicated.leg1.calls)} leg2=${String(duplicated.leg2 === null ? null : duplicated.leg2.calls)} call sites=${String(duplicated.loadCalls)} (the pre-fix body returned a hardcoded calls: 1, which no draw could move)`)
+      // NEGATIVE 3 — a ZERO-LOAD leg must be rejected
       attempt(run, i++, harnessShape(fabricatedModule({ load: 'none', focus: 'leg2' })).violations.length > 0
         ? null
         : 'NEGATIVE (a zero-load leg): a leg that never loads was ACCEPTED — the §3.5 `A-4` asymmetry must red LOUDLY at the shim leg (its root-only boot authors no `inc`)')
@@ -1691,67 +2264,401 @@ describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-2 — EXACTLY TWO HOSTS AND EXACTLY ON
 })
 
 describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-3 — THE APP\'S OWN `provident.load` ROUTE IS THE ONE THE LEG USES, AND IT EXISTS AT BOTH ENDS (strat:divergence-fixture-load-route)', () => {
-  it('P-SM-3 — 2 hosts × 2 arms (the name is registered; the route reaches that host\'s runtime) + 2 negative draws (an unregistered name; a load routed to a method the renderer does not carry) = 6 attempts', () => {
+  it('P-SM-3 — 2 hosts × 2 arms (the name is registered; the route reaches THAT HOST\'S OWN runtime) + 2 negative draws (`NEG-shim-load-route-removed`; `NEG-unregistered-load`) = 6 attempts', () => {
     registerRow('P-SM-3', (run) => {
       let i = 0
+      // ⟨THE AUDIT'S `S-3` FINDING, FIXED HERE: the pre-fix shim arms were NEAR-VACUOUS — arm 1 read
+      //   `BATTERY_HOST_SRC.includes('provident') || includes('Runtime')` (satisfied by any mention)
+      //   and arm 2 asserted the shim through the APP's `renderer.ts` `case 'load'` (a CROSS-SUBJECT
+      //   read that re-asserted the app-side positive). Both arms now read the SHIM'S OWN ROUTE: the
+      //   battery host registers `provident.load` through the SAME `ProvidentMcpServer` tool surface
+      //   (its `ALL_TOOLS`/gate) and routes the name to ITS OWN backend method
+      //   (`case 'load': ⇒ this.runtime.load(p)` ⇒ `Runtime.load` ⇒ `loadEnvelope`).⟩
       const hosts = [
         {
           name: 'the app (leg 1)',
           registered: APP_ROUTE.loadRegistered && APP_ROUTE.groupRow === 'graph',
           reaches: APP_ROUTE.rendererLoadCase && APP_ROUTE.runtimeLoadOk && APP_ROUTE.dispatchSlice,
+          evidence: `ALL_TOOLS=${String(APP_ROUTE.loadRegistered)} group=${JSON.stringify(APP_ROUTE.groupRow)} renderer 'load' case=${String(APP_ROUTE.rendererLoadCase)} runtime load→loadEnvelope=${String(APP_ROUTE.runtimeLoadOk)} dispatchSlice=${String(APP_ROUTE.dispatchSlice)}`,
         },
         {
           name: 'the shim host (leg 2)',
-          registered: BATTERY_HOST_SRC.includes('provident') || BATTERY_HOST_SRC.includes('Runtime'),
-          reaches: BATTERY_HOST_SRC.includes('Runtime') && RENDERER_SRC.includes("case 'load'"),
+          registered: APP_ROUTE.shimRegistersTool && APP_ROUTE.loadRegistered,
+          reaches: APP_ROUTE.shimLoadMethodCase && APP_ROUTE.shimRuntimeLoadOk && APP_ROUTE.shimMethodRouting,
+          evidence: `battery host uses ProvidentMcpServer+SecurityGate=${String(APP_ROUTE.shimRegistersTool)} ALL_TOOLS carries the name=${String(APP_ROUTE.loadRegistered)} shim 'load' case→runtime.load=${String(APP_ROUTE.shimLoadMethodCase)} shim backend invoke routing=${String(APP_ROUTE.shimMethodRouting)} runtime loadEnvelope=${String(APP_ROUTE.shimRuntimeLoadOk)}`,
         },
       ]
       for (const h of hosts) {
         attempt(run, i++, h.registered
           ? null
-          : `${h.name} · arm 1 (the name is registered): \`provident.load\` must be a registered, group-gated tool name (FINDING-1 items 1/2 — \`ProvidentMcpServer.ALL_TOOLS\` + \`TOOL_GROUPS\` ⇒ \`graph\`); read ALL_TOOLS=${String(APP_ROUTE.loadRegistered)}, group=${JSON.stringify(APP_ROUTE.groupRow)}`)
+          : `${h.name} · arm 1 (the name is registered): \`provident.load\` must be a registered, group-gated tool name at THIS host (FINDING-1 items 1/2 — \`ProvidentMcpServer.ALL_TOOLS\` + \`TOOL_GROUPS\` ⇒ \`graph\`); read ${h.evidence}`)
         attempt(run, i++, h.reaches
           ? null
-          : `${h.name} · arm 2 (the route reaches that host's runtime): the registered handler must route \`dispatch(name)\` ⇒ the renderer's \`load\` method ⇒ \`Runtime.load\` ⇒ \`loadEnvelope\` (FINDING-1 items 3/5); read dispatchSlice=${String(APP_ROUTE.dispatchSlice)}, renderer 'load' case=${String(APP_ROUTE.rendererLoadCase)}, runtime load→loadEnvelope=${String(APP_ROUTE.runtimeLoadOk)}`)
+          : `${h.name} · arm 2 (the route reaches THAT HOST'S OWN runtime): the registered handler must route \`dispatch(name)\` ⇒ that host's own \`load\` method ⇒ \`Runtime.load\` ⇒ \`loadEnvelope\` (FINDING-1 items 3/5), read from THAT host's own source; read ${h.evidence}`)
       }
-      // NEGATIVE 1 — a load routed to a method the renderer does not carry
-      const unhandled = "case 'not-load': value = runtime.load(req.payload)"
-      attempt(run, i++, /case\s+'load'\s*:/.test(unhandled) === false
+      // NEGATIVE 1 — `NEG-shim-load-route-removed`: a battery host WITHOUT its `case 'load'` must be
+      // REJECTED by the same predicate the shim arm 2 uses (the pre-fix draw asserted the positive
+      // again through the APP's file, so it could not fail for the shim at all)
+      attempt(run, i++, APP_ROUTE.shimLoadRouteRemoved
         ? null
-        : "NEGATIVE (a load routed to a method the renderer does not carry): the renderer-case detector failed to see that `case 'load'` is absent")
-      // NEGATIVE 2 — the group-gate row
-      attempt(run, i++, APP_ROUTE.groupRow === 'graph' && APP_ROUTE.mutating
+        : "NEGATIVE (NEG-shim-load-route-removed): a `battery-host` whose `case 'load'` has been removed must be READ as NOT reaching its runtime — the shim arm above would otherwise pass on any file that merely mentions `Runtime`")
+      // NEGATIVE 2 — `NEG-unregistered-load`: a fabricated `ALL_TOOLS` that has lost the name must be
+      // REJECTED by the same predicate arm 1 uses
+      attempt(run, i++, APP_ROUTE.unregisteredLoad
         ? null
-        : `NEGATIVE (an unregistered name): \`provident.load\` must be group-gated to \`graph\` and treated as a MUTATING method by the app's own bookkeeping (FINDING-1 items 2/4); read group=${JSON.stringify(APP_ROUTE.groupRow)}, mutating=${String(APP_ROUTE.mutating)}`)
+        : "NEGATIVE (NEG-unregistered-load): a fabricated `ALL_TOOLS` without `'provident.load'` must be READ as unregistered — the `ALL_TOOLS` predicate would otherwise pass on any list")
     })
   })
 })
 
+/** The FIVE NAMED STOP ARMS of `waitForBootInstalled` (§0B.3 item 5's four + `A-5`'s refused read),
+ *  each DRIVEN against the real function through a stub client. The outcomes are produced at test
+ *  level (the register's bodies are synchronous tables) and scored by `P-SM-4`.
+ *
+ *  THE DEADLINE ARM'S CLOCK: `waitCallables()` passes an INJECTED `Date` into the sandbox whose
+ *  `now()` advances by ONE POLL INTERVAL per call, and the deadline arm passes the SOURCE'S OWN
+ *  `BOOT_POLL_DEADLINE_MS` as that step — so the arm reaches the source's OWN deadline comparison
+ *  after a couple of iterations, and the stop text carries the source's own figure. (At one real
+ *  poll interval per call the arm would need 20 000 ms of wall clock; the injection is what makes it
+ *  a fast, deterministic row rather than a 20-second one.) */
+interface WaitArmOutcome { name: string; must: string[]; threw: boolean; message: string; loadCalls: number; dispatchCalls: number; listCalls: number }
+
+async function driveWaitArms(): Promise<WaitArmOutcome[]> {
+  const deadlineValue = Number(constRhs(HARNESS_SRC, 'BOOT_POLL_DEADLINE_MS')!.replace(/_/g, ''))
+  const arms: Array<{ name: string; must: string[]; reply: () => unknown }> = [
+    {
+      name: 'a MISSING `boot` member (this launch did not take the enablement route)',
+      must: ['boot-install wait FAILED', 'NO `boot` member', 'PROVIDENT_ENABLE_TOOL_GROUPS'],
+      reply: () => toolReply({ nodes: [] }),
+    },
+    {
+      name: "`status: 'failed'` carrying its own `error`",
+      must: ['boot-install wait FAILED', "status 'failed'", 'the renderer boot chain failed'],
+      reply: () => toolReply({ nodes: [], boot: { status: 'failed', error: 'the renderer boot chain failed: ENOENT dist/main/main.cjs' } }),
+    },
+    {
+      name: 'a status OUTSIDE `pending|installed|failed` (fails CLOSED)',
+      must: ['boot-install wait FAILED', 'outside the declared three-state set', 'pending|installed|failed'],
+      reply: () => toolReply({ nodes: [], boot: { status: 'booting' } }),
+    },
+    {
+      name: "the DEADLINE with the status still `pending`",
+      must: ['boot-install wait FAILED', `deadline of ${deadlineValue} ms expired`, "still 'pending'"],
+      reply: () => toolReply({ nodes: [], boot: { status: 'pending', epoch: 1, generation: 0 } }),
+    },
+    {
+      name: "the REFUSED readiness read (A-5: the wait's own named stop)",
+      must: ['boot-install wait FAILED', 'REFUSED', 'the `read` group is disabled'],
+      reply: () => { throw new Error('tool refused: the `read` group is disabled') },
+    },
+  ]
+  const out: WaitArmOutcome[] = []
+  for (const arm of arms) {
+    const W = arm.name.startsWith('the DEADLINE') ? waitCallables({ tickPerNow: deadlineValue }) : waitCallables()
+    const stub = stubClient(async () => arm.reply())
+    let threw = false
+    let message = ''
+    try {
+      const value = await W.wait(stub)
+      message = `RESOLVED with ${JSON.stringify(value)} — no stop was raised`
+    } catch (e) {
+      threw = true
+      message = (e as Error)?.message ?? String(e)
+    }
+    out.push({ name: arm.name, must: arm.must, threw, message, loadCalls: stub.loadCalls, dispatchCalls: stub.dispatchCalls, listCalls: stub.listCalls })
+  }
+  return out
+}
+
+describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-4 — THE BOUNDED BOOT-INSTALL WAIT IS ON LEG 1\'S PATH, IN `F-7`\'S POSITION, WITH ITS TWO PINNED CONSTANTS, AND EVERY ONE OF ITS STOP ARMS NAMES ITSELF (strat:divergence-fixture-boot-wait)', () => {
+  it('P-SM-4 — 1 path × 3 arms (the wait EXISTS on leg 1\'s path; its position is connect → WAIT → load → probe → drive; its pinned budget) + 5 named stop arms + 2 negative draws (`NEG-wait-absent`; `NEG-wait-after-load`) = 10 attempts', async () => {
+    const waitArms = await driveWaitArms()
+    registerRow('P-SM-4', (run) => {
+      let i = 0
+      const leg1 = SHAPE.leg1
+      // ARM 1 — THE WAIT EXISTS ON LEG 1'S PATH (A-2: nothing else in either divergence file read it)
+      attempt(run, i++, leg1 !== null && leg1.waitAt !== null && SHAPE.leg2 !== null && SHAPE.leg2.waitAt === null
+        ? null
+        : `leg 1's path · arm 1 (the wait EXISTS): \`waitForBootInstalled(client)\` must be called on leg 1's path (A-2 — the one step \`T-1\` added to the ordering), and leg 2 (the shim host) must NOT wait (its host is not fire-and-forget); read leg1 waitAt=${String(leg1 === null ? null : leg1.waitAt)} leg2 waitAt=${String(SHAPE.leg2 === null ? null : SHAPE.leg2.waitAt)}`)
+      // ARM 2 — ITS POSITION: connect → WAIT → load → probe → drive (F-7's refinement)
+      const orderViolations = waitOrderViolations(HARNESS_SRC, leg1)
+      attempt(run, i++, leg1 !== null && leg1.waitAt !== null && leg1.loadAt !== null && leg1.probeAt !== null && leg1.driveAt !== null &&
+        leg1.connectAt !== null && leg1.connectAt < leg1.waitAt && leg1.waitAt < leg1.loadAt && leg1.loadAt < leg1.probeAt && leg1.probeAt < leg1.driveAt &&
+        orderViolations.length === 0
+        ? null
+        : `leg 1's path · arm 2 (its position): the ordering must be connect → wait (bounded) → load → probe → drive (§0B.3 F-7, the clause a deleted/moved wait must red); read connect=${String(leg1 === null ? null : leg1.connectAt)} wait=${String(leg1 === null ? null : leg1.waitAt)} load=${String(leg1 === null ? null : leg1.loadAt)} probe=${String(leg1 === null ? null : leg1.probeAt)} drive=${String(leg1 === null ? null : leg1.driveAt)}; violations ${JSON.stringify(orderViolations)}`)
+      // ARM 3 — THE BUDGET: the two pinned constants, the sleep/deadline they drive, and NO use of
+      // `O-1`'s measured 250–540 ms as a budget (§0B.3 item 5: an OBSERVATION is never a budget)
+      const budget = waitBudgetViolations(HARNESS_SRC)
+      const interval = constRhs(HARNESS_SRC, 'BOOT_POLL_INTERVAL_MS')
+      const deadline = constRhs(HARNESS_SRC, 'BOOT_POLL_DEADLINE_MS')
+      const observedAsBudget = /^(250|540)$/.test(String(deadline)) || String(deadline).includes('250') || String(deadline).includes('540')
+      attempt(run, i++, budget.length === 0 && interval === '100' && deadline === '20_000' && !observedAsBudget
+        ? null
+        : `the budget · the two PINNED constants (F-6 / §0B.3 item 1: BOOT_POLL_INTERVAL_MS = 100, BOOT_POLL_DEADLINE_MS = 20_000) and no observed-ms budget; read interval=${JSON.stringify(interval)} deadline=${JSON.stringify(deadline)}; violations ${JSON.stringify(budget)}`)
+      // THE FIVE NAMED STOP ARMS, each driven against the REAL wait
+      for (const arm of waitArms) {
+        const ok = arm.threw && arm.must.every((needle) => arm.message.includes(needle)) && arm.loadCalls === 0 && arm.dispatchCalls === 0
+        attempt(run, i++, ok
+          ? null
+          : `${arm.name} · a NAMED stop that lets NO comparison row emit: ${arm.message} — the stop must name its arm (${JSON.stringify(arm.must)}) and the leg must issue NO load and NO dispatch; read list reads=${arm.listCalls} load calls=${arm.loadCalls} dispatch calls=${arm.dispatchCalls}`)
+      }
+      // NEG-wait-absent / NEG-wait-after-load — the two ORDERING draws, each scored against the SHAPE
+      // the row's own arm 2 must reject
+      const absentSrc = waitAbsentModule()
+      const absent = harnessShape(absentSrc)
+      const absentViolations = waitOrderViolations(absentSrc, absent.leg1)
+      attempt(run, i++, absent.leg1 !== null && absent.leg1.waitAt === null && absentViolations.length > 0
+        ? null
+        : `NEGATIVE (NEG-wait-absent): a module whose leg 1 goes connect → load → drive must be REJECTED by the ordering check; read waitAt=${String(absent.leg1 === null ? null : absent.leg1.waitAt)} violations=${JSON.stringify(absentViolations)}`)
+      const lateSrc = waitAfterLoadModule()
+      const late = harnessShape(lateSrc)
+      const lateViolations = waitOrderViolations(lateSrc, late.leg1)
+      attempt(run, i++, late.leg1 !== null && late.leg1.waitAt !== null && late.leg1.loadAt !== null && late.leg1.waitAt > late.leg1.loadAt && lateViolations.length > 0
+        ? null
+        : `NEGATIVE (NEG-wait-after-load): a wait placed AFTER the shared load must be REJECTED (the app's own fire-and-forget install can land after the load and REPLACE it — the O-1 race the wait exists to close); read waitAt=${String(late.leg1 === null ? null : late.leg1.waitAt)} loadAt=${String(late.leg1 === null ? null : late.leg1.loadAt)} violations=${JSON.stringify(lateViolations)}`)
+    })
+  })
+})
+
+describe('U-DIVERGENCE-FIXTURE §4.2 P-SM-5 — THE SPAWN `env` MEMBER `PROVIDENT_ENABLE_TOOL_GROUPS: \'graph\'` IS PRESENT AT BOTH ELECTRON SITES AND ABSENT FROM THE SHIM TRANSPORT (strat:divergence-fixture-spawn-env-member)', () => {
+  it('P-SM-5 — 2 sites × 3 arms (the member is present; its value is exactly `\'graph\'`; the vector stays NINE so no argv route exists) + the shim-transport arm + 2 negative draws = 9 attempts', () => {
+    registerRow('P-SM-5', (run) => {
+      let i = 0
+      const electronSites = SHAPE.envObjects.filter((e) => !e.shim)
+      // the two SITE VECTORS, read from the source text (the same read `P-TP-2` uses)
+      const VECTORS = ((): string[][] => {
+        const out: string[][] = []
+        let at = HARNESS_SRC.indexOf('siteArgs([')
+        while (at >= 0) {
+          const open = HARNESS_SRC.indexOf('[', at)
+          const body = open < 0 ? null : balancedBody(HARNESS_SRC, open)
+          if (body !== null) out.push(splitTopLevel(body))
+          at = HARNESS_SRC.indexOf('siteArgs([', at + 1)
+        }
+        return out
+      })()
+      for (let k = 0; k < 2; k++) {
+        const site = electronSites[k]
+        // ARM 1 — THE MEMBER IS PRESENT (A-3: NOTHING in either divergence file read an `env` object)
+        const member = site === undefined ? null : envMemberValue(site.text, 'PROVIDENT_ENABLE_TOOL_GROUPS')
+        attempt(run, i++, member !== null
+          ? null
+          : `spawn site ${k + 1} · arm 1 (the member is PRESENT): \`PROVIDENT_ENABLE_TOOL_GROUPS\` must be declared in this site's \`env\` object (§0B.2 F-6 — the launch-scoped grant leg 1's wait depends on: with the \`graph\` group off, the app serves 9 tools and \`provident.load\` is ABSENT, which is what \`F-2\` item 2 registered). Read the site's env object as ${JSON.stringify(site === undefined ? '(NO SUCH SITE)' : site.text.slice(0, 180))}`)
+        // ARM 2 — ITS VALUE IS EXACTLY 'graph'
+        attempt(run, i++, member !== null && stripQuotes(member) === 'graph'
+          ? null
+          : `spawn site ${k + 1} · arm 2 (its value): the member must read exactly \`'graph'\` (§0B.2 F-6); the app-side route the wait depends on is the \`graph\` group, and a different or empty value leaves \`provident.load\` unserved; read ${JSON.stringify(member)}`)
+        // ARM 3 — THE NINE-MEMBER VECTOR STAYS, which is the WHOLE REASON the env route exists:
+        // `siteArgs` THROWS on any difference from the composed vector (§0B.2 item 2), so an
+        // `--enable-tool-groups=` argv spelling would be a TENTH member and would make the leg
+        // refuse its own launch. The arm drives that THROW for real, through the harness's own
+        // `siteArgs`/`composeArgs` executed in a sandbox.
+        const vector = VECTORS[k] ?? []
+        const siteArgsCalls = ((): { ok: boolean; tenth: boolean; message: string } => {
+          const composedFn = declText(HARNESS_SRC, 'composeArgs')
+          const siteArgsFn = declText(HARNESS_SRC, 'siteArgs')
+          const baseFlagsSrc = constArrayText(HARNESS_SRC, 'BASE_FLAGS')
+          if (composedFn === null || siteArgsFn === null || baseFlagsSrc === null) return { ok: false, tenth: false, message: 'the harness no longer declares composeArgs/siteArgs/BASE_FLAGS' }
+          // the extracted declarations are CONCATENATED, never interpolated into a template literal:
+          // `siteArgs`'s own named throw contains `${site}`/`${JSON.stringify(…)}` placeholders, and
+          // a template literal in THIS file would interpolate them instead of carrying them into the
+          // sandbox (the resulting `SyntaxError: Unexpected token ')'` is exactly that mistake).
+          const api = new Function('mainCjs', 'BASE_FLAGS', 'JSON', composedFn + '\n' + siteArgsFn + '\nreturn { composeArgs, siteArgs }')(
+            '/tmp/main.cjs',
+            new Function('return ' + baseFlagsSrc)(),
+            JSON,
+          ) as {
+            composeArgs: (p: string) => string[]
+            siteArgs: (a: string[], p: string, s: string) => string[]
+          }
+          const composed = api.composeArgs('/tmp/p')
+          let ok = false
+          try { api.siteArgs(composed, '/tmp/p', 'direct-spawn'); ok = true } catch { ok = false }
+          let tenth = false
+          let message = ''
+          try {
+            api.siteArgs([...composed, '--enable-tool-groups=graph'], '/tmp/p', 'direct-spawn')
+            tenth = false
+          } catch (e) {
+            tenth = true
+            message = (e as Error)?.message ?? String(e)
+          }
+          return { ok, tenth, message }
+        })()
+        attempt(run, i++, vector.length === 9 && siteArgsCalls.ok && siteArgsCalls.tenth && /composed vector reads/.test(siteArgsCalls.message)
+          ? null
+          : `spawn site ${k + 1} · arm 3 (the nine-member vector): the composed vector must stay NINE members, and a TENTH (\`--enable-tool-groups=graph\`) must be REFUSED by \`siteArgs\`'s own named throw — which is why the grant travels in \`env\` (§0B.2 item 2); read site vector=${String(vector.length)} composed accepted=${String(siteArgsCalls.ok)} tenth refused=${String(siteArgsCalls.tenth)} message=${JSON.stringify(siteArgsCalls.message.slice(0, 120))}`)
+      }
+      // THE SHIM TRANSPORT ARM — leg 2's transport carries NO `env` member at all, so no grant may
+      // appear in it: the shim host pre-enables every group in its OWN code and needs none.
+      const shimRegion = ((): string => {
+        const at = HARNESS_SRC.indexOf('const shimTransport = new StdioClientTransport(')
+        if (at < 0) return ''
+        const to = HARNESS_SRC.indexOf('\n\n', at)
+        return HARNESS_SRC.slice(at, to < 0 ? at + 400 : to)
+      })()
+      const grantInShim = envMemberValue(shimRegion, 'PROVIDENT_ENABLE_TOOL_GROUPS')
+      attempt(run, i++, shimRegion !== '' && grantInShim === null && SHAPE.envObjects.filter((e) => e.shim).length === 0
+        ? null
+        : `the shim transport · leg 2 must carry NO \`env\` member and NO grant: the battery host pre-enables read/dispatch/graph/code itself; read grant=${JSON.stringify(grantInShim)} shim env objects=${String(SHAPE.envObjects.filter((e) => e.shim).length)} region=${JSON.stringify(shimRegion.slice(0, 160))}`)
+      // NEGATIVE 1 — `NEG-env-member-absent`: the member DELETED from both sites (the audit's
+      // `A-3` draw, which kept `held × 8` and `78/78` green) must be READ as absent.
+      const strippedEnv = (HARNESS_SRC.match(/env: \{[^}]*\}/g) ?? []).map((t) => t.replace(/,\s*PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'/, ''))
+      const absentEverywhere = strippedEnv.length === 2 && strippedEnv.every((t) => envMemberValue(t, 'PROVIDENT_ENABLE_TOOL_GROUPS') === null) &&
+        electronSites.length === 2 && strippedEnv.filter((t) => envMemberValue(t, 'PROVIDENT_ENABLE_TOOL_GROUPS') !== null).length === 0
+      attempt(run, i++, absentEverywhere
+        ? null
+        : `NEGATIVE (NEG-env-member-absent): deleting the member from BOTH sites must be READ as absent — that is the draw the audit showed stayed green at the pre-fix head; read stripped sites=${String(strippedEnv.length)} values=${JSON.stringify(strippedEnv.map((t) => envMemberValue(t, 'PROVIDENT_ENABLE_TOOL_GROUPS')))}`)
+      // NEGATIVE 2 — `NEG-env-in-shim`: a grant written into the SHIM transport's env must be READ
+      // as being in the shim (which this row's shim arm forbids).
+      const shimWithGrant = `...process.env, PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'`
+      attempt(run, i++, envMemberValue(shimWithGrant, 'PROVIDENT_ENABLE_TOOL_GROUPS') !== null
+        ? null
+        : 'NEGATIVE (NEG-env-in-shim): a grant written into the shim transport\'s env must be READ as present — the shim arm above would otherwise pass on any string')
+    })
+  })
+})
+
+// ⟨`A-5`/`P-TP-1` — THE REAL FAILURE PATHS. The pre-fix row drove `stopReport`, a MODEL OF THE
+//  CONTRACT WRITTEN INSIDE THE TEST whose every branch returned `named: true`, so the "named cause"
+//  arm could not fail (the audit's `S-3` finding). The callables below are the LEG's OWN
+//  `loadFixture` / `readinessStop` / `readSurface` / `absentDemoIds`, extracted from the harness
+//  source and executed against a stub client — so the arms assert the leg's REAL stop text, and a
+//  stop that no longer names its subject REDS.⟩
+
+/** The load-side failure callables, all extracted from the harness's own source text. */
+function loadCallables(): {
+  load: (client: StubClient) => Promise<unknown>
+  readinessStop: (leg: string, read: { ids: string[]; error: string | null }) => Error
+  readSurface: (client: StubClient, tool: string) => Promise<{ ids: string[]; error: string | null }>
+  absent: (read: { ids: string[] }) => string[]
+  demoIds: string[]
+} {
+  const callFn = declText(HARNESS_SRC, 'call')
+  const load = declText(HARNESS_SRC, 'loadFixture')
+  const demo = declText(HARNESS_SRC, 'demoEnvelope')
+  const readFn = declText(HARNESS_SRC, 'readSurface')
+  const stopFn = declText(HARNESS_SRC, 'readinessStop')
+  const absentFn = declText(HARNESS_SRC, 'absentDemoIds')
+  const idsRhs = constRhs(HARNESS_SRC, 'DEMO_READBACK_IDS')
+  if (callFn === null || load === null || demo === null || readFn === null || stopFn === null || absentFn === null || idsRhs === null) {
+    throw new Error('the harness no longer carries the load-side stop surface (call / loadFixture / demoEnvelope / readSurface / readinessStop / absentDemoIds / DEMO_READBACK_IDS) — P-TP-1 cannot drive the leg\'s own report path')
+  }
+  const build = new Function(
+    'call', 'DEMO_READBACK_IDS', 'console', 'Error', 'JSON', 'String', 'Array', 'Number', 'Object',
+    `${demo}\n${callFn}\n${load}\n${readFn}\n${stopFn}\n${absentFn}\nreturn { load: loadFixture, readinessStop, readSurface, absentDemoIds, DEMO_READBACK_IDS }`,
+  )
+  const idsValue = new Function(`return (${idsRhs})`)() as string[]
+  const built = build(callFn, idsValue, { log: () => undefined }, Error, JSON, String, Array, Number, Object) as {
+    load: (client: StubClient) => Promise<unknown>
+    readinessStop: (leg: string, read: { ids: string[]; error: string | null }) => Error
+    readSurface: (client: StubClient, tool: string) => Promise<{ ids: string[]; error: string | null }>
+    absentDemoIds: (read: { ids: string[] }) => string[]
+    DEMO_READBACK_IDS: string[]
+  }
+  return { ...built, demoIds: built.DEMO_READBACK_IDS, absent: built.absentDemoIds }
+}
+
 describe('U-DIVERGENCE-FIXTURE §4.2 P-TP-1 — NO INPUT SHAPE THROWS WHERE A NAMED STOP IS CONTRACT (strat:divergence-fixture-totality)', () => {
-  it('P-TP-1 — 3 failure shapes × 2 report arms (a named cause; the honest "no cause captured" form) + 1 draw asserting the existing leg-1 try/catch still records its failure = 7 attempts', () => {
+  it('P-TP-1 — 3 failure shapes × 2 report arms (a named cause; the honest "no cause captured" form) + the A-5 refused-read arm + 1 draw asserting the existing leg-1 try/catch still records its failure = 8 attempts', async () => {
+    // THE ARMS ARE DRIVEN THROUGH THE LEG'S OWN FAILURE PATHS (never through an in-test model of
+    // the clause): `loadFixture`'s refusal branch, `readSurface` + `absentDemoIds` +
+    // `readinessStop`, and the wait's refused-read stop. They are awaited HERE (the register's own
+    // bodies are synchronous tables), and the register then scores their REAL outcomes.
+    const C = loadCallables()
+    const W = waitCallables()
+    const driven = async (fn: () => Promise<unknown>): Promise<{ threw: boolean; message: string }> => {
+      try {
+        const value = await fn()
+        return { threw: false, message: `RESOLVED with ${JSON.stringify(value)} — no stop was raised` }
+      } catch (e) {
+        return { threw: true, message: (e as Error)?.message ?? String(e) }
+      }
+    }
+    const SHAPES = [
+      // `loadCalls` = the leg's own `provident.load` requests this arm issues: the two REFUSAL
+      // shapes issue exactly ONE (the request the surface refused); the ABSENT-SURFACE shape is
+      // stopped by the read-back, and the harness's own `loadFixture` call is what the real path
+      // would have issued first, so the arm that drives only the probe reports 0.
+      { id: 'gate refusal', must: ['REFUSED', 'tool surface', '`graph` group is disabled'], loadCalls: 1 },
+      { id: 'malformed envelope payload', must: ['REFUSED', 'tool surface', "envelope is not an object"], loadCalls: 1 },
+      { id: 'load landed, demo surface absent', must: ['readiness precondition FAILED', 'inc'], loadCalls: 0 },
+    ] as const
+    const findings: Array<{
+      shape: string
+      must: readonly string[]
+      loadCalls: number
+      arm1: { threw: boolean; message: string }
+      arm1Client: { loadCalls: number; dispatchCalls: number }
+      arm2: { threw: boolean; message: string }
+      arm2Client: { loadCalls: number; dispatchCalls: number }
+    }> = []
+    for (const shape of SHAPES) {
+      const client = stubClient(async (name) => {
+        if (name === 'provident.list_targets') return toolReply({ nodes: [] })
+        if (shape.id === 'gate refusal') return toolReply({ error: 'tool error: the `graph` group is disabled' }, true)
+        if (shape.id === 'malformed envelope payload') return toolReply({ error: 'the envelope is not an object' }, true)
+        return toolReply({ ok: true })
+      })
+      const arm1 = shape.id === 'gate refusal' || shape.id === 'malformed envelope payload'
+        ? await driven(() => C.load(client))
+        : await (async () => {
+          const read = await C.readSurface(client, 'provident.list_targets')
+          if (C.absent(read).length > 0) return driven(async () => { throw C.readinessStop('leg 1', read) })
+          return { threw: false, message: 'the read-back found every demo id — no stop was raised' }
+        })()
+      const bare = stubClient(async (name) => {
+        if (name === 'provident.list_targets') return toolReply({ nodes: [] })
+        return toolReply({}, true)
+      })
+      const arm2 = shape.id === 'gate refusal'
+        ? await driven(() => C.load(bare))
+        : shape.id === 'malformed envelope payload'
+          ? await driven(async () => { throw C.readinessStop('leg 1', { ids: [], error: null }) })
+          : await (async () => {
+            const refused = await C.readSurface(bare, 'provident.list_targets')
+            return driven(async () => { throw C.readinessStop('leg 1', refused) })
+          })()
+      findings.push({
+        shape: shape.id,
+        must: shape.must,
+        loadCalls: shape.loadCalls,
+        arm1,
+        arm1Client: { loadCalls: client.loadCalls, dispatchCalls: client.dispatchCalls },
+        arm2,
+        arm2Client: { loadCalls: bare.loadCalls, dispatchCalls: bare.dispatchCalls },
+      })
+    }
+    // THE A-5 REFUSED-READ ARM (the auditor's own addition): the wait's readiness READ is refused by
+    // the tool surface, which must be a NAMED stop in the WAIT'S OWN voice — never misattributed to
+    // the load's absence, never an unhandled rejection out of the leg-1 `try`.
+    const refusedRead = stubClient(async () => { throw new Error('tool refused: the `read` group is disabled') })
+    const refused = await driven(() => W.wait(refusedRead))
     registerRow('P-TP-1', (run) => {
       let i = 0
-      const SHAPES = ['gate refusal', 'malformed envelope payload', 'load landed, demo surface absent'] as const
-      for (const shape of SHAPES) {
-        // ARM 1 — a named cause
-        const named = attemptOf(() => {
-          const r = stopReport(shape, shape === 'gate refusal' ? 'tool error: the `graph` group is disabled' : shape === 'malformed envelope payload' ? 'the envelope is not an object' : "no node carries css.id === 'inc'")
-          if (r.text === '' || r.text === 'undefined') throw new Error('the stop names nothing')
-          if (!r.named) throw new Error('the stop is not a NAMED stop')
-        })
-        attempt(run, i++, named === null ? null : `${shape} · arm 1 (a named cause): ${named} — C-2 item 2 requires a NAMED stop, never an unhandled rejection and never a bare undefined`)
-        // ARM 2 — the honest "no cause captured" form
-        const honest = attemptOf(() => {
-          const r = stopReport(shape, '')
-          if (r.text === '' || r.text === 'undefined') throw new Error('the stop does not say what it has')
-        })
-        attempt(run, i++, honest === null ? null : `${shape} · arm 2 (the honest "no cause captured" form): ${honest} — C-2 item 2 forbids a silent skip into \`drive\``)
+      for (const f of findings) {
+        // the refusal IS this arm's own failing load request (exactly one), and what must stay ZERO
+        // is the DISPATCH count — a comparison row emitted from a graph the leg never loaded
+        const arm1Ok = f.arm1.threw && f.must.every((needle) => f.arm1.message.includes(needle)) &&
+          f.arm1Client.loadCalls === f.loadCalls && f.arm1Client.dispatchCalls === 0
+        attempt(run, i++, arm1Ok
+          ? null
+          : `${f.shape} · arm 1 (a named cause, driven through the LEG'S OWN path): ${f.arm1.message} — the stop must NAME its subject (${JSON.stringify([...f.must])}) AND QUOTE the tool's own text, never be an unhandled rejection or a bare undefined, and must let NO comparison row emit; read load calls=${f.arm1Client.loadCalls} dispatch calls=${f.arm1Client.dispatchCalls}`)
+        const arm2Ok = f.arm2.threw && f.arm2.message.trim() !== '' && !f.arm2.message.includes('undefined') && f.arm2Client.dispatchCalls === 0
+        attempt(run, i++, arm2Ok
+          ? null
+          : `${f.shape} · arm 2 (the honest "no cause captured" form): ${f.arm2.message} — the stop must still say what it has, name its subject, never fabricate a cause, and emit no comparison row; read load calls=${f.arm2Client.loadCalls} dispatch calls=${f.arm2Client.dispatchCalls}`)
       }
+      const refusedOk = refused.threw && refused.message.includes('boot-install wait FAILED') && refused.message.includes('REFUSED') &&
+        refusedRead.loadCalls === 0 && refusedRead.dispatchCalls === 0 && refusedRead.listCalls === 1
+      attempt(run, i++, refusedOk
+        ? null
+        : `the refused readiness READ (A-5) · the wait's own named stop: ${refused.message} — the refusal must be named in the WAIT'S own voice (never misattributed to the load) and no comparison row may emit`)
       // the +1 draw: the EXISTING leg-1 `try`/`catch` still records its failure, and the arithmetic
       // and exit contract are unchanged (C-2 item 5 / C-3 item 4 — a failed load still reaches the
-      // leg's existing arithmetic and adds no new exit code)
-      // the leg-1 `try`/`catch` lives inside `main()` (the `reportBootFailure(...)` call site is
-      // what identifies it); the sweep/exit arithmetic must stay in the same shape (C-2 item 5).
+      // leg's existing arithmetic and adds no new exit code). The leg-1 `try`/`catch` lives inside
+      // `main()` (the `reportBootFailure(...)` call site identifies it).
       const mainBody = functionRegions(HARNESS_SRC).get('main')?.body ?? ''
       const catchAt = mainBody.indexOf('catch')
       const catchBody = catchAt < 0 ? '' : mainBody.slice(catchAt, catchAt + 600)
@@ -1821,15 +2728,18 @@ function memberText(expr: string): string {
 }
 
 describe('U-DIVERGENCE-FIXTURE §4.2 — THE REGISTER REPORT (declared vs executed, held/broken, stoppedAt, counterexamples)', () => {
-  it('§4.2 — the register is exactly the EIGHT declared rows, `P-IM-`/`P-SM-`/`P-TP-` ONLY (no `F-` row), the declared total is 78 and every term is the sum of its own factors', () => {
+  it('§4.2 — the register is exactly the TEN declared rows (the gate EIGHT + the two zero-coverage rows the remand added), `P-IM-`/`P-SM-`/`P-TP-` ONLY (no `F-` row), the declared total is 101 and every term is the sum of its own factors', () => {
     expect(DECLARED_REGISTER.map((r) => r.row), 'the register is authored in the declared register order').toEqual([
-      'P-IM-1', 'P-IM-2', 'P-IM-3', 'P-SM-1', 'P-SM-2', 'P-SM-3', 'P-TP-1', 'P-TP-2',
+      'P-IM-1', 'P-IM-2', 'P-IM-3', 'P-SM-1', 'P-SM-2', 'P-SM-3', 'P-TP-1', 'P-TP-2', 'P-SM-4', 'P-SM-5',
     ])
-    expect(DECLARED_REGISTER.length, 'the register is EXACTLY eight rows — the cap, exactly full').toBe(8)
+    // ⟨AMENDED 2026-10-05 (gate-4 remand): the register was EIGHT rows at the gate («the cap, exactly
+    //   full»); the two zero-coverage steps `A-2`/`A-3` name are NEW rows, so the spec's §4.1 cap
+    //   (≤8) must be amended to TEN. The eight superseded rows are all still present, unmoved.⟩
+    expect(DECLARED_REGISTER.length, 'the register is the eight gate rows PLUS the two zero-coverage rows the remand added (10)').toBe(10)
     expect(DECLARED_REGISTER.some((r) => r.row.startsWith('F-')), 'NEVER an `F-` row (§4.1)').toBe(false)
     expect(DECLARED_REGISTER.some((r) => r.row === 'P-IM-4' || r.row.startsWith('P-TH-')), '`P-IM-4` and `P-TH-*` do NOT exist in this register (§4.1)').toBe(false)
     for (const row of DECLARED_REGISTER) {
-      expect(row.row, `${row.row}: only \`P-IM-\`/\`P-SM-\`/\`P-TP-\` rows may appear`).toMatch(/^P-(IM|SM|TP)-[123]$/)
+      expect(row.row, `${row.row}: only \`P-IM-\`/\`P-SM-\`/\`P-TP-\` rows may appear`).toMatch(/^P-(IM|SM|TP)-[1-5]$/)
       const factors = row.declared.split(/[+×*]/).map((t) => t.trim())
       expect(factors.every((t) => t !== ''), `${row.row}: every declared factor must be printed (${row.declared})`).toBe(true)
       const value = row.declared
@@ -1840,7 +2750,12 @@ describe('U-DIVERGENCE-FIXTURE §4.2 — THE REGISTER REPORT (declared vs execut
       expect(row.declaredTotal, `${row.row} must be ≤ ${CAPS.perRow}`).toBeLessThanOrEqual(CAPS.perRow)
     }
     const total = DECLARED_REGISTER.reduce((a, r) => a + r.declaredTotal, 0)
-    expect(total, 'the arithmetic printed with its terms: `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78`').toBe(78)
+    // ⟨AMENDED 2026-10-05: the superseded reading was `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78`. The
+    //   gate-4 remand moved `P-IM-1` 6 → 8, `P-SM-2` 6 → 7 and `P-TP-1` 7 → 8.⟩
+    // ⟨AMENDED 2026-10-05: the superseded reading was `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78`. The
+    //   gate-4 remand moved `P-IM-1` 6 → 8, `P-SM-2` 6 → 7, `P-TP-1` 7 → 8, and ADDED the two
+    //   zero-coverage rows `P-SM-4` (10) and `P-SM-5` (9).⟩
+    expect(total, 'the arithmetic printed with its terms: `8 + 23 + 15 + 8 + 7 + 6 + 8 + 7 + 10 + 9 = 101` (superseded: `6 + 23 + 15 + 8 + 6 + 6 + 7 + 7 = 78`)').toBe(101)
     expect(total, `the total must be ≤ ${CAPS.total}`).toBeLessThanOrEqual(CAPS.total)
     expect(SEED, 'the pinned seed of this register (§4.1): `0x20260930`').toBe(0x20260930)
     expect(STOP_AFTER, 'the register stops after 5 distinct counterexamples on every row (§4.1)').toBe(5)

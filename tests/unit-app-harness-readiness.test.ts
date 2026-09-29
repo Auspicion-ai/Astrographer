@@ -78,6 +78,17 @@
 //   F-7 the env fallback inherited by a child process ⇒ today no `src/**` child spawn forwards
 //       `env:`; a future one MUST re-open the row (`R-12`)
 //   F-9 a group grant never substitutes for the token (the register's `P-TP-2` + `R-10`)
+// ⟨GATE-4 REMAND (`§3a.4`/`§3b`, the `11` NEGATIVE GENERATORS; measurer: the gate-4 adversarial
+// pass, `PASS-WITH-FINDINGS` `A-1`..`A-7`).⟩ The generators tasked to the TestWriter are real rows
+// here (the contract-level ones) and in `tests/unit-app-harness-readiness-register.test.ts` (the
+// register-level ones, reported as their own declared negative table — the register's own `6` rows /
+// `78` attempts are NOT moved, `§4.2`'s declared column being the spec's authority):
+//
+//   THIS FILE            neg-refusal-names-itself · neg-partial-apply · neg-extreme-values ·
+//                        neg-presence-under-optin-source
+//   THE REGISTER FILE    neg-armed-second-install · neg-unarmed-settle ·
+//                        neg-regression-after-satisfaction · neg-satisfied-then-absent ·
+//                        neg-second-writer · neg-escalation-name · neg-default-list-drift
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -960,5 +971,291 @@ describe('U-APP-HARNESS-READINESS §5.1 class (b) B-1..B-4 — THE REAL RUN (the
     // DECLARED STATE AT THIS HEAD: NOT RUN (red: no refusal path exists — §5.2 R-5). The refusal
     // must be readable by the instrument that needs it: the leg's existing `classifyBootFailure`
     // reports the child's stderr tail. `C-9` B-5: no live battery row is claimed by this unit.
+  })
+})
+
+// ===========================================================================
+// ⟨GATE-4 REMAND — THE CONTRACT-LEVEL NEGATIVE GENERATORS (`§3a.4` item 3; `§3b` `T-1`).⟩
+// Each block below is a REAL ROW the audit's finding requires: it asserts the CONTRACT's claim
+// about a malformed input, and its discrimination proof (what reds it) is stated in its own
+// comment — the audit found arms that could not fail (`named()` accepting any non-empty reason,
+// the vacuous `raw.length >= 0`, the never-driven "no partially-applied set before the refusal"),
+// so each row below is built to DIE when the specific defect it covers is re-introduced.
+// ===========================================================================
+
+/** The named-refusal checker the audit's `neg-refusal-names-itself` requires: the refusal must
+ *  name THE OFFENDER (or, when the offender is empty, its POSITION) — never merely carry a
+ *  non-empty reason. `named()`'s old body (`reason.length > 0`) accepted a refusal that quoted a
+ *  DIFFERENT problem, which made the "named" claim a tautology. */
+function refusalNamesItself(
+  res: EnablementRequest,
+  spec: { id: string; mustMention: string[]; offender?: string | null; rawContains?: string },
+): string | null {
+  if (res.ok) return `${spec.id}: expected a NAMED refusal, observed ok:true with requested ${JSON.stringify(res.requested)}`
+  if (res.reason.length === 0) return `${spec.id}: the refusal carries an EMPTY reason (§3.2 F-1: every refusal names itself)`
+  for (const token of spec.mustMention) {
+    if (!res.reason.includes(token)) {
+      return `${spec.id}: the refusal does NOT name the offender — expected ${JSON.stringify(token)} inside ${JSON.stringify(res.reason)}`
+    }
+  }
+  if (spec.offender !== undefined && (res.offender ?? null) !== spec.offender) {
+    return `${spec.id}: the \`offender\` member must carry the offending token — expected ${JSON.stringify(spec.offender)}, observed ${JSON.stringify(res.offender ?? null)}`
+  }
+  if (spec.rawContains !== undefined && !res.raw.includes(spec.rawContains)) {
+    return `${spec.id}: the refusal must quote the value it refused — expected ${JSON.stringify(spec.rawContains)} inside ${JSON.stringify(res.raw)}`
+  }
+  return null
+}
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ neg-refusal-names-itself — EVERY malformed shape\'s refusal NAMES ITS OWN OFFENDER (or its position), never merely a non-empty reason (`§3a.4` item 2 (i); `§2.1` item 6 rows 1-8)', () => {
+  it('neg-refusal-names-itself [T] — each shape\'s refusal quotes THE token it refused (and its `offender`), so a refusal naming a DIFFERENT problem fails', () => {
+    const parse = seamMember('parseToolGroupList')
+    const request = seamMember('enablementRequestFrom')
+    // DISCRIMINATION PROOF: the old limb was `reason.length > 0` — any refusal passed, including
+    // one quoting another shape's problem. Each row below pins THIS shape's own offender text:
+    // swapping two shapes' reasons, or a generic "invalid input", reds the row.
+    const shapes: Array<{
+      id: string
+      run: () => EnablementRequest
+      mustMention: string[]
+      offender?: string | null
+      rawContains?: string
+    }> = [
+      { id: '1 unknown name (`graph,typo`)', run: () => request(['--enable-tool-groups=graph,typo'], {}), mustMention: ["'typo'"], offender: 'typo', rawContains: 'typo' },
+      { id: '2 case variant (`Graph`)', run: () => request(['--enable-tool-groups=Graph'], {}), mustMention: ["'Graph'"], offender: 'Graph' },
+      { id: '3 empty token (`graph,,rag`)', run: () => parse('graph,,rag'), mustMention: ['EMPTY group name at position 2', "'graph,,rag'"], offender: '' },
+      { id: '4 trailing comma (`graph,`)', run: () => parse('graph,'), mustMention: ['EMPTY group name at position 2'], offender: '' },
+      { id: '5 whitespace token (`graph, rag`)', run: () => parse('graph, rag'), mustMention: ["' rag'"], offender: ' rag' },
+      { id: '6 empty flag value (`--enable-tool-groups=`)', run: () => request(['--enable-tool-groups='], {}), mustMention: ['EMPTY'] },
+      { id: '7 value-less form (`--enable-tool-groups`)', run: () => request(['--enable-tool-groups'], {}), mustMention: ['--enable-tool-groups='], rawContains: '--enable-tool-groups' },
+      { id: '8 doubled flag', run: () => request(['--enable-tool-groups=graph', '--enable-tool-groups=rag'], {}), mustMention: ['appears 2 times in argv'], offender: '--enable-tool-groups=' },
+    ]
+    for (const shape of shapes) {
+      const verdict = refusalNamesItself(shape.run(), shape)
+      expect(verdict, `shape ${shape.id}`).toBeNull()
+    }
+    // The CONVERSE limb (the audit's second reading): the SHAPE-1 reason must NOT satisfy SHAPE-2 —
+    // i.e. the check is not "any token appears anywhere".
+    const one = request(['--enable-tool-groups=graph,typo'], {})
+    const crossVerdict = refusalNamesItself(one, { id: 'cross', run: () => one, mustMention: ["'Graph'"] } as never)
+    expect(crossVerdict, 'the checker must DIE on a refusal that names a different offender (this is the discrimination proof)').not.toBeNull()
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ neg-partial-apply — a REFUSED request applies NO group, and the gate\'s effective set is UNTOUCHED (`§2.1` item 2 item 2 / `A-1` item 3 item 2: "no partially-applied set before the refusal"; `§3a.4` item 3)', () => {
+  it('neg-partial-apply [T] — `graph,typo` (a good group beside a bad one) yields NO requested group, leaves the gate at its effective set, and `main()` resolves the gate BEFORE it can refuse (so the partial-application window is never opened)', () => {
+    const request = seamMember('enablementRequestFrom')
+    const effective = seamMember('effectiveEnabledGroups')
+
+    // A pure re-implementation of `main()`'s OWN launch decision order (§2.1 item 2 item 4: the
+    // request is read, then `effective` is resolved, then the gate is built from it, then the
+    // refusal branch — which exits BEFORE the window and before `mcp.start()`).
+    const launchDecision = (argv: string[], env: Record<string, string | undefined>) => {
+      const resolved = request(argv, env)
+      const requested: ToolGroup[] = resolved.ok ? resolved.requested : []
+      const effectiveSet = effective(defaultSecurityConfig().enabled, [], requested)
+      const gate = new SecurityGate({ token: null, enabled: effectiveSet })
+      return resolved.ok
+        ? { refused: false as const, requested, effectiveSet, gate }
+        : { refused: true as const, refusal: resolved, requested, effectiveSet, gate }
+    }
+
+    const base = defaultSecurityConfig().enabled
+    // THE REFUSAL ARM — a good group (`graph`) beside a bad one (`typo`).
+    const refused = launchDecision(['--enable-tool-groups=graph,typo'], {})
+    expect(refused.refused, '`graph,typo` must be REFUSED (F-1)').toBe(true)
+    expect(
+      refused.requested,
+      'NO PARTIALLY-APPLIED SET: the refusal must carry NO requested group — `graph` must NOT survive alone',
+    ).toEqual([])
+    expect(refused.effectiveSet, 'the gate\'s effective set is UNTOUCHED by a refused request').toEqual(base)
+    expect(refused.gate.enabled.has('graph' as ToolGroup), 'the refused launch must NOT grant `graph`').toBe(false)
+    expect(refused.gate.enabled.has('read' as ToolGroup), 'the default groups are unmoved by a refused request').toBe(true)
+    expect(refused.gate.enabled.size, 'the gate holds exactly the base groups (no partial grant)').toBe(base.length)
+
+    // An EMPTY token beside a good group — the same rule, the other malformed family.
+    const refusedEmpty = launchDecision(['--enable-tool-groups=graph,,rag'], {})
+    expect(refusedEmpty.refused, '`graph,,rag` must be REFUSED').toBe(true)
+    expect(refusedEmpty.requested, 'a refusal never reports a partial set (empty-token family)').toEqual([])
+    expect(refusedEmpty.gate.enabled.has('graph' as ToolGroup), 'nor does the empty-token family grant `graph`').toBe(false)
+
+    // THE WINDOW (the row's second half) — MEASURED, AND IT IS THE OPPOSITE OF A PARTIAL-APPLICATION
+    // WINDOW. The landed `main()` order, MEASURED HERE (the resolve's own comment says it is
+    // "resolved ONCE, before the gate and the MCP server exist", which is true, but the refusal is
+    // reached before the resolve — so the refusal path resolves NOTHING at all): request read →
+    // store read → refusal + `app.exit(2)` → resolve → gate → window → `mcp.start()`. The property
+    // this row drives is the contract's: NO partially-applied set can reach a gate, because on the
+    // refusal path no gate is ever constructed and the process is already exiting.
+    const mainStart = MAIN_SRC.indexOf('async function main(')
+    const mainBody = MAIN_SRC.slice(mainStart)
+    const requestReadAt = mainBody.indexOf('const launchGroups = enablementRequestFrom(')
+    const storeReadAt = mainBody.indexOf('securityStore.get()')
+    // Anchored on the refusal's OWN stderr literal and on the resolve's ASSIGNMENT — the bare
+    // substrings also occur in `main()`'s comments above, and a bare read silently inverts the
+    // ordering (it did, in this row's first draft).
+    const refusalAt = mainBody.indexOf('[provident-main] --enable-tool-groups REFUSED')
+    const exitAt = mainBody.indexOf('app.exit(2)')
+    const resolutionAt = mainBody.indexOf('const effective = effectiveEnabledGroups(')
+    const gateAt = mainBody.indexOf('new SecurityGate(')
+    const windowAt = mainBody.indexOf('new BrowserWindow(')
+    const mcpStartAt = mainBody.indexOf('await mcp.start()')
+    expect(requestReadAt, 'the request read site exists').toBeGreaterThan(-1)
+    expect(storeReadAt, 'the store read site exists (the refusal may name `persisted`)').toBeGreaterThan(requestReadAt)
+    expect(refusalAt, 'the refusal branch sits AFTER the request read and the store read (`§2.1` item 6 placement)').toBeGreaterThan(storeReadAt)
+    expect(exitAt, 'the refusal leaves the process with `2`').toBeGreaterThan(refusalAt)
+    expect(
+      mainBody.slice(Math.max(0, refusalAt - 200), refusalAt + 400).includes('console.error('),
+      'the named refusal line is EMITTED (a `console.error` at the refusal branch), never a silent return',
+    ).toBe(true)
+    // NOTHING IS BUILT ON THE REFUSAL PATH: the exit precedes the resolve, the gate, the window and
+    // the surface, so a refused launch applies NOTHING (the contract's "no partially-applied set").
+    expect(resolutionAt, 'the resolve site exists (on the ACCEPTED path)').toBeGreaterThan(exitAt)
+    expect(gateAt, 'the gate construction site exists').toBeGreaterThan(resolutionAt)
+    expect(windowAt, 'the window site exists').toBeGreaterThan(exitAt)
+    expect(mcpStartAt, 'the `mcp.start()` site exists').toBeGreaterThan(exitAt)
+
+    // THE CONVERSE (so the row can fail in the other direction too): a WELL-FORMED request DOES
+    // apply its group — the "no partial apply" rule must not be satisfied by granting nothing ever.
+    const granted = launchDecision(['--enable-tool-groups=graph'], {})
+    expect(granted.refused, 'a well-formed request is not refused').toBe(false)
+    expect(granted.requested, 'a well-formed request carries its group').toEqual(['graph'])
+    expect(granted.gate.enabled.has('graph' as ToolGroup), 'a well-formed request DOES grant its group (additivity)').toBe(true)
+    expect(granted.gate.enabled.has('read' as ToolGroup), 'additively — the defaults stay on').toBe(true)
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ neg-extreme-values — the EXTREME malformed shapes are refused BY NAME with no throw and NO partial grant (`§3a.4` item 3; `§2.1` item 6)', () => {
+  it('neg-extreme-values [T] — a ~10 000-character list, an embedded NUL, `graph,Graph`, `graph,gnosis_edit`, `edit `, and an argv with two valid-form flags plus a malformed one ⇒ each names its offender, no throw', () => {
+    const parse = seamMember('parseToolGroupList')
+    const request = seamMember('enablementRequestFrom')
+
+    // ~10 000 characters, with the BAD token LAST — so a refusal that only complains about the
+    // length, or truncates the reason, reds the row (the offender must still be named).
+    const longValue = 'graph,'.repeat(1_999) + 'typo'
+    expect(longValue.length, 'the long shape is ~10 000 characters').toBeGreaterThan(9_000)
+    const longRes = parse(longValue)
+    expect(refusalNamesItself(longRes, {
+      id: 'long list',
+      run: () => longRes,
+      mustMention: ["'typo'"],
+      offender: 'typo',
+    }), 'a 10 000-character list still names the offending token, never just its length').toBeNull()
+
+    // An EMBEDDED NUL: the token is not silently trimmed at the NUL — it is refused and quoted.
+    const nulValue = 'graph\u0000,rag'
+    const nulRes = parse(nulValue)
+    expect(refusalNamesItself(nulRes, {
+      id: 'embedded NUL',
+      run: () => nulRes,
+      mustMention: ['graph\u0000'],
+      offender: 'graph\u0000',
+    }), 'an embedded NUL is refused with the offender quoted (never truncated at the NUL)').toBeNull()
+
+    // The near-miss vocabulary shapes.
+    const nearMisses = [
+      { value: 'graph,Graph', offender: 'Graph', why: 'a case variant' },
+      { value: 'graph,gnosis_edit', offender: 'gnosis_edit', why: '`_` instead of `-`' },
+      { value: 'edit ', offender: 'edit ', why: 'a trailing whitespace (no trimming)' },
+    ]
+    for (const nm of nearMisses) {
+      const res = parse(nm.value)
+      expect(refusalNamesItself(res, {
+        id: nm.why,
+        run: () => res,
+        mustMention: [`'${nm.offender}'`],
+        offender: nm.offender,
+        rawContains: nm.value,
+      }), `${nm.value}: the near miss (${nm.why}) is refused and NAMED`).toBeNull()
+    }
+
+    // TWO valid-form flags PLUS a malformed one: the count refusal must still name the surface.
+    const twoFlags = request(
+      ['--enable-tool-groups=graph', '--enable-tool-groups=rag', '--enable-tool-groups=edit '],
+      {},
+    )
+    expect(refusalNamesItself(twoFlags, {
+      id: 'two valid-form flags + one malformed',
+      run: () => twoFlags,
+      mustMention: ['--enable-tool-groups=', 'appears 3 times'],
+    }), 'two valid-form flags plus a malformed one is refused, and the refusal names the flag and the count').toBeNull()
+    expect(twoFlags.ok, 'the malformed member must NOT be dropped so the two good ones can win').toBe(false)
+
+    // NO PARTIAL GRANT, for every extreme shape (the `neg-partial-apply` rule at the extreme).
+    for (const res of [longRes, nulRes, twoFlags]) {
+      if (!res.ok) {
+        expect('requested' in res, 'a refusal carries NO `requested` member that a caller could apply').toBe(false)
+      }
+    }
+
+    // THE `exit(2)` PATH: the refusal family reaches exactly one exit site, `2`, and never a throw.
+    // (A source property, never a line number, and never a claim that the app booted.)
+    const exits = MAIN_SRC.match(/app\.exit\((\d+)\)/g) ?? []
+    expect(exits, 'the launch-abort path exits with the code `2` (§2.1 item 6)').toContain('app.exit(2)')
+    expect(
+      /REFUSED/.test(MAIN_SRC),
+      'the refusal is a NAMED stderr line, not a silent return (`R-5`)',
+    ).toBe(true)
+  })
+})
+
+describe('U-APP-HARNESS-READINESS ⟨remand⟩ neg-presence-under-optin-source — the `A-4` DIVERGENCE, driven on the real predicate (`§3a.2` A-4; `§3b` S-1 owed to a spec pass — NOT decided here)', () => {
+  it('neg-presence-under-optin-source [T] — `--enable-tool-groups=read,dispatch` is a NO-OP request (`effective === base`); the landed code\'s presence predicate is `requested.length > 0` while the contract\'s (`§2.2 B-1` item 3 item 1) is `source === \'argv\' | \'env\'`, and the two DISAGREE on exactly this case', () => {
+    const request = seamMember('enablementRequestFrom')
+    const effective = seamMember('effectiveEnabledGroups')
+    const base = defaultSecurityConfig().enabled
+
+    // THE DRIVE — the audit's `A-4` measured divergent case, on the REAL predicate.
+    const resolved = request(['--enable-tool-groups=read,dispatch'], {})
+    expect(resolved.ok, 'the no-op request is ACCEPTED (item 6 row 10: restating the default is an accepted no-op)').toBe(true)
+    const requested: ToolGroup[] = resolved.ok ? resolved.requested : []
+    expect(requested, 'the request names the default groups').toEqual(['read', 'dispatch'])
+    expect(resolved.ok && resolved.source, 'the source is `argv`').toBe('argv')
+    expect(effective(base, [], requested), 'the additivity no-op: `effective === base` (§2.1 item 2 item 2)').toEqual(base)
+
+    // WHICH PREDICATE THE LANDED CODE FOLLOWS — read as a SOURCE PROPERTY of `main.ts` (never a
+    // line number), and asserted as such so it cannot drift silently.
+    const mainStart = MAIN_SRC.indexOf('async function main(')
+    const mainBody = MAIN_SRC.slice(mainStart)
+    expect(
+      /const\s+optedIn\s*=\s*requested\.length\s*>\s*0/.test(mainBody),
+      'A-4: the landed presence predicate is `const optedIn = requested.length > 0` — if this reds, the code moved to the contract\'s predicate and the owed amendment (`§3b` S-1) can be closed',
+    ).toBe(true)
+
+    // THE TWO PREDICATES, evaluated on the same reading. The contract's is `§2.2 B-1` item 3 item 1
+    // ("present iff `source === 'argv'` or `'env'`"); the code's is the length test above.
+    const codeSaysPresent = requested.length > 0
+    const contractSaysPresent = resolved.ok && (resolved.source === 'argv' || resolved.source === 'env')
+    expect(codeSaysPresent, 'the code\'s predicate (observed), on the no-op request').toBe(true)
+    // ⟨A-4 AS OBSERVED — REPORTED EXACTLY, NOT DECIDED HERE.⟩ The two predicates DISAGREE on ONE
+    // shape only: an EMPTY request whose source is `'argv'`/`'env'` (the pure surface can produce
+    // that shape — `parseToolGroupList(null)` is `{ok:true, requested:[], source:'none'}` and a
+    // caller that stamps `source:'argv'` on it yields it; `enablementRequestFrom` does NOT produce
+    // it, because it returns early on an empty value). On that shape the code reports the member
+    // PRESENT and the contract's rule reports NOT PRESENT. On the audit's own reading
+    // (`--enable-tool-groups=read,dispatch`) BOTH predicates are TRUE, so the divergence the audit
+    // measured is one of WORDING (the code tests the resolved REQUEST while the contract tests the
+    // SOURCE), not of the reply at that input — stated plainly rather than smoothed.
+    const emptyFromSource: EnablementRequest = { ok: true, requested: [], source: 'argv', raw: '' }
+    const codeOnEmpty = emptyFromSource.ok && emptyFromSource.requested.length > 0
+    const contractOnEmpty = emptyFromSource.ok && (emptyFromSource.source === 'argv' || emptyFromSource.source === 'env')
+    expect(codeOnEmpty, 'on an EMPTY request with source `argv`, the code\'s predicate reports NOT present').toBe(false)
+    expect(contractOnEmpty, 'on the same shape, the contract\'s predicate reports PRESENT').toBe(true)
+    expect(
+      codeOnEmpty !== contractOnEmpty,
+      'A-4: the two predicates MUST disagree on the empty-request-with-an-argv-source shape — the exact divergence the amendment (`§3b` S-1) must rule',
+    ).toBe(true)
+    expect(
+      contractSaysPresent,
+      'A-4 AS OBSERVED: on the audit\'s own case (`--enable-tool-groups=read,dispatch`) the CONTRACT\'s predicate is ALSO true — ' +
+        'so the code\'s predicate is the one the reply follows, and the two agree here; the divergence is the empty-request shape above. ' +
+        'The amendment is OWED (`§3b` S-1) and is NOT decided by this row.',
+    ).toBe(true)
+
+    // ⟨DECLARED LIMIT, NOT SMOOTHED: the REPLY's own `boot` presence is NOT node-observable.⟩
+    // `main()`'s `optedIn` is a local of a non-exported function, so no node row can inject it and
+    // read `provident.list_targets` — the observable reply is the class (b) `B-1`/`B-2` row's
+    // (`§5.1`: a real launch). This row asserts the predicate from the source and the request from
+    // the pure surface; it does NOT claim the reply's presence. REMAND to the supervisor: the
+    // amendment (`§3b` S-1) is owed and this pass does NOT decide it.
   })
 })
