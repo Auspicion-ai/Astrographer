@@ -283,6 +283,35 @@ handoff is *"a config-file persistence METHOD is absent"*, never *"persistence i
 closed by an upstream ruling that a fork owns its own) — **but the unit must record which of the two
 outcomes its own store's future depends on.**
 
+**AND THE FOLLOWING IS WHAT THE HANDOFF'S ANSWER CHANGES — added 2026-09-29 by the
+supervisor's filing pass, ANNOTATED BESIDE (nothing in the six paragraphs above is
+rewritten; `RCA-8(c)`; the pass holds NO SHELL, ran no suite, no leg and no battery, and
+every figure it quotes is the foundation's own recorded reading or a `VERIFIED-BY-READ`).
+THE DEPENDENCY IS RESOLVED BY RULING, AND NO WAIT REMAINS.** The foundation ran its
+four-step proposal review and executed disposition (A): **the facility arm is DECLINED on
+its standing text and the ask's own arm — *"an upstream ruling that a fork owns its own"*
+— is GRANTED** (`../Provident-Electron/docs/specs/foundation-no-config-file-persistence-review.md`;
+its ACTIVE row `NO-FOUNDATION-CONFIG-FILE-FACILITY`; its `docs/FORKER.md` §4's
+`### PERSISTENCE — WHAT A FORK OWNS`). **So the two outcomes the paragraph above asked
+this unit to choose between are now ONE: there is no upstream facility to wait for and
+none to adopt.** **`GAP-6` / `S-12`'s persistence work is thereby UNAMBIGUOUSLY HOST-SIDE**
+— the mechanism layer returns committed values through an **injected sink** and the
+**file is the caller's** — and it is tied to the minted host row
+`docs/defects.md` `HOST-PERSISTENCE-ATOMICITY-AND-CONSISTENCY` (the fork-side
+atomicity-consistency pass the foundation names as owed on our side: **atomic replace**,
+a **schema/version gate on read**, and **the persisted set governing the rendered
+frames**) plus the new ACTIVE row `docs/decisions.md`
+`HOST-PERSISTENCE-SINK-BOUNDARY-AND-HOST-SIDE-OWNERSHIP`. **The fork-side store named in
+the paragraph above stays the carrier; nothing here adds a vendored module and no wave
+may expect one to persist state.** **WHAT REMAINS OPEN IN THIS SECTION IS THE
+RE-MEASUREMENT SET, NOT THE HANDOFF: the operator's corrections `OC-1`..`OC-5` (above in
+this same `§3.0`, each with the `GAP-*` id it gates — `GAP-1`/`GAP-5` not mintable on the
+current evidence, `GAP-4` re-homed) and the EMPTY-DOC-LIST FIXTURE (the seeded corpus
+`OC-3` names via `--strict-seed` / the `--o0-corpus` route).** **The as-filed sentence
+*"the unit must record which of the two outcomes its own store's future depends on"* is
+DISCHARGED by the ruling: the outcome is *"a fork owns its own"*, and this paragraph is
+that recorded outcome.**
+
 ---
 
 **The battery's last reading.** `RECORDED READING (measurer: the live-scenario runner)` —
@@ -823,7 +852,7 @@ five corrections change is WHICH OF THEM MAY BE MINTED ON THE CURRENT EVIDENCE.*
   Its work is the persistence work this app does today with a FORK-OWNED store; **the foundation
   config-file ask is filed** (`FOUNDATION-NO-CONFIG-FILE-PERSISTENCE`, `docs/defects.md` +
   `docs/HANDOFF.md`) and **this unit may not wait on it** — it must record whether it will keep its
-  own store or adopt an upstream facility if one is ruled in.
+  own store or adopt an upstream facility if one is ruled in. **⟶ ADDED 2026-09-29 (the supervisor's filing pass; `RCA-8(c)`: the bullet above is KEPT and NOT rewritten): THE DEPENDENCY IS RESOLVED AND THE FACILITY RULED — the outcome the bullet awaited is *"a fork owns its own"*.** The foundation's disposition (A) DECLINED the facility on its standing text and GRANTED the ask's own arm (`../Provident-Electron/docs/decisions.md` `NO-FOUNDATION-CONFIG-FILE-FACILITY`), so **`GAP-6`'s persistence work is HOST-SIDE BY RULING, with no upstream wait**: **the mechanism returns its committed values through an injected sink and the FILE IS THE CALLER'S** — the boundary pinned as `docs/decisions.md` `HOST-PERSISTENCE-SINK-BOUNDARY-AND-HOST-SIDE-OWNERSHIP`, and the work tied to `docs/defects.md` `HOST-PERSISTENCE-ATOMICITY-AND-CONSISTENCY` (atomic replace · a schema/version gate on read · the persisted set governing the rendered frames). **This bullet's `(h)` architect question is NOT answered by that ruling and STAYS OPEN** (whether the first-run pin's re-derivation is pulled into this program), and **`GAP-6`'s `(g)` falsifier is unmoved** — a fresh first boot shows exactly `['search','doc-nav']` enabled AND rendered, with the persisted set authoritative afterwards. **The `S-12` symptom carries its own recorded caveat and this annotation does not smooth it: `boot_landing`/`vis_persist` FAIL *"while naming no failing clause"*, so `S-12`'s symptom text is inferred from the block names (§9 `NR-1`).**
 - **`GAP-7` (`PD-DRIVER-MATRIX-AND-EVIDENCE`) — STANDS, and it HARDENS: it is now the PREREQUISITE of
   `GAP-1`/`GAP-5`'s re-measurement.** The missing per-row clause is the same absence `OC-1`/`OC-2`
   name; **fixing `GAP-7` is what makes the other two re-measurable at all.**
