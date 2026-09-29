@@ -36,6 +36,19 @@ check**; the comparison set, the demo literal, the `ok()` labels and the `{0,1}`
 **The layer statement is UNCHANGED and this green may never be over-read: HARNESS/`[D]` only.** **This
 amendment's ledger is `§0B`, immediately below `§0A`.**⟩**
 
+**⟨ANNOTATED 2026-10-05 — `RCA-8(c)`, ANNOTATE-BESIDE: EVERY STATUS SENTENCE ABOVE IS KEPT VERBATIM AS ITS OWN
+PASS'S READING. THE GATE-4 ADVERSARIAL PASS HAS NOW RUN AND ITS RECORD IS `§3a` + `§3b` (ADDED AT THE TAIL, AFTER
+`§3.6`; NOTHING RENUMBERED): VERDICT `PASS-WITH-FINDINGS`, `A-1`…`A-11`, ALL HARNESS/`[D]`-LAYER, WITH `A-1`
+(the app's `bootTabs()` un-awaited → a second whole-graph install can land after the settle signal, so `§0B.3`
+item 7 / `§0B.1` item 3 OVER-READ `installed`) BLOCKING AND ESCALATED APP-SIDE — **the SAME ROOT CAUSE AS THE
+SIBLING UNIT'S `A-1`, and NO LEG-SIDE FIX EXISTS** — plus `A-2`/`A-3`/`A-10` BLOCKING-COVERAGE ITEMS OWED TO THE
+TESTWRITER. **THE LEG'S GREEN IS NOT WITHDRAWN AND NOT RE-PINNED** (`9 checks, 0 failures`, exit `0`,
+`§0B.1`/`§3a.1`); **what the findings change is WHAT THAT GREEN IS EVIDENCE OF, and how much of the landed
+contract any ROW actually holds.** **GATES 7 (proofreader/blind-greens, `AGENTS.md` item 10b) AND 8 (item-10d doc
+review) REMAIN OWED FOR THIS UNIT — no review record exists for it at this head** (`archive/reviews/**` carries
+none), and the `T-1` amendment itself recorded the trio/adversarial/doc-review halves as the landing pass's
+(`§9` `T-4`'s amendment note).⟩**
+
 **Pass kind:** SPEC (the contract only). **Unit id:** `U-DIVERGENCE-FIXTURE` (a HARNESS unit; the id is
 minted by this filing) — **the id this unit's own predecessor already reserved for exactly this class**:
 `docs/specs/unit-divergence-harness-precondition.md` §9.1 `T-4` names *"a separate unit
@@ -956,6 +969,18 @@ that *passes* against a claim here is a **finding**; the disposition column is f
 | **`A-9`** | Point the leg at a **stale `dist`** (drop `npm run build` from a local invocation, not from the key). | **§1.4**'s `build`-first clause — the reading becomes **suspect** (the leg would measure a previous build), so the pinned key's shape is load-bearing. | **RESERVED** |
 | **`A-10`** | Move the demo literal (drop `echo-card`) and run the leg. | **`C-3` item 2** + `C-1` item 1 — the fixture's move is **detectable** in the leg's own readings and in `R-8`, and never silent. | **RESERVED** |
 
+**⟨ANNOTATED 2026-10-05 — `RCA-8(c)`, ANNOTATE-BESIDE: THE TEN `RESERVED` CELLS ABOVE ARE KEPT VERBATIM AS THE
+FILING'S OWN STATE, AND THE DISPOSITION THEY WERE WAITING FOR NOW EXISTS.⟩** **THE GATE-4 ADVERSARIAL PASS HAS
+RUN AND ITS RECORD IS THIS FILE'S `§3a` (findings `A-1`…`A-11`) + `§3b` (the disposition table)** — **so this
+table's `RESERVED` cells are answered BY REFERENCE, not by rewriting them** (`A-9` of that pass is exactly this
+observation: *"the `§3.5` probes were `RESERVED` and the spec carries no `§3a`/`§3b`"*). **TWO LIMITS, STATED SO
+THE DISPOSITION IS NOT OVER-READ:** **(1)** the pass was **READ-ONLY and drove NO probe** — it ran no Electron
+and no leg, so these ten probes were **NOT DRIVEN**, and **an undriven probe is not a pass**; the pass's findings
+are findings **about the instrument**, not probe-run verdicts (`§3a.2` `A-9`; `§3a.4` item 3). **(2)** the
+pass's own finding ids (`§3a`'s `A-1`…`A-11`) are a **DIFFERENT SET** from this table's probe ids
+(**same letter, different set** — `§3a.7`'s id table binds the distinction). **Nothing here is renumbered and no
+probe cell is rewritten.**
+
 ### 3.6 The red-set readings the DONE row must carry (`RCA-1`'s record)
 
 **`C-11`.** The DONE row states: **(i)** the **red tally** for class (a) as the TestWriter measured it —
@@ -966,6 +991,188 @@ failures`, exit `0`, plus the probe's observed disposition (B-2) and the structu
 the **adversarial** disposition of §3.5 and the **item-10d documentation-review** record; **(v)** **the
 layer** (HARNESS/`[D]`) on every line. **An entry that claims green without a recorded red run is a review
 finding** (`RCA-1`).
+
+---
+
+**⟨ADDED 2026-10-05 — `§3a`/`§3b`, THE GATE-4 ADVERSARIAL PASS ON `U-DIVERGENCE-FIXTURE`, ANNOTATE-BESIDE
+(`RCA-8(c)`): `§3a` IS PLACED IMMEDIATELY AFTER `§3.6` AND `§3b` IMMEDIATELY AFTER IT; `§0`…`§10` (and the
+`§0A`/`§0B` ledgers) KEEP THE NUMBERS THEIR PASSES GAVE THEM, NOTHING IS RENUMBERED, EVERY AS-FILED CLAUSE
+BELOW STAYS VISIBLE, AND NO CITATION MOVES. `§3a`/`§3b` are placed as **sections of this file** — unlike the
+amendment ledgers (`§0A`/`§0B`), they were never promised under another number, so no `§12`-class naming
+question arises here (`§0C` item 2 is untouched by this addition). **THE DATE:** as this file's own status block
+and `docs/defects.md`'s `SPEC-DATE-MISMATCH-TWO-NEW-SPECS` row both record, **the pass-dating on this file is
+itself an open, unreconciled item** — the date written here is the pass's own recorded date and **does not
+settle that row**.⟩**
+
+---
+
+## §3a. ADVERSARIAL FINDINGS (`RCA-3`) — THE GATE-4 ADVERSARIAL PASS ON `U-DIVERGENCE-FIXTURE`
+
+**PASS KIND, STATED FIRST.** A **read-only adversarial pass** (edge cases / unauthorized access / malformed
+inputs; `RCA-3`) **RAN** on this unit, **with the PBT audit** of `§4.2`'s register, **and the live battery was
+re-run in the same round** (`§3a.6`). **This DOC-LAYER record RAN NOTHING**: no shell, no Electron, no suite,
+no leg, no battery; **no measurement below is this record's own.** Every figure is a **RECORDED READING quoted
+with its measurer** (the gate-4 adversarial pass; the leg's run reading the implementer's `T-1` pass; the live
+figures the **live-scenario runner**) or a **VERIFIED-BY-READ** statement named as such. **No contract clause is
+rewritten on the basis of a finding** (`RCA-8(c)`): the one clause a finding bears on (`§0B.3`'s `installed`
+over-read) is recorded as **OWED**, in `§3b` `S-1`.
+
+**VERDICT: `PASS-WITH-FINDINGS`, `A-1`…`A-11`.** **EVERY FINDING IS HARNESS / `[D]`-LAYER, AND NO
+FOUNDATION/PACKAGE ROW IS OWED** (RECORDED READING; measurer: the gate-4 adversarial pass — *"every finding is
+HARNESS/`[D]`; no foundation/package row owed"*). **BLOCKING: `A-1` · `A-2` · `A-3` · `A-10`.**
+
+### §3a.1 The leg's green, re-read independently (so `A-1` is not misread as a red instrument)
+
+**RECORDED READING; measurer: the live-scenario runner / the leg's own re-run.** **The leg REPRODUCED its green
+INDEPENDENTLY:** **`R13 RESULT: 9 checks, 0 failures`, exit `0`** — with **`requested=[graph]
+effective=[read, dispatch, graph] (source=env)`** · **`boot wait: status=installed (epoch=1, generation=1) after
+2 poll(s)/109 ms`** **(NOTE, RECORDED: this re-run's wait reading is `109 ms`; `§0B.1` item 3's earlier green run
+read `105 ms`. BOTH are OBSERVATIONS ABOUT A HOST — neither is a budget or a constant (`§0B.3` item 5), and
+neither is reconciled to the other here.)** · probe satisfied · all eight comparison rows ·
+**`removed 2 · passes 3 · leftover: NONE`.** **`§0B.1` `F-5` and `§0B.4` `F-8` STAND; nothing in them is
+withdrawn by this pass, and this green remains HARNESS/`[D]`-ONLY — never app-green, in no trio, collected by
+nothing.**
+
+### §3a.2 The findings, `A-1`…`A-11`, each with its layer and its disposition
+
+| # | The finding, as the pass measured it (RECORDED READING; measurer: the gate-4 adversarial pass) | Disposition |
+| --- | --- | --- |
+| **`A-1`** | **BLOCKING — THE SAME ROOT CAUSE AS THE APP-SIDE UNIT'S `A-1`: `bootTabs()` IS UN-AWAITED, SO A SECOND WHOLE-GRAPH INSTALL (`applyStageBody → loadAppGraph → loadEnvelope`) CAN LAND *AFTER* THE SETTLE SIGNAL** — which means **`§0B.3` item 7 and `§0B.1` item 3 OVER-READ `installed`**: the reading *"the app's own boot install is complete BEFORE the load step"* is **one race outcome**, not a property. **The green is therefore ONE RACE OUTCOME**: **a late install REDS LOUDLY — it is FLAKINESS, NOT A SILENT FALSE GREEN** (the leg's own probe/comparison rows catch it). **NO LEG-SIDE FIX EXISTS:** a re-probe would be **a NEW CHECK** (`§0.3`'s `F-1a`: an added `ok()` is a PIN DRIFT, never a pass) **or a pin drift against `§2.3` `C-3` item 1's preserved set**. | **BLOCKING — ESCALATED APP-SIDE; the leg takes NO fix.** Owner of the fix: **the app-side host fix landing in this round** (`§3b`). The leg-side disposition is **ESCALATE** (`docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN`, one row, both citations). **The over-read clause is recorded as OWED (`§3b` `S-1`).** |
+| **`A-2`** | **BLOCKING (COVERAGE) — THE NEW `waitForBootInstalled` HAS ZERO INSTRUMENT COVERAGE:** deleting the wait, **moving it AFTER the load**, or **zeroing the deadline** each leaves **`npm test` GREEN** — i.e. **the one step `T-1` added to the ordering is unheld by any row**. | **BLOCKING — OWED TO THE TESTWRITER** (`§3b` `T-1`): negatives **`NEG-wait-absent`** / **`NEG-wait-after-load`** + the four stop arms. |
+| **`A-3`** | **BLOCKING (COVERAGE) — THE ENV MEMBER (`PROVIDENT_ENABLE_TOOL_GROUPS: 'graph'`) HAS THE SAME ZERO COVERAGE:** deleting it from **both** spawn sites keeps **`held × 8`, `78/78` green** — so `§0B.2` `F-6`'s member is asserted by **prose and a read**, never by a row. | **BLOCKING — OWED TO THE TESTWRITER** (`§3b` `T-1`): **`NEG-env-member-absent`** / **`NEG-env-in-shim`**. |
+| **`A-10`** | **BLOCKING (RED-SET HOLE) — `loadStepInvocations` IS A RAW REGEX WITH NO COMMENT STRIPPING** (unlike the harness's `callSites`), so **a COMMENTED `// await loadFixture(eClient)` READS AS A TRAVERSAL** — and **`R-1`/`R-3`/`P-IM-1`/`P-SM-2` all go green with the PRE-FIX ASYMMETRY RESTORED** (one leg's load commented out, the rows still "see" it). | **BLOCKING — OWED TO THE TESTWRITER** (`§3b` `T-1`): **`NEG-commented-invocation`** (+ **`NEG-duplicate-invocation`**). |
+| **`A-4`** | **THE PRESERVED SET'S PROXIES OVER-CLAIM — three measured weaknesses:** **row 7**'s `includes('counter')` **passes with a NO-OP `inc` handler**; **row 8** tests **attribute presence**, not dispatch **`results`**; **row 6** **collapses ids to a COUNT**. | **PROSE CORRECTION + ESCALATION — NOT a set change:** `§2.3` `C-3` item 1 **forbids changing the set**, so the correction is a **prose/proxy** act and the escalation is recorded. **Owner: THE TESTWRITER (prose/proxy correction) + THE SPEC-WRITER's `C-3`-class note** (`§3b`). |
+| **`A-5`** | **THE WAIT NEVER INSPECTS `isError`, AND `call()`'s `JSON.parse` IS UNGUARDED** — so a refused/mis-shaped read during the wait produces **MISATTRIBUTED ARMS** (a tool-surface error can surface as an unrelated branch). | **OWED — TESTWRITER negative** (part of the four stop arms, `§3b` `T-1`). |
+| **`A-6`** | **LEG 2 HAS NO `try`/`catch`, AND `reportBootFailure` READS THE ELECTRON CHILD's STDERR** — so leg 2's failures are reported by a channel belonging to the other leg's shape. | **RECORDED — owner: THE HARNESS UNIT'S OWNER** (a harness-shape item; no app claim). |
+| **`A-7`** | **`installed` CANNOT REPORT A POST-INSTALL REGRESSION** — the leg **never re-polls** after satisfaction, and **`§0B.3` item 4's clause** (*"a regression observed after the install is a NAMED FAILURE"*) **has NO MECHANISM in the landed leg**. | **RECORDED — a REAL GAP BETWEEN THE CLAUSE AND THE INSTRUMENT.** Disposition: **the clause is NOT relaxed**; the mechanism is owed to the leg's owner (a re-poll is **not** free — it interacts with `A-1`'s pin-drift constraint), and the app-side contract's own `§2.2 B-1` item 5 item 4 (*"a client MUST NOT re-wait"*) bounds the shape. **Owner: THE HARNESS UNIT'S OWNER with an architect ruling if a re-poll is ruled admissible** (`§3b`). |
+| **`A-8`** | **THE ENV MEMBER IS PER-CHILD ONLY AND NEVER TOUCHES `process.env`; leg 2's transport passes no env; the vector stays NINE — BUT THE APP-SIDE BASIS IS WRONG:** the app-side contract's `§2.1 A-1` item 3 item 2 (and its `F-7`) reads the residual risk as **tiny** on the premise of *no env forwarding*, while **`src/main/embeddings.ts`'s `execFileSync('curl', …, { stdio, timeout })` INHERITS `process.env`** — so **a GRANDCHILD INHERITS THE GRANT.** | **CORRECTION — OWNER: THE APP-SIDE UNIT** (`docs/defects.md`'s grandchild note; **the app-side contract's `F-7`/`A-1` item 3 item 2 custody premise is the text that must be re-read**). **No foundation row.** |
+| **`A-9`** | **THE `§3.5` PROBES WERE `RESERVED`, AND THE SPEC CARRIES NO `§3a`/`§3b`** — i.e. the pre-registered falsification list had **no disposition record** at all. | **THIS PASS DISPOSITIONS THEM — the record is `§3a`/`§3b` (this section and the next).** **HONEST LIMIT, RECORDED:** the pass **did not DRIVE the leg's probes** (it ran no Electron), so the probes' dispositions are the pass's **read-only findings about the instrument**, **not** probe-run verdicts; **a probe that was never driven is NOT thereby passed** (`§3a.4`). |
+| **`A-11`** | **THE REVIEW BRIEF'S PER-ROW REGISTER TERMS QUOTED THE PREDECESSOR UNIT'S REGISTER** — the **landed** terms are **`6+23+15+8+6+6+7+7 = 78`** (`§4.2`). | **RECORDED — a doc-layer citation defect in the brief.** **This file's `§4.2` arithmetic is UNMOVED and correct**; **owner: THE SUPERVISOR's tracker/citation reconciliation** (the brief is not this unit's file). |
+
+### §3a.3 THE STRONGEST FALSE GREEN the pass constructed (the one that matters most)
+
+**QUOTED: *"the leg is green, therefore the app's graph/boot/panes are validated."*** **THE MECHANISM, exactly:
+the leg's own load REPLACES the app's graph** (`§5` `L-2`; `§1.1` `FINDING-2`), so **the eight comparison rows
+are DEMO-vs-SHIM, NEVER APP-vs-SHIM.** **The drives the pass recorded, each one a way the false green survives:**
+
+1. **Read `get_rendered_html`/`list_targets` BEFORE the load** — the app's OWN `wiki-root`/`zone:main` graph,
+   **recorded `app 32 vs shim 12`**, **is looked at by NO row.**
+2. **Make `inc` a NO-OP and the green SURVIVES** — the strongest form: **a comparison set that cannot see a
+   dead handler still reads `0 failures`.**
+3. **A DEFAULT launch CANNOT RUN THE LEG AT ALL** — so the leg's green is **conditional on the very opt-in the
+   app-side unit added**, and a reader who forgets that turns a gated instrument into an app claim.
+
+**THE BOUND, STATED WITH THE FINDING (so the correction is not over-read in the other direction):** this is
+**NOT** a claim that the leg is worthless — it is a **precise statement of what it compares** (`§5` `L-2`) and
+**therefore of the ceiling on every citation of its green.**
+
+### §3a.4 THE PBT AUDIT OF `§4.2`'S REGISTER (read-only, by the same pass)
+
+**RECORDED READING; measurer: the gate-4 adversarial pass. THE DECLARED TERMS OF EVERY ROW ARE UNMOVED
+(`§4.3` item 4's rule: a row that cannot be executed at the filed shape is reported against the DECLARED term,
+never silently re-scoped).**
+
+1. **SEVERAL ARMS ARE TAUTOLOGICAL / UNDER-STRENGTH — measured one by one:** **`P-IM-1`'s and `P-IM-3`'s
+   NEGATIVES CANNOT FAIL** (they assert a shape the fixed head already has) · **`P-SM-2`'s "one load per host"
+   IS MEASURED NOWHERE** — **`calls: 1` is HARDCODED and only the FIRST traversal is read** · **`P-SM-3`'s shim
+   arms are NEAR-VACUOUS** · **`P-TP-1`'s `stopReport` is a MODEL OF THE CONTRACT WRITTEN INSIDE THE TEST** —
+   i.e. the row tests a restatement of the clause rather than the leg's own report path.
+2. **THE NEGATIVE GENERATORS THE TESTWRITER NOW OWES** (tasked by this pass; `§3b` `T-1` carries the owner):
+   **`NEG-commented-invocation`** · **`NEG-duplicate-invocation`** · **`NEG-env-member-absent`** ·
+   **`NEG-env-in-shim`** · **`NEG-wait-absent`** · **`NEG-wait-after-load`** (+ the **four stop arms** of
+   `waitForBootInstalled`) · **`NEG-shim-load-route-removed`** · **`NEG-unregistered-load`** ·
+   **`NEG-literal-mutated-through-instrument`** · **`NEG-exitCodeFor-respelled`** ·
+   **`NEG-stage-install-late`** — **the last one is a CLASS-(b)/LIVE OBSERVATION, NOT a node row** (`§3.3`
+   class (b)); it is the generator that would drive `A-1`'s race deliberately.
+3. **WHAT THE AUDIT DOES NOT DO:** it **does not certify the rows it found acceptable in a direction it did not
+   measure**; a weakness unmeasured is **not** a soundness finding, and this record claims none.
+
+### §3a.5 WHAT THIS FINDINGS RECORD DOES NOT DO
+
+It **does not fix `A-1`** (escalated app-side, fix landing this round) · **does not add a check to the leg**
+(`§0.3` `F-1a`) · **does not change the comparison set** (`§2.3` `C-3` item 1) · **does not renumber `§3.5` or
+fill its `RESERVED` cells in place** (the disposition of those probes is **this `§3a`/`§3b` record**, cited from
+`§3.5`'s annotation) · **and does not re-run the leg**: the green re-read in `§3a.1` **reproduces `§0B.1`, it
+does not supersede it.**
+
+### §3a.6 THE LIVE RE-RUN (`E-8` ITEM (i) — **DISCHARGED**), quoted with its measurer, and what it changes here
+
+**RECORDED READING; measurer: the LIVE-SCENARIO RUNNER.** The battery **RAN** against the head this leg's green
+belongs to, on **isolated ports** (`--port=3951 --cdp-port=9451 --display=0`), with **boot-and-connect confirmed
+before driving** (MCP `http://127.0.0.1:3951/mcp` · CDP `:9451` · `cdp.enableGroups([…])` · `list_targets`
+confirmed · seed import ok):
+
+1. **`done: 100 blocks, 39 FAIL, 3 PARKED`** · per-outcome **`31 PASS / 39 FAIL / 3 PARKED / 27 DIAG`** —
+   **IDENTICAL to the previous reading.** **What that does and does not say, in this unit's own terms:** it is a
+   **DEFAULT-BRANCH** reading (the driver passes no `--enable-tool-groups` and no env member and never reads the
+   opt-in `boot` member — `S-9`-class), **so *"the app-side change altered nothing observable"* is a claim about
+   the DEFAULT BRANCH ONLY** — **it is NOT evidence about the leg's opt-in path, and NOT app health.**
+2. **THE `§5.U` MATRIX REPORT IS INVALID AGAIN — only `2` of `8` declared rows returned a verdict**
+   (`U-1:uf_panes_12=FAIL` · `U-7:uf_hist_6=PASS`) **while the driver still printed `OK`** → **NOT readable as a
+   pass** (`DECIDED: LIVE-GATE-RUN-DISCIPLINE` clause (iv); the standing `docs/defects.md`
+   `LIVE-DRIVER-MATRIX-MAPPING-INCOMPLETE` row, **re-confirmed, annotated there, not duplicated here**).
+3. **RUNNER LIMITS, RECORDED EXACTLY AS THE RUNNER STATES THEM:** the driver's **exit code was DERIVED from the
+   printed `39 FAIL` and the code path, NOT captured** (redirection); and **`summary.pass`/`summary.fail` count
+   ONLY the two executed matrix rows** and **must never be read as app health.** **Neither limit is smoothed.**
+4. **THE NEW ISOLATION FINDING: `uf_panes_1` PASSES ALONE and FAILS in the full battery** — `--block=uf_panes_1`
+   on fresh ports reads **PASS** (`doc-nav before: li=1 ul=true h=100px … reExpanded=true samePaneRoot=true`),
+   the full battery reads **FAIL** (`no doc-nav pane frame rendered; frames=[{pid:"search"}]`), **because
+   `persistence_v1` deliberately toggles `doc-nav` OFF and persists it and no block restores it.** **So the
+   doc-nav FRAME is not broken: part of the recorded "app-layer" pile is a DRIVER ORDER/PERSISTENCE ARTIFACT and
+   must be RE-CLASSIFIED, not inflated.** **Filed in `docs/defects.md` (the order-artifact row + the annotation
+   on the app-layer pile's row); this file does not re-count the pile.**
+5. **THE OTHER FAIL CLASSES, UNCHANGED (quoted so this record does not silently drop them):** driver/scenario
+   ×2 (`toolbar_toggle`'s **stale `data-mode` vocabulary** vs the live **`html → markdown`** flip — **the click
+   path is real**; `repro_dup_para` FAILs with an **EMPTY evidence field**) · fixture/precondition ×2 + 3 PARKED
+   (`uf_panes_12`'s missing `li[data-document-id=".live-corpus/beta"]`; the two `stage_docnav_switch_*` rows with
+   `rows=0`) · **`gnosis_*` FAIL with NO ENGINE** (`ECONNREFUSED 127.0.0.1:8080`) · **the `o0_*` rows remain
+   DIAG** (census **226** claimed / **2** observed — needs `--strict-seed`). **These are the SAME classes the
+   first run recorded, and their owner rows are the existing `docs/defects.md` rows** (no new row minted here).
+   **`PD-UI-6`'s four live claims were re-confirmed on this second run** (an APP-layer, ADDITIVE reading owned
+   by that unit's row): `L-1` real `#settings-toggle` click → `is-open` / `display=flex` / body `[922,676]` /
+   operator pane `[865,787]`; `L-2` real scrim click and real `Escape` → `is-closed`; `L-3` `#panes` `[865,1100]`
+   + `#operator-panes` `[865,787]` inside `#settings-modal-body`, `#app` still in `main.layout`; the class-XOR
+   re-pin `before/inside/after = true` at all three boundaries — **with the run's own honest caveats: the XOR is
+   a CLASS-STRING oracle, and the modal's *contents* rows `uf_settings_4`/`uf_settings_7` still FAIL.**
+
+### §3a.7 THE FINDING-ID SETS, KEPT APART (so no reader conflates them)
+
+| Set | What it is | Where |
+| --- | --- | --- |
+| `§3.5` `A-1`…`A-10` | the **PRE-REGISTERED falsification probes**, `RESERVED` as filed | `§3.5` (as filed; **annotation beside it**) |
+| **this `§3a`'s `A-1`…`A-11`** | **the gate-4 adversarial pass's OWN FINDING IDS** | `§3a.2` |
+| `§0A`'s `F-1`…`F-4` · `§0B`'s `F-5`…`F-9` | the two **amendment ledgers'** finding ids | `§0A`/`§0B` (as filed, unchanged) |
+| `§0.3`'s `F-1`/`F-1a`/`F-2`/`F-3` · `§1.1`'s `FINDING-1`/`FINDING-2` | the **foundation-precedent rows** and **this file's original findings** | `§0.3`/`§1.1` (as filed, unchanged) |
+| `§8`'s `E-1`…`E-8` | the **escalation ledger** | `§8` (as filed, `E-8` carried forward) |
+| `docs/specs/unit-app-harness-readiness.md`'s `§3a` `A-1`…`A-7` | **the sibling pass's ids, a DIFFERENT set on a DIFFERENT unit** | that file's `§3a` |
+
+---
+
+## §3b. THE DISPOSITION TABLE — one row per finding, each with its owner, and the items this pass ADDS to what is owed
+
+| Finding / item | Disposition | Owner |
+| --- | --- | --- |
+| **`A-1`** (`bootTabs()` un-awaited → a second whole-graph install can land after the settle signal; `installed` over-read) | **BLOCKING — ESCALATED APP-SIDE; NO LEG-SIDE FIX EXISTS** (a re-probe = a new check / pin drift; `§0.3` `F-1a`) | **THE APP-SIDE HOST FIX'S LANDING PASS** (this round) — one root cause, both citations: `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` |
+| **`A-2`** (`waitForBootInstalled` zero instrument coverage) | **OWED — TESTWRITER NEGATIVES** | **THE TESTWRITER** (`T-1`) |
+| **`A-3`** (env member zero instrument coverage) | **OWED — TESTWRITER NEGATIVES** | **THE TESTWRITER** (`T-1`) |
+| **`A-10`** (`loadStepInvocations` raw regex, no comment stripping → commented invocation restores the asymmetry) | **OWED — TESTWRITER NEGATIVE** | **THE TESTWRITER** (`T-1`) |
+| **`A-4`** (preserved set's proxies over-claim: rows 6/7/8) | **PROSE CORRECTION + ESCALATION — the SET IS NOT CHANGED** (`§2.3` `C-3` item 1) | **THE TESTWRITER** (prose/proxy) · **THE SPEC-WRITER** (the `C-3`-class note) |
+| **`A-5`** (the wait never inspects `isError`; `call()`'s `JSON.parse` unguarded) | **OWED — TESTWRITER NEGATIVES (stop arms)** | **THE TESTWRITER** (`T-1`) |
+| **`A-6`** (leg 2 has no `try`/`catch`; `reportBootFailure` reads the child's stderr) | **RECORDED — HARNESS SHAPE** | **THE HARNESS UNIT'S OWNER** |
+| **`A-7`** (`installed` cannot report a post-install regression; `§0B.3` item 4 has no mechanism) | **RECORDED AS A REAL CLAUSE-vs-INSTRUMENT GAP; the clause is NOT relaxed**; a re-poll needs a ruling | **THE HARNESS UNIT'S OWNER, with an ARCHITECT RULING if a re-poll is ruled admissible** |
+| **`A-8`** (env member per-child only; **the app-side custody basis is wrong — `embeddings.ts`'s `execFileSync('curl', …)` inherits `process.env`, so a GRANDCHILD INHERITS THE GRANT**) | **CORRECTION — APP-SIDE** | **THE APP-SIDE UNIT** (its `F-7`/`A-1` item 3 item 2 custody premise) |
+| **`A-9`** (`§3.5` probes `RESERVED`; no `§3a`/`§3b` existed) | **DISPOSITIONED BY THIS PASS** — `§3a`/`§3b` are the record; **the probes were NOT DRIVEN, and an undriven probe is not a pass** | **the gate-4 pass's record** (this spec) |
+| **`A-11`** (the brief's per-row register terms quoted the PREDECESSOR's register) | **RECORDED — DOC/CITATION DEFECT IN THE BRIEF**; `§4.2`'s `78` is the landed arithmetic and is unmoved | **THE SUPERVISOR** (tracker/citation reconciliation) |
+| **`S-1` — THE OWED AMENDMENT ON THE OVER-READ (`A-1`)** | **OWED, NOT APPLIED.** `§0B.3` item 7 / `§0B.1` item 3's *"the app's own boot install is complete BEFORE the load step"* is **one race outcome**; the amendment must say so **beside** the as-filed text and record that **the app-side fix is what makes it a property.** | **THE SPEC-WRITER** (this file) |
+| **`S-2` — `T-1`'s COVERAGE ITEMS, ADDED TO WHAT `T-1` OWES** | **OWED** — the two zero-coverage steps (`waitForBootInstalled`, the env member) are **NEW OWED ITEMS THIS PASS ADDS** to `§9` `T-1`'s landing record, and they are the reason the register's `held × 8`, `78/78` may **never** be read as coverage of them. | **THE TESTWRITER** |
+| **`S-3` — THE PBT RE-DERIVATION** (`P-IM-1`/`P-IM-3`'s cannot-fail negatives; `P-SM-2`'s hardcoded `calls: 1`; `P-SM-3`'s near-vacuous shim arms; `P-TP-1`'s in-test model of the contract) | **OWED — re-derivation against the DECLARED terms** (`§4.3` item 4) | **THE TESTWRITER** |
+| **`S-4` — NO FOUNDATION/PACKAGE ROW** | **RECORDED: NO ROW OWED** (`E-7`'s honest-empty-search discipline; `AGENTS.md` item 7). **`A-8`'s correction is APP-SIDE, not upstream.** | — (none) |
+
+**WHAT THIS `§3a`/`§3b` RECORD DOES NOT CHANGE:** **`§8` `E-8`'s five owed items all STAND** — this pass
+**discharges `E-8` item (i) ONLY** (the live battery's re-run: **RAN**, `§3a.6`), and it **adds** the
+`A-2`/`A-3`/`A-10`-class coverage items and the PBT re-derivation to what the TestWriter owes, **without
+retiring `E-8` items (ii)..(v)**. **`§0B.2`'s env member and `§0B.3`'s ordering stand as landed; their
+COVERAGE is new owed work, not a clause change.**
 
 ---
 
@@ -1012,6 +1219,26 @@ house cap of ≤8. **stop-after-5** on every row (`≤5` distinct counterexample
 `strat:divergence-fixture-literal` · `strat:divergence-fixture-readiness` · `strat:divergence-fixture-hosts` ·
 `strat:divergence-fixture-load-route` · `strat:divergence-fixture-totality` · `strat:divergence-fixture-spawn-untouched`.
 **Every row reports `held`/`broken`; the report prints each row's declared-vs-executed term.**
+
+**⟨ANNOTATED 2026-10-05 — THE GATE-4 PBT AUDIT OF THIS REGISTER (RECORDED READING; measurer: the gate-4
+adversarial pass; `§3a.4`; `RCA-8(c)` — the DECLARED terms above are UNMOVED and no row is re-scoped, so a
+weakness found here is `§4.3` item 4's `BROKEN`-class finding, never a silent edit).⟩** **THE ARITHMETIC
+`6+23+15+8+6+6+7+7 = 78` STANDS, and `§0A.1` `F-1` item 5's `held × 8` reading stands with it — BUT THE AUDIT
+MEASURED THAT `held × 8` IS NOT COVERAGE OF EVERY STEP THE CONTRACT NAMES:**
+
+| Row | What the audit measured | The negative generators owed (owner: the TestWriter; `§3b` `T-1`/`S-3`) |
+| --- | --- | --- |
+| **`P-IM-1`** | **ITS NEGATIVES CANNOT FAIL** — they assert a shape the landed head already has, so the row holds for any implementation of that shape. | **`NEG-commented-invocation`** · **`NEG-duplicate-invocation`** (**`A-10`**: a COMMENTED invocation reads as a traversal through `loadStepInvocations`'s raw regex) |
+| **`P-IM-1` / `P-SM-2`** | **THE WAIT STEP AND THE ENV MEMBER HAVE ZERO COVERAGE BETWEEN THEM** (`A-2`/`A-3`): deleting `waitForBootInstalled`, moving it **after** the load, zeroing the deadline, or deleting the env member from **both** sites each leaves the register **`78/78` green**. | **`NEG-wait-absent`** · **`NEG-wait-after-load`** (+ the **four stop arms**) · **`NEG-env-member-absent`** · **`NEG-env-in-shim`** |
+| **`P-IM-3`** | **ITS NEGATIVES CANNOT FAIL** (same shape as `P-IM-1`'s). | **`NEG-literal-mutated-through-instrument`** |
+| **`P-SM-1`** | **`P-TP-1`'s `stopReport` IS A MODEL OF THE CONTRACT WRITTEN INSIDE THE TEST** — i.e. the row asserts a restatement of the clause rather than the leg's own report path; the **`A-5`** arms (`isError` never inspected; `call()`'s unguarded `JSON.parse`) are the shapes a real report path can misattribute. | **`NEG-shim-load-route-removed`** · **`NEG-unregistered-load`** · the `A-5` stop arms |
+| **`P-SM-2`** | **"ONE LOAD PER HOST" IS MEASURED NOWHERE** — **`calls: 1` is HARDCODED and only the FIRST traversal is read**, so a second load would not be seen. | **`NEG-duplicate-invocation`** |
+| **`P-SM-3`** | **ITS SHIM ARMS ARE NEAR-VACUOUS** (`§0A.2` `F-2` item 2's registered-but-not-served annotation is the honest record; the row's property is unmoved). | **`NEG-exitCodeFor-respelled`** (the exit-contract half) |
+| **all rows** | **`NEG-stage-install-late` IS A CLASS-(b)/LIVE OBSERVATION, NOT A NODE ROW** — it is the generator that would drive **`A-1`**'s race deliberately, and it **cannot** enter this register. | **`NEG-stage-install-late`** (owner: the class (b) run's pass) |
+
+**THE AUDIT'S OWN LIMIT, RECORDED:** it was taken **read-only over the landed test bodies**; a weakness it did
+not measure is **not** thereby certified sound, and **no row above is retired, re-scoped or renumbered by this
+note.**
 
 ### 4.3 The register's own honesty limits
 

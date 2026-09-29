@@ -7,6 +7,22 @@ Electron was booted** and no `scripts/live-drive.mjs` block was driven, so **no 
 test tally of any file is produced by this filing** (the digest is **OWED** — §10 item 8). Reading, `glob` and
 `grep` were used.
 
+**⟨ANNOTATED 2026-09-29 — `RCA-8(c)`, ANNOTATE-BESIDE: THE AS-FILED STATUS BLOCK ABOVE IS KEPT VERBATIM AS THIS
+FILING'S OWN READING AND NOTHING IN IT IS REWRITTEN. THIS SPEC'S STATUS IS NOW:**
+**CLASS (a)/(b) LANDED AND GREEN — the unit has since been implemented, its red set turned green and its
+class (b) real launches were read (§0.2 `S-1`…`S-12` describe the pre-landing head) — AND THE GATE-4
+ADVERSARIAL PASS HAS NOW RAN, `PASS-WITH-FINDINGS`, WITH `A-1` BLOCKING (`§3a`/`§3b`, ADDED AT THIS PASS).**
+**THE UNIT IS NOT "CLEAN":** **the fix for `A-1` is landing in the same round**, **two amendments are owed**
+(`§3b` `S-1`/`S-2`), **three register rows are under-strength and owe the TestWriter's negative generators**
+(`§3a.4`, `§4.2`'s audit note), and **the unit's own gates 7 (blind-greens/proofreader, `AGENTS.md` item 10b)
+and 8 (item-10d documentation review, `RCA-6`/`§10 C-11` item 6) REMAIN OWED** — **no review record exists for
+this unit at this head** (`archive/reviews/**` carries none for it), **so this file's `§10 C-11` item (6)
+expectation is UNMET, and the trackers say so.** **OWED `§10 C-11` items, honestly listed:** item **(8)**, the
+spec file's `sha256` and line count — **still owed** (this pass holds no shell); item **(6)**, the item-10d
+doc-review record — **owed**; item **(5)**, the adversarial disposition of `§5.4`'s probes — **partly answered by
+`§3a` (which records its own finding set; see `§3a.7` for the id-set distinction)**. **`§3a` IS THIS SPEC'S
+GATE-4 RECORD; `§3b` IS ITS DISPOSITION TABLE.**⟩**
+
 **Every claim about the app's or the harness's CURRENT behaviour below is one of: (a) a RECORDED READING of a
 prior pass, quoted verbatim with its source and its measurer named; or (b) a VERIFIED-BY-READ statement about
 the source text at this head — named as such, with its reader named (the SpecDoc). Nothing else is claimed.**
@@ -635,6 +651,174 @@ the vendored baselines, the bridge-capture fixture, the `package.json` pinned VA
 number** (a row pins a **property**) · must not **edit any existing test file**, and **never** a `PROTECTED`
 file, a fence file, or the sibling units' red sets.
 
+**⟨ADDED 2026-09-29 — `§3a`/`§3b`, THE GATE-4 ADVERSARIAL PASS (`RCA-3`), ANNOTATE-BESIDE (`RCA-8(c)`):
+`§3a` SITS IMMEDIATELY AFTER `§3` AND `§3b` IMMEDIATELY AFTER IT; `§0`…`§11` KEEP THE NUMBERS THEIR FILING GAVE
+THEM, NOTHING IS RENUMBERED, EVERY AS-FILED CLAUSE BELOW STAYS VISIBLE, AND THIS ADDITION MOVES NO CITATION.
+The house convention is the same one `docs/specs/unit-import-batch-persist.md` uses (`## §3a / §3b` beside its
+`§3`). **NAME COLLISION, RECORDED SO IT IS NOT READ AS THIS SECTION'S CLAIM:** `§5.4`'s heading calls its
+reserved probe table **"the `§3a` SEED SET"** — that is the **house's name for the reserved table**
+(`§11.3` says so explicitly), **not an address of this section**; §5.4 is **the pass's own seed list**, and
+**this `§3a` is the pass's findings record**. Both are cited by their own names below and neither is
+renumbered.⟩**
+
+---
+
+## §3a. ADVERSARIAL FINDINGS (`RCA-3`) — THE GATE-4 ADVERSARIAL PASS ON `U-APP-HARNESS-READINESS`
+
+**PASS KIND, STATED FIRST.** A **read-only adversarial pass** (edge cases / unauthorized access / malformed
+inputs; `AGENTS.md` item 7's adversarial-loop carve-out and `RCA-3`) **RAN** on this unit, **with the PBT
+audit** of `§4.2`'s register, **after the unit's green and after the `§5.4` reserved probes existed**. **This
+DOC-LAYER record RAN NOTHING**: it holds a read/search/doc-write wall and **no shell**, it booted no Electron,
+ran no suite, no leg and no battery, and it **re-took no measurement of its own**. **Every figure below is a
+RECORDED READING quoted with the measurer that took it**, or a statement about the pass's own record; the
+**measurer** is named at each site — the gate-4 adversarial pass's own readings are the app-side pass's, and
+the live figures are the **live-scenario runner's**. **No contract clause below is rewritten on the basis of a
+finding** (`RCA-8(c)`; §3b's amendment rows carry the two owed amendments instead).
+
+**VERDICT: `PASS-WITH-FINDINGS`, `A-1`…`A-7`** (RECORDED READING; measurer: the gate-4 adversarial pass).
+**`A-1` IS BLOCKING. `A-2`/`A-3` ARE FINDINGS AGAINST THE UNIT'S OWN INSTRUMENT. `A-4`/`A-5` ARE SPEC
+AMENDMENTS OWED (§3b). `A-6`/`A-7` ARE ACCEPTED WITH REASON.**
+
+### §3a.1 The two headline readings — the honest bound on this pass, quoted as the pass states it
+
+1. **NO PRIVILEGE-ESCALATION HOLE, AND NO CONTRACT-LEVEL DEFAULT REGRESSION.** The pass's own words:
+   **"the refusal path is total and pre-surface, the route is launch-scoped and non-persisting, and no
+   MCP-reachable enablement route exists"** (RECORDED READING; measurer: the gate-4 adversarial pass). **This
+   is the `P-3`/`P-6`/`P-TP-2` half of the contract holding against the pass's own probes.** It is a **MAIN-PROCESS
+   `[T]`-class reading about the pass's probes**, **never** an app-green, never a live row, and never a claim
+   that any UI behaves (`L-2`).
+2. **THE BLOCKING FINDING IS IN THE RENDERER, NOT IN THE SECURITY SURFACE** — `A-1` below. **Stated so the two
+   readings are not read as one:** *"no escalation hole"* **and** *"the boot observable can stay `pending`
+   forever"* are **both true of this head**.
+
+### §3a.2 The findings, `A-1`…`A-7`, with their layer and their disposition
+
+| # | The finding, as the pass measured it (RECORDED READING; measurer: the gate-4 adversarial pass) | Layer | Disposition |
+| --- | --- | --- | --- |
+| **`A-1`** | **BLOCKING — THE UN-AWAITED `bootTabs()`, THE SETTLE GAP, AND `pending` FOREVER.** `src/renderer/renderer.ts`'s **`void host.boot(runtime).then(() => { bootTabs(); bridge.bootSettled?.({ok:true}) })`** leaves **`bootTabs()` un-awaited**, so **a throw inside `bootTabs()` never reaches the chain's `.catch`** — **and that `.catch` is the ONLY `ok:false` sender**. **Consequence, exactly: the observable stays `pending` FOREVER**, which **violates the contract's own `§3.2 F-4`** (*"a boot that fails with **no** graph installed **must report `failed`, not `pending` forever"*). **The register cannot see it:** `P-SM-1`'s `failed` arms **call `markBootSettled({ok:false})` directly**, so the row tests the STATE OWNER and never the production sender. | **APP / renderer call site + the `[T]` observable's honesty** | **BLOCKING — A FIX IS LANDING IN THIS SAME ROUND** (the host boot chain: the `.then` body must await/`catch` `bootTabs()` so a throw reaches the chain's failure sender). **Owner: the app-side host fix's landing pass** — **the same round**; the tracker row is `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` (which names **BOTH** citations, this one and the sibling's `A-1`). **`§3.2 F-4` itself is NOT rewritten by this finding** — it is the clause `A-1` proves violated. |
+| **`A-2`** | **THE SETTLE GUARD HONOURS A SETTLE ON AN UNARMED, STILL-`pending` EPOCH.** `markBootSettled`'s guard accepts a settle in that state, **contradicting its own comment**. **UNREACHABLE TODAY — LATENT**, and the register's **draw 16 is NON-DISCRIMINATING** (it does not distinguish the armed from the unarmed epoch). | **`[T]` (the state owner, `src/main/mcp-server.ts`'s backend)** | **ACCEPTED WITH REASON — LATENT, recorded as a defect-side note rather than a fix demand**; **the register draw's non-discrimination is recorded under `P-SM-1`'s audit note (§4.2)** and is **part of what the owed re-derivation must address** (§3b). |
+| **`A-3`** | **`markReady()` RE-ARMS WITHOUT ADVANCING THE EPOCH**, so **a second `IPC_READY` in the SAME epoch after a `failed`** lets a **later `ok:true` resurrect `failed → installed`** — the illegal transition `P-SM-1` claims is *"not produced by the state owner"*. | **`[T]` (the state owner)** | **A FINDING AGAINST THE UNIT'S OWN TRANSITION SET — recorded, owner `THE STATE OWNER'S FIX PASS` (the boot-chain fix's neighbourhood)**, and **the `P-SM-1` illegal-transition claim is NOT relaxed**: the row's claim stands and this finding says **the landed code can produce the state the row forbids**, which is exactly what a non-discriminating arm cannot see. |
+| **`A-4`** | **THE ENABLEMENT PREDICATE DIVERGES FROM THE CONTRACT.** `main.ts`'s **`optedIn = requested.length > 0`** against the contract's **`§2.2 B-1` item 3 item 1** (*present **iff** `source === 'argv'` or `'env'`*). **The measured divergent case:** **`--enable-tool-groups=read,dispatch`** yields **`effective === base`** (the additivity no-op of `§2.1 A-1` item 2 item 2 / row 10) **yet the reply GAINS the `boot` member** — so a launch that requested nothing new is treated as opted-in. | **`[T]` — a CONTRACT-TEXT vs implementation predicate divergence** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE.** **The predicate to be named by the amendment is `source === 'argv' \| 'env'` (the contract's own `§2.2 B-1` item 3 item 1 predicate), and the amendment must ALSO rule what `P-6`'s *"a normal launch is byte-for-byte today's behaviour"* means for a request that is a no-op.** **Owner: THE SPEC-WRITER** (§3b `S-1`); **filing**: `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE`. **No clause is rewritten by this pass.** |
+| **`A-5`** | **DOC DRIFT WITHIN THIS FILE, MEASURED BY COUNT: `§8` `D-3` says a FOUR-member state shape while `§2.2 B-1` item 2 defines FIVE** (`installed`, `status`, `epoch`, `generation`, `error`). | **DOC-LAYER (this file's own text)** | **SPEC AMENDS — AN OWED AMENDMENT, NOT APPLIED HERE** (the clause `D-3` is the one whose count reads wrong; the five-member shape of `§2.2 B-1` item 2 is the one the landed code and the tests carry). **Owner: THE SPEC-WRITER** (§3b `S-2`); **filing**: `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT`. |
+| **`A-6`** | **ACCEPTED WITH REASON — a SOURCE-INDEX/ORDER instrument** (the finding concerns the pass's source-index reading, not a behaviour). | **PROCESS / instrument** | **ACCEPTED — no defect row owed.** |
+| **`A-7`** | **ACCEPTED WITH REASON — THE FOUR RE-STATED PIN SITES WERE AUDITED SITE BY SITE: each retains its DISCRIMINATING LIMB, each keeps an UNRECORDED MOVE FAILING, and NO RELAXATION WAS FOUND.** This is the pass's audit of the *"pins re-stated, never relaxed"* clause (`docs/decisions.md` `DECIDED: HARNESS-ENABLEMENT-AND-BOOT-READINESS` clause (v)). | **`[T]` — the pinned/audited rows** | **ACCEPTED — the positive half of the pass; recorded so the DONE row's pin claim is backed by an audit and not by assertion.** |
+
+### §3a.3 THE STRONGEST FALSE GREEN the pass constructed (the one that matters most)
+
+**QUOTED: an opt-in launch whose `boot.status` stays `pending` FOREVER** — **the false green that READS AS A
+CLIENT STILL WAITING.** **The drive, as the pass recorded it: make `host.mountTab` throw after `boot()`
+resolves** — i.e. **`boot()` succeeds, the chain's `.then` body throws, and because `bootTabs()` is
+un-awaited (`A-1`) the throw never reaches the `.catch`, so the `ok:false` signal is never sent.**
+**Why this is the strongest one, stated plainly:** it is **not a wrong colour on a row** — it is
+**a client-side deadlock with an honest-looking state** (`pending`, the state a `pending` client is told to
+keep polling on, `§2.2 B-1` item 5), **and the register cannot produce it** (see `A-2`/`A-3`/`§3a.4`). **A fix
+is landing in this same round** (`A-1`), and **until it lands, no reader may treat a `pending` reading as
+progress.**
+
+### §3a.4 THE PBT AUDIT OF `§4.2`'S REGISTER (read-only, by the same pass)
+
+**STRUCTURALLY SOUND, WITH NOTED PROXIES:** `P-IM-1` · `P-SM-1` · `P-SM-2` · `P-TP-2` (RECORDED READING;
+measurer: the gate-4 adversarial pass). **`P-SM-1`'s soundness carries the `A-2` qualifier above (draw 16 is
+non-discriminating); `P-SM-2`'s does too (its fake-backend proxies are the register's own declared limit,
+`§4.3` item 3).**
+
+**UNDER-STRENGTH — `P-SM-3` AND `P-TP-1`, measured:**
+
+1. **`P-SM-3` — ITS REGRESSION BRANCH IS UNREACHABLE, and only `3` of its `5` declared branches are distinct**
+   (an enumeration that declares five arms and can only distinguish three **over-states its own coverage** —
+   this is a `§4.3` item 4-class gap, **not** a re-scope: **the declared terms are unmoved**).
+2. **`P-TP-1` — THREE measured weaknesses:** **(i)** its **`named()` accepts ANY non-empty reason** — a
+   refusal that quotes a *different* problem still passes; **(ii)** its **`raw.length >= 0` limb is VACUOUS**
+   (a tautology, true for every string including the empty one), so that arm asserts nothing; and **(iii)** the
+   contract's **`A-1` item 3 item 2`-class clause — "no partially-applied set before the refusal" — IS NEVER
+   DRIVEN**: no arm observes the gate between the refusal and the surface, so a partially-applied effective set
+   would pass the row.
+3. **THE NEGATIVE GENERATORS THE TESTWRITER NOW OWES** (tasked by this pass; §3b `T-1` carries the owner):
+   **`neg-armed-second-install`** · **`neg-unarmed-settle`** · **`neg-regression-after-satisfaction`** ·
+   **`neg-satisfied-then-absent`** · **`neg-refusal-names-itself`** · **`neg-partial-apply`** ·
+   **`neg-extreme-values`** · **`neg-second-writer`** · **`neg-escalation-name`** ·
+   **`neg-presence-under-optin-source`** · **`neg-default-list-drift`**.
+   **Each is a NEGATIVE the register must be able to FAIL** — the generators exist **because the audit found
+   arms that cannot fail**, and **they are the TestWriter's, not this pass's** (this record writes no test).
+
+### §3a.5 WHAT THIS FINDINGS RECORD DOES NOT DO
+
+It **does not fix `A-1`** (a fix is landing in the same round, recorded in the trackers) · **does not rewrite
+`§3.2 F-4`, `§2.2 B-1` item 3 or `§8 D-3`** (the three clauses the findings bear on; the two amendments are
+**owed**, §3b `S-1`/`S-2`) · **does not re-run the probes** (`§5.4`'s `A-1`…`A-10` are the **pre-registered**
+list; **this pass's `A-1`…`A-7` are ITS OWN finding ids**, and a reader must not conflate the two id sets) ·
+and **does not turn any register row green**: `§4.2`'s rows and the `§5.4` probes stand **exactly as filed and
+exactly as the pass found them**.
+
+---
+
+## §3b. THE DISPOSITION TABLE — one row per finding, each with its owner and where its truth now lives
+
+| Finding | Disposition | Owner | Recorded at |
+| --- | --- | --- | --- |
+| **`A-1`** (un-awaited `bootTabs()`; `pending` forever; `§3.2 F-4` violated) | **BLOCKING — FIX LANDING IN THIS SAME ROUND** (the host boot chain's `.then` body must route a `bootTabs()` throw to the settle path) | **THE APP-SIDE HOST FIX'S LANDING PASS** (this round) | `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` (one row, **both** citations) · this `§3a.2`/`§3a.3` |
+| **`A-2`** (unarmed-epoch settle accepted; latent) | **ACCEPTED WITH REASON — LATENT**; the register draw's non-discrimination is part of the owed re-derivation | **THE STATE OWNER'S FIX PASS** (recorded; no separate fix demanded at this head) | this `§3a.2`; `§4.2`'s `P-SM-1` audit note |
+| **`A-3`** (`markReady()` re-arms without advancing the epoch; `failed → installed` resurfaces) | **FINDING — recorded, not relaxed**; the illegal-transition claim stands | **THE STATE OWNER'S FIX PASS** | this `§3a.2` |
+| **`A-4`** (enablement predicate divergence: `requested.length > 0` vs `source === 'argv' \| 'env'`) | **SPEC AMENDS — OWED, NOT APPLIED** | **THE SPEC-WRITER** (this file) | `§3b` `S-1` · `docs/defects.md` `APP-SIDE-ENABLEMENT-PREDICATE-DIVERGENCE` |
+| **`A-5`** (`§8 D-3`'s four-member count vs `§2.2 B-1` item 2's five) | **SPEC AMENDS — OWED, NOT APPLIED** (doc drift) | **THE SPEC-WRITER** (this file) | `§3b` `S-2` · `docs/defects.md` `APP-SIDE-SPEC-D3-READINESS-MEMBER-COUNT-DRIFT` |
+| **`A-6`** (source-index/order instrument) | **ACCEPTED WITH REASON** | — (none owed) | this `§3a.2` |
+| **`A-7`** (the four re-stated pin sites, audited site by site: discriminating limb held, unrecorded move still fails, **no relaxation found**) | **ACCEPTED — the positive audit** | — (none owed) | this `§3a.2` |
+| **`P-SM-3`** under-strength (regression branch unreachable; `3` of `5` branches distinct) | **RE-DERIVATION OWED — declared terms UNMOVED** (`§4.3` item 4's rule) | **THE TESTWRITER** (with the negative generators) | this `§3a.4` |
+| **`P-TP-1`** under-strength (`named()` accepts any non-empty reason; vacuous `raw.length >= 0`; the no-partial-apply clause never driven) | **RE-DERIVATION OWED — declared terms UNMOVED** | **THE TESTWRITER** | this `§3a.4` |
+| **The `11` negative generators** | **OWED WORK** (each is a negative the register must be able to FAIL) | **THE TESTWRITER** (`T-1`) | this `§3a.4` |
+| **The live battery's re-run against this head** | **DISCHARGED — RAN, and the app-side change altered NOTHING OBSERVABLE** (see `§3a.6`) | **THE LIVE-SCENARIO RUNNER** (measurer) | `docs/next-steps.md`'s DONE-row annotations · `docs/defects.md`'s existing live rows |
+| **`S-1` — THE OWED AMENDMENT ON THE ENABLEMENT PREDICATE (`A-4`)** | **OWED.** The amendment must (i) name the predicate — **`source === 'argv' \| 'env'`** — as the presence rule of `§2.2 B-1` item 3, and (ii) rule explicitly what `P-6` means for a **no-op request** (`--enable-tool-groups=read,dispatch`), because **today the code and the contract answer that case differently** (`A-4`). | **THE SPEC-WRITER** | here; `docs/defects.md`'s amendment row |
+| **`S-2` — THE OWED DOC AMENDMENT ON THE MEMBER COUNT (`A-5`)** | **OWED.** `§8` `D-3`'s *"exactly four-member state shape"* must be corrected **beside** its as-filed text (`RCA-8(c)`) to the **five** members `§2.2 B-1` item 2 defines. | **THE SPEC-WRITER** | here; `docs/defects.md`'s amendment row |
+| **`S-3` — THE SHARED ROOT CAUSE WITH THE SIBLING UNIT** | **RECORDED, ONE ROOT CAUSE, TWO CITATIONS.** The harness unit's `A-1` is **the same root cause** (its *"a second whole-graph install can land after the settle signal"*); **the divergence leg has NO leg-side fix** (a re-probe would be a new check / pin drift) and therefore **escalates app-side** — **this unit's fix is what both readings wait on.** | **THE APP-SIDE HOST FIX'S LANDING PASS** (this round) | `docs/defects.md` `BOOT-SETTLE-RACE-UNSETTLED-BOOT-CHAIN` · `docs/specs/unit-divergence-drive-fixture.md` `§3a`/`§3b` |
+
+### §3a.6 THE LIVE RE-RUN, quoted with its measurer (the discharge of the owed re-run)
+
+**RECORDED READING; measurer: the LIVE-SCENARIO RUNNER.** The battery **RAN** against this head on **isolated
+ports** (`--port=3951 --cdp-port=9451 --display=0`), with **boot-and-connect confirmed before driving** (MCP
+`http://127.0.0.1:3951/mcp` · CDP `:9451` · `cdp.enableGroups([…])` · `list_targets` confirmed · seed import
+ok — `DECIDED: LIVE-GATE-RUN-DISCIPLINE` honoured):
+
+1. **`done: 100 blocks, 39 FAIL, 3 PARKED`** · per-outcome **`31 PASS / 39 FAIL / 3 PARKED / 27 DIAG`** —
+   **IDENTICAL to the previous reading, i.e. THE APP-SIDE CHANGE ALTERED NOTHING OBSERVABLE.** **Why that is
+   the expected reading and not a claim of health:** the driver **passes no `--enable-tool-groups` and no env
+   member and never reads the opt-in `boot` member** — it takes the **default branch**, which is exactly what
+   `S-9`/`§7 V-3` item 2 predicted for a default-preserving change. **It is a DEFAULT-BRANCH reading, and it
+   says nothing about the opt-in branch or about the app's health.**
+2. **THE `§5.U` MATRIX REPORT IS INVALID AGAIN — only `2` of `8` rows returned a verdict** (`U-1:uf_panes_12=FAIL`
+   · `U-7:uf_hist_6=PASS`) **while the driver still printed `OK`.** **`6` of `8` declared rows carry NO verdict**
+   → **NOT readable as a pass** (`DECIDED: LIVE-GATE-RUN-DISCIPLINE` clause (iv)). **This is the EXISTING
+   defect row's re-confirmation** (`docs/defects.md` `LIVE-DRIVER-MATRIX-MAPPING-INCOMPLETE`), **annotated
+   there, not duplicated here.**
+3. **RUNNER LIMITS, RECORDED EXACTLY AS THE RUNNER STATES THEM:** the driver's **exit code was DERIVED from the
+   printed `39 FAIL` and the code path, NOT captured** (redirection) — so **the exit code is a derived reading**;
+   and **`summary.pass`/`summary.fail` count ONLY the two executed matrix rows** and **must never be read as app
+   health.** **Neither limit is smoothed here.**
+4. **`PD-UI-6`'s four live claims re-confirmed on a second run** (an APP-layer, ADDITIVE reading owned by that
+   unit's row, not by this one): `L-1` real `#settings-toggle` click → `is-open` / `display=flex` / body
+   `[922,676]` / operator pane `[865,787]`; `L-2` real scrim click and real `Escape` → `is-closed`; `L-3`
+   `#panes` `[865,1100]` + `#operator-panes` `[865,787]` inside `#settings-modal-body` with `#app` still in
+   `main.layout`; the class-XOR re-pin `before/inside/after = true` at all three boundaries — **with the
+   honest caveats the run itself carries: the XOR is a CLASS-STRING oracle, and the modal's own *contents*
+   rows `uf_settings_4`/`uf_settings_7` still FAIL.**
+5. **THE NEW ISOLATION FINDING (the highest-value reading of this re-run): `uf_panes_1` PASSES ALONE but FAILS
+   in the full battery.** `--block=uf_panes_1` on fresh ports reads **PASS** (`doc-nav before: li=1 ul=true
+   h=100px … reExpanded=true samePaneRoot=true`); the full battery reads **FAIL** (`no doc-nav pane frame
+   rendered; frames=[{pid:"search"}]`) — **because `persistence_v1` deliberately toggles `doc-nav` OFF and
+   persists it, and no block restores it.** **So the doc-nav FRAME is NOT broken: part of the recorded
+   "app-layer" pile is a DRIVER ORDER/PERSISTENCE ARTIFACT and must be RE-CLASSIFIED, not inflated.**
+   **Filed in `docs/defects.md`** (the new order-artifact row) **and annotated on the app-layer pile's row** —
+   **this spec does not re-count the pile.**
+
+### §3a.7 THE FINDING-ID SETS, KEPT APART (so no reader conflates them)
+
+| Set | What it is | Where |
+| --- | --- | --- |
+| `§5.4` `A-1`…`A-10` | the **PRE-REGISTERED falsification probes** this filing reserved, disposition column filled by the adversarial pass | `§5.4` (as filed, unchanged) |
+| **this `§3a`'s `A-1`…`A-7`** | **the gate-4 adversarial pass's OWN FINDING IDS** — not the `§5.4` probes, not `§3.2`'s `F-1`…`F-9` fail-states | `§3a.2` |
+| `§3.2` `F-1`…`F-9` | the filing's **enumerated fail-states** (contract clauses) | `§3.2` (as filed, unchanged) |
+| `§3b` `S-1`…`S-3` | **this record's OWED-AMENDMENT / shared-cause ids** | `§3b` |
+| `docs/specs/unit-divergence-drive-fixture.md`'s `§3a` `A-1`…`A-11` | **the sibling pass's ids, a DIFFERENT set on a DIFFERENT unit** | that file's `§3a` |
+
 ---
 
 ## 4. The typed Property register (code-bearing unit — no exemption is available)
@@ -678,6 +862,26 @@ cap**; **the largest single row is `P-TP-1` at 24**, **under the ≤ 100 cap**; 
 `strat:app-harness-presence-and-pending` · `strat:app-harness-wait-protocol` ·
 `strat:app-harness-request-totality` · `strat:app-harness-no-escalation`. **Every row reports `held`/`broken`;
 the report prints each row's declared-vs-executed term.**
+
+**⟨ANNOTATED 2026-09-29 — THE GATE-4 PBT AUDIT OF THIS REGISTER (RECORDED READING; measurer: the gate-4
+adversarial pass; `§3a.4`; `RCA-8(c)` — the DECLARED terms above are UNMOVED and no row is re-scoped).⟩**
+**STRUCTURALLY SOUND WITH NOTED PROXIES: `P-IM-1` · `P-SM-1` · `P-SM-2` · `P-TP-2`** (each row's own honesty
+limit stands as `§4.3` states it). **UNDER-STRENGTH, MEASURED, WITH THE NEGATIVE GENERATORS THE TESTWRITER NOW
+OWES:**
+
+| Row | What the audit measured | The negative generators owed (`§3b` `T-1`) |
+| --- | --- | --- |
+| **`P-SM-1`** | **DRAW `16` IS NON-DISCRIMINATING** — it does not separate the **armed** from the **unarmed** epoch, which is the state the guard must reject (`§3a.2` `A-2`) — **and the row tests the STATE OWNER, never the production sender**, so it cannot see `A-1`'s un-awaited `bootTabs()` throw. | **`neg-armed-second-install`** · **`neg-unarmed-settle`** · **`neg-regression-after-satisfaction`** |
+| **`P-SM-3`** | **ITS REGRESSION BRANCH IS UNREACHABLE — only `3` of its `5` declared branches are DISTINCT**, so the row's coverage is stated larger than it is. | **`neg-regression-after-satisfaction`** · **`neg-satisfied-then-absent`** |
+| **`P-TP-1`** | **`named()` ACCEPTS ANY NON-EMPTY REASON** (a refusal quoting a different problem passes); **its `raw.length >= 0` limb is VACUOUS**; and **the contract's "no partially-applied set before the refusal" is NEVER DRIVEN**. | **`neg-refusal-names-itself`** · **`neg-partial-apply`** · **`neg-extreme-values`** |
+| **`P-SM-2`** | structurally sound, **with its fake-backend proxy recorded as the row's own limit** (`§4.3` item 3) — **but the presence rule it asserts is the one `A-4` shows the CODE resolving differently**. | **`neg-presence-under-optin-source`** · **`neg-second-writer`** |
+| **`P-TP-2`** | structurally sound (the pass's own reading). | **`neg-escalation-name`** · **`neg-default-list-drift`** |
+| **`P-IM-1`** | structurally sound (the pass's own reading). | (none additional beyond `neg-default-list-drift`) |
+
+**THE GENERATORS ARE THE TESTWRITER'S, NOT THIS RECORD'S** — no test is written by this pass, and **the register
+above is not rewritten by the audit**: a row whose arm cannot fail is **re-derived against its DECLARED terms**
+(`§4.3` item 4), never silently re-scoped. **The audit's own limit, recorded:** it was taken **read-only over the
+landed test bodies**, so a weakness it did not measure is **not** thereby certified sound.
 
 ### 4.3 The register's own honesty limits
 

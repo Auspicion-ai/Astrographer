@@ -2721,15 +2721,16 @@ export class RendererBackend implements McpBackend {
   private window: WindowLike | null = null
   /** §2.2 `B-1` — the boot-install observable. `bootObservable` is a PUBLIC
    *  field so the opt-in is readable off the instance (the red set's seam).
-   *  `bootArmed` is the per-epoch arm: a settle is honoured only after the
-   *  renderer signalled ready, so a repeated signal in the SAME epoch cannot
-   *  resurrect a failed boot (`F-4`) — only a reload (`epoch++`) can. */
+   *  `bootArmedEpoch` is the per-epoch arm, STAMPED with the epoch `markReady()`
+   *  armed: a settle is honoured by the arm of its OWN epoch only, so a repeated
+   *  signal in the SAME epoch cannot resurrect a failed boot (`F-4`) — only a
+   *  reload (`epoch++`) can (`A-3`). */
   readonly bootObservable: boolean
   private bootStatus: 'pending' | 'installed' | 'failed' = 'pending'
   private bootEpoch = 1
   private bootGeneration = 0
   private bootError: string | null = null
-  private bootArmed = false
+  private bootArmedEpoch: number | null = null
 
   constructor(opts: RendererBackendOptions = {}) {
     this.readyTimeoutMs = opts.readyTimeoutMs ?? 30000
@@ -2786,8 +2787,13 @@ export class RendererBackend implements McpBackend {
     if (this.ready) return
     this.ready = true
     // §2.2 `B-1` — the renderer's ready signal ARMS this epoch's boot-install
-    // observation (the boot chain's signal follows it).
-    this.bootArmed = true
+    // observation (the boot chain's signal follows it). `A-3` — the arm is
+    // STAMPED with the epoch it belongs to, so "armed" is a property of the
+    // epoch rather than of a free-standing flag a later re-arm could carry into
+    // a terminal epoch. (`if (this.ready) return` already makes a second
+    // `IPC_READY` in the same epoch a no-op; the stamp makes that invariant
+    // explicit and independent of that guard.)
+    this.bootArmedEpoch = this.bootEpoch
     this.resolveReady?.()
   }
 
@@ -2814,10 +2820,17 @@ export class RendererBackend implements McpBackend {
   markBootSettled(signal: BootInstallSignal): void {
     if (!this.bootObservable) return
     const ok = signal?.ok === true
-    // A settle is honoured only when this epoch is armed (a ready signal has
-    // arrived) — an unarmed settle cannot resurrect a terminal state.
-    if (!this.bootArmed && this.bootStatus !== 'pending') return
-    this.bootArmed = false
+    // `A-2`, tightened — a settle is honoured only by an arm taken in THIS epoch
+    // (a ready signal has arrived) or, for a FAILURE, by the fail-safe arm below.
+    // An unarmed `ok:true` is REFUSED: it would report an install nothing ever
+    // reported ready, and it is exactly the signal that could resurrect a
+    // terminal state. The fail-safe exception is kept deliberately, and it is
+    // the safe direction: a NAMED failure is recorded even when the chain failed
+    // BEFORE the ready signal, because `F-4` forbids `pending`-forever — a boot
+    // chain that threw early must still report `failed`, never stay unobserved.
+    const armed = this.bootArmedEpoch === this.bootEpoch
+    if (!armed && (ok || this.bootStatus !== 'pending')) return
+    this.bootArmedEpoch = null
     if (ok) {
       this.bootStatus = 'installed'
       this.bootError = null
@@ -2861,7 +2874,7 @@ export class RendererBackend implements McpBackend {
     this.bootStatus = 'pending'
     this.bootGeneration = 0
     this.bootError = null
-    this.bootArmed = false
+    this.bootArmedEpoch = null
     // release any awaiter on the current gate with the reset reason
     this.rejectReady?.(new Error(reason))
     this.readyPromise = this.newReadyPromise()

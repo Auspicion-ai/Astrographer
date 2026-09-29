@@ -1036,16 +1036,34 @@ async function main(): Promise<void> {
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.
-  // U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — this `.then(...)` boundary IS
+  // U-APP-HARNESS-READINESS §2.2 `B-1` item 4 — this chain's completion IS
   // the app's own definition of "the initial graph install completed", so the
   // SAME boundary reports it to main (the boot-install observable), and the
   // `.catch(...)` reports the failure BY NAME (`F-4`). The renderer does not
   // wait for anything: the signal is fire-and-forget, and main's observable is
   // a state a client polls.
+  //
+  // THE BLOCKING HOST FINDING (`U-APP-HARNESS-READINESS` `A-1` /
+  // `U-DIVERGENCE-FIXTURE` `A-1`, the same code path) — the tab chain is now
+  // AWAITED INSIDE this chain, for two reasons that are both properties of the
+  // signal's MEANING ("no further boot-time graph install follows `installed`"):
+  //   1. `bootTabs()` is `async` and awaits the persisted-tab read BEFORE
+  //      `host.mountTab(...)` — and for a non-document tab that mount reaches
+  //      `applyStageBody` → `loadAppGraph` → `runtime.loadEnvelope`, i.e. a
+  //      SECOND whole-graph replacement. Signalling `ok: true` before it settled
+  //      let that install land AFTER the signal, unordered against a client that
+  //      trusted it (the leg's `waitForBootInstalled` → load race).
+  //   2. The un-awaited call owned no rejection: a throw inside `bootTabs()`
+  //      (e.g. `host.mountTab(...)`) never reached the `.catch(...)` below, so
+  //      the `ok:false` arm never fired and `boot.status` stayed `pending`
+  //      forever — the `F-4` violation. Awaiting it puts the tab chain inside
+  //      this chain's own rejection path.
+  // Nothing else moves: the chain still runs after the host boot and after the
+  // settings-modal install seam above, and the signal is still fire-and-forget.
   void host
     .boot(runtime)
-    .then(() => {
-      bootTabs()
+    .then(async () => {
+      await bootTabs()
       bridge.bootSettled?.({ ok: true })
     })
     .catch((e) => {
