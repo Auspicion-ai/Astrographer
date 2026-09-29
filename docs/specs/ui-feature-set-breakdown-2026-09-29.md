@@ -223,6 +223,68 @@ it never edits a vendored byte** (`K-5`).
 
 ## 3. THE MEASURED APP-LAYER GAP — the user-visible work that is NOT in the wave table
 
+### 3.0 THE OPERATOR-CORRECTIONS LEDGER (ANCHORED INSERT, `2026-09-29`; `RCA-8(c)` — ANNOTATE-BESIDE)
+
+**This block is an ANCHORED INSERT at the head of §3 and it REWRITES NOTHING BELOW IT.** Every
+row of §3, §5.9 and §7 stays visible as its own pass's reading; the corrections below sit BESIDE
+them, dated, and the rows they contradict say so at their own sites — the per-symptom notes appended
+BELOW §3.1's table and the per-id notes appended BELOW §5.9's `GAP-*` table.
+
+**Layer, stated per claim (`RCA-12`); this is the standing house rule and it decides (1) below.**
+
+- **`[U]` / app-layer (the operator's layer)** — **measurer: THE OPERATOR, in the RUNNING app** (the
+  live launch at `http://127.0.0.1:3787/mcp`, profile `/tmp/astrographer-live-P2Dl`). The operator
+  **looked at the running app and corrected five of this breakdown's inferences.** These are
+  observations at the assembled/rendered layer.
+- **`[T]` / MCP-surface (the supervisor's layer)** — **measurer: THE SUPERVISOR'S PROBE** of that
+  same running app (`provident.get_rendered_html`). Quoted here only where a figure is needed.
+- **DOC-LAYER (the filing pass)** — this ledger is a **TRACKER-LAYER RECORD**: the filing pass **ran
+  nothing, booted nothing, took no measurement of its own**, and holds **no shell** (its tool wall is
+  read/search + doc-write). Every figure below is quoted with the measurer that took it.
+
+**WHERE THIS LEDGER LIVES, and why three homes.** It is recorded here (the breakdown's own evidence
+ledger, `§3`/`§5.9`), in `docs/defects.md` at the rows that exist there, and in
+`docs/next-steps.md`'s head-of-region pickup. **`GAP-*` ids stay PROPOSED** (§11 item 3 is
+unmoved) — **what changes is which of them may be MINTED on the current evidence (see item 6).**
+
+**THE FIVE OPERATOR CORRECTIONS, each naming what it RETRACTS.**
+
+| # | The operator's observation (`[U]`, app-layer) | What it RETRACTS from this breakdown | The corrected reading, and the layer that carries it |
+| --- | --- | --- | --- |
+| **OC-1** | **THE PANES ARE VISIBLE.** | **`S-1`'s dominant symptom — *"the census says a pane is enabled while NO `.pane-frame[data-pane-id]` renders"* — is CONTRADICTED at the operator layer.** **`S-1` also understates the pile's composition by attributing it to ONE dominant symptom; that attribution is now falsified as a *universal*.** | **The supervisor's own `[T]` measurement supports the operator:** the running app's `provident.get_rendered_html` carries **14 `pane-frame` tokens** (the frames **do** render) and **only a single `data-pane-id` occurrence in the escaped payload** — so **the driver's *set* comparison is measuring something else**: an **earlier render moment**, or **an attribute the payload escapes**. **THE CONSEQUENCE, STATED PLAINLY: `GAP-1` / `PD-CENSUS-RENDER-COHERENCE` MAY NOT BE MINTED ON THIS EVIDENCE.** **The driver must FIRST print its own `surface.target` + its per-row FAILING CLAUSE and be RE-MEASURED** — §9 `NR-1` already flagged exactly those clauses as **`NOT RECORDED`**. **And the layer rule that decides it (`RCA-12` + `DECIDED: LIVE-GATE-RUN-DISCIPLINE`'s split): the operator's layer (`[U]`, eyeball on the assembled app) OUTRANKS a driver inference here** — a driver's *set* comparison against a payload it did not print is not evidence against a rendered surface the operator can see. |
+| **OC-2** | **THE MODAL'S SETTINGS LOOK CORRECT** (the operator's screenshot of the running app). | **`S-5`'s contents claim — *"the settings modal's CONTENTS are wrong"*, carried by `uf_settings_4`/`uf_settings_7` — is CONTRADICTED.** | **`GAP-5`'s evidence must be RE-MEASURED BEFORE IT IS MINTED** (the same rule as `OC-1`, and the same missing fields: `surface.target` + the failing clause). **What this does NOT retract:** `PD-UI-6` stays DONE with its four live rows passing, and **`PANE-VISIBILITY-IRREVERSIBLE` stays OPEN with its user ruling attached** — that row is about the *visibility control*, not about the modal's contents rendering. |
+| **OC-3** | **`S-4` (the stage async mount) and `S-9` (search flicker) CANNOT BE TESTED in the demo launch because THE DOC LIST IS EMPTY.** | **Both are FIXTURE-BLOCKED, NOT APP-FAILING — so they leave the "app pile" count until the fixture exists.** | **The fixture the driver needs is NAMED: a SEEDED CORPUS — `--strict-seed` and/or the `--o0-corpus` route that `GAP-8`/`LIVE-FIXTURE-PRECONDITION-GAPS` already carries.** (The recorded driver-side evidence points the same way: `stage_docnav_switch_*` read `rows=0`, and `uf_panes_12` fails on a missing `li[data-document-id=".live-corpus/beta"]` — both already classified FIXTURE/precondition.) **Until the fixture is seeded, `stage_async_mount_race_v1` / `stage_docnav_switch_inside_async` / `user6_search_no_flicker` carry NO app verdict** — they are **refused/parked by precondition, never counted as app FAILs**, exactly as `RCA-11` clause (b) requires (a recorded park reason, never parked-by-default). |
+| **OC-4** | **REORDER WORKS** — the operator dragged a pane and it moved where they dropped it. | **`N3`'s reading — *"a dragged pane can only move to the TOP"* (`S-10`, `PANE-DRAG-TOP-ONLY`) — is WRONG as a universal.** **`GAP-4`'s title and grounding — `PD-PANE-DRAG-PROJECTION`, *"a projection bug"* — is RETRACTED.** | **What is ACTUALLY missing, in the operator's terms: the MULTI-ZONE DROP INDICATION and the PREVIEW GHOSTING** — i.e. **the AFFORDANCE HALF (`PD-UI-5`, `W4`'s BUILD) plus the relocate session's PREVIEW SEAMS** (`PD-UI-4c`'s `PreviewSink`). **`GAP-4` IS RE-HOMED: it is *"the drag works; the DROP TARGETS and the GHOST PREVIEW do not exist"*, and its owners are `PD-UI-5` (affordance) + `PD-UI-4c` (session).** **`PANE-SLOT-INSTABILITY-ON-DISCLOSURE` stays SEPARATE** (it is a disclosure-path slot defect, not a drop-indication defect). **Note what this does to §5.3 `W3.2`'s and §7 item 7's framing: the `N3` falsifier (`drag A between B and C → B,A,C`) is no longer the right instrument for this symptom — a DROP-TARGET/ghost-preview assertion is.** |
+| **OC-5** | **ZONE RESIZE CANNOT BE DONE THROUGH THE UI AT ALL** — there is **no resize affordance**. | **`S-14`'s "flaky row" reading is RETRACTED: it is a REAL, USER-FACING GAP.** | **`S-14` is APP-REAL, and its owners are `PD-UI-4b` (the gutter session) PLUS `PD-UI-5` (the affordance BUILD).** **RECORDED BECAUSE IT IS A PROGRAM-LEVEL FACT, NOT A ROW NOTE: `PD-UI-5` is therefore THE GATING ROW FOR A VISIBLE CAPABILITY — not merely a build nicety** — and §5.3 `W4b.1`'s `R-8` clause (*"the largest under-estimation risk in the set"*) is **now the program's own risk reading as well as the proposal's**. |
+
+**6 · WHICH `GAP-*` ROWS MAY BE MINTED ON THE CURRENT EVIDENCE (`2026-09-29`).** Stated as the
+operator's corrections force it, **not as a new ruling**: **`GAP-1` and `GAP-5` ARE NOT MINTABLE on
+this evidence** — both rest on a driver inference the operator's `[U]` layer contradicts, and **both
+need the driver's `surface.target` + per-row failing clause printed and a re-measurement** before any
+row is minted. **`GAP-2` (with `S-9`) IS FIXTURE-BLOCKED** and waits on the seeded corpus
+(`--strict-seed` / `--o0-corpus`). **`GAP-4` is RE-HOMED into `PD-UI-5` + `PD-UI-4c`** on the
+operator's reorder reading (it is no longer a projection row). **`GAP-6`/`GAP-7`/`GAP-8` STAND** (the
+driver-side and fixture-side rows are unaffected by these five observations). **`GAP-3`'s symptom
+(`S-7`, history outside any pane frame) was NOT checked by the operator and is neither confirmed nor
+retracted.**
+
+**7 · THE FOUNDATION CONFIG-FILE HANDOFF IS FILED — AND IT IS A DEPENDENCY OF THE PERSISTENCE WORK
+(`S-12` / `GAP-6`).** **`FOUNDATION-NO-CONFIG-FILE-PERSISTENCE`** is filed **OPEN** in
+`docs/defects.md` **and** in `docs/HANDOFF.md` (**foundation-owned; the package/foundation is NEVER
+patched** — `AGENTS.md` item 7). **It is named here because `§5.9`'s `GAP-6`
+(`PD-BOOT-PERSISTENCE-COHERENCE`) and the `S-12` class are exactly the persistence work this app
+does today with its **own** fork-side store (`src/main/operator-settings-store.ts`, plus
+`src/main/security-store.ts`): the operator settings, the pane/zone set and the first-run enabled
+defaults (`DECIDED: FIRST-RUN-ENABLED-DEFAULT`) all persist through a FORK-OWNED file. **A config-file
+METHOD is ABSENT at the foundation — the precision that keeps the ask honest is stated at the row
+itself: `focus-model.ts`'s `persist` is a RETURNED-WRITE SEAM, not a config-file facility, so the
+handoff is *"a config-file persistence METHOD is absent"*, never *"persistence is absent"*.** **The
+`GAP-6` unit may not wait on it** (the proposed fix shape is upstream-owned and may equally be
+closed by an upstream ruling that a fork owns its own) — **but the unit must record which of the two
+outcomes its own store's future depends on.**
+
+---
+
 **The battery's last reading.** `RECORDED READING (measurer: the live-scenario runner)` —
 **`done: 100 blocks, 39 FAIL, 3 PARKED`**, block split **PASS 31 / FAIL 39 / PARK 3 / DIAG 27**;
 `§6.1 summary: {"total":8,"pass":1,"fail":1,"parked":0,"matrixRowsExecuted":2,"blocksRun":100,"extendedRowsRun":54,"diagnostics":27}`.
@@ -264,6 +326,46 @@ order/persistence artifact**. (§) = carried in the 32-row list but re-classifie
 **FIXTURE/precondition** or **DRIVER** on the re-run (§3.2). (†) = `uf_panes_12` belongs to the
 FIRST RUN's list and is re-classified **FIXTURE/precondition** on the re-run (its own evidence: the
 missing `li[data-document-id=".live-corpus/beta"]`).
+
+**⟨ANNOTATED `2026-09-29` — `RCA-8(c)`, ANNOTATE-BESIDE: EVERY ROW OF THE TABLE ABOVE IS KEPT
+VERBATIM AS THE FILING PASS'S READING. The notes below are the OPERATOR'S `[U]`/APP-LAYER
+CORRECTIONS (measurer: THE OPERATOR, in the RUNNING app), supported where a figure is quoted by the
+SUPERVISOR'S `[T]`/MCP-SURFACE PROBE; the filing pass measured nothing. Full ledger: §3.0.⟩**
+
+- **`S-1` — CONTRADICTED (`OC-1`).** The operator reports **THE PANES ARE VISIBLE**, so the dominant
+  symptom *"no `.pane-frame[data-pane-id]` renders"* **does not hold at the operator's layer**; the
+  supervisor's probe reads **14 `pane-frame` tokens** in `provident.get_rendered_html` against **one
+  `data-pane-id` occurrence in the escaped payload**, so **the driver's *set* comparison measures
+  something else (an earlier render moment, or an escaped attribute).** **Consequence: `GAP-1` /
+  `PD-CENSUS-RENDER-COHERENCE` may NOT be minted on this evidence; the driver must print its own
+  `surface.target` + per-row failing clause and be re-measured** (§9 `NR-1` already recorded those
+  clauses as `NOT RECORDED`). **The operator's `[U]` layer outranks the driver inference here.**
+- **`S-3` — UNCHANGED**, and its `0-px painted seam` (`user8_zone_boundary`) is the same
+  geometry surface `OC-5`'s missing resize affordance would be measured through — **no correction was
+  given for it, and none is inferred.**
+- **`S-4` — FIXTURE-BLOCKED, NOT APP-FAILING (`OC-3`).** The stage async mount **cannot be tested in
+  the demo launch because the doc list is EMPTY**; the blocking fixture is a **SEEDED CORPUS**
+  (`--strict-seed` / the `--o0-corpus` route `GAP-8` carries). **Its rows leave the app-pile count
+  until then.**
+- **`S-5` — CONTRADICTED (`OC-2`).** The operator's screenshot shows **the modal's settings LOOK
+  CORRECT**, so **the contents claim is contradicted**; **`GAP-5`'s evidence must be re-measured
+  before it is minted** (same rule and same missing fields as `S-1`). **`PANE-VISIBILITY-IRREVERSIBLE`
+  is NOT touched by this** — it is about the visibility *control*, not the modal's contents.
+- **`S-9` — FIXTURE-BLOCKED, NOT APP-FAILING (`OC-3`).** **Search flicker cannot be tested in the demo
+  launch because the doc list is EMPTY**; same seeded-corpus fixture. **It leaves the app-pile count
+  until then; no defect row for the flicker is minted on this evidence.**
+- **`S-10` — RETRACTED AS FILED (`OC-4`).** The operator reports **REORDER WORKS**, so **`N3`'s
+  *"only move to the top"* reading is WRONG.** **What is missing is the AFFORDANCE HALF — the
+  MULTI-ZONE DROP INDICATION and the PREVIEW GHOSTING** — owned by **`PD-UI-5`** (the affordance
+  BUILD) + **`PD-UI-4c`** (the relocate session's preview seams). **`GAP-4` is re-homed accordingly
+  (§5.9's annotation) and `PANE-SLOT-INSTABILITY-ON-DISCLOSURE` stays separate.**
+- **`S-14` — CONFIRMED APP-REAL AND NOT FLAKY (`OC-5`).** **ZONE RESIZE CANNOT BE DONE THROUGH THE UI
+  AT ALL — there is NO resize affordance.** Owners: **`PD-UI-4b`** (the gutter session) **+ `PD-UI-5`**
+  (the affordance BUILD) — **so `PD-UI-5` is THE GATING ROW FOR A VISIBLE CAPABILITY, not merely a
+  build nicety.**
+- **`S-2` · `S-6` · `S-7` · `S-8` · `S-11` · `S-12` · `S-13` — NO OPERATOR CORRECTION WAS GIVEN.** Their
+  cells are kept as filed; **`S-7` in particular was not checked** (stated so the silence is not read
+  as agreement).
 
 ### 3.2 The non-app classes, recorded so the app pile is not inflated
 
@@ -677,6 +779,62 @@ as **re-pins of the eight declared rows** (`U-1`..`U-8`) or as **extended (non-m
 reported in the separate same-shape table `D-GP-UFA-4` requires. **The `S-1`/`S-5`/`S-12` classes in
 particular span `uf_panes_*`/`uf_settings_*` rows that are NOT matrix rows at all** — which is exactly
 why they can carry verdicts without touching `MATRIX_ROWS`.
+
+**⟶ ANCHORED OPERATOR-CORRECTIONS ANNOTATION `2026-09-29` ON THE `GAP-*` TABLE ABOVE — `RCA-8(c)`,
+ANNOTATE-BESIDE: EVERY CELL OF THE TABLE IS KEPT VERBATIM AS THE FILING PASS'S READING AND NOTHING IN
+IT IS REWRITTEN; the corrections live at §3.0 and are cross-referenced here per id.** **LAYER
+(`RCA-12`): the operator's readings are `[U]`/APP-LAYER (measurer: THE OPERATOR, in the RUNNING app —
+the live launch `http://127.0.0.1:3787/mcp`, profile `/tmp/astrographer-live-P2Dl`); the supervisor's
+figures are `[T]`/MCP-SURFACE (measurer: THE SUPERVISOR'S PROBE, `provident.get_rendered_html` of that
+same app); this filing pass is a TRACKER-LAYER RECORD that ran and measured NOTHING.** **THE `GAP-*`
+IDS REMAIN PROPOSED (minting a row is the architect's act — §11 item 3, unmoved); what the operator's
+five corrections change is WHICH OF THEM MAY BE MINTED ON THE CURRENT EVIDENCE.**
+
+- **`GAP-1` (`PD-CENSUS-RENDER-COHERENCE`) — NOT MINTABLE ON THIS EVIDENCE (`OC-1`).** The operator
+  reports the panes are visible, so **`S-1`'s dominant symptom is contradicted at the `[U]` layer**;
+  the supervisor's probe supports it (**14 `pane-frame` tokens** rendered, **one `data-pane-id`
+  occurrence in the escaped payload**), which means the driver's *set* comparison is measuring an
+  earlier render moment or an escaped attribute. **Re-measurement that would restore it: the driver
+  PRINTS its own `surface.target` + the per-row FAILING CLAUSE (§9 `NR-1` recorded both as
+  `NOT RECORDED`) and the symptom is re-measured through it.** Until then, **the `S-1` class carries
+  NO minted row and the app pile's composition must be quoted with §3.0's caveat.**
+- **`GAP-2` (`PD-STAGE-ASYNC-MOUNT`) — FIXTURE-BLOCKED, NOT APP-FAILING (`OC-3`).** With the demo
+  launch's EMPTY doc list, `stage_async_mount_race_v1` cannot be driven. **Blocking fixture, named: a
+  SEEDED CORPUS — `--strict-seed` / the `--o0-corpus` route `GAP-8` already carries.** The two OPEN
+  defects it cites (`STAGE-RACE-ASYNC-MOUNT`, `UF-STAGE-AT-8 …`) are NOT withdrawn by this; what is
+  withdrawn is the **live verdict** in a run without the fixture.
+- **`GAP-3` (`PD-HISTORY-IN-PANE`) — NEITHER CONFIRMED NOR RETRACTED.** The operator did not check
+  `S-7`; its grounding rows (`LIVE-UF5 HISTORY-IN-MAIN-CANVAS`, `HISTORY-NOT-DROPDOWN`) are OPEN and
+  un-re-measured. Stated so the silence is not read as agreement.
+- **`GAP-4` — RE-HOMED (`OC-4`), and its title is RETRACTED.** The operator reports **REORDER WORKS**,
+  so **`N3`'s *"a dragged pane can only move to the TOP"* is wrong** and **`PD-PANE-DRAG-PROJECTION`'s
+  *"projection bug"* framing is retracted with it.** **What is missing is the AFFORDANCE HALF: the
+  MULTI-ZONE DROP INDICATION and the PREVIEW GHOSTING.** **Its owners are `PD-UI-5` (the affordance
+  BUILD) and `PD-UI-4c` (the relocate session's preview seams)** — **`PD-UI-5` is therefore doing
+  double duty** (`OC-5` below) — and **`PANE-SLOT-INSTABILITY-ON-DISCLOSURE` STAYS SEPARATE.** **The
+  instrument changes with the reading: the `N3` order assertion (`drag A between B and C → B,A,C`) is
+  replaced by a DROP-TARGET / ghost-preview assertion.**
+- **`GAP-5` (`PD-SETTINGS-CONTENT-COHERENCE`) — NOT MINTABLE ON THIS EVIDENCE (`OC-2`).** The operator's
+  screenshot shows the modal's settings correct, contradicting `S-5`'s contents claim. **Same
+  re-measurement rule as `GAP-1`** (`surface.target` + the failing clause, printed by the driver).
+  **`PANE-VISIBILITY-IRREVERSIBLE` is NOT touched by this** — it is about the visibility CONTROL, not
+  the modal's contents rendering.
+- **`GAP-6` (`PD-BOOT-PERSISTENCE-COHERENCE`) — STANDS, with one dependency recorded (`§3.0` item 7).**
+  Its work is the persistence work this app does today with a FORK-OWNED store; **the foundation
+  config-file ask is filed** (`FOUNDATION-NO-CONFIG-FILE-PERSISTENCE`, `docs/defects.md` +
+  `docs/HANDOFF.md`) and **this unit may not wait on it** — it must record whether it will keep its
+  own store or adopt an upstream facility if one is ruled in.
+- **`GAP-7` (`PD-DRIVER-MATRIX-AND-EVIDENCE`) — STANDS, and it HARDENS: it is now the PREREQUISITE of
+  `GAP-1`/`GAP-5`'s re-measurement.** The missing per-row clause is the same absence `OC-1`/`OC-2`
+  name; **fixing `GAP-7` is what makes the other two re-measurable at all.**
+- **`GAP-8` (`PD-LIVE-FIXTURE-PRECONDITIONS`) — STANDS, and its fixture list GAINS the corpus route's
+  use for `GAP-2`/`S-9`** (`OC-3`): a seeded corpus is what un-blocks the stage/search rows, not only
+  the `o0_*` diagnostics.
+- **ALSO APP-REAL, AND IT HAS NO NEW `GAP-*` ID (because it has owners): `S-14` (`OC-5`).** **ZONE
+  RESIZE CANNOT BE DONE THROUGH THE UI AT ALL — there is NO resize affordance.** Its owners are
+  **`PD-UI-4b` (the gutter session) + `PD-UI-5` (the affordance BUILD)**, and **`PD-UI-5` is thereby
+  THE GATING ROW FOR A VISIBLE CAPABILITY**, not merely a build nicety (§7 item 8's cost column
+  should be read with this).
 
 ---
 
