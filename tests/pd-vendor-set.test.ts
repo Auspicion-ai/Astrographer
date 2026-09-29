@@ -106,7 +106,7 @@ const PINNED_FIFTEEN = [
   'zones',
 ] as const
 
-const PINNED_COMMIT = '8f193a8d1446ed1e64c4ab6c569941e988f82459'
+const PINNED_COMMIT = 'd7b98b574adc7fa63fbabda617eba2a753f52cb5'
 
 /** §2.1 item 5 — FIVE files carry any import at all; the other TEN of the fifteen
  *  carry none. ⟨Corrected per §12.3(d) (`C-AM-4`, DOC-DRIFT, LOW): the clause's
@@ -164,6 +164,20 @@ const DECLARED_CONSUMER_EDGES: Array<{ file: string; specifier: string; member: 
   //   `§2.1` (no behaviour depends on it — the vendored member is the same either way).⟩
   { file: 'src/renderer/theme.ts', specifier: '../../shared/theme.js', member: 'theme', unit: 'PD-UI-1' },
   { file: 'src/renderer/theme.ts', specifier: '../shared/theme.js', member: 'theme', unit: 'PD-UI-1' },
+  // ⟨RE-STATED 2026-09-28 — unit `PD-UI-6` §3.6.1 / §9 item 6 (`E-6`); the supervisor's
+  //   disposition ① of the unit's red-set delegation.⟩ THE ONE ROW THE OVERLAY ADOPTION
+  //   ADDS. `src/renderer/modal-state.ts` is the unit's named adapter, and its single new
+  //   import statement is the vendored member this row declares:
+  //   `import { overlayTransition } from '../shared/overlay.js'`, whose RESOLVED path is
+  //   `src/shared/overlay.ts` (the row asserts the RESOLVED path, never a spelling — the
+  //   limb below already does). `overlay` is one of the pin's fifteen and has NO fork
+  //   sibling, so the adoption is a VENDORED-RESOLVING edge and NOT a stem-collision hit:
+  //   the three-hit stem-collision limb above is UNAFFECTED and stays exactly as landed.
+  //   NO EVASION FORM is taken (`await import(...)` / `require(...)` / `new URL(...)` stay
+  //   refused and caught by the extended derivation), and the NEGATIVE CONTROL row below is
+  //   left INTACT — a relaxation would replace the allow-list limb with "any
+  //   vendored-resolving hit passes", which is FORBIDDEN and is not what this row does.⟩
+  { file: 'src/renderer/modal-state.ts', specifier: '../shared/overlay.js', member: 'overlay', unit: 'PD-UI-6' },
 ]
 
 /** The vendored member a specifier stem names (`./theme.js` → `theme`), or `null`. */

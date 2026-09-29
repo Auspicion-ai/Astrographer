@@ -89,7 +89,7 @@ const PINNED_FIFTEEN = [
 ] as const
 
 /** §3.3 item 2 — the architect-measured pinned revision. */
-const PINNED_COMMIT = '8f193a8d1446ed1e64c4ab6c569941e988f82459'
+const PINNED_COMMIT = 'd7b98b574adc7fa63fbabda617eba2a753f52cb5'
 
 /** §2.2 — the four baseline files that are NOT replaced (clause (2) of `R-3`). */
 const BASELINE_FILES_NOT_REPLACED = [
@@ -314,7 +314,7 @@ describe('PD-VENDOR §2.2 — the manifest shape (foundation block + per-module 
     expect(requireManifest().schema).toBe('foundation-lock/1')
   })
 
-  it('§3.3 item 2 — foundation.commit equals the pinned revision 8f193a8…f82459', () => {
+  it('§3.3 item 2 — foundation.commit equals the pinned revision d7b98b57…f52cb5 ⟨superseded: 8f193a8…f82459 was the pin before the 2026-09-28 refresh⟩', () => {
     const foundation = requireManifest().foundation as Record<string, unknown>
     expect(foundation, 'the manifest carries no `foundation` block').toBeDefined()
     expect(foundation.commit).toBe(PINNED_COMMIT)

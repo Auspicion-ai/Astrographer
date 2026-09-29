@@ -89,6 +89,7 @@ head is UNVERIFIED**; what would settle it is a row (or a re-read) comparing the
 code.** All rows below are **VERIFIED-BY-READ this pass in the adjacent tree**
 (`../Provident-Electron/**`), whose revision recorded by the program is `main` =
 `8f193a8d1446ed1e64c4ab6c569941e988f82459`:
+**⟨ANNOTATED 2026-09-28 BY THE `PD-VENDOR-PIN-REFRESH` ITEM-10d DOCUMENTATION REVIEW — the as-filed clause is KEPT and this is its dated correction (annotate-beside, `RCA-8(c)`).⟩ THE REVISION `THE PROGRAM RECORDS` IS NO LONGER THAT ONE: the pin was re-stated to `d7b98b574adc7fa63fbabda617eba2a753f52cb5` (a docs-only upstream commit, the fifteen vendored module bytes byte-unchanged) by the pin-refresh unit under its own gate — `vendor/foundation.lock.json`'s `foundation.commit`, its embedded `digestCommand` literal and the three `PINNED_COMMIT` constants all read it (VERIFIED-BY-READ). This unit's PRECEDENT rows (`F-1`…`F-6`) are unaffected: they are read from the adjacent tree's own files, whose content at the two revisions is byte-identical for `src/shared` and whose harness scripts this unit cites by symbol. The current pin is the manifest's own `foundation.commit` — never this literal (`docs/specs/unit-pd-vendor-pin-refresh.md`; `docs/next-steps.md`'s 2026-09-28 PD-VENDOR-PIN-REFRESH doc-review block).**
 
 | # | The precedent, and where it is written | Why this unit cites it |
 | --- | --- | --- |

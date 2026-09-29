@@ -72,7 +72,7 @@ const PINNED_FIFTEEN = [
   'zones',
 ] as const
 
-const PINNED_COMMIT = '8f193a8d1446ed1e64c4ab6c569941e988f82459'
+const PINNED_COMMIT = 'd7b98b574adc7fa63fbabda617eba2a753f52cb5'
 
 function md5(text: string): string {
   return createHash('md5').update(text).digest('hex')

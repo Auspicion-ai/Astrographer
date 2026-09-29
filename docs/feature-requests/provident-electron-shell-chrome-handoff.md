@@ -682,7 +682,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   delete it or keep it as the fork's own thin adapter, but not both; (d) **add** the two missing behaviors as
   fork-side adoptions once the primitive lands (focus trap + `inert` are the fork's two recorded a11y gaps);
   (e) move the closed-state/Escape/scrim XOR rows **upstream**, keeping the fork's module-wiring rows
-  (`tests/unit-u-shell-7-settings-modal.test.ts`) and the parked live battery
+  (`tests/unit-u-shell-7-settings-modal.test.ts` ⟨**REPOINTED 2026-09-28 BY THE SUPERVISOR'S LANDING PASS — annotate-beside (`RCA-8(c)`), the as-filed path is KEPT: that suite's CURRENT address is `archive/tests/2026-09-28-unit-u-shell-7-settings-modal.test.ts`. The `PD-UI-6` landing (`W1`) ARCHIVED it whole — a MOVE, `md5` identical, `R100`, nothing deleted (`docs/specs/unit-pd-ui-6-modal-state.md` `§6.3`) — so the old `tests/**` path no longer exists. THIS REQUEST'S OWN SUBSTANCE IS UNAFFECTED: the fork's module-wiring rows the item keeps are now the unit's re-derived files (`tests/pd-ui-6-modal-state-adoption.test.ts` + `tests/pd-ui-6-modal-state-register.test.ts`), and the closed-state/Escape/scrim XOR rows were re-derived against the foundation four-state matrix as this item asked.⟩**) and the parked live battery
   (`docs/pending.md:66`) as the fork's own.
 - **Priority:** **P1**.
 - **Fallback if upstream declines.** SC-3's: implement trap + `inert` + top-layer in `modal-state.ts` and

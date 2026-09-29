@@ -4719,8 +4719,16 @@ const BLOCKS = {
   // TRACK must collapse and the stage must reclaim the width.
   uf_layout_10: async (h) => {
     await ufEnsureAppClear(h)
-    const measure = async () => h.cdp.evaluate(`(()=>{const g=(id)=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],display:getComputedStyle(e).display,cls:String(e.className)}};const w=document.getElementById('wiki-root');return {left:g('zone:left'),main:g('zone:main'),cols:w?getComputedStyle(w).gridTemplateColumns:null,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length}})()`)
-    await ufModal(h, true)
+    const measure = async () => h.cdp.evaluate(`(()=>{const g=(id)=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],display:getComputedStyle(e).display,cls:String(e.className)}};const w=document.getElementById('wiki-root');return {left:g('zone:left'),main:g('zone:main'),cols:w?getComputedStyle(w).gridTemplateColumns:null,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,modal:(document.getElementById('settings-modal')||{}).className||null}})()`)
+    // §7.2 re-pin (finding A-9): the settings-modal frame must carry EXACTLY ONE
+    // of `.is-open`/`.is-closed` at every state boundary this block already
+    // crosses — before the open, inside the open, after the close. The class
+    // read is the one `ufModal` already performs (its pre/post `className`
+    // reads and `measure()`'s `modal` field); NO new MATRIX_ROWS slot, NO new
+    // block, NO new click. `x` counts the two markers in one class string.
+    const x = (c) => (/is-open/.test(c ?? '') ? 1 : 0) + (/is-closed/.test(c ?? '') ? 1 : 0)
+    const preModal = await ufModal(h, true)
+    const preXor = x(preModal.cls) === 1
     const filled = await measure()
     // REAL clicks: disable every ENABLED app-graph pane in the modal
     const enabledIds = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#settings-modal [data-pane][data-enabled]')].map((t)=>{const p=t.getAttribute('data-pane');const root=document.querySelector('.pane-frame[data-pane-id="'+p+'"]');return root?p:null}).filter(Boolean))()`)
@@ -4741,6 +4749,8 @@ const BLOCKS = {
     }
     await sleep(1500)
     const restored = await measure()
+    // the class XOR INSIDE the open (read from `measure()`'s own class read)
+    const openXor = x(filled.modal) === 1 && x(empty.modal) === 1 && x(restored.modal) === 1
     const isEmptied = /is-empty/.test(empty.left ? empty.left.cls : '') && empty.frames === 0
     const trackCollapsed = (() => {
       const first = (c) => Number(String(c || '').split(' ')[0].replace('px', '')) || 0
@@ -4748,8 +4758,11 @@ const BLOCKS = {
     })()
     const stageReclaimed = !!empty.main && !!filled.main && empty.main.box[0] < filled.main.box[0] && empty.main.box[2] > filled.main.box[2] + 10
     const censusEnd = await h.cdp.evaluate(`(()=>{const c=document.getElementById('operator-enabled-panes');return c?(c.textContent||'').trim():null})()`)
-    await ufModal(h, false)
-    return rowResult('UF-LAYOUT-10', "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", 'D-visual', `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"`, { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed, surface: await ufSurfaceTarget(h) })
+    const postModal = await ufModal(h, false)
+    // the class XOR AFTER the close (the class read `ufModal` performs on its return)
+    const postXor = x(postModal.cls) === 1
+    const modalClassXor = preXor && openXor && postXor
+    return rowResult('UF-LAYOUT-10', "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", 'D-visual', `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; settings-modal class-XOR (§7.2 re-pin): before the open class="${preModal.cls}" exactlyOne=${preXor}, inside the open class="${filled.modal}" exactlyOne=${openXor} (and ${JSON.stringify([empty.modal, restored.modal])} at the block's other in-open reads), after the close class="${postModal.cls}" exactlyOne=${postXor} → exactlyOneOf(.is-open/.is-closed) at every state boundary=${modalClassXor}`, { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) })
   },
 
   // Harness hygiene (not a checklist row, no verdict — §6.1 diagnostic form):

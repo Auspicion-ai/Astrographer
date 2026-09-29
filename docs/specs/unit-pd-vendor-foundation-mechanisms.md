@@ -563,7 +563,7 @@ re-declares them at `src/shared/foundation-return-shapes.ts`**, under these rule
     "path": "../Provident-Electron",          // adjacent, NOT a dependency
     "remote": "https://github.com/LittleKingsguard/Provident-Electron",
     "ref": "main",
-    "commit": "<40-hex>",                     // MUST equal the architect-measured 8f193a8d1446ed1e64c4ab6c569941e988f82459
+    "commit": "<40-hex>",                     // MUST equal the architect-measured 8f193a8d1446ed1e64c4ab6c569941e988f82459 ⟨SUPERSEDED 2026-09-28 — the PIN-REFRESH unit re-stated this pin to the foundation's then-current HEAD `d7b98b574adc7fa63fbabda617eba2a753f52cb5` (docs-only upstream commit; the fifteen vendored module bytes byte-unchanged); the literal above is KEPT as the as-filed reading, and the CURRENT pinned value is `vendor/foundation.lock.json`'s own `foundation.commit` — never this example. See `docs/specs/unit-pd-vendor-pin-refresh.md` §1.1/§12.15 and `docs/next-steps.md`'s 2026-09-28 PD-VENDOR-PIN-REFRESH doc-review block.⟩
     "measuredAt": "<ISO date of the md5 run>",
     "digestCommand": "md5sum …",              // the command, verbatim, as run (§3.3 item 1)
     "byteIdentity": "byte-identical to the pinned commit's blob at `commit`"
@@ -779,7 +779,7 @@ FOUNDATION TREE** (§2.3 row 1), never about a dependency-free checkout.
 ### 3.3 Computing and recording the digests — the `O-1` procedure
 
 1. **The digest run is a PRE-RED OBLIGATION, and its command is recorded verbatim.** In the foundation tree at
-   `main` = `8f193a8d1446ed1e64c4ab6c569941e988f82459`, run a digest over the fifteen files (e.g. `md5sum
+   `main` = `8f193a8d1446ed1e64c4ab6c569941e988f82459` ⟨SUPERSEDED 2026-09-28 (`PD-VENDOR-PIN-REFRESH`; the contract is `docs/specs/unit-pd-vendor-pin-refresh.md`; anchored annotation, the as-filed revision KEPT VISIBLE): **the PROCEDURE's rule is unchanged — read the revision FIRST and record it in both the command and the manifest (§3.3 item 2) — and only the revision this paragraph names is historical.** The pin now reads `d7b98b574adc7fa63fbabda617eba2a753f52cb5`, so a future digest run takes the tree's CURRENT HEAD and records THAT; §3.3 item 2 governs, never this literal.⟩, run a digest over the fifteen files (e.g. `md5sum
    src/shared/{census,container,focus-model,gesture-session,gutter,gutter-affordance,layout-projection,menu-template,mount-invariant-guard,overlay,owned-list-host,relocate,slot-host,theme,zones}.ts`), capture the
    output, and paste the **command and its output** into the unit's DONE row and the manifest's
    `foundation.digestCommand`.

@@ -1032,7 +1032,7 @@ async function main(): Promise<void> {
   // (`#panes` = SecurePanels, `#operator-panes` = the SidebarPanes operator
   // graph) inside the settings modal + wire the toggle/Escape/scrim affordances.
   // Runs AFTER installShellPointers and after both mounts exist (§2.6).
-  installSettingsModal(host, panels, { panes: 'panes', operatorPanes: 'operator-panes' })
+  installSettingsModal()
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.
