@@ -232,9 +232,14 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 
 const DRIVER_URL = new URL('../scripts/live-drive.mjs', import.meta.url)
 const SRC = readFileSync(DRIVER_URL, 'utf8')
+/** THE REPOSITORY ROOT as the pin's own file URL resolves it (the `§2.3` clause 4
+ *  ignore file and the tracked-file read are both repo-relative surfaces). */
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 // ===========================================================================
 // §0 — source extraction (the BLOCKS table + per-block bodies).
@@ -544,7 +549,21 @@ function maskCode(src: string): string {
 //           3. a SHORT single/double-quoted literal keeps its token (a path
 //              marker like `'zero-box'`), a long one (prose) is masked.
 // ---------------------------------------------------------------------------
+/** ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT.⟩ `stripComments` is a PURE
+ *  `string → string` masking of the text it is handed (it reads nothing else and holds no
+ *  state), so the same input must always produce the same masked text, and every caller
+ *  treats the result as read-only (strings are immutable — a caller can only REPLACE its
+ *  local binding). It is nevertheless the pin's single hottest reader: a character-by-
+ *  character walk over a ~9.5k-line driver source (with `src.split('')` allocating one
+ *  entry per character), reached from every `mockSetCode`/predicate call, per arm, per
+ *  mutation leg. The cache is BOUNDED (the mutated texts are per-leg and never re-read
+ *  after their leg), so peak memory stays at a few driver-sized strings. NO limb reads
+ *  anything different: a cache hit returns the value the uncached body would have returned. */
+const STRIP_COMMENTS_CACHE = new Map<string, string>()
+const STRIP_COMMENTS_CACHE_MAX = 24
 function stripComments(src: string): string {
+  const cached = STRIP_COMMENTS_CACHE.get(src)
+  if (cached !== undefined) return cached
   const out = src.split('')
   let i = 0
   let quote: string | null = null
@@ -569,7 +588,10 @@ function stripComments(src: string): string {
     if (ch === "'" || ch === '"' || ch === '`') quote = ch
     i++
   }
-  return out.join('')
+  const masked = out.join('')
+  if (STRIP_COMMENTS_CACHE.size >= STRIP_COMMENTS_CACHE_MAX) STRIP_COMMENTS_CACHE.clear()
+  STRIP_COMMENTS_CACHE.set(src, masked)
+  return masked
 }
 const CODE_TOKEN_MAX_LITERAL = 44
 function tokenizeCode(src: string): string {
@@ -5728,8 +5750,31 @@ function splitTopLevelCommas(text: string): string[] {
  *  DRIVER's own body, never a re-implementation. Its stub deps carry the three
  *  lookups the driver's `rowResult` performs (`rowIdLiteral`/`dclassLiteral`/
  *  `ufNormalizeClickRecord`) plus `buildFailingClause`, which is asserted
- *  SEPARATELY by `R-3`, so no arm here rests on it. */
+ *  SEPARATELY by `R-3`, so no arm here rests on it.
+ *
+ *  ⟨GATE-4 FIX PASS `2026-10-05` (`F9`) — `rowIdLiteral` IS NO LONGER A PASS-THROUGH
+ *  STUB.⟩ The filed dep was `(id) => id`, while the driver's OWN `rowIdLiteral` returns
+ *  the literal ONLY when the id is a key of `ROW_ID_LITERALS` and `null` otherwise —
+ *  so the stub MASKED exactly the defect this arm exists to grade (an id that is not a
+ *  contract row). THE RULE OF RECORD, quoted from the driver and applied here: a real
+ *  `rowIdLiteral` is built from the driver's own `ROW_ID_LITERALS` enum, and a row id
+ *  outside it falls back to the raw value. `dclassLiteral` keeps its pass-through
+ *  (the §6.1 class enum is asserted by `P-IM-2`'s own dclass arms). */
 type ParkRowFn = (row: string, assertion: string, dclass: string, reason: string, evidence: unknown, opts?: unknown) => Record<string, unknown>
+function rowIdLiteralFrom(src: string): (id: unknown) => unknown {
+  const m = /(?:^|\n)(?:export\s+)?const\s+ROW_ID_LITERALS\s*=\s*\{/.exec(src)
+  if (m === null) return (id: unknown) => id
+  const braceAt = src.indexOf('{', m.index + m[0].length - 1)
+  const raw = braceAt < 0 ? '' : scanBalancedRegion(src, braceAt)
+  let table: Record<string, unknown> = {}
+  try { table = new Function(`return (${raw})`)() as Record<string, unknown> } catch { return (id: unknown) => id }
+  return (id: unknown) => (Object.prototype.hasOwnProperty.call(table, String(id)) ? table[String(id)] : null)
+}
+/** THE BALANCED REGION OF A BRACE/PAREN, as the pin's own `scanBalanced` resolves it. */
+function scanBalancedRegion(src: string, start: number): string {
+  const end = scanBalanced(src, start)
+  return end < 0 ? '' : src.slice(start, end + 1)
+}
 function parkRowEvaluatedFrom(src: string): ParkRowFn | null {
   const grab = (name: string): string => {
     const m = new RegExp(`(?:export\\s+)?function\\s+${name}\\s*\\(`).exec(src)
@@ -5746,7 +5791,7 @@ function parkRowEvaluatedFrom(src: string): ParkRowFn | null {
   const rowResult = evaluatePureFunction<(id: unknown, a: string, e: string, o?: unknown) => Record<string, unknown>>(rowSrc, 'rowResult', {
     NO_EXTRA_FIELDS: null,
     buildFailingClause: () => null,
-    rowIdLiteral: (id: unknown) => id,
+    rowIdLiteral: rowIdLiteralFrom(src),
     dclassLiteral: (c: unknown) => c,
     ufNormalizeClickRecord: (r: unknown) => r,
   })
@@ -5956,14 +6001,32 @@ describe('R-12 driver verdict integrity — the third gate-4 pass\'s three BLOCK
       offences,
       'C-1 — a park must produce a REPORT ROW (`row` + `parkReason`), never a result the report\'s own guard discards:\n' + offences.join('\n'),
     ).toEqual([])
-    // THE MUTATION THAT MUST FIRE IT: restore the FOUR-param argument order
-    // (`rowResult({ row, dclass }, assertion, evidence, opts)`). The arm must then
-    // report NO offence — if it still does, the arm is not reading the park route.
+    // ⟨GATE-4 FIX PASS `2026-10-05` (`F9`) — THE FILED COMMENT WAS POLARITY-INVERTED
+    // AND IS CORRECTED HERE; THE ASSERTION'S POLARITY IS PROVEN CORRECT AND UNMOVED.⟩
+    // THE FINDING: the filed comment read *"THE MUTATION THAT MUST FIRE IT"* while the
+    // assertion below requires `mutOffences` to be EMPTY under a message that says
+    // *"is NOT discriminated by this arm"* — i.e. the arm DEMANDS the mutation NOT fire.
+    // THE READING OF RECORD, ESTABLISHED BY EVALUATING BOTH FORMS (never by assuming):
+    // THE MUTATION IS A **PROVEN NO-OP** UNDER THIS ARM'S OWN STUB. The arm builds
+    // `rowResult` and `parkRow` through `parkRowEvaluatedFrom`, whose `rowResult` deps
+    // are pass-throughs with NO `park`/`parkReason` propagation. Replacing
+    // `rowResult(row, assertion, dclass, evidence, opts)` by
+    // `rowResult({ row, dclass }, assertion, evidence, opts ?? {})` therefore maps the
+    // SAME five values to the SAME positions, so every call site returns the IDENTICAL
+    // `row`/`parkReason` pair — `mutOffences === []` IS THE CORRECT EXPECTATION, and an
+    // inverted assertion would be the WEAKENING (it could be satisfied by an arm that
+    // reads nothing). WHAT THE ARM ACTUALLY GRADES: (i) `parkRow`'s own five-value →
+    // four-parameter RESOLUTION (each call site is exercised at its own arity and must
+    // yield a `typeof res.row === 'string'` id + a non-empty `parkReason`, which is what
+    // `ufPushRows`' guard and the report's `parkReason` field require), and (ii) the
+    // push guard and the classifier. IT DOES NOT GRADE AN ARITY/ORDER REGRESSION AT A
+    // CALL SITE — the filed comment claimed it did. THAT TOOTH IS ADDED IMMEDIATELY
+    // BELOW (`C-1.ii`), so the corrected comment is true of the arm as landed.
     const mutated = SRC.replace(
       /const r = rowResult\(row, assertion, dclass, evidence, opts\)/,
       'const r = rowResult({ row, dclass }, assertion, evidence, opts ?? {})',
     )
-    expect(mutated, 'the C-1 mutation (the corrected 4-param argument order) could not be built').not.toBe(SRC)
+    expect(mutated, 'the C-1 no-op mutation could not be built').not.toBe(SRC)
     const mutFn = parkRowEvaluatedFrom(mutated)
     expect(mutFn, 'the C-1 mutation must stay evaluable').not.toBe(null)
     const mutOffences = parkRowCallArgs(mutated).map(splitTopLevelCommas).flatMap((args) => {
@@ -5980,8 +6043,56 @@ describe('R-12 driver verdict integrity — the third gate-4 pass\'s three BLOCK
     })
     expect(
       mutOffences,
-      `the C-1 mutation (the corrected 4-param argument order) is NOT discriminated by this arm — the arm does not read the park route: ${mutOffences.join('; ')}`,
+      `the C-1 mutation (the corrected 4-param argument order) is NOT discriminated by this arm — it is a PROVEN NO-OP under the arm's own stubbed \`rowResult\`, so an offence HERE means the stub or the call sites moved, not that the arm reads the park route: ${mutOffences.join('; ')}`,
     ).toEqual([])
+    // C-1.ii ⟨GATE-4 FIX PASS `2026-10-05` (`F9`) — THE MISSING TOOTH.⟩ A REAL ARITY/
+    // ORDER REGRESSION AT A CALL SITE: the five-value park form becomes the four-value
+    // row form `rowResult({ row, dclass }, assertion, evidence, opts)` — the exact defect
+    // the driver's own `parkRow` docblock records (the park's id lands in `id.row` as
+    // `undefined`, `ufPushRows`' guard SKIPS the result, and the park prints no
+    // `verdict=PARKED` ROW line). The arm's OWN per-site predicate must report it.
+    // THE REGRESSION AND WHY IT IS THIS ONE: the driver's own docblock records that
+    // the defect was a call reading ONE convention through the OTHER — `id.row` read
+    // `undefined`, `ufPushRows`' guard SKIPPED the result, and the park printed a
+    // `PARK` line with NO `verdict=PARKED` ROW line and NO §6.1 report row. A
+    // regression that only MOVES the id (`rowResult({ row, dclass }, …)` with the row
+    // still reaching the `id` slot as a string) is a PROVEN NO-OP: `rowResult` accepts
+    // both conventions and `id.row` still reads the row id — MEASURED on all four call
+    // sites, each returning the SAME `row`/`parkReason`. THE OBSERVABLE ONE IS THE
+    // CROSS-CONVENTION MIX-UP: the FIVE-value park call resolved through the
+    // FOUR-parameter shape's `(id, assertion, evidence, opts)` order, so the caller's
+    // options land in the EVIDENCE slot and the evidence in the fifth — `parkForm`
+    // then reads FALSE for a park call, `row` becomes `id.row` while `id` is a STRING,
+    // and the result carries no row id and no park reason.
+    const arityRegression = SRC.replace(
+      /const r = rowResult\(row, assertion, dclass, evidence, opts\)/,
+      'const r = rowResult(row, assertion, opts, evidence)',
+    )
+    expect(arityRegression, 'the C-1.ii call-site arity regression could not be built').not.toBe(SRC)
+    expect(
+      /rowResult\(row,\s*assertion,\s*opts,\s*evidence\)/.test(arityRegression),
+      'the C-1.ii regression did not reach the resolver\'s own resolution site',
+    ).toBe(true)
+    const regFn = parkRowEvaluatedFrom(arityRegression)
+    expect(regFn, 'the C-1.ii regression must stay evaluable').not.toBe(null)
+    const regOffences = parkRowCallArgs(arityRegression)
+      .map(splitTopLevelCommas)
+      .flatMap((args) => {
+        let res: Record<string, unknown>
+        try {
+          res = (regFn as ParkRowFn)(args[0], args[1], args[2], args[3], args[4], args[5] ?? {})
+        } catch (e) {
+          return [`${String(args[0]).trim().slice(0, 40)} THREW on the call-site regression: ${String(e)}`]
+        }
+        const bad: string[] = []
+        if (typeof res.row !== 'string' || res.row === '') bad.push(`row=${JSON.stringify(res.row)}`)
+        if (typeof res.parkReason !== 'string' || res.parkReason === '') bad.push(`parkReason=${JSON.stringify(res.parkReason)}`)
+        return bad
+      })
+    expect(
+      regOffences.length,
+      'C-1.ii — THE ARITY/ORDER REGRESSION AT THE RESOLVER IS NOT DISCRIMINATED by this arm\'s own per-site predicate: a park resolved through the FOUR-value row form must yield a result `ufPushRows`\' `typeof res.row === \'string\'` guard DISCARDS (no §6.1 report row, no PARKED verdict). A green here is the tooth that cannot bite (F9).',
+    ).toBeGreaterThan(0)
     // THE MUTATION THAT MUST FIRE IT, second limb: a push guard that admits only
     // `U-<n>` ids would still discard the three parked parks (`UF-GNOSIS-5`,
     // `UF-STAGE-AT-7`, `U-EDIT-1-LIVE-6`).
@@ -7639,8 +7750,17 @@ function ufArrowOwnBodyIn(src: string, name: string): string {
     new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*(?:async\\s*)?(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*=>\\s*\\{`),
   )
 }
-/** Every module-level function name in a source (`function f()` or `const f = (…) =>`). */
+/** Every module-level function name in a source (`function f()` or `const f = (…) =>`).
+ *  ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT.⟩ A pure name census of the text it
+ *  is handed, walked once per block and once per reached helper by the repin sweep over a
+ *  ~9.5k-line source — the cost that put the register tally (which drives all four rows a
+ *  SECOND time inside `vitest.config.ts`'s 15 s budget) at the limit. Every call returns its
+ *  OWN `Set`, so a caller that mutates the result cannot poison a later read. */
+const UF_HELPER_CACHE_MAX = 24
+const UF_HELPER_NAMES_CACHE = new Map<string, Set<string>>()
 function ufHelperNamesIn(src: string): Set<string> {
+  const cached = UF_HELPER_NAMES_CACHE.get(src)
+  if (cached !== undefined) return new Set(cached)
   const out = new Set<string>()
   const re = /(?:^|\n)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(|(?:^|\n)(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/g
   let m: RegExpExecArray | null
@@ -7648,19 +7768,41 @@ function ufHelperNamesIn(src: string): Set<string> {
     const name = m[1] ?? m[2]
     if (name) out.add(name)
   }
+  if (UF_HELPER_NAMES_CACHE.size >= UF_HELPER_CACHE_MAX) UF_HELPER_NAMES_CACHE.clear()
+  UF_HELPER_NAMES_CACHE.set(src, new Set(out))
   return out
 }
+/** ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT (`ufHelperNamesIn`'s reasoning).⟩ The
+ *  body of one named helper is a pure read of `(src, name)`; the key is TWO-LEVEL so the outer
+ *  lookup hashes only the source (whose hash the engine caches) and never re-hashes a driver-
+ *  sized composite string. */
+const UF_HELPER_BODY_CACHE = new Map<string, Map<string, string>>()
 function ufHelperBodyIn(src: string, name: string): string {
+  let inner = UF_HELPER_BODY_CACHE.get(src)
+  if (inner === undefined) {
+    if (UF_HELPER_BODY_CACHE.size >= UF_HELPER_CACHE_MAX) UF_HELPER_BODY_CACHE.clear()
+    inner = new Map<string, string>()
+    UF_HELPER_BODY_CACHE.set(src, inner)
+  }
+  const cached = inner.get(name)
+  if (cached !== undefined) return cached
   // A `const <name> = (…) => { … }` is NOT a `function <name>(`, and the driver's own
   // PROSE names both forms — so the DECLARATION form is preferred and the ARROW form is
   // the fallback, and a declaration-form miss (an unclosed paren in a comment) falls
   // through rather than returning an empty body.
   const own = ufHelperOwnBodyIn(src, name)
-  if (own !== '') return own
-  return ufArrowOwnBodyIn(src, name)
+  const body = own !== '' ? own : ufArrowOwnBodyIn(src, name)
+  inner.set(name, body)
+  return body
 }
-/** The `BLOCKS` key census of a source, by the pin's own two-space-indented entry form. */
+/** The `BLOCKS` key census of a source, by the pin's own two-space-indented entry form.
+ *  ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT.⟩ A pure read of the text (a line
+ *  split plus one regex per line), walked once per block by the repin sweep and the census.
+ *  Every call returns FRESH entry records, so no caller can reach into the cache. */
+const UF_BLOCK_ENTRIES_CACHE = new Map<string, Array<{ name: string; body: string }>>()
 function ufBlockEntriesIn(src: string): Array<{ name: string; body: string }> {
+  const cached = UF_BLOCK_ENTRIES_CACHE.get(src)
+  if (cached !== undefined) return cached.map((e) => ({ name: e.name, body: e.body }))
   const lines = src.split('\n')
   const open = lines.findIndex((l) => /^const BLOCKS = \{/.test(l))
   if (open < 0) return []
@@ -7669,10 +7811,13 @@ function ufBlockEntriesIn(src: string): Array<{ name: string; body: string }> {
   const region = lines.slice(open + 1, close < 0 ? lines.length : close)
   const heads: Array<{ name: string; line: number }> = []
   region.forEach((l, i) => { const m = BLOCKS_HEADER.exec(l); if (m) heads.push({ name: m[1], line: i }) })
-  return heads.map((hd, i) => ({
+  const entries = heads.map((hd, i) => ({
     name: hd.name,
     body: region.slice(hd.line, i + 1 < heads.length ? heads[i + 1].line : region.length).join('\n'),
   }))
+  if (UF_BLOCK_ENTRIES_CACHE.size >= UF_HELPER_CACHE_MAX) UF_BLOCK_ENTRIES_CACHE.clear()
+  UF_BLOCK_ENTRIES_CACHE.set(src, entries)
+  return entries.map((e) => ({ name: e.name, body: e.body }))
 }
 function ufBlockBodyIn(src: string, name: string): string {
   return ufBlockEntriesIn(src).filter((b) => b.name === name).map((b) => b.body).join('\n')
@@ -8994,8 +9139,18 @@ describe('§4 A-5 the runner-membership arm — the park branch is gated by the 
     // THE MUTATION'S OWN BEHAVIOURAL LEG — WHAT THE HAND-LIST-ONLY GATE WOULD DO. The reverted
     // gate COMPILES when the hand-list is in scope, and its DOMAIN is the hand-list: it FIRES on a
     // gated key the hand-list carries and does NOT fire on a gated key it does not, so the
-    // contract's park route is CLOSED for every gated key outside `17`-entry hand-list (`34` gated
-    // keys at this head) — the block runs against an absent fixture instead of parking.
+    // contract's park route is CLOSED for every gated key outside the `17`-entry hand-list.
+    // ⟨RE-STATED `2026-10-05` — THE CROSS-UNIT LANDING OF `§17.1` CLAUSE 2 (`U-MOCK-CORPUS-
+    // FIXTURE-SETS`, UNIT B): the population figure in this note is a READING OF THE DECLARATION,
+    // and the one COLUMN-MOVE (`u_edit_1_live_package_table_limitation`: `selfProvisioning:true`
+    // → `selfProvisioning:false`) moves it. THE RE-STATED FIGURE: THE GATED POPULATION IS `35`
+    // KEYS AT THIS HEAD (`47 − 3 − 9 = 35`, `§16.17`), so the hand-list-only gate's closed
+    // park route is measured against `35` and this arm's own domain legs (`insideList` /
+    // `outsideList`, both derived from the declaration below) are UNCHANGED. THE TOOTH IS KEPT:
+    // the domain leg still asserts a gated key INSIDE the hand-list fires and one OUTSIDE it does
+    // not. SUPERSEDED, KEPT VISIBLE — the as-filed figure, verbatim:
+    //   // contract's park route is CLOSED for every gated key outside `17`-entry hand-list (`34` gated
+    //   // keys at this head) — the block runs against an absent fixture instead of parking.⟩
     const handList = ufHistoricalHandList()
     const revertedGateText = 'pre && pre.present !== true && UF_CORPUS_DEPENDENT_BLOCKS.includes(n)'
     const revertedGate = new Function('n', 'pre', 'UF_CORPUS_DEPENDENT_BLOCKS', `return (${revertedGateText})`) as (
@@ -9649,42 +9804,54 @@ describe('§4 A-8 the run-wide fixture-state arm — one read, FOUR sites, never
       ufRunWideStateOffences(planted).filter((o) => !o.startsWith('limb 9')),
       `A-8: the planted CONTRACTED form is not accepted by the arm's own ten limbs:\n${ufRunWideStateOffences(planted).join('\n')}`,
     ).toEqual([])
-    // ⟨THE OTHER SIDE OF THE CHANGE, MEASURED IN PLACE — AND WITHOUT TOUCHING THE DRIVER.⟩ The
-    // declaration's keyword swapped to `let`, which the arg's ONE late assignment requires (`§7.2`
-    // clause 3): the acceptance control, the one-declaration count, the object's own members, the
-    // `none`-form values and EVERY site limb must hold EXACTLY as they hold on `const`. This is the
-    // pin's own proof that the re-statement admits the post-arg form (`§11.5` clause 1's whole point)
-    // and that no tooth was bought by pinning the keyword; it BITES if a reader is ever narrowed back
-    // to `const`.
-    const letSrc = SRC.replace(declText, declText.replace(/^(?:const|let)\b/, 'let'))
-    expect(letSrc, 'A-8 (`§11.5`): the `let`-form swap could not be built — the driver is not left touched: this is an IN-MEMORY plant').not.toBe(SRC)
+    // ⟨BOTH SIDES OF THE CHANGE, MEASURED IN MEMORY — AND WITHOUT TOUCHING THE DRIVER.⟩ BOTH
+    // contracted forms are built from the one the source really carries — `const` (the pre-arg form
+    // the pin was filed against) and `let` (the form the arg's ONE late assignment requires, `§7.2`
+    // clause 3) — and on EITHER form the acceptance control, the one-declaration count, the object's
+    // own members, the `none`-form values and EVERY site limb must hold EXACTLY as they hold on the
+    // landed source. This is the pin's own proof that the re-statement admits the post-arg driver
+    // (`§11.5` clause 1's whole point) and that no tooth was bought by pinning the keyword; it BITES
+    // if any reader is narrowed back to ONE form. (MEASURED, `2026-10-05`: the FIRST form of this
+    // control swapped `let` INTO the source and so became a NO-OP on a driver already declaring `let`
+    // — it is re-stated SYMMETRICALLY, because a swap that cannot be built reds a UNIT A arm on the
+    // very side it exists to protect.)
+    const declKeyword = /^(?:const|let)\b/.exec(declText)?.[0] ?? ''
     expect(
-      ufFixtureStateDeclCountIn(letSrc),
-      'A-8 (`§11.5` clause 2): the one-declaration count must read 1 on the `let` form too — the count tooth is keyword-agnostic, not keyword-bound',
-    ).toBe(1)
-    expect(
-      ufFixtureStateLiteralIn(letSrc).value,
-      'A-8 (`§11.5` clauses 2/3): the object\'s own members and the `none`-form values must read on the `let` form too — limb 2/2b must be keyword-agnostic',
-    ).toEqual({ state: 'no fixture data set selected', kind: 'none', id: 'none' })
-    expect(
-      ufRunWideStateOffences(letSrc).filter((o) => !o.startsWith('limb 9')),
-      `A-8 (\`§11.5\`): the arm is NOT keyword-agnostic — the \`let\`-form declaration is refused by its own limbs:\n${ufRunWideStateOffences(letSrc).join('\n')}`,
-    ).toEqual([])
-    expect(
-      ufFixtureStateDeclTextIn(letSrc),
-      `A-8 (\`§11.5\`): the RESOLVED declaration text must be the RE-STATED expression in its \`let\` form — read: ${JSON.stringify(ufFixtureStateDeclTextIn(letSrc))}`,
-    ).toBe(UF_FIXTURE_STATE_EXPR.replace(UF_FIXTURE_STATE_KW, 'let'))
+      ['const', 'let'].includes(declKeyword),
+      `A-8 (\`§11.5\`): the landed declaration's keyword (\`${declKeyword}\`, read from \`${declText}\`) is neither of the two contracted forms`,
+    ).toBe(true)
+    const constForm = SRC.replace(declText, declText.replace(/^(?:const|let)\b/, 'const'))
+    const letForm = SRC.replace(declText, declText.replace(/^(?:const|let)\b/, 'let'))
+    expect(constForm, 'A-8 (`§11.5`): the two contracted forms must DIFFER — the keyword is the ONLY part of the declaration this re-statement moves').not.toBe(letForm)
+    for (const [kw, form] of [['const', constForm], ['let', letForm]] as Array<[string, string]>) {
+      expect(
+        ufFixtureStateDeclCountIn(form),
+        `A-8 (\`§11.5\` clause 2): the one-declaration count must read 1 on the \`${kw}\` form — the count tooth is keyword-agnostic, not keyword-bound`,
+      ).toBe(1)
+      expect(
+        ufFixtureStateLiteralIn(form).value,
+        `A-8 (\`§11.5\` clauses 2/3): the object's own members and the \`none\`-form values must read on the \`${kw}\` form — limbs 2/2b must be keyword-agnostic`,
+      ).toEqual({ state: 'no fixture data set selected', kind: 'none', id: 'none' })
+      expect(
+        ufRunWideStateOffences(form).filter((o) => !o.startsWith('limb 9')),
+        `A-8 (\`§11.5\`): the arm is NOT keyword-agnostic — the \`${kw}\`-form declaration is refused by its own limbs:\n${ufRunWideStateOffences(form).join('\n')}`,
+      ).toEqual([])
+      expect(
+        ufFixtureStateDeclTextIn(form),
+        `A-8 (\`§11.5\`): the RESOLVED declaration text must be the RE-STATED expression in its \`${kw}\` form — read: ${JSON.stringify(ufFixtureStateDeclTextIn(form))}`,
+      ).toBe(UF_FIXTURE_STATE_EXPR.replace(UF_FIXTURE_STATE_KW, kw))
+    }
     // ⟨THE FOUR UNIT A MUTATIONS, RE-DRIVEN ON THE `let` FORM.⟩ `§11.5` clause 2's mutation set must
     // bite on the POST-ARG driver exactly as it bites on the landed one: delete a member → limb 2 ·
     // change a value → limb 2b · delete the declaration → limb 1 · delete a site's member → limb 4.
-    // Each plant is built from the `let` source's OWN resolved declaration text, so none of them can
+    // Each plant is built from the `let` form's OWN resolved declaration text, so none of them can
     // no-op into the source unchanged.
-    const letDecl = ufFixtureStateDeclTextIn(letSrc)
-    const letNoId = letSrc.replace(letDecl, letDecl.replace(/,\s*id\s*:\s*'none'/, ''))
-    const letChangedValue = letSrc.replace(letDecl, letDecl.replace("state: 'no fixture data set selected'", "state: 'fixture data set selected'"))
-    const letNoDecl = letSrc.replace(letDecl, '')
-    const letNoSummary = letSrc.replace(ufSummaryLiteral(letSrc), ufSummaryLiteral(letSrc).replace(/^\s*fixture\s*:\s*UF_FIXTURE_STATE\s*,?\s*$/m, ''))
-    expect([letNoId, letChangedValue, letNoDecl, letNoSummary].every((s) => s !== letSrc), 'A-8 (`§11.5`): a `let`-form mutation could not be built — every plant must change the source').toBe(true)
+    const letDecl = ufFixtureStateDeclTextIn(letForm)
+    const letNoId = letForm.replace(letDecl, letDecl.replace(/,\s*id\s*:\s*'none'/, ''))
+    const letChangedValue = letForm.replace(letDecl, letDecl.replace("state: 'no fixture data set selected'", "state: 'fixture data set selected'"))
+    const letNoDecl = letForm.replace(letDecl, '')
+    const letNoSummary = letForm.replace(ufSummaryLiteral(letForm), ufSummaryLiteral(letForm).replace(/^\s*fixture\s*:\s*UF_FIXTURE_STATE\s*,?\s*$/m, ''))
+    expect([letNoId, letChangedValue, letNoDecl, letNoSummary].every((s) => s !== letForm), 'A-8 (`§11.5`): a `let`-form mutation could not be built — every plant must change the source').toBe(true)
     expect(ufRunWideStateOffences(letNoId).some((o) => o.startsWith('limb 2')), 'A-8 (`§11.5` clause 2): on the `let` form, the member-deletion mutation is NOT discriminated by limb 2').toBe(true)
     expect(ufRunWideStateOffences(letChangedValue).some((o) => o.startsWith('limb 2b')), 'A-8 (`§11.5` clause 2/3): on the `let` form, the value-change mutation is NOT discriminated by limb 2b').toBe(true)
     expect(ufRunWideStateOffences(letNoDecl).some((o) => o.startsWith('limb 1')), 'A-8 (`§11.5` clause 2): on the `let` form, the declaration-deletion mutation is NOT discriminated by limb 1').toBe(true)
@@ -11655,12 +11822,64 @@ function mockSetAfterArgvWalk(src: string, statement: string): string {
   return src.replace(walk, `${walk}\n${statement}`)
 }
 
+/** ⟨§21.2 clause 2 — THE SAME PLANT, INSERTED ONLY WHERE THE DRIVER'S OWN TEXT DOES
+ *  NOT ALREADY CARRY IT (`§10.3` clause 4).⟩ A plant that re-inserts a branch the
+ *  driver ALREADY carries in the contracted form makes the source carry TWO copies;
+ *  a limb that must find the contracted naming EXACTLY ONCE then reads a plant the
+ *  contract rejects, and any mutation whose subject is *"the naming removed"* can
+ *  only delete ONE copy — the survivor satisfies the limb and the tooth CANNOT BITE.
+ *  IDEMPOTENCE IS NOT A RELAXATION: the plant is *"the driver edited into the
+ *  contracted form"*, and on a driver already in that form the edit is a NO-OP, so
+ *  the plant stays the contracted source text either way. A driver that LOST the
+ *  branch takes the plain append arm, and the plant then carries the contracted
+ *  branch the limb grades.
+ *  THE COMPARISON IS BRANCH-SCOPED AND WHITESPACE-INSENSITIVE, AND THAT IS THE WHOLE
+ *  REASON IT EXISTS IN THIS FORM:
+ *    (i)  BRANCH-SCOPED — the statement is the plant's WHOLE refusal block, two of
+ *         whose branch entries are the plant's own copy of LANDED branches whose
+ *         sweep sentences the driver has since re-landed. Requiring the WHOLE block
+ *         to match would re-insert the contracted `S-6` branch on a driver that
+ *         already carries it, which is the duplication this helper exists to prevent.
+ *         The branch whose presence decides the insert is the `S-6` BRANCH ITSELF —
+ *         the one this pass's limb grades (`§21.2` clause 2).
+ *    (ii) WHITESPACE-INSENSITIVE — the driver ANNOTATES its contracted branch with a
+ *         comment block between the guard and the naming declaration (`§21.2`'s own
+ *         ruling note), and the plant is a hand-rendered literal, so neither
+ *         byte-equality nor line-layout equality holds between two copies of the SAME
+ *         contracted code. Comments are blanked (`stripComments`) and every whitespace
+ *         run is collapsed to one space; THE CODE is what is compared. The comparison
+ *         stays SUFFICIENT — every contracted token of the branch must be present, in
+ *         order, before the insert is skipped. */
+function mockSetAfterArgvWalkOnce(src: string, statement: string): string {
+  const code = (text: string): string => stripComments(text).split(/\s+/).join(' ')
+  const at = statement.indexOf('  if (opt.fixture !== null')
+  const s6 = at < 0 ? statement : statement.slice(at)
+  return code(src).includes(code(s6)) ? src : mockSetAfterArgvWalk(src, statement)
+}
+
 /** PLANT a statement at the driver's fixture-state anchor — the plant that lets a
  *  RED-at-this-head arm still show its NAMED MUTATION is discriminated. */
 function mockSetPlanted(src: string, statement: string): string {
-  const at = src.indexOf('const UF_FIXTURE_STATE')
+  // ⟨RE-STATED `2026-10-05` — THE ANCHOR IS KEYWORD-AGNOSTIC (`§7.2` clause 3 +
+  // `§11.5`): the declaration the plant is inserted ABOVE is matched under EITHER
+  // contracted keyword (`const` OR `let`), because the state is assigned ONCE after
+  // the refusal branches and the binding is therefore a `let`. THE TOOTH IS KEPT:
+  // the plant is still inserted IMMEDIATELY ABOVE the ONE module-level declaration,
+  // so a driver with NO such declaration still takes the append arm.⟩
+  // SUPERSEDED, KEPT VISIBLE — the as-filed keyword-bound anchor, verbatim:
+  //   const at = src.indexOf('const UF_FIXTURE_STATE')
+  const at = src.search(/(?:const|let)\s+UF_FIXTURE_STATE\s*=/)
+  // ⟨GATE-4 FIX PASS `2026-10-05` — THE PLANT IS INSERTED ON ITS OWN LINE AT COLUMN
+  // ZERO.⟩ The filed form appended the statement to the END of the preceding line, so a
+  // planted `function …() { … }` had no `\n}` at column zero and the pin's own
+  // module-level body readers (`ufHelperBodyIn`, which resolves a body to the first
+  // line-level `}`) could not read it: the folded limbs then graded an unreadable plant
+  // instead of the contracted shape. The insertion is unchanged in POSITION (immediately
+  // above the ONE declaration) and only gains its own line.
   const stmt = `${statement}\n`
-  return at < 0 ? `${src}\n${stmt}` : src.slice(0, at) + stmt + src.slice(at)
+  return at < 0
+    ? `${src}\n${stmt}`
+    : `${src.slice(0, src.lastIndexOf('\n', at) + 1)}${stmt}${src.slice(src.lastIndexOf('\n', at) + 1)}`
 }
 
 /** THE WHOLE SOURCE CODE, COMMENT-BLANKED — a read of the driver's CODE (a
@@ -11698,7 +11917,54 @@ function mockSetFilesOf(value: unknown): Map<string, string[]> | null {
   }
   return out.size === 0 ? null : out
 }
+/** ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT.⟩ `mockSetInventory` is a PURE
+ *  function of its own argument (it parses the text it is handed and holds no state), and its
+ *  result is READ-ONLY at every one of its call sites (`.files.get/has/keys/values`, `.raw`,
+ *  `.constant` — never a mutation), so returning the same record for the same text cannot
+ *  change any limb's verdict. It is nevertheless on every predicate's hot path (`new Function`
+ *  compilation of each candidate literal, per call, per arm, per leg), and the register tally
+ *  — which drives all four rows a SECOND time — holds a 15 s budget (`vitest.config.ts`). The
+ *  cache is what keeps the two repaired teeth inside it.
+ *
+ *  ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 3: BOUNDED LIKE THE OTHER SIX, AND SAFE TO HAND OUT.⟩
+ *  TWO CLAIMS IN THE REMAND WERE FALSE AND ARE CORRECTED HERE, ANNOTATE-BESIDE:
+ *   (a) THIS CACHE (AND `MOCK_SET_DOCS_CACHE` BELOW) CARRIED NO CAP AND NO EVICTION while
+ *       `STRIP_COMMENTS_CACHE` / `UF_HELPER_NAMES_CACHE` / `UF_HELPER_BODY_CACHE` /
+ *       `UF_BLOCK_ENTRIES_CACHE` each clear at `24` entries. Each arm's mutated source is a
+ *       DISTINCT ~350 KB key, so those two maps accumulated ONE DRIVER-SIZED STRING PER LEG for
+ *       the whole process lifetime. Both now use the SAME discipline as those four
+ *       (`MOCK_SET_READ_CACHE_MAX = 24`, clear-then-set on overflow).
+ *   (b) THE "RE-COPIED PER CALL" READING WAS FALSE FOR THIS READER: it returned the CACHED
+ *       OBJECT IDENTITY (`{constant, files(Map), raw}`), so an in-place mutation by ANY caller
+ *       would have poisoned EVERY later read process-wide (no caller mutates it today — the
+ *       re-audit confirmed the memoisation is verdict-inert — but the discipline, not the current
+ *       call sites, is what a later editor inherits).
+ *  WHAT THE CACHE NOW GUARANTEES, STATED SO IT CANNOT BE MIS-READ: an EXACT-KEY HIT ⇒ a record
+ *  with the SAME VALUE (same `constant`, same `raw`, a `files` Map with the same entries) — never
+ *  a DIFFERENT one; NO CALLER CAN POISON IT (the cached record is never handed out — every read
+ *  returns its OWN record and its OWN `files` Map, so an in-place mutation reaches neither the
+ *  cache nor another caller); and EVICTION RECOMPUTES rather than aliases (a cleared entry is
+ *  re-derived from the text by the same pure parse, which is why the bound cannot move a
+ *  verdict). The cached record is the pin's own `MockSetInventory` shape — nothing else changes. */
+const MOCK_SET_READ_CACHE_MAX = 24
+const MOCK_SET_INVENTORY_CACHE = new Map<string, MockSetInventory | null>()
+/** THE READ'S OWN COPY — the record shape unchanged, the `files` Map FRESH, so a caller's
+ *  `.files.set(...)`/`delete(...)` can never reach the cached record (or a sibling caller). */
+function mockSetInventoryCopy(v: MockSetInventory | null): MockSetInventory | null {
+  return v === null ? null : { constant: v.constant, files: new Map(v.files), raw: v.raw }
+}
 function mockSetInventory(src: string = SRC): MockSetInventory | null {
+  const cached = MOCK_SET_INVENTORY_CACHE.get(src)
+  if (cached !== undefined) return mockSetInventoryCopy(cached)
+  // ⟨GATE-4 FIX PASS `2026-10-05` — THE READ IS LAST-WINS AND THE UNIQUENESS IS THE
+  // CONTRACT'S OWN.⟩ A CONTRACTED PLANT is built by INSERTING a second inventory above
+  // the driver's module-level declaration (`mockSetPlanted`), so a FIRST-MATCH read
+  // resolved the DRIVER's literal and the plant's own edits were never seen — the
+  // folded per-set limbs then graded the wrong object and could not bite. THE LAST
+  // MATCHING CANDIDATE is the one the plant's insertion produced (and is the driver's
+  // own literal for the unplanted source), and `mockSetSetOffences` asserts that the
+  // DRIVER carries exactly ONE such literal, so a duplicate is itself reported.
+  let found: MockSetInventory | null = null
   for (const m of src.matchAll(/(?:^|\n)(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*([{[])/g)) {
     if (!/(?:SET|MOCK|FIXTURE)/i.test(m[1])) continue
     const openAt = src.indexOf(m[2], m.index + m[0].length - 1)
@@ -11709,9 +11975,12 @@ function mockSetInventory(src: string = SRC): MockSetInventory | null {
     const files = mockSetFilesOf(value)
     if (files === null) continue
     if (!MOCK_SET_NAMES.every((n) => files.has(n))) continue
-    return { constant: m[1], files, raw }
+    found = { constant: m[1], files, raw }
   }
-  return null
+  // ⟨ITEM 3(a)⟩ THE BOUND: clear at the cap, THEN set — the four capped readers' own discipline.
+  if (MOCK_SET_INVENTORY_CACHE.size >= MOCK_SET_READ_CACHE_MAX) MOCK_SET_INVENTORY_CACHE.clear()
+  MOCK_SET_INVENTORY_CACHE.set(src, found)
+  return mockSetInventoryCopy(found)
 }
 
 /** ONE SET'S OWN SPAN of the inventory literal — its declared files and content,
@@ -11855,6 +12124,1000 @@ const MOCK_SET_NOT_MATERIALISED = 'no SET was materialised'
  *  `mock-data-set` consequence clause must carry. */
 const MOCK_SET_NON_QUOTABILITY_RE: RegExp = /fixture-fed PASS may NOT be quoted as a live-corpus app reading/
 
+// ===========================================================================
+// GATE-4 (`2026-10-05`) FIX-PASS LIMBS — THE SUB-LIMBS WHOSE SUBJECTS ARE THE
+// FOUR BEHAVIOURS THE GATE-4 REPORT MEASURED AS BROKEN OR UNGRADED (`F1` · `F2` ·
+// `F5` · `F6`), PLUS THE POSITIVE-TARGET HALF OF `F8`.
+// ---------------------------------------------------------------------------
+// REGISTER DISCIPLINE (BINDING — NO FIGURE MOVES): every reader below is folded
+// into the HEAD's own offence list of an ALREADY-NAMED arm, so `k`, the per-row
+// declared terms, `declaredTotal`, `declaredClassB`, `17 + 12 + 11 + 27 = 67`,
+// EXECUTED `57`, the `≤ 100`/`≤ 400`/`≤ 8` caps and the seed `0x20261005` are
+// BYTE-UNMOVED — only the arms' own VERDICTS move. NO `arm(run, N, …)` CALL IS
+// ADDED ANYWHERE BELOW.
+//
+// THE ARMS EACH NEW LIMB RIDES, AND WHY THAT ARM IS ITS HOME:
+//   `print-site:post-assignment` — the observation's THREE PARK MEMBERS are that
+//     arm's own declared subject (`§16.17` item 6 / `§17.4` / `§17.5` clause 1),
+//     so the members' COMPUTATION and the printed field are the same arm's class.
+//   `state-member:id` — the arm whose declared subject is *"a member is missing,
+//     OR the set's identity does not reach `fixtureId`"* (`§11.2`'s STATE-MEMBER
+//     row): the identity's REACH is exactly this limb's subject.
+//   `set-file-list:declared` / `set-shape:inline` — the two arms whose declared
+//     subjects are the sets' own FILE LISTS (`§2.1`) and the per-set CONTENT
+//     PROPERTIES (`§2.2` `P-γ`) respectively.
+//   `repin-completeness:*` — the family whose declared subject is the re-pin set's
+//     COMPLETENESS (`§2.4` clause 1); "the NEW identity is present" is that
+//     subject's positive half, where the filed limbs grade only the OLD family's
+//     ABSENCE.
+//   `citation-repoint:no-dead-path` — the arm whose declared subject is a citation
+//     pointing at the materialised path vs a path a reader would take for the
+//     fixture's supply (`§6.3` clause 3), which is exactly the `.gitignore` file's
+//     own class (a path/citation surface).
+// ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — TWO MORE LIMBS RIDE `print-site:post-assignment`,
+// FOR THE SAME REASON (`ITEM 1` and `ITEM 2`): the gate route's park records are what the
+// observation's THREE PARK MEMBERS are counted over, so (i) the per-EMISSION-SITE read of
+// `ufDriverFailureRows` (`mockSetParkEmissionOffences` — the missing tooth: ONE tagged
+// limb cannot satisfy a limb about every park-emitting path) and (ii) the tag's own
+// ATTRIBUTION read (`mockSetParkAttributionOffences` — the tag only for a FIXTURE reading)
+// are that arm's class. `k` = `8`, `3×print-site`, `declaredTotal` `11`, `67`/`57`, the
+// caps and the seed are BYTE-UNMOVED and NO `arm(run, N, …)` CALL IS ADDED.⟩
+// ===========================================================================
+
+/** `§5.5`'s counting clause + `§16.5` + `§17.4` — THE ROUTE TAG'S ONE SPELLING. */
+const MOCK_SET_PARK_ROUTE_TAG = 'parked-by-fixture-absence'
+
+/** `§2.3` clause 4 / `§1.2` — THE `--fixture` MATERIALISATION ROOT'S ONE
+ *  `.gitignore` LINE. The subject is the ROOT NAME the driver's own content
+ *  declares, never a re-typed spelling of `§2.3` clause 1. */
+const MOCK_SET_IGNORE_URL = new URL('../.gitignore', import.meta.url)
+
+/** `§17.6` clause 1 — THE MATERIALISATION ROOT AS THE DRIVER DECLARES IT: the
+ *  template the root resolver carries (`` `.live-fixture/${id}/` `` →
+ *  `.live-fixture/`). `null` when the driver carries no such resolver, in which
+ *  case the root-name limbs say so by name rather than guessing. */
+function mockSetFixtureRootPrefix(src: string = SRC): string | null {
+  const m = /const\s+UF_MOCK_FIXTURE_ROOT\s*=\s*\([^)]*\)\s*=>\s*`([^`]*)`/.exec(src)
+  if (m === null) return null
+  const prefix = m[1].split('${')[0]
+  return prefix === '' ? null : prefix
+}
+
+/** ONE IDENTIFIER'S OWN DEFINITION — the LAST module-level `function <name>(`,
+ *  `async function <name>(` or `const <name> =` before `at`. The read that lets a
+ *  limb resolve a name the observation's call site passes (`ufBlockClass`) to the
+ *  helper that produces it, so a classification carried by a helper is still read
+ *  at the site that uses it. The brace search runs from the match's own SIGNATURE
+ *  (a declaration whose parameter list spans a line break is matched too). */
+function mockSetHelperRegion(src: string, name: string, at: number): string {
+  const re = new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\(|(?:const|let)\\s+${name}\\s*=`, 'g')
+  let last = -1
+  for (const m of src.matchAll(re)) {
+    // `<= at`: a PLANTED helper is inserted at the anchor line's own start, so its
+    // declaration begins EXACTLY at the offset a caller resolves from the anchor
+    // (`mockSetPlanted`), and an exclusive test would miss precisely the plant.
+    if (m.index !== undefined && m.index <= at) last = m.index
+  }
+  if (last < 0) return ''
+  const open = src.indexOf('(', last)
+  const parenEnd = open < 0 ? -1 : scanBalanced(src, open)
+  const braceAt = src.indexOf('{', parenEnd < 0 ? last : parenEnd)
+  if (braceAt < 0) return ''
+  const body = ufBalancedRegionIn(src, braceAt)
+  return body === '' ? '' : `${src.slice(last)}\n${body}`
+}
+
+/** `§5.5` / `§17.4` clause 3 — THE THREE PARK MEMBERS' OWN FILTER PREDICATES, read
+ *  from the observation helper's OWN local `const <member> = …` declarations. The
+ *  subject is the computation (a member bound to `0` carries no predicate, and is
+ *  reported as unreadable rather than silently passing). */
+interface MockSetParkMember { name: string; line: string; predicate: string | null }
+function mockSetParkMemberPredicates(src: string = SRC): MockSetParkMember[] {
+  // THE DECLARATIONS ARE READ WHEREVER THEY SIT, by their OWN name and their OWN
+  // `list.filter(` value — no enclosing scope has to be resolved, because the three
+  // member names are the observation's own vocabulary. A declaration whose value is
+  // not a `list.filter(…)` (a `0`, a literal) is reported with a `null` predicate and
+  // is an offence: a member that counts nothing cannot be a superset of a member that
+  // counts something. THE VALUE IS READ OVER AS MANY LINES AS IT SPANS (the driver
+  // wraps the third member's second conjunct onto the next line) and the predicate is
+  // read from `list.filter(` to the value's own `).length` terminator.
+  const out: MockSetParkMember[] = []
+  for (const name of ['parked', 'parkedByGate', 'parkedByFixtureAbsence']) {
+    const m = new RegExp(`(?:const|let)\\s+${name}\\s*=\\s*`).exec(src)
+    if (m === null) {
+      out.push({ name, line: '', predicate: null })
+      continue
+    }
+    const valueAt = m.index + m[0].length
+    const lineEnd = src.indexOf('\n', valueAt)
+    const f = src.indexOf('list.filter(', valueAt)
+    if (f < 0 || f > valueAt + 200) {
+      out.push({ name, line: src.slice(valueAt, lineEnd < 0 ? valueAt + 80 : lineEnd).trim(), predicate: null })
+      continue
+    }
+    // THE PREDICATE IS READ TO THE VALUE'S OWN END — `).length` — and NOT through a
+    // brace/paren scanner: the driver's predicates carry REGEX literals
+    // (`=== true &&`), whose `/` a naive scanner reads as a quote and then consumes
+    // the rest of the file, truncating the predicate to `(r`. The terminator is the
+    // expression's own tail, so the read is exact and layout-free.
+    const after = src.indexOf('(', f + 'list.filter'.length)
+    const tail = src.indexOf(').length', after < 0 ? valueAt : after)
+    const predicate =
+      after < 0 || tail < 0
+        ? null
+        : src.slice(after, tail + 1).replace(/^list\.filter/, '').trim()
+    out.push({
+      name,
+      line: src.slice(valueAt, lineEnd < 0 ? valueAt + 120 : lineEnd).trim(),
+      predicate,
+    })
+  }
+  return out
+}
+
+/** `§5.5`'s counting clause (the counting route) — THE PREDICATE'S OWN CONJUNCTS.
+ *  `gated` is the predicate's membership test over the gated declared population,
+ *  whatever the driver's own set/array name for it is (a set of KEYS or of block
+ *  RECORDS — either shape counts `.block` in its member test). */
+interface MockSetParkConjuncts { park: boolean; gated: boolean; tag: boolean; gateRoute: boolean }
+function mockSetParkConjunctsOf(predicate: string | null): MockSetParkConjuncts {
+  const p = predicate ?? ''
+  return {
+    park: /\bpark\s*===\s*true/.test(p),
+    gated: /\.includes\s*\(\s*(?:r|[A-Za-z_$][\w$]*)\s*\.?\s*block\b/.test(p) || /\.some\s*\(\s*\(?[A-Za-z_$][\w$]*\)?\s*=>[\s\S]{0,60}block\b/.test(p),
+    tag: /parkRoute\s*===\s*['"]/.test(p),
+    gateRoute: /\bgateRoute\b/.test(p),
+  }
+}
+
+/** `§2.1` — THE FILE CENSUS THE CONTRACT ITSELF ASSERTS (`§16.17` item 1): the
+ *  per-set file list as `§2.1`'s own table spells it, WITH ITS FILE NAMES. These
+ *  are the CONTRACT'S constants — never the driver's own inventory, which would be
+ *  a self-oracle. */
+const MOCK_SET_EXPECTED_FILES: Record<string, string[]> = {
+  core: ['alpha.md', 'beta.md', 'gamma.md'],
+  table: ['alpha.md', 'beta.md', 'gamma.md', 'table.md'],
+  search: ['alpha.md', 'beta.md', 'gamma.md'],
+  tabs: ['alpha.md', 'beta.md', 'gamma.md', 'search.md'],
+  empty: [],
+}
+
+/** `§2.2` `P-γ` — THE SETS THAT CARRY THE INLINE ELEMENT (the property's own
+ *  distribution, `§16.17` item 1's *"the inline element is gone"* and `§2.2`'s
+ *  `F-1 · F-2 · F-3 · F-4` cell). `empty` carries NO document and is therefore NOT
+ *  in the distribution: `§17.1`'s column-move is the only membership change the
+ *  second loop made, and it is not this property's.
+ *  ⟨GATE-4 `2026-10-05` — THE DISTRIBUTION IS THE CONTRACT'S `>= 1` PER SET, NOT
+ *  `>= 1` ACROSS THE FOUR: the filed `set-shape:inline` limb graded the second
+ *  reading, under which a landing that kept the inline element in `core` ALONE was
+ *  green. `§2.2`'s P-γ cell names four sets and `§11.2`'s SET-SHAPE row names *"the
+ *  inline element is gone"* as ONE of the three per-set content properties.⟩ */
+const MOCK_SET_INLINE_SETS: string[] = ['core', 'table', 'search', 'tabs']
+
+/** `§2.2` `P-α`'s EXACT-TITLE PAIR: the two selectors the alpha/beta rows match. */
+const MOCK_SET_ALPHA_BETA_TITLES: RegExp[] = [/alpha/i, /beta/i]
+
+/** `§2.2` `P-α` — ONE SET'S DOCUMENTS, EVALUATED AS PURE DATA: its declared file
+ *  list and its own content literal, per file. The read the `P-α`/`P-γ` limbs grade.
+ *  Only literals whose own key set carries all five contracted names are read (the
+ *  same bounded scan `mockSetInventory` uses). */
+interface MockSetDocs { files: string[]; docs: Map<string, string> }
+/** ⟨GATE-4 REMAND `2026-10-05` — MEMOISED, VERDICT-INERT.⟩ The same reasoning as
+ *  `MOCK_SET_INVENTORY_CACHE`: a pure parse of `(src, set)`, read-only at every call site, on
+ *  the per-set limbs' hot path (four `new Function` parses per call, several calls per arm).
+ *  ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 3, THE SAME TWO CORRECTIONS, ANNOTATE-BESIDE.⟩
+ *  (a) NO CAP AND NO EVICTION was the filed state of this too, in the very leg that keys on
+ *  `(set, src)` — so it accumulated FOUR driver-sized keys per distinct source, one per set
+ *  (`${set}\u0000${src}`) × the per-leg mutated texts. It now clears at `MOCK_SET_READ_CACHE_MAX`
+ *  (`24`, the four other capped readers' discipline). (b) IT RETURNED THE CACHED OBJECT IDENTITY
+ *  `{files, docs(Map)}`, so one in-place mutation by a caller would have poisoned every later
+ *  read; each read now returns ITS OWN `files` array and ITS OWN `docs` Map.
+ *  WHAT IT GUARANTEES: exact-key ⇒ the same VALUE (same file list, same per-file content, `null`
+ *  stays `null` — the recorded absence of a set's documents is a value too); no caller can poison
+ *  it (nothing cached is handed out); eviction RECOMPUTES rather than aliases. */
+const MOCK_SET_DOCS_CACHE = new Map<string, MockSetDocs | null>()
+/** THE READ'S OWN COPY — the `docs` Map and the `files` array are both FRESH per read. */
+function mockSetDocsCopy(v: MockSetDocs | null): MockSetDocs | null {
+  return v === null ? null : { files: [...v.files], docs: new Map(v.docs) }
+}
+function mockSetDocsOf(src: string, set: string): MockSetDocs | null {
+  const cached = MOCK_SET_DOCS_CACHE.get(`${set}\u0000${src}`)
+  if (cached !== undefined) return mockSetDocsCopy(cached)
+  // LAST-WINS, for the same reason `mockSetInventory` is: a contracted plant inserts a
+  // SECOND inventory literal, and the plant's own content is what a folded limb grades.
+  let found: MockSetDocs | null = null
+  for (const m of src.matchAll(/(?:^|\n)(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*([{[])/g)) {
+    if (!/(?:SET|MOCK|FIXTURE)/i.test(m[1])) continue
+    const openAt = src.indexOf(m[2], m.index + m[0].length - 1)
+    const raw = openAt < 0 ? '' : ufBalancedRegionIn(src, openAt)
+    if (raw === '') continue
+    let value: unknown
+    try { value = new Function(`return (${raw})`)() } catch { continue }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) continue
+    const rec = value as Record<string, unknown>
+    if (!MOCK_SET_NAMES.every((n) => n in rec)) continue
+    const entry = rec[set]
+    if (entry === null || typeof entry !== 'object') continue
+    const e = entry as Record<string, unknown>
+    const files = Array.isArray(e.files) ? e.files.filter((f): f is string => typeof f === 'string') : []
+    const docs = new Map<string, string>()
+    if (e.docs !== null && typeof e.docs === 'object' && !Array.isArray(e.docs)) {
+      for (const [k, v] of Object.entries(e.docs as Record<string, unknown>)) if (typeof v === 'string') docs.set(k, v)
+    }
+    found = { files, docs }
+  }
+  // ⟨ITEM 3(a)⟩ THE BOUND, the same clear-then-set discipline as the inventory reader.
+  if (MOCK_SET_DOCS_CACHE.size >= MOCK_SET_READ_CACHE_MAX) MOCK_SET_DOCS_CACHE.clear()
+  MOCK_SET_DOCS_CACHE.set(`${set}\u0000${src}`, found)
+  return mockSetDocsCopy(found)
+}
+
+/** ONE DOCUMENT'S TITLE-BEARING LINE — the `# <title>` a tab strip paints, which
+ *  is what `uf_tabs_4`'s selector matches by exact title (`§2.2` `P-α`). */
+function mockSetDocTitle(text: string): string | null {
+  const m = /^#\s+(.+?)\s*$/m.exec(text)
+  return m === null ? null : m[1]
+}
+
+/** `§2.2` `P-γ` — THE CLOSED NODE-TYPE SET'S OUTSIDE: an inline element the
+ *  decomposer's closed set does not carry. */
+const MOCK_SET_INLINE_RE: RegExp = /<\/?(?:b|i|em|strong|u|mark|sub|sup|small|span)[\s>]/i
+
+/** ⟨GATE-5 RULING `2026-10-05` — `§2.2` `P-β`'s BINDING CONTENT FORM IS THE
+ *  PARSER-MEDIATED ONE.⟩ A GFM PIPE TABLE as the app's own markdown import reads it:
+ *  a HEADER ROW, a DELIMITER ROW (`---`, optionally colon-aligned, at least two dashes
+ *  per cell) and at least one BODY ROW. This is the form the app's importer PRESERVES
+ *  and decomposes into `:table:` / `:thead:` / `:th:` / `:tr:` / `:td:` nodes
+ *  (`§22.2` item 3 clause 1). THE RAW-`<table>`-LITERAL READING IS `SUPERSEDED` (its
+ *  carrier list is `MOCK_SET_RAW_TABLE_RE` below, read only to NAME the raw-HTML-only
+ *  state the limb rejects): the app's import DROPS raw HTML ENTIRELY (element +
+ *  content), so a stored raw `<table>` literal satisfies the OLD source-string shape
+ *  while creating NO TABLE NODE — and a source-string shape the app's own supply route
+ *  discards cannot deliver the contracted end state. */
+const MOCK_SET_PIPE_TABLE_RE: RegExp =
+  /(?:^|\n)[ \t]*\|[^\n|]*\|[^\n]*\n[ \t]*\|[ \t]*:?-{2,}:?[ \t]*\|(?:[ \t]*:?-{2,}:?[ \t]*\|)*[ \t]*\n[ \t]*\|[^\n|]*\|/
+
+/** THE `SUPERSEDED` RAW-`<table>`-LITERAL READING'S OWN PREDICATE, KEPT SO THE
+ *  `set-shape:table` OFFENCE CAN NAME THE STATE IT REJECTS (`§22.2` item 3 clause 2).
+ *  It is NOT the limb's reading of record any more: a set carrying the raw form ALONE
+ *  now REDs (`MOCK_SET_PIPE_TABLE_RE` finds no table-bearing content in it), which is
+ *  the ruling's own requirement — the raw form no longer delivers the contracted end
+ *  state, so it may not be accepted as SUFFICIENT. */
+const MOCK_SET_RAW_TABLE_RE: RegExp = /<table[\s>]/
+
+/** `§5.5`'s counting clause / `§17.4` clause 3 / `§16.5` — THE (PARK SET, ROUTE
+ *  TAG) PAIR, GRADE-ABLE BECAUSE THE ROUTE TAG RIDES EVERY CLASSIFIED PARK'S
+ *  RECORD. THE OFFENCES, EACH NAMED (the two halves of one behaviour):
+ *   (i)  `:route-tag-on-every-route` — the tag is on the BLOCK-BODY route's record
+ *        (emitted through `parkRow` → `rowResult` → the classification record) AND
+ *        on the GATE route's record (emitted through the two-supply record builder).
+ *        A tag carried by only ONE of the two routes is the defect `F1` measured:
+ *        the member then counts the parks of one route only, so under
+ *        `--fixture=search` it reads `1` where `FA-1` contracts `3`, under `tabs`
+ *        `0` where `FA-2` contracts `1`, and under `empty` `parkedByGate > 0` while
+ *        the ABSENCE member is `0` — the chain FALSE.
+ *   (ii) `:subset-chain` — every member's OWN predicate carries the conjuncts its
+ *        subset position requires, so `parkedByGate ⊆ parkedByFixtureAbsence ⊆
+ *        parked` HOLDS BY CONSTRUCTION over `UF_GATED_DECLARED_KEYS`.
+ */
+function mockSetParkRouteOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const code = mockSetCode(src)
+  const tagRe = /parkRoute\s*:\s*'parked-by-fixture-absence'/
+  const tagReAny = /parkRoute\s*:\s*[^,}\n]*parked-by-fixture-absence/
+  // ---- (i) THE TAG ON EVERY ROUTE'S OWN CLASSIFICATION RECORD ----
+  // THE BLOCK'S OWN BODY: the tag must be ON the options object its own park passes.
+  const bodyParks = [...src.matchAll(/parkRow\s*\(/g)].map((m) => src.slice(m.index ?? 0, (m.index ?? 0) + 2200))
+  const bodyTagged = bodyParks.filter((w) => tagRe.test(w) || tagReAny.test(w))
+  if (bodyParks.length === 0) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'the driver carries NO `parkRow(…)` call at all, so the block-body park route cannot carry the route tag — the (park set, route tag) pair is unreadable and the fixture-absence member has no body route to count (§5.5, §16.5)',
+    })
+  } else if (bodyTagged.length === 0) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the BLOCK-BODY park route carries NO \`parkRoute: '${MOCK_SET_PARK_ROUTE_TAG}'\` tag anywhere (read ${bodyParks.length} \`parkRow(…)\` call(s), none tagged) — the tag must ride the options object the park passes, and the member's computation must count the route REGARDLESS of which route emitted the park (§5.5's counting clause, §16.5)`,
+    })
+  } else {
+    // THE RECORD THE CLASSIFICATION READS: the tag must reach the object the
+    // classification record is taken from. `rowResult` builds a row from its own
+    // options, so a tag that only rides `opts` is DROPPED before the record.
+    const builder = ufHelperBodyIn(src, 'rowResult')
+    const builderCarries = /\bparkRoute\b/.test(builder)
+    if (!builderCarries) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `the row-result builder (\`rowResult\`) does NOT carry \`parkRoute\` on the object it RETURNS — the tag rides the park's options and is DROPPED by the builder, so \`r.parkRoute\` reads \`null\` at the classification record for every block-body park and the member counts none of them (§5.5's counting clause: *"however the park was routed — the gate branch OR the block's own body"*)`,
+      })
+    }
+    // The builder's return must carry the tag from the options, and this file's
+    // reader for it is the ONLY one that could have supplied the body route.
+    if (!/parkRoute\s*:/.test(builder)) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence: 'the row-result builder does not spread the park route onto its returned object (`parkRoute:` absent from its member list) — the tag cannot survive the builder (§16.5)',
+      })
+    }
+  }
+  // THE GATE ROUTE: the record builder that serves the fixture-gate branch must
+  // carry the tag too, or the gate route's parks are invisible to the member.
+  const gateRecords = ufHelperBodyIn(src, 'ufDriverFailureRows')
+  if (!tagRe.test(gateRecords) && !tagReAny.test(gateRecords)) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the FIXTURE-GATE route's record carries NO \`parkRoute: '${MOCK_SET_PARK_ROUTE_TAG}'\` tag — the gate branch parks a block WITHOUT running it on its OWN declared fixture's ABSENCE (§5.5; ` +
+        `\`§16.5\`: *"however the park was routed (the gate branch OR the block's own body)"*), so under \`--fixture=empty\` every gated key parks through this route and the member reads \`0\` while \`parkedByGate > 0\` — the contracted chain \`parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked\` is FALSE`,
+    })
+  }
+  // ---- (ii) THE SUBSET CHAIN, BY CONSTRUCTION ----
+  const members = mockSetParkMemberPredicates(src)
+  const unreadable = members.filter((m) => m.predicate === null)
+  const byName = new Map(members.map((m) => [m.name, m]))
+  const c: Record<string, MockSetParkConjuncts> = {}
+  for (const n of ['parked', 'parkedByGate', 'parkedByFixtureAbsence']) c[n] = mockSetParkConjunctsOf(byName.get(n)?.predicate ?? null)
+  if (unreadable.length > 0) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the observation's park member(s) ${unreadable.map((m) => `\`${m.name}\``).join(', ')} carry NO \`list.filter((r) => …)\` predicate (read: ${unreadable.map((m) => JSON.stringify(m.line)).join('; ')}) — a member that counts nothing cannot be a superset of a member that counts something, so the chain cannot hold (§17.4 clause 3)`,
+    })
+  } else {
+    if (!c.parked.park || !c.parked.gated) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `\`parked\`'s predicate does not carry BOTH its required conjuncts (read park=${c.parked.park}, gated=${c.parked.gated}) — \`parked\` is EVERY park inside the gated declared population, whatever it parked for (§5.5)`,
+      })
+    }
+    if (!c.parkedByGate.park || !c.parkedByGate.gated || !c.parkedByGate.gateRoute) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `\`parkedByGate\`'s predicate does not carry its three conjuncts (read park=${c.parkedByGate.park}, gated=${c.parkedByGate.gated}, gateRoute=${c.parkedByGate.gateRoute}) — it is the GATE branch ALONE over the same gated population, hence a SUBSET of \`parked\` (§17.4 clause 3)`,
+      })
+    }
+    if (!c.parkedByFixtureAbsence.park || !c.parkedByFixtureAbsence.gated) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `\`parkedByFixtureAbsence\`'s predicate is MISSING a conjunct its subset position requires (read park=${c.parkedByFixtureAbsence.park}, gated=${c.parkedByFixtureAbsence.gated}) — the member is the gated keys parked by fixture-absence, so it carries BOTH the park flag and the gated-population membership (§17.4 clause 3)`,
+      })
+    }
+    if (!c.parkedByGate.gated || !c.parkedByFixtureAbsence.gated || !c.parked.gated) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence: 'not all three park members are filtered over the SAME gated population — a member filtered over a different population cannot be ordered by `⊆` against the others (§5.5)',
+      })
+    }
+    // THE CHAIN'S OWN READING OF THE TAG: the absence member's discriminator is the
+    // ROUTE TAG, and the tag must be the contracted spelling.
+    if (c.parkedByFixtureAbsence.tag === false) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `\`parkedByFixtureAbsence\`'s predicate carries no \`parkRoute === '…'\` discriminator at all — the member cannot tell a fixture-absence park from a park for the block's OWN reason, which is the whole (park set, route tag) pair \`§16.11\`/` + `\`§5.5\` \`FA-3\` discriminate (§17.4 clause 3)`,
+      })
+    } else if (!/parkRoute\s*===\s*['"]parked-by-fixture-absence['"]/.test(byName.get('parkedByFixtureAbsence')?.predicate ?? '')) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence: `\`parkedByFixtureAbsence\`'s predicate tags a route other than the contracted \`'${MOCK_SET_PARK_ROUTE_TAG}'\` (§16.5)`,
+      })
+    }
+  }
+  return out
+}
+
+/** `§5.5` / `§16.17` item 6 / `§17.4` clause 2 — THE PRINTED FIELD. The printed
+ *  line carries all three park members TOGETHER, and the third member's field is
+ *  the HYPHENATED \`parked-by-fixture-absence=\` (adopted because it is the driver's
+ *  landed convention: \`parked-by-the-fixture-gate=\` is the label it prints for
+ *  \`parkedByGate\`). The subject is the PRINT SITE's own text, not the member's
+ *  name: a member that reaches the JSON summary and never the printed line leaves
+ *  a reader with two of the three figures (§17.5 clause 1). */
+function mockSetPrintedFieldOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const regions = mockSetPostAssignmentSites(src).map((r) => stripComments(r)).filter((r) => r !== '')
+  const printed = regions.join('\n')
+  const field = 'parked-by-fixture-absence='
+  // THE LINE THE FIELD MUST RIDE: the observation line is the one carrying the
+  // observation's own `parked=` / `blocksRun=` vocabulary. Reading it THIS way keeps
+  // the limb to the print SITES §17.5 names, so a field planted at an unrelated
+  // console.log is not admitted.
+  const line =
+    src
+      .split('\n')
+      .map((l) => stripComments(l))
+      .find((l) => /console\.(?:log|error)\(/.test(l) && /blocksRun=|parked-by-the-fixture-gate=/.test(l)) ?? ''
+  if (line === '') {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'no printed line carries the run observation (neither `blocksRun=` nor the fixture-gate label appears in any `console.log`/`console.error` line) — the derived, conditional split the run actually produced is never printed (§17.6 clause 1)',
+    })
+    return out
+  }
+  if (!printed.includes(field) && !line.includes(field)) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the printed observation line does NOT carry the contracted field \`${field}\` — the value reaches the run's JSON summary ONLY, so the artifact a reader receives prints the other two park members (\`parked=\` and the fixture-gate label) and never the fixture-absence member: §5.5's counting clause contracts *"the printed line carries all three beside \`blocksRun\`"* and §17.4 clause 2 contracts the HYPHENATED field name (§16.17 item 6)`,
+    })
+  }
+  if (!line.includes('blocksRun=')) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence: 'the printed observation line carries no `blocksRun=` beside the park members — §5.5 contracts the three members *"beside `blocksRun`"* (§17.6 clause 1)',
+    })
+  }
+  return out
+}
+
+// ===========================================================================
+// ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 1 (THE BLOCKER: THE MISSING TOOTH) AND
+// ITEM 2 (THE TAG'S OWN ATTRIBUTION). THE READERS BELOW GRADE THE GATE ROUTE'S
+// **EMISSION SITES**, ONE BY ONE, AND THE TAG'S OWN GATE.
+// ---------------------------------------------------------------------------
+// REGISTER DISCIPLINE (BINDING — NO FIGURE MOVES): both readers are folded into the
+// HEAD's own offence list of the ALREADY-NAMED arm `print-site:post-assignment`
+// (`§17.5` clause 1: that arm's declared subject IS the printed run observation's
+// three park members), exactly as the gate-4 fix pass folded the route-tag pair and
+// the printed-field limb into it. So `k` = `8`, `3×print-site`, `P-TP-4`'s declared
+// `11`, `17 + 12 + 11 + 27 = 67`, EXECUTED `57`, the `≤ 100`/`≤ 400`/`≤ 8` caps and
+// the seed `0x20261005` are BYTE-UNMOVED, NO `arm(run, N, …)` CALL IS ADDED, and the
+// distinct-arm count stays `57`.
+//
+// THE MISSING TOOTH, AS THE RE-AUDIT MEASURED IT: `ufDriverFailureRows` emits TWO
+// record shapes — the id-carrying limb (`rowResult`, one per declared row) and the
+// NO-DECLARED-ROW limb (`diagResult`, the §6.1 diagnostic form a block that declares
+// no row id takes). The filed `F1` tooth read the helper's WHOLE body with an
+// EXISTENTIAL test (`/parkRoute\s*:\s*'…'/` over `ufHelperBodyIn(src,'ufDriverFailureRows')`),
+// so ONE tagged occurrence — the id-carrying limb's — satisfied it while the no-id
+// limb returned `diagResult(text)` with NO park and NO tag. `ufCountBlock` then
+// recorded `park:true` (its `diagnostic && /PRECONDITION-FAILED/` conjunct) with
+// `parkRoute:null`, so that park was counted by `parked`/`parkedByGate` and NOT by
+// `parkedByFixtureAbsence`: under `--fixture=empty` the artifact printed
+// `parked-by-the-fixture-gate=1` with `parked-by-fixture-absence=0` and the
+// contracted chain `parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked` was FALSE
+// (`§5.5`'s counting clause; `§16.17` item 6; `§17.4` clause 3).
+// ===========================================================================
+
+/** `§5.5`'s counting clause / `§16.17` item 6 — THE TWO FIXTURE-READING KINDS the member's own
+ *  definition names: a declared fixture read that RESOLVED and came back ABSENT
+ *  (`` `resolved:true` `` in the spec's words — `ufFixturePreconditionRead`'s `empty-corpus`
+ *  and `fixture-missing`). */
+const MOCK_SET_FIXTURE_READ_KINDS: string[] = ['empty-corpus', 'fixture-missing']
+
+/** THE PARK-CARRYING KINDS THAT ARE **NOT** FIXTURE READINGS — DERIVED FROM THE DRIVER'S OWN
+ *  `driverFailureReason` (`preconditionKinds` MINUS the fixture-reading pair), never from a
+ *  re-typed literal list, so a driver that widens or narrows its own precondition vocabulary
+ *  moves THIS read with it. At this head the read is `['engine-absent', 'ECONNREFUSED']`, and
+ *  those are exactly the kinds `ufRecordDriverFailure`'s catch site (route `undefined`,
+ *  `gateRoute:false`) can hand `ufDriverFailureRows`. */
+function mockSetNonFixturePreconditionKinds(src: string = SRC): string[] {
+  const body = stripComments(ufHelperBodyIn(src, 'driverFailureReason'))
+  const m = /preconditionKinds\s*=\s*\[([^\]]*)\]/.exec(body)
+  if (m === null) return []
+  const kinds = [...m[1].matchAll(/'([^']*)'|"([^"]*)"/g)].map((x) => x[1] ?? x[2])
+  return kinds.filter((k) => !MOCK_SET_FIXTURE_READ_KINDS.includes(k))
+}
+
+/** A NAMED declaration whose own literal IS a set of kinds (`const X = ['a','b']` or
+ *  `const X = new Set(['a','b'])`), read ONLY when every value it carries is a fixture-reading
+ *  kind: the discriminant a gate may NAME instead of spelling the pair out. The subject is the
+ *  declaration's own literal, never its name. */
+function mockSetFixtureKindSets(src: string): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const m of src.matchAll(/(?:^|\n)(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(\[[^\]]*\]|new\s+Set\s*\(\s*\[[^\]]*\]\s*\))/g)) {
+    const vals = [...m[2].matchAll(/'([^']*)'|"([^"]*)"/g)].map((x) => x[1] ?? x[2])
+    if (vals.length > 0 && vals.every((v) => MOCK_SET_FIXTURE_READ_KINDS.includes(v))) out.set(m[1], vals)
+  }
+  return out
+}
+
+/** THE §6.1 RECORD BUILDERS ONE EMISSION SITE MAY RETURN THROUGH: the shared verdict builder
+ *  (`rowResult`), the diagnostic form (`diagResult`, the only form that carries NO row id) and
+ *  the park builder (`parkRow`). A name the driver does not declare is simply never enumerated. */
+const MOCK_SET_EMISSION_BUILDERS: string[] = ['rowResult', 'diagResult', 'parkRow']
+
+interface MockSetEmissionSite { builder: string; expr: string; rowless: boolean }
+
+/** ⟨ITEM 1⟩ THE GATE ROUTE'S EMISSION SITES, READ BY SITE AND NOT BY EXISTENCE: every
+ *  `return <builder>(…)` statement of `ufDriverFailureRows`' OWN body (prose blanked by the
+ *  pin's own masking reader, so a comment that merely NAMES a tag is not the tag), each carrying
+ *  THE TEXT OF ITS OWN RETURN — the read that makes a missing limb's offence quotable and makes
+ *  ONE tagged limb unable to satisfy a limb about the other. */
+function mockSetParkEmissionSites(src: string = SRC): MockSetEmissionSite[] {
+  const body = ufHelperBodyIn(src, 'ufDriverFailureRows')
+  if (body === '') return []
+  const out: MockSetEmissionSite[] = []
+  for (const expr of returnedExpressions(body)) {
+    const m = /^([A-Za-z_$][\w$]*)\s*\(/.exec(expr)
+    if (m === null || !MOCK_SET_EMISSION_BUILDERS.includes(m[1])) continue
+    out.push({ builder: m[1], expr, rowless: m[1] === 'diagResult' })
+  }
+  return out
+}
+
+/** ⟨ITEM 1 (THE BLOCKER)⟩ **THE NAMED SUB-LIMB `print-site:park-emission-sites`** —
+ *  `§5.5`'s counting clause / `§16.17` item 6 / `§17.4` clause 3 —
+ *  EVERY PARK-EMITTING PATH OF THE GATE ROUTE CARRIES BOTH THE PARK MEMBER AND THE ROUTE TAG.
+ *  THE READ IS PER SITE: a site is graded on ITS OWN returned call, never on whether the helper
+ *  contains a tagged occurrence anywhere (the filed `F1` tooth's existential read). THE OFFENCES,
+ *  EACH NAMED: (i) a limb exists but carries no `park:` member; (ii) a limb exists but carries no
+ *  `parkRoute: 'parked-by-fixture-absence'` tag (the id-carrying limb's tag does NOT satisfy the
+ *  no-id limb's site); (iii) the §6.1 diagnostic builder does not PROPAGATE the park's
+ *  attribution (`diagResult`'s `...extra` spread is the record's only channel); (iv) the
+ *  no-declared-row limb cannot be read at all (the tooth would be blind, which is the filed
+ *  defect's own shape). */
+function mockSetParkEmissionOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const body = ufHelperBodyIn(src, 'ufDriverFailureRows')
+  if (body === '') {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'the gate route\'s record builder `ufDriverFailureRows` cannot be read at all (no such helper in this source), so NEITHER park-emitting limb of the gate branch can be graded — the fixture-absence member is counted over this builder\'s own records (§5.5\'s counting clause)',
+    })
+    return out
+  }
+  const sites = mockSetParkEmissionSites(src)
+  if (sites.length === 0) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'the gate route\'s `ufDriverFailureRows` exposes NO `return <builder>(…)` emission site, so the (park set, route tag) pair cannot be read one site at a time — read it as the sites it emits (§5.5; §16.17 item 6)',
+    })
+    return out
+  }
+  const tagRe = new RegExp(`parkRoute\\s*:\\s*['"]${MOCK_SET_PARK_ROUTE_TAG}['"]`)
+  const rowGuard = /\brow\s*===\s*null\b[\s\S]{0,240}?\breturn\s+diagResult\s*\(/.test(stripComments(body))
+  if (!sites.some((s) => s.rowless)) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the gate route's NO-DECLARED-ROW limb cannot be read: none of the ${sites.length} emission site(s) of \`ufDriverFailureRows\` returns through the §6.1 DIAGNOSTIC builder (\`diagResult\`), which is the ONE form a block carrying NO declared row id emits (§5.5; §17.4 clause 3)`,
+    })
+  }
+  for (const s of sites) {
+    const hasPark = /\bpark\s*:/.test(s.expr)
+    const hasTag = tagRe.test(s.expr)
+    if (hasPark && hasTag) continue
+    const which = s.rowless
+      ? `NO-DECLARED-ROW (\`${s.builder}\`${rowGuard ? ', the `r.row === null` limb' : ''})`
+      : `DECLARED-ROW (\`${s.builder}\`)`
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `the gate route's ${which} emission site carries ${hasPark ? 'the `park:` member' : 'NO `park:` member'} and ${hasTag ? 'the route tag' : `NO \`parkRoute: '${MOCK_SET_PARK_ROUTE_TAG}'\` route tag`} — every park-emitting path of \`ufDriverFailureRows\` MUST carry BOTH, and each site is graded on ITS OWN returned call (a tag on the OTHER limb does not satisfy this one). READ VERBATIM at this site: ${JSON.stringify(s.expr.slice(0, 170))}${s.expr.length > 170 ? '…' : ''}. WITHOUT the pair, \`ufCountBlock\` records \`park:true\` with \`parkRoute:null\` at this site, so \`parked\`/\`parkedByGate\` count the park and \`parkedByFixtureAbsence\` does not — under \`--fixture=empty\` the printed chain reads \`parked-by-the-fixture-gate=1\` beside \`parked-by-fixture-absence=0\`, which FALSIFIES the contracted \`parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked\` (§5.5's counting clause: *"however the park was routed (the gate branch OR the block's own body)"*; §16.17 item 6; §17.4 clause 3)`,
+    })
+  }
+  // THE RECORD-BUILDING PATH MUST PROPAGATE IT: the diagnostic form's own returned record is
+  // where `ufCountBlock` reads `r.park`/`r.parkRoute`, and its ONLY channel is `...extra`.
+  const diag = stripComments(ufHelperBodyIn(src, 'diagResult'))
+  if (diag === '') {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'the §6.1 diagnostic builder `diagResult` cannot be read (no such helper), so the NO-DECLARED-ROW record\'s own propagation of the park\'s attribution cannot be graded — the classification reads the record THIS builder returns (§5.5)',
+    })
+  } else if (!/\.\.\.\s*extra\b/.test(diag)) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        'the §6.1 diagnostic builder `diagResult` does NOT spread its `extra` argument onto the record it returns (read: no `...extra` in its own body) — a park member and a route tag handed to this builder are DROPPED before `ufCountBlock` reads `r.park`/`r.parkRoute`, so the no-declared-row limb\'s park is counted with `parkRoute:null` however its call site tags it (§5.5; §17.4 clause 3)',
+    })
+  }
+  return out
+}
+
+/** THE TAG'S OWN GATE, READ FROM THE SPREAD THE TAG RIDES: for `...( <cond> ? { … parkRoute: '…' } : {})`
+ *  the CONDITION text before the spread's own top-level `?`; `null` when the tag does not ride a
+ *  readable spread at all (the limb then says so by name instead of guessing). */
+function mockSetTagGateOf(region: string): string | null {
+  const at = region.search(new RegExp(`parkRoute\\s*:\\s*['"]${MOCK_SET_PARK_ROUTE_TAG}['"]`))
+  if (at < 0) return null
+  const spreadAt = region.lastIndexOf('...(', at)
+  if (spreadAt < 0) return null
+  const end = scanBalanced(region, spreadAt + 3)
+  if (end < 0) return null
+  const inner = region.slice(spreadAt + 4, end)
+  let depth = 0
+  let quote: string | null = null
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]
+    if (quote) {
+      if (ch === '\\') { i++; continue }
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue }
+    if (ch === '(' || ch === '[' || ch === '{') depth++
+    else if (ch === ')' || ch === ']' || ch === '}') depth--
+    else if (ch === '?' && depth === 0) return inner.slice(0, i).trim()
+  }
+  return null
+}
+
+/** WHICH FIXTURE-READING DISCRIMINANT A GATE NAMES, read from the gate's OWN text and — when the
+ *  gate CALLS one — from the body of the helper it calls. `null` when the gate names none: the
+ *  three admitted spellings are (i) the two contracted kind literals tested POSITIVELY,
+ *  (ii) a named kind set whose own literal is exactly the contracted pair, (iii) a named
+ *  discriminant helper whose own body reads that pair (or the named set). */
+function mockSetFixtureReadDiscriminant(src: string, gate: string): string | null {
+  const positives = MOCK_SET_FIXTURE_READ_KINDS.filter((k) =>
+    new RegExp(`(?:===|==|\\.includes\\s*\\(|\\.has\\s*\\()\\s*['"]${k}['"]`).test(gate),
+  )
+  if (positives.length === MOCK_SET_FIXTURE_READ_KINDS.length) {
+    return `it tests BOTH contracted fixture-reading kinds positively (${positives.map((k) => `'${k}'`).join(' and ')})`
+  }
+  const sets = mockSetFixtureKindSets(src)
+  const named = [...sets.entries()].find(([n, vals]) => vals.length === MOCK_SET_FIXTURE_READ_KINDS.length && new RegExp(`\\b${n}\\b`).test(gate))
+  if (named !== undefined) return `it reads the named kind set \`${named[0]}\` = ${JSON.stringify(named[1])}`
+  for (const m of gate.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
+    const helper = stripComments(ufHelperBodyIn(src, m[1]))
+    if (helper === '') continue
+    const inside = MOCK_SET_FIXTURE_READ_KINDS.filter((k) => helper.includes(`'${k}'`) || helper.includes(`"${k}"`))
+    const insideSet = [...sets.keys()].some((n) => new RegExp(`\\b${n}\\b`).test(helper))
+    if (inside.length === MOCK_SET_FIXTURE_READ_KINDS.length || (insideSet && inside.length > 0)) {
+      return `it calls \`${m[1]}\`, whose own body reads the fixture-reading discriminant (${inside.map((k) => `'${k}'`).join(', ') || 'the named kind set'})`
+    }
+  }
+  return null
+}
+
+/** ⟨ITEM 2⟩ **THE NAMED SUB-LIMB `print-site:tag-attribution`** — `§5.5` / `§16.17` item 6 /
+ *  `§18.6` clauses 1(i)/2(i) — THE TAG IS APPLIED **ONLY** FOR A FIXTURE READING.
+ *  `ufDriverFailureRows` is reached by TWO routes: the fixture gate's own
+ *  branch (a resolved, absent fixture read) AND `ufRecordDriverFailure`'s catch site (route
+ *  `undefined`). `driverFailureReason` classifies `ECONNREFUSED` and `engine-absent` as
+ *  preconditions TOO, so a tag gated on `preconditionFailed` ALONE would mark a gated key that
+ *  threw on a transport/engine failure as parked-by-fixture-absence although NO fixture read
+ *  resolved — inflating the member and able to falsify `§18.6`'s `EXACTLY {…}` predicates.
+ *  THE OFFENCES, EACH NAMED: (i) the tag does not ride a readable gate; (ii) the gate ADMITS a
+ *  non-fixture precondition kind; (iii) the gate names NO fixture-reading discriminant at all
+ *  (the gate is reported VERBATIM, so the work order is the reading itself). */
+function mockSetParkAttributionOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const sites = mockSetParkEmissionSites(src)
+  const tagRe = new RegExp(`parkRoute\\s*:\\s*['"]${MOCK_SET_PARK_ROUTE_TAG}['"]`)
+  const tagged = sites.filter((s) => tagRe.test(s.expr))
+  if (tagged.length === 0) {
+    out.push({
+      arm: 'print-site:post-assignment',
+      offence:
+        `NO emission site of \`ufDriverFailureRows\` carries the \`${MOCK_SET_PARK_ROUTE_TAG}\` route tag, so the tag's OWN attribution cannot be read at all — the tag must ride every park-emitting path of this builder AND be gated on a FIXTURE READING (§5.5; §16.17 item 6)`,
+    })
+    return out
+  }
+  const nonFixture = mockSetNonFixturePreconditionKinds(src)
+  for (const s of tagged) {
+    const which = s.rowless ? `NO-DECLARED-ROW (\`${s.builder}\`)` : `DECLARED-ROW (\`${s.builder}\`)`
+    const gate = mockSetTagGateOf(s.expr)
+    if (gate === null) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `the route tag at the gate route's ${which} emission site does not ride a READABLE park gate (read: no \`...( <cond> ? { … parkRoute: '${MOCK_SET_PARK_ROUTE_TAG}' } : {})\` spread inside this emission site's own text: ${JSON.stringify(s.expr.slice(0, 170))}${s.expr.length > 170 ? '…' : ''}) — the limb cannot tell a FIXTURE reading from a transport/engine failure, and the member is DEFINED as the gated keys parked because their OWN DECLARED FIXTURE read ABSENT at \`resolved:true\` (§5.5; §16.17 item 6)`,
+      })
+      continue
+    }
+    const admitted = nonFixture.filter((k) => gate.includes(`'${k}'`) || gate.includes(`"${k}"`))
+    if (admitted.length > 0) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `the route tag at the gate route's ${which} emission site is gated by ${JSON.stringify(gate)}, which ADMITS ${admitted.map((k) => `\`${k}\``).join(', ')} — a TRANSPORT/ENGINE precondition that is NOT a fixture reading (the driver's own \`driverFailureReason\` classifies it as a precondition, but no fixture read resolved): such a park is tagged \`${MOCK_SET_PARK_ROUTE_TAG}\` although no declared fixture read came back ABSENT, which inflates the member and can FALSIFY \`§18.6\`'s \`EXACTLY {…}\` predicates (§5.5; §16.17 item 6; §18.6 clauses 1(i)/2(i))`,
+      })
+    }
+    const disc = mockSetFixtureReadDiscriminant(src, gate)
+    if (disc === null) {
+      out.push({
+        arm: 'print-site:post-assignment',
+        offence:
+          `the route tag at the gate route's ${which} emission site rides the gate ${JSON.stringify(gate)}, which names NO FIXTURE-READING DISCRIMINANT — so the tag is applied to EVERY precondition park this builder emits, including a transport/engine failure (the park-carrying non-fixture kinds read from the driver are [${nonFixture.map((k) => `'${k}'`).join(', ')}]). THE CONTRACT: the tag rides a gate that admits ONLY \`${MOCK_SET_FIXTURE_READ_KINDS.map((k) => `'${k}'`).join('` and `')}\` — the two contracted fixture-reading kinds, both of them — spelled as the pair, as a named kind set, or through a named discriminant helper (§5.5's counting clause: *"parked because its OWN declared fixture read absent at \`resolved:true\`"*; §16.17 item 6; §18.6 clauses 1(i)/2(i), whose \`EXACTLY {…}\` members a false park falsifies)`,
+      })
+    }
+  }
+  return out
+}
+
+/** `§11.2`'s STATE-MEMBER row (*"a member is missing, OR the set's identity does not
+ *  reach `fixtureId`"*) + `§7.1` + `§16.12` — THE DERIVATION'S OWN RETURNED `id`.
+ *  The subject is the DERIVATION (the helper the one assignment reads), never the
+ *  module-level literal: the literal is the `none` DEFAULT, and a limb that reads it
+ *  grades the default in BOTH directions (`F5`). */
+function mockSetSetIdentityReachOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const code = mockSetCode(src)
+  // THE ASSIGNMENT SITE: the FIRST `UF_FIXTURE_STATE = …` whose right-hand side is not
+  // an object/array literal — i.e. the ONE derivation the module-level `none` default
+  // is superseded by, read wherever in the file it sits (the module-level declaration
+  // is `let UF_FIXTURE_STATE = { … }` and carries a `{`, so it is never taken for the
+  // derivation).
+  const assignRe = /UF_FIXTURE_STATE\s*=\s*(?!=)([^\n]*)/g
+  let assignAt = -1
+  for (const m of code.matchAll(assignRe)) {
+    const rhs = (m[1] ?? '').trim()
+    if (rhs.startsWith('{') || rhs.startsWith('[')) continue
+    assignAt = m.index ?? -1
+    break
+  }
+  const site = assignAt < 0 ? '' : code.slice(assignAt, assignAt + 240)
+  const m = /=\s*([A-Za-z_$][\w$]*)\s*\(/.exec(site)
+  if (m === null) {
+    out.push({
+      arm: 'state-member:id',
+      offence:
+        'the ONE assignment gives the state no DERIVED value (no helper call at the assignment site) — the set\'s identity cannot reach `fixtureId` from anything (§7.2 clause 3)',
+    })
+    return out
+  }
+  const helper = m[1]
+  // THE DERIVATION'S OWN DEFINITION — read from the WHOLE source (the code-region
+  // slice loses the helper's own declaration whenever the PLANT inserts it above the
+  // module-level declaration, which is the only place a derivation can live).
+  const helperBody = ufHelperBodyIn(src, helper)
+  if (helperBody === '') {
+    out.push({
+      arm: 'state-member:id',
+      offence: `the derivation \`${helper}\`() the assignment reads cannot be resolved — the identity carrier is unreadable (§7.1)`,
+    })
+    return out
+  }
+  const arg = /\(([^)]*)\)/.exec(m[0])
+  const param = arg === null ? '' : arg[1].split(',')[0].trim()
+  // THE IDENTITY CARRIER, read at the RETURN: in the `mock-data-set` branch the
+  // `id` member must be the DERIVATION'S OWN PARAMETER — the parsed set name.
+  const branch = /mock-data-set[\s\S]{0,240}/.exec(helperBody)
+  const branchText = branch === null ? '' : branch[0]
+  const idMember = /(?:^|[{,]\s*)id\s*(?::\s*([^,}\n]+))?/.exec(branchText)
+  if (idMember === null) {
+    out.push({
+      arm: 'state-member:id',
+      offence:
+        `the derivation \`${helper}\`()'s \`mock-data-set\` branch carries no \`id\` member at all — the selected set's identity does not reach \`fixtureId\`, so the artifact names a kind and never a set (§7.1)`,
+    })
+  } else if (param !== '' && !new RegExp(`\\bid\\s*:\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(branchText)) {
+    out.push({
+      arm: 'state-member:id',
+      offence:
+        `the derivation \`${helper}\`() does not RETURN the parsed set name as its \`id\` (read at its \`mock-data-set\` branch: ${JSON.stringify(branchText.replace(/\s+/g, ' ').slice(0, 160))}) — the identity carrier must carry the SELECTION, never a constant, or \`fixtureId\` is the same for every set (§7.1, §11.2's STATE-MEMBER subject)`,
+    })
+  }
+  // THE STATE SENTENCE NAMES THE SET — `§7.1`'s `mock-data-set` form is
+  // `'mock data set <setName> selected'`, so the sentence interpolates the id. The
+  // sentence is read over the WHOLE helper body: the driver writes the `state`
+  // sentence BEFORE the `kind` literal it is tested beside, so a read windowed from
+  // `mock-data-set` onward would see the kind and never the sentence.
+  const sentence = /state:\s*`([^`]*)`/.exec(helperBody)
+  const sentenceText = sentence === null ? '' : sentence[1]
+  if (!/^mock data set \$\{\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?id\s*\}\s*selected$/.test(sentenceText.trim())) {
+    out.push({
+      arm: 'state-member:id',
+      offence:
+        `the derived \`state\` sentence does not NAME the set (read: ${JSON.stringify(sentenceText)}) — §7.1's \`mock-data-set\` form is \`'mock data set <setName> selected'\`, so a reader can attribute a reading to its fixture from the sentence alone`,
+    })
+  }
+  return out
+}
+
+/** `§2.1` / `§16.17` item 1 — THE PER-SET FILE CENSUS AND THE FILE NAMES, graded
+ *  against THE CONTRACT'S CONSTANTS (`MOCK_SET_EXPECTED_FILES`), never against the
+ *  driver's own inventory (a self-oracle would make the limb unfalsifiable). */
+function mockSetFileCensusOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const inv = mockSetInventory(src)
+  if (inv === null) {
+    out.push({
+      arm: 'set-file-list:declared',
+      offence: 'the driver declares NO set inventory, so the per-set file census of §2.1 cannot be read at all',
+    })
+    return out
+  }
+  for (const name of MOCK_SET_NAMES) {
+    const expected = MOCK_SET_EXPECTED_FILES[name] ?? []
+    const got = inv.files.get(name) ?? []
+    if (got.length !== expected.length || expected.some((f) => !got.includes(f)) || got.some((f) => !expected.includes(f))) {
+      out.push({
+        arm: 'set-file-list:declared',
+        offence:
+          `the \`${name}\` set's declared files are ${JSON.stringify(got)}, not the contract's ${JSON.stringify(expected)} (§2.1 F-${MOCK_SET_NAMES.indexOf(name) + 1}, §16.17 item 1) — the file list IS the contract`,
+      })
+    }
+  }
+  return out
+}
+
+/** `§2.2` `P-α` — THE DOCUMENT-COUNT AND TITLE-SHAPE PROPERTY, per set: `>= 3`
+ *  documents with DISTINCT ids, and AT LEAST TWO carrying the titles the alpha/beta
+ *  selectors match (`uf_tabs_4`'s exact-title pair). `P-α` is a property of
+ *  `F-1 · F-2 · F-3 · F-4`. */
+function mockSetAlphaPropertyOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  for (const name of MOCK_SET_INLINE_SETS) {
+    const d = mockSetDocsOf(src, name)
+    if (d === null) {
+      out.push({
+        arm: 'set-file-list:declared',
+        offence: `the \`${name}\` set's documents cannot be read as pure data, so P-α cannot be graded for it (§2.2)`,
+      })
+      continue
+    }
+    if (d.files.length < 3) {
+      out.push({
+        arm: 'set-file-list:declared',
+        offence: `the \`${name}\` set carries ${d.files.length} document(s), fewer than the \`>= 3\` P-α requires (§2.2 P-α)`,
+      })
+    }
+    const ids = d.files.map((f) => f.replace(/\.md$/, ''))
+    if (new Set(ids).size !== ids.length) {
+      out.push({
+        arm: 'set-file-list:declared',
+        offence: `the \`${name}\` set carries DUPLICATE document ids (${ids.join(', ')}) — P-α requires each document to carry a DISTINCT id (§2.2)`,
+      })
+    }
+    const titles = d.files.map((f) => mockSetDocTitle(d.docs.get(f) ?? '')).filter((t): t is string => t !== null)
+    const matched = MOCK_SET_ALPHA_BETA_TITLES.map((re) => titles.some((t) => re.test(t)))
+    const missing = MOCK_SET_ALPHA_BETA_TITLES.map((re, i) => (matched[i] ? null : String(re))).filter((x): x is string => x !== null)
+    if (missing.length > 0) {
+      out.push({
+        arm: 'set-file-list:declared',
+        offence: `the \`${name}\` set carries NO title-bearing document matching ${missing.join(' and ')} — uf_tabs_4's alpha/beta exact-title pair cannot resolve (§2.2 P-α)`,
+      })
+    }
+  }
+  return out
+}
+
+/** `§2.2` `P-γ` — THE INLINE ELEMENT'S PER-SET DISTRIBUTION (`F-1 · F-2 · F-3 ·
+ *  F-4`, `MOCK_SET_INLINE_SETS`). The filed limb grades only that SOME set carries
+ *  it, under which a landing keeping it in \`core\` alone is green. */
+function mockSetInlineDistributionOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const inv = mockSetInventory(src)
+  if (inv === null) {
+    out.push({
+      arm: 'set-shape:inline',
+      offence: 'no set content is declared, so P-γ\'s per-set distribution cannot be read (§2.2)',
+    })
+    return out
+  }
+  const missing: string[] = []
+  for (const name of MOCK_SET_INLINE_SETS) {
+    const d = mockSetDocsOf(src, name)
+    const carries = d === null
+      ? MOCK_SET_INLINE_RE.test(mockSetSpanIn(inv.raw, name))
+      : [...d.docs.values()].some((t) => MOCK_SET_INLINE_RE.test(t))
+    if (!carries) missing.push(name)
+  }
+  if (missing.length > 0) {
+    out.push({
+      arm: 'set-shape:inline',
+      offence:
+        `set(s) ${missing.join(', ')} ${missing.length === 1 ? 'carries' : 'carry'} NO inline element outside the decomposer's closed node-type set — P-γ is carried by F-1 · F-2 · F-3 · F-4 (all four document-carrying sets), so the commit-failure row's fixture is absent under ${missing.length === 1 ? 'that set' : 'those sets'} (§2.2 P-γ)`,
+    })
+  }
+  return out
+}
+
+/** `§2.4` clause 1 — THE POSITIVE-TARGET HALF OF THE RE-PIN (`F8`): the NEW
+ *  identity must be PRESENT, not merely the old one ABSENT. A landing that DELETED
+ *  a target identity instead of re-pointing it satisfies the filed sweep (which
+ *  grades \`/\\.live-corpus/\` alone) and is caught here. */
+const MOCK_SET_REPIN_POSITIVE_TARGETS: Array<{ arm: string; needle: string; note: string }> = [
+  { arm: 'repin-completeness:document-ids', needle: '.live-fixture/core/beta', note: 'R-1/R-2: the beta leaf and the folder label' },
+  { arm: 'repin-completeness:alpha-identity', needle: '.live-fixture/core/alpha', note: 'R-3…R-9, R-12' },
+  { arm: 'repin-completeness:node-ids', needle: '.live-fixture/core/alpha:p:1', note: "R-4's `:p:1` node id" },
+  { arm: 'repin-completeness:docnav-folder', needle: 'data-folder-label=".live-fixture/core"', note: "R-11's folder label" },
+]
+
+function mockSetRepinPositiveOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  for (const t of MOCK_SET_REPIN_POSITIVE_TARGETS) {
+    const hits = t.arm === 'repin-completeness:docnav-folder'
+      ? src.includes(t.needle)
+      : MOCK_SET_REPIN_GROUPS.find((g) => g.arm === t.arm)!.subject.some((b) => mockSetBlockClosure(src, b).includes(t.needle))
+    if (!hits) {
+      out.push({
+        arm: t.arm,
+        offence:
+          `the NEW target identity \`${t.needle}\` is ABSENT from ${t.arm === 'repin-completeness:docnav-folder' ? "the driver's own text" : `the site(s) ${MOCK_SET_REPIN_GROUPS.find((g) => g.arm === t.arm)!.subject.join(', ')}`} (${t.note}) — the re-pin is graded only by the OLD family's absence, so a landing that DELETED the target identity instead of RE-POINTING it is invisible: R-* contracts the NEW identity's PRESENCE (§2.4 clause 2, "every re-pin is by direct string substitution of an IDENTITY")`,
+      })
+    }
+  }
+  return out
+}
+
+/** `§16.7` clause 3 / `R-14`·`R-15` — THE SELF-PROVISIONERS' POSITIVE TARGET: the
+ *  three blocks write through the ROOT RESOLVER, never a `.live-fixture/core/`
+ *  literal. `VERIFIED-BY-READ` at this head: the driver carries
+ *  `ufMockFixtureWritePath` and all three blocks call it. */
+const MOCK_SET_SELF_PROVISIONERS: string[] = ['boot_landing', 'import1', 'ms_store']
+
+function mockSetSelfProvisionerOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  for (const block of MOCK_SET_SELF_PROVISIONERS) {
+    const closure = mockSetBlockClosure(src, block)
+    if (!/ufMockFixtureWritePath\s*\(/.test(closure)) {
+      out.push({
+        arm: 'repin-completeness:self-provisioners',
+        offence: `the self-provisioning \`${block}\` does NOT write through the ROOT RESOLVER (\`ufMockFixtureWritePath\` absent from its own closure) — deleting the resolver instead of routing through it leaves the write path unreadable (§16.7, R-14/R-15)`,
+      })
+    }
+  }
+  return out
+}
+
+/** THE COMMITTED-SURFACE TOOTH: no materialised fixture file may be TRACKED, and
+ *  the ignore line's subject is the root the driver itself declares. Returns the
+ *  tracked paths, or a NAMED read failure (never a silent empty list). */
+function mockSetTrackedFixtureFiles(): { files: string[]; error: string | null } {
+  try {
+    const out = execFileSync('git', ['-C', REPO_ROOT, 'ls-files', '--', '.live-fixture'], { encoding: 'utf8' })
+    return { files: out.split('\n').map((l) => l.trim()).filter((l) => l !== ''), error: null }
+  } catch (e) {
+    return { files: [], error: `the repository's tracked-file list could not be read (\`git ls-files\`): ${String(e)}` }
+  }
+}
+
+/** `§2.3` clause 4 / `§1.2` — THE IGNORE FILE CARRIES **EXACTLY ONE LINE** FOR THE
+ *  MATERIALISATION ROOT, and the root is NOT otherwise exposed as a committed
+ *  surface. The subject is a path/citation surface, which is why this limb rides
+ *  the `citation-repoint` pair. */
+function mockSetIgnoreRootOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const prefix = mockSetFixtureRootPrefix(src)
+  if (prefix === null) {
+    out.push({
+      arm: 'citation-repoint:no-dead-path',
+      offence: 'the driver declares no `UF_MOCK_FIXTURE_ROOT` template, so the materialisation root the ignore file must carry cannot be derived (§2.3 clause 1)',
+    })
+    return out
+  }
+  const name = prefix.replace(/^\.\//, '').replace(/\/+$/, '')
+  let lines: string[] = []
+  try {
+    lines = readFileSync(MOCK_SET_IGNORE_URL, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '' && !l.startsWith('#'))
+  } catch (e) {
+    out.push({
+      arm: 'citation-repoint:no-dead-path',
+      offence: `the repository's ignore file could not be read (${String(e)}) — the materialisation root's ONE line cannot be graded (§2.3 clause 4)`,
+    })
+    return out
+  }
+  const hits = lines.filter((l) => l.replace(/^\//, '').replace(/\/+$/, '') === name)
+  if (hits.length === 0) {
+    out.push({
+      arm: 'citation-repoint:no-dead-path',
+      offence:
+        `\`.gitignore\` carries NO line for the materialisation root \`${name}\` (read ${lines.length} non-comment line(s), none matching) — §2.3 clause 4 contracts *"\`.gitignore\` GAINS EXACTLY ONE LINE for the materialisation root"* (§1.2's ALLOWED surface) so the files are runtime artifacts and NEVER committed product data`,
+    })
+  } else if (hits.length > 1) {
+    out.push({
+      arm: 'citation-repoint:no-dead-path',
+      offence: `\`.gitignore\` carries ${hits.length} lines for the materialisation root \`${name}\` — §2.3 clause 4 contracts EXACTLY ONE (§1.2)`,
+    })
+  }
+  const tracked = mockSetTrackedFixtureFiles()
+  if (tracked.error !== null) {
+    out.push({ arm: 'citation-repoint:no-dead-path', offence: tracked.error })
+  } else if (tracked.files.length > 0) {
+    out.push({
+      arm: 'citation-repoint:no-dead-path',
+      offence: `the materialisation root is exposed as a COMMITTED surface: ${tracked.files.length} tracked path(s) under \`.live-fixture\` (${tracked.files.slice(0, 5).join(', ')}${tracked.files.length > 5 ? ', …' : ''}) — a landing pass that commits a materialised set is a review finding (§2.3 clause 4, §9.2)`,
+    })
+  }
+  return out
+}
+
 
 // ===========================================================================
 // §4 P-IM-6 — THE SETS, THE ARG'S GRAMMAR AND ITS REFUSALS (`§2`, `§3`).
@@ -11876,14 +13139,25 @@ const MOCK_SET_NON_QUOTABILITY_RE: RegExp = /fixture-fed PASS may NOT be quoted 
  *  still proves its NAMED MUTATION is DISCRIMINATED: the plant must be CLEAN under
  *  the arm's own limb, and the mutation must turn it RED. Never the arm's subject:
  *  the arm's subject is `scripts/live-drive.mjs` itself, which is why each of these
- *  arms is RED at the filing head. */
+ *  arms is RED at the filing head.
+ *  ⟨GATE-5 RULING `2026-10-05` — `table`'s own `table.md` IN THIS PLANT CARRIES THE
+ *  PARSER-MEDIATED FORM (`§22.2` item 3): a GFM PIPE TABLE, the form the app's own
+ *  markdown import PRESERVES and decomposes into `:table:`/`:thead:`/`:th:`/`:tr:`/`:td:`
+ *  nodes. THE PLANT IS "THE DRIVER EDITED INTO THE CONTRACTED FORM", so the plant's
+ *  `table.md` moves WITH the contract's form — the raw-`<table>`-literal plant is
+ *  `SUPERSEDED` and is kept VISIBLE in the note below (`RCA-8(c)`). A plant still
+ *  carrying the superseded raw literal would be reported by `mockSetMutation` as
+ *  *"the CONTRACTED PLANT is not accepted by this arm's own limb"*, and the
+ *  `set-shape:table` tooth could then never show its mutation biting.
+ *  ⟨SUPERSEDED — KEPT VISIBLE, the as-filed `table.md` plant entry, verbatim:⟩
+ *    'table.md': '# Table\\n\\nufmockterm\\n\\n<table><tr><td>c</td></tr></table>\\n' */
 const MOCK_SET_PLANT_INVENTORY = [
   "const UF_MOCK_FIXTURE_TERM = 'ufmockterm'",
   "const UF_MOCK_FIXTURE_SETS = {",
   "  core: { files: ['alpha.md', 'beta.md', 'gamma.md'], docs: { 'alpha.md': '# Alpha\\n\\nufmockterm with an <b>inline element</b>\\n', 'beta.md': '# Beta\\n\\nufmockterm\\n', 'gamma.md': '# Gamma\\n\\nufmockterm\\n' } },",
-  "  table: { files: ['alpha.md', 'beta.md', 'gamma.md', 'table.md'], docs: { 'alpha.md': '# Alpha\\n\\nufmockterm\\n', 'table.md': '# Table\\n\\nufmockterm\\n\\n<table><tr><td>c</td></tr></table>\\n' } },",
+  "  table: { files: ['alpha.md', 'beta.md', 'gamma.md', 'table.md'], docs: { 'alpha.md': '# Alpha\\n\\nufmockterm with an <b>inline element</b>\\n', 'beta.md': '# Beta\\n\\nufmockterm\\n', 'gamma.md': '# Gamma\\n\\nufmockterm\\n', 'table.md': '# Table\\n\\nufmockterm\\n\\n| col a | col b |\\n| --- | --- |\\n| c1 | c2 |\\n' } },",
   "  search: { files: ['alpha.md', 'beta.md', 'gamma.md'], docs: { 'alpha.md': '# Alpha\\n\\nno marker here\\n', 'beta.md': '# Beta\\n\\nnothing either\\n', 'gamma.md': '# Gamma\\n\\nplain\\n' } },",
-  "  tabs: { files: ['alpha.md', 'beta.md', 'gamma.md', 'search.md'], docs: { 'search.md': '# Search\\n\\nufmockterm\\n' } },",
+  "  tabs: { files: ['alpha.md', 'beta.md', 'gamma.md', 'search.md'], docs: { 'alpha.md': '# Alpha\\n\\nufmockterm with an <b>inline element</b>\\n', 'beta.md': '# Beta\\n\\nufmockterm\\n', 'gamma.md': '# Gamma\\n\\nufmockterm\\n', 'search.md': '# Search\\n\\nufmockterm\\n' } },",
   "  empty: { files: [], docs: {} },",
   "}",
   "const UF_MOCK_FIXTURE_ROOT = (id) => `.live-fixture/${id}/`",
@@ -11902,7 +13176,34 @@ const MOCK_SET_PLANT_BRANCH = [
 ].join('\n')
 
 /** The refusal branches (`§3.3` `A-1`…`A-4`, `§6.4` `S-6`), planted INSIDE `main`
- *  after the argv walk, beside the three landed refusals. */
+ *  after the argv walk, beside the three landed refusals.
+ *
+ *  ⟨§21.2 clause 1 (`D-2`, greens `B-1`) — THE PLANT IS WIDENED TO THE CONTRACTED
+ *  LINE, IN THE SAME PASS THAT WIDENS THE LIMB.⟩ `§10.3` clause 4 makes the plant
+ *  *"the driver EDITED INTO THE CONTRACTED FORM"*, so the `S-6` branch planted here
+ *  must carry the CONTRACTED text — the naming form the arm's four readings now
+ *  require (`§6.4`'s gate-5 block item 1: name the supplied flag BY ITS OWN NAME,
+ *  value included, with the FAMILY list BESIDE the name). A plant still carrying the
+ *  family-only line would be reported by `mockSetMutation` as *"the CONTRACTED PLANT
+ *  is not accepted by this arm's own limb"* on the plant-clean leg, and the limb's
+ *  named mutation could never show its tooth biting.
+ *  THE CONTRACTED LINE IS THE DRIVER'S OWN, VERBATIM — the same single
+ *  `console.log` the driver prints at `scripts/live-drive.mjs` (`§10.3` clause 4: the
+ *  plant is read by the SAME reader the arm runs; a paraphrase would be a second
+ *  subject).
+ *  ⟨§21.2 clause 1 — THE INSERT IS NOW IDEMPOTENT, AND IDEMPOTENCE IS WHAT LETS THE
+ *  NAMED MUTATIONS BITE.⟩ THE FOUND DEFECT, MEASURED: the plant was inserted BESIDE
+ *  the driver's own `S-6` branch, so the source carried TWO naming lines; a limb that
+ *  must find the contracted naming EXACTLY ONCE reads a plant no landing can satisfy,
+ *  and a mutation whose subject is *"the naming removed"* deletes only one copy — the
+ *  survivor satisfies the limb and the tooth CANNOT BITE. The insert helper
+ *  (`mockSetAfterArgvWalkOnce`) now skips an insert whose CODE the source already
+ *  carries, so the plant is the driver's OWN contracted branch where the driver is
+ *  already in the contracted form. THE PLANT'S TWO OTHER BRANCH ENTRIES STAY AS
+ *  FILED: they are the plant's own copy of the two landed refusals, their text is
+ *  the driver's own, and NOTHING about them is this pass's subject.
+ *  ⟨SUPERSEDED, KEPT VISIBLE — the as-filed family-only branch entry, verbatim:⟩
+ *    "    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.fixture)} with an OBSOLETE SUPPLY flag (--seed= / --corpus-root= / --strict-seed / --o0-corpus=) — two fixture supplies cannot both write the store this run measures; fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1)`)" */
 const MOCK_SET_PLANT_REFUSALS = [
   "  if (opt.badFixtureArg) {",
   "    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.badFixtureArg.text)} ${opt.badFixtureArg.why} — pass --fixture=<core|table|search|tabs|empty> or omit the flag to take the neutral default (no fixture data set selected); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too)`)",
@@ -11916,7 +13217,14 @@ const MOCK_SET_PLANT_REFUSALS = [
   "    return",
   "  }",
   "  if (opt.fixture !== null && (opt.seed !== null || opt.corpusRoot !== null || opt.strictSeed === true || opt.o0Corpus !== null)) {",
-  "    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.fixture)} with an OBSOLETE SUPPLY flag (--seed= / --corpus-root= / --strict-seed / --o0-corpus=) — two fixture supplies cannot both write the store this run measures; fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1)`)",
+  "    const suppliedSupplyFlags = [",
+  "      opt.seed !== null ? `--seed=${JSON.stringify(opt.seed)}` : null,",
+  "      opt.corpusRoot !== null ? `--corpus-root=${JSON.stringify(opt.corpusRoot)}` : null,",
+  "      opt.strictSeed === true ? '--strict-seed' : null,",
+  "      opt.o0Corpus !== null ? `--o0-corpus=${JSON.stringify(opt.o0Corpus)}` : null,",
+  "    ].filter((flag) => flag !== null)",
+  "    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.fixture)} together with ${suppliedSupplyFlags.length > 1 ? 'the OBSOLETE SUPPLY flags' : 'the OBSOLETE SUPPLY flag'} THE RUN ACTUALLY SUPPLIED, NAMED: ${suppliedSupplyFlags.join(' and ')} — this is the offending supply (§21.2: the flag must be named, not only its family); the FAMILY stands beside the name, never in its place (--seed= / --corpus-root= / --strict-seed / --o0-corpus=): two fixture supplies cannot both write the store this run measures, and the artifact must be able to attribute that store to ONE fixture; the empty set is NOT exempt (§6.4 clause 2) and the do-not-seed switch is never a supply and is refused on NO path (§6.4 clause 3); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too)`)",
+  "    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (a selected mock data set alongside an OBSOLETE SUPPLY flag) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))",
   "    process.exitCode = 2",
   "    return",
   "  }",
@@ -11964,11 +13272,13 @@ const MOCK_SET_PLANT_DECLARATION = [
   "  ? `CONSEQUENCE: the rows this run reports were driven against the mock data set ${UF_FIXTURE_STATE.id}; a fixture-fed PASS may NOT be quoted as a live-corpus app reading`",
   "  : UF_FIXTURE_STATE_CONSEQUENCE",
   "function ufMockFixtureGateObservation(classifications) {",
-  "  const parked = 0",
-  "  const parkedByGate = 0",
-  "  const parkedByFixtureAbsence = 0",
-  "  return { declared: 0, parked, parkedByGate, parkedByFixtureAbsence, observed: null, split: '', scope: '' }",
+  "  const list = Array.isArray(classifications) ? classifications : null",
+  "  const parked = list === null ? null : list.filter((r) => r && r.park === true && UF_MOCK_GATED_KEYS.includes(r.block)).length",
+  "  const parkedByGate = list === null ? null : list.filter((r) => r && r.park === true && r.gateRoute === true && UF_MOCK_GATED_KEYS.includes(r.block)).length",
+  "  const parkedByFixtureAbsence = list === null ? null : list.filter((r) => r && r.park === true && r.parkRoute === 'parked-by-fixture-absence' && UF_MOCK_GATED_KEYS.includes(r.block)).length",
+  "  return { declared: 0, parked, parkedByGate, parkedByFixtureAbsence, observed: null, split: `parked=${parked}/0`, scope: '' }",
   "}",
+  "const UF_MOCK_GATED_KEYS = []",
   "function ufMockFixtureStateOf(id) {",
   "  return id === null",
   "    ? { state: 'no fixture data set selected', kind: 'none', id: 'none' }",
@@ -11989,8 +13299,16 @@ const MOCK_SET_PLANT_DECLARATION = [
   "function ufMockFixtureWritePath(name) { return join(ROOT, `.live-fixture/${UF_FIXTURE_STATE.id ?? 'core'}/`, name) }",
 ].join('\n')
 
-/** THE CONTRACTED PLANT ITSELF: the real driver edited into the contracted form. */
+/** THE CONTRACTED PLANT ITSELF: the real driver edited into the contracted form.
+ *  ⟨GATE-4 REMAND `2026-10-05` — DERIVED ONCE, MEMOISED.⟩ The plant is a PURE function of the
+ *  module-constant `SRC` (read once at module load and never mutated), and the 57 arms build
+ *  it once per mutation leg (~150 derivations of a ~9.5k-line string per drive). Re-deriving it
+ *  moved NO verdict — the register tally's own test then TIMED OUT on the cost (15 s budget)
+ *  while every arm's verdict was already green. The cached value is the same string the
+ *  uncached body returns, so no limb reads anything different. */
+let MOCK_SET_CONTRACTED_PLANT_CACHE: string | null = null
 function mockSetContractedPlant(): string {
+  if (MOCK_SET_CONTRACTED_PLANT_CACHE !== null) return MOCK_SET_CONTRACTED_PLANT_CACHE
   let src = SRC
   src = src.replace(/\.live-corpus/g, '.live-fixture/core')
   src = src.replace(/const candidates = \[[^\]]*\]/, "const candidates = ['.live-fixture/table/table', 'defects']")
@@ -12017,7 +13335,7 @@ function mockSetContractedPlant(): string {
     )
   }
   src = mockSetWithArgvLine(src, MOCK_SET_PLANT_BRANCH)
-  src = mockSetAfterArgvWalk(src, MOCK_SET_PLANT_REFUSALS)
+  src = mockSetAfterArgvWalkOnce(src, MOCK_SET_PLANT_REFUSALS)
   src = src.replace(
     '  const ownScratchHome = opt.home === null || opt.connect === true',
     `${MOCK_SET_PLANT_DERIVATION}\n  const ownScratchHome = opt.home === null || opt.connect === true`,
@@ -12030,6 +13348,136 @@ function mockSetContractedPlant(): string {
       "  const parkedByFixtureAbsence = list === null ? null : list.filter((r) => r && r.park === true && r.parkRoute === 'parked-by-fixture-absence' && UF_GATED_DECLARED_KEYS.includes(r.block)).length",
   )
   src = src.replace('    parkedByGate,\n', '    parkedByGate,\n    parkedByFixtureAbsence,\n')
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F1`) — THE CONTRACTED PLANT NOW CARRIES THE ROUTE
+  // TAG ON **EVERY** PARK ROUTE'S OWN RECORD, because the folded sub-limbs grade that
+  // and a plant the contract rejects would be reported by `mockSetMutation` as
+  // *"the CONTRACTED PLANT is not accepted by this arm's own limb"* instead of letting
+  // the NAMED MUTATION bite. THE TWO EDITS BELOW ARE THE CONTRACT'S OWN SHAPE, and the
+  // MUTATIONS that remove them are the limbs' named teeth:
+  //   (i)  the row-result builder SPREADS the tag onto the object it returns (a tag
+  //        riding only the park's `opts` is DROPPED before the classification reads it);
+  //   (ii) the fixture-gate route's record carries the tag beside `parkReason`.
+  src = src.replace(
+    '    parkReason: rowOpts.park === true ? (rowOpts.parkReason ?? null) : null,\n    diagnostic:',
+    '    parkReason: rowOpts.park === true ? (rowOpts.parkReason ?? null) : null,\n    parkRoute: rowOpts.park === true ? (rowOpts.parkRoute ?? null) : null,\n    diagnostic:',
+  )
+  src = src.replace(
+    "          ...(d.preconditionFailed ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ?? 'no further detail'})` } : {}),",
+    "          ...(d.preconditionFailed ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ?? 'no further detail'})`, parkRoute: 'parked-by-fixture-absence' } : {}),",
+  )
+  // ⟨GATE-4 FIX PASS `2026-10-05` — THE CONTRACTED PLANT DOES **NOT** ADD THE PRINTED
+  // FIELD `parked-by-fixture-absence=` (nor any `parked-by-the-fixture-gate=` RUNTIME
+  // field: `VERIFIED-BY-READ`, the driver spells that label in a COMMENT only, and its
+  // runtime text is *"of which parked-by-the-fixture-gate=${…}"*). THE PLANT EDITS THE
+  // DRIVER'S SHAPE UP TO THE CONTRACT AND NO FURTHER: the folded `printed-field`
+  // sub-limb's NAMED MUTATION is what must be exercised for its tooth, and it is
+  // exercised on a plant built for it (the arm's own mutation leg).
+  //
+  // ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 4: THE STATED RATIONALE WAS VOID AND IS
+  // CORRECTED HERE, THE SUPERSEDED WORDING KEPT VISIBLE BELOW (`RCA-8(c)`).⟩ THE FILED
+  // NOTE SAID THE FIELD'S ABSENCE FROM THE PLANT *IS* THE DEFECT `F3` MEASURED, "so a
+  // plant that did [carry it] would MASK the limb's own verdict on `scripts/live-drive.mjs`".
+  // THAT IS NO LONGER TRUE OF THIS PLANT AND AN EDITOR WHO TRUSTED IT COULD RE-BREAK THE
+  // REPAIR BY "RESTORING" A SINGLE-OCCURRENCE DELETION. THE ACTUAL MECHANISM, AS LANDED:
+  //  (a) this plant is built FROM `SRC` (the real driver, read at the top of this file),
+  //      and after the `F3` landing `SRC` ITSELF carries the field (`scripts/live-drive.mjs`'s
+  //      observation line: `…and of which parked-by-fixture-absence=${summary.fixtureGate.parkedByFixtureAbsence}…`),
+  //      so THE PLANT **INHERITS** IT — it does not lack it, and the limb's plant-clean leg
+  //      (`mockSetPrintedFieldOffences(mockSetContractedPlant())`) correctly reads it PRESENT.
+  //  (b) THE TOOTH'S TEETH THEREFORE COME FROM THE MUTATION'S OWN DELETION DISCIPLINE, not
+  //      from the plant's absence: the `print-site:post-assignment` field mutation deletes
+  //      EVERY occurrence of `parked-by-fixture-absence=${summary.fixtureGate.parkedByFixtureAbsence}`
+  //      (`planted.split('…').join('')`) from the SHARED SUBJECT it is handed
+  //      (`mockSetWithPrintedField(mockSetContractedPlant())` — the contracted plant WITH the
+  //      field), so no surviving copy can satisfy the limb. A SINGLE-OCCURRENCE deletion
+  //      (`.replace(…, '')`) removes only ONE copy — the builder's inserted copy OR the
+  //      driver's inherited one, whichever comes first — leaves the other on the line, and the
+  //      limb then CORRECTLY reads the field present: the tooth reports *"NOT discriminated"*
+  //      and the repair silently stops being graded. THAT is the trap this note now names.
+  //  (c) `mockSetWithPrintedField`'s own insertion is still what supplies the subject's
+  //      guaranteed copy (the builder inserts at `of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate}`,
+  //      which the landed driver also carries), so the subject carries the field in BOTH
+  //      driver states — whether or not a later driver edit removes its own copy.
+  // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed rationale, verbatim:⟩
+  //   // ⟨GATE-4 FIX PASS `2026-10-05` — THE CONTRACTED PLANT DOES **NOT** CARRY THE
+  //   // PRINTED FIELD `parked-by-fixture-absence=` (nor any `parked-by-the-fixture-gate=`
+  //   // RUNTIME field: `VERIFIED-BY-READ`, the driver spells that label in a COMMENT only,
+  //   // and its runtime text is *"of which parked-by-the-fixture-gate=${…}"*). THAT IS THE
+  //   // DEFECT `F3` MEASURED — the field is absent from the printed line — so a plant that
+  //   // carried it would MASK the limb's own verdict on `scripts/live-drive.mjs`. THE
+  //   // PLANT THEREFORE EDITS THE DRIVER'S SHAPE UP TO THE CONTRACT AND NO FURTHER: the
+  //   // folded `printed-field` sub-limb's NAMED MUTATION is what must be exercised for its
+  //   // tooth, and it is exercised on a plant built for it (the arm's own mutation leg).⟩
+  MOCK_SET_CONTRACTED_PLANT_CACHE = src
+  return src
+}
+
+/** `§17.4` clause 2 — THE PLANT THAT CARRIES THE PRINTED FIELD the contract requires, built from
+ *  the contracted plant — the SUBJECT the field limb's named mutation is handed, so both legs of
+ *  that tooth grade ONE text.
+ *  ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 4: THE RATIONALE BELOW WAS VOID AND IS CORRECTED,
+ *  THE SUPERSEDED WORDING KEPT VISIBLE (`RCA-8(c)`).⟩ After the `F3` landing the contracted plant
+ *  is built from `SRC`, which ALREADY carries the field, so this builder is NOT what makes the
+ *  subject carry it — it makes the subject carry it in BOTH driver states (its insertion anchor,
+ *  `of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate}`, is one the landed
+ *  driver also carries, so a subject handed to the tooth holds a guaranteed copy whatever a later
+ *  driver edit does). The field limb's teeth come from the MUTATION'S ALL-OCCURRENCE DELETION
+ *  over this subject (see the note at the contracted plant above), never from the plant's absence.
+ *  ⟨SUPERSEDED — KEPT VISIBLE, the as-filed wording, verbatim:⟩
+ *  "THE FIELD'S ABSENCE FROM THE CONTRACTED PLANT IS THE DEFECT `F3` MEASURED, so the contracted
+ *  plant must NOT carry it (a plant that did would MASK the limb's verdict on the real driver) —
+ *  and the field limb's NAMED MUTATION therefore needs its own subject." */
+function mockSetWithPrintedField(src: string): string {
+  return src.replace(
+    /of which parked-by-the-fixture-gate=\$\{summary\.fixtureGate\.parkedByGate\}/,
+    'of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate} and of which parked-by-fixture-absence=${summary.fixtureGate.parkedByFixtureAbsence}',
+  )
+}
+
+/** ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEMS 1/2: THE SUBJECT THE TWO NEW LIMBS CAN ACCEPT.⟩
+ *  THE `F3` PATTERN, FOR THE SAME STRUCTURAL REASON: the CONTRACTED PLANT edits the driver's
+ *  SHAPE up to the contract, and the gate route's NO-DECLARED-ROW limb's own emission is PART
+ *  of that shape — but the filed plant tagged only the id-carrying limb (the `F1` defect the
+ *  re-audit measured is IN the driver), so `mockSetParkEmissionOffences` /
+ *  `mockSetParkAttributionOffences` report the PLANT BY CONSTRUCTION and the two legs of their
+ *  teeth would be mutually exclusive: the plant-clean leg asserts a shape the mutant plant does
+ *  not carry. THIS BUILDER SUPPLIES THE SHAPE THE CONTRACT REQUIRES, and the teeth mutate THIS
+ *  text (which is why the two limb readers' offences are reported against `scripts/live-drive.mjs`
+ *  by the ARM's head, where they are RED at this head, and against the subject below by the
+ *  tooth's plant-clean leg, where they are CLEAN).
+ *  THE TWO EDITS IT MAKES, EACH THE CONTRACT'S OWN:
+ *   (i)  the NO-DECLARED-ROW emission site (`diagResult`) carries the §6.1 record's park member
+ *        AND the route tag, gated on the two contracted FIXTURE-READING kinds (ITEM 1 + ITEM 2);
+ *   (ii) the id-carrying site's tag is gated on the SAME fixture reading (ITEM 2; its `park:`
+ *        member is UNMOVED — a transport park is still a park, `§2.3` `H-4`), so BOTH sites are
+ *        graded on their own attribution and neither masks the other. */
+const MOCK_SET_PARK_EMISSION_NOID_PLAIN =
+  'return diagResult(`${d.marker} — the block carries no declared row id; its verdict is classified, never counted as an app FAIL`)'
+const MOCK_SET_PARK_EMISSION_NOID_TAGGED =
+  'return diagResult(`${d.marker} — the block carries no declared row id; its verdict is classified, never counted as an app FAIL`, ' +
+  "{ park: d.preconditionFailed, preconditionFailed: d.preconditionFailed, driverReason: reason.kind, " +
+  "...(reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing' ? { parkReason: `${reason.kind}: ${reason.detail}`, " +
+  "parkRoute: 'parked-by-fixture-absence' } : {}) })"
+/** THE ID-CARRYING SITE'S GATE, as the contracted plant files it and as the contract requires it:
+ *  the tooth's own anchors, so a mutation edits the very text the plant-clean leg graded. */
+const MOCK_SET_PARK_EMISSION_ID_GATE_FILED = '...(d.preconditionFailed ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ??'
+const MOCK_SET_PARK_EMISSION_ID_GATE_CONTRACTED =
+  "...((reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing') ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ??"
+/** THE ID-CARRYING SITE'S TAG ITSELF, IN ITS TWO SPELLINGS — tagged (the driver's and the
+ *  contracted plant's own text) and untagged — so the MIRROR mutation (`ITEM 1`, mutation 2:
+ *  the tag stripped from the ID site while the no-id site keeps ITS tag) edits the very text the
+ *  plant-clean leg asserted. BOTH are double-quoted strings, so `${…}` stays literal text. */
+const MOCK_SET_PARK_EMISSION_ID_TAG = "(${reason.extra ?? 'no further detail'})`, parkRoute: 'parked-by-fixture-absence'"
+const MOCK_SET_PARK_EMISSION_ID_NO_TAG = "(${reason.extra ?? 'no further detail'})`"
+let MOCK_SET_PARK_EMISSION_PLANT_CACHE: string | null = null
+function mockSetParkEmissionPlant(): string {
+  if (MOCK_SET_PARK_EMISSION_PLANT_CACHE !== null) return MOCK_SET_PARK_EMISSION_PLANT_CACHE
+  let src = mockSetContractedPlant()
+  // (i) THE NO-DECLARED-ROW LIMB'S OWN EMISSION SITE (`ITEM 1` + `ITEM 2`).
+  src = src.replace(MOCK_SET_PARK_EMISSION_NOID_PLAIN, () => MOCK_SET_PARK_EMISSION_NOID_TAGGED)
+  // (ii) THE ID-CARRYING SITE'S OWN GATE (`ITEM 2`).
+  src = src.replace(MOCK_SET_PARK_EMISSION_ID_GATE_FILED, () => MOCK_SET_PARK_EMISSION_ID_GATE_CONTRACTED)
+  MOCK_SET_PARK_EMISSION_PLANT_CACHE = src
   return src
 }
 
@@ -12073,9 +13521,22 @@ function mockSetArmRead(
   offences: Array<{ arm: string; offence: string }>,
   mutation: () => string | null,
 ): string | null {
+  // ⟨GATE-4 FIX PASS `2026-10-05` — EVERY SUB-LIMB REPORTS, NONE MASKS ANOTHER.⟩
+  // The filed form returned the MUTATION's message whenever the tooth complained, and
+  // only otherwise the ARM's own offences — so on an arm whose head is RED and whose
+  // tooth additionally fails its plant-clean leg, the head's offence (the finding the
+  // implementer must green) was never printed. A folded sub-limb makes that masking
+  // routine, so the two are now reported TOGETHER, mutations first. NOTHING ABOUT AN
+  // ARM'S VERDICT MOVES: a GREEN arm still returns `null`, because a clean head with
+  // no mutation complaint yields no message at all.
   const m = mutation()
+  // THE SAME OFFENCE MAY REACH THIS ARM THROUGH MORE THAN ONE FOLD (the head's own
+  // predicate builds its list and a folded sub-limb's list is appended to it; and the
+  // mutation's PLANT-CLEAN leg reports the same strings the head does), so the
+  // messages are DEDUPED ACROSS THE WHOLE SET: a sub-limb's work order is stated once.
   const mine = offences.filter((o) => o.arm === armLabel).map((o) => o.offence)
-  const message = m !== null ? m : mine.length === 0 ? '' : mine.join('; ')
+  const parts = [...new Set([...(m === null ? [] : [m]), ...mine])]
+  const message = parts.join('; ')
   MOCK_SET_ARM_LOG.push({ row, term: armLabel, verdict: message === '' ? 'GREEN' : 'RED', message })
   return message === '' ? null : message
 }
@@ -12101,16 +13562,149 @@ function mockSetMutation(
   predicate: (src: string) => Array<{ arm: string; offence: string }>,
   mutate: (planted: string) => string,
   description: string,
+  // ⟨GATE-4 REMAND `2026-10-05` — REPAIRS (a) AND (b): THE TOOTH'S OWN SUBJECT PLANT.⟩
+  // BOTH legs below grade ONE text: the plant the plant-clean leg asserts IS the text the
+  // mutation edits. THAT IS THE PROPERTY TWO ARMS WERE MISSING. Every other arm's limb reads
+  // a shape the CONTRACTED PLANT carries in the contracted form, so the contracted plant is
+  // its correct subject and this parameter is left at its default — every landed arm is
+  // BYTE-UNMOVED. THE TWO EXCEPTIONS pass their own subject:
+  //   (a) `P-IM-6` arm 7 `set-shape:inline`: the contracted plant OMITS the inline element
+  //       from `search` BY CONSTRUCTION (`MOCK_SET_PLANT_INVENTORY`, `F-3`), so the
+  //       plant-clean leg reports the limb by construction — no driver edit can clear a
+  //       verdict about the PIN'S OWN plant (`mockSetInlineCarryingPlant`);
+  //   (b) `P-TP-4` arm 8 `print-site:post-assignment`: the subject must CARRY the printed
+  //       field the limb grades (`mockSetWithPrintedField(mockSetContractedPlant())`).
+  plant: string = mockSetContractedPlant(),
 ): string | null {
-  const planted = mockSetContractedPlant()
+  const planted = plant
   const clean = predicate(planted).filter((o) => o.arm === armLabel)
   if (clean.length > 0) {
-    return `the CONTRACTED PLANT is not accepted by this arm's own limb: ${clean.map((o) => o.offence).join('; ')}`
+    // ⟨GATE-4 FIX PASS `2026-10-05` — THE PLANT-CLEAN FAILURE NAMES ITSELF, NOT THE
+    // OFFENCES.⟩ The filed form quoted the plant's OWN offence strings, which are NOT the
+    // arm's verdict on the driver (`scripts/live-drive.mjs` is the subject) and are
+    // TEXTUALLY DIFFERENT from it wherever the plant's shape and the driver's diverge —
+    // so the same finding was printed TWICE in the row's counterexample set. THE PLANT'S
+    // SHAPE IS REPORTED BY COUNT AND BY ARM HERE, and its offences are read on demand
+    // (`mockSetShapeOffences(mockSetContractedPlant())` prints every one of them).
+    return `the CONTRACTED PLANT is not accepted by this arm's own limb (${clean.length} offence(s) on the plant, arm \`${armLabel}\`) — the ARM's own verdict on the driver is reported separately; read the plant's offences with the arm's own predicate over \`mockSetContractedPlant()\``
   }
   const mutated = mutate(planted)
   if (mutated === planted) return `the NAMED MUTATION (${description}) could not be built on the contracted plant`
   const fired = predicate(mutated).filter((o) => o.arm === armLabel)
   return fired.length > 0 ? null : `the NAMED MUTATION (${description}) is NOT discriminated by this arm's limb`
+}
+
+/** ⟨GATE-4 REMAND `2026-10-05` — REPAIR (a): THE SUBJECT THE `set-shape:inline` LIMB CAN
+ *  ACCEPT.⟩ `§2.2` `P-γ` is reported by THIS arm's own label, and the CONTRACTED PLANT
+ *  DELIBERATELY OMITS the inline element from `search` (`MOCK_SET_PLANT_INVENTORY`, the
+ *  `F-3` omission the pin's plant note states): a plant carrying the element in all four
+ *  sets would MASK the arm's own verdict on `scripts/live-drive.mjs`. THE CONSEQUENCE FOR
+ *  THE TOOTH IS STRUCTURAL: `mockSetShapeOffences(mockSetContractedPlant())` reports THIS
+ *  limb BY CONSTRUCTION, so the limb's plant-clean leg and its mutation leg were MUTUALLY
+ *  EXCLUSIVE — every contracted-plant leg reads *"the CONTRACTED PLANT is not accepted by
+ *  this arm's own limb"*, a verdict about the PIN'S OWN plant that no driver edit can clear.
+ *  This builder supplies the subject the limb CAN accept: the contracted plant with
+ *  `search`'s own `alpha.md` carrying the element, so ALL FOUR document-carrying sets
+ *  satisfy `P-γ` and the mutation ALONE can turn the limb RED. DERIVED ONCE (`SRC` cannot
+ *  change after module load) — a pure subject builder, and the arm builds it once per leg. */
+let MOCK_SET_INLINE_CARRYING_PLANT: string | null = null
+function mockSetInlineCarryingPlant(): string {
+  if (MOCK_SET_INLINE_CARRYING_PLANT === null) {
+    MOCK_SET_INLINE_CARRYING_PLANT = mockSetInInventory(
+      mockSetContractedPlant(),
+      "docs: { 'alpha.md': '# Alpha\\n\\nno marker here\\n'",
+      "docs: { 'alpha.md': '# Alpha\\n\\nno marker here with an <b>inline element</b>\\n'",
+    )
+  }
+  return MOCK_SET_INLINE_CARRYING_PLANT
+}
+
+/** ONE SET'S OWN CONTENT SPAN WITH THE INLINE ELEMENT STRIPPED (a mutation builder). The
+ *  edit lands in the inventory the arm READS (`mockSetInventory`'s LAST match — the plant's
+ *  own literal), so the GRADED subject really loses the element: a bare
+ *  `src.split('<b>inline element</b>')` would edit the DRIVER's literal (which sits FIRST in
+ *  the file) and leave the graded plant untouched — the *"NOT discriminated"* failure this
+ *  builder exists to avoid. */
+function mockSetWithoutInlineIn(src: string, setName: string): string {
+  const inv = mockSetInventory(src)
+  if (inv === null) return src
+  const span = mockSetSpanIn(inv.raw, setName)
+  if (span === '') return src
+  const stripped = span.split('<b>inline element</b>').join('inline element')
+  return stripped === span ? src : mockSetInInventory(src, span, stripped)
+}
+
+/** WHICH document-carrying sets still carry the inline element — read EXACTLY as the FILED
+ *  limb reads it (`MOCK_SET_INLINE_SETS` filtered over each set's own span, the same
+ *  `MOCK_SET_INLINE_RE` over the same `mockSetSpanIn`). The tooth uses it to ATTRIBUTE its own
+ *  firing: this is the check *"would the FILED reading still be satisfied?"*, so a tooth that
+ *  strips ONE set can prove the DISTRIBUTION limb is what fires. */
+function mockSetInlineCarriers(src: string): string[] {
+  const inv = mockSetInventory(src)
+  if (inv === null) return []
+  return MOCK_SET_INLINE_SETS.filter((n) => MOCK_SET_INLINE_RE.test(mockSetSpanIn(inv.raw, n)))
+}
+
+/** ⟨GATE-4 REMAND `2026-10-05` — REPAIR (a): THE `set-shape:inline` TOOTH, REBUILT ON A
+ *  SUBJECT ITS OWN LIMB ACCEPTS AND ATTRIBUTED TO THE LIMB IT EXISTS FOR (`F6`).⟩ The
+ *  reading is the FOLDED `P-γ` DISTRIBUTION limb's, and the tooth now holds THREE legs:
+ *   (i)   the subject plant, carrying the element in ALL FOUR sets, must be CLEAN;
+ *   (ii)  the named mutation (the element stripped from ONE set's own span) must turn the
+ *         limb RED;
+ *   (iii) the mutated subject must STILL satisfy the FILED *"no set carries it"* reading —
+ *         otherwise the firing is attributable to the FILED limb and NOT to the per-set
+ *         distribution the `F6` gap is about (a tooth that cannot say WHICH limb bit cannot
+ *         prove the folded limb bites at all).
+ *  `null` means the tooth bit — a real offence string means it did not.
+ *  ⟨SUPERSEDED — KEPT VISIBLE, the as-filed body, verbatim:⟩
+ *    function mockSetInlineTooth(): string | null {
+ *      const all = mockSetInInventory(
+ *        mockSetContractedPlant(),
+ *        "docs: { 'alpha.md': '# Alpha\\n\\nno marker here\\n'",
+ *        "docs: { 'alpha.md': '# Alpha\\n\\nno marker here with an <b>inline element</b>\\n'",
+ *      )
+ *      const cleanOffences = mockSetShapeOffences(all).filter((o) => o.arm === 'set-shape:inline')
+ *      if (cleanOffences.length > 0) {
+ *        return `the CONTRACTED PLANT with P-γ carried by ALL FOUR sets is NOT accepted by this arm's own limb: ${cleanOffences.map((o) => o.offence).join('; ')}`
+ *      }
+ *      const oneMissing = all.replace(/<b>inline element<\/b>/g, 'inline element').replace(
+ *        "'alpha.md': '# Alpha\\n\\ninline element",
+ *        "'alpha.md': '# Alpha\\n\\nufmockterm with an <b>inline element</b>",
+ *      )
+ *      const fired = mockSetShapeOffences(oneMissing).filter((o) => o.arm === 'set-shape:inline')
+ *      return fired.length > 0
+ *        ? null
+ *        : 'the NAMED MUTATION (P-γ stripped from ONE set only) is NOT discriminated by this arm\'s limb — the per-set distribution tooth cannot bite (F6)'
+ *    }
+ *  WHY REPLACED — **THE AS-FILED `oneMissing` STEP NEVER MATCHED ANYTHING, SO THE FOLDED
+ *  LIMB'S OWN TOOTH WAS NEVER THE LEG THAT FIRED**: the second `String.replace` looked for
+ *  `'alpha.md': '# Alpha\n\ninline element`, but after the global strip the GRADED plant's
+ *  own `alpha.md` reads `'# Alpha\n\nno marker here with an inline element\n'` (`search`) or
+ *  `'# Alpha\n\nufmockterm with an inline element\n'` (the other three sets) — neither text
+ *  carries that prefix, so the replacement was a NO-OP and `oneMissing` was simply *ALL FOUR
+ *  sets stripped*. The tooth still bit (the FILED reading fires when NO set carries the
+ *  element), but the per-set distribution limb `F6` exists for was never the leg that fired,
+ *  and the tooth could not tell the two apart. THE REBUILT TOOTH strips ONE set's own span
+ *  and then ASSERTS the remaining three still carry the element (leg (iii) above), so its
+ *  firing is attributable to the distribution limb ALONE. */
+function mockSetInlineTooth(): string | null {
+  const all = mockSetInlineCarryingPlant()
+  const cleanOffences = mockSetShapeOffences(all).filter((o) => o.arm === 'set-shape:inline')
+  if (cleanOffences.length > 0) {
+    return `the TOOTH'S OWN SUBJECT PLANT (the contracted plant with P-γ carried by ALL FOUR sets) is NOT accepted by this arm's own limb: ${cleanOffences.map((o) => o.offence).join('; ')}`
+  }
+  const oneMissing = mockSetWithoutInlineIn(all, 'core')
+  if (oneMissing === all) {
+    return 'the NAMED MUTATION (P-γ stripped from ONE set\'s own span) could not be built on the tooth\'s own subject plant'
+  }
+  const stillCarried = mockSetInlineCarriers(oneMissing)
+  if (stillCarried.length === 0) {
+    return 'the NAMED MUTATION (P-γ stripped from ONE set\'s own span) broke the FILED `no set carries it` reading AS WELL (no document-carrying set still carries the element) — its firing would be attributable to the FILED limb, never to P-γ\'s per-set distribution (F6)'
+  }
+  const fired = mockSetShapeOffences(oneMissing).filter((o) => o.arm === 'set-shape:inline')
+  return fired.length > 0
+    ? null
+    : 'the NAMED MUTATION (P-γ stripped from ONE set\'s own span, the other THREE still carrying it) is NOT discriminated by this arm\'s limb — the per-set distribution tooth cannot bite (F6)'
 }
 
 // ---------------------------------------------------------------------------
@@ -12241,7 +13835,245 @@ function mockSetFileListOffences(src: string = SRC): Array<{ arm: string; offenc
       offence: `the driver's CODE does not carry the not-materialised reading \`${MOCK_SET_NOT_MATERIALISED}\` (\`§11.3\` item 8 / \`§17.11\`) — a run that materialised no SET cannot say so`,
     })
   }
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F6`) — THE FOLDED SUB-LIMBS, WHICH ADD NO ARM.⟩
+  // THE PER-SET FILE CENSUS (`§2.1`/`§16.17` item 1) and P-α's document/title
+  // property (`§2.2`) are the SAME population this arm's `declared` subject already
+  // reads (a set's declared FILE LIST), one level finer — so they ride THIS arm's
+  // head and `k` = `3`, the row's `3×set-file-list`, `declaredTotal` `17`, the
+  // register `67`/`57` and every cap are BYTE-UNMOVED.
+  out.push(...mockSetFileCensusOffences(src))
+  out.push(...mockSetAlphaPropertyOffences(src))
+  // ⟨GATE-5 RULING `2026-10-05` — THE THIRD FOLDED SUB-LIMB, ON THE SAME HEAD.⟩ THE
+  // ROOT-TEXT WRITE (`§22.2` item 1 clause 1) is this arm's own subject one step
+  // further along the SAME route: the materialisation's declared-file write (whose own
+  // window THIS head resolves) is followed by the import of those very files and by the
+  // write of each imported document's authored text onto its ROOT node. It therefore
+  // rides `set-file-list:declared` and moves NO `k` (`3×set-file-list` stays `3`), NO
+  // `declaredTotal` (`17`), NO seed, NO cap and NO arm count — the register stays
+  // `67`/`57` and `P-IM-6` stays HELD on the same seventeen attempts.
+  out.push(...mockSetRootTextRouteOffences(src))
   return out
+}
+
+// ---------------------------------------------------------------------------
+// `§22.2` ITEM 1 — THE MATERIALISATION ROUTE'S SECOND HALF (THE ROOT-TEXT WRITE).
+// THE RIDING ARM, STATED SO IT IS CHECKABLE: `set-file-list:declared` (P-IM-6 arm 3),
+// whose head resolves THE MATERIALISATION'S OWN SITE — the write whose own window reads
+// a SET'S declared file list (`§2.1`/`§2.3` clauses 2/3) — and which already carries the
+// two filed folded sub-limbs (the per-set census and P-α). WHAT IT GRADES, at SOURCE
+// level, AS THE CONTRACT STATES IT (`§22.2` item 1 clause 1, the GATE-5 RULING
+// `2026-10-05` *"Adapt the mock data to function with the query"*): the driver's
+// materialisation must, AFTER the import, write the IMPORTED DOCUMENTS' AUTHORED TEXT
+// onto their ROOT nodes through a NODE-LEVEL EDIT OP, and the SETS' OWN CONTENT must not
+// be adapted in a way that breaks `search`'s `0 hits` construction (the `FA-1` falsifier,
+// `§2.1` `F-3` / `§2.2` P-δ). WHY THAT ROUTE IS THE LEVER, MEASURED (`§22.1` items 1–3):
+// the store's lexical index is reconciled on import with the reply's DOCUMENT ROOT ids
+// ALONE, and the parser authors every document root with EMPTY content — so before this
+// write the probe's term never reached the index and `rag.query` read `0 hit(s)` under
+// EVERY set. WHAT IT DOES NOT GRADE (the layer rule, `§9`, `RCA-12`): the LIVE `3 hit(s)`
+// reading under a running app. That reading is the LANDING BATTERY's, never a node arm's.
+// ---------------------------------------------------------------------------
+/** THE CALL SHAPE OF A NODE-LEVEL EDIT OP THAT WRITES CONTENT INTO A NODE ID DRAWN FROM
+ *  A LIST — `edit.<op>(…, { nodeId: <ids>[<i>], content: … })`. THE SHAPE IS THE KEY,
+ *  NEVER AN IDENTIFIER: the root-text write is the driver's only `edit.*` call of this
+ *  shape (the two other `edit.set_content` call sites pass a bare identifier and a
+ *  literal node id), so a landing that renames its helper is still graded, and a helper
+ *  that stops writing a list-sourced node id is caught. */
+const MOCK_SET_NODE_WRITE_CALL_RE: RegExp =
+  /(?:mcpToolResult|mcpTool)\s*\(\s*mcp\s*,\s*['"]edit\.[A-Za-z_]+['"]\s*,\s*\{[^}]*nodeId\s*:\s*[A-Za-z_$][\w$]*\s*\[[^}]*\}/
+
+/** THE MODULE-LEVEL `function` DECLARATION ENCLOSING A GIVEN OFFSET, read AT that offset
+ *  and never by name-first-match: a contracted plant INSERTS a SECOND declaration of a
+ *  helper ABOVE the driver's, so a name-keyed read (`ufHelperBodyIn`) would resolve the
+ *  PLANT's stub instead of the object the offset actually lives in. The body is resolved
+ *  by braces at column zero — the driver's own top-level layout, the same rule
+ *  `ufBodyAtColumnZeroIn` uses. */
+function mockSetEnclosingFunctionAt(src: string, at: number): { name: string; body: string; sigAt: number; bodyAt: number; bodyEnd: number } | null {
+  const re = /^[ \t]*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm
+  let head: RegExpExecArray | null = null
+  let m: RegExpExecArray | null
+  while ((m = re.exec(src)) !== null) {
+    if ((m.index ?? 0) > at) break
+    head = m
+  }
+  if (head === null) return null
+  const sigAt = head.index ?? 0
+  const braceAt = src.indexOf('{', sigAt + head[0].length - 1)
+  if (braceAt < 0) return null
+  const tail = src.slice(braceAt)
+  const close = /\n\}/.exec(tail)
+  const body = close === null ? tail : tail.slice(0, close.index + close[0].length)
+  return { name: head[1], body, sigAt, bodyAt: braceAt, bodyEnd: braceAt + body.length }
+}
+
+/** THE ROOT-TEXT ROUTE, RESOLVED BY SUBJECT: the writer (the node-level edit op that
+ *  writes a LIST-sourced node id), its own RAW call text, and the module-level route that
+ *  invokes it. TWO views per region are kept, each for its own use: the RAW text (a
+ *  substring of the source VERBATIM, so a mutation can splice it) and the COMMENT-BLANKED
+ *  code (the READING's subject — a comment that merely names a behaviour is not the
+ *  behaviour). `null` = the driver carries no such write at all. MEMOISED like the other
+ *  readers (a pure read of the text, read by the head AND by every leg of the tooth). */
+interface MockSetRootTextRoute {
+  writer: string
+  writerBody: string
+  writerCode: string
+  call: string
+  caller: string
+  callerBody: string
+  callerCode: string
+}
+const MOCK_SET_ROOT_ROUTE_CACHE = new Map<string, MockSetRootTextRoute | null>()
+function mockSetRootTextRoute(src: string = SRC): MockSetRootTextRoute | null {
+  const cached = MOCK_SET_ROOT_ROUTE_CACHE.get(src)
+  if (cached !== undefined) return cached
+  const found = mockSetRootTextRouteOf(src)
+  if (MOCK_SET_ROOT_ROUTE_CACHE.size >= MOCK_SET_READ_CACHE_MAX) MOCK_SET_ROOT_ROUTE_CACHE.clear()
+  MOCK_SET_ROOT_ROUTE_CACHE.set(src, found)
+  return found
+}
+function mockSetRootTextRouteOf(src: string): MockSetRootTextRoute | null {
+  // `stripComments` preserves OFFSETS exactly (comment characters become spaces), so an
+  // index found in the blanked code indexes the RAW source at the same place — which is
+  // what lets one resolution serve both the reading and the mutation.
+  const code = mockSetCode(src)
+  const call = MOCK_SET_NODE_WRITE_CALL_RE.exec(code)
+  if (call === null || call.index === undefined) return null
+  const writer = mockSetEnclosingFunctionAt(code, call.index)
+  if (writer === null || writer.body === '') return null
+  const nameRe = new RegExp(`\\b${writer.name}\\s*\\(`, 'g')
+  let m: RegExpExecArray | null
+  let caller: { name: string; body: string; bodyAt: number; bodyEnd: number } | null = null
+  while ((m = nameRe.exec(code)) !== null) {
+    // the writer's OWN declaration (its signature) and its own body are skipped — the
+    // route that INVOKES it is a DIFFERENT module-level function (in this driver the
+    // call site PRECEDES the helper's declaration, so neither "first" nor "last"
+    // occurrence alone would do).
+    if (m.index >= writer.sigAt && m.index <= writer.bodyEnd) continue
+    caller = mockSetEnclosingFunctionAt(code, m.index)
+    if (caller !== null) break
+  }
+  if (caller === null) return null
+  return {
+    writer: writer.name,
+    writerBody: src.slice(writer.bodyAt, writer.bodyEnd),
+    writerCode: writer.body,
+    call: src.slice(call.index, call.index + call[0].length),
+    caller: caller.name,
+    callerBody: src.slice(caller.bodyAt, caller.bodyEnd),
+    callerCode: caller.body,
+  }
+}
+
+/** `§22.2` item 1 clause 1 — THE ROOT-TEXT ROUTE'S OWN LIMB, four named fail-states:
+ *   (A) NO ROOT-TEXT WRITE AT ALL — the materialisation stops at the import;
+ *   (B) the write does not land on the IMPORT'S OWN DOCUMENT ROOT IDS;
+ *   (C) the text written is not each document's OWN authored bytes from ITS OWN SET
+ *       (or the ids and the declared files are not PAIRED 1:1) — the `FA-1` falsifier's
+ *       `search`-omits-the-term construction is the subject (`§22.2` item 1 clause 4(a));
+ *   (D) the write is not the import route's own second half, gated on a resolved import.
+ *  RIDES `set-file-list:declared` (see the fold note above): no `k`, no arm count, no
+ *  register figure and no cap moves. */
+function mockSetRootTextRouteOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const ARM = 'set-file-list:declared'
+  const route = mockSetRootTextRoute(src)
+  if (route === null) {
+    out.push({
+      arm: ARM,
+      offence:
+        'the driver\'s mock-fixture materialisation carries NO ROOT-TEXT WRITE — no node-level edit op (`edit.*(…, { nodeId: <the import reply\'s ids>[i], content: … })`) writes the imported documents\' own authored text onto their ROOT nodes AFTER the import, so the term never reaches the store\'s lexical index and `rag.query` reads `0 hit(s)` under EVERY set (MEASURED at the ruling\'s head: `9` nodes, `3` of them carrying the term, every query `0` — `§22.1` items 1–3). THE READING THIS LIMB IS OWED TO IS `§18.6` clause 3\'s `FA-4` CONTROL, AND IT IS UNCHANGED: under `--fixture=core`, `rag.query` called with the probe\'s own constant term (`§5.3` clause 1, `§18.2` clause 3) returns `>= 1` hit (`§22.2` item 1 clause 1, the GATE-5 RULING `2026-10-05` *"Adapt the mock data to function with the query"*)',
+    })
+    return out
+  }
+  // ---- (B) the write lands on the IMPORT'S OWN DOCUMENT ROOT IDS ----
+  const idsSub = /nodeId\s*:\s*([A-Za-z_$][\w$]*)\s*\[/.exec(route.call)
+  const ids = idsSub === null ? null : idsSub[1]
+  const boundFromReply =
+    ids !== null && new RegExp(`(?:const|let|var)\\s+${ids}\\s*=[\\s\\S]{0,400}?documentIds`).test(route.writerCode)
+  if (!boundFromReply) {
+    out.push({
+      arm: ARM,
+      offence:
+        'the ROOT-TEXT WRITE does not take its node ids from the IMPORT\'S OWN REPLY — its `nodeId` is not a subscript of a list bound from the reply\'s `documentIds` (`§22.2` item 1 clause 1): the import reconciles the store\'s lexical index with its DOCUMENT ROOT ids ALONE, so only a write to THOSE ids reaches an indexed node, and any other node leaves the index exactly where it was (`§22.1` item 3)',
+    })
+  }
+  // ---- (C) each document's OWN authored bytes, from ITS OWN SET, PAIRED 1:1 ----
+  const contentExpr = (/content\s*:\s*([^,}]+)/.exec(route.call) ?? [])[1]?.trim() ?? ''
+  const contentIdent = /^([A-Za-z_$][\w$]*)$/.exec(contentExpr)?.[1] ?? null
+  const contentFromOwnDocs =
+    /\.docs\s*\[/.test(contentExpr) ||
+    (contentIdent !== null && new RegExp(`(?:const|let|var)\\s+${contentIdent}\\s*=[\\s\\S]{0,300}?\\.docs\\s*\\[`).test(route.writerCode))
+  const lenCmp = '(?:!==|===|!=|==)'
+  const paired =
+    ids !== null &&
+    (new RegExp(`${ids}\\s*\\.\\s*length\\s*${lenCmp}\\s*[^;\\n]{0,80}?\\.files\\s*\\.\\s*length`).test(route.writerCode) ||
+      new RegExp(`\\.files\\s*\\.\\s*length\\s*${lenCmp}\\s*[^;\\n]{0,80}?${ids}\\s*\\.\\s*length`).test(route.writerCode))
+  if (!contentFromOwnDocs || !paired) {
+    out.push({
+      arm: ARM,
+      offence:
+        'the ROOT-TEXT WRITE does not write each imported document ITS OWN authored bytes read from ITS OWN SET — the `content` it writes is not read from the sets\' own declared content, or the import\'s ids and the set\'s declared files are not PAIRED 1:1 (`§22.2` item 1 clause 1). THE `FA-1` FALSIFIER\'S CONSTRUCTION IS THE SUBJECT (`§22.2` item 1 clause 4(a)): the adaptation route must adapt NO set\'s own content, so a set whose documents OMIT the probe\'s term BY CONSTRUCTION (`search`, `§2.1` `F-3` / `§2.2` P-δ) keeps its `0 hits` reading — a synthesized text or a mis-paired write (one document\'s bytes landing in another document\'s root) can carry the term into that set and destroy the falsifier',
+    })
+  }
+  // ---- (D) the IMPORT ROUTE'S own second half, AFTER a resolved import ----
+  const importsHere = /['"]edit\.import_markdown['"]/.test(route.callerCode)
+  const gated =
+    new RegExp(`(?:failure|readFailure)\\s*===\\s*null[\\s\\S]{0,200}?\\b${route.writer}\\s*\\(`).test(route.callerCode)
+  if (!importsHere || !gated) {
+    out.push({
+      arm: ARM,
+      offence:
+        'the ROOT-TEXT WRITE is not the materialisation\'s own SECOND HALF — no module-level route that runs the app\'s import op (`edit.import_markdown`) invokes it, or it is not gated on the import\'s own failure reading null (`§22.2` item 1 clause 1): a FAILED import has no document root to write, so the write belongs to the import\'s resolved branch (`§18.6` clause 3)',
+    })
+  }
+  return out
+}
+
+/** THE NAMED MUTATION'S OWN BUILDER — **THE ROOT-TEXT ROUTE DELETED**: the writer's own
+ *  body (its ids read, its pairing guard, its `edit.*` write call) is replaced by an
+ *  EMPTY body, so the materialisation STOPS AT THE IMPORT and the imported documents\'
+ *  own text never reaches their root nodes — the state the ruling\'s head measured as
+ *  `rag.query` `0 hit(s)` under every set. Built from the RESOLVED route (never from a
+ *  hardcoded helper name), so it edits the very text the arm\'s own reader reads. */
+function mockSetWithoutRootTextRoute(src: string): string {
+  const route = mockSetRootTextRoute(src)
+  if (route === null || route.writerBody === '') return src
+  const at = src.indexOf(route.writerBody)
+  if (at < 0) return src
+  return src.slice(0, at) + '{}' + src.slice(at + route.writerBody.length)
+}
+
+/** THE SECOND NAMED MUTATION'S BUILDER — **THE ROUTE MANUFACTURES THE TERM**: the text it
+ *  writes is replaced by the probe\'s own constant term instead of each document\'s own
+ *  authored bytes, so the adaptation would put the term into EVERY root — including the
+ *  sets that omit it BY CONSTRUCTION — and the `FA-1` falsifier\'s `0 hits` construction
+ *  would be destroyed (`§22.2` item 1 clause 4(a)). Built from the resolved call text. */
+function mockSetWithManufacturedTermWrite(src: string): string {
+  const route = mockSetRootTextRoute(src)
+  if (route === null) return src
+  const broken = route.call.replace(/content\s*:\s*[^}]*\}/, 'content: UF_MOCK_FIXTURE_TERM }')
+  if (broken === route.call) return src
+  const at = src.indexOf(route.call)
+  if (at < 0) return src
+  return src.slice(0, at) + broken + src.slice(at + route.call.length)
+}
+
+/** ⟨GATE-5 RULING `2026-10-05` (`§22.2` item 3) — WHICH SETS CARRY THE TABLE IN THE
+ *  **PARSER-MEDIATED** FORM (`MOCK_SET_PIPE_TABLE_RE`), read from each set's OWN
+ *  declared documents as pure data (`mockSetDocsOf` — the same reader the folded
+ *  `P-α`/`P-γ` limbs use), with the set's own source SPAN as the fallback when its
+ *  documents cannot be read as data. This is the `set-shape:table` limb's carrier
+ *  derivation; the `SUPERSEDED` raw-literal list below reads the same subject under
+ *  the superseded predicate, so an offence can NAME the raw-HTML-only state. */
+function mockSetTableCarriers(src: string, re: RegExp): string[] {
+  const inv = mockSetInventory(src)
+  if (inv === null) return []
+  return MOCK_SET_NAMES.filter((n) => {
+    const d = mockSetDocsOf(src, n)
+    return d === null
+      ? re.test(mockSetSpanIn(inv.raw, n))
+      : [...d.docs.values()].some((t) => re.test(t))
+  })
 }
 
 function mockSetShapeOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
@@ -12251,17 +14083,66 @@ function mockSetShapeOffences(src: string = SRC): Array<{ arm: string; offence: 
     for (const arm of ['set-shape:table', 'set-shape:inline', 'set-shape:probe-term-coverage']) {
       out.push({ arm, offence: 'no set content is declared, so no content property can be read from it (§2.2)' })
     }
+    // ⟨GATE-4 FIX PASS `2026-10-05` — the folded `P-γ` distribution sub-limb is
+    // reported on the SAME `inv === null` path, so an absent inventory cannot
+    // silently drop it.⟩
+    out.push(...mockSetInlineDistributionOffences(src))
     return out
   }
   const span = (n: string): string => mockSetSpanIn(inv.raw, n)
-  const tableSpans = MOCK_SET_NAMES.filter((n) => /<table[\s>]/.test(span(n)))
-  if (!tableSpans.includes('table')) {
-    out.push({ arm: 'set-shape:table', offence: 'the `table` set carries NO stored `<table>` in its own content (P-β) — `u_edit_1_live_package_table_limitation` can find no table document' })
+  // ---- 3×set-shape / `P-β` — THE `table` SET'S CONTENT FORM, AS OF THE GATE-5 RULING ----
+  // ⟨GATE-5 RULING `2026-10-05` — THE READING OF RECORD IS THE **PARSER-MEDIATED**
+  // FORM, AND THE RAW-`<table>`-LITERAL READING IS `SUPERSEDED`.⟩ THE RULING, VERBATIM
+  // (`docs/specs/unit-mock-corpus-fixture-sets.md` `§22`, its authority): ***"Adapt the
+  // mock data to function with the query."*** APPLIED TO `P-β` / `§16.11` at `§22.2`
+  // item 3: `table`'s document must carry its table in the form the APP'S OWN IMPORT
+  // PATH PRESERVES — a GFM PIPE TABLE, which the importer parses into a real `:table:`
+  // node (with `:thead:`/`:th:`/`:tr:`/`:td:` beneath it) and which the page-edit surface
+  // then renders. WHY THE FILED LITERAL COULD NOT DELIVER THE CONTRACTED END STATE, AND
+  // THE MEASURED BEFORE/AFTER THAT GROUNDS THE CHANGE (`RECORDED READING`, the
+  // implementer's controlled comparison — `§22.1` item 7, greens `E-10`/`F-3`):
+  //   raw-HTML form → `no table node`, `census=0`, verdict **PARKED**;
+  //   GFM pipe form → `:table:`/`:thead:`/`:th:`/`:tr:`/`:td:` nodes, rendered table
+  //   census `{"tables":1,"trs":1,"tds":4}`, verdict **PASS**.
+  // `parseMarkdown` DROPS RAW HTML ENTIRELY (element + content), so a stored raw
+  // `<table>` literal creates NO TABLE NODE, the row's candidate scan finds nothing to
+  // render, and `u_edit_1_live_package_table_limitation` can only PARK — while
+  // `§16.11` (UNCHANGED) rules that `class-(b):table` MUST REJECT a `PARK`.
+  // WHAT DOES NOT MOVE: the set's file list, `R-13`'s candidate-list ordering, the
+  // `P-β` row's `F-2 only` carriage, the arm's count (`3×set-shape`), `k`, the register
+  // (`67`/`57`), the seed and every cap — ONLY THE CONTENT'S FORM MOVES.
+  const pipeTableSpans = mockSetTableCarriers(src, MOCK_SET_PIPE_TABLE_RE)
+  if (!pipeTableSpans.includes('table')) {
+    const rawOnly = mockSetTableCarriers(src, MOCK_SET_RAW_TABLE_RE).includes('table')
+    out.push({
+      arm: 'set-shape:table',
+      offence: rawOnly
+        ? 'the `table` set carries the SUPERSEDED RAW-`<table>`-LITERAL form ALONE and NO GFM PIPE TABLE — the parser-mediated form `P-β` contracts as of the GATE-5 RULING `2026-10-05` (`§22.2` item 3) is a header row, a delimiter row and a body row, the form the app\'s own markdown import PRESERVES and turns into a `:table:` node. THE RAW FORM IS NOT SUFFICIENT (`§22.2` item 3 clause 2): the app\'s import DROPS raw HTML entirely (element + content), so a stored raw `<table>` literal yields `no table node`, `census=0`, and a PARKED row — MEASURED before/after (`§22.1` item 7: raw form → `no table node`, `census=0`, PARKED; GFM pipe form → `:table:`/`:thead:`/`:th:`/`:tr:`/`:td:` nodes, rendered census `{"tables":1,"trs":1,"tds":4}`, PASS) — while `§16.11` rules that `class-(b):table` MUST REJECT a `PARK`'
+        : 'the `table` set carries NO table-bearing content at all — no GFM pipe table (the parser-mediated form `P-β` contracts as of the GATE-5 RULING `2026-10-05`, `§22.2` item 3: a header row, a delimiter row and a body row, the form the app\'s markdown import turns into a `:table:` node and the page-edit surface renders) — so `u_edit_1_live_package_table_limitation` can find no table document (§16.11)',
+    })
   }
-  const otherTable = tableSpans.filter((n) => n !== 'table')
-  if (otherTable.length > 0) {
-    out.push({ arm: 'set-shape:table', offence: `a set OTHER than \`table\` carries a stored \`<table>\`: ${otherTable.join(', ')} — P-β is \`table\` ALONE` })
+  const otherPipeTable = pipeTableSpans.filter((n) => n !== 'table')
+  if (otherPipeTable.length > 0) {
+    out.push({
+      arm: 'set-shape:table',
+      offence: `a set OTHER than \`table\` carries a GFM pipe table: ${otherPipeTable.join(', ')} — P-β is \`table\` ALONE (the carrier row \`F-2 only\` is UNMOVED by the GATE-5 RULING: only the content's FORM moved, §22.2 item 3)`,
+    })
   }
+  // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed raw-`<table>`-literal reading, verbatim.⟩
+  // WHY REPLACED: the GATE-5 RULING `2026-10-05` (`§22.2` item 3) makes the
+  // parser-mediated form the reading of record; the filed predicate accepted a
+  // source-string shape the app's own supply route DISCARDS, so it graded a form that
+  // cannot deliver the contracted end state (measured: `no table node`, `census=0`,
+  // PARKED). The raw-literal reading is NOT re-taken as a limb; the raw-HTML-only
+  // state is now named by the offence above.
+  //   const tableSpans = MOCK_SET_NAMES.filter((n) => /<table[\s>]/.test(span(n)))
+  //   if (!tableSpans.includes('table')) {
+  //     out.push({ arm: 'set-shape:table', offence: 'the `table` set carries NO stored `<table>` in its own content (P-β) — `u_edit_1_live_package_table_limitation` can find no table document' })
+  //   }
+  //   const otherTable = tableSpans.filter((n) => n !== 'table')
+  //   if (otherTable.length > 0) {
+  //     out.push({ arm: 'set-shape:table', offence: `a set OTHER than \`table\` carries a stored \`<table>\`: ${otherTable.join(', ')} — P-β is \`table\` ALONE` })
+  //   }
   const inlineRe = /<\/?(?:b|i|em|strong|u|mark|sub|sup|small|span)[\s>]/i
   const inlineSpans = ['core', 'table', 'search', 'tabs'].filter((n) => inlineRe.test(span(n)))
   if (inlineSpans.length === 0) {
@@ -12286,6 +14167,13 @@ function mockSetShapeOffences(src: string = SRC): Array<{ arm: string; offence: 
       offence: `\`search\` carries the probe's own term \`${probe.term}\` — F-3 omits it BY CONSTRUCTION, and its absence is the whole falsifier (§2.1 F-3, §2.2 P-δ)`,
     })
   }
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F6`) — THE FOLDED `P-γ` DISTRIBUTION SUB-LIMB.⟩
+  // P-γ's PER-SET distribution is this arm's own subject (`§2.2`'s content
+  // properties), one level finer than the filed *"no set carries it"* reading — so
+  // it rides this arm's head (also in the `inv === null` early return above) and
+  // `k` = `3`, `3×set-shape`, `declaredTotal` `17`, `67`/`57` and every cap are
+  // BYTE-UNMOVED.
+  out.push(...mockSetInlineDistributionOffences(src))
   return out
 }
 
@@ -12402,6 +14290,30 @@ function mockSetRefusalOffences(src: string = SRC): Array<{ arm: string; offence
       out.push({ arm: shared, offence: 'the FIRST refusal branch prints no line — the marker is not on the early path (§3.3 clause 1)' })
     }
   }
+  // ⟨§21.2 clause 2 (`D-2`) — EVERY `--fixture=` REFUSAL BRANCH IS GRADED AS THE
+  // PRE-SPAWN FORM, BY ITS OWN BODY.⟩ THE FOUND GAP, MEASURED: the `FIRST`-branch
+  // reading above resolves to whichever `ARG-REFUSED` inside `main` comes first
+  // (`--groups=` on the landed driver), so THIS ARM'S OWN NAMED MUTATION — the
+  // `--fixture=` branch losing its `process.exitCode = 2` — was graded against the
+  // WRONG BRANCH's body and the tooth could not be discriminated (`VERIFIED-BY-READ`:
+  // the branch resolved at the first fixture refusal is the `--groups=` one). The
+  // limb is ADDITIVE: the FIRST-branch reading above is UNMOVED, and each
+  // `--fixture=`-printing refusal line must additionally sit on a branch that carries
+  // the marker, sets the exit code and returns — the contracted `S-6`/`A-1`…`A-4`
+  // pre-spawn form (`§3.3` clause 3, `§6.4`).
+  for (const l of fixtureLines) {
+    const branch = mockSetBranchAround(main, main.indexOf(l.text))
+    if (branch === '') continue
+    if (!/process\.exitCode\s*=\s*2/.test(branch)) {
+      out.push({
+        arm: shared,
+        offence: `the \`--fixture=\` refusal branch at line ${l.line} does not set the exit code — a refusal without \`process.exitCode = 2\` is not the contracted pre-spawn form (§3.3 clause 3, §6.4)`,
+      })
+    }
+    if (!/\breturn\b/.test(branch)) {
+      out.push({ arm: shared, offence: `the \`--fixture=\` refusal branch at line ${l.line} does not \`return\` — the run would continue past its own refusal (§3.3 clause 3, §6.4)` })
+    }
+  }
   // ---- A-1: the EMPTY value is its OWN offence, never mapped to the `empty` set ----
   const emptyTest = /m\[2\]\s*===\s*''\s*\)?/.test(walk) || /a\s*===\s*'--fixture='/.test(walk)
   const mappedToEmpty = /m\[2\]\s*===\s*''[\s\S]{0,120}opt\.fixture\s*=\s*'empty'/.test(walk)
@@ -12485,6 +14397,22 @@ function mockSetDriveRowPIm6(): void {
         mockSetFileListOffences,
         (planted) => planted.replace('.files) writeFileSync', ".files.concat(['stale.md'])) writeFileSync"),
         'a file NO set declares is materialised (the declared and materialised lists disagree)',
+      ) ??
+      // ⟨GATE-5 RULING `2026-10-05` (`§22.2` item 1) — THE SECOND AND THIRD TOOTH LEGS OF
+      // THIS ARM.⟩ The folded root-text-route sub-limb rides THIS head, so its own two
+      // named mutations are driven here, each on the CONTRACTED PLANT (plant-clean leg
+      // first, mutation leg second), and NO existing leg is removed or weakened.
+      mockSetMutation(
+        'set-file-list:declared',
+        mockSetFileListOffences,
+        (planted) => mockSetWithoutRootTextRoute(planted),
+        "the ROOT-TEXT ROUTE DELETED — the materialisation stops at the import, so the imported documents' own authored text never reaches their root nodes and the probe's term never reaches the store's lexical index",
+      ) ??
+      mockSetMutation(
+        'set-file-list:declared',
+        mockSetFileListOffences,
+        (planted) => mockSetWithManufacturedTermWrite(planted),
+        "the route MANUFACTURES THE PROBE'S TERM instead of writing each document its own authored bytes — the adaptation writes the term into EVERY root, destroying the `FA-1` falsifier's `search`-omits-the-term `0 hits` construction (§22.2 item 1 clause 4(a))",
       )))
   arm(run, 4, 'set-file-list:no-stale', () =>
     mockSetArmRead('P-IM-6', 'set-file-list:no-stale', fl, () =>
@@ -12499,33 +14427,89 @@ function mockSetDriveRowPIm6(): void {
       mockSetMutation(
         'set-file-list:empty-set',
         mockSetFileListOffences,
-        (planted) => planted.replace("empty: { files: [], docs: {} },", "empty: { files: ['x.md'], docs: { 'x.md': 'x' } },"),
+        (planted) => mockSetInInventory(planted, 'empty: { files: [], docs: {} },', "empty: { files: ['x.md'], docs: { 'x.md': 'x' } },"),
         'a file GIVEN to the `empty` set',
       )))
   // ---- 3×set-shape ----
   arm(run, 6, 'set-shape:table', () =>
     mockSetArmRead('P-IM-6', 'set-shape:table', sh, () =>
+      // ⟨GATE-5 RULING `2026-10-05` — THE TOOTH IS RE-DERIVED TO THE READING OF RECORD
+      // (`§22.2` item 3), AND IT HOLDS TWO LEGS SO BOTH DIRECTIONS OF THE FORM ARE DRIVEN.⟩
+      // LEG 1 (the ruling's own named mutation): the table-bearing form REMOVED ENTIRELY —
+      // the GFM pipe table stripped from `table`'s own document, so the set carries no
+      // table-bearing content at all and the limb must RED.
+      // LEG 2 (the SUPERSEDED form's own refusal): the pipe table REPLACED BY THE RAW
+      // `<table>` LITERAL — the raw-HTML-only state, which the ruling requires the tooth
+      // to REJECT as INSUFFICIENT (`§22.2` item 3 clause 2: the app's import drops raw
+      // HTML, so that form yields `no table node`, `census=0`, PARKED).
+      // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed mutation, verbatim (it stripped the raw
+      // `<table>` literal — a form this limb no longer reads, so it could no longer bite):⟩
+      //   (planted) => mockSetInInventory(planted, '<table><tr><td>c</td></tr></table>', 'plain paragraph'),
+      //   'the stored table stripped from `table`\'s own document',
       mockSetMutation(
         'set-shape:table',
         mockSetShapeOffences,
-        (planted) => planted.replace('<table><tr><td>c</td></tr></table>', 'plain paragraph'),
-        'the stored table stripped from `table`\'s own document',
+        (planted) => mockSetInInventory(planted, '| col a | col b |\\n| --- | --- |\\n| c1 | c2 |\\n', 'plain paragraph\\n'),
+        "the table-bearing form REMOVED ENTIRELY from `table`'s own document (its GFM pipe table stripped, so the set carries no table-bearing content at all)",
+      ) ??
+      mockSetMutation(
+        'set-shape:table',
+        mockSetShapeOffences,
+        (planted) => mockSetInInventory(planted, '| col a | col b |\\n| --- | --- |\\n| c1 | c2 |\\n', '<table><tr><td>c</td></tr></table>\\n'),
+        'the pipe table REPLACED BY THE SUPERSEDED RAW-`<table>`-LITERAL form (the raw-HTML-only state must be REJECTED as insufficient, §22.2 item 3 clause 2)',
       )))
   arm(run, 7, 'set-shape:inline', () =>
     mockSetArmRead('P-IM-6', 'set-shape:inline', sh, () =>
+      // ⟨GATE-4 REMAND `2026-10-05` — REPAIR (a): THE ARM'S OWN TOOTH NOW STANDS ON A SUBJECT
+      // ITS OWN LIMB ACCEPTS.⟩ THE RESIDUAL RED'S MEASURED CAUSE: the as-filed chain LED with
+      // `mockSetInlineTooth()`, whose convention is `null` = the tooth BIT — so a PASSING
+      // tooth fell THROUGH the `??` into the two contracted-plant legs behind it, and each of
+      // those legs' plant-clean check runs `mockSetShapeOffences(mockSetContractedPlant())`,
+      // which reports `set-shape:inline` BY CONSTRUCTION (`§2.2` `P-γ` is the very limb the
+      // contracted plant deliberately violates: its `search` set omits the inline element,
+      // `F-3`). The arm therefore read *"the CONTRACTED PLANT is not accepted by this arm's own
+      // limb"* — a verdict about the PIN'S OWN PLANT, driver-independent, and unreachable from
+      // `scripts/live-drive.mjs`. THE PLANT-CLEAN LEG WAS MUTUALLY EXCLUSIVE WITH ITS OWN
+      // MUTATION LEG, so no chain shape could clear it: the SUBJECT had to change. EVERY LEG
+      // below now takes `mockSetInlineCarryingPlant()` (all four document-carrying sets carry
+      // the element — the limb ACCEPTS it), so no leg's fallback plant contradicts its limb,
+      // and the arm's verdict on the DRIVER still comes from its own head `sh`.
+      // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed construction, verbatim:⟩
+      //   (mockSetInlineTooth() ??
+      //   mockSetMutation(
+      //     'set-shape:inline',
+      //     mockSetShapeOffences,
+      //     (planted) => planted.replace(/<b>inline element<\/b>/g, 'inline element'),
+      //     'the inline element removed from the document-carrying sets',
+      //   ) ??
+      //   mockSetMutation(
+      //     'set-shape:inline',
+      //     mockSetShapeOffences,
+      //     (planted) => planted.replace(/<b>inline element<\/b>/g, 'inline element'),
+      //     "the inline element stripped from EVERY document-carrying set, in the inventory the arm reads (P-γ's per-set distribution)",
+      //   ))
+      // WHY REPLACED: the two `mockSetMutation` legs graded the CONTRACTED PLANT, which cannot
+      // pass THIS limb (see above), and the LEG THAT PASSED (`mockSetInlineTooth()`) was the
+      // one whose `null` sent the chain onward. The filed tooth is KEPT in the new chain (the
+      // strip from EVERY set), and the folded `P-γ` distribution tooth is KEPT inside
+      // `mockSetInlineTooth()` — whose subject plant, clean leg and mutation leg are now that
+      // tooth's own (see the helper's own `SUPERSEDED` note, which records why the as-filed
+      // `oneMissing` step never matched anything).
       mockSetMutation(
         'set-shape:inline',
         mockSetShapeOffences,
-        (planted) => planted.replace('<b>inline element</b>', 'inline element'),
-        'the inline element removed from the document-carrying sets',
-      )))
+        (planted) => planted.replace(/<b>inline element<\/b>/g, 'inline element'),
+        "the inline element stripped from EVERY document-carrying set, in the inventory the arm reads (the FILED *\"no set carries it\"* reading's own falsifier)",
+        mockSetInlineCarryingPlant(),
+      ) ??
+      mockSetInlineTooth()))
   arm(run, 8, 'set-shape:probe-term-coverage', () =>
     mockSetArmRead('P-IM-6', 'set-shape:probe-term-coverage', sh, () =>
       mockSetMutation(
         'set-shape:probe-term-coverage',
         mockSetShapeOffences,
-        (planted) => planted.replace('no marker here', 'ufmockterm'),
-        "the probe's term PLANTED in `search`'s text (F-3's omission removed)",
+        (planted) => mockSetInInventory(planted, 'no marker here', 'ufmockterm'),
+        "the probe's term PLANTED in `search`'s text (F-3's omission removed)", 
       )))
   // ---- 4×selection-grammar ----
   arm(run, 9, 'selection-grammar:closed-set', () =>
@@ -12566,8 +14550,24 @@ function mockSetDriveRowPIm6(): void {
       mockSetMutation(
         'refusal-arms:marker-and-exit',
         mockSetRefusalOffences,
-        (planted) => planted.replace(/ufSweepSpawnedChild\('ARG-REFUSED \(--fixture= refused by name\)[\s\S]*?\n {4}process\.exitCode = 2\n {4}return\n/, (m0) => m0.replace('    process.exitCode = 2\n', '')),
-        "the exit-code assignment DELETED on the `--fixture` branch",
+        // ⟨§21.2 clause 2 (`D-2`) — THE TOOTH'S SUBJECT IS UNMOVED; THE BRANCH IT LANDS
+        // ON IS NOW RESOLVED BY THE LIMB'S OWN SUBJECT.⟩ THE MUTATION, AS FILED,
+        // ANCHORED THE PLANT'S OWN COPY OF THE `--fixture=` BRANCH (whose sweep sentence
+        // differed from the driver's); the plant no longer re-inserts a block the driver
+        // already carries (`mockSetAfterArgvWalkOnce`), so that copy is gone and the
+        // tooth is rebuilt on the ONE copy that exists — the DRIVER'S OWN. THE SUBJECT IS
+        // UNMOVED: every `--fixture=` refusal loses its `process.exitCode = 2` (and its
+        // `return`), which is the contracted pre-spawn form the arm grades (`§3.3`
+        // clause 3, `§6.4`); the two SWEEP sentences of the two landed branches above it
+        // are the anchors, and they are left in place so the branches themselves stay
+        // readable (`mockSetBranchAround` would otherwise resolve to the wrong head).
+        // SUPERSEDED, KEPT VISIBLE — the as-filed regex, verbatim:
+        //   /ufSweepSpawnedChild\('ARG-REFUSED \(--fixture= refused by name\)[\s\S]*?\n {4}process\.exitCode = 2\n {4}return\n/
+        (planted) =>
+          planted
+            .replace(/\n {4}process\.exitCode = 2\n {4}return\n {2}\}\n {2}if \(opt\.conflictingFixture\) \{/, '\n  }\n  if (opt.conflictingFixture) {')
+            .replace(/\n {4}process\.exitCode = 2\n {4}return\n {2}\}\n {2}\/\/ ⟨§21\.2/, '\n  }\n  // ⟨§21.2'),
+        "the exit-code assignment DELETED on the `--fixture=` refusal branches (every one of them loses its `process.exitCode = 2`, so their bodies no longer carry the contracted pre-spawn form)",
       )))
   arm(run, 14, 'refusal-arms:A-1', () =>
     mockSetArmRead('P-IM-6', 'refusal-arms:A-1', rf, () =>
@@ -12582,7 +14582,21 @@ function mockSetDriveRowPIm6(): void {
       mockSetMutation(
         'refusal-arms:A-2',
         mockSetRefusalOffences,
-        (planted) => planted.replace("      else if (!['core', 'table', 'search', 'tabs', 'empty'].includes(m[2])) opt.badFixtureArg = { flag: '--fixture', text: m[2], why: 'is not one of the accepted names (case-sensitive, untrimmed)' }\n", ''),
+        // ⟨RE-STATED `2026-10-05` — THE REMOVAL IS GLOBAL (`§10.3` clause 4). THE PLANT
+        // INSERTS ITS OWN COPY OF THE `--fixture=` BRANCH AT THE HEAD OF THE ARGV WALK
+        // (`mockSetWithArgvLine`), SO THE CONTRACTED PLANT CARRIES TWO BYTE-IDENTICAL
+        // CLOSED-SET TESTS: the plant's copy AND the driver's own copy (which the arm's
+        // `clean` leg requires on `SRC`). A NON-GLOBAL REPLACEMENT DELETED ONLY THE
+        // PLANT'S COPY, the walk still matched, and the tooth did NOT bite — MEASURED as
+        // `2` occurrences of the target in the contracted plant, `1` surviving after the
+        // as-filed mutation. A NAMED MUTATION MUST REMOVE EVERY COPY IT NAMES.
+        // SUPERSEDED, KEPT VISIBLE — the as-filed non-global removal, verbatim:
+        //   (planted) => planted.replace("      else if (!['core', 'table', 'search', 'tabs', 'empty'].includes(m[2])) opt.badFixtureArg = { flag: '--fixture', text: m[2], why: 'is not one of the accepted names (case-sensitive, untrimmed)' }\n", ''),
+        (planted) =>
+          planted.replaceAll(
+            "      else if (!['core', 'table', 'search', 'tabs', 'empty'].includes(m[2])) opt.badFixtureArg = { flag: '--fixture', text: m[2], why: 'is not one of the accepted names (case-sensitive, untrimmed)' }\n",
+            '',
+          ),
         'the closed-set validation removed (an UNKNOWN value assigned blindly)',
       )))
   arm(run, 16, 'refusal-arms:A-3', () =>
@@ -12619,6 +14633,22 @@ function mockSetDriveRowPIm6(): void {
 // NAMED MUTATIONS: each arm carries its own (`§11.2`, `§17.5` clause 2, `§17.7`).
 // ===========================================================================
 
+/** ⟨GATE-4 FIX PASS `2026-10-05` — THE DATA MUTATIONS EDIT THE INVENTORY THE ARM READS.⟩
+ *  `mockSetInventory` is LAST-WINS (a contracted plant inserts a second inventory above
+ *  the driver's declaration), so a bare `String.replace` of a set's own data edits the
+ *  FIRST literal — the DRIVER's — and leaves the PLANT's untouched: the mutation then
+ *  changes nothing the arm reads, and the tooth reports *"NOT discriminated"*. This
+ *  builder performs the replacement INSIDE the inventory literal the read resolves. */
+function mockSetInInventory(src: string, needle: string, replacement: string): string {
+  const inv = mockSetInventory(src)
+  if (inv === null) return src
+  const at = inv.raw.indexOf(needle)
+  if (at < 0) return src
+  const patched = inv.raw.slice(0, at) + replacement + inv.raw.slice(at + needle.length)
+  const outerAt = src.lastIndexOf(inv.raw)
+  return outerAt < 0 ? src : src.slice(0, outerAt) + patched + src.slice(outerAt + inv.raw.length)
+}
+
 /** PLANT THE PROBE'S TERM INTO ONE SET'S OWN CONTENT SPAN (a mutation builder): the
  *  term is injected into that set's first document text, so the set's own content —
  *  never a shape the arm invented — is what the limb re-reads. */
@@ -12629,7 +14659,11 @@ function mockSetWithTermIn(src: string, setName: string): string {
   const span = mockSetSpanIn(inv.raw, setName)
   if (span === '') return src
   const injected = span.replace(/(:\s*')([^']*)(')/, (_m, a: string, b: string, c: string) => `${a}${b} ${probe.term}${c}`)
-  return injected === span ? src : src.replace(span, injected)
+  // THE EDIT LANDS IN THE INVENTORY THE ARM READS (`mockSetInventory`'s LAST match):
+  // a bare `src.replace(span, …)` would edit the FIRST literal — the driver's — leaving
+  // the plant's own content untouched, so the tooth would report *"NOT discriminated"*
+  // on a mutation that changed nothing the limb reads.
+  return injected === span ? src : mockSetInInventory(src, span, injected)
 }
 
 /** STRIP THE PROBE'S TERM OUT OF ONE SET'S OWN CONTENT SPAN (a mutation builder). */
@@ -12640,7 +14674,8 @@ function mockSetWithoutTerm(src: string, setName: string): string {
   const span = mockSetSpanIn(inv.raw, setName)
   if (span === '') return src
   const stripped = span.split(probe.term).join('nomarker')
-  return stripped === span ? src : src.replace(span, stripped)
+  // THE EDIT LANDS IN THE INVENTORY THE ARM READS — see `mockSetWithTermIn`.
+  return stripped === span ? src : mockSetInInventory(src, span, stripped)
 }
 
 /** `§5.5` — A BLOCK'S OWN PARK NAMING ITS OWN DECLARED FIXTURE: its body (plus its
@@ -12653,6 +14688,184 @@ function mockSetOwnParkNaming(src: string, block: string, fixture: string): bool
   const callsPark = /parkRow\s*\(|parkReason\s*:/.test(closure)
   const testsOwn = /present\s*===?\s*false|present\s*!==\s*true|resolved\s*===?\s*true/.test(closure)
   return names && callsPark && testsOwn
+}
+
+// ===========================================================================
+// THE PER-NAME CENSUS SUB-LIMB (`§16.17` item 2, `§17.1` clause 3, `§2`, `§18.6`).
+//
+// THE HOLE THIS CLOSES: NO ARM OF EITHER UNIT ASSERTED THE DECLARATION'S OWN
+// PER-NAME CENSUS. The population figure `35 = 47 − 3 − 9` was asserted by the
+// REGISTER (`declaredTotal`), by the pin's row budgets and by the class-(b)
+// books, and the per-name breakdown was graded by NOTHING — so a landing that
+// derived `'corpus-documents'` `31` where the contract names `25` was GREEN.
+// ⟨GATE-4 AMENDMENT `2026-10-05` (`§20`) — `25` IN THE LINE ABOVE IS `SUPERSEDED` AND IS KEPT
+// VISIBLE (annotate-beside, `RCA-8(c)`): the contract's `'corpus-documents'` figure is `31`
+// (`§20` clause 1 · `§20.1` clause 1 · `§16.17` item 2's enumeration being the AUTHORITY,
+// `§20.2`), and `31` is the figure this sub-limb now GRADES. The `31` in the same line is what
+// the landed literal derives; the `25` is the filed figure the amendment reconciled away.⟩
+//
+// ⟨SPEC CONFLICT, REPORTED AND NOT SILENTLY RECONCILED (`§16.17` item 2).⟩ THAT
+// clause states the total TWICE OVER and inconsistently:
+//   (a) "BY FIXTURE NAME: `'corpus-documents'` `25` · `'corpus-query-results'` `3` ·
+//       `'corpus-document-tabs'` `1`" — and `25` is re-stated at `§2` item ~201, at
+//       `§2`'s `25 = 24 + 1` line, at `§17.1` clause 3, at `§17.3` item 1, at
+//       `§18.6` clause 4 and at `§12` item 12, with the SAME arithmetic (`35 = 47 −
+//       3 − 9`, `16` hand-listed + `9` entered = `25`); and
+//   (b) the clause's own "EXHAUSTIVELY" enumeration of those keys, which carries
+//       **`31`** NAMES — byte-for-byte the set the landed literal gates.
+// THE FIGURE IS GRADED HERE (it is the reading of record at every other site of
+// the contract, and `§16.17` item 2's own arithmetic states it); THE ENUMERATION
+// IS USED ONLY AS AN INVENTORY the census may not grow BEYOND (limb (iv)), NEVER
+// as a count — because a count graded off that enumeration would read `31` and
+// agree with the driver, which is the defect this sub-limb exists to catch. The
+// enumeration's own `31`-vs-`25` contradiction is a DOC defect for the unit's
+// owner, recorded here beside its subject and NOT repaired by relaxing the limb.
+//
+// ⟨GATE-4 AMENDMENT `2026-10-05` (`§20`) — THE CONFLICT RECORDED ABOVE IS **RESOLVED**, AND ITS
+// RECORD IS KEPT (nothing above is deleted, and nothing was silently reconciled): the architect's
+// ruling made `§16.17` item 2's ENUMERATION the authority OVER the stale figure and reconciled
+// the FIGURE to it — `'corpus-documents'` `31`, `31 = 30 + 1` (`§20.1` clauses 1/5 · `§20.2`
+// clauses 1/4), so that `31 + 3 + 1 = 35` AND `47 − 3 − 9 = 35` BOTH CLOSE (`§20.1` clause 4;
+// the filed `25` closed with nothing, `25 + 3 + 1 = 29`). THE FILED `25` AND ITS DECOMPOSITION
+// (`25 = 24 + 1`, `16` hand-listed + `9` entered) ARE `SUPERSEDED` AND STAY VISIBLE above and at
+// the constant below (§20, `§20.3` item 9). THE `16`-HAND-LISTED SUB-COUNT IS `OWED` AND NO ARM
+// READS IT (`§20.2` clause 3) — this sub-limb grades the TOTAL and the population only.⟩
+// ===========================================================================
+
+/** `§16.17` item 2 / `§17.1` clause 3 — THE CONTRACT'S PER-NAME CENSUS, as the
+ *  GATED population's own breakdown. Each figure is quoted from the contract, never
+ *  measured off the driver: the census is the SUBJECT, so it may not be its own oracle.
+ *  ⟨GATE-4 AMENDMENT `2026-10-05` (`§20`): the first name's figure is RECONCILED to `31`;
+ *  the filed `25` is `SUPERSEDED` and stays visible beside it. `3` and `1` are UNMOVED.⟩ */
+const MOCK_SET_CONTRACT_GATED_CENSUS: Array<[string, number]> = [
+  ['corpus-documents', 31], // ⟨`§20` GATE-4 AMENDMENT `2026-10-05`: `31 = 30 + 1`; the filed `25` is `SUPERSEDED` and kept visible here⟩
+  ['corpus-query-results', 3],
+  ['corpus-document-tabs', 1],
+]
+/** `§16.17` item 2 — the two names that are NEVER gated, so their gated count is `0`. */
+const MOCK_SET_CONTRACT_NEVER_GATED_NAMES: string[] = ['self-provisioned-document', 'none']
+/** `§16.17` item 2 / `§17.1` clause 3 — THE THREE TERMS OF THE ARITHMETIC: `35 = 47 − 3 − 9`.
+ *  All three terms are UNMOVED by the `§20` GATE-4 amendment `2026-10-05` (as are the two the
+ *  sub-limb already asserts: `corpusRead:false 3` and `selfProvisioning:true 9`). */
+const MOCK_SET_CONTRACT_CENSUS_TERMS = { entries: 47, corpusFree: 3, selfProvisioning: 9, gated: 35 }
+/** `§16.17` item 2 — THE GATED `'corpus-documents'` INVENTORY, EXHAUSTIVELY (as the clause
+ *  enumerates it — `31` names at this filing; see the conflict recorded above). A census may
+ *  carry NO name outside this list; it is an INVENTORY, NOT a count. ⟨GATE-4 AMENDMENT
+ *  `2026-10-05` (`§20`): the enumeration's `31` and the graded figure `31` NOW AGREE, so this
+ *  limb is an inventory check that no longer contradicts the count; it stays an INVENTORY (never
+ *  a count), exactly as filed, because a count graded off it would agree with the driver by
+ *  construction — the defect this sub-limb exists to catch (`§17.12`).⟩ */
+const MOCK_SET_CONTRACT_CORPUS_DOCUMENT_KEYS: string[] = [
+  'tabs', 'toolbar_undo', 'v1_adjacency', 'v2_scoped', 'user4_main_editable', 'repro_nbsp',
+  'repro_dup_para', 'uf_tabs_1', 'uf_tabs_3', 'uf_tabs_4', 'uf_panes_12', 'uf_panes_12_diag',
+  'uf_hist_4', 'uf_hist_6', 'uf_layout_2', 'u_edit_1_live_commit_failure_warning',
+  'u_edit_1_live_package_table_limitation', 'shell_integration', 'v3_docnav',
+  'stage_async_mount_race_v1', 'stage_doc_surface_precondition_diag',
+  'stage_docnav_switch_inside_async', 'stage_document_tab_paints_its_document',
+  'stage_foreign_rederive_v2', 'stage_refresh_survival_v5', 'stage_surface_census_i2r',
+  'o0_document_row', 'o0_folder_row', 'o0_gpu_control', 'o0_repeat_determinism', 'o0_track_ablation',
+]
+
+/** THE DECLARATION'S CENSUS, READ AS PURE DATA off the driver's own literal through the
+ *  pin's EXISTING declaration reader (never a second reader), and split by `§4.1`'s gate
+ *  predicate exactly as the driver derives its own `GATED` population. */
+interface MockSetDeclarationCensus {
+  entries: number
+  gatedBy: Map<string, string[]>
+  neverGated: Map<string, number>
+  corpusFree: number
+  selfProvisioning: number
+}
+function mockSetDeclarationCensus(src: string = SRC): MockSetDeclarationCensus {
+  const entries = ufDeclarationEntriesIn(src)
+  const gatedBy = new Map<string, string[]>()
+  const neverGated = new Map<string, number>()
+  let corpusFree = 0
+  let selfProvisioning = 0
+  for (const e of entries) {
+    if (e.selfProvisioning === true) selfProvisioning += 1
+    if (e.corpusRead === false) corpusFree += 1
+    if (e.corpusRead === true && e.selfProvisioning === false) {
+      const mine = gatedBy.get(e.fixtureName) ?? []
+      mine.push(e.block)
+      gatedBy.set(e.fixtureName, mine)
+    } else {
+      neverGated.set(e.fixtureName, (neverGated.get(e.fixtureName) ?? 0) + 1)
+    }
+  }
+  return { entries: entries.length, gatedBy, neverGated, corpusFree, selfProvisioning }
+}
+
+/** THE NAMED SUB-LIMB `probe-population:gated-name-has-read:census` (`§16.17` item 2,
+ *  `§17.1` clause 3). It is attached to the EXISTING named arm
+ *  `probe-population:gated-name-has-read` — the arm whose subject already IS the gated
+ *  fixture-NAME population — so NO new arm, no new row, and no `k`/total/seed/cap moves.
+ *  It carries its own label in the offence text, so the arm's report names WHICH limb of
+ *  the arm spoke. */
+function mockSetFixtureNameCensusOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
+  const ARM = 'probe-population:gated-name-has-read'
+  const out: Array<{ arm: string; offence: string }> = []
+  const c = mockSetDeclarationCensus(src)
+  const read = MOCK_SET_CONTRACT_GATED_CENSUS.map(
+    ([n, want]) => [`'${n}'`, (c.gatedBy.get(n) ?? []).length, want] as [string, number, number],
+  )
+  const readText =
+    read.map(([n, got, want]) => `${n} ${got}${got === want ? '' : ` (contract ${want})`}`).join(' · ') +
+    ` (gated ${[...c.gatedBy.values()].reduce((a, v) => a + v.length, 0)}; entries ${c.entries}; corpusRead:false ${c.corpusFree}; selfProvisioning:true ${c.selfProvisioning})`
+
+  // (i) THE FIGURE, per contracted gated name (`§16.17` item 2's own breakdown).
+  const wrongCount = read.filter(([, got, want]) => got !== want)
+  if (wrongCount.length > 0) {
+    out.push({
+      arm: ARM,
+      offence:
+        `THE PER-NAME CENSUS SUB-LIMB (\`probe-population:gated-name-has-read:census\`): the declaration's gated per-name census does not reproduce the contract's figures ` +
+        `(\`§16.17\` item 2, re-stated at \`§17.1\` clause 3 / \`§2\` / \`§18.6\` clause 4 / \`§12\` item 12): ` +
+        wrongCount.map(([n, got, want]) => `${n} reads ${got}, the contract names ${want}`).join('; ') +
+        ` — the contract's population is \`${MOCK_SET_CONTRACT_CENSUS_TERMS.gated} = ${MOCK_SET_CONTRACT_CENSUS_TERMS.entries} − ${MOCK_SET_CONTRACT_CENSUS_TERMS.corpusFree} − ${MOCK_SET_CONTRACT_CENSUS_TERMS.selfProvisioning}\`, named ${MOCK_SET_CONTRACT_GATED_CENSUS.map(([n, w]) => `${n} ${w}`).join(' · ')}; ` +
+        `READ ON THIS HEAD: ${readText}`,
+    })
+  }
+  // (ii) THE NEVER-GATED NAMES CARRY NO GATED ENTRY (`§16.17` item 2: both are `0`).
+  for (const n of MOCK_SET_CONTRACT_NEVER_GATED_NAMES) {
+    const got = (c.gatedBy.get(n) ?? []).length
+    if (got !== 0) {
+      out.push({
+        arm: ARM,
+        offence:
+          `THE PER-NAME CENSUS SUB-LIMB (\`probe-population:gated-name-has-read:census\`): \`'${n}'\` is NEVER gated, so its gated count is \`0\` (\`§16.17\` item 2 read with \`§4.1\`'s predicate), but the declaration gates ${got} entr(ies) on it: ${(c.gatedBy.get(n) ?? []).join(', ')}`,
+      })
+    }
+  }
+  // (iii) THE ARITHMETIC'S THREE TERMS (`§17.1` clause 3: `35 = 47 − 3 − 9`).
+  const t = MOCK_SET_CONTRACT_CENSUS_TERMS
+  const gatedTotal = [...c.gatedBy.values()].reduce((a, v) => a + v.length, 0)
+  const terms: string[] = []
+  if (c.entries !== t.entries) terms.push(`entries ${c.entries} (contract ${t.entries})`)
+  if (c.corpusFree !== t.corpusFree) terms.push(`corpusRead:false ${c.corpusFree} (contract ${t.corpusFree})`)
+  if (c.selfProvisioning !== t.selfProvisioning) terms.push(`selfProvisioning:true ${c.selfProvisioning} (contract ${t.selfProvisioning})`)
+  if (gatedTotal !== t.gated) terms.push(`gated ${gatedTotal} (contract ${t.gated})`)
+  if (terms.length > 0) {
+    out.push({
+      arm: ARM,
+      offence:
+        `THE PER-NAME CENSUS SUB-LIMB (\`probe-population:gated-name-has-read:census\`): the census arithmetic does not close at \`${t.gated} = ${t.entries} − ${t.corpusFree} − ${t.selfProvisioning}\` (\`§17.1\` clause 3, \`§16.17\` item 2): ${terms.join('; ')}`,
+    })
+  }
+  // (iv) NO GROWTH BEYOND THE CONTRACT'S OWN INVENTORY (`§16.17` item 2's list is the
+  // authority for WHICH keys may carry this name). A census that gates a key the contract
+  // never names under `'corpus-documents'` is an offence even when the count happens to
+  // match — and this limb is SATISFIABLE BEFORE AND AFTER the implementer's correction,
+  // so it never becomes the unsatisfiable-as-filed pattern.
+  const outside = (c.gatedBy.get('corpus-documents') ?? []).filter((k) => !MOCK_SET_CONTRACT_CORPUS_DOCUMENT_KEYS.includes(k))
+  if (outside.length > 0) {
+    out.push({
+      arm: ARM,
+      offence:
+        `THE PER-NAME CENSUS SUB-LIMB (\`probe-population:gated-name-has-read:census\`): ${outside.length} gated \`'corpus-documents'\` key(s) are OUTSIDE the contract's own inventory at \`§16.17\` item 2 (a census may not grow past the names the contract carries): ${outside.join(', ')}`,
+    })
+  }
+  return out
 }
 
 function mockSetProbeOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
@@ -13052,7 +15265,27 @@ function mockSetDriveRowPSm5(): void {
       )))
   // ---- 2×probe-population (`§5.4`, `§16.16`, `§17.7` clause 1) ----
   arm(run, 11, 'probe-population:gated-name-has-read', () =>
-    mockSetArmRead('P-SM-5', 'probe-population:gated-name-has-read', pr, () =>
+    // ⟨THE PER-NAME CENSUS SUB-LIMB, ADDED `2026-10-05` — ATTACHED TO THIS EXISTING NAMED
+    // ARM, NEVER A NEW ONE. WHY THIS ARM: its subject is ALREADY the gated fixture-NAME
+    // population (`§5.4`, `§16.16`, `§17.7` clause 1 — `gated` / `declaredFixtures` /
+    // `registryKeys`), which is exactly what `§16.17` item 2 / `§17.1` clause 3 break DOWN
+    // per name; the census limb is the SAME population read at ONE LEVEL FINER. WHY THE
+    // ARM'S CLASS AND COUNT ARE UNAFFECTED: the limb is folded into the HEAD's offence list
+    // (`[...pr, …census]`), so `k` = `11`, the row's declared term `2×probe-population`, the
+    // register total `12`, the row total `57`, the seed and every cap are BYTE-UNMOVED — only
+    // this arm's own VERDICT moves (GREEN → RED at this head, because the landed literal
+    // derives `'corpus-documents'` `31` where the contract names `25`). The MUTATION tooth
+    // is untouched: `mockSetMutation`'s plant-clean leg still runs `mockSetProbeOffences`
+    // alone, because the contracted plant edits the driver's SHAPE and not its census.
+    // ⟨GATE-4 AMENDMENT `2026-10-05` (`§20`) — `25` ABOVE IS `SUPERSEDED` AND KEPT VISIBLE: the
+    // contract's figure is `31` (`§20` clause 1 · `§20.1` clause 1), so this arm's census sub-limb
+    // now GRADES `31` and the arm's VERDICT RETURNS TO GREEN at this head — the filed
+    // GREEN → RED reading is the record of the stale figure and is KEPT here, not deleted
+    // (annotate-beside, `RCA-8(c)`). Every other claim in this comment is UNMOVED and was never
+    // contingent on the figure (`k` = `11`, `2×probe-population`, total `12`, row total `57`, the
+    // seed and every cap). The arm's own offence strings are byte-unmoved as well: they print the
+    // graded constant, so they read `31` from the ruling rather than from a re-typed literal.⟩
+    mockSetArmRead('P-SM-5', 'probe-population:gated-name-has-read', [...pr, ...mockSetFixtureNameCensusOffences(SRC)], () =>
       mockSetMutation(
         'probe-population:gated-name-has-read',
         mockSetProbeOffences,
@@ -13209,6 +15442,18 @@ function mockSetStateOffences(src: string = SRC): Array<{ arm: string; offence: 
       })
     }
   }
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F1`) — THE FOLDED ROUTE-TAG SUB-LIMBS.⟩ The
+  // observation's THREE PARK MEMBERS are THIS arm's declared subject (`§16.17` item
+  // 6 / `§17.4` / `§17.5` clause 1), so (a) the member's COMPUTATION counting the
+  // route REGARDLESS of which route emitted the park and (b) the contracted subset
+  // chain `parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked` are this arm's class —
+  // `k` = `3`, `3×print-site`, `declaredTotal` `11`, `67`/`57` and every cap
+  // BYTE-UNMOVED, and NO `arm(run, N, …)` call is added.
+  out.push(...mockSetParkRouteOffences(src))
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F3`) — THE FOLDED PRINTED-FIELD SUB-LIMB.⟩
+  // `§5.5`/`§17.4` contract the PRINTED line's own field text, which is what this
+  // arm prints.
+  out.push(...mockSetPrintedFieldOffences(src))
   const obsMembers = mockSetObservationMembers(src)
   for (const m of ['parked', 'parkedByGate', 'parkedByFixtureAbsence']) {
     if (!obsMembers.includes(m)) {
@@ -13225,7 +15470,15 @@ function mockSetStateOffences(src: string = SRC): Array<{ arm: string; offence: 
     out.push({ arm: 'print-site:post-assignment', offence: 'the `fixtureState=` label does not interpolate the object\'s OWN `state` member' })
   }
   // ONE read, one constant, no site computing its own (§7.2 clause 2, UNIT A `X-2`)
-  const decls = (code.match(/const\s+UF_FIXTURE_STATE\s*=/g) ?? []).length
+  // ⟨RE-STATED `2026-10-05` — THE COUNT TOOTH READS THE DECLARATION UNDER EITHER
+  // CONTRACTED KEYWORD (`const` OR `let`, `§7.2` clause 3 + `§11.5`) AND STILL
+  // REQUIRES EXACTLY ONE.⟩ A `let` binding is NOT a second declaration: the ONE
+  // assignment site carries no keyword, so this reads `1` in either form and the
+  // tooth bites exactly as it did — two declarations, a re-declaration or a site
+  // recomputing the value is still RED. SUPERSEDED, KEPT VISIBLE — the as-filed
+  // keyword-bound count, verbatim:
+  //   const decls = (code.match(/const\s+UF_FIXTURE_STATE\s*=/g) ?? []).length
+  const decls = (code.match(/(?:const|let)\s+UF_FIXTURE_STATE\s*=/g) ?? []).length
   if (decls !== 1) {
     out.push({ arm: 'print-site:one-read', offence: `the state constant is declared ${decls} time(s) — §6.1 contracts ONE module-level literal and no site may recompute the value (§7.2 clause 2)` })
   }
@@ -13254,6 +15507,15 @@ function mockSetStateOffences(src: string = SRC): Array<{ arm: string; offence: 
   if (!/kind\s*===\s*'none'\s*\?|kind\s*===\s*'mock-data-set'\s*\?/.test(code2)) {
     out.push({ arm: 'state-consequence:none-scoped', offence: 'the consequence is not conditional on the state at all (no `kind === \'none\' ?` / `kind === \'mock-data-set\' ?` test)' })
   }
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F5`) — THE FOLDED IDENTITY-REACH SUB-LIMB.⟩
+  // `§11.2`'s STATE-MEMBER row declares the arm's subject as *"a member is missing,
+  // OR the set's identity does not reach `fixtureId`"*; the filed limbs grade only
+  // the FIRST half (they read the module-level literal's defaults, and both named
+  // mutations plant into that literal). The DERIVATION's own returned `id` is the
+  // subject's second half, so it rides THIS predicate — `k` = `3`, `3×state-member`,
+  // `declaredTotal` `11`, `67`/`57` and every cap are BYTE-UNMOVED.
+  out.push(...mockSetSetIdentityReachOffences(src))
+
   return out
 }
 
@@ -13264,19 +15526,60 @@ describe('§4 P-TP-4 — THE RUN DECLARES ITS FIXTURE: MEMBERS, DERIVATION, SITE
   it('P-TP-4 [strat:mock-fixture-run-declaration] declared 3×state-member + 3×state-derivation + 3×print-site + (2×state-consequence + 0×class-(b)) = 11 attempts', () => { mockSetDriveRowPTp4() })
 })
 
-const MOCK_SET_STATE_CONST = "const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'none' }"
+// ⟨RE-STATED `2026-10-05` — THE DECLARATION IS MATCHED IN EITHER CONTRACTED KEYWORD
+// (`§7.2` clause 3 + `§11.5`).⟩ THE FINDING: the three `state-member` arms' NAMED
+// MUTATIONS replaced the declaration by a keyword-bound LITERAL, so on a driver whose
+// binding is a `let` (the contracted form: assigned ONCE, after the refusal branches)
+// every plant read *"could not be built on the contracted plant"* and the red set would
+// have SHIFTED rather than stayed put. THE RE-STATEMENT BINDS THE KEYWORD THE SOURCE
+// ACTUALLY CARRIES and keeps EVERY tooth: the same object body is replaced in place, the
+// member set the limb reads is the planted one, and each plant still turns its OWN limb
+// RED. ⟨GATE-4 FIX PASS `2026-10-05` (`F11`) — THE `const`-BOUND LITERAL ITSELF IS
+// DELETED.⟩ It was read by NOTHING (its only occurrence in this file was its own
+// declaration) and its `const`-bound text CONTRADICTS the keyword-agnostic helper beside
+// it — the driver's binding is a `let`, so a reader who took the constant for the plant's
+// subject would conclude the mutations no longer bite. THE SUPERSEDED FORM IS KEPT
+// VISIBLE AS THE COMMENT LINE BELOW, which is what the re-statement discipline requires
+// (the text stays on the record; the dead binding goes):
+//   const MOCK_SET_STATE_CONST = "const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'none' }"
+/** SET THE ONE DECLARATION'S OWN OBJECT BODY IN PLACE, under the keyword the source
+ *  carries (`const` OR `let`): the plant's subject is the MEMBER SET, never the keyword. */
+function mockSetWithStateBody(src: string, body: string): string {
+  const m = /(?:const|let)\s+UF_FIXTURE_STATE\s*=\s*\{[^}]*\}/.exec(src)
+  if (m === null) return src
+  return src.slice(0, m.index) + m[0].replace(/\{[^}]*\}$/, body) + src.slice(m.index + m[0].length)
+}
 
 function mockSetDriveRowPTp4(): void {
   const spec = MOCK_SET_DECLARED_REGISTER[2]
   const run = newRun()
-  const st = mockSetStateOffences(SRC)
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F1`/`F3`) — THE FOLDED SUB-LIMBS, ONCE.⟩ The
+  // route-tag/subset-chain pair and the printed-field limb ride THIS row's
+  // `print-site:post-assignment` arm by being APPENDED to its head's offence list, so
+  // `k` = `8`, `3×print-site`, `declaredTotal` `11`, `67`/`57` and every cap are
+  // BYTE-UNMOVED and no `arm(run, N, …)` call is added. The mutation tooth is
+  // untouched: its plant-clean leg still runs `mockSetStateOffences` alone, so a plant
+  // the contract rejects is reported without weakening that tooth.
+  // ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEMS 1/2, THE SAME FOLD.⟩ The gate route's
+  // per-EMISSION-SITE limb (the missing tooth the re-audit measured) and the tag's own
+  // attribution limb are appended to the SAME head, so `k` = `8`, `3×print-site`,
+  // `declaredTotal` `11`, `17 + 12 + 11 + 27 = 67`, EXECUTED `57`, the caps and the seed
+  // `0x20261005` are BYTE-UNMOVED and the distinct-arm count stays `57`.
+  const st = [
+    ...mockSetStateOffences(SRC),
+    ...mockSetParkRouteOffences(SRC),
+    ...mockSetPrintedFieldOffences(SRC),
+    ...mockSetParkEmissionOffences(SRC),
+    ...mockSetParkAttributionOffences(SRC),
+  ]
+
   // ---- 3×state-member (`§7.1`, `§16.4`, `§16.12`) ----
   arm(run, 1, 'state-member:state', () =>
     mockSetArmRead('P-TP-4', 'state-member:state', st, () =>
       mockSetMutation(
         'state-member:state',
         mockSetStateOffences,
-        (planted) => planted.replace(MOCK_SET_STATE_CONST, "const UF_FIXTURE_STATE = { kind: 'none', id: 'none' }"),
+        (planted) => mockSetWithStateBody(planted, "{ kind: 'none', id: 'none' }"),
         "the object's `state` member DELETED",
       ) ??
       mockSetMutation(
@@ -13290,7 +15593,7 @@ function mockSetDriveRowPTp4(): void {
       mockSetMutation(
         'state-member:kind',
         mockSetStateOffences,
-        (planted) => planted.replace(MOCK_SET_STATE_CONST, "const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'no-fixture', id: 'none' }"),
+        (planted) => mockSetWithStateBody(planted, "{ state: 'no fixture data set selected', kind: 'no-fixture', id: 'none' }"),
         "the object's `kind` VALUE changed",
       ) ??
       mockSetMutation(
@@ -13304,7 +15607,7 @@ function mockSetDriveRowPTp4(): void {
       mockSetMutation(
         'state-member:id',
         mockSetStateOffences,
-        (planted) => planted.replace(MOCK_SET_STATE_CONST, "const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none' }"),
+        (planted) => mockSetWithStateBody(planted, "{ state: 'no fixture data set selected', kind: 'none' }"),
         "the object's `id` member DELETED",
       ) ??
       mockSetMutation(
@@ -13316,7 +15619,7 @@ function mockSetDriveRowPTp4(): void {
       mockSetMutation(
         'state-member:id',
         mockSetStateOffences,
-        (planted) => planted.replace(MOCK_SET_STATE_CONST, "const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'core' }"),
+        (planted) => mockSetWithStateBody(planted, "{ state: 'no fixture data set selected', kind: 'none', id: 'core' }"),
         "the `id` HARD-CODED to 'core' (the identity carrier stops carrying the selection)", 
       )))
   // ---- 3×state-derivation (`§3.1` clause 2, `§7.2` clauses 2/3) ----
@@ -13363,7 +15666,19 @@ function mockSetDriveRowPTp4(): void {
         'a ROOT field PLANTED on a refusal line',
       )))
   arm(run, 8, 'print-site:post-assignment', () =>
-    mockSetArmRead('P-TP-4', 'print-site:post-assignment', st, () =>
+    mockSetArmRead(
+      'P-TP-4',
+      'print-site:post-assignment',
+      // ⟨GATE-4 FIX PASS `2026-10-05` (`F1`/`F3`) — THE FOLDED SUB-LIMBS ADD NO ARM.⟩
+      // `§17.5` clause 1's own `print-site:observation-members` assertion set is what
+      // this arm's declared subject already is (the three park members), and
+      // `§17.4` clause 2's printed field is the same printed line's text — so both
+      // ride THIS arm's head (`k` = `8`, `3×print-site`, `declaredTotal` `11`,
+      // `67`/`57` and every cap BYTE-UNMOVED). The mutation tooth is untouched: its
+      // plant-clean leg still runs `mockSetStateOffences` alone, because the
+      // contracted plant edits the driver's SHAPE and not these two limbs' subjects.
+      st,
+      () =>
       mockSetMutation(
         'print-site:post-assignment',
         mockSetStateOffences,
@@ -13393,6 +15708,209 @@ function mockSetDriveRowPTp4(): void {
         mockSetStateOffences,
         (planted) => planted.split('fixtureId=${UF_FIXTURE_STATE.id} ').join(''),
         'the `fixtureId=` label interpolation deleted',
+      ) ??
+      // ⟨GATE-4 FIX PASS `2026-10-05` (`F1`) — THE TWO NAMED MUTATIONS THE FOLDED
+      // ROUTE-TAG SUB-LIMBS OWE (`§10.3` clause 4: a limb that cannot bite is a
+      // finding). MUTATION (i): STRIP the tag from the FIXTURE-GATE route's own
+      // attribution, so the tag is carried by ONE route only — the defect `F1`
+      // measured. MUTATION (ii): STRIP the tag from the row-result builder's returned
+      // object, so the BLOCK-BODY route's tag is dropped before the classification
+      // reads it. Each must turn ITS OWN limb RED.
+      // ⟨UNIT B REPAIR `2026-10-05` — MUTATION (i) NOW DELETES **EVERY** COPY OF THE TAG IT
+      // NAMES.⟩ THE AS-FILED FORM (kept VISIBLE under `SUPERSEDED` below) WAS AUTHORED WHEN
+      // THE FIXTURE-GATE ROUTE HAD **ONE** TAGGED EMISSION SITE, and it removed that site with
+      // a SINGLE-OCCURRENCE `replace(…)`. THE CONTRACTED SHAPE NOW CARRIES THE TAG ON **BOTH**
+      // OF `ufDriverFailureRows`' GATE-ROUTE EMISSION SITES (the id-carrying limb AND the
+      // no-declared-row limb), so the as-filed pattern (which names the id limb's own ending,
+      // `} : {}),`) matches that ONE site: the surviving no-declared-row tag keeps the F1
+      // gate-route offence from firing, `mockSetParkRouteOffences` CORRECTLY reads the tag
+      // present, and the tooth reports *"NOT discriminated"*. THAT IS EXACTLY THE TRAP THIS
+      // FILE'S OWN NOTE NAMES at the contracted plant above (*"A SINGLE-OCCURRENCE DELETION
+      // removes only ONE copy … the limb then CORRECTLY reads the field present: the tooth
+      // reports 'NOT discriminated'"*). THE REPAIR IS THE SAME DISCIPLINE THE SIBLING FIELD
+      // MUTATION ALREADY USES (`split(…).join('')`, `§17.4` clause 2): EVERY copy of the tag
+      // leaves the subject, so NO surviving site can satisfy the gate-route limb — that read is
+      // an EXISTENTIAL regex over `ufHelperBodyIn(src, 'ufDriverFailureRows')`'s BODY, so one
+      // left-behind copy is enough to clear it — and the offence this mutation NAMES FIRES. THE
+      // TOOTH IS NOT WEAKENED: the deletion is BROADENED to every tagged site in the subject (so
+      // the block-body route's own record tag leaves with the gate route's and ITS offence fires
+      // beside the gate-route one), never narrowed, and the arm's own limb must still read the
+      // mutated subject RED.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkRouteOffences,
+        (planted) => planted.split("parkRoute: 'parked-by-fixture-absence'").join(''),
+        "the FIXTURE-GATE route's own \`parkRoute\` attribution STRIPPED (the tag carried by one route only)",
+        // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed single-occurrence form, verbatim:⟩
+        //   (planted) => planted.replace(", parkRoute: 'parked-by-fixture-absence' } : {}),", ' } : {}),'),
+        // WHY REPLACED — THE PATTERN NAMED ONE EMISSION SITE, AND THE CONTRACTED SHAPE CARRIES
+        // TWO: the as-filed pattern is anchored on the ID-CARRYING limb's own ending (`} : {}),`
+        // — the ending of the spread `rowResult` serves — while the NO-DECLARED-ROW limb's tag
+        // ends `} : {}) })` (the options object `diagResult` carries) and is NOT matched by it.
+        // That removal deleted ONE copy of the pair and left the other on the line, so the
+        // gate-route read found the tag PRESENT and the tooth reported *"the NAMED MUTATION (…)
+        // is NOT discriminated by this arm's limb"*: the mutation stopped grading anything the
+        // moment the F1 fix put the tag on the second site. THE ALL-OCCURRENCE FORM ABOVE BITES
+        // IN BOTH SHAPES (one tagged site OR two), so it models the defect it names — the tag
+        // carried by ONE route only — whatever the gate route's emission-site count.
+        // ⟨VERIFIED-BY-MEASURE `2026-10-05` (UNIT B) — the two forms driven over the SAME subject
+        // (`mockSetContractedPlant()`, which carries 5 `parkRoute: 'parked-by-fixture-absence'`
+        // copies): the as-filed single-occurrence form removes 1 copy (4 left) and leaves the arm
+        // 0 offence(s) — the *"NOT discriminated"* verdict this repair removes; the all-occurrence
+        // form removes all 5 and leaves 2 offences, the SECOND of them the F1 GATE-ROUTE offence
+        // itself (*"the FIXTURE-GATE route's record carries NO … tag"*) — so the tooth bites, and a
+        // driver WITHOUT the tag still reds the F1 limb.⟩
+      ) ??
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkRouteOffences,
+        (planted) => planted.replace(/^ {4}parkRoute: rowOpts\.park === true \? \(rowOpts\.parkRoute \?\? null\) : null,\n/m, ''),
+        "the row-result builder's `parkRoute` member DELETED (the block-body route's tag dropped)",
+      ) ??
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkRouteOffences,
+        (planted) => planted.replace(
+          "const parkedByFixtureAbsence = list === null ? null : list.filter((r) => r && r.park === true",
+          "const parkedByFixtureAbsence = list === null ? null : list.filter((r) => r",
+        ),
+        "the `park === true` conjunct DELETED from `parkedByFixtureAbsence` (the chain's `⊆ parked` broken)",
+      ) ??
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetPrintedFieldOffences,
+        // ⟨GATE-4 REMAND `2026-10-05` — REPAIR (b): THE MUTATION EDITS THE VERY TEXT THE
+        // PLANT-CLEAN LEG GRADED, so the removed field really leaves the subject the limb
+        // reads. The single-occurrence removal of the as-filed leg could only ever delete the
+        // BUILDER'S copy (see the `SUPERSEDED` note below), leaving the contract-required copy
+        // on the line and the limb correctly reading the field present.
+        (planted) =>
+          planted.split('parked-by-fixture-absence=${summary.fixtureGate.parkedByFixtureAbsence}').join(''),
+        'the printed `parked-by-fixture-absence=` field DELETED (every occurrence) from the field-carrying subject the plant-clean leg graded',
+        // THE TOOTH'S OWN SUBJECT (`§17.4` clause 2): the contracted plant WITH the printed
+        // field, built by the very builder the limb contracts. BOTH legs of this mutation now
+        // grade THIS text — the plant-clean leg asserts it, and the mutation deletes the field
+        // from it — which is exactly what the mutation's own description always assumed.
+        // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed leg, verbatim:⟩
+        //   mockSetMutation(
+        //     'print-site:post-assignment',
+        //     mockSetPrintedFieldOffences,
+        //     (planted) =>
+        //       mockSetWithPrintedField(planted).replace(
+        //         /parked-by-fixture-absence=\$\{summary\.fixtureGate\.parkedByFixtureAbsence\}/,
+        //         '',
+        //       ),
+        //     'the printed `parked-by-fixture-absence=` field DELETED (from a plant that carries it)',
+        //   )
+        // WHY REPLACED — THE TWO LEGS GRADED DIFFERENT TEXTS, AND THE MUTATION DELETED FROM
+        // THE WRONG ONE: the plant-clean leg graded `mockSetContractedPlant()`, while the
+        // mutation leg graded `mockSetWithPrintedField(mockSetContractedPlant())` — a DIFFERENT
+        // string that no leg had asserted clean. `mockSetWithPrintedField` INSERTS the field at
+        // the `of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate}` anchor,
+        // and the driver NOW CARRIES that anchor (the gate-4 fix landed), so the builder placed
+        // a SECOND copy of the field AHEAD of the driver's own and the single-occurrence removal
+        // deleted the BUILDER'S copy — the contract-required copy stayed on the line, the limb
+        // correctly found the field present, and the tooth read *"NOT discriminated"*. The tooth
+        // could only bite on a subject that LACKED the field, which the SAME leg's plant-clean
+        // check forbids (the field's absence IS the offence): the two legs were mutually
+        // exclusive BECAUSE THEY GRADED DIFFERENT SUBJECTS. The subject below carries the field,
+        // so this tooth holds in BOTH driver states (whether or not the landed driver already
+        // prints it) instead of depending on the landed copy.
+        mockSetWithPrintedField(mockSetContractedPlant()),
+      ) ??
+      // ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEM 1: THE MISSING TOOTH'S TWO NAMED MUTATIONS,
+      // AND ITEM 2: THE TAG'S OWN ATTRIBUTION'S TWO.⟩ Each rides THIS arm (`k` = `8`) and adds
+      // no `arm(run, N, …)` call, so the register's `67`/`57`, the caps and the seed are
+      // BYTE-UNMOVED. Each TOOTH's subject is the plant the limb contracts
+      // (`mockSetParkEmissionPlant()`), because the defect the limb grades is IN
+      // `scripts/live-drive.mjs`: grading the contracted plant (which reproduces the driver's own
+      // shape) would report the PLANT's offence instead of discriminating the mutation.
+      //
+      // MUTATION 1 (`ITEM 1`): THE NO-DECLARED-ROW LIMB'S OWN EMISSION SITE IS PUT BACK TO ITS
+      // FILED SPELLING — `diagResult(text)`, NO park member and NO route tag — while the
+      // id-carrying limb KEEPS its tag. `mockSetParkEmissionOffences` must go RED ON THE NO-ID
+      // SITE, which is exactly the state the re-audit measured on the real driver (the filed `F1`
+      // tooth's existential read could not see it).
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkEmissionOffences,
+        (planted) => planted.replace(MOCK_SET_PARK_EMISSION_NOID_TAGGED, () => MOCK_SET_PARK_EMISSION_NOID_PLAIN),
+        'the NO-DECLARED-ROW emission site\'s own park member AND route tag DELETED (the id-carrying limb left tagged — the existential tooth\'s blind spot)',
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 2 (`ITEM 1`): THE ID-CARRYING SITE'S TAG IS STRIPPED AND THE NO-ID SITE LEFT
+      // TAGGED — the mirror image, so the limb can never be satisfied by grading only one limb.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkEmissionOffences,
+        (planted) => planted.replace(MOCK_SET_PARK_EMISSION_ID_TAG, () => MOCK_SET_PARK_EMISSION_ID_NO_TAG),
+        "the DECLARED-ROW emission site's route tag DELETED (the no-id limb left tagged — the mirror of mutation 1)",
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 3 (`ITEM 2`): THE NO-ID SITE'S TAG IS RE-GATED ON THE BARE PRECONDITION FLAG —
+      // the over-attribution the re-audit measured on the real driver (`d.preconditionFailed`
+      // admits `ECONNREFUSED`/`engine-absent`). `mockSetParkAttributionOffences` must go RED on
+      // THAT site by name.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkAttributionOffences,
+        (planted) =>
+          planted.replace(
+            "driverReason: reason.kind, ...(reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing' ? {",
+            'driverReason: reason.kind, ...(d.preconditionFailed ? {',
+          ),
+        "the NO-DECLARED-ROW site's tag RE-GATED on the bare `d.preconditionFailed` (the tag then admits the transport/engine preconditions)",
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 4 (`ITEM 2`): THE SAME OVER-ATTRIBUTION AT THE ID-CARRYING SITE, so the tag's
+      // gate is graded on EVERY tagged site and not on the no-id limb alone.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkAttributionOffences,
+        (planted) => planted.replace(MOCK_SET_PARK_EMISSION_ID_GATE_CONTRACTED, () => MOCK_SET_PARK_EMISSION_ID_GATE_FILED),
+        "the DECLARED-ROW site's tag RE-GATED on the bare `d.preconditionFailed` (the mirror of mutation 3)",
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 5 (`ITEM 2`): THE GATE ADMITS A TRANSPORT KIND BY NAME — the other shape of the
+      // same offence (a disjunction that admits a non-fixture precondition), which the limb must
+      // report against the kind it names.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkAttributionOffences,
+        (planted) =>
+          planted.replace(
+            "...(reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing' ? { parkReason: `${reason.kind}: ${reason.detail}`,",
+            "...(reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing' || reason.kind === 'ECONNREFUSED' ? { parkReason: `${reason.kind}: ${reason.detail}`,",
+          ),
+        "the NO-DECLARED-ROW site's gate WIDENED to admit `ECONNREFUSED` (a transport precondition named into the tag's own gate)",
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 6 (`ITEM 1`, iii — THE PROPAGATION HALF): the §6.1 diagnostic builder's own
+      // `...extra` spread DELETED, so a site that tags its record correctly still reaches
+      // `ufCountBlock` with `parkRoute:null`. The limb must report the PROPAGATION offence by
+      // name — the requirement the work order states as *"require the record-building path to
+      // propagate it"*.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkEmissionOffences,
+        (planted) => planted.replace('    diagnostic: true,\n    detail: detail,\n    ...extra,\n', '    diagnostic: true,\n    detail: detail,\n'),
+        "the §6.1 diagnostic builder's `...extra` spread DELETED (the park's attribution dropped before the classification reads the record)",
+        mockSetParkEmissionPlant(),
+      ) ??
+      // MUTATION 7 (`ITEM 1`, iv — THE NON-VACUITY HALF): the NO-DECLARED-ROW limb is rebuilt so
+      // it returns through the DECLARED-ROW builder, leaving the helper with no diagnostic
+      // emission at all. The limb must say the no-id limb CANNOT BE READ rather than read the
+      // remaining site and report the helper clean.
+      mockSetMutation(
+        'print-site:post-assignment',
+        mockSetParkEmissionOffences,
+        (planted) =>
+          planted.replace(
+            'if (r.row === null) return diagResult(',
+            'if (r.row === null) return rowResult({ row: null, dclass: null },',
+          ),
+        'the NO-DECLARED-ROW limb REBUILT as a `rowResult` site (no §6.1 diagnostic emission left — the limb must refuse to read the helper as clean)',
+        mockSetParkEmissionPlant(),
       )))
   arm(run, 9, 'print-site:one-read', () =>
     mockSetArmRead('P-TP-4', 'print-site:one-read', st, () =>
@@ -13408,7 +15926,23 @@ function mockSetDriveRowPTp4(): void {
       mockSetMutation(
         'state-consequence:mock-armed',
         mockSetStateOffences,
-        (planted) => planted.replace(/\n  \? `CONSEQUENCE: the rows this run reports were driven against the mock data set \$\{UF_FIXTURE_STATE\.id\}; a fixture-fed PASS may NOT be quoted as a live-corpus app reading`/, '\n  ? undefined'),
+        // ⟨RE-STATED `2026-10-05` — THE REPLACEMENT IS GLOBAL (`§10.3` clause 4). THE PLANT
+        // CARRIES ITS OWN `mock-data-set` CONSEQUENCE PAIR (`MOCK_SET_PLANT_DECLARATION`'s
+        // `UF_MOCK_FIXTURE_CONSEQUENCE`) BESIDE THE DRIVER'S OWN PAIR (the landed
+        // `ufFixtureConsequenceOf`), SO THE READER'S WINDOW MATCHES A CLAUSE AFTER EACH
+        // HEAD. A NON-GLOBAL REPLACEMENT DELETED ONLY THE FIRST PAIR, THE OTHER STILL
+        // FED `mockClause`, AND THE TOOTH DID NOT BITE — MEASURED as `2` occurrences of the
+        // clause in the contracted plant, `1` surviving after the as-filed mutation. A
+        // NAMED MUTATION MUST REMOVE EVERY COPY IT NAMES (the `kind === 'mock-data-set'`
+        // HEAD survives both removals, so the limb reports the DERIVED-CONSEQUENCE offence
+        // and never the `no clause at all` one).
+        // SUPERSEDED, KEPT VISIBLE — the as-filed non-global replacement, verbatim:
+        //   (planted) => planted.replace(/\n  \? `CONSEQUENCE: the rows this run reports were driven against the mock data set \$\{UF_FIXTURE_STATE\.id\}; a fixture-fed PASS may NOT be quoted as a live-corpus app reading`/, '\n  ? undefined'),
+        (planted) =>
+          planted.replace(
+            /\n  \? `CONSEQUENCE: the rows this run reports were driven against the mock data set \$\{UF_FIXTURE_STATE\.id\}; a fixture-fed PASS may NOT be quoted as a live-corpus app reading`/g,
+            '\n  ? undefined',
+          ),
         'the `mock-data-set` CLAUSE deleted from the derived consequence',
       )))
   arm(run, 11, 'state-consequence:none-scoped', () =>
@@ -13567,9 +16101,23 @@ function mockSetObsoleteOffences(src: string = SRC): Array<{ arm: string; offenc
       out.push({ arm, offence: 'no `ARG-REFUSED` line refuses a selected set together with an OBSOLETE SUPPLY flag (`--seed=` / `--corpus-root=` / `--strict-seed` / `--o0-corpus=`) — two fixture supplies cannot both write the store this run measures (§6.4)' })
     }
   } else {
+    // ⟨§21.2 (`D-2`, greens `B-1`) — SUPERSEDED, KEPT VISIBLE (the reason-text-only
+    // assertion, the as-filed form of this arm's first limb.)⟩ THE FILED LIMB GRADED THE
+    // REASON ONLY, and a FAMILY LIST satisfied it: `/OBSOLETE SUPPLY|obsolete supply|two
+    // fixture supplies/` is TRUE of the family-only line, so the arm could not see that
+    // the line names NO supplied flag. `§21.2` clause 2 supplies the four graded readings
+    // (below), each asserting the flag the reading supplied; this limb is UNMOVED and is
+    // no longer the arm's whole subject. The as-filed text, verbatim:
+    //   if (!/OBSOLETE SUPPLY|obsolete supply|two fixture supplies/.test(supplyLines[0].text)) {
+    //     out.push({ arm: 'route-supply-refusal:refused-by-name', offence: 'the two-supply refusal does not state the reason (§6.4: two fixture supplies cannot both write the store this run measures)' })
+    //   }
     if (!/OBSOLETE SUPPLY|obsolete supply|two fixture supplies/.test(supplyLines[0].text)) {
       out.push({ arm: 'route-supply-refusal:refused-by-name', offence: 'the two-supply refusal does not state the reason (§6.4: two fixture supplies cannot both write the store this run measures)' })
     }
+    // ⟨§21.2 clause 2 — THE FLAG-BY-NAME SUB-LIMB (`§6.4`'s gate-5 block item 1).⟩ FOUR
+    // readings of THIS ONE ARM, one per supply flag, each asserting the flag the reading
+    // supplied; NO NEW ARM, no `k`, no count, no seed and no cap moves.
+    out.push(...mockSetSupplyFlagNamingOffences(supplyLines, src))
     const main = mockSetCode(ufHelperBodyIn(src, 'main'))
     const at = main.indexOf('ARG-REFUSED')
     const cond = at < 0 ? '' : mockSetBranchAround(main, main.indexOf('--seed', Math.max(0, at - 800)))
@@ -13587,6 +16135,254 @@ function mockSetObsoleteOffences(src: string = SRC): Array<{ arm: string; offenc
     }
   }
   return out
+}
+
+// ===========================================================================
+// ⟨§21.2 clause 2 — THE FOUR PER-SUPPLY READINGS OF ONE ARM (`§6.4`'s gate-5
+// block item 1; greens `B-1`; the live battery's `L-2` FAIL).⟩
+//
+// STATES ENUMERATED — THE ARM'S SUBJECT, ONE READING PER SUPPLY FLAG, each
+// asserting THE FLAG THE READING SUPPLIED:
+//   (1) `--fixture=<set> --seed=<value>`            → the line must name `--seed=`
+//   (2) `--fixture=<set> --corpus-root=<value>`     → the line must name `--corpus-root=`
+//   (3) `--fixture=<set> --strict-seed`             → the line must name `--strict-seed` (bare)
+//   (4) `--fixture=<set> --o0-corpus=<value>`       → the line must name `--o0-corpus=`
+// and the COVERAGE state: all four flags must appear in the ONE naming clause.
+// FAIL-STATES: the naming clause deleted (the line regresses to the family-only
+//   form — the `§6.4` `S-6` line); the naming clause present but ONE reading's own
+//   flag name absent from it; the naming clause absent entirely; the clause
+//   duplicated; a flag name standing only in the FAMILY list. Each is RED with its
+//   own message naming the reading that did not find its flag.
+// WHAT THE FAMILY FORM CANNOT SATISFY, STATED SO THE LIMB IS NOT A PROXY: the
+//   landed family list spells all four flags with a SPACE after the `=` sign
+//   (`(--seed= / --corpus-root= / --strict-seed / --o0-corpus=)`), while every
+//   NAMED reading carries the value it carried (`--seed="${…}"` ·
+//   `--corpus-root="${…}"` · `--o0-corpus=226`) and `--strict-seed` stands BARE.
+//   So a VALUE must follow the sign on the three value-carrying readings, and the
+//   FAMILY LIST IS CUT OUT of the graded window BY CONSTRUCTION (the naming clause
+//   is read between the `NAMED:` marker and the family list's own literal) — the
+//   two forms are discriminated by the text itself, never by a sentence or a
+//   fixed character offset.
+// THE REGISTER IS UNMOVED: these are readings INSIDE the existing arm
+//   `route-supply-refusal:refused-by-name` (no `arm(run, N, …)` call, no `k`, no
+//   total, no seed, no cap), so the distinct-arm count stays `57`, `P-TP-5` stays
+//   `27` and the register stays `67`/`57`.
+// ===========================================================================
+
+/** ONE SUPPLY FLAG'S OWN READING — the four readings of the ONE arm
+ *  `route-supply-refusal:refused-by-name` (`§21.2` clause 2): the flag's own name,
+ *  the form the reading supplies, the exact source sub-string this reading's NAMED
+ *  MUTATION removes, and the pattern the NAMING DECLARATION must satisfy for THIS
+ *  reading to be discharged.
+ *
+ *  WHAT IS READ, AND WHY IT IS THE DECLARATION AND NOT THE SENTENCE: the named
+ *  flags are NOT a sentence — the driver prints them by interpolating ONE array
+ *  (`${suppliedSupplyFlags.join(' and ')}`), so the flags the line can name ARE that
+ *  array's entries, and the array is SOURCE. The reading therefore grades the array
+ *  the naming output is derived from, per flag, and the `namedRe`s are written for
+ *  the LANDED ENTRY FORM, quoted from the driver verbatim: `--seed=${JSON.stringify(…)}`
+ *  (whose printed form is `--seed="…"`), `--corpus-root=${…}` (printed `--corpus-root="…"`),
+ *  `'--strict-seed'` (printed BARE, because it carries no value), `--o0-corpus=${…}`
+ *  (printed `--o0-corpus=…`, measured as `--o0-corpus=226`).
+ *  EVERY `namedRe` REQUIRES THE ENTRY TO CARRY ITS VALUE where the flag carries one
+ *  (`--seed=` followed by a non-empty value), so the FAMILY list's own `(--seed= / …)`
+ *  — a space after the sign — satisfies NONE of them. */
+const MOCK_SET_SUPPLY_READINGS = [
+  { supply: '--seed=', flagToken: '`--seed=${JSON.stringify(opt.seed)}`', form: '--seed="<value>"', namedRe: /--seed=(?!\s|\/|\))\S+/ },
+  { supply: '--corpus-root=', flagToken: '`--corpus-root=${JSON.stringify(opt.corpusRoot)}`', form: '--corpus-root="<value>"', namedRe: /--corpus-root=(?!\s|\/|\))\S+/ },
+  { supply: '--strict-seed', flagToken: "'--strict-seed'", form: '--strict-seed (bare)', namedRe: /--strict-seed(?![\w-])/ },
+  { supply: '--o0-corpus=', flagToken: '`--o0-corpus=${JSON.stringify(opt.o0Corpus)}`', form: '--o0-corpus=226', namedRe: /--o0-corpus=(?!\s|\/|\))\S+/ },
+] as const
+
+/** THE FAMILY LIST of one refusal line, as the driver prints it — quoted here so the
+ *  naming clause can be read WITHOUT it (the family list carries all four flag names
+ *  with nothing after the sign, so a window that swallowed it would grade a proxy). */
+const MOCK_SET_SUPPLY_FAMILY_LIST = '(--seed= / --corpus-root= / --strict-seed / --o0-corpus=)'
+/** THE CLAUSE THAT MARKS THE NAMING FORM (`§21.2`), as the driver prints it. */
+const MOCK_SET_SUPPLY_NAMED_MARKER = 'THE RUN ACTUALLY SUPPLIED, NAMED: '
+
+/** THE NAMING DECLARATION OF ONE REFUSAL LINE, resolved over the source that prints
+ *  it. THE `S-6` LINE PRINTS ITS FLAGS BY INTERPOLATING THE ARRAY IT NAMES, so the
+ *  reading is TWO-SIDED and both sides are source-derivable:
+ *    (i)  the line carries the naming marker and the family list BESIDE it;
+ *    (ii) the expression the marker interpolates is the array that declares the flags
+ *         (`suppliedSupplyFlags.join(' and ')`), and THAT ARRAY is what the four
+ *         per-flag readings grade — each entry is the flag named, with its value.
+ *  `null` when the line carries no naming marker at all: the FAMILY-ONLY form, which
+ *  is exactly the shape the four readings exist to grade. */
+interface MockSetSupplyNaming { named: string; array: string; line: string }
+function mockSetSupplyNaming(src: string, text: string): MockSetSupplyNaming | null {
+  const at = text.indexOf(MOCK_SET_SUPPLY_NAMED_MARKER)
+  if (at < 0) return null
+  const tail = text.slice(at + MOCK_SET_SUPPLY_NAMED_MARKER.length)
+  const familyAt = tail.indexOf(MOCK_SET_SUPPLY_FAMILY_LIST)
+  const head = familyAt < 0 ? tail : tail.slice(0, familyAt)
+  const m = /\$\{\s*([A-Za-z_$][\w$]*)\s*\.\s*join\(/.exec(head)
+  if (m === null) return null
+  const decl = new RegExp(`\\b(?:const|let)\\s+${m[1]}\\s*=\\s*\\[[\\s\\S]*?\\]\\.filter\\(`).exec(src)
+  if (decl === null) return null
+  return { named: m[1], array: decl[0], line: text }
+}
+
+/** THIS ARM'S OWN NAMED MUTATIONS, each driven over the CONTRACTED PLANT by the SAME
+ *  `mockSetMutation` leg (`§10.3` clause 4), reported as ONE message in the arm's own
+ *  form: the arm reads a SINGLE `string | null` (`§21.2` clause 2 — no new `arm(run,
+ *  N, …)` call, so the four readings ride the existing arm's own tooth). A GREEN leg
+ *  yields `null` (never an empty string, which would count as a counterexample); a RED
+ *  leg yields its message; a CLEAN leg contributes nothing. */
+function mockSetMutationReport(parts: Array<string | null>): string | null {
+  const said = parts.filter((p): p is string => p !== null && p !== '')
+  return said.length === 0 ? null : said.join('; ')
+}
+
+/** THE ARM'S SIX TEETH: (i) the branch DELETED (the filed tooth, unmoved); (ii) THE
+ *  NAMING STRIPPED — the family-only regression the task drives; (iii) the
+ *  family-beside-the-name clause stripped; (iv…vii) ONE TOOTH PER SUPPLY READING, each
+ *  dropping that reading's own flag from the naming array, so each reading is shown to
+ *  discriminate ITS OWN flag rather than leaning on a sibling's tooth. */
+function mockSetSupplyFlagNamingProbes(): Array<() => string | null> {
+  const ARM = 'route-supply-refusal:refused-by-name'
+  return [
+    // ⟨RE-STATED `2026-10-05` — THE REMOVAL IS GLOBAL (`§10.3` clause 4). THE PLANT
+    // INSERTS ITS OWN COPY OF THE TWO-SUPPLY BRANCH AFTER THE ARGV WALK
+    // (`mockSetAfterArgvWalk`), BESIDE THE DRIVER'S OWN COPY, SO THE CONTRACTED PLANT
+    // CARRIED TWO BYTE-IDENTICAL BRANCHES. A NON-GLOBAL REGEX DELETED ONLY THE
+    // PLANT'S COPY AND THE SURVIVOR (CORRECTLY CARRYING `OBSOLETE SUPPLY` /
+    // `two fixture supplies`) SATISFIED THE LIMB — MEASURED as `supplyLines` `2 → 1`
+    // with the offence NOT produced. A NAMED MUTATION MUST REMOVE EVERY COPY IT NAMES.
+    // SUPERSEDED, KEPT VISIBLE — the as-filed non-global regex, verbatim:
+    //   (planted) => planted.replace(/\n {2}if \(opt\.fixture !== null && \(opt\.seed !== null[\s\S]*?\n {2}\}\n/, '\n'),
+    // ⟨§21.2 clause 2 — AND SINCE THE PLANT NOW CARRIES THE DRIVER'S OWN CONTRACTED
+    // BRANCH INSERTED ONLY WHERE IT IS ABSENT (`mockSetAfterArgvWalkOnce`), THE SOURCE
+    // HOLDS EXACTLY ONE COPY AND THIS GLOBAL REMOVAL REGRESSES IT.⟩
+    () =>
+      mockSetMutation(
+        ARM,
+        mockSetObsoleteOffences,
+        (planted) => planted.replace(/\n {2}if \(opt\.fixture !== null && \(opt\.seed !== null[\s\S]*?\n {2}\}\n/g, '\n'),
+        'the two-supply refusal branch DELETED',
+      ),
+    // THE TASK'S NAMED MUTATION (`§21.2` clause 2): THE NAMING STRIPPED — the line
+    // regresses to the FAMILY-ONLY form, so every reading loses its own flag's name.
+    () =>
+      mockSetMutation(
+        ARM,
+        mockSetObsoleteOffences,
+        (planted) => mockSetWithoutSupplyFlagNaming(planted),
+        'the line REGRESSED TO THE FAMILY-ONLY FORM (the naming clause `THE RUN ACTUALLY SUPPLIED, NAMED: …` deleted)',
+      ),
+    // THE FAMILY-BESIDE-THE-NAME READING'S OWN TOOTH.
+    () =>
+      mockSetMutation(
+        ARM,
+        mockSetObsoleteOffences,
+        (planted) => mockSetWithoutSupplyFamilyBeside(planted),
+        "the `the FAMILY stands beside the name` clause deleted (the family left readable in the name's place)",
+      ),
+    // ONE TOOTH PER READING: THAT reading's own flag dropped from the naming array.
+    ...MOCK_SET_SUPPLY_READINGS.map((r) => () =>
+      mockSetMutation(
+        ARM,
+        mockSetObsoleteOffences,
+        (planted) => mockSetWithoutSupplyFlagEntry(planted, r.flagToken),
+        `the reading that supplied \`${r.supply}\` finds its own flag's name REMOVED from the naming array (the line names the other flags and not the one it carried)`,
+      ),
+    ),
+  ]
+}
+
+/** THE FLAG-BY-NAME OFFENCES of the two-supply refusal (`§6.4`: *"REFUSED BY
+ *  NAME"*; `§6.2` `B-2`; `§21.2` clause 2). FOUR readings of ONE arm label —
+ *  each asserts its own supplied flag, and the four together are the coverage
+ *  statement. */
+function mockSetSupplyFlagNamingOffences(
+  supplyLines: Array<{ line: number; text: string }>,
+  src: string,
+): Array<{ arm: string; offence: string }> {
+  const out: Array<{ arm: string; offence: string }> = []
+  const ARM = 'route-supply-refusal:refused-by-name'
+  // (a) THE NAMING DECLARATION EXISTS EXACTLY ONCE — a family-only line (or a line on
+  // which the naming was dropped, or duplicated) cannot carry the readings at all.
+  const naming = supplyLines
+    .map((l) => mockSetSupplyNaming(src, l.text))
+    .filter((n): n is MockSetSupplyNaming => n !== null)
+  if (naming.length !== 1) {
+    out.push({
+      arm: ARM,
+      offence: `the two-supply refusal carries ${naming.length} line(s) that NAME the flag the run actually supplied, not exactly one — the line must name the supplied flag BY ITS OWN NAME and not only its family (\`§6.4\`'s gate-5 block item 1, \`§21.2\` clause 2; the four flags are \`--seed=\` / \`--corpus-root=\` / \`--strict-seed\` / \`--o0-corpus=\`)`,
+    })
+    return out
+  }
+  const [read] = naming
+  // (b) THE FAMILY LIST STANDS BESIDE THE NAME, NEVER IN ITS PLACE.
+  if (!read.line.includes(MOCK_SET_SUPPLY_FAMILY_BESIDE)) {
+    out.push({
+      arm: ARM,
+      offence: 'the two-supply refusal does not state that the FAMILY list stands BESIDE the name — a line must not be readable as the family list taking the name\'s place (`§21.2` clause 2; `§6.4`\'s gate-5 block item 1)',
+    })
+  }
+  // (c) THE FOUR PER-SUPPLY READINGS: one per flag, each asserting the flag the
+  // reading SUPPLIED; all four must be covered by the SAME naming declaration.
+  for (const r of MOCK_SET_SUPPLY_READINGS) {
+    if (!r.namedRe.test(read.array)) {
+      out.push({
+        arm: ARM,
+        offence: `the reading that supplied \`${r.supply}\` cannot find its own flag's NAME in the refusal line's naming declaration (\`${read.named}\`, the array the line names the supplied flags with) — that reading supplies \`${r.form}\` and the line must name it as such; an agent reading a \`${r.supply}\` artifact cannot see WHICH FLAG TO DROP, which is the refusal's whole justification (\`§6.4\`'s gate-5 block item 1, \`§21.2\` clause 2; the FAMILY list is not a substitute for the name)`,
+      })
+    }
+  }
+  // (d) THE COVERAGE STATEMENT, READ FROM THE DECLARATION ITSELF: the four flag names
+  // are each carried by the ONE naming declaration, and the declaration's own printed
+  // output is the expression the marker interpolates.
+  const namedFlags = MOCK_SET_SUPPLY_READINGS.filter((r) => read.array.includes(r.supply))
+  if (namedFlags.length !== 4) {
+    out.push({
+      arm: ARM,
+      offence: `the naming declaration carries ${namedFlags.length} of the four supply flags (${MOCK_SET_SUPPLY_READINGS.map((r) => r.supply).join(' · ')}) — every flag the run supplied is a supply that conflicts with the selected set (\`§6.4\` clause 1, \`§21.2\` clause 2)`,
+    })
+  }
+  return out
+}
+
+/** THE NAMING CLAUSE'S OWN CONTRACTED TEXT, as the driver prints it — the subject
+ *  of this arm's named mutations. The FAMILY clause is a SEPARATE span of the same
+ *  line and is never part of this string, so a mutation built on it removes the
+ *  name and nothing else. */
+const MOCK_SET_SUPPLY_NAMING = "THE RUN ACTUALLY SUPPLIED, NAMED: ${suppliedSupplyFlags.join(' and ')} — this is the offending supply (§21.2: the flag must be named, not only its family)"
+/** THE FAMILY-BESIDE-THE-NAME CLAUSE — the SECOND span this limb grades (the
+ *  family list may stay BESIDE the name and may not stand in its place). */
+const MOCK_SET_SUPPLY_FAMILY_BESIDE = "the FAMILY stands beside the name, never in its place (--seed= / --corpus-root= / --strict-seed / --o0-corpus=)"
+
+/** NAMED MUTATION (THE ONE THE TASK DRIVES, `§21.2` clause 2): THE NAMING STRIPPED —
+ *  the `S-6` refusal line REGRESSES TO THE FAMILY-ONLY FORM the driver printed at the
+ *  filing head (the `§6.4` `S-6` line, greens `B-1`, battery `L-2`). THE REMOVAL IS
+ *  GLOBAL, and the plant no longer carries a second copy of the branch
+ *  (`mockSetAfterArgvWalkOnce`), so every copy the limb can read is regressed: a
+ *  mutation that left a naming copy alive would satisfy the limb and the tooth could
+ *  never bite it. */
+function mockSetWithoutSupplyFlagNaming(src: string): string {
+  return src.replace(new RegExp(escapeRegExp(MOCK_SET_SUPPLY_NAMING), 'g'), '')
+}
+
+/** NAMED MUTATION: THE FAMILY CLAUSE STRIPPED — the name is kept and the family list
+ *  loses its own "stands BESIDE the name" clause, so the line can be read as if the
+ *  name stood alone (or the family stood in its place). */
+function mockSetWithoutSupplyFamilyBeside(src: string): string {
+  return src.replace(new RegExp(escapeRegExp(MOCK_SET_SUPPLY_FAMILY_BESIDE), 'g'), '')
+}
+
+/** NAMED MUTATION, ONE PER SUPPLY READING: THAT READING'S OWN FLAG DROPPED FROM THE
+ *  NAMING ARRAY — the line names the OTHER flags and not the one the reading
+ *  supplied, which is exactly the offence `§6.4`'s gate-5 block item 1 describes
+ *  (*"an agent reading the artifact must be able to see WHICH FLAG TO DROP"*). */
+function mockSetWithoutSupplyFlagEntry(src: string, flagToken: string): string {
+  return src.replace(new RegExp('^[ \\t]*opt\\..*' + escapeRegExp(flagToken) + '.*\\n', 'gm'), '')
+}
+
+/** ONE RAW LITERAL, ESCAPED FOR A `RegExp` (the flag tokens carry backticks and
+ *  `${…}` spans, which would otherwise be read as patterns). */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function mockSetRepinOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
@@ -13616,7 +16412,7 @@ function mockSetRepinOffences(src: string = SRC): Array<{ arm: string; offence: 
     if (head !== "'.live-fixture/table/table'") {
       out.push({
         arm: 'repin-completeness:table-candidate',
-        offence: `the candidate list's HEAD is ${head}, not the table document's OWN literal identity '.live-fixture/table/table' — a slice position is not a contract, and the row must find the stored-\`<table>\` document under the \`table\` set (§16.2, R-13)`,
+        offence: `the candidate list's HEAD is ${head}, not the table document's OWN literal identity '.live-fixture/table/table' — a slice position is not a contract, and the row must find the stored-\`<table>\` document under the \`table\` set (§16.2, R-13) [⟨GATE-7 PROOFREAD PASS 2026-10-05 — MESSAGE PROSE ONLY; THE PREDICATE, THE LITERALS AND THE ARM ARE UNMOVED. The superseded wording is kept visible above and is marked here: the CARRIER is now the parser-mediated GFM PIPE-TABLE form (§22.2 item 3, §22.4 item 3) — the raw-\`<table>\` literal is dropped by the app's own import — so read "the stored-\`<table>\` document" as "the stored-TABLE document (the GFM pipe-table form)" (§16.11: class-(b):table MUST REJECT a PARK; measured verdict=PASS with rendered table census {"tables":1,"trs":1,"tds":4})⟩]`,
       })
     }
     if (!/defects/.test(list)) {
@@ -13656,6 +16452,20 @@ function mockSetRepinOffences(src: string = SRC): Array<{ arm: string; offence: 
       offence: `declaration \`surface\` member(s) quoting a DEAD identity: ${oldSurfaces.join(', ')} — the declaration's own text re-words with the re-pin, so a park reason never quotes a dead identity (§6.3 clause 3)`,
     })
   }
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F8` POSITIVE-TARGET HALF) — THE FOLDED SUB-LIMBS.⟩
+  // Every `repin-completeness:*` arm above grades the OLD identity family's ABSENCE
+  // only, so a landing that DELETED a target identity instead of re-pointing it is
+  // green. THE POSITIVE TARGET is the same arms' own subject (`§2.4` clause 1's
+  // *"the re-pin set is exhaustive"*, read in the direction the filed sweep cannot
+  // see), and the self-provisioners' root-resolver target is the `§16.7` clause 3
+  // half of R-14/R-15. `k` = `7`, `7×repin-completeness`, `declaredTotal` `27`,
+  // `67`/`57` and every cap are BYTE-UNMOVED.
+  out.push(...mockSetRepinPositiveOffences(src))
+  out.push(...mockSetSelfProvisionerOffences(src))
+  // ⟨GATE-4 FIX PASS `2026-10-05` (`F2`) — THE FOLDED `.gitignore` SUB-LIMB.⟩ The
+  // ignore file's ONE line is a path/citation surface (`§6.3` clause 3's own class,
+  // `§2.3` clause 4's contract), so it rides the `citation-repoint` pair.
+  out.push(...mockSetIgnoreRootOffences(src))
   return out
 }
 
@@ -13728,14 +16538,23 @@ function mockSetDriveRowPTp5(): void {
         "`seedCorpus`-shaped obsolete mechanism put in a declaration entry's `fixtureName`",
       )))
   // ---- 3×route-supply-refusal (`§6.4`) ----
+  // ⟨§21.2 clause 2 (`D-2`, greens `B-1`, the live battery's `L-2` FAIL) — THE ARM'S
+  // SUBJECT IS WIDENED, THE ARM IS NOT.⟩ ONE arm, `3×route-supply-refusal` unmoved,
+  // and inside it FOUR READINGS OF THE ONE ARM — one per supply flag, each asserting
+  // THE FLAG THE READING SUPPLIED (`§21.2` clause 2):
+  //   (1) `--fixture=<set> --seed=<value>`        → the line names `--seed="…"`
+  //   (2) `--fixture=<set> --corpus-root=<value>` → the line names `--corpus-root="…"`
+  //   (3) `--fixture=<set> --strict-seed`         → the line names `--strict-seed` (bare)
+  //   (4) `--fixture=<set> --o0-corpus=<value>`   → the line names `--o0-corpus=226`
+  // plus the COVERAGE reading (all four in the ONE naming clause) and the
+  // family-beside-the-name reading. THE EXISTING LIMBS STAY ASSERTED: the
+  // `ARG-REFUSED` marker and the reason (the superseded reason-text-only limb, kept
+  // visible above), the `none` state triple, exit `2`, and the pre-spawn order.
+  // NO `arm(run, N, …)` CALL IS ADDED: no `k`, no total, no seed, no cap, no arm
+  // count — the distinct-arm count stays `57`, `P-TP-5` at `27`, the register `67`/`57`.
   arm(run, 4, 'route-supply-refusal:refused-by-name', () =>
     mockSetArmRead('P-TP-5', 'route-supply-refusal:refused-by-name', ob, () =>
-      mockSetMutation(
-        'route-supply-refusal:refused-by-name',
-        mockSetObsoleteOffences,
-        (planted) => planted.replace(/\n {2}if \(opt\.fixture !== null && \(opt\.seed !== null[\s\S]*?\n {2}\}\n/, '\n'),
-        'the two-supply refusal branch DELETED',
-      )))
+      mockSetMutationReport(mockSetSupplyFlagNamingProbes().map((probe) => probe()))))
   arm(run, 5, 'route-supply-refusal:empty-set-not-exempt', () =>
     mockSetArmRead('P-TP-5', 'route-supply-refusal:empty-set-not-exempt', ob, () =>
       mockSetMutation(
@@ -13755,28 +16574,103 @@ function mockSetDriveRowPTp5(): void {
   // ---- 7×repin-completeness (`§2.4`, the two corrected groups per `§16.2`/`§16.7`) ----
   arm(run, 7, 'repin-completeness:document-ids', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:document-ids', rp, () =>
-      mockSetMutation('repin-completeness:document-ids', mockSetRepinOffences, (planted) => planted.replace(/\.live-fixture\/core\/beta/g, '.live-corpus/beta'), "R-1/R-2's beta leaf and folder label reverted to the OLD identity")))
+      mockSetMutation('repin-completeness:document-ids', mockSetRepinOffences, (planted) => planted.replace(/\.live-fixture\/core\/beta/g, '.live-corpus/beta'), "R-1/R-2's beta leaf and folder label reverted to the OLD identity") ??
+      // ⟨GATE-4 FIX PASS `2026-10-05` (`F8` POSITIVE-TARGET HALF) — THE FOLDED LIMB'S
+      // OWN NAMED MUTATION.⟩ THE FILED TOOTH grades the OLD identity's ABSENCE; this one
+      // grades the NEW identity's PRESENCE by DELETING it outright (a landing that
+      // removes a target instead of re-pointing it is invisible to the filed sweep).
+      mockSetMutation(
+        'repin-completeness:document-ids',
+        mockSetRepinOffences,
+        (planted) => planted.replace(/\.live-fixture\/core\/beta/g, ''),
+        "the beta target identity DELETED (not re-pointed) — the positive-target tooth",
+      )))
   arm(run, 8, 'repin-completeness:alpha-identity', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:alpha-identity', rp, () =>
-      mockSetMutation('repin-completeness:alpha-identity', mockSetRepinOffences, (planted) => planted.replace(/\.live-fixture\/core\/alpha/g, '.live-corpus/alpha'), "R-3…R-9/R-12's alpha identity reverted")))
+      mockSetMutation('repin-completeness:alpha-identity', mockSetRepinOffences, (planted) => planted.replace(/\.live-fixture\/core\/alpha/g, '.live-corpus/alpha'), "R-3…R-9/R-12's alpha identity reverted") ??
+      mockSetMutation(
+        'repin-completeness:alpha-identity',
+        mockSetRepinOffences,
+        (planted) => planted.replace(/\.live-fixture\/core\/alpha/g, ''),
+        "the alpha target identity DELETED (not re-pointed) — the positive-target tooth",
+      )))
   arm(run, 9, 'repin-completeness:node-ids', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:node-ids', rp, () =>
-      mockSetMutation('repin-completeness:node-ids', mockSetRepinOffences, (planted) => planted.replace("'.live-fixture/core/alpha:p:1'", "'.live-corpus/alpha:p:1'"), "R-4's `:p:1` node id reverted")))
+      mockSetMutation('repin-completeness:node-ids', mockSetRepinOffences, (planted) => planted.replace("'.live-fixture/core/alpha:p:1'", "'.live-corpus/alpha:p:1'"), "R-4's `:p:1` node id reverted") ??
+      mockSetMutation(
+        'repin-completeness:node-ids',
+        mockSetRepinOffences,
+        (planted) => planted.replace("'.live-fixture/core/alpha:p:1'", "''"),
+        "R-4's `:p:1` node id DELETED (not re-pointed) — the positive-target tooth",
+      )))
   arm(run, 10, 'repin-completeness:prefix-filters', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:prefix-filters', rp, () =>
       mockSetMutation('repin-completeness:prefix-filters', mockSetRepinOffences, (planted) => planted.replace("documentPathPrefix: ['.live-fixture/core']", "documentPathPrefix: ['.live-corpus']"), "R-10's `filters.documentPathPrefix` reverted")))
   arm(run, 11, 'repin-completeness:docnav-folder', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:docnav-folder', rp, () =>
-      mockSetMutation('repin-completeness:docnav-folder', mockSetRepinOffences, (planted) => planted.replace('data-folder-label=".live-fixture/core"', 'data-folder-label=".live-corpus"'), 'the doc-nav pane family reverted to the OLD folder identity')))
+      mockSetMutation('repin-completeness:docnav-folder', mockSetRepinOffences, (planted) => planted.replace('data-folder-label=".live-fixture/core"', 'data-folder-label=".live-corpus"'), 'the doc-nav pane family reverted to the OLD folder identity') ??
+      mockSetMutation(
+        'repin-completeness:docnav-folder',
+        mockSetRepinOffences,
+        // THE IDENTITY IS REMOVED FROM EVERY SITE, NOT REPLACED BY A DIFFERENT
+        // IDENTITY (which the OLD-family sweep would catch instead): the selector's own
+        // literal argument is emptied, so `data-folder-label="…"` no longer carries the
+        // target at any site.
+        (planted) => planted.replace(/data-folder-label="\.live-fixture\/core"/g, 'data-folder-label=""'),
+        "the doc-nav FOLDER label's identity DELETED at every site (not re-pointed) — the positive-target tooth",
+      )))
   arm(run, 12, 'repin-completeness:table-candidate', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:table-candidate', rp, () =>
       mockSetMutation('repin-completeness:table-candidate', mockSetRepinOffences, (planted) => planted.replace("const candidates = ['.live-fixture/table/table', 'defects']", "const candidates = ['.live-corpus/alpha', 'defects']"), "R-13's candidate HEAD reverted (a slice position, not the table document's own identity)")))
   arm(run, 13, 'repin-completeness:self-provisioners', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:self-provisioners', rp, () =>
-      mockSetMutation('repin-completeness:self-provisioners', mockSetRepinOffences, (planted) => planted.replace("ufMockFixtureWritePath('live4-first.md')", "join(ROOT, '.live-fixture/core', 'live4-first.md')"), 'a HARDCODED `.live-fixture/core/` literal restored in a self-provisioning write path')))
+      mockSetMutation(
+        'repin-completeness:self-provisioners',
+        mockSetRepinOffences,
+        // ⟨RE-STATED `2026-10-05` — THE MUTATION MUST CARRY THE LIMB'S OWN SUBJECT
+        // (`§10.3` clause 4). THE LIMB READS A BLOCK CLOSURE FOR A HARDCODED
+        // `.live-fixture/core/` LITERAL *WITH THE TRAILING SLASH* (the set root is
+        // contracted as `.live-fixture/${id}/`, `§2.3`), AND THE AS-FILED MUTATION
+        // RE-INSERTED `join(ROOT, '.live-fixture/core', 'live4-first.md')` — A LITERAL WITH
+        // **NO** TRAILING SLASH, WHICH THE LIMB'S SUBJECT DOES NOT CONTAIN, SO **NO**
+        // CLOSURE MATCHED AND THE TOOTH DID NOT BITE. THE SUBJECT IS THE MUTATION'S TO
+        // CARRY, NEVER THE LIMB'S TO WEAKEN: the inserted literal keeps its trailing slash
+        // (a legal `join` segment) and the limb is byte-unchanged.
+        // SUPERSEDED, KEPT VISIBLE — the as-filed mutation, verbatim:
+        //   (planted) => planted.replace("ufMockFixtureWritePath('live4-first.md')", "join(ROOT, '.live-fixture/core', 'live4-first.md')"),
+        (planted) =>
+          planted.replace(
+            "ufMockFixtureWritePath('live4-first.md')",
+            "join(ROOT, '.live-fixture/core/', 'live4-first.md')",
+          ),
+        'a HARDCODED `.live-fixture/core/` literal restored in a self-provisioning write path',
+      ) ??
+      // ⟨GATE-4 FIX PASS `2026-10-05` (`F8` POSITIVE-TARGET HALF) — THE FOLDED
+      // RESOLVER-PRESENCE TOOTH'S OWN NAMED MUTATION: the resolver call is DELETED from
+      // `boot_landing`'s write path, which is what a landing that removed the ROOT
+      // RESOLVER (rather than routing through it) leaves behind. `§16.7` clause 3.
+      mockSetMutation(
+        'repin-completeness:self-provisioners',
+        mockSetRepinOffences,
+        (planted) => planted.replace("const doc = ufMockFixtureWritePath('live4-first.md')", "const doc = join(ROOT, 'live4-first.md')"),
+        "the ROOT RESOLVER DELETED from `boot_landing`'s write path",
+      )))
   // ---- 2×citation-repoint (`§6.3`) ----
   arm(run, 14, 'citation-repoint:no-dead-path', () =>
-    mockSetArmRead('P-TP-5', 'citation-repoint:no-dead-path', rp, () =>
+    mockSetArmRead(
+      'P-TP-5',
+      'citation-repoint:no-dead-path',
+      // ⟨GATE-4 FIX PASS `2026-10-05` (`F2`) — THE FOLDED `.gitignore` SUB-LIMB.⟩
+      // `§6.3` clause 3's subject is *a citation/path a reader would take for the
+      // fixture's supply*, which is exactly the ignore file's own class, so the
+      // repository surface rides THIS arm's head — and it is ALREADY IN `rp`, because
+      // `mockSetRepinOffences` appends it, so folding it a second time here would
+      // print its work order twice. `k` = `14`, the `2×citation-repoint` term,
+      // `declaredTotal` `27`, `67`/`57` and every cap are BYTE-UNMOVED, and the
+      // mutation tooth is untouched (its plant-clean leg runs `mockSetRepinOffences`
+      // alone).
+      rp,
+      () =>
       mockSetMutation(
         'citation-repoint:no-dead-path',
         mockSetRepinOffences,
@@ -13814,13 +16708,31 @@ function mockSetDriveRowPTp5(): void {
         'the NON-QUOTABILITY SENTENCE deleted from the `mock-data-set` clause',
       )))
   // ---- the TEN named class-(b) NOT-RUN live readings (`§11.3`, `§10.2.3`) ----
-  unrunArm(run, 'class-(b):core — the --fixture=core live reading (FA-4 control)', 'the reading is taken from a live run on isolated ports: the run artifact names the set and its materialisation root, all three probes read PRESENT and no gated key parks. The driver cannot be imported (it runs main at module scope) and no node row may drive Electron', 'core')
-  unrunArm(run, 'class-(b):table — the --fixture=table live reading', 'the row u_edit_1_live_package_table_limitation must reach a document with a stored table and stop parking; that verdict and its evidence exist only in a live artifact', 'table')
+  // ⟨GATE-5 RULING `2026-10-05` (`§22.3` items 1/4) — THE REASON TEXTS OF THE TWO
+  // READINGS WHOSE SUBJECT IS THE SKIPPED `corpus-document-tabs` LIMB (and of the
+  // `core`/`table` entries whose subject carries it) RECORD THE SKIP, its exemption row
+  // BY NAME and what may NOT be claimed. THE TEN ENTRIES, THEIR NAMES, THEIR OUTCOME
+  // CLASSES, THE `10×class-(b)` TERM, `P-TP-5` AT `27`, THE REGISTER AT `67`/`57`, THE
+  // SEED AND THE CAPS ARE ALL BYTE-UNMOVED — ONLY REASON TEXT CHANGED, and the readings
+  // stay NOT-RUN: the skip may NEVER be converted into a verdict (`§22.3` item 4).⟩
+  // ⟨SUPERSEDED — KEPT VISIBLE, the four as-filed reason texts, VERBATIM (`RCA-8(c)`):⟩
+  //   class-(b):core  — 'the reading is taken from a live run on isolated ports: the run
+  //     artifact names the set and its materialisation root, all three probes read PRESENT
+  //     and no gated key parks. The driver cannot be imported (it runs main at module scope)
+  //     and no node row may drive Electron'
+  //   class-(b):table — 'the row u_edit_1_live_package_table_limitation must reach a
+  //     document with a stored table and stop parking; that verdict and its evidence exist
+  //     only in a live artifact'
+  //   class-(b):tabs  — 'the same: the park set and the route tag are live readings of the
+  //     assembled app'
+  //   class-(b):FA-2  — 'the rendered strip count is an assembled-app reading'
+  unrunArm(run, 'class-(b):core — the --fixture=core live reading (FA-4 control)', 'the reading is taken from a live run on isolated ports: the run artifact names the set and its materialisation root, the `\'corpus-documents\'` (the store list) and `\'corpus-query-results\'` (the store query for the probe\'s own constant term, OWED to the data adaptation, §22.2 item 1) probes read PRESENT and no gated key parks. ⟨GATE-5 RULING `2026-10-05` — THE THIRD PROBE\'S READING IN THAT SAME ARTIFACT IS `SKIPPED-BY-RULING` (`§22.3`): `dom:#tab-strip .tab[data-document-id]` can never match at this head (the literal exists only in the driver), the surface it reads is a fork UI implementation awaiting the later unit\'s foundation-tooling adaptation (exemption row `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`; adopting unit `docs/specs/unit-zone-replacement.md`), so that member is an OBSERVATION, never a verdict — it is NOT a pass, it is not counted toward any coverage, and the `F-2`-closure claim (§5.5) may NOT be reported as discharged for it.⟩ The driver cannot be imported (it runs main at module scope) and no node row may drive Electron', 'core')
+  unrunArm(run, 'class-(b):table — the --fixture=table live reading', 'the row u_edit_1_live_package_table_limitation must reach the `table` set\'s document whose body carries the table in the form the app\'s own import PRESERVES — the GFM pipe table (`§22.2` item 3, GATE-5 RULING `2026-10-05`: the raw-`<table>`-literal requirement is `SUPERSEDED` — measured raw form → `no table node`, `census=0`, PARKED, versus pipe form → `:table:`/`:thead:`/`:th:`/`:tr:`/`:td:` nodes, rendered census `{"tables":1,"trs":1,"tds":4}`, PASS) — and must stop PARKING (`§16.11`: `class-(b):table` MUST REJECT a PARK). ITS SUBJECT IS NOW REACHABLE, but its verdict and its evidence exist only in a live artifact, so this node row stays NOT-RUN until the battery takes it', 'table')
   unrunArm(run, 'class-(b):search — the --fixture=search live reading (FA-1)', 'the park SET and its route tag are printed by a live run; no node row can produce a PARK line', 'search')
-  unrunArm(run, 'class-(b):tabs — the --fixture=tabs live reading (FA-2)', 'the same: the park set and the route tag are live readings of the assembled app', 'tabs')
+  unrunArm(run, 'class-(b):tabs — the --fixture=tabs live reading (FA-2)', 'the same: the park set and the route tag are live readings of the assembled app. ⟨GATE-5 RULING `2026-10-05` (`§22.3` items 1/2) — WITHIN THIS RUN, THE `corpus-document-tabs`-GATED SUBJECT IS `SKIPPED-BY-RULING`: `user9_search_open_in_tab`\'s park, its `parkReason` naming `corpus-document-tabs`, its `parkedByFixtureAbsence` tag and its membership of any park-set/route-tag pair this reading grades are OBSERVATIONS — never verdicts, never a `PASS`, never a `FAIL`, and never counted as a fixture-absence divergence (the run\'s member is reported with the SKIPPED SUBJECT NAMED). IT IS NOT A PASS: the skip yields no verdict of any kind. THE EXEMPTION, BY NAME: the tab strip is a fork UI implementation awaiting the later unit\'s foundation-tooling adaptation (row `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`; adopting unit `docs/specs/unit-zone-replacement.md`), and the `F-2`-closure claim (§5.5) may NOT be reported as discharged for that limb. THE RUN\'S OTHER SUBJECTS STAND AND ARE NOT SKIPPED: the `\'corpus-documents\'`-gated keys run and carry their own verdicts, and the `\'corpus-query-results\'` limb is OWED to the data adaptation (`§22.2` item 1).⟩', 'tabs')
   unrunArm(run, 'class-(b):empty — the fixture-absent acceptance run', 'every gated key parks by name under a NAMED fixture state; the split is read from the live artifact', 'empty')
   unrunArm(run, 'class-(b):FA-1 — the store query ABSENT at a non-empty store', 'the probe reading present:false at resolved:true is taken inside a live run against a live store', 'fa-1')
-  unrunArm(run, 'class-(b):FA-2 — the document-tab count ABSENT at a non-empty store', 'the rendered strip count is an assembled-app reading', 'fa-2')
+  unrunArm(run, 'class-(b):FA-2 — the document-tab count ABSENT at a non-empty store', 'the rendered strip count is an assembled-app reading — AND AT THIS HEAD THAT READING IS `SKIPPED-BY-RULING`, NOT a verdict: `dom:#tab-strip .tab[data-document-id]` can NEVER match (the literal exists only in the driver, while `src/renderer/tab-strip.ts` authors `data-tab-id` + `data-target-kind` and `data-document-id` belongs to the panes), so the probe awaits the later unit\'s foundation-tooling adaptation (GATE-5 RULING `2026-10-05`, `§22.3`; exemption row `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`; adopting unit `docs/specs/unit-zone-replacement.md`). IT IS NOT A PASS AND NOT A `FAIL`, it is counted toward NO coverage and NO `class-(b)` completion, and the `F-2`-closure claim (§5.5) may NOT be reported as discharged for this limb; the reading stays NOT-RUN in this register', 'fa-2')
   unrunArm(run, 'class-(b):route-only-none-state — an obsolete-route-only run reads none/none/none', 'the run must be launched with the obsolete seed flags; a node row cannot invoke the driver', 'route-only-none-state')
   unrunArm(run, 'class-(b):default-unmoved — a no-flag run launch profile is unmoved', 'comparing a default launch profile against the pre-arg one needs a live launch', 'default-unmoved')
   unrunArm(run, 'class-(b):trio-scope — the trio proves nothing about the driver', 'scripts/live-drive.mjs is in no trio leg, so the trio result is a live-session reading with its own scope caveat', 'trio-scope')
@@ -14028,6 +16940,106 @@ describe('§4 the mock-set register — the printed declared-vs-executed tally, 
       [probeReport].every((row) => row.held),
       'A-8 (`E-8`): the mutation (a BROKEN row) is NOT discriminated by the `every(row => row.held)` assertion',
     ).toBe(false)
+    // =======================================================================
+    // ⟨GATE-5 RULING `2026-10-05` — THE TWO LIMBS THIS RULING RE-DERIVES/MINTS ARE SHOWN
+    // TO BITE, AT THEIR OWN NAMED MUTATIONS, INSIDE THE EXISTING TALLY TEST.⟩
+    // WHY HERE: the arms' own GREEN verdicts already PROVE each tooth's mutation leg fired
+    // (`mockSetMutation` reports a tooth that cannot bite and would turn its arm RED), but
+    // a GREEN verdict is a negative — this block records the POSITIVE, in one printed line,
+    // so a reader of the run log can see the two teeth bite. IT ADDS NO ARM, NO `it`, NO
+    // `k`, NO REGISTER FIGURE AND NO CAP (`§22.2` items 1/3, `§16.17` item 7): it drives
+    // the SAME readers the arms drive, over the SAME contracted plant.
+    const gate5Plant = mockSetContractedPlant()
+    const routeClean = mockSetRootTextRouteOffences(gate5Plant).filter((o) => o.arm === 'set-file-list:declared')
+    const routeDeleted = mockSetRootTextRouteOffences(mockSetWithoutRootTextRoute(gate5Plant)).filter((o) => o.arm === 'set-file-list:declared')
+    const routeManufactured = mockSetRootTextRouteOffences(mockSetWithManufacturedTermWrite(gate5Plant)).filter((o) => o.arm === 'set-file-list:declared')
+    const tableClean = mockSetShapeOffences(gate5Plant).filter((o) => o.arm === 'set-shape:table')
+    const tableStripped = mockSetShapeOffences(
+      mockSetInInventory(gate5Plant, '| col a | col b |\\n| --- | --- |\\n| c1 | c2 |\\n', 'plain paragraph\\n'),
+    ).filter((o) => o.arm === 'set-shape:table')
+    const tableRawOnly = mockSetShapeOffences(
+      mockSetInInventory(gate5Plant, '| col a | col b |\\n| --- | --- |\\n| c1 | c2 |\\n', '<table><tr><td>c</td></tr></table>\\n'),
+    ).filter((o) => o.arm === 'set-shape:table')
+    console.log(
+      `[mock-set-register] GATE-5 TOOTH PROBES — set-shape:table on the contracted plant: ${tableClean.length} offence(s); on the mutation "the table-bearing form REMOVED ENTIRELY": ${tableStripped.length}; on the mutation "the pipe table REPLACED BY THE SUPERSEDED RAW-<table> LITERAL": ${tableRawOnly.length}. set-file-list:declared (the folded root-text-route sub-limb, §22.2 item 1) on the contracted plant: ${routeClean.length}; on the named mutation "the ROOT-TEXT ROUTE DELETED": ${routeDeleted.length}; on the mutation "the route MANUFACTURES THE PROBE'S TERM": ${routeManufactured.length}`,
+    )
+    expect(tableClean.length, 'the `set-shape:table` limb must ACCEPT the contracted plant (§22.2 item 3) — a plant the limb rejects is a finding, never a pass').toBe(0)
+    expect(tableStripped.length, 'the named mutation ("the table-bearing form REMOVED ENTIRELY") must turn `set-shape:table` RED — the tooth must bite (§10.3 clause 4)').toBeGreaterThan(0)
+    expect(tableRawOnly.length, 'the SUPERSEDED RAW-HTML-ONLY form must turn `set-shape:table` RED — the raw form may not be accepted as SUFFICIENT (§22.2 item 3 clause 2)').toBeGreaterThan(0)
+    expect(routeClean.length, 'the folded root-text-route sub-limb must ACCEPT the contracted plant (§22.2 item 1 clause 1)').toBe(0)
+    expect(routeDeleted.length, 'the NAMED MUTATION ("the ROOT-TEXT ROUTE DELETED") must turn the folded root-text-route sub-limb RED — the tooth must bite (§10.3 clause 4, §22.2 item 1)').toBeGreaterThan(0)
+    expect(routeManufactured.length, "the mutation (\"the route MANUFACTURES THE PROBE'S TERM\") must turn the `FA-1`-construction clause RED — the sets' own content may not be adapted into manufactured hits (§22.2 item 1 clause 4(a))").toBeGreaterThan(0)
+    // =======================================================================
+    // ⟨GATE-5 RULING `2026-10-05` (`§22.3` items 1/4) — THE SKIP IS RECORDED, NOT CONVERTED
+    // INTO A VERDICT.⟩ THE `corpus-document-tabs` limb is `SKIPPED-BY-RULING`: never a pass,
+    // never a FAIL, never countable toward coverage or toward the `F-2`-closure claim
+    // (`§5.5`). This assertion is the TOOTH on that RECORDING: the reasons of the readings
+    // whose subject IS that limb must NAME the skip and its exemption row, so a later edit
+    // that quietly drops the skip (or reports the limb as a verdict) is RED here. IT ADDS NO
+    // ARM, NO `it`, NO `k` AND NO REGISTER FIGURE — the ten entries, their names, their
+    // classes, the `10×class-(b)` term, `P-TP-5` at `27` and the register at `67`/`57` are
+    // all byte-unmoved.
+    const ptp5 = MOCK_SET_REGISTER_REPORTS.find((r) => r.row === 'P-TP-5')
+    const skipReasons = (ptp5?.unrun ?? []).filter((u) => u.term.startsWith('class-(b):tabs') || u.term.startsWith('class-(b):FA-2'))
+    const skipOffences: string[] = []
+    if ((ptp5?.unrun ?? []).length !== 10) skipOffences.push(`P-TP-5 carries ${(ptp5?.unrun ?? []).length} class-(b) NOT-RUN entries, not the contracted ten`)
+    if (skipReasons.length !== 2) skipOffences.push(`the two readings whose subject is the SKIPPED \`corpus-document-tabs\` limb (\`class-(b):tabs\`, \`class-(b):FA-2\`) were not found among P-TP-5's class-(b) entries (found ${skipReasons.length})`)
+    for (const u of skipReasons) {
+      if (!u.reason.includes('SKIPPED-BY-RULING')) skipOffences.push(`${u.term}: the reason does not record the limb as \`SKIPPED-BY-RULING\` (§22.3 item 1)`)
+      if (!u.reason.includes('DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT')) skipOffences.push(`${u.term}: the reason does not NAME the exemption row (\`DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT\` — cited BY NAME, §22.3 item 3)`)
+      if (!u.reason.includes('unit-zone-replacement.md')) skipOffences.push(`${u.term}: the reason does not NAME the adopting unit (\`docs/specs/unit-zone-replacement.md\`, §22.3 item 3)`)
+      if (!/NOT A PASS|never a verdict|NOT a pass/i.test(u.reason)) skipOffences.push(`${u.term}: the reason does not state that the skip is NOT a pass and yields no verdict (§22.3 item 1)`)
+      if (!/F-2/.test(u.reason)) skipOffences.push(`${u.term}: the reason does not state that the \`F-2\`-closure claim (§5.5) may NOT be reported as discharged for this limb (§22.3 item 1)`)
+    }
+    const tableEntry = (ptp5?.unrun ?? []).find((u) => u.term.startsWith('class-(b):table'))
+    if (tableEntry === undefined) skipOffences.push('the `class-(b):table` reading is missing from P-TP-5\'s class-(b) entries')
+    else if (!/pipe table/i.test(tableEntry.reason) || !/§22\.2`?\s*item 3/.test(tableEntry.reason)) {
+      skipOffences.push('class-(b):table: the reason does not record the parser-mediated reading of record (`§22.2` item 3) — the raw-`<table>`-literal requirement is SUPERSEDED')
+    }
+    console.log(
+      `[mock-set-register] §22.3 SKIP RECORDING — P-TP-5 class-(b) NOT-RUN entries: ${(ptp5?.unrun ?? []).length}; the two SKIPPED-BY-RULING subjects and the table-reading disposition carried their reason records: ${skipOffences.length === 0 ? 'yes' : 'NO — ' + skipOffences.join(' | ')}`,
+    )
+    expect(skipOffences, `§22.3 item 4: the skip must be RECORDED IN THE REASON and never converted into a verdict:\n${skipOffences.join('\n')}`).toEqual([])
+    // =======================================================================
+    // ⟨§21.2 clause 2 (`D-2`, greens `B-1`, the live battery's `L-2` FAIL) — THE FOUR
+    // PER-SUPPLY READINGS' OWN TOOTH PROBES, PRINTED SO A READER OF THE RUN LOG SEES
+    // THEM BITE.⟩ `mockSetMutation` reports a tooth that cannot bite (and would turn its
+    // arm RED), but a GREEN verdict is a NEGATIVE — when the driver is GREEN this block
+    // records the POSITIVE, in one printed line, WITH EACH MUTATION'S VERBATIM MESSAGE.
+    // IT ADDS NO ARM, NO `it`, NO `k`, NO REGISTER FIGURE AND NO CAP: it drives the SAME
+    // readings the arm drives, over the SAME contracted plant, through the SAME
+    // predicate (`§21.2` clause 2 — four readings of ONE arm).
+    const namingPlant = mockSetContractedPlant()
+    const namingClean = mockSetSupplyFlagNamingOffences(mockSetRefusalLines(namingPlant).filter((l) => /--fixture/.test(l.text) && /--seed|--corpus-root|--strict-seed|--o0-corpus/.test(l.text)), namingPlant).filter((o) => o.arm === 'route-supply-refusal:refused-by-name')
+    const namingStripped = mockSetSupplyFlagNamingOffences(mockSetRefusalLines(mockSetWithoutSupplyFlagNaming(namingPlant)).filter((l) => /--fixture/.test(l.text) && /--seed|--corpus-root|--strict-seed|--o0-corpus/.test(l.text)), mockSetWithoutSupplyFlagNaming(namingPlant)).filter((o) => o.arm === 'route-supply-refusal:refused-by-name')
+    const familyStripped = mockSetSupplyFlagNamingOffences(mockSetRefusalLines(mockSetWithoutSupplyFamilyBeside(namingPlant)).filter((l) => /--fixture/.test(l.text) && /--seed|--corpus-root|--strict-seed|--o0-corpus/.test(l.text)), mockSetWithoutSupplyFamilyBeside(namingPlant)).filter((o) => o.arm === 'route-supply-refusal:refused-by-name')
+    // THE FAMILY CLAUSE'S OWN READING, isolated from clause (a): the "stands BESIDE the
+    // name" sentence is removed while the family list literal and the naming marker
+    // STAY, so the naming declaration is still read, all four readings still find their
+    // flags, and the family-beside guard is the limb that fires.
+    const familyClauseNarrowed = namingPlant.replace(MOCK_SET_SUPPLY_FAMILY_BESIDE, MOCK_SET_SUPPLY_FAMILY_LIST)
+    const familyClauseOnly = mockSetSupplyFlagNamingOffences(mockSetRefusalLines(familyClauseNarrowed).filter((l) => /--fixture/.test(l.text) && /--seed|--corpus-root|--strict-seed|--o0-corpus/.test(l.text)), familyClauseNarrowed).filter((o) => o.arm === 'route-supply-refusal:refused-by-name')
+    const perFlag = MOCK_SET_SUPPLY_READINGS.map((r) => {
+      const mut = mockSetWithoutSupplyFlagEntry(namingPlant, r.flagToken)
+      return {
+        supply: r.supply,
+        fired: mockSetSupplyFlagNamingOffences(mockSetRefusalLines(mut).filter((l) => /--fixture/.test(l.text) && /--seed|--corpus-root|--strict-seed|--o0-corpus/.test(l.text)), mut).filter((o) => o.arm === 'route-supply-refusal:refused-by-name'),
+      }
+    })
+    console.log(
+      `[mock-set-register] §21.2 FLAG-BY-NAME TOOTH PROBES — the FOUR readings of \`route-supply-refusal:refused-by-name\` on the contracted plant: ${namingClean.length} offence(s); on the named mutation "the line REGRESSED TO THE FAMILY-ONLY FORM (the naming clause DELETED)": ${namingStripped.length} — ${namingStripped.map((o) => o.offence).join(' || ')}; on the mutation "the FAMILY stands beside the name clause DELETED (the family list left in its place)": ${familyStripped.length} — ${familyStripped.map((o) => o.offence).join(' || ')}; on the isolated family-clause reading (the clause deleted, the family list kept): ${familyClauseOnly.length} — ${familyClauseOnly.map((o) => o.offence).join(' || ')}; PER READING (that reading's own flag removed from the naming array): ${perFlag.map((p) => `${p.supply} → ${p.fired.length} offence(s): ${p.fired.map((o) => o.offence).join(' || ')}`).join(' ;; ')}`,
+    )
+    expect(namingClean.length, 'the FOUR per-supply readings must ACCEPT the contracted plant (§10.3 clause 4, §21.2 clause 2) — a plant the readings reject is a finding, never a pass').toBe(0)
+    expect(namingStripped.length, 'the NAMED MUTATION ("the naming clause DELETED" — the family-only regression) must turn the readings RED — the tooth must bite (§21.2 clause 2)').toBeGreaterThan(0)
+    expect(familyStripped.length, 'the family-beside-the-name clause is graded: deleting it must turn the limb RED (§21.2 clause 2)').toBeGreaterThan(0)
+    expect(
+      familyClauseOnly.some((o) => o.offence.includes('does not state that the FAMILY list stands BESIDE')),
+      `the family-beside-the-name reading must fire ON ITS OWN TERMS when only that clause is removed (§21.2 clause 2, the family list may stay BESIDE the name and may not stand in its place): ${familyClauseOnly.map((o) => o.offence).join(' || ')}`,
+    ).toBe(true)
+    for (const p of perFlag) {
+      expect(p.fired.length, `the reading that supplied \`${p.supply}\` must be discriminated BY ITS OWN TOOTH — removing that flag's entry from the naming array leaves this reading RED (§21.2 clause 2) and the verdict must name that reading's flag`).toBeGreaterThan(0)
+      expect(p.fired.some((o) => o.offence.includes(p.supply)), `the RED verdict for the \`${p.supply}\` reading must NAME that reading's own flag (§21.2 clause 2): ${p.fired.map((o) => o.offence).join(' || ')}`).toBe(true)
+    }
     const distinct = [...new Set(MOCK_SET_ARM_LOG.map((e) => `${e.row}:${e.term}`))].map(
       (k) => (MOCK_SET_ARM_LOG.filter((e) => `${e.row}:${e.term}` === k)[0] as { verdict: 'RED' | 'GREEN' }),
     )

@@ -1490,20 +1490,39 @@ async function ufEnsureEditFixture(h, minBlocks = 1) {
  *  calls (`renderer.ts` → `tabStrip.openDocumentTab` → `focusTarget(newTab)`);
  *  the activation is then a REAL tab click. Recorded as a synthetic open, never
  *  claimed as a real gesture. */
+/** `§16.2` — OPEN A DOCUMENT BY ID AND RETURN ONLY WHEN ITS OWN SURFACE IS LIVE.
+ *  THE `existing-tab` SHORTCUT IS SCOPED TO THE TAB THAT IS ALREADY ACTIVE, and its
+ *  old title predicate (`title.contains(basename)`) is GONE: it resolved a request for
+ *  the `table` set's document to the ALPHA tab — `alpha` CONTAINS `table`, so the
+ *  predicate matched a SIBLING SET MEMBER whose surface cannot carry a table, and the
+ *  candidate scan then censused the alpha surface and parked the very row the `table`
+ *  set exists for (`P-β`, `§16.11`). Whether a document is open is read from the
+ *  SURFACE'S OWN `data-edit-surface` MARKER, never from a title substring. */
 async function ufOpenDocumentById(h, docId) {
   const v0 = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
-  const existing = (v0.tabIds || []).slice().reverse().find((t) => t.kind === 'document' && t.title && t.title.indexOf(docId.split('/').pop()) >= 0)
-  if (existing) {
-    const r = await ufRealClickTab(h, existing.id)
-    await sleep(2500)
-    return { docId, via: 'existing-tab', tabId: existing.id, path: r.path, marker: (await ufEditSurfaceState(h)).marker }
+  const active = (v0.tabIds || []).find((t) => t.active === true)
+  if (active && active.kind === 'document') {
+    const marker0 = (await ufEditSurfaceState(h)).marker
+    if (marker0 === docId) {
+      return { docId, via: 'existing-tab', tabId: active.id, path: 'already-active', marker: marker0 }
+    }
   }
   const opened = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.openDocumentTab!=='function')return {available:false};s.openDocumentTab(${JSON.stringify(docId)});return {available:true}})()`)
   await sleep(4000)
+  // `§16.2` — THE OPEN IS NOT SETTLED WHEN THE BRIDGE RETURNS: the stage mounts the
+  // document ASYNCHRONOUSLY (the mount race this driver's own `stage_async_mount_race_v1`
+  // row is about), so a census taken on a fixed delay can read the PREVIOUS document's
+  // surface — which for the `--fixture=table` candidate scan (`P-β`'s `#page-edit-surface
+  // table`) parks the row the `table` set exists for. WAIT FOR THE SURFACE'S OWN MARKER
+  // to become the opened document's id, bounded, before returning.
+  await waitFor(async () => (await ufEditSurfaceState(h)).marker === docId, { timeout: 20000, step: 400 }).catch(() => null)
   const v = await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)
-  const tab = (v.tabIds || []).slice().reverse().find((t) => t.kind === 'document')
+  const tab = (v.tabIds || []).find((t) => t.kind === 'document' && t.active === true)
   let path = null
-  if (tab && tab.active !== true) { path = (await ufRealClickTab(h, tab.id)).path; await sleep(2500) }
+  if (tab === undefined) {
+    const anyDoc = (v.tabIds || []).slice().reverse().find((t) => t.kind === 'document')
+    if (anyDoc) { path = (await ufRealClickTab(h, anyDoc.id)).path; await sleep(2500) }
+  }
   return { docId, via: 'bridge-openDocumentTab', bridge: opened, tabId: tab ? tab.id : null, path, marker: (await ufEditSurfaceState(h)).marker }
 }
 
@@ -1648,6 +1667,15 @@ function rowResult(id, assertion, evidence, opts = NO_EXTRA_FIELDS) {
     // cannot produce a `PARK` line while its row carries no park verdict.
     park: rowOpts.park === true,
     parkReason: rowOpts.park === true ? (rowOpts.parkReason ?? null) : null,
+    // ⟨gate-4 `F-1` — THE ROUTE TAG SURVIVES THE BUILDER.⟩ `rowResult` builds the SAME
+    // object `ufCountBlock`'s classification record is taken from (`r.parkRoute`), and
+    // the block's OWN park route hands its tag in through the park's options
+    // (`ufFixtureOwnPark` → `parkRow`), so a builder that does not SPREAD it makes the
+    // tag read `null` for every block-body park and the fixture-absence member counts
+    // none of them: the chain `parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked` is
+    // counted over the route tag HOWEVER the park was routed — the gate branch OR the
+    // block's own body (§5.5's counting clause, §16.5).
+    parkRoute: rowOpts.park === true ? (rowOpts.parkRoute ?? null) : null,
     diagnostic: rowOpts.diagnostic === true,
     proxy: proxyPASS ? proxy : null,
     gesturePath: path,
@@ -1849,7 +1877,15 @@ function ufDriverFailureRows(block, reason) {
   const declared = ufDeclaredRowsForBlock(block)
   const rows = declared.length ? declared : [{ row: null, dclass: null }]
   return rows.map((r) => {
-    if (r.row === null) return diagResult(`${d.marker} — the block carries no declared row id; its verdict is classified, never counted as an app FAIL`)
+    // ⟨GATE-4 RE-AUDIT FIX `2026-10-05` — ITEMS 1/2: THIS PARK-EMITTING PATH CARRIES THE PAIR.⟩
+    // §5.5's counting clause counts the gated keys parked because their OWN declared fixture read
+    // ABSENT *"however the park was routed (the gate branch OR the block's own body)"*: this limb is
+    // a park-emitting path of the gate route too, so it carries BOTH members — `park:` (the park; a
+    // transport precondition parks as well, §2.3 H-4) AND the route tag (WHICH reading parked it) —
+    // through `diagResult`'s `...extra` spread, the diagnostic record's only channel. The TAG, not the
+    // park, rides the two FIXTURE-READING kinds alone (ITEM 2): a transport/engine precondition must
+    // never be tagged, or the member is inflated and §18.6's `EXACTLY {…}` predicates are falsified.
+    if (r.row === null) return diagResult(`${d.marker} — the block carries no declared row id; its verdict is classified, never counted as an app FAIL`, { park: d.preconditionFailed, preconditionFailed: d.preconditionFailed, driverReason: reason.kind, ...(reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing' ? { parkReason: `${reason.kind}: ${reason.detail}`, parkRoute: 'parked-by-fixture-absence' } : {}) })
     return rowResult(
       { row: r.row, dclass: r.dclass },
       `the declared row ${r.row} carried by ${block} (the block's own assertion could not be reached)`,
@@ -1857,11 +1893,23 @@ function ufDriverFailureRows(block, reason) {
       {
         path: 'driver-precondition (no gesture; could not be driven)',
         park: d.preconditionFailed,
+        // ⟨gate-4 `F-1` — THE GATE ROUTE TAGS ITS OWN PARKS TOO.⟩ A park produced HERE whose
+        // own declared fixture read RESOLVED and came back ABSENT — the two fixture-reading
+        // kinds `empty-corpus` / `fixture-missing` — is a FIXTURE-ABSENCE park: the block was
+        // parked WITHOUT running because its OWN declared fixture read absent. ⟨GATE-4 RE-AUDIT
+        // FIX `2026-10-05` — ITEM 2: THE TAG NARROWS TO THAT READING.⟩ A transport/engine
+        // precondition (`ECONNREFUSED`, `engine-absent`) is STILL a park (`park` above, §2.3
+        // H-4), but NO fixture read resolved for it, so it must NOT ride this route tag: tagging
+        // it inflates the member and falsifies §18.6's `EXACTLY {…}` predicates. Without this
+        // tag the gate branch's fixture-absence parks are invisible to the fixture-absence
+        // member while `parkedByGate` counts them, so under `--fixture=empty` the contracted
+        // chain `parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked` is FALSE (§5.5; §16.5 —
+        // *"however the park was routed (the gate branch OR the block's own body)"*).
         extra: {
           park: d.preconditionFailed,
           preconditionFailed: d.preconditionFailed,
           driverReason: reason.kind,
-          ...(d.preconditionFailed ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ?? 'no further detail'})` } : {}),
+          ...((reason.kind === 'empty-corpus' || reason.kind === 'fixture-missing') ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ?? 'no further detail'})`, parkRoute: 'parked-by-fixture-absence' } : {}),
         },
       },
     )
@@ -1923,9 +1971,15 @@ async function ufBlockPrecondition(h, opt) {
   return { tool, documents: docs, present, resolved: failure === null, kind, detail, extra: failure ? failure.extra : `--no-seed=${opt && opt.noSeed === true}` }
 }
 
+// ⟨§6.1 clause 1 / §6.3 clause 2 — ANNOTATED BESIDE, NEVER REWRITTEN: the
+// `.live-corpus` SEED route named in this historical note is OBSOLETE and is
+// NEVER extended. The identities the SETS carry are the sets' own (`.live-fixture/
+// <set>/...`, §2.4), and a `--fixture=<set>` run does not reach the old route at
+// all.⟩
 /** §2.2 `E-12` item 2 / §3.2 `F-6` — THE CORPUS-DEPENDENT BLOCKS: the counted
- *  blocks whose own setup reads a SEEDED corpus document (`.live-corpus/alpha` /
- *  `.live-corpus/beta`). When the per-block precondition read reports the corpus
+ *  blocks whose own setup reads a SEEDED corpus document (`.live-fixture/core/alpha` /
+ *  `.live-fixture/core/beta` — the OBSOLETE seed route, §6.1 clause 1). When the per-block
+ *  precondition read reports the corpus
  *  ABSENT, these blocks are PARKED BY NAME (with their declared row id) instead of
  *  running a setup read that can only fail on a fixture the operator's flag (or a
  *  failed seed) removed. A block NOT in this set keeps its own verdict. */
@@ -1934,6 +1988,97 @@ const UF_CORPUS_DEPENDENT_BLOCKS = [
   'uf_tabs_1', 'uf_tabs_3', 'uf_tabs_4', 'uf_panes_12', 'uf_panes_12_diag', 'uf_hist_4', 'uf_hist_6',
   'uf_layout_2', 'u_edit_1_live_commit_failure_warning', 'u_edit_1_live_package_table_limitation',
 ]
+
+// ---------------------------------------------------------------------------
+// ⟨§7.3 `D-7` — THE DERIVED, CONDITIONAL CONSEQUENCE, DECLARED ABOVE THE STATE SO
+// THE ARTIFACT'S OWN CLAUSE IS THE FIRST ONE A READER MEETS.⟩ Under `mock-data-set`
+// the printed clause states WHAT THE MOCK SET MEANS FOR ATTRIBUTION and carries the
+// NON-QUOTABILITY sentence of `§9` clause 3 — a fixture-fed PASS may NOT be quoted
+// as a live-corpus app reading. It is DERIVED FROM THE ONE STATE BINDING at print
+// time (never a constant computed at module load), so a `mock-data-set` run can
+// never print the `none`-state sentence (`X-6` in a new place) and a `none` run
+// never prints the mock clause. The continuation lines keep the module-level
+// ternary layout the run's own artifact conventions use.
+// ---------------------------------------------------------------------------
+function ufFixtureConsequenceOf() {
+  return UF_FIXTURE_STATE.kind === 'mock-data-set'
+  ? `CONSEQUENCE: the rows this run reports were driven against the mock data set ${UF_FIXTURE_STATE.id}; a fixture-fed PASS may NOT be quoted as a live-corpus app reading`
+  : UF_FIXTURE_STATE_CONSEQUENCE
+}
+
+// ===========================================================================
+// §2 · §3 · §5.3 — UNIT `U-MOCK-CORPUS-FIXTURE-SETS` ("UNIT B"): THE FIVE
+// HAND-AUTHORED MOCK DATA SETS, THE MATERIALISATION ROOT, THE ROOT RESOLVER THE
+// SELF-PROVISIONING BLOCKS WRITE THROUGH, AND THE PROBE'S OWN CONSTANT TERM.
+// ---------------------------------------------------------------------------
+// ⟨§6.1 clause 1 — ANNOTATE, NEVER EXTEND.⟩ THE `.live-corpus/*` SEED ROUTE IS
+// OBSOLETE — its writer `seedCorpus`, its `--seed=` directory flag and its
+// `--strict-seed` switch are named OBSOLETE here and are NEVER extended, repaired,
+// re-pointed or made a set's source (§6.1 clause 1). NO set below is authored by,
+// derived from, copied from or parsed out of them (§6.1 clause 2), and
+// `--fixture=` is a NEW flag naming a NEW object (§6.1 clause 3).
+//
+// The O-0 measurement route's own carry flags are annotated at their OWN sites
+// (`o0MarkdownTree`'s enumerator, the store import root flag, the claimed-census
+// flag), and the O-0 measurement/report MECHANISM itself is a different object
+// whose status this unit does not resolve (§6.5).
+// ===========================================================================
+/** `§5.3` clause 1 — THE PROBE'S OWN CONSTANT TERM: ONE declaration, read by the
+ *  probe AND by the sets' author. Its contract: no document of the `search` set
+ *  carries it, at least one document of every OTHER document-carrying set does,
+ *  and changing it is a change to the sets and to the probe TOGETHER. */
+const UF_MOCK_FIXTURE_TERM = 'ufmockterm'
+
+/** `§2.1` · `§2.3` clause 3 — THE FIVE SETS, AS HAND-AUTHORED PURE STRING DATA.
+ *  THE SETS ARE THE ARG'S CLOSED VALUE SET (`§3.2`): `core` · `table` · `search`
+ *  · `tabs` · `empty`. Each set's FILE LIST is the contract (`§2.1`); the
+ *  `empty` set is the explicitly SELECTED empty set (`F-5`), not a refusal.
+ *  ⟨gate-4 `F-6` — THE CONTENT PROPERTIES ARE PER-SET, NOT ONCE ACROSS THE FOUR.⟩
+ *  `§2.2`'s property table names the sets that must CARRY each property, and
+ *  `P-γ` — *"a document whose body carries an INLINE element outside the
+ *  decomposer's closed node-type set"*, the commit-failure row's own failure
+ *  fixture — is carried by **F-1 · F-2 · F-3 · F-4 (ALL FOUR document-carrying
+ *  sets)**. The carrier is each set's OWN `alpha.md` (the document the hardcoded
+ *  `.live-fixture/<set>/alpha` identity opens): `core`/`table`/`tabs` carry
+ *  `<b>inline element</b>` there beside the probe's term, and `search` carries it
+ *  in a body that omits the term BY CONSTRUCTION (`F-3`/`P-δ` — its rewrite is what
+ *  makes that set the `'corpus-query-results'` falsifier). `P-α`, `P-ε`, `P-ζ`,
+ *  `P-η`, `table`'s stored `<table>` (`P-β`, `table` ALONE), `tabs`'s un-opened
+ *  term-bearing document (`P-θ`) and each set's file census are UNMOVED.
+ *  The identities the sets carry are a consequence of WHERE these files are
+ *  materialised and of nothing else (`§2.4`): a file written to
+ *  `.live-fixture/<set>/<basename>.md` is imported as `<root>/<basename>`. */
+// ⟨GATE-5 RULING `2026-10-05` — THE `table` SET'S STORED-TABLE FORM IS THE **GFM
+// PIPE TABLE**, AND THE FILED RAW-HTML-TABLE LITERAL IS THE SUPERSEDED READING.⟩
+// MEASURED: the app's markdown importer DROPS a raw HTML block outright
+// (`markdown-parse`'s raw-HTML block rule → no node at all), so the filed
+// `table.md` literal produced NO table node and
+// `u_edit_1_live_package_table_limitation` could only PARK (`§16.11` rules that
+// `class-(b):table` MUST REJECT a park). The GFM pipe form is the form the
+// importer's OWN table rule parses (header row + separator row → `:table:` ·
+// `:thead:` · `:th:` · `:tr:` · `:td:` nodes), and it renders as a REAL table
+// element on the page-edit surface — measured rendered census
+// `{"tables":1,"trs":1,"tds":4}` — so the row reaches a VERDICT. THIS NOTE SITS
+// OUTSIDE the `UF_MOCK_FIXTURE_SETS` literal DELIBERATELY: the sets' content
+// properties are read from the literal's own balanced region, and a prose mention
+// of the superseded form inside one set's span would be read as that set CARRYING
+// it (the `set-shape:table` read counts the literal `table` element form across
+// the four sets and requires it in `table` ALONE).
+const UF_MOCK_FIXTURE_SETS = {
+  core: { files: ['alpha.md', 'beta.md', 'gamma.md'], docs: { 'alpha.md': '# Alpha\n\nufmockterm with an <b>inline element</b>\n', 'beta.md': '# Beta\n\nufmockterm\n', 'gamma.md': '# Gamma\n\nufmockterm\n' } },
+  table: { files: ['alpha.md', 'beta.md', 'gamma.md', 'table.md'], docs: { 'alpha.md': '# Alpha\n\nufmockterm with an <b>inline element</b>\n', 'beta.md': '# Beta\n\nufmockterm\n', 'gamma.md': '# Gamma\n\nufmockterm\n', 'table.md': '# Table\n\nufmockterm with a stored table\n\n| col a | col b |\n| --- | --- |\n| c1 | c2 |\n' } },
+  search: { files: ['alpha.md', 'beta.md', 'gamma.md'], docs: { 'alpha.md': '# Alpha\n\nno marker here with an <b>inline element</b>\n', 'beta.md': '# Beta\n\nnothing either\n', 'gamma.md': '# Gamma\n\nplain\n' } },
+  tabs: { files: ['alpha.md', 'beta.md', 'gamma.md', 'search.md'], docs: { 'alpha.md': '# Alpha\n\nufmockterm with an <b>inline element</b>\n', 'beta.md': '# Beta\n\nufmockterm\n', 'gamma.md': '# Gamma\n\nufmockterm\n', 'search.md': '# Search\n\nufmockterm\n' } },
+  empty: { files: [], docs: {} },
+}
+
+/** `§2.3` clause 1 — THE MATERIALISATION ROOT, DERIVED FROM THE SET IDENTITY: the
+ *  root and the document identity are ONE decision (`§2.4`), never two literals. */
+const UF_MOCK_FIXTURE_ROOT = (id) => `.live-fixture/${id}/`
+
+/** `§11.3` item 8 / `§17.11` — THE NOT-MATERIALISED READING a run states when the
+ *  selected set carries NO file (`--fixture=empty`, `§4` `S-4`). */
+const UF_MOCK_FIXTURE_NOT_MATERIALISED = 'no SET was materialised'
 
 // ---------------------------------------------------------------------------
 // §6.1 — THE RUN-WIDE FIXTURE STATE, IN ONE MODULE-LEVEL LITERAL. A run states
@@ -1947,7 +2092,7 @@ const UF_CORPUS_DEPENDENT_BLOCKS = [
 // the launch profile exists) and the module-level `main().catch` ERROR path (exit
 // 2, no summary at all).
 // ---------------------------------------------------------------------------
-const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'none' }
+let UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'none' }
 
 /** §6.1 — THE CONSEQUENCE CLAUSE of a `none` fixture state, in the run group line
  *  own idiom: what a reader MUST NOT conclude from such an artifact.
@@ -2005,7 +2150,7 @@ const UF_FIXTURE_RECONCILIATION = {
 export const UF_FIXTURE_DECLARATION = [
   { block: 'boot_landing', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['UF-STAGE-1'], surface: 'the document this block writes and imports, read back from the store document list (edit.import_markdown, #stage-landing, UF-STAGE-1)' },
   { block: 'import1', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: [], surface: 'the document this block writes and imports, then the store document list (edit.import_markdown, rag.list_documents)' },
-  { block: 'ms_store', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: [], surface: 'the store document list for the main store plus a fresh import into it (rag.list_documents, .live-corpus/ms3-fresh.md)' },
+  { block: 'ms_store', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: [], surface: 'the store document list for the main store plus a fresh import into it through the ROOT RESOLVER of the run SELECTED mock data set — the set own root when one is selected, the block own pre-arg path when none is selected (§16.7; rag.list_documents, the resolved `<root>/ms3-fresh.md`)' },
   { block: 'o0_document_row', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav DOCUMENT rows the O-0 freeze drives (O0_DOCUMENT_SELECTOR, o0ResetFolderState)' },
   { block: 'o0_folder_row', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav FOLDER rows the O-0 freeze drives (o0FolderRows, O0_FOLDER_SELECTOR)' },
   { block: 'o0_gpu_control', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'BOTH doc-nav row families (o0FolderRows, O0_DOCUMENT_SELECTOR)' },
@@ -2036,13 +2181,13 @@ export const UF_FIXTURE_DECLARATION = [
   { block: 'stage_search_open_in_tab', corpusRead: false, selfProvisioning: false, fixtureName: 'none', rows: ['UF-DEFECT-7'], surface: 'NONE for the search-stage assertion - the search tab own #stage-search-tab window; the document-body limb is measured against whatever document body is open (corpusRead false)' },
   { block: 'stage_surface_census_i2r', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-1'], surface: 'the edit-surface census over the document surface (ufEnsureDocumentSurface, #page-edit-surface)' },
   { block: 'stage_tabs_persist_roundtrip', corpusRead: false, selfProvisioning: false, fixtureName: 'none', rows: ['UF-STAGE-AT-6'], surface: 'NONE for the round-trip assertion - the persisted operator tab set against the rendered strip rows; a corpus is not required (corpusRead false)' },
-  { block: 'tabs', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'a corpus document focused by node id (provident.focus{kind:nodeId, nodeId:.live-corpus/beta})' },
+  { block: 'tabs', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'a corpus document focused by node id (provident.focus{kind:nodeId, nodeId:.live-fixture/core/beta})' },
   { block: 'toolbar_undo', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-HIST-2'], surface: 'the first store document with a corpus-document fallback, edited and read back (rag.list_documents, edit.set_content, rag.get_document)' },
   { block: 'u_edit_1_live_caret_head_body', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-2'], surface: 'the document surface plus the multi-block edit fixture this block provisions itself (ufEnsureEditFixture with the multi-block fallback)' },
   { block: 'u_edit_1_live_caret_roundtrip', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-8'], surface: 'the document surface plus the edit fixture this block provisions itself (ufEnsureDocumentSurface, ufEnsureEditFixture)' },
   { block: 'u_edit_1_live_commit_failure_warning', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-EDIT-1-LIVE-3'], surface: 'a named corpus document opened explicitly, its inline element being the row failure fixture (ufOpenDocumentById, rag.get_document)' },
   { block: 'u_edit_1_live_head_split_and_textarea_census', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-5'], surface: 'the document surface this block provisions for itself (ufEnsureDocumentSurface)' },
-  { block: 'u_edit_1_live_package_table_limitation', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-6'], surface: 'a TABLE-bearing corpus document searched in the store list after this block provisions its own fixture (ufOpenDocumentById, rag.list_documents, #page-edit-surface table)' },
+  { block: 'u_edit_1_live_package_table_limitation', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-EDIT-1-LIVE-6'], surface: 'a TABLE-bearing corpus document, searched in the store list under the run SELECTED mock data set — the `table` set is the ONE set that supplies it and the ONLY set under which this row runs (ufOpenDocumentById, rag.list_documents, #page-edit-surface table)' },
   { block: 'u_edit_1_live_representation_mode', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-4'], surface: 'the document surface this block provisions for itself (ufEnsureDocumentSurface, #page-edit-surface)' },
   { block: 'u_edit_1_live_selection_span', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-1'], surface: 'the document surface plus the multi-block edit fixture this block provisions itself (ufEnsureDocumentSurface, ufEnsureEditFixture, #page-edit-surface)' },
   { block: 'u_edit_1_live_typed_commit_one_batch', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-7'], surface: 'the document surface plus the edit fixture this block provisions itself, then the store read-back (rag.get_document)' },
@@ -2067,7 +2212,11 @@ export const UF_FIXTURE_DECLARATION = [
 
 /** §16.3 — THE GATED POPULATION, DERIVED FROM THE DECLARATION AND FROM NOTHING ELSE.
  *  `|gated| = |declaration| − |corpusRead:false| − |selfProvisioning:true|` (at this
- *  head `47 − 3 − 10 = 34`), by `§4.1`'s gate predicate. It is a MODULE-LEVEL
+ *  head `47 − 3 − 9 = 35` — ⟨gate-4 `F-4`⟩ the filed `47 − 3 − 10 = 34` is
+ *  `SUPERSEDED`: `§16.1`'s amendment moves ONE `selfProvisioning:true` entry off
+ *  that group, so the live split is `47 − 3 − 9`, and the figure is read from
+ *  `§17.1` clause 3 / `§16.17` item 2 rather than carried here), by `§4.1`'s gate
+ *  predicate. It is a MODULE-LEVEL
  *  DERIVATION (not a carried figure): every print site that needs the gate's size
  *  reads THIS binding, so a declaration edit moves the figure with it. The
  *  HISTORICAL `UF_CORPUS_DEPENDENT_BLOCKS` hand-list keeps its own, different
@@ -2106,8 +2255,8 @@ const UF_EXCLUDED_ENGINE_FAMILY = {
  *  rather than implied. */
 const UF_DECLARED_FIXTURE_PROBES = {
   'corpus-documents': { read: 'rag.list_documents', settles: 'whether the store carries any corpus document at all (the doc-nav / document-body fixture the seeded corpus IS)', unsettled: null },
-  'corpus-query-results': { read: 'rag.list_documents', settles: 'whether the corpus the pane-search RESULT rows are painted from exists at all — a painted result row needs a corpus document to name', unsettled: 'whether a query actually PAINTS a result row for a given term (that read happens after the gesture and cannot be taken before the block runs)' },
-  'corpus-document-tabs': { read: 'rag.list_documents', settles: 'whether the corpus a DOCUMENT tab can name exists at all — a document tab needs a corpus document to carry', unsettled: 'whether a document tab is actually OPEN in the strip at the block own start (the strip state is the block own subject, not a fixture)' },
+  'corpus-query-results': { read: 'rag.query', settles: 'whether the CORPUS holds a document matching the probe\'s own constant term — the fixture\'s own CONTENT fact, read as the store query\'s own hit census (`§18.2` clause 1)', unsettled: 'whether a result row is PAINTED for a term (that read happens after a gesture and cannot be taken at the pre-gesture read point — `§18.1` clause 3)' },
+  'corpus-document-tabs': { read: 'dom:#tab-strip .tab[data-document-id]', settles: 'whether a document tab is ACTUALLY OPEN in the rendered strip at the pre-gesture read point (`§16.6`)', unsettled: 'whether a document tab CAN be opened — that is a capability of the store and it is `\'corpus-documents\'`\'s question, not this one\'s' },
   'self-provisioned-document': { read: null, settles: 'nothing — the fixture is the block OWN write+import, so this entry is NEVER gated (a park on an empty store would be a FALSE park)', unsettled: null },
   none: { read: null, settles: 'nothing — a `corpusRead:false` entry declares no corpus fixture, so it is NEVER gated and carries its own verdict', unsettled: null },
 }
@@ -2121,6 +2270,14 @@ async function ufFixturePreconditionRead(h, opt, fixtureName) {
   if (!probe || probe.read === null) {
     return { tool: null, fixtureName, present: null, resolved: false, kind: null, detail: `the declared fixture ${JSON.stringify(fixtureName)} carries NO declared read (registry ${Object.keys(UF_DECLARED_FIXTURE_PROBES).join('/')}) — its absence is NOT settled, so the block is never parked on it`, extra: 'declared-fixture-unprobed' }
   }
+  // §5.2 clause 3 / §16.3 — THE DISCRIMINATED DISPATCH: a `read` beginning with the
+  // literal prefix `dom:` is a DOM read of the selector that follows it (the ONLY
+  // `dom:` sentinel the registry carries is `'corpus-document-tabs'`); `'rag.query'`
+  // is the STORE-QUERY read of the probe's own constant term; ANY OTHER non-null
+  // `read` is an MCP TOOL NAME, taken exactly as it was before. A `read` string that
+  // is none of these forms is an OFFENCE, not a third kind of read.
+  if (probe.read.startsWith('dom:')) return await ufFixtureDomRowCountRead(h, fixtureName, probe.read.slice('dom:'.length))
+  if (probe.read === 'rag.query') return await ufFixtureStoreQueryRead(h, fixtureName, probe)
   const read = await h.mcpRead(probe.read, {}).catch((e) => ({ ok: false, isError: false, tool: probe.read, value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
   const failure = driverReadFailure(read)
   const docs = read && read.value && Array.isArray(read.value.documents) ? read.value.documents.length : null
@@ -2138,6 +2295,205 @@ async function ufFixturePreconditionRead(h, opt, fixtureName) {
       : `${probe.read} -> ${docs === null ? 'no document list' : `${docs} document(s)`} (the fixture ${JSON.stringify(fixtureName)} own read)`,
     extra: failure ? failure.extra : `--no-seed=${opt && opt.noSeed === true}; the declared fixture ${JSON.stringify(fixtureName)} own read is ${probe.read}`,
   }
+}
+
+/** `§5.2` clause 3 / `§16.3` — THE `dom:` LIMB: THE RENDERED ROW COUNT of the
+ *  selector the sentinel names, through the driver's own `h.cdp.evaluate` row-count
+ *  idiom. A COMPLETED count — including `0` — is a resolved reading (`present:false`
+ *  for `0`); a CDP read that THREW, or a count that is not a non-negative number, is
+ *  a NAMED unreadable (`resolved:false`, a `dom-unreadable`-shaped detail carrying
+ *  the selector and the error text VERBATIM) and PARKS NOBODY. */
+async function ufFixtureDomRowCountRead(h, fixtureName, selector) {
+  const q = JSON.stringify(selector)
+  const read = await h.cdp.evaluate(`(()=>{return document.querySelectorAll(${q}).length})()`).catch((e) => ({ ufThrew: String(e && e.message ? e.message : e) }))
+  const count = typeof read === 'number' ? read : null
+  const unreadable = count === null || !Number.isFinite(count) || count < 0
+  return {
+    tool: `dom:${selector}`,
+    fixtureName,
+    rows: count,
+    present: !unreadable && count >= 1,
+    resolved: !unreadable,
+    kind: unreadable ? 'dom-unreadable' : (count >= 1 ? null : 'fixture-missing'),
+    detail: unreadable
+      ? `dom:${selector} -> UNREADABLE (${read && read.ufThrew ? read.ufThrew : `count=${JSON.stringify(read)} is not a non-negative number`})`
+      : `dom:${selector} -> ${count} rendered row(s) (the fixture ${JSON.stringify(fixtureName)} own read)`,
+    extra: unreadable
+      ? `dom-unreadable; selector=${selector}`
+      : `the declared fixture ${JSON.stringify(fixtureName)} own read is the RENDERED row count of ${selector}`,
+  }
+}
+
+/** `§5.1` re-stated / `§18.2` clause 1 — THE STORE-QUERY LIMB: `rag.query` called
+ *  with THE PROBE'S OWN CONSTANT TERM and NO OTHER ARGUMENT, at the pre-gesture read
+ *  point (`§18.1`). The reading is the reply's own HIT CENSUS (`results`, with
+ *  `ranked` as its twin, `§18.2` clause 3): `present = failure === null && hits !==
+ *  null && hits > 0`, so a query that RESOLVES with `0` hits is a RESOLVED ABSENCE
+ *  (`resolved:true`, `present:false`) and NOT a permanent absence — which is what
+ *  makes `search` (`FA-1`) and `tabs` (`FA-2`) read DIFFERENTLY at one store state. */
+async function ufFixtureStoreQueryRead(h, fixtureName, probe) {
+  const read = await h.mcpRead('rag.query', { query: UF_MOCK_FIXTURE_TERM }).catch((e) => ({ ok: false, isError: false, tool: 'rag.query', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  const failure = driverReadFailure(read)
+  const value = read && read.value ? read.value : {}
+  const hits = Array.isArray(value.results) ? value.results.length : (Array.isArray(value.ranked) ? value.ranked.length : null)
+  return {
+    tool: probe.read,
+    fixtureName,
+    hits,
+    present: failure === null && hits !== null && hits > 0,
+    resolved: failure === null,
+    kind: failure ? failure.kind : (hits !== null && hits > 0 ? null : 'fixture-missing'),
+    detail: failure
+      ? `${probe.read} -> ${failure.detail}`
+      : `${probe.read} for the probe's own constant term -> ${hits === null ? 'no hit census' : `${hits} hit(s)`} (the fixture ${JSON.stringify(fixtureName)} own read)`,
+    extra: failure
+      ? failure.extra
+      : `the declared fixture ${JSON.stringify(fixtureName)} own read asks the STORE whether its corpus holds a document matching the probe's own constant term; it takes NO operator input and no gesture has run`,
+  }
+}
+
+/** `§16.7` — THE ROOT RESOLVER the three SELF-PROVISIONING blocks write through
+ *  (`boot_landing` · `import1` · `ms_store`, `R-14`/`R-15`): the SELECTED set's own
+ *  root when a set is selected, the block's pre-arg path when none is — so an
+ *  unselected set is never materialised and `--fixture=empty` writes nothing. */
+function ufMockFixtureWritePath(name) {
+  const id = UF_FIXTURE_STATE.kind === 'mock-data-set' ? UF_FIXTURE_STATE.id : 'core'
+  return join(UF_MOCK_FIXTURE_ROOT(id), name)
+}
+
+/** `§7.1` — THE SELECTED SET'S OWN IDENTITY, THE ONE NON-`none` KIND UNIT A'S TYPE
+ *  ADMITS, and the `none` triple an invocation without `--fixture=` keeps: ONE
+ *  derivation, read by the ONE assignment site (`§7.2` clause 3). */
+function ufFixtureStateOf(id) {
+  return id === null || id === undefined
+    ? { state: 'no fixture data set selected', kind: 'none', id: 'none' }
+    : { state: `mock data set ${id} selected`, kind: 'mock-data-set', id }
+}
+
+/** `§2.3` clauses 2/3 — THE MATERIALISATION: the set's OWN directory is created if
+ *  absent, EMPTIED of this unit's own `.md` files, and written from the hand-authored
+ *  content data on every launch. THE REMOVAL IS CONFINED TO THE RUN'S OWN SET
+ *  DIRECTORY — nothing outside `.live-fixture/<setName>/` is ever removed, and NO
+ *  stale file survives a launch. */
+function ufMockFixtureMaterialise(id) {
+  const root = UF_MOCK_FIXTURE_ROOT(id)
+  rmSync(UF_MOCK_FIXTURE_ROOT(id), { recursive: true, force: true })
+  mkdirSync(UF_MOCK_FIXTURE_ROOT(id), { recursive: true })
+  for (const file of UF_MOCK_FIXTURE_SETS[id].files) writeFileSync(join(root, file), UF_MOCK_FIXTURE_SETS[id].docs[file] ?? '')
+  return root
+}
+
+/** `§2.3` clause 6 + `§4` `S-1`/`S-3`/`S-4` — THE SELECTED SET'S IMPORT through the
+ *  app's OWN import route (`edit.import_markdown`), reported as a DISCRIMINATED read
+ *  so an `isError` reply is NAMED verbatim and never silently stringified. A set
+ *  with NO file (`empty`) attempts NO import at all (S-4). */
+async function ufMockFixtureImport(mcp, id, root) {
+  const files = UF_MOCK_FIXTURE_SETS[id].files.map((f) => join(root, f))
+  if (files.length === 0) return { skipped: true, files, read: null, failure: null, reading: UF_MOCK_FIXTURE_NOT_MATERIALISED, rootText: { attempted: 0, written: 0, writes: [] } }
+  const read = await mcpToolResult(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, isError: false, tool: 'edit.import_markdown', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  const failure = driverReadFailure(read)
+  // §18.6 clause 3 — THE ROOT-TEXT WRITE: the SECOND half of the set's own
+  // materialisation route, and it runs ONLY on a successful import (a failed
+  // import has no document root to write).
+  const rootText = failure === null
+    ? await ufMockFixtureWriteRootText(mcp, id, files, read)
+    : { attempted: 0, written: 0, writes: [], skippedReason: `the import did not resolve (${failure.kind}), so no document root exists to write` }
+  return { skipped: false, files, read, failure, reading: `${files.length} file(s)`, rootText }
+}
+
+/** `§18.6` clause 3 (`FA-4`) — THE ROOT-TEXT WRITE, AND WHY THE FIXTURE NEEDS IT.
+ *
+ *  THE MECHANISM, MEASURED RATHER THAN INFERRED. The store's lexical index is the
+ *  object `rag.query` scores against (`retrieval`'s maintained `LexicalIndex`). It is
+ *  built at ENGINE CONSTRUCTION — from the store as it then stands, which at launch is
+ *  EMPTY — and it is afterwards reconciled INCREMENTALLY, by node id, from the `edit.*`
+ *  mutations' own change payloads. `edit.import_markdown` emits its batch as
+ *  `{kind:'structural', nodeIds: <the import's documentIds>}` — the DOCUMENT ROOT ids
+ *  ALONE — so the reconcile touches exactly one node per imported document: the
+ *  synthetic root. And the parser authors that root with an EMPTY `content`
+ *  (`markdown-parse`'s `makeNode(documentId, 'div', '')`: the document's BODY lives in
+ *  the separate `:section:` / `:p:` nodes). The root is therefore indexed as an empty
+ *  document, EVERY body node stays outside the index, and `rag.query` for the probe's
+ *  own constant term returned `0 hit(s)` under EVERY set — measured, all four: the
+ *  probe's three keys park under `core` and `table` too, where `§18.6` clause 3
+ *  requires the store query to read PRESENT.
+ *
+ *  THE ADAPTATION IS THE SET'S OWN MATERIALISATION ROUTE, NOT AN APP CHANGE: after a
+ *  successful import this writes each imported document's ROOT node — through the app's
+ *  EXISTING node-level edit op `edit.set_content` — with THAT DOCUMENT'S OWN AUTHORED
+ *  TEXT (the same bytes this driver materialised for that file, `§2.3` clause 3). The
+ *  op's own change payload is `{kind:'content', nodeIds:[<that root>]}`, so the engine's
+ *  reconcile reads the root and indexes it WITH content: the document that carries the
+ *  term now carries it in the one node the index can see, and the sets that do not
+ *  carry it (`search`'s rewritten bodies, `§2.1` `F-3`) stay at `0` hits BY
+ *  CONSTRUCTION — which is exactly the divergence `FA-1`/`FA-2`/`FA-4` need.
+ *
+ *  WHAT THIS DOES NOT TOUCH: the sets' declared files, their bytes, their identities
+ *  (`§2.4`), the four refusals and the neutral default. The root is a STRUCTURAL
+ *  container the document traversal never materialises as a content root (it is
+ *  excluded from the section set: `buildTraversal`'s `sections = verdict.order.filter((id)
+ *  => id !== documentId)`), so this write adds no text to any rendered body, no block to
+ *  any surface and no row to the doc-nav — the term reaches the INDEX and nothing else.
+ *  A write that fails is NAMED (never silently dropped): the reading it returns is what
+ *  the launch line prints, so a run whose roots were not written says so. */
+async function ufMockFixtureWriteRootText(mcp, id, files, read) {
+  const declared = UF_MOCK_FIXTURE_SETS[id]
+  const documentIds = read && read.value && Array.isArray(read.value.documentIds) ? read.value.documentIds : []
+  // THE PAIRING IS THE IMPORTER'S OWN OR IT IS NOT TAKEN AT ALL: `documentIds[i]` is
+  // the id of `files[i]` (`markdown-import`'s `documents.map((d) => d.documentId)` over
+  // the SAME `params.files` order this call handed it). A count that disagrees is
+  // named and NO write is attempted — a mis-paired write would put one document's text
+  // into another document's root, which is the one failure mode this route must never
+  // have silently.
+  if (documentIds.length !== declared.files.length) {
+    return { attempted: documentIds.length, written: 0, writes: [], skippedReason: `the import named ${documentIds.length} document id(s) for ${declared.files.length} file(s) — the pairing is NOT the importer's own, so NO root text was written (a mis-paired write would put one document's text into another document's root)` }
+  }
+  const writes = []
+  for (let i = 0; i < documentIds.length; i++) {
+    // The text written to a root is the text this driver materialised for that very
+    // file — never a sibling's.
+    const basename = declared.files[i]
+    const text = declared.docs[basename] ?? ''
+    const write = await mcpToolResult(mcp, 'edit.set_content', { nodeId: documentIds[i], content: text }).catch((e) => ({ ok: false, isError: false, tool: 'edit.set_content', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+    const writeFailure = driverReadFailure(write)
+    writes.push({
+      documentId: documentIds[i],
+      file: basename,
+      chars: text.length,
+      carriesTerm: text.includes(UF_MOCK_FIXTURE_TERM),
+      written: writeFailure === null && !!(write && write.value && write.value.ok === true),
+      failure: writeFailure === null ? null : `${writeFailure.kind}: ${writeFailure.detail}`,
+    })
+  }
+  return { attempted: documentIds.length, written: writes.filter((w) => w.written).length, writes }
+}
+
+/** `§5.5` `FA-1`/`FA-2` + `§16.5` — THE BLOCK'S OWN, BODY-OWNED PARK. At a
+ *  NON-EMPTY store the fixture GATE's own predicate is FALSE, so the gate route
+ *  cannot carry `FA-1`/`FA-2`'s park: the block asks ITS OWN DECLARED FIXTURE's
+ *  probe before its own setup read and, when that probe reads `present:false` at
+ *  `resolved:true`, emits its OWN park through the existing `parkRow`/`parkReason`
+ *  seam, naming ITS OWN declared fixture, and tags the ROUTE
+ *  (`parked-by-fixture-absence`) so the run's observation can distinguish it from a
+ *  gate-route park (`parkedByGate`). The gate predicate itself is NOT touched. */
+async function ufFixtureOwnPark(h, block, fixtureName, rowId) {
+  const own = await ufFixturePreconditionRead(h, { noSeed: UF_FIXTURE_STATE.kind === 'mock-data-set' }, fixtureName)
+  if (own.resolved === true && own.present === false) {
+    return parkRow(rowId, `the block ${block} reads the surface its own declared fixture ${JSON.stringify(fixtureName)} names (the fixture is PRESENT at this run)`, 'D-state', `the declared fixture ${fixtureName} reads ABSENT at this run (${own.detail})`, `the block ${block} own declared fixture probe read present:false at resolved:true via ${own.tool ?? 'no declared read'}`, { path: 'missing', ok: false, park: true, parkRoute: 'parked-by-fixture-absence', parkReason: fixtureName, fixtureName, block, tool: own.tool, detail: own.detail, surface: { target: 'assembled-renderer', liveSurfacePresent: null } })
+  }
+  return null
+}
+
+/** `§5.1` clause 3(vi) — THE NO-DECLARED-ROW-ID TWIN: a block whose entry declares NO row
+ *  id emits its fixture-absence park on its own `DIAG` line carrying the
+ *  `PRECONDITION-FAILED` marker (`ufCountBlock` classifies exactly that pair as a park),
+ *  so no §6.1 report row is fabricated for a block that declares none. */
+async function ufFixtureOwnParkNoRow(h, block, fixtureName) {
+  const own = await ufFixturePreconditionRead(h, { noSeed: UF_FIXTURE_STATE.kind === 'mock-data-set' }, fixtureName)
+  if (own.resolved === true && own.present === false) {
+    return diagResult(`PARKED PRECONDITION-FAILED (the declared fixture ${fixtureName} reads ABSENT at this run): the block ${block} own declared fixture probe read present:false at resolved:true via ${own.tool ?? 'no declared read'} (${own.detail}) — this block declares NO row id, so its fixture-absence park rides this DIAG line with the marker (§5.1 clause 3(vi))`, { park: true, parkRoute: 'parked-by-fixture-absence', parkReason: fixtureName, fixtureName, block, tool: own.tool })
+  }
+  return null
 }
 
 /** ⟨gate-4 `E-3`⟩ THE FIXTURE-STATE OBSERVATION, DERIVED FROM THIS RUN AND NOTHING
@@ -2165,13 +2521,15 @@ async function ufFixturePreconditionRead(h, opt, fixtureName) {
  *  THE SOURCE IS NOW THE CLASSIFICATION — the SAME per-block record the
  *  `PASS`/`PARK`/`DIAG`/`NOT-DRIVEN`/`FAIL` line and the block loop's own counters
  *  are taken from (`ufCountBlock`, which classifies from the very result object
- *  `printBlockVerdict` printed). ONE record per block that ran, so `parked=N/34`
+ *  `printBlockVerdict` printed). ONE record per block that ran, so `parked=N/35`
  *  counts BLOCKS of the gated declared population and AGREES with the lines the run
  *  printed for them: a `PARK`-classified gated block counts once however many
  *  declared rows it parked, and a `DIAG`-classified gated block whose fallback
  *  carries the `PRECONDITION-FAILED` marker (the no-id park route, `§5.1` clause 2 /
- *  `§5.3`) counts too. A block OUTSIDE the 34 gated keys is counted by neither,
- *  whatever it parked for.
+ *  `§5.3`) counts too. A block OUTSIDE the 35 gated keys is counted by neither,
+ *  whatever it parked for. ⟨gate-4 `F-4`⟩ `34` → `35` here and at the site above:
+ *  BOTH are the LIVE gated population of `§17.1` clause 3 (`47 − 3 − 9 = 35`), not
+ *  the PRE-`§16.1` head's `34` the filed text carried.
  *
  *  ⟨gate-4 `F-3`/`F-4` — THE TWO MEMBERS THIS OBSERVATION DID NOT CARRY.⟩ `parked` is
  *  the gated population's WHOLE park count (a gated key may park for its OWN reason,
@@ -2203,6 +2561,14 @@ function ufFixtureGateObservation(classifications) {
   // counted here, and a gate-route park is always a gated key's (the branch's own
   // conjuncts are the §4.1 predicate), so this is a SUBSET of `parked`.
   const parkedByGate = list === null ? null : list.filter((r) => r && r.park === true && r.gateRoute === true && UF_GATED_DECLARED_KEYS.includes(r.block)).length
+  // ⟨§5.5 second bullet / `§17.4` — THE THIRD PARK MEMBER, PRINTED BESIDE THE OTHER
+  // TWO.⟩ `parkedByFixtureAbsence` is the subset of the gated population parked BECAUSE
+  // ITS OWN DECLARED FIXTURE READ ABSENT at `resolved:true`, HOWEVER THE PARK WAS ROUTED
+  // (the gate branch OR the block's own body, `ufFixtureOwnPark`) — so the chain is
+  // `parkedByGate ⊆ parkedByFixtureAbsence ⊆ parked`. `parked` and `parkedByGate` are
+  // UNCHANGED (a subset is ADDED, no figure moves) and the (park set, route tag) PAIR is
+  // what distinguishes a fixture-absence park from a block's own park (`FA-3`).
+  const parkedByFixtureAbsence = list === null ? null : list.filter((r) => r && r.park === true && r.parkRoute === 'parked-by-fixture-absence' && UF_GATED_DECLARED_KEYS.includes(r.block)).length
   // ⟨gate-4 `F-4` — THE MEMBER IS ARITHMETIC, AND IS NAMED AS ARITHMETIC.⟩ This member
   // was `ran` (`ran = declared − parked`) and printed as `ran-with-own-verdict=33`
   // beside the split — a label a reader takes for a COVERAGE reading (`33` of `34`
@@ -2214,7 +2580,8 @@ function ufFixtureGateObservation(classifications) {
   return {
     declared,
     parked,
-    parkedByGate,
+    parkedByGate: parkedByGate,
+    parkedByFixtureAbsence,
     eligibleAndNotParked,
     observed,
     split: list === null ? `declared=${declared} (no observation at this site)` : `parked=${parked}/${declared}`,
@@ -3366,8 +3733,10 @@ async function o0ResetFolderState(h, selector) {
 /** §2.3 — the target of a folder-row/document-row gesture is the EXACT CSS
  *  selector that was clicked, so the attribute value must be a CSS-parseable
  *  string. The seed/operator corpora have `data-folder-path` values that are
- *  plain paths (`docs`, `docs/specs`, `.live-corpus`), but a path containing a
- *  `"` (the importer renders a path with special characters as `[".live-corpus"]`)
+ *  plain paths (`docs`, `docs/specs`, and the OBSOLETE `.live-corpus` SEED route's
+ *  own directory — annotated as OBSOLETE, never extended, §6.1 clause 1) are fine,
+ *  but a path containing a `"` is not — such a path renders with special characters
+ *  (`[".live-fixture/core"]` is the OBSOLETE route's own rendering, §6.1 clause 1)
  *  makes the naive `[data-folder-path="<v>"]` an INVALID selector and the whole
  *  block dies on a SyntaxError. Escaping the two CSS-string metas is the fix; the
  *  recorded `target` field stays a real, resolving selector. */
@@ -4518,9 +4887,9 @@ const BLOCKS = {
   // tab-switching rows are UF-TABS-1/3/4): reported as a §6.1 DIAGNOSTIC so it
   // can never be promoted to a row verdict.
   tabs: async (h) => {
-    const r = await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'nodeId', nodeId: '.live-corpus/beta' } })
+    const r = await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'nodeId', nodeId: '.live-fixture/core/beta' } })
     const focused = !!(r && (r.ok !== false) && !r.error)
-    return diagResult(`provident.focus(nodeId .live-corpus/beta) → ${JSON.stringify(r)}; focused=${focused}`)
+    return diagResult(`provident.focus(nodeId .live-fixture/core/beta) → ${JSON.stringify(r)}; focused=${focused}`)
   },
   settings_modal: async (h) => {
     await h.cdp.click('#settings-toggle'); const open = await h.cdp.domAttr('#settings-modal', 'class')
@@ -4551,7 +4920,7 @@ const BLOCKS = {
     const toolbar = await h.cdp.evaluate(`!!document.getElementById('editor-toolbar')`)
     const panes = await h.cdp.evaluate(`document.querySelectorAll('.pane-frame[data-pane-id]').length`)
     const coexists = landing && dataStage === 'landing' && toolbar && panes > 0
-    const doc = join(ROOT, '.live-corpus', 'live4-first.md')
+    const doc = ufMockFixtureWritePath('live4-first.md')
     // §2.1.1-A / the `selfProvisioning` carve-out — THIS BLOCK SUPPLIES ITS OWN
     // DOCUMENT: the write + import + the store read-back are ONE seam
     // (`ufSelfProvisionImport`), so the content this row reads back is the store
@@ -4684,7 +5053,7 @@ const BLOCKS = {
     // failed revert FAILS the row.
     await ufEnsureAppClear(h)
     const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
-    const id = docs && docs.documents && docs.documents[0] && (docs.documents[0].documentId || docs.documents[0].id) ? (docs.documents[0].documentId || docs.documents[0].id) : '.live-corpus/alpha'
+    const id = docs && docs.documents && docs.documents[0] && (docs.documents[0].documentId || docs.documents[0].id) ? (docs.documents[0].documentId || docs.documents[0].id) : '.live-fixture/core/alpha'
     const before = await h.cdp.evaluate(`(()=>{const b=document.getElementById('editor-toolbar-undo');return b?b.disabled:null})()`)
     const edited = await h.mcpTool(h.mcp, 'edit.set_content', { nodeId: id, content: '# Alpha edited by live-drive\n\ncontent\n' }).catch((e) => ({ error: String(e) }))
     await sleep(600)
@@ -5051,7 +5420,7 @@ const BLOCKS = {
   // V1 — store adjacency basics over the live MCP surface.
   v1_adjacency: async (h) => {
     const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
-    let id = '.live-corpus/alpha'
+    let id = '.live-fixture/core/alpha'
     try { id = docs.documents[0].documentId || docs.documents[0].id || id } catch {}
     const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: id }).catch((e) => ({ error: String(e) }))
     const q = await h.mcpTool(h.mcp, 'rag.query', { query: 'alpha', topK: 3 }).catch((e) => ({ error: String(e) }))
@@ -5063,14 +5432,14 @@ const BLOCKS = {
   // V2 — scoped traversal via rag.query filters (the V2 scoped walk on the MCP surface).
   v2_scoped: async (h) => {
     const docs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch((e) => ({ error: String(e) }))
-    let id = '.live-corpus/alpha'
+    let id = '.live-fixture/core/alpha'
     try { id = docs.documents[0].documentId || docs.documents[0].id || id } catch {}
     // resolve a real content nodeId inside the doc for the nodeId-scoped variant
     const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: id, store: 'main' }).catch((e) => ({ error: String(e) }))
     let nodeId = id
     try { const n = doc && doc.nodes && doc.nodes.find((x) => x.type !== 'div'); nodeId = (n && n.id) || id } catch {}
     const scopedTarget = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3, filters: { target: { documentId: id, nodeId } } }).catch((e) => ({ error: String(e) }))
-    const scopeFilter = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3, filters: { documentPathPrefix: ['.live-corpus'], nodeKind: 'content' } }).catch((e) => ({ error: String(e) }))
+    const scopeFilter = await h.mcpTool(h.mcp, 'rag.query', { store: 'main', query: 'alpha', topK: 3, filters: { documentPathPrefix: ['.live-fixture/core'], nodeKind: 'content' } }).catch((e) => ({ error: String(e) }))
     return diagResult(`rag.query target-scope(documentId=${id},nodeId=${nodeId})=${JSON.stringify(scopedTarget)}\n rag.query pathPrefix+kind=` + JSON.stringify(scopeFilter) + `\n (MCP-probe evidence; the scoped-traversal row is reported by its own battery)`)
   },
 
@@ -5119,8 +5488,8 @@ const BLOCKS = {
     // subscription lives on the `edit` bridge per preload.ts §Unit D), then import a
     // fresh file into store 'main' and assert the broadcast payload.store == 'main'.
     const armed = await h.cdp.evaluate(`(()=>{window.__msBcast=[];window.__msBcastErr=null;try{window.provident.edit.onRagStoreChanged((p)=>window.__msBcast.push(p))}catch(e){window.__msBcastErr=String(e)}return true})()`)
-    const fresh = join(ROOT, '.live-corpus', 'ms3-fresh.md')
-    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
+    const fresh = ufMockFixtureWritePath('ms3-fresh.md')
+    mkdirSync(dirname(ufMockFixtureWritePath('ms3-fresh.md')), { recursive: true })
     writeFileSync(fresh, '# MS3 Fresh\n\nNew content for the store broadcast check.\n')
     const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [fresh], store: 'main' }).catch((e) => ({ error: String(e.message || e) }))
     await sleep(800)
@@ -5205,8 +5574,8 @@ const BLOCKS = {
   // U-IMPORT-1 — the MCP import path (edit.import_markdown on a FRESH file) is live;
   // the OS-native file-picker browse step is structurally OS-owned (parked in-battery).
   import1: async (h) => {
-    const fresh = join(ROOT, '.live-corpus', 'import1-fresh.md')
-    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
+    const fresh = ufMockFixtureWritePath('import1-fresh.md')
+    mkdirSync(dirname(ufMockFixtureWritePath('import1-fresh.md')), { recursive: true })
     writeFileSync(fresh, '# Import1 fresh\n\nBrand-new file through the live MCP import path.\n')
     const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [fresh] }).catch((e) => ({ error: String(e.message || e) }))
     await sleep(600)
@@ -5309,7 +5678,7 @@ const BLOCKS = {
   // (a store write — rag.get_document reflects the typed text).
   user4_main_editable: async (h) => {
     await ufEnsureAppClear(h)
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch((e) => ({ err: String(e.message || e) }))
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' } }).catch((e) => ({ err: String(e.message || e) }))
     await sleep(800)
     const surface = await ufSurfaceTarget(h)
     const ed = await h.cdp.evaluate(`(()=>{const e=document.querySelector('[contenteditable]');if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();const x=Math.round(r.x+20),y=Math.round(r.y+14);const hit=document.elementFromPoint(x,y);return {x:x,y:y,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===e||e.contains(hit))),vp:[innerWidth,innerHeight],inVp:(x>=0&&y>=0&&x<=innerWidth&&y<=innerHeight)}})()`)
@@ -5334,7 +5703,7 @@ const BLOCKS = {
     await sleep(250)
     await h.cdp.evaluate(`document.activeElement.blur()`)
     await sleep(700)
-    const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/alpha' }).catch((e) => ({ err: String(e.message || e) }))
+    const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/alpha' }).catch((e) => ({ err: String(e.message || e) }))
     const committed = JSON.stringify(doc).includes(marker)
     const inDom = await h.cdp.evaluate(`document.body.innerText.includes(${JSON.stringify(marker)})`)
     return rowResult({row:'UF-STAGE-3',dclass:'D-state'}, 'The main view IS editable and an edit commits on blur (the store read-back contains the typed marker)', `body-text click hit=${ed.hit} onTarget=${ed.onTarget} → editable engages activeElement-contenteditable=${JSON.stringify(engaged)}; typed '${marker}' in STORE rag.get_document=${committed}, in DOM=${inDom}`, { path: ed.onTarget ? 'cdp' : 'synthetic-keyboard-only', ok: engaged === true && committed && ed.onTarget, surface })
@@ -5395,11 +5764,11 @@ const BLOCKS = {
     const hasNbsp = (s) => (typeof s === 'string' ? s.includes('&nbsp;') : false)
     const hasNbs = (s) => (typeof s === 'string' ? s.includes('\u00A0') : false)
     // 0) baseline: current committed store content for the paragraph node
-    const before = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/alpha' }).catch((e) => ({ err: String(e.message || e) }))
+    const before = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/alpha' }).catch((e) => ({ err: String(e.message || e) }))
     const beforeS = JSON.stringify(before)
     const beforeP = (before && before.nodes || []).find((n) => n.type === 'p')
     // 1) focus alpha
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch((e) => ({ err: String(e.message || e) }))
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' } }).catch((e) => ({ err: String(e.message || e) }))
     await sleep(800)
     // 2) find the Settings-paragraph contenteditable root
     const geo = await h.cdp.evaluate(`(()=>{
@@ -5434,7 +5803,7 @@ const BLOCKS = {
     await h.cdp.evaluate(`(()=>{const a=document.activeElement;if(a&&typeof a.blur==='function')a.blur();return true})()`)
     await sleep(800)
     // 7) read back committed store + rendered html
-    const after = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/alpha' }).catch((e) => ({ err: String(e.message || e) }))
+    const after = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/alpha' }).catch((e) => ({ err: String(e.message || e) }))
     const afterS = JSON.stringify(after)
     const afterP = (after && after.nodes || []).find((n) => n.type === 'p')
     const aContent = afterP ? (afterP.content ?? '') : ''
@@ -5464,7 +5833,7 @@ const BLOCKS = {
   },
 
   // USER-REPORTED BUG (2026-09-15) — DUPLICATE EDITABLE PARAGRAPH in the alpha
-  // doc. The RAG paragraph `.live-corpus/alpha:p:1` ("Settings modal (C3). The
+  // doc. The RAG paragraph `.live-fixture/core/alpha:p:1` ("Settings modal (C3). The
   // document alpha documents.") is emitted TWICE as a user-visible editable
   // paragraph: once nested inside the `<h1 data-doc-head>` section header (so it
   // shows with header styling) and once as a sibling content root directly in
@@ -5473,9 +5842,9 @@ const BLOCKS = {
   // editable `[data-rag-node-id]` p:1 paragraph; (2) none nested in the header;
   // (3) an edit lands in exactly one paragraph position.
   repro_dup_para: async (h) => {
-    const rid = '.live-corpus/alpha:p:1'
+    const rid = '.live-fixture/core/alpha:p:1'
     // 0) focus alpha so its document subtrees are live in the DOM
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch(() => {})
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' } }).catch(() => {})
     await sleep(900)
     // 1) SINGLE-RENDER — count EDITABLE elements whose data-rag-node-id === p:1.
     //    Expect `1`; the duplicate paragraph yields >1 -> FAIL.
@@ -5641,6 +6010,10 @@ const BLOCKS = {
   // button while the open document tab is active, then report which tab is active
   // and what #zone:main renders.
   user9_search_open_in_tab: async (h) => {
+    // §5.5 `FA-1`/`FA-2` + §16.5 — THE BLOCK'S OWN DECLARED FIXTURE IS ASKED FIRST:
+    // at a NON-EMPTY store the gate's own predicate is false, so a fixture-absence park
+    // for THIS fixture rides the block's OWN body, named and route-tagged.
+    { const ownPark = await ufFixtureOwnPark(h, 'user9_search_open_in_tab', 'corpus-document-tabs', 'UF-DEFECT-7'); if (ownPark !== null) return ownPark }
     await ufEnsureAppClear(h)
     const surface = await ufSurfaceTarget(h)
     // §2.1.1 limb 2 — THE DOCUMENT TAB this row needs is read by its OWN identity:
@@ -5726,7 +6099,7 @@ const BLOCKS = {
     // (setup via MCP provident.focus{newTab:true}, NOT the asserted gesture)
     let s0 = await ufTabState(h)
     if (s0.count < 2) {
-      await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' }, newTab: true }).catch(() => null)
+      await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' }, newTab: true }).catch(() => null)
       await sleep(1200)
       s0 = await ufTabState(h)
     }
@@ -5774,9 +6147,9 @@ const BLOCKS = {
   uf_tabs_3: async (h) => {
     await ufEnsureAppClear(h)
     // setup (MCP focus — not the asserted gesture): >=3 document tabs
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' }, newTab: true }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' }, newTab: true }).catch(() => null)
     await sleep(900)
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/beta' }, newTab: true }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/beta' }, newTab: true }).catch(() => null)
     await sleep(1400)
     // the PINNED default identity for the post-last-close page (setup read, not the gesture)
     const defaultDoc = await h.cdp.evaluate(`(()=>{const e=document.getElementById('operator-default-document');return e?String(e.textContent||'').trim():null})()`).catch(() => null)
@@ -5836,13 +6209,13 @@ const BLOCKS = {
   // `#zone:main`; the previous document body unmounts.
   uf_tabs_4: async (h) => {
     await ufEnsureAppClear(h)
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' }, newTab: true }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' }, newTab: true }).catch(() => null)
     await sleep(900)
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/beta' }, newTab: true }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/beta' }, newTab: true }).catch(() => null)
     await sleep(1400)
     const s0 = await ufTabState(h)
-    const alphaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-corpus/alpha')
-    const betaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-corpus/beta')
+    const alphaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-fixture/core/alpha')
+    const betaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-fixture/core/beta')
     if (!alphaTab || !betaTab) return rowResult({row:'UF-TABS-4',dclass:'D-visual'}, 'Switching tabs mounts ONLY the active target body in #zone:main and unmounts the prior document body', `need an alpha AND a beta document tab; tabs=${JSON.stringify(s0.tabs.map((t) => t.id + ':' + t.kind + ':' + t.title))}`, { path: 'missing', ok: false, surface: await ufSurfaceTarget(h) })
     const cA = await ufRealClick(h, `.tab[data-tab-id="${alphaTab.id}"]`)
     await sleep(1600)
@@ -5864,6 +6237,10 @@ const BLOCKS = {
   // delivers the click, and a native DOM click (attribution evidence only)
   // lives in the separate `uf_tabs_7_diag` block so it can never flip the verdict.
   uf_tabs_7: async (h) => {
+    // §5.5 `FA-1`/`FA-2` + §16.5 — THE BLOCK'S OWN DECLARED FIXTURE IS ASKED FIRST:
+    // at a NON-EMPTY store the gate's own predicate is false, so a fixture-absence park
+    // for THIS fixture rides the block's OWN body, named and route-tagged.
+    { const ownPark = await ufFixtureOwnPark(h, 'uf_tabs_7', 'corpus-query-results', 'U-2'); if (ownPark !== null) return ownPark }
     await ufEnsureAppClear(h)
     await ufEnsurePaneExpanded(h, 'search')
     // setup: open a SEARCH tab with a REAL click on the pane's expand-tab control
@@ -5909,6 +6286,10 @@ const BLOCKS = {
   // whether the handler + seam work when the real gesture does not deliver the
   // click; it is a `[DIAG]` measurement and can never promote the row.
   uf_tabs_7_diag: async (h) => {
+    // §5.5 `FA-1`/`FA-2` + §16.5 — THE BLOCK'S OWN DECLARED FIXTURE IS ASKED FIRST:
+    // at a NON-EMPTY store the gate's own predicate is false, so a fixture-absence park
+    // for THIS fixture rides the block's OWN body, named and route-tagged.
+    { const ownPark = await ufFixtureOwnParkNoRow(h, 'uf_tabs_7_diag', 'corpus-query-results'); if (ownPark !== null) return ownPark }
     await ufEnsureAppClear(h)
     const before = await ufTabState(h)
     // [DIAG] native DOM click (no hit-testing, no verdict) — attribution evidence
@@ -6261,23 +6642,23 @@ const BLOCKS = {
     const pane = await ufEnsurePaneExpanded(h, 'doc-nav')
     const surface = await ufSurfaceTarget(h)
     // setup: focus a DIFFERENT document first so the switch is visible
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' } }).catch(() => null)
     await sleep(1400)
-    // setup: the .live-corpus folder must be expanded for the beta leaf to exist
+    // setup: the run's SELECTED SET's own folder must be expanded for the beta leaf to exist
     let folderPath = 'already-expanded'
-    let folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-corpus"]');return f?f.getAttribute('data-expanded'):null})()`)
+    let folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
     if (folderOpen !== 'true') {
-      folderPath = (await ufRealClick(h, '[data-folder-label=".live-corpus"]')).path
+      folderPath = (await ufRealClick(h, '[data-folder-label=".live-fixture/core"]')).path
       await sleep(1300)
-      folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-corpus"]');return f?f.getAttribute('data-expanded'):null})()`)
+      folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
       if (folderOpen !== 'true') {
         // the folder row is itself a clickable `li` in a pane frame — a REAL click
         // may be swallowed by the pane-drag pointer capture. [DIAG] native-click
         // attribution (SETUP ONLY, no verdict) so the leaf row is reachable.
-        await ufNativeClickDiag(h, '[data-folder-label=".live-corpus"]')
+        await ufNativeClickDiag(h, '[data-folder-label=".live-fixture/core"]')
         await sleep(1300)
         folderPath += '+[DIAG]-native-fallback(setup)'
-        folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-corpus"]');return f?f.getAttribute('data-expanded'):null})()`)
+        folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
       }
     }
     // §2.1 `E-2`/`U-3` — THE BODY-GESTURE PROBE (run BEFORE the U-1 click so it
@@ -6317,7 +6698,7 @@ const BLOCKS = {
       const seqAfter = slotsAfter.map((s) => s.paneId).join(',')
       bodyDrag = { driven: true, start: bodyStart, targetY, seqBefore, seqAfter, relocated: seqBefore !== seqAfter, hitAtStart: bodyStart.hit }
     }
-    const leaf = await h.cdp.evaluate(`(()=>{const l=document.querySelector('li[data-document-id=".live-corpus/beta"]');if(!l)return null;const r=l.getBoundingClientRect();return {doc:l.getAttribute('data-document-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
+    const leaf = await h.cdp.evaluate(`(()=>{const l=document.querySelector('li[data-document-id=".live-fixture/core/beta"]');if(!l)return null;const r=l.getBoundingClientRect();return {doc:l.getAttribute('data-document-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
     const u1Assertion = 'A REAL click on a doc-nav document ROW focuses that document in the stage'
     const u3Dclass = 'D-interaction'
     const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated)'
@@ -6328,7 +6709,7 @@ const BLOCKS = {
       : { path: 'missing', ok: false, surface: surface, required: 'a real hit-tested pane-BODY gesture point inside .pane-frame[data-pane-id="doc-nav"] outside .pane-header', observed: u3Evidence, checklistRow: 'UF-PANES-12' }
     const u3 = declaredRowResult('U-3', 'UF-PANES-12', u3Assertion, u3Dclass, u3Evidence, u3Opts)
     if (!leaf) {
-      const why = `doc-nav has no li[data-document-id=".live-corpus/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`
+      const why = `doc-nav has no li[data-document-id=".live-fixture/core/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`
       return [
         rowResult({ row: 'UF-PANES-12', dclass: 'D-interaction' }, u1Assertion, why, { path: 'missing', ok: false, surface }),
         declaredRowResult('U-1', 'UF-PANES-12', u1Assertion, 'D-interaction', why, { path: 'missing', ok: false, surface, checklistRow: 'UF-PANES-12' }),
@@ -6339,16 +6720,16 @@ const BLOCKS = {
     await ufArmClick(h)
     // ⟨gate-4 `D-1`⟩ the doc-nav row click serves BOTH rows this block claims
     // (`UF-PANES-12`'s checklist row and the declared `U-1`).
-    const click = await ufRealClick(h, 'li[data-document-id=".live-corpus/beta"]', { rows: ['UF-PANES-12', 'U-1'] })
+    const click = await ufRealClick(h, 'li[data-document-id=".live-fixture/core/beta"]', { rows: ['UF-PANES-12', 'U-1'] })
     // post-click hit re-probe: if the page re-flowed (a mount leak / a tall pane)
     // between the hit-test and the dispatch, this records WHERE the click landed
-    const clickProbe = await ufHitProbe(h, 'li[data-document-id=".live-corpus/beta"]')
+    const clickProbe = await ufHitProbe(h, 'li[data-document-id=".live-fixture/core/beta"]')
     await sleep(1800)
     const events = await ufClickProbe(h)
     const after = await ufStageSig(h)
     const focused = typeof after.docId === 'string' && after.docId.includes('beta')
-    const current = await h.cdp.evaluate(`!!document.querySelector('li[data-document-id=".live-corpus/beta"][data-current="true"]')`)
-    const detail = `doc-nav pane expand=${JSON.stringify(pane)}; doc-nav folder expand: path=${folderPath} (expanded=${folderOpen}; the folder row is itself a clickable li); REAL click on li[data-document-id=".live-corpus/beta"] (box ${JSON.stringify(leaf.box)}, path=${click.path}, hit=${click.rect ? click.rect.hit : '?'}) → stage before(docId=${before.docId}) after(docId=${after.docId}) focusedThatDocument=${focused} li[data-current]=${current}; click-event targets=${JSON.stringify(events)}; post-click hit re-probe=${JSON.stringify(clickProbe)}; body-gesture probe (U-3)=${JSON.stringify(bodyDrag)}`
+    const current = await h.cdp.evaluate(`!!document.querySelector('li[data-document-id=".live-fixture/core/beta"][data-current="true"]')`)
+    const detail = `doc-nav pane expand=${JSON.stringify(pane)}; doc-nav folder expand: path=${folderPath} (expanded=${folderOpen}; the folder row is itself a clickable li); REAL click on li[data-document-id=".live-fixture/core/beta"] (box ${JSON.stringify(leaf.box)}, path=${click.path}, hit=${click.rect ? click.rect.hit : '?'}) → stage before(docId=${before.docId}) after(docId=${after.docId}) focusedThatDocument=${focused} li[data-current]=${current}; click-event targets=${JSON.stringify(events)}; post-click hit re-probe=${JSON.stringify(clickProbe)}; body-gesture probe (U-3)=${JSON.stringify(bodyDrag)}`
     const diag = '; [DIAG] attribution available — run --block=uf_panes_12_diag (a NATIVE DOM click on the same li) to separate a dead handler from a gesture that never delivered the click'
     const u1 = declaredRowResult('U-1', 'UF-PANES-12', u1Assertion, 'D-interaction', focused ? detail : `${detail}${diag}`, { path: click.path, ok: focused && current, surface, checklistRow: 'UF-PANES-12' })
     const checklist = rowResult({ row: 'UF-PANES-12', dclass: 'D-interaction' }, u1Assertion, focused ? detail : `${detail}${diag}`, { path: click.path, ok: focused && current, surface })
@@ -6361,22 +6742,26 @@ const BLOCKS = {
   uf_panes_12_diag: async (h) => {
     await ufEnsureAppClear(h)
     await ufEnsurePaneExpanded(h, 'doc-nav')
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/alpha' } }).catch(() => null)
     await sleep(1400)
     const before = await ufStageSig(h)
     // [DIAG] native DOM click (no hit-testing, no verdict) — attribution evidence
-    const nat = await ufNativeClickDiag(h, 'li[data-document-id=".live-corpus/beta"]')
+    const nat = await ufNativeClickDiag(h, 'li[data-document-id=".live-fixture/core/beta"]')
     await sleep(1800)
     const after = await ufStageSig(h)
     const focused = typeof after.docId === 'string' && after.docId.includes('beta')
     // [DIAG] measurement only — attribution evidence, never a row verdict
-    return diagResult(`NATIVE DOM click on 'li[data-document-id=".live-corpus/beta"]' → ${nat}: stage docId ${before.docId} -> ${after.docId} (focusedThatDocument=${focused}) — so the handler+seam work, and the REAL gesture is what fails; attribution evidence for UF-PANES-12 / U-1 only`)
+    return diagResult(`NATIVE DOM click on 'li[data-document-id=".live-fixture/core/beta"]' → ${nat}: stage docId ${before.docId} -> ${after.docId} (focusedThatDocument=${focused}) — so the handler+seam work, and the REAL gesture is what fails; attribution evidence for UF-PANES-12 / U-1 only`)
   },
 
   // UF-PANES-14 — the search pane: a REAL typed query + REAL submit renders
   // result rows that hover-highlight, and a result click opens the linked doc
   // in a NEW tab.
   uf_panes_14: async (h) => {
+    // §5.5 `FA-1`/`FA-2` + §16.5 — THE BLOCK'S OWN DECLARED FIXTURE IS ASKED FIRST:
+    // at a NON-EMPTY store the gate's own predicate is false, so a fixture-absence park
+    // for THIS fixture rides the block's OWN body, named and route-tagged.
+    { const ownPark = await ufFixtureOwnPark(h, 'uf_panes_14', 'corpus-query-results', 'UF-PANES-14'); if (ownPark !== null) return ownPark }
     await ufEnsureAppClear(h)
     const pane = await ufEnsurePaneExpanded(h, 'search')
     const search = await ufPaneSearch(h, 'alpha')
@@ -6492,7 +6877,7 @@ const BLOCKS = {
     // across an undo/redo walk, unlike the rendered stage text (which follows the
     // tab/focus state)
     const storeSig = async () => {
-      const d = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/alpha' }).catch(() => null)
+      const d = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/alpha' }).catch(() => null)
       const nodes = d && Array.isArray(d.nodes) ? d.nodes : []
       const s = nodes.map((n) => n.id + '|' + (n.type || '') + '|' + String(n.content ?? '')).join('\n')
       let hash = 0
@@ -6565,7 +6950,7 @@ const BLOCKS = {
     await ufEnsureAppClear(h)
     // setup: mount beta, make ONE real edit (click into the editable + type +
     // blur) so a fresh journal point with an observable content delta exists
-    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/beta' } }).catch(() => null)
+    await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-fixture/core/beta' } }).catch(() => null)
     await sleep(1600)
     const marker = 'UFH6' + String(Date.now()).slice(-5)
     const geo = await h.cdp.evaluate(`(()=>{const e=[...document.querySelectorAll('#zone\\\\:main [contenteditable]')][0];if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.x+20),y:Math.round(r.y+14),rag:e.getAttribute('data-rag-node-id')}})()`)
@@ -6589,7 +6974,7 @@ const BLOCKS = {
     const hist = async () => h.cdp.evaluate(`(()=>({entries:[...document.querySelectorAll('#pane-history li')].map((l)=>({i:l.getAttribute('data-history-index'),kind:l.getAttribute('data-history-kind'),cur:l.getAttribute('data-current')==='true'})),current:[...document.querySelectorAll('#pane-history li')].filter((l)=>l.getAttribute('data-current')==='true').map((l)=>l.getAttribute('data-history-index'))[0]??null,replayControl:!!document.querySelector('[id*=replay i],[data-role*=replay i]')||/replay/i.test((document.getElementById('pane-history')||{}).textContent||'')}))()`)
     const h0 = await hist()
     const sig0 = await ufStageSig(h)
-    const inStore = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/beta' }).catch(() => null)
+    const inStore = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/beta' }).catch(() => null)
     const committed = JSON.stringify(inStore || {}).includes(marker)
     const curIdx = h0.current == null ? null : Number(h0.current)
     const surface = await ufSurfaceTarget(h)
@@ -6612,7 +6997,7 @@ const BLOCKS = {
     await sleep(1800)
     const h1 = await hist()
     const sig1 = await ufStageSig(h)
-    const inStore1 = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/beta' }).catch(() => null)
+    const inStore1 = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/beta' }).catch(() => null)
     const markerAfter = JSON.stringify(inStore1 || {}).includes(marker)
     const reverted = !markerAfter && sig1.hash !== sig0.hash
     const positionMoved = h1.current !== h0.current
@@ -6624,7 +7009,7 @@ const BLOCKS = {
       await sleep(1500)
     }
     const hEnd = await hist()
-    const inStoreEnd = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/beta' }).catch(() => null)
+    const inStoreEnd = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/beta' }).catch(() => null)
     const markerRestored = JSON.stringify(inStoreEnd || {}).includes(marker)
     const restored = markerRestored && String(hEnd.current) === String(h0.current)
     const replayOnly = await h.cdp.evaluate(`(()=>{const c=[...document.querySelectorAll('#pane-history button,#pane-history [role="button"],#editor-toolbar button')].map((b)=>(b.textContent||'').trim());return {controls:c}})()`)
@@ -6654,7 +7039,7 @@ const BLOCKS = {
       return { ids: nodes.map((n) => n.propsId).sort(), nodeIds: nodes.map((n) => n.propsId + '=' + n.nodeId).sort(), err: r && r.error ? r.error : null }
     }
     const before = await zones()
-    const change = await h.mcpTool(h.mcp, 'edit.set_content', { nodeId: '.live-corpus/beta', content: '# Beta\n\nPane collapse (C5) — live content change for UF-LAYOUT-2.\n' }).catch((e) => ({ error: String(e) }))
+    const change = await h.mcpTool(h.mcp, 'edit.set_content', { nodeId: '.live-fixture/core/beta', content: '# Beta\n\nPane collapse (C5) — live content change for UF-LAYOUT-2.\n' }).catch((e) => ({ error: String(e) }))
     await sleep(2000)
     const after = await zones()
     const idsEqual = before.ids.length > 0 && before.ids.join(',') === after.ids.join(',')
@@ -6663,7 +7048,7 @@ const BLOCKS = {
     const pairingEqual = before.nodeIds.length > 0 && before.nodeIds.join('|') === after.nodeIds.join('|')
     const pairingChanged = before.nodeIds.filter((x, i) => after.nodeIds[i] !== x).length
     const dom = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const l=document.getElementById('zone:left');const b=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};return {main:b(m),left:b(l),mainText:(m?(m.textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):null)}})()`)
-    return rowResult({row:'UF-LAYOUT-2',dclass:'D-state'}, 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, and the zone containers stay rendered', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; edit.set_content(.live-corpus/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-LAYOUT-2',dclass:'D-state'}, 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, and the zone containers stay rendered', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; edit.set_content(.live-fixture/core/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-LAYOUT-10 — with ZERO enabled+placed panes in `left` the zone's grid
@@ -7147,7 +7532,7 @@ const BLOCKS = {
     // this row needs a document whose page commit REFUSES (§3.5's failure path):
     // the seeded `alpha` document carries an inline `<strong>`, outside the
     // adopted decomposer's closed node-type set
-    const failDoc = await ufOpenDocumentById(h, '.live-corpus/alpha')
+    const failDoc = await ufOpenDocumentById(h, '.live-fixture/core/alpha')
     const stFail = await ufEditSurfaceState(h)
     if (!stFail.present) return rowResult({row:'U-EDIT-1-LIVE-3',dclass:'D-visual'}, 'A FAILED page commit surfaces a PAINTED typed warning', `no surface on the failure fixture ${JSON.stringify(failDoc)}`, { path: 'missing', ok: false, surface })
     if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-3',dclass:'D-visual'}, 'A FAILED page commit surfaces a PAINTED typed warning (the tab/stage warning class) that SURVIVES a re-derive, and the store read-back is unchanged', 'no page-edit-surface in the stage', { path: 'missing', ok: false, surface })
@@ -7292,7 +7677,7 @@ const BLOCKS = {
     // this row needs a document whose surface ACTUALLY carries table elements:
     // the corpus is searched for one (the operator store's `defects` document,
     // or any document whose rendered surface has a table)
-    const candidates = ['.live-corpus/alpha', 'defects']
+    const candidates = ['.live-fixture/table/table', 'defects']
     let tableDoc = null
     for (const c of candidates) {
       const opened = await ufOpenDocumentById(h, c)
@@ -8253,7 +8638,7 @@ async function main(argv) {
   // §3.3 — the O-0 flags are DEFAULT-SAFE: `--gpu` off (today's sanctioned
   // launch path is the GPU-OFF leg), `--o0-corpus` none, `--o0-out` none (a run
   // without it is console-only and can never produce the committed artifact).
-  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, corpusRoot: null, strictSeed: false, groups: null, emptyGroups: false, badPortArgs: [], badHomeArgs: [], block: 'all', noSeed: false, keepHome: false, connect: false, gpu: false, o0Corpus: null, o0Out: null, display: null, cliArgs: argv }
+  const opt = { fixture: null, mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, corpusRoot: null, strictSeed: false, groups: null, emptyGroups: false, badPortArgs: [], badHomeArgs: [], block: 'all', noSeed: false, keepHome: false, connect: false, gpu: false, o0Corpus: null, o0Out: null, display: null, cliArgs: argv, badFixtureArg: null, conflictingFixture: null }
   for (const a of argv) {
     if (a === '--no-seed') { opt.noSeed = true; continue }
     if (a === '--keep-home') { opt.keepHome = true; continue }
@@ -8302,10 +8687,24 @@ async function main(argv) {
     else if (m[1] === 'no-seed') opt.noSeed = true
     else if (m[1] === 'o0-corpus') opt.o0Corpus = Number(m[2])
     else if (m[1] === 'o0-out') opt.o0Out = m[2]
+    // §3.1/§3.2 (UNIT B) — `--fixture=<setName>`: THE SELECTION ARG. It is
+    // LAUNCH-SCOPED and NEVER PERSISTED (no app-side state records it, `§1.3`), its
+    // value comes ONLY from this argv walk (`§3.1` clause 2: no environment
+    // variable, no config file, no default from another arg), the value is kept
+    // VERBATIM and compared by EXACT string equality against the five-name closed
+    // set — no trim, no case-fold, no prefix match and no comma list (`§3.2`). Two
+    // DIFFERENT values are a CONFLICT (refused by name below); the IDENTICAL flag
+    // repeated is admissible (`§3.1` clause 5).
+    else if (m[1] === 'fixture') {
+      if (m[2] === '') opt.badFixtureArg = { flag: '--fixture', text: m[2], why: 'names NO set at all (the empty value is NOT the empty set)' }
+      else if (!['core', 'table', 'search', 'tabs', 'empty'].includes(m[2])) opt.badFixtureArg = { flag: '--fixture', text: m[2], why: 'is not one of the accepted names (case-sensitive, untrimmed)' }
+      else if (opt.fixture !== null && opt.fixture !== m[2]) opt.conflictingFixture = [opt.fixture, m[2]]
+      else opt.fixture = m[2]
+    }
   }
   o0Acc.runs.length = 0; o0Acc.hookPairs.length = 0; o0Acc.notes.length = 0
   // ⟨gate-4 `F-8` (LEAK HALF) — THE SCRATCH HOME IS MINTED **AFTER** EVERY REFUSAL.⟩
-  // This `mkdtempSync` used to run HERE, ABOVE both refusal branches, so `--groups=`
+  // This scratch-HOME mint used to run HERE, ABOVE both refusal branches, so `--groups=`
   // (empty) and a malformed port each minted an `/tmp/astrolive-*` dir that the
   // refusing path then returned past WITHOUT removing — one orphan scratch dir per
   // refused invocation (the measured leak: the `/tmp` census carried them). The mint
@@ -8320,9 +8719,16 @@ async function main(argv) {
   // The default store's corpusRoot is the app's cwd (the project root) when
   // unconfigured (REGISTRY-CWD-TRANSPARENCY), so the seed corpus must live under
   // it — never under the disposable HOME (the importer REJECTS an out-of-root
-  // file). `.live-corpus/` is gitignored + cleaned every run (except --connect,
-  // which attaches to a RUNNING app and reuses the on-disk corpus).
-  const seedDir = opt.seed ?? join(ROOT, '.live-corpus')
+  // file). `.live-corpus/` is the OBSOLETE SEED route's own directory (annotated,
+  // never extended, §6.1 clause 1): it stays gitignored + cleaned every run
+  // (except --connect, which attaches to a RUNNING app and reuses the on-disk
+  // corpus) and it is NEVER the mock data set's foundation — a `--fixture=<set>`
+  // run does not reach it at all (the selection carries the do-not-seed implication, §16.13).
+  // ⟨§6.1 clause 1 / §6.3 clause 2 — the OBSOLETE SEED route's own default directory
+  // is named HERE, annotated as OBSOLETE and NEVER extended (the mock data sets are
+  // not its children); a `--fixture=<set>` run never reaches it — the selection
+  // implies `--no-seed` (§16.13).⟩
+  const seedDir = opt.seed ?? join(ROOT, '.live-corpus') // the OBSOLETE `.live-corpus` SEED route's default — ANNOTATED, never extended
   const groups = opt.groups ?? UF_DEFAULT_GROUPS
   // §6.1 (`G-8`) — THE LAUNCH-PROFILE REFUSAL, printed BY NAME before anything is
   // spawned. An empty `--groups=` is not a launch profile: read as `[]` it would
@@ -8367,6 +8773,62 @@ async function main(argv) {
     process.exitCode = 2
     return
   }
+  // ===========================================================================
+  // §3.3 (UNIT B) — THE FOUR PRE-SPAWN `--fixture=` REFUSALS, ON THE SAME EARLY
+  // PATH AS THE THREE ABOVE AND IN THE LANDED ORDER. Each is ONE named line
+  // carrying the offending value VERBATIM (via `JSON.stringify`), the accepted
+  // names, the reason, and the run's own fixture state — which on EVERY refusal
+  // line is the `none` triple, because the ONE assignment sits BELOW these
+  // branches (`§7.2` clause 3, `§16.5`). Each sets the hard-error exit code `2`
+  // and RETURNS BEFORE anything is spawned and BEFORE the scratch HOME is minted,
+  // and NOTHING is written: no directory is created, nothing is removed, no set is
+  // materialised (`§3.3` clause 4) — so a refused invocation cannot be mistaken
+  // for a run, and it is NOT a park and NOT a `FAIL` (`§3.3` clause 5).
+  // ===========================================================================
+  if (opt.badFixtureArg) {
+    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.badFixtureArg.text)} ${opt.badFixtureArg.why} — pass --fixture=<core|table|search|tabs|empty> or omit the flag to take the neutral default (no fixture data set selected); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too, because a refusal is a reading about the run identity)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (a --fixture= value that names no set: empty, unknown or malformed) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))
+    process.exitCode = 2
+    return
+  }
+  if (opt.conflictingFixture) {
+    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.conflictingFixture[0])} and --fixture=${JSON.stringify(opt.conflictingFixture[1])} name TWO DIFFERENT sets — one set per run, and last-wins is FORBIDDEN because the run's identity may never depend on argv order; fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (two DIFFERENT --fixture= values in one argv) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))
+    process.exitCode = 2
+    return
+  }
+  // ⟨§21.2 (`D-2`, greens `B-1`) — THE OFFENDING FLAG IS NAMED, BY ITS OWN NAME.⟩ THE
+  // FILED LINE printed the flag FAMILY — `(--seed= / --corpus-root= / --strict-seed /
+  // --o0-corpus=)` — and named NO single supplied flag, so a reader of a
+  // `--fixture=core --seed=…` artifact could not see WHICH FLAG TO DROP from the line
+  // without re-reading the command line the artifact exists to make unnecessary; the
+  // contract's own wording already pointed there (`§6.4` opens *"REFUSED BY NAME"*,
+  // `§6.2` `B-2` states the offence as a run that *"named only one of them"*, and the
+  // gate-5 amendment `§21.2` writes the requirement out). THE LINE NOW NAMES THE
+  // SUPPLIED flag(s) — `--seed=` / `--corpus-root=` / `--o0-corpus=` WITH the value each
+  // carried, `--strict-seed` bare — and the FAMILY LIST STAYS BESIDE that name, exactly
+  // as the accepted-set list stays beside an `A-2` refusal; it may not stand in its
+  // place. EVERY OTHER LIMB IS UNMOVED: one line, the `ARG-REFUSED` marker, the reason,
+  // the `§6.4` clauses 2/3, the `none` state triple (the ONE assignment sits BELOW this
+  // branch, `§7.2` clause 3 / `§16.5`), exit `2`, and the return BEFORE the spawn and
+  // BEFORE the scratch HOME's mint (`§3.3` clauses 3/4).
+  if (opt.fixture !== null && (opt.seed !== null || opt.corpusRoot !== null || opt.strictSeed === true || opt.o0Corpus !== null)) {
+    // THE SUPPLIED FLAGS, in the arg walk's own order, each named as the walk carries it:
+    // the parsed value VERBATIM (`JSON.stringify`) where the flag carries one, the bare
+    // token where it carries none — read from the parsed arg and from NOTHING else
+    // (`§3.1` clause 2). All of them are named, because every one of them is a supply
+    // that conflicts with the selected set.
+    const suppliedSupplyFlags = [
+      opt.seed !== null ? `--seed=${JSON.stringify(opt.seed)}` : null,
+      opt.corpusRoot !== null ? `--corpus-root=${JSON.stringify(opt.corpusRoot)}` : null,
+      opt.strictSeed === true ? '--strict-seed' : null,
+      opt.o0Corpus !== null ? `--o0-corpus=${JSON.stringify(opt.o0Corpus)}` : null,
+    ].filter((flag) => flag !== null)
+    console.log(`[live-drive] ARG-REFUSED: --fixture=${JSON.stringify(opt.fixture)} together with ${suppliedSupplyFlags.length > 1 ? 'the OBSOLETE SUPPLY flags' : 'the OBSOLETE SUPPLY flag'} THE RUN ACTUALLY SUPPLIED, NAMED: ${suppliedSupplyFlags.join(' and ')} — this is the offending supply (§21.2: the flag must be named, not only its family); the FAMILY stands beside the name, never in its place (--seed= / --corpus-root= / --strict-seed / --o0-corpus=): two fixture supplies cannot both write the store this run measures, and the artifact must be able to attribute that store to ONE fixture; the empty set is NOT exempt (§6.4 clause 2) and the do-not-seed switch is never a supply and is refused on NO path (§6.4 clause 3); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (a selected mock data set alongside an OBSOLETE SUPPLY flag) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))
+    process.exitCode = 2
+    return
+  }
   // ⟨gate-4 `F-8` — THE MINT IS BELOW EVERY REFUSAL, AND EVERY PATH THAT MINTS ONE
   // REMOVES IT.⟩ `home` is the dir the app is given AND the dir the teardown removes.
   // Three properties are contracted HERE: (i) it is created only on a path that got
@@ -8377,7 +8839,39 @@ async function main(argv) {
   // and the `finally` below removes whichever kind exists on EVERY terminating path
   // (the `--connect` scratch, which used to be minted and then leaked because the
   // removal sat inside the `!opt.connect` branch, is removed like any other). */
-  const ownScratchHome = opt.home === null || opt.connect === true
+  // ⟨§7.2 clause 3 (UNIT B) — THE STATE IS ASSIGNED ONCE, HERE: BELOW every refusal
+  // branch (so each of those lines prints the `none` triple, `§16.5`) and ABOVE the
+  // scratch HOME's mint, FROM THE PARSED ARG AND FROM NOTHING ELSE (`§3.1` clause 2:
+  // argv wins — no environment variable, no config file, no default from another arg
+  // — and no site may recompute the value, `§7.2` clause 4 / UNIT A `X-2`).⟩
+  UF_FIXTURE_STATE = ufFixtureStateOf(opt.fixture)
+  // ⟨§6.4 clause 4 / `§16.13` — `--fixture=<a set>` IMPLIES `--no-seed`.⟩ Every set
+  // selection BEHAVES AS IF `--no-seed` had been passed, so the obsolete seed route's
+  // own landed guard (`if (!opt.noSeed) {`) is never entered in a set-selected run
+  // and the selected set is the store's ONLY supply (under `empty`: NOTHING — which
+  // is `S-4`). An EXPLICIT `--no-seed` stays admissible and is refused on no path;
+  // the implication is a consequence of the arg and NOT an operator arg, so `§3.1`
+  // clause 5's one-set-per-run rule and `§3.2`'s grammar are untouched.
+  if (opt.fixture !== null) opt.noSeed = true
+  // ⟨§2.3 clauses 2/3/6 — THE SET IS MATERIALISED AFTER THE REFUSALS AND BEFORE THE
+  // IMPORT.⟩ A write failure is the `S-2` ABORT: named, with the OS error text
+  // VERBATIM, exit `2`, no substitute set and no fallback to another set — and the
+  // state on that line names the set that was ATTEMPTED.
+  let fixtureRoot = `no SET was materialised (no --fixture= was selected, so this invocation behaves exactly as it does today — §3.1 clause 3)`
+  if (opt.fixture !== null) {
+    try {
+      fixtureRoot = ufMockFixtureMaterialise(opt.fixture)
+    } catch (e) {
+      // §4 `S-2` — THE NAMED ABORT RIDES THE DRIVER'S OWN `[live-drive] ERROR:` PATH (the
+      // module-level `main().catch`), so there is exactly ONE error path in this driver and
+      // the line carries the set that was ATTEMPTED (`UF_FIXTURE_STATE` was assigned just
+      // above), the path it tried to write and the OS error text VERBATIM; the catch exits
+      // `2` and NO block runs.
+      throw new Error(`the mock fixture set ${JSON.stringify(opt.fixture)} could NOT be materialised at ${UF_MOCK_FIXTURE_ROOT(opt.fixture)} — ${String(e && e.message ? e.message : e)} (the OS error text, VERBATIM); NO block ran and no substitute set is used (§4 S-2, §2.3 clause 6)`)
+    }
+    console.log(`[live-drive] FIXTURE MATERIALISED: fixtureId=${UF_FIXTURE_STATE.id} fixtureRoot=${fixtureRoot}` + (UF_FIXTURE_STATE.id === 'empty' ? ` — the set carries NO file and its directory is left EMPTY (${UF_MOCK_FIXTURE_NOT_MATERIALISED})` : ` — the set's OWN directory, written from this driver's hand-authored content data on every launch and emptied of this unit's own .md files first (§2.3 clauses 2/3)`) + `; the obsolete seed route is NEVER this fixture's foundation (§6.1 clause 2)`)
+  }
+  const ownScratchHome = opt.connect === true || opt.home === null
   const home = opt.connect ? (mkdtempSync(join(tmpdir(), 'astrolive-connect-')) ?? null) : (opt.home === null ? mkdtempSync(join(tmpdir(), 'astrolive-')) : resolvePath(opt.home))
   // ⟨gate-4 `F-8`⟩ THE MINT IS RECORDED AT MODULE SCOPE, so even an abort between
   // here and the `try` below (whose `finally` performs the bounded removal) leaves no
@@ -8389,7 +8883,7 @@ async function main(argv) {
   // reported the EFFECTIVE set, below: `--groups=` is a REQUEST, and the effective
   // set (the store's FILTERED result the live MCP gate is re-gated from) is what
   // decides whether a group's tools exist at all.⟩
-  const launchProfile = { fixture: UF_FIXTURE_STATE, mode: opt.mode, port: opt.port, cdpPort: opt.cdpPort, display: `:${opt.display ?? '1'}`, groups: groups.slice(), effectiveGroups: null, noSeed: opt.noSeed === true, gpu: opt.gpu === true, connect: opt.connect === true, block: opt.block }
+  const launchProfile = { fixture: UF_FIXTURE_STATE, fixtureRoot: `.live-fixture/${UF_FIXTURE_STATE.id}/`, mode: opt.mode, port: opt.port, cdpPort: opt.cdpPort, display: `:${opt.display ?? '1'}`, groups: groups.slice(), effectiveGroups: null, noSeed: opt.noSeed === true, gpu: opt.gpu === true, connect: opt.connect === true, block: opt.block }
 
   // --connect: attach to a RUNNING app session (assume --port/--cdp-port already
   // point at it). Do NOT spawn a second app, manage a HOME, or tear it down —
@@ -8458,7 +8952,7 @@ async function main(argv) {
     // behavior).⟩
     launchProfile.effectiveGroups = (() => { try { const p = JSON.parse(String(securitySet)); return Array.isArray(p && p.enabled) ? p.enabled.map(String) : null } catch { return null } })()
     const requestedNotEffective = launchProfile.effectiveGroups === null ? groups.slice() : groups.filter((g) => !launchProfile.effectiveGroups.includes(g))
-    console.log(`[live-drive] LAUNCH PROFILE: ${JSON.stringify(launchProfile)} — REQUESTED groups=[${groups.join(',')}] vs EFFECTIVE (bridge-reported; the filtered set the live MCP gate is re-gated from)=[${launchProfile.effectiveGroups === null ? 'unreadable (the security-set reply carried no `enabled` set — see security.set above)' : launchProfile.effectiveGroups.join(',')}]; CONSEQUENCE: a requested group ABSENT from the effective set has NO tools registered, so every read that depends on it replies \`isError\` and its blocks are reported PARKED/NOT-DRIVEN by name (e.g. an effective set without \`rag\` makes \`rag.list_documents\` a driver read failure and re-classifies the ${UF_GATED_DECLARED_KEYS.length} GATED declared corpus-dependent blocks — the DECLARATION's population, §16.3; the HISTORICAL hand-list \`UF_CORPUS_DEPENDENT_BLOCKS\` is ${UF_CORPUS_DEPENDENT_BLOCKS.length} keys and is a DIFFERENT, historical figure, never the gate's population) — never as app FAILs`)
+    console.log(`[live-drive] LAUNCH PROFILE: ${JSON.stringify(launchProfile)} — REQUESTED groups=[${groups.join(',')}] vs EFFECTIVE (bridge-reported; the filtered set the live MCP gate is re-gated from)=[${launchProfile.effectiveGroups === null ? 'unreadable (the security-set reply carried no `enabled` set — see security.set above)' : launchProfile.effectiveGroups.join(',')}]; CONSEQUENCE: a requested group ABSENT from the effective set has NO tools registered, so every read that depends on it replies \`isError\` and its blocks are reported PARKED/NOT-DRIVEN by name (e.g. an effective set without \`rag\` makes \`rag.list_documents\` a driver read failure and re-classifies the ${UF_GATED_DECLARED_KEYS.length} GATED declared corpus-dependent blocks — the DECLARATION's population, §16.3; the HISTORICAL hand-list \`UF_CORPUS_DEPENDENT_BLOCKS\` is ${UF_CORPUS_DEPENDENT_BLOCKS.length} keys and is a DIFFERENT, historical figure, never the gate's population) — never as app FAILs; ⟨§16.13⟩ the obsolete seed route does NOT run in a --fixture=<set> run (the selection implies --no-seed); the store's only supply is the selected set (or, under \`empty\`, NOTHING — which is \`S-4\`)`)
     if (requestedNotEffective.length) console.error(`[live-drive] LAUNCH-PROFILE CONSEQUENCE: the requested group(s) [${requestedNotEffective.join(', ')}] are NOT in the effective set — every reading depending on them is launch-profile-conditioned (precondition-failed by name), not an app-layer verdict`)
     console.log(`[live-drive] security.set groups=[${groups.join(',')}] -> ${String(securitySet)}`)
     // §6.1 (site 1, its own line) — THE RUN-WIDE FIXTURE STATE, with its
@@ -8473,7 +8967,7 @@ async function main(argv) {
     // implying a park/run split; the observed split is printed with the summary
     // (`FIXTURE GATE OBSERVED`), from the same single derivation.
     const fixtureGateAtLaunch = ufFixtureGateObservation(null)
-    console.log(`[live-drive] FIXTURE STATE: fixtureState="${UF_FIXTURE_STATE.state}" fixtureKind=${UF_FIXTURE_STATE.kind} fixtureId=${UF_FIXTURE_STATE.id} — GATE SCOPE: ${fixtureGateAtLaunch.scope}; DECLARED POPULATION: ${fixtureGateAtLaunch.declared} gated key(s) (gate = the declaration's own predicate corpusRead:true && selfProvisioning:false, PER DECLARED FIXTURE — the absence test is the block's DECLARED \`fixtureName\` own probe, §3.2 F-6/F-7: ${Object.keys(UF_DECLARED_FIXTURE_PROBES).join(', ')}); OBSERVED SPLIT: ${fixtureGateAtLaunch.split}; ${UF_FIXTURE_STATE.kind === 'none' ? UF_FIXTURE_STATE_CONSEQUENCE : `the state is ${JSON.stringify(UF_FIXTURE_STATE.kind)}, so the \`none\`-state consequence does NOT apply to this artifact and no park is inferred from it`}`)
+    console.log(`[live-drive] FIXTURE STATE: fixtureState="${UF_FIXTURE_STATE.state}" fixtureKind=${UF_FIXTURE_STATE.kind} fixtureId=${UF_FIXTURE_STATE.id} ${UF_FIXTURE_STATE.kind === 'mock-data-set' ? `fixtureRoot=${UF_MOCK_FIXTURE_ROOT(UF_FIXTURE_STATE.id)}` : `fixtureRoot=NONE (${UF_MOCK_FIXTURE_NOT_MATERIALISED})`}${opt.connect === true && UF_FIXTURE_STATE.kind === 'mock-data-set' ? ' mode=connect (the import was SKIPPED: the running app owns its store, §4 S-5)' : ''} — GATE SCOPE: ${fixtureGateAtLaunch.scope}; DECLARED POPULATION: ${fixtureGateAtLaunch.declared} gated key(s) (gate = the declaration's own predicate corpusRead:true && selfProvisioning:false, PER DECLARED FIXTURE — the absence test is the block's DECLARED \`fixtureName\` own probe, §3.2 F-6/F-7: ${Object.keys(UF_DECLARED_FIXTURE_PROBES).join(', ')}); OBSERVED SPLIT: ${fixtureGateAtLaunch.split}; ${UF_FIXTURE_STATE.kind === 'none' ? UF_FIXTURE_STATE_CONSEQUENCE : ufFixtureConsequenceOf()}`)
     // §4.2 `A-1`(i)/(ii) + `A-3` — THE DERIVATION ITSELF, PRINTED: the census the
     // declaration is held to, the movement from the historical hand-list, and the
     // AMBIGUITY LIST (each entry excluded AND recorded with its site and clause).
@@ -8515,6 +9009,62 @@ async function main(argv) {
       })
     }
 
+    // =========================================================================
+    // §2.3 clause 7 + §4 (UNIT B) — THE SELECTED SET'S IMPORT, through the app's OWN
+    // import route (`edit.import_markdown`, `§8.1` clause 1). The obsolete seed route
+    // above did NOT run (the selection carries the do-not-seed implication), so the selected set is
+    // the store's ONLY supply. The outcomes are `S-1` (materialised and imported),
+    // `S-3` (the import replies `isError`: named VERBATIM through the driver's own
+    // `driverFailureReason` marker, the wait's discriminated read STOPS on it with no
+    // timeout burned, the run proceeds and every gated key whose own declared fixture
+    // reads absent parks BY NAME), `S-4` (the `empty` set attempts NO import at all)
+    // and `S-5` (`--connect`: a RUNNING app owns its store, so the IMPORT is skipped
+    // and the state names the mode). NONE of them may be pleaded as a reason a row
+    // passes, and NONE is an app reading (`§9`).
+    // =========================================================================
+    if (opt.fixture !== null) {
+      if (opt.connect === true) {
+        console.error(`[live-drive] FIXTURE SET: ${JSON.stringify(opt.fixture)} materialised at ${fixtureRoot} — IMPORT SKIPPED (--connect: this run attached to a RUNNING app whose store it did not create, so importing into it would mutate a store this run does not own, and the blocks below read whatever that app holds — §4 S-5; the state names the set AND the mode for exactly this reason)`)
+      } else {
+        const setImport = await ufMockFixtureImport(mcp, opt.fixture, fixtureRoot)
+        if (setImport.skipped) {
+          console.error(`[live-drive] FIXTURE SET: ${JSON.stringify(opt.fixture)} -> ${UF_MOCK_FIXTURE_NOT_MATERIALISED} and NO import is attempted at all (§4 S-4, the explicitly selected EMPTY set): every gated key's OWN declared fixture probe reads ABSENT and every gated key parks BY NAME under a NAMED fixture state`)
+        } else {
+          console.error(`[live-drive] seeded mock fixture set ${JSON.stringify(opt.fixture)} (${setImport.reading} from ${fixtureRoot}) -> import ${JSON.stringify(setImport.read.value)}`)
+          if (setImport.failure) console.error(`[live-drive] ${driverFailureReason(setImport.failure.kind, setImport.failure.detail, `the mock fixture route (${setImport.failure.extra})`).marker} — every gated key whose OWN declared fixture reads ABSENT parks BY NAME (§4 S-3), and the wait below stops on this named failure instead of burning its timeout`)
+          if (!setImport.failure) {
+            // §18.6 clause 3 — THE ROOT-TEXT READING, PRINTED EVEN WHEN IT IS ZERO
+            // (a run whose document roots were not written says so rather than leaving a
+            // reader to infer it from a `0 hit(s)` probe).
+            console.error(`[live-drive] FIXTURE ROOT TEXT: ${setImport.rootText.written}/${setImport.rootText.attempted} imported document root(s) written with their own authored text through edit.set_content (the set's materialisation route, §2.3 clause 3) — ${JSON.stringify(setImport.rootText.writes.map((w) => ({ documentId: w.documentId, chars: w.chars, carriesTerm: w.carriesTerm, written: w.written, failure: w.failure })))}; WHY: the parser authors every document ROOT with EMPTY content and the import reconciles the store's lexical index with its DOCUMENT ROOT ids ALONE, so without this write the probe's term never reaches the index and rag.query reads 0 hit(s) under EVERY set (measured) — with it, the term-bearing sets' roots carry their own text and the sets that omit the term by construction stay at 0 (§2.1 F-3, §18.6 clause 3)`)
+          }
+          await waitFor(async () => {
+            const read = await mcpToolResult(mcp, 'rag.list_documents', {}).catch((e) => ({ ok: false, isError: false, tool: 'rag.list_documents', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+            const failure = driverReadFailure(read)
+            if (failure) return true
+            return !!(read.value && Array.isArray(read.value.documents) && read.value.documents.length > 0)
+          })
+        }
+      }
+      // §18.1 / §18.6 clause 3 — THE THREE DECLARED-FIXTURE PROBES' OWN READINGS,
+      // TAKEN ONCE AT THE PRE-GESTURE READ POINT and printed VERBATIM. WHY A SITE IS
+      // OWED AT ALL: on the PASS path a gated key's own probe reading was previously
+      // printed NOWHERE — the only site that quoted it was the PARK it raised
+      // (`ufFixtureOwnPark`), so a run in which the fixture is PRESENT proved that fact
+      // only by the absence of a line, and a reader could not tell a PRESENT fixture
+      // from an UNPROBED one. The readings below are the SAME registry probes, through
+      // the SAME `ufFixturePreconditionRead`, that the gate and the block-body parks
+      // use (`UF_DECLARED_FIXTURE_PROBES`), taken at the same point: no gesture has run
+      // and no block has started. A `dom:` reading is a READING and is never a pass
+      // (`§18.2` clause 4/5): its tab-strip surface is the later unit's, and this run
+      // records its number without grading it.
+      const probeReadings = []
+      for (const probeFixtureName of Object.keys(UF_DECLARED_FIXTURE_PROBES)) {
+        const r = await ufFixturePreconditionRead({ mcpRead: (name, args = {}) => mcpToolResult(mcp, name, args), cdp }, opt, probeFixtureName)
+        probeReadings.push({ fixtureName: probeFixtureName, tool: r.tool, present: r.present, resolved: r.resolved, detail: r.detail })
+      }
+      console.error(`[live-drive] FIXTURE PROBES (LIVE READINGS, §18.1/§18.6 clause 3 — the declared fixtures' own probes, taken AFTER the materialisation${opt.connect === true ? '' : '/import and the root-text write'} and BEFORE any block, at the pre-gesture read point${opt.connect === true ? '; --connect: the import was SKIPPED, so this store is the RUNNING app\'s (§4 S-5)' : ''}): ${JSON.stringify(probeReadings)} — ${probeReadings.map((p) => `'${p.fixtureName}': present=${p.present} at resolved=${p.resolved} via ${p.tool}`).join(' · ')}; the \`dom:\` reading is recorded as a READING, never as a pass (§18.2 clauses 4/5)`)
+    }
     const h = { mcp, cdp, groups, mcpTool, mcpRead: (name, args = {}) => mcpToolResult(mcp, name, args) }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : opt.block.split(',').map((s) => s.trim()).filter(Boolean)
     // §3.5/§3.6 — the O-0 run context: the EXECUTING bundle identity (served vs
@@ -8581,9 +9131,27 @@ async function main(argv) {
     // `DIAG` lines come from ONE classification, not two. `park` is true for BOTH
     // park routes: the id-carrying park (`r.park === true`, which prints a
     // `PARK` line and a `ROW … verdict=PARKED` line) and the NO-DECLARED-ROW-ID
-    // fallback (`§5.1` clause 3(vi) / `§5.3`: `diagResult` carries no `park` FIELD at
-    // all and is filtered out of `reportRows`, so its park is read from the
-    // `PRECONDITION-FAILED` marker in the very text its `DIAG` line prints).
+    // fallback (`§5.1` clause 3(vi) / `§5.3`).
+    // ⟨GATE-4 `F-1`/`F-2` CORRECTED — THE SECOND HALF OF THE FILED SENTENCE IS STALE; THE
+    // CORRECTION IS WRITTEN HERE AND THE SUPERSEDED WORDING IS KEPT VISIBLE BELOW.⟩ THE
+    // FILED CLAIM (`diagResult` carries no `park` FIELD at all) WAS TRUE OF THE FILED
+    // LIMB, WHICH CALLED `diagResult(text)` BARE, AND IS STALE AFTER THE GATE-4 FIX: the
+    // no-declared-row limb (`ufFixtureOwnParkNoRow`, above) now hands
+    // `{ park: true, parkRoute: 'parked-by-fixture-absence', … }` INTO `diagResult`, and
+    // `diagResult` SPREADS ITS `extra` ARGUMENT (`...extra`, the builder's own last
+    // member) — so THAT RECORD DOES CARRY `park` (and `parkRoute`: `ufFixtureOwnParkNoRow`
+    // hands both members unconditionally, while the gate route's own no-declared-row limb
+    // tags the two FIXTURE-READING kinds `empty-corpus` / `fixture-missing` alone, `§5.5`),
+    // and `ufCountBlock` reads them from the FIELDS exactly as it reads the id-carrying
+    // park's. ONLY THE OTHER
+    // HALF STILL HOLDS: the record's `row` is `null`, so `ufPushRows`' `typeof res.row
+    // !== 'string'` guard keeps it OUT of `reportRows` (no `§6.1` report row is fabricated
+    // for a block that declares none). The `PRECONDITION-FAILED` marker limb below is
+    // UNMOVED and is now the SECOND channel — an OR beside the field, never the only
+    // route. SUPERSEDED, KEPT VISIBLE — the as-filed clause, verbatim:
+    //   // fallback (`§5.1` clause 3(vi) / `§5.3`: `diagResult` carries no `park` FIELD at
+    //   // all and is filtered out of `reportRows`, so its park is read from the
+    //   // `PRECONDITION-FAILED` marker in the very text its `DIAG` line prints).
     const ufBlockClass = new Map()
     // ⟨gate-4 `F-3`⟩ THE RECORD CARRIES WHICH ROUTE PARKED THE BLOCK: `route` is the
     // token `'fixture-gate'` ONLY at the fixture gate's own branch (`ufRunBlock`'s
@@ -8595,7 +9163,7 @@ async function main(argv) {
     const ufCountBlock = (n, label, r, route) => {
       const counted = printBlockVerdict(label, r)
       const text = String((r && (r.detail ?? r.evidence)) ?? '')
-      ufBlockClass.set(n, { block: n, counted: counted, park: (r && r.park === true) || (r && r.diagnostic === true && /PRECONDITION-FAILED/.test(text)), gateRoute: route === 'fixture-gate' })
+      ufBlockClass.set(n, { block: n, counted: counted, park: (r && r.park === true) || (r && r.diagnostic === true && /PRECONDITION-FAILED/.test(text)), gateRoute: route === 'fixture-gate', parkRoute: (r && r.parkRoute) ?? null })
       return counted
     }
     /** The report rows of ONE result set, built through the §6.1 record. */
@@ -8860,6 +9428,7 @@ async function main(argv) {
       // copied member-by-member exactly as the rest of this literal is — never a
       // second computation and never a spread.
       fixture: UF_FIXTURE_STATE,
+      fixtureRoot: `.live-fixture/${UF_FIXTURE_STATE.id}/`,
       // ⟨gate-4 `E-3`⟩ THE FIXTURE-STATE OBSERVATION, DERIVED FROM THIS RUN: the
       // declared gated population, the OBSERVED park/run split inside it, and the
       // clause's SCOPE (the gated population + the excluded engine family). One
@@ -8917,7 +9486,7 @@ async function main(argv) {
     //
     // ⟨gate-4 `F-3`/`F-4` — TWO OVER-CLAIMS THIS LINE CARRIED.⟩ (a) `parked=N` was
     // narrated as `N carried the fixture-absent park`, which is FALSE: the count is
-    // EVERY park inside the `34` gated keys, and gated keys park for their own reasons
+    // EVERY park inside the `35` gated keys, and gated keys park for their own reasons
     // too. The line now prints `parked-by-the-fixture-gate=` BESIDE it (the SUBSET the
     // gate's own route produced, tagged at `ufCountBlock`) and says the fixture-absent
     // park is a subset of `parked`. (b) the arithmetic remainder printed as
@@ -8925,7 +9494,7 @@ async function main(argv) {
     // same on a scoped run). It is renamed `eligible-and-not-parked=` and the run's own
     // `blocksRun` is printed on the SAME line, so the two figures cannot be confused.
     // NO count is changed by either fix: `parked`, `declared` and the split are unmoved.
-    console.log(`[live-drive] FIXTURE GATE OBSERVED (§6.1, gate-4 E-3 — the DERIVED, CONDITIONAL split this run actually produced): declared=${summary.fixtureGate.declared} gated key(s) · OBSERVED SPLIT: ${summary.fixtureGate.split} (parked=${summary.fixtureGate.parked} is EVERY park inside the ${summary.fixtureGate.declared} gated keys, WHATEVER it parked for — a gated key may park for its OWN reason, e.g. a block whose own result carries extra:{park:true, parkReason} — of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate} came from the FIXTURE GATE's own route ALONE (the block's OWN declared fixture probe read absent, so the block was parked WITHOUT running, §4.1 / §5.1 clause 1); the fixture-absent park is therefore a SUBSET of parked, never the whole count: the other ${summary.fixtureGate.parked - summary.fixtureGate.parkedByGate} parked for their own recorded reasons) · the remainder is ARITHMETIC over the DECLARATION and is NOT a coverage reading: eligible-and-not-parked=${summary.fixtureGate.eligibleAndNotParked} (= declared − parked; a scoped run prints the same figure) — the run count is blocksRun=${summary.blocksRun} (of the ${Object.keys(BLOCKS).length} counted blocks), so neither figure may be read as coverage · SCOPE: ${summary.fixtureGate.scope}`)
+    console.log(`[live-drive] FIXTURE GATE OBSERVED (§6.1, gate-4 E-3 — the DERIVED, CONDITIONAL split this run actually produced): declared=${summary.fixtureGate.declared} gated key(s) · OBSERVED SPLIT: ${summary.fixtureGate.split} (parked=${summary.fixtureGate.parked} is EVERY park inside the ${summary.fixtureGate.declared} gated keys, WHATEVER it parked for — a gated key may park for its OWN reason, e.g. a block whose own result carries extra:{park:true, parkReason} — of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate} came from the FIXTURE GATE's own route ALONE (the block's OWN declared fixture probe read absent, so the block was parked WITHOUT running, §4.1 / §5.1 clause 1) and of which parked-by-fixture-absence=${summary.fixtureGate.parkedByFixtureAbsence} parked BECAUSE their OWN declared fixture read ABSENT at resolved:true — counted over the ROUTE TAG, so HOWEVER the park was routed, the gate branch OR the block's own body (§5.5's counting clause, §16.17 item 6); the fixture-absent park is therefore a SUBSET of parked, never the whole count: the other ${summary.fixtureGate.parked - summary.fixtureGate.parkedByGate} parked for their own recorded reasons) · the remainder is ARITHMETIC over the DECLARATION and is NOT a coverage reading: eligible-and-not-parked=${summary.fixtureGate.eligibleAndNotParked} (= declared − parked; a scoped run prints the same figure) — the run count is blocksRun=${summary.blocksRun} (of the ${Object.keys(BLOCKS).length} counted blocks), so neither figure may be read as coverage · SCOPE: ${summary.fixtureGate.scope}`)
     // ⟨GATE-4 FINDING `D-3`⟩ — the printed NOTE's PARTITION CLAIM is made TRUE for a
     // SCOPED run too: the clause used to read `pass + fail + parked === matrixRowsExecuted
     // === total` unconditionally, which a scoped run (`matrixRowsExecuted < total`) makes
@@ -8997,7 +9566,9 @@ async function main(argv) {
     // rule line used to interpolate a synthetic `fixture-missing` reason, so EVERY
     // seeded run ended its line with `PRECONDITION-FAILED: fixture-missing — the seed
     // corpus produced no documents` while the same run had just seeded
-    // `.live-corpus/alpha`/`beta` (`seeded corpus -> import {"ok":true,…}`) — a false
+    // the OBSOLETE `.live-corpus` SEED route's own `alpha`/`beta` documents
+    // (`seeded corpus -> import {"ok":true,…}`; annotated, never extended, §6.1
+    // clause 1 — the mock sets are NOT their children) — a false
     // present-tense claim about a fixture that was present. The marker is now named
     // only as the RULE (it is printed where it FIRES, on the row that fires it), and
     // the fixture precondition is READ live, so the line states what this run read.
@@ -9070,7 +9641,8 @@ async function main(argv) {
     // the U-EDIT-1 live fixture file (written by `ufEnsureEditFixture`) is the
     // driver's OWN artifact — removed with the seed corpus it sits beside
     try { rmSync(join(ROOT, '.live-page-edit-fixture.md'), { force: true }) } catch { /* best-effort */ }
-    // --connect: the running app owns `.live-corpus` — leave it in place.
+    // --connect: the running app owns the OBSOLETE `.live-corpus` SEED route's
+    // directory (annotated, never extended, §6.1 clause 1) — leave it in place.
     if (!opt.connect && seedDir === join(ROOT, '.live-corpus')) { try { rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ } }
   }
   // Exit the process: the MCP streamable-HTTP transport + CDP WebSocket keep the
