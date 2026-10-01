@@ -30,9 +30,9 @@ shell-chrome elements are authored in `index.html`; the pane-frame root carries
 `data-pane-id` in `pane-graph.ts`; the dom-shim (`src/shared/dom-shim.ts`)
 gained the `innerHTML`/`outerHTML` getters back + a delegated pointer dispatch +
 `closest`/`setRect`/`setPointerCapture`. **Trio green: 4527 pass / 58 skip;
-typecheck 0; build 0.** Tests: `tests/unit-u-shell-shell-wiring.test.ts` (30),
-`tests/unit-u-shell-shell-wiring-adversarial.test.ts` (14 —
-HOST-1..5 + ADV1..5), `tests/unit-u-shell-shell-wiring-pbt-generators.test.ts`
+typecheck 0; build 0.** Tests: `archive/tests/2026-10-04-unit-u-shell-shell-wiring.test.ts` (30),
+`archive/tests/2026-10-04-unit-u-shell-shell-wiring-adversarial.test.ts` (14 —
+HOST-1..5 + ADV1..5), `archive/tests/2026-10-04-unit-u-shell-shell-wiring-pbt-generators.test.ts`
 (5). Adversarial + re-audit records: §3a/§3b.
 
 ---
@@ -303,7 +303,7 @@ the two pure modules stay independent).
 The wiring's **listener registration** is asserted BOTH node-testably (this pass
 extended the dom-shim so the live `installShellPointers` can be driven — §3a)
 AND by a source-snapshot assertion (the `unit-u-shell-8`/`unit-ujr1`
-module-private source-pin house convention — `tests/unit-u-shell-shell-wiring.test.ts`).
+module-private source-pin house convention — `archive/tests/2026-10-04-unit-u-shell-shell-wiring.test.ts`).
 The TestWriter statically asserts the wiring in `src/renderer/renderer.ts` (the
 `installShellPointers(host)` NAMED export invoked from `main()` after the
 `SidebarPanes` host is constructed) registers, by literal call:
@@ -319,8 +319,8 @@ The TestWriter statically asserts the wiring in `src/renderer/renderer.ts` (the
 > `data-pane-id` on the frame root is still required (the frame is resolved from the
 > header for the pane id + the capture target). Live evidence:
 > `docs/specs/user-flow-audit-coverage-2026-09-15.md` §4 F-1 with the §5.U U-1/U-2/U-3
-> rows; the pins live in `tests/renderer-pane-drag-surface.test.ts` +
-> `tests/unit-u-shell-shell-wiring.test.ts` (F-1.1/F-1.2). Every
+> rows; the pins live in `archive/tests/2026-10-04-renderer-pane-drag-surface.test.ts` +
+> `archive/tests/2026-10-04-unit-u-shell-shell-wiring.test.ts` (F-1.1/F-1.2). Every
 > `.pane-frame[data-pane-id]` selector string below is the PRE-F-1 record.
 
 1. ONE document-level DELEGATED `pointerdown` (`addEventListener('pointerdown', …)`)
@@ -403,7 +403,7 @@ listener layer is now ALSO node-testable: this pass extended the repo's
 `dom-shim` (`ShimElement` + the synthetic document) with
 `getBoundingClientRect`/`setPointerCapture`/`releasePointerCapture`/`closest`/
 `setRect` + a DELEGATED pointer dispatch, so the §3a adversarial suite
-(`tests/unit-u-shell-shell-wiring-adversarial.test.ts`) drives the LIVE
+(`archive/tests/2026-10-04-unit-u-shell-shell-wiring-adversarial.test.ts`) drives the LIVE
 `installShellPointers` against the real listener layer. Both halves — the pure
 node-testable behavior + the node-driven/adversarial + the §2.8 source-pinned
 registration — are MANDATORY for a green.
@@ -414,7 +414,7 @@ The post-green adversarial pass (2026-09-13) confirmed the wiring in
 `installShellPointers` was INERT against the real app: its selectors matched NO
 authored DOM, so the C4/C7/C11/C12 gestures were unreachable live and the §2.8
 source-pin was a false green. All five host findings were FIXED in this landed
-pass (+ regression-tested in `tests/unit-u-shell-shell-wiring-adversarial.test.ts`):
+pass (+ regression-tested in `archive/tests/2026-10-04-unit-u-shell-shell-wiring-adversarial.test.ts`):
 
 - **HOST-1 (HIGH):** the wiring attached pointers to elements found only at
   INSTALL time (`document.querySelectorAll('.gutter[data-zone]')` /
@@ -451,7 +451,7 @@ pass (+ regression-tested in `tests/unit-u-shell-shell-wiring-adversarial.test.t
 
 The re-audit of the fixed wiring surfaced a further five findings, all FIXED +
 regression-tested in the `HOST-N7-ADV` block of
-`tests/unit-u-shell-shell-wiring-adversarial.test.ts`:
+`archive/tests/2026-10-04-unit-u-shell-shell-wiring-adversarial.test.ts`:
 
 - **ADV1 (HIGH):** a `dblclick` fires AFTER the second `pointerup` in a real
   two-click order, so a reset tied to the gesture lifecycle was unreachable.

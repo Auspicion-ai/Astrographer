@@ -691,7 +691,7 @@ own Supervisor + own DomAdapter → the `#operator-panes` mount (UI-MOUNT-OPERAT
 MCP-visible: the app Runtime's `get_rendered_html`/`get_markdown`/
 `list_targets`/`get_node_state`/`provident.dispatch` read only the app Runtime
 graph, and an operator pane NEVER enters the app-graph envelope (the existing
-negative, `tests/sidebar-panes.test.ts:730-743`). A listing rendered OUTSIDE
+negative, `archive/tests/2026-10-04-sidebar-panes.test.ts:730-743`). A listing rendered OUTSIDE
 the provident graph, or inside the app graph, is a review finding.
 
 ### 5.6 The search-pane passthrough + the display-only asymmetry rule
@@ -905,7 +905,7 @@ review §4's rows, owned by U-MS1/MS2/MS4/MS3 and cited, not restated.)
    (or any store-enumerating tool) to "fix" the census gap is FORBIDDEN (B9;
    A9) — the census is the operator UI ONLY.** The listing nodes live ONLY in
    the operator isolated scope (never the app-graph envelope — the existing
-   negative, `tests/sidebar-panes.test.ts:730-743`).
+   negative, `archive/tests/2026-10-04-sidebar-panes.test.ts:730-743`).
 10. **A registry file edited while running** → the listing is UNCHANGED until
     restart (the wiring passes the boot-loaded form; the handler never re-reads
     the file — D8's UI-layer pin; node-testable: mutate the file between two
@@ -1032,10 +1032,10 @@ discipline):
   (`:466,:698`), `tests/embeddings.test.ts` (`:734`) — the
   `handleRagQueryIpc` callers (additive-arg compatible).
 - `tests/mcp-server-wiring.test.ts` — the IPC surface wiring.
-- `tests/sidebar-panes.test.ts` — the pane content + the operator-isolated
+- `archive/tests/2026-10-04-sidebar-panes.test.ts` — the pane content + the operator-isolated
   negatives (`:730-743` — the listing must never enter the app graph).
-- `tests/sidebar-panes-host.test.ts` (the host boot/`mountOperator`),
-  `tests/sidebar-panes-adversarial.test.ts`.
+- `archive/tests/2026-10-04-sidebar-panes-host.test.ts` (the host boot/`mountOperator`),
+  `archive/tests/2026-10-04-sidebar-panes-adversarial.test.ts`.
 - `tests/operator-settings-editing-mode.test.ts` (the settings-pane rows incl.
   the editing-mode toggle — byte-green per BE-5),
   `tests/editing-mode-broadcast-host.test.ts`.

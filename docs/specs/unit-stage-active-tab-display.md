@@ -44,7 +44,7 @@ audit), `docs/specs/live-user-flow-scenarios.md` §9, `docs/specs/requirement-ca
 **Authority read this pass (code):** `src/renderer/sidebar-panes.ts`, `src/renderer/tab-strip.ts`,
 `src/renderer/tab-state.ts`, `src/renderer/renderer.ts`, `src/renderer/pane-graph.ts`,
 `src/renderer/edit-controller.ts`, `src/renderer/content-reconcile.ts`,
-`scripts/live-drive.mjs`, `tests/unit-u-shell-9a-main-focus-tabs.test.ts`.
+`scripts/live-drive.mjs`, `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts`.
 
 **Citation discipline (recorded honestly, and it is a deliberate departure).** This repo's specs are
 normally cited **symbol-first** (never a line number — `docs/specs/requirement-catalog.md` §3.4 rule
@@ -354,7 +354,7 @@ private stageMountSeq = 0
 
 | Member | Signature | Returns | Notes |
 | --- | --- | --- | --- |
-| `SidebarPanes.getActiveTabId` | `(): string | null` | `activeTabId` | additive; `page-editor-host.test.ts`'s proto check is containment-only (`[reading] tests/page-editor-host.test.ts:213-215`), so an additive member is not a break |
+| `SidebarPanes.getActiveTabId` | `(): string | null` | `activeTabId` | additive; `page-editor-host.test.ts`'s proto check is containment-only (`[reading] archive/tests/2026-10-04-page-editor-host.test.ts:213-215`), so an additive member is not a break |
 | `SidebarPanes.getActiveTargetKind` | `(): TabTarget['kind'] | null` | `activeTargetKind` | additive |
 | `SidebarPanes.getActiveDocumentId` | `(): string | null` | `activeDocumentId` | additive; **`_currentDocumentId`'s retained role is narrowed to the doc-nav/selection path and the persisted default context** (`getTabContext` `[reading] src/renderer/sidebar-panes.ts:704-711`) — it is **no longer** a scope source at any stage/re-derive/surface seam |
 | `SidebarPanes.mountTab` | `(entry: TabEntry | null): void` | `void` | **the only** production stage-mount seam; unchanged signature |
@@ -653,8 +653,8 @@ not re-litigated:
   single-active policy **for the 9b wave**, and 9b is **BLOCKED on U-STATE-1e**
   (`docs/specs/unit-u-shell-9b-cross-document-shared.md`'s header). Deleting `mountTabs` here would
   (i) pre-empt that wave's seam and (ii) **re-derive three 9b suites** — `mountTabs` is called by
-  `tests/unit-u-shell-9b-w2n15-rederive-scope.test.ts` `[reading] :201` and required by
-  `tests/unit-u-shell-9b-cross-document-shared.test.ts` `[reading] :687-690` — which is exactly the
+  `archive/tests/2026-10-04-unit-u-shell-9b-w2n15-rederive-scope.test.ts` `[reading] :201` and required by
+  `archive/tests/2026-10-04-unit-u-shell-9b-cross-document-shared.test.ts` `[reading] :687-690` — which is exactly the
   "silent re-pin" this spec forbids (§7.4).
 - **What I2 actually needs** is that no **production** path can mount more than the active tab's body.
 
@@ -801,9 +801,9 @@ copied** by the item-10d review. Each is marked `[reading]` with its proof.
 | 3 | Register rows | **8** (`P-IM-1`..`P-IM-4`, `P-SM-1`..`P-SM-2`, `P-TP-1`..`P-TP-2`) | §6's table — ≤ 8 ✔ (the ceiling, not under it) |
 | 4 | `RagStore` interface size (unchanged by this unit) | **22 members = 13 sync reads + 9 async** | recounted symbol-by-symbol in `src/main/rag-store.ts` `interface RagStore` by the 2026-09-21 doc review; the figure is **not** re-derived here (this unit touches no `RagStore` member) `[reading]` |
 | 5 | Node suites that construct `SidebarPanes` (the blast-radius family) | **32 test files** under `tests/**` | a `SidebarPanes` grep over `tests/**` for the import/construction (`[reading]` the audit's own family scan is narrower: it names 5 suites, audit §4.1) |
-| 6 | 9a suites that will fight the fix (audit §4.1) | **1 named file** + **4 sibling 9b files** | `tests/unit-u-shell-9a-main-focus-tabs.test.ts` (`[reading]` 1085 lines; the audit measured **67 passed / 4 skipped**), plus `unit-u-shell-9b-cross-document-shared.test.ts`, `unit-u-shell-9b-h2-c20-materialization.test.ts`, `unit-u-shell-9b-w2n15-rederive-scope.test.ts`, `unit-u-shell-9b-h3-doc-namespace.test.ts` |
-| 7 | 9a assertions that reference the affected seams | **HOST-1** (`tests/unit-u-shell-9a-main-focus-tabs.test.ts:835`), **HOST-4/5** (`:879-935`), **W2-N10** (search-mount settle `:996-1029`) | `[reading]`; the disposition of each is §7.4 |
-| 8 | `mountTabs` production call sites | **0** | the audit's grep over `src/`, `scripts/`, `dist/renderer/renderer.js` returned definition + comments only (audit §3.2) `[reading]`; its **test** callers are `tests/unit-u-shell-9b-w2n15-rederive-scope.test.ts:201` and `tests/unit-u-shell-9b-cross-document-shared.test.ts:687-690` |
+| 6 | 9a suites that will fight the fix (audit §4.1) | **1 named file** + **4 sibling 9b files** | `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` (`[reading]` 1085 lines; the audit measured **67 passed / 4 skipped**), plus `unit-u-shell-9b-cross-document-shared.test.ts`, `unit-u-shell-9b-h2-c20-materialization.test.ts`, `unit-u-shell-9b-w2n15-rederive-scope.test.ts`, `unit-u-shell-9b-h3-doc-namespace.test.ts` |
+| 7 | 9a assertions that reference the affected seams | **HOST-1** (`archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts:835`), **HOST-4/5** (`:879-935`), **W2-N10** (search-mount settle `:996-1029`) | `[reading]`; the disposition of each is §7.4 |
+| 8 | `mountTabs` production call sites | **0** | the audit's grep over `src/`, `scripts/`, `dist/renderer/renderer.js` returned definition + comments only (audit §3.2) `[reading]`; its **test** callers are `archive/tests/2026-10-04-unit-u-shell-9b-w2n15-rederive-scope.test.ts:201` and `archive/tests/2026-10-04-unit-u-shell-9b-cross-document-shared.test.ts:687-690` |
 | 9 | Files this unit touches | **4** (`src/renderer/sidebar-panes.ts`, `src/renderer/edit-controller.ts`, **`src/renderer/runtime.ts`** — A.1.2, `scripts/live-drive.mjs`) + **1 new suite** + **1 new driver block** | §8.4; **⟨A.1.2 — the `runtime.ts` row's "0 changes" reading is SUPERSEDED: exactly ONE change (`destroyRoot`'s classifier, §A.1.2) is now in the touched set⟩**; `renderer.ts` needs a change **only if** the identity cannot be sourced inside `mountTab` (§5.2 makes it sourceable there ⇒ **0 changes to `renderer.ts`**, recorded as the expected reading) |
 | 10 | Live blocks affected | **1 re-run** (`user9_search_open_in_tab` — it should now PASS in steady state, audit §2.6) + **1 new variant** (the V1 race) + **1 driver extension** (`ufStageSig`) | §8.3; the extension is an **oracle-identity change** (`docs/specs/requirement-catalog.md` fact 3) |
 | 11 | §5.U matrix rows available | **0 new** (`MATRIX_ROWS` may not change) | `docs/specs/design-extensions-review.md` §7.4/§13.3; `docs/specs/user-flow-audit.md` §2 (**8 rows, capped**) |
@@ -991,15 +991,15 @@ this unit's spec **agrees with** is left **untouched**. Any edit not listed belo
 
 | Green | Current assertion | Disposition | Why |
 | --- | --- | --- | --- |
-| `tests/page-editor-host.test.ts:337-344` (§3.5 item 6 / `FS17`) | calls `h.editController.markDirty('tab-1')` **directly** with a tab id and asserts the flag survives a re-derive | **UNCHANGED (extended, not edited)** | It is already **correct**; it simply never drives the host's production key seam (the audit's §4.1 note). The new row that drives `pageSurfaceInput` and asserts a tab id belongs to **this unit's new suite**, not to that file. |
-| `tests/unit-u-shell-9a-main-focus-tabs.test.ts` **HOST-1** `[reading] :835-845` | `mountTab(landing)` then `mountTab(docTab('doc-a'))` ⇒ the mount DOM contains `Doc A`, not `stage-landing` | **UNCHANGED** — and **this is a correction to the audit's §4.1 premise**: HOST-1 **does not fight this fix** (it mounts two entries whose `JSON.stringify(entry)` keys differ, and a **synchronous document** mount is unaffected by the generation guard). It is **extended** by a new row in this unit's suite: `mountTab(search)` (slow query) → `mountTab(docTab('doc-b'))` → settle ⇒ the DOM still shows BETA and **no** `stage-search-tab`. | The audit's "greens that will fight the fix" list named HOST-1/HOST-4/HOST-5/W2-N10; on reading the rows, the fight is **absent** — the rows are compatible and merely incomplete. Recorded **with the reason**, so a reader does not expect a re-pin that never happens. |
+| `archive/tests/2026-10-04-page-editor-host.test.ts:337-344` (§3.5 item 6 / `FS17`) | calls `h.editController.markDirty('tab-1')` **directly** with a tab id and asserts the flag survives a re-derive | **UNCHANGED (extended, not edited)** | It is already **correct**; it simply never drives the host's production key seam (the audit's §4.1 note). The new row that drives `pageSurfaceInput` and asserts a tab id belongs to **this unit's new suite**, not to that file. |
+| `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` **HOST-1** `[reading] :835-845` | `mountTab(landing)` then `mountTab(docTab('doc-a'))` ⇒ the mount DOM contains `Doc A`, not `stage-landing` | **UNCHANGED** — and **this is a correction to the audit's §4.1 premise**: HOST-1 **does not fight this fix** (it mounts two entries whose `JSON.stringify(entry)` keys differ, and a **synchronous document** mount is unaffected by the generation guard). It is **extended** by a new row in this unit's suite: `mountTab(search)` (slow query) → `mountTab(docTab('doc-b'))` → settle ⇒ the DOM still shows BETA and **no** `stage-search-tab`. | The audit's "greens that will fight the fix" list named HOST-1/HOST-4/HOST-5/W2-N10; on reading the rows, the fight is **absent** — the rows are compatible and merely incomplete. Recorded **with the reason**, so a reader does not expect a re-pin that never happens. |
 | **HOST-4** `[reading] :879-912` | a search result `li` carries the open-result handler; `openDocumentTab` opens a NEW document tab | **UNCHANGED** | This unit does not change the strip's focus/close/open semantics or the handler defs. |
 | **HOST-5** `[reading] :915-935` | editing the query in a search tab reuses that same tab; the body renders its query + the in-tab submit handler | **UNCHANGED** | In-tab query reuse calls `setSearchParams` → `commit` → `onActiveChange` → `mountTab` with the **same** tab id; the generation guard permits it (newest attempt wins). |
 | **W2-N10** `[reading] :996-1033` | `mountTab(searchEntry)` → the query spy sees `('alpha', 5)` once and the DOM contains `stage-search-tab`/`search-tab-input` | **UNCHANGED** | The query is **still issued** (§5.3.1 consequence 4) and the mount is **not** superseded, so its body applies. The guard adds a discard path, not a suppression path. |
 | **W2-N10** parked-kind rows `[reading] :1035-1049` | `graph`/`template` mounts render their placeholders | **UNCHANGED** | The `other`/parked branch keeps its body and now also sets `activeTargetKind` (§5.2). |
 | `tests/unit-u-shell-9b-*` (the `mountTabs` family: `w2n15-rederive-scope.test.ts` `[reading] :198-228`, `cross-document-shared.test.ts` `[reading] :687-690`) | multi-document mounting + the scoped-union re-derive (W2-N15) | **UNCHANGED** — because **option (a)** was chosen (§5.3.6) | Deleting `mountTabs` would re-derive these suites and pre-empt the blocked 9b wave. The reachability pin is satisfied **without** touching them. **⟨A.1.1/A.1.2 — the 9b suites' ASSERTIONS stay untouched, and their envelope censuses already assert a single `page-edit-surface` (`unit-u-shell-9b-h2-c20-materialization.test.ts:402-416`, `unit-u-shell-9b-h1-optionc-interception.test.ts:399-412`, `unit-u-shell-9b-blind-greens.test.ts:553-567`), i.e. consistent with §A.1.1. The ONE runtime change they can observe is `destroyRoot`'s widening (§A.1.2), which makes a stale surface/warning root actually destroyed: the item-10d doc review RE-RUNS these suites and records the outcome — asserted, never assumed.⟩** |
-| `tests/single-editable-surface.test.ts`, `tests/page-scoped-caret.test.ts`, `tests/unit-u-edit-1-property-register.test.ts`, `tests/unit-ms5-*`, `tests/unit-u-state-1a-*`, `tests/edit-controller.test.ts`, `tests/page-diff.test.ts` | the surface / caret / commit families | **UNCHANGED** | The audit (§4.1) verified none of them drives the host's production key seam. Where one **does** construct a controller, the new `pageSubjectDocument` hook is **optional** ⇒ the legacy path is preserved (`P-TP-2`'s "supplied and absent" direction). |
-| `tests/sidebar-panes-host.test.ts:310-331` (the 12-method census) | a containment check on 12 proto names | **UNCHANGED** | Containment-only (`expect(proto).toContain(m)`), so the four additive readers of §5.2 do not break it. **If** the implementer instead adds a **public** member whose name a suite asserts **absent**, that is the implementer's finding to report, not a silent test edit. |
+| `archive/tests/2026-10-04-single-editable-surface.test.ts`, `archive/tests/2026-10-04-page-scoped-caret.test.ts`, `tests/unit-u-edit-1-property-register.test.ts`, `tests/unit-ms5-*`, `tests/unit-u-state-1a-*`, `tests/edit-controller.test.ts`, `archive/tests/2026-10-04-page-diff.test.ts` | the surface / caret / commit families | **UNCHANGED** | The audit (§4.1) verified none of them drives the host's production key seam. Where one **does** construct a controller, the new `pageSubjectDocument` hook is **optional** ⇒ the legacy path is preserved (`P-TP-2`'s "supplied and absent" direction). |
+| `archive/tests/2026-10-04-sidebar-panes-host.test.ts:310-331` (the 12-method census) | a containment check on 12 proto names | **UNCHANGED** | Containment-only (`expect(proto).toContain(m)`), so the four additive readers of §5.2 do not break it. **If** the implementer instead adds a **public** member whose name a suite asserts **absent**, that is the implementer's finding to report, not a silent test edit. |
 
 ### 7.3 Rows that must be treated as RED (they do not exist yet)
 
@@ -1013,7 +1013,7 @@ review finding. (b) The fix owes ONE MORE red row: `R8` — the reconcile-destro
 (A.1.2): after a seam that re-authors the surface for another/next document, exactly ONE live
 `#page-edit-surface` remains, carrying the active document's `data-edit-surface`, and the stale root
 is gone (red today: `domSurfaces: 2` — the instrumented measurement at §A.1). (c) The two
-adversarial rows `tests/stage-active-tab-display-adversarial.test.ts:317-318` are re-pinned to
+adversarial rows `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:317-318` are re-pinned to
 A.1.4's consultation set before they are re-run.⟩**
 
 ### 7.4 The re-pin prohibition (explicit)
@@ -1027,8 +1027,8 @@ amendment** (`AGENTS.md` item 8's discipline for a contract change), never a sil
 **⟨A.1 — this prohibition STANDS, unweakened, and it is exactly the route this amendment took.** The
 Implementer refused to code around two unsatisfiable rows and re-entered the spec instead of
 re-pinning; §A.1 amends **this unit's own red/adversarial rows**
-(`tests/unit-stage-active-tab-display.test.ts:887`; `tests/stage-active-tab-display-adversarial.test.ts:317-318`;
-`tests/stage-active-tab-display-adversarial.test.ts:385`) and **no listed green** of §7.2 — the sole
+(`archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:887`; `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:317-318`;
+`archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:385`) and **no listed green** of §7.2 — the sole
 behavioral change outside the host is `destroyRoot` in `runtime.ts` (§A.1.2), which §8.1 previously
 recorded as a "0 changes" reading.⟩**
 
@@ -1047,9 +1047,9 @@ set** is exactly the rows of §7.2; everything else in the family must stay gree
 | `src/renderer/sidebar-panes.ts` | host | §5.3.1 (generation guard + identity), §5.3.2 (subject key), §5.3.3 (scope gate), **§5.3.4 (`refresh`) — ⟨A.1.5: WITHDRAWN, no `refresh()` change⟩**, §5.3.5 item 3 (caret gate), §5.3.6 rule 3 (doc comment) |
 | `src/renderer/edit-controller.ts` | host/pure | §5.3.2's optional `pageSubjectDocument` hook + the `restoreCaret` guard |
 | `scripts/live-drive.mjs` | harness | §8.3's `ufStageSig` extension + the V1-race variant block — an **oracle-identity change** |
-| `tests/unit-stage-active-tab-display.test.ts` (**new**) | test | the §5.4 states + the §5.5 fail-states + the §6 rows' host half |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts` (**new**) | test | the §5.4 states + the §5.5 fail-states + the §6 rows' host half |
 | `tests/unit-stage-active-tab-display-adversarial.test.ts` (**new**) | test | the RCA-3 findings' regressions |
-| `tests/unit-stage-active-tab-display-pbt-generators.test.ts` (**new**) | test | the §6 register's generators (seed `0x7A6AC71D`) |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display-pbt-generators.test.ts` (**new**) | test | the §6 register's generators (seed `0x7A6AC71D`) |
 | `src/renderer/renderer.ts` | — | **0 changes expected** (§5.2 sources the identity inside `mountTab`; recorded so a change here is a **finding** to justify, not a silent extra edit) |
 | `src/renderer/pane-graph.ts`, `src/renderer/tab-state.ts`, `src/renderer/tab-strip.ts`, `src/renderer/content-reconcile.ts` | — | **0 changes** (V4 is decided by the host's `documentId` input; no envelope/reconciler behavior change) |
 | `src/renderer/runtime.ts` | runtime | **⟨A.1.2 — SUPERSEDES the former "0 changes" reading of this file: exactly ONE change, `applyContentReconcile`'s `destroyRoot` classifier, which must admit the same root set `extractContentRoots` admits (`page-edit-surface` + `page-commit-warning` + `editor-toolbar` + `stage-landing` + `rag-*`/`pane-*`) so a `replaced`/`removed` classification actually destroys the stale root. Closed whitelist; no reorder of destroy-then-attach; a root still authored by `next` is never destroyed. See §A.1.2.⟩** |
@@ -1266,17 +1266,17 @@ battery applies to this unit.** Stated exactly:
    (§9 above); the fix is the supervisor's/archival pass's, and the correct target is §1/§2/§3/§4 of
    that file.
 4. **⟨A.1 — the TestWriter remand and the two amended rows⟩** — owed by the **TestWriter**, before
-   the Implementer resumes: re-pin `tests/unit-stage-active-tab-display.test.ts:887` (the census
+   the Implementer resumes: re-pin `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:887` (the census
    predicate + both discriminators + an explicit pre-state; **not** `<= 1`, **not** `=== 2`),
-   `tests/stage-active-tab-display-adversarial.test.ts:385` (`<= 1` ⇒ the census) and
-   `tests/stage-active-tab-display-adversarial.test.ts:317-318` (the hook consultation set; no
+   `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:385` (`<= 1` ⇒ the census) and
+   `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:317-318` (the hook consultation set; no
    `'t1'` requirement, save-before-read) per §A.1.1/§A.1.4; and author the new red row `R8`
    (§A.1.2). The **item-10d doc review** then recounts §5.6 rows 1/9 + §8.5 and re-checks the
    9b/C9-adjacent suites per §A.1.2/§7.2.
 5. **⟨A.3 — the second TestWriter remand (C1 + C2)⟩** — owed by the **TestWriter** before the
-   Implementer resumes: re-pin `tests/unit-stage-active-tab-display-blind-contradictions.test.ts:356`
-   / `:383` (S1/S2), `tests/unit-stage-active-tab-display-contract-holes.test.ts:453-476` (H-3's
-   PRE-STATE clause only) and `tests/unit-stage-active-tab-display-pbt-generators.test.ts:1134-1154`
+   Implementer resumes: re-pin `archive/tests/2026-10-04-unit-stage-active-tab-display-blind-contradictions.test.ts:356`
+   / `:383` (S1/S2), `archive/tests/2026-10-04-unit-stage-active-tab-display-contract-holes.test.ts:453-476` (H-3's
+   PRE-STATE clause only) and `archive/tests/2026-10-04-unit-stage-active-tab-display-pbt-generators.test.ts:1134-1154`
    + `checkStep` `:1092-1128` (P-SM-1's `boot` start) to §A.3.1's `stageOwner` predicate; and re-pin
    the caret oracle/liveness rows to §A.3.2's carrier
    (`…pbt-generators.test.ts:1019`, `:1035-1052`, `:1397-1415`; `…display.test.ts:840`;
@@ -1339,8 +1339,8 @@ exactly the currently active document tab's surface — or none when `activeTabI
 
 | Row | Verdict | What it must assert instead |
 | --- | --- | --- |
-| `tests/unit-stage-active-tab-display.test.ts:887` (S14) | **WRONG — the row asserts the DEFECT as the expectation.** `surfaceIds(h).length === 2` encodes the un-destroyed stale root as correct behavior: exactly the state `I2-R` forbids and exactly what the instrumented measurement printed. It is also the only row in the tree that asserts a two-surface DOM. | **The census predicate**, with the row's pre-state made explicit (prefix the row with `mountTab(docTab('t1', DOC_A))`, as A4 step 1 does, so the active target is a document): `surfaceCensus === (getActiveTargetKind() === 'document' ? 1 : 0)`, and when `1`, `surfaceIds === [getActiveDocumentId()]` (i.e. `[DOC_A]`), with both discriminators agreeing. **Not `<= 1`, not `=== 2`.** The row's 9b half (`DOC_A`+`DOC_B` bodies present; `getMountedDocumentIds()` = the open set) stays, as A.1.1's body carve-out; its post-`mountTab` half (`surfaceIds === [DOC_A]`, `getMountedDocumentIds() === [DOC_A]`) is already right and stands. |
-| `tests/stage-active-tab-display-adversarial.test.ts:385` (A4 step 2) | **Right direction, wrong strength.** `<= 1` is not the contract and is trivially satisfied by a zero surface (a build that authors NO surface on a document tab must not pass). | The same predicate as above — the **exact** census plus the identity for the active document at that step (`1` / `[DOC_A]`), never `<= 1`. |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:887` (S14) | **WRONG — the row asserts the DEFECT as the expectation.** `surfaceIds(h).length === 2` encodes the un-destroyed stale root as correct behavior: exactly the state `I2-R` forbids and exactly what the instrumented measurement printed. It is also the only row in the tree that asserts a two-surface DOM. | **The census predicate**, with the row's pre-state made explicit (prefix the row with `mountTab(docTab('t1', DOC_A))`, as A4 step 1 does, so the active target is a document): `surfaceCensus === (getActiveTargetKind() === 'document' ? 1 : 0)`, and when `1`, `surfaceIds === [getActiveDocumentId()]` (i.e. `[DOC_A]`), with both discriminators agreeing. **Not `<= 1`, not `=== 2`.** The row's 9b half (`DOC_A`+`DOC_B` bodies present; `getMountedDocumentIds()` = the open set) stays, as A.1.1's body carve-out; its post-`mountTab` half (`surfaceIds === [DOC_A]`, `getMountedDocumentIds() === [DOC_A]`) is already right and stands. |
+| `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:385` (A4 step 2) | **Right direction, wrong strength.** `<= 1` is not the contract and is trivially satisfied by a zero surface (a build that authors NO surface on a document tab must not pass). | The same predicate as above — the **exact** census plus the identity for the active document at that step (`1` / `[DOC_A]`), never `<= 1`. |
 
 **Also superseded by this ruling, marked in place above** (never deleted): §5.3.3 sub-rule 4's "the
 multi case is **untouched**" now covers the **document-scope union** (`mountedDocumentIds`, W2-N15)
@@ -1378,7 +1378,7 @@ is exactly why the C9 warning could not attach through the reconcile path:** `ne
 `applyContentReconcile: added root missing from next: page-commit-warning` and never call
 `attachRoot`. **Consequence recorded for the owner:** `docs/specs/unit-u-edit-1-whole-page-editing.md`
 §3a `M5`'s "the warning is re-authored IMMEDIATELY through the content reconcile" was therefore only
-**conditionally** true, and the node rows `W1`/`W2`/`W3` (`tests/page-commit-failure-visibility.test.ts`)
+**conditionally** true, and the node rows `W1`/`W2`/`W3` (`archive/tests/2026-10-04-page-commit-failure-visibility.test.ts`)
 are red on that tree — the correction is annotated at §3a `M5` itself, not re-derived here.
 **THE PRODUCTION FIX LANDED DURING THIS REVIEW (closing re-read, same pass):**
 `extractContentRoots` now admits the class — `src/renderer/runtime.ts:152-176`, with
@@ -1415,7 +1415,7 @@ destroy the stale root** (`runtime.ts:610-613`, `:623-632`, `:636-646`). Three p
    no longer authors is now genuinely removed (the `M3` "phantom warning" direction of the
    `docs/defects.md` row `C9-U-EDIT-1-ADVERSARIAL-MUST-FIX-SET`), and a stale surface root is
    genuinely replaced. The item-10d doc review **re-runs** the C9-adjacent suites
-   (`tests/page-commit-failure-visibility.test.ts`, `tests/single-editable-surface.test.ts`) and the
+   (`archive/tests/2026-10-04-page-commit-failure-visibility.test.ts`, `archive/tests/2026-10-04-single-editable-surface.test.ts`) and the
    9b suites, and records the outcome — asserted, never assumed.
 
 **The red row that proves it — `R8` (see §7.3, §8.2 item 9).** After a seam that re-authors the
@@ -1429,9 +1429,9 @@ discriminators**, not the report.
 #### A.1.3 Ruling — the body clause is not total at the `mountTabs` seam (a third, latent contradiction, adjudicated the same way)
 
 §6's `P-SM-1` states "after each step the mount DOM contains the body of **at most one** document",
-while `tests/unit-stage-active-tab-display.test.ts:519-527` (S3, a listed green control) asserts
+while `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:519-527` (S3, a listed green control) asserts
 `mountTabs([t1,t2])` shows **both** `Doc A` and `Doc B` ⟨**A.4 — DRIFT PIN, marked in place: at the
-§A.4 read that S3 row is `tests/unit-stage-active-tab-display.test.ts:618-629`** (`:620` the
+§A.4 read that S3 row is `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:618-629`** (`:620` the
 `mountTabs([t1,t2])` call, `:622-623` the two order-insensitive `toContain` assertions); its
 **assertion content is unchanged** and the §A.1.3 ruling stands verbatim — only the line pin moved.⟩, and 9b's whole point is that simultaneous
 render. As written, `P-SM-1`'s body clause is **unsatisfiable** at that seam — the same class of
@@ -1462,7 +1462,7 @@ so the row passes vacuously): the amended row keys the census by document, not b
    return `saved`).
 
 **Why both rows are impossible (the evidence).** In
-`tests/stage-active-tab-display-adversarial.test.ts`: `HOSTILE_SUBJECTS` (`:281`) contains **no**
+`archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts`: `HOSTILE_SUBJECTS` (`:281`) contains **no**
 `'t1'`, so `if (s === 't1') continue` (`:307`) is **dead code** and **no** `restoreCaret` call in that
 row ever receives `'t1'` ⇒ `:318`'s `toContain('t1')` is unsatisfiable by **any** implementation. And
 the row's loop reads each subject **before** saving a caret under it (`:308-310`), so the caret-less
@@ -1506,10 +1506,10 @@ files**.
 
 | Artifact | Owed change | Ruling |
 | --- | --- | --- |
-| `tests/unit-stage-active-tab-display.test.ts:887` | `=== 2` ⇒ the exact census predicate + both discriminators + an explicit doc-tab pre-state | A.1.1 |
-| `tests/stage-active-tab-display-adversarial.test.ts:385` | `<= 1` ⇒ the exact census predicate (both directions) | A.1.1 |
-| `tests/stage-active-tab-display-adversarial.test.ts:318` | `toContain('t1')` ⇒ `hookCalls` equals the hostile-subject consultation set (no `'t1'`) | A.1.4 |
-| `tests/stage-active-tab-display-adversarial.test.ts:317` | `hookCalls.length > 0` ⇒ the consultation set, with save-before-read | A.1.4 |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:887` | `=== 2` ⇒ the exact census predicate + both discriminators + an explicit doc-tab pre-state | A.1.1 |
+| `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:385` | `<= 1` ⇒ the exact census predicate (both directions) | A.1.1 |
+| `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:318` | `toContain('t1')` ⇒ `hookCalls` equals the hostile-subject consultation set (no `'t1'`) | A.1.4 |
+| `archive/tests/2026-10-04-stage-active-tab-display-adversarial.test.ts:317` | `hookCalls.length > 0` ⇒ the consultation set, with save-before-read | A.1.4 |
 | new `R8` row (this unit's suite) | the reconcile-destroy / census row | A.1.2, §7.3, §8.2 item 9 |
 | §5.1 I2 clause 3, §5.3.3 sub-rule 4, §5.3.5 rule 1, §5.3.6 rule 2, §6 `P-SM-1`, §7.2 (9b row), §7.3, §7.4, §8.1, §8.2 items 6/9, §8.5, §5.6 rows 1/9, §1 item 5, §2, §3, §5.3.2, §5.3.4, §5.5 `FS-8`, §10 | marked in place; no renumbering | A.1.1–A.1.5 |
 
@@ -1544,8 +1544,8 @@ The **RCA-3 adversarial pass** (read-only) ran on this unit's landed implementat
 **H-1/H-1b, H-2, H-3 (+ the boot-seam census), H-4, H-5**; **two independent verification passes** ran
 after it (the blind-contradictions re-measure of the artifact's FAILs, and the contract-holes/
 PBT red-set re-read) and are the second and third derivations of **H-3**. Their rows live in
-**`tests/unit-stage-active-tab-display-contract-holes.test.ts`** (H-1…H-5) and
-**`tests/unit-stage-active-tab-display-blind-contradictions.test.ts`** (the boot census + the hook).
+**`archive/tests/2026-10-04-unit-stage-active-tab-display-contract-holes.test.ts`** (H-1…H-5) and
+**`archive/tests/2026-10-04-unit-stage-active-tab-display-blind-contradictions.test.ts`** (the boot census + the hook).
 Status as read **§A.2.0's method**:
 
 | id | The finding (as the adversarial pass reported it) | Evidence (`file:line` / file+row) | Status at this read | Owning row |
@@ -1577,7 +1577,7 @@ later harness reproduced it independently**:
 3. the **blind-greens artifact's `A11`/`A11b` rows**
    (`docs/specs/unit-stage-active-tab-display-greens.md` §A) — **`❌ FAIL`**, and
 4. **independently reproduced by a later harness**:
-   `tests/unit-stage-active-tab-display-blind-contradictions.test.ts` **ROW 1 / S1 + S2** (`:356`,
+   `archive/tests/2026-10-04-unit-stage-active-tab-display-blind-contradictions.test.ts` **ROW 1 / S1 + S2** (`:356`,
    `:383`), whose own recorded run reading is **RED — 2 rows**, reproducing the artifact's values
    **verbatim**: `[page-edit-surface]=1 [data-edit-surface]=1 marker=["doc-a"] agrees=true` with
    `activeTabId=null activeTargetKind=null activeDocumentId=null` — at boot **and** with the persisted
@@ -1643,7 +1643,7 @@ NOT reopened by the PBT's residual reading: the reported pane-additive `0`-surfa
 **not reproducible from the HEAD source by any trace this pass could follow** (§A.4.2), so (c) is not
 contradicted here; if that reading lands on a HEAD re-run it is a genuine `I2-R` + clause-(b)
 violation and `(c)` must then be rewritten in place as `REOPENED` — never silently.⟩** **The earlier `S14 === 2` expectation
-(`tests/unit-stage-active-tab-display.test.ts:887`) was the DEFECT, not the contract** (§A.1.1's
+(`archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:887`) was the DEFECT, not the contract** (§A.1.1's
 ruling stands: *the row asserted the defect as the expectation*), and **any restatement of
 `S14 === 2` as a contract is a re-derivation of a refuted finding**. The `P-IM-2` MIXED-envelope case
 is **not** one of these non-findings — it **is** a live foreign-root case (§A.2.1).
@@ -1744,13 +1744,13 @@ direction). Each was read, in full, at:
 
 | # | Committed row (read this pass) | What it asserts at the no-tab boot |
 | --- | --- | --- |
-| 1 | `tests/unit-u-shell-9b-h2-c20-materialization.test.ts:384-422` (boot `:396`; census `:414-417`; `FOCUSED_DOCUMENT_ID='doc-a'` `:282`) | DOM `contenteditableCensus(h.mount)`: `count === 1`, `ids === ['page-edit-surface']`, `markers === ['doc-a']` — **one surface, at a boot with NO `mountTab`** |
-| 2 | `tests/unit-u-shell-9b-blind-greens.test.ts:533-573` (boot `:547`; census `:565-569`; `FOCUSED_DOCUMENT_ID='da'` `:258`) | `count === 1`, `ids === ['page-edit-surface']`, `markers === ['da']` — the same census at a NO-`mountTab` boot |
-| 3 | `tests/unit-u-shell-9b-h1-optionc-interception.test.ts:377-416` (boot `:380`; census `:410-413`) | `count === 1`, `ids === ['page-edit-surface']`, `markers === ['doc-a']` — the same census at a NO-`mountTab` boot |
-| 4 | `tests/sidebar-panes-host.test.ts:595-606` (§5.8.7) | after `boot`, `buildContext().currentDocumentId === 'astrographer-review'` and the rendered HTML holds the SCOPED current-document body, not the other's — the **boot body scope** pin |
-| 5 | `tests/sidebar-panes-host.test.ts:920-939` (§5.8.29/M6) | no-tab re-derive body scope: `setCurrentDocumentId('doc-a')` ⇒ `Doc A` present (`:923-928`); `setCurrentDocumentId(null)` ⇒ still `Doc A` (`:931-938`) |
-| 6 | `tests/page-commit-scope-ack-race.test.ts:403-419` (harness reader `:357-361`) | after `mountTab(null)` + `docNavSelect(DOC_3)`: `stageDocumentScope() === DOC_3` — the no-tab **legacy fallback** is pinned at the scope seam itself |
-| 7 | `tests/unit-u-shell-9b-w2n15-rederive-scope.test.ts:220-229` | boot (NO `mountTab`) + `reDerive('operator')` ⇒ the UNSCOPED `rag-X` survives and no `rag-doc-a--` scope appears — the no-tab body scope is pinned in BOTH directions |
+| 1 | `archive/tests/2026-10-04-unit-u-shell-9b-h2-c20-materialization.test.ts:384-422` (boot `:396`; census `:414-417`; `FOCUSED_DOCUMENT_ID='doc-a'` `:282`) | DOM `contenteditableCensus(h.mount)`: `count === 1`, `ids === ['page-edit-surface']`, `markers === ['doc-a']` — **one surface, at a boot with NO `mountTab`** |
+| 2 | `archive/tests/2026-10-04-unit-u-shell-9b-blind-greens.test.ts:533-573` (boot `:547`; census `:565-569`; `FOCUSED_DOCUMENT_ID='da'` `:258`) | `count === 1`, `ids === ['page-edit-surface']`, `markers === ['da']` — the same census at a NO-`mountTab` boot |
+| 3 | `archive/tests/2026-10-04-unit-u-shell-9b-h1-optionc-interception.test.ts:377-416` (boot `:380`; census `:410-413`) | `count === 1`, `ids === ['page-edit-surface']`, `markers === ['doc-a']` — the same census at a NO-`mountTab` boot |
+| 4 | `archive/tests/2026-10-04-sidebar-panes-host.test.ts:595-606` (§5.8.7) | after `boot`, `buildContext().currentDocumentId === 'astrographer-review'` and the rendered HTML holds the SCOPED current-document body, not the other's — the **boot body scope** pin |
+| 5 | `archive/tests/2026-10-04-sidebar-panes-host.test.ts:920-939` (§5.8.29/M6) | no-tab re-derive body scope: `setCurrentDocumentId('doc-a')` ⇒ `Doc A` present (`:923-928`); `setCurrentDocumentId(null)` ⇒ still `Doc A` (`:931-938`) |
+| 6 | `archive/tests/2026-10-04-page-commit-scope-ack-race.test.ts:403-419` (harness reader `:357-361`) | after `mountTab(null)` + `docNavSelect(DOC_3)`: `stageDocumentScope() === DOC_3` — the no-tab **legacy fallback** is pinned at the scope seam itself |
+| 7 | `archive/tests/2026-10-04-unit-u-shell-9b-w2n15-rederive-scope.test.ts:220-229` | boot (NO `mountTab`) + `reDerive('operator')` ⇒ the UNSCOPED `rag-X` survives and no `rag-doc-a--` scope appears — the no-tab body scope is pinned in BOTH directions |
 
 **Reachability (what this state is, honestly).** It is **production-real but transient**: the shipped
 renderer calls `host.boot(runtime).then(() => bootTabs())` (`src/renderer/renderer.ts:1039`), and
@@ -1787,7 +1787,7 @@ superseded):**
   or no document is known (the empty-store/landing boot).
 - `SidebarPanes.getStageDocumentScope(): string | null` — the public projection of the pinned
   `stageDocumentScope()` seam (already read reflectively at
-  `tests/page-commit-scope-ack-race.test.ts:357-361`); it keeps its pinned BODY-scope semantics.
+  `archive/tests/2026-10-04-page-commit-scope-ack-race.test.ts:357-361`); it keeps its pinned BODY-scope semantics.
 
 **The owning document of the stage, for every reachable state `s` and settle point `t`:**
 
@@ -1832,7 +1832,7 @@ stageOwner(s) ≡
 
 | Red row (read at its `file:line`) | Its assertion today | Its NEW assertion |
 | --- | --- | --- |
-| `tests/unit-stage-active-tab-display-blind-contradictions.test.ts:356-381` (**S1**) | boot, no `mountTab` ⇒ `authored === 0`, `marked === 0`, `markers === []` | keep `agrees === true` and the identity-triple assertions (`activeTabId`/`activeTargetKind`/`activeDocumentId` all `null`); ADD `isPreTabState() === true`; assert `getPreTabDocumentId() === DOC_A` and **`authored === 1`, `marked === 1`, `markers === [getPreTabDocumentId()]`**; ADD the tab-state half: after `mountTab(searchTab('s1'))` ⇒ `isPreTabState() === false`, `authored === 0`, `bodies === []` |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display-blind-contradictions.test.ts:356-381` (**S1**) | boot, no `mountTab` ⇒ `authored === 0`, `marked === 0`, `markers === []` | keep `agrees === true` and the identity-triple assertions (`activeTabId`/`activeTargetKind`/`activeDocumentId` all `null`); ADD `isPreTabState() === true`; assert `getPreTabDocumentId() === DOC_A` and **`authored === 1`, `marked === 1`, `markers === [getPreTabDocumentId()]`**; ADD the tab-state half: after `mountTab(searchTab('s1'))` ⇒ `isPreTabState() === false`, `authored === 0`, `bodies === []` |
 | `…blind-contradictions.test.ts:383-400` (**S2**) | persisted `defaultDocumentId='doc-b'` ⇒ still `authored === 0` | `isPreTabState() === true`; `authored === 1` and `markers === [getPreTabDocumentId()]`; keep the FS-7 teeth by asserting the pre-tab document is the **alphabetical-first** `doc-a` (the `A11b` measurement — the persisted default does NOT move the pre-tab SURFACE); ADD: after `mountTab(docTab('t1', DOC_B))` ⇒ `authored === 1`, `markers === [DOC_B]`, no `doc-a` surface (no stale pre-tab root, clause (f)) |
 | `…contract-holes.test.ts:453-476` (**H-3**) | PRE-state: boot ⇒ `bootCensus.authored === 0`; POST: `mountTabs([docTab('t2', DOC_B)])` with no active tab ⇒ `authored === 0`, `markers !== [DOC_B]`, `marked === 0` | **PRE-STATE re-pinned**: `isPreTabState() === true`, `getPreTabDocumentId() === DOC_A`, census `1`/`[DOC_A]` (the carve-out clause). **POST-STATE UNCHANGED and still RED**: `getActiveTabId() === null`, `authored === 0`, `marked === 0`, `markers !== [DOC_B]` (the `documentIds[0]` fallback at `:1849-1851` is the violation) — plus a new clause: the pre-tab surface root is **gone** (destroyed), and the open set's doc-b **body** is still present (A.1.3) |
 | `…pbt-generators.test.ts:1134-1154` + `checkStep:1092-1128` (**P-SM-1**) | `start === 'boot'` (drawn at `:1138`) is checked by the strict clauses ⇒ `BROKEN @7` | give the `boot` draw a **pre-tab expectation** (`stageOwner = ('pre-tab', getPreTabDocumentId())`): census `1` with that marker, bodies `[that document]`, `mountedDocumentIds` `[that document]`, identity triple `null` — and do NOT assert `documentRoots === 0` there; every other start and **every** step keeps the strict clause (in particular `mountTabs(openSet)` with no active entry stays `0`) |
@@ -1894,16 +1894,16 @@ pre-check would then accept a document id.
 
 | Row (read at its `file:line`) | Today | NEW |
 | --- | --- | --- |
-| `tests/unit-stage-active-tab-display-pbt-generators.test.ts:1019` (**`P-IM-4` oracle**) | `expectedRestore = … && h.backRefs.has(docId) && caretKind === 'page'` | `expectedRestore = subject === tabId && tabId !== null && kind === 'document' && docId != null && h.host.isDocumentLive(docId) && caretKind === 'page'` |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display-pbt-generators.test.ts:1019` (**`P-IM-4` oracle**) | `expectedRestore = … && h.backRefs.has(docId) && caretKind === 'page'` | `expectedRestore = subject === tabId && tabId !== null && kind === 'document' && docId != null && h.host.isDocumentLive(docId) && caretKind === 'page'` |
 | `…pbt-generators.test.ts:1035-1052` (**`P-IM-4` 2nd leg**) | `!h.backRefs.has(String(answer))` / `expected2 = … && h.backRefs.has(answer) && …` on a controller-only harness | inject the sibling carrier (`isDocumentLive`) into the harness and express both legs through it; the **totality/junk-answer** clauses (non-string/`''`/foreign answer ⇒ cleared) are unchanged |
 | `…pbt-generators.test.ts:1397-1415` (**`P-TP-2`**) ⟨**A.4 — DRIFT PIN: at the §A.4 read this row is `:1442-1531` and its carrier injection is `:1472-1475`; `:1397-1415` is a sibling P-SM-2 block**⟩ | `backRefs = [[liveDoc,['x']],['t1',['x']]]`; `live = … : subject === 't1' && backRefs.has(liveDoc)` | the harness supplies `isDocumentLive` (and **no** document id in `backRefs`); the expectation keeps its **shape** — `hookMode 'absent'` ⇒ `backRefs.has(subject)` (legacy, unchanged); `'supplied'` ⇒ `subject === 't1' && isDocumentLive(liveDoc)` — **LANDED at this read** |
-| `tests/unit-stage-active-tab-display.test.ts:840` (**S12/FS-6**) | `h.backRefs.has(DOC_A) === true` ("the document is live in backRefs") | `h.host.isDocumentLive(DOC_A) === true` **and** `h.backRefs.has(DOC_A) === false` (the seed is gone) — the caret must still be restored after the `reDerive('content')` at `:842-847` |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:840` (**S12/FS-6**) | `h.backRefs.has(DOC_A) === true` ("the document is live in backRefs") | `h.host.isDocumentLive(DOC_A) === true` **and** `h.backRefs.has(DOC_A) === false` (the seed is gone) — the caret must still be restored after the `reDerive('content')` at `:842-847` |
 | `…blind-contradictions.test.ts:463-473` (**`liveBackRefs()`**) | seeds `['t1',[]]`, `['doc-a-body',[]]`, **`[DOC_A,[]]`** | drop the `DOC_A` entry and give `makeController` the carrier (`isDocumentLive`); the consultation-set rows S5–S10 keep their behavior (the `'ghost-doc'` / `null` / `undefined` answers are NOT live either way) |
 | `…blind-contradictions.test.ts:588-608` (**S9**, message text) | ``doc !== null but !backRefs.has(doc)`` | the same assertion with `!isDocumentLive(doc)` in the observable string |
-| `tests/unit-stage-active-tab-display-contract-holes.test.ts:530-555` (**H-5**) | RED: `keys` contains `DOC_A`; `isEditable(DOC_A)` is `true` | **UNCHANGED and now GREEN** — no document id in `backRefs.keys()`, every key in `nodeIds` (`:543-546`), `isEditable(DOC_A) === false` (`:551-554`) |
-| `tests/unit-stage-active-tab-display-contract-holes.test.ts:514-523` (**H-4b**, green control) | same tab + same live document ⇒ `restoreCaret` defined | **UNCHANGED** (the carrier holds `DOC_A` after the mount) — the no-over-eviction control must stay green |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display-contract-holes.test.ts:530-555` (**H-5**) | RED: `keys` contains `DOC_A`; `isEditable(DOC_A)` is `true` | **UNCHANGED and now GREEN** — no document id in `backRefs.keys()`, every key in `nodeIds` (`:543-546`), `isEditable(DOC_A) === false` (`:551-554`) |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display-contract-holes.test.ts:514-523` (**H-4b**, green control) | same tab + same live document ⇒ `restoreCaret` defined | **UNCHANGED** (the carrier holds `DOC_A` after the mount) — the no-over-eviction control must stay green |
 | `…pbt-generators.test.ts:1330-1346` (**`P-SM-2`'s caret clause**) ⟨**A.4 — DRIFT PIN: at the §A.4 read that span is inside `P-SM-2`'s COMMIT block; the caret-isolation clause is `:1394-1411`**⟩ | `restoreCaret(k1)`/`restoreCaret('t2')` defined for each tab's own live document | **UNCHANGED in expected behavior**; only the liveness source moves to `h.host.isDocumentLive(docId)` |
-| `tests/unit-stage-active-tab-display.test.ts:869-887` (**the `P-TP-2` in-row-controller row — OMITTED from this table by §A.3.3; added here by §A.4.1, never a renumbering**) | `createEditController({ backRefs: h.backRefs, commit, onRebuild, pageSubjectDocument: (s) => (s === 't1' ? DOC_A : null) })` — the hook is supplied but **NO liveness carrier**, so `:886`'s `restoreCaret('t1')` falls back to `opts.backRefs.has(DOC_A)` (`src/renderer/edit-controller.ts:261-263`) against a `backRefs` map whose only keys are `t1`/`t2`/`s1` (`…test.ts:272-279`): the seed `seedActiveDocumentRef` is DELETED (`src/renderer/sidebar-panes.ts:864` — a comment is the only residue), so **the row cannot pass as written** | **⟨§A.4.1⟩** inject the carrier — `isDocumentLive: (id) => documentLive(h.host, id)` in the in-row `createEditController` options, plus `h.backRefs.has(DOC_A) === false` and `documentLive(h.host, DOC_A) === true`. **`:882`/`:883` (the non-active-subject direction) and the whole legacy/no-hook direction (`…test.ts:1155-1164` S16, `:1166-1177` S16b) stay UNCHANGED** |
+| `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:869-887` (**the `P-TP-2` in-row-controller row — OMITTED from this table by §A.3.3; added here by §A.4.1, never a renumbering**) | `createEditController({ backRefs: h.backRefs, commit, onRebuild, pageSubjectDocument: (s) => (s === 't1' ? DOC_A : null) })` — the hook is supplied but **NO liveness carrier**, so `:886`'s `restoreCaret('t1')` falls back to `opts.backRefs.has(DOC_A)` (`src/renderer/edit-controller.ts:261-263`) against a `backRefs` map whose only keys are `t1`/`t2`/`s1` (`…test.ts:272-279`): the seed `seedActiveDocumentRef` is DELETED (`src/renderer/sidebar-panes.ts:864` — a comment is the only residue), so **the row cannot pass as written** | **⟨§A.4.1⟩** inject the carrier — `isDocumentLive: (id) => documentLive(h.host, id)` in the in-row `createEditController` options, plus `h.backRefs.has(DOC_A) === false` and `documentLive(h.host, DOC_A) === true`. **`:882`/`:883` (the non-active-subject direction) and the whole legacy/no-hook direction (`…test.ts:1155-1164` S16, `:1166-1177` S16b) stay UNCHANGED** |
 
 **Recorded, NOT conflated:** `H-4` (a closed/re-minted tab id restoring the previous page's caret
 against a DIFFERENT document, `…contract-holes.test.ts:484-512`) is **not** fixed by this ruling and
@@ -1946,7 +1946,7 @@ the commit path uses `bridge.edit.batch`, untouched), `single-editable-surface.t
 the new late-bind MUST be non-enumerable), and the C9 `U-EDIT-1` commit rows.
 
 **⟨A.4.1 — INCOMPLETE, marked in place: this C2 blast radius and §A.3.2's affected-rows table both
-OMIT `tests/unit-stage-active-tab-display.test.ts:869-887`** (the `P-TP-2` row that builds its **own**
+OMIT `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:869-887`** (the `P-TP-2` row that builds its **own**
 `createEditController` in-row). That row is in **neither** list, and C2's deletion of
 `seedActiveDocumentRef()` made its last assertion unsatisfiable (the row supplies
 `pageSubjectDocument` but **no** `isDocumentLive`, so step 4 takes the legacy fallback against a
@@ -2005,7 +2005,7 @@ claim plus the suite's own header — **never re-run here**. The counterexample 
 reproduced from the HEAD source by any trace this pass could follow, and is written as **UNVERIFIED**;
 the items this pass could not verify are listed in §A.4.6.
 
-#### A.4.1 RULING D1 — `tests/unit-stage-active-tab-display.test.ts:869-887` is a **ROW bug**: the row must supply the §A.3.2 C2 liveness carrier (production is CORRECT and UNCHANGED)
+#### A.4.1 RULING D1 — `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:869-887` is a **ROW bug**: the row must supply the §A.3.2 C2 liveness carrier (production is CORRECT and UNCHANGED)
 
 **The row (read at its `file:line`; the supervisor's citation `:850-887` spans S12 at `:843-867` + this
 row at `:869-887`, whose `it` title is `P-TP-2 [RED] — a subject that is NOT the active tab is never
@@ -2028,7 +2028,7 @@ opts.isDocumentLive(doc) : opts.backRefs.has(doc)` (`src/renderer/edit-controlle
 fallback literal at `:261-263`). The row supplies `pageSubjectDocument` but **no** `isDocumentLive`, so
 the read is `h.backRefs.has('doc-a')`. `seedActiveDocumentRef()` is **DELETED** — the only residue is a
 comment at `src/renderer/sidebar-panes.ts:864` — and the harness's `backRefs` is constructed with the
-keys `t1`/`t2`/`s1` only (`tests/unit-stage-active-tab-display.test.ts:272-279`), as is required by the
+keys `t1`/`t2`/`s1` only (`archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:272-279`), as is required by the
 documented `Map<ragNodeId, nodeId[]>` invariant (`src/renderer/edit-controller.ts:9-12`). So `live` is
 `false`, the entry is **deleted**, and `restoreCaret('t1')` returns `undefined`. The row is red **by its
 own wiring**, not by any host behavior: nothing in the production path is wrong, and the sibling rows
@@ -2133,11 +2133,11 @@ plus the reconcile report is what names it. **No row may be weakened in the mean
 amends the body clause to **coexistence only** — *"the body clause quantifies over every seam except
 `mountTabs` (bodies only may coexist there)"* — and no clause of this spec, §5.3.6, or
 `docs/specs/unit-u-shell-9b-cross-document-shared.md` pins the DOM order of coexisting bodies (9b's own
-rows are order-insensitive: `tests/unit-u-shell-9b-cross-document-shared.test.ts:701-709` and
+rows are order-insensitive: `archive/tests/2026-10-04-unit-u-shell-9b-cross-document-shared.test.ts:701-709` and
 `:723-731` use `toContain('Doc A')`/`toContain('Doc B')`; `:711-721` and
-`tests/unit-u-shell-9b-h3-doc-namespace.test.ts:312-340` use set/containment censuses — all read this
+`archive/tests/2026-10-04-unit-u-shell-9b-h3-doc-namespace.test.ts:312-340` use set/containment censuses — all read this
 pass). The sibling row that owns the multi seam in **this** unit is order-insensitive too
-(`tests/unit-stage-active-tab-display.test.ts:618-629`, S3 — `toContain('Doc A')`/`toContain('Doc B')`
+(`archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:618-629`, S3 — `toContain('Doc A')`/`toContain('Doc B')`
 **at this read**; §A.1.3's pin `:519-527` is drift, §A.4.6 item 4; §A.1.3's own green control).
 
 **The mechanism that produces the measured order — named, so it is never re-derived as a defect.** The
@@ -2180,13 +2180,13 @@ The row's `it` title is re-pinned to:
 
 | # | Artifact (`file:row`, read this pass) | The change | Owner | Ruling |
 | --- | --- | --- | --- | --- |
-| 1 | `tests/unit-stage-active-tab-display.test.ts:869-887` | **ROW**: inject `isDocumentLive` (the carrier) into the in-row controller + the two liveness assertions; `:882`/`:883` unchanged; `[RED]` ⇒ `[re-pinned — GREEN]` | **TEST** (production unchanged) | §A.4.1 |
-| 2 | `tests/unit-stage-active-tab-display-pbt-generators.test.ts:1189-1274` (`checkStep` `:1140-1186`, the pane-additive step `:1257-1264`) | **ROW**: predicate **UNCHANGED/strict** (census 1 + marker + `bodies=['doc-a']` at the pane-additive seam) + the non-vacuity guard; a `src/**` edit ONLY if the HEAD re-run reproduces the `0`-surface state | **TEST** now; **PRODUCTION** only on reproduction (§A.4.2, site UNVERIFIED) | §A.4.2 |
-| 3 | `tests/unit-stage-active-tab-display-pbt-generators.test.ts:1178-1179` (the multi-bodies branch) | **ROW**: ordered comparison ⇒ **set** comparison (`got.sort()` vs `want.sort()`); clause (2)'s `expectedMounted` stays **order-sensitive** | **TEST** (production unchanged) | §A.4.3 |
+| 1 | `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:869-887` | **ROW**: inject `isDocumentLive` (the carrier) into the in-row controller + the two liveness assertions; `:882`/`:883` unchanged; `[RED]` ⇒ `[re-pinned — GREEN]` | **TEST** (production unchanged) | §A.4.1 |
+| 2 | `archive/tests/2026-10-04-unit-stage-active-tab-display-pbt-generators.test.ts:1189-1274` (`checkStep` `:1140-1186`, the pane-additive step `:1257-1264`) | **ROW**: predicate **UNCHANGED/strict** (census 1 + marker + `bodies=['doc-a']` at the pane-additive seam) + the non-vacuity guard; a `src/**` edit ONLY if the HEAD re-run reproduces the `0`-surface state | **TEST** now; **PRODUCTION** only on reproduction (§A.4.2, site UNVERIFIED) | §A.4.2 |
+| 3 | `archive/tests/2026-10-04-unit-stage-active-tab-display-pbt-generators.test.ts:1178-1179` (the multi-bodies branch) | **ROW**: ordered comparison ⇒ **set** comparison (`got.sort()` vs `want.sort()`); clause (2)'s `expectedMounted` stays **order-sensitive** | **TEST** (production unchanged) | §A.4.3 |
 | 4 | `src/renderer/sidebar-panes.ts` `:1942`/`:1964` → `runtime.ts:632-654` / `pane-graph.ts:430` | **NO CHANGE** in this pass; the **minimal** production change, if owed, is at the surface-scope/`next`-authoring decision of the pane-additive re-derive (the re-run names which) | **PRODUCTION, conditional** | §A.4.2 |
 
 **Blast radius that MUST stay green unchanged (all read this pass).**
-**D1 (row 1):** the no-hook legacy control `tests/unit-stage-active-tab-display.test.ts:1155-1164` (S16 —
+**D1 (row 1):** the no-hook legacy control `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:1155-1164` (S16 —
 `backRefs=[['t1',['doc-a-body']]]` ⇒ `restoreCaret('t1')` defined via `backRefs.has('t1')`) and
 `:1166-1177` (S16b — the `'doc-gone'` dead-document direction, green under either liveness source);
 S12 (`:843-867`); the third `P-TP-2` row (`:889-907`, the host's own controller); and §A.3.3's C2 set —
@@ -2197,7 +2197,7 @@ pin `:1330-1346` is drift onto P-SM-2's commit block; §A.4.6 item 4), `page-sco
 **non-enumerable**, `edit-controller.ts:304-306`).
 **D2 (row 2):** the seven boot rows of §A.3.1's table, the 9b `mountTabs` family
 (`unit-u-shell-9b-cross-document-shared.test.ts:701-731`, `unit-u-shell-9b-h3-doc-namespace.test.ts:312-364`,
-`unit-u-shell-9b-w2n15-rederive-scope.test.ts:198-214`), `tests/unit-stage-active-tab-display.test.ts:618-629`
+`unit-u-shell-9b-w2n15-rederive-scope.test.ts:198-214`), `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:618-629`
 (S3), and the surface-census suites `single-editable-surface.test.ts` / `page-commit-failure-visibility.test.ts`
 — **none may be re-derived** to buy the PBT row a pass.
 **D3 (row 3):** P-SM-1's own generator guarantees (`seamCovered` for the five pinned seams,
@@ -2232,7 +2232,7 @@ order-sensitive; `⟨A.4.3⟩`), §A.3.2's affected-rows table (the **omitted** 
    `01:46`–`01:48`), so a residual reading may describe a mid-landing tree. It must be re-derived on
    HEAD before any clause or `src/**` change (§7.4).
 4. **Drift pins found and corrected in place (the item-10d review owes the full recount).** §A.1.3's
-   S3 pin `tests/unit-stage-active-tab-display.test.ts:519-527` is **drift** — at this read S3 is
+   S3 pin `archive/tests/2026-10-04-unit-stage-active-tab-display.test.ts:519-527` is **drift** — at this read S3 is
    `:618-629` (assertion content unchanged; marked in place at §A.1.3). §A.3.2's `P-TP-2` pin
    `…pbt-generators.test.ts:1397-1415` is **drift** — at this read the `P-TP-2` row is
    `:1442-1531` and its `⟨C2⟩` carrier injection is `:1472-1475` (a **sibling** row — the P-SM-2

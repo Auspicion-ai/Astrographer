@@ -12,17 +12,17 @@ LANDED 2026-08-26** (see §6); **U3 (module manifest types + `module.install`/
 internal toolset) LANDED 2026-08-26** (see §4/§7b/§7); **U5 (image/binary MCP
 tool-result channel, M-r4) LANDED 2026-08-26** (see §9 + the §7 seam row);
 **U6 (emit-only render-transform wiring, M-r5) LANDED 2026-08-26** (see §4 + the
-§7 seam row; tests `tests/module-transform.test.ts` 7);
+§7 seam row; tests `archive/tests/2026-10-04-module-transform.test.ts` 7);
 **U7 (async-queue data-hook, M-r12) LANDED 2026-08-26** (see §4 + the §7 seam row;
-tests `tests/module-queue.test.ts` 7; adversarial fixes H1 + M1, §4).
+tests `archive/tests/2026-10-04-module-queue.test.ts` 7; adversarial fixes H1 + M1, §4).
 **U8 (module management pane, §4) LANDED 2026-08-26** (see §4 + the §7 seam row;
-tests `tests/module-pane.test.ts` 7; adversarial F1 wiring fixed, F2 enable/disable
+tests `archive/tests/2026-10-04-module-pane.test.ts` 7; adversarial F1 wiring fixed, F2 enable/disable
 control residual → future pass).
 **U9 (dynamic module-tool registration + invocation two-gate, §5) LANDED 2026-08-26**
 (see §5/§7 — `router` in `McpServerOptions`, `allowedToolNames()` includes the
 dynamic `module:<name>.<tool>` tools when `module` is enabled, `invokeTool`
 (two-gate) + `invokeModuleTool` (standalone), `registerTools` now registers the
-router's dynamic tools; tests `tests/module-dynamic.test.ts` 7; the §9 F1 note is
+router's dynamic tools; tests `archive/tests/2026-10-04-module-dynamic.test.ts` 7; the §9 F1 note is
 CLOSED — the DYNAMIC invocation path + live re-register are wired).
 
 **The FULL `module.*` extension system (U1–U9) is LANDED 2026-08-26.**
@@ -143,7 +143,7 @@ Runtime in U9); `uploadQueue`/`fetch` are M-r12-deferred stubs (uploadQueue at U
 hardening (F1–F4):** a throwing hook is contained (F1); module/tool names with
 `.`/`:` are REJECTED (F2 namespace injectivity); a duplicate module name is
 REJECTED, never a silent overwrite (F3); a non-function tool handler is rejected
-at registration (F4). Tests `tests/module-router.test.ts` (17).
+at registration (F4). Tests `archive/tests/2026-10-04-module-router.test.ts` (17).
 
 **U7 LANDED 2026-08-26 — bounded async-queue data-hook (§4 hook seam, M-r12):**
 `ctx.uploadQueue()` now returns a REAL bounded async queue (was an M-r12-deferred
@@ -157,7 +157,7 @@ drops the oldest item). **M1 (adversarial fix):** `uploadQueue()` returns the
 SAME queue object per module ctx — a module that captures it in a hook and calls
 it again in a tool handler shares one buffer (no fragmented data loss). The
 vector-embedding acceptance case is constrained to the offline/local-store mock
-(no network). Tests `tests/module-queue.test.ts` (7).
+(no network). Tests `archive/tests/2026-10-04-module-queue.test.ts` (7).
 
 ## 5. Tool group & gating (M-r2, M-r3, M-r6)
 
@@ -179,7 +179,7 @@ vector-embedding acceptance case is constrained to the offline/local-store mock
   and the secure-panels GROUPS (`secure-panels.ts`) now include `module`; the static
   `module.*` tools map to `module` in TOOL_GROUPS; `groupForTool` resolves the
   `module:` prefix (empty-rest denied). The invocation two-gate predicate
-  (`moduleToolAllowed`) EXISTS and is unit-tested (`tests/module-security-gate.test.ts`)
+  (`moduleToolAllowed`) EXISTS and is unit-tested (`archive/tests/2026-10-04-module-security-gate.test.ts`)
   but — **U3 (2026-08-26): CLOSED for the STATIC `module.*` tools** — the two-gate
   is   now wired into the static `module.install`/`module.update` tools (registration
   in `registeredToolNames` + live re-gate in `applyGatePatch`, `mcp-server.ts`):
@@ -200,7 +200,7 @@ preferred):
 { name, version, capabilities, source, hash, installedAt, disabled?, quarantined? }
 ```
 - `source` stored as a string + SHA-256 `hash`.
-- **U2 LANDED 2026-08-26** (`src/main/module-store.ts` + `tests/module-store.test.ts`, 12 tests):
+- **U2 LANDED 2026-08-26** (`src/main/module-store.ts` + `archive/tests/2026-10-04-module-store.test.ts`, 12 tests):
   - Persists a **bare array** of records (NOT `{modules:[]}`).
   - `put(record)` **derives `hash` from `source`** (never trusts a caller-supplied
     hash) and **validates its input** (rejects empty/non-string `name`/`version`/

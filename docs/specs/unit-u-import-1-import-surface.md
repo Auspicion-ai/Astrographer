@@ -389,7 +389,7 @@ integration wiring** in `main.ts`. Both halves are MANDATORY for a green.
 
 The post-green adversarial re-audit found three host-side findings, all FIXED in
 `src/main/import-directory.ts` (+ 4 regression pins in
-`tests/unit-u-import-1-import-surface.test.ts`); no package (`provident-ssr`) finding
+`archive/tests/2026-10-04-unit-u-import-1-import-surface.test.ts`); no package (`provident-ssr`) finding
 (nothing for `docs/defects.md`):
 
 - **IMPORT-ADV-1 (LOW) — FIXED:** `buildImportDialogOptions('')` fell through to
@@ -419,7 +419,7 @@ untouched).
 
 The adversarial pass ran AFTER the green (2026-09-14) and its findings are
 recorded ABOVE (§3c: IMPORT-ADV-1..3, all host-side FIXED here + 4 regression
-pins in `tests/unit-u-import-1-import-surface.test.ts`). No package
+pins in `archive/tests/2026-10-04-unit-u-import-1-import-surface.test.ts`). No package
 (`provident-ssr`) finding — nothing for `docs/defects.md`.
 
 ## 4. Fail-states / edge cases

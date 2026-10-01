@@ -194,7 +194,7 @@ was **destroyed+reattached on EVERY content reconcile** — violating P-TP-1/P-T
   flip → a single LIVE root, no per-reconcile teardown.
 - **Regression:** `(Finding 1/b) an UNCHANGED toolbar … lands in kept` and
   `(Finding 1/b) a disabled flip … lands in a SINGLE replaced entry` in
-  `tests/unit-live8-toolbar-undo-refresh.test.ts` (RED pre-fix: the unchanged toolbar
+  `archive/tests/2026-10-04-unit-live8-toolbar-undo-refresh.test.ts` (RED pre-fix: the unchanged toolbar
   was `[]`-kept and the flip was not a single `replaced`; GREEN after).
 
 **AD-2026-09-14-2 (Finding 2 — MED, regression/guard):** add guards/proving that

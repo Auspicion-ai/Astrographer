@@ -12,7 +12,7 @@ set from it, the Implementer lands the least code.
 `npm test` **155 files / 3762 pass + 43 skip**, `typecheck` 0, `build` 0. The
 red set for this unit is attributable to the new test file alone.
 
-**TestWriter RED (2026-09-11, RCA-1):** `tests/unit-u-state-1a-content-reconcile.test.ts`
+**TestWriter RED (2026-09-11, RCA-1):** `archive/tests/2026-10-04-unit-u-state-1a-content-reconcile.test.ts`
 authored from this spec ALONE (22 cases: §4 states 1–12 + §5 F1–F6). RUN and
 reported: **suite-load failure** — `Failed to load url ../src/renderer/content-reconcile.js`
 (the module does not exist yet). 1 failed test file / 0 tests collected; the
@@ -39,7 +39,7 @@ root); resolved in favour of §3.1 and state 10 amended. Unit 18/18.
 | AF9 | LOW | `usedFallback` wording contradiction (§3.2 "changes the outcome" vs §3.3 "always") | **SPEC RESOLVED** — `usedFallback` = true iff the fallback path ran (null/malformed change, structural, or edge-bearing); §3.2 reworded |
 | AF10 | LOW | §5.8 census said 4 types; 5 are exported (`PreviousRoot` omitted) | **FIXED** — census corrected to 1 function + 5 types |
 
-Adversarial regressions: `tests/unit-u-state-1a-content-reconcile-adversarial.test.ts`
+Adversarial regressions: `archive/tests/2026-10-04-unit-u-state-1a-content-reconcile-adversarial.test.ts`
 (8 tests, all green). **Trio after the fixes: 157 files / 3788 pass + 43 skip,
 typecheck 0, build 0.**
 
@@ -338,6 +338,6 @@ U-STATE-1a pure-reconciler surface.
 This unit lands **only** the pure reconciler. It does NOT: call any supervisor/
 managed op (U-STATE-1b), persist the journal or operator scope (U-STATE-1c),
 touch `buildTraversal`, or change `loadEnvelope`/`tearDownGraph`. It must not
-break the existing trio; a new `tests/unit-u-state-1a-content-reconcile.test.ts`
+break the existing trio; a new `archive/tests/2026-10-04-unit-u-state-1a-content-reconcile.test.ts`
 red set is authored by a TestWriter from this spec before implementation
 (AGENTS.md item 9 / RCA-1).

@@ -992,7 +992,7 @@ item 4); the directly affected set:
 - `tests/traversal.test.ts`, `tests/unit-v2-scoped-traversal-mcp.test.ts`
   (+adversarial) (the `rag.get_document` contract U-MS2 re-points but must
   not change),
-- `tests/sidebar-panes-host.test.ts`, `tests/editing-mode-broadcast-host.test.ts`
+- `archive/tests/2026-10-04-sidebar-panes-host.test.ts`, `tests/editing-mode-broadcast-host.test.ts`
   (the default-store UI bindings),
 - `tests/security.test.ts`, `tests/security-gate.test.ts`,
   `tests/security-store.test.ts` (the gate seams — unchanged).

@@ -320,7 +320,7 @@ re-found by every fork via a live user-flow audit.
 shipped correctness property (live-confirmed defect F-1).
 
 **Fallback if upstream declines.** The fork keeps three ad-hoc controllers and promotes F-1 to a permanent
-regression pin (already true: `tests/renderer-pane-drag-surface.test.ts` + the re-pinned shell-wiring suites).
+regression pin (already true: `archive/tests/2026-10-04-renderer-pane-drag-surface.test.ts` + the re-pinned shell-wiring suites).
 Cost: the next fork re-introduces the same capture-at-pointerdown bug and needs its own live audit to find it.
 
 ---

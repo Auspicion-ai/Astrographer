@@ -1,5 +1,8 @@
 # USER FEEDBACK — Sidebar pane decomposition
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 **Date:** 2026-09-19 · **Reporter:** product owner (user feedback pass) ·
 **Status:** OPEN — first focus of this feedback pass · **Target:** this repo (fork-side
 implementation unit), NOT the foundation/engine/package projects ·
@@ -328,7 +331,7 @@ receive the runtime's shared state via a narrow internal context (not `this`-spr
 - `src/renderer/runtime/` exists; no file exceeds 1000 lines (target ≤600).
 - `runtime.ts` gone or a thin re-export.
 - Existing suites pass unchanged: `tests/unit-h2-runtime-controller.test.ts`,
-  `tests/sidebar-panes-host.test.ts`, the renderer/mcp-equivalence suites.
+  `archive/tests/2026-10-04-sidebar-panes-host.test.ts`, the renderer/mcp-equivalence suites.
 - New test: the `Runtime` public method set is byte-identical to the pre-refactor
   set (a frozen method-name snapshot), and each extracted module is importable
   under the dom-shim with no browser-only globals.
@@ -395,8 +398,8 @@ later pass has the full census and does not re-scan.
 | File | Lines |
 | --- | --- |
 | `tests/unit-ms2-store-wiring.test.ts` | 2191 |
-| `tests/unit-gn-engine-integration.test.ts` | 1741 |
-| `tests/unit-a1-crud-routing-proxy.test.ts` | 1709 |
+| `archive/tests/2026-10-04-unit-gn-engine-integration.test.ts` | 1741 |
+| `archive/tests/2026-10-04-unit-a1-crud-routing-proxy.test.ts` | 1709 |
 | `tests/unit-o-0-report-contract.test.ts` | 1605 |
 | `tests/unit-h2-runtime-controller.test.ts` | 1411 |
 | `tests/unit-h8-operator-editor.test.ts` | 1348 |
@@ -407,10 +410,10 @@ later pass has the full census and does not re-scan.
 | `tests/vector-cache.test.ts` | 1223 |
 | `tests/unit-gn-mcp-ui-wiring.test.ts` | 1180 |
 | `tests/contenteditable-editor-host.test.ts` | 1163 |
-| `tests/unit-u-shell-9a-main-focus-tabs.test.ts` | 1086 |
+| `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` | 1086 |
 | `tests/unit-h1-registry-write.test.ts` | 1073 |
-| `tests/unit-u-shell-4-drag-relocate.test.ts` | 1043 |
-| `tests/sidebar-panes-host.test.ts` | 1043 |
+| `archive/tests/2026-10-04-unit-u-shell-4-drag-relocate.test.ts` | 1043 |
+| `archive/tests/2026-10-04-sidebar-panes-host.test.ts` | 1043 |
 | `tests/vector-boot.test.ts` | 1041 |
 | `tests/unit-o-0-hook-contract.test.ts` | 1031 |
 | `tests/mcp-security-hardening.test.ts` | 1013 |

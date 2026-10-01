@@ -135,7 +135,7 @@ Post-green adversarial pass (RCA-3) 2026-08-27. All findings are HOST (this
 repo's `src/`); none are package/upstream findings (the `createIsolatedScope()`
 mechanism is an engine primitive and is NOT patched). Each host finding was
 fixed + regression-tested (12 regression tests in
-`tests/sidebar-panes-adversarial.test.ts`). No unauthorized-access finding: the
+`archive/tests/2026-10-04-sidebar-panes-adversarial.test.ts`). No unauthorized-access finding: the
 operator-isolation seam is correctly enforced at the assembly layer
 (`assembleAppGraphEnvelope` collects only `listByScope('app-graph')`; operator
 panes never enter the app graph). The renderer `mountOperator`

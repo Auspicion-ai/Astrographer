@@ -363,7 +363,7 @@ against the shared type — enumerated per copy):**
    `type RagStoreChangedPayload` from `../shared/types.js` (extend the import
    list at :7) and keeps a compat RE-EXPORT for its existing test importers
    (`tests/unit-v3-doc-heads-docnav.test.ts:44`,
-   `tests/sidebar-panes-host.test.ts:48` import from
+   `archive/tests/2026-10-04-sidebar-panes-host.test.ts:48` import from
    `'../src/main/preload.js'`):
    ```ts
    export type { RagStoreChangedPayload }
@@ -1069,7 +1069,7 @@ kinds, channels, idempotence — is unchanged; they are the regression floor):
   set (:102-163): green UNTOUCHED (channel + count only).
 - `tests/unit-u5-rich-commit-ipc.test.ts` — the bridge-surface census
   (:186-222): green UNTOUCHED (4 edit methods — no new bridge method).
-- `tests/sidebar-panes-host.test.ts` — the subscription assertion (:567) +
+- `archive/tests/2026-10-04-sidebar-panes-host.test.ts` — the subscription assertion (:567) +
   the method census (:326): green after the fixture updates below.
 
 **Existing tests UPDATED by this unit (mechanical, in the same red→green
@@ -1090,15 +1090,15 @@ pass; a REQUIRED field ripples):**
   argument lists are UNCHANGED — only the captured-payload assertions gain
   the `store` field.
 - **`RagSnapshotPayload` fixtures gain `store: 'main'`** — the fixture
-  builders/empty snapshots in: `tests/sidebar-panes-host.test.ts`,
+  builders/empty snapshots in: `archive/tests/2026-10-04-sidebar-panes-host.test.ts`,
   `tests/unit-v3-doc-heads-docnav.test.ts`,
   `tests/unit-v3-doc-heads-docnav-adversarial.test.ts`,
   `tests/blind-unit-v3-doc-heads-docnav-greens.test.ts`,
   `tests/contenteditable-editor-host.test.ts`,
   `tests/editing-mode-broadcast-host.test.ts`,
   `tests/unit-l-textarea-editing-ui.test.ts`, `tests/rich-splice.test.ts`,
-  `tests/sidebar-panes.test.ts`, `tests/sidebar-panes-adversarial.test.ts`,
-  `tests/template.test.ts`.
+  `archive/tests/2026-10-04-sidebar-panes.test.ts`, `archive/tests/2026-10-04-sidebar-panes-adversarial.test.ts`,
+  `archive/tests/2026-10-04-template.test.ts`.
 - **The 3 direct host-payload injections gain `store: 'main'`** (otherwise the
   new guard would drop them):
   `tests/contenteditable-editor-host.test.ts:568, :835, :1046`.

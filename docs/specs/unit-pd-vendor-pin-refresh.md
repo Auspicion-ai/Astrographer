@@ -1,6 +1,13 @@
 # Unit `PD-VENDOR-PIN-REFRESH` — **the pin refresh**: moving the `PD-VENDOR` pin's revision anchor to the foundation's current HEAD, in all four sites atomically, with no module byte changed — Spec
 
 **Status: SPEC — authored 2026-09-28. NO CODE LANDED, NO TEST LANDED, NO MANIFEST BYTE MOVED, NOTHING RUN by this pass.**
+**⟨ANNOTATED `2026-10-04` BY THE GATES-7+8 PASS (PROOFREADER, `AGENTS.md` item 10b, + ITEM-10d DOCUMENTATION REVIEW, `RCA-6`) OF `U-FOUNDATION-PIN-REFRESH-2` — `RCA-8(c)`, ANNOTATE-BESIDE: every as-filed clause of this contract is KEPT VERBATIM and NOTHING in it is rewritten or renumbered; this block is the CURRENT STATE BESIDE it. The review record is `archive/reviews/2026-10-04-U-FOUNDATION-PIN-REFRESH-2-doc-review.md`.** **LAYER (`RCA-12`): DOC-LAYER ONLY — that pass RAN NO LEG and holds no digest instrument; its instruments were the file-read tool's line census and the read/`grep` surfaces, and every figure is a `VERIFIED-BY-READ` (reader named) or a `RECORDED READING` (measurer named).** **WHY THIS FILE IS ANNOTATED BY A LATER UNIT'S REVIEW: it is the CONTRACT THE SECOND REFRESH READS — the register's `measuredAt` limb takes the LAST *"declared refresh reading"* clause out of this file's anchored `§4` region, so the second landing had to re-anchor that region (`§2.5` clause 4's route), and the region therefore now ends with a dated clause reading `2026-09-30`; the `2026-09-28` declaration at `§12.4` is KEPT, annotated and SUPERSEDED, never deleted, and the limb's teeth are unmoved.** **AND THE PIN THIS FILE RE-STATED (`d7b98b574adc7fa63fbabda617eba2a753f52cb5`) IS SUPERSEDED TOO:** at this head the manifest's `foundation.commit`, its embedded `digestCommand` literal and the three `PINNED_COMMIT` constants all read **`dd34e01148440f83b3f595919d865d05a2badbfe`**, with `foundation.measuredAt` `2026-09-30` (`VERIFIED-BY-READ`) — **so every present-tense "the pin now reads `d7b98b5…`" clause in this file is a reading of the `2026-09-28` head and is SUPERSEDED as such; the RULE it establishes is unmoved.** **`§4` REGION INTEGRITY, CHECKED SO THE LIMB'S ANCHOR CANNOT SILENTLY DRIFT: `§4` is still headed `## 4.` and still closed by `## 5. The layer ledger`, the register file `tests/pd-vendor-pin-refresh-register.test.ts` still anchors on those two headings (`registerRegion()`), and the last *"declared refresh reading"* clause in the region is the `2026-09-30` one, which equals the manifest's `foundation.measuredAt`.**
+**⟨ANNOTATED `2026-10-05` BY THE `U-FOUNDATION-PIN-REFRESH-3` PASS AND ITS GATES-7+8 PASS (PROOFREADER, `AGENTS.md` item 10b, + ITEM-10d DOCUMENTATION REVIEW, `RCA-6`) — `RCA-8(c)`, ANNOTATE-BESIDE, AND **AT THIS FILE'S HEAD ONLY**: the whole head block above is KEPT VERBATIM as its pass's reading and NOTHING in it is rewritten, renumbered or deleted — this block is the CURRENT STATE BESIDE IT, and the block above's own `dd34e011…` reading is SUPERSEDED AS A READING. **NO CLAUSE ANYWHERE INSIDE THIS FILE'S ANCHORED `§4` REGION (`## 4.` … closed by `## 5. The layer ledger`) WAS ADDED, REMOVED, REORDERED, RESTATED OR ANNOTATED BY THIS PASS, AND NO NEW CLAUSE OF ANY KIND WAS MINTED THERE** — the region's clause count and its last reading clause are UNCHANGED by this note.⟩**
+**LAYER (`RCA-12`): DOC-LAYER ONLY — `[T]`/`[D]`/DOC. THIS PASS RAN NO LEG** (no `npm test`, no `npx vitest`, no `typecheck`, no `build`, no `npm run drift`, no `npm run conformance`, no battery, no Electron boot, **no `md5sum`/`sha256sum`/`wc -l`: this pass's wall holds read/`grep`/`glob` + doc writes and NO SHELL**)**, and it TOUCHED NO `src/**`, `scripts/**` OR `tests/**` BYTE. NOTHING HERE IS APP-GREEN, ENVELOPE-GREEN, STORE-GREEN, ENGINE-GREEN OR LIVE-GREEN.**
+**ONCE MORE, ONE GENERATION LATER, AND THIS TIME FROM `dd34e011…`:** the head block above records that **the pin this file re-stated (`d7b98b574adc7fa63fbabda617eba2a753f52cb5`) is SUPERSEDED**, at which pass the five value lines read **`dd34e01148440f83b3f595919d865d05a2badbfe`**. **`VERIFIED-BY-READ` at this head by this pass (reader: the proofreader; instrument: direct file reads): the manifest's `foundation.commit` (`vendor/foundation.lock.json`), the single 40-hex literal embedded in its `digestCommand`, and `const PINNED_COMMIT` in each of `tests/pd-vendor-set.test.ts` · `tests/pd-vendor-manifest.test.ts` · `tests/pd-vendor-drift.test.ts` ALL READ `93c058f69bd78fd1a80c96044e504deac4737ab3` — five value lines across four files, unmoved in SHAPE; and `foundation.measuredAt` STILL READS `2026-09-30` (`VERIFIED-BY-READ`, this pass) — it DID NOT MOVE with this refresh, so the region this contract owns was NOT re-anchored and did not need to be.** **So every present-tense *"the pin now reads `dd34e011…`"* clause in the block above is likewise a reading of an earlier head and is SUPERSEDED as such: the rule this file establishes — a moved HEAD is a PIN FAULT BY DESIGN met by ONE FOUR-SITE ATOMIC RESTATEMENT in its own unit — is UNMOVED, and the superseded literals are KEPT VISIBLE as annotated citations, never deleted.**
+**WHY NOTHING ELSE HERE MOVED, AND WHY THE PIN IS NOT UNGUARDED (`RECORDED READING`, measurer: the `U-FOUNDATION-PIN-REFRESH-3` landing pass, recorded in its DONE row — `docs/next-steps.md`, the newest `⟶ DONE` insert, dated `2026-10-05`; `docs/decisions.md`'s `2026-10-05` annotation beside the pin-ledger rows carries the same reading):** the adjacent `../Provident-Electron` tree advanced **four DOCS-ONLY commits (`ea285ac` · `cd7221d` · `b48b732` · `93c058f6`)** past the revision the block above records, and the refresh's pre-edit premise was **RE-DERIVED: all FIFTEEN module blobs read MD5-IDENTICAL between the two revisions, `15/15`** — so **no re-vendor decision was owed and no vendored byte changed** (`§1.2` `R-3`; the `P-TP` byte-preservation row reads the blobs at whatever the manifest's `commit` then says, which is the point of that row).
+**THIS BLOCK'S WALL, STATED SO NO LATER PASS HAS TO GUESS IT:** this pass **edited no `tests/**` byte except ONE test TITLE's prose** (`tests/pd-vendor-manifest.test.ts`'s `§3.3 item 2` row title, the `G-1`-class act the comment block above that row already records as the repo's title-refresh shape — no assertion, no literal, no other row), and it **holds no shell, so it states NO digest and NO test count of its own.** This file's own owed items are UNMOVED and NOT discharged here: the `baselines`-cell re-stamping (its `§9` `E-10`) and the per-module `provenance` wording (its `§9` `E-11`) remain OWED with their named owners. **The review record for this note is the gates-7+8 record of the `U-FOUNDATION-PIN-REFRESH-3` pass — `OWED` at this head: `archive/reviews/**` was read and carries no `2026-10-05` entry yet, so the record's name is not asserted here; the DONE row above is this note's citable address.**
+
 **This pass held a read/search/doc-write wall and NO SHELL.** Every figure below is either a **READ** taken this pass
 (`VERIFIED-BY-READ`, reader named) or a **`RECORDED READING` quoted with its measurer named** — never a prediction, and
 never a figure this pass produced by running anything. **No line number appears in this file**
@@ -152,6 +159,59 @@ authorities disagreeing, which is precisely the false-green class `P-SM` exists 
 > `A-3` adds ONE prose-only sub-change inside it** (the row title). **No fifth file joins the change set** (`§12.3`).
 > **(c) Item 5 stands UNCHANGED and is re-affirmed: the `tests/pd-vendor-set.test.ts` row `§3.3 item 2` is never edited,
 > never retitled, never relaxed** (`F-5`, `D-5`).
+
+> **⟨AMENDED — THE DENIAL'S CARVE-OUT, `2026-09-30` (the LOCAL/repo day of the second refresh unit
+> `U-FOUNDATION-PIN-REFRESH-2`'s landed run; this pass read no clock and holds no shell, so the date is carried from
+> that unit's record rather than measured here). THE SUPERVISOR'S RULING, recorded in the supervisor's own terms; and it
+> is a CARVE-OUT, not a widening: the paragraph above is the FILING pass's wording and STAYS VISIBLE (`RCA-8(c)`,
+> annotate-beside) — the denial stands as written for the pass that wrote it, and the exception it did not name is
+> recorded HERE, dated, with the conflict that produced it.⟩**
+>
+> **THE CARVE-OUT'S TERMS.** **`§1.2` item 10's denial — *"any tracker row, any `docs/decisions.md` row, any other
+> `docs/specs/*.md`"* — now reads: *"…EXCEPT one dated, annotate-beside RE-ANCHORING CLAUSE inside this contract's own
+> `§4` region, ordered by a refresh contract's measured-day coupling (`unit-foundation-pin-refresh-2.md` `§2.5` clause 4)
+> — an additive clause that re-anchors the declared refresh reading, moves no tooth and removes no line."***
+>
+> **THE CARVE-OUT'S NARROW SCOPE, stated so no later pass widens it by implication.** It permits **ONE** dated clause,
+> **inside this contract's `§4` region** — i.e. inside **this very file**, never another spec, never a tracker row, never
+> a decision row — carrying **one new *"declared refresh reading (`<YYYY-MM-DD>`)"***. The clause is **ADDITIVE** (it
+> appends; it deletes no line, renumbers nothing and rewrites nothing) and it **relaxes no tooth and moves no register
+> term**: the `measuredAt` limb keeps every condition it had (**present** · **`YYYY-MM-DD`** · **equal to the declared
+> reading**). **Everything else in item 10 stands exactly as denied — a tracker row, a `docs/decisions.md` row, any OTHER
+> `docs/specs/*.md`, and any `archive/**` move remain DENIED to a refresh unit's landing pass.**
+>
+> **THE CONFLICT, recorded because the record is where a finding lives or dies** (the sibling contract's `§13` rule ④:
+> *a finding recorded nowhere is a finding DROPPED*). **The denial and the coupling requirement were in DIRECT conflict,
+> and the conflict was UNADJUDICATED in the record when it arose.** **(i) THE COUPLING REQUIREMENT** — the sibling
+> contract `docs/specs/unit-foundation-pin-refresh-2.md` **`§2.5` clause 3 / clause 4** (carried as its `F-15` and
+> `O-3`) **REQUIRES the first unit's register region to be re-anchored IN THIS CONTRACT'S `§4` REGION within the same
+> landing whenever `foundation.measuredAt` moves**; and **the run's own local/repo day (`2026-09-30`) differed from the
+> day the manifest recorded (`2026-09-28`), so the move was forced, not optional** (**`RECORDED READING`** — the landed
+> refresh run; **`VERIFIED-BY-READ`** this pass, reader: the spec-writer, at **`§4`'s landed re-anchoring clause**: it
+> carries the pair **`2026-09-28` → `2026-09-30`** and states that no tooth is relaxed and that the terms
+> `7` + `16` + `21` = `44` stand). **(ii) THE DENIAL** — item 10 above **DENIED *"any other `docs/specs/*.md`"*, and the
+> ordered re-anchoring site IS another `docs/specs/*.md`** (this one), **so satisfying the coupling rule breached that
+> denial on its face.** **(iii) WHAT THE IMPLEMENTER DID** (**`RECORDED READING`** — measurer: **the implementer's
+> landing pass**; **re-read this pass, `VERIFIED-BY-READ`**): it **took the coupling rule and inserted an ADDITIVE
+> re-anchoring clause at this contract's `§4` region end (no removed line)**, and **the register's reader parses it
+> correctly** — `tests/pd-vendor-pin-refresh-register.test.ts`'s `declaredRefreshReading()` takes the **LAST** declared
+> refresh reading in the anchored region, **that clause now yields `2026-09-30`, and `P-SM-pd-pin-2` HOLDS**.
+> **(iv) THE REFUSED ALTERNATIVE** (**`RECORDED READING`**): letting the date move with no re-anchoring would have
+> produced a **THIRD red**, which **the sibling contract's `§6` no-other-red rule FORBIDS** (*"a refresh which makes any
+> OTHER arm red is a REGRESSION, not a success"*). **(v) THE SUPERVISOR'S RULING, recorded in terms: THE IMPLEMENTER'S
+> READING WAS RULED CORRECT — THE COUPLING RULE GOVERNS, AND THIS ITEM'S DENIAL CLAUSE WAS UNDER-SPECIFIED AS FILED**
+> (it was written for the FILING pass's own one-file wall and did not contemplate a LATER refresh contract ordering a
+> clause into this region). **This carve-out is the wording of that ruling; it mints no new decision.**
+>
+> **WHAT THIS ANNOTATION IS NOT, stated so nothing here is over-read.** It is **not** a licence to edit this contract
+> again — the exception is bounded to a re-anchoring declaration ordered by a refresh contract's measured-day coupling.
+> **`§4`'s landed re-anchoring clause is NOT touched by this annotation** and **is correct as landed**
+> (**`VERIFIED-BY-READ`** this pass: it carries the superseded `2026-09-28` visibly beside `2026-09-30`, is a
+> **CONTRACT clause and not a register term**, and leaves `7` + `16` + `21` = `44` standing); **and no other clause of
+> this file is re-opened, renumbered or reworded here.** **This file's only other later-unit annotation is the
+> `2026-10-04` gates-7+8 documentation-review block at the head of the file, which is untouched by this pass.**
+> **The unit's own record of the conflict, its resolution, and its finding census is
+> `docs/specs/unit-foundation-pin-refresh-2.md` `§13` — whose as-filed EMPTINESS is the gate-4 finding `G-4`.**
 
 ### 1.3 The unit's own cycle (the ruling, recorded so no step is skipped)
 
@@ -497,6 +557,89 @@ an oversight).**
   and they are **stale for unrelated reasons**; refreshing them is a separate act with its own gate (§9 `E-4`).
 - *"every other repo file is unchanged"* — **rejected as a PROPERTY** (a repo-wide census is not a pin property); its
   content is carried as §1.2's DENIED surface, enforced by the implementer's scope and by review, not by a row.
+
+**⟨THE `measuredAt` RE-ANCHORING CLAUSE — added by the SECOND refresh unit, `docs/specs/unit-foundation-pin-refresh-2.md`
+§2.5 clause 4, in the SAME landing that moved the date; ANNOTATE-BESIDE (`RCA-8(c)`): no as-filed clause above is
+deleted, renumbered or rewritten, and the SUPERSEDED reading is kept visible here.⟩** **the contract's declared refresh
+reading (`2026-09-30`) SUPERSEDES the as-filed declaration (the SUPERSEDED reading `2026-09-28` stays
+visible beside it, never deleted and never rewritten).** The register's `measuredAt` limb compares the
+manifest's `foundation.measuredAt` against the **last** declared refresh reading clause in this anchored `§4` region,
+so this clause re-couples that limb automatically: **`foundation.measuredAt` moved `2026-09-28` → `2026-09-30`** in the
+second refresh's landing, because that landing's own run read the **LOCAL/repo day `2026-09-30`** (`A-12`; the refresh's
+own reading's day is authoritative, never a UTC day), while the pin literal itself moved
+`d7b98b574adc7fa63fbabda617eba2a753f52cb5` → `dd34e01148440f83b3f595919d865d05a2badbfe` in the same landing.
+**NO TOOTH IS RELAXED AND NO TERM MOVES:** the limb still requires **present** · **`YYYY-MM-DD`** · **equal to the
+declared reading**, it still discriminates against an absent, ill-formed or uncoupled date, and this is a **CONTRACT
+clause, not a register term** — the declared terms `7` + `16` + `21` = `44` stand exactly as landed.
+
+> **⟨ANNOTATED `2026-10-04` — THE REGISTER'S DECLARED-REFRESH-READING RULE HAS LANDED STRICTER THAN THE `§4` SENTENCE
+> IMMEDIATELY ABOVE SAYS; ANNOTATE-BESIDE (`RCA-8(c)`): that sentence is KEPT VISIBLE AND UNCHANGED, and this clause
+> records the LANDED rule beside it. The date is a CARRIED reading (the latest record in this file's tree, the
+> `2026-10-04` gates-7+8 block and the unit DONE row); this pass read no clock, holds no shell, and if its own local day
+> differs the heading is corrected in place rather than left wrong (the `§12.12` `A-12` discipline).⟩**
+> **WHY THIS IS OWED AT ALL: gate 4 of the second refresh unit filed it, and the TestWriter could not take it — a
+> `tests/**` wall may not edit a `docs/specs/*.md` contract.** **THE DISCREPANCY, NAMED EXACTLY:** the filed sentence
+> reads the limb as taking the **last** declared refresh reading clause in the anchored region (**last-match
+> semantics**), while the rule that LANDED is stricter. **THE LANDED RULE, as written in
+> `tests/pd-vendor-pin-refresh-register.test.ts` → `declaredReadingFromRegionText` (read this pass,
+> `VERIFIED-BY-READ`):** *among the clauses of the anchored `§4` region, **the LAST clause that does NOT name its own
+> cited date superseded governs; the last clause governs only when EVERY clause names its own cited date superseded***.
+> **On this region the two readings coincide** — the last clause here names no older reading as superseded, so it is
+> the governing one — **and they diverge on exactly the mutation the new control catches, which is why the filed
+> sentence needed this clause rather than a correction.**
+> **(i) THE REGION CARRIES TWO CLAUSES, so the limb is DECOUPLED from the OLD date on the real region, not only
+> synthetically.** **`VERIFIED-BY-READ` this pass (reader: the spec-writer):** this very `§4` region carries **(a)** the
+> as-filed dated declaration **`2026-09-28`** (a clause of `§4.1`, the reading the re-anchoring clause above states an
+> older reading is superseded by — kept VISIBLE, never deleted) **and (b)** the governing dated clause **`2026-09-30`**
+> of the re-anchoring clause above (which cites **no** older reading as its own supersession). **The limb therefore
+> reads `2026-09-30`, which is `foundation.measuredAt`'s landed value; under the as-filed LAST-MATCH reading the old
+> `2026-09-28` clause would have been the LAST clause had the region's clauses been ordered the other way, so the
+> control's subject is this region's own ordering, exercised rather than inferred.**
+> **(ii) THE CONTROL, AND THE MUTATION IT CATCHES — `§4 row 2 (G-3)`.** **`VERIFIED-BY-READ`:** the landed register
+> carries the drive BOTH inside row 2's one declared `measuredAt` attempt (a synthetic region stating the
+> declared-current clause FIRST and a self-superseded clause SECOND, driven through the factored
+> `declaredReadingFromRegionText`) **and** as its own row titled *"`§4` row 2 (`G-3`) — `declaredRefreshReading`'s
+> SELECTION LIMB is pinned"*. **THE MUTATION THE CONTROL CATCHES, named as the control names it: a `§4` amendment that
+> states an older, superseded reading LATER in the region than the governing clause.** With the as-filed last-match
+> reader that amendment **silently re-couples the `measuredAt` limb to the OLD date** — the red would then invite the
+> next pass to "fix" it by moving `foundation.measuredAt` BACKWARDS, a stale-date churn with no failing oracle. **With
+> the landed reader the control FAILS, as it must:** the same synthetic subject is driven through the **as-filed**
+> last-match reading and **asserted to differ** from the governing reading, so the control is not vacuous — the two
+> readings genuinely disagree on that subject. **The register file itself is NOT touched by this annotation** (it is
+> `tests/**`, and this pass holds no code wall).
+> **(iii) A RECORDED STRUCTURAL NARROWING — a clause's date must now sit in THAT CLAUSE'S OWN SPAN.** **`VERIFIED-BY-READ`:
+> the clause matcher bounds a clause's date window at the clause's own phrase END and at the NEXT phrase, so a
+> **"declared refresh reading"** phrase carrying **no date before the next clause** no longer binds to the NEXT clause's
+> literal** — such a clause yields no match at all and is simply not a clause. **The as-filed sentence above says
+> nothing about where a clause's date may sit, so this tightening is a RULE MOVE, not a clarification: on a region
+> whose clauses are not self-dated it MOVES THE READING (a clause that used to absorb the next clause's date now
+> contributes nothing), and on this region — both of whose clauses carry their own dates — it moves nothing.**
+> **(iv) NOTHING IS WIDENED, NO TOOTH IS RELAXED AND NO TERM IS MOVED.** **The `measuredAt` limb keeps every condition
+> it had** — **present** · **`YYYY-MM-DD`** · **equal to the declared reading** — and the fail-states `F-12`/`F-13` and
+> the atomicity guard stand exactly as filed. **The register's arithmetic STAYS `7` + `16` + `21` = `44`, its seed
+> STAYS `0x20260928`, its caps stay `≤100` per row · `≤400` total, and the as-filed `4` + `6` + `20` = `30` stays
+> visible:** the control is a **drive INSIDE row 2's already-declared `measuredAt` attempt**, so it **adds no term and
+> reduces no term** — the landed register's own arithmetic assertion prints those very factors and the unmoved total
+> (`VERIFIED-BY-READ`), with row 2's declared `16` and the register-wide `44` re-asserted in the same row. **The landed
+> `executed == declared` verdict for all three rows and the `7` / `16` / `21` readings are `RECORDED READINGS`** —
+> **measurer: the supervisor's run of `npx vitest run tests/pd-vendor-pin-refresh-register.test.ts`** (recorded in
+> this file's `§4.1` `DR-P1` discharge block, and consistent with the unit DONE row's `131 files passed (131) · 2993
+> passed | 22 skipped (3015) · 0 failed`); **this pass ran nothing and does not present them as its own measurement.**
+> **(v) WHERE THE UNIT'S RECORD OF THIS LIVES: the `U-FOUNDATION-PIN-REFRESH-2` DONE row at the head of
+> `docs/next-steps.md`'s CURRENT WORK region** — the row is `VERIFIED-BY-READ` this pass to exist there and to carry
+> the **two-clause** state, the **`G-3` control and its mutation**, the **narrowing**, and the **unmoved arithmetic
+> `7` + `16` + `21` = `44` with seed `0x20260928`** (the row's own readings of the register file and of the trio are
+> unchanged by this clause).
+> **(vi) ONE MECHANICAL CONSEQUENCE OF THIS CLAUSE, stated so no later pass is surprised:** this annotation
+> **deliberately does NOT mint a *"declared refresh reading (`<YYYY-MM-DD>`)"* form**, because such a clause would
+> become a **THIRD** clause in the region and the landed register asserts the region's clause count as **exactly `2`**
+> — **a third clause REDS that assertion, so the count and any reading that depends on the region's clause set are
+> OWED to the unit that next re-anchors this region** (a register act this pass may not take). **And the `2026-10-04`
+> gates-7+8 block at this file's head says the limb takes *"the LAST 'declared refresh reading' clause"* — a reading of
+> the **pre-`G-3`** state; it is KEPT VERBATIM under `RCA-8(c)` and **that sentence is SUPERSEDED as a description of
+> the rule by the landed rule recorded here** (it remains accurate as a description of the **filed** sentence).
+> **This clause edits nothing else: the `§4` region's landed re-anchoring clause, `§1.2`, and every other clause of
+> this file are untouched.**
 
 ---
 

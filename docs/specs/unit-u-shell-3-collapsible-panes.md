@@ -6,7 +6,7 @@ serialized `LayoutState`). Decisions in `docs/specs/wave-2-open-decisions.md`
 (W2-Q1/W2-Q2 RESOLVED; W2-N4 FIXED; W2-N5 opened).
 
 **TDD cycle (2026-09-12, RCA-1/RCA-2):**
-`tests/unit-u-shell-3-collapsible-panes.test.ts` was authored from this spec
+`archive/tests/2026-10-04-unit-u-shell-3-collapsible-panes.test.ts` was authored from this spec
 ALONE and RUN red before the Implementer pass; after the Implementer it is
 **26 tests (22 pass + 4 skip)** — the 4 skips are the §2.5 pin-4 live-runtime
 battery placeholders (live `provident.dispatch`/`list_targets` + the F5

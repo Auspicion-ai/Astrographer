@@ -2,8 +2,8 @@
 
 - **Author:** blind-test writer (RCA-4 / `AGENTS.md` item 10a) — **documentation-derived, independently
   authored**. No line of `src/**` was read, and none of the unit's own suites
-  (`tests/page-diff.test.ts`, `tests/edit-adversarial.test.ts`,
-  `tests/unit-u-edit-1-property-register.test.ts`, `tests/page-commit-tab-ownership.test.ts`) was read.
+  (`archive/tests/2026-10-04-page-diff.test.ts`, `tests/edit-adversarial.test.ts`,
+  `tests/unit-u-edit-1-property-register.test.ts`, `archive/tests/2026-10-04-page-commit-tab-ownership.test.ts`) was read.
   This artifact is **not** a self-verified greens set: the scenarios and their expectations were authored
   by an agent that did not implement the unit.
 - **Source contract (read in full, incl. §11.7 / §11.8 / §11.9):**

@@ -1052,7 +1052,7 @@ SUPERSEDED and its three-member list is WRONG IN MEMBERSHIP (`C3`/`C4`; `§3a` `
 nine-file set (including `tests/unit-live11-bridge-seams.test.ts`, which pins `defaultLayout`/`coerceLayout`)
 · the **two fence files** (`tests/traversal.test.ts`, `tests/import-render-no-duplicates.test.ts`) — **no
 fence edit, no re-plan** · the O-0 hook-contract wrapper pins (`tests/unit-o-0-hook-contract.test.ts`) and the
-`G-9` source-text pin sets · `tests/unit-u-shell-9a-main-focus-tabs.test.ts` · every `src/renderer/**` and
+`G-9` source-text pin sets · `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` · every `src/renderer/**` and
 `src/main/**` file · `docs/specs/mcp-endpoint.md`'s tool rows.
 
 ---

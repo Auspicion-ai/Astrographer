@@ -1,5 +1,8 @@
 # Spec — Unit GN: Gnosis Engine Integration — the `createEngineRagStore` Proxy (Retrieval Trio + Health Wire Client)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Status:** SPEC — **LANDED (2026-09-10)** — the shell-side Gnosis-engine wire
   client, scoped per the proposal gate Architecture A1. Proposal gate: the
   implementation guide
@@ -8,8 +11,8 @@
   full `RagStore` CRUD routing, the server-host binary crate, and CRUD wire
   shapes are **deferred** — see §4.6/§10.4 of the guide). **LANDED:** the
   `createEngineRagStore` proxy + the decode/SSE/status helpers in
-  `src/main/engine-rag-store.ts` — **70/70 unit** (`tests/unit-gn-engine-integration.test.ts`),
-  **63/63 blind-greens** (`tests/blind-unit-gn-engine-integration-greens.test.ts`),
+  `src/main/engine-rag-store.ts` — **70/70 unit** (`archive/tests/2026-10-04-unit-gn-engine-integration.test.ts`),
+  **63/63 blind-greens** (`archive/tests/2026-10-04-blind-unit-gn-engine-integration-greens.test.ts`),
   trio **2958 pass / 41 skip**, typecheck + build clean; the RCA-3 adversarial
   findings H1–H14 are recorded in §3a (all HOST, fixed + regression-tested; H11
   PARTIAL — a documented loopback-localhost limitation; H13/H14 INFO doc-only);

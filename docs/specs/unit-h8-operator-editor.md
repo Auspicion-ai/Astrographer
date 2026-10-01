@@ -85,7 +85,7 @@
   payload/result types + the `RagStoreRuntimeController` seams are all
   node-testable; the `ipcMain.handle` wiring + the `bridge.rag.manage` + the
   `sidebar.registryManage` methods + the operator-pane section ride the existing
-  SidebarPanes host integration harness (`tests/sidebar-panes-host.test.ts`) + the
+  SidebarPanes host integration harness (`archive/tests/2026-10-04-sidebar-panes-host.test.ts`) + the
   `unit-ms5` listing harness (`tests/unit-ms5-settings-listing.test.ts`), mirroring
   the U1 (`tests/operator-settings-editing-mode.test.ts`,
   `tests/editing-mode-broadcast-host.test.ts`) + U-MS5 (`tests/unit-ms5-settings-listing.test.ts`)
@@ -1018,8 +1018,8 @@ accessor state) unchanged. The handler NEVER throws for a domain failure.
   `tests/unit-h3`-equivalent (the U-H2 add-coverage), `tests/unit-h5-teardown.test.ts`,
   `tests/unit-h4-hot-remove.test.ts`, `tests/unit-h6-hot-rename.test.ts`,
   `tests/unit-h7-default-reassign.test.ts`, `tests/unit-h1-registry-write.test.ts`,
-  `tests/unit-ms5-settings-listing.test.ts`; the host suites `tests/sidebar-panes-host.test.ts`,
-  `tests/sidebar-panes.test.ts`, `tests/operator-settings-editing-mode.test.ts`,
+  `tests/unit-ms5-settings-listing.test.ts`; the host suites `archive/tests/2026-10-04-sidebar-panes-host.test.ts`,
+  `archive/tests/2026-10-04-sidebar-panes.test.ts`, `tests/operator-settings-editing-mode.test.ts`,
   `tests/editing-mode-broadcast-host.test.ts`; the five-seam/census pins
   (`tests/mcp-server-wiring.test.ts`, `tests/security-gate.test.ts` — ALL_TOOLS stays
   41, `RpcMethod` unchanged). U-H8 does NOT touch `rag-store-runtime.ts` /
@@ -1132,7 +1132,7 @@ accessor state) unchanged. The handler NEVER throws for a domain failure.
   §"Page-design note" (§5.9) — this repo has NO `docs/skills/designing-pages.md`; no
   such update is made.
 - **Test files (SpecWriter-pinned + the host harness):** `tests/unit-h8-operator-editor.test.ts`
-  (NEW), `tests/sidebar-panes-host.test.ts`, `tests/unit-ms5-settings-listing.test.ts`,
+  (NEW), `archive/tests/2026-10-04-sidebar-panes-host.test.ts`, `tests/unit-ms5-settings-listing.test.ts`,
   `tests/operator-settings-editing-mode.test.ts`, `tests/editing-mode-broadcast-host.test.ts`.
 - **Decision rows (cite-only + NEW on landing):** PANE-PROVIDENT-AUTHORING,
   OPERATOR-ISOLATED-GRAPHSCOPE, UI-MOUNT-OPERATOR, IPC-SURFACE-NOT-GROUP-GATED,

@@ -181,7 +181,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   markup at `:297-301` moves to a `modalHost` region); (b) keep `#app` (`:280`) as the ONE `mountRoot` and
   re-point `src/renderer/renderer.ts:830` (`new Runtime({ mount, … })`) at it; (c) **delete** the fork-local
   sweep at `src/renderer/runtime.ts:1143-1164` (it is the compensation SC-1 clause 4 exists to make
-  unnecessary) and re-run `tests/renderer-empty-zone-track.test.ts` + `tests/sidebar-panes-host.test.ts`
+  unnecessary) and re-run `archive/tests/2026-10-04-renderer-empty-zone-track.test.ts` + `archive/tests/2026-10-04-sidebar-panes-host.test.ts`
   against the new invariant; (d) move the mount-cardinality rows **upstream**: the fork's structural
   count assertions become foundation rows, and the fork keeps only the assembled-app live row.
 - **Priority:** **P1** (the substrate every other item sits on).
@@ -228,7 +228,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   `lostpointercapture` at `:785-791`) and the surface/threshold constants (`:304`/`:326`/`:334`); (b) re-point
   `installShellPointers` at the delegate with the same selectors/threshold and the fork's commit semantics
   (`pane-drag.ts:246-252`/`:285-293`, `pane-gutter.ts:145-150`); (c) **move upstream** the F-1 regression pin
-  (currently `tests/renderer-pane-drag-surface.test.ts`) — the fork keeps only the assembled-app live row that
+  (currently `archive/tests/2026-10-04-renderer-pane-drag-surface.test.ts`) — the fork keeps only the assembled-app live row that
   a real mouse requires (RCA-12's layer split).
 - **Priority:** **P1**.
 - **Fallback if upstream declines.** SC-2's: keep three ad-hoc controllers + the F-1 pin. **Cost:** the next
@@ -263,7 +263,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   — it is the fork's `ThemeTokens` payload, and the cascade comment at `:52-53` becomes the consumer's
   documentation of the explicit-wins rule; (c) **keep** `UI-CONFIG-CARRIER`'s `theme` field and its store
   (`docs/decisions.md:228`); (d) move the pure resolution/restart/malformed rows **upstream** —
-  `tests/unit-u-shell-2-theme.test.ts` shrinks to the fork's own carrier + the assembled-app row.
+  `archive/tests/2026-10-04-unit-u-shell-2-theme.test.ts` shrinks to the fork's own carrier + the assembled-app row.
 - **Priority:** **P1**.
 - **Fallback if upstream declines.** SC-4's: keep `theme.ts` + the token block pinned host-side. **Cost:**
   every fork re-derives the specificity/media-query cascade and re-invents persistence + restart semantics.
@@ -298,8 +298,8 @@ consumer unit; P2 quality/parity; P3 destination/future).
   (`src/renderer/layout-state.ts:233-265` stays only as the **census supplier**, not as a second authority) and
   re-point `zoneTrackCssVars` (`:275-288`)/`applyZoneTracks` (`src/renderer/sidebar-panes.ts:1541-1563`) at the
   contract; (c) keep the four `:has()` rules (`index.html:147-150`) as the declarative half; (d) move the
-  census-vs-declaration agreement rows **upstream**, keeping `tests/renderer-empty-zone-track.test.ts` +
-  `tests/unit-u-shell-1-w2n3-zone-size-grid.test.ts` as the fork's own wiring rows; (e) the fork's **O-10**
+  census-vs-declaration agreement rows **upstream**, keeping `archive/tests/2026-10-04-renderer-empty-zone-track.test.ts` +
+  `archive/tests/2026-10-04-unit-u-shell-1-w2n3-zone-size-grid.test.ts` as the fork's own wiring rows; (e) the fork's **O-10**
   slot-order unit (`docs/decisions.md:35`) consumes the contract's `orderOf` (the **requested** parameter name —
   `orderOf` is not a symbol in either tree today; the fork supplies the order through `orderPaneCatalog`,
   `src/main/app-menu.ts:67`, and O-10's own `LayoutState.panes[].order`), so it lands after this item, never
@@ -344,7 +344,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   `IMPORT_DIALOG_FILTERS`/`IMPORT_DIALOG_PROPERTIES`/`importSelectionFromDialog` (`:34/39/81-88`) as the
   fork's picker spec + cancel contract; (c) **keep all of `src/main/import-directory.ts:14-37`** — the 512 cap,
   atomicity, `corpusRoot` containment and the three outcome codes are excluded by clause 5; (d) move the pure
-  builder rows **upstream** (`tests/unit-u-menu-1-application-menus.test.ts` shrinks to the fork's catalog
+  builder rows **upstream** (`archive/tests/2026-10-04-unit-u-menu-1-application-menus.test.ts` shrinks to the fork's catalog
   wiring + the live native-menu park).
 - **Priority:** **P2**.
 - **Fallback if upstream declines.** SC-7's: keep `app-menu.ts` + `import-directory.ts` as a pinned host
@@ -390,7 +390,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
 - **Astrographer-side adoption steps.** Re-point `sidebar-panes.ts:886` at the foundation controller and delete
   the fork's clamp/bounds/axis helpers if the contract absorbs them (keeping `setZoneSize`'s model mutation,
   which is the fork's serialized write). Fork test rows that move upstream: the pure `bounds`/`clamp`/`reset`
-  rows of `tests/unit-u-shell-5-resizable-gutters.test.ts`; the fork keeps its layout-state round-trip rows.
+  rows of `archive/tests/2026-10-04-unit-u-shell-5-resizable-gutters.test.ts`; the fork keeps its layout-state round-trip rows.
 - **Priority:** **P2** — blocks no shipped path (the fork's controller works); the cost is reuse.
 - **Fallback if upstream declines.** The fork keeps `pane-gutter.ts` as a pinned host contract, documented
   fork-local; the cost is that every fork re-derives clamping, the reset semantics and the resizable predicate.
@@ -480,7 +480,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   "so the agent can read it" would put geometry into `get_rendered_html` and break the Table C boundary.
 - **Astrographer-side adoption steps.** Replace the fork's three functions with the contract's (keeping the
   fork's variable-name spec, which is the fork's data), re-point `renderer.ts:187-195` and
-  `sidebar-panes.ts:1541-1563`, and move the total/fail-soft rows upstream (`tests/props-layout-state.test.ts`
+  `sidebar-panes.ts:1541-1563`, and move the total/fail-soft rows upstream (`archive/tests/2026-10-04-props-layout-state.test.ts`
   keeps only the fork's spec + carrier rows).
 - **Priority:** **P2**.
 - **Fallback if upstream declines.** The fork keeps `layout-state.ts` as a pinned host contract; the cost is
@@ -682,7 +682,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   delete it or keep it as the fork's own thin adapter, but not both; (d) **add** the two missing behaviors as
   fork-side adoptions once the primitive lands (focus trap + `inert` are the fork's two recorded a11y gaps);
   (e) move the closed-state/Escape/scrim XOR rows **upstream**, keeping the fork's module-wiring rows
-  (`tests/unit-u-shell-7-settings-modal.test.ts` ⟨**REPOINTED 2026-09-28 BY THE SUPERVISOR'S LANDING PASS — annotate-beside (`RCA-8(c)`), the as-filed path is KEPT: that suite's CURRENT address is `archive/tests/2026-09-28-unit-u-shell-7-settings-modal.test.ts`. The `PD-UI-6` landing (`W1`) ARCHIVED it whole — a MOVE, `md5` identical, `R100`, nothing deleted (`docs/specs/unit-pd-ui-6-modal-state.md` `§6.3`) — so the old `tests/**` path no longer exists. THIS REQUEST'S OWN SUBSTANCE IS UNAFFECTED: the fork's module-wiring rows the item keeps are now the unit's re-derived files (`tests/pd-ui-6-modal-state-adoption.test.ts` + `tests/pd-ui-6-modal-state-register.test.ts`), and the closed-state/Escape/scrim XOR rows were re-derived against the foundation four-state matrix as this item asked.⟩**) and the parked live battery
+  (`tests/unit-u-shell-7-settings-modal.test.ts` ⟨**REPOINTED 2026-09-28 BY THE SUPERVISOR'S LANDING PASS — annotate-beside (`RCA-8(c)`), the as-filed path is KEPT: that suite's CURRENT address is `archive/tests/2026-09-28-unit-u-shell-7-settings-modal.test.ts`. The `PD-UI-6` landing (`W1`) ARCHIVED it whole — a MOVE, `md5` identical, `R100`, nothing deleted (`docs/specs/unit-pd-ui-6-modal-state.md` `§6.3`) — so the old `tests/**` path no longer exists. THIS REQUEST'S OWN SUBSTANCE IS UNAFFECTED: the fork's module-wiring rows the item keeps are now the unit's re-derived files (`archive/tests/2026-10-04-pd-ui-6-modal-state-adoption.test.ts` + `tests/pd-ui-6-modal-state-register.test.ts`), and the closed-state/Escape/scrim XOR rows were re-derived against the foundation four-state matrix as this item asked.⟩**) and the parked live battery
   (`docs/pending.md:66`) as the fork's own.
 - **Priority:** **P1**.
 - **Fallback if upstream declines.** SC-3's: implement trap + `inert` + top-layer in `modal-state.ts` and
@@ -726,7 +726,7 @@ consumer unit; P2 quality/parity; P3 destination/future).
   changes **no** tool registration; (c) keep the fork's `OperatorSettings.tabs` carrier for persistence
   (`UI-CONFIG-CARRIER`, `docs/decisions.md:228`) and the close-seam publication
   (`src/renderer/tab-strip.ts:59-77` + the drain at `src/renderer/sidebar-panes.ts:115`); (d) move the pure
-  transition + equivalence rows **upstream** (`tests/unit-u-shell-9a-main-focus-tabs.test.ts` shrinks to the
+  transition + equivalence rows **upstream** (`archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` shrinks to the
   fork's wiring + carrier + the landed active-tab ownership rows); (e) **MUST NOT MOVE:** the landed
   stage/active-tab ownership (`SidebarPanes.getActiveTabId`/`getActiveTargetKind`/`getActiveDocumentId`/
   `mountTab`, `docs/specs/unit-stage-active-tab-display.md` §5.2 at `:355-360`) — the item changes no stage

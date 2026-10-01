@@ -470,24 +470,157 @@ function redSetRegion(): { text: string; detail: string } {
   return specRegion('## 6. The red-set plan', '## 7. Verification')
 }
 
-/** ⟨`A-4` / `A-12` / `D-13`⟩ The contract's OWN declared refresh reading, READ OUT OF
- *  the anchored `§4` region (never re-typed in this file, so a dated amendment that
- *  moves the declaration moves this limb with it). The LAST declaration in the region
- *  governs, because `§4.1` says the amended block is the CURRENT one where the two
- *  differ. NOTHING about a UTC day is asserted here: `A-12` makes the refresh's
- *  LOCAL/REPO day authoritative, and this limb asserts only the SHAPE and the
- *  DECLARED equality, with no clock read anywhere in this file. */
-function declaredRefreshReading(): { reading: string | null; detail: string } {
-  const region = registerRegion()
-  if (region.text === '') return { reading: null, detail: region.detail }
-  const matches = [...region.text.matchAll(/declared refresh\s+reading[\s\S]{0,24}?(\d{4}-\d{2}-\d{2})/g)]
-  if (matches.length === 0) {
+/** The `declared refresh reading` clause matcher — the phrase the clause OPENS with, then
+ *  the date within a BOUNDED window of it. The window runs over the phrase's own
+ *  neighbourhood (markdown, bold markers and — in the landed contract — a line break
+ *  between `declared refresh` and `reading`), never over an unbounded tail, so a clause
+ *  that states no date of its own can never absorb the NEXT clause's literal. Kept as its
+ *  own pinned literal so the reading and its self-supersession limb are stated once. */
+const DECLARED_READING_PHRASE = /declared refresh\s+reading/g
+/** The phrase, as plain text — used to locate the marker that sits BESIDE it. */
+const DECLARED_READING_PHRASE_TEXT = 'declared refresh reading'
+/** The date window: how far AFTER a clause's phrase its own date may sit. */
+const DECLARED_READING_WINDOW = 120
+/** How much of a clause's own span AFTER its date is carried in the clause text — enough
+ *  for the parenthetical `<date> (superseded)` supersession marker. */
+const DECLARED_READING_AFTER_CONTEXT = 40
+/** How far BEFORE a clause's own phrase the look-behind reaches — bounded, and short
+ *  enough that a marker belonging to a PREVIOUS clause cannot leak in. */
+const SUPERSEDED_LOOKBEHIND = 40
+
+/** Every `declared refresh reading (<YYYY-MM-DD>)` clause in a region text, as the phrase,
+ *  the date it cites, the clause's OWN text span and a BOUNDED look-behind. Each clause's
+ *  text starts at its OWN phrase and never reaches the NEXT phrase, so a per-clause test
+ *  reads the clause it belongs to: a marker in a LATER clause can never leak into an
+ *  earlier one, and a clause that states no date of its own can never absorb the NEXT
+ *  clause's literal. */
+function declaredReadingClauses(regionText: string): Array<{ phrase: string; date: string; text: string; lookBehind: string }> {
+  const phrases = [...regionText.matchAll(DECLARED_READING_PHRASE)]
+  const out: Array<{ phrase: string; date: string; text: string; lookBehind: string }> = []
+  for (let index = 0; index < phrases.length; index++) {
+    const match = phrases[index]!
+    const at = match.index
+    const nextAt = index + 1 < phrases.length ? phrases[index + 1]!.index : regionText.length
+    const phraseEnd = at + match[0].length
+    // the DATE window opens at the END of the phrase and stops at the NEXT phrase: a clause
+    // states its date AFTER its own phrase, so neither an earlier phrase's date nor the NEXT
+    // clause's date can be read as this clause's date
+    const dateWindow = regionText.slice(phraseEnd, Math.min(nextAt, phraseEnd + DECLARED_READING_WINDOW))
+    const found = /\d{4}-\d{2}-\d{2}/.exec(dateWindow)
+    if (found === null) continue
+    const dateAt = phraseEnd + found.index
+    // the look-behind is BOUNDED and anchored at the region's start (never at the previous
+    // phrase), so the text just before THIS phrase — where an annotate-beside marker sits —
+    // is visible without a previous clause's own marker leaking in
+    const lookBehind = regionText.slice(Math.max(0, at - SUPERSEDED_LOOKBEHIND), at)
+    // the clause TEXT is this clause's OWN span: its phrase through a bounded span after its
+    // date, so the marker written after the date (`<date> (superseded)`) is visible and the
+    // NEXT clause's text never is
+    out.push({
+      phrase: match[0],
+      date: found[0],
+      text: regionText.slice(at, dateAt + found[0].length + DECLARED_READING_AFTER_CONTEXT),
+      lookBehind,
+    })
+  }
+  return out
+}
+
+/** ⟨`G-3` (2026-09-30, gate 4 of `U-FOUNDATION-PIN-REFRESH-2`) — WHAT COUNTS AS A CLAUSE
+ *  THAT NAMES ITS OWN READING SUPERSEDED.⟩ The marker must sit IMMEDIATELY BESIDE the
+ *  date the clause cites — either just BEFORE the clause's phrase (`the SUPERSEDED declared
+ *  refresh reading (<date>)`, the annotate-beside shape a dated `§4` amendment writes) or
+ *  just AFTER its date (the parenthetical `<date> (superseded)` shape). Both windows are
+ *  BOUNDED (and the before-window is anchored at the clause's own look-behind), so a marker
+ *  belonging to a NEIGHBOURING clause can never leak in, and a FORWARD `SUPERSEDES the
+ *  as-filed declaration` does NOT qualify — the re-anchoring clause the landed contract
+ *  carries (`§4`) says the CURRENT reading supersedes an older one, which is the OPPOSITE
+ *  of naming itself superseded. This limb makes the reader's preference a RECORDED
+ *  PROPERTY rather than an accident. */
+const SUPERSEDED_MARKER = /\bsuperseded\b|\bsuperseding\b|\(superseded\)/i
+/** The bounded before/after windows the marker is looked for in (see above). */
+const SUPERSEDED_BEFORE_WINDOW = 60
+const SUPERSEDED_AFTER_WINDOW = 40
+
+/** Whether one clause names its OWN cited date superseded. The marker must sit in the
+ *  clause's OWN line, at one of the two ADJACENT positions a dated `§4` amendment writes it
+ *  in: in the bounded span BEFORE the clause's phrase (`the SUPERSEDED declared refresh
+ *  reading (<date>)`) or in the bounded span AFTER its date (`<date> (superseded)`). A
+ *  marker in a LATER line or a LATER clause is never seen. */
+function clauseNamesItsReadingSuperseded(clause: { text: string; lookBehind: string }): boolean {
+  const parts = /([\s\S]*?)(\d{4}-\d{2}-\d{2})([\s\S]*)/.exec(clause.text)
+  if (parts === null) return false
+  const before = `${clause.lookBehind}${parts[1]!}`
+  const after = parts[3]!
+  const beforeLine = before.split('\n').pop() ?? ''
+  const afterLine = after.split('\n')[0] ?? ''
+  const phraseAt = beforeLine.lastIndexOf(DECLARED_READING_PHRASE_TEXT)
+  const lineBefore = phraseAt < 0 ? beforeLine : beforeLine.slice(0, phraseAt)
+  return (
+    SUPERSEDED_MARKER.test(lineBefore.slice(-SUPERSEDED_BEFORE_WINDOW)) ||
+    SUPERSEDED_MARKER.test(afterLine.slice(0, SUPERSEDED_AFTER_WINDOW))
+  )
+}
+
+/** ⟨`A-4` / `A-12` / `D-13` — FACTORED (`G-3`) SO THE SELECTION LIMB CAN BE DRIVEN OVER A
+ *  SYNTHETIC REGION.⟩ Read the contract's OWN declared refresh reading OUT OF a region
+ *  text (never re-typed in this file, so a dated amendment that moves the declaration
+ *  moves this limb with it).
+ *
+ *  ⟨ANNOTATE-BESIDE (`RCA-8(c)`): THE AS-FILED BODY IS KEPT VISIBLE IN PLACE — it is the
+ *  reading this function's factoring SUPERSEDED, and nothing about it is deleted.⟩ As filed
+ *  the whole of `declaredRefreshReading()` read:
+ *
+ *    const region = registerRegion()
+ *    if (region.text === '') return { reading: null, detail: region.detail }
+ *    const matches = [...region.text.matchAll(⟨the clause matcher⟩)]
+ *    if (matches.length === 0) { … the same "no declared subject" detail as below … }
+ *    return { reading: matches[matches.length - 1]![1]!,
+ *             detail: `${region.detail}: the last declared refresh reading is …` }
+ *
+ *  — i.e. it took the LAST match in the region and returned it, which is why the superseded
+ *  body's own detail line read *"the last declared refresh reading is …"*.
+ *
+ *  ⟨`G-3` SELECTION RULE — EXPLICIT, NOT "THE LAST MATCH".⟩ The as-filed `[matches.length - 1]`
+ *  was an UNPINNED HAZARD: a later `§4` amendment that states a SUPERSEDED reading further
+ *  down the region would silently re-couple the `measuredAt` limb to the OLD date, and the
+ *  next pass would "fix" the resulting red by moving the manifest's date BACKWARDS — a
+ *  stale-date churn with no failing oracle.
+ *  The rule is now: **among the clauses in the region, the LAST clause that does NOT name
+ *  its own cited date SUPERSEDED governs; the last clause governs only when EVERY clause
+ *  names its reading superseded.** The landed region carries the as-filed clause (`§4.1`
+ *  ②, the reading the re-anchoring clause supersedes) AND the amended governing clause
+ *  beside it, so the rule is exercised on the landed contract and not only synthetically;
+ *  NOTHING about a UTC day is asserted here: `A-12` makes the refresh's LOCAL/REPO day
+ *  authoritative, and this limb asserts only the SHAPE, the DECLARED equality and the
+ *  SELECTION, with no clock read anywhere in this file. */
+function declaredReadingFromRegionText(regionText: string, regionDetail: string): { reading: string | null; detail: string } {
+  if (regionText === '') return { reading: null, detail: regionDetail }
+  const clauses = declaredReadingClauses(regionText)
+  if (clauses.length === 0) {
     return {
       reading: null,
-      detail: `${region.detail}: the region no longer carries a \`declared refresh reading (<YYYY-MM-DD>)\` clause, so the \`measuredAt\` limb has no declared subject (it must RED, never pass vacuously)`,
+      detail: `${regionDetail}: the region no longer carries a \`declared refresh reading (<YYYY-MM-DD>)\` clause, so the \`measuredAt\` limb has no declared subject (it must RED, never pass vacuously)`,
     }
   }
-  return { reading: matches[matches.length - 1]![1]!, detail: `${region.detail}: the last declared refresh reading is ${matches[matches.length - 1]![1]!}` }
+  // the governing clause: the last one that does NOT name its own cited date superseded —
+  // the fallback (the LAST clause, whatever it says) applies only when EVERY clause does.
+  const nonSuperseded = clauses.map((_, index) => index).filter((index) => !clauseNamesItsReadingSuperseded(clauses[index]!))
+  const governing = nonSuperseded.length > 0 ? nonSuperseded[nonSuperseded.length - 1]! : clauses.length - 1
+  const reading = clauses[governing]!.date
+  return {
+    reading,
+    detail:
+      `${regionDetail}: the governing declared refresh reading is ${reading}` +
+      ` (clause ${governing + 1} of ${clauses.length}; ${clauses.length - nonSuperseded.length} clause(s) name a reading superseded` +
+      `${nonSuperseded.length === 0 ? ' — ALL of them do, so the LAST governs' : ''})`,
+  }
+}
+
+/** The real reading: the anchored `§4` region, through the factored reader above. */
+function declaredRefreshReading(): { reading: string | null; detail: string } {
+  const region = registerRegion()
+  return declaredReadingFromRegionText(region.text, region.detail)
 }
 
 /** ⟨`A-4` / `D-13` / `F-13`⟩ The `measuredAt` LIMB: present · `YYYY-MM-DD` · equal to
@@ -1147,6 +1280,39 @@ describe('PD-VENDOR-PIN-REFRESH §4 P-SM-pd-pin-2 — the pin is restated in all
           return `MEASURED-AT could not discriminate: the limb ACCEPTED ${negative.label} ("${negative.value}" against declared ${String(negative.declared)}) — a corrupted date would leave the register green (F-13)`
         }
       }
+      // ---------------------------------------------------------------------
+      // ⟨`G-3` — THE DECLARED CONTROL ON `declaredRefreshReading`'s SELECTION LIMB,
+      // driven INSIDE this row's one `measuredAt` attempt (so the declared term `16` and
+      // the register total `44` stay TRUE — no term is added and none is reduced).⟩
+      // THE MUTATION THIS CONTROL MUST CATCH: a `§4` amendment that states a SUPERSEDED
+      // reading LATER in the anchored region than the governing clause — i.e. the reader
+      // silently taking the LAST match, which re-couples the `measuredAt` limb to the OLD
+      // date, reds the row, and invites the next pass to "fix" it by moving the manifest's
+      // date BACKWARDS (a stale-date churn with no oracle). The control's subject is a
+      // SYNTHETIC region that carries the declared-current clause FIRST and a clause
+      // naming its own reading SUPERSEDED SECOND; the reader must choose the CURRENT one.
+      const supersededReading = declaredReading === '1970-01-01' ? '1970-01-02' : '1970-01-01'
+      const syntheticRegion =
+        `the contract's declared refresh reading (${declaredReading}).\n` +
+        `The SUPERSEDED declared refresh reading (${supersededReading}) is kept visible beside it — never the governing clause.\n`
+      const syntheticRead = declaredReadingFromRegionText(syntheticRegion, '⟨SYNTHETIC⟩ region')
+      if (syntheticRead.reading !== declaredReading) {
+        return (
+          `MEASURED-AT could not discriminate on the SELECTION limb (G-3): a region declaring the current reading (${declaredReading}) FIRST ` +
+          `and a SUPERSEDED reading (${supersededReading}) LATER read as ${String(syntheticRead.reading)} — ` +
+          `a last-match reader would take ${supersededReading}, silently re-coupling the limb to the OLD date (${syntheticRead.detail})`
+        )
+      }
+      // …and the reader is not merely ignoring the second clause: when EVERY clause names
+      // itself superseded the LAST one governs, so the fallback is a recorded property too.
+      const allSuperseded = declaredReadingFromRegionText(
+        `The SUPERSEDED declared refresh reading (${supersededReading}) is kept visible beside it.\n` +
+          `The SUPERSEDED declared refresh reading (${declaredReading}) is kept visible beside it.\n`,
+        '⟨SYNTHETIC⟩ region',
+      )
+      if (allSuperseded.reading !== declaredReading) {
+        return `MEASURED-AT could not be driven: with EVERY clause naming a reading superseded the LAST must govern (read ${String(allSuperseded.reading)}; ${allSuperseded.detail})`
+      }
       return null
     })()
     attempt(run, i++, measuredAtAttempt)
@@ -1805,6 +1971,117 @@ describe('PD-VENDOR-PIN-REFRESH §4 — the register arithmetic, the caps, the r
     }
     const supersededDomain = DECLARED_REGISTER.find((r) => r.row === 'P-TP-pd-pin-3')!.superseded.declared
     expect(supersededDomain, 'the superseded row-3 term stays visible beside the current one').toBe('15 × 1 + 3 + 2')
+  })
+
+  it('§4 row 2 (`G-3`) — `declaredRefreshReading`\'s SELECTION LIMB is pinned: with a declared-current clause FIRST and a `SUPERSEDED` one LATER, the CURRENT reading governs — the mutation the control names is a `§4` amendment appending a superseded reading, which a LAST-MATCH reader would silently re-couple the `measuredAt` limb to', () => {
+    // -------------------------------------------------------------------------
+    // ⟨`G-3` (filed by gate 4's read-only adversarial pass on
+    //  `U-FOUNDATION-PIN-REFRESH-2`).⟩ As filed the reader took the LAST
+    //  `declared refresh reading` match in the anchored `§4` region, and NOTHING
+    //  exercised the selection limb (the `measuredAt` control drove only the limb's
+    //  other negatives). THE HAZARD MADE EXPLICIT: a future `§4` amendment stating a
+    //  SUPERSEDED reading LATER in the region would re-couple the limb to the OLD date,
+    //  red the suite, and the next pass would "fix" the red by moving
+    //  `foundation.measuredAt` BACKWARDS — stale-date churn with no failing oracle.
+    // THE CURE (both halves are asserted here, so the hazard is a RECORDED PROPERTY
+    // rather than an accident): the reader prefers the last clause that does NOT name
+    // its own reading superseded, and falls back to the last clause only when EVERY
+    // clause names itself superseded.
+    // -------------------------------------------------------------------------
+    const region = registerRegion()
+    expect(region.text, `§4’s anchored region must be readable: ${region.detail}`).not.toBe('')
+    const real = declaredRefreshReading()
+    expect(
+      String(real.reading),
+      `the contract’s declared refresh reading must be readable out of the anchored §4 region (${real.detail}) — the \`measuredAt\` limb has no other subject`,
+    ).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+
+    const declaredCurrent = '2026-09-30'
+    const supersededLater = '2026-09-28'
+    // THE SYNTHETIC REGION — the mutation's premise: the CURRENT clause first, a clause
+    // that NAMES ITS OWN READING SUPERSEDED second (the shape a dated `§4` amendment
+    // takes under `RCA-8(c)`'s annotate-beside rule). The supersession marker sits
+    // IMMEDIATELY BESIDE the old date, which is what makes the clause self-superseding.
+    const syntheticRegion =
+      `⟨A synthetic §4 register region.⟩\n` +
+      `the contract's declared refresh reading (${declaredCurrent})\n` +
+      `The earlier SUPERSEDED declared refresh reading (${supersededLater}) is kept visible beside it, never the governing clause.\n`
+    const chosen = declaredReadingFromRegionText(syntheticRegion, '⟨SYNTHETIC⟩ §4 region')
+    expect(
+      chosen.reading,
+      `G-3: a region stating the CURRENT reading (${declaredCurrent}) first and a SUPERSEDED reading (${supersededLater}) later MUST read the CURRENT one — the reader may not be re-coupled to the OLD date by an amendment that only KEEPS it visible (${chosen.detail})`,
+    ).toBe(declaredCurrent)
+    // …and the control is NOT VACUOUS: the AS-FILED last-match reading, driven over the
+    // SAME synthetic region, picks the SUPERSEDED date — so the two readings genuinely
+    // differ and this row can fail.
+    const asFiledLastMatch = ((): string | null => {
+      const all = declaredReadingClauses(syntheticRegion)
+      return all.length > 0 ? all[all.length - 1]!.date : null
+    })()
+    expect(
+      asFiledLastMatch,
+      'G-3: the as-filed LAST-MATCH reading is kept visible and is driven here — it must pick the SUPERSEDED date over the same text, else the control above proves nothing',
+    ).toBe(supersededLater)
+    expect(asFiledLastMatch, 'G-3: the two readings must differ on this subject — that difference IS the mutation the control catches').not.toBe(chosen.reading)
+    // THE OTHER HALF OF THE PROPERTY: with EVERY clause naming itself superseded the LAST
+    // still governs (the declared fallback), so the reader is shown to be a documented
+    // rule rather than a reader that simply ignores the extra clause.
+    const allSuperseded = declaredReadingFromRegionText(
+      `The SUPERSEDED declared refresh reading (${supersededLater}) is kept visible.\n` +
+        `The SUPERSEDED declared refresh reading (${declaredCurrent}) is kept visible.\n`,
+      '⟨SYNTHETIC⟩ §4 region',
+    )
+    expect(
+      allSuperseded.reading,
+      `G-3: when EVERY clause names a reading superseded the LAST one governs (${allSuperseded.detail}) — the fallback is a recorded property, not an accident`,
+    ).toBe(declaredCurrent)
+    // THE REAL READING IS UNMOVED BY THE SELECTION RULE — and the selection limb is
+    // exercised by the LANDED contract itself: the anchored region carries the AS-FILED
+    // clause (`§4.1` ②, the `2026-09-28` reading the re-anchoring clause supersedes) AND
+    // the amended governing clause, and the rule picks the GOVERNING one.
+    const realClauses = declaredReadingClauses(region.text)
+    expect(
+      realClauses.length,
+      `G-3: the anchored §4 region carries the as-filed clause AND the amended governing clause (read ${realClauses.length}: [${realClauses.map((c) => c.date).join(', ')}]) — a region whose clauses are read here so the selection is visible, not inferred`,
+    ).toBe(2)
+    const realClauseDates = realClauses.map((c) => c.date)
+    expect(
+      new Set(realClauseDates).size,
+      `G-3: the two clauses cite DIFFERENT readings (${realClauseDates.join(', ')}) — so the region itself is the selection limb's subject, and a last-match reader and the governing reader CAN be told apart on the landed contract`,
+    ).toBe(2)
+    expect(real.reading, 'G-3: the reading the `measuredAt` limb compares against IS the LAST clause’s — the landed region’s governing clause, which is the amended one').toBe(realClauses[realClauses.length - 1]!.date)
+    expect(
+      String(real.reading),
+      `G-3: and the as-filed clause (${realClauseDates[0]!}) is NOT the reading the limb took — the old date may not be re-coupled to the limb by the amendment that only KEEPS it visible (${real.detail})`,
+    ).toBe(realClauseDates[realClauseDates.length - 1]!)
+    expect(
+      DECLARED_REGISTER.map((r) => `${r.row}: ${r.declared} = ${r.declaredTotal}`),
+      'G-3 moves NO term: the register arithmetic is re-printed with its own factors — 1 real pair × 2 limbs + 1 comparator pin-arm drive + 4 controls = 7 · 3 + 3 + 1 + 1 + 2 + 6 = 16 · 15 × 1 + 4 + 2 = 21',
+    ).toEqual([
+      'P-IM-pd-pin-1: 1 real pair × 2 limbs + 1 comparator pin-arm drive + 4 controls = 7',
+      'P-SM-pd-pin-2: 3 + 3 + 1 + 1 + 2 + 6 = 16',
+      'P-TP-pd-pin-3: 15 × 1 + 4 + 2 = 21',
+    ])
+    const total = DECLARED_REGISTER.reduce((a, r) => a + r.declaredTotal, 0)
+    expect(total, 'G-3: the total is UNMOVED at `7` + `16` + `21` = `44` — the control above is a drive INSIDE row 2’s declared `measuredAt` attempt, so it adds no term').toBe(44)
+    const reports = ['P-IM-pd-pin-1', 'P-SM-pd-pin-2', 'P-TP-pd-pin-3'].map((row) => {
+      const found = REPORTS.find((r) => r.row === row)
+      const declared = DECLARED_REGISTER.find((r) => r.row === row)!
+      return {
+        row,
+        executed: found === undefined ? -1 : found.executed,
+        declaredTotal: declared.declaredTotal,
+        held: found !== undefined && found.held,
+      }
+    })
+    expect(
+      reports.map((r) => `${r.row}: executed ${r.executed} of ${r.declaredTotal} — ${r.held ? 'held' : 'broken'}`),
+      'G-3: every register row’s `held`/`broken` verdict is reported beside the unmoved arithmetic — a control that added or reduced a term would show up here as `broken`',
+    ).toEqual([
+      'P-IM-pd-pin-1: executed 7 of 7 — held',
+      'P-SM-pd-pin-2: executed 16 of 16 — held',
+      'P-TP-pd-pin-3: executed 21 of 21 — held',
+    ])
   })
 
   it('§6 item 2 — the contract’s declared colours: the red head’s one-red-of-three record AND the amendment’s LANDED reading, each read from the bounded `§6` region (never a whole-file adjacency regex)', () => {

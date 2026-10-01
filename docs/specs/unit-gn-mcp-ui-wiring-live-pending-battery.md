@@ -1,5 +1,8 @@
 # Unit GN-MCP-UI — Gnosis MCP/UI Wiring (`gnosis.*` tools + `gnosis` group + `handleGnosisTool` + boot injection + D4 parity panes): LIVE-Scenario Pending Battery (handoff)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Author:** Live-scenario runner (delegated subagent). **Date: 2026-09-10.**
 - **Source contract:** `docs/specs/unit-gn-mcp-ui-wiring.md` — §5.1 (the three
   `gnosis.*` tools + inputSchemas), §5.2 (`gnosis` group + `security.ts`), §5.3
@@ -13,7 +16,7 @@
   `../Gnosis/docs/specs/engine-wire-contract.md` §4–§12.
 - **Greens battery (blind-test, already run against the LIVE MODULE):**
    `archive/greens/2026-09-21-unit-gn-mcp-ui-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-gn-mcp-ui-wiring-greens.md) — **39 / 39 PASS, 0 FAIL** (the
-  recorded run: `tests/blind-unit-gn-mcp-ui-wiring-greens.test.ts`, vitest, 31
+  recorded run: `archive/tests/2026-10-04-blind-unit-gn-mcp-ui-wiring-greens.test.ts`, vitest, 31
   `it` blocks, exit 0; re-verified 2026-09-10 this session: 31/31 tests pass).
   Source under test: `src/main/mcp-server.js` (`handleGnosisTool`,
   `ProvidentMcpServer.ALL_TOOLS`, `registeredToolNames`),

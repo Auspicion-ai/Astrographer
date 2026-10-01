@@ -106,7 +106,7 @@ const PINNED_FIFTEEN = [
   'zones',
 ] as const
 
-const PINNED_COMMIT = 'd7b98b574adc7fa63fbabda617eba2a753f52cb5'
+const PINNED_COMMIT = '93c058f69bd78fd1a80c96044e504deac4737ab3'
 
 /** §2.1 item 5 — FIVE files carry any import at all; the other TEN of the fifteen
  *  carry none. ⟨Corrected per §12.3(d) (`C-AM-4`, DOC-DRIFT, LOW): the clause's
@@ -1269,6 +1269,18 @@ describe('PD-VENDOR §3.5 — the scoped conformance leg, registered by PLACEMEN
 
 // ===========================================================================
 // §3a `A-10` — THE CLOSURE ORACLE IS AST-BASED (HOST-FIX; RED at HEAD).
+// ⟨ANNOTATED 2026-09-30 — THE FILED TEXT ABOVE IS KEPT VISIBLE AS THE AS-FILED
+// READING AND IS NOW SUPERSEDED; NOTHING BELOW IT IS REWRITTEN, AND NO ASSERTION
+// IN THIS BLOCK CHANGES.⟩ WHY: the `HOST-FIX` LANDED — the monitor now exports its
+// AST-based `importSpecifiers`, so the two rows under this block are GREEN, not RED.
+// The as-filed phrases *"HOST-FIX; RED at HEAD"* (above) and *"RED at HEAD by
+// design"* (the `describe` title below) describe the state at FILING, not the state
+// at this head: `npx vitest run tests/pd-vendor-set.test.ts` passes this file IN FULL
+// at this head, so this block contributes NO red. Filed as `O-5` by
+// `docs/specs/unit-foundation-pin-refresh-2.md` §9 item 5 (owner: the TestWriter, a
+// COMMENT-TEXT act that moves no tooth); this annotation is that act. The block
+// title is left as filed because it is a NAMED cross-reference target; the ROWS
+// below are the live teeth and they are unchanged.
 // THE NEGATIVE GENERATOR §3a’s PBT audit TASKED (i): a generator over synthetic
 // IMPORT-STATEMENT SHAPES. The single-line regex the landed row uses misses a
 // bare side-effect import, a MULTI-LINE statement, a dynamic `import(…)` and a

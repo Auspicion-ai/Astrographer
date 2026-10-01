@@ -22,7 +22,7 @@
 //   - groupForTool('gnosis.<other>') === null (the fail-closed half of §5.9-27)
 //   - `ALL_TOOLS` does NOT expose gnosis.waitForReady
 //
-// Conventions follow tests/unit-gn-engine-integration.test.ts + tests/unit-f2-
+// Conventions follow archive/tests/2026-10-04-unit-gn-engine-integration.test.ts + tests/unit-f2-
 // result-qualification.test.ts (vitest node environment, `.js` import suffix for
 // main-process ESM modules, injected mock fetch/sse over the real proxy per §5.6).
 //

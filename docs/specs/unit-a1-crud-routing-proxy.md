@@ -1,5 +1,8 @@
 # Spec — Unit A1: Document-CRUD Routing Proxy — the `createEngineCrudRagStore` Proxy (the 11 §4.1 Document-CRUD Wire Client)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Status:** SPEC — **LANDED-GREEN (2026-09-10)** — the shell-side Gnosis-engine
   document-CRUD wire client, scoped per the roadmap
    `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units)) §6.1 (A1). Proposal gate:
@@ -17,8 +20,8 @@
   decoded by the NEW lenient **`decodeDocumentSummary`** (six fields, snake+camel,
   tolerates a full `Document` item / projects it; a malformed summary →
   `EngineError('malformed document')` 502) — closing **HOST-CRUD-LIST-SUMMARY-DECODE**
-  (§3 FINDING). A1 green set: **60 unit + 8 PBT rows** (`tests/unit-a1-crud-routing-proxy.test.ts`
-  + `tests/props-a1-crud-routing-proxy.test.ts` = 68 A1 test rows), trio green
+  (§3 FINDING). A1 green set: **60 unit + 8 PBT rows** (`archive/tests/2026-10-04-unit-a1-crud-routing-proxy.test.ts`
+  + `archive/tests/2026-10-04-props-a1-crud-routing-proxy.test.ts` = 68 A1 test rows), trio green
   (**3356 pass / 43 skip**, 137 test files, typecheck + build clean); the greens
   docs  `archive/greens/2026-09-21-unit-a1-crud-routing-proxy-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy-greens.md) (26 PASS / 18
   NOT-VERIFIED / 0 FAIL) and  `archive/greens/2026-09-21-unit-a1-crud-list-summary-decode-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-list-summary-decode-greens.md)

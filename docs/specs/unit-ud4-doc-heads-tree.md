@@ -644,12 +644,12 @@ a behavior change:
   `handleRagDocHeadsIpc`/`buildContext` assertions at 206, 211, 261, 270, 390,
   397, 475, 482; the direct `deriveDocNavDocuments` calls (463-482) need no
   change.
-- `tests/sidebar-panes-host.test.ts` — the payload literal at 589-594 (add
+- `archive/tests/2026-10-04-sidebar-panes-host.test.ts` — the payload literal at 589-594 (add
   `path`/`tags` per document) and at 758.
-- `tests/sidebar-panes.test.ts` — the `makeContext` docHeads overrides at
+- `archive/tests/2026-10-04-sidebar-panes.test.ts` — the `makeContext` docHeads overrides at
   557-561 and 578-582 (the `Partial<PaneContext>` literal now requires
   `path`/`tags`).
-- `tests/sidebar-panes-adversarial.test.ts` — the `makeContext` docHeads
+- `archive/tests/2026-10-04-sidebar-panes-adversarial.test.ts` — the `makeContext` docHeads
   override at 263-265.
 
 All other payload usages pass `{ documents: [] }`, `null`, or use

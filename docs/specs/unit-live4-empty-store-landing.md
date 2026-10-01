@@ -176,7 +176,7 @@ consumes.
 
 The U-LIVE4 fix landed the empty-boot co-authored landing. The post-fix
 adversarial pass (RCA-3, host-side) surfaced four host findings — all fixed HERE
-(with regressions in `tests/unit-live4-adversarial-fix.test.ts`), never in the
+(with regressions in `archive/tests/2026-10-04-unit-live4-adversarial-fix.test.ts`), never in the
 `provident-ssr` package.
 
 | Ref | Severity | Finding | Host fix | Regression |

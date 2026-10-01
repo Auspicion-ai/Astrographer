@@ -4,9 +4,9 @@
     "path": "../Provident-Electron",
     "remote": "https://github.com/LittleKingsguard/Provident-Electron",
     "ref": "main",
-    "commit": "d7b98b574adc7fa63fbabda617eba2a753f52cb5",
-    "measuredAt": "2026-09-28",
-    "digestCommand": "git -C ../Provident-Electron show d7b98b574adc7fa63fbabda617eba2a753f52cb5:src/shared/<name>.ts | md5sum   # cross-checked with: (cd ../Provident-Electron && md5sum src/shared/census.ts src/shared/container.ts src/shared/focus-model.ts src/shared/gesture-session.ts src/shared/gutter.ts src/shared/gutter-affordance.ts src/shared/layout-projection.ts src/shared/menu-template.ts src/shared/mount-invariant-guard.ts src/shared/overlay.ts src/shared/owned-list-host.ts src/shared/relocate.ts src/shared/slot-host.ts src/shared/theme.ts src/shared/zones.ts)",
+    "commit": "93c058f69bd78fd1a80c96044e504deac4737ab3",
+    "measuredAt": "2026-09-30",
+    "digestCommand": "git -C ../Provident-Electron show 93c058f69bd78fd1a80c96044e504deac4737ab3:src/shared/<name>.ts | md5sum   # cross-checked with: (cd ../Provident-Electron && md5sum src/shared/census.ts src/shared/container.ts src/shared/focus-model.ts src/shared/gesture-session.ts src/shared/gutter.ts src/shared/gutter-affordance.ts src/shared/layout-projection.ts src/shared/menu-template.ts src/shared/mount-invariant-guard.ts src/shared/overlay.ts src/shared/owned-list-host.ts src/shared/relocate.ts src/shared/slot-host.ts src/shared/theme.ts src/shared/zones.ts)",
     "byteIdentity": "byte-identical to the pinned commit's blob at `commit` (verified per module by md5, 15/15 REPRODUCED against the proposal §2 table)"
   },
   "modules": [

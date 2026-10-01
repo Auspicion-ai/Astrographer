@@ -133,7 +133,7 @@ was found (nothing handed off to `docs/defects.md`).
   the localeCompare-first doc-head (matching the doc-nav's first entry), derived
   from the SNAPSHOT's doc-head edges (not `lastDocHeads`, which can be empty
   even when the snapshot has documents). `get_rendered_html` dropped to ~0.15s.
-  Regression test added (`tests/sidebar-panes-host.test.ts` "SCOPED-LOAD (live
+  Regression test added (`archive/tests/2026-10-04-sidebar-panes-host.test.ts` "SCOPED-LOAD (live
   finding)"); the Unit V3 `selectDocument` fail-state tests updated for the new
   boot behavior (the boot sets `currentDocumentId` to the first doc-head).
 

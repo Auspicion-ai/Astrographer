@@ -1,5 +1,8 @@
 # Spec — Unit A2: Document-CRUD D4 Wiring — the `gnosis.document.*` / `gnosis.wiki.*` MCP Tools + the GUI Document-Editor/Wiki Screens (the 11 §4.1 Document-CRUD Methods over the LANDED A1 Proxy)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Status:** **LANDED** — the FINAL MVP unit of the Gnosis
   CRUD-unblock roadmap (the roadmap  `archive/gate-reviews/2026-09-21-unblock-gnosis-remaining-endpoints.md` (historical; archived 2026-09-21; successor docs/specs/unit-a1-crud-routing-proxy.md + docs/specs/unit-a2-document-crud-wiring.md (the landed A1/A2 units))
   §6.2, A2). Proposal gate: the roadmap's §6.2 (PASS — the A2 deliverable = the
@@ -1542,7 +1545,7 @@ has **no** reserved fail-variant rows (no `FS-*` rows) by the invariant-only rul
   with the `P-IM-4` documents-pane render row). The
   LANDED test files: **91 unit tests** (`tests/unit-a2-document-crud-wiring.test.ts`),
   **8 props tests** (`tests/props-a2-document-crud-wiring.test.ts`), and **49
-  blind-greens tests** (`tests/blind-unit-a2-document-crud-wiring-greens.test.ts`,
+  blind-greens tests** (`archive/tests/2026-10-04-blind-unit-a2-document-crud-wiring-greens.test.ts`,
   covering the 81 greens scenarios — 33 G + 40 F + 8 P). All green.
 
 ### 5.11 Cross-references

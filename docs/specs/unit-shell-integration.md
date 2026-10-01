@@ -1,9 +1,12 @@
 # Spec — Unit: Shell-Integration (the re-scoped Option B) — the shared `engine-transport.ts` module (TLS application + the extracted transport helpers + the `isLoopbackHost` superset), the fetch-based SSE client (SSE-path auth + the H10 no-reconnect contract), the bind/auth/TLS policy record, the D2-fallback clarification, and the e2e transport test / live-battery revisit
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Status:** **LANDED — GREEN** (the unit is landed; the re-scoped Option B is
   realized). The full TDD + PBT + adversarial + blind-greens + live-scenario + trio
   gates PASSED. Test counts (verified against the build): 
-  `tests/unit-shell-integration.test.ts` **42 pass + 1 skipped** (the e2e descriptor
+  `archive/tests/2026-10-04-unit-shell-integration.test.ts` **42 pass + 1 skipped** (the e2e descriptor
   is opt-in + gated on the engine), `tests/props-shell-integration.test.ts` **8 pass**
   (the §5.7 register — all rows HELD), 
   `tests/blind-unit-shell-integration-greens.test.ts` **44 pass + 1 skipped** (the
@@ -67,7 +70,7 @@ dependency is a shell-side runtime cost (the engine lib stays at zero new runtim
 deps). None blocks delegation.
 
 **Landing record (post-green):** the re-scoped Option B is realized and green. The
-landed test census: `tests/unit-shell-integration.test.ts` **42 + 1 skipped**
+landed test census: `archive/tests/2026-10-04-unit-shell-integration.test.ts` **42 + 1 skipped**
 (covers the §5.1 shared-module surface, the §5.2 fetch-based SSE client, the §5.3/§5.4
 policy-record + D2-fallback clarification, the pinned non-throws, and the three
 adversarial regressions H1/H2/H3); `tests/props-shell-integration.test.ts` **8**
@@ -190,7 +193,7 @@ the LANDED `SseClient` interface. The undici dependency is a shell-side runtime 
   §5.2 literal: `createSseClient.subscribe` (`engine-rag-store.ts`) issues the fetch
   with ONLY the Bearer header (`{ ...(auth?.token ? { authorization: Bearer ${token}
   } : {}) }`) and never reuses `headers(auth)`. Regression-tested by two tests in
-  `tests/unit-shell-integration.test.ts` that assert the SSE GET's captured
+  `archive/tests/2026-10-04-unit-shell-integration.test.ts` that assert the SSE GET's captured
   `init.headers` contains NO `content-type` key (both with and without a token), plus
   the blind-green G11/G11b rows.
 - **H2 (pinned):** the `{ tls: {} }` empty-object edge — because
@@ -198,13 +201,13 @@ the LANDED `SseClient` interface. The undici dependency is a shell-side runtime 
   presence-of-fields check), an empty-but-truthy `auth.tls = {}` takes the TLS path
   (an undici `Agent` with an EMPTY `connect: {}`), NOT `globalThis.fetch`. Pinned in
   §5.1 (the no-TLS return applies only when `auth.tls` is absent/undefined) and
-  regression-tested by the H2 test in `tests/unit-shell-integration.test.ts`, the
+  regression-tested by the H2 test in `archive/tests/2026-10-04-unit-shell-integration.test.ts`, the
   `{tls:{}}` variant of the P-TP-1 register row, and blind-green G4b.
 - **H3 (assertion added):** a direct GN-factory hex-loopback no-throw — the GN
   factory `createEngineRagStore({ baseUrl: 'http://[::ffff:7f00:1]:8080' })` accepts
   the hex IPv4-mapped loopback form at construction (no-throw) via the shared
   `isLoopbackHost` superset (§5.1 amendment 1). Regression-tested directly against
-  the factory (the H3 re-verification test in `tests/unit-shell-integration.test.ts`
+  the factory (the H3 re-verification test in `archive/tests/2026-10-04-unit-shell-integration.test.ts`
   + blind-green G13).
 - **PBT audit verdict — the negative-generator gaps are CLOSED; all register rows
   HELD.** The post-green read-only PBT audit requested negative-generator coverage
@@ -865,7 +868,7 @@ rule.
 - **`opts.fetch` injectable seam:** **unchanged** (stays as the test seam).
 - **PBT register:** **8 rows** (IM ×3, SM ×3, TP ×2), ≤100 attempts/row, ≤400 total,
   stop-after-5, deterministic pinned seed `0x5E11E11E`.
-- **LANDED test census:** `tests/unit-shell-integration.test.ts` **42 pass + 1
+- **LANDED test census:** `archive/tests/2026-10-04-unit-shell-integration.test.ts` **42 pass + 1
   skipped** (the e2e descriptor — opt-in + gated on the engine);
   `tests/props-shell-integration.test.ts` **8 pass** (the §5.7 register — all rows
   HELD); `tests/blind-unit-shell-integration-greens.test.ts` **44 pass + 1 skipped**
@@ -919,7 +922,7 @@ rule.
 ## 6. Test plan (the red set the TestWriter will write)
 
 > **LANDED note:** this red set has been written and turned green. The executed test
-> census is: `tests/unit-shell-integration.test.ts` **42 pass + 1 skipped**,
+> census is: `archive/tests/2026-10-04-unit-shell-integration.test.ts` **42 pass + 1 skipped**,
 > `tests/props-shell-integration.test.ts` **8 pass** (the §5.7 register — all rows
 > HELD), `tests/blind-unit-shell-integration-greens.test.ts` **44 pass + 1 skipped**.
 > The adversarial regressions H1/H2/H3 and the PBT negative-generator additions are

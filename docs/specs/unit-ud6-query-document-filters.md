@@ -1,5 +1,8 @@
 # Spec — Unit U-D6: `rag.query` / `rag-stream` Document Filters
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 - **Status:** SPEC (the query-filter half of the document directory/category
   slice — the SIXTH unit of the ratified U-D1…U-D7 decomposition; execution
   order U-D1 → U-D2 → U-D3 → U-D4 → U-D5 **∥ U-D6** → U-D7). Gate references:
@@ -238,7 +241,7 @@ NOT regress them); the pass results are recorded at the end of this section:
   `validateGnosisFilters` BEFORE any proxy call (so nothing is serialized); the
   proxy (`engine-rag-store.ts`) MUST be unchanged and MUST NOT serialize them.
   The existing serialization pin
-  (`tests/unit-gn-engine-integration.test.ts:818-840`) MUST stay green.
+  (`archive/tests/2026-10-04-unit-gn-engine-integration.test.ts:818-840`) MUST stay green.
 - **A8 — determinism + no mutation.** The filter arrays are read-only; a query
   MUST NOT mutate the caller's `documentPathPrefix`/`tags`. The application is
   deterministic (the same store + filters → the same result) and stable.
@@ -696,7 +699,7 @@ The chosen three-layer design (§4.1):
 **Pinned consequences:**
 
 - **`src/main/engine-rag-store.ts` is UNCHANGED.** The serialization pin
-  (`tests/unit-gn-engine-integration.test.ts:818-840`) stays green.
+  (`archive/tests/2026-10-04-unit-gn-engine-integration.test.ts:818-840`) stays green.
 - **The `gnosis.*` schemas do NOT advertise the fields** (no schema edit).
 - **A probe of the gnosis wire cannot observe the fields** — either stripped
   (MCP) or rejected (direct) before the proxy.
@@ -908,7 +911,7 @@ function edgePassesFilters(store: RagStore, e: RagEdge, filters: LocalRagQueryFi
     for `gnosis.stream`.
 12. **Gnosis serialization regression:** the existing
     `filters=%7B...%7D` serialization pin
-    (`tests/unit-gn-engine-integration.test.ts:818-840`) stays green; the proxy
+    (`archive/tests/2026-10-04-unit-gn-engine-integration.test.ts:818-840`) stays green; the proxy
     (`engine-rag-store.ts`) is byte-identical.
 13. **Missing/quarantined document root:** a node whose owning document root is
     absent from `listNodes()` (or whose `documentPath`/`tags` are non-arrays) is

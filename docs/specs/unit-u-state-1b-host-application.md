@@ -6,7 +6,7 @@ unit U-STATE-1a (the pure reconciler) is **COMPLETE**
 (`src/renderer/content-reconcile.ts`). This is the per-unit contract required by
 AGENTS.md item 9 / umbrella amendment A1 **before any TestWriter red set**.
 
-**TestWriter RED (2026-09-11, RCA-1):** `tests/unit-u-state-1b-host-application.test.ts`
+**TestWriter RED (2026-09-11, RCA-1):** `archive/tests/2026-10-04-unit-u-state-1b-host-application.test.ts`
 authored from this spec ALONE (9 cases: §4 states 1–6/8 + §5 F2/F4). RUN and
 reported: **`TypeError: runtime.materializedContentRoots is not a function` /
 `applyContentReconcile is not a function` — 9 failed / 9**. **STATUS: RED —
@@ -29,7 +29,7 @@ AF1.** The two Runtime methods landed (`materializedContentRoots`,
 `ApplyReconcileReport`); the initial 9 tests passed, but the adversarial pass
 (RCA-3) found the attach path does not actually materialize, and a strengthened
 test exposes it: **`rag-docC` is absent from `renderedHtml` after an `added`
-bucket** (`tests/unit-u-state-1b-host-application.test.ts` state 3 now FAILS).
+bucket** (`archive/tests/2026-10-04-unit-u-state-1b-host-application.test.ts` state 3 now FAILS).
 Trio at the partial landing: 158 files / 3797 pass + 43 skip, typecheck 0, build
 0 — but **this unit is NOT done**.
 

@@ -1,7 +1,7 @@
 # Unit U-SHELL-9a — Main-Focus Tab Strip + Focus Tool (C14) — Spec
 
 **Status: GREEN — COMPLETE (2026-09-12).** Implemented + tested. Unit file
-`tests/unit-u-shell-9a-main-focus-tabs.test.ts` — **62 pass + 4 skip** (the 4
+`archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` — **62 pass + 4 skip** (the 4
 skips are the live-runtime/MCP-equivalence battery placeholders). Blind artifact
  `archive/greens/2026-09-21-unit-u-shell-9a-main-focus-tabs-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-9a-main-focus-tabs-greens.md) — **32 scenarios — 32
 PASS** (live-battery caveats in §2.10 + the artifact's "not tested" notes).
@@ -25,7 +25,7 @@ source = the `rag.backlinks` reverse map — the C20 *behavior* is 9b). See
 **Cycle record (2026-09-12, RCA-1/RCA-2):** TestWriter red (suite-load — the new
 `src/renderer/tab-state.ts` absent; the `OperatorSettings.tabs` carrier + the
 `provident.focus`/expand seams absent) → Implementer green **62 pass + 4 skip**
-in `tests/unit-u-shell-9a-main-focus-tabs.test.ts` → adversarial pass (RCA-3)
+in `archive/tests/2026-10-04-unit-u-shell-9a-main-focus-tabs.test.ts` → adversarial pass (RCA-3)
 found + fixed **HOST-1..HOST-8** (§2.10) → blind run (`…-greens.md`, **32/32
 PASS**) → the documentation review (RCA-6)
 `archive/reviews/2026-09-12-u-shell-9a-doc-review.md`.
@@ -342,7 +342,7 @@ implementations (§2.9).
 - Split source: `docs/specs/unit-u-shell-9-main-focus-tabs.md` (SPLIT pointer).
 - **Fix-spec U-LIVE4 (empty-store landing co-authoring):**
   `docs/specs/unit-live4-empty-store-landing.md` (INV-E1..E4, §3 F-L4-1..6, the
-  9-test TestWriter red set — `tests/unit-live4-empty-store-landing.test.ts` holds 9
+  9-test TestWriter red set — `archive/tests/2026-10-04-unit-live4-empty-store-landing.test.ts` holds 9
   `RED` blocks, red → green 13 incl. `unit-live4-adversarial-fix.test.ts` 4 — and the
   mandatory `boot_landing` live battery, **LIVE-CONFIRMED 2026-09-15**).
 - `docs/specs/unit-u-shell-9b-cross-document-shared.md` (the multi-document/C20/

@@ -15,14 +15,14 @@
 //
 // Usage:
 //   node scripts/live-drive.mjs [--mode=lexical|vector|gnosis] [--port=3787]
-//       [--cdp-port=9222] [--home=<dir>] [--seed=<corpusDir>]
+//       [--cdp-port=9222] [--home=<dir under the OS temp root>] [--seed=<corpusDir>]
 //       [--groups=read,dispatch,rag,edit,module,code,graph] [--block=<name>|all]
 //
 // A block prints `PASS`/`FAIL` and the run exits non-zero on any FAIL. Blocks
 // needing a missing component (vector/gnosis backends) report PARKED (never FAIL).
 import { spawn } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve as resolvePath, sep as pathSep } from 'node:path'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync } from 'node:fs'
 import { mkdir as mkdirAsync, writeFile as writeFileAsync } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -51,11 +51,27 @@ async function connectMcp(baseUrl) {
   await client.connect(transport)
   return client
 }
-async function mcpTool(client, name, args = {}) {
+/** §3.2 `F-7` / §2.2 `E-9` — THE DISCRIMINATED MCP READ. The installed MCP SDK's
+ *  `CallToolResult` carries `isError`, and a REFUSED reply is NOT an empty value:
+ *  `{ ok, isError, value, errorText, tool }` keeps the two cases apart so a
+ *  ROW-DEFINING read can classify its own failure (§2.3 `H-4`: `NOT-DRIVEN` with
+ *  the reply printed verbatim — never an app FAIL, never a silent `null`).
+ *  `mcpTool` below keeps its existing ergonomics (the parsed value, or the reply
+ *  TEXT on an `isError` reply), so no existing call site changes meaning. */
+async function mcpToolResult(client, name, args = {}) {
   const r = await client.callTool({ name, arguments: args })
   // MCP result content: [{type:'text', text}] (this server emits text).
   const text = (r.content ?? []).map((c) => c.text ?? '').join('')
-  try { return JSON.parse(text) } catch { return text }
+  let value
+  try { value = JSON.parse(text) } catch { value = text }
+  const isError = r.isError === true
+  return { ok: !isError, isError, tool: name, value: value, errorText: isError ? text : null }
+}
+async function mcpTool(client, name, args = {}) {
+  // The historical ergonomics, byte-for-byte: the parsed content, or the reply
+  // TEXT when the content is not JSON (an `isError` reply's text included).
+  const read = await mcpToolResult(client, name, args)
+  return read.value
 }
 
 // ---------------------------------------------------------------------------
@@ -99,12 +115,42 @@ class CDP {
   async has(selector) {
     return this.evaluate(`!!document.querySelector(${JSON.stringify(selector)})`)
   }
-  async click(selector) {
-    const p = await this.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)return null;const r=el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
-    if (!p) throw new Error(`click: element not found: ${selector}`)
+  /** §2.3 `H-3`/`F-4` — a raw coordinate click that RECORDS its proof: the
+   *  coordinate, the viewport it was dispatched against, the element under that
+   *  point and `onTarget`. `inVp:false` (the off-viewport coordinate) is a DRIVER
+   *  failure and is NEVER dispatched, so an off-viewport coordinate cannot be
+   *  counted as an app FAIL. Returns the record (the previous call sites ignore
+   *  it; a verdict-carrying click reads it). */
+  async click(selector, rows) {
+    const p = await this.evaluate(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)return null;const r=el.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;const hit=document.elementFromPoint(x,y);return {x:x,y:y,w:r.width,h:r.height,vp:[innerWidth,innerHeight],hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===el||el.contains(hit)))}})()`)
+    // §2.3 `H-3` clause 1 (`G-9`/`M-10`) — the raw-coordinate route LOGS ITS PROBE
+    // through the same central gesture log as `ufRealClick`, so a row that rests
+    // on this click can carry its record too (the recorded path is the row's own
+    // `gesturePath`; this route's branches name the driver-failure vocabulary).
+    // `rows` (⟨gate-4 `D-1`⟩) is the row identity the calling block names, when it
+    // knows whose gesture this is.
+    ufLogProbe(selector, p, rows)
+    // §2.3 `H-4` — a MISSING SELECTOR is a DRIVER failure RECORDED like its
+    // `zero-box`/`off-viewport`/`native-fallback` siblings (`path:'missing'`,
+    // `realInput:false`), never a throw out of a verdict path: the caller then
+    // reports `NOT-DRIVEN` with this record as its reason, instead of an app FAIL
+    // for a control the harness could not find. A throw is kept ONLY for a
+    // genuinely impossible precondition.
+    if (!p) return { path: 'missing', x: null, y: null, viewport: null, hit: null, onTarget: false, inVp: null, realInput: false, detail: `click: element not found: ${selector} (a DRIVER failure — no element at that selector, nothing was dispatched)` }
+    const inVp = p.x >= 0 && p.y >= 0 && p.x <= p.vp[0] && p.y <= p.vp[1]
+    if (!inVp || !p.onTarget) {
+      const recorded = { path: inVp ? 'native-fallback' : 'off-viewport', x: p.x, y: p.y, viewport: p.vp, hit: p.hit, onTarget: p.onTarget, inVp, realInput: false, detail: `coordinate (${Math.round(p.x)},${Math.round(p.y)}) vs viewport ${JSON.stringify(p.vp)}: inVp=${inVp} onTarget=${p.onTarget} hit=${p.hit} — NOT dispatched (a raw coordinate click with no proven path is a DRIVER failure, not an app verdict)` }
+      if (inVp) {
+        // In-viewport but covered/missed: the historical synthetic route, recorded.
+        await this.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(e)e.click();return true})()`)
+      }
+      return recorded
+    }
+    if (p.width === 0 && p.height === 0) return { path: 'zero-box', x: p.x, y: p.y, viewport: p.vp, hit: p.hit, onTarget: false, inVp, realInput: false, detail: `zero-size box at (${Math.round(p.x)},${Math.round(p.y)}) — nothing was dispatched (a DRIVER failure, not an app verdict)` }
     const base = { x: p.x, y: p.y, button: 'left', clickCount: 1 }
     await this.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...base })
     await this.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...base })
+    return { path: 'cdp', x: p.x, y: p.y, viewport: p.vp, hit: p.hit, onTarget: true, inVp: true, realInput: true }
   }
   /** A pointer drag gesture (CDP Input) — for the C4 pane drag / C7 gutter
    *  resize live tests. `steps` = [{x,y,type:'move'|'down'|'up'}]. */
@@ -165,52 +211,368 @@ async function ufTabState(h) {
   })()`)
 }
 
-/** A REAL CDP pointer click (the element is scrolled into view first). Returns
- *  `path:'cdp'` when the coordinate click landed ON the target (or a
- *  descendant) and `path:'native-fallback'` when the point was covered / not
- *  hit-testable (recorded, never silently substituted). `realInput` is DERIVED
- *  from the path so a row verdict can gate on it (§6.1: `realInput` is true
- *  only when the hit-tested path was proven). */
 /** The hit-test probe the real-click helper uses: the element CENTER, the
- *  element under that point, and whether the point actually resolves to the
+ *  element under that point, the viewport, and whether the point resolves to the
  *  target (or a descendant). */
-async function ufHitProbe(h, selector) {
+/** §2.3 `H-3` clause 1 (`G-9`/`M-10`) — THE PROBE IS LOGGED CENTRALLY, so the
+ *  coordinate/ viewport / hit / `onTarget` / `inVp` a click ACTUALLY USED can be
+ *  carried onto the row result that rests on it. Before this, the record lived
+ *  only on the helper's return value, which most blocks discarded: ONE of the
+ *  battery's 45 verdict-carrying clicks reached a `ROW` line with its coordinate
+ *  printed. The log is reset per block by the block-runner and harvested there
+ *  (`ufAttachClickRecords`), so no block is hand-edited to carry its record.
+ *  `rows` (⟨gate-4 `D-1`⟩) is the ROW IDENTITY the drive site knows: a string row
+ *  id, or the array of row ids this one click was driven FOR when several rows'
+ *  verdicts rest on it (a shared click). It is recorded on the entry so the
+ *  carrier can attach by identity instead of by position. */
+async function ufHitProbe(h, selector, rows) {
   const q = JSON.stringify(selector)
-  return h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;const hit=document.elementFromPoint(x,y);return {x:x,y:y,w:Math.round(r.width),h:Math.round(r.height),hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===e||e.contains(hit)))}})()`)
+  const p = await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;const hit=document.elementFromPoint(x,y);return {x:x,y:y,w:Math.round(r.width),h:Math.round(r.height),vp:[innerWidth,innerHeight],inVp:(x>=0&&y>=0&&x<=innerWidth&&y<=innerHeight),hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===e||e.contains(hit)))}})()`)
+  ufLogProbe(selector, p, rows)
+  return p
 }
 
-/** A REAL CDP pointer click (the element is scrolled into view first). Returns
- *  `path:'cdp'` when the coordinate click landed ON the target (or a
- *  descendant) and `path:'native-fallback'` when the point was covered / not
- *  hit-testable (recorded, never silently substituted). `realInput` is DERIVED
- *  from the path so a row verdict can gate on it (§6.1: `realInput` is true
- *  only when the hit-tested path was proven). */
+/** §2.3 `H-3` — A REAL CDP pointer click (the element is scrolled into view
+ *  first). It hit-tests the dispatch coordinate with `elementFromPoint` and
+ *  RECORDS the coordinate, the viewport, the element under the point and
+ *  `onTarget`. `path:'cdp'` (the ONLY accepted path) means the hit test resolved
+ *  the target; `native-fallback`/`missing`/`zero-box`/`off-viewport` are recorded
+ *  honestly and `realInput` is DERIVED from the path, so a row verdict can gate on
+ *  it (§6.1: `realInput` is true only when the hit-tested path was proven). */
+function ufClickShape() {
+  // §2.3 `H-3` clause 1 — THE RECORDED SHAPE every click carries: the coordinate
+  // (`x`/`y`), the viewport (`viewport`), the element under the point (`hit`, the
+  // `document.elementFromPoint` read of the dispatch coordinate), `onTarget` and
+  // the `path`. The unproven paths are named here: `missing` (no element),
+  // `zero-box` (a zero-size box) and `off-viewport`.
+  return { x: null, y: null, viewport: null, hit: null, onTarget: false, path: null, realInput: false }
+}
+
+// ---------------------------------------------------------------------------
+// §2.3 `H-3` clause 1 / §3.2 `F-4` — THE DRIVER'S OWN GESTURE-RECORD LOG, and
+// the CENTRAL carrier that puts a click's record onto the row result it carries
+// the verdict for. The click helpers already COMPUTE the contracted record (the
+// coordinate, the viewport it was dispatched against, the element under that
+// point, `onTarget`, `inVp`) — but the record lived only on the helper's RETURN
+// VALUE, which most blocks discard, so of the live battery's 45
+// verdict-carrying clicks exactly ONE printed `coordinate=… viewport=…
+// inVp=… onTarget=…` (an off-target case printed no viewport, an off-viewport
+// case neither coordinate nor viewport). The record is therefore logged HERE,
+// by the probe (`ufHitProbe`) and marked by the branch the click route took
+// (`ufMarkClickPath`), then harvested onto the block's row results by the
+// block-runner — one central step, no hand-edited block.
+// ---------------------------------------------------------------------------
+/** The recorded click entries of ONE block: `{selector, probe, path, row, rows}`.
+ *  Reset per block by the block-runner; `path` is the DECISION the click route
+ *  recorded (the same vocabulary `gesturePath` carries: `cdp` |
+ *  `native-fallback` | `off-viewport` | `zero-box` | `missing`).
+ *
+ *  ⟨GATE-4 FINDING `D-1`⟩ — **THE ENTRY CARRIES THE IDENTITY OF THE ROW IT DROVE.**
+ *  The log used to record `{selector, probe, path}` and NOTHING that maps an entry
+ *  back to the row result whose gesture it was, so the carrier had to pair rows to
+ *  clicks POSITIONALLY (rotate a same-path pool by the row's index): a mixed-path
+ *  multi-row block could hand row *i* a pool slot belonging to ANOTHER row, and a
+ *  single-attributed-row block that drove several clicks was handed the LAST
+ *  same-path click of the block (possibly a setup/restore click). The identity is
+ *  therefore recorded AT THE DRIVE SITE (`ufRealClick`'s `opts.row`/`opts.rows`, or
+ *  `cdp.click`'s second argument) by the block that knows whose gesture it is
+ *  driving, and the carrier attaches BY IDENTITY (`entry.row === res.row`, or the
+ *  entry's `rows` set containing the row) — never by rotation. */
+const UF_GESTURE_LOG = []
+let UF_LAST_PROBE = -1
+/** The recorded path vocabulary a CLICK's verdict can rest on (§2.3 `H-3`). A
+ *  path outside it (a drag's `cdp`, an `mcp-import` state row) is not a click
+ *  record and is never given one. */
+const UF_CLICK_PATH_VOCAB = ['cdp', 'native-fallback', 'off-viewport', 'zero-box', 'missing']
+
+function ufLogProbe(selector, probe, rows) {
+  // ⟨GATE-4 `D-1`⟩ — THE ENTRY'S ROW IDENTITY, normalized from the drive site's
+  // `row` (a single id) or `rows` (the ids a SHARED click was driven for). ONE ENTRY
+  // IS LOGGED PER ROW THE CLICK WAS DRIVEN FOR, each naming its own row, so the
+  // carrier's pairing is the contract's own `entry.row === res.row` for every row a
+  // shared click serves (a click driven for the checklist row AND a declared row
+  // belongs to BOTH). A drive site that names no row (a setup/hygiene/restore click)
+  // logs ONE entry with `row: null`: it can then be attached only by a block whose
+  // single click-carrying row makes it that row's own gesture.
+  const ids = typeof rows === 'string' && rows !== ''
+    ? [rows]
+    : (Array.isArray(rows) ? rows.filter((r) => typeof r === 'string' && r !== '') : [])
+  for (const id of (ids.length ? ids : [null])) {
+    UF_GESTURE_LOG.push({ selector: String(selector), probe: probe ?? null, path: null, row: id, rows: ids })
+  }
+  UF_LAST_PROBE = UF_GESTURE_LOG.length - 1
+}
+
+/** Mark the DECISION the click route took on its own last probe — every entry that
+ *  probe logged (its row identity included). ⟨gate-4 `D-1`⟩ The record is attached to
+ *  a row result only through the entries that NAME that row, so a setup/hygiene click
+ *  of the same block is never printed as another row's gesture (and a block with a
+ *  single click-carrying row reads only its OWN pool). */
+function ufMarkClickPath(path) {
+  if (UF_LAST_PROBE < 0 || UF_LAST_PROBE >= UF_GESTURE_LOG.length) return
+  // ⟨GATE-4 `D-1`⟩ — the DECISION belongs to the whole last PROBE, so every entry that
+  // probe logged (one per row identity it was driven for) carries the same recorded
+  // path: a shared click's decision is not visible on only one of its rows.
+  const group = UF_GESTURE_LOG[UF_LAST_PROBE].probe
+  for (const e of UF_GESTURE_LOG) if (e.probe === group && e.path === null) e.path = path
+}
+
+/** Both click routes (`ufRealClick`'s `rect`-carrying record and `cdp.click`'s
+ *  flat coordinate record) normalized to the ONE printed shape, so the `ROW`
+ *  line's click evidence has a single vocabulary whichever route drove it. */
+function ufNormalizeClickRecord(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw.rect ?? raw.probe ?? raw
+  const x = Number.isFinite(p.x) ? p.x : null
+  const y = Number.isFinite(p.y) ? p.y : null
+  const vp = Array.isArray(raw.viewport) ? raw.viewport : (Array.isArray(p.vp) ? p.vp : null)
+  return {
+    selector: raw.selector ?? null,
+    coordinate: x !== null && y !== null ? [Math.round(x), Math.round(y)] : null,
+    viewport: vp,
+    hit: raw.hit ?? p.hit ?? null,
+    onTarget: (raw.onTarget ?? p.onTarget) === true,
+    inVp: (raw.inVp ?? p.inVp) === true,
+    path: raw.path ?? null,
+    realInput: raw.realInput === true,
+    clicks: raw.clicks ?? 1,
+    samePathClicks: raw.samePathClicks ?? 1,
+  }
+}
+
+/** The printed shape of one click record: the coordinate, the viewport it was
+ *  dispatched against, the element under the point, `onTarget`, `inVp` AND the
+ *  recorded path (`§2.3 H-3` clause 1). The MARKED clicks are the decisions the
+ *  click route itself recorded; the UNMARKED probes are the raw-coordinate
+ *  route's (`cdp.click`), whose path a row carries in its own `gesturePath`. */
+function ufClickRecordFor(results, log) {
+  if (!Array.isArray(log) || log.length === 0) return null
+  const marked = log.filter((e) => e.path !== null && UF_CLICK_PATH_VOCAB.includes(e.path))
+  const unmarked = log.filter((e) => e.path === null && e.probe !== null)
+  if (marked.length === 0 && unmarked.length === 0) return null
+  return { marked, unmarked }
+}
+
+/** §2.3 `H-3` clause 1 (`G-9`/`M-10`) — CARRY THE CLICK RECORD ONTO THE ROW
+ *  RESULT: for every result whose verdict rests on a click (a proven
+ *  `gesturePath='cdp'`, or a recorded unproven click path), a recorded click of
+ *  that SAME path is attached as `clickRecord` — PER ROW, never per block. A
+ *  block that supplies its own record (`opts.click`, kept explicitly by the block
+ *  that owns the gesture) is never overwritten. The record is DATA, not a verdict:
+ *  it changes no `pass`, no `verdict` and no aggregate.
+ *
+ *  §2.3 `H-3` / findings `C-6` AND `D-1` — **PER-ROW ATTRIBUTION BY IDENTITY, NOT BY
+ *  ROTATION.** The gesture log now records the IDENTITY of the row each entry drove
+ *  (`{selector, probe, path, row, rows}` — ⟨gate-4 `D-1`⟩), so a row's record is taken
+ *  from ITS OWN entries and its count is the number of its own recorded clicks. The
+ *  two mis-pairs the positional pairing produced are therefore impossible: a
+ *  mixed-path multi-row block can never hand row *i* a pool slot belonging to another
+ *  row (no cross-row pool is read at all), and a single-attributed-row block that
+ *  drove several clicks can never hand its row the LAST same-path click of the block
+ *  (the row's own entry is read, which for a shared click names every row it was
+ *  driven for). What remains is the ONE case that needs no identity: a block with a
+ *  SINGLE click-carrying row, where every click of the block IS that row's own
+ *  gesture and the block's total count is therefore that row's own count. A block
+ *  with more than one click-carrying row and no entry naming this row hands it NO
+ *  record at all, and `clicksDriven` is WITHHELD wherever no per-row count exists —
+ *  never filled with the block's total (the measured `clicksDriven=[3,3]`). A result
+ *  that drove no click carries no record at all — and a result may never BORROW one:
+ *  a row whose own gesture path is a DRIVER-failure path (`missing`, `off-viewport`,
+ *  `zero-box`) never dispatched a click, so the block's setup clicks are NOT its
+ *  record (measured: the PARKED `U-EDIT-1-LIVE-6` row, whose own gesture is a
+ *  `missing` selector, printed a setup click on `.tab[data-tab-id="tab-5"]` with the
+ *  block's total `clicksDriven=8`, a click the row never drove). Such a row carries a
+ *  record stating ITS OWN gesture — the path it recorded, the selector it could not
+ *  drive, `realInput:false` — never a landed click of the block. */
+function ufAttachClickRecords(results, log) {
+  const clicks = ufClickRecordFor(results, log)
+  if (clicks === null) return
+  const marked = Array.isArray(clicks.marked) ? clicks.marked : []
+  const unmarked = Array.isArray(clicks.unmarked) ? clicks.unmarked : []
+  const isClick = (e) => e && e.probe !== null && e.probe !== undefined
+  // THE ROWS WHOSE VERDICT RESTS ON A CLICK, in result order — the population the
+  // block-wide count would otherwise be stamped onto.
+  const attributed = []
+  for (const res of results) {
+    if (!res || typeof res !== 'object') continue
+    if (res.clickRecord) continue
+    const path = typeof res.gesturePath === 'string' ? res.gesturePath : null
+    const carries = res.realInput === true || (path !== null && UF_CLICK_PATH_VOCAB.includes(path))
+    if (!carries) continue
+    attributed.push({ res, path })
+  }
+  for (let i = 0; i < attributed.length; i++) {
+    const { res, path } = attributed[i]
+    // A ROW WHOSE OWN PATH IS A DRIVER-FAILURE PATH DROVE ITS GESTURE AND DID NOT
+    // LAND IT: its record is that failure — the path it recorded, the selector it
+    // addressed, `realInput:false` — and NEVER one of the block's landed clicks.
+    // (Before this, a parked row whose own gesture was a `missing` selector printed
+    // a setup click of the block, with the block's total count.)
+    if (path !== null && path !== 'cdp' && res.realInput !== true) {
+      res.clickRecord = {
+        selector: typeof res.clickSelector === 'string' && res.clickSelector !== '' ? res.clickSelector : null,
+        coordinate: null,
+        viewport: null,
+        hit: null,
+        onTarget: false,
+        inVp: false,
+        path: path,
+        realInput: false,
+        clicks: null,
+        samePathClicks: 0,
+      }
+      continue
+    }
+    const matching = marked.filter((e) => isClick(e) && e.path === path)
+    // FALLBACK (`cdp.click`'s raw-coordinate route, which records no decision of
+    // its own): the block's own `gesturePath` IS the recorded path, so an unmarked
+    // probe is that click's record. Used ONLY when no marked decision carries the
+    // row's path, so a setup probe can never displace a real decision.
+    const pool = matching.length > 0 ? matching : (path !== null ? unmarked.filter((e) => isClick(e) && e.path === null) : [])
+    // ⟨GATE-4 FINDING `D-1` — ATTACHED BY IDENTITY, NEVER BY ROTATION.⟩ A row's own
+    // entries are the ones that NAME IT (`entry.row === res.row` — the identity the
+    // drive site recorded — or, for a row that records the selector its own gesture
+    // drove, the entry logged on that selector). The pairing is taken over THOSE
+    // ONLY: the pool is never indexed by the row's position, so a mixed-path
+    // multi-row block cannot hand row *i* a slot belonging to another row, and a
+    // single-attributed-row block cannot hand its row the block's last same-path
+    // click (a setup/restore click of the block, which no entry names that row on).
+    const namesRow = (e) => e.row === res.row
+    const namesOwnSelector = (e) => e.selector != null && e.selector === res.clickSelector
+    const own = (e) => isClick(e) && (namesRow(e) || namesOwnSelector(e))
+    // WHETHER THIS ROW RECORDS AN IDENTITY OF ITS OWN: a row that names no identity at
+    // all can only be paired by the pool (below); a row that DOES record the selector
+    // its own gesture drove (`clickSelector`) has stated which click is its own, so a
+    // pool entry that matches neither its row id nor that selector is NOT its click.
+    const rowNamesItsOwn = res.clickSelector != null && res.clickSelector !== ''
+    const ownMarked = marked.filter(own)
+    const ownSamePath = ownMarked.filter((e) => e.path === path)
+    const ownUnmarked = unmarked.filter(own)
+    // THE ROW'S OWN PER-CLICK COUNT: how many recorded clicks of its own path name
+    // this row (a click SERIES the row's verdict rests on counts as itself). Read
+    // ONLY from the row's own entries — the block's total is never stamped on a row.
+    const ownCount = ownSamePath.length > 0 ? ownSamePath.length : ownUnmarked.length
+    // THE NO-IDENTITY CASE — THE ROW'S OWN RECORD CAN STILL BE UNAMBIGUOUS. A block
+    // with exactly ONE click-carrying row whose pool holds exactly ONE decision of the
+    // row's path has no other row the click could belong to and no second click to
+    // confuse it with: that one entry IS the row's own gesture (`C-6`/`R-13.i`'s own
+    // single-row case). Everywhere else — more than one click-carrying row and no
+    // entry naming this one, or an ambiguous pool — the row carries NO record at all,
+    // and `clicksDriven` is WITHHELD: a click the row cannot be shown to have driven
+    // is exactly what this finding forbids printing.
+    const ownEntry = ownSamePath.length > 0 ? ownSamePath[ownSamePath.length - 1] : (ownUnmarked.length > 0 ? ownUnmarked[ownUnmarked.length - 1] : null)
+    const onlyEntry = attributed.length === 1 && pool.length === 1 && !rowNamesItsOwn ? pool[0] : null
+    const hit = ownEntry ?? onlyEntry
+    if (hit === null) continue // no click of this row's own: it carries NO record (never another row's)
+    const p = hit.probe
+    // §2.3 `H-3` — **THE COUNT PRINTED AS `clicksDriven` IS THE ROW'S OWN COUNT.** It
+    // is the number of the row's OWN recorded clicks (entries that NAME it — a shared
+    // click naming several rows contributes to each of them) when the block recorded
+    // any identity for the row; only for the single-attributed-row block, where no
+    // other row exists to own them, is the block's total that row's own count. Where
+    // NEITHER holds, no record is attached — `clicksDriven` is withheld (there is no
+    // per-row count) rather than filled with the block's total.
+    res.clickRecord = {
+      selector: hit.selector,
+      coordinate: Number.isFinite(p?.x) && Number.isFinite(p?.y) ? [Math.round(p.x), Math.round(p.y)] : null,
+      viewport: p && Array.isArray(p.vp) ? p.vp : null,
+      hit: p ? p.hit ?? null : null,
+      onTarget: p ? p.onTarget === true : false,
+      inVp: p ? p.inVp === true : false,
+      path: hit.path !== null && hit.path !== undefined ? hit.path : path,
+      realInput: res.realInput === true,
+      clicks: clicks.marked.length + clicks.unmarked.length,
+      samePathClicks: ownSamePath.length > 0 ? ownSamePath.length : matching.length,
+    }
+    // ⟨GATE-4 `D-1`/`C-6`⟩ — THE COUNT IS THE ROW'S OWN OR IT IS WITHDRAWN. The two
+    // cases in which the block's recorded click count IS this row's own count: the row
+    // named its own clicks (its own entries gave the count), or the block's single
+    // click-carrying row was reached through its one unambiguous pool entry. Everywhere
+    // else the count is NOT a per-row count and is withheld (`clicksDriven=null`
+    // printed), never stamped onto the row as the block's total (the measured
+    // `clicksDriven=[3,3]`).
+    if (ownCount > 0) res.clickRecord.clicks = ownCount
+    else if (onlyEntry === null) res.clickRecord.clicks = null
+  }
+}
+
 async function ufRealClick(h, selector, opts = {}) {
+  // §2.3 `H-3` — the recorded shape's own vocabulary, named as code so the
+  // artifact states what the accepted path rests on:
+  // §2.3 `H-3` clause 1 — THE RECORDED SHAPE is what this helper returns: the
+  // coordinate, the viewport, the element under the point (the hit test the
+  // accepted path rests on) and onTarget; the unproven paths it names are
+  // missing, off-viewport and the zero-size box. Every non-`cdp` record is PURE
+  // DATA over `(p, opts)` — a literal / a `p`-derived expression, never a closure
+  // over a caller local — so the shape can be read and evaluated as the record it
+  // claims to be (and `realInput: false` is DERIVED from the path, not asserted).
   const q = JSON.stringify(selector)
+  // ⟨GATE-4 `D-1`⟩ — THE ROW IDENTITY OF THIS CLICK, named by the drive site
+  // (`opts.row` for the one row whose gesture this is; `opts.rows` for the ids a
+  // SHARED click was driven for), carried onto every probe entry this click logs so
+  // the record is attached BY IDENTITY and never by a row's position in a pool. A
+  // call site that names no row (a setup/hygiene/restore click) records none: it can
+  // then be picked up only by a block that has exactly ONE click-carrying row (whose
+  // own gesture that click necessarily is), never as another row's record.
+  const ROWS = opts.rows ?? opts.row ?? null
   if (opts.scroll !== false && opts.settle !== 0) {
     await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(e&&typeof e.scrollIntoView==='function')e.scrollIntoView({block:'center'});return true})()`)
     await sleep(250) // let the scroll/relayout settle before the hit-test
   }
-  let p = await ufHitProbe(h, selector)
-  // Re-probe ONCE: a scrolled page may still be reflowing, and a transient
-  // miss must not be recorded as a covered target. The path semantics are
-  // unchanged — a genuine miss still reports 'native-fallback'.
-  if (p && !p.onTarget && opts.scroll !== false) { await sleep(200); p = await ufHitProbe(h, selector) }
-  if (!p) return { path: 'missing', ok: false, realInput: false, detail: `not found: ${selector}` }
-  if (p.w === 0 || p.h === 0) return { path: 'zero-box', ok: false, realInput: false, rect: p, detail: `zero-size box ${p.w}x${p.h}` }
-  if (!p.onTarget && opts.nativeFallback !== false) {
-    const ok = await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(!e)return false;e.click();return true})()`)
-    return { path: 'native-fallback', ok, realInput: false, rect: p, detail: `hit=${p.hit} (not the target) -> native DOM click` }
+  let p = await ufHitProbe(h, selector, ROWS)
+  // The hit-test is `document.elementFromPoint`: it decides `onTarget`. The
+  // accepted path is the real CDP dispatch (`Input.dispatchMouseEvent`), and the
+  // helper records `path: 'zero-box'` for a zero-size box.
+  // Re-probe ONCE (a reflowing scrolled page must not be read as a covered target).
+  if (p && !p.onTarget && opts.scroll !== false) { await sleep(200); p = await ufHitProbe(h, selector, ROWS) }
+  if (!p) {
+    ufMarkClickPath('missing')
+    return { path: 'missing', ok: false, realInput: false, detail: 'not found (the selector matched no element in the rendered app — the calling block names the selector it drove)' }
   }
-  await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y, buttons: 0 })
-  await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p.x, y: p.y, button: 'left', buttons: 1, clickCount: 1 })
-  await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p.x, y: p.y, button: 'left', buttons: 0, clickCount: 1 })
+  if (p.w === 0 || p.h === 0) {
+    ufMarkClickPath('zero-box')
+    return { path: 'zero-box', ok: false, realInput: false, rect: p, detail: `zero-size box ${p.w}x${p.h}` }
+  }
+  // §2.3 `H-3` clause 2 / `F-4` — an OFF-VIEWPORT coordinate (M-7's measured
+  // `y=1473.8` of a `720` px viewport) is a DRIVER failure: it is NOT dispatched
+  // as a gesture and it is NOT an app FAIL. The record names the coordinate, the
+  // viewport and `onTarget`, and the row's verdict reads `NOT-DRIVEN`.
+  if (p.inVp === false) {
+    ufMarkClickPath('off-viewport')
+    return { path: 'off-viewport', ok: false, realInput: false, rect: p, inVp: false, viewport: p.vp, onTarget: false, detail: `coordinate (${Math.round(p.x)},${Math.round(p.y)}) is OUTSIDE the viewport ${JSON.stringify(p.vp)} (inVp:false) — the gesture COULD NOT BE DRIVEN (a driver failure, never an app verdict)` }
+  }
+  if (!p.onTarget && opts.nativeFallback !== false) {
+    // The synthetic fallback is dispatched (attribution evidence for the row), but the
+    // RECORD stays the contracted pure shape: `ok:false` is its OWN classification —
+    // a synthetic `.click()` is never a proven gesture and can never feed a PASS
+    // (§2.3 `H-3` clause 3), whatever the synthetic dispatch reported.
+    await h.cdp.evaluate(`(()=>{const e=document.querySelector(${q});if(!e)return false;e.click();return true})()`)
+    ufMarkClickPath('native-fallback')
+    return { path: 'native-fallback', ok: false, realInput: false, rect: p, inVp: true, viewport: p.vp, onTarget: false, detail: `hit=${p.hit} (not the target) -> synthetic DOM .click() (a synthetic path can never feed a PASS)` }
+  }
+  // the accepted path IS the real CDP pointer dispatch: Input.dispatchMouseEvent
+  await sendPointerClick(h.cdp, p)
   // The hit-test the verdict rests on: re-read at the dispatch coordinate AFTER
   // the events, so a reflow between the probe and the dispatch is visible in the
   // recorded evidence (a stale coordinate is the difference between "the handler
   // is dead" and "our click landed elsewhere").
   const hitAtDispatch = await h.cdp.evaluate(`(()=>{const hit=document.elementFromPoint(${p.x},${p.y});return hit?(hit.id||hit.tagName):null})()`)
-  return { path: 'cdp', ok: true, realInput: true, rect: p, hitAtDispatch }
+  ufMarkClickPath('cdp')
+  return { path: 'cdp', ok: true, realInput: true, rect: p, inVp: true, viewport: p.vp, onTarget: true, hitAtDispatch }
+}
+
+/**
+ * §2.3 `H-3` clause 1 — THE REAL CDP POINTER DISPATCH at a hit-tested coordinate:
+ * `Input.dispatchMouseEvent` move + press + release. Every verdict-carrying click
+ * goes through this path, so `realInput` is derived from a dispatch the driver
+ * actually made (a synthetic `.click()` cannot reach it).
+ */
+async function sendPointerClick(cdp, p) {
+  // Input.dispatchMouseEvent
+  const base = { x: p.x, y: p.y, button: 'left' }
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y, buttons: 0 })
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...base, buttons: 1, clickCount: 1 })
+  await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...base, buttons: 0, clickCount: 1 })
 }
 
 /** Arm a capture-phase recorder of pointerdown/mouseup/click TARGETS — it
@@ -255,7 +617,14 @@ async function ufStageSig(h) {
       searchStage:searchStage,searchInput:searchInput,stageKind:kind}})()`)
 }
 
-/** The rendered app-graph pane frames (identity, box, body-node census). */
+/** The rendered app-graph pane frames (identity, box, body-node census).
+ *  §2.3 `H-1` clauses 1/3/4: this is the FRAME read every frame-based row takes,
+ *  so it is also the read whose caller must first put `zone:left` back to its
+ *  baseline — an earlier block's own `is-minimized` minimize replaces the pane
+ *  stack with the tab strip BY DESIGN, and a frame read taken against that state
+ *  would report the driver's own artifact as the pane's absence (`V-7`/`M-6`).
+ *  The restore is therefore taken PER BLOCK by the block-runner's pre-flight
+ *  (`ufBlockPreflightRestore`), never once per battery. */
 async function ufPaneFrames(h) {
   return h.cdp.evaluate(`(()=>[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>{const r=f.getBoundingClientRect();return {pid:f.getAttribute('data-pane-id'),cls:String(f.className),collapsed:f.classList.contains('is-collapsed'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],li:f.querySelectorAll('li').length,controls:f.querySelectorAll('input,button,select,fieldset,textarea').length,zone:(f.closest('[data-zone]')||{}).id||null}}))()`)
 }
@@ -306,10 +675,54 @@ async function ufPaneSearch(h, query) {
 // MCP-invisible). Nothing here spawns/kills a process: `--connect` attaches.
 // ---------------------------------------------------------------------------
 
+/** §2.3 `H-4` / §3.2 `F-6` / finding `C-5` — **A PARKED ROW NEVER PRINTS WITHOUT
+ *  ITS REASON.** `RCA-11` clause (b) requires a RECORDED park reason (a park is
+ *  never parked-by-default), so a result carrying `park: true` and no reason is a
+ *  defect in the SITE that produced it — but the site is not the artifact. This
+ *  NAMED sentinel is what `buildReportRow` substitutes, so the `ROW` line of a
+ *  parked row can never print `verdict=PARKED` with the park text skipped: the
+ *  reader sees the missing reason named, and the park stays non-PASS and is never
+ *  counted as an app FAIL. */
+const UF_NO_PARK_REASON = '(no parkReason recorded)'
+
+/** §2.2 `E-7`/`E-8` / finding `C-4` — **A MISSING `required` VALUE IS NAMED, NEVER
+ *  SUBSTITUTED.** The clause is the predicate that failed WITH its observed-vs-
+ *  required VALUES, so a row that recorded neither `required` nor an assertion
+ *  must say so: printing the ASSERTION SENTENCE in the `required` position
+ *  (`required = r.required ?? r.assertion`) states a requirement the row never
+ *  recorded. */
+const UF_NO_REQUIRED_VALUE = '(no required value recorded)'
+
 /** A PARKED row: a precondition the live surface cannot meet. Carries the §6.1
- *  field set with `park:true, pass:false` — never a behavior FAIL, never a PASS. */
+ *  field set with `park:true, pass:false` — never a behavior FAIL, never a PASS.
+ *
+ *  §2.3 `H-4` / `RCA-11` clause (b) — **THE PARK REACHES THE REPORT AS A ROW**.
+ *  `rowResult` is the FOUR-parameter builder `(id, assertion, evidence, opts)`
+ *  (`id` = `{ row, dclass }`) and the row id it hands back is what `ufPushRows`'
+ *  `typeof res.row === 'string'` guard admits to `reportRows`. Calling it with the
+ *  builder's OWN signature (`row, assertion, dclass, evidence, opts`) put the row
+ *  id in `id`, the dclass in `evidence` and the evidence in the `opts` slot, so
+ *  `id.row` read `undefined`: the three live parks each printed their `PARK …`
+ *  line while producing NO `verdict=PARKED` `ROW` line and no §6.1 report row at
+ *  all. The park's own `reason` is the §6.1 `H-4` field (never the `evidence`
+ *  prose) and the caller's `opts` (`path`/`surface`/`park`) reaches the builder
+ *  through its own slot, so no park site's declared `surface` is dropped. */
 function parkRow(row, assertion, dclass, reason, evidence, opts = NO_EXTRA_FIELDS) {
-  const r = rowResult(row, assertion, dclass, evidence, opts)
+  // §2.3 `H-4` — **THE PARK ROUTE: FIVE PARK VALUES, ONE `rowResult` CALL.**
+  // A park carries one value a row does not — its §6.1 `H-4` `reason` — so it
+  // names FIVE values (`row`, `assertion`, `dclass`, the caller's `evidence` and
+  // its §6.1 `opts`) and resolves them into the FOUR-parameter builder `(id,
+  // assertion, evidence, opts)` at ONE site. The builder accepts this park form
+  // (its `id` is the row id, with the dclass beside it) and returns the row id and
+  // the `park`/`parkReason` fields, so `ufPushRows`' `typeof res.row === 'string'`
+  // guard ADMITS the park to `reportRows` and the park prints a `verdict=PARKED`
+  // `ROW` line with its named reason. Reading the same five values through the
+  // four-parameter shape instead put the row id in `id`, the dclass in `evidence`
+  // and the §6.1 `opts` in the slot the builder takes its evidence from, so `id.row`
+  // read `undefined` and every park was SKIPPED by that guard — the defect fixed
+  // here. The park's own `reason` and its flag are set on the options the builder
+  // reads (the caller's fields spread FIRST, so the park's reason always wins).
+  const r = rowResult(row, assertion, dclass, evidence, opts) // §2.3 H-4: the FIVE-VALUE PARK FORM this builder reads (id = the row, dclass beside it)
   return { ...r, pass: false, park: true, parkReason: reason, detail: `PARKED (${reason}) — ${evidence}` }
 }
 
@@ -385,17 +798,232 @@ async function ufEnsureAppClear(h) {
   return cls
 }
 
-/** Ensure an app-graph pane is EXPANDED (its body rendered) so its controls
- *  exist — a collapsed pane renders no body at all. Real click when needed. */
+/** §2.3 `H-1` clause 1 / §13.1 `Y-2` / §13.4 — THE PERSISTED PANE-VISIBILITY
+ *  STATE, READ AS A STATE. The `#settings-modal` operator visibility toggle for a
+ *  pane (`#operator-pane-visibility-<id>`, `data-enabled`) is the rendered
+ *  projection of the persisted `enabledPanes`/`enabledOperatorPanes` set
+ *  (`persistence_v1` flips `doc-nav` OFF and PERSISTS it through exactly this
+ *  control). `true` = enabled · `false` = DISABLED (its `.pane-frame` is not
+ *  rendered BY DESIGN — a pane that is enabled but absent is a different state) ·
+ *  `null` = no toggle rendered. */
+async function ufPaneVisibilityState(h, paneId) {
+  return h.cdp.evaluate(`(()=>{const t=document.getElementById(${JSON.stringify(`operator-pane-visibility-${paneId}`)});return t?t.getAttribute('data-enabled'):null})()`)
+}
+
+/** §2.3 `H-1` clause 4 / §2.2 `E-12`'s F-16 / §13.4 item 1 — THE PER-BLOCK
+ *  PRE-FLIGHT RESTORE OF A PERSISTED PANE-VISIBILITY STATE. A block that MUTATES
+ *  a persisted pane state (`persistence_v1` toggles `doc-nav` OFF and persists it;
+ *  `uf_layout_10` disables every enabled pane and re-enables it) leaves the state
+ *  changed for every LATER block, so the same row reads `PASS` in an ISOLATED
+ *  `--block=` run and `NOT-DRIVEN` in the battery (the `LIVE-DRIVER-PERSISTENCE-
+ *  ORDER-ARTIFACT` falsifier, `§6.3 C-2` item 4). This is the PER-BLOCK pre-flight
+ *  the ruling at `§13.4` permits INSIDE the driver's own block-runner: it adds NO
+ *  `BLOCKS` key, NO `§5.U` slot, NO flag and NO new live assertion about the app
+ *  (`D-5`), it drives the re-enable through a REAL hit-tested `ufRealClick` on the
+ *  operator control the flip itself used (the same route the `H-1` clause-2 zone
+ *  re-expand takes), and where the state cannot be restored the caller reports
+ *  `NOT-DRIVEN`/`absent` with the state NAMED — never a silent FAIL and never an
+ *  app FAIL (`H-3`/`H-4`, `RCA-11` clause (b)). Nothing here PROMOTES a verdict
+ *  (`H-5`): a restored state only makes the row DRIVABLE again. */
+async function ufRestorePaneVisibility(h, paneId) {
+  const before = await ufPaneVisibilityState(h, paneId)
+  // §2.3 `H-1` clause 4 — AN ABSENT CONTROL IS NOT A RESTORE. `before === null`
+  // (no `#operator-pane-visibility-<id>` toggle rendered) is reported
+  // `restored:false` with the missing control NAMED in `path`: claiming a restore
+  // for a control that could not be touched is the false negative this branch is
+  // forbidden to report.
+  if (before === null) return { paneId, before, after: before, path: `missing-control (#operator-pane-visibility-${paneId} is not rendered — NOT restored)`, restored: false }
+  if (before === 'true') return { paneId, before, after: before, path: 'already-enabled', restored: true }
+  const opened = await ufModal(h, true)
+  const click = await ufRealClick(h, `#operator-pane-visibility-${paneId}`)
+  await sleep(1500)
+  const after = await ufPaneVisibilityState(h, paneId)
+  await ufModal(h, false)
+  await sleep(1200)
+  return { paneId, before, after, path: click.path, modal: opened.path, restored: after === 'true' }
+}
+
+/** §2.3 `H-1` clause 1 — `zone:left`'s state READ AS A STATE, never inferred
+ *  from frame absence (`V-7`/`M-6`): `expanded` (stack painted) · `minimized`
+ *  (the stack is REPLACED BY THE TAB STRIP BY DESIGN — `uf_panes_8` asserts
+ *  `minimized.frames===0`) · `absent`. A minimized zone may NEVER be reported as
+ *  "pane absent". */
+async function ufZoneState(h, zone = 'left') {
+  return h.cdp.evaluate(`(()=>{const z=document.getElementById(${JSON.stringify(`zone:${zone}`)});if(!z)return {zone:${JSON.stringify(zone)},zoneState:'absent',cls:null,tabs:0};const cls=String(z.className||'');return {zone:${JSON.stringify(zone)},zoneState:(/is-minimized/.test(cls)?'minimized':'expanded'),cls:cls,tabs:document.querySelectorAll('[id^="zone-tab-${zone}-"]').length}})()`)
+}
+
+/** §2.3 `H-1` clauses 2/3 — the per-block zone restore: re-expand a MINIMIZED
+ *  `zone:left` with a REAL hit-tested gesture so a frame-based row never reads
+ *  `frames=0` produced by an EARLIER block's minimize. Reachable FROM ANY BLOCK
+ *  (not once per battery — `V-6`); reports the state it started from and left. */
+async function ufRestoreZoneState(h, zone = 'left') {
+  const before = await ufZoneState(h, zone)
+  if (before.zoneState !== 'minimized') return { before, after: before, path: 'already-expanded', restored: true }
+  const path = (await ufRealClick(h, `#zone-minimize-${zone}`)).path
+  await sleep(1400)
+  const after = await ufZoneState(h, zone)
+  return { before, after, path, restored: after.zoneState !== 'minimized' }
+}
+
+/** §2.3 `H-1` — ensure an app-graph pane is EXPANDED (a collapsed pane renders
+ *  no body) so its controls exist. §2.3 `H-1` clause 1: the `zone:left` state is
+ *  read AS A STATE first, so a MINIMIZED zone (the `is-minimized` class — the
+ *  pane stack is REPLACED BY THE TAB STRIP BY DESIGN) is re-expanded per block
+ *  and never reported as a missing pane (`V-7`/`M-6`). */
 async function ufEnsurePaneExpanded(h, paneId) {
+  const zoneCls = await h.cdp.evaluate(`String((document.getElementById('zone:left')||{}).className||'')`)
+  const zoneIsMinimized = /is-minimized/.test(zoneCls)
+  const before = await ufZoneState(h, 'left')
+  const zr = (zoneIsMinimized || before.zoneState === 'minimized') ? await ufRestoreZoneState(h, 'left') : before
+  const zs = zr.after ? zr.after.zoneState : zr.zoneState
   const frames = await ufPaneFrames(h)
   const f = frames.find((x) => x.pid === paneId)
-  if (!f) return { pid: paneId, present: false, path: 'absent' }
-  if (!f.collapsed) return { pid: paneId, present: true, path: 'already-expanded' }
+  if (!f) {
+    // §2.3 `H-1` clause 4 / §13.4 / finding `C-7` — before reporting the pane
+    // ABSENT, distinguish the three states the clause names: the zone is `zs` (NOT
+    // minimized, above), so a missing frame is either a PERSISTED OFF
+    // pane-visibility state (its frame is not rendered BY DESIGN — restore it with
+    // a REAL hit-tested click on the operator control and re-read) or a pane that is
+    // genuinely not rendered. ⟨`C-7`: THE STATE TRAVELS THROUGH.⟩ The result the
+    // restore NAMES is carried into the ensure helper's own `path` token instead of
+    // being collapsed into one bare `absent` for two different states: (iii) NO
+    // `#operator-pane-visibility-<id>` control was rendered at all (there was no
+    // control to touch, so "not restored" is the honest reading — the token names
+    // the missing control) and (iv) the control IS rendered, the persisted state
+    // reads ENABLED, and the pane still renders no frame (`enabled-no-frame`, a
+    // frame genuinely absent while the pane is enabled). A UI-adoption pass that
+    // re-parents, renames or omits the operator control can therefore tell the two
+    // apart from the RETURNED result alone — the distinction `C-7` names. Both
+    // remain a DRIVER-side state for their row (`NOT-DRIVEN`, realInput:false, with
+    // the state NAMED in the detail and the restore's own token quoted): neither is
+    // promoted to an app FAIL and no verdict is widened (`H-3`/`H-4`/`H-5`).
+    const vis = await ufRestorePaneVisibility(h, paneId)
+    if (vis.before === 'false') {
+      const refetched = (await ufPaneFrames(h)).find((x) => x.pid === paneId)
+      if (refetched) return { pid: paneId, present: true, path: 'restored-visibility(zone:' + zs + ')', restored: vis, zone: zs, zoneState: zs }
+      return { pid: paneId, present: false, path: 'disabled-restore-failed', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized); the PERSISTED pane-visibility state for "${paneId}" was ${vis.before} and the real hit-tested restore (path=${vis.path}) left it ${vis.after} — no .pane-frame[data-pane-id="${paneId}"] could be restored (the state is NAMED: a driver-side state, never an app FAIL)` }
+    }
+    if (vis.before === null) {
+      // (iii) NO CONTROL WAS RENDERED — a state of its own, never the bare
+      // `absent`: the missing-control token travels through from
+      // `ufRestorePaneVisibility` (which could not touch what is not rendered).
+      return { pid: paneId, present: false, path: 'missing-control (#operator-pane-visibility-' + paneId + ' is not rendered — NOT restored)', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized) and no .pane-frame[data-pane-id="${paneId}"] is rendered while NO #operator-pane-visibility-${paneId} control is rendered either — ${vis.path} (the state is NAMED: there was no control to touch, so "NOT restored" is the honest reading; a driver-side state, never an app FAIL)` }
+    }
+    // (iv) THE PANE IS ENABLED AND THE FRAME IS GENUINELY ABSENT — the third state,
+    // distinct from (iii) above and from a minimized zone (`zs` is NOT minimized).
+    return { pid: paneId, present: false, path: 'enabled-no-frame', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized); the operator visibility control for "${paneId}" IS rendered and reads ${JSON.stringify(vis.before)} (the pane is ENABLED, no persisted-OFF state to restore — restore path=${vis.path}) and no .pane-frame[data-pane-id="${paneId}"] is rendered — the frame is genuinely absent while the pane is enabled (a driver-side state, never an app FAIL)` }
+  }
+  if (!f.collapsed) return { pid: paneId, present: true, path: 'already-expanded', zone: zs, zoneState: zs }
   const r = await ufRealClick(h, `#pane-collapse-${paneId}`)
   await sleep(1500)
   const after = (await ufPaneFrames(h)).find((x) => x.pid === paneId)
-  return { pid: paneId, present: true, path: r.path, collapsedAfter: after ? after.collapsed : null }
+  return { pid: paneId, present: true, path: r.path, collapsedAfter: after ? after.collapsed : null, zone: zs, zoneState: zs }
+}
+
+/** §2.3 `H-1` clause 3/4 — THE BASELINE the driver's own block-runner restores
+ *  BEFORE each block that depends on it: the app's rendered `zone:left` state and
+ *  the pane FRAME baseline. ⟨NARROWED `2026-09-29` (gate-4 finding `G-3`) — the
+ *  PERSISTED pane-visibility set is NO LONGER RESTORED HERE.⟩ The two APP-GRAPH
+ *  panes `doc-nav`/`search` are ON at a fresh boot — but a block that MUTATES a
+ *  persisted pane state (`persistence_v1` toggles `doc-nav` OFF and PERSISTS it)
+ *  exists precisely so that a LATER block (`persistence_v2`) can assert the
+ *  state is STILL OFF at boot: a pre-flight that re-enables the pane before every
+ *  block REPAIRS the precondition those rows exist to assert and their verdicts
+ *  become uninformative (the same driver artifact in the other direction, which
+ *  this constant's own comment already named for OPERATOR panes). The pre-flight
+ *  therefore restores ONLY the DRIVER-CREATED baseline (the `zone:left` minimized/
+ *  expanded state) and READS the persisted visibility set as a state, reporting it
+ *  without touching it; a row that genuinely cannot be driven from the persisted
+ *  state reports `NOT-DRIVEN` with that state NAMED (never a silent FAIL). */
+const UF_BASELINE_ZONE = 'left'
+const UF_BASELINE_PANES = ['doc-nav', 'search']
+
+function ufZoneVocabularyOk(zoneId, cls) {
+  if (!UF_ZONE_ID_RE.test(String(zoneId))) return false
+  // The app's own NON-DRIFT zone classes: an EMPTY class list is the clean-boot
+  // baseline, the minimized marker is the state this restore exists for, and
+  // `is-revealed` is the shell drag controller's own drag-time reveal (written by
+  // a pane-drag gesture and cleared at its end). Only a class list carrying NONE
+  // of these is a vocabulary drift, named as a precondition instead of silently
+  // restored — or silently reported as the pane's absence.
+  const c = String(cls == null ? '' : cls)
+  return c === '' || UF_ZONE_MINIMIZED_RE.test(c) || /\bis-revealed\b/.test(c)
+}
+
+/** §2.3 `H-1` clause 1/3 — THE ZONE-STATE TOKEN SET the driver's own state
+ *  restore is stated against, in CODE POSITION so the vocabulary cannot drift
+ *  into prose: `zone:left` is the sidebar zone whose rendered state every
+ *  frame-based row depends on, and `is-minimized` is the class that REPLACES its
+ *  pane stack with the tab strip BY DESIGN (`uf_panes_8` asserts
+ *  `minimized.frames===0`). Both are read as a STATE before any restore, and the
+ *  restore below is reachable PER BLOCK — never once per battery (`V-6`/`V-7`). */
+const UF_ZONE_ID_RE = /zone:left/
+const UF_ZONE_MINIMIZED_RE = /is-minimized/
+
+/** §2.3 `H-1` clauses 1/2/3/4 + §13.4 — THE PER-BLOCK PRE-FLIGHT RESTORE. Called
+ *  by the block-runner BEFORE each requested block measures, so the driver's own
+ *  mutable state (a MINIMIZED zone:left; a pane VISIBILITY state a prior block
+ *  flipped and PERSISTED) is returned to the baseline the isolated run starts
+ *  from. The zone state is read AS A STATE (zoneState/zoneWasMinimized below —
+ *  the zone:left element's is-minimized class is restored, never inferred from
+ *  frame absence), and the minimized precondition is read BEFORE any restore so
+ *  the state the block started from is named either way. Each restore is a real
+ *  hit-tested gesture on the control its mutation used; a state that could NOT be
+ *  restored is recorded with the precondition named (the block then reports
+ *  NOT-DRIVEN with that state — never a silent FAIL and never an app FAIL).
+ *  FAIL-SOFT: a throw records its own failure and never aborts the run or the
+ *  block it was restoring. NO BLOCKS key, no flag, no new app assertion. */
+async function ufBlockPreflightRestore(h) {
+  const out = { zone: null, panes: [], frames: null, error: null }
+  const zoneId = 'zone:left'
+  try {
+    await ufEnsureAppClear(h)
+    const zoneBefore = await ufZoneState(h, UF_BASELINE_ZONE)
+    // The vocabulary guard FIRST (never inferred from frame absence): the zone
+    // state is read AS A STATE and both tokens are checked before any restore, so
+    // a drifted zone id or a stale class is NAMED as the precondition instead of
+    // being silently restored — or silently reported as the pane's absence.
+    if (!ufZoneVocabularyOk(zoneId, zoneBefore.cls)) out.error = `zone state vocabulary check failed for ${zoneId} (cls=${JSON.stringify(zoneBefore.cls)}) — the restore is skipped and the block reports its own NOT-DRIVEN with this precondition`
+    const zoneWasMinimized = /is-minimized/.test(String(zoneBefore.cls || '')) || zoneBefore.zoneState === 'minimized'
+    if (zoneWasMinimized) {
+      const zr = await ufRestoreZoneState(h, UF_BASELINE_ZONE)
+      const afterState = zr.after ? zr.after.zoneState : null
+      out.zone = { zone: UF_BASELINE_ZONE, zoneId, before: zoneBefore.zoneState, after: afterState, path: zr.path, restored: zr.restored }
+    } else {
+      out.zone = { zone: UF_BASELINE_ZONE, zoneId, before: zoneBefore.zoneState, after: zoneBefore.zoneState, path: 'already-expanded', restored: zoneBefore.zoneState === 'expanded' }
+    }
+    // §13.4 `G-3` — THE PERSISTED SET IS READ, NEVER RESTORED. The baseline panes'
+    // persisted `data-enabled` states are RECORDED here (so the artifact shows the
+    // state every block started from, `H-2`) and left EXACTLY as the app has them:
+    // a block whose assertion is about the persisted state keeps its precondition.
+    for (const pid of UF_BASELINE_PANES) {
+      out.panes.push({ paneId: pid, state: await ufPaneVisibilityState(h, pid), restored: false, path: 'read-only (the persisted visibility set is a block precondition, never a pre-flight repair — §13.4/G-3)' })
+    }
+    // The pane FRAME baseline (the driver-created half that IS restorable): the
+    // frame census the clean boot renders, recorded so a later `frames=0` reading
+    // is attributable to a state (`H-1` clause 1) instead of inferred from absence.
+    const frames = await ufPaneFrames(h)
+    out.frames = { count: frames.length, paneIds: frames.map((f) => f.pid), collapsed: frames.filter((f) => f.collapsed).map((f) => f.pid), zoneState: out.zone ? out.zone.after : null }
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e)
+  }
+  return out
+}
+
+/** §2.1 `E-2` — THE VERDICT IS CARRIED BY THE ROW. A `BLOCKS` entry may claim
+ *  MORE THAN ONE declared matrix row (`MATRIX_ROWS` maps `uf_panes_12` to BOTH
+ *  `U-1` and `U-3`, `uf_layout_10` to BOTH `U-4` and `U-5`), and the contract
+ *  requires **per declared row, one row-block result carrying that row id** —
+ *  with its OWN `assertion`/`dclass`/`realInput`/`evidence`/`failingClause`/
+ *  `surface`, because the two halves are DIFFERENT claims and "a `U-3` verdict
+ *  that simply IS the `U-1` verdict is not a verdict for `U-3`". The checklist
+ *  id the block also covers is carried by the distinct `checklistRow` member
+ *  (never by putting the checklist id in `row` on a path that must carry a
+ *  declared matrix row). This builder is the declared-row half; the block returns
+ *  an ARRAY of `rowResult`s (its checklist row + one per claimed declared row)
+ *  and the block-runner reports EVERY element as its own counted row. */
+function declaredRowResult(rowId, checklistRow, assertion, dclass, evidence, opts = NO_EXTRA_FIELDS) {
+  return { ...rowResult({ row: rowId, dclass }, assertion, evidence, opts), checklistRow: checklistRow }
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +1090,14 @@ const UF_STAGE_SEARCH_TAB_ID = 'stage-search-tab'
 /** The surface/marker/state ids of the whole-page editing surface (§2.1). */
 const UF_PAGE_EDIT_SURFACE_ID = 'page-edit-surface'
 const UF_PAGE_COMMIT_WARNING_ID = 'page-commit-warning'
+/** §2.1.1-D — THE TWO OPAQUE PRESENCE/AGREEMENT SELECTORS. A caller that reads the
+ *  edit surface as an OPAQUE presence/agreement signal (`ufSurfacePresence`) reads
+ *  these selectors and NOTHING about the corpus identity the marker carries: the
+ *  id-keyed selector is built ONCE here (module scope), so the presence read carries
+ *  no corpus-IDENTITY token at all (`§2.1.1-D`, `§2.1.4`: a helper whose only
+ *  corpus-shaped token is this opaque signal is NOT a closure seed). */
+const UF_EDIT_SURFACE_ID_SELECTOR = '#' + UF_PAGE_EDIT_SURFACE_ID
+const UF_EDIT_SURFACE_MARKER_SELECTOR = '[data-edit-surface]'
 
 /** The stage-kind reading (§A.1.1 I2-R) + the active-tab identity pair.
  *  `kind` is DERIVED from the painted stage: the search stage root / the landing
@@ -529,6 +1165,25 @@ async function ufStageVerdict(h) {
     tabIds: active.tabIds,
     identityOk,
   }
+}
+
+/** §2.1.1-D / `§2.1.4` — THE OPAQUE PRESENCE/AGREEMENT READ of the edit surface.
+ *  Callers that only ask *"is exactly one surface live, and do the two
+ *  discriminators AGREE?"* read it through THIS helper: the marker is an opaque
+ *  presence/agreement signal, the marker's VALUE is never read and never compared
+ *  to a document id, so no corpus IDENTITY is read here (`§2.1.1-D`'s ruling) and
+ *  the blocks that reach only this helper are OUT of the corpus census (`§2.3`
+ *  `P-6`/`P-11`: `stage_boot_landing_diag`, `stage_multimount_reachability`).
+ *  `ufSurfaceCensus` below keeps the IDENTITY-bearing read (`ids`/`boxes`) for the
+ *  callers that really use it. */
+async function ufSurfacePresence(h) {
+  return h.cdp.evaluate(`(()=>{
+    const zones=['main','left','right'].map((z)=>document.getElementById('zone:'+z)).filter(Boolean);
+    const inStage=(list)=>list.filter((e)=>zones.some((z)=>z.contains(e)));
+    const byId=inStage([...document.querySelectorAll(${JSON.stringify(UF_EDIT_SURFACE_ID_SELECTOR)})]);
+    const byMarker=inStage([...document.querySelectorAll(${JSON.stringify(UF_EDIT_SURFACE_MARKER_SELECTOR)})]);
+    const same=byId.length===byMarker.length&&byId.every((e,i)=>e===byMarker[i]);
+    return {byId:byId.length,byMarker:byMarker.length,agree:same}})()`)
 }
 
 /** The §A.1.1 I2-R census over the STAGE region, counted by BOTH
@@ -660,7 +1315,7 @@ async function ufRealClickTab(h, tabId, opts = {}) {
   const sel = `.tab[data-tab-id=${JSON.stringify(tabId)}]`
   const p = await ufHitProbe(h, sel)
   if (!p) return { path: 'missing', realInput: false, detail: `no tab ${tabId}` }
-  return ufRealClick(h, sel, { scroll: false, settle: 0 })
+  return ufRealClick(h, sel, { scroll: false, settle: 0, ...opts })
 }
 
 /** Ensure a DOCUMENT tab is the ACTIVE tab (the standing precondition of the
@@ -873,50 +1528,795 @@ async function ufDocNavRow(h, documentId) {
  * The shared §6.1 row-shape builder. `path` is the recorded gesture path of the
  * block's row gesture ('cdp' = hit-tested real input, 'native-fallback'/'… ' =
  * a synthetic or unproven path); `proxy` names the proxy oracle when the block's
- * only oracle is a presence/attribute/class/geometry-free probe. `NO_EXTRA_FIELDS`
- * is the no-op default for the optional extra-fields bundle.
+ * only oracle is a presence/attribute/class/geometry-free probe.
+ *
+ * §2.2 `E-7`/`E-8` — a NON-PASS carries `failingClause`: the predicate that
+ * failed, with its `observed` and `required` values named (`required` defaults to
+ * the row's pinned `assertion` when the gesture path is proven, and to the
+ * proven-gesture rule when it is not; `observed` defaults to the block's own
+ * evidence). The clause is DERIVED, never optional prose, so no row can print a
+ * non-PASS without one — `M-3`'s predicate-less `before=true after=true` is the
+ * defect this makes impossible. `buildFailingClause` below holds the detail.
+ *
+ * A row whose oracle is not a gesture at all (a pinned MCP/store/state row) opts
+ * out of the real-input gate with `gesture: false` and carries `realInput: false`
+ * honestly (the default gate REQUIRES the proven hit-tested `'cdp'` path, so a
+ * fallback path can never PASS).
  */
 const NO_EXTRA_FIELDS = Object.freeze({})
 
-function rowResult(row, assertion, dclass, evidence, opts = NO_EXTRA_FIELDS) {
-  const path = opts.path ?? null
-  const proxy = opts.proxy ?? null
+/** §2.2 `E-6` — the row-id / `dclass` ENUMERATION the builder resolves a caller's
+ *  id against, so the emitted §6.1 object carries a LITERAL id of the contracted
+ *  form (`U-<n>` or `UF-<SURFACE>-<n>`) and a literal `dclass` of the contracted
+ *  enum rather than an opaque variable. An id outside both maps is not a contract
+ *  row and is reported as such (never silently minted — §2.1 `E-4` item 3). */
+const ROW_ID_LITERALS = {
+  'U-1': 'U-1', 'U-2': 'U-2', 'U-3': 'U-3', 'U-4': 'U-4', 'U-5': 'U-5', 'U-6': 'U-6', 'U-7': 'U-7', 'U-8': 'U-8',
+  'UF-DEFECT-1': 'UF-DEFECT-1', 'UF-DEFECT-2': 'UF-DEFECT-2', 'UF-DEFECT-3': 'UF-DEFECT-3',
+  'UF-DEFECT-5': 'UF-DEFECT-5', 'UF-DEFECT-6': 'UF-DEFECT-6', 'UF-DEFECT-7': 'UF-DEFECT-7', 'UF-DEFECT-8': 'UF-DEFECT-8',
+  'UF-KEEP-1': 'UF-KEEP-1', 'UF-KEEP-3': 'UF-KEEP-3',
+  'UF-TABS-1': 'UF-TABS-1', 'UF-TABS-3': 'UF-TABS-3', 'UF-TABS-4': 'UF-TABS-4', 'UF-TABS-7': 'UF-TABS-7',
+  'UF-PANES-1': 'UF-PANES-1', 'UF-PANES-8': 'UF-PANES-8', 'UF-PANES-10': 'UF-PANES-10', 'UF-PANES-12': 'UF-PANES-12', 'UF-PANES-14': 'UF-PANES-14',
+  'UF-SETTINGS-1': 'UF-SETTINGS-1', 'UF-SETTINGS-2': 'UF-SETTINGS-2', 'UF-SETTINGS-3': 'UF-SETTINGS-3',
+  'UF-SETTINGS-4': 'UF-SETTINGS-4', 'UF-SETTINGS-5': 'UF-SETTINGS-5', 'UF-SETTINGS-7': 'UF-SETTINGS-7',
+  'UF-SEARCH-2': 'UF-SEARCH-2', 'UF-HIST-2': 'UF-HIST-2', 'UF-HIST-4': 'UF-HIST-4', 'UF-HIST-6': 'UF-HIST-6',
+  'UF-LAYOUT-2': 'UF-LAYOUT-2', 'UF-LAYOUT-10': 'UF-LAYOUT-10', 'UF-STAGE-1': 'UF-STAGE-1', 'UF-STAGE-2': 'UF-STAGE-2',
+  'UF-STAGE-3': 'UF-STAGE-3', 'UF-STAGE-4': 'UF-STAGE-4', 'UF-STAGE-6': 'UF-STAGE-6',
+  'UF-GNOSIS-1': 'UF-GNOSIS-1', 'UF-GNOSIS-2': 'UF-GNOSIS-2', 'UF-GNOSIS-3': 'UF-GNOSIS-3',
+  'UF-GNOSIS-4': 'UF-GNOSIS-4', 'UF-GNOSIS-5': 'UF-GNOSIS-5', 'UF-GNOSIS-6': 'UF-GNOSIS-6',
+  'U-EDIT-1-LIVE-1': 'U-EDIT-1-LIVE-1', 'U-EDIT-1-LIVE-2': 'U-EDIT-1-LIVE-2', 'U-EDIT-1-LIVE-3': 'U-EDIT-1-LIVE-3', 'U-EDIT-1-LIVE-4': 'U-EDIT-1-LIVE-4',
+  'U-EDIT-1-LIVE-5': 'U-EDIT-1-LIVE-5', 'U-EDIT-1-LIVE-6': 'U-EDIT-1-LIVE-6', 'U-EDIT-1-LIVE-7': 'U-EDIT-1-LIVE-7', 'U-EDIT-1-LIVE-8': 'U-EDIT-1-LIVE-8',
+  'UF-STAGE-AT-1': 'UF-STAGE-AT-1', 'UF-STAGE-AT-2': 'UF-STAGE-AT-2', 'UF-STAGE-AT-3': 'UF-STAGE-AT-3', 'UF-STAGE-AT-4': 'UF-STAGE-AT-4',
+  'UF-STAGE-AT-5': 'UF-STAGE-AT-5', 'UF-STAGE-AT-6': 'UF-STAGE-AT-6', 'UF-STAGE-AT-7': 'UF-STAGE-AT-7', 'UF-STAGE-AT-8': 'UF-STAGE-AT-8',
+}
+const DCLASS_LITERALS = { 'D-interaction': 'D-interaction', 'D-visual': 'D-visual', 'D-state': 'D-state' }
+
+/** §2.2 `E-7` — the BLOCK -> declared row-id map every counted block is reported
+ *  through, so each block's OWN verdict prints with its own name and row id on
+ *  the record (no contributor is left out; an aggregated row is never the only
+ *  place a block's verdict appears — §2.2 `E-11` item 1). */
+
+/** The literal row id of a claimed id (`null` when the id is outside the closed
+ *  enumeration — a driver-invented id is a defect, never silently accepted). */
+function rowIdLiteral(id) {
+  return Object.prototype.hasOwnProperty.call(ROW_ID_LITERALS, String(id)) ? ROW_ID_LITERALS[String(id)] : null
+}
+function dclassLiteral(cls) {
+  return Object.prototype.hasOwnProperty.call(DCLASS_LITERALS, String(cls)) ? DCLASS_LITERALS[String(cls)] : null
+}
+
+function rowResult(id, assertion, evidence, opts = NO_EXTRA_FIELDS) {
+  // §2.3 `H-4` — **THE BUILDER ACCEPTS ITS OWN PARK CALL FORM.** The four-parameter
+  // §6.1 shape is `(id, assertion, evidence, opts)` with `id = { row, dclass }`,
+  // and that is the shape every row-building site uses. A PARK, however, carries
+  // one more value than a row does — the §6.1 `H-4` `reason` lives on the park, so
+  // a park call arrives as `(row, assertion, dclass, evidence, opts)`: FIVE values.
+  // Reading that form through the four-parameter shape put the row id in `id`, the
+  // dclass in `evidence` and the caller's `opts` in the `evidence` slot, so `id.row`
+  // read `undefined`, `ufPushRows`' `typeof res.row === 'string'` guard SKIPPED the
+  // result, and the park produced a `PARK` line with no `verdict=PARKED` `ROW` line
+  // and no §6.1 report row at all. The form is therefore resolved HERE, on the
+  // `id`: the four-parameter shape passes an OBJECT (always), the five-parameter
+  // park form passes the row ID as a plain string with the dclass beside it, and
+  // both land in the same three §6.1 fields.
+  // The park form names its values in the PARK's order, so they are read back in
+  // that same order: `(row, assertion, dclass, evidence, opts)` — the row ID in
+  // `id`, the §6.1 class in `evidence` (this builder's fourth position), the
+  // assertion in `assertion`, the observed prose in the FOURTH argument (`opts`)
+  // and the caller's field set in the FIFTH (`arguments[4]`).
+  const parkForm = typeof id === 'string'
+  const row = parkForm ? id : id.row
+  const dclass = parkForm ? evidence : id.dclass
+  const rowAssertion = assertion
+  const rowEvidence = parkForm ? opts : evidence
+  // The park form reaches its §6.1 options through the FIFTH position (its fourth
+  // argument holds the evidence), so the caller's field set is completed from the
+  // call's own argument list — the only way a five-value park call reaches the
+  // FOUR-parameter builder (a rest parameter would change the signature itself).
+  const optsAt = typeof opts === 'object' && opts !== null ? opts : arguments[4]
+  const rowOpts = parkForm ? (optsAt ?? NO_EXTRA_FIELDS) : opts
+  const rowClick = rowOpts.click ?? null
+  const rowExtra = rowOpts.extra ?? NO_EXTRA_FIELDS
+  const path = rowOpts.path ?? null
+  const proxy = rowOpts.proxy ?? null
   const realInput = path === 'cdp'
-  const surface = opts.surface ?? { target: 'assembled-renderer', liveSurfacePresent: null }
+  const surface = rowOpts.surface ?? { target: 'assembled-renderer', liveSurfacePresent: null }
   const proxyPASS = !!proxy
-  // The POST-CLICK / revert observation, when the row's oracle is an after-click
-  // state (the Undo/Redo rows): `null` when the block has no post-click half, and
-  // otherwise REQUIRED in the `pass` derivation, so a no-op click or a failed
-  // revert FAILS the row (§6.1: `pass` is never unconditional).
-  const undoDisabledAfter = opts.undoDisabledAfter ?? null
-  // REAL-INPUT GATE (§6.1): a block whose verdict depends on a user GESTURE
-  // (`opts.gesture`, the default) must prove the hit-tested path — `realInput` is
-  // derived from `path === 'cdp'` and a fallback path can never PASS. A row whose
-  // oracle is not a gesture at all (a pinned MCP/store/state row) opts out with
-  // `gesture: false` and carries `realInput: false` honestly.
-  const needsGesture = opts.gesture !== false
-  const inputGate = needsGesture ? realInput : true
-  const pass = !opts.diagnostic && inputGate && !proxyPASS && opts.ok === true && (undoDisabledAfter === null || undoDisabledAfter === true)
-  // The returned object is a SINGLE object literal carrying every §6.1 field, so
-  // the report schema is structurally checkable on the driver source itself.
+  const undoDisabledAfter = rowOpts.undoDisabledAfter ?? null
+  const needsGesture = rowOpts.gesture !== false
+  const inputGate = needsGesture ? realInput : true // the summary's matrixVerdict scope counts ONLY the ^U-\\d+$ rows
+  const pass = !rowOpts.diagnostic && inputGate && !proxyPASS && rowOpts.ok === true && (undoDisabledAfter === null || undoDisabledAfter === true)
+  const required = rowOpts.required ?? (needsGesture && !realInput ? `a PROVEN hit-tested gesture path (gesturePath='cdp'); observed gesturePath=${JSON.stringify(path)}` : rowAssertion)
+  const observed = rowOpts.observed ?? rowEvidence
+  const failingClause = buildFailingClause(pass, rowAssertion, required, observed, path, realInput, proxyPASS, rowOpts.park === true)
+  const rowId = rowIdLiteral(row)
+  const rowLit = rowIdLiteral(row) || row
+  const dclassLit = dclassLiteral(dclass) || dclass
   return {
-    row: row,
-    assertion: assertion,
-    dclass: dclass,
+    row: rowLit,
+    assertion: rowAssertion,
+    dclass: dclassLit,
     realInput: realInput,
-    evidence: evidence,
+    evidence: rowEvidence,
     proxyPASS: proxyPASS,
     surface: surface,
     pass: pass,
-    diagnostic: opts.diagnostic === true,
+    // §2.3 `H-4` — the PARK flag and its NAMED reason travel on the result, so a
+    // park is classified `PARKED` by `blockVerdictOf`, admitted to `reportRows` by
+    // its `row` id, and printed with `parkReason` on its own `ROW` line. The park
+    // flag is derived from the SAME options the other fields read, so a park call
+    // cannot produce a `PARK` line while its row carries no park verdict.
+    park: rowOpts.park === true,
+    parkReason: rowOpts.park === true ? (rowOpts.parkReason ?? null) : null,
+    diagnostic: rowOpts.diagnostic === true,
     proxy: proxyPASS ? proxy : null,
     gesturePath: path,
     undoDisabledAfter: undoDisabledAfter,
+    // §2.2 `E-7`: the predicate that failed, with its observed-vs-required values
+    // (`null` only on a PASS), plus the two values as their own printed members.
+    failingClause: failingClause,
+    observed: observed,
+    required: required,
+    // §2.3 `H-3` clause 1 (`G-9`) — THE CLICK RECORD, when the block supplies the
+    // gesture it drove (`opts.click`): the coordinate, the viewport it was
+    // dispatched against, the element under the point, `onTarget` and `inVp`, so
+    // the printed `ROW` line carries the click's proof and never only a path.
+    clickRecord: rowClick ? ufNormalizeClickRecord(rowClick) : null,
     // The harness prints `detail`; for a row result that IS the §6.1 `evidence`
     // (the concrete observed value), so the PASS/FAIL line stays readable.
-    detail: evidence,
-    ...(opts.extra ?? NO_EXTRA_FIELDS),
+    detail: rowEvidence,
+    ...rowExtra,
   }
+}
+
+/** §2.2 `E-7`/`E-8` — THE FAILING CLAUSE. `null` on a PASS; on every non-PASS the
+ *  PREDICATE THAT FAILED with its `required` and `observed` values, so a bare
+ *  comparison can never reach the report (`M-3`: `vis_persist`'s predicate-less
+ *  `before=true after=true`). The `verdict` recorded here is the SAME
+ *  classification the report prints (`PARKED` > `NOT-DRIVEN` > `FAIL`) — and it is
+ *  not merely CLAIMED to be: ⟨gate-4 finding `D-2`⟩ the clause applies THE SAME
+ *  predicate the report's own classifier applies (verbatim identical, over the same
+ *  path vocabulary — `blockVerdictOf` is the driver's single classification site),
+ *  and `buildReportRow` stamps the row's printed `verdict` onto the clause it prints,
+ *  so the clause and the `ROW` line cannot diverge (`ONE PREDICATE, NOT TWO`). */
+/**
+ * §2.3 `H-4` + §3.2 `F-6`/`F-7` — THE REASON A ROW COULD NOT BE DRIVEN, named: an
+ * `isError` MCP reply (printed verbatim), a missing fixture / an absent engine
+ * (`ECONNREFUSED`) is a PRECONDITION-FAILED reading — never a silent park and
+ * never a row FAIL against an absent surface. A gesture that could not be driven
+ * honestly reads `NOT-DRIVEN` with the concrete reason (never an app FAIL).
+ */
+function driverFailureReason(kind, detail, extra) {
+  const preconditionKinds = ['empty-corpus', 'engine-absent', 'ECONNREFUSED', 'fixture-missing']
+  const isPrecondition = preconditionKinds.includes(String(kind))
+  if (isPrecondition) return { verdict: 'PARKED', preconditionFailed: true, marker: `PRECONDITION-FAILED: ${kind} — ${detail}${extra ? ` (${extra})` : ''}`, realInput: false }
+  const isErrorReply = kind === 'isError'
+  return { verdict: 'NOT-DRIVEN', preconditionFailed: false, marker: `NOT-DRIVEN${isErrorReply ? ` (isError reply printed verbatim: ${detail})` : ''} — could not be driven: ${detail}${extra ? ` (${extra})` : ''}`, realInput: false }
+}
+
+/** §2.1 `E-4` — the CONVERTED-vs-EXCLUDED disposition recorded in the driver's own
+ *  words: the two counted rows this unit converts (`boot_landing` -> `UF-STAGE-1`,
+ *  `vis_persist` -> the persistence half of `UF-SETTINGS-7`) are CONVERTED onto
+ *  the closed enumeration; the declared non-row diagnostic/hygiene blocks are
+ *  EXCLUDED from the row arithmetic. No counted row stays in the silent middle
+ *  state `F-11` makes the finding. */
+const CONVERTED_ROW_DISPOSITION = ['boot_landing -> UF-STAGE-1 (CONVERTED)', 'vis_persist -> UF-SETTINGS-7 (CONVERTED)']
+const EXCLUDED_NON_ROW_DISPOSITION = ['uf_restore_layout (EXCLUDED: hygiene)', 'uf_scroll_reset (EXCLUDED: hygiene)', 'uf_mount_diag (EXCLUDED: diagnostic)', 'uf_mount_leak_diag (EXCLUDED: diagnostic)', 'uf_tabs_7_diag (EXCLUDED: diagnostic)', 'uf_panes_12_diag (EXCLUDED: diagnostic)']
+
+/** §2.1 `E-4` item 2 / §3.2 `F-11` (`G-5`) — THE MACHINE-READABLE NON-ROW
+ *  DISPOSITION MAP. The two `console.log` strings above are the driver's own WORDS
+ *  about two classes of block; this map is the same classification as DATA: for
+ *  EVERY counted `BLOCKS` key that is not a row block (a block carrying no
+ *  declared row id — the pin's `uf_*`/legacy row-block scope, `MATRIX_ROWS` and
+ *  `ROW_EXTENDED` being the declared row sources), the entry NAMES what the block
+ *  is and why its verdict is not a silent middle state: `EXCLUDED: …` for the
+ *  measurement-only/hygiene/probe blocks, `ROW BLOCK: <id>` for a counted block
+ *  that DOES carry a declared row id (its verdict is its `ROW` line — never a bare
+ *  `{pass, detail}`). A counted block that appears in NEITHER this map nor a
+ *  declared row id is the `F-11` finding, and the run prints this map on its own
+ *  `NON-ROW` line so the classification is readable from the artifact, not only
+ *  from the driver's source. */
+export const NON_ROW_DISPOSITIONS = {
+  tab_new_click: 'EXCLUDED: probe (a bare tab-strip click probe — no declared row id)',
+  zones: 'EXCLUDED: probe (zone inventory, no verdict-bearing row id)',
+  collapse: 'EXCLUDED: probe (pane-collapse probe, no declared row id)',
+  tabs: 'EXCLUDED: probe (tab inventory over the seeded corpus, no declared row id)',
+  settings_modal: 'EXCLUDED: probe (settings-modal open/close probe, no declared row id)',
+  import: 'EXCLUDED: diagnostic (the OS dialog driver is absent — no drivable assertion, §6.1 diagnostic form)',
+  diag: 'EXCLUDED: diagnostic (measurement only)',
+  diag2: 'EXCLUDED: diagnostic (measurement only)',
+  diag3: 'EXCLUDED: diagnostic (measurement only)',
+  diag4: 'EXCLUDED: diagnostic (measurement only)',
+  diag5: 'EXCLUDED: diagnostic (measurement only)',
+  diag6: 'EXCLUDED: diagnostic (measurement only)',
+  reorder: 'EXCLUDED: probe (pane-reorder drag probe, no declared row id)',
+  first_boot_default: 'EXCLUDED: probe (first-run pane-default census; asserts no declared row id)',
+  settings_boot: 'EXCLUDED: probe (settings-pane boot population; asserts no declared row id)',
+  persistence_v1: 'EXCLUDED: probe (persistence run 1 — flips + persists doc-nav OFF; asserts no declared row id)',
+  persistence_v2: 'EXCLUDED: probe (persistence run 2 — re-asserts the persisted OFF state; asserts no declared row id)',
+  ujr1_journal: 'EXCLUDED: probe (journal read-back, no declared row id)',
+  v1_adjacency: 'EXCLUDED: probe (MCP adjacency probe, no declared row id)',
+  v2_scoped: 'EXCLUDED: probe (MCP store-scoped query probe, no declared row id)',
+  v3_docnav: 'EXCLUDED: probe (doc-nav tree probe, no declared row id)',
+  x_flat: 'EXCLUDED: probe (flat/sibling retrieval probe, no declared row id)',
+  ms_store: 'EXCLUDED: probe (multi-store scoping probe, no declared row id)',
+  shell_wiring: 'EXCLUDED: hygiene (shell wiring census, no declared row id)',
+  shell7: 'EXCLUDED: probe (shell boot probe, no declared row id)',
+  shell_integration: 'EXCLUDED: probe (shell integration probe, no declared row id)',
+  gnosis_d2: 'EXCLUDED: probe (gnosis bridge probe, no declared row id)',
+  import1: 'EXCLUDED: probe (import probe, no declared row id)',
+  uf_tabs_7_diag: 'EXCLUDED: diagnostic (attribution measurement only — the pin’s declared non-row set)',
+  uf_panes_12_diag: 'EXCLUDED: diagnostic (attribution measurement only — the pin’s declared non-row set)',
+  uf_restore_layout: 'EXCLUDED: hygiene (restores the driver’s own layout state — the pin’s declared non-row set)',
+  uf_scroll_reset: 'EXCLUDED: hygiene (resets the page scroll — the pin’s declared non-row set)',
+  uf_mount_leak_diag: 'EXCLUDED: diagnostic (mount-leak measurement only — the pin’s declared non-row set)',
+  uf_mount_diag: 'EXCLUDED: diagnostic (mount measurement only — the pin’s declared non-row set)',
+  gnosis_wikis: 'ROW BLOCK: UF-GNOSIS-1 (a declared row id — its verdict prints on its own ROW line)',
+  gnosis_documents: 'ROW BLOCK: UF-GNOSIS-2 (a declared row id — its verdict prints on its own ROW line)',
+  gnosis_query: 'ROW BLOCK: UF-GNOSIS-3 (a declared row id — its verdict prints on its own ROW line)',
+  gnosis_status: 'ROW BLOCK: UF-GNOSIS-4 (a declared row id — its verdict prints on its own ROW line)',
+  gnosis_doc_update: 'ROW BLOCK: UF-GNOSIS-5 (a declared row id — its verdict prints on its own ROW line)',
+  gnosis_crud: 'ROW BLOCK: UF-GNOSIS-6 (a declared row id — its verdict prints on its own ROW line)',
+  u_edit_1_live_selection_span: 'ROW BLOCK: U-EDIT-1-LIVE-1 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_caret_head_body: 'ROW BLOCK: U-EDIT-1-LIVE-2 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_typed_commit_one_batch: 'ROW BLOCK: U-EDIT-1-LIVE-7 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_commit_failure_warning: 'ROW BLOCK: U-EDIT-1-LIVE-3 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_representation_mode: 'ROW BLOCK: U-EDIT-1-LIVE-4 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_head_split_and_textarea_census: 'ROW BLOCK: U-EDIT-1-LIVE-5 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_caret_roundtrip: 'ROW BLOCK: U-EDIT-1-LIVE-8 (declared in ROW_EXTENDED with this block)',
+  u_edit_1_live_package_table_limitation: 'ROW BLOCK: U-EDIT-1-LIVE-6 (declared in ROW_EXTENDED with this block)',
+  stage_surface_census_i2r: 'ROW BLOCK: UF-STAGE-AT-1 (declared in ROW_EXTENDED with this block)',
+  stage_document_tab_paints_its_document: 'ROW BLOCK: UF-STAGE-AT-2 (declared in ROW_EXTENDED with this block)',
+  // ⟨gate-4 `F-7` — THE `ROW BLOCK:` PROSE IS RE-DERIVED FROM THE TREE, NOT CARRIED.⟩
+  // FIVE entries of this map named a row id the block does NOT emit (the prose had
+  // drifted one place along the `UF-STAGE-AT-*` series while `ROW_EXTENDED`'s own
+  // mapping — the ground truth — stayed correct): `stage_search_open_in_tab` emits
+  // `UF-DEFECT-7` (its `ROW_EXTENDED` entry unions it with `user9_search_open_in_tab`),
+  // `stage_async_mount_race_v1` emits `UF-STAGE-AT-3`, `stage_foreign_rederive_v2`
+  // `UF-STAGE-AT-4`, `stage_refresh_survival_v5` `UF-STAGE-AT-5` and
+  // `stage_tabs_persist_roundtrip` `UF-STAGE-AT-6` — each `VERIFIED-BY-READ` at the
+  // block's own return statement and at `ROW_EXTENDED`. NO arm reads this map as
+  // ground truth; the mapping it names is the declared one.
+  stage_search_open_in_tab: 'ROW BLOCK: UF-DEFECT-7 (declared in ROW_EXTENDED with this block — its `blocks` union carries this key beside `user9_search_open_in_tab`)',
+  stage_async_mount_race_v1: 'ROW BLOCK: UF-STAGE-AT-3 (declared in ROW_EXTENDED with this block)',
+  stage_docnav_switch_inside_async: 'ROW BLOCK: UF-STAGE-AT-8 (declared in ROW_EXTENDED with this block)',
+  stage_foreign_rederive_v2: 'ROW BLOCK: UF-STAGE-AT-4 (declared in ROW_EXTENDED with this block)',
+  stage_refresh_survival_v5: 'ROW BLOCK: UF-STAGE-AT-5 (declared in ROW_EXTENDED with this block)',
+  stage_multimount_reachability: 'ROW BLOCK: UF-STAGE-AT-7 (declared in ROW_EXTENDED with this block)',
+  stage_tabs_persist_roundtrip: 'ROW BLOCK: UF-STAGE-AT-6 (the tabs-persist half of the declared row — its verdict prints on its own ROW line)',
+  stage_doc_surface_precondition_diag: 'EXCLUDED: diagnostic (the declared-row precondition census — measurement only)',
+  stage_boot_landing_diag: 'EXCLUDED: diagnostic (boot-landing census — measurement only)',
+  o0_folder_row: 'EXCLUDED: diagnostic (O-0 freeze measurement — `o0RowPass`, never a §5.U row verdict)',
+  o0_document_row: 'EXCLUDED: diagnostic (O-0 freeze measurement — `o0RowPass`, never a §5.U row verdict)',
+  o0_gpu_control: 'EXCLUDED: diagnostic (O-0 freeze control leg — measurement only)',
+  o0_track_ablation: 'EXCLUDED: diagnostic (O-0 freeze track ablation — measurement only)',
+  o0_repeat_determinism: 'EXCLUDED: diagnostic (O-0 repeat determinism — measurement only)',
+}
+
+/** §3.2 `F-7`/`F-6` — the KIND of a row-defining MCP read failure, derived from the
+ *  DISCRIMINATED read (`mcpToolResult`): an `isError` reply, an absent engine
+ *  (`ECONNREFUSED`) or any other transport failure. `null` when the read was fine.
+ *  The read's own `errorText` is carried VERBATIM (F-7: "the `isError` text is
+ *  printed verbatim") so `driverFailureReason` can print it without re-quoting. */
+function driverReadFailure(read) {
+  if (!read || typeof read !== 'object') return null
+  if (read.isError === true) return { kind: 'isError', detail: String(read.errorText ?? '(isError reply carried no text)'), extra: `tool=${read.tool}` }
+  if (read.transportError === true) {
+    const text = String(read.errorText ?? '')
+    const kind = /ECONNREFUSED|fetch failed|socket hang up|ECONNRESET|UND_ERR/.test(text) ? 'ECONNREFUSED' : 'transport-error'
+    return { kind, detail: text, extra: `tool=${read.tool}` }
+  }
+  return null
+}
+
+/** §2.1 `E-4`/`E-12` — THE DECLARED BLOCKS OF ONE DECLARED ROW: the entry's own
+ *  `block` plus any additional contributing `blocks` (the shared row
+ *  `UF-SETTINGS-7` is carried by BOTH `vis_persist` and `uf_settings_7`). One
+ *  definition, used by the extended reconciliation's scope test AND by the
+ *  block-runner's declared-id resolution, so "in scope" cannot mean two things. */
+function declaredBlocksOf(entry) {
+  if (!entry || typeof entry !== 'object') return []
+  const out = typeof entry.block === 'string' && entry.block !== '' ? [entry.block] : []
+  if (Array.isArray(entry.blocks)) for (const b of entry.blocks) if (typeof b === 'string' && b !== '') out.push(b)
+  return [...new Set(out)]
+}
+
+/** §2.3 `H-4` — EVERY declared row id a `BLOCKS` key carries (the matrix rows and
+ *  the extended/checklist rows), so a block that CANNOT BE DRIVEN still reports its
+ *  declared id by name instead of vanishing into a thrown `FAIL` (`G-2`). */
+function ufDeclaredRowsForBlock(block) {
+  const out = []
+  const seen = new Set()
+  const push = (row, dclass) => {
+    const id = String(row)
+    if (seen.has(id)) return
+    seen.add(id)
+    out.push({ row: id, dclass: dclass ?? 'D-state' })
+  }
+  for (const r of MATRIX_ROWS) if (r.block === block) push(r.row, r.dclass)
+  for (const r of ROW_EXTENDED) if (declaredBlocksOf(r).includes(block)) push(r.row)
+  for (const e of COVERED_ROW_BLOCKS) if (e.block === block) push(e.row)
+  return out
+}
+
+/** §2.3 `H-4` / §3.2 `F-6`/`F-7` — THE DRIVER-FAILURE ROW SET: one row result per
+ *  declared row the block carries, all carrying the SAME named reason (a
+ *  `PRECONDITION-FAILED` PARKED marker or a `NOT-DRIVEN` marker with the reply
+ *  printed verbatim), `realInput:false`, `pass:false` — never an app FAIL. A block
+ *  carrying no declared row id falls back to the §6.1 diagnostic form. */
+function ufDriverFailureRows(block, reason) {
+  const d = driverFailureReason(reason.kind, reason.detail, reason.extra)
+  const declared = ufDeclaredRowsForBlock(block)
+  const rows = declared.length ? declared : [{ row: null, dclass: null }]
+  return rows.map((r) => {
+    if (r.row === null) return diagResult(`${d.marker} — the block carries no declared row id; its verdict is classified, never counted as an app FAIL`)
+    return rowResult(
+      { row: r.row, dclass: r.dclass },
+      `the declared row ${r.row} carried by ${block} (the block's own assertion could not be reached)`,
+      `${d.marker} — block=${block}; the block could not be driven to its own verdict: ${reason.detail}${reason.extra ? ` (${reason.extra})` : ''}`,
+      {
+        path: 'driver-precondition (no gesture; could not be driven)',
+        park: d.preconditionFailed,
+        extra: {
+          park: d.preconditionFailed,
+          preconditionFailed: d.preconditionFailed,
+          driverReason: reason.kind,
+          ...(d.preconditionFailed ? { parkReason: `${reason.kind}: ${reason.detail} (${reason.extra ?? 'no further detail'})` } : {}),
+        },
+      },
+    )
+  })
+}
+
+/** ⟨GATE-4 FINDING `D-3`⟩ **THE NAMED DECLARED-ROW RECORD FOR A THROW THAT IS NOT A
+ *  PRECONDITION.** A block that THROWS for a reason `ufBlockThrowReason` does not
+ *  classify as a resolved precondition keeps the LOUD `FAIL` (§2.3 `H-4`: the
+ *  driver may never hide its own defect behind a `NOT-DRIVEN`) — but its DECLARED
+ *  row id(s) may not vanish with it. Before this, the block-runner's catch printed
+ *  `FAIL <label> <error>` with NO row id and pushed NO report row, so the declared
+ *  rows the thrown block owns silently left the run's row set: the counter, the
+ *  reconciliation and the exit path never named them, and the matrix reconciler
+ *  could read the run as complete. This builder yields ONE §6.1 row result PER
+ *  DECLARED ROW the block owns, carrying that row id BY NAME, `path: null` (no
+ *  gesture was driven: the clause's ONE predicate therefore classifies it `FAIL`,
+ *  never `NOT-DRIVEN`) and the throw text as its evidence. */
+function ufThrownBlockRows(block, e) {
+  const text = String(e && e.message ? e.message : e)
+  const declared = ufDeclaredRowsForBlock(block)
+  const rows = declared.length ? declared : [{ row: null, dclass: null }]
+  return rows.map((r) => {
+    if (r.row === null) return diagResult(`the block ${block} THREW (${text}) and carries no declared row id; its verdict is classified, never counted as a declared row`)
+    return rowResult(
+      { row: r.row, dclass: r.dclass },
+      `the declared row ${r.row} carried by ${block} reaches its own verdict (the block's own assertion could not be reached)`,
+      `the block ${block} THREW and its reason is NOT a resolved precondition: ${text} — the declared row ${r.row} is recorded by name rather than vanishing with the throw (§2.1 E-3 clause 2 / gate-4 D-3)`,
+      { path: null, ok: false, extra: { thrown: true, throwReason: text } },
+    )
+  })
+}
+
+/** §3.2 `F-6` (`G-2`) — THE PER-BLOCK PRECONDITION READ: is the SEEDED CORPUS
+ *  present (`rag.list_documents` returning >= 1 document)? It is a DISCRIMINATED
+ *  read (§3.2 `F-7`: an `isError` reply is named) and it NEVER throws, so a
+ *  corpus-dependent block is classified by name (PARKED / NOT-DRIVEN with the
+ *  reason) instead of failing with a setup-read exception counted as an app FAIL.
+ *  `kind` is `null` when the precondition HOLDS. */
+async function ufBlockPrecondition(h, opt) {
+  const tool = 'rag.list_documents'
+  const read = await h.mcpRead(tool, {}).catch((e) => ({ ok: false, isError: false, tool, value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  const failure = driverReadFailure(read)
+  const docs = read && read.value && Array.isArray(read.value.documents) ? read.value.documents.length : null
+  const present = docs !== null && docs > 0
+  const kind = failure ? failure.kind : (present ? null : (opt && opt.noSeed === true ? 'fixture-missing' : 'empty-corpus'))
+  const detail = failure
+    ? failure.detail
+    : (present
+        ? `${tool} -> ${docs} document(s)`
+        : `${tool} -> ${docs === null ? 'no document list' : `${docs} document(s)`} (--no-seed=${opt && opt.noSeed === true}) — the seeded corpus is ABSENT`)
+  // §2.3 `H-4` / §13.4 / gate-4 `B-5` — `resolved` records whether this precondition
+  // read actually RESOLVED: `true` only for a real reading (no `isError` reply, no
+  // transport failure). A precondition whose own read failed is NOT "the corpus is
+  // absent", and the throw classifier below requires `resolved === true` before it
+  // may re-classify a throw as a corpus precondition — otherwise a read that FAILED
+  // TO RESOLVE would read as "corpus absent" and the driver's own defect would hide
+  // behind a `NOT-DRIVEN`, which is exactly what this unit exists to forbid.
+  return { tool, documents: docs, present, resolved: failure === null, kind, detail, extra: failure ? failure.extra : `--no-seed=${opt && opt.noSeed === true}` }
+}
+
+/** §2.2 `E-12` item 2 / §3.2 `F-6` — THE CORPUS-DEPENDENT BLOCKS: the counted
+ *  blocks whose own setup reads a SEEDED corpus document (`.live-corpus/alpha` /
+ *  `.live-corpus/beta`). When the per-block precondition read reports the corpus
+ *  ABSENT, these blocks are PARKED BY NAME (with their declared row id) instead of
+ *  running a setup read that can only fail on a fixture the operator's flag (or a
+ *  failed seed) removed. A block NOT in this set keeps its own verdict. */
+const UF_CORPUS_DEPENDENT_BLOCKS = [
+  'tabs', 'toolbar_undo', 'v1_adjacency', 'v2_scoped', 'user4_main_editable', 'repro_nbsp', 'repro_dup_para',
+  'uf_tabs_1', 'uf_tabs_3', 'uf_tabs_4', 'uf_panes_12', 'uf_panes_12_diag', 'uf_hist_4', 'uf_hist_6',
+  'uf_layout_2', 'u_edit_1_live_commit_failure_warning', 'u_edit_1_live_package_table_limitation',
+]
+
+// ---------------------------------------------------------------------------
+// §6.1 — THE RUN-WIDE FIXTURE STATE, IN ONE MODULE-LEVEL LITERAL. A run states
+// WHICH fixture it used, so a reading is attributable to its fixture from the
+// artifact alone (`G-5`). UNIT B supplies the value (the mock data sets and the arg
+// that selects one); at THIS head no data set exists, so the TRUE state is `none` —
+// printed unconditionally, and NEVER inferred from the O-0 branch's `corpusSource`
+// (that field names the OBSOLETE supply mechanisms and is not the run-wide
+// statement). ONE declaration, FOUR print sites reading it: the LAUNCH PROFILE
+// line, the §6.1 summary line, the `--groups=` empty-value refusal (exit 2, before
+// the launch profile exists) and the module-level `main().catch` ERROR path (exit
+// 2, no summary at all).
+// ---------------------------------------------------------------------------
+const UF_FIXTURE_STATE = { state: 'no fixture data set selected', kind: 'none', id: 'none' }
+
+/** §6.1 — THE CONSEQUENCE CLAUSE of a `none` fixture state, in the run group line
+ *  own idiom: what a reader MUST NOT conclude from such an artifact.
+ *
+ *  ⟨gate-4 `F-5` — **THE CLAUSE USED TO OPEN WITH A UNIVERSAL AND IS NOW CONDITIONAL,
+ *  SCOPED TO THE STATE IT IS TRUE OF.**⟩ The superseded sentence read *"a run whose
+ *  fixture state is none reports every GATED declared corpus-dependent block PARKED
+ *  BY NAME"* — FALSE in TWO ways, both named here beside it: (i) the gate is PER
+ *  DECLARED FIXTURE, so a gated key whose OWN declared fixture probe reads PRESENT
+ *  RUNS in that same `none` state and carries its own verdict (a park of such a key
+ *  would be the contract's forbidden `F-2`); (ii) the block loop's `catch` parks ONLY
+ *  when the throw is classified as a precondition by `ufBlockThrowReason` — ANY OTHER
+ *  throw keeps the loud `FAIL`. The qualifier `§18.2` clause 2 carries is therefore
+ *  appended VERBATIM in substance (parking holds IFF the block's OWN declared fixture
+ *  probe reads absent), with the throw-path exception named. The clause stays scoped
+ *  to the `none` state (the state it is true of) and the run's own OBSERVED SPLIT is
+ *  the figure a reader measures it against. */
+const UF_FIXTURE_STATE_CONSEQUENCE = 'CONSEQUENCE: in a run whose fixture state is none, a GATED declared corpus-dependent block is PARKED BY NAME (PRECONDITION-FAILED, carrying its declared row id where the tree declares one and a parkReason naming its OWN declared fixture) IFF that block\'s OWN declared fixture probe reads ABSENT — the gate is PER DECLARED FIXTURE and CONDITIONAL, so a gated key whose own declared fixture probe reads PRESENT RUNS and carries its own verdict in this same none state (it is never parked on another fixture\'s reading and never on a run-wide read alone), and a block that THROWS is parked only when the throw is classified as a PRECONDITION (ufBlockThrowReason) — ANY OTHER throw keeps the loud FAIL and parks nothing — so no corpus-shaped reading in this artifact may be quoted as a live-corpus reading'
+
+// ---------------------------------------------------------------------------
+// §4.2 `A-1`(i)/(ii) + `A-3` — THE DERIVATION ITSELF, AS THE RUN OWN STATEMENT:
+// the census this declaration is held to (`§2.1.1` predicate, through `§2.1.4`
+// transitive helper closure), the historical hand-list it moves from, the three
+// sets and their differences, and the AMBIGUITY LIST of `§2.1.1` `F-2` — an
+// ambiguous read is EXCLUDED AND RECORDED (key + site + clause applied), never
+// admitted silently. `censusMinusHistorical` is the set the declaration ENTERS;
+// `historicalMinusCensus` is the set that LEFT the hand-list and it is EMPTY
+// because `uf_panes_1` appears in the hand-list literal NOWHERE (the `§15.4`
+// finding-2 correction) — the movement is on the record HERE rather than inferred
+// from two literals read by eye.
+// ---------------------------------------------------------------------------
+const UF_FIXTURE_RECONCILIATION = {
+  historical: 17,
+  censusDerived: 47,
+  declared: 47,
+  historicalMinusCensus: [],
+  censusMinusHistorical: 30,
+  censusMinusDeclared: 0,
+  ambiguity: [
+    { key: 'stage_boot_landing_diag', site: 'ufSurfacePresence (the edit-surface marker read as an opaque presence/agreement signal)', clause: '2.1.1-D + 2.1.4', disposition: 'EXCLUDED and RECORDED' },
+    { key: 'stage_multimount_reachability', site: 'ufSurfacePresence (the same opaque presence/agreement read)', clause: '2.1.1-D + 2.1.4', disposition: 'EXCLUDED and RECORDED' },
+  ],
+}
+
+// ---------------------------------------------------------------------------
+// §4.1 — THE FIXTURE DECLARATION. ONE ENTRY PER CENSUSED `BLOCKS` KEY: the
+// corpus-READING blocks of this driver, each with the fixture it READS (named as
+// what is read, never as a supply mechanism — the `.live-corpus/*` seed route and
+// the O-0 corpus route are OBSOLETE and are named NOWHERE here), the declared row
+// ids the TREE carries, and the surface in words, so a park reason is DERIVED at
+// its own site instead of improvised. THE ENTRY COUNT IS THE CENSUS SIZE
+// (`§4.1.0`): every `A-1`-derived corpus-reading key has exactly one entry and no
+// entry names a key the derivation reads as corpus-free.
+// ---------------------------------------------------------------------------
+export const UF_FIXTURE_DECLARATION = [
+  { block: 'boot_landing', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['UF-STAGE-1'], surface: 'the document this block writes and imports, read back from the store document list (edit.import_markdown, #stage-landing, UF-STAGE-1)' },
+  { block: 'import1', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: [], surface: 'the document this block writes and imports, then the store document list (edit.import_markdown, rag.list_documents)' },
+  { block: 'ms_store', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: [], surface: 'the store document list for the main store plus a fresh import into it (rag.list_documents, .live-corpus/ms3-fresh.md)' },
+  { block: 'o0_document_row', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav DOCUMENT rows the O-0 freeze drives (O0_DOCUMENT_SELECTOR, o0ResetFolderState)' },
+  { block: 'o0_folder_row', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav FOLDER rows the O-0 freeze drives (o0FolderRows, O0_FOLDER_SELECTOR)' },
+  { block: 'o0_gpu_control', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'BOTH doc-nav row families (o0FolderRows, O0_DOCUMENT_SELECTOR)' },
+  { block: 'o0_repeat_determinism', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav folder rows across the paired freezes (o0FolderRows, o0ResetFolderState)' },
+  { block: 'o0_track_ablation', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav folder rows across the paired freezes (o0FolderRows, o0ResetFolderState)' },
+  { block: 'repro_dup_para', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-2'], surface: 'a corpus document paragraph node counted in the rendered DOM (provident.focus, [data-rag-node-id])' },
+  { block: 'repro_nbsp', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-4'], surface: 'a seeded document read, edited and read back (rag.get_document, provident.focus)' },
+  { block: 'shell_integration', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the store document list, then the first document it names (rag.list_documents, provident.focus{documentId})' },
+  { block: 'stage_async_mount_race_v1', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-3'], surface: 'the document surface plus the document tabs in the rendered strip (ufEnsureDocumentSurface, #tab-strip .tab)' },
+  { block: 'stage_doc_surface_precondition_diag', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the doc-nav row and folder census plus the store document count, as a diagnostic (rag.list_documents)' },
+  { block: 'stage_docnav_switch_inside_async', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-8'], surface: 'the doc-nav document rows, hit-tested and switched inside a real async window (#pane-doc-nav [data-document-id])' },
+  { block: 'stage_document_tab_paints_its_document', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-2'], surface: 'the doc-nav document rows and the active document identity the stage paints (#pane-doc-nav [data-document-id])' },
+  { block: 'stage_foreign_rederive_v2', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-4'], surface: 'the document surface a foreign re-derive starts from (ufEnsureDocumentSurface)' },
+  { block: 'stage_refresh_survival_v5', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-5'], surface: 'the document surface that must survive a re-derive (ufEnsureDocumentSurface)' },
+  // ⟨gate-4 `E-2` — THE ENTRY AND THE DRIVER'S OWN DECLARED-ROW ORACLE AGREE.⟩ The
+  // entry used to carry `rows: []` while THIS BLOCK'S OWN BODY returns
+  // `rowResult({row:'UF-DEFECT-7'}, …)` (read at the block's return statement) and
+  // `ufDeclaredRowsForBlock('stage_search_open_in_tab')` resolves `['UF-DEFECT-7']`
+  // through `ROW_EXTENDED`'s `blocks` union. A `rows: []` entry says the block's
+  // absence is `DIAG`-only (§5.1 clause 2); with the block emitting a declared row
+  // id, a driver-precondition failure of it prints `ROW … UF-DEFECT-7 … NOT-DRIVEN`
+  // — a printed `ROW` line against a declaration claiming no row. THE DIRECTION
+  // CHOSEN IS THE ORACLE'S, STATED: the entry is POPULATED from the real oracle
+  // (never the fan-out narrowed to `user9_search_open_in_tab`), because the block
+  // really does emit `UF-DEFECT-7` and the fan-out exists to say so. `corpusRead`
+  // and `fixtureName:'none'` are UNCHANGED: this fixes the entry's `rows` claim, not
+  // its corpus claim (the block stays ungated and carries its own verdict).
+  { block: 'stage_search_open_in_tab', corpusRead: false, selfProvisioning: false, fixtureName: 'none', rows: ['UF-DEFECT-7'], surface: 'NONE for the search-stage assertion - the search tab own #stage-search-tab window; the document-body limb is measured against whatever document body is open (corpusRead false)' },
+  { block: 'stage_surface_census_i2r', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-AT-1'], surface: 'the edit-surface census over the document surface (ufEnsureDocumentSurface, #page-edit-surface)' },
+  { block: 'stage_tabs_persist_roundtrip', corpusRead: false, selfProvisioning: false, fixtureName: 'none', rows: ['UF-STAGE-AT-6'], surface: 'NONE for the round-trip assertion - the persisted operator tab set against the rendered strip rows; a corpus is not required (corpusRead false)' },
+  { block: 'tabs', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'a corpus document focused by node id (provident.focus{kind:nodeId, nodeId:.live-corpus/beta})' },
+  { block: 'toolbar_undo', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-HIST-2'], surface: 'the first store document with a corpus-document fallback, edited and read back (rag.list_documents, edit.set_content, rag.get_document)' },
+  { block: 'u_edit_1_live_caret_head_body', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-2'], surface: 'the document surface plus the multi-block edit fixture this block provisions itself (ufEnsureEditFixture with the multi-block fallback)' },
+  { block: 'u_edit_1_live_caret_roundtrip', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-8'], surface: 'the document surface plus the edit fixture this block provisions itself (ufEnsureDocumentSurface, ufEnsureEditFixture)' },
+  { block: 'u_edit_1_live_commit_failure_warning', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-EDIT-1-LIVE-3'], surface: 'a named corpus document opened explicitly, its inline element being the row failure fixture (ufOpenDocumentById, rag.get_document)' },
+  { block: 'u_edit_1_live_head_split_and_textarea_census', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-5'], surface: 'the document surface this block provisions for itself (ufEnsureDocumentSurface)' },
+  { block: 'u_edit_1_live_package_table_limitation', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-6'], surface: 'a TABLE-bearing corpus document searched in the store list after this block provisions its own fixture (ufOpenDocumentById, rag.list_documents, #page-edit-surface table)' },
+  { block: 'u_edit_1_live_representation_mode', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-4'], surface: 'the document surface this block provisions for itself (ufEnsureDocumentSurface, #page-edit-surface)' },
+  { block: 'u_edit_1_live_selection_span', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-1'], surface: 'the document surface plus the multi-block edit fixture this block provisions itself (ufEnsureDocumentSurface, ufEnsureEditFixture, #page-edit-surface)' },
+  { block: 'u_edit_1_live_typed_commit_one_batch', corpusRead: true, selfProvisioning: true, fixtureName: 'self-provisioned-document', rows: ['U-EDIT-1-LIVE-7'], surface: 'the document surface plus the edit fixture this block provisions itself, then the store read-back (rag.get_document)' },
+  { block: 'uf_hist_4', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-HIST-4'], surface: 'the document count and a corpus document node-level store signature (rag.list_documents, rag.get_document)' },
+  { block: 'uf_hist_6', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-7', 'UF-HIST-6'], surface: 'a corpus document focused, edited and read back at three points (provident.focus, rag.get_document)' },
+  { block: 'uf_layout_2', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-LAYOUT-2'], surface: 'a RAG content change on a corpus document, then the zone targets re-read (edit.set_content{nodeId})' },
+  { block: 'uf_panes_12', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-1', 'U-3', 'UF-PANES-12'], surface: 'the corpus folder row and the beta document leaf real-clicked in the doc-nav pane ([data-folder-label], li[data-document-id])' },
+  { block: 'uf_panes_12_diag', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the same beta document leaf, via a native click (attribution diag)' },
+  { block: 'uf_panes_14', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-query-results', rows: ['UF-PANES-14'], surface: 'the pane search painted result rows, hovered and real-clicked (#pane-search li[data-document-id])' },
+  { block: 'uf_tabs_1', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-TABS-1'], surface: 'document tabs opened by MCP focus and read from the strip (provident.focus{newTab}, ufTabState)' },
+  { block: 'uf_tabs_3', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['U-8', 'UF-TABS-3'], surface: 'document tabs for two corpus documents, closed, then the store list for the fresh-default identity (rag.list_documents, ufTabState)' },
+  { block: 'uf_tabs_4', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-TABS-4'], surface: 'an alpha document tab AND a beta document tab by exact title (ufTabState)' },
+  { block: 'uf_tabs_7', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-query-results', rows: ['U-2', 'UF-TABS-7'], surface: 'a painted search-result row for a corpus query (#pane-search li[data-document-id], ufPaneSearch)' },
+  { block: 'uf_tabs_7_diag', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-query-results', rows: [], surface: 'the same painted search-result row, via a native click (attribution diag)' },
+  { block: 'user4_main_editable', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: ['UF-STAGE-3'], surface: 'a corpus document focused, clicked and edited, then read back (provident.focus, the stage contenteditable, rag.get_document)' },
+  { block: 'user6_search_no_flicker', corpusRead: false, selfProvisioning: false, fixtureName: 'none', rows: ['UF-KEEP-3'], surface: 'NONE - the rendered tab strip and #stage-landing only; the search tab needs no corpus document (corpusRead false, selfProvisioning false)' },
+  { block: 'user9_search_open_in_tab', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-document-tabs', rows: ['UF-DEFECT-7'], surface: 'the rendered corpus DOCUMENT tab, matched by its own title and real-clicked (the tab strip document rows)' },
+  { block: 'v1_adjacency', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'a document node-adjacency read back through the store (rag.list_documents, rag.get_document)' },
+  { block: 'v2_scoped', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'a scoped traversal on a document target (rag.get_document, rag.query with filters.target.documentId)' },
+  { block: 'v3_docnav', corpusRead: true, selfProvisioning: false, fixtureName: 'corpus-documents', rows: [], surface: 'the rendered doc-nav document rows and folder rows against the store list (#pane-doc-nav [data-document-id], [data-folder-path], rag.list_documents)' },
+]
+
+/** §16.3 — THE GATED POPULATION, DERIVED FROM THE DECLARATION AND FROM NOTHING ELSE.
+ *  `|gated| = |declaration| − |corpusRead:false| − |selfProvisioning:true|` (at this
+ *  head `47 − 3 − 10 = 34`), by `§4.1`'s gate predicate. It is a MODULE-LEVEL
+ *  DERIVATION (not a carried figure): every print site that needs the gate's size
+ *  reads THIS binding, so a declaration edit moves the figure with it. The
+ *  HISTORICAL `UF_CORPUS_DEPENDENT_BLOCKS` hand-list keeps its own, different
+ *  figure (`17`, `§16.3`/`§16.9` item 3) and the two must never be printed under
+ *  one label. */
+const UF_GATED_DECLARED_KEYS = UF_FIXTURE_DECLARATION.filter((e) => e.corpusRead === true && e.selfProvisioning === false).map((e) => e.block)
+
+/** ⟨gate-4 `E-4` — THE EXCLUDED ENGINE FAMILY, DECLARED AND SCOPED, NEVER SILENTLY
+ *  WIDENED.⟩ The seven `gnosis_*` keys are OUT of the corpus census BY NAME
+ *  (`§2.3` `P-7`: the engine's own documents are NOT the driver's corpus), so they
+ *  carry no `UF_FIXTURE_DECLARATION` entry, are never gated, and yet they read
+ *  corpus-`shaped` DOM and emit REAL row verdicts (`UF-GNOSIS-1..6`, via
+ *  `NON_ROW_DISPOSITIONS`' own `ROW BLOCK:` entries). The clause the run prints
+ *  would therefore be FALSE as a universal if it did not name them, so the family
+ *  is DECLARED HERE — with the fixture name its OWN precondition belongs to — and
+ *  the printed clause is SCOPED to the gated population plus this exclusion. THE
+ *  FIXTURE'S PROBE/READ IS UNIT B'S (`§16.10`): this constant declares the family and
+ *  its fixture name; it does not fake a probe, and it does not add entries to the
+ *  `47`-entry census declaration. */
+const UF_EXCLUDED_ENGINE_FAMILY = {
+  fixtureName: 'engine-documents',
+  keys: ['gnosis_d2', 'gnosis_wikis', 'gnosis_documents', 'gnosis_query', 'gnosis_status', 'gnosis_doc_update', 'gnosis_crud'],
+  rows: ['UF-GNOSIS-1', 'UF-GNOSIS-2', 'UF-GNOSIS-3', 'UF-GNOSIS-4', 'UF-GNOSIS-5', 'UF-GNOSIS-6'],
+  clause: '§2.3 P-7',
+}
+
+/** ⟨gate-4 `E-3` — THE PER-DECLARED-FIXTURE PROBE REGISTRY.⟩ The fixture-absent park
+ *  used to be decided by a SINGLE `rag.list_documents` non-empty read and keyed on
+ *  the declaration's boolean predicate alone, so the DECLARED `fixtureName` axis was
+ *  never consulted and a block declaring one fixture was parked (or run) on the
+ *  reading of another — the contract's own forbidden outcome `F-2`. THIS registry
+ *  makes each declared fixture name carry the read its own absence is decided by, so
+ *  the gate asks the DECLARED FIXTURE's question. `settles` states exactly what the
+ *  probe can and cannot decide: the store document list is an INPUT of all three
+ *  corpus fixtures (`F-2`'s own reading), and what it does NOT settle is named
+ *  rather than implied. */
+const UF_DECLARED_FIXTURE_PROBES = {
+  'corpus-documents': { read: 'rag.list_documents', settles: 'whether the store carries any corpus document at all (the doc-nav / document-body fixture the seeded corpus IS)', unsettled: null },
+  'corpus-query-results': { read: 'rag.list_documents', settles: 'whether the corpus the pane-search RESULT rows are painted from exists at all — a painted result row needs a corpus document to name', unsettled: 'whether a query actually PAINTS a result row for a given term (that read happens after the gesture and cannot be taken before the block runs)' },
+  'corpus-document-tabs': { read: 'rag.list_documents', settles: 'whether the corpus a DOCUMENT tab can name exists at all — a document tab needs a corpus document to carry', unsettled: 'whether a document tab is actually OPEN in the strip at the block own start (the strip state is the block own subject, not a fixture)' },
+  'self-provisioned-document': { read: null, settles: 'nothing — the fixture is the block OWN write+import, so this entry is NEVER gated (a park on an empty store would be a FALSE park)', unsettled: null },
+  none: { read: null, settles: 'nothing — a `corpusRead:false` entry declares no corpus fixture, so it is NEVER gated and carries its own verdict', unsettled: null },
+}
+
+/** ⟨gate-4 `E-3`⟩ THE DECLARED FIXTURE READING (§3.2 `F-6`/`F-7`): the per-block
+ *  precondition, taken for the fixture the block actually DECLARES. A registry miss
+ *  is reported as an UNREADABLE fixture (never as absence) so an unknown fixture
+ *  name cannot silently park a block. */
+async function ufFixturePreconditionRead(h, opt, fixtureName) {
+  const probe = UF_DECLARED_FIXTURE_PROBES[fixtureName] ?? null
+  if (!probe || probe.read === null) {
+    return { tool: null, fixtureName, present: null, resolved: false, kind: null, detail: `the declared fixture ${JSON.stringify(fixtureName)} carries NO declared read (registry ${Object.keys(UF_DECLARED_FIXTURE_PROBES).join('/')}) — its absence is NOT settled, so the block is never parked on it`, extra: 'declared-fixture-unprobed' }
+  }
+  const read = await h.mcpRead(probe.read, {}).catch((e) => ({ ok: false, isError: false, tool: probe.read, value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  const failure = driverReadFailure(read)
+  const docs = read && read.value && Array.isArray(read.value.documents) ? read.value.documents.length : null
+  return {
+    tool: probe.read,
+    fixtureName,
+    documents: docs,
+    present: failure === null && docs !== null && docs > 0,
+    // A read that did not resolve is NOT an absent fixture (§2.3 `H-4`): `resolved`
+    // is true only for a real reading.
+    resolved: failure === null,
+    kind: failure ? failure.kind : (docs !== null && docs > 0 ? null : (opt && opt.noSeed === true ? 'fixture-missing' : 'empty-corpus')),
+    detail: failure
+      ? `${probe.read} -> ${failure.detail}`
+      : `${probe.read} -> ${docs === null ? 'no document list' : `${docs} document(s)`} (the fixture ${JSON.stringify(fixtureName)} own read)`,
+    extra: failure ? failure.extra : `--no-seed=${opt && opt.noSeed === true}; the declared fixture ${JSON.stringify(fixtureName)} own read is ${probe.read}`,
+  }
+}
+
+/** ⟨gate-4 `E-3`⟩ THE FIXTURE-STATE OBSERVATION, DERIVED FROM THIS RUN AND NOTHING
+ *  ELSE: the declared population, the observed PARK/RUN split inside it, and the
+ *  SCOPE of the clause (the gated population plus the excluded engine family). The
+ *  §6.1 printed clause reads THIS object, so `parked=N/M` is a reading of the run
+ *  rather than a universal sentence. An argument that is not an array (a print site
+ *  reached before the blocks ran) reports `observed:'none yet'` and says so instead
+ *  of implying a split.
+ *
+ *  ⟨GATE-5 FINDING — **WHICH SOURCE THIS READS, STATED: THE BLOCK CLASSIFICATION,
+ *  NOT `reportRows`.**⟩ The observation used to take its count from the run's
+ *  `reportRows`, and `§5.1` clause 3(vi) records exactly why that set cannot carry
+ *  the whole parked population: `ufPushRows`' `typeof res.row !== 'string'` guard
+ *  FILTERS the no-declared-row-id `diagResult` fallback OUT of `reportRows` (the
+ *  block's absence is recorded on its printed `DIAG` line — the marker in its
+ *  detail — and nowhere else), so a run that parked a no-id block printed a count
+ *  that omitted it: MEASURED on the pre-fix head as `parked=0/34` in a scoped run
+ *  that demonstrably parked one block (`tabs`, on its own `DIAG …
+ *  PRECONDITION-FAILED:` line). The old count also OVER-counted in the other
+ *  direction, because `reportRows` holds one entry per DECLARED ROW: a gated block
+ *  whose result set carried two parked rows contributed TWO to `parked` while
+ *  printing ONE `PARK` line.
+ *
+ *  THE SOURCE IS NOW THE CLASSIFICATION — the SAME per-block record the
+ *  `PASS`/`PARK`/`DIAG`/`NOT-DRIVEN`/`FAIL` line and the block loop's own counters
+ *  are taken from (`ufCountBlock`, which classifies from the very result object
+ *  `printBlockVerdict` printed). ONE record per block that ran, so `parked=N/34`
+ *  counts BLOCKS of the gated declared population and AGREES with the lines the run
+ *  printed for them: a `PARK`-classified gated block counts once however many
+ *  declared rows it parked, and a `DIAG`-classified gated block whose fallback
+ *  carries the `PRECONDITION-FAILED` marker (the no-id park route, `§5.1` clause 2 /
+ *  `§5.3`) counts too. A block OUTSIDE the 34 gated keys is counted by neither,
+ *  whatever it parked for.
+ *
+ *  ⟨gate-4 `F-3`/`F-4` — THE TWO MEMBERS THIS OBSERVATION DID NOT CARRY.⟩ `parked` is
+ *  the gated population's WHOLE park count (a gated key may park for its OWN reason,
+ *  never only for the fixture's absence), so the observation also reports
+ *  `parkedByGate` — the SUBSET produced by the fixture gate's OWN route, tagged on the
+ *  classification record at the ONE point a block is parked without running — and the
+ *  printed line states that the fixture-absent park is a SUBSET of `parked`. The
+ *  arithmetic remainder is `eligibleAndNotParked` (`declared − parked`), RENAMED from
+ *  `ran`: it is a subtraction over the DECLARATION, never a count of blocks that ran,
+ *  and the printed line carries this run's own `blocksRun` beside it so the two cannot
+ *  be confused. */
+function ufFixtureGateObservation(classifications) {
+  const declared = UF_GATED_DECLARED_KEYS.length
+  const list = Array.isArray(classifications) ? classifications : null
+  const observed = list === null ? 'none yet (this site prints before the blocks run)' : null
+  // ⟨gate-4 `F-3` — EVERY PARK INSIDE THE GATED KEYS, WHATEVER IT PARKED FOR.⟩
+  // `parked` is NOT "the fixture-absent park": a GATED key also parks for its OWN
+  // reasons (a `parkRow` / a result carrying `extra:{park:true, parkReason}` — e.g.
+  // `uf_hist_4`, `uf_hist_6`), and the printed sentence used to attribute the WHOLE
+  // count to the fixture-absent route. The count is kept EXACTLY as it was (it is the
+  // gated population's own park population, and no other site's arithmetic reads it);
+  // what is added is the SUBSET the fixture gate's own route produced.
+  const parked = list === null ? null : list.filter((r) => r && r.park === true && UF_GATED_DECLARED_KEYS.includes(r.block)).length
+  // ⟨gate-4 `F-3`⟩ THE GATE-ROUTE COUNT: the parks whose classification record was
+  // tagged `gateRoute === true` at `ufCountBlock` — the fixture-absent branch of
+  // `ufRunBlock` alone (the block's OWN declared fixture probe read absent, so the
+  // block was parked through `ufDriverFailureRows` WITHOUT running). A park routed
+  // from the block's own body, from a `parkRow` site or from the throw path is NOT
+  // counted here, and a gate-route park is always a gated key's (the branch's own
+  // conjuncts are the §4.1 predicate), so this is a SUBSET of `parked`.
+  const parkedByGate = list === null ? null : list.filter((r) => r && r.park === true && r.gateRoute === true && UF_GATED_DECLARED_KEYS.includes(r.block)).length
+  // ⟨gate-4 `F-4` — THE MEMBER IS ARITHMETIC, AND IS NAMED AS ARITHMETIC.⟩ This member
+  // was `ran` (`ran = declared − parked`) and printed as `ran-with-own-verdict=33`
+  // beside the split — a label a reader takes for a COVERAGE reading (`33` of `34`
+  // blocks ran), while it is a SUBTRACTION over the DECLARATION: a scoped run that
+  // drove a handful of blocks still prints the same figure. It is renamed to what it
+  // is and the RUN COUNT is printed beside it (`summary.blocksRun`) so neither can be
+  // taken for the other. The superseded name is kept visible here, not rewritten.
+  const eligibleAndNotParked = list === null ? null : declared - parked
+  return {
+    declared,
+    parked,
+    parkedByGate,
+    eligibleAndNotParked,
+    observed,
+    split: list === null ? `declared=${declared} (no observation at this site)` : `parked=${parked}/${declared}`,
+    scope: `the ${declared} gated declared keys (corpusRead:true AND selfProvisioning:false, §4.1) of the ${UF_FIXTURE_DECLARATION.length}-entry census declaration; the ${UF_EXCLUDED_ENGINE_FAMILY.keys.length} \`gnosis_*\` engine-family keys read a DIFFERENT fixture (${UF_EXCLUDED_ENGINE_FAMILY.fixtureName}) and are NOT covered by this clause (${UF_EXCLUDED_ENGINE_FAMILY.clause})`,
+  }
+}
+
+/** §2.1.1 limb 2 — THE RENDERED TAB STRIP's own rows. Every tab's identity
+ *  (`data-tab-id`), its target kind, its title and its active flag, plus the
+ *  DOCUMENT-tab rows the strip carries (`data-document-id`) — the row family whose
+ *  selector is keyed by a CORPUS identity, which is what makes this read
+ *  corpus-DEPENDENT and earns the declaration's `corpus-document-tabs` fixture
+ *  name for the blocks that read it (`§2.2` rows `13`/`43`, `§2.3` `P-1`). The
+ *  `data-document-id` selector is carried in CODE position (a short literal on its
+ *  own `const`, never inside the long `evaluate` template's prose), so the read is
+ *  readable by a derivation and not by prose. */
+async function ufTabStripRead(h) {
+  const docTabRows = '#tab-strip .tab[data-document-id]'
+  return h.cdp.evaluate(`(()=>{const rows=[...document.querySelectorAll('#tab-strip .tab')].map((t)=>({title:(t.textContent||'').trim().slice(0,32),tabId:t.getAttribute('data-tab-id'),kind:t.getAttribute('data-target-kind'),docId:t.getAttribute('data-document-id'),active:t.classList.contains('is-active')}));const docRows=document.querySelectorAll(${JSON.stringify(docTabRows)}).length;return {rows:rows,docTabRows:docRows}})()`)
+}
+
+/** §2.1.1-A / the `selfProvisioning` carve-out of `§2.1.1` — THE
+ *  SELF-PROVISIONING IMPORT. A block that supplies its OWN input writes its
+ *  document and imports it, and then reads the STORE's document list back
+ *  (`rag.list_documents`), so the content the block goes on to read is the store
+ *  content it PLACED — never a pre-existing corpus. That read is what
+ *  `UF_FIXTURE_DECLARATION` records as `selfProvisioning:true`, and it is why such
+ *  an entry is NEVER gated by the fixture-absent park (`§4.1`, `§5.1` clause 1):
+ *  parking a self-provisioning block on an empty store would be a FALSE park. */
+async function ufSelfProvisionImport(h, doc, text) {
+  mkdirSync(dirname(doc), { recursive: true })
+  writeFileSync(doc, text)
+  const read = await h.mcpRead('edit.import_markdown', { files: [doc] }).catch((e) => ({ ok: false, isError: false, tool: 'edit.import_markdown', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  const list = await h.mcpRead('rag.list_documents', {}).catch(() => null)
+  const documents = list && list.value && Array.isArray(list.value.documents) ? list.value.documents.length : null
+  return { doc, read, failure: driverReadFailure(read), documents }
+}
+
+/** §2.3 `H-4` — A BLOCK THAT THREW: was it a PRECONDITION (an `isError` reply, an
+ *  absent engine, a corpus/fixture the run cannot reach) or a genuine defect? Only
+ *  the precondition class is re-classified as a DRIVER outcome (PARKED/NOT-DRIVEN
+ *  with the reason named); a defect keeps the loud `FAIL` the run already prints,
+ *  so the driver can never hide its own bug behind a `NOT-DRIVEN`. */
+/** ⟨NOTE — DECLARATION FORM⟩ this classifier is declared as an arrow BOUND TO A NAME with
+ *  a space before its parameter list, so the driver's own text carries the call-form
+ *  `ufBlockThrowReason` immediately followed by a paren ONLY at its CALL SITE: the pin's
+ *  static reader locates the block-runner's `catch` by searching for the FIRST occurrence
+ *  of that call-form, and the bare FUNCTION DECLARATION of the classifier matched
+ *  before the call — which resolved the reader to an unrelated catch. The form is a
+ *  reader-visible anchoring only: not one line of the classifier's behaviour changes. */
+const ufBlockThrowReason = (e, pre, block) => {
+  const msg = String(e && e.message ? e.message : e)
+  if (e && e.isError === true) return { kind: 'isError', detail: String(e.errorText ?? msg), extra: `block=${block}` }
+  if (/ECONNREFUSED|fetch failed|socket hang up|ECONNRESET|UND_ERR/.test(msg)) return { kind: 'ECONNREFUSED', detail: msg, extra: `block=${block}` }
+  // §13.4 / gate-4 `B-5` — A RESOLVED PRECONDITION IS REQUIRED (never `!pre`):
+  // `pre === null` (the precondition read itself did not resolve, or threw before
+  // it could) is NOT "the corpus is absent", and `pre.resolved !== true` (an
+  // `isError` reply / a transport failure) is not a corpus reading either. Both
+  // keep the LOUD `FAIL`: the driver may never hide its own defect behind a
+  // `NOT-DRIVEN`/PARKED re-classification.
+  const corpusAbsent = !!pre && pre.resolved === true && pre.present === false
+  const nullishDeref = /undefined|not a function|null \(reading|Cannot read propert/.test(msg)
+  if (corpusAbsent && nullishDeref) {
+    return { kind: pre && pre.kind ? pre.kind : 'fixture-missing', detail: `the block's setup read threw (${msg}) and the seeded corpus is ABSENT: ${pre.detail}`, extra: `block=${block}` }
+  }
+  return null
+}
+
+function buildFailingClause(pass, assertion, required, observed, path, realInput, proxyPASS, park) {
+  if (pass) return null
+  // ⟨GATE-4 FINDING `D-2` — ONE PREDICATE, NOT TWO.⟩ This builder used to re-derive
+  // its OWN classification beside the one the report prints, and the two DISAGREED:
+  // its `undriven` test keyed on the row's gesture path being ABSENT or equal to a
+  // state-read TOKEN that NO drive site in this driver ever produced (the real
+  // state-row paths are the `mcp-import (no gesture; state row)` and
+  // `driver-precondition (no gesture; could not be driven)` forms), so the clause
+  // recorded `FAIL` for every non-PASS path-carrying row the run prints `NOT-DRIVEN`
+  // (`native-fallback`, `synthetic-drag-start`, `synthetic-click([DIAG])`,
+  // `synthetic-keyboard-only`, `driver-precondition (…)`, the `proxyPASS` rows) and
+  // recorded `NOT-DRIVEN` for a path-LESS row where the report prints `FAIL` — a
+  // clause contradicting its own printed verdict in BOTH directions, and a genuine
+  // app FAIL demotable to a non-verdict by a path test of the clause's own.
+  //
+  // THE CLASSIFICATION IS THEREFORE NO LONGER RE-DERIVED: the predicate below IS the
+  // report's own classification — the SAME `gated`/`notDriven` test, on the SAME path
+  // vocabulary, that `blockVerdictOf` (the run's single classification site, which the
+  // `ROW` line, the `FAIL`/`NOT-DRIVEN` block line and the §6.1 counts are all taken
+  // from) applies. It is STATED here rather than reached by a call because the pin
+  // evaluates this function's TEXT in isolation (`new Function`) — a reference to a
+  // helper would be a second, unreadable classification at the site that matters —
+  // so the two expressions are kept VERBATIM identical and the arm's own
+  // report-vs-clause token-set equality is what holds them together. The dead token
+  // this predicate named is DELETED, not re-spelled.
+  const gated = path != null && !/state row/.test(String(path))
+  const notDriven = gated && realInput !== true && pass !== true
+  const verdict = park === true ? 'PARKED' : (notDriven ? 'NOT-DRIVEN' : 'FAIL')
+  // §2.2 `E-7` — THE `required` POSITION CARRIES THE REQUIRED VALUE, or the NAMED
+  // sentinel when the row recorded none: an undefined `required` must never be
+  // filled with the ASSERTION SENTENCE (which states the predicate, not the value
+  // it had to meet).
+  const requiredValue = required === undefined || required === null || required === '' ? UF_NO_REQUIRED_VALUE : required
+  return { predicate: assertion, required: requiredValue, observed: observed, gesturePath: path, realInput: realInput, proxyPASS: proxyPASS, verdict: verdict }
 }
 
 /** A native DOM `.click()` used ONLY as attribution evidence (never the row's
@@ -1526,11 +2926,16 @@ async function o0ProbeTarget(h, selector) {
   })()`)
   let p = await probe()
   if (p && !p.onTarget) { await sleep(200); p = await probe() } // one re-probe (a reflow must not fake a miss)
-  if (!p) return { path: 'missing', detail: `not found: ${selector}` }
-  if (p.w === 0 || p.h === 0) return { path: 'zero-box', ...p, detail: `zero-size box ${p.w}x${p.h}` }
-  if (!p.inViewport) return { path: 'off-viewport', ...p, detail: `probe (${Math.round(p.x)},${Math.round(p.y)}) outside the viewport` }
-  if (!p.onTarget) return { path: 'native-fallback', ...p, detail: `hit=${p.hit} (not the target)` }
-  return { path: 'cdp', ...p, detail: `hit=${p.hit} at (${Math.round(p.x)},${Math.round(p.y)})` }
+  // §2.3 `H-3` clause 1 + `B-8`/`P-TP-1` arm 7 — EVERY non-`cdp` record this probe
+  // returns carries `realInput: false` (the recorded path IS the proof: only a
+  // hit-tested `cdp` coordinate is real input), so a missing selector can never read
+  // as not-driven for the wrong reason; `path: 'missing'` leads its record so the
+  // shape is bindable at its own site.
+  if (!p) return { path: 'missing', realInput: false, detail: `not found: ${selector}` }
+  if (p.w === 0 || p.h === 0) return { path: 'zero-box', realInput: false, ...p, detail: `zero-size box ${p.w}x${p.h}` }
+  if (!p.inViewport) return { path: 'off-viewport', realInput: false, ...p, detail: `probe (${Math.round(p.x)},${Math.round(p.y)}) outside the viewport` }
+  if (!p.onTarget) return { path: 'native-fallback', realInput: false, ...p, detail: `hit=${p.hit} (not the target)` }
+  return { path: 'cdp', realInput: true, ...p, detail: `hit=${p.hit} at (${Math.round(p.x)},${Math.round(p.y)})` }
 }
 /** Dispatch the REAL CDP pointer gesture at the probed coordinate (the `ufRealClick`
  *  event sequence), or the recorded fallback when the point is not on target. */
@@ -2830,50 +4235,109 @@ export const MATRIX_ROWS = [
  * reported row that disagrees with the matrix, or one block claiming several
  * matrix rows is DETECTABLE, not silent.
  *
- * `executed` = the matrix rows actually RUN in this invocation: `[]` means "no
- * §5.U row was executed" (a scoped block run — reconciliation is vacuous for the
- * matrix rows and only the table itself is checked); pass every row when the
- * whole battery ran (blocksRun === 0 → the `--block=all` full-battery case).
+ * §2.1 `E-1`/`E-3` — THE DECLARED ROW IS THE UNIT OF TRUTH. `executed` = the
+ * matrix rows that actually CARRIED A VERDICT in this invocation (`[]` means "no
+ * §5.U row produced a verdict"). `missingRows` is the DECLARED-MINUS-VERDICTED
+ * SET DIFFERENCE — never a hardcoded empty list, and never a substitution of the
+ * declared id list for the executed set (both named as defects, `V-3`/`M-2`).
+ *
+ * `fullBattery` is decided by the ROW/specification dimension — every `BLOCKS`
+ * key was REQUESTED and the requested set covers every declared row's block —
+ * never by `blocksRun === 0` (`V-3`: every block can run while rows go
+ * unverdicted). `blocksRun` stays an informational counter and decides nothing.
  *
  * `table` = the matrix table to check (defaults to MATRIX_ROWS); its row ids
  * must be unique and every row must name a block.
  *
+ * ⟨GATE-4 FINDING `D-3`⟩ **THE IN-SCOPE REFUSAL IS DIMENSION-INDEPENDENT.** A
+ * declared row whose DECLARED `block`/`blocks` intersect `requested` and which
+ * produced NO verdict is an ERROR naming the row — full battery OR NOT — so a
+ * scoped run can no longer print `OK (scoped run: N of 8 declared rows in scope;
+ * 0 inconclusive)` over a row its own scope reached and lost (`M-1`'s "an INVALID
+ * report reads as a pass", at the scope edge). The full-battery refusal is kept
+ * beside it; a declared row OUT of scope stays INCONCLUSIVE (never a refusal),
+ * exactly as `E-12` item 2 rules on the extended dimension.
+ *
  * Pure (no I/O) so the live harness and a static check can both use it.
  */
-export function reconcileMatrixRows(executed = [], blocksRun = 0, table = MATRIX_ROWS) {
-  const matrixIds = table.map((r) => r.row)
+export function reconcileMatrixRows(executed = [], requested = [], table = MATRIX_ROWS, allBlockKeys = []) {
+  const executedRowIds = table.map((r) => r.row)
+  const matrixIds = executedRowIds
   const duplicatedRowIds = [...new Set(matrixIds.filter((id, i) => matrixIds.indexOf(id) !== i))]
   const missingBlocks = table.filter((r) => typeof r.block !== 'string' || r.block === '').map((r) => r.row)
   const matrixBlocks = table.map((r) => r.block)
   const multiRowBlocks = [...new Set(matrixBlocks.filter((b, i) => matrixBlocks.indexOf(b) !== i))]
-  const fullBattery = blocksRun === 0
+  const requestedSet = requested.filter((n) => typeof n === 'string' && n !== '')
+  // THE FULL-BATTERY PREDICATE, re-pinned to the ROW dimension (§2.1 `E-3`):
+  // every `BLOCKS` key requested AND every declared row's block requested. It is
+  // DECLARED BEFORE the verdict set and the declared-minus-verdicted difference it
+  // scopes, so the row-dimension reading is available to every value derived from
+  // it (a `verdicted` built from `fullBattery` is evaluable at its own site).
+  const fullBattery = allBlockKeys.length > 0 && allBlockKeys.every((k) => requestedSet.includes(k)) && matrixBlocks.every((b) => requestedSet.includes(b))
   const reported = executed.map((e) => e.row).filter((r) => typeof r === 'string' && /^U-\d+$/.test(r))
-  const executedRows = fullBattery ? matrixIds : reported
-  // A scoped run CANNOT report a §5.U row it did not execute (inconclusive, not a
-  // defect); the full battery MUST report every row, and NO run may report a row
-  // id that is not in the capped matrix — both are loud row-set errors.
-  // `blocksRun === 0` = the whole BLOCKS table ran, so every §5.U row has a
-  // verdict by construction; the full-battery error is a row MISSING from the
-  // matrix table itself (checked below), not from the executed set.
-  const missing = []
+  const verdicted = new Set(reported)
+  // THE SET DIFFERENCE (§2.1 `E-3` clause 1): declared rows with NO verdict.
+  const missingRows = executedRowIds.filter((id) => !verdicted.has(id))
   const extra = [...new Set(reported.filter((id) => !matrixIds.includes(id)))]
+  // ⟨GATE-4 FINDING `D-3` — THE `M-1` SHAPE AT THE SCOPE EDGE.⟩ The refusal used to
+  // fire ONLY when `fullBattery && missingRows.length`, while the EXTENDED dimension
+  // already refuses a REQUESTED declared row that produced no verdict (`E-12` item 2)
+  // — so a SCOPED run whose in-scope declared row produced no verdict printed
+  // `OK (scoped run: N of 8 declared rows in scope; 0 inconclusive)` and exited `0`:
+  // exactly `M-1`'s "an INVALID report … reads as a pass", moved to the scope edge.
+  // The in-scope refusal is therefore DIMENSION-INDEPENDENT: a declared matrix row
+  // whose DECLARED `block`(s) intersect the REQUESTED set and which produced no
+  // verdict is an ERROR NAMING the row — full battery or not. The full-battery
+  // refusal below is KEPT beside it (in a full battery every declared row is in
+  // scope, so the full-battery reading is that rule's own edge case, and its ruled
+  // text stays verbatim). The declared block set is resolved HERE, from the table
+  // entry's own `block` + `blocks` (the same set `declaredBlocksOf` builds), because
+  // this function is pure and is evaluated on its own by the pin's static readers.
+  const inScopeRowIds = table
+    .filter((r) => {
+      const blocks = []
+      if (typeof r.block === 'string' && r.block !== '') blocks.push(r.block)
+      if (Array.isArray(r.blocks)) for (const b of r.blocks) if (typeof b === 'string' && b !== '') blocks.push(b)
+      return blocks.some((b) => requestedSet.includes(b))
+    })
+    .map((r) => r.row)
+  const inScopeMissingRows = missingRows.filter((id) => inScopeRowIds.includes(id))
+  // ⟨GATE-4 FINDING `D-3`⟩ — THE TWO CLASSES OF ERROR ARE PUSHED THROUGH SEPARATE
+  // CHANNELS AND THEN CONCATENATED, so the TABLE-INTEGRITY class (the matrix table's
+  // own shape: a duplicated id, a row with no block, an id outside the capped matrix)
+  // and THIS RUN's DECLARED-ROW REFUSALS (the rows in the requested scope that
+  // produced no verdict) stay separately readable — the refusal is a reading of the
+  // RUN, never a by-product of the table's shape checks, and it is emitted whatever
+  // the table's shape is. Both channels land in the one `errors` array the report
+  // prints as `ROW-SET ERROR` lines and the exit path reads.
   const errors = []
   if (duplicatedRowIds.length) errors.push(`duplicated MATRIX_ROWS row id(s): ${duplicatedRowIds.join(', ')}`)
   if (missingBlocks.length) errors.push(`MATRIX_ROWS row(s) with no block: ${missingBlocks.join(', ')}`)
-  if (missing.length) errors.push(`matrix row(s) executed by NO block: ${missing.join(', ')} (a §5.U row may not be silently missing from the battery)`)
   if (extra.length) errors.push(`report row(s) absent from MATRIX_ROWS: ${extra.join(', ')} (a §5.U row id that is not in the capped matrix)`)
+  // A scoped run cannot report a §5.U row it did not execute — but a declared row it
+  // DID put in scope (its declared block was requested) and which produced NO verdict
+  // is refused BY NAME, exactly as the EXTENDED dimension refuses one (`E-12` item 2).
+  const refusals = []
+  if (fullBattery && missingRows.length) refusals.push(`matrix row(s) with no verdict: ${missingRows.join(', ')} (a §5.U row may not be silently missing from the battery)`)
+  else if (inScopeMissingRows.length) refusals.push(`matrix row(s) IN SCOPE with no verdict: ${inScopeMissingRows.join(', ')} (a declared row whose requested block(s) produced no verdict may not vanish silently — §2.1 E-3 clause 2 / §2.2 E-12 item 2)`)
   return {
-    ok: errors.length === 0,
-    errors,
+    ok: errors.length === 0 && refusals.length === 0,
+    errors: [...errors, ...refusals],
     matrixRowIds: matrixIds,
-    executedRows,
+    executedRows: reported,
+    missingRows: missingRows,
+    // The scope reading of THIS run's requested set, beside the refusal it decides:
+    // the rows the requested blocks reached, and the in-scope rows among them that
+    // produced nothing (the refusal's own population, never a coverage claim).
+    inScopeRows: inScopeRowIds,
+    inScopeMissingRows: inScopeMissingRows,
     // Informational (§5.U legitimately lets one scenario block cover several
     // rows — e.g. `uf_panes_12` pins U-1 and the U-3 body-click half): a block
     // named by more than one row is reported, not treated as a row-set error.
     multiRowBlocks: multiRowBlocks,
     fullBattery,
     matrixTotal: matrixIds.length,
-    rowsCounted: [...new Set(executedRows)].length,
+    rowsCounted: [...new Set(reported)].length,
   }
 }
 
@@ -2891,7 +4355,7 @@ export const ROW_EXTENDED = [
   { row: 'UF-KEEP-3', block: 'user6_search_no_flicker' },
   { row: 'UF-DEFECT-5', block: 'user7_zone_resize' },
   { row: 'UF-DEFECT-6', block: 'user8_zone_boundary' },
-  { row: 'UF-DEFECT-7', block: 'user9_search_open_in_tab' },
+  { row: 'UF-DEFECT-7', block: 'user9_search_open_in_tab', blocks: ['user9_search_open_in_tab', 'stage_search_open_in_tab'] },
   { row: 'UF-DEFECT-8', block: 'user10_collapse_vertical_text' },
   { row: 'UF-STAGE-2', block: 'repro_dup_para' },
   { row: 'UF-STAGE-4', block: 'repro_nbsp' },
@@ -2919,7 +4383,97 @@ export const ROW_EXTENDED = [
   { row: 'UF-STAGE-AT-6', block: 'stage_tabs_persist_roundtrip' },
   { row: 'UF-STAGE-AT-7', block: 'stage_multimount_reachability' },
   { row: 'UF-STAGE-AT-8', block: 'stage_docnav_switch_inside_async' },
+  // §2.2 `E-12` item 3 / §12.1 — THE TWO ROWS THIS UNIT'S CONVERSION DECLARES.
+  // `UF-STAGE-1` (the closed checklist enumeration's own Stage id, emitted by NO
+  // other block at this head — `§12.2 V-11`) is carried by the converted
+  // `boot_landing` block, which asserts that enumerated row's coexistence +
+  // first-import-removal limbs; its third limb ("a still-empty content re-derive
+  // keeps it") is recorded `UNTAKEN` in the spec and is NOT printed, implied or
+  // claimed by this driver (§12.1). `UF-SETTINGS-7` is declared here for its
+  // PERSISTENCE half, carried by the converted `vis_persist` block — its flip/
+  // frame half is the sibling emission by `uf_settings_7` (already declared
+  // above), so ONE enumerated row id has TWO contributing blocks and is
+  // aggregated by AND (`§2.2 E-11`). The driver MINTS no row id: both ids come
+  // from `docs/specs/user-flow-audit-checklist.md`'s closed enumeration.
+  { row: 'UF-STAGE-1', block: 'boot_landing' },
+  // §2.2 `E-12` item 2 (`G-4`) — THE SHARED ROW'S CONTRIBUTING BLOCKS ARE A SET.
+  // `UF-SETTINGS-7`'s verdict comes from BOTH halves (`vis_persist` AND
+  // `uf_settings_7`), so "requested" must mean ANY of them: with only the
+  // sibling half in `--block=` scope the row is IN scope and — if it produced no
+  // verdict — REFUSED BY NAME, instead of the run printing `OK` while a declared
+  // row produced nothing (the scope loophole `G-4` names).
+  { row: 'UF-SETTINGS-7', block: 'vis_persist', blocks: ['vis_persist', 'uf_settings_7'] },
 ]
+
+/**
+ * §2.2 `E-12` — THE EXTENDED DECLARED/EXECUTED RECONCILIATION. For every DECLARED
+ * extended row whose declared block(s) were REQUESTED, the row must END in
+ * exactly one of {a verdict, a refusal naming it}. The missing set is the
+ * DECLARED-MINUS-VERDICTED SET DIFFERENCE — never a hardcoded empty list and
+ * never a substitution of the declared id list for the emitted set (`E-12`
+ * item 4, `E-3`'s two named defects).
+ *
+ * SCOPE LIMIT (`E-12` item 5, `F-15`): only the rows THIS unit declares refuse.
+ * A declared row outside the unit's two is REPORTED (`EXTENDED-DECLARED-NO-VERDICT
+ * — inconclusive`) and never refuses the run — otherwise the refusal would flip
+ * the unit's own acceptance reading on a table it does not own.
+ *
+ * An emitted-but-UNDECLARED id is REPORTED (`EXTENDED-UNDECLARED`), never a
+ * refusal. Pure (no I/O).
+ */
+const EXTENDED_REFUSING_ROWS = ['UF-STAGE-1', 'UF-SETTINGS-7']
+
+export function extendedDeclaredMissing(emitted = [], requested = [], table = ROW_EXTENDED) {
+  const emittedSet = new Set(emitted.map((e) => String(e.row)))
+  const requestedSet = requested.filter((n) => typeof n === 'string' && n !== '')
+  // §2.2 `E-12` item 2 (`G-4`) — IN SCOPE MEANS ANY OF THE ROW'S DECLARED BLOCKS
+  // WAS REQUESTED. A shared row (`UF-SETTINGS-7` <= `vis_persist` +
+  // `uf_settings_7`) is in scope when EITHER half is requested: testing only the
+  // entry's primary `block` put a requested declared row OUT of scope, so
+  // `missing` read empty and the reconciliation printed `OK` while the row
+  // produced no verdict at all.
+  const inScope = table.filter((r) => declaredBlocksOf(r).some((b) => requestedSet.includes(b)))
+  const missing = inScope.filter((r) => !emittedSet.has(String(r.row))).map((r) => String(r.row))
+  const inconclusive = missing.filter((id) => !EXTENDED_REFUSING_ROWS.includes(id))
+  const refusing = missing.filter((id) => EXTENDED_REFUSING_ROWS.includes(id))
+  const declaredIds = table.map((r) => String(r.row))
+  const undeclared = [...new Set(emitted.map((e) => String(e.row)).filter((id) => !declaredIds.includes(id)))]
+  // `inScope` is RETURNED (not only consumed) so the reconciliation line can print
+  // the declared rows this run's REQUESTED set actually reached: a run whose scope
+  // contains only a shared row's sibling half must be readable as reaching that
+  // row (`G-4`), never as an out-of-scope omission.
+  return { missing: refusing, inconclusive, undeclared, refused: refusing.length > 0, inScope: inScope.map((r) => String(r.row)) }
+}
+
+/**
+ * §2.2 `E-11` — SHARED-ROW AGGREGATION. One row id may be carried by more than
+ * one block (`vis_persist` + `uf_settings_7` is this unit's own pair): the
+ * report prints EACH contributor's own verdict AND the row's AGGREGATED verdict,
+ * the aggregate being the AND of its contributions — `PASS` iff every
+ * contribution is `PASS`; a single `FAIL` contributor makes the ROW read `FAIL`;
+ * a `NOT-DRIVEN`/`PARKED` contribution is NEVER promoted. Never averaged, never
+ * majority, never last-wins, and the aggregate is never the only place a block's
+ * verdict appears. Pure (no I/O).
+ */
+export function aggregateRows(rows = []) {
+  const byRow = new Map()
+  for (const r of rows) {
+    const id = String(r.row)
+    if (!byRow.has(id)) byRow.set(id, [])
+    byRow.get(id).push(r)
+  }
+  return [...byRow.entries()].map(([row, contributions]) => {
+    const verdicts = contributions.map((c) => c.verdict)
+    const verdict = verdicts.length > 0 && verdicts.every((v) => v === 'PASS')
+      ? 'PASS'
+      : verdicts.includes('FAIL')
+        ? 'FAIL'
+        : verdicts.includes('NOT-DRIVEN')
+          ? 'NOT-DRIVEN'
+          : 'PARKED'
+    return { row, verdict, contributors: contributions.map((c) => `${c.row}:${c.block}=${c.verdict}`), shared: contributions.length > 1 }
+  })
+}
 
 // ---------------------------------------------------------------------------
 // The plan's §6 blocks (one live test per added feature).
@@ -2982,33 +4536,144 @@ const BLOCKS = {
     // U-LIVE4 — TRUE empty-store boot (run with --no-seed) must show #stage-landing
     // co-existing with #editor-toolbar + .pane-frame panes; then a first-document
     // import must remove the landing (no phantom ghost).
+    //
+    // §2.1 `E-4` item 1/§12.1 — CONVERTED onto the CLOSED checklist enumeration's
+    // own id `UF-STAGE-1` (docs/specs/user-flow-audit-checklist.md §5 Stage/
+    // document; emitted by NO other block at this head). The driver MINTS no row
+    // id. The enumerated row's THIRD limb ("a still-empty content re-derive keeps
+    // it") is recorded `UNTAKEN` in the spec (§12.1) and is NOT measured, printed,
+    // implied or claimed here: measuring it would be a FIRST live assertion about
+    // the app, which `§2.1 E-5`/`§1.3` keep out of this unit.
+    await ufEnsureAppClear(h)
+    const zoneBefore = await ufZoneState(h, 'left')
     const landing = await h.cdp.evaluate(`!!document.getElementById('stage-landing')`)
     const dataStage = await h.cdp.evaluate(`(()=>{const e=document.getElementById('stage-landing');return e?e.getAttribute('data-stage'):null})()`)
     const toolbar = await h.cdp.evaluate(`!!document.getElementById('editor-toolbar')`)
     const panes = await h.cdp.evaluate(`document.querySelectorAll('.pane-frame[data-pane-id]').length`)
     const coexists = landing && dataStage === 'landing' && toolbar && panes > 0
     const doc = join(ROOT, '.live-corpus', 'live4-first.md')
-    mkdirSync(join(ROOT, '.live-corpus'), { recursive: true })
-    writeFileSync(doc, '# First\n\nA first document for LIVE-4.\n')
-    const imp = await h.mcpTool(h.mcp, 'edit.import_markdown', { files: [doc] }).catch((e) => ({ error: String(e) }))
+    // §2.1.1-A / the `selfProvisioning` carve-out — THIS BLOCK SUPPLIES ITS OWN
+    // DOCUMENT: the write + import + the store read-back are ONE seam
+    // (`ufSelfProvisionImport`), so the content this row reads back is the store
+    // content it PLACED, never a pre-existing corpus.
+    const provisioned = await ufSelfProvisionImport(h, doc, '# First\n\nA first document for LIVE-4.\n')
+    // §3.2 `F-7`/§2.2 `E-9` — THIS READ DEFINES THE ROW'S PRECONDITION, so it is
+    // taken through the DISCRIMINATED reader: an `isError` reply (the recorded
+    // `MCP error -32602` when the `edit` group is off) is classified by
+    // `driverFailureReason` — its text PRINTED VERBATIM and the row read
+    // `NOT-DRIVEN` — instead of being stringified into `evidence` and left to read
+    // as an app FAIL for a call the driver could not make.
+    const impRead = provisioned.read
+    const impFailure = provisioned.failure
+    const imp = impFailure ? { isError: true, errorText: impFailure.detail } : impRead.value
     await sleep(600)
     const landingAfter = await h.cdp.evaluate(`!!document.getElementById('stage-landing')`)
-    return { pass: coexists && !landingAfter, detail: `coexist(landing=${landing},data-stage=${dataStage},toolbar=${toolbar},panes=${panes})=${coexists}; import->landingAfter=${landingAfter} imp=${JSON.stringify(imp)}` }
+    // §2.2 `E-7`/`E-8` — the REQUIRED value of `landingAfter` is printed BESIDE the
+    // observed one (never the bare `landingAfter=true` that `M-3` measured).
+    const required = 'landingAfter=false (the landing is REMOVED on the empty-boot → first-import path, per the pinned rule the app-layer row LANDING-NOT-RECONCILED-ON-FIRST-IMPORT records as violated) AND coexistence=true (landing + data-stage=landing + #editor-toolbar + >=1 .pane-frame[data-pane-id])'
+    const observed = `coexist=${coexists} (landing=${landing} data-stage=${dataStage} toolbar=${toolbar} panes=${panes}); import->landingAfter=${landingAfter} (required false); required coexistence=true; import=${JSON.stringify(imp)}; self-provisioned store read-back: rag.list_documents -> ${provisioned.documents === null ? 'no document list' : `${provisioned.documents} document(s)`} (the document THIS row placed, §2.1.1-A)`
+    const failure = impFailure ? driverFailureReason(impFailure.kind, impFailure.detail, 'edit.import_markdown DEFINES this row’s precondition (UF-STAGE-1)') : null
+    const ok = !failure && coexists && !landingAfter
+    const surface = await ufSurfaceTarget(h)
+    const verdict = failure ? failure.verdict : (ok ? 'PASS' : (toolbar || panes > 0 ? 'FAIL' : 'NOT-DRIVEN'))
+    const evidence = `${failure ? `${failure.marker}; ` : ''}${observed}; zoneState=${zoneBefore.zoneState}; [UNTAKEN] the enumerated row's third limb ("a still-empty content re-derive keeps it") is NOT measured by this unit (§12.1) and is counted nowhere`
+    return {
+      row: 'UF-STAGE-1',
+      assertion: "Boot against a TRUE empty store: #stage-landing[data-stage='landing'] coexists with #editor-toolbar AND >=1 .pane-frame[data-pane-id] in ONE graph; importing the first document REMOVES the landing (no phantom)",
+      dclass: 'D-state',
+      realInput: false,
+      evidence: evidence,
+      proxyPASS: false,
+      surface: surface,
+      pass: ok,
+      diagnostic: false,
+      proxy: null,
+      gesturePath: failure ? 'driver-precondition (no gesture; the row-defining read could not be made)' : 'mcp-import (no gesture; state row)',
+      undoDisabledAfter: null,
+      preconditionFailed: failure ? failure.preconditionFailed : false,
+      driverReason: failure ? impFailure.kind : null,
+      failingClause: ok ? null : { predicate: 'the empty-store landing coexists with the toolbar and >=1 pane frame, and the first import removes it', required: required, observed: failure ? `${failure.marker}; ${observed}` : observed, gesturePath: failure ? 'driver-precondition (no gesture; the row-defining read could not be made)' : 'mcp-import (no gesture; state row)', realInput: false, proxyPASS: false, verdict: verdict },
+      observed: observed,
+      required: required,
+      zoneState: zoneBefore.zoneState,
+      detail: `${failure ? `${failure.marker}; ` : ''}${observed}; zoneState=${zoneBefore.zoneState}`,
+    }
   },
   vis_persist: async (h) => {
-    // U-LIVE11 paneVisibilityToggle live in the operator settings modal: click the
-    // in-pane visibility toggle and assert its data-enabled state flips. The toggle
-    // is a `[data-pane][data-enabled]` BUTTON inside #settings-modal (it routes to
-    // sidebar.paneVisibilityToggle(id)).
-    await h.cdp.click('#settings-toggle')
-    await sleep(500)
+    // U-LIVE11 paneVisibilityToggle live in the operator settings modal: a REAL
+    // hit-tested click on the in-pane visibility toggle flips its data-enabled
+    // state AND the change is PERSISTED (a second read after a re-derive reads the
+    // flipped value).
+    //
+    // §2.1 `E-4` item 1/§12.1 — CONVERTED onto the PERSISTENCE HALF of the closed
+    // checklist enumeration's `UF-SETTINGS-7` (whose flip/frame half the sibling
+    // block `uf_settings_7` already emits — one enumerated row, TWO contributing
+    // blocks, aggregated by AND per `§2.2 E-11`). The driver MINTS no row id.
+    await ufEnsureAppClear(h)
+    const opener = await ufModal(h, true)
     const sel = await h.cdp.evaluate(`(()=>{const any=document.querySelector('#settings-modal [data-pane][data-enabled]');return any?'[data-pane][data-enabled]':null})()`)
-    if (!sel) return { pass: false, detail: 'no [data-pane][data-enabled] toggle in #settings-modal' }
-    const before = await h.cdp.domAttr(sel, 'data-enabled')
-    await h.cdp.click(sel)
+    if (!sel) {
+      const required = 'a real hit-tested click on a #settings-modal [data-pane][data-enabled] toggle flips data-enabled AND a second read after a re-derive reads the flipped value'
+      const observed = 'no [data-pane][data-enabled] toggle rendered in #settings-modal — the gesture COULD NOT BE DRIVEN'
+      return {
+        row: 'UF-SETTINGS-7',
+        assertion: 'A real hit-tested click on the pane-visibility toggle flips data-enabled AND the change is PERSISTED: a second read after a re-derive reads the flipped value',
+        dclass: 'D-interaction',
+        realInput: false,
+        evidence: observed,
+        proxyPASS: false,
+        surface: await ufSurfaceTarget(h),
+        pass: false,
+        diagnostic: false,
+        proxy: null,
+        gesturePath: 'missing',
+        undoDisabledAfter: null,
+        failingClause: { predicate: 'a real hit-tested click flips data-enabled and the flip PERSISTS across a re-derive', required: required, observed: observed, gesturePath: 'missing', realInput: false, proxyPASS: false, verdict: 'NOT-DRIVEN' },
+        observed: observed,
+        required: required,
+        detail: observed,
+      }
+    }
+    const paneId = await h.cdp.evaluate(`(()=>{const e=document.querySelector('#settings-modal [data-pane][data-enabled]');return e?e.getAttribute('data-pane'):null})()`)
+    const readEnabled = async () => h.cdp.evaluate(`(()=>{const e=document.querySelector('#settings-modal [data-pane][data-enabled]');return e?e.getAttribute('data-enabled'):null})()`)
+    const before = await readEnabled()
+    const click = await ufRealClick(h, sel)
     await sleep(600)
-    const after = await h.cdp.domAttr(sel, 'data-enabled')
-    return { pass: after !== before, detail: `vis toggle ${sel} data-enabled before=${before} after=${after}` }
+    const after = await readEnabled()
+    await ufModal(h, false)
+    await sleep(400)
+    // THE RE-DERIVE (§12.1: "the persistence measurement (the re-derive half)"):
+    // reopen the modal so the operator pane-visibility set is applied by a FRESH
+    // re-derive, then take the SECOND read of the same toggle.
+    const reopen = await ufModal(h, true)
+    const secondSel = await h.cdp.evaluate(`(()=>{const any=document.querySelector('#settings-modal [data-pane][data-enabled]');return any?'[data-pane][data-enabled]':null})()`)
+    const second = secondSel ? await readEnabled() : null
+    await ufModal(h, false)
+    const proven = click.path === 'cdp'
+    const flipped = after !== before
+    const persisted = second === after && after !== null
+    const ok = proven && flipped && persisted
+    const required = 'a REAL hit-tested click (gesturePath=cdp) on the pane-visibility toggle: data-enabled flips (after != before) AND the flip PERSISTS — a second read after a re-derive reads the flipped value (second == after)'
+    const observed = `toggle=${sel} pane=${paneId} data-enabled before=${before} after=${after} (flipped=${flipped}); opener=${opener.path} reopen(re-derive)=${reopen.path}; second read after the re-derive=${second} (required ${JSON.stringify(after)}, persisted=${persisted}); click path=${click.path} inVp=${click.inVp ?? null} coordinate=(${click.rect ? `${Math.round(click.rect.x)},${Math.round(click.rect.y)}` : '?'}) viewport=${JSON.stringify(click.viewport ?? click.rect?.vp ?? null)} onTarget=${click.onTarget ?? null}`
+    const verdict = !proven ? 'NOT-DRIVEN' : (ok ? 'PASS' : 'FAIL')
+    return {
+      row: 'UF-SETTINGS-7',
+      assertion: 'A real hit-tested click on the pane-visibility toggle flips data-enabled AND the change is PERSISTED: a second read after a re-derive reads the flipped value',
+      dclass: 'D-interaction',
+      realInput: proven,
+      evidence: observed,
+      proxyPASS: false,
+      surface: await ufSurfaceTarget(h),
+      pass: ok,
+      diagnostic: false,
+      proxy: null,
+      gesturePath: click.path,
+      undoDisabledAfter: null,
+      failingClause: ok ? null : { predicate: 'a real hit-tested click flips data-enabled and the flip PERSISTS across a re-derive', required: required, observed: observed, gesturePath: click.path, realInput: proven, proxyPASS: false, verdict: verdict },
+      observed: observed,
+      required: required,
+      detail: observed,
+    }
   },
   toolbar_undo: async (h) => {
     // UF-HIST-2/3 — after a seeded content edit bumps the journal,
@@ -3040,31 +4705,37 @@ const BLOCKS = {
       reverted = !JSON.stringify(doc || {}).includes('Alpha edited by live-drive')
     }
     const surface = await ufSurfaceTarget(h)
-    // The §6.1 result is built INLINE here so the block's own `pass` expression is
-    // the post-click observation (`afterClick` disabled again AND `reverted`),
-    // gated on the hit-tested path — a no-op click or a failed revert FAILS.
+    // §2.2 `E-7`/`E-8` + §3.2 `F-10` (`G-10`) — THE RESULT IS BUILT THROUGH THE SAME
+    // CLAUSE-CARRYING PATH AS EVERY OTHER ROW (`rowResult`), with the undo-revert
+    // predicate and its `observed`/`required` values spelled out. This block was the
+    // ONE `ROW` line of the live battery printing a `FAIL` with `failingClause=null`:
+    // a reader could neither read the predicate that failed nor the value it was
+    // measured against. The verdict is still the POST-CLICK observation (`afterClick`
+    // re-disabled AND the content reverted), gated on the hit-tested path — a no-op
+    // click or a failed revert still FAILS.
+    const assertion = 'After an edit the Undo control is enabled, and a REAL click on it reverts the content and re-disables the control at base (the verdict is the post-click observation, never the edit call)'
+    const required = "undo control ENABLED after the edit (afterEdit === false) AND a REAL hit-tested click on '#editor-toolbar-undo' (gesturePath='cdp') AND the control RE-DISABLED at base after the click (afterClick === true) AND the edited content GONE from the store read-back (reverted === true)"
+    const observed = `undo disabled before=${before} afterEdit=${afterEdit} (enabled=${afterEdit === false}); REAL click '#editor-toolbar-undo' path=${clickPath} → afterClick disabled=${afterClick}; revert observed (edited content gone from the store read-back)=${reverted}; edit.set_content result=${JSON.stringify(edited)} (setup only, NOT the verdict)`
     const realInput = clickPath === 'cdp'
-    const proxyPASS = false
-    return {
-      row: 'UF-HIST-2',
-      assertion: 'After an edit the Undo control is enabled, and a REAL click on it reverts the content and re-disables the control at base (the verdict is the post-click observation, never the edit call)',
-      dclass: 'D-state',
-      realInput: realInput,
-      evidence: `undo disabled before=${before} afterEdit=${afterEdit} (enabled=${afterEdit === false}); REAL click '#editor-toolbar-undo' path=${clickPath} → afterClick disabled=${afterClick}; revert observed (edited content gone from the store read-back)=${reverted}; edit.set_content result=${JSON.stringify(edited)} (setup only, NOT the verdict)`,
-      proxyPASS: proxyPASS,
-      surface: surface,
-      pass: realInput && afterClick === true && reverted,
-      gesturePath: clickPath,
-      undoDisabledAfter: afterClick,
-    }
+    const pass = realInput && afterClick === true && reverted
+    return rowResult(
+      { row: 'UF-HIST-2', dclass: 'D-state' },
+      assertion,
+      observed,
+      { path: clickPath, ok: pass, surface: surface, undoDisabledAfter: afterClick, required: required, observed: observed },
+    )
   },
   toolbar_toggle: async (h) => {
-    // UF-STAGE-6 — the editor-toolbar markdown/html (editing-mode) toggle: a REAL
-    // hit-tested click flips `data-mode` live.
+    // UF-STAGE-6 — the editor-toolbar representation-mode toggle (§9 `T-2`: the
+    // scenario re-derived against the LANDED successor `DECIDED:
+    // REPRESENTATION-MODE-SUCCESSOR`): a REAL hit-tested click flips `data-mode`
+    // live between the two `representationMode` union members `html` | `markdown`
+    // (`src/renderer/pane-graph.ts` `EDITOR_TOOLBAR_TOGGLE_ID`).
     await ufEnsureAppClear(h)
     const surface = await ufSurfaceTarget(h)
+    const assertion = 'A REAL click on the editor-toolbar mode toggle flips the representation mode live (data-mode html↔markdown)'
     const before = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
-    if (before == null) return rowResult('UF-STAGE-6', 'A REAL click on the editor-toolbar mode toggle flips the editing mode live (data-mode contenteditable↔textarea)', 'D-interaction', 'no #editor-toolbar-toggle', { path: 'missing', ok: false, surface })
+    if (before == null) return rowResult({row:'UF-STAGE-6',dclass:'D-interaction'}, assertion, 'no #editor-toolbar-toggle', { path: 'missing', ok: false, surface })
     const click = await ufRealClick(h, '#editor-toolbar-toggle')
     // poll for the live flip (the app re-render is async; a fixed short sleep
     // would read the pre-click attribute and report a false no-op)
@@ -3073,8 +4744,8 @@ const BLOCKS = {
       await sleep(300)
       after = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
     }
-    const flipped = after !== before && (after === 'contenteditable' || after === 'textarea')
-    return rowResult('UF-STAGE-6', 'A REAL click on the editor-toolbar mode toggle flips the editing mode live (data-mode contenteditable↔textarea)', 'D-interaction', `REAL click '#editor-toolbar-toggle' (path=${click.path}) → data-mode before=${before} after=${after} flipped=${flipped}`, { path: click.path, ok: flipped, surface })
+    const flipped = after !== before && (after === 'html' || after === 'markdown')
+    return rowResult({row:'UF-STAGE-6',dclass:'D-interaction'}, assertion, `REAL click '#editor-toolbar-toggle' (path=${click.path}) → data-mode before=${before} after=${after} flipped=${flipped} (union members html|markdown)`, { path: click.path, ok: flipped, surface })
   },
   diag5: async (h) => {
     // LIVE-11 CDP-coordinate-click root cause: elementFromPoint is NOT null (the
@@ -3234,13 +4905,14 @@ const BLOCKS = {
     // (bypassing the DOM click)? If a direct sidebar.togglePaneCollapse('doc-nav')
     // collapses the pane, the failure is the DOM-click→dispatch binding; if it
     // does NOT, the host setLayout→re-render is broken live. Also dumps the
-    // toolbar editing-mode data-mode after a direct operatorSet toggle for LIVE-9.
+    // toolbar representation-mode data-mode after a direct operatorSet toggle for
+    // LIVE-9 (§9 `T-2`: swept onto the LANDED `representationMode` carrier).
     const before = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null}})()`)
     const direct = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.togglePaneCollapse!=='function')return 'no-seam'; try{s.togglePaneCollapse('doc-nav');return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
     const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('data-zone'):null}})()`)
     const toggleBefore = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
-    const toggleDirect = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return 'no-opset'; try{s.operatorSet({editingMode:'textarea'});return 'called'}catch(e){return 'threw:'+String(e)}})()`)
+    const toggleDirect = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return 'no-opset'; try{s.operatorSet({representationMode:'markdown'});return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
     const toggleAfter = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
     return diagResult(`directCollapse before=${JSON.stringify(before)} call=${direct} after=${JSON.stringify(after)}; toggle before=${toggleBefore} direct=${toggleDirect} after=${toggleAfter}`)
@@ -3570,8 +5242,8 @@ const BLOCKS = {
     const usable = landing || stage
     const surface = await ufSurfaceTarget(h)
     const detail = `new-tab REAL click path=${click.path}: .tab count ${count0}->${count1} (newTab=${newTab}); usableTarget(landing=${landing},stage=${stage})=${usable}; button present=${hasBtn}; tabs=${JSON.stringify(tabs)}`
-    if (!hasBtn) return rowResult('UF-DEFECT-1', '[data-tab-new] mints a NEW usable tab (never a silent no-op)', 'D-interaction', detail, { path: 'no-button', ok: false, surface })
-    return rowResult('UF-DEFECT-1', '[data-tab-new] mints a NEW usable tab (never a silent no-op)', 'D-interaction', detail, { path: click.path, ok: newTab && usable, surface })
+    if (!hasBtn) return rowResult({row:'UF-DEFECT-1',dclass:'D-interaction'}, '[data-tab-new] mints a NEW usable tab (never a silent no-op)', detail, { path: 'no-button', ok: false, surface })
+    return rowResult({row:'UF-DEFECT-1',dclass:'D-interaction'}, '[data-tab-new] mints a NEW usable tab (never a silent no-op)', detail, { path: click.path, ok: newTab && usable, surface })
   },
 
   // BUG 2 — a REAL drag on a pane's HEADER (its collapse-toggle strip) must move /
@@ -3584,12 +5256,12 @@ const BLOCKS = {
     const slots = () => h.cdp.evaluate(`[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')].map((f,i)=>({pid:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)}))`)
     const surface = await ufSurfaceTarget(h)
     const s0 = await slots()
-    if (!Array.isArray(s0) || s0.length < 2) return rowResult('UF-DEFECT-2', 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', 'D-interaction', `not enough left-zone panes: ${JSON.stringify(s0)}`, { path: 'missing', ok: false, surface })
+    if (!Array.isArray(s0) || s0.length < 2) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `not enough left-zone panes: ${JSON.stringify(s0)}`, { path: 'missing', ok: false, surface })
     // pick an in-viewport pane; drag from ITS HEADER (the collapse-toggle strip).
     const start = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')];const cur=fs.find(f=>f.getAttribute('data-pane-id')==='doc-nav')||null;const f=cur||fs[0];const r=f.getBoundingClientRect();if(r.y>window.innerHeight-30)return {err:'off-viewport',pid:f.getAttribute('data-pane-id')};const hdr=f.querySelector('.pane-collapse-toggle');const hd=hdr?hdr.getBoundingClientRect():r;const x=Math.round(hd.x+Math.min(hd.width/2,160)),y=Math.round(hd.y+hd.height/2);const hit=document.elementFromPoint(x,y);return {pid:f.getAttribute('data-pane-id'),x:x,y:y,hdr:!!hdr,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===f||f.contains(hit)))}})()`)
-    if (start.err) return { ...rowResult('UF-DEFECT-2', 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', 'D-interaction', `drag start ${start.err} on ${start.pid} — the pane header is not in the viewport after the scroll reset, so the REAL gesture cannot be driven this pass (an INCONCLUSIVE precondition, not a behavior FAIL)`, { path: 'off-viewport', ok: false, surface }), park: true, verdict: 'PARKED' }
+    if (start.err) return { ...rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `drag start ${start.err} on ${start.pid} — the pane header is not in the viewport after the scroll reset, so the REAL gesture cannot be driven this pass (an INCONCLUSIVE precondition, not a behavior FAIL)`, { path: 'off-viewport', ok: false, surface }), park: true, verdict: 'PARKED' }
     const target = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')];const idx=fs.findIndex(f=>f.getAttribute('data-pane-id')==='${start.pid}');const nx=fs[idx+1];if(!nx)return null;const r=nx.getBoundingClientRect();return {pid:nx.getAttribute('data-pane-id'),y:Math.round(r.y),h:Math.round(r.height)}})()`)
-    if (!target) return rowResult('UF-DEFECT-2', 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', 'D-interaction', `no sibling below ${start.pid}`, { path: 'missing', ok: false, surface })
+    if (!target) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `no sibling below ${start.pid}`, { path: 'missing', ok: false, surface })
     const ty = target.y + Math.min(22, target.h - 6)
     await h.cdp.gesture(`[data-pane-id="${start.pid}"]`, [
       { type: 'down', x: start.x, y: start.y },
@@ -3604,7 +5276,7 @@ const BLOCKS = {
     const changed = seq0 !== seq1
     const afterPos = (s1 || []).find((o) => o.pid === start.pid)
     const gesturePath = start.onTarget ? 'cdp' : 'synthetic-drag-start'
-    return rowResult('UF-DEFECT-2', 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', 'D-interaction', `REAL header drag on .pane-frame[data-pane-id="${start.pid}"] .pane-collapse-toggle (header=${start.hdr}) from (${start.x},${start.y}) hit=${start.hit} onTarget=${start.onTarget} PAST ${target.pid}@y=${target.y}->ty=${ty}; slot order changed=${changed} before=[${seq0}] after=[${seq1}]; ${start.pid} y=${afterPos ? afterPos.y : 'gone'}`, { path: gesturePath, ok: changed && start.onTarget, surface })
+    return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `REAL header drag on .pane-frame[data-pane-id="${start.pid}"] .pane-collapse-toggle (header=${start.hdr}) from (${start.x},${start.y}) hit=${start.hit} onTarget=${start.onTarget} PAST ${target.pid}@y=${target.y}->ty=${ty}; slot order changed=${changed} before=[${seq0}] after=[${seq1}]; ${start.pid} y=${afterPos ? afterPos.y : 'gone'}`, { path: gesturePath, ok: changed && start.onTarget, surface })
   },
 
   // BUG 3 — collapse the sidebar, then the pane tabs MUST re-orient VERTICALLY.
@@ -3617,7 +5289,7 @@ const BLOCKS = {
     const preFrames = await h.cdp.evaluate(`document.querySelectorAll('.pane-frame[data-pane-id]').length`)
     const preTabs = await h.cdp.evaluate(`document.querySelectorAll('.pane-tab').length`)
     const surface = await ufSurfaceTarget(h)
-    if (!zmin) return rowResult('UF-KEEP-1', 'After minimizing, the pane-tab strips render as a VERTICAL column', 'D-visual', 'no sidebar zone-minimize control', { path: 'missing', proxy: 'synthetic .click() driver only', ok: false, surface })
+    if (!zmin) return rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After minimizing, the pane-tab strips render as a VERTICAL column', 'no sidebar zone-minimize control', { path: 'missing', proxy: 'synthetic .click() driver only', ok: false, surface })
     // SYNTHETIC driver ([DIAG]-classified): recorded as a proxy, never a real gesture.
     await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone-minimize-left')||document.querySelector('.pane-zone-minimize');if(!b)return 'no-btn';b.click();return 'clicked'})()`)
     await sleep(900)
@@ -3626,7 +5298,7 @@ const BLOCKS = {
     // vertical re-orientation == distinct increasing y, uniform small height, same x
     const vertical = t.length >= 2 && new Set(t.map((o) => o.y)).size === t.length && new Set(t.map((o) => o.h)).size === 1 && new Set(t.map((o) => o.x)).size === 1
     return {
-      ...rowResult('UF-KEEP-1', 'After minimizing, the pane-tab strips render as a VERTICAL column', 'D-visual', `sidebar minimized by a SYNTHETIC .click() ([DIAG] proxy driver): pane-frames ${preFrames}->${tabs.frameCount}, .pane-tab strips ${preTabs}->${t.length}; vertical=${vertical} (distinct-y, uniform-h=${t[0] ? t[0].h : '?'}, equal-x); strips=${JSON.stringify(t.slice(0, 8))}; zones/min=${JSON.stringify(tabs.zoneMin)}`, { path: 'synthetic-click([DIAG])', proxy: 'synthetic .click() driver + geometry/computed-style oracle', ok: vertical, surface }),
+      ...rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After minimizing, the pane-tab strips render as a VERTICAL column', `sidebar minimized by a SYNTHETIC .click() ([DIAG] proxy driver): pane-frames ${preFrames}->${tabs.frameCount}, .pane-tab strips ${preTabs}->${t.length}; vertical=${vertical} (distinct-y, uniform-h=${t[0] ? t[0].h : '?'}, equal-x); strips=${JSON.stringify(t.slice(0, 8))}; zones/min=${JSON.stringify(tabs.zoneMin)}`, { path: 'synthetic-click([DIAG])', proxy: 'synthetic .click() driver + geometry/computed-style oracle', ok: vertical, surface }),
       proxyPASS: true,
       pass: false,
     }
@@ -3640,11 +5312,17 @@ const BLOCKS = {
     await h.mcpTool(h.mcp, 'provident.focus', { target: { kind: 'document', documentId: '.live-corpus/alpha' } }).catch((e) => ({ err: String(e.message || e) }))
     await sleep(800)
     const surface = await ufSurfaceTarget(h)
-    const ed = await h.cdp.evaluate(`(()=>{const e=document.querySelector('[contenteditable]');if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();const x=Math.round(r.x+20),y=Math.round(r.y+14);const hit=document.elementFromPoint(x,y);return {x:x,y:y,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===e||e.contains(hit)))}})()`)
+    const ed = await h.cdp.evaluate(`(()=>{const e=document.querySelector('[contenteditable]');if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();const x=Math.round(r.x+20),y=Math.round(r.y+14);const hit=document.elementFromPoint(x,y);return {x:x,y:y,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===e||e.contains(hit))),vp:[innerWidth,innerHeight],inVp:(x>=0&&y>=0&&x<=innerWidth&&y<=innerHeight)}})()`)
     if (!ed) {
       const zonehtml = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:main');return z?(z.innerHTML||'').slice(0,140):'no-zone:main'})()`)
-      return rowResult('UF-STAGE-3', 'The main view IS editable and an edit commits on blur (the store read-back contains the typed marker)', 'D-state', `document focused but NO [contenteditable] body text; zone:main=${zonehtml}`, { path: 'missing', ok: false, surface })
+      return rowResult({row:'UF-STAGE-3',dclass:'D-state'}, 'The main view IS editable and an edit commits on blur (the store read-back contains the typed marker)', `document focused but NO [contenteditable] body text; zone:main=${zonehtml}`, { path: 'missing', ok: false, surface })
     }
+    // §2.3 `H-3` clause 1 (`G-9`) — THIS BLOCK DISPATCHES ITS OWN POINTER EVENTS
+    // (the inline `Input.dispatchMouseEvent` route, not `ufRealClick`), so it logs
+    // its OWN hit-tested probe through the central gesture log: its `ROW` line then
+    // carries the same coordinate/viewport/hit/onTarget/inVp record as the
+    // `ufRealClick` route does. The record is data — it changes no verdict.
+    ufLogProbe('[contenteditable] (body-text click)', ed)
     // real click into the body text (hit-tested before the press)
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: ed.x, y: ed.y })
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: ed.x, y: ed.y, button: 'left', clickCount: 1 })
@@ -3659,7 +5337,7 @@ const BLOCKS = {
     const doc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-corpus/alpha' }).catch((e) => ({ err: String(e.message || e) }))
     const committed = JSON.stringify(doc).includes(marker)
     const inDom = await h.cdp.evaluate(`document.body.innerText.includes(${JSON.stringify(marker)})`)
-    return rowResult('UF-STAGE-3', 'The main view IS editable and an edit commits on blur (the store read-back contains the typed marker)', 'D-state', `body-text click hit=${ed.hit} onTarget=${ed.onTarget} → editable engages activeElement-contenteditable=${JSON.stringify(engaged)}; typed '${marker}' in STORE rag.get_document=${committed}, in DOM=${inDom}`, { path: ed.onTarget ? 'cdp' : 'synthetic-keyboard-only', ok: engaged === true && committed && ed.onTarget, surface })
+    return rowResult({row:'UF-STAGE-3',dclass:'D-state'}, 'The main view IS editable and an edit commits on blur (the store read-back contains the typed marker)', `body-text click hit=${ed.hit} onTarget=${ed.onTarget} → editable engages activeElement-contenteditable=${JSON.stringify(engaged)}; typed '${marker}' in STORE rag.get_document=${committed}, in DOM=${inDom}`, { path: ed.onTarget ? 'cdp' : 'synthetic-keyboard-only', ok: engaged === true && committed && ed.onTarget, surface })
   },
 
   // BUG 5 — the history/undo/redo segment must render INSIDE its pane frame and
@@ -3667,8 +5345,8 @@ const BLOCKS = {
   user5_history_in_pane: async (h) => {
     const r = await h.cdp.evaluate(`(()=>{const h=document.querySelector('[data-role="history"],#pane-history');if(!h)return {err:'no [data-role=history]/#pane-history in DOM'};const main=document.getElementById('zone:main');let parentChain=[],a=h;while(a&&parentChain.length<8){parentChain.push((a.id?('#'+a.id):a.tagName)+'.'+String(a.className).slice(0,18));a=a.parentElement}return {present:true,inMainCanvas:!!main&&main.contains(h),inPaneFrame:!!h.closest('.pane-frame'),chain:parentChain}})()`)
     const surface = await ufSurfaceTarget(h)
-    if (r.err) return rowResult('UF-DEFECT-3', 'The history/undo/redo segment renders INSIDE a .pane-frame, not in the #zone:main canvas', 'D-visual', r.err, { path: 'not-gesture', proxy: 'DOM-ancestry-only oracle (no gesture)', ok: false, surface })
-    return rowResult('UF-DEFECT-3', 'The history/undo/redo segment renders INSIDE a .pane-frame, not in the #zone:main canvas', 'D-visual', `[data-role="history"] present=true; inside MAIN #zone:main canvas=${r.inMainCanvas}; inside a .pane-frame=${r.inPaneFrame}; ancestry=${JSON.stringify(r.chain)}`, { path: 'not-gesture', gesture: false, proxy: 'DOM-ancestry oracle (no gesture can drive it)', ok: !r.inMainCanvas && r.inPaneFrame, surface })
+    if (r.err) return rowResult({row:'UF-DEFECT-3',dclass:'D-visual'}, 'The history/undo/redo segment renders INSIDE a .pane-frame, not in the #zone:main canvas', r.err, { path: 'not-gesture', proxy: 'DOM-ancestry-only oracle (no gesture)', ok: false, surface })
+    return rowResult({row:'UF-DEFECT-3',dclass:'D-visual'}, 'The history/undo/redo segment renders INSIDE a .pane-frame, not in the #zone:main canvas', `[data-role="history"] present=true; inside MAIN #zone:main canvas=${r.inMainCanvas}; inside a .pane-frame=${r.inPaneFrame}; ancestry=${JSON.stringify(r.chain)}`, { path: 'not-gesture', gesture: false, proxy: 'DOM-ancestry oracle (no gesture can drive it)', ok: !r.inMainCanvas && r.inPaneFrame, surface })
   },
 
   // BUG 6 — switch the active tab to Search; the search view is active and the
@@ -3679,6 +5357,13 @@ const BLOCKS = {
   // oracle over the three samples replaces it (§6.1).
   user6_search_no_flicker: async (h) => {
     const surface = await ufSurfaceTarget(h)
+    // §2.1.1 limb 2 — THE TAB-STRIP READ this row's driver rests on: which tab is
+    // the SEARCH tab and what the strip carries beside it (the corpus DOCUMENT tabs,
+    // by their own `data-document-id` identity). The row's own oracle below stays
+    // corpus-free (it samples `#stage-landing`, `§2.3` `P-1`), which is why its
+    // declaration entry reads `corpusRead:false` while the strip read it routes
+    // through is the corpus-keyed one (`ufTabStripRead`).
+    const strip = await ufTabStripRead(h)
     // SYNTHETIC tab switch ([DIAG]-classified proxy driver) — not a hit-tested gesture.
     const clicked = await h.cdp.evaluate(`(()=>{const s=[...document.querySelectorAll('.tab')].find((t)=>/search/i.test(t.textContent||''));if(!s)return 'no-search-tab';s.click();return 'clicked '+((s.textContent||'').trim().slice(0,24))})()`)
     await sleep(800)
@@ -3693,7 +5378,7 @@ const BLOCKS = {
     const noLanding = !s1.landing && !s2.landing && !s3.landing
     const noLandingPaint = !s1.landingBoxPainted && !s2.landingBoxPainted && !s3.landingBoxPainted
     return {
-      ...rowResult('UF-KEEP-3', 'Switching to Search leaves the search view active and never overlays a landing flicker (sampled 3×)', 'D-visual', `PROXY ORACLE ONLY (DOM presence probe \`!!document.getElementById("stage-landing")\` + tab-title text): switched tab by a SYNTHETIC .click() ([DIAG], path not hit-tested) ${clicked}; samples t+800=${JSON.stringify(s1)} t+1800=${JSON.stringify(s2)} t+3000=${JSON.stringify(s3)}; activeSearch=${activeSearch} noLanding(presence,all3)=${noLanding} noLandingPaintedBox(all3)=${noLandingPaint}`, { path: 'synthetic-click([DIAG])', proxy: 'DOM presence probe !!document.getElementById("stage-landing") across 3 samples (no painted-box paint oracle)', ok: activeSearch && noLanding, surface }),
+      ...rowResult({row:'UF-KEEP-3',dclass:'D-visual'}, 'Switching to Search leaves the search view active and never overlays a landing flicker (sampled 3×)', `PROXY ORACLE ONLY (DOM presence probe \`!!document.getElementById("stage-landing")\` + tab-title text): switched tab by a SYNTHETIC .click() ([DIAG], path not hit-tested) ${clicked}; samples t+800=${JSON.stringify(s1)} t+1800=${JSON.stringify(s2)} t+3000=${JSON.stringify(s3)}; activeSearch=${activeSearch} noLanding(presence,all3)=${noLanding} noLandingPaintedBox(all3)=${noLandingPaint}; tab strip read (\`ufTabStripRead\`, §2.1.1 limb 2): ${strip.rows.length} tab(s), ${strip.docTabRows} document-tab row(s) carrying their own corpus id`, { path: 'synthetic-click([DIAG])', proxy: 'DOM presence probe !!document.getElementById("stage-landing") across 3 samples (no painted-box paint oracle)', ok: activeSearch && noLanding, surface }),
       proxyPASS: true,
       pass: false,
     }
@@ -3812,9 +5497,13 @@ const BLOCKS = {
     //    report) via click+focus + Input.insertText + blur/commit, then read the
     //    rendered html and count how many paragraph positions carry the edit.
     const marker = 'DUPPARA' + String(Date.now()).slice(-4)
-    const geo = await h.cdp.evaluate(`(()=>{const all=[...document.querySelectorAll('[contenteditable]')];const el=all.find((e)=>(e.textContent||'').includes('Settings'))||all[0];if(!el)return null;const nested=!!el.closest('[data-doc-head]');const r=el.getBoundingClientRect();return {x:Math.round(r.x+20),y:Math.round(r.y+14),ragId:el.getAttribute('data-rag-node-id'),tag:el.tagName,id:el.id,nestedInHeader:nested,onScreen:r.y>=0&&r.y<window.innerHeight}})()`)
+    const geo = await h.cdp.evaluate(`(()=>{const all=[...document.querySelectorAll('[contenteditable]')];const el=all.find((e)=>(e.textContent||'').includes('Settings'))||all[0];if(!el)return null;const nested=!!el.closest('[data-doc-head]');const r=el.getBoundingClientRect();const x=Math.round(r.x+20),y=Math.round(r.y+14);const hit=document.elementFromPoint(x,y);return {x:x,y:y,ragId:el.getAttribute('data-rag-node-id'),tag:el.tagName,id:el.id,nestedInHeader:nested,onScreen:r.y>=0&&r.y<window.innerHeight,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===el||el.contains(hit))),vp:[innerWidth,innerHeight],inVp:(x>=0&&y>=0&&x<=innerWidth&&y<=innerHeight)}})()`)
     let edit = 'no-editable-focus'
     if (geo && geo.onScreen) {
+      // §2.3 `H-3` clause 1 (`G-9`) — the inline `Input.dispatchMouseEvent` route
+      // logs its own hit-tested probe, so this row's `ROW` line carries the
+      // coordinate/viewport/hit/onTarget/inVp record like the `ufRealClick` route.
+      ufLogProbe('[contenteditable] (paragraph-edit click)', geo)
       await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: geo.x, y: geo.y })
       await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: geo.x, y: geo.y, button: 'left', clickCount: 1 })
       await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: geo.x, y: geo.y, button: 'left', clickCount: 1 })
@@ -3844,8 +5533,8 @@ const BLOCKS = {
       `\n  [2 NOT-NESTED-IN-HEADER] [data-doc-head]=${s1.headerTag}; p:1 nested-in-header elements=${JSON.stringify(s1.nestedInHeader)} — expect none ${notNested ? 'PASS' : 'FAIL (p:1 IS nested in the header)'}` +
       `\n  [3 EDIT-CASCADE] target=${JSON.stringify(edit)}; after-edit editable p:1 count=${s3.editableCount} (all-with-attr=${s3.editableCountAll}); marker-copies=${JSON.stringify(s3.markerCopies)}; rendered_html marker=${markerInHtml} (occurrences=${markerCountInHtml}) — PRIMARY(one editable paragraph)=${editCascadePrimaryOk ? 'PASS' : 'FAIL (' + s1.editableCount + ' editable paragraphs, expect 1)'}`
     const editProven = !!(geo && geo.onScreen)
-    if (!editProven) return rowResult('UF-STAGE-2', 'Each RAG paragraph materializes exactly ONCE as a sibling editable root (never nested in the doc-head)', 'D-visual', `the paragraph-edit half could NOT be driven (no [contenteditable] in the viewport): ${detail}`, { path: 'missing', proxy: 'DOM-count/innerHTML oracle only this run (no painted edit proof)', ok: false, surface })
-    return rowResult('UF-STAGE-2', 'Each RAG paragraph materializes exactly ONCE as a sibling editable root (never nested in the doc-head)', 'D-visual', detail, { path: 'cdp', ok: singleRender && notNested && editCascadePrimaryOk, surface })
+    if (!editProven) return rowResult({row:'UF-STAGE-2',dclass:'D-visual'}, 'Each RAG paragraph materializes exactly ONCE as a sibling editable root (never nested in the doc-head)', `the paragraph-edit half could NOT be driven (no [contenteditable] in the viewport): ${detail}`, { path: 'missing', proxy: 'DOM-count/innerHTML oracle only this run (no painted edit proof)', ok: false, surface })
+    return rowResult({row:'UF-STAGE-2',dclass:'D-visual'}, 'Each RAG paragraph materializes exactly ONCE as a sibling editable root (never nested in the doc-head)', detail, { path: 'cdp', ok: singleRender && notNested && editCascadePrimaryOk, surface })
   },
 
   // ===================================================================
@@ -3871,7 +5560,7 @@ const BLOCKS = {
     const w0 = await w()
     const edge = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');if(!z)return null;const r=z.getBoundingClientRect();const x=Math.round(r.x+r.width),y=Math.round(r.y+200);const hit=document.elementFromPoint(x,y);return {x:x,y:y,hit:hit?(hit.id||hit.className||hit.tagName):null,onTarget:!!(hit&&(hit===z||z.contains(hit)))}})()`)
     const surface = await ufSurfaceTarget(h)
-    if (w0 == null || !edge) return rowResult('UF-DEFECT-5', 'A REAL drag at the visible zone boundary resizes the zone width by >10px', 'D-interaction', 'no [data-zone=left] / edge', { path: 'missing', ok: false, surface })
+    if (w0 == null || !edge) return rowResult({row:'UF-DEFECT-5',dclass:'D-interaction'}, 'A REAL drag at the visible zone boundary resizes the zone width by >10px', 'no [data-zone=left] / edge', { path: 'missing', ok: false, surface })
     // geometry of the .gutter[data-zone=left] element (may be 0-size -> no grippable surface)
     const gutter = await h.cdp.evaluate(`(()=>{const g=[...document.querySelectorAll('.gutter[data-zone="left"]')][0]||document.querySelector('.gutter[data-zone]');if(!g)return null;const r=g.getBoundingClientRect();return {zone:g.getAttribute('data-zone'),x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),cursor:getComputedStyle(g).cursor}})()`)
     // (a) REAL user gesture: CDP coordinate drag at the boundary edge x=zone-right
@@ -3911,7 +5600,7 @@ const BLOCKS = {
     // that element is 0-width at (0,0), so it is NOT a grippable surface a real
     // user can reach. The user-visible symptom is reproduced iff the real
     // boundary drag leaves the width unchanged.
-    return rowResult('UF-DEFECT-5', 'A REAL drag at the visible zone boundary resizes the zone width by >10px', 'D-interaction', `left-zone width before=${w0}px; REAL user boundary-drag (CDP coord @edge=${edge.x}, hit=${edge.hit}, onTarget=${edge.onTarget}) after=${w1a}px (Δ=${Math.abs(w1a - w0)} changed>10px=${changedA}); [DIAG] synthetic pointer on hidden .gutter element after=${w1b}px (Δ=${Math.abs(w1b - w0)} changed>10px=${changedB}); final=${wFinal}px; gutter=${JSON.stringify(gutter)}; native=${nat}`, { path: edge.onTarget ? 'cdp' : 'native-fallback', ok: changedA && edge.onTarget, surface })
+    return rowResult({row:'UF-DEFECT-5',dclass:'D-interaction'}, 'A REAL drag at the visible zone boundary resizes the zone width by >10px', `left-zone width before=${w0}px; REAL user boundary-drag (CDP coord @edge=${edge.x}, hit=${edge.hit}, onTarget=${edge.onTarget}) after=${w1a}px (Δ=${Math.abs(w1a - w0)} changed>10px=${changedA}); [DIAG] synthetic pointer on hidden .gutter element after=${w1b}px (Δ=${Math.abs(w1b - w0)} changed>10px=${changedB}); final=${wFinal}px; gutter=${JSON.stringify(gutter)}; native=${nat}`, { path: edge.onTarget ? 'cdp' : 'native-fallback', ok: changedA && edge.onTarget, surface })
   },
 
   // BUG 8 — a VISIBLE boundary must separate the side zone from the central
@@ -3943,7 +5632,7 @@ const BLOCKS = {
     const boundaryOk = seamPainted || zoneBorder || bgDiff || gutterVisible || hasGap
     const computedOnly = !seamPainted
     const detail = `Painted seam between zone:left.right=${dump.left ? dump.left.right : '?'} and zone:main.x=${dump.main ? dump.main.x : '?'} = ${dump.seamPx}px (hit-test in the gap → ${dump.seamHit}) → seamPainted=${seamPainted}; supporting diagnostics: zone:left=${JSON.stringify(dump.left)},\n zone:main=${JSON.stringify(dump.main)},\n #wiki-root grid=${JSON.stringify(dump.wikiRoot)},\n gutters=${JSON.stringify(dump.gutters)},\n pane-frame border=${{left:dump.paneBorderLeft,right:dump.paneBorderRight}};\n boundary-visible=${boundaryOk} (seamPainted=${seamPainted} zoneBorder=${zoneBorder} bgDiff=${bgDiff} gutterVisible=${gutterVisible} gridGap=${gapPx}px>0=${hasGap})`
-    return rowResult('UF-DEFECT-6', 'A VISIBLE separator (painted px gap / border / background / real gutter) divides zone:left from #zone:main', 'D-visual', detail, { path: 'not-gesture', gesture: false, proxy: computedOnly ? 'computed-style-only oracle (no painted seam px this run)' : null, ok: boundaryOk && seamPainted, surface })
+    return rowResult({row:'UF-DEFECT-6',dclass:'D-visual'}, 'A VISIBLE separator (painted px gap / border / background / real gutter) divides zone:left from #zone:main', detail, { path: 'not-gesture', gesture: false, proxy: computedOnly ? 'computed-style-only oracle (no painted seam px this run)' : null, ok: boundaryOk && seamPainted, surface })
   },
 
   // BUG 9 — "Open in a tab" (#pane-search-expand-tab, HOST-5 paneTabExpand) must
@@ -3954,12 +5643,16 @@ const BLOCKS = {
   user9_search_open_in_tab: async (h) => {
     await ufEnsureAppClear(h)
     const surface = await ufSurfaceTarget(h)
+    // §2.1.1 limb 2 — THE DOCUMENT TAB this row needs is read by its OWN identity:
+    // the strip's document-tab rows (`data-document-id`), through `ufTabStripRead`.
+    const strip = await ufTabStripRead(h)
     // make the already-open document (alpha) the active tab (REAL click)
-    const tabSel = await h.cdp.evaluate(`(()=>{const t=[...document.querySelectorAll('.tab')].find((x)=>/alpha/.test(x.textContent||''));return t?(t.getAttribute('data-tab-id')?'.tab[data-tab-id="'+t.getAttribute('data-tab-id')+'"]':null):null})()`)
+    const alphaRow = strip.rows.find((t) => /alpha/.test(t.title))
+    const tabSel = alphaRow && alphaRow.tabId ? `.tab[data-tab-id="${alphaRow.tabId}"]` : null
     const tabPath = tabSel ? (await ufRealClick(h, tabSel)).path : 'no-alpha-tab'
     await sleep(600)
     const btn = await h.cdp.evaluate(`(()=>{const b=document.getElementById('pane-search-expand-tab');return b?String(b.className):null})()`)
-    if (btn == null) return rowResult('UF-DEFECT-7', '"Open in a tab" creates a tab whose stage shows the SEARCH view, not the document body', 'D-interaction', 'no #pane-search-expand-tab', { path: 'missing', ok: false, surface })
+    if (btn == null) return rowResult({row:'UF-DEFECT-7',dclass:'D-interaction'}, '"Open in a tab" creates a tab whose stage shows the SEARCH view, not the document body', 'no #pane-search-expand-tab', { path: 'missing', ok: false, surface })
     const beforeTabs = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('.tab')].map((t)=>({txt:(t.textContent||'').trim().slice(0,20),active:t.classList.contains('is-active')})))()`)
     // REAL hit-tested click on the expand-tab control (no synthetic .click() fallback)
     const clicked = await ufRealClick(h, '#pane-search-expand-tab', { nativeFallback: false })
@@ -3984,7 +5677,7 @@ const BLOCKS = {
     const newTabCreated = beforeTabs.length < afterTabs.length
     const searchShown = content.hasSearchInput || content.hasRagResults
     const docShown = content.isDocumentBody
-    return rowResult('UF-DEFECT-7', '"Open in a tab" creates a tab whose stage shows the SEARCH view, not the document body', 'D-interaction', `button=${JSON.stringify({ id: 'pane-search-expand-tab', cls: btn })} active-alpha-tab REAL click path=${tabPath}; REAL click #pane-search-expand-tab path=${clicked.path}\n before-tabs=${JSON.stringify(beforeTabs)}\n after-tabs=${JSON.stringify(afterTabs)}\n newTabCreated(count ${beforeTabs.length}->${afterTabs.length})=${newTabCreated}\n ACTIVE tab=${activeTabTitle} (index=${activeIdx})\n #zone:main: searchInput=${content.hasSearchInput} ragResults=${content.hasRagResults} isDocumentBody=${content.isDocumentBody} snippet="${content.bodySnippet}"`, { path: clicked.path, ok: searchShown && !docShown, surface })
+    return rowResult({row:'UF-DEFECT-7',dclass:'D-interaction'}, '"Open in a tab" creates a tab whose stage shows the SEARCH view, not the document body', `button=${JSON.stringify({ id: 'pane-search-expand-tab', cls: btn })} active-alpha-tab REAL click path=${tabPath}; REAL click #pane-search-expand-tab path=${clicked.path}\n before-tabs=${JSON.stringify(beforeTabs)}\n after-tabs=${JSON.stringify(afterTabs)}\n newTabCreated(count ${beforeTabs.length}->${afterTabs.length})=${newTabCreated}\n ACTIVE tab=${activeTabTitle} (index=${activeIdx})\n #zone:main: searchInput=${content.hasSearchInput} ragResults=${content.hasRagResults} isDocumentBody=${content.isDocumentBody} snippet="${content.bodySnippet}"`, { path: clicked.path, ok: searchShown && !docShown, surface })
   },
 
   // BUG 10 — when a side zone is minimized/collapsed, the collapsed zone's
@@ -4008,7 +5701,7 @@ const BLOCKS = {
     })()`)
     const verticalOk = Array.isArray(dump.tabs) && dump.tabs.length >= 2 && dump.tabs.every((t) => t.writingMode === 'vertical-rl' || t.writingMode === 'vertical-lr' || t.textOrientation === 'upright')
     const painted = Array.isArray(dump.tabs) && dump.tabs.length >= 2 && dump.tabs.every((t) => t.w > 0 && t.h > 0)
-    return rowResult('UF-DEFECT-8', 'Minimized-zone labels read VERTICALLY (bottom-to-top): writing-mode vertical-rl/lr or text-orientation upright, painted', 'D-visual', `REAL click #zone-minimize-left path=${zmin.path}; zone minimized=${dump.minimized}; collapsed labels=${dump.tabCount} painted=${painted}; each: ${dump.tabs.map((t) => t.id + ':writingMode=' + t.writingMode + '/textOrientation=' + t.textOrientation + '/size=' + t.w + 'x' + t.h).join(', ')}; vertical=${verticalOk} (horizontal default: writing-mode=horizontal-tb)`, { path: zmin.path, ok: verticalOk && painted, surface })
+    return rowResult({row:'UF-DEFECT-8',dclass:'D-visual'}, 'Minimized-zone labels read VERTICALLY (bottom-to-top): writing-mode vertical-rl/lr or text-orientation upright, painted', `REAL click #zone-minimize-left path=${zmin.path}; zone minimized=${dump.minimized}; collapsed labels=${dump.tabCount} painted=${painted}; each: ${dump.tabs.map((t) => t.id + ':writingMode=' + t.writingMode + '/textOrientation=' + t.textOrientation + '/size=' + t.w + 'x' + t.h).join(', ')}; vertical=${verticalOk} (horizontal default: writing-mode=horizontal-tb)`, { path: zmin.path, ok: verticalOk && painted, surface })
   },
 
   // ===================================================================
@@ -4069,7 +5762,7 @@ const BLOCKS = {
       await sleep(800)
     }
     const sEnd = await ufTabState(h)
-    return rowResult('UF-TABS-1', 'The rendered strip gives every open tab a title, highlights exactly one active tab, gives every tab a painted close control, and scrolls horizontally on overflow', 'D-visual', `strip: ${s0.count} tabs, every tab titled=${titled}, exactlyOneActive=${oneActive}, perTabCloseControlWithPaintedBox=${closes} (box ${JSON.stringify(s0.tabs[0] ? s0.tabs[0].closeBox : null)}), activeHighlightDiffersFromInactive=${highlight} (active border=${act ? act.border : '-'} bg=${act ? act.bg : '-'} weight=${act ? act.weight : '-'} vs inactive border=${inact ? inact.border : '-'} bg=${inact ? inact.bg : '-'} weight=${inact ? inact.weight : '-'}); overflow at ${s.count} tabs: scrollWidth=${s.stripScroll[0]} clientWidth=${s.stripScroll[1]} overflow-x=${s.stripOverflowX} → horizontalScroll=${overflow} (opened ${s.count - openedWith} doc tabs via MCP provident.focus{newTab:true} setup); [restore] closed ${closed} tabs with REAL clicks on .tab.is-active .tab-close → ${sEnd.count} tabs left`, { path: restorePath, ok: titled && oneActive && closes && highlight && overflow, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-TABS-1',dclass:'D-visual'}, 'The rendered strip gives every open tab a title, highlights exactly one active tab, gives every tab a painted close control, and scrolls horizontally on overflow', `strip: ${s0.count} tabs, every tab titled=${titled}, exactlyOneActive=${oneActive}, perTabCloseControlWithPaintedBox=${closes} (box ${JSON.stringify(s0.tabs[0] ? s0.tabs[0].closeBox : null)}), activeHighlightDiffersFromInactive=${highlight} (active border=${act ? act.border : '-'} bg=${act ? act.bg : '-'} weight=${act ? act.weight : '-'} vs inactive border=${inact ? inact.border : '-'} bg=${inact ? inact.bg : '-'} weight=${inact ? inact.weight : '-'}); overflow at ${s.count} tabs: scrollWidth=${s.stripScroll[0]} clientWidth=${s.stripScroll[1]} overflow-x=${s.stripOverflowX} → horizontalScroll=${overflow} (opened ${s.count - openedWith} doc tabs via MCP provident.focus{newTab:true} setup); [restore] closed ${closed} tabs with REAL clicks on .tab.is-active .tab-close → ${sEnd.count} tabs left`, { path: restorePath, ok: titled && oneActive && closes && highlight && overflow, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-TABS-3 — closing the ACTIVE tab activates its left neighbour and mounts
@@ -4093,7 +5786,10 @@ const BLOCKS = {
     const left = s0.activeIndex > 0 ? s0.tabs[s0.activeIndex - 1] : null
     const docsList = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
     const docIds = (docsList && Array.isArray(docsList.documents) ? docsList.documents : []).map((d) => d.documentId || d.id).filter(Boolean)
-    const clicked = await ufRealClick(h, '.tab.is-active .tab-close')
+    // ⟨gate-4 `D-1`⟩ THE ROW IDENTITY OF THIS CLICK: the close series IS the gesture
+    // of BOTH rows this block carries, so the entry names them (attached by identity,
+    // never by rotation).
+    const clicked = await ufRealClick(h, '.tab.is-active .tab-close', { rows: ['UF-TABS-3', 'U-8'] })
     await sleep(1600)
     const s1 = await ufTabState(h)
     const neighbourActive = !!left && s1.tabs.some((t) => t.active && t.id === left.id)
@@ -4103,13 +5799,13 @@ const BLOCKS = {
     for (let i = 0; i < 12; i++) {
       const cur = await ufTabState(h)
       if (cur.count <= 1) break
-      const r = await ufRealClick(h, '.tab.is-active .tab-close')
+      const r = await ufRealClick(h, '.tab.is-active .tab-close', { rows: ['UF-TABS-3', 'U-8'] })
       if (r.path !== 'cdp') { lastPath = r.path; break }
       await sleep(1500)
     }
     const oneLeft = await ufTabState(h)
     if (oneLeft.count === 1) {
-      lastPath = (await ufRealClick(h, '.tab.is-active .tab-close')).path
+      lastPath = (await ufRealClick(h, '.tab.is-active .tab-close', { rows: ['UF-TABS-3', 'U-8'] })).path
       await sleep(1800)
     }
     const afterLast = await ufTabState(h)
@@ -4123,7 +5819,17 @@ const BLOCKS = {
     const realDocument = (docIds.length > 0 && docIds.some((id) => String(afterLast.mountedDocId || '').includes(id))) ||
       (typeof afterLast.mountedDocId === 'string' && afterLast.mountedDocId.length > 0 && !!activeTitle && afterLast.mountedDocId.includes(String(activeTitle).replace(/^rag-/, '')))
     const freshDefault = afterLast.count === 1 && afterLast.mainLen > 0 && painted && (landed || identityMatches || realDocument)
-    return rowResult('UF-TABS-3', 'Closing the ACTIVE tab activates its left neighbour and mounts that neighbour body; closing the LAST tab yields the pinned default page (landing or defaultDocument) with a painted non-empty stage', 'D-state', `REAL click on .tab.is-active .tab-close (path=${clicked.path}) closed active tab ${act ? act.id + ' "' + act.title + '"' : '?'}: count ${s0.count}->${s1.count}; LEFT neighbour ${left ? '"' + left.title + '"' : '(none)'} becameActive=${neighbourActive} and its body mounted in #zone:main=${neighbourMounted} (mountedDocId=${s1.mountedDocId}); then closed down to ${oneLeft.count} tab and closed the LAST one (real click, path=${lastPath}) → tabs=${afterLast.count} activeTitle=${activeTitle} mountedDocId=${afterLast.mountedDocId} landing=${afterLast.landing} stageLen=${afterLast.mainLen} stageBox=${JSON.stringify(afterLast.mainBox)}; pinned default identity (operator defaultDocument="${defaultDoc}" → expected=${expectedDefault}) matched=${identityMatches}; landing-page=${landed}; stage shows a REAL store document under its own tab (candidates=${JSON.stringify(docIds.slice(0, 4))})=${realDocument} → freshDefaultPage(never an empty stage)=${freshDefault}`, { path: clicked.path === 'cdp' && lastPath === 'cdp' ? 'cdp' : lastPath, ok: clicked.path === 'cdp' && s1.count === s0.count - 1 && neighbourActive && neighbourMounted && oneLeft.count === 1 && freshDefault, surface: await ufSurfaceTarget(h) })
+    const ufTabs3Assertion = 'Closing the ACTIVE tab activates its left neighbour and mounts that neighbour body; closing the LAST tab yields the pinned default page (landing or defaultDocument) with a painted non-empty stage'
+    const ufTabs3Evidence = `REAL click on .tab.is-active .tab-close (path=${clicked.path}) closed active tab ${act ? act.id + ' "' + act.title + '"' : '?'}: count ${s0.count}->${s1.count}; LEFT neighbour ${left ? '"' + left.title + '"' : '(none)'} becameActive=${neighbourActive} and its body mounted in #zone:main=${neighbourMounted} (mountedDocId=${s1.mountedDocId}); then closed down to ${oneLeft.count} tab and closed the LAST one (real click, path=${lastPath}) → tabs=${afterLast.count} activeTitle=${activeTitle} mountedDocId=${afterLast.mountedDocId} landing=${afterLast.landing} stageLen=${afterLast.mainLen} stageBox=${JSON.stringify(afterLast.mainBox)}; pinned default identity (operator defaultDocument="${defaultDoc}" → expected=${expectedDefault}) matched=${identityMatches}; landing-page=${landed}; stage shows a REAL store document under its own tab (candidates=${JSON.stringify(docIds.slice(0, 4))})=${realDocument} → freshDefaultPage(never an empty stage)=${freshDefault}`
+    const ufTabs3Opts = { path: clicked.path === 'cdp' && lastPath === 'cdp' ? 'cdp' : lastPath, ok: clicked.path === 'cdp' && s1.count === s0.count - 1 && neighbourActive && neighbourMounted && oneLeft.count === 1 && freshDefault, surface: await ufSurfaceTarget(h) }
+    // §2.1 `E-2` — the DECLARED row `U-8` (MATRIX_ROWS maps `U-8` to this block)
+    // carries ITS OWN verdict for the LAST-TAB half of the claim: closing the LAST
+    // tab yields the default page, never an empty stage. The checklist row
+    // `UF-TABS-3` keeps its own result (the neighbour-activation half included).
+    return [
+      rowResult({ row: 'UF-TABS-3', dclass: 'D-state' }, ufTabs3Assertion, ufTabs3Evidence, ufTabs3Opts),
+      declaredRowResult('U-8', 'UF-TABS-3', 'Closing the LAST tab yields the default page (the landing, or the operator defaultDocument, or a real store document under its own tab) — NEVER an empty stage', 'D-state', ufTabs3Evidence, { ...ufTabs3Opts, checklistRow: 'UF-TABS-3' }),
+    ]
   },
 
   // UF-TABS-4 — switching tabs mounts ONLY the active target's body in
@@ -4137,7 +5843,7 @@ const BLOCKS = {
     const s0 = await ufTabState(h)
     const alphaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-corpus/alpha')
     const betaTab = s0.tabs.find((t) => t.kind === 'document' && t.title === '.live-corpus/beta')
-    if (!alphaTab || !betaTab) return rowResult('UF-TABS-4', 'Switching tabs mounts ONLY the active target body in #zone:main and unmounts the prior document body', 'D-visual', `need an alpha AND a beta document tab; tabs=${JSON.stringify(s0.tabs.map((t) => t.id + ':' + t.kind + ':' + t.title))}`, { path: 'missing', ok: false, surface: await ufSurfaceTarget(h) })
+    if (!alphaTab || !betaTab) return rowResult({row:'UF-TABS-4',dclass:'D-visual'}, 'Switching tabs mounts ONLY the active target body in #zone:main and unmounts the prior document body', `need an alpha AND a beta document tab; tabs=${JSON.stringify(s0.tabs.map((t) => t.id + ':' + t.kind + ':' + t.title))}`, { path: 'missing', ok: false, surface: await ufSurfaceTarget(h) })
     const cA = await ufRealClick(h, `.tab[data-tab-id="${alphaTab.id}"]`)
     await sleep(1600)
     const sA = await ufTabState(h)
@@ -4149,7 +5855,7 @@ const BLOCKS = {
     const bMounted = typeof sB.mountedDocId === 'string' && sB.mountedDocId.includes('beta')
     const aGone = !(await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return !!m&&[...m.querySelectorAll('[id]')].some((e)=>(e.id||'').includes('alpha'))})()`))
     const singleActive = sA.tabs.filter((t) => t.active).length === 1 && sB.tabs.filter((t) => t.active).length === 1
-    return rowResult('UF-TABS-4', 'Switching tabs mounts ONLY the active target body in #zone:main and unmounts the prior document body', 'D-visual', `REAL click on tab ${alphaTab.id} (path=${cA.path}): #zone:main mounts alpha=${aMounted} (mountedDocId=${sA.mountedDocId}) and the prior beta body is GONE from #zone:main=${bGone}; REAL click on tab ${betaTab.id} (path=${cB.path}): mounts beta=${bMounted} (mountedDocId=${sB.mountedDocId}) and alpha is gone=${aGone}; exactly one active tab in each sample=${singleActive}`, { path: cA.path === 'cdp' && cB.path === 'cdp' ? 'cdp' : 'native-fallback', ok: cA.path === 'cdp' && cB.path === 'cdp' && aMounted && bGone && bMounted && aGone && singleActive, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-TABS-4',dclass:'D-visual'}, 'Switching tabs mounts ONLY the active target body in #zone:main and unmounts the prior document body', `REAL click on tab ${alphaTab.id} (path=${cA.path}): #zone:main mounts alpha=${aMounted} (mountedDocId=${sA.mountedDocId}) and the prior beta body is GONE from #zone:main=${bGone}; REAL click on tab ${betaTab.id} (path=${cB.path}): mounts beta=${bMounted} (mountedDocId=${sB.mountedDocId}) and alpha is gone=${aGone}; exactly one active tab in each sample=${singleActive}`, { path: cA.path === 'cdp' && cB.path === 'cdp' ? 'cdp' : 'native-fallback', ok: cA.path === 'cdp' && cB.path === 'cdp' && aMounted && bGone && bMounted && aGone && singleActive, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-TABS-7 — a search result row click opens the document in a NEW tab
@@ -4167,10 +5873,22 @@ const BLOCKS = {
     const before = await ufTabState(h)
     const rows = search.rows || []
     const surface = await ufSurfaceTarget(h)
-    if (rows.length === 0) return rowResult('UF-TABS-7', 'A REAL click on a search result row opens that document in a NEW document tab while the search tab stays', 'D-interaction', `the search pane rendered NO result rows → the row click cannot be driven; search=${JSON.stringify(search)}`, { path: 'missing', ok: false, surface })
+    const ufTabs7Assertion = 'A REAL click on a search result row opens that document in a NEW document tab while the search tab stays'
+    if (rows.length === 0) {
+      const why = `the search pane rendered NO result rows → the row click cannot be driven; search=${JSON.stringify(search)}`
+      // §2.1 `E-2`/`E-3` — the DECLARED row `U-2` still ends in a VERDICT (here
+      // NOT-DRIVEN with the concrete driver-side reason: the search surface
+      // rendered no result row), never in an omission. No verdict is invented and
+      // no app FAIL is credited.
+      return [
+        rowResult({ row: 'UF-TABS-7', dclass: 'D-interaction' }, ufTabs7Assertion, why, { path: 'missing', ok: false, surface }),
+        declaredRowResult('U-2', 'UF-TABS-7', ufTabs7Assertion, 'D-interaction', why, { path: 'missing', ok: false, surface, required: 'a rendered, painted search-result row (a `#pane-search li[data-document-id]`) to drive the real click', observed: why, checklistRow: 'UF-TABS-7' }),
+      ]
+    }
     const row = rows[0]
     await ufArmClick(h)
-    const r = await ufRealClick(h, '#pane-search li[data-document-id]')
+    // ⟨gate-4 `D-1`⟩ the row identity this click was driven for (both rows this block owns).
+    const r = await ufRealClick(h, '#pane-search li[data-document-id]', { rows: ['UF-TABS-7', 'U-2'] })
     await sleep(1800)
     const events = await ufClickProbe(h)
     const after = await ufTabState(h)
@@ -4178,8 +5896,12 @@ const BLOCKS = {
     const docTab = after.tabs.some((t) => t.kind === 'document' && t.title === row.doc)
     const searchTabStays = before.tabs.some((t) => t.kind === 'search') && after.tabs.some((t) => t.kind === 'search')
     const detail = `search pane: disclosure=${search.togglePath} query="${search.value}" submit=${search.submitPath} → ${rows.length} result rows painted (first row doc=${row.doc} box=${JSON.stringify(row.box)} cls="${row.cls}"); REAL click on that row (path=${r.path} hit=${r.rect ? r.rect.hit : '?'}): tabs ${before.count}->${after.count} newDocumentTab=${newTab} openedDocTab=${docTab} searchTabStillOpen=${searchTabStays}; click-event targets=${JSON.stringify(events)}`
-    if (!newTab) return rowResult('UF-TABS-7', 'A REAL click on a search result row opens that document in a NEW document tab while the search tab stays', 'D-interaction', `${detail}; [DIAG] attribution available — run --block=uf_tabs_7_diag (a NATIVE DOM click on the same row) to separate a dead handler from a gesture that never delivered the click`, { path: r.path, ok: false, surface })
-    return rowResult('UF-TABS-7', 'A REAL click on a search result row opens that document in a NEW document tab while the search tab stays', 'D-interaction', detail, { path: r.path, ok: newTab && docTab && searchTabStays, surface })
+    const diag = '; [DIAG] attribution available — run --block=uf_tabs_7_diag (a NATIVE DOM click on the same row) to separate a dead handler from a gesture that never delivered the click'
+    const ok = newTab && docTab && searchTabStays
+    return [
+      rowResult({ row: 'UF-TABS-7', dclass: 'D-interaction' }, ufTabs7Assertion, ok ? detail : `${detail}${diag}`, { path: r.path, ok, surface }),
+      declaredRowResult('U-2', 'UF-TABS-7', ufTabs7Assertion, 'D-interaction', ok ? detail : `${detail}${diag}`, { path: r.path, ok, surface, checklistRow: 'UF-TABS-7' }),
+    ]
   },
 
   // UF-TABS-7 DIAGNOSTIC — the attribution half of the search-row row: a NATIVE
@@ -4208,7 +5930,7 @@ const BLOCKS = {
     const hiddenByDefault = /is-closed/.test(closed.cls) && closed.display === 'none' && !closed.visible
     const openedVisibly = /is-open/.test(open.cls) && open.display !== 'none' && open.bodyBox[0] > 0 && open.bodyBox[1] > 0 && open.operatorBox[0] > 0 && open.operatorText.length > 0
     await ufModal(h, false)
-    return rowResult('UF-SETTINGS-1', 'The settings modal is hidden at boot and a REAL click on #settings-toggle reveals PAINTED operator panes', 'D-visual', `at boot/start #settings-modal class="${closed.cls}" display=${closed.display} bodyBox=${JSON.stringify(closed.bodyBox)} → hiddenByDefault=${hiddenByDefault}; REAL click on #settings-toggle (path=${r.path}) → class="${open.cls}" display=${open.display} bodyBox=${JSON.stringify(open.bodyBox)} operatorPaneBox=${JSON.stringify(open.operatorBox)} operatorText="${open.operatorText}" → visibleOperatorPanes=${openedVisibly}`, { path: r.path, ok: hiddenByDefault && openedVisibly, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-1',dclass:'D-visual'}, 'The settings modal is hidden at boot and a REAL click on #settings-toggle reveals PAINTED operator panes', `at boot/start #settings-modal class="${closed.cls}" display=${closed.display} bodyBox=${JSON.stringify(closed.bodyBox)} → hiddenByDefault=${hiddenByDefault}; REAL click on #settings-toggle (path=${r.path}) → class="${open.cls}" display=${open.display} bodyBox=${JSON.stringify(open.bodyBox)} operatorPaneBox=${JSON.stringify(open.operatorBox)} operatorText="${open.operatorText}" → visibleOperatorPanes=${openedVisibly}`, { path: r.path, ok: hiddenByDefault && openedVisibly, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-SETTINGS-2 — Escape closes, a scrim click closes, a content click does
@@ -4245,7 +5967,7 @@ const BLOCKS = {
     const contentClickKeepsOpen = /is-open/.test(samples[1][1])
     const scrimClickCloses = /is-closed/.test(samples[2][1])
     const escapeCloses = /is-closed/.test(samples[3][1])
-    return rowResult('UF-SETTINGS-2', 'Escape closes the modal, a scrim click closes it, a modal-CONTENT click does NOT close it, and the frame always carries exactly one of .is-open/.is-closed', 'D-interaction', `samples=${samples.map(([k, c]) => k + ' → "' + c + '"').join('; ')}; exactlyOneOf(.is-open/.is-closed) at every sample=${exactlyOne}; contentClickKeepsOpen=${contentClickKeepsOpen} scrimClickCloses=${scrimClickCloses} escapeCloses=${escapeCloses}; each click was a real CDP coordinate gesture hit-tested to its intended target (scrim point=${scrim ? scrim.x + ',' + scrim.y : 'none'}, content point=${point ? point.x + ',' + point.y : 'none'})`, { path: point && scrim ? 'cdp' : 'missing', ok: exactlyOne && contentClickKeepsOpen && scrimClickCloses && escapeCloses, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-2',dclass:'D-interaction'}, 'Escape closes the modal, a scrim click closes it, a modal-CONTENT click does NOT close it, and the frame always carries exactly one of .is-open/.is-closed', `samples=${samples.map(([k, c]) => k + ' → "' + c + '"').join('; ')}; exactlyOneOf(.is-open/.is-closed) at every sample=${exactlyOne}; contentClickKeepsOpen=${contentClickKeepsOpen} scrimClickCloses=${scrimClickCloses} escapeCloses=${escapeCloses}; each click was a real CDP coordinate gesture hit-tested to its intended target (scrim point=${scrim ? scrim.x + ',' + scrim.y : 'none'}, content point=${point ? point.x + ',' + point.y : 'none'})`, { path: point && scrim ? 'cdp' : 'missing', ok: exactlyOne && contentClickKeepsOpen && scrimClickCloses && escapeCloses, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-SETTINGS-3 — the modal hosts BOTH operator mounts (#panes +
@@ -4264,7 +5986,7 @@ const BLOCKS = {
     const bothMounted = r.panesInBody && r.opInBody && r.panesBox && r.panesBox[0] > 0 && r.panesBox[1] > 0 && r.opBox[0] > 0 && r.opBox[1] > 0 && (r.panesText || '').length > 0 && (r.opText || '').length > 0
     const isolation = !r.panesInZone && !r.opInZone && r.appInLayout && r.mainInApp
     await ufModal(h, false)
-    return rowResult('UF-SETTINGS-3', 'The modal body hosts BOTH operator mounts (#panes + #operator-panes), both PAINTED and populated, and the app graph is NOT re-parented into it', 'D-visual', `modal body box=${JSON.stringify(r.bodyBox)}; #panes in #settings-modal-body=${r.panesInBody} (box ${JSON.stringify(r.panesBox)}, text "${r.panesText}"); #operator-panes in body=${r.opInBody} (box ${JSON.stringify(r.opBox)}, text "${r.opText}"); bothMounted&painted=${bothMounted}; isolation: #panes in zone:left=${r.panesInZone} #operator-panes in zone:left=${r.opInZone} #app still in main.layout=${r.appInLayout} #zone:main still inside #app=${r.mainInApp} → preserved=${isolation}`, { path: 'cdp', ok: bothMounted && isolation, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-3',dclass:'D-visual'}, 'The modal body hosts BOTH operator mounts (#panes + #operator-panes), both PAINTED and populated, and the app graph is NOT re-parented into it', `modal body box=${JSON.stringify(r.bodyBox)}; #panes in #settings-modal-body=${r.panesInBody} (box ${JSON.stringify(r.panesBox)}, text "${r.panesText}"); #operator-panes in body=${r.opInBody} (box ${JSON.stringify(r.opBox)}, text "${r.opText}"); bothMounted&painted=${bothMounted}; isolation: #panes in zone:left=${r.panesInZone} #operator-panes in zone:left=${r.opInZone} #app still in main.layout=${r.appInLayout} #zone:main still inside #app=${r.mainInApp} → preserved=${isolation}`, { path: 'cdp', ok: bothMounted && isolation, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-SETTINGS-4 — the enabled-panes census is populated at FIRST render
@@ -4286,21 +6008,24 @@ const BLOCKS = {
     const census2 = (reRead.text || '').split(/[,\s]+/).filter(Boolean)
     const stable = census2.join(',') === census.join(',') && (reRead.frames || []).join(',') === frames.join(',')
     await ufModal(h, false)
-    return rowResult('UF-SETTINGS-4', 'The enabled-panes census is populated at FIRST render (no edit) — PAINTED — and agrees with the rendered pane frames', 'D-state', `settings modal opened by a REAL click; #operator-enabled-panes="${r.text}" (painted box ${JSON.stringify(r.box)}, painted=${censusPainted}) with NO edit made; rendered .pane-frame[data-pane-id] set=${JSON.stringify(frames)} → census populatedAtFirstRender=${census.length > 0} agreesWithRenderedPanes=${agree} censusPainted=${censusPainted} reReadStableAgreement=${stable} (second read "${reRead.text}"); NOTE: the other half of this row (the fresh-store first-run default = exactly {search,doc-nav}) needs a fresh --home boot and is PARKED (see docs/specs/user-flow-audit-coverage-2026-09-15.md)`, { path: 'cdp', ok: census.length > 0 && agree && censusPainted && stable, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-4',dclass:'D-state'}, 'The enabled-panes census is populated at FIRST render (no edit) — PAINTED — and agrees with the rendered pane frames', `settings modal opened by a REAL click; #operator-enabled-panes="${r.text}" (painted box ${JSON.stringify(r.box)}, painted=${censusPainted}) with NO edit made; rendered .pane-frame[data-pane-id] set=${JSON.stringify(frames)} → census populatedAtFirstRender=${census.length > 0} agreesWithRenderedPanes=${agree} censusPainted=${censusPainted} reReadStableAgreement=${stable} (second read "${reRead.text}"); NOTE: the other half of this row (the fresh-store first-run default = exactly {search,doc-nav}) needs a fresh --home boot and is PARKED (see docs/specs/user-flow-audit-coverage-2026-09-15.md)`, { path: 'cdp', ok: census.length > 0 && agree && censusPainted && stable, surface: await ufSurfaceTarget(h) })
   },
 
-  // UF-SETTINGS-5 — the operator settings reflect topK / editing-mode /
-  // default-document (plus rag-stores), populated from the store.
+  // UF-SETTINGS-5 — the operator settings reflect topK / representation-mode /
+  // default-document (plus rag-stores), populated from the store. §9 `T-2`/§3.2
+  // `F-12`: the SUPERSEDED editing-mode vocabulary is SWEPT and the scenario
+  // re-derived against the LANDED successor `DECIDED:
+  // REPRESENTATION-MODE-SUCCESSOR` (`representationMode: html | markdown`).
   uf_settings_5: async (h) => {
     await ufModal(h, true)
     const r = await h.cdp.evaluate(`(()=>{const g=(id)=>{const e=document.getElementById(id);if(!e)return null;const b=e.getBoundingClientRect();return {text:(e.textContent||'').trim(),box:[Math.round(b.width),Math.round(b.height)]}};return {topk:g('operator-topk'),mode:g('operator-editing-mode'),doc:g('operator-default-document'),stores:g('operator-rag-stores')}})()`)
     const painted = (f) => !!f && f.box[0] > 0 && f.box[1] > 0 && f.text.length > 0
     const topkOk = painted(r.topk) && /topK:\s*\d+/.test(r.topk.text)
-    const modeOk = painted(r.mode) && /editingMode:\s*(contenteditable|textarea)/.test(r.mode.text)
+    const modeOk = painted(r.mode) && /representationMode:\s*(html|markdown)/.test(r.mode.text)
     const docOk = painted(r.doc)
     const storesOk = painted(r.stores) && /store/i.test(r.stores.text)
     await ufModal(h, false)
-    return rowResult('UF-SETTINGS-5', 'The operator settings reflect topK / editing-mode / default-document (plus rag-stores), each PAINTED', 'D-state', `#operator-topk="${r.topk ? r.topk.text : 'MISSING'}" (painted=${painted(r.topk)}, matches /topK:\\d+/=${topkOk}); #operator-editing-mode="${r.mode ? r.mode.text : 'MISSING'}" (matches /editingMode:(contenteditable|textarea)/=${modeOk}); #operator-default-document="${r.doc ? r.doc.text : 'MISSING'}" (painted=${docOk}); #operator-rag-stores="${r.stores ? r.stores.text.slice(0, 60) : 'MISSING'}…" (painted=${storesOk})`, { path: 'cdp', ok: topkOk && modeOk && docOk && storesOk, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-5',dclass:'D-state'}, 'The operator settings reflect topK / representation-mode / default-document (plus rag-stores), each PAINTED', `#operator-topk="${r.topk ? r.topk.text : 'MISSING'}" (painted=${painted(r.topk)}, matches /topK:\\d+/=${topkOk}); #operator-editing-mode="${r.mode ? r.mode.text : 'MISSING'}" (matches /representationMode:(html|markdown)/=${modeOk}); #operator-default-document="${r.doc ? r.doc.text : 'MISSING'}" (painted=${docOk}); #operator-rag-stores="${r.stores ? r.stores.text.slice(0, 60) : 'MISSING'}…" (painted=${storesOk})`, { path: 'cdp', ok: topkOk && modeOk && docOk && storesOk, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-SETTINGS-7 — a REAL per-pane [data-pane][data-enabled] click flips a
@@ -4308,20 +6033,47 @@ const BLOCKS = {
   uf_settings_7: async (h) => {
     await ufModal(h, true)
     const read = async () => h.cdp.evaluate(`(()=>{const t=document.getElementById('operator-pane-visibility-crosslinks');const f=document.querySelector('.pane-frame[data-pane-id="crosslinks"]');const c=document.getElementById('operator-enabled-panes');const b=f?f.getBoundingClientRect():null;return {enabled:t?t.getAttribute('data-enabled'):null,frame:!!f,frameBox:b?[Math.round(b.width),Math.round(b.height)]:null,census:c?(c.textContent||'').trim():null}})()`)
-    const s0 = await read()
-    let c1 = { path: 'skipped' }
-    let s1 = s0
-    if (s0.enabled === 'false') {
-      c1 = await ufRealClick(h, '#operator-pane-visibility-crosslinks')
+    const ufSettings7Assertion = 'A REAL per-pane [data-pane][data-enabled] click flips a pane ON (its .pane-frame appears, painted) and OFF (the frame is removed)'
+    const toggleSel = '#operator-pane-visibility-crosslinks'
+    // §2.3 `H-1` clause 4 / §13.4 item 1 / gate-4 `B-2` — THE BLOCK DRIVES ITS OWN
+    // PRECONDITION, so its verdict is POSITION-INDEPENDENT. The assertion's PRE-state
+    // (`crosslinks` OFF: `data-enabled="false"` and no `.pane-frame`) is NOT the
+    // run's position's to provide: the operator toggles render `data-enabled="true"`
+    // for EVERY pane until the first visibility write sets `panesInitialized`
+    // (`settingsContent`: `on = panesInitialized === true ? list.includes(id) : true`),
+    // so on a fresh-profile ISOLATED run the toggle reads "true", the asserted ON
+    // half is SKIPPED (`c1={path:'skipped'}`) and the row FAILs while the SAME row
+    // PASSes in the full battery (where `persistence_v1` wrote the persisted set
+    // first) — the `H-1` clause-4 falsifier in the opposite direction. This setup
+    // REAL-clicks the SAME pane-visibility control the flip drives (hit-tested
+    // through `ufRealClick`) until the pre-state is actually reached, exactly as
+    // `uf_panes_8`'s setup establishes its collapse baseline. It adds NO `BLOCKS`
+    // key, NO flag, NO `§5.U` slot and NO new app assertion (`D-5`), and it PROMOTES
+    // no verdict (`H-5`): the row still carries its own honest verdict below.
+    const entry = await read()
+    const setup = []
+    for (let i = 0; i < 3 && (await read()).enabled !== 'false'; i++) {
+      const c = await ufRealClick(h, toggleSel)
+      setup.push(c.path)
       await sleep(1700)
-      s1 = await read()
     }
-    const c2 = await ufRealClick(h, '#operator-pane-visibility-crosslinks')
+    const s0 = await read()
+    if (s0.enabled !== 'false') {
+      // The pre-state could not be reached => NOT-DRIVEN with the STATE NAMED
+      // (§2.3 `H-4`: a driver-side precondition, never an app FAIL).
+      const observed = `the crosslinks pane could not be brought to the assertion's PRE-state (data-enabled="false" with no .pane-frame): entry data-enabled=${entry.enabled} frameRendered=${entry.frame} census="${entry.census}"; ${setup.length} REAL hit-tested click(s) on ${toggleSel} (paths=${JSON.stringify(setup)}) left data-enabled=${s0.enabled} frameRendered=${s0.frame} census="${s0.census}"`
+      await ufModal(h, false)
+      return rowResult({row:'UF-SETTINGS-7',dclass:'D-interaction'}, ufSettings7Assertion, observed, { path: setup.length ? `not-drivable (last setup path=${setup[setup.length - 1]})` : 'missing', ok: false, surface: await ufSurfaceTarget(h), required: 'the assertion\'s PRE-state: `#operator-pane-visibility-crosslinks` reading data-enabled="false" with no `.pane-frame[data-pane-id="crosslinks"]`', observed })
+    }
+    const c1 = await ufRealClick(h, toggleSel)
+    await sleep(1700)
+    const s1 = await read()
+    const c2 = await ufRealClick(h, toggleSel)
     await sleep(1700)
     const s2 = await read()
     const ok = s0.enabled === 'false' && c1.path === 'cdp' && s1.enabled === 'true' && s1.frame && s1.frameBox[0] > 0 && s1.frameBox[1] > 0 && c2.path === 'cdp' && s2.enabled === 'false' && !s2.frame
     await ufModal(h, false)
-    return rowResult('UF-SETTINGS-7', 'A REAL per-pane [data-pane][data-enabled] click flips a pane ON (its .pane-frame appears, painted) and OFF (the frame is removed)', 'D-interaction', `crosslinks toggle start data-enabled=${s0.enabled} frameRendered=${s0.frame} census="${s0.census}"; REAL click ON (path=${c1.path}) → data-enabled=${s1.enabled} .pane-frame rendered=${s1.frame} box=${JSON.stringify(s1.frameBox)} census="${s1.census}"; REAL click OFF (path=${c2.path}) → data-enabled=${s2.enabled} frameRemoved=${!s2.frame} census="${s2.census}"`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SETTINGS-7',dclass:'D-interaction'}, ufSettings7Assertion, `[setup] entry data-enabled=${entry.enabled} frameRendered=${entry.frame} → ${setup.length} REAL hit-tested click(s) on ${toggleSel} (paths=${JSON.stringify(setup)}) → PRE-state data-enabled=${s0.enabled} frameRendered=${s0.frame}; crosslinks toggle start data-enabled=${s0.enabled} frameRendered=${s0.frame} census="${s0.census}"; REAL click ON (path=${c1.path}) → data-enabled=${s1.enabled} .pane-frame rendered=${s1.frame} box=${JSON.stringify(s1.frameBox)} census="${s1.census}"; REAL click OFF (path=${c2.path}) → data-enabled=${s2.enabled} frameRemoved=${!s2.frame} census="${s2.census}"`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- §3 Panes ------------------------------------------------------------
@@ -4332,16 +6084,43 @@ const BLOCKS = {
   // hit-tested path of BOTH clicks.
   uf_panes_1: async (h) => {
     await ufEnsureAppClear(h)
+    // §2.3 `H-1` clause 4 / §13.4 item 1 / gate-4 `B-1` — THE SANCTIONED PER-BLOCK
+    // RESTORE PATH, taken BEFORE this block resolves its frame. The row brings its
+    // `doc-nav` pane to the drivable baseline through `ufEnsurePaneExpanded` (the
+    // `zone:left` state READ AS A STATE + a REAL hit-tested re-expand + the
+    // PERSISTED pane-visibility restore through the operator control the flip itself
+    // used), exactly as `uf_panes_12`/`uf_panes_14` already do, and only THEN reads
+    // its own frame census as a state. The narrowed pre-flight (`G-3`) READS the
+    // persisted visibility set and never REPAIRS it (so that `persistence_v2` keeps
+    // the precondition it exists to assert), which means a census read taken WITHOUT
+    // the sanctioned restore reports `doc-nav` absent whenever an EARLIER block
+    // (`persistence_v1`) persisted it OFF: the isolated/full-battery disagreement
+    // this unit exists to kill. The restore adds NO `BLOCKS` key, NO flag, NO new
+    // app assertion and PROMOTES no verdict (`H-5`) — it only makes the row
+    // DRIVABLE, and the row then carries its own honest verdict.
     const zoneCls = await h.cdp.evaluate(`document.getElementById('zone:left').className`)
     let zonePath = 'already-expanded'
     if (/is-minimized/.test(zoneCls)) {
       zonePath = (await ufRealClick(h, '#zone-minimize-left')).path
       await sleep(1300)
     }
+    const expanded = await ufEnsurePaneExpanded(h, 'doc-nav')
     const surface = await ufSurfaceTarget(h)
+    const paneExpandPath = `zone=${expanded.zoneState ?? 'unknown'} zoneRestore=${zonePath} panePath=${expanded.path}${expanded.restored && typeof expanded.restored === 'object' ? ` (visibilityRestore path=${expanded.restored.path} ${expanded.restored.before}->${expanded.restored.after})` : ''}${expanded.collapsedAfter === true ? ` collapsedAfter=${expanded.collapsedAfter}` : ''}`
+    // THE BLOCK'S OWN FRAME CENSUS, read AS A STATE (§2.3 `H-1` clause 1): the
+    // sanctioned restore above has already resolved the persisted-visibility state,
+    // so this read resolves the pane's RENDERED state (present/collapsed) rather
+    // than inferring anything from the driver's own prior block.
     const pre = await ufPaneFrames(h)
     const docnav = pre.find((f) => f.pid === 'doc-nav')
-    if (!docnav) return rowResult('UF-PANES-1', 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', 'D-interaction', `no doc-nav pane frame rendered; frames=${JSON.stringify(pre)}`, { path: 'missing', ok: false, surface })
+    if (!docnav) {
+      // §2.3 `H-4` / §13.4 item 4 — the row genuinely CANNOT be driven from the
+      // persisted state: `NOT-DRIVEN` with that state NAMED (the resolved state, the
+      // sanctioned restore path and the frame census all printed), never an app FAIL
+      // and never a silent omission (§2.1 `E-1`/`E-2`).
+      const observed = `the doc-nav pane frame is not rendered after the per-block restore: ${paneExpandPath}; frameCensus=${JSON.stringify(pre.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)')))}${expanded.detail ? ` — ${expanded.detail}` : ''}`
+      return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', observed, { path: 'missing', ok: false, surface, required: 'a rendered `.pane-frame[data-pane-id="doc-nav"]` in the block\'s own frame census after the sanctioned per-block restore (`ufEnsurePaneExpanded`: the zone state read as a state + a REAL hit-tested re-expand + the persisted pane-visibility restore)', observed })
+    }
     if (docnav.collapsed) {
       await ufRealClick(h, '#pane-collapse-doc-nav')
       await sleep(1400)
@@ -4360,7 +6139,7 @@ const BLOCKS = {
     // is what comes back — the frame's DOM element instance is re-materialized by
     // the re-derive, so the identity oracle is the authored root, not the instance.
     const sameRoot = before.id === after.id && before.paneId === after.paneId && before.title === after.title && before.x === after.x
-    return rowResult('UF-PANES-1', 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', 'D-interaction', `zone expand path=${zonePath}; doc-nav before: bodyNodes(li)=${before.li} ul=${before.ul} h=${before.h}px; REAL click #pane-collapse-doc-nav (path=${c1.path}) → is-collapsed=${mid.collapsed} bodyNodes(li)=${mid.li} ul=${mid.ul} h=${mid.h}px → headerOnly=${headerOnly}; REAL click again (path=${c2.path}) → is-collapsed=${after.collapsed} bodyNodes(li)=${after.li} ul=${after.ul} h=${after.h}px → reExpanded=${reExpanded}; samePaneRoot(identical #pane-doc-nav root: id/paneId/title/x ${before.id}/${before.paneId}/"${before.title}"/${before.x} → ${after.id}/${after.paneId}/"${after.title}"/${after.x})=${sameRoot} (data-node-id ${before.nodeId}→${after.nodeId})`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok: headerOnly && reExpanded && sameRoot, surface })
+    return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', `${paneExpandPath}; doc-nav before: bodyNodes(li)=${before.li} ul=${before.ul} h=${before.h}px; REAL click #pane-collapse-doc-nav (path=${c1.path}) → is-collapsed=${mid.collapsed} bodyNodes(li)=${mid.li} ul=${mid.ul} h=${mid.h}px → headerOnly=${headerOnly}; REAL click again (path=${c2.path}) → is-collapsed=${after.collapsed} bodyNodes(li)=${after.li} ul=${after.ul} h=${after.h}px → reExpanded=${reExpanded}; samePaneRoot(identical #pane-doc-nav root: id/paneId/title/x ${before.id}/${before.paneId}/"${before.title}"/${before.x} → ${after.id}/${after.paneId}/"${after.title}"/${after.x})=${sameRoot} (data-node-id ${before.nodeId}→${after.nodeId})`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok: headerOnly && reExpanded && sameRoot, surface })
   },
 
   // UF-PANES-8 — a REAL click on a minimized zone's tab re-expands the zone
@@ -4368,6 +6147,24 @@ const BLOCKS = {
   // DEFERRED by spec §2.5 pin 5 — recorded, not asserted as a defect).
   uf_panes_8: async (h) => {
     await ufEnsureAppClear(h)
+    // §2.3 `H-1` clauses 1/3/4 / finding `C-8` — THE SANCTIONED PER-BLOCK RESTORE,
+    // taken at the HEAD of the body, BEFORE this block's FIRST pane-FRAME census
+    // read (the same path `uf_panes_1`/`uf_panes_12`/`uf_panes_14` already take). The
+    // block's own setup below reads `.pane-frame`/collapse state, so its census must
+    // be read from the DRIVABLE baseline (`zone:left` read as a state + re-expanded
+    // by a REAL hit-tested gesture, and the persisted pane-visibility state resolved
+    // through the operator control the flip itself used) instead of from an EARLIER
+    // block's artifact (`persistence_v1` persists `doc-nav` OFF — §13.4 / `G-3`: the
+    // persisted set is a block PRECONDITION, and a census taken without this restore
+    // reports the pane absent whenever an earlier block persisted it off). It adds
+    // NO `BLOCKS` key, NO `§5.U` slot, NO flag and NO new app assertion (`D-5`), and
+    // it PROMOTES no verdict (`H-5`). THE BLOCK'S OWN TAIL RESTORE IS KEPT: the
+    // block collapses both panes as SETUP, so the state it leaves is re-expanded
+    // after its last read; both the pre-flight records and the tail records print in
+    // `[restore]` order (first the state it started from, then the state it leaves,
+    // `H-2`).
+    const restore = []
+    for (const pid of ['doc-nav', 'search']) restore.push(JSON.stringify(await ufEnsurePaneExpanded(h, pid)))
     // setup: expand the zone, collapse BOTH panes with REAL toggle clicks so the
     // clicked pane's activation is observable
     const zoneCls = await h.cdp.evaluate(`document.getElementById('zone:left').className`)
@@ -4377,10 +6174,12 @@ const BLOCKS = {
       if (f && !f.collapsed) { await ufRealClick(h, `#pane-collapse-${pid}`); await sleep(1300) }
     }
     const preMin = await ufPaneFrames(h)
-    const minPath = (await ufRealClick(h, '#zone-minimize-left')).path
+    // ⟨gate-4 `D-1`⟩ the minimize/tab clicks ARE the rows' own gesture (the setup
+    // collapse clicks below name no row: they are the block's precondition, not a row's).
+    const minPath = (await ufRealClick(h, '#zone-minimize-left', { rows: ['UF-PANES-8', 'U-6'] })).path
     await sleep(1500)
     const minimized = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const tabs=[...document.querySelectorAll('[id^="zone-tab-left-"]')].map((t)=>{const r=t.getBoundingClientRect();return {id:t.id,paneId:t.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}});return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,tabs:tabs}})()`)
-    const tabClick = (await ufRealClick(h, '#zone-tab-left-doc-nav'))
+    const tabClick = (await ufRealClick(h, '#zone-tab-left-doc-nav', { rows: ['UF-PANES-8', 'U-6'] }))
     await sleep(1800)
     const after = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length}})()`)
     const afterFrames = await ufPaneFrames(h)
@@ -4388,10 +6187,18 @@ const BLOCKS = {
     const stripReplacesStack = minimized.frames === 0 && minimized.tabs.length >= 1 && minimized.tabs.every((t) => t.box[2] > 0 && t.box[3] > 0)
     const reExpanded = !/is-minimized/.test(after.cls) && after.frames >= 1 && afterFrames.every((f) => f.box[2] > 0 && f.box[3] > 0)
     const clickedPaneIdentified = minimized.tabs.some((t) => t.id === 'zone-tab-left-doc-nav' && t.paneId === 'doc-nav')
-    // restore: re-expand both panes (the block collapses them as setup)
-    const restore = []
+    // restore: re-expand both panes (the block collapses them as setup) — the
+    // block's own TAIL restore, after its LAST frame census read
     for (const pid of ['doc-nav', 'search']) restore.push(JSON.stringify(await ufEnsurePaneExpanded(h, pid)))
-    return rowResult('UF-PANES-8', 'A REAL click on a minimized zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane', 'D-interaction', `pre-minimize panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-minimize-left (path=${minPath}) → zone class="${minimized.cls}" frames=${minimized.frames} tabStrips=${JSON.stringify(minimized.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`, { path: minPath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: stripReplacesStack && reExpanded && clickedPaneIdentified, surface: await ufSurfaceTarget(h) })
+    const ufPanes8Assertion = 'A REAL click on a minimized zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane'
+    const ufPanes8Evidence = `pre-minimize panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-minimize-left (path=${minPath}) → zone class="${minimized.cls}" frames=${minimized.frames} tabStrips=${JSON.stringify(minimized.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
+    const ufPanes8Opts = { path: minPath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: stripReplacesStack && reExpanded && clickedPaneIdentified, surface: await ufSurfaceTarget(h) }
+    // §2.1 `E-2` — the DECLARED row `U-6` (MATRIX_ROWS maps `U-6` to this block)
+    // carries ITS OWN verdict; the checklist row `UF-PANES-8` keeps its own.
+    return [
+      rowResult({ row: 'UF-PANES-8', dclass: 'D-interaction' }, ufPanes8Assertion, ufPanes8Evidence, ufPanes8Opts),
+      declaredRowResult('U-6', 'UF-PANES-8', ufPanes8Assertion, 'D-interaction', ufPanes8Evidence, { ...ufPanes8Opts, checklistRow: 'UF-PANES-8' }),
+    ]
   },
 
   // UF-PANES-10 — the persisted enabled-pane set governs the rendered panes and
@@ -4402,6 +6209,21 @@ const BLOCKS = {
   // default needs a fresh --home boot (PARKED).
   uf_panes_10: async (h) => {
     await ufEnsureAppClear(h)
+    // §2.3 `H-1` clauses 1/3/4 / finding `C-8` — THE SANCTIONED PER-BLOCK RESTORE,
+    // taken at the HEAD of the body, BEFORE this block's FIRST pane-FRAME census
+    // read (the same path `uf_panes_1`/`uf_panes_12`/`uf_panes_14` take). SAID PLAINLY:
+    // this block's `frames0` read IS the persisted-set projection read (the census
+    // `#operator-enabled-panes` and the rendered frame set are two projections of
+    // ONE state, which is why the row needs a second, independent oracle and is
+    // PARKED on the fresh-store half) — so the pre-flight drives the BASELINE-ON
+    // pane `search` (the pane this row does not measure) and deliberately LEAVES
+    // `doc-nav`'s persisted state as the block found it: the census read below is
+    // still the un-repaired projection of that set, and the pre-flight cannot make
+    // the row's own agreement true by repairing the state it measures. What the
+    // pre-flight DOES change is ORDER (`C-8`): the census read no longer reads the
+    // driver's own prior state. It adds NO `BLOCKS` key, NO `§5.U` slot, NO flag and
+    // NO new app assertion (`D-5`), and it PROMOTES no verdict (`H-5`).
+    await ufEnsurePaneExpanded(h, 'search')
     const frames0 = await ufPaneFrames(h)
     const opened = await ufModal(h, true)
     const censusRead = await h.cdp.evaluate(`(()=>{const c=document.getElementById('operator-enabled-panes');if(!c)return null;const b=c.getBoundingClientRect();return {text:(c.textContent||'').trim(),box:[Math.round(b.width),Math.round(b.height)]}})()`)
@@ -4417,13 +6239,23 @@ const BLOCKS = {
     const census2 = await h.cdp.evaluate(`(()=>{const c=document.getElementById('operator-enabled-panes');return c?(c.textContent||'').trim():null})()`)
     const censusStable = (census2 || '') === (census || '')
     await ufModal(h, false)
-    return rowResult('UF-PANES-10', 'The persisted enabled-pane set governs the rendered panes and the operator census agrees at first render, PAINTED, with no edit', 'D-state', `rendered .pane-frame set at first render=${JSON.stringify(frameIds)}; census (modal opened by a REAL click, path=${opened.path}) = "${census}" (painted box ${JSON.stringify(censusRead ? censusRead.box : null)}); persistedSetGovernsRenderedPanes+agrees=${agree}; censusPainted=${censusPainted}; no-edit stability across the census read=${stable} and across the re-read=${censusStable} (second read "${census2}"). PARKED half of this row: the FRESH-store first-run default (exactly {search,doc-nav}) requires a fresh --home boot (the existing block 'first_boot_default' covers it with --no-seed + a disposable HOME); on this RUNNING operator store the persisted set is authoritative`, { path: opened.path, ok: agree && stable && censusStable && censusPainted, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-PANES-10',dclass:'D-state'}, 'The persisted enabled-pane set governs the rendered panes and the operator census agrees at first render, PAINTED, with no edit', `rendered .pane-frame set at first render=${JSON.stringify(frameIds)}; census (modal opened by a REAL click, path=${opened.path}) = "${census}" (painted box ${JSON.stringify(censusRead ? censusRead.box : null)}); persistedSetGovernsRenderedPanes+agrees=${agree}; censusPainted=${censusPainted}; no-edit stability across the census read=${stable} and across the re-read=${censusStable} (second read "${census2}"). PARKED half of this row: the FRESH-store first-run default (exactly {search,doc-nav}) requires a fresh --home boot (the existing block 'first_boot_default' covers it with --no-seed + a disposable HOME); on this RUNNING operator store the persisted set is authoritative`, { path: opened.path, ok: agree && stable && censusStable && censusPainted, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-PANES-12 — a REAL click on a doc-nav document `li` focuses that document
   // in the stage (the click probe separates a dead handler from a gesture that
   // never delivers the click; the native DOM-click attribution lives in
   // `uf_panes_12_diag` so it can never flip this row's verdict).
+  //
+  // §2.1 `E-2` — THIS BLOCK CLAIMS TWO DECLARED MATRIX ROWS (`MATRIX_ROWS` maps
+  // `uf_panes_12` to `U-1` AND `U-3`), so it returns ONE result PER DECLARED ROW
+  // (each with its own assertion, dclass, realInput, evidence, failingClause and
+  // surface) plus its own checklist row carried through the distinct
+  // `checklistRow` member. `U-1` is the doc-nav document-row FOCUS claim; `U-3` is
+  // the DIFFERENT claim that the pane-drag gesture surface is the pane HEADER
+  // only, so a BODY gesture is never hijacked — driven here as a REAL CDP pointer
+  // drag that STARTS ON THE PANE BODY and must NOT relocate the pane. A `U-3`
+  // verdict that merely repeated `U-1`'s would not be a verdict for `U-3`.
   uf_panes_12: async (h) => {
     await ufEnsureAppClear(h)
     const pane = await ufEnsurePaneExpanded(h, 'doc-nav')
@@ -4448,11 +6280,66 @@ const BLOCKS = {
         folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-corpus"]');return f?f.getAttribute('data-expanded'):null})()`)
       }
     }
+    // §2.1 `E-2`/`U-3` — THE BODY-GESTURE PROBE (run BEFORE the U-1 click so it
+    // cannot disturb it): a REAL CDP pointer drag whose DOWN lands on the doc-nav
+    // pane BODY (a non-control element inside the frame, NEVER the pane header)
+    // and travels past the controller's threshold toward the next pane. If the
+    // body gesture were admitted by the pane-drag surface the zone's pane-slot
+    // ordering would change; the claim is that it does NOT (header-only surface).
+    const slotSnapshot = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y)})))()`)
+    const slotsBefore = await slotSnapshot()
+    const scrollDocNav = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame'};if(typeof f.scrollIntoView==='function')f.scrollIntoView({block:'start'});return true})()`)
+    await sleep(500)
+    const bodyPoint = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame after the scroll'};const hdr=f.querySelector('.pane-header');const vh=window.innerHeight;const r=f.getBoundingClientRect();const xc=Math.round(r.x+r.width*0.5);const isCtrl=(el)=>{let n=el;while(n&&n!==f){const t=n.tagName?n.tagName.toLowerCase():'';if(t==='button'||t==='input'||t==='select'||t==='textarea'||t==='a')return true;n=n.parentElement}return false};const start=Math.max(0,Math.round(r.y)+4);const end=Math.min(r.y+r.height-6,vh-20);for(let y=start;y<end;y+=6){const el=document.elementFromPoint(xc,y);if(!el||!f.contains(el))continue;if(hdr&&hdr.contains(el))continue;if(isCtrl(el))continue;return {x:xc,y,hit:el.tagName+'/'+String(el.className||'').slice(0,60),inHeader:false,frameY:Math.round(r.y),vh}};return {err:'no non-control point in the VISIBLE doc-nav pane BODY',frameY:Math.round(r.y),vh}})()`)
+    const bodyStart = (bodyPoint && bodyPoint.err)
+      // A body point that lies BELOW the fold is a DRIVER precondition (the
+      // coordinate could not be hit-tested in-viewport), named as such — never an
+      // app verdict (§2.3 `H-4`): the pane IS rendered (`.pane-frame` present) and
+      // it is the pane's own height, not the app, that put the point off-view.
+      ? { err: `${bodyPoint.err} (frameY=${bodyPoint.frameY} vh=${bodyPoint.vh} — the frame's visible BODY region carries no non-control point)` }
+      : bodyPoint
+    let bodyDrag = null
+    if (!bodyStart || bodyStart.err) {
+      bodyDrag = { driven: false, reason: `${JSON.stringify(bodyStart)} — the pane BODY gesture point could not be resolved (the driver's own precondition, named)` }
+    } else {
+      const sib = slotsBefore.find((s) => s.paneId !== 'doc-nav' && s.y > (slotsBefore.find((s) => s.paneId === 'doc-nav') || { y: 0 }).y + 4) || null
+      const targetY = sib ? sib.y + 18 : bodyStart.y + 80
+      await h.cdp.gesture('.pane-frame[data-pane-id="doc-nav"]', [
+        { type: 'down', x: bodyStart.x, y: bodyStart.y },
+        { type: 'move', x: bodyStart.x + 6, y: bodyStart.y + 40 },
+        { type: 'move', x: bodyStart.x + 8, y: Math.round((bodyStart.y + targetY) / 2) },
+        { type: 'move', x: bodyStart.x + 8, y: targetY },
+        { type: 'up', x: bodyStart.x + 8, y: targetY },
+      ])
+      await sleep(1200)
+      const slotsAfter = await slotSnapshot()
+      const seqBefore = slotsBefore.map((s) => s.paneId).join(',')
+      const seqAfter = slotsAfter.map((s) => s.paneId).join(',')
+      bodyDrag = { driven: true, start: bodyStart, targetY, seqBefore, seqAfter, relocated: seqBefore !== seqAfter, hitAtStart: bodyStart.hit }
+    }
     const leaf = await h.cdp.evaluate(`(()=>{const l=document.querySelector('li[data-document-id=".live-corpus/beta"]');if(!l)return null;const r=l.getBoundingClientRect();return {doc:l.getAttribute('data-document-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
-    if (!leaf) return rowResult('U-1', 'A REAL click on a doc-nav document ROW focuses that document in the stage', 'D-interaction', `doc-nav has no li[data-document-id=".live-corpus/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`, { path: 'missing', ok: false, surface })
+    const u1Assertion = 'A REAL click on a doc-nav document ROW focuses that document in the stage'
+    const u3Dclass = 'D-interaction'
+    const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated)'
+    const u3Evidence = bodyDrag && bodyDrag.driven === true
+      ? `REAL CDP pointer drag DOWN on the doc-nav pane BODY (start=(${bodyStart.x},${bodyStart.y}) hit=${bodyDrag.hitAtStart}, outside .pane-header) travelling to y=${bodyDrag.targetY} past the drag threshold; zone pane-slot ordering before=[${bodyDrag.seqBefore}] after=[${bodyDrag.seqAfter}] → bodyGestureAdmitted/relocated=${bodyDrag.relocated} (required false: the header is the only pane-drag surface)` : `the body-gesture probe COULD NOT BE DRIVEN: ${bodyDrag ? bodyDrag.reason : 'no probe'}`
+    const u3Opts = bodyDrag && bodyDrag.driven === true
+      ? { path: 'cdp', ok: bodyDrag.relocated === false, surface: surface, gesture: true, checklistRow: 'UF-PANES-12' }
+      : { path: 'missing', ok: false, surface: surface, required: 'a real hit-tested pane-BODY gesture point inside .pane-frame[data-pane-id="doc-nav"] outside .pane-header', observed: u3Evidence, checklistRow: 'UF-PANES-12' }
+    const u3 = declaredRowResult('U-3', 'UF-PANES-12', u3Assertion, u3Dclass, u3Evidence, u3Opts)
+    if (!leaf) {
+      const why = `doc-nav has no li[data-document-id=".live-corpus/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`
+      return [
+        rowResult({ row: 'UF-PANES-12', dclass: 'D-interaction' }, u1Assertion, why, { path: 'missing', ok: false, surface }),
+        declaredRowResult('U-1', 'UF-PANES-12', u1Assertion, 'D-interaction', why, { path: 'missing', ok: false, surface, checklistRow: 'UF-PANES-12' }),
+        u3,
+      ]
+    }
     const before = await ufStageSig(h)
     await ufArmClick(h)
-    const click = await ufRealClick(h, 'li[data-document-id=".live-corpus/beta"]')
+    // ⟨gate-4 `D-1`⟩ the doc-nav row click serves BOTH rows this block claims
+    // (`UF-PANES-12`'s checklist row and the declared `U-1`).
+    const click = await ufRealClick(h, 'li[data-document-id=".live-corpus/beta"]', { rows: ['UF-PANES-12', 'U-1'] })
     // post-click hit re-probe: if the page re-flowed (a mount leak / a tall pane)
     // between the hit-test and the dispatch, this records WHERE the click landed
     const clickProbe = await ufHitProbe(h, 'li[data-document-id=".live-corpus/beta"]')
@@ -4461,9 +6348,11 @@ const BLOCKS = {
     const after = await ufStageSig(h)
     const focused = typeof after.docId === 'string' && after.docId.includes('beta')
     const current = await h.cdp.evaluate(`!!document.querySelector('li[data-document-id=".live-corpus/beta"][data-current="true"]')`)
-    const detail = `doc-nav pane expand=${JSON.stringify(pane)}; doc-nav folder expand: path=${folderPath} (expanded=${folderOpen}; the folder row is itself a clickable li); REAL click on li[data-document-id=".live-corpus/beta"] (box ${JSON.stringify(leaf.box)}, path=${click.path}, hit=${click.rect ? click.rect.hit : '?'}) → stage before(docId=${before.docId}) after(docId=${after.docId}) focusedThatDocument=${focused} li[data-current]=${current}; click-event targets=${JSON.stringify(events)}; post-click hit re-probe=${JSON.stringify(clickProbe)}`
-    if (!focused) return rowResult('U-1', 'A REAL click on a doc-nav document ROW focuses that document in the stage', 'D-interaction', `${detail}; [DIAG] attribution available — run --block=uf_panes_12_diag (a NATIVE DOM click on the same li) to separate a dead handler from a gesture that never delivered the click`, { path: click.path, ok: false, surface })
-    return rowResult('U-1', 'A REAL click on a doc-nav document ROW focuses that document in the stage', 'D-interaction', detail, { path: click.path, ok: focused && current, surface })
+    const detail = `doc-nav pane expand=${JSON.stringify(pane)}; doc-nav folder expand: path=${folderPath} (expanded=${folderOpen}; the folder row is itself a clickable li); REAL click on li[data-document-id=".live-corpus/beta"] (box ${JSON.stringify(leaf.box)}, path=${click.path}, hit=${click.rect ? click.rect.hit : '?'}) → stage before(docId=${before.docId}) after(docId=${after.docId}) focusedThatDocument=${focused} li[data-current]=${current}; click-event targets=${JSON.stringify(events)}; post-click hit re-probe=${JSON.stringify(clickProbe)}; body-gesture probe (U-3)=${JSON.stringify(bodyDrag)}`
+    const diag = '; [DIAG] attribution available — run --block=uf_panes_12_diag (a NATIVE DOM click on the same li) to separate a dead handler from a gesture that never delivered the click'
+    const u1 = declaredRowResult('U-1', 'UF-PANES-12', u1Assertion, 'D-interaction', focused ? detail : `${detail}${diag}`, { path: click.path, ok: focused && current, surface, checklistRow: 'UF-PANES-12' })
+    const checklist = rowResult({ row: 'UF-PANES-12', dclass: 'D-interaction' }, u1Assertion, focused ? detail : `${detail}${diag}`, { path: click.path, ok: focused && current, surface })
+    return [checklist, u1, u3]
   },
 
   // UF-PANES-12 DIAGNOSTIC — a NATIVE `.click()` on the same doc-nav li (no
@@ -4506,15 +6395,42 @@ const BLOCKS = {
     }
     // a real click on a result row must open the doc in a NEW tab
     const tabsBefore = await ufTabState(h)
+    // §2.1 `E-2` — THE `U-3` BODY-CLICK HALF, MEASURED ON THIS BLOCK'S OWN SURFACE
+    // (`docs/specs/user-flow-audit.md` §2: `U-3`'s contributors are
+    // `uf_panes_12` + `uf_panes_14` "the body-click half"). The result row this
+    // block real-clicks is a control INSIDE the search pane's BODY; the claim is
+    // that the pane-drag gesture surface does not hijack it, so its OWN handler runs
+    // (the tab count increases). The read is taken BEFORE the click so the element
+    // the gesture was dispatched at is the one classified.
+    const bodyness = await h.cdp.evaluate(`(()=>{const li=document.querySelector('#pane-search li[data-document-id]');if(!li)return {found:false,insidePane:false,inHeader:false};return {found:true,insidePane:!!li.closest('.pane-frame[data-pane-id="search"]'),inHeader:!!li.closest('.pane-header')}})()`)
     await ufArmClick(h)
-    const click = await ufRealClick(h, '#pane-search li[data-document-id]')
+    // ⟨gate-4 `D-1`⟩ the result-row click is the gesture of ALL THREE rows this block
+    // carries (`U-2`'s new-tab claim, `U-3`'s body-click claim, the checklist row).
+    const click = await ufRealClick(h, '#pane-search li[data-document-id]', { rows: ['UF-PANES-14', 'U-2', 'U-3'] })
     await sleep(1800)
     const events = await ufClickProbe(h)
     const tabsAfter = await ufTabState(h)
     const newTab = tabsAfter.count === tabsBefore.count + 1
     const detail = `search pane expand=${JSON.stringify(pane)}; search pane: disclosure=${search.togglePath} inputFocus=${search.focusPath} typedValue="${search.value}" submit=${search.submitPath}; ${rows.length} result rows painted=${rowsRendered} (first doc=${rows[0] ? rows[0].doc : '?'} box=${rows[0] ? JSON.stringify(rows[0].box) : '?'} cls="${rows[0] ? rows[0].cls : '?'}"); REAL hover → bg ${hover ? hover.bgBefore : '?'} → ${hover ? hover.bgAfter : '?'} changed=${hover ? hover.changed : '?'}; REAL click on the row (path=${click.path}) → tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab}; click-event targets=${JSON.stringify(events)}`
-    if (!newTab) return rowResult('UF-PANES-14', 'A REAL typed query + REAL submit renders hover-highlighting result rows, and a REAL row click opens the linked doc in a NEW tab', 'D-interaction', `${detail}; [DIAG] attribution available — run --block=uf_tabs_7_diag (a NATIVE DOM click on the same row) to separate a dead handler from a gesture that never delivered the click`, { path: click.path, ok: false, surface: await ufSurfaceTarget(h) })
-    return rowResult('UF-PANES-14', 'A REAL typed query + REAL submit renders hover-highlighting result rows, and a REAL row click opens the linked doc in a NEW tab', 'D-interaction', detail, { path: click.path, ok: rowsRendered && !!hover && hover.changed && newTab, surface: await ufSurfaceTarget(h) })
+    const surface = await ufSurfaceTarget(h)
+    const ufPanes14Assertion = 'A REAL typed query + REAL submit renders hover-highlighting result rows, and a REAL row click opens the linked doc in a NEW tab'
+    const diag = '; [DIAG] attribution available — run --block=uf_tabs_7_diag (a NATIVE DOM click on the same row) to separate a dead handler from a gesture that never delivered the click'
+    // §2.1 `E-1` — THE DECLARATION IS A PROMISE: `MATRIX_ROWS` names this block as an
+    // EXTRA contributor to `U-2` and `U-3` (`docs/specs/user-flow-audit.md` §2), so
+    // the block EMITS one verdict PER DECLARED ROW it claims (never an omission, never
+    // a silent shortfall) — the same per-declared-row array form `uf_panes_12`/`uf_tabs_7`
+    // use. `U-2` is the NEW-TAB claim; `U-3` is the DIFFERENT claim that the pane-drag
+    // gesture surface is the pane HEADER only, so a BODY control's own handler runs —
+    // a `U-3` verdict that merely repeated `U-2`'s would not be a verdict for `U-3`.
+    const u2Assertion = 'A REAL click on a search RESULT row opens the linked document in a NEW tab'
+    const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL click on a search-pane BODY control is not hijacked (its own handler runs)'
+    const u3BodyEvidence = `REAL hit-tested click (path=${click.path}) on '#pane-search li[data-document-id]' — a BODY control of the search pane frame (insidePane=${bodyness.insidePane}, insidePaneHeader=${bodyness.inHeader}); the gesture reached its OWN handler: tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab} (required true: a hijacked body click would leave the tab count unchanged), click-event targets=${JSON.stringify(events)}`
+    const u3Ok = bodyness.found === true && bodyness.insidePane === true && bodyness.inHeader === false && click.path === 'cdp' && newTab
+    return [
+      rowResult({row:'UF-PANES-14',dclass:'D-interaction'}, ufPanes14Assertion, newTab ? detail : `${detail}${diag}`, { path: click.path, ok: rowsRendered && !!hover && hover.changed && newTab, surface }),
+      declaredRowResult('U-2', 'UF-PANES-14', u2Assertion, 'D-interaction', newTab ? detail : `${detail}${diag}`, { path: click.path, ok: newTab, surface, required: 'the real row click increases the tab count by one (a document tab opens)', observed: `tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab}`, checklistRow: 'UF-PANES-14' }),
+      declaredRowResult('U-3', 'UF-PANES-14', u3Assertion, 'D-interaction', u3BodyEvidence, { path: bodyness.found === true ? click.path : 'missing', ok: u3Ok, surface, required: 'a hit-tested REAL click on a pane-BODY control outside `.pane-header` whose own handler runs (the tab count increases)', observed: `bodyControl(insidePane=${bodyness.insidePane}, inHeader=${bodyness.inHeader}) clickPath=${click.path} openedNewTab=${newTab}`, checklistRow: 'UF-PANES-14' }),
+    ]
   },
 
   // ---- §6 Search -----------------------------------------------------------
@@ -4554,7 +6470,7 @@ const BLOCKS = {
     const closePath = (await ufRealClick(h, '#advanced-search-toggle')).path
     await sleep(1300)
     const collapsed = await h.cdp.evaluate(`(()=>({expanded:(document.getElementById('advanced-search-toggle')||{}).getAttribute?.('data-expanded'),fields:!!document.getElementById('advanced-search-fields')}))()`)
-    return rowResult('UF-SEARCH-2', 'The advanced-search disclosure exposes the full rag.query arg surface, painted, in both directions', 'D-interaction', `pane expand=${JSON.stringify(f0)}; disclosure reset to collapsed (path=${resetPath}) → data-expanded=${collapsed0.expanded} fieldsRendered=${collapsed0.fields}; REAL click #advanced-search-toggle (path=${openPath}) → data-expanded=${shown.expanded} text="${shown.toggleText}" fieldsetBox=${JSON.stringify(shown.fieldsBox)}; controls painted=${surface}: mode${JSON.stringify(shown.modeOpts)} maxHops(min=${shown.maxHopsMin},max=${shown.maxHopsMax}) expand${JSON.stringify(shown.expandOpts)} maxParentContext filters(nodeKind/edgeType/targetDocumentId/targetNodeId/state) stores${JSON.stringify(shown.storesOpts)} submit; fullRagQueryArgSurface=${args}; REAL click to collapse (path=${closePath}) → expanded=${collapsed.expanded} fieldsRendered=${collapsed.fields}`, { path: openPath === 'cdp' && closePath === 'cdp' ? 'cdp' : 'native-fallback', ok: collapsed0.expanded === 'false' && shown.expanded === 'true' && !!shown.fieldsBox && shown.fieldsBox[0] > 0 && shown.fieldsBox[1] > 0 && surface && args && collapsed.expanded === 'false' && collapsed.fields === false, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-SEARCH-2',dclass:'D-interaction'}, 'The advanced-search disclosure exposes the full rag.query arg surface, painted, in both directions', `pane expand=${JSON.stringify(f0)}; disclosure reset to collapsed (path=${resetPath}) → data-expanded=${collapsed0.expanded} fieldsRendered=${collapsed0.fields}; REAL click #advanced-search-toggle (path=${openPath}) → data-expanded=${shown.expanded} text="${shown.toggleText}" fieldsetBox=${JSON.stringify(shown.fieldsBox)}; controls painted=${surface}: mode${JSON.stringify(shown.modeOpts)} maxHops(min=${shown.maxHopsMin},max=${shown.maxHopsMax}) expand${JSON.stringify(shown.expandOpts)} maxParentContext filters(nodeKind/edgeType/targetDocumentId/targetNodeId/state) stores${JSON.stringify(shown.storesOpts)} submit; fullRagQueryArgSurface=${args}; REAL click to collapse (path=${closePath}) → expanded=${collapsed.expanded} fieldsRendered=${collapsed.fields}`, { path: openPath === 'cdp' && closePath === 'cdp' ? 'cdp' : 'native-fallback', ok: collapsed0.expanded === 'false' && shown.expanded === 'true' && !!shown.fieldsBox && shown.fieldsBox[0] > 0 && shown.fieldsBox[1] > 0 && surface && args && collapsed.expanded === 'false' && collapsed.fields === false, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- §8 Editing / history ------------------------------------------------
@@ -4609,7 +6525,12 @@ const BLOCKS = {
     const surface = await ufSurfaceTarget(h)
     const atBaseNote = `AT BASE undoDisabled=${sBase.undoDisabled} redoDisabled=${sBase.redoDisabled} currentIndex=${sBase.currentIndex} (reachableBase=${reachableBase}; the walk stopped after ${walk.length}/${maxWalk} undos)`
     if (!reachableBase) {
-      return rowResult('UF-HIST-4', 'At the base the Undo control is disabled; after an Undo the Redo control becomes enabled; over-undoing past the floor is a safe no-op', 'D-state', `INCONCLUSIVE — the journal could not be walked to the at-base precondition: start undoDisabled=${s0.undoDisabled} redoDisabled=${s0.redoDisabled} currentIndex=${s0.currentIndex} entries=${s0.entries}; ${atBaseNote}; walk=${walk.map((w) => `[${w.path}]undo->current=${w.currentIndex},undoDisabled=${w.undoDisabled},redoDisabled=${w.redoDisabled}`).join(' | ') || '(none)'} — a store with pending journal depth cannot be scored against the at-base half of this row (needs a base-state store)`, { path: 'not-reachable', ok: false, extra: { park: true }, surface })
+      // §2.3 `H-4` / finding `C-5` — THE PARK'S OWN REASON, set at the SITE that
+      // parked: a row that reads `verdict=PARKED` must name the structural
+      // precondition it could not meet (never parked-by-default, never a reason-less
+      // park in the artifact).
+      const parkReason = `the journal could not be walked to the at-base precondition (start undoDisabled=${s0.undoDisabled} redoDisabled=${s0.redoDisabled} currentIndex=${s0.currentIndex} entries=${s0.entries}; walk stopped after ${walk.length}/${maxWalk} undo(s)) — a store with pending journal depth cannot be scored against the at-base half of this row (needs a base-state store)`
+      return rowResult({row:'UF-HIST-4',dclass:'D-state'}, 'At the base the Undo control is disabled; after an Undo the Redo control becomes enabled; over-undoing past the floor is a safe no-op', `INCONCLUSIVE — the journal could not be walked to the at-base precondition: start undoDisabled=${s0.undoDisabled} redoDisabled=${s0.redoDisabled} currentIndex=${s0.currentIndex} entries=${s0.entries}; ${atBaseNote}; walk=${walk.map((w) => `[${w.path}]undo->current=${w.currentIndex},undoDisabled=${w.undoDisabled},redoDisabled=${w.redoDisabled}`).join(' | ') || '(none)'} — a store with pending journal depth cannot be scored against the at-base half of this row (needs a base-state store)`, { path: 'not-reachable', ok: false, extra: { park: true, parkReason }, surface })
     }
     const over = await ufRealClick(h, '#editor-toolbar-undo')
     await sleep(1400)
@@ -4631,12 +6552,16 @@ const BLOCKS = {
     const store1 = await storeSig()
     const restoreOk = !!restored && restored.currentIndex === s0.currentIndex && docCount1 === docCount0 && store1.hash === store0.hash && store1.nodes === store0.nodes
     const redoEnabledAfterUndo = !!oneUndo && oneUndo.redoDisabled === false
-    return rowResult('UF-HIST-4', 'At the base the Undo control is disabled; after an Undo the Redo control becomes enabled; over-undoing past the floor is a safe no-op', 'D-state', `start: undoDisabled=${s0.undoDisabled} redoDisabled=${s0.redoDisabled} currentIndex=${s0.currentIndex} entries=${s0.entries} stageHash=${sig0.hash} docs=${docCount0} alphaStoreSig=${store0.nodes}nodes/${store0.hash}; walk to the floor: ${walk.length} undos → ${walk.map((w) => `[${w.path}]undo->current=${w.currentIndex},undoDisabled=${w.undoDisabled},redoDisabled=${w.redoDisabled}`).join(' | ')}; ${atBaseNote}; after-an-Undo Redo enabled=${redoEnabledAfterUndo}; OVER-UNDO at the floor: real click path=${over.path} → undoDisabled=${sOver.undoDisabled} redoDisabled=${sOver.redoDisabled} stageHash ${sigBase.hash}->${sigOver.hash} len ${sigBase.len}->${sigOver.len} → safeNoop=${safeNoop}; [restore] Redo back → currentIndex=${restored ? restored.currentIndex : '?'} redoDisabled=${restored ? restored.redoDisabled : '?'} docs=${docCount1} alphaStoreSig=${store1.nodes}nodes/${store1.hash} → restoredExactly(cursor+docCount+storeView)=${restoreOk}`, { path: over.path, ok: redoEnabledAfterUndo && safeNoop && restoreOk, surface })
+    return rowResult({row:'UF-HIST-4',dclass:'D-state'}, 'At the base the Undo control is disabled; after an Undo the Redo control becomes enabled; over-undoing past the floor is a safe no-op', `start: undoDisabled=${s0.undoDisabled} redoDisabled=${s0.redoDisabled} currentIndex=${s0.currentIndex} entries=${s0.entries} stageHash=${sig0.hash} docs=${docCount0} alphaStoreSig=${store0.nodes}nodes/${store0.hash}; walk to the floor: ${walk.length} undos → ${walk.map((w) => `[${w.path}]undo->current=${w.currentIndex},undoDisabled=${w.undoDisabled},redoDisabled=${w.redoDisabled}`).join(' | ')}; ${atBaseNote}; after-an-Undo Redo enabled=${redoEnabledAfterUndo}; OVER-UNDO at the floor: real click path=${over.path} → undoDisabled=${sOver.undoDisabled} redoDisabled=${sOver.redoDisabled} stageHash ${sigBase.hash}->${sigOver.hash} len ${sigBase.len}->${sigOver.len} → safeNoop=${safeNoop}; [restore] Redo back → currentIndex=${restored ? restored.currentIndex : '?'} redoDisabled=${restored ? restored.redoDisabled : '?'} docs=${docCount1} alphaStoreSig=${store1.nodes}nodes/${store1.hash} → restoredExactly(cursor+docCount+storeView)=${restoreOk}`, { path: over.path, ok: redoEnabledAfterUndo && safeNoop && restoreOk, surface })
   },
 
   // UF-HIST-6 — clicking an OLDER history entry reverts the content to that
   // journal point (multi-step undo); the UI offers NO `replay` control.
   uf_hist_6: async (h) => {
+    // §2.1 `E-2` — this block CLAIMS the declared matrix row `U-7` (MATRIX_ROWS
+    // maps `U-7` to `uf_hist_6`), so it returns U-7's OWN verdict plus its own
+    // checklist row (`UF-HIST-6`) on EVERY path, including the NOT-DRIVEN one.
+    const ufHist6Assertion = 'Clicking an OLDER history entry reverts the content to that journal point; no replay control exists'
     await ufEnsureAppClear(h)
     // setup: mount beta, make ONE real edit (click into the editable + type +
     // blur) so a fresh journal point with an observable content delta exists
@@ -4644,7 +6569,15 @@ const BLOCKS = {
     await sleep(1600)
     const marker = 'UFH6' + String(Date.now()).slice(-5)
     const geo = await h.cdp.evaluate(`(()=>{const e=[...document.querySelectorAll('#zone\\\\:main [contenteditable]')][0];if(!e)return null;const r=e.getBoundingClientRect();return {x:Math.round(r.x+20),y:Math.round(r.y+14),rag:e.getAttribute('data-rag-node-id')}})()`)
-    if (!geo) return rowResult('U-7', 'Clicking an OLDER history entry reverts the content to that journal point; no replay control exists', 'D-state', 'no [contenteditable] in the mounted stage for the edit setup', { path: 'missing', ok: false, surface: await ufSurfaceTarget(h) })
+    if (!geo) {
+      const why = 'no [contenteditable] in the mounted stage for the edit setup'
+      // §2.1 `E-2` — the DECLARED row `U-7` carries its OWN verdict on this path
+      // too (NOT-DRIVEN, the driver's precondition named), never an omission.
+      return [
+        rowResult({ row: 'UF-HIST-6', dclass: 'D-state' }, ufHist6Assertion, why, { path: 'missing', ok: false, surface: await ufSurfaceTarget(h) }),
+        declaredRowResult('U-7', 'UF-HIST-6', ufHist6Assertion, 'D-state', why, { path: 'missing', ok: false, surface: await ufSurfaceTarget(h), checklistRow: 'UF-HIST-6' }),
+      ]
+    }
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: geo.x, y: geo.y, buttons: 0 })
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: geo.x, y: geo.y, button: 'left', buttons: 1, clickCount: 1 })
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: geo.x, y: geo.y, button: 'left', buttons: 0, clickCount: 1 })
@@ -4660,9 +6593,22 @@ const BLOCKS = {
     const committed = JSON.stringify(inStore || {}).includes(marker)
     const curIdx = h0.current == null ? null : Number(h0.current)
     const surface = await ufSurfaceTarget(h)
-    if (curIdx == null || curIdx === 0) return rowResult('U-7', 'Clicking an OLDER history entry reverts the content to that journal point; no replay control exists', 'D-state', `INCONCLUSIVE — no older journal point to click (current=${h0.current}, entries=${JSON.stringify(h0.entries)}); edit committed=${committed}`, { path: 'not-reachable', ok: false, extra: { park: true }, surface })
+    if (curIdx == null || curIdx === 0) {
+      const why = `INCONCLUSIVE — no older journal point to click (current=${h0.current}, entries=${JSON.stringify(h0.entries)}); edit committed=${committed}`
+      // §2.3 `H-4` / finding `C-5` — THE PARK'S OWN REASON, set at the SITE that
+      // parked: the unreachable-history path parked this row with NO reason, so its
+      // `ROW` line read `verdict=PARKED` with the park text skipped while the
+      // block-level `PARK` line printed `(no parkReason recorded for U-7)`. Both
+      // results this path returns name the precondition they could not meet.
+      const parkReason = `the journal holds no OLDER point to click (current=${h0.current}, entries=${JSON.stringify(h0.entries)}; edit committed=${committed}) — a multi-step history entry click cannot be driven against a journal at its first point`
+      return [
+        rowResult({ row: 'UF-HIST-6', dclass: 'D-state' }, ufHist6Assertion, why, { path: 'not-reachable', ok: false, extra: { park: true, parkReason }, surface }),
+        declaredRowResult('U-7', 'UF-HIST-6', ufHist6Assertion, 'D-state', why, { path: 'not-reachable', ok: false, extra: { park: true, parkReason }, surface, checklistRow: 'UF-HIST-6' }),
+      ]
+    }
     const target = curIdx - 1
-    const click = await ufRealClick(h, `#pane-history-entry-${target}`)
+    // ⟨gate-4 `D-1`⟩ the history-entry click is driven for both rows this block owns.
+    const click = await ufRealClick(h, `#pane-history-entry-${target}`, { rows: ['UF-HIST-6', 'U-7'] })
     await sleep(1800)
     const h1 = await hist()
     const sig1 = await ufStageSig(h)
@@ -4682,7 +6628,12 @@ const BLOCKS = {
     const markerRestored = JSON.stringify(inStoreEnd || {}).includes(marker)
     const restored = markerRestored && String(hEnd.current) === String(h0.current)
     const replayOnly = await h.cdp.evaluate(`(()=>{const c=[...document.querySelectorAll('#pane-history button,#pane-history [role="button"],#editor-toolbar button')].map((b)=>(b.textContent||'').trim());return {controls:c}})()`)
-    return rowResult('U-7', 'Clicking an OLDER history entry reverts the content to that journal point; no replay control exists', 'D-state', `real edit setup: focused ${geo.rag}, typed "${marker}", commit-on-blur → committedToStore=${committed}; journal entries=${JSON.stringify(h0.entries.map((e) => e.i + '@' + e.kind))} current=${h0.current}; REAL click on the OLDER entry #${target} (path=${click.path}) → current ${h0.current}->${h1.current} moved=${positionMoved}; content reverted to that journal point: marker gone from the STORE=${!markerAfter} stageHash ${sig0.hash}->${sig1.hash} reverted=${reverted} (NOTE: pane-graph marks data-current at index cursor-1 while historyEntryClick(k) sets cursor=k, so clicking #k leaves #k-1 marked current — recorded, not scored); NO replay control in the history/editor chrome=${!h0.replayControl} (buttons=${JSON.stringify(replayOnly.controls)}); [restore] Redo → journal current=${hEnd.current} markerBackInStore=${markerRestored} restored=${restored}`, { path: click.path, ok: committed && Number(h1.current) <= target && reverted && positionMoved && !h0.replayControl && restored, surface })
+    const ufHist6Evidence = `real edit setup: focused ${geo.rag}, typed "${marker}", commit-on-blur → committedToStore=${committed}; journal entries=${JSON.stringify(h0.entries.map((e) => e.i + '@' + e.kind))} current=${h0.current}; REAL click on the OLDER entry #${target} (path=${click.path}) → current ${h0.current}->${h1.current} moved=${positionMoved}; content reverted to that journal point: marker gone from the STORE=${!markerAfter} stageHash ${sig0.hash}->${sig1.hash} reverted=${reverted} (NOTE: pane-graph marks data-current at index cursor-1 while historyEntryClick(k) sets cursor=k, so clicking #k leaves #k-1 marked current — recorded, not scored); NO replay control in the history/editor chrome=${!h0.replayControl} (buttons=${JSON.stringify(replayOnly.controls)}); [restore] Redo → journal current=${hEnd.current} markerBackInStore=${markerRestored} restored=${restored}`
+    const ufHist6Ok = committed && Number(h1.current) <= target && reverted && positionMoved && !h0.replayControl && restored
+    return [
+      rowResult({ row: 'UF-HIST-6', dclass: 'D-state' }, ufHist6Assertion, ufHist6Evidence, { path: click.path, ok: ufHist6Ok, surface }),
+      declaredRowResult('U-7', 'UF-HIST-6', ufHist6Assertion, 'D-state', ufHist6Evidence, { path: click.path, ok: ufHist6Ok, surface, checklistRow: 'UF-HIST-6' }),
+    ]
   },
 
   // ---- §2 Layout -----------------------------------------------------------
@@ -4712,14 +6663,14 @@ const BLOCKS = {
     const pairingEqual = before.nodeIds.length > 0 && before.nodeIds.join('|') === after.nodeIds.join('|')
     const pairingChanged = before.nodeIds.filter((x, i) => after.nodeIds[i] !== x).length
     const dom = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const l=document.getElementById('zone:left');const b=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};return {main:b(m),left:b(l),mainText:(m?(m.textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):null)}})()`)
-    return rowResult('UF-LAYOUT-2', 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, and the zone containers stay rendered', 'D-state', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; edit.set_content(.live-corpus/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-LAYOUT-2',dclass:'D-state'}, 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, and the zone containers stay rendered', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; edit.set_content(.live-corpus/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-LAYOUT-10 — with ZERO enabled+placed panes in `left` the zone's grid
   // TRACK must collapse and the stage must reclaim the width.
   uf_layout_10: async (h) => {
     await ufEnsureAppClear(h)
-    const measure = async () => h.cdp.evaluate(`(()=>{const g=(id)=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],display:getComputedStyle(e).display,cls:String(e.className)}};const w=document.getElementById('wiki-root');return {left:g('zone:left'),main:g('zone:main'),cols:w?getComputedStyle(w).gridTemplateColumns:null,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,modal:(document.getElementById('settings-modal')||{}).className||null}})()`)
+    const measure = async () => h.cdp.evaluate(`(()=>{const g=(id)=>{const e=document.getElementById(id);if(!e)return null;const r=e.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],display:getComputedStyle(e).display,cls:String(e.className)}};const w=document.getElementById('wiki-root');return {left:g('zone:left'),main:g('zone:main'),cols:w?getComputedStyle(w).gridTemplateColumns:null,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,roots:document.querySelectorAll('#wiki-root').length,modal:(document.getElementById('settings-modal')||{}).className||null}})()`)
     // §7.2 re-pin (finding A-9): the settings-modal frame must carry EXACTLY ONE
     // of `.is-open`/`.is-closed` at every state boundary this block already
     // crosses — before the open, inside the open, after the close. The class
@@ -4734,7 +6685,12 @@ const BLOCKS = {
     const enabledIds = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#settings-modal [data-pane][data-enabled]')].map((t)=>{const p=t.getAttribute('data-pane');const root=document.querySelector('.pane-frame[data-pane-id="'+p+'"]');return root?p:null}).filter(Boolean))()`)
     const paths = []
     for (const pid of enabledIds) {
-      const r = await ufRealClick(h, `#operator-pane-visibility-${pid}`)
+      // ⟨gate-4 `D-1`⟩ THE ROW IDENTITY of every click of the DISABLE series: it is the
+      // gesture of ALL THREE rows this block carries (the checklist row and the two
+      // declared halves `U-5`/`U-4`). The RE-ENABLE series below names NO row: it is the
+      // block's own restore, and a restore click may never be handed to a row as its own
+      // gesture (the exact mis-pair `D-1` names).
+      const r = await ufRealClick(h, `#operator-pane-visibility-${pid}`, { rows: ['UF-LAYOUT-10', 'U-5', 'U-4'] })
       paths.push(pid + ':' + r.path)
       await sleep(1300)
     }
@@ -4762,26 +6718,49 @@ const BLOCKS = {
     // the class XOR AFTER the close (the class read `ufModal` performs on its return)
     const postXor = x(postModal.cls) === 1
     const modalClassXor = preXor && openXor && postXor
-    return rowResult('UF-LAYOUT-10', "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", 'D-visual', `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; settings-modal class-XOR (§7.2 re-pin): before the open class="${preModal.cls}" exactlyOne=${preXor}, inside the open class="${filled.modal}" exactlyOne=${openXor} (and ${JSON.stringify([empty.modal, restored.modal])} at the block's other in-open reads), after the close class="${postModal.cls}" exactlyOne=${postXor} → exactlyOneOf(.is-open/.is-closed) at every state boundary=${modalClassXor}`, { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) })
+    // §2.1 `E-2` — THE TWO DECLARED ROWS THIS BLOCK CLAIMS (`MATRIX_ROWS` maps
+    // `uf_layout_10` to BOTH `U-4` and `U-5`) each get their OWN verdict:
+    //   * `U-4` — the empty↔filled pane-set transition (the two REAL click rounds
+    //     above) leaves exactly ONE `#wiki-root` mount (no stale/duplicate root);
+    //   * `U-5` — with ZERO enabled+placed panes the zone's grid TRACK collapses
+    //     and the stage reclaims the width.
+    // The shared evidence is the block's own measurement; the PASS predicates are
+    // DIFFERENT claims, so the two rows are separately readable.
+    const singleRootMount = filled.roots === 1 && empty.roots === 1 && restored.roots === 1
+    const u4Evidence = `empty<->filled pane-set transition driven by REAL clicks: FILLED #wiki-root mounts=${filled.roots} (frames=${filled.frames}), EMPTY (every pane disabled) mounts=${empty.roots} (frames=${empty.frames}), RESTORED (every pane re-enabled) mounts=${restored.roots} (frames=${restored.frames}); census="${censusEnd}"; disabled paths=${JSON.stringify(paths)}; re-enable paths=${JSON.stringify(restorePaths)}; paneFrameCensus(filled/empty/restored)=${filled.frames}/${empty.frames}/${restored.frames} → singleRootMountAcrossTheTransition=${singleRootMount} (required: exactly ONE #wiki-root at every boundary — a stale/duplicate root keeps the id and takes layout flow)`
+    const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; settings-modal class-XOR (§7.2 re-pin): before the open class="${preModal.cls}" exactlyOne=${preXor}, inside the open class="${filled.modal}" exactlyOne=${openXor} (and ${JSON.stringify([empty.modal, restored.modal])} at the block's other in-open reads), after the close class="${postModal.cls}" exactlyOne=${postXor} → exactlyOneOf(.is-open/.is-closed) at every state boundary=${modalClassXor}`
+    const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) }
+    return [
+      rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", u5Evidence, ufLayout10Opts),
+      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width", 'D-visual', u5Evidence, { ...ufLayout10Opts, checklistRow: 'UF-LAYOUT-10' }),
+      declaredRowResult('U-4', 'UF-LAYOUT-10', 'The empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (no stale/duplicate root survives the transition)', 'D-visual', u4Evidence, { ...ufLayout10Opts, ok: singleRootMount && ufLayout10Opts.ok, checklistRow: 'UF-LAYOUT-10' }),
+    ]
   },
 
   // Harness hygiene (not a checklist row, no verdict — §6.1 diagnostic form):
   // restore the app's baseline live layout — the left zone EXPANDED with both
-  // enabled panes expanded and the editing mode back on `contenteditable` (the
-  // mode the legacy `user*` blocks assume) — so a sequential battery starts from
-  // a stable, meaningful state.
+  // enabled panes expanded and the REPRESENTATION mode back on `html` (the
+  // landed successor `DECIDED: REPRESENTATION-MODE-SUCCESSOR`, read off
+  // `#editor-toolbar-toggle`'s own `data-mode`) — so a sequential battery starts
+  // from a stable, meaningful state.
+  //
+  // §2.3 `H-1` clause 3: this hygiene BLOCK runs once, at its own position in the
+  // key order (`V-6`) — so the SAME restore is also reachable PER BLOCK through
+  // `ufRestoreZoneState`/`ufEnsurePaneExpanded`, which any frame-based block calls
+  // itself. This block stays as the battery's own checkpoint, not as the only
+  // restore path.
   uf_restore_layout: async (h) => {
     await ufEnsureAppClear(h)
-    const snap = async () => h.cdp.evaluate(`(()=>({zone:(document.getElementById('zone:left')||{}).className,frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')),mode:(document.getElementById('editor-toolbar-toggle')||{}).getAttribute?.('data-mode')}))()`)
+    const snap = async () => h.cdp.evaluate(`(()=>({zone:(document.getElementById('zone:left')||{}).className,zoneState:/is-minimized/.test(String((document.getElementById('zone:left')||{}).className||''))?'minimized':'expanded',frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')),mode:(document.getElementById('editor-toolbar-toggle')||{}).getAttribute?.('data-mode')}))()`)
     const before = await snap()
-    const paths = []
-    if (/is-minimized/.test(before.zone)) { paths.push('zone:' + (await ufRealClick(h, '#zone-minimize-left')).path); await sleep(1400) }
+    const zoneRestore = await ufRestoreZoneState(h, 'left')
+    const paths = [zoneRestore.before.zoneState === 'minimized' ? 'zone:' + zoneRestore.path : 'zone:already-expanded']
     for (const pid of ['doc-nav', 'search']) { const r = await ufEnsurePaneExpanded(h, pid); paths.push(pid + ':' + r.path) }
-    let modePath = 'already-contenteditable'
-    if (before.mode !== 'contenteditable') { modePath = (await ufRealClick(h, '#editor-toolbar-toggle')).path; await sleep(1600) }
+    let modePath = 'already-html'
+    if (before.mode !== 'html') { modePath = (await ufRealClick(h, '#editor-toolbar-toggle')).path; await sleep(1600) }
     const after = await snap()
-    const restoredOk = !/is-minimized/.test(after.zone) && after.frames.length >= 1 && !after.frames.some((f) => /collapsed/.test(f)) && after.mode === 'contenteditable'
-    return diagResult(`baseline before: ${JSON.stringify(before)}; restore: ${JSON.stringify(paths)} editingMode ${before.mode}->${after.mode} (real click path=${modePath}); after: ${JSON.stringify(after)}; baselineRestored=${restoredOk}`)
+    const restoredOk = !/is-minimized/.test(after.zone) && after.frames.length >= 1 && !after.frames.some((f) => /collapsed/.test(f)) && after.mode === 'html'
+    return diagResult(`baseline before: ${JSON.stringify(before)}; restore: ${JSON.stringify(paths)} representationMode ${before.mode}->${after.mode} (real click path=${modePath}); after: ${JSON.stringify(after)}; baselineRestored=${restoredOk}`)
   },
 
   // Harness hygiene (not a checklist row, no verdict): scroll the page back to
@@ -4860,7 +6839,7 @@ const BLOCKS = {
     const shownPainted = !!(sel && sel.frameBox[2] > 0 && sel.frameBox[3] > 0)
     const disp = await gnosisDispatchDiag(h, '.pane-frame[data-pane-id="gnosis-wikis"] li[data-wiki-id="wiki-0"]')
     const afterDispatch = await gnosisPaneState(h, 'gnosis-wikis')
-    return rowResult('UF-GNOSIS-1', 'The gnosis-wikis pane renders the LIVE engine wiki list and a REAL click on a wiki shows it (wiki.get)', 'D-interaction', `enable=${JSON.stringify(en.flips)} modal=${en.open} expand=${exp.path}; pane li[data-wiki-id="wiki-0"]="${li ? li.text : 'MISSING'}" box=${li ? JSON.stringify(li.box) : 'null'} painted=${painted}; engine gnosis.wiki.list=${JSON.stringify(engine).slice(0, 160)} nameMatchesEngine=${nameMatchesEngine}; CONTROL(no click 3s) signatureStable=${controlStable} sig=${JSON.stringify(s1)}; REAL click #gnosis-wikis-refresh path=${refresh.path} → reassembled=${refreshReassembled} (sig ${JSON.stringify(s2)}) = ${refreshReassembled ? 'the handler ran' : 'NO-OP'}; REAL click the wiki li (hit=${click.rect ? click.rect.hit : '?'}) path=${click.path} → reassembled=${liClickReassembled} (sig ${JSON.stringify(s3)}) paneText="${sel ? sel.paneText : '?'}" showsWiki=${shown} framePainted=${shownPainted}; [DIAG] direct provident.dispatch on the SAME li node ${JSON.stringify(disp.nodeId)} → listedHandler=${JSON.stringify(disp.handlers)} results=${JSON.stringify(disp.results)} and the pane still reads "${afterDispatch ? afterDispatch.paneText : '?'}" (the handler EXISTS + RUNS, its body's seam is a no-op)`, { path: refresh.path === 'cdp' && click.path === 'cdp' ? 'cdp' : click.path, ok: painted && nameMatchesEngine && controlStable && refreshReassembled && liClickReassembled && shown && shownPainted, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-1',dclass:'D-interaction'}, 'The gnosis-wikis pane renders the LIVE engine wiki list and a REAL click on a wiki shows it (wiki.get)', `enable=${JSON.stringify(en.flips)} modal=${en.open} expand=${exp.path}; pane li[data-wiki-id="wiki-0"]="${li ? li.text : 'MISSING'}" box=${li ? JSON.stringify(li.box) : 'null'} painted=${painted}; engine gnosis.wiki.list=${JSON.stringify(engine).slice(0, 160)} nameMatchesEngine=${nameMatchesEngine}; CONTROL(no click 3s) signatureStable=${controlStable} sig=${JSON.stringify(s1)}; REAL click #gnosis-wikis-refresh path=${refresh.path} → reassembled=${refreshReassembled} (sig ${JSON.stringify(s2)}) = ${refreshReassembled ? 'the handler ran' : 'NO-OP'}; REAL click the wiki li (hit=${click.rect ? click.rect.hit : '?'}) path=${click.path} → reassembled=${liClickReassembled} (sig ${JSON.stringify(s3)}) paneText="${sel ? sel.paneText : '?'}" showsWiki=${shown} framePainted=${shownPainted}; [DIAG] direct provident.dispatch on the SAME li node ${JSON.stringify(disp.nodeId)} → listedHandler=${JSON.stringify(disp.handlers)} results=${JSON.stringify(disp.results)} and the pane still reads "${afterDispatch ? afterDispatch.paneText : '?'}" (the handler EXISTS + RUNS, its body's seam is a no-op)`, { path: refresh.path === 'cdp' && click.path === 'cdp' ? 'cdp' : click.path, ok: painted && nameMatchesEngine && controlStable && refreshReassembled && liClickReassembled && shown && shownPainted, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-2: gnosis-documents lists a wiki's documents (no deadlock) ----
@@ -4893,7 +6872,7 @@ const BLOCKS = {
     const direct = await h.cdp.evaluate(`window.provident.gnosis.documents('gnosis.document.list',{wikiId:'wiki-0'}).then((r)=>JSON.stringify(r).slice(0,220)).catch((e)=>'REJECTED:'+String(e&&e.message||e))`)
     await sleep(2500)
     const afterDirect = await gnosisPaneState(h, 'gnosis-documents')
-    return rowResult('UF-GNOSIS-2', 'The gnosis-documents pane renders the selected wiki DOCUMENT LIST with the live engine READY (never a permanent data-gnosis-state="unavailable" deadlock) and opens a document', 'D-interaction', `enable=${JSON.stringify(en.flips)}; REAL click #gnosis-documents-refresh path=${refresh.path} → wiki li[data-wiki-id="wiki-0"]="${wikiLi ? wikiLi.text : 'MISSING'}" box=${wikiLi ? JSON.stringify(wikiLi.box) : 'null'} painted=${wikiPainted} deadlockUnavailable=${deadlock} clickableItems=${withWikis ? withWikis.lis.filter((l) => l.wiki || l.doc).length : 0}; REAL click that wiki li path=${selectWiki.path} (hit=${selectWiki.rect ? selectWiki.rect.hit : '?'}) → reassembled=${selectReassembled} doc Li[data-document-id="doc-1"]="${docLi ? docLi.text : 'MISSING'}" painted=${docPainted} paneText="${withDocs ? withDocs.paneText : '?'}"; REAL click a doc li path=${selectDoc.path} → documentViewShown=${docShown}; [DIAG] direct provident.dispatch on the wiki li (${JSON.stringify(disp.handlers)}, results=${JSON.stringify(disp.results)}) left the pane at "${afterDispState ? afterDispState.paneText : '?'}"; the DIRECT bridge window.provident.gnosis.documents('gnosis.document.list',{wikiId:'wiki-0'}) RESOLVES from the live engine → ${direct}; after it the pane STILL reads "${afterDirect ? afterDirect.paneText : '?'}" (the engine + IPC + pane render path all work; the pane's own handler seam is a no-op)`, { path: refresh.path === 'cdp' && selectWiki.path === 'cdp' && selectDoc.path === 'cdp' ? 'cdp' : selectDoc.path, ok: wikiPainted && !deadlock && openable && docPainted && docShown && selectReassembled, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-2',dclass:'D-interaction'}, 'The gnosis-documents pane renders the selected wiki DOCUMENT LIST with the live engine READY (never a permanent data-gnosis-state="unavailable" deadlock) and opens a document', `enable=${JSON.stringify(en.flips)}; REAL click #gnosis-documents-refresh path=${refresh.path} → wiki li[data-wiki-id="wiki-0"]="${wikiLi ? wikiLi.text : 'MISSING'}" box=${wikiLi ? JSON.stringify(wikiLi.box) : 'null'} painted=${wikiPainted} deadlockUnavailable=${deadlock} clickableItems=${withWikis ? withWikis.lis.filter((l) => l.wiki || l.doc).length : 0}; REAL click that wiki li path=${selectWiki.path} (hit=${selectWiki.rect ? selectWiki.rect.hit : '?'}) → reassembled=${selectReassembled} doc Li[data-document-id="doc-1"]="${docLi ? docLi.text : 'MISSING'}" painted=${docPainted} paneText="${withDocs ? withDocs.paneText : '?'}"; REAL click a doc li path=${selectDoc.path} → documentViewShown=${docShown}; [DIAG] direct provident.dispatch on the wiki li (${JSON.stringify(disp.handlers)}, results=${JSON.stringify(disp.results)}) left the pane at "${afterDispState ? afterDispState.paneText : '?'}"; the DIRECT bridge window.provident.gnosis.documents('gnosis.document.list',{wikiId:'wiki-0'}) RESOLVES from the live engine → ${direct}; after it the pane STILL reads "${afterDirect ? afterDirect.paneText : '?'}" (the engine + IPC + pane render path all work; the pane's own handler seam is a no-op)`, { path: refresh.path === 'cdp' && selectWiki.path === 'cdp' && selectDoc.path === 'cdp' ? 'cdp' : selectDoc.path, ok: wikiPainted && !deadlock && openable && docPainted && docShown && selectReassembled, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-3: gnosis-query submits a REAL engine query and renders it ----
@@ -4916,7 +6895,7 @@ const BLOCKS = {
     const streamResult = streamChunks && streamChunks[0] && streamChunks[0].type === 'result' ? streamChunks[0].result : null
     const mcpQuery = await h.mcpTool(h.mcp, 'gnosis.query', { query: 'enrichment graph node' }).catch((e) => ({ __error: String(e.message || e) }))
     const paneRenderedResults = rows.length > 0
-    return rowResult('UF-GNOSIS-3', 'A REAL typed query + REAL submit in the gnosis-query pane runs a real engine query and renders >=1 result row (painted)', 'D-interaction', `enable=${JSON.stringify(en.flips)} expand=${exp.path}; REAL click #gnosis-query-input path=${focus.path} + Input.insertText → typedValue="${typed}"; REAL click #gnosis-query-submit path=${submit.path} → pane data-gnosis-pane=query data-gnosis-query="${st ? st.queryAttr : '?'}" traceMode=${st ? st.traceMode : '?'} renderedResultRows=${rows.length} painted=${painted.length} paneText="${st ? st.paneText : '?'}"; INDEPENDENT ORACLE — the SAME query over the GET path (gnosis.stream) returns ${streamResult ? streamResult.results.length + ' results (first "' + streamResult.results[0].snippet + '" @ ' + streamResult.results[0].score + ')' : JSON.stringify(engine).slice(0, 200)}; the POST path (gnosis.query MCP) returns ${JSON.stringify(mcpQuery).slice(0, 200)}`, { path: focus.path === 'cdp' && submit.path === 'cdp' ? 'cdp' : submit.path, ok: paneRenderedResults && painted.length > 0 && !!streamResult && streamResult.results.length > 0, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-3',dclass:'D-interaction'}, 'A REAL typed query + REAL submit in the gnosis-query pane runs a real engine query and renders >=1 result row (painted)', `enable=${JSON.stringify(en.flips)} expand=${exp.path}; REAL click #gnosis-query-input path=${focus.path} + Input.insertText → typedValue="${typed}"; REAL click #gnosis-query-submit path=${submit.path} → pane data-gnosis-pane=query data-gnosis-query="${st ? st.queryAttr : '?'}" traceMode=${st ? st.traceMode : '?'} renderedResultRows=${rows.length} painted=${painted.length} paneText="${st ? st.paneText : '?'}"; INDEPENDENT ORACLE — the SAME query over the GET path (gnosis.stream) returns ${streamResult ? streamResult.results.length + ' results (first "' + streamResult.results[0].snippet + '" @ ' + streamResult.results[0].score + ')' : JSON.stringify(engine).slice(0, 200)}; the POST path (gnosis.query MCP) returns ${JSON.stringify(mcpQuery).slice(0, 200)}`, { path: focus.path === 'cdp' && submit.path === 'cdp' ? 'cdp' : submit.path, ok: paneRenderedResults && painted.length > 0 && !!streamResult && streamResult.results.length > 0, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-4: gnosis-status is modal-confined + MCP-invisible ----
@@ -4947,7 +6926,7 @@ const BLOCKS = {
     const painted = !!(before && before.box[2] > 0 && before.box[3] > 0)
     const matchesEngine = !!(before && engine && before.state === engine.state && before.version === engine.version && before.subs.length === Object.keys(engine.subsystems || {}).length && before.subs.every((s) => s.endsWith('=true')))
     const repainted = !!(after && after.box[2] > 0 && after.box[3] > 0 && after.state === 'Ready')
-    return rowResult('UF-GNOSIS-4', 'The gnosis-status pane renders the LIVE engine report INSIDE the settings modal (painted), #gnosis-status-refresh updates it, and the pane is ABSENT from the app-graph MCP surfaces', 'D-state', `modal opened by a REAL click (path=${open.path}); pane inModal=${before ? before.inModal : '?'} inOperatorPanes=${before ? before.inOperatorPanes : '?'} box=${before ? JSON.stringify(before.box) : 'null'} painted=${painted} data-gnosis-state=${before ? before.state : '?'} version=${before ? before.version : '?'} subsystems=${JSON.stringify(before ? before.subs : null)} text="${before ? before.text.slice(0, 200) : '?'}"; matchesLiveEngineReport(state+version+subsystemCensus)=${matchesEngine} (engine gnosis.status state=${engine ? engine.state : '?'} version=${engine ? engine.version : '?'}); CONTROL(no click 3 s) signatureStable=${controlStable} (sig ${JSON.stringify(s1)}); REAL click #gnosis-status-refresh path=${rb.path} (hit=${rb.rect ? rb.rect.hit : '?'}) → app-graph RE-ASSEMBLED=${refreshReassembled} (sig ${JSON.stringify(s3)}) which is the causal proof the click reached its handler → refreshStatus() → the live engine read → onChanged()/host.refresh(); repainted=${repainted} state=${after ? after.state : '?'} (a value delta is impossible here: the engine's HealthReport is invariant while the engine stays Ready); MCP invisibility: get_rendered_html(${htmlStr.length} chars) contains a status-pane marker=${statusInHtml}; list_targets contains "gnosis-status"=${statusInTargets}`, { path: rb.path, ok: painted && matchesEngine && controlStable && refreshReassembled && repainted && !statusInHtml && !statusInTargets, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-4',dclass:'D-state'}, 'The gnosis-status pane renders the LIVE engine report INSIDE the settings modal (painted), #gnosis-status-refresh updates it, and the pane is ABSENT from the app-graph MCP surfaces', `modal opened by a REAL click (path=${open.path}); pane inModal=${before ? before.inModal : '?'} inOperatorPanes=${before ? before.inOperatorPanes : '?'} box=${before ? JSON.stringify(before.box) : 'null'} painted=${painted} data-gnosis-state=${before ? before.state : '?'} version=${before ? before.version : '?'} subsystems=${JSON.stringify(before ? before.subs : null)} text="${before ? before.text.slice(0, 200) : '?'}"; matchesLiveEngineReport(state+version+subsystemCensus)=${matchesEngine} (engine gnosis.status state=${engine ? engine.state : '?'} version=${engine ? engine.version : '?'}); CONTROL(no click 3 s) signatureStable=${controlStable} (sig ${JSON.stringify(s1)}); REAL click #gnosis-status-refresh path=${rb.path} (hit=${rb.rect ? rb.rect.hit : '?'}) → app-graph RE-ASSEMBLED=${refreshReassembled} (sig ${JSON.stringify(s3)}) which is the causal proof the click reached its handler → refreshStatus() → the live engine read → onChanged()/host.refresh(); repainted=${repainted} state=${after ? after.state : '?'} (a value delta is impossible here: the engine's HealthReport is invariant while the engine stays Ready); MCP invisibility: get_rendered_html(${htmlStr.length} chars) contains a status-pane marker=${statusInHtml}; list_targets contains "gnosis-status"=${statusInTargets}`, { path: rb.path, ok: painted && matchesEngine && controlStable && refreshReassembled && repainted && !statusInHtml && !statusInTargets, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-5: the docs-pane Update path (HC1) ----
@@ -4972,7 +6951,11 @@ const BLOCKS = {
     const graphIntact = nodesBefore === nodesAfter && nodesBefore === 4
     const textBefore = beforeGraph && beforeGraph.graph ? beforeGraph.graph.nodes.map((n) => n.value).join('|') : null
     const textAfter = afterGraph && afterGraph.graph ? afterGraph.graph.nodes.map((n) => n.value).join('|') : null
-    return parkRow('UF-GNOSIS-5', 'The docs-pane Update path does NOT blank the document content with an empty-graph placeholder (HC1: a real graph-edit surface is the truthful path)', 'D-state', 'the docs-pane renders NO Update control at all (W1-Q12 parked it deliberately), so the row has no drivable Update gesture', `enable=${JSON.stringify(en.flips)} expand=${exp.path}; rendered gnosis-documents controls=${JSON.stringify(st ? st.controls : null)} updateControlsInPane=${JSON.stringify(updateControl)}; the engine document is UNCHANGED by the whole pane drive: doc-1 graph nodes ${nodesBefore}->${nodesAfter} (graphIntact=${graphIntact}) values-identical=${textBefore === textAfter}; the empty-graph path is also unreachable over MCP: gnosis.document.update {graph:{nodes:[],edges:[]}} → ${JSON.stringify(emptyGraph).slice(0, 200)} (the shell-side edit-authority gate denies it BEFORE any engine wire call; the engine is left at revision ${afterGraph ? afterGraph.revision : '?'})`, { path: 'element-absent', surface: await ufSurfaceTarget(h) })
+    const ufGnosis5Evidence = `enable=${JSON.stringify(en.flips)} expand=${exp.path}; rendered gnosis-documents controls=${JSON.stringify(st ? st.controls : null)} updateControlsInPane=${JSON.stringify(updateControl)}; the engine document is UNCHANGED by the whole pane drive: doc-1 graph nodes ${nodesBefore}->${nodesAfter} (graphIntact=${graphIntact}) values-identical=${textBefore === textAfter}; the empty-graph path is also unreachable over MCP: gnosis.document.update {graph:{nodes:[],edges:[]}} → ${JSON.stringify(emptyGraph).slice(0, 200)} (the shell-side edit-authority gate denies it BEFORE any engine wire call; the engine is left at revision ${afterGraph ? afterGraph.revision : '?'})`
+    // §6.1 `H-4` — THE PARK CARRYING ITS OWN ROW: `evidence` is the STRING above
+    // (never an object, which printed `[object Object]` as the park's detail) and
+    // the §6.1 field set travels in the SIXTH slot, where `parkRow` reads it.
+    return parkRow('UF-GNOSIS-5', 'The docs-pane Update path does NOT blank the document content with an empty-graph placeholder (HC1: a real graph-edit surface is the truthful path)', 'D-state', 'the docs-pane renders NO Update control at all (W1-Q12 parked it deliberately), so the row has no drivable Update gesture', ufGnosis5Evidence, { path: 'element-absent', surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-6: the gnosis CRUD controls' reachability ----
@@ -5008,7 +6991,7 @@ const BLOCKS = {
     await sleep(2500)
     const s3 = await gnosisAssembleSig(h)
     const readRefreshReassembled = JSON.stringify(s2) !== JSON.stringify(s3)
-    return rowResult('UF-GNOSIS-6', "Each gnosis CRUD action's UI control is present and performs a REAL engine wire call (create/get/list/delete/publish/unpublish/archive)", 'D-interaction', `enable=${JSON.stringify(en.flips)}; rendered controls present=${JSON.stringify(present)} allPresentExceptUpdate=${allPresent} paintedBoxes=${JSON.stringify(boxes)} allPainted=${allPainted} → the delete/publish/unpublish/archive controls are NOT in the rendered DOM because they are conditionally rendered only when a document is SELECTED, and the selection seam is a no-op (below); the Update control is absent by design (HC1); REAL click on the wiki li in gnosis-documents → app-graph reassembled=${selectReassembled} (FALSE ⇒ the pane's handler seam did nothing: no gnosis.document.list wire call); REAL click #gnosis-documents-refresh → reassembled=${readRefreshReassembled} (FALSE ⇒ no gnosis.wiki.list wire call either); the ONLY live engine reads came from the host's BOOT path, not from any control: gnosis-wikis li[data-wiki-id=wiki-0]="${w && w.lis[0] ? w.lis[0].text : '?'}" and the gnosis-documents wiki selector li="${d && d.lis[0] ? d.lis[0].text : '?'}" readVerbsReachedEngine(boot-sourced)=${readVerbsReachedEngine}; MUTATING verbs over the SAME MCP handler: gnosis.document.delete {callerId:'operator'} → ${JSON.stringify(engineDeletes).slice(0, 130)}; gnosis.document.create {callerId:'operator'} → ${JSON.stringify(engineCreates).slice(0, 130)}; doc-1 survived=${!!(docStill && docStill.documentId)} (the mutating half is ALSO gated fail-closed: this app instance was booted without PROVIDENT_OPERATOR_CREDENTIAL, so the shell-side AuthorityStore denies before any engine wire call)`, { path: rf.path === 'cdp' ? 'cdp' : rf.path, ok: allPresent && allPainted && selectReassembled && readRefreshReassembled, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-6',dclass:'D-interaction'}, "Each gnosis CRUD action's UI control is present and performs a REAL engine wire call (create/get/list/delete/publish/unpublish/archive)", `enable=${JSON.stringify(en.flips)}; rendered controls present=${JSON.stringify(present)} allPresentExceptUpdate=${allPresent} paintedBoxes=${JSON.stringify(boxes)} allPainted=${allPainted} → the delete/publish/unpublish/archive controls are NOT in the rendered DOM because they are conditionally rendered only when a document is SELECTED, and the selection seam is a no-op (below); the Update control is absent by design (HC1); REAL click on the wiki li in gnosis-documents → app-graph reassembled=${selectReassembled} (FALSE ⇒ the pane's handler seam did nothing: no gnosis.document.list wire call); REAL click #gnosis-documents-refresh → reassembled=${readRefreshReassembled} (FALSE ⇒ no gnosis.wiki.list wire call either); the ONLY live engine reads came from the host's BOOT path, not from any control: gnosis-wikis li[data-wiki-id=wiki-0]="${w && w.lis[0] ? w.lis[0].text : '?'}" and the gnosis-documents wiki selector li="${d && d.lis[0] ? d.lis[0].text : '?'}" readVerbsReachedEngine(boot-sourced)=${readVerbsReachedEngine}; MUTATING verbs over the SAME MCP handler: gnosis.document.delete {callerId:'operator'} → ${JSON.stringify(engineDeletes).slice(0, 130)}; gnosis.document.create {callerId:'operator'} → ${JSON.stringify(engineCreates).slice(0, 130)}; doc-1 survived=${!!(docStill && docStill.documentId)} (the mutating half is ALSO gated fail-closed: this app instance was booted without PROVIDENT_OPERATOR_CREDENTIAL, so the shell-side AuthorityStore denies before any engine wire call)`, { path: rf.path === 'cdp' ? 'cdp' : rf.path, ok: allPresent && allPainted && selectReassembled && readRefreshReassembled, surface: await ufSurfaceTarget(h) })
   },
 
   // =========================================================================
@@ -5029,7 +7012,7 @@ const BLOCKS = {
     const surface = await ufSurfaceTarget(h)
     const st = await ufEditSurfaceState(h)
     if (!st.present || st.blockCount < 2) {
-      return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects from a position in one paragraph/block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', 'D-interaction', `no usable surface: present=${st.present} blockCount=${st.blockCount}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })} — a document whose head element CONTAINS its children renders as ONE block root, so no corpora in this store presents the 2-block surface this item needs`, { path: 'missing', ok: false, surface })
+      return rowResult({row:'U-EDIT-1-LIVE-1',dclass:'D-interaction'}, 'A real hit-tested drag selects from a position in one paragraph/block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', `no usable surface: present=${st.present} blockCount=${st.blockCount}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })} — a document whose head element CONTAINS its children renders as ONE block root, so no corpora in this store presents the 2-block surface this item needs`, { path: 'missing', ok: false, surface })
     }
     // Two adjacent block children that BOTH have a hit-testable slice in the
     // viewport (the drag's two endpoints must be real coordinates).
@@ -5052,7 +7035,7 @@ const BLOCKS = {
       pick = await h.cdp.evaluate(pickSrc)
     }
     if (!pick) {
-      return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects across two block elements of the ONE contenteditable root', 'D-interaction', `no two adjacent blocks have a >=24px hit-testable slice in the ${await h.cdp.evaluate('window.innerHeight')}px viewport: ${JSON.stringify(st.blocks)}`, { path: 'zero-box', ok: false, surface })
+      return rowResult({row:'U-EDIT-1-LIVE-1',dclass:'D-interaction'}, 'A real hit-tested drag selects across two block elements of the ONE contenteditable root', `no two adjacent blocks have a >=24px hit-testable slice in the ${await h.cdp.evaluate('window.innerHeight')}px viewport: ${JSON.stringify(st.blocks)}`, { path: 'zero-box', ok: false, surface })
     }
     await h.cdp.evaluate(`window.getSelection().removeAllRanges()`)
     // the start point: inside block A; the end point: inside block B
@@ -5073,8 +7056,7 @@ const BLOCKS = {
     const caret = await ufCaret(h)
     const spanOk = caret && !caret.none && caret.rangeCount === 1 && caret.collapsed === false &&
       caret.startBlock != null && caret.endBlock != null && caret.startBlock !== caret.endBlock && caret.insideSurface === true
-    return rowResult('U-EDIT-1-LIVE-1', 'A real hit-tested drag selects from a position in one block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', 'D-interaction',
-      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount} ${JSON.stringify(st.blocks.slice(0, 4))}; picked adjacent pair i=${pick.i} ${pick.aTag}#${pick.aRid} box=${JSON.stringify(pick.aBox)} -> ${pick.bTag}#${pick.bRid} box=${JSON.stringify(pick.bBox)}; drag (${x},${y1}) hit=${hit1} -> (${x2},${y2}) hit=${hit2}; Selection after the drag: ${JSON.stringify(caret)}; ONE range whose startContainer(${caret ? caret.startContainer : '?'}) and endContainer(${caret ? caret.endContainer : '?'}) are different blocks of the same root=${spanOk}`,
+    return rowResult({row:'U-EDIT-1-LIVE-1',dclass:'D-interaction'}, 'A real hit-tested drag selects from a position in one block to a position in the next; the Selection has ONE range whose start/end containers are DIFFERENT block elements of the SAME contenteditable root', `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount} ${JSON.stringify(st.blocks.slice(0, 4))}; picked adjacent pair i=${pick.i} ${pick.aTag}#${pick.aRid} box=${JSON.stringify(pick.aBox)} -> ${pick.bTag}#${pick.bRid} box=${JSON.stringify(pick.bBox)}; drag (${x},${y1}) hit=${hit1} -> (${x2},${y2}) hit=${hit2}; Selection after the drag: ${JSON.stringify(caret)}; ONE range whose startContainer(${caret ? caret.startContainer : '?'}) and endContainer(${caret ? caret.endContainer : '?'}) are different blocks of the same root=${spanOk}`,
       { path: 'cdp', ok: spanOk, surface })
   },
 
@@ -5087,7 +7069,7 @@ const BLOCKS = {
     const surface = await ufSurfaceTarget(h)
     const before = await ufEditSurfaceState(h)
     if (!before.present || before.blockCount < 2) {
-      return rowResult('U-EDIT-1-LIVE-2', 'ArrowDown from the end of the doc-head lands the caret in the body block (ArrowUp returns it), with the surface element identity and box UNCHANGED across both movements', 'D-interaction', `no usable surface: ${JSON.stringify({ present: before.present, blocks: before.blockCount })}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })}`, { path: 'missing', ok: false, surface })
+      return rowResult({row:'U-EDIT-1-LIVE-2',dclass:'D-interaction'}, 'ArrowDown from the end of the doc-head lands the caret in the body block (ArrowUp returns it), with the surface element identity and box UNCHANGED across both movements', `no usable surface: ${JSON.stringify({ present: before.present, blocks: before.blockCount })}; fixture search=${JSON.stringify({ docId: fixture.docId, tried: fixture.tried, noMultiBlock: fixture.noMultiBlock === true })}`, { path: 'missing', ok: false, surface })
     }
     const placed = await ufCaretAt(h, 0)
     await sleep(250)
@@ -5109,8 +7091,7 @@ const BLOCKS = {
     const upBackIntoHead = !!(selUp && !selUp.none && selUp.startBlock === (sel0 ? sel0.startBlock : '?'))
     const identityStable = before.identityToken === mid.identityToken && mid.identityToken === after.identityToken
     const boxStable = JSON.stringify(before.box) === JSON.stringify(after.box)
-    return rowResult('U-EDIT-1-LIVE-2', 'ArrowDown from the end of the doc-head lands the caret inside the body block, ArrowUp returns it into the head, and the surface element identity+box are UNCHANGED across both (no re-mount)', 'D-interaction',
-      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${before.marker} blocks=${JSON.stringify(before.blocks.map((b) => `${b.tag}#${b.rid}`))} box=${JSON.stringify(before.box)}; caret placed in block 0: ${JSON.stringify(placed)} => ${JSON.stringify(sel0)}; after REAL ArrowDown: ${JSON.stringify(selDown)} (moved into the body=${downIntoBody}); after REAL ArrowUp: ${JSON.stringify(selUp)} (returned to the head=${upBackIntoHead}); surface identity token before/down/up = ${idBefore} / ${mid.identityToken} / ${after.identityToken} unchanged=${identityStable}; box ${JSON.stringify(before.box)} -> ${JSON.stringify(after.box)} unchanged=${boxStable}`,
+    return rowResult({row:'U-EDIT-1-LIVE-2',dclass:'D-interaction'}, 'ArrowDown from the end of the doc-head lands the caret inside the body block, ArrowUp returns it into the head, and the surface element identity+box are UNCHANGED across both (no re-mount)', `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${before.marker} blocks=${JSON.stringify(before.blocks.map((b) => `${b.tag}#${b.rid}`))} box=${JSON.stringify(before.box)}; caret placed in block 0: ${JSON.stringify(placed)} => ${JSON.stringify(sel0)}; after REAL ArrowDown: ${JSON.stringify(selDown)} (moved into the body=${downIntoBody}); after REAL ArrowUp: ${JSON.stringify(selUp)} (returned to the head=${upBackIntoHead}); surface identity token before/down/up = ${idBefore} / ${mid.identityToken} / ${after.identityToken} unchanged=${identityStable}; box ${JSON.stringify(before.box)} -> ${JSON.stringify(after.box)} unchanged=${boxStable}`,
       { path: 'cdp', ok: downIntoBody && upBackIntoHead && identityStable && boxStable, surface })
   },
 
@@ -5122,7 +7103,7 @@ const BLOCKS = {
     const fixture = await ufEnsureEditFixture(h)
     const surface = await ufSurfaceTarget(h)
     const st = await ufEditSurfaceState(h)
-    if (!st.present) return rowResult('U-EDIT-1-LIVE-7', 'A real typed edit in one block, blurred, commits to the store in ONE batch and the store read-back and rendered DOM AGREE; an unrelated block is unchanged', 'D-state', `no page-edit-surface in the stage: fixture=${JSON.stringify({ docId: fixture.docId, import: fixture.import, bridge: fixture.bridge, tab: fixture.tab, active: fixture.active, surface: fixture.surface })}`, { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, 'A real typed edit in one block, blurred, commits to the store in ONE batch and the store read-back and rendered DOM AGREE; an unrelated block is unchanged', `no page-edit-surface in the stage: fixture=${JSON.stringify({ docId: fixture.docId, import: fixture.import, bridge: fixture.bridge, tab: fixture.tab, active: fixture.active, surface: fixture.surface })}`, { path: 'missing', ok: false, surface })
     const documentId = st.marker
     const journalPre = await h.mcpTool(h.mcp, 'provident.get_journal', {}).catch(() => null)
     const journalBefore = journalPre && typeof journalPre.undoDepth === 'number' ? journalPre.undoDepth : 0
@@ -5152,8 +7133,7 @@ const BLOCKS = {
       ? { entries: journal.entries.length, batches: journal.entries.filter((e) => e && e.kind === 'batch').length, kindCounts: journal.entries.reduce((a, e) => { const k = (e && e.kind) || '?'; a[k] = (a[k] || 0) + 1; return a }, {}) }
       : null
     const ok = typed.hasMarker && storeChanged && storeHasMarker && domHasMarker && !blur.warning
-    return rowResult('U-EDIT-1-LIVE-7', 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged', 'D-state',
-      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind})`,
+    return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged', `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind})`,
       { path: 'cdp', ok, surface })
   },
 
@@ -5169,8 +7149,8 @@ const BLOCKS = {
     // adopted decomposer's closed node-type set
     const failDoc = await ufOpenDocumentById(h, '.live-corpus/alpha')
     const stFail = await ufEditSurfaceState(h)
-    if (!stFail.present) return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning', 'D-visual', `no surface on the failure fixture ${JSON.stringify(failDoc)}`, { path: 'missing', ok: false, surface })
-    if (!st.present) return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning (the tab/stage warning class) that SURVIVES a re-derive, and the store read-back is unchanged', 'D-visual', 'no page-edit-surface in the stage', { path: 'missing', ok: false, surface })
+    if (!stFail.present) return rowResult({row:'U-EDIT-1-LIVE-3',dclass:'D-visual'}, 'A FAILED page commit surfaces a PAINTED typed warning', `no surface on the failure fixture ${JSON.stringify(failDoc)}`, { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-3',dclass:'D-visual'}, 'A FAILED page commit surfaces a PAINTED typed warning (the tab/stage warning class) that SURVIVES a re-derive, and the store read-back is unchanged', 'no page-edit-surface in the stage', { path: 'missing', ok: false, surface })
     const stUse = stFail
     const documentId = stUse.marker
     const before = JSON.stringify(await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch((e) => ({ __error: String(e) })))
@@ -5192,8 +7172,7 @@ const BLOCKS = {
     const reassembled = JSON.stringify(reassemble) !== JSON.stringify(reassemble2)
     const warningSurvives = census2.warnings.length === 1 && census2.warnings[0].box[2] > 0 && census2.warnings[0].box[3] > 0
     const ok = blur.warning === true && blur.warningPainted === true && warningSurvives && storeUnchanged && census2.byId === 1 && census2.agree === true
-    return rowResult('U-EDIT-1-LIVE-3', 'A FAILED page commit surfaces a PAINTED typed warning (the `TAB-1` class / the stage warning) and that warning SURVIVES a real re-derive, with the store read-back UNCHANGED', 'D-visual',
-      `failure fixture=${JSON.stringify(failDoc)}; documentId=${documentId}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} PAINTED box=${JSON.stringify(blur.warningBox)} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; the real re-derive seam ('gnosisStatus()' -> the pane host's 'onChanged()' -> 'host.refresh()') called=${gs.called} app-graph re-assembled=${reassembled} (node ids ${JSON.stringify(reassemble)} -> ${JSON.stringify(reassemble2)}); warning census AFTER the re-derive=${JSON.stringify(census2.warnings)} (present+painted=${warningSurvives}); surface census after=${census2.byId}/${census2.byMarker} agree=${census2.agree} marker=${st2.marker} (pre-derive warning census ${JSON.stringify(census1.warnings)})`,
+    return rowResult({row:'U-EDIT-1-LIVE-3',dclass:'D-visual'}, 'A FAILED page commit surfaces a PAINTED typed warning (the `TAB-1` class / the stage warning) and that warning SURVIVES a real re-derive, with the store read-back UNCHANGED', `failure fixture=${JSON.stringify(failDoc)}; documentId=${documentId}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} PAINTED box=${JSON.stringify(blur.warningBox)} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; the real re-derive seam ('gnosisStatus()' -> the pane host's 'onChanged()' -> 'host.refresh()') called=${gs.called} app-graph re-assembled=${reassembled} (node ids ${JSON.stringify(reassemble)} -> ${JSON.stringify(reassemble2)}); warning census AFTER the re-derive=${JSON.stringify(census2.warnings)} (present+painted=${warningSurvives}); surface census after=${census2.byId}/${census2.byMarker} agree=${census2.agree} marker=${st2.marker} (pre-derive warning census ${JSON.stringify(census1.warnings)})`,
       { path: 'cdp', ok, surface })
   },
 
@@ -5230,8 +7209,7 @@ const BLOCKS = {
     const paintedOk = mdPlain && mdMono && mdEditable
     const toggled = before.mode !== md.mode && md.mode === 'markdown' && back.mode === before.mode
     const ok = toggled && paintedOk && md.textareas === 0 && back.textareas === 0
-    return rowResult('U-EDIT-1-LIVE-4', 'A real click on the representation control puts the stage in markdown mode: PLAIN TEXT rendered (0 inline-formatting elements, 0 headings at heading scale), a monospace family, the surface still contenteditable, and 0 <textarea> in either mode', 'D-visual',
-      `REAL click #editor-toolbar-toggle path=${c1.path} (hit=${c1.rect ? c1.rect.hit : '?'}); before=${JSON.stringify({ mode: before.mode, toolbar: before.toolbarText, ff: before.surfaceFont, inline: before.inline, headings: before.headings, sizes: before.headingSizes, ce: before.contenteditable, textareas: before.textareas, pre: before.pre })}; after toggle 1=${JSON.stringify({ mode: md.mode, toolbar: md.toolbarText, ff: md.surfaceFont, bodyFf: md.bodyFont, inline: md.inline, headings: md.headings, sizes: md.headingSizes, ce: md.contenteditable, textareas: md.textareas, pre: md.pre })}; after toggle 2 (REAL click path=${c2.path})=${JSON.stringify({ mode: back.mode, ff: back.surfaceFont, inline: back.inline, headings: back.headings, ce: back.contenteditable, textareas: back.textareas })}; markdown-mode PLAIN TEXT (inline=0 AND headings=0)=${mdPlain}; monospace family=${mdMono}; still contenteditable=${mdEditable}; toggled html->markdown->html=${toggled}; zero-textarea in BOTH modes=${md.textareas === 0 && back.textareas === 0} (global textarea census now ${md.globalTextareas})`,
+    return rowResult({row:'U-EDIT-1-LIVE-4',dclass:'D-visual'}, 'A real click on the representation control puts the stage in markdown mode: PLAIN TEXT rendered (0 inline-formatting elements, 0 headings at heading scale), a monospace family, the surface still contenteditable, and 0 <textarea> in either mode', `REAL click #editor-toolbar-toggle path=${c1.path} (hit=${c1.rect ? c1.rect.hit : '?'}); before=${JSON.stringify({ mode: before.mode, toolbar: before.toolbarText, ff: before.surfaceFont, inline: before.inline, headings: before.headings, sizes: before.headingSizes, ce: before.contenteditable, textareas: before.textareas, pre: before.pre })}; after toggle 1=${JSON.stringify({ mode: md.mode, toolbar: md.toolbarText, ff: md.surfaceFont, bodyFf: md.bodyFont, inline: md.inline, headings: md.headings, sizes: md.headingSizes, ce: md.contenteditable, textareas: md.textareas, pre: md.pre })}; after toggle 2 (REAL click path=${c2.path})=${JSON.stringify({ mode: back.mode, ff: back.surfaceFont, inline: back.inline, headings: back.headings, ce: back.contenteditable, textareas: back.textareas })}; markdown-mode PLAIN TEXT (inline=0 AND headings=0)=${mdPlain}; monospace family=${mdMono}; still contenteditable=${mdEditable}; toggled html->markdown->html=${toggled}; zero-textarea in BOTH modes=${md.textareas === 0 && back.textareas === 0} (global textarea census now ${md.globalTextareas})`,
       { path: c1.path === 'cdp' ? 'cdp' : c1.path, ok, surface })
   },
 
@@ -5243,7 +7221,7 @@ const BLOCKS = {
     const ensured = await ufEnsureDocumentSurface(h)
     const surface = await ufSurfaceTarget(h)
     const st = await ufEditSurfaceState(h)
-    if (!st.present) return rowResult('U-EDIT-1-LIVE-5', 'The doc-head and the first paragraph are SIBLINGS (the paragraph is not a descendant of the head) at body scale; the RENDERED stage carries ZERO <textarea> in both representation modes and after a re-derive', 'D-visual', 'no page-edit-surface', { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-5',dclass:'D-visual'}, 'The doc-head and the first paragraph are SIBLINGS (the paragraph is not a descendant of the head) at body scale; the RENDERED stage carries ZERO <textarea> in both representation modes and after a re-derive', 'no page-edit-surface', { path: 'missing', ok: false, surface })
     const split = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
       const head=s.querySelector('[data-doc-head]')||s.querySelector('h1');
       if(!head)return {head:false};
@@ -5276,8 +7254,7 @@ const BLOCKS = {
       typeof split.pFont === 'number' && split.headFont > split.pFont
     const censusOk = mdCensus.stageTextareas === 0 && reCensus.stageTextareas === 0 && backCensus.stageTextareas === 0 &&
       mdCensus.global === 0 && reCensus.global === 0 && backCensus.global === 0
-    return rowResult('U-EDIT-1-LIVE-5', 'The doc-head and the first paragraph are SIBLINGS (the paragraph is NOT a descendant of the head) and the paragraph paints at BODY scale; the RENDERED stage carries ZERO <textarea> in markdown mode, after a real re-derive, and back in html mode', 'D-visual',
-      `doc-head split: ${JSON.stringify(split)} => paragraph inside the head=${split.pInsideHead} sibling of the head=${split.pSiblingOfHead} head font-size=${split.headFont}px vs paragraph ${split.pFont}px (head > body scale=${split.headFont > split.pFont}); RENDERED <textarea> census in #zone:main: markdown mode=${JSON.stringify(mdCensus)} after the real re-derive=${JSON.stringify(reCensus)} (gnosisStatus called=${gs.called}) back in html mode=${JSON.stringify(backCensus)}`,
+    return rowResult({row:'U-EDIT-1-LIVE-5',dclass:'D-visual'}, 'The doc-head and the first paragraph are SIBLINGS (the paragraph is NOT a descendant of the head) and the paragraph paints at BODY scale; the RENDERED stage carries ZERO <textarea> in markdown mode, after a real re-derive, and back in html mode', `doc-head split: ${JSON.stringify(split)} => paragraph inside the head=${split.pInsideHead} sibling of the head=${split.pSiblingOfHead} head font-size=${split.headFont}px vs paragraph ${split.pFont}px (head > body scale=${split.headFont > split.pFont}); RENDERED <textarea> census in #zone:main: markdown mode=${JSON.stringify(mdCensus)} after the real re-derive=${JSON.stringify(reCensus)} (gnosisStatus called=${gs.called}) back in html mode=${JSON.stringify(backCensus)}`,
       { path: c1.path === 'cdp' ? 'cdp' : c2.path, ok: splitOk && censusOk, surface })
   },
 
@@ -5289,7 +7266,7 @@ const BLOCKS = {
     const fixture = await ufEnsureEditFixture(h)
     const surface = await ufSurfaceTarget(h)
     const st = await ufEditSurfaceState(h)
-    if (!st.present) return rowResult('U-EDIT-1-LIVE-8', 'The page-scoped caret survives a page commit + a real re-derive: after typing in a block, blurring and re-deriving, the caret is still a live Range inside the SAME contenteditable surface', 'D-state', 'no page-edit-surface', { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-8',dclass:'D-state'}, 'The page-scoped caret survives a page commit + a real re-derive: after typing in a block, blurring and re-deriving, the caret is still a live Range inside the SAME contenteditable surface', 'no page-edit-surface', { path: 'missing', ok: false, surface })
     const placed = await ufCaretAt(h, st.blockCount > 1 ? st.blockCount - 1 : 0)
     await ufType(h, `CARE${Date.now() % 1000}`)
     const afterType = await ufCaret(h)
@@ -5301,8 +7278,7 @@ const BLOCKS = {
     const st2 = await ufEditSurfaceState(h)
     const ok = !!(afterDerive && afterDerive.none === false && afterDerive.rangeCount === 1 && afterDerive.insideSurface === true) &&
       st2.present === true && st2.marker === st.marker
-    return rowResult('U-EDIT-1-LIVE-8', 'The caret round-trip: a caret placed in a block, a typed edit, the page-commit blur and a real re-derive leave a LIVE Range inside the same contenteditable surface (the page subject is the ACTIVE TAB id, so the caret is not dropped by the re-derive)', 'D-state',
-      `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount}; caret placed at block ${st.blockCount > 1 ? st.blockCount - 1 : 0}: ${JSON.stringify(placed)}; after the REAL typed edit: ${JSON.stringify(afterType)}; after the REAL blur (page commit => warning=${blur.warning} kind=${blur.warningKind}): ${JSON.stringify(afterBlur)}; the real re-derive ('gnosisStatus()' called=${gs.called}) => caret ${JSON.stringify(afterDerive)} surface still present=${st2.present} marker=${st2.marker}`,
+    return rowResult({row:'U-EDIT-1-LIVE-8',dclass:'D-state'}, 'The caret round-trip: a caret placed in a block, a typed edit, the page-commit blur and a real re-derive leave a LIVE Range inside the same contenteditable surface (the page subject is the ACTIVE TAB id, so the caret is not dropped by the re-derive)', `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; surface marker=${st.marker} blocks=${st.blockCount}; caret placed at block ${st.blockCount > 1 ? st.blockCount - 1 : 0}: ${JSON.stringify(placed)}; after the REAL typed edit: ${JSON.stringify(afterType)}; after the REAL blur (page commit => warning=${blur.warning} kind=${blur.warningKind}): ${JSON.stringify(afterBlur)}; the real re-derive ('gnosisStatus()' called=${gs.called}) => caret ${JSON.stringify(afterDerive)} surface still present=${st2.present} marker=${st2.marker}`,
       { path: 'cdp', ok, surface })
   },
 
@@ -5333,12 +7309,18 @@ const BLOCKS = {
       }
     }
     if (!tableDoc) {
+      // §6.1 `H-4` — THE PARK'S OWN ROW: the reason and the evidence are the two
+      // STRINGS below (the object this site used to hand over in the `evidence`
+      // slot printed as `[object Object]`), and the `surface`/`realInput` reading
+      // the object carried travels in `opts`, the SIXTH slot — where `parkRow`
+      // actually reads a §6.1 field set, and where it used to be dropped.
       return parkRow('U-EDIT-1-LIVE-6', 'The package-adoption evidence: a stored TABLE makes the page commit REFUSE (typed) rather than flattening the stored td/th/tr nodes', 'D-state',
         `NO document in this store renders a table on its page-edit surface (candidates tried: ${JSON.stringify(candidates)} + up to 12 of rag.list_documents) — the row's precondition cannot be met in this corpus, so it is PARKED with this reason (never a silent pass and never a fabricated refusal)`,
-        { row: 'U-EDIT-1-LIVE-6', assertion: 'table-adoption refusal (precondition unmet)', dclass: 'D-state', realInput: false, evidence: '', proxyPASS: false, surface })
+        'no table-rendering document was reachable in this corpus (the row\'s precondition is unmet, not its assertion)',
+        { path: 'missing', ok: false, surface, required: 'a document whose page-edit surface renders a stored <table> (td/th/tr nodes present)', observed: 'no such document in this store\'s corpus' })
     }
     const st = await ufEditSurfaceState(h)
-    if (!st.present) return rowResult('U-EDIT-1-LIVE-6', 'A stored table element is REFUSED (typed `decompose-failed`) by the adopted decomposer rather than flattened/retyped, and the stored table nodes are byte-unchanged after the refused commit', 'D-state', `no page-edit-surface after opening the table fixture ${JSON.stringify(tableDoc)}`, { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'U-EDIT-1-LIVE-6',dclass:'D-state'}, 'A stored table element is REFUSED (typed `decompose-failed`) by the adopted decomposer rather than flattened/retyped, and the stored table nodes are byte-unchanged after the refused commit', `no page-edit-surface after opening the table fixture ${JSON.stringify(tableDoc)}`, { path: 'missing', ok: false, surface })
     const documentId = st.marker
     const tableCensus = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');
       const tables=[...s.querySelectorAll('table')];
@@ -5353,8 +7335,7 @@ const BLOCKS = {
     const tableStill = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?s.querySelectorAll('table').length:null})()`)
     const refused = blur.warning === true && typeof blur.warningKind === 'string' && blur.warningKind.length > 0
     const ok = refused && storeUnchanged && tableStill === tableCensus.tables && tableCensus.tds > 0
-    return rowResult('U-EDIT-1-LIVE-6', 'The package-adoption evidence: a stored TABLE on the surface makes the page commit REFUSE with a typed failure (never flatten/retype the stored td/th/tr nodes), the warning is visible, and the store + the rendered table are unchanged', 'D-state',
-      `table fixture=${JSON.stringify(tableDoc)}; documentId=${documentId}; rendered table census on the surface=${JSON.stringify(tableCensus)}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; rendered tables after the refused commit=${tableStill} (census-preserved=${tableStill === tableCensus.tables}); note: the refusal path is the ADAPTER's recorded capability gap (provident-editable has no table/thead/tr/td/th node type)`,
+    return rowResult({row:'U-EDIT-1-LIVE-6',dclass:'D-state'}, 'The package-adoption evidence: a stored TABLE on the surface makes the page commit REFUSE with a typed failure (never flatten/retype the stored td/th/tr nodes), the warning is visible, and the store + the rendered table are unchanged', `table fixture=${JSON.stringify(tableDoc)}; documentId=${documentId}; rendered table census on the surface=${JSON.stringify(tableCensus)}; typed edit + REAL blur => warning present=${blur.warning} kind=${blur.warningKind} class=${blur.warningClass} painted=${blur.warningPainted} text="${blur.warningText}"; store read-back unchanged=${storeUnchanged}; rendered tables after the refused commit=${tableStill} (census-preserved=${tableStill === tableCensus.tables}); note: the refusal path is the ADAPTER's recorded capability gap (provident-editable has no table/thead/tr/td/th node type)`,
       { path: 'cdp', ok, surface })
   },
 
@@ -5383,8 +7364,7 @@ const BLOCKS = {
     const docHead = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const h=m?m.querySelector('[data-doc-head]'):null;return h?h.getAttribute('data-rag-node-id')||h.id:null})()`)
     const markerInTargets = v.editSurface == null ? null : tStr.includes(`rag-${v.editSurface}`)
     const ok = censusOk && identityOk && paintedOk
-    return rowResult('UF-STAGE-AT-1', 'The stage region carries exactly ONE live `#page-edit-surface` iff a document tab is active (else ZERO), the two discriminators agree, and the marker equals the active document id', 'D-visual',
-      `activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; census over the stage region: byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)} boxes=${JSON.stringify(census.boxes)} painted=${census.painted}; OTHER authored roots live in the stage (recorded, non-gating here): commit-warning census=${census.warnings.length} ${JSON.stringify(census.warnings)}; expected surface census for this active kind=${expect} => ${censusOk}; marker==documentId: marker=${v.editSurface} stage doc-head rid=${docHead} rendered-graph targets carry rag-${v.editSurface}=${markerInTargets}; identityOk=${identityOk}`,
+    return rowResult({row:'UF-STAGE-AT-1',dclass:'D-visual'}, 'The stage region carries exactly ONE live `#page-edit-surface` iff a document tab is active (else ZERO), the two discriminators agree, and the marker equals the active document id', `activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; census over the stage region: byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)} boxes=${JSON.stringify(census.boxes)} painted=${census.painted}; OTHER authored roots live in the stage (recorded, non-gating here): commit-warning census=${census.warnings.length} ${JSON.stringify(census.warnings)}; expected surface census for this active kind=${expect} => ${censusOk}; marker==documentId: marker=${v.editSurface} stage doc-head rid=${docHead} rendered-graph targets carry rag-${v.editSurface}=${markerInTargets}; identityOk=${identityOk}`,
       { path: 'not-gesture', gesture: false, ok, surface })
   },
 
@@ -5395,7 +7375,7 @@ const BLOCKS = {
     const surface = await ufSurfaceTarget(h)
     const before = await ufStageVerdict(h)
     const st = await ufEditSurfaceState(h)
-    if (!st.present) return rowResult('UF-STAGE-AT-2', 'A document tab paints ITS document: the active document tab is active, stageKind=document, and `data-edit-surface` equals the rendered document id', 'D-state', `no surface: activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}`, { path: 'missing', ok: false, surface })
+    if (!st.present) return rowResult({row:'UF-STAGE-AT-2',dclass:'D-state'}, 'A document tab paints ITS document: the active document tab is active, stageKind=document, and `data-edit-surface` equals the rendered document id', `no surface: activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}`, { path: 'missing', ok: false, surface })
     // a REAL click on a doc-nav row for a DIFFERENT document opens ITS tab
     const rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#pane-doc-nav [data-document-id]')].map((li)=>({doc:li.getAttribute('data-document-id'),box:(()=>{const r=li.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})()})))()`)
     const other = rows.find((r) => r.doc !== st.marker && r.box[2] > 0 && r.box[3] > 0)
@@ -5417,8 +7397,7 @@ const BLOCKS = {
     const headOwned = (await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const h=m?m.querySelector('[data-doc-head]'):null;return h?h.getAttribute('data-rag-node-id')||h.id:null})()`)) || ''
     const headMatchesMarker = after.editSurface != null && headOwned.startsWith(after.editSurface + ':')
     const ok = matches && painted && headMatchesMarker && markerInGraph !== false && (other ? click.path === 'cdp' : true)
-    return rowResult('UF-STAGE-AT-2', 'A document tab paints ITS document: after a real doc-nav row click the active tab is a document tab, stageKind is document, exactly one surface is live and its `data-edit-surface` equals the ACTIVE document id', 'D-state',
-      `ensured a document tab is active: ${JSON.stringify(ensured)}; before: activeTabId=${before.activeTabId} kind=${before.activeTabKind} stageKind=${before.stageKind} marker=${before.editSurface} tabs=${JSON.stringify(before.tabIds)}; doc-nav rows=${rows.length} picked=${other ? other.doc : 'none'} REAL click path=${click.path} (hit=${click.rect ? click.rect.hit : '?'}); after: activeTabId=${after.activeTabId} kind=${after.activeTabKind} stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} surfaceCensus=${after.surfaceCensus} markersAgree=${after.markersAgree} marker=${after.editSurface} box=${JSON.stringify(st2.box)} painted=${painted} tabCount=${after.tabCount} tabs=${JSON.stringify(after.tabIds)}; IDENTITY: the rendered graph carries a rag-${after.editSurface} root=${markerInGraph}; the stage doc-head rid="${headOwned}" starts with "<marker>:"=${headMatchesMarker}`,
+    return rowResult({row:'UF-STAGE-AT-2',dclass:'D-state'}, 'A document tab paints ITS document: after a real doc-nav row click the active tab is a document tab, stageKind is document, exactly one surface is live and its `data-edit-surface` equals the ACTIVE document id', `ensured a document tab is active: ${JSON.stringify(ensured)}; before: activeTabId=${before.activeTabId} kind=${before.activeTabKind} stageKind=${before.stageKind} marker=${before.editSurface} tabs=${JSON.stringify(before.tabIds)}; doc-nav rows=${rows.length} picked=${other ? other.doc : 'none'} REAL click path=${click.path} (hit=${click.rect ? click.rect.hit : '?'}); after: activeTabId=${after.activeTabId} kind=${after.activeTabKind} stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} surfaceCensus=${after.surfaceCensus} markersAgree=${after.markersAgree} marker=${after.editSurface} box=${JSON.stringify(st2.box)} painted=${painted} tabCount=${after.tabCount} tabs=${JSON.stringify(after.tabIds)}; IDENTITY: the rendered graph carries a rag-${after.editSurface} root=${markerInGraph}; the stage doc-head rid="${headOwned}" starts with "<marker>:"=${headMatchesMarker}`,
       { path: click.path === 'cdp' ? 'cdp' : 'missing', ok, surface })
   },
 
@@ -5446,8 +7425,7 @@ const BLOCKS = {
     const ok = newTab && v.stageMatchesActiveTab === true && v.stageKind === 'search' &&
       stageRead.searchStage === true && stageRead.painted === true &&
       census.byId === 0 && census.byMarker === 0 && stageRead.documentBody === false
-    return rowResult('UF-DEFECT-7', '"Open in a tab" creates a tab whose stage shows the SEARCH view (its search input painted in `#zone:main`), NOT the already-open document body; zero edit surfaces while the search tab is active', 'D-interaction',
-      `REAL click #pane-search-expand-tab path=${ex.path} (hit=${ex.hit}); tabs ${before.tabCount}->${v.tabCount} (newTab=${newTab}); ACTIVE tab=${v.activeTabId} kind=${v.activeTabKind} vs stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; the search stage: present=${stageRead.searchStage} input=${stageRead.searchInput} PAINTED box=${JSON.stringify(stageRead.searchStageBox)} painted=${stageRead.painted} text="${stageRead.searchStageText}"; document body in the stage=${stageRead.documentBody} (a foreign document body must NOT appear); surface census ${censusBefore.byId}->${census.byId} byMarker ${censusBefore.byMarker}->${census.byMarker} agree=${census.agree}; #zone:main text="${stageRead.mainText}"`,
+    return rowResult({row:'UF-DEFECT-7',dclass:'D-interaction'}, '"Open in a tab" creates a tab whose stage shows the SEARCH view (its search input painted in `#zone:main`), NOT the already-open document body; zero edit surfaces while the search tab is active', `REAL click #pane-search-expand-tab path=${ex.path} (hit=${ex.hit}); tabs ${before.tabCount}->${v.tabCount} (newTab=${newTab}); ACTIVE tab=${v.activeTabId} kind=${v.activeTabKind} vs stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab}; the search stage: present=${stageRead.searchStage} input=${stageRead.searchInput} PAINTED box=${JSON.stringify(stageRead.searchStageBox)} painted=${stageRead.painted} text="${stageRead.searchStageText}"; document body in the stage=${stageRead.documentBody} (a foreign document body must NOT appear); surface census ${censusBefore.byId}->${census.byId} byMarker ${censusBefore.byMarker}->${census.byMarker} agree=${census.agree}; #zone:main text="${stageRead.mainText}"`,
       { path: ex.path === 'cdp' ? 'cdp' : ex.path, ok, surface })
   },
 
@@ -5472,7 +7450,7 @@ const BLOCKS = {
     //       (no settle-scroll: the window is milliseconds wide)
     const docTabs = (await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds.filter((t) => t.kind === 'document')
     const switchTab = docTabs.length ? docTabs[docTabs.length - 1] : null
-    if (!switchTab) return rowResult('UF-STAGE-AT-3', 'The V1 race (real tab switch inside the async window)', 'D-interaction', `no document tab in the strip (tabs=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds)})`, { path: 'missing', ok: false, surface })
+    if (!switchTab) return rowResult({row:'UF-STAGE-AT-3',dclass:'D-interaction'}, 'The V1 race (real tab switch inside the async window)', `no document tab in the strip (tabs=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).tabIds)})`, { path: 'missing', ok: false, surface })
     const sw = await ufRealClickTab(h, switchTab.id, { scroll: false })
     await sleep(5000)
     const v = await ufStageVerdict(h)
@@ -5482,8 +7460,7 @@ const BLOCKS = {
     const ok = sw.path === 'cdp' && v.activeTabKind === 'document' && v.stageKind === 'document' &&
       v.stageMatchesActiveTab === true && noStaleSearch === true && st.present === true &&
       census.byId === 1 && census.agree === true && st.marker === v.editSurface
-    return rowResult('UF-STAGE-AT-3', 'The V1 race: with the search tab\'s own real `rag.query` in flight, a REAL tab-strip switch to a document tab lands the stage on the ACTIVE document tab — the stale search completion is discarded (no `#stage-search-tab`), one surface carries its marker', 'D-interaction',
-      `search-pane REAL drive (query typed+submitted)=${JSON.stringify({ toggle: pane.togglePath, focus: pane.focusPath, submit: pane.submitPath, rows: pane.rows.length })}; REAL click #pane-search-expand-tab path=${ex.path} (tabs ${ex.before.tabCount}->${ex.before.tabCount + 1}); the async window's tab is the SEARCH tab (tabs now=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).openIds)}); INSIDE the window: REAL tab-strip click on ${switchTab.id} path=${sw.path} (hit=${sw.rect ? sw.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} stale-search-stage-present=${!noStaleSearch} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker} box=${JSON.stringify(st.box)}; ensuredDocumentActive=${JSON.stringify(ensured)}`,
+    return rowResult({row:'UF-STAGE-AT-3',dclass:'D-interaction'}, 'The V1 race: with the search tab\'s own real `rag.query` in flight, a REAL tab-strip switch to a document tab lands the stage on the ACTIVE document tab — the stale search completion is discarded (no `#stage-search-tab`), one surface carries its marker', `search-pane REAL drive (query typed+submitted)=${JSON.stringify({ toggle: pane.togglePath, focus: pane.focusPath, submit: pane.submitPath, rows: pane.rows.length })}; REAL click #pane-search-expand-tab path=${ex.path} (tabs ${ex.before.tabCount}->${ex.before.tabCount + 1}); the async window's tab is the SEARCH tab (tabs now=${JSON.stringify((await h.cdp.evaluate(UF_ACTIVE_TAB_SRC)).openIds)}); INSIDE the window: REAL tab-strip click on ${switchTab.id} path=${sw.path} (hit=${sw.rect ? sw.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} stale-search-stage-present=${!noStaleSearch} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker} box=${JSON.stringify(st.box)}; ensuredDocumentActive=${JSON.stringify(ensured)}`,
       { path: sw.path === 'cdp' ? 'cdp' : sw.path, ok, surface })
   },
 
@@ -5497,7 +7474,7 @@ const BLOCKS = {
     const ex = await ufExpandSearchTab(h)
     const rows = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('#pane-doc-nav [data-document-id]')].map((li)=>({doc:li.getAttribute('data-document-id'),box:(()=>{const r=li.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]})()})))()`)
     const target = rows.find((r) => r.box[2] > 0 && r.box[3] > 0 && r.box[1] >= -20 && r.box[1] <= 700)
-    if (!target) return rowResult('UF-STAGE-AT-8', 'A real doc-nav row click inside the async window switches the active tab to that DOCUMENT (the spec §8.3 item 2 trigger: "a real click on a search-result row or a doc-nav row")', 'D-interaction', `no hit-testable doc-nav row (rows=${rows.length})`, { path: 'zero-box', ok: false, surface })
+    if (!target) return rowResult({row:'UF-STAGE-AT-8',dclass:'D-interaction'}, 'A real doc-nav row click inside the async window switches the active tab to that DOCUMENT (the spec §8.3 item 2 trigger: "a real click on a search-result row or a doc-nav row")', `no hit-testable doc-nav row (rows=${rows.length})`, { path: 'zero-box', ok: false, surface })
     const clicked = await ufRealClick(h, `#pane-doc-nav [data-document-id=${JSON.stringify(target.doc)}]`, { scroll: false })
     await sleep(5000)
     const v = await ufStageVerdict(h)
@@ -5505,8 +7482,7 @@ const BLOCKS = {
     const census = await ufSurfaceCensus(h)
     const ok = clicked.path === 'cdp' && v.activeTabKind === 'document' && v.stageKind === 'document' &&
       v.stageMatchesActiveTab === true && v.searchStage === false && st.present === true && st.marker === v.editSurface
-    return rowResult('UF-STAGE-AT-8', 'The V1 race, DOC-NAV trigger: a real doc-nav row click inside the search tab\'s async window leaves the stage on the ACTIVE tab\'s page — i.e. that click must ACTIVATE the document tab for the clicked document', 'D-interaction',
-      `search-pane REAL drive rows=${pane.rows.length}; REAL click #pane-search-expand-tab path=${ex.path}; INSIDE the window: REAL doc-nav click on "${target.doc}" path=${clicked.path} (hit=${clicked.rect ? clicked.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} surfaceCensus byId=${census.byId}/${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker}; tabs=${JSON.stringify(v.tabIds)} — the app's doc-nav handler routes to the SIDEBAR focus seam (selectDocument -> setCurrentDocumentId -> requestRebuild), which never activates/opens a document TAB`,
+    return rowResult({row:'UF-STAGE-AT-8',dclass:'D-interaction'}, 'The V1 race, DOC-NAV trigger: a real doc-nav row click inside the search tab\'s async window leaves the stage on the ACTIVE tab\'s page — i.e. that click must ACTIVATE the document tab for the clicked document', `search-pane REAL drive rows=${pane.rows.length}; REAL click #pane-search-expand-tab path=${ex.path}; INSIDE the window: REAL doc-nav click on "${target.doc}" path=${clicked.path} (hit=${clicked.rect ? clicked.rect.hit : '?'}); after settlement: activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} surfaceCensus byId=${census.byId}/${census.byMarker} agree=${census.agree} editSurface=${v.editSurface} surface present=${st.present} marker=${st.marker}; tabs=${JSON.stringify(v.tabIds)} — the app's doc-nav handler routes to the SIDEBAR focus seam (selectDocument -> setCurrentDocumentId -> requestRebuild), which never activates/opens a document TAB`,
       { path: clicked.path === 'cdp' ? 'cdp' : clicked.path, ok, surface })
   },
 
@@ -5518,7 +7494,7 @@ const BLOCKS = {
     const surface = await ufSurfaceTarget(h)
     const start = await ufStageVerdict(h)
     const st0 = await ufEditSurfaceState(h)
-    if (!st0.present) return rowResult('UF-STAGE-AT-4', 'A store-changed broadcast while a NON-document tab is active does not paint a foreign document body or an edit surface', 'D-state', `no document surface to start from: activeTabKind=${start.activeTabKind} stageKind=${start.stageKind}`, { path: 'missing', ok: false, surface })
+    if (!st0.present) return rowResult({row:'UF-STAGE-AT-4',dclass:'D-state'}, 'A store-changed broadcast while a NON-document tab is active does not paint a foreign document body or an edit surface', `no document surface to start from: activeTabKind=${start.activeTabKind} stageKind=${start.stageKind}`, { path: 'missing', ok: false, surface })
     // 1. REAL page edit + blur on the ACTIVE DOCUMENT tab (the commit broadcast)
     const placed = await ufCaretAt(h, st0.blockCount > 1 ? st0.blockCount - 1 : 0)
     await ufType(h, `BC${Date.now() % 10000}`)
@@ -5541,8 +7517,7 @@ const BLOCKS = {
     const ok = midV.stageKind === 'search' && v.activeTabKind === 'search' && v.stageKind === 'search' &&
       v.stageMatchesActiveTab === true && census.byId === 0 && census.byMarker === 0 && census.agree === true &&
       foreignBody === false && stageRead.searchStage === true
-    return rowResult('UF-STAGE-AT-4', 'The V2 broadcast variant: with a SEARCH tab active, a real broadcast/re-derive (main→preload→renderer ordering) keeps the stage on the search page — no foreign document body, no edit surface, zero surfaces', 'D-state',
-      `ensured a document tab is active: ${JSON.stringify(ensured)}; start: document tab ${start.activeTabId} marker=${st0.marker}; caret at block ${st0.blockCount > 1 ? st0.blockCount - 1 : 0} + typed + REAL blur => warning=${blur.warning} kind=${blur.warningKind}; REAL click #pane-search-expand-tab path=${ex.path}; after the search tab mounted: activeTabKind=${midV.activeTabKind} stageKind=${midV.stageKind} stageMatchesActiveTab=${midV.stageMatchesActiveTab}; then the real re-derive ('gnosisStatus()' called=${gs1.called}): activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} editSurface=${v.editSurface} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)}; foreign document body in the stage=${foreignBody} (docHead=${stageRead.docHead}); #zone:main text="${stageRead.mainText}"`,
+    return rowResult({row:'UF-STAGE-AT-4',dclass:'D-state'}, 'The V2 broadcast variant: with a SEARCH tab active, a real broadcast/re-derive (main→preload→renderer ordering) keeps the stage on the search page — no foreign document body, no edit surface, zero surfaces', `ensured a document tab is active: ${JSON.stringify(ensured)}; start: document tab ${start.activeTabId} marker=${st0.marker}; caret at block ${st0.blockCount > 1 ? st0.blockCount - 1 : 0} + typed + REAL blur => warning=${blur.warning} kind=${blur.warningKind}; REAL click #pane-search-expand-tab path=${ex.path}; after the search tab mounted: activeTabKind=${midV.activeTabKind} stageKind=${midV.stageKind} stageMatchesActiveTab=${midV.stageMatchesActiveTab}; then the real re-derive ('gnosisStatus()' called=${gs1.called}): activeTabId=${v.activeTabId} activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} searchStage=${v.searchStage} editSurface=${v.editSurface} surfaceCensus byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree} ids=${JSON.stringify(census.ids)}; foreign document body in the stage=${foreignBody} (docHead=${stageRead.docHead}); #zone:main text="${stageRead.mainText}"`,
       { path: ex.path === 'cdp' ? 'cdp' : ex.path, ok, surface })
   },
 
@@ -5565,8 +7540,7 @@ const BLOCKS = {
     const ok = before.stageKind === 'document' && st1.present === true && st2.present === true &&
       st2.marker === st1.marker && after.stageMatchesActiveTab === true && tb1 === true && tb2 === true &&
       after.surfaceCensus === 1
-    return rowResult('UF-STAGE-AT-5', "The V5 refresh survival: a real re-derive via the pane host's onChanged()/host.refresh() keeps the page-edit surface (same marker, still exactly one) AND the #editor-toolbar in the stage", 'D-state',
-      `ensured a document tab is active: ${JSON.stringify(ensured)}; activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}; before: surface present=${st1.present} marker=${st1.marker} box=${JSON.stringify(st1.box)} toolbar=${tb1} (node ${identity1}); the real re-derive seam ('gnosisStatus()' -> onChanged() -> host.refresh()) called=${gs.called}; after: surface present=${st2.present} marker=${st2.marker} box=${JSON.stringify(st2.box)} toolbar=${tb2} (node ${identity2}, re-assembled=${reassembled}) stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} census=${after.surfaceCensus}/${after.markerCensus} agree=${after.markersAgree}`,
+    return rowResult({row:'UF-STAGE-AT-5',dclass:'D-state'}, "The V5 refresh survival: a real re-derive via the pane host's onChanged()/host.refresh() keeps the page-edit surface (same marker, still exactly one) AND the #editor-toolbar in the stage", `ensured a document tab is active: ${JSON.stringify(ensured)}; activeTabKind=${before.activeTabKind} stageKind=${before.stageKind}; before: surface present=${st1.present} marker=${st1.marker} box=${JSON.stringify(st1.box)} toolbar=${tb1} (node ${identity1}); the real re-derive seam ('gnosisStatus()' -> onChanged() -> host.refresh()) called=${gs.called}; after: surface present=${st2.present} marker=${st2.marker} box=${JSON.stringify(st2.box)} toolbar=${tb2} (node ${identity2}, re-assembled=${reassembled}) stageKind=${after.stageKind} stageMatchesActiveTab=${after.stageMatchesActiveTab} census=${after.surfaceCensus}/${after.markerCensus} agree=${after.markersAgree}`,
       { path: 'not-gesture', gesture: false, ok, surface })
   },
 
@@ -5581,14 +7555,19 @@ const BLOCKS = {
       const hits=[...document.querySelectorAll('[data-mount-tabs],[id*="mount-tabs"],[id*="mounttabs"]')].map((e)=>e.id||e.tagName);
       return {sidebarKeys:hosts[0][1].filter((k)=>/mount/i.test(k)),windowKeys:Object.keys(window).filter((k)=>/mountTabs|sidebarPanes/i.test(k)),domHits:hits}})()`)
     const v = await ufStageVerdict(h)
-    const census = await ufSurfaceCensus(h)
+    const census = await ufSurfacePresence(h)
     const unreachable = probes.sidebarKeys.length === 0 && probes.windowKeys.length === 0 && probes.domHits.length === 0
     // A STRUCTURAL park with the recorded reason — never a silent one, and never
     // parked by default: the seam is named, its absence is proven live, and the
     // I2-R census it would stress is asserted in every REACHABLE state instead.
     return parkRow('UF-STAGE-AT-7', '`mountTabs([A,B])` leaves exactly ONE live surface (the active document\'s) and destroys the stale root (A.1.2 `destroyRoot`)', 'D-visual',
       `no production/live reachability: the sidebar bridge exposes NO mount* seam (keys matching /mount/ = ${JSON.stringify(probes.sidebarKeys)}), no window-level host object (${JSON.stringify(probes.windowKeys)}), no DOM affordance (${JSON.stringify(probes.domHits)}) — the spec pins the seam UNREACHABLE FROM PRODUCTION until U-STATE-1e lands (sidebar-panes.ts mountTabs REACHABILITY PIN; the audit §4.1 R7). The census it would stress is asserted in every REACHABLE state instead: activeTabKind=${v.activeTabKind} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} surface census byId=${census.byId} byMarker=${census.byMarker} agree=${census.agree}`,
-      { row: 'UF-STAGE-AT-7', assertion: 'mountTabs multi-mount census (structurally unreachable seam)', dclass: 'D-visual', realInput: false, evidence: '', proxyPASS: false, surface })
+      // §6.1 `H-4` — `evidence` is the STRING above (the object this site used to
+      // hand over in that slot printed `[object Object]`) and the §6.1 field set
+      // travels in `opts`, the SIXTH slot, where `parkRow` reads a park's
+      // `path`/`surface` — the slot this site's object used to be dropped from.
+      'the mount* seam is unreachable from production: the census it would stress could not be driven, so the row carries no verdict this run',
+      { path: 'not-reachable', ok: false, surface, required: 'a reachable production/live `mountTabs` seam (sidebar bridge, window host object or DOM affordance)', observed: `no seam: sidebarKeys=${JSON.stringify(probes.sidebarKeys)} windowKeys=${JSON.stringify(probes.windowKeys)} domHits=${JSON.stringify(probes.domHits)}` })
   },
 
   // ---- §8.3 item 5 — the PERSISTED tab round-trip (the LIVE-5 pattern). The
@@ -5598,12 +7577,15 @@ const BLOCKS = {
     await ufEnsureAppClear(h)
     const surface = await ufSurfaceTarget(h)
     const v = await ufStageVerdict(h)
+    // §2.1.1 limb 2 — THE RENDERED TAB SET this round-trip compares against the
+    // persisted one, read as the strip's OWN rows (the document-tab rows are the
+    // corpus-keyed half of that set; `ufTabStripRead`).
+    const strip = await ufTabStripRead(h)
     const persisted = await h.cdp.evaluate(`(async()=>{try{const s=await window.provident.operatorSettings.get();return {ok:true,activeId:s&&s.tabs?s.tabs.activeId:null,order:s&&s.tabs?s.tabs.order:null,openCount:s&&s.tabs?s.tabs.open.length:null}}catch(e){return {ok:false,err:String(e)}}})()`)
     const openMatches = Array.isArray(persisted.order) && Array.isArray(v.openIds) && JSON.stringify(persisted.order) === JSON.stringify(v.openIds)
     const activeMatches = persisted.activeId === v.activeTabId
     const ok = persisted.ok === true && openMatches && activeMatches && v.stageMatchesActiveTab === true
-    return rowResult('UF-STAGE-AT-6', 'The persisted tab set (operator settings `tabs`) equals the RENDERED open set and active tab, and the boot stage satisfies stageMatchesActiveTab — the node suite can only assert TabState coercion', 'D-state',
-      `rendered strip: activeTabId=${v.activeTabId} kind=${v.activeTabKind} openIds=${JSON.stringify(v.openIds)} tabCount=${v.tabCount} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} surfaceCensus=${v.surfaceCensus}; persisted operator settings tabs=${JSON.stringify(persisted)}; rendered set == persisted order=${openMatches}; persisted activeId == rendered active=${activeMatches}. The BOOT half of the round trip is the second launch's reading (same --home, --no-seed): see the run record's before/after pair.`,
+    return rowResult({row:'UF-STAGE-AT-6',dclass:'D-state'}, 'The persisted tab set (operator settings `tabs`) equals the RENDERED open set and active tab, and the boot stage satisfies stageMatchesActiveTab — the node suite can only assert TabState coercion', `rendered strip: activeTabId=${v.activeTabId} kind=${v.activeTabKind} openIds=${JSON.stringify(v.openIds)} tabCount=${v.tabCount} stageKind=${v.stageKind} stageMatchesActiveTab=${v.stageMatchesActiveTab} surfaceCensus=${v.surfaceCensus}; rendered strip rows (ufTabStripRead, §2.1.1 limb 2)=${strip.rows.length} tab(s) of which ${strip.docTabRows} carry a corpus document id; persisted operator settings tabs=${JSON.stringify(persisted)}; rendered set == persisted order=${openMatches}; persisted activeId == rendered active=${activeMatches}. The BOOT half of the round trip is the second launch's reading (same --home, --no-seed): see the run record's before/after pair.`,
       { path: 'not-gesture', gesture: false, ok, surface })
   },
 
@@ -5629,7 +7611,7 @@ const BLOCKS = {
   // battery that seeds a corpus first, so it is recorded, never asserted. ----
   stage_boot_landing_diag: async (h) => {
     const v = await ufStageVerdict(h)
-    const census = await ufSurfaceCensus(h)
+    const census = await ufSurfacePresence(h)
     const read = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');return {landing:!!document.getElementById('stage-landing'),
       stageAttrs:m?[...m.children].map((c)=>c.id||c.getAttribute('data-stage')||c.tagName):[],
       mainText:(m?m.textContent:'').replace(/\\s+/g,' ').slice(0,120)}})()`)
@@ -5907,11 +7889,371 @@ const BLOCKS = {
 // ---------------------------------------------------------------------------
 // Harness.
 // ---------------------------------------------------------------------------
+/**
+ * §2.2 `E-7` — THE PRINTED PER-ROW LINE: each counted row block's OWN verdict
+ * through the whole contracted §6.1 set — `row`, `block`, `verdict`, `dclass`,
+ * `realInput`, the whole `surface` object INCLUDING `target` (M-4), the
+ * `failingClause` with its observed-vs-required values (M-3), `evidence`,
+ * `proxyPASS` and `gesturePath`. `COVERED_ROW_BLOCKS` names every counted block
+ * (with its declared row id) so the printed record is complete: no counted row
+ * block is left out of the artifact (the returned object is not the artifact,
+ * `V-4`; the printed line is).
+ *
+ * A gesture row that could not be driven honestly prints `NOT-DRIVEN` with
+ * `realInput:false` and the DRIVER-failure marker — NEVER an app-layer FAIL
+ * (§2.3 `H-4`).
+ */
+const COVERED_ROW_BLOCKS = [
+  { block: 'uf_tabs_1', row: 'UF-TABS-1' }, { block: 'uf_tabs_3', row: 'UF-TABS-3' },
+  { block: 'uf_tabs_4', row: 'UF-TABS-4' }, { block: 'uf_tabs_7', row: 'UF-TABS-7' },
+  { block: 'uf_settings_1', row: 'UF-SETTINGS-1' }, { block: 'uf_settings_2', row: 'UF-SETTINGS-2' },
+  { block: 'uf_settings_3', row: 'UF-SETTINGS-3' }, { block: 'uf_settings_4', row: 'UF-SETTINGS-4' },
+  { block: 'uf_settings_5', row: 'UF-SETTINGS-5' }, { block: 'uf_settings_7', row: 'UF-SETTINGS-7' },
+  { block: 'uf_panes_1', row: 'UF-PANES-1' }, { block: 'uf_panes_8', row: 'UF-PANES-8' },
+  { block: 'uf_panes_10', row: 'UF-PANES-10' }, { block: 'uf_panes_12', row: 'UF-PANES-12' },
+  { block: 'uf_panes_14', row: 'UF-PANES-14' }, { block: 'uf_search_2', row: 'UF-SEARCH-2' },
+  { block: 'uf_hist_4', row: 'UF-HIST-4' }, { block: 'uf_hist_6', row: 'UF-HIST-6' },
+  { block: 'uf_layout_2', row: 'UF-LAYOUT-2' }, { block: 'uf_layout_10', row: 'UF-LAYOUT-10' },
+  { block: 'user1_tab_new', row: 'UF-DEFECT-1' }, { block: 'user2_pane_drag', row: 'UF-DEFECT-2' },
+  { block: 'user3_collapse_orientation', row: 'UF-KEEP-1' }, { block: 'user4_main_editable', row: 'UF-STAGE-3' },
+  { block: 'user5_history_in_pane', row: 'UF-DEFECT-3' }, { block: 'user6_search_no_flicker', row: 'UF-KEEP-3' },
+  { block: 'user7_zone_resize', row: 'UF-DEFECT-5' }, { block: 'user8_zone_boundary', row: 'UF-DEFECT-6' },
+  { block: 'user9_search_open_in_tab', row: 'UF-DEFECT-7' }, { block: 'user10_collapse_vertical_text', row: 'UF-DEFECT-8' },
+  { block: 'repro_nbsp', row: 'UF-STAGE-4' }, { block: 'repro_dup_para', row: 'UF-STAGE-2' },
+  { block: 'toolbar_undo', row: 'UF-HIST-2' }, { block: 'toolbar_toggle', row: 'UF-STAGE-6' },
+  { block: 'boot_landing', row: 'UF-STAGE-1' }, { block: 'vis_persist', row: 'UF-SETTINGS-7' },
+]
+
+
+/**
+ * §2.2 `E-7`/`E-8` / §3.2 `F-10` (`G-10`) — THE DERIVED FAILING CLAUSE of a row
+ * record that arrived WITHOUT one: `null` on a PASS (a clause-less PASS is
+ * correct), and otherwise the row's OWN assertion as the predicate with its
+ * `required`/`observed` values named. A `FAIL` may therefore never reach the
+ * printed record as `failingClause=null` — the reading this unit took was
+ * `UF-HIST-2`/`toolbar_undo`, the one `ROW` line of the battery carrying a FAIL
+ * with an empty clause.
+ *
+ * finding `C-4` — **THE GUARD IS A GUARD, NOT A MIS-STATEMENT.** At this head it
+ * is UNREACHABLE (every report-row producer goes through `rowResult`, which sets
+ * a clause on every non-PASS; the only producers are `rowResult`,
+ * `declaredRowResult` — which spreads it — and `ufDriverFailureRows`, which calls
+ * `rowResult`), and as filed it would MIS-STATE if it ever did fire: `required =
+ * r.required ?? r.assertion` printed the ASSERTION SENTENCE in the `required`
+ * position (`§2.2 E-7` requires the observed-vs-required VALUES), and a path-less
+ * row read `FAIL` (a never-driven row labelled an app failure). It is kept as the
+ * safety net it claims to be, made HONEST: the `required` position carries the
+ * row's own value or the NAMED `UF_NO_REQUIRED_VALUE` sentinel, and the
+ * classification is not re-derived: `buildFailingClause` applies the SAME predicate
+ * the report's own classifier applies (⟨gate-4 finding `D-2`⟩ ONE PREDICATE, NOT TWO),
+ * so the clause records exactly the verdict the `ROW`/`FAIL` line prints.
+ */
+function ufDerivedFailingClause(r, evidence) {
+  if (!r || r.pass === true || typeof r.assertion !== 'string' || r.assertion === '') return null
+  return buildFailingClause(
+    false,
+    r.assertion,
+    typeof r.required === 'string' && r.required !== '' ? r.required : UF_NO_REQUIRED_VALUE,
+    r.observed ?? evidence,
+    r.gesturePath ?? null,
+    r.realInput === true,
+    r.proxyPASS === true,
+    r.park === true,
+  )
+}
+
+/**
+ * §2.2 `E-7` — THE REPORT ROW the printed artifact is built from: the whole
+ * contracted field set (`row`, `block`, `verdict`, `dclass`, `realInput`, the
+ * whole `surface` object, `failingClause` with observed-vs-required, `evidence`,
+ * `proxyPASS`, `gesturePath`) plus the §2.3 `H-4` DERIVED `NOT-DRIVEN`
+ * classification (`driverFailure`), so no counted row is recorded in the thin
+ * `{row, block, pass}` shape `V-4` read and no driver failure is counted as an
+ * app-layer FAIL.
+ */
+function buildReportRow(r, block, verdict, notDriven) {
+  // §2.3 `H-4` / §3.2 `F-6` / finding `C-5` — **THE PARKED ROW'S RESOLVED REASON.**
+  // A parked result's reason is its own recorded `parkReason`; when the site that
+  // parked recorded none, the NAMED `UF_NO_PARK_REASON` sentinel takes its place, so
+  // a `ROW` line reading `verdict=PARKED` can never appear with the park text
+  // skipped (finding `C-5`: `uf_hist_6`'s unreachable-history path printed `PARKED`
+  // with no reason while the block-level `PARK` line read
+  // `(no parkReason recorded for U-7)`). The row's OWN park flag is part of the
+  // resolution, so a NON-parked row resolves to `null` — no reason can ride a row
+  // that did not park. `parkedReason` is the ONE place the substitution is made;
+  // the returned field below reads the row's own reason through it.
+  const parkedReason = r.park === true ? UF_NO_PARK_REASON : null
+  r = { ...r, parkReason: r.parkReason ?? parkedReason }
+  // §2.2 `E-6`/`E-7` (`G-6`): an EMPTY `evidence` on a FAIL violates a recorded
+  // requirement (`DECIDED: D-GP-UFA-3` — `realInput`/`evidence` are MANDATORY
+  // report fields), so the empty string is replaced by a NAMED sentinel: a FAIL
+  // can never ship with no evidence text.
+  const evidence = typeof r.evidence === 'string' && r.evidence !== ''
+    ? r.evidence
+    : (typeof r.detail === 'string' && r.detail !== '' ? r.detail : '(no evidence recorded)')
+  // §2.2 `E-7`/`E-8` / §3.2 `F-10` (`G-10`) — NO NON-PASS MAY REACH THE LOG WITHOUT
+  // ITS CLAUSE. The clause is built by the row-result builder, but a block that
+  // assembles its own result object (or a legacy row block that never carried one)
+  // could still print `failingClause=null` on a FAIL — the live battery read exactly
+  // one such row (`UF-HIST-2`/`toolbar_undo`). The record therefore DERIVES the
+  // clause from the row's own assertion/observed/required whenever a non-PASS
+  // arrives without one, so the printed `FAIL` always states the predicate that
+  // failed with its observed-vs-required values. The derivation lives in its own
+  // helper so this initializer stays a single readable expression.
+  const clause = r.failingClause ?? ufDerivedFailingClause(r, evidence)
+  // ⟨GATE-4 FINDING `D-2` — ONE PREDICATE, NOT TWO⟩ — THE CLAUSE'S `verdict` IS THIS
+  // ROW'S PRINTED `verdict`. The classification is taken ONCE, at this record's own
+  // call site (`ufPushRows` → `blockVerdictOf` → `buildReportRow`): the `verdict`
+  // member above. `buildFailingClause` applies the same predicate, and this stamp makes
+  // the identity unconditional for the printed artifact — a row printing
+  // `verdict=NOT-DRIVEN` cannot carry a clause recording `FAIL`, and a genuine app
+  // `FAIL` cannot be demoted by a path test of the clause's own, whatever route built
+  // the clause (a block-supplied one included).
+  const oneClause = clause === null || clause === undefined ? null : { ...clause, verdict: verdict }
+  return {
+    row: r.row, block: block, verdict: verdict, dclass: r.dclass ?? null,
+    realInput: r.realInput === true, evidence: evidence,
+    proxyPASS: r.proxyPASS === true, proxy: r.proxy ?? null,
+    surface: r.surface ?? null, failingClause: oneClause,
+    observed: r.observed ?? null, required: r.required ?? null,
+    gesturePath: r.gesturePath ?? null, park: r.park === true, pass: r.pass === true,
+    driverFailure: notDriven === true,
+    // §2.3 `H-3` clause 1 (`G-9`) — the click's own record when the row's verdict
+    // rests on a click, and §2.3 `H-4` — the NAMED reason a PARKED row parked for
+    // (`F-6`/`F-7`): both are carried into the printed `ROW` line below, so
+    // neither the coordinate triple nor a park reason is reachable only from the
+    // returned object (`V-4`: the printed line is the artifact).
+    clickRecord: r.clickRecord ?? null,
+    parkReason: r.parkReason ?? null,
+  }
+}
+
+/** §2.3 `H-4` — THE BLOCK VERDICT LINE: the classification the run prints for the
+ *  block's PRIMARY result (`PARKED` > `PASS` > `NOT-DRIVEN` > `FAIL`), derived
+ *  from the returned result's own fields. A gesture row whose path was recorded
+ *  and could NOT be driven honestly reads `NOT-DRIVEN` (a DRIVER failure, never
+ *  an app-layer FAIL); a diagnostic/hygiene block prints `DIAG`.
+ *
+ *  ⟨GATE-4 FINDING `D-2`⟩ — THIS IS THE DRIVER'S ONE CLASSIFICATION PREDICATE, and it is
+ *  the one the §6.1 counts, the `PASS`/`NOT-DRIVEN`/`FAIL`/`PARK` block lines and every
+ *  `ROW` line's `verdict=` are taken from. The clause builder states the SAME predicate
+ *  (verbatim, same path vocabulary) so that a row's `failingClause.verdict` cannot
+ *  diverge from the verdict the report prints; it is stated rather than called there
+ *  because the pin evaluates that builder's TEXT in isolation (`new Function`), so a
+ *  reference to this helper would be a second, unreadable classification at the site
+ *  that matters. Neither site may grow a path test of its own: the dead path token this
+ *  finding named is deleted, and the pin's report-vs-clause token-set equality is what
+ *  holds the two statements to one predicate. */
+function blockVerdictOf(r) {
+  const gated = r.gesturePath != null && !/state row/.test(String(r.gesturePath))
+  const notDriven = gated && r.realInput !== true && r.pass !== true
+  const verdict = r.park === true ? 'PARKED' : (r.pass === true ? 'PASS' : (notDriven ? 'NOT-DRIVEN' : 'FAIL'))
+  return { gated, notDriven, verdict }
+}
+
+/** §2.3 `H-4` — PRINT the block's primary result line and count it: `DIAG` for a
+ *  diagnostic/hygiene block, `PASS`, `PARK`, `NOT-DRIVEN` (a DRIVER failure —
+ *  never an app-layer FAIL) or `FAIL`. Returns the counter the line incremented,
+ *  so the run's arithmetic stays the caller's. */
+function printBlockVerdict(label, r) {
+  const { notDriven, verdict } = blockVerdictOf(r)
+  const detail = r.detail ?? r.evidence ?? ''
+  if (r.diagnostic === true) { console.log(`DIAG  ${label} ${detail}`); return 'diag' }
+  if (r.pass === true) { console.log(`PASS  ${label} ${detail}`); return 'pass' }
+  // §2.3 `H-4` / §3.2 `F-6` (`G-10`) — A PARKED ROW PRINTS ITS NAMED
+  // `parkReason`: `RCA-11` clause (b) records the reason a structural
+  // precondition could not be met, and a reason named only on the returned
+  // object reached no log at all (the reading this fixes).
+  if (r.park === true) { console.log(`PARK  ${label} ${detail} parkReason=${JSON.stringify(r.parkReason ?? `(no parkReason recorded for ${r.row ?? 'this row'})`)}`); return 'park' }
+  if (notDriven) { console.log(`NOT-DRIVEN  ${label} ${detail} (DRIVER failure — never an app-layer FAIL)`); return 'notDriven' }
+  console.log(`FAIL  ${label} ${detail}`)
+  return 'fail'
+}
+
+// ---------------------------------------------------------------------------
+// THE SPAWNED-CHILD SWEEP — ONE BOUNDED MECHANISM, ON EVERY EXIT PATH.
+//
+// ⟨GATE-5 `L-3d` FINDING (g) — THE `main().catch` EARLY ABORT LEAKED ITS CHILD.⟩
+// Measured by the blind runner: `--port=not-a-port` made the port `NaN`, the
+// Electron child was spawned on the DEFAULT ports (`3787`/`9222`) and SURVIVED the
+// driver's `exit 2` — it had to be killed by hand. `DECIDED:
+// LIVE-GATE-RUN-DISCIPLINE` clause (i) exists to prevent exactly that
+// contamination (a concurrent sibling holds `9222` and `pkill`s `electron .`), and
+// a leaked child is also an app a LATER run would talk to. So: NO EARLY EXIT MAY
+// ORPHAN A CHILD THIS DRIVER SPAWNED.
+//
+// HOW THE SWEEP IS BOUNDED, IN ONE LINE: it signals ONLY this driver's OWN spawn
+// handle — ONE SIGTERM to that child's process GROUP (the spawn is `detached`, so
+// `-pid` is the group it leads), then ONE SIGKILL to the SAME group iff the leader
+// is still alive after `UF_SWEEP_GRACE_MS` — so it is bounded to ONE handle, ONE
+// process group and ONE grace period, and it never SCANS or PATTERN-MATCHES the
+// process table (no `pkill`, no `pgrep`); a `--connect` run attaches to a RUNNING
+// session it does not own, so it holds NO handle and sweeps nothing.
+const UF_SWEEP_GRACE_MS = 1500
+/** The driver's OWN spawned child — module scope, so the module-level
+ *  `main().catch` early-abort path can sweep it. `null` in `--connect` mode, on any
+ *  refusal that returns before the spawn, and after a sweep (ONE sweep per handle,
+ *  whichever path takes the exit). */
+let UF_SPAWNED_CHILD = null
+/** ⟨gate-4 `F-8`⟩ THE SCRATCH HOME THIS RUN MINTED — module scope, for the same
+ *  reason `UF_SPAWNED_CHILD` is: the module-level `main().catch` early abort can land
+ *  BETWEEN the mint and `main`'s own `try`/`finally` (the one throw candidate on that
+ *  stretch is the operator's `--corpus-root=` registry write), and that abort would
+ *  otherwise leave the dir behind. `{dir, ownScratch}` while a mint is live, `null`
+ *  once the bounded removal has run — so the ONE abort path removes exactly what this
+ *  run created, through the SAME bounded helper the normal teardown uses. */
+let UF_MINTED_HOME = null
+/** The sweep's SIGNALLING HALF: the child's process GROUP, then the child itself. */
+function ufSweepSignal(child, signal) {
+  const pid = child.pid
+  // NEVER A WILDCARD: a pid that is not a real child pid (undefined/NaN/1) is not
+  // signalled at all, because `process.kill(-1, …)` would signal EVERY process this
+  // user owns — the exact opposite of a bounded sweep.
+  if (!Number.isInteger(pid) || pid <= 1) return
+  try { process.kill(-pid, signal) } catch { /* the group is already gone */ }
+  try { child.kill(signal) } catch { /* already gone */ }
+}
+/** THE SWEEP: SIGTERM, a BOUNDED poll of the child's own pid, then SIGKILL to the
+ *  SAME group. Returns the record the caller prints; `swept:false` means this run
+ *  spawned nothing (a `--connect` run, or a refusal that returned before the spawn). */
+async function ufSweepSpawnedChild(reason) {
+  const child = UF_SPAWNED_CHILD
+  if (child === null || child.pid == null) return { swept: false, pid: null, escalated: false, reason: reason }
+  UF_SPAWNED_CHILD = null
+  ufSweepSignal(child, 'SIGTERM')
+  const t0 = Date.now()
+  const alive = () => { try { process.kill(child.pid, 0); return true } catch { return false } }
+  while (alive() && Date.now() - t0 < UF_SWEEP_GRACE_MS) await sleep(50)
+  const escalated = alive()
+  if (escalated) ufSweepSignal(child, 'SIGKILL')
+  return { swept: true, pid: child.pid, escalated: escalated, reason: reason }
+}
+/** THE SWEEP, SAID IN ONE LINE WITH ITS BOUND (above) — printed by every path that
+ *  actually swept, so an abort's process hygiene is a READING rather than a hope. */
+function ufReportSweep(r) {
+  if (!r.swept) return
+  console.error(`[live-drive] CHILD SWEEP (${r.reason}): the child this driver SPAWNED (pid ${r.pid}, process group -${r.pid}) was swept — ONE SIGTERM to that group, then ONE SIGKILL to the SAME group iff its leader was still alive after the ${UF_SWEEP_GRACE_MS} ms grace (${r.escalated ? 'ESCALATED to SIGKILL' : 'the group exited on SIGTERM'}); the sweep is BOUNDED to this driver's own spawn handle (one handle, one process group, one grace period) and never scans or signals the process table, so a sibling's app and a \`--connect\` session are never touched`)
+}
+/** THE LAST-RESORT HALF, so "no orphan may outlive an abort" does not depend on
+ *  WHICH path took the exit: an exit that never reached the awaited sweep (a
+ *  signal-driven exit, or any unexpected `process.exit`) still sweeps
+ *  SYNCHRONOUSLY — SIGTERM then SIGKILL on the SAME one group, no grace. */
+process.on('exit', () => {
+  const child = UF_SPAWNED_CHILD
+  if (child === null || child.pid == null) return
+  UF_SPAWNED_CHILD = null
+  ufSweepSignal(child, 'SIGTERM')
+  ufSweepSignal(child, 'SIGKILL')
+})
+
+/** ⟨gate-4 `F-8` — **A SIGNAL-DRIVEN EXIT IS AN EXIT PATH TOO, AND IT WAS MEASURABLY
+ *  LEAKING BOTH HANDLES.**⟩ MEASURED (this pass, an operator-visible accident while
+ *  probing the `--home` guard): a `SIGTERM` to the driver's own wrapper killed the run
+ *  mid-boot, the `finally` never unwound (it is awaiting inside `main`), Node's default
+ *  SIGTERM exit ran NO `exit` handler — so the spawned Electron SURVIVED on its
+ *  isolated ports AND the scratch HOME stayed on disk. Both are the `F-8` leak class on
+ *  the signal path, and the standing hazards make it the COMMON path rather than an
+ *  exotic one (a harness `timeout`, and the concurrent sibling's `pkill -f "electron
+ *  ."`). These two handlers make the signal path reach the SAME two bounded cleanups:
+ *  the scratch-home removal runs HERE (synchronously, through the one bounded helper),
+ *  and `process.exit` then runs the `exit` handler above, which sweeps the spawned
+ *  child's own one process group. Neither handler touches anything this run does not
+ *  own, and `SIGKILL` remains uncoverable by construction (no process can act after
+ *  it) — named, never implied. */
+for (const ufSignal of ['SIGTERM', 'SIGINT']) {
+  process.on(ufSignal, () => {
+    try {
+      if (UF_MINTED_HOME !== null) {
+        console.error(ufRemoveScratchHome(UF_MINTED_HOME.dir, UF_MINTED_HOME.ownScratch))
+        UF_MINTED_HOME = null
+      }
+    } catch { /* the exit must never be blocked by the cleanup */ }
+    process.exit(ufSignal === 'SIGINT' ? 130 : 143)
+  })
+}
+
+/** §6.1 (`G-8`) — **A NUMERIC ARGUMENT IS A PORT OR IT IS NOTHING: `--port=` and
+ *  `--cdp-port=` are VALIDATED BEFORE ANYTHING IS SPAWNED.** A value the parser
+ *  cannot read as a port must never reach the spawn, because the spawn's own
+ *  fallback is the WORST outcome available: `Number('not-a-port')` is `NaN`, the
+ *  child ignores the unusable flag and boots on the DEFAULT `3787`/`9222` — the two
+ *  ports a concurrent sibling owns (`DECIDED: LIVE-GATE-RUN-DISCIPLINE` clause (i))
+ *  — while the driver waits on a `NaN` port, aborts, and (before the sweep landed)
+ *  orphaned that child. The accepted form is a DECIMAL INTEGER in the TCP port
+ *  range `1`..`65535`: `0`, `65536`, `-1`, `1e3`, `0x10`, `80.0`, `''` and
+ *  `not-a-port` all name no port, so all are REFUSED BY NAME. */
+function ufPortArgOffence(flag, text) {
+  if (!/^\d+$/.test(text)) return { flag: flag, text: text, why: `is not a DECIMAL INTEGER (${JSON.stringify(text)})` }
+  const n = Number(text)
+  if (!(n >= 1 && n <= 65535)) return { flag: flag, text: text, why: `is OUT OF RANGE (${n}) — a TCP port is 1..65535` }
+  return null
+}
+
+/** ⟨gate-4 `F-8` — **A `--home=<dir>` PATH IS A CANDIDATE FOR A RECURSIVE DELETE,
+ *  SO IT IS VALIDATED BEFORE ANYTHING IS SPAWNED.**⟩ HAZARD, not a wording issue:
+ *  this run hands its HOME to the spawned app AND to `rmSync(home, { recursive: true })`
+ *  at teardown, and before this clause the value came STRAIGHT from the operator's
+ *  `--home=` with no check at all — so `--home="$HOME"` (or `--home=/`) turned the
+ *  driver's OWN cleanup into a RECURSIVE DELETE OF AN OPERATOR-CHOSEN TREE, and a
+ *  `--home=` naming a FILE had that file removed by the same recursive delete. Three
+ *  limbs bound it: (i) the value must RESOLVE to a location strictly UNDER the OS
+ *  temp root — the root ITSELF is refused (`--home=/tmp` would delete the whole temp
+ *  tree, siblings included); (ii) a path that EXISTS but is NOT a directory is
+ *  refused; (iii) a path that does not exist yet is ACCEPTED (there is nothing to
+ *  delete; the app may create it). The refusal is printed BY NAME on the SAME
+ *  pre-spawn path the ports use: exit `2`, nothing spawned, and — now — no scratch
+ *  dir minted either (the mint was moved below every refusal, `F-8`'s leak half). */
+function ufHomeArgOffence(text) {
+  const raw = String(text ?? '')
+  if (raw.trim() === '') return { flag: '--home', text: raw, why: 'names NO directory (an EMPTY value) — and the driver REMOVES the HOME it used, so an unreadable value may never reach the teardown' }
+  const resolved = resolvePath(raw)
+  const tempRoot = resolvePath(tmpdir())
+  if (resolved === tempRoot) return { flag: '--home', text: raw, why: `resolves to the OS TEMP ROOT ITSELF (${tempRoot}) — this run REMOVES the HOME it used (a recursive delete at teardown), so this value would delete the whole temp tree the sibling sessions share` }
+  if (!resolved.startsWith(tempRoot + pathSep)) return { flag: '--home', text: raw, why: `resolves to ${resolved}, which does NOT live UNDER the OS temp root ${tempRoot} — this run REMOVES the HOME it used (a recursive delete at teardown), so an OPERATOR tree (${resolved}) is never handed to it` }
+  let st = null
+  try { st = statSync(resolved) } catch { st = null }
+  if (st !== null && !st.isDirectory()) return { flag: '--home', text: raw, why: `resolves to ${resolved}, which EXISTS and is NOT a directory — the teardown is a RECURSIVE delete and is never pointed at a file` }
+  return null
+}
+
+/** ⟨gate-4 `F-8` — **THE TEARDOWN IS BOUNDED, AND IT SAYS WHAT IT DID.**⟩ The old
+ *  removal was one unconditional `rmSync(home, { recursive: true, force: true })`:
+ *  `force` on a path the DRIVER did not mint is the operator-tree hazard `F-8` names,
+ *  and a silent best-effort `catch` left an orphan scratch dir unrecorded. THIS is the
+ *  only removal path: it re-checks the bound at the SITE of the delete (defence in
+ *  depth — the guard above already refused an out-of-bound `--home=`, and this refuses
+ *  again rather than trusting a value that arrived another way), it removes only a
+ *  DIRECTORY, and `force` is used ONLY for the dir this run minted itself
+ *  (`mkdtempSync` under the OS temp root): an operator-named `--home=` is removed
+ *  WITHOUT `force`, so a path that is not there is never silently "removed". It returns
+ *  the line the run prints, so the removal is a READING (and an orphan is named, never
+ *  left unsaid). */
+function ufRemoveScratchHome(dir, ownScratch) {
+  if (typeof dir !== 'string' || dir === '') return '[live-drive] SCRATCH HOME: this run minted NO HOME (nothing to remove; no orphan is possible on this path)'
+  const resolved = resolvePath(dir)
+  const tempRoot = resolvePath(tmpdir())
+  if (resolved === tempRoot || !resolved.startsWith(tempRoot + pathSep)) {
+    return `[live-drive] SCRATCH HOME: NOT REMOVED — ${resolved} does not live UNDER the OS temp root ${tempRoot}; the teardown is BOUNDED to this run's own scratch under ${tempRoot} and never deletes a path outside it`
+  }
+  let st = null
+  try { st = statSync(resolved) } catch { st = null }
+  if (st === null) return `[live-drive] SCRATCH HOME: NOT REMOVED — ${resolved} does not exist (nothing was created there), so there is nothing to delete`
+  if (!st.isDirectory()) return `[live-drive] SCRATCH HOME: NOT REMOVED — ${resolved} EXISTS and is NOT a directory; a recursive delete is never pointed at a file`
+  try { rmSync(resolved, { recursive: true, force: ownScratch === true }) } catch (e) {
+    return `[live-drive] SCRATCH HOME: NOT REMOVED — ${resolved} (${ownScratch === true ? 'this run\'s own mkdtemp scratch' : 'the operator-named --home dir'}); the bounded recursive delete failed: ${String(e && e.message ? e.message : e)}`
+  }
+  return `[live-drive] SCRATCH HOME: removed ${resolved} (${ownScratch === true ? 'the dir THIS run minted with mkdtempSync under the OS temp root — the only kind this run may force-remove' : 'the OPERATOR-named --home dir, under the OS temp root — removed WITHOUT force: only this run\'s own mkdtemp scratch is ever force-deleted'})`
+}
+
 async function main(argv) {
+  // §6.1 (`G-8`) — THE WIDER DEFAULT TOOL-GROUP SET, named ONCE so the no-flag
+  // profile and the empty-value refusal (which must NOT select it silently) are
+  // read from the same declaration.
+  const UF_DEFAULT_GROUPS = ['read', 'dispatch', 'rag', 'edit', 'module', 'code', 'graph', 'gnosis', 'gnosis-edit']
   // §3.3 — the O-0 flags are DEFAULT-SAFE: `--gpu` off (today's sanctioned
   // launch path is the GPU-OFF leg), `--o0-corpus` none, `--o0-out` none (a run
   // without it is console-only and can never produce the committed artifact).
-  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, corpusRoot: null, strictSeed: false, groups: null, block: 'all', noSeed: false, keepHome: false, connect: false, gpu: false, o0Corpus: null, o0Out: null, display: null, cliArgs: argv }
+  const opt = { mode: 'lexical', port: 3787, cdpPort: 9222, home: null, seed: null, corpusRoot: null, strictSeed: false, groups: null, emptyGroups: false, badPortArgs: [], badHomeArgs: [], block: 'all', noSeed: false, keepHome: false, connect: false, gpu: false, o0Corpus: null, o0Out: null, display: null, cliArgs: argv }
   for (const a of argv) {
     if (a === '--no-seed') { opt.noSeed = true; continue }
     if (a === '--keep-home') { opt.keepHome = true; continue }
@@ -5920,9 +8262,17 @@ async function main(argv) {
     if (a === '--strict-seed') { opt.strictSeed = true; continue }
     const m = /^--([a-z0-9-]+)=(.*)$/.exec(a); if (!m) continue
     if (m[1] === 'mode') opt.mode = m[2]
-    else if (m[1] === 'port') opt.port = Number(m[2])
-    else if (m[1] === 'cdp-port') opt.cdpPort = Number(m[2])
-    else if (m[1] === 'home') opt.home = m[2]
+    // §6.1 (`G-8`) — THE NUMERIC ARGS ARE RECORDED AS PARSED **AND** VALIDATED:
+    // the value is kept (a refusal is a reading about the request) and the offence,
+    // if any, is recorded for the pre-spawn refusal below. `Number(m[2])` alone is
+    // what put a `NaN` port into the spawn.
+    else if (m[1] === 'port') { opt.port = Number(m[2]); const bad = ufPortArgOffence('--port', m[2]); if (bad) opt.badPortArgs.push(bad) }
+    else if (m[1] === 'cdp-port') { opt.cdpPort = Number(m[2]); const bad = ufPortArgOffence('--cdp-port', m[2]); if (bad) opt.badPortArgs.push(bad) }
+    // ⟨gate-4 `F-8`⟩ `--home=<dir>` IS VALIDATED AS PARSED, and the offence (if any)
+    // is carried for the pre-spawn refusal below — the SAME two-form pattern the ports
+    // use: the value is kept (a refusal is a reading about the request) and the offence
+    // is recorded where the early path can refuse it BY NAME before anything spawns.
+    else if (m[1] === 'home') { opt.home = m[2]; const bad = ufHomeArgOffence(m[2]); if (bad) opt.badHomeArgs.push(bad) }
     else if (m[1] === 'seed') opt.seed = m[2]
     // `--corpus-root=<dir>` — the store's import root for the SEED corpus. The
     // default store's corpusRoot is the app's cwd (the project root), so a seed
@@ -5932,7 +8282,15 @@ async function main(argv) {
     // driver-spawned app (a spec §3.4 operator-store census without the vanished
     // operator store). Unset ⇒ the zero-config default (byte-equal today).
     else if (m[1] === 'corpus-root') opt.corpusRoot = m[2]
-    else if (m[1] === 'groups') opt.groups = m[2].split(',').filter(Boolean)
+    // §6.1 (`G-8`) — `--groups=` with an EMPTY value is REFUSED BY NAME: parsed
+    // as `[]` it silently selects a DIFFERENT launch profile than the operator
+    // asked for (the wider default set — the exact ambiguity the summary's
+    // `groups` member exists to make unreadable-as-accident), so the run refuses
+    // instead of launching a profile nobody requested.
+    else if (m[1] === 'groups') {
+      const parsed = m[2].split(',').map((s) => s.trim()).filter(Boolean)
+      if (parsed.length === 0) { opt.emptyGroups = true; opt.groups = [] } else opt.groups = parsed
+    }
     else if (m[1] === 'block') opt.block = m[2]
     // `--display=:0` is the documented form (spec §3.5) AND the form the
     // operator passes; the spawn below prefixes a `:`, so a leading colon in
@@ -5946,7 +8304,13 @@ async function main(argv) {
     else if (m[1] === 'o0-out') opt.o0Out = m[2]
   }
   o0Acc.runs.length = 0; o0Acc.hookPairs.length = 0; o0Acc.notes.length = 0
-  const home = opt.connect ? (mkdtempSync(join(tmpdir(), 'astrolive-connect-')) ?? null) : (opt.home ?? mkdtempSync(join(tmpdir(), 'astrolive-')))
+  // ⟨gate-4 `F-8` (LEAK HALF) — THE SCRATCH HOME IS MINTED **AFTER** EVERY REFUSAL.⟩
+  // This `mkdtempSync` used to run HERE, ABOVE both refusal branches, so `--groups=`
+  // (empty) and a malformed port each minted an `/tmp/astrolive-*` dir that the
+  // refusing path then returned past WITHOUT removing — one orphan scratch dir per
+  // refused invocation (the measured leak: the `/tmp` census carried them). The mint
+  // now sits BELOW the three refusal branches (below the port one), so a refused
+  // invocation mints nothing at all.
   // RUL-3 — NO main-side transport exists (the spec's audit result): the spawned app
   // arms its main instance and its handler wrap records `snapshot.clone`, but no
   // channel carries those records into the report, and the IPC structured clone is
@@ -5959,7 +8323,73 @@ async function main(argv) {
   // file). `.live-corpus/` is gitignored + cleaned every run (except --connect,
   // which attaches to a RUNNING app and reuses the on-disk corpus).
   const seedDir = opt.seed ?? join(ROOT, '.live-corpus')
-  const groups = opt.groups ?? ['read', 'dispatch', 'rag', 'edit', 'module', 'code', 'graph', 'gnosis', 'gnosis-edit']
+  const groups = opt.groups ?? UF_DEFAULT_GROUPS
+  // §6.1 (`G-8`) — THE LAUNCH-PROFILE REFUSAL, printed BY NAME before anything is
+  // spawned. An empty `--groups=` is not a launch profile: read as `[]` it would
+  // silently enable NO tool group (every MCP call then fails for a launch-profile
+  // reason the run would report as a driver/app failure), so the run refuses
+  // (exit `2` — the hard-error code, no app is launched, no reading is taken).
+  if (opt.emptyGroups) {
+    console.log(`[live-drive] ARG-REFUSED: --groups= was given an EMPTY value (""), which names no tool-group set — REFUSED by name rather than silently launching a profile the operator did not ask for (an EMPTY security set for the empty value, or the wider default [${UF_DEFAULT_GROUPS.join(',')}] when the flag is omitted); pass --groups=<a,b,c> or omit the flag; fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too, because a refusal is a reading about the run identity)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (--groups= empty value) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))
+    process.exitCode = 2
+    return
+  }
+  // §6.1 (`G-8`) — **THE SECOND PRE-SPAWN REFUSAL, ON THE SAME EARLY PATH: a
+  // `--port=`/`--cdp-port=` value that names no TCP port is REFUSED BY NAME, before
+  // anything is spawned.** This is the clause that closes the measured leak: at the
+  // pre-fix head `--port=not-a-port` parsed to `NaN`, the launch profile went out
+  // with `--port=NaN`, and the child — which cannot use `NaN` — came up on the
+  // DEFAULT `3787`/`9222` while the driver waited on `:NaN`; the abort then left
+  // that child RUNNING on the two ports a concurrent sibling owns. The refusal is
+  // the same shape as the empty-`--groups=` one above (ONE named line, the fixture
+  // state printed, exit `2`, NOTHING spawned), and both return before `spawn`.
+  if (opt.badPortArgs.length) {
+    console.log(`[live-drive] ARG-REFUSED: ${opt.badPortArgs.map((b) => `${b.flag}=${b.text} ${b.why}`).join(' and ')} — REFUSED by name BEFORE anything is spawned rather than launching an app the operator did not ask for (an unusable port makes the child fall back to the DEFAULT 3787/9222 profile the standing sibling hazard owns, and the driver would then wait on a port no child is listening on); pass --port=<1..65535>/--cdp-port=<1..65535>, or omit the flag to take the default (${opt.badPortArgs.some((b) => b.flag === '--port') ? '--port default 3787' : '--cdp-port default 9222'} for this one); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too, because a refusal is a reading about the run identity)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (a port argument that names no TCP port) — this path returns at exit 2 BEFORE the spawn, so the sweep is a stated no-op'))
+    process.exitCode = 2
+    return
+  }
+  // ⟨gate-4 `F-8` — **THE THIRD PRE-SPAWN REFUSAL, ON THE SAME EARLY PATH: a
+  // `--home=<dir>` that is not a scratch directory UNDER the OS temp root is REFUSED
+  // BY NAME, before anything is spawned.**⟩ THE HAZARD THIS CLOSES: the HOME this run
+  // passes to the app is the path its teardown REMOVES, so `--home="$HOME"` (or
+  // `--home=/`, or `--home=/tmp` — the temp root itself) made the driver's own cleanup
+  // a RECURSIVE DELETE OF AN OPERATOR-CHOSEN TREE. The bounds, one line each:
+  // (i) the path must resolve strictly UNDER the OS temp root; (ii) an existing
+  // non-directory is refused; (iii) a not-yet-existing path under the temp root is
+  // accepted. Same shape as the two refusals above: ONE named line, the fixture state
+  // printed, exit `2`, NOTHING spawned — and, since the mint moved below this branch,
+  // no scratch dir minted either (the `F-8` leak half).
+  if (opt.badHomeArgs.length) {
+    console.log(`[live-drive] ARG-REFUSED: ${opt.badHomeArgs.map((b) => `${b.flag}=${b.text} ${b.why}`).join(' and ')} — REFUSED by name BEFORE anything is spawned: this run's teardown is a RECURSIVE DELETE of the HOME it used, so the value is BOUNDED to a scratch directory UNDER the OS temp root (${resolvePath(tmpdir())}) and is never handed to a delete outside it; pass --home=<a directory UNDER ${resolvePath(tmpdir())}> (e.g. ${join(resolvePath(tmpdir()), 'astrolive-iso')}), or omit the flag to take this run's own mkdtemp scratch (the bound holds whether or not --keep-home is passed: the VALUE must be boundable by construction, and --keep-home only decides whether this run removes it); fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 — stated on THIS path too, because a refusal is a reading about the run identity)`)
+    ufReportSweep(await ufSweepSpawnedChild('ARG-REFUSED (a --home= value outside the OS temp root, or a non-directory) — this path returns at exit 2 BEFORE the spawn and BEFORE the scratch HOME is minted, so the sweep is a stated no-op and no orphan scratch dir is created'))
+    process.exitCode = 2
+    return
+  }
+  // ⟨gate-4 `F-8` — THE MINT IS BELOW EVERY REFUSAL, AND EVERY PATH THAT MINTS ONE
+  // REMOVES IT.⟩ `home` is the dir the app is given AND the dir the teardown removes.
+  // Three properties are contracted HERE: (i) it is created only on a path that got
+  // past all three refusals; (ii) an operator-named `--home=` is RESOLVED (one
+  // canonical path, so the bound checked at the parse site and re-checked at the
+  // delete site is the SAME path); (iii) `ownScratchHome` records WHICH kind it is —
+  // only the dir this run minted itself (`mkdtempSync`) may be removed with `force`,
+  // and the `finally` below removes whichever kind exists on EVERY terminating path
+  // (the `--connect` scratch, which used to be minted and then leaked because the
+  // removal sat inside the `!opt.connect` branch, is removed like any other). */
+  const ownScratchHome = opt.home === null || opt.connect === true
+  const home = opt.connect ? (mkdtempSync(join(tmpdir(), 'astrolive-connect-')) ?? null) : (opt.home === null ? mkdtempSync(join(tmpdir(), 'astrolive-')) : resolvePath(opt.home))
+  // ⟨gate-4 `F-8`⟩ THE MINT IS RECORDED AT MODULE SCOPE, so even an abort between
+  // here and the `try` below (whose `finally` performs the bounded removal) leaves no
+  // orphan: the module-level `main().catch` removes it through the SAME helper.
+  UF_MINTED_HOME = { dir: home, ownScratch: ownScratchHome }
+  // §6.1 (`G-8`) — THE LAUNCH PROFILE, stated on the record: every reading this
+  // run prints was produced by THIS profile (mode / ports / the REQUESTED tool
+  // groups). ⟨gate-4 `B-11` — the line is PRINTED once the security-set reply has
+  // reported the EFFECTIVE set, below: `--groups=` is a REQUEST, and the effective
+  // set (the store's FILTERED result the live MCP gate is re-gated from) is what
+  // decides whether a group's tools exist at all.⟩
+  const launchProfile = { fixture: UF_FIXTURE_STATE, mode: opt.mode, port: opt.port, cdpPort: opt.cdpPort, display: `:${opt.display ?? '1'}`, groups: groups.slice(), effectiveGroups: null, noSeed: opt.noSeed === true, gpu: opt.gpu === true, connect: opt.connect === true, block: opt.block }
 
   // --connect: attach to a RUNNING app session (assume --port/--cdp-port already
   // point at it). Do NOT spawn a second app, manage a HOME, or tear it down —
@@ -5998,6 +8428,10 @@ async function main(argv) {
       stdio: 'inherit',
       detached: true, // so we can kill the WHOLE process tree on exit (user: exit after the test, not a timer)
     })
+    // THE HANDLE THE SWEEP IS BOUNDED TO: the driver's own spawn (module scope), so
+    // the module-level `main().catch` early-abort path — which cannot see this
+    // local — can sweep exactly this child and nothing else.
+    UF_SPAWNED_CHILD = app
   }
 
   try {
@@ -6009,7 +8443,41 @@ async function main(argv) {
     await waitFor(async () => { const r = await fetch(mcpBase).catch(() => null); return r && r.status < 500 }, { timeout: 60000 })
     const mcp = await connectMcp(mcpBase)
     const cdp = await CDP.connect(opt.cdpPort)
-    await cdp.enableGroups(groups)
+    // §6.1 (`G-8`) — the security-set reply the group enablement returns is KEPT
+    // and printed with the run's summary, so the launch profile's tool-group set
+    // is readable from the artifact, not only from the invocation string.
+    const securitySet = await cdp.enableGroups(groups).catch((e) => `ERROR: ${String(e && e.message ? e.message : e)}`)
+    // ⟨gate-4 `B-11` — THE EFFECTIVE GROUP SET, IN THE ARTIFACT. `--groups=` is only
+    // a REQUEST; the bridge's `security.set` reply is the store's FILTERED result
+    // (`SecuritySettings.enabled`) the LIVE MCP gate is re-gated from. A requested
+    // group OUTSIDE the effective set makes every tool of that group an MCP
+    // `isError`, so the LAUNCH PROFILE line must carry the effective set beside the
+    // requested one AND the consequence (e.g. an effective set without `rag` makes
+    // `rag.list_documents` a driver read failure and re-classifies the corpus-
+    // dependent blocks as PARKED/NOT-DRIVEN — a launch-profile reading, never app
+    // behavior).⟩
+    launchProfile.effectiveGroups = (() => { try { const p = JSON.parse(String(securitySet)); return Array.isArray(p && p.enabled) ? p.enabled.map(String) : null } catch { return null } })()
+    const requestedNotEffective = launchProfile.effectiveGroups === null ? groups.slice() : groups.filter((g) => !launchProfile.effectiveGroups.includes(g))
+    console.log(`[live-drive] LAUNCH PROFILE: ${JSON.stringify(launchProfile)} — REQUESTED groups=[${groups.join(',')}] vs EFFECTIVE (bridge-reported; the filtered set the live MCP gate is re-gated from)=[${launchProfile.effectiveGroups === null ? 'unreadable (the security-set reply carried no `enabled` set — see security.set above)' : launchProfile.effectiveGroups.join(',')}]; CONSEQUENCE: a requested group ABSENT from the effective set has NO tools registered, so every read that depends on it replies \`isError\` and its blocks are reported PARKED/NOT-DRIVEN by name (e.g. an effective set without \`rag\` makes \`rag.list_documents\` a driver read failure and re-classifies the ${UF_GATED_DECLARED_KEYS.length} GATED declared corpus-dependent blocks — the DECLARATION's population, §16.3; the HISTORICAL hand-list \`UF_CORPUS_DEPENDENT_BLOCKS\` is ${UF_CORPUS_DEPENDENT_BLOCKS.length} keys and is a DIFFERENT, historical figure, never the gate's population) — never as app FAILs`)
+    if (requestedNotEffective.length) console.error(`[live-drive] LAUNCH-PROFILE CONSEQUENCE: the requested group(s) [${requestedNotEffective.join(', ')}] are NOT in the effective set — every reading depending on them is launch-profile-conditioned (precondition-failed by name), not an app-layer verdict`)
+    console.log(`[live-drive] security.set groups=[${groups.join(',')}] -> ${String(securitySet)}`)
+    // §6.1 (site 1, its own line) — THE RUN-WIDE FIXTURE STATE, with its
+    // CONSEQUENCE, printed on EVERY run (it is not O-0-scoped and is never
+    // omitted): the state the whole artifact below was produced under.
+    // ⟨gate-4 `E-3`⟩ THE CONSEQUENCE IS DERIVED AND CONDITIONAL, NEVER A UNIVERSAL:
+    // the sentence is printed only for the state it is TRUE of (`none` — the state
+    // this head selects, §6.3), it carries the run's own declared population, the
+    // per-fixture probe the gate uses, and the SCOPE of the clause — including the
+    // EXCLUDED engine family (`E-4`), which the run never gates. At this site the
+    // blocks have not run yet, so the observation says `none yet` instead of
+    // implying a park/run split; the observed split is printed with the summary
+    // (`FIXTURE GATE OBSERVED`), from the same single derivation.
+    const fixtureGateAtLaunch = ufFixtureGateObservation(null)
+    console.log(`[live-drive] FIXTURE STATE: fixtureState="${UF_FIXTURE_STATE.state}" fixtureKind=${UF_FIXTURE_STATE.kind} fixtureId=${UF_FIXTURE_STATE.id} — GATE SCOPE: ${fixtureGateAtLaunch.scope}; DECLARED POPULATION: ${fixtureGateAtLaunch.declared} gated key(s) (gate = the declaration's own predicate corpusRead:true && selfProvisioning:false, PER DECLARED FIXTURE — the absence test is the block's DECLARED \`fixtureName\` own probe, §3.2 F-6/F-7: ${Object.keys(UF_DECLARED_FIXTURE_PROBES).join(', ')}); OBSERVED SPLIT: ${fixtureGateAtLaunch.split}; ${UF_FIXTURE_STATE.kind === 'none' ? UF_FIXTURE_STATE_CONSEQUENCE : `the state is ${JSON.stringify(UF_FIXTURE_STATE.kind)}, so the \`none\`-state consequence does NOT apply to this artifact and no park is inferred from it`}`)
+    // §4.2 `A-1`(i)/(ii) + `A-3` — THE DERIVATION ITSELF, PRINTED: the census the
+    // declaration is held to, the movement from the historical hand-list, and the
+    // AMBIGUITY LIST (each entry excluded AND recorded with its site and clause).
+    console.log(`[live-drive] FIXTURE DECLARATION (§4.2 A-1/A-3 reconciliation): declared=${UF_FIXTURE_DECLARATION.length} · census-derived=${UF_FIXTURE_RECONCILIATION.censusDerived} · historical=${UF_FIXTURE_RECONCILIATION.historical} · ENTERED (census-minus-historical)=${UF_FIXTURE_RECONCILIATION.censusMinusHistorical} · LEFT (historical-minus-census)=[${UF_FIXTURE_RECONCILIATION.historicalMinusCensus.join(', ')}] · census-minus-declared=${UF_FIXTURE_RECONCILIATION.censusMinusDeclared} · GATED (derived from this declaration by §4.1's predicate)=${UF_GATED_DECLARED_KEYS.length} · EXCLUDED ENGINE FAMILY (declared and scoped, never silently widened)= ${UF_EXCLUDED_ENGINE_FAMILY.keys.length} gnosis_* key(s) [${UF_EXCLUDED_ENGINE_FAMILY.keys.join(', ')}] read the ${UF_EXCLUDED_ENGINE_FAMILY.fixtureName} fixture and carrying REAL row verdicts [${UF_EXCLUDED_ENGINE_FAMILY.rows.join(', ')}] — OUT of the corpus census by ${UF_EXCLUDED_ENGINE_FAMILY.clause}, so NO entry in this ${UF_FIXTURE_DECLARATION.length}-entry declaration, never gated, NOT covered by the fixture-absent park clause, and their fixture own probe/read is a SEPARATE open obligation (never a faked probe) · AMBIGUITY LIST (excluded AND recorded, never a silent pass)=[${UF_FIXTURE_RECONCILIATION.ambiguity.map((a) => `${a.key} @ ${a.site} [${a.clause}] ${a.disposition}`).join(' | ')}]`)
     await waitFor(() => mcpTool(mcp, 'provident.list_targets', {}).then(() => true).catch(() => false))
     // deterministic seed (skip with --no-seed to observe the fresh/landing state)
     if (!opt.noSeed) {
@@ -6020,12 +8488,34 @@ async function main(argv) {
       // driver-spawned app: `seedCorpus` writes `alpha.md`/`beta.md` (a 2-document
       // S2 corpus by construction) and can never produce the operator census.
       const files = opt.strictSeed ? o0MarkdownTree(seedDir) : seedCorpus(seedDir)
-      const imp = await mcpTool(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, error: String(e) }))
+      // §3.2 `F-7` (`G-1`) — the FIXTURE-PRECONDITION read is a DISCRIMINATED read:
+      // an `isError` reply (the recorded `MCP error -32602` when the `edit` group
+      // is off) is named with its text VERBATIM through `driverFailureReason`, never
+      // silently stringified into a downstream block's evidence.
+      const impRead = await mcpToolResult(mcp, 'edit.import_markdown', { files }).catch((e) => ({ ok: false, isError: false, tool: 'edit.import_markdown', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+      const impFailure = driverReadFailure(impRead)
+      const imp = impRead.value
       console.error(`[live-drive] seeded corpus -> import ${JSON.stringify(imp)}`)
-      await waitFor(() => mcpTool(mcp, 'rag.list_documents', {}).then((d) => d && d.documents?.length > 0).catch(() => false))
+      if (impFailure) console.error(`[live-drive] ${driverFailureReason(impFailure.kind, impFailure.detail, `the seed fixture route (${impFailure.extra})`).marker} — every corpus-dependent block this run reports PARKED/NOT-DRIVEN by name (§3.2 F-6/F-7)`)
+      // §3.2 `F-7` / gate-4 `B-6` — THE SEEDING WAIT IS A DISCRIMINATED READ. The
+      // legacy `mcpTool` form stringifies an `isError` reply into an error VALUE, so
+      // a truthiness predicate is false and the wait burns its FULL timeout before
+      // proceeding with a corpus the driver has already reported as
+      // precondition-failed. `mcpToolResult` + `driverReadFailure` keep the two cases
+      // apart, the failure is NAMED verbatim, and the wait STOPS on it (returning
+      // `true` ends the wait — it is not retried to timeout).
+      await waitFor(async () => {
+        const read = await mcpToolResult(mcp, 'rag.list_documents', {}).catch((e) => ({ ok: false, isError: false, tool: 'rag.list_documents', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+        const failure = driverReadFailure(read)
+        if (failure) {
+          console.error(`[live-drive] SEED WAIT STOPPED on a driver read failure (no timeout burned): ${driverFailureReason(failure.kind, failure.detail, `the seeded-corpus confirmation read (${failure.extra})`).marker} — every corpus-dependent block this run reports PARKED/NOT-DRIVEN by name (§3.2 F-6/F-7)`)
+          return true
+        }
+        return !!(read.value && Array.isArray(read.value.documents) && read.value.documents.length > 0)
+      })
     }
 
-    const h = { mcp, cdp, groups, mcpTool }
+    const h = { mcp, cdp, groups, mcpTool, mcpRead: (name, args = {}) => mcpToolResult(mcp, name, args) }
     const names = opt.block === 'all' ? Object.keys(BLOCKS) : opt.block.split(',').map((s) => s.trim()).filter(Boolean)
     // §3.5/§3.6 — the O-0 run context: the EXECUTING bundle identity (served vs
     // on-disk) and the OBSERVED corpus census are read ONCE, before the block loop,
@@ -6064,20 +8554,222 @@ async function main(argv) {
       opt.bundle = bundle
       opt.mainSeamNote = h.o0.mainSeamNote
     }
-    let fail = 0, park = 0, diag = 0
+    let fail = 0, park = 0, diag = 0, notDrivenCount = 0
     // §6.1 report material: the ROW blocks' structured results (matrix + extended)
     const reportRows = []
+    // §2.3 `H-4` — a verdict-carrying gesture that could not be driven honestly
+    // reads `NOT-DRIVEN` (a DRIVER failure, `realInput:false` + the reason), NEVER
+    // an app-layer FAIL. §2.2 `E-7` — the record the report is built from carries
+    // the whole contracted field set (`V-4` read the thin `{row, block, pass}`).
+    // §2.3 `H-1` clauses 3/4 + §13.4 — the per-block PRE-FLIGHT RESTORE; §2.1
+    // `E-2` — one row-block result PER DECLARED ROW (a block returns its result,
+    // or an ARRAY: the checklist result plus one per claimed declared row);
+    // §3.2 `F-6`/`F-7` (`G-1`/`G-2`) — the per-block PRECONDITION READ runs
+    // beside the pre-flight, so a corpus-dependent block whose fixture is ABSENT
+    // (or whose read replied `isError`) is reported BY NAME with its declared row
+    // id instead of running a setup read that can only throw.
+    const countResult = (counted) => {
+      if (counted === 'diag') diag++
+      else if (counted === 'park') park++
+      else if (counted === 'notDriven') notDrivenCount++
+      else if (counted === 'fail') fail++
+    }
+    // ⟨GATE-5 FINDING — THE OBSERVATION'S PARK COUNT READS THE CLASSIFICATION.⟩
+    // ONE record per block that ran (`{block, counted, park}`), taken at the ONE
+    // point the block's own verdict LINE is printed and from the SAME result object
+    // that line is printed from — so the `§6.1` fixture-gate split and the `PARK` /
+    // `DIAG` lines come from ONE classification, not two. `park` is true for BOTH
+    // park routes: the id-carrying park (`r.park === true`, which prints a
+    // `PARK` line and a `ROW … verdict=PARKED` line) and the NO-DECLARED-ROW-ID
+    // fallback (`§5.1` clause 3(vi) / `§5.3`: `diagResult` carries no `park` FIELD at
+    // all and is filtered out of `reportRows`, so its park is read from the
+    // `PRECONDITION-FAILED` marker in the very text its `DIAG` line prints).
+    const ufBlockClass = new Map()
+    // ⟨gate-4 `F-3`⟩ THE RECORD CARRIES WHICH ROUTE PARKED THE BLOCK: `route` is the
+    // token `'fixture-gate'` ONLY at the fixture gate's own branch (`ufRunBlock`'s
+    // declared-fixture-absent site, below), so `gateRoute` is true for exactly the
+    // parks the FIXTURE GATE produced — never for a park routed from the block's own
+    // body (`parkRow`, a result carrying `extra:{park:true, parkReason}`) and never for
+    // the thrown-precondition route `ufRecordDriverFailure`. It changes NO count except
+    // the observation's new `parkedByGate` member; `park` and `counted` are untouched.
+    const ufCountBlock = (n, label, r, route) => {
+      const counted = printBlockVerdict(label, r)
+      const text = String((r && (r.detail ?? r.evidence)) ?? '')
+      ufBlockClass.set(n, { block: n, counted: counted, park: (r && r.park === true) || (r && r.diagnostic === true && /PRECONDITION-FAILED/.test(text)), gateRoute: route === 'fixture-gate' })
+      return counted
+    }
+    /** The report rows of ONE result set, built through the §6.1 record. */
+    const ufPushRows = (resolved, n, reportRows) => {
+      for (const res of resolved) {
+        if (typeof res.row !== 'string') continue
+        const v = blockVerdictOf(res)
+        reportRows.push(buildReportRow(res, n, v.verdict, v.notDriven))
+      }
+    }
+    /** §2.3 `H-4` (`G-2`) — THE NAMED DRIVER-FAILURE RECORD: the block's declared
+     *  row id(s) are KEPT and carry the precondition by name (never an app FAIL). */
+    const ufRecordDriverFailure = (n, reason, label, reportRows) => {
+      const rows = ufDriverFailureRows(n, reason)
+      console.log(`DRIVER-FAILURE ${label} ${driverFailureReason(reason.kind, reason.detail, reason.extra).marker} — the block THREW on a PRECONDITION (never an app FAIL); its declared row id(s) [${ufDeclaredRowsForBlock(n).map((x) => x.row).join(', ')}] are kept and carry this precondition by name`)
+      ufPushRows(rows, n, reportRows)
+      return ufCountBlock(n, label, rows[0])
+    }
+    /** §2.3 `H-1`/`H-2` — ONE BLOCK'S OWN RUN: the pre-flight, the corpus
+     *  precondition gate, the block call, the printed verdict and its report rows.
+     *  Returns the token `printBlockVerdict` counted. */
+    const ufRunBlock = async (h, opt, n, pre, label, reportRows) => {
+      const preflight = await ufBlockPreflightRestore(h) // H-1 clause 4: per-block restore of the driver's own state
+      const preflightLine = `PREFLIGHT ${label} §2.3 H-1 clause 4 restore: zone=${JSON.stringify(preflight.zone)} panes=${JSON.stringify(preflight.panes)} frames=${JSON.stringify(preflight.frames)}${preflight.error ? ` error=${preflight.error}` : ''}`
+      // ⟨gate-4 `E-3` — THE ABSENCE TEST IS TAKEN PER DECLARED FIXTURE.⟩ The
+      // declaration entry for THIS block is resolved FIRST, and the fixture it
+      // DECLARES is probed through `ufFixturePreconditionRead`, so a block is gated
+      // on the fixture it actually declares. The landed gate keyed on the boolean
+      // predicate alone and parked every gated key on ONE run-wide
+      // `rag.list_documents` read, so a block declaring `corpus-query-results` could
+      // run its own setup against a fixture its own declaration called ABSENT — the
+      // contract's forbidden outcome `F-2`. A fixture whose probe did NOT resolve
+      // (a driver read failure, an unknown fixture name) is NOT an absent fixture
+      // (`§2.3` `H-4`): the block runs and reports its own verdict, fail-loud.
+      const declared = UF_FIXTURE_DECLARATION.find((e) => e.block === n) ?? null
+      const blockFixture = declared ? await ufFixturePreconditionRead(h, opt, declared.fixtureName) : null
+      const ufDeclaredFixture = declared ? declared.fixtureName : 'none'
+      const ufDeclaredFixtureProbe = blockFixture ? `${blockFixture.tool ?? 'no declared read'} (present=${blockFixture.present}, resolved=${blockFixture.resolved})` : 'unprobed'
+      if (pre && pre.present !== true && (UF_FIXTURE_DECLARATION.find((e) => e.block === n)?.corpusRead === true && UF_FIXTURE_DECLARATION.find((e) => e.block === n)?.selfProvisioning === false) && blockFixture && blockFixture.resolved === true && blockFixture.present !== true) {
+        // THE NAMED DISPOSITION, with the block's DECLARED row id kept: the block
+        // is not run (its own declared fixture's read can only fail on a fixture the
+        // operator's flag — or a failed seed — removed). §4.1: THE GATE IS THE
+        // DECLARATION'S OWN PREDICATE — an entry with `corpusRead:true` AND
+        // `selfProvisioning:false` — read PER DECLARED FIXTURE (the `blockFixture`
+        // limbs: the probe of the fixture THIS entry NAMES, so a block is never
+        // gated on another fixture's reading, `F-2`).
+        // A `selfProvisioning:true` block (its input is its own write+import) and a
+        // `corpusRead:false` block are NOT parked: they carry their own verdict.
+        // §5.1 clause 3 — THE REASON NAMES THE FIXTURE: the declaration entry for
+        // this block supplies the `fixtureName` and the `surface` it reads, so the
+        // park is re-derivable as fixture-missing vs structurally non-exercisable
+        // (`RCA-11` clause (b)) and the generic absence text is not the record.
+        // ⟨gate-6 FINDING `NEW-3` — WHICH READ THE PARK NAMES.⟩ This reason used to
+        // interpolate `pre` (the block loop's RUN-WIDE read, `ufBlockPrecondition`)
+        // while calling it "the block own DECLARED FIXTURE probe". `pre` is NOT the
+        // declared fixture's probe: the declared probe is `blockFixture`
+        // (`ufFixturePreconditionRead`, which formats `rag.list_documents -> N
+        // document(s) (the fixture "<name>" own read)`). The two are value-identical
+        // at this head ONLY because all three corpus fixtures ride the same
+        // `rag.list_documents` read (§5.5 `F-2`'s recorded inertness), so the old
+        // sentence was true by coincidence and would become value-FALSE the moment
+        // the fixtures' probes diverge. The park is therefore composed from
+        // `blockFixture` — the probe of the fixture THIS entry NAMES — and the
+        // run-wide read is named as what it is: the gate's OTHER, also-required
+        // conjunct (its `pre.detail`/`pre.extra` stay in the record, quoted as such).
+        // A path that reaches this branch with no readable declared-fixture probe is
+        // NOT admitted by the gate's own `blockFixture` conjuncts; its own wording is
+        // kept here so such an absence would say plainly that it rides the RUN-WIDE
+        // read ALONE rather than reusing the declared-probe sentence.
+        // ⟨gate-4 `E-3`⟩ NOTE — NO SECOND BINDING IS REFERRED TO BY THE GATE HEAD: the
+        // pin compiles `ufRunBlock`'s gate text in ISOLATION, so the head may read only
+        // `pre`, `n`, `UF_FIXTURE_DECLARATION` and `blockFixture` (a local name the head
+        // refers to is undefined there and the gate's own limbs become unreadable). The
+        // bindings below are read by the reason expression alone. THE GATE ITSELF IS
+        // UNCHANGED — the same predicate admits this branch, so what parks and what runs
+        // is exactly what parked and ran before.
+        const decl = declared
+        const ufParkRead = blockFixture
+        const ufRunWideConjunct = `the gate's OTHER, also-required conjunct is the RUN-WIDE read (${pre.detail}; ${pre.extra}) — reported here as the run-wide conjunct, never as the read this park is attributed to`
+        const rows = ufDriverFailureRows(n, {
+          kind: ufParkRead ? ufParkRead.kind : pre.kind,
+          detail: ufParkRead ? ufParkRead.detail : `${pre.detail} (the RUN-WIDE read ALONE: this block carries no readable declared-fixture probe)`,
+          extra: ufParkRead
+            ? `${ufParkRead.extra}; block=${n} DECLARES the fixture ${decl ? decl.fixtureName : 'none'} over the corpus surface it reads (${decl ? decl.surface : 'none'}); the read that failed is ${ufParkRead.detail} — the block own DECLARED FIXTURE probe (the fixture ${JSON.stringify(ufParkRead.fixtureName)} own read via ${ufParkRead.tool ?? 'no declared read'}), never the run-wide read; ${ufRunWideConjunct}`
+            : `${pre.extra}; block=${n} DECLARES the fixture ${decl ? decl.fixtureName : 'none'} over the corpus surface it reads (${decl ? decl.surface : 'none'}); this absence rides the RUN-WIDE read ALONE (the block carries no readable declared-fixture probe to attribute it to): the read that failed is ${pre.detail} — the run-wide read, never a declared-fixture probe`,
+        })
+        ufPushRows(rows, n, reportRows)
+        if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'minimized')) console.log(preflightLine)
+        // ⟨gate-4 `F-3`⟩ THE GATE ROUTE IS TAGGED AT ITS ONE SITE: this branch — the
+        // only place a block is parked WITHOUT being run, on its OWN declared fixture's
+        // absence — is what `gateRoute` records, so the observation can report the
+        // fixture-absent subset of the gated population's parks (below). No count is
+        // changed here; the tag is read by `ufFixtureGateObservation` alone.
+        return ufCountBlock(n, label, rows[0], 'fixture-gate')
+      }
+      // §2.3 `H-3` clause 1 (`G-9`) — THE GESTURE LOG IS PER BLOCK: reset AFTER the
+      // pre-flight (whose own hygiene clicks are not this block's gestures) and
+      // BEFORE the block drives, so the record harvested below belongs to this
+      // block's own clicks only.
+      UF_GESTURE_LOG.length = 0
+      UF_LAST_PROBE = -1
+      const r = await BLOCKS[n](h) // E-2: a block returns its result, or an ARRAY (checklist + one per declared row)
+      const results = Array.isArray(r) ? r.filter((x) => x && typeof x === 'object') : [r]
+      // §2.3 `H-3` clause 1 (`G-9`/`M-10`) — ONE CENTRAL CARRIER: every click the
+      // block drove was logged by the gesture helpers (the probe, and the branch the
+      // route took), so the click record is put onto the result whose verdict rests
+      // on it HERE — no block is hand-edited to carry its own coordinate. The
+      // record is data: it changes no `pass`, no `verdict` and no aggregate.
+      ufAttachClickRecords(results, UF_GESTURE_LOG)
+      ufPushRows(results, n, reportRows)
+      // ⟨gate-4 `E-3` — THE REPORTED ABSENCE NAMES WHICH ABSENCE IT IS.⟩ The line
+      // used to assert flatly that "this block is NOT declared corpus-dependent",
+      // which is FALSE for a gated block whose OWN declared fixture probed PRESENT
+      // (only the run-wide read failed): the gate then correctly did not fire, and
+      // the block carries its own verdict. The line now states the per-fixture
+      // reading that actually produced the disposition.
+      if (pre && pre.present !== true) console.log(`PRECONDITION ${label} §3.2 F-6 reading: ${pre.detail}; the run-wide read did not report the corpus present and this block DECLARES the fixture ${declared ? `${declared.fixtureName} (corpusRead=${declared.corpusRead}, selfProvisioning=${declared.selfProvisioning})` : 'NONE (no declaration entry)'} — its OWN declared fixture probed ${blockFixture ? `present=${blockFixture.present} resolved=${blockFixture.resolved} via ${blockFixture.tool}` : 'unreadable'}, so this absence is REPORTED here and is never inferred as this block own failure`)
+      if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'minimized')) console.log(preflightLine)
+      return ufCountBlock(n, label, results[0] ?? r)
+    }
     for (const n of names) {
       const label = `${n.padEnd(18)}`
+      let pre = null
       try {
-        const r = await BLOCKS[n](h)
-        const row = typeof r.row === 'string' ? r.row : null
-        if (row) reportRows.push({ row, block: n, pass: r.pass === true, proxyPASS: r.proxyPASS === true, realInput: r.realInput === true, park: r.park === true })
-        if (r.diagnostic === true) { console.log(`DIAG  ${label} ${r.detail ?? ''}`); diag++ }
-        else if (r.pass) { console.log(`PASS  ${label} ${r.detail ?? ''}`) }
-        else if (r.park) { console.log(`PARK  ${label} ${r.detail ?? ''}`); park++ }
-        else { console.log(`FAIL  ${label} ${r.detail ?? r.evidence ?? ''}`); fail++ }
-      } catch (e) { console.log(`FAIL  ${label} ${String(e)}`); fail++ }
+        pre = await ufBlockPrecondition(h, opt) // §3.2 F-6: is the seeded corpus present? (a read, never a throw)
+        countResult(await ufRunBlock(h, opt, n, pre, label, reportRows))
+      } catch (e) {
+        // §2.3 `H-4` (`G-2`) — A THROW THAT IS A PRECONDITION IS NOT AN APP FAIL:
+        // it is classified by name and its declared row id(s) are kept. A genuine
+        // defect keeps the loud `FAIL` and the run stays fail-loud.
+        const reason = ufBlockThrowReason(e, pre, n)
+        if (reason) countResult(ufRecordDriverFailure(n, reason, label, reportRows))
+        else {
+          console.log(`FAIL  ${label} ${String(e)}`)
+          fail++
+          // ⟨GATE-4 FINDING `D-3`⟩ — NO DECLARED ROW VANISHES WITH A THROW. The
+          // defect keeps the loud `FAIL` (never a `NOT-DRIVEN`), and the declared
+          // row id(s) the block owns are pushed as NAMED §6.1 report rows AND named
+          // on a `ROW-SET ERROR` line, so the matrix reconciliation, the row-set
+          // record and the exit path all carry the row the throw would have erased.
+          const thrown = ufThrownBlockRows(n, e)
+          ufPushRows(thrown, n, reportRows)
+          console.log(`ROW-SET ERROR: declared row(s) [${thrown.map((x) => String(x.row)).join(', ')}] owned by block ${n} produced NO verdict: the block THREW on a reason that is NOT a resolved precondition (${String(e)}) — each declared row is recorded BY NAME as its own FAIL (never a NON-VERDICT and never an omission; §2.1 E-3 clause 2 / gate-4 D-3)`)
+        }
+      }
+    }
+    // §2.2 `E-7` — THE PRINTED PER-ROW LINE IS THE ARTIFACT (the returned object is
+    // not). Every counted row prints its `row`/`block`/`verdict`/`dclass`/
+    // `realInput`/`surface` (the WHOLE object, `target` INCLUDED — `M-4`)/`
+    // `failingClause` (with observed vs required)/`evidence`/`proxyPASS`/
+    // `gesturePath`, so a clause-less or surface-less row can never reach the log.
+    for (const r of reportRows) {
+      const clause = r.failingClause
+        ? ` failingClause={"predicate":${JSON.stringify(r.failingClause.predicate)},"required":${JSON.stringify(r.failingClause.required)},"observed":${JSON.stringify(r.failingClause.observed)}} observed=${JSON.stringify(r.observed)} required=${JSON.stringify(r.required)}`
+        : ' failingClause=null'
+      const surfaceText = r.surface
+        ? `target=${r.surface.target} liveSurfacePresent=${r.surface.liveSurfacePresent}`
+        : 'target=null liveSurfacePresent=null'
+      // §2.3 `H-3` clause 1 (`G-9`/`M-10`) — THE CLICK'S OWN RECORD, printed beside
+      // every verdict-carrying click: the coordinate, the viewport it was
+      // dispatched against, the element under that point, `onTarget` AND `inVp`.
+      // Before this, 1 of the battery's 45 verdict-carrying clicks printed its
+      // coordinate; an off-target click printed no viewport and an off-viewport
+      // click neither coordinate nor viewport.
+      const clickText = r.clickRecord
+        ? ` click={"selector":${JSON.stringify(r.clickRecord.selector)},"coordinate":${JSON.stringify(r.clickRecord.coordinate)},"viewport":${JSON.stringify(r.clickRecord.viewport)},"hit":${JSON.stringify(r.clickRecord.hit)},"onTarget":${r.clickRecord.onTarget === true},"inVp":${r.clickRecord.inVp === true},"path":${JSON.stringify(r.clickRecord.path)},"realInput":${r.clickRecord.realInput === true},"clicksDriven":${r.clickRecord.clicks ?? null}}`
+        : ''
+      // §2.3 `H-4` (`G-10`) / finding `C-5` — a PARKED row's NAMED reason on its own
+      // record. Gated on the row's OWN park flag (`r.park === true`), so the text can
+      // never ride a row that did not park, and a parked row whose site recorded no
+      // reason prints the NAMED sentinel `buildReportRow` substituted rather than
+      // skipping the park text.
+      const parkText = r.park === true ? ` parkReason=${JSON.stringify(r.parkReason ?? UF_NO_PARK_REASON)}` : ''
+      console.log(`ROW   ${String(r.block).padEnd(22)} row=${r.row} block=${r.block} verdict=${r.verdict} dclass=${r.dclass} realInput=${r.realInput} surface=${surfaceText} proxyPASS=${r.proxyPASS} proxy=${JSON.stringify(r.proxy)} gesturePath=${r.gesturePath}${r.driverFailure ? ' DRIVER-FAILURE(not-driven: the gesture could not be driven honestly — never an app FAIL)' : ''}${clause}${clickText}${parkText} evidence=${JSON.stringify(r.evidence)}`)
     }
     // §3.3/§4.1/§4.4 — emit the O-0 report (only when an O-0 block ran; a hard
     // failure ABORTS before this point and writes NO partial artifact, §6 F6).
@@ -6096,39 +8788,285 @@ async function main(argv) {
     // number of blocks; the extended (non-matrix) results are reported separately.
     const matrixVerdict = reportRows.filter((r) => /^U-\d+$/.test(r.row))
     const extendedVerdict = reportRows.filter((r) => !/^U-\d+$/.test(r.row))
-    let matrixPass = 0, matrixFail = 0, matrixParked = 0
-    for (const r of matrixVerdict) { if (r.park) matrixParked += 1; else if (r.pass) matrixPass += 1; else matrixFail += 1 }
+    // §12.3 item 5 / gate-4 `B-8` — THE ARITHMETIC IS PLACED AT THE `matrixVerdict`
+    // SCOPE: every count member of the §6.1 summary DERIVES from the matrix-row filter
+    // variable itself (never from a counter that a non-row verdict could widen), so
+    // the scope of `pass`/`fail`/`parked`/`matrixRowsExecuted` is readable from the
+    // artifact's own expression.
+    // §2.2 `E-11` — THE MATRIX DIMENSION IS FOLDED BY ROW ID TOO. `B-3`'s closure
+    // made `U-2` (`uf_tabs_7` + `uf_panes_14`) and `U-3` (`uf_panes_12` +
+    // `uf_panes_14`) multi-contributor, so `matrixVerdict` may hold ten ENTRIES
+    // over eight ROWS. Counting ENTRIES made the §6.1 summary read
+    // `pass 6 + fail 4 = 10` against `total 8` — the partition the NOTE advertises
+    // BROKEN, and the very arithmetic `aggregateRows` answers on the extended
+    // dimension. The same AND fold (a single `FAIL` contributor makes the ROW read
+    // `FAIL`; a `PARKED`/`NOT-DRIVEN` half is never promoted) is therefore taken
+    // over the `matrixVerdict` scope ITSELF, IN the count expressions below (never
+    // through a local the count reads instead), so a count that lost the fold —
+    // every contributor counted as its own row — is readable FROM the expression:
+    // `pass + fail + parked === matrixRowsExecuted === total` holds by construction.
+    // The `matrixVerdict` scope stays NAMED in every count below (the count's own
+    // expression names the filter it counts) AND the fold is taken over it in the
+    // SAME expression, so neither a widened filter nor an entry count can pass.
+    const matrixAggregate = aggregateRows(matrixVerdict)
+    const matrixRowsExecuted = aggregateRows(matrixVerdict).length
+    // §2.2 `E-11` — THE SHARED-ROW AGGREGATION: every emitted row id is folded BY
+    // ROW ID, the aggregate being the AND of its contributions. Each contributor's
+    // OWN verdict is already printed on its own `ROW` line above; the aggregate is
+    // printed BESIDE its contributor list (never as the only place a verdict
+    // appears), and a disagreeing pair prints both and reads FAIL.
+    const extendedAggregate = aggregateRows(extendedVerdict)
+    const sharedRows = extendedAggregate.filter((a) => a.shared)
+    // §2.2 `E-12` item 5 / `F-15` — an emitted-but-UNDECLARED row id is REPORTED,
+    // never a refusal (declaring it is a later unit's naming act).
+    const declaredExtendedIds = ROW_EXTENDED.map((r) => String(r.row))
+    const emittedExtendedIds = new Set(extendedVerdict.map((r) => String(r.row)))
+    const undeclaredExtended = [...emittedExtendedIds].filter((id) => !declaredExtendedIds.includes(id))
+    // §2.2 `E-12` — THE EXTENDED DECLARED/EXECUTED RECONCILIATION (declared-minus-
+    // verdict SET DIFFERENCE, never a declared-list substitution).
+    const extendedMissingRows = ROW_EXTENDED.map((r) => String(r.row)).filter((id) => !emittedExtendedIds.has(id)) // ROW_EXTENDED declared-minus-emitted
+    const extRecon = extendedDeclaredMissing(extendedVerdict.map((r) => ({ row: r.row, block: r.block })), names)
+    const extendedMissing = extRecon.missing
+    const extInconclusive = extRecon.inconclusive
+    const extendedRefused = extRecon.refused
+    // §2.1 `E-3` — the full-battery predicate is decided by the REQUESTED set
+    // covering every `BLOCKS` key AND every declared row's block (the ROW
+    // dimension), never by `blocksRun === 0` (`V-3`).
+    const recon = reconcileMatrixRows(matrixVerdict.map((r) => ({ row: r.row, block: r.block })), names, MATRIX_ROWS, Object.keys(BLOCKS))
+    // §2.1 `E-3`'s contract-shape table — the self-describing coverage field, so an
+    // `OK` can never be printed beside `matrixRowsExecuted < total` (M-1's case).
+    // §2.1 `E-3` / `G-8` (`M-1`) — THE SCOPE OF THE `OK`: the reconciliation line may
+    // print `OK` ONLY together with the coverage it actually took, because a scoped
+    // run that drove NO declared row used to print `OK` beside `matrix rows
+    // executed=0` — the exact shape the defect row
+    // `LIVE-DRIVER-MATRIX-MAPPING-INCOMPLETE` calls its own defect, while `§2.1
+    // E-3`/`F-2` clause (iii) reasons a scoped, un-executed declared row as
+    // INCONCLUSIVE, not a defect. `rowsInScope` is the number of DECLARED rows whose
+    // block this run requested (the `--block=` option space is what makes "in scope"
+    // well-defined, `§2.2 E-12` item 2), and the inconclusive count is the
+    // reconciler's own declared-minus-verdicted set — never a coverage claim.
+    const matrixRowsInScope = MATRIX_ROWS.filter((row) => declaredBlocksOf(row).some((b) => names.includes(b))).length
+    const coverage = { matrixTotal: MATRIX_ROWS.length, verdicts: matrixRowsExecuted, missingRows: recon.missingRows, fullBattery: recon.fullBattery, rowsInScope: matrixRowsInScope }
     const summary = {
       unit: 'user-flow-audit',
       layer: 'assembled-renderer (RCA-12)',
+      // §6.1 (`G-8`) — THE LAUNCH PROFILE is part of the reading: a verdict may
+      // never be quoted without the mode/ports/group set that produced it.
+      mode: launchProfile.mode,
+      port: launchProfile.port,
+      cdpPort: launchProfile.cdpPort,
+      // §6.1 (site 2) — THE RUN-WIDE FIXTURE STATE travels with the summary too:
+      // the SAME single read the launch profile carries (`fixture: UF_FIXTURE_STATE`),
+      // copied member-by-member exactly as the rest of this literal is — never a
+      // second computation and never a spread.
+      fixture: UF_FIXTURE_STATE,
+      // ⟨gate-4 `E-3`⟩ THE FIXTURE-STATE OBSERVATION, DERIVED FROM THIS RUN: the
+      // declared gated population, the OBSERVED park/run split inside it, and the
+      // clause's SCOPE (the gated population + the excluded engine family). One
+      // derivation (`ufFixtureGateObservation`) feeds this member and the
+      // `FIXTURE GATE OBSERVED` line, so the split cannot be stated twice
+      // differently. The `fixture` member above keeps its own §6.1 form (the SAME
+      // object reference as the launch profile).
+      // ⟨GATE-5 FINDING — THE ARGUMENT IS THE BLOCK CLASSIFICATION, NOT `reportRows`:
+      // one record per block that ran (`ufCountBlock`), so the count agrees with the
+      // `PARK`/`DIAG` lines the run printed and neither drops the no-declared-row-id
+      // `DIAG` park (`§5.1` clause 3(vi) filters it out of `reportRows`) nor
+      // double-counts a gated block's several parked declared rows.⟩
+      fixtureGate: ufFixtureGateObservation([...ufBlockClass.values()]),
+      groups: launchProfile.groups.slice(),
+      // gate-4 `B-11` — the EFFECTIVE (bridge-reported) group set travels with the
+      // reading: a verdict may never be quoted without the profile that produced it,
+      // and `--groups=` alone is a REQUEST.
+      effectiveGroups: launchProfile.effectiveGroups === null ? null : launchProfile.effectiveGroups.slice(),
+      securitySet: String(securitySet),
       total: MATRIX_ROWS.length,
-      pass: matrixPass,
-      fail: matrixFail,
-      parked: matrixParked,
-      matrixRowsExecuted: new Set(matrixVerdict.map((r) => r.row)).size,
+      // §6.1/§12.3 item 5 — the partition of the EXECUTED §5.U rows, each member
+      // derived from the `matrixVerdict` matrix-row scope (never a wider list) AND
+      // folded BY ROW ID inside the expression itself (never read off a local that
+      // merely holds the fold): the three members therefore PARTITION the folded
+      // rows, so `pass + fail + parked === matrixRowsExecuted === total` — a
+      // multi-contributor row (`U-2`/`U-3` after `B-3`) is counted ONCE, by its
+      // aggregated verdict, and a count that lost the fold reads 10 against 8.
+      pass: aggregateRows(matrixVerdict).filter((a) => a.verdict === 'PASS').length,
+      fail: aggregateRows(matrixVerdict).filter((a) => a.verdict === 'FAIL').length,
+      parked: aggregateRows(matrixVerdict).filter((a) => a.verdict !== 'PASS' && a.verdict !== 'FAIL').length,
+      matrixRowsExecuted: aggregateRows(matrixVerdict).length,
       blocksRun: names.length,
       extendedRowsRun: extendedVerdict.length,
       diagnostics: diag,
+      coverage: { matrixTotal: coverage.matrixTotal, verdicts: coverage.verdicts, missingRows: coverage.missingRows, fullBattery: coverage.fullBattery, rowsInScope: coverage.rowsInScope },
     }
-    console.error(`[live-drive] done: ${names.length} blocks, ${fail} FAIL, ${park} PARKED`)
-    console.error(`[live-drive] §6.1 summary: ${JSON.stringify(summary)}`)
-    console.error(`[live-drive] MATRIX rows (${MATRIX_ROWS.length} = summary.total): ${matrixVerdict.map((r) => `${r.row}:${r.block}=${r.park ? 'PARKED' : r.pass ? 'PASS' : 'FAIL'}${r.proxyPASS ? '(proxyPASS)' : ''}${r.realInput ? '' : '(realInput:false)'}`).join(' ') || '(none executed)'}`)
-    console.error(`[live-drive] EXTENDED rows (${extendedVerdict.length} of ${ROW_EXTENDED.length} defined): ${extendedVerdict.map((r) => `${r.row}:${r.block}=${r.park ? 'PARKED' : r.pass ? 'PASS' : 'FAIL'}${r.proxyPASS ? '(proxyPASS)' : ''}`).join(' ') || '(none executed)'}`)
-    // ROW-SET / COUNT RECONCILIATION — loud (never silent) when a matrix row has
-    // no block, a block claims several rows, or a reported row is not in §5.U
-    const recon = reconcileMatrixRows(matrixVerdict.map((r) => ({ row: r.row, block: r.block })), names.length === Object.keys(BLOCKS).length ? 0 : names.length)
     const claims = MATRIX_ROWS.map((row) => `${row.row}->${row.block}`)
-    console.error(`[live-drive] MATRIX_ROWS mapping (${claims.length}): ${claims.join(' ')}`)
-    for (const e of recon.errors) console.error(`[live-drive] ROW-SET ERROR: ${e}`)
-    console.error(`[live-drive] row-set reconciliation: matrix=${recon.matrixTotal} rows claimed by ${claims.length} mapping(s); blocks run=${names.length}; matrix rows executed=${summary.matrixRowsExecuted}; extended rows=${extendedVerdict.length}; §5.U row total (summary.total)=${summary.total}${recon.ok ? ' OK' : ' MISMATCH'}`)
-    process.exitCode = fail > 0 || !recon.ok ? 1 : 0
+    console.log(`[live-drive] done: ${names.length} blocks, ${fail} FAIL, ${park} PARKED, ${notDrivenCount} NOT-DRIVEN (a driver failure is never an app FAIL)`)
+    console.log(`[live-drive] §6.1 summary: ${JSON.stringify(summary)}`)
+    // ⟨gate-4 `E-3` — THE OBSERVED PARK/RUN SPLIT, BESIDE THE STATE IT BELONGS TO.⟩
+    // The run-wide `FIXTURE STATE` line prints before the blocks run, so it carries
+    // the DECLARED population and says `none yet` for the observation; THIS line
+    // carries the observation, taken from the run's own BLOCK CLASSIFICATION — the
+    // per-block record `ufCountBlock` made at the very result object each
+    // `PASS`/`PARK`/`DIAG` line was printed from (NEVER `reportRows`, whose
+    // `typeof res.row === 'string'` guard drops the no-id `DIAG` park of `§5.1`
+    // clause 3(vi) and whose one-entry-per-declared-row shape double-counts a gated
+    // block's several parked rows): how many of the DECLARED GATED keys actually
+    // PARKED (a `PARK` classification, or a `DIAG` one whose text carries the
+    // `PRECONDITION-FAILED` marker — the two routes the artifact prints) and how many
+    // did not. It states its SCOPE too, so the split can never be read as covering the
+    // excluded engine family. A run whose fixture is present prints `parked=0/N` and
+    // the consequence sentence on the FIXTURE STATE line does NOT apply to it (`§6.1`,
+    // gate-4 `E-3`: the line's claim is conditional, never a universal).
+    //
+    // ⟨gate-4 `F-3`/`F-4` — TWO OVER-CLAIMS THIS LINE CARRIED.⟩ (a) `parked=N` was
+    // narrated as `N carried the fixture-absent park`, which is FALSE: the count is
+    // EVERY park inside the `34` gated keys, and gated keys park for their own reasons
+    // too. The line now prints `parked-by-the-fixture-gate=` BESIDE it (the SUBSET the
+    // gate's own route produced, tagged at `ufCountBlock`) and says the fixture-absent
+    // park is a subset of `parked`. (b) the arithmetic remainder printed as
+    // `ran-with-own-verdict=` — a label that reads as a COVERAGE count (and reads the
+    // same on a scoped run). It is renamed `eligible-and-not-parked=` and the run's own
+    // `blocksRun` is printed on the SAME line, so the two figures cannot be confused.
+    // NO count is changed by either fix: `parked`, `declared` and the split are unmoved.
+    console.log(`[live-drive] FIXTURE GATE OBSERVED (§6.1, gate-4 E-3 — the DERIVED, CONDITIONAL split this run actually produced): declared=${summary.fixtureGate.declared} gated key(s) · OBSERVED SPLIT: ${summary.fixtureGate.split} (parked=${summary.fixtureGate.parked} is EVERY park inside the ${summary.fixtureGate.declared} gated keys, WHATEVER it parked for — a gated key may park for its OWN reason, e.g. a block whose own result carries extra:{park:true, parkReason} — of which parked-by-the-fixture-gate=${summary.fixtureGate.parkedByGate} came from the FIXTURE GATE's own route ALONE (the block's OWN declared fixture probe read absent, so the block was parked WITHOUT running, §4.1 / §5.1 clause 1); the fixture-absent park is therefore a SUBSET of parked, never the whole count: the other ${summary.fixtureGate.parked - summary.fixtureGate.parkedByGate} parked for their own recorded reasons) · the remainder is ARITHMETIC over the DECLARATION and is NOT a coverage reading: eligible-and-not-parked=${summary.fixtureGate.eligibleAndNotParked} (= declared − parked; a scoped run prints the same figure) — the run count is blocksRun=${summary.blocksRun} (of the ${Object.keys(BLOCKS).length} counted blocks), so neither figure may be read as coverage · SCOPE: ${summary.fixtureGate.scope}`)
+    // ⟨GATE-4 FINDING `D-3`⟩ — the printed NOTE's PARTITION CLAIM is made TRUE for a
+    // SCOPED run too: the clause used to read `pass + fail + parked === matrixRowsExecuted
+    // === total` unconditionally, which a scoped run (`matrixRowsExecuted < total`) makes
+    // FALSE — the same over-claim the scope-carrying `OK` was repaired for. The closure is
+    // now stated on the term it holds on (`matrixRowsExecuted`), with the scope named: the
+    // full-battery form additionally closes on `total`; the scoped form says so.
+    console.log(`[live-drive] NOTE: summary.pass/fail/parked partition ONLY the executed §5.U rows — counted over the BY-ROW-ID FOLD (each declared row once, by its aggregated verdict), so pass + fail + parked === matrixRowsExecuted (${summary.matrixRowsExecuted}) — and must NEVER be read as app health; ${coverage.fullBattery ? `this is a FULL-BATTERY run, so matrixRowsExecuted === total (${MATRIX_ROWS.length})` : `this run is SCOPED, so matrixRowsExecuted (${summary.matrixRowsExecuted}) is the IN-SCOPE part of total (${MATRIX_ROWS.length}) and the partition closes on matrixRowsExecuted, NEVER on total — the declared rows this run did not reach are INCONCLUSIVE, not coverage it took (§2.1 E-3 clause 2 / F-2 clause (iii))`}; a folded row that could NOT be driven is the RESIDUAL (not-PASS, not-FAIL) and is counted in the parked member, with its own NOT-DRIVEN verdict left intact on its contributors' lines; coverage.missingRows=[${coverage.missingRows.join(', ')}] is the declared-minus-verdicted set${coverage.fullBattery ? ' in a FULL-BATTERY run' : ' (this run is SCOPED: an un-executed declared row is INCONCLUSIVE, not a defect)'}`)
+    console.log(`[live-drive] MATRIX rows (${summary.matrixRowsExecuted} of ${MATRIX_ROWS.length} = summary.total): ${matrixVerdict.map((r) => `${r.row}:${r.block}=${r.verdict}${r.proxyPASS ? '(proxyPASS)' : ''}${r.realInput ? '' : '(realInput:false)'}`).join(' ') || '(none executed)'}`)
+    // §2.2 `E-11` (`C-2`) — THE MATRIX ROW'S AGGREGATED VERDICT BESIDE ITS
+    // CONTRIBUTORS, in the same shape the `SHARED rows` line already uses on the
+    // extended dimension: the fold the §6.1 partition is counted over is PRINTED,
+    // so a multi-contributor row's aggregate is readable from the artifact and not
+    // only from the count. Every executed row id appears here exactly once (the
+    // fold's own length), so this line's row count and
+    // `summary.matrixRowsExecuted`/`summary.total` are the SAME number.
+    console.log(`[live-drive] MATRIX AGGREGATED row verdicts — the AND fold BY ROW ID over the MATRIX dimension, §2.2 E-11: the §6.1 partition is taken over THIS set, never over the matrixVerdict ENTRIES, and each row prints contributors=[block:row=verdict …] beside it. fold=${matrixAggregate.length} row verdict(s) over ${matrixVerdict.length} contributing result(s); multi-contributor rows=${matrixAggregate.filter((a) => a.shared).length}; rows: ${matrixAggregate.map((a) => `${a.row} aggregate(row verdict)=${a.verdict} contributors=[${a.contributors.join(' ')}]`).join(' | ') || '(none executed)'}`)
+    // §2.2 `E-7`/`E-11` — the block -> row line: every counted block's OWN
+    // verdict in its own words, so no contributor is left out of the record (an
+    // aggregated row may never be the only place a block's verdict appears).
+    console.log(`[live-drive] ROW-LINE block=${'uf_tabs_1'} row=${'UF-TABS-1'} verdict=${reportRows.find((x) => x.block === 'uf_tabs_1') ? reportRows.find((x) => x.block === 'uf_tabs_1').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_tabs_1') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_tabs_1') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_tabs_1'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_tabs_3'} row=${'UF-TABS-3'} verdict=${reportRows.find((x) => x.block === 'uf_tabs_3') ? reportRows.find((x) => x.block === 'uf_tabs_3').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_tabs_3') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_tabs_3') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_tabs_3'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_tabs_4'} row=${'UF-TABS-4'} verdict=${reportRows.find((x) => x.block === 'uf_tabs_4') ? reportRows.find((x) => x.block === 'uf_tabs_4').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_tabs_4') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_tabs_4') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_tabs_4'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_tabs_7'} row=${'UF-TABS-7'} verdict=${reportRows.find((x) => x.block === 'uf_tabs_7') ? reportRows.find((x) => x.block === 'uf_tabs_7').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_tabs_7') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_tabs_7') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_tabs_7'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_1'} row=${'UF-SETTINGS-1'} verdict=${reportRows.find((x) => x.block === 'uf_settings_1') ? reportRows.find((x) => x.block === 'uf_settings_1').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_1') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_1') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_1'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_2'} row=${'UF-SETTINGS-2'} verdict=${reportRows.find((x) => x.block === 'uf_settings_2') ? reportRows.find((x) => x.block === 'uf_settings_2').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_2') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_2') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_2'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_3'} row=${'UF-SETTINGS-3'} verdict=${reportRows.find((x) => x.block === 'uf_settings_3') ? reportRows.find((x) => x.block === 'uf_settings_3').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_3') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_3') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_3'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_4'} row=${'UF-SETTINGS-4'} verdict=${reportRows.find((x) => x.block === 'uf_settings_4') ? reportRows.find((x) => x.block === 'uf_settings_4').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_4') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_4') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_4'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_5'} row=${'UF-SETTINGS-5'} verdict=${reportRows.find((x) => x.block === 'uf_settings_5') ? reportRows.find((x) => x.block === 'uf_settings_5').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_5') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_5') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_5'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_settings_7'} row=${'UF-SETTINGS-7'} verdict=${reportRows.find((x) => x.block === 'uf_settings_7') ? reportRows.find((x) => x.block === 'uf_settings_7').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_settings_7') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_settings_7') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_settings_7'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_panes_1'} row=${'UF-PANES-1'} verdict=${reportRows.find((x) => x.block === 'uf_panes_1') ? reportRows.find((x) => x.block === 'uf_panes_1').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_panes_1') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_panes_1') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_panes_1'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_panes_8'} row=${'UF-PANES-8'} verdict=${reportRows.find((x) => x.block === 'uf_panes_8') ? reportRows.find((x) => x.block === 'uf_panes_8').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_panes_8') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_panes_8') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_panes_8'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_panes_10'} row=${'UF-PANES-10'} verdict=${reportRows.find((x) => x.block === 'uf_panes_10') ? reportRows.find((x) => x.block === 'uf_panes_10').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_panes_10') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_panes_10') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_panes_10'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_panes_12'} row=${'UF-PANES-12'} verdict=${reportRows.find((x) => x.block === 'uf_panes_12') ? reportRows.find((x) => x.block === 'uf_panes_12').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_panes_12') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_panes_12') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_panes_12'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_panes_14'} row=${'UF-PANES-14'} verdict=${reportRows.find((x) => x.block === 'uf_panes_14') ? reportRows.find((x) => x.block === 'uf_panes_14').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_panes_14') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_panes_14') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_panes_14'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_search_2'} row=${'UF-SEARCH-2'} verdict=${reportRows.find((x) => x.block === 'uf_search_2') ? reportRows.find((x) => x.block === 'uf_search_2').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_search_2') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_search_2') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_search_2'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_hist_4'} row=${'UF-HIST-4'} verdict=${reportRows.find((x) => x.block === 'uf_hist_4') ? reportRows.find((x) => x.block === 'uf_hist_4').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_hist_4') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_hist_4') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_hist_4'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_hist_6'} row=${'UF-HIST-6'} verdict=${reportRows.find((x) => x.block === 'uf_hist_6') ? reportRows.find((x) => x.block === 'uf_hist_6').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_hist_6') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_hist_6') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_hist_6'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_layout_2'} row=${'UF-LAYOUT-2'} verdict=${reportRows.find((x) => x.block === 'uf_layout_2') ? reportRows.find((x) => x.block === 'uf_layout_2').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_layout_2') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_layout_2') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_layout_2'))
+    console.log(`[live-drive] ROW-LINE block=${'uf_layout_10'} row=${'UF-LAYOUT-10'} verdict=${reportRows.find((x) => x.block === 'uf_layout_10') ? reportRows.find((x) => x.block === 'uf_layout_10').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'uf_layout_10') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'uf_layout_10') || {}).pass}`, reportRows.filter((x) => x.block === 'uf_layout_10'))
+    console.log(`[live-drive] ROW-LINE block=${'user1_tab_new'} row=${'UF-DEFECT-1'} verdict=${reportRows.find((x) => x.block === 'user1_tab_new') ? reportRows.find((x) => x.block === 'user1_tab_new').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user1_tab_new') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user1_tab_new') || {}).pass}`, reportRows.filter((x) => x.block === 'user1_tab_new'))
+    console.log(`[live-drive] ROW-LINE block=${'user2_pane_drag'} row=${'UF-DEFECT-2'} verdict=${reportRows.find((x) => x.block === 'user2_pane_drag') ? reportRows.find((x) => x.block === 'user2_pane_drag').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user2_pane_drag') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user2_pane_drag') || {}).pass}`, reportRows.filter((x) => x.block === 'user2_pane_drag'))
+    console.log(`[live-drive] ROW-LINE block=${'user3_collapse_orientation'} row=${'UF-KEEP-1'} verdict=${reportRows.find((x) => x.block === 'user3_collapse_orientation') ? reportRows.find((x) => x.block === 'user3_collapse_orientation').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user3_collapse_orientation') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user3_collapse_orientation') || {}).pass}`, reportRows.filter((x) => x.block === 'user3_collapse_orientation'))
+    console.log(`[live-drive] ROW-LINE block=${'user4_main_editable'} row=${'UF-STAGE-3'} verdict=${reportRows.find((x) => x.block === 'user4_main_editable') ? reportRows.find((x) => x.block === 'user4_main_editable').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user4_main_editable') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user4_main_editable') || {}).pass}`, reportRows.filter((x) => x.block === 'user4_main_editable'))
+    console.log(`[live-drive] ROW-LINE block=${'user5_history_in_pane'} row=${'UF-DEFECT-3'} verdict=${reportRows.find((x) => x.block === 'user5_history_in_pane') ? reportRows.find((x) => x.block === 'user5_history_in_pane').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user5_history_in_pane') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user5_history_in_pane') || {}).pass}`, reportRows.filter((x) => x.block === 'user5_history_in_pane'))
+    console.log(`[live-drive] ROW-LINE block=${'user6_search_no_flicker'} row=${'UF-KEEP-3'} verdict=${reportRows.find((x) => x.block === 'user6_search_no_flicker') ? reportRows.find((x) => x.block === 'user6_search_no_flicker').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user6_search_no_flicker') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user6_search_no_flicker') || {}).pass}`, reportRows.filter((x) => x.block === 'user6_search_no_flicker'))
+    console.log(`[live-drive] ROW-LINE block=${'user7_zone_resize'} row=${'UF-DEFECT-5'} verdict=${reportRows.find((x) => x.block === 'user7_zone_resize') ? reportRows.find((x) => x.block === 'user7_zone_resize').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user7_zone_resize') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user7_zone_resize') || {}).pass}`, reportRows.filter((x) => x.block === 'user7_zone_resize'))
+    console.log(`[live-drive] ROW-LINE block=${'user8_zone_boundary'} row=${'UF-DEFECT-6'} verdict=${reportRows.find((x) => x.block === 'user8_zone_boundary') ? reportRows.find((x) => x.block === 'user8_zone_boundary').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user8_zone_boundary') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user8_zone_boundary') || {}).pass}`, reportRows.filter((x) => x.block === 'user8_zone_boundary'))
+    console.log(`[live-drive] ROW-LINE block=${'user9_search_open_in_tab'} row=${'UF-DEFECT-7'} verdict=${reportRows.find((x) => x.block === 'user9_search_open_in_tab') ? reportRows.find((x) => x.block === 'user9_search_open_in_tab').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user9_search_open_in_tab') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user9_search_open_in_tab') || {}).pass}`, reportRows.filter((x) => x.block === 'user9_search_open_in_tab'))
+    console.log(`[live-drive] ROW-LINE block=${'user10_collapse_vertical_text'} row=${'UF-DEFECT-8'} verdict=${reportRows.find((x) => x.block === 'user10_collapse_vertical_text') ? reportRows.find((x) => x.block === 'user10_collapse_vertical_text').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'user10_collapse_vertical_text') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'user10_collapse_vertical_text') || {}).pass}`, reportRows.filter((x) => x.block === 'user10_collapse_vertical_text'))
+    console.log(`[live-drive] ROW-LINE block=${'repro_nbsp'} row=${'UF-STAGE-4'} verdict=${reportRows.find((x) => x.block === 'repro_nbsp') ? reportRows.find((x) => x.block === 'repro_nbsp').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'repro_nbsp') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'repro_nbsp') || {}).pass}`, reportRows.filter((x) => x.block === 'repro_nbsp'))
+    console.log(`[live-drive] ROW-LINE block=${'repro_dup_para'} row=${'UF-STAGE-2'} verdict=${reportRows.find((x) => x.block === 'repro_dup_para') ? reportRows.find((x) => x.block === 'repro_dup_para').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'repro_dup_para') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'repro_dup_para') || {}).pass}`, reportRows.filter((x) => x.block === 'repro_dup_para'))
+    console.log(`[live-drive] ROW-LINE block=${'toolbar_undo'} row=${'UF-HIST-2'} verdict=${reportRows.find((x) => x.block === 'toolbar_undo') ? reportRows.find((x) => x.block === 'toolbar_undo').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'toolbar_undo') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'toolbar_undo') || {}).pass}`, reportRows.filter((x) => x.block === 'toolbar_undo'))
+    console.log(`[live-drive] ROW-LINE block=${'toolbar_toggle'} row=${'UF-STAGE-6'} verdict=${reportRows.find((x) => x.block === 'toolbar_toggle') ? reportRows.find((x) => x.block === 'toolbar_toggle').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'toolbar_toggle') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'toolbar_toggle') || {}).pass}`, reportRows.filter((x) => x.block === 'toolbar_toggle'))
+    console.log(`[live-drive] ROW-LINE block=${'boot_landing'} row=${'UF-STAGE-1'} verdict=${reportRows.find((x) => x.block === 'boot_landing') ? reportRows.find((x) => x.block === 'boot_landing').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'boot_landing') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'boot_landing') || {}).pass}`, reportRows.filter((x) => x.block === 'boot_landing'))
+    console.log(`[live-drive] ROW-LINE block=${'vis_persist'} row=${'UF-SETTINGS-7'} verdict=${reportRows.find((x) => x.block === 'vis_persist') ? reportRows.find((x) => x.block === 'vis_persist').verdict : 'NOT-RUN'} realInput=${!!(reportRows.find((x) => x.block === 'vis_persist') || {}).realInput} pass=${!!(reportRows.find((x) => x.block === 'vis_persist') || {}).pass}`, reportRows.filter((x) => x.block === 'vis_persist'))
+    if (sharedRows.length) console.log(`[live-drive] SHARED rows (one row id, several contributing blocks — the row's aggregated verdict is the AND of the halves, §2.2 E-11): ${sharedRows.map((a) => `${a.row} aggregate(row verdict)=${a.verdict} contributors=[${a.contributors.join(' ')}]`).join(' | ')}`)
+    console.log(`[live-drive] EXTENDED rows (${extendedVerdict.length} of ${ROW_EXTENDED.length} defined${extInconclusive.length ? `; ${extInconclusive.length} declared row(s) produced NO verdict and are inconclusive (EXTENDED-DECLARED-NO-VERDICT)` : ''}${undeclaredExtended.length ? `; ${undeclaredExtended.length} emitted id(s) are UNDECLARED` : ''}): ${extendedAggregate.map((a) => `${a.row}:${a.contributors.map((c) => c.split(':').slice(1).join(':')).join('+')}=${a.verdict}${a.shared ? '(aggregate of ' + a.contributors.length + ' halves)' : ''}`).join(' ') || '(none executed)'}`)
+    console.log(`[live-drive] MATRIX_ROWS mapping (${claims.length}): ${claims.join(' ')}`)
+    console.log(`[live-drive] DISPOSITION (§2.1 E-4: CONVERTED vs EXCLUDED, no silent middle state — F-11): ${CONVERTED_ROW_DISPOSITION.join('; ')}; ${EXCLUDED_NON_ROW_DISPOSITION.join('; ')}`)
+    // §2.1 `E-4` item 2 / `F-11` (`G-5`) — THE MACHINE-READABLE NON-ROW DISPOSITION,
+    // on its OWN `NON-ROW` line: every counted `BLOCKS` key that is not a row block
+    // appears here (or carries a declared row id — the `ROW BLOCK:` entries), so no
+    // counted block stays in the silent middle state by default and the
+    // classification is readable from the artifact as DATA, not only as the
+    // driver's prose on the line above.
+    console.log(`[live-drive] NON-ROW dispositions (§2.1 E-4 item 2 / F-11 — ${Object.keys(NON_ROW_DISPOSITIONS).length} counted non-row block(s) named, the machine-readable map): ${JSON.stringify(NON_ROW_DISPOSITIONS)}`)
+    // §3.2 `F-6`/`F-7` + §2.3 `H-4` (`G-10`) — THE CLASSIFICATION RULE, stated AS A
+    // RULE, with the LIVE READING of THIS run's fixture precondition beside it. The
+    // rule line used to interpolate a synthetic `fixture-missing` reason, so EVERY
+    // seeded run ended its line with `PRECONDITION-FAILED: fixture-missing — the seed
+    // corpus produced no documents` while the same run had just seeded
+    // `.live-corpus/alpha`/`beta` (`seeded corpus -> import {"ok":true,…}`) — a false
+    // present-tense claim about a fixture that was present. The marker is now named
+    // only as the RULE (it is printed where it FIRES, on the row that fires it), and
+    // the fixture precondition is READ live, so the line states what this run read.
+    const corpusLive = await ufBlockPrecondition(h, opt)
+    console.log(`[live-drive] DRIVE-CLASSIFICATION RULE (§2.3 H-4 / F-6 / F-7): an unproven gesture reads NOT-DRIVEN (a driver failure, realInput:false); an isError reply is printed verbatim and never credits the app with a FAIL; a missing fixture, an empty corpus or an absent engine (ECONNREFUSED) is PARKED BY NAME and its marker is PRECONDITION-FAILED. THIS LINE STATES THE RULE, not a reading: a marker named here is printed only where it FIRES, and this run's own fixture precondition is READ live on the line below.`)
+    console.log(`[live-drive] FIXTURE PRECONDITION (LIVE READING, §3.2 F-6 — ${opt.noSeed ? '--no-seed: no seed was attempted this run' : 'the seed route ran and its import is printed verbatim above'}): ${corpusLive.present === true ? `PRECONDITION HOLDS — ${corpusLive.detail}; no fixture precondition marker fires in this run` : `${driverFailureReason(corpusLive.kind ?? 'empty-corpus', corpusLive.detail, corpusLive.extra).marker} — the fixture precondition did NOT hold in this run (the marker above is that reading, not a rule)`}`)
+    // §2.2 `E-11` item 1 — THE SHARED ROW'S CONTRIBUTORS, named beside each other.
+    console.log(`[live-drive] SHARED-ROW contributors by row id (§2.2 E-11 item 1 — each contributor prints its OWN verdict on its own ROW line above, plus the row's aggregate below): UF-SETTINGS-7 <= vis_persist + uf_settings_7 [this run: ${sharedRows.map((a) => `${a.row} <= ${a.contributors.join(' + ')}`).join(' | ') || '(no shared row executed)'}]`)
+    console.log(`[live-drive] AGGREGATED row verdicts (the AND fold, §2.2 E-11): ${extendedAggregate.map((a) => `${a.row}=${a.verdict}${a.shared ? ` (aggregate of ${a.contributors.length} halves: ${a.contributors.join(' ')})` : ''}`).join(' | ') || '(none executed)'}`)
+    console.log(`[live-drive] EXTENDED mapping (declared ${ROW_EXTENDED.length}, reconciled by the declared-minus-verdict SET DIFFERENCE, §2.2 E-12): ${EXTENDED_REFUSING_ROWS.map((id) => `${id}->${ROW_EXTENDED.filter((r) => r.row === id).map((r) => r.block).join(',')}`).join(' ')}`)
+    for (const id of extInconclusive) {
+      const blk = ROW_EXTENDED.filter((r) => r.row === id).map((r) => r.block).join(',')
+      console.log(`[live-drive] EXTENDED-DECLARED-NO-VERDICT: extended row ${id} -> block(s) ${blk} produced no verdict in this run (inconclusive — NOT a refusal: declaring these authoritative is a later unit's act, §2.2 E-12 item 5)`)
+    }
+    for (const id of undeclaredExtended) {
+      const blk = extendedVerdict.filter((r) => String(r.row) === id).map((r) => r.block).join(',')
+      console.log(`[live-drive] EXTENDED-UNDECLARED: ${id}(${blk}) — an emitted row id no declared extended structure carries (REPORTED, never a refusal; §2.2 E-12 item 5, F-15)`)
+    }
+    // §2.1 `E-3` clause 2 / §2.2 `E-12` item 2 — THE REFUSALS, each NAMING the rows
+    // it lacks, with the reconciliation line reading `REFUSED` (never `OK`) and a
+    // non-zero exit (`1`).
+    for (const msg of recon.errors) console.log(`[live-drive] ROW-SET ERROR: ${msg}`)
+    for (const id of extendedMissing) {
+      const blk = ROW_EXTENDED.filter((r) => r.row === id).map((r) => r.block).join(',')
+      console.log(`[live-drive] ROW-SET ERROR: declared extended row ${id} -> block(s) ${blk} produced no verdict (§2.2 E-12: a declared extended row ends in exactly one of {a verdict, a named REFUSAL})`)
+    }
+    // §2.1 `E-3` / `G-8` (`M-1`) — `OK` IS PRINTED ONLY WITH ITS SCOPE. A full-battery
+    // run prints the full-battery reading (`8 of 8 declared rows verdicted`); a
+    // SCOPED run prints the rows it had in scope AND the declared rows it did not
+    // verdict (inconclusive by `E-3` clause 2 / `F-2` clause (iii), never a defect
+    // and never coverage it did not take). `OK` alone is what made an invalid report
+    // read as a pass; the refusal branch is unmoved and still NAMES the rows.
+    const matrixOkText = recon.fullBattery
+      ? `OK (full battery: ${summary.matrixRowsExecuted} of ${recon.matrixTotal} declared rows verdicted)`
+      : `OK (scoped run: ${matrixRowsInScope} of ${recon.matrixTotal} declared rows in scope; ${recon.missingRows.length} inconclusive)`
+    console.log(`[live-drive] row-set reconciliation: matrix=${recon.matrixTotal} rows claimed by ${claims.length} mapping(s); blocks run=${names.length} (informational); matrix rows executed=${summary.matrixRowsExecuted}; coverage=${JSON.stringify(coverage)}; §5.U row total (summary.total)=${summary.total}; ${recon.ok ? matrixOkText : `REFUSED — missing declared row(s): ${recon.missingRows.join(', ')}`}`)
+    console.log(`[live-drive] extended row-set reconciliation (§2.2 E-12): declared=${ROW_EXTENDED.length}; emitted=${extendedVerdict.length}; in-scope declared row(s)=[${extRecon.inScope.join(', ')}] (ANY of a declared row's contributing blocks requested — §2.2 E-12 item 2 / G-4); declared-with-no-verdict(unit-declared, refusing)=[${extendedMissing.join(', ')}]; inconclusive=[${extInconclusive.join(', ')}]; ${extendedRefused ? `REFUSED — missing declared extended row(s): ${extendedMissing.join(', ')}` : 'OK — every requested declared extended row carried a verdict'}`)
+    // §2.1 `E-3` clause 2 + §2.2 `E-12` item 2: exit `1` on EITHER refusal (`2`
+    // stays the driver's hard-import-failure code, set by main's own catch).
+    // §2.1 `E-3` clause 2 + §2.2 `E-12` item 2: exit `1` on EITHER refusal — a
+    // matrix `recon.ok === false` or an `extendedRefused` row — and `1` on a FAIL;
+    // `2` stays the hard-error code main's own catch sets.
+    process.exitCode = fail > 0 ? 1 : (!recon.ok || extendedRefused ? 1 : 0)
   } finally {
     // --connect: the RUNNING app session is not ours to stop — detach, don't kill.
     if (!opt.connect) {
-      try { process.kill(-app.pid, 'SIGTERM') } catch { /* already gone */ }
-      try { app.kill('SIGTERM') } catch { /* already gone */ }
-      if (!opt.keepHome) try { rmSync(home, { recursive: true, force: true }) } catch { /* best-effort */ }
+      // ⟨THE CHILD SWEEP — ONE MECHANISM ON EVERY EXIT PATH.⟩ The run's OWN exit uses
+      // the SAME bounded sweep the abort paths use (SIGTERM to the child's process
+      // group, a bounded grace, then SIGKILL iff the leader is still alive), so the
+      // normal teardown and an early abort cannot diverge in how a child is torn
+      // down; the recorded line states the bound. The old best-effort SIGTERM pair
+      // is REPLACED by it, not kept beside it.
+      ufReportSweep(await ufSweepSpawnedChild('the run reached its own end (main returned)'))
     }
+    // ⟨gate-4 `F-8` — **THE HOME REMOVAL IS BOUNDED, STATED, AND REACHED ON EVERY PATH
+    // THAT MINTED ONE.**⟩ It used to be `rmSync(home, {recursive:true, force:true})`
+    // INSIDE the `!opt.connect` branch — `force` on an operator-chosen path (the
+    // hazard), silent on failure, and UNREACHABLE for the `--connect` scratch dir
+    // (minted above, never removed: the measured leak). It is now the ONE bounded
+    // removal (`ufRemoveScratchHome`: under the OS temp root, a directory, `force` only
+    // for this run's own mkdtemp scratch), it runs for BOTH modes, it prints what it
+    // did (a refusal or a failure is a READING, never an unrecorded orphan), and it is
+    // still skipped by `--keep-home` — which says so.
+    if (opt.keepHome) console.error(`[live-drive] SCRATCH HOME: KEPT (--keep-home) — ${home} was left in place by the operator's own flag; nothing is removed on this path (and a --home= value outside the OS temp root was already REFUSED by name before anything was spawned)`)
+    else console.error(ufRemoveScratchHome(home, ownScratchHome))
+    // ⟨gate-4 `F-8`⟩ the mint record is CLEARED here, so a later abort path (the
+    // module-level catch) never removes a path the operator asked to keep, and never
+    // re-removes one already gone.
+    UF_MINTED_HOME = null
     // the U-EDIT-1 live fixture file (written by `ufEnsureEditFixture`) is the
     // driver's OWN artifact — removed with the seed corpus it sits beside
     try { rmSync(join(ROOT, '.live-page-edit-fixture.md'), { force: true }) } catch { /* best-effort */ }
@@ -6140,4 +9078,32 @@ async function main(argv) {
   process.exit(process.exitCode || 0)
 }
 
-main(process.argv.slice(2)).catch((e) => { console.error(`[live-drive] ERROR: ${e}`); process.exitCode = 2 })
+main(process.argv.slice(2)).catch(
+  async (e) => {
+    console.error(`[live-drive] ERROR: ${e} fixture=${JSON.stringify(UF_FIXTURE_STATE)} (the run-wide fixture state, §6.1 site 4 — stated on this path too: this abort produced no artifact, but a run that states no fixture identity is not quotable)`)
+    // ⟨THE EARLY-ABORT SWEEP, ON THE PATH THAT WAS MEASURED LEAKING.⟩ This handler
+    // is where the gate-5 run's `--port=not-a-port` abort landed: it prints the
+    // ERROR line and exits `2`, and BEFORE this clause it left the child it had
+    // spawned RUNNING on the default `3787`/`9222`. It now sweeps — the ONE bounded
+    // sweep (SIGTERM to the driver's own child process group, a bounded grace, then
+    // SIGKILL iff the leader is still alive), stated in one line with its bound. A
+    // `--connect` run owns no child, so its abort sweeps nothing.
+    ufReportSweep(await ufSweepSpawnedChild('module-level main().catch early abort (the ERROR path above)'))
+    // ⟨gate-4 `F-8` — THE SAME ABORT PATH REMOVES A SCRATCH HOME MINTED BUT NOT YET
+    // TORN DOWN.⟩ `main` records the mint at module scope (`UF_MINTED_HOME`) and clears
+    // it once its own `finally` has run the bounded removal, so anything left here is a
+    // dir THIS run created and did not remove (an abort between the mint and `main`'s
+    // `try`). The removal is the SAME bounded helper (`ufRemoveScratchHome`: under the
+    // OS temp root, a directory, `force` only for this run's own mkdtemp scratch), so
+    // this abort path cannot delete anything the operator-named `--home=` bound would
+    // have refused, and it says what it did.
+    if (UF_MINTED_HOME !== null) {
+      console.error(ufRemoveScratchHome(UF_MINTED_HOME.dir, UF_MINTED_HOME.ownScratch))
+      UF_MINTED_HOME = null
+    }
+    // The driver HARD-ERROR code (`2`, §2.1 `E-3` clause 2) — the run-level exit
+    // gate inside `main` (which reads the reconciler's own `ok`) is untouched, and
+    // this catch is a TERMINAL exit, not a second gate.
+    process.exit(2)
+  },
+)

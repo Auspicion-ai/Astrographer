@@ -8,7 +8,7 @@ set). Resolutions honoured: **OB2 = Reading 2** (`ui-overhaul.md` §7.3) and
 Open items live in `docs/specs/wave-2-open-decisions.md` (W2-Q1..).
 
 **Cycle (RCA-1/2/3):** TestWriter red 34 (of 37) → Implementer green 35 pass + 2
-skip (`tests/unit-u-shell-1-layout-zones.test.ts`); adversarial pass found **H1**
+skip (`archive/tests/2026-10-04-unit-u-shell-1-layout-zones.test.ts`); adversarial pass found **H1**
 (id-only zone-container defeats the F8 HARD PRECONDITION; MCP-reachable) + **AF-2**
 (malformed `version`) — both **FIXED** with regression tests; **AF-3/AF-4** were
 deferred → W2-N3/W2-N4 and are now **FIXED (2026-09-12)**. Blind-greens  `archive/greens/2026-09-21-unit-u-shell-1-layout-zones-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-1-layout-zones-greens.md)
@@ -130,7 +130,7 @@ LayoutState {
 
 ### 2.6 Pinned implementation details (resolved 2026-09-12, post-TestWriter)
 
-The TestWriter red run (`tests/unit-u-shell-1-layout-zones.test.ts`, 34 red)
+The TestWriter red run (`archive/tests/2026-10-04-unit-u-shell-1-layout-zones.test.ts`, 34 red)
 flagged 8 spec gaps. Pinned (Architect):
 
 1. **`coerceLayout` home/export** — a **public export of

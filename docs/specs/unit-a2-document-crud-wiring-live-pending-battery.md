@@ -1,5 +1,8 @@
 # Unit A2 — Document-CRUD D4 Wiring (`gnosis.document.*` / `gnosis.wiki.*` MCP tools + the `gnosis-edit` group + the extended `handleGnosisTool` + the `AuthorityStore` + the `IdempotencyRegistry` + the GUI document-editor/wiki screens): LIVE-Scenario Pending Battery (handoff)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 ## LIVE-RUN UPDATE (2026-09-11) — the mutating CRUD write surface + the read-class GET-body finding
 
 - **Author:** Gate supervisor (live runner). **Date: 2026-09-11.**
@@ -115,7 +118,7 @@ The **A2 mutating CRUD write surface is VERIFIED LIVE** (create→update-validat
 - **Greens battery (blind-test, docs-only, already run against the LIVE MODULE):**
    `archive/greens/2026-09-21-unit-a2-document-crud-wiring-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-a2-document-crud-wiring-greens.md) — **81 / 81 PASS, 0 FAIL**
   (33 G + 40 F + 8 P; the recorded run file
-  `tests/blind-unit-a2-document-crud-wiring-greens.test.ts`, vitest). The greens
+  `archive/tests/2026-10-04-blind-unit-a2-document-crud-wiring-greens.test.ts`, vitest). The greens
   exercise the wiring through the **real `createEngineCrudRagStore` proxy on a
   deterministic mock transport** (A6, §5.6) — NOT a live engine. Source under test:
   `src/main/mcp-server.js` (`handleGnosisTool`, `ProvidentMcpServer.ALL_TOOLS`,
@@ -159,7 +162,7 @@ park**, verified live:
   `gnosis.document.*`/`gnosis.wiki.*` tool rows in `ALL_TOOLS` + the extended
   `handleGnosisTool` + the `name.startsWith('gnosis.')` routing branch threading
   `engineCrudRagStore`/`authorityStore`/`idempotency`.
-- The blind-greens run file `tests/blind-unit-a2-document-crud-wiring-greens.test.ts`
+- The blind-greens run file `archive/tests/2026-10-04-blind-unit-a2-document-crud-wiring-greens.test.ts`
   exists and the greens are **81/81 PASS at the module level** (mock transport).
 
 ### 1.2 No live Gnosis engine (the decisive probe) and no running app

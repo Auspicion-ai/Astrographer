@@ -1,5 +1,8 @@
 # TEST-PRUNING DISPOSITION AUDIT — the 224-file classification + the archive list (2026-09-21)
 
+> **⟶ CITATION REPOINT `2026-10-04` (the ARCHIVE-MOVE pass of `DECIDED: BRANCH-TESTING-SCOPE-AMENDMENT`'s EXEMPT-ENGINE class; `RCA-8(c)` — every reading, row and count below is KEPT AS FILED and nothing is rewritten; only the PATHS are repointed, and the as-filed `tests/<name>.test.ts` form remains readable as the file's name).** **The `8` MOVABLE `EXEMPT-ENGINE` suites were moved byte-identically by `git mv` to `archive/tests/2026-10-04-<name>.test.ts`** (`blind-unit-a2-document-crud-wiring-greens` · `blind-unit-gn-engine-integration-greens` · `blind-unit-gn-mcp-ui-wiring-greens` · `engine-crud-real-transport` · `props-a1-crud-routing-proxy` · `unit-a1-crud-routing-proxy` · `unit-gn-engine-integration` · `unit-shell-integration`; no byte edited, `md5` identical per file, nothing deleted). **Every citation of those paths in this file now names the archive address.** **PER `archive/README.md` THE ARCHIVE IS NOT A CITABLE SOURCE OF AUTHORITY** — the archive path is a HISTORICAL POINTER; the authority for each subject remains its owning unit spec / tracker row. **(The task's "repoint every citation in `tests/**`" arm is DISCHARGED-EXCEPT-ONE and recorded: `tests/unit-gn-mcp-ui-wiring.test.ts:25` carries a stale `tests/**` comment citation left BYTE-UNTOUCHED, because the same task forbids editing any test file's content — recorded as an unresolved conflict, never repaired by guessing.)**
+
+
 **Kind:** the **disposition audit** the product owner's instruction *"proceed with pruning
 further down the development chain, archiving tests for changed/obsoleted features"* requires
 **before any test moves**. This file **classifies**; it does not move, delete, rename or edit a
@@ -648,9 +651,9 @@ citation-debt block in the repo, and it is the reason these files read as orphan
 | 16 | `tests/mcp-server-wiring.test.ts` | `docs/specs/mcp-server-wiring.md` | `archive/parent-project/2026-08-26-mcp-server-wiring.md` `[archive]` | **REPOINT** |
 | 17 | `tests/adapter-parity-battery.test.mjs` | `docs/specs/adapter-parity-battery.md` | `archive/parent-project/2026-08-26-adapter-parity-battery.md` `[archive]` | **REPOINT** |
 | 18 | `tests/e2e-battery.test.mjs` | `docs/specs/e2e-test-battery.md` | same as #8 | **REPOINT** |
-| 19 | `tests/blind-unit-gn-engine-integration-greens.test.ts` | `docs/integrations/astrographer-interface-implementation.md`, `docs/specs/engine-wire-contract.md` | **these are the Gnosis sibling repo's paths** — the files **exist** at `../Gnosis/docs/integrations/astrographer-interface-implementation.md` and `../Gnosis/docs/specs/engine-wire-contract.md` (verified) | **REPOINT to the `../Gnosis/`-prefixed form** (a citation-form fix, not an archive ground) |
-| 20 | `tests/unit-gn-engine-integration.test.ts` | `docs/specs/engine-wire-contract.md` | `../Gnosis/docs/specs/engine-wire-contract.md` | **REPOINT** (citation form) |
-| 21 | `tests/unit-a1-crud-routing-proxy.test.ts` · `tests/props-a1-crud-routing-proxy.test.ts` | `docs/specs/p1a-document-crud-wire.md` | `../Gnosis/docs/specs/p1a-document-crud-wire.md` | **REPOINT** (citation form) |
+| 19 | `archive/tests/2026-10-04-blind-unit-gn-engine-integration-greens.test.ts` | `docs/integrations/astrographer-interface-implementation.md`, `docs/specs/engine-wire-contract.md` | **these are the Gnosis sibling repo's paths** — the files **exist** at `../Gnosis/docs/integrations/astrographer-interface-implementation.md` and `../Gnosis/docs/specs/engine-wire-contract.md` (verified) | **REPOINT to the `../Gnosis/`-prefixed form** (a citation-form fix, not an archive ground) |
+| 20 | `archive/tests/2026-10-04-unit-gn-engine-integration.test.ts` | `docs/specs/engine-wire-contract.md` | `../Gnosis/docs/specs/engine-wire-contract.md` | **REPOINT** (citation form) |
+| 21 | `archive/tests/2026-10-04-unit-a1-crud-routing-proxy.test.ts` · `archive/tests/2026-10-04-props-a1-crud-routing-proxy.test.ts` | `docs/specs/p1a-document-crud-wire.md` | `../Gnosis/docs/specs/p1a-document-crud-wire.md` | **REPOINT** (citation form) |
 
 #### §3.2.2 The never-existed reference docs (5 files)
 
@@ -665,9 +668,9 @@ These named docs were **never committed to this tree** and are **not in `archive
 | 25 | `tests/mcp-resources.test.ts` | `docs/specs/mcp-resources-review.md` | `docs/specs/mcp-endpoint.md` | **REPOINT** |
 
 > **The count, reconciled.** Row 21 of §3.2.1 covers **two files**
-> (`tests/unit-a1-crud-routing-proxy.test.ts` **and** `tests/props-a1-crud-routing-proxy.test.ts`), so
+> (`archive/tests/2026-10-04-unit-a1-crud-routing-proxy.test.ts` **and** `archive/tests/2026-10-04-props-a1-crud-routing-proxy.test.ts`), so
 > §3.2.1 is **21 numbered rows = 22 files** and §3.2.2 is **5 rows = 5 files**:
-> **22 + 5 − 1 = 26 files**, where the subtraction is `tests/blind-unit-gn-engine-integration-greens.test.ts`
+> **22 + 5 − 1 = 26 files**, where the subtraction is `archive/tests/2026-10-04-blind-unit-gn-engine-integration-greens.test.ts`
 > (§3.2.1 row 19), which would otherwise also be a `docs/specs/` row. **Verified by re-counting the class
 > membership, not by assertion** — the probe enumerated 26 distinct basenames before the tables were
 > written, and the tables reproduce exactly those basenames. The two files excluded by inspection (§2.9)
@@ -715,7 +718,7 @@ half), `ST-3`, `ST-4`, `ST-5`, **`ST-6`**; *"the biggest unit — store + envelo
 | 13 | `tests/unit-o-edit-ops.test.ts` | `setProps`/`setSubtree`/`setType` (the 6→9 census) |
 | 14 | `tests/unit-p-ipc-edit-batch.test.ts` | `IPC_EDIT_BATCH` + `handleEditBatch` + `deriveBatchBroadcast` |
 | 15 | `tests/unit-n-batch-atomicity.test.ts` | `applyBatch` — **the commit primitive C9 uses** (`docs/specs/design-extensions-review.md` §3.3 C `C9` collision discipline: *"commit = one `applyBatch` = one invertible `batch` entry"*) |
-| 16 | `tests/unit-u-edit-2-undo-redo-history.test.ts` | the project-journal IPC + undo/redo history |
+| 16 | `archive/tests/2026-10-04-unit-u-edit-2-undo-redo-history.test.ts` | the project-journal IPC + undo/redo history |
 | 17 | `tests/edit-controller.test.ts` | the Unit D editing controller (commit-on-blur, dirty-edit guard) |
 | 18 | `tests/edit-ops.test.ts` | the Unit D write-back (`setContent`/`createNode`/`deleteNode`/`split_node`/`merge_node`/`setEdge`) |
 | 19 | `tests/edit-adversarial.test.ts` | the same write-back's adversarial battery (H4/M1/M2/M3/L1-L4): it pins those per-node ops **and** the `rag-store-changed` broadcast *through* them, so it retires with the model they belong to |
@@ -902,7 +905,7 @@ fix does not make a live test archivable.
 | 5 | `tests/blind-renderer-debug.test.ts` | `archive/tests/2026-09-21-blind-renderer-debug.test.ts` | `tests/` | none | §3.2.1 row 4 (4 paths) |
 | 6 | `tests/blind-runtime-host.test.ts` | `archive/tests/2026-09-21-blind-runtime-host.test.ts` | `tests/` | none | §3.2.1 row 5 (2 paths) |
 | 7 | `tests/blind-security-gate.test.ts` | `archive/tests/2026-09-21-blind-security-gate.test.ts` | `tests/` | none | §3.2.1 row 6 (6 paths) |
-| 8 | `tests/blind-unit-gn-engine-integration-greens.test.ts` | `archive/tests/2026-09-21-blind-unit-gn-engine-integration-greens.test.ts` | `tests/` | none | §3.2.1 row 19 (citation **form** fix to `../Gnosis/…`) |
+| 8 | `archive/tests/2026-10-04-blind-unit-gn-engine-integration-greens.test.ts` | `archive/tests/2026-09-21-blind-unit-gn-engine-integration-greens.test.ts` | `tests/` | none | §3.2.1 row 19 (citation **form** fix to `../Gnosis/…`) |
 | 9 | `tests/journal-endpoint.test.ts` | `archive/tests/2026-09-21-journal-endpoint.test.ts` | `tests/` | none | §3.2.2 row 23 |
 | 10 | `tests/journal-reversibility.test.ts` | `archive/tests/2026-09-21-journal-reversibility.test.ts` | `tests/` | none | §3.2.1 row 7 |
 | 11 | `tests/mcp-notify.test.ts` | `archive/tests/2026-09-21-mcp-notify.test.ts` | `tests/` | none | §3.2.2 row 24 |
@@ -910,15 +913,15 @@ fix does not make a live test archivable.
 | 13 | `tests/mcp-server-gate.test.ts` | `archive/tests/2026-09-21-mcp-server-gate.test.ts` | `tests/` | none | §3.2.1 row 15 |
 | 14 | `tests/mcp-server-wiring.test.ts` | `archive/tests/2026-09-21-mcp-server-wiring.test.ts` | `tests/` | none | §3.2.1 row 16 |
 | 15 | `tests/path-fork-cycle.test.ts` | `archive/tests/2026-09-21-path-fork-cycle.test.ts` | `tests/` | none | §3.2.1 row 8 |
-| 16 | `tests/props-a1-crud-routing-proxy.test.ts` | `archive/tests/2026-09-21-props-a1-crud-routing-proxy.test.ts` | `tests/` | none | §3.2.1 row 21 (citation **form** fix to `../Gnosis/…`) |
+| 16 | `archive/tests/2026-10-04-props-a1-crud-routing-proxy.test.ts` | `archive/tests/2026-09-21-props-a1-crud-routing-proxy.test.ts` | `tests/` | none | §3.2.1 row 21 (citation **form** fix to `../Gnosis/…`) |
 | 17 | `tests/renderer-backend.test.ts` | `archive/tests/2026-09-21-renderer-backend.test.ts` | `tests/` | none | §3.2.1 row 10 |
 | 18 | `tests/runtime-battery.test.ts` | `archive/tests/2026-09-21-runtime-battery.test.ts` | `tests/` | none | §3.2.1 row 9 |
 | 19 | `tests/runtime-host.test.ts` | `archive/tests/2026-09-21-runtime-host.test.ts` | `tests/` | none | §3.2.1 row 11 |
 | 20 | `tests/secure-panels.test.ts` | `archive/tests/2026-09-21-secure-panels.test.ts` | `tests/` | none | §3.2.1 row 12 |
 | 21 | `tests/security-gate.test.ts` | `archive/tests/2026-09-21-security-gate.test.ts` | `tests/` | none | §3.2.1 row 13 |
 | 22 | `tests/security.test.ts` | `archive/tests/2026-09-21-security.test.ts` | `tests/` | none | §3.2.1 row 14 |
-| 23 | `tests/unit-a1-crud-routing-proxy.test.ts` | `archive/tests/2026-09-21-unit-a1-crud-routing-proxy.test.ts` | `tests/` | none | §3.2.1 row 21 (citation **form** fix) |
-| 24 | `tests/unit-gn-engine-integration.test.ts` | `archive/tests/2026-09-21-unit-gn-engine-integration.test.ts` | `tests/` | none | §3.2.1 row 20 (citation **form** fix) |
+| 23 | `archive/tests/2026-10-04-unit-a1-crud-routing-proxy.test.ts` | `archive/tests/2026-09-21-unit-a1-crud-routing-proxy.test.ts` | `tests/` | none | §3.2.1 row 21 (citation **form** fix) |
+| 24 | `archive/tests/2026-10-04-unit-gn-engine-integration.test.ts` | `archive/tests/2026-09-21-unit-gn-engine-integration.test.ts` | `tests/` | none | §3.2.1 row 20 (citation **form** fix) |
 | 25 | `tests/adapter-parity-battery.test.mjs` | `archive/tests/2026-09-21-adapter-parity-battery.test.mjs` | `tests/` | none | §3.2.1 row 17 |
 | 26 | `tests/e2e-battery.test.mjs` | `archive/tests/2026-09-21-e2e-battery.test.mjs` | `tests/` | **SHARED — BLOCKED.** Shares `hooks-scenarios-data.mjs` + `handlers-scenarios-data.mjs` with the **KEEP-LIVE** `gemma4-blind-battery.test.ts`. Fixtures **must stay**. **Also:** this file is the `npm run battery` leg's entry — retiring it retires the leg, which is a **build-script change**, not a test move. | §3.2.1 row 18 |
 

@@ -7,11 +7,11 @@ the **§2.5 project-journal host seam** (pinned 2026-09-13). Resolved: Q14
 **repeated `undo`**; `replay` is **not** a control. Open items in
 `docs/specs/wave-2-open-decisions.md` (W2-Q14/Q15). **Chrome-independent — does
 not need U-SHELL-1.** **Cycle:** TestWriter red 29/31 → Implementer green 31/31
-(`tests/unit-u-edit-2-undo-redo-history.test.ts`); trio 187 files / 4362 pass +
+(`archive/tests/2026-10-04-unit-u-edit-2-undo-redo-history.test.ts`); trio 187 files / 4362 pass +
 58 skip; doc-review `archive/reviews/2026-09-13-unit-u-edit-2-doc-review.md`.
 
 **TestWriter RED is the NEXT step (RCA-1):** author
-`tests/unit-u-edit-2-undo-redo-history.test.ts` from this spec ALONE and RUN it
+`archive/tests/2026-10-04-unit-u-edit-2-undo-redo-history.test.ts` from this spec ALONE and RUN it
 red before any Implementer pass.
 
 ---

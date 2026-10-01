@@ -11,7 +11,7 @@ AGENTS.md item 9 / umbrella amendment A1 **before any TestWriter red set**.
 this unit creates (1b spec §10; gate A6). U-STATE-1a (pure reconciler) is
 already complete.
 
-**TestWriter RED (2026-09-11, RCA-1):** `tests/unit-u-state-1c-persistent-scaffolding.test.ts`
+**TestWriter RED (2026-09-11, RCA-1):** `archive/tests/2026-10-04-unit-u-state-1c-persistent-scaffolding.test.ts`
 — Runtime scaffolding 4 red (`hub` undefined; `admitContentNodes` missing);
 operator-scope assertions red too (`mountOperator` non-idempotent;
 `refreshOperator` absent). 6 failed + 1 green-on-arrival (the `supervisor`
@@ -124,7 +124,7 @@ the helper. 1b recomputes from the **live** reconciled graph (not a throwaway
 
 The 1c behaviors are mostly about **object identity across calls**, so the spec
 pins the field/method names the TestWriter targets (read via `as any` casts, the
-house pattern — e.g. `tests/sidebar-panes-host.test.ts`):
+house pattern — e.g. `archive/tests/2026-10-04-sidebar-panes-host.test.ts`):
 
 ```ts
 // Runtime

@@ -47,7 +47,7 @@ Runtime graph. The U-MS5 listing section lives inside `settingsContent()`,
 which renders via `mountOperator()` → `buildOperatorEnvelope` →
 `createIsolatedScope()` — a SEPARATE GraphScope (own Supervisor + own
 DomAdapter) that NEVER enters the app-graph envelope (OPERATOR-ISOLATED-
-GRAPHSCOPE; the pre-existing negative pinned in `tests/sidebar-panes.test.ts:730-743`).
+GRAPHSCOPE; the pre-existing negative pinned in `archive/tests/2026-10-04-sidebar-panes.test.ts:730-743`).
 
 **Live verification (2026-09-05):** `get_rendered_html` on the running app
 returns the document/pane graph (`pane-doc-nav`, `pane-crosslinks`,

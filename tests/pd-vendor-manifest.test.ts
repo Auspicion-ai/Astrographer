@@ -89,7 +89,7 @@ const PINNED_FIFTEEN = [
 ] as const
 
 /** §3.3 item 2 — the architect-measured pinned revision. */
-const PINNED_COMMIT = 'd7b98b574adc7fa63fbabda617eba2a753f52cb5'
+const PINNED_COMMIT = '93c058f69bd78fd1a80c96044e504deac4737ab3'
 
 /** §2.2 — the four baseline files that are NOT replaced (clause (2) of `R-3`). */
 const BASELINE_FILES_NOT_REPLACED = [
@@ -314,7 +314,17 @@ describe('PD-VENDOR §2.2 — the manifest shape (foundation block + per-module 
     expect(requireManifest().schema).toBe('foundation-lock/1')
   })
 
-  it('§3.3 item 2 — foundation.commit equals the pinned revision d7b98b57…f52cb5 ⟨superseded: 8f193a8…f82459 was the pin before the 2026-09-28 refresh⟩', () => {
+  // ⟨TITLE REFRESHED 2026-09-30 (unit `U-FOUNDATION-PIN-REFRESH-2`) — `G-1` OF ITS GATE-4 PASS:
+  //  THE TITLE STATED A FALSEHOOD IN THE PRESENT TENSE.⟩ As filed the title read
+  //  `§3.3 item 2 — foundation.commit equals the pinned revision d7b98b57…f52cb5
+  //  ⟨superseded: 8f193a8…f82459 was the pin before the 2026-09-28 refresh⟩` while the row's OWN
+  //  assertion (immediately below) already compared against the NEW `PINNED_COMMIT` — so the row was
+  //  green and correct and its NAME was wrong. The title now names the pin the refresh landed
+  //  (`dd34e011…adbfe`) and the SUPERSEDED literal is KEPT VISIBLE as an explicitly-annotated
+  //  citation — the shape the repo already uses (`A-3`/`D-12`: a superseded literal is kept as an
+  //  annotated citation, never deleted). NO ASSERTION CHANGES: the row below still reads
+  //  `expect(foundation.commit).toBe(PINNED_COMMIT)`, which is the pin as consumed.
+  it('§3.3 item 2 — foundation.commit equals the pinned revision 93c058f6…7ab3 ⟨superseded: dd34e011…adbfe was the pin before the 2026-10-05 refresh; d7b98b57…f52cb5 before the 2026-09-30 one; 8f193a8…f82459 before the 2026-09-28 one⟩', () => {
     const foundation = requireManifest().foundation as Record<string, unknown>
     expect(foundation, 'the manifest carries no `foundation` block').toBeDefined()
     expect(foundation.commit).toBe(PINNED_COMMIT)

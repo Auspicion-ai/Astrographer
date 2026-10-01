@@ -4,7 +4,7 @@
 umbrella gate (PROCEED-WITH-AMENDMENTS, A1). **Depends on U-SHELL-1** (zone
 tracks + `LayoutState.zones[].size`). Open items in
 `docs/specs/wave-2-open-decisions.md` (W2-Q7/W2-Q9). **Final unit result:**
-`tests/unit-u-shell-5-resizable-gutters.test.ts` **33 pass** (0 skip); full suite
+`archive/tests/2026-10-04-unit-u-shell-5-resizable-gutters.test.ts` **33 pass** (0 skip); full suite
 `177 files / 4101 pass + 54 skip`; typecheck 0; build OK. **Blind artifact:**
  `archive/greens/2026-09-21-unit-u-shell-5-resizable-gutters-greens.md` (historical; archived 2026-09-21; successor docs/specs/unit-u-shell-5-resizable-gutters-greens.md) (24 scenarios — 24 PASS).
 **Doc review:** `archive/reviews/2026-09-12-u-shell-5-doc-review.md`.
@@ -75,7 +75,7 @@ Post-green read-only adversarial pass (RCA-3); host findings fixed here, no pack
 
 | # | Sev | Finding | Disposition |
 | --- | --- | --- | --- |
-| **H-1** | medium | **`reset` bypassed the §2.3 resizability gate:** a gutter double-click committed the registry default on an empty/minimized zone (collapsed track / not resizable), unlike `start`. | **FIXED** — `reset` honours the SAME shared `resizable()` gate as `start`; a non-resizable zone commits nothing (`pane-gutter.ts` `reset`). Regression: `tests/unit-u-shell-5-resizable-gutters.test.ts` "H-1". |
+| **H-1** | medium | **`reset` bypassed the §2.3 resizability gate:** a gutter double-click committed the registry default on an empty/minimized zone (collapsed track / not resizable), unlike `start`. | **FIXED** — `reset` honours the SAME shared `resizable()` gate as `start`; a non-resizable zone commits nothing (`pane-gutter.ts` `reset`). Regression: `archive/tests/2026-10-04-unit-u-shell-5-resizable-gutters.test.ts` "H-1". |
 | **H-2** | low | **Invalid explicit zone retargeted an in-flight gesture:** `reset('bogus')` fell back to the active gesture and committed it (only an OMITTED zone may fall back). | **FIXED** — only `zone === undefined` falls back to `activeZone`; an explicit invalid zone is ignored (`null`, no commit, gesture intact). Regression: "H-2". |
 | **H-3** | low | **Resizability predicate failed OPEN:** a non-boolean falsy `isResizable` return (`undefined`/`null`/`0`/`''`) enabled the gesture. | **FIXED** — the shared `resizable()` gate is fail-closed: only an explicit `true` enables; a throwing predicate refuses. Regression: "H-3". |
 | **H-4** | low | **`start` over an active gesture silently discarded the prior** (lost in-flight drag). | **FIXED** — `start` calls `finishGesture()` first, explicitly resolving the prior with ONE commit; `finishGesture()` is the shared `end`/takeover body. Regression: "H-4". |
