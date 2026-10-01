@@ -14,9 +14,21 @@ import { SecurePanels } from './secure-panels.js'
 import { installSettingsModal } from './modal-state.js'
 import { createEditController } from './edit-controller.js'
 import { applyThemeToRoot } from './theme.js'
-import { applyLayoutToRoot, type LayoutState, type LayoutZoneName } from './layout-state.js'
+import { type LayoutState, type LayoutZoneName } from './layout-state.js'
+import { applyLayoutToRoot } from './layout-vars.js'
 import { TabStrip } from './tab-strip.js'
 import type { RpcRequest, RpcReply } from '../shared/types.js'
+// ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 rows 4/5, §3.4: THE GESTURE SESSION IS THE
+// VENDORED `gesture-session.ts`, ITS ELEMENT-BACKED SOURCE IS BUILT ON THE VENDORED
+// `gutter-affordance.ts` `domEventSource()`, and THE WRITE IS THE VENDORED
+// `gutter.ts` CONTROLLER'S `commit` — `§3.4(a)/(d)`: the renderer supplies the session
+// (`{source, commit: <guard-only>}`, never the writer), the per-control opt-in capture
+// capability the source advertises, the session seam the host's controller is composed
+// over, and the fork's own element resolution (`closest` — OUTSIDE the module, whose
+// bytes carry no selector). The hand-rolled per-gesture listener bookkeeping is
+// REMOVED: the session owns establishment, tracking and the terminal.
+import { createGestureSession, POINTER_TYPES, type EventSource } from '../shared/gesture-session.js'
+import { cursorDeclarationFor, domEventSource } from '../shared/gutter-affordance.js'
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
  *  (content/structural/re-derive). Only these trigger the app-graph-changed push
@@ -266,37 +278,113 @@ interface GestureRect {
  *  mid-gesture NEVER orphans the gesture (HOST-4) and the per-gesture listeners
  *  are torn down on end — never accumulated across consecutive gestures
  *  (HOST-2 — a second gesture never re-commits an older zone). */
-type ActiveGesture =
-  | {
-      kind: 'gutter'
-      host: SidebarPanes
-      zone: LayoutZoneName
-      layoutRect: GestureRect
-      /** ADV2 — the originating pointer's id; a stale/lost pointer of a
-       *  DIFFERENT id must never act on this gesture. */
-      pointerId: number | null
-    }
-  | {
-      kind: 'pane'
-      host: SidebarPanes
-      paneId: string
-      lastZones: readonly ZoneBounds[]
-      moved: boolean
-      /** ADV2 — the originating pointer's id (see the gutter variant). */
-      pointerId: number | null
-      /** F-1b (live 2026-09-15) — the pointer-capture ELEMENT for this gesture
-       *  (the pane frame) plus the pointerdown coordinates. Capture is DEFERRED
-       *  until the gesture actually MOVES past `PANE_DRAG_CAPTURE_THRESHOLD`: a
-       *  `setPointerCapture` issued AT the pointerdown on the frame RETARGETS the
-       *  gesture's own `click` to the capturing frame (per the pointer-capture
-       *  spec's click-target resolution), which made the pane HEADER's
-       *  collapse/expand toggle inert exactly as the body rows had been. A pure
-       *  click therefore never captures and always reaches its own target; a real
-       *  drag still captures, so the move/up routing is unchanged. */
-      captureEl: { setPointerCapture(pointerId: number): void } | null
-      downX: number | null
-      downY: number | null
-    }
+/** ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 rows 4/5: THE VENDORED SESSION.⟩ The
+ *  module-level gesture state is the vendored `createGestureSession`'s own: one
+ *  session for the gutter controls and one for the pane drag, each with the
+ *  element-backed source the vendored `gutter-affordance.domEventSource()` supplies
+ *  (its START turn; its three tracking turns are the fork's own document-bound
+ *  tracking — `gutterGestureSource`) and a GUARD-ONLY `commit` — the write is the
+ *  COMPOSED CONTROLLER's (`§3.4(a)/(b)`). `null` until `installShellPointers` wires the document
+ *  (a no-DOM environment, and a host-less plain page, leave both unset), so the
+ *  helpers below no-op rather than throw. */
+let gutterSession: ReturnType<typeof createGestureSession> | null = null
+let paneSession: ReturnType<typeof createGestureSession> | null = null
+
+/** The control elements this boot already gave a POINTER-IDENTITY listener to (one
+ *  per element): the listener is registered BEFORE the session's own start listener,
+ *  so it is the fork's only reading of the gesture's pointer identity at the instant
+ *  the session's capture turn runs (`§4` item (iii)'s deferred-capture policy). The
+ *  fork's per-control SESSION INSTALL is no longer taken here: `§3.4(d)` makes the
+ *  controller's `attach` the element's one install (and the capture opt-in travels
+ *  through the session seam that install is given). */
+const gutterPointerWatched = new Set<unknown>()
+
+/** ⟨§4 item (iii) / §3.4(b) — THE GESTURE'S POINTER IDENTITY.⟩ The vendored session's
+ *  capture turn calls the source's `capturePointer(element)` with NO identity (the
+ *  upstream API gap this unit FILES, never patches), so the fork carries its own: the
+ *  identity recorded by the element's own `pointerdown` listener (an already-installed
+ *  control — the element-backed `begin` wins the slot) or by the delegated
+ *  `pointerdown` (a control installed by this very gesture). `null` until the first
+ *  gesture; a capture turn with no identity degrades to no capture, exactly as an
+ *  engine without capture does. */
+let currentGutterPointerId: number | null = null
+
+/** Record the pointer identity a `pointerdown` carries, TOTAL and fail-soft. */
+function noteGutterPointerId(event: unknown): void {
+  try {
+    const pointerId = (event as { pointerId?: unknown } | null | undefined)?.pointerId
+    if (typeof pointerId === 'number' && Number.isFinite(pointerId)) currentGutterPointerId = pointerId
+  } catch {
+    // fail-soft — a hostile event leaves the previous identity (or null) in place
+  }
+}
+
+/** ⟨§3 row 4's "policy that stays" — THE FORK'S IDENTITY LISTENER, registered ONCE per
+ *  control element and BEFORE the session's own start listener.⟩ It begins NOTHING and
+ *  cancels nothing: it reads the identity the capture turn will need. TOTAL. */
+function watchGutterPointerIdentity(element: unknown): void {
+  if (gutterPointerWatched.has(element)) return
+  gutterPointerWatched.add(element)
+  try {
+    // The vendored element-backed source (`domEventSource`), whose handler is handed the
+    // EVENT — the session's own `EventSource.on` seam is typed `() => void`, so the
+    // identity reading goes through the member that actually carries the event.
+    domEventSource().on(element, 'pointerdown', (event) => noteGutterPointerId(event))
+  } catch {
+    // fail-soft — an element with no listener surface simply carries no identity
+  }
+}
+/** The elements this boot already installed on the pane session. */
+const paneInstalled = new Set<unknown>()
+
+/** The in-flight PANE drag's own fork-side record: the module owns establishment and
+ *  the terminal, while WHICH pane is being dragged, the last projected zone bounds
+ *  and whether the gesture has actually MOVED are the fork's facts. */
+interface PaneDragState {
+  host: SidebarPanes
+  paneId: string
+  lastZones: readonly ZoneBounds[]
+  moved: boolean
+  pointerId: number | null
+  captureEl: { setPointerCapture(pointerId: number): void } | null
+  /** ⟨gate-4 re-audit — THE LIVE CAPTURE TARGET.⟩ The frame node a gesture starts on
+   *  is REPLACED by the establishment's own re-derive, so the capture claim resolves
+   *  the frame by the pane's identity at the claim (never the pinned node). */
+  captureTargetOf: () => { setPointerCapture(pointerId: number): void } | null
+  downX: number | null
+  downY: number | null
+}
+let paneDrag: PaneDragState | null = null
+
+/** The in-flight GUTTER gesture's own fork-side record: the zone under the pointer
+ *  and the `.layout` rect read ONCE at establishment (never per move). The session
+ *  owns the gesture; this only carries the fork's own geometry facts. */
+interface GutterGestureState {
+  host: SidebarPanes
+  zone: LayoutZoneName
+  layoutRect: GestureRect
+}
+let gutterGesture: GutterGestureState | null = null
+
+
+/** ADV4 — the document instance `installShellPointers` is currently wired onto.
+ *  Tied to the DOCUMENT (not a bare boolean) so each fresh document/install
+ *  (per renderer boot, and per adversarial shim test) still registers exactly
+ *  once, while a redundant second call on the SAME document is a no-op. */
+let shellWiredDoc: unknown = null
+
+/** The module's `cancel` terminal accepts the control element; on the lost-capture
+ *  path the fork does not hold it (the session's own record does), and the module's
+ *  own contract reads an absent element as "the record's element" — the one gesture a
+ *  session holds at a time. Named here so every call site passes the SAME value. */
+const paneCancelElement: unknown = undefined
+
+/** True only for the four real layout zones. HOST-5 — a malformed `'bogus'`
+ *  value must never be coerced into a real `left` `ZoneBounds`. */
+function isLayoutZoneNameValue(value: unknown): value is LayoutZoneName {
+  return value === 'left' || value === 'right' || value === 'header' || value === 'footer'
+}
+
 
 /** F-1b — the pointer travel (px) at which a pane drag CLAIMS the pointer via
  *  `setPointerCapture`. Below it the gesture is still a click (the toggle / a
@@ -397,206 +485,334 @@ function resolvePaneId(gestureEl: unknown, frame: unknown | null): string | null
   return null
 }
 
-/** The module-level active gesture (null when none — HOST-2/HOST-4). */
-let activeGesture: ActiveGesture | null = null
-
-/** ADV4 — the document instance `installShellPointers` is currently wired onto.
- *  Tied to the DOCUMENT (not a bare boolean) so each fresh document/install
- *  (per renderer boot, and per adversarial shim test) still registers exactly
- *  once, while a redundant second call on the SAME document is a no-op. The
- *  module-global `activeGesture` stays single-homed per wired document. */
-let shellWiredDoc: unknown = null
-
-/** True only for the four real layout zones. HOST-5 — a malformed `'bogus'`
- *  value must never be coerced into a real `left` `ZoneBounds`. */
-function isLayoutZoneNameValue(value: unknown): value is LayoutZoneName {
-  return value === 'left' || value === 'right' || value === 'header' || value === 'footer'
-}
-
-/** HOST-2 — register the per-gesture move/up/cancel handlers EXACTLY ONCE for
- *  the current gesture, removing any lingering prior handlers first so a second
- *  gesture never accumulates stale ones. The `dblclick` reset is NOT here (ADV1):
- *  it fires AFTER the second `pointerup` in a real two-click order, so tying it
- *  to the gesture lifecycle made it unreachable — it is a PERMANENT
- *  document-delegated listener registered in `installShellPointers` instead. */
-function beginGesture(): void {
-  if (typeof document?.addEventListener !== 'function') return
-  // reset-guard — a previous gesture's teardown already removed these; removing
-  // first is belt-and-suspenders against stale accumulation.
-  document.removeEventListener('pointermove', onGestureMove)
-  document.removeEventListener('pointerup', onGestureUp)
-  document.removeEventListener('pointercancel', onGestureCancel)
-  document.addEventListener('pointermove', onGestureMove)
-  document.addEventListener('pointerup', onGestureUp)
-  document.addEventListener('pointercancel', onGestureCancel)
-}
-
-/** HOST-2 — tear down the per-gesture listeners + clear the active gesture at
- *  the end of a gesture. Called from the `up`/`cancel`/supersede/lost-pointer
- *  paths. The permanent delegated `dblclick` is NOT torn down here (ADV1). */
-function clearGesture(): void {
-  activeGesture = null
-  if (typeof document?.removeEventListener !== 'function') return
-  document.removeEventListener('pointermove', onGestureMove)
-  document.removeEventListener('pointerup', onGestureUp)
-  document.removeEventListener('pointercancel', onGestureCancel)
-}
-
-/** The document-level `pointermove` — routes the active gesture's move through
- *  the module-level record (HOST-4 survives a frame re-mount). ADV2: a move from
- *  a DIFFERENT pointer than the one that started the gesture is ignored —
- *  a stale/lost gesture never acts on an unrelated pointer's events. */
-function onGestureMove(e: { clientX?: number; clientY?: number; pointerId?: number } | null): void {
-  const g = activeGesture
-  if (g == null) return
-  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
-  // F-1b — DEFERRED pointer capture: claim the pointer only once the gesture has
-  // actually travelled past the threshold (a pure click never captures, so its
-  // own `click` reaches the control the operator pressed — the header toggle and
-  // every pane-body row). Fail-soft: a throwing/absent `setPointerCapture` is
-  // swallowed and the non-captured listeners carry the gesture.
-  if (g.kind === 'pane' && g.captureEl != null && g.pointerId != null && e?.pointerId === g.pointerId) {
-    const cx = typeof e.clientX === 'number' ? e.clientX : 0
-    const cy = typeof e.clientY === 'number' ? e.clientY : 0
-    const dx = g.downX == null ? 0 : cx - g.downX
-    const dy = g.downY == null ? 0 : cy - g.downY
-    if (Math.hypot(dx, dy) >= PANE_DRAG_CAPTURE_THRESHOLD) {
-      const el = g.captureEl
-      g.captureEl = null // claim exactly ONCE per gesture
+/** ⟨§3 row 4 — the session's `source` seam.⟩ The vendored `domEventSource()` binds a
+ *  listener ON THE ELEMENT IT IS GIVEN, through that element's own member; the
+ *  renderer's only addition is THE OPT-IN CAPTURE CAPABILITY (`§4` item (iii)): the
+ *  source advertises `capturePointer`, and the SESSION invokes it AT MOST ONCE per
+ *  gesture, inside `begin`, only after the gesture is established and only for a
+ *  control that opted in with `capture: true`. NO capture call exists on the
+ *  `pointerdown` path. */
+function shellEventSource(): EventSource {
+  const base = domEventSource()
+  return {
+    on: (element, type, handler) => base.on(element, type, handler),
+    off: (element, type, handler) => base.off(element, type, handler),
+    isConnected: (element) => base.isConnected?.(element) ?? true,
+    capturePointer: (element) => {
       try {
-        el.setPointerCapture(g.pointerId)
+        const capture = (element as { setPointerCapture?: unknown })?.setPointerCapture
+        if (typeof capture !== 'function') return
+        // ⟨§4 item (iii) / `F2`.⟩ THE DOM CALL CARRIES THE GESTURE'S POINTER IDENTITY: a
+        // real `setPointerCapture` REQUIRES a pointer id and THROWS for the no-argument
+        // call, so a no-argument capture is no capture at all — the gesture is lost the
+        // moment the pointer leaves the element's box. The identity is the fork's own
+        // (`currentGutterPointerId`); where none was recorded the call is SKIPPED rather
+        // than made with an invented id (the declared degradation).
+        const pointerId = currentGutterPointerId
+        if (typeof pointerId !== 'number' || !Number.isFinite(pointerId)) return
+        ;(capture as (this: unknown, pointerId: number) => void).call(element, pointerId)
       } catch {
-        // capture unavailable/throws — proceed on the non-captured listeners
+        // capture unavailable/throws — the non-captured listeners carry the gesture
       }
-    }
+    },
   }
+}
+
+/** ⟨§3 row 4's deferred-capture policy / §4 item (iii) — THE FORK'S OWN TRACKING.⟩
+ *  THE GUTTER SESSION'S SOURCE. The START turn is ELEMENT-BACKED: the session is
+ *  installed PER CONTROL ELEMENT, by identity (`C-6`'s ban is on a SELECTOR-resolving
+ *  source, and this source resolves nothing — no `closest`, no `data-zone`, no
+ *  selector enters it). The three TRACKING turns (`pointermove`/`pointerup`/
+ *  `pointercancel`) are bound on the DOCUMENT, and that is the fork's own tracking,
+ *  declared here rather than assumed: the capture is what RETARGETS a pointer that
+ *  leaves the element's box back to the element, and the engine's capture semantics are
+ *  exactly what the harness cannot model — so a gesture whose pointer leaves its box
+ *  must still receive its move and its terminal, or it is LOST (the failure this unit
+ *  fixes). The tracking listeners exist ONLY between a `begin` and its terminal (the
+ *  session attaches and detaches them per gesture), so an idle document carries none.
+ *  ONE delivery per event: the element does not also carry these three types. */
+function documentTrackedGestureSource(): EventSource {
+  const base = shellEventSource()
+  const tracking: ReadonlySet<string> = new Set([POINTER_TYPES.move, POINTER_TYPES.end, POINTER_TYPES.cancel])
+  /** The document root where one exists, else the element itself (the declared
+   *  degradation — a host with no document keeps the element-backed binding). */
+  const rootFor = (element: unknown): unknown =>
+    typeof document === 'undefined' || typeof document.addEventListener !== 'function' ? element : document
+  return {
+    on: (element, type, handler) => base.on(tracking.has(type) ? rootFor(element) : element, type, handler),
+    off: (element, type, handler) => base.off(tracking.has(type) ? rootFor(element) : element, type, handler),
+    isConnected: (element) => base.isConnected?.(element) ?? true,
+    capturePointer: (element) => base.capturePointer?.(element),
+  }
+}
+
+/** THE GUTTER SESSION'S source — the shared document-bound tracking source above,
+ *  declared here as the gutter's own name so `installGutterSession` reads the way
+ *  the contract describes it. ONE implementation, TWO named consumers (the gutter
+ *  and the pane): a re-point of the rule lands on both or on neither. */
+function gutterGestureSource(): EventSource {
+  return documentTrackedGestureSource()
+}
+
+/** ⟨§3.4(d) — THE SESSION SEAM THE CONTROLLER IS COMPOSED OVER.⟩ The vendored
+ *  `createResizeController` builds its own per-control install options (`onStart`/
+ *  `onMove`/`onEnd`/`onCancel`) and its `attach` is what calls the session's `install` —
+ *  so the capture OPT-IN cannot travel through the controller, and the vendored
+ *  `gutter-affordance` says so itself (*"the capture opt-in cannot be delivered by the
+ *  composed controller's `attach`"*). This adapter is the fork's own two-SHAPE seam
+ *  (never a second sink: the session's `commit` and the controller's `commit` stay
+ *  DISTINCT, `§3.4(b)/(d)`): it forwards the controller's five usable members verbatim
+ *  and merges the ONE caller-side opt-in the controller's own install options cannot
+ *  carry. TOTAL — every member is present and callable in every case. */
+function gutterControlSession(session: ReturnType<typeof createGestureSession>): unknown {
+  return {
+    install: (element: unknown, options?: unknown): boolean => {
+      const input = (options ?? {}) as Record<string, unknown>
+      return session.install(element, { ...input, capture: true })
+    },
+    reset: (element: unknown, gesture: unknown, value: unknown): unknown =>
+      session.reset(element, gesture as Parameters<typeof session.reset>[1], value),
+    cancel: (element: unknown, gesture?: unknown): unknown =>
+      session.cancel(element, gesture as Parameters<typeof session.cancel>[1]),
+    dispose: () => session.dispose(),
+    stats: () => session.stats(),
+    gesture: () => session.gesture(),
+    get disposed(): boolean {
+      return session.disposed
+    },
+  }
+}
+
+/** ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 row 5: THE CURSOR DECLARATION, ADOPTED.⟩
+ *  THE FORK'S AXIS-TOKEN-TO-CURSOR MAPPING — the module's `cursorOf` seam, which
+ *  `§3` row 5 names as *"the fork's axis-token→cursor mapping (the DECLARATION
+ *  string is the caller's)"*. The AXIS TOKEN is the fork's own (`data-axis`,
+ *  authored from `gutterAxis` at §3.1's authoring site); the DECLARATION VALUE is
+ *  the caller's own vocabulary — the SAME `'col-resize'`/`'row-resize'` values the
+ *  shell's `.layout .gutter[data-axis=…]` cursor rules carry — and it is supplied as
+ *  the module's own producer ANSWER SHAPE (an object carrying an own `cursor`
+ *  member), never pre-resolved here. PURE. */
+const GUTTER_CURSOR_DECLARATIONS: Readonly<Record<string, string>> = { columns: 'col-resize', rows: 'row-resize' }
+
+/** THE ONE RESOLUTION OF THE PRODUCER'S ANSWER — the MODULE's, never a fork copy.
+ *  `cursorDeclarationFor` is the vendored member's total resolution (`§3` row 5's
+ *  adopted member list; `§0A` note 8's own-property rule): a trimmed non-empty
+ *  string, or `undefined` for EVERY absent/non-object/absent-member/non-string/
+ *  empty-or-whitespace shape. A token the fork authored no declaration for resolves
+ *  to `undefined` rather than to an invented default. PURE. */
+function gutterCursorDeclarationFor(axisToken: unknown): string | undefined {
+  const token = typeof axisToken === 'string' ? axisToken : ''
+  return cursorDeclarationFor({ cursor: GUTTER_CURSOR_DECLARATIONS[token] })
+}
+
+/** THE FORK'S CURSOR WRITE — `§3` row 5's `applyCursor` seam, *"the fork's cursor write"*,
+ *  THE SITE THE CONTRACT NAMES (the `applyCursor` seam of the row's eleven; `§2.1(e)`
+ *  fixes the CSS half: the cursor RULES stay shell CSS and the module only ever
+ *  receives the property value as a string). This function carries the module's
+ *  RETURNED text to the affordance element the renderer already holds, applied as that
+ *  element's cursor declaration. IT IS NOT A RE-POINT AND NOT A RE-VOCABULARY:
+ *  `class="gutter"` + `data-zone` + `data-axis` and both `§3.2` dependents
+ *  (`GESTURE_SELECTOR`, the two shell cursor rules) are UNTOUCHED — an element with no
+ *  writable style, or an `undefined` declaration, keeps whatever the shell CSS already
+ *  declares. TOTAL + fail-soft. */
+function applyGutterCursorDeclaration(element: unknown, declaration: string | undefined): void {
+  if (declaration === undefined) return
   try {
-    const x = typeof e?.clientX === 'number' ? e.clientX : 0
-    const y = typeof e?.clientY === 'number' ? e.clientY : 0
-    if (g.kind === 'gutter') {
-      g.host.moveGutter(gutterSizeForPoint(g.layoutRect, g.zone, { x, y }))
-    } else {
-      const point = { x, y }
-      const zones: ZoneBounds[] = []
-      const containers =
-        typeof document?.querySelectorAll === 'function' ? document.querySelectorAll('.layout [data-zone]') : []
-      for (let i = 0; i < containers.length; i++) {
-        const el = containers[i] as {
-          className?: unknown
-          getAttribute(name: string): string | null
-          getBoundingClientRect(): GestureRect
-        }
-        // The `.layout [data-zone]` set also matches the resize GUTTERS (they
-        // carry `data-zone` + `data-axis`, not `data-orientation`). A gutter is
-        // NOT a drop container — skip it so it is never projected as a zone.
-        const cls = typeof el.className === 'string' ? el.className : ''
-        if (cls.split(/\s+/).includes('gutter')) continue
-        // HOST-5 — fail-closed: project ONLY a real LayoutZoneName. A malformed
-        // `'bogus'` value is SKIPPED, never coerced into a `left` drop target.
-        const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('data-zone') : null
-        if (!isLayoutZoneNameValue(dataZone)) continue
-        if (typeof el.getBoundingClientRect === 'function') {
-          zones.push(toZoneBounds(dataZone, el.getBoundingClientRect()))
+    const style = (element as { style?: unknown } | null | undefined)?.style
+    if (style === null || style === undefined || typeof style !== 'object') return
+    const declared = style as Record<string, unknown>
+    declared['cursor'] = declaration
+  } catch {
+    // fail-soft — an unwritable/hostile style leaves the shell CSS rule in force
+  }
+}
+
+/** ⟨§3.4(b) — THE SESSION'S `commit` IS GUARD-ONLY: IT CARRIES NO WRITE.⟩ The
+ *  session's terminal fires with a `null` value on a REFUSED establishment as well as
+ *  on an accepted `end`, so it cannot discriminate acceptance from refusal and must
+ *  never invoke `setLayout`, `commitGutterSize` or the operator-settings persist. The
+ *  fork's ONE write is the CONTROLLER's `commit` (`§3.4(a)/(d)`, `pane-gutter.ts` →
+ *  `commitGutterSize`), which the composition above reaches exactly once per accepted
+ *  gesture and zero times on a refusal. This hook does the fork's own BOOKKEEPING only:
+ *  it closes the fork-side record and clears the per-gesture value channel. */
+function gutterCommit(): void {
+  const state = gutterGesture
+  if (state == null) return
+  try {
+    state.host.endGutter()
+  } catch {
+    // fail-soft — a throwing commit never breaks the gesture stream
+  } finally {
+    gutterGesture = null
+  }
+}
+
+/** The gutter session's PERMANENT hooks: a gutter gesture has no travel threshold, so
+ *  its capture is part of the establishment and its commit is the terminal's. */
+function installGutterSession(): ReturnType<typeof createGestureSession> | null {
+  if (gutterSession != null) return gutterSession
+  try {
+    gutterSession = createGestureSession({
+      source: gutterGestureSource(),
+      // §3.4(b) — guard-only; the CONTROLLER's `commit` carries the write.
+      commit: () => gutterCommit(),
+    })
+  } catch {
+    gutterSession = null
+  }
+  return gutterSession
+}
+
+/** The pane-drag session's PERMANENT hooks. The establishment records the fork's own
+ *  drag facts; the move turn carries the DEFERRED capture (`F-1b`: the frame is
+ *  claimed only once the gesture has travelled past `PANE_DRAG_CAPTURE_THRESHOLD`, so
+ *  a pure click still reaches the control the operator pressed); the terminal decides
+ *  the drop. The session — never a fork listener — owns the per-gesture tracking. */
+/** ⟨gate-4 re-audit finding — THE PANE SESSION'S TRACKING BINDS ON THE DOCUMENT
+ *  TOO, and the measured reason is named rather than assumed.⟩ The pane session
+ *  was built over `shellEventSource()` (element-backed), and the fork's OWN
+ *  establishment path REPLACES the element it bound: `host.startPaneDrag(paneId)`
+ *  re-derives the layout graph, so the `.pane-frame` the gesture started on is a
+ *  DIFFERENT node from the one under the pointer a few pixels later (measured on
+ *  the assembled app: `doc-nav#1` → `doc-nav#2` within the first four moves). An
+ *  element-backed tracking turn attached to the discarded node never fires again,
+ *  so the gesture received no move after that first 2px step, claimed no capture,
+ *  and never got its terminal — the header drag moved nothing. The gutter path
+ *  already solved exactly this shape with `documentTrackedGestureSource`; the pane
+ *  session takes the SAME source (no new mechanism, and the rule now has ONE
+ *  implementation for both consumers). The START turn stays ELEMENT-BACKED inside
+ *  that source (the session is installed PER CONTROL ELEMENT by identity, `§2 C-6`). */
+function installPaneSession(): ReturnType<typeof createGestureSession> | null {
+  if (paneSession != null) return paneSession
+  try {
+    paneSession = createGestureSession({ source: documentTrackedGestureSource() })
+  } catch {
+    paneSession = null
+  }
+  return paneSession
+}
+
+/** The pane session's `onMove` hook: the DEFERRED capture, then the move routing.
+ *  ADV2 — a move from a DIFFERENT pointer than the one that started the gesture is
+ *  ignored, so a stale/lost gesture never acts on an unrelated pointer's events. */
+function onPaneSessionMove(gesture: { readonly value?: unknown } | null): void {
+  const g = paneDrag
+  if (g == null) return
+  try {
+    if (g.captureEl != null && g.pointerId != null) {
+      const cx = lastPointerX
+      const cy = lastPointerY
+      const dx = g.downX == null ? 0 : cx - g.downX
+      const dy = g.downY == null ? 0 : cy - g.downY
+      if (Math.hypot(dx, dy) >= PANE_DRAG_CAPTURE_THRESHOLD) {
+        const el = g.captureEl
+        g.captureEl = null // claim exactly ONCE per gesture
+        try {
+          // ⟨gate-4 re-audit⟩ The claim is made against the LIVE frame (the pinned node
+          // was replaced by the establishment's own re-derive), and the DOM call carries
+          // the gesture's POINTER IDENTITY — the same rule the gutter path's source
+          // applies (§4 item (iii) / `F2`: a no-argument capture is no capture at all).
+          const target = g.captureTargetOf() ?? el
+          target.setPointerCapture(g.pointerId)
+        } catch {
+          // capture unavailable/throws — proceed on the non-captured listeners
         }
       }
-      g.lastZones = zones
-      g.moved = true
-      g.host.movePaneDrag(point, zones)
     }
+    const point = lastPointerPoint()
+    const x = point.x
+    const y = point.y
+    const zones: ZoneBounds[] = []
+    const containers =
+      typeof document?.querySelectorAll === 'function' ? document.querySelectorAll('.layout [data-zone]') : []
+    for (let i = 0; i < containers.length; i++) {
+      const el = containers[i] as {
+        className?: unknown
+        getAttribute(name: string): string | null
+        getBoundingClientRect(): GestureRect
+      }
+      // The `.layout [data-zone]` set also matches the resize GUTTERS (they
+      // carry `data-zone` + `data-axis`, not `data-orientation`). A gutter is
+      // NOT a drop container — skip it so it is never projected as a zone.
+      const cls = typeof el.className === 'string' ? el.className : ''
+      if (cls.split(/\s+/).includes('gutter')) continue
+      // HOST-5 — fail-closed: project ONLY a real LayoutZoneName.
+      const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('data-zone') : null
+      if (!isLayoutZoneNameValue(dataZone)) continue
+      if (typeof el.getBoundingClientRect === 'function') {
+        zones.push(toZoneBounds(dataZone, el.getBoundingClientRect()))
+      }
+    }
+    g.lastZones = zones
+    g.moved = true
+    g.host.movePaneDrag({ x, y }, zones)
   } catch {
     // fail-soft — a throwing move never breaks the gesture stream
   }
 }
 
-/** The document-level `pointerup` — one commit (or abort) per gesture, then the
- *  HOST-2 teardown. ADV2: a `pointerup` from a different/lost pointer is a no-op. */
-function onGestureUp(e: { clientX?: number; clientY?: number; pointerId?: number } | null): void {
-  const g = activeGesture
+/** The pane session's terminal hook: ONE commit (or abort) per gesture. */
+function onPaneSessionEnd(): void {
+  const g = paneDrag
   if (g == null) return
-  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
   try {
-    if (g.kind === 'gutter') {
-      g.host.endGutter()
+    if (!g.moved) {
+      g.host.cancelPaneDrag()
+      return
+    }
+    const zone = dropZoneForPoint(lastPointerPoint(), g.lastZones, 24)
+    if (zone == null) {
+      g.host.cancelPaneDrag() // F1 — outside any zone → abort, no mutation
     } else {
-      const point = {
-        x: typeof e?.clientX === 'number' ? e.clientX : 0,
-        y: typeof e?.clientY === 'number' ? e.clientY : 0,
-      }
-      if (!g.moved) {
-        g.host.cancelPaneDrag()
-        return
-      }
-      const zone = dropZoneForPoint(point, g.lastZones, 24)
-      if (zone == null) {
-        g.host.cancelPaneDrag() // F1 — outside any zone → abort, no mutation
-      } else {
-        g.host.commitPaneDrop({ paneId: g.paneId, zone })
-      }
+      g.host.commitPaneDrop({ paneId: g.paneId, zone })
     }
   } catch {
     // fail-soft
   } finally {
-    clearGesture()
+    paneDrag = null
   }
 }
 
-/** The document-level `pointercancel` — revert the gesture (F4). ADV2: a
- *  `pointercancel` from a different/lost pointer is a no-op. */
-function onGestureCancel(e: { pointerId?: number } | null): void {
-  const g = activeGesture
+/** The pane session's cancel hook: revert with no mutation (F4). */
+function onPaneSessionCancel(): void {
+  const g = paneDrag
   if (g == null) return
-  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // ADV2 — not our pointer
   try {
-    if (g.kind === 'gutter') g.host.cancelGutter() // F4 — revert, no commit
-    else g.host.cancelPaneDrag() // re-hide with one final write, no mutation
+    g.host.cancelPaneDrag() // re-hide with one final write, no mutation
   } catch {
     // fail-soft
   } finally {
-    clearGesture()
+    paneDrag = null
   }
 }
 
-/** ADV3 — a new gesture supersedes an in-flight one cleanly: revert the PRIOR
- *  gesture (a pane drag → `cancelPaneDrag` so its reveal is re-hidden; a gutter
- *  → `cancelGutter`), then fully clear it before the new gesture starts. */
-function revertPriorGesture(): void {
-  const prior = activeGesture
-  if (prior == null) return
-  try {
-    if (prior.kind === 'gutter') prior.host.cancelGutter()
-    else prior.host.cancelPaneDrag()
-  } catch {
-    // fail-soft — a throwing revert never breaks the wire-up
-  }
-  clearGesture()
-}
-
-/** ADV2 — the document-delegated `lostpointercapture` handler. A pointer
- *  released without `pointerup`/`pointercancel` (dropped out of the window /
- *  capture lost) must NOT leak a stale gesture: when the active gesture's
- *  `pointerId` matches the event's, revert any gesture that actually MOVED
- *  (a moved pane drag → `cancelPaneDrag` to re-hide its reveal; a gutter →
- *  `cancelGutter`) and then `clearGesture()` — tearing down the per-gesture
- *  listeners so a later UNRELATED event can never re-commit. A never-moved
- *  dropped gesture is cleared cleanly without an extra seam write. */
-function onLostPointerCapture(e: { pointerId?: number } | null): void {
-  const g = activeGesture
+/** The gutter session's cancel hook: revert, no commit (F4). */
+function onGutterSessionCancel(): void {
+  const g = gutterGesture
   if (g == null) return
-  if (g.pointerId != null && e?.pointerId != null && g.pointerId !== e.pointerId) return // not our pointer — leave it alone
   try {
-    if (g.kind === 'gutter') g.host.cancelGutter()
-    else if (g.moved) g.host.cancelPaneDrag() // reveal re-hidden only if the drag actually moved
+    g.host.cancelGutter()
   } catch {
     // fail-soft
   } finally {
-    clearGesture() // never leak the stale gesture or its listeners
+    gutterGesture = null
   }
+}
+
+/** The last pointer position observed by the delegated listeners, in the shell
+ *  coordinate space. Read by the pane drag's move/terminal routing (the module hands
+ *  the handle, not the event, on its move channel). */
+let lastPointerX = 0
+let lastPointerY = 0
+function lastPointerPoint(): { x: number; y: number } {
+  return { x: lastPointerX, y: lastPointerY }
 }
 
 /** The PERMANENT document-delegated `dblclick` (ADV1) — the gutter double-click
  *  reset, decoupled from the gesture lifecycle. Resolves the gutter via
  *  `.gutter[data-zone]` and, ONLY for a real layout zone, calls
- *  `host.resetGutter(dataZone)`. Fail-soft, never throws. */
+ *  `host.resetGutter(dataZone)` (the FORK-side reset route, §4 item (vii): the
+ *  module's own `reset` refuses `'no-gesture'` outside a gesture). Fail-soft. */
 function onGestureDblclick(host: SidebarPanes, e: unknown): void {
   if (host == null) return
   try {
@@ -616,18 +832,20 @@ function onGestureDblclick(host: SidebarPanes, e: unknown): void {
 /**
  * The document-level DELEGATED `pointerdown` — resolves the gesture element via
  * `e.target.closest(GESTURE_SELECTOR)` (HOST-1: works for chrome authored AFTER
- * install), then starts the gutter or the pane HEADER gesture with exactly-once
- * per-gesture move/up/cancel listeners (HOST-2) routed through the module-level
- * active-gesture record (HOST-4). F-1: the two surface kinds are distinguished
- * explicitly — a match carrying `data-zone` is the gutter (unchanged); a match
- * carrying the pane-header class is the pane HEADER, whose pane id comes from
- * its `.pane-frame` ancestor and whose pointer capture stays on that FRAME.
- * TOTAL + fail-soft — never throws. */
+ * install), INSTALLS that control on its session once and ESTABLISHES the gesture
+ * through the SESSION's own `begin` (which is where capture happens, after
+ * establishment and only for an opted-in control — §4 item (iii)). F-1: the two
+ * surface kinds are distinguished explicitly — a match carrying `data-zone` is the
+ * gutter; a match carrying the pane-header class is the pane HEADER, whose pane id
+ * comes from its `.pane-frame` ancestor and whose pointer capture stays on that
+ * FRAME. TOTAL + fail-soft — never throws. */
 function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
   if (host == null) return
   try {
     const target = (e as { target?: unknown })?.target
     if (target == null) return
+    lastPointerX = typeof (e as { clientX?: number }).clientX === 'number' ? (e as { clientX: number }).clientX : 0
+    lastPointerY = typeof (e as { clientY?: number }).clientY === 'number' ? (e as { clientY: number }).clientY : 0
     const t = target as { closest?: (sel: string) => unknown }
     const gestureEl =
       typeof t.closest === 'function'
@@ -642,6 +860,8 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
 
     // Gutter gesture — the matched element carries a real layout `data-zone`.
     if (isLayoutZoneNameValue(dataZone)) {
+      const session = installGutterSession()
+      if (session == null) return
       // read the `.layout` rect ONCE per gesture
       let layoutRect: GestureRect | null = null
       if (typeof document?.querySelector === 'function') {
@@ -651,21 +871,31 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
         }
       }
       if (layoutRect == null) return
-      // ADV3 — a new gutter gesture supersedes any in-flight one first (a prior
-      // pane drag's reveal is re-hidden, a prior gutter is reverted).
+      // ADV3 — a new gutter gesture supersedes any in-flight one first.
       revertPriorGesture()
-      host.startGutter(dataZone)
-      if (host.activeGutter() !== dataZone) return // §2.3 gate — empty/minimized zone: no gesture
-      try {
-        if (pointerId != null && typeof gestureEl.setPointerCapture === 'function') {
-          gestureEl.setPointerCapture(pointerId) // F5 fail-soft
-        }
-      } catch {
-        // capture unavailable/throws — proceed on the non-captured listeners
-      }
-      activeGesture = { kind: 'gutter', host, zone: dataZone, layoutRect, pointerId: pointerId ?? null }
-      beginGesture()
-      return
+      const zone = dataZone
+      const element = gestureEl
+      // §3 row 5 — THE FORK'S CURSOR WRITE, on the ONE affordance element this
+      // resolution already holds: the AXIS TOKEN the fork authored (`data-axis`) goes
+      // through the ADOPTED mapping, the module resolves the producer's answer to the
+      // DECLARATION, and the fork applies THAT text. The shell's cursor rules stay the
+      // primary path (§3.2 dependent #2, unre-pointed): this writes the module's own
+      // resolved text and never a second vocabulary.
+      applyGutterCursorDeclaration(
+        element,
+        gutterCursorDeclarationFor(
+          typeof element.getAttribute === 'function' ? element.getAttribute('data-axis') : null,
+        ),
+      )
+      // ⟨§4 item (iii) — NO capture here: the session takes it INSIDE `begin`, after
+      // the gesture is established, and only because this control opted in.⟩ The fork's own
+      // TWO prep turns (the identity listener FIRST, so it precedes the session's own
+      // start listener on an already-installed control; then the session install itself,
+      // taken by the CONTROLLER's `attach` inside `host.startGutter` below — `§3.4(d)`).
+      noteGutterPointerId(e)
+      watchGutterPointerIdentity(element)
+      const begun = establishGutterGesture({ host, zone, layoutRect }, session, element)
+      if (!begun) return
     }
 
     // Pane-drag gesture — the matched element must be the pane HEADER surface
@@ -681,92 +911,261 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
     const frameEl = paneFrameAncestorOf(gestureEl)
     const dataPaneId = resolvePaneId(gestureEl, frameEl)
     if (dataPaneId == null || frameEl == null) return
+    const session = installPaneSession()
+    if (session == null) return
     // F9/HOST-3/ADV5 — never hijack a control. PINNED (supervisor decision, F-1
     // 2026-09-15): the header is itself a `button.pane-collapse-toggle`, so the
     // resolved HEADER surface is the pane's explicit GRAB SURFACE and is EXEMPT
-    // from this guard (otherwise the header would be inert exactly as the body
-    // was). The guard stays armed as the second line of defence for every other
-    // resolved target — i.e. any control inside the pane BODY.
-    // (Body pointerdowns never reach this line — a body resolves no header.)
+    // from this guard. The guard stays armed as the second line of defence for
+    // every other resolved target — i.e. any control inside the pane BODY.
     if (!isHeaderSurface && isInteractiveControl(target as Element | null)) return
     // ADV3 — a new pane drag supersedes any in-flight one first (a prior pane
     // drag is cancelled so its reveal is re-hidden, a prior gutter is reverted).
     revertPriorGesture()
     host.startPaneDrag(dataPaneId)
-    // F-1b — the capture target is the FRAME (the existing pointermove/up/cancel
-    // routing stays on the frame element) but it is claimed LAZILY, once the
-    // gesture passes `PANE_DRAG_CAPTURE_THRESHOLD` (see `onGestureMove`). An
-    // immediate capture here retargets the gesture's own `click` to the frame,
-    // which is what made the header's collapse/expand toggle (and every pane-body
-    // row) inert to a real user. A pure click therefore never captures, while a
-    // real drag still does.
-    const captureEl =
-      pointerId != null && typeof (frameEl as { setPointerCapture?: unknown }).setPointerCapture === 'function'
-        ? (frameEl as { setPointerCapture(pointerId: number): void })
-        : null
-    activeGesture = {
-      kind: 'pane',
+    // F-1b — the capture target is the pane's FRAME, claimed LAZILY once the gesture
+    // passes `PANE_DRAG_CAPTURE_THRESHOLD` (see `onPaneSessionMove`). An immediate
+    // capture here retargets the gesture's own `click` to the frame. ⟨gate-4
+    // re-audit — THE TARGET IS THE LIVE FRAME, RESOLVED AT THE CLAIM.⟩ The
+    // establishment path re-derives the layout graph, so the frame node this
+    // resolution holds is REPLACED a few pixels into the gesture; a capture claim
+    // made against the discarded node is a claim the engine refuses (`NotFoundError`
+    // — the node is no longer in the document, which is exactly the zero
+    // `gotpointercapture` reading), so the frame is looked up by its PANE IDENTITY at
+    // the claim instead of pinned at the down. One `.pane-frame` per id is the frame
+    // vocabulary's own rule (`PANE_FRAME_CLASS`). TOTAL: no frame/no document → null.
+    const liveFrame = (): { setPointerCapture(pointerId: number): void } | null => {
+      try {
+        if (typeof document?.querySelector !== 'function') return null
+        const found = document.querySelector(`.${PANE_FRAME_CLASS}[data-pane-id=${JSON.stringify(dataPaneId)}]`) as
+          | { setPointerCapture?: unknown }
+          | null
+        if (found == null || typeof found.setPointerCapture !== 'function') return null
+        return found as { setPointerCapture(pointerId: number): void }
+      } catch {
+        return null
+      }
+    }
+    const captureEl = pointerId != null ? liveFrame() : null
+    paneDrag = {
       host,
       paneId: dataPaneId,
       lastZones: [],
       moved: false,
       pointerId: pointerId ?? null,
       captureEl,
+      captureTargetOf: liveFrame,
       downX: typeof (e as { clientX?: number }).clientX === 'number' ? (e as { clientX: number }).clientX : null,
       downY: typeof (e as { clientY?: number }).clientY === 'number' ? (e as { clientY: number }).clientY : null,
     }
-    beginGesture()
+    if (!paneInstalled.has(gestureEl)) {
+      paneInstalled.add(gestureEl)
+      try {
+        session.install(gestureEl, {
+          onMove: (gesture: unknown) => onPaneSessionMove(gesture as { readonly value?: unknown } | null),
+          onEnd: () => onPaneSessionEnd(),
+          onCancel: () => onPaneSessionCancel(),
+        })
+      } catch {
+        paneDrag = null
+        return
+      }
+    }
+    // ⟨gate-4 re-audit finding — THE PANE PATH CONSUMES `begin`'s ANSWER (the gutter
+    // path's own landed rule, §3.4: EXACTLY ONE ESTABLISHMENT PER GESTURE, AND A
+    // `busy` ANSWER IS NEVER A FAILURE).⟩ The answer was previously DISCARDED, so a
+    // refused establishment left the fork's `paneDrag` record and the `paneInstalled`
+    // ledger entry live for a gesture no session holds — a state that later drags
+    // read as `busy` with nothing reported. ONLY a refusal that means NO gesture
+    // exists reverts the fork's record (the session's OWN start turn may already hold
+    // the slot — the `busy` case, which is this very gesture, not a failure).
+    const begun = session.begin(gestureEl)
+    if (begun == null || (begun as { ok?: unknown }).ok !== true) {
+      const code = begun == null ? 'refused' : (begun as { code?: unknown }).code
+      if (code !== 'busy') {
+        paneDrag = null
+        try {
+          host.cancelPaneDrag()
+        } catch {
+          // fail-soft — a throwing revert never breaks the renderer
+        }
+      }
+    }
   } catch {
     // fail-soft — a throwing gesture never breaks the renderer
   }
 }
 
-/** Unit U-SHELL-N7 (W2-N7) — the shell pointer-wiring integration pass. Real
- *  DOM pointer listeners (`pointerdown`/`pointermove`/`pointerup`/
- *  `pointercancel` with `setPointerCapture`) + `getBoundingClientRect` rect math
- *  that feed the EXISTING §2.1 host seams: the C7 gutter resize
- *  (`startGutter`/`moveGutter`/`endGutter`/`cancelGutter`/`resetGutter`) and the
- *  C4 pane drag/reorder/relocate with the C11 reveal + C12 minimize hooks
- *  (`startPaneDrag`/`movePaneDrag`/`commitPaneDrop`/`cancelPaneDrag`). This is
- *  SHELL CHROME (the one AGENTS.md exception to the provident-framework UI
- *  constraint), so raw DOM wiring is permitted here and nowhere else. The
- *  pointer→seam argument mapping rides the THREE NEW pure helpers (§2.2) —
- *  `gutterSizeForPoint`/`toZoneBounds`/`dropZoneForPoint` — never inlined. The
- *  wiring introduces ZERO graph writes: every gesture-state write flows through
- *  the controllers (no per-move render/render, no direct `setLayout`).
+/** Establish ONE gutter gesture. THE ORDER IS THE CONTRACT (§4 item (iii)): the fork
+ *  records its own zone identity for the control on the CONTROLLER first (so the
+ *  controller's establishment evaluation — axis, bounds, the FAIL-CLOSED
+ *  resizability gate — runs inside the session's `begin`), and then the SESSION's own
+ *  `begin` opens the gesture and takes the capture AFTER establishment and only
+ *  because the control opted in. A refused establishment leaves the fork's record
+ *  unset, so every terminal path is a no-op. Returns whether the gesture was
+ *  established. */
+function establishGutterGesture(
+  state: GutterGestureState,
+  session: ReturnType<typeof createGestureSession>,
+  element: unknown,
+): boolean {
+  gutterGesture = state
+  try {
+    state.host.startGutter(state.zone, element)
+    const begun = session.begin(element)
+    if (begun != null && (begun as { ok?: unknown }).ok === true) return true
+    // ⟨§3.4 — EXACTLY ONE ESTABLISHMENT PER GESTURE, AND A `busy` ANSWER IS NEVER A
+    // FAILURE.⟩ Two routes can reach the session's `begin` for ONE gesture: the
+    // element-backed source's own `pointerdown` turn (an already-installed control) and
+    // this explicit one. Whichever loses reads `'busy'` while the SAME control holds the
+    // slot — that is the gesture this fork record already describes, not a refused
+    // establishment, so it must not be torn down (the tear-down is exactly what left the
+    // gesture zoneless and its commit valueless). ONLY a refusal that means NO gesture
+    // exists (‘not-installed’/‘disconnected’/‘disposed’/‘stale’) reverts the fork's record.
+    const code = begun == null ? 'refused' : (begun as { code?: unknown }).code
+    if (code === 'busy') return true
+    gutterGesture = null
+    state.host.cancelGutter()
+    return false
+  } catch {
+    gutterGesture = null
+    return false
+  }
+}
+
+/** ADV3 — a new gesture supersedes an in-flight one cleanly: revert the PRIOR
+ *  gesture (a pane drag → `cancelPaneDrag` so its reveal is re-hidden; a gutter →
+ *  `cancelGutter`), then fully clear it before the new gesture starts. */
+function revertPriorGesture(): void {
+  const pane = paneDrag
+  if (pane != null) {
+    try {
+      pane.host.cancelPaneDrag()
+    } catch {
+      // fail-soft — a throwing revert never breaks the wire-up
+    }
+    paneDrag = null
+  }
+  const gutter = gutterGesture
+  if (gutter != null) {
+    try {
+      gutter.host.cancelGutter()
+    } catch {
+      // fail-soft
+    }
+    gutterGesture = null
+  }
+}
+
+/** ADV2 — the document-delegated `lostpointercapture` handler. A pointer released
+ *  without `pointerup`/`pointercancel` (dropped out of the window / capture lost)
+ *  must NOT leak a stale gesture: the SESSION's own cancel terminal is taken, which
+ *  detaches its tracking listeners and runs the fork's cancel hook — so a later
+ *  UNRELATED event can never re-commit. A never-moved dropped pane drag is cleared
+ *  without an extra seam write. */
+function onLostPointerCapture(host: SidebarPanes): void {
+  try {
+    const pane = paneDrag
+    if (pane != null) {
+      // A never-moved dropped drag is cleared cleanly; a MOVED one re-hides its
+      // reveal through the host seam (the same rule the pane path has always had).
+      if (pane.moved) pane.host.cancelPaneDrag()
+      paneDrag = null
+    }
+    const gutter = gutterGesture
+    if (gutter != null) {
+      gutter.host.cancelGutter()
+      gutterGesture = null
+    }
+    // The sessions' own records are discarded through their cancel terminal, so no
+    // stale gesture can survive a lost capture; a no-gesture session refuses and is
+    // a no-op.
+    if (paneSession?.gesture() != null) paneSession.cancel(paneCancelElement)
+    if (gutterSession?.gesture() != null) gutterSession.cancel(paneCancelElement)
+    void host
+  } catch {
+    // fail-soft
+  }
+}
+
+/** Unit U-SHELL-N7 (W2-N7) — the shell pointer-wiring integration pass.
  *
- *  Fail-soft (F5/F11): no host, an environment without the DOM surface, a thrown
- *  `getBoundingClientRect`/`setPointerCapture`, or a throwing engine → the
- *  gesture degrades or no-ops; `installShellPointers` itself never throws (the
- *  app still boots). The DELEGATED `pointerdown` attaches ONCE at renderer boot
- *  (after the host is constructed, HOST-1) and resolves the gesture element per
- *  event, so the real app's render-time-authored `.gutter[data-zone]` and pane
- *  HEADER (`.pane-collapse-toggle` inside its `.pane-frame[data-pane-id]`) chrome
- *  is always reachable (HOST-1). The
- *  per-gesture move/up/cancel listeners are registered exactly once and
- *  torn down on gesture end (HOST-2), routed through the module-level
- *  active-gesture record so a re-mount survives (HOST-4). F-1: the pane-drag
- *  surface is the pane HEADER only — a `pointerdown` in the pane BODY starts no
- *  pane drag and captures nothing, so a body control's own `click` is never
- *  retargeted to the frame. */
+ *  ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 rows 4/5: THE WIRING RE-POINTS AT THE
+ *  VENDORED SESSION.⟩ The renderer keeps exactly what the family's own contract
+ *  leaves to a consumer: the ONE delegated `pointerdown` (HOST-1, so chrome authored
+ *  AFTER install still routes), the per-event element resolution through the fork's
+ *  own `closest` call (`GESTURE_SELECTOR` — the module's bytes carry no selector),
+ *  the fork's own surface rules (the pane HEADER is the grab surface, a BODY element
+ *  is not), the opt-in CAPTURE CAPABILITY the injected source advertises, and the
+ *  fork's own seam calls (`gutterSizeForPoint`/`toZoneBounds`/`dropZoneForPoint`).
+ *  The gesture LIFECYCLE — establishment, the three tracking listeners, the
+ *  terminal, the cancel and the at-most-once commit — is the SESSION's, installed PER
+ *  CONTROL ELEMENT by identity (`§2 C-6`), never a per-event delegated selector
+ *  resolution INSIDE the mechanism. The permanent `dblclick` reset and the
+ *  `lostpointercapture` guard stay document-delegated (ADV1/ADV2) because they are
+ *  not gesture turns: the reset must survive the gesture's own teardown, and the
+ *  lost-capture guard's whole job is the case where no terminal arrives.
+ *
+ *  Fail-soft (F5/F11): no host, no DOM surface, a thrown `getBoundingClientRect`, or
+ *  an unusable source degrades or no-ops; `installShellPointers` itself never throws
+ *  (the app still boots). */
 export function installShellPointers(host: SidebarPanes): void {
   if (host == null) return // F11 — no host (no-bridge plain-page mode) → no-op
   try {
     if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return
     // ADV4 — idempotent: a SECOND call on the SAME document is a no-op (no
     // duplicate delegated `pointerdown`/`dblclick`/`lostpointercapture`
-    // registration), keeping the module-global `activeGesture` single-homed.
+    // registration), keeping the sessions single-homed per wired document.
     const currentDoc = document as unknown
     if (shellWiredDoc === currentDoc) return
+    // The sessions are created ONCE per wired document, on the vendored factory.
+    const wiredGutterSession = installGutterSession()
+    installPaneSession()
+    // ⟨§3.4(d) — ONE SESSION, ONE CONTROLLER, ONE WRITE.⟩ The host's gutter controller is
+    // composed over THIS session (the only one with an element-backed source and the
+    // per-control capture opt-in), so the controller's `commit` — the fork's ONE write
+    // path — is reachable from the gesture the operator drives. FIRST-CONFIG-WINS: a
+    // host that already carries a supplied session is left untouched.
+    if (wiredGutterSession != null) {
+      try {
+        host.attachGutterGestureSession(gutterControlSession(wiredGutterSession))
+      } catch {
+        // fail-soft — a host that predates the seam keeps the declared inert composition
+      }
+    }
     // HOST-1 — ONE document-level DELEGATED `pointerdown` listener. The gesture
     // element is resolved per-event via `e.target.closest(GESTURE_SELECTOR)`,
     // so gutters/headers authored AFTER install (the real app authors the
-    // `.gutter` elements and the pane chrome only at render) still route.
+    // gutter affordances on the producing graph and the pane chrome at render)
+    // still route.
     document.addEventListener('pointerdown', (e) => {
       try {
         onDocumentPointerDown(host, e)
       } catch {
         // fail-soft — a throwing gesture never breaks the renderer
+      }
+    })
+    // The pane drag's TRAVEL measure: the fork's own pointer-position reading. The
+    // session's move turn hands the gesture handle, not the event, so the deferred
+    // capture's travel check reads this coordinate. NOT a gesture authority: it
+    // records a position and decides nothing.
+    document.addEventListener('pointermove', (e) => {
+      try {
+        const ev = e as { clientX?: number; clientY?: number }
+        if (typeof ev.clientX === 'number') lastPointerX = ev.clientX
+        if (typeof ev.clientY === 'number') lastPointerY = ev.clientY
+        // ⟨§3 row 3's `sizeFor` seam — THE FORK'S PER-MOVE GEOMETRY (§3.4(f): a caller
+        // ROUTES INTO the one controller seam that carries the write).⟩ The element-backed
+        // session's own move turn reaches the controller's hook on the ELEMENT's event
+        // only, so an off-element move could never supply a size; the document sees every
+        // move (on-element events bubble here), computes the candidate size from the
+        // `.layout` rect read at establishment, and pushes it to the ONE value channel
+        // (`host.moveGutter`). The module narrows it into the zone's window at the
+        // terminal and the CONTROLLER writes it — nothing is written per move.
+        const state = gutterGesture
+        if (state != null) state.host.moveGutter(gutterSizeForPoint(state.layoutRect, state.zone, lastPointerPoint()))
+      } catch {
+        // fail-soft
       }
     })
     // ADV1 — a PERMANENT document-delegated `dblclick` (decoupled from the
@@ -782,9 +1181,9 @@ export function installShellPointers(host: SidebarPanes): void {
     // ADV2 — a document-delegated `lostpointercapture` so a pointer released
     // without `pointerup`/`pointercancel` reverts + clears the gesture (never
     // leaks a stale gesture or its listeners).
-    document.addEventListener('lostpointercapture', (e) => {
+    document.addEventListener('lostpointercapture', () => {
       try {
-        onLostPointerCapture(e as { pointerId?: number } | null)
+        onLostPointerCapture(host)
       } catch {
         // fail-soft — a throwing revert never breaks the renderer
       }

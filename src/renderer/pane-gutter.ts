@@ -1,15 +1,27 @@
 // src/renderer/pane-gutter.ts — Unit U-SHELL-5: the shell pointer gutter
 // controller + the pure clamp/axis/bounds helpers (docs/specs/unit-u-shell-5-
-// resizable-gutters.md §2.5 pins). The shell owns the drag mechanic (continuous
-// pointer capture + getBoundingClientRect); this module owns the gesture state
-// and commits exactly ONE `onCommit` write at gesture END (W2-Q7/§2.1), never a
-// per-move stream. No DOM/Electron import (node-testable), mirroring
-// `pane-drag.ts`.
+// resizable-gutters.md §2.5 pins). No DOM/Electron import (node-testable),
+// mirroring `pane-drag.ts`.
+//
+// ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — the ADOPTION (§3 row 3).⟩ The gesture
+// state machine and the one-commit-per-gesture discipline are the vendored
+// `gutter.ts` → `createResizeController` composed on the vendored
+// `gesture-session.ts`; the local `createGutterController` is REMOVED
+// (`P-IM-zone-repl-1` row-3 witness). What STAYS here is the fork's own POLICY,
+// supplied as the controller's injected seams (§3 row 3's policy column):
+// `gutterAxis` (`axisFor`), `gutterBounds` (`boundsFor`), `clampGutterSize`
+// (`clampToBounds`' caller-side coercer + the reset/default read),
+// `isGutterResizable` (the empty/minimized gate, read FAIL-CLOSED) and
+// `setZoneSize` (the ONE write path's policy half). The H-4 takeover-commit and
+// the reset policy stay fork-side too; `stage.size` is never touched by a zone
+// commit.
 //
 // Pinned: side-column clamp bounds are the landed `LAYOUT_ZONE_MIN`/
 // `LAYOUT_ZONE_MAX`; row (header/footer) bounds are this module's per-axis
 // minimum/maximum (§2.5 pin 3). A commit never collapses a track (never
 // negative/NaN). `stage.size` is never touched by a zone commit (§2.5 pin 4).
+import { createResizeController, clampToBounds, type ResizeController } from '../shared/gutter.js'
+import type { EventSource, GestureHandle } from '../shared/gesture-session.js'
 import {
   coerceLayout,
   defaultLayout,
@@ -20,25 +32,17 @@ import {
   type LayoutZoneName,
 } from './layout-state.js'
 
-/** The gutter orientation (§2.1): side columns are resized horizontally, the
- *  header/footer rows vertically. */
-export type GutterAxis = 'columns' | 'rows'
+// ⟨§2.1 — the axis reading lives in its own module so the envelope authoring site
+// (`pane-graph.ts`) can share it WITHOUT adding a fourth `./pane-gutter.js` stem
+// collision to the vendored-set pin; it is RE-EXPORTED below, so this module's export
+// surface is unchanged.⟩
+import { gutterAxis, type GutterAxis } from './layout-zone-geometry.js'
+export { gutterAxis, type GutterAxis }
 
 /** A per-zone clamp window (§2.2, W2-Q9). */
 export interface GutterBounds {
   min: number
   max: number
-}
-
-/** The shell gutter controller surface (§2.5 pin 2). */
-export interface GutterController {
-  start(zone: LayoutZoneName): void
-  move(size: number): void
-  end(): number | null
-  cancel(): void
-  reset(zone?: LayoutZoneName): number | null
-  active(): LayoutZoneName | null
-  preview(): number | null
 }
 
 /** The four trimmed gutters (§2.1): the two side columns + the header/footer
@@ -67,12 +71,6 @@ export interface Rect {
 interface Point2D {
   x: number
   y: number
-}
-
-/** The gutter orientation for a zone (§2.1). TOTAL: an unknown zone defaults to
- *  `'columns'` and never throws (F5). */
-export function gutterAxis(zone: unknown): GutterAxis {
-  return zone === 'header' || zone === 'footer' ? 'rows' : 'columns'
 }
 
 /** §2.2.1 (P-IM-1) — the pointer→gutter-seam mapping helper. Maps a pointer
@@ -109,16 +107,27 @@ export function gutterBounds(zone: LayoutZoneName): GutterBounds {
     : { min: LAYOUT_ZONE_MIN, max: LAYOUT_ZONE_MAX }
 }
 
+/** ⟨`PD-UI-14` §4 item (i) — THE COERCER PROPERTY.⟩ A size reaching the vendored
+ *  `clampToBounds` is ALWAYS a finite number: this is the fork's `min`-answering
+ *  input COERCER in front of the seam (the module's `NaN` limb is unreachable by
+ *  construction), never a second clamp authority. TOTAL. */
+function finiteOrDefault(size: unknown, fallback: number): number {
+  return typeof size === 'number' && Number.isFinite(size) ? size : fallback
+}
+
 /** Clamp a requested zone size to its bounds (§2.2/W2-Q9). TOTAL: a
  *  non-finite/NaN value clamps to the minimum; a below-min value to the
  *  minimum; an above-max value to the maximum — never negative/NaN. An unknown
- *  zone never throws (F5). */
+ *  zone never throws (F5).
+ *
+ *  ⟨`PD-UI-14` §3 row 3 — the CLAMP is the vendored `clampToBounds`; what stays
+ *  fork-side is the §2.5 pin-3 WINDOW (`gutterBounds`) and the §4 item (i)
+ *  coercer in front of the seam (the fork answers `min` for an unusable input,
+ *  which is the property this function's callers rely on).⟩ */
 export function clampGutterSize(zone: LayoutZoneName, size: number): number {
-  const { min, max } = gutterBounds(zone)
-  if (typeof size !== 'number' || !Number.isFinite(size)) return min
-  if (size < min) return min
-  if (size > max) return max
-  return size
+  const window = gutterBounds(zone)
+  const clamped = clampToBounds(finiteOrDefault(size, window.min), window)
+  return Number.isFinite(clamped) ? clamped : window.min
 }
 
 /** Apply a clamped zone size to the serialized layout (§2.2). PURE: the input
@@ -142,128 +151,107 @@ export function isGutterResizable(empty: boolean, minimized: boolean): boolean {
   return empty !== true && minimized !== true
 }
 
-/** The shell gutter controller (§2.5 pin 2). `start` gates on the caller's
- *  `isResizable` predicate (the §2.3 empty/minimized gate). `move` only records
- *  the clamped preview; `end` performs the ONE `onCommit` write for the gesture
- *  (never per-move — W2-Q7/§2.1). `cancel` reverts with no write (F2: at most
- *  one commit). `reset` (double-click, §2.5 pin 5) commits the registry default
- *  once. TOTAL: a malformed/unknown zone never throws. */
-export function createGutterController(options: {
-  onCommit: (zone: LayoutZoneName, size: number) => void
-  isResizable?: (zone: LayoutZoneName) => boolean
-  bounds?: (zone: LayoutZoneName) => GutterBounds
-}): GutterController {
-  const onCommit = typeof options?.onCommit === 'function' ? options.onCommit : () => {}
-  const isResizableFn =
-    typeof options?.isResizable === 'function' ? options.isResizable : () => true
-  const boundsFn = typeof options?.bounds === 'function' ? options.bounds : gutterBounds
-
-  let activeZone: LayoutZoneName | null = null
-  let lastSize: number | null = null
-
-  function resolveBounds(zone: LayoutZoneName): GutterBounds {
+/** The fork's ONE gutter composition (`§3` row 3), built on the vendored
+ *  `createResizeController` with the vendored session injected by the caller (the
+ *  shell's gesture wiring). The returned controller is the module's own surface —
+ *  `attach`/`detach`/`reset`/`stats`/`detached` — and this factory adds NO second
+ *  lifecycle of its own.
+ *
+ *  The seams, each the fork's own policy: `axisFor` ← `gutterAxis`; `boundsFor` ←
+ *  `gutterBounds`; `defaultSizeFor` ← the pinned registry default for the zone
+ *  (`clampGutterSize`, the same coercer the double-click reset uses);
+ *  `isResizable` ← the FAIL-CLOSED gate (`isGutterResizable`'s reading compared with
+ *  `=== true`, so a non-`true` answer refuses under the module's truthiness rule too
+ *  — `C-1`); `sizeFor` ← the FORK's per-move size (`pendingSizeFor`, the geometry the
+ *  caller computed; the module-built handle's `value` is the fallback shape); `commit`
+ *  ← `onCommit`, the ONE write path, reached at most once per committing terminal and
+ *  the ONLY seam that carries the write (`§3.4(a)/(d)`; the session's own `commit` is
+ *  guard-only).
+ *
+ *  The `zoneOf` seam is the fork's own identity policy: which zone a controller
+ *  element belongs to (the shell's wiring supplies it), and a `null` answer refuses
+ *  the gesture rather than guessing. TOTAL: an unusable seam refuses, never throws. */
+export function createGutterResizeController(options: {
+  session: unknown
+  zoneOf: (element: unknown) => LayoutZoneName | null
+  isResizable: (zone: LayoutZoneName) => unknown
+  commit: (zone: LayoutZoneName, size: number) => void
+  defaultSizeFor?: (zone: LayoutZoneName) => number
+  /** ⟨§3 row 3's `sizeFor` seam — THE FORK'S VALUE CHANNEL. The module reads the value at
+   *  the committing terminal; the fork computes it (§3 row 3: "`sizeFor` ← `gutterSizeForPoint`'s
+   *  geometry (pointer → size, computed by the fork, never by the module)"). A host that holds
+   *  the per-move size it computed supplies it HERE; the module-built gesture handle's own
+   *  `value` remains the fallback for a fork that pushes the value onto the handle instead. ⟩ */
+  pendingSizeFor?: (zone: LayoutZoneName) => unknown
+}): ResizeController {
+  const zoneOf = (element: unknown): LayoutZoneName | null => {
     try {
-      const candidate = boundsFn(zone)
-      if (
-        candidate != null &&
-        typeof candidate.min === 'number' &&
-        typeof candidate.max === 'number' &&
-        Number.isFinite(candidate.min) &&
-        Number.isFinite(candidate.max) &&
-        candidate.max >= candidate.min
-      ) {
-        return candidate
+      const zone = options.zoneOf(element)
+      return isLayoutZoneName(zone) ? zone : null
+    } catch {
+      return null
+    }
+  }
+  const defaultFor = (zone: LayoutZoneName): number => {
+    const provided = options.defaultSizeFor?.(zone)
+    return clampGutterSize(zone, finiteOrDefault(provided, defaultLayout().zones[zone].size))
+  }
+  return createResizeController({
+    session: options.session,
+    axisFor: (element: unknown): unknown => {
+      const zone = zoneOf(element)
+      return zone === null ? undefined : gutterAxis(zone)
+    },
+    boundsFor: (element: unknown): unknown => {
+      const zone = zoneOf(element)
+      return zone === null ? undefined : gutterBounds(zone)
+    },
+    defaultSizeFor: (element: unknown): unknown => {
+      const zone = zoneOf(element)
+      return zone === null ? undefined : defaultFor(zone)
+    },
+    // C-1 / §3 row 3's policy column — FAIL-CLOSED: only an explicit `true` enables
+    // the gesture, and a throw is a refusal rather than a propagated error.
+    isResizable: (element: unknown): boolean => {
+      const zone = zoneOf(element)
+      if (zone === null) return false
+      try {
+        return options.isResizable(zone) === true
+      } catch {
+        return false
       }
-    } catch {
-      // a throwing/invalid bounds provider falls back to the pinned bounds
-    }
-    return gutterBounds(zone)
-  }
-
-  function clamp(zone: LayoutZoneName, size: number): number {
-    const { min, max } = resolveBounds(zone)
-    if (typeof size !== 'number' || !Number.isFinite(size)) return min
-    if (size < min) return min
-    if (size > max) return max
-    return size
-  }
-
-  /** H-3 (adversarial) — the §2.3 resizability gate fails CLOSED: only an
-   *  explicit `true` enables a gesture. A non-boolean falsy predicate return
-   *  (`undefined`/`null`/`0`/`''`) refuses; a throwing predicate refuses. */
-  function resizable(zone: LayoutZoneName): boolean {
-    try {
-      return isResizableFn(zone) === true
-    } catch {
-      return false
-    }
-  }
-
-  function safeCommit(zone: LayoutZoneName, size: number): void {
-    try {
-      onCommit(zone, size)
-    } catch {
-      // a throwing consumer must never break the gesture
-    }
-  }
-
-  /** Resolve the active gesture with ONE commit of its last valid size (the
-   *  shared body of `end` + the H-4 takeover in `start`). No active gesture (or
-   *  no recorded size) is a no-op returning null. */
-  function finishGesture(): number | null {
-    if (activeZone == null) return null
-    const zone = activeZone
-    const size = lastSize
-    activeZone = null
-    lastSize = null
-    if (size == null) return null
-    safeCommit(zone, size)
-    return size
-  }
-
-  return {
-    start(zone: LayoutZoneName): void {
-      // H-4 (adversarial) — a `start` over an active gesture must NOT silently
-      // discard the prior: explicitly resolve (end) it first, committing its
-      // last valid size so no in-flight drag is lost.
-      finishGesture()
-      if (!isLayoutZoneName(zone)) return
-      if (!resizable(zone)) return
-      activeZone = zone
-      lastSize = null
     },
-    move(size: number): void {
-      if (activeZone == null) return
-      lastSize = clamp(activeZone, size)
+    // ⟨§3 row 3's `sizeFor` seam — THE FORK'S VALUE CHANNEL, in its two declared forms.⟩
+    // The FORK's own computed per-move size (`pendingSizeFor`, the geometry the caller
+    // derived from the pointer) is preferred when it answers a number; otherwise the
+    // module-built gesture handle's `value` — the channel a caller that pushes the size
+    // onto the handle itself uses. Either way the FORK produces the magnitude and the
+    // MODULE alone narrows it into the caller's pair.
+    sizeFor: (element: unknown, gesture: GestureHandle): unknown => {
+      const zone = zoneOf(element)
+      if (zone !== null && typeof options.pendingSizeFor === 'function') {
+        try {
+          const pending = options.pendingSizeFor(zone)
+          if (typeof pending === 'number' && Number.isFinite(pending)) return pending
+        } catch {
+          // fail-soft — an unusable value seam falls through to the handle's own value
+        }
+      }
+      try {
+        return (gesture as { value?: unknown }).value
+      } catch {
+        return undefined
+      }
     },
-    end(): number | null {
-      return finishGesture()
+    commit: (gesture: GestureHandle, value: number): void => {
+      const zone = zoneOf((gesture as { element?: unknown }).element)
+      if (zone === null) return
+      options.commit(zone, clampGutterSize(zone, value))
     },
-    cancel(): void {
-      activeZone = null
-      lastSize = null
-    },
-    reset(zone?: LayoutZoneName): number | null {
-      // H-2 (adversarial, F5) — ONLY an omitted (`undefined`) zone falls back to
-      // the in-flight gesture. An explicit but invalid zone (e.g. `'bogus'`) is
-      // IGNORED (returns null) and must NOT retarget onto the active gesture.
-      const target = zone === undefined ? activeZone : zone
-      if (!isLayoutZoneName(target)) return null
-      // H-1 (adversarial) — `reset` (double-click) honours the SAME §2.3
-      // empty/minimized resizability gate as `start`: a non-resizable zone
-      // commits nothing (mirror `start`).
-      if (!resizable(target)) return null
-      const size = clamp(target, defaultLayout().zones[target].size)
-      activeZone = null
-      lastSize = null
-      safeCommit(target, size)
-      return size
-    },
-    active(): LayoutZoneName | null {
-      return activeZone
-    },
-    preview(): number | null {
-      return lastSize
-    },
-  }
+  })
 }
+
+/** The session a gutter gesture runs on — the vendored `gesture-session` instance
+ *  injected by the shell wiring. Re-exported as a TYPE only so a consumer names the
+ *  same shape without a second declaration. */
+export type GutterGestureSource = EventSource

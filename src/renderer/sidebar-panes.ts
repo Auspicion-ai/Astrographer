@@ -46,7 +46,11 @@ import {
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
 import { clickableClasses } from './render-shared.js'
-import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, zoneTrackCssVars, type LayoutState, type LayoutZoneName } from './layout-state.js'
+import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, zoneTrackVars, type LayoutState, type LayoutZoneName } from './layout-state.js'
+// ⟨`PD-UI-14` §3 row 2 — the projection seam supplier.⟩ The write site composes the
+// TRACK record (`zoneTrackVars`) with the projection seam (`layoutCssVars`): both go
+// through ONE `setProperty` loop so the grid's tokens cannot drift apart.
+import { layoutCssVars } from './layout-vars.js'
 import {
   createDragController,
   insertionIndexForPoint,
@@ -58,11 +62,26 @@ import {
   type ZoneBounds,
 } from './pane-drag.js'
 import {
-  createGutterController,
+  clampGutterSize,
+  createGutterResizeController,
   isGutterResizable,
   setZoneSize,
-  type GutterController,
 } from './pane-gutter.js'
+// ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 rows 3/4: the shell's gutter gesture
+// composition is the vendored `ResizeController` (the local controller is gone) and
+// the session it runs on is the vendored gesture session. The SESSION INSTANCE is
+// created here, on the vendored factory, and the element-backed SOURCE is installed
+// by the shell wiring (`renderer.ts`), which alone owns the renderer's DOM env; this
+// host owns the policy seams and the one write path. `GestureSession` is NOT exported
+// by the module (§0A note 7), so the host names its shape through the factory's own
+// return type rather than re-declaring a second authority.
+import { createGestureSession } from '../shared/gesture-session.js'
+import type { ResizeController } from '../shared/gutter.js'
+
+/** The vendored session's OWN return shape, read from the factory (§0A note 7 — the
+ *  module declares `GestureSession` without `export`; a consumer names the shape it
+ *  RETURNS instead of re-declaring a parallel type). */
+type GutterGestureSession = ReturnType<typeof createGestureSession>
 import type { EditController, CaretState, RichCaretEdge, RebuildKind, CommitFailure } from './edit-controller.js'
 import { decodePage, buildPageOps } from '../main/page-diff.js'
 import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from './content-reconcile.js'
@@ -631,8 +650,38 @@ export class SidebarPanes {
   /** U-SHELL-5 (C7) — the shell gutter resize controller. `onCommit` applies the
    *  clamped `ZoneLayout.size` and writes ONCE through `setLayout` at gesture
    *  end (W2-Q7/§2.1, never per-move); the `isResizable` gate is the §2.3
-   *  empty/minimized rule (a zone with no gutter). */
-  private readonly gutterController: GutterController
+   *  empty/minimized rule (a zone with no gutter).
+   *
+   *  ⟨`PD-UI-14` §3 row 3 — the VENDORED controller.⟩ The gesture state machine is
+   *  the module's `createResizeController`; the fork supplies the seams (axis,
+   *  bounds, default, the FAIL-CLOSED resizability adapter, the value channel, and
+   *  the ONE commit sink — the only seam that carries the write, `§3.4(a)/(d)`) and
+   *  nothing else. The session it is composed over arrives through
+   *  `attachGutterGestureSession` (the wiring's own); until then the composition is
+   *  the declared INERT one. */
+  /** ⟨§3.4(d) — THE COMPOSITION'S ONE SESSION.⟩ The DOM-side wiring supplies the
+   *  session this controller is composed over (`attachGutterGestureSession`); until it
+   *  does, this is the DECLARED INERT degradation — a session with no `source`, whose
+   *  `install` therefore refuses and whose `begin` answers `'not-installed'`, so the
+   *  controller attaches nothing and no gesture is ever established (zero writes). */
+  private gutterSession: GutterGestureSession = createGestureSession()
+  private gutterController: ResizeController
+  /** `true` once the wiring has supplied its session — FIRST-CONFIG-WINS: a second
+   *  supply is refused rather than silently re-pointing the one write path. */
+  private gutterSessionAttached = false
+  /** The zone each attached gesture control belongs to (by element IDENTITY — the
+   *  controller is element-keyed and the fork owns which element is which zone). */
+  private readonly gutterZones = new Map<unknown, LayoutZoneName>()
+  /** H-4 — the zone of the currently-started gutter gesture, so a second `start`
+   *  over an in-flight one resolves the PRIOR by its own zone (the takeover-commit
+   *  is fork-side policy that STAYS, `§3` row 3). */
+  private gutterGestureZone: LayoutZoneName | null = null
+  /** The per-move value the controller's own move channel reads and pushes onto the
+   *  gesture handle (the module reads the value, the fork computes it). */
+  private pendingGutterSize: number | null = null
+  /** The live gesture handle the controller handed this host at its move turn — the
+   *  ONE legal channel for the per-move value (`§R` R6). */
+  private liveGutterHandle: { set?: (value: unknown) => unknown } | null = null
   /** U-PARITY-C18 — the advanced-search disclosure state (collapsed by default).
    *  Flipped by the `pane-search-advanced-toggle` handler → re-derive. */
   private advancedSearchOpen = false
@@ -880,17 +929,57 @@ export class SidebarPanes {
         this.rerenderAppGraph()
       },
     })
-    // U-SHELL-5 (C7) — the shell gutter controller. The commit seam applies the
-    // clamped size + persists via ONE `setLayout`; the resizability gate reads
-    // the same enabled+placed census the assembler uses for `is-empty` (§2.3).
-    this.gutterController = createGutterController({
-      onCommit: (zone, size) => this.commitGutterSize(zone, size),
+    // U-SHELL-5 (C7) — the shell gutter controller, COMPOSED ON THE VENDORED
+    // `createResizeController` (`PD-UI-14` §3 row 3). The commit seam applies the
+    // clamped size + persists via ONE `setLayout` at the gesture's committing
+    // terminal; the resizability gate reads the same enabled+placed census the
+    // assembler uses for `is-empty` (§2.3) and answers the fork's FAIL-CLOSED form.
+    this.gutterController = this.buildGutterController()
+  }
+
+  /** ⟨§3.4(d) — THE PER-CONTROL COMPOSITION, built from ONE closure per seam.⟩ One
+   *  vendored `createResizeController` over ONE vendored `createGestureSession`, with the
+   *  fork's own policy seams and the fork's writer AT THE CONTROLLER'S `commit` SEAM ONLY
+   *  (`§3.4(a)`): the session's own `commit` is guard-only, because its terminal fires with
+   *  a `null` value on a refusal as well as on an `end` (`§3.4(b)`), so the controller's
+   *  establishment gate is the only thing in front of the write (`§3.4(c)`). */
+  private buildGutterController(): ResizeController {
+    return createGutterResizeController({
+      session: this.gutterSession,
+      zoneOf: (element) => this.gutterZones.get(element) ?? null,
       isResizable: (zone) => {
         const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
         const count = enabledZonePaneCounts(this.registry, base)[zone]
         return isGutterResizable(count === 0, base.zones[zone]?.minimized === true)
       },
+      // §3 row 3's `sizeFor` seam: the FORK's own computed per-move size (§3.4(f) — the
+      // caller routes into the ONE write seam; the geometry is `gutterSizeForPoint`'s).
+      pendingSizeFor: () => this.pendingGutterSize,
+      commit: (zone, size) => this.commitGutterSize(zone, size),
     })
+  }
+
+  /** ⟨§3.4(d) — THE SESSION SEAM THE WIRING SUPPLIES.⟩ The DOM-side wiring (the
+   *  renderer, which alone holds the element-backed source, the delegated resolution and
+   *  the per-control capture opt-in) constructs the ONE session a control element's
+   *  gesture runs on and hands it here; this host then composes its controller over THAT
+   *  session, so the controller's `commit` — the ONE write path — is reachable from the
+   *  gesture the operator actually drives. FIRST-CONFIG-WINS: a second supply returns
+   *  `false` and changes nothing. TOTAL. */
+  attachGutterGestureSession(session: unknown): boolean {
+    if (this.gutterSessionAttached) return false
+    if (session === null || session === undefined) return false
+    try {
+      this.gutterSession = session as GutterGestureSession
+      this.gutterController = this.buildGutterController()
+      this.gutterSessionAttached = true
+      return true
+    } catch {
+      // fail-soft — an unusable session leaves the declared inert composition in place
+      this.gutterSession = createGestureSession()
+      this.gutterController = this.buildGutterController()
+      return false
+    }
   }
 
   /** Host-owned mutable state (M5): the host owns the current-document/node
@@ -1523,10 +1612,12 @@ export class SidebarPanes {
    *  project the shell grid's per-zone TRACK onto the LIVE grid element: a zone
    *  with zero enabled+placed app-graph panes (§2.5 census) that is not being
    *  revealed as a drag drop target gets its track COLLAPSED to `0px`, so the
-   *  stage reclaims the space. A populated/revealed zone gets NO write here —
-   *  its track resolves through the stylesheet's `var(--zone-<z>-size)`, so a
-   *  size commit still needs no host write (the non-empty geometry is
-   *  byte-identical to the pre-F-3 behavior).
+   *  stage reclaims the space. A POPULATED zone's own module value —
+   *  `String(size)+unit` — IS WRITTEN here too (`§3` row 1's amended write rule), so the
+   *  grid consumes the record's token rather than a stylesheet fallback, and a zone that
+   *  becomes non-empty cannot keep a stale `0px` on a sink with no `removeProperty`. A
+   *  merely-REVEALED empty zone is the DECLINED member: its value is `''`, which is the
+   *  removal path, and the stylesheet fallback then supplies its persisted size.
    *
    *  WHY the host writes at all: the census is the authority (§2.5 — "zero
    *  enabled+placed panes (post-overlay/fallback resolution)"), and unlike the
@@ -1549,12 +1640,31 @@ export class SidebarPanes {
           : null
       const style = grid?.style
       if (style == null || typeof style.setProperty !== 'function') return
-      const vars = zoneTrackCssVars(this.registry, this.layout ?? defaultLayout(), {
-        revealedZones: this.revealedZones,
-      })
+      const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+      // ⟨§3 row 2 — OUTCOME (A): THE PROJECTION RECORD IS APPLIED HERE.⟩ The two §3 rows'
+      // records are composed at this ONE write site and BOTH are applied: the projection
+      // record (`layoutCssVars`, the six geometry properties the §3 row 2 seam emits — the
+      // four `--zone-<z>-size` values, `--stage-weight`, `--top-bar-size`) and the track
+      // record (`zoneTrackVars`, the four `--zone-<z>-track` values). A record that is
+      // computed and DISCARDED at its own call site is neither of the two admissible
+      // outcomes, so the projection's own keys reach the sink with the projection's own
+      // values, never a re-derivation of them here.
+      const projection = layoutCssVars(base)
+      const tracks = zoneTrackVars(this.registry, base, { revealedZones: this.revealedZones })
+      for (const name of Object.keys(projection)) {
+        const value = projection[name]
+        if (typeof value === 'string' && value !== '') style.setProperty(name, value)
+      }
+      // ⟨§3 row 1's amended write rule, limb for limb.⟩ `'0px'` IS the collapse write; a
+      // SIZED value (the module's own `String(size)+unit` for a populated zone) MUST be
+      // written — leaving it to the stylesheet fallback drops the module's returned token
+      // AND, on a sink without `removeProperty`, lets a stale `0px` survive a zone's
+      // repopulation; `''` (the DECLINED member: an empty zone the fork IS revealing) is
+      // the REMOVAL PATH, never a value to write.
       for (const zone of LAYOUT_PANE_ZONES) {
         const name = `--zone-${zone}-track`
-        if (vars[name] === '0px') style.setProperty(name, '0px')
+        const value = tracks[name]
+        if (typeof value === 'string' && value !== '') style.setProperty(name, value)
         else if (typeof style.removeProperty === 'function') style.removeProperty(name)
       }
     } catch {
@@ -3457,36 +3567,101 @@ export class SidebarPanes {
     return result
   }
 
-  /** U-SHELL-5 (C7) — the shell gutter pointer wiring entry points. The
-   *  renderer's pointer listeners drive the controller through these; the ONE
-   *  commit at gesture end applies `setZoneSize` and persists via a single
-   *  `setLayout` (W2-Q7/§2.1 — no per-move stream). */
-  startGutter(zone: LayoutZoneName): void {
-    this.gutterController.start(zone)
+  /** U-SHELL-5 (C7) — the shell gutter pointer wiring entry point. The renderer's
+   *  delegated pointer listener resolves WHICH element is a gesture surface and calls
+   *  this; the CONTROLLER (over the session the wiring supplied) owns every turn, and
+   *  the ONE commit at a committing terminal applies `setZoneSize` and persists via a
+   *  single `setLayout` (W2-Q7/§2.1 — no per-move stream, `§3.4(a)/(e)`).
+   *
+   *  ⟨`PD-UI-14` §3 rows 3/4 / §3.4 / §4 items (iii)/(vii)/(viii).⟩ The gesture
+   *  LIFECYCLE is the vendored session's; this method only PREPARES the turn: it
+   *  `attach`es the control element ONCE (per element — `§4` item (viii): the module
+   *  refuses a multi-element `detach`, so one controller serves one control element and
+   *  each element gets its own attachment; the attach is also the element's ONE session
+   *  `install`, carrying the per-control capture opt-in the wiring supplies through its
+   *  session seam) and records the fork's zone identity for it.
+   *
+   *  THE ESTABLISHMENT IS NOT TAKEN HERE (§3.4: EXACTLY ONE establishment per gesture).
+   *  The session establishes on ONE of two routes and a `begin` taken here as well would
+   *  be the second one: the element-backed source's OWN `pointerdown` turn (an
+   *  already-installed control) or the wiring's explicit `begin` right after this call
+   *  (a control installed by this very gesture). A second `begin` over an in-flight
+   *  gesture answers `'busy'` and that is NOT a failure — it is the SAME gesture. */
+  startGutter(zone: LayoutZoneName, element?: unknown): void {
+    try {
+      // A control element the caller supplied is attached on FIRST use: the
+      // controller is element-keyed and one element = one attachment.
+      if (element !== null && element !== undefined && !this.gutterZones.has(element)) {
+        this.gutterZones.set(element, zone)
+        this.gutterController.attach(element, {
+          onMove: (gesture: unknown) => this.onGutterMove(gesture),
+        })
+      }
+      this.gutterGestureZone = zone
+    } catch {
+      // fail-soft — a throwing gesture never breaks the shell wiring
+    }
   }
 
+  /** The controller's own move channel: the fork pushes the per-move size onto the
+   *  gesture the module built (the module READS it at the committing terminal, never
+   *  per move), and keeps the live handle so `moveGutter` reaches the SAME gesture. */
+  private onGutterMove(gesture: unknown): void {
+    this.liveGutterHandle = gesture as { set?: (value: unknown) => unknown }
+    const size = this.pendingGutterSize
+    if (size === null) return
+    try {
+      this.liveGutterHandle?.set?.(size)
+    } catch {
+      // fail-soft — a refused handle write is a no-op, never a throw
+    }
+  }
+
+  /** The per-move value channel (W2-Q7/§2.1): ONE assignment per observed move,
+   *  pushed through the gesture handle the module handed the controller. `0` writes
+   *  when no gesture is in flight — the module's own terminal is the only writer. */
   moveGutter(size: number): void {
-    this.gutterController.move(size)
+    this.pendingGutterSize = size
+    const handle = this.liveGutterHandle
+    if (handle === null) return
+    try {
+      handle.set?.(size)
+    } catch {
+      // fail-soft — a refused handle write is a no-op, never a throw
+    }
   }
 
+  /** The gesture's committing terminal: the value that reached the commit sink (the
+   *  clamped size the controller wrote through `commitGutterSize`), or `null` where
+   *  no gesture or no observed move existed. */
   endGutter(): number | null {
-    return this.gutterController.end()
+    const size = this.pendingGutterSize
+    this.gutterGestureZone = null
+    this.pendingGutterSize = null
+    this.liveGutterHandle = null
+    return size
   }
 
   cancelGutter(): void {
-    this.gutterController.cancel()
+    this.gutterGestureZone = null
+    this.pendingGutterSize = null
+    this.liveGutterHandle = null
   }
 
+  /** §4 item (vii) — THE FORK-SIDE DOUBLE-CLICK RESET. The module's own `reset`
+   *  refuses with `'no-gesture'` where no gesture is recorded, so the reset is the
+   *  FORK's route over the ONE write path: it resolves the zone's pinned default,
+   *  narrows it through the same clamp the module uses, and commits ONCE — honouring
+   *  the SAME empty/minimized resizability gate the gesture path honours. Returns the
+   *  committed size, or `null` where the gate declined. */
   resetGutter(zone?: LayoutZoneName): number | null {
-    return this.gutterController.reset(zone)
-  }
-
-  previewGutter(): number | null {
-    return this.gutterController.preview()
-  }
-
-  activeGutter(): LayoutZoneName | null {
-    return this.gutterController.active()
+    if (!isLayoutZoneName(zone)) return null
+    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    const count = enabledZonePaneCounts(this.registry, base)[zone]
+    if (isGutterResizable(count === 0, base.zones[zone]?.minimized === true) !== true) return null
+    const size = clampGutterSize(zone, defaultLayout().zones[zone].size)
+    this.commitGutterSize(zone, size)
+    return size
   }
 
   /** U-SHELL-5 (C7) — apply a committed gutter size to the current layout and

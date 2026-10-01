@@ -137,7 +137,36 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   { file: 'src/shared/types.ts', md5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', superseded: '303e63d28ec430920aebf0d4a8f3fd3f', restated: 'U-APP-HARNESS-READINESS' },
   { file: 'src/main/operator-settings-store.ts', md5: '11841179e004f22dd758edbe927f1a40' },
   { file: 'src/main/preload.ts', md5: '00dba3cdd5e1eb3c7de632a838e3d28b', superseded: '76d2299070d4333e0e66189359baad22', restated: 'U-APP-HARNESS-READINESS' },
-  { file: 'src/renderer/sidebar-panes.ts', md5: 'df1930a3d6cac72796cc6c42609dd6c6' },
+  // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
+  //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still
+  //  FAILS both the ⟨A-1⟩ digest limb and the working-tree limb). WHAT MOVED IS THE RECORDED
+  //  VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may move the file
+  //  only by re-stating it here, with its reason and its unit named"*. **THE REASON:** this
+  //  unit REPLACES the zone/sidebar build inside that file — §3 row 3's `gutter` adoption
+  //  reduces the file's hand-rolled resize-controller duplicate to the vendored module's
+  //  composition, and §3 row 5's `gutter-affordance` adoption takes the fork's cursor/axis
+  //  seams with it — so its bytes MOVE by construction and §5 `G-7` is the clause that orders
+  //  this one row re-stated in the landing's own commit. **THE UNIT:** `U-ZONE-REPLACEMENT`
+  //  (`PD-UI-14`). THE SUPERSEDED VALUE, kept visible and NEVER deleted:
+  //  `df1930a3d6cac72796cc6c42609dd6c6`. THE NEW VALUE is MEASURED at the landing's final head
+  //  (`md5sum src/renderer/sidebar-panes.ts`), AFTER this unit's `src/` writes — never inferred,
+  //  never copied from another row. NO OTHER ROW OF THIS TABLE IS TOUCHED by this re-statement.
+  // ⟨RE-STATED AGAIN 2026-10-04 — the SAME unit (`U-ZONE-REPLACEMENT` / `PD-UI-14`) and the SAME clause
+  //  (§5 `G-7` / §10 `O-8`).⟩ **THE SUBJECT, THE MECHANISM AND THE TEETH ARE UNCHANGED** (the path stays a
+  //  RECORDED md5 digest; an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the
+  //  working-tree limb). **WHAT MOVED IS THE RECORDED VALUE**, licensed by this row's own text
+  //  (*"a later pass may move the file only by re-stating it here, with its reason and its unit
+  //  named"*). **THE REASON:** the unit's GATE-4 FIX PASS then moved the SAME file again, under this
+  //  unit's own contract — §3 row 1's write rule (`'0px'` is the collapse write, a SIZED value must be
+  //  applied) and §3 row 1/§3.4's write site (`sidebar-panes.ts` → `applyZoneTracks`, which now applies the
+  //  §3 row 2 projection record, the one-write controller composition, and the session seam the wiring
+  //  supplies) — so its bytes moved by construction and this row is re-stated a second time.
+  //  **THE SUPERSEDED VALUES, kept visible and NEVER deleted:** `df1930a3d6cac72796cc6c42609dd6c6`
+  //  (the pre-landing value) and `3f87d796f19ac839c9837d0d6f0506e8` (the landing's first re-statement).
+  //  **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/renderer/sidebar-panes.ts`, taken at the
+  //  fix pass's head AFTER its `src/` writes). **NO OTHER ROW OF THIS TABLE IS TOUCHED.**
+  { file: 'src/renderer/sidebar-panes.ts', md5: 'f0b43b52565ad33145a3c979599214eb', superseded: '3f87d796f19ac839c9837d0d6f0506e8', restated: 'U-ZONE-REPLACEMENT' },
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
   { file: 'src/shared/path-fork-cycle.ts', md5: 'eee412ed7609a1c8c727f2dafb2d97fb' },
@@ -146,6 +175,28 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
 /** §4 `P-TH-SM-1` (e)/(f) and §1.2 (c) — the same set, by path (the superseded list, kept so the
  *  weaker working-tree limb can still name it). */
 const UNTOUCHED_BY_THE_LANDING = UNTOUCHED_DIGESTS.map((d) => d.file)
+
+/** ⟨RE-POINTED `2026-10-04` — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
+ *  THE CONTROL'S SUBJECT IS "an UNRECORDED change is CAUGHT", so the path this control drives
+ *  must be one that carries NO recorded re-statement. It is DERIVED from the table itself (a
+ *  second, hand-kept copy of the membership would go stale exactly the way the as-filed control
+ *  did) and it resolves — at this head — to `src/main/operator-settings-store.ts`: an
+ *  `UNTOUCHED_DIGESTS` row with no `restated:` field, i.e. a path §5 `G-7` does NOT license this
+ *  unit to move, so an UNRECORDED working-tree change to it must still FAIL.
+ *  ⟨SUPERSEDED IN PLACE — `RCA-8(c)`, KEPT VISIBLE, NEVER DELETED: the as-filed control drove
+ *   the literal `' M src/renderer/sidebar-panes.ts\n'` and required the reading
+ *     `['src/renderer/sidebar-panes.ts: no RECORDED re-statement in §4 `P-TH-SM-1` (f)']`.
+ *   WHY IT WAS WRONG: §5 `G-7` / §10 `O-8` REQUIRE that very `sidebar-panes.ts` row to be
+ *   RE-STATED when a later RECORDED unit legitimately moves its bytes (superseded value kept
+ *   visible, reason and unit named, a `restated:` field) — `U-ZONE-REPLACEMENT` replaces the
+ *   zone/sidebar build inside that file, so the landing MUST re-state it. A control demanding
+ *   `no RECORDED re-statement` for the ONE row the contract orders re-stated is UNSATISFIABLE
+ *   once that licensed re-statement lands (and leaving it un-re-stated only keeps the digest
+ *   limb above red). THE FIX IS A RE-POINT, NOT A RELAXATION: the tooth (an UNRECORDED change
+ *   to an un-re-stated pinned path FAILS), the reader and the assertion's shape are unchanged,
+ *   and the `sidebar-panes.ts` row itself is NOT touched here — its re-statement is the LANDING
+ *   pass's act under `G-7`'s own licence, and the digest limb above stays exactly as landed.⟩ */
+const UNRESTATED_CONTROL_PATH = UNTOUCHED_DIGESTS.find((d) => d.restated === undefined)?.file ?? ''
 
 /** ⟨A-1⟩ the digest oracle: ONE reader, driven over the real files AND over a synthetic
  *  "committed change" corpus, so its discrimination is shown rather than asserted. */
@@ -614,10 +665,20 @@ describe('§4 P-TH-SM-1 — nothing G-9-pinned is disturbed (strat:theme-protect
       unrecordedWorkingTreeChanges(''),
       'the SUPERSEDED reading (EMPTY — a fully committed tree) stays ADMISSIBLE, exactly as filed: the re-statement does not red a committed head',
     ).toEqual([])
+    // ⟨RE-POINTED `2026-10-04` — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`:
+    //   the control's subject is "an UNRECORDED change is CAUGHT", so its path is one that
+    //   carries NO recorded re-statement — the as-filed literal (`src/renderer/sidebar-panes.ts`)
+    //   is superseded and KEPT VISIBLE above, because `G-7`/`O-8` order that very row re-stated
+    //   (which would make it satisfiable only by violating the contract). THE TOOTH IS UNCHANGED:
+    //   an un-re-stated pinned path is not admissible, and the control must HAVE a subject.⟩
     expect(
-      unrecordedWorkingTreeChanges(' M src/renderer/sidebar-panes.ts\n'),
+      UNRESTATED_CONTROL_PATH,
+      'the control must have a subject: at least ONE `UNTOUCHED_DIGESTS` row still carries no recorded re-statement — §5 `G-7` re-states exactly ONE row of the seven, so the other six stay un-re-stated and drive this control; if NO row were left un-re-stated the control would be vacuous',
+    ).not.toBe('')
+    expect(
+      unrecordedWorkingTreeChanges(` M ${UNRESTATED_CONTROL_PATH}\n`),
       '…an UNRECORDED path in the same reading must FAIL — the re-statement is a RECORDED exception, never a relaxation',
-    ).toEqual(['src/renderer/sidebar-panes.ts: no RECORDED re-statement in §4 `P-TH-SM-1` (f)'])
+    ).toEqual([`${UNRESTATED_CONTROL_PATH}: no RECORDED re-statement in §4 \`P-TH-SM-1\` (f)`])
     expect(
       unrecordedWorkingTreeChanges(' D src/shared/types.ts\n'),
       '…and even a RE-STATED path fails on a status code that is not the recorded unstaged modification',

@@ -1,7 +1,7 @@
 // src/renderer/pane-drag.ts — Unit U-SHELL-4: the shell pointer drag controller
 // + the pure C4/C11/C12 model/proximity helpers (docs/specs/unit-u-shell-4-
 // drag-relocate.md §2.5 pins). PURE where it can be: `movePane`/
-// `legalZonesForScope`/`withinSnapThreshold`/`zoneOrientation`/
+// `legalZonesForScope`/`distanceToZoneBox`/`zoneOrientation`/
 // `setZoneMinimized` are total functions over the serialized `LayoutState`; the
 // pointer `createDragController` owns the drag-time reveal state and commits
 // ONE `onRevealChange` write per threshold crossing (W2-Q7/F4), never a
@@ -13,6 +13,11 @@ import {
   type LayoutZoneName,
   type PaneLayoutEntry,
 } from './layout-state.js'
+// ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 row 6: the proximity COMPARATOR is the
+// vendored `relocate.withinProximity`. The fork keeps its own GEOMETRY (the
+// pointer→box distance is the caller's measured scalar, §4 item (v)) and hands the
+// comparator a number: the module only compares, and it repairs nothing.⟩
+import { withinProximity } from '../shared/relocate.js'
 
 /** The pane scope (mirrors `pane-registry.ts`'s `PaneScope`; redeclared here so
  *  this pure module does not import the registry). */
@@ -171,11 +176,10 @@ export function toZoneBounds(zone: unknown, rect: Rect | null): ZoneBounds {
 }
 
 /** §2.2.3 (P-TP-1) — the drop-target hit-test. Geometry-first + scope-agnostic:
- *  returns the FIRST `ZoneBounds` whose rect contains a point within the snap
- *  threshold (`withinSnapThreshold`); `null` when no zone matches (F1). Legality
- *  is enforced downstream by the drag controller's `drop`. TOTAL: a malformed
- *  point, a non-array/empty `zones`, or a non-finite/non-positive `threshold`
- *  → `null`, never a throw. */
+ *  returns the FIRST `ZoneBounds` whose rect matches the point within the snap
+ *  threshold; `null` when no zone matches (F1). Legality is enforced downstream
+ *  by the drag controller's `drop`. TOTAL: a malformed point, a non-array/empty
+ *  `zones`, or a non-finite/non-positive `threshold` → `null`, never a throw. */
 export function dropZoneForPoint(
   point: DragPoint,
   zones: readonly ZoneBounds[],
@@ -185,32 +189,46 @@ export function dropZoneForPoint(
   if (!Array.isArray(zones) || zones.length === 0) return null
   if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) return null
   for (const zone of zones) {
-    if (zone != null && withinSnapThreshold(point, zone, threshold)) return zone.zone
+    if (zone != null && measuresWithinSnapThreshold(point, zone, threshold)) return zone.zone
   }
   return null
 }
 
-/** C11 — true when `point` is inside `zone` OR within the `threshold` band
- *  around it. TOTAL: a malformed point/zone/threshold yields false, never a
- *  throw. */
-export function withinSnapThreshold(point: DragPoint, zone: ZoneBounds, threshold: number): boolean {
+/** ⟨`PD-UI-14` §4 item (v) — THE `CandidateFor.distance` MEASUREMENT SEAM.⟩ The
+ *  pointer's EUCLIDEAN distance to the candidate zone's box, measured along each
+ *  axis: exactly `0` when the point is INSIDE the box, else the hypotenuse of the
+ *  two per-axis gaps (the corner distance). It is FINITE and NON-NEGATIVE by
+ *  construction on any usable input, and `null` — never a `NaN` — where the input is
+ *  unusable, which is the shape the module's usability class reads as "nothing
+ *  within proximity". PURE + TOTAL: never throws. */
+export function distanceToZoneBox(point: DragPoint, zone: ZoneBounds): number | null {
+  if (point == null || zone == null) return null
+  const values = [point.x, point.y, zone.left, zone.top, zone.right, zone.bottom]
+  if (!values.every((v) => typeof v === 'number' && Number.isFinite(v))) return null
+  // The per-axis gap to the CLOSED box: 0 inside, otherwise the distance to the
+  // nearest edge on that axis.
+  const dx = Math.max(zone.left - point.x, 0, point.x - zone.right)
+  const dy = Math.max(zone.top - point.y, 0, point.y - zone.bottom)
+  const distance = Math.hypot(dx, dy)
+  return Number.isFinite(distance) ? distance : null
+}
+
+/** C11 — is the point on the candidate zone, within the snap threshold? The
+ *  FORK owns the geometry (`distanceToZoneBox`: the pointer's distance to the box,
+ *  `0` inside) and the VENDORED `relocate.withinProximity` owns the comparison
+ *  (`distance <= threshold`), so exactly ONE authority decides proximity and the
+ *  same scalar feeds the module's own candidate answer.
+ *
+ *  TOTAL: a malformed point/zone/threshold, a degenerate rect (a collapsed/empty
+ *  track or a hidden zone — a zero or inverted span), or an unusable measured
+ *  scalar answers `false`, never a throw (`§4 F6`). */
+function measuresWithinSnapThreshold(point: DragPoint, zone: ZoneBounds, threshold: number): boolean {
   if (point == null || zone == null) return false
-  // §4 F6 — a zero/degenerate rect (a collapsed/empty track or hidden zone, zero
-  // or inverted span) never spuriously contains / reveals: `withinSnapThreshold`
-  // returns false, so neither `dropZoneForPoint` nor the controller's proximity
-  // reveal can accept it. TOTAL — a malformed zone with missing/inverted edges
-  // yields false, never a throw.
   if (typeof zone.right === 'number' && typeof zone.left === 'number' && zone.right <= zone.left) return false
   if (typeof zone.bottom === 'number' && typeof zone.top === 'number' && zone.bottom <= zone.top) return false
-  const values = [point.x, point.y, zone.left, zone.top, zone.right, zone.bottom]
-  if (!values.every((v) => typeof v === 'number' && Number.isFinite(v))) return false
-  const t = typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0 ? threshold : 0
-  return (
-    point.x >= zone.left - t &&
-    point.x <= zone.right + t &&
-    point.y >= zone.top - t &&
-    point.y <= zone.bottom + t
-  )
+  const distance = distanceToZoneBox(point, zone)
+  if (distance === null) return false
+  return withinProximity(distance, threshold)
 }
 
 /** F8 — derive the tab-strip orientation from the zone edge: sidebars
@@ -308,7 +326,7 @@ export function createDragController(options: {
         for (const bounds of zones) {
           if (bounds == null || !legal.includes(bounds.zone)) continue
           if (seen.has(bounds.zone)) continue
-          if (withinSnapThreshold(point, bounds, threshold)) {
+          if (measuresWithinSnapThreshold(point, bounds, threshold)) {
             seen.add(bounds.zone)
             next.push(bounds.zone)
           }

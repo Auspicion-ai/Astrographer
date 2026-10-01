@@ -6,18 +6,34 @@
 // slice (like `coerceTheme`/`coerceEditingMode`, but exported here because it is
 // shared by the store + the app-graph assembler).
 //
-// W2-N3 (AF-3) — additive: `layoutCssVars`/`applyLayoutToRoot` project the
-// serialized geometry onto the shell grid's CSS custom properties (§2.4). The
-// projection is pure; the applier takes an injected root surface (no DOM
-// import) so it stays node-testable, mirroring `theme.ts`'s `applyThemeToRoot`.
+// W2-N3 (AF-3) — the serialized geometry is projected onto the shell grid's CSS
+// custom properties (§2.4) by this module's `zoneTrackVars` and by the projection
+// seam module (`layout-vars.ts`); the applier takes an injected root surface (no
+// DOM import) so it stays node-testable, mirroring `theme.ts`'s `applyThemeToRoot`.
 //
 // F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED, 2026-09-15) — additive:
-// `zoneTrackCssVars` projects the per-zone GRID TRACK (the persisted size, or
+// `zoneTrackVars` projects the per-zone GRID TRACK (the persisted size, or
 // `0px` when the enabled+placed census says the zone is empty) onto the shell
-// grid. The census is duplicated here (see `isZoneEmpty`) rather than imported
-// from `pane-graph.ts`: `enabledZonePaneCounts` lives in the pane-assembly
-// module, which this pure geometry module is imported BY (and which is also
-// loaded from the MAIN process via `operator-settings-store.ts`).
+// grid.
+//
+// ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — the ADOPTION (§3 rows 1/2 of
+// `docs/specs/unit-zone-replacement.md`).⟩ The per-zone TRACK ARITHMETIC and
+// the token FORMATTING are the vendored `census.ts` → `computeTrackVars` over
+// the vendored `zones.ts` → `trackFor`/`isEmpty`; the geometry → CSS
+// custom-property PROJECTION and its one write are the vendored
+// `layout-projection.ts` → `project`/`applyProjection`. What STAYS here is the
+// caller's own data and policy: the zone enumeration, the token vocabulary and
+// units, the census (the fork's own enabled+placed emptiness rule), the
+// empty-track collapse policy (a reveal carve-out), the finite-positive
+// coercion and the write target. The local duplicates this replaces — the TRACK
+// RECORD COMPUTER and its private per-zone emptiness helper, and the
+// hand-rolled var formatting — are GONE as computation; the projection half is
+// kept only as the NAMED SEAM SUPPLIERS in `layout-vars.ts`
+// (now supplied by the projection seam module `layout-vars.ts`), which
+// `P-IM-zone-repl-1`'s witnesses expect (`§3`, `D-2`/`D-3`).
+import { computeTrackVars } from '../shared/census.js'
+import { isEmpty } from '../shared/zones.js'
+import type { TrackSpec } from '../shared/zones.js'
 import type { PaneRegistry } from './pane-registry.js'
 
 /** The four pane zones a pane can be placed into (C4). `stage`/`top-bar` are
@@ -202,50 +218,35 @@ export function coerceLayout(value: unknown): LayoutState {
   return { version: LAYOUT_VERSION, panes, zones, stage, topBar }
 }
 
-/** W2-N3 (AF-3) — project the serialized layout onto the shell grid's CSS
- *  custom properties (the shell chrome is NOT a provident node). The four pane
- *  zones + `topBar` project to px SIZES; `stage.size` is the serialized 1fr
- *  weight (§2.1) so it projects with an `fr` unit. TOTAL/fail-soft: the layout
- *  is re-coerced first, so a corrupt size can never emit `NaN`/`-Infinity`/
- *  negative geometry (a finite-positive track is always produced). PURE.
- *
- *  NOTE — the zone entries are the PERSISTED sizes, NOT the grid tracks: an
- *  empty zone's track is `0px` (F-3; see `zoneTrackCssVars`). */
-export function layoutCssVars(layout: LayoutState): Record<string, string> {
-  const l = coerceLayout(layout)
-  return {
-    '--zone-left-size': `${l.zones.left.size}px`,
-    '--zone-right-size': `${l.zones.right.size}px`,
-    '--zone-header-size': `${l.zones.header.size}px`,
-    '--zone-footer-size': `${l.zones.footer.size}px`,
-    '--stage-weight': `${l.stage.size}fr`,
-    '--top-bar-size': `${l.topBar.size}px`,
-  }
-}
-
 /** The §2.5 enabled+placed census for ONE zone — `true` when the zone holds
  *  ZERO enabled `app-graph` panes after placement resolution (the persisted
  *  overlay entry wins, else the pane's `defaultZone`, else `left`; §2.6 pin 7).
  *  This mirrors `enabledZonePaneCounts` (`pane-graph.ts`, H1) — the count the
  *  `is-empty` mirror is derived from — NOT the raw overlay, and NOT the runtime
  *  overlay class (which lags a toggle until the managed reconcile lands).
- *  TOTAL/fail-soft: a null/absent/malformed registry reads as "no panes". */
-function isZoneEmpty(
-  registry: PaneRegistry | null | undefined,
-  layout: LayoutState,
-  zone: LayoutZoneName,
-): boolean {
+ *  TOTAL/fail-soft: a null/absent/malformed registry reads as "no panes".
+ *
+ *  ⟨`PD-UI-14` §3 row 1 — reduced to the CENSUS SOURCE.⟩ The COUNT is the fork's own
+ *  fact (`D-4`): this function derives the per-zone enabled+placed count from the
+ *  registry, and the census is handed to the module as DATA. The emptiness READING
+ *  over that census is the vendored `zones.isEmpty` — called at `zoneTrackVars`
+ *  through the module's own `trackFor(spec, size, isEmpty(census, member))` limb — and
+ *  this function does NOT decide emptiness; it only supplies the counts for the
+ *  `LAYOUT_PANE_ZONES` enumeration so no module recomputes them. */
+function enabledPlacedCounts(registry: PaneRegistry | null | undefined, layout: LayoutState): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const zone of LAYOUT_PANE_ZONES) counts[zone] = 0
   const reg = registry as PaneRegistry | null | undefined
   if (reg == null || typeof reg.listByScope !== 'function' || typeof reg.isEnabled !== 'function') {
-    return true
+    return counts
   }
   let panes: unknown
   try {
     panes = reg.listByScope('app-graph')
   } catch {
-    return true
+    return counts
   }
-  if (!Array.isArray(panes)) return true
+  if (!Array.isArray(panes)) return counts
   const placed = new Map<string, LayoutZoneName>()
   for (const entry of layout.panes) placed.set(entry.id, entry.zone)
   for (const pane of panes as ReadonlyArray<{ id?: unknown; defaultZone?: unknown }>) {
@@ -259,9 +260,47 @@ function isZoneEmpty(
     }
     if (!enabled) continue
     const resolved = placed.get(id) ?? (isLayoutZoneName(pane.defaultZone) ? pane.defaultZone : 'left')
-    if (resolved === zone) return false
+    counts[resolved] = (counts[resolved] ?? 0) + 1
   }
-  return true
+  return counts
+}
+
+/** The caller's `specOf` record for the four zone TRACKS (`§3` row 1): `trackProp`
+ *  `--zone-<z>-track`, `unit` `'px'`, `emptyToken` `'0px'` — CALLER DATA, never module
+ *  literals (the module holds no token, unit or empty token of its own). PURE. */
+function zoneTrackSpecs(): Record<string, TrackSpec> {
+  const specs: Record<string, TrackSpec> = {}
+  for (const zone of LAYOUT_PANE_ZONES) {
+    specs[zone] = { trackProp: `--zone-${zone}-track`, unit: 'px', emptyToken: '0px' }
+  }
+  return specs
+}
+
+/**
+ * §4 item (ii) — THE MANDATORY CLOSURE ADAPTER. `census.computeTrackVars`'s
+ * `revealed` position is CALLABLE-ONLY: a non-callable argument makes it return the
+ * EMPTY record — for every zone, with no key at all (`Object.create(null)`, returned
+ * before any member is enumerated). The fork holds an ARRAY, so the array must never
+ * reach that position: this factory closes over it, AT THE WRITE SITE, and answers the
+ * module's one question. It creates no module-level mutable and holds no state of its
+ * own.
+ *
+ * THE DECISION'S POLARITY IS THE CALLER'S OWN POLICY (`§3` row 1's policy column: the
+ * empty-track collapse policy is the fork's), AND IT IS THE INVERSE OF THE MODULE'S OWN
+ * VOCABULARY (`§3` row 1's annotated binding clause; `§11.3` defect 1, whose predicate-
+ * polarity question is `OWED` to the architect): in the MODULE's terms
+ * `revealed(id) === true` means "this member EMITS a track value" — which, for an EMPTY
+ * member, is the caller's `emptyToken`, i.e. a COLLAPSE — while the fork's `revealedZones`
+ * ARRAY names the drop targets that must NOT collapse. This adapter therefore INVERTS: it
+ * answers `true` (emit) for a zone the fork is NOT revealing — so an empty zone collapses
+ * to `'0px'` — and `false` (the DECLINED member, whose key is kept carrying `''`) for a
+ * zone that IS being revealed, which is the C11 carve-out. The `''` is NOT converted back
+ * to a size here: `§3` row 1 makes `''` the REMOVAL PATH, and the fork's removal arm is the
+ * write site's own (`sidebar-panes.ts` → `applyZoneTracks`), so the stylesheet fallback
+ * supplies the persisted size for a merely-revealed drop target.
+ */
+function revealedPredicate(revealedZones: readonly LayoutZoneName[]): (id: unknown) => boolean {
+  return (id: unknown): boolean => !(typeof id === 'string' && (revealedZones as readonly string[]).includes(id))
 }
 
 /** F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED) — project the shell
@@ -271,44 +310,67 @@ function isZoneEmpty(
  *  `--zone-<zone>-size` value. `--stage-weight` stays the serialized `fr`
  *  weight, so the stage — the remaining-space track — reclaims the collapsed
  *  zone's space. Fail-soft (a null/malformed registry or layout never throws
- *  and never emits `NaN`/`Infinity`/negative geometry) and PURE. */
-export function zoneTrackCssVars(
+ *  and never emits `NaN`/`Infinity`/negative geometry) and PURE.
+ *
+ *  ⟨`PD-UI-14` §3 row 1 / §4 item (ii) — THE ADOPTION.⟩ The record is the
+ *  vendored `census.computeTrackVars`'s own output, over the fork's five caller
+ *  positions: the zone enumeration, the fork's census, the coerced per-zone
+ *  size lookup, the MANDATORY CALLABLE `revealed` closure over the fork's
+ *  ARRAY (never the array itself — a non-callable yields the module's EMPTY
+ *  record), and the caller's `TrackSpec` map. A zone the predicate declines
+ *  keeps its key carrying `''`; the write site is what turns a declined member
+ *  into a removal.
+ *
+ *  THIS REPLACES the removed local track-record computer (`PD-UI-14` row-1
+ *  witness: that symbol is absent from this file). */
+export function zoneTrackVars(
   registry: PaneRegistry | null | undefined,
   layout: LayoutState,
   opts?: { revealedZones?: readonly LayoutZoneName[] },
 ): Record<string, string> {
   const l = coerceLayout(layout)
-  const revealed = Array.isArray(opts?.revealedZones) ? opts.revealedZones : []
+  const revealedZones = Array.isArray(opts?.revealedZones) ? opts.revealedZones : []
+  const revealed = revealedPredicate(revealedZones)
+  const counts = enabledPlacedCounts(registry, l)
+  const sizes = (id: unknown): unknown => {
+    if (typeof id !== 'string' || !(LAYOUT_PANE_ZONES as readonly string[]).includes(id)) return undefined
+    return l.zones[id as LayoutZoneName].size
+  }
+  const trackRecord = computeTrackVars(LAYOUT_PANE_ZONES, counts, sizes, revealed, zoneTrackSpecs())
+  // §3 row 2 — the projection HALF (`layoutCssVars`/`applyLayoutToRoot`) is the named
+  // SEAM SUPPLIER and lives in its own module (`layout-vars.ts`): this file keeps only
+  // the TRACK record, and the stage weight the grid consumes is the caller's own token
+  // written here. The write site that needs BOTH records composes them
+  // (`sidebar-panes.ts`'s `applyZoneTracks`), so the token vocabulary stays ONE.
   const vars: Record<string, string> = { '--stage-weight': `${l.stage.size}fr` }
   for (const zone of LAYOUT_PANE_ZONES) {
-    const collapsed = isZoneEmpty(registry, l, zone) && !revealed.includes(zone)
-    vars[`--zone-${zone}-track`] = collapsed ? '0px' : `${l.zones[zone].size}px`
+    const name = `--zone-${zone}-track`
+    // ⟨THE KEYING RULE (`§3` row 1's annotated binding clause; `§11.3` defect 1).⟩
+    // `computeTrackVars`' returned record is keyed by THE CALLER'S ZONE/MEMBER NAMES —
+    // the enumerated members, in first-seen order — and NEVER by the CSS custom-property
+    // names: each member's `TrackSpec.trackProp` (`'--zone-<z>-track'`) is a VALUE the
+    // spec carries, not a key. So the read is `trackRecord[zone]` (the ZONE MEMBER) and
+    // never `trackRecord[name]`; a token-keyed read ALWAYS misses, and every zone then
+    // silently reads the fallback.
+    const memberTrack = trackRecord[zone]
+    // The CALLER'S OWN collapse policy, never the module's: `zones.isEmpty` reads the
+    // fork's census, so a zone that is NOT empty never collapses — it carries its
+    // persisted `String(size)+unit` whatever the predicate answered.
+    //
+    // AN EMPTY zone carries the MODULE's own answer for that member, verbatim, and the
+    // two reachable answers are the contract's two write rules (`§3` row 1): `'0px'`
+    // (the caller's `emptyToken`, an empty zone the predicate did NOT decline) is the
+    // COLLAPSE WRITE, and `''` (the DECLINED member, the C11 carve-out — an empty zone
+    // the fork IS revealing) is the REMOVAL PATH, which the write site turns into
+    // `removeProperty` so the stylesheet fallback supplies the persisted size. A member
+    // the record does not carry falls back to the collapse token.
+    const declaredEmpty = isEmpty(counts, zone)
+    vars[name] = declaredEmpty
+      ? typeof memberTrack === 'string'
+        ? memberTrack
+        : '0px'
+      : `${l.zones[zone].size}px`
   }
   return vars
 }
 
-/** The minimal root surface `applyLayoutToRoot` writes: anything whose `style`
- *  exposes `setProperty` (a real `document.documentElement` or a test double). */
-export interface LayoutRoot {
-  style?: { setProperty?: (name: string, value: string) => void }
-}
-
-/** W2-N3 (AF-3) — apply the layout CSS custom properties to a root (§2.4).
- *  TOTAL/fail-soft: a missing/frozen `style`/`setProperty` is left untouched and
- *  never throws (mirrors `theme.ts`'s `applyThemeToRoot`). Returns the vars so a
- *  caller can assert/inspect what was applied. */
-export function applyLayoutToRoot(
-  root: LayoutRoot | null | undefined,
-  layout: LayoutState,
-): Record<string, string> {
-  const vars = layoutCssVars(layout)
-  try {
-    const style = root?.style
-    if (style && typeof style.setProperty === 'function') {
-      for (const [name, value] of Object.entries(vars)) style.setProperty(name, value)
-    }
-  } catch {
-    // never throw — a frozen/absent root must not break boot
-  }
-  return vars
-}

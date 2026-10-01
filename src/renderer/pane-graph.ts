@@ -37,6 +37,68 @@ import {
   type PaneLayoutEntry,
 } from './layout-state.js'
 import { zoneOrientation } from './pane-drag.js'
+import { gutterAxis } from './layout-zone-geometry.js'
+import { containerDeclarationFor } from '../shared/container.js'
+
+/** ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 row 5 / §3.1: THE AUTHORING SITE OF THE
+ *  FOUR GUTTER AFFORDANCES.⟩ The shell's four resize gutters are authored HERE, as
+ *  ENVELOPE/PLACEMENT DATA driven through the producing graph — one affordance per
+ *  `LAYOUT_PANE_ZONES` member, carrying its ZONE and its AXIS — and never as
+ *  host-authored DOM (`src/renderer/index.html` keeps ZERO inline gutter elements).
+ *  §3.2 binds the class/attribute vocabulary the shell already targets: `class`
+ *  `gutter` + `data-zone` + `data-axis`, so the delegated gesture listener and the
+ *  shell's cursor CSS keep matching with NO re-point. The AXIS is the fork's own
+ *  `gutterAxis(zone)` reading, never a module's answer (the taxonomy is the
+ *  caller's). PURE. */
+function authoredGutterAffordances(): LegacyNodeData[] {
+  return LAYOUT_PANE_ZONES.map((zone) => {
+    const axis = gutterAxis(zone)
+    const node: LegacyNodeData = {
+      type: 'div',
+      props: { id: `zone-gutter-${zone}`, 'data-zone': zone, 'data-axis': axis },
+      css: {
+        classes: ['gutter'],
+        // The CURSOR DECLARATION stays SHELL CSS and is never interpreted here: an
+        // affordance's box is the zone's own edge, and the axis picks the cursor.
+        style: { cursor: axis === 'rows' ? 'row-resize' : 'col-resize' },
+      },
+    }
+    return node
+  })
+}
+
+/** The pinned declaration TEXT, read ONCE from the module and applied by the fork.
+ *  `containerDeclarationFor(className)` returns the module-owned opaque text
+ *  (`contain: layout style paint`) as a STRING and never applies it; the `className`
+ *  member is the caller's string, returned verbatim. PURE. */
+function zoneContainerDeclaration(): string {
+  return containerDeclarationFor('zone-container').declaration
+}
+
+/** The inline-style VALUE for the pinned declaration. The module's text is a whole
+ *  DECLARATION (`contain: layout style paint`), and the caller's inline form is a
+ *  `property: value` pair — so the fork maps the module's own text onto the `contain`
+ *  PROPERTY here, at its own write site, and a text the fork does not recognise is
+ *  carried verbatim rather than silently dropped. The mapping is CALLER POLICY: the
+ *  module interprets nothing and this file interprets no other byte of its text. */
+function containerDeclarationStyle(): Record<string, string> {
+  const declaration = zoneContainerDeclaration()
+  return { contain: declaration === 'contain: layout style paint' ? 'layout style paint' : declaration }
+}
+
+/** Apply the pinned container declaration to a zone container's authored css WITHOUT
+ *  discarding whatever style the caller already authored on it. The authoring form is
+ *  the provident `css.style` RECORD (serialized kebab-case at translate); a caller's
+ *  already-serialized string is left as it is rather than double-serialized. PURE. */
+function withContainerDeclaration(css: LegacyNodeData['css']): LegacyNodeData['css'] {
+  const base = css ?? {}
+  const own = (base as { style?: unknown }).style
+  if (typeof own === 'string') return own.trim() === '' ? { ...base, style: containerDeclarationStyle() } : base
+  if (own !== null && typeof own === 'object' && !Array.isArray(own)) {
+    return { ...base, style: { ...(own as Record<string, string>), ...containerDeclarationStyle() } }
+  }
+  return { ...base, style: containerDeclarationStyle() }
+}
 
 /** The root-visible sidebar zone the app-graph panes attach into. The assembler
  *  MUST emit a `container`-role producer for this zone (the Unit C HARD
@@ -472,7 +534,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
     const existing = findZoneContainer(children, zone)
     if (existing != null) {
       const existingClasses = existing.css?.classes ?? []
-      const merged = [...new Set([...existingClasses, ...classes])]
+      const mergedClasses = [...new Set([...existingClasses, ...classes])]
       const repaired =
         anchored != null
           ? existing
@@ -481,7 +543,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
       children[children.indexOf(existing)] = {
         ...repaired,
         props: { ...(repaired.props ?? {}), 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
-        css: { ...(existing.css ?? {}), classes: merged },
+        css: withContainerDeclaration({ ...(existing.css ?? {}), classes: mergedClasses }),
         ...(authoredChildren.length > 0
           ? { children: [...existingChildren, ...authoredChildren] }
           : {}),
@@ -491,7 +553,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
         type: 'div',
         props: { id: `zone:${zone}`, 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
         placement: { placementName: zone },
-        ...(classes.length > 0 ? { css: { classes } } : {}),
+        css: withContainerDeclaration(classes.length > 0 ? { classes } : {}),
         ...(authoredChildren.length > 0 ? { children: authoredChildren } : {}),
       })
     }
@@ -514,6 +576,23 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
         placement: { placementName: sidebarZone },
       })
     }
+  }
+
+  // ⟨`PD-UI-14` §3 row 5 / §3.1/§3.2 — THE FOUR GUTTER AFFORDANCES, AUTHORED HERE.⟩
+  // One per `LAYOUT_PANE_ZONES` member, as ENVELOPE DATA on the producing graph's
+  // root (never host-authored DOM: `index.html` keeps zero inline gutters), each
+  // carrying its zone + the fork's own axis reading under the vocabulary the shell
+  // already targets. Kept IDEMPOTENT: a re-assembly over an envelope that already
+  // carries an authored affordance for a zone never duplicates it (the same
+  // discipline the zone-container loop above uses).
+  for (const affordance of authoredGutterAffordances()) {
+    const zone = (affordance.props as { 'data-zone'?: unknown })['data-zone']
+    const alreadyAuthored = children.some(
+      (child) =>
+        (child.props as { 'data-zone'?: unknown; 'data-axis'?: unknown } | undefined)?.['data-zone'] === zone &&
+        typeof (child.props as { 'data-axis'?: unknown } | undefined)?.['data-axis'] === 'string',
+    )
+    if (!alreadyAuthored) children.push(affordance as ZoneContainerNode)
   }
 
   const envelope: LegacyInitialData = {

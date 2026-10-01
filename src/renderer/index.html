@@ -123,6 +123,13 @@
         "header header header"
         "left   main   right"
         "footer footer footer";
+      /* ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` §2.1(d) — THE ZONES ARE FIXED.⟩
+         `contain: layout` makes THIS element the containing block for its
+         `position: fixed` descendants, so the four zone containers' fixed boxes
+         (below) are positioned in the SAME coordinate space — and against the
+         SAME track tokens — as the grid areas they belong to. Without it a fixed
+         zone would resolve against the viewport and drift off its own track. */
+      contain: layout;
     }
     #app [data-zone="header"] { grid-area: header; }
     #app [data-zone="left"]   { grid-area: left;   }
@@ -148,6 +155,45 @@
     #app > #wiki-root:has([data-zone='right'].is-empty:not(.is-revealed)) { --zone-right-track: 0px; }
     #app > #wiki-root:has([data-zone='header'].is-empty:not(.is-revealed)) { --zone-header-track: 0px; }
     #app > #wiki-root:has([data-zone='footer'].is-empty:not(.is-revealed)) { --zone-footer-track: 0px; }
+    /* ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` — §2.1(d) ALL ZONES ARE FIXED
+       POSITION WITH ANY SCROLLING INTERNAL, and §2.1(f) THE STAGE ALSO SCROLLS
+       INTERNALLY.⟩ THE TWO CLAUSES, AND WHAT EACH DECLARATION IS FOR:
+       (1) THE PAGE NEVER SCROLLS THE ZONES AWAY: `html`/`body` are viewport-high
+           and non-scrollable, and the shell frame below the tab strip is a
+           DEFINITE-height flex row — so `#app`'s grid has a definite height
+           instead of growing with the mounted document. (The measured defect this
+           replaces: with a long document open, `#wiki-root` stretched to 12843px
+           and carried every zone's box with it.)
+       (2) EACH ZONE CONTAINER IS `position: fixed` WITH ITS OWN BOUNDED BOX: the
+           insets are the SAME `--zone-<z>-track` tokens the grid element above
+           consumes, so a fixed zone's box stays exactly on its grid area (a
+           collapsed/empty zone's `0px` track collapses its fixed box too), and
+           `overflow: auto` sits on the zone's own content box — so a zone whose
+           content is taller than its box scrolls INSIDE that box.
+       (3) `#zone:main` (the STAGE) is its own scroll container: it keeps its
+           `main` grid area (the negative space between the zone tracks, §2.1(c))
+           and gains `overflow: auto`, so a document longer than the stage's box
+           scrolls inside the stage while the surrounding chrome keeps its rects.
+       THE SELECTOR IS THE ZONE CONTAINER, NEVER `[data-zone]` ALONE: the four
+       authored gutter affordances and the zone minimize controls ALSO carry
+       `data-zone` (they are children/controls, not containers), so the zone rule
+       is scoped by the container's own `zone:<name>` id.
+       THE `G-5` FIFTEEN-TOKEN THEME CENSUS IS UNTOUCHED — no custom property is
+       declared or moved inside the three theme blocks and none is declared here
+       (the track tokens stay on the grid element above); §3.2's class/attribute
+       vocabulary and the two `.layout .gutter[data-axis=…]` cursor rules are
+       unchanged. */
+    html, body { height: 100%; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+    .tab-strip { flex: none; }
+    main.layout { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .layout #app { min-width: 0; min-height: 0; }
+    #app [id^="zone:"][data-zone] { position: fixed; overflow: auto; box-sizing: border-box; }
+    #app [id="zone:header"][data-zone] { top: 0; left: 0; right: 0; height: var(--zone-header-track); }
+    #app [id="zone:footer"][data-zone] { bottom: 0; left: 0; right: 0; height: var(--zone-footer-track); }
+    #app [id="zone:left"][data-zone] { top: var(--zone-header-track); bottom: var(--zone-footer-track); left: 0; width: var(--zone-left-track); }
+    #app [id="zone:right"][data-zone] { top: var(--zone-header-track); bottom: var(--zone-footer-track); right: 0; width: var(--zone-right-track); }
+    #app [id="zone:main"] { overflow: auto; min-width: 0; min-height: 0; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
     h2 { font-size: 1rem; margin: 0 0 0.75rem; }
     .counter-value { font-size: 2rem; font-weight: 700; margin: 0 0 0.75rem; }
@@ -206,6 +252,30 @@
     .layout .gutter:hover { background: var(--hover); }
     .layout .gutter[data-axis='columns'] { cursor: col-resize; }
     .layout .gutter[data-axis='rows'] { cursor: row-resize; }
+    /* ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` — gate-4 re-audit finding 8: THE FOUR
+       AUTHORED AFFORDANCES HAVE NO BOX.⟩ THE AFFORDANCE'S BOX IS THE ZONE'S OWN
+       EDGE (`pane-graph.ts`'s own authoring comment), and the four affordances are
+       authored by the producing graph INSIDE `#app > #wiki-root` — while every rule
+       above is scoped `.layout .gutter`, where they are NOT descendants of
+       `.layout`'s direct children (`#app` is), so the old shell rules left them at
+       `display: block` with no box: a zero-area element is unpaintable AND
+       unhittable by real input (the live pass printed zero affordance geometry), and
+       §3.2's second dependent (the two cursor rules) was therefore discharged only by
+       the inline declaration + the `pointerdown`-time write.
+       THE DECLARATION IS SCOPED TO THE AUTHORED AFFORDANCE AND SITS ON THE ZONE'S OWN
+       TRACK EDGE, consuming the SAME `--zone-<z>-track` tokens the grid element and
+       the fixed zone containers consume (so a collapsed `0px` track collapses its
+       affordance with it). It is OUTSIDE the three THEME blocks and declares NO
+       custom property — the `G-5` fifteen-token census is untouched — and the shell's
+       class/attribute vocabulary (`class="gutter"` + `data-zone` + `data-axis`) is
+       unchanged, so both `.layout .gutter` dependents above and the delegated
+       `.gutter[data-zone]` wiring keep matching with NO re-point. */
+    #app .gutter[data-zone] { position: fixed; z-index: 3; background: var(--border); touch-action: none; }
+    #app .gutter[data-zone]:hover { background: var(--hover); }
+    #app .gutter[id='zone-gutter-left']   { left: calc(var(--zone-left-track) - 3px);   top: var(--zone-header-track); bottom: var(--zone-footer-track); width: 6px; }
+    #app .gutter[id='zone-gutter-right']  { right: calc(var(--zone-right-track) - 3px); top: var(--zone-header-track); bottom: var(--zone-footer-track); width: 6px; }
+    #app .gutter[id='zone-gutter-header'] { top: calc(var(--zone-header-track) - 3px);  left: 0; right: 0; height: 6px; }
+    #app .gutter[id='zone-gutter-footer'] { bottom: calc(var(--zone-footer-track) - 3px); left: 0; right: 0; height: 6px; }
     /* Unit U-SHELL-9a §2.4 — the shell top-bar tab strip (shell chrome, not a
        pane zone). It scrolls horizontally on overflow (no overflow dropdown)
        and highlights the single active tab. */
@@ -280,14 +350,16 @@
     <div id="app" class="card"></div>
     <div id="panes"></div>
     <div id="operator-panes"></div>
-    <!-- Unit U-SHELL-N7 (HOST-1) — the four shell resize gutters (shell chrome,
-         plain authored elements, no on:* handler). Each carries a matching
-         `data-axis` so the `.layout .gutter[data-axis=…]` cursor rules apply AND
-         the delegated `.gutter[data-zone]` pointer wiring resolves it. -->
-    <div class="gutter" data-zone="left" data-axis="columns"></div>
-    <div class="gutter" data-zone="right" data-axis="columns"></div>
-    <div class="gutter" data-zone="header" data-axis="rows"></div>
-    <div class="gutter" data-zone="footer" data-axis="rows"></div>
+    <!-- ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` §3.1(d) — THE FOUR GUTTER AFFORDANCES
+         ARE NO LONGER AUTHORED HERE.⟩ They are authored as ENVELOPE/PLACEMENT DATA at
+         the producing graph's authoring site (`src/renderer/pane-graph.ts`, one
+         affordance per `LAYOUT_PANE_ZONES` member) and driven through the graph, per
+         the project-wide UI constraint (§12 item 6: a control node never moves out of
+         the provident graph). §3.2 keeps the class/attribute vocabulary the two
+         dependents below already target — the authored nodes render as
+         `class="gutter" data-zone="<zone>" data-axis="<axis>"`, so NO re-point is
+         needed: the delegated `.gutter[data-zone]` pointer wiring in `renderer.ts` and
+         the two `.layout .gutter[data-axis=…]` cursor rules below keep matching. -->
   </main>
   <!-- Unit U-SHELL-7 (C3) — the settings modal shell chrome (plain authored
        elements in <body>, OUTSIDE the <main class="layout"> grid; no on:*

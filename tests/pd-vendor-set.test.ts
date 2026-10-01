@@ -178,6 +178,50 @@ const DECLARED_CONSUMER_EDGES: Array<{ file: string; specifier: string; member: 
   //   left INTACT — a relaxation would replace the allow-list limb with "any
   //   vendored-resolving hit passes", which is FORBIDDEN and is not what this row does.⟩
   { file: 'src/renderer/modal-state.ts', specifier: '../shared/overlay.js', member: 'overlay', unit: 'PD-UI-6' },
+  // ⟨ADDED 2026-10-04 — unit `PD-UI-14` (`U-ZONE-REPLACEMENT`) §3's SWAP TABLE, §5 `G-2`.
+  //   SIX ADOPTION EDGES, ONE ROW PER ADOPTING FILE'S EDGE, each a STATIC `from '…'` form
+  //   that RESOLVES to the vendored member it names (`§2.1`'s resolution clause — the row
+  //   asserts the RESOLVED path, never a spelling). The three pre-existing rows above are
+  //   UNTOUCHED, and the three stem-collision hits (`renderer.ts ./theme.js`,
+  //   `renderer.ts|sidebar-panes.ts ./pane-gutter.js`) are NOT rows: they resolve to FORK
+  //   modules. The module REQUIRES no byte of the vendored set to move (`R-3`/`R-7`); every
+  //   fork-side change is the caller's own seams and policy. NO evasion form is taken
+  //   (`await import(...)` / `require(...)` / `new URL(...)` stay refused and caught by the
+  //   AST derivation above), so a declared row here is always a REAL, statically visible
+  //   edge of the tree.⟩
+  { file: 'src/renderer/layout-state.ts', specifier: '../shared/census.js', member: 'census', unit: 'PD-UI-14' },
+  { file: 'src/renderer/layout-state.ts', specifier: '../shared/zones.js', member: 'zones', unit: 'PD-UI-14' },
+  { file: 'src/renderer/sidebar-panes.ts', specifier: '../shared/gutter.js', member: 'gutter', unit: 'PD-UI-14' },
+  { file: 'src/renderer/renderer.ts', specifier: '../shared/gesture-session.js', member: 'gesture-session', unit: 'PD-UI-14' },
+  { file: 'src/renderer/renderer.ts', specifier: '../shared/gutter-affordance.js', member: 'gutter-affordance', unit: 'PD-UI-14' },
+  { file: 'src/renderer/pane-drag.ts', specifier: '../shared/relocate.js', member: 'relocate', unit: 'PD-UI-14' },
+  // ⟨§4 item (iv) — the ONE foundation element of `container.ts`'s family this unit uses:
+  //   the zone containers' `contain: layout style paint` declaration, RETURNED as text by
+  //   the module and APPLIED by the fork at its own write site (`src/renderer/pane-graph.ts`
+  //   authors it per zone container). `slot-host` stays an explicit NON-adoption and gains
+  //   no row here.⟩
+  { file: 'src/renderer/pane-graph.ts', specifier: '../shared/container.js', member: 'container', unit: 'PD-UI-14' },
+  // ⟨§3 rows 3/4/5 — the adopted gesture-family modules' own edges, each a static import of
+  //   the file that composes them: `pane-gutter.ts` composes the vendored controller on the
+  //   vendored session's shape, and `pane-graph.ts` reads the fork's own axis reading for the
+  //   four authored affordances (`gutterAxis`). `renderer.ts` supplies the affordance's
+  //   element-backed source (`domEventSource`).⟩
+  { file: 'src/renderer/pane-gutter.ts', specifier: '../shared/gesture-session.js', member: 'gesture-session', unit: 'PD-UI-14' },
+  // ⟨§3 row 2 — THE PROJECTION SEAM MODULE.⟩ `layout-vars.ts` is the renderer file that
+  //   actually imports the vendored projection (`src/renderer/layout-state.ts` no longer
+  //   does: §3 row 2 names the projection half as the local duplicate that file gives up
+  //   and §3 row 1 keeps `layoutCssVars`/`applyLayoutToRoot` as the NAMED SEAM SUPPLIERS
+  //   — both clauses hold at once only if the seam suppliers are no longer COMPUTATION
+  //   inside `layout-state.ts`, so they live in their own seam module and the adopting
+  //   file declares its own edge).⟩
+  { file: 'src/renderer/layout-vars.ts', specifier: '../shared/layout-projection.js', member: 'layout-projection', unit: 'PD-UI-14' },
+  // ⟨§3 row 3 — the fork's clamp seam supplier calls the vendored `clampToBounds` (the
+  //   ONE clamp in the family): `pane-gutter.ts` declares that edge.⟩
+  { file: 'src/renderer/pane-gutter.ts', specifier: '../shared/gutter.js', member: 'gutter', unit: 'PD-UI-14' },
+  // ⟨§3 rows 3/4 — the HOST owns the gutter gesture session instance (the vendored
+  //   factory) and names its return shape; the shell wiring injects the element-backed
+  //   source. `sidebar-panes.ts` declares that edge.⟩
+  { file: 'src/renderer/sidebar-panes.ts', specifier: '../shared/gesture-session.js', member: 'gesture-session', unit: 'PD-UI-14' },
 ]
 
 /** The vendored member a specifier stem names (`./theme.js` → `theme`), or `null`. */

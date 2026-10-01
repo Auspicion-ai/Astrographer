@@ -675,6 +675,417 @@ async function ufPaneSearch(h, query) {
 // MCP-invisible). Nothing here spawns/kills a process: `--connect` attaches.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// §7.2 THE LAYOUT-EFFECT RE-PIN (unit `U-ZONE-REPLACEMENT` / `PD-UI-14`).
+//
+// THE READINGS BELOW ARE THE THREE §7.2 LIMBS, taken ON THE ASSEMBLED SURFACE (the
+// app the driver itself spawned, through its own CDP input path — never a synthetic
+// substitute) and printed as an EXTENSION of the ALREADY-DECLARED `§5.U` carrier rows
+// (`U-3`/`uf_panes_12` for limb 1, `U-5`/`uf_layout_10` for limbs 2 and 3). NO new
+// slot is created, `MATRIX_ROWS` is UNMOVED at the 8 declared rows, and no `U-n` id
+// is renumbered.
+//
+// WHAT THEY ARE NOT (the contract names each refusal, so the failure cannot recur):
+// a mount count is limb 1's SUB-CLAUSE, never limb 1; a class-existence or an XOR
+// invariant (`uf_layout_10`'s landed `settings-modal` class-XOR) is a DOM/class
+// invariant of a DIFFERENT surface and is NOT a layout-effect reading at all; and a
+// node-side reading cannot carry any limb. Every limb prints its REQUIRED values
+// beside its OBSERVED ones; a scoped or partial reading carries its scope.
+// ---------------------------------------------------------------------------
+
+/** §7.2 LIMB 1's CARRIER READING — the assembled surface's sibling-zone and stage
+ *  boxes (position AND size, in the greens' `[x,y,w,h]` shape), `#wiki-root`'s MOUNT
+ *  COUNT, and the STALE-CHILDLESS-ROOT census, all taken at ONE instant so a
+ *  before/after pair is a value-for-value comparison of the same reads. */
+async function ufLayoutReading(h) {
+  return h.cdp.evaluate(`(()=>{
+    const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const g=(id)=>document.getElementById(id);
+    const roots=[...document.querySelectorAll('#wiki-root')];
+    return {
+      zoneLeft:box(g('zone:left')),
+      zoneRight:box(g('zone:right')),
+      zoneHeader:box(g('zone:header')),
+      zoneFooter:box(g('zone:footer')),
+      main:box(g('zone:main')),
+      tabStrip:box(g('tab-strip')),
+      wikiRoot:box(g('wiki-root')),
+      gridColumns:(()=>{const w=g('wiki-root');return w?getComputedStyle(w).gridTemplateColumns:null})(),
+      mountCount:roots.length,
+      staleChildlessRoots:roots.filter((w)=>w.children.length===0).length,
+      page:{y:Math.round(scrollY),docScrollHeight:document.documentElement.scrollHeight,docClientHeight:document.documentElement.clientHeight},
+      frames:[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f)=>({paneId:f.getAttribute('data-pane-id'),slot:f.parentElement?[...f.parentElement.children].filter((c)=>c.classList&&c.classList.contains('pane-frame')).indexOf(f):-1,box:box(f)}))
+    }})()`)
+}
+
+/** §7.2 LIMB 2's CARRIER READING — the FOUR ZONE CONTAINERS' box rects and, per zone,
+ *  the zone's OWN scroll geometry: the computed `position` (the clause's own word,
+ *  §2.1(d): *"each zone container carries `position: fixed`"*), the content box's
+ *  computed `overflow-y`, and whether the zone's own box carries an internal scroll
+ *  range with `scrollTop` ADVANCING INSIDE THAT BOX (the scrolled element is NAMED:
+ *  the zone's own content box, never the document). THE SCOPE IS THE FOUR CONTAINERS
+ *  (`#zone:left|right|header|footer`) — never every element carrying `data-zone`: the
+ *  four AUTHORED GUTTER AFFORDANCES and the zone-minimize controls carry that same
+ *  attribute and are containers of nothing (a gutter's box can never hold a scroll
+ *  range), so they are printed BESIDE the reading under the excluded list, never graded
+ *  as zone containers. Driven by a PAGE-LEVEL scroll attempt whose own advance AND the
+ *  document's own overflow are read back, so a no-op attempt is never mistaken for the
+ *  property. A zone whose content does NOT exceed its box has no range to exercise and
+ *  says so per zone (`contentExceedsTheBox`), so the "any overflow scrolls inside" half
+ *  is graded on the zones that HAVE an overflow — and the reading's own non-vacuity is
+ *  carried separately (`anyInternalScrollRangeExercised`). */
+async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
+  return h.cdp.evaluate(`(()=>{
+    const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const ZONES=['left','right','header','footer'];
+    const containers=()=>ZONES.map((z)=>({id:'zone:'+z,zone:z,el:document.getElementById('zone:'+z)})).filter((c)=>c.el!=null);
+    const rects=()=>containers().map((c)=>({id:c.id,zone:c.zone,box:box(c.el)}));
+    const before=rects();
+    const pageBefore={y:Math.round(scrollY),docScrollTop:document.scrollingElement?Math.round(document.scrollingElement.scrollTop):null,docScrollHeight:document.documentElement.scrollHeight,docClientHeight:document.documentElement.clientHeight};
+    window.scrollTo(0,${Number(attempt)});
+    const after=rects();
+    const pageAfter={y:Math.round(scrollY),docScrollTop:document.scrollingElement?Math.round(document.scrollingElement.scrollTop):null,docScrollHeight:document.documentElement.scrollHeight,docClientHeight:document.documentElement.clientHeight};
+    const inside=containers().map((c)=>{
+      const z=c.el;const cs=getComputedStyle(z);
+      const st0=Math.round(z.scrollTop);
+      z.scrollTop=Math.min(40,z.scrollHeight-z.clientHeight+40);
+      const st1=Math.round(z.scrollTop);
+      z.scrollTop=st0;
+      return {id:c.id,zone:c.zone,scrolledElement:'the zone container itself ('+c.id+', its own content box)',position:cs.position,display:cs.display,overflowY:cs.overflowY,scrollHeight:z.scrollHeight,clientHeight:z.clientHeight,contentExceedsTheBox:z.scrollHeight>z.clientHeight+1,scrollTopBefore:st0,scrollTopAfter:st1,scrollTopAdvanced:st1>st0};
+    });
+    window.scrollTo(0,0);
+    if(document.scrollingElement)document.scrollingElement.scrollTop=0;
+    const stage=document.getElementById('zone:main');
+    const stageScroll=stage==null?null:(()=>{const cs=getComputedStyle(stage);const st0=Math.round(stage.scrollTop);stage.scrollTop=Math.min(40,stage.scrollHeight-stage.clientHeight+40);const st1=Math.round(stage.scrollTop);stage.scrollTop=st0;return {id:'zone:main',position:cs.position,overflowY:cs.overflowY,scrollHeight:stage.scrollHeight,clientHeight:stage.clientHeight,contentExceedsTheBox:stage.scrollHeight>stage.clientHeight+1,scrollTopBefore:st0,scrollTopAfter:st1,scrollTopAdvanced:st1>st0}})();
+    const excluded=[...document.querySelectorAll('#app [data-zone]')].filter((e)=>!ZONES.some((z)=>e.id==='zone:'+z)).map((e)=>({id:e.id||e.getAttribute('data-zone'),zone:e.getAttribute('data-zone'),classes:String(e.className||''),box:box(e)}));
+    const zonesUnmoved=before.length>0&&before.length===after.length&&before.every((b,i)=>JSON.stringify(b.box)===JSON.stringify(after[i].box));
+    const pageMoved=pageAfter.y!==pageBefore.y||pageAfter.docScrollTop!==pageBefore.docScrollTop;
+    const viewport=[innerWidth,innerHeight];
+    const bounded=before.every((b)=>b.box!=null&&b.box[3]<=viewport[1]+1);
+    const anyInternalScrollRangeExercised=inside.some((z)=>z.contentExceedsTheBox===true&&z.scrollTopAdvanced===true)||!!(stageScroll&&stageScroll.contentExceedsTheBox===true&&stageScroll.scrollTopAdvanced===true);
+    return {
+      required:{zonesUnmovedAcrossAPageLevelScrollAttempt:true,eachZoneContainerPositionFixed:'every zone container computes position:fixed (the clause own words, section 2.1(d))',eachZoneContentBoxScrollsInternally:'every zone container computes an overflow-y that can scroll (auto, never visible) and, WHERE the content exceeds the box, its own scrollTop advances inside that box (section 2.1(d): any overflow scrolls INSIDE the box)',noZoneBoxIsStretchedByTheDocument:'every zone box height stays within the viewport and the page itself cannot overflow (the document cannot scroll the zones away)',thePageLevelAttemptIsReadBack:'the page own offset and the document own overflow are printed, so a no-op attempt is never mistaken for the property'},
+      attemptPx:${Number(attempt)},
+      before,after,inside,excluded,stageScroll,viewport,
+      pageBefore,pageAfter,pageMoved,
+      pageCannotOverflow:pageAfter.docScrollHeight<=pageAfter.docClientHeight+1,
+      zonesUnmoved,zoneBoxesBoundedByTheViewport:bounded,anyInternalScrollRangeExercised,
+      scrolledElement:'each of the four zone CONTAINERS (its own content box), never the document',
+      zoneScope:'the four pane-zone containers; every OTHER element carrying data-zone (the four authored gutter affordances, the zone-minimize controls) is listed under the excluded list and is not graded as a zone container',
+      scope:'the assembled renderer surface this driver spawned'
+    }})()`)
+}
+
+/** §7.2 LIMB 3's SUBJECT IDENTITY — **A PREPARED SUBJECT IS NAMED BY ITS OWN
+ *  FIXTURE; AN INHERITED ONE IS NAMED BY THE MARKER THE SHAPE CARRIES.** The
+ *  preparation helper returns EARLY when the stage box already overflows, and on
+ *  that path the subject is a document THIS BLOCK NEVER WROTE (whatever the previous
+ *  phase left open). The reading must therefore print WHAT THE SUBJECT IS in each
+ *  case, and the returned value must DECIDE which narrative is printed — the print
+ *  site previously carried its ternary the WRONG WAY ROUND, so a `prepared:false`
+ *  run printed the fixture narrative of a fixture that was never written (gate-4
+ *  re-audit item 2). PURE. */
+function ufStageSubjectIdentity(prep) {
+  if (prep == null || typeof prep !== 'object') return 'no preparation record'
+  if (prep.prepared === true) return `the fixture this helper wrote (${prep.fixturePath})`
+  const observed = prep.observed ?? null
+  const activeTab = observed && observed.activeTab != null ? JSON.stringify(observed.activeTab) : 'not read'
+  const marker = observed && observed.stageTextHasMarker != null ? String(observed.stageTextHasMarker) : 'not read'
+  return `THE STATE THIS BLOCK INHERITED (no fixture was written or imported on this path — the stage document at the read is the pre-existing one: its active tab was ${activeTab}, and the fixture's own marker text rendered=${marker})`
+}
+
+/** §7.2 LIMB 3's CARRIER READING — the STAGE's OWN box as the scroll container: the
+ *  stage box rect and the surrounding CHROME's (the zones' and the tab strip's) rects
+ *  across a document-scroll attempt on the stage's own box, with BOTH the stage's own
+ *  `scrollTop` and the page's own offset read back so "scrolled inside" and "scrolled
+ *  the page" are told apart. The scrolled element is NAMED. */
+async function ufLayoutStageScrollAttempt(h, attempt = 200) {
+  return h.cdp.evaluate(`(()=>{
+    const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const g=(id)=>document.getElementById(id);
+    const chrome=()=>({zoneLeft:box(g('zone:left')),zoneRight:box(g('zone:right')),zoneHeader:box(g('zone:header')),zoneFooter:box(g('zone:footer')),tabStrip:box(g('tab-strip'))});
+    const stage=g('zone:main');
+    if(!stage)return {err:'no #zone:main on the assembled surface'};
+    const chromeBefore=chrome();
+    const pageBefore={y:Math.round(scrollY),docScrollTop:document.scrollingElement?Math.round(document.scrollingElement.scrollTop):null};
+    const st0=Math.round(stage.scrollTop);
+    stage.scrollTop=Math.min(${Number(attempt)},stage.scrollHeight-stage.clientHeight+${Number(attempt)});
+    const st1=Math.round(stage.scrollTop);
+    const pageAfter={y:Math.round(scrollY),docScrollTop:document.scrollingElement?Math.round(document.scrollingElement.scrollTop):null};
+    const chromeAfter=chrome();
+    stage.scrollTop=0;
+    const cs=getComputedStyle(stage);
+    const chromeUnmoved=JSON.stringify(chromeBefore)===JSON.stringify(chromeAfter);
+    const pageUnmoved=JSON.stringify(pageBefore)===JSON.stringify(pageAfter);
+    return {
+      required:{theStageOwnBoxIsTheScrollContainer:'the stage box (#zone:main) is the element scrolled',stageScrollTopAdvances:'the stage own scrollTop advances',theSurroundingChromeDoesNotMove:'the zones and the tab strip keep their rects',thePageDoesNotScroll:'the page own offset does not move'},
+      scrolledElement:'the stage box itself (#zone:main - the stage OWN box)',
+      stageBox:box(stage),stageBoxAfter:box(stage),chromeBefore,chromeAfter,pageBefore,pageAfter,
+      scrollHeight:stage.scrollHeight,clientHeight:stage.clientHeight,overflowY:cs.overflowY,
+      scrollTopBefore:st0,scrollTopAfter:st1,
+      stageScrollTopAdvanced:st1>st0,
+      stageScrolledInside:st1>st0&&cs.overflowY!=='visible'&&stage.scrollHeight>stage.clientHeight+1,
+      chromeUnmoved,pageUnmoved,
+      attemptPx:${Number(attempt)},
+      scope:'the assembled renderer surface this driver spawned'
+    }})()`)
+}
+
+/** §7.2 LIMB 1's REAL INPUT — a hit-tested CDP POINTER DRAG on a pane HEADER inside
+ *  `zone`, travelling PAST the frame that follows it in the SAME zone's slot order: a
+ *  REARRANGE INSIDE ONE ZONE, driven through the driver's own input path (no synthetic
+ *  DOM call, no MCP shortcut). FOUR THINGS THIS PROBE DOES HONESTLY, EACH MEASURED:
+ *    (1) THE DRAG START IS THE PANE HEADER'S OWN DRAG SURFACE, resolved from the frame
+ *        (`.pane-collapse-toggle` — the app's `PANE_HEADER_CLASS`) and hit-tested, with
+ *        the app's OWN delegated resolution re-driven at the point
+ *        (`closest('.gutter[data-zone], .pane-collapse-toggle')` must return that very
+ *        header). NOTE, MEASURED AND RECORDED RATHER THAN ASSUMED: on this build the
+ *        pane header IS a `button.pane-collapse-toggle` (the fork's own pinned F-1
+ *        decision — the header is its own grab surface and is exempt from the
+ *        interactive-control guard), so "a point on the header that is not the toggle"
+ *        does not exist here; the probe uses the header element and says so.
+ *    (2) THE DROP LANDS IN A BAND WHOSE DERIVED INSERTION INDEX IS NOT THE PANE'S OWN:
+ *        a drop just inside the sibling's top edge derives the insertion index the pane
+ *        ALREADY occupies, so such a probe could never register a rearrange even on a
+ *        working drag. The candidate is the sibling's own `0.75` point; where the APP's
+ *        own `insertionIndexForPoint` rule maps that point back to the pane's current
+ *        index (measured on the carrier: zone:left is 634px tall with two panes, so the
+ *        band boundary sits at the ZONE's midpoint — y≈370 — while the sibling's `0.75`
+ *        point is y≈336, i.e. still inside the pane's OWN band), the probe re-derives
+ *        the band it needs and prints both the derivation and what it moved to. The
+ *        arithmetic is the app's own rule, transcribed here for the probe's placement
+ *        and printed so the reading can be checked; the drop is still a REAL
+ *        `Input.dispatchMouseEvent` at a hit-tested in-viewport point.
+ *    (3) THE PATH IS REAL POINTER TRAVEL IN SMALL STEPS: the app claims the frame's
+ *        pointer capture from a move ON the header (the deferred-capture policy), so a
+ *        single 40px jump would leave the header in one move.
+ *    (4) THE POINTER AUDIT: `gotpointercapture` / the capture holders at the end / the
+ *        move and terminal targets are recorded, so a drag that moves no pane is
+ *        reported as NOT-DRIVEN **with the reason it did not move** — never as a pass
+ *        and never as a bare failure. */
+async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav') {
+  const frames = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>{const r=f.getBoundingClientRect();return {i,paneId:f.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],header:!!f.querySelector('.pane-collapse-toggle')}}))()`)
+  if (!Array.isArray(frames) || frames.length < 2) {
+    return { driven: false, reason: `zone '${zone}' renders ${Array.isArray(frames) ? frames.length : '?'} pane frame(s) — a WITHIN-zone rearrange needs at least two`, frames: frames ?? null }
+  }
+  const order = (fs) => fs.map((f) => f.paneId).join(',')
+  // ⟨gate-4 re-audit — THE START PANE IS CHOSEN BY THE PROPERTY, NOT BY IDENTITY.⟩
+  // The zone's pane ORDER is PERSISTED state (`operatorSettings.layout`), so across
+  // consecutive runs the preferred pane may already be LAST — and a pane with no
+  // downward sibling cannot be moved DOWN at all, which reads "NOT DRIVEN" for a
+  // reason that has nothing to do with the wiring. The probe therefore starts on the
+  // FIRST frame of the zone (a downward move exists by construction whenever the zone
+  // holds two or more panes) and PRINTS the pane it actually dragged, beside the
+  // preference (the requested drag identity is not silently dropped).
+  const preferredIdx = frames.findIndex((f) => f.paneId === preferredPane)
+  const from = preferredIdx >= 0 && preferredIdx < frames.length - 1 ? preferredIdx : 0
+  const start = frames[from]
+  const sibling = frames[from + 1] ?? null
+  if (!start || !sibling) return { driven: false, reason: `no downward sibling below ${start ? start.paneId : '(none)'} in zone '${zone}'`, frames }
+  // THE DROP: the sibling's own `0.75` point (see (2) above). Bounded to the viewport so
+  // the coordinate is always dispatchable; an off-viewport drop would be a DRIVER
+  // precondition, reported as such by `ufRealClick`'s siblings rather than dispatched.
+  const siblingMidpointDropY = Math.round(sibling.box[1] + sibling.box[3] * 0.75)
+  // THE BAND CHECK — the app's OWN rule (`insertionIndexForPoint`, `src/renderer/pane-drag.ts`:
+  // `min(count-1, floor(fraction*count))` over the zone's vertical span for a stacked zone),
+  // transcribed so the probe can tell whether its candidate drop could EVER derive a
+  // different index. A candidate that maps back to the pane's OWN index is a no-op by the
+  // app's own arithmetic (F2), so a probe that dispatched it would report "no rearrange"
+  // for a reason that has nothing to do with the wiring. The zone boxes are read from the
+  // assembled app (the same `.layout [data-zone]` set the app's own move routing projects).
+  const bandProbe = await h.cdp.evaluate(`(()=>{
+    const zoneEl=document.querySelector('.layout [data-zone="${zone}"]');
+    if(!zoneEl)return {err:'no .layout [data-zone="${zone}"] container on the assembled surface'};
+    const r=zoneEl.getBoundingClientRect();
+    const top=r.top,bottom=r.bottom,span=bottom-top;
+    const idx=(y,count)=>span<=0?0:Math.min(count-1,Math.floor(Math.max(0,Math.min((y-top)/span,1))*count));
+    return {top:Math.round(top),bottom:Math.round(bottom),span:Math.round(span)}})()`)
+  const dropBands = (() => {
+    if (!bandProbe || bandProbe.err || !(bandProbe.span > 0)) return null
+    const count = frames.length
+    const indexAt = (y) => Math.min(count - 1, Math.max(0, Math.floor(Math.max(0, Math.min((y - bandProbe.top) / bandProbe.span, 1)) * count)))
+    const wanted = Math.min(count - 1, from + 1) // the next band DOWN (a within-zone move downward)
+    const wantedBandTop = bandProbe.top + (bandProbe.span * wanted) / count
+    return { count, fromIndex: from, wantedIndex: wanted, indexAtSiblingMidpointDrop: indexAt(siblingMidpointDropY), siblingMidpointDropY, wantedBandTopY: Math.round(wantedBandTop), indexAtWantedBandTop: indexAt(wantedBandTop) }
+  })()
+  const dropYRaw = dropBands != null && dropBands.indexAtSiblingMidpointDrop === from && dropBands.wantedIndex !== from
+    ? Math.round(dropBands.wantedBandTopY)
+    : siblingMidpointDropY
+  const point = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');if(!f)return {err:'frame gone'};const hd=f.querySelector('.pane-collapse-toggle');if(!hd)return {err:'the frame carries no pane-header surface (.pane-collapse-toggle)'};const r=hd.getBoundingClientRect();if(r.height<2)return {err:'zero-height header',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width*0.5);const y=Math.round(r.y+r.height/2);const el=document.elementFromPoint(x,y);const resolved=el&&el.closest?el.closest('.gutter[data-zone], .pane-collapse-toggle'):null;return {x,y,hit:el?(el.tagName+(el.className?'.'+String(el.className).slice(0,40):'')):'null',headerTag:hd.tagName,headerIsTheToggle:hd.tagName==='BUTTON',onTarget:!!(el&&(el===f||f.contains(el))),onTheAppHeaderSurface:resolved===hd,vh:window.innerHeight,headerBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
+  if (!point || point.err || !point.onTarget) {
+    return { driven: false, reason: `the pane-HEADER drag start could not be hit-tested on ${start.paneId}: ${JSON.stringify(point)}`, frames, slotOrderBefore: order(frames) }
+  }
+  if (point.onTheAppHeaderSurface !== true) {
+    return { driven: false, reason: `the hit-tested drag start on ${start.paneId} does NOT resolve back to the pane header through the app's own delegated resolution (closest('.gutter[data-zone], .pane-collapse-toggle')): ${JSON.stringify(point)} — a drag start that is not the app's own gesture surface grades nothing`, frames, slotOrderBefore: order(frames) }
+  }
+  const dropY = Math.max(1, Math.min(dropYRaw, point.vh - 2))
+  // THE REAL POINTER PATH: small steps (2px → 12px) that stay on the header for the first
+  // moves, then travel to the drop, then a terminal.
+  const path = [{ type: 'down', x: point.x, y: point.y }]
+  for (const dy of [2, 4, 6, 8, 10, 12]) path.push({ type: 'move', x: point.x + Math.min(6, dy), y: point.y + dy })
+  for (const frac of [0.4, 0.7, 1]) path.push({ type: 'move', x: point.x + 8, y: Math.round(point.y + (dropY - point.y) * frac) })
+  path.push({ type: 'up', x: point.x + 8, y: dropY })
+  // THE AUDIT, installed BEFORE the drag and read after it: the capture claim and the
+  // per-move targets. The probe's own listeners are capture-phase and read-only.
+  await h.cdp.evaluate(`(()=>{window.__ufDragAudit={captured:[],moves:[],terminals:[],gotCapture:0};const rec=(e)=>{const t=e.target;const n=t?(t.id||t.tagName):'?';if(e.type==='gotpointercapture')window.__ufDragAudit.gotCapture+=1;else if(e.type==='pointermove')window.__ufDragAudit.moves.push(n);else window.__ufDragAudit.terminals.push(e.type+':'+n)};for(const ty of ['pointermove','pointerup','pointercancel','gotpointercapture'])document.addEventListener(ty,rec,true);return true})()`)
+  await h.cdp.gesture(`.pane-frame[data-pane-id="${start.paneId}"]`, path)
+  await sleep(1200)
+  const audit = await h.cdp.evaluate(`(()=>{const a=window.__ufDragAudit||{};const holders=[];for(const n of document.querySelectorAll('*')){for(const id of [1,2,3]){try{if(typeof n.hasPointerCapture==='function'&&n.hasPointerCapture(id))holders.push((n.id||n.tagName)+'#'+id)}catch{}}}return {gotPointerCaptureEvents:a.gotCapture||0,captureHoldersAtTheEnd:holders,moveTargets:(a.moves||[]).slice(0,14),terminalTargets:a.terminals||[],revealedMirrors:[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.className).slice(0,30))}})()`)
+  const after = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id')})))()`)
+  const seqBefore = order(frames)
+  const seqAfter = (after || []).map((f) => f.paneId).join(',')
+  // RESTORE (this block's own hygiene, taken AFTER the reading and recorded, never hidden):
+  // the failed drag leaves the zone's provisional drop-target mirror (`is-revealed`) behind,
+  // because the gesture never reached a terminal — and a revealed empty zone suppresses the
+  // C11 track collapse a LATER block measures. The app's OWN gesture path clears it: a real
+  // click on the header supersedes the in-flight drag (`revertPriorGesture` → `cancelPaneDrag`)
+  // AND terminates its own session cleanly, and the SECOND real click restores the collapse
+  // state the first one toggled (the header IS the collapse control — the same measured fact
+  // the drag start records). The restore's own state pair is printed beside the reading.
+  const cleanup = { performed: false, revealMirrorsAfterTheDrag: audit ? audit.revealedMirrors : null }
+  try {
+    const collapseState = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')))()`)
+    if (Array.isArray(cleanup.revealMirrorsAfterTheDrag) && cleanup.revealMirrorsAfterTheDrag.length > 0) {
+      cleanup.collapseBefore = await collapseState()
+      for (let pass = 0; pass < 2; pass += 1) {
+        const p2 = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');const hd=f?f.querySelector('.pane-collapse-toggle'):null;if(!hd)return null;const r=hd.getBoundingClientRect();if(r.height<2)return null;return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
+        if (!p2) break
+        await h.cdp.gesture(`.pane-frame[data-pane-id="${start.paneId}"] .pane-collapse-toggle`, [{ type: 'down', x: p2.x, y: p2.y }, { type: 'up', x: p2.x, y: p2.y }])
+        await sleep(1200)
+      }
+      cleanup.collapseAfter = await collapseState()
+      cleanup.revealMirrorsAfterTheRestore = await h.cdp.evaluate(`[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.className).slice(0,30))`)
+      cleanup.paneSlotsAfterTheRestore = (await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')))()`)) ?? null
+      cleanup.performed = true
+      cleanup.collapseStateRestored = JSON.stringify(cleanup.collapseBefore) === JSON.stringify(cleanup.collapseAfter)
+    } else {
+      cleanup.collapseStateRestored = null
+    }
+  } catch (e) {
+    cleanup.error = String(e && e.message ? e.message : e)
+  }
+  return {
+    driven: true,
+    inputKind: 'REAL CDP pointer drag (Input.dispatchMouseEvent) in small steps on the pane HEADER surface inside the zone',
+    dragStartPane: start.paneId, dragStartPaneHeaderBox: point.headerBox, dragStartHit: point.hit, dragStartOnTarget: point.onTarget,
+    dragStartPanePreference: preferredPane,
+    dragStartPaneChosenBecause: preferredIdx === from
+      ? `the preferred pane ${preferredPane} sits at index ${from} with a downward sibling (${sibling.paneId}) below it, so the requested identity IS the dragged one`
+      : (preferredIdx < 0
+        ? `the preferred pane ${preferredPane} is not rendered in zone '${zone}' on this run (the zone renders ${JSON.stringify(frames.map((f) => f.paneId))}), so the FIRST frame (${start.paneId}) was dragged — a within-zone DOWNWARD rearrange needs a pane with a sibling below it`
+        : `the preferred pane ${preferredPane} is the LAST frame of zone '${zone}' on this run (the zone's pane ORDER is persisted state, so it can differ between runs) and a pane with no downward sibling cannot be moved DOWN, so the FIRST frame (${start.paneId}) was dragged`),
+    dragStartOnTheAppHeaderSurface: point.onTheAppHeaderSurface, dragStartHeaderTag: point.headerTag, dragStartHeaderIsTheToggle: point.headerIsTheToggle,
+    dragStart: { x: point.x, y: point.y }, dragToY: dropY, dragPastTheSiblingMidpoint: dropY > sibling.box[1] + sibling.box[3] / 2, draggedPast: sibling.paneId,
+    slotOrderBefore: seqBefore, slotOrderAfter: seqAfter, rearranged: seqBefore !== seqAfter, zone, framesBefore: frames,
+    pointerAudit: audit,
+    dropBands,
+    dropBasis: dropBands == null
+      ? `the zone band rule could not be evaluated on the assembled surface (${JSON.stringify(bandProbe)}) — the drop is the sibling's own 0.75 point, y=${siblingMidpointDropY}`
+      : (dropYRaw === siblingMidpointDropY
+        ? `the sibling's own 0.75 point (y=${siblingMidpointDropY}) derives index ${dropBands.indexAtSiblingMidpointDrop} by the app's own rule (zone span ${bandProbe.top}..${bandProbe.bottom}, ${dropBands.count} pane(s)), which is NOT the pane's own index ${dropBands.fromIndex} — the drop needs no re-derivation`
+        : `the sibling's own 0.75 point (y=${siblingMidpointDropY}) derives index ${dropBands.indexAtSiblingMidpointDrop}, i.e. the pane's OWN index ${dropBands.fromIndex}, by the app's own rule (\`insertionIndexForPoint\`, zone span ${bandProbe.top}..${bandProbe.bottom}, ${dropBands.count} pane(s)) — a drop there is a NO-OP by the app's own arithmetic (F2), so the drop was moved DOWN to the top of band ${dropBands.wantedIndex} (y=${dropBands.wantedBandTopY}, which the same rule reads as index ${dropBands.indexAtWantedBandTop}) so the probe drives the property instead of its own dead point`),
+    pathShape: path.map((s) => s.type + '@' + s.y).join(' '),
+    restore: cleanup,
+  }
+}
+
+/** §7.2 LIMB 3's FIXTURE NAME — the driver's OWN artifact (written by
+ *  `ufEnsureStageBoxOverflowDoc` only where the stage box does not already overflow)
+ *  and removed by this run's own cleanup path, by this ONE name. */
+const UF_STAGE_OVERFLOW_FIXTURE = '.live-stage-overflow-probe.md'
+
+/** §7.2 LIMB 3's SUBJECT SELECTOR — **THE STAGE'S DOCUMENT SURFACE, BY ITS OWN DOM
+ *  SHAPE** (the editable content the stage mounts), passed to the preparation helper
+ *  by its CALLER. The stage's document surface is read here WITHOUT any
+ *  document-store read: the limb-3 reading is a LAYOUT measurement, and a store read
+ *  is not part of it. */
+function ufStageDocSurfaceSelector() {
+  return '[contenteditable="true"]'
+}
+
+/** §7.2 LIMB 3's SUBJECT PREPARATION — **A DOCUMENT LONGER THAN THE STAGE'S BOX**,
+ *  so "a document longer than the stage's box scrolls INSIDE the stage" is a
+ *  FALSIFIABLE reading rather than a vacuous one. THE SUBJECT IS PREPARED IN FOUR
+ *  STEPS, EACH READ BACK:
+ *    (1) the stage's OWN box is read FIRST (`stageNow`) — if it ALREADY overflows, a
+ *        document longer than the stage is already mounted and no fixture is owed;
+ *    (2) the CALLER's fixture text is written to the CALLER's own path;
+ *    (3) it is IMPORTED through the app's own route (`edit.import_markdown`);
+ *    (4) it is MOUNTED ON THE STAGE through the app's own document-selection seam
+ *        (`window.provident.sidebar.selectDocument` — the SAME seam the doc-nav row
+ *        click routes to), and the helper WAITS, bounded, for the STAGE to render the
+ *        fixture's OWN marker text. THE IMPORT IS NOT THE MOUNT (measured: with a
+ *        document tab active, the import adds the document to the store and switches
+ *        nothing), and a reading taken on "a surface is present" is a reading taken on
+ *        WHATEVER document happened to be open — the vacuity this wait removes.
+ *  THE READING IS TAKEN FROM THE STAGE CONTAINER'S OWN SCROLL GEOMETRY
+ *  (`stageBoxOverflows` = the stage box's own scrollHeight > its clientHeight), never
+ *  from a child surface's height, so `stageBoxOverflowed` is the clause's own
+ *  falsifier: FALSE means the attempt below cannot discriminate a non-scrolling stage
+ *  from a stage with nothing to scroll, and it is REPORTED as such, never a pass.
+ *  NO STORE CONTENT IS READ HERE: the block provisions its OWN document and measures
+ *  the STAGE BOX, so no corpus identity enters this closure and the driver's
+ *  fixture-declaration census is unmoved (measured: the A-1/A-3 arms stay at the
+ *  figure of record `47`). */
+async function ufEnsureStageBoxOverflowDoc(h, opt = {}) {
+  const surfaceSelector = typeof opt.surfaceSelector === 'string' && opt.surfaceSelector !== '' ? opt.surfaceSelector : 'body'
+  const marker = typeof opt.marker === 'string' ? opt.marker : ''
+  const stageNow = async () => h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');if(!m)return null;const cs=getComputedStyle(m);const r=m.getBoundingClientRect();const cands=[...document.querySelectorAll(${JSON.stringify(surfaceSelector)})].filter((e)=>m.contains(e));return {stageBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],stageScrollHeight:m.scrollHeight,stageClientHeight:m.clientHeight,stageOverflowY:cs.overflowY,stageBoxOverflows:m.scrollHeight>m.clientHeight+1,surfacePresent:cands.length>0,surfaceCandidates:cands.length,stageTextHasMarker:${JSON.stringify(marker)}===''?null:((m.textContent||'').indexOf(${JSON.stringify(marker)})>=0),activeTab:(document.querySelector('#tab-strip .tab.is-active')||{}).textContent||null}})()`)
+  const already = await stageNow()
+  if (already && already.stageBoxOverflows === true) {
+    return { prepared: false, why: 'the stage box ALREADY overflows — a document longer than the stage is already mounted, so no fixture was needed', stageBoxOverflowed: true, observed: already, mountOfTheImportedDoc: null, preparedBy: 'the state this block inherited (no fixture was written or imported)' }
+  }
+  const fixtureText = typeof opt.fixtureText === 'string' ? opt.fixtureText : ''
+  const fixturePath = typeof opt.fixturePath === 'string' ? opt.fixturePath : ''
+  if (fixtureText === '' || fixturePath === '') {
+    return { prepared: false, why: 'the stage box does not overflow and the caller supplied no fixture text to import (a reading taken WITHOUT an overflowing document, and reported as such)', stageBoxOverflowed: false, observed: already, mountOfTheImportedDoc: null, preparedBy: 'nothing' }
+  }
+  try { writeFileSync(fixturePath, fixtureText, 'utf8') } catch (e) { return { prepared: false, why: `the fixture file could not be written at ${fixturePath}: ${String(e && e.message ? e.message : e)}`, stageBoxOverflowed: false, observed: already, mountOfTheImportedDoc: null, preparedBy: 'nothing' } }
+  const read = await mcpToolResult(h.mcp, 'edit.import_markdown', { files: [fixturePath] }).catch((e) => ({ ok: false, isError: false, value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+  if (read.isError === true || read.ok !== true) {
+    return { prepared: false, why: `edit.import_markdown failed for ${fixturePath}: ${String(read.errorText ?? '').slice(0, 240)}`, stageBoxOverflowed: false, observed: already, mountOfTheImportedDoc: null, preparedBy: `the fixture at ${fixturePath} (the import FAILED)` }
+  }
+  const documentId = Array.isArray(read.value && read.value.documentIds) ? read.value.documentIds[0] ?? null : null
+  // THE MOUNT IS RETRIED WITHIN THE BOUNDED WAIT: an import is a STORE write, and the
+  // document-selection seam resolves against the sidebar's own document list — which the
+  // import's store event may not have reached yet when the first call is made (measured:
+  // a single immediate call is a no-op and the stage keeps the previous document). The
+  // seam is re-driven each step until the stage renders the fixture's own marker, or the
+  // bounded wait expires; every attempt is counted and printed.
+  const mountOnce = () => h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.selectDocument!=='function')return {available:false};s.selectDocument(${JSON.stringify(documentId)});return {available:true}})()`).catch((e) => ({ available: false, error: String(e && e.message ? e.message : e) }))
+  const mount = await mountOnce()
+  const stageBeforeWait = await stageNow()
+  let waitedMs = 0
+  let mountAttempts = 1
+  await waitFor(async () => {
+    const now = await stageNow()
+    waitedMs += 500
+    if (now && now.stageTextHasMarker === true) return true
+    mountAttempts += 1
+    await mountOnce()
+    return false
+  }, { timeout: Number(opt.mountWaitMs ?? 12000), step: 500 }).catch(() => null)
+  const observed = await stageNow()
+  const mounted = !!(observed && observed.stageTextHasMarker === true)
+  return {
+    prepared: true, fixturePath, documentId, waitedMs, mountAttempts, stageBeforeWait,
+    mountRoute: 'the app own document-selection seam (window.provident.sidebar.selectDocument) — the SAME seam the doc-nav row click routes to; NOT a store read and NOT a corpus identity, so this block provisions its OWN document and the fixture-declaration census is unmoved',
+    mountRequested: mount, mountOfTheImportedDoc: mounted,
+    stageBoxOverflowed: !!(observed && observed.stageBoxOverflows === true),
+    observed,
+    preparedBy: `the fixture this helper wrote (${fixturePath}) and imported (documentId=${JSON.stringify(documentId)}) through the app own route, then mounted through the app own document-selection seam`,
+    why: mounted
+      ? 'the imported document is mounted on the stage (the stage renders the fixture own marker text)'
+      : `the imported document did NOT become the stage document within the bounded wait (${waitedMs}ms, ${mountAttempts} mount attempt(s)): the stage reads marker=${observed ? String(observed.stageTextHasMarker) : '?'} (active tab ${JSON.stringify(observed ? observed.activeTab : null)}) and the mount request answered ${JSON.stringify(mount)} — the limb-3 attempt therefore runs against the stage document that IS open, and it is reported as such (its own reading, scope and this gap, never a pass)`,
+  }
+}
+
+/** §7.2 LIMB 3's CARRIER READING — the STAGE's OWN box as the scroll container: the
+ *  stage box rect and the surrounding CHROME's (the zones' and the tab strip's) rects
+ *  across a document-scroll attempt on the stage's own box, with BOTH the stage's own
+ *  `scrollTop` and the page's own offset read back so "scrolled inside" and "scrolled
+ *  the page" are told apart. The scrolled element is NAMED. */
+
 /** §2.3 `H-4` / §3.2 `F-6` / finding `C-5` — **A PARKED ROW NEVER PRINTS WITHOUT
  *  ITS REASON.** `RCA-11` clause (b) requires a RECORDED park reason (a park is
  *  never parked-by-default), so a result carrying `park: true` and no reason is a
@@ -6646,19 +7057,19 @@ const BLOCKS = {
     await sleep(1400)
     // setup: the run's SELECTED SET's own folder must be expanded for the beta leaf to exist
     let folderPath = 'already-expanded'
-    let folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
+    let folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('#pane-doc-nav [data-folder-path]');return f?f.getAttribute('data-expanded'):null})()`)
     if (folderOpen !== 'true') {
-      folderPath = (await ufRealClick(h, '[data-folder-label=".live-fixture/core"]')).path
+      folderPath = (await ufRealClick(h, '#pane-doc-nav [data-folder-path]')).path
       await sleep(1300)
-      folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
+      folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('#pane-doc-nav [data-folder-path]');return f?f.getAttribute('data-expanded'):null})()`)
       if (folderOpen !== 'true') {
         // the folder row is itself a clickable `li` in a pane frame — a REAL click
         // may be swallowed by the pane-drag pointer capture. [DIAG] native-click
         // attribution (SETUP ONLY, no verdict) so the leaf row is reachable.
-        await ufNativeClickDiag(h, '[data-folder-label=".live-fixture/core"]')
+        await ufNativeClickDiag(h, '#pane-doc-nav [data-folder-path]')
         await sleep(1300)
         folderPath += '+[DIAG]-native-fallback(setup)'
-        folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('[data-folder-label=".live-fixture/core"]');return f?f.getAttribute('data-expanded'):null})()`)
+        folderOpen = await h.cdp.evaluate(`(()=>{const f=document.querySelector('#pane-doc-nav [data-folder-path]');return f?f.getAttribute('data-expanded'):null})()`)
       }
     }
     // §2.1 `E-2`/`U-3` — THE BODY-GESTURE PROBE (run BEFORE the U-1 click so it
@@ -6704,10 +7115,42 @@ const BLOCKS = {
     const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated)'
     const u3Evidence = bodyDrag && bodyDrag.driven === true
       ? `REAL CDP pointer drag DOWN on the doc-nav pane BODY (start=(${bodyStart.x},${bodyStart.y}) hit=${bodyDrag.hitAtStart}, outside .pane-header) travelling to y=${bodyDrag.targetY} past the drag threshold; zone pane-slot ordering before=[${bodyDrag.seqBefore}] after=[${bodyDrag.seqAfter}] → bodyGestureAdmitted/relocated=${bodyDrag.relocated} (required false: the header is the only pane-drag surface)` : `the body-gesture probe COULD NOT BE DRIVEN: ${bodyDrag ? bodyDrag.reason : 'no probe'}`
-    const u3Opts = bodyDrag && bodyDrag.driven === true
-      ? { path: 'cdp', ok: bodyDrag.relocated === false, surface: surface, gesture: true, checklistRow: 'UF-PANES-12' }
-      : { path: 'missing', ok: false, surface: surface, required: 'a real hit-tested pane-BODY gesture point inside .pane-frame[data-pane-id="doc-nav"] outside .pane-header', observed: u3Evidence, checklistRow: 'UF-PANES-12' }
-    const u3 = declaredRowResult('U-3', 'UF-PANES-12', u3Assertion, u3Dclass, u3Evidence, u3Opts)
+    // §7.2 LIMB 1 — THE LAYOUT-EFFECT READING, carried as an EXTENSION of this
+    // block's ALREADY-DECLARED row (`U-3`): a pane rearrange INSIDE one zone must
+    // leave the OTHER ZONES' and the STAGE's measured rects UNCHANGED value-for-value,
+    // `#wiki-root`'s mount count at EXACTLY 1, and NO stale childless root behind. NO
+    // new slot, `MATRIX_ROWS` unmoved, no `U-n` id renumbered. The before/after pair is
+    // THIS run's OWN (it may not borrow the greens artifact's); the rearrange input is
+    // a REAL hit-tested CDP drag NAMED as such; and the reading is PRINTED even when
+    // the gesture could not be driven — a rearrange that never moved a pane names its
+    // precondition and reads NOT-DRIVEN, never a silent park.
+    const limb1Before = await ufLayoutReading(h)
+    const rearrange = await ufPaneRearrangeInput(h, 'left', 'doc-nav')
+    const limb1After = await ufLayoutReading(h)
+    const rectUnchanged = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    const limb1SiblingZonesUnchanged = rectUnchanged(limb1Before.zoneRight, limb1After.zoneRight) && rectUnchanged(limb1Before.zoneHeader, limb1After.zoneHeader) && rectUnchanged(limb1Before.zoneFooter, limb1After.zoneFooter)
+    const limb1StageUnchanged = rectUnchanged(limb1Before.main, limb1After.main)
+    const limb1MountExactlyOne = limb1Before.mountCount === 1 && limb1After.mountCount === 1
+    const limb1NoStaleChildlessRoot = limb1Before.staleChildlessRoots === 0 && limb1After.staleChildlessRoots === 0
+    const limb1Rearranged = rearrange.driven === true && rearrange.rearranged === true
+    const limb1LayoutHeld = limb1SiblingZonesUnchanged && limb1StageUnchanged && limb1MountExactlyOne && limb1NoStaleChildlessRoot
+    const limb1Ok = limb1Rearranged && limb1LayoutHeld
+    const limb1InputReading = rearrange.driven === true
+      ? `${rearrange.inputKind} — the drag START is the pane's OWN HEADER SURFACE (hit=${JSON.stringify(rearrange.dragStartHit)}, onTarget=${rearrange.dragStartOnTarget}, and the APP'S OWN delegated resolution at that point (closest('.gutter[data-zone], .pane-collapse-toggle')) returns that very header=${rearrange.dragStartOnTheAppHeaderSurface}; the header element is a ${rearrange.dragStartHeaderTag}, i.e. the header IS the collapse control on this build — the fork's pinned F-1 decision, so a point on the header that is NOT the toggle does not exist and is not invented): pane ${rearrange.dragStartPane} (header box ${JSON.stringify(rearrange.dragStartPaneHeaderBox)}; WHY THIS PANE: ${rearrange.dragStartPaneChosenBecause}) dragged in small steps (${rearrange.pathShape}) from (${rearrange.dragStart.x},${rearrange.dragStart.y}) PAST ${rearrange.draggedPast} to y=${rearrange.dragToY} (past the sibling's midpoint=${rearrange.dragPastTheSiblingMidpoint}; DROP POINT DERIVATION: ${rearrange.dropBasis}) INSIDE zone '${rearrange.zone}' (the rearrange is WITHIN one zone); zone pane-slot order before=[${rearrange.slotOrderBefore}] after=[${rearrange.slotOrderAfter}] → rearrangedInsideTheZone=${rearrange.rearranged}; POINTER AUDIT (why a drag that moved nothing moved nothing): gotpointercapture events=${rearrange.pointerAudit ? rearrange.pointerAudit.gotPointerCaptureEvents : '?'}, pointer-capture holders at the end=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.captureHoldersAtTheEnd : null)}, move targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.moveTargets : null)}, terminal targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.terminalTargets : null)}, revealed zone mirrors=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.revealedMirrors : null)}; RESTORE (this block's own hygiene, AFTER the reading and never a substitute for it)=${rearrange.restore ? (rearrange.restore.performed === true ? `a leaked provisional drop-target mirror was cleared through the app's own gesture path (two real header clicks: the first supersedes the in-flight drag and terminates its own session, the second restores the collapse state it toggled) → reveal mirrors after the restore=${JSON.stringify(rearrange.restore.revealMirrorsAfterTheRestore)} pane slots after the restore=${JSON.stringify(rearrange.restore.paneSlotsAfterTheRestore)} collapse state ${JSON.stringify(rearrange.restore.collapseBefore)} -> ${JSON.stringify(rearrange.restore.collapseAfter)} restored=${rearrange.restore.collapseStateRestored}` : `nothing to restore: the drag left NO revealed zone mirror (${JSON.stringify(rearrange.restore.revealMirrorsAfterTheDrag)})`) + (rearrange.restore.error ? ` ERROR=${rearrange.restore.error}` : '') : 'no restore record'}`
+      : `NOT DRIVEN — ${rearrange.reason}`
+    const limb1Evidence = `[§7.2 limb 1 — LAYOUT EFFECT, carrier row U-3/uf_panes_12; scope: the assembled renderer THIS driver spawned, its own CDP input path] ` +
+      `REAL INPUT (required (iv)): ${limb1InputReading}; ` +
+      `rects BEFORE the rearrange (required (i), this run's own pair): zone:left=${JSON.stringify(limb1Before.zoneLeft)} (the zone rearranged IN) zone:right=${JSON.stringify(limb1Before.zoneRight)} zone:header=${JSON.stringify(limb1Before.zoneHeader)} zone:footer=${JSON.stringify(limb1Before.zoneFooter)} stage(#zone:main)=${JSON.stringify(limb1Before.main)} gridColumns="${limb1Before.gridColumns}"; ` +
+      `rects AFTER: zone:left=${JSON.stringify(limb1After.zoneLeft)} zone:right=${JSON.stringify(limb1After.zoneRight)} zone:header=${JSON.stringify(limb1After.zoneHeader)} zone:footer=${JSON.stringify(limb1After.zoneFooter)} stage(#zone:main)=${JSON.stringify(limb1After.main)} gridColumns="${limb1After.gridColumns}"; ` +
+      `OBSERVED (i): siblingZonesUnchanged=${limb1SiblingZonesUnchanged} stageUnchanged=${limb1StageUnchanged}; ` +
+      `OBSERVED (ii) #wiki-root mount count: BEFORE=${limb1Before.mountCount} AFTER=${limb1After.mountCount} → exactlyOneMount=${limb1MountExactlyOne} (required EXACTLY 1 — no zero, no two); ` +
+      `OBSERVED (iii) STALE CHILDLESS ROOT: childless #wiki-root(s) BEFORE=${limb1Before.staleChildlessRoots} AFTER=${limb1After.staleChildlessRoots} → NO stale childless root appeared=${limb1NoStaleChildlessRoot} (explicit statement: NO element under the layout root carried zero children in the post-state); ` +
+      `pane frames before=${JSON.stringify(limb1Before.frames.map((f) => f.paneId))} after=${JSON.stringify(limb1After.frames.map((f) => f.paneId))} → limb1LayoutEffectHeld=${limb1Ok}${limb1Rearranged === true ? '' : ` — THE READING IS NOT-DRIVEN: the rearrange gesture did not move a pane, so the before/after pair is NOT a within-zone rearrange and may NOT be read as the limb. The four sub-readings above are printed as a SCOPED measurement of a state in which nothing was rearranged. THE GESTURE ITSELF IS PROVEN (it started on the pane's own header surface at a hit-tested point, in small steps, and dropped past the sibling's midpoint), so this is an APP finding about the pane-drag wiring — filed in docs/defects.md with its owner — and NOT a probe gap`}`
+    const u3EvidenceWithLimb1 = `${limb1Evidence}; [§7.2 limb 1's OTHER half — the pane-BODY gesture probe, kept BESIDE the limb, never substituted for it] ${u3Evidence}`
+    const u3Opts = limb1Rearranged && bodyDrag && bodyDrag.driven === true
+      ? { path: 'cdp', ok: limb1LayoutHeld && bodyDrag.relocated === false, surface: surface, gesture: true, checklistRow: 'UF-PANES-12', required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange leaves the sibling zones\' and the stage\'s rects UNCHANGED value-for-value, #wiki-root mounts EXACTLY ONE, and NO stale childless root appears (plus: a pane-BODY gesture is never admitted — the header is the only pane-drag surface)', observed: u3EvidenceWithLimb1 }
+      : { path: 'missing', ok: false, surface: surface, required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange — THE DRIVER PRECONDITION IS THAT THE GESTURE ACTUALLY MOVES A PANE (a rearrange that moves nothing cannot discriminate the property, so a scoped before/after pair taken in a state where no pane moved is REPORTED as a scoped measurement and is NOT-DRIVEN, never a silent park)', observed: u3EvidenceWithLimb1 }
+    const u3 = declaredRowResult('U-3', 'UF-PANES-12', u3Assertion, u3Dclass, u3EvidenceWithLimb1, u3Opts)
     if (!leaf) {
       const why = `doc-nav has no li[data-document-id=".live-fixture/core/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`
       return [
@@ -7103,6 +7546,84 @@ const BLOCKS = {
     // the class XOR AFTER the close (the class read `ufModal` performs on its return)
     const postXor = x(postModal.cls) === 1
     const modalClassXor = preXor && openXor && postXor
+    // §7.2 LIMBS 2 and 3 — THE LAYOUT-EFFECT READINGS, carried as an EXTENSION of this
+    // block's ALREADY-DECLARED row (`U-5`; `MATRIX_ROWS` unmoved at 8, no new slot, no
+    // `U-n` id renumbered). LIMB 2: each zone container's box rect identical across a
+    // PAGE-LEVEL scroll attempt, with the zone's OWN box carrying its internal scroll
+    // range and `scrollTop` advancing INSIDE that box (the scrolled element is NAMED —
+    // the zone's own content box, never the document). LIMB 3: the STAGE's own box is
+    // the scroll container — its `scrollTop` advances while the page's does not and the
+    // surrounding chrome (the zones and the tab strip) keeps its rects. Limb 3's subject
+    // (a document longer than the stage's box) is prepared through the app's own import
+    // route and reported by name; a reading taken without it is reported as such.
+    //
+    // ── THE READING ORDER IS PART OF THE PROPERTY, AND IT IS PRINTED AS SUCH ──
+    // Limb 2 is read TWICE: `limb2AtRest` in the state this block's own clicks produced,
+    // and `limb2WithTheStageDocOpen` AFTER the longer-than-the-stage document has been
+    // loaded — because THE ZONE RECTS CAN ONLY DISAGREE WITH THE STAGE'S BOX WHILE THE
+    // STAGE HOLDS A DOCUMENT LONGER THAN IT. A resting-state pair that reads "nothing
+    // moved" cannot discriminate a fixed zone from a zone stretched by the very document
+    // the limb is about, so the decisive pair is the second one and it is labelled so.
+    const limb2AtRest = await ufLayoutZoneScrollAttempt(h, 260)
+    // LIMB 3's subject: the fixture text and path are composed HERE (the caller's
+    // values), and the fixture's OWN marker text is what the preparation helper waits
+    // for on the stage — so the limb-3 reading can never silently run against whatever
+    // document happened to be open (the vacuity the previous reading had).
+    const stageOverflowFixture = join(ROOT, '.live-stage-overflow-probe.md')
+    const stageOverflowBlocks = Number(60)
+    const stageOverflowMarker = 'stage-overflow probe paragraph ' + String(stageOverflowBlocks)
+    const stageOverflowText = `# Live Page Edit Fixture\n\n${Array.from({ length: stageOverflowBlocks }, (_, i) => `§7.2 stage-overflow probe paragraph ${i + 1} — the stage's own box must be the scroll container for a document longer than it, with the surrounding chrome unmoved.`).join('\n\n')}\n`
+    const tallStageDoc = await ufEnsureStageBoxOverflowDoc(h, { fixtureText: stageOverflowText, fixturePath: stageOverflowFixture, surfaceSelector: ufStageDocSurfaceSelector(), marker: stageOverflowMarker })
+    const limb2WithTheStageDocOpen = await ufLayoutZoneScrollAttempt(h, 260)
+    const limb3 = await ufLayoutStageScrollAttempt(h, 220)
+    // THE LIMB-2 PREDICATE, PER THE CLAUSE (never a proxy): every zone container is
+    // FIXED, every zone's content box is scroll-CAPABLE, a zone that HAS an overflow
+    // scrolls inside its own box, the zone boxes are bounded by the viewport with the
+    // page unable to overflow, and the rects are value-for-value UNCHANGED across the
+    // page-level attempt.
+    const zoneContainersOk = (r) => Array.isArray(r.inside) && r.inside.length === 4 &&
+      r.inside.every((z) => z.position === 'fixed') &&
+      r.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll') &&
+      r.inside.every((z) => z.contentExceedsTheBox !== true || z.scrollTopAdvanced === true)
+    const zonesUnmovedBothReadings = limb2AtRest.zonesUnmoved === true && limb2WithTheStageDocOpen.zonesUnmoved === true
+    const zonesFixedAndScrollCapableBothReadings = zoneContainersOk(limb2AtRest) && zoneContainersOk(limb2WithTheStageDocOpen)
+    const zonesBoundedAndPageCannotOverflow = [limb2AtRest, limb2WithTheStageDocOpen].every((r) => r.zoneBoxesBoundedByTheViewport === true && r.pageCannotOverflow === true)
+    // THE NON-VACUITY GUARD: the "any overflow scrolls INSIDE the box" half must have
+    // been exercised by a REAL range somewhere in this reading (a zone, or the stage) —
+    // four empty zones with nothing to scroll can never satisfy it by themselves.
+    const anInternalScrollRangeWasExercised = limb2AtRest.anyInternalScrollRangeExercised === true || limb2WithTheStageDocOpen.anyInternalScrollRangeExercised === true
+    const limb2Ok = zonesUnmovedBothReadings && zonesFixedAndScrollCapableBothReadings && zonesBoundedAndPageCannotOverflow && anInternalScrollRangeWasExercised
+    const limb3StageScrolledInside = !!(limb3 && limb3.stageScrolledInside === true)
+    const limb3ChromeUnmoved = !!(limb3 && limb3.chromeUnmoved === true)
+    const limb3PageUnmoved = !!(limb3 && limb3.pageUnmoved === true)
+    // THE FALSIFIABILITY GATE: without a document LONGER than the stage's box the attempt
+    // cannot discriminate a non-scrolling stage from a stage with nothing to scroll, so
+    // the reading is reported INCONCLUSIVE and is never counted as a pass.
+    const limb3SubjectOverflows = tallStageDoc.stageBoxOverflowed === true
+    // ⟨gate-4 re-audit item 2 — THE GATE REQUIRES A **PREPARED** SUBJECT, NOT AN
+    // INHERITED ONE.⟩ `ufEnsureStageBoxOverflowDoc` returns EARLY when the stage box
+    // ALREADY overflows, and on that path it wrote nothing and mounted nothing: the
+    // subject is whatever the previous phase left open. `stageBoxOverflowed === true`
+    // is therefore satisfied by an INHERITED subject too, and the limb could read
+    // CONCLUSIVE on a document this block never wrote and never identified — the
+    // vacuity the helper's own wait exists to remove. The gate now names BOTH terms.
+    const limb3SubjectPrepared = tallStageDoc.prepared === true
+    const limb3SubjectIdentified = limb3SubjectPrepared && limb3SubjectOverflows
+    const limb3Ok = limb3SubjectIdentified && limb3StageScrolledInside && limb3ChromeUnmoved && limb3PageUnmoved
+    const zoneFacts = (r) => JSON.stringify(r.inside.map((z) => ({ id: z.id, position: z.position, overflowY: z.overflowY, scrollHeight: z.scrollHeight, clientHeight: z.clientHeight, contentExceedsTheBox: z.contentExceedsTheBox, scrollTop: z.scrollTopBefore + '->' + z.scrollTopAfter, scrollTopAdvanced: z.scrollTopAdvanced })))
+    const zoneRects = (r, key) => JSON.stringify(r[key].map((b) => [b.id, b.box]))
+    const u5LimbsEvidence =
+      `[§7.2 limb 2 — ALL ZONES ARE FIXED POSITION WITH ANY SCROLLING INTERNAL; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned, the four ZONE CONTAINERS measured] ` +
+      `REQUIRED: each zone container computes position:fixed with its own bounded box, its content box is scroll-capable (overflow:auto, never visible), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone's own content box, the element scrolled NAMED), the zone boxes hold their rects across a page-level scroll attempt, and no zone's box is stretched by the document (the page itself cannot overflow). READ TWICE, because the zone boxes can only disagree with the stage's box WHILE THE STAGE HOLDS A DOCUMENT LONGER THAN IT: ` +
+      `OBSERVED (a) AT REST [the state this block's own REAL clicks produced]: scrolled element = ${limb2AtRest.scrolledElement}; page-level scroll attempt=${limb2AtRest.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2AtRest.pageBefore)} after=${JSON.stringify(limb2AtRest.pageAfter)} → pageAdvanced=${limb2AtRest.pageMoved} pageCannotOverflow=${limb2AtRest.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2AtRest, 'before')} AFTER=${zoneRects(limb2AtRest, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2AtRest.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2AtRest.zoneBoxesBoundedByTheViewport} (viewport=${JSON.stringify(limb2AtRest.viewport)}); per-zone own scroll geometry: ${zoneFacts(limb2AtRest)} → zonesFixed=${limb2AtRest.inside.every((z) => z.position === 'fixed')} zonesScrollCapable=${limb2AtRest.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll')}; EXCLUDED (elements carrying data-zone that are NOT zone containers — the four authored gutter affordances and the zone-minimize controls; named, never graded as zones)=${JSON.stringify(limb2AtRest.excluded.map((e) => [e.id, e.classes, e.box]))}; ` +
+      `OBSERVED (b) WITH THE STAGE DOCUMENT OPEN — THE DECISIVE PAIR: scrolled element = ${limb2WithTheStageDocOpen.scrolledElement}; page-level scroll attempt=${limb2WithTheStageDocOpen.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2WithTheStageDocOpen.pageBefore)} after=${JSON.stringify(limb2WithTheStageDocOpen.pageAfter)} → pageAdvanced=${limb2WithTheStageDocOpen.pageMoved} pageCannotOverflow=${limb2WithTheStageDocOpen.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2WithTheStageDocOpen, 'before')} AFTER=${zoneRects(limb2WithTheStageDocOpen, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2WithTheStageDocOpen.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2WithTheStageDocOpen.zoneBoxesBoundedByTheViewport}; per-zone own scroll geometry: ${zoneFacts(limb2WithTheStageDocOpen)}; the stage's own box in the same reading: ${JSON.stringify(limb2WithTheStageDocOpen.stageScroll)}; ` +
+      `→ zonesUnmovedAcrossBOTHReadings=${zonesUnmovedBothReadings} zonesFixedAndScrollCapableBothReadings=${zonesFixedAndScrollCapableBothReadings} zonesBoundedAndPageCannotOverflow=${zonesBoundedAndPageCannotOverflow} anInternalScrollRangeWasExercised=${anInternalScrollRangeWasExercised}; limb2Held=${limb2Ok}. ` +
+      `[§7.2 limb 3 — THE STAGE SCROLLS INTERNALLY; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned] ` +
+      `SUBJECT PREPARATION (the falsifiability requirement): ${tallStageDoc.prepared === true ? `a document LONGER than the stage's box was written to ${tallStageDoc.fixturePath}, imported through the app's own route (documentId=${JSON.stringify(tallStageDoc.documentId)}) and MOUNTED through the app's own document-selection seam (request answered ${JSON.stringify(tallStageDoc.mountRequested)}); the stage was WAITED ON (bounded, ${tallStageDoc.waitedMs}ms) for its OWN marker text: the imported document is mounted on the stage=${tallStageDoc.mountOfTheImportedDoc}` : `${ufStageSubjectIdentity(tallStageDoc)} — WHY: ${tallStageDoc.why}`} → the stage box read during the limb: box=${tallStageDoc.observed ? JSON.stringify(tallStageDoc.observed.stageBox) : '?'} scrollHeight=${tallStageDoc.observed ? tallStageDoc.observed.stageScrollHeight : '?'} clientHeight=${tallStageDoc.observed ? tallStageDoc.observed.stageClientHeight : '?'} overflowY=${tallStageDoc.observed ? tallStageDoc.observed.stageOverflowY : '?'} (editable surface present=${tallStageDoc.observed ? tallStageDoc.observed.surfacePresent : '?'}, candidates=${tallStageDoc.observed ? tallStageDoc.observed.surfaceCandidates : '?'}, marker rendered=${tallStageDoc.observed ? tallStageDoc.observed.stageTextHasMarker : '?'}, active tab ${JSON.stringify(tallStageDoc.observed ? tallStageDoc.observed.activeTab : null)}, prepared by ${tallStageDoc.preparedBy}) → the SUBJECT was PREPARED BY THIS HELPER=${limb3SubjectPrepared} (required true: an INHERITED overflowing stage box satisfies stageBoxOverflowed without identifying the subject, and a limb read on it would be a reading of a document this block never wrote) and stageBoxOverflowed=${limb3SubjectOverflows} → subjectIdentified=${limb3SubjectIdentified} (${limb3SubjectIdentified === true ? 'the attempt below is CONCLUSIVE for the property' : `NOT CONCLUSIVE — ${limb3SubjectPrepared ? 'WITHOUT a document longer than the stage box this attempt cannot discriminate a non-scrolling stage from a stage with nothing to scroll' : 'the subject is an INHERITED state, not a document this block prepared: the state may be read, and it is reported as such, but it may not carry limb 3'}, never a pass`}); ` +
+      `OBSERVED: scrolled element = ${limb3 && limb3.scrolledElement ? limb3.scrolledElement : '(no #zone:main)'}; stage box=${JSON.stringify(limb3 ? limb3.stageBox : null)} scrollHeight=${limb3 ? limb3.scrollHeight : '?'} clientHeight=${limb3 ? limb3.clientHeight : '?'} overflowY=${limb3 ? limb3.overflowY : '?'}; stage's OWN scrollTop ${limb3 ? limb3.scrollTopBefore : '?'}->${limb3 ? limb3.scrollTopAfter : '?'} (attempt ${limb3 ? limb3.attemptPx : '?'}px) → stageScrollTopAdvanced=${limb3 && limb3.stageScrollTopAdvanced} stageScrolledInside=${limb3StageScrolledInside}; ` +
+      `chrome rects (the zones + the tab strip) BEFORE=${JSON.stringify(limb3 ? limb3.chromeBefore : null)} AFTER=${JSON.stringify(limb3 ? limb3.chromeAfter : null)} → surroundingChromeUnchanged=${limb3ChromeUnmoved}; the PAGE's own offset before=${JSON.stringify(limb3 ? limb3.pageBefore : null)} after=${JSON.stringify(limb3 ? limb3.pageAfter : null)} → pageDidNotMove=${limb3PageUnmoved}; limb3Held=${limb3Ok}. ` +
+      `[WHAT THESE ARE NOT — stated so the failure cannot recur: a mount count is limb 1's SUB-CLAUSE (b); the settings-modal class-XOR below is a DOM/class invariant of a DIFFERENT surface and is NOT a layout-effect reading at all — it is CARRIED BESIDE these limbs and NEVER substitutes for any of them; and no node-side reading can carry a limb (§7.1)] ` +
+      `settings-modal class-XOR (the block's landed extra property): before the open class="${preModal.cls}" exactlyOne=${preXor}, inside the open class="${filled.modal}" exactlyOne=${openXor} (and ${JSON.stringify([empty.modal, restored.modal])} at the block's other in-open reads), after the close class="${postModal.cls}" exactlyOne=${postXor} → exactlyOneOf(.is-open/.is-closed) at every state boundary=${modalClassXor}`
     // §2.1 `E-2` — THE TWO DECLARED ROWS THIS BLOCK CLAIMS (`MATRIX_ROWS` maps
     // `uf_layout_10` to BOTH `U-4` and `U-5`) each get their OWN verdict:
     //   * `U-4` — the empty↔filled pane-set transition (the two REAL click rounds
@@ -7113,11 +7634,11 @@ const BLOCKS = {
     // DIFFERENT claims, so the two rows are separately readable.
     const singleRootMount = filled.roots === 1 && empty.roots === 1 && restored.roots === 1
     const u4Evidence = `empty<->filled pane-set transition driven by REAL clicks: FILLED #wiki-root mounts=${filled.roots} (frames=${filled.frames}), EMPTY (every pane disabled) mounts=${empty.roots} (frames=${empty.frames}), RESTORED (every pane re-enabled) mounts=${restored.roots} (frames=${restored.frames}); census="${censusEnd}"; disabled paths=${JSON.stringify(paths)}; re-enable paths=${JSON.stringify(restorePaths)}; paneFrameCensus(filled/empty/restored)=${filled.frames}/${empty.frames}/${restored.frames} → singleRootMountAcrossTheTransition=${singleRootMount} (required: exactly ONE #wiki-root at every boundary — a stale/duplicate root keeps the id and takes layout flow)`
-    const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; settings-modal class-XOR (§7.2 re-pin): before the open class="${preModal.cls}" exactlyOne=${preXor}, inside the open class="${filled.modal}" exactlyOne=${openXor} (and ${JSON.stringify([empty.modal, restored.modal])} at the block's other in-open reads), after the close class="${postModal.cls}" exactlyOne=${postXor} → exactlyOneOf(.is-open/.is-closed) at every state boundary=${modalClassXor}`
+    const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; ${u5LimbsEvidence}`
     const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) }
     return [
       rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", u5Evidence, ufLayout10Opts),
-      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width", 'D-visual', u5Evidence, { ...ufLayout10Opts, checklistRow: 'UF-LAYOUT-10' }),
+      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width — EXTENDED (§7.2 re-pin) with limbs 2 and 3: every zone container keeps its box rect and scrolls INSIDE its own box, and the stage's own box is the scroll container with the surrounding chrome unmoved", 'D-visual', u5Evidence, { ...ufLayout10Opts, ok: isEmptied && trackCollapsed && stageReclaimed && limb2Ok && limb3Ok, required: '§7.2 limb 2 on the assembled surface, measured on the four ZONE CONTAINERS: each computes position:fixed with its own bounded box, its content box is scroll-capable (overflow:auto, never visible), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone\'s own content box, the element scrolled NAMED), the zone boxes hold their rects value-for-value across a page-level scroll attempt, no zone box is stretched by the document (the page itself cannot overflow), and the reading exercises a REAL internal range (non-vacuity); §7.2 limb 3: a document LONGER than the stage\'s box is mounted on the stage (the falsifiability gate — without it the reading is inconclusive) and the stage\'s own box is the scroll container — its scrollTop advances inside it while the page\'s offset does not move and the surrounding chrome (the zones and the tab strip) keeps its rects; PLUS the row\'s filed property (the empty side zone\'s grid track collapses and the stage reclaims the width)', observed: u5Evidence, checklistRow: 'UF-LAYOUT-10' }),
       declaredRowResult('U-4', 'UF-LAYOUT-10', 'The empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (no stale/duplicate root survives the transition)', 'D-visual', u4Evidence, { ...ufLayout10Opts, ok: singleRootMount && ufLayout10Opts.ok, checklistRow: 'UF-LAYOUT-10' }),
     ]
   },
@@ -9641,6 +10162,10 @@ async function main(argv) {
     // the U-EDIT-1 live fixture file (written by `ufEnsureEditFixture`) is the
     // driver's OWN artifact — removed with the seed corpus it sits beside
     try { rmSync(join(ROOT, '.live-page-edit-fixture.md'), { force: true }) } catch { /* best-effort */ }
+    // ⟨§7.2 limb 3⟩ the STAGE-OVERFLOW fixture `ufEnsureStageBoxOverflowDoc` writes for
+    // the stage-scroll reading is the driver's OWN artifact too — removed on the same
+    // path, by name, so a run leaves no `.live-*` file behind.
+    try { rmSync(join(ROOT, UF_STAGE_OVERFLOW_FIXTURE), { force: true }) } catch { /* best-effort */ }
     // --connect: the running app owns the OBSOLETE `.live-corpus` SEED route's
     // directory (annotated, never extended, §6.1 clause 1) — leave it in place.
     if (!opt.connect && seedDir === join(ROOT, '.live-corpus')) { try { rmSync(seedDir, { recursive: true, force: true }) } catch { /* best-effort */ } }

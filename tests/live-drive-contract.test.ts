@@ -13008,12 +13008,48 @@ function mockSetInlineDistributionOffences(src: string = SRC): Array<{ arm: stri
 /** `§2.4` clause 1 — THE POSITIVE-TARGET HALF OF THE RE-PIN (`F8`): the NEW
  *  identity must be PRESENT, not merely the old one ABSENT. A landing that DELETED
  *  a target identity instead of re-pointing it satisfies the filed sweep (which
- *  grades \`/\\.live-corpus/\` alone) and is caught here. */
+ *  grades \`/\\.live-corpus/\` alone) and is caught here.
+ *
+ *  ⟨RE-POINTED `2026-10-05` (the LAST PIN ITEM of `U-ZONE-REPLACEMENT` / `PD-UI-14`;
+ *  the gate-4 re-audit's ruling, `RCA-8(c)` — THE SUPERSEDED NEEDLE IS KEPT VISIBLE
+ *  BESIDE THE NEW ONE AND THE ARM IS UNMOVED).⟩ **THE DEAD PIN, MEASURED:** the
+ *  `repin-completeness:docnav-folder` row's needle was the literal
+ *  `data-folder-label=".live-fixture/core"`, and THE APP AUTHORS NO SUCH ELEMENT —
+ *  `src/renderer/pane-graph.ts` writes the folder **LABEL** into `data-folder-label`
+ *  and the **PATH** into `data-folder-path` (`JSON.stringify(path)`), so a positive
+ *  target naming `data-folder-label=".live-fixture/core"` matched **no element ever
+ *  authored**. The doc-nav folder row was therefore never resolved, the beta leaf was
+ *  never rendered, and `U-1` read `NOT-DRIVEN` while this very tooth could not bite:
+ *  its named mutation rewrote a literal the driver had already stopped carrying, so
+ *  the mutation was a **no-op** and the pin was reading the PLANT's own missing needle
+ *  (`the CONTRACTED PLANT is not accepted by this arm's own limb`), never the driver.
+ *  **THE TOOTH'S OWN SUBJECT IS `scripts/live-drive.mjs`, so a positive target the
+ *  driver can never carry is a DEAD PIN, not a contract** (§2.4 clause 2: *"every
+ *  re-pin is by direct string substitution of an IDENTITY"*).
+ *  **THE CORRECTED POSITIVE IDENTITY — the app's own authored attribute**, the shape
+ *  `ufEnsureDocumentSurface` already used and the four superseded
+ *  `[data-folder-label=".live-fixture/core"]` sites now carry
+ *  (`#pane-doc-nav [data-folder-path]`: query that attribute and open the first
+ *  not-`expanded` row; the driver's own live proof at this head reads
+ *  `doc-nav folder expand: path=cdp, expanded=true`, was `path=missing`). The needle is
+ *  kept MINIMAL (`data-folder-path]` — the attribute **inside a selector bracket**, so
+ *  it is the RESOLUTION SITE and not a bare attribute-name mention): an attribute read
+ *  (`getAttribute('data-folder-path')`) is not a selector and must not satisfy a target
+ *  about how the doc-nav folder is RESOLVED. **THE TOOTH STILL BITES — both of arm 11's
+ *  legs are re-pointed with the needle and DRIVEN below (the arm's tally prints GREEN):
+ *  leg 1 reverts the driver's `[data-folder-path]` selector sites to `[data-folder-label]`
+ *  — the exact dead selector this re-point disposes of — and leg 2 deletes the attribute
+ *  from every selector site; BOTH RED this target while the OLD-family sweep stays
+ *  silent (`MEASURED`: the driver carries the needle at 13 sites, both mutations leave the
+ *  needle at ZERO sites and fire neither the filed sweep NOR the label-family half of
+ *  `mockSetRepinOffences`, so the positive target is the ONE limb that catches them).**
+ *  ⟨SUPERSEDED — KEPT VISIBLE, the as-filed needle, verbatim:⟩
+ *    needle: 'data-folder-label=".live-fixture/core"', note: "R-11's folder label" */
 const MOCK_SET_REPIN_POSITIVE_TARGETS: Array<{ arm: string; needle: string; note: string }> = [
   { arm: 'repin-completeness:document-ids', needle: '.live-fixture/core/beta', note: 'R-1/R-2: the beta leaf and the folder label' },
   { arm: 'repin-completeness:alpha-identity', needle: '.live-fixture/core/alpha', note: 'R-3…R-9, R-12' },
   { arm: 'repin-completeness:node-ids', needle: '.live-fixture/core/alpha:p:1', note: "R-4's `:p:1` node id" },
-  { arm: 'repin-completeness:docnav-folder', needle: 'data-folder-label=".live-fixture/core"', note: "R-11's folder label" },
+  { arm: 'repin-completeness:docnav-folder', needle: 'data-folder-path]', note: "R-11's doc-nav folder row, resolved through the app's AUTHORED attribute (`#pane-doc-nav [data-folder-path]`; the superseded label literal is kept above)" },
 ]
 
 function mockSetRepinPositiveOffences(src: string = SRC): Array<{ arm: string; offence: string }> {
@@ -16608,16 +16644,26 @@ function mockSetDriveRowPTp5(): void {
       mockSetMutation('repin-completeness:prefix-filters', mockSetRepinOffences, (planted) => planted.replace("documentPathPrefix: ['.live-fixture/core']", "documentPathPrefix: ['.live-corpus']"), "R-10's `filters.documentPathPrefix` reverted")))
   arm(run, 11, 'repin-completeness:docnav-folder', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:docnav-folder', rp, () =>
-      mockSetMutation('repin-completeness:docnav-folder', mockSetRepinOffences, (planted) => planted.replace('data-folder-label=".live-fixture/core"', 'data-folder-label=".live-corpus"'), 'the doc-nav pane family reverted to the OLD folder identity') ??
+      mockSetMutation('repin-completeness:docnav-folder', mockSetRepinOffences, (planted) => planted.replace(/\[data-folder-path\]/g, '[data-folder-label]'), 'the doc-nav pane family reverted to the SUPERSEDED folder selector (`[data-folder-label]` — the app authors the LABEL there, so it matches no authored row)') ??
       mockSetMutation(
         'repin-completeness:docnav-folder',
         mockSetRepinOffences,
-        // THE IDENTITY IS REMOVED FROM EVERY SITE, NOT REPLACED BY A DIFFERENT
-        // IDENTITY (which the OLD-family sweep would catch instead): the selector's own
-        // literal argument is emptied, so `data-folder-label="…"` no longer carries the
-        // target at any site.
-        (planted) => planted.replace(/data-folder-label="\.live-fixture\/core"/g, 'data-folder-label=""'),
-        "the doc-nav FOLDER label's identity DELETED at every site (not re-pointed) — the positive-target tooth",
+        // ⟨RE-POINTED `2026-10-05` (the last pin item of `U-ZONE-REPLACEMENT`) — THE
+        // IDENTITY IS REMOVED FROM EVERY SITE, NOT REPLACED BY A DIFFERENT IDENTITY
+        // (which the OLD-family sweep would catch instead): the selector's own bracket
+        // keeps the attribute NAME but loses its closing bracket, so the attribute is
+        // no longer carried INSIDE A SELECTOR anywhere the driver resolves the doc-nav
+        // folder row and `data-folder-path]` — the re-pointed positive identity —
+        // appears at NO site. A bare `getAttribute('data-folder-path')` read cannot
+        // satisfy a target about how the row is RESOLVED.⟩
+        // ⟨SUPERSEDED — KEPT VISIBLE, the as-filed second leg, verbatim (it emptied
+        // `data-folder-label="…"` at every site, a literal the corrected driver no
+        // longer carries, so the plant was returned UNCHANGED and `mockSetMutation`
+        // reported *"the NAMED MUTATION … could not be built on the contracted plant"*
+        // — the dead-pin half of this same finding):⟩
+        //   (planted) => planted.replace(/data-folder-label="\.live-fixture\/core"/g, 'data-folder-label=""'),
+        (planted) => planted.replace(/\[data-folder-path\]/g, '[data-folder-path'),
+        "the doc-nav folder row's AUTHORED attribute DELETED from every selector site (not re-pointed) — the positive-target tooth",
       )))
   arm(run, 12, 'repin-completeness:table-candidate', () =>
     mockSetArmRead('P-TP-5', 'repin-completeness:table-candidate', rp, () =>
