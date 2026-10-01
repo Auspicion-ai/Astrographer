@@ -1,4 +1,6 @@
-# Provident-Electron
+# Astrographer
+
+TODO: Update text below away from project foundation fork
 
 Prebuilt Electron shell for apps using the Provident SSR framework
 ([`provident-ssr`](https://www.npmjs.com/package/provident-ssr)) — with full
