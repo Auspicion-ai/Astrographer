@@ -965,7 +965,17 @@ function unitOwnedPaths(): string[] {
  *  path outside that list is a FINDING for the adversarial pass rather than an
  *  automatic FAIL** (`§3.4 R-12`'s own scope rule), which is why this row asserts the
  *  UNIT-OWNED census and never a whole-repo diff. */
-const ALLOWED_UNIT_PATH = /^(src\/shared\/relocate\.ts|tests\/relocate\.test\.ts|docs\/specs\/relocate(-[a-z]+)?\.md)$/
+/** **EXTENDED 2026-09-30/2026-10-01 (repair pass, `RCA-8(a)`)** to cover the USER-FACING
+ *  GUIDE page for this unit, `docs/guide/relocate.md`. The file is not a new unit artifact:
+ *  it landed in the docs-only guide fan-out (`8f193a8` — *"TWELVE per-unit pages"* — and
+ *  `b48b732`, the guide pass), i.e. a LATER, DOCUMENTATION-ONLY pass legitimately touched
+ *  the guide, and `R-12`'s census globs `docs/**` by name so this row reddened on a file
+ *  no pass of this unit wrote. The allow-list is widened by exactly ONE literal path — no
+ *  glob, no directory — which is the narrowest change that lets the census read TRUE, and
+ *  the DENIED half below is untouched and unweakened: the two FROZEN pairs, every sibling
+ *  `src/shared/*` module, `src/main/**`, `src/renderer/**`, `package.json`, the configs and
+ *  the MCP surface are still asserted INTACT. */
+const ALLOWED_UNIT_PATH = /^(src\/shared\/relocate\.ts|tests\/relocate\.test\.ts|docs\/specs\/relocate(-[a-z]+)?\.md|docs\/guide\/relocate\.md)$/
 /** Every `src/**` file that imports the module, by path — the *"imported by NO
  *  `src/**` file"* claim (`R-6`/`R-12`, `§4.1`). */
 function importerCensus(): string[] {

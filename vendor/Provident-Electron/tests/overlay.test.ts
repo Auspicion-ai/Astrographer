@@ -1231,6 +1231,25 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
     ).toBe(false)
   })
 
+  // ⟶ **X-6 AMENDED (2026-10-03, bounded landing per `docs/specs/store-modules-seams.md`
+  // `§2.7` item 7's dated EXTENSION — the overlay caller admission, filed IN PARALLEL
+  // beside the three theme cells; TestWriter gate; `RCA-8(d)` ANNOTATE-BESIDE, never a
+  // rewrite — the as-filed reading stands visible in the assertion message below, so
+  // the revert is the annotation's removal, never a re-derivation). LICENCE CELL
+  // (the overlay clause of `§2.7` item 7's extension): `tests/overlay.test.ts` `X-6`
+  // (which carries `§3.4 R-6`'s no-importer half, read from the TREE) — the
+  // `src/**`-tree importer scan admits **EXACTLY ONE importer —
+  // `src/renderer/overlay-store.ts`** (the `§2.2` caller-side overlay store turn FIRST
+  // imports `src/shared/overlay.js` at the unit's landing) — and stays CLOSED to any
+  // SECOND importer (the row's own words, "A FAIL here admits an importer, FIRES the
+  // §7.1 predicate", survive for every OTHER path; the row's closed-census INTENT is
+  // UNCHANGED — the set gains the unit's own admitted caller only; the overlay
+  // MODULE's own bytes still import nothing). ROLLBACK: retiring the overlay caller
+  // reverts this row to its as-filed `.toEqual([])` closed form (the licence's
+  // reversibility note; `§5.4`'s rollback holds — retiring the caller restores the
+  // honest as-filed reading; the `overlayInert` line-guard that made the landing's
+  // importer INVISIBLE (the gate-4 false-negative) is gone for good — it excluded
+  // exactly this caller).
   it('X-6 (§3.5) / §2.5 item 5 — THE READER QUESTION HAS NO READER AND THE ENTRY-POINT ANSWER IS `NO`', () => {
     // THE IMPORT-GRAPH PROBE (§3.4 R-6's no-importer half, read from the TREE).
     const specifier = new RegExp(`['"][^'"]*${t0('overlay')}[^'"]*['"]`)
@@ -1238,13 +1257,31 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
     for (const p of srcTsFiles()) {
       const src = readFileSync(p, 'utf8')
       for (const line of src.split('\n')) {
-        if (/\bimport\b|\brequire\s*\(/.test(line) && specifier.test(line) && !line.includes('overlayInert')) importers.push(`${p.replace(ROOT, '.')}: ${line.trim()}`)
+        if (/\bimport\b|\brequire\s*\(/.test(line) && specifier.test(line)) importers.push(`${p.replace(ROOT, '.')}: ${line.trim()}`)
       }
     }
+    // THE AMENDED SET (the licence's overlay cell): EXACTLY ONE admitted importer —
+    // the unit's own caller file `src/renderer/overlay-store.ts` — and NOTHING
+    // else. The as-filed reading ("the src/** tree contains ZERO importers of this
+    // unit's module") survives: the ONE member is the caller's own admission, and a
+    // SECOND importer is still a FINDING.
+    const admittedImporter = '.src/renderer/overlay-store.ts:'
     expect(
-      importers,
-      'X-6 — no instrument on any layer this repo owns reads an APPLIED `inert` attribute back through a channel this unit could cite, and no path exists from the application entry point to this mechanism: the src/** tree contains ZERO importers of this unit\'s module. A FAIL here admits an importer, FIRES the §7.1 predicate and VOIDS the three-part [U] refusal (§5.1\'s closing sentence).',
-    ).toEqual([])
+      importers.length,
+      `X-6 (AMENDED, licence cell of §2.7 item 7's dated extension — the overlay caller admission) — the importer set is EXACTLY ONE: the unit's own caller file \`src/renderer/overlay-store.ts\` (the §2.2 caller-side store turn, admitted BY NAME) and NOTHING else. The AS-FILED READING, KEPT VISIBLE BESIDE: "the src/** tree contains ZERO importers of this unit's module. A FAIL here admits an importer, FIRES the §7.1 predicate and VOIDS the three-part [U] refusal (§5.1's closing sentence)." That intent is UNCHANGED for every OTHER path — the overlay MODULE's own bytes still import nothing; only the one declared caller may import it. Measured: ${JSON.stringify(importers)}`,
+    ).toBe(1)
+    expect(
+      importers[0] ?? '',
+      'X-6 (AMENDED) — the ONE importer IS the admitted caller, by path prefix; any other path (or an absent overlay-store import) fails this row, keeping the closed set honest.',
+    ).toContain(admittedImporter)
+    // THE BOUNDED-EXTENSION POSITIVE CONTROL (the licence's positive-control clause:
+    // broadening the set BEYOND the one admitted path is a FINDING): the SAME
+    // instrument MUST still flag a SECOND new path's import.
+    const secondImporterLine = `import { overlayTransition } from '../shared/overlay.js'`
+    expect(
+      /\bimport\b|\brequire\s*\(/.test(secondImporterLine) && specifier.test(secondImporterLine),
+      "X-6 (bounded-extension control) — a SECOND new path importing the module is STILL a FINDING: the instrument flags the synthetic second importer, so the one-member admission is bounded (a second admitted importer would be a violation per §2.7 item 7's positive-control clause).",
+    ).toBe(true)
   })
 
   it('R-3(config half) (§3.4) — package.json/package-lock.json carry the LANDED dependency and script sets: no new dependency and no new script key', () => {

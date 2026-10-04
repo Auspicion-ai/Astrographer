@@ -106,7 +106,7 @@ const PINNED_FIFTEEN = [
   'zones',
 ] as const
 
-const PINNED_COMMIT = '93c058f69bd78fd1a80c96044e504deac4737ab3'
+const PINNED_COMMIT = '7bd1de4786c4d46a3fee02f72adaf6ef612985d1'
 
 /** §2.1 item 5 — FIVE files carry any import at all; the other TEN of the fifteen
  *  carry none. ⟨Corrected per §12.3(d) (`C-AM-4`, DOC-DRIFT, LOW): the clause's

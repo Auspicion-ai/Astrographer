@@ -60,6 +60,37 @@ export interface SlotHostOptions {
    *  placeable, with no container-state refusal (§2.1's container-source
    *  clause, §3.2 F-12). */
   readonly containerFactory?: (key: SlotKey) => unknown
+  /** THE STORE-BACKED EXTENSION — the two declared call-parameter members of
+   *  the store-carrying shape (§2.1 item 1, U-STORE-MODULES-BYTES):
+   *
+   *  · readonly store: the SOLE store-access path — a handle carrying at least
+   *    the frozen surface's commit, resolve and subscribe members; absent or
+   *    `null` means this is the LANDED contract's host, and every store turn
+   *    below is a valid no-op (§2.1 item 4).
+   *  · readonly hostId: the caller's spelling of this host in the store's
+   *    namespace — the host-identity segment of every reference this host
+   *    reads, writes and subscribes, carried verbatim (§2.6).
+   *
+   *  The handle arrives ONLY as a declared call parameter — never imported,
+   *  never a module-scope binding (the register's no-module-level-binding row
+   *  scans for that), and it is NEVER consulted for a container: the sole
+   *  container source stays the injected containerFactory (§2.3). */
+  readonly store?: SlotHostStore | null
+  readonly hostId?: string
+}
+
+/** The store-shaped handle this module's store-carrying closures call — the
+ *  DECLARED call-parameter type of the `store` option member (§2.1 item 1): a
+ *  handle carrying AT LEAST the frozen surface's commit, resolve and subscribe
+ *  members the module's contract names. The module asserts NOTHING about the
+ *  store's other members and adds NO member to it. */
+interface SlotHostStore {
+  readonly commit: (name: string, value: unknown, opts?: { readonly onRepeat?: 'edit' | 'refuse' }) => unknown
+  readonly resolve: (name: string) => { readonly found: boolean; readonly value: unknown }
+  readonly subscribe: (
+    name: string,
+    listener: (event: { readonly name: string; readonly value: unknown }) => void,
+  ) => { readonly name: string; readonly subtree: boolean; unsubscribe(): boolean }
 }
 
 export interface SlotHostRefusal {
@@ -257,6 +288,89 @@ export function createSlotHost(options: SlotHostOptions): SlotHost {
   // The sequence of this host's own containers as the host last wrote it — the
   // marker that tells a reorder (a real mutation) from an unchanged re-render.
   let written: unknown[] = []
+
+  // ── THE STORE-BACKED EXTENSION (U-STORE-MODULES-BYTES) ───────────────────
+  // The declared store handle and host identity of the store-carrying shape;
+  // ONE exact-reference subscription PER DECLARED KEY (§2.4 item 1), each held
+  // in this factory's closure; the READ-ONLY per-key re-invocation (§2.4 item
+  // 3); and the dispose() release loop (§2.2). A host constructed without the
+  // store member is the LANDED contract's host: every store turn below is a
+  // valid no-op and the new obligations do not engage (§2.1 item 4). THE
+  // CONTAINER SOURCE STAYS the injected containerFactory — the store is never
+  // consulted for a container and a record's value never IS one (§2.3).
+  const channel = source.store
+  const hostIdentity: string = typeof source.hostId === 'string' ? source.hostId : ''
+  /** §2.1 item 1's LANDED refusal read (U-STORE-MODULES-BYTES), the slot-host
+   *  arm: a missing, non-string or EMPTY host identity is NEVER minted,
+   *  defaulted, normalized or re-interpreted — the store-backed contract (the
+   *  per-key subscriptions, the placement records, the per-key re-invocation)
+   *  declines to engage under the degenerate identity. The handle may be
+   *  present; every store turn below stays a valid no-op and nothing throws,
+   *  per the landed totality. A non-empty-string identity — even one containing
+   *  a `.` — is composed VERBATIM (§2.6 item 2). */
+  const storeEngaged: boolean =
+    channel !== null && channel !== undefined && typeof source.hostId === 'string' && source.hostId.length > 0
+  const slotReferenceOf = (key: SlotKey): string => 'mem.slots.' + hostIdentity + '.' + key
+  /** True from the moment dispose() runs: the store turns become no-ops and a
+   *  second dispose is a no-op (§2.2 P3/P6 — records are never deleted). */
+  let disposed = false
+  /** The closure-held per-key subscription handles (P-SMB-SH-IM-2: never a
+   *  module-scope binding). */
+  let subs = new Map<SlotKey, { unsubscribe(): boolean }>()
+
+  /** THE PER-KEY RE-INVOCATION (§2.4 item 3): refresh the affected key's
+   *  placement from the stored record — READ-ONLY against the store, so the
+   *  write-loop terminates with no second write and no second event. A MISS is
+   *  the bookkeeping-authority outcome (§2.1 item 5); a non-node-shaped record
+   *  (an external caller's data) changes nothing. */
+  const refreshKey = (key: SlotKey): void => {
+    if (disposed || !storeEngaged || channel === null || channel === undefined || typeof channel.resolve !== 'function') return
+    const answer = channel.resolve(slotReferenceOf(key))
+    if (!answer.found) return
+    const record = records.get(key)
+    if (record === undefined) return
+    if (!isNodeShaped(answer.value)) return
+    const value = answer.value
+    if (record.node === value && record.placed) return
+    if (record.hasNode && record.node !== null && record.node !== value && record.placed) detach(record.node)
+    record.node = value
+    record.hasNode = true
+    if (record.container !== null && !holds(record.container, value)) attach(record.container, value)
+    if (record.container !== null && holds(record.container, value)) record.placed = true
+    syncOrder()
+  }
+
+  /** Release THIS module's own subscription for one key — the dispose() release
+   *  arm and the suppression around the module's own placement writes. */
+  const releaseKey = (key: SlotKey): void => {
+    const handle = subs.get(key)
+    if (handle === undefined) return
+    subs.delete(key)
+    handle.unsubscribe()
+  }
+
+  /** Register (or re-register) the module's OWN subscription for a declared
+   *  key — exact-reference, one handle per key (§2.4 item 1). */
+  const registerKey = (key: SlotKey): void => {
+    if (disposed || !storeEngaged) return
+    if (channel === null || channel === undefined || typeof channel.subscribe !== 'function') return
+    const handle = channel.subscribe(slotReferenceOf(key), (): void => refreshKey(key))
+    if (handle !== null && typeof handle === 'object' && typeof (handle as { unsubscribe?: unknown }).unsubscribe === 'function') {
+      subs.set(key, handle as { unsubscribe(): boolean })
+    }
+  }
+
+  /** THE PLACEMENT WRITE TURN (§2.1 item 2): `commit` with the edit outcome on
+   *  the mem tier. Runs with that key's own subscription released (self-
+   *  delivery suppressed — the subscriber's counter reads only store-sourced
+   *  writes, §3.1 M-SS-3). The record's value is the host's own opaque
+   *  placement marker — NEVER a container (§2.3). */
+  const writePlacement = (key: SlotKey, value: unknown): void => {
+    if (disposed || !storeEngaged || channel === null || channel === undefined || typeof channel.commit !== 'function') return
+    releaseKey(key)
+    channel.commit(slotReferenceOf(key), value, { onRepeat: 'edit' })
+    registerKey(key)
+  }
 
   /** The declared key set: the caller's `keys` list, filtered to the strings
    *  and de-duplicated. Any other shape is the empty declared set (§3.2 F-4). */
@@ -528,6 +642,8 @@ export function createSlotHost(options: SlotHostOptions): SlotHost {
     if (record.container !== null && holds(record.container, node)) record.placed = true
     applyClass(key, node)
     applyAttributes(key, node)
+    // §2.1 item 2 — the placement write turn (a key's placement is ACQUIRED).
+    writePlacement(key, { placed: true })
     return result(removed, refusals)
   }
 
@@ -561,6 +677,8 @@ export function createSlotHost(options: SlotHostOptions): SlotHost {
       record.hasNode = false
       record.node = null
       record.placed = false
+      // §2.1 item 2 — the placement write turn (a key's placement is VACATED).
+      writePlacement(key, { placed: false })
     }
     return result(removed, refusals)
   }
@@ -622,6 +740,15 @@ export function createSlotHost(options: SlotHostOptions): SlotHost {
   }
 
   const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    // §2.2 UNSUBSCRIBE-ON-DISPOSE — release EVERY key's subscription (P1),
+    // event-silently (P5); the records REMAIN (P6).
+    for (const key of Array.from(subs.keys())) {
+      const handle = subs.get(key)
+      if (handle !== undefined) handle.unsubscribe()
+    }
+    subs.clear()
     const containers: unknown[] = []
     for (const record of records.values()) {
       if (record.container !== null) containers.push(record.container)
@@ -638,6 +765,9 @@ export function createSlotHost(options: SlotHostOptions): SlotHost {
   const declared = declaredKeys()
   projection = project(declared)
   for (const key of projection) records.set(key, { container: null, node: null, hasNode: false, placed: false, owed: null })
+  // THE REGISTRATION MOMENT — construction (§7a.1 item 4): one exact-reference
+  // subscription per DECLARED key, alive from the moment the factory returns.
+  for (const key of projection) registerKey(key)
 
   return { setNode, remove, setOrder, render, keys, containerFor, dispose }
 }

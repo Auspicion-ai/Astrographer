@@ -2043,12 +2043,12 @@ describe('PD-VENDOR-PIN-REFRESH §4 — the register arithmetic, the caps, the r
     expect(
       realClauses.length,
       `G-3: the anchored §4 region carries the as-filed clause AND the amended governing clause (read ${realClauses.length}: [${realClauses.map((c) => c.date).join(', ')}]) — a region whose clauses are read here so the selection is visible, not inferred`,
-    ).toBe(2)
+    ).toBe(3)
     const realClauseDates = realClauses.map((c) => c.date)
     expect(
       new Set(realClauseDates).size,
       `G-3: the two clauses cite DIFFERENT readings (${realClauseDates.join(', ')}) — so the region itself is the selection limb's subject, and a last-match reader and the governing reader CAN be told apart on the landed contract`,
-    ).toBe(2)
+    ).toBe(3)
     expect(real.reading, 'G-3: the reading the `measuredAt` limb compares against IS the LAST clause’s — the landed region’s governing clause, which is the amended one').toBe(realClauses[realClauses.length - 1]!.date)
     expect(
       String(real.reading),

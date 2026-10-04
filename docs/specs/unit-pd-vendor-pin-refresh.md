@@ -641,6 +641,18 @@ clause, not a register term** — the declared terms `7` + `16` + `21` = `44` st
 > **This clause edits nothing else: the `§4` region's landed re-anchoring clause, `§1.2`, and every other clause of
 > this file are untouched.**
 
+**⟨THE `measuredAt` RE-ANCHORING CLAUSE — added by the REREVENDOR unit, `docs/specs/unit-foundation-rerevendor-2026-10-04.md` §1.1 item 7 / the carry-rule (a), in the SAME landing that moved the pin to `7bd1de4…`; ANNOTATE-BESIDE (`RCA-8(c)`): no as-filed clause above is deleted, renumbered or rewritten, and the SUPERSEDED reading is kept visible here.⟩** **the contract's declared refresh
+reading (`2026-10-04`) SUPERSEDES the as-filed declaration (the SUPERSEDED reading `2026-09-30` stays
+visible beside it, never deleted and never rewritten).** The register's `measuredAt` limb compares the
+manifest's `foundation.measuredAt` against the **last** declared refresh reading clause in this anchored `§4`
+region, so this clause re-couples that limb automatically: **`foundation.measuredAt` moved `2026-09-30` → `2026-10-04`**
+in the `U-FOUNDATION-REREVENDOR (F1)` landing, because that landing's own run read the **LOCAL/repo day `2026-10-04`**
+(`A-12`; the refresh's own reading's day is authoritative, never a UTC day), while the pin literal itself moved
+`93c058f69bd78fd1a80c96044e504deac4737ab3` → `7bd1de4786c4d46a3fee02f72adaf6ef612985d1` in the same landing.
+**NO TOOTH IS RELAXED AND NO TERM MOVES:** the limb still requires **present** · **`YYYY-MM-DD`** · **equal to the
+declared reading**, it still discriminates against an absent, ill-formed or uncoupled date, and this is a **CONTRACT
+clause, not a register term** — the declared terms `7` + `16` + `21` = `44` stand exactly as landed.
+
 ---
 
 ## 5. The layer ledger — what this unit does NOT claim

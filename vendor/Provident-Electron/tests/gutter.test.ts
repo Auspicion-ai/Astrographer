@@ -2323,6 +2323,44 @@ const SIBLING_DIVERGENCE_UNIT_ARTIFACTS: ReadonlyArray<{ readonly path: string; 
     // own), so it still reads in the RAW reading this row reports, and an UNDECLARED path still
     // FAILS the arm (control (m)’s synthetic path).
   },
+  // **⟶ THE RULE THIS ENTRY IS READ UNDER IS THE SAME SENTENCE EVERY ENTRY ABOVE CARRIES —
+  // `E3`'S DENIED PREDICATE IS KEPT BYTE-IDENTICAL AND UNWEAKENED FOR `E3`'S OWN PATHS, AND THIS
+  // REPAIR MAY ONLY *EXCLUDE A DECLARED SIBLING*, NEVER RELAX WHAT COUNTS AS DENIED:** the path
+  // below still reads `isDeniedPath === true` (a `tests/**` path that is not `E3`'s own), so the
+  // RAW reading this row reports still NAMES it; this registry can only ever REMOVE a path from
+  // `E3`'s subject, never add one; and the row's own control (h-2) keeps `E3`'s OWN denied paths
+  // reading NOT-sibling. Control `(n-6)` below drives all four directions on this very path.
+  {
+    path: 'tests/store-modules-seams.test.ts',
+    unit: 'the STORE-MODULES-SEAMS unit (`H2b` / `U-STORE-MODULES-SEAMS`) — its own RED SET (`docs/specs/store-modules-seams.md`, `62` test rows, counted by name at the H2b gate-7/8 reconciliation; the file ADDED at `0f4edcd`) — NOT this unit',
+    // **⟶ DECLARED 2026-10-03 (THE CROSS-UNIT SIBLING-REGISTRY REPAIR — THE SIXTH REPAIR OF THIS
+    // CLASS, AFTER `E4`/`U-RELOCATE`, `E5`/`U-CONTAINER`, `E7`/`U-MENULIB` AND `E8`/`U-THEME`, IN THE
+    // E4/E5/E7/E8 PRECEDENT'S OWN FORM).** `tests/store-modules-seams.test.ts` is **`H2b`'s**
+    // artifact — its own 62-row red set (14 M + 13 F + 7 I + 9 S + 6 E + 3 REAL-STORE + 10 register
+    // rows incl. the totals row, `c7ed9de`) — so it is **neither `E3`'s nor `E10`'s nor `E4`'s nor
+    // `E5`'s nor `E7`'s nor `E8`'s**. **THE MEASURED CAUSE, VERBATIM FROM THIS PASS'S RED RUN AT
+    // `HEAD` `c7ed9de` (1 failed | 92 passed of 93):** the row's own core claim read
+    // `Outside the allow-list: ["docs/specs/listhost.md","docs/specs/overlay.md",
+    // "docs/specs/relocate.md","docs/specs/slothost.md","docs/specs/store-modules-bytes-greens.md",
+    // "docs/specs/store-modules-bytes.md","docs/specs/store-modules-seams.md",
+    // "tests/store-modules-seams.test.ts"]` — **`R-12` FAILING on a sibling's legitimate red set
+    // merely because the registry had no entry for it**, the same class `§5.1`'s commit-range scope
+    // rule forbids (*"must NOT read … a sibling's dirty working-tree file … as this unit's diff"*).
+    // The failing commit is `f7c780f` (H2b's OWN gate-4 landing-side obligations): it rode `E3`'s
+    // own spec (`docs/specs/gutter.md`, one of `E3`'s five artifacts, its `P-9`/`P-10` pointers), so
+    // the row's per-commit attribution charged every path of that commit — this file included — to
+    // `E3`; the `E7`/`E8` doc declarations already covered `theme.md`/`menulib.md`, the eight below
+    // were not covered at all. **THE LIVE STATE AT THE TIME OF THIS DECLARATION IS *CLEAN* RATHER
+    // THAN DIRTY-RED, and the reason is recorded rather than smoothed:** the H2b red set is
+    // committed, so `git status --porcelain` is EMPTY and the dirty arm sees nothing — the COMMITTED
+    // arm is the one that stays red until this declaration lands, and the registry is keyed by PATH,
+    // so a later H2b landing (its gate-10 DONE-row commit, or any later edit to its test file)
+    // cannot redden this row again. **WHAT IT DOES NOT WEAKEN.** `isDeniedPath` is not referenced by
+    // this list and is not edited by this pass (control `(n-6)` asserts it still reads `true` for
+    // this path), so `tests/store-modules-seams.test.ts` still reads denied in the RAW reading this
+    // row reports; a path can only ever be REMOVED from `E3`'s subject; and `E3`'s own five
+    // artifacts stay NOT-sibling, so **a denied path among `E3`'s own changes still FAILS.**
+  },
 ]
 /** **THE DECLARING UNITS, BY PATH** — the registry above, read as a map by the row so it can
  *  name the owning unit of every denied path it EXCLUDES. A path repeated in the registry
@@ -2579,6 +2617,117 @@ const THEME_DOC_ARTIFACTS: ReadonlyArray<{ readonly path: string; readonly unit:
 const THEME_DOC_BY_PATH: Readonly<Record<string, string>> = Object.fromEntries(
   THEME_DOC_ARTIFACTS.map((entry) => [entry.path, entry.unit]),
 )
+/** **⟶ DECLARED 2026-10-03 (THE `H2a`/`U-STORE-MODULES-BYTES` DOC-ARTIFACT DECLARATION — THE FIFTH
+ *  REPAIR OF THIS CLASS, `R-12`'s ALLOW-LIST HALF) — THE BYTE-MOVING PAIR'S FOUR **NON-DENIED**
+ *  SPEC ARTIFACTS, WITH THEIR OWNER NAMED.**
+ *
+ *  **WHY THIS IS A NEW DECLARATION PAIR AND NOT FOUR MORE REGISTRY ENTRIES.** The four paths below
+ *  are **NOT `isDeniedPath` paths** (`isDeniedPath` denies `src/shared/*`, `src/main/**`,
+ *  `src/renderer/**`, `scripts/**`, `tests/**`-other-than-`E3`'s and a named handful of config
+ *  paths — never `docs/specs/*`). They therefore reach `R-12`'s ALLOW-LIST half, not its DENIED
+ *  half, and declaring them `isSiblingUnitArtifact` paths would claim them through a predicate
+ *  whose job is the DENIED half (and would redden control `(n-6)`'s not-sibling pins, which hold
+ *  all four NOT-sibling on purpose). **This is exactly the split `MENULIB_DOC_ARTIFACTS` and
+ *  `THEME_DOC_ARTIFACTS` above carry for the same reason, and the same shape is used here so the
+ *  three doc pairs can be read side by side.** The four paths are declared TOGETHER because they
+ *  are one unit's artifacts surfaced by one measured cause (see below).
+ *
+ *  **THE MEASURED CAUSE.** This pass's red run at `HEAD` `c7ed9de` read
+ *  `Outside the allow-list: ["docs/specs/listhost.md","docs/specs/overlay.md",
+ *  "docs/specs/relocate.md","docs/specs/slothost.md","docs/specs/store-modules-bytes-greens.md",
+ *  "docs/specs/store-modules-bytes.md","docs/specs/store-modules-seams.md",
+ *  "tests/store-modules-seams.test.ts"]` — 1 failed | 92 passed (93). The failing commit is
+ *  **`f7c780f`** (H2b's own gate-4 landing-side obligations), which rode `E3`'s own spec
+ *  (`docs/specs/gutter.md`, one of `E3`'s five artifacts): its `E1`-attributed paths include the
+ *  four below (the file-side faces of this pair's own 25-site `§2.5`-item-6 amendment set, per the
+ *  H2a DONE row: *"the landed-spec amendments at 19+ sites (`listhost.md` 10 + `slothost.md` 9,
+ *  supersession-beside)"* — the ledger's TWENTY-FIFTH DONE row, `docs/next-steps.md`), plus
+ *  `docs/specs/store-modules-bytes.md` + `docs/specs/store-modules-bytes-greens.md` (the unit's own
+ *  spec and greens, FILED at `6a64805` / `e5c6efd`). These are **not `E3`'s diff**
+ *  (`docs/specs/gutter.md` `§5.1`'s commit-range scope rule: *"must NOT read a later unit's
+ *  commits, a sibling's dirty working-tree file, or a sibling unit's artifact as this unit's
+ *  diff"*; `§3.4 R-4`).
+ *
+ *  **WHAT IT DOES NOT DO.** (1) It **does not weaken `isDeniedPath`** — that predicate is
+ *  byte-identical and untouched; these paths read `false` there and always did. (2) It **does not
+ *  touch `isSiblingUnitArtifact`** — control `(n-6)` asserts all four read NOT-sibling, so this
+ *  pair can never be mistaken for the sibling registry, and it cannot excuse anything in the DENIED
+ *  arm. (3) It **cannot excuse an `E3`-OWN path**: `E3`'s own spec `docs/specs/gutter.md` is NOT on
+ *  this list, and an UNDECLARED path outside the allow-list still FAILS the core claim (control
+ *  `(n-6)` list (b) drives a synthetic unclaimed path). (4) It **changes no row id, term, seed,
+ *  strategy id, cap or threshold.** */
+const STORE_MODULES_BYTES_DOC_ARTIFACTS: ReadonlyArray<{ readonly path: string; readonly unit: string }> = [
+  {
+    path: 'docs/specs/listhost.md',
+    unit: 'the STORE-MODULES-BYTES unit (`H2a` / `U-STORE-MODULES-BYTES`) — the `§2.5`-item-6 LANDED-ROW AMENDMENT SET (10 cells) was AUTHORED and committed at `c9a103b` (its gate-4 repairs: "the F-1 HIGH named landed-row amendment set landed at 25 sites (listhost.md 10 + slothost.md 9 sites)"); the unit’s DONE row (`docs/next-steps.md` `## DONE — U-STORE-MODULES-BYTES`, the ledger’s TWENTY-FIFTH) records "the landed-spec amendments at 19+ sites (`listhost.md` 10 + `slothost.md` 9, supersession-beside)" among THE UNIT’S OWN ARTIFACTS — NOT this unit',
+  },
+  {
+    path: 'docs/specs/slothost.md',
+    unit: 'the STORE-MODULES-BYTES unit (`H2a` / `U-STORE-MODULES-BYTES`) — the `§2.5`-item-6 set (9 cells) AUTHORED at `c9a103b` (its gate-4 repairs), per the H2a DONE row’s "19+ sites (`listhost.md` 10 + `slothost.md` 9)" — **THE SUPERVISOR’S RULING ON THIS FILE (2026-10-03):** H2b’s `f7c780f` touched it ONLY as date-stamp corrections inside H2a’s annotations, and H2b’s own 16-cell set is overlay/theme/menulib/gutter/relocate — **slothost.md is NOT in it** — NOT this unit',
+  },
+  {
+    path: 'docs/specs/store-modules-bytes.md',
+    unit: 'the STORE-MODULES-BYTES unit (`H2a` / `U-STORE-MODULES-BYTES`) — its own CONTRACT SPEC, FILED at `6a64805` (the unit’s spec gate, 761 lines) and amended at `c9a103b` (gate-4 repairs) / `955bf2f` (gates 7+8) / `f7c780f` (the date-stamp faces); the H2a DONE row names it first among THE UNIT’S OWN ARTIFACTS — NOT this unit',
+  },
+  {
+    path: 'docs/specs/store-modules-bytes-greens.md',
+    unit: 'the STORE-MODULES-BYTES unit (`H2a` / `U-STORE-MODULES-BYTES`) — its own BLIND GREENS SET, AUTHORED at `e5c6efd` (gate 5, 50 scenarios) and amended at `955bf2f` / `f7c780f` (the extra faces + date-stamp faces); the H2a DONE row records "`docs/specs/store-modules-bytes-greens.md` — 50 scenarios" — NOT this unit',
+  },
+]
+/** **THE `H2a`/`U-STORE-MODULES-BYTES` DOC-ARTIFACT DECLARATION, READ AS A MAP** — its own
+ *  registry, consulted by `declaredOtherUnitNameOf` in the same `typeof … === 'string'` form as
+ *  the four registries above, and driven in all four directions by `R-12` control (n-6). Kept as
+ *  its OWN declaration rather than folded into `THEME_DOC_BY_PATH` because its owning unit differs
+ *  (a different sibling's contract/amendment/greens artifacts, declared for a different measured
+ *  cause). */
+const STORE_MODULES_BYTES_DOC_BY_PATH: Readonly<Record<string, string>> = Object.fromEntries(
+  STORE_MODULES_BYTES_DOC_ARTIFACTS.map((entry) => [entry.path, entry.unit]),
+)
+/** **⟶ DECLARED 2026-10-03 (THE `H2b`/`U-STORE-MODULES-SEAMS` DOC-ARTIFACT DECLARATION — THE SIXTH
+ *  REPAIR OF THIS CLASS, `R-12`'s ALLOW-LIST HALF) — THE CALLER/SEAM-SIDE UNIT'S THREE **NON-DENIED**
+ *  SPEC ARTIFACTS, WITH THEIR OWNER NAMED.**
+ *
+ *  **WHY THIS IS A SIXTH DECLARATION PAIR AND NOT THREE MORE REGISTRY ENTRIES.** The three paths
+ *  below are **NOT `isDeniedPath` paths** (never `docs/specs/*`), so they reach the ALLOW-LIST
+ *  half, not the DENIED half — the same split `MENULIB_DOC_ARTIFACTS`, `THEME_DOC_ARTIFACTS` and
+ *  the `H2a` pair above carry, in the same shape, so the four doc pairs can be read side by side.
+ *
+ *  **THE MEASURED CAUSE — THE SAME `f7c780f` RED THE `H2a` PAIR ABOVE ANSWERS, ON THE OTHER TWO
+ *  FACES.** The same red run read all eight wave-`H2` paths as `Outside the allow-list`; the three
+ *  below are **`H2b`'s** own: 3 of the 16 cells of the `§2.7`-item-7 MODULE-SPEC amendment set in
+ *  `docs/specs/overlay.md` (`P-OV-4`/`I-4`/`R-3`, landed at `f7c780f` — the H2b gate-7/8
+ *  reconciliation, `c7ed9de`, counts "overlay 3" of the 16 dated cells), 2 in `docs/specs/relocate.md`
+ *  (`P-6`/`I-13` verification-half pointers — "relocate 2"), and the unit's own CONTRACT SPEC
+ *  `docs/specs/store-modules-seams.md` (FILED at `9b8dfae`, amended at `505d631`/`0f4edcd`/
+ *  `f9ccd6f`/`f7c780f`; the reconciled Spec cell counts 964 lines). Not `E3`'s diff under the same
+ *  `§5.1` commit-range scope rule.
+ *
+ *  **WHAT IT DOES NOT DO** — the same four clauses the `H2a` pair carries: (1) `isDeniedPath`
+ *  untouched (all three read `false` there); (2) `isSiblingUnitArtifact` untouched (control `(n-6)`
+ *  pins all three NOT-sibling); (3) an UNDECLARED path outside the allow-list still FAILS (control
+ *  `(n-6)` list (b)); (4) no row id, term, seed, strategy id, cap or threshold moves. */
+const STORE_MODULES_SEAMS_DOC_ARTIFACTS: ReadonlyArray<{ readonly path: string; readonly unit: string }> = [
+  {
+    path: 'docs/specs/overlay.md',
+    unit: 'the STORE-MODULES-SEAMS unit (`H2b` / `U-STORE-MODULES-SEAMS`) — 3 of the 16 cells of the `§2.7`-item-7 MODULE-SPEC AMENDMENT SET (`overlay.md` `P-OV-4`/`I-4`/`R-3`), landed at `f7c780f` (its gate-4 landing-side obligations; the H2b gate-7/8 reconciliation counts "overlay 3" of the 16 dated cells) — NOT this unit',
+  },
+  {
+    path: 'docs/specs/relocate.md',
+    unit: 'the STORE-MODULES-SEAMS unit (`H2b` / `U-STORE-MODULES-SEAMS`) — 2 of the 16 cells (`relocate.md` `P-6`/`I-13` verification-half pointers), landed at `f7c780f` (the H2b gate-7/8 reconciliation counts "relocate 2" of the 16 dated cells) — NOT this unit',
+  },
+  {
+    path: 'docs/specs/store-modules-seams.md',
+    unit: 'the STORE-MODULES-SEAMS unit (`H2b` / `U-STORE-MODULES-SEAMS`) — its own CONTRACT SPEC, FILED at `9b8dfae` (the unit’s spec gate, 915 lines; the H2b queue row’s reconciled Spec cell, `c7ed9de`, counts 964) and amended at `505d631`/`0f4edcd`/`f9ccd6f`/`f7c780f` — NOT this unit',
+  },
+]
+/** **THE `H2b`/`U-STORE-MODULES-SEAMS` DOC-ARTIFACT DECLARATION, READ AS A MAP** — its own
+ *  registry, consulted by `declaredOtherUnitNameOf` in the same `typeof … === 'string'` form as the
+ *  five registries above, and driven in all four directions by `R-12` control (n-6). Kept as its
+ *  OWN declaration rather than folded into `STORE_MODULES_BYTES_DOC_BY_PATH` because its owning
+ *  unit differs (the caller/seam-side sibling, declared for its own measured cause). */
+const STORE_MODULES_SEAMS_DOC_BY_PATH: Readonly<Record<string, string>> = Object.fromEntries(
+  STORE_MODULES_SEAMS_DOC_ARTIFACTS.map((entry) => [entry.path, entry.unit]),
+)
 /** **⟶ SCOPED 2026-09-27 (THE TEST-LAYER PASS) — THE DECLARATION FILTER, NAMED ONCE AND SHARED BY
  *  BOTH OF `R-12`'s ALLOW-LIST HALVES.**
  *
@@ -2632,6 +2781,17 @@ function declaredOtherUnitNameOf(path: string): string | null {
   // (`isDeniedPath` answers `false` for both entries and is untouched; control (n-5) drives them).
   const themeDoc = THEME_DOC_BY_PATH[path]
   if (typeof themeDoc === 'string' && themeDoc.length > 0) return themeDoc
+  // **⟶ ADDED 2026-10-03 (THE WAVE-`H2` CROSS-UNIT SIBLING-REGISTRY REPAIR, THE `H2a`/
+  // `U-STORE-MODULES-BYTES` DOC-ARTIFACT DECLARATION).** The FIFTH non-denied registry, read in
+  // the SAME form as the four above: a path another unit is DECLARED to own is out of `E3`'s
+  // allow-list subject. It is consulted by NO other predicate (`isDeniedPath` answers `false` for
+  // all four entries; control (n-6) drives them).
+  const storeModulesBytesDoc = STORE_MODULES_BYTES_DOC_BY_PATH[path]
+  if (typeof storeModulesBytesDoc === 'string' && storeModulesBytesDoc.length > 0) return storeModulesBytesDoc
+  // **⟶ ADDED 2026-10-03 (THE `H2b`/`U-STORE-MODULES-SEAMS` DOC-ARTIFACT DECLARATION).** The SIXTH
+  // non-denied registry, in the same form; control (n-6) drives all three entries.
+  const storeModulesSeamsDoc = STORE_MODULES_SEAMS_DOC_BY_PATH[path]
+  if (typeof storeModulesSeamsDoc === 'string' && storeModulesSeamsDoc.length > 0) return storeModulesSeamsDoc
   return null
 }
 function isDeclaredOtherUnitPath(path: string): boolean {
@@ -5658,6 +5818,227 @@ describe('R — §3.4 the static rows (the §2.2 prohibition table’s ids)', ()
       [],
       ['src/shared/theme.ts', 'tests/theme.test.ts'],
       [CONTROL_UNCLAIMED_E8_PATH],
+    ])
+    // (n-6) **⟶ ADDED 2026-10-03 (THE WAVE-`H2` DECLARATION PAIR — THE FIFTH/SIXTH REPAIRS OF THIS
+    //     CLASS, AFTER `E4`/`U-RELOCATE`, `E5`/`U-CONTAINER`, `E7`/`U-MENULIB` AND `E8`/`U-THEME`) —
+    //     THE `H2a`/`U-STORE-MODULES-BYTES` + `H2b`/`U-STORE-MODULES-SEAMS` DECLARATIONS, DRIVEN ON
+    //     THEIR OWN EIGHT DECLARED PATHS (ONE DENIED-HALF, SEVEN ALLOW-LIST-HALF) AND IN ALL FOUR
+    //     REQUIRED DIRECTIONS.** A SEPARATE control rather than an extension of
+    //     `(n)`/`(n-2)`/`(n-3)`/`(n-4)`/`(n-5)`, for the same reason those gave: each of them pins
+    //     its expectations to LITERAL paths of ITS OWN unit and (for the first three) to the SIBLING
+    //     predicate, so folding the H2 paths in would silently widen an expectation that pins
+    //     another declaration.
+    //
+    //     **THE MEASURED CAUSE THIS CONTROL ANSWERS, VERBATIM FROM THIS PASS'S RED RUN AT `HEAD`
+    //     `c7ed9de` (1 failed | 92 passed of 93):** the row's own core claim read
+    //     `Outside the allow-list: ["docs/specs/listhost.md","docs/specs/overlay.md",
+    //     "docs/specs/relocate.md","docs/specs/slothost.md","docs/specs/store-modules-bytes-greens.md",
+    //     "docs/specs/store-modules-bytes.md","docs/specs/store-modules-seams.md",
+    //     "tests/store-modules-seams.test.ts"]` — commit `f7c780f` (H2b's OWN gate-4 landing-side
+    //     obligations) rode `E3`'s own spec (`docs/specs/gutter.md`, one of `E3`'s five artifacts,
+    //     its `P-9`/`P-10` pointers), so the row attributed ALL ELEVEN of that commit's paths to
+    //     `E3`; three were the allow-list's own (`gutter.md` itself, the shared trackers), two were
+    //     already declared (`theme.md`, `menulib.md`), and the EIGHT below were not — the exact
+    //     reading that FAILED the row and that this declaration moves.
+    //
+    //       (a) the ONE DECLARED `H2b` DENIED-HALF path (`tests/store-modules-seams.test.ts`,
+    //           `H2b`'s own 62-row red set, ADDED at `0f4edcd`) reads `isSiblingUnitArtifact === true`
+    //           AND carries a NAMED owner (`H2b` / `U-STORE-MODULES-SEAMS`) AND is a REGISTRY KEY
+    //           (`SIBLING_DIVERGENCE_UNIT_BY_PATH`) AND is EXCLUDED from `E3`'s subject by the row's
+    //           own splitter; and the SEVEN DECLARED wave-`H2` DOC paths (four `H2a`:
+    //           `docs/specs/listhost.md`, `docs/specs/slothost.md`, `docs/specs/store-modules-bytes.md`,
+    //           `docs/specs/store-modules-bytes-greens.md`; three `H2b`: `docs/specs/overlay.md`,
+    //           `docs/specs/relocate.md`, `docs/specs/store-modules-seams.md`) read
+    //           `isDeclaredOtherUnitPath === true` AND carry a NAMED owner AND are REGISTRY KEYS
+    //           (`STORE_MODULES_BYTES_DOC_BY_PATH` / `STORE_MODULES_SEAMS_DOC_BY_PATH`) AND are
+    //           EXCLUDED from the allow-list subject by the row's own declaration filter — **this is
+    //           the exclusion the arm relies on for both halves, and the exact reading that FAILED
+    //           as `Outside the allow-list: […]` before this declaration**;
+    //       (b) a synthetic **UNCLAIMED** path (`docs/specs/store-modules-CONTROL-unclaimed.md`) still reads
+    //           `isSiblingUnitArtifact === false` AND `isDeclaredOtherUnitPath === false` with NO
+    //           owner — so it stays in `E3`'s subject and remains the row's FINDING path
+    //           (`§5.1`: *"a non-denied path outside the allow-list is a FINDING for the adversarial
+    //           pass, not an automatic FAIL"*). This is the direction that FAILS a predicate
+    //           claiming everything;
+    //       (c) an **`E3`-OWN denied path still reads denied/`true` and NOT-sibling and
+    //           NOT-declared** — the synthetic `src/shared/gutter-hack.ts` — so **the DENIED half
+    //           is UNTOUCHED by this declaration**; `E3`'s OWN file `tests/gutter.test.ts` reads
+    //           not-sibling with `isE3OwnArtifact === true` and is declared by NOBODY; and **the RAW
+    //           reading still NAMES the declared `H2b` red set as DENIED** (the `deniedRaw !== true`
+    //           list is EMPTY because the path IS still denied — a list that emptied the OTHER way
+    //           would mean the predicate had been weakened);
+    //       (d) the **MUTATION-SHAPED PROBES fire when the entries are removed**, and they are
+    //           DRIVEN rather than described: the registries are module-level declarations that no
+    //           in-run probe may edit (`R-12`'s own rule: the synthetic controls never touch
+    //           `src/**`, and an edit here would make the tree dirty *while the probe reads it*), so
+    //           each mutation is driven at the PREDICATE level as **exactly that one declaration
+    //           removed** — the `H2b` red-set key (`isSiblingUnitArtifact(path) &&
+    //           !H2_SEAMS_SIBLING_DECLARED_PATHS.includes(path)`), the four
+    //           `STORE_MODULES_BYTES_DOC_BY_PATH` keys, the three `STORE_MODULES_SEAMS_DOC_BY_PATH`
+    //           keys (`isDeclaredOtherUnitPath(path) && !<THAT registry's keys>.has(path)`) — and
+    //           each probe asserts that ALL of that declaration's paths then LEAVE their declared
+    //           class (all three mutation lists EMPTY), which is precisely what makes the control's
+    //           lists FAIL. **Each probe is FALSIFIABLE IN BOTH DIRECTIONS:** if a path were claimed
+    //           by some OTHER clause too (a pattern, a second list, another registry), it would keep
+    //           reading declared under the mutation and the corresponding mutation list would be
+    //           NON-empty.
+    //
+    //     **WHAT THIS CONTROL KEEPS OUT OF THE BINDING POSITION.** Every comparison is SET-based
+    //     (sorted), never order-based (`§3.4 R-12` binds WHICH paths are declared and never the
+    //     incidental order in which a registry happens to be listed — the `E4` lesson, where an
+    //     order-bound expectation FAILED on a committed clean tree because the live branch, not the
+    //     synthetic one, was the one running). **The ordered reading is REPORTED inside the message's
+    //     `READS` block and is BOUND NOWHERE.** The `E4`/`E5`/`E7`/`E8` branch readings are printed
+    //     BESIDE this control's own so the six registrations are visible together without being
+    //     compared.
+    const H2_SEAMS_RED_SET_PATH = 'tests/store-modules-seams.test.ts'
+    const H2_BYTES_DOC_PATHS: readonly string[] = STORE_MODULES_BYTES_DOC_ARTIFACTS.map((entry) => entry.path)
+    const H2_SEAMS_DOC_PATHS: readonly string[] = STORE_MODULES_SEAMS_DOC_ARTIFACTS.map((entry) => entry.path)
+    const CONTROL_UNCLAIMED_H2_PATH = 'docs/specs/store-modules-CONTROL-unclaimed.md'
+    const h2RedSetBranch = {
+      path: H2_SEAMS_RED_SET_PATH,
+      sibling: isSiblingUnitArtifact(H2_SEAMS_RED_SET_PATH),
+      owner: declaredOtherUnitNameOf(H2_SEAMS_RED_SET_PATH),
+      declared: Object.prototype.hasOwnProperty.call(SIBLING_DIVERGENCE_UNIT_BY_PATH, H2_SEAMS_RED_SET_PATH),
+      deniedRaw: isDeniedPath(H2_SEAMS_RED_SET_PATH),
+      e3Own: isE3OwnArtifact(H2_SEAMS_RED_SET_PATH),
+      outsideAllowSubject: !isDeclaredOtherUnitPath(H2_SEAMS_RED_SET_PATH),
+    }
+    const h2BytesDocBranch = H2_BYTES_DOC_PATHS.map((path) => ({
+      path,
+      declared: isDeclaredOtherUnitPath(path),
+      owner: declaredOtherUnitNameOf(path),
+      registryKey: Object.prototype.hasOwnProperty.call(STORE_MODULES_BYTES_DOC_BY_PATH, path),
+      sibling: isSiblingUnitArtifact(path),
+      deniedRaw: isDeniedPath(path),
+      e3Own: isE3OwnArtifact(path),
+    }))
+    const h2SeamsDocBranch = H2_SEAMS_DOC_PATHS.map((path) => ({
+      path,
+      declared: isDeclaredOtherUnitPath(path),
+      owner: declaredOtherUnitNameOf(path),
+      registryKey: Object.prototype.hasOwnProperty.call(STORE_MODULES_SEAMS_DOC_BY_PATH, path),
+      sibling: isSiblingUnitArtifact(path),
+      deniedRaw: isDeniedPath(path),
+      e3Own: isE3OwnArtifact(path),
+    }))
+    const controlUnclaimedH2Branch = {
+      path: CONTROL_UNCLAIMED_H2_PATH,
+      sibling: isSiblingUnitArtifact(CONTROL_UNCLAIMED_H2_PATH),
+      declared: isDeclaredOtherUnitPath(CONTROL_UNCLAIMED_H2_PATH),
+      owner: declaredOtherUnitNameOf(CONTROL_UNCLAIMED_H2_PATH),
+      deniedRaw: isDeniedPath(CONTROL_UNCLAIMED_H2_PATH),
+    }
+    // (d) THE MUTATIONS, in THREE halves: the sibling registry read as if the `H2b` red-set key had
+    // been deleted, and each doc registry read as if ITS OWN keys were absent — each keeping every
+    // other clause and every other registry intact.
+    const H2_SEAMS_SIBLING_DECLARED_PATHS: readonly string[] = [H2_SEAMS_RED_SET_PATH]
+    const mutationWithoutH2SeamsSibling = H2_SEAMS_SIBLING_DECLARED_PATHS.map((path) => ({
+      path,
+      mutatedSibling: isSiblingUnitArtifact(path) && !H2_SEAMS_SIBLING_DECLARED_PATHS.includes(path),
+    }))
+    const H2_BYTES_DOC_DECLARED_KEYS: ReadonlySet<string> = new Set(Object.keys(STORE_MODULES_BYTES_DOC_BY_PATH))
+    const mutationWithoutH2BytesDocEntries = H2_BYTES_DOC_PATHS.map((path) => ({
+      path,
+      mutatedStillDeclared: isDeclaredOtherUnitPath(path) && !H2_BYTES_DOC_DECLARED_KEYS.has(path),
+    }))
+    const H2_SEAMS_DOC_DECLARED_KEYS: ReadonlySet<string> = new Set(Object.keys(STORE_MODULES_SEAMS_DOC_BY_PATH))
+    const mutationWithoutH2SeamsDocEntries = H2_SEAMS_DOC_PATHS.map((path) => ({
+      path,
+      mutatedStillDeclared: isDeclaredOtherUnitPath(path) && !H2_SEAMS_DOC_DECLARED_KEYS.has(path),
+    }))
+    // Driven through the row's OWN splitter, so the mutation's consequence is measured on the
+    // mechanism the arm actually reads rather than argued.
+    const h2SubjectSplit = splitBySiblingAttribution([H2_SEAMS_RED_SET_PATH, CONTROL_UNCLAIMED_H2_PATH])
+    expect(
+      [
+        [h2RedSetBranch.path],
+        h2RedSetBranch.sibling !== true ? [H2_SEAMS_RED_SET_PATH] : [],
+        h2RedSetBranch.owner === null || h2RedSetBranch.owner.length === 0 ? [H2_SEAMS_RED_SET_PATH] : [],
+        h2RedSetBranch.declared !== true ? [H2_SEAMS_RED_SET_PATH] : [],
+        h2RedSetBranch.outsideAllowSubject ? [H2_SEAMS_RED_SET_PATH] : [],
+        h2RedSetBranch.deniedRaw !== true ? [H2_SEAMS_RED_SET_PATH] : [],
+        h2RedSetBranch.e3Own ? [H2_SEAMS_RED_SET_PATH] : [],
+        [...H2_BYTES_DOC_PATHS].sort(),
+        h2BytesDocBranch.filter((r) => r.declared !== true).map((r) => r.path),
+        h2BytesDocBranch.filter((r) => r.owner === null || r.owner.length === 0).map((r) => r.path),
+        h2BytesDocBranch.filter((r) => !r.registryKey).map((r) => r.path),
+        h2BytesDocBranch.filter((r) => r.sibling).map((r) => r.path),
+        h2BytesDocBranch.filter((r) => r.e3Own).map((r) => r.path),
+        [...H2_SEAMS_DOC_PATHS].sort(),
+        h2SeamsDocBranch.filter((r) => r.declared !== true).map((r) => r.path),
+        h2SeamsDocBranch.filter((r) => r.owner === null || r.owner.length === 0).map((r) => r.path),
+        h2SeamsDocBranch.filter((r) => !r.registryKey).map((r) => r.path),
+        h2SeamsDocBranch.filter((r) => r.sibling).map((r) => r.path),
+        h2SeamsDocBranch.filter((r) => r.e3Own).map((r) => r.path),
+        controlUnclaimedH2Branch.sibling,
+        controlUnclaimedH2Branch.declared,
+        controlUnclaimedH2Branch.owner,
+        [isDeniedPath(CONTROL_CORE_HACK_PATH), isSiblingUnitArtifact(CONTROL_CORE_HACK_PATH), isDeclaredOtherUnitPath(CONTROL_CORE_HACK_PATH)],
+        [isSiblingUnitArtifact(TEST_RELPATH), isE3OwnArtifact(TEST_RELPATH), isDeclaredOtherUnitPath(TEST_RELPATH)],
+        mutationWithoutH2SeamsSibling.filter((r) => r.mutatedSibling).map((r) => r.path),
+        mutationWithoutH2BytesDocEntries.filter((r) => r.mutatedStillDeclared).map((r) => r.path),
+        mutationWithoutH2SeamsDocEntries.filter((r) => r.mutatedStillDeclared).map((r) => r.path),
+        [...h2SubjectSplit.sibling].sort(),
+        h2SubjectSplit.own.filter((path) => path === CONTROL_UNCLAIMED_H2_PATH),
+      ],
+      `R-12 §3.4 — CONTROL (n-6, THE \`H2a\`/\`U-STORE-MODULES-BYTES\` + \`H2b\`/\`U-STORE-MODULES-SEAMS\` DECLARATION PAIR DRIVEN IN ALL FOUR DIRECTIONS): (a) the DECLARED \`H2b\` DENIED-HALF path \`${H2_SEAMS_RED_SET_PATH}\` reads \`isSiblingUnitArtifact === true\` (list 2 EMPTY) AND carries a NAMED declaring unit (list 3 EMPTY) AND is a REGISTRY KEY in \`SIBLING_DIVERGENCE_UNIT_BY_PATH\` (list 4 EMPTY) AND is EXCLUDED from \`E3\`'s subject (list 5 EMPTY) — **the exact exclusion that FAILED with \`Outside the allow-list: [\`…\`]\` before this declaration** — while still reading \`isDeniedPath === true\` in the RAW reading (list 6 EMPTY: the \`deniedRaw !== true\` list emptied the OTHER way would mean the predicate was weakened) and NOT an \`E3\` artifact (list 7 EMPTY); AND the four DECLARED \`H2a\` DOC paths \`${JSON.stringify(
+        H2_BYTES_DOC_PATHS,
+      )}\` read \`isDeclaredOtherUnitPath === true\` (list 9 EMPTY) AND carry a NAMED declaring unit (list 10 EMPTY) AND are REGISTRY KEYS in \`STORE_MODULES_BYTES_DOC_BY_PATH\` (list 11 EMPTY) — while reading \`isSiblingUnitArtifact === false\` (list 12 EMPTY: this pair is the ALLOW-LIST-half declaration only, deliberately NOT the sibling registry) and NOT an \`E3\` artifact (list 13 EMPTY); AND the three DECLARED \`H2b\` DOC paths \`${JSON.stringify(
+        H2_SEAMS_DOC_PATHS,
+      )}\` read \`isDeclaredOtherUnitPath === true\` (list 15 EMPTY) AND carry a NAMED declaring unit (list 16 EMPTY) AND are REGISTRY KEYS in \`STORE_MODULES_SEAMS_DOC_BY_PATH\` (list 17 EMPTY) — while reading NOT-sibling (list 18 EMPTY) and NOT an \`E3\` artifact (list 19 EMPTY); (b) the synthetic UNCLAIMED path \`${CONTROL_UNCLAIMED_H2_PATH}\` still reads \`isSiblingUnitArtifact === false\` (list 20) AND \`isDeclaredOtherUnitPath === false\` (list 21) with NO owner (list 22), so it stays in the subject and remains the row's FINDING path — a declaration that claimed everything FAILS here; (c) the \`E3\`-OWN denied path \`${CONTROL_CORE_HACK_PATH}\` STILL reads denied/true and NOT-sibling and NOT-declared (list 23), \`E3\`'s OWN file \`${TEST_RELPATH}\` reads not-sibling with \`isE3OwnArtifact === true\` and is declared by NOBODY (list 24) — **the DENIED half is UNTOUCHED by this declaration**; and (d) **the probes are not tautologies: with the \`H2b\` red-set REGISTRY KEY REMOVED the path leaves the sibling class (list 25 EMPTY), with the four \`STORE_MODULES_BYTES_DOC_BY_PATH\` KEYS REMOVED all four \`H2a\` doc paths leave the declared class (list 26 EMPTY), and with the three \`STORE_MODULES_SEAMS_DOC_BY_PATH\` KEYS REMOVED all three \`H2b\` doc paths leave the declared class (list 27 EMPTY)** — each mutated reading is the proof that no OTHER clause or registry would keep those paths declared, so the control's lists FAIL under each mutation, and the row's own splitter names the red set \`sibling\` (list 28) while the unclaimed path stays \`own\` (list 29). **ALL COMPARISONS ARE SET-BASED (SORTED), NEVER ORDER-BASED** (the \`E4\` lesson: an order-bound expectation FAILED on a committed clean tree when the live branch, not the synthetic one, ran); the ordered reading is REPORTED below and BOUND NOWHERE. READS: ${JSON.stringify(
+        {
+          beforeReadingAtHead: '1 failed | 92 passed (93) — Outside the allow-list: ["docs/specs/listhost.md","docs/specs/overlay.md","docs/specs/relocate.md","docs/specs/slothost.md","docs/specs/store-modules-bytes-greens.md","docs/specs/store-modules-bytes.md","docs/specs/store-modules-seams.md","tests/store-modules-seams.test.ts"]',
+          h2RedSetBranch: [h2RedSetBranch.path, h2RedSetBranch.sibling, h2RedSetBranch.owner],
+          h2BytesDocBranch: h2BytesDocBranch.map((r) => [r.path, r.declared, r.owner]),
+          h2BytesDocBranchSortedPaths: [...H2_BYTES_DOC_PATHS].sort(),
+          h2BytesDocBranchDeclaredOrder: H2_BYTES_DOC_PATHS,
+          h2SeamsDocBranch: h2SeamsDocBranch.map((r) => [r.path, r.declared, r.owner]),
+          h2SeamsDocBranchSortedPaths: [...H2_SEAMS_DOC_PATHS].sort(),
+          controlUnclaimedH2Branch,
+          mutationWithoutH2SeamsSibling,
+          mutationWithoutH2BytesDocEntries,
+          mutationWithoutH2SeamsDocEntries,
+          h2SubjectSplit,
+          e3OwnDeniedControl: [CONTROL_CORE_HACK_PATH, isDeniedPath(CONTROL_CORE_HACK_PATH), isSiblingUnitArtifact(CONTROL_CORE_HACK_PATH)],
+          e3OwnFileNotClaimed: [TEST_RELPATH, isSiblingUnitArtifact(TEST_RELPATH), isE3OwnArtifact(TEST_RELPATH)],
+          e7BranchBesideThis: MENULIB_SIBLING_DECLARED_PATHS,
+          e8BranchBesideThis: THEME_SIBLING_DECLARED_PATHS,
+          declaredRegistryEntries: SIBLING_DIVERGENCE_UNIT_ARTIFACTS.length,
+          storeModulesBytesDocRegistryEntries: Object.keys(STORE_MODULES_BYTES_DOC_BY_PATH).length,
+          storeModulesSeamsDocRegistryEntries: Object.keys(STORE_MODULES_SEAMS_DOC_BY_PATH).length,
+        },
+      )}`,
+    ).toEqual([
+      [H2_SEAMS_RED_SET_PATH],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      ['docs/specs/listhost.md', 'docs/specs/slothost.md', 'docs/specs/store-modules-bytes-greens.md', 'docs/specs/store-modules-bytes.md'],
+      [],
+      [],
+      [],
+      [],
+      [],
+      ['docs/specs/overlay.md', 'docs/specs/relocate.md', 'docs/specs/store-modules-seams.md'],
+      [],
+      [],
+      [],
+      [],
+      [],
+      false,
+      false,
+      null,
+      [true, false, false],
+      [false, true, false],
+      [],
+      [],
+      [],
+      [H2_SEAMS_RED_SET_PATH],
+      [CONTROL_UNCLAIMED_H2_PATH],
     ])
     // (b) **THE DENIED SET OVER `E3`'S OWN CHANGES — this is the narrowed half.** A denied path
     //     AMONG `E3`'s own committed paths FAILS the row; a SIBLING's legitimate denied path is

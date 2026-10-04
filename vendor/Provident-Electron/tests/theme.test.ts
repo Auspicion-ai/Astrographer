@@ -1130,19 +1130,38 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     ).toBe(false)
   })
 
+  // ⟶ AMENDED 2026-10-03 (machine clock — the `H2b` IMPLEMENTER-LANDING amendment
+  // pass; `RCA-8(d)` ANNOTATE-BESIDE, never a rewrite). LICENCE CELL:
+  // `docs/specs/store-modules-seams.md` `§2.7` item 7's dated EXTENSION, cell (2)
+  // — `tests/theme.test.ts` `X-5`: the vocabulary allow-list (`X5_EXEMPT_PATHS`)
+  // gains the ONE new path — `src/renderer/theme-store.ts` — BESIDE the two
+  // pre-declared paths (`src/shared/demo-envelope.ts`, `src/renderer/renderer.ts`).
+  // The row's closed-vocabulary INTENT is UNCHANGED: the exemption stays the
+  // PATHS BY NAME, never the tokens, and the row's positive controls (a token in
+  // ANY OTHER `src/**` file FAILS, in BOTH vocabularies; the `index.html`
+  // one-match appearance reading) SURVIVE as filed. ROLLBACK: retiring the theme
+  // caller reverts this row to the as-filed two-path closed form (the revert is
+  // the annotation's removal, never a re-derivation; `§5.4`'s rollback holds).
   it('X-5 (§3.5) — src/** carries NO theme/appearance/attribute-write/media-query/OS surface, and the only theme-ish artifact is index.html\'s existing rule', () => {
     const vocabulary = [t('matchMedia'), t('prefers-color-scheme'), t('data-theme'), t('color-scheme'), t('appearance')]
     // THE DECLARED EXEMPTIONS, NAMED (the form this file's other scan rows use —
     // `R-1_EXEMPT` above; `S-TH-2`: a scan row that does not name its exemptions
-    // is VACUOUS). TWO PATHS AND NO OTHERS: `F1` / `U-THEME-CONTROL`'s MANDATED
-    // surface necessarily carries this vocabulary — the AUTHORED appearance
-    // control in the demo envelope and the caller-held attribute-name holder in
-    // the renderer wiring (`theme-control.md` §5.1 allow-list rows 11/12, both
-    // ALLOWED to that unit and DENIED to this one). The exemption is the two
-    // PATHS BY NAME, never the tokens: the POSITIVE CONTROL below proves a
-    // token in any OTHER `src/**` file still FAILS, in BOTH vocabularies.
-    // It is applied PER PATH to both readings, so the row measures ONE surface.
-    const X5_EXEMPT_PATHS: readonly string[] = ['src/shared/demo-envelope.ts', 'src/renderer/renderer.ts']
+    // is VACUOUS). THE AS-FILED READING, KEPT VISIBLE BESIDE: "TWO PATHS AND NO
+    // OTHERS: `F1` / `U-THEME-CONTROL`'s MANDATED surface necessarily carries
+    // this vocabulary — the AUTHORED appearance control in the demo envelope and
+    // the caller-held attribute-name holder in the renderer wiring
+    // (`theme-control.md` §5.1 allow-list rows 11/12, both ALLOWED to that unit
+    // and DENIED to this one)." ⟶ AMENDED 2026-10-03 (machine clock — the `H2b`
+    // IMPLEMENTER-LANDING amendment pass; `RCA-8(d)` ANNOTATE-BESIDE, never a
+    // rewrite; LICENCE CELL: `docs/specs/store-modules-seams.md` `§2.7` item 7's
+    // dated EXTENSION, cell (2)): the set gains the ONE admitted member —
+    // `src/renderer/theme-store.ts`, the `H2b` theme caller file (its
+    // resolution-site reading carries the module's own vocabulary by the unit's
+    // licence) — BESIDE the two pre-declared paths. The exemption is STILL the
+    // PATHS BY NAME, never the tokens: the POSITIVE CONTROL below proves a token
+    // in any OTHER `src/**` file still FAILS, in BOTH vocabularies. It is
+    // applied PER PATH to both readings, so the row measures ONE surface.
+    const X5_EXEMPT_PATHS: readonly string[] = ['src/shared/demo-envelope.ts', 'src/renderer/renderer.ts', 'src/renderer/theme-store.ts']
     const x5Exempt = (p: string): boolean => X5_EXEMPT_PATHS.some((e) => p === join(ROOT, e))
     const exemptedReads: string[] = []
     const x5Scan = (p: string, src: string, tokens: readonly string[]): string[] => {
@@ -1168,7 +1187,7 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     }
     expect(
       tsHits,
-      `X-5 — a src/**/*.ts search for the theme/appearance vocabulary returns ZERO matches OUTSIDE THE DECLARED EXEMPTIONS, which are the two paths BY NAME: ${JSON.stringify(X5_EXEMPT_PATHS)} (the surface \`F1\`/\`U-THEME-CONTROL\` is MANDATED to carry, and which is DENIED to this unit — theme-control.md §5.1 allow-list rows 11/12). A FAIL here means a theme surface already exists OUTSIDE those two paths and this unit's DENIED list must be re-derived. Offending: ${JSON.stringify(tsHits)}. The exempted reads, reported and never asserted: ${JSON.stringify(exemptedReads)}`,
+      `X-5 (AMENDED, licence cell (2) of §2.7 item 7's dated extension) — a src/**/*.ts search for the theme/appearance vocabulary returns ZERO matches OUTSIDE THE DECLARED EXEMPTIONS, which are the THREE paths BY NAME (the two pre-declared — the surface \`F1\`/\`U-THEME-CONTROL\` is MANDATED to carry, and which is DENIED to this unit: theme-control.md §5.1 allow-list rows 11/12 — plus the ONE admitted member \`src/renderer/theme-store.ts\`, the \`H2b\` theme caller): ${JSON.stringify(X5_EXEMPT_PATHS)}. The AS-FILED reading stood at the two paths before any store-backed theme caller existed (the as-filed closed form is kept visible BESIDE this row, so the revert is the annotation's removal). The exemption remains the PATHS BY NAME, never the tokens. A FAIL here means a theme surface already exists OUTSIDE those exempt paths and this unit's DENIED list must be re-derived. Offending: ${JSON.stringify(tsHits)}. The exempted reads, reported and never asserted: ${JSON.stringify(exemptedReads)}`,
     ).toEqual([])
     // THE EXEMPTION'S OWN POSITIVE CONTROL, so the exemption is not a blanket
     // strip: the SAME scan instrument carrying the same token, in a synthetic
@@ -1181,6 +1200,14 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     expect(
       x5Scan(otherFile, `const rule = '${t('color-scheme')}'`, vocabulary).length,
       'X-5 (POSITIVE control, second vocabulary) — the SAME path rule governs the appearance-vocabulary reading: the token in a non-exempt path FAILS it too, so the exemption is neither a blanket strip nor a per-vocabulary one.',
+    ).toBeGreaterThan(0)
+    // THE BOUNDED-EXTENSION POSITIVE CONTROL (the licence's positive-control
+    // clause: broadening the set BEYOND the one admitted path — a third
+    // allow-listed path — is a FINDING): a SECOND NEW path is STILL a failure.
+    const secondNewPath = join(ROOT, 'src', 'renderer', 'theme-store-2.ts')
+    expect(
+      x5Scan(secondNewPath, `import { resolveTheme } from '../shared/theme.js'`, [t('theme'), t('appearance'), t('dark')]).length,
+      "X-5 (bounded-extension control) — a SECOND NEW path carrying the vocabulary is STILL a failure: the exemption is the THREE paths BY NAME (the two pre-declared plus the ONE admitted), and a fourth path — e.g. a second caller like 'src/renderer/theme-store-2.ts' — FAILS the row. Broadening the set BEYOND the one admitted path would be a FINDING per §2.7 item 7's positive-control clause.",
     ).toBeGreaterThan(0)
     expect(
       hits.length,
@@ -1204,6 +1231,22 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     expect(Object.keys(pkg.dependencies ?? {}).sort(), 'R-3 — the dependency SET is unchanged').toEqual([...LANDED_DEPS].sort())
   })
 
+  // ⟶ AMENDED 2026-10-03 (machine clock — the `H2b` IMPLEMENTER-LANDING amendment
+  // pass; `RCA-8(d)` ANNOTATE-BESIDE, never a rewrite — the AS-FILED closed
+  // reading stands visible in the assertion message below, so the revert is the
+  // annotation's removal, never a re-derivation). LICENCE CELL:
+  // `docs/specs/store-modules-seams.md` `§2.7` item 7's dated EXTENSION, cell (1)
+  // — `tests/theme.test.ts` `R-6` (the no-importer half): the `src/**`-tree
+  // importer scan admits EXACTLY ONE new importer — `src/renderer/theme-store.ts`
+  // (the `§2.3` resolution-site decision FIRST imports `src/shared/theme.js` at
+  // the unit's landing) — and stays CLOSED to any SECOND importer (the row's own
+  // words, "a later importer is a FINDING", survive for every other path; the
+  // row's closed-census INTENT is UNCHANGED — the set gains the unit's own
+  // admitted member only). `R-6`'s allow-list-census half (the DENIED paths'
+  // presence + the module/test-file allow-list pair) is NOT amended — none of
+  // its checks flip at this landing. ROLLBACK: retiring the theme caller reverts
+  // this row to its as-filed `.toEqual([])` closed form (the licence's
+  // reversibility note; `§5.4`'s rollback holds).
   it('R-6(no-importer half) (§3.4) — src/shared/theme.ts is imported by NO src/** file (a recursive tree probe, never a git command)', () => {
     const importerPattern = new RegExp(`['"][^'"]*${t('theme')}[^'"]*['"]`)
     const importers: string[] = []
@@ -1213,7 +1256,28 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
         if (/\bimport\b|\brequire\s*\(/.test(line) && importerPattern.test(line)) importers.push(`${p.replace(ROOT, '.')}: ${line.trim()}`)
       }
     }
-    expect(importers, 'R-6 — §2.5 item 5 answers the entry-point question NO: no src/** path reaches this mechanism, and at red time (module absent) the probe reads zero by construction; at green time it must STILL read zero, so a later importer is a FINDING.').toEqual([])
+    // THE AMENDED SET (the licence's cell (1)): EXACTLY ONE admitted importer —
+    // the unit's own caller file `src/renderer/theme-store.ts` — and NOTHING
+    // else. The as-filed reading ("at green time it must STILL read zero, so a
+    // later importer is a FINDING") survives: the ONE member is the caller's own
+    // admission, and a SECOND importer is still a FINDING.
+    const admittedImporter = '.src/renderer/theme-store.ts:'
+    expect(
+      importers.length,
+      `R-6 (AMENDED, licence cell (1) of §2.7 item 7's dated extension) — the importer set is EXACTLY ONE: the unit's own caller file \`src/renderer/theme-store.ts\` (the §2.3 resolution-site decision, admitted BY NAME) and NOTHING else. The AS-FILED READING, KEPT VISIBLE BESIDE: "§2.5 item 5 answers the entry-point question NO: no src/** path reaches this mechanism, and at red time (module absent) the probe reads zero by construction; at green time it must STILL read zero, so a later importer is a FINDING." That intent is UNCHANGED for every OTHER path. Measured: ${JSON.stringify(importers)}`,
+    ).toBe(1)
+    expect(
+      importers[0] ?? '',
+      'R-6 (AMENDED) — the ONE importer IS the admitted caller, by path prefix; any other path (or an absent theme-store import) fails this row, keeping the closed set honest.',
+    ).toContain(admittedImporter)
+    // THE BOUNDED-EXTENSION POSITIVE CONTROL (the licence's positive-control
+    // clause: broadening the set BEYOND the one admitted path is a FINDING): the
+    // SAME instrument MUST still flag a SECOND new path's import.
+    const secondImporterLine = `import { resolveTheme } from '../shared/theme.js'`
+    expect(
+      /\bimport\b|\brequire\s*\(/.test(secondImporterLine) && importerPattern.test(secondImporterLine),
+      "R-6 (bounded-extension control) — a SECOND new path importing the module is STILL a FINDING: the instrument flags the synthetic second importer, so the one-member admission is bounded (a second admitted importer would be a violation per §2.7 item 7's positive-control clause).",
+    ).toBe(true)
   })
 
   it('R-6 / §5.1 (allow-list census) — the DENIED paths are PRESENT and the unit\'s own artifact paths are the allow-list', async () => {

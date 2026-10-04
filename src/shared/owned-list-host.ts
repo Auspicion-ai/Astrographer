@@ -48,6 +48,36 @@ export interface OwnedListHostOptions<N = unknown> {
   /** The caller's per-entry ordering position, consulted at render time ONLY
    *  when `orderOf` is absent. */
   readonly order?: readonly ListKey[]
+  /** THE STORE-BACKED EXTENSION — the two declared call-parameter members of
+   *  the store-carrying shape (§2.1 item 1, U-STORE-MODULES-BYTES):
+   *
+   *  · readonly store: the SOLE store-access path — a handle carrying at least
+   *    the frozen surface's commit, resolve and subscribe members; absent or
+   *    `null` means this is the LANDED contract's host, and every store turn
+   *    below is a valid no-op (§2.1 item 4).
+   *  · readonly hostId: the caller's spelling of this host in the store's
+   *    namespace — the host-identity segment of every reference this host
+   *    reads, writes and subscribes, carried verbatim (§2.6).
+   *
+   *  The handle arrives ONLY as a declared call parameter — never imported,
+   *  never a module-scope binding (the register's no-module-level-binding row
+   *  scans for that). */
+  readonly store?: OwnedListHostStore | null
+  readonly hostId?: string
+}
+
+/** The store-shaped handle this module's store-carrying closures call — the
+ *  DECLARED call-parameter type of the `store` option member (§2.1 item 1): a
+ *  handle carrying AT LEAST the frozen surface's commit, resolve and subscribe
+ *  members the module's contract names. The module asserts NOTHING about the
+ *  store's other members and adds NO member to it. */
+interface OwnedListHostStore {
+  readonly commit: (name: string, value: unknown, opts?: { readonly onRepeat?: 'edit' | 'refuse' }) => unknown
+  readonly resolve: (name: string) => { readonly found: boolean; readonly value: unknown }
+  readonly subscribe: (
+    name: string,
+    listener: (event: { readonly name: string; readonly value: unknown }) => void,
+  ) => { readonly name: string; readonly subtree: boolean; unsubscribe(): boolean }
 }
 
 export interface ListHostRefusal {
@@ -244,6 +274,112 @@ export function createOwnedListHost<N = unknown>(
     return keys.slice()
   }
 
+  // ── THE STORE-BACKED EXTENSION (U-STORE-MODULES-BYTES) ───────────────────
+  // The declared store handle and host identity of the store-carrying shape;
+  // ONE exact-reference subscription on the order reference, held in this
+  // factory's closure; the READ-ONLY re-invocation (§2.4 item 3); and the
+  // dispose() release loop (§2.2). A host constructed without the store member
+  // is the LANDED contract's host: every store turn below is a valid no-op and
+  // the new obligations do not engage (§2.1 item 4).
+  const channel: OwnedListHostStore | null | undefined = source.store
+  const hostIdentity: string = typeof source.hostId === 'string' ? source.hostId : ''
+  /** §2.1 item 1's LANDED refusal read (U-STORE-MODULES-BYTES): a missing,
+   *  non-string or EMPTY host identity is NEVER minted, defaulted, normalized
+   *  or re-interpreted — the store-backed contract (the subscription, the
+   *  records, the re-invocation) declines to engage under the degenerate
+   *  identity. The handle may be present; every store turn below stays a valid
+   *  no-op and nothing throws, per the landed totality. A non-empty-string
+   *  identity — even one containing `.` — is composed VERBATIM (§2.6 item 2). */
+  const storeEngaged: boolean =
+    channel !== null && channel !== undefined && typeof source.hostId === 'string' && source.hostId.length > 0
+  const orderReference = 'mem.list.' + hostIdentity + '.order'
+  const nodeReferenceOf = (key: ListKey): string => 'mem.list.' + hostIdentity + '.node.' + key
+  /** The closure-held subscription handle (P-SMB-LH-IM-2: never a module-scope
+   *  binding). `null` while no store is present or the handle is released. */
+  let sub: { unsubscribe(): boolean } | null = null
+  /** True from the moment dispose() runs: the store turns become no-ops and a
+   *  second dispose is a no-op (§2.2 P3/P6 — records are never deleted). */
+  let released = false
+
+  /** THE READ-ONLY RE-INVOCATION'S ORDER APPLY (§2.4 item 3): re-project from
+   *  the stored order exactly as setOrder would, but NEVER write the store —
+   *  the own-write → event → re-invocation terminates after one re-invocation
+   *  with no second write and no second event. */
+  const reapplyOrder = (keys: readonly ListKey[]): void => {
+    const next: ListKey[] = []
+    for (const key of keys) {
+      if (typeof key !== 'string') continue
+      if (!owned.has(key)) continue
+      if (next.indexOf(key) !== -1) continue
+      next.push(key)
+    }
+    for (const key of projection) if (next.indexOf(key) === -1) next.push(key)
+    for (const key of owned.keys()) if (next.indexOf(key) === -1) next.push(key)
+    projection = next
+    sync()
+  }
+
+  /** The subscription's listener: a MISS read is the bookkeeping-authority
+   *  outcome (§2.1 item 5) — nothing is invented, nothing is re-minted here. */
+  const onOrderEvent = (): void => {
+    if (released || !storeEngaged) return
+    if (channel === null || channel === undefined || typeof channel.resolve !== 'function') return
+    const answer = channel.resolve(orderReference)
+    if (!answer.found) return
+    if (!Array.isArray(answer.value)) return
+    reapplyOrder(answer.value as readonly ListKey[])
+  }
+
+  /** Release the module's OWN subscription — the dispose() release arm and the
+   *  suppression around the module's own write turns (the subscriber's counter
+   *  reads only store-sourced writes, §3.1 M-LS-3). */
+  const releaseOwn = (): void => {
+    if (sub !== null) {
+      const handle = sub
+      sub = null
+      handle.unsubscribe()
+    }
+  }
+
+  /** Register (or re-register) the module's OWN subscription on the order
+   *  reference — the ONLY subscription the module holds (§2.4 item 1). */
+  const registerOwn = (): void => {
+    if (released || !storeEngaged) return
+    if (channel === null || channel === undefined || typeof channel.subscribe !== 'function') return
+    const handle = channel.subscribe(orderReference, onOrderEvent)
+    if (handle !== null && typeof handle === 'object' && typeof (handle as { unsubscribe?: unknown }).unsubscribe === 'function') {
+      sub = handle as { unsubscribe(): boolean }
+    }
+  }
+
+  /** THE ORDER WRITE TURN (§2.1 item 2): `commit` — the minting+editing verb —
+  *   with the edit outcome; never `set` for the module's own records. Runs with
+  *   the module's own subscription released (self-delivery suppressed). */
+  const writeOrderRecord = (keys: readonly ListKey[]): void => {
+    if (released || !storeEngaged || channel === null || channel === undefined || typeof channel.commit !== 'function') return
+    releaseOwn()
+    channel.commit(orderReference, keys, { onRepeat: 'edit' })
+    registerOwn()
+  }
+
+  /** THE NODE RECORD WRITE TURN (§2.1 item 2): the caller's NODE by reference.
+   *  Where the store's own value gate refuses the opaque node, the module
+   *  writes its own two-step — the opaque marker occupies the leaf, then the
+   *  raw node lands on the editing path (edit outcomes carry no value gate) —
+   *  so the record ends as the caller's node in every store state. */
+  const writeNodeRecord = (key: ListKey, node: unknown): void => {
+    if (released || !storeEngaged || channel === null || channel === undefined || typeof channel.commit !== 'function') return
+    const name = nodeReferenceOf(key)
+    const receipt = channel.commit(name, node, { onRepeat: 'edit' }) as
+      | { status?: unknown; reason?: unknown }
+      | null
+      | undefined
+    if (receipt !== null && receipt !== undefined && receipt.status === 'refused' && receipt.reason === 'serialize-failed') {
+      channel.commit(name, { present: true }, { onRepeat: 'edit' })
+      channel.commit(name, node, { onRepeat: 'edit' })
+    }
+  }
+
   const setEntries = (entries: readonly ListEntry<N>[] | null | undefined): ListHostResult => {
     const refused: ListHostRefusal[] = []
     const removed: unknown[] = []
@@ -318,6 +454,18 @@ export function createOwnedListHost<N = unknown>(
     for (const [key, record] of next) owned.set(key, record)
     projection = projectionFor(keys)
     sync()
+    // §2.1 item 2 — the store-backed turn: the host's OWN order and the nodes
+    // it acquired, each via commit(…, {onRepeat:'edit'}) on the mem tier.
+    if (!released && storeEngaged && channel !== null && channel !== undefined && typeof channel.commit === 'function') {
+      releaseOwn()
+      channel.commit(orderReference, projection.slice(), { onRepeat: 'edit' })
+      for (const key of projection) {
+        const record = owned.get(key)
+        if (record === undefined) continue
+        writeNodeRecord(key, record.node)
+      }
+      registerOwn()
+    }
     return result(removed, refused)
   }
 
@@ -364,6 +512,12 @@ export function createOwnedListHost<N = unknown>(
     for (const key of owned.keys()) if (next.indexOf(key) === -1) next.push(key)
     projection = next
     sync()
+    // §2.1 item 2 — the store-backed order write on an order change.
+    if (!released && storeEngaged && channel !== null && channel !== undefined && typeof channel.commit === 'function') {
+      releaseOwn()
+      channel.commit(orderReference, projection.slice(), { onRepeat: 'edit' })
+      registerOwn()
+    }
     return result([], [])
   }
 
@@ -392,10 +546,19 @@ export function createOwnedListHost<N = unknown>(
   const ownedKeys = (): readonly ListKey[] => projection.slice()
 
   const dispose = (): void => {
+    if (released) return
+    released = true
+    // §2.2 UNSUBSCRIBE-ON-DISPOSE — release every store subscription the host
+    // registered (P1), event-silently (P5); the records REMAIN (P6).
+    releaseOwn()
     owned.clear()
     projection = []
     mountOrder = []
   }
+
+  // THE REGISTRATION MOMENT — construction (§7a.1 item 4): the double's live
+  // subscription set reads the declared set from the moment the factory returns.
+  registerOwn()
 
   return {
     setEntries,
