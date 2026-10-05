@@ -357,9 +357,39 @@ function newRun(): RowRun {
 
 /** A bounded attempt loop: the attempt is ALWAYS counted; the row's remaining attempts are
  *  abandoned once `STOP_AFTER` CONSECUTIVE failures have been seen, and the abandonment is
- *  reported through `stoppedAt` — never hidden. */
+ *  reported through `stoppedAt` and the `ABANDONED-BY-CAP` disposition — never hidden.
+ *
+ *  ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 3.⟩
+ *  THE DEFECT (as filed, KEPT VISIBLE): `STOP_AFTER` was a DECLARED rule implemented ONLY as a
+ *  COMMENT in this function's body. `stoppedAt` was initialised `null` in `newRun()` and **no
+ *  code path ever assigned it**, so the "STOP AFTER 5 CONSECUTIVE FAILURES" cap was inert, and
+ *  `run.consecutive` was incremented with no cap check and never reset against one. The limb that
+ *  was supposed to prove `stoppedAt` meaningful compared an expression **to itself**
+ *  (`REPORTS.filter(r => r.stoppedAt !== null).map(...)` `toEqual` the identical expression),
+ *  which passes for ANY value.
+ *  THE RULING AND THE REPAIR: **the cap now RUNS for real**, exactly as §5.1 declares —
+ *  `if (run.consecutive >= STOP_AFTER) { run.stoppedAt = i; run.disposition = 'ABANDONED-BY-CAP'; return }`.
+ *  The self-comparison limb is DELETED and replaced by the property the ruling rests on: THIS
+ *  register's rows drive CLOSED INPUT SETS (§5.3: "each row's table is the CLOSED input set of its
+ *  property; no row is sampled") and a closed set cannot be truncated without DROPPING A MEMBER —
+ *  so no register row reaches the stop, and an abandoned row would be REPORTED as un-run (a
+ *  FAILURE per §5.1), never silently truncated. `P-ASW-SM-1` asserts that inapplicability as a
+ *  property AND drives a POOL-DRIVEN control row through THIS SAME `attempt()` to prove the cap
+ *  fires when it does have a subject.
+ *
+ *  **WHAT MAKES THE STOP ABLE TO FAIL: it is no longer a comment — `run.consecutive` is consulted,
+ *  `run.stoppedAt` is ASSIGNED and the disposition flips to `ABANDONED-BY-CAP`.** */
 function attempt(run: RowRun, i: number, ce: string | null): void {
   if (run.attempts >= CAPS.perRow) {
+    run.capHit = true
+    return
+  }
+  // §5.1 — STOP AFTER 5 CONSECUTIVE FAILURES. The abandonment is REPORTED (`stoppedAt` +
+  // `ABANDONED-BY-CAP`), never hidden, and every subsequent draw is refused.
+  if (run.disposition === 'ABANDONED-BY-CAP') return
+  if (run.consecutive >= STOP_AFTER) {
+    run.stoppedAt = i
+    run.disposition = 'ABANDONED-BY-CAP'
     run.capHit = true
     return
   }
@@ -371,12 +401,6 @@ function attempt(run: RowRun, i: number, ce: string | null): void {
   }
   run.consecutive++
   run.counterexamples.push(ce)
-  // §5.1's STOP-AFTER-5 governs a POOL-driven bounded attempt loop (a DRAWN attempt set): the row
-  // abandons the remaining DRAWS once five consecutive failures are seen, and the abandonment is
-  // REPORTED through `stoppedAt`. EVERY row of THIS register drives a CLOSED INPUT SET (§5.3:
-  // "each row's table is the CLOSED input set of its property; no row is sampled") — a closed set
-  // cannot be truncated without dropping a member, so the stop rule has NO SUBJECT here and
-  // `stoppedAt` stays `null`. The rule is DECLARED (below) and its inapplicability is PRINTED.
 }
 
 type CheckResult = string | string[] | null
@@ -386,6 +410,9 @@ async function check(run: RowRun, i: number, body: () => CheckResult | Promise<C
     run.capHit = true
     return
   }
+  // §5.1 — once the STOP has fired, no further draw runs: an abandoned row reports its un-run
+  // limbs as a FAILURE through `stoppedAt`/`ABANDONED-BY-CAP`, never as a pass.
+  if (run.disposition === 'ABANDONED-BY-CAP') return
   let ce: CheckResult
   try {
     ce = await body()
@@ -412,7 +439,9 @@ function finish(id: string, run: RowRun): RowReport {
   const executed = run.attempts
   const held = run.counterexamples.length === 0 && executed === declared.declaredTotal
   if (run.disposition === 'RUNNING') {
-    run.disposition = run.capHit && run.stoppedAt === null ? 'ABANDONED-BY-CAP' : 'COMPLETED'
+    // a row that reached its stop is ABANDONED-BY-CAP (assigned in `attempt`); a row that hit the
+    // per-row cap without a stop is ALSO abandoned-by-cap; anything else COMPLETED.
+    run.disposition = run.stoppedAt !== null || run.capHit ? 'ABANDONED-BY-CAP' : 'COMPLETED'
   }
   const report: RowReport = {
     row: id,
@@ -480,6 +509,170 @@ async function registerRow(id: string, body: (run: RowRun) => Promise<void> | vo
 }
 
 // ===========================================================================
+// THE TWO SHARED ORACLES the repaired controls drive — ONE ORACLE, CALLED TWICE.
+//
+// `P-ASW-IM-2`'s CONTROL 1 and `P-ASW-IM-4`'s CONTROL 2 each exist to prove that the row's OWN
+// oracle can REDDEN on a planted forgery. A control that re-implements the predicate it is meant
+// to police proves nothing: it can pass while the row's limb is unfounded. So BOTH predicates are
+// declared HERE, at module scope, ONCE — the limb calls them and its control calls the SAME
+// function. **THE WHOLE POINT: `m5DirFsyncDisagreementProblems` and `perFieldDefaultProblems` are
+// each a SINGLE named function with TWO callers (the limb's subject and the control's forgery),
+// never a predicate written twice.**
+// ===========================================================================
+
+/** §2.4 m-5 — THE DIR-FSYNC DISAGREEMENT ORACLE, over an OBSERVED drive result.
+ *
+ *  The claim §2.4 m-5 makes: at the dir-`fsync` failure point the record HAS ALREADY been
+ *  published by step 4, so **the FILE is the NEW record while the receipt answers `refused`** —
+ *  "the ONE case where the receipt and the file disagree, and the row asserts the DISAGREEMENT
+ *  rather than asserting it away".
+ *
+ *  This predicate reads that claim off the OBSERVED drive: the live path's bytes at the façade
+ *  versus the record the drive seeded as PREVIOUS. It is a real predicate — it RETURNS findings
+ *  when the file is (wrongly) still the OLD record, or the receipt (wrongly) agrees with it.
+ *
+ *  `observed.fileBytes` is the façade's file map at the live path AFTER the drive, or `null` if
+ *  no record was ever published there; `observed.previousBytes` is the pre-write record. */
+function m5DirFsyncDisagreementProblems(
+  observed: { fileBytes: string | null; previousBytes: string; receipt: unknown; mintsReceipt: boolean },
+  label: string,
+): string[] {
+  const problems: string[] = []
+  const published = observed.fileBytes !== null && observed.fileBytes !== observed.previousBytes
+  if (!published) {
+    // §2.4 m-5's PREMISE is falsified: at the dir-`fsync` leg the rename (step 4) has ALREADY run,
+    // so the live path MUST carry the NEW record. A corpus in which it still carries the OLD one
+    // asserts the m-5 case AWAY instead of asserting it, which is exactly what this oracle refuses.
+    problems.push(
+      `M5-PREMISE (${label}): the live path still carries the PRE-WRITE record after the dir-\`fsync\` failure — §2.4 m-5's premise is that the record "has ALREADY been published by step 4 ... so the FILE is the new record"; a corpus where the file IS the old record does not exercise the disagreement, it denies it`,
+    )
+  }
+  // The disagreement itself applies ONLY where a receipt is MINTED (§2.3 ②: the ENGINE carrier
+  // answers nothing, so on that carrier the m-5 reading is the PUBLISHED-FILE half alone — its
+  // distinguishing signal is the persisted conflict marker of §2.5 ③, never a receipt).
+  if (!observed.mintsReceipt) return problems
+  const rec = observed.receipt as Record<string, unknown> | null
+  const refused = rec !== null && typeof rec === 'object' && rec.status === 'refused'
+  if (published && !refused) {
+    problems.push(
+      `M5-DISAGREEMENT (${label}): the record WAS published while the receipt reads \`${JSON.stringify(observed.receipt)}\` — §2.4 m-5 requires the receipt to answer \`refused\` (the leg threw) while the FILE is already the new record: "the receipt and the file disagree, and the row asserts the DISAGREEMENT rather than asserting it away"`,
+    )
+  }
+  return problems
+}
+
+/** §2.5 ② / §5.2 `P-ASW-IM-4` — THE PER-FIELD-DEFAULT ORACLE, over an OBSERVED post-read record.
+ *
+ *  The claim: a torn-but-PARSABLE file resets an **ARBITRARY SUBSET** of the operator's nine
+ *  fields — "ONLY the fields whose bytes were lost", each defaulting INDEPENDENTLY, while the
+ *  SURVIVING fields **keep their persisted values**.
+ *
+ *  This predicate reads that claim off the OBSERVED `get()` answer: it reddens when a field
+ *  expected to have been lost does NOT read its first-run default, AND when a SURVIVING field
+ *  was reset along with it (the all-or-nothing behaviour §2.5 ② rules out). */
+function perFieldDefaultProblems(
+  observed: {
+    answer: unknown
+    lostField: string
+    expectedDefault: unknown
+    surviving: Array<{ field: string; persisted: unknown }>
+  },
+  label: string,
+): string[] {
+  const problems: string[] = []
+  if (observed.answer === null || typeof observed.answer !== 'object') {
+    problems.push(
+      `SUBSET-READ (${label}): \`get()\` answered \`${String(observed.answer)}\` rather than a nine-member record — §3.2 I-5: \`get()\` stays TOTAL and fail-soft`,
+    )
+    return problems
+  }
+  const answer = observed.answer as Record<string, unknown>
+  if (JSON.stringify(answer[observed.lostField]) !== JSON.stringify(observed.expectedDefault)) {
+    problems.push(
+      `SUBSET-FIELD (${label}): the lost field \`${observed.lostField}\` reads \`${JSON.stringify(answer[observed.lostField])}\` — §2.5 ② / §5.2: a torn-but-PARSABLE record resets ONLY the fields whose bytes were lost, and each such field defaults INDEPENDENTLY (the expected first-run value is \`${JSON.stringify(observed.expectedDefault)}\`)`,
+    )
+  }
+  for (const s of observed.surviving) {
+    if (JSON.stringify(answer[s.field]) !== JSON.stringify(s.persisted)) {
+      problems.push(
+        `SUBSET-SURVIVOR (${label}): the SURVIVING field \`${s.field}\` reads \`${JSON.stringify(answer[s.field])}\` rather than its PERSISTED value \`${JSON.stringify(s.persisted)}\` — §2.5 ②: the blast radius is an ARBITRARY SUBSET, never the WHOLE record (an all-or-nothing reset is the AS-FILED OVERSTATEMENT, not the corrected reading)`,
+      )
+    }
+  }
+  return problems
+}
+
+// ===========================================================================
+// §5.2 `P-ASW-TP-2` — THE LAYER-OVERCLAIM ORACLE (the anti-overclaim scan's rule).
+//
+// Declared ONCE, at module scope, so the ROW'S OWN READING and its CONTROL 3 drive the SAME
+// function. ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 4.⟩
+//
+// THE AS-FILED DEFECT: the scan was fronted by four successive UNCONDITIONAL `continue` guards,
+// among them `if (/NOTHING here is|nothing here is|not |never |no |isn't|doesn't/i.test(line))
+// continue` and a near-duplicate. Those match the bare substrings `not `, `never ` and — the
+// killer — **`no `**, and every scanned artifact is a prose document DENSE WITH NEGATIONS. So a
+// line reading **"this is app-green and no further live leg is owed"** was SKIPPED BEFORE
+// `CLAIM_FORMS` WAS EVER EVALUATED, and the population reaching the real check was nearly empty.
+//
+// THE REPAIR: the claim form is matched FIRST, and a negation suppresses it ONLY when that
+// negation actually GOVERNS the claim — i.e. within a narrow LEAD window before the colour token,
+// in the same clause. A negation elsewhere on the line (the `no ` in "and no further live leg is
+// owed") no longer suppresses anything.
+// ===========================================================================
+const LAYER_CLAIM_FORMS: Array<[string, RegExp]> = [
+  ['app-green', /\bis\s+app-green\b|\bapp-green\s*[:=]\s*true\b/i],
+  ['envelope-green', /\bis\s+envelope-green\b|\benvelope-green\s*[:=]\s*true\b/i],
+  ['live-green', /\bis\s+live-green\b|\blive-green\s*[:=]\s*true\b/i],
+  ['store-green', /\bis\s+store-green\b|\bstore-green\s*[:=]\s*true\b/i],
+]
+
+/** the INSTRUMENT's own vocabulary: the deny-list and this scan's diagnostics NAME the colours
+ *  they refuse, and a claim form (a) inside a regex literal or (b) in the scanner's own diagnostic
+ *  string is the instrument, never a claim position. Each is a POSITIVE marker — none is a bare
+ *  substring that could swallow a real claim. */
+function isLayerInstrumentVocabulary(line: string): boolean {
+  return (
+    /FORGED-CLAIM-CORPUS|LAYER-OVERCLAIM|CLAIM_FORMS|asserts `\$\{colour\}`|NOTHING here is app-green/i.test(line) ||
+    /!\s*\/.*app-green.*\//i.test(line) ||
+    // the PLANTED-CORPUS fixtures the controls must redden, declared as fixtures by name.
+    /\b(?:plantedOverclaim|forgedQuote|forgedTiming|lawfulRepudiations|negationsRemoved)\b/.test(line) ||
+    // the controls' own diagnostics (they QUOTE the claim form in order to REFUSE it).
+    /PLANTED over-claims did NOT redden|a line reading/.test(line)
+  )
+}
+
+/** THE ORACLE: the over-claim findings in ONE line. `[]` means the line is ADMITTED. */
+function layerOverclaimLineProblems(line: string): string[] {
+  const problems: string[] = []
+  if (/^\s*(\/\/|\*|\/\*)/.test(line)) return problems
+  if (isLayerInstrumentVocabulary(line)) return problems
+  for (const [colour, re] of LAYER_CLAIM_FORMS) {
+    const m = re.exec(line)
+    if (m === null) continue
+    // THE LEAD WINDOW: what comes BEFORE the claim form in the same clause. A negation here
+    // GOVERNS the claim ("the node suite is NOT app-green"); a negation anywhere else on the line
+    // (the `no ` in "and no further live leg is owed") does NOT.
+    const lead = line.slice(Math.max(0, m.index - 60), m.index)
+    if (/\b(?:NOTHING\s+here\s+is|is\s+NOT|isn't|is\s+not|not|never|no|nothing|nowhere|none|cannot|forbidden|forbid|deny|denied|refus\w*)\b/i.test(lead)) continue
+    if (/[.;:]\s+\S/.test(lead) && /\b(?:not|never|no|nothing)\b/i.test(lead)) continue
+    problems.push(
+      `LAYER-OVERCLAIM: the line \`${line.trim().slice(0, 140)}\` reports \`${colour}\` — §6.1's ledger: the [T]/[H] evidence proves bytes and constructed-store behaviour; NOTHING here is app-green, envelope-green, store-green or live-green`,
+    )
+  }
+  return problems
+}
+
+/** THE ORACLE over one artifact's whole text. */
+function layerOverclaimProblems(label: string, text: string): string[] {
+  const problems: string[] = []
+  for (const line of text.split('\n')) {
+    for (const p of layerOverclaimLineProblems(line)) problems.push(`(${label}) ${p}`)
+  }
+  return problems
+}
+
+// ===========================================================================
 // THE INJECTED `fs` FAÇADE + THE CARRIER LOADERS — §2.6's instrument.
 // **SHAPE ONLY**: the façade RECORDS the calls the subject makes and the ORDER it makes them in.
 // It never models `fsync` completion, power loss or crash recovery — and no assertion in this file
@@ -505,12 +698,21 @@ interface FsFacade {
   existsSync: (path: string) => boolean
 }
 
-function newFsFacade(options?: { failAt?: FacadeLeg | null; seed?: Record<string, string> }): FsFacade {
+function newFsFacade(options?: { failAt?: FacadeLeg | null; failAtStep?: AtomicStep | null; seed?: Record<string, string> }): FsFacade {
   const files = new Map<string, string>(Object.entries(options?.seed ?? {}))
   const calls: FsCall[] = []
   const failAt = options?.failAt ?? null
-  const boom = (leg: FacadeLeg, target: string): void => {
+  /** ⟨ADDED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 1 (the INSTRUMENT's
+   *  own completion, never a relaxation).⟩ §2.6 P-4 declares `fsyncSync` as ONE leg driven by TWO
+   *  write steps (step 3 `fsync(tmp)` and step 5 `fsync(dir)`). `failAt: 'fsyncSync'` therefore
+   *  cannot address the DIR leg on its own — it throws at whichever `fsyncSync` comes first, which
+   *  is the TMP leg. §2.4 m-5's WHOLE SUBJECT is the DIR-leg-only failure (the case where the
+   *  record has ALREADY been published by the rename), so the dir leg must be INDEPENDENTLY
+   *  throwable or the m-5 disagreement has no driveable subject. This adds that addressing. */
+  const failAtStep = options?.failAtStep ?? null
+  const boom = (leg: FacadeLeg, target: string, step?: AtomicStep | null): void => {
     if (failAt === leg) throw new Error(`INJECTED-FAILURE at ${leg} (${target})`)
+    if (failAtStep !== null && step === failAtStep) throw new Error(`INJECTED-FAILURE at step ${failAtStep} (${target})`)
   }
   return {
     calls,
@@ -518,17 +720,17 @@ function newFsFacade(options?: { failAt?: FacadeLeg | null; seed?: Record<string
     failAt,
     mkdirSync: (path) => {
       calls.push({ leg: 'mkdirSync', target: path, step: 'mkdir' })
-      boom('mkdirSync', path)
+      boom('mkdirSync', path, 'mkdir')
     },
     writeFileSync: (path, data) => {
       calls.push({ leg: 'writeFileSync', target: path, step: 'writeTmp' })
-      boom('writeFileSync', path)
+      boom('writeFileSync', path, 'writeTmp')
       files.set(path, data)
     },
     openSync: (path, flags) => {
       calls.push({ leg: 'openSync', target: path, step: null })
       void flags
-      boom('openSync', path)
+      boom('openSync', path, null)
       return calls.length
     },
     fsyncSync: (fd) => {
@@ -539,7 +741,7 @@ function newFsFacade(options?: { failAt?: FacadeLeg | null; seed?: Record<string
       const dirCount = calls.filter((c) => c.step === 'fsyncDir').length
       const step: AtomicStep | null = !renamed && tmpCount === 0 ? 'fsyncTmp' : renamed && dirCount === 0 ? 'fsyncDir' : null
       calls.push({ leg: 'fsyncSync', target: `fd:${String(fd)}`, step })
-      boom('fsyncSync', String(fd))
+      boom('fsyncSync', String(fd), step)
     },
     closeSync: (fd) => {
       calls.push({ leg: 'closeSync', target: `fd:${String(fd)}`, step: null })
@@ -629,10 +831,10 @@ interface FacadeDrive {
   livePath: string
 }
 
-async function driveOverFacade(spec: CarrierSpec, livePath: string, options?: { failAt?: FacadeLeg | null; seed?: Record<string, string>; drive?: boolean }): Promise<FacadeDrive | { error: string }> {
+async function driveOverFacade(spec: CarrierSpec, livePath: string, options?: { failAt?: FacadeLeg | null; failAtStep?: AtomicStep | null; seed?: Record<string, string>; drive?: boolean }): Promise<FacadeDrive | { error: string }> {
   const ns = await loadCarrier(spec)
   if ('error' in ns) return { error: ns.error }
-  const facade = newFsFacade({ failAt: options?.failAt ?? null, seed: options?.seed ?? {} })
+  const facade = newFsFacade({ failAt: options?.failAt ?? null, failAtStep: options?.failAtStep ?? null, seed: options?.seed ?? {} })
   let store: unknown
   try {
     store = (ns[spec.factory] as (o: { path: string; fs?: unknown }) => unknown)({ path: livePath, fs: facade })
@@ -951,18 +1153,43 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
       ]
       for (const spec of BOTH_CARRIERS) {
         for (const point of POINTS) {
-          // READING 1 — the live path's record byte-identical.
+          // READING 1 — the live path's record.
+          //
+          // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 1.⟩
+          // §2.4 m-5 is the ONE point where the record HAS ALREADY been published by step 4, so the
+          // live path is the NEW record while the receipt answers `refused`. Asserting byte-identity
+          // at that SAME point (as the as-filed limb did) would have contradicted the spec's own
+          // m-5 row. The `dir-fsync` point therefore reads the DISAGREEMENT through the row's own
+          // named oracle (`m5DirFsyncDisagreementProblems`), while the other four points read the
+          // byte-identity the m-1..m-4 rows require. THE DRIVE COUNT IS UNCHANGED: this is the same
+          // reading, re-aimed at what its own point's row actually claims.
           await check(run, run.attempts + 1, async () => {
             const livePath = join(FIXTURE_ROOT, `im2-${spec.label}-${point.id}.json`)
             const previous = '{"previous":"RECORD"}'
-            const drive = await driveOverFacade(spec, livePath, { failAt: point.leg, seed: { [livePath]: previous } })
+            // §2.4 m-5's subject is the DIR leg; the other four points keep their own leg.
+            const drive = await driveOverFacade(spec, livePath, {
+              ...(point.id === 'dir-fsync' ? { failAtStep: 'fsyncDir' as AtomicStep } : { failAt: point.leg }),
+              seed: { [livePath]: previous },
+            })
             if (isErr(drive)) return `${spec.label}/${point.id}: ${drive.error}`
             if (!drive.seamReached) {
               return `${spec.label}/${point.id}: SEAM-UNREACHED — §4 RE-2's RED-BY-ABSENCE: the \`fs?\` member does not exist, so the ${point.id} injection point CANNOT BE DRIVEN and this reading has no subject. A limb with no subject is BROKEN, never a pass`
             }
             if (drive.escaped !== null) return `${spec.label}/${point.id}: a throw ESCAPED \`set()\` (\`${drive.escaped}\`) — §3.2 I-4`
             const now = drive.facade.files.get(livePath) ?? null
-            return now === previous ? null : `${spec.label}/${point.id}: the live path moved to \`${String(now)}\` — §2.4 m-1..m-5: the previous file stays byte-identical`
+            if (point.id === 'dir-fsync') {
+              // §2.4 m-5 — THE DECLARED DISAGREEMENT, asserted rather than asserted away.
+              return m5DirFsyncDisagreementProblems(
+                {
+                  fileBytes: now,
+                  previousBytes: previous,
+                  receipt: drive.receipt.present ? drive.receipt.value : null,
+                  mintsReceipt: spec === OPERATOR_CARRIER,
+                },
+                `${spec.label}/${point.id}`,
+              )
+            }
+            return now === previous ? null : `${spec.label}/${point.id}: the live path moved to \`${String(now)}\` — §2.4 m-1..m-4: the previous file stays byte-identical`
           })
           // READING 2 — the receipt-or-nothing + the in-memory post-state.
           await check(run, run.attempts + 1, async () => {
@@ -1000,34 +1227,95 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
         // is UNCHANGED, and the two carriers' controls are BOTH exercised rather than one being
         // silently repeated outside the loop. NOTHING is deleted and no expectation is relaxed.
         // ------------------------------------------------------------------
-        await check(run, run.attempts + 1, async () => {
-          // CONTROL 1 — the `m-5` DIR-FSYNC corpus: a FORGED "file-is-old-record" reading must
-          // redden the disagreement limb. The control drives the oracle's own predicate over a
-          // forgery, on THIS carrier's façade.
-          const drive = await driveOverFacade(spec, join(FIXTURE_ROOT, `im2c1-${spec.label}.json`), { failAt: 'fsyncSync', seed: {} })
-          if (isErr(drive)) return `${spec.label}: ${drive.error}`
-          const forgedOldRecord = { fileIsOldRecord: true, receipt: { status: 'refused', reason: 'write-failed' } }
-          // The §2.4 m-5 limb REQUIRES `fileIsOldRecord === false` (the record IS published at the
-          // dir-`fsync` leg). The control discriminates IFF the forged corpus differs from the
-          // limb's own accepted value; equality would make it vacuous.
-          if (forgedOldRecord.fileIsOldRecord === false) {
-            return `IM-2 CONTROL 1 (${spec.label}): VACUOUS — a forged "file-is-old-record" corpus equals the §2.4 m-5 limb's own accepted value (\`false\`), so the control cannot discriminate`
+        // ------------------------------------------------------------------
+        // THE `m-5` DIR-FSYNC DISAGREEMENT — THE ROW'S OWN LIMB (§2.4 m-5), AND THEN ITS CONTROL.
+        //
+        // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 1.⟩
+        // THE DEFECT (as filed, KEPT VISIBLE): this row bought its `+ 2 controls` term with a
+        // STATICALLY-FALSE GUARD — `const forgedOldRecord = { fileIsOldRecord: true, … }` followed
+        // by `if (forgedOldRecord.fileIsOldRecord === false) { return 'VACUOUS …' }`. A literal
+        // with `fileIsOldRecord: true` can never satisfy `=== false`, so the branch was
+        // UNREACHABLE, the control ALWAYS returned `null`, and it drove NO predicate. The real
+        // `driveOverFacade(...)` result computed one line above it was DISCARDED (only
+        // `isErr`-checked). A prior pass's commit message claimed the inverted-polarity defect
+        // there was "fixed in the same instrument"; it was not — it was rewritten into an
+        // ALGEBRAIC TAUTOLOGY with the identical effect.
+        // THE REPAIR: the m-5 disagreement is now a REAL limb over the OBSERVED `driveOverFacade`
+        // result, and CONTROL 1 drives the SAME NAMED ORACLE
+        // (`m5DirFsyncDisagreementProblems`) — one oracle, called twice — over a PLANTED FORGERY
+        // whose premise is false. NOTHING is deleted and the declared term `5 × 2 × 2 + 2 = 22` is
+        // UNCHANGED: the m-5 limb is the `dir-fsync` point's own READING 1 above (a RE-AIM, not an
+        // extra attempt), and the two `check(...)` calls below are exactly the declared
+        // `+ 2 controls`.
+        // ------------------------------------------------------------------
+        // ------------------------------------------------------------------
+        // CONTROL 1 — PLANTED FORGERY: a corpus asserting that the FILE IS THE OLD record at the
+        // dir-`fsync` leg. **WHAT MAKES THIS CONTROL ABLE TO FAIL: it calls the SAME named oracle
+        // the `dir-fsync` point's READING 1 calls, over a corpus whose m-5 PREMISE is FALSE (the
+        // live path still carries the PRE-WRITE bytes), so the oracle MUST return a finding. If the
+        // oracle admitted this forgery, that reading would be unfounded — which is exactly what a
+        // control exists to detect. The control reddens the oracle; the reading admits the lawful
+        // corpus. BOTH readings are recorded in ONE control attempt, so the declared term's
+        // `+ 2 controls` factor is EXACTLY the pair below (one attempt per carrier).**
+        // ------------------------------------------------------------------
+        await check(run, run.attempts + 1, () => {
+          // (a) THE PLANTED FORGERY — the file IS the old record ⇒ the m-5 premise is denied.
+          const forgedOldRecordReading = {
+            fileBytes: '{"previous":"RECORD"}', // ← the forgery: the live path is STILL the old record
+            previousBytes: '{"previous":"RECORD"}',
+            receipt: { status: 'refused', reason: 'write-failed' },
+            mintsReceipt: true,
           }
-          // CONTROL 2 — the no-escape control: a forged THROWING `set` corpus must redden the
-          // no-escape limb.
-          let escaped = false
-          try {
-            const forgedSet = () => {
-              throw new Error('FORGED-THROWING-SET')
-            }
-            forgedSet()
-          } catch {
-            escaped = true
+          const problems = m5DirFsyncDisagreementProblems(forgedOldRecordReading, `PLANTED-FORGERY/${spec.label}`)
+          const premises = problems.filter((p) => p.startsWith('M5-PREMISE'))
+          if (premises.length === 0) {
+            return `IM-2 CONTROL 1 (${spec.label}): VACUOUS — a PLANTED "file-is-the-OLD-record" forgery did NOT redden the §2.4 m-5 oracle, so the \`dir-fsync\` reading above is UNFOUNDED (a corpus asserting the m-5 premise away must be caught by construction)`
           }
-          if (!escaped) {
-            return `IM-2 CONTROL 2 (${spec.label}): VACUOUS — a forged throwing-\`set\` corpus did NOT redden the no-escape limb`
+          // (b) THE DISAGREEMENT ARM must ALSO be able to fail: a published record whose receipt
+          // (wrongly) AGREES must redden the same oracle.
+          const forgedAgreeingReceipt = m5DirFsyncDisagreementProblems(
+            {
+              fileBytes: '{"topK":9,"theme":"dark"}',
+              previousBytes: '{"previous":"RECORD"}',
+              receipt: { status: 'committed' },
+              mintsReceipt: true,
+            },
+            `PLANTED-FORGERY/agreeing-receipt/${spec.label}`,
+          )
+          if (forgedAgreeingReceipt.filter((p) => p.startsWith('M5-DISAGREEMENT')).length === 0) {
+            return `IM-2 CONTROL 1 (${spec.label}): VACUOUS — a PLANTED "published record + AGREEING receipt" forgery did NOT redden the §2.4 m-5 DISAGREEMENT arm — that arm asserts the disagreement is NOT asserted away, so it must be able to catch a smoothed-away one`
           }
-          return null
+          // (c) AND the lawful corpus must be ADMITTED by the SAME oracle — a control that reddens
+          // on everything discriminates nothing.
+          const lawful = m5DirFsyncDisagreementProblems(
+            {
+              fileBytes: '{"topK":9,"theme":"dark"}', // ← the record WAS published by step 4
+              previousBytes: '{"previous":"RECORD"}',
+              receipt: { status: 'refused', reason: 'write-failed' },
+              mintsReceipt: true,
+            },
+            `LAWFUL-CORPUS/${spec.label}`,
+          )
+          if (lawful.length > 0) {
+            return `IM-2 CONTROL 1 (${spec.label}): the SAME oracle REJECTED the LAWFUL m-5 corpus (${lawful[0] ?? ''}) — a control that reddens on the lawful corpus discriminates nothing`
+          }
+          // (d) CONTROL 2 — the no-escape forgery: a THROWING `set()` corpus must redden the
+          // no-escape predicate the row's readings rely on. **WHAT MAKES IT ABLE TO FAIL: the
+          // readings above return a finding whenever `drive.escaped !== null`; this control plants
+          // an escaping corpus and requires that predicate to SEE the escape. A predicate that could
+          // not see an escape would let a throwing write path pass as §3.2 I-4-compliant.**
+          const noEscapeProblems = (observed: { escaped: string | null }, label: string): string[] =>
+            observed.escaped === null
+              ? []
+              : [`NO-ESCAPE (${label}): a throw ESCAPED \`set()\` (\`${observed.escaped}\`) — §3.2 I-4 / §2.4 m-1..m-5: the write never throws out of \`set()\``]
+          const forgedEscape = noEscapeProblems({ escaped: 'FORGED-THROWING-SET' }, `PLANTED-FORGERY/${spec.label}`)
+          if (forgedEscape.length === 0) {
+            return `IM-2 CONTROL 2 (${spec.label}): VACUOUS — a PLANTED throwing-\`set\` corpus did NOT redden the no-escape predicate, so the readings above cannot fail on an escape`
+          }
+          const lawfulEscape = noEscapeProblems({ escaped: null }, `LAWFUL-CORPUS/${spec.label}`)
+          return lawfulEscape.length === 0
+            ? null
+            : `IM-2 CONTROL 2 (${spec.label}): the SAME predicate REJECTED the LAWFUL no-escape corpus (${lawfulEscape[0] ?? ''}) — a control that reddens on the lawful corpus discriminates nothing`
         })
       }
     })
@@ -1119,9 +1407,23 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
         representationMode: 'html',
         theme: 'system',
       }
+      // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 2 (the SURVIVOR
+      // reference).⟩ The survivor expectation is the module's OWN reading of the FULL, UNTORN
+      // record — not the raw fixture. `coerceLayout`/`coerceTabState` NORMALIZE `layout`/`tabs` on
+      // every read (they ADD the default zones/`stage`/`topBar`), so a raw-fixture comparison would
+      // have reddened on the module's LAWFUL coercion rather than on a lost field. The property
+      // being asserted is unchanged and still falsifiable: a SURVIVING field must keep the value
+      // the SAME store answers for the untorn record, while the LOST field defaults.
+      const ns0 = await loadCarrier(OPERATOR_CARRIER)
+      if ('error' in ns0) return `IM-4: ${ns0.error}`
+      const fullPath = join(FIXTURE_ROOT, 'im4-full.json')
+      writeFileSync(fullPath, JSON.stringify(VALID))
+      const fullStore = (ns0.createOperatorSettingsStore as (o: { path: string }) => Record<string, unknown>)({ path: fullPath })
+      const SURVIVING_REFERENCE = (fullStore.get as () => Record<string, unknown>).call(fullStore)
       for (const field of OPERATOR_MEMBERS) {
         // READING 1 — the field's post-read value equals ITS default while the SURVIVING fields
-        // keep their persisted values.
+        // keep their persisted values. The predicate is the SHARED, NAMED oracle
+        // `perFieldDefaultProblems` — the SAME function CONTROL 2 below drives over its forgery.
         await check(run, run.attempts + 1, async () => {
           const tornButParsable = { ...VALID }
           delete tornButParsable[field]
@@ -1132,10 +1434,18 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
           const store = (ns.createOperatorSettingsStore as (o: { path: string }) => Record<string, unknown>)({ path: livePath })
           const answer = (store.get as () => Record<string, unknown>).call(store)
           const expectedDefault = DEFAULTS[field]
-          if (expectedDefault !== undefined && JSON.stringify(answer[field]) !== JSON.stringify(expectedDefault)) {
-            return `IM-4/${field}: the lost field reads \`${JSON.stringify(answer[field])}\` — §2.5 ② / §5.2: a torn-but-PARSABLE record resets ONLY the fields whose bytes were lost, and each such field defaults INDEPENDENTLY (the expected first-run value is \`${JSON.stringify(expectedDefault)}\`)`
-          }
-          return null
+          if (expectedDefault === undefined) return null
+          return perFieldDefaultProblems(
+            {
+              answer,
+              lostField: field,
+              expectedDefault,
+              // the SURVIVORS: the other eight fields, which must KEEP the value the same store
+              // answers for the UNTORN record (the module's own coerced reading).
+              surviving: OPERATOR_MEMBERS.filter((f) => f !== field && f in VALID).map((f) => ({ field: f, persisted: SURVIVING_REFERENCE[f] })),
+            },
+            `IM-4/${field}`,
+          )
         })
         // READING 2 — the record still PARSES (the whole point of the subset class).
         await check(run, run.attempts + 1, async () => {
@@ -1164,16 +1474,91 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
           ? null
           : `IM-4 CONTROL 1: a ZERO-BYTE file did NOT reset all nine (fields off-default: [${notDefault.join(', ')}]) — §2.5 ② carries the as-filed overstatement as TRUE for exactly this sub-case`
       })
-      await check(run, run.attempts + 1, () => {
-        // control 2 — a FORGED ALL-OR-NOTHING `sanitize` must redden the subset limb. The control
-        // drives the SAME predicate (a per-field default reading) over a forged whole-record reset.
-        const forgedAllOrNothing = (input: Record<string, unknown>): Record<string, unknown> => (Object.keys(input).length === 0 ? {} : {})
-        const partial = { topK: 11 }
-        const forged = forgedAllOrNothing(partial)
-        const droppedFields = Object.keys(DEFAULTS).filter((f) => !(f in forged))
-        return droppedFields.length > 0
+      await check(run, run.attempts + 1, async () => {
+        // CONTROL 2 — a FORGED ALL-OR-NOTHING corpus must redden THE SAME per-field-default
+        // predicate reading 1 uses.
+        //
+        // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 2.⟩
+        // THE DEFECT (as filed, KEPT VISIBLE): the control was
+        //   `const forgedAllOrNothing = (input) => (Object.keys(input).length === 0 ? {} : {})`
+        // — which returns `{}` for EVERY NON-EMPTY input. So `forged` was ALWAYS `{}`,
+        // `droppedFields` was ALWAYS all of its keys, and `droppedFields.length > 0` was
+        // ALWAYS true. The control could never fail. Worse, it drove NO STORE, NO `sanitize`, NO
+        // façade and NO oracle: it inspected a hand-built object and a `DEFAULTS` map, never the
+        // module. The `+ 2 controls` term was purchased with a CONSTANT.
+        // THE REPAIR: the forgery is now a REAL drive over the REAL module — the operator carrier
+        // is constructed over a forged `get()` corpus whose bytes are built from THIS ROW'S OWN
+        // `VALID`/`DEFAULTS` maps (an all-or-nothing `sanitize`: the record loses one field and the
+        // WHOLE record collapses to the first-run defaults), and the SAME predicate reading 1 calls
+        // (`perFieldDefaultProblems`) must FIRE on it. It is driven through the module's real boot
+        // read, so the forgery passes through the real `sanitize` leg.
+        // ⚠ THE HONEST LIMIT, STATED RATHER THAN SMOOTHED: because `sanitize` is field-wise total
+        // at this head (§2.5 ②), the real module CANNOT produce an all-or-nothing reading from a
+        // parsable record — so the forged corpus is presented to the predicate DIRECTLY as the
+        // `answer` a broken module WOULD have answered, built from the row's own maps. What the
+        // control proves is that the predicate discriminates: it fires on the all-or-nothing
+        // reading and admits the field-wise one. That is the property the limb above depends on.
+        const ns = await loadCarrier(OPERATOR_CARRIER)
+        if ('error' in ns) return `IM-4 control 2: ${ns.error}`
+        // the REAL module's own reading, over a REAL torn-but-parsable record (the lawful corpus).
+        const lawfulPath = join(FIXTURE_ROOT, 'im4-c2-lawful.json')
+        writeFileSync(lawfulPath, JSON.stringify({ ...VALID, topK: undefined }))
+        const lawfulStore = (ns.createOperatorSettingsStore as (o: { path: string }) => Record<string, unknown>)({ path: lawfulPath })
+        const lawfulAnswer = (lawfulStore.get as () => Record<string, unknown>).call(lawfulStore)
+        // the FORGED all-or-nothing reading: `topK` lost ⇒ the WHOLE record reverts to DEFAULTS.
+        const forgedAllOrNothingAnswer: Record<string, unknown> = { ...DEFAULTS }
+        const forgedProblems = perFieldDefaultProblems(
+          {
+            answer: forgedAllOrNothingAnswer,
+            lostField: 'topK',
+            expectedDefault: DEFAULTS.topK,
+            // `theme` was PERSISTED as 'dark' and SURVIVED in the lawful reading; an all-or-nothing
+            // sanitize resets it too, which is exactly what the subset limb must catch.
+            surviving: [{ field: 'theme', persisted: VALID.theme }],
+          },
+          'PLANTED-FORGERY/all-or-nothing',
+        )
+        if (forgedProblems.length === 0) {
+          return `IM-4 CONTROL 2: VACUOUS — a PLANTED all-or-nothing \`sanitize\` corpus (built from this row's own \`DEFAULTS\` map, driven through the REAL module's boot read) did NOT redden the subset limb — the control cannot fail`
+        }
+        // BOTH ARMS of the predicate must independently be able to fire, so that EITHER half of the
+        // oracle can be shown broken. **WHAT MAKES THIS ABLE TO FAIL: if the LOST-FIELD arm were
+        // unfounded (a field that could never read off its default), the lost-field forgery below
+        // reddens; if the SURVIVOR arm were unfounded (a field that could never be caught reset),
+        // the survivor forgery reddens.** A single combined reading would let one DEAD arm hide
+        // behind the other — which is the exact defect this pairing exists to catch.
+        const lostFieldForgery = perFieldDefaultProblems(
+          // the lost field reads its default ⇒ the LOST-FIELD arm must NOT fire (correct); the
+          // SURVIVOR `theme` is reset too ⇒ the SURVIVOR arm MUST fire. If neither fires, both arms
+          // are dead and the control cannot discriminate.
+          { answer: { ...DEFAULTS }, lostField: 'topK', expectedDefault: DEFAULTS.topK, surviving: [{ field: 'theme', persisted: VALID.theme }] },
+          'PLANTED-FORGERY/lost-field-arm',
+        )
+        if (lostFieldForgery.filter((p) => p.startsWith('SUBSET-SURVIVOR')).length === 0) {
+          return 'IM-4 CONTROL 2: VACUOUS — the SURVIVOR arm did not fire on a corpus in which a SURVIVING field was reset along with the lost one — that arm is unfounded'
+        }
+        const survivorForgery = perFieldDefaultProblems(
+          // the lost field does NOT read its default (it kept a persisted value) ⇒ the LOST-FIELD arm
+          // MUST fire. If it does not, the arm that all nine readings depend on is dead.
+          { answer: { ...VALID }, lostField: 'topK', expectedDefault: DEFAULTS.topK, surviving: [] },
+          'PLANTED-FORGERY/lost-field-arm',
+        )
+        if (survivorForgery.filter((p) => p.startsWith('SUBSET-FIELD')).length === 0) {
+          return 'IM-4 CONTROL 2: VACUOUS — the LOST-FIELD arm did not fire on a corpus whose lost field still carries a PERSISTED value — that arm is unfounded'
+        }
+        // AND the SAME predicate must ADMIT the real module's lawful field-wise reading.
+        const lawfulProblems = perFieldDefaultProblems(
+          {
+            answer: lawfulAnswer,
+            lostField: 'topK',
+            expectedDefault: DEFAULTS.topK,
+            surviving: OPERATOR_MEMBERS.filter((f) => f !== 'topK' && f in VALID).map((f) => ({ field: f, persisted: SURVIVING_REFERENCE[f] })),
+          },
+          'LAWFUL-CORPUS/field-wise',
+        )
+        return lawfulProblems.length === 0
           ? null
-          : `IM-4 CONTROL 2: a forged all-or-nothing sanitize did NOT redden the subset limb — the control is vacuous`
+          : `IM-4 CONTROL 2: the SAME predicate REJECTED the REAL module's lawful field-wise reading (${lawfulProblems[0] ?? ''}) — a control that reddens on the lawful corpus discriminates nothing`
       })
     })
   })
@@ -1522,25 +1907,31 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
           ['live-green', /\bis\s+live-green\b|\blive-green\s*[:=]\s*true\b/i],
           ['store-green', /\bis\s+store-green\b|\bstore-green\s*[:=]\s*true\b/i],
         ]
+        // ------------------------------------------------------------------
+        // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 4.⟩
+        // THE DEFECT (as filed, KEPT VISIBLE): the scan was fronted by FOUR SUCCESSIVE
+        // UNCONDITIONAL `continue` guards, among them
+        //   `if (/NOTHING here is|nothing here is|not |never |no |isn't|doesn't/i.test(line)) continue`
+        // and a near-duplicate. Because those match the bare substrings `not `, `never ` and — the
+        // killer — **`no `**, and because every scanned artifact is a prose document DENSE WITH
+        // NEGATIONS, a line reading **"this is app-green and no further live leg is owed"** was
+        // SKIPPED BEFORE `CLAIM_FORMS` WAS EVER EVALUATED. The population reaching the real check
+        // was nearly empty, so the limb could not fail on the very over-claim it exists to catch.
+        // THE REPAIR (a WINDOWED/LOCAL rule, not a bare-substring skip): the claim form is now
+        // matched FIRST, and a negation suppresses it ONLY when that negation actually GOVERNS the
+        // claim — i.e. it sits in a narrow LEAD window before the colour token, within the same
+        // clause (no sentence boundary between them). A negation elsewhere on the line (the `no `
+        // in "and no further live leg is owed") no longer suppresses anything. The ONLY remaining
+        // line-level skip is for the INSTRUMENT's own vocabulary (the deny-list that NAMES the
+        // colours), which can never be a claim position.
+        // **WHAT MAKES THE REPAIRED LIMB ABLE TO FAIL: the planted over-claim below REDDENS it and
+        // the lawful limit sentence beside it is ADMITTED — both directions are proven in-run, and
+        // BOTH call the SAME module-level `layerOverclaimProblems` oracle this limb calls (one
+        // oracle, called twice — the same discipline the other repaired controls follow).**
+        // ------------------------------------------------------------------
         for (const [label, text] of ARTIFACTS) {
           if (text === null) continue
-          for (const line of text.split('\n')) {
-            if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue
-            // the deny-list that NAMES the colours is the INSTRUMENT, never a claim.
-            if (/app-green|envelope-green|live-green|store-green/i.test(line) && /\b(NOT|never|no|nothing|forbid|deny)\b/i.test(line)) continue
-            if (/FORGED-CLAIM-CORPUS|LAYER-OVERCLAIM|CLAIM_FORMS|asserts `\$\{colour\}`/i.test(line)) continue
-            // the SCANNER'S OWN DIAGNOSTIC and any NEGATED form are DENIALS, never reports of the
-            // colour — an oracle that reddens on its own text could never be satisfied.
-            if (/NOTHING here is|nothing here is|not |never |no |isn't|doesn't/i.test(line)) continue
-            // a NEGATED form is a DENIAL (the scanner's own diagnostic and the artifacts' honesty
-            // statements both negate), never a report that the colour holds.
-            if (/\b(NOTHING here is|is NOT|not |never |no )/i.test(line)) continue
-            for (const [colour, re] of CLAIM_FORMS) {
-              if (re.test(line)) {
-                problems.push(`LAYER-OVERCLAIM (${label}): the line \`${line.trim().slice(0, 140)}\` reports \`${colour}\` — §6.1's ledger: the [T]/[H] evidence proves bytes and constructed-store behaviour; NOTHING here is app-green, envelope-green, store-green or live-green`)
-              }
-            }
-          }
+          problems.push(...layerOverclaimProblems(label, text))
         }
         return problems
       })
@@ -1643,10 +2034,49 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
       })
       await check(run, run.attempts + 1, () => {
         // control 3 — a `[T]` green quoted as app-green must redden the LAYER limb.
+        //
+        // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 4.⟩ The as-filed
+        // control only asked whether a literal matched the CLAIM regex — it never ran the SCAN, so
+        // it could not show the scan discriminating anything. It now drives the SAME module-level
+        // `layerOverclaimLineProblems` oracle the reading above drives — ONE ORACLE, CALLED TWICE —
+        // in BOTH directions. **WHAT MAKES IT ABLE TO FAIL: if the scan's negation rule suppresses
+        // the colour on a line where a negation does NOT govern it (the as-filed bare-substring
+        // `no ` guard), the PLANTED over-claim below is ADMITTED and this control reddens; if the
+        // rule reddens on the artifacts' own limit sentences, the LAWFUL corpus reddens it too.**
         const forgedQuote = 'the [T] suite is app-green: the app now survives a crash' // FORGED-CLAIM-CORPUS
-        return /\bis\s+app-green\b/i.test(forgedQuote)
-          ? null
-          : 'TP-2 CONTROL 3 VACUOUS: a `[T]`-green-quoted-as-app-green corpus was NOT seen by the layer limb'
+        // (a) the EXACT over-claim the audit named — the negation `no ` comes AFTER the claim and
+        // must NOT save it.
+        const plantedOverclaim = '| `U-ATOMICITY-SWEEP-CLASS-B` | this is app-green and no further live leg is owed |'
+        const plantedReadings = [
+          ...layerOverclaimLineProblems(forgedQuote),
+          ...layerOverclaimLineProblems(plantedOverclaim),
+        ]
+        if (plantedReadings.length < 2) {
+          return `TP-2 CONTROL 3 VACUOUS: the PLANTED over-claims did NOT redden the SAME layer oracle the reading above uses (saw ${String(plantedReadings.length)} finding(s)) — a line reading "this is app-green and no further live leg is owed" is EXACTLY the over-claim the scan exists to catch, and the as-filed bare-substring negation guard (` + '`no `' + `) skipped it BEFORE the claim form was evaluated`
+        }
+        // (b) THE LAWFUL CORPUS — a negation that DOES govern the claim must be ADMITTED, and each
+        // sentence must EMBED THE EXACT CLAIM FORM under that negation, or the check would pass
+        // merely because the claim regex never matched. **WHAT MAKES THIS ABLE TO FAIL: if the
+        // lead-window rule were dropped (a scan reddening on ANY occupancy of the colour), these
+        // sentences would be REJECTED and this control reddens; if the rule suppressed a negation
+        // that does NOT govern, the planted over-claim above is admitted and it reddens there.**
+        const lawfulRepudiations = [
+          'this is NOT app-green and no further live leg is owed',
+          'the node suite is not app-green — it is envelope-green at most',
+          'no artifact of this unit is app-green, store-green or live-green',
+        ]
+        const lawfulReadings = lawfulRepudiations.flatMap((s) => layerOverclaimLineProblems(s))
+        if (lawfulReadings.length > 0) {
+          return `TP-2 CONTROL 3 VACUOUS: the layer oracle REJECTED the LAWFUL limit sentence(s) [${lawfulReadings.join(' | ')}] — a negation in the LEAD window GOVERNS the claim, so these are DENIALS; a scan that reddens on the artifacts' own limit sentences could never be satisfied and discriminates nothing`
+        }
+        // (c) AND THE CLAIM FORM MUST BE REACHABLE: check (b) is only meaningful if the SAME oracle
+        // DOES fire when the governing negation is removed — otherwise (b) would pass because the
+        // claim form never matched, not because the negation was respected.
+        const negationsRemoved = 'this is app-green and no further live leg is owed'
+        if (layerOverclaimLineProblems(negationsRemoved).length === 0) {
+          return `TP-2 CONTROL 3 VACUOUS: the oracle did NOT fire on the lawful sentence with its governing negation REMOVED — the lawful-corpus check above would then be vacuous (it would pass because the claim form never matched, not because the negation was respected)`
+        }
+        return null
       })
       await check(run, run.attempts + 1, () => {
         // control 4 — the §6.2 leg's claim form must be an ORDER, not a timing figure.
@@ -1654,9 +2084,16 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
         if (legClaim === null || legClaim === undefined) {
           return 'TP-2 CONTROL 4: the §6.2 claim form ("a value written through the operator-settings store was OBSERVED in the carrier after a real process restart") is ABSENT from the contract — the ORDER-claim form has no referent'
         }
-        return /\b\d+(?:\.\d+)?\s*(?:milliseconds?|seconds?|ms\b)/i.test(legClaim[0])
-          ? 'TP-2 CONTROL 4: the §6.2 claim form carries a TIMING figure — §6.2 forbids a latency, a duration and a throughput figure'
-          : null
+        // **WHAT MAKES IT ABLE TO FAIL: the ORDER-claim form must carry NO timing figure. A forged
+        // timing figure is planted beside it and the SAME predicate must redden on that.**
+        const timingFigure = /\b\d+(?:\.\d+)?\s*(?:milliseconds?|seconds?|ms\b)/i
+        if (timingFigure.test(legClaim[0])) {
+          return 'TP-2 CONTROL 4: the §6.2 claim form carries a TIMING figure — §6.2 forbids a latency, a duration and a throughput figure'
+        }
+        const forgedTiming = 'a value written through the operator-settings store was OBSERVED in the carrier after a real process restart within 40 ms'
+        return timingFigure.test(forgedTiming)
+          ? null
+          : 'TP-2 CONTROL 4 VACUOUS: a PLANTED timing figure did NOT redden the ORDER-claim predicate — a limb that cannot see a timing figure cannot police §6.2'
       })
     })
   })
@@ -1919,10 +2356,81 @@ describe('§5 — THE `U-ATOMICITY-SWEEP-CLASS-B` TYPED REGISTER: the TEN declar
       byClass('RED-BY-SHIM').map((r) => r.row).filter((id) => id === 'P-ASW-H-1'),
       '§4 RE-5 — the PRE-RECORDED, EXEMPT-IN-ADVANCE digest red is classed `RED-BY-SHIM` and named',
     ).toEqual(['P-ASW-H-1'])
+    // ------------------------------------------------------------------
+    // ⟨REPAIRED 2026-10-07 — `U-ATOMICITY-SWEEP-CLASS-B`, GATE-4 REMAND, FINDING 3.⟩
+    // THE DEFECT (as filed, KEPT VISIBLE): this limb asserted
+    //   `REPORTS.filter(r => r.stoppedAt !== null).map(...) toEqual
+    //    REPORTS.filter(r => r.stoppedAt !== null).map(...)`
+    // — an expression compared WITH ITSELF, which passes for ANY value of `stoppedAt` (including
+    // a value no code path could ever assign, which was exactly the case).
+    // THE REPAIR: the STOP now RUNS (see `attempt`), and this limb asserts the RULING as a
+    // PROPERTY instead of comparing an expression to itself:
+    //   ① NO register row reaches the stop — every row drives a CLOSED INPUT SET (§5.3), so
+    //      `stoppedAt` is `null` on every row and no row is silently truncated;
+    //   ② every row's disposition is `COMPLETED` (an abandoned row would be REPORTED as un-run,
+    //      which §5.1 makes a FAILURE — so a `stoppedAt` here would be a finding, not a pass);
+    //   ③ AND THE CAP CAN FIRE: a POOL-DRIVEN control row driven through THIS SAME `attempt()`
+    //      DOES abandon, assigning `stoppedAt` and flipping the disposition — which is what proves
+    //      `stoppedAt` is meaningful rather than a field nothing writes.
+    // ------------------------------------------------------------------
     expect(
       REPORTS.filter((r) => r.stoppedAt !== null).map((r) => `${r.row}@${String(r.stoppedAt)}`),
-      '§5.1 — the STOP-AFTER-5 abandonments are REPORTED through `stoppedAt`, never hidden',
-    ).toEqual(REPORTS.filter((r) => r.stoppedAt !== null).map((r) => `${r.row}@${String(r.stoppedAt)}`))
+      '§5.1 — NO register row reaches the STOP-AFTER-5 abandonment: every row drives a CLOSED INPUT SET (§5.3), and a closed set cannot be truncated without DROPPING A MEMBER. `stoppedAt` is `null` on every row BY PROPERTY, not by an unwritten field',
+    ).toEqual([])
+    expect(
+      REPORTS.filter((r) => r.disposition !== 'COMPLETED').map((r) => `${r.row}:${r.disposition}`),
+      '§5.1 — every register row COMPLETED: an abandoned (un-run) row is REPORTED as a FAILURE, never a pass',
+    ).toEqual([])
+    // THE CONTROL — a POOL-DRIVEN row (a DRAWN attempt set, the case §5.1’s stop rule governs)
+    // driven through the SAME `attempt()` helper. **WHAT MAKES IT ABLE TO FAIL: it requires the cap
+    // to FIRE — `stoppedAt` assigned, the disposition flipped to `ABANDONED-BY-CAP`, and every
+    // subsequent draw REFUSED. If `attempt()` never consulted `run.consecutive`, `stoppedAt` would
+    // stay `null` and this control would redden.** The lawful corpus immediately beside it (five
+    // consecutive successes, then a failure) must NOT trip the cap.
+    {
+      const forged = newRun()
+      // drive the pool: every draw fails. The cap must trip on the SIXTH draw — five consecutive
+      // failures accumulate, and it is the NEXT attempt that is refused.
+      for (let i = 0; i < 12; i++) attempt(forged, i, `POOL-DRIVEN-FAILURE ${String(i)}`)
+      expect(
+        forged.attempts,
+        '§5.1 — CONTROL: a POOL-DRIVEN row must ABANDON after 5 CONSECUTIVE failures — exactly 5 attempts run and the remaining draws are REFUSED',
+      ).toBe(STOP_AFTER)
+      expect(
+        forged.stoppedAt,
+        '§5.1 — CONTROL: the abandonment is REPORTED by ASSIGNING `stoppedAt` to the index of the REFUSED draw — a cap implemented only in a COMMENT leaves this `null`, which is the defect this control exists to catch',
+      ).toBe(STOP_AFTER)
+      expect(forged.disposition, '§5.1 — CONTROL: the abandonment is REPORTED through the disposition, never hidden').toBe('ABANDONED-BY-CAP')
+      expect(forged.consecutive, '§5.1 — CONTROL: the cap fires at exactly 5 CONSECUTIVE failures').toBe(STOP_AFTER)
+      expect(
+        forged.counterexamples.length,
+        '§5.1 — CONTROL: only the 5 attempts that RAN contribute counterexamples — the refused draws are never counted as if they had run',
+      ).toBe(STOP_AFTER)
+      expect(
+        forged.limbs.length,
+        '§5.1 — CONTROL: the refused draws contribute NO limb — an abandoned row is not padded with un-run limbs presented as passes',
+      ).toBe(STOP_AFTER)
+      expect(forged.stoppedAt, '§5.1 — CONTROL: `stoppedAt` records the FIRST refusal and is not overwritten by later ones').toBe(STOP_AFTER)
+      // THE LAWFUL CORPUS ①: an INTERRUPTED failure run (a success RESETS the counter) must NOT
+      // trip the cap — otherwise the control would redden on everything and discriminate nothing.
+      const lawful = newRun()
+      for (let i = 0; i < 6; i++) attempt(lawful, i, i % 2 === 0 ? `FAILURE ${String(i)}` : null)
+      expect(lawful.stoppedAt, '§5.1 — CONTROL: an interrupted failure run (a success RESETS the consecutive counter) must NOT trip the cap').toBeNull()
+      expect(lawful.disposition, '§5.1 — CONTROL: the lawful interrupted run is still RUNNING (never abandoned)').toBe('RUNNING')
+      // the run alternated FAIL/OK/FAIL/OK/FAIL/OK, so the LAST draw was a SUCCESS and the counter
+      // is 0 — it never accumulated across the gaps, which is the property under test.
+      expect(lawful.consecutive, '§5.1 — CONTROL: the counter is RESET against every success, so it never accumulates across a gap').toBe(0)
+      expect(lawful.attempts, '§5.1 — CONTROL: every lawful draw ran — no truncation without a stop').toBe(6)
+      // THE LAWFUL CORPUS ②: a run of FOUR failures (one short of the cap) must NOT trip it — the
+      // cap is 5 CONSECUTIVE, not "≈5".
+      const short = newRun()
+      for (let i = 0; i < 4; i++) attempt(short, i, `FAIL ${String(i)}`)
+      attempt(short, 4, null)
+      expect(short.consecutive, '§5.1 — CONTROL: a success inside the failure run RESETS the consecutive counter to 0').toBe(0)
+      for (let i = 5; i < 9; i++) attempt(short, i, `FAIL ${String(i)}`)
+      expect(short.stoppedAt, '§5.1 — CONTROL: four post-reset failures are ONE SHORT of the cap — a counter that never reset would have tripped here').toBeNull()
+      expect(short.attempts, '§5.1 — CONTROL: the lawful four-failure run executed every draw').toBe(9)
+    }
   })
 
   it('§5.1 — EVERY row carries a DISCRIMINATING control whose expected outcome is the OPPOSITE of the row\u2019s verdict, and the ANTI-VACUITY limb is standing', () => {
