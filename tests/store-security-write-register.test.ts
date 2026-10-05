@@ -553,9 +553,13 @@ const SECURE_REFUSED_TOKEN = ['secure', 'refused'].join('-')
 /** §1.2 item 9 / §2.2 — the receipt's reason token, likewise assembled from parts so the
  *  needle never appears as a literal in this file's own bytes. */
 const WRITE_FAILED_TOKEN = ['write', 'failed'].join('-')
-/** §6 — the DURABILITY TOKEN SET: any of these appearing as an ASSERTED claim in this
- *  unit's artifact texts is §5.1 `P-SSW-H-4`'s anti-overclaim falsifier. */
-const DURABILITY_TOKENS = ['DURABLE-ON-DISK', 'CRASH-SAFE-ON-DISK', 'BYTES-ON-DISK-AFTER-CRASH', 'FSYNC-COMPLETED-ON-DISK'] as const
+/** §6 — THE DURABILITY-VOCABULARY SET, carried as the INSTRUMENT'S OWN WORD LIST (the
+ *  words the scan LOOKS FOR, never a claim of this file's). See `P-SSW-H-4` below for the
+ *  re-aim that made this row falsifiable: the AS-FILED set was the four SCREAMING-CASE
+ *  literals `DURABLE-ON-DISK` · `CRASH-SAFE-ON-DISK` · `BYTES-ON-DISK-AFTER-CRASH` ·
+ *  `FSYNC-COMPLETED-ON-DISK`, which appear in NO artifact of this unit, so the row could
+ *  never redden; the OPERATIVE subject is the PROSE-SHAPED over-claim. */
+const DURABILITY_TOKENS = ['durable', 'durability', 'crash-safe', 'crash safe', 'survives a power loss', 'survive a power loss', 'bytes on disk', 'torn-file-free', 'fsync completed', 'fsync-completed'] as const
 /** §2.5 — the widened return type's spelling, assembled so the needle is exact. */
 const WIDENED_RETURN = ['SecuritySettings', ' & { write: ', 'SecurityWriteReceipt', ' }'].join('')
 /** §1.1 member 5 / `S-P-3` — the md5 literal the re-statement must keep VISIBLE, and the
@@ -1261,29 +1265,168 @@ function unrestatedControlProblems(): string[] {
 
 // ===========================================================================
 // §5.1 `P-SSW-H-4` — THE NO-DURABILITY / LAYER HONESTY ROW (the anti-overclaim row).
-// The instrument reads the unit's CLAIM-BEARING artifacts and refuses a durability claim
-// asserted as a SHAPE reading. The token set is SCREAMING-CASE and carried at the top of
-// this file, so the scan's own vocabulary is never mistaken for a claim.
+//
+// `⟶ RE-AIM ⑤ (THE GATE-4 `G-1` REMAND — `P-SSW-H-4` WAS VACUOUS; `RCA-8(c)`
+// ANNOTATE-BESIDE: the as-filed text is KEPT HERE VERBATIM and the block below is the
+// OPERATIVE disposition).`
+//
+// THE VACUITY, MEASURED (not argued). The AS-FILED row had TWO readings and BOTH were
+// true-by-construction:
+//   (i)  `durabilityClaimProblems()` required one of the four SCREAMING-CASE literals
+//        (`DURABLE-ON-DISK` etc.) to appear VERBATIM. MEASURED at the remand head over the
+//        three artifacts it read (this register · the sibling guard · the spec) AND over the
+//        greens artifact and the store module: the ONLY line in the whole unit carrying any
+//        of the four is this file's own `const DURABILITY_TOKENS = [...]` vocabulary
+//        declaration — which the scanner SKIPS BY NAME (`line.includes('DURABILITY_TOKENS')`).
+//        So the reading's counterexample set was EMPTY BY CONSTRUCTION: no edit to a DONE
+//        row, a greens artifact, a park artifact or an assertion text could ever redden it.
+//   (ii) the second reading (`/NO DURABILITY CLAIM FROM A CALL-COUNT/` inside the spec's §6)
+//        asserted a clause the SPEC IS REQUIRED TO CARRY (§6's mandatory honesty block), so it
+//        too was true by construction — it policed the contract's own prose, not the unit's.
+//   MEANWHILE the REAL over-claim class passed GREEN: an ordinary-English durability
+//   assertion in a DONE row, a greens artifact or a park artifact — e.g.
+//   *"the write is now crash-safe and durable on disk"* — carries NONE of the four literals,
+//   so the as-filed scan could not see it (PROVEN by the control below).
+//
+// THE OPERATIVE SUBJECT: a CASE-INSENSITIVE PROSE pattern over the CLAIM-BEARING lines of
+// the artifacts this row POLICES (this register · the sibling guard · the spec · the
+// greens artifact · the store module), with an EXPLICIT ALLOW-LIST for the NEGATED forms the
+// spec legitimately uses (`NO DURABILITY CLAIM`, `not durability`, `shape only`,
+// `never claims`, …) — because a prohibition that NAMES what it forbids is not an assertion
+// of it. The allow-list is the reason the REAL artifacts (which only NEGATE) stay GREEN.
+//
+// THE ROW NOW REDDENS ON ITS REAL COUNTEREXAMPLE: a durability assertion in a CLAIM
+// position. The control below forges exactly the sentence the remand names and REQUIRES the
+// same production predicate to reject it — a control that cannot fail is the finding this
+// re-aim exists to close, and the as-filed predicate is MEASURED against the same forged
+// line so the vacuity is a printed reading rather than an argument.
 // ===========================================================================
+/** The NEGATED forms the spec and this unit's artifacts legitimately use: a line carrying one
+ *  of these is a PROHIBITION or a LIMIT, never an assertion. Case-insensitive, and matched as
+ *  phrases (never as a bare `no`, so `no residual tmp` cannot silently excuse a claim). */
+const DURABILITY_NEGATIONS = [
+  'no durability claim',
+  'durability is not',
+  'shape only',
+  'never claims',
+  'never as a completed',
+  'never as a durable',
+  'no claim',
+  'claims nowhere',
+  'claim nowhere',
+  'asserted nowhere',
+  'nothing here is',
+  'does not prove',
+  'never a durability',
+  'without a durability',
+  'falsifier',
+  'anti-overclaim',
+  'no durability',
+  'durability is asserted',
+  'is not durability',
+  'no durability-based',
+  // THE LIMIT-LEDGER COLUMN: the spec's §6 table states, per deliverable, "what that layer
+  // does NOT prove" — `durability; crash recovery; …` is the NEGATED reading of the row, i.e.
+  // the spec's own HONESTY, and it is the clause this whole row exists to keep honest.
+  'not prove',
+  'does not prove',
+] as const
+
+/** The four AS-FILED literals, kept VISIBLE and still run as a SECOND limb: an artifact that
+ *  spells one of them in a claim position is the `RCA-8(c)`-named over-claim shape. */
+const AS_FILED_DURABILITY_LITERALS = ['DURABLE-ON-DISK', 'CRASH-SAFE-ON-DISK', 'BYTES-ON-DISK-AFTER-CRASH', 'FSYNC-COMPLETED-ON-DISK'] as const
+
+/** The row's shared PROSE predicate: case-insensitive durability vocabulary in a CLAIM
+ *  position. Exposed as its OWN function so the positive control drives the SAME code the row
+ *  drives — a control over a re-implemented copy would discriminate nothing.
+ *
+ *  `scope` names the artifact so the INSTRUMENT ITSELF can be excluded: this register must
+ *  CARRY the vocabulary (it is the word list the scan looks for, and this row's prose
+ *  DISCUSSES the over-claim by naming it), and a scanner that reddened on its own vocabulary
+ *  is an oracle that cannot pass — as useless as one that cannot fail. The exclusion is
+ *  narrowed to the shape a vocabulary/prohibition must have (a quoted pool entry, an
+ *  ALL-CAPS denial, an SCREAMING-CASE token, or a negated/limit form); every OTHER line —
+ *  including a `//` or `*` comment — is a CLAIM POSITION, which is where the GATE-4 `G-1`
+ *  remand's over-claim class lives ("a DONE row, a greens artifact or a park artifact"). */
+function durabilityClaimLine(line: string, scope: 'instrument' | 'subject'): string | null {
+  const lower = line.toLowerCase()
+  const prose = DURABILITY_TOKENS.filter((t) => lower.includes(t.toLowerCase()))
+  const literal = AS_FILED_DURABILITY_LITERALS.filter((t) => line.includes(t))
+  if (prose.length === 0 && literal.length === 0) return null
+  // (a) THE WORD LIST ITSELF and its own cited forms — the INSTRUMENT, never a claim.
+  if (line.includes('DURABILITY_TOKENS') || line.includes('AS_FILED_DURABILITY_LITERALS') || line.includes('DURABILITY_NEGATIONS')) return null
+  // (b) THE PREDICATE'S OWN NAME — a line that NAMES the oracle is discussing the instrument
+  //     (this file's re-aim block, the row's comments, the row's own diagnostic text), never
+  //     asserting a durability outcome. A claim would not need to name the scanner.
+  if (line.includes('durabilityClaim') || line.includes('DURABILITY-CLAIM')) return null
+  if (scope === 'instrument') {
+    // THE INSTRUMENT'S OWN PROSE. This file and the sibling guard ARE the anti-overclaim
+    // instrument: they must be able to NAME the claim they refuse (that is how a falsifier is
+    // written) and they must carry the word list they scan with. A scanner that reddened on its
+    // own documentation could never be satisfied by ANY correct instrument — the same
+    // "oracle that cannot pass" failure class as the vacuity this re-aim closes. The exclusion
+    // is therefore TOTAL for the two instrument files and rests on a MEASURED property rather
+    // than on a wording: no `[H]`/`[T]` CLAIM of this unit lives in a test file — the unit's
+    // claims live in the DONE row, the greens artifact, the park artifact and the spec, and
+    // THOSE are scanned as SUBJECTS below with no exclusion at all.
+    return null
+  }
+  // (c) THE FALSIFIER LIST — the assertions this row refuses by name, and the ADMIT corpus the
+  //     control drives, are CARRIED here as DATA (they must exist for the control to drive
+  //     them); they are marked as such and are the instrument's corpus, not this unit's claim.
+  if (line.includes('FORGED-CLAIM-CORPUS') || line.includes('NEGATED-FORM-CORPUS')) return null
+  // (d) THE NEGATED/LIMIT FORMS the spec legitimately uses (a prohibition that names what it
+  //     forbids is not an assertion of it) — an explicit phrase allow-list, never a bare `no`.
+  if (DURABILITY_NEGATIONS.some((n) => lower.includes(n))) return null
+  // (e) A MARKDOWN TABLE CELL that continues a "what that layer does NOT prove" header — the
+  //     spec's §6 limit ledger wraps its cells, so the NEGATION sits on the header row and the
+  //     words ("durability; crash recovery; …") on the next physical line. Tracked by the
+  //     caller (`durabilityClaimProblems`) since it is a POSITION property of the artifact.
+  // (f) THE NON-CRASH SENSE of `durable`: two pre-existing landings use it for something other
+  //     than a survival claim on the WRITE —
+  //       • the byte-scan-helper line calls the `[H]` instrument "durable" meaning it ENDURES
+  //         across heads (a claim about the instrument's availability);
+  //       • the store's step-5 comment says the *rename* "is durable at the directory level",
+  //         which is the `fsync(dir)` leg's DESIGN RATIONALE in production code, not a node
+  //         evidence claim — §2.4 item 2 requires exactly that leg, so reddening here would
+  //         make the row unsatisfiable by the declared implementation.
+  //     BOTH are recorded in the DONE row as the two lines in the unit where this vocabulary
+  //     appears outside an anti-claim position, so the reading is honest rather than invisible.
+  if (lower.includes('durable `[h]` instrument') || lower.includes('durable instrument')) return null
+  if (/^[ \t]*(\/\/|\*|\/\*)/.test(line) && /\bis durable at the directory level\b/i.test(line)) return null
+  return `the line \`${line.trim().slice(0, 160)}\` asserts durability vocabulary [${[...prose, ...literal].join(', ')}] in a CLAIM position — §6's honesty block: every atomic claim is a CALL ORDER/COUNT over the injected façade; a real \`fsync\` completion, a crash-safe write or bytes-on-disk-after-a-power-loss is asserted NOWHERE in node evidence (the NEGATED forms the spec uses are allow-listed; this line is not one of them)`
+}
+
 function durabilityClaimProblems(): string[] {
   const problems: string[] = []
-  const artifacts: Array<[string, string | null]> = [
-    ['this register', readMaybe(SELF_PATH)],
-    ['the sibling guard', readMaybe(join(HERE, 'pd-store-security-write.test.ts'))],
-    ['the spec', readMaybe(SPEC_PATH)],
+  const artifacts: Array<[string, 'instrument' | 'subject', string | null]> = [
+    ['this register', 'instrument', readMaybe(SELF_PATH)],
+    ['the sibling guard', 'instrument', readMaybe(join(HERE, 'pd-store-security-write.test.ts'))],
+    ['the spec', 'subject', readMaybe(SPEC_PATH)],
+    // the artifacts the AS-FILED row did NOT police although §5.1's own text names them
+    // ("no durability token appears in any assertion text, DONE row or park artifact")
+    ['the greens artifact', 'subject', readMaybe(join(REPO_ROOT, 'docs', 'specs', 'unit-store-security-write-greens.md'))],
+    ['the store module', 'subject', readMaybe(STORE_PATH)],
   ]
-  for (const [label, text] of artifacts) {
+  for (const [label, scope, text] of artifacts) {
     if (text === null) continue // an artifact not yet authored has no claim to police
-    // The scan is SCOPED to the unit's CLAIM-BEARING lines, excluding the vocabulary's OWN
-    // declaration line (the token SET is the instrument, not a claim) and the DENIAL positions
-    // (a prohibition that names what it forbids is not an assertion of it).
+    // A MARKDOWN LIMIT-LEDGER CELL: a table whose HEADER row carries a negation (`What that
+    // layer does NOT prove`). Every data row of THAT table is a limit cell — the spec's §6
+    // ledger states, per deliverable, what its evidence does NOT cover, and a limit column is
+    // by construction the spec's own HONESTY, never an over-claim. Keyed off the HEADER ROW and
+    // released at the table's end (the first non-`|` line) — so this can never excuse a claim
+    // written anywhere else in the artifact.
+    let inLimitTable = false
     for (const line of text.split('\n')) {
-      if (!DURABILITY_TOKENS.some((t) => line.includes(t))) continue
-      if (line.includes('DURABILITY_TOKENS')) continue // the vocabulary's own declaration
-      if (/^\s*(\/\/|\*|\/\*)/.test(line)) continue // prose/comment positions
-      if (/\b(no|never|not|forbid|prohibit|anti-overclaim|NOTHING|WITHOUT)\b/i.test(line)) continue
-      if (/asserted NOWHERE|claim(s)? NOWHERE/.test(line)) continue
-      problems.push(`DURABILITY-CLAIM (${label}): the line \`${line.trim().slice(0, 160)}\` asserts a durability token as a claim — §6's honesty block: every atomic claim is a CALL ORDER/COUNT over the injected façade; a real \`fsync\` completion or a crash-recovery outcome is asserted NOWHERE in node evidence`)
+      const tableRow = /^\s*\|/.test(line)
+      if (!tableRow) {
+        inLimitTable = false
+      } else if (/\|\s*\|?\s*/.test(line) && /\bNOT\b/.test(line) && /prove/i.test(line)) {
+        inLimitTable = true
+      }
+      if (inLimitTable && tableRow) continue
+      const problem = durabilityClaimLine(line, scope)
+      if (problem !== null) problems.push(`DURABILITY-CLAIM (${label}): ${problem}`)
     }
   }
   return problems
@@ -1402,28 +1545,58 @@ function setCallSiteProblems(): string[] {
 
 /** `§2.2`/`K-1`/`O-3` — NO new `src/main/**` importer of `security-store.js`: the receipt's
  *  home is `src/shared/types.ts`, so `NEG-SECOND-WRITER`'s offender set stays EMPTY. The
- *  scan is MODULE-IDENTITY based (a renamed/aliased binding is caught by the same limb). */
-function secondWriterClosureProblems(): string[] {
-  const problems: string[] = []
-  const dir = join(REPO_ROOT, 'src', 'main')
-  if (!existsSync(dir)) {
-    problems.push(`ABSTRACT-SUBJECT: src/main does not exist — the module-identity scan has no substrate (\`O-3\`)`)
-    return problems
-  }
+ *  scan is MODULE-IDENTITY based (a renamed/aliased binding is caught by the same limb).
+ *
+ *  `⟶ RE-AIM ⑨ (THE GATE-4 `G-7` REMAND — THE OFFENDER PREDICATE WAS STRICTLY WEAKER THAN THE
+ *  INSTRUMENT IT RE-ASSERTS).` AS-FILED, the closing loop pushed TWO offender classes:
+ *    (1) `reached.has(id)` — the module-IDENTITY closure (a module importing the store, or
+ *        importing a module that does), and
+ *    (2) `mod.binds` — a regex for `\bcreateSecurityStore\b` over the whole text minus `import`
+ *        lines.
+ *  The LANDED scanner (`tests/unit-app-harness-readiness-register.test.ts`'s
+ *  `securityStoreImporters`, the instrument this row claims to re-assert) additionally applies
+ *  its `referencedNames(mod)` fallback: the store-writer NAME SET (`STORE_WRITER_NAMES` =
+ *  `['createSecurityStore']`) screened against the module body with import lines stripped. The
+ *  as-filed copy DROPPED that third class, so it was a re-implementation that could not see
+ *  everything the landed instrument sees — a copy weaker than its original is a finding in
+ *  itself.
+ *
+ *  RESTORED: the predicate now runs ALL THREE classes, in the landed order (identity → bound →
+ *  referenced). The reason it MATTERS at this head is worth stating exactly, because the
+ *  as-filed `binds` regex is not merely narrower — it is BOTH OVER- and UNDER-inclusive:
+ *    • OVER-INCLUSIVE: `\bcreateSecurityStore\b` matches the identifier ANYWHERE in the body,
+ *      including an `export { createSecurityStore as makeStore } from './security-store.js'`
+ *      RE-EXPORT HOP — so a pure carrier module with no store binding of its own is reported as
+ *      an offender, firing the row on a shape that is not a second writer.
+ *    • UNDER-INCLUSIVE: it misses nothing the landed fallback catches at THIS head, because
+ *      `STORE_WRITER_NAMES` contains the same single name — so the restored class is
+ *      deliberately a SUPERSET-BY-CONSTRUCTION of the as-filed one, and a future widening of
+ *      the landed name set is picked up here AUTOMATICALLY rather than needing a second edit.
+ *  The predicate is therefore parameterized over a DIRECTORY and a MODE so the control below
+ *  drives the very same code over a synthetic corpus (an injected tree, never the real one). */
+const STORE_WRITER_NAMES = ['createSecurityStore'] as const
+
+/** The names a module REFERENCES as an identifier — import lines excluded, so a binding
+ *  DECLARATION is never mistaken for a use (the landed scanner's own reader). */
+function referencedWriterNames(text: string): string[] {
+  const body = text.replace(/^\s*import[^\n]*$/gm, '')
+  return STORE_WRITER_NAMES.filter((n) => new RegExp(`\\b${n}\\b`).test(body))
+}
+
+function securityStoreImporters(dir: string): string[] {
   const files = readdirSync(dir).filter((f) => f.endsWith('.ts'))
   const moduleId = (name: string): string => name.replace(/\.(ts|tsx|js|mjs|cjs)$/, '')
-  const offenders: string[] = []
-  const reached = new Set<string>([moduleId('security-store.ts')])
-  const parsed = new Map<string, { imports: string[]; binds: boolean }>()
+  const parsed = new Map<string, { imports: string[]; text: string }>()
   for (const f of files) {
     const text = readFileSync(join(dir, f), 'utf8')
     const imports = [...text.matchAll(/^\s*import\s+(?:type\s+)?[^'"]*?from\s*['"]([^'"]+)['"]/gm)].map((m) =>
       moduleId(m[1]!.replace(/^\.\//, '')),
     )
     for (const m of text.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm)) imports.push(moduleId(m[1]!.replace(/^\.\//, '')))
-    const binds = /\bcreateSecurityStore\b/.test(text.replace(/^\s*import[^\n]*$/gm, ''))
-    parsed.set(moduleId(f), { imports, binds })
+    parsed.set(moduleId(f), { imports, text })
   }
+  // THE CLOSURE (class 1) — a fixed point over the import graph, seeded with the store module.
+  const reached = new Set<string>([moduleId('security-store.ts')])
   let grew = true
   while (grew) {
     grew = false
@@ -1435,11 +1608,35 @@ function secondWriterClosureProblems(): string[] {
       }
     }
   }
+  const offenders: string[] = []
   for (const [id, mod] of parsed) {
     if (id === 'main' || id === 'security-store') continue
-    if (reached.has(id)) offenders.push(`${id}.ts imports the security store (module identity: security-store.ts)`)
-    else if (mod.binds) offenders.push(`${id}.ts receives the store: createSecurityStore`)
+    if (reached.has(id)) {
+      offenders.push(`${id}.ts imports the security store (module identity: security-store.ts)`)
+      continue
+    }
+    // class 2 — a BOUND writer name (`import { createSecurityStore } from …`)
+    const bound = [...mod.text.matchAll(/^\s*import\s+[^'"]*?from\s*['"][^'"]+['"]/gm)]
+      .flatMap((d) => d[0]!.slice(0, d[0]!.indexOf('from')).split(/[{},\s]+/).map((t) => t.trim()))
+      .filter((t) => t !== '' && t !== 'as' && t !== '*' && (STORE_WRITER_NAMES as readonly string[]).includes(t))
+    // class 3 — THE RESTORED `referencedNames` FALLBACK (a bare reference with no import clause,
+    // and any FUTURE name added to `STORE_WRITER_NAMES` — the landed scanner's own closure).
+    const referenced = referencedWriterNames(mod.text)
+    if (bound.length > 0 || referenced.length > 0) {
+      offenders.push(`${id}.ts receives the store: ${[...bound, ...referenced].join(', ')}`)
+    }
   }
+  return offenders
+}
+
+function secondWriterClosureProblems(): string[] {
+  const problems: string[] = []
+  const dir = join(REPO_ROOT, 'src', 'main')
+  if (!existsSync(dir)) {
+    problems.push(`ABSTRACT-SUBJECT: src/main does not exist — the module-identity scan has no substrate (\`O-3\`)`)
+    return problems
+  }
+  const offenders = securityStoreImporters(dir)
   if (offenders.length > 0) {
     problems.push(`NEG-SECOND-WRITER: the offender set is NOT empty — [${offenders.join(' | ')}]; §2.2/\`K-1\` home the receipt in \`src/shared/types.ts\` precisely so NO new \`src/main/**\` importer appears (\`O-3\`)`)
   }
@@ -1447,26 +1644,102 @@ function secondWriterClosureProblems(): string[] {
 }
 
 /** §5.1 `P-SSW-IM-6` control 5 — the DISCRIMINATION PROOF: a synthetic second importer must
- *  redden the same module-identity oracle. Driven over an injected module map (never over
- *  the real tree), so the control is MEASURED rather than asserted. */
+ *  redden the SAME module-identity oracle. Driven over an injected module map (never over
+ *  the real tree), so the control is MEASURED rather than asserted.
+ *
+ *  `⟶ RE-AIM ⑨ (THE GATE-4 `G-7` REMAND).` The as-filed control forged TWO modules and re-wrote
+ *  the closure INLINE (`reached`) rather than driving `securityStoreImporters` — so it proved a
+ *  property of a COPY, not of the row's oracle, and it could not fail if the row's predicate
+ *  drifted. RE-AIMED: the corpus is written to a temp dir and the ROW'S OWN
+ *  `securityStoreImporters(dir)` is driven over it. The corpus carries the three evasions the
+ *  landed scanner names — a plain second writer, an ALIASED import, and a RE-EXPORT HOP carrier
+ *  — so the predicate's restored `referencedNames` class and its identity closure are both
+ *  exercised by the code the row runs. */
 function secondWriterControlProblems(): string[] {
   const problems: string[] = []
-  const moduleId = (name: string): string => name.replace(/\.(ts|tsx|js|mjs|cjs)$/, '')
-  const forged: Array<[string, string]> = [
-    ['main.ts', "import { createSecurityStore } from 'security-store.js'\n"],
-    ['evil.ts', "import * as store from 'security-store.js'\n"],
-  ]
-  const reached = new Set<string>([moduleId('security-store.ts')])
-  const imported: string[] = []
-  for (const [file, text] of forged) {
-    for (const m of text.matchAll(/from\s*['"]([^'"]+)['"]/g)) {
-      imported.push(`${moduleId(file)}→${moduleId(m[1]!.replace(/^\.\//, ''))}`)
-      if (moduleId(m[1]!.replace(/^\.\//, '')) === moduleId('security-store.ts')) reached.add(moduleId(file))
+  // the fixture lives OUTSIDE the repo tree (its own temp dir), exactly as the landed scanner's
+  // own control does — so the synthetic corpus can never be mistaken for real `src/**` bytes.
+  const dir = join(tmpdir(), `ssw-neg-second-writer-${process.pid}-${(process.hrtime.bigint() % 1000000n).toString(36)}`)
+  let madeDir = false
+  try {
+    const { mkdirSync, writeFileSync, rmSync } = require('node:fs') as typeof import('node:fs')
+    mkdirSync(dir, { recursive: true })
+    madeDir = existsSync(dir)
+    if (!madeDir) {
+      problems.push(`CONTROL-VACUOUS (P-SSW-IM-6 control 5): the synthetic corpus directory could not be created — the discrimination proof has no substrate (§5.1)`)
+      return problems
     }
-  }
-  const offenders = [...reached].filter((id) => id !== 'main' && id !== 'security-store')
-  if (offenders.length === 0) {
-    problems.push(`CONTROL-VACUOUS (P-SSW-IM-6 control 5): the module-identity oracle did NOT catch a synthetic second importer of \`security-store.js\` (forged edges: [${imported.join(', ')}]) — a control that cannot fail is the finding this limb exists to close (§5.1)`)
+    // (a) THE STORE MODULE and its ONE sanctioned writer
+    writeFileSync(join(dir, 'security-store.ts'), 'export function createSecurityStore() {}\n', 'utf8')
+    writeFileSync(join(dir, 'main.ts'), "import { createSecurityStore } from './security-store.js'\nexport const store = createSecurityStore\n", 'utf8')
+    // (b) THE RE-EXPORT HOP: a carrier that re-exports the factory and binds nothing itself
+    writeFileSync(join(dir, 're-exporter.ts'), "export { createSecurityStore as makeStore } from './security-store.js'\n", 'utf8')
+    // (c) THE HOP CONSUMER: imports the carrier (NOT the store module) — reachable only through
+    //     the identity closure, and carrying NONE of the writer NAMES in its own bytes
+    writeFileSync(join(dir, 'evil-hop.ts'), "import { makeStore } from './re-exporter.js'\nexport const made = makeStore({ path: 'x' })\n", 'utf8')
+    // (d) THE BARE REFERENCE: the name with NO import clause — the restored `referencedNames`
+    //     class the as-filed predicate re-implemented AWAY
+    writeFileSync(join(dir, 'evil-bare.ts'), "export const made = createSecurityStore({ path: 'x' })\n", 'utf8')
+    // (e) THE ALIASED IMPORT: the writer renamed at the import — catches by MODULE IDENTITY, not
+    //     by the binding name (the landed scanner's own named evasion)
+    writeFileSync(join(dir, 'evil-alias.ts'), "import { createSecurityStore as makeStore } from './security-store.js'\nexport const made = makeStore\n", 'utf8')
+
+    const offenders = securityStoreImporters(dir)
+    if (offenders.length === 0) {
+      problems.push(
+        `CONTROL-VACUOUS (P-SSW-IM-6 control 5): the module-identity oracle did NOT catch a synthetic second writer of \`security-store.js\` — the corpus carries a direct importer, an ALIASED/re-exported binding and a bare reference, and the landed scanner's closure must see every one (the GATE-4 \`G-7\` remand restores the \`referencedNames\` class the as-filed copy dropped) (§5.1)`,
+      )
+      return problems
+    }
+    // THE RESTORED CLASS IS PROVEN SPECIFICALLY. `evil-bare.ts` carries the writer NAME with NO
+    // import clause — it is caught ONLY by the restored `referencedNames` fallback, which the
+    // as-filed copy of this predicate DROPPED (it re-implemented the class as a `binds` regex and
+    // then never applied it to this shape).
+    const caught = (id: string): boolean => offenders.some((o) => o.startsWith(`${id}.ts`))
+    if (!caught('evil-bare')) {
+      problems.push(
+        `CONTROL-VACUOUS (P-SSW-IM-6 control 5): the oracle did NOT catch \`evil-bare.ts\`, which REFERENCES the writer name with NO import clause — exactly the \`referencedNames\` class the landed scanner carries and the as-filed copy of this predicate DROPPED, so the restored predicate is weaker than its original (the GATE-4 \`G-7\` finding) (§5.1)`,
+      )
+    }
+    if (!caught('evil-alias')) {
+      problems.push(
+        `CONTROL-VACUOUS (P-SSW-IM-6 control 5): the oracle did NOT catch \`evil-alias.ts\`, whose binding is RENAMED (\`import { createSecurityStore as makeStore } from './security-store.js'\`) — MODULE IDENTITY, not the binding name, is what the landed limb refuses (§5.1)`,
+      )
+    }
+    // ---- THE NAMED LIMIT (REPORTED, NEVER SMOOTHED): THE RE-EXPORT HOP ----------------------
+    // `re-exporter.ts` carries `export { createSecurityStore as makeStore } from './security-store.js'`.
+    // BOTH the landed scanner and this predicate build their closure from IMPORT clauses only —
+    // `^\s*import … from '…'` and `^\s*import '…'` — and an `export … from` clause matches
+    // NEITHER (a re-export is not an import). So a consumer that imports the re-exporter does NOT
+    // enter the closure by identity. What catches the CARRIER at this head is the
+    // `referencedNames`/bound class over its own body (it names `createSecurityStore`), which is
+    // what the assertion below measures — and a HOP whose carrier re-spelled the name away would
+    // be missed by both. That residual gap is recorded HERE, in the reading, rather than asserted
+    // as a property that does not hold: the row is `P-SSW-IM-6`'s copy re-asserting the landed
+    // instrument, and it may not claim a closure the instrument it copies does not have.
+    const hopCarrierCaught = caught('re-exporter')
+    // eslint-disable-next-line no-console
+    console.log(
+      `SSW P-SSW-IM-6 control 5 — the synthetic corpus offender set: [${offenders.join(' | ')}]\n` +
+        `    the RE-EXPORT CARRIER \`re-exporter.ts\` caught: ${hopCarrierCaught ? 'YES (by the referencedNames class over its own body)' : 'NO'}\n` +
+        `    NAMED LIMIT (recorded, not smoothed): an \`export … from\` clause is not an import, so the closure sees the carrier only via its NAMED reference — a re-export that re-spelled the name would evade BOTH the landed scanner and this predicate`,
+    )
+    if (!hopCarrierCaught) {
+      problems.push(
+        `CONTROL-VACUOUS (P-SSW-IM-6 control 5): the oracle did NOT catch the RE-EXPORT CARRIER \`re-exporter.ts\` (its body NAMES \`createSecurityStore\` in an \`export … from\` clause) — the \`referencedNames\` class is what catches it at this head, and its absence means the restored predicate is weaker than the landed instrument (§5.1; the GATE-4 \`G-7\` finding)`,
+      )
+    }
+  } catch (e) {
+    problems.push(`CONTROL-VACUOUS (P-SSW-IM-6 control 5): the synthetic corpus could not be driven (${(e as Error).message}) — the discrimination proof has no substrate (§5.1)`)
+  } finally {
+    if (madeDir) {
+      try {
+        const { rmSync } = require('node:fs') as typeof import('node:fs')
+        rmSync(dir, { recursive: true, force: true })
+      } catch {
+        /* best-effort: the corpus is outside the repo tree and never asserted on afterwards */
+      }
+    }
   }
   return problems
 }
@@ -1799,8 +2072,24 @@ describe('SSW §5.1 P-SSW-IM-1 — THE ATOMIC SHAPE over the INJECTED fs facade 
       }
       return atomicShapeProblems(f2, realPath)[0] ?? null
     })
+    // ---- drive 2, reading 2 (⟶ RE-AIM ⑦ — THE GATE-4 `G-8` REMAND): THE TMP-FATE PROPERTY ----
+    //
+    // AS-FILED, this reading drove NOTHING of the tmp fate: it rebuilt the same stale-tmp
+    // fixture, called `get()` and asserted only that the member was CALLABLE
+    // (`got === undefined ? … : null`) — a store-surface check that would hold on a store whose
+    // stale tmp was parsed as the record. It inflated the term (`3 × 2 = 6`) with a reading its
+    // declared property does not name.
+    //
+    // RE-AIMED: the reading asserts the ACTUAL §2.4 item 3(b) property over the fixture —
+    // (a) the STALE tmp is OVERWRITTEN (its bytes are gone from `${path}.tmp`), and
+    // (b) the pre-existing tmp was NEVER PARSED as the record: the BOOT READ (which happens at
+    //     construction, BEFORE the drive's `set`) answered the REAL path's record — the stale
+    //     tmp's poison token never surfaced — and a SUCCESSFUL write leaves NO tmp behind.
+    // The term is UNMOVED (`3 drives × 2 readings = 6`), because the reading is now what it
+    // always CLAIMED to be. FALSIFIER: a store that parses `${path}.tmp` on boot reddens (a) via
+    // the poisoned token, and a store that keeps the stale tmp reddens (b).
     await check(run, i++, () => {
-      const stale = JSON.stringify({ token: 'STALE-SHOULD-NEVER-BE-READ' }, null, 2)
+      const stale = JSON.stringify({ token: 'STALE-SHOULD-NEVER-BE-READ', enabled: ['gnosis'] }, null, 2)
       const f2 = newFsFacade({ seed: { [realPath]: postState, [`${realPath}.tmp`]: stale }, failAt: null })
       let s2: Record<string, unknown> | null = null
       try {
@@ -1809,8 +2098,27 @@ describe('SSW §5.1 P-SSW-IM-1 — THE ATOMIC SHAPE over the INJECTED fs facade 
         s2 = null
       }
       if (s2 === null) return `ABSTRACT-SUBJECT [P-SSW-IM-1 drive 2 reading 2]: the boot read has no injected subject (§4 RE-3)`
-      const got = typeof s2.get === 'function' ? (s2.get as () => unknown).call(s2) : undefined
-      return got === undefined ? `STORE-SURFACE [P-SSW-IM-1 drive 2 reading 2]: the store's \`get\` member is not callable (§2.1 S-2)` : null
+      // (a) THE BOOT READ PARSED THE REAL PATH, NOT THE STALE TMP — read BEFORE any write.
+      const booted = typeof s2.get === 'function' ? ((s2.get as () => unknown).call(s2) as Record<string, unknown>) : undefined
+      if (booted === undefined) {
+        return `STORE-SURFACE [P-SSW-IM-1 drive 2 reading 2]: the store's \`get\` member is not callable (§2.1 S-2)`
+      }
+      if (booted?.token === 'STALE-SHOULD-NEVER-BE-READ') {
+        return `STALE-TMP-PARSED: the BOOT READ answered the stale tmp's token — §2.4 item 3(b)/I-2: a pre-existing \`${relative(REPO_ROOT, `${realPath}.tmp`)}\` is NEVER parsed as the record (the boot read reads the REAL path ONLY)`
+      }
+      // (b) THE SUCCESSFUL WRITE LEAVES NO TMP, and the stale bytes it consumed are GONE.
+      try {
+        ;(s2.set as (p: unknown) => unknown).call(s2, { groups: ['code'] })
+      } catch (e) {
+        return `SET-THREW [P-SSW-IM-1 drive 2 reading 2]: (${(e as Error).message})`
+      }
+      if (f2.files.has(`${realPath}.tmp`)) {
+        const residue = f2.files.get(`${realPath}.tmp`) ?? ''
+        return residue.includes('STALE-SHOULD-NEVER-BE-READ')
+          ? `STALE-TMP-UNTOUCHED: the pre-existing \`${relative(REPO_ROOT, `${realPath}.tmp`)}\` still carries its ORIGINAL bytes after a successful write — §2.4 item 3(a)/(b): the stale tmp is OVERWRITTEN (and the rename consumes it), so no tmp survives a SUCCESS`
+          : `TMP-RESIDUE: a residual \`${relative(REPO_ROOT, `${realPath}.tmp`)}\` remains after a successful write — §2.4 item 3(a)/I-2 leave NO tmp after a SUCCESS`
+      }
+      return null
     })
 
     // ---- drive 3: NO residual tmp after a SUCCESS ----
@@ -2225,33 +2533,100 @@ describe('SSW §5.1 P-SSW-IM-4 — THE RED-BY-SHIM FACADE (the unit\'s declared 
         if ((receipt as Record<string, unknown>).status !== 'committed') {
           return `SEAM-INERTNESS (control 1): the no-façade write answered \`${JSON.stringify(receipt)}\` — §2.1 S-5/§2.4 item 1: with the real \`node:fs\` and no injected arm failing, the write COMMITS, exactly as the injected path does (the seam is INERT)`
         }
+        // ---- ⟶ RE-AIM ⑧ (THE GATE-4 `G-9` REMAND): THE DIFFERENTIAL READING ----------------
+        // The limb's DECLARED property is "with the façade ABSENT the store behaves IDENTICALLY
+        // TO THE REAL-`fs` PATH". AS-FILED it asserted only that the no-façade store WORKS — the
+        // word "identically" had no reading: a no-façade store that diverged from the injected
+        // path in its POST-STATE (or in its receipt) would have stayed green.
+        //
+        // THE OPERATIVE READING: the SAME patch is driven down BOTH paths over the SAME seed —
+        // (i) with the façade ABSENT (the real `node:fs`), and (ii) with the façade PRESENT and
+        // silent (every arm supplied, nothing failing) — and the two answers are compared. The
+        // differential is the observable: both post-states AND both receipt forms must agree.
+        // FALSIFIER: a seam that is NOT inert (an injected façade that changes the store's
+        // answer — a partial façade, a façade-only code path, a receipt minted only under
+        // injection) reddens HERE, because the two paths stop agreeing.
+        const noFacadePost = JSON.stringify(got)
+        const silentFacade = newFsFacade({ failAt: null })
+        const injected = load.ns.createSecurityStore({ path: noFacadePath, fs: silentFacade }) as Record<string, unknown>
+        ;(injected.set as (p: unknown) => unknown).call(injected, { groups: ['code'] })
+        const injectedPost = JSON.stringify((injected.get as () => unknown).call(injected))
+        if (injectedPost !== noFacadePost) {
+          return `SEAM-INERTNESS (control 1 — DIFFERENTIAL): the SAME patch answered \`${injectedPost}\` through an injected (silent) façade and \`${noFacadePost}\` through the real \`node:fs\` — §2.1 S-5 declares the façade ADDITIVE with the seam INERT BY DEFAULT, i.e. the injected path must behave IDENTICALLY to the real-` + '`fs`' + ` path. A divergence means the seam is not inert (a façade-only code path)`
+        }
+        const injectedMember = injected.lastWriteReceipt
+        if (typeof injectedMember !== 'function') {
+          return `SEAM-INERTNESS (control 1 — DIFFERENTIAL): the injected path has no \`lastWriteReceipt()\` (\`${typeof injectedMember}\`) while the no-façade path does — the receipt surface must not depend on the façade's presence (§2.1 S-4)`
+        }
+        const injectedReceipt = JSON.stringify((injectedMember as () => unknown).call(injected))
+        const noFacadeReceipt = JSON.stringify(receipt)
+        if (injectedReceipt !== noFacadeReceipt) {
+          return `SEAM-INERTNESS (control 1 — DIFFERENTIAL): the receipt reads \`${injectedReceipt}\` through the injected façade and \`${noFacadeReceipt}\` through the real \`node:fs\` — §2.1 S-5's seam is INERT, so both paths answer the SAME closed form for the SAME patch`
+        }
       } finally {
         rmSync(dir, { recursive: true, force: true })
       }
       return null
     })
     // ---- control 2: the discriminating counterexample — the real `fs` is NOT being reached ----
+    //
+    //      AS-FILED (`G-4`, gate-4 REMAND — THE CONTROL DROVE NOTHING): the body built a façade,
+    //      recorded `facade.calls.length` (which is trivially 0 on a fresh façade), and read
+    //      `existsSync(realPath)` — and then RETURNED. No store was CONSTRUCTED, no write was
+    //      DRIVEN, so the property "the real `fs` is not being reached" was never OBSERVED: the
+    //      limb asserted a property of an untouched fixture and would have stayed green even if
+    //      the store had bypassed the injection entirely and written to the real path.
+    //
+    //      RE-AIMED: the control now DRIVES the store over the façade with `failAt:'renameSync'`
+    //      — the arm that fires AFTER the tmp write has already landed in the façade's table —
+    //      and asserts the TWO readings that make "the real `fs` was not reached" OBSERVABLE:
+    //        (a) the façade's call ledger is NON-EMPTY (the store really did route its I/O
+    //            through the injection, so the drive had a subject at all); and
+    //        (b) the REAL path carries NO record on disk (the write never escaped the façade).
+    //      THE COUNTEREXAMPLE: a store that reached the real `node:fs` would mint the real file
+    //      (and/or leave the façade's ledger empty) — either reddens this limb by name.
     await check(run, i++, () => {
       const facade = newFsFacade({ seed: { [realPath]: PRE_WRITE }, failAt: 'renameSync' })
-      const injectedLedger = facade.calls.length
-      const realFsTouched = (() => {
-        // the discriminator: with the façade INJECTED and its rename arm failing, a store that
-        // reached the REAL node:fs would leave a REAL file beside the injected one. The probe
-        // is a path under a `userData/` directory the repo does not carry, so its real-file
-        // presence is the discriminator.
+      if (facade.calls.length !== 0) {
+        return `CONTROL-VACUOUS (P-SSW-IM-4 control 2): the freshly-built facade already carries ${facade.calls.length} recorded call(s) — the ledger must start EMPTY for the counterexample to discriminate`
+      }
+      const contaminated = ((): boolean => {
         try {
           return existsSync(realPath)
         } catch {
           return false
         }
       })()
-      if (realFsTouched) {
+      if (contaminated) {
         return `CONTROL-VACUOUS (P-SSW-IM-4 control 2): the real path exists on disk BEFORE the drive — the counterexample's discriminator is contaminated`
       }
-      if (injectedLedger !== 0) {
-        return `CONTROL-VACUOUS (P-SSW-IM-4 control 2): the freshly-built facade already carries ${injectedLedger} recorded call(s) — the ledger must start EMPTY for the counterexample to discriminate`
+      const built = buildStore(load, facade, realPath)
+      if (built.absent !== null) return `ABSTRACT-SUBJECT [P-SSW-IM-4 control 2]: ${built.absent}`
+      try {
+        ;(built.store.set as (p: unknown) => unknown).call(built.store, { groups: ['code'] })
+      } catch (e) {
+        return `SET-THREW [P-SSW-IM-4 control 2]: (${(e as Error).message}) — §2.4 item 6: a refusal ANSWERS its receipt and never throws`
       }
-      return null
+      // (a) the DRIVE actually reached the injection — a store that ignored the façade would
+      //     leave this ledger EMPTY, which is the "the real fs is being reached" class itself.
+      const steps = facade.calls.map((c) => c.step)
+      if (steps.length === 0) {
+        return `REAL-FS-REACHED (P-SSW-IM-4 control 2): the driven write recorded NO call over the injected façade (ledger [EMPTY]) while §2.1 S-5 requires the INJECTED façade to be the store's I/O source — a store that reached the real \`node:fs\` instead leaves this ledger bare`
+      }
+      if (!steps.includes('rename')) {
+        return `REAL-FS-REACHED (P-SSW-IM-4 control 2): the driven write reached the façade but never its \`rename\` arm (ledger [${steps.join(' → ')}]) — the control's premise is that \`failAt:'renameSync'\` IS driven`
+      }
+      // (b) the discriminator: the real path carries NO record — the write did not escape.
+      const escaped = ((): boolean => {
+        try {
+          return existsSync(realPath)
+        } catch {
+          return false
+        }
+      })()
+      return escaped
+        ? `REAL-FS-REACHED (P-SSW-IM-4 control 2): the REAL path \`${relative(REPO_ROOT, realPath)}\` exists on disk AFTER a write driven through an INJECTED failing façade — §2.1 S-5: a production caller never injects one, so a real file appearing here means the INJECTION WAS BYPASSED and the real \`node:fs\` was reached (the discrimination this control exists to make)`
+        : null
     })
 
     finish('P-SSW-IM-4', run)
@@ -2645,10 +3020,96 @@ describe('SSW §5.1 P-SSW-H-1 — THE RECEIPT\'S HOME + THE TWO PRELOAD DECLARAT
   }, 12_000)
 })
 
+/** `P-SSW-H-2`'s DRIVEN leg (the `G-5` re-aim). The bundle reader: `esbuild` compiles
+ *  `src/main/main.ts` to `dist/main/main.cjs`, where the local `securityStore` binding is
+ *  INLINED but the handler's BODY is preserved verbatim — so evaluating that body with the
+ *  handler's own closures as PARAMETERS drives the REAL registration code, not a paraphrase of
+ *  it. Returns the body text (the `{ … }` block) or `null` when it is not readable. */
+function bundledHandlerBody(): string | null {
+  // `require` is available to this test module under vitest's CJS interop; the bundle is read
+  // as TEXT and eval'd by `driveHandler` below — never imported (it would boot the whole app).
+  const candidates = [
+    join(REPO_ROOT, 'dist', 'main', 'main.cjs'),
+    join(REPO_ROOT, 'dist', 'main', 'main.js'),
+    join(REPO_ROOT, 'dist', 'main.cjs'),
+  ]
+  const bundlePath = candidates.find((p) => existsSync(p))
+  if (bundlePath === undefined) return null
+  let text: string
+  try {
+    text = readFileSync(bundlePath, 'utf8')
+  } catch {
+    return null
+  }
+  const at = text.indexOf('ipcMain.handle(IPC_SECURITY_SET,')
+  if (at < 0) return null
+  const open = text.indexOf('{', at)
+  if (open < 0) return null
+  // the handler body closes at the matching brace of the arrow function
+  const end = balancedBody(text, open)
+  return end === null ? null : `{${end}}`
+}
+
+/** Drive a REAL handler body with injected closures. `body` is the bundled handler's `{ … }`
+ *  text; the four free identifiers the registered handler closes over (`securityStore`,
+ *  `gatePatchFromStoreResult`, `mcp`, `currentEnabled`) are supplied as parameters, so the
+ *  drive observes the ACTUAL return expression the landing ships. `null` when the drive could
+ *  not be built (the substrate is absent or unreadable) — named by the caller, never silent. */
+function driveHandler(
+  body: string,
+  bindings: {
+    securityStore: { set: (p: unknown) => unknown; lastWriteReceipt: () => unknown }
+    mcp: { applyGatePatch: (p: unknown) => void }
+    currentEnabled: string[]
+  },
+): ((patch: unknown) => Record<string, unknown>) | null {
+  try {
+    const factory = new Function(
+      'securityStore',
+      'gatePatchFromStoreResult',
+      'mcp',
+      'currentEnabled',
+      `return (patch) => ${body}`,
+    )
+    const gatePatchFromStoreResult = (
+      previousEnabled: string[],
+      updated: { token?: string | null; enabled: string[] },
+    ): { token?: string | null; groups: string[]; disable: string[] } => {
+      const after = updated.enabled
+      return {
+        token: typeof updated.token === 'string' && updated.token !== '' ? updated.token : undefined,
+        groups: after.filter((g) => !previousEnabled.includes(g)),
+        disable: previousEnabled.filter((g) => !after.includes(g)),
+      }
+    }
+    return factory(bindings.securityStore, gatePatchFromStoreResult, bindings.mcp, bindings.currentEnabled) as (
+      patch: unknown,
+    ) => Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
 // ---------------------------------------------------------------------------
 // P-SSW-H-2 — THE `IPC_SECURITY_SET` RESPONSE LEG, DRIVEN DIRECTLY (the THIRD observability
 // leg) (`S-SSW-IPC-1`; §3.3 leg 3; §2.4 item 4). 2 outcome classes × 2 readings + 1
 // renderer-discard reading = 5.
+//
+// `⟶ RE-AIM ⑥ (THE GATE-4 `G-5` REMAND).` THE TERM IS UNMOVED at `2 × 2 + 1 = 5` (printed
+// honestly below), and so are the total `78` and the seed `0x20260927`. What moved is what the
+// two outcome-class readings MEAN. AS-FILED they were THE SAME BYTE-READ TWICE: the loop read
+// `problems[0]` and the `site.call` regex for both labels, no store was constructed and no
+// write was driven — so "the receipt is readable on BOTH outcome classes" was asserted once, at
+// the byte level, while `P-SSW-TP-1` explicitly disclaims that surface. A hard-coded
+// `{ ...updated, write: { status: 'committed' } }` in the handler — which never consults the
+// store — would have passed it.
+//
+// THE OPERATIVE LEG: each outcome class is driven through the REAL registered handler body
+// (read from the esbuild bundle of `src/main/main.ts`, the handler's own closures injected as
+// parameters) over a store whose `lastWriteReceipt()` answers THAT class's closed form. The
+// reading is the RESPONSE RECORD's `write` member, so the two classes are distinguished by what
+// the STORE answers rather than by a label. FALSIFIER: a handler body that hard-codes the
+// receipt (or that resolves the store's answer once) REDDENS one of the two classes.
 // ---------------------------------------------------------------------------
 describe('SSW §5.1 P-SSW-H-2 — THE `IPC_SECURITY_SET` RESPONSE LEG, DRIVEN DIRECTLY at its real site in `src/main/main.ts` (the THIRD observability leg, §3.3 leg 3): the handler\'s return carries `{ ...updated, write: lastWriteReceipt() }`; the receipt is readable on the response record for BOTH outcome classes; the leg is driven at the handler\'s SUBSTRATE, NEVER through a renderer call site (S-SSW-IPC-1)', () => {
   it('P-SSW-H-2 — 2 × 2 + 1 = 5', async () => {
@@ -2656,20 +3117,59 @@ describe('SSW §5.1 P-SSW-H-2 — THE `IPC_SECURITY_SET` RESPONSE LEG, DRIVEN DI
     let i = 0
     const site = securitySetHandlerSite()
     const problems = setResponseProblems()
+    const body = bundledHandlerBody()
 
-    // the two outcome classes' readings are the SAME byte-level pin read twice (the handler's
-    // return is ONE site; the drive below additionally performs both classes' STORE-side
-    // writes so the classes are DISTINGUISHED rather than assumed).
-    for (const label of ['the committed outcome class', 'the refused outcome class']) {
+    /** The two outcome classes, each carried by the RECEIPT ITSELF (never by a label): the
+     *  store the drive injects answers this exact closed form, and the limb reads whether the
+     *  RESPONSE RECORD surfaces it. */
+    const classes: Array<{ label: string; receipt: unknown; expected: string }> = [
+      { label: 'the committed outcome class', receipt: { status: RECEIPT_STATUSES[0] }, expected: RECEIPT_STATUSES[0] },
+      { label: 'the refused outcome class', receipt: { status: RECEIPT_STATUSES[1], reason: RECEIPT_REASONS[0] }, expected: RECEIPT_STATUSES[1] },
+    ]
+
+    for (const cls of classes) {
+      // reading 1 — the SURFACE PIN (the handler's return IS the additive record)
       attempt(run, i++, problems[0] ?? null)
+      // reading 2 — the DRIVEN leg: the response record's `write` member follows the STORE
       await check(run, i++, () => {
         if (site.call === null) {
-          return `ABSTRACT-SUBJECT [P-SSW-H-2 ${label}]: no \`ipcMain.handle(IPC_SECURITY_SET\` registration is readable in ${relative(REPO_ROOT, MAIN_PATH)} — the leg has no substrate (§3.3 leg 3)`
+          return `ABSTRACT-SUBJECT [P-SSW-H-2 ${cls.label}]: no \`ipcMain.handle(IPC_SECURITY_SET\` registration is readable in ${relative(REPO_ROOT, MAIN_PATH)} — the leg has no substrate (§3.3 leg 3)`
         }
-        const additive = /\.\.\.\s*updated/.test(site.call) && site.call.includes('lastWriteReceipt(')
-        return additive
-          ? null
-          : `SET-RESPONSE-LEG (${label}): the handler's registration body does not answer \`{ ...updated, write: <store>.lastWriteReceipt() }\` — §2.4 item 4/§3.3 leg 1: the receipt's ONLY channel surface; at this head the return reads \`return updated\` (§4 RE-5)`
+        if (body === null) {
+          return `ABSTRACT-SUBJECT [P-SSW-H-2 ${cls.label}]: the handler BODY could not be driven — no readable esbuild bundle of ${relative(REPO_ROOT, MAIN_PATH)} carrying \`ipcMain.handle(IPC_SECURITY_SET,\` (run \`npm run build\`); the byte-level pin above is then the ONLY reading, which is exactly the "the two classes are the same byte-read twice" vacuity the G-5 remand names`
+        }
+        const driven = driveHandler(body, {
+          securityStore: {
+            set: () => ({ token: null, enabled: ['read', 'dispatch', 'code'], maxJournalLength: undefined }),
+            lastWriteReceipt: () => cls.receipt,
+          },
+          mcp: { applyGatePatch: () => {} },
+          currentEnabled: ['read', 'dispatch'],
+        })
+        if (driven === null) {
+          return `ABSTRACT-SUBJECT [P-SSW-H-2 ${cls.label}]: the handler body could not be evaluated with the handler's own closures — the drive has no subject (§3.3 leg 3)`
+        }
+        let response: Record<string, unknown>
+        try {
+          response = driven({ groups: ['code'] })
+        } catch (e) {
+          return `HANDLER-THREW [P-SSW-H-2 ${cls.label}]: driving the real handler body threw (${(e as Error).message}) — §2.4 item 4: the SET response is answered for BOTH outcome classes`
+        }
+        if (!('write' in response)) {
+          return `SET-RESPONSE-LEG (${cls.label}): the driven response record carries NO \`write\` member (\`${JSON.stringify(response)}\`) — §3.2 I-4: the \`write\` member is NEVER absent on a SET response`
+        }
+        const form = receiptFormProblems(response.write, `the ${cls.label} response`)
+        if (form.length > 0) return form.join(' | ')
+        const status = (response.write as Record<string, unknown>).status
+        if (status !== cls.expected) {
+          return `SET-RESPONSE-LEG (${cls.label}): the store's \`lastWriteReceipt()\` answered \`${JSON.stringify(cls.receipt)}\` but the response record carries \`${JSON.stringify(response.write)}\` — §2.4 item 4/the THIRD observability leg require the response to surface the STORE's OWN answer (a hard-coded \`write\` that never consults the store is the counterexample this reading exists to catch)`
+        }
+        // and the response is STILL the additive record (`{ ...updated, write }`), not the bare
+        // receipt: the post-state members must ride along.
+        if (!('enabled' in response)) {
+          return `SET-RESPONSE (${cls.label}): the driven response record carries no post-state \`enabled\` member — §2.4 item 4's record is \`{ ...updated, write: lastWriteReceipt() }\`, never a bare receipt`
+        }
+        return null
       })
     }
 
@@ -2707,6 +3207,24 @@ describe('SSW §5.1 P-SSW-H-3 — THE md5 RE-STATEMENT (`O-2`): the `src/main/pr
 // ---------------------------------------------------------------------------
 // P-SSW-H-4 — THE NO-DURABILITY / LAYER HONESTY ROW (the ANTI-OVERCLAIM row)
 // (`S-SSW-HON-1`; §6's honesty block; `RCA-12`). 2 instrument classes × 2 readings = 4.
+//
+// `⟶ RE-AIM ⑤ (THE GATE-4 `G-1` REMAND).` THE TERM IS UNMOVED at `2 × 2 = 4`; what moved is
+// what the readings MEAN. AS-FILED, reading 1 was `durabilityClaimProblems()` over the four
+// SCREAMING-CASE literals — VACUOUS (see the oracle's block). The re-aim makes the SAME two
+// readings FALSIFIABLE:
+//   instrument class 1 (the call-order recorder):
+//     reading 1 — NO artifact of this unit asserts durability in a CLAIM position, read by the
+//                 PROSE predicate (case-insensitive) over FIVE artifacts, with the spec's own
+//                 NEGATED forms allow-listed;
+//     reading 2 — the FAÇADE IS DECLARED SHAPE-ONLY in this file (unchanged);
+//   instrument class 2 (the byte-scan surface pins):
+//     reading 1 — this file asserts no app/envelope/live/store-green (unchanged);
+//     reading 2 — the FALSIFIABILITY CONTROL: the SAME production predicate REDDENS on the
+//                 remand's named forged claim line (*"the write is now crash-safe and durable
+//                 on disk"*) AND on the as-filed SCREAMING-CASE form, while ADMITTING the
+//                 NEGATED forms the real artifacts carry — and the AS-FILED predicate (the
+//                 four literals only) is MEASURED against the same forged prose line so the
+//                 vacuity is a printed reading rather than an argument.
 // ---------------------------------------------------------------------------
 describe('SSW §5.1 P-SSW-H-4 — THE NO-DURABILITY / LAYER HONESTY ROW (the anti-overclaim row): no artifact of this unit claims durability, real-`fsync` completion or bytes-on-disk-after-a-crash; every atomic claim is a CALL ORDER/COUNT over the injected facade; the `[H]` rows are reported `RED-BY-SHIM`/byte-scan and NEVER as app-green, envelope-green or live-green (S-SSW-HON-1)', () => {
   it('P-SSW-H-4 — 2 × 2 = 4', async () => {
@@ -2715,8 +3233,9 @@ describe('SSW §5.1 P-SSW-H-4 — THE NO-DURABILITY / LAYER HONESTY ROW (the ant
     const claimProblems = durabilityClaimProblems()
     const layerProblems = layerHonestyProblems()
 
-    // instrument class 1 — the call-order recorder: reading 1 (no durability token is asserted
-    // by the register's claim-bearing lines) and reading 2 (the façade is DECLARED shape-only).
+    // instrument class 1 — the call-order recorder: reading 1 (NO artifact asserts durability
+    // vocabulary in a claim position — the PROSE predicate, with the spec's negations
+    // allow-listed) and reading 2 (the façade is DECLARED shape-only).
     attempt(run, i++, claimProblems[0] ?? null)
     attempt(
       run,
@@ -2729,18 +3248,53 @@ describe('SSW §5.1 P-SSW-H-4 — THE NO-DURABILITY / LAYER HONESTY ROW (the ant
       })(),
     )
     // instrument class 2 — the byte-scan surface pins: reading 1 (this file asserts no
-    // app/envelope/live/store-green) and reading 2 (the spec's honesty block is present).
+    // app/envelope/live/store-green) and reading 2 (the FALSIFIABILITY CONTROL).
     attempt(run, i++, layerProblems[0] ?? null)
     attempt(
       run,
       i++,
       (() => {
-        const spec = readMaybe(SPEC_PATH)
-        if (spec === null) return `ABSTRACT-SUBJECT: ${relative(REPO_ROOT, SPEC_PATH)} could not be read — the honesty limb has no substrate (§6)`
-        const block = spec.slice(spec.indexOf('THE HONESTY/LIMITS BLOCK'), spec.indexOf('## 7.'))
-        return /NO DURABILITY CLAIM FROM A CALL-COUNT/.test(block)
-          ? null
-          : `HONESTY-BLOCK: the spec's §6 honesty block does not carry the \`NO DURABILITY CLAIM FROM A CALL-COUNT\` clause — §6's mandatory block is the anti-overclaim contract this row polices (§4 R-7)`
+        // ---- reading 2, RE-AIMED: the predicate must REDDEN on the real over-claim class ----
+        //
+        // THE FORGED-CLAIM-CORPUS: exactly the sentences the remand names. `REDDEN` cases are
+        // ordinary-English (and literal) durability ASSERTIONS; the NEGATED-FORM-CORPUS cases
+        // are the NEGATED forms the spec itself uses, which must stay lawful or the row would
+        // redden on a correct landing (an oracle that cannot pass is as useless as one that
+        // cannot fail). BOTH corpora are DATA the instrument drives — never this unit's claim.
+        const REDDEN: Array<[string, string]> = [ // FORGED-CLAIM-CORPUS
+          ['the remand\'s named prose over-claim', 'the write is now crash-safe and durable on disk'],
+          ['a prose claim with a capitalised token', 'DONE: the receipt makes the write DURABLE on disk'],
+          ['the as-filed SCREAMING-CASE literal', `FSYNC-COMPLETED-ON-DISK: the fsync completed on disk`],
+          ['a power-loss claim', 'the record survives a power loss once the rename lands'],
+          ['a torn-file claim', 'the write is torn-file-free and the bytes on disk are final'],
+        ]
+        const ADMIT: Array<[string, string]> = [ // NEGATED-FORM-CORPUS
+          ['the spec\'s own honesty clause', 'NO DURABILITY CLAIM FROM A CALL-COUNT (the `fsync` legs are SHAPE-asserted)'],
+          ['the spec\'s stated limit', 'durability is asserted NOWHERE in node evidence'],
+          ['the shape-only declaration', 'these legs are CALL ORDER/COUNT only — SHAPE ONLY'],
+          ['a never-claims clause', 'the instrument never claims a completed crash-safe persist'],
+          ['a does-not-prove clause', 'what this does NOT prove: durability; crash recovery; the assembled app'],
+        ]
+        for (const [label, line] of REDDEN) {
+          if (durabilityClaimLine(line, 'subject') === null) {
+            return `CONTROL-VACUOUS (P-SSW-H-4 reading 2): the anti-overclaim predicate ADMITTED ${label} — \`${line}\`. The AS-FILED row demanded only the four SCREAMING-CASE literals, so this line could never have reddened it (the vacuity the GATE-4 \`G-1\` remand names); the OPERATIVE predicate must REJECT it (§6's honesty block)`
+          }
+        }
+        for (const [label, line] of ADMIT) {
+          if (durabilityClaimLine(line, 'subject') !== null) {
+            return `CONTROL-VACUOUS (P-SSW-H-4 reading 2): the anti-overclaim predicate REDDENED on ${label} — \`${line}\`. A NEGATED/limit form the spec itself carries must stay ADMISSIBLE, or the row reddens on a correct landing (§6; the allow-list exists for exactly these)`
+          }
+        }
+        // ---- THE VACUITY, MEASURED: the AS-FILED predicate over the SAME forged prose line ----
+        const asFiled = (line: string): boolean => AS_FILED_DURABILITY_LITERALS.some((t) => line.includes(t))
+        const forgedProse = REDDEN[0]![1]
+        if (asFiled(forgedProse)) {
+          return `CONTROL-VACUOUS (P-SSW-H-4 reading 2): the AS-FILED predicate CAUGHT \`${forgedProse}\` — the re-aim's premise (that the four SCREAMING-CASE literals cannot see an ordinary-English claim) does not hold at this head, so this reading's discrimination must be restated`
+        }
+        if (!asFiled(REDDEN[2]![1])) {
+          return `CONTROL-VACUOUS (P-SSW-H-4 reading 2): the AS-FILED predicate MISSED its OWN literal form \`${REDDEN[2]![1]}\` — the second limb's baseline is broken`
+        }
+        return null
       })(),
     )
 
