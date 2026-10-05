@@ -160,7 +160,39 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row now carries a
   //  `restated:` field, so the derivation still resolves to the same un-re-stated path) and
   //  is NOT hand-edited here.
-  { file: 'src/main/preload.ts', md5: 'f24ea717a5f8f93a3ac490334611d22a', superseded: '00dba3cdd5e1eb3c7de632a838e3d28b', restated: 'U-STORE-PERSIST-ADOPT' },
+  // ⟨RE-STATED 2026-10-04 — unit `U-STORE-SECURITY-ADOPT` (the SPLIT's own name for the
+  //  store-adoption program's unit 3; the LANDING unit is its FIRST half
+  //  `U-STORE-SECURITY-WRITE`/3a, §1.1 member 5 / `S-P-3` / `O-2`).⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
+  //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it
+  //  still FAILS both the ⟨A-1⟩ digest limb and the working-tree limb). WHAT MOVED IS THE
+  //  RECORDED VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may
+  //  move the file only by re-stating it here, with its reason and its unit named, exactly
+  //  as this note does"*. **THE REASON:** this unit lands the security-tier write
+  //  discipline's OBSERVABILITY SEAM — §2.5's TWO `security.set` declarations (the
+  //  `ProvidentBridge` interface declaration AND the bridge implementation) are BOTH
+  //  widened to return `SecuritySettings & { write: SecurityWriteReceipt }`, so the
+  //  persist receipt rides the channel response; §1.1 member 4 is the clause that orders
+  //  this row re-stated in the landing's own commit, because units 2 / 2b / 3 SHARE
+  //  `src/main/preload.ts` + `src/main/main.ts` and therefore CANNOT land in one wave.
+  //  **THE UNIT:** `U-STORE-SECURITY-ADOPT` (the split unit's name; landed by its 3a half
+  //  `U-STORE-SECURITY-WRITE`). THE SUPERSEDED VALUE, kept visible and NEVER deleted:
+  //  `f24ea717a5f8f93a3ac490334611d22a` (the `U-STORE-PERSIST-ADOPT` re-statement, itself
+  //  superseding `00dba3cdd5e1eb3c7de632a838e3d28b` and, before that, the as-filed
+  //  `76d2299070d4333e0e66189359baad22` — ALL kept visible).
+  //  THE NEW VALUE is MEASURED at the landing's head (`md5sum src/main/preload.ts`, taken
+  //  AFTER this unit's `src/` writes) — never inferred, never copied from another row.
+  //  **THE PRIOR PASS'S PROVISIONAL VALUE**, superseded WITHIN THE SAME UNIT and kept
+  //  visible beside the new one: `21b8120cddadd1b1531bd0422cb5d613` was recorded by the
+  //  prior implementer pass BEFORE the store module's final shape landed (§1.1 member 1's
+  //  `fs?` façade annotation and the receipt declaration form both moved after it), so
+  //  `A-3A-2` ④(c)'s measure-then-record ORDER re-measures at the FINAL head. The
+  //  superseded chain is now `cb1ee2ff…` ← `21b8120c…` ← `f24ea717…` ← `00dba3cd…`.
+  //  **NO OTHER ROW OF THIS TABLE IS TOUCHED** by this re-statement; the
+  //  `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row already
+  //  carried a `restated:` field, so the derivation still resolves to the same un-re-stated
+  //  path) and is NOT hand-edited here.
+  { file: 'src/main/preload.ts', md5: 'cb1ee2ff3cd409363dd656a9914e72ad', superseded: 'f24ea717a5f8f93a3ac490334611d22a', restated: 'U-STORE-SECURITY-ADOPT' },
   // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
   //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still

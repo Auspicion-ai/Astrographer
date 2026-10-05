@@ -701,7 +701,12 @@ async function main(): Promise<void> {
     // cast is safe — the store's filtered result is the source of truth.
     mcp.applyGatePatch({ token: gatePatch.token, groups: gatePatch.groups as ToolGroup[], disable: gatePatch.disable as ToolGroup[] })
     currentEnabled = updated.enabled
-    return updated
+    // U-STORE-SECURITY-WRITE §1.1 member 3 / §2.4 item 4 — THE ADDITIVE MEMBER:
+    // the EXISTING return now answers `{ ...updated, write: … }`, so the persist
+    // outcome rides the SET response as a record of its OWN (the persisted type
+    // `SecuritySettings` is NOT widened — ruling (iv) row 1). The store's writer
+    // call site above stays the ONLY one in this file.
+    return { ...updated, write: securityStore.lastWriteReceipt() }
   })
 
   // U-STORE-PERSIST-ADOPT §2.4 / §1.1 members 2-3 — THE `Y-1`/`Y-2` CHANNELS.

@@ -17,6 +17,16 @@ export interface ModuleBridgeResult {
   modules: ModuleListEntry[]
 }
 
+/** U-STORE-SECURITY-WRITE §1.1 member 4 / §2.5 (ruling `A-3A-1` ①) — THE SET RESPONSE'S
+ *  PERSIST RECEIPT. This is the preload's OWN structural twin of the receipt declared in
+ *  `src/main/security-store.ts`: the preload declares it LOCALLY and imports NOTHING from
+ *  the store module, so no new `src/main/**` importer of `security-store.js` appears and
+ *  the landed `NEG-SECOND-WRITER` module-identity scan's offender set stays EMPTY (`K-1`).
+ *  Structurally identical to the ruled home: the TWO CLOSED forms `{ status: 'committed' }
+ *  | { status: 'refused'; reason: 'write-failed' }`. It rides the `security.set` RESPONSE
+ *  only — the persisted `SecuritySettings` type is NOT widened (§1.2 item 6). */
+export type SecurityWriteReceipt = { readonly status: 'committed' } | { readonly status: 'refused'; readonly reason: 'write-failed' }
+
 /** The Unit D §5.1.10 commit result (mirrors the controller's CommitResult). */
 export type { EditCommitResult }
 
@@ -125,7 +135,7 @@ export interface ProvidentBridge {
   onPaneVisibility(handler: (change: { id: string; enabled: boolean }) => void): () => void
   security: {
     get(): Promise<SecuritySettings>
-    set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings>
+    set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings & { write: SecurityWriteReceipt }>
   }
   module: {
     get(): Promise<ModuleBridgeResult>
@@ -386,7 +396,7 @@ const bridge: ProvidentBridge = {
     get(): Promise<SecuritySettings> {
       return ipcRenderer.invoke(IPC_SECURITY_GET)
     },
-    set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings> {
+    set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings & { write: SecurityWriteReceipt }> {
       return ipcRenderer.invoke(IPC_SECURITY_SET, patch)
     },
   },
