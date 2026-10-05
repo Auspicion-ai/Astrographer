@@ -521,17 +521,47 @@ function deniedSurfaceReadings(): DeniedReading[] {
     // reddens only on a §1.2 item 1 SUBJECT: a `maxJournalLength`/`journalDepth` authored
     // surface appearing in `secure-panels.ts` or a pane construction-site option in
     // `renderer.ts` — 3b's declared members.
+    // =====================================================================
+    // ⟶ THE `DENIED-1` RE-AIM (3b `U-STORE-SECURITY-JOURNAL`, amendment row 11, IN THIS COMMIT).
+    // `RCA-8(c)` ANNOTATE-BESIDE: the AS-FILED wording of the three regexes is KEPT VISIBLE
+    // below, and the dispositions (`A-3B-1`'s ①NULLED ②INVERTED ③SCOPED) are applied beside it.
+    // The item is DISCHARGED BY LANDING on the paths 3b legitimately wrote (`S-P-3`) and
+    // SURVIVES re-aimed at the surface 3b may not touch. The guard's own subject is unchanged:
+    // "this unit moves no renderer byte".
+    // =====================================================================
+    // AS FILED (row 11① — the `journalDepth` limb over `secure-panels.ts`), KEPT VISIBLE:
+    //   if (/\bjournalDepth\s*\(/.test(body)) {
+    //     problems.push(`DENIED-1: \`journalDepth()\` appears in src/renderer/secure-panels.ts — … this unit authors NO renderer byte (\`R-5\`; \`S-P-6\`)`)
+    //   }
+    //   if (/SecurePanelsOptions[\s\S]{0,400}maxJournalLength/.test(body)) {
+    //     problems.push(`DENIED-1: \`SecurePanelsOptions\` carries \`maxJournalLength\` — … this unit authors NO renderer byte (\`R-5\`; \`S-P-6\`)`)
+    //   }
+    // DISPOSITION ① NULL: 3b AUTHORS `journalDepth()` in `secure-panels.ts`, so the as-filed
+    // assertion is DISCHARGED BY LANDING and is no longer a live `problems.push` source. A guard
+    // that still tripped on 3b's AUTHORIZED edit would be §3 `F-11`.
+    // DISPOSITION ② INVERTED: 3b AUTHORIZES `SecurePanelsOptions.maxJournalLength?: number`; the
+    // SURVIVING limb forbids the REQUIRED or POSITIONAL form (an additive-OPTIONAL member is
+    // lawful; a required/positional one is §3 `F-10`).
     const panels = readMaybe(join(RENDERER_DIR, 'secure-panels.ts'))
     if (panels === null) {
       problems.push(`ABSTRACT-SUBJECT (§1.2 item 1): src/renderer/secure-panels.ts could not be read — the renderer-byte negative has no substrate`)
     } else {
       const body = withoutComments(panels)
-      if (/\bjournalDepth\s*\(/.test(body)) {
-        problems.push(`DENIED-1: \`journalDepth()\` appears in src/renderer/secure-panels.ts — §1.2 item 1 assigns \`journalDepth()\` to 3b (\`U-STORE-SECURITY-JOURNAL\`); this unit authors NO renderer byte (\`R-5\`; \`S-P-6\`)`)
+      // ② INVERTED — the surviving limb: the option may not be REQUIRED, and no POSITIONAL
+      // second argument may bind it at any landed `new SecurePanels(` call site.
+      const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+      if (requiredOption) {
+        problems.push(`DENIED-1 (RE-AIMED ②, INVERTED): \`SecurePanelsOptions.maxJournalLength\` is a REQUIRED member — §7 row 11② / §1.1 member 1① / §3.2 I-3: 3b AUTHORIZES the member as ADDITIVE-OPTIONAL; the surviving limb forbids the REQUIRED form (a required option breaks every landed one-argument \`new SecurePanels(\` call site, §3 \`F-10\`)`)
       }
-      if (/SecurePanelsOptions[\s\S]{0,400}maxJournalLength/.test(body)) {
-        problems.push(`DENIED-1: \`SecurePanelsOptions\` carries \`maxJournalLength\` — §1.2 item 1 assigns the AUTHORED cap + the option to 3b; this unit authors NO renderer byte (\`R-5\`; \`S-P-6\`)`)
+      const positional = /new\s+SecurePanels\s*\(\s*[^,()]+,\s*[A-Za-z_$][\w$]*\s*\)/.test(body)
+      if (positional) {
+        problems.push(`DENIED-1 (RE-AIMED ②, INVERTED): a \`new SecurePanels(\` call site binds a bare identifier as its SECOND POSITIONAL argument — §7 row 11② / §1.1 member 1①: the option is a NAMED member of \`SecurePanelsOptions\`, NEVER positional (§3 \`F-10\`)`)
       }
+      // ① NULL — recorded, and the re-aim's subject read into the report.
+      // eslint-disable-next-line no-console
+      console.log(
+        `PD-SSW arm 2 [denied row 1, RE-AIM ① NULL]: \`journalDepth()\` is PRESENT in secure-panels.ts (${String(/\bjournalDepth\s*\(/.test(body))}) — the as-filed assertion is DISCHARGED BY LANDING (3b AUTHORS the seam, §7 row 11① / \`S-P-3\`); the surviving limb (② INVERTED) reads required=${String(requiredOption)} positional=${String(positional)}`,
+      )
     }
     const renderer = readMaybe(join(RENDERER_DIR, 'renderer.ts'))
     if (renderer === null) {
@@ -542,15 +572,44 @@ function deniedSurfaceReadings(): DeniedReading[] {
       // EXISTING `Runtime({ …, maxJournalLength })` read (landed before this unit, §3.3's
       // closing clause) is NOT a pane option and is NOT what §1.2 item 1 denies: the line is
       // checked against the AUTHORED-PANE-CAP spelling, never the Runtime's own option.
+      //
+      // ⟶ THE `DENIED-1` RE-AIM ③ SCOPED (3b, amendment row 11, IN THIS COMMIT; `RCA-8(c)`
+      // ANNOTATE-BESIDE). AS FILED, KEPT VISIBLE:
+      //   const paneCapShape = /SecurePanelsOptions|securePanelsOptions|paneOptions[\s\S]{0,200}maxJournalLength/.test(body)
+      //   if (paneCapShape) {
+      //     problems.push(`DENIED-1: \`renderer.ts\` passes a \`maxJournalLength\` PANE-construction option (\`SecurePanelsOptions\`) — … this unit authors NO renderer byte`)
+      //   }
+      // DISPOSITION ③ SCOPED: `renderer.ts` legitimately gains the pane option AT THE EXISTING
+      // PANE CONSTRUCTION SITE (§1.1 member 2①), so an unqualified pane-cap prohibition would
+      // redden 3b's AUTHORIZED edit. The SURVIVING limb forbids (a) the `Runtime`-option path
+      // carrying a PANE-CAP spelling, and (b) a SECOND pane-cap site. It still FAILS for a
+      // `src/renderer/**` byte authored in 3a's OWN change-set context — the limb's SUBJECT
+      // ("this unit moves no renderer byte") is unchanged.
       const body = withoutComments(renderer)
-      const paneCapShape = /SecurePanelsOptions|securePanelsOptions|paneOptions[\s\S]{0,200}maxJournalLength/.test(body)
-      if (paneCapShape) {
-        problems.push(`DENIED-1: \`renderer.ts\` passes a \`maxJournalLength\` PANE-construction option (\`SecurePanelsOptions\`) — §1.2 item 1 assigns that option to 3b (\`S-P-6\`); this unit authors NO renderer byte`)
+      const paneConstructionSites = [...body.matchAll(/new\s+SecurePanels\s*\(/g)].length
+      const runtimeCapShape = /new\s+Runtime\s*\(\s*\{[\s\S]{0,400}?maxJournalLength[\s\S]{0,400}?SecurePanelsOptions/.test(body)
+      if (runtimeCapShape) {
+        problems.push(`DENIED-1 (RE-AIMED ③, SCOPED): \`renderer.ts\` passes a \`maxJournalLength\` PANE-CAP option through the \`Runtime\`-option path — §7 row 11③: the surviving limb forbids the \`Runtime\`-option path; 3b's authorized edit is the PANE CONSTRUCTION SITE alone`)
       }
+      if (paneConstructionSites > 1) {
+        problems.push(`DENIED-1 (RE-AIMED ③, SCOPED): \`renderer.ts\` carries ${String(paneConstructionSites)} \`new SecurePanels(\` PANE-CONSTRUCTION sites — §7 row 11③: the pane option belongs at the EXISTING site; a SECOND pane-cap site is the surviving denial (§1.2 row 7's THIRD-site class)`)
+      }
+      const paneCapShape = runtimeCapShape || paneConstructionSites > 1
       // eslint-disable-next-line no-console
       console.log(
-        `PD-SSW arm 2 [denied row 1 preview]: \`renderer.ts\` carries ${(body.match(/maxJournalLength/g) ?? []).length} \`maxJournalLength\` occurrence(s) — the landed \`Runtime({ …, maxJournalLength })\` read is UNIT-2-LANDED and pre-existing, NOT the AUTHORED pane cap §1.2 item 1 assigns to 3b; the DENIED shape is the \`SecurePanelsOptions\` spelling (present: ${String(paneCapShape)})`,
+        `PD-SSW arm 2 [denied row 1 preview]: \`renderer.ts\` carries ${(body.match(/maxJournalLength/g) ?? []).length} \`maxJournalLength\` occurrence(s) — the landed \`Runtime({ …, maxJournalLength })\` read is UNIT-2-LANDED and pre-existing, NOT the AUTHORED pane cap §1.2 item 1 assigns to 3b; the DENIED shape is RE-AIMED ③ SCOPED: it reddens on the \`Runtime\`-option path (${String(runtimeCapShape)}) or a SECOND pane-cap site (${String(paneConstructionSites > 1)}, ${String(paneConstructionSites)} \`new SecurePanels(\` site(s)) — never on 3b's AUTHORIZED pane construction site`,
       )
+      // §7 row 11 — THE RE-AIMED SURFACE, ASSERTED IN THIS GUARD'S OWN BYTES: the item's INTENT
+      // survives as (a) a literal `maxJournalLength` in `MUTATING_METHODS` (a WIDENED predicate,
+      // §1.2 row 6) and (b) a THIRD `refreshDebug` site (§1.2 row 7).
+      const mutating = /const\s+MUTATING_METHODS\s*=\s*new\s+Set\(\[([^\]]*)\]\)/.exec(body)
+      if (mutating !== null && /maxJournalLength/.test(mutating[1]!)) {
+        problems.push(`DENIED-1-REAIM-SURFACE: \`maxJournalLength\` is a literal \`MUTATING_METHODS\` member — §7 row 11's RE-AIMED SURFACE / §1.2 row 6: the predicate is UNWIDENED (a cap value is not an MCP method)`)
+      }
+      const refreshSites = [...body.matchAll(/refreshDebug/g)].length
+      if (refreshSites !== 2) {
+        problems.push(`DENIED-1-REAIM-SURFACE: \`renderer.ts\` carries ${String(refreshSites)} \`refreshDebug\` occurrence(s) — §7 row 11's RE-AIMED SURFACE / §1.2 row 7 / §2.5: EXACTLY TWO call sites (the boot site + the notify-callback site); a THIRD site reddens this limb`)
+      }
     }
     out.push({ row: '1 · no `src/renderer/**` byte (3b\'s)', problems })
   }

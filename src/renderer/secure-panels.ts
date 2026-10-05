@@ -95,9 +95,18 @@ export interface ModuleRunnerHost {
 }
 
 /** SecurePanels construction options. `moduleRunner` (PG12) is OPTIONAL: with
- *  no runner the module pane renders an empty runner placeholder (fail-closed). */
+ *  no runner the module pane renders an empty runner placeholder (fail-closed).
+ *
+ *  `maxJournalLength` is OPTIONAL and ADDITIVE: feeding it to the pane's own
+ *  `Supervisor` makes the ENGINE's deferred `condense()` live on this pane
+ *  graph (the pane registers every translated node and roots it on
+ *  `rootNode`, so `condense()` finds its root). The cap is the ENGINE's — this
+ *  host authors NO trim of `journal`/`undoStack`/`redoStack` (a host splice of
+ *  `journal` alone would desynchronize the coupled three structures). With the
+ *  member ABSENT (or `undefined`) the cap is INERT, exactly as before. */
 export interface SecurePanelsOptions {
   moduleRunner?: ModuleToolRunner
+  maxJournalLength?: number
 }
 
 // L3 (adversarial) — the pane's group list MUST match security.ts's ToolGroup
@@ -314,6 +323,10 @@ export class SecurePanels {
   private moduleListText = ''
   // PG12 — the operator-only runner state (operator scope; never MCP-visible).
   private readonly moduleRunner: ModuleToolRunner | null
+  // The pane's own journal cap: the operator's value, fed to the pane
+  // `Supervisor` (the ENGINE's `maxJournalLength`). NEVER an independent
+  // literal — the operator's value IS the pane's value.
+  private readonly maxJournalLength: number | undefined
   private moduleSelectedTool = ''
   private moduleArgsRaw = ''
   private moduleRunResult = ''
@@ -328,9 +341,19 @@ export class SecurePanels {
     return this.debugValue
   }
 
+  /** Test/visibility accessor — the pane's OWN journal depth, read from the
+   *  engine's PUBLIC readonly `Supervisor.journal` array. The subject is the
+   *  JOURNAL, never `undoDepth` (the stack `condense()` TRUNCATES — after a
+   *  landed condense the two readings legitimately diverge). No production
+   *  caller: shipped wiring never asks the pane about its own journal. */
+  journalDepth(): number {
+    return this.supervisor.journal.length
+  }
+
   constructor(mount: HTMLElement, opts: SecurePanelsOptions = {}) {
     this.mount = mount
     this.moduleRunner = opts.moduleRunner ?? null
+    this.maxJournalLength = opts.maxJournalLength
     // The runner control handlers reach this host via closures (in-process; the
     // isolated pane graph — never a window/MCP bridge).
     const runnerHost: ModuleRunnerHost = {
@@ -348,7 +371,7 @@ export class SecurePanels {
     this.scope = createIsolatedScope()
     const hub = createLinkHub()
     const t = translateLegacy(paneEnvelope(runnerHost), { hub, graphScope: this.scope })
-    this.supervisor = new Supervisor({ events: new EventBridge(), graphScope: this.scope })
+    this.supervisor = new Supervisor({ events: new EventBridge(), graphScope: this.scope, maxJournalLength: this.maxJournalLength })
     for (const n of t.nodes as unknown[]) this.supervisor.registerNode(n as never)
     this.adapter = new DomAdapter(mount, { onEvent: this.handleDomEvent })
     this.root = t.root
@@ -485,31 +508,59 @@ export class SecurePanels {
   /** Write the current cfg into the pane graph nodes (token status, enabled
    *  groups, per-group toggle on/off) through the MANAGED CHANNEL (state-slice
    *  content + props writes), then the render reflects it. Never mutates a
-   *  Node's derived fields directly. */
+   *  Node's derived fields directly.
+   *
+   *  The VOLUME GUARD: the drawn candidate value is compared against the node's
+   *  CURRENT value, and the `apply` is issued only when they differ. Almost
+   *  every draw on a repeated refresh is a value-idempotent no-op that the
+   *  engine would journal anyway (`journalIfApplied` journals every applied
+   *  op), so skipping the unchanged ones lowers the pane journal's growth at
+   *  its SOURCE — no engine structure is read here, nothing is capped, and the
+   *  rendered outcome is byte-identical to the unguarded rendering. The guard
+   *  never suppresses a CHANGED value. */
   private syncConfig(): void {
     for (const n of this.supervisor.allNodes()) {
       const id = (n.props as { id?: string })?.id
+      const props = n.props as Record<string, unknown> | undefined
+      const currentContent = (n as { content?: unknown }).content
+      const unchanged = (targetProp: string, value: unknown): boolean => {
+        if (targetProp === 'content') return currentContent === value
+        if (targetProp === 'props.data-on') return props?.['data-on'] === value
+        if (targetProp === 'props.value') return props?.['value'] === value
+        return false
+      }
       const mutation: Array<{ targetProp: string; value: unknown; mode?: string }> = []
       if (id === 'security-status') {
         const jl = this.cfg.maxJournalLength !== undefined ? ` · journal: ≤${this.cfg.maxJournalLength}` : ' · journal: ∞'
-        mutation.push({ targetProp: 'content', value: `token: ${this.cfg.token ? '••••' : '(none)'} · enabled: [${this.cfg.enabled.join(', ')}]${jl}` })
+        const value = `token: ${this.cfg.token ? '••••' : '(none)'} · enabled: [${this.cfg.enabled.join(', ')}]${jl}`
+        if (!unchanged('content', value)) mutation.push({ targetProp: 'content', value })
       } else if (id === 'status') {
-        mutation.push({ targetProp: 'content', value: this.debugText })
+        // The CALL, never the bare method reference: an unbound `this.debugText`
+        // is a function, and the engine's `serializeSlice` refuses a non-JSON
+        // value (its `assertJsonSafe` throws on `function`), which aborts the
+        // pane's deferred condense with `condense-aborted` and leaves the
+        // journal unbounded. The call yields the pane's own string.
+        const value = this.debugText()
+        if (!unchanged('content', value)) mutation.push({ targetProp: 'content', value })
       } else if (id === 'token-input') {
-        mutation.push({ targetProp: 'content', value: this.cfg.token ?? '' })
+        const value = this.cfg.token ?? ''
+        if (!unchanged('content', value)) mutation.push({ targetProp: 'content', value })
       } else if (typeof id === 'string' && id.startsWith('toggle:')) {
         const g = id.slice('toggle:'.length)
         const on = this.cfg.enabled.includes(g)
-        mutation.push({ targetProp: 'props.data-on', mode: 'replace', value: on ? 'true' : 'false' })
-        mutation.push({ targetProp: 'content', value: `${on ? '☑' : '☐'} ${GROUP_LABELS[g]}` })
+        const onValue = on ? 'true' : 'false'
+        if (!unchanged('props.data-on', onValue)) mutation.push({ targetProp: 'props.data-on', mode: 'replace', value: onValue })
+        const label = `${on ? '☑' : '☐'} ${GROUP_LABELS[g]}`
+        if (!unchanged('content', label)) mutation.push({ targetProp: 'content', value: label })
       } else if (id === 'journal-length-input') {
-        mutation.push({ targetProp: 'props.value', mode: 'replace', value: this.cfg.maxJournalLength ?? '' })
+        const value = this.cfg.maxJournalLength ?? ''
+        if (!unchanged('props.value', value)) mutation.push({ targetProp: 'props.value', mode: 'replace', value })
       } else if (id === 'module-status') {
-        mutation.push({ targetProp: 'content', value: this.moduleStatus })
+        if (!unchanged('content', this.moduleStatus)) mutation.push({ targetProp: 'content', value: this.moduleStatus })
       } else if (id === 'module-list') {
-        mutation.push({ targetProp: 'content', value: this.moduleListText })
+        if (!unchanged('content', this.moduleListText)) mutation.push({ targetProp: 'content', value: this.moduleListText })
       } else if (id === 'module-run-result') {
-        mutation.push({ targetProp: 'content', value: this.moduleRunResult })
+        if (!unchanged('content', this.moduleRunResult)) mutation.push({ targetProp: 'content', value: this.moduleRunResult })
       }
       if (mutation.length > 0) {
         this.supervisor.apply({ kind: 'state-slice', node: n, mutation })

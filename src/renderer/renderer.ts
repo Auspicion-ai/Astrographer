@@ -1421,15 +1421,21 @@ async function main(): Promise<void> {
     },
   }
   const panesMount = document.getElementById('panes')
-  const panels = panesMount ? new SecurePanels(panesMount, { moduleRunner }) : null
+  const panels = panesMount ? new SecurePanels(panesMount, { moduleRunner, maxJournalLength }) : null
   if (panels) {
     void panels.refresh()
     // the Debug pane's live census + SSR preview, sourced from the APP graph
     panels.refreshDebug(runtime)
   }
   bridge.onRequest((req) => {
-    void handleRequest(runtime, req, (p) => bridge!.notify(p)).then((reply) => {
+    // The per-reply Debug-pane refresh sits in the NOTIFY CALLBACK, not in the
+    // reply `.then`: the notify path is gated by the mutating predicate
+    // (`reply.ok && MUTATING_METHODS.has(req.method)`), so a READ-ONLY reply
+    // never runs the burst. The pane render still precedes `sendReply`.
+    void handleRequest(runtime, req, (p) => {
+      bridge!.notify(p)
       panels?.refreshDebug(runtime)
+    }).then((reply) => {
       bridge.sendReply(reply)
     })
   })
