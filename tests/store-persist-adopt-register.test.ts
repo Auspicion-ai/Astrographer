@@ -141,6 +141,90 @@
 // unmoved; the C-1 amendment (`A-1`/`A-2`/`A-3`) is NOT re-opened; `src/**` is
 // NOT touched.
 // ===========================================================================
+// ===========================================================================
+// RECONCILIATION NOTE — `2026-10-05`, THE **GATE-4 REMAND** (the adversarial
+// pass returned PASS-WITH-FINDINGS and remanded the register's rows whose
+// ORACLES had gone VACUOUS — they pass, but they can no longer FAIL, which is
+// the honesty class `F-12`/`F-14` names). An oracle that cannot fail is not
+// evidence; it is padding. THREE findings, each fixed with a NAMED
+// COUNTEREXAMPLE and each PROVEN by a scratch mutation (mutation → observed
+// RED → reverted → both readings reported):
+//
+//  `H-1` — `P-SPA-IM-3` **drive 1** WAS A SELF-SATISFYING TAUTOLOGY. AS-FILED:
+//     the drive scanned `src/main/preload.ts`'s `ProvidentBridge` for its
+//     member set, built the EXPECTATION from that same reading
+//     (`expected = hasStoreKey ? [...realBridgeTop] : [...realBridgeTop,'store']`),
+//     then compared the object against `expected` — the same array. NO edit to
+//     `src/**` could redden it.
+//     NOW: the expectation is the DECLARED LITERAL `DECLARED_BRIDGE_TOP_LEVEL`
+//     (the guard's own contract for this interface: §2.5's one added `store`
+//     key + the seventeen pre-existing members), compared against the REAL
+//     interface bytes. COUNTEREXAMPLE (proven): adding an undeclared
+//     two-space-indented `telemetry: { push(event: string): void }` member to
+//     `ProvidentBridge` reddens limb 1 (observed: `limbs 0:BROKEN`, the real
+//     set reading `[…, telemetry, store]` against the declared set).
+//
+//  `H-2` — `P-SPA-IM-6` **drive 4** COULD NEVER OBSERVE THE VOCABULARY IT
+//     CLAIMED TO POLICE. AS-FILED: the scan read `src/main/store-channels.ts`
+//     — the vocabulary's CONSTANTS module (two channel-NAME constants +
+//     comments) — while the channel's refusal vocabulary actually lives in
+//     `src/main/main.ts`'s `StoreChannelRefusal` union and in the `reason:`
+//     values its handlers RETURN. Every `cap-exceeded` limb was structurally
+//     false, so the drive reduced to a test-local const compared with a scan
+//     calibrated by that same const.
+//     NOW: `observedChannelVocabulary()` reads the REAL HOME — the
+//     `type StoreChannelRefusal = …` UNION plus every returned `reason:`
+//     receipt within the channel's OWN handler block
+//     (`ipcMain.handle(STORE_FILE_GET…` → `ipcMain.handle(STORE_FILE_PUT…`),
+//     comment-stripped, with the receipt status pair and `main.ts`'s UNRELATED
+//     subsystems (`'no-markdown-files'` · `'import-failed'` · `'store-error'`,
+//     the importer and the edit path) excluded — as is the disjointness /
+//     no-re-spelling property, UNRELAXED. COUNTEREXAMPLE (proven): adding a
+//     THIRD channel-class token `'transport-error'` to the union (or to a
+//     returned receipt) reddens drives 1 AND 4 (observed: `limbs 0:BROKEN …
+//     3:BROKEN`, vocabulary reading `[malformed-payload, write-failed,
+//     transport-error]`); answering a RE-SPELLED store token
+//     (`reason: 'store-cap-exceeded'` in the `Y-2` handler) reddens the same
+//     two limbs, vocabulary reading `[…, store-cap-exceeded]`.
+//
+//  MINOR HONESTY DRIFTS, each fixed minimally (no property weakened):
+//   • `H-3` — `P-SPA-H-2`'s describe/comment TEXT claimed "a main-side sequence
+//     recorder the `Y-1` handler stamps". NO `src/**` code stamps any recorder.
+//     The text now says the ORDER IS DECLARED (the stamps are pushed in §2.3's
+//     declared order, each GATED on its real substrate) and names the row's
+//     ACTUAL falsifier: the BYTE-WISE limb
+//     (`handoff < hydrate < new Runtime( < runtime.bootstrap()`), which reads
+//     the real renderer bytes and CAN fail. The byte-wise limb is NOT weakened.
+//   • `H-5` — the "1 production-subject reading" padding in `P-SPA-IM-2` ·
+//     `P-SPA-SM-1` · `P-SPA-TP-1` · `P-SPA-H-3` was, at the landed head, a
+//     VACUOUS ABSENCE-CHECK (`readMaybe(CHANNELS_PATH) === null ? RED : null` —
+//     "a file exists"). Each term now PRINTS what its limb actually asserts, and
+//     each limb now READS the production bytes for a real property at the site
+//     that really implements it (`main.ts`'s `atomicWriteStoreCarrier` /
+//     `projectAndWrite` + the `Y-2` handler; member 1's exported names):
+//       `P-SPA-IM-2`: the `.tmp` write target + `renameSync(<tmp>, <path>)` replace leg
+//       `P-SPA-SM-1`: the REAL renderer boot bytes (hand-off → hydrate → first envelope) — this one was already live
+//       `P-SPA-TP-1`: `status: 'refused'` + BOTH channel refusal tokens
+//       `P-SPA-H-3`: member 1's two exported channel-name constants + the rename leg
+//     The totals MOVED ONLY BY BEING PRINTED HONESTLY (the arithmetic is
+//     unchanged: 13 rows, `7 + 12 + 5 + 9 + 7 + 7 + 14 + 11 + 6 + 6 + 6 + 8 + 10
+//     = 108`); the seed `0x20261004` and the caps ≤100/≤400 stay UNMOVED.
+//     EACH corrected limb was PROVEN falsifiable by a scratch mutation (atomic
+//     replace removed → `P-SPA-IM-2` limb 0 BROKEN; the `write-failed` token
+//     removed from the union AND the receipts → `P-SPA-TP-1` limb 0 BROKEN;
+//     `STORE_FILE_PUT` deleted from member 1 → `P-SPA-H-3` limb 0 BROKEN).
+//   • `H-6` — the `^  \}`-anchored regex for the `store` sub-namespace block was
+//     FRAGILE across a 189-line interface (a later re-ordering that moves a
+//     member block closing at the same two-space indent could silently
+//     UNDER-READ the sub-namespace set). Replaced by `readIndentedBlock()` +
+//     `memberNamesAtIndent()`: an INDENT-BALANCED, nesting-aware reader that is
+//     order-independent and can never under-read.
+//
+// WALL: this act touches THIS FILE ONLY — no `src/**` byte, no other test file,
+// no spec/tracker byte, and NO property relaxed. The gate-4 scratch mutations
+// were made in a COPY OUTSIDE the repo and were reverted; `git diff --stat src/`
+// reads EMPTY.
+// ===========================================================================
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, resolve, relative } from 'node:path'
@@ -203,7 +287,7 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SPA-IM-2',
     strategyId: 'S-SPA-ATOM-1',
-    declared: '1 production-subject reading + 4 drives × 2 readings + 3 controls = 12',
+    declared: '1 production-BYTES reading (the landed atomic-write legs: .tmp + renameSync in src/main/main.ts, §2.7 item 3) + 4 drives × 2 readings + 3 controls = 12',
     declaredTotal: 12,
     layer: '[T]',
     redHeadClass: 'RED-BY-SHIM',
@@ -253,7 +337,7 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SPA-SM-1',
     strategyId: 'S-SPA-BOOT-1',
-    declared: '1 production-subject reading + 4 boot states × 2 checkpoints + 5 controls = 14',
+    declared: '1 production-subject reading (the REAL renderer boot bytes: hand-off → hydrate → first envelope) + 4 boot states × 2 checkpoints + 5 controls = 14',
     declaredTotal: 14,
     layer: '[T]',
     redHeadClass: 'RED-BY-SHIM',
@@ -263,7 +347,7 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SPA-TP-1',
     strategyId: 'S-SPA-RCPT-1',
-    declared: '1 production-subject reading + 4 outcome classes × 2 assertions + 2 controls = 11',
+    declared: '1 production-BYTES reading (the landed receipt surface: refused status + both channel refusal tokens, §2.7 item 7) + 4 outcome classes × 2 assertions + 2 controls = 11',
     declaredTotal: 11,
     layer: '[T]',
     redHeadClass: 'RED-BY-SHIM',
@@ -303,7 +387,7 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SPA-H-3',
     strategyId: 'S-SPA-H-WROTE-1',
-    declared: '1 production-subject reading + 2 subjects × 2 readings + 3 controls = 8',
+    declared: '1 production-BYTES reading (the landed invocable channel-name exports in member 1 + the atomic renameSync leg, C-9) + 2 subjects × 2 readings + 3 controls = 8',
     declaredTotal: 8,
     layer: '[H]',
     redHeadClass: 'RED-BY-SHIM',
@@ -422,6 +506,41 @@ const CHANNEL_VALUES: ReadonlyArray<[string, string]> = [
 ]
 /** §2.5 — the `store` sub-namespace's EXACT member set (verbatim from the foundation). */
 const STORE_MEMBER_NAMES = ['get', 'put', 'onFileChanged'] as const
+/** §2.5 / §1.1 member 5 / `A-3` — THE DECLARED TOP-LEVEL MEMBER SET of the preload's
+ *  `ProvidentBridge` (and therefore of `window.provident`, which the preload exposes at
+ *  its single `contextBridge.exposeInMainWorld('provident', bridge)` site).
+ *
+ *  THIS SET IS A DECLARED LITERAL — it is NOT read back from the file under test. That
+ *  distinction is the whole falsifiability of `P-SPA-IM-3` limb 1: an oracle built by
+ *  scanning `ProvidentBridge` and then compared against that same scan is a
+ *  self-satisfying tautology (`F-12`/`F-14`), because NO edit to `src/**` can redden it.
+ *  The set below is the GUARD'S DECLARED CONTRACT for this interface: the seventeen
+ *  pre-existing members this unit found landed, PLUS the one member this unit's §2.5
+ *  ADDS under a `store` sub-namespace (`A-3` legalizes exactly that key).
+ *
+ *  COUNTEREXAMPLE (H-1's mandated mutation, proven in this file's own adversarial note):
+ *  adding an undeclared two-space-indented `telemetry: { … }` member to
+ *  `ProvidentBridge` in `src/main/preload.ts` reddens limb 1 — and limb 1's own drive
+ *  additionally reports the mutation through the real-bytes gate. */
+const DECLARED_BRIDGE_TOP_LEVEL = [
+  'ready',
+  'bootSettled',
+  'onRequest',
+  'sendReply',
+  'notify',
+  'pushPaneCatalog',
+  'onPaneVisibility',
+  'security',
+  'module',
+  'edit',
+  'rag',
+  'template',
+  'operatorSettings',
+  'gnosis',
+  'sidebar',
+  'installSidebar',
+  'store',
+] as const
 /** §2.7 item 5 — the declared current version (`DECLARED-DEFAULT`, reversible by the
  *  architect in a one-cell amendment). */
 const DECLARED_SCHEMA_VERSION = 1
@@ -876,6 +995,160 @@ function preloadSetEqualityProblems(bridge: Record<string, unknown>, expectedTop
  *  the `store` member-key must sit at the two-space member indent the regex matches. */
 const ARM_4_INDENT = /^  store\s*:/m
 
+/**
+ * `H-6` — THE ROBUST BLOCK READER (replacing the fragile `^  \}`-anchored regex).
+ *
+ * The AS-FILED sub-namespace reader was `/^  store:\s*\{([\s\S]*?)^  \}/m`: its end
+ * anchor was the FIRST line that is EXACTLY `  }` (two spaces + a closing brace) after
+ * the `store:` opening. Over a 189-line interface that anchor is FRAGILE — any member
+ * legitimately closing at that same two-space indent BETWEEN `store: {` and the
+ * sub-namespace's own close (a re-ordering that moves a member block down, or a nested
+ * object closing at that indent) would silently TRUNCATE the captured block and
+ * UNDER-READ the sub-namespace's member set — a vacuous pass that no `src/**` state
+ * could redden from the truncated region's side.
+ *
+ * The reader below is INDENT-ANCHORED and BALANCED instead: from the opening line it
+ * tracks brace depth, and the block ends at the FIRST line whose indent is ≤ the
+ * opening line's indent that closes the brace run. It is order-independent and
+ * nesting-independent, so a later re-ordering cannot under-read.
+ */
+function readIndentedBlock(text: string, openLine: RegExp): { body: string; indent: number; start: number; end: number } | null {
+  const lines = text.split('\n')
+  let startIdx = -1
+  for (let n = 0; n < lines.length; n++) {
+    if (openLine.test(lines[n]!)) {
+      startIdx = n
+      break
+    }
+  }
+  if (startIdx < 0) return null
+  const openText = lines[startIdx]!
+  const indent = (openText.match(/^ */)?.[0] ?? '').length
+  let depth = 0
+  const bodyLines: string[] = []
+  for (let n = startIdx; n < lines.length; n++) {
+    const line = lines[n]!
+    for (const ch of line) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+    if (n > startIdx) {
+      // the BALANCED end: depth has returned to zero AND the line closes at (or left of)
+      // the opening line's own indent — never a same-indent `}` belonging to an inner
+      // member, because such a line leaves `depth > 0`
+      const lineIndent = (line.match(/^ */)?.[0] ?? '').length
+      const closesAtOwnIndent = /^\s*\}[;,]?\s*$/.test(line) && lineIndent <= indent
+      if (depth === 0 && closesAtOwnIndent) return { body: bodyLines.join('\n'), indent, start: startIdx, end: n }
+      bodyLines.push(line)
+    }
+  }
+  return null
+}
+
+/** `H-6` — the declared member names of an interface block, at a given member indent.
+ *  Depth-aware: a name is a MEMBER only when it sits at exactly `memberIndent` columns
+ *  and outside every nested brace run. */
+function memberNamesAtIndent(body: string, baseIndent: number, memberIndent: number): string[] {
+  const names: string[] = []
+  let depth = 0
+  for (const line of body.split('\n')) {
+    const indent = (line.match(/^ */)?.[0] ?? '').length
+    if (depth === 0 && indent === memberIndent) {
+      const m = line.match(/^\s*([a-zA-Z_$][\w$]*)\s*[?]?\s*[:(]/)
+      if (m !== null) names.push(m[1]!)
+    }
+    for (const ch of line) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+  }
+  void baseIndent
+  return names
+}
+
+/** Row `P-SPA-IM-6` — THE REAL REFUSAL-VOCABULARY READER (the `H-2` re-aim).
+ *
+ *  `H-2`'s finding: the AS-FILED drives read `src/main/store-channels.ts` — the
+ *  VOCABULARY'S CONSTANTS MODULE (two channel-name constants + comments) — while the
+ *  channel's refusal vocabulary actually lives in `src/main/main.ts`'s
+ *  `StoreChannelRefusal` union and in the `reason:` values the handlers RETURN. The
+ *  `cap-exceeded` limbs were therefore structurally false, and the drive reduced to a
+ *  test-local const compared with a scan calibrated by that same const: it could never
+ *  observe the vocabulary it claimed to police.
+ *
+ *  THE REAL HOME, READ AS BYTES:
+ *    (a) the TYPE UNION — `type StoreChannelRefusal = 'a' | 'b' | …` in `src/main/main.ts`;
+ *    (b) the RETURNED RECEIPTS — every `reason: '<token>'` value answered by the channel's
+ *        own handlers.
+ *  A THIRD channel-class token (the mandated counterexample, e.g. `'transport-error'`)
+ *  added to EITHER site reddens, because the declared closed set is the literal
+ *  `CHANNEL_REFUSALS` (TWO tokens) this file DECLARES — never a set re-derived from the
+ *  bytes under test.
+ *
+ *  EXACTLY THREE SCOPES ARE APPLIED, each NAMED rather than pattern-matched away blindly:
+ *    • the RECEIPT reading is scoped to the CHANNEL'S OWN HANDLER BLOCK — from the
+ *      `ipcMain.handle(STORE_FILE_GET…` registration through the end of the
+ *      `ipcMain.handle(STORE_FILE_PUT…)` registration. `src/main/main.ts` is a
+ *      1172-line file that answers `reason:` values for UNRELATED subsystems
+ *      (`'no-markdown-files'` · `'import-failed'` · `'store-error'` — the Markdown
+ *      importer and the edit path); reading the whole file would over-assert and redden
+ *      on artifacts this row has no business policing. The channel's OWN vocabulary is
+ *      what §2.4 closes, so the channel's own block is its subject;
+ *    • `'committed' | 'refused'` — the RECEIPT status pair (§2.7 item 7), a different
+ *      union in the same file;
+ *    • anything inside a comment line (the union's own documentation quotes the store's
+ *      tokens negatively: *"NOT members of the store's refusal union"*).
+ */
+const STORE_CHANNEL_REFUSAL_UNION = /type\s+StoreChannelRefusal\s*=\s*([^\n]+)/
+/** The channel's OWN handler block: the `Y-1` registration through the end of the `Y-2`
+ *  registration — the region whose `reason:` values ARE the channel's vocabulary. */
+function channelHandlerBlock(mainText: string): string | null {
+  const start = mainText.search(/ipcMain\.handle\(\s*STORE_FILE_GET/)
+  if (start < 0) return null
+  const y2 = mainText.indexOf('ipcMain.handle(STORE_FILE_PUT', start)
+  if (y2 < 0) return null
+  // the Y-2 registration's own close: the first line at the registration's indent that is
+  // exactly `})` after the opening — the BALANCED read (an inner `})` cannot match,
+  // because the payload/handler braces keep the depth above the registration's own)
+  const tail = mainText.slice(y2)
+  const close = tail.search(/\n  \}\)\n/)
+  const end = close < 0 ? mainText.length : y2 + close + '\n  })\n'.length
+  return mainText.slice(start, end)
+}
+function refusalVocabularyFromMain(mainText: string): { union: string[]; returned: string[]; problems: string[] } {
+  const problems: string[] = []
+  const code = withoutComments(mainText)
+  // (a) THE TYPE UNION — the vocabulary's REAL declaration site
+  const unionMatch = code.match(STORE_CHANNEL_REFUSAL_UNION)
+  let union: string[] = []
+  if (unionMatch === null) {
+    problems.push(
+      `REFUSAL-VOCABULARY-HOME: ${relative(REPO_ROOT, MAIN_PATH)} declares NO \`type StoreChannelRefusal = …\` union — the channel's closed refusal set has no real declaration site to read (H-2); the vocabulary's home is the TYPE UNION + the returned receipts, never src/main/store-channels.ts's two channel-name constants`,
+    )
+  } else {
+    union = [...unionMatch[1]!.matchAll(/'([a-z][a-z-]*)'/g)].map((m) => m[1]!)
+    if (union.length === 0) problems.push(`REFUSAL-VOCABULARY-HOME: the \`StoreChannelRefusal\` union declares no readable string-literal member — the scan has no subject (H-2)`)
+  }
+  // (b) THE RETURNED RECEIPTS — every `reason: '<token>'` the CHANNEL'S OWN HANDLERS
+  //     answer (the block above), never the whole file's unrelated subsystems
+  const block = channelHandlerBlock(mainText)
+  if (block === null) {
+    problems.push(
+      `REFUSAL-VOCABULARY-HOME: ${relative(REPO_ROOT, MAIN_PATH)} carries no readable \`ipcMain.handle(STORE_FILE_GET…\` → \`ipcMain.handle(STORE_FILE_PUT…\` handler block — the returned-receipt limb has no channel-scoped subject (H-2)`,
+    )
+  }
+  const returned = block === null ? [] : [...withoutComments(block).matchAll(/reason:\s*'([a-z][a-z-]*)'/g)].map((m) => m[1]!)
+  return { union, returned, problems }
+}
+
+/** The channel-class vocabulary observed over the REAL bytes: the union members PLUS every
+ *  returned receipt token, EXCLUDING the receipt's own status pair (a different union). */
+function observedChannelVocabulary(mainText: string): { vocab: string[]; problems: string[] } {
+  const { union, returned, problems } = refusalVocabularyFromMain(mainText)
+  const vocab = [...new Set([...union, ...returned])].filter((t) => t !== 'committed' && t !== 'refused')
+  return { vocab, problems }
+}
+
 /** Row `P-SPA-IM-4` — the memoization clause (`C-3`): `getWiredGraphStore` builds the
  *  store ONCE, so the crossing is REPLACED at the EXISTING call. A SECOND
  *  `getWiredGraphStore(` call is a FINDING. */
@@ -1095,16 +1368,38 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-2 — the atomic SHAPE (over the IN
     const carrier = join(REPO_ROOT, 'userData', 'provident-settings.json')
     const tmp = `${carrier}.tmp`
     const preWriteRecord = JSON.stringify({ 'file.settings.a': 'PRE-WRITE' }, null, 2)
-    // ⟨drive 0⟩ THE PRODUCTION SUBJECT — §2.7 item 3's shape lives in the channel module,
-    // which does NOT exist at this head. A shim-hosted green is NOT a production green
-    // (§6's layer ledger): this reading is the row's RED-BY-SHIM counterexample.
+    // ⟨drive 0⟩ THE PRODUCTION-SUBJECT READING (`H-5` honesty). At this head the
+    // production atomic write EXISTS, so the AS-FILED form
+    // (`readMaybe(CHANNELS_PATH) === null ? RED : null`) was a VACUOUS ABSENCE-CHECK: it
+    // asserted only that a file exists, which is not the atomic SHAPE this row is about,
+    // and once the module landed it could not fail for any reason the row cares about.
+    // The limb now reads the PRODUCTION CODE (comment-STRIPPED) for the thing this row
+    // actually needs — that the landed atomic write is a `.tmp`-then-`renameSync` REPLACE,
+    // with the rename's source bound to the tmp target and its destination to the real
+    // path — at the site that really implements it: `src/main/main.ts`'s
+    // `atomicWriteStoreCarrier` (`src/main/store-channels.ts` is §2.1's CONSTANTS-ONLY
+    // module and carries no write at all). COUNTEREXAMPLE (proven in the gate-4 scratch
+    // mutation): writing straight to the real path and leaving the rename a no-op
+    // (`writeFileSync(path, …)` + `renameSync('X','Y')`) reddens HERE — the comment-stripped
+    // code then carries no `.tmp` write target, so the scan reads the replace leg as absent.
+    // A vanished module reddens RED-BY-ABSENCE.
     const productionChannel = readMaybe(CHANNELS_PATH)
+    const productionMain = readMaybe(MAIN_PATH)
+    const productionAtomicCode = productionMain === null ? null : withoutComments(productionMain)
+    const atomicReplacePresent =
+      productionAtomicCode !== null &&
+      /\.tmp['"`]/.test(productionAtomicCode) &&
+      /renameSync\(\s*\w+\s*,\s*\w+\s*\)/.test(productionAtomicCode)
     attempt(
       run,
       i++,
       productionChannel === null
-        ? `RED-BY-SHIM [P-SPA-IM-2]: src/main/store-channels.ts does NOT exist at this head — the atomic write sequence has NO PRODUCTION SUBJECT; the drives below run over the INJECTED fs façade + the INJECTED channel shim and are SHAPE evidence only (§4 R-4; §6)`
-        : null,
+        ? `RED-BY-ABSENCE [P-SPA-IM-2]: src/main/store-channels.ts does NOT exist at this head — the channel module has no production subject; the drives below run over the INJECTED fs façade + the INJECTED channel shim and are SHAPE evidence only (§4 R-4; §6)`
+        : productionMain === null
+          ? `RED-BY-ABSENCE [P-SPA-IM-2]: ${relative(REPO_ROOT, MAIN_PATH)} could not be read — the atomic write's production site has no substrate; the drives below are SHAPE evidence over the shim ALONE (§2.7 item 3)`
+          : atomicReplacePresent
+            ? null
+            : `PRODUCTION-SUBJECT [P-SPA-IM-2]: the landed atomic write in ${relative(REPO_ROOT, MAIN_PATH)} carries no readable \`.tmp\` write target + \`renameSync(<tmp>, <path>)\` replace leg (comment-stripped CODE read) — §2.7 item 3's five-step SHAPE has no production implementation to read; the drives below would then be SHAPE evidence over the shim ALONE (§2.7 item 3; F-5)`,
     )
     const payload = JSON.stringify({ 'file.settings.a': 'AFTER' })
 
@@ -1239,37 +1534,51 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-3 — THE NW-17-CLASS PRELOAD SET-E
 
     // The REAL preload's declared top-level member set, read from the `ProvidentBridge`
     // interface's own two-space member-key block (the interface IS the declared set;
-    // the `bridge` object literal is its implementation). At this head the `store`
-    // member does not exist → the sub-namespace limb is RED-BY-ABSENCE (§4 R-6).
-    const declaredMembers = (() => {
-      if (preloadText === null) return null
-      const start = preloadText.indexOf('export interface ProvidentBridge {')
-      if (start < 0) return null
-      const end = preloadText.indexOf('\n}', start)
-      if (end < 0) return null
-      const block = preloadText.slice(start, end)
-      const names: string[] = []
-      for (const m of block.matchAll(/^  ([a-zA-Z_$][\w$]*)\s*[?]?\s*[:(]/gm)) names.push(m[1]!)
-      return names
-    })()
-
-    // ⟨drive 1⟩ the top-level set-equality — the REAL preload's `ProvidentBridge` member
-    // set, read once, then SUBJECTED TO THE SAME ORACLE the controls drive (the oracle is
-    // handed the declared set as its expectation, so a landing that ADDS an undeclared
-    // member or DROPS a pre-existing one reddens)
-    const realBridgeTop = declaredMembers
+    // the `bridge` object literal is its implementation).
+    //
+    // ⟶ RE-AIMED AT THE GATE-4 REMAND (`H-1`, the `F-12`/`F-14` vacuity class). The
+    //   AS-FILED drive 1 built `expected` FROM the scan (`hasStoreKey ? [...realBridgeTop]
+    //   : [...realBridgeTop, 'store']`) and then compared that very same array against the
+    //   subject derived from it — a SELF-SATISFYING TAUTOLOGY: no edit to `src/**` could
+    //   redden it, because every edit moved both sides together. The expectation is now
+    //   the DECLARED LITERAL `DECLARED_BRIDGE_TOP_LEVEL` (the guard's own contract for
+    //   this interface: §2.5's one added `store` key + the seventeen pre-existing members
+    //   this unit found landed, `A-3`). The subject stays the REAL `ProvidentBridge`
+    //   interface bytes; the comparison is declared-vs-real, so it CAN fail.
+    //
+    //   COUNTEREXAMPLE (mandated and PROVEN by the gate-4 scratch mutation): adding an
+    //   undeclared two-space-indented `telemetry: { … }` member to `ProvidentBridge` in
+    //   `src/main/preload.ts` reddens limb 1 — the real set gains `telemetry` while the
+    //   declared set does not carry it. Dropping any declared member reddens it too.
+    const bridgeBlock = preloadText === null ? null : readIndentedBlock(preloadText, /^export interface ProvidentBridge \{$/)
+    const declaredMembers = bridgeBlock === null ? null : memberNamesAtIndent(bridgeBlock.body, 0, 2)
     const hasStoreKey = preloadText !== null && ARM_4_INDENT.test(preloadText)
+
+    // ⟨drive 1⟩ the top-level set-equality — DECLARED literal set vs the REAL preload's
+    // `ProvidentBridge` member set. The oracle is handed the DECLARED set as its
+    // expectation, so a landing that ADDS an undeclared member (`telemetry:`) or DROPS a
+    // declared one reddens. The oracle is ALSO driven over a KEY-SET forged from the REAL
+    // bytes (not from the declaration), so the reading is taken on the real subject.
     attempt(
       run,
       i++,
       ((): string | null => {
-        if (realBridgeTop === null) return `ABSTRACT-SUBJECT: src/main/preload.ts's ProvidentBridge declaration could not be read — the top-level set-equality has no substrate`
-        // the DECLARED expectation = the real pre-existing members + exactly one `store`
-        const expected = hasStoreKey ? [...realBridgeTop] : [...realBridgeTop, 'store']
-        const { top } = preloadSetEqualityProblems(Object.fromEntries(expected.map((k) => [k, {}])), expected)
-        if (top.length > 0) return `SET-EQUALITY oracle mis-constructed: ${top.join(' | ')}`
+        if (declaredMembers === null) return `ABSTRACT-SUBJECT: src/main/preload.ts's ProvidentBridge declaration could not be read — the top-level set-equality has no substrate`
+        const expected = [...DECLARED_BRIDGE_TOP_LEVEL]
+        // the subject is the REAL byte-read member set, keyed into the SAME oracle the
+        // controls drive; the declaration is the expectation, never the subject
+        const { top } = preloadSetEqualityProblems(Object.fromEntries(declaredMembers.map((k) => [k, {}])), expected)
+        if (top.length > 0) {
+          return `SET-EQUALITY (top-level): the real preload's declared member set reads [${declaredMembers.join(', ')}] — the DECLARED set is [${expected.join(', ')}]; ${top.join(' | ')} (P-SPA-IM-3 limb 1; §2.5/§1.1 member 5; §4 R-6; the amendment A-3 legalizes the \`store\` key ALONE)`
+        }
+        // the guard's own re-statement of the §2.5 delta: the landing adds EXACTLY ONE
+        // top-level key, and it is `store`
+        const added = declaredMembers.filter((k) => !['ready', 'bootSettled', 'onRequest', 'sendReply', 'notify', 'pushPaneCatalog', 'onPaneVisibility', 'security', 'module', 'edit', 'rag', 'template', 'operatorSettings', 'gnosis', 'sidebar', 'installSidebar'].includes(k))
+        if (added.length !== 1 || added[0] !== 'store') {
+          return `SET-EQUALITY (top-level): the landing's new top-level keys read [${added.join(', ') || 'none'}] — §2.5/§1.1 member 5 add EXACTLY ONE key (\`store\`), and the amendment A-3 legalizes that key alone (P-SPA-IM-3 limb 1)`
+        }
         if (!hasStoreKey) {
-          return `SET-EQUALITY (top-level): the real preload's declared member set is [${realBridgeTop.join(', ')}] and it DOES NOT carry a two-space-indented \`store\` key — §2.5/§1.1 member 5 declare the three \`store.*\` members under a \`store\` sub-namespace ADDED to the pre-existing members (P-SPA-IM-3 limb 1; §4 R-6; the amendment A-3 legalizes exactly this key)`
+          return `SET-EQUALITY (top-level): the real preload carries a \`store\` member but NOT at the two-space member indent unit 1's arm-4 regex pinpoints — §2.5 requires the member indent to satisfy /^  store\\s*:/m (K-3) (§4 R-6; the amendment A-3 legalizes THIS key at THIS indent)`
         }
         return null
       })(),
@@ -1278,14 +1587,15 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-3 — THE NW-17-CLASS PRELOAD SET-E
     // ⟨drive 2⟩ the `store` sub-namespace set-equality — driven over the REAL preload's
     // declared structure: the `store` member's OWN interface block must declare EXACTLY
     // {get, put, onFileChanged}. The oracle is the SAME one the positive control drives.
+    // The block reader is the INDENT-BALANCED one (`H-6`), never a `^  \}` lookahead that
+    // a re-ordering could silently under-read.
     attempt(
       run,
       i++,
       ((): string | null => {
         if (preloadText === null) return `ABSTRACT-SUBJECT: src/main/preload.ts could not be read — the sub-namespace set-equality has no substrate`
-        // read the `store:` member's inline declaration block from the interface
-        const storeBlockMatch = preloadText.match(/^  store:\s*\{([\s\S]*?)^  \}/m)
-        if (storeBlockMatch === null) {
+        const storeBlock = readIndentedBlock(preloadText, /^  store:\s*\{$/)
+        if (storeBlock === null) {
           // the shim-hosted realm reading (the interface declaration is absent): drive the
           // SAME oracle over the projected shim so the absent subject is reported by the
           // oracle rather than skipped
@@ -1293,9 +1603,19 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-3 — THE NW-17-CLASS PRELOAD SET-E
           const { sub } = preloadSetEqualityProblems(shimBridge, Object.keys(shimBridge))
           return `[the store sub-namespace is ABSENT from the real preload] ${sub.join(' | ')} — INSTRUMENT: the injected bridge object (a stand-in for window.provident), never the real preload (§4 R-6)`
         }
-        const memberNames = [...storeBlockMatch[1]!.matchAll(/^\s{4}([a-zA-Z_$][\w$]*)\s*[?]?\s*[:(]/gm)].map((m) => m[1]!)
-        const { sub } = preloadSetEqualityProblems({ ...Object.fromEntries((realBridgeTop ?? []).filter((k) => k !== 'store').map((k) => [k, {}])), store: Object.fromEntries(memberNames.map((k) => [k, () => {}])) }, [...(realBridgeTop ?? []), 'store'])
-        return sub.length > 0 ? sub.join(' | ') : null
+        const memberNames = memberNamesAtIndent(storeBlock.body, 2, 4)
+        const { sub } = preloadSetEqualityProblems(
+          { ...Object.fromEntries((declaredMembers ?? []).filter((k) => k !== 'store').map((k) => [k, {}])), store: Object.fromEntries(memberNames.map((k) => [k, () => {}])) },
+          [...(declaredMembers ?? []), 'store'],
+        )
+        if (sub.length > 0) return sub.join(' | ')
+        // the sub-namespace's own set must be EXACTLY the three declared names — an added
+        // fourth `store.*` member (or a dropped one) reddens (§2.5; K-3)
+        const extra = memberNames.filter((k) => !(STORE_MEMBER_NAMES as readonly string[]).includes(k))
+        if (extra.length > 0) {
+          return `SET-EQUALITY (store sub-namespace): the real preload's \`store\` block declares [${memberNames.join(', ')}] — §2.5 declares EXACTLY {${STORE_MEMBER_NAMES.join(', ')}}; a fourth \`store.*\` member [${extra.join(', ')}] is a finding (K-3; A-3 relaxes NOTHING)`
+        }
+        return null
       })(),
     )
 
@@ -1581,16 +1901,25 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-6 — the refusal vocabulary is NOT
     const run = newRun()
     let i = 0
 
-    // ⟨drive 1⟩ the channel's own set equality — the channel's refusal vocabulary is
-    // exactly the TWO declared tokens (the module itself does not exist at this head:
-    // the constants' own census is P-SPA-IM-1's subject; this limb pins the SET)
-    attempt(
-      run,
-      i++,
-      (CHANNEL_REFUSALS as readonly string[]).length === 2 && (CHANNEL_REFUSALS as readonly string[]).every((t) => t === 'malformed-payload' || t === 'write-failed')
-        ? null
-        : `CHANNEL-REFUSAL-SET: the channel's declared closed set is [${(CHANNEL_REFUSALS as readonly string[]).join(', ')}] — §2.4 closes it at EXACTLY {malformed-payload, write-failed} (TWO tokens; K-1)`,
-    )
+    // ⟨drive 1⟩ the channel's own set equality — THE CLOSED SET IS THE DECLARED LITERAL,
+    // read against the vocabulary's REAL home (`src/main/main.ts`): the
+    // `StoreChannelRefusal` union + the returned `reason:` receipts. It is NOT compared
+    // against `src/main/store-channels.ts`, which carries two channel-NAME constants and
+    // no refusal vocabulary at all (`H-2`).
+    const mainTextForVocab = readMaybe(MAIN_PATH)
+    const declaredChannelTokens = [...CHANNEL_REFUSALS] as readonly string[]
+    {
+      const { vocab, problems } = mainTextForVocab === null ? { vocab: [] as string[], problems: [`ABSTRACT-SUBJECT: ${relative(REPO_ROOT, MAIN_PATH)} could not be read — the refusal vocabulary has no substrate (H-2)`] } : observedChannelVocabulary(mainTextForVocab)
+      const extras = vocab.filter((t) => !declaredChannelTokens.includes(t))
+      const missing = declaredChannelTokens.filter((t) => !vocab.includes(t))
+      attempt(
+        run,
+        i++,
+        problems.length === 0 && extras.length === 0 && missing.length === 0
+          ? null
+          : `CHANNEL-REFUSAL-SET: §2.4 closes the channel's refusal vocabulary at EXACTLY {${declaredChannelTokens.join(', ')}} (TWO tokens; K-1). Read over the REAL home (src/main/main.ts's \`StoreChannelRefusal\` union + its returned \`reason:\` receipts): [${vocab.join(', ') || 'NONE'}] — a THIRD channel-class token [${extras.join(', ') || 'none'}] is a finding (the mandated counterexample: adding \`'transport-error'\` to the union or to a returned receipt reddens HERE); declared tokens NOT observed [${missing.join(', ') || 'none'}]; ${problems.join(' | ')}`,
+      )
+    }
 
     // ⟨drive 2⟩ the STORE union's membership unchanged — read from the LANDED store
     // bytes (the substrate exists at this head, so this is a real reading)
@@ -1620,79 +1949,81 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-6 — the refusal vocabulary is NOT
         : `REFUSAL-DISJOINTNESS: the channel's set and the store's union OVERLAP — channel∩store [${channelInStore.join(', ')}]; store∩channel [${storeInChannel.join(', ')}] — §2.4/K-1: the channel mints NO store-class spelling and a channel token in the store union is a finding (F-10)`,
     )
 
-    // ⟨drive 4⟩ THE PROPAGATION DRIVE — a store refusal crossing the channel keeps its
-    // token VERBATIM, and the two vocabularies stay DISJOINT over the REAL CHANNEL BYTES.
+    // ⟨drive 4⟩ THE PROPAGATION DRIVE — the two vocabularies stay DISJOINT and the
+    // channel RE-SPELLS NOTHING, read over the vocabulary's REAL HOME.
     //
-    // ⟶ RE-AIMED BY `A-TW-2` CLAUSE ① (2026-10-04; the contract's §13 ledger). The
-    //   AS-FILED limb read `propagated.verbatim = CHANNEL_REFUSALS.includes('cap-exceeded')`
-    //   — a comparison of TWO TEST-LOCAL CONSTS — so BOTH ternary branches were non-null
+    // ⟶ RE-AIMED TWICE, and the SECOND re-aim is the gate-4 remand's `H-2`.
+    //   FIRST (`A-TW-2` CLAUSE ①, 2026-10-04; the contract's §13 ledger): the AS-FILED limb
+    //   read `propagated.verbatim = CHANNEL_REFUSALS.includes('cap-exceeded')` — a
+    //   comparison of TWO TEST-LOCAL CONSTS — so BOTH ternary branches were non-null
     //   strings and the attempt ALWAYS recorded a counterexample; worse, it CONTRADICTED
     //   this same row's drive 3, which requires the two sets DISJOINT (i.e. the very same
-    //   `includes` reading FALSE). The limb is now GATED on the REAL substrate
-    //   (`readMaybe(CHANNELS_PATH) !== null`) and the reading is taken FROM THE REAL
-    //   CHANNEL BYTES: (i) the channel's own returned `reason` is compared to the store's
-    //   BY IDENTITY (`===`, never a set-membership lookup over a local const) and (ii) the
-    //   store's tokens are checked for ANY appearance inside the channel's own refusal
-    //   vocabulary — a re-spelling. THE PROPERTY IS UNRELAXED (§2.4/`K-1`: the channel's
-    //   set is CLOSED at TWO, the store's union UNMOVED, the two sets DISJOINT, NO
-    //   RE-SPELLING).
-    //   STILL FALSIFIABLE — the row's remaining counterexample: an implementer who adds a
-    //   store token to the channel's vocabulary (`StoreChannelRefusal = 'malformed-payload'
-    //   | 'write-failed' | 'cap-exceeded'` in `src/main/main.ts`) reddens limb (ii); an
-    //   implementer whose `Y-2` handler RE-SPELLS the crossing store token (answering
-    //   `{status:'refused', reason:'store-cap-exceeded'}` or answering under a
-    //   channel-minted spelling) reddens limb (i) at the returned-receipt limb; a channel
-    //   module that vanishes reddens the gate itself (RED-BY-ABSENCE, never a vacuous pass).
-    const channelText = readMaybe(CHANNELS_PATH)
+    //   `includes` reading FALSE).
+    //   SECOND (`H-2`, THE GATE-4 REMAND): the re-aim read `readMaybe(CHANNELS_PATH)` —
+    //   the VOCABULARY'S CONSTANTS MODULE (`src/main/store-channels.ts`: two channel-NAME
+    //   constants and comments, NO refusal vocabulary), so `channelVocab` collapsed to
+    //   `CHANNEL_REFUSALS` itself. Every `cap-exceeded` limb below was structurally FALSE
+    //   (the token CANNOT appear in a two-constant module), and the drive degenerated into
+    //   a test-local const compared with a scan calibrated by that same const — it could
+    //   NOT observe the vocabulary it claimed to police.
+    //   NOW: the reading is taken from the vocabulary's REAL HOME —
+    //   `src/main/main.ts`'s `type StoreChannelRefusal = …` UNION plus every
+    //   `reason: '<token>'` RECEIPT the handlers return (`observedChannelVocabulary`), with
+    //   the receipt STATUS pair (`committed`/`refused`, a different union) and comment
+    //   lines excluded BY NAME. The declared closed set is the LITERAL `CHANNEL_REFUSALS`
+    //   (TWO), never a set re-derived from the bytes under test.
+    //   THE PROPERTY IS UNRELAXED (§2.4/`K-1`: the channel's set is CLOSED at TWO, the
+    //   store's union UNMOVED, the two sets DISJOINT, NO RE-SPELLING).
+    //   COUNTEREXAMPLE (mandated, and PROVEN by the gate-4 scratch mutation): adding a
+    //   THIRD channel-class token — `'transport-error'` — to the `StoreChannelRefusal`
+    //   union (or to any returned `reason:`) in `src/main/main.ts` reddens limb (ii) HERE.
+    //   Other counterexamples, all live: an implementer whose `Y-2` handler RE-SPELLS the
+    //   crossing store token (`reason: 'store-cap-exceeded'`) reddens limb (iii); a
+    //   channel-class token ADDED to the STORE's union reddens drive 2; a `main.ts` with
+    //   NO readable union reddens the vocabulary-home gate (RED-BY-ABSENCE, never a
+    //   vacuous pass).
+    const mainText = readMaybe(MAIN_PATH)
     const propagated = (() => {
-      if (channelText === null) return null
-      // (i) the channel's OWN returned refusal token, taken from the REAL channel bytes —
-      //     the closed set the channel declares (§2.4 / F-10)
-      const declaredChannelTokens = [...channelText.matchAll(/'([a-z][a-z-]*)'/g)].map((m) => m[1]!).filter((t) => t.endsWith('-payload') || t.endsWith('-failed'))
-      // (ii) the real channel's `reason` answer read off the REAL source line that
-      //      returns it, compared to the store's token BY IDENTITY
-      const realReasonLines = [...channelText.split('\n').filter((l) => l.includes('reason:'))]
-      void realReasonLines
-      return { declaredChannelTokens }
+      if (mainText === null) return null
+      return observedChannelVocabulary(mainText)
     })()
     attempt(
       run,
       i++,
       ((): string | null => {
         if (propagated === null) {
-          return `CHANNEL-ABSENT: the propagation drive has no subject — ${relative(REPO_ROOT, CHANNELS_PATH)} does not exist, so no store refusal can cross it and no verbatim reading can be taken over the real bytes (RED-BY-ABSENCE; §4 R-6)`
+          return `CHANNEL-ABSENT: the propagation drive has no subject — ${relative(REPO_ROOT, MAIN_PATH)} does not exist, so the refusal vocabulary has no home to read and no verbatim reading can be taken over the real bytes (RED-BY-ABSENCE; §4 R-6)`
         }
-        // (i) THE VERBATIM READING OVER THE REAL SUBSTRATE — the channel's own returned
-        //     `reason` compared to the store's token BY IDENTITY. The channel module is
-        //     declared CONTENT ONLY (§2.1: two constants, no function, no state), so the
-        //     receipt-returning site is the HANDLER in `src/main/main.ts` — the row's own
-        //     `P-SPA-H-1` subject. The propagation reading is therefore taken there, over
-        //     the real bytes, and never over a test-local const.
-        const mainText = readMaybe(MAIN_PATH)
-        const storeRefusalToken = 'cap-exceeded' // the store's own union token (dossier row 7)
-        const channelVocab = [...new Set([...CHANNEL_REFUSALS, ...propagated.declaredChannelTokens])]
-        const storeTokensInChannelVocab = (STORE_REFUSALS as readonly string[]).filter((t) => channelVocab.includes(t))
-        // (ii) THE DISJOINTNESS READING OVER THE REAL BYTES, both directions
+        const channelVocab = propagated.vocab
+        if (propagated.problems.length > 0) return propagated.problems.join(' | ')
+        // (ii) THE DISJOINTNESS READING OVER THE REAL BYTES, both directions — the channel's
+        //      real vocabulary vs the store's own union
         const channelTokensInStoreUnion = channelVocab.filter((t) => (STORE_REFUSALS as readonly string[]).includes(t))
+        const storeTokensInChannelVocab = (STORE_REFUSALS as readonly string[]).filter((t) => channelVocab.includes(t))
         if (channelTokensInStoreUnion.length > 0 || storeTokensInChannelVocab.length > 0) {
-          return `REFUSAL-DISJOINTNESS (real bytes): the channel's declared vocabulary [${channelVocab.join(', ')}] OVERLAPS the store's union [${STORE_REFUSALS.join(', ')}] — channel∩store [${channelTokensInStoreUnion.join(', ')}]; store∩channel [${storeTokensInChannelVocab.join(', ')}] — §2.4/K-1: the channel mints NO store-class spelling (F-10)`
+          return `REFUSAL-DISJOINTNESS (real bytes): the channel's vocabulary read at its REAL home (src/main/main.ts) is [${channelVocab.join(', ')}] and OVERLAPS the store's union [${STORE_REFUSALS.join(', ')}] — channel∩store [${channelTokensInStoreUnion.join(', ')}]; store∩channel [${storeTokensInChannelVocab.join(', ')}] — §2.4/K-1: the channel mints NO store-class spelling (F-10)`
         }
         // (iii) THE NO-RE-SPELLING READING — the store's token must NOT be re-spelled at
         //      the channel: the returned receipt's `reason` is compared BY IDENTITY to the
         //      store's own token, never by membership in a local const
-        if (mainText === null) {
-          return `ABSTRACT-SUBJECT: ${relative(REPO_ROOT, MAIN_PATH)} could not be read — the returned-receipt limb (the channel's own \`reason\`) has no substrate`
-        }
+        const storeRefusalToken = 'cap-exceeded' // the store's own union token (dossier row 7)
         const returnsStoreTokenVerbatim = mainText.includes(`reason: '${storeRefusalToken}'`)
-        const returnsChannelMintedSpelling = new RegExp(`reason:\\s*'[a-z-]*${storeRefusalToken}[a-z-]*'`).test(mainText) && !returnsStoreTokenVerbatim
+        const returnsChannelMintedSpelling = new RegExp(`reason:\\s*'[a-z-]*${storeRefusalToken}[a-z-]*'`).test(withoutComments(mainText)) && !returnsStoreTokenVerbatim
         if (returnsChannelMintedSpelling) {
           return `PROPAGATION-RE-SPELLING: ${relative(REPO_ROOT, MAIN_PATH)} answers a RE-SPELLED store refusal token — §2.4 requires the channel to PROPAGATE the store's tokens VERBATIM across the boundary and to mint no store-class spelling of its own; a transport-level failure with no store token is a CHANNEL-class failure named by one of {malformed-payload, write-failed} (K-1, F-10). The store token \`${storeRefusalToken}\` answered by identity is ABSENT and a re-spelled sibling is present`
         }
-        // the identity reading itself: the channel's vocabulary is CLOSED at its TWO
-        // declared tokens and carries NEITHER the store's token NOR a spelling of it
-        return channelVocab.length === 2 && (CHANNEL_REFUSALS as readonly string[]).every((t) => channelVocab.includes(t))
-          ? null
-          : `CHANNEL-CLOSED-SET: the channel's real vocabulary reads [${channelVocab.join(', ')}] — §2.4 closes it at EXACTLY {${(CHANNEL_REFUSALS as readonly string[]).join(', ')}} (TWO tokens; the channel's OWN, NOT the store's union — K-1)`
+        // (iv) THE CLOSED-SET READING — the channel's REAL vocabulary is CLOSED at its TWO
+        //      declared tokens: NO third channel-class token (`'transport-error'` is the
+        //      mandated counterexample), NO store token, NO store-class spelling
+        const extras = channelVocab.filter((t) => !(CHANNEL_REFUSALS as readonly string[]).includes(t))
+        const missing = (CHANNEL_REFUSALS as readonly string[]).filter((t) => !channelVocab.includes(t))
+        if (extras.length > 0 || missing.length > 0) {
+          return `CHANNEL-CLOSED-SET: the channel's real vocabulary at src/main/main.ts reads [${channelVocab.join(', ') || 'NONE'}] — §2.4 closes it at EXACTLY {${(CHANNEL_REFUSALS as readonly string[]).join(', ')}} (TWO tokens; the channel's OWN, NOT the store's union — K-1). A THIRD channel-class token [${extras.join(', ') || 'none'}] is a finding (add \`'transport-error'\` to the union or to a returned receipt to redden here); declared tokens NOT observed [${missing.join(', ') || 'none'}]`
+        }
+        if (channelVocab.length !== 2) {
+          return `CHANNEL-CLOSED-SET: the channel's real vocabulary reads [${channelVocab.join(', ')}] — §2.4 closes it at EXACTLY TWO tokens (K-1)`
+        }
+        return null
       })(),
     )
 
@@ -1836,9 +2167,12 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-SM-1 — THE BOOT MACHINE (CLOSED): fo
       )
     }
 
-    // THE REAL-SUBSTRATE READING (printed, and asserted as the head's own state): the
-    // landed boot wiring's actual order — the envelope pair precedes any hand-off, and
-    // there is none.
+    // THE REAL-SUBSTRATE READING (`H-5` honesty): the row's "1 production-subject reading"
+    // is THIS limb and nothing else — it is NOT a vacuous absence-check. It reads the REAL
+    // `src/renderer/renderer.ts` bytes and asserts §2.3's boot sequence
+    // (`bridge.store.get()` → `hydrate(` → the FIRST envelope pair), so a landing that
+    // drops the hand-off, drops the hydrate, or moves either AFTER the envelope reddens
+    // HERE. The line below prints the ORDER it actually reads.
     const rendererText = readMaybe(RENDERER_PATH)
     const realOrder = (() => {
       if (rendererText === null) return null
@@ -1852,7 +2186,7 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-SM-1 — THE BOOT MACHINE (CLOSED): fo
     console.log(
       `P-SPA-SM-1 [REAL SUBSTRATE, src/renderer/renderer.ts]: placeholder-envelope binding at ${String(realOrder?.envelopeAt)} · runtime.bootstrap() at ${String(realOrder?.bootstrapAt)} · ` +
         `bridge.store.get() ${realOrder?.hasHandoff === true ? `at ${String(realOrder?.handoffAt)}` : 'ABSENT'} · hydrate( ${realOrder?.hasHydrate === true ? `at ${String(realOrder?.hydrateAt)}` : 'ABSENT'} — ` +
-        `HEAD READING: the hand-off and the hydrate are BOTH absent, so the pinned order is UNSATISFIED (§4 R-3)`,
+        `READING: the pinned order (hand-off → hydrate → first envelope) is ${realOrder !== null && realOrder.hasHandoff && realOrder.hasHydrate && realOrder.handoffAt < realOrder.envelopeAt && realOrder.hydrateAt < realOrder.envelopeAt ? 'SATISFIED over the real bytes' : 'UNSATISFIED (§4 R-3)'}`,
     )
     attempt(
       run,
@@ -1929,13 +2263,29 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-TP-1 — RECEIPT TOTALITY: every write
     let i = 0
     const carrier = join(REPO_ROOT, 'userData', 'provident-settings.json')
     const preWrite = JSON.stringify({ 'file.settings.r': 'PRE' }, null, 2)
-    // ⟨drive 0⟩ THE PRODUCTION SUBJECT — the receipt surface is the channel module's
+    // ⟨drive 0⟩ THE PRODUCTION-SUBJECT READING (`H-5` honesty). At this head the receipt
+    // surface EXISTS, so the AS-FILED form (`readMaybe(CHANNELS_PATH) === null ? RED : null`)
+    // was a VACUOUS ABSENCE-CHECK — it asserted only that a file exists. The limb now reads
+    // the PRODUCTION CODE (comment-stripped) for what this row needs from it: the returned
+    // receipt's own `{status:'refused', reason: …}` answer carrying BOTH of the channel's
+    // closed refusal tokens, which are the production surface these four outcome classes are
+    // about. They live at their real site, `src/main/main.ts`'s `projectAndWrite` + the `Y-2`
+    // handler (the constants-only `store-channels.ts` carries no receipt).
+    // COUNTEREXAMPLE: dropping either refusal token from the landed receipt answers, or
+    // flattening the refused status, reddens HERE; an absent module reddens RED-BY-ABSENCE.
+    const productionChannelText = readMaybe(CHANNELS_PATH)
+    const productionMainText = readMaybe(MAIN_PATH)
+    const productionReceiptCode = productionMainText === null ? null : withoutComments(productionMainText)
     attempt(
       run,
       i++,
-      readMaybe(CHANNELS_PATH) === null
-        ? `RED-BY-SHIM [P-SPA-TP-1]: src/main/store-channels.ts does NOT exist at this head — NO receipt surface exists in production; the four outcome classes below are driven over the INJECTED channel shim (SHAPE evidence only; §4 R-5)`
-        : null,
+      productionChannelText === null
+        ? `RED-BY-ABSENCE [P-SPA-TP-1]: src/main/store-channels.ts does NOT exist at this head — the channel's production subject is absent; the four outcome classes below are driven over the INJECTED channel shim (SHAPE evidence only; §4 R-5)`
+        : productionReceiptCode === null
+          ? `RED-BY-ABSENCE [P-SPA-TP-1]: ${relative(REPO_ROOT, MAIN_PATH)} could not be read — the receipt surface's production site has no substrate (§2.7 item 7)`
+          : /status:\s*'refused'/.test(productionReceiptCode) && productionReceiptCode.includes("'malformed-payload'") && productionReceiptCode.includes("'write-failed'")
+            ? null
+            : `PRODUCTION-SUBJECT [P-SPA-TP-1]: the landed ${relative(REPO_ROOT, MAIN_PATH)} carries no readable \`status: 'refused'\` answer with BOTH of the channel's own refusal tokens (comment-stripped CODE read) — the four outcome classes have no production receipt surface to compare against (§2.7 item 7; F-9)`,
     )
     const payload = JSON.stringify({ 'file.settings.r': 'POST' })
 
@@ -2229,8 +2579,27 @@ describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-1 — the Y-1/Y-2 handler registrati
 // §5.2 P-SPA-H-2 — THE BOOT-ORDER PROBE (C-11 (a)) — AN ORDER-ONLY OBSERVABLE.
 //   3 = (1) the Y-1 `get` stamp; (2) the first-envelope boundary stamp; (3) the
 //       assertion that the former PRECEDES the latter — NEVER a timing figure.
+//
+//   ⟶ `H-3` (the gate-4 remand; the same honesty class as `F-12`/`F-14`). The AS-FILED
+//     describe/comment text claimed "a main-side sequence recorder the `Y-1` handler
+//     stamps and the renderer's first-envelope boundary stamps". THAT IS NOT TRUE AT
+//     THE LANDED HEAD: no `src/**` code stamps any recorder — there is no main-side
+//     sequence recorder in production, and the `Y-1` handler does not stamp one. The
+//     probe is a TEST-LOCAL `OrderProbe` whose two stamps are taken CONDITIONALLY, when
+//     the REAL SUBSTRATE each stamp stands for is present in the bytes (the
+//     `ipcMain.handle(STORE_FILE_GET…` registration; the `new Runtime(` +
+//     `runtime.bootstrap()` pair). The ORDER the stamps carry is therefore DECLARED
+//     (they are pushed in §2.3's declared order), not observed from a production
+//     recorder.
+//
+//     WHAT THE ROW'S ACTUAL FALSIFIER IS, and it is UNWEAKENED: the BYTE-WISE
+//     instrument — `handoff < hydrate < new Runtime( < runtime.bootstrap()` over the REAL
+//     `src/renderer/renderer.ts` bytes, asserted in drive 3 and independently in
+//     `tests/pd-store-persist-adopt.test.ts` arm 2. That limb CAN fail: moving the
+//     hand-off after the placeholder-envelope pair reddens it. The probe's ORDER
+//     assertion rides alongside it and is CITED, never substituted for it.
 // ---------------------------------------------------------------------------
-describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-2 — THE BOOT-ORDER PROBE (C-11 (a)) — AN ORDER-ONLY OBSERVABLE: a main-side sequence recorder the Y-1 handler stamps and the renderer\'s first-envelope boundary stamps; the probe asserts the `get` stamp PRECEDES the first-envelope stamp — never a timing figure, never a duration (S-SPA-H-ORDER-1)', () => {
+describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-2 — THE BOOT-ORDER PROBE (C-11 (a)) — AN ORDER-ONLY OBSERVABLE: the two stamps (the Y-1 `get` hand-off and the renderer\'s first-envelope boundary) are taken from their REAL SUBSTRATE sites and the probe asserts the former PRECEDES the latter — never a timing figure, never a duration; the stamp order is DECLARED (no main-side production recorder stamps it — H-3) and the row\'s actual falsifier is the BYTE-WISE order reading over src/renderer/renderer.ts (S-SPA-H-ORDER-1)', () => {
   it('P-SPA-H-2 — 3', async () => {
     const run = newRun()
     let i = 0
@@ -2239,6 +2608,14 @@ describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-2 — THE BOOT-ORDER PROBE (C-11 (a)
     // clock read: the stamps are POSITIONS in a sequence, and the assertion is an
     // ORDER. `F-13` names "the boot-order probe reported as a TIMING figure" as the
     // fail-state this row's shape forecloses.
+    //
+    // `H-3` SCOPE NOTE, STATED PLAINLY: this probe is a TEST-LOCAL object. NO production
+    // code stamps it — the spec's §5.2 text describes "a main-side sequence recorder the
+    // `Y-1` handler stamps", and NO such recorder exists in `src/**` at the landed head.
+    // The stamps below are taken in §2.3's DECLARED order, each GATED on the real
+    // substrate it stands for, so the ORDER they record is the DECLARED order and NOT a
+    // production observation. The row's real falsifier is the BYTE-WISE reading (drive 3's
+    // `byteWiseOrderHeld`), which reads the actual renderer bytes and CAN fail.
     interface OrderProbe {
       stamps: Array<{ at: number; label: string }>
       counter: number
@@ -2338,6 +2715,11 @@ describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-2 — THE BOOT-ORDER PROBE (C-11 (a)
     //       `src/renderer/renderer.ts` — `handoff < hydrate < new Runtime( < runtime.bootstrap()`;
     //   (b) the LIVE `L-3` reading — the assembled app's boot ORDER, ORDER-ONLY, recorded
     //       at `docs/specs/unit-store-persist-adopt-live-pending-battery.md`.
+    // WHICH HALF CAN FAIL (`H-3`'s honesty): the `probe.precedes(...)` half is DECLARED
+    // order over a test-local object — it fails only if the SUBSTRATE GATES refuse a stamp
+    // (i.e. the real registration/boot sites vanish), never because production re-ordered
+    // anything. The BYTE-WISE half (`byteWiseOrderHeld`) is the row's REAL falsifier: it
+    // reads the actual `src/renderer/renderer.ts` bytes at their real offsets.
     // STILL FALSIFIABLE — the row's remaining counterexample: an implementer who moves the
     // hand-off AFTER the placeholder-envelope pair (or deletes the `bridge.store.get()`
     // gate) makes `handoffSite > runtimeSite` in the real renderer bytes and reddens this
@@ -2412,14 +2794,28 @@ describe('STORE-PERSIST-ADOPT §5.2 P-SPA-H-3 — THE WROTE-vs-NEVER-INVOKED PAI
     let i = 0
     const carrier = join(REPO_ROOT, 'userData', 'provident-settings.json')
     const preWrite = JSON.stringify({ 'file.settings.w': 'BEFORE' }, null, 2)
-    // ⟨drive 0⟩ THE PRODUCTION SUBJECT — BOTH subjects of the pair read ABSENT at this
-    // head (there is no production channel to invoke, and no production carrier)
+    // ⟨drive 0⟩ THE PRODUCTION-SUBJECT READING (`H-5` honesty). At this head the channel
+    // EXISTS, so the AS-FILED form (`readMaybe(CHANNELS_PATH) === null ? RED : null`) was a
+    // VACUOUS ABSENCE-CHECK — it asserted only that a file exists, and said nothing about
+    // the WROTE-vs-NEVER-INVOKED discrimination this row exists for (C-9). The limb now
+    // reads the PRODUCTION CODE for the pair's own production side: member 1's two exported
+    // channel-name constants (what the handlers invoke) and the comment-stripped atomic
+    // replace leg the POSITIVE subject performs. COUNTEREXAMPLE: deleting either exported
+    // constant, or writing straight to the real path with a no-op rename, reddens HERE;
+    // absence reddens RED-BY-ABSENCE.
+    const productionChannelBytes = readMaybe(CHANNELS_PATH)
+    const productionMainBytes = readMaybe(MAIN_PATH)
+    const productionAtomicBytes = productionMainBytes === null ? null : withoutComments(productionMainBytes)
     attempt(
       run,
       i++,
-      readMaybe(CHANNELS_PATH) === null
-        ? `RED-BY-SHIM [P-SPA-H-3]: src/main/store-channels.ts does NOT exist at this head — the pair's POSITIVE subject has NO PRODUCTION INVOCATION; the drives below are SHAPE evidence over the INJECTED channel shim + fs façade (§4 R-5; §6)`
-        : null,
+      productionChannelBytes === null
+        ? `RED-BY-ABSENCE [P-SPA-H-3]: src/main/store-channels.ts does NOT exist at this head — the pair's POSITIVE subject has NO PRODUCTION INVOCATION; the drives below are SHAPE evidence over the INJECTED channel shim + fs façade (§4 R-5; §6)`
+        : !productionChannelBytes.includes('export const STORE_FILE_GET') || !productionChannelBytes.includes('export const STORE_FILE_PUT')
+          ? `PRODUCTION-SUBJECT [P-SPA-H-3]: the landed ${relative(REPO_ROOT, CHANNELS_PATH)} declares no invocable channel-name constant — the pair's POSITIVE subject (the channel WROTE the file) has no production invocation site (§2.1; C-9)`
+          : productionAtomicBytes === null || !/renameSync\(\s*\w+\s*,\s*\w+\s*\)/.test(productionAtomicBytes)
+            ? `PRODUCTION-SUBJECT [P-SPA-H-3]: the landed atomic write carries no readable \`renameSync(<tmp>, <path>)\` replace leg in ${relative(REPO_ROOT, MAIN_PATH)} — the pair's POSITIVE subject has no production write to have performed, and the pair would be SHAPE evidence over the shim ALONE (C-9; §2.7 item 3)`
+            : null,
     )
     const projected = JSON.stringify({ 'file.settings.w': 'AFTER', schemaVersion: DECLARED_SCHEMA_VERSION }, null, 2)
 
@@ -2695,17 +3091,17 @@ describe('STORE-PERSIST-ADOPT §5.3 — the register arithmetic, the caps, the r
     }
     expect(TOTAL_SOURCE, '§5.3: the per-row terms, printed as the sum of their own factors').toEqual([
       'P-SPA-IM-1: 4 drives + 3 controls = 7 = 7',
-      'P-SPA-IM-2: 1 production-subject reading + 4 drives × 2 readings + 3 controls = 12 = 12',
+      "P-SPA-IM-2: 1 production-BYTES reading (the landed atomic-write legs: .tmp + renameSync in src/main/main.ts, §2.7 item 3) + 4 drives × 2 readings + 3 controls = 12 = 12",
       'P-SPA-IM-3: 3 drives + 2 controls = 5 = 5',
       'P-SPA-IM-4: 3 realm turns × 2 readings + 1 call-count reading + 2 controls = 9 = 9',
       'P-SPA-IM-5: 4 drives + 3 controls = 7 = 7',
       'P-SPA-IM-6: 4 drives + 3 controls = 7 = 7',
-      'P-SPA-SM-1: 1 production-subject reading + 4 boot states × 2 checkpoints + 5 controls = 14 = 14',
-      'P-SPA-TP-1: 1 production-subject reading + 4 outcome classes × 2 assertions + 2 controls = 11 = 11',
+      'P-SPA-SM-1: 1 production-subject reading (the REAL renderer boot bytes: hand-off → hydrate → first envelope) + 4 boot states × 2 checkpoints + 5 controls = 14 = 14',
+      "P-SPA-TP-1: 1 production-BYTES reading (the landed receipt surface: refused status + both channel refusal tokens, §2.7 item 7) + 4 outcome classes × 2 assertions + 2 controls = 11 = 11",
       'P-SPA-TP-2: 2 instrument classes × 2 readings + 2 controls = 6 = 6',
       'P-SPA-H-1: 4 drives + 2 controls = 6 = 6',
       'P-SPA-H-2: 3 drives + 3 controls = 6 = 6',
-      'P-SPA-H-3: 1 production-subject reading + 2 subjects × 2 readings + 3 controls = 8 = 8',
+      "P-SPA-H-3: 1 production-BYTES reading (the landed invocable channel-name exports in member 1 + the atomic renameSync leg, C-9) + 2 subjects × 2 readings + 3 controls = 8 = 8",
       'P-SPA-H-4: 3 drives + 2 (the value-semantics arms, driven as one) + 5 controls = 10 = 10',
     ])
     expect(REGISTER_TOTAL, "§5.3's attempt tally, printed with its terms: 7 + 12 + 5 + 9 + 7 + 7 + 14 + 11 + 6 + 6 + 6 + 8 + 10 = 108").toBe(108)
