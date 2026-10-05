@@ -1789,19 +1789,57 @@ describe('STORE-CORE-ADOPT §5 P-STORE-CORE-H — [H] the getWiredGraphStore sea
         ['buildWiredGraphStore', 'the builder `buildWiredGraphStore(options?)`'],
         ['getWiredGraphStore', 'the export `export function getWiredGraphStore(options?)`'],
         ['storeGraphReferences(FILE_TIER_TOP_NAMES_FORK)', 'the construction call\'s declaration feed'],
-        ['crossing: null', 'the construction call\'s crossing feed (R-5: a feed other than null is PERSIST\'s edit)'],
+        // ⟨C-1 AMENDMENT `A-2` — 2026-10-04, unit `U-STORE-PERSIST-ADOPT` (core; unit 2 of the
+        //  store-adoption program, F2) — DATED ANNOTATE-BESIDE + LITERAL RE-STATEMENT; the pin is
+        //  unit 1's own landed act and this unit is the pre-recorded subject of its supersession
+        //  (`docs/specs/unit-store-persist-adopt.md` §10 `A-2`; `C-3`; §2.3's MEMOIZATION CLAUSE;
+        //  the F1 member-7a precedent).
+        //
+        //  THE SUPERSEDED LITERAL, KEPT VISIBLE AND NEVER DELETED (as filed):
+        //
+        //      ['crossing: null', 'the construction call\'s crossing feed (R-5: a feed other than
+        //       null is PERSIST\'s edit)'],
+        //
+        //  WHY IT IS SUPERSEDED: `crossing: null` is UNIT 1's inert seam (the `file.*` surface
+        //  CLOSED, no boot hydration). `U-STORE-PERSIST-ADOPT` owns exactly this edit — the live
+        //  crossing REPLACED at the EXISTING construction call, CONDITIONAL on `bridge?.store` —
+        //  so at this unit's landed head the superseded literal is ABSENT by construction.
+        //
+        //  THE RE-STATEMENT (the operative assertion): the construction call's crossing feed is
+        //  the LIVE crossing (any readable expression other than the `null` literal), fed at the
+        //  EXISTING call site. THE NEW FALSIFIER: the `null` literal still occupying the site —
+        //  the memoization clause is the SAME unchanged limb beside it (a SECOND
+        //  `getWiredGraphStore(` call still reddens), so REPLACEMENT is asserted, never a
+        //  re-call. THE ORDERING LIMB (`if (!bridge)`) AND EVERY OTHER REQUIRED LITERAL ARE
+        //  RE-STATED UNCHANGED below, as is the register's arithmetic (78 terms, seed, caps) —
+        //  §10's unchanged-limb guarantee.
         ["FILE_TIER_TOP_NAMES_FORK = [{ name: 'settings' }]", 'the closed declared-roots set (D-4, F-5)'],
       ]
       for (const [literal, label] of required) {
         if (!rendererText.includes(literal)) pinProblems.push(`BYTE-SCAN-PIN: ${label} — the literal \`${literal}\` is ABSENT from src/renderer/renderer.ts at this head`)
+      }
+      // ⟨C-1 AMENDMENT `A-2`⟩ the crossing feed, RE-STATED: the construction call's `crossing:`
+      // argument must be a readable expression that is NOT the superseded `null` literal.
+      const crossingFeed = rendererText.match(/getWiredGraphStore\(\{[\s\S]{0,400}?crossing:\s*([A-Za-z_$][\w$.?]*|null)/)
+      if (crossingFeed === null) {
+        pinProblems.push(`BYTE-SCAN-PIN: the construction call carries no readable \`crossing:\` feed — the amended limb (C-1 amendment \`A-2\`) requires the LIVE crossing at the EXISTING call site (§2.3)`)
+      } else if (crossingFeed[1] === 'null') {
+        pinProblems.push(`BYTE-SCAN-PIN: the construction call's crossing is still the superseded \`crossing: null\` literal (C-1 amendment \`A-2\`: the live crossing REPLACES it at the EXISTING call site — §2.3's memoization clause forbids a second call)`)
       }
       const callAt = rendererText.indexOf('getWiredGraphStore({')
       const bridgeAt = rendererText.indexOf('if (!bridge)')
       if (callAt < 0) pinProblems.push('BYTE-SCAN-PIN: no `getWiredGraphStore({` construction call exists in the boot wiring (F-4)')
       else if (bridgeAt < 0) pinProblems.push('BYTE-SCAN-PIN: the `if (!bridge)` early-return is not found — the order limb has no upper bound')
       else if (callAt > bridgeAt) pinProblems.push('BYTE-SCAN-PIN: the construction call sits AFTER the no-bridge early-return — the call site must be BEFORE it (duty (d), F-4)')
+      // ⟨C-1 AMENDMENT `A-2`⟩ the hydrate limb, RE-STATED: unit 1's superseded zero-match
+      // reading ("unit 1 calls hydrate NOWHERE (R-5, F-7)") becomes EXACTLY ONE call — this
+      // unit's own boot-order call. THE FALSIFIERS: ZERO calls, TWO OR MORE calls.
       const hydrateCalls = [...rendererText.matchAll(/\bhydrate\(/g)]
-      if (hydrateCalls.length > 0) pinProblems.push(`BYTE-SCAN-PIN: ${hydrateCalls.length} \`hydrate(\` call(s) in the boot wiring — unit 1 calls hydrate NOWHERE (R-5, F-7)`)
+      if (hydrateCalls.length !== 1) {
+        pinProblems.push(
+          `BYTE-SCAN-PIN: ${hydrateCalls.length} \`hydrate(\` call(s) in the boot wiring — the amended limb (C-1 amendment \`A-2\`) declares EXACTLY ONE (unit 1's superseded zero-match reading is kept visible above; F-7)`,
+        )
+      }
     }
     attempt(run, i++, pinProblems.length === 0 ? null : `the construction-site pin failed at this head: ${pinProblems.join(' | ')}`)
 

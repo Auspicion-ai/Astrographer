@@ -136,7 +136,31 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  preload `00dba3cdd5e1eb3c7de632a838e3d28b`.)⟩
   { file: 'src/shared/types.ts', md5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', superseded: '303e63d28ec430920aebf0d4a8f3fd3f', restated: 'U-APP-HARNESS-READINESS' },
   { file: 'src/main/operator-settings-store.ts', md5: '11841179e004f22dd758edbe927f1a40' },
-  { file: 'src/main/preload.ts', md5: '00dba3cdd5e1eb3c7de632a838e3d28b', superseded: '76d2299070d4333e0e66189359baad22', restated: 'U-APP-HARNESS-READINESS' },
+  // ⟨RE-STATED 2026-10-04 — unit `U-STORE-PERSIST-ADOPT` (`core`; unit 2 of the
+  //  store-adoption program, F2), §9 `C-10` / §10 `O-8`.⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
+  //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it
+  //  still FAILS both the ⟨A-1⟩ digest limb and the working-tree limb). WHAT MOVED IS THE
+  //  RECORDED VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may
+  //  move the file only by re-stating it here, with its reason and its unit named, exactly
+  //  as this note does"*. **THE REASON:** this unit lands the tier-1 store surface — §2.5's
+  //  THREE `store.*` preload members (`get` · `put` · `onFileChanged`) under a `store`
+  //  sub-namespace, each importing the channel-name constants from the NEW
+  //  `src/main/store-channels.ts` (§1.1 member 5; `K-3`; the surface the `store` member's
+  //  own arm-4 regex targets) — so its bytes MOVE by construction, and §9 (`C-10`)'s
+  //  units-order row orders THIS row re-stated in the landing's own commit, because units
+  //  2 / 2b / 3 SHARE `src/main/preload.ts` + `src/main/main.ts` +
+  //  `src/renderer/renderer.ts` and therefore CANNOT land in one wave. **THE UNIT:**
+  //  `U-STORE-PERSIST-ADOPT` (core). THE SUPERSEDED VALUE, kept visible and NEVER deleted:
+  //  `00dba3cdd5e1eb3c7de632a838e3d28b` (the `U-APP-HARNESS-READINESS` re-statement, itself
+  //  superseding the as-filed `76d2299070d4333e0e66189359baad22` — both kept visible).
+  //  THE NEW VALUE is MEASURED at the landing's head (`md5sum src/main/preload.ts`, taken
+  //  AFTER this unit's `src/` writes) — never inferred, never copied from another row.
+  //  **NO OTHER ROW OF THIS TABLE IS TOUCHED** by this re-statement; the
+  //  `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row now carries a
+  //  `restated:` field, so the derivation still resolves to the same un-re-stated path) and
+  //  is NOT hand-edited here.
+  { file: 'src/main/preload.ts', md5: 'f24ea717a5f8f93a3ac490334611d22a', superseded: '00dba3cdd5e1eb3c7de632a838e3d28b', restated: 'U-STORE-PERSIST-ADOPT' },
   // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
   //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still

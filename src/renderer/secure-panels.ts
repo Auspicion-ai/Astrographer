@@ -44,6 +44,17 @@ declare global {
         get(): Promise<SecuritySettings>
         set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings>
       }
+      /** U-STORE-PERSIST-ADOPT §2.5 (core; unit 2 of the store-adoption program,
+       *  F2) — the tier-1 store surface: THREE members under a `store`
+       *  sub-namespace (`get` · `put` · `onFileChanged`). OPTIONAL: a realm with
+       *  no preload bridge (or an older bridge without the surface) takes §2.3's
+       *  DECLARED NO-BRIDGE POSTURE — the hand-off gate is skipped, `hydrate` is
+       *  NOT called, the crossing is NOT fed, and nothing throws. */
+      store?: {
+        get(): Promise<Array<{ name: string; value: unknown }>>
+        put(row: { name: string; value: unknown }): Promise<{ status: 'committed' | 'refused'; reason?: 'malformed-payload' | 'write-failed' }>
+        onFileChanged(handler: () => void): () => void
+      }
       module?: {
         get(): Promise<{ corrupt: boolean; quarantined: string[]; loaded: string[]; modules: Array<{ name: string; version: string; capabilities?: unknown; disabled?: boolean; quarantined?: boolean }> }>
         setDisabled(name: string, disabled: boolean): Promise<{ corrupt: boolean; quarantined: string[]; loaded: string[]; modules: Array<{ name: string; version: string; capabilities?: unknown; disabled?: boolean; quarantined?: boolean }> }>

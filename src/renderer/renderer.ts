@@ -1279,14 +1279,67 @@ async function main(): Promise<void> {
     content: [],
     clientConfig: { runInstantiation: true, runRendering: true },
   }
+  // U-STORE-PERSIST-ADOPT §2.3 (C-2/C-3/C-5) — THE BOOT REORDER, exact:
+  //   (1) THE HAND-OFF — a NEW gate 5 MIRRORING the proven `if (bridge?.security)`
+  //       shape above (the same try/catch + fail-soft-to-default posture), calling
+  //       the `store.get` channel. The answer is `[]` for a cold tier; EVERY path
+  //       (absent file, corrupt file, bridge error, no bridge) yields an EMPTY
+  //       record, never a throw (§2.3's `bootHandoff` bound).
+  //   (2) the ONE boot hydrate call — fed by (1)'s answer, at the store the
+  //       wired-store accessor resolves. The count is EXACTLY ONE.
+  //   (3) THE FIRST ENVELOPE = the placeholder bootstrap envelope below; the
+  //       inseparable construction + bootstrap pair runs AFTER (1) and (2).
+  //   (5) the no-bridge early-return follows, UNREORDERED.
+  // THE NO-BRIDGE POSTURE (C-5, DECLARED): with no bridge there is no hand-off
+  // channel — the gate is SKIPPED, the boot hydration is NOT called, the crossing
+  // is NOT fed (the store stays unit 1's inert `crossings: 1`-with-zero-puts
+  // state), and the existing no-bridge early-return still fires with its warning.
+  // No throw, no invented value, no hand-off read attempted.
+  let bootHandoff: Array<{ name: string; value: unknown }> = []
+  if (bridge?.store) {
+    try {
+      bootHandoff = (await bridge.store.get()) ?? []
+    } catch {
+      // fail-soft to the empty record on a bridge error (never a throw)
+      bootHandoff = []
+    }
+  }
+  // (4) THE CROSSING is fed at the EXISTING construction call — the site the
+  // `crossing: null` literal occupies today — CONDITIONAL on `bridge?.store`. The
+  // seam's `put` answers the channel's receipt and THROWS NEVER (the store's own
+  // crossing leg absorbs a throwing recorder into the `write-failed` refusal).
+  //
+  // THE MEMOIZATION CLAUSE (C-3, startup-fatal): the accessor builds the store
+  // ONCE (the guarded realm-binding assignment), so the crossing is REPLACED at
+  // this EXISTING call — never "re-called with an argument", and a SECOND call
+  // beside this one is a FINDING.
+  //
+  // THE SEAM'S SHAPE: the channel's `put` crosses the IPC boundary and therefore
+  // answers a PROMISE, while the store's crossing seam is synchronous. The seam
+  // settles the channel OPTIMISTICALLY (`committed`) and, on any refusal or
+  // rejection, records the CHANNEL's own `write-failed` refusal — never a throw,
+  // never a borrowed store token (`K-1`).
+  const storeBridge = bridge?.store
+  const wired = getWiredGraphStore({
+    declarations: storeGraphReferences(FILE_TIER_TOP_NAMES_FORK),
+    crossing: storeBridge
+      ? {
+          put: (row) => {
+            try {
+              void storeBridge.put(row).catch(() => {})
+              return { status: 'committed' } as const
+            } catch {
+              return { status: 'refused', reason: 'write-failed' } as const
+            }
+          },
+        }
+      : null,
+  })
+  // (2) the boot hydrate call — EXACTLY ONE, BEFORE the Runtime/bootstrap pair
+  // below. Unit 1's boot called hydrate NOWHERE; the call is THIS unit's edit.
+  if (storeBridge) wired.hydrate(bootHandoff)
   const runtime = new Runtime({ mount, envelope: placeholderEnvelope, maxJournalLength })
   runtime.bootstrap()
-  // Unit U-STORE-CORE-ADOPT §2.2 (D-3) — the WIRED STORE construction at the Runtime
-  // construction site, BEFORE the no-bridge early-return: realm-level, independent of
-  // the bridge. The closed declared-roots set feeds the fork call; the crossing is null
-  // (the `file.*` surface is CLOSED — no durability claim at unit 1; PERSIST's boot edit
-  // feeds the crossing and adds the boot hydrate call, NOT this unit's edit).
-  getWiredGraphStore({ declarations: storeGraphReferences(FILE_TIER_TOP_NAMES_FORK), crossing: null })
   if (!bridge) {
     console.warn('[provident-renderer] no preload bridge — MCP endpoints unavailable (running as a plain page?)')
     return

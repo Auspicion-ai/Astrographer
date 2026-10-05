@@ -3,7 +3,8 @@
 // (stdio or Streamable HTTP), and bridges MCP tool calls to the renderer via
 // IPC.
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MenuItemConstructorOptions } from 'electron'
-import { join, basename } from 'node:path'
+import { join, basename, dirname } from 'node:path'
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, openSync, fsyncSync, closeSync } from 'node:fs'
 import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, IPC_IMPORT_RESULT, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type ImportResultPayload, type PaneCatalogEntry } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleRagJournalIpc, handleRagJournalOpIpc, handleGnosisTool, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
@@ -23,6 +24,7 @@ import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.j
 import { createRagStoreRuntimeController } from './rag-store-runtime.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { createO0HookRecorder } from '../shared/o0-hook.js'
+import { STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 // §3.6b — the MAIN-side O-0 recorder (the optional `snapshot.clone` refinement): a
 // SECOND, INDEPENDENT instance — never the RENDERER's app-wide singleton. The driver
@@ -96,6 +98,171 @@ function retrievalEmbedderFromArgs(argv: string[]): 'lexical' | 'vector' {
   return 'lexical'
 }
 
+/** U-STORE-PERSIST-ADOPT §2.9 — THE `--provident-user-data=` SEAM (this unit's
+ *  OWN landing; the honest divergence record: the fork has NEITHER this seam NOR
+ *  `scripts/electron-ui.mjs` at this head). It is a TEST-DRIVABILITY affordance
+ *  (the live leg's precondition), never an operator surface: the flag is read
+ *  from `process.argv.slice(1)` in the EXISTING argv-seam idiom
+ *  (`transportFromArgs`/`portFromArgs`/`retrievalEmbedderFromArgs`).
+ *
+ *  DOMAIN / OUTSIDE: a non-empty ABSOLUTE path is honored; an ABSENT flag falls
+ *  back to the default userData root; an EMPTY or RELATIVE value is IGNORED with
+ *  a logged warning — never a throw and never a partial application (the boot
+ *  proceeds on the default root). A malformed value must NOT abort the launch. */
+function userDataFromArgs(argv: string[]): string | null {
+  const flag = argv.find((a) => a.startsWith('--provident-user-data='))
+  if (flag === undefined) return null
+  const value = flag.slice('--provident-user-data='.length)
+  if (value.length === 0 || !value.startsWith('/')) {
+    console.error(
+      `[provident-main] --provident-user-data IGNORED: the value ${value === '' ? '(empty)' : `'${value}'`} is outside the seam's domain ` +
+        '(a non-empty absolute path) — the boot proceeds on the default userData root (never a throw, never a partial application)',
+    )
+    return null
+  }
+  return value
+}
+
+
+/** U-STORE-PERSIST-ADOPT §2.7 item 5 — THE DECLARED CURRENT VERSION of the
+ *  tier-1 carrier's payload (`DECLARED-DEFAULT`). */
+const STORE_SCHEMA_VERSION = 1
+
+/** U-STORE-PERSIST-ADOPT §2.4 — THE CLOSED CHANNEL REFUSAL SET (TWO tokens, the
+ *  CHANNEL's OWN — NOT members of the store's refusal union, `K-1`). The channel
+ *  PROPAGATES a store refusal token VERBATIM and mints no store-class spelling of
+ *  its own; a transport-level failure with no store token is a CHANNEL-class
+ *  failure named by one of these two. */
+type StoreChannelRefusal = 'malformed-payload' | 'write-failed'
+/** §2.7 item 7 — the receipt: EXACTLY ONE of `{committed, refused}`, never a
+ *  third status, never a throw, never a swallow. */
+interface StoreChannelReceipt {
+  status: 'committed' | 'refused'
+  reason?: StoreChannelRefusal
+}
+
+/** A persisted reference row — the `Y-1` answer's element and the `Y-2`
+ *  request's payload. */
+interface StoreFileRow {
+  name: string
+  value: unknown
+}
+
+/** U-STORE-PERSIST-ADOPT §2.7 item 1 — THE CARRIER: tier 1's file is the
+ *  `provident-settings.json` member of the userData root, minted at exactly ONE
+ *  site. Its payload is a KEYED JSON object: keys are the `file.*` reference
+ *  spellings PLUS the single reserved member `schemaVersion`;
+ *  `mem.*`/`temp.*`/`secure.*` keys never land in the file. */
+/** §2.7 item 2 — THE READ-BACK RECOVERY (`C-6`): the boot read NEVER throws. A
+ *  MISSING file answers the registered defaults (the EMPTY record) with
+ *  `corrupt: false`; a CORRUPT file (unparsable, non-object, foreign key,
+ *  unknown version) answers the SAME registered defaults — never a throw, never
+ *  a fatal stop. The registered defaults are the record registered at the
+ *  channel's construction, never derived at read time and never invented. */
+function readStoreCarrier(path: string): StoreFileRow[] {
+  let bytes: string | null = null
+  try {
+    bytes = existsSync(path) ? readFileSync(path, 'utf8') : null
+  } catch {
+    // an unreadable real path is the registered-defaults path, never a throw
+    return []
+  }
+  if (bytes === null) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(bytes)
+  } catch {
+    return []
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+  const record = parsed as Record<string, unknown>
+  if (record['schemaVersion'] !== STORE_SCHEMA_VERSION) return []
+  const rows: StoreFileRow[] = []
+  for (const [k, v] of Object.entries(record)) {
+    if (k === 'schemaVersion') continue
+    if (!k.startsWith('file.')) return []
+    rows.push({ name: k, value: v })
+  }
+  return rows
+}
+
+/** §2.7 item 3 — THE ATOMIC FIVE-STEP WRITE: `mkdirSync(dirname(path),
+ *  {recursive:true})` if needed → write the projected record to `${path}.tmp` →
+ *  `fsync` the tmp file → `renameSync(tmp, path)` → `fsync` the DIRECTORY.
+ *  Returns true only when every step completed; any failure answers false and
+ *  leaves the previous file intact (§2.7 item 4). The failure is answered as a
+ *  RETURNED receipt by the caller — never a throw. */
+function atomicWriteStoreCarrier(path: string, serialized: string): boolean {
+  const tmp = `${path}.tmp`
+  try {
+    mkdirSync(dirname(path), { recursive: true })
+    // the tmp write OVERWRITES a pre-existing stale tmp and never reads it as input
+    writeFileSync(tmp, serialized)
+    const tmpFd = openSync(tmp, 'r+')
+    try {
+      fsyncSync(tmpFd)
+    } finally {
+      closeSync(tmpFd)
+    }
+    renameSync(tmp, path)
+    const dirFd = openSync(dirname(path), 'r')
+    try {
+      fsyncSync(dirFd)
+    } finally {
+      closeSync(dirFd)
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** §2.4 — `Y-2`'s write, IN ORDER: receive the translation → project it to the
+ *  file-tier record → stamp/preserve `schemaVersion` → serialize → validate
+ *  (parses as JSON; keys admissible) → atomic-replace → answer the receipt. A
+ *  write whose serialized form does not validate answers
+ *  `{status:'refused', reason:'malformed-payload'}` with the PREVIOUS file
+ *  untouched. */
+function projectAndWrite(path: string, payload: unknown): { receipt: StoreChannelReceipt; rows: StoreFileRow[] | null } {
+  // (1) the payload must be the STABLE-JSON translation (a JSON STRING)
+  if (typeof payload !== 'string') return { receipt: { status: 'refused', reason: 'malformed-payload' }, rows: null }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(payload)
+  } catch {
+    return { receipt: { status: 'refused', reason: 'malformed-payload' }, rows: null }
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { receipt: { status: 'refused', reason: 'malformed-payload' }, rows: null }
+  }
+  // (2) project to the file-tier record; keys are `file.*` spellings (+ schemaVersion)
+  const keys = Object.keys(parsed as Record<string, unknown>)
+  if (keys.some((k) => !k.startsWith('file.') && k !== 'schemaVersion')) {
+    return { receipt: { status: 'refused', reason: 'malformed-payload' }, rows: null }
+  }
+  const record: Record<string, unknown> = {}
+  for (const k of keys) if (k !== 'schemaVersion') record[k] = (parsed as Record<string, unknown>)[k]
+  // (3) VERSION-FROM-FIRST-WRITE: the payload carries its `schemaVersion` member
+  // from its FIRST write — the cold first write and any later first write alike.
+  record['schemaVersion'] = STORE_SCHEMA_VERSION
+  // (4) serialize + validate (the serialized form must parse back)
+  const serialized = JSON.stringify(record, null, 2)
+  try {
+    JSON.parse(serialized)
+  } catch {
+    return { receipt: { status: 'refused', reason: 'malformed-payload' }, rows: null }
+  }
+  // (5) ATOMIC-REPLACE
+  if (!atomicWriteStoreCarrier(path, serialized)) {
+    return { receipt: { status: 'refused', reason: 'write-failed' }, rows: null }
+  }
+  const rows: StoreFileRow[] = []
+  for (const [k, v] of Object.entries(record)) {
+    if (k === 'schemaVersion') continue
+    rows.push({ name: k, value: v })
+  }
+  return { receipt: { status: 'committed' }, rows }
+}
 
 /** Unit F §5.7 — the embedding provider config (`retrieval.embeddingProvider`),
  *  read from env. REQUIRED when `retrieval.embedder === 'vector'`. */
@@ -171,8 +338,24 @@ function logEffectiveToolGroups(
 
 async function main(): Promise<void> {
   console.error(`[provident-main] node ${process.versions.node} electron ${process.versions.electron} crypto=${typeof globalThis.crypto}`)
+  // U-STORE-PERSIST-ADOPT §2.9 — THE `--provident-user-data=` SEAM, RESOLVED
+  // BEFORE the carrier's path is computed: it feeds `app.setPath('userData', …)`
+  // here, AHEAD of every `app.getPath('userData')` consumer below
+  // (`createSecurityStore` and the other carriers). A malformed value never
+  // aborts the launch — the resolver answers null and the default root is used.
+  const userDataOverride = userDataFromArgs(process.argv.slice(1))
+  if (userDataOverride !== null) app.setPath('userData', userDataOverride)
   const transport = transportFromArgs(process.argv.slice(1))
   const port = portFromArgs(process.argv.slice(1))
+
+  // U-STORE-PERSIST-ADOPT §2.6 / §2.7 items 1-2 — THE TIER-1 CARRIER + THE
+  // `bootRecord` HOLDER. The carrier is `<userData>/provident-settings.json`
+  // (minted at exactly ONE site in this file); the boot read is performed ONCE,
+  // here, into the handler-scoped `bootRecord` holder. The read NEVER throws: a
+  // missing file and a corrupt file both answer the registered defaults — the
+  // EMPTY record — so a cold tier hand-off answers `[]`.
+  const storeCarrier = join(app.getPath('userData'), 'provident-settings.json')
+  let bootRecord: StoreFileRow[] = readStoreCarrier(storeCarrier)
 
   // U-APP-HARNESS-READINESS §2.1 `A-1` — the LAUNCH-SCOPED tool-group
   // enablement route (`--enable-tool-groups=<g1,g2,…>`, env fallback
@@ -519,6 +702,38 @@ async function main(): Promise<void> {
     mcp.applyGatePatch({ token: gatePatch.token, groups: gatePatch.groups as ToolGroup[], disable: gatePatch.disable as ToolGroup[] })
     currentEnabled = updated.enabled
     return updated
+  })
+
+  // U-STORE-PERSIST-ADOPT §2.4 / §1.1 members 2-3 — THE `Y-1`/`Y-2` CHANNELS.
+  // Registered in THIS existing `ipcMain.handle(…)` block and BEFORE the window
+  // is created. The channel-name constants are IMPORTED from
+  // `./store-channels.js` (the F-8 single source — never re-spelled here).
+  //
+  // `Y-1` (the boot hand-off): NO request; answers the persisted reference list.
+  // It NEVER throws — not for a missing file, not for a corrupt file, not for
+  // any read-back failure; a `Y-1` that throws fails `F-9`. §2.6 clause (c): the
+  // hand-off is SERVED at each realm's `Y-1` (a reload is a new realm, so its
+  // hand-off answers the FILE's current value).
+  ipcMain.handle(STORE_FILE_GET, () => {
+    const rows = readStoreCarrier(storeCarrier)
+    // §2.6 clauses (a)/(c) — REFRESHED from the file's current value and SERVED
+    bootRecord = rows
+    return rows
+  })
+  // `Y-2` (the commit): `{name, value}` where `value` is the stable-JSON
+  // translation (a JSON string); answers EXACTLY ONE of `{committed, refused}`.
+  // A refused persist is ALWAYS a returned receipt — never a swallow, never a
+  // silent no-op, never a throw. §2.6 clause (b): a COMMITTED write
+  // synchronously REPLACES the holder with the projected record; clause (d): the
+  // holder is NEVER consulted for a write (the payload is authoritative).
+  ipcMain.handle(STORE_FILE_PUT, (_event, row: unknown) => {
+    const payload = (row ?? null) as { name?: unknown; value?: unknown } | null
+    if (payload === null || typeof payload !== 'object' || typeof payload.name !== 'string' || payload.name === '') {
+      return { status: 'refused', reason: 'malformed-payload' } satisfies StoreChannelReceipt
+    }
+    const { receipt, rows } = projectAndWrite(storeCarrier, payload.value)
+    if (receipt.status === 'committed' && rows !== null) bootRecord = rows
+    return receipt
   })
 
   // U8 — the module management IPC (module-feature-list.md §4). Manual-UI only:

@@ -369,8 +369,42 @@ function mcpSurfaceProblems(): string[] {
   const preloadPath = join(REPO_ROOT, 'src', 'main', 'preload.ts')
   const preloadMember = /^  store\s*:/m
   const preloadText = readText(preloadPath)
-  if (preloadMember.test(preloadText)) {
-    problems.push(`PRELOAD-MEMBER: src/main/preload.ts exposes a top-level \`store\` member — the landing adds NO preload/IPC member (K-3)`)
+  // ⟨C-1 AMENDMENT `A-3` — 2026-10-04, unit `U-STORE-PERSIST-ADOPT` (core; unit 2 of the
+  //  store-adoption program, F2) — DATED ANNOTATE-BESIDE + LITERAL RE-STATEMENT; the pin is
+  //  unit 1's own landed act and this unit is the pre-recorded subject of its supersession
+  //  (`docs/specs/unit-store-persist-adopt.md` §10 `A-3`; `K-3`; the F1 member-7a precedent).
+  //
+  //  THE SUPERSEDED ASSERTION, KEPT VISIBLE AND NEVER DELETED (as filed):
+  //
+  //      if (preloadMember.test(preloadText)) {
+  //        problems.push(`PRELOAD-MEMBER: src/main/preload.ts exposes a top-level \`store\` member — the landing adds NO preload/IPC member (K-3)`)
+  //      }
+  //
+  //  WHY IT IS SUPERSEDED: the negative as filed reads "*no store surface*". Unit 1's own
+  //  DENIED rows 5/6 reserve that surface to THIS unit ("*each is `U-STORE-PERSIST-ADOPT`'s
+  //  edit*"), whose §2.5 lands exactly THREE `store.*` members under a `store`
+  //  sub-namespace — at unit 1's arm-4 indent, which is the very indent the regex targets.
+  //
+  //  THE RE-STATEMENT (the operative assertion): the negative moves from "*no store
+  //  surface*" to "*EXACTLY the three `store.*` members this spec names
+  //  (`get`/`put`/`onFileChanged`), and NO OTHER store member*". THE TEETH RELAX NOTHING: a
+  //  FOURTH `store.*` member, or a `store` member outside the sub-namespace's declared set,
+  //  still reddens here (K-3; the sibling register's `P-SPA-IM-3` is this contract's own
+  //  set-equality home). EVERY OTHER LIMB OF ARM 4 IS UNTOUCHED — the main-realm store-symbol
+  //  scan, the `package.json` script-key limb, the MCP-surface limb and the `P-16` citation
+  //  shape are byte-frozen by §10's unchanged-limb guarantee.
+  const storeMemberBlock = preloadText.match(/^  store:\s*\{([\s\S]*?)^  \}/m)
+  if (storeMemberBlock !== null && !preloadMember.test(preloadText)) {
+    problems.push(`PRELOAD-MEMBER: src/main/preload.ts's \`store\` member does not sit at the two-space member-key indent the amended limb pins (the arm-4 regex) — unit 1's own indent is the contract's (§2.5; K-3)`)
+  }
+  if (storeMemberBlock !== null) {
+    const memberNames = [...storeMemberBlock[1]!.matchAll(/^\s{4}([a-zA-Z_$][\w$]*)\s*[?]?\s*[:(]/gm)].map((m) => m[1]!)
+    const declaredStoreMembers = ['get', 'put', 'onFileChanged']
+    if (memberNames.length !== declaredStoreMembers.length || declaredStoreMembers.some((n) => !memberNames.includes(n))) {
+      problems.push(
+        `PRELOAD-MEMBER: src/main/preload.ts's \`store\` member declares [${memberNames.join(', ') || 'none'}] — the amended limb (C-1 amendment \`A-3\`) admits EXACTLY the three declared members {get, put, onFileChanged}; a fourth \`store.*\` member is still a finding (K-3)`,
+      )
+    }
   }
 
   // (d) the MCP server surface registers NO store-named tool/group/resource/RpcMethod —
@@ -475,9 +509,55 @@ function frozenContractProblems(): string[] {
   if (rendererBytes === null) {
     problems.push(`ABSTRACT-SUBJECT: src/renderer/renderer.ts is ABSENT — the no-hydrate-at-boot scan has no subject`)
   } else {
-    const hydrateCalls = [...rendererBytes.toString('utf8').matchAll(/\bhydrate\(/g)]
-    if (hydrateCalls.length > 0) {
-      problems.push(`HYDRATE-AT-BOOT: src/renderer/renderer.ts carries ${hydrateCalls.length} \`hydrate(\` call(s) — unit 1's boot calls hydrate NOWHERE (R-5, F-7; PERSIST's edit owns the call)`)
+    // ⟨C-1 AMENDMENT `A-1` — 2026-10-04, unit `U-STORE-PERSIST-ADOPT` (core; unit 2 of the
+    //  store-adoption program, F2) — DATED ANNOTATE-BESIDE + LITERAL RE-STATEMENT;
+    //  the pin is unit 1's own landed act and this unit is the pre-recorded subject of its
+    //  supersession (`docs/specs/unit-store-persist-adopt.md` §10 `A-1`; §1.2 DENIED rows
+    //  5/6 of `docs/specs/unit-store-core-adopt.md`, each of which reads "*each is
+    //  `U-STORE-PERSIST-ADOPT`'s edit*"; the F1 member-7a precedent).
+    //
+    //  THE SUPERSEDED ASSERTION, KEPT VISIBLE AND NEVER DELETED (as filed):
+    //
+    //      const hydrateCalls = [...rendererBytes.toString('utf8').matchAll(/\bhydrate\(/g)]
+    //      if (hydrateCalls.length > 0) {
+    //        problems.push(`HYDRATE-AT-BOOT: src/renderer/renderer.ts carries ${hydrateCalls.length} \`hydrate(\` call(s) — unit 1's boot calls hydrate NOWHERE (R-5, F-7; PERSIST's edit owns the call)`)
+    //      }
+    //
+    //  WHY IT IS SUPERSEDED: the zero-match reading is UNIT 1's OWN boot posture (`R-5`'s
+    //  `crossing: null`, no boot hydration). `U-STORE-PERSIST-ADOPT` owns exactly this edit
+    //  — the ONE boot `hydrate(` call, placed BEFORE the inseparable Runtime-construction +
+    //  bootstrap pair — so at this unit's landed head the superseded literal is ARITHMETICALLY
+    //  FALSE by construction.
+    //
+    //  THE RE-STATEMENT (the operative assertion): EXACTLY ONE `hydrate(` call, and it sits
+    //  BEFORE `new Runtime(` and BEFORE `runtime.bootstrap()`. THE NEW FALSIFIERS: ZERO calls
+    //  (the hand-off never hydrates), TWO OR MORE calls (F-7's "hydrate called TWICE — the
+    //  count is exactly ONE"), or a call OUTSIDE the declared gate (AFTER either half of the
+    //  pair). EVERY OTHER ARM OF THIS GUARD IS UNTOUCHED: the `moduleCount`/15 limb, the
+    //  no-lock-cell limb, both guards' controls and the register's arithmetic (78 terms, seed,
+    //  caps) are byte-frozen by §10's unchanged-limb guarantee.
+    const rendererText = rendererBytes.toString('utf8')
+    const hydrateCalls = [...rendererText.matchAll(/\bhydrate\(/g)]
+    if (hydrateCalls.length === 0) {
+      problems.push(
+        `HYDRATE-AT-BOOT: src/renderer/renderer.ts carries ZERO \`hydrate(\` calls — the amended limb (C-1 amendment \`A-1\`, unit \`U-STORE-PERSIST-ADOPT\`) asserts EXACTLY ONE: the boot order's own call, fed by the ` +
+          '`Y-1` hand-off and placed BEFORE the Runtime construction (R-5 amended; F-7)',
+      )
+    } else {
+      const hydrateAt = rendererText.search(/\bhydrate\(/)
+      const runtimeAt = rendererText.indexOf('new Runtime(')
+      const bootstrapAt = rendererText.indexOf('runtime.bootstrap()')
+      if (hydrateCalls.length > 1) {
+        problems.push(
+          `HYDRATE-AT-BOOT: src/renderer/renderer.ts carries ${hydrateCalls.length} \`hydrate(\` call(s) — the amended limb (C-1 amendment \`A-1\`) declares EXACTLY ONE (F-7: "hydrate called TWICE — the count is exactly ONE")`,
+        )
+      }
+      if (runtimeAt >= 0 && hydrateAt > runtimeAt) {
+        problems.push(`HYDRATE-AT-BOOT: the \`hydrate(\` call sits AFTER \`new Runtime(\` — the amended limb places it BEFORE the inseparable construction + bootstrap pair (F-7)`)
+      }
+      if (bootstrapAt >= 0 && hydrateAt > bootstrapAt) {
+        problems.push(`HYDRATE-AT-BOOT: the \`hydrate(\` call sits AFTER \`runtime.bootstrap()\` — the amended limb places the boot order as hand-off → hydrate → first envelope (F-7)`)
+      }
     }
   }
   return problems

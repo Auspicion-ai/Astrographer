@@ -8,6 +8,7 @@ import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
+import { STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -274,6 +275,23 @@ export interface ProvidentBridge {
    *  exposed `sidebar.*` methods DELEGATE to the installed holder. */
   sidebar: SidebarMethods
   installSidebar(methods: SidebarMethods): void
+  /** U-STORE-PERSIST-ADOPT §2.5 (core; unit 2 of the store-adoption program, F2)
+   *  — the tier-1 store surface: THREE members under a `store` sub-namespace, the
+   *  namespace and member spellings adopted verbatim from the foundation's
+   *  `store-persist.md` §2.11 item 4 (`get` · `put` · `onFileChanged`).
+   *
+   *  `get` is the `Y-1` boot hand-off (`[]` for a cold tier, never a throw);
+   *  `put` is the `Y-2` commit (the CHANNEL's own closed refusal set
+   *  `{malformed-payload, write-failed}`, a receipt that is never a throw);
+   *  `onFileChanged` is the `Y-3` push — a DECLARED NO-OP on today's single-window
+   *  app (specified, registered once at boot, released at realm teardown; a second
+   *  `webContents.send` registration is a finding). It returns the RELEASE
+   *  function. */
+  store: {
+    get(): Promise<Array<{ name: string; value: unknown }>>
+    put(row: { name: string; value: unknown }): Promise<{ status: 'committed' | 'refused'; reason?: 'malformed-payload' | 'write-failed' }>
+    onFileChanged(handler: () => void): () => void
+  }
 }
 
 // The renderer-installed sidebar host methods (Unit K M2 — set via
@@ -640,6 +658,24 @@ const bridge: ProvidentBridge = {
   },
   installSidebar(methods) {
     sidebarHolder = methods
+  },
+  // U-STORE-PERSIST-ADOPT §2.5 — the tier-1 store surface (THREE members under a
+  // `store` sub-namespace). The renderer reaches the two channel-name constants
+  // through these members ONLY: `src/renderer/**` never imports the channel
+  // module (§2.1). The member indent is the two-space member-key indent.
+  store: {
+    get(): Promise<Array<{ name: string; value: unknown }>> {
+      return ipcRenderer.invoke(STORE_FILE_GET)
+    },
+    put(row: { name: string; value: unknown }): Promise<{ status: 'committed' | 'refused'; reason?: 'malformed-payload' | 'write-failed' }> {
+      return ipcRenderer.invoke(STORE_FILE_PUT, row)
+    },
+    // The `Y-3` push is a DECLARED NO-OP on today's single-window app: the
+    // registration and its single release are the whole surface. There is no
+    // second `webContents.send` registration here (§2.5).
+    onFileChanged(_handler: () => void): () => void {
+      return () => {}
+    },
   },
 }
 
