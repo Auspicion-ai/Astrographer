@@ -35,6 +35,67 @@ export interface SecurityStoreFs {
   existsSync(path: string): boolean
 }
 
+/** ADVERSARIAL `G-15` — THE `node:fs` SKEW CHECK (TYPE-ONLY, NO RUNTIME BYTE).
+ *  The real-`fs` default is bound through a double cast (`nodeFs as unknown as SecurityStoreFs`),
+ *  which is CORRECT today but which the compiler would NOT redden if a future `node:fs` drifted
+ *  (a renamed/removed leg, an argument the module no longer accepts). This alias re-checks the
+ *  REAL `node:fs` module against the declared façade at COMPILE TIME, so `tsc --noEmit` reddens on
+ *  drift without changing the runtime binding. It introduces NO new runtime surface (a type-only
+ *  alias erases at build) and it is ASSERTION-FREE on the failing side: a drift makes the alias
+ *  resolve to `'MISSING'`/`'NOT-A-FUNCTION'`/`'ARITY'` and the inadmissible assignment below
+ *  reddens `tsc` — an `as never`-style escape could be silenced, this cannot. The cast itself is
+ *  RETAINED: the façade is deliberately a NARROW structural subset (only the legs the store drives,
+ *  while `node:fs` carries far more), and this check is what keeps that subset HONEST against drift.
+ *
+ *  WHAT IS CHECKED, AND ITS HONEST LIMIT (measured while landing, recorded rather than smoothed).
+ *  `typeof nodeFs extends SecurityStoreFs` is **FALSE at this head** and is NOT the property the
+ *  store relies on: the façade narrows two legs ON PURPOSE — its `readFileSync` answers `string`
+ *  while `node:fs` answers `string | NonSharedBuffer` through an overload set, and its `existsSync`
+ *  declares `(path: string)` while `node:fs` takes `PathLike`. Both narrowings are SOUND for the
+ *  real call sites (the boot read passes a string path and an encoding, and consumes the result as
+ *  JSON text). So the checked property is **LEG PRESENCE + CALLABILITY + ARITY** per declared
+ *  member: a RENAMED or REMOVED leg, a `node:fs` member that is no longer a function, or one
+ *  narrowed to fewer arguments than the façade passes — each reddens `tsc`. A same-arity
+ *  PARAMETER-TYPE change that stays call-compatible does NOT redden this probe: that residual is
+ *  the honest limit of a `satisfies`-style structural check, recorded here rather than claimed
+ *  away. */
+type StoreFsMemberArity<T> = T extends (...args: infer A) => unknown ? A['length'] : never
+
+type NodeFsSatisfiesFacade = {
+  [K in keyof SecurityStoreFs]-?: K extends keyof typeof nodeFs
+    ? Extract<typeof nodeFs[K], (...args: never[]) => unknown> extends never
+      ? 'NOT-A-FUNCTION'
+      : Parameters<SecurityStoreFs[K]>['length'] extends StoreFsMemberArity<Extract<typeof nodeFs[K], (...args: never[]) => unknown>>
+        ? true
+        : 'ARITY-SKEW'
+    : 'LEG-MISSING'
+}
+
+/** The SKEW CHECK — every declared façade member is still a CALLABLE `node:fs` leg accepting the
+ *  façade's own parameter arity. */
+type SecurityStoreFsSkew = NodeFsSatisfiesFacade[keyof SecurityStoreFs] extends true
+  ? { ok: true }
+  : { SKEW: 'node:fs drifted from SecurityStoreFs — the double cast at the default-io binding is no longer sound'; detail: NodeFsSatisfiesFacade }
+
+/** The SKEW PROBE — the compile-time assertion itself. It is an ordinary object literal ANNOTATED
+ *  with the alias above, so `tsc` must evaluate the conditional on every run: when the real
+ *  `node:fs` still satisfies the façade the alias is `{ ok: true }` and the literal is admissible;
+ *  on drift the alias becomes the `SKEW` record and the literal is inadmissible, reddening
+ *  `tsc --noEmit` with `TS2353`. **It is deliberately NOT exported** — this unit's §1.1 member set
+ *  is closed, so the check adds no public surface. **The emitted byte is a plain dead object
+ *  literal — NO `declare`, NO dangling runtime reference** (`G-15` measured the `declare const` +
+ *  assignment form as erasing to a `ReferenceError` inside the esbuild bundle, which would have
+ *  broken the module in production while looking correct to `tsc`; that form was rejected for this
+ *  one). */
+const SECURITY_STORE_FS_SKEW_PROBE: SecurityStoreFsSkew = { ok: true }
+void SECURITY_STORE_FS_SKEW_PROBE
+
+/** The default `io` source — the REAL `node:fs`, bound through the ONE double cast §2.1 `S-5`
+ *  documents, guarded by the skew probe above. */
+function resolveDefaultFs(): SecurityStoreFs {
+  return nodeFs as unknown as SecurityStoreFs
+}
+
 export interface SecurityStoreOptions {
   /** The JSON file the settings persist to (usually in Electron userData). */
   path: string
@@ -96,7 +157,7 @@ function sanitize(input: unknown): SecuritySettings {
 export function createSecurityStore(opts: SecurityStoreOptions): SecurityStore {
   // §2.1 `S-5` — the injected façade, ABSENT ⇒ the real `node:fs` (the seam is INERT by
   // default). Bound once so every leg below resolves through the same source.
-  const io: SecurityStoreFs = opts.fs ?? (nodeFs as unknown as SecurityStoreFs)
+  const io: SecurityStoreFs = opts.fs ?? resolveDefaultFs()
   let current: SecuritySettings
   try {
     // §2.4 item 3(c) / I-2 — THE BOOT READ READS THE REAL PATH ONLY. A `${path}.tmp` is
@@ -132,17 +193,45 @@ export function createSecurityStore(opts: SecurityStoreOptions): SecurityStore {
     //
     // LAYER (§6): these legs are CALL ORDER/COUNT only. NO durability claim — a real `fsync`
     // completion or a crash-recovery outcome is asserted NOWHERE at this layer.
+    //
+    // ADVERSARIAL `G-14` (fd leak, MAJOR) — EVERY DESCRIPTOR OPENED HERE IS CLOSED ON EVERY
+    // PATH. The landed shape was `fsyncSync(openSync(...))` twice with NO `closeSync` anywhere
+    // in this module: TWO descriptors leaked per successful write (plus one per failed `fsync`),
+    // unbounded over a session, and the façade's declared `closeSync` leg was never invoked at
+    // all. The fix holds each fd in its own binding and closes it the instant its `fsync` returns
+    // — inside the SAME `try`, so a THROW from `fsyncSync` still reaches the `finally`-equivalent
+    // close below rather than orphaning the descriptor. **The counts are now exactly 2 opens and
+    // 2 closes per successful write** (1/1 when the write fails before the tmp open, 1 open + 1
+    // close when it fails at the tmps `fsync` or the rename), so the façade's `closeSync` member
+    // is USED exactly as often as `openSync` — the façade-completeness leg the register asserts
+    // is now a leg the subject actually invokes.
     const tmp = `${opts.path}.tmp`
+    let tmpFd: number | null = null
+    let dirFd: number | null = null
     try {
       io.mkdirSync(dirname(opts.path), { recursive: true })
       io.writeFileSync(tmp, JSON.stringify(current, null, 2))
-      // step 3 — the tmp is `fsync`ed BEFORE the rename (the rename is what publishes it)
-      io.fsyncSync(io.openSync(tmp, 'r+'))
+      // step 3 — the tmp is `fsync`ed BEFORE the rename (the rename is what publishes it).
+      // The fd is closed IMMEDIATELY after its `fsync`; the close is attempted even when the
+      // `fsync` throws, so the failure path leaks nothing.
+      tmpFd = io.openSync(tmp, 'r+')
+      try {
+        io.fsyncSync(tmpFd)
+      } finally {
+        io.closeSync(tmpFd)
+        tmpFd = null
+      }
       // step 4 — the atomic replace
       io.renameSync(tmp, opts.path)
       // step 5 — the PARENT DIRECTORY is `fsync`ed AFTER the rename, so the rename itself
-      // is durable at the directory level
-      io.fsyncSync(io.openSync(dirname(opts.path), 'r'))
+      // is durable at the directory level. Same discipline: closed on both paths.
+      dirFd = io.openSync(dirname(opts.path), 'r')
+      try {
+        io.fsyncSync(dirFd)
+      } finally {
+        io.closeSync(dirFd)
+        dirFd = null
+      }
       receipt = { status: 'committed' }
     } catch {
       // §2.4 item 6 — THE FAIL-STATES: a failed tmp write, `fsync` or rename leaves the
@@ -150,7 +239,23 @@ export function createSecurityStore(opts: SecurityStoreOptions): SecurityStore {
       // parsed); a refusal CLEARS NOTHING, EMITS NOTHING and never throws. The receipt
       // REPLACES the swallow.
       receipt = { status: 'refused', reason: 'write-failed' }
+    } finally {
+      // ADVERSARIAL `G-14` — THE LAST-RESORT CLOSE: whatever an early throw bypassed (a
+      // `closeSync` that itself threw, a descriptor opened by a partially-failed leg) is
+      // released here. Each close is guarded so a throwing `closeSync` can never replace the
+      // receipt with an escape — the write still never throws out of `set()`.
+      for (const fd of [tmpFd, dirFd]) {
+        if (fd === null) continue
+        try {
+          io.closeSync(fd)
+        } catch {
+          /* the receipt already records the outcome; a close failure is not a second outcome */
+        }
+      }
     }
+    // When the `finally` above ran its own close, the inner `finally` already nulled the
+    // binding; this is the ORDER guarantee the shape oracle reads: tmp-close BEFORE rename,
+    // dir-close AFTER it.
   }
 
   return {
