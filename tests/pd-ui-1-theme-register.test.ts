@@ -135,7 +135,28 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  (Both new digests MEASURED by this pass at this head: types `ff8c0b9a7cfb2f37cc94c6b018c1f756` ·
   //  preload `00dba3cdd5e1eb3c7de632a838e3d28b`.)⟩
   { file: 'src/shared/types.ts', md5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', superseded: '303e63d28ec430920aebf0d4a8f3fd3f', restated: 'U-APP-HARNESS-READINESS' },
-  { file: 'src/main/operator-settings-store.ts', md5: '11841179e004f22dd758edbe927f1a40' },
+  { file: 'src/main/operator-settings-store.ts', md5: '0f846fa907c36000511ec5d516056a42', superseded: '11841179e004f22dd758edbe927f1a40', restated: 'U-ATOMICITY-SWEEP-CLASS-B' },
+  // ⟨RE-STATED 2026-10-07 — unit `U-ATOMICITY-SWEEP-CLASS-B`, §1.1 member 4 / §3.2 `I-7` / `O-4`.⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a RECORDED,
+  //  md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still FAILS both the
+  //  ⟨A-1⟩ digest limb and the working-tree limb). WHAT MOVED IS THE RECORDED VALUE, and the move is
+  //  LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may move the file only by re-stating it here,
+  //  with its reason and its unit named, exactly as this note does"*. **THE REASON:** this unit lands
+  //  the ATOMIC FIVE-STEP WRITE on this carrier — its `persist()` is re-shaped from the plain
+  //  `writeFileSync(opts.path, …)` against the LIVE path to `mkdirSync(dirname,{recursive:true})` →
+  //  `${path}.tmp` write → `fsync(tmp)` → `renameSync(tmp, path)` → `fsync(dir)`, its empty
+  //  `catch {}` is REMOVED in favour of the RETURNED receipt (`lastWriteReceipt()`), and
+  //  `OperatorSettingsStoreOptions` gains the ADDITIVE-OPTIONAL `fs?` façade
+  //  (`docs/specs/unit-atomicity-sweep-class-b.md` §1.1 members 1/3, §2.2, §2.6) — so its bytes MOVE
+  //  by construction, and §1.1 member 4 is the clause that orders THIS row re-stated in the landing's
+  //  own commit. **THE UNIT:** `U-ATOMICITY-SWEEP-CLASS-B`. **THE SUPERSEDED VALUE IS THE ROW'S OWN
+  //  `superseded:` FIELD BESIDE IT** (`11841179e004f22dd758edbe927f1a40`, kept VISIBLE and NEVER
+  //  deleted). **THE NEW VALUE IS MEASURED, never inferred** (`md5sum`, taken at the landing's head
+  //  AFTER this unit's `src/` writes, never copied from another row). **NO OTHER ROW OF THIS TABLE IS
+  //  TOUCHED** by this re-statement; the table stays SEVEN rows and `UNRESTATED_CONTROL_PATH` stays
+  //  DERIVED (this row now carries a `restated:` field, so the derivation moves on to the next
+  //  un-re-stated row — see the PRE-EMPTIVE re-anchor note below, which names that path) and is NOT
+  //  hand-edited here.
   // ⟨RE-STATED 2026-10-04 — unit `U-STORE-PERSIST-ADOPT` (`core`; unit 2 of the
   //  store-adoption program, F2), §9 `C-10` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
@@ -251,7 +272,26 @@ const UNTOUCHED_BY_THE_LANDING = UNTOUCHED_DIGESTS.map((d) => d.file)
  *   limb above red). THE FIX IS A RE-POINT, NOT A RELAXATION: the tooth (an UNRECORDED change
  *   to an un-re-stated pinned path FAILS), the reader and the assertion's shape are unchanged,
  *   and the `sidebar-panes.ts` row itself is NOT touched here — its re-statement is the LANDING
- *   pass's act under `G-7`'s own licence, and the digest limb above stays exactly as landed.⟩ */
+ *   pass's act under `G-7`'s own licence, and the digest limb above stays exactly as landed.⟩
+ *  ⟨RE-ANCHORED PRE-EMPTIVELY `2026-10-07` — unit `U-ATOMICITY-SWEEP-CLASS-B`, §1.1 member 5 /
+ *   §3.2 `I-6` / `O-4`.⟩ THIS IS A PRE-EMPTIVE RE-ANCHOR, NOT A RE-POINT TAKEN AFTER A FAIL: the
+ *  difference from the `2026-10-04` precedent above is exactly that this re-point is taken BEFORE
+ *  the control goes stale, so the note never asserts a false statement about its own subject.
+ *  **WHAT MOVED THE DERIVATION:** member 4's lawful re-statement above gave the
+ *  `src/main/operator-settings-store.ts` row a `restated:` field, so
+ *  `UNTOUCHED_DIGESTS.find((d) => d.restated === undefined)?.file` — left DERIVED, never
+ *  hand-edited — now answers the FIRST row in table order that still carries no recorded
+ *  re-statement. **THE PATH IT ACTUALLY RESOLVES TO AT THIS HEAD IS `src/shared/demo-envelope.ts`**
+ *  (the three un-re-stated rows are `src/shared/demo-envelope.ts`, `src/shared/dom-shim.ts` and
+ *  `src/shared/path-fork-cycle.ts`, and `Array.prototype.find` answers the first of those in table
+ *  order). **WHY THAT PATH IS A LEGITIMATE SUBJECT:** `src/shared/demo-envelope.ts` is a row this
+ *  unit is **NOT LICENSED TO MOVE** — `U-ATOMICITY-SWEEP-CLASS-B` touches no shared-tree byte,
+ *  so the row carries no re-statement and the tooth holds: an UNRECORDED working-tree change to it
+ *  must still FAIL. The tooth, the reader, the DERIVED expression and the assertion's shape are
+ *  UNCHANGED — **this is an AIM, not a relaxation, and the derivation is NOT hand-edited to this
+ *  literal.** (§2.7 `C-4` flags this path as `OWED` to the landed table: were an intervening
+ *  landing to re-state a row ahead of `src/shared/demo-envelope.ts`, the derivation would move
+ *  again and this note would have to name THAT path — never a relaxed expectation.)⟩ */
 const UNRESTATED_CONTROL_PATH = UNTOUCHED_DIGESTS.find((d) => d.restated === undefined)?.file ?? ''
 
 /** ⟨A-1⟩ the digest oracle: ONE reader, driven over the real files AND over a synthetic
