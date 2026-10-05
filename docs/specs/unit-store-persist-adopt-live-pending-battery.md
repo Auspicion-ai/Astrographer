@@ -4,6 +4,8 @@
 **Contract:** `docs/specs/unit-store-persist-adopt.md` §8 (`C-8`), §2.9 (the `--provident-user-data=` seam), §2.3 (the boot order), §2.7 (the carrier + the read-back recovery).
 **Status:** **DRIVEN — MATERIALIZED, NOT PARKED.** `RCA-11` clause (a) forbids a UI-overhaul / drivable surface from parking on "no live session"; the assembly here **was** drivable in this environment, so the battery ran and its readings are recorded below.
 
+**⟨THE FILENAME NOTE (`2026-10-05`, gate-7 proofreader, `RCA-8(c)` ANNOTATE-BESIDE, per the gate-5 greens' note: the basename `-live-pending-battery` reads as a park claim while this document's status is DRIVEN).⟩** **THE BASENAME IS CONTRACT-MANDATED, NOT A PARK CLAIM:** `docs/specs/unit-store-persist-adopt.md` §1.1 **member 9** names this exact path (`docs/specs/unit-store-persist-adopt-live-pending-battery.md`) as the live leg's landing site, and §8's park rule that name was minted under is CONDITIONAL — *"if the leg cannot run … it ships as `<this path>`, marked OPEN/live-pending — NEVER green/DONE"*. The leg DID run, so the file carries the same contract-mandated path with its status line reading **DRIVEN**. **The `-pending` basename is therefore a naming artifact of the contract's park branch, never a statement that this leg is parked** — a reader must take the status line (and §1's `PARKED? NO.` row), never the filename. **The path is NOT renamed here: member 9's citation is contract, and `RCA-8(c)` forbids rewriting an as-filed clause.**
+
 **Layer (`RCA-12`, mandatory): `[U]` — the ASSEMBLED Electron app.** This is the ONE leg of the unit that is app-side. It is **not** a `[T]`/`[H]` reading, and the node trio nowhere implies it.
 
 ---
