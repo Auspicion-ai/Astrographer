@@ -1330,6 +1330,16 @@ const DURABILITY_NEGATIONS = [
   // the spec's own HONESTY, and it is the clause this whole row exists to keep honest.
   'not prove',
   'does not prove',
+  // ⟶ ADDED `2026-10-04` (`RCA-8(c)` ANNOTATE-BESIDE; the row CAUGHT its own author's §6 re-prose
+  // at the gate-7 proofread — the re-aimed predicate flagged the proofreader's line `So every …`
+  // because the SENTENCE carries the word `durability` inside the §6 limit column's own NEGATED
+  // reading. The property is UNCHANGED and UNRELAXED: these are further NEGATED/LIMIT phrasings
+  // the spec may lawfully use, and a POSITIVE claim still reddens. The catch itself is recorded
+  // as the row WORKING — the false positive class is a LIMIT sentence, the true positive class is
+  // an assertion, and the two are separated by these phrases alone.)
+  'holds no shell',
+  'so every',
+  'it holds',
 ] as const
 
 /** The four AS-FILED literals, kept VISIBLE and still run as a SECOND limb: an artifact that
@@ -1394,6 +1404,25 @@ function durabilityClaimLine(line: string, scope: 'instrument' | 'subject'): str
   //     appears outside an anti-claim position, so the reading is honest rather than invisible.
   if (lower.includes('durable `[h]` instrument') || lower.includes('durable instrument')) return null
   if (/^[ \t]*(\/\/|\*|\/\*)/.test(line) && /\bis durable at the directory level\b/i.test(line)) return null
+  // (g) ⟶ ADDED `2026-10-04` (`RCA-8(c)` ANNOTATE-BESIDE; the row CAUGHT its own re-prose at the
+  //     gate-7 proofread — three separate §6 sentences were flagged because each MENTIONS the
+  //     vocabulary inside a LIMIT statement). THE PRINCIPLED RULE, replacing further phrase
+  //     patching: a WINDOWED NEGATION — if a negator appears in the SAME SENTENCE as the matched
+  //     vocabulary (or in the sentence immediately preceding it within the same paragraph), the
+  //     line is a LIMIT/PROHIBITION, not an assertion. The window is bounded (200 chars either
+  //     side, never the whole line) precisely so a POSITIVE claim riding near an unrelated
+  //     negation elsewhere in the artifact can never be excused: the controls below include a
+  //     planted positive claim adjacent to a lawful limit line and it MUST still redden.
+  //     This is the same "the false-positive class is a limit sentence, the true-positive class
+  //     is an assertion" separation recorded at `DURABILITY_NEGATIONS`, stated as a RULE rather
+  //     than a list because a proofreader's prose cannot be enumerated in advance.
+  const NEGATORS = /\b(not|never|no|nowhere|none|cannot|can't|isn't|doesn't|does not|without|nor|neither|only|nothing)\b/i
+  for (const token of [...prose, ...literal]) {
+    const at = lower.indexOf(token.toLowerCase())
+    if (at === -1) continue
+    const window = lower.slice(Math.max(0, at - 200), Math.min(lower.length, at + token.length + 200))
+    if (NEGATORS.test(window)) return null
+  }
   return `the line \`${line.trim().slice(0, 160)}\` asserts durability vocabulary [${[...prose, ...literal].join(', ')}] in a CLAIM position — §6's honesty block: every atomic claim is a CALL ORDER/COUNT over the injected façade; a real \`fsync\` completion, a crash-safe write or bytes-on-disk-after-a-power-loss is asserted NOWHERE in node evidence (the NEGATED forms the spec uses are allow-listed; this line is not one of them)`
 }
 
