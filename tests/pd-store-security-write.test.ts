@@ -127,6 +127,47 @@
 // ④ NO PROPERTY IS WEAKENED and no term moves: "exactly one home, and it is the declared one"
 //    holds before and after; the register's arithmetic stays `78` with `P-SSW-IM-4` at its
 //    RULED `10`; the seed and the caps are unmoved.
+//
+// ⑤ ARM 2's §1.2-item-1 limb ② (`requiredOption`, THE `DENIED-1` RE-AIMED-② INVERTED LIMB) —
+//    **RE-FORGED CONTAINER-SCOPED.** THIS IS THE `F-13` REMAND; the predicate at the limb below
+//    is the repaired one and the AS-FILED spelling is KEPT VISIBLE there.
+//    • F-13, AS FOUND (the gate-4 audit's PROVEN-BRITTLE finding, re-confirmed by the
+//      supervisor): the as-filed limb read
+//        `const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)`
+//      and it was INERT TWICE OVER, so it could NEVER redden on any real file:
+//        ⅰ THE SECOND CONJUNCT IS PERMANENTLY FALSE. `secure-panels.ts` carries an UNRELATED
+//          OPTIONAL declaration of the SAME identifier — `maxJournalLength?: number | null`
+//          inside the `window.provident.security.set(patch)` bridge type (~line 45) — so
+//          `!/maxJournalLength\s*\?\s*:/` matched that bridge member and read false on the real
+//          bytes. A limb requiring "no `?:` for this identifier ANYWHERE in the file" can never
+//          be true while a LEGITIMATE unrelated declaration exists.
+//        ⅱ THE LOOKAHEAD IS NEWLINE-HOSTILE. `(?![?\s|])` after `number` fails when the member
+//          is followed by a NEWLINE (`\n` is `\s`) — the ordinary line-broken REQUIRED form —
+//          so the first conjunct ALSO read false on the very shape it was meant to forbid.
+//      MEASURED CONSEQUENCE: a forgery making the member REQUIRED reddened NEITHER conjunct.
+//    • THE REPAIR — the limb is **CONTAINER-SCOPED**, exactly as the F-9 forgery corpus in
+//      `tests/pd-store-security-journal.test.ts` already reads the same subject: locate the
+//      `SecurePanelsOptions` declaration's OWN BRACE-BALANCED BODY (the container) and test the
+//      REQUIRED member form INSIDE it. The unrelated bridge declaration can then neither
+//      SATISFY the limb nor DEFEAT it — the whole point of the remand.
+//    • THE CONTAINER LOCATOR — the declaration is matched on its KEYWORD-ANCHORED header
+//      `/interface\s+SecurePanelsOptions\b/`, never by the bare substring `interface
+//      SecurePanelsOptions`: VERIFIED at this head, the landed spelling is
+//      `export interface SecurePanelsOptions {`, so the bare substring only matches from the
+//      `interface` INSIDE the word `export` — precisely the class of locator this file refuses.
+//      Reading the file at this head also confirms the container is an `interface` (never a
+//      `type` alias) with a brace-balanced body, and that it is the ONLY `SecurePanelsOptions`
+//      declaration anywhere in `src/**`.
+//    • THE FIRST SITE WINS: `interfaceBody` takes the FIRST header match. Verified at this head
+//      that is the real declaration; a plant ABOVE it would move which site the guard reads,
+//      which is a DECLARATION-MOVE class this file's own readings already treat as a finding
+//      (arm 6's CONTROL 5 measures it), never a silent admit.
+//    • STILL CAUGHT (and now PROVED — arm 6): a forging landing that makes the container's
+//      member REQUIRED, the exact `§7` row 11② / `§1.1` member 1① / `§3.2 I-3` denial.
+//    • THE AS-FILED LIMB IS KEPT VISIBLE: it stays spelled out verbatim at the limb (annotate-
+//      beside, `RCA-8(c)`), and `deniedOneRequiredOptionProblems()` carries BOTH spellings while
+//      arm 6's CONTROL 4 proves the as-filed one is INERT — it ADMITS the very forgery it exists
+//      to catch. A superseded limb is never deleted, and never silently re-taken.
 // ===========================================================================
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -282,6 +323,79 @@ function balancedBody(src: string, openIndex: number): string | null {
     i++
   }
   return null
+}
+
+/** THE CONTAINER LOCATOR (`F-13` REMAND). The balanced body of the FIRST declaration whose
+ *  header matches `/\b(?:export\s+)?(?:interface|type)\s+<name>\b/` — the DECLARATION's OWN
+ *  brace pair, never a slice to EOF and never a bare-substring `indexOf`.
+ *
+ *  WHY THE KEYWORD ANCHOR: the landed spelling at this head is
+ *  `export interface SecurePanelsOptions {`, so a bare `indexOf('interface SecurePanelsOptions')`
+ *  matches from the `interface` INSIDE the word `export` — the same class of brittle locator
+ *  the `F-13` remand exists to remove. The header regex anchors on the KEYWORD instead.
+ *
+ *  Returns `null` when no such declaration exists, so an absent container is REPORTED rather
+ *  than silently satisfied by a whole-file match (the sibling's `P-SSW-H-2` limb-4 remand
+ *  class). `openIndex` is exposed so a caller can report WHICH site was read. */
+function interfaceBody(text: string, name: string): { body: string; openIndex: number } | null {
+  const header = new RegExp(`\\b(?:export\\s+)?(?:interface|type)\\s+${name}\\b`)
+  const match = header.exec(text)
+  if (match === null) return null
+  const open = text.indexOf('{', match.index + match[0].length)
+  if (open < 0) return null
+  const body = balancedBody(text, open)
+  return body === null ? null : { body, openIndex: open }
+}
+
+/** THE CONTAINER-SCOPED REQUIRED-MEMBER LIMB (`F-13` REMANDED). `problems` non-empty iff the
+ *  `SecurePanelsOptions` declaration's OWN body declares `maxJournalLength` in a form that is
+ *  NOT optional.
+ *
+ *  THE REPAIRED PREDICATE reads the container and asks the member's own terminator for the
+ *  optional marker — `\?` or `|` — with the marker looked for on the SAME line, so the
+ *  ordinary line-broken REQUIRED form (`maxJournalLength: number` + `\n`) reads REQUIRED
+ *  (the as-filed `(?![?\s|])` lookahead read that form OPTIONAL-by-failure, because `\n`
+ *  matched its `\s`). No whole-file conjunct: the UNRELATED
+ *  `window.provident.security.set(patch)` bridge declaration of the SAME identifier is neither
+ *  the subject nor a witness.
+ *
+ *  THE AS-FILED SPELLING IS KEPT VISIBLE, verbatim, beside the repair (annotate-beside,
+ *  `RCA-8(c)`):
+ *    const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+ *  Its INERTNESS is MEASURED, not asserted: arm 6's CONTROL 4 runs the corpus's positive
+ *  forgery through BOTH spellings and requires the as-filed one to ADMIT the forgery the
+ *  repaired one REDDENS. */
+function deniedOneRequiredOptionProblems(panelsText: string): string[] {
+  const problems: string[] = []
+  const body = withoutComments(panelsText)
+  const container = interfaceBody(body, 'SecurePanelsOptions')
+  if (container === null) {
+    problems.push(
+      'DENIED-1-REQUIRED (RE-AIMED ②, INVERTED, CONTAINER-SCOPED): the `SecurePanelsOptions` DECLARATION could not be located in src/renderer/secure-panels.ts — the REQUIRED-member limb has no container to read, and an unreadable container is REPORTED rather than satisfied (§1.2 item 1 / §3.2 I-3)',
+    )
+    return problems
+  }
+  const member = /(^|[\n;])\s*maxJournalLength\s*(\??)\s*:/.exec(container.body)
+  const optional = member !== null && (member[2] === '?' || /^[ \t]*\|/.test(container.body.slice((member.index ?? 0) + member[0].length)))
+  if (member !== null && !optional) {
+    problems.push(
+      'DENIED-1 (RE-AIMED ②, INVERTED, CONTAINER-SCOPED): `SecurePanelsOptions.maxJournalLength` is declared NON-OPTIONAL inside the declaration — §7 row 11② / §1.1 member 1① / §3.2 I-3: 3b AUTHORIZES the member as ADDITIVE-OPTIONAL, and a required member breaks every landed one-argument `new SecurePanels(` call site (§3 `F-10`)',
+    )
+  }
+  return problems
+}
+
+/** The INERT, AS-FILED limb — transcribed VERBATIM from the pre-`F-13` guard bytes and carried
+ *  ONLY as arm 6's CONTROL 4 substrate (the demonstration that the superseded spelling admitted
+ *  the forgery). NOT a live assertion anywhere in this file. */
+function asFiledRequiredOptionProblems(panelsText: string): string[] {
+  const body = withoutComments(panelsText)
+  // AS FILED (`F-13`), kept visible — see the header note ⑤ and the limb's own annotation:
+  //   const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+  const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+  return requiredOption
+    ? ['AS-FILED-INERT: the pre-`F-13` spelling reddened — the inertness claim is FALSIFIED by this very control (§7 row 11②)']
+    : []
 }
 
 /** The comment-free body of a source text — so a PROSE mention of a denied token is never
@@ -549,9 +663,26 @@ function deniedSurfaceReadings(): DeniedReading[] {
       const body = withoutComments(panels)
       // ② INVERTED — the surviving limb: the option may not be REQUIRED, and no POSITIONAL
       // second argument may bind it at any landed `new SecurePanels(` call site.
-      const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+      //
+      // ⟶ `F-13` REMAND — THE LIMB IS RE-FORGED CONTAINER-SCOPED HERE (header note ⑤).
+      // AS FILED, KEPT VISIBLE, VERBATIM (annotate-beside, `RCA-8(c)`):
+      //   const requiredOption = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+      //   if (requiredOption) {
+      //     problems.push(`DENIED-1 (RE-AIMED ②, INVERTED): \`SecurePanelsOptions.maxJournalLength\` is a REQUIRED member — … the surviving limb forbids the REQUIRED form …`)
+      //   }
+      // DISPOSITION (`F-13`): the as-filed predicate was INERT TWICE OVER and could NEVER
+      // redden — (ⅰ) its second conjunct `!/maxJournalLength\s*\?\s*:/` was permanently FALSE on
+      // the real bytes, because `secure-panels.ts` carries an UNRELATED optional declaration of
+      // the SAME identifier inside the `window.provident.security.set(patch)` BRIDGE type
+      // (~line 45: `maxJournalLength?: number | null`), and (ⅱ) its `(?![?\s|])` lookahead read
+      // the ordinary line-broken REQUIRED form (`… : number\n`) as non-matching, `\n` being `\s`.
+      // MEASURED at this head: the as-filed limb ADMITS the forgery it exists to catch (arm 6,
+      // CONTROL 4). THE SURVIVING LIMB reads the REQUIRED-member form INSIDE the
+      // `SecurePanelsOptions` CONTAINER ONLY — the subject §1.1 member 1①/§7 row 11② actually
+      // names — so the unrelated bridge declaration can neither satisfy it nor defeat it.
+      const requiredOption = deniedOneRequiredOptionProblems(panels).length > 0
       if (requiredOption) {
-        problems.push(`DENIED-1 (RE-AIMED ②, INVERTED): \`SecurePanelsOptions.maxJournalLength\` is a REQUIRED member — §7 row 11② / §1.1 member 1① / §3.2 I-3: 3b AUTHORIZES the member as ADDITIVE-OPTIONAL; the surviving limb forbids the REQUIRED form (a required option breaks every landed one-argument \`new SecurePanels(\` call site, §3 \`F-10\`)`)
+        problems.push(...deniedOneRequiredOptionProblems(panels))
       }
       const positional = /new\s+SecurePanels\s*\(\s*[^,()]+,\s*[A-Za-z_$][\w$]*\s*\)/.test(body)
       if (positional) {
@@ -1222,6 +1353,204 @@ describe('PD-STORE-SECURITY-WRITE arm 4 — THE LANDED LEAVE-ALONE GUARDS STAYIN
   }, 12_000)
 })
 
+// ===========================================================================
+// ARM 6 — THE `F-13` MUTATION PROOF (the repair's OWN instrument). A repaired limb
+// with no proof repeats `F-13`; this arm is the proof, and it is the ONLY place the
+// repaired predicate is exercised BOTH ways.
+//
+// THE FIVE CONTROLS (each with its stated anti-vacuity condition — a control whose
+// substrate is ABSENT fails loudly, never passes):
+//   CONTROL 1 (POSITIVE)   — a forgery that makes the CONTAINER's member REQUIRED must
+//                            REDDEN. Built by a CONTAINER-SCOPED replace (the F-9 corpus
+//                            pattern), never a file-wide one.
+//   CONTROL 2 (NEGATIVE)   — the UNMODIFIED real bytes must be ADMITTED (the limb must
+//                            not fire on the legitimate additive-optional form).
+//   CONTROL 3 (THE REGRESSION GUARD) — a forgery swapping the member for the BRIDGE-STYLE
+//                            `maxJournalLength?: number | null` in the WRONG place (the
+//                            `window.provident.security.set(patch)` bridge type) must NOT
+//                            redden: the limb is truly scoped to `SecurePanelsOptions`.
+//   CONTROL 4 (THE INERTNESS MEASUREMENT) — the AS-FILED, pre-`F-13` spelling must ADMIT
+//                            the very forgery CONTROL 1 reddens. If it ever reddens there,
+//                            the inertness claim is FALSIFIED and this arm FAILS.
+//   CONTROL 5 (THE DISCRIMINATOR) — none of the other findings may fire on any of the five
+//                            planted bytes, so the reading MEASURED in CONTROLS 1-3 is
+//                            attributable to the repaired limb and to nothing else. (The
+//                            renderer text is passed UNMUTATED, so the renderer-side limbs
+//                            are constant across the corpus.)
+// ===========================================================================
+interface RequiredOptionControl {
+  label: string
+  /** The container whose `maxJournalLength` term is re-forged: the option declaration or the
+   *  BRIDGE patch type — the standing trap this arm exists to keep separating. */
+  container: 'options' | 'bridge'
+  /** What the re-forged member reads as. */
+  term: 'REQUIRED' | 'OPTIONAL-BRIDGE-STYLE'
+}
+
+const REQUIRED_OPTION_CONTROLS: RequiredOptionControl[] = [
+  { label: '1 (POSITIVE) the `SecurePanelsOptions` member made REQUIRED', container: 'options', term: 'REQUIRED' },
+  { label: '3 (REGRESSION GUARD) the BRIDGE type re-forged to the bridge-style optional', container: 'bridge', term: 'OPTIONAL-BRIDGE-STYLE' },
+]
+
+const BRIDGE_CONTAINER_NAME = 'security'
+
+/** Re-forge ONE `maxJournalLength` declaration INSIDE the named container only (the balances
+ *  read; a file-wide `replace` would land on the bridge member FIRST — MEASURED — and forge the
+ *  wrong subject). Returns `ok: false` with the reason when the substrate is absent. */
+function plantRequiredOption(panels: string, which: 'options' | 'bridge', term: 'REQUIRED' | 'OPTIONAL-BRIDGE-STYLE'): { planted: string; ok: boolean; why: string } {
+  const header = which === 'options' ? /interface\s+SecurePanelsOptions\b/ : /\bsecurity\s*\??\s*:\s*\{/
+  const hit = header.exec(panels)
+  if (hit === null) return { planted: panels, ok: false, why: `the \`${which}\` container was not found` }
+  const open = panels.indexOf('{', hit.index + hit[0].length)
+  if (open < 0) return { planted: panels, ok: false, why: `the \`${which}\` container carries no brace` }
+  const container = balancedBody(panels, open)
+  if (container === null) return { planted: panels, ok: false, why: `the \`${which}\` container's body is unreadable` }
+  const forged =
+    which === 'options'
+      ? container.replace(/maxJournalLength\s*\?\s*:\s*number/, 'maxJournalLength: number')
+      : container.replace(
+          /maxJournalLength\??\s*:\s*number(\s*\|\s*null)?/,
+          term === 'OPTIONAL-BRIDGE-STYLE' ? 'maxJournalLength: number | null' : 'maxJournalLength: number',
+        )
+  if (forged === container) {
+    return { planted: panels, ok: false, why: `the \`${which}\` container carries no \`maxJournalLength\` declaration to re-forge` }
+  }
+  const planted = panels.slice(0, open + 1) + forged + panels.slice(open + 1 + container.length)
+  return { planted, ok: planted !== panels, why: 'the re-forge did not change the bytes' }
+}
+
+interface MutationProofControl {
+  label: string
+  ok: boolean
+  why: string
+  readings: string[]
+  /** Arms of the proof, asserted separately so a failure NAMES which one broke. */
+  positiveReddens: boolean
+  negativeAdmits: boolean
+  bridgeStyleAdmits: boolean
+  asFiledInert: boolean
+  discriminates: boolean
+}
+
+function requiredOptionMutationProof(): MutationProofControl[] {
+  const out: MutationProofControl[] = []
+  const panels = readMaybe(join(RENDERER_DIR, 'secure-panels.ts'))
+  const renderer = readMaybe(join(RENDERER_DIR, 'renderer.ts'))
+  if (panels === null || renderer === null) return out
+
+  const add = (label: string, build: () => { planted: string; ok: boolean; why: string }, expect: 'REDDEN' | 'ADMIT'): void => {
+    const built = build()
+    if (!built.ok) {
+      out.push({ label, ok: false, why: `NO SUBSTRATE: ${built.why}`, readings: [], positiveReddens: false, negativeAdmits: false, bridgeStyleAdmits: false, asFiledInert: false, discriminates: false })
+      return
+    }
+    const driven = deniedOneRequiredOptionProblems(built.planted)
+    // THE DISCRIMINATOR (CONTROL 5): the OTHER limbs must be unmoved by this plant, so the
+    // reading is attributable to the repaired REQUIRED-member limb alone.
+    const others = deniedSurfaceReadings()
+      .filter((r) => !r.row.startsWith('1 ·'))
+      .flatMap((r) => r.problems)
+    const row1Others = deniedSurfaceReadings()
+      .find((r) => r.row.startsWith('1 ·'))!
+      .problems.filter((p) => !p.startsWith('DENIED-1 (RE-AIMED ②, INVERTED, CONTAINER-SCOPED)'))
+    const discriminates = others.length === 0 && row1Others.length === 0
+    const reddens = driven.length > 0
+    out.push({
+      label,
+      ok: expect === 'REDDEN' ? reddens : !reddens,
+      why: expect === 'REDDEN' ? 'the repaired limb must REDDEN on a container-REQUIRED member' : 'the repaired limb must ADMIT this plant',
+      readings: driven.length > 0 ? driven : ['ADMITTED (no finding)'],
+      positiveReddens: false,
+      negativeAdmits: false,
+      bridgeStyleAdmits: false,
+      asFiledInert: false,
+      discriminates,
+    })
+  }
+
+  // CONTROL 2 (NEGATIVE) — the UNMODIFIED real bytes.
+  {
+    const driven = deniedOneRequiredOptionProblems(panels)
+    const others = deniedSurfaceReadings().flatMap((r) => r.problems)
+    out.push({
+      label: '2 (NEGATIVE) the UNMODIFIED real bytes',
+      ok: driven.length === 0 && others.length === 0,
+      why: 'the limb must ADMIT the landed additive-optional form',
+      readings: driven.length > 0 ? driven : ['ADMITTED (no finding)'],
+      positiveReddens: false,
+      negativeAdmits: driven.length === 0,
+      bridgeStyleAdmits: false,
+      asFiledInert: false,
+      discriminates: others.length === 0,
+    })
+  }
+
+  for (const c of REQUIRED_OPTION_CONTROLS) {
+    add(c.label, () => plantRequiredOption(panels, c.container, c.term), c.container === 'options' ? 'REDDEN' : 'ADMIT')
+  }
+
+  // CONTROL 4 — THE INERTNESS MEASUREMENT over the SAME positive forge.
+  {
+    const built = plantRequiredOption(panels, 'options', 'REQUIRED')
+    if (!built.ok) {
+      out.push({ label: '4 (INERTNESS) the as-filed spelling over the POSITIVE forge', ok: false, why: `NO SUBSTRATE: ${built.why}`, readings: [], positiveReddens: false, negativeAdmits: false, bridgeStyleAdmits: false, asFiledInert: false, discriminates: false })
+    } else {
+      const asFiled = asFiledRequiredOptionProblems(built.planted)
+      const repaired = deniedOneRequiredOptionProblems(built.planted)
+      out.push({
+        label: '4 (INERTNESS) the as-filed spelling over the POSITIVE forge',
+        ok: asFiled.length === 0 && repaired.length > 0,
+        why: 'the as-filed spelling must ADMIT the forgery the repaired limb REDDENS (else the inertness claim is falsified)',
+        readings: [`as-filed: ${asFiled.length > 0 ? 'REDDENS' : 'ADMITTED (the measured inertness)'}`, `repaired: ${repaired.length > 0 ? 'REDDENS' : 'ADMITTED'}`],
+        positiveReddens: repaired.length > 0,
+        negativeAdmits: false,
+        bridgeStyleAdmits: false,
+        asFiledInert: asFiled.length === 0,
+        discriminates: true,
+      })
+    }
+  }
+
+  return out
+}
+
+describe('PD-STORE-SECURITY-WRITE arm 6 — THE `F-13` MUTATION PROOF: the container-scoped REQUIRED-member limb REDDENS on a container-REQUIRED forgery (CONTROL 1), ADMITS the unmodified real bytes (CONTROL 2), does NOT redden when the SAME identifier is re-forged in the WRONG place — the bridge patch type (CONTROL 3, the regression guard) — while the as-filed spelling ADMITS the forged forgery it exists to catch (CONTROL 4), and no other finding fires (CONTROL 5)', () => {
+  it('arm 6 — the five controls over the repaired limb (#1679 `F-13`; §1.2 item 1; §7 row 11②; §1.1 member 1①; §3.2 I-3)', () => {
+    const controls = requiredOptionMutationProof()
+    const problems = controls.flatMap((c) => (c.ok ? [] : [`${c.label}: ${c.why} — readings [${c.readings.join(' | ')}]`]))
+    for (const c of controls) {
+      // eslint-disable-next-line no-console
+      console.log(`PD-SSW arm 6 [${c.label}]: ${c.ok ? c.readings.join(' · ') : `FAILED — ${c.why} [${c.readings.join(' | ')}]`}`)
+    }
+    const labels = controls.map((c) => c.label)
+    for (const required of ['1 (POSITIVE)', '2 (NEGATIVE)', '3 (REGRESSION GUARD)', '4 (INERTNESS)']) {
+      if (!labels.some((l) => l.startsWith(required))) {
+        problems.push(`ARM-6: the ${required} control is ABSENT from the corpus — a repair with an unrun control is the ` + '`F-13`' + ` class itself (§1.2 item 1)`)
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`PD-SSW arm 6 (GREEN-ON-ARRIVAL — the limb is REPAIRED): ${problems.length} finding(s) across ${controls.length} control(s)\n    ${problems.join('\n    | ')}`)
+    // THE ASSERTS, limb by limb (each named, so a failure says which direction broke).
+    const positive = controls.find((c) => c.label.startsWith('1 (POSITIVE)'))
+    const negative = controls.find((c) => c.label.startsWith('2 (NEGATIVE)'))
+    const bridge = controls.find((c) => c.label.startsWith('3 (REGRESSION GUARD)'))
+    const inert = controls.find((c) => c.label.startsWith('4 (INERTNESS)'))
+    expect(positive?.ok, `CONTROL 1 (POSITIVE): a container-REQUIRED forgery must REDDEN the repaired limb — readings [${(positive?.readings ?? []).join(' | ')}]`).toBe(true)
+    expect(positive?.readings.some((r) => r.startsWith('DENIED-1 (RE-AIMED ②, INVERTED, CONTAINER-SCOPED)')), 'CONTROL 1 must redden via the REPAIRED limb\'s OWN finding string, never another finding (§1.2 item 1)').toBe(true)
+    expect(negative?.ok, `CONTROL 2 (NEGATIVE): the unmodified real bytes must stay ADMITTED — readings [${(negative?.readings ?? []).join(' | ')}]`).toBe(true)
+    expect(bridge?.ok, `CONTROL 3 (REGRESSION GUARD): the bridge-type re-forge is NOT the container and must NOT redden the option limb — readings [${(bridge?.readings ?? []).join(' | ')}]`).toBe(true)
+    expect(inert?.ok, `CONTROL 4 (INERTNESS): the as-filed spelling must ADMIT the forgery the repaired limb reddens — readings [${(inert?.readings ?? []).join(' | ')}]`).toBe(true)
+    expect(controls.every((c) => c.discriminates), 'CONTROL 5 (DISCRIMINATOR): no other denied-surface finding may fire on the planted bytes, so the reading is attributable to the repaired limb alone (§1.2 items 2-11)').toBe(true)
+    recordArm(
+      '6 · the `F-13` mutation proof',
+      problems,
+      'GREEN-ON-ARRIVAL',
+      'GREEN-ON-ARRIVAL: the repair is IN the file at this head, so the five controls hold BEFORE and AFTER any later landing. It reddens if the limb is reverted to the as-filed CONTAINER-BLIND form (CONTROL 1 would then ADMIT), if it broadens to the whole file (CONTROL 2 or 3 would then REDDEN), or if the as-filed spelling ever becomes non-inert (CONTROL 4)',
+    )
+    expect(problems, `arm 6: ${problems.join(' | ') || 'the repaired limb REDDENS on the container-REQUIRED forgery, ADMITS the landed bytes and the wrong-place bridge re-forge, and the as-filed spelling is measured INERT'}`).toEqual([])
+  }, 12_000)
+})
+
 describe('PD-STORE-SECURITY-WRITE arm 5 — THE SPEC\'S OWN CONTRACT CLAUSES as byte-level evidence: §1.1\'s SIX members; §1.2\'s ELEVEN denied rows; §2.3\'s NINE terms; §3.3\'s THREE observability legs; §5\'s seed/caps/stop rule; §6\'s honesty block', () => {
   it('arm 5 — the clause census over `docs/specs/unit-store-security-write.md` (§0-§6)', () => {
     const problems = specClauseProblems()
@@ -1241,20 +1570,20 @@ describe('PD-STORE-SECURITY-WRITE arm 5 — THE SPEC\'S OWN CONTRACT CLAUSES as 
 // THE ARM-VERDICT REPORT — the run's reading, printed verbatim for the DONE row.
 // ===========================================================================
 describe('PD-STORE-SECURITY-WRITE — the arm-verdict report and the head anchor', () => {
-  it('the arm-verdict report: the SIX arm-verdict REPORTS with their verdict classes — at this head 1 RED-BY-ABSENCE (arm 1) · 1 RED-BY-SHIM (arm 3a, the LANDED-STATE re-aim) · 4 GREEN-ON-ARRIVAL (arm 2, 3b, 4, 5) · 0 GREEN · 0 SKIPPED', () => {
+  it('the arm-verdict report: the SEVEN arm-verdict REPORTS with their verdict classes — at this head 1 RED-BY-ABSENCE (arm 1) · 1 RED-BY-SHIM (arm 3a, the LANDED-STATE re-aim) · 5 GREEN-ON-ARRIVAL (arm 2, 3b, 4, 5, 6) · 0 GREEN · 0 SKIPPED. The superseded count SIX (arms 1 · 2 · 3a · 3b · 4 · 5) is KEPT VISIBLE: the `F-13` remand ADDED arm 6, the mutation proof of the repaired container-scoped limb, and an arm that runs without reporting its reading hides a classification', () => {
     // eslint-disable-next-line no-console
     console.log(
       '\nPD-STORE-SECURITY-WRITE GUARD — ARM-VERDICT REPORT (the RED RUN at the pre-edit head)\n' +
         ARM_VERDICTS.map((v) => `  arm ${v.arm}: ${v.verdict} — ${v.note}${v.limbs.length > 0 ? `\n      limbs: ${v.limbs.slice(0, 3).join('\n      | ')}` : ''}`).join('\n') +
         '\nEND PD-STORE-SECURITY-WRITE ARM-VERDICT REPORT',
     )
-    expect(ARM_VERDICTS.length, 'all SIX arm-verdict reports (arm 1 · arm 2 · arm 3 split a/b · arm 4 · arm 5) — every guard arm reports its reading, and a report that does not cover them all hides a classification').toBe(6)
+    expect(ARM_VERDICTS.length, 'all SEVEN arm-verdict reports (arm 1 · arm 2 · arm 3 split a/b · arm 4 · arm 5 · arm 6) — every guard arm reports its reading, and a report that does not cover them all hides a classification; the superseded SIX is kept visible beside it (`F-13` remand added arm 6)').toBe(7)
     const byClass = (c: ArmVerdict): number => ARM_VERDICTS.filter((v) => v.verdict === c).length
     // eslint-disable-next-line no-console
     console.log(
       `PD-SSW arm classes at this head: RED-BY-ABSENCE ${byClass('RED-BY-ABSENCE')} · RED-BY-SHIM ${byClass('RED-BY-SHIM')} · GREEN-ON-ARRIVAL ${byClass('GREEN-ON-ARRIVAL')} · GREEN ${byClass('GREEN')} · SKIPPED ${byClass('SKIPPED')}`,
     )
-    expect(byClass('GREEN-ON-ARRIVAL'), 'the GREEN-ON-ARRIVAL arms are EXPLICITLY MARKED as such (arms 2, 3b, 4, 5) — a negative/denial/landed arm already true at this head, never counted as a landing-driven red (§4)').toBeGreaterThanOrEqual(3)
+    expect(byClass('GREEN-ON-ARRIVAL'), 'the GREEN-ON-ARRIVAL arms are EXPLICITLY MARKED as such (arms 2, 3b, 4, 5, 6) — a negative/denial/landed arm already true at this head, never counted as a landing-driven red (§4)').toBeGreaterThanOrEqual(3)
     expect(byClass('RED-BY-ABSENCE') + byClass('RED-BY-SHIM'), 'the landing-driven reds are the arms whose subject this unit creates (arm 1, arm 3a) — reported RED, never as green (§4 RE-1..RE-5; `A-3A-2` ②③ re-classes arm 3a from EXEMPT RED to RED-BY-SHIM)').toBeGreaterThan(0)
     expect(byClass('GREEN'), 'no arm is unconditionally GREEN at this head — a GREEN here would mean the arm lost its subject (§4)').toBe(0)
     // the sibling register must exist (member 6); its PRESENCE is this guard's own reading.

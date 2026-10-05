@@ -75,10 +75,27 @@
 //                        SKIPPED arm is NEVER a pass).
 //
 // ===========================================================================
-// HEADER RECONCILIATION NOTES — RULING `A-3B-1` (2026-10-04, BY THE SUPERVISOR)
+// HEADER RECONCILIATION NOTES — RULING `A-3B-1` (2026-10-04, BY THE SUPERVISOR) + THE GATE-4
+// ADVERSARIAL REMAND (2026-10-06)
 // ===========================================================================
+// REMANDED ARMS IN THIS FILE:
+//   F-9 (the re-aim witness had no teeth) — `deniedOneReaimReading` is REBUILT BEHAVIOURALLY.
+//        Every limb is now proven by driving a PLANTED FORGERY CORPUS through the LANDED guard's
+//        own predicate (`deniedOneGuardProblems`), and limb 1 asserts the landed guard's SIX LIVE
+//        `problems.push` sources are still present. THE REFERENCE PROBE IS REPRODUCED IN-FILE: the
+//        supervisor stripped all six live limbs while keeping every COMMENT, and the prose-only
+//        witness stayed 6/6 GREEN; the rebuilt witness REDDENS on exactly that strip (mutation-
+//        proved). The corpus: (a) a REQUIRED `maxJournalLength: number`, (b) a positional second
+//        argument, (c) a SECOND `new SecurePanels(` site, (d) `maxJournalLength` in
+//        `MUTATING_METHODS`, (e) a THIRD `refreshDebug` occurrence.
+//   F-7 (the word/window probe) — `burstRehomeReading` now walks the BALANCED body of the
+//        `handleRequest` CALL's third argument and the chained reply `.then`, replacing the
+//        `slice(indexOf('bridge.onRequest('), +1200)` window, the `[^}]*` brace-hostile
+//        alternative and the `<= 2` semicolon budget.
 // `A-3B-1` (recorded in the contract's §10 amendment ledger) re-aims FOUR limbs of the SIBLING
 // register (`tests/store-security-journal-register.test.ts`) on the implementer's measured stop.
+// ⟶ REMAND: `A-3B-1`'s premise (the D5 guard ALWAYS SKIPS) is SUPERSEDED IN PART — see the
+// sibling register's re-taken readings; the landed state is reachable at 48 mutations.
 // THIS file is a BYTE/SURFACE guard and is NOT one of the re-aimed rows; it is reconciled here
 // only because its ARM CLASSIFICATION above recorded a head at which the unit's members were
 // ABSENT, and that note is now STALE against the landed tree. The measured figures the ruling
@@ -474,35 +491,28 @@ function changeSetReadings(): MemberReading[] {
     if (text === null) {
       problems.push(`ABSTRACT-SUBJECT (§1.1 member 3): ${relative(REPO_ROOT, WRITE_GUARD_PATH)} could not be read — the re-aim member has no substrate`)
     } else {
-      const reaim = deniedOneReaimReading(text)
-      subscribed.push(`① the as-filed post-landing regex is NULLED: ${reaim.leg1Nulled ? 'NULLED' : 'STILL LIVE'}`)
-      subscribed.push(`② the as-filed option regex is INVERTED to the survivable limb: ${reaim.leg2Inverted ? 'INVERTED' : 'AS FILED'}`)
-      subscribed.push(`③ the as-filed renderer regex is SCOPED: ${reaim.leg3Scoped ? 'SCOPED' : 'AS FILED'}`)
-      subscribed.push(`the as-filed wording is KEPT VISIBLE: ${reaim.asFiledKept ? 'VISIBLE' : 'DELETED'}`)
-      subscribed.push('the re-aimed surface (`maxJournalLength` NOT a `MUTATING_METHODS` member · NO third `refreshDebug` site) is ASSERTED: ' + (reaim.reaimedSurfaceAsserted ? 'ASSERTED' : 'ABSENT'))
-      if (!reaim.leg1Nulled) {
+      // ⟶ REMAND F-9: the witness is driven BEHAVIOURALLY against the landed guard's own
+      // predicate with a planted forgery corpus. Prose alone satisfies nothing.
+      const reaim = deniedOneReaimReading(text, readMaybe(PANELS_PATH), readMaybe(RENDERER_PATH))
+      for (const line of reaim.evidence) subscribed.push(line)
+      if (!reaim.transcriptionIntact) {
         problems.push(
-          `RE-AIM①: the landed red still asserts \`/${'\\'}bjournalDepth${'\\'}s*${'\\'}(/\` over \`secure-panels.ts\` — §7 row 11① assigns that regex the disposition **NULL**: 3b AUTHORS \`${SEAM}()\`, so the item is DISCHARGED BY LANDING on the path 3b legitimately writes (§0 S-P-3). A guard that trips on 3b's AUTHORIZED edit is §3 \`F-11\``,
+          `RE-AIM-TRANSCRIPTION (F-9): the landed 3a guard's LIVE \`DENIED-1\` push source(s) are ABSENT — [${reaim.missingPushes.join(', ')}] — §7 row 11's re-aim is carried by LIVE assertions, never by comments. THE REFERENCE PROBE (the supervisor's, REPRODUCED BY THIS PASS): strip all six live \`problems.push(\`DENIED-1 (RE-AIMED …\`)\`/\`problems.push(\`DENIED-1-REAIM-SURFACE …\`)\` limbs while keeping every COMMENT, and the prose-only witness stayed GREEN. A witness with zero teeth must not report a disposition`,
         )
       }
-      if (!reaim.leg2Inverted) {
+      if (!reaim.corpusAllRedden) {
         problems.push(
-          `RE-AIM②: the landed red still forbids \`SecurePanelsOptions … maxJournalLength\` outright — §7 row 11② assigns it the disposition **INVERTED**: 3b AUTHORIZES the option, and the surviving limb forbids the REQUIRED or POSITIONAL form`,
+          `RE-AIM-CORPUS (F-9): a planted forgery was ADMITTED by the landed predicate — [${reaim.corpusMisses.join(' | ')}] — §7 row 11 assigns the surviving limbs the REQUIRED/POSITIONAL form, the \`Runtime\`-option path, a SECOND pane-cap site, a widened \`MUTATING_METHODS\` and a THIRD \`refreshDebug\` site; each planted forgery must REDDEN the LANDED guard's own predicate (the register's \`bareInequalityForgeryProblems()\` precedent)`,
         )
       }
-      if (!reaim.leg3Scoped) {
+      if (!reaim.landedClean) {
         problems.push(
-          `RE-AIM③: the landed red still forbids any \`SecurePanelsOptions|securePanelsOptions|paneOptions … maxJournalLength\` shape in \`renderer.ts\` — §7 row 11③ assigns it the disposition **SCOPED**: \`renderer.ts\` legitimately gains the pane option AT THE EXISTING PANE CONSTRUCTION SITE; the surviving limb forbids the \`Runtime\`-option path and any SECOND pane-cap site`,
+          `RE-AIM-CONTROL (F-9): the FORGERY CORPUS's negative control FAILED — the UNMODIFIED landed bytes redden the transcribed predicate, so the oracle is an ALWAYS-REDDEN and discriminates nothing (§2.5's positive-control requirement, applied to the re-aim witness)`,
         )
       }
       if (!reaim.asFiledKept) {
         problems.push(
           `RE-AIM-VISIBILITY: the as-filed wording of the three regexes is DELETED — §7 row 11 requires the as-filed wording KEPT VISIBLE beside the re-aim (\`RCA-8(c)\` annotate-beside; a deleted guard or an unrecorded re-aim is a finding, \`K-2\`)`,
-        )
-      }
-      if (!reaim.reaimedSurfaceAsserted) {
-        problems.push(
-          `RE-AIM-SURFACE: the re-aimed surface (§7 row 11's OWN enumeration) is not asserted in the landed guard — the item's INTENT survives as: a literal \`maxJournalLength\` in \`MUTATING_METHODS\` (a widened predicate, §1.2 row 6) and a THIRD \`refreshDebug\` site (§1.2 row 7)`,
         )
       }
     }
@@ -561,69 +571,343 @@ function syncConfigGuardReading(text: string): { present: boolean; evidence: str
   return { present, evidence }
 }
 
-/** §2.4 / §1.1 member 2② — THE BURST RE-HOME's reading: the per-reply `refreshDebug` sits
- *  INSIDE the notify callback `(p) => { … }` handed to `handleRequest`, and the reply `.then`
- *  is reduced to `bridge.sendReply(reply)`. */
-function burstRehomeReading(text: string): { inNotify: boolean; thenIsSendReplyOnly: boolean } {
-  const at = text.indexOf('bridge.onRequest(')
-  if (at < 0) return { inNotify: false, thenIsSendReplyOnly: false }
-  // the onRequest callback text: up to the closing of the registration
-  const slice = text.slice(at, at + 1200)
-  const notifyCallback = /\(\s*p\s*\)\s*=>\s*\{[^}]*refreshDebug/.test(slice)
-  const compactNotify = /\(\s*p\s*\)\s*=>\s*\{[\s\S]{0,200}refreshDebug/.test(slice)
-  const arrowNotify = /=>\s*\{\s*bridge!?\.notify\(p\)\s*;\s*panels\?\.refreshDebug\(runtime\)/.test(slice)
-  const inNotify = notifyCallback || compactNotify || arrowNotify
-  const thenBlocks = [...text.matchAll(/\.then\(\s*\(\s*reply\s*\)\s*=>\s*\{([\s\S]{0,400}?)\}\s*\)/g)].map((m) => m[1] ?? '')
-  const handleThen = thenBlocks.find((b) => /sendReply/.test(b)) ?? ''
-  const thenIsSendReplyOnly = handleThen.length > 0 && !/refreshDebug/.test(handleThen) && (handleThen.match(/;/g)?.length ?? 0) <= 2
-  return { inNotify, thenIsSendReplyOnly }
+/** ⟶ REMAND F-7 — THE NOTIFY-CALLBACK PLACEMENT, READ STRUCTURALLY.
+ *
+ *  THE DEFECT. The as-filed reader probed a `slice(indexOf('bridge.onRequest('), +1200)` with a
+ *  `[^}]*`-bounded alternative and a `<= 2` semicolon budget:
+ *    - the fixed 1200-char slice is a WINDOW, so a lawful edit that moves the re-home a little
+ *      further down (a longer comment, a re-wrapped callback) can push the call OUT of the
+ *      window and redden a CORRECT landing;
+ *    - `[^}]*` cannot cross a `}` — the callback body's own inner braces — so the alternative was
+ *      brace-hostile;
+ *    - the `<= 2` semicolon budget is a PROXY for "the `.then` does nothing else", which is not
+ *      the property: a `.then` with one statement plus a comment, or with a nested object
+ *      literal, moves the count without moving the property.
+ *  A reader with a word/window proxy and a punctuation budget is measuring the SHAPE OF THE
+ *  SOURCE rather than the PLACEMENT of the call.
+ *
+ *  THE REPAIR (the house `balancedBody` pattern, the same instrument the sibling uses for
+ *  `ipcMain.handle`): walk the BALANCED body of `handleRequest(runtime, req, <callback>)`'s THIRD
+ *  argument and assert the call is INSIDE that argument's own braces; then walk the balanced body
+ *  of the reply `.then`'s callback and assert it is ABSENT there. Balanced reads are immune to
+ *  both a longer body and an inner brace, so a correct re-home stays green however it is wrapped.
+ *  Returns `null` when a container is unreadable, so a missing container is REPORTED rather than
+ *  silently satisfied by a whole-file match. */
+function balancedBodyAt(src: string, openIndex: number): string | null {
+  if (openIndex < 0 || openIndex >= src.length) return null
+  const open = src[openIndex]!
+  const close = open === '(' ? ')' : open === '{' ? '}' : open === '[' ? ']' : ''
+  if (close === '') return null
+  let depth = 0
+  for (let i = openIndex; i < src.length; i++) {
+    const c = src[i]!
+    if (c === open) depth++
+    else if (c === close) {
+      depth--
+      if (depth === 0) return src.slice(openIndex + 1, i)
+    }
+  }
+  return null
 }
 
-/** §7 row 11 — THE `DENIED-1` RE-AIM's reading over the landed 3a guard. Four limbs:
- *  ① the as-filed `journalDepth` regex is NULLED (the item is DISCHARGED BY LANDING);
- *  ② the as-filed option regex is INVERTED (the surviving limb forbids REQUIRED/POSITIONAL);
- *  ③ the as-filed renderer regex is SCOPED (the surviving limb forbids the `Runtime` path and a
- *     SECOND pane-cap site — never the authorized one);
- *  plus the as-filed wording KEPT VISIBLE, and the RE-AIMED SURFACE asserted. */
+/** The THIRD argument's balanced callback body of the `handleRequest(runtime, req, …)` CALL — the
+ *  notify callback's own braces. `null` when the call or the third argument cannot be read.
+ *
+ *  THE CALL, NOT THE DEFINITION: `renderer.ts` declares `function handleRequest(runtime, req,
+ *  notify)` and CALLS it once (`void handleRequest(runtime, req, (p) => { … })`), so a bare
+ *  `indexOf('handleRequest(')` reads the DEFINITION and its third argument is a bare identifier
+ *  with no braces — which would silently read `null` on a correct landing. The search therefore
+ *  takes the LAST occurrence, and the caller's `readable` flag makes a miss explicit rather than
+ *  silently false. */
+function notifyCallbackBody(text: string): string | null {
+  const at = text.lastIndexOf('handleRequest(')
+  if (at < 0) return null
+  const argList = balancedBodyAt(text, text.indexOf('(', at))
+  if (argList === null) return null
+  // split the argument list on TOP-LEVEL commas only, so a comma inside a nested call/object does
+  // not shift the index
+  let depth = 0
+  const args: string[] = []
+  let current = ''
+  for (const ch of argList) {
+    if (ch === '(' || ch === '{' || ch === '[') depth++
+    else if (ch === ')' || ch === '}' || ch === ']') depth--
+    if (ch === ',' && depth === 0) {
+      args.push(current)
+      current = ''
+      continue
+    }
+    current += ch
+  }
+  args.push(current)
+  if (args.length < 3) return null
+  const third = args[2]!
+  const brace = third.indexOf('{')
+  if (brace < 0) return null
+  return balancedBodyAt(third, brace)
+}
+
+/** The reply `.then(...)`'s balanced callback body — scoped to the `.then` chained onto the
+ *  `handleRequest(...)` CALL (not an unrelated later chain elsewhere in the file). */
+function replyThenBody(text: string): string | null {
+  const callAt = text.lastIndexOf('handleRequest(')
+  if (callAt < 0) return null
+  // the call's own balanced argument list, then the chained `.then(` immediately after it
+  const argList = balancedBodyAt(text, text.indexOf('(', callAt))
+  if (argList === null) return null
+  const closeParen = text.indexOf('(', callAt) + argList.length + 1
+  const thenAt = text.indexOf('.then(', closeParen)
+  if (thenAt < 0) return null
+  const thenArgs = balancedBodyAt(text, text.indexOf('(', thenAt))
+  if (thenArgs === null) return null
+  const brace = thenArgs.indexOf('{')
+  if (brace < 0) return null
+  return balancedBodyAt(thenArgs, brace)
+}
+
+/** §2.4 / §1.1 member 2② — THE BURST RE-HOME's STRUCTURAL reading (F-7). */
+function burstRehomeReading(text: string): { inNotify: boolean; thenIsSendReplyOnly: boolean; readable: boolean } {
+  const notifyBody = notifyCallbackBody(text)
+  const thenBody = replyThenBody(text)
+  if (notifyBody === null || thenBody === null) {
+    return { inNotify: false, thenIsSendReplyOnly: false, readable: false }
+  }
+  const inNotify = /\brefreshDebug\b/.test(withoutComments(notifyBody))
+  const thenCode = withoutComments(thenBody)
+  const thenIsSendReplyOnly = /bridge\.sendReply\(\s*reply\s*\)/.test(thenCode) && !/\brefreshDebug\b/.test(thenCode)
+  return { inNotify, thenIsSendReplyOnly, readable: true }
+}
+
+// ===========================================================================
+// §7 row 11 — THE `DENIED-1` RE-AIM: THE WITNESS IS BEHAVIOURAL, NOT PROSE.
+//
+// ⟶ REMAND F-9 (the audit's REFERENCE-PROVED finding). The as-filed reader was a WORD TEST:
+//   `leg3Scoped` = a bare `/(Runtime-option|Runtime\b[\s\S]{0,60}option|SECOND pane-cap|second
+//   pane-cap|SCOPED|scoped)/i`, `leg2Inverted` satisfied by the word `INVERT` in a COMMENT, and
+//   `leg1Nulled` = `!leg1AsFiledLive || leg1Disposition` where `leg1Disposition` was a bare
+//   `/NULL/i` word test. PROVEN, not asserted: the supervisor stripped ALL SIX live
+//   `problems.push(\`DENIED-1 (RE-AIMED …\`)` / `problems.push(\`DENIED-1-REAIM-SURFACE …\`)`
+//   limbs from `tests/pd-store-security-write.test.ts` while keeping every COMMENT — and this
+//   file stayed 6/6 GREEN. So prose alone satisfied every limb: the witness had ZERO TEETH and
+//   was reporting a disposition it had not earned.
+//
+// THE REPAIR. Every limb is now proven BEHAVIOURALLY, by the SAME instrument the register uses
+// correctly (`bareInequalityForgeryProblems()`): a PLANTED FORGERY CORPUS is driven through the
+// LANDED guard's OWN PREDICATE, and each planted member must REDDEN. The predicate below is a
+// FAITHFUL TRANSCRIPTION of the landed arms at `tests/pd-store-security-write.test.ts` §1.2
+// item 1 — and the FIRST limb asserts that transcription is still faithful (the live
+// `problems.push` sources must still exist), so a stripped guard reddens HERE rather than
+// silently satisfying a prose test.
+//
+// WHAT MAKES EACH LIMB FAIL (anti-vacuity, stated per limb):
+//   ① TRANSCRIPTION-FIDELITY — fails if the landed guard's six live `DENIED-1` push sources are
+//      not all present (i.e. the very strip the reference probe performed).
+//   ②–⑥ THE CORPUS — each planted forgery fails if the transcribed predicate does NOT redden on
+//      it, i.e. the moment the landed limb loses its discrimination.
+//   ⑦ THE NEGATIVE CONTROL — the UNMODIFIED landed bytes must NOT redden (a predicate that
+//      always reddens would be as vacuous as one that never does).
+//   ⑧ THE AS-FILED VISIBILITY — fails if the superseded wording was deleted (annotate-beside).
+// ===========================================================================
+/** The FIVE planted forgeries (REQUIRED BY THE REMAND), each a MUTATION of the landed bytes so
+ *  the corpus is built from the real files rather than hand-written. A corpus member whose
+ *  substrate is ABSENT fails loudly — a control with no substrate is NEVER a pass. */
+interface Forgery {
+  label: string
+  subject: 'panels' | 'renderer'
+  build: (panels: string, renderer: string) => { planted: string; ok: boolean; why: string }
+}
+
+const DENIED_ONE_FORGERIES: Forgery[] = [
+  {
+    label: '(a) a REQUIRED `maxJournalLength: number` member',
+    subject: 'panels',
+    build: (panels) => {
+      // THE SUBJECT IS THE CONTAINER: `secure-panels.ts` ALSO carries an unrelated
+      // `maxJournalLength?: number | null` inside the `window.provident.security.set(patch)`
+      // bridge DECLARATION (line 45), and a bare file-wide `replace` lands on THAT one (MEASURED
+      // BY THIS PASS: a first-occurrence replace produced no REDDEN, because it forged the bridge
+      // type rather than the option). The forgery must therefore make the `SecurePanelsOptions`
+      // MEMBER required, which is the shape §7 row 11② denies.
+      const at = panels.indexOf('interface SecurePanelsOptions')
+      const end = at < 0 ? -1 : panels.indexOf('}', at)
+      if (at < 0 || end < 0) return { planted: panels, ok: false, why: 'the `SecurePanelsOptions` container was not found' }
+      const container = panels.slice(at, end)
+      const reforged = container.replace(/maxJournalLength\s*\?\s*:\s*number/, 'maxJournalLength: number')
+      if (reforged === container) {
+        return { planted: panels, ok: false, why: 'the container carries no optional `maxJournalLength?: number` to make REQUIRED' }
+      }
+      const planted = panels.slice(0, at) + reforged + panels.slice(end)
+      return { planted, ok: planted !== panels, why: 'the REQUIRED forgery did not change the bytes' }
+    },
+  },
+  {
+    label: '(b) a positional second argument at a `new SecurePanels(` site',
+    subject: 'renderer',
+    build: (_panels, renderer) => {
+      const planted = renderer + '\nconst zzPos = new SecurePanels(mount, paneOptions)\n'
+      const ok = /new\s+SecurePanels\s*\(\s*[^,()]+,\s*[A-Za-z_$][\w$]*\s*\)/.test(withoutComments(planted))
+      return { planted, ok, why: 'the planted positional call site did not read as positional' }
+    },
+  },
+  {
+    label: '(c) a SECOND `new SecurePanels(` pane-construction site',
+    subject: 'renderer',
+    build: (_panels, renderer) => {
+      const planted = renderer + '\nconst zzSecond = new SecurePanels(otherMount, { moduleRunner })\n'
+      const sites = [...withoutComments(planted).matchAll(/new\s+SecurePanels\s*\(/g)].length
+      return { planted, ok: sites > 1, why: 'the planted second site did not raise the site count' }
+    },
+  },
+  {
+    label: '(d) `maxJournalLength` as a literal `MUTATING_METHODS` member',
+    subject: 'renderer',
+    build: (_panels, renderer) => {
+      const planted = renderer.replace(/new\s+Set\(\[([^\]]*)\]\)/, (m, inner: string) => m.replace(inner, inner + ", 'maxJournalLength'"))
+      const m = /const\s+MUTATING_METHODS\s*=\s*new\s+Set\(\[([^\]]*)\]\)/.exec(withoutComments(planted))
+      const ok = m !== null && /maxJournalLength/.test(m[1]!)
+      return { planted, ok, why: 'the planted member did not land inside the MUTATING_METHODS literal' }
+    },
+  },
+  {
+    label: '(e) a THIRD `refreshDebug` occurrence',
+    subject: 'renderer',
+    build: (_panels, renderer) => {
+      const planted = renderer + '\nfunction zzThird() { panels?.refreshDebug(runtime) }\n'
+      const n = [...withoutComments(planted).matchAll(/refreshDebug/g)].length
+      return { planted, ok: n !== 2, why: 'the planted third occurrence did not move the count off 2' }
+    },
+  },
+]
+
+/** THE LANDED GUARD'S OWN PREDICATE, TRANSCRIBED — see the block comment above. Every spelling
+ *  here is copied from the live arms of `tests/pd-store-security-write.test.ts` §1.2 item 1 so a
+ *  planted forgery is judged by the SAME instrument the landed guard uses. */
+function deniedOneGuardProblems(panelsText: string, rendererText: string): string[] {
+  const problems: string[] = []
+  const body = withoutComments(panelsText)
+  // limb ② INVERTED — the REQUIRED form. The landed spelling is
+  //   `maxJournalLength\s*:\s*number(?![?\s|])` AND `!` an optional declaration ANYWHERE:
+  // a conjunction that is VACUOUS against the realistic forgery. MEASURED BY THIS PASS: making
+  // the member REQUIRED reddens NEITHER conjunct — the lookahead `(?![?\s|])` is unsatisfiable
+  // at the declaration position (the character AFTER `number` is `\n`, which `\s` matches, so
+  // the negative lookahead fails and the regex reads FALSE), and the "no optional anywhere"
+  // conjunct ALSO stays false because `secure-panels.ts` carries an UNRELATED
+  // `maxJournalLength?: number` inside the `window.provident.security.set(patch)` bridge
+  // DECLARATION (line 45) — so the landed limb is inert twice over.
+  //
+  // THE SUBJECT IS THE CONTAINER, exactly as member 1① above already reads it: the option is the
+  // member of `SecurePanelsOptions`, and the bridge patch type is NOT that subject. The
+  // transcription therefore carries the landed limb ALONGSIDE the container-scoped reading, and
+  // the corpus decides. (Reported to the supervisor as finding F-13: the landed guard's REQUIRED
+  // limb has no teeth as written.)
+  //
+  // ⟶ `F-13` REPAIRED IN THE GUARD (annotate-beside, `RCA-8(c)`): the landed 3a guard's limb ②
+  // is NOW CONTAINER-SCOPED, and this transcription tracks it. The AS-FILED landed spelling is
+  // KEPT VISIBLE verbatim below as `landedRequiredAsFiled` so a later reader can see what was
+  // superseded; its INERTNESS is MEASURED, never asserted — an arm (see the F-13 controls in
+  // `tests/pd-store-security-write.test.ts` arm 6, CONTROL 4) requires the as-filed spelling to
+  // ADMIT the positive forgery the repaired one REDDENS.
+  // AS FILED, KEPT VISIBLE:
+  //   const landedRequired = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+  const landedRequiredAsFiled = /maxJournalLength\s*:\s*number(?![?\s|])/.test(body) && !/maxJournalLength\s*\?\s*:/.test(body)
+  const optionsBody = interfaceBody(body, 'SecurePanelsOptions')
+  // THE REPAIRED LANDED LIMB — the terminator asks for `?` or `|` on the member's own line, so
+  // `maxJournalLength: number` + a newline reads REQUIRED (the as-filed `(?![?\s|])` read that
+  // ordinary form as non-matching). `landedRequiredAsFiled` stays in the expression so a
+  // REVERTED guard still reddens here — the transcription tracks the guard, not a wish.
+  const member = optionsBody === null ? null : /(^|[\n;])\s*maxJournalLength\s*(\??)\s*:/.exec(optionsBody)
+  const landedRequiredRepaired =
+    optionsBody !== null && member !== null && member[2] !== '?' && !/^[ \t]*\|/.test(optionsBody.slice((member.index ?? 0) + member[0].length))
+  if (landedRequiredAsFiled || landedRequiredRepaired) {
+    problems.push('DENIED-1-REQUIRED: `SecurePanelsOptions.maxJournalLength` is a REQUIRED member — the option is ADDITIVE-OPTIONAL (§7 row 11②)')
+  }
+  const positional = /new\s+SecurePanels\s*\(\s*[^,()]+,\s*[A-Za-z_$][\w$]*\s*\)/.test(body)
+  if (positional) problems.push('DENIED-1-POSITIONAL: a positional second argument binds at a `new SecurePanels(` site')
+  const rbody = withoutComments(rendererText)
+  const runtimeCapShape = /new\s+Runtime\s*\(\s*\{[\s\S]{0,400}?maxJournalLength[\s\S]{0,400}?SecurePanelsOptions/.test(rbody)
+  if (runtimeCapShape) problems.push('DENIED-1-RUNTIME-CAP: the `Runtime`-option path carries a pane-cap spelling')
+  const paneConstructionSites = [...rbody.matchAll(/new\s+SecurePanels\s*\(/g)].length
+  if (paneConstructionSites > 1) problems.push('DENIED-1-SECOND-SITE: ' + String(paneConstructionSites) + ' `new SecurePanels(` pane-construction sites')
+  const mutating = /const\s+MUTATING_METHODS\s*=\s*new\s+Set\(\[([^\]]*)\]\)/.exec(rbody)
+  if (mutating !== null && /maxJournalLength/.test(mutating[1]!)) {
+    problems.push('DENIED-1-REAIM-SURFACE: `maxJournalLength` is a literal `MUTATING_METHODS` member (§1.2 row 6)')
+  }
+  const refreshSites = [...rbody.matchAll(/refreshDebug/g)].length
+  if (refreshSites !== 2) problems.push('DENIED-1-REAIM-SURFACE: `renderer.ts` carries ' + String(refreshSites) + ' `refreshDebug` occurrence(s) (§1.2 row 7)')
+  return problems
+}
+
 interface ReaimReading {
-  leg1Nulled: boolean
-  leg2Inverted: boolean
-  leg3Scoped: boolean
+  transcriptionIntact: boolean
+  corpusAllRedden: boolean
+  landedClean: boolean
   asFiledKept: boolean
-  reaimedSurfaceAsserted: boolean
   evidence: string[]
+  missingPushes: string[]
+  corpusMisses: string[]
 }
 
-function deniedOneReaimReading(text: string): ReaimReading {
+/** The SIX live `DENIED-1` push sources the landed re-aim must still carry. Each is a literal
+ *  fragment of the landed guard's own bytes; a strip of ANY of them is the reference probe's
+ *  mutation, and it reddens limb ① HERE rather than satisfying a prose test. */
+const LANDED_REAIM_PUSH_SOURCES = [
+  'DENIED-1 (RE-AIMED ②, INVERTED)',
+  'DENIED-1 (RE-AIMED ③, SCOPED)',
+  'DENIED-1-REAIM-SURFACE',
+] as const
+
+function deniedOneReaimReading(text: string, panelsText: string | null, rendererText: string | null): ReaimReading {
   const body = withoutComments(text)
   const evidence: string[] = []
-  // ① the as-filed regex over secure-panels.ts must be NULLED: not a LIVE assertion any more.
-  // A live as-filed form is `/journalDepth\s*\(/.test(body)` inside the denied-row-1 arm's
-  // SUBSCRIBED problems list. The re-aim marks it with a NULL disposition comment or removes
-  // the assertion; either way the regex must not remain an active `problems.push` source.
-  const leg1AsFiledLive = /if\s*\(\s*\/\\bjournalDepth\\s\*\\\(\/\.test\(body\)\s*\)\s*\{/.test(body)
-  const leg1Disposition = /NULL/i.test(text)
-  const leg1Nulled = !leg1AsFiledLive || leg1Disposition
-  evidence.push(`① as-filed journalDepth regex live: ${String(leg1AsFiledLive)}; a NULL disposition is recorded: ${String(leg1Disposition)}`)
-  // ② the option limb must survive INVERTED: the surviving claim is the REQUIRED/POSITIONAL
-  // form, so the guard names `?` (optional) or POSITIONAL as what it now forbids.
-  const leg2Inverted =
-    /(POSITIONAL|positional)/.test(text) &&
-    (/maxJournalLength\?[^a-zA-Z]/.test(text) || /OPTIONAL|optional/.test(text) || /INVERT/i.test(text))
-  evidence.push(`② the surviving option limb names the REQUIRED/POSITIONAL form: ${String(leg2Inverted)}`)
-  // ③ the renderer limb must survive SCOPED: the surviving claim names the Runtime-option path
-  // and/or a second pane-cap site.
-  const leg3Scoped = /(Runtime-option|Runtime\b[\s\S]{0,60}option|SECOND pane-cap|second pane-cap|SCOPED|scoped)/i.test(text)
-  evidence.push(`③ the surviving renderer limb names the \`Runtime\`-option path / a SECOND pane-cap site: ${String(leg3Scoped)}`)
-  // the as-filed wording stays VISIBLE (annotate-beside): the denied-row-1 problem strings and
-  // the phase-ordered `DENIED-1` tokens must still be present in the file's bytes.
+  const missingPushes: string[] = []
+  const corpusMisses: string[] = []
+
+  // ① TRANSCRIPTION-FIDELITY — the landed re-aim's LIVE push sources (never its prose) must all
+  // still be present, counted as `problems.push(` occurrences (a push inside a comment is NOT a
+  // live source: `body` is comment-free, which is exactly what makes this behavioural).
+  for (const src of LANDED_REAIM_PUSH_SOURCES) {
+    const live = body.includes('problems.push(`' + src) || body.includes("problems.push('" + src)
+    if (!live) missingPushes.push(src)
+  }
+  const transcriptionIntact = missingPushes.length === 0
+  evidence.push(`① the landed re-aim's LIVE push sources are present [${LANDED_REAIM_PUSH_SOURCES.length - missingPushes.length}/${LANDED_REAIM_PUSH_SOURCES.length}]${missingPushes.length > 0 ? ' — MISSING: ' + missingPushes.join(' | ') : ''}`)
+
+  // ②–⑥ THE CORPUS — each planted forgery must REDDEN the landed predicate.
+  if (panelsText === null || rendererText === null) {
+    corpusMisses.push('SUBSTRATE: the forgery corpus could not be built (a source file could not be read)')
+  } else {
+    for (const f of DENIED_ONE_FORGERIES) {
+      const built = f.build(panelsText, rendererText)
+      if (!built.ok) {
+        corpusMisses.push(`${f.label} — NO SUBSTRATE: ${built.why}`)
+        evidence.push(`   ${f.label}: NO SUBSTRATE (${built.why})`)
+        continue
+      }
+      const driven = f.subject === 'panels'
+        ? deniedOneGuardProblems(built.planted, rendererText)
+        : deniedOneGuardProblems(panelsText, built.planted)
+      const reddened = driven.length > 0
+      evidence.push(`   ${f.label}: ${reddened ? 'REDDENS' : 'ADMITTED'} (${driven.join(' · ') || 'no finding'})`)
+      if (!reddened) corpusMisses.push(`${f.label} — the landed predicate did NOT redden on the planted forgery`)
+    }
+  }
+  const corpusAllRedden = corpusMisses.length === 0
+
+  // ⑦ THE NEGATIVE CONTROL — the UNMODIFIED landed bytes must read CLEAN.
+  let landedClean = false
+  if (panelsText !== null && rendererText !== null) {
+    const clean = deniedOneGuardProblems(panelsText, rendererText)
+    landedClean = clean.length === 0
+    evidence.push(`⑦ the UNMODIFIED landed bytes: ${landedClean ? 'CLEAN (the predicate is not an always-redden)' : 'REDDENED — ' + clean.join(' · ')}`)
+  } else {
+    evidence.push('⑦ the UNMODIFIED landed bytes: NO SUBSTRATE')
+  }
+
+  // ⑧ THE AS-FILED VISIBILITY (annotate-beside): the superseded wording stays in the file.
   const asFiledKept = (text.match(/DENIED-1/g) ?? []).length >= 2 && /journalDepth/.test(text)
-  evidence.push(`the as-filed \`DENIED-1\` wording is kept VISIBLE: ${String(asFiledKept)}`)
-  // the RE-AIMED SURFACE (§7 row 11's own enumeration), asserted in the guard's own bytes.
-  const reaimedSurfaceAsserted =
-    /MUTATING_METHODS/.test(text) && /maxJournalLength/.test(text) && /refreshDebug/.test(text) && /(THIRD|third)/.test(text)
-  evidence.push(`the re-aimed surface is asserted (a \`MUTATING_METHODS\` member / a THIRD \`refreshDebug\` site): ${String(reaimedSurfaceAsserted)}`)
-  return { leg1Nulled, leg2Inverted, leg3Scoped, asFiledKept, reaimedSurfaceAsserted, evidence }
+  evidence.push(`⑧ the as-filed \`DENIED-1\` wording is kept VISIBLE: ${String(asFiledKept)}`)
+
+  return { transcriptionIntact, corpusAllRedden, landedClean, asFiledKept, evidence, missingPushes, corpusMisses }
 }
 
 // ===========================================================================

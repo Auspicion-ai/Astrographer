@@ -98,17 +98,50 @@
 // never re-takes a term) and PRINTS the executed count as the OUTCOME.
 //
 // ===========================================================================
-// HEADER RECONCILIATION NOTES — RULING `A-3B-1` (2026-10-04, BY THE SUPERVISOR)
+// HEADER RECONCILIATION NOTES — RULING `A-3B-1` (2026-10-04, BY THE SUPERVISOR) + THE GATE-4
+// ADVERSARIAL REMAND (2026-10-06, findings `F-1`..`F-12`)
 // ===========================================================================
-// The supervisor's `A-3B-1` ruling (recorded in the contract's §10 amendment ledger) re-aims
+// THIS FILE WAS REMANDED AND ITS WITNESSES REBUILT. The as-filed readings below are KEPT VISIBLE
+// (`RCA-8(c)` annotate-beside); the operative behaviour is the re-taken form. The discharge per
+// finding, with the MEASURED figure each rests on:
+//   F-1/F-2 (the landed-outcome contradiction) — RESOLVED BY A DERIVED DRIVE. MEASURED BY THIS
+//        PASS over the landed tree: the landing threshold is SIZE-DEPENDENT and sits at 48
+//        mutations on this fixture (47 => `journal 59 · undoDepth 59 · basePresent false`;
+//        48 => `journal 1 · undoDepth 0 · basePresent true`). The as-filed hard-coded
+//        `LANDED_DRIVE = 60` is REPLACED by a bounded search (`LANDED_DRIVE_FLOOR`->`CEIL`) whose
+//        EXHAUSTION is reported as a NAMED counterexample; the drive is now a REAL `[T]` reading
+//        (never `FORGED-BY-CONSTRUCTION`). NOTE FOR THE SUPERVISOR: this DISPUTES the `A-3B-1`
+//        sentence "the landed/inequality branch survives ONLY as the control (b) — never as a
+//        real `[T]` drive" (see the remand report's requested park edit).
+//   F-3 (the short subject-discrimination drive) — the divergence is DERIVED by a bounded
+//        `undo()` loop (`UNDO_DIVERGENCE_BOUND`), and EXHAUSTION is reported as a counterexample
+//        naming the drive. MEASURED: ONE `undo()` DOES diverge on this fixture
+//        (`journal 20 · undoDepth 19`), so the as-filed claim was not wrong — it was UNGUARDED.
+//   F-4 (the stale warn) — every attempt reading now flows through `captureWarns` +
+//        `scopedAttemptReading`, which REFUSE a warn that cannot be attributed to the pane and
+//        drive being read. The UNPLUMBED-pane generator (§3 F-2) DRIVES the class the prose
+//        only described.
+//   F-5 (cap honesty + `stoppedAt: null`) — the per-row cap is ASSERTED, the register total is
+//        ASSERTED, and the disposition is an EXPLICIT three-way field
+//        (`COMPLETED` / `ABANDONED-BY-CAP` / `ABANDONED-BY-THROW`) resolved from the run's own
+//        end, so a throw can no longer read as a clean completion.
+//   F-6 (one reading printed twice) — the H-1 comment-exclusion reading is now a CONTROL PAIR
+//        (a prose plant must NOT move the count; a code plant MUST).
+//   F-7 (the word/window probe) — the placement reading walks the BALANCED bodies of the
+//        `handleRequest` CALL's third argument and the chained reply `.then`, replacing the
+//        `slice(indexOf(...), +1200)` window, the `[^}]*` alternative and the `<= 2` semicolon
+//        budget.
+//
+// The supervisor's `A-3B-1` ruling (recorded in the contract's §10 amendment ledger) re-aimed
 // FOUR limbs of this register on the implementer's MEASURED stop. The measured figures that
 // govern every re-aim below, quoted verbatim from that ledger and RE-CONFIRMED BY THIS PASS's own
-// probe over the landed tree (reader: this TestWriter, at HEAD 62904ef + the implementer's
-// uncommitted member set):
+// probe over the landed tree:
 //   (i)   the engine's condense FIRES (the trigger is live, the attempt observable) but the D5
-//         size guard ALWAYS SKIPS on this pane — `base 7622B >= pre-base journal 2312B` —
-//         because the pane's base snapshot covers all 41 registered nodes while a single-node
-//         drive carries a tiny payload. The skip is the structurally NORMAL outcome here.
+//         size guard SKIPS on this pane at the as-filed drive sizes —
+//         `base 7622B >= pre-base journal 2312B` — because the pane's base snapshot covers all 41
+//         registered nodes while a single-node drive carries a tiny payload.
+//         ** SUPERSEDED IN PART BY F-1/F-2's BISECT: the D5 guard does NOT "ALWAYS SKIP" — it
+//         skips BELOW the size crossover and LANDS ABOVE it, measured at 48 mutations. **
 //         CONFIRMED: the observed warn is verbatim
 //         `condense-skipped-size at journal-12: base 7622B >= pre-base journal 2312B; no rewrite
 //         (raise maxJournalLength)`, `basePresent === false`, and the capped settle reads 52
@@ -225,12 +258,33 @@ const MEASURED_BASELINE_PER_MUTATING_REPLY = 32
 /** §2.1(c) — THE M SEMANTICS: the trigger fires at M+1; the settled reading is 1 + post-base
  *  entries; M undefined => INERT (the landed default). */
 const M_FIXTURE = 4
-/** §5.1 `P-SSJ-IM-4` OUTCOME A / A-3B-1② — THE LANDED-CONDENSE DRIVE SIZE, MEASURED by this
- *  pass over the landed tree: the engine's D5 size guard SKIPS at 40 mutations
- *  (`journal 52 · undoDepth 52 · basePresent false`) and LANDS at 60
- *  (`journal 1 · undoDepth 0 · basePresent true`), because the base snapshot only becomes
- *  cheaper than the pre-base journal once the journal is large enough. */
-const LANDED_DRIVE = 60
+/** §5.1 `P-SSJ-IM-4` OUTCOME A / A-3B-1② — THE LANDED-CONDENSE DRIVE SIZE.
+ *
+ *  ⟶ REMAND F-1/F-2. The as-filed constant was a HARD-CODED `LANDED_DRIVE = 60`, and the drive
+ *  that used it asserted `basePresent === true` at that literal. MEASURED BY THIS PASS over the
+ *  landed tree: the landing threshold on this fixture is SIZE-DEPENDENT, not a property of the
+ *  drive count alone — a bisect gives `journal 59 · undoDepth 59 · basePresent false` at 47
+ *  mutations and `journal 1 · undoDepth 0 · basePresent true` at 48, i.e. the guard stops
+ *  skipping exactly when the pre-base journal first exceeds the base snapshot. The threshold
+ *  therefore depends on the BASE SIZE, which depends on how many nodes the pane registered and
+ *  what each node's content contributed — so a COPIED literal is a reading that can silently
+ *  stop being true, which is precisely the F-1/F-2 class (a landed assertion resting on an
+ *  uncopied premise).
+ *
+ *  THE REPAIR: the landed outcome is reached by a DERIVED drive, not a copied one. The drive
+ *  starts at a floor that is ZERO-CROSSING-SAFE on the measured fixture and EXTENDS IN BOUNDED
+ *  STEPS until the landed state is observed or the bound is exhausted; EXHAUSTION IS REPORTED AS
+ *  A COUNTEREXAMPLE naming the drive, never silently absorbed. `LANDED_DRIVE_FLOOR` and
+ *  `LANDED_DRIVE_CEIL` are the bounds of that search, and `LANDED_DRIVE_STEPS` is its step
+ *  count — the term's drives are the SEARCH, whose outcome is the reading. */
+const LANDED_DRIVE_FLOOR = 8
+const LANDED_DRIVE_STEPS = 12
+const LANDED_DRIVE_STRIDE = 8
+const LANDED_DRIVE_CEIL = LANDED_DRIVE_FLOOR + LANDED_DRIVE_STEPS * LANDED_DRIVE_STRIDE
+/** ⟶ REMAND F-3 — THE BOUNDED DIVERGENCE LOOP's bound for `P-SSJ-IM-1` drive 5: at most this
+ *  many `undo()` calls before the drive declares itself EXHAUSTED (a counterexample about the
+ *  DRIVE, never a verdict about the oracle). */
+const UNDO_DIVERGENCE_BOUND = 12
 
 function lcgDraw(state: number, poolSize: number): { state: number; index: number } {
   const next = (Math.imul(state >>> 0, 1664525) + 1013904223) >>> 0
@@ -266,8 +320,8 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SSJ-IM-2',
     strategyId: 'S-SSJ-CAP-1',
-    declared: '4 drives x 2 readings = 8',
-    declaredTotal: 8,
+    declared: '4 drives x 2 readings + 2 negative generators (the UNPLUMBED pane, the NEVER-CROSSES drive) = 10',
+    declaredTotal: 10,
     layer: '[T]',
     redHeadClass: 'RED-BY-ABSENCE',
     redHeadNote:
@@ -277,8 +331,8 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SSJ-IM-3',
     strategyId: 'S-SSJ-OPT-1',
-    declared: '3 option states x 2 readings = 6',
-    declaredTotal: 6,
+    declared: '3 option states x 2 readings + the `M`-value boundary set + the guard-suppresses-a-change control = 8',
+    declaredTotal: 8,
     layer: '[T]',
     redHeadClass: 'RED-BY-ABSENCE',
     redHeadNote:
@@ -321,8 +375,8 @@ const DECLARED_REGISTER: DeclaredRow[] = [
   {
     row: 'P-SSJ-H-1',
     strategyId: 'S-SSJ-PROBE-1',
-    declared: '3 readings + 1 control = 4',
-    declaredTotal: 4,
+    declared: '3 readings + 1 control + 1 re-home regression pair = 5',
+    declaredTotal: 5,
     layer: '[H]',
     redHeadClass: 'RED-BY-SHIM',
     redHeadNote:
@@ -366,6 +420,9 @@ interface RowReport {
   redId: string
   counterexamples: string[]
   limbs: Array<{ index: number; held: boolean }>
+  /** ⟶ REMAND F-5 — the PROVEN disposition (see `RowRun`). */
+  disposition: RowRun['disposition']
+  capHit: boolean
 }
 
 const REPORTS: RowReport[] = []
@@ -376,10 +433,18 @@ interface RowRun {
   counterexamples: string[]
   stoppedAt: number | null
   limbs: Array<{ index: number; held: boolean }>
+  /** ⟶ REMAND F-5 — the THREE-WAY disposition. `stoppedAt: null` was INITIALISED and never
+   *  PROVEN: a row that ran to completion and a row that THREW both reported `null`, so
+   *  "completed" was indistinguishable from "abandoned by throw". The disposition is now an
+   *  EXPLICIT field set by the run's own end, and the three readings are asserted distinct. */
+  disposition: 'RUNNING' | 'COMPLETED' | 'ABANDONED-BY-CAP' | 'ABANDONED-BY-THROW'
+  /** ⟶ REMAND F-5 — whether the PER-ROW cap was HIT (a row may finish under its cap while a
+   *  lower-level drive was refused by it; that is reported, never hidden). */
+  capHit: boolean
 }
 
 function newRun(): RowRun {
-  return { attempts: 0, consecutive: 0, counterexamples: [], stoppedAt: null, limbs: [] }
+  return { attempts: 0, consecutive: 0, counterexamples: [], stoppedAt: null, limbs: [], disposition: 'RUNNING', capHit: false }
 }
 
 /** A bounded attempt loop: the attempt is ALWAYS counted; the row's remaining attempts are
@@ -387,7 +452,10 @@ function newRun(): RowRun {
  *  reported through `stoppedAt` — never hidden. */
 function attempt(run: RowRun, i: number, ce: string | null): void {
   if (run.stoppedAt !== null) return
-  if (run.attempts >= CAPS.perRow) return
+  if (run.attempts >= CAPS.perRow) {
+    run.capHit = true
+    return
+  }
   run.attempts++
   run.limbs.push({ index: i, held: ce === null })
   if (ce === null) {
@@ -402,7 +470,11 @@ function attempt(run: RowRun, i: number, ce: string | null): void {
 type CheckResult = string | string[] | null
 
 async function check(run: RowRun, i: number, body: () => CheckResult | Promise<CheckResult>): Promise<void> {
-  if (run.stoppedAt !== null || run.attempts >= CAPS.perRow) return
+  if (run.stoppedAt !== null) return
+  if (run.attempts >= CAPS.perRow) {
+    run.capHit = true
+    return
+  }
   let ce: CheckResult
   try {
     ce = await body()
@@ -428,6 +500,13 @@ function finish(id: string, run: RowRun): RowReport {
   if (declared === undefined) throw new Error('SSJ register failure: ' + id + ' is not a declared register row')
   const executed = run.attempts
   const held = run.counterexamples.length === 0
+  // ⟶ REMAND F-5 — the disposition is RESOLVED from the run's own end, never left at the
+  // initialised `RUNNING`/`null` pair. A row that consumed its per-row cap is ABANDONED-BY-CAP,
+  // even when it also stopped early on consecutive failures: the cap is the outer bound.
+  if (run.disposition === 'RUNNING') {
+    if (run.capHit && run.stoppedAt === null) run.disposition = 'ABANDONED-BY-CAP'
+    else run.disposition = 'COMPLETED'
+  }
   const report: RowReport = {
     row: id,
     strategyId: declared.strategyId,
@@ -441,6 +520,8 @@ function finish(id: string, run: RowRun): RowReport {
     redId: declared.redId,
     counterexamples: run.counterexamples,
     limbs: run.limbs,
+    disposition: run.disposition,
+    capHit: run.capHit,
   }
   REPORTS.push(report)
   console.log(
@@ -458,7 +539,11 @@ function finish(id: string, run: RowRun): RowReport {
       String(executed) +
       ' · stoppedAt ' +
       String(run.stoppedAt) +
-      ' · red-class ' +
+      ' · disposition ' +
+      run.disposition +
+      ' (capHit ' +
+      String(run.capHit) +
+      ') · red-class ' +
       declared.redHeadClass +
       ' (' +
       declared.redId +
@@ -466,6 +551,22 @@ function finish(id: string, run: RowRun): RowReport {
       run.limbs.map((l) => String(l.index) + ':' + (l.held ? 'held' : 'BROKEN')).join(',') +
       (run.counterexamples.length > 0 ? '\n    counterexamples: ' + run.counterexamples.slice(0, 3).join('\n    | ') : ''),
   )
+  // ⟶ REMAND F-5 — THE CAP IS ASSERTED, NOT LABEL-PRINTED. The row's executed reading must sit
+  // UNDER its per-row cap; a row AT the cap was abandoned by it and is reported as such. This
+  // fires per row, so the global `<= CAPS.total` claim is a sum of proven terms rather than a
+  // checked-against-itself table.
+  expect(
+    executed <= CAPS.perRow,
+    id + ': the row executed ' + String(executed) + ' reading(s) against the per-row cap of ' + String(CAPS.perRow) + ' — §5.2 caps: <=100 attempts per row',
+  ).toBe(true)
+  expect(
+    run.disposition !== 'RUNNING',
+    id + ': the row left its disposition UNRESOLVED (RUNNING) — F-5: `stoppedAt: null` is INITIALISED, so completed / abandoned-by-cap / abandoned-by-throw must be PROVEN distinct, never inferred from a null',
+  ).toBe(true)
+  expect(
+    run.disposition !== 'ABANDONED-BY-THROW' || run.stoppedAt !== null || run.counterexamples.length > 0,
+    id + ': the row reports ABANDONED-BY-THROW with no counterexample recorded — an abandonment with no reading is indistinguishable from a silent pass (F-5)',
+  ).toBe(true)
   expect(
     held,
     id +
@@ -479,6 +580,8 @@ function finish(id: string, run: RowRun): RowReport {
       String(executed) +
       ' reading(s); stoppedAt ' +
       String(run.stoppedAt) +
+      '; disposition ' +
+      run.disposition +
       ' — ' +
       (held ? 'HELD' : 'BROKEN') +
       (run.counterexamples.length > 0 ? '; counterexamples: ' + run.counterexamples.slice(0, 4).join(' | ') : ''),
@@ -488,7 +591,8 @@ function finish(id: string, run: RowRun): RowReport {
 
 /** Run a register row's body: a body that THROWS still reports the row — BROKEN, with the throw
  *  as its counterexample — so `stoppedAt`, the declared-vs-executed term and the counterexample
- *  list are never hidden by an early throw. */
+ *  list are never hidden by an early throw. ⟶ REMAND F-5: the throw is now an EXPLICIT
+ *  disposition (`ABANDONED-BY-THROW`), so it can never be confused with a clean completion. */
 async function registerRow(id: string, body: (run: RowRun) => Promise<void> | void): Promise<void> {
   const run = newRun()
   let thrown: string | null = null
@@ -497,7 +601,10 @@ async function registerRow(id: string, body: (run: RowRun) => Promise<void> | vo
   } catch (e) {
     thrown = (e as Error)?.message ?? String(e)
   }
-  if (thrown !== null) run.counterexamples.push(thrown)
+  if (thrown !== null) {
+    run.counterexamples.push(thrown)
+    run.disposition = 'ABANDONED-BY-THROW'
+  }
   finish(id, run)
 }
 
@@ -670,7 +777,9 @@ function recordDraws(pane: PaneHandle): DrawRecorder {
   return rec
 }
 
-/** §2.6 — the per-cycle APPLIED count for one refresh(). */
+/** §2.6 — the per-cycle APPLIED count for one refresh(). (The config-moving form is
+ *  `refreshDrawsWithConfig`, which applies the change through the real bridge BEFORE installing
+ *  the recorder, so the recorder counts the refresh's own draws and never the bridge traffic.) */
 async function refreshDraws(pane: PaneHandle): Promise<number> {
   const rec = recordDraws(pane)
   try {
@@ -695,6 +804,81 @@ async function driveJournal(pane: PaneHandle, mutationCount: number, m: number):
     if (sup.journal.length > m) crossings++
   }
   return { crossings, grew: sup.journal.length - before }
+}
+
+// ===========================================================================
+// ⟶ REMAND F-4 — THE PER-DRIVE WARN CAPTURE (the stale-warn class).
+//
+// The as-filed shape was `const warned: string[] = []` installed BEFORE a drive and read by
+// `view.basePresent || warned.some((w) => w.includes('condense-skipped-size'))`. TWO defects:
+//   (i)  the capture was never scoped PER PANE: `P-SSJ-IM-2` limb 1 and `P-SSJ-IM-4` limb 3 each
+//        installed ONE capture over a pane that is created earlier and driven more than once, so
+//        the second and later limbs read a warn the FIRST drive emitted. A STALE warn from a
+//        DIFFERENT drive (or a different pane) could therefore satisfy the current pane's limb.
+//   (ii) the warn is a PROCESS-WIDE `console.warn` side effect, so it is also satisfiable by a
+//        warn a DIFFERENT pane emitted inside the same capture window.
+//
+// THE REPAIR: a capture that is SCOPED to exactly one drive on exactly one pane, holding the
+// driven pane's IDENTITY so a cross-pane warn can be attributed and rejected.
+// ===========================================================================
+interface ScopedWarnCapture {
+  warnings: string[]
+  /** The identity of the pane that OWNED the window — a warn is counted only while this pane is
+   *  the one being driven; see `warnOwnership`. */
+  pane: PaneHandle
+  skipped: boolean
+  stop: () => void
+}
+
+/** Install a capture on `console.warn` scoped to ONE drive over ONE pane. The capture records the
+ *  pane it was installed FOR, so `skippedWarnOn` can refuse a warn that cannot be attributed to
+ *  that pane's own drive. */
+function captureWarns(pane: PaneHandle): ScopedWarnCapture {
+  const warnings: string[] = []
+  const original = console.warn
+  const cap: ScopedWarnCapture = {
+    warnings,
+    pane,
+    skipped: false,
+    stop: () => {
+      console.warn = original
+    },
+  }
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((a) => String(a)).join(' '))
+    original(...args)
+  }
+  return cap
+}
+
+/** THE PER-DRIVE, PER-PANE ATTEMPT READING. `skippedWarn` is true ONLY when the captured warn
+ *  belongs to `pane`'s OWN drive — the capture must have been installed for that same pane, and
+ *  the drive must have been observed to cross. A capture held over a DIFFERENT pane reddens the
+ *  caller by reading `null` (UNSCOPED), never `true`. */
+function scopedAttemptReading(pane: PaneHandle, cap: ScopedWarnCapture, crossings: number): {
+  basePresent: boolean
+  skippedWarn: boolean | null
+  scopeProblem: string | null
+} {
+  if (cap.pane !== pane) {
+    return {
+      basePresent: pane.supervisor.journalEntries().basePresent,
+      skippedWarn: null,
+      scopeProblem:
+        'SCOPED-WARN (F-4): the warn capture was installed for a DIFFERENT pane than the one being read — a stale warn from another pane could satisfy this limb, so the reading is refused as UNSCOPED rather than accepted',
+    }
+  }
+  if (crossings <= 0) {
+    return {
+      basePresent: pane.supervisor.journalEntries().basePresent,
+      skippedWarn: null,
+      scopeProblem:
+        'SCOPED-WARN (F-4): the capture is scoped to this pane but the drive observed ZERO > M crossings, so NO condense could have been scheduled in this window and any warn present belongs to an earlier one',
+    }
+  }
+  const skipped = cap.warnings.some((w) => w.includes('condense-skipped-size'))
+  cap.skipped = skipped
+  return { basePresent: pane.supervisor.journalEntries().basePresent, skippedWarn: skipped, scopeProblem: null }
 }
 
 // ===========================================================================
@@ -750,6 +934,62 @@ function refreshDebugSiteReading(text: string): ProbeReading {
   // because the notify site lies INSIDE the replyRoute span.
   const span = [...text.matchAll(/replyRoute[\s\S]{0,400}refreshDebug/g)].length
   return { symbol, commentFree: symbol, literal, inNotify, inThen, span }
+}
+
+/** ⟶ REMAND F-6 — THE COMMENT EXCLUSION's OWN READING, MADE GENUINELY INDEPENDENT.
+ *
+ *  THE DEFECT. The as-filed H-1 reading 2 was `const forgedR = refreshDebugSiteReading(forged)`
+ *  compared against `r.symbol` — i.e. `countRefreshDebug(renderer,'symbol')` was called twice,
+ *  into `symbolCount` and `commentFree`, and the two were PRINTED AND ASSERTED as two independent
+ *  readings. They were ONE reading duplicated: same function, same argument, same subject.
+ *
+ *  THE REPAIR (the remand's second option — "make the second genuinely independent by driving the
+ *  comment-exclusion with a planted comment occurrence as a CONTROL"). The exclusion is now driven
+ *  by a CONTROL PAIR: a planted PROSE occurrence inside a comment must NOT move the count, and a
+ *  planted CODE occurrence outside a comment MUST move it. ONLY the pair proves the reader
+ *  excludes comments rather than ignoring everything after the first `//`.
+ *
+ *  WHAT MAKES IT FAIL (anti-vacuity, stated): it reddens if the prose plant MOVES the count (the
+ *  reader is not comment-free — §2.5's own requirement), OR if the code plant does NOT move the
+ *  count (the reader is insensitive to the very token it counts, so the "comment-free" reading was
+ *  vacuous and the exclusion was never actually exercised).
+ */
+function commentExclusionProblems(text: string): string | null {
+  const base = refreshDebugSiteReading(text).symbol
+  const prosePlanted = text + '\n// a prose mention of refreshDebug here must not move the count\n'
+  const proseReading = refreshDebugSiteReading(prosePlanted).symbol
+  if (proseReading !== base) {
+    return (
+      'PROBE-COMMENT-EXCLUSION: a COMMENT occurrence moved the count (' +
+      String(base) +
+      ' -> ' +
+      String(proseReading) +
+      ') — §2.5: the count is a count of CALL SITES, so the probe reads the comment-free body (the landed withoutComments precedent); the exclusion stands as a PROPERTY of the probe, not as a repair'
+    )
+  }
+  // THE POSITIVE HALF OF THE PAIR: a REAL (comment-free) occurrence must move it. Without this
+  // limb the "comment exclusion" reading is satisfied by a reader that counts NOTHING at all.
+  const codePlanted = text + '\nfunction zzCommentControl() { panels?.refreshDebug(runtime) }\n'
+  const codeReading = refreshDebugSiteReading(codePlanted).symbol
+  if (codeReading === base) {
+    return (
+      'PROBE-COMMENT-EXCLUSION-VACUOUS: a CODE occurrence OUTSIDE a comment did NOT move the count (still ' +
+      String(base) +
+      ') — the reader is insensitive to the token it claims to count, so the comment-free reading was VACUOUS and the exclusion was never exercised (F-6: the exclusion must be driven by a CONTROL PAIR, never by one reading printed twice)'
+    )
+  }
+  console.log(
+    'SSJ ROW P-SSJ-H-1 [comment-exclusion CONTROL PAIR]: prose-in-comment plant ' +
+      String(base) +
+      ' -> ' +
+      String(proseReading) +
+      ' (UNMOVED, required) · code-outside-comment plant ' +
+      String(base) +
+      ' -> ' +
+      String(codeReading) +
+      ' (MOVED, required) — the pair is what makes the exclusion a reading rather than a duplicate',
+  )
+  return null
 }
 
 // ===========================================================================
@@ -1007,6 +1247,428 @@ function bareInequalityForgeryProblems(): string | null {
   return null
 }
 
+// ===========================================================================
+// ⟶ REMAND F-4 — THE UNPLUMBED-PANE NEGATIVE GENERATOR (§3 F-2). THE OPTION IS DECLARED BUT
+// NEVER FED TO `new Supervisor({ … })`.
+//
+// THE DEFECT THIS CLOSES. `P-SSJ-IM-2` limb 1 and `P-SSJ-IM-4` limb 3 both rest on
+// `attempted = view.basePresent || skippedWarn`. Nothing in the as-filed register DRIVED the
+// state that must REDDEN that reading — the counterexample was ASSERTED IN PROSE ("an
+// unconfigured pane … produces EXACTLY this reading") and never produced. A counterexample that
+// is only described cannot fail, so the limb's falsifiability was unproven.
+//
+// THE GENERATOR drives the REAL landed pane, then FORGES THE F-2 CLASS IN VIVO: the pane's
+// declared `maxJournalLength` stays SET (so the option IS declared) while the Supervisor's own
+// engine option is cleared — exactly the state a landing would produce if it built the pane
+// without threading the option into the `Supervisor` construction.
+//
+// WHAT MAKES IT FAIL (anti-vacuity, stated): the generator reddens if the driven pane's attempt
+// reading is STILL PRESENT after the option is unplumbed — i.e. if `basePresent === true` or a
+// fresh `condense-skipped-size` warn appears in the drive's OWN scoped window. Under a correct
+// landing NEITHER can appear (the trigger never fires: `maxJournalLength === undefined` makes the
+// cap INERT, §2.1(c) I-2), so the reading must be ABSENT. It ALSO reddens if the drive failed to
+// cross at all, because then the generator has no subject and a control with no substrate is
+// never a pass.
+// ===========================================================================
+async function unplumbedPaneProblems(): Promise<string | null> {
+  const pane = await makePane({ maxJournalLength: M_FIXTURE })
+  if (isPaneError(pane)) return 'ABSTRACT-SUBJECT: the unplumbed-pane generator has no subject — ' + pane.error
+  await (pane.panels as { refresh: () => Promise<void> }).refresh()
+  await drain()
+  // THE FORGERY: the pane DECLARES the cap; the Supervisor is NOT fed it (§3 F-2's in-vivo form).
+  ;(pane.panels as { maxJournalLength?: number }).maxJournalLength = M_FIXTURE
+  ;(pane.supervisor as unknown as { maxJournalLength?: number }).maxJournalLength = undefined
+  const echoed = pane.supervisor.journalEntries().maxJournalLength
+  if (echoed !== undefined) {
+    return (
+      'UNPLUMBED-GENERATOR-SUBSTRATE: the forged unplumbed pane still echoes maxJournalLength = ' +
+      String(echoed) +
+      ' off its Supervisor — the forgery did NOT reach the §3 F-2 state (the option must be DECLARED at the pane and ABSENT from the Supervisor), so the generator has NO SUBSTRATE (a control with no substrate is NEVER a pass)'
+    )
+  }
+  const cap = captureWarns(pane)
+  let crossed: number
+  try {
+    crossed = (await driveJournal(pane, M_FIXTURE + 12, M_FIXTURE)).crossings
+    await drain()
+  } finally {
+    cap.stop()
+  }
+  const reading = scopedAttemptReading(pane, cap, crossed)
+  if (reading.scopeProblem !== null) return reading.scopeProblem + ' — the unplumbed-pane generator'
+  const attempted = reading.basePresent || reading.skippedWarn === true
+  console.log(
+    'SSJ [THE UNPLUMBED-PANE GENERATOR — §3 F-2]: the cap is DECLARED at the pane and NOT fed to the Supervisor · crossings ' +
+      String(crossed) +
+      ' · basePresent ' +
+      String(reading.basePresent) +
+      ' · skip warn in THIS drive’s scoped window ' +
+      String(reading.skippedWarn) +
+      ' · the attempt reading is ' +
+      (attempted ? 'PRESENT (THE LIMB WOULD PASS A FORGERY)' : 'ABSENT (the limb REDDENS — correct)'),
+  )
+  if (crossed <= 0) {
+    return (
+      'UNPLUMBED-GENERATOR-VACUOUS: the unplumbed drive observed ZERO > M crossings, so NO condense could have been scheduled and the generator proves nothing about the F-2 class (§3 F-3: a vacuous control is a FAILURE)'
+    )
+  }
+  if (attempted) {
+    return (
+      'UNPLUMBED-GENERATOR (F-4 / §3 F-2 — THE LIMBS ARE NOT DISCRIMINATING): with the option DECLARED at the pane and NOT FED to the Supervisor (the F-2 forgery), the attempt reading is STILL PRESENT (basePresent ' +
+      String(reading.basePresent) +
+      ', skip warn ' +
+      String(reading.skippedWarn) +
+      ') — so `P-SSJ-IM-2` limb 1 and `P-SSJ-IM-4` limb 3 would PASS an unplumbed landing and their falsifiability is unproven'
+    )
+  }
+  return null
+}
+
+// ===========================================================================
+// ⟶ REMAND — THE DRIVE-THAT-NEVER-CROSSES NEGATIVE GENERATOR (§3 F-3). `M` IS SET ABOVE THE
+// ACHIEVABLE JOURNAL, SO THE TRIGGER (fires at M + 1) NEVER FIRES.
+//
+// THE DEFECT THIS CLOSES. The as-filed rows carried a `crossed` check, but the state that must
+// produce ZERO crossings was never DRIVEN — and a drive that never crosses makes every cap limb
+// VACUOUS. §3 F-3 rules that a vacuous row is a FAILURE of the row, never a pass; the generator
+// makes that rule executable by DRIVING the never-crossing state and REQUIRING the row's own
+// `crossed` guard to report VACUOUS.
+//
+// WHAT MAKES IT FAIL (anti-vacuity, stated): it reddens if a drive with `M` above the achievable
+// journal STILL registers a crossing (the trigger fired anyway, so `M` is not the cap's source),
+// or if it produces an attempt reading (basePresent / a skip warn), because under a correct
+// landing NEITHER is possible without a crossing. Any other behaviour means the row's VACUOUS
+// verdict is unreachable and the row could report a false failure of a correct implementation.
+// ===========================================================================
+async function neverCrossesProblems(): Promise<string | null> {
+  const mAboveJournal = 100_000
+  const pane = await makePane({ maxJournalLength: mAboveJournal })
+  if (isPaneError(pane)) return 'ABSTRACT-SUBJECT: the never-crosses generator has no subject — ' + pane.error
+  await (pane.panels as { refresh: () => Promise<void> }).refresh()
+  await drain()
+  const cap = captureWarns(pane)
+  let drove: { crossings: number; grew: number }
+  try {
+    drove = await driveJournal(pane, M_FIXTURE * 3, mAboveJournal)
+    await drain()
+  } finally {
+    cap.stop()
+  }
+  const view = pane.supervisor.journalEntries()
+  const reached = pane.supervisor.journal.length
+  const attempted = view.basePresent || cap.warnings.some((w) => w.includes('condense-skipped-size'))
+  console.log(
+    'SSJ [THE NEVER-CROSSES GENERATOR — §3 F-3]: M = ' +
+      String(mAboveJournal) +
+      ' (above the achievable journal) · crossings ' +
+      String(drove.crossings) +
+      ' · journal ' +
+      String(reached) +
+      ' · basePresent ' +
+      String(view.basePresent) +
+      ' · the row’s VACUOUS verdict is ' +
+      (drove.crossings === 0 ? 'REACHABLE (the row must report VACUOUS, never pass)' : 'UNREACHABLE'),
+  )
+  if (drove.crossings !== 0) {
+    return (
+      'NEVER-CROSSES-GENERATOR (THE ROW’S VACUOUS VERDICT IS UNREACHABLE): with M = ' +
+      String(mAboveJournal) +
+      ' set ABOVE the achievable journal (' +
+      String(reached) +
+      '), the drive still registered ' +
+      String(drove.crossings) +
+      ' > M crossing(s) — the trigger (fires at M + 1) fired anyway, so M is NOT the cap’s source (§2.1(c)) and no row can ever report the VACUOUS class §3 F-3 mandates'
+    )
+  }
+  if (attempted) {
+    return (
+      'NEVER-CROSSES-GENERATOR: the never-crossing drive produced an ATTEMPT reading (basePresent ' +
+      String(view.basePresent) +
+      ', skip warn ' +
+      String(cap.warnings.some((w) => w.includes('condense-skipped-size'))) +
+      ') despite ZERO crossings — a condense was attempted with NO trigger, so the attempt reading is not tied to the crossing it claims to require (A-3B-1①)'
+    )
+  }
+  return null
+}
+
+// ===========================================================================
+// ⟶ REMAND — THE `M`-VALUE BOUNDARY SET (§8 gate 4's hostile option forms).
+//
+// WHAT IT DRIVES: `maxJournalLength` set to `0`, a negative, `NaN`, a string, `Infinity`, and a
+// value BELOW the warm-up draw (12) — every form §8 gate 4 names as hostile, and every one of
+// which the operator can reach through the bridge.
+//
+// WHAT MAKES IT FAIL (anti-vacuity, stated): it reddens if the CONSTRUCTION throws on any value
+// (the constructor is `opts.maxJournalLength = ...` with no validation, so a throw is a real
+// defect), if `journalDepth()` throws or answers a non-number, a non-finite number or a
+// non-integer, or if the seam's reading diverges from the Supervisor's own `journal.length` at
+// the same head. Each value is driven through the SAME construction path the register uses.
+// ===========================================================================
+async function mValueBoundaryProblems(): Promise<string | null> {
+  const boundaryValues: Array<[string, unknown]> = [
+    ['0', 0],
+    ['a negative (-1)', -1],
+    ['NaN', Number.NaN],
+    ['a string ("12")', '12'],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['below the warm-up draw (1, warm-up measured 12)', 1],
+  ]
+  const readings: string[] = []
+  for (const [label, value] of boundaryValues) {
+    const pane = await makePane({ maxJournalLength: value })
+    if (isPaneError(pane)) {
+      return (
+        'M-BOUNDARY (THE CONSTRUCTION THREW — F-5/HOSTILE-OPTION): { maxJournalLength: ' +
+        label +
+        ' } did not construct — ' +
+        pane.error +
+        ' — §2.2/§8 gate 4: the option is ADDITIVE-OPTIONAL and the constructor must tolerate every bridge-reachable value; a throwing constructor is a defect'
+      )
+    }
+    // a drive, so the seam is read on a moved journal rather than at the initial head
+    const cap = captureWarns(pane)
+    try {
+      await (pane.panels as { refresh: () => Promise<void> }).refresh()
+      await drain()
+      await driveJournal(pane, M_FIXTURE + 4, M_FIXTURE)
+      await drain()
+    } catch (e) {
+      cap.stop()
+      return 'M-BOUNDARY (THE DRIVE THREW — ' + label + '): ' + ((e as Error)?.message ?? String(e))
+    } finally {
+      cap.stop()
+    }
+    const seam = readSeam(pane.panels)
+    if (!seam.present) return seamAbsentCe('the M-boundary set (' + label + ')')
+    if (seam.threw !== null) {
+      return 'M-BOUNDARY: journalDepth() THREW for { maxJournalLength: ' + label + ' } — ' + seam.threw + ' — §2.2: the member is SYNCHRONOUS and total'
+    }
+    const v = seam.value
+    if (typeof v !== 'number' || !Number.isFinite(v) || !Number.isInteger(v)) {
+      return (
+        'M-BOUNDARY (THE SEAM LEAKED A NON-FINITE-INTEGER): { maxJournalLength: ' +
+        label +
+        ' } ⇒ journalDepth() answered ' +
+        String(v) +
+        ' (' +
+        typeof v +
+        ') — §2.2: the return is a FINITE INTEGER (this.supervisor.journal.length) for EVERY option value, hostile ones included'
+      )
+    }
+    const engine = pane.supervisor.journal.length
+    if (v !== engine) {
+      return (
+        'M-BOUNDARY (THE IDENTITY BROKE): { maxJournalLength: ' +
+        label +
+        ' } ⇒ journalDepth() read ' +
+        String(v) +
+        ' while Supervisor.journal.length read ' +
+        String(engine) +
+        ' at the SAME head — §2.2: the seam answers the journal array for every option value'
+      )
+    }
+    readings.push(label + ' ⇒ ' + String(v))
+  }
+  console.log(
+    'SSJ ROW P-SSJ-IM-3 control 3 [THE `M`-VALUE BOUNDARY SET]: no construction threw and the seam stayed a finite integer for every hostile value — ' +
+      readings.join(' · '),
+  )
+  return null
+}
+
+// ===========================================================================
+// ⟶ REMAND — THE GUARD-SUPPRESSES-A-CHANGE CONTROL (§2.6④ / §3.2 I-6 / §3 F-6).
+//
+// WHAT IT DRIVES: the pane's warm-up, then a REPEATED refresh with the config UNCHANGED (must
+// draw 0), then a refresh after the config ACTUALLY CHANGES (must draw >= 1 and must move the
+// rendered text).
+//
+// WHAT MAKES IT FAIL (anti-vacuity, stated): it reddens if the CHANGED cycle draws ZERO (the
+// guard suppressed a real change — the §3 F-6 falsifier, and the worst class this control exists
+// to catch), if the changed cycle does not move the rendered text (the change did not take
+// effect), or if the UNCHANGED cycle draws at all (the guard is not suppressing, so the control's
+// "changed vs unchanged" contrast is not established). This is the changed/unchanged CONTRAST,
+// not a draw-count equality — §2.6④'s "exactly once" is a per-mutation-draw claim (the greens
+// artifact's `DG-3` records the toggle class legitimately moving 2).
+// ===========================================================================
+async function guardSuppressesChangeProblems(): Promise<string | null> {
+  const pane = await makePane()
+  if (isPaneError(pane)) return 'ABSTRACT-SUBJECT: the guard-suppresses-a-change control has no subject — ' + pane.error
+  const pan = pane.panels as { refresh: () => Promise<void>; debugText?: () => string }
+  // THE WARM-UP (the DRAWN state, A-3B-1③)
+  const warmUp = await refreshDraws(pane)
+  await drain()
+  // THE UNCHANGED CYCLE — must be suppressed (0 draws)
+  const unchanged = await refreshDraws(pane)
+  await drain()
+  if (unchanged !== 0) {
+    return (
+      'GUARD-CHANGE-CONTROL-EFFACED: a repeated UNCHANGED cycle drew ' +
+      String(unchanged) +
+      ' state-slice op(s), not ZERO — the unchanged/changed contrast this control rests on is not established, so the control proves nothing (§2.6③; a control with no contrast is NEVER a pass)'
+    )
+  }
+  // THE CHANGED CYCLE — the config moves, and the pane must DRAW. The rendered outcome is read
+  // from the MOUNTED pane, NOT from `debugText()`: the Debug text is fed by
+  // `refreshDebug(runtime)` (the APP runtime's census/SSR, §3.2 I-5), so it is NOT the carrier of
+  // a `refresh()`-driven config change — MEASURED BY THIS PASS, it stays `booting…` across a
+  // changed `refresh()` on a constructed pane. The changed class driven here is `enabled gains a
+  // group`, whose TWO draws (§2.6④'s per-mutation-draw reading; the greens artifact's `DG-3`)
+  // are exactly what a Debug-text reading would have missed.
+  const beforeText = readMountText(pane)
+  const changed = await refreshDrawsWithConfig(pane, { groups: ['graph'] })
+  await drain()
+  const afterText = readMountText(pane)
+  console.log(
+    'SSJ ROW P-SSJ-IM-3 control 4 [THE GUARD-SUPPRESSES-A-CHANGE CONTROL]: warm-up ' +
+      String(warmUp) +
+      ' · unchanged ' +
+      String(unchanged) +
+      ' (required 0) · CHANGED ' +
+      String(changed) +
+      ' (required >= 1) · mounted text moved ' +
+      String(beforeText !== afterText),
+  )
+  if (changed <= 0) {
+    return (
+      'GUARD-SUPPRESSES-A-CHANGE (§3 F-6 / §3.2 I-6): a cycle whose config value ACTUALLY CHANGED drew ' +
+      String(changed) +
+      ' state-slice op(s) — the volume guard MUST be an IDEMPOTENCE guard: it may skip an UNCHANGED value and must NEVER suppress a CHANGED one (§2.6④, the §3 F-6 falsifier). A guard that suppresses a change is a LOST-EDIT defect, not a volume optimisation'
+    )
+  }
+  if (beforeText === afterText) {
+    return (
+      'GUARD-SUPPRESSES-A-CHANGE (THE CHANGE DID NOT TAKE EFFECT): the changed-config cycle drew ' +
+      String(changed) +
+      ' op(s) but the MOUNTED pane did NOT move ([' +
+      beforeText +
+      ']) — §3.2 I-6 / §5.1 P-SSJ-TP-1: the guard is never a rendering change, so a drawn change that leaves every rendered node identical means the change was drawn to the wrong node (a LOST EDIT)'
+    )
+  }
+  return null
+}
+
+/** The MOUNTED pane's own text — the carrier a `refresh()`-driven config change actually reaches
+ *  (the `#status` Debug text is fed by `refreshDebug(runtime)`, §3.2 I-5). */
+function readMountText(pane: PaneHandle): string {
+  const mount = pane.mount as { textContent?: string; outerHTML?: string }
+  const text = typeof mount?.textContent === 'string' ? mount.textContent : ''
+  return typeof mount?.outerHTML === 'string' && text.length === 0 ? mount.outerHTML : text
+}
+
+/** ⟶ REMAND: drive a `refresh()` after moving the OPERATOR CONFIG through the real bridge. The
+ *  change is applied BEFORE the recorder is installed, so the recorder counts the refresh's own
+ *  draws and never the (non-`state-slice`) bridge traffic. */
+async function refreshDrawsWithConfig(pane: PaneHandle, cfgChange: Record<string, unknown>): Promise<number> {
+  const bridge = (globalThis as unknown as {
+    window?: { provident?: { security?: { set?: (p: unknown) => Promise<unknown> } } }
+  }).window?.provident?.security
+  if (typeof bridge?.set !== 'function') return Number.NaN
+  await bridge.set(cfgChange)
+  const rec = recordDraws(pane)
+  try {
+    await (pane.panels as { refresh: () => Promise<void> }).refresh()
+  } finally {
+    rec.stop()
+  }
+  return rec.draws
+}
+
+// ===========================================================================
+// ⟶ REMAND — THE RE-HOME REGRESSION PAIR (§2.4 / §5.1 `P-SSJ-H-1` reading 3 and reading 1).
+// TWO PLANTED ARRANGEMENTS, each of which must REDDEN a SPECIFIC reading:
+//   (i)  the call ONLY in the reply `.then` (the pre-re-home arrangement) — reading 3 (the
+//        notify-callback PLACEMENT) must redden; reading 1 (the symbol count) must NOT, because
+//        the count is 2 either way. THAT SEPARATION is what proves the two readings are
+//        independent instruments rather than one reading printed twice.
+//   (ii) the call in BOTH places — reading 1 (the count) must redden.
+// WHAT MAKES IT FAIL (anti-vacuity, stated): it reddens if either planted arrangement fails to
+// move its designated reading, or if it moves the OTHER reading too (a reader that cannot tell
+// the two failure modes apart is one instrument, not two).
+// ===========================================================================
+function rehomeRegressionProblems(): string | null {
+  const text = readMaybe(RENDERER_PATH)
+  if (text === null) return 'ABSTRACT-SUBJECT: the re-home regression pair has no subject (renderer.ts unreadable)'
+  const clean = refreshDebugSiteReading(text)
+  // (i) THE PRE-RE-HOME ARRANGEMENT: the per-reply call is RELOCATED — REMOVED from the notify
+  //     callback and RE-PLANTED inside the reply `.then` (the boot site is left alone). A
+  //     relocate, never a delete: a delete would drop the count and prove nothing about
+  //     PLACEMENT, which is the reading under test.
+  const stripped = text.replace(
+    /(\(\s*p\s*\)\s*=>\s*\{\s*bridge!?\.notify\(p\)\s*;?\s*)panels\?\.refreshDebug\(runtime\)(\s*\})\)/,
+    '$1$2',
+  )
+  if (stripped === text) {
+    return 'REHOME-GENERATOR-SUBSTRATE: the notify-callback spelling was not found, so the pre-re-home arrangement could not be planted (a control with no substrate is NEVER a pass)'
+  }
+  const thenOnly = stripped.replace(/(\.then\(\s*\(\s*reply\s*\)\s*=>\s*\{)/, '$1\n      panels?.refreshDebug(runtime)')
+  if (thenOnly === stripped) {
+    return 'REHOME-GENERATOR-SUBSTRATE: the reply `.then(` spelling was not found, so the relocated call had nowhere to move (a control with no substrate is NEVER a pass)'
+  }
+  const thenOnlyReading = refreshDebugSiteReading(thenOnly)
+  // (ii) BOTH PLACES: a THIRD occurrence (boot + notify + .then), which must move the count.
+  const bothPlaces = clean.inNotify
+    ? text.replace(/(\.then\(\s*\(\s*reply\s*\)\s*=>\s*\{)/, '$1\n      panels?.refreshDebug(runtime)')
+    : ''
+  if (bothPlaces === '' || bothPlaces === text) {
+    return 'REHOME-GENERATOR-SUBSTRATE: the reply `.then(` spelling was not found, so the BOTH-places arrangement could not be planted (a control with no substrate is NEVER a pass)'
+  }
+  const bothReading = refreshDebugSiteReading(bothPlaces)
+  console.log(
+    'SSJ [THE RE-HOME REGRESSION PAIR]: clean: symbol ' +
+      String(clean.symbol) +
+      ' · inNotify ' +
+      String(clean.inNotify) +
+      ' · inThen ' +
+      String(clean.inThen) +
+      ' || then-only: symbol ' +
+      String(thenOnlyReading.symbol) +
+      ' · inNotify ' +
+      String(thenOnlyReading.inNotify) +
+      ' · inThen ' +
+      String(thenOnlyReading.inThen) +
+      ' || both: symbol ' +
+      String(bothReading.symbol) +
+      ' · inNotify ' +
+      String(bothReading.inNotify),
+  )
+  if (thenOnlyReading.inNotify) {
+    return 'REHOME-GENERATOR (i): the CALL-ONLY-IN-THE-`.then` arrangement still read as PLACED in the notify callback — `P-SSJ-H-1` reading 3 would PASS the pre-re-home regression it exists to catch'
+  }
+  if (!thenOnlyReading.inThen) {
+    return (
+      'REHOME-GENERATOR (i — THE PLANT DID NOT MOVE THE SUBJECT): the pre-re-home arrangement was planted but the reader still reports inThen = false, so the plant did not actually place the call in the reply `.then` and the control proves nothing (a control with no substrate is NEVER a pass)'
+    )
+  }
+  // THE SEPARATION THE PAIR EXISTS TO PROVE. The count is HONESTLY expected to FALL (2 -> 1) when
+  // the call is removed from the notify callback: the symbol count counts CALL SITES, and a
+  // relocation removes one. What must NOT happen is the two plants becoming INDISTINGUISHABLE —
+  // so the both-places plant (a DUPLICATED burst: three call sites) must read a count the
+  // then-only plant does not, and the then-only plant must be the one that reddens the PLACEMENT
+  // reading.
+  if (bothReading.symbol === clean.symbol) {
+    return (
+      'REHOME-GENERATOR (ii): the CALL-IN-BOTH-PLACES arrangement did NOT move the symbol count (still ' +
+      String(bothReading.symbol) +
+      ') — `P-SSJ-H-1` reading 1 would PASS the duplicated-burst regression, so the third-site limb is vacuous'
+    )
+  }
+  if (bothReading.symbol === thenOnlyReading.symbol) {
+    return (
+      'REHOME-GENERATOR (THE READINGS ARE NOT INDEPENDENT): the then-only plant and the both-places plant read the SAME symbol count (' +
+      String(bothReading.symbol) +
+      '), so reading 1 cannot separate the pre-re-home regression from the duplicated-burst regression — the two readings collapse to one instrument (F-6’s own class, applied to the re-home pair)'
+    )
+  }
+  if (!bothReading.inThen) {
+    return (
+      'REHOME-GENERATOR (ii — THE PLANT DID NOT MOVE THE SUBJECT): the both-places arrangement was planted but the reader reports inThen = false, so the duplicated burst was not actually planted (a control with no substrate is NEVER a pass)'
+    )
+  }
+  return null
+}
+
 /** §6 — THE DURABILITY-VOCABULARY SET, carried as the INSTRUMENT'S OWN WORD LIST (the words the
  *  scan LOOKS FOR, never a claim of this file's). */
 const DURABILITY_TOKENS = [
@@ -1224,38 +1886,75 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
       // both), so an equality-only identity oracle is satisfied by a seam returning `undoDepth`
       // (the §3 F-4 WRONG-SUBJECT falsifier) — planting `return this.supervisor.undoDepth` left
       // the identity drive GREEN at this head. The pair is DIVERGED here through the engine's own
-      // PUBLIC `undo()`, which pops the STACK while the JOURNAL keeps the entry it recorded
-      // (MEASURED: journal 20 · undoDepth 19 after eight applies + one undo). The oracle then
-      // separates the two subjects on this very fixture.
+      // PUBLIC `undo()`, which pops the STACK while the JOURNAL keeps the entry it recorded.
+      //
+      // ⟶ REMAND F-3. The as-filed drive asserted the divergence after a COPIED single `undo()`
+      // with a claimed `MEASURED` reading of `journal 20 · undoDepth 19`, and reported the
+      // EXHAUSTED case as "THE ORACLE IS VACUOUS". MEASURED BY THIS PASS over the landed tree:
+      // ONE `undo()` DOES diverge on this fixture (`journal 20 · undoDepth 19`, re-confirmed), so
+      // the as-filed drive is NOT wrong on today's bytes — but it was UNGUARDED: the engine
+      // pushes the SAME entry object into both arrays, so whether one `undo()` is enough depends
+      // on whether a skipping condense has already truncated the stack relative to the journal.
+      // A drive that merely happens to diverge is one fixture change away from reporting a
+      // vacuous-oracle verdict about an oracle that was fine.
+      //
+      // THE REPAIR: the divergence is DERIVED, not asserted at a copied count — a bounded loop
+      // applies `undo()` until the pair separates or the bound is exhausted. EXHAUSTION IS
+      // REPORTED AS A COUNTEREXAMPLE NAMING THE DRIVE (the bound and the readings at every step),
+      // never as a diagnosis that the oracle is vacuous: a short drive is a failure of the DRIVE,
+      // which is what §3 F-3 rules.
       await check(run, 5, async () => {
         const disc = await makePane({ maxJournalLength: M_FIXTURE })
         if (isPaneError(disc)) return 'ABSTRACT-SUBJECT: the subject-discrimination drive has no subject — ' + disc.error
         await (disc.panels as { refresh: () => Promise<void> }).refresh()
         await drain()
         await driveJournal(disc, M_FIXTURE + 4, M_FIXTURE)
-        ;(disc.supervisor as unknown as { undo: () => unknown }).undo()
-        await drain()
+        // THE BOUNDED DIVERGENCE LOOP: at most `UNDO_DIVERGENCE_BOUND` undos, stopping at the
+        // first head where the journal and the stack separate.
+        const trace: string[] = []
+        let divergedAt = -1
+        let journalSubject = disc.supervisor.journal.length
+        let stackSubject = disc.supervisor.undoDepth
+        for (let u = 1; u <= UNDO_DIVERGENCE_BOUND; u++) {
+          ;(disc.supervisor as unknown as { undo: () => unknown }).undo()
+          await drain()
+          journalSubject = disc.supervisor.journal.length
+          stackSubject = (disc.supervisor as unknown as { undoDepth: number }).undoDepth
+          trace.push(`undo#${String(u)}: journal ${String(journalSubject)} · undoDepth ${String(stackSubject)}`)
+          if (journalSubject !== stackSubject) {
+            divergedAt = u
+            break
+          }
+        }
         const seam = readSeam(disc.panels)
         if (!seam.present) return seamAbsentCe('the subject-discrimination drive')
-        const journalSubject = disc.supervisor.journal.length
-        const stackSubject = (disc.supervisor as unknown as { undoDepth: number }).undoDepth
         console.log(
-          'SSJ [P-SSJ-IM-1 drive 5 · SUBJECT DISCRIMINATION]: journal ' +
+          'SSJ [P-SSJ-IM-1 drive 5 · SUBJECT DISCRIMINATION]: diverged at undo #' +
+            String(divergedAt) +
+            ' of a bound of ' +
+            String(UNDO_DIVERGENCE_BOUND) +
+            ' · journal ' +
             String(journalSubject) +
             ' · undoDepth ' +
             String(stackSubject) +
             ' · seam ' +
-            String(seam.value),
+            String(seam.value) +
+            '\n    trace: ' +
+            trace.join(' · '),
         )
-        if (stackSubject === journalSubject) {
+        if (divergedAt < 0) {
           return (
-            'SUBJECT-DISCRIMINATION (THE ORACLE IS VACUOUS): after a ' +
+            'SUBJECT-DISCRIMINATION (THE DRIVE IS EXHAUSTED — F-3): the drive applied ' +
             String(M_FIXTURE + 4) +
-            '-mutation drive plus one undo() the journal (' +
+            ' mutation(s) and then ' +
+            String(UNDO_DIVERGENCE_BOUND) +
+            ' bounded undo() call(s), and the journal (' +
             String(journalSubject) +
             ') and undoDepth (' +
             String(stackSubject) +
-            ') still read EQUAL, so this drive CANNOT separate the two subjects and a seam returning `undoDepth` (the §3 F-4 falsifier) would pass it — the identity oracle must be exercised on a head where the pair DIVERGES'
+            ') still read EQUAL at EVERY step, so THIS DRIVE cannot separate the two subjects. THE VERDICT IS ABOUT THE DRIVE, NEVER ABOUT THE ORACLE: a seam returning `undoDepth` (the §3 F-4 falsifier) would pass an equality-only reading here, and §3 F-3 rules a drive that cannot reach its own subject a FAILURE OF THE DRIVE. Named counterexample set: ' +
+            trace.join(' | ') +
+            ' — a LONGER or DIFFERENTLY-SHAPED drive (or a fixture whose condense has truncated the stack relative to the journal) is what this row needs, NOT a re-diagnosis of the oracle'
           )
         }
         if (seam.value !== journalSubject) {
@@ -1286,30 +1985,32 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
       await (pane.panels as { refresh: () => Promise<void> }).refresh()
       await drain()
 
-      const warned: string[] = []
-      const originalWarn = console.warn
-      console.warn = (...args: unknown[]) => {
-        warned.push(args.map((a) => String(a)).join(' '))
-        originalWarn(...args)
-      }
-      try {
-        // DRIVE 1 (V1: the fixture SETS M) — the cap is CONFIGURED and ECHOED.
-        await check(run, 1, () => {
-          const seam = readSeam(pane.panels)
-          if (!seam.present) return seamAbsentCe('the capped settle')
-          const view = pane.supervisor.journalEntries()
-          if (view.maxJournalLength === undefined) {
-            return (
-              'V1 (THE ROW IS VACUOUS): the fixture SET M = ' +
-              String(M_FIXTURE) +
+      // DRIVE 1 (V1: the fixture SETS M) — the cap is CONFIGURED and ECHOED.
+      await check(run, 1, () => {
+        const seam = readSeam(pane.panels)
+        if (!seam.present) return seamAbsentCe('the capped settle')
+        const view = pane.supervisor.journalEntries()
+        if (view.maxJournalLength === undefined) {
+          return (
+            'V1 (THE ROW IS VACUOUS): the fixture SET M = ' +
+            String(M_FIXTURE) +
               ' but the pane Supervisor does not echo it (journalEntries().maxJournalLength is undefined) — §2.1(c)/§5.1 P-SSJ-IM-2 drive 1: the fixture must SET M, or every cap row is VACUOUS (§4 RE-2: the option is configured but NOT PLUMBED, §3 F-2)'
             )
           }
           return null
         })
 
-        const drove = await driveJournal(pane, M_FIXTURE + 12, M_FIXTURE)
-        await drain()
+        // ⟶ REMAND F-4 — THE DRIVE IS SCOPED: the capture is installed for THIS pane and THIS
+        // drive alone, and `scopedAttemptReading` refuses a reading whose capture cannot be
+        // attributed to this drive.
+        const cap2 = captureWarns(pane)
+        let drove: { crossings: number; grew: number }
+        try {
+          drove = await driveJournal(pane, M_FIXTURE + 12, M_FIXTURE)
+          await drain()
+        } finally {
+          cap2.stop()
+        }
 
         // DRIVE 2 (A-3B-1①②: THE ATTEMPT READING — the `<= M` BOUND-CLAIM IS WITHDRAWN).
         // The cap is CONFIGURED at the pane's Supervisor AND a condense was ATTEMPTED after the
@@ -1320,16 +2021,15 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         // legal mechanism on this pane can produce (A-3B-1①, superseding §2.1(c)'s `<= M`
         // in part).
         // COUNTEREXAMPLE IT STILL CATCHES: an UNCONFIGURED pane (the cap never reaching the
-        // Supervisor — §3 F-2) and a DRIVE THAT NEVER TRIGGERS (never crossing M+1, so no
-        // condense is scheduled at all). Under either, NO condense is attempted and this limb
-        // reddens: the skip warn is absent AND `basePresent` is false.
+        // Supervisor — §3 F-2; the `unplumbedPaneProblems` generator below DRIVES this very
+        // reading) and a DRIVE THAT NEVER TRIGGERS (never crossing M+1, so no condense is
+        // scheduled at all — the `neverCrossesProblems` generator drives that one). Under either,
+        // NO condense is attempted and this limb reddens.
         const crossed = drove.crossings > 0
         await check(run, 2, () => {
           const seam = readSeam(pane.panels)
           if (!seam.present) return seamAbsentCe('the attempt reading')
-          const view = pane.supervisor.journalEntries()
-          const skippedWarn = warned.some((w) => w.includes('condense-skipped-size'))
-          const attempted = view.basePresent || skippedWarn
+          const reading = scopedAttemptReading(pane, cap2, drove.crossings)
           console.log(
             'SSJ [P-SSJ-IM-2 drive 2 · THE ATTEMPT READING]: journalDepth() ' +
               String(seam.value) +
@@ -1338,29 +2038,30 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
               ' · crossings ' +
               String(drove.crossings) +
               ' · basePresent ' +
-              String(view.basePresent) +
-              ' · condense-skipped-size warn ' +
-              String(skippedWarn),
+              String(reading.basePresent) +
+              ' · condense-skipped-size warn (SCOPED to THIS drive) ' +
+              String(reading.skippedWarn),
           )
+          if (reading.scopeProblem !== null) return reading.scopeProblem + ' — limb 1 (drive 2, M = ' + String(M_FIXTURE) + ')'
           if (!crossed) {
             return (
               'LIMB-1 / THE ATTEMPT (THE DRIVE NEVER TRIGGERED): the drive observed ZERO > M crossings, so the trigger (fires at M + 1) never fired and NO condense could have been scheduled — §2.1(c) M-semantics: the drive must cross M + 1 BEFORE the settle, or the attempt reading has no subject (§3 F-3: a drive floor too small makes the row VACUOUS, which is a FAILURE of the row)'
             )
           }
-          if (!attempted) {
+          if (!(reading.basePresent || reading.skippedWarn)) {
             return (
               'LIMB-1 / THE ATTEMPT (A-3B-1①): the drive crossed > M ' +
               String(drove.crossings) +
               ' time(s) with M = ' +
               String(M_FIXTURE) +
               ' configured, yet NEITHER attempt reading is present — basePresent reads ' +
-              String(view.basePresent) +
-              ' AND no condense-skipped-size warn was emitted. §2.1(c)/A-3B-1①: the cap must be CONFIGURED at the pane’s Supervisor AND a condense ATTEMPTED after the drive. An UNCONFIGURED pane (the option declared but not fed to the Supervisor, §3 F-2) produces EXACTLY this reading, which is the counterexample this limb still catches'
+              String(reading.basePresent) +
+              ' AND no condense-skipped-size warn was emitted IN THIS DRIVE’S OWN SCOPED WINDOW. §2.1(c)/A-3B-1①: the cap must be CONFIGURED at the pane’s Supervisor AND a condense ATTEMPTED after the drive. An UNCONFIGURED pane (the option declared but not fed to the Supervisor, §3 F-2) produces EXACTLY this reading, which is the counterexample this limb still catches'
             )
           }
-          if (view.basePresent === false && !skippedWarn) {
+          if (reading.basePresent === false && reading.skippedWarn !== true) {
             return (
-              'LIMB-1 / THE ATTEMPT: basePresent is false and no skip warn was emitted — the two alternate forms of the attempt reading are BOTH absent, so no condense was attempted (§2.1(c); A-3B-1②: the SKIPPED arm carries the discrimination on this fixture through basePresent === false PLUS the skip warn)'
+              'LIMB-1 / THE ATTEMPT: basePresent is false and no skip warn was emitted in this drive’s own window — the two alternate forms of the attempt reading are BOTH absent, so no condense was attempted (§2.1(c); A-3B-1②: the SKIPPED arm carries the discrimination on this fixture through basePresent === false PLUS the skip warn)'
             )
           }
           return null
@@ -1368,31 +2069,46 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
 
         // the JITTER term: the attempt reading RE-CONFIRMED at a SECOND consecutive settle
         // (A-3B-1①: limb 1's second reading is the attempt, never the withdrawn `<= M`).
+        // ⟶ REMAND F-4: the jitter term carries its OWN scoped capture — it is a DISTINCT settle
+        // window on the same pane, so it may not inherit the first window's warn.
+        const cap2b = captureWarns(pane)
         await drain()
-        await check(run, 3, () => {
-          const seam = readSeam(pane.panels)
-          if (!seam.present) return seamAbsentCe('the attempt jitter reading')
-          const view = pane.supervisor.journalEntries()
-          const skippedWarn = warned.some((w) => w.includes('condense-skipped-size'))
-          if (!(view.basePresent || skippedWarn)) {
-            return (
-              'LIMB-1 (the jitter term): at the SECOND consecutive settle NEITHER attempt reading is present (basePresent ' +
-              String(view.basePresent) +
-              ', skip warn ' +
-              String(skippedWarn) +
-              ') — §5.1 P-SSJ-IM-2: each drive’s second reading re-confirms the ATTEMPT at a second settle, and unlike the withdrawn `<= M` bound the attempt reading is STABLE across settles (A-3B-1①)'
+        try {
+          await check(run, 3, () => {
+            const seam = readSeam(pane.panels)
+            if (!seam.present) return seamAbsentCe('the attempt jitter reading')
+            // the jitter window has NO fresh drive behind it, so the honest reading is the
+            // PERSISTED attempt state (basePresent) plus the FIRST window's scoped warn — read
+            // through the scope guard so a cross-window inheritance is impossible to mistake for
+            // a fresh observation.
+            const view = pane.supervisor.journalEntries()
+            const jitterWarn = cap2b.warnings.some((w) => w.includes('condense-skipped-size'))
+            if (!(view.basePresent || cap2.skipped || jitterWarn)) {
+              return (
+                'LIMB-1 (the jitter term): at the SECOND consecutive settle NEITHER attempt reading is present (basePresent ' +
+                String(view.basePresent) +
+                ', skip warn in the first scoped window ' +
+                String(cap2.skipped) +
+                ', skip warn in the jitter window ' +
+                String(jitterWarn) +
+                ') — §5.1 P-SSJ-IM-2: each drive’s second reading re-confirms the ATTEMPT at a second settle, and unlike the withdrawn `<= M` bound the attempt reading is STABLE across settles (A-3B-1①)'
+              )
+            }
+            console.log(
+              'SSJ [P-SSJ-IM-2 drive 3 · THE ATTEMPT JITTER]: second settle — journalDepth() ' +
+                String(seam.value) +
+                ' · basePresent ' +
+                String(view.basePresent) +
+                ' · skip warn (first scoped window) ' +
+                String(cap2.skipped) +
+                ' · skip warn (jitter window) ' +
+                String(jitterWarn),
             )
-          }
-          console.log(
-            'SSJ [P-SSJ-IM-2 drive 3 · THE ATTEMPT JITTER]: second settle — journalDepth() ' +
-              String(seam.value) +
-              ' · basePresent ' +
-              String(view.basePresent) +
-              ' · skip warn ' +
-              String(skippedWarn),
-          )
-          return null
-        })
+            return null
+          })
+        } finally {
+          cap2b.stop()
+        }
 
         // DRIVE 3 (V3: THE ATTEMPT SUB-CLAUSE, read INDEPENDENTLY of drive 2) — the attempt read
         // through the PUBLIC journalEntries()'s basePresent, with the ABSENCE of the
@@ -1400,7 +2116,7 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         // §2.1(c)); on THIS fixture the SKIPPED arm is the EXPECTED arm (A-3B-1②).
         await check(run, 4, () => {
           const view = pane.supervisor.journalEntries()
-          const skippedWarn = warned.some((w) => w.includes('condense-skipped-size'))
+          const skippedWarn = cap2.skipped
           if (view.basePresent) {
             console.log('SSJ [P-SSJ-IM-2 drive 3]: basePresent === true — a condense LANDED; the ATTEMPT reading HOLDS through the public journalEntries()')
             return null
@@ -1412,11 +2128,8 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
           }
           return null
         })
-      } finally {
-        console.warn = originalWarn
-      }
 
-      // DRIVE 2 (V2: THE ANTI-VACUITY CONTROL) — the IDENTICAL drive with M = undefined
+      // DRIVE 5 (V2: THE ANTI-VACUITY CONTROL) — the IDENTICAL drive with M = undefined
       // => journal.length > M.
       await check(run, 5, async () => {
         const control = await makePane({ maxJournalLength: undefined })
@@ -1444,6 +2157,18 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         }
         return null
       })
+
+      // ⟶ REMAND F-4 — DRIVE 7: THE UNPLUMBED-PANE NEGATIVE GENERATOR (§3 F-2), driven ON THIS
+      // ROW because limb 1's own falsifiability is what it proves. It is a REAL forged drive over
+      // the landed pane: the cap is DECLARED and NOT fed to the Supervisor, and the attempt
+      // reading must be ABSENT (if it is present, limb 1 would pass a forgery).
+      await check(run, 7, () => unplumbedPaneProblems())
+
+      // ⟶ REMAND — DRIVE 8: THE DRIVE-THAT-NEVER-CROSSES GENERATOR (§3 F-3). `M` is set ABOVE the
+      // achievable journal, so the trigger never fires; the row's own VACUOUS verdict must be
+      // reachable. A drive that never crosses is a FAILURE of the row, never a pass — this
+      // generator makes that rule executable rather than prose.
+      await check(run, 8, () => neverCrossesProblems())
 
       // DRIVE 4 (V5: THE MULTI-WINDOW DRIVE) — >= 2 > M crossings BEFORE the settling drain
       // => a condense is ATTEMPTED AGAIN in a later window (A-3B-1①②: the `<= M` reading is
@@ -1624,6 +2349,16 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
       await check(run, 4, () => positionalForgeryProblems())
       // CONTROL 2 — the landed ONE-ARGUMENT call-site compatibility reading.
       await check(run, 5, () => oneArgumentCompatibilityProblems())
+      // ⟶ REMAND — CONTROL 3: THE `M`-VALUE BOUNDARY SET. The hostile option forms §8 gate 4
+      // names (`0`, negative, `NaN`, a string, `Infinity`) plus a value BELOW the warm-up draw
+      // (12). The construction must NOT throw and the seam must stay a FINITE INTEGER for every
+      // one of them — the operator can reach these through the bridge, so a constructor that
+      // throws on a hostile value, or a seam that leaks `NaN`, is a real defect class.
+      await check(run, 6, () => mValueBoundaryProblems())
+      // ⟶ REMAND — CONTROL 4: THE GUARD-SUPPRESSES-A-CHANGE CONTROL (§2.6④ / I-6). A CHANGED config
+      // value must still draw — the guard is an IDEMPOTENCE guard and must never suppress a
+      // change. This is the §3 F-6 falsifier driven as a CONTROL rather than asserted in prose.
+      await check(run, 7, () => guardSuppressesChangeProblems())
     })
   }, 40_000)
 
@@ -1643,12 +2378,11 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
       await (pane.panels as { refresh: () => Promise<void> }).refresh()
       await drain()
 
-      const warned: string[] = []
-      const originalWarn = console.warn
-      console.warn = (...args: unknown[]) => {
-        warned.push(args.map((a) => String(a)).join(' '))
-        originalWarn(...args)
-      }
+      // ⟶ REMAND F-4 — THE SKIPPED-OUTCOME DRIVE CARRIES ITS OWN SCOPED CAPTURE, so a warn
+      // emitted by a DIFFERENT drive (this row drives the same pane twice) can never satisfy
+      // limb 3's attempt reading.
+      const capOutcomeB = captureWarns(pane)
+      let droveOutcomeB: { crossings: number; grew: number }
       try {
         // OUTCOME B (RE-AIMED AS THE EXPECTED ARM — A-3B-1②). The observable outcome of a
         // condense ATTEMPT on this fixture is the SKIP: the equal journalDepth()/undoDepth()
@@ -1657,55 +2391,61 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         // `journalDepth() !== undoDepth()`) is UNREACHABLE here: the D5 guard compares the pane's
         // base snapshot against the pre-base journal and ALWAYS skips (MEASURED: base 7622B >=
         // pre-base journal 2312B), because the base covers all 41 registered nodes while a
-        // single-node drive carries a tiny payload. Reaching a LANDED condense would require
-        // changing the PANE'S BASE SIZE — not this unit's surface. The inequality branch is
-        // therefore carried by the FORGED-BY-CONSTRUCTION control (b), which reaches the landed
-        // state a correct landing genuinely produces WITHOUT claiming this fixture produced it.
+        // single-node drive carries a tiny payload. The inequality branch is therefore carried by
+        // the FORGED-BY-CONSTRUCTION control (b), which reaches the landed state a correct
+        // landing genuinely produces WITHOUT claiming this fixture produced it.
         // COUNTEREXAMPLE IT STILL CATCHES: a seam reading a WRONG SUBJECT (§3 F-4) — the
         // disjunction would classify the reading UNCLASSIFIED (neither a landed base nor an
         // equal pair), and the equal arm below reddens on any divergence.
-        await check(run, 1, async () => {
-          await driveJournal(pane, Math.max(M_FIXTURE * 8, 40), M_FIXTURE)
-          await drain()
-          const seam = readSeam(pane.panels)
-          if (!seam.present) return seamAbsentCe('the SKIPPED-outcome drive')
-          const view = pane.supervisor.journalEntries()
-          const depth = seam.value as number
-          const undoDepth = pane.supervisor.undoDepth
-          const skippedWarn = warned.some((w) => w.includes('condense-skipped-size'))
-          const outcome = view.basePresent ? 'LANDED' : depth === undoDepth ? 'SKIPPED' : 'UNCLASSIFIED'
-          console.log(
-            'SSJ [P-SSJ-IM-4 drive 1 · THE OUTCOME]: ' +
-              outcome +
-              ' — journalDepth() ' +
-              String(depth) +
-              ' · undoDepth ' +
-              String(undoDepth) +
-              ' · basePresent ' +
-              String(view.basePresent) +
-              ' · skip warn ' +
-              String(skippedWarn),
+        droveOutcomeB = await driveJournal(pane, Math.max(M_FIXTURE * 8, 40), M_FIXTURE)
+        await drain()
+      } finally {
+        capOutcomeB.stop()
+      }
+      await check(run, 1, async () => {
+        const seam = readSeam(pane.panels)
+        if (!seam.present) return seamAbsentCe('the SKIPPED-outcome drive')
+        const reading = scopedAttemptReading(pane, capOutcomeB, droveOutcomeB.crossings)
+        if (reading.scopeProblem !== null) {
+          return reading.scopeProblem + ' — P-SSJ-IM-4 limb 3 (the SKIPPED-outcome drive)'
+        }
+        const view = pane.supervisor.journalEntries()
+        const depth = seam.value as number
+        const undoDepth = pane.supervisor.undoDepth
+        const skippedWarn = reading.skippedWarn === true
+        const outcome = view.basePresent ? 'LANDED' : depth === undoDepth ? 'SKIPPED' : 'UNCLASSIFIED'
+        console.log(
+          'SSJ [P-SSJ-IM-4 drive 1 · THE OUTCOME]: ' +
+            outcome +
+            ' — journalDepth() ' +
+            String(depth) +
+            ' · undoDepth ' +
+            String(undoDepth) +
+            ' · basePresent ' +
+            String(view.basePresent) +
+            ' · skip warn (SCOPED to THIS drive) ' +
+            String(skippedWarn),
+        )
+        if (outcome === 'UNCLASSIFIED') {
+          return (
+            'LIMB-3 / V4 (THE ROW IS VACUOUS — THE CONTRAST IS NOT MADE): after a ' +
+            String(Math.max(M_FIXTURE * 8, 40)) +
+            '-mutation drive the readings are NEITHER a landed base NOR an equal pair (journalDepth ' +
+            String(depth) +
+            ' vs undoDepth ' +
+            String(undoDepth) +
+            ', basePresent ' +
+            String(view.basePresent) +
+            ') — A-3B-1②: the observable outcome on this fixture is the SKIP (equal reading + basePresent === false); an UNCLASSIFIED reading means the disjunction proves nothing (§3 F-4: a seam reading a wrong subject)'
           )
-          if (outcome === 'UNCLASSIFIED') {
-            return (
-              'LIMB-3 / V4 (THE ROW IS VACUOUS — THE CONTRAST IS NOT MADE): after a ' +
-              String(Math.max(M_FIXTURE * 8, 40)) +
-              '-mutation drive the readings are NEITHER a landed base NOR an equal pair (journalDepth ' +
-              String(depth) +
-              ' vs undoDepth ' +
-              String(undoDepth) +
-              ', basePresent ' +
-              String(view.basePresent) +
-              ') — A-3B-1②: the observable outcome on this fixture is the SKIP (equal reading + basePresent === false); an UNCLASSIFIED reading means the disjunction proves nothing (§3 F-4: a seam reading a wrong subject)'
-            )
-          }
-          if (outcome === 'SKIPPED' && !skippedWarn) {
-            return (
-              'LIMB-3 / THE SKIP WARN: the readings classify SKIPPED (equal pair, basePresent === false) but NO condense-skipped-size warn was emitted — §2.1(c) names the skip warn as the observable form of the D5 exit; an equal pair WITHOUT the warn is indistinguishable from “no condense was ever attempted”, which is the §3 F-2 unplumbed class the row must not accept'
-            )
-          }
-          return null
-        })
+        }
+        if (outcome === 'SKIPPED' && !skippedWarn) {
+          return (
+            'LIMB-3 / THE SKIP WARN: the readings classify SKIPPED (equal pair, basePresent === false) but NO condense-skipped-size warn was emitted IN THIS DRIVE’S OWN SCOPED WINDOW — §2.1(c) names the skip warn as the observable form of the D5 exit; an equal pair WITHOUT the warn is indistinguishable from “no condense was ever attempted”, which is the §3 F-2 unplumbed class the row must not accept (F-4: the capture is scoped to THIS pane and THIS drive, so a warn from another pane or an earlier drive cannot satisfy it)'
+          )
+        }
+        return null
+      })
 
         // OUTCOME B — the SECOND, INDEPENDENT skip substrate (a different M, a different drive
         // length): CONDENSE SKIPPED (D5) => journalDepth() === undoDepth() AND
@@ -1737,42 +2477,64 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
           }
           return null
         })
-      } finally {
-        console.warn = originalWarn
-      }
 
-      // OUTCOME A (RE-AIMED, A-3B-1② — NOW MEASURED AS REACHABLE). The ruling re-aimed this
-      // limb because `basePresent === true` after a FORTY-mutation drive is unreachable: the D5
-      // guard compares the pane's base snapshot against the pre-base journal and SKIPS at that
-      // size (MEASURED: at 40 mutations `journal 52 · undoDepth 52 · basePresent false`, with the
-      // warn `base 7622B >= pre-base journal 2312B`). MEASURED FURTHER — and this is the figure
-      // the re-aim is anchored to — the LANDED outcome IS reachable on this fixture at a LARGER
-      // drive: at 60 mutations `journal 1 · undoDepth 0 · basePresent true` (the base snapshot
-      // finally becomes cheaper than the pre-base journal, so the guard stops skipping and the
-      // condense REWRITES the journal down to the marker). The landed pair therefore DIVERGES
-      // (1 !== 0), which is the discrimination §5.1's OUTCOME A named.
+      // ⟶ REMAND F-1/F-2 — OUTCOME A: THE LANDED STATE, REACHED BY A **DERIVED** DRIVE.
+      //
+      // THE CONTRADICTION THE REMAND NAMES, and it is REAL at the as-filed head: `P-SSJ-IM-4`
+      // assert `basePresent === true` at a HARD-CODED `LANDED_DRIVE = 60` on the SAME fixture
+      // whose D5 guard (per `A-3B-1`'s own measured skip) "ALWAYS SKIPS" — while `P-SSJ-IM-2`
+      // drive 3 / `P-SSJ-IM-4` drive 5 reported `FORGED-BY-CONSTRUCTION` readings with a note
+      // claiming they were REAL drives. MEASURED BY THIS PASS over the landed tree, BOTH readings
+      // were right and the CONTRADICTION was in the PROSE, not the state: the landing threshold
+      // is SIZE-DEPENDENT and sits at 48 mutations on this fixture (47 ⇒ `journal 59 ·
+      // undoDepth 59 · basePresent false`; 48 ⇒ `journal 1 · undoDepth 0 · basePresent true`), so
+      // a bounded drive DOES reach the landed state — but a COPIED `60` is a premise that can
+      // stop being true without any test noticing, which is the F-1/F-2 class exactly.
+      //
+      // THE DISCHARGE (the remand's first option — "make the landed state genuinely reachable
+      // with a DERIVED (not copied) drive"): the drive SEARCHES from a floor in bounded strides
+      // until `basePresent === true`, and reports EXHAUSTION as a NAMED COUNTEREXAMPLE. The
+      // reading is a REAL drive over a CONSTRUCTED pane — never `FORGED-BY-CONSTRUCTION`, and
+      // never reported as app/live evidence. The `A-3B-1` ruling's own sentence ("the
+      // landed/inequality branch survives ONLY as the FORGED-BY-CONSTRUCTION control (b) — never
+      // as a real `[T]` drive") is SUPERSEDED BY THIS MEASUREMENT and the supersession is
+      // REPORTED TO THE SUPERVISOR as a one-line requested edit to the park (this file may not
+      // edit it): the ruling's premise was the MEASURED SKIP AT 40, and the state is REACHABLE at
+      // 48. The forged control (b) is KEPT as its own class, unchanged, and is never reported as
+      // a real drive.
       // COUNTEREXAMPLE IT STILL CATCHES: a seam reading the STACK subject (§3 F-4) — after a
       // landed condense `undoDepth` is 0 while the journal keeps the marker, so a `undoDepth`
-      // seam reads 0 against the journal's 1 and reddens.
-      // FORGED-BY-CONSTRUCTION NOTE: this is a REAL drive (not a forgery) — it is reported as a
-      // [T] reading over a CONSTRUCTED pane, and never as app/live evidence.
+      // seam reads 0 against the journal's 1 and reddens; AND a landing whose threshold the
+      // search cannot reach, reported as EXHAUSTION naming the drive rather than as a pass.
       await check(run, 5, async () => {
         const landed = await makePane({ maxJournalLength: M_FIXTURE })
         if (isPaneError(landed)) return 'ABSTRACT-SUBJECT: the LANDED-outcome drive has no subject — ' + landed.error
         await (landed.panels as { refresh: () => Promise<void> }).refresh()
         await drain()
-        const landedWarned: string[] = []
-        const originalWarn4 = console.warn
-        console.warn = (...args: unknown[]) => {
-          landedWarned.push(args.map((a) => String(a)).join(' '))
-          originalWarn4(...args)
-        }
-        try {
-          // 60 mutations: MEASURED to reach the LANDED outcome on this fixture (40 does not).
-          await driveJournal(landed, LANDED_DRIVE, M_FIXTURE)
-          await drain()
-        } finally {
-          console.warn = originalWarn4
+        // THE DERIVED SEARCH: floor -> ceil in bounded strides, stopping at the first drive that
+        // lands the condense. `driveJournal` is called with the WHOLE stride each pass, so the
+        // cumulative mutation count is what the trace reports.
+        const trace: string[] = []
+        let landedAt = -1
+        let cumulative = 0
+        for (let step = 0; step < LANDED_DRIVE_STEPS; step++) {
+          const stride = step === 0 ? LANDED_DRIVE_FLOOR : LANDED_DRIVE_STRIDE
+          const capLanded = captureWarns(landed)
+          try {
+            await driveJournal(landed, stride, M_FIXTURE)
+            await drain()
+          } finally {
+            capLanded.stop()
+          }
+          cumulative += stride
+          const v = landed.supervisor.journalEntries()
+          trace.push(
+            `drive ${String(cumulative)}: journal ${String(landed.supervisor.journal.length)} · undoDepth ${String(landed.supervisor.undoDepth)} · basePresent ${String(v.basePresent)}`,
+          )
+          if (v.basePresent) {
+            landedAt = cumulative
+            break
+          }
         }
         const view = landed.supervisor.journalEntries()
         const seam = readSeam(landed.panels)
@@ -1780,20 +2542,29 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         const depth = seam.value as number
         const undoDepth = landed.supervisor.undoDepth
         console.log(
-          'SSJ [P-SSJ-IM-4 drive 5 · THE LANDED OUTCOME]: journalDepth() ' +
+          'SSJ [P-SSJ-IM-4 drive 5 · THE LANDED OUTCOME — DERIVED DRIVE]: landed at ' +
+            String(landedAt) +
+            ' of a search bounded [' +
+            String(LANDED_DRIVE_FLOOR) +
+            ', ' +
+            String(LANDED_DRIVE_CEIL) +
+            '] · journalDepth() ' +
             String(depth) +
             ' · undoDepth ' +
             String(undoDepth) +
             ' · basePresent ' +
             String(view.basePresent) +
-            ' · skip warn ' +
-            String(landedWarned.some((w) => w.includes('condense-skipped-size'))),
+            '\n    trace: ' +
+            trace.join(' · '),
         )
         if (!view.basePresent) {
           return (
-            'LIMB-3 / OUTCOME A (UNREACHED ON A REACHABLE DRIVE): after a ' +
-            String(LANDED_DRIVE) +
-            '-mutation drive the condense did NOT land (basePresent === false) — MEASURED, the LANDED outcome is reachable on this fixture at ~60 mutations (base snapshot cheaper than the pre-base journal), so a drive this large that skips means the drive size is below the landing threshold rather than the state being structurally unreachable'
+            'LIMB-3 / OUTCOME A (THE DERIVED DRIVE IS EXHAUSTED — F-1/F-2): the bounded search drove up to ' +
+            String(cumulative) +
+            ' cumulative mutation(s) (bound ' +
+            String(LANDED_DRIVE_CEIL) +
+            ') and the condense NEVER LANDED (basePresent === false throughout). MEASURED, the landed outcome IS reachable on this fixture at ~48 mutations (the base snapshot cheaper than the pre-base journal), so an exhausted search means the drive size is below the landing threshold or the pane base has grown — a NAMED COUNTEREXAMPLE about THIS DRIVE, never a re-diagnosis that the state is unreachable. Trace: ' +
+            trace.join(' | ')
           )
         }
         if (!(depth !== undoDepth)) {
@@ -1998,22 +2769,11 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         return null
       })
 
-      // READING 2 — the COMMENT-FREE count (the exclusion's OWN reading): a prose occurrence
-      // must NOT move the count.
-      await check(run, 2, () => {
-        const forged = text + '\n// a prose mention of refreshDebug must not move the count\n'
-        const forgedR = refreshDebugSiteReading(forged)
-        if (forgedR.symbol !== r.symbol) {
-          return (
-            'PROBE-COMMENT-EXCLUSION: a COMMENT occurrence moved the count (' +
-            String(r.symbol) +
-            ' to ' +
-            String(forgedR.symbol) +
-            ') — §2.5: the count is a count of CALL SITES, so the probe reads the comment-free body (the landed withoutComments precedent); the exclusion stands as a PROPERTY of the probe, not as a repair'
-          )
-        }
-        return null
-      })
+      // READING 2 — ⟶ REMAND F-6: THE COMMENT EXCLUSION, DRIVEN BY A CONTROL PAIR. The as-filed
+      // form compared `refreshDebugSiteReading(forged).symbol` against `r.symbol` — the SAME
+      // reading, twice, printed as two independent readings. The pair below is what makes the
+      // exclusion a genuinely independent reading (see `commentExclusionProblems`).
+      await check(run, 2, () => commentExclusionProblems(text))
 
       // READING 3 — the NOTIFY-CALLBACK PLACEMENT: the call sits inside the (p) => ... callback
       // and NOT in the reply .then.
@@ -2054,6 +2814,13 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.1 the NINE rows over a CONSTRU
         )
         return null
       })
+
+      // ⟶ REMAND — READING 5: THE RE-HOME REGRESSION PAIR. Two planted arrangements, each of
+      // which must move its OWN designated reading and NOT the other's: call-only-in-the-`.then`
+      // must redden the placement reading while leaving the symbol count alone, and
+      // call-in-BOTH-places must redden the count. THIS is what proves readings 1 and 3 are two
+      // instruments rather than one instrument described twice.
+      await check(run, 5, () => rehomeRegressionProblems())
     })
   }, 30_000)
 
@@ -2365,12 +3132,12 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.2 the arithmetic, the caps and
     expect(DECLARED_REGISTER.length, 'the register declares NINE rows (§5.1)').toBe(9)
     expect(tRows.length, 'the [T] rows are SIX (P-SSJ-IM-1..4 · P-SSJ-SM-1 · P-SSJ-TP-1)').toBe(6)
     expect(hRows.length, 'the [H] rows are THREE (P-SSJ-H-1..3)').toBe(3)
-    expect(tSum, 'the [T] rows read 5 + 8 + 6 + 7 + 6 + 8 = 40 (§5.2 RE-TAKEN by A-3B-1①②: P-SSJ-IM-1 gained the subject-discrimination drive and P-SSJ-IM-4 gained the landed-outcome drive; the superseded figure 38 = 4 + 8 + 6 + 6 + 6 + 8 is kept visible)').toBe(40)
-    expect(hSum, 'the [H] rows read 4 + 5 + 5 = 14 (§5.2 — UNMOVED by A-3B-1)').toBe(14)
-    expect(total, 'the DECLARED total is [T] 40 + [H] 14 = 54 (§5.2 RE-TAKEN: superseded 52 = [T] 38 + [H] 14, kept visible)').toBe(54)
-    expect(largest.row, 'the largest row is P-SSJ-IM-2 at 8 (§5.2)').toBe('P-SSJ-IM-2')
-    expect(largest.declaredTotal, '8 <= 100 with headroom 92 (§5.2)').toBe(8)
-    expect(total, '54 <= 400 with headroom 346 (§5.2 RE-TAKEN: superseded headroom 348)').toBeLessThanOrEqual(CAPS.total)
+    expect(tSum, 'the [T] rows read 5 + 10 + 8 + 7 + 6 + 8 = 44 (§5.2 RE-TAKEN by the F-4/F-3 remand and the M-boundary/guard-change controls: P-SSJ-IM-2 gained the UNPLUMBED-pane and NEVER-CROSSES generators, P-SSJ-IM-3 gained the `M`-value boundary set and the guard-suppresses-a-change control; the superseded 42, 40 = 5 + 8 + 6 + 7 + 6 + 8 and the as-filed 38 = 4 + 8 + 6 + 6 + 6 + 8 are all kept visible)').toBe(44)
+    expect(hSum, 'the [H] rows read 5 + 5 + 5 = 15 (§5.2 RE-TAKEN by the F-6/re-home remand: P-SSJ-H-1 gained the re-home regression pair; the superseded 14 = 4 + 5 + 5 is kept visible)').toBe(15)
+    expect(total, 'the DECLARED total is [T] 44 + [H] 15 = 59 (§5.2 RE-TAKEN: superseded 57 = [T] 42 + [H] 15, then 54 = [T] 40 + [H] 14, then as-filed 52 = [T] 38 + [H] 14 — ALL kept visible)').toBe(59)
+    expect(largest.row, 'the largest row is P-SSJ-IM-2 at 10 (§5.2; the superseded maximum was 8)').toBe('P-SSJ-IM-2')
+    expect(largest.declaredTotal, '10 <= 100 with headroom 90 (§5.2)').toBe(10)
+    expect(total, '59 <= 400 with headroom 341 (§5.2 RE-TAKEN: superseded 343/346, as-filed 348)').toBeLessThanOrEqual(CAPS.total)
     for (const row of DECLARED_REGISTER) {
       expect(row.row, 'every row carries a fork-own P-SSJ-* id (§5)').toMatch(/^P-SSJ-(IM|SM|TP|H)-\d+$/)
       expect(row.strategyId, 'row ' + row.row + ' carries its S-SSJ-* strategy id (§5)').toMatch(/^S-SSJ-/)
@@ -2421,12 +3188,49 @@ describe('STORE-SECURITY-JOURNAL REGISTER — §5.2 the arithmetic, the caps and
         String(byClass('GREEN')) +
         '\n' +
         '  per-row: ' +
-        REPORTS.map((r) => r.row + '(' + (r.held ? 'held' : 'broken') + '/' + String(r.executed) + ')').join(' · '),
+        REPORTS.map((r) => r.row + '(' + (r.held ? 'held' : 'broken') + '/' + String(r.executed) + ')').join(' · ') +
+        '\n  dispositions: ' +
+        REPORTS.map((r) => r.row + '=' + r.disposition + (r.capHit ? '(CAP-HIT)' : '')).join(' · ') +
+        '\n  THE THREE ABANDONMENT READING CLASSES (F-5): completed ' +
+        String(REPORTS.filter((r) => r.disposition === 'COMPLETED').length) +
+        ' · abandoned-by-cap ' +
+        String(REPORTS.filter((r) => r.disposition === 'ABANDONED-BY-CAP').length) +
+        ' · abandoned-by-throw ' +
+        String(REPORTS.filter((r) => r.disposition === 'ABANDONED-BY-THROW').length) +
+        ' (a row that THROWS reports ABANDONED-BY-THROW, never the same `null` as a clean run)',
     )
     expect(REPORTS.length, 'all NINE declared rows RAN (an un-run row reports a FAILURE, never a pass — §5)').toBe(DECLARED_REGISTER.length)
     for (const r of REPORTS) {
       expect(r.executed, 'row ' + r.row + ' reports at least one executed reading (a row that ran nothing is an un-run row, i.e. a FAILURE)').toBeGreaterThan(0)
+      // ⟶ REMAND F-5 — THE CAP IS ASSERTED PER ROW, not label-printed.
+      expect(r.executed, 'row ' + r.row + ' executed ' + String(r.executed) + ' reading(s) — §5.2 caps: <=100 attempts per row').toBeLessThanOrEqual(CAPS.perRow)
+      // ⟶ REMAND F-5 — THE DISPOSITION IS PROVEN, never an initialised `null`. The three classes
+      // are asserted as a CLOSED set with `RUNNING` excluded, so `stoppedAt: null` can no longer
+      // stand for both "completed" and "abandoned by throw".
+      expect(r.disposition, 'row ' + r.row + ' left its disposition UNRESOLVED — F-5: a row must report COMPLETED, ABANDONED-BY-CAP or ABANDONED-BY-THROW').not.toBe('RUNNING')
     }
+    // ⟶ REMAND F-5 — THE REGISTER TOTAL IS ASSERTED, and the EXECUTED sum is TIED to the declared
+    // terms rather than checked against a hand-written table that agrees with itself. The tie is
+    // per row: every row's executed count is bounded by its OWN declared term (a row cannot
+    // execute more readings than it declares) and the three disposition classes must account for
+    // the whole set.
+    expect(executedTotal, 'the EXECUTED sum ' + String(executedTotal) + ' is a sum of the per-row readings and sits <= the declared total ' + String(declaredTotal)).toBeLessThanOrEqual(declaredTotal)
+    expect(executedTotal, 'the EXECUTED sum must be >= 1 per row (the per-row floor already asserted) so it cannot be a vacuous 0').toBeGreaterThanOrEqual(REPORTS.length)
+    expect(executedTotal, 'the register TOTAL executed reading sits <= CAPS.total (§5.2: <=400 in total)').toBeLessThanOrEqual(CAPS.total)
+    expect(
+      REPORTS.every((r) => r.executed <= r.declaredTotal),
+      'every row executed <= its OWN declared term — the executed reading is BOUNDED BY THE DECLARED TERM, so the two agree by construction rather than by a hand-written table checked against itself',
+    ).toBe(true)
+    const dispositions = new Set(REPORTS.map((r) => r.disposition))
+    expect(
+      [...dispositions].every((d) => d === 'COMPLETED' || d === 'ABANDONED-BY-CAP' || d === 'ABANDONED-BY-THROW'),
+      'every row carries one of the THREE reading dispositions (F-5): ' + [...dispositions].join(', '),
+    ).toBe(true)
+    const capAbandoned = REPORTS.filter((r) => r.disposition === 'ABANDONED-BY-CAP')
+    expect(
+      capAbandoned.every((r) => r.executed >= CAPS.perRow),
+      'a row reported ABANDONED-BY-CAP must have consumed its per-row cap (F-5: the class is EARNED from the reading, never declared)',
+    ).toBe(true)
     void byClass
   }, 12_000)
 })
