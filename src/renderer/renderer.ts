@@ -29,6 +29,59 @@ import type { RpcRequest, RpcReply } from '../shared/types.js'
 // REMOVED: the session owns establishment, tracking and the terminal.
 import { createGestureSession, POINTER_TYPES, type EventSource } from '../shared/gesture-session.js'
 import { cursorDeclarationFor, domEventSource } from '../shared/gutter-affordance.js'
+import { createGraphStore } from './store-core-graph.js'
+import type { GraphStore, GraphCrossing } from './store-core-graph.js'
+import { storeGraphReferences, type StoreGraphDeclarationRow, type StoreGraphDeclarationInput } from './store-graph-references.js'
+
+/** Unit U-STORE-CORE-ADOPT §2.2 — the CLOSED declared-roots set at unit 1: `settings` is
+ *  the ONLY declared top (the four clauses: no other top, no mem/temp top declared here,
+ *  the `file.*` surface CLOSED while the crossing is null, PERSIST's boot edit extends the
+ *  set AND feeds the crossing in ITS edit). The tier-agnostic `mem.settings.*` /
+ *  `temp.settings.*` C-TOP consequence of declaring `settings` is carried byte-adopted
+ *  behavior, never re-found as a defect (K-4). */
+const FILE_TIER_TOP_NAMES_FORK = [{ name: 'settings' }]
+
+/** Unit U-STORE-CORE-ADOPT §2.2 — THE WIRED STORE SEAM (the dossier row-8 `N-5`
+ *  migration, the foundation's own realm form): one lazily-constructed store per realm.
+ *  The realm binding is the wiring host's own (the foundation's no-module-level-mutable-
+ *  state rule governs `store-core-graph.ts` itself, never the host). Construction is
+ *  TOTAL over the options' contents and the DECLARED-ROW throw paths are author-time
+ *  errors — the boot never wrap-degrades them. NO boot hydrate call at unit 1. */
+let wiredGraphStore: GraphStore | null = null
+
+/** Unit U-STORE-CORE-ADOPT §2.2 — the wired-store construction options: the caller's
+ *  declared rows (the foundation's own `WiredStoreOptions` shape — raw rows the builder
+ *  wraps ONCE) OR the already-wrapped declaration input (the fork call site's mandated
+ *  literal `storeGraphReferences(FILE_TIER_TOP_NAMES_FORK)` feeds the wrapped form; the
+ *  builder passes a wrapped input through without a second wrap, so the boot store's
+ *  declared-roots set is the single wrap's — never an empty declaration set). */
+interface WiredGraphStoreOptions {
+  declarations?: readonly StoreGraphDeclarationRow[] | StoreGraphDeclarationInput
+  crossing?: GraphCrossing | null
+}
+
+/** A declaration-input narrowing guard — `StoreGraphDeclarationRow[]` is a readonly
+ *  array, which TypeScript's `Array.isArray` guard does not remove in a union with the
+ *  row wrapper, so the distinction is made by an explicit predicate. */
+function isDeclarationInput(value: unknown): value is StoreGraphDeclarationInput {
+  return value !== null && typeof value === 'object' && Array.isArray((value as { rows?: unknown }).rows)
+}
+
+function buildWiredGraphStore(options?: WiredGraphStoreOptions): GraphStore {
+  const raw = options?.declarations
+  const wrapped: StoreGraphDeclarationInput = isDeclarationInput(raw)
+    ? raw // the already-wrapped declaration input (the fork call site's mandated literal form)
+    : storeGraphReferences(Array.isArray(raw) ? raw : [])
+  return createGraphStore({
+    declarations: wrapped,
+    crossing: options?.crossing ?? null,
+  })
+}
+
+export function getWiredGraphStore(options?: WiredGraphStoreOptions): GraphStore {
+  if (wiredGraphStore === null) wiredGraphStore = buildWiredGraphStore(options)
+  return wiredGraphStore
+}
 
 /** N3 (live-notification-review.md) — the MCP methods that mutate the APP graph
  *  (content/structural/re-derive). Only these trigger the app-graph-changed push
@@ -1228,6 +1281,12 @@ async function main(): Promise<void> {
   }
   const runtime = new Runtime({ mount, envelope: placeholderEnvelope, maxJournalLength })
   runtime.bootstrap()
+  // Unit U-STORE-CORE-ADOPT §2.2 (D-3) — the WIRED STORE construction at the Runtime
+  // construction site, BEFORE the no-bridge early-return: realm-level, independent of
+  // the bridge. The closed declared-roots set feeds the fork call; the crossing is null
+  // (the `file.*` surface is CLOSED — no durability claim at unit 1; PERSIST's boot edit
+  // feeds the crossing and adds the boot hydrate call, NOT this unit's edit).
+  getWiredGraphStore({ declarations: storeGraphReferences(FILE_TIER_TOP_NAMES_FORK), crossing: null })
   if (!bridge) {
     console.warn('[provident-renderer] no preload bridge — MCP endpoints unavailable (running as a plain page?)')
     return
