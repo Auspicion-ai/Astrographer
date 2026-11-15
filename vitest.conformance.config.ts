@@ -12,6 +12,14 @@ import { defineConfig } from 'vitest/config'
 // against the vendored copies. A suite passing here proves the COPY matches the
 // pinned contract; it is NOT app-green and NOT envelope-green-as-app.
 //
+// ⟨ANNOTATED 2026-11-15 BY UNIT `V-2` (`conformance-refresh`) — the paragraph above is KEPT
+// VERBATIM and this is the measured correction beside it: A SUITE PASSING HERE PROVES NOTHING
+// ABOUT THE COPY. There is no `vendor/Provident-Electron/src/`, so every `../src/shared/<x>.js`
+// specifier resolves to nothing and the suites fail by construction (11 files, 11 failed, 511
+// failed / 59 passed / 570 at this head, 3 suites collecting zero tests). Copy fidelity is
+// `tests/integration/foundation-vendor/conformance-refresh-register.test.ts`'s claim — per-copy
+// md5 against the pinned blob, with an anti-vacuity limb — and this leg is a class tally only.⟩
+//
 // `O-3` / `O-5` (unit spec §1.3, §3.5 item 4). The leg's colour is NOT a green/red
 // word and is NOT this unit's pass condition. Two recorded reasons, neither papered
 // over: (a) every suite also carries rows that assert the FOUNDATION REPO'S own

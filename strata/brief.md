@@ -48,8 +48,8 @@ replaced, never annotated.
 | Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
 | Foundation pin | commit `e8dfb57…`, measured 2026-11-15 by unit `V-1`; **15** modules byte-identical at that commit, so the move owed no module byte | `vendor/foundation.lock.json`, `docs/L1/unit-v-1-pin-restate.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
-| Tests | **144** flat `tests/*.test.ts` + 3 flat `tests/*.test.mjs`, and **2** nested `tests/integration/<module>/*.test.ts` the units added (146 `.test.ts` collected in all); a git pathspec's `*` crosses directories, so the census is taken with `find -maxdepth` | `find tests -maxdepth 1 -name '*.test.ts'`, `find tests -mindepth 2 -name '*.test.ts'` |
-| Docs corpus | **253** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
+| Tests | **144** flat `tests/*.test.ts` + 3 flat `tests/*.test.mjs`, and **3** nested `tests/integration/<module>/*.test.ts` the units added (147 `.test.ts` collected in all); a git pathspec's `*` crosses directories, so the census is taken with `find -maxdepth` | `find tests -maxdepth 1 -name '*.test.ts'`, `find tests -mindepth 2 -name '*.test.ts'` |
+| Docs corpus | **254** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
 | Archive | **199** tracked files under `archive/` | `git ls-files 'archive/**'` |
 | UI authority | every element outside the shell's own chrome is provident data in the graph, never hand-written DOM | `AGENTS.md`'s UI-rendering constraint (D-8) |
 
@@ -76,15 +76,20 @@ patch (D-6). Repeat failure escalates to a rebuild (`rebuild.md`). A multi-unit 
 per unit before any unit starts, because a single pass cannot carry one unit's red→green→adversarial→greens
 sequence beside a sibling's (§9, D-4).
 
-## 5. Where the loop stands (D-12, D-19)
+## 5. Where the loop stands (D-12, D-19, D-20)
 
-The program's first unit has LANDED: `V-1` `pin-restate` moved the foundation pin to `e8dfb57…`
-(measured 2026-11-15) in one atomic commit and left the fifteen modules untouched (D-19); the program's
-design is `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`. The next
-actionable work is `V-2` `conformance-refresh`, while `U-1` stands BLOCKED by its own item-8 gate —
-both intake reviews returned `ADJUDICATION` and their findings are filed under `strata/records/` — and
-whose engine half was answered by `E-1`'s dependency adoption (D-20); the store-program relation is `pending.md` row 1 and the `docs/` migration row 2. No unit's stage is restated here: state
-lives in `strata/.strata/units/*.json` (D-2).
+THREE UNITS HAVE LANDED: `V-1` `pin-restate` moved the pin to `e8dfb57…` (measured 2026-11-15) in one
+atomic commit with no module byte (D-19); `E-1` `deps-adopt` took the dependencies (`provident-ssr
+^0.5.2`, `provident-storeroom ^1.11.0`) because the older engine dropped an authored provider at
+render (D-20); `V-2` `conformance-refresh` made the eleven vendored copies the pinned commit's bytes
+and restated the lock's `conformance` block as a measured 147-suite disposition set. The program's
+design is `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`.
+
+THE NEXT ACTIONABLE WORK IS `U-1`'s RE-SHAPE: `U-1` stands blocked by its own item-8 gate — both
+intake reviews returned `ADJUDICATION` and their findings are filed under `strata/records/` — with the
+engine half of that blocking set answered by `E-1`. The store-program relation is `pending.md` row 1 and
+the `docs/` migration row 2. No unit's stage is restated here: state lives in `strata/.strata/units/*.json`
+(D-2).
 
 The constraint every later unit inherits: nothing it builds may be a change to `provident-ssr`,
 `provident-editable` or the adjacent foundation tree (D-9), and no unit rewrites the foundation's
