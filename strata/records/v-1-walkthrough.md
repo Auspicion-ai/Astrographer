@@ -15,23 +15,17 @@ goal/expected pair and a step's citation is resolved mechanically (§2, §4).
 
 ## Runs to date
 
-- **Run 1 — `STALE`.** Eight of ten steps passed mechanically; two of the unit's own claims about what
-  it left alone were contradicted (it said four copied suites moved and seven were unchanged — all
-  ELEVEN are one revision behind; and it explained the parked anchors by their files' "bytes differ",
-  where both paths are ABSENT at the new revision). Both findings named `docs/L1/`, so both routed to
-  L1, which corrected them annotate-beside with per-file md5s.
-- **Run 2 — `DOC-GAP`.** Every value, agreement, blob and "left alone" claim reproduced; the verdict
-  stood on documentation completeness alone: this record was cited and absent, the repairs were
-  uncommitted, one sentence said "168 tests" where the four registers measure **162**, and two
-  contract lines were stale (a `zones` digest prefix typo; §7.8 still listing the archive copy as
-  owed). All were discharged by the pass that followed.
-- **Run 3 — `STALE`.** The same class, one layer in: the project register's landing row still said
-  `168`, and the contract's pointer to the anchors' reason sent readers to `pending.md` row 1, which
-  the landing's tracker pass had renumbered to row 2. Both corrected beside themselves (`9a86be7`),
-  the map's three stale pointers and its status line with them (`430f681`).
-- **Run 4 — `DOC-GAP`.** Twelve of thirteen steps reproduced; step 10's citation limb was not settled (two
-  contract pointers). Both repaired: the "no successor" evidence's path had no tree prefix (routed to
-  L1), and this record lagged the runs (rewritten).
+- **Run 1 — `STALE`**: two claims about what the unit left alone contradicted (all eleven copies are
+  one revision behind; the parked anchors' paths are ABSENT, not byte-different). Routed to L1.
+- **Run 2 — `DOC-GAP`**: this record absent, the repairs uncommitted, `168` vs the measured `162`, two
+  stale contract lines. All discharged.
+- **Run 3 — `STALE`**: the project register still said `168`; a pointer sent to `pending.md` row 1 after
+  the renumbering. Both corrected beside themselves; the map's three pointers and its status with them.
+- **Run 4 — `DOC-GAP`**: twelve of thirteen steps reproduced; step 10's citation limb unsettled (a path
+  with no tree prefix). Repaired, and this record widened to carry its runs.
+- **Run 5 — `DOC-GAP`**: the foundation's deletion-row pointer named a path that never existed in the adjacent tree (it is
+  `docs/L2/…:45`), the embed precondition was cited to §3 instead of §1, `brief.md` §5 still said no
+  unit had been admitted, and run 4's line over-claimed its step count. All four repaired.
 
 ## Not settled, stated as such
 

@@ -49,7 +49,7 @@ replaced, never annotated.
 | Foundation pin | commit `e8dfb57…`, measured 2026-11-15 by unit `V-1`; **15** modules byte-identical at that commit, so the move owed no module byte | `vendor/foundation.lock.json`, `docs/L1/unit-v-1-pin-restate.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
 | Tests | **144** flat `tests/*.test.ts` + 3 `tests/*.test.mjs` | `git ls-files 'tests/*.test.*'` |
-| Docs corpus | **250** tracked files, **227** of them under `docs/specs/` | `git ls-files 'docs/**'` |
+| Docs corpus | **252** tracked files, **227** of them under `docs/specs/` (re-measured after `docs/L1/` landed two design files) | `git ls-files 'docs/**'` |
 | Archive | **199** tracked files under `archive/` | `git ls-files 'archive/**'` |
 | UI authority | every element outside the shell's own chrome is provident data in the graph, never hand-written DOM | `AGENTS.md`'s UI-rendering constraint (D-8) |
 
@@ -90,7 +90,7 @@ The constraint every later unit inherits: nothing it builds may be a change to `
 `provident-editable` or the adjacent foundation tree (D-9), and no unit rewrites the foundation's
 surface locally where an import unit would move the pin (D-11).
 
-## 6. Instruments at this head (measured at commit `9119608`; the install pass re-ran only `drift`)
+## 6. Instruments at this head (the trio and build rows are the `9119608` readings; the `drift` and `npm test` rows are post-`V-1` readings and self-date their cells — a row name here never dates a reading)
 
 | Instrument | Reading | What it can see |
 |---|---|---|
