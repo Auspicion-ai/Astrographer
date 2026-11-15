@@ -357,3 +357,30 @@ sites one revision behind (the vendored conformance copies, which `V-2` owns).
 
 D-11's older literal `7bd1de47…` is superseded as a reading, never deleted. Rejected alternative:
 annotating D-11 in place, which the register forbids (D-2).
+
+---
+
+## D-20 — The fork adopts the foundation's package dependencies
+
+**Status:** ACTIVE · **Date:** 2026-11-15
+
+**Source (user, verbatim, answering `pending.md` row 1):** "Yes, use the dependecies" — the ruling the
+item-8 reviews made necessary when they measured that the pinned engine cannot express the port's own
+contract.
+
+**Decision:** the fork takes the foundation's own runtime dependencies: **`provident-ssr` `^0.5.1` →
+`^0.5.2`**, and **`provident-storeroom` `^1.11.0`** added. Both were verified published before the
+ruling was recorded (registry query, this seat: `provident-ssr` 0.5.2 and `provident-storeroom` 1.11.0
+exist). The engine finding that forced it is thus DISCHARGED BY ADOPTION rather than by a patch:
+`provident-ssr` 0.5.1 drops an authored provider at render (`dist/core/node.js`'s `!isSeamProvider`
+guard) while 0.5.2 renders it through the `valueRecord` gate, which is what the port's
+zone-form-by-position depends on (D-9's rule that a package is catalogued and never patched is
+untouched — a bug in 0.5.2 is a finding, never a local edit).
+
+**The storage dependency is admitted AHEAD of its consumer:** `provident-storeroom` is what surface (d)'s
+record families are built on, and (d) is a later program (D-15), so no unit may claim a storeroom
+consumer until that program admits one; the dependency's landing unit proves only that the package
+installs, resolves and leaves the trio, the drift leg and the conformance tally as they stood.
+
+**Rejected alternative:** staying on 0.5.1 and dropping the by-position zone-form inheritance from the
+UI port — which would have made the port's own §7.4 behaviour unwritable on the engine it ships with.

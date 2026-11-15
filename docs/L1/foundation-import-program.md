@@ -1,7 +1,7 @@
 # L1 — the foundation-import program: unit map, order, interfaces and gates
 
 **Layer:** L1 · **Date:** 2026-11-15 · **Ceiling:** 150 lines (D-2's design class) · **Write scope:** `docs/L1/`, `strata/modules.json` (D-3)
-**Status:** the map and the program design are filed; **no unit is admitted and no implementation is claimed** (`brief.md` §5, `next-steps.md` row 1). **CORRECTION (2026-11-15, after the landing) — the sentence above is the map's state as filed and is now stale:** `V-1` `pin-restate` is **ADMITTED and LANDED** at commit `2d69aa8` (`RECORDED`: `next-steps.md` lines 5–6 and `records/v-1-walkthrough.md`), so one unit is admitted and one implementation is claimed, and **`V-2` `conformance-refresh` is the actionable next unit** (`RECORDED`: `next-steps.md` row 1).
+**Status:** the map and the program design are filed; **no unit is admitted and no implementation is claimed** (`brief.md` §5, `next-steps.md` row 1). **CORRECTION (2026-11-15, after the landing) — the sentence above is the map's state as filed and is now stale:** `V-1` `pin-restate` is **ADMITTED and LANDED** at commit `2d69aa8` (`RECORDED`: `next-steps.md` lines 5–6 and `records/v-1-walkthrough.md`), so one unit is admitted and one implementation is claimed, and **`V-2` `conformance-refresh` is the actionable next unit** (`RECORDED`: `next-steps.md` row 1). **CORRECTION (2026-11-15, second) — `E-1` `deps-adopt` is ADMITTED and LANDED beside `V-1`** (this file's §3, `unit-e-1-deps-adopt.md`): D-20's two dependencies are adopted, the two-module count is unchanged because that unit owns no module, and **`V-2` remains the actionable next unit** (`RECORDED`: `strata/next-steps.md` rows 1–2).
 **Markers:** `READ` = read in this pass from the named file, by this pass; `RECORDED` = a figure measured elsewhere and quoted with its measurer. This pass **ran no leg and holds no shell**, so it states no reading of its own (D-2).
 **Layer declaration (mandatory):** nothing here is app-green, envelope-green or instrument-green; the **live leg is the only assembled-app reading and a node-suite green is envelope-green** (D-10).
 
@@ -18,13 +18,21 @@
 | Module | Paths it owns (`strata/modules.json`) | Units | Endpoints `N` | Cap `50+10N` |
 |---|---|---|---|---|
 | `foundation-vendor` | `vendor`; the four flat pin registers (`tests/pd-vendor-{set,manifest,drift,pin-refresh-register}.test.ts`); `tests/{unit,integration}/foundation-vendor` | `V-1`, `V-2` | 3 | 80 |
-| `shell-chrome` | `src/renderer`; `src/main/{preload,main,app-menu}.ts`; `src/shared/types.ts`; `scripts/live-drive.mjs`; the four flat shell registers; `tests/{unit,integration}/shell-chrome` | `U-1`…`U-4` | 26 | 310 |
+| `shell-chrome` | `src/renderer`; `src/main/{preload,main,app-menu}.ts`; `src/shared/types.ts`; `scripts/live-drive.mjs`; the four flat shell registers; `tests/{unit,integration}/shell-chrome` | `U-1`…`U-4`, **plus `E-1`'s battery row** | 26 | 310 |
 
 - **Why two and not six.** `READ` in this pass: the four shell units write **one shared file set** — `pane-graph.ts`, `index.html`, `sidebar-panes.ts`, `renderer.ts`, `layout-state.ts`, `pane-drag.ts`, `preload.ts` — so any finer split would put **one unit inside two modules**, which D-7's one-module-per-agent rule forbids; the intake measured the same non-separability for (a)+(b) and (c)+(d) (validity review, the not-file-separable row; the fork's shared-file sequentiality rule).
 - **`N` counted, not asserted** (`platform.md` §4, `READ` from the imports): `foundation-vendor` = **3**, the exported functions of this repo's own drift instrument the register calls (`compareFoundation`, `isRegularFile`, `foundationRevision`) — the closest of that rule's three categories to an instrument surface; `shell-chrome` = **26** = **6** MCP tools that drive the surface (`dispatch`, `get_rendered_html`, `get_markdown`, `list_targets`, `get_node_state`, `focus`) + **14** vendored exports it calls (`computeTrackVars`, `isEmpty`, `project`, `applyProjection`, `containerDeclarationFor`, `createResizeController`, `clampToBounds`, `createGestureSession`, `cursorDeclarationFor`, `domEventSource`, `withinProximity`, `overlayTransition`, `resolveTheme`, `applyThemeDeclaration`) + **6** preload bridge methods (the four `sidebar` seams + `operatorSettings.get`/`set`).
+- **`E-1` owns no module, and the two-module count is therefore unchanged** (`READ`: `E-1` landed with its battery row claimed by `shell-chrome`): the unit is a dependency act — it moves no module source — and its one row lives at `tests/integration/shell-chrome/`, the module that will consume the capability in `U-3`, so `N` stays **26** and the cap stays `310`. A module of its own would claim a path for an act that authors no surface (D-7).
 - Each path is claimed by one module only; a module's agent reads a sibling's surface through the L2 interface, never its code (D-7).
 
 ## 3. The units
+
+### `E-1` `deps-adopt` — no module of its own; its battery row is claimed by `shell-chrome` (**LANDED**)
+- **Behaviour:** none rendered. The fork takes the foundation's two runtime dependencies (D-20): `provident-ssr` `^0.5.1` → `^0.5.2`, and `provident-storeroom` **added at `^1.11.0` with no consumer here** — surface (d) is a later program (D-15). The lockfile follows from the install.
+- **Why the engine bump is a prerequisite and not an option:** measured at the unit's own landing — on `0.5.1` an authored provider node is **not an element** (the compile pass drops it at `!isSeamProvider`, `dist/core/node.js`); `0.5.2` drops only a runtime-minted value record, so the provider renders with its children. The port's zones are **both** the provider of `pane-in-<zone>` **and** the grid areas carrying `[zone=]`, so the 0.5.1 surface cannot express `U-3`'s behaviour at all (D-20; `unit-e-1-deps-adopt.md` §7.2b).
+- **Files:** `package.json` (two lines) · `package-lock.json` (regenerated, never hand-edited) · `tests/integration/shell-chrome/deps-adopt-engine-provider.test.ts` (limbs `A`…`E`) · `docs/L1/unit-e-1-deps-adopt.md`.
+- **The layer ruling:** L1 ran it with **no L2 and no L3 pass** — no module source moves, the capability under proof is a PACKAGE's (D-9 makes it catalogued-and-never-patched), and no design pass lifts an envelope reading toward app-green (`unit-e-1-deps-adopt.md` §1).
+- **The one thing it does not license:** a storeroom consumer. `provident-storeroom` is resolvable and unreferenced by `src/**`, and no unit may claim it until (d) is admitted (D-20, D-15).
 
 ### `V-1` `pin-restate` — module `foundation-vendor`
 - **Behaviour:** none rendered. The pin moves to the adjacent tree's head in **five value lines across four files** (the lock's `commit`, its embedded `digestCommand`, the three `PINNED_COMMIT` constants) **plus `measuredAt`**, and **one dated clause + two clause-count assertions** move with it (D-11; `unit-pd-vendor-pin-refresh.md` §1.1; validity review §(a)).
@@ -68,10 +76,12 @@
 
 ## 4. Order, and every dependency stated
 
-**`V-1` → `V-2` → `U-1` → `U-2` → `U-3` → `U-4`.**
+**`V-1` (LANDED) → `E-1` (LANDED, owns no module) → `V-2` → `U-1` → `U-2` → `U-3` → `U-4`** — the `E-1`→`U-*` edges below are DEPENDENCY edges, not a landing order.
 
 | Edge | Why it exists |
 |---|---|
+| `E-1` → `U-1`…`U-3` | the port's zone-form-by-position is **unwritable on 0.5.1** (§3 `E-1`, measured), so the engine adoption precedes every unit that authors the inheritance (D-20). |
+| `E-1` → (d) | `provident-storeroom` lands here and **no storeroom consumer may be claimed** before (d) is admitted (D-20, D-15). |
 | `V-1` → `V-2` | the copies are read at the pin `V-1` lands, and **both write the lock**, so they are sequential and never one commit (D-11; the re-vendor contract's carry-rule (b)). |
 | `V-1` → `U-1`…`U-3` | each shell unit records the landed pin as its provenance revision, because **provenance anchoring runs (a)→(c)** (validity review). |
 | `U-1` → `U-2` → `U-3` | the renamed domain is what the later units read, and `U-3` consumes `U-2`'s authored drops and `props.pane` (D-16, D-7). |
@@ -94,12 +104,12 @@
 | G0 | **the item-8 change-analysis for the MCP-visible `zone:` vocabulary**, owed before `U-1`'s code (`AGENTS.md` item 8 via `ASM-3`; D-16) | document layer |
 | G1 | **red set RUN and reported per unit before any byte** (`AGENTS.md` item 3, RCA-1) | envelope/harness |
 | G2 | **the trio** `npm test` / `npm run typecheck` / `npm run build` (item 4) | envelope/harness — the node suite runs under a layout-less DOM shim (D-10) |
-| G3 | `npm run drift` (`V-1`, `V-2`) | a `[D]`-class byte/revision oracle; **proves nothing about behaviour** (D-11) |
-| G4 | `npm run conformance` (`V-2`) | a class-labelled tally; **supplies NO behaviour evidence** (D-11) |
+| G3 | `npm run drift` (`V-1`, `V-2`, `E-1`) | a `[D]`-class byte/revision oracle; **proves nothing about behaviour** (D-11) |
+| G4 | `npm run conformance` (`V-2`, `E-1` — a tally it must leave as it stood, never a pass) | a class-labelled tally; **supplies NO behaviour evidence** (D-11) |
 | G5 | **read-only adversarial pass per unit** (item 10c, RCA-3) | findings recorded in the unit's spec; host findings fixed + regression-tested here, package findings to `docs/defects.md`/`docs/HANDOFF.md` (D-9) |
 | G6 | **blind greens** by an agent that did not write the unit, from the documentation only (item 10a, D-5) | envelope — except a row labelled assembled-app |
 | G7 | **the proofreader's audit + the per-unit documentation review** (items 10b/10d, RCA-6) | document layer |
-| G8 | **the live leg** `node scripts/live-drive.mjs` on a usable display — **mandatory pre-DONE for `U-1`…`U-3`** (RCA-11); for `U-4` the native menu bar is a **parked surface with its recorded reason** (no DOM/CDP surface reaches it), and for `V-1`/`V-2` a **recorded structural refusal** (they render nothing) — parked-by-default is the failure RCA-11 closes (D-10) | **the assembled app — the only reading that is app-green** |
+| G8 | **the live leg** `node scripts/live-drive.mjs` on a usable display — **mandatory pre-DONE for `U-1`…`U-3`** (RCA-11); for `U-4` the native menu bar is a **parked surface with its recorded reason** (no DOM/CDP surface reaches it), and for `V-1`/`V-2`/`E-1` a **recorded structural refusal** (they render nothing) — parked-by-default is the failure RCA-11 closes (D-10) | **the assembled app — the only reading that is app-green** |
 | G9 | **per unit, its contract before delegation (item 9) and its spec/tracker rows in the same pass (item 5)**; the DONE row states **which layer each reading covers**, and a `SKIPPED`/byte-only drift reading is never cited as a pin pass — and the unit's acceptance path is L0's blind walkthrough (D-5, D-10, D-11) | document layer |
 
 - **Per-unit battery, stated once:** `V-1`/`V-2` = the pin registers + the blob arms + the two legs (G3/G4); `U-1` = the zone-replacement register re-grained (adoption wiring, census record, write discipline, shell declaration clauses) + the new derivation arms + the theme register; `U-2` = node arms over the authored head/grip/collapse nodes plus the source-clause census for the paint rules; `U-3` = the placement/no-op/family-write arms plus the zone-form-by-position arm; `U-4` = the template-shape arms. **A paint rule's effect is a G8 row, never a node assertion** (D-10).
@@ -109,9 +119,9 @@
 - **Claim a green its instrument cannot supply** — a node green is envelope-green, the drift and conformance legs are instruments, and only the live leg sees the assembled app (D-10, D-11).
 - **Leave two vocabularies in the tree** — the rename travels with the behaviour in the same commit (D-14, D-16).
 - **Introduce hand-written DOM** — every element outside the shell's own chrome is provident data at the envelope site, and `index.html` keeps CSS only (D-8).
-- **Change a package or the adjacent tree** — a gap is a finding (D-9). **No unit bumps `provident-ssr`**: the intake record reads the `0.5.1 → 0.5.2` move as an *engine prerequisite* while the validity review measures that the delta is **not shown to gate** the port (`READ` at `node_modules/provident-ssr`), so the two readings stand in conflict, the premise is nobody's to assume, and a behaviour the 0.5.1 surface cannot express is catalogued as a finding (D-9).
+- **Change a package or the adjacent tree** — a gap is a finding (D-9). **The engine's version is the RULING's, not a unit's:** D-20 adopted `provident-ssr` `^0.5.2` and `provident-storeroom` `^1.11.0` and unit `E-1` landed them (this file's §3), which **settles the conflict this clause used to record**: the intake read the move as an engine prerequisite while the validity review measured the delta as not shown to gate the port, and the landing measured that it **does** gate it — an authored provider is not an element on 0.5.1 (`unit-e-1-deps-adopt.md` §7.2b). No unit re-opens the version question; a behaviour the ADOPTED surface cannot express is catalogued as a finding, still never patched.
 - **Adopt the foundation's view record as a geometry authority** (D-15).
-- **Touch the two store-adopt anchors or the record families** (D-15; `pending.md` row 1 — **CORRECTED 2026-11-15: row 2**, `READ` in this pass: the store-program relation and the two anchors are row 2, row 1 being THE DEPENDENCY RULING).
+- **Touch the two store-adopt anchors or the record families** (D-15; `strata/pending.md` row 1 — the store-program relation and the two anchors, whose DEPENDENCY predecessor row has departed under D-20).
 - **Report a clean trio while a carried red stands** — the pin's revision arm goes red on the foundation's next commit by design (D-11).
 
 ## 8. Assumptions this design takes (each with the alternative it rejected)

@@ -45,11 +45,11 @@ replaced, never annotated.
 | MCP tools | **59** in `ALL_TOOLS`; **3** resources (2 fixed URIs + 1 template) | `src/main/mcp-server.ts` |
 | Tool groups (gate) | **9** — `read`, `dispatch`, `graph`, `code`, `module`, `rag`, `edit`, `gnosis`, `gnosis-edit` | `src/main/security.ts` (`VALID_GROUPS`) |
 | Transports | stdio, and Streamable HTTP behind `--mcp-transport=http` | `package.json`'s `start:http`, `src/main/main.ts` |
-| Consumed packages | `provident-ssr ^0.5.1`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` |
+| Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
 | Foundation pin | commit `e8dfb57…`, measured 2026-11-15 by unit `V-1`; **15** modules byte-identical at that commit, so the move owed no module byte | `vendor/foundation.lock.json`, `docs/L1/unit-v-1-pin-restate.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
 | Tests | **144** flat `tests/*.test.ts` + 3 `tests/*.test.mjs` | `git ls-files 'tests/*.test.*'` |
-| Docs corpus | **252** tracked files, **227** of them under `docs/specs/` (re-measured after `docs/L1/` landed two design files) | `git ls-files 'docs/**'` |
+| Docs corpus | **257** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
 | Archive | **199** tracked files under `archive/` | `git ls-files 'archive/**'` |
 | UI authority | every element outside the shell's own chrome is provident data in the graph, never hand-written DOM | `AGENTS.md`'s UI-rendering constraint (D-8) |
 
@@ -94,7 +94,7 @@ surface locally where an import unit would move the pin (D-11).
 
 | Instrument | Reading | What it can see |
 |---|---|---|
-| `npm test` | at the `V-1` landing: **145 files / 3,232 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
+| `npm test` | at the `E-1` landing: **146 files / 3,237 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
 | `npm run typecheck` | exit 0 at the same head | `src/**/*.ts` only |
 | `npm run build` | exit 0 at the same head | the bundles exist at all |
 | `npm run conformance` | the vendored fifteen's own suites, under their own config | that the copies match the pinned contract — not app-green (D-11) |
