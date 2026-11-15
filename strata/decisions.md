@@ -338,3 +338,22 @@ The landing consequence, recorded rather than left to a unit: the **method** mat
 count. A pattern that matches the type name, the literal token and the paint class reads three
 surfaces at once, and D-16's "149 / 12 files / 32" mixed them. The unit's contract names the pattern
 it used for each figure. Rejected alternative: editing D-16 in place, which the register forbids.
+
+---
+
+## D-19 — The foundation pin at this head, and what its move owed
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Source (measurement):** unit `V-1` `pin-restate`'s
+landing (`docs/L1/unit-v-1-pin-restate.md`, `strata/records/v-1-walkthrough.md`)
+
+**Decision:** D-11's rule is unchanged; this row records the fact it governs. The lock's `commit`, its
+`digestCommand`'s single literal and the three `PINNED_COMMIT` constants read
+`e8dfb57730f657521d543c8d49f0d67e7ee1e6d4`, `measuredAt` reads `2026-11-15`, and the anchored §4
+region of the pin-refresh contract carries **four** dated declared-refresh-reading clauses whose
+**last** governs. The move owed **no module byte** — all fifteen vendored modules were byte-equal at
+the new revision before any byte moved — and it left **two** sites deliberately at the old revision
+(the two store-adopt anchors, whose subject no longer exists at the foundation's head) and **eleven**
+sites one revision behind (the vendored conformance copies, which `V-2` owns).
+
+D-11's older literal `7bd1de47…` is superseded as a reading, never deleted. Rejected alternative:
+annotating D-11 in place, which the register forbids (D-2).
