@@ -190,3 +190,54 @@ this fork's tree would need, filed as `strata/records/foundation-update-2026-11-
 carried in `pending.md` row 1, and design starts at L1 only after that ruling (`brief.md` §5).
 Rejected alternative: treating the whole 911-commit backlog since the pin as one import unit, which
 would design the scope at L0 and cannot be reviewed per unit (`brief.md` §4, D-4).
+
+---
+
+## D-13 — The import takes ALL FOUR surfaces, and the record-family rework comes with the UI port
+
+**Status:** ACTIVE · **Date:** 2026-11-15
+
+**Source (user, asked and answered this session):** the question put the intake's four separable
+surfaces — (a) the pin restatement, (b) the vendored conformance copies, (c) the layout/UI port of
+the foundation's rows 248…287, (d) the record-family backlog (`main/data/*`, the view and tabs
+records, operator settings, storeroom, the mcp-server growth) — and the user answered **"All four
+surfaces"**.
+
+**Decision:** the import is one program spanning all four surfaces, and each surface is admitted as
+its own unit — never as one pass — because a multi-unit deliverable is split per unit before any unit
+starts (`brief.md` §4). The program's unit decomposition, order and interfaces are L1's to file
+(`brief.md` §3, D-3); this row fixes only that no surface is left out and that the UI port does not
+wait on the record-family work or the reverse. The intake's findings are the authority for what each
+surface contains (`strata/records/foundation-update-2026-11-15-research.md`,
+`strata/records/foundation-import-surface-2026-11-15-research.md`).
+
+**The measured price this row names rather than hides:** surface (a) owes no module bytes — the
+fifteen vendored modules are byte-equal to the foundation's head — but it does owe one atomic
+restatement of the lock's four literal sites plus the register's §4 clause, and the drift arm may not
+be made revision-tolerant (D-11). Surface (c) is a port into the fork's own chrome, not a copy: the
+foundation's `renderer.ts` (7844 lines) and `renderer/index.html` (1999) are its own app, and the
+fork's equivalents are `src/renderer/renderer.ts` (1601) and `index.html` (376).
+
+---
+
+## D-14 — The port adopts the foundation's vocabulary where the two collide
+
+**Status:** ACTIVE · **Date:** 2026-11-15
+
+**Source (user, asked and answered this session):** the question named the collisions — the
+foundation's `.pane-head`/`.pane-grab`/`.pane-collapse`/`.pane-drop` and zones
+`top|bottom|left|right` + `[zone=]` and theme `[theme="dark"]`, against the fork's
+`header|left|right|footer` + `data-zone` and `data-theme` — and the user answered **"Adopt the
+foundation's vocabulary where they collide"**.
+
+**Decision:** where the ported behaviour needs a name the two trees spell differently, the
+foundation's spelling wins: the zone attributes become `top|bottom|left|right` with `[zone=]`, the
+theme carrier becomes `[theme="dark"]`, and the pane head/collapse names are the foundation's. The
+fork's own app-level names — pane ids, pane titles, terminal predicates, the `updated` policy and the
+fork's census figures — stay the fork's (`forking.md` §10's split, D-8).
+
+**The measured price this row names rather than hides:** every row that names the old spelling moves
+with it — the fork's zone track vars (`--zone-*-track`), `data-zone` readers, the theme adapter
+(`src/renderer/theme.ts`), every `cssId`/`dispatch` target row that names a renamed node, and the
+tests that assert those ids. The rename is therefore part of the unit that changes the behaviour, in
+the same commit, never a separate sweep that leaves the tree reading two vocabularies.
