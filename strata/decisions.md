@@ -297,3 +297,44 @@ with them in the same commit.
 rule for colliding names. This is D-14's scope applied, and a unit that finds a genuine semantic
 difference (not a spelling difference) between the two members reports it as an adjudication instead
 of renaming it.
+
+---
+
+## D-17 — A unit's spec act is written by the layer that owns its contract, under L0's scoping grant
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Source (measurement):** the strata install's layer
+scopes (D-3) predate this project's corpus, whose unit contracts and amendments live in
+`docs/specs/**` — a path no layer's persona claims. The first unit admitted after the install (V-1)
+cannot reach green without amending one anchored clause in `docs/specs/unit-pd-vendor-pin-refresh.md`
+and filing its own contract.
+
+**Decision:** where a unit needs a document act in the existing corpus, L0 names that document in the
+delegation, and the layer that owns the unit's behaviour writes it — the unit's own new contract file
+and the specific clauses it amends, and nothing else. The grant is per unit, stated in the
+delegation, and listed in the unit's DONE row; it never widens a layer's wall beyond the named
+documents, and it never licenses a layer to edit a document another layer owns (D-3).
+
+Rejected alternative: migrating `docs/` into the layer paths before any unit runs — a migration the
+user has not ruled on (D-1, `pending.md`), and one that would make the first unit wait on a corpus
+move it does not need.
+
+---
+
+## D-18 — Corrigendum to D-16's measured price: the reach re-read in both item-8 reviews
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Corrects:** D-16's price paragraph · **Source
+(measurement):** three independent greps in this session — the validity reviewer's, the critique
+reviewer's and this seat's own — none of which reproduces D-16's figures.
+
+**Decision:** D-16's authority stands untouched; its PRICE is corrected where each reading disagrees.
+`LayoutZoneName` reads **82–88 occurrences in 7 `src` files** (not 149 across 12), plus ~70 in docs and
+the strata rows; `data-zone` reproduces at **54–56 src / 19–20 tests / 43 driver** sites; the
+`zone:header|footer` literal reads **10–14** (not 32); and the `minimize → collapse` seam — a surface
+D-16 did not measure at all — reads **39 explicit sites** (87 occurrences counting the `is-minimized`
+paint class). A unit's contract re-measures its own list rather than quoting this row, and a figure
+here is a reading at this head, never a constant.
+
+The landing consequence, recorded rather than left to a unit: the **method** matters as much as the
+count. A pattern that matches the type name, the literal token and the paint class reads three
+surfaces at once, and D-16's "149 / 12 files / 32" mixed them. The unit's contract names the pattern
+it used for each figure. Rejected alternative: editing D-16 in place, which the register forbids.
