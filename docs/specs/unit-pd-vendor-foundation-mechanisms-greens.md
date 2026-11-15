@@ -1,5 +1,8 @@
 # Unit `PD-VENDOR` — GREEN-SCENARIO ARTIFACT (blind test writer)
 
+
+**⟶ DATED NOTE `2026-11-15` — EVERY `572 tests / 511 failed / 61 passed` READING BELOW IS SUPERSEDED (`RCA-8(c)`: the as-filed readings are KEPT verbatim; this note is the CURRENT reading beside them).** After unit `V-2` (`conformance-refresh`) refreshed the eleven vendored copies to the pinned revision (`e8dfb57…`) the conformance leg reads **`11 files · 570 tests · 511 failed / 59 passed`, exit `1`**, still with **3 of the 11 suites collecting ZERO tests**; the copies are the pinned commit's bytes and copy fidelity is `tests/integration/foundation-vendor/conformance-refresh-register.test.ts`'s claim, never this artifact's tally.
+
 - **Date:** 2026-09-28. **Repo under test:** `/media/ryanr/Shared Files/Projects/Astrographer`, branch
   `post-division-rebuild`, HEAD **`ddde29c409e302d14e925f8285819757a6c23bc2`** (clean tree at start).
   **Adjacent foundation:** `/media/ryanr/Shared Files/Projects/Provident-Electron`, `main` =
