@@ -1,5 +1,7 @@
 # Handover — Astrographer UI Overhaul (Wave 2)
 
+
+**⟶ VOCABULARY NOTE `2026-11-15` (POINTER — the full note is at this file's foot):** unit `U-1a` moved the zone vocabulary to the foundation's (`top|bottom|left|right`, `[zone=]`, the pane `order` member becoming `index`). Every `header`/`footer` zone spelling and every `data-zone` carrier below is a PRE-RENAME reading; the accepted cost is `ZONE-RENAME-SILENTLY-RELOCATES-PERSISTED-PLACEMENTS` in `docs/defects.md`.
 **Date:** 2026-09-14 (latest) · **Tree:** the last Wave-3 unit
 (`docs/specs/unit-u-import-1-import-surface.md`, previously an untracked
 spec-only draft) is now **GREEN / COMPLETE / CODE LANDED** — **WAVE 3 COMPLETE:

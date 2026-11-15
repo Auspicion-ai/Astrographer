@@ -78,16 +78,18 @@ sequence beside a sibling's (§9, D-4).
 
 ## 5. Where the loop stands (D-12, D-19, D-20)
 
-THREE UNITS HAVE LANDED: `V-1` `pin-restate` moved the pin to `e8dfb57…` (measured 2026-11-15) in one
+FOUR UNITS HAVE LANDED: `V-1` `pin-restate` moved the pin to `e8dfb57…` (measured 2026-11-15) in one
 atomic commit with no module byte (D-19); `E-1` `deps-adopt` took the dependencies (`provident-ssr
 ^0.5.2`, `provident-storeroom ^1.11.0`) because the older engine dropped an authored provider at
 render (D-20); `V-2` `conformance-refresh` made the eleven vendored copies the pinned commit's bytes
-and restated the lock's `conformance` block as a measured 147-suite disposition set. The program's
-design is `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`.
+and restated the lock's `conformance` block as a measured 147-suite disposition set; `U-1a`
+`zone-vocabulary` moved the zone vocabulary to the foundation's (`top|bottom|left|right`, `[zone=]`, the
+pane `order` member becoming `index`), moved the MCP-visible `zone:` ids with it, and gave `UF-LAYOUT-2`
+a literal limb the live leg read `PASS`. The program's design is
+`docs/L1/foundation-import-program.md` and its module map `strata/modules.json`.
 
-THE NEXT ACTIONABLE WORK IS `U-1`'s RE-SHAPE: `U-1` stands blocked by its own item-8 gate — both
-intake reviews returned `ADJUDICATION` and their findings are filed under `strata/records/` — with the
-engine half of that blocking set answered by `E-1`. The store-program relation is `pending.md` row 1 and
+THE NEXT ACTIONABLE WORK IS `U-1b`'s RUN: the item-8 gate is discharged (`docs/specs/foundation-import-u1-change-analysis.md`) and both of its
+adjudications are ruled (D-22): `U-1b` carries the one-state collapse and `U-1c` the theme carrier. The store-program relation is `pending.md` row 1 and
 the `docs/` migration row 2. No unit's stage is restated here: state lives in `strata/.strata/units/*.json`
 (D-2).
 
