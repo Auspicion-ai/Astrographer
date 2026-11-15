@@ -1,7 +1,8 @@
-# `V-1` `pin-restate` — the L0 exit walkthrough record (2026-11-15)
+# `V-1` `pin-restate` — the L0 exit walkthrough record (replaced on every run)
 
-Scenario set (L0-authored from the documents, never from the source tree): the goal/expected pair is
-the step's contract and its citation is resolved mechanically (`strata/walkthrough.md` §2, §4).
+The scenario set (L0-authored from the documents, never from the source tree) and the runs' outcomes;
+this file is REPLACED, never appended (`strata/walkthrough.md` §6). The set's contract is the
+goal/expected pair and a step's citation is resolved mechanically (§2, §4).
 
 | # | Goal · expected | Cite |
 |---|---|---|
@@ -9,29 +10,31 @@ the step's contract and its citation is resolved mechanically (`strata/walkthrou
 | 2–3 | `measuredAt` is the landing's own local day; the `digestCommand`'s single literal equals the pin | contract §2, §4 clause |
 | 4–5 | The three `PINNED_COMMIT` constants agree; the §4 region carries four dated clauses, the LAST governs, and the register's two assertions read 4 | contract §2; pin-refresh contract §4 |
 | 6–8 | Drift CLEAN with its PIN ARM read and equal; no module byte owed; the conformance leg a tally only, never green | `brief.md` §2, §6 |
-| 9–10 | The unit's claims about what it left alone hold; the two store anchors keep the old revision and say why | contract §2, §6, §7.6; `pending.md` row 2 |
-| 11–12 | The trackers state the post-landing pin; this record exists and does not over-claim | `brief.md` §2/§6, both next-steps |
+| 9–10 | The unit's claims about what it left alone hold; the two store anchors keep the old revision, say why, and every pointer to that reason resolves | contract §2, §6; `pending.md` row 2 |
+| 11–13 | The trackers state the post-landing pin and the landing; this record exists, is cited and over-claims nothing; three numeric claims reproduce against commands | `brief.md` §2/§6, both next-steps, this file |
 
-## Run 1 — `STALE`
+## Runs to date
 
-Eight of ten steps resolved mechanically and PASS; two of the unit's own claims were contradicted —
-the contract said four copied suites moved and "the other seven are byte-unchanged" (the surface reads
-all ELEVEN one revision behind), and it explained the parked store anchors by their files' "bytes
-differ" (both paths are ABSENT at the new revision). Both findings named `docs/L1/`, so both routed
-to L1, which corrected them annotate-beside with per-file md5s.
+- **Run 1 — `STALE`.** Eight of ten steps passed mechanically; two of the unit's own claims about what
+  it left alone were contradicted (it said four copied suites moved and seven were unchanged — all
+  ELEVEN are one revision behind; and it explained the parked anchors by their files' "bytes differ",
+  where both paths are ABSENT at the new revision). Both findings named `docs/L1/`, so both routed to
+  L1, which corrected them annotate-beside with per-file md5s.
+- **Run 2 — `DOC-GAP`.** Every value, agreement, blob and "left alone" claim reproduced; the verdict
+  stood on documentation completeness alone: this record was cited and absent, the repairs were
+  uncommitted, one sentence said "168 tests" where the four registers measure **162**, and two
+  contract lines were stale (a `zones` digest prefix typo; §7.8 still listing the archive copy as
+  owed). All were discharged by the pass that followed.
+- **Run 3 — `STALE`.** The same class, one layer in: the project register's landing row still said
+  `168`, and the contract's pointer to the anchors' reason sent readers to `pending.md` row 1, which
+  the landing's tracker pass had renumbered to row 2. Both corrected beside themselves (`9a86be7`),
+  the map's three stale pointers and its status line with them (`430f681`).
+- **Run 4 — `DOC-GAP`.** All thirteen steps reproduced mechanically. Two documentation findings, both
+  repaired: the contract's "no successor" evidence cited a path with no tree prefix (routed to L1,
+  which found the archive it lives in), and this record lagged the runs the corpus cites (this rewrite).
 
-## Run 2 — `DOC-GAP`
+## Not settled, stated as such
 
-Every value, agreement, blob and "left alone" claim reproduced mechanically; the two run-1 findings
-now pass (`local == old 11/11`, `local == new 0/11`; both anchor paths `git show` exit 128 at the new
-revision, 0 at the old). The verdict was DOC-GAP on documentation completeness alone: this record was
-cited three times and did not yet exist, the repairs were uncommitted at the landing commit, one
-sentence said "168 tests" where the four registers measure **162** (the 168 folded in the unit's own
-six-row file, reported separately as 6/6), and two contract lines were stale (a `zones` digest prefix
-typo; §7.8 still listing the archive copy as owed). All were discharged by the pass following this
-record.
-
-**Not settled, stated as such:** run 1's staging root excluded the two huge project trackers, so
-their rows read `unverifiable` — never cleared; run 2 read them and found them current in the
-worktree. An instrument's error is not a corpus finding (`walkthrough.md` §5): the `168`/`162`
-discrepancy was L0's own arithmetic, corrected in the DONE row rather than smoothed.
+Run 1's staging root excluded the two huge project trackers, so their rows read `unverifiable` — never
+cleared; later runs read them. An instrument's error is not a corpus finding (`walkthrough.md` §5): the
+`168`/`162` discrepancy was L0's own arithmetic, corrected in the trackers rather than smoothed.
