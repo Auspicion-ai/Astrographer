@@ -25,7 +25,7 @@ annotated (D-2). Ceiling: 60 lines.
 
 ## 3. This checkout
 
-- Node `v24.20.0`. Consumed packages — `provident-ssr ^0.5.1`, `provident-editable ^0.2.0`,
+- Node `v24.20.0`. Consumed packages — `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`,
   `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` — and devDependencies — Electron `^44.4.3`,
   esbuild `^0.28.2`, TypeScript `^5.5.0`, vite `^8.3.0`, vitest `^5.0.1`, `@types/node ^24.13.6`
   (`package.json`'s `dependencies` and `devDependencies` blocks).

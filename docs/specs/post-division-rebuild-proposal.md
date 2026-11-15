@@ -232,7 +232,7 @@ delete-wholesale at unit granularity"*).
   in the provident authored surface and none in `index.html`; the persisted `theme` field defaults to
   `'system'` and only `installTheme` re-resolves on the media query. **Corrected disposition:
   `ABSENT → author-in-build` as part of `PD-UI-1`'s envelope work** (or explicitly declined).
-- **`U-ENGINE-PIN`'s engine half is already satisfied** — this repo pins `provident-ssr: ^0.5.1`, the same
+- **`U-ENGINE-PIN`'s engine half is already satisfied** — this repo pins `provident-ssr: ^0.5.1` ⟨**SUPERSEDED AS A READING `2026-11-15` (unit `E-1`, D-20): the tree now declares `^0.5.2` and adds `provident-storeroom ^1.11.0`; kept as this proposal's reading.**⟩, the same
   pin the foundation installed. The shim-completion half is a separate candidate (the fork's
   `dom-shim.ts` is larger); **`C-14` adds the boundary: keep the "do not replace" ruling for
   `dom-shim.ts`/`types.ts`, but name `demo-envelope.ts` as the AUTHORED-DATA work `PD-UI-5`/`PD-UI-1`
