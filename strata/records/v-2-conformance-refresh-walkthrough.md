@@ -28,6 +28,12 @@ figure's set.
   evidence, and no document may read behaviour out of either.
 - `npm test` is **not clean** and no document claims it is: 147 files, 3,245 passed, 22 skipped,
   **4 failed** — the real-ollama live gates (`ollama embed: HTTP 404`, `embeddinggemma` absent).
+- **Run 2 — `STALE`, then `STALE` again.** Run 2 caught that three repairs the first pass had reported as
+  landed were not in the tree (my `python` replacements had no-oped against anchors that did not match);
+  all were applied and verified, and the class is recorded in the commit that fixed it. Run 3 then found
+  one survivor — the mechanisms spec still stated `572 tests / 511 failed / 61 passed` as its measured
+  coverage, with no superseded marker anywhere in the file — now met by a dated head note that keeps
+  every as-filed reading and states the current one (`570 / 511 / 59`) beside them.
 - Two findings are routed, not taken: the whole-file substring scans in `pd-store-security-{write,journal}`
   that the restated block tripped (fixed in the lock's spelling; the guard's fragility reported to its
   owner), and the contract's section order, recorded in the contract's own reader's note.

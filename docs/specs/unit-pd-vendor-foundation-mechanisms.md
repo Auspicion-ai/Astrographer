@@ -1,6 +1,8 @@
 # Unit `PD-VENDOR` — the vendoring/pin unit (Phase 0): the vendored foundation mechanism set, the machine-readable manifest, the `A2` hash row, the `A3` cross-tree drift monitor, and the scoped conformance leg — Spec
 
 **Status: SPEC — authored 2026-09-27. NO CODE LANDED, NO TEST LANDED, NOTHING RUN by this pass.**
+
+**⟶ DATED NOTE `2026-11-15` — EVERY `572 tests · 511 failed / 61 passed` READING IN THIS DOCUMENT IS SUPERSEDED (`RCA-8(c)`: the as-filed readings are KEPT verbatim; this note is the CURRENT reading beside them).** After unit `V-2` (`conformance-refresh`) refreshed the eleven vendored copies to the pinned revision (`e8dfb57…`) the conformance leg reads **`11 files · 570 tests · 511 failed / 59 passed`, exit `1`**, still with **3 of the 11 suites collecting ZERO tests**. The copies are now the pinned commit's bytes, and copy fidelity is `tests/integration/foundation-vendor/conformance-refresh-register.test.ts`'s claim — NOT the leg's, whose specifiers resolve against a `vendor/Provident-Electron/src/` that does not exist. Every `572 tests` / `61 passed` figure below is that pre-refresh reading; the lock's `conformance` block is the current statement of the suite universe (11 included · 4 excluded · 132 not-admitted · 7 retired · 4 caveats).
 **⟨AMENDED 2026-09-28 — POST-CYCLE CONTRACT AMENDMENT; the as-filed status line above is KEPT as the
 filing's reading, never deleted.⟩** The red set has since been RUN and the implementation has followed, so
 the unit's status is now: **RED-SET RUN AND REPORTED (116 rows · 96 failed / 20 passed, as filed) →
