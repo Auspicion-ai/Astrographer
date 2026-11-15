@@ -433,9 +433,11 @@ let shellWiredDoc: unknown = null
 const paneCancelElement: unknown = undefined
 
 /** True only for the four real layout zones. HOST-5 — a malformed `'bogus'`
- *  value must never be coerced into a real `left` `ZoneBounds`. */
+ *  value must never be coerced into a real `left` `ZoneBounds`. ⟨`U-1a`
+ *  (D-14/D-16): the closed four are `top`/`bottom`/`left`/`right`; the pre-`U-1a`
+ *  pair was `header`/`footer`.⟩ */
 function isLayoutZoneNameValue(value: unknown): value is LayoutZoneName {
-  return value === 'left' || value === 'right' || value === 'header' || value === 'footer'
+  return value === 'top' || value === 'bottom' || value === 'left' || value === 'right'
 }
 
 
@@ -447,7 +449,8 @@ const PANE_DRAG_CAPTURE_THRESHOLD = 4
 /** The delegated gesture-element selector (HOST-1). Resolved per `pointerdown`
  *  via `e.target.closest(...)` so gutters/headers authored AFTER install —
  *  the real app authors them at render — still route. TWO surface kinds:
- *    - the gutter (`.gutter[data-zone]`, unchanged), and
+ *    - the gutter (`.gutter[zone]`; ⟨`U-1a`: the carrier is `zone=`, and the
+ *      superseded attribute name is spelled only in the docs, never here⟩), and
  *    - the pane HEADER (`.pane-collapse-toggle` — the frame's FIRST child in
  *      `src/renderer/pane-graph.ts`, carrying the authored
  *      `id="pane-collapse-<paneId>"`).
@@ -464,12 +467,12 @@ const PANE_DRAG_CAPTURE_THRESHOLD = 4
  *  compound is equivalent here (the frame ancestry is resolved separately, and
  *  the `.pane-collapse-toggle` class is authored ONLY on the pane header). No
  *  colon-bearing compound either (the dom-shim `closest` rejects `[on:...]`). */
-const GESTURE_SELECTOR = '.gutter[data-zone], .pane-collapse-toggle'
+const GESTURE_SELECTOR = '.gutter[zone], .pane-collapse-toggle'
 
 /** The delegated gutter element for the PERMANENT `dblclick` reset (ADV1) —
  *  resolved separately from the pointerdown selector so a double-click is
  *  decoupled from the gesture lifecycle. */
-const GUTTER_SELECTOR = '.gutter[data-zone]'
+const GUTTER_SELECTOR = '.gutter[zone]'
 
 /** F-1 — the pane HEADER's class (the grab surface). */
 const PANE_HEADER_CLASS = 'pane-collapse-toggle'
@@ -574,7 +577,7 @@ function shellEventSource(): EventSource {
 /** ⟨§3 row 4's deferred-capture policy / §4 item (iii) — THE FORK'S OWN TRACKING.⟩
  *  THE GUTTER SESSION'S SOURCE. The START turn is ELEMENT-BACKED: the session is
  *  installed PER CONTROL ELEMENT, by identity (`C-6`'s ban is on a SELECTOR-resolving
- *  source, and this source resolves nothing — no `closest`, no `data-zone`, no
+ *  source, and this source resolves nothing — no `closest`, no `zone` read, no
  *  selector enters it). The three TRACKING turns (`pointermove`/`pointerup`/
  *  `pointercancel`) are bound on the DOCUMENT, and that is the fork's own tracking,
  *  declared here rather than assumed: the capture is what RETARGETS a pointer that
@@ -664,7 +667,7 @@ function gutterCursorDeclarationFor(axisToken: unknown): string | undefined {
  *  receives the property value as a string). This function carries the module's
  *  RETURNED text to the affordance element the renderer already holds, applied as that
  *  element's cursor declaration. IT IS NOT A RE-POINT AND NOT A RE-VOCABULARY:
- *  `class="gutter"` + `data-zone` + `data-axis` and both `§3.2` dependents
+ *  `class="gutter"` + `zone` + `data-axis` and both `§3.2` dependents
  *  (`GESTURE_SELECTOR`, the two shell cursor rules) are UNTOUCHED — an element with no
  *  writable style, or an `undefined` declaration, keeps whatever the shell CSS already
  *  declares. TOTAL + fail-soft. */
@@ -777,20 +780,20 @@ function onPaneSessionMove(gesture: { readonly value?: unknown } | null): void {
     const y = point.y
     const zones: ZoneBounds[] = []
     const containers =
-      typeof document?.querySelectorAll === 'function' ? document.querySelectorAll('.layout [data-zone]') : []
+      typeof document?.querySelectorAll === 'function' ? document.querySelectorAll('.layout [zone]') : []
     for (let i = 0; i < containers.length; i++) {
       const el = containers[i] as {
         className?: unknown
         getAttribute(name: string): string | null
         getBoundingClientRect(): GestureRect
       }
-      // The `.layout [data-zone]` set also matches the resize GUTTERS (they
-      // carry `data-zone` + `data-axis`, not `data-orientation`). A gutter is
+      // The `.layout [zone]` set also matches the resize GUTTERS (they
+      // carry `zone` + `data-axis`, not `data-orientation`). A gutter is
       // NOT a drop container — skip it so it is never projected as a zone.
       const cls = typeof el.className === 'string' ? el.className : ''
       if (cls.split(/\s+/).includes('gutter')) continue
       // HOST-5 — fail-closed: project ONLY a real LayoutZoneName.
-      const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('data-zone') : null
+      const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('zone') : null
       if (!isLayoutZoneNameValue(dataZone)) continue
       if (typeof el.getBoundingClientRect === 'function') {
         zones.push(toZoneBounds(dataZone, el.getBoundingClientRect()))
@@ -863,7 +866,7 @@ function lastPointerPoint(): { x: number; y: number } {
 
 /** The PERMANENT document-delegated `dblclick` (ADV1) — the gutter double-click
  *  reset, decoupled from the gesture lifecycle. Resolves the gutter via
- *  `.gutter[data-zone]` and, ONLY for a real layout zone, calls
+ *  `.gutter[zone]` and, ONLY for a real layout zone, calls
  *  `host.resetGutter(dataZone)` (the FORK-side reset route, §4 item (vii): the
  *  module's own `reset` refuses `'no-gesture'` outside a gesture). Fail-soft. */
 function onGestureDblclick(host: SidebarPanes, e: unknown): void {
@@ -873,7 +876,7 @@ function onGestureDblclick(host: SidebarPanes, e: unknown): void {
     if (target == null) return
     const t = target as { closest?: (sel: string) => { getAttribute?: (name: string) => string | null } | null }
     const gutterEl = typeof t.closest === 'function' ? t.closest(GUTTER_SELECTOR) : null
-    const dataZone = gutterEl && typeof gutterEl.getAttribute === 'function' ? gutterEl.getAttribute('data-zone') : null
+    const dataZone = gutterEl && typeof gutterEl.getAttribute === 'function' ? gutterEl.getAttribute('zone') : null
     // ONLY a real layout zone triggers the reset — a malformed `'bogus'` value
     // is never coerced into a registry-default commit (HOST-5 fail-closed).
     if (isLayoutZoneNameValue(dataZone)) host.resetGutter(dataZone)
@@ -888,7 +891,7 @@ function onGestureDblclick(host: SidebarPanes, e: unknown): void {
  * install), INSTALLS that control on its session once and ESTABLISHES the gesture
  * through the SESSION's own `begin` (which is where capture happens, after
  * establishment and only for an opted-in control — §4 item (iii)). F-1: the two
- * surface kinds are distinguished explicitly — a match carrying `data-zone` is the
+ * surface kinds are distinguished explicitly — a match carrying `zone` is the
  * gutter; a match carrying the pane-header class is the pane HEADER, whose pane id
  * comes from its `.pane-frame` ancestor and whose pointer capture stays on that
  * FRAME. TOTAL + fail-soft — never throws. */
@@ -908,10 +911,10 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
           } | null)
         : null
     if (gestureEl == null) return
-    const dataZone = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('data-zone') : null
+    const dataZone = typeof gestureEl.getAttribute === 'function' ? gestureEl.getAttribute('zone') : null
     const pointerId = (e as { pointerId?: number })?.pointerId
 
-    // Gutter gesture — the matched element carries a real layout `data-zone`.
+    // Gutter gesture — the matched element carries a real layout `zone`.
     if (isLayoutZoneNameValue(dataZone)) {
       const session = installGutterSession()
       if (session == null) return

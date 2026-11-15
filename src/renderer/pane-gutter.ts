@@ -45,12 +45,13 @@ export interface GutterBounds {
   max: number
 }
 
-/** The four trimmed gutters (§2.1): the two side columns + the header/footer
- *  rows vs the main row. `stage`/`top-bar` are regions, not pane zones (W2-Q2),
- *  so they have no gutter. */
-export const GUTTER_ZONES: readonly LayoutZoneName[] = ['left', 'right', 'header', 'footer']
+/** The four trimmed gutters (§2.1): the two side columns + the top/bottom rows
+ *  vs the main row. `stage`/`top-bar` are regions, not pane zones (W2-Q2), so
+ *  they have no gutter. ⟨`U-1a` (D-14/D-16): `top`/`bottom` replace the pre-`U-1a`
+ *  `header`/`footer`, re-grained BY POSITION (`ASM-U1a-1`).⟩ */
+export const GUTTER_ZONES: readonly LayoutZoneName[] = ['left', 'right', 'top', 'bottom']
 
-/** The row (header/footer) clamp defaults (§2.5 pin 3 — W2-N2 leaves the exact
+/** The row (top/bottom) clamp defaults (§2.5 pin 3 — W2-N2 leaves the exact
  *  per-axis row minimums to this unit; the side columns use the landed
  *  `LAYOUT_ZONE_MIN`/`LAYOUT_ZONE_MAX`). */
 const GUTTER_ROW_MIN = 32
@@ -77,13 +78,13 @@ interface Point2D {
  *  within the `.layout` bounding rect to a candidate gutter-seam track size in
  *  px, measured from the layout rect's leading edge along the zone's axis
  *  (§3 states 1/2): `left` → `point.x − rect.left`, `right` → `rect.right −
- *  point.x`, `header` → `point.y − rect.top`, `footer` → `rect.bottom −
+ *  point.x`, `top` → `point.y − rect.top`, `bottom` → `rect.bottom −
  *  point.y` (F10). TOTAL + deterministic: an unknown zone, or a non-finite
  *  `point`/`layoutRect` field → `0` (never a throw, never NaN/negative). The
  *  wiring passes the result to `host.moveGutter`, whose controller clamps it to
  *  the zone's bounds (a collapsed track is never committed). */
 export function gutterSizeForPoint(layoutRect: Rect, zone: LayoutZoneName, point: Point2D): number {
-  if (zone !== 'left' && zone !== 'right' && zone !== 'header' && zone !== 'footer') return 0
+  if (zone !== 'left' && zone !== 'right' && zone !== 'top' && zone !== 'bottom') return 0
   if (layoutRect == null || point == null) return 0
   const fields = [layoutRect.left, layoutRect.top, layoutRect.right, layoutRect.bottom, point.x, point.y]
   if (!fields.every((v) => typeof v === 'number' && Number.isFinite(v))) return 0
@@ -92,9 +93,9 @@ export function gutterSizeForPoint(layoutRect: Rect, zone: LayoutZoneName, point
       return point.x - layoutRect.left
     case 'right':
       return layoutRect.right - point.x
-    case 'header':
+    case 'top':
       return point.y - layoutRect.top
-    default: // footer
+    default: // bottom
       return layoutRect.bottom - point.y
   }
 }

@@ -626,7 +626,7 @@ async function ufStageSig(h) {
  *  The restore is therefore taken PER BLOCK by the block-runner's pre-flight
  *  (`ufBlockPreflightRestore`), never once per battery. */
 async function ufPaneFrames(h) {
-  return h.cdp.evaluate(`(()=>[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>{const r=f.getBoundingClientRect();return {pid:f.getAttribute('data-pane-id'),cls:String(f.className),collapsed:f.classList.contains('is-collapsed'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],li:f.querySelectorAll('li').length,controls:f.querySelectorAll('input,button,select,fieldset,textarea').length,zone:(f.closest('[data-zone]')||{}).id||null}}))()`)
+  return h.cdp.evaluate(`(()=>[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>{const r=f.getBoundingClientRect();return {pid:f.getAttribute('data-pane-id'),cls:String(f.className),collapsed:f.classList.contains('is-collapsed'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],li:f.querySelectorAll('li').length,controls:f.querySelectorAll('input,button,select,fieldset,textarea').length,zone:(f.closest('[zone]')||{}).id||null}}))()`)
 }
 
 /** Drive the settings modal to OPEN/CLOSED with a real gesture (Escape closes). */
@@ -705,8 +705,8 @@ async function ufLayoutReading(h) {
     return {
       zoneLeft:box(g('zone:left')),
       zoneRight:box(g('zone:right')),
-      zoneHeader:box(g('zone:header')),
-      zoneFooter:box(g('zone:footer')),
+      zoneTop:box(g('zone:top')),
+      zoneBottom:box(g('zone:bottom')),
       main:box(g('zone:main')),
       tabStrip:box(g('tab-strip')),
       wikiRoot:box(g('wiki-root')),
@@ -714,7 +714,7 @@ async function ufLayoutReading(h) {
       mountCount:roots.length,
       staleChildlessRoots:roots.filter((w)=>w.children.length===0).length,
       page:{y:Math.round(scrollY),docScrollHeight:document.documentElement.scrollHeight,docClientHeight:document.documentElement.clientHeight},
-      frames:[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f)=>({paneId:f.getAttribute('data-pane-id'),slot:f.parentElement?[...f.parentElement.children].filter((c)=>c.classList&&c.classList.contains('pane-frame')).indexOf(f):-1,box:box(f)}))
+      frames:[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')].map((f)=>({paneId:f.getAttribute('data-pane-id'),slot:f.parentElement?[...f.parentElement.children].filter((c)=>c.classList&&c.classList.contains('pane-frame')).indexOf(f):-1,box:box(f)}))
     }})()`)
 }
 
@@ -724,7 +724,7 @@ async function ufLayoutReading(h) {
  *  computed `overflow-y`, and whether the zone's own box carries an internal scroll
  *  range with `scrollTop` ADVANCING INSIDE THAT BOX (the scrolled element is NAMED:
  *  the zone's own content box, never the document). THE SCOPE IS THE FOUR CONTAINERS
- *  (`#zone:left|right|header|footer`) — never every element carrying `data-zone`: the
+ *  (`#zone:left|right|top|bottom`) — never every element carrying `zone`: the
  *  four AUTHORED GUTTER AFFORDANCES and the zone-minimize controls carry that same
  *  attribute and are containers of nothing (a gutter's box can never hold a scroll
  *  range), so they are printed BESIDE the reading under the excluded list, never graded
@@ -737,7 +737,7 @@ async function ufLayoutReading(h) {
 async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
   return h.cdp.evaluate(`(()=>{
     const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
-    const ZONES=['left','right','header','footer'];
+    const ZONES=['left','right','top','bottom'];
     const containers=()=>ZONES.map((z)=>({id:'zone:'+z,zone:z,el:document.getElementById('zone:'+z)})).filter((c)=>c.el!=null);
     const rects=()=>containers().map((c)=>({id:c.id,zone:c.zone,box:box(c.el)}));
     const before=rects();
@@ -757,7 +757,7 @@ async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
     if(document.scrollingElement)document.scrollingElement.scrollTop=0;
     const stage=document.getElementById('zone:main');
     const stageScroll=stage==null?null:(()=>{const cs=getComputedStyle(stage);const st0=Math.round(stage.scrollTop);stage.scrollTop=Math.min(40,stage.scrollHeight-stage.clientHeight+40);const st1=Math.round(stage.scrollTop);stage.scrollTop=st0;return {id:'zone:main',position:cs.position,overflowY:cs.overflowY,scrollHeight:stage.scrollHeight,clientHeight:stage.clientHeight,contentExceedsTheBox:stage.scrollHeight>stage.clientHeight+1,scrollTopBefore:st0,scrollTopAfter:st1,scrollTopAdvanced:st1>st0}})();
-    const excluded=[...document.querySelectorAll('#app [data-zone]')].filter((e)=>!ZONES.some((z)=>e.id==='zone:'+z)).map((e)=>({id:e.id||e.getAttribute('data-zone'),zone:e.getAttribute('data-zone'),classes:String(e.className||''),box:box(e)}));
+    const excluded=[...document.querySelectorAll('#app [zone]')].filter((e)=>!ZONES.some((z)=>e.id==='zone:'+z)).map((e)=>({id:e.id||e.getAttribute('zone'),zone:e.getAttribute('zone'),classes:String(e.className||''),box:box(e)}));
     const zonesUnmoved=before.length>0&&before.length===after.length&&before.every((b,i)=>JSON.stringify(b.box)===JSON.stringify(after[i].box));
     const pageMoved=pageAfter.y!==pageBefore.y||pageAfter.docScrollTop!==pageBefore.docScrollTop;
     const viewport=[innerWidth,innerHeight];
@@ -771,7 +771,7 @@ async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
       pageCannotOverflow:pageAfter.docScrollHeight<=pageAfter.docClientHeight+1,
       zonesUnmoved,zoneBoxesBoundedByTheViewport:bounded,anyInternalScrollRangeExercised,
       scrolledElement:'each of the four zone CONTAINERS (its own content box), never the document',
-      zoneScope:'the four pane-zone containers; every OTHER element carrying data-zone (the four authored gutter affordances, the zone-minimize controls) is listed under the excluded list and is not graded as a zone container',
+      zoneScope:'the four pane-zone containers; every OTHER element carrying zone (the four authored gutter affordances, the zone-minimize controls) is listed under the excluded list and is not graded as a zone container',
       scope:'the assembled renderer surface this driver spawned'
     }})()`)
 }
@@ -803,7 +803,7 @@ async function ufLayoutStageScrollAttempt(h, attempt = 200) {
   return h.cdp.evaluate(`(()=>{
     const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
     const g=(id)=>document.getElementById(id);
-    const chrome=()=>({zoneLeft:box(g('zone:left')),zoneRight:box(g('zone:right')),zoneHeader:box(g('zone:header')),zoneFooter:box(g('zone:footer')),tabStrip:box(g('tab-strip'))});
+    const chrome=()=>({zoneLeft:box(g('zone:left')),zoneRight:box(g('zone:right')),zoneTop:box(g('zone:top')),zoneBottom:box(g('zone:bottom')),tabStrip:box(g('tab-strip'))});
     const stage=g('zone:main');
     if(!stage)return {err:'no #zone:main on the assembled surface'};
     const chromeBefore=chrome();
@@ -838,7 +838,7 @@ async function ufLayoutStageScrollAttempt(h, attempt = 200) {
  *    (1) THE DRAG START IS THE PANE HEADER'S OWN DRAG SURFACE, resolved from the frame
  *        (`.pane-collapse-toggle` — the app's `PANE_HEADER_CLASS`) and hit-tested, with
  *        the app's OWN delegated resolution re-driven at the point
- *        (`closest('.gutter[data-zone], .pane-collapse-toggle')` must return that very
+ *        (`closest('.gutter[zone], .pane-collapse-toggle')` must return that very
  *        header). NOTE, MEASURED AND RECORDED RATHER THAN ASSUMED: on this build the
  *        pane header IS a `button.pane-collapse-toggle` (the fork's own pinned F-1
  *        decision — the header is its own grab surface and is exempt from the
@@ -864,7 +864,7 @@ async function ufLayoutStageScrollAttempt(h, attempt = 200) {
  *        reported as NOT-DRIVEN **with the reason it did not move** — never as a pass
  *        and never as a bare failure. */
 async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav') {
-  const frames = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>{const r=f.getBoundingClientRect();return {i,paneId:f.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],header:!!f.querySelector('.pane-collapse-toggle')}}))()`)
+  const frames = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>{const r=f.getBoundingClientRect();return {i,paneId:f.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],header:!!f.querySelector('.pane-collapse-toggle')}}))()`)
   if (!Array.isArray(frames) || frames.length < 2) {
     return { driven: false, reason: `zone '${zone}' renders ${Array.isArray(frames) ? frames.length : '?'} pane frame(s) — a WITHIN-zone rearrange needs at least two`, frames: frames ?? null }
   }
@@ -892,10 +892,10 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   // different index. A candidate that maps back to the pane's OWN index is a no-op by the
   // app's own arithmetic (F2), so a probe that dispatched it would report "no rearrange"
   // for a reason that has nothing to do with the wiring. The zone boxes are read from the
-  // assembled app (the same `.layout [data-zone]` set the app's own move routing projects).
+  // assembled app (the same `.layout [zone]` set the app's own move routing projects).
   const bandProbe = await h.cdp.evaluate(`(()=>{
-    const zoneEl=document.querySelector('.layout [data-zone="${zone}"]');
-    if(!zoneEl)return {err:'no .layout [data-zone="${zone}"] container on the assembled surface'};
+    const zoneEl=document.querySelector('.layout [zone="${zone}"]');
+    if(!zoneEl)return {err:'no .layout [zone="${zone}"] container on the assembled surface'};
     const r=zoneEl.getBoundingClientRect();
     const top=r.top,bottom=r.bottom,span=bottom-top;
     const idx=(y,count)=>span<=0?0:Math.min(count-1,Math.floor(Math.max(0,Math.min((y-top)/span,1))*count));
@@ -911,12 +911,12 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   const dropYRaw = dropBands != null && dropBands.indexAtSiblingMidpointDrop === from && dropBands.wantedIndex !== from
     ? Math.round(dropBands.wantedBandTopY)
     : siblingMidpointDropY
-  const point = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');if(!f)return {err:'frame gone'};const hd=f.querySelector('.pane-collapse-toggle');if(!hd)return {err:'the frame carries no pane-header surface (.pane-collapse-toggle)'};const r=hd.getBoundingClientRect();if(r.height<2)return {err:'zero-height header',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width*0.5);const y=Math.round(r.y+r.height/2);const el=document.elementFromPoint(x,y);const resolved=el&&el.closest?el.closest('.gutter[data-zone], .pane-collapse-toggle'):null;return {x,y,hit:el?(el.tagName+(el.className?'.'+String(el.className).slice(0,40):'')):'null',headerTag:hd.tagName,headerIsTheToggle:hd.tagName==='BUTTON',onTarget:!!(el&&(el===f||f.contains(el))),onTheAppHeaderSurface:resolved===hd,vh:window.innerHeight,headerBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
+  const point = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');if(!f)return {err:'frame gone'};const hd=f.querySelector('.pane-collapse-toggle');if(!hd)return {err:'the frame carries no pane-header surface (.pane-collapse-toggle)'};const r=hd.getBoundingClientRect();if(r.height<2)return {err:'zero-height header',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width*0.5);const y=Math.round(r.y+r.height/2);const el=document.elementFromPoint(x,y);const resolved=el&&el.closest?el.closest('.gutter[zone], .pane-collapse-toggle'):null;return {x,y,hit:el?(el.tagName+(el.className?'.'+String(el.className).slice(0,40):'')):'null',headerTag:hd.tagName,headerIsTheToggle:hd.tagName==='BUTTON',onTarget:!!(el&&(el===f||f.contains(el))),onTheAppHeaderSurface:resolved===hd,vh:window.innerHeight,headerBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
   if (!point || point.err || !point.onTarget) {
     return { driven: false, reason: `the pane-HEADER drag start could not be hit-tested on ${start.paneId}: ${JSON.stringify(point)}`, frames, slotOrderBefore: order(frames) }
   }
   if (point.onTheAppHeaderSurface !== true) {
-    return { driven: false, reason: `the hit-tested drag start on ${start.paneId} does NOT resolve back to the pane header through the app's own delegated resolution (closest('.gutter[data-zone], .pane-collapse-toggle')): ${JSON.stringify(point)} — a drag start that is not the app's own gesture surface grades nothing`, frames, slotOrderBefore: order(frames) }
+    return { driven: false, reason: `the hit-tested drag start on ${start.paneId} does NOT resolve back to the pane header through the app's own delegated resolution (closest('.gutter[zone], .pane-collapse-toggle')): ${JSON.stringify(point)} — a drag start that is not the app's own gesture surface grades nothing`, frames, slotOrderBefore: order(frames) }
   }
   const dropY = Math.max(1, Math.min(dropYRaw, point.vh - 2))
   // THE REAL POINTER PATH: small steps (2px → 12px) that stay on the header for the first
@@ -931,7 +931,7 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   await h.cdp.gesture(`.pane-frame[data-pane-id="${start.paneId}"]`, path)
   await sleep(1200)
   const audit = await h.cdp.evaluate(`(()=>{const a=window.__ufDragAudit||{};const holders=[];for(const n of document.querySelectorAll('*')){for(const id of [1,2,3]){try{if(typeof n.hasPointerCapture==='function'&&n.hasPointerCapture(id))holders.push((n.id||n.tagName)+'#'+id)}catch{}}}return {gotPointerCaptureEvents:a.gotCapture||0,captureHoldersAtTheEnd:holders,moveTargets:(a.moves||[]).slice(0,14),terminalTargets:a.terminals||[],revealedMirrors:[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.className).slice(0,30))}})()`)
-  const after = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id')})))()`)
+  const after = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id')})))()`)
   const seqBefore = order(frames)
   const seqAfter = (after || []).map((f) => f.paneId).join(',')
   // RESTORE (this block's own hygiene, taken AFTER the reading and recorded, never hidden):
@@ -944,7 +944,7 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   // the drag start records). The restore's own state pair is printed beside the reading.
   const cleanup = { performed: false, revealMirrorsAfterTheDrag: audit ? audit.revealedMirrors : null }
   try {
-    const collapseState = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')))()`)
+    const collapseState = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')))()`)
     if (Array.isArray(cleanup.revealMirrorsAfterTheDrag) && cleanup.revealMirrorsAfterTheDrag.length > 0) {
       cleanup.collapseBefore = await collapseState()
       for (let pass = 0; pass < 2; pass += 1) {
@@ -955,7 +955,7 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
       }
       cleanup.collapseAfter = await collapseState()
       cleanup.revealMirrorsAfterTheRestore = await h.cdp.evaluate(`[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.className).slice(0,30))`)
-      cleanup.paneSlotsAfterTheRestore = (await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')))()`)) ?? null
+      cleanup.paneSlotsAfterTheRestore = (await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')))()`)) ?? null
       cleanup.performed = true
       cleanup.collapseStateRestored = JSON.stringify(cleanup.collapseBefore) === JSON.stringify(cleanup.collapseAfter)
     } else {
@@ -5272,9 +5272,9 @@ const BLOCKS = {
     // C3 re-parents `#panes` INTO #settings-modal-body; the app-graph pane zones
     // (zone:*) live in `.layout`. Assert the zone containers + the doc-nav/crosslinks
     // panes are placed (U-SHELL-1) and the operator mounts re-parented (U-SHELL-7).
-    const zoneContainers = await h.cdp.evaluate(`document.querySelectorAll('[data-zone]').length`)
+    const zoneContainers = await h.cdp.evaluate(`document.querySelectorAll('[zone]').length`)
     const panesReparented = await h.cdp.evaluate(`!!document.querySelector('#settings-modal-body #panes')`)
-    return { pass: zoneContainers >= 4 && panesReparented, detail: `[data-zone] containers=${zoneContainers}, #panes re-parented=${panesReparented}` }
+    return { pass: zoneContainers >= 4 && panesReparented, detail: `[zone] containers=${zoneContainers}, #panes re-parented=${panesReparented}` }
   },
   collapse: async (h) => {
     // U-SHELL-3: the pane-frame root carries data-pane-id; its collapse toggle is
@@ -5566,8 +5566,8 @@ const BLOCKS = {
   reorder: async (h) => {
     // U-LIVE6/D — a real pointer drag on a pane-frame must drive a pane reorder.
     // A pane's SLOT is its index among `.pane-frame[data-pane-id]` WITHIN its
-    // enclosing `[data-zone]` container (the `data-zone` attr lives on the PARENT
-    // `[data-zone='left']` container, NOT the frame). Drive a genuine CDP pointer
+    // enclosing `[zone]` container (the `zone` attr lives on the PARENT
+    // `[zone='left']` container, NOT the frame). Drive a genuine CDP pointer
     // drag on an IN-VIEWPORT pane (doc-nav is the LAST left-zone pane and sits
     // below the fold on this display), VERIFYING the drag-start point is NOT an
     // interactive control (renderer.ts isInteractiveControl refuses to start a
@@ -5575,7 +5575,7 @@ const BLOCKS = {
     // the earlier attempt no-op'd). Assert the pane's slot index moved.
     const slotSnapshot = async () =>
       h.cdp.evaluate(
-        `(()=>{const vh=window.innerHeight;return {vh,slots:[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y),h:Math.round(f.getBoundingClientRect().height)}))}})()`,
+        `(()=>{const vh=window.innerHeight;return {vh,slots:[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y),h:Math.round(f.getBoundingClientRect().height)}))}})()`,
       )
     const snap0 = await slotSnapshot()
     const before = snap0.slots
@@ -5588,7 +5588,7 @@ const BLOCKS = {
     const startInfo = await h.cdp.evaluate(`(()=>{
       const vh=window.innerHeight;
       const isCtrl=(el)=>{let n=el;while(n){const t=n.tagName?n.tagName.toLowerCase():'';if(t==='button'||t==='input'||t==='select'||t==='textarea'||t==='a')return true;n=n.parentElement}return false};
-      const frames=[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')]
+      const frames=[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')]
         .filter((f)=>{const r=f.getBoundingClientRect();return r.y>20&&r.y<vh-40})
         .sort((a,b)=>(a.getAttribute('data-pane-id')==='doc-nav'?-1:0)-(b.getAttribute('data-pane-id')==='doc-nav'?-1:0));
       for(const f of frames){
@@ -5670,7 +5670,7 @@ const BLOCKS = {
   diag: async (h) => {
     // Diagnostic: dump the pane-frame inventory + a collapse-click trace so a live
     // FAIL can be distinguished from a wrong harness selector.
-    const dump = await h.cdp.evaluate(`(()=>{const frames=[...document.querySelectorAll('.pane-frame[data-pane-id]')];return {frames:frames.map((f)=>({paneId:f.getAttribute('data-pane-id'),zone:f.getAttribute('data-zone'),collapse:f.getAttribute('data-pane-collapse'),hasToggle:!!f.querySelector('.pane-collapse-toggle'),isCollapsed:f.classList.contains('is-collapsed'),bodyNodes:f.children.length})),modalPanes:document.querySelector('#settings-modal-body #panes')?true:false}})()`)
+    const dump = await h.cdp.evaluate(`(()=>{const frames=[...document.querySelectorAll('.pane-frame[data-pane-id]')];return {frames:frames.map((f)=>({paneId:f.getAttribute('data-pane-id'),zone:f.getAttribute('zone'),collapse:f.getAttribute('data-pane-collapse'),hasToggle:!!f.querySelector('.pane-collapse-toggle'),isCollapsed:f.classList.contains('is-collapsed'),bodyNodes:f.children.length})),modalPanes:document.querySelector('#settings-modal-body #panes')?true:false}})()`)
     const toggleSel = await h.cdp.evaluate(`document.querySelector('.pane-frame .pane-collapse-toggle') ? true : false`)
     let clickTrace = null
     if (toggleSel) {
@@ -5690,7 +5690,7 @@ const BLOCKS = {
     const before = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null}})()`)
     const direct = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.togglePaneCollapse!=='function')return 'no-seam'; try{s.togglePaneCollapse('doc-nav');return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
-    const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('data-zone'):null}})()`)
+    const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('zone'):null}})()`)
     const toggleBefore = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
     const toggleDirect = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return 'no-opset'; try{s.operatorSet({representationMode:'markdown'});return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
@@ -5914,11 +5914,11 @@ const BLOCKS = {
   // U-SHELL-N7 — the shell pointer-wiring surface: inventory gutters + pane-frames,
   // drive one gutter gesture + one pane-frame drag, report whether they reach the seam.
   shell_wiring: async (h) => {
-    const inv = await h.cdp.evaluate(`(()=>({gutters:[...document.querySelectorAll('.layout .gutter,[class*="gutter"]')].length,gutterZoned:[...document.querySelectorAll('.gutter[data-zone]')].length,panes:[...document.querySelectorAll('.pane-frame[data-pane-id]')].length,zones:[...document.querySelectorAll('[data-zone]')].length,hasLayout:!!document.querySelector('.layout')}))()`)
+    const inv = await h.cdp.evaluate(`(()=>({gutters:[...document.querySelectorAll('.layout .gutter,[class*="gutter"]')].length,gutterZoned:[...document.querySelectorAll('.gutter[zone]')].length,panes:[...document.querySelectorAll('.pane-frame[data-pane-id]')].length,zones:[...document.querySelectorAll('[zone]')].length,hasLayout:!!document.querySelector('.layout')}))()`)
     // arm the seam counters (capture pointerdown/up on .layout)
     await h.cdp.evaluate(`(()=>{window.__seam={pd:0,pu:0,pm:0};const lay=document.querySelector('.layout');if(lay){for(const t of ['pointerdown','pointerup','pointermove'])lay.addEventListener(t,(ev)=>{window.__seam[t.replace('pointer','').toLowerCase()]++},{capture:true,passive:true})}return true})()`)
     // 1) gutter gesture: CDP drag across the first gutter
-    const gutterGeo = await h.cdp.evaluate(`(()=>{const g=document.querySelector('.gutter[data-zone]')||document.querySelector('.gutter');if(!g)return null;const r=g.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
+    const gutterGeo = await h.cdp.evaluate(`(()=>{const g=document.querySelector('.gutter[zone]')||document.querySelector('.gutter');if(!g)return null;const r=g.getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
     let gutterResult = 'no gutter to drag'
     if (gutterGeo) {
       await h.cdp.gesture('.gutter', [
@@ -5931,9 +5931,9 @@ const BLOCKS = {
       gutterResult = 'gutter drag dispatched (check seam counters below)'
     }
     // 2) pane-frame drag: reuse slot-snapshot before/after
-    const slots = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)})))()`)
+    const slots = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)})))()`)
     const s0 = await slots()
-    const target = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const fs=[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].filter(f=>{const r=f.getBoundingClientRect();return r.y>20&&r.y<vh-60});const f=fs[0];if(!f)return null;const r=f.getBoundingClientRect();return {id:f.getAttribute('data-pane-id'),x:Math.round(r.x+r.width*0.4),y:Math.round(r.y+14)}})()`)
+    const target = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const fs=[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')].filter(f=>{const r=f.getBoundingClientRect();return r.y>20&&r.y<vh-60});const f=fs[0];if(!f)return null;const r=f.getBoundingClientRect();return {id:f.getAttribute('data-pane-id'),x:Math.round(r.x+r.width*0.4),y:Math.round(r.y+14)}})()`)
     let dragResult = 'no in-viewport pane-frame'
     if (target && s0.length >= 2) {
       await h.cdp.gesture(`[data-pane-id="${target.id}"]`, [
@@ -6033,14 +6033,14 @@ const BLOCKS = {
   // path and can never PASS).
   user2_pane_drag: async (h) => {
     await ufEnsureAppClear(h)
-    const slots = () => h.cdp.evaluate(`[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')].map((f,i)=>({pid:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)}))`)
+    const slots = () => h.cdp.evaluate(`[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')].map((f,i)=>({pid:f.getAttribute('data-pane-id'),y:Math.round(f.getBoundingClientRect().y)}))`)
     const surface = await ufSurfaceTarget(h)
     const s0 = await slots()
     if (!Array.isArray(s0) || s0.length < 2) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `not enough left-zone panes: ${JSON.stringify(s0)}`, { path: 'missing', ok: false, surface })
     // pick an in-viewport pane; drag from ITS HEADER (the collapse-toggle strip).
-    const start = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')];const cur=fs.find(f=>f.getAttribute('data-pane-id')==='doc-nav')||null;const f=cur||fs[0];const r=f.getBoundingClientRect();if(r.y>window.innerHeight-30)return {err:'off-viewport',pid:f.getAttribute('data-pane-id')};const hdr=f.querySelector('.pane-collapse-toggle');const hd=hdr?hdr.getBoundingClientRect():r;const x=Math.round(hd.x+Math.min(hd.width/2,160)),y=Math.round(hd.y+hd.height/2);const hit=document.elementFromPoint(x,y);return {pid:f.getAttribute('data-pane-id'),x:x,y:y,hdr:!!hdr,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===f||f.contains(hit)))}})()`)
+    const start = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')];const cur=fs.find(f=>f.getAttribute('data-pane-id')==='doc-nav')||null;const f=cur||fs[0];const r=f.getBoundingClientRect();if(r.y>window.innerHeight-30)return {err:'off-viewport',pid:f.getAttribute('data-pane-id')};const hdr=f.querySelector('.pane-collapse-toggle');const hd=hdr?hdr.getBoundingClientRect():r;const x=Math.round(hd.x+Math.min(hd.width/2,160)),y=Math.round(hd.y+hd.height/2);const hit=document.elementFromPoint(x,y);return {pid:f.getAttribute('data-pane-id'),x:x,y:y,hdr:!!hdr,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===f||f.contains(hit)))}})()`)
     if (start.err) return { ...rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `drag start ${start.err} on ${start.pid} — the pane header is not in the viewport after the scroll reset, so the REAL gesture cannot be driven this pass (an INCONCLUSIVE precondition, not a behavior FAIL)`, { path: 'off-viewport', ok: false, surface }), park: true, verdict: 'PARKED' }
-    const target = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[data-zone="left"] .pane-frame[data-pane-id]')];const idx=fs.findIndex(f=>f.getAttribute('data-pane-id')==='${start.pid}');const nx=fs[idx+1];if(!nx)return null;const r=nx.getBoundingClientRect();return {pid:nx.getAttribute('data-pane-id'),y:Math.round(r.y),h:Math.round(r.height)}})()`)
+    const target = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')];const idx=fs.findIndex(f=>f.getAttribute('data-pane-id')==='${start.pid}');const nx=fs[idx+1];if(!nx)return null;const r=nx.getBoundingClientRect();return {pid:nx.getAttribute('data-pane-id'),y:Math.round(r.y),h:Math.round(r.height)}})()`)
     if (!target) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `no sibling below ${start.pid}`, { path: 'missing', ok: false, surface })
     const ty = target.y + Math.min(22, target.h - 6)
     await h.cdp.gesture(`[data-pane-id="${start.pid}"]`, [
@@ -6073,7 +6073,7 @@ const BLOCKS = {
     // SYNTHETIC driver ([DIAG]-classified): recorded as a proxy, never a real gesture.
     await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone-minimize-left')||document.querySelector('.pane-zone-minimize');if(!b)return 'no-btn';b.click();return 'clicked'})()`)
     await sleep(900)
-    const tabs = await h.cdp.evaluate(`(()=>{const ts=[...document.querySelectorAll('.pane-tab')].map((el,i)=>{const r=el.getBoundingClientRect();return {i,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}});return {ts,frameCount:document.querySelectorAll('.pane-frame[data-pane-id]').length,zoneMin:[...document.querySelectorAll('[data-zone="left"],.pane-zone-minimize')].map(z=>({tag:z.tagName,id:z.id||'',cls:String(z.className)}))}})()`)
+    const tabs = await h.cdp.evaluate(`(()=>{const ts=[...document.querySelectorAll('.pane-tab')].map((el,i)=>{const r=el.getBoundingClientRect();return {i,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}});return {ts,frameCount:document.querySelectorAll('.pane-frame[data-pane-id]').length,zoneMin:[...document.querySelectorAll('[zone="left"],.pane-zone-minimize')].map(z=>({tag:z.tagName,id:z.id||'',cls:String(z.className)}))}})()`)
     const t = Array.isArray(tabs.ts) ? tabs.ts : []
     // vertical re-orientation == distinct increasing y, uniform small height, same x
     const vertical = t.length >= 2 && new Set(t.map((o) => o.y)).size === t.length && new Set(t.map((o) => o.h)).size === 1 && new Set(t.map((o) => o.x)).size === 1
@@ -6326,10 +6326,10 @@ const BLOCKS = {
   // ===================================================================
 
   // BUG 7 — drag a side-zone GUTTER: the zone width MUST change (>10px).
-  // Captures `[data-zone="left"]`'s bounding-rect width and drives a REAL CDP
+  // Captures `[zone="left"]`'s bounding-rect width and drives a REAL CDP
   // coordinate drag at the zone's right (gutter) edge, HIT-TESTING the drag start
   // against the zone (an unproven start is recorded as a non-`'cdp'` path and can
-  // never PASS); a native pointer-drag on the `.gutter[data-zone="left"]` element
+  // never PASS); a native pointer-drag on the `.gutter[zone="left"]` element
   // is kept as a `[DIAG]` seam probe only, then the width change is asserted.
   user7_zone_resize: async (h) => {
     // restore: ensure the left zone is EXPANDED so a gutter edge exists
@@ -6340,9 +6340,9 @@ const BLOCKS = {
     const w0 = await w()
     const edge = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');if(!z)return null;const r=z.getBoundingClientRect();const x=Math.round(r.x+r.width),y=Math.round(r.y+200);const hit=document.elementFromPoint(x,y);return {x:x,y:y,hit:hit?(hit.id||hit.className||hit.tagName):null,onTarget:!!(hit&&(hit===z||z.contains(hit)))}})()`)
     const surface = await ufSurfaceTarget(h)
-    if (w0 == null || !edge) return rowResult({row:'UF-DEFECT-5',dclass:'D-interaction'}, 'A REAL drag at the visible zone boundary resizes the zone width by >10px', 'no [data-zone=left] / edge', { path: 'missing', ok: false, surface })
-    // geometry of the .gutter[data-zone=left] element (may be 0-size -> no grippable surface)
-    const gutter = await h.cdp.evaluate(`(()=>{const g=[...document.querySelectorAll('.gutter[data-zone="left"]')][0]||document.querySelector('.gutter[data-zone]');if(!g)return null;const r=g.getBoundingClientRect();return {zone:g.getAttribute('data-zone'),x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),cursor:getComputedStyle(g).cursor}})()`)
+    if (w0 == null || !edge) return rowResult({row:'UF-DEFECT-5',dclass:'D-interaction'}, 'A REAL drag at the visible zone boundary resizes the zone width by >10px', 'no [zone=left] / edge', { path: 'missing', ok: false, surface })
+    // geometry of the .gutter[zone=left] element (may be 0-size -> no grippable surface)
+    const gutter = await h.cdp.evaluate(`(()=>{const g=[...document.querySelectorAll('.gutter[zone="left"]')][0]||document.querySelector('.gutter[zone]');if(!g)return null;const r=g.getBoundingClientRect();return {zone:g.getAttribute('zone'),x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),cursor:getComputedStyle(g).cursor}})()`)
     // (a) REAL user gesture: CDP coordinate drag at the boundary edge x=zone-right
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: edge.x, y: edge.y, button: 'left', clickCount: 0 })
     await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: edge.x, y: edge.y, button: 'left', clickCount: 1 })
@@ -6358,7 +6358,7 @@ const BLOCKS = {
     let nat = 'not-attempted (no gutter element)'
     if (gutter) {
       nat = await h.cdp.evaluate(`(()=>{
-        const g=[...document.querySelectorAll('.gutter[data-zone="left"]')][0]||document.querySelector('.gutter[data-zone]');
+        const g=[...document.querySelectorAll('.gutter[zone="left"]')][0]||document.querySelector('.gutter[zone]');
         if(!g) return 'no-gutter';
         const mk=(t,x,y)=>new PointerEvent(t,{bubbles:true,cancelable:true,button:0,pointerId:7,isPrimary:true,clientX:x,clientY:y,screenX:x,screenY:y});
         g.dispatchEvent(mk('pointerdown',g.getBoundingClientRect().x,g.getBoundingClientRect().y));
@@ -6385,7 +6385,7 @@ const BLOCKS = {
 
   // BUG 8 — a VISIBLE boundary must separate the side zone from the central
   // stage. The primary oracle is a SEAM GAP MEASURED IN PAINTED PIXELS between
-  // `[data-zone=left]`'s right edge and `#zone:main`'s left edge (a real
+  // `[zone=left]`'s right edge and `#zone:main`'s left edge (a real
   // separator leaves a gutter > 1px wide); the computed border/background/gap
   // probes are kept as supporting diagnostics, never as the sole oracle.
   user8_zone_boundary: async (h) => {
@@ -6393,7 +6393,7 @@ const BLOCKS = {
       const left=document.getElementById('zone:left'), main=document.getElementById('zone:main'), wr=document.getElementById('wiki-root');
       const cs=(el)=>{if(!el)return null;const s=getComputedStyle(el);const r=el.getBoundingClientRect();return {bg:s.backgroundColor,borderL:s.borderLeft,borderR:s.borderRight,gap:s.gap,shadow:s.boxShadow,cls:String(el.className),x:Math.round(r.x),right:Math.round(r.right),w:Math.round(r.width)}};
       const wcs=wr?(()=>{const s=getComputedStyle(wr);return {tc:s.gridTemplateColumns.replace(/\\s+/g,' '),gap:s.gap,bg:s.backgroundColor}})():null;
-      const gutters=[...document.querySelectorAll('.gutter[data-zone]')].map(g=>({z:g.getAttribute('data-zone'),x:Math.round(g.getBoundingClientRect().x),w:Math.round(g.getBoundingClientRect().width),h:Math.round(g.getBoundingClientRect().height),cursor:getComputedStyle(g).cursor,bg:getComputedStyle(g).backgroundColor}));
+      const gutters=[...document.querySelectorAll('.gutter[zone]')].map(g=>({z:g.getAttribute('zone'),x:Math.round(g.getBoundingClientRect().x),w:Math.round(g.getBoundingClientRect().width),h:Math.round(g.getBoundingClientRect().height),cursor:getComputedStyle(g).cursor,bg:getComputedStyle(g).backgroundColor}));
       const pf=document.querySelector('.pane-frame[data-pane-id]');
       const seamPx=(left&&main)?Math.round(main.getBoundingClientRect().x-left.getBoundingClientRect().right):null;
       const between=(left&&main)?document.elementFromPoint(Math.round((left.getBoundingClientRect().right+main.getBoundingClientRect().x)/2),Math.round(main.getBoundingClientRect().y+120)):null;
@@ -7078,7 +7078,7 @@ const BLOCKS = {
     // and travels past the controller's threshold toward the next pane. If the
     // body gesture were admitted by the pane-drag surface the zone's pane-slot
     // ordering would change; the claim is that it does NOT (header-only surface).
-    const slotSnapshot = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[data-zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y)})))()`)
+    const slotSnapshot = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone] .pane-frame[data-pane-id]')].map((f,i)=>({i,paneId:f.getAttribute('data-pane-id'),x:Math.round(f.getBoundingClientRect().x),y:Math.round(f.getBoundingClientRect().y)})))()`)
     const slotsBefore = await slotSnapshot()
     const scrollDocNav = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame'};if(typeof f.scrollIntoView==='function')f.scrollIntoView({block:'start'});return true})()`)
     await sleep(500)
@@ -7128,7 +7128,7 @@ const BLOCKS = {
     const rearrange = await ufPaneRearrangeInput(h, 'left', 'doc-nav')
     const limb1After = await ufLayoutReading(h)
     const rectUnchanged = (a, b) => JSON.stringify(a) === JSON.stringify(b)
-    const limb1SiblingZonesUnchanged = rectUnchanged(limb1Before.zoneRight, limb1After.zoneRight) && rectUnchanged(limb1Before.zoneHeader, limb1After.zoneHeader) && rectUnchanged(limb1Before.zoneFooter, limb1After.zoneFooter)
+    const limb1SiblingZonesUnchanged = rectUnchanged(limb1Before.zoneRight, limb1After.zoneRight) && rectUnchanged(limb1Before.zoneTop, limb1After.zoneTop) && rectUnchanged(limb1Before.zoneBottom, limb1After.zoneBottom)
     const limb1StageUnchanged = rectUnchanged(limb1Before.main, limb1After.main)
     const limb1MountExactlyOne = limb1Before.mountCount === 1 && limb1After.mountCount === 1
     const limb1NoStaleChildlessRoot = limb1Before.staleChildlessRoots === 0 && limb1After.staleChildlessRoots === 0
@@ -7136,12 +7136,12 @@ const BLOCKS = {
     const limb1LayoutHeld = limb1SiblingZonesUnchanged && limb1StageUnchanged && limb1MountExactlyOne && limb1NoStaleChildlessRoot
     const limb1Ok = limb1Rearranged && limb1LayoutHeld
     const limb1InputReading = rearrange.driven === true
-      ? `${rearrange.inputKind} — the drag START is the pane's OWN HEADER SURFACE (hit=${JSON.stringify(rearrange.dragStartHit)}, onTarget=${rearrange.dragStartOnTarget}, and the APP'S OWN delegated resolution at that point (closest('.gutter[data-zone], .pane-collapse-toggle')) returns that very header=${rearrange.dragStartOnTheAppHeaderSurface}; the header element is a ${rearrange.dragStartHeaderTag}, i.e. the header IS the collapse control on this build — the fork's pinned F-1 decision, so a point on the header that is NOT the toggle does not exist and is not invented): pane ${rearrange.dragStartPane} (header box ${JSON.stringify(rearrange.dragStartPaneHeaderBox)}; WHY THIS PANE: ${rearrange.dragStartPaneChosenBecause}) dragged in small steps (${rearrange.pathShape}) from (${rearrange.dragStart.x},${rearrange.dragStart.y}) PAST ${rearrange.draggedPast} to y=${rearrange.dragToY} (past the sibling's midpoint=${rearrange.dragPastTheSiblingMidpoint}; DROP POINT DERIVATION: ${rearrange.dropBasis}) INSIDE zone '${rearrange.zone}' (the rearrange is WITHIN one zone); zone pane-slot order before=[${rearrange.slotOrderBefore}] after=[${rearrange.slotOrderAfter}] → rearrangedInsideTheZone=${rearrange.rearranged}; POINTER AUDIT (why a drag that moved nothing moved nothing): gotpointercapture events=${rearrange.pointerAudit ? rearrange.pointerAudit.gotPointerCaptureEvents : '?'}, pointer-capture holders at the end=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.captureHoldersAtTheEnd : null)}, move targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.moveTargets : null)}, terminal targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.terminalTargets : null)}, revealed zone mirrors=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.revealedMirrors : null)}; RESTORE (this block's own hygiene, AFTER the reading and never a substitute for it)=${rearrange.restore ? (rearrange.restore.performed === true ? `a leaked provisional drop-target mirror was cleared through the app's own gesture path (two real header clicks: the first supersedes the in-flight drag and terminates its own session, the second restores the collapse state it toggled) → reveal mirrors after the restore=${JSON.stringify(rearrange.restore.revealMirrorsAfterTheRestore)} pane slots after the restore=${JSON.stringify(rearrange.restore.paneSlotsAfterTheRestore)} collapse state ${JSON.stringify(rearrange.restore.collapseBefore)} -> ${JSON.stringify(rearrange.restore.collapseAfter)} restored=${rearrange.restore.collapseStateRestored}` : `nothing to restore: the drag left NO revealed zone mirror (${JSON.stringify(rearrange.restore.revealMirrorsAfterTheDrag)})`) + (rearrange.restore.error ? ` ERROR=${rearrange.restore.error}` : '') : 'no restore record'}`
+      ? `${rearrange.inputKind} — the drag START is the pane's OWN HEADER SURFACE (hit=${JSON.stringify(rearrange.dragStartHit)}, onTarget=${rearrange.dragStartOnTarget}, and the APP'S OWN delegated resolution at that point (closest('.gutter[zone], .pane-collapse-toggle')) returns that very header=${rearrange.dragStartOnTheAppHeaderSurface}; the header element is a ${rearrange.dragStartHeaderTag}, i.e. the header IS the collapse control on this build — the fork's pinned F-1 decision, so a point on the header that is NOT the toggle does not exist and is not invented): pane ${rearrange.dragStartPane} (header box ${JSON.stringify(rearrange.dragStartPaneHeaderBox)}; WHY THIS PANE: ${rearrange.dragStartPaneChosenBecause}) dragged in small steps (${rearrange.pathShape}) from (${rearrange.dragStart.x},${rearrange.dragStart.y}) PAST ${rearrange.draggedPast} to y=${rearrange.dragToY} (past the sibling's midpoint=${rearrange.dragPastTheSiblingMidpoint}; DROP POINT DERIVATION: ${rearrange.dropBasis}) INSIDE zone '${rearrange.zone}' (the rearrange is WITHIN one zone); zone pane-slot order before=[${rearrange.slotOrderBefore}] after=[${rearrange.slotOrderAfter}] → rearrangedInsideTheZone=${rearrange.rearranged}; POINTER AUDIT (why a drag that moved nothing moved nothing): gotpointercapture events=${rearrange.pointerAudit ? rearrange.pointerAudit.gotPointerCaptureEvents : '?'}, pointer-capture holders at the end=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.captureHoldersAtTheEnd : null)}, move targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.moveTargets : null)}, terminal targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.terminalTargets : null)}, revealed zone mirrors=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.revealedMirrors : null)}; RESTORE (this block's own hygiene, AFTER the reading and never a substitute for it)=${rearrange.restore ? (rearrange.restore.performed === true ? `a leaked provisional drop-target mirror was cleared through the app's own gesture path (two real header clicks: the first supersedes the in-flight drag and terminates its own session, the second restores the collapse state it toggled) → reveal mirrors after the restore=${JSON.stringify(rearrange.restore.revealMirrorsAfterTheRestore)} pane slots after the restore=${JSON.stringify(rearrange.restore.paneSlotsAfterTheRestore)} collapse state ${JSON.stringify(rearrange.restore.collapseBefore)} -> ${JSON.stringify(rearrange.restore.collapseAfter)} restored=${rearrange.restore.collapseStateRestored}` : `nothing to restore: the drag left NO revealed zone mirror (${JSON.stringify(rearrange.restore.revealMirrorsAfterTheDrag)})`) + (rearrange.restore.error ? ` ERROR=${rearrange.restore.error}` : '') : 'no restore record'}`
       : `NOT DRIVEN — ${rearrange.reason}`
     const limb1Evidence = `[§7.2 limb 1 — LAYOUT EFFECT, carrier row U-3/uf_panes_12; scope: the assembled renderer THIS driver spawned, its own CDP input path] ` +
       `REAL INPUT (required (iv)): ${limb1InputReading}; ` +
-      `rects BEFORE the rearrange (required (i), this run's own pair): zone:left=${JSON.stringify(limb1Before.zoneLeft)} (the zone rearranged IN) zone:right=${JSON.stringify(limb1Before.zoneRight)} zone:header=${JSON.stringify(limb1Before.zoneHeader)} zone:footer=${JSON.stringify(limb1Before.zoneFooter)} stage(#zone:main)=${JSON.stringify(limb1Before.main)} gridColumns="${limb1Before.gridColumns}"; ` +
-      `rects AFTER: zone:left=${JSON.stringify(limb1After.zoneLeft)} zone:right=${JSON.stringify(limb1After.zoneRight)} zone:header=${JSON.stringify(limb1After.zoneHeader)} zone:footer=${JSON.stringify(limb1After.zoneFooter)} stage(#zone:main)=${JSON.stringify(limb1After.main)} gridColumns="${limb1After.gridColumns}"; ` +
+      `rects BEFORE the rearrange (required (i), this run's own pair): zone:left=${JSON.stringify(limb1Before.zoneLeft)} (the zone rearranged IN) zone:right=${JSON.stringify(limb1Before.zoneRight)} zone:top=${JSON.stringify(limb1Before.zoneTop)} zone:bottom=${JSON.stringify(limb1Before.zoneBottom)} stage(#zone:main)=${JSON.stringify(limb1Before.main)} gridColumns="${limb1Before.gridColumns}"; ` +
+      `rects AFTER: zone:left=${JSON.stringify(limb1After.zoneLeft)} zone:right=${JSON.stringify(limb1After.zoneRight)} zone:top=${JSON.stringify(limb1After.zoneTop)} zone:bottom=${JSON.stringify(limb1After.zoneBottom)} stage(#zone:main)=${JSON.stringify(limb1After.main)} gridColumns="${limb1After.gridColumns}"; ` +
       `OBSERVED (i): siblingZonesUnchanged=${limb1SiblingZonesUnchanged} stageUnchanged=${limb1StageUnchanged}; ` +
       `OBSERVED (ii) #wiki-root mount count: BEFORE=${limb1Before.mountCount} AFTER=${limb1After.mountCount} → exactlyOneMount=${limb1MountExactlyOne} (required EXACTLY 1 — no zero, no two); ` +
       `OBSERVED (iii) STALE CHILDLESS ROOT: childless #wiki-root(s) BEFORE=${limb1Before.staleChildlessRoots} AFTER=${limb1After.staleChildlessRoots} → NO stale childless root appeared=${limb1NoStaleChildlessRoot} (explicit statement: NO element under the layout root carried zero children in the post-state); ` +
@@ -7470,7 +7470,29 @@ const BLOCKS = {
   // node ids AFTER a RAG content change (a before/after comparison of the zone
   // id set AND the id↔nodeId pairing — membership of a constant list alone is a
   // trivially satisfiable proxy), and the zone containers stay rendered.
+  //
+  // ⟨Unit `U-1a` (D-16; change-analysis §2.5) — THE LITERAL CONTAINER-ID LIMB.⟩ The
+  // set comparison above is NAME-AGNOSTIC: a rename that moved every id EQUALLY
+  // stays green while asserting nothing, and the `startsWith('zone')` filter also
+  // admits `zone-minimize-*`, `zone-gutter-*` and `zone-tab-*`. So the CONTAINERS are
+  // separated from those controls BY ID SHAPE (`zone:<name>`) and asserted to equal
+  // the closed four, SPELLED, before AND after the content change. This is the
+  // MCP-visible half's only possible red (before `U-1a` the two row zones' container
+  // ids spelled `header`/`footer` — not spelled here, the driver census forbids the
+  // token — and the `top`/`bottom` ids were absent), and it re-pins an existing row —
+  // no new matrix slot (`unit-zone-replacement.md:32` `R-10`).
   uf_layout_2: async (h) => {
+    // THE CLOSED FOUR, SPELLED AND SORTED — the PANE-ZONE CONTAINERS only. `zone:main` (the
+    // STAGE) and `zone:sidebar` (the legacy producer) are `zone:`-shaped nodes that are NOT
+    // pane zones (D-16 names four), so the limb filters BY NAME and would otherwise be
+    // unsatisfiable on every run; the rename's own tooth is the `oldRowZoneIds` arm.
+    const PANE_ZONE_IDS = ['zone:bottom', 'zone:left', 'zone:right', 'zone:top']
+    const paneZoneContainerIds = (ids) => ids.filter((id) => /^zone:(?:top|bottom|left|right)$/.test(id)).sort()
+    const oldRowZoneIds = (ids) => ids.filter((id) => /^zone:(?:header|footer)$/.test(id))
+    // NON-VACUOUS IN BOTH DIRECTIONS: a missing closed-four member reads a short list, and a
+    // surviving pre-rename row-zone id reads a non-empty `oldRowZoneIds`.
+    const containersLiteral = (ids) =>
+      paneZoneContainerIds(ids).join(',') === PANE_ZONE_IDS.join(',') && oldRowZoneIds(ids).length === 0
     await ufEnsureAppClear(h)
     // hygiene: a previous block's scrollIntoView on a tall pane can leave the
     // app graph above the viewport — reset so the painted-box oracle is stable
@@ -7479,7 +7501,8 @@ const BLOCKS = {
     const zones = async () => {
       const r = await h.mcpTool(h.mcp, 'provident.list_targets', {}).catch((e) => ({ error: String(e) }))
       const nodes = (r && Array.isArray(r.nodes) ? r.nodes : []).filter((n) => typeof n.propsId === 'string' && n.propsId.startsWith('zone'))
-      return { ids: nodes.map((n) => n.propsId).sort(), nodeIds: nodes.map((n) => n.propsId + '=' + n.nodeId).sort(), err: r && r.error ? r.error : null }
+      const allIds = nodes.map((n) => n.propsId)
+      return { ids: allIds.slice().sort(), containers: paneZoneContainerIds(allIds), oldZoneIds: oldRowZoneIds(allIds), literal: containersLiteral(allIds), nodeIds: nodes.map((n) => n.propsId + '=' + n.nodeId).sort(), err: r && r.error ? r.error : null }
     }
     const before = await zones()
     const change = await h.mcpTool(h.mcp, 'edit.set_content', { nodeId: '.live-fixture/core/beta', content: '# Beta\n\nPane collapse (C5) — live content change for UF-LAYOUT-2.\n' }).catch((e) => ({ error: String(e) }))
@@ -7490,8 +7513,11 @@ const BLOCKS = {
     const idsAfterMinusBefore = after.ids.filter((x) => !before.ids.includes(x))
     const pairingEqual = before.nodeIds.length > 0 && before.nodeIds.join('|') === after.nodeIds.join('|')
     const pairingChanged = before.nodeIds.filter((x, i) => after.nodeIds[i] !== x).length
+    // THE LITERAL LIMB — the closed four, SPELLED, before AND after:
+    const containersLiteralBefore = before.literal
+    const containersLiteralAfter = after.literal
     const dom = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const l=document.getElementById('zone:left');const b=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};return {main:b(m),left:b(l),mainText:(m?(m.textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):null)}})()`)
-    return rowResult({row:'UF-LAYOUT-2',dclass:'D-state'}, 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, and the zone containers stay rendered', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; edit.set_content(.live-fixture/core/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-LAYOUT-2',dclass:'D-state'}, 'provident.list_targets keeps the STABLE zone:* ids AND node-id pairing after a RAG content change, the zone CONTAINER ids equal the closed four literally (zone:top/bottom/left/right), and the zone containers stay rendered', `zones BEFORE the content change: ids=${JSON.stringify(before.ids)} pairing=${JSON.stringify(before.nodeIds)}${before.err ? ' err=' + before.err : ''}; PANE-ZONE CONTAINER ids before=${JSON.stringify(before.containers)} expected=${JSON.stringify(PANE_ZONE_IDS)} literal=${containersLiteralBefore} preRenameRowZoneIds=${JSON.stringify(before.oldZoneIds)}; edit.set_content(.live-fixture/core/beta) → ${change && change.ok === false ? JSON.stringify(change) : 'ok'}; zones AFTER: ids=${JSON.stringify(after.ids)} pairing=${JSON.stringify(after.nodeIds)} CONTAINER ids after=${JSON.stringify(after.containers)} literal=${containersLiteralAfter} preRenameRowZoneIds=${JSON.stringify(after.oldZoneIds)} → zoneIdSetStable=${idsEqual} (removed=${JSON.stringify(idsBeforeMinusAfter)} added=${JSON.stringify(idsAfterMinusBefore)}) nodeIdPairingStable=${pairingEqual} (pairing entries changed=${pairingChanged}); rendered zone containers: #zone:main box=${JSON.stringify(dom.main)} text="${dom.mainText}", #zone:left box=${JSON.stringify(dom.left)} (an empty zone is display:none by design — its id survives in the graph)`, { path: 'not-gesture', gesture: false, ok: idsEqual && pairingEqual && containersLiteralBefore && containersLiteralAfter && !!dom.main && dom.main[2] > 0 && dom.main[3] > 0, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-LAYOUT-10 — with ZERO enabled+placed panes in `left` the zone's grid
@@ -7615,7 +7641,7 @@ const BLOCKS = {
     const u5LimbsEvidence =
       `[§7.2 limb 2 — ALL ZONES ARE FIXED POSITION WITH ANY SCROLLING INTERNAL; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned, the four ZONE CONTAINERS measured] ` +
       `REQUIRED: each zone container computes position:fixed with its own bounded box, its content box is scroll-capable (overflow:auto, never visible), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone's own content box, the element scrolled NAMED), the zone boxes hold their rects across a page-level scroll attempt, and no zone's box is stretched by the document (the page itself cannot overflow). READ TWICE, because the zone boxes can only disagree with the stage's box WHILE THE STAGE HOLDS A DOCUMENT LONGER THAN IT: ` +
-      `OBSERVED (a) AT REST [the state this block's own REAL clicks produced]: scrolled element = ${limb2AtRest.scrolledElement}; page-level scroll attempt=${limb2AtRest.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2AtRest.pageBefore)} after=${JSON.stringify(limb2AtRest.pageAfter)} → pageAdvanced=${limb2AtRest.pageMoved} pageCannotOverflow=${limb2AtRest.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2AtRest, 'before')} AFTER=${zoneRects(limb2AtRest, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2AtRest.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2AtRest.zoneBoxesBoundedByTheViewport} (viewport=${JSON.stringify(limb2AtRest.viewport)}); per-zone own scroll geometry: ${zoneFacts(limb2AtRest)} → zonesFixed=${limb2AtRest.inside.every((z) => z.position === 'fixed')} zonesScrollCapable=${limb2AtRest.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll')}; EXCLUDED (elements carrying data-zone that are NOT zone containers — the four authored gutter affordances and the zone-minimize controls; named, never graded as zones)=${JSON.stringify(limb2AtRest.excluded.map((e) => [e.id, e.classes, e.box]))}; ` +
+      `OBSERVED (a) AT REST [the state this block's own REAL clicks produced]: scrolled element = ${limb2AtRest.scrolledElement}; page-level scroll attempt=${limb2AtRest.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2AtRest.pageBefore)} after=${JSON.stringify(limb2AtRest.pageAfter)} → pageAdvanced=${limb2AtRest.pageMoved} pageCannotOverflow=${limb2AtRest.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2AtRest, 'before')} AFTER=${zoneRects(limb2AtRest, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2AtRest.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2AtRest.zoneBoxesBoundedByTheViewport} (viewport=${JSON.stringify(limb2AtRest.viewport)}); per-zone own scroll geometry: ${zoneFacts(limb2AtRest)} → zonesFixed=${limb2AtRest.inside.every((z) => z.position === 'fixed')} zonesScrollCapable=${limb2AtRest.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll')}; EXCLUDED (elements carrying zone that are NOT zone containers — the four authored gutter affordances and the zone-minimize controls; named, never graded as zones)=${JSON.stringify(limb2AtRest.excluded.map((e) => [e.id, e.classes, e.box]))}; ` +
       `OBSERVED (b) WITH THE STAGE DOCUMENT OPEN — THE DECISIVE PAIR: scrolled element = ${limb2WithTheStageDocOpen.scrolledElement}; page-level scroll attempt=${limb2WithTheStageDocOpen.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2WithTheStageDocOpen.pageBefore)} after=${JSON.stringify(limb2WithTheStageDocOpen.pageAfter)} → pageAdvanced=${limb2WithTheStageDocOpen.pageMoved} pageCannotOverflow=${limb2WithTheStageDocOpen.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2WithTheStageDocOpen, 'before')} AFTER=${zoneRects(limb2WithTheStageDocOpen, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2WithTheStageDocOpen.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2WithTheStageDocOpen.zoneBoxesBoundedByTheViewport}; per-zone own scroll geometry: ${zoneFacts(limb2WithTheStageDocOpen)}; the stage's own box in the same reading: ${JSON.stringify(limb2WithTheStageDocOpen.stageScroll)}; ` +
       `→ zonesUnmovedAcrossBOTHReadings=${zonesUnmovedBothReadings} zonesFixedAndScrollCapableBothReadings=${zonesFixedAndScrollCapableBothReadings} zonesBoundedAndPageCannotOverflow=${zonesBoundedAndPageCannotOverflow} anInternalScrollRangeWasExercised=${anInternalScrollRangeWasExercised}; limb2Held=${limb2Ok}. ` +
       `[§7.2 limb 3 — THE STAGE SCROLLS INTERNALLY; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned] ` +
@@ -8646,7 +8672,7 @@ const BLOCKS = {
     const target = pick ? o0AttrSelector(O0_DOCNAV, 'data-folder-path', pick.folderPath) : O0_FOLDER_SELECTOR
     const cell = await h.cdp.evaluate(`(()=>{
       const root = document.getElementById('wiki-root');
-      const cellEl = document.getElementById('zone:main') || (root ? root.querySelector('[data-zone="main"]') : null);
+      const cellEl = document.getElementById('zone:main') || (root ? root.querySelector('[zone="main"]') : null);
       const sel = cellEl ? (cellEl.id ? '#' + cellEl.id : cellEl.tagName.toLowerCase()) : '#zone:main';
       if (!root || !cellEl) return { available: false, selector: sel, elId: cellEl && cellEl.id ? cellEl.id : null, computed: cellEl ? getComputedStyle(cellEl).display : null, rootDisplay: root ? getComputedStyle(root).display : null, detail: 'the stage cell or #wiki-root is absent in the executing bundle' };
       const rootDisplay = getComputedStyle(root).display;

@@ -549,3 +549,5 @@ Reconciled against the actual build + the U-SHELL-N7/7/IMPORT-1 hardening:
   `unit-u-shell-8-*` F4 (unverified — reconcile when their cycles reopen);
   pre-U-SHELL-1 `pane-graph.ts` line citations in `ui-overhaul.md` /
   `unit-ms5-*` / `unit-h8-*` (line drift only).
+
+**⟶ DATED NOTE `2026-11-15` — THE ZONE VOCABULARY MOVED (unit `U-1a`, D-16).** `LayoutZoneName` is now `top | bottom | left | right`, the carriers are `[zone=]`, and the pane `order` member is `index`; every `header`/`footer` zone spelling and every `data-zone` carrier in this handover is a pre-rename reading, kept as filed. The accepted cost of the move (persisted placements coercing to `left`, a persisted `order` discarded) is `ZONE-RENAME-SILENTLY-RELOCATES-PERSISTED-PLACEMENTS` in `docs/defects.md` (D-22).

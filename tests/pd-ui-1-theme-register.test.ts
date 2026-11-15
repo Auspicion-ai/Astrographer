@@ -243,7 +243,28 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  (the pre-landing value) and `3f87d796f19ac839c9837d0d6f0506e8` (the landing's first re-statement).
   //  **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/renderer/sidebar-panes.ts`, taken at the
   //  fix pass's head AFTER its `src/` writes). **NO OTHER ROW OF THIS TABLE IS TOUCHED.**
-  { file: 'src/renderer/sidebar-panes.ts', md5: 'f0b43b52565ad33145a3c979599214eb', superseded: '3f87d796f19ac839c9837d0d6f0506e8', restated: 'U-ZONE-REPLACEMENT' },
+  // ⟨RE-STATED 2026-11-15 — unit `U-1a` (`zone-vocabulary`), THE D-16 ZONE RENAME; §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are not relaxed (an
+  //  UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree limb). WHAT MOVED IS THE RECORDED
+  //  VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may move the file only by re-stating it here,
+  //  with its reason and its unit named"*. **THE REASON:** `U-1a` lands the D-16 ZONE RENAME WHOLE and
+  //  `src/renderer/sidebar-panes.ts` is one of its write sites — `LayoutZoneName` becomes `'top' | 'bottom' | 'left' |
+  //  'right'` (the two row zones the pre-rename vocabulary called `header`/`footer` renamed BY POSITION to `top`/`bottom`,
+  //  `ASM-U1a-1`), the authored carrier the pane graph writes becomes the bare `zone` attribute (no alias, no dual read:
+  //  `ASM-U1a-3`), the MCP-visible container ids become `zone:top`/`zone:bottom`, and the persisted pane entry's member
+  //  moves `order` → `index` — so its bytes MOVE by construction, and §2 row 11 of
+  //  `docs/L1/unit-u-1a-zone-vocabulary.md` is the clause that orders THIS row re-stated in the landing's own commit.
+  //  **THE UNIT:** `U-1a` (`zone-vocabulary`) — the split's first of three (`docs/L1/unit-u-1a-zone-vocabulary.md` §1).
+  //  **THE SUPERSEDED CHAIN, kept VISIBLE and NEVER deleted:** `df1930a3d6cac72796cc6c42609dd6c6` (the pre-landing value)
+  //  ← `3f87d796f19ac839c9837d0d6f0506e8` (`U-ZONE-REPLACEMENT`'s landing re-statement) ←
+  //  `f0b43b52565ad33145a3c979599214eb` (the same unit's GATE-4 fix pass) — the new value is that chain's fourth link.
+  //  **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/renderer/sidebar-panes.ts`, taken at this unit's landing
+  //  head AFTER its `src/` writes: `c56e3aac3bb4cf32302636d69d7c1b64`, measured twice and identical). **NO OTHER ROW OF
+  //  THIS TABLE IS TOUCHED** — the table stays SEVEN rows; `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself
+  //  (this row already carried a `restated:` field, so the derivation still resolves to the first row with none,
+  //  `src/shared/demo-envelope.ts`) and is NOT hand-edited here; and `src/main/preload.ts` IS NOT TOUCHED by this unit
+  //  (its carrier work is `U-1b`'s and it carries no zone literal — so it is not re-recorded either).
+  { file: 'src/renderer/sidebar-panes.ts', md5: 'c56e3aac3bb4cf32302636d69d7c1b64', superseded: 'f0b43b52565ad33145a3c979599214eb', restated: 'U-1a' },
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
   { file: 'src/shared/path-fork-cycle.ts', md5: 'eee412ed7609a1c8c727f2dafb2d97fb' },

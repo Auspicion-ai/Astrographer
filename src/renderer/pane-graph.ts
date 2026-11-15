@@ -46,7 +46,9 @@ import { containerDeclarationFor } from '../shared/container.js'
  *  `LAYOUT_PANE_ZONES` member, carrying its ZONE and its AXIS — and never as
  *  host-authored DOM (`src/renderer/index.html` keeps ZERO inline gutter elements).
  *  §3.2 binds the class/attribute vocabulary the shell already targets: `class`
- *  `gutter` + `data-zone` + `data-axis`, so the delegated gesture listener and the
+ *  `gutter` + `zone` + `data-axis` (⟨`U-1a`: the carrier is `zone=`, two-way: the
+ *  superseded attribute name is spelled in the docs, never in `src/`⟩), so the
+ *  delegated gesture listener and the
  *  shell's cursor CSS keep matching with NO re-point. The AXIS is the fork's own
  *  `gutterAxis(zone)` reading, never a module's answer (the taxonomy is the
  *  caller's). PURE. */
@@ -55,7 +57,7 @@ function authoredGutterAffordances(): LegacyNodeData[] {
     const axis = gutterAxis(zone)
     const node: LegacyNodeData = {
       type: 'div',
-      props: { id: `zone-gutter-${zone}`, 'data-zone': zone, 'data-axis': axis },
+      props: { id: `zone-gutter-${zone}`, zone, 'data-axis': axis },
       css: {
         classes: ['gutter'],
         // The CURSOR DECLARATION stays SHELL CSS and is never interpreted here: an
@@ -138,18 +140,18 @@ export const PANE_COLLAPSED_CLASS = 'is-collapsed'
 export const PANE_MINIMIZE_TOGGLE_HANDLER = 'pane-zone-minimize-toggle'
 
 /** The inline zone minimize/expand toggle body. It reads the zone from the
- *  control's authored `data-zone` and routes it to the host seam. A malformed
+ *  control's authored `zone` prop and routes it to the host seam. A malformed
  *  node is a no-op — never a throw. */
 const PANE_MINIMIZE_TOGGLE_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s || typeof s.zoneMinimizeToggle !== 'function') return;
-  var zone = ctx && ctx.node && ctx.node.props && ctx.node.props['data-zone'];
+  var zone = ctx && ctx.node && ctx.node.props && ctx.node.props['zone'];
   if (zone) s.zoneMinimizeToggle(String(zone));
 }`
 
 /** U-SHELL-4 (C12) — the shared zone-tab expand/select handler name. Each tab
  *  carries the SAME name (spec §2.4 "1 handler def per strip"); its inline body
- *  reads the authored `data-zone`/`data-pane-id` and routes to the
+ *  reads the authored `zone`/`data-pane-id` and routes to the
  *  `window.provident.sidebar.paneTabExpand` host seam, which expands the zone
  *  (`minimized:false`) + identifies the selected pane. */
 export const PANE_TAB_EXPAND_HANDLER = 'pane-tab-expand'
@@ -160,15 +162,17 @@ const PANE_TAB_EXPAND_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s || typeof s.paneTabExpand !== 'function') return;
   var props = ctx && ctx.node && ctx.node.props;
-  var zone = props && props['data-zone'];
+  var zone = props && props['zone'];
   var paneId = props && props['data-pane-id'];
   if (zone && paneId) s.paneTabExpand(String(zone), String(paneId));
 }`
 
-/** A zone's contained pane (the assembler's resolved per-zone entry). */
+/** A zone's contained pane (the assembler's resolved per-zone entry). `index` is
+ *  the pane's position within its zone (⟨`U-1a`: the `PaneLayoutEntry` member's
+ *  spelling, `order` → `index`). */
 interface ZonePane {
   def: PaneDefinition
-  order: number
+  index: number
   collapsed: boolean
   seq: number
 }
@@ -185,18 +189,18 @@ function resolveEnabledZonePanes(
 ): Record<LayoutZoneName, ZonePane[]> {
   const byId = new Map<string, PaneLayoutEntry>()
   for (const entry of layout.panes) byId.set(entry.id, entry)
-  const zonePanes: Record<LayoutZoneName, ZonePane[]> = { left: [], right: [], header: [], footer: [] }
+  const zonePanes: Record<LayoutZoneName, ZonePane[]> = { left: [], right: [], top: [], bottom: [] }
   enabledAppGraph.forEach((def, seq) => {
     const entry = byId.get(def.id)
     const zone: LayoutZoneName = entry?.zone ?? (isLayoutZoneName(def.defaultZone) ? def.defaultZone : 'left')
-    const order =
-      entry?.order ??
+    const index =
+      entry?.index ??
       (typeof def.defaultOrder === 'number' && Number.isFinite(def.defaultOrder) ? def.defaultOrder : seq)
     const collapsed = entry?.collapsed ?? false
-    zonePanes[zone].push({ def, order, collapsed, seq })
+    zonePanes[zone].push({ def, index, collapsed, seq })
   })
   for (const zone of LAYOUT_PANE_ZONES) {
-    zonePanes[zone].sort((a, b) => a.order - b.order || a.seq - b.seq)
+    zonePanes[zone].sort((a, b) => a.index - b.index || a.seq - b.seq)
   }
   return zonePanes
 }
@@ -212,7 +216,7 @@ export function enabledZonePaneCounts(
 ): Record<LayoutZoneName, number> {
   const enabledAppGraph = registry.listByScope('app-graph').filter((p) => registry.isEnabled(p.id))
   const resolved = resolveEnabledZonePanes(enabledAppGraph, coerceLayout(layout))
-  const counts: Record<LayoutZoneName, number> = { left: 0, right: 0, header: 0, footer: 0 }
+  const counts: Record<LayoutZoneName, number> = { left: 0, right: 0, top: 0, bottom: 0 }
   for (const zone of LAYOUT_PANE_ZONES) counts[zone] = resolved[zone].length
   return counts
 }
@@ -230,7 +234,7 @@ function zoneContainerChildren(
   if (panes.length === 0) return []
   const toggle: LegacyNodeData = {
     type: 'button',
-    props: { id: `zone-minimize-${zone}`, 'data-zone': zone, 'data-minimized': minimized ? 'true' : 'false' },
+    props: { id: `zone-minimize-${zone}`, zone, 'data-minimized': minimized ? 'true' : 'false' },
     css: { classes: clickableClasses(['pane-zone-minimize']) },
     content: minimized ? '▸' : '▾',
     handlers: [{ name: PANE_MINIMIZE_TOGGLE_HANDLER, event: 'click', body: PANE_MINIMIZE_TOGGLE_BODY }],
@@ -238,7 +242,7 @@ function zoneContainerChildren(
   if (!minimized) return [toggle]
   const tabs: LegacyNodeData[] = panes.map((p) => ({
     type: 'button',
-    props: { id: `zone-tab-${zone}-${p.def.id}`, 'data-pane-id': p.def.id, 'data-zone': zone },
+    props: { id: `zone-tab-${zone}-${p.def.id}`, 'data-pane-id': p.def.id, zone },
     css: { classes: clickableClasses(['pane-tab']) },
     content: p.def.title,
     handlers: [{ name: PANE_TAB_EXPAND_HANDLER, event: 'click', body: PANE_TAB_EXPAND_BODY }],
@@ -343,7 +347,7 @@ export interface AppGraphAssemblyInput {
 export interface AppGraphAssemblyResult {
   /** The pane-inclusive envelope: the traversal content payloads + one
    *  ContentPayload per ENABLED app-graph pane (grouped by zone, ordered by
-   *  `PaneLayoutEntry.order`), with one `zone:<name>` container producer per
+   *  `PaneLayoutEntry.index`), with one `zone:<name>` container producer per
    *  pane zone + one ContentPayload per pane in the template. */
   envelope: LegacyInitialData
   /** The enabled app-graph pane ids included (in registration order). */
@@ -396,7 +400,7 @@ function zoneMirrorClasses(paneCount: number, minimized: boolean, revealed: bool
 /** Assemble the pane-inclusive app-graph envelope from the traversal envelope
  *  + the enabled app-graph panes. Every pane zone always gets a stable
  *  `zone:<name>` container producer (W2-Q3); panes are placed into their zone
- *  in `PaneLayoutEntry.order` (spec §2.6 pin 3). PURE. */
+ *  in `PaneLayoutEntry.index` (spec §2.6 pin 3). PURE. */
 export function assembleAppGraphEnvelope(input: AppGraphAssemblyInput): AppGraphAssemblyResult {
   // §3.6 (the measurement-only hook allowance) — the recorder brackets the
   // EXISTING body below and is INERT WHEN UNARMED (a pure pass-through: no mark,
@@ -446,7 +450,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
     }
   }
 
-  // U-SHELL-4 (C11, H1/H2) — resolve each enabled pane's zone/order/collapsed
+  // U-SHELL-4 (C11, H1/H2) — resolve each enabled pane's zone/index/collapsed
   // into the SINGLE enabled+placed census (post overlay + default fallback).
   // `is-empty` derives from THIS (`zonePanes[zone].length`), NOT the raw overlay:
   // a fallback-placed pane makes its zone non-empty (spec §2.5 pin 8).
@@ -459,7 +463,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
   )
 
   // One ContentPayload per pane, grouped by zone (payload order is the
-  // `PaneLayoutEntry.order` observable — spec §2.6 pin 3). U-SHELL-4 (C12) — a
+  // `PaneLayoutEntry.index` observable — spec §2.6 pin 3). U-SHELL-4 (C12) — a
   // MINIMIZED non-empty zone REPLACES its pane stack with the tab strip (below),
   // so its pane payloads are not emitted.
   const panePayloads: LegacyContentPayload[] = []
@@ -542,7 +546,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
       const existingChildren = (existing.children ?? []) as LegacyNodeData[]
       children[children.indexOf(existing)] = {
         ...repaired,
-        props: { ...(repaired.props ?? {}), 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
+        props: { ...(repaired.props ?? {}), zone, 'data-orientation': zoneOrientation(zone) },
         css: withContainerDeclaration({ ...(existing.css ?? {}), classes: mergedClasses }),
         ...(authoredChildren.length > 0
           ? { children: [...existingChildren, ...authoredChildren] }
@@ -551,7 +555,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
     } else {
       children.push({
         type: 'div',
-        props: { id: `zone:${zone}`, 'data-zone': zone, 'data-orientation': zoneOrientation(zone) },
+        props: { id: `zone:${zone}`, zone, 'data-orientation': zoneOrientation(zone) },
         placement: { placementName: zone },
         css: withContainerDeclaration(classes.length > 0 ? { classes } : {}),
         ...(authoredChildren.length > 0 ? { children: authoredChildren } : {}),
@@ -586,10 +590,10 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
   // carries an authored affordance for a zone never duplicates it (the same
   // discipline the zone-container loop above uses).
   for (const affordance of authoredGutterAffordances()) {
-    const zone = (affordance.props as { 'data-zone'?: unknown })['data-zone']
+    const zone = (affordance.props as { zone?: unknown })['zone']
     const alreadyAuthored = children.some(
       (child) =>
-        (child.props as { 'data-zone'?: unknown; 'data-axis'?: unknown } | undefined)?.['data-zone'] === zone &&
+        (child.props as { zone?: unknown; 'data-axis'?: unknown } | undefined)?.['zone'] === zone &&
         typeof (child.props as { 'data-axis'?: unknown } | undefined)?.['data-axis'] === 'string',
     )
     if (!alreadyAuthored) children.push(affordance as ZoneContainerNode)

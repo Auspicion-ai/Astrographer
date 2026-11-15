@@ -16,6 +16,9 @@ sibling engine set), `docs/HANDOFF.md` (the filing index), `docs/FORKER.md` (fre
 
 ---
 
+
+**⟶ DATED NOTE `2026-11-15` — THE ZONE VOCABULARY BELOW IS SUPERSEDED AS A READING (unit `U-1a`, D-16).** The fork's zone names are now the foundation's: `LayoutZoneName` is `top | bottom | left | right`, the carriers are `[zone=]`, and the pane `order` member is `index`. This document's SC-5 row and its zone paragraphs were written against the pre-rename spelling (`header`/`footer`, `data-zone`); they are kept as filed (`RCA-8(c)`) and read through this note. The MCP-visible ids moved with the rename and `UF-LAYOUT-2` now asserts them literally (live reading: `PASS`, ids `[zone:bottom,zone:left,zone:right,zone:top]`).
+
 ## 1. What upstream ships
 
 The foundation is a **working MCP/Electron endpoint with a demo renderer** — deliberately minimal chrome. Read it

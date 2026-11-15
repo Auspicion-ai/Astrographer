@@ -3415,7 +3415,7 @@ export class SidebarPanes {
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
     const index = base.panes.findIndex((p) => p.id === paneId)
     if (index >= 0) {
-      // H1 (adversarial) — an EXISTING entry is COLLAPSED-ONLY: its zone/order
+      // H1 (adversarial) — an EXISTING entry is COLLAPSED-ONLY: its zone/index
       // are preserved (the toggle must never relocate/reorder the pane).
       const panes = base.panes.map((p, i) => (i === index ? { ...p, collapsed: p.collapsed !== true } : p))
       this.setLayout({ ...base, panes })
@@ -3433,7 +3433,7 @@ export class SidebarPanes {
       {
         id: paneId,
         zone: derived?.zone ?? ('left' as const),
-        order: derived?.order ?? base.panes.length,
+        index: derived?.index ?? base.panes.length,
         collapsed: true,
       },
     ]
@@ -3531,8 +3531,8 @@ export class SidebarPanes {
   /** Commit the active drop: resolve the controller's `DropResult`, derive the
    *  within-zone insertion index from the recorded drop point (§3.1), apply
    *  `movePane` to the current layout, and persist via ONE `setLayout`. A
-   *  self-drop that lands in the pane's current zone/order is a NO-OP (F2):
-   *  zero `operatorSettings.set` writes and no order change. Returns the
+   *  self-drop that lands in the pane's current zone/index is a NO-OP (F2):
+   *  zero `operatorSettings.set` writes and no placement change. Returns the
    *  committed descriptor (null when the drop is rejected — no mutation). */
   commitPaneDrop(payload?: unknown): DropResult | null {
     const result = this.dragController.drop(payload)
@@ -3541,26 +3541,26 @@ export class SidebarPanes {
     // (the controller reset its internal set silently — no extra crossing write).
     this.revealedZones = []
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
-    // U-SHELL-4 (C4/§3.1) — when the controller did not pin an order, derive it
+    // U-SHELL-4 (C4/§3.1) — when the controller did not pin an index, derive it
     // from the recorded drop point within the target zone's bounds. No recorded
     // point (a synthetic/index-less drop) → append (the prior behavior).
-    let order = result.order
-    if (order === undefined && this.lastDragPoint != null) {
+    let index = result.index
+    if (index === undefined && this.lastDragPoint != null) {
       const bounds = this.lastDragZones.find((z) => z.zone === result.zone)
       if (bounds != null) {
         const slots =
           base.panes.filter((p) => p.zone === result.zone && p.id !== result.paneId).length + 1
-        order = insertionIndexForPoint(this.lastDragPoint, bounds, slots)
+        index = insertionIndexForPoint(this.lastDragPoint, bounds, slots)
       }
     }
     this.lastDragPoint = null
     this.lastDragZones = []
-    const next = movePane(base, result.paneId, result.zone, order)
+    const next = movePane(base, result.paneId, result.zone, index)
     // F2 — a drop of a pane onto its own current position changes neither the
-    // zone nor the effective order → a no-op (0 writes, no order change).
+    // zone nor the effective index → a no-op (0 writes, no placement change).
     const before = base.panes.find((p) => p.id === result.paneId)
     const after = next.panes.find((p) => p.id === result.paneId)
-    if (before != null && after != null && before.zone === after.zone && before.order === after.order) {
+    if (before != null && after != null && before.zone === after.zone && before.index === after.index) {
       return result
     }
     this.setLayout(next)

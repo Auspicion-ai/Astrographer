@@ -22,12 +22,16 @@ import { applyProjection, project, type Projection, type VarSpec, type VarValues
 import { coerceLayout, type LayoutState } from './layout-state.js'
 
 /** The caller's `VarSpec` record for the SIX projected geometry properties: the four
- *  zone SIZES and the top bar in `px`, the stage as the serialized `fr` weight. */
+ *  zone SIZES and the top bar in `px`, the stage as the serialized `fr` weight.
+ *  ⟨`U-1a` (D-14/D-16): the row zones are `top`/`bottom`; the pre-`U-1a` token pair
+ *  named those two zones `header`/`footer` (superseded — the token itself is spelled
+ *  nowhere, because this unit's source census forbids the superseded spelling; the
+ *  superseded values stay visible in the docs and the register, `RCA-8(c)`).⟩ */
 const LAYOUT_VAR_SPECS: Record<string, VarSpec> = {
   '--zone-left-size': { name: '--zone-left-size', unit: 'px' },
   '--zone-right-size': { name: '--zone-right-size', unit: 'px' },
-  '--zone-header-size': { name: '--zone-header-size', unit: 'px' },
-  '--zone-footer-size': { name: '--zone-footer-size', unit: 'px' },
+  '--zone-top-size': { name: '--zone-top-size', unit: 'px' },
+  '--zone-bottom-size': { name: '--zone-bottom-size', unit: 'px' },
   '--stage-weight': { name: '--stage-weight', unit: 'fr' },
   '--top-bar-size': { name: '--top-bar-size', unit: 'px' },
 }
@@ -39,8 +43,8 @@ function layoutVarValues(layout: LayoutState): VarValues {
   return {
     '--zone-left-size': l.zones.left.size,
     '--zone-right-size': l.zones.right.size,
-    '--zone-header-size': l.zones.header.size,
-    '--zone-footer-size': l.zones.footer.size,
+    '--zone-top-size': l.zones.top.size,
+    '--zone-bottom-size': l.zones.bottom.size,
     '--stage-weight': l.stage.size,
     '--top-bar-size': l.topBar.size,
   }

@@ -37,18 +37,25 @@ import type { TrackSpec } from '../shared/zones.js'
 import type { PaneRegistry } from './pane-registry.js'
 
 /** The four pane zones a pane can be placed into (C4). `stage`/`top-bar` are
- *  regions (serialized geometry), NOT pane zones (W2-Q2). */
-export type LayoutZoneName = 'left' | 'right' | 'header' | 'footer'
+ *  regions (serialized geometry), NOT pane zones (W2-Q2). ⟨Unit `U-1a` — D-14/D-16:
+ *  the FOUNDATION'S vocabulary. The pre-`U-1a` spelling named the two row zones
+ *  `header`/`footer` (superseded; the literal is not spelled in `src/` because this
+ *  unit's source census forbids it — the superseded values stay visible in the docs
+ *  and the registers, `RCA-8(c)`), and it is superseded here, never aliased
+ *  (`ASM-U1a-3`: no dual read).⟩ */
+export type LayoutZoneName = 'top' | 'bottom' | 'left' | 'right'
 
 /** The two shell regions that are serialized but are never pane drop targets. */
 export type RegionName = 'stage' | 'top-bar'
 
-/** One pane's placement overlay entry. `collapsed` is PER-PANE (C5); `order`
- *  is the pane's position within its zone (W2-Q1). */
+/** One pane's placement overlay entry. `collapsed` is PER-PANE (C5); `index`
+ *  is the pane's position within its zone (W2-Q1) — ⟨`U-1a`: D-16's spelling move,
+ *  `order` → `index`, over a settled meaning; the pre-`U-1a` member name was
+ *  `order` (superseded, kept visible).⟩ */
 export interface PaneLayoutEntry {
   id: string
   zone: LayoutZoneName
-  order: number
+  index: number
   collapsed: boolean
 }
 
@@ -65,7 +72,7 @@ export interface ZoneLayout {
 export interface LayoutState {
   version: number
   panes: PaneLayoutEntry[]
-  zones: { left: ZoneLayout; right: ZoneLayout; header: ZoneLayout; footer: ZoneLayout }
+  zones: { left: ZoneLayout; right: ZoneLayout; top: ZoneLayout; bottom: ZoneLayout }
   stage: { size: number }
   topBar: { size: number }
 }
@@ -81,8 +88,12 @@ export interface LayoutPaneSpec {
 /** The current `LayoutState` schema version (W2-Q16). */
 export const LAYOUT_VERSION = 1
 
-/** The four pane zones, in the assembler's payload order. */
-export const LAYOUT_PANE_ZONES: readonly LayoutZoneName[] = ['left', 'right', 'header', 'footer']
+/** The four pane zones, in the assembler's payload order — ⟨`U-1a` `ASM-U1a-1`:
+ *  re-grained **BY POSITION** (`header`→`top`, `footer`→`bottom` in place), so the
+ *  payload order and every order-sensitive assertion keep their meaning. The
+ *  foundation's own `top|bottom|left|right` order is its demo census and is NOT
+ *  copied (`forking.md` §9).⟩ */
+export const LAYOUT_PANE_ZONES: readonly LayoutZoneName[] = ['left', 'right', 'top', 'bottom']
 
 /** The serialized regions (NOT pane zones — W2-Q2). */
 export const LAYOUT_REGIONS: readonly RegionName[] = ['stage', 'top-bar']
@@ -97,8 +108,8 @@ export const LAYOUT_REGION_MAX = 1200
 const DEFAULT_ZONE_SIZE: Record<LayoutZoneName, number> = {
   left: 220,
   right: 220,
-  header: 48,
-  footer: 48,
+  top: 48,
+  bottom: 48,
 }
 const DEFAULT_STAGE_SIZE = 640
 const DEFAULT_TOPBAR_SIZE = 36
@@ -110,7 +121,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** True when `value` is a known pane zone name (spec §2.6 pin 7 unknown-zone
  *  coercion relies on this). */
 export function isLayoutZoneName(value: unknown): value is LayoutZoneName {
-  return value === 'left' || value === 'right' || value === 'header' || value === 'footer'
+  return value === 'top' || value === 'bottom' || value === 'left' || value === 'right'
 }
 
 /** A total size coercion: a finite positive number passes through; any other
@@ -140,8 +151,8 @@ export function defaultLayout(): LayoutState {
     zones: {
       left: { size: DEFAULT_ZONE_SIZE.left, minimized: false },
       right: { size: DEFAULT_ZONE_SIZE.right, minimized: false },
-      header: { size: DEFAULT_ZONE_SIZE.header, minimized: false },
-      footer: { size: DEFAULT_ZONE_SIZE.footer, minimized: false },
+      top: { size: DEFAULT_ZONE_SIZE.top, minimized: false },
+      bottom: { size: DEFAULT_ZONE_SIZE.bottom, minimized: false },
     },
     stage: { size: DEFAULT_STAGE_SIZE },
     topBar: { size: DEFAULT_TOPBAR_SIZE },
@@ -156,7 +167,7 @@ export function deriveLayout(specs: ReadonlyArray<LayoutPaneSpec>): LayoutState 
   const panes: PaneLayoutEntry[] = specs.map((spec, index) => ({
     id: spec.id,
     zone: isLayoutZoneName(spec.defaultZone) ? spec.defaultZone : 'left',
-    order:
+    index:
       typeof spec.defaultOrder === 'number' && Number.isFinite(spec.defaultOrder)
         ? spec.defaultOrder
         : index,
@@ -198,7 +209,7 @@ export function coerceLayout(value: unknown): LayoutState {
     panes.push({
       id,
       zone: isLayoutZoneName(raw.zone) ? raw.zone : 'left', // F3/W2-Q2 — unknown/stage/top-bar → left
-      order: typeof raw.order === 'number' && Number.isFinite(raw.order) ? raw.order : index,
+      index: typeof raw.index === 'number' && Number.isFinite(raw.index) ? raw.index : index,
       collapsed: raw.collapsed === true,
     })
   }
@@ -207,9 +218,8 @@ export function coerceLayout(value: unknown): LayoutState {
   const zones = {
     left: coerceZoneLayout(rawZones.left, DEFAULT_ZONE_SIZE.left),
     right: coerceZoneLayout(rawZones.right, DEFAULT_ZONE_SIZE.right),
-    header: coerceZoneLayout(rawZones.header, DEFAULT_ZONE_SIZE.header),
-    footer: coerceZoneLayout(rawZones.footer, DEFAULT_ZONE_SIZE.footer),
-  }
+    top: coerceZoneLayout(rawZones.top, DEFAULT_ZONE_SIZE.top),
+    bottom: coerceZoneLayout(rawZones.bottom, DEFAULT_ZONE_SIZE.bottom),  }
   const rawStage = isRecord(value.stage) ? value.stage : {}
   const rawTopBar = isRecord(value.topBar) ? value.topBar : {}
   const stage = { size: coerceSize(rawStage.size, DEFAULT_STAGE_SIZE) }

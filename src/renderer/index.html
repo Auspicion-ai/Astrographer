@@ -83,7 +83,7 @@
       /* LIVE-6/B (2026-09-14) — the runtime mounts into #app and its zone
          containers are laid out INSIDE #app's wiki-root (below). The shell
          `.layout` is now just a full-width frame that gives #app a definite
-         height — the old separate left/stage/right/header/footer shell columns
+         height — the old separate left/stage/right/top/bottom shell columns
          are gone (they were the "empty col-resize" dead element). */
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -98,7 +98,7 @@
     .layout > .gutter { display: none; }
     /* LIVE-6 (2026-09-14) — the runtime mounts into #app, so the app-graph zone
        containers live INSIDE #app's single `wiki-root`. Lay `#wiki-root` out as
-       the intended shell grid (header / left · main · right / footer) so the
+       the intended shell grid (top / left · main · right / bottom) so the
        panes render as a LEFT SIDEBAR and the stage (`zone:main`) content sits in
        the center — fixing "panes populate the main canvas, not zones". */
     #app > #wiki-root {
@@ -115,14 +115,14 @@
          reclaimed the space). */
       --zone-left-track: var(--zone-left-size, 220px);
       --zone-right-track: var(--zone-right-size, 220px);
-      --zone-header-track: var(--zone-header-size, 48px);
-      --zone-footer-track: var(--zone-footer-size, 48px);
+      --zone-top-track: var(--zone-top-size, 48px);
+      --zone-bottom-track: var(--zone-bottom-size, 48px);
       grid-template-columns: var(--zone-left-track) minmax(0, var(--stage-weight, 1fr)) var(--zone-right-track);
-      grid-template-rows: var(--zone-header-track) minmax(0, 1fr) var(--zone-footer-track);
+      grid-template-rows: var(--zone-top-track) minmax(0, 1fr) var(--zone-bottom-track);
       grid-template-areas:
-        "header header header"
+        "top    top    top"
         "left   main   right"
-        "footer footer footer";
+        "bottom bottom bottom";
       /* ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` §2.1(d) — THE ZONES ARE FIXED.⟩
          `contain: layout` makes THIS element the containing block for its
          `position: fixed` descendants, so the four zone containers' fixed boxes
@@ -131,18 +131,18 @@
          zone would resolve against the viewport and drift off its own track. */
       contain: layout;
     }
-    #app [data-zone="header"] { grid-area: header; }
-    #app [data-zone="left"]   { grid-area: left;   }
+    #app [zone="top"]    { grid-area: top;    }
+    #app [zone="left"]   { grid-area: left;   }
     #app [id="zone:main"]     { grid-area: main;   }
-    #app [data-zone="right"]  { grid-area: right;  }
-    #app [data-zone="footer"] { grid-area: footer; }
+    #app [zone="right"]  { grid-area: right;  }
+    #app [zone="bottom"] { grid-area: bottom; }
     #app [id="zone:sidebar"]  { display: none; }
     .layout #panes { grid-area: left; }
     /* W2-N4 (AF-4) — the operator panes are modal-confined (C3) and MUST NOT
        occupy an app pane zone. The former `.layout #operator-panes
        { grid-area: right }` (higher specificity) defeated the spanning rule
        below; operator-pane placement is owned by U-SHELL-3/9. */
-    .layout .zone-footer { grid-area: footer; }
+    .layout .zone-bottom { grid-area: bottom; }
     /* Unit U-SHELL-4 (C11, H6) / F-3 — an empty zone's grid track collapses to
        zero, UNLESS the drag controller currently reveals it as a provisional
        drop target (`.is-revealed`). The state-derived `.is-empty` mirror is
@@ -151,10 +151,10 @@
        declaration. These rules must target the grid element ITSELF (it declares
        the base track): same element + higher specificity wins the cascade,
        which is what makes the declaration above actually collapse. */
-    #app > #wiki-root:has([data-zone='left'].is-empty:not(.is-revealed)) { --zone-left-track: 0px; }
-    #app > #wiki-root:has([data-zone='right'].is-empty:not(.is-revealed)) { --zone-right-track: 0px; }
-    #app > #wiki-root:has([data-zone='header'].is-empty:not(.is-revealed)) { --zone-header-track: 0px; }
-    #app > #wiki-root:has([data-zone='footer'].is-empty:not(.is-revealed)) { --zone-footer-track: 0px; }
+    #app > #wiki-root:has([zone='left'].is-empty:not(.is-revealed)) { --zone-left-track: 0px; }
+    #app > #wiki-root:has([zone='right'].is-empty:not(.is-revealed)) { --zone-right-track: 0px; }
+    #app > #wiki-root:has([zone='top'].is-empty:not(.is-revealed)) { --zone-top-track: 0px; }
+    #app > #wiki-root:has([zone='bottom'].is-empty:not(.is-revealed)) { --zone-bottom-track: 0px; }
     /* ⟨Unit `U-ZONE-REPLACEMENT` / `PD-UI-14` — §2.1(d) ALL ZONES ARE FIXED
        POSITION WITH ANY SCROLLING INTERNAL, and §2.1(f) THE STAGE ALSO SCROLLS
        INTERNALLY.⟩ THE TWO CLAUSES, AND WHAT EACH DECLARATION IS FOR:
@@ -174,9 +174,9 @@
            `main` grid area (the negative space between the zone tracks, §2.1(c))
            and gains `overflow: auto`, so a document longer than the stage's box
            scrolls inside the stage while the surrounding chrome keeps its rects.
-       THE SELECTOR IS THE ZONE CONTAINER, NEVER `[data-zone]` ALONE: the four
+       THE SELECTOR IS THE ZONE CONTAINER, NEVER `[zone]` ALONE: the four
        authored gutter affordances and the zone minimize controls ALSO carry
-       `data-zone` (they are children/controls, not containers), so the zone rule
+       `zone` (they are children/controls, not containers), so the zone rule
        is scoped by the container's own `zone:<name>` id.
        THE `G-5` FIFTEEN-TOKEN THEME CENSUS IS UNTOUCHED — no custom property is
        declared or moved inside the three theme blocks and none is declared here
@@ -188,11 +188,11 @@
     .tab-strip { flex: none; }
     main.layout { flex: 1 1 auto; min-height: 0; overflow: hidden; }
     .layout #app { min-width: 0; min-height: 0; }
-    #app [id^="zone:"][data-zone] { position: fixed; overflow: auto; box-sizing: border-box; }
-    #app [id="zone:header"][data-zone] { top: 0; left: 0; right: 0; height: var(--zone-header-track); }
-    #app [id="zone:footer"][data-zone] { bottom: 0; left: 0; right: 0; height: var(--zone-footer-track); }
-    #app [id="zone:left"][data-zone] { top: var(--zone-header-track); bottom: var(--zone-footer-track); left: 0; width: var(--zone-left-track); }
-    #app [id="zone:right"][data-zone] { top: var(--zone-header-track); bottom: var(--zone-footer-track); right: 0; width: var(--zone-right-track); }
+    #app [id^="zone:"][zone] { position: fixed; overflow: auto; box-sizing: border-box; }
+    #app [id="zone:top"][zone] { top: 0; left: 0; right: 0; height: var(--zone-top-track); }
+    #app [id="zone:bottom"][zone] { bottom: 0; left: 0; right: 0; height: var(--zone-bottom-track); }
+    #app [id="zone:left"][zone] { top: var(--zone-top-track); bottom: var(--zone-bottom-track); left: 0; width: var(--zone-left-track); }
+    #app [id="zone:right"][zone] { top: var(--zone-top-track); bottom: var(--zone-bottom-track); right: 0; width: var(--zone-right-track); }
     #app [id="zone:main"] { overflow: auto; min-width: 0; min-height: 0; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
     h2 { font-size: 1rem; margin: 0 0 0.75rem; }
@@ -238,7 +238,7 @@
     .is-empty.is-revealed { outline: 2px dashed var(--accent); outline-offset: 2px; min-height: 2rem; }
     /* Unit U-SHELL-4 (C12) — a minimized zone REPLACES its pane stack with a
        tab strip (provident subtree). Sidebars (`left`/`right`) stack their tabs
-       vertically; header/footer lay them out horizontally (edge-derived). */
+       vertically; top/bottom lay them out horizontally (edge-derived). */
     .is-minimized .pane-tab { cursor: pointer; }
     [data-orientation='vertical'] .pane-tab { display: block; }
     [data-orientation='horizontal'] .pane-tab { display: inline-block; margin-right: 0.5rem; }
@@ -246,7 +246,7 @@
        shell pointer controller owns the drag mechanic; the surface only reads
        the C1 tokens so it themes with the rest of the chrome. A column gutter
        (left|stage, stage|right) resizes horizontally; a row gutter
-       (header/main, main/footer) vertically. An empty/minimized zone has no
+       (top/main, main/bottom) vertically. An empty/minimized zone has no
        gutter (the controller's `isGutterResizable` gate) so no rule reveals one. */
     .layout .gutter { flex: none; background: var(--border); }
     .layout .gutter:hover { background: var(--hover); }
@@ -267,15 +267,15 @@
        the fixed zone containers consume (so a collapsed `0px` track collapses its
        affordance with it). It is OUTSIDE the three THEME blocks and declares NO
        custom property — the `G-5` fifteen-token census is untouched — and the shell's
-       class/attribute vocabulary (`class="gutter"` + `data-zone` + `data-axis`) is
+       class/attribute vocabulary (`class="gutter"` + `zone` + `data-axis`) is
        unchanged, so both `.layout .gutter` dependents above and the delegated
-       `.gutter[data-zone]` wiring keep matching with NO re-point. */
-    #app .gutter[data-zone] { position: fixed; z-index: 3; background: var(--border); touch-action: none; }
-    #app .gutter[data-zone]:hover { background: var(--hover); }
-    #app .gutter[id='zone-gutter-left']   { left: calc(var(--zone-left-track) - 3px);   top: var(--zone-header-track); bottom: var(--zone-footer-track); width: 6px; }
-    #app .gutter[id='zone-gutter-right']  { right: calc(var(--zone-right-track) - 3px); top: var(--zone-header-track); bottom: var(--zone-footer-track); width: 6px; }
-    #app .gutter[id='zone-gutter-header'] { top: calc(var(--zone-header-track) - 3px);  left: 0; right: 0; height: 6px; }
-    #app .gutter[id='zone-gutter-footer'] { bottom: calc(var(--zone-footer-track) - 3px); left: 0; right: 0; height: 6px; }
+       `.gutter[zone]` wiring keep matching with NO re-point. */
+    #app .gutter[zone] { position: fixed; z-index: 3; background: var(--border); touch-action: none; }
+    #app .gutter[zone]:hover { background: var(--hover); }
+    #app .gutter[id='zone-gutter-left']   { left: calc(var(--zone-left-track) - 3px);   top: var(--zone-top-track); bottom: var(--zone-bottom-track); width: 6px; }
+    #app .gutter[id='zone-gutter-right']  { right: calc(var(--zone-right-track) - 3px); top: var(--zone-top-track); bottom: var(--zone-bottom-track); width: 6px; }
+    #app .gutter[id='zone-gutter-top']    { top: calc(var(--zone-top-track) - 3px);  left: 0; right: 0; height: 6px; }
+    #app .gutter[id='zone-gutter-bottom'] { bottom: calc(var(--zone-bottom-track) - 3px); left: 0; right: 0; height: 6px; }
     /* Unit U-SHELL-9a §2.4 — the shell top-bar tab strip (shell chrome, not a
        pane zone). It scrolls horizontally on overflow (no overflow dropdown)
        and highlights the single active tab. */
@@ -357,8 +357,8 @@
          the project-wide UI constraint (§12 item 6: a control node never moves out of
          the provident graph). §3.2 keeps the class/attribute vocabulary the two
          dependents below already target — the authored nodes render as
-         `class="gutter" data-zone="<zone>" data-axis="<axis>"`, so NO re-point is
-         needed: the delegated `.gutter[data-zone]` pointer wiring in `renderer.ts` and
+         `class="gutter" zone="<zone>" data-axis="<axis>"`, so NO re-point is
+         needed: the delegated `.gutter[zone]` pointer wiring in `renderer.ts` and
          the two `.layout .gutter[data-axis=…]` cursor rules below keep matching. -->
   </main>
   <!-- Unit U-SHELL-7 (C3) — the settings modal shell chrome (plain authored

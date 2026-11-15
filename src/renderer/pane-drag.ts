@@ -38,11 +38,13 @@ export interface ZoneBounds {
   bottom: number
 }
 
-/** A committed drop descriptor (spec §2.5 pin 2). */
+/** A committed drop descriptor (spec §2.5 pin 2). ⟨`U-1a`: the position member is
+ *  `index` — the same spelling move as `PaneLayoutEntry` (`order` → `index`); the
+ *  pre-`U-1a` name was `order` (superseded, kept visible).⟩ */
 export interface DropResult {
   paneId: string
   zone: LayoutZoneName
-  order?: number
+  index?: number
 }
 
 /** The shell drag controller surface (spec §2.5 pin 2). */
@@ -54,8 +56,9 @@ export interface DragController {
   cancel(): void
 }
 
-/** The four pane zones, in the assembler's payload order. */
-const PANE_ZONE_NAMES: readonly LayoutZoneName[] = ['left', 'right', 'header', 'footer']
+/** The four pane zones, in the assembler's payload order (`U-1a` `ASM-U1a-1`:
+ *  BY POSITION, `header`→`top` and `footer`→`bottom` in place). */
+const PANE_ZONE_NAMES: readonly LayoutZoneName[] = ['left', 'right', 'top', 'bottom']
 
 /** The legal drop zones for a pane scope (spec §2.2 / Q9). An `app-graph` pane
  *  may target all four zones; an `operator` pane stays in the operator layer
@@ -65,32 +68,32 @@ export function legalZonesForScope(scope: PaneScope): LayoutZoneName[] {
 }
 
 /** C4 — reorder within a zone (same `zone`) or relocate across zones (mutate
- *  `zone`), adjusting sibling `order`s. PURE (never mutates `layout`) and TOTAL
+ *  `zone`), adjusting sibling `index`es. PURE (never mutates `layout`) and TOTAL
  *  (junk input never throws). A missing pane id / unknown zone is a no-op. An
- *  omitted/non-finite `order` appends at the end of the target zone. */
+ *  omitted/non-finite `index` appends at the end of the target zone. */
 export function movePane(
   layout: LayoutState,
   paneId: string,
   zone: LayoutZoneName,
-  order?: number,
+  index?: number,
 ): LayoutState {
   const base = coerceLayout(layout)
   if (typeof paneId !== 'string' || paneId === '') return base
   if (!isLayoutZoneName(zone)) return base
-  const index = base.panes.findIndex((p) => p.id === paneId)
-  if (index < 0) return base
+  const paneIndex = base.panes.findIndex((p) => p.id === paneId)
+  if (paneIndex < 0) return base
 
   const panes: PaneLayoutEntry[] = base.panes.map((p) => ({ ...p }))
-  const moved = panes[index]
+  const moved = panes[paneIndex]
   const originalZone = moved.zone
 
   // The target zone's OTHER entries, in their current order.
   const targetSiblings = panes
     .filter((p) => p.zone === zone && p.id !== paneId)
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => a.index - b.index)
   const insertIndex =
-    typeof order === 'number' && Number.isFinite(order)
-      ? Math.max(0, Math.min(Math.floor(order), targetSiblings.length))
+    typeof index === 'number' && Number.isFinite(index)
+      ? Math.max(0, Math.min(Math.floor(index), targetSiblings.length))
       : targetSiblings.length
 
   // Window the moved pane into the target zone at the requested index and
@@ -102,15 +105,15 @@ export function movePane(
   ]
   for (let i = 0; i < ordered.length; i++) {
     ordered[i].zone = zone
-    ordered[i].order = i
+    ordered[i].index = i
   }
 
   // A relocate also renumbers the vacated source zone (sibling order adjusts).
   if (originalZone !== zone) {
     const sourceSiblings = panes
       .filter((p) => p.zone === originalZone && p.id !== paneId)
-      .sort((a, b) => a.order - b.order)
-    for (let i = 0; i < sourceSiblings.length; i++) sourceSiblings[i].order = i
+      .sort((a, b) => a.index - b.index)
+    for (let i = 0; i < sourceSiblings.length; i++) sourceSiblings[i].index = i
   }
 
   return { ...base, panes }
@@ -118,7 +121,7 @@ export function movePane(
 
 /** C4 (§3.1) — derive a 0-based insertion index from a drop `point` within a
  *  target zone rectangle. The zone's primary axis (vertical for `left`/`right`,
- *  horizontal for `header`/`footer`) is divided into `slots` equal bands; a
+ *  horizontal for `top`/`bottom`) is divided into `slots` equal bands; a
  *  point in the Nth band inserts at index N (clamped to `slots - 1`). Used by
  *  the host drop path so a within-zone drag reorders to the intended position
  *  instead of always appending. PURE + TOTAL: a malformed point/zone or a
@@ -131,7 +134,7 @@ export function insertionIndexForPoint(
   const count =
     typeof slots === 'number' && Number.isFinite(slots) ? Math.max(1, Math.floor(slots)) : 1
   if (point == null || zone == null) return 0
-  const horizontal = zone.zone === 'header' || zone.zone === 'footer'
+  const horizontal = zone.zone === 'top' || zone.zone === 'bottom'
   const min = horizontal ? zone.left : zone.top
   const max = horizontal ? zone.right : zone.bottom
   const p = horizontal ? point.x : point.y
@@ -232,10 +235,11 @@ function measuresWithinSnapThreshold(point: DragPoint, zone: ZoneBounds, thresho
 }
 
 /** F8 — derive the tab-strip orientation from the zone edge: sidebars
- *  (`left`/`right`) are vertical; `header`/`footer` are horizontal. TOTAL:
- *  an unknown zone defaults to `'vertical'` and never throws. */
-export function zoneOrientation(zone: unknown): 'vertical' | 'horizontal' {
-  return zone === 'header' || zone === 'footer' ? 'horizontal' : 'vertical'
+ *  (`left`/`right`) are vertical; `top`/`bottom` are horizontal. TOTAL over the
+ *  CLOSED zone domain (`ASM-U1a-2`: the parameter is narrowed from `unknown` so a
+ *  missed rename fails to compile instead of silently reading `'vertical'`). */
+export function zoneOrientation(zone: LayoutZoneName): 'vertical' | 'horizontal' {
+  return zone === 'top' || zone === 'bottom' ? 'horizontal' : 'vertical'
 }
 
 /** C12 — set (or clear) a zone's stored `minimized` flag, RETAINING its `size`
@@ -340,12 +344,12 @@ export function createDragController(options: {
     drop(payload?: unknown): DropResult | null {
       if (activePaneId == null) return null
       if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return null
-      const p = payload as { paneId?: unknown; zone?: unknown; order?: unknown }
+      const p = payload as { paneId?: unknown; zone?: unknown; index?: unknown }
       if (typeof p.paneId !== 'string' || p.paneId === '') return null
       if (!isLayoutZoneName(p.zone)) return null
       if (!legalZonesForScope(scopeOf(p.paneId) as PaneScope).includes(p.zone)) return null
       const result: DropResult = { paneId: p.paneId, zone: p.zone }
-      if (typeof p.order === 'number' && Number.isFinite(p.order)) result.order = p.order
+      if (typeof p.index === 'number' && Number.isFinite(p.index)) result.index = p.index
       activePaneId = null
       revealed = []
       return result

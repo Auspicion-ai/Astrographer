@@ -947,7 +947,9 @@ function mentionsSymbol(code: string, symbol: string): boolean {
 // THE RULING THIS READER EXECUTES (contract §3 row 5's local-duplicate column, read
 // with §2.1(e) and §2.2):
 //   *"the fork has no gutter-affordance module; what exists is inline authored markup +
-//   CSS in `src/renderer/index.html` (the four `div.gutter[data-zone][data-axis]` and
+//   CSS in `src/renderer/index.html` (the four `div.gutter[zone][data-axis]` — ⟨RE-GRAINED BY
+//   UNIT `U-1a`, AT RED TIME: the carrier is `zone`, `data-zone` superseded (pre-U-1a), and the
+//   quoted clause keeps its historical spelling below⟩ — and
 //   their cursor rules) — that markup is REPLACED by a provident-authored affordance
 //   (the project-wide UI constraint: a non-shell UI element is authored as envelope
 //   data), not by host-authored DOM"*, and the cursor DECLARATION stays `SHELL` CSS.
@@ -962,7 +964,10 @@ function mentionsSymbol(code: string, symbol: string): boolean {
 // second source census.
 //
 // ⟨SUPERSEDED IN PLACE — `RCA-8(c)`, KEPT VISIBLE, NEVER DELETED: the as-filed clause #6
-//   read the WRONG FILE and is recorded here verbatim as that pass's reading:
+//   read the WRONG FILE and is recorded here verbatim as that pass's reading. ⟨The quoted
+//   regex spells the zone carrier `data-zone` — superseded (pre-U-1a): unit `U-1a` lands
+//   `zone=` (§3 row 5's re-grain, `ASM-U1a-3`), and the verbatim reading is kept because it
+//   is the RECORD of what that pass measured, not a claim about this head.⟩
 //     const authored = [...gridText().matchAll(/class="gutter" data-zone="([a-z-]+)"/g)]
 //       .map((m) => m[1]!)
 //     if (authored.length !== 4 || authored.slice().sort().join(',')
@@ -984,7 +989,8 @@ function mentionsSymbol(code: string, symbol: string): boolean {
  *  different fact and never satisfies this reader).
  *  ⟨THE DECLINE-RECORDING PASS `2026-10-04` — `RCA-8(c)`: `classes` is ADDED, because §3.6.2's
  *  re-declared item (4) names the landed affordances as carrying §3.2's FULL vocabulary
- *  (`class="gutter"` + `data-zone` + `data-axis`), and the class half had no tooth; the
+ *  (`class="gutter"` + `zone` + `data-axis` — the `zone` carrier is the LANDED one; the `data-zone`
+ *  spelling is superseded (pre-U-1a), kept visible here per `RCA-8(c)`), and the class half had no tooth; the
  *  attribute half keeps the two limbs it had. `§3.2`'s OWN ESCAPE IS HONOURED rather than
  *  overridden: the clause binds the RENDERED attribute set and admits "a different internal
  *  representation ... only if the RENDERED attribute set is this one" — so the reader takes the
@@ -1039,7 +1045,11 @@ function carriesGutterClass(a: AuthoredAffordance): boolean {
 }
 
 /** The authored affordances in ONE node subtree walk: a node whose `props` carry BOTH
- *  `data-zone` and `data-axis`. PURE. */
+ *  `zone` and `data-axis`. PURE.
+ *  ⟨RE-GRAINED BY UNIT `U-1a` `zone-vocabulary` (D-14/D-16, `ASM-U1a-3`), AT RED TIME — `RCA-8(c)`:
+ *  the reading this line replaces is kept VISIBLE, never deleted: the carrier attribute was
+ *  `data-zone` — superseded (pre-U-1a) — and is `zone` after the rename, with NO alias (a dual
+ *  read would make the two-vocabulary tree D-14 forbids untestable). `data-axis` did NOT move.⟩ */
 function affordancesIn(nodes: readonly unknown[]): AuthoredAffordance[] {
   const out: AuthoredAffordance[] = []
   const walk = (node: unknown): void => {
@@ -1047,8 +1057,8 @@ function affordancesIn(nodes: readonly unknown[]): AuthoredAffordance[] {
     const props = (node as { props?: unknown }).props
     if (props != null && typeof props === 'object' && !Array.isArray(props)) {
       const p = props as Record<string, unknown>
-      if (typeof p['data-zone'] === 'string' && typeof p['data-axis'] === 'string') {
-        out.push({ zone: p['data-zone'], axis: p['data-axis'], classes: authoredClassSurface(node) })
+      if (typeof p['zone'] === 'string' && typeof p['data-axis'] === 'string') {
+        out.push({ zone: p['zone'], axis: p['data-axis'], classes: authoredClassSurface(node) })
       }
     }
     const children = (node as { children?: unknown }).children
@@ -1071,7 +1081,7 @@ function affordanceVocabularyOffences(authored: AuthoredAffordance[]): string[] 
     offenders.push(
       `the authored affordance(s) ${missing
         .map((a) => `${a.zone}/data-axis=${a.axis} (class surface [${a.classes.join(' ')}])`)
-        .join(', ')} do NOT carry the \`gutter\` class token §3.2 binds — \`class="gutter"\` plus \`data-zone\` plus \`data-axis\` is the vocabulary BOTH shell dependents already target ` +
+        .join(', ')} do NOT carry the \`gutter\` class token §3.2 binds — \`class="gutter"\` plus \`zone\` plus \`data-axis\` is the vocabulary BOTH shell dependents already target ` +
         `(renderer.ts's \`GESTURE_SELECTOR\` family and index.html's two \`.layout .gutter[data-axis=…]\` cursor rules), so a changed vocabulary kills the delegated listener and the resize cursor SILENTLY, with every suite green (§3.2's escape: re-point BOTH dependents and say so in the DONE row — and re-declare this register row, §6.0)`,
     )
   }
@@ -1180,7 +1190,8 @@ function registerZoneProbe(registry: ReturnType<typeof createPaneRegistry>, id: 
  *  WHAT IS REAL HERE, and what is an instrument: the host is the REAL `SidebarPanes`; the
  *  wiring is the REAL `installShellPointers`; the document and the gutter element are the
  *  fork's own `dom-shim` (a DOM double — never a module mock); the gesture control carries
- *  the shell's own vocabulary (`class="gutter"` + `data-zone` + `data-axis`, §3.2). The
+ *  the shell's own vocabulary (`class="gutter"` + `zone` + `data-axis`, §3.2 — the `zone` carrier is
+ *  the LANDED one; `data-zone` is superseded (pre-U-1a) and kept visible beside it). The
  *  INSTRUMENTS are three wrappers over the host's own seams: `startGutter` (the fork's
  *  establishment path, counted), `cancelGutter` (the fork's mid-gesture teardown, counted)
  *  and the `bridge.operatorSettings.set` sink (the ONE write path a commit reaches —
@@ -1222,7 +1233,7 @@ function shellGestureDrive(opts?: { zone?: LayoutZoneName; axis?: string }): She
   doc.body.appendChild(layoutEl)
   const gutter = new ShimElement('div')
   gutter.className = 'gutter'
-  gutter.setAttribute('data-zone', zone)
+  gutter.setAttribute('zone', zone)
   gutter.setAttribute('data-axis', opts?.axis ?? gutterAxis(zone))
   // The shim element does not model `isConnected`; a REAL DOM element answers `true`, and
   // the fork's source seam reads it (`domEventSource().isConnected`). Set the way the live
@@ -1517,8 +1528,9 @@ const ADOPTIONS: AdoptionRow[] = [
     members: ['gutter-affordance'],
     // §3 row 5's local duplicate is host MARKUP in `src/renderer/index.html` (it holds no TS
     // symbol at all), and §3.2 names its two dependents: this row's adopting importer holds
-    // dependent #1 — `GESTURE_SELECTOR`, the delegated consumer of the `gutter`/`data-zone`
-    // vocabulary the authored affordance MUST carry (§3.2). The AUTHORING site is asserted by
+    // dependent #1 — `GESTURE_SELECTOR`, the delegated consumer of the `gutter`/`zone`
+    // vocabulary the authored affordance MUST carry (§3.2 — `zone` is the LANDED carrier;
+    // `data-zone` is superseded (pre-U-1a)). The AUTHORING site is asserted by
     // this suite's row 5 (the assembly drive), not here.
     //
     // ⟨THE DECLINE-RECORDING PASS `2026-10-04` — `RCA-8(c)`: §3 ROW 5'S ADOPTED SET IS
@@ -1538,11 +1550,16 @@ const ADOPTIONS: AdoptionRow[] = [
     //   (§4.0 blockers 1 and 2). It is the row's `declinedFactory` DATA below, so the decline is
     //   WITNESSED (`declinedFactoryOffences`) and not merely written down.
     // WHAT THIS ROW'S ADOPTION ARM STILL WITNESSES: the MODULE is imported by a file that holds
-    //   the row's reduced seam — `GESTURE_SELECTOR` (dependent #1) or `data-zone`+`data-axis`
+    //   the row's reduced seam — `GESTURE_SELECTOR` (dependent #1) or `zone`+`data-axis`
     //   (dependent #2's vocabulary) — and the `DECLARED_CONSUMER_EDGES` row names that SAME file.
     //   THE MODULE, NEVER THE FACTORY: §3.6.2's words, "what stays unimported is the two
     //   FACTORIES, not the two modules".
-    reducedSeamEvidence: [['GESTURE_SELECTOR'], ['data-zone', 'data-axis']],
+    //   ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the second evidence GROUP read
+    //   `['data-zone', 'data-axis']` (superseded (pre-U-1a)) and reads `['zone', 'data-axis']`
+    //   with the landed carrier. The group is an OR-alternative to `GESTURE_SELECTOR`, which the
+    //   same file (`renderer.ts`) holds, so the re-grain weakens no live tooth; it only stops the
+    //   evidence line quoting a spelling the tree no longer carries.⟩
+    reducedSeamEvidence: [['GESTURE_SELECTOR'], ['zone', 'data-axis']],
     duplicateFile: 'src/renderer/index.html',
     duplicateSymbols: ['the inline gutter markup'],
     seamSuppliers: [],
@@ -1909,9 +1926,19 @@ describe('§6 P-IM-zone-repl-1 — the adoption wiring (strat:zone-replacement-a
     check: () => {
       if (a.duplicateFile.endsWith('index.html')) {
         const html = readText(INDEX_HTML_PATH)
-        const inlineGutters = [...html.matchAll(/<div class="gutter" data-zone="[a-z]+" data-axis="(?:columns|rows)"><\/div>/g)].length
-        if (inlineGutters > 0) {
-          return `src/renderer/index.html still carries ${inlineGutters} host-authored div.gutter[data-zone][data-axis] element(s): §3 row 5 replaces them with a provident-authored affordance and §12 item 6 forbids moving a control node out of the graph`
+        // ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the tooth is RE-POINTED, never
+        //   deleted. The superseded (pre-U-1a) pattern was
+        //   `<div class="gutter" data-zone="[a-z]+" data-axis="(?:columns|rows)"></div>`; the carrier
+        //   is `zone="…"` after the rename, so a host-authored gutter re-introduced with EITHER
+        //   spelling must still be caught — the first arm below reads the landed carrier, the second
+        //   keeps reading the superseded one so a partial landing cannot slip through this tooth.⟩
+        const inlineGutters = [...html.matchAll(/<div class="gutter" zone="[a-z]+" data-axis="(?:columns|rows)"><\/div>/g)].length
+        const supersededInlineGutters = [
+          ...html.matchAll(/<div class="gutter" data-zone="[a-z]+" data-axis="(?:columns|rows)"><\/div>/g),
+        ].length
+        const inlineGuttersTotal = inlineGutters + supersededInlineGutters
+        if (inlineGuttersTotal > 0) {
+          return `src/renderer/index.html still carries ${inlineGuttersTotal} host-authored div.gutter[zone][data-axis] element(s) (${inlineGutters} with the landed \`zone=\` carrier, ${supersededInlineGutters} with the superseded (pre-U-1a) \`data-zone=\` one): §3 row 5 replaces them with a provident-authored affordance and §12 item 6 forbids moving a control node out of the graph`
         }
         return null
       }
@@ -2186,20 +2213,28 @@ describe('§6 P-SM-zone-repl-3 — the census/track record (strat:zone-replaceme
     // supplies the persisted size), or (ii) the fork's own words for the same state
     // ("`zoneTrackVars` below turns a declined member back into the zone's persisted size")
     // — the persisted `String(size)+unit`. BOTH are "no collapse"; `0px` is neither.
-    const carveOut = forkRecord(registry, ['header'])
-    const headerValue = carveOut['--zone-header-track']
-    const headerAdmissible = ['', `${base.zones.header.size}px`]
-    if (headerValue === '0px' || !headerAdmissible.includes(headerValue as string)) {
+    // ⟨RE-GRAINED BY UNIT `U-1a` `zone-vocabulary`, AT RED TIME (D-16, `ASM-U1a-1`) — `RCA-8(c)`:
+    //   the revealed member was `'header'` — superseded (pre-U-1a) — and is `'top'` after the
+    //   rename (header→top IN PLACE). The readings the arm prints keep the OLD spelling beside the
+    //   new one where the value is a recorded reading of this head.
+    //   The persisted size is read through a record cast rather than `base.zones.top`, so a head
+    //   that still carries `header`/`footer` reads `undefined` and REDS with its own message
+    //   instead of throwing a `TypeError` (a red must name its reading, RCA-8(c) hygiene).⟩
+    const carveOut = forkRecord(registry, ['top'])
+    const topValue = carveOut['--zone-top-track']
+    const topZone = (base.zones as unknown as Record<string, { size: number } | undefined>)['top']
+    const topAdmissible = topZone === undefined ? [''] : ['', `${topZone.size}px`]
+    if (topValue === '0px' || !topAdmissible.includes(topValue as string)) {
       offenders.push(
-        `the FORK's own record reads ${JSON.stringify(headerValue)} for the empty zone \`header\` while \`header\` IS REVEALED — §3 row 1's collapse policy collapses an empty zone ONLY when it is NOT revealed, so a revealed empty zone must carry either the module's DECLINED reading (the empty string, which the write site turns into a removal) or the persisted size (${base.zones.header.size}px); the \`emptyToken\` 0px is a COLLAPSE and is the one reading the carve-out forbids`,
+        `the FORK's own record reads ${JSON.stringify(topValue)} for the empty zone \`top\` while \`top\` IS REVEALED — §3 row 1's collapse policy collapses an empty zone ONLY when it is NOT revealed, so a revealed empty zone must carry either the module's DECLINED reading (the empty string, which the write site turns into a removal) or the persisted size (${topZone === undefined ? 'NO `top` zone in the coerced layout — the model still reads header/footer, superseded (pre-U-1a)' : `${topZone.size}px`}); the \`emptyToken\` 0px is a COLLAPSE and is the one reading the carve-out forbids`,
       )
     }
     for (const zone of LAYOUT_PANE_ZONES) {
-      if (zone === 'header') continue
+      if (zone === 'top') continue
       const got = carveOut[`--zone-${zone}-track`]
       if (got !== '0px') {
         offenders.push(
-          `the FORK's own record reads ${JSON.stringify(got)} for the empty zone ${zone} while only \`header\` is revealed — the polarity must select ONE revealed member, not every member`,
+          `the FORK's own record reads ${JSON.stringify(got)} for the empty zone ${zone} while only \`top\` is revealed — the polarity must select ONE revealed member, not every member`,
         )
       }
     }
@@ -2234,7 +2269,11 @@ describe('§6 P-SM-zone-repl-3 — the census/track record (strat:zone-replaceme
       check: () => {
         const wiring = censusWired()
         if (wiring !== null) return wiring
-        const out = runCensus(censusRecord({ left: 0, right: 0, header: 0, footer: 0 }), revealedAll())
+        // ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the census zeroed the four zones
+        //   under the superseded (pre-U-1a) names `header`/`footer`; the landed enumeration is
+        //   `left`/`right`/`top`/`bottom`, so the zeroed census must name the landed four or it
+        //   zeroes nothing and the limb reds reading the OLD zones' persisted sizes.⟩
+        const out = runCensus(censusRecord({ left: 0, right: 0, top: 0, bottom: 0 }), revealedAll())
         if (Object.keys(out).length !== LAYOUT_PANE_ZONES.length) {
           return `the record key census is ${Object.keys(out).length}, not ${LAYOUT_PANE_ZONES.length}`
         }
@@ -2293,9 +2332,13 @@ describe('§6 P-SM-zone-repl-3 — the census/track record (strat:zone-replaceme
       check: () => {
         const wiring = censusWired()
         if (wiring !== null) return wiring
-        const census = censusRecord({ footer: 0 })
+        // ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the zero-count member was
+        //   `footer` — superseded (pre-U-1a) — and is `bottom` (footer→bottom IN PLACE). The KEY
+        //   and the READ move together: re-graining only one half would leave the limb red forever
+        //   on a `undefined` reading, which is a broken tooth rather than a moved one.⟩
+        const census = censusRecord({ bottom: 0 })
         const out = runCensus(census, revealedAll())
-        if (out.footer !== '0px') return `the record-shaped census read ${String(out.footer)} for the zero-count footer, not 0px`
+        if (out.bottom !== '0px') return `the record-shaped census read ${String(out.bottom)} for the zero-count bottom zone, not 0px`
         return null
       },
     },
@@ -3109,7 +3152,9 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
   //      the §3 row 2 projection record is computed and DISCARDED at the write site (`layoutCssVars`
   //      called, its exclusive keys never reaching the sink, no call site removed).
   //   4. clause — the two REGIONS excluded. Stimulus: add `--zone-stage-track`, or an inline
-  //      `class="gutter" data-zone="stage"`, or a `[data-zone="stage"]` grid area → RED.
+  //      `class="gutter" zone="stage"`, or a `[zone="stage"]` grid area → RED (the stimulus is
+  //      RE-GRAINED by unit `U-1a` to the landed carrier; the superseded (pre-U-1a) spelling was
+  //      `class="gutter" data-zone="stage"` / `[data-zone="stage"]`, both still read by the arm).
   //   5. clause — the gutters are FOUR ONLY (a four-member `GUTTER_ZONES`, four affordances
   //      PROVIDENT-AUTHORED at the envelope site). Stimulus: (i) leave the four `div.gutter` in
   //      `index.html` and author nothing → the assembly drive reads ZERO → RED with the count;
@@ -3320,7 +3365,11 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
     const offenders: string[] = []
     const axes: Array<[LayoutZoneName, string, string]> = [
       ['left', 'columns', 'col-resize'],
-      ['header', 'rows', 'row-resize'],
+      // ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the `rows` fixture was `'header'`
+      //   — superseded (pre-U-1a) — and is `'top'`, which is the zone whose axis is `rows` after
+      //   the rename. A `rows` fixture naming a zone the landed domain does not carry would make
+      //   `gutterAxis` answer `columns` and the limb grade the wrong declaration.⟩
+      ['top', 'rows', 'row-resize'],
     ]
     for (const [zone, axis, declaration] of axes) {
       const drive = shellGestureDrive({ zone, axis })
@@ -3440,9 +3489,20 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
         if (badTokens.length > 0) {
           return `region track token(s) ${badTokens.join(', ')} exist — §2 point (g)/D-5: a region token goes through the projection path, NEVER through the census record`
         }
-        const regionGutters = [...gridText().matchAll(/class="gutter" data-zone="(stage|top-bar)"/g)].map((m) => m[1]!)
+        // ⟨RE-GRAINED BY UNIT `U-1a`, AT RED TIME — `RCA-8(c)`: the two region patterns are
+        //   RE-POINTED to the landed carrier, never deleted. Superseded (pre-U-1a) readings, kept
+        //   visible: `class="gutter" data-zone="(stage|top-bar)"` and `\[data-zone="(stage|top-bar)"\]`.
+        //   Both spellings are read below, so a region gutter or region AREA re-introduced with
+        //   either vocabulary still reds this clause.⟩
+        const regionGutters = [
+          ...gridText().matchAll(/class="gutter" zone="(stage|top-bar)"/g),
+          ...gridText().matchAll(/class="gutter" data-zone="(stage|top-bar)"/g),
+        ].map((m) => m[1]!)
         if (regionGutters.length > 0) return `gutter(s) exist for the region(s) ${regionGutters.join(', ')} — GUTTER_ZONES has four members, not six`
-        const regionAreas = [...gridText().matchAll(/\[data-zone="(stage|top-bar)"\]\s*\{/g)].map((m) => m[1]!)
+        const regionAreas = [
+          ...gridText().matchAll(/\[zone="(stage|top-bar)"\]\s*\{/g),
+          ...gridText().matchAll(/\[data-zone="(stage|top-bar)"\]\s*\{/g),
+        ].map((m) => m[1]!)
         if (regionAreas.length > 0) return `a grid AREA is declared for the region(s) ${regionAreas.join(', ')} — regions are not pane zones (R-9)`
         return null
       },
@@ -3510,7 +3570,9 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
         //   RIDING THIS ARM (`§6.0` clause 2: a limb rides an EXISTING named arm, so NO declared
         //   term is added and the arithmetic is UNMOVED). The re-declared subject names the four
         //   authored affordances WITH their §3.2 clauses, and of §3.2's three vocabulary tokens
-        //   only `data-zone`/`data-axis` had a tooth (limbs 1–3); the `gutter` CLASS token — the
+        //   only `zone`/`data-axis` had a tooth (limbs 1–3; `zone` is the LANDED carrier — the
+        //   `data-zone` spelling is superseded (pre-U-1a) and is kept visible here per
+        //   `RCA-8(c)`); the `gutter` CLASS token — the
         //   one `GESTURE_SELECTOR` and the two cursor rules both match — had none, so a landing
         //   could drop it with every suite still green. The limb carries its own driven vacuity
         //   guard.⟩

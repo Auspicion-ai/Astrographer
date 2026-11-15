@@ -19,6 +19,8 @@ suite **174 files / 3997 pass + 46 skip**, typecheck 0, build OK. Follow-ups
 see `wave-2-open-decisions.md` §D. This unit is the **keystone of
 Wave 2** and **gates U-SHELL-3/4/5/8/9** (§8.1).
 
+**⟨RE-STATED `2026-11-15` — unit `U-1a` (`D-14`/`D-16), `RCA-8(c)` annotate-beside: the ZONE VOCABULARY and the PANE-ENTRY MEMBER only — no clause rewritten, no section renumbered.** The landed vocabulary is `LayoutZoneName = 'top' | 'bottom' | 'left' | 'right'`, `LAYOUT_PANE_ZONES` re-grained **BY POSITION** to `['left','right','top','bottom']` (the pre-rename row names `header`/`footer` became `top`/`bottom` in place, `ASM-U1a-1`), the container ids `zone:top`/`zone:bottom`, and the pane entry's member `index` (the pre-rename spelling was `order`); the carrier attribute's pre-rename token is **not spelled in this file** because the unit's own corpus tooth (`tests/integration/shell-chrome/zone-vocabulary-target.test.ts`, limb `E2`) forbids it inside these four documents — it stays visible in `docs/L1/unit-u-1a-zone-vocabulary.md` §2 and the registers. **`LAYOUT_VERSION` STAYS `1`** (`D-22` refuses the migration; the `L.version === 1` cells below are UNMOVED and read green). `zone:main` (the STAGE), `stage` and `top-bar` are REGIONS and never move; `LayoutPaneSpec.defaultOrder` keeps its spelling (the registry's declared default, `pane-registry.ts`).
+
 ---
 
 ## 1. What the proposal asks
@@ -31,7 +33,7 @@ per-pane placement, and no persistence** (SG5). Deliver the layout substrate:
 - a serialized **`LayoutState`** model (zones / per-pane entry / version);
 - the **zone-container authoring** in the app graph (Reading 2: zone containers
   + pane roots are provident, MCP-visible);
-- the **shell grid geometry** (top-bar / header / left | stage | right / footer)
+- the **shell grid geometry** (top-bar / top / left | stage | right / bottom)
   as Table C shell chrome;
 - **persistence** of the layout through the C9 `OperatorSettings` carrier;
 - the **default / empty** behavior.
@@ -41,15 +43,15 @@ per-pane placement, and no persistence** (SG5). Deliver the layout substrate:
 ### 2.1 `LayoutState` model
 
 ```
-LayoutZoneName = 'left' | 'right' | 'header' | 'footer'   // pane zones
+LayoutZoneName = 'top' | 'bottom' | 'left' | 'right'   // pane zones
 RegionName     = 'stage' | 'top-bar'                      // regions, not drop targets
 
-PaneLayoutEntry { id: string; zone: LayoutZoneName; order: number; collapsed: boolean }
+PaneLayoutEntry { id: string; zone: LayoutZoneName; index: number; collapsed: boolean }
 ZoneLayout      { size: number; minimized: boolean }       // C7 size + C12 minimize
 LayoutState {
   version: number                                          // starts at 1
   panes:   PaneLayoutEntry[]                               // placement overlay only
-  zones:   { left: ZoneLayout; right: ZoneLayout; header: ZoneLayout; footer: ZoneLayout }
+  zones:   { left: ZoneLayout; right: ZoneLayout; top: ZoneLayout; bottom: ZoneLayout }
   stage:   { size: number }                                // serialized 1fr weight
   topBar:  { size: number }                                // shell height (not a pane zone)
 }
@@ -82,13 +84,13 @@ LayoutState {
 ### 2.3 Zone-container authoring (provident — Reading 2)
 
 - `assembleAppGraphEnvelope` generalizes from one `sidebar` producer to one
-  `container`-role producer per zone (`zone:left`, `zone:right`, `zone:header`,
-  `zone:footer`) with **stable node identity**, plus the content-root producers.
+  `container`-role producer per zone (`zone:left`, `zone:right`, `zone:top`,
+  `zone:bottom`) with **stable node identity**, plus the content-root producers.
   The HARD PRECONDITION holds: every `targetPlacement` names a container that
   exists in the same envelope/hub.
 - Each enabled pane renders as `pane-<id>` with
   `placement: { targetPlacement: [<zone>] }` (`paneSubtreeRoot`), in
-  `PaneLayoutEntry.order`.
+  `PaneLayoutEntry.index`.
 - Each zone container carries the **state-derived mirror**: an `is-empty`
   class when the zone has **zero enabled+placed panes (post-overlay/fallback
   resolution)** (C11), `is-minimized` when `minimized` (C12),
@@ -104,8 +106,8 @@ LayoutState {
 
 ### 2.4 Shell grid geometry (Table C — shell chrome)
 
-- `index.html` body becomes a CSS grid: `top-bar` row → `header` zone row →
-  main row (`left` | `stage` | `right`) → `footer` zone row. Gutters between the
+- `index.html` body becomes a CSS grid: `top-bar` row → `top` zone row →
+  main row (`left` | `stage` | `right`) → `bottom` zone row. Gutters between the
   columns/rows are shell geometry (U-SHELL-5 owns their drag; U-SHELL-1 owns the
   tracks).
 - Zone geometry reads `ZoneLayout.size`; an empty zone's track collapses
@@ -139,13 +141,13 @@ flagged 8 spec gaps. Pinned (Architect):
    is the store's private helper, but this module is shared).
 2. **Assembler input name** — `assembleAppGraphEnvelope({ layout })`; `layout`
    is optional and omitted → derive the default from the registry.
-3. **Order observable** — `PaneLayoutEntry.order` manifests as the **payload
+3. **Order observable** — `PaneLayoutEntry.index` manifests as the **payload
    order** panes are attached to a zone container; no `data-order` prop.
 4. **Mirror placement** — `is-collapsed` on the `pane-<id>` root;
    `is-empty` / `is-minimized` / `is-revealed` on the `zone:<name>` container.
 5. **Size validity** — a `size` must be a **finite positive number**; an invalid
    value (`≤0`, `NaN`, `±Infinity`) fails soft to that zone's default. A finite
-   positive size is **preserved** on load (e.g. a `header`/`footer`/`topBar`
+   positive size is **preserved** on load (e.g. a `top`/`bottom`/`topBar`
    strip of 36–48 px). Drag-time min/max clamps are U-SHELL-5's concern, not
    U-SHELL-1's.
 6. **F2 warning channel** — a dropped unregistered pane is reported via
@@ -154,8 +156,8 @@ flagged 8 spec gaps. Pinned (Architect):
    (matches §2.1: the legacy `[sidebar]` maps to `left`).
 8. **Grid mechanism** — `index.html` uses CSS
    `grid-template-columns` / `grid-template-rows` / `grid-template-areas` with
-   named areas `top-bar`, `header`, the mid row's three tracks
-   `left` / `stage` / `right`, and `footer` (the mid row has **no** composite
+   named areas `top-bar`, `top`, the mid row's three tracks
+   `left` / `stage` / `right`, and `bottom` (the mid row has **no** composite
    `main` area name — consistent with §2.4 `left | stage | right`). (Reconciled
    after the blind-test P8 finding, 2026-09-12.)
 9. **Malformed `version`** — a non-integer, negative, or non-finite `version` is
@@ -182,7 +184,7 @@ throws); sizes (`NaN`/`±Infinity`/`≤0` → default); panes (non-string/empty 
 dropped, duplicate first-wins, unregistered dropped + warn + no phantom);
 zones (unknown/`stage`/`top-bar` → `left`); MCP visibility (envelope carries no
 `layout`, no MCP reference to `OperatorSettings`); identity/order (stable
-`zone:*` ids, finite `order` + `seq` tiebreak). **No package findings.**
+`zone:*` ids, finite `index` + `seq` tiebreak). **No package findings.**
 
 ## 3. States (TestWriter red set — valid paths)
 
@@ -245,12 +247,12 @@ module**.
 
 | Ref | Class | Invariant | Strategy | Checkable proposition (∀ pattern) |
 |---|---|---|---|---|
-| `P-IM-1` | IM | **`isLayoutZoneName` is a total predicate.** It returns `true` exactly for the four pinned pane zones and `false` for every other value. | `strat:zone-name-total` | ∀ generated value `v`: `isLayoutZoneName(v) === (v === 'left' \|\| v === 'right' \|\| v === 'header' \|\| v === 'footer')` — `true` for exactly the four zone names; `false` for every other string (`'stage'`, `'top-bar'`, `'sidebar'`, `''`, garbage) and every non-string (`null`, `undefined`, numbers, booleans, objects, arrays). |
+| `P-IM-1` | IM | **`isLayoutZoneName` is a total predicate.** It returns `true` exactly for the four pinned pane zones and `false` for every other value. | `strat:zone-name-total` | ∀ generated value `v`: `isLayoutZoneName(v) === (v === 'top' \|\| v === 'bottom' \|\| v === 'left' \|\| v === 'right')` — `true` for exactly the four zone names; `false` for every other string (`'stage'`, `'top-bar'`, `'sidebar'`, `''`, garbage) and every non-string (`null`, `undefined`, numbers, booleans, objects, arrays). **⟨RE-STATED `2026-11-15` — unit `U-1a` (D-14/D-16): the clause above is the LANDED one; the as-filed proposition read `v === 'left' \|\| v === 'right' \|\| v === 'header' \|\| v === 'footer'` and is kept verbatim here as the superseded reading (`RCA-8(c)`), because the source census forbids the superseded zone literals inside the granted documents. U-1a replaced the two row-zone members; `isLayoutZoneName('header')` is now `false`, which is the falsifiable difference.⟩** |
 | `P-IM-2` | IM | **`coerceLayout` is total — any input yields a valid `LayoutState` and never throws.** Null/undefined, a non-object, or a plain object carrying arbitrary deeply-nested junk all coerce to a well-formed state; no code path throws. | `strat:coerce-total` | ∀ generated (possibly malformed / deeply-nested) value `x`: `coerceLayout(x)` returns a `LayoutState` satisfying the §P-SM-2 shape and never throws. |
 | `P-TP-1` | TP | **`coerceLayout` is idempotent.** Coercing an already-coerced result reproduces it exactly. | `strat:coerce-idempotent` | ∀ value `x`: `coerceLayout(coerceLayout(x))` deep-equals `coerceLayout(x)` (identical `version`, `panes`, `zones`, `stage`, `topBar`; pane order preserved; the second pass changes nothing). |
 | `P-SM-1` | SM | **Version gating.** `coerceLayout` preserves/coerces the payload only when `version === LAYOUT_VERSION` (exactly 1); any other value — missing, non-integer, negative, zero, `> 1`, `NaN`, `±Infinity` — fails soft to `defaultLayout()`, never a newer-schema partial or a crash. | `strat:coerce-version-gate` | ∀ value `x` with a `version` field: a non-`LAYOUT_VERSION` version — missing, non-integer, negative, `> 1`, non-finite, or non-number — fails soft to `defaultLayout()` whenever `typeof version !== 'number'` OR `!Number.isInteger(version)` OR `version < 1` OR `version > LAYOUT_VERSION`; an exact-`LAYOUT_VERSION` payload is preserved — the output `.version === LAYOUT_VERSION` in BOTH cases (the fail-soft `defaultLayout()` result itself carries `.version === LAYOUT_VERSION === 1`, so no strict `⟺` biconditional on the gate). |
-| `P-SM-2` | SM | **The coerced `LayoutState` is well-formed — only known fields, no invalid field, no duplicate pane id.** Every zone `size` is finite-positive, every `minimized` is a boolean, `stage`/`topBar` sizes are finite-positive, every pane has a non-empty string `id`, a valid zone, a finite `order`, a boolean `collapsed`, and pane ids are unique (first-wins dedup). | `strat:coerce-state-model` | ∀ value `x`, let `L = coerceLayout(x)`: `L.version === 1`; for each zone `z ∈ {left,right,header,footer}`: `Number.isFinite(L.zones[z].size) && L.zones[z].size > 0` and `typeof L.zones[z].minimized === 'boolean'`; `Number.isFinite(L.stage.size) && L.stage.size > 0`; `Number.isFinite(L.topBar.size) && L.topBar.size > 0`; ∀ pane ∈ `L.panes`: `typeof pane.id === 'string' && pane.id !== ''`, `isLayoutZoneName(pane.zone)`, `Number.isFinite(pane.order)`, `typeof pane.collapsed === 'boolean'`; and all pane `id`s are pairwise distinct. |
-| `P-TP-2` | TP | **`deriveLayout` is a deterministic pure projection of the placement overlay.** The same specs yield the identical layout; each spec maps to exactly one pane, and the stated defaults (legacy `left` zone, registration-index `order`, `collapsed:false`) are applied. | `strat:derive-deterministic` | ∀ generated specs array `S` of length `N`: `deriveLayout(S)` twice returns deep-equal outputs; `panes.length === N`; for `i ∈ [0,N)`: `panes[i].id === S[i].id`, `panes[i].zone === (isLayoutZoneName(S[i].defaultZone) ? S[i].defaultZone : 'left')`, `panes[i].order === ((typeof S[i].defaultOrder === 'number' && Number.isFinite(S[i].defaultOrder)) ? S[i].defaultOrder : i)`, `panes[i].collapsed === false`; and `deriveLayout(S)` has `version === LAYOUT_VERSION` with `zones`/`stage`/`topBar` equal to `defaultLayout()`'s. |
+| `P-SM-2` | SM | **The coerced `LayoutState` is well-formed — only known fields, no invalid field, no duplicate pane id.** Every zone `size` is finite-positive, every `minimized` is a boolean, `stage`/`topBar` sizes are finite-positive, every pane has a non-empty string `id`, a valid zone, a finite `index`, a boolean `collapsed`, and pane ids are unique (first-wins dedup). | `strat:coerce-state-model` | ∀ value `x`, let `L = coerceLayout(x)`: `L.version === 1`; for each zone `z ∈ {left,right,top,bottom}`: `Number.isFinite(L.zones[z].size) && L.zones[z].size > 0` and `typeof L.zones[z].minimized === 'boolean'`; `Number.isFinite(L.stage.size) && L.stage.size > 0`; `Number.isFinite(L.topBar.size) && L.topBar.size > 0`; ∀ pane ∈ `L.panes`: `typeof pane.id === 'string' && pane.id !== ''`, `isLayoutZoneName(pane.zone)`, `Number.isFinite(pane.index)`, `typeof pane.collapsed === 'boolean'`; and all pane `id`s are pairwise distinct. |
+| `P-TP-2` | TP | **`deriveLayout` is a deterministic pure projection of the placement overlay.** The same specs yield the identical layout; each spec maps to exactly one pane, and the stated defaults (legacy `left` zone, registration-index `index`, `collapsed:false`) are applied. | `strat:derive-deterministic` | ∀ generated specs array `S` of length `N`: `deriveLayout(S)` twice returns deep-equal outputs; `panes.length === N`; for `i ∈ [0,N)`: `panes[i].id === S[i].id`, `panes[i].zone === (isLayoutZoneName(S[i].defaultZone) ? S[i].defaultZone : 'left')`, `panes[i].index === ((typeof S[i].defaultOrder === 'number' && Number.isFinite(S[i].defaultOrder)) ? S[i].defaultOrder : i)`, `panes[i].collapsed === false`; and `deriveLayout(S)` has `version === LAYOUT_VERSION` with `zones`/`stage`/`topBar` equal to `defaultLayout()`'s. |
 
 **Class tally:** IM ×2, SM ×2, TP ×2 = **6 rows ≤ 8** ✔.
 
@@ -273,7 +275,7 @@ reaches beyond the documented contract. Note the deliberate **omission of any
 load-time clamp claim**: `coerceLayout` preserves finite-positive sizes
 byte-for-byte (spec §2.6 pin 5) and does **not** normalize them into
 `[LAYOUT_ZONE_MIN, LAYOUT_ZONE_MAX]` / `[LAYOUT_REGION_MIN, LAYOUT_REGION_MAX]` —
-the default `header`/`footer` zone sizes (48) and `topBar` (36) lie outside those
+the default `top`/`bottom` zone sizes (48) and `topBar` (36) lie outside those
 ranges, and the constants are consumed only by the **U-SHELL-5** drag clamps
 (`src/renderer/pane-gutter.ts`), not by U-SHELL-1 load coercion. A row asserting
 `size ∈ [LAYOUT_ZONE_MIN, LAYOUT_ZONE_MAX]` after coerce would reject the landed
