@@ -83,7 +83,7 @@ The program's first unit has LANDED: `V-1` `pin-restate` moved the foundation pi
 design is `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`. The next
 actionable work is `V-2` `conformance-refresh`, while `U-1` stands BLOCKED by its own item-8 gate —
 both intake reviews returned `ADJUDICATION` and their findings are filed under `strata/records/` — and
-the dependency ruling that gate exposed is `pending.md` row 1. No unit's stage is restated here: state
+whose engine half was answered by `E-1`'s dependency adoption (D-20); the store-program relation is `pending.md` row 1 and the `docs/` migration row 2. No unit's stage is restated here: state
 lives in `strata/.strata/units/*.json` (D-2).
 
 The constraint every later unit inherits: nothing it builds may be a change to `provident-ssr`,

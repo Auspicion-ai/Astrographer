@@ -20,6 +20,10 @@ states the dependency set, and every citation's resolution.
   Five tracker lines still routed the DEPARTED dependency ruling to `pending.md` row 1, the brief's
   docs-corpus and tests figures named sets they no longer measured, `platform.md` §5 said the layer
   paths did not exist, and the map still described a three-row `pending.md`. All repaired.
+- **Run 3 — `STALE`.** Every adoption reading reproduced and the unit's own documents resolved; two L0
+  lines were still wrong — `brief.md` §5 routed the departed ruling to `pending.md` row 1 (my earlier
+  edit had missed that sentence), and `platform.md` §5 claimed four unit contracts where two exist.
+  Both replaced; the `§5` sentence had been the same claim twice corrected and is now written once.
 
 ## Not settled, stated as such
 
