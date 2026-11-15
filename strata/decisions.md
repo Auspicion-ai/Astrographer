@@ -241,3 +241,59 @@ with it — the fork's zone track vars (`--zone-*-track`), `data-zone` readers, 
 (`src/renderer/theme.ts`), every `cssId`/`dispatch` target row that names a renamed node, and the
 tests that assert those ids. The rename is therefore part of the unit that changes the behaviour, in
 the same commit, never a separate sweep that leaves the tree reading two vocabularies.
+
+---
+
+## D-15 — The fork's own carriers stay the geometry authority; the record-family surface becomes a later program
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Narrows:** D-13's ordering clause stands as written
+
+**Source (user, asked and answered this session):** the validity review's blocking question was put —
+does pane/zone geometry **move** into the foundation's view record (making the UI port depend on the
+record-family work and deleting the fork's operator-settings `layout` slice as a second authority), or
+does the fork keep its slice and take only the behaviours — and the user answered **"Keep the fork's
+carriers; (c) ports behaviours onto them"**.
+
+**Decision:** the layout/UI port writes through the fork's existing carriers — the operator-settings
+`layout` slice for pane and zone geometry, the fork's store carriers for everything beside it — and
+does **not** adopt the foundation's view record as a geometry authority. D-13's ordering clause is
+therefore true as written: the port neither waits on the record-family work nor blocks it. Surface (d)
+stays in scope as a program of its own, admitted later and reconciled against what has landed by then
+(`pending.md` row 2), and its record families are not a prerequisite for any surface (c) unit.
+
+**Why this row exists rather than being left to the unit:** the two intake reviews established that
+the fork already persists per-pane `collapsed` and per-zone `minimized` in its own slice while the
+foundation's members live in its view record, so adopting both would have created two authorities for
+one state — the adjudication the reviews returned. Rejected alternative: adopting the view record as
+the geometry authority, which the user did not take.
+
+---
+
+## D-16 — The rename reaches the fork's closed zone domain and its MCP-visible `zone:` ids
+
+**Status:** ACTIVE · **Date:** 2026-11-15
+
+**Source (user, asked and answered this session):** the critique review's blocking question was put —
+does D-14's vocabulary ruling reach the fork's closed `LayoutZoneName` domain and its MCP-visible
+`zone:` ids (pinned by `R-9`, `P-IM-1`/`P-SM-2` and the `UF-LAYOUT-2` clause), or only carriers the
+import newly authors — and the user answered **"Full rename — including the closed LayoutZoneName
+domain and the MCP zone: ids"**.
+
+**Decision:** the fork's zone vocabulary becomes the foundation's **everywhere**: `LayoutZoneName` is
+`'top' | 'bottom' | 'left' | 'right'`, the carriers are `[zone=]` and the foundation's track variables,
+and every row that names the old spelling is re-grained — `R-9`, `P-IM-1`/`P-SM-2`, the `UF-LAYOUT-2`
+clause that requires `provident.list_targets` to carry stable `zone:` nodes, the zone-replacement
+register rows and the live driver's own vocabulary. The rename lands **in the same unit that changes
+the behaviour**, never as a separate sweep that leaves the tree reading two vocabularies (D-14).
+
+**The measured price, named rather than hidden:** 149 `LayoutZoneName` matches (12 src files, the
+3,851-line zone-replacement register, ~30 spec cells), 54 src / 19 test / 43 live-driver `data-zone`
+sites, 32 `zone:header|footer` tokens, and two protected register rows. `UF-LAYOUT-2` is re-grained to
+the new spellings rather than waived: the agent-visible ids move, and the row that checks them moves
+with them in the same commit.
+
+**Derived from D-14 rather than separately asked:** the state members that also collide — pane/zone
+`minimized` against the foundation's `collapsed`, pane `order` against its `index` — follow D-14's
+rule for colliding names. This is D-14's scope applied, and a unit that finds a genuine semantic
+difference (not a spelling difference) between the two members reports it as an adjudication instead
+of renaming it.
