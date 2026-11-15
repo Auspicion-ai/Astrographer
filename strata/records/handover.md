@@ -34,10 +34,10 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 
 ## Process lessons from this session (each cost real time)
 
-- **A `python` string replace is not an edit unless the anchor is verified afterwards.** Three "repairs"
+- **A `python` string replace is not an edit unless the anchor is verified afterwards** (D-5). Three "repairs"
   were reported as landed and were not in the tree; the exit walkthrough — reading the corpus, not the
   commit message — is what caught it.
-- **A walkthrough finds one class per run.** Eight runs on `V-1`, five on `E-1`, four on `V-2`. The
+- **A walkthrough finds one class per run** (D-5). Eight runs on `V-1`, five on `E-1`, four on `V-2`. The
   findings were almost always *my own* tracker/census drift, never the unit's evidence.
-- **The full live battery is bounded at 240 s and may not reach its reconciliation line.** Scope a block
+- **The full live battery is bounded at 240 s and may not reach its reconciliation line** (D-10). Scope a block
   (`--block=<id>`) for a verdict rather than reading a truncated run as coverage.
