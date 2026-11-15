@@ -12,5 +12,5 @@ walkthrough reads `PASS` (`strata/records/v-1-walkthrough.md`).
 
 **`E-1` `deps-adopt` LANDED** (D-20: `provident-ssr` `^0.5.2`, `provident-storeroom` `^1.11.0`), so the engine
 half of `U-1`'s blocking set is answered; its first storeroom consumer inherits a recorded build debt
-(`--external:provident-storeroom` is absent). Surface (d) and the `docs/` migration wait on the user
-(`pending.md` rows 1–2).
+(`--external:provident-storeroom` is absent). Surface (d) waits on the UI program's landing (`pending.md` row 1); the `docs/`
+migration waits on the user (row 2).

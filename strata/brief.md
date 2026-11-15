@@ -48,8 +48,8 @@ replaced, never annotated.
 | Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
 | Foundation pin | commit `e8dfb57…`, measured 2026-11-15 by unit `V-1`; **15** modules byte-identical at that commit, so the move owed no module byte | `vendor/foundation.lock.json`, `docs/L1/unit-v-1-pin-restate.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
-| Tests | **144** flat `tests/*.test.ts` + 3 `tests/*.test.mjs` | `git ls-files 'tests/*.test.*'` |
-| Docs corpus | **257** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
+| Tests | **146** flat `tests/*.test.ts` + 3 `tests/*.test.mjs` (149 flat test files; the suite also collects the nested `tests/integration/<module>/` paths the units add) | `git ls-files 'tests/*.test.ts'`, `'tests/*.test.mjs'` |
+| Docs corpus | **253** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
 | Archive | **199** tracked files under `archive/` | `git ls-files 'archive/**'` |
 | UI authority | every element outside the shell's own chrome is provident data in the graph, never hand-written DOM | `AGENTS.md`'s UI-rendering constraint (D-8) |
 

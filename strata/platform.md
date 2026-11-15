@@ -56,5 +56,4 @@ annotated (D-2). Ceiling: 60 lines.
 ## 5. The layer write scopes at this head
 
 - `docs/L1/`, `docs/L2/<module>/`, `docs/L3/<module>/` and `tests/{e2e,integration/<module>,unit/<module>}`
-  are created on first write; none exists yet. The existing flat `tests/` tree is claimed by L1's map
-  and migrates per module at claim time, never wholesale ahead of it (`ASM-1`, `ASM-3`).
+  now exist where units have claimed them (`docs/L1/` holds the program's map and four unit contracts; `tests/integration/{foundation-vendor,shell-chrome}/` hold the battery rows). The existing flat `tests/` tree is claimed by L1's map and migrates per module at claim time, never wholesale ahead of it (`ASM-1`, `ASM-3`).
