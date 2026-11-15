@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/overlay.test.ts
 // ===========================================================================
 // U-OVERLAY · wave E · ledger row E9 · **THE RED SET** (RCA-1)
@@ -1180,7 +1181,7 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
   })
 
   it('X-2 (§3.5) — THIS UNIT\'S CONTRACT IS FILED: docs/specs/overlay.md EXISTS and is this file\'s contract', () => {
-    const specPath = join(ROOT, 'docs', 'specs', 'overlay.md')
+    const specPath = join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'overlay.md')
     expect(existsSync(specPath), `X-2 — the contract is filed at ${specPath} (the unit is not delegable without it, §4.5)`).toBe(true)
     const spec = readFileSync(specPath, 'utf8')
     expect(spec.split('\n')[0], 'X-2 — the first line names the unit and its two-function mechanism, so the file is the contract and not a sibling').toContain('U-OVERLAY')
@@ -1188,7 +1189,7 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
   })
 
   it('X-3 (§3.5) — the gate-1 record is the RECORD and NOT this file\'s contract, and it EXISTS (a DENIED path of §5.1 item 12)', () => {
-    const recordPath = join(ROOT, 'docs', 'specs', 'overlay-review.md')
+    const recordPath = join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'overlay-review.md')
     expect(existsSync(recordPath), 'X-3 — docs/specs/overlay-review.md is the gate-1 record; this unit does not edit it again, so the row is an EXISTENCE probe whose FAIL is meaningful').toBe(true)
     const record = readFileSync(recordPath, 'utf8')
     expect(record, 'X-3 — the record is NOT this contract: it does not carry this file\'s `§2.1` surface block as its own (the two documents are distinguishable)').not.toContain('export function overlayTransition(state: unknown, verb: unknown, callback?: unknown): OverlayTransition')
@@ -1201,26 +1202,56 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
     ).toBe(false)
   })
 
-  it('X-5 (§3.5) — src/** carries NO overlay / dialog / modal / popover / focus-trap / portal surface of any kind, and NO DOM inert attribute', () => {
+  // ⟶ **X-5 RE-GRAINED 2026-11-05 (`D-113`) — THE SURFACE ITS ROW SAID DID NOT EXIST NOW DOES, BY RULING.** The row's
+  // own message says what a FAIL means: *"an overlay surface already exists and this unit's DENIED list must be
+  // re-derived"*. The user's ruling is *"The overlay is used to contain UI elements that should block general app access
+  // while open, ex. security tools and other configuration settings"*, so the app now AUTHORS one, and the two files that
+  // author and consume it are admitted BY NAME — the authored nodes (`src/shared/demo-envelope.ts`) and the wiring
+  // (`src/renderer/renderer.ts`). **THE ROW IS NOT RELAXED, IT IS SCOPED**: every other `src/**/*.ts` file is swept in
+  // FULL under the same five tokens, and the two admitted paths are asserted to be the ONLY carriers. The `inert`
+  // ATTRIBUTE-WRITE half is UNMOVED and unmoved on purpose: `D-113` writes it as provident data (`props.<name>` through
+  // one `state-slice`), never through `setAttribute`, so the sentence *"`inert` appears in src/** as DEGRADATION PROSE
+  // ONLY, NEVER as an applied attribute"* still holds where it was written.
+  const ADMITTED_OVERLAY_SURFACE: readonly string[] = [
+    '/src/shared/demo-envelope.ts', // the AUTHORED nodes: the scrim, the dialog card, the opener, the close control
+    '/src/renderer/renderer.ts', // the CONSUMER: `overlayWiringRole` + `startOverlayApplication`
+  ]
+  it('X-5 (§3.5) — `src/**` carries the overlay surface in EXACTLY the two paths `D-113` names, and NO DOM inert attribute anywhere', () => {
     const surfaceTokens = [t0('overlayFrame'), t0('dialog'), t0('modal'), t0('popover'), t0('portal')]
     const hits: string[] = []
     const inertFiles: string[] = []
+    const carriers = new Set<string>()
     const attributeWrites: string[] = []
     for (const p of srcTsFiles()) {
       const src = readFileSync(p, 'utf8')
       const rel = p.replace(ROOT, '.')
-      for (const v of surfaceTokens) if (scanForToken(src, v, false)) hits.push(`${rel}: ${v}`)
-      if (scanForToken(src, t0('inert'), false)) inertFiles.push(rel)
+      const admitted = ADMITTED_OVERLAY_SURFACE.some((suffix) => p.endsWith(suffix))
+      for (const v of surfaceTokens) if (scanForToken(src, v, false)) (admitted ? carriers.add(rel) : hits.push(`${rel}: ${v}`))
+      if (scanForToken(src, t0('inert'), false)) (admitted ? carriers.add(rel) : inertFiles.push(rel))
       for (const m of src.matchAll(new RegExp(`${t0('setAttribute')}|${t0('removeAttribute')}`, 'g'))) { // CORPUS-EXEMPT
         const around = src.slice(Math.max(0, (m.index ?? 0) - 40), (m.index ?? 0) + 80)
         if (around.includes(t0('inert'))) attributeWrites.push(`${rel}: ${around.replace(/\s+/g, ' ').trim()}`)
       }
     }
-    console.log(`X-5 readings :: overlay/dialog/modal/popover/portal token hits = ${JSON.stringify(hits)} · files carrying the inert token = ${JSON.stringify(inertFiles)}`)
+    console.log(`X-5 readings :: overlay/dialog/modal/popover/portal token hits OUTSIDE the two admitted paths = ${JSON.stringify(hits)} · the admitted carriers measured = ${JSON.stringify([...carriers])} · files carrying the inert token outside them = ${JSON.stringify(inertFiles)}`)
     expect(
       hits,
-      'X-5 — a src/**/*.ts search for the overlay / dialog / modal / popover / portal surface vocabulary returns ZERO matches. A FAIL here means an overlay surface already exists and this unit\'s DENIED list must be re-derived.',
+      'X-5 — a src/**/*.ts search for the overlay / dialog / modal / popover / portal surface vocabulary returns ZERO matches OUTSIDE the two paths `D-113` admits by name. A FAIL here means a THIRD file carries an overlay surface and this row\'s admission must be re-derived.',
     ).toEqual([])
+    // THE `inert` PROSE READING IS PRINTED AND NOT ASSERTED AS A COUNT, exactly as it was before this re-grain (§3.5
+    // X-5 carries that measurement from the gate-1 record without re-pinning it): the word appears in several modules as
+    // DEGRADATION PROSE ("the inert module", "an inert controller"), which is not a surface.
+    void inertFiles
+    expect(
+      [...carriers].sort(),
+      'X-5 POSITIVITY — the admission is BOUNDED and MEASURED: exactly the two named paths carry the surface, so an admission that admitted nothing (or a third carrier) reddens here rather than passing quietly',
+    ).toEqual(['.src/renderer/renderer.ts', '.src/shared/demo-envelope.ts'])
+    // THE BOUNDED-EXTENSION CONTROL: the same token in a THIRD `src/**` path is STILL a finding, so the admission is a
+    // scope and never a licence for the directory.
+    expect(
+      ADMITTED_OVERLAY_SURFACE.some((suffix) => '/src/shared/theme.ts'.endsWith(suffix)),
+      'X-5 CONTROL — a third path is NOT admitted: the same surface vocabulary anywhere else still fails the row above',
+    ).toBe(false)
     expect(
       attributeWrites,
       'X-5 — `inert` appears in src/** as DEGRADATION PROSE ONLY, NEVER as an applied attribute: no setAttribute/removeAttribute call site names it. (The prose files are PRINTED as a READING above and are not asserted as a count — §3.5 X-5 carries that measurement from the gate-1 record without re-pinning it.)', // CORPUS-EXEMPT
@@ -1260,20 +1291,27 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
         if (/\bimport\b|\brequire\s*\(/.test(line) && specifier.test(line)) importers.push(`${p.replace(ROOT, '.')}: ${line.trim()}`)
       }
     }
-    // THE AMENDED SET (the licence's overlay cell): EXACTLY ONE admitted importer —
-    // the unit's own caller file `src/renderer/overlay-store.ts` — and NOTHING
-    // else. The as-filed reading ("the src/** tree contains ZERO importers of this
-    // unit's module") survives: the ONE member is the caller's own admission, and a
-    // SECOND importer is still a FINDING.
-    const admittedImporter = '.src/renderer/overlay-store.ts:'
+    // ⟶ **X-6 REVERTS TO ITS AS-FILED CLOSED FORM (2026-11-03, `D-93`) — THE ROLLBACK THE LICENCE ITSELF DECLARED.**
+    // The amended set admitted EXACTLY ONE importer, the unit's own caller file `src/renderer/overlay-store.ts`. **THAT
+    // CALLER IS DELETED**: it was a store-shaped turn written against the frozen graph store's `mem.overlay.<name>.state`
+    // address space, it had NO live consumer under `src/` (the amended row's own measurement was "one importer, and that
+    // importer is the caller"), and the address space it addressed is deleted with `src/renderer/store-core-graph.ts`
+    // (`D-93`; `strata/decisions.md` `D-78`'s purge). **THE LICENCE'S OWN ROLLBACK CLAUSE IS WHAT FIRES HERE** — *"retiring
+    // the overlay caller reverts this row to its as-filed `.toEqual([])` closed form"* — so the row goes back to the form
+    // the unit filed it in, which is now, again, the truth of the tree. **IT IS NOT A WEAKENING**: the as-filed reading is
+    // STRIcter than the amended one — zero importers rather than one — and the bounded-extension control below still fails
+    // any second importer.
+    // ⟶ **X-6 RE-GRAINED AGAIN 2026-11-05 (`D-113`) — THE CONSUMER THE RULING OWED IS HERE, AND IT IS NAMED.**
+    // The as-filed form (`zero importers`) held while nothing consumed the mechanism; the amended form (one member,
+    // `src/renderer/overlay-store.ts`) held while that deleted caller existed. `D-113` gives the mechanism its LAWFUL
+    // consumer — the app renderer's wiring — so the set is CLOSED AT ONE NAMED MEMBER again, exactly the form `D-96` took
+    // for `theme` when it wired that mechanism's consumer (`tests/theme.test.ts` `R-6`). **IT IS NOT A WEAKENING**: the
+    // bounded-extension control below still fails any SECOND importer, and the member is asserted by NAME rather than
+    // by count.
     expect(
-      importers.length,
-      `X-6 (AMENDED, licence cell of §2.7 item 7's dated extension — the overlay caller admission) — the importer set is EXACTLY ONE: the unit's own caller file \`src/renderer/overlay-store.ts\` (the §2.2 caller-side store turn, admitted BY NAME) and NOTHING else. The AS-FILED READING, KEPT VISIBLE BESIDE: "the src/** tree contains ZERO importers of this unit's module. A FAIL here admits an importer, FIRES the §7.1 predicate and VOIDS the three-part [U] refusal (§5.1's closing sentence)." That intent is UNCHANGED for every OTHER path — the overlay MODULE's own bytes still import nothing; only the one declared caller may import it. Measured: ${JSON.stringify(importers)}`,
-    ).toBe(1)
-    expect(
-      importers[0] ?? '',
-      'X-6 (AMENDED) — the ONE importer IS the admitted caller, by path prefix; any other path (or an absent overlay-store import) fails this row, keeping the closed set honest.',
-    ).toContain(admittedImporter)
+      importers.map((line) => line.split(':')[0]).sort(),
+      `X-6 (RE-GRAINED, 2026-11-05 — \`D-113\`) — the importer set is EXACTLY ONE and it is NAMED: the app renderer's wiring. A SECOND importer STILL FIRES the §7.1 predicate and VOIDS the three-part [U] refusal (§5.1's closing sentence), which is what the bounded-extension control below drives. THE TWO EARLIER READINGS, KEPT VISIBLE BESIDE: "ZERO importers" (as filed, and the form \`D-93\` restored) and "EXACTLY ONE: \`src/renderer/overlay-store.ts\`" (the 2026-10-03 amendment, which held while that caller existed). Measured: ${JSON.stringify(importers)}`,
+    ).toEqual(['.src/renderer/renderer.ts'])
     // THE BOUNDED-EXTENSION POSITIVE CONTROL (the licence's positive-control clause:
     // broadening the set BEYOND the one admitted path is a FINDING): the SAME
     // instrument MUST still flag a SECOND new path's import.
@@ -1284,15 +1322,22 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
     ).toBe(true)
   })
 
+  // strata:gates — the script key set is a loop instrument, not module machinery (D-38)
   it('R-3(config half) (§3.4) — package.json/package-lock.json carry the LANDED dependency and script sets: no new dependency and no new script key', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
       scripts?: Record<string, string>
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>
     }
-    const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'ui', 'mcp']
+    // ⟶ ADDED 2026-10-30: `panes` — the `secure-panels` unit's live leg key (D-37). A `scripts`
+    // key set is a loop INSTRUMENT, so this row is EXTENDED and stays gating rather than being
+    // turned into a lower bound (D-38); the set stays EXACT, and no key this unit owns is added.
+    // ⟶ EXTENDED 2026-11-03 (`D-94`): `crossings`, the crossings' live leg key (see the note above);
+    // a `scripts` key set is a loop INSTRUMENT, so this row is EXTENDED and stays gating (D-38).
+    const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'ui', 'mcp', 'panes', 'crossings']
     const LANDED_DEV = ['@types/node', 'electron', 'esbuild', 'typescript', 'vitest']
-    const LANDED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr']
+    // THE SET STAYS EXACT: 'provident-storeroom' is the one member added by the 2026-10-29 import.
+    const LANDED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr', 'provident-storeroom']
     // A SET claim against the NAMES, never a bare count (§4.4 S-OV-6).
     expect(Object.keys(pkg.scripts ?? {}).sort(), 'R-3 — the scripts KEY SET is the landed set: ANY further script key reddens this row, and a config change cannot satisfy it (§5.1 item 7, AGENTS.md item 4). This unit\'s leg 5 adds NO SCRIPT.').toEqual([...LANDED_SCRIPT_KEYS].sort())
     expect(Object.keys(pkg.devDependencies ?? {}).sort(), 'R-3 — no new devDependency: the register is executed by plain deterministic vitest tables with NO property runner and NO fast-check (§5.5).').toEqual([...LANDED_DEV].sort())
@@ -1317,13 +1362,13 @@ describe('§3.5 X-1 / X-2 / X-3 / X-4 / X-5 / X-6 + §3.4 R-13 / R-3(config) / R
       'src/renderer/index.html', 'src/renderer/renderer.ts', 'src/main/main.ts', 'src/main/preload.ts',
       'src/shared/demo-envelope.ts', 'src/shared/dom-shim.ts', 'package.json', 'package-lock.json',
       'scripts/electron-divergence.mjs', 'tsconfig.json', 'tsconfig.tests.json', 'vitest.config.ts',
-      'docs/specs/overlay-review.md',
+      'archive/gate-corpus-2026-10-29/specs/overlay-review.md',
     ]
     for (const p of denied) {
       expect(existsSync(join(ROOT, p)), `R-6 — the DENIED path §5.1 names is PRESENT on disk: ${p}. The denial binds this unit's diff; it does NOT forbid a later consumer from importing the module.`).toBe(true)
     }
     expect(existsSync(new URL('./overlay.test.ts', import.meta.url)), 'R-6 — the allow-list row 2 (THIS file) EXISTS; §5.1 names it so the register\'s own execution cannot read as a DENY-set violation').toBe(true)
-    expect(existsSync(join(ROOT, 'docs', 'specs', 'overlay.md')), 'R-6 — the allow-list row 3 (this unit\'s spec) EXISTS').toBe(true)
+    expect(existsSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'overlay.md')), 'R-6 — the allow-list row 3 (this unit\'s spec) EXISTS').toBe(true)
     // THE ALLOW-LIST ROW 1, IN THE BRANCH FORM: asserting the module's ABSENCE as a
     // STANDING claim would be a red-only premise (true before the work and false for
     // ever after). The RED branch states the absence; the GREEN branch states the
@@ -2004,7 +2049,7 @@ describe('§3.3 I-2 / I-3 / I-5..I-10 / I-12 — the invariants that hold in eve
   })
 
   it('I-7 (§3.3) — NO [U] ROW IS OFFERED AND NO [D] ROW IS CLAIMED: both refusals are STRUCTURAL, and gate 6 is never "waived"', () => {
-    const spec = readFileSync(join(ROOT, 'docs', 'specs', 'overlay.md'), 'utf8')
+    const spec = readFileSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'overlay.md'), 'utf8')
     expect(spec, 'I-7 / §5.2 — the three-part [U] refusal carries docs/specs/zones.md §4.4 S-6\'s sentence VERBATIM (step 4 required the lift rather than a paraphrase)').toContain('the row may not be moved to the `ui` leg silently.')
     expect(spec, 'I-7 / §5.2 — gate 6 is stated as STRUCTURAL with its reason: no importer, no rendered surface, nothing written or moved').toContain('GATE 6 IS `STRUCTURAL`, NOT WAIVED')
     expect(spec, 'I-7 / §5.2 — the reader question is answered NONE').toContain('THE READER QUESTION, ANSWERED: `NONE`')
@@ -3065,7 +3110,7 @@ describe('§5.5.1 / §5.5.2 / §5.5.3 — the register harness: declared-vs-meas
     const im = terms.slice(0, 5).reduce((a, b) => a + b, 0)
     const sm = terms.slice(5, 7).reduce((a, b) => a + b, 0)
     const tp = terms.slice(7).reduce((a, b) => a + b, 0)
-    const spec = readFileSync(join(ROOT, 'docs', 'specs', 'overlay.md'), 'utf8')
+    const spec = readFileSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'overlay.md'), 'utf8')
     // ⟶ **THE TWO PRINTED TOTALS ARE ANCHORED THROUGH THEIR SIXTH TERM.** Both figures
     // are printed `**`NNN` = `10` + `6` + `12` + `4` + `4` + …**`, and the declared and
     // the distinct printings diverge at EXACTLY that sixth term (`P-OV-SM-1`: `6`

@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/relocate.test.ts
 // ===========================================================================
 // U-RELOCATE · wave E (ledger row `E4`) · upstream `SCH-7` (`A-d4`, ADOPTED-RESHAPED)
@@ -166,7 +167,7 @@ const TEST_FILE = fileURLToPath(import.meta.url)
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MODULE_RELPATH = 'src/shared/relocate.ts'
 const TEST_RELPATH = 'tests/relocate.test.ts'
-const SPEC_RELPATH = 'docs/specs/relocate.md'
+const SPEC_RELPATH = 'archive/gate-corpus-2026-10-29/specs/relocate.md'
 
 /** `§4.1` — the module-absent reason, as DATA: a clause row asserts it (so the red
  *  message names the absent module) while a REGISTER row counts it as a BROKEN attempt
@@ -1464,7 +1465,7 @@ describe('§3.5 X-1 + §3.4 R-17/R-18/R-9 — the existence and precondition row
   })
 
   it('R-17 §3.4 — the `[D]`-precondition row: at the time this red set is authored, `docs/specs/gsession.md` §2.6’s `F-12` remains `PRECONDITION-GATED`, so this unit claims no `[D]` row (a clause-status probe whose FAIL is meaningful)', async () => {
-    const spec = readFileSync(`${REPO_ROOT}/docs/specs/gsession.md`, 'utf8')
+    const spec = readFileSync(`${REPO_ROOT}/archive/gate-corpus-2026-10-29/specs/gsession.md`, 'utf8')
     expect(
       spec.includes('PRECONDITION-GATED'),
       'R-17 — the sibling contract still carries its PRECONDITION-GATED token, so the probe is not vacuous (the token is the clause status this row reads)',
@@ -1524,7 +1525,7 @@ describe('§3.5 X-1 + §3.4 R-17/R-18/R-9 — the existence and precondition row
       'R-9 — `docs/skills/designing-pages.md` DOES NOT EXIST at the time this unit’s red set runs (§1 item 6, §7 item 6: globbed `docs/skills/*` at filing held `process-guardrails.md` alone). IF THIS FAILS the file DOES exist, and this unit then OWES a test-use-case coverage row in that file’s matrix plus an entry in its demo-page index — with the honest note that a mechanism with no UI surface can only contribute an ABSENCE row',
     ).toBe(false)
     expect(
-      existsSync(`${REPO_ROOT}/docs/skills/process-guardrails.md`),
+      existsSync(`${REPO_ROOT}/archive/gate-corpus-2026-10-29/skills/process-guardrails.md`),
       'R-9 — the probe is not vacuous: the sibling skill file DOES exist, so `existsSync` answers true for a present path',
     ).toBe(true)
   })

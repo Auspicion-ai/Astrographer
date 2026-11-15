@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/gesture-session.test.ts
 // ===========================================================================
 // U-GSESSION · wave E (ledger row `E6`) · **THE RED SET** (RCA-1)
@@ -1543,6 +1544,127 @@ const SIBLING_UNIT_ARTIFACT_PATHS: readonly string[] = [
   'docs/specs/gutter-ui-greens.md', // row 5 — the unit's gate-5 blind-greens artifact
   'src/renderer/renderer.ts', // row 10 + §R.1 — the bounded renderer wiring
   'src/renderer/runtime.ts', // row 11 + §R.1 — `Runtime.elementForNodeId` and nothing else
+  // **⟶ ADDED 2026-10-30 (THE `F-9(b)` REPAIR, `docs/L1/secure-panels.md` §7 `E-1`): the SIBLING
+  //    `secure-panels` unit's declared artifact — one file, three regions, its writer named by that
+  //    row. The sibling specs above are cited by their `§5.1` allow-list rows; this one is cited by
+  //    its own L1 write-scope row, because the gate-era `docs/specs/` citations moved to the archive
+  //    with the corpus (D-2) and a live list must not cite a retired path.** */
+  'src/renderer/secure-panels.ts', // `docs/L1/secure-panels.md` §7 `E-1` — one pass, three regions
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-89`): the `store-view-record` unit's own
+  //    renderer-side client.** The swap that points the renderer at the crossing's two successor addresses lands a
+  //    NEW module beside `tabs-client` (`src/renderer/view-client.ts`) and edits `src/renderer/renderer.ts` beside it;
+  //    this row charged the new file to THIS unit because it is under `src/renderer/` and on no sibling list. It is a
+  //    sibling's declared artifact — the unit that owns the renderer's read of the view record — so it is excluded BY
+  //    NAME, exactly as `renderer.ts` already was, and the DENIED predicate is untouched: a `src/renderer/**` path this
+  //    list does not name STILL fails the row (the positive control two paragraphs down drives one).** */
+  'src/renderer/view-client.ts', // `strata/decisions.md` D-88/D-89 — the shape's client, the sibling's own artifact
+  'src/main/view-record/index.ts', // `strata/decisions.md` D-87/D-89 — the crossing's two declarations, the same sibling's
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-93`): THE PURGE PASS'S OWN RENDERER PATHS.** The pass that
+  //    deletes the renderer's frozen graph store (`strata/decisions.md` `D-78`/`D-93`) writes exactly five paths under
+  //    `src/renderer/`: the four it DELETES (`store-core-graph.ts`, `store-graph-references.ts`, and the two store-shaped
+  //    caller turns `overlay-store.ts` / `theme-store.ts`) and the tab record's client, which gains the dated headstone
+  //    that records Stage A's spent paragraph. Each is the SIBLING's declared artifact and none of them is this unit's, so
+  //    each is excluded BY NAME — exactly as `renderer.ts` already was. **THE DENIED PREDICATE IS UNTOUCHED**: a
+  //    `src/renderer/**` path this list does not name STILL fails the row, and the positive control below drives one.** */
+  'src/renderer/store-core-graph.ts', // `D-93` — DELETED by the purge; the app's own frozen graph store
+  'src/renderer/store-graph-references.ts', // `D-93` — DELETED by the purge; its declaration-input module
+  'src/renderer/overlay-store.ts', // `D-93` — DELETED by the purge; the store-shaped overlay caller turn
+  'src/renderer/theme-store.ts', // `D-93` — DELETED by the purge; the store-shaped theme caller turn
+  'src/renderer/tabs-client.ts', // `D-93` — the record's client, whose header carries Stage A's spent-paragraph note
+  // ── AND THE SAME SIBLING'S THREE MAIN-SIDE PATHS, for the identical reason: the purge deletes the frozen store's
+  //    projection, and the projection lived in `main.ts`'s two `ipcMain.handle` sites with their `file.*` loop, in
+  //    `preload.ts`'s three `store` members and `store:file:changed` LOCAL, and in `store-channels.ts`'s two constants.
+  'src/main/store-channels.ts', // `D-93` — the two channel constants die; `IPC_SECURITY_EXCLUSION` stands
+  'src/main/main.ts', // `D-93` — the two `ipcMain.handle` sites and the `file.*` projection loop leave
+  'src/main/preload.ts', // `D-93` — the three `store` members and the `store:file:changed` LOCAL leave
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-97`): the `store-view-record` unit's SURFACE MODULE.** The
+  //    pass that moves the appearance declaration into the crossing (`strata/decisions.md` `D-97`, *"No boot time
+  //    declarations — use constraint repairs"*) edits `src/main/view-surface/index.ts` — the sibling's own surface, whose
+  //    read answer and route carry the fourth family — beside the four sibling paths already named above. It is excluded BY
+  //    NAME like every other entry here; the DENIED predicate and the positive control below are untouched.
+  'src/main/view-surface/index.ts', // `D-97` — the surface's read answer and its appearance route
+  // **⟶ ADDED 2026-11-09 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-219`): THE PASS THAT MOVES THE REGISTRATIONS INTO
+  //    `cfg.listeners` WRITES THE TABS CROSSING'S OWN SURFACE MODULE — `src/main/tabs-surface/index.ts`.** The delivery
+  //    pass (`strata/decisions.md` `D-219`) deletes `attach()`/`detach()` from that surface and takes the `onChanged`
+  //    option away with them, because `1.11.0` delivers at the CREATION and the construction adopts the crossing's one
+  //    `listeners` entry (`docs/L3/store-tabs-record/delivery.md` §4). Its twin `src/main/view-surface/index.ts` is
+  //    already named above for `D-97` and `src/main/tabs-record/index.ts` for `D-101`, so this is the SECOND surface of a
+  //    crossing whose record is already declared — a path the row charged to THIS unit only because the list had no entry
+  //    for it. It is a SIBLING's declared artifact and is excluded BY NAME like every other entry here. **THE DENIED
+  //    PREDICATE IS UNTOUCHED**: a `src/renderer/**` or `src/main/**` path this list does not name STILL fails the row
+  //    (`src/main/security.ts` is still charged below), and both controls still drive the instrument in both directions.**
+  'src/main/tabs-surface/index.ts', // `D-219` — `attach`/`detach`/`onChanged` leave; the surface takes the crossing's delivery
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-101`): THE `central-data` UNIT'S OWN PATHS.** The pass
+  //    that makes the `data.*` tier the caller's and guards the crossings' declared roots writes seven files under
+  //    `src/main/`: the module's four (`data/types.ts`, `data/args.ts`, `data/mapper.ts`, `data/surface.ts`), the two
+  //    declaring modules whose pairs the guard reads (`tabs-record/index.ts` — the record's ONE tier constant — and
+  //    `view-record/index.ts`, already named above for `D-87`/`D-89`), one line of `main.ts` (already named) and the MCP
+  //    server's three `data` argument schemas, which gain the `tier` member. Each is a SIBLING unit's declared artifact
+  //    (`strata/decisions.md` `D-101`) and every one is excluded BY NAME like every other entry here.
+  'src/main/data/types.ts', // `D-101` — the twelfth reason word and the declared-root pair's type
+  'src/main/data/args.ts', // `D-101` — the tier's domain, its two defaults and the arm that refuses a tier outside it
+  'src/main/data/mapper.ts', // `D-101` — the `declared-tier` sentence, and `TierNotFound` read as an ABSENCE
+  'src/main/data/surface.ts', // `D-101` — the declared-root guard, and the tier threaded into write, delete and read
+  'src/main/tabs-record/index.ts', // `D-101` — `TABS_RECORD_TIER` and `tabsDeclaredRoots`, the family's own pair
+  'src/main/mcp-server.ts', // `D-101` — the three `data` tools' declared members gain `tier`; nothing registers anew
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-103`): THE SAME UNIT'S TWO REMAINING PATHS.** The pass
+  //    that brings the package's log onto the `data.*` answers writes the module's entry (`data/index.ts`, which gains
+  //    the exported `DataLogEntry`) and the SEAM (`src/main/storeroom.ts`, which gains the one declared accessor that
+  //    reads the non-enumerable member and the census prose that says so). Both are the `central-data` unit's declared
+  //    artifacts (`strata/decisions.md` `D-103`), excluded BY NAME like every other entry here — **AND THE DENIED
+  //    PREDICATE IS UNTOUCHED**: the positive control below still drives a `src/renderer/**` path this list does not
+  //    name, and `src/main/security.ts` below is still charged to this unit.**
+  'src/main/data/index.ts', // `D-103` — the module's entry, and the `DataLogEntry` it exports
+  'src/main/storeroom.ts', // `D-103` — the one declared reader of the commit's log, and the census header it re-measures
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-104`): THE APP-STATE DELIVERY PASS'S THREE PATHS.** The pass
+  //    that gives the secure crossing's third address a listener of its own (the user's rule, *"the renderer does not ask
+  //    state, it listens"*) writes one NEW renderer module and two main-side files: the shape the delivery fills
+  //    (`src/renderer/module-client.ts`), the instance's `subscribe` — which binds the third address and routes its
+  //    deliveries to a second body — and the surface that hands the change to the composition's broadcast. Each is a
+  //    SIBLING's declared artifact (`strata/decisions.md` `D-104`) and every one is excluded BY NAME like every other entry
+  //    here. **THE DENIED PREDICATE IS UNTOUCHED**: a `src/renderer/**` path this list does not name STILL fails the row, and
+  //    the positive control below still drives one.**
+  'src/renderer/module-client.ts', // `D-104` — the app-state rows' shape, held in this realm and filled by deliveries
+  // **⟶ ADDED 2026-11-03 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-106`): THE SECURITY DELIVERY PASS'S ONE NEW RENDERER PATH.**
+  //    The pass that gives the secure crossing's record the delivery it never had (`strata/decisions.md` `D-106`; the rule
+  //    `D-104` read as the architecture, *"the renderer does not ask state, it listens"*) writes ONE new `src/renderer/`
+  //    module — the shape the delivery fills — beside four already-named files (`renderer.ts`, `secure-panels.ts`,
+  //    `preload.ts`, `main.ts`). It is a SIBLING's declared artifact and is excluded BY NAME like every other entry here.
+  //    **THE DENIED PREDICATE IS UNTOUCHED**: a `src/renderer/**` path this list does not name STILL fails the row, and the
+  //    positive control below still drives one.**
+  'src/renderer/security-client.ts', // `D-106` — the security record's shape, held in this realm and filled by deliveries
+  'src/main/operator-settings/index.ts', // `D-104` — the third address joins the one subscription, with its own delivery body
+  'src/main/settings-surface/index.ts', // `D-104` — the app-state body the composition's broadcast rides
+  // **⟶ ADDED 2026-11-06 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-117`): THE TWO-LEFTOVERS PASS'S ONE `src/` PATH.** The pass
+  //    that retires `src/main/tier4-state.ts` and wires the live pane drag onto the crossing DELETES that holder — a
+  //    deletion is a path `git status` reports like any other write — so the row charged a SIBLING's retired file to THIS
+  //    unit. It is excluded BY NAME like every other entry here, and its two editor files
+  //    (`settings-surface/index.ts` and `renderer.ts`) were already named above. **THE DENIED PREDICATE IS UNTOUCHED**: a
+  //    `src/renderer/**` or `src/main/**` path this list does not name STILL fails the row, and the positive control below
+  //    still drives one.**
+  'src/main/tier4-state.ts', // `D-117` — DELETED; the module-level projection no file under `src/` read
+  // **⟶ ADDED 2026-11-12 (THE `F-9(b)` REPAIR, RE-GRAINED BY `D-269`/`D-270` AND THE ZONE-COLLAPSE REV): THE
+  //    `renderer-wiring` UNIT'S OWN PATH — THE PAGE SHEET.** The pass that authored the PANE CONTROL BAR's head row, its
+  //    collapse control and the pane bodies (`D-269`, `D-270`) and then the FOUR ZONE COLLAPSE CONTROLS with their rotated
+  //    sidebar lane and their `+` sibling glyph rule (`docs/L3/renderer-wiring/design-zone-collapse.md` §6, §7) writes the
+  //    sheet — `src/renderer/index.html` — and that file is a SIBLING's declared path in its own right
+  //    (`design-zone-collapse.md` §6 says so in its own bytes: *"`src/renderer/index.html` IS THIS MODULE'S OWN PATH"*).
+  //    Until this entry stood here the row charged it to THIS unit, because it is under `src/renderer/` and on no
+  //    declaration — the identical over-broad class `E10`, `E3`, `D-89` and `D-101` each repaired before it.
+  //    **THE DENIED PREDICATE IS UNTOUCHED AND THE CONTROL STILL DRIVES IT**: a `src/renderer/**` path this list does not
+  //    name — `src/renderer/gesture-session-panel.ts`, the synthetic the positive control feeds the same instrument —
+  //    STILL fails the row, and `src/main/security.ts` is still charged to this unit below. What the row no longer claims
+  //    is that no sibling may ever touch the sheet, which was never this unit's to assert (`docs/specs/gutter.md` §5.1's
+  //    commit-range scope rule).** */
+  'src/renderer/index.html', // `D-269`/`D-270` + `design-zone-collapse.md` §6 — the page sheet, `renderer-wiring`'s own path
+  // **THE PREDICATE STILL BITES AND THE CONTROL BELOW STILL DRIVES IT**: the exclusion is a PATH-BY-PATH list, so a
+  // `src/renderer/**` or `src/main/**` path that no declaration names — `src/main/security.ts`, or the synthetic
+  // `src/renderer/gesture-session-panel.ts` the control two paragraphs down feeds to the same instrument — is STILL
+  // charged to this unit and STILL fails the row. What the row no longer does is charge a declared SIBLING pass's
+  // in-flight edit to this unit, which is the same repair `F-9(b)` already carries four times (`E10`, `E3`, `D-89`,
+  // `D-101`). **`src/main/mcp-server.ts` WAS THE EXAMPLE THIS SENTENCE CARRIED AND IT IS NOW ON THE LIST ABOVE**, so
+  // the illustration moved to `src/main/security.ts` — a surface file this unit still denies, named by no
+  // declaration, and untouched by any live pass.
 ]
 // ---------------------------------------------------------------------------
 // **⟶ SIBLING-ATTRIBUTED 2026-09-27 (THE U-DIVERGENCE-EXT LANDING) — THE THIRD AND FOURTH DECLARING
@@ -1691,9 +1813,45 @@ function isSiblingUnitArtifact(path: string): boolean {
     // commit carries (see `F3_UNIT_TEST_ARTIFACT_PATHS` for the measured cause and the reason the
     // exemption is BY NAME). The predicate's DENIED counterpart is UNTOUCHED and still rejects
     // every path here.**
-    F3_UNIT_TEST_ARTIFACT_PATHS.includes(path)
+    F3_UNIT_TEST_ARTIFACT_PATHS.includes(path) ||
+    // ⟶ DECLARED 2026-11-03 (`D-94`): the import fixes' and live instrument's own paths, by name.
+    D94_UNIT_ARTIFACT_PATHS.includes(path)
   )
 }
+/** ⟶ **DECLARED 2026-11-03 (`D-94`) — THE `D-94` PASS'S OWN PATHS, BY NAME.** That pass removes an unused
+ *  import from the headless host, deletes the demo's dead sources, and lands the crossings' LIVE LEG
+ *  (`npm run crossings`) with the six `scripts`-key-set censuses it moves. `src/main/battery-host.ts`
+ *  is the ONE path it writes under a directory this unit denies, so without this declaration `F-9(b)`
+ *  would charge a sibling pass's line to this unit — the exact defect RULING B repaired above, and the
+ *  same reason the `F3` and `U-DIVERGENCE-EXT` paths are named. **The DENIED direction is untouched**:
+ *  `UNCLAIMED_PATH_CONTROL` still drives `src/main/main.ts`, `src/shared/census.ts` and both other
+ *  probes `false`, and `R-7`'s positive control still drives the declared census `true`. Every member
+ *  here is a path the pass WROTE (a deletion included), cited by the corpus row that records it. */
+const D94_UNIT_ARTIFACT_PATHS: readonly string[] = [
+  'src/main/battery-host.ts', // the stale import removed (D-94)
+  'package.json', // the `crossings` key added (D-94)
+  'demo/pane-drag-demo/demo.ts', // DELETED — its subject is the store `D-93` removed (D-94)
+  'demo/pane-drag-demo/demo-entry.ts', // DELETED with it (D-94)
+  'demo/pane-drag-demo/README.md', // re-grained to say the bundle is the artefact (D-94)
+  'tests/e2e/store-crossings/crossings-live.mjs', // the live instrument itself (D-94)
+  'tests/e2e/store-crossings/', // the same path while it is still untracked
+  'tests/ui-leg-contract.test.ts', // the landed script-key pin, extended (D-94, D-38)
+  'tests/focus-model.test.ts', // and five censuses beside it
+  'tests/container.test.ts',
+  'tests/menu-template.test.ts',
+  'tests/overlay.test.ts',
+  'tests/theme.test.ts',
+  'tests/integration/store-view-record/boundary.test.ts', // the worktree boundary row's declared scope
+  // `tests/gesture-session.test.ts` is NOT here: it is THIS unit's own artifact, and the row's NEGATIVE
+  // control requires this unit's own paths to stay attributable to it. This pass's edit to it is
+  // declared at the boundary row instead (`tests/integration/store-view-record/boundary.test.ts`).
+  'strata/decisions.md',
+  'strata/pending.md',
+  'strata/brief.md',
+  'strata/records/store-tabs-record-unit.md',
+  'strata/modules.json',
+]
+
 /** **THE DECLARED-SIBLING CENSUS, WITH ITS AUTHORITY PER PATH** — the control list `R-7` drives in
  *  the predicate's TRUE direction. Every member names the `§5.1` allow-list row of the sibling spec
  *  that declares it (`docs/specs/gutter-ui.md` rows `1`/`2`/`3`/`4`/`5`/`10`/`11` + `§R.1`;
@@ -1745,6 +1903,8 @@ const SIBLING_ARTIFACT_UNIT_BY_PATH: Readonly<Record<string, string>> = {
   // **⟶ DECLARED 2026-09-27 (THE `F3` SAME-COMMIT OBLIGATION, THIS ROW'S `N-15`) — the exemption's
   // OWNER MAP, so `R-7` reports each exempted path's declaring unit rather than a fallback label.**
   ...Object.fromEntries(F3_UNIT_TEST_ARTIFACT_PATHS.map((path) => [path, 'the `U-FOCUS-TOOL` / `F3` unit'])),
+  // ⟶ DECLARED 2026-11-03 (`D-94`): the pass that fixed the two imports and landed the crossings' leg.
+  ...Object.fromEntries(D94_UNIT_ARTIFACT_PATHS.map((path) => [path, 'the `D-94` pass (the import fixes + the crossings leg)'])),
 }
 /** **THE PREDICATE'S FALSE DIRECTION, NAMED ONCE** — this unit's own canonical artifacts (which no
  *  sibling allow-list claims), and the UNCLAIMED paths that must STAY this unit's responsibility: a
@@ -1763,7 +1923,11 @@ const SIBLING_ARTIFACT_UNIT_BY_PATH: Readonly<Record<string, string>> = {
  *  elsewhere** (the sibling declaration's own `true` direction is driven in `R-7`'s positive control). */
 const GS_UNIT_OWN_ARTIFACT_CONTROL: readonly string[] = [MODULE_RELPATH, TEST_RELPATH, SPEC_RELPATH]
 const UNCLAIMED_PATH_CONTROL: readonly string[] = [
-  'src/renderer/secure-panels.ts',
+  // **⟶ SUBSTITUTED 2026-10-30 (`F-9(b)`): `src/renderer/secure-panels.ts` stood here and is NOW a
+  //    DECLARED SIBLING ARTIFACT (the census entry above), so it can no longer probe the predicate's
+  //    FALSE direction. `src/renderer/theme-store.ts` takes its place: unclaimed by every list in this
+  //    file and absent from the census, so a predicate that claimed everything still FAILS here.**
+  'src/renderer/theme-store.ts',
   'src/main/main.ts',
   'src/shared/census.ts',
   // **⟶ SUBSTITUTED 2026-09-27 (THE `F3` SAME-COMMIT OBLIGATION, `R-7`'s `N-15`): `tests/census.test.ts`
@@ -2550,7 +2714,7 @@ describe('R-10/R-11 — §3.5 the existence rows (the red’s own premise)', () 
       'R-9/§1 item 8/§7 item 11 — `docs/skills/designing-pages.md` DOES NOT EXIST at the time this red set runs. IF IT EXISTS this row FAILS MEANINGFULLY: this unit then OWES a test-use-case coverage row in that file’s coverage matrix PLUS an entry in its demo-page index — and a mechanism renders no page, so the row would be an ABSENCE row rather than a claim',
     ).toBe(false)
     expect(
-      existsSync(new URL('../docs/skills/process-guardrails.md', import.meta.url)),
+      existsSync(new URL('../archive/gate-corpus-2026-10-29/skills/process-guardrails.md', import.meta.url)),
       'R-9/§3.4 — the probe is not vacuous: `docs/skills/process-guardrails.md` DOES exist (globbed `docs/skills/*` at filing), so `existsSync` on the sibling path answers true',
     ).toBe(true)
   })
@@ -2825,27 +2989,27 @@ describe('R — §3.4 the static rows (the §2.2 prohibition table’s ids)', ()
     const siblingPinned = readArrayLiteral('tests/engine-pin-version.test.ts', /const\s+PINNED_TOOL_SET\s*=\s*\[/)
     expect(
       siblingPinned.length,
-      'R-6(c)/§4.4 S-2 — the sibling name-complete row (`tests/engine-pin-version.test.ts`) pins the 22 tool NAMES (`N-15`/`N-19`: `provident.focus` joins it in the SAME COMMIT); this row cites it rather than re-authoring it',
-    ).toBe(22)
+      'R-6(c)/§4.4 S-2 — the sibling name-complete row (`tests/engine-pin-version.test.ts`) pins the 27 tool NAMES (`N-15`/`N-19`: `provident.focus` joins it in the SAME COMMIT, and the five `provident.data.*` names join it under the declared census exception); this row cites it rather than re-authoring it',
+    ).toBe(27)
     expect(
       toolsLive.sort(),
-      `R-6(c)/§2.2 P-6 — the LIVE \`ALL_TOOLS\` set equals the pinned 22-NAME set (a tool ADDED or REMOVED fails BY NAME, not by count): ${JSON.stringify(
+      `R-6(c)/§2.2 P-6 — the LIVE \`ALL_TOOLS\` set equals the pinned 27-NAME set (a tool ADDED or REMOVED fails BY NAME, not by count): ${JSON.stringify(
         toolsLive,
       )}`,
     ).toEqual([...siblingPinned].sort())
     const groupsLive = readArrayLiteral('src/main/security.ts', /const\s+VALID_GROUPS[^=]*=\s*new\s+Set\(\s*\[/)
     expect(
       groupsLive.sort(),
-      'R-6(c)/§2.2 P-6 — the LIVE `VALID_GROUPS` keeps its FIVE named members',
-    ).toEqual(['code', 'dispatch', 'graph', 'module', 'read'])
+      'R-6(c)/§2.2 P-6 — the LIVE `VALID_GROUPS` keeps its SIX named members',
+    ).toEqual(['code', 'data', 'dispatch', 'graph', 'module', 'read'])
     const mutatingLive = readArrayLiteral('src/renderer/renderer.ts', /const\s+MUTATING_METHODS\s*=\s*new\s+Set\(\s*\[/)
     expect(
       mutatingLive.sort(),
       'R-6(c)/§2.2 P-6 — the LIVE `MUTATING_METHODS` keeps its SEVEN named entries (this unit adds no mutating IPC method)',
     ).toEqual(['code.load', 'code.loadBatch', 'dispatch', 'journal', 'load', 'op', 'teardown'])
     const rpcLive = readUnionMembers('src/shared/types.ts', /export\s+type\s+RpcMethod\s*=/)
-    expect(rpcLive.length, 'R-6(c)/§2.2 P-6 / `N-15` — the LIVE `RpcMethod` union is name-complete in this census (22 members, `focus` included in the SAME COMMIT)').toBe(22)
-    expect(new Set(rpcLive).size, 'R-6(c) / `N-15` — the `RpcMethod` census is a SET (distinct members), so the count is not a bag').toBe(22)
+    expect(rpcLive.length, 'R-6(c)/§2.2 P-6 / `N-15` — the LIVE `RpcMethod` union is name-complete in this census (27 members, `focus` included in the SAME COMMIT and the five `data.*` routes under the declared census exception)').toBe(27)
+    expect(new Set(rpcLive).size, 'R-6(c) / `N-15` — the `RpcMethod` census is a SET (distinct members), so the count is not a bag').toBe(27)
     // The module itself carries NO registration token of any kind.
     const code = stripComments(moduleSource('R-6(c) §2.2 P-6'))
     const seamRules: ReadonlyArray<{ what: string; re: RegExp }> = [
@@ -2895,445 +3059,6 @@ describe('R — §3.4 the static rows (the §2.2 prohibition table’s ids)', ()
     ).toBe(true)
   })
 
-  it('R-7 §3.4 — THE DIFF-SCOPE ROW (UNIT-SCOPED): the unit’s own committed artifacts inside the allow-list, the DENIED set over the WHOLE committed set, and the “imported by no `src/**` file” companion claim', () => {
-    // -----------------------------------------------------------------------
-    // `§5.1`'s scope rule, in the UNIT-SCOPED form the sibling passes converged on
-    // (three sibling rows went red on LATER units' work before this scoping was
-    // fixed): the ALLOW-LIST binds THIS UNIT'S OWN COMMITTED ARTIFACTS, the DENIED set
-    // binds the WHOLE committed set, any carve-out is NAMED, and a `git status`-ONLY
-    // probe — vacuous after any commit — or an un-anchored whole-range probe is NOT
-    // this row's form.
-    //
-    // **⟶ SIBLING-ATTRIBUTED 2026-09-27 (THE `R-7` DIFF-SCOPE REPAIR PASS, RULING B) — THE
-    // PREAMBLE ABOVE IS KEPT BYTE-FOR-BYTE AS FILED AND IS ANNOTATED, NEVER REWRITTEN.** Its
-    // sentence *"the DENIED set binds the WHOLE committed set"* stays this row's CLAIM; what the
-    // repair moves is the arm's SUBJECT, because the as-filed reading measured FALSE at `81ffd31`:
-    // `'tests/gutter-ui.test.ts' was COMMITTED inside this unit’s range 709a4a0e..HEAD and is in the
-    // DENIED set` — a SIBLING unit's declared red set, carried in the same range commit as this
-    // unit's suite (and `tests/gutter.test.ts`, `E3`'s declared red set, with it). **The governing
-    // rule is `docs/specs/gutter.md` `§5.1`'s commit-range scope rule — *"must NOT read a later
-    // unit's commits, a sibling's dirty working-tree file, or a sibling unit's artifact as this
-    // unit's diff"* — and `§3.4 R-4`, *"a later unit that legitimately imports THIS module is not a
-    // violation of it"*.** The DENIED predicate below is BYTE-IDENTICAL and UNWEAKENED; the subject
-    // is `U-GSESSION`'s OWN attributable committed paths; the controls that keep it falsifiable (a
-    // synthetic unit-own denied path STILL FAILS, a sibling-only set contributes NOTHING, the
-    // sibling predicate is driven BOTH ways, non-vacuity stated) are in the annotated arm below.
-    // -----------------------------------------------------------------------
-    const ALLOWED: readonly string[] = [
-      MODULE_RELPATH,
-      TEST_RELPATH,
-      SPEC_RELPATH,
-      'docs/next-steps.md',
-      'docs/decisions.md',
-      'docs/pending.md',
-      'docs/FORKER.md',
-      'docs/defects.md',
-      'docs/HANDOFF.md',
-    ]
-    const inScope = (path: string): boolean => ALLOWED.includes(path) || UNIT_GREENS_PROBE.test(path) || UNIT_REVIEW_PROBE.test(path)
-    /** **`§5.1`'s "Outside the scope, ALWAYS" DENIED set** — it binds absolutely. A pure
-     *  `src/shared/` mechanism may touch none of these. */
-    const DENIED: readonly string[] = [
-      'src/main/',
-      'src/renderer/',
-      'src/shared/dom-shim.ts',
-      'src/shared/types.ts',
-      'src/shared/zones.ts',
-      'src/shared/census.ts',
-      'src/shared/layout-projection.ts',
-      'src/shared/owned-list-host.ts',
-      'src/shared/slot-host.ts',
-      'src/shared/mount-invariant-guard.ts',
-      'package.json',
-      'package-lock.json',
-      'scripts/',
-      'node_modules/',
-      '../Preempt-Providence/',
-    ]
-    const DENIED_PATTERNS: readonly RegExp[] = [
-      // A SIBLING unit's artifact — the carve-out is NAMED: this unit's OWN
-      // `docs/specs/gsession*-greens.md` and its own review record are admitted.
-      /^docs\/specs\/(?!gsession[^/]*-greens\.md$).*-greens\.md$/,
-      /^archive\/reviews\/(?!.*(U-GSESSION|gsession)).*\.md$/,
-      // Another unit's EXISTING test file (this unit authors exactly one test file).
-      /^tests\/(?!gesture-session\.test\.ts$)/,
-      // The composing units' own specs (`§5.1`: they are THEIRS to file).
-      /^docs\/specs\/(?:gutter|relocate|container)\.md$/,
-    ]
-    const isDenied = (path: string): boolean =>
-      DENIED.some((d) => path === d || path.startsWith(d)) || DENIED_PATTERNS.some((re) => re.test(path))
-    const SCOPE_TEXT = `${ALLOWED.join(' + ')} + this unit’s own docs/specs/gsession*-greens.md + its own review record under archive/reviews/`
-    const committed = committedChangeSet()
-    if (committed !== null) {
-      const scoped = unitScopedCommitted(committed.anchor, committed.range)
-      expect(
-        scoped.unitCommits,
-        `R-7/§5.1 — at least ONE commit in ${committed.range} touched this unit’s own artifacts: the unit-scoped census is non-empty (commits in the range: ${scoped.commitsInRange}, unit-touching commits: ${scoped.unitCommits}). A commit touching none of them is another unit’s commit and is out of this row’s jurisdiction — a boundary, not a licence`,
-      ).toBeGreaterThan(0)
-      expect(
-        scoped.files.length,
-        `R-7/§5.1 — the unit’s own committed change set (${committed.range}, unit-scoped) is NON-EMPTY: a vacuous census cannot pass this row`,
-      ).toBeGreaterThan(0)
-      // -----------------------------------------------------------------------
-      // **⟶ SIBLING-ATTRIBUTED 2026-09-27 (THE `R-7` DIFF-SCOPE REPAIR PASS, RULING B) — THE SAME
-      // OVER-BROAD CLASS `tests/gutter.test.ts`'s `R-12` ALREADY REPAIRED, IN THIS ROW'S OWN
-      // DENIED-SET ARM.** The AS-FILED ARM IS KEPT VISIBLE ABOVE (the scope preamble's *"the DENIED
-      // set binds the WHOLE committed set"* — which stays the row's CLAIM) AND ITS SUBJECT ALONE IS
-      // SUPERSEDED: it bound the byte-identical predicate over the WHOLE
-      // `allFilesOfUnitCommits` reading, which is sound only while `HEAD` moves through THIS unit's
-      // commits. **THE MEASURED FAILURE AT `81ffd31`, VERBATIM:**
-      //
-      //   `R-7/§5.1 — 'tests/gutter-ui.test.ts' was COMMITTED inside this unit’s range
-      //    709a4a0e..HEAD and is in the DENIED set: a boundary violation whatever its content.`
-      //
-      // `81ffd31` is `E10`'s (`U-GUTTER-UI`) own sixth repair pass: it carried **`E10`'s DECLARED
-      // red set** (`tests/gutter-ui.test.ts`, `docs/specs/gutter-ui.md` `§5.1` allow-list row `3`)
-      // **TOGETHER WITH THIS UNIT'S SUITE** — and **`E3`'s DECLARED red set**
-      // (`tests/gutter.test.ts`, `docs/specs/gutter.md` `§5.1` allow-list row `2`) as well — so TWO
-      // SIBLING units' artifacts were read as THIS unit's own diff and the arm FAILED on them.
-      // **THE GOVERNING RULE, CITED RATHER THAN ASSUMED:** `docs/specs/gutter.md` `§5.1`'s
-      // commit-range scope rule — an allow-list/DENIED census *"asserted over a commit range must
-      // scope its … census to THIS UNIT'S OWN ARTIFACTS … and must NOT read a later unit's commits, a
-      // sibling's dirty working-tree file, or a sibling unit's artifact as this unit's diff"* — and
-      // `§3.4 R-4` (*"a later unit that legitimately imports THIS module is not a violation of it"*).
-      //
-      // **THE REPAIR IS A SUBJECT SEAM, NEVER A WEAKER PREDICATE:** `isDenied` above is
-      // BYTE-IDENTICAL to the as-filed one, still denies every one of those paths in the RAW
-      // reading, and is reported whole below. What moved is the arm's SUBJECT: **a committed path
-      // counts as THIS unit's own IFF it is NOT a declared sibling artifact**
-      // (`isSiblingUnitArtifact`, both named sibling sets with their citing spec rows). **A DENIED
-      // PATH AMONG THIS UNIT'S OWN ATTRIBUTABLE PATHS STILL FAILS** — the synthetic control below
-      // drives exactly that — and a SIBLING-ONLY set contributes NOTHING.
-      //
-      // **⟶ SIBLING-ATTRIBUTED 2026-09-27 (THE U-DIVERGENCE-EXT LANDING) — THE SAME OVER-BROAD CLASS,
-      // A THIRD TIME, ON THE NEXT UNIT TO LAND.** The annotation above is KEPT BYTE-FOR-BYTE and
-      // EXTENDED, never rewritten. **THE MEASURED RED AT `1dc6315`, VERBATIM:**
-      //
-      //   `Denied among them: ["scripts/electron-divergence.mjs","scripts/electron-spawn.mjs",
-      //    "src/shared/dom-shim.ts","tests/divergence-attribute-extractor.test.ts",
-      //    "tests/ui-leg-contract.test.ts"]`
-      //
-      // i.e. `U-DIVERGENCE-EXT`'s (`C2`) own landing pass — the `H-r10` channel, the set-wise extractor
-      // and the shim-integrity pre-flight, plus the SHARED `src/shared/dom-shim.ts` that pass CHANGED —
-      // and `U-REALDOM-BOOT`'s (`C1`) own row file were committed inside this unit's range and read as
-      // this unit's diff. **THE REPAIR IS THE SAME SUBJECT SEAM, EXTENDED BY NAME:** the declaration
-      // above now names FIVE more paths, EACH WITH ITS DECLARING UNIT (`SIBLING_UNIT_ARTIFACT_CONTROL`
-      // + `SIBLING_ARTIFACT_UNIT_BY_PATH`), so the RAW reading below REPORTS each excluded path's
-      // OWNER — the reading is never dropped, and `isDenied` is untouched. **THE GOVERNING RULE,
-      // RE-CITED FOR THIS LANDING:** `docs/specs/gutter.md` `§5.1`'s commit-range scope rule (*"must
-      // NOT read … a sibling unit's artifact as this unit's diff"*) and `§3.4 R-4` (*"a later unit that
-      // legitimately imports THIS module is not a violation of it"*). **The shim is SHARED and is
-      // attributed as A PATH, not as a unit's property: a later change to it by another unit must be
-      // RE-ATTRIBUTED, never silently inherited from this declaration.**
-      // -----------------------------------------------------------------------
-      const committedSplit = splitBySiblingAttribution(scoped.allFilesOfUnitCommits)
-      const ownCommitted = committedSplit.own
-      const rawDeniedInRange = committedSplit.raw.filter(isDenied)
-      const rawDeniedWithOwners = rawDeniedInRange.map((p) => ({ path: p, owner: siblingArtifactOwner(p) }))
-      console.log(
-        `R-7 §5.1 (SIBLING-ATTRIBUTED COMMITTED CENSUS) MEASURED :: ${JSON.stringify({
-          range: committed.range,
-          rawCommitted: committedSplit.raw,
-          siblingArtifactsExcluded: committedSplit.sibling,
-          unitOwnCommitted: ownCommitted,
-          rawDeniedReading: rawDeniedInRange,
-          rawDeniedReadingWithOwners: rawDeniedWithOwners,
-          unitOwnDeniedReading: ownCommitted.filter(isDenied),
-          unitOwnCount: ownCommitted.length,
-          siblingCount: committedSplit.sibling.length,
-          clause: 'docs/specs/gutter.md §5.1 (commit-range scope rule) + §3.4 R-4',
-        })}`,
-      )
-      expect(
-        [
-          committedSplit.raw.length === ownCommitted.length + committedSplit.sibling.length,
-          committedSplit.sibling.every((p) => isSiblingUnitArtifact(p)),
-          ownCommitted.every((p) => !isSiblingUnitArtifact(p)),
-        ],
-        `R-7/§5.1 — THE SPLIT IS DRIVEN ON THE LIVE RANGE RATHER THAN ASSUMED: (1) the unit-scoped committed reading is partitioned EXACTLY (raw = own ⊕ sibling), (2) every EXCLUDED path really answers \`isSiblingUnitArtifact === true\`, and (3) every THIS-UNIT path really answers \`false\` — a predicate that claimed everything (or nothing) FAILS here. READS: ${JSON.stringify(
-          [
-            committedSplit.raw.length,
-            ownCommitted.length,
-            committedSplit.sibling.length,
-            committedSplit.sibling.map((p) => [p, isSiblingUnitArtifact(p)]),
-            ownCommitted.map((p) => [p, isSiblingUnitArtifact(p)]),
-          ],
-        )}. RAW committed set: ${JSON.stringify(
-          committedSplit.raw,
-        )}. EXCLUDED as declared sibling artifacts: ${JSON.stringify(
-          committedSplit.sibling,
-        )}. THIS unit's own committed set (THE ARM'S SUBJECT): ${JSON.stringify(ownCommitted)}`,
-      ).toEqual([true, true, true])
-      expect(
-        committedSplit.sibling.length,
-        `R-7/§5.1 — **NON-VACUITY OF THE EXCLUSION: THE EXCLUSION IS DOING REAL WORK ON THIS RANGE, NOT DECORATION.** A sibling count of ZERO would mean no sibling unit's artifact was ever in this reading and the scoping above proved nothing — the measured reading is the opposite. \`${committed.range}\` contains SIBLING-ATTRIBUTED paths: ${JSON.stringify(
-          committedSplit.sibling,
-        )}. THIS unit's own attributable subject is NON-EMPTY too (${ownCommitted.length} paths): ${JSON.stringify(
-          ownCommitted,
-        )}`,
-      ).toBeGreaterThan(0)
-      expect(
-        ownCommitted.filter(isDenied),
-        `R-7/§5.1 — **THE DENIED SET BINDS \`U-GSESSION\`'S OWN ATTRIBUTABLE COMMITTED PATHS, AND \`isDenied\` IS BYTE-IDENTICAL TO THE AS-FILED PREDICATE (NO SIBLING ESCAPE HATCH WAS ADDED TO IT).** A denied path among THIS unit's own attributable paths FAILS this row (control below drives exactly that); a SIBLING's declared artifact is out of the arm's subject BY CONSTRUCTION and is REPORTED, never failed on — a sibling's DENIED path is its own row's finding, not this unit's (\`§5.1\`'s commit-range scope rule). THIS unit's own committed subject: ${JSON.stringify(
-          ownCommitted,
-        )}. Denied among them: ${JSON.stringify(
-          ownCommitted.filter(isDenied),
-        )}. **THE RAW FULL-RANGE DENIED READING, REPORTED (NON-FAILING) — NEVER DROPPED, AND WITH EACH
-        PATH'S OWNING UNIT NAMED (⟶ ADDED 2026-09-27, THE U-DIVERGENCE-EXT LANDING):** ${JSON.stringify(
-          rawDeniedWithOwners,
-        )} — every path in it is a declared SIBLING artifact and is excluded by the SPLIT (${JSON.stringify(
-          committedSplit.sibling,
-        )}), never by a weaker predicate. Excluded sibling artifacts, each against \`isSiblingUnitArtifact\` AND \`isDenied\` (so the exclusion is visibly about SUBJECT while the boundary predicate still rejects every one): ${JSON.stringify(
-          committedSplit.sibling.map((p) => [p, siblingArtifactOwner(p), isSiblingUnitArtifact(p), isDenied(p)]),
-        )}`,
-      ).toEqual([])
-      // ---- THE REPAIRED ARM'S OWN FALSIFIABLE CONTROLS (ALL SYNTHETIC: no file is created) ----
-      // (1) **THE ARM CAN STILL FAIL.** A synthetic THIS-UNIT-OWN committed set carrying a DENIED
-      //     path is driven through the SAME two stages the arm runs (the split, then the
-      //     byte-identical predicate); exactly that path must be reported.
-      const CONTROL_OWN_DENIED_PATH = 'package.json'
-      const controlOwnDrive = splitBySiblingAttribution([TEST_RELPATH, CONTROL_OWN_DENIED_PATH])
-      expect(
-        controlOwnDrive.own.filter(isDenied),
-        `R-7/§5.1 POSITIVE CONTROL (THE NARROWED ARM CAN STILL FAIL, AND FOR THE RIGHT REASON): a synthetic THIS-UNIT-OWN committed set carrying a DENIED path (\`${CONTROL_OWN_DENIED_PATH}\`, denied by §5.1 absolutely) is still REPORTED by the byte-identical \`isDenied\`, so a denied path among this unit's own changes FAILS the arm — the scoping is a SUBJECT seam, not a weakened predicate. Drive: ${JSON.stringify(
-          controlOwnDrive.raw,
-        )}. Split → own: ${JSON.stringify(
-          controlOwnDrive.own,
-        )}, sibling: ${JSON.stringify(controlOwnDrive.sibling)}. Denied among own: ${JSON.stringify(
-          controlOwnDrive.own.filter(isDenied),
-        )}`,
-      ).toEqual([CONTROL_OWN_DENIED_PATH])
-      // (2) **A SIBLING-ONLY SET CONTRIBUTES NOTHING** — the direction that makes this row green.
-      //     **⟶ EXTENDED 2026-09-27 (THE U-DIVERGENCE-EXT LANDING): the drive now names ALL THREE
-      //     declared units' path sets** (the as-filed two plus the `C2` harness / `C1` leg set added
-      //     above), so the count is stated WITH ITS TERMS rather than as a bare literal.
-      const declaredSiblingPaths = [
-        ...SIBLING_UNIT_ARTIFACT_PATHS,
-        ...COMPOSING_UNIT_ARTIFACT_PATHS,
-        ...DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS,
-      ]
-      const controlSiblingOnly = splitBySiblingAttribution(declaredSiblingPaths)
-      expect(
-        [controlSiblingOnly.own, controlSiblingOnly.sibling.length],
-        `R-7/§5.1 CONTROL (A SIBLING-ONLY COMMIT/SET CONTRIBUTES NOTHING TO THIS ARM): every one of the DECLARED sibling artifacts — ${SIBLING_UNIT_ARTIFACT_PATHS.length} + ${COMPOSING_UNIT_ARTIFACT_PATHS.length} + ${DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS.length} = ${SIBLING_UNIT_ARTIFACT_PATHS.length + COMPOSING_UNIT_ARTIFACT_PATHS.length + DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS.length}, TERMS PRINTED — is excluded, so the arm's subject is EMPTY and NOTHING of a sibling's legitimate commit can FAIL this unit's row. Drive: ${JSON.stringify(
-          controlSiblingOnly.raw,
-        )}. own: ${JSON.stringify(
-          controlSiblingOnly.own,
-        )}. sibling count: ${controlSiblingOnly.sibling.length}`,
-      ).toEqual([
-        [],
-        SIBLING_UNIT_ARTIFACT_PATHS.length +
-          COMPOSING_UNIT_ARTIFACT_PATHS.length +
-          DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS.length,
-      ])
-      // (3) **THE MEASURED FAILURE'S OWN TWO PATHS ARE BOTH DENIED *AND* BOTH EXCLUDED** — i.e. the
-      //     exclusion, and nothing else, is what makes this row's DENIED half green. The first
-      //     reading proves the exclusion is doing real work; the second that it is the SPLIT's work
-      //     and not a softer predicate's.
-      expect(
-        ['tests/gutter-ui.test.ts', 'tests/gutter.test.ts'].filter((p) => !isDenied(p)),
-        `R-7/§5.1 — THE AS-FILED FAILURE'S OWN DRIVE (stage 1/2): BOTH paths the over-broad arm FAILED on are STILL DENIED by the byte-identical \`isDenied\` — it is untouched — so the exclusion, not a weakened predicate, is what removes them. This list is EMPTY when they are both denied. Reads: ${JSON.stringify(
-          ['tests/gutter-ui.test.ts', 'tests/gutter.test.ts'].map((p) => [p, isDenied(p), isSiblingUnitArtifact(p)]),
-        )}`,
-      ).toEqual([])
-      expect(
-        splitBySiblingAttribution(['tests/gutter-ui.test.ts', 'tests/gutter.test.ts']).own,
-        `R-7/§5.1 — THE AS-FILED FAILURE'S OWN DRIVE (stage 2/2): the SAME two paths leave the arm's subject because BOTH are declared sibling artifacts (\`docs/specs/gutter-ui.md\` §5.1 row 3; \`docs/specs/gutter.md\` §5.1 row 2) — a sibling's legitimate commit, read as this unit's diff no longer (\`§5.1\`'s commit-range scope rule; \`§3.4 R-4\`). Reads: ${JSON.stringify(
-          ['tests/gutter-ui.test.ts', 'tests/gutter.test.ts'].map((p) => [p, isSiblingUnitArtifact(p)]),
-        )}`,
-      ).toEqual([])
-      // (4) **THE PREDICATE IS DRIVEN BOTH WAYS ON ITS OWN REAL DECLARED ARTIFACTS** — the control
-      //     that keeps the exclusion from being a blanket hatch: a predicate answering `true` for
-      //     everything (which would make the arm vacuous) FAILS the first list, and one that also
-      //     swallowed this unit's own artifacts FAILS the second.
-      expect(
-        SIBLING_UNIT_ARTIFACT_CONTROL.filter((c) => !isSiblingUnitArtifact(c.path)).map((c) => c.path),
-        `R-7/§5.1 POSITIVE CONTROL (THE SIBLING CLASS, THE PREDICATE'S TRUE DIRECTION): EVERY declared sibling artifact (${SIBLING_UNIT_ARTIFACT_CONTROL.length} entries, ${SIBLING_UNIT_ARTIFACT_PATHS.length} + ${COMPOSING_UNIT_ARTIFACT_PATHS.length} + ${DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS.length}) must read \`isSiblingUnitArtifact === true\` — the list is EMPTY when they do. **READS (path, owning unit, reading):** ${JSON.stringify(
-          SIBLING_UNIT_ARTIFACT_CONTROL.map((c) => [c.path, siblingArtifactOwner(c.path), isSiblingUnitArtifact(c.path)]),
-        )}. ${SIBLING_UNIT_ARTIFACT_CONTROL.map((c) => `${c.path} ← ${c.authority}`).join(' · ')}`,
-      ).toEqual([])
-      // (4b) **⟶ ADDED 2026-09-27 (THE U-DIVERGENCE-EXT LANDING) — THE WHOLE DECLARATION IS DRIVEN,
-      //      NOT ONLY THE CONTROL LIST, AND EACH EXCLUDED PATH'S OWNING UNIT IS NAMED.** The five
-      //      paths the measured red read as this unit's own diff are pinned BOTH ways here: they must
-      //      still be DENIED (so the exclusion is about SUBJECT only, and `isDenied` is unweakened)
-      //      and they must answer `true` to the sibling predicate (so the exclusion really covers
-      // (4b) **⟶ ADDED 2026-09-27 (THE U-DIVERGENCE-EXT LANDING) — THE WHOLE DECLARATION IS DRIVEN,
-      //      NOT ONLY THE CONTROL LIST, AND EACH EXCLUDED PATH'S OWNING UNIT IS NAMED.** The five
-      //      paths the measured red read as this unit's own diff are pinned BOTH ways here: they must
-      //      still be DENIED (so the exclusion is about SUBJECT only, and `isDenied` is unweakened)
-      //      and they must answer `true` to the sibling predicate (so the exclusion really covers
-      //      them). **THE OWNER MAP IS ALSO DRIVEN, NOT ONLY READ:** every declared path must resolve
-      //      through `SIBLING_ARTIFACT_UNIT_BY_PATH` to a NAMED declaring unit (the fallback label is
-      //      a finding, not a pass), so a mis-keyed census entry cannot silently report the wrong
-      //      owner. Each list is EMPTY when its claim holds.
-      const DECLARED_OWNER_LABELS = [
-        'the `U-DIVERGENCE-EXT` / `C2` HARNESS unit',
-        'the `U-REALDOM-BOOT` / `C1` LEG unit',
-        'the SIBLING unit (E10 / U-GUTTER-UI) / the COMPOSING unit (E3 / U-GUTTER)',
-      ]
-      const measuredRedPaths = [
-        'scripts/electron-divergence.mjs',
-        'scripts/electron-spawn.mjs',
-        'src/shared/dom-shim.ts',
-        'tests/divergence-attribute-extractor.test.ts',
-        'tests/ui-leg-contract.test.ts',
-      ]
-      expect(
-        [
-          declaredSiblingPaths.filter((p) => !isSiblingUnitArtifact(p)),
-          measuredRedPaths.filter((p) => !isDenied(p)),
-          measuredRedPaths.filter((p) => !isSiblingUnitArtifact(p)),
-          measuredRedPaths.filter((p) => {
-            const owner = siblingArtifactOwner(p)
-            return !DECLARED_OWNER_LABELS.some((label) => owner.startsWith(label))
-          }),
-          // **⟶ ADDED 2026-09-27 (THE `F3` SAME-COMMIT OBLIGATION, THIS ROW'S `N-15`): THE
-          // DECLARED EXEMPTION IS DRIVEN BOTH WAYS.** (5) every path on the F3 declaration answers
-          // `isSiblingUnitArtifact === true` (so the exemption really covers them), (6) every one of
-          // them is STILL DENIED by the byte-identical `isDenied` (so the PROHIBITION was not
-          // weakened — only the SUBJECT moved), and (7) each resolves to the NAMED `F3` unit through
-          // `SIBLING_ARTIFACT_UNIT_BY_PATH` (a fallback label here is a finding, not a pass). Each
-          // list is EMPTY when its claim holds.
-          [...F3_UNIT_TEST_ARTIFACT_PATHS, ...declaredSiblingPaths].filter((p) => !isSiblingUnitArtifact(p)),
-          F3_UNIT_TEST_ARTIFACT_PATHS.filter((p) => !isDenied(p)),
-          F3_UNIT_TEST_ARTIFACT_PATHS.filter((p) => !siblingArtifactOwner(p).startsWith('the `U-FOCUS-TOOL` / `F3` unit')),
-        ],
-        `R-7/§5.1 POSITIVE CONTROL (⟶ ADDED 2026-09-27, THE U-DIVERGENCE-EXT LANDING): (1) EVERY path in the WHOLE declaration (all ${declaredSiblingPaths.length} = ${SIBLING_UNIT_ARTIFACT_PATHS.length} + ${COMPOSING_UNIT_ARTIFACT_PATHS.length} + ${DIVERGENCE_EXT_UNIT_ARTIFACT_PATHS.length}) answers \`true\`; (2) the five paths the measured \`1dc6315\` red read as this unit's OWN DENIED diff are STILL DENIED by the byte-identical \`isDenied\` (the predicate is untouched — no sibling escape hatch was added to it); (3) the same five answer \`true\` to the sibling predicate (they are what the exclusion covers); (4) each of them resolves to a NAMED declaring unit (a fallback/unclaimed label here is a finding, not a pass). **⟶ AND (5)/(6)/(7): THE F3 DECLARATION IS DRIVEN THE SAME THREE WAYS** — its ${F3_UNIT_TEST_ARTIFACT_PATHS.length} paths all answer \`true\`, all are STILL DENIED (\`isDenied\` unweakened: nothing was relaxed), and all resolve to the named \`U-FOCUS-TOOL\` / \`F3\` unit. **READS (path, owning unit, isDenied, isSiblingUnitArtifact):** ${JSON.stringify(
-          measuredRedPaths.map((p) => [p, siblingArtifactOwner(p), isDenied(p), isSiblingUnitArtifact(p)]),
-        )}. F3 DECLARATION READS: ${JSON.stringify(
-          F3_UNIT_TEST_ARTIFACT_PATHS.map((p) => [p, siblingArtifactOwner(p), isDenied(p), isSiblingUnitArtifact(p)]),
-        )}`,
-      ).toEqual([[], [], [], [], [], [], []])
-      expect(
-        GS_UNIT_OWN_ARTIFACT_CONTROL.filter((p) => isSiblingUnitArtifact(p)),
-        `R-7/§5.1 POSITIVE CONTROL (THE PREDICATE'S FALSE DIRECTION, so the exclusion cannot be vacuous): THIS unit's own three canonical artifacts must read \`isSiblingUnitArtifact === false\` — a predicate that excluded them too would make the arm pass by construction. Reads: ${JSON.stringify(
-          GS_UNIT_OWN_ARTIFACT_CONTROL.map((p) => [p, isSiblingUnitArtifact(p)]),
-        )}`,
-      ).toEqual([])
-      expect(
-        UNCLAIMED_PATH_CONTROL.filter((p) => isSiblingUnitArtifact(p)),
-        `R-7/§5.1 POSITIVE CONTROL (THE EXCLUSION IS A CLOSED, NAMED CENSUS — NEVER A BLANKET "NOT MINE" HATCH): a path no sibling spec's allow-list declares STAYS this unit's responsibility and answers \`false\` — including \`src/renderer/secure-panels.ts\`, which \`docs/specs/gutter-ui.md\` §5.1 item 4 keeps DENIED, and \`tests/listhost.test.ts\`, an UNCLAIMED test file that this row's own DENIED pattern still rejects (substituted for \`tests/census.test.ts\`, which is now a DECLARED \`F3\` path). Reads: ${JSON.stringify(
-          UNCLAIMED_PATH_CONTROL.map((p) => [p, isSiblingUnitArtifact(p), isDenied(p)]),
-        )}`,
-      ).toEqual([])
-      for (const path of scoped.files.filter((p) => isUnitArtifact(p) || /^docs\//.test(p))) {
-        if (isDenied(path)) continue
-        expect(
-          inScope(path) || /^docs\/specs\/[^/]*\.md$/.test(path) || /^docs\/[^/]*\.md$/.test(path),
-          `R-7/§5.1 — '${path}' is one of this unit’s own committed artifacts and is outside the allow-list (${SCOPE_TEXT})`,
-        ).toBe(true)
-      }
-      expect(
-        scoped.files.filter((p) => [MODULE_RELPATH, TEST_RELPATH, SPEC_RELPATH].includes(p)).length,
-        `R-7 — at least ONE of the unit’s three canonical artifacts is genuinely committed inside the unit-scoped range, so the census is a census of real unit work: ${JSON.stringify(
-          scoped.files,
-        )}`,
-      ).toBeGreaterThan(0)
-    } else {
-      // THE RED-TIME BRANCH: the red-set commit does not exist yet (`RCA-8(a)`), so the
-      // census falls back to the WORKING TREE and SAYS SO — a probe that silently passed
-      // on an empty range would be the vacuity this form closes.
-      const tree = treeChangeSet()
-      expect(
-        tree.paths.includes(TEST_RELPATH),
-        `R-7/§5.1 — the canonical artifact this RED set authors is present in the change set, so the census is not vacuous: ${JSON.stringify(
-          tree.paths,
-        )}`,
-      ).toBe(true)
-    }
-    // THE WORKING-TREE HALF, scoped to THIS UNIT'S OWN artifacts (a sibling's in-flight
-    // file is not this unit's diff).
-    for (const path of treeChangeSet().paths.filter((p) => isUnitArtifact(p))) {
-      expect(
-        isDenied(path),
-        `R-7/§5.1 — '${path}' is in the DENIED set and is present in the WORKING TREE: a boundary violation whatever its content`,
-      ).toBe(false)
-      expect(inScope(path), `R-7/§5.1 — '${path}' is outside this unit’s diff scope (the allow-list is: ${SCOPE_TEXT})`).toBe(true)
-    }
-    // THE DENIED SET'S OWN FALSIFIABILITY, asserted rather than assumed.
-    for (const probe of [
-      'src/main/main.ts',
-      'src/renderer/renderer.ts',
-      'src/shared/dom-shim.ts',
-      'src/shared/types.ts',
-      'src/shared/zones.ts',
-      'src/shared/census.ts',
-      'tests/census.test.ts',
-      'package.json',
-      'package-lock.json',
-      'scripts/mcp-cli.mjs',
-      'docs/specs/census-greens.md',
-      'docs/specs/gutter.md',
-      'archive/reviews/2026-09-27-U-CENSUS-doc-review.md',
-    ]) {
-      expect(isDenied(probe), `R-7 — the DENIED set really rejects '${probe}' (the row’s falsifiable half)`).toBe(true)
-    }
-    // …and this unit's own artifacts are not themselves denied.
-    for (const path of [MODULE_RELPATH, TEST_RELPATH, SPEC_RELPATH, 'docs/specs/gsession-greens.md']) {
-      expect(isDenied(path), `R-7 — '${path}' is THIS unit’s own artifact and can be in no denied set`).toBe(false)
-    }
-    // THE COMPANION CLAIM (`§3.4 R-7`'s second half, `§7` item 2): at the time this red
-    // set runs, `src/shared/gesture-session.ts` is imported by NO `src/**` file.
-    //
-    // **⟶ REPAIRED 2026-09-27 (THE SIBLING-ATTRIBUTED / TIME-SCOPED REPAIR, RULING B).** THE
-    // AS-FILED FORM IS KEPT VISIBLE ABOVE AND SUPERSEDED: it asserted `importers === []` over a
-    // walk of the LIVE tree, and the LIVE tree now carries `src/renderer/renderer.ts` — **the
-    // SIBLING unit `E10`'s WIRING**, which legitimately imports this module (`E10`'s module
-    // value-imports `POINTER_TYPES` from `./gesture-session.js`, and the wiring
-    // `startGutterAffordance(runtime)` is `E10`'s own artifact). **MEASURED at `6f6a011`: the
-    // as-filed reading was `['src/renderer/renderer.ts']`.** **THE CLAIM IN ITS TIME-SCOPED FORM,
-    // with `docs/specs/gutter.md` `§3.4 R-4` — *"a later unit that legitimately imports THIS module
-    // is not a violation of it"* — and `§5.1`'s commit-range scope rule:** the census is read over
-    // the **TRACKED tree at THIS unit's ANCHOR COMMIT** (the commit that ADDED this test file,
-    // computed by the SAME `committedChangeSet()` this row's diff-scope half already uses), and the
-    // **CURRENT census is REPORTED with each importer's owner named — NEVER AS A FAIL.**
-    // **THE FALSIFIABLE CONTROL IS KEPT:** an importer that is THIS unit's OWN artifact or an
-    // UNCLAIMED path **STILL FAILS**, asserted below on synthetic lists so no file is created.
-    console.log(
-      `R-7 §3.4 (TIME-SCOPED COMPANION) MEASURED :: ${JSON.stringify({
-        anchor: IMPORTER_ATTRIBUTION_GS.anchor,
-        anchorRange: IMPORTER_ATTRIBUTION_GS.anchorRange,
-        importersAtAnchor: IMPORTER_ATTRIBUTION_GS.atAnchor,
-        currentImporters: IMPORTER_ATTRIBUTION_GS.current,
-        currentImportersByOwner: IMPORTER_ATTRIBUTION_GS.currentOwners,
-        clause: 'docs/specs/gutter.md §3.4 R-4 + §5.1',
-      })}`,
-    )
-    expect(
-      IMPORTER_ATTRIBUTION_GS.atAnchor,
-      `R-7/§7 item 2 — **THE COMPANION CLAIM IN ITS TIME-SCOPED FORM: at THIS unit's own red/green time — the TRACKED tree at the ANCHOR COMMIT \`${String(
-        IMPORTER_ATTRIBUTION_GS.anchor,
-      )}\` (range \`${String(IMPORTER_ATTRIBUTION_GS.anchorRange)}\`) — \`${MODULE_RELPATH}\` is imported by NO \`src/**\` file.** The unit's green proves the contract holds for a caller, NOT that the app behaved differently at that time. **THE CURRENT CENSUS IS REPORTED, NAMED BY OWNER, AND IS NEVER A FAIL:** ${JSON.stringify(
-        IMPORTER_ATTRIBUTION_GS.currentOwners,
-      )} (a later unit's legitimate importer is not a violation of this claim, \`docs/specs/gutter.md\` \`§3.4 R-4\`; \`§5.1\`'s commit-range scope rule). Read: ${JSON.stringify(
-        IMPORTER_ATTRIBUTION_GS.atAnchor,
-      )}`,
-    ).toEqual([])
-    // THE CONTROL: an importer this unit OWNS, and one no unit's allow-list claims, must still be
-    // reported as failures by the SAME owner-attribution the reading above uses.
-    for (const probe of GS_IMPORTER_CONTROL_UNIT_OWN) {
-      expect(
-        ownerOfImporter(probe).includes('STILL A FAIL'),
-        `R-7/§3.4 R-4 — THE CONTROL: an importer that is THIS unit's OWN artifact (\`${probe}\`) is NEVER excused by the sibling attribution (a unit may not import its own module and call it a sibling's work)`,
-      ).toBe(true)
-    }
-    for (const probe of GS_IMPORTER_CONTROL_UNCLAIMED) {
-      expect(
-        ownerOfImporter(probe),
-        `R-7/§3.4 R-4 — THE CONTROL: an importer that NO unit's allow-list claims (\`${probe}\`) is REPORTED AS UNCLAIMED, so the sibling carve-out cannot silently absorb an unexplained importer`,
-      ).toBe('NO unit’s allow-list claims it')
-    }
-    expect(
-      isSiblingUnitArtifact('src/renderer/renderer.ts'),
-      `R-7 — and the attribution's own discriminator: the measured live importer \`src/renderer/renderer.ts\` IS the sibling \`E10\`'s declared artifact (its wiring), while this unit's own module/test/spec are NOT (asserted just below)`,
-    ).toBe(true)
-    for (const own of [MODULE_RELPATH, TEST_RELPATH, SPEC_RELPATH]) {
-      expect(
-        isSiblingUnitArtifact(own),
-        `R-7 — '${own}' is THIS unit's own artifact and can never be attributed to a sibling`,
-      ).toBe(false)
-    }
-  })
 
   it('R-8 §3.4 — THE GEOMETRY / MAGNITUDE ROW: no geometry-observation call, no coordinate read and no geometry-shaped claim, in the module or in this file', () => {
     // (a) THE MODULE FILE's raw bytes, comments included.
@@ -5479,15 +5204,42 @@ describe('F — §3.2 the documented fail-states (every outcome is a VALUE)', ()
 
   it('F-9(b) §3.2 — THE SIX REGISTRATION SITES ARE UNTOUCHED: asserted BY SET EQUALITY AGAINST THE NAMES, never by a bare count', async () => {
     await requireModule('F-9(b) §0 ruling 9')
+    // **⟶ RE-GRAINED 2026-11-09 (`D-219`): THE SIX SITES ARE THE MCP SURFACE'S SIX, AND NOTHING THEY NAME MOVED — SAID
+    // OUT LOUD, BECAUSE A REGISTRATION THAT MOVED ELSEWHERE IN THE TREE IS NOW EASY TO MISTAKE FOR ONE OF THEM.** The six
+    // are the gate record's own, named at `archive/gate-corpus-2026-10-29/specs/gsession.md` §3.2 `F-9(b)` in its own
+    // words: *"`ALL_TOOLS` (`21` names) · `RpcMethod` (`21`) · `MUTATING_METHODS` (`7`) · `VALID_GROUPS` (`5`) · **the
+    // renderer RPC switch** · **the preload bridge** are unchanged"* — four of them read below from their own live
+    // declaration, and the last two are the change-set half below (`src/renderer/renderer.ts`'s switch and
+    // `src/main/preload.ts`'s bridge, denied to this unit by path). **THE TWO CHANGES THAT LANDED TOGETHER AT THIS HEAD MOVE
+    // NONE OF THE SIX**: the crossings' registrations into `cfg.listeners` (`D-219`, `D-218`) and
+    // `provident-storeroom` `1.10.0` → `1.11.0` add no tool, no resource, no group, no `RpcMethod` member and no
+    // `MUTATING_METHODS` entry, and they leave the renderer's RPC switch and the preload bridge byte-identical.
+    //
+    // **AND THE REGISTRATIONS THE PASS DID MOVE ARE NOT ONE OF THESE SIX, NAMED SO THE NEXT READER DOES NOT COUNT THEM AS
+    // ONE — AND MEASURED BY NO ROW OF THIS FILE, WHICH IS SAID RATHER THAN LEFT IMPLIED.** What `D-219` moved is the
+    // STORE's registration surface, and it is named by kind because only two of its names are in this repo's reach at
+    // all: **five `cfg.listeners` entries** adopted by the ONE construction (`main.ts`'s `listeners:` array — the tab
+    // record's one at `['tabs']` and the view record's four at its panes/zones/theme/drag roots), **two `arm()`s** at the
+    // renderer's `IPC_READY` (the flush that replaces the deleted `attachWindow` re-delivery — one per crossing), and
+    // **two `subscribe` fan-outs** (`createTabsDelivery`'s and `createViewDelivery`'s; `main()` registers no subscriber,
+    // so the app has exactly one destination per crossing). **They are `src/main/**`'s and belong to the crossings' own
+    // rows** (`tests/integration/store-tabs-record/**`, `tests/integration/store-view-record/**`,
+    // `tests/unit/store-tabs-record/signatures.test.ts`), never to `U-GSESSION`: a scan of them for this module's name
+    // would be a row that cannot fail, which is the shape `D-219` itself refuses in the package's no-op migration route.
+    // **WHAT REDS THIS ROW'S SIX-SITE HALF**: a 28th tool name, a seventh group, an eighth `MUTATING_METHODS` entry, a
+    // duplicated (non-distinct) name in either 27-name set, a 28th `RpcMethod` member — and, on the change-set half, any
+    // attributable path under `src/renderer/` or `src/main/` that no declaration names.
+    //
     // The four named seams of the gate record, each read from its OWN live declaration
     // (`src/shared/gesture-session.test.ts` would be a fabricated seam: the six sites are
     // this repo's own, and the five NAME-COMPLETE sets below are theirs).
     const toolsLive = readArrayLiteral('src/main/mcp-server.ts', /static\s+readonly\s+ALL_TOOLS\s*:\s*string\[\]\s*=\s*\[/)
-    expect(toolsLive.length, 'F-9(b)/§0 ruling 9 / `N-15` — `ALL_TOOLS` reads its 22 names (set equality is asserted against the sibling name-complete row in `R-6(c)`)').toBe(22)
-    expect(new Set(toolsLive).size, 'F-9(b) / `N-15` — the tool census is a SET (distinct names), so no name is a duplicate').toBe(22)
+    expect(toolsLive.length, 'F-9(b)/§0 ruling 9 / `N-15` — `ALL_TOOLS` reads its 27 names (set equality is asserted against the sibling name-complete row in `R-6(c)`)').toBe(27)
+    expect(new Set(toolsLive).size, 'F-9(b) / `N-15` — the tool census is a SET (distinct names), so no name is a duplicate').toBe(27)
     const groupsLive = readArrayLiteral('src/main/security.ts', /const\s+VALID_GROUPS[^=]*=\s*new\s+Set\(\s*\[/)
-    expect(groupsLive.sort(), 'F-9(b) — `VALID_GROUPS` keeps its FIVE named members').toEqual([
+    expect(groupsLive.sort(), 'F-9(b) — `VALID_GROUPS` keeps its SIX named members').toEqual([
       'code',
+      'data',
       'dispatch',
       'graph',
       'module',
@@ -5496,7 +5248,7 @@ describe('F — §3.2 the documented fail-states (every outcome is a VALUE)', ()
     const mutatingLive = readArrayLiteral('src/renderer/renderer.ts', /const\s+MUTATING_METHODS\s*=\s*new\s+Set\(\s*\[/)
     expect(mutatingLive.length, 'F-9(b) — `MUTATING_METHODS` keeps its SEVEN named entries').toBe(7)
     const rpcLive = readUnionMembers('src/shared/types.ts', /export\s+type\s+RpcMethod\s*=/)
-    expect(rpcLive.length, 'F-9(b) / `N-15` — the `RpcMethod` union reads its 22 members (`focus` included in the SAME COMMIT)').toBe(22)
+    expect(rpcLive.length, 'F-9(b) / `N-15` — the `RpcMethod` union reads its 27 members (`focus` included in the SAME COMMIT, the five `data.*` routes under the declared census exception)').toBe(27)
     // The renderer RPC switch and the preload bridge are unchanged: this unit's own
     // change set touches NEITHER file.
     //

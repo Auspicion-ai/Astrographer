@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/gutter-ui.test.ts
 // ===========================================================================
 // U-GUTTER-UI · wave `E` · ledger row `E10` · **THE RED SET** (`RCA-1`, `§4`)
@@ -365,7 +366,7 @@ const TEST_FILE = fileURLToPath(import.meta.url)
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MODULE_RELPATH = 'src/shared/gutter-affordance.ts'
 const TEST_RELPATH = 'tests/gutter-ui.test.ts'
-const SPEC_RELPATH = 'docs/specs/gutter-ui.md'
+const SPEC_RELPATH = 'archive/gate-corpus-2026-10-29/specs/gutter-ui.md'
 const SESSION_RELPATH = 'src/shared/gesture-session.ts'
 const GUTTER_RELPATH = 'src/shared/gutter.ts'
 const RENDERER_RELPATH = 'src/renderer/renderer.ts'
@@ -374,9 +375,13 @@ const DEMO_RELPATH = 'src/shared/demo-envelope.ts'
 
 // ===========================================================================
 // `§3.4 R-11`’S NAME-COMPLETE PINNED SURFACE (`§2.2` P-7, `§3.3 I-12;` the same
-// `21`-name set `tests/engine-pin-version.test.ts`’s `PINNED_TOOL_SET` asserts BY
+// name set `tests/engine-pin-version.test.ts`’s `PINNED_TOOL_SET` asserts BY
 // SET EQUALITY). The names are carried here so `R-11`’s green branch can ask
 // whether THE MODULE ADDS ONE — a bare count would answer the wrong question.
+// ⟶ SWEPT to the operative figures at this head: `ALL_TOOLS` `27` (`22 → 27`) and
+// `VALID_GROUPS` `6` (`5 → 6`), both moved by the declared census exception
+// (`docs/L1/central-data-census-exception.md` §4) and neither by THIS unit. A pin
+// left at `21`/`22`/`5` would read a surface that no longer stands.
 // ===========================================================================
 const ENGINE_PIN_RELPATH = 'tests/engine-pin-version.test.ts'
 const DEFAULT_GATE_RELPATH = 'src/main/security.ts'
@@ -406,8 +411,16 @@ const PINNED_TOOL_NAMES: readonly string[] = [
   // move TOGETHER in the tool-census commit: this row's own positive control below reads the
   // engine pin's `PINNED_TOOL_SET`, so a list left at `21` would read a pin that had grown.
   'provident.focus',
+  // The sixth group's five names (`docs/L1/central-data-census-exception.md` §4): they join
+  // this list in the SAME COMMIT as the census move, so the module's own bytes are asked about
+  // every name the listing carries.
+  'provident.data.read',
+  'provident.data.write',
+  'provident.data.delete',
+  'provident.data.list',
+  'provident.data.journal',
 ]
-const PINNED_GROUP_NAMES: readonly string[] = ['read', 'dispatch', 'graph', 'code', 'module']
+const PINNED_GROUP_NAMES: readonly string[] = ['read', 'dispatch', 'graph', 'code', 'module', 'data']
 /** The registration-site vocabulary: a module carrying ANY of these has added a
  *  pinned-surface member or a registration site (`§2.2` P-7, `§3.3 I-12`). */
 const REGISTRATION_SITE_TOKENS: readonly string[] = [
@@ -1799,7 +1812,7 @@ describe('§3.5 — the existence and precondition rows (the red’s own premise
     // the dated discharge note; its as-filed `predicateSourcePresent: false` reading is kept
     // as THAT unit's own reading against the tree it ran on, never rewritten).
     // =====================================================================
-    const PREDICATE_SOURCE_RELPATH = 'docs/specs/user-flow-audit.md'
+    const PREDICATE_SOURCE_RELPATH = 'archive/gate-corpus-2026-10-29/specs/user-flow-audit.md'
     /** **THE FOUR CITED SECTIONS, AS LITERAL TOKENS — THE ROW'S *CONTROL* CORPUS, kept SEPARATE
      *  from the row's own marker table (`PREDICATE_SOURCE_SECTION_MARKERS`, below) so the two
      *  cannot be mutated in one stroke.** Each token is a section the gate instructions cite and
@@ -2378,7 +2391,7 @@ describe('§3.4 — the static rows (the §2.2 prohibition table’s ids)', () =
     ).toEqual([])
   })
 
-  it('R-11 §3.4 — THE NO-NEW-SURFACE ROW: `ALL_TOOLS` (22) · `RpcMethod` (22) · `MUTATING_METHODS` (7) · `VALID_GROUPS` (5) are UNCHANGED', () => {
+  it('R-11 §3.4 — THE NO-NEW-SURFACE ROW: `ALL_TOOLS` (27) · `RpcMethod` (27) · `MUTATING_METHODS` (7) · `VALID_GROUPS` (6) are UNCHANGED', () => {
     const enginePin = readRel(ENGINE_PIN_RELPATH)
     expect(
       enginePin.length,
@@ -2414,12 +2427,12 @@ describe('§3.4 — the static rows (the §2.2 prohibition table’s ids)', () =
       moduleBytes().length,
       `R-11 §3.4 (GREEN BRANCH — module PRESENT) — \`${MODULE_RELPATH}\` EXISTS, so this branch governs; the green-branch claims below are read over ITS OWN bytes, which is why the scan is asserted NON-EMPTY first (a scan over \`''\` would pass vacuously)`,
     ).toBeGreaterThan(0)
-    // (i) NOT ONE member of the name-complete pin is added: none of the `22` tool names
+    // (i) NOT ONE member of the name-complete pin is added: none of the `27` tool names
     //     appears in this module's bytes, and the module exports no tool descriptor.
     const toolNamesAdded = hitsOf(moduleBytes(), PINNED_TOOL_NAMES)
     expect(
       toolNamesAdded,
-      `R-11 §3.4 (GREEN BRANCH)/§2.2 P-7 — the module adds NO \`ALL_TOOLS\` member: NOT ONE of the \`22\` pinned tool names (§3.4 R-11's name-complete set, \`tests/engine-pin-version.test.ts\`'s \`PINNED_TOOL_SET\`, read BY NAME and never by a bare count) appears in ITS OWN bytes. Hits: ${JSON.stringify(
+      `R-11 §3.4 (GREEN BRANCH)/§2.2 P-7 — the module adds NO \`ALL_TOOLS\` member: NOT ONE of the \`27\` pinned tool names (§3.4 R-11's name-complete set, \`tests/engine-pin-version.test.ts\`'s \`PINNED_TOOL_SET\`, read BY NAME and never by a bare count) appears in ITS OWN bytes. Hits: ${JSON.stringify(
         toolNamesAdded,
       )}`,
     ).toEqual([])
@@ -2453,7 +2466,7 @@ describe('§3.4 — the static rows (the §2.2 prohibition table’s ids)', () =
     ].sort()
     expect(
       groupMembers,
-      `R-11 §3.4 (GREEN BRANCH) — and the \`VALID_GROUPS\` domain is still exactly the \`5\` pinned names (\`read\`/\`dispatch\`/\`graph\`/\`code\`/\`module\`), read BY NAME and never by a bare count: a SIXTH group name anywhere in the surface files FAILS this row. Read: ${JSON.stringify(
+      `R-11 §3.4 (GREEN BRANCH) — and the \`VALID_GROUPS\` domain is still exactly the \`6\` pinned names (\`read\`/\`dispatch\`/\`graph\`/\`code\`/\`module\`/\`data\`), read BY NAME and never by a bare count: a SEVENTH group name anywhere in the surface files FAILS this row. Read: ${JSON.stringify(
         groupMembers,
       )}`,
     ).toEqual([...PINNED_GROUP_NAMES].sort())
@@ -2972,16 +2985,80 @@ describe('§3.3 — the every-state invariants', () => {
     ).toBe(true)
   })
 
-  it('I-12 §3.3 — NO NEW MCP SURFACE AND NO SHELL CHANGE: the pinned surface files are UNCHANGED by this unit', () => {
+  // ⟶ **I-12 RE-GRAINED 2026-11-03 (`D-93`) — THE PIN BECOMES "UNCHANGED BY *THIS* UNIT", SCOPED BY NAME.**
+  // THE AS-FILED READING, KEPT VISIBLE BESIDE: `the pinned surface files are UNCHANGED by this unit`, asserted over
+  // `git status --porcelain` with no scope at all. That was true while this file's unit was the only live writer in
+  // its worktree. **IT IS NO LONGER TRUE AND THE ROW WAS NOT THE THING THAT CHANGED**: the purge pass (`strata/decisions.md`
+  // `D-78`/`D-93`) deletes the renderer's frozen graph store and therefore rewrites `src/main/main.ts` (two
+  // `ipcMain.handle` sites and the `file.*` projection loop leave) and `src/main/preload.ts` (the three `store` members and
+  // the `store:file:changed` LOCAL leave) — the SIBLING's declared artifacts, exactly the class
+  // `tests/gesture-session.test.ts`'s `F-9(b)` already excludes by name for the same reason. **THE TERM IS UNCHANGED AND THE
+  // BITE IS UNCHANGED**: a surface path this list does not name STILL FAILS, and the CONTROL below drives one. What the row
+  // no longer claims is that no sibling may ever touch the shell — that was never this unit's to assert (`§5.1`'s
+  // commit-range scope rule: a diff-scope row *"must NOT read … a sibling's dirty working-tree file … as this unit's diff"*).
+  const DECLARED_SIBLING_SURFACE_PATHS: readonly string[] = [
+    // `strata/decisions.md` `D-93` — the two main-side files the frozen store's projection was deleted from. Named
+    // PATH BY PATH, never by a `src/main/` prefix: the two files below them in the `surface` list stay this unit's own.
+    'src/main/main.ts',
+    'src/main/preload.ts',
+    // **⟶ ADDED 2026-11-03 (`D-101`): the `central-data` unit's MCP path, and the constant is RENAMED for it.** The pass
+    // that makes the `data.*` tier the caller's rewrites the three `data` tools' declared member sets in
+    // `src/main/mcp-server.ts` — `tier` joins `path`, `value` and `prefix` — which is a SIBLING's declared artifact and
+    // no work of this unit's. The constant said `PURGE_PASS_SURFACE_PATHS`, which named one pass; it now names the
+    // declared sibling passes, because a name that claims one and carries three is the kind of quiet untruth these rows
+    // exist to refuse. **THE TERM AND THE BITE ARE UNCHANGED**: a `surface` path this list does not name STILL FAILS.
+    'src/main/mcp-server.ts',
+    // **⟶ ADDED 2026-11-12 (THE `D-93`/`D-101` TERM, USED AGAIN): THE SHELL CHROME — `src/renderer/index.html` — IS A
+    //    SIBLING'S DECLARED ARTIFACT AND NO LONGER THIS UNIT'S TO DENY.** The `renderer-wiring` unit's control bar
+    //    (`D-269`, `D-270`) and its zone-collapse sheet block (`docs/L3/renderer-wiring/design-zone-collapse.md` §6, §7:
+    //    *"`src/renderer/index.html` IS THIS MODULE'S OWN PATH"*) write the page sheet, so the same reading that charged a
+    //    sibling's in-flight edit to this unit was charging this one too. It is excluded BY NAME, path by path, exactly as
+    //    `main.ts`, `preload.ts` and `mcp-server.ts` above are — never by a `src/renderer/` prefix, and never by a
+    //    `surface`-wide strip. **THE TERM AND THE BITE ARE UNCHANGED**: a `surface` path this list does not name STILL
+    //    FAILS, and since this list now names all four of the `surface` entries the CONTROL below carries a FIFTH surface
+    //    path — the app's two HEADLESS main-process entry bundles, which this unit denies for the same reason — so the
+    //    row still drives its own instrument in the failing direction instead of passing vacuously.
+    'src/renderer/index.html',
+  ]
+  it('I-12 §3.3 — NO NEW MCP SURFACE AND NO SHELL CHANGE: the pinned surface files are UNCHANGED BY THIS UNIT, and a surface path outside the declared purge pass still FAILS', () => {
     const changed = gitChangeSet()
-    const surface = ['src/main/main.ts', 'src/main/preload.ts', 'src/main/mcp-server.ts', 'src/renderer/index.html']
-    const touched = (changed ?? []).filter((path) => surface.some((s) => path.endsWith(s)))
+    // **AND THE SURFACE LIST GAINS THE APP'S TWO HEADLESS MAIN-PROCESS ENTRIES** (`src/main/standalone.ts` and
+    // `src/main/battery-host.ts`, the sources of `standalone.mjs` and `battery-host.mjs` — brief §6's five build artifacts,
+    // of which `main.mjs` is the entry `src/main/main.ts` above already names). **THEY ARE ADDED BECAUSE THE DECLARATION ABOVE
+    // NOW NAMES ALL FOUR OF THE OLD ENTRIES**, and a row whose every surface path is declared asserts nothing: the term it
+    // measures would pass on any tree, which is exactly the shape a boundary row may not take. This is a STRENGTHENING —
+    // this unit denies two more paths than it did — and it keeps the CONTROL driving a real file that exists.
+    const surface = [
+      'src/main/main.ts',
+      'src/main/preload.ts',
+      'src/main/mcp-server.ts',
+      'src/renderer/index.html',
+      'src/main/standalone.ts',
+      'src/main/battery-host.ts',
+    ]
+    const attributable = (changed ?? []).filter((path) => !DECLARED_SIBLING_SURFACE_PATHS.some((declared) => path.endsWith(declared)))
+    const touched = attributable.filter((path) => surface.some((s) => path.endsWith(s)))
     expect(
       touched,
-      `I-12 §3.3/§3.4 R-11/§2.2 P-7 — the preload bridge, the MCP server, the main process entry and the shell chrome are UNCHANGED and appear nowhere in this unit’s change set (§5.1 DENIED item 4). Touched: ${JSON.stringify(
+      `I-12 §3.3/§3.4 R-11/§2.2 P-7 — the preload bridge, the MCP server, the main process entry and the shell chrome are UNCHANGED by THIS unit and appear nowhere in its attributable change set (§5.1 DENIED item 4). The declared sibling passes' paths are excluded BY NAME (${JSON.stringify(DECLARED_SIBLING_SURFACE_PATHS)}, \`D-93\`, \`D-101\`) and nothing else is. Touched: ${JSON.stringify(
         touched,
       )}`,
     ).toEqual([])
+    // THE CONTROL — the exclusion is BY NAME and is not a blanket strip: the SAME reading still reports a surface path
+    // that no declaration names, so a later unexplained write to the shell reddens this row. **THE EXAMPLE HAS MOVED TWICE
+    // AND EACH MOVE WAS ITSELF THE ROW WORKING**: it stood at `src/main/mcp-server.ts` until that file was declared
+    // (`D-101`), then at `src/renderer/index.html` until the zone-collapse sheet block declared it, and it stands now at the
+    // app's two HEADLESS main-process entries — both on the `surface` list, both named by no declaration, and both files
+    // this unit may not edit. **AND THE PAIR IS DRIVEN, NOT THE PREFIX**: the filter below is the row's OWN predicate
+    // applied to a literal list, so a declaration list widened to a blanket strip (a `src/` prefix, a `surface`-wide
+    // allowance) makes these two disappear from `control` and reds here.
+    const control = ['src/main/standalone.ts', 'src/main/battery-host.ts']
+      .filter((path) => !DECLARED_SIBLING_SURFACE_PATHS.some((declared) => path.endsWith(declared)))
+      .filter((path) => surface.some((s) => path.endsWith(s)))
+    expect(
+      control,
+      'I-12 (bounded-exclusion control) — `src/main/standalone.ts` and `src/main/battery-host.ts` are on the surface list and on NO exclusion list, so an edit to either is still reported here: the row measures the shell, not the worktree.',
+    ).toEqual(['src/main/standalone.ts', 'src/main/battery-host.ts'])
   })
 
   it('I-13 §3.3 — NO CAPTURE CHANNEL EXISTS IN THIS COMPOSITION, AND NO RELEASE TOKEN APPEARS ANYWHERE', () => {

@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/container.test.ts
 // ===========================================================================
 // `U-CONTAINER` · wave **E** · ledger row **`E5`** · **THE RED SET** (`RCA-1`).
@@ -986,7 +987,8 @@ describeC('§3.5 X-1 + §3.4 R-9 / R-11 / R-12 — the red set\'s own premise (e
     ).toBe(false)
   })
 
-  itc('R-11 the config/dependency rows: the scripts key set, the devDependencies key set and the absence of any new dependency', () => {
+  // strata:gates — the script key set is a loop instrument, not module machinery (D-38)
+  it(recordTitle('R-11 the config/dependency rows: the scripts key set, the devDependencies key set and the absence of any new dependency'), () => {
     const pkg = JSON.parse(readOrEmpty(fileURLToPath(new URL('../package.json', import.meta.url)))) as {
       scripts?: Record<string, string>
       dependencies?: Record<string, string>
@@ -996,6 +998,13 @@ describeC('§3.5 X-1 + §3.4 R-9 / R-11 / R-12 — the red set\'s own premise (e
     // `AGENTS.md` item 4's recorded hazard: `tests/ui-leg-contract.test.ts`'s `L-1`
     // pins the `scripts` KEY SET (the landed keys plus exactly `ui`), so this unit
     // adds NO script key at all — leg 5 is a bare tsc invocation, never a script.
+    // ⟶ EXTENDED 2026-10-30 (ANNOTATE-BESIDE, `RCA-8(d)`; the as-filed reading above
+    // stands): the landed set gains ONE key it did not carry — `panes`, the
+    // `secure-panels` unit's own live leg (D-37), landed by the harness row that owns
+    // `package.json` and not by this unit. A `scripts` KEY SET is a loop INSTRUMENT, so
+    // the row that guards it stays gating and is EXTENDED when the instrument set
+    // legitimately grows (D-38); the claim THIS row makes is unchanged and still exact:
+    // this unit adds no key, and the set below is still pinned in both directions.
     expect(
       [...scripts].sort(),
       'R-11 — the `scripts` key set is UNCHANGED by this unit: leg 5 adds NO script (`§5.1` item 7, `§5.2` leg 5). ' +
@@ -1005,8 +1014,10 @@ describeC('§3.5 X-1 + §3.4 R-9 / R-11 / R-12 — the red set\'s own premise (e
       'build',
       'build:watch',
       'clean',
+      'crossings', // ⟶ ADDED 2026-11-03: the crossings' live leg key (D-94) — the instrument `pending.md` row 5 closed on; extended on the same ground, never a licence (D-38)
       'divergence',
       'mcp',
+      'panes', // ⟶ ADDED 2026-10-30: the `secure-panels` unit's live leg key (D-37); an extended INSTRUMENT, never a licence (D-38)
       'start',
       'start:http',
       'test',
@@ -1022,7 +1033,7 @@ describeC('§3.5 X-1 + §3.4 R-9 / R-11 / R-12 — the red set\'s own premise (e
     expect(
       Object.keys(pkg.dependencies ?? {}).sort(),
       'R-11 — this unit adds no runtime dependency either',
-    ).toEqual(['@modelcontextprotocol/sdk', 'provident-ssr'])
+    ).toEqual(['@modelcontextprotocol/sdk', 'provident-ssr', 'provident-storeroom'])
   })
 
   itc('R-12 (the no-importer half) at red time src/shared/container.ts is imported by NO src/** file, and no src/** file names it', () => {
@@ -1039,7 +1050,7 @@ describeC('§3.5 X-1 + §3.4 R-9 / R-11 / R-12 — the red set\'s own premise (e
   })
 
   itc('R-9 / X-4 the page-design layer is absent, so no page-design artifact can be owed or updated', () => {
-    const dir = fileURLToPath(new URL('../docs/skills', import.meta.url))
+    const dir = fileURLToPath(new URL('../archive/gate-corpus-2026-10-29/skills', import.meta.url))
     const names = existsSync(dir) ? readdirSync(dir) : []
     expect(
       names.includes('designing-pages.md'),
@@ -1478,11 +1489,11 @@ describeC('§3.4 R-1..R-13 — the static rows (the rows §2.2\'s prohibition ta
       expect(existsSync(url), `R-12 — the DENIED path '${name}' exists and is therefore a path this unit may not change (§5.1 item 2 / item 4)`).toBe(true)
     }
     expect(
-      existsSync(new URL('../docs/specs/container-review.md', import.meta.url)),
+      existsSync(new URL('../archive/gate-corpus-2026-10-29/specs/container-review.md', import.meta.url)),
       'R-12 / X-3 — the CLOSED gate-1 record exists and is a DENIED path: this unit derives from it and never edits it (`§5.1` item 11)',
     ).toBe(true)
     expect(
-      existsSync(new URL('../docs/specs/container.md', import.meta.url)),
+      existsSync(new URL('../archive/gate-corpus-2026-10-29/specs/container.md', import.meta.url)),
       'X-2 / R-12 — this unit\'s contract is FILED, so the allow-list is a real, checkable set',
     ).toBe(true)
     const mine = [MODULE_PATH, TEST_PATH]

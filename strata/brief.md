@@ -94,10 +94,10 @@ surface locally where an import unit would move the pin (D-11).
 
 | Instrument | Reading | What it can see |
 |---|---|---|
-| `npm test` | at the `E-1` landing: **146 files / 3,237 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
+| `npm test` | at the `V-2` landing: **147 files / 3,245 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
 | `npm run typecheck` | exit 0 at the same head | `src/**/*.ts` only |
 | `npm run build` | exit 0 at the same head | the bundles exist at all |
-| `npm run conformance` | the vendored fifteen's own suites, under their own config | that the copies match the pinned contract — not app-green (D-11) |
+| `npm run conformance` | **11 files, 11 failed — 511 failed / 59 passed (570)**, 3 suites collecting zero tests: a class tally and nothing more | the leg cannot see what it is usually assumed to see — its copies' specifiers resolve against a `vendor/Provident-Electron/src/` that does not exist, so the tally proves neither copy fidelity (the register does that) nor behaviour (D-11) |
 | `npm run drift` | **CLEAN at this head** — 15 checks / 0 differences, and the `PIN` arm was read and EQUALS the manifest's commit (`revisionChecked === true`); before unit `V-1` it read `FAIL` on the `PIN` arm alone | upstream drift and a moved pin, read apart (D-11) |
 | `npm run battery` | e2e battery over the built bundle's entry points | a process green, not a rendered-surface green |
 | `npm run divergence` | real-DOM divergence leg | shim-versus-real-DOM identity on a live renderer |

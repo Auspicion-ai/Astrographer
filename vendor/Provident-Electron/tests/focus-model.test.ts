@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/focus-model.test.ts
 // ===========================================================================
 // U-FOCUS-MODEL · wave F · ledger row F2 · **THE RED SET** (RCA-1)
@@ -137,8 +138,8 @@ const MODULE_SRC = new URL('../src/shared/focus-model.ts', import.meta.url)
 const MODULE_PATH = fileURLToPath(MODULE_SRC)
 const TEST_PATH = fileURLToPath(new URL('./focus-model.test.ts', import.meta.url))
 const MODULE_SPECIFIER = ['..', 'src', 'shared', 'focus-model.js'].join('/')
-const SPEC_PATH = join(ROOT, 'docs', 'specs', 'focus-model.md')
-const SPEC_SRC = fileURLToPath(new URL('../docs/specs/focus-model.md', import.meta.url))
+const SPEC_PATH = join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'focus-model.md')
+const SPEC_SRC = fileURLToPath(new URL('../archive/gate-corpus-2026-10-29/specs/focus-model.md', import.meta.url))
 
 /** `§2.1` item 3 — `FocusResult`'s SEVEN declared names, IN DECLARED ORDER. */
 const RESULT_KEYS = ['state', 'accepted', 'verb', 'refusals', 'seated', 'changed', 'persisted'] as const
@@ -832,10 +833,18 @@ function importBreakOf(source: string, label: string): string | null {
 }
 /** `R-3` — the config/dependency half: the pinned `scripts` key set is the
  *  landed set PLUS `ui` (`tests/ui-leg-contract.test.ts` `L-1`, quoted here
- *  rather than re-opened), and no dependency may be added. */
-const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'mcp']
+ *  rather than re-opened), and no dependency may be added.
+ *  ⟶ EXTENDED 2026-10-30: the landed set gains `panes`, the `secure-panels`
+ *  unit's live leg key (D-37). A `scripts` key set is a loop INSTRUMENT, so the
+ *  rows that guard it are EXTENDED and stay gating rather than becoming lower
+ *  bounds (D-38) — `R-3` and `I-9` both read this one list. */
+// ⟶ EXTENDED 2026-11-03 (`D-94`): `crossings` — the crossings' live leg key, the instrument that
+// closes `pending.md` row 5. A `scripts` key set is a loop INSTRUMENT, so `R-3`/`I-9`'s one list is
+// EXTENDED and stays gating (D-38); this unit adds no key and its DELTA claim is unchanged.
+const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'mcp', 'panes', 'crossings']
 const PINNED_DEV_DEPS = ['@types/node', 'electron', 'esbuild', 'typescript', 'vitest']
-const PINNED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr']
+// THE SET STAYS EXACT: 'provident-storeroom' is the one member added by the 2026-10-29 import.
+const PINNED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr', 'provident-storeroom']
 function readJson(rel: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(ROOT, rel), 'utf8')) as Record<string, unknown>
 }
@@ -893,16 +902,16 @@ describe('§3.5 X-1..X-6 + §3.4 R-3(config) / R-14 / R-6(no-importer) — the r
   })
 
   it('X-3 / X-6 — the TWO INPUT RECORDS exist and are FROZEN for this unit', () => {
-    expect(existsSync(join(ROOT, 'docs', 'specs', 'focus-model-review.md')), 'X-6 — the gate-1 record must exist (its FAIL means this contract\'s authority is gone).').toBe(true)
-    expect(existsSync(join(ROOT, 'docs', 'specs', 'focus-model-adoption-dossier.md')), 'X-6 — the STEP-0 dossier must exist.').toBe(true)
+    expect(existsSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'focus-model-review.md')), 'X-6 — the gate-1 record must exist (its FAIL means this contract\'s authority is gone).').toBe(true)
+    expect(existsSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'focus-model-adoption-dossier.md')), 'X-6 — the STEP-0 dossier must exist.').toBe(true)
     // ⟶ FLIPPED by the `F3`/`U-FOCUS-TOOL` TestWriter pass: `docs/specs/focus-tool.md` IS
     // filed, so the consumed module's SPEC-EXISTENCE ROW reads `true` (`focus-tool.md`
     // `§5.2` item 4 `N-5`).
-    expect(existsSync(join(ROOT, 'docs', 'specs', 'focus-tool.md')), "§5.2 item 4 N-5 — `F3`'s spec IS filed, so this row reads `true` (the same-commit spec-existence obligation).").toBe(true)
+    expect(existsSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'focus-tool.md')), "§5.2 item 4 N-5 — `F3`'s spec IS filed, so this row reads `true` (the same-commit spec-existence obligation).").toBe(true)
   })
 
   it('X-4 / R-14 — THE PAGE-DESIGN ABSENCE PROBE: `docs/skills/designing-pages.md` does NOT exist', () => {
-    const skills = readdirSync(join(ROOT, 'docs', 'skills'))
+    const skills = readdirSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'skills'))
     expect(
       skills.includes('designing-pages.md'),
       `R-14 — the probe whose FAIL is meaningful: if designing-pages.md comes to exist, this unit OWES a coverage row and a demo-page entry (an ABSENCE row: a mechanism that renders nothing contributes no page). Measured docs/skills/: ${JSON.stringify(skills)}`,
@@ -933,6 +942,7 @@ describe('§3.5 X-1..X-6 + §3.4 R-3(config) / R-14 / R-6(no-importer) — the r
     ).toBe(true)
   })
 
+  // strata:gates — the script key set is a loop instrument, not module machinery (D-38)
   it('R-3 (config half) — no shim/config/script/dependency change: `package.json` keeps the landed key set + `ui`, and the five pinned devDependencies', () => {
     const pkg = readJson('package.json')
     const scripts = (pkg['scripts'] ?? {}) as Record<string, unknown>
@@ -958,7 +968,7 @@ describe('§3.5 X-1..X-6 + §3.4 R-3(config) / R-14 / R-6(no-importer) — the r
       control.outside,
       `R-6 (POSITIVE control for the declared exemption) — a file OUTSIDE the declared set still FAILS this row: the instrument routes ${JSON.stringify(control.exempted)} to the exempt side and ${JSON.stringify(control.outside)} to the OFFENDER side, so the exemption is the PATH BY NAME, never the token.`,
     ).toEqual(['src/main/mcp-server.ts'])
-    const allowed = ['src/shared/focus-model.ts', 'tests/focus-model.test.ts', 'docs/specs/focus-model.md']
+    const allowed = ['src/shared/focus-model.ts', 'tests/focus-model.test.ts', 'archive/gate-corpus-2026-10-29/specs/focus-model.md']
     expect(existsSync(join(ROOT, allowed[2]!)), 'R-6 — this unit\'s OWN artifacts must non-vacuously exist in the range: the spec.').toBe(true)
     expect(existsSync(join(ROOT, allowed[1]!)), 'R-6 — and this unit\'s own test file (allow-list row 2).').toBe(true)
     expect(
@@ -1694,9 +1704,10 @@ describe('§3.3 I-1..I-14 — the invariants that hold in every state', () => {
     expect(rec.received.length, 'I-14 — no seam is retained: a second call with the same seam observes a FRESH count.').toBe(0)
   })
 
+  // strata:gates — the script key set is a loop instrument, not module machinery (D-38)
   it('I-9 (§2.2 P-FM-5/P-FM-6) — no store of its own, no MCP surface, no shim member, no `electron`/`node:*` import, no new dependency, no script', async () => {
     const pkg = readJson('package.json')
-    expect(Object.keys((pkg['scripts'] ?? {}) as Record<string, unknown>).filter((k) => !LANDED_SCRIPT_KEYS.includes(k)), 'I-9 — no script is added by this unit.').toEqual(['ui'])
+    expect(Object.keys((pkg['scripts'] ?? {}) as Record<string, unknown>).filter((k) => !LANDED_SCRIPT_KEYS.includes(k)), 'I-9 — no script is added by this unit; the DELTA is exactly `ui` (and since 2026-11-03 `crossings` is in the LANDED set above, D-94, so the delta did not move).').toEqual(['ui'])
     const src = moduleSourceOrNull()
     if (src !== null) {
       expect(scanFor(src, ['electron', 'node:', 'ALL_TOOLS', 'RpcMethod', 'VALID_GROUPS', 'MUTATING_METHODS', 'dom-shim'], 'I-9'), 'I-9 — no MCP registration site, no shim member and no `electron`/`node:*` import appears in the module.').toBe(null)

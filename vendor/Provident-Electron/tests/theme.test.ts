@@ -1,3 +1,4 @@
+// strata:marked-file rework — pins today's module machinery; the storeroom rework replaces it whole (D-30)
 // tests/theme.test.ts
 // ===========================================================================
 // U-THEME · wave E · ledger row E8 · **THE RED SET** (RCA-1)
@@ -1116,7 +1117,7 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
   })
 
   it('X-2 (§3.5) — this unit\'s contract is FILED: docs/specs/theme.md EXISTS and is THIS file\'s contract', () => {
-    const specPath = join(ROOT, 'docs', 'specs', 'theme.md')
+    const specPath = join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'theme.md')
     expect(existsSync(specPath), `X-2 — the contract is filed at ${specPath} (the unit is not delegable without it, §4.5)`).toBe(true)
     const spec = readFileSync(specPath, 'utf8')
     expect(spec.split('\n')[0], 'X-2 — the first line names the unit and its two-function surface, so the file is the contract and not a sibling').toContain('U-THEME')
@@ -1161,7 +1162,48 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     // PATHS BY NAME, never the tokens: the POSITIVE CONTROL below proves a token
     // in any OTHER `src/**` file still FAILS, in BOTH vocabularies. It is
     // applied PER PATH to both readings, so the row measures ONE surface.
-    const X5_EXEMPT_PATHS: readonly string[] = ['src/shared/demo-envelope.ts', 'src/renderer/renderer.ts', 'src/renderer/theme-store.ts']
+    // ⟶ **THE THIRD EXEMPT PATH IS DELETED, AND THIS IS THE LICENCE'S OWN ROLLBACK** (2026-11-03, `D-93`; the cell's own
+    // words: *"retiring the theme caller reverts this row to the as-filed two-path closed form"*). `src/renderer/theme-store.ts`
+    // was a store-shaped turn written against the frozen graph store's `file.settings.theme.token` address; it had NO live
+    // consumer under `src/`, and the address space it addressed is deleted with `src/renderer/store-core-graph.ts`. The set is
+    // now the TWO PRE-DECLARED paths and nothing else — a STRICTER reading than the amended one, not a looser one.
+    // ⟶ **RE-GRAINED 2026-11-03 (`D-97`) — THE NAME VOCABULARY MOVES TO A CLOSED SET WITH ITS MEMBERS NAMED, AND THE
+    // MACHINERY VOCABULARY IS TIGHTENED TO ZERO OVER ALL OF `src/**`.** The instruction this pass carries (*"No boot time
+    // declarations — Use constraint repairs"*) makes the appearance setting a DATA FLOW of the app: the crossing's
+    // `['theme']` family, its declaration, its route and the record that carries the mechanism's answer are, by ruling, part
+    // of `src/**` — so "no `src/**` file outside the mandated control names this vocabulary" is FALSE of this head, and the
+    // row's own remedy sentence applies: *"a FAIL here means a theme surface already exists OUTSIDE those exempt paths and
+    // this unit's DENIED list must be re-derived."* **THE RE-GRAIN IS A CLOSED SET WITH ONE REASON PER MEMBER, and it is
+    // bought with a TIGHTENING, not a relaxation**: the AMBIENT-APPEARANCE vocabulary — the media-query, attribute-write and
+    // OS-surface tokens that are this row's real subject — is now scanned over EVERY `src/**/*.ts` file WITH NO EXEMPTION AT
+    // ALL (the as-filed form applied it to `index.html` alone), and reads ZERO. So the row keeps its teeth: no file in this
+    // tree may carry the browser appearance machinery, and no file outside the closed set may even carry the NAME.
+    const X5_NAME_EXEMPT_PATHS: readonly string[] = [
+      // THE MANDATED CONTROL'S OWN PAIR, as filed: the authored card and the caller-held attribute-name role.
+      'src/shared/demo-envelope.ts',
+      'src/renderer/renderer.ts',
+      // THE APPEARANCE FAMILY OF THE VIEW RECORD (`D-97`), one path per layer of the flow it implements:
+      'src/main/view-record/index.ts', // the address, the pair's id and the derivation the record stores
+      'src/main/view-surface/index.ts', // the surface's read answer and its one shape-armed route
+      'src/shared/view-channels.ts', // the channel constant, single-sourced
+      'src/shared/view-shape.ts', // the record's vocabulary, one spelling for both realms
+      'src/renderer/view-client.ts', // the client's synchronous read and its one route
+      'src/main/preload.ts', // the bridge member's main half
+      'src/renderer/secure-panels.ts', // and its renderer half, in lockstep
+      'src/main/main.ts', // the boot's batch and the route's handler
+    ]
+    const X5_EXEMPT_PATHS = X5_NAME_EXEMPT_PATHS
+    // A SET CLAIM: a duplicate path inflates the exemption without widening it.
+    expect(new Set(X5_NAME_EXEMPT_PATHS).size, 'X-5 — the declared set carries no duplicate path').toBe(X5_NAME_EXEMPT_PATHS.length)
+    // AND EVERY MEMBER IS MEASURED, so the set cannot accumulate a dead entry: a named path that stopped carrying the
+    // vocabulary reddens here rather than sitting in the exemption as a licence for nothing.
+    for (const exempt of X5_NAME_EXEMPT_PATHS) {
+      const text = readFileSync(join(ROOT, exempt), 'utf8')
+      expect(
+        [t('theme'), t('appearance'), t('dark')].some((token) => scanForToken(text, token, false)),
+        `X-5 — the declared member ${exempt} really carries the vocabulary it is exempted for`,
+      ).toBe(true)
+    }
     const x5Exempt = (p: string): boolean => X5_EXEMPT_PATHS.some((e) => p === join(ROOT, e))
     const exemptedReads: string[] = []
     const x5Scan = (p: string, src: string, tokens: readonly string[]): string[] => {
@@ -1178,6 +1220,18 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
       else hits.push(...found)
     }
     readFile(join(ROOT, 'src', 'renderer', 'index.html'))
+    // ⟶ **THE TIGHTENING (`D-97`)**: the AMBIENT-APPEARANCE vocabulary — media query, attribute-write, colour-scheme — is
+    // scanned over EVERY `src/**/*.ts` file WITH NO EXEMPTION AT ALL, and it must read ZERO. This is the half of the as-filed
+    // row that no ruling moved: the browser's appearance machinery may not be reached from this tree, and this pass introduces
+    // none of it (the crossing's record carries the MECHANISM's answer and reads no environment — the claim is omitted, which
+    // is `D-97`'s own measurement).
+    const machineryVocabulary = [t('matchMedia'), t('prefers-color-scheme'), t('data-theme'), t('color-scheme')]
+    const machineryHits: string[] = []
+    for (const p of srcTsFiles()) machineryHits.push(...x5Scan(p, readFileSync(p, 'utf8'), machineryVocabulary))
+    expect(
+      machineryHits,
+      `X-5 (TIGHTENED 2026-11-03 by \`D-97\`: the machinery vocabulary over the WHOLE src/** tree, with NO exemption — the as-filed form applied it to index.html alone) — no src/**/*.ts file may carry the browser's appearance machinery: ${JSON.stringify(machineryHits)}`,
+    ).toEqual([])
     const tsHits: string[] = []
     for (const p of srcTsFiles()) {
       const src = readFileSync(p, 'utf8')
@@ -1187,7 +1241,7 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     }
     expect(
       tsHits,
-      `X-5 (AMENDED, licence cell (2) of §2.7 item 7's dated extension) — a src/**/*.ts search for the theme/appearance vocabulary returns ZERO matches OUTSIDE THE DECLARED EXEMPTIONS, which are the THREE paths BY NAME (the two pre-declared — the surface \`F1\`/\`U-THEME-CONTROL\` is MANDATED to carry, and which is DENIED to this unit: theme-control.md §5.1 allow-list rows 11/12 — plus the ONE admitted member \`src/renderer/theme-store.ts\`, the \`H2b\` theme caller): ${JSON.stringify(X5_EXEMPT_PATHS)}. The AS-FILED reading stood at the two paths before any store-backed theme caller existed (the as-filed closed form is kept visible BESIDE this row, so the revert is the annotation's removal). The exemption remains the PATHS BY NAME, never the tokens. A FAIL here means a theme surface already exists OUTSIDE those exempt paths and this unit's DENIED list must be re-derived. Offending: ${JSON.stringify(tsHits)}. The exempted reads, reported and never asserted: ${JSON.stringify(exemptedReads)}`,
+      `X-5 (AS-FILED TWO-PATH FORM RESTORED 2026-11-03 — the licence cell's own rollback, fired by the deletion of \`src/renderer/theme-store.ts\` under \`D-93\`) — a src/**/*.ts search for the theme/appearance vocabulary returns ZERO matches OUTSIDE THE DECLARED EXEMPTIONS, which are the TWO paths BY NAME (the surface \`F1\`/\`U-THEME-CONTROL\` is MANDATED to carry, and which is DENIED to this unit: theme-control.md §5.1 allow-list rows 11/12): ${JSON.stringify(X5_EXEMPT_PATHS)}. The AMENDED READING, KEPT VISIBLE BESIDE, admitted a THIRD path — \`src/renderer/theme-store.ts\`, the \`H2b\` theme caller — for as long as that caller existed; it is deleted with the frozen store. The exemption remains the PATHS BY NAME, never the tokens. A FAIL here means a theme surface already exists OUTSIDE those exempt paths and this unit's DENIED list must be re-derived. Offending: ${JSON.stringify(tsHits)}. The exempted reads, reported and never asserted: ${JSON.stringify(exemptedReads)}`,
     ).toEqual([])
     // THE EXEMPTION'S OWN POSITIVE CONTROL, so the exemption is not a blanket
     // strip: the SAME scan instrument carrying the same token, in a synthetic
@@ -1207,7 +1261,7 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     const secondNewPath = join(ROOT, 'src', 'renderer', 'theme-store-2.ts')
     expect(
       x5Scan(secondNewPath, `import { resolveTheme } from '../shared/theme.js'`, [t('theme'), t('appearance'), t('dark')]).length,
-      "X-5 (bounded-extension control) — a SECOND NEW path carrying the vocabulary is STILL a failure: the exemption is the THREE paths BY NAME (the two pre-declared plus the ONE admitted), and a fourth path — e.g. a second caller like 'src/renderer/theme-store-2.ts' — FAILS the row. Broadening the set BEYOND the one admitted path would be a FINDING per §2.7 item 7's positive-control clause.",
+      "X-5 (bounded-extension control) — a NEW path carrying the vocabulary is STILL a failure: the exemption is the TWO paths BY NAME, and a third path — e.g. a re-landed caller like 'src/renderer/theme-store-2.ts' — FAILS the row. Broadening the set BEYOND the pre-declared pair would be a FINDING per §2.7 item 7's positive-control clause.",
     ).toBeGreaterThan(0)
     expect(
       hits.length,
@@ -1216,15 +1270,22 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     expect(hits[0], 'X-5 — the one match is in src/renderer/index.html, the DENIED path of §5.1 item 2').toContain('index.html')
   })
 
+  // strata:gates — the script key set is a loop instrument, not module machinery (D-38)
   it('R-3(config half) (§3.4) — package.json/package-lock.json carry the LANDED dependency and script sets: no new dependency, no new script key', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
       scripts?: Record<string, string>
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>
     }
-    const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'ui', 'mcp']
+    // ⟶ ADDED 2026-10-30: `panes` — the `secure-panels` unit's live leg key (D-37). A `scripts`
+    // key set is a loop INSTRUMENT, so this row is EXTENDED and stays gating rather than being
+    // turned into a lower bound (D-38); the set stays EXACT, and no key this unit owns is added.
+    // ⟶ EXTENDED 2026-11-03 (`D-94`): `crossings`, the crossings' live leg key (see the note above);
+    // a `scripts` key set is a loop INSTRUMENT, so this row is EXTENDED and stays gating (D-38).
+    const LANDED_SCRIPT_KEYS = ['clean', 'build', 'build:watch', 'start', 'start:http', 'typecheck', 'typecheck:tests', 'test', 'test:watch', 'battery', 'divergence', 'ui', 'mcp', 'panes', 'crossings']
     const LANDED_DEV = ['@types/node', 'electron', 'esbuild', 'typescript', 'vitest']
-    const LANDED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr']
+    // THE SET STAYS EXACT: 'provident-storeroom' is the one member added by the 2026-10-29 import (src/main/storeroom.ts is the single seam; no capability is exposed).
+    const LANDED_DEPS = ['@modelcontextprotocol/sdk', 'provident-ssr', 'provident-storeroom']
     // A SET claim against the NAMES, never a bare count (§4.4 S-TH-6).
     expect(Object.keys(pkg.scripts ?? {}).sort(), 'R-3 — the scripts KEY SET is the landed set: ANY further script key reddens this row, and a config change cannot satisfy it (§5.1 item 7, AGENTS.md item 4). §5.2 leg 5 adds NO script.').toEqual([...LANDED_SCRIPT_KEYS].sort())
     expect(Object.keys(pkg.devDependencies ?? {}).sort(), 'R-3 — no new devDependency: the register is executed by plain deterministic vitest tables with NO property runner and NO fast-check (§5.5).').toEqual([...LANDED_DEV].sort())
@@ -1256,20 +1317,37 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
         if (/\bimport\b|\brequire\s*\(/.test(line) && importerPattern.test(line)) importers.push(`${p.replace(ROOT, '.')}: ${line.trim()}`)
       }
     }
-    // THE AMENDED SET (the licence's cell (1)): EXACTLY ONE admitted importer —
-    // the unit's own caller file `src/renderer/theme-store.ts` — and NOTHING
-    // else. The as-filed reading ("at green time it must STILL read zero, so a
-    // later importer is a FINDING") survives: the ONE member is the caller's own
-    // admission, and a SECOND importer is still a FINDING.
-    const admittedImporter = '.src/renderer/theme-store.ts:'
+    // ⟶ **R-6 REVERTS TO ITS AS-FILED CLOSED FORM (2026-11-03, `D-93`) — THE ROLLBACK THE LICENCE ITSELF DECLARED.** The
+    // amended set admitted EXACTLY ONE importer, `src/renderer/theme-store.ts`. **THAT CALLER IS DELETED**: a store-shaped
+    // turn written against the frozen graph store's `file.settings.theme.token` address, with NO live consumer under
+    // `src/`, and the address space it addressed is deleted with `src/renderer/store-core-graph.ts`. The licence's own
+    // rollback clause — *"retiring the theme caller reverts this row to its as-filed `.toEqual([])` closed form"* — is what
+    // fires. **THE AS-FILED READING IS NOW THE TRUTH OF THE TREE AND IT IS THE STRICTER ONE**: zero importers, not one.
+    // ⟶ **RE-GRAINED 2026-11-03 (`D-96`) — THE IMPORTER SET IS EXACTLY ONE, AND THE ONE IS NAMED.** The user's ruling is
+    // that this mechanism is OWED a consumer and that the consumer is the module renderers; `D-96` wires it at
+    // `src/renderer/renderer.ts`'s `startThemeDeclaration`, under the module's OWN licence (`docs/specs/theme.md` §2.5
+    // item 3: *"a later `F1` pass LAWFULLY importing this module must NOT be read as falsifying `U-THEME` … it does not
+    // declare the module permanently importer-less"*). **THE ROW'S CLOSED INTENT IS UNCHANGED**: the exemption is the
+    // PATH BY NAME, never the tokens, and a SECOND importer is still a FINDING — which the bounded-extension control
+    // below measures. The AS-FILED reading and `D-93`'s ("zero importers, not one") are KEPT VISIBLE BESIDE as the form
+    // this row reverts to if that import is removed.
+    // ⟶ **RE-GRAINED 2026-11-03 (`D-97`) — THE IMPORTER SET IS STILL EXACTLY ONE, AND THE ONE IS NOW THE CROSSING.** The
+    // instruction this pass carries (*"No boot time declarations — Use constraint repairs"*) DELETES `D-96`'s drive from
+    // `src/renderer/renderer.ts`, so the mechanism's one in-tree consumer is the view record's `theme-must-stand` repair in
+    // `src/main/view-record/index.ts`, which computes the declaration the record stores. **THE ROW'S CLOSED INTENT IS
+    // UNCHANGED**: the exemption is the PATH BY NAME, a SECOND importer is still a FINDING (the bounded-extension control
+    // below measures it), and the AS-FILED / `D-93` / `D-96` forms are KEPT VISIBLE BESIDE as the forms this row reverts to.
+    const ADMITTED_IMPORTER = '.src/main/view-record/index.ts:'
+    const unadmitted = importers.filter((entry) => !entry.startsWith(ADMITTED_IMPORTER))
+    const admitted = importers.filter((entry) => entry.startsWith(ADMITTED_IMPORTER))
     expect(
-      importers.length,
-      `R-6 (AMENDED, licence cell (1) of §2.7 item 7's dated extension) — the importer set is EXACTLY ONE: the unit's own caller file \`src/renderer/theme-store.ts\` (the §2.3 resolution-site decision, admitted BY NAME) and NOTHING else. The AS-FILED READING, KEPT VISIBLE BESIDE: "§2.5 item 5 answers the entry-point question NO: no src/** path reaches this mechanism, and at red time (module absent) the probe reads zero by construction; at green time it must STILL read zero, so a later importer is a FINDING." That intent is UNCHANGED for every OTHER path. Measured: ${JSON.stringify(importers)}`,
+      unadmitted,
+      `R-6 (RE-GRAINED 2026-11-03 by \`D-97\`, and by \`D-96\` before it) — the importer set is EXACTLY ONE, BY NAME: \`src/main/view-record/index.ts\`, the crossing's \`theme-must-stand\` repair, where the declaration is COMPUTED and stored. A second path importing the mechanism is a FINDING and is named here. The earlier forms, KEPT VISIBLE BESIDE: "no src/** path reaches this mechanism … a later importer is a FINDING" (as filed), "zero importers, not one" (\`D-93\`, after \`src/renderer/theme-store.ts\` was deleted) and "exactly one, \`src/renderer/renderer.ts\`" (\`D-96\`'s drive, deleted by this pass's instruction). Measured: ${JSON.stringify(importers)}`,
+    ).toEqual([])
+    expect(
+      admitted.length,
+      `R-6 (RE-GRAINED 2026-11-03 by \`D-97\`, and by \`D-96\` before it) — and the ONE admitted importer IS the one measured, so the exemption is a named member rather than a blanket strip: ${JSON.stringify(admitted)}`,
     ).toBe(1)
-    expect(
-      importers[0] ?? '',
-      'R-6 (AMENDED) — the ONE importer IS the admitted caller, by path prefix; any other path (or an absent theme-store import) fails this row, keeping the closed set honest.',
-    ).toContain(admittedImporter)
     // THE BOUNDED-EXTENSION POSITIVE CONTROL (the licence's positive-control
     // clause: broadening the set BEYOND the one admitted path is a FINDING): the
     // SAME instrument MUST still flag a SECOND new path's import.
@@ -1285,7 +1363,7 @@ describe('§3.5 X-1 / X-2 / X-4 / X-5 + §3.4 R-9 / R-3(config) / R-6(no-importe
     for (const p of denied) {
       expect(existsSync(join(ROOT, p)), `R-6 — the DENIED path §5.1 names is PRESENT on disk: ${p}. The denial binds this unit's diff (a later F1 pass lawfully importing the module does NOT falsify U-THEME).`).toBe(true)
     }
-    expect(existsSync(join(ROOT, 'docs', 'specs', 'theme-review.md')), 'R-6 / X-3 — the gate-1 record is a DENIED path (§5.1 item 11) and it EXISTS, so a later edit is a FINDING').toBe(true)
+    expect(existsSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'theme-review.md')), 'R-6 / X-3 — the gate-1 record is a DENIED path (§5.1 item 11) and it EXISTS, so a later edit is a FINDING').toBe(true)
     expect(existsSync(new URL('./theme.test.ts', import.meta.url)), 'R-6 — the allow-list row 2 is THIS file').toBe(true)
     // THE ALLOW-LIST ROW 1, IN THE BRANCH FORM (`X-1`'s own shape, "no third path"):
     // asserting the module's ABSENCE as a STANDING claim would be a red-only premise
@@ -1873,7 +1951,7 @@ describe('§3.3 I-1..I-11 — the invariants that hold in every state', () => {
   })
 
   it('I-11 (§3.3) — [U] is NOT offered and [D] is NOT claimed: both refusals are STRUCTURAL, and gate 6 is never "waived"', () => {
-    const spec = readFileSync(join(ROOT, 'docs', 'specs', 'theme.md'), 'utf8')
+    const spec = readFileSync(join(ROOT, 'archive/gate-corpus-2026-10-29', 'specs', 'theme.md'), 'utf8')
     expect(spec, 'I-11 — the contract records gate 6 as STRUCTURAL').toContain('STRUCTURAL')
     expect(spec, 'I-11 — the §7.1 predicate decision is recorded as DOES NOT TRIGGER').toContain('DOES NOT TRIGGER')
     expect(/\[U\].{0,200}not offered|THE `\[U\]` ROW IS NOT OFFERED/s.test(spec), 'I-11 — the three-part [U] refusal is recorded (the refusal · the structural reason · the zones.md §4.4 S-6 sentence).').toBe(true)

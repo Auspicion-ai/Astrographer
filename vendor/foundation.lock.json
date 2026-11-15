@@ -200,6 +200,8 @@
     "leg": "conformance",
     "config": "vitest.conformance.config.ts",
     "placement": "vendor/Provident-Electron/tests/",
+    "revision": "e8dfb57730f657521d543c8d49f0d67e7ee1e6d4",
+    "derivation": "A suite is INCLUDED iff every specifier its module-under-test path carries resolves to one of the fifteen vendored `src/shared/<name>` modules; EXCLUDED iff it carries an out-of-set module-under-test specifier (the X-1 class); every other suite in the pinned tree's `tests/**/*.test.ts` universe carries an explicit `notAdmitted` disposition. Re-Derived at `revision` by an AST walk (`importSpecifiers`) over the pinned blobs plus the resolution of the universe's computed dynamic forms, 2026-11-15.",
     "included": [
       "theme.test.ts",
       "zones.test.ts",
@@ -216,19 +218,861 @@
     "excluded": [
       {
         "suite": "layout-projection.test.ts",
-        "reason": "X-1 EXCLUSION — installShim/mountEl/ShimElement come from ../src/shared/dom-shim.js, which resolves to THIS repo's divergent dom-shim.ts (508 lines vs the foundation's 238); the suite also reads dom-shim.ts by path and ../package.json, and drives git status --porcelain against the repo."
+        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (a static import, an import type, and the computed ['..','src','shared','dom-shim.js'].join('/') form), which resolves to THIS repo's divergent dom-shim.ts (508 lines vs the foundation's 237 at the pin), so the suite would drive the fork's shim and not the pinned one; the suite also drives git status --porcelain against the repo. RE-DERIVED at `revision` (2026-11-15): the two clauses this reason used to carry — a dom-shim.ts read by path and a ../package.json read — are FALSE there (no fs call takes either path, and ../package.json is read by six suites that are INCLUDED, so it never discriminated); the dom-shim.js import edge and the porcelain audit stand."
       },
       {
         "suite": "owned-list-host.test.ts",
-        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (the fork's divergent copy). The U-LISTHOST module itself stays vendored (§2.1 item 4)."
+        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (static, import type, and the computed array-join form), i.e. this repo's divergent copy, so the suite would drive the fork's shim and not the pinned one. The owned-list-host MODULE itself stays vendored (§2.1 item 4). RE-DERIVED at `revision` (2026-11-15): TRUE and complete."
       },
       {
         "suite": "slot-host.test.ts",
-        "reason": "X-1 EXCLUSION — dom-shim.js as above, PLUS a second out-of-set import: ../src/main/security.js and ../src/main/mcp-server.js by dynamic import (the foundation's own src/main modules). The U-SLOTHOST module itself stays vendored."
+        "reason": "X-1 EXCLUSION — ../src/shared/dom-shim.js as above, PLUS two further out-of-set imports: ../src/main/security.js and ../src/main/mcp-server.js, both reached by computed dynamic import (the foundation's own src/main modules, of which this fork has no sibling by that name). The slot-host MODULE itself stays vendored. RE-DERIVED at `revision` (2026-11-15): all three edges still present."
       },
       {
         "suite": "mount-invariant-guard.test.ts",
-        "reason": "X-1 EXCLUSION — THREE out-of-set imports: ../src/shared/dom-shim.js (installShim/mountEl), ../src/renderer/runtime.js (Runtime) and ../src/shared/demo-envelope.js (demoEnvelope, 131 vs 434 lines). The U-MOUNTGUARD module stays vendored; its reconcileMount fix is not in the set (PD-UI-10)."
+        "reason": "X-1 EXCLUSION — THREE out-of-set imports, all re-derived at `revision` (2026-11-15): ../src/shared/dom-shim.js (static and import type), ../src/renderer/runtime.js (Runtime, static) and ../src/shared/demo-envelope.js (demoEnvelope, static and computed form). The fork's copies are divergent: demo-envelope 131 lines vs the foundation's 2239 at the pin (433 at 7bd1de47…), dom-shim 508 vs 237. The mount-invariant-guard module stays vendored; its reconcileMount fix is not in the set (PD-UI-10)."
+      }
+    ],
+    "notAdmitted": [
+      {
+        "suite": "tests/0-2-regression-adversarial.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-battery-hooks-handlers.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-battery-verify.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-ci-divergence.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-loadbatch.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-mcp-notify.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-mcp-resources.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-renderer-debug.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-runtime-host.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/blind-security-gate.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/construction-exhaustion.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/construction-exhaustion2.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/debug-panel.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/demo-bundle.test.ts",
+        "class": "NO-VENDORED-MODULE-UNDER-TEST",
+        "criterion": "no-in-set-specifier",
+        "reason": "Carries no specifier onto the fifteen vendored modules (measured at the pin: 7 reading(s), e.g. vitest,node:child_process), so its module-under-test lies outside the vendored set and the leg has nothing to gate."
+      },
+      {
+        "suite": "tests/divergence-attribute-extractor.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/dom-shim-remove-attribute.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/e2e/app-layout/app-layout.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/app-layout/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/bundle-boot-seam/boot-contract.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/bundle-boot-seam/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/central-data/scenarios.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 9 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/focus-retirement/focus-retirement.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/focus-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/pane-drag-temp/pane-drag-temp.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/pane-drag-temp/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/security-store-storeroom/isolation.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 8 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/security-store-storeroom/scenarios.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/settings-carrier-retirement/scenarios.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 7 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/e2e/tier-readout/tier-readout.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/e2e/tier-readout/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/engine-pin-boolean-dom.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/engine-pin-boolean-ssr.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/engine-pin-controls.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/engine-pin-version.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/engine-surfaces.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/focus-tool.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/fork-store-reads.test.ts",
+        "class": "NO-VENDORED-MODULE-UNDER-TEST",
+        "criterion": "no-in-set-specifier",
+        "reason": "Carries no specifier onto the fifteen vendored modules (measured at the pin: 4 reading(s), e.g. vitest,node:fs), so its module-under-test lies outside the vendored set and the leg has nothing to gate."
+      },
+      {
+        "suite": "tests/gemma4-blind-battery.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/host-guard-panes.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/host-guard.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/integration/bundle-boot-seam/arrangement.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/bundle-boot-seam/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/bridge-route.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/declared-root.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 5 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/message-log.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/profile-file.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 5 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/registration.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/central-data/value-arms.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/overlay-application.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 2 (`tests/integration/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 5 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/secure-panels/persistence.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/secure-panels/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/secure-panels/roster.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/secure-panels/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/instance.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/isolation.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 8 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/patch-domain.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/port-follow.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/recovered-scenarios.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/security-store-storeroom/surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/app-state-delivery.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/app-state.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/import.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/retirement.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 5 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/security-delivery.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/settings-carrier-retirement/surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-tabs-record/crossing.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 4 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-tabs-record/surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-tabs-record/tabs-client.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/boundary.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/client.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/crossing.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/theme-family.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/zone-family.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 7 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/isolation-adv-d.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/isolation-adversarial-e2e.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/isolation-adversarial.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/journal-endpoint.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/journal-reversibility.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/dom-shim.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/loadbatch-adversarial.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/loadbatch.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/markdown-endpoint.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-notify-adversarial.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/secure-panels.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-notify.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-resources-adversarial.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-resources.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-server-gate.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/mcp-server-wiring.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-dynamic.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-e2e.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+3 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-image.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-pane.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/secure-panels.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-queue.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/extensions.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-router.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/extensions.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-security-gate.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-tools.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/module-transform.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/op-command-unwrap.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/renderer.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/pane-drag-compliance.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/renderer,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/path-fork-cycle.test.ts",
+        "class": "DIVERGENT-BASELINE-IMPORT",
+        "criterion": "divergent-baseline-import",
+        "reason": "Imports ../src/shared/path-fork-cycle.js — one of the four `baselineFilesNotReplaced` this fork does NOT replace, so it drives this repo's divergent copy, not the pinned blob; X-1 class, no vendored module under test."
+      },
+      {
+        "suite": "tests/renderer-backend.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/renderer-delivery-compliance.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/renderer.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/runtime-battery.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/runtime-host.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/runtime.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/secure-exclusion.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js,+6 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/secure-panels.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/security-gate.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/security.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/security.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/store-modules-bytes.test.ts",
+        "class": "STORE-WIRING-ABSENT",
+        "criterion": "recorded",
+        "reason": "NOT an admissible conformance suite: its module-under-test closure is IN-SET (../src/shared/owned-list-host.js and ../src/shared/slot-host.js, static and `import type`, plus vitest/node:* — all fifteen in the vendored set), while its ONLY `src/renderer/**` readings are `existsSync(new URL('../src/renderer/store-core-graph.ts', import.meta.url))` and the `store-graph-references.ts` twin — headstone probes asserting the ABSENCE of those two paths (`…).toBe(false)` — the path the pin deleted is still gone), and the pin DID delete both (git cat-file -e at the pin exits 128; both existed at 7bd1de47…, at 2372 and 36 lines), so its subject is the foundation's store wiring, which this fork has no store for (unit-foundation-rerevendor-2026-10-04.md §2.3's recorded disposition; D-15/D-20)."
+      },
+      {
+        "suite": "tests/store-modules-seams.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/view-client.js,+1 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/storeroom-surface.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/storeroom) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/theme-act.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+4 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/theme-control.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/theme-declaration.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/runtime.js,+4 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/tier4-arbitrary-storage.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/renderer/secure-panels.js,+3 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/ui-leg-contract.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/mcp-server.js) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/ui-leg-seam.test.ts",
+        "class": "FOUNDATION-TREE-IMPORT",
+        "criterion": "foundation-tree-import",
+        "reason": "Imports the foundation's own tree at the pin (../src/main/operator-settings/index.js,+2 more) — `src/main`/`src/renderer` modules this fork has no sibling by that name; X-1 class, no drive of the vendored fifteen."
+      },
+      {
+        "suite": "tests/unit/app-envelope/live-seams.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/app-envelope/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/bundle-boot-seam/derivation.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/bundle-boot-seam/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/bundle-boot-seam/emission.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/bundle-boot-seam/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/central-data/cold-and-write.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/central-data/delete-and-journal.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/central-data/read-node-readout.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/central-data/refusals.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/central-data/surface-and-profile.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/central-data/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/renderer-wiring/pane-node-map.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/renderer-wiring/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/renderer-wiring/preview-seat.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/renderer-wiring/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/renderer-wiring/signatures.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/renderer-wiring/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 0 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/renderer-wiring/state-checked-paint.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/renderer-wiring/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 5 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/renderer-wiring/zone-collapse.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/renderer-wiring/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 6 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/security-store-storeroom/creation-declarations.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/security-store-storeroom/operator-settings.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/security-store-storeroom/read-path-census.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/security-store-storeroom/recovered-scenarios.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/security-store-storeroom/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/settings-carrier-retirement/main-source.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/settings-carrier-retirement/operator-settings.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/settings-carrier-retirement/settings-surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/settings-carrier-retirement/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/settings-surface/surface.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/settings-surface/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/store-tabs-record/signatures.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      }
+    ],
+    "outOfUniverse": [
+      {
+        "suite": "tests/module-store.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/security-store.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/store-core-graph.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/store-core-graph-integration.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/store-focus.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/store-persist.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      },
+      {
+        "suite": "tests/store-security.test.ts",
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+      }
+    ],
+    "caveats": [
+      {
+        "suite": "container.test.ts",
+        "reason": "its PRE-1 harness-precondition row is UNGUARDED — `const existing = ['..','src','shared','dom-shim.js'].join('/')` then `await import(/* @vite-ignore */ existing)` asserting `typeof mod['mountEl'] === 'function'` — an OUT-OF-SET relative edge onto `../src/shared/dom-shim.js` that CANNOT resolve at the leg's placement (`vendor/Provident-Electron/src/shared/` does not exist), so the row is a structural red by construction (measured: all four PRE-1 rows FAIL with `Cannot find module …/vendor/Provident-Electron/src/shared/dom-shim.js`); at a `tests/`-at-root placement it would instead resolve THIS FORK's divergent 508-line `dom-shim.ts` and its `typeof … === 'function'` assertion would pass on the fork's copy — so its green would never be copy fidelity either way; it sits OUTSIDE the suite's own `resolveSurface()` try/catch, so it cannot abort the module rows, and it declares itself 'not spec rows', which is why the suite still stays INCLUDED under the module-under-test closure (contract §3.4 corrected ①, §7.7). No row of the leg may cite it — or the suite's failed/collected count — as copy fidelity."
+      },
+      {
+        "suite": "overlay.test.ts",
+        "reason": "its PRE-1 harness-precondition row is UNGUARDED — `const existing = ['..','src','shared','dom-shim.js'].join('/')` then `await import(/* @vite-ignore */ existing)` asserting `typeof mod['installShim'] === 'function'` — an OUT-OF-SET relative edge onto `../src/shared/dom-shim.js` that CANNOT resolve at the leg's placement (`vendor/Provident-Electron/src/shared/` does not exist), so the row is a structural red by construction (measured: all four PRE-1 rows FAIL with `Cannot find module …/vendor/Provident-Electron/src/shared/dom-shim.js`); at a `tests/`-at-root placement it would instead resolve THIS FORK's divergent 508-line `dom-shim.ts` and its `typeof … === 'function'` assertion would pass on the fork's copy — so its green would never be copy fidelity either way; it sits OUTSIDE the suite's own `resolveSurface()` try/catch, so it cannot abort the module rows, and it declares itself 'not spec rows', which is why the suite still stays INCLUDED under the module-under-test closure (contract §3.4 corrected ①, §7.7). No row of the leg may cite it — or the suite's failed/collected count — as copy fidelity."
+      },
+      {
+        "suite": "menu-template.test.ts",
+        "reason": "its PRE-1 harness-precondition row is UNGUARDED — `const existing = ['..','src','shared','dom-shim.js'].join('/')` then `await import(/* @vite-ignore */ existing)` asserting `typeof mod['mountEl'] === 'function'` — an OUT-OF-SET relative edge onto `../src/shared/dom-shim.js` that CANNOT resolve at the leg's placement (`vendor/Provident-Electron/src/shared/` does not exist), so the row is a structural red by construction (measured: all four PRE-1 rows FAIL with `Cannot find module …/vendor/Provident-Electron/src/shared/dom-shim.js`); at a `tests/`-at-root placement it would instead resolve THIS FORK's divergent 508-line `dom-shim.ts` and its `typeof … === 'function'` assertion would pass on the fork's copy — so its green would never be copy fidelity either way; it sits OUTSIDE the suite's own `resolveSurface()` try/catch, so it cannot abort the module rows, and it declares itself 'not spec rows', which is why the suite still stays INCLUDED under the module-under-test closure (contract §3.4 corrected ①, §7.7). No row of the leg may cite it — or the suite's failed/collected count — as copy fidelity."
+      },
+      {
+        "suite": "theme.test.ts",
+        "reason": "its PRE-1 harness-precondition row is UNGUARDED — `const existing = ['..','src','shared','dom-shim.js'].join('/')` then `await import(/* @vite-ignore */ existing)` asserting `typeof mod['installShim'] === 'function'` — an OUT-OF-SET relative edge onto `../src/shared/dom-shim.js` that CANNOT resolve at the leg's placement (`vendor/Provident-Electron/src/shared/` does not exist), so the row is a structural red by construction (measured: all four PRE-1 rows FAIL with `Cannot find module …/vendor/Provident-Electron/src/shared/dom-shim.js`); at a `tests/`-at-root placement it would instead resolve THIS FORK's divergent 508-line `dom-shim.ts` and its `typeof … === 'function'` assertion would pass on the fork's copy — so its green would never be copy fidelity either way; it sits OUTSIDE the suite's own `resolveSurface()` try/catch, so it cannot abort the module rows, and it declares itself 'not spec rows', which is why the suite still stays INCLUDED under the module-under-test closure (contract §3.4 corrected ①, §7.7). No row of the leg may cite it — or the suite's failed/collected count — as copy fidelity."
       }
     ]
   },
