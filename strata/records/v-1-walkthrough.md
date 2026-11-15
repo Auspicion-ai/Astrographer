@@ -22,7 +22,11 @@ alone, every citation's resolution, the trackers, this record, and three numeric
 - **Run 6 — `DOC-GAP`**: this record stopped at run 4, `brief.md`'s docs-corpus figure read `250` where
   the command reads `252`, and §6's header dated rows it no longer measured. All three repaired.
 - **Run 7 — `DOC-GAP`**: twelve of thirteen steps reproduced and every citation resolved; the one
-  finding was this record again one run behind, which this rewrite closes.
+  finding was this record again one run behind, closed by the rewrite above.
+- **Run 8 — `PASS`**: all thirteen scenarios reproduced at head `85a7157` — the pin read live, the
+  date, the one digest literal, the three constants, four clauses with the last governing, drift
+  CLEAN with its pin arm read, 15/15 blobs, the tally-only conformance leg, the eleven copies, both
+  anchors absent at the pin, every citation resolving, the trackers and this record current.
 
 ## Not settled, stated as such
 
@@ -31,7 +35,6 @@ alone, every citation's resolution, the trackers, this record, and three numeric
   carries 162 with the correction beside it; the commit message is immutable history and is SUPERSEDED
   AS A READING here, by name, rather than left to trip a future reader.
 - Pre-existing and not this unit's: `docs/specs/unit-pd-vendor-pin-refresh.md` §0A cites
-  `docs/specs/unit-pd-ui-6-adoption-dossier.md`, which does not exist (the file is
-  `docs/specs/pd-ui-6-adoption-dossier.md`). Reported, never repaired from here.
-- Run 1's staging root excluded the two huge project trackers, so their rows read `unverifiable` —
-  never cleared; later runs read them. An instrument's error is not a corpus finding (§5).
+  `docs/specs/unit-pd-ui-6-adoption-dossier.md`, which does not exist (it is `pd-ui-6-…`). Reported only.
+- Run 1's staging root excluded the two huge trackers, so their rows read `unverifiable` — never
+  cleared; later runs read them. An instrument's error is not a corpus finding (§5).
