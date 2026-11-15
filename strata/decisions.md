@@ -400,3 +400,32 @@ commit's blobs, and the lock's `conformance` block states a measured 147-suite d
 instrument, with an anti-vacuity limb proved by driving a laundered disposition set to 131 violations.
 The leg's tally is and stays a tally: 11 files, 11 failed, 511 failed / 59 passed (570). Rejected
 alternative: annotating D-19 in place, which the register forbids (D-2).
+
+---
+
+## D-22 — The foundation's `collapsed` is the meaning, and the silent relocation is ACCEPTED and recorded
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Source (user, asked and answered this session):** Q1 —
+what does `collapsed` mean — answered **"The foundation version is overriding"**; Q2 — the persisted
+profile, migrate or accept — answered **"Accept the silent relocation and record it"**.
+
+**Decision (1), the meaning:** `collapsed` carries the foundation's semantics — the extent is collapsed,
+it is derived from emptiness, and the record may overturn it — and the fork's `minimized` does NOT survive
+beside it. The operator's "minimize an occupied zone to a tab strip" becomes an ACT that overturns the
+derivation on the same member, and the fork's tab-strip paint becomes the collapsed-zone paint. One
+member, one paint family, two ways to reach the state (derivation and act).
+
+**Decision (2), the profile:** `LAYOUT_VERSION` stays **1** and no migration arm is written. An existing
+install's `header`/`footer` placements (and any resized edge track) are coerced to `left` on first load
+and the coercion re-persists that loss. **This is ACCEPTED, and it is recorded as a defect row in
+`docs/defects.md` and named in the affected units' DONE rows, so it can never be read as an unnoticed
+regression.**
+
+**Consequences the units inherit:** `U-1b` carries the ONE-state collapse — the `auto`/`hidden` extent
+included, the member and act re-grained, the tab-strip paint folded into the collapsed paint; `U-1a`
+drops the migration it would otherwise have carried, so its red set is the census rows and
+`UF-LAYOUT-2`'s literal container-id limb; and the accepted relocation is a stated cost of the rename, not
+a bug to be found later.
+
+Rejected alternatives, named: the one-state-plus-migration pairing (the shape L1 recommended on Q2 — the
+user took the state and refused the migration), and the two-state pairing (refused on Q1).
