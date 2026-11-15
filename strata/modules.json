@@ -1,0 +1,35 @@
+{
+  "modules": [
+    {
+      "name": "foundation-vendor",
+      "paths": [
+        "vendor",
+        "tests/pd-vendor-set.test.ts",
+        "tests/pd-vendor-manifest.test.ts",
+        "tests/pd-vendor-drift.test.ts",
+        "tests/pd-vendor-pin-refresh-register.test.ts",
+        "tests/unit/foundation-vendor",
+        "tests/integration/foundation-vendor"
+      ],
+      "endpoints": 3
+    },
+    {
+      "name": "shell-chrome",
+      "paths": [
+        "src/renderer",
+        "src/main/preload.ts",
+        "src/main/main.ts",
+        "src/main/app-menu.ts",
+        "src/shared/types.ts",
+        "scripts/live-drive.mjs",
+        "tests/unit-zone-replacement-register.test.ts",
+        "tests/pd-ui-1-theme-register.test.ts",
+        "tests/live-drive-contract.test.ts",
+        "tests/unit-live11-bridge-seams.test.ts",
+        "tests/unit/shell-chrome",
+        "tests/integration/shell-chrome"
+      ],
+      "endpoints": 26
+    }
+  ]
+}
