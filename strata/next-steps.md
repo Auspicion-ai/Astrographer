@@ -7,7 +7,8 @@ walkthrough reads `PASS` (`strata/records/v-1-walkthrough.md`).
 
 | # | Work | Owner | Closed when |
 |---|---|---|---|
-| 1 | **`U-1` IS BLOCKED BY ITS OWN ITEM-8 GATE — RE-SHAPE IT BEFORE A CONTRACT.** Both reviews returned ADJUDICATION and their findings are filed (`strata/records/foundation-import-u1-{validity,critique}-2026-11-15.md`): the anchored collapse control's placement, a total `minimized` member that cannot hold a derivation, the unmigrated persisted slice, `ThemeRoot`'s write surface, and an MCP-visible half no row grades. The engine half of that blocking set is answered by `E-1` | L1 (re-shape under D-14/D-16 and the filed findings), then the change-analysis | the re-shape resolves or escalates every blocking finding and its contract cites the filed reviews |
+| 1 | **`U-1` IS SPLIT INTO THREE — `U-1a` `zone-vocabulary`, `U-1b` `zone-collapse`, `U-1c` `theme-carrier`** (the item-8 gate's third step is discharged: `docs/specs/foundation-import-u1-change-analysis.md` disposes every finding, and the contracts are `docs/L1/unit-u-1{a,b,c}-*.md`). Two adjudications gate parts of it and are `pending.md` row 1: Q1 decides what `collapsed` means (`U-1b` C-4/C-5), Q2 decides the persisted-slice migration (`U-1a` row 2). `U-1a`'s other rows and all of `U-1c` are delegable as filed | L1's contracts after the rulings, then each unit's own cycle | each unit's DONE row with its red set, adversarial pass, blind greens and doc review |
+| 2 | **`U-2`…`U-4`** follow the split in the map's order (`U-2` depends on `U-1a` + `U-1b`), each with the rename inside the unit that changes its behaviour, and the live leg mandatory pre-DONE for the UI units (RCA-11) | L2 → L3 → L4 per unit | each unit's DONE row
 
 
 **`V-2` `conformance-refresh` LANDED**: the eleven copies now equal the pinned blobs, the lock's
