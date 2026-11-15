@@ -384,3 +384,19 @@ installs, resolves and leaves the trio, the drift leg and the conformance tally 
 
 **Rejected alternative:** staying on 0.5.1 and dropping the by-position zone-form inheritance from the
 UI port — which would have made the port's own §7.4 behaviour unwritable on the engine it ships with.
+
+---
+
+## D-21 — `V-2` landed the copies `D-19` recorded as one revision behind
+
+**Status:** ACTIVE · **Date:** 2026-11-15 · **Source (measurement):** unit `V-2`'s landing and its
+walkthrough record (`strata/records/v-2-conformance-refresh-walkthrough.md`)
+
+**Decision:** D-19's clause "eleven sites one revision behind (the vendored conformance copies, which
+`V-2` owns)" is SUPERSEDED AS A READING and kept as filed: those eleven copies now equal the pinned
+commit's blobs, and the lock's `conformance` block states a measured 147-suite disposition set
+(11 included · 4 excluded · 132 not-admitted · 7 retired · 4 caveats). The register at
+`tests/integration/foundation-vendor/conformance-refresh-register.test.ts` is the copy-fidelity
+instrument, with an anti-vacuity limb proved by driving a laundered disposition set to 131 violations.
+The leg's tally is and stays a tally: 11 files, 11 failed, 511 failed / 59 passed (570). Rejected
+alternative: annotating D-19 in place, which the register forbids (D-2).

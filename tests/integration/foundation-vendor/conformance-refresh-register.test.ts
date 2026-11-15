@@ -1752,8 +1752,18 @@ describe('CONFORMANCE-REFRESH REGISTER — `V-2`: the vendored conformance copie
     // INCLUDED suites (`container`, `overlay`, `menu-template`, `theme`) each carrying an UNGUARDED
     // `PRE-1` harness-precondition row that dynamically imports
     // `['..','src','shared','dom-shim.js'].join('/')` and asserts a member of THIS FORK's divergent
-    // shim — so that row PASSES here and evidences NOTHING about the pinned copy. `outOfUniverse`
-    // records the corpus-named suites the pinned tree no longer carries (§3.5's `OUT-OF-UNIVERSE`).
+    // shim — ⟨CORRECTED 2026-11-15 (`V-2`'s exit walkthrough): this comment read "so that row PASSES
+    // here and evidences NOTHING about the pinned copy". MEASURED — the four `PRE-1` rows FAIL, not
+    // PASS: `Cannot find module …/vendor/Provident-Electron/src/shared/dom-shim.js`, because
+    // `vendor/Provident-Electron/src/` does not exist at the leg's placement, so the computed
+    // specifier cannot resolve and each row reds structurally (four rows of the leg's `511` failed /
+    // `59` passed (`570`) · `docs/L1/unit-v-2-conformance-refresh.md` §3.4 corrected ① and §7.6, and
+    // the lock's own `caveats`, carry the same correction). The conclusion the comment drew still
+    // holds — the row evidences NOTHING about the pinned copy — but for the corrected reason: it
+    // never resolves, rather than resolving against this fork's shim. A dated note only: no
+    // assertion, limb or expected value of this arm changes with it.⟩
+    // `outOfUniverse` records the corpus-named suites the pinned tree no longer carries (§3.5's
+    // `OUT-OF-UNIVERSE`).
     //
     // The arm asserts the SHAPE and the MEMBERSHIP RULES of both lists, never the census. A
     // hardcoded `4` or `7` would be today's count re-typed as an oracle: it would red the day a
