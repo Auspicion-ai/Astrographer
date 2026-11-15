@@ -47,7 +47,7 @@ LayoutZoneName = 'top' | 'bottom' | 'left' | 'right'   // pane zones
 RegionName     = 'stage' | 'top-bar'                      // regions, not drop targets
 
 PaneLayoutEntry { id: string; zone: LayoutZoneName; index: number; collapsed: boolean }
-ZoneLayout      { size: number; minimized: boolean }       // C7 size + C12 minimize
+ZoneLayout      { size: number; collapsed?: boolean }      // C7 size + the C12 collapse STATEMENT
 LayoutState {
   version: number                                          // starts at 1
   panes:   PaneLayoutEntry[]                               // placement overlay only
@@ -57,13 +57,32 @@ LayoutState {
 }
 ```
 
+- **⟨RE-DERIVED `2026-11-15` BY UNIT `U-1b` (`zone-collapse`), D-22 (1) — `RCA-8(c)`,
+  ANNOTATE-BESIDE: the superseded shape stays visible and is never deleted.⟩**
+  `SUPERSEDED (the pre-U-1b cell, kept as that reading):` `ZoneLayout { size: number;
+  minimized: boolean }` — a REQUIRED, TOTAL boolean seeded `false` in every profile, so
+  "nothing stated" and "stated `false`" were the SAME VALUE and the derivation this unit
+  lands was not representable. `LANDED:` `{ size: number; collapsed?: boolean }` —
+  **absence is the storable "nothing stated"** (`ASM-U1b-1`), the seeds OMIT it
+  (`ASM-U1b-2`), `coerceZoneLayout` is absence-preserving (it copies the member only when
+  it is exactly `true`/`false`), and the ONE derivation `zoneCollapsedOf(stated,
+  paneCount)` answers the statement when one is stated and `paneCount === 0` otherwise.
+  `size` stays REQUIRED, and the act never writes it (`forking.md` §7.1 lines 480-481).
+  `LAYOUT_VERSION` stays `1` (no migration, D-22 (2)).
+
 - **Source of truth split (Reading 2):** the serialized `LayoutState` is
   authoritative; the graph **mirrors** the state-derived facts
-  (`is-empty`/`is-revealed`/`is-minimized`/`is-collapsed` classes). Pane
+  (`is-empty`/`is-revealed`/`is-collapsed` classes — ⟨`U-1b`, D-22 (1): the zone
+  container's collapse mirror is `is-collapsed`, ONE class for the ONE collapsed
+  state; the superseded mirror spelling stays visible in §2.3's annotated
+  cell⟩). Pane
   *existence* stays the host `PaneRegistry` (`PANE-REGISTRY`); the overlay never
   invents panes.
 - **Per-pane vs per-zone granularity:** `collapsed` is per-pane (C5);
-  `minimized` + `size` are per-zone (C12/C7). See W2-Q1.
+  the per-zone `collapsed` **statement** (optional, absence = derive) + `size`
+  are per-zone (C12/C7). ⟨`U-1b`: the per-zone state member is the same
+  `collapsed` word as the per-pane one — ONE collapsed state per record level,
+  written as an explicit boolean and never deleted.⟩ See W2-Q1.
 - **Default placement** is derived from the registry (`defaultZone` /
   `defaultOrder`, additive on `PaneDefinition`) — see W2-Q4. The legacy single
   `[sidebar]` maps to `left`.
@@ -93,10 +112,18 @@ LayoutState {
   `PaneLayoutEntry.index`.
 - Each zone container carries the **state-derived mirror**: an `is-empty`
   class when the zone has **zero enabled+placed panes (post-overlay/fallback
-  resolution)** (C11), `is-minimized` when `minimized` (C12),
+  resolution)** (C11), `is-collapsed` when the zone's EFFECTIVE state is
+  collapsed (C12 — ⟨`U-1b`, D-22 (1): the operator's statement when one is
+  stated, else the derivation off that same census; the container ALSO authors
+  `collapsed="true"|"false"`, the attribute the glyph reads (`ASM-U1b-9`), and
+  the hide/expand control is its **immediate following SIBLING**, never a child
+  (`ASM-U1b-5`)⟩),
   and a revealed marker during a drag (C11). The mirror is written as ONE
   managed write (state-slice `css.classes` / a hook) at gesture/state change,
   never a per-frame stream.
+  ⟨`SUPERSEDED` — the pre-U-1b clause, kept visible, `RCA-8(c)`:⟩ "`is-minimized`
+  when `minimized` (C12)" — that mirror class is GONE with the member it read;
+  the superseded spelling survives only in this annotated cell.⟩
 - **U-STATE-1 preservation (OB5/§7.3):** the reconciler must preserve
   `zone:*` container nodes + pane roots across a RAG content change.
 - **Legacy compatibility (2026-09-12):** the single `sidebar` producer is
@@ -111,8 +138,15 @@ LayoutState {
   columns/rows are shell geometry (U-SHELL-5 owns their drag; U-SHELL-1 owns the
   tracks).
 - Zone geometry reads `ZoneLayout.size`; an empty zone's track collapses
-  (derived from `is-empty`); a minimized zone's track collapses to its tab
-  strip (C12, U-SHELL-4).
+  (derived from `is-empty`); a COLLAPSED occupied zone's track reads `auto`
+  (content-derived, so its tab strip's own extent wins) with `hidden` on its
+  arrangement axis (C12, U-SHELL-4 — ⟨`U-1b` `C-4`: the `auto` arm is authored
+  TWICE, by `zoneTrackVars` and by `index.html`'s `:has()` mirror, and the
+  empty-zone `0px` rule is declared AFTER it and stays the empty case's
+  authority, `ASM-U1b-8`/`-10`⟩).
+  ⟨`SUPERSEDED (the pre-`U-1b` clause, kept visible, `RCA-8(c)`):` "a minimized
+  zone's track collapses to its tab strip" — the same outcome under the retired
+  state word; the tab-strip paint is the collapsed-zone paint.⟩
 - The `stage` is the largest cell; its content gets the content-scope boundary
   (Q5 — token/class, no shadow DOM v1).
 
@@ -144,7 +178,11 @@ flagged 8 spec gaps. Pinned (Architect):
 3. **Order observable** — `PaneLayoutEntry.index` manifests as the **payload
    order** panes are attached to a zone container; no `data-order` prop.
 4. **Mirror placement** — `is-collapsed` on the `pane-<id>` root;
-   `is-empty` / `is-minimized` / `is-revealed` on the `zone:<name>` container.
+   `is-empty` / `is-collapsed` / `is-revealed` on the `zone:<name>` container.
+   ⟨`U-1b`, D-22 (1): the zone container's collapse mirror is `is-collapsed`
+   and it carries the `collapsed="true"|"false"` attribute beside it
+   (`ASM-U1b-9`); the superseded zone-mirror spelling is `SUPERSEDED`, kept
+   visible in §2.1/§2.3's annotated cells and never re-spelled here.⟩
 5. **Size validity** — a `size` must be a **finite positive number**; an invalid
    value (`≤0`, `NaN`, `±Infinity`) fails soft to that zone's default. A finite
    positive size is **preserved** on load (e.g. a `top`/`bottom`/`topBar`
@@ -251,7 +289,7 @@ module**.
 | `P-IM-2` | IM | **`coerceLayout` is total — any input yields a valid `LayoutState` and never throws.** Null/undefined, a non-object, or a plain object carrying arbitrary deeply-nested junk all coerce to a well-formed state; no code path throws. | `strat:coerce-total` | ∀ generated (possibly malformed / deeply-nested) value `x`: `coerceLayout(x)` returns a `LayoutState` satisfying the §P-SM-2 shape and never throws. |
 | `P-TP-1` | TP | **`coerceLayout` is idempotent.** Coercing an already-coerced result reproduces it exactly. | `strat:coerce-idempotent` | ∀ value `x`: `coerceLayout(coerceLayout(x))` deep-equals `coerceLayout(x)` (identical `version`, `panes`, `zones`, `stage`, `topBar`; pane order preserved; the second pass changes nothing). |
 | `P-SM-1` | SM | **Version gating.** `coerceLayout` preserves/coerces the payload only when `version === LAYOUT_VERSION` (exactly 1); any other value — missing, non-integer, negative, zero, `> 1`, `NaN`, `±Infinity` — fails soft to `defaultLayout()`, never a newer-schema partial or a crash. | `strat:coerce-version-gate` | ∀ value `x` with a `version` field: a non-`LAYOUT_VERSION` version — missing, non-integer, negative, `> 1`, non-finite, or non-number — fails soft to `defaultLayout()` whenever `typeof version !== 'number'` OR `!Number.isInteger(version)` OR `version < 1` OR `version > LAYOUT_VERSION`; an exact-`LAYOUT_VERSION` payload is preserved — the output `.version === LAYOUT_VERSION` in BOTH cases (the fail-soft `defaultLayout()` result itself carries `.version === LAYOUT_VERSION === 1`, so no strict `⟺` biconditional on the gate). |
-| `P-SM-2` | SM | **The coerced `LayoutState` is well-formed — only known fields, no invalid field, no duplicate pane id.** Every zone `size` is finite-positive, every `minimized` is a boolean, `stage`/`topBar` sizes are finite-positive, every pane has a non-empty string `id`, a valid zone, a finite `index`, a boolean `collapsed`, and pane ids are unique (first-wins dedup). | `strat:coerce-state-model` | ∀ value `x`, let `L = coerceLayout(x)`: `L.version === 1`; for each zone `z ∈ {left,right,top,bottom}`: `Number.isFinite(L.zones[z].size) && L.zones[z].size > 0` and `typeof L.zones[z].minimized === 'boolean'`; `Number.isFinite(L.stage.size) && L.stage.size > 0`; `Number.isFinite(L.topBar.size) && L.topBar.size > 0`; ∀ pane ∈ `L.panes`: `typeof pane.id === 'string' && pane.id !== ''`, `isLayoutZoneName(pane.zone)`, `Number.isFinite(pane.index)`, `typeof pane.collapsed === 'boolean'`; and all pane `id`s are pairwise distinct. |
+| `P-SM-2` | SM | **The coerced `LayoutState` is well-formed — only known fields, no invalid field, no duplicate pane id.** Every zone `size` is finite-positive, every zone's `collapsed` is **ABSENT or a boolean** (⟨RE-DERIVED `2026-11-15` BY UNIT `U-1b`, D-22 (1): absence is the storable "nothing stated" and is copied only when the stored value is exactly `true`/`false`; `SUPERSEDED (kept visible, `RCA-8(c)`):` "every `minimized` is a boolean"⟩), `stage`/`topBar` sizes are finite-positive, every pane has a non-empty string `id`, a valid zone, a finite `index`, a boolean `collapsed`, and pane ids are unique (first-wins dedup). | `strat:coerce-state-model` | ∀ value `x`, let `L = coerceLayout(x)`: `L.version === 1`; for each zone `z ∈ {left,right,top,bottom}`: `Number.isFinite(L.zones[z].size) && L.zones[z].size > 0` and `(L.zones[z].collapsed === undefined \|\| typeof L.zones[z].collapsed === 'boolean')` — a PRESENT-but-non-boolean member is unrepresentable (`U-1b` `C-1`); `Number.isFinite(L.stage.size) && L.stage.size > 0`; `Number.isFinite(L.topBar.size) && L.topBar.size > 0`; ∀ pane ∈ `L.panes`: `typeof pane.id === 'string' && pane.id !== ''`, `isLayoutZoneName(pane.zone)`, `Number.isFinite(pane.index)`, `typeof pane.collapsed === 'boolean'`; and all pane `id`s are pairwise distinct. |
 | `P-TP-2` | TP | **`deriveLayout` is a deterministic pure projection of the placement overlay.** The same specs yield the identical layout; each spec maps to exactly one pane, and the stated defaults (legacy `left` zone, registration-index `index`, `collapsed:false`) are applied. | `strat:derive-deterministic` | ∀ generated specs array `S` of length `N`: `deriveLayout(S)` twice returns deep-equal outputs; `panes.length === N`; for `i ∈ [0,N)`: `panes[i].id === S[i].id`, `panes[i].zone === (isLayoutZoneName(S[i].defaultZone) ? S[i].defaultZone : 'left')`, `panes[i].index === ((typeof S[i].defaultOrder === 'number' && Number.isFinite(S[i].defaultOrder)) ? S[i].defaultOrder : i)`, `panes[i].collapsed === false`; and `deriveLayout(S)` has `version === LAYOUT_VERSION` with `zones`/`stage`/`topBar` equal to `defaultLayout()`'s. |
 
 **Class tally:** IM ×2, SM ×2, TP ×2 = **6 rows ≤ 8** ✔.
@@ -324,7 +362,13 @@ scope.
 ## 8. Open items
 
 **None — all resolved 2026-09-12** (see `wave-2-open-decisions.md`).
-- **W2-Q1** — per-pane `collapsed`; per-zone `minimized` + `size`.
+- **W2-Q1** — per-pane `collapsed`; per-zone `collapsed?` (the OPTIONAL statement:
+  absent = derive, present = the operator's word) + `size`.
+  ⟨RE-DERIVED `2026-11-15` BY UNIT `U-1b`, D-22 (1) — `RCA-8(c)`, annotate-beside:
+  `SUPERSEDED (kept visible):` "per-zone `minimized` + `size`" — a REQUIRED total
+  boolean that could not store "nothing stated". `LANDED:` the same per-zone
+  granularity on the `collapsed` word, optional so absence means DERIVE off the
+  enabled+placed census (`zoneCollapsedOf`), and `size` untouched by any collapse.⟩
 - **W2-Q2** — `stage`/`top-bar` are **regions, not pane zones**.
 - **W2-Q3** — zone nodes are **always-present** (not per-non-empty).
 - **W2-Q4** — default placement from additive `PaneDefinition.defaultZone?`/

@@ -8,7 +8,7 @@
 //   (a) PRELOAD-SURFACE — in the REAL contextBridge renderer the preload OWNS
 //       `window.provident.sidebar`. After the preload loads, and again after
 //       `installSidebar({...})`, the four collapse/visibility seams
-//       `togglePaneCollapse` / `paneVisibilityToggle` / `zoneMinimizeToggle` /
+//       `togglePaneCollapse` / `paneVisibilityToggle` / `zoneCollapseToggle` /
 //       `paneTabExpand` are EACH `function`s on `bridge.sidebar`; the default
 //       holder no-ops never throw; after installSidebar each exposed seam
 //       forwards the exact args to the installed holder (`id`, `id`, `zone`,
@@ -355,7 +355,10 @@ function storeOf(h: BootHarness): OperatorSettings {
 // RED today: the fixed-key `sidebarHolder`/`sidebar` proxy omit the four keys.
 // ===========================================================================
 describe('U-LIVE11 (a) — preload exposes the four collapse/visibility seams as functions (§2.1, P-IM-1)', () => {
-  const SEAMS = ['togglePaneCollapse', 'paneVisibilityToggle', 'zoneMinimizeToggle', 'paneTabExpand'] as const
+  // ⟨RE-GRAINED BY UNIT `U-1b`, AT LANDING — D-22 (1)/`C-5`: the zone seam is
+  //   RENAMED in place with the member it writes (`zoneCollapseToggle`), so the
+  //   four-seam set keeps its shape and its count; only the state word moves.⟩
+  const SEAMS = ['togglePaneCollapse', 'paneVisibilityToggle', 'zoneCollapseToggle', 'paneTabExpand'] as const
 
   it('state 1 — after the preload loads, each seam on bridge.sidebar is a function (the default-holder no-op) [RED]', () => {
     const bridge = capturedBridge()
@@ -371,7 +374,7 @@ describe('U-LIVE11 (a) — preload exposes the four collapse/visibility seams as
     expect(() => {
       bridge.sidebar.togglePaneCollapse('notes')
       bridge.sidebar.paneVisibilityToggle('notes')
-      bridge.sidebar.zoneMinimizeToggle('left')
+      bridge.sidebar.zoneCollapseToggle('left')
       bridge.sidebar.paneTabExpand('left', 'notes')
     }).not.toThrow()
   })
@@ -390,12 +393,12 @@ describe('U-LIVE11 (a) — preload exposes the four collapse/visibility seams as
 
     bridge.sidebar.togglePaneCollapse('notes')
     bridge.sidebar.paneVisibilityToggle('notes')
-    bridge.sidebar.zoneMinimizeToggle('left')
+    bridge.sidebar.zoneCollapseToggle('left')
     bridge.sidebar.paneTabExpand('left', 'notes')
 
     expect(seen.togglePaneCollapse).toEqual([['notes']])
     expect(seen.paneVisibilityToggle).toEqual([['notes']])
-    expect(seen.zoneMinimizeToggle).toEqual([['left']])
+    expect(seen.zoneCollapseToggle).toEqual([['left']])
     expect(seen.paneTabExpand).toEqual([['left', 'notes']])
   })
 
@@ -405,7 +408,7 @@ describe('U-LIVE11 (a) — preload exposes the four collapse/visibility seams as
     expect(() => {
       bridge.sidebar.togglePaneCollapse('notes')
       bridge.sidebar.paneVisibilityToggle('notes')
-      bridge.sidebar.zoneMinimizeToggle('left')
+      bridge.sidebar.zoneCollapseToggle('left')
       bridge.sidebar.paneTabExpand('left', 'notes')
     }).not.toThrow()
   })
@@ -685,7 +688,7 @@ describe('U-LIVE11 (f) — AD-2026-09-14-2: preload parity guard + the two searc
       selectDocument: () => {},
       togglePaneCollapse: () => {},
       paneVisibilityToggle: () => {},
-      zoneMinimizeToggle: () => {},
+      zoneCollapseToggle: () => {},
       paneTabExpand: () => {},
       openDocumentTab: () => {},
       // searchTabQuery intentionally absent → parity guard must throw.

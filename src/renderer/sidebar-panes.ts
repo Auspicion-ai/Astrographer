@@ -46,7 +46,7 @@ import {
 } from './pane-graph.js'
 import { createTemplateEditorPane, type TemplatePaneContext } from './template-pane.js'
 import { clickableClasses } from './render-shared.js'
-import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, zoneTrackVars, type LayoutState, type LayoutZoneName } from './layout-state.js'
+import { LAYOUT_PANE_ZONES, coerceLayout, defaultLayout, deriveLayout, isLayoutZoneName, zoneCollapsedOf, zoneTrackVars, type LayoutState, type LayoutZoneName } from './layout-state.js'
 // ⟨`PD-UI-14` §3 row 2 — the projection seam supplier.⟩ The write site composes the
 // TRACK record (`zoneTrackVars`) with the projection seam (`layoutCssVars`): both go
 // through ONE `setProperty` loop so the grid's tokens cannot drift apart.
@@ -55,7 +55,7 @@ import {
   createDragController,
   insertionIndexForPoint,
   movePane,
-  setZoneMinimized,
+  setZoneCollapsed,
   type DragController,
   type DragPoint,
   type DropResult,
@@ -650,7 +650,7 @@ export class SidebarPanes {
   /** U-SHELL-5 (C7) — the shell gutter resize controller. `onCommit` applies the
    *  clamped `ZoneLayout.size` and writes ONCE through `setLayout` at gesture
    *  end (W2-Q7/§2.1, never per-move); the `isResizable` gate is the §2.3
-   *  empty/minimized rule (a zone with no gutter).
+   *  empty/collapsed rule (a zone with no gutter).
    *
    *  ⟨`PD-UI-14` §3 row 3 — the VENDORED controller.⟩ The gesture state machine is
    *  the module's `createResizeController`; the fork supplies the seams (axis,
@@ -950,7 +950,7 @@ export class SidebarPanes {
       isResizable: (zone) => {
         const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
         const count = enabledZonePaneCounts(this.registry, base)[zone]
-        return isGutterResizable(count === 0, base.zones[zone]?.minimized === true)
+        return isGutterResizable(count === 0, zoneCollapsedOf(base.zones[zone]?.collapsed, count))
       },
       // §3 row 3's `sizeFor` seam: the FORK's own computed per-move size (§3.4(f) — the
       // caller routes into the ONE write seam; the geometry is `gutterSizeForPoint`'s).
@@ -2101,7 +2101,7 @@ export class SidebarPanes {
     // U-SHELL-8 (C11/V4-V5) — the content reconcile refreshes the `rag-`/`pane-`
     // content roots ONLY. A pane-visibility toggle that empties (or repopulates)
     // a zone must also re-emit that zone container's state-derived
-    // `is-empty`/`is-minimized` mirror; otherwise the zone's mirror drifts from
+    // `is-empty`/`is-collapsed` mirror; otherwise the zone's mirror drifts from
     // the census (V4/V5). The assembler computed the fresh classes into `env`'s
     // template, so sync them onto the LIVE zone nodes through the managed
     // state-slice channel — pane-additive, no `loadEnvelope`/teardown, stable
@@ -2239,7 +2239,7 @@ export class SidebarPanes {
    *  after a pane-additive content reconcile. `applyContentReconcile` reconciles
    *  only content roots (`rag-`/`pane-`), so a visibility toggle that empties or
    *  repopulates a zone leaves that zone container's state-derived
-   *  `is-empty`/`is-minimized` mirror stale (a fresh boot renders it correctly;
+   *  `is-empty`/`is-collapsed` mirror stale (a fresh boot renders it correctly;
    *  the toggle path did not). The assembler authored the fresh classes into the
    *  assembled template; apply them to the LIVE zone nodes through the managed
    *  `state-slice` channel (pane-additive — no `loadEnvelope`/teardown, `zone:*`
@@ -2252,17 +2252,34 @@ export class SidebarPanes {
    *  CHANGED zone lands its own journaled slice; in the common case a visibility
    *  toggle empties/repopulates exactly ONE zone, so one reconcile produces ONE
    *  journal entry. Correctness is unchanged: the mirror classes are identical,
-   *  no `loadEnvelope`/teardown. */
+   *  no `loadEnvelope`/teardown.
+   *
+   *  ⟨`U-1b` `ASM-U1b-9` — THE SECOND CARRIER IS RE-EMITTED IN THE SAME SLICE
+   *  (`G5` repair pass, finding F2).⟩ The zone container carries TWO carriers for
+   *  ONE state: the `is-collapsed` mirror CLASS (the extent rules read it) and
+   *  `props.collapsed` = `'true'`/`'false'` (THREE paints read the ATTRIBUTE it
+   *  renders: the glyph's `[collapsed='true'] + .zone-collapse` combinator, the
+   *  arrangement-axis `hidden` rule, and the collapsed zone's hidden gutter
+   *  affordance). `pane-graph.ts` authors both once, at assembly — so a content
+   *  reconcile that changes the DERIVATION (the operator disables the last pane of
+   *  an occupied zone, or re-enables one) left the class fresh and the attribute
+   *  stale, and the two carriers disagreed. The value re-emitted here is the
+   *  assembled container's OWN `props.collapsed` — the SAME authored source the
+   *  classes came from, never a second derivation (`zoneCollapsedOf` is not called
+   *  in this method), and both mutation targets ride ONE `state-slice` op, so the
+   *  pair lands atomically and journals as ONE entry. Fail-soft like its
+   *  neighbour: an unreadable container yields the class-derived value and no
+   *  throw. */
   private syncZoneMirrors(envelope: LegacyInitialData): void {
     if (this.runtime == null) return
     const children = (envelope.template?.root?.children ?? []) as Array<{
-      props?: { id?: unknown }
+      props?: { id?: unknown; collapsed?: unknown }
       placement?: { placementName?: unknown }
       css?: { classes?: unknown }
     }>
     // W2-N8 — single gather pass: collect every zone whose desired mirror
     // diverges from the LIVE node, in LAYOUT_PANE_ZONES order.
-    const changed: { zone: LayoutZoneName; desired: string[] }[] = []
+    const changed: { zone: LayoutZoneName; desired: string[]; collapsed: string }[] = []
     for (const zone of LAYOUT_PANE_ZONES) {
       const container = children.find(
         (c) => c?.placement?.placementName === zone || c?.props?.id === `zone:${zone}`,
@@ -2270,32 +2287,56 @@ export class SidebarPanes {
       const desired = Array.isArray(container?.css?.classes)
         ? (container.css.classes as unknown[]).map(String)
         : []
-      if (sameClassSet(this.currentZoneMirror(zone), desired)) continue
-      changed.push({ zone, desired })
+      // `ASM-U1b-9` — the attribute carrier, read off the SAME assembled node the
+      // classes come from. An envelope that carries no authored carrier (never the
+      // assembler's output — it writes all four) falls back to the class, which is
+      // the same one computation, not a re-derivation.
+      const authoredCarrier = container?.props?.collapsed
+      const desiredCollapsed =
+        typeof authoredCarrier === 'string'
+          ? authoredCarrier
+          : desired.includes('is-collapsed')
+            ? 'true'
+            : 'false'
+      const live = this.currentZoneMirror(zone)
+      if (sameClassSet(live.classes, desired) && live.collapsed === desiredCollapsed) continue
+      changed.push({ zone, desired, collapsed: desiredCollapsed })
     }
     if (changed.length === 0) return
     // W2-N8 — apply each changed zone through the managed `state-slice` channel.
+    // BOTH carriers in ONE op (`ASM-U1b-9`): the class a content reconcile must
+    // refresh, and the attribute three paints read.
     for (const w of changed) {
       this.runtime.applyCommand({
         kind: 'state-slice',
         node: `zone:${w.zone}`,
-        mutation: [{ targetProp: 'css.classes', mode: 'replace', value: w.desired }],
+        mutation: [
+          { targetProp: 'css.classes', mode: 'replace', value: w.desired },
+          { targetProp: 'props.collapsed', mode: 'replace', value: w.collapsed },
+        ],
       })
     }
   }
 
-  /** The live `zone:<name>` container's resolved mirror classes (empty when the
-   *  runtime/zone is not resolvable — never throws). */
-  private currentZoneMirror(zone: LayoutZoneName): string[] {
-    if (this.runtime == null) return []
+  /** The live `zone:<name>` container's resolved mirror carriers — its classes
+   *  (empty when the runtime/zone is not resolvable) and its authored
+   *  `props.collapsed` attribute carrier (`''` when the live state carries none).
+   *  Never throws. */
+  private currentZoneMirror(zone: LayoutZoneName): { classes: string[]; collapsed: string } {
+    if (this.runtime == null) return { classes: [], collapsed: '' }
     try {
       const states = this.runtime.nodeState(`zone:${zone}`).states as Array<{
         css?: { classes?: unknown }
+        props?: { collapsed?: unknown }
       }>
       const classes = states[0]?.css?.classes
-      return Array.isArray(classes) ? classes.map(String) : []
+      const collapsed = states[0]?.props?.collapsed
+      return {
+        classes: Array.isArray(classes) ? classes.map(String) : [],
+        collapsed: typeof collapsed === 'string' ? collapsed : '',
+      }
     } catch {
-      return []
+      return { classes: [], collapsed: '' }
     }
   }
 
@@ -3287,10 +3328,10 @@ export class SidebarPanes {
       togglePaneCollapse: (id: string) => this.togglePaneCollapse(id),
       // LIVE-12/C — the in-pane pane-visibility toggle (flip + persist).
       paneVisibilityToggle: (id: string) => this.togglePaneVisibility(id),
-      // U-SHELL-4 (C12) — the zone minimize/expand + tab-expand/select seams
-      // (the inline `pane-zone-minimize-toggle`/`pane-tab-expand` handler bodies
+      // U-SHELL-4 (C12) / `U-1b` — the zone collapse/expand + tab-expand/select
+      // seams (the inline `zone-collapse-toggle`/`pane-tab-expand` handler bodies
       // reach them). Each commits ONE `setLayout` write-through.
-      zoneMinimizeToggle: (zone: string) => this.zoneMinimizeToggle(zone),
+      zoneCollapseToggle: (zone: string) => this.zoneCollapseToggle(zone),
       paneTabExpand: (zone: string, paneId: string) => this.paneTabExpand(zone, paneId),
       // U-PARITY-DOCNAV — the doc-nav folder toggle seam (the
       // `pane-doc-nav-toggle` handler body reaches it; same add/remove
@@ -3471,30 +3512,37 @@ export class SidebarPanes {
     }
   }
 
-  /** U-SHELL-4 (C12) — toggle a zone's stored `minimized` flag. A non-empty
-   *  zone minimizes to a tab strip; an empty zone ignores minimize (F5 — C11
-   *  empty-hidden wins). Commits ONCE through `setLayout`. A malformed zone is a
-   *  NO-OP. SYNCHRONOUS. */
-  private zoneMinimizeToggle(zone: string): void {
+  /** U-SHELL-4 (C12) — toggle a zone's collapsed STATE (`U-1b` `C-3`). The
+   *  current effect is the ONE derivation (`zoneCollapsedOf`: the operator's
+   *  statement when one is stated, else the enabled+placed census), and the act
+   *  writes its NEGATION as an EXPLICIT boolean — ONE `setLayout`, ONE member at
+   *  ONE address, `size` untouched, the member never deleted (`ASM-U1b-1`). An
+   *  OCCUPIED zone collapses to its tab strip; an EMPTY zone's statement is
+   *  still written (stating `false` on an empty zone is the point — `C-3`), so
+   *  there is no emptiness guard here. A malformed zone is a NO-OP (zero
+   *  writes). SYNCHRONOUS. */
+  private zoneCollapseToggle(zone: string): void {
     if (!isLayoutZoneName(zone)) return
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
-    // H2 (adversarial) — the acceptance census is the SAME enabled+placed count
-    // the assembler uses for `is-empty` (post overlay + default fallback), NOT
-    // the raw overlay: a fallback-placed pane makes the zone minimizable.
+    // H2 (adversarial) — the census is the SAME enabled+placed count the
+    // assembler uses for `is-empty`/`is-collapsed` (post overlay + default
+    // fallback), NOT the raw overlay.
     const count = enabledZonePaneCounts(this.registry, base)[zone]
-    this.setLayout(setZoneMinimized(base, zone, base.zones[zone].minimized !== true, count))
+    const current = zoneCollapsedOf(base.zones[zone].collapsed, count)
+    this.setLayout(setZoneCollapsed(base, zone, !current))
   }
 
-  /** U-SHELL-4 (C12) — expand a minimized zone + select the clicked tab's pane.
-   *  Expands (`minimized:false`, restoring the retained `size`) and commits ONCE
-   *  through `setLayout`. The pane's `data-pane-id` identifies the selection (the
-   *  live selection highlight is deferred to the battery block — no
-   *  `LayoutState` selection field). A malformed zone is a NO-OP. SYNCHRONOUS. */
+  /** U-SHELL-4 (C12) — expand a collapsed zone + select the clicked tab's pane.
+   *  Expands by writing `collapsed: false` at the ZONE's address (ONE leaf, ONE
+   *  `setLayout`); the retained `size` is never touched, so expanding costs no
+   *  size write and nothing is restored. The pane's `data-pane-id` identifies the
+   *  selection (the live selection highlight is deferred to the battery block —
+   *  no `LayoutState` selection field); nothing is written at the pane's address.
+   *  A malformed zone/pane id is a NO-OP. SYNCHRONOUS. */
   private paneTabExpand(zone: string, paneId: string): void {
     if (!isLayoutZoneName(zone) || typeof paneId !== 'string' || paneId === '') return
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
-    const count = base.panes.filter((p) => p.zone === zone).length
-    this.setLayout(setZoneMinimized(base, zone, false, count))
+    this.setLayout(setZoneCollapsed(base, zone, false))
   }
 
   /** U-SHELL-4 (C4) — the shell pointer wiring entry points. The renderer's
@@ -3652,13 +3700,13 @@ export class SidebarPanes {
    *  refuses with `'no-gesture'` where no gesture is recorded, so the reset is the
    *  FORK's route over the ONE write path: it resolves the zone's pinned default,
    *  narrows it through the same clamp the module uses, and commits ONCE — honouring
-   *  the SAME empty/minimized resizability gate the gesture path honours. Returns the
+   *  the SAME empty/collapsed resizability gate the gesture path honours. Returns the
    *  committed size, or `null` where the gate declined. */
   resetGutter(zone?: LayoutZoneName): number | null {
     if (!isLayoutZoneName(zone)) return null
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
     const count = enabledZonePaneCounts(this.registry, base)[zone]
-    if (isGutterResizable(count === 0, base.zones[zone]?.minimized === true) !== true) return null
+    if (isGutterResizable(count === 0, zoneCollapsedOf(base.zones[zone]?.collapsed, count)) !== true) return null
     const size = clampGutterSize(zone, defaultLayout().zones[zone].size)
     this.commitGutterSize(zone, size)
     return size

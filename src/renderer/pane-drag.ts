@@ -2,7 +2,7 @@
 // + the pure C4/C11/C12 model/proximity helpers (docs/specs/unit-u-shell-4-
 // drag-relocate.md §2.5 pins). PURE where it can be: `movePane`/
 // `legalZonesForScope`/`distanceToZoneBox`/`zoneOrientation`/
-// `setZoneMinimized` are total functions over the serialized `LayoutState`; the
+// `setZoneCollapsed` are total functions over the serialized `LayoutState`; the
 // pointer `createDragController` owns the drag-time reveal state and commits
 // ONE `onRevealChange` write per threshold crossing (W2-Q7/F4), never a
 // per-frame stream. No DOM/Electron import (node-testable).
@@ -242,25 +242,27 @@ export function zoneOrientation(zone: LayoutZoneName): 'vertical' | 'horizontal'
   return zone === 'top' || zone === 'bottom' ? 'horizontal' : 'vertical'
 }
 
-/** C12 — set (or clear) a zone's stored `minimized` flag, RETAINING its `size`
- *  (the retained size restores on expand). F5: minimizing an EMPTY zone is a
- *  no-op (C11 empty-hidden wins — no tab strip). PURE + TOTAL. */
-export function setZoneMinimized(
+/** C12 — set a zone's `collapsed` STATEMENT, RETAINING its `size` (the retained
+ *  size is what an expand restores, and it costs ZERO writes). ⟨Unit `U-1b`
+ *  (D-22 (1)) — the member is the foundation's `collapsed?: boolean`, the value
+ *  is an EXPLICIT boolean the operator's word states, and it is **never deleted**
+ *  (`ASM-U1b-1`): stating `false` on an EMPTY zone is the point (the operator's
+ *  "expanded" overturning the derivation), so there is **no emptiness guard and
+ *  no census parameter** — the pre-statement emptiness rule belonged to the
+ *  required total boolean this replaces. `size` is
+ *  untouched (`forking.md` §7.1 lines 480-481).⟩ PURE + TOTAL: a malformed
+ *  layout coerces, and an unknown zone is a NO-OP returning the coerced value
+ *  unchanged (zero writes). */
+export function setZoneCollapsed(
   layout: LayoutState,
   zone: LayoutZoneName,
-  minimized: boolean,
-  paneCount?: number,
+  collapsed: boolean,
 ): LayoutState {
   const base = coerceLayout(layout)
   if (!isLayoutZoneName(zone)) return base
-  const count =
-    typeof paneCount === 'number' && Number.isFinite(paneCount)
-      ? paneCount
-      : base.panes.filter((p) => p.zone === zone).length
-  const next = minimized === true && count > 0
   const zones = {
     ...base.zones,
-    [zone]: { ...base.zones[zone], minimized: next },
+    [zone]: { ...base.zones[zone], collapsed: collapsed === true },
   } as LayoutState['zones']
   return { ...base, zones }
 }

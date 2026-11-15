@@ -282,7 +282,7 @@ function installLayout(): void {
 /** U-SHELL-9a §2.7 — true when the pointerdown target is an interactive control
  *  (an `input`/`button`/`a`/`select`/`textarea` or a node carrying `on:click`/
  *  `on-click`/`data-handler`), so a click on a control is never hijacked into a
- *  pane drag (F9). §2.4: the collapse-toggle, minimize-toggle and tab controls
+ *  pane drag (F9). §2.4: the collapse-toggle, zone-collapse and tab controls
  *  are provident click handlers and stay clickable. TOTAL — never throws. */
 function isInteractiveControl(target: Element | null): boolean {
   if (target == null) return false
@@ -1544,7 +1544,7 @@ async function main(): Promise<void> {
   })
   // Unit U-SHELL-N7 (W2-N7) — attach the shell pointer wiring ONCE after the
   // host is constructed. This hooks the C7 gutter resize + C4 drag/reorder/
-  // relocate gestures (with C11 reveal/C12 minimize) to the existing host seams;
+  // relocate gestures (with C11 reveal/C12 zone collapse) to the existing host seams;
   // the host boot below populates the layout the gestures read. Shell chrome
   // only — the wiring never re-renders or writes the graph itself (§2.7).
   installShellPointers(host)

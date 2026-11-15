@@ -620,7 +620,7 @@ async function ufStageSig(h) {
 /** The rendered app-graph pane frames (identity, box, body-node census).
  *  §2.3 `H-1` clauses 1/3/4: this is the FRAME read every frame-based row takes,
  *  so it is also the read whose caller must first put `zone:left` back to its
- *  baseline — an earlier block's own `is-minimized` minimize replaces the pane
+ *  baseline — an earlier block's own `is-collapsed` zone collapse replaces the pane
  *  stack with the tab strip BY DESIGN, and a frame read taken against that state
  *  would report the driver's own artifact as the pane's absence (`V-7`/`M-6`).
  *  The restore is therefore taken PER BLOCK by the block-runner's pre-flight
@@ -725,7 +725,7 @@ async function ufLayoutReading(h) {
  *  range with `scrollTop` ADVANCING INSIDE THAT BOX (the scrolled element is NAMED:
  *  the zone's own content box, never the document). THE SCOPE IS THE FOUR CONTAINERS
  *  (`#zone:left|right|top|bottom`) — never every element carrying `zone`: the
- *  four AUTHORED GUTTER AFFORDANCES and the zone-minimize controls carry that same
+ *  four AUTHORED GUTTER AFFORDANCES and the zone-collapse controls carry that same
  *  attribute and are containers of nothing (a gutter's box can never hold a scroll
  *  range), so they are printed BESIDE the reading under the excluded list, never graded
  *  as zone containers. Driven by a PAGE-LEVEL scroll attempt whose own advance AND the
@@ -733,7 +733,15 @@ async function ufLayoutReading(h) {
  *  property. A zone whose content does NOT exceed its box has no range to exercise and
  *  says so per zone (`contentExceedsTheBox`), so the "any overflow scrolls inside" half
  *  is graded on the zones that HAVE an overflow — and the reading's own non-vacuity is
- *  carried separately (`anyInternalScrollRangeExercised`). */
+ *  carried separately (`anyInternalScrollRangeExercised`).
+ *
+ *  ⟨Unit `U-1b` `C-6` — THE ONE RULED CLAIM THAT MOVES (`L3` finding `N5`).⟩ `C-4`
+ *  gives a COLLAPSED zone `overflow: hidden` on its arrangement axis, so the landed
+ *  universal predicate ("EVERY zone's `overflow-y` is `auto`/`scroll`") is re-pinned to
+ *  the EXPANDED zones and the collapsed arm gains the `hidden` reading it never had.
+ *  Each container's AUTHORED collapse carrier (`collapsed="true"|"false"`,
+ *  `ASM-U1b-9`) is read HERE, so the pin grades the model rather than a guess. This is
+ *  a RE-PIN of this row, never a new matrix slot (`R-10`: `MATRIX_ROWS` stays 8). */
 async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
   return h.cdp.evaluate(`(()=>{
     const box=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
@@ -751,7 +759,7 @@ async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
       z.scrollTop=Math.min(40,z.scrollHeight-z.clientHeight+40);
       const st1=Math.round(z.scrollTop);
       z.scrollTop=st0;
-      return {id:c.id,zone:c.zone,scrolledElement:'the zone container itself ('+c.id+', its own content box)',position:cs.position,display:cs.display,overflowY:cs.overflowY,scrollHeight:z.scrollHeight,clientHeight:z.clientHeight,contentExceedsTheBox:z.scrollHeight>z.clientHeight+1,scrollTopBefore:st0,scrollTopAfter:st1,scrollTopAdvanced:st1>st0};
+      return {id:c.id,zone:c.zone,scrolledElement:'the zone container itself ('+c.id+', its own content box)',position:cs.position,display:cs.display,overflowY:cs.overflowY,collapsed:String(z.getAttribute('collapsed')),classes:String(z.className||''),scrollHeight:z.scrollHeight,clientHeight:z.clientHeight,contentExceedsTheBox:z.scrollHeight>z.clientHeight+1,scrollTopBefore:st0,scrollTopAfter:st1,scrollTopAdvanced:st1>st0};
     });
     window.scrollTo(0,0);
     if(document.scrollingElement)document.scrollingElement.scrollTop=0;
@@ -771,7 +779,7 @@ async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
       pageCannotOverflow:pageAfter.docScrollHeight<=pageAfter.docClientHeight+1,
       zonesUnmoved,zoneBoxesBoundedByTheViewport:bounded,anyInternalScrollRangeExercised,
       scrolledElement:'each of the four zone CONTAINERS (its own content box), never the document',
-      zoneScope:'the four pane-zone containers; every OTHER element carrying zone (the four authored gutter affordances, the zone-minimize controls) is listed under the excluded list and is not graded as a zone container',
+      zoneScope:'the four pane-zone containers; every OTHER element carrying zone (the four authored gutter affordances, the zone-collapse controls) is listed under the excluded list and is not graded as a zone container',
       scope:'the assembled renderer surface this driver spawned'
     }})()`)
 }
@@ -1255,44 +1263,50 @@ async function ufRestorePaneVisibility(h, paneId) {
 }
 
 /** §2.3 `H-1` clause 1 — `zone:left`'s state READ AS A STATE, never inferred
- *  from frame absence (`V-7`/`M-6`): `expanded` (stack painted) · `minimized`
+ *  from frame absence (`V-7`/`M-6`): `expanded` (stack painted) · `collapsed`
  *  (the stack is REPLACED BY THE TAB STRIP BY DESIGN — `uf_panes_8` asserts
- *  `minimized.frames===0`) · `absent`. A minimized zone may NEVER be reported as
- *  "pane absent". */
+ *  `collapsed.frames===0`) · `absent`. A collapsed zone may NEVER be reported as
+ *  "pane absent".
+ *
+ *  ⟨Unit `U-1b` `C-6` (D-14/D-16) — the vocabulary re-grain: the paint class and
+ *  the state token both read the COLLAPSE word (`is-collapsed` / `'collapsed'`),
+ *  because the app's one collapsed state carries it (`C-5`). The rows' claims do
+ *  not move — this helper's reading says the same thing about the same state.⟩ */
 async function ufZoneState(h, zone = 'left') {
-  return h.cdp.evaluate(`(()=>{const z=document.getElementById(${JSON.stringify(`zone:${zone}`)});if(!z)return {zone:${JSON.stringify(zone)},zoneState:'absent',cls:null,tabs:0};const cls=String(z.className||'');return {zone:${JSON.stringify(zone)},zoneState:(/is-minimized/.test(cls)?'minimized':'expanded'),cls:cls,tabs:document.querySelectorAll('[id^="zone-tab-${zone}-"]').length}})()`)
+  return h.cdp.evaluate(`(()=>{const z=document.getElementById(${JSON.stringify(`zone:${zone}`)});if(!z)return {zone:${JSON.stringify(zone)},zoneState:'absent',cls:null,tabs:0};const cls=String(z.className||'');return {zone:${JSON.stringify(zone)},zoneState:(/is-collapsed/.test(cls)?'collapsed':'expanded'),cls:cls,tabs:document.querySelectorAll('[id^="zone-tab-${zone}-"]').length}})()`)
 }
 
-/** §2.3 `H-1` clauses 2/3 — the per-block zone restore: re-expand a MINIMIZED
+/** §2.3 `H-1` clauses 2/3 — the per-block zone restore: re-expand a COLLAPSED
  *  `zone:left` with a REAL hit-tested gesture so a frame-based row never reads
- *  `frames=0` produced by an EARLIER block's minimize. Reachable FROM ANY BLOCK
- *  (not once per battery — `V-6`); reports the state it started from and left. */
+ *  `frames=0` produced by an EARLIER block's zone collapse. Reachable FROM ANY
+ *  BLOCK (not once per battery — `V-6`); reports the state it started from and
+ *  left. */
 async function ufRestoreZoneState(h, zone = 'left') {
   const before = await ufZoneState(h, zone)
-  if (before.zoneState !== 'minimized') return { before, after: before, path: 'already-expanded', restored: true }
-  const path = (await ufRealClick(h, `#zone-minimize-${zone}`)).path
+  if (before.zoneState !== 'collapsed') return { before, after: before, path: 'already-expanded', restored: true }
+  const path = (await ufRealClick(h, `#zone-collapse-${zone}`)).path
   await sleep(1400)
   const after = await ufZoneState(h, zone)
-  return { before, after, path, restored: after.zoneState !== 'minimized' }
+  return { before, after, path, restored: after.zoneState !== 'collapsed' }
 }
 
 /** §2.3 `H-1` — ensure an app-graph pane is EXPANDED (a collapsed pane renders
  *  no body) so its controls exist. §2.3 `H-1` clause 1: the `zone:left` state is
- *  read AS A STATE first, so a MINIMIZED zone (the `is-minimized` class — the
+ *  read AS A STATE first, so a COLLAPSED zone (the `is-collapsed` class — the
  *  pane stack is REPLACED BY THE TAB STRIP BY DESIGN) is re-expanded per block
  *  and never reported as a missing pane (`V-7`/`M-6`). */
 async function ufEnsurePaneExpanded(h, paneId) {
   const zoneCls = await h.cdp.evaluate(`String((document.getElementById('zone:left')||{}).className||'')`)
-  const zoneIsMinimized = /is-minimized/.test(zoneCls)
+  const zoneIsCollapsed = /is-collapsed/.test(zoneCls)
   const before = await ufZoneState(h, 'left')
-  const zr = (zoneIsMinimized || before.zoneState === 'minimized') ? await ufRestoreZoneState(h, 'left') : before
+  const zr = (zoneIsCollapsed || before.zoneState === 'collapsed') ? await ufRestoreZoneState(h, 'left') : before
   const zs = zr.after ? zr.after.zoneState : zr.zoneState
   const frames = await ufPaneFrames(h)
   const f = frames.find((x) => x.pid === paneId)
   if (!f) {
     // §2.3 `H-1` clause 4 / §13.4 / finding `C-7` — before reporting the pane
     // ABSENT, distinguish the three states the clause names: the zone is `zs` (NOT
-    // minimized, above), so a missing frame is either a PERSISTED OFF
+    // collapsed, above), so a missing frame is either a PERSISTED OFF
     // pane-visibility state (its frame is not rendered BY DESIGN — restore it with
     // a REAL hit-tested click on the operator control and re-read) or a pane that is
     // genuinely not rendered. ⟨`C-7`: THE STATE TRAVELS THROUGH.⟩ The result the
@@ -1312,17 +1326,17 @@ async function ufEnsurePaneExpanded(h, paneId) {
     if (vis.before === 'false') {
       const refetched = (await ufPaneFrames(h)).find((x) => x.pid === paneId)
       if (refetched) return { pid: paneId, present: true, path: 'restored-visibility(zone:' + zs + ')', restored: vis, zone: zs, zoneState: zs }
-      return { pid: paneId, present: false, path: 'disabled-restore-failed', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized); the PERSISTED pane-visibility state for "${paneId}" was ${vis.before} and the real hit-tested restore (path=${vis.path}) left it ${vis.after} — no .pane-frame[data-pane-id="${paneId}"] could be restored (the state is NAMED: a driver-side state, never an app FAIL)` }
+      return { pid: paneId, present: false, path: 'disabled-restore-failed', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT collapsed); the PERSISTED pane-visibility state for "${paneId}" was ${vis.before} and the real hit-tested restore (path=${vis.path}) left it ${vis.after} — no .pane-frame[data-pane-id="${paneId}"] could be restored (the state is NAMED: a driver-side state, never an app FAIL)` }
     }
     if (vis.before === null) {
       // (iii) NO CONTROL WAS RENDERED — a state of its own, never the bare
       // `absent`: the missing-control token travels through from
       // `ufRestorePaneVisibility` (which could not touch what is not rendered).
-      return { pid: paneId, present: false, path: 'missing-control (#operator-pane-visibility-' + paneId + ' is not rendered — NOT restored)', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized) and no .pane-frame[data-pane-id="${paneId}"] is rendered while NO #operator-pane-visibility-${paneId} control is rendered either — ${vis.path} (the state is NAMED: there was no control to touch, so "NOT restored" is the honest reading; a driver-side state, never an app FAIL)` }
+      return { pid: paneId, present: false, path: 'missing-control (#operator-pane-visibility-' + paneId + ' is not rendered — NOT restored)', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT collapsed) and no .pane-frame[data-pane-id="${paneId}"] is rendered while NO #operator-pane-visibility-${paneId} control is rendered either — ${vis.path} (the state is NAMED: there was no control to touch, so "NOT restored" is the honest reading; a driver-side state, never an app FAIL)` }
     }
     // (iv) THE PANE IS ENABLED AND THE FRAME IS GENUINELY ABSENT — the third state,
-    // distinct from (iii) above and from a minimized zone (`zs` is NOT minimized).
-    return { pid: paneId, present: false, path: 'enabled-no-frame', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT minimized); the operator visibility control for "${paneId}" IS rendered and reads ${JSON.stringify(vis.before)} (the pane is ENABLED, no persisted-OFF state to restore — restore path=${vis.path}) and no .pane-frame[data-pane-id="${paneId}"] is rendered — the frame is genuinely absent while the pane is enabled (a driver-side state, never an app FAIL)` }
+    // distinct from (iii) above and from a collapsed zone (`zs` is NOT collapsed).
+    return { pid: paneId, present: false, path: 'enabled-no-frame', restored: vis, zone: zs, zoneState: zs, detail: `zone:left is ${zs} (NOT collapsed); the operator visibility control for "${paneId}" IS rendered and reads ${JSON.stringify(vis.before)} (the pane is ENABLED, no persisted-OFF state to restore — restore path=${vis.path}) and no .pane-frame[data-pane-id="${paneId}"] is rendered — the frame is genuinely absent while the pane is enabled (a driver-side state, never an app FAIL)` }
   }
   if (!f.collapsed) return { pid: paneId, present: true, path: 'already-expanded', zone: zs, zoneState: zs }
   const r = await ufRealClick(h, `#pane-collapse-${paneId}`)
@@ -1342,7 +1356,7 @@ async function ufEnsurePaneExpanded(h, paneId) {
  *  block REPAIRS the precondition those rows exist to assert and their verdicts
  *  become uninformative (the same driver artifact in the other direction, which
  *  this constant's own comment already named for OPERATOR panes). The pre-flight
- *  therefore restores ONLY the DRIVER-CREATED baseline (the `zone:left` minimized/
+ *  therefore restores ONLY the DRIVER-CREATED baseline (the `zone:left` collapsed/
  *  expanded state) and READS the persisted visibility set as a state, reporting it
  *  without touching it; a row that genuinely cannot be driven from the persisted
  *  state reports `NOT-DRIVEN` with that state NAMED (never a silent FAIL). */
@@ -1352,32 +1366,33 @@ const UF_BASELINE_PANES = ['doc-nav', 'search']
 function ufZoneVocabularyOk(zoneId, cls) {
   if (!UF_ZONE_ID_RE.test(String(zoneId))) return false
   // The app's own NON-DRIFT zone classes: an EMPTY class list is the clean-boot
-  // baseline, the minimized marker is the state this restore exists for, and
+  // baseline, the COLLAPSED marker is the state this restore exists for, and
   // `is-revealed` is the shell drag controller's own drag-time reveal (written by
   // a pane-drag gesture and cleared at its end). Only a class list carrying NONE
   // of these is a vocabulary drift, named as a precondition instead of silently
   // restored — or silently reported as the pane's absence.
   const c = String(cls == null ? '' : cls)
-  return c === '' || UF_ZONE_MINIMIZED_RE.test(c) || /\bis-revealed\b/.test(c)
+  return c === '' || UF_ZONE_COLLAPSED_RE.test(c) || /\bis-revealed\b/.test(c)
 }
 
 /** §2.3 `H-1` clause 1/3 — THE ZONE-STATE TOKEN SET the driver's own state
  *  restore is stated against, in CODE POSITION so the vocabulary cannot drift
  *  into prose: `zone:left` is the sidebar zone whose rendered state every
- *  frame-based row depends on, and `is-minimized` is the class that REPLACES its
+ *  frame-based row depends on, and `is-collapsed` is the class that REPLACES its
  *  pane stack with the tab strip BY DESIGN (`uf_panes_8` asserts
- *  `minimized.frames===0`). Both are read as a STATE before any restore, and the
- *  restore below is reachable PER BLOCK — never once per battery (`V-6`/`V-7`). */
+ *  `collapsed.frames===0`). Both are read as a STATE before any restore, and the
+ *  restore below is reachable PER BLOCK — never once per battery (`V-6`/`V-7`).
+ *  ⟨Unit `U-1b` `C-6`: the token moved with the paint class it reads.⟩ */
 const UF_ZONE_ID_RE = /zone:left/
-const UF_ZONE_MINIMIZED_RE = /is-minimized/
+const UF_ZONE_COLLAPSED_RE = /is-collapsed/
 
 /** §2.3 `H-1` clauses 1/2/3/4 + §13.4 — THE PER-BLOCK PRE-FLIGHT RESTORE. Called
  *  by the block-runner BEFORE each requested block measures, so the driver's own
- *  mutable state (a MINIMIZED zone:left; a pane VISIBILITY state a prior block
+ *  mutable state (a COLLAPSED zone:left; a pane VISIBILITY state a prior block
  *  flipped and PERSISTED) is returned to the baseline the isolated run starts
- *  from. The zone state is read AS A STATE (zoneState/zoneWasMinimized below —
- *  the zone:left element's is-minimized class is restored, never inferred from
- *  frame absence), and the minimized precondition is read BEFORE any restore so
+ *  from. The zone state is read AS A STATE (zoneState/zoneWasCollapsed below —
+ *  the zone:left element's is-collapsed class is restored, never inferred from
+ *  frame absence), and the collapsed precondition is read BEFORE any restore so
  *  the state the block started from is named either way. Each restore is a real
  *  hit-tested gesture on the control its mutation used; a state that could NOT be
  *  restored is recorded with the precondition named (the block then reports
@@ -1395,8 +1410,8 @@ async function ufBlockPreflightRestore(h) {
     // a drifted zone id or a stale class is NAMED as the precondition instead of
     // being silently restored — or silently reported as the pane's absence.
     if (!ufZoneVocabularyOk(zoneId, zoneBefore.cls)) out.error = `zone state vocabulary check failed for ${zoneId} (cls=${JSON.stringify(zoneBefore.cls)}) — the restore is skipped and the block reports its own NOT-DRIVEN with this precondition`
-    const zoneWasMinimized = /is-minimized/.test(String(zoneBefore.cls || '')) || zoneBefore.zoneState === 'minimized'
-    if (zoneWasMinimized) {
+    const zoneWasCollapsed = /is-collapsed/.test(String(zoneBefore.cls || '')) || zoneBefore.zoneState === 'collapsed'
+    if (zoneWasCollapsed) {
       const zr = await ufRestoreZoneState(h, UF_BASELINE_ZONE)
       const afterState = zr.after ? zr.after.zoneState : null
       out.zone = { zone: UF_BASELINE_ZONE, zoneId, before: zoneBefore.zoneState, after: afterState, path: zr.path, restored: zr.restored }
@@ -5004,7 +5019,7 @@ export const MATRIX_ROWS = [
   { row: 'U-3', block: 'uf_panes_12', blocks: ['uf_panes_14'], dclass: 'D-interaction', delta: 'the pane-drag gesture surface is the pane HEADER only — a body click is never hijacked (F-1)' },
   { row: 'U-4', block: 'uf_layout_10', dclass: 'D-visual', delta: 'empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (F-2)' },
   { row: 'U-5', block: 'uf_layout_10', dclass: 'D-visual', delta: "an empty side zone's grid TRACK collapses and the stage reclaims the width (F-3)" },
-  { row: 'U-6', block: 'uf_panes_8', dclass: 'D-interaction', delta: 'a pane-tab click after zone minimize re-expands the zone (visible)' },
+  { row: 'U-6', block: 'uf_panes_8', dclass: 'D-interaction', delta: 'a pane-tab click after zone collapse re-expands the zone (visible)' },
   { row: 'U-7', block: 'uf_hist_6', dclass: 'D-state', delta: 'a history-entry click reverts the content to that journal point' },
   { row: 'U-8', block: 'uf_tabs_3', dclass: 'D-state', delta: 'closing the LAST tab yields the default page (never an empty stage)' },
 ]
@@ -6065,20 +6080,20 @@ const BLOCKS = {
   // row is recorded `proxyPASS:true` with `pass:false` — a synthetic driver can
   // never be an accepted PASS (§6.1).
   user3_collapse_orientation: async (h) => {
-    const zmin = await h.cdp.evaluate(`!!document.querySelector('#zone-minimize-left,.pane-zone-minimize')`)
+    const zcol = await h.cdp.evaluate(`!!document.querySelector('#zone-collapse-left,.zone-collapse')`)
     const preFrames = await h.cdp.evaluate(`document.querySelectorAll('.pane-frame[data-pane-id]').length`)
     const preTabs = await h.cdp.evaluate(`document.querySelectorAll('.pane-tab').length`)
     const surface = await ufSurfaceTarget(h)
-    if (!zmin) return rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After minimizing, the pane-tab strips render as a VERTICAL column', 'no sidebar zone-minimize control', { path: 'missing', proxy: 'synthetic .click() driver only', ok: false, surface })
+    if (!zcol) return rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After collapsing, the pane-tab strips render as a VERTICAL column', 'no sidebar zone-collapse control', { path: 'missing', proxy: 'synthetic .click() driver only', ok: false, surface })
     // SYNTHETIC driver ([DIAG]-classified): recorded as a proxy, never a real gesture.
-    await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone-minimize-left')||document.querySelector('.pane-zone-minimize');if(!b)return 'no-btn';b.click();return 'clicked'})()`)
+    await h.cdp.evaluate(`(()=>{const b=document.getElementById('zone-collapse-left')||document.querySelector('.zone-collapse');if(!b)return 'no-btn';b.click();return 'clicked'})()`)
     await sleep(900)
-    const tabs = await h.cdp.evaluate(`(()=>{const ts=[...document.querySelectorAll('.pane-tab')].map((el,i)=>{const r=el.getBoundingClientRect();return {i,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}});return {ts,frameCount:document.querySelectorAll('.pane-frame[data-pane-id]').length,zoneMin:[...document.querySelectorAll('[zone="left"],.pane-zone-minimize')].map(z=>({tag:z.tagName,id:z.id||'',cls:String(z.className)}))}})()`)
+    const tabs = await h.cdp.evaluate(`(()=>{const ts=[...document.querySelectorAll('.pane-tab')].map((el,i)=>{const r=el.getBoundingClientRect();return {i,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}});return {ts,frameCount:document.querySelectorAll('.pane-frame[data-pane-id]').length,zoneCol:[...document.querySelectorAll('[zone="left"],.zone-collapse')].map(z=>({tag:z.tagName,id:z.id||'',cls:String(z.className)}))}})()`)
     const t = Array.isArray(tabs.ts) ? tabs.ts : []
     // vertical re-orientation == distinct increasing y, uniform small height, same x
     const vertical = t.length >= 2 && new Set(t.map((o) => o.y)).size === t.length && new Set(t.map((o) => o.h)).size === 1 && new Set(t.map((o) => o.x)).size === 1
     return {
-      ...rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After minimizing, the pane-tab strips render as a VERTICAL column', `sidebar minimized by a SYNTHETIC .click() ([DIAG] proxy driver): pane-frames ${preFrames}->${tabs.frameCount}, .pane-tab strips ${preTabs}->${t.length}; vertical=${vertical} (distinct-y, uniform-h=${t[0] ? t[0].h : '?'}, equal-x); strips=${JSON.stringify(t.slice(0, 8))}; zones/min=${JSON.stringify(tabs.zoneMin)}`, { path: 'synthetic-click([DIAG])', proxy: 'synthetic .click() driver + geometry/computed-style oracle', ok: vertical, surface }),
+      ...rowResult({row:'UF-KEEP-1',dclass:'D-visual'}, 'After collapsing, the pane-tab strips render as a VERTICAL column', `sidebar collapsed by a SYNTHETIC .click() ([DIAG] proxy driver): pane-frames ${preFrames}->${tabs.frameCount}, .pane-tab strips ${preTabs}->${t.length}; vertical=${vertical} (distinct-y, uniform-h=${t[0] ? t[0].h : '?'}, equal-x); strips=${JSON.stringify(t.slice(0, 8))}; zones/col=${JSON.stringify(tabs.zoneCol)}`, { path: 'synthetic-click([DIAG])', proxy: 'synthetic .click() driver + geometry/computed-style oracle', ok: vertical, surface }),
       proxyPASS: true,
       pass: false,
     }
@@ -6334,7 +6349,7 @@ const BLOCKS = {
   user7_zone_resize: async (h) => {
     // restore: ensure the left zone is EXPANDED so a gutter edge exists
     // ([DIAG] setup restore — not the asserted gesture)
-    await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const b=document.getElementById('zone-minimize-left');if(z&&b&&z.classList.contains('is-minimized'))b.click();return true})()`)
+    await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const b=document.getElementById('zone-collapse-left');if(z&&b&&z.classList.contains('is-collapsed'))b.click();return true})()`)
     await sleep(600)
     const w = () => h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');if(!z)return null;return Math.round(z.getBoundingClientRect().width)})()`)
     const w0 = await w()
@@ -6464,28 +6479,28 @@ const BLOCKS = {
     return rowResult({row:'UF-DEFECT-7',dclass:'D-interaction'}, '"Open in a tab" creates a tab whose stage shows the SEARCH view, not the document body', `button=${JSON.stringify({ id: 'pane-search-expand-tab', cls: btn })} active-alpha-tab REAL click path=${tabPath}; REAL click #pane-search-expand-tab path=${clicked.path}\n before-tabs=${JSON.stringify(beforeTabs)}\n after-tabs=${JSON.stringify(afterTabs)}\n newTabCreated(count ${beforeTabs.length}->${afterTabs.length})=${newTabCreated}\n ACTIVE tab=${activeTabTitle} (index=${activeIdx})\n #zone:main: searchInput=${content.hasSearchInput} ragResults=${content.hasRagResults} isDocumentBody=${content.isDocumentBody} snippet="${content.bodySnippet}"`, { path: clicked.path, ok: searchShown && !docShown, surface })
   },
 
-  // BUG 10 — when a side zone is minimized/collapsed, the collapsed zone's
+  // BUG 10 — when a side zone is COLLAPSED, the collapsed zone's
   // label/tab text must read VERTICALLY (bottom-to-top), not horizontally. Read
   // the computed writing-mode / text-orientation of the collapsed `#zone-tab-*`
   // labels and assert they are vertical (vs the horizontal default).
   user10_collapse_vertical_text: async (h) => {
     await ufEnsureAppClear(h)
     const surface = await ufSurfaceTarget(h)
-    // restore: ensure the left zone is expanded before minimizing it (REAL click)
+    // restore: ensure the left zone is expanded before collapsing it (REAL click)
     const zoneCls = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');return z?String(z.className):null})()`)
-    if (zoneCls !== null && /is-minimized/.test(zoneCls)) { await ufRealClick(h, '#zone-minimize-left'); await sleep(600) }
-    // the gesture: REAL hit-tested click on #zone-minimize-left (collapse the whole zone)
-    const zmin = await ufRealClick(h, '#zone-minimize-left')
+    if (zoneCls !== null && /is-collapsed/.test(zoneCls)) { await ufRealClick(h, '#zone-collapse-left'); await sleep(600) }
+    // the gesture: REAL hit-tested click on #zone-collapse-left (collapse the whole zone)
+    const zcol = await ufRealClick(h, '#zone-collapse-left')
     await sleep(900)
     const dump = await h.cdp.evaluate(`(()=>{
       const zoneEl=document.getElementById('zone:left');
-      const minimized=zoneEl&&zoneEl.classList.contains('is-minimized');
+      const collapsed=zoneEl&&zoneEl.classList.contains('is-collapsed');
       const tabs=[...document.querySelectorAll('[id^="zone-tab-left-"]')].map((t)=>{const s=getComputedStyle(t);const r=t.getBoundingClientRect();return {id:t.id,text:(t.textContent||'').trim().slice(0,16),writingMode:s.writingMode,textOrientation:s.textOrientation,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)}});
-      return {minimized, tabCount:tabs.length, tabs};
+      return {collapsed, tabCount:tabs.length, tabs};
     })()`)
     const verticalOk = Array.isArray(dump.tabs) && dump.tabs.length >= 2 && dump.tabs.every((t) => t.writingMode === 'vertical-rl' || t.writingMode === 'vertical-lr' || t.textOrientation === 'upright')
     const painted = Array.isArray(dump.tabs) && dump.tabs.length >= 2 && dump.tabs.every((t) => t.w > 0 && t.h > 0)
-    return rowResult({row:'UF-DEFECT-8',dclass:'D-visual'}, 'Minimized-zone labels read VERTICALLY (bottom-to-top): writing-mode vertical-rl/lr or text-orientation upright, painted', `REAL click #zone-minimize-left path=${zmin.path}; zone minimized=${dump.minimized}; collapsed labels=${dump.tabCount} painted=${painted}; each: ${dump.tabs.map((t) => t.id + ':writingMode=' + t.writingMode + '/textOrientation=' + t.textOrientation + '/size=' + t.w + 'x' + t.h).join(', ')}; vertical=${verticalOk} (horizontal default: writing-mode=horizontal-tb)`, { path: zmin.path, ok: verticalOk && painted, surface })
+    return rowResult({row:'UF-DEFECT-8',dclass:'D-visual'}, 'Collapsed-zone labels read VERTICALLY (bottom-to-top): writing-mode vertical-rl/lr or text-orientation upright, painted', `REAL click #zone-collapse-left path=${zcol.path}; zone collapsed=${dump.collapsed}; collapsed labels=${dump.tabCount} painted=${painted}; each: ${dump.tabs.map((t) => t.id + ':writingMode=' + t.writingMode + '/textOrientation=' + t.textOrientation + '/size=' + t.w + 'x' + t.h).join(', ')}; vertical=${verticalOk} (horizontal default: writing-mode=horizontal-tb)`, { path: zcol.path, ok: verticalOk && painted, surface })
   },
 
   // ===================================================================
@@ -6892,8 +6907,8 @@ const BLOCKS = {
     // DRIVABLE, and the row then carries its own honest verdict.
     const zoneCls = await h.cdp.evaluate(`document.getElementById('zone:left').className`)
     let zonePath = 'already-expanded'
-    if (/is-minimized/.test(zoneCls)) {
-      zonePath = (await ufRealClick(h, '#zone-minimize-left')).path
+    if (/is-collapsed/.test(zoneCls)) {
+      zonePath = (await ufRealClick(h, '#zone-collapse-left')).path
       await sleep(1300)
     }
     const expanded = await ufEnsurePaneExpanded(h, 'doc-nav')
@@ -6934,7 +6949,7 @@ const BLOCKS = {
     return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', `${paneExpandPath}; doc-nav before: bodyNodes(li)=${before.li} ul=${before.ul} h=${before.h}px; REAL click #pane-collapse-doc-nav (path=${c1.path}) → is-collapsed=${mid.collapsed} bodyNodes(li)=${mid.li} ul=${mid.ul} h=${mid.h}px → headerOnly=${headerOnly}; REAL click again (path=${c2.path}) → is-collapsed=${after.collapsed} bodyNodes(li)=${after.li} ul=${after.ul} h=${after.h}px → reExpanded=${reExpanded}; samePaneRoot(identical #pane-doc-nav root: id/paneId/title/x ${before.id}/${before.paneId}/"${before.title}"/${before.x} → ${after.id}/${after.paneId}/"${after.title}"/${after.x})=${sameRoot} (data-node-id ${before.nodeId}→${after.nodeId})`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok: headerOnly && reExpanded && sameRoot, surface })
   },
 
-  // UF-PANES-8 — a REAL click on a minimized zone's tab re-expands the zone
+  // UF-PANES-8 — a REAL click on a collapsed zone's tab re-expands the zone
   // (and the tab's data-pane-id identifies that pane; pane-body activation is
   // DEFERRED by spec §2.5 pin 5 — recorded, not asserted as a defect).
   uf_panes_8: async (h) => {
@@ -6960,31 +6975,31 @@ const BLOCKS = {
     // setup: expand the zone, collapse BOTH panes with REAL toggle clicks so the
     // clicked pane's activation is observable
     const zoneCls = await h.cdp.evaluate(`document.getElementById('zone:left').className`)
-    if (/is-minimized/.test(zoneCls)) { await ufRealClick(h, '#zone-minimize-left'); await sleep(1300) }
+    if (/is-collapsed/.test(zoneCls)) { await ufRealClick(h, '#zone-collapse-left'); await sleep(1300) }
     for (const pid of ['doc-nav', 'search']) {
       const f = (await ufPaneFrames(h)).find((x) => x.pid === pid)
       if (f && !f.collapsed) { await ufRealClick(h, `#pane-collapse-${pid}`); await sleep(1300) }
     }
     const preMin = await ufPaneFrames(h)
-    // ⟨gate-4 `D-1`⟩ the minimize/tab clicks ARE the rows' own gesture (the setup
+    // ⟨gate-4 `D-1`⟩ the zone-collapse/tab clicks ARE the rows' own gesture (the setup
     // collapse clicks below name no row: they are the block's precondition, not a row's).
-    const minPath = (await ufRealClick(h, '#zone-minimize-left', { rows: ['UF-PANES-8', 'U-6'] })).path
+    const collapsePath = (await ufRealClick(h, '#zone-collapse-left', { rows: ['UF-PANES-8', 'U-6'] })).path
     await sleep(1500)
-    const minimized = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const tabs=[...document.querySelectorAll('[id^="zone-tab-left-"]')].map((t)=>{const r=t.getBoundingClientRect();return {id:t.id,paneId:t.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}});return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,tabs:tabs}})()`)
+    const collapsedZone = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const tabs=[...document.querySelectorAll('[id^="zone-tab-left-"]')].map((t)=>{const r=t.getBoundingClientRect();return {id:t.id,paneId:t.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}});return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,tabs:tabs}})()`)
     const tabClick = (await ufRealClick(h, '#zone-tab-left-doc-nav', { rows: ['UF-PANES-8', 'U-6'] }))
     await sleep(1800)
     const after = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length}})()`)
     const afterFrames = await ufPaneFrames(h)
     const docnavAfter = afterFrames.find((f) => f.pid === 'doc-nav') || null
-    const stripReplacesStack = minimized.frames === 0 && minimized.tabs.length >= 1 && minimized.tabs.every((t) => t.box[2] > 0 && t.box[3] > 0)
-    const reExpanded = !/is-minimized/.test(after.cls) && after.frames >= 1 && afterFrames.every((f) => f.box[2] > 0 && f.box[3] > 0)
-    const clickedPaneIdentified = minimized.tabs.some((t) => t.id === 'zone-tab-left-doc-nav' && t.paneId === 'doc-nav')
+    const stripReplacesStack = collapsedZone.frames === 0 && collapsedZone.tabs.length >= 1 && collapsedZone.tabs.every((t) => t.box[2] > 0 && t.box[3] > 0)
+    const reExpanded = !/is-collapsed/.test(after.cls) && after.frames >= 1 && afterFrames.every((f) => f.box[2] > 0 && f.box[3] > 0)
+    const clickedPaneIdentified = collapsedZone.tabs.some((t) => t.id === 'zone-tab-left-doc-nav' && t.paneId === 'doc-nav')
     // restore: re-expand both panes (the block collapses them as setup) — the
     // block's own TAIL restore, after its LAST frame census read
     for (const pid of ['doc-nav', 'search']) restore.push(JSON.stringify(await ufEnsurePaneExpanded(h, pid)))
-    const ufPanes8Assertion = 'A REAL click on a minimized zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane'
-    const ufPanes8Evidence = `pre-minimize panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-minimize-left (path=${minPath}) → zone class="${minimized.cls}" frames=${minimized.frames} tabStrips=${JSON.stringify(minimized.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
-    const ufPanes8Opts = { path: minPath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: stripReplacesStack && reExpanded && clickedPaneIdentified, surface: await ufSurfaceTarget(h) }
+    const ufPanes8Assertion = 'A REAL click on a collapsed zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane'
+    const ufPanes8Evidence = `pre-collapse panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-collapse-left (path=${collapsePath}) → zone class="${collapsedZone.cls}" frames=${collapsedZone.frames} tabStrips=${JSON.stringify(collapsedZone.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
+    const ufPanes8Opts = { path: collapsePath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: stripReplacesStack && reExpanded && clickedPaneIdentified, surface: await ufSurfaceTarget(h) }
     // §2.1 `E-2` — the DECLARED row `U-6` (MATRIX_ROWS maps `U-6` to this block)
     // carries ITS OWN verdict; the checklist row `UF-PANES-8` keeps its own.
     return [
@@ -7474,7 +7489,7 @@ const BLOCKS = {
   // ⟨Unit `U-1a` (D-16; change-analysis §2.5) — THE LITERAL CONTAINER-ID LIMB.⟩ The
   // set comparison above is NAME-AGNOSTIC: a rename that moved every id EQUALLY
   // stays green while asserting nothing, and the `startsWith('zone')` filter also
-  // admits `zone-minimize-*`, `zone-gutter-*` and `zone-tab-*`. So the CONTAINERS are
+  // admits `zone-collapse-*`, `zone-gutter-*` and `zone-tab-*`. So the CONTAINERS are
   // separated from those controls BY ID SHAPE (`zone:<name>`) and asserted to equal
   // the closed four, SPELLED, before AND after the content change. This is the
   // MCP-visible half's only possible red (before `U-1a` the two row zones' container
@@ -7609,7 +7624,13 @@ const BLOCKS = {
     // page-level attempt.
     const zoneContainersOk = (r) => Array.isArray(r.inside) && r.inside.length === 4 &&
       r.inside.every((z) => z.position === 'fixed') &&
-      r.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll') &&
+      // ⟨`U-1b` `C-6` re-pin (the ONE claim that moves, `L3` `N5`): an EXPANDED zone's
+      //   content box is scroll-capable; a COLLAPSED zone's arrangement axis is
+      //   `hidden` (`C-4`). Read off the component's own computed `overflow-y` and its
+      //   AUTHORED collapse carrier — the expanded-zone claim is unchanged.⟩
+      r.inside.every((z) => (z.collapsed === 'true'
+        ? z.overflowY === 'hidden'
+        : (z.overflowY === 'auto' || z.overflowY === 'scroll'))) &&
       r.inside.every((z) => z.contentExceedsTheBox !== true || z.scrollTopAdvanced === true)
     const zonesUnmovedBothReadings = limb2AtRest.zonesUnmoved === true && limb2WithTheStageDocOpen.zonesUnmoved === true
     const zonesFixedAndScrollCapableBothReadings = zoneContainersOk(limb2AtRest) && zoneContainersOk(limb2WithTheStageDocOpen)
@@ -7636,12 +7657,12 @@ const BLOCKS = {
     const limb3SubjectPrepared = tallStageDoc.prepared === true
     const limb3SubjectIdentified = limb3SubjectPrepared && limb3SubjectOverflows
     const limb3Ok = limb3SubjectIdentified && limb3StageScrolledInside && limb3ChromeUnmoved && limb3PageUnmoved
-    const zoneFacts = (r) => JSON.stringify(r.inside.map((z) => ({ id: z.id, position: z.position, overflowY: z.overflowY, scrollHeight: z.scrollHeight, clientHeight: z.clientHeight, contentExceedsTheBox: z.contentExceedsTheBox, scrollTop: z.scrollTopBefore + '->' + z.scrollTopAfter, scrollTopAdvanced: z.scrollTopAdvanced })))
+    const zoneFacts = (r) => JSON.stringify(r.inside.map((z) => ({ id: z.id, position: z.position, overflowY: z.overflowY, collapsed: z.collapsed, classes: z.classes, scrollHeight: z.scrollHeight, clientHeight: z.clientHeight, contentExceedsTheBox: z.contentExceedsTheBox, scrollTop: z.scrollTopBefore + '->' + z.scrollTopAfter, scrollTopAdvanced: z.scrollTopAdvanced })))
     const zoneRects = (r, key) => JSON.stringify(r[key].map((b) => [b.id, b.box]))
     const u5LimbsEvidence =
       `[§7.2 limb 2 — ALL ZONES ARE FIXED POSITION WITH ANY SCROLLING INTERNAL; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned, the four ZONE CONTAINERS measured] ` +
-      `REQUIRED: each zone container computes position:fixed with its own bounded box, its content box is scroll-capable (overflow:auto, never visible), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone's own content box, the element scrolled NAMED), the zone boxes hold their rects across a page-level scroll attempt, and no zone's box is stretched by the document (the page itself cannot overflow). READ TWICE, because the zone boxes can only disagree with the stage's box WHILE THE STAGE HOLDS A DOCUMENT LONGER THAN IT: ` +
-      `OBSERVED (a) AT REST [the state this block's own REAL clicks produced]: scrolled element = ${limb2AtRest.scrolledElement}; page-level scroll attempt=${limb2AtRest.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2AtRest.pageBefore)} after=${JSON.stringify(limb2AtRest.pageAfter)} → pageAdvanced=${limb2AtRest.pageMoved} pageCannotOverflow=${limb2AtRest.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2AtRest, 'before')} AFTER=${zoneRects(limb2AtRest, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2AtRest.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2AtRest.zoneBoxesBoundedByTheViewport} (viewport=${JSON.stringify(limb2AtRest.viewport)}); per-zone own scroll geometry: ${zoneFacts(limb2AtRest)} → zonesFixed=${limb2AtRest.inside.every((z) => z.position === 'fixed')} zonesScrollCapable=${limb2AtRest.inside.every((z) => z.overflowY === 'auto' || z.overflowY === 'scroll')}; EXCLUDED (elements carrying zone that are NOT zone containers — the four authored gutter affordances and the zone-minimize controls; named, never graded as zones)=${JSON.stringify(limb2AtRest.excluded.map((e) => [e.id, e.classes, e.box]))}; ` +
+      `REQUIRED: each zone container computes position:fixed with its own bounded box, an EXPANDED zone's content box is scroll-capable (overflow:auto, never visible) while a COLLAPSED zone's arrangement axis is hidden (\`U-1b\` \`C-4\`; the ruled re-pin, read off the authored \`collapsed\` carrier), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone's own content box, the element scrolled NAMED), the zone boxes hold their rects across a page-level scroll attempt, and no zone's box is stretched by the document (the page itself cannot overflow). READ TWICE, because the zone boxes can only disagree with the stage's box WHILE THE STAGE HOLDS A DOCUMENT LONGER THAN IT: ` +
+      `OBSERVED (a) AT REST [the state this block's own REAL clicks produced]: scrolled element = ${limb2AtRest.scrolledElement}; page-level scroll attempt=${limb2AtRest.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2AtRest.pageBefore)} after=${JSON.stringify(limb2AtRest.pageAfter)} → pageAdvanced=${limb2AtRest.pageMoved} pageCannotOverflow=${limb2AtRest.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2AtRest, 'before')} AFTER=${zoneRects(limb2AtRest, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2AtRest.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2AtRest.zoneBoxesBoundedByTheViewport} (viewport=${JSON.stringify(limb2AtRest.viewport)}); per-zone own scroll geometry: ${zoneFacts(limb2AtRest)} → zonesFixed=${limb2AtRest.inside.every((z) => z.position === 'fixed')} zonesExpandedScrollCapable=${limb2AtRest.inside.every((z) => z.collapsed === 'true' || z.overflowY === 'auto' || z.overflowY === 'scroll')} zonesCollapsedHidden=${limb2AtRest.inside.every((z) => z.collapsed !== 'true' || z.overflowY === 'hidden')}; EXCLUDED (elements carrying zone that are NOT zone containers — the four authored gutter affordances and the zone-collapse controls; named, never graded as zones)=${JSON.stringify(limb2AtRest.excluded.map((e) => [e.id, e.classes, e.box]))}; ` +
       `OBSERVED (b) WITH THE STAGE DOCUMENT OPEN — THE DECISIVE PAIR: scrolled element = ${limb2WithTheStageDocOpen.scrolledElement}; page-level scroll attempt=${limb2WithTheStageDocOpen.attemptPx}px → the PAGE's own reading before=${JSON.stringify(limb2WithTheStageDocOpen.pageBefore)} after=${JSON.stringify(limb2WithTheStageDocOpen.pageAfter)} → pageAdvanced=${limb2WithTheStageDocOpen.pageMoved} pageCannotOverflow=${limb2WithTheStageDocOpen.pageCannotOverflow}; ZONE CONTAINERS (id, box) BEFORE=${zoneRects(limb2WithTheStageDocOpen, 'before')} AFTER=${zoneRects(limb2WithTheStageDocOpen, 'after')} → zonesUnmovedAcrossTheAttempt=${limb2WithTheStageDocOpen.zonesUnmoved} zoneBoxesBoundedByTheViewport=${limb2WithTheStageDocOpen.zoneBoxesBoundedByTheViewport}; per-zone own scroll geometry: ${zoneFacts(limb2WithTheStageDocOpen)}; the stage's own box in the same reading: ${JSON.stringify(limb2WithTheStageDocOpen.stageScroll)}; ` +
       `→ zonesUnmovedAcrossBOTHReadings=${zonesUnmovedBothReadings} zonesFixedAndScrollCapableBothReadings=${zonesFixedAndScrollCapableBothReadings} zonesBoundedAndPageCannotOverflow=${zonesBoundedAndPageCannotOverflow} anInternalScrollRangeWasExercised=${anInternalScrollRangeWasExercised}; limb2Held=${limb2Ok}. ` +
       `[§7.2 limb 3 — THE STAGE SCROLLS INTERNALLY; carrier row U-5/uf_layout_10; scope: the assembled renderer THIS driver spawned] ` +
@@ -7664,7 +7685,7 @@ const BLOCKS = {
     const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) }
     return [
       rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", u5Evidence, ufLayout10Opts),
-      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width — EXTENDED (§7.2 re-pin) with limbs 2 and 3: every zone container keeps its box rect and scrolls INSIDE its own box, and the stage's own box is the scroll container with the surrounding chrome unmoved", 'D-visual', u5Evidence, { ...ufLayout10Opts, ok: isEmptied && trackCollapsed && stageReclaimed && limb2Ok && limb3Ok, required: '§7.2 limb 2 on the assembled surface, measured on the four ZONE CONTAINERS: each computes position:fixed with its own bounded box, its content box is scroll-capable (overflow:auto, never visible), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone\'s own content box, the element scrolled NAMED), the zone boxes hold their rects value-for-value across a page-level scroll attempt, no zone box is stretched by the document (the page itself cannot overflow), and the reading exercises a REAL internal range (non-vacuity); §7.2 limb 3: a document LONGER than the stage\'s box is mounted on the stage (the falsifiability gate — without it the reading is inconclusive) and the stage\'s own box is the scroll container — its scrollTop advances inside it while the page\'s offset does not move and the surrounding chrome (the zones and the tab strip) keeps its rects; PLUS the row\'s filed property (the empty side zone\'s grid track collapses and the stage reclaims the width)', observed: u5Evidence, checklistRow: 'UF-LAYOUT-10' }),
+      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width — EXTENDED (§7.2 re-pin) with limbs 2 and 3: every zone container keeps its box rect and scrolls INSIDE its own box, and the stage's own box is the scroll container with the surrounding chrome unmoved", 'D-visual', u5Evidence, { ...ufLayout10Opts, ok: isEmptied && trackCollapsed && stageReclaimed && limb2Ok && limb3Ok, required: '§7.2 limb 2 on the assembled surface, measured on the four ZONE CONTAINERS: each computes position:fixed with its own bounded box, an EXPANDED zone\'s content box is scroll-capable (overflow:auto, never visible) while a COLLAPSED zone\'s arrangement axis is hidden (`U-1b` `C-4`, read off the authored `collapsed` carrier), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone\'s own content box, the element scrolled NAMED), the zone boxes hold their rects value-for-value across a page-level scroll attempt, no zone box is stretched by the document (the page itself cannot overflow), and the reading exercises a REAL internal range (non-vacuity); §7.2 limb 3: a document LONGER than the stage\'s box is mounted on the stage (the falsifiability gate — without it the reading is inconclusive) and the stage\'s own box is the scroll container — its scrollTop advances inside it while the page\'s offset does not move and the surrounding chrome (the zones and the tab strip) keeps its rects; PLUS the row\'s filed property (the empty side zone\'s grid track collapses and the stage reclaims the width)', observed: u5Evidence, checklistRow: 'UF-LAYOUT-10' }),
       declaredRowResult('U-4', 'UF-LAYOUT-10', 'The empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (no stale/duplicate root survives the transition)', 'D-visual', u4Evidence, { ...ufLayout10Opts, ok: singleRootMount && ufLayout10Opts.ok, checklistRow: 'UF-LAYOUT-10' }),
     ]
   },
@@ -7683,15 +7704,15 @@ const BLOCKS = {
   // restore path.
   uf_restore_layout: async (h) => {
     await ufEnsureAppClear(h)
-    const snap = async () => h.cdp.evaluate(`(()=>({zone:(document.getElementById('zone:left')||{}).className,zoneState:/is-minimized/.test(String((document.getElementById('zone:left')||{}).className||''))?'minimized':'expanded',frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')),mode:(document.getElementById('editor-toolbar-toggle')||{}).getAttribute?.('data-mode')}))()`)
+    const snap = async () => h.cdp.evaluate(`(()=>({zone:(document.getElementById('zone:left')||{}).className,zoneState:/is-collapsed/.test(String((document.getElementById('zone:left')||{}).className||''))?'collapsed':'expanded',frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')),mode:(document.getElementById('editor-toolbar-toggle')||{}).getAttribute?.('data-mode')}))()`)
     const before = await snap()
     const zoneRestore = await ufRestoreZoneState(h, 'left')
-    const paths = [zoneRestore.before.zoneState === 'minimized' ? 'zone:' + zoneRestore.path : 'zone:already-expanded']
+    const paths = [zoneRestore.before.zoneState === 'collapsed' ? 'zone:' + zoneRestore.path : 'zone:already-expanded']
     for (const pid of ['doc-nav', 'search']) { const r = await ufEnsurePaneExpanded(h, pid); paths.push(pid + ':' + r.path) }
     let modePath = 'already-html'
     if (before.mode !== 'html') { modePath = (await ufRealClick(h, '#editor-toolbar-toggle')).path; await sleep(1600) }
     const after = await snap()
-    const restoredOk = !/is-minimized/.test(after.zone) && after.frames.length >= 1 && !after.frames.some((f) => /collapsed/.test(f)) && after.mode === 'html'
+    const restoredOk = !/is-collapsed/.test(after.zone) && after.frames.length >= 1 && !after.frames.some((f) => /collapsed/.test(f)) && after.mode === 'html'
     return diagResult(`baseline before: ${JSON.stringify(before)}; restore: ${JSON.stringify(paths)} representationMode ${before.mode}->${after.mode} (real click path=${modePath}); after: ${JSON.stringify(after)}; baselineRestored=${restoredOk}`)
   },
 
@@ -7723,8 +7744,8 @@ const BLOCKS = {
     await step('pane-crosslinks-OFF', async () => { await ufRealClick(h, '#operator-pane-visibility-crosslinks') })
     await step('pane-doc-nav-OFF', async () => { await ufRealClick(h, '#operator-pane-visibility-doc-nav') })
     await step('pane-doc-nav-ON', async () => { await ufRealClick(h, '#operator-pane-visibility-doc-nav') })
-    await step('modal-CLOSE+zone-MINIMIZE', async () => { await ufModal(h, false); await ufRealClick(h, '#zone-minimize-left') })
-    await step('zone-EXPAND', async () => { await ufRealClick(h, '#zone-minimize-left') })
+    await step('modal-CLOSE+zone-COLLAPSE', async () => { await ufModal(h, false); await ufRealClick(h, '#zone-collapse-left') })
+    await step('zone-EXPAND', async () => { await ufRealClick(h, '#zone-collapse-left') })
     const final = await h.cdp.evaluate(`(()=>{const r=[...document.querySelectorAll('#wiki-root')];const m=document.getElementById('zone:main');return {roots:r.length,stale:r.filter((w)=>w.children.length===0).length,mainY:m?Math.round(m.getBoundingClientRect().y):null,scrollH:document.documentElement.scrollHeight,census:(document.getElementById('operator-enabled-panes')||{}).textContent||null}})()`)
     return diagResult(`mount count per gesture → ${steps.join(' | ')}; FINAL ${JSON.stringify(final)} (singleRootMount=${final.roots === 1})${final.roots > 1 ? ' — the app-graph re-assembly LEAKED stale childless #wiki-root mounts (each keeps the duplicated id and takes layout flow, pushing #zone:main down the page)' : ''}`)
   },
@@ -9798,7 +9819,7 @@ async function main(argv) {
             : `${pre.extra}; block=${n} DECLARES the fixture ${decl ? decl.fixtureName : 'none'} over the corpus surface it reads (${decl ? decl.surface : 'none'}); this absence rides the RUN-WIDE read ALONE (the block carries no readable declared-fixture probe to attribute it to): the read that failed is ${pre.detail} — the run-wide read, never a declared-fixture probe`,
         })
         ufPushRows(rows, n, reportRows)
-        if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'minimized')) console.log(preflightLine)
+        if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'collapsed')) console.log(preflightLine)
         // ⟨gate-4 `F-3`⟩ THE GATE ROUTE IS TAGGED AT ITS ONE SITE: this branch — the
         // only place a block is parked WITHOUT being run, on its OWN declared fixture's
         // absence — is what `gateRoute` records, so the observation can report the
@@ -9828,7 +9849,7 @@ async function main(argv) {
       // the block carries its own verdict. The line now states the per-fixture
       // reading that actually produced the disposition.
       if (pre && pre.present !== true) console.log(`PRECONDITION ${label} §3.2 F-6 reading: ${pre.detail}; the run-wide read did not report the corpus present and this block DECLARES the fixture ${declared ? `${declared.fixtureName} (corpusRead=${declared.corpusRead}, selfProvisioning=${declared.selfProvisioning})` : 'NONE (no declaration entry)'} — its OWN declared fixture probed ${blockFixture ? `present=${blockFixture.present} resolved=${blockFixture.resolved} via ${blockFixture.tool}` : 'unreadable'}, so this absence is REPORTED here and is never inferred as this block own failure`)
-      if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'minimized')) console.log(preflightLine)
+      if (preflight.panes.length || preflight.error || (preflight.frames && preflight.frames.zoneState === 'collapsed')) console.log(preflightLine)
       return ufCountBlock(n, label, results[0] ?? r)
     }
     for (const n of names) {

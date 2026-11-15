@@ -31,6 +31,7 @@ import {
   coerceLayout,
   deriveLayout,
   isLayoutZoneName,
+  zoneCollapsedOf,
   type LayoutPaneSpec,
   type LayoutState,
   type LayoutZoneName,
@@ -39,6 +40,15 @@ import {
 import { zoneOrientation } from './pane-drag.js'
 import { gutterAxis } from './layout-zone-geometry.js'
 import { containerDeclarationFor } from '../shared/container.js'
+
+/** ⟨Unit `U-1b` `C-2` — `ASM-U1b-11`: WHERE THE DERIVATION LIVES.⟩
+ *  `zoneCollapsedOf` is DEFINED in `layout-state.ts` (its projection arm
+ *  `zoneTrackVars` must call it, and `operator-settings-store.ts` imports that
+ *  module into the MAIN bundle — defining it here would create the reverse
+ *  import) and RE-EXPORTED here, so the assembler, the sidebar's act, its two
+ *  gutter gates and every sibling read it from the sealed surface this module
+ *  already is. One expression, one home, one vocabulary. */
+export { zoneCollapsedOf }
 
 /** ⟨`U-ZONE-REPLACEMENT` / `PD-UI-14` — §3 row 5 / §3.1: THE AUTHORING SITE OF THE
  *  FOUR GUTTER AFFORDANCES.⟩ The shell's four resize gutters are authored HERE, as
@@ -132,28 +142,38 @@ export const PANE_FRAME_CLASS = 'pane-frame'
 /** The U-SHELL-3 `is-collapsed` mirror class (spec §2.5 pin 3). */
 export const PANE_COLLAPSED_CLASS = 'is-collapsed'
 
-/** U-SHELL-4 (C12) — the shared zone minimize/expand toggle handler name. The
- *  body is authored INLINE on the zone container's control (mirrors the
- *  U-SHELL-3 `PANE_COLLAPSE_HANDLER` convention) and routes to the SAME
- *  `window.provident.sidebar.zoneMinimizeToggle` host seam, so a DOM click and
- *  `provident.dispatch` are equivalent. */
-export const PANE_MINIMIZE_TOGGLE_HANDLER = 'pane-zone-minimize-toggle'
+/** U-SHELL-4 (C12) — the shared ZONE-COLLAPSE toggle handler name. The body is
+ *  authored INLINE on the zone's own control (mirrors the U-SHELL-3
+ *  `PANE_COLLAPSE_HANDLER` convention) and routes to the SAME
+ *  `window.provident.sidebar.zoneCollapseToggle` host seam, so a DOM click and
+ *  `provident.dispatch` are equivalent.
+ *
+ *  ⟨Unit `U-1b` `C-3`/`C-5` — D-22 (1): the seam is renamed with the member it
+ *  writes.⟩ The collapse state is ONE member (`zones[zone].collapsed`), so the
+ *  handler, the control, its id and its class all carry the collapse
+ *  vocabulary — the superseded state word would be reading a `collapsed`
+ *  member (its spelling stays visible in the docs and the registers, `RCA-8(c)`,
+ *  and never in `src/`). */
+export const ZONE_COLLAPSE_HANDLER = 'zone-collapse-toggle'
 
-/** The inline zone minimize/expand toggle body. It reads the zone from the
- *  control's authored `zone` prop and routes it to the host seam. A malformed
- *  node is a no-op — never a throw. */
-const PANE_MINIMIZE_TOGGLE_BODY = `function (ctx) {
+/** The inline zone-collapse toggle body. It reads the zone from the control's
+ *  authored `zone` prop and routes it to the host seam, which owns the state
+ *  arithmetic (the body never reads the current state, never computes the
+ *  next one, and carries no second address). A malformed node — or an absent
+ *  seam on an older preload — is a no-op, never a throw. */
+const ZONE_COLLAPSE_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
-  if (!s || typeof s.zoneMinimizeToggle !== 'function') return;
+  if (!s || typeof s.zoneCollapseToggle !== 'function') return;
   var zone = ctx && ctx.node && ctx.node.props && ctx.node.props['zone'];
-  if (zone) s.zoneMinimizeToggle(String(zone));
+  if (zone) s.zoneCollapseToggle(String(zone));
 }`
 
 /** U-SHELL-4 (C12) — the shared zone-tab expand/select handler name. Each tab
  *  carries the SAME name (spec §2.4 "1 handler def per strip"); its inline body
  *  reads the authored `zone`/`data-pane-id` and routes to the
- *  `window.provident.sidebar.paneTabExpand` host seam, which expands the zone
- *  (`minimized:false`) + identifies the selected pane. */
+ *  `window.provident.sidebar.paneTabExpand` host seam, which EXPANDS the zone
+ *  (writes `collapsed: false` at the zone's address) + identifies the selected
+ *  pane. */
 export const PANE_TAB_EXPAND_HANDLER = 'pane-tab-expand'
 
 /** The inline tab expand/select body (a full function-expression string). A
@@ -181,7 +201,8 @@ interface ZonePane {
  *  placement zones, POST overlay + fallback: a persisted `PaneLayoutEntry` wins,
  *  else the pane's additive `defaultZone`, else `left` (registration order as
  *  the default order). This is the SINGLE enabled+placed census backing the
- *  `is-empty` mirror (H1), the minimize acceptance (H2), and the C12 tab count
+ *  `is-empty` mirror (H1), the zone-collapse DERIVATION (`U-1b` `C-2` /
+ *  `ASM-U1b-3`: `zoneCollapsedOf`'s `paneCount` input), and the C12 tab count
  *  (spec §2.5 pin 8) — NOT the raw overlay. PURE. */
 function resolveEnabledZonePanes(
   enabledAppGraph: ReadonlyArray<PaneDefinition>,
@@ -208,7 +229,7 @@ function resolveEnabledZonePanes(
 /** U-SHELL-4 (C11/C12, H1/H2) — the per-zone enabled+placed pane census: the
  *  count of enabled app-graph panes actually emitted into each zone AFTER the
  *  overlay + default fallback resolution. This is the SINGLE census backing the
- *  `is-empty` mirror, `zoneMinimizeToggle`'s acceptance, and the C12 tab count
+ *  `is-empty` mirror, `zoneCollapsedOf`'s derivation and the C12 tab count
  *  (spec §2.5 pin 8). PURE. */
 export function enabledZonePaneCounts(
   registry: PaneRegistry,
@@ -221,33 +242,49 @@ export function enabledZonePaneCounts(
   return counts
 }
 
-/** U-SHELL-4 (C12) — author the zone container's provident children. A
- *  non-empty zone carries a minimize/expand toggle; a MINIMIZED non-empty zone
- *  REPLACES its pane stack with a tab strip (one `data-pane-id` tab per
- *  contained pane + a shared `on:click` expand handler). An empty zone has no
- *  children (C11 empty-hidden wins — F5). PURE. */
+/** U-SHELL-4 (C12) — the zone container's AUTHORED CONTROL, one per zone: the
+ *  hide/expand arrow the operator drives. ⟨Unit `U-1b` `C-3` — `ASM-U1b-5`:⟩ it
+ *  is a ROOT-LEVEL SIBLING of its zone container (the container's immediate
+ *  following child in `templateRoot.children`, inserted below), never a child
+ *  of it — a child is buried at a collapsed/empty zone's zero extent and can
+ *  never be hit. The node addresses its own zone through the `zone` carrier
+ *  (the handler body reads it), carries the SHARED `ZONE_COLLAPSE_HANDLER`, and
+ *  authors `content: ''` because the glyph is the SHELL's (a generated
+ *  `::after` in `index.html`, keyed on the adjacent-sibling combinator — no
+ *  hand-written DOM, D-8). It authors no census and no state word: the state is
+ *  the container's `collapsed` carrier. TOTAL over the closed four. PURE. */
+export function zoneCollapseControlOf(zone: LayoutZoneName): LegacyNodeData {
+  return {
+    type: 'button',
+    props: { id: `zone-collapse-${zone}`, zone },
+    css: { classes: clickableClasses(['zone-collapse']) },
+    content: '',
+    handlers: [{ name: ZONE_COLLAPSE_HANDLER, event: 'click', body: ZONE_COLLAPSE_BODY }],
+  }
+}
+
+/** U-SHELL-4 (C12) — author the zone container's provident children. An EMPTY
+ *  zone has no children (C11 empty-hidden wins); a NON-empty zone carries none
+ *  either until it is COLLAPSED, where its pane stack is REPLACED by a tab strip
+ *  (one `data-pane-id` tab per contained pane + a shared `on:click` expand
+ *  handler). ⟨Unit `U-1b` `C-2`/`C-3`: THE FOLD and THE MOVE.⟩ A collapsed zone
+ *  with panes emits the tab strip — which IS the collapsed-zone paint — and the
+ *  hide/expand control is no longer a CHILD here at all (`zoneCollapseControlOf`
+ *  authors it as the container's sibling). PURE. */
 function zoneContainerChildren(
   zone: LayoutZoneName,
   panes: ZonePane[],
-  minimized: boolean,
+  collapsed: boolean,
 ): LegacyNodeData[] {
   if (panes.length === 0) return []
-  const toggle: LegacyNodeData = {
-    type: 'button',
-    props: { id: `zone-minimize-${zone}`, zone, 'data-minimized': minimized ? 'true' : 'false' },
-    css: { classes: clickableClasses(['pane-zone-minimize']) },
-    content: minimized ? '▸' : '▾',
-    handlers: [{ name: PANE_MINIMIZE_TOGGLE_HANDLER, event: 'click', body: PANE_MINIMIZE_TOGGLE_BODY }],
-  }
-  if (!minimized) return [toggle]
-  const tabs: LegacyNodeData[] = panes.map((p) => ({
+  if (!collapsed) return []
+  return panes.map((p): LegacyNodeData => ({
     type: 'button',
     props: { id: `zone-tab-${zone}-${p.def.id}`, 'data-pane-id': p.def.id, zone },
     css: { classes: clickableClasses(['pane-tab']) },
     content: p.def.title,
     handlers: [{ name: PANE_TAB_EXPAND_HANDLER, event: 'click', body: PANE_TAB_EXPAND_BODY }],
   }))
-  return [toggle, ...tabs]
 }
 
 /** Wrap a pane's render output into a zone content root. The stable pane id
@@ -386,13 +423,15 @@ function findZoneContainer(children: ZoneContainerNode[], name: string): ZoneCon
 }
 
 /** The mirror classes a zone container carries (spec §2.6 pin 4): `is-empty`
- *  when the zone has zero panes (C11), `is-minimized` when the zone is
- *  minimized (C12) and `is-revealed` when the shell drag controller currently
- *  reveals it as a provisional drop target (U-SHELL-4/C11). */
-function zoneMirrorClasses(paneCount: number, minimized: boolean, revealed: boolean): string[] {
+ *  when the zone has zero panes (C11), `is-collapsed` when the zone's EFFECTIVE
+ *  state is collapsed (C12 — `U-1b`: one class for both ways to reach the state,
+ *  the operator's statement or the derivation) and `is-revealed` when the shell
+ *  drag controller currently reveals it as a provisional drop target
+ *  (U-SHELL-4/C11). `is-empty` is unchanged and still derives from the census. */
+function zoneMirrorClasses(paneCount: number, collapsed: boolean, revealed: boolean): string[] {
   const classes: string[] = []
   if (paneCount === 0) classes.push('is-empty')
-  if (minimized) classes.push('is-minimized')
+  if (collapsed) classes.push('is-collapsed')
   if (revealed) classes.push('is-revealed')
   return classes
 }
@@ -463,12 +502,18 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
   )
 
   // One ContentPayload per pane, grouped by zone (payload order is the
-  // `PaneLayoutEntry.index` observable — spec §2.6 pin 3). U-SHELL-4 (C12) — a
-  // MINIMIZED non-empty zone REPLACES its pane stack with the tab strip (below),
-  // so its pane payloads are not emitted.
+  // `PaneLayoutEntry.index` observable — spec §2.6 pin 3). U-SHELL-4 (C12) /
+  // `U-1b` `C-2` — a COLLAPSED non-empty zone REPLACES its pane stack with the
+  // tab strip (below), so its pane payloads are not emitted; the state is read
+  // through the ONE derivation (`zoneCollapsedOf`), never re-spelled.
   const panePayloads: LegacyContentPayload[] = []
   for (const zone of LAYOUT_PANE_ZONES) {
-    if (layout.zones[zone].minimized === true && zonePanes[zone].length > 0) continue
+    if (
+      zoneCollapsedOf(layout.zones[zone].collapsed, zonePanes[zone].length) &&
+      zonePanes[zone].length > 0
+    ) {
+      continue
+    }
     for (const p of zonePanes[zone]) {
       panePayloads.push({ content: [paneSubtreeRoot(p.def, ctx, zone, p.collapsed)] })
     }
@@ -523,14 +568,27 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
 
   // Ensure the template root has one `container`-role producer per pane zone
   // (the HARD PRECONDITION) with the state-derived mirror classes + the C12
-  // minimize/tab-strip subtree. Keep an existing producer for the same zone;
-  // add it otherwise.
+  // tab-strip subtree, and one anchored COLLAPSE CONTROL as each container's
+  // immediate following sibling (`U-1b` `C-3`, `ASM-U1b-5`). Keep an existing
+  // producer for the same zone; add it otherwise.
   const templateRoot = traversalEnvelope.template.root
   const children = [...((templateRoot.children ?? []) as ZoneContainerNode[])]
   for (const zone of LAYOUT_PANE_ZONES) {
-    const minimized = layout.zones[zone].minimized === true
-    const classes = zoneMirrorClasses(zonePanes[zone].length, minimized, revealedSet.has(zone))
-    const authoredChildren = zoneContainerChildren(zone, zonePanes[zone], minimized)
+    // THE ONE DERIVATION (`C-2`): the operator's statement when one is stated,
+    // else the enabled+placed census. `is-empty` and `is-collapsed` come out of
+    // the SAME computation, so the two carriers cannot disagree.
+    const collapsed = zoneCollapsedOf(layout.zones[zone].collapsed, zonePanes[zone].length)
+    const classes = zoneMirrorClasses(zonePanes[zone].length, collapsed, revealedSet.has(zone))
+    const authoredChildren = zoneContainerChildren(zone, zonePanes[zone], collapsed)
+    // `ASM-U1b-9` — TWO carriers for ONE state, computed here in one place:
+    // `props.collapsed` (`"true"`/`"false"`, the foundation's carrier, which the
+    // glyph's `+` combinator reads) and the `is-collapsed` mirror class (which
+    // the extent rules read).
+    const carriers = {
+      zone,
+      'data-orientation': zoneOrientation(zone),
+      collapsed: collapsed ? 'true' : 'false',
+    }
     // H1 — prefer the authoritative `placementName` anchor. A node matched only
     // by `props.id` is NOT resolvable by the engine, so synthesize the missing
     // `placementName` on it (the HARD PRECONDITION) rather than keeping it as-is.
@@ -546,7 +604,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
       const existingChildren = (existing.children ?? []) as LegacyNodeData[]
       children[children.indexOf(existing)] = {
         ...repaired,
-        props: { ...(repaired.props ?? {}), zone, 'data-orientation': zoneOrientation(zone) },
+        props: { ...(repaired.props ?? {}), ...carriers },
         css: withContainerDeclaration({ ...(existing.css ?? {}), classes: mergedClasses }),
         ...(authoredChildren.length > 0
           ? { children: [...existingChildren, ...authoredChildren] }
@@ -555,12 +613,31 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
     } else {
       children.push({
         type: 'div',
-        props: { id: `zone:${zone}`, zone, 'data-orientation': zoneOrientation(zone) },
+        props: { id: `zone:${zone}`, ...carriers },
         placement: { placementName: zone },
         css: withContainerDeclaration(classes.length > 0 ? { classes } : {}),
         ...(authoredChildren.length > 0 ? { children: authoredChildren } : {}),
       })
     }
+    // `U-1b` §3 — THE CONTROL'S PLACEMENT, for all four zones, empty or not:
+    // the container's IMMEDIATE FOLLOWING SIBLING. The idempotence scan is keyed
+    // on the control's OWN id (`zone-collapse-<zone>`), never the gutter family's
+    // `zone`+`data-axis` pair — a `zone`-keyed scan collides with the container
+    // and the affordance, which both carry `zone`. A stray control is MOVED, not
+    // kept, so a re-assembly over an already-authored envelope adds no duplicate
+    // and leaves the adjacency correct.
+    const containerIndex = children.findIndex(
+      (child) => child.placement?.placementName === zone || child.props?.id === `zone:${zone}`,
+    )
+    const controlId = `zone-collapse-${zone}`
+    const duplicate = children.findIndex((child) => child.props?.id === controlId)
+    if (duplicate >= 0) children.splice(duplicate, 1)
+    // Recomputed AFTER the removal, never the pre-removal index.
+    const after = children.findIndex(
+      (child) => child.placement?.placementName === zone || child.props?.id === `zone:${zone}`,
+    )
+    const anchor = after >= 0 ? after : containerIndex
+    children.splice(anchor + 1, 0, zoneCollapseControlOf(zone) as ZoneContainerNode)
   }
 
   // Backward compatibility: keep/add the legacy sidebar producer (the traversal

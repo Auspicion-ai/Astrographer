@@ -240,7 +240,7 @@
 //     row's LANDED half IS wired — `withinProximity` reached through the fork's own
 //     `measuresWithinSnapThreshold`, the `distance` seam `distanceToZoneBox`, and the four named
 //     suppliers `legalZonesForScope` / `insertionIndexForPoint` / `createDragController` /
-//     `setZoneMinimized`. That record lives at three sites in this file: the `ADOPTIONS` table's
+//     `setZoneCollapsed`. That record lives at three sites in this file: the `ADOPTIONS` table's
 //     row 6 (`declinedFactory`, plus its provenance comment), row 6's own describe block, and
 //     the driven limb on row 1's row-6 adoption arm. The byte-identity set itself is UNMOVED:
 //     `relocate` and `gutter-affordance` REMAIN adopted modules whose bytes are pinned —
@@ -1601,7 +1601,7 @@ const ADOPTIONS: AdoptionRow[] = [
     //   number | null`, `0` inside the box, the not-a-number member for unusable input (§4 item
     //   (v)); (3) THE FOUR NAMED SEAM SUPPLIERS — `legalZonesForScope` (scope legality),
     //   `insertionIndexForPoint` (order derivation), `createDragController` (the drag-time reveal
-    //   state and the commit) and `setZoneMinimized` (the zone-minimize interplay).
+    //   state and the commit) and `setZoneCollapsed` (the zone-collapse interplay).
     // DECLINED FOR THIS UNIT — RECORDED: `createRelocateSession` AND ITS SEVEN SEAMS, the row's
     //   `declinedFactory` DATA below. **THE CONSEQUENCE, RECORDED PER §3.6.1 AND §4.0(1):
     //   `createRelocateSession` IS IMPORTED BY NOTHING** — the comparator adoption is the row's
@@ -1612,7 +1612,7 @@ const ADOPTIONS: AdoptionRow[] = [
     reducedSeamEvidence: [['legalZonesForScope', 'insertionIndexForPoint']],
     duplicateFile: 'src/renderer/pane-drag.ts',
     duplicateSymbols: ['withinSnapThreshold'],
-    seamSuppliers: ['createDragController', 'legalZonesForScope', 'insertionIndexForPoint', 'setZoneMinimized'],
+    seamSuppliers: ['createDragController', 'legalZonesForScope', 'insertionIndexForPoint', 'setZoneCollapsed'],
     declinedFactory: {
       module: 'relocate',
       factory: 'createRelocateSession',
@@ -2898,9 +2898,16 @@ describe('§6 P-SM-zone-repl-4 — the one-write-per-gesture discipline (strat:z
         if (establish(comp) === null) return 'the session refused establishment for the composed control — the limb has no subject'
         // The module's decision seam reads TRUTHINESS; the fork's fail-closed closure answers
         // `=== true`, and `isGutterResizable`'s body is the predicate it wraps.
+        //⟨RE-GRAINED BY UNIT `U-1b`, AT RED TIME — `RCA-8(c)`: the tooth is RE-POINTED, never
+        //   deleted. §2 `C-5` absorbs the zone state into `collapsed`, so the gate's second
+        //   parameter and its body move: `isGutterResizable(empty, collapsed)` =
+        //   `empty !== true && collapsed !== true` (still FAIL-CLOSED). The superseded (pre-U-1b)
+        //   body named the retired member in the same two positions; `C-5`'s right-hand column is
+        //   the only surviving spelling, and that member's name is NOT re-spelled here (the unit's
+        //   own vocabulary census forbids it under `tests/**`).⟩
         const gate = codeOf(PANE_GUTTER_PATH)
-        if (!/empty !== true && minimized !== true/.test(gate)) {
-          return 'isGutterResizable no longer carries the fail-closed body (empty !== true && minimized !== true) (§3 row 3 policy column)'
+        if (!/empty !== true && collapsed !== true/.test(gate)) {
+          return 'isGutterResizable no longer carries the fail-closed body (empty !== true && collapsed !== true) (§3 row 3 policy column, re-grained by U-1b §2 C-5)'
         }
         // The fork's fail-closed form is a DISTINCT SHAPE, not the module's truthiness rule: a
         // landing that hands the raw predicate to the module is the C-1 finding, so the fork's
@@ -3695,7 +3702,7 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
 //     any consumer file under `src/**` names the declined factory. THE LANDED HALF IS RECORDED
 //     BESIDE IT: `withinProximity` via `measuresWithinSnapThreshold`, the `distance` seam
 //     `distanceToZoneBox`, and the four named suppliers `legalZonesForScope` /
-//     `insertionIndexForPoint` / `createDragController` / `setZoneMinimized`.
+//     `insertionIndexForPoint` / `createDragController` / `setZoneCollapsed`.
 //   · THE ARITHMETIC: this row's terms are `14` BEFORE and `14` AFTER (`8 + 1 + 4 + 1`), and the
 //     register's total is `76` before and after. NO TERM IS ADDED FOR THE DECLINE — the decline
 //     IS recorded, at the three sites above — and the figure the contract declares for this row

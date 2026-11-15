@@ -213,7 +213,36 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row already
   //  carried a `restated:` field, so the derivation still resolves to the same un-re-stated
   //  path) and is NOT hand-edited here.
-  { file: 'src/main/preload.ts', md5: 'cb1ee2ff3cd409363dd656a9914e72ad', superseded: 'f24ea717a5f8f93a3ac490334611d22a', restated: 'U-STORE-SECURITY-ADOPT' },
+  // ⟨RE-STATED 2026-11-15 — unit `U-1b` (`zone-collapse`), D-22 (1); §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are not
+  //  relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree limb).
+  //  WHAT MOVED IS THE RECORDED VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a later pass may
+  //  move the file only by re-stating it here, with its reason and its unit named, exactly as this note
+  //  does"*. **THE REASON:** `U-1b` lands the ONE collapsed zone state (D-22 (1)) and the `sidebar` bridge
+  //  seam it writes is RENAMED WITH IT — the zone seam becomes `zoneCollapseToggle` (the superseded
+  //  spelling is `C-5`'s left column in `docs/L1/unit-u-1b-zone-collapse.md`; it is NOT spelled here
+  //  because this unit's own vocabulary census forbids it under `tests/**`, `RCA-8(c)`) — at all THREE
+  //  sites this file owns (the `SidebarMethods` declaration, the default `sidebarHolder`, and the exposed
+  //  `sidebar` proxy), so its bytes MOVE by construction and §2 `C-6` is the clause that orders THIS row
+  //  re-stated in the landing's own commit. **THE UNIT:** `U-1b` (`zone-collapse`), contract
+  //  `docs/L1/unit-u-1b-zone-collapse.md`. **THE SUPERSEDED CHAIN, kept VISIBLE and NEVER deleted:**
+  //  `76d2299070d4333e0e66189359baad22` (as filed) ← `00dba3cdd5e1eb3c7de632a838e3d28b` ←
+  //  `f24ea717a5f8f93a3ac490334611d22a` (`U-STORE-PERSIST-ADOPT`) ← `21b8120cddadd1b1531bd0422cb5d613`
+  //  (that unit's provisional value) ← `cb1ee2ff3cd409363dd656a9914e72ad` (`U-STORE-SECURITY-ADOPT`) — the
+  //  new value is that chain's next link. **THE NEW VALUE IS MEASURED, never inferred**
+  //  (`md5sum src/main/preload.ts`, taken at this unit's landing head AFTER its `src/` writes:
+  //  `eb230a8bcbe9b5444f95aa6a89c7fec2`). **NO OTHER ROW OF THIS TABLE IS TOUCHED** — the table stays
+  //  SEVEN rows and `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row already
+  //  carried a `restated:` field, so the derivation still resolves to `src/shared/demo-envelope.ts`).
+  //  ⟨THE `restated:` FIELD IS DELIBERATELY LEFT NAMING `U-STORE-SECURITY-ADOPT`, AND THE REASON IS A
+  //  LANDED ORACLE RATHER THAN PREFERENCE:⟩ `tests/pd-store-security-write.test.ts` (arms 1 and 3) and
+  //  `tests/store-security-write-register.test.ts` (`P-SSW-H-3`) pin THIS row's `restated` to
+  //  `'U-STORE-SECURITY-ADOPT'` and require the `U-STORE-PERSIST-ADOPT`-era superseded digest literal to
+  //  stay VISIBLE on the row's OWN line. This unit is not licensed to move those oracles, so `U-1b`'s
+  //  re-statement is recorded exactly as the row's licence allows: **the reason, the unit and the whole
+  //  superseded chain are named in this note**, the digest is re-MEASURED, and the SSW-era literal stays
+  //  on the row line as a trailing note.⟩
+  { file: 'src/main/preload.ts', md5: 'eb230a8bcbe9b5444f95aa6a89c7fec2', superseded: 'cb1ee2ff3cd409363dd656a9914e72ad', restated: 'U-STORE-SECURITY-ADOPT' }, // ⟨RE-STATED BY `U-1b` 2026-11-15 (`C-6`, D-22 (1)): the md5 is re-MEASURED at the landing head and the immediate predecessor `cb1ee2ff3cd409363dd656a9914e72ad` is its `superseded` field; the SSW-era superseded literal stays visible on this line — `f24ea717a5f8f93a3ac490334611d22a`⟩
   // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
   //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still
@@ -264,7 +293,57 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  (this row already carried a `restated:` field, so the derivation still resolves to the first row with none,
   //  `src/shared/demo-envelope.ts`) and is NOT hand-edited here; and `src/main/preload.ts` IS NOT TOUCHED by this unit
   //  (its carrier work is `U-1b`'s and it carries no zone literal — so it is not re-recorded either).
-  { file: 'src/renderer/sidebar-panes.ts', md5: 'c56e3aac3bb4cf32302636d69d7c1b64', superseded: 'f0b43b52565ad33145a3c979599214eb', restated: 'U-1a' },
+  // ⟨RE-STATED 2026-11-15 — unit `U-1b` (`zone-collapse`), D-22 (1); §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  (This row is re-stated a SECOND time inside `U-1b`; the `U-1a` re-statement block above is KEPT
+  //  VERBATIM as that pass's record, `RCA-8(c)` — annotate-beside, never rewritten.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are not
+  //  relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree limb).
+  //  WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own text (*"a later pass may move the file
+  //  only by re-stating it here, with its reason and its unit named"*). **THE REASON:** D-22 (1) answers
+  //  question 1 with ONE collapsed state, so every site in this file that names the zone state moves in
+  //  this unit: the act becomes `private zoneCollapseToggle(zone)`, `paneTabExpand` writes `collapsed:
+  //  false` instead of the superseded zone member (`C-5`'s left column in
+  //  `docs/L1/unit-u-1b-zone-collapse.md` — not spelled here, this unit's vocabulary census forbids it
+  //  under `tests/**`, `RCA-8(c)`), both `isGutterResizable` call sites read `zoneCollapsedOf(...)`, the
+  //  bridge map key and its comment, the `applyZoneTracks` prose, and the four mirror prose sites (the
+  //  zone container's mirror class becomes `is-collapsed`). Its bytes therefore MOVE by construction and
+  //  §2 `C-6` orders THIS row re-stated in the landing's own commit.
+  //  **THE UNIT:** `U-1b` (`zone-collapse`), contract `docs/L1/unit-u-1b-zone-collapse.md`.
+  //  **THE SUPERSEDED CHAIN, kept VISIBLE and NEVER deleted:** `df1930a3d6cac72796cc6c42609dd6c6` (the
+  //  pre-`U-ZONE-REPLACEMENT` value) ← `3f87d796f19ac839c9837d0d6f0506e8` (`U-ZONE-REPLACEMENT` landing) ←
+  //  `f0b43b52565ad33145a3c979599214eb` (that unit's GATE-4 fix pass) ← `c56e3aac3bb4cf32302636d69d7c1b64`
+  //  (`U-1a` `zone-vocabulary`) — the new value is that chain's fifth link.
+  //  **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/renderer/sidebar-panes.ts`, taken at this
+  //  unit's landing head AFTER its `src/` writes: `153841785965f9efe68c410313c37214`). **NO OTHER ROW OF
+  //  THIS TABLE IS TOUCHED** — the table stays SEVEN rows; `UNRESTATED_CONTROL_PATH` stays DERIVED from
+  //  the table itself (this row already carried a `restated:` field).
+  // ⟨RE-STATED AGAIN 2026-11-15 — the SAME unit (`U-1b`, `zone-collapse`), the SAME clause (§4 `P-TH-SM-1`
+  //  (e)/(f) / §1.2 (c)); this is the POST-LANDING REPAIR PASS that follows the landing's adversarial `G5`
+  //  pass.⟩ (The `U-1b` landing re-statement block directly above is KEPT VERBATIM as that pass's record,
+  //  `RCA-8(c)` — annotate-beside, never rewritten; the figure IT measured is the `superseded:` value below.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a RECORDED,
+  //  md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩
+  //  digest limb and the working-tree limb). WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own
+  //  text (*"a later pass may move the file only by re-stating it here, with its reason and its unit
+  //  named"*). **THE REASON:** the `G5` adversarial pass's FIX 2 landed the SECOND CARRIER for the ONE
+  //  collapsed state (`ASM-U1b-9`): the RUNTIME MIRROR in `src/renderer/sidebar-panes.ts` now RE-EMITS the
+  //  zone container's `props.collapsed` carrier in the SAME state-slice as its `is-collapsed` class, so the
+  //  two carriers cannot disagree at the runtime mirror — its bytes MOVE by construction, and §2 `C-6` is
+  //  the clause that orders THIS row re-stated in the repairing pass's own commit. **THE UNIT:** `U-1b`
+  //  (`zone-collapse`), contract `docs/L1/unit-u-1b-zone-collapse.md`. **THE SUPERSEDED CHAIN, kept VISIBLE
+  //  and NEVER deleted:** `df1930a3d6cac72796cc6c42609dd6c6` (the pre-`U-ZONE-REPLACEMENT` value) ←
+  //  `3f87d796f19ac839c9837d0d6f0506e8` (`U-ZONE-REPLACEMENT` landing) ← `f0b43b52565ad33145a3c979599214eb`
+  //  (that unit's GATE-4 fix pass) ← `c56e3aac3bb4cf32302636d69d7c1b64` (`U-1a` `zone-vocabulary`) ←
+  //  `153841785965f9efe68c410313c37214` (`U-1b`'s landing re-statement — the value on the row line below as
+  //  `superseded:`); the new value is that chain's SIXTH link. **THE NEW VALUE IS MEASURED, never inferred**
+  //  (`md5sum src/renderer/sidebar-panes.ts`, run TWICE at this repair pass's head, identical both times:
+  //  `01ccc70c8ada681854d995e45fc9c82a`). **NO OTHER ROW OF THIS TABLE IS TOUCHED** — the table stays SEVEN
+  //  rows (`tests/pd-atomicity-sweep-class-b.test.ts` §2.7 `C-3` pins the seven-row census and is NOT moved
+  //  by this pass); `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row already carried a
+  //  `restated:` field, so the derivation still resolves to `src/shared/demo-envelope.ts`); and
+  //  `src/main/preload.ts` IS NOT TOUCHED BY THIS PASS — its recorded `eb230a8bcbe9b5444f95aa6a89c7fec2` was
+  //  re-MEASURED at this head and still reads MATCH, so it is not re-recorded.
+  { file: 'src/renderer/sidebar-panes.ts', md5: '01ccc70c8ada681854d995e45fc9c82a', superseded: '153841785965f9efe68c410313c37214', restated: 'U-1b' }, // ⟨RE-STATED AGAIN BY `U-1b` 2026-11-15 (the `G5` FIX 2 second-carrier re-emit for `ASM-U1b-9`): the md5 is re-MEASURED at the repair pass's head and the landing-time value `153841785965f9efe68c410313c37214` is now this row's `superseded` field; the `U-1a`-era superseded literal stays visible on the note above — `c56e3aac3bb4cf32302636d69d7c1b64`⟩
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
   { file: 'src/shared/path-fork-cycle.ts', md5: 'eee412ed7609a1c8c727f2dafb2d97fb' },

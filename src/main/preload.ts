@@ -102,7 +102,7 @@ export interface SidebarMethods {
    *  call so a holder missing a key never throws. */
   togglePaneCollapse(id: string): void
   paneVisibilityToggle(id: string): void
-  zoneMinimizeToggle(zone: string): void
+  zoneCollapseToggle(zone: string): void
   paneTabExpand(zone: string, paneId: string): void
   /** HOST-4 (U-SHELL-9a §2.6) — the search-result open seam. The
    *  `SEARCH_RESULT_OPEN_BODY` handler reaches it (the result's
@@ -340,7 +340,7 @@ let sidebarHolder: SidebarMethods = {
   historyEntryClick: () => {},
   togglePaneCollapse: () => {},
   paneVisibilityToggle: () => {},
-  zoneMinimizeToggle: () => {},
+  zoneCollapseToggle: () => {},
   paneTabExpand: () => {},
   // HOST-4/HOST-5 — the search-result open + in-tab query-edit seams
   // (AD-2026-09-14-2 — exposed here so the renderer's holder keys have preload
@@ -658,7 +658,7 @@ const bridge: ProvidentBridge = {
     // optional-call and never throws (P-IM-2).
     togglePaneCollapse: (id) => sidebarHolder.togglePaneCollapse?.(id),
     paneVisibilityToggle: (id) => sidebarHolder.paneVisibilityToggle?.(id),
-    zoneMinimizeToggle: (zone) => sidebarHolder.zoneMinimizeToggle?.(zone),
+    zoneCollapseToggle: (zone) => sidebarHolder.zoneCollapseToggle?.(zone),
     paneTabExpand: (zone, paneId) => sidebarHolder.paneTabExpand?.(zone, paneId),
     // HOST-4/HOST-5 — the search-result open + in-tab query-edit seams
     // (AD-2026-09-14-2 — same style as the LIVE-11 seams; delegate to the

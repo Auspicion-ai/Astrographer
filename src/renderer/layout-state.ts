@@ -59,16 +59,25 @@ export interface PaneLayoutEntry {
   collapsed: boolean
 }
 
-/** One zone's geometry: `size` is PER-ZONE (C7) and `minimized` is PER-ZONE
- *  (C12) (W2-Q1). */
+/** One zone's geometry: `size` is PER-ZONE (C7) and `collapsed` is the
+ *  PER-ZONE operator STATEMENT (C12) (W2-Q1).
+ *
+ *  ⟨Unit `U-1b` — D-22 (1): ONE collapsed state, TWO ways to reach it.⟩
+ *  `collapsed` is OPTIONAL and ABSENCE is the storable "nothing stated": where
+ *  the record states nothing, the zone's state is DERIVED (`zoneCollapsedOf`
+ *  below — collapsed iff no enabled+placed pane names the zone), and where the
+ *  record states a boolean, the operator's word wins. The act writes an explicit
+ *  boolean and NEVER deletes (`ASM-U1b-1`); `size` is REQUIRED and is the one
+ *  thing a collapse never touches (forking §7.1 lines 480-481). */
 export interface ZoneLayout {
   size: number
-  minimized: boolean
+  collapsed?: boolean
 }
 
 /** The serialized layout state (the C9 `OperatorSettings.layout` slice). The
  *  serialized state is authoritative; the graph mirrors the derived facts
- *  (`is-empty`/`is-revealed`/`is-minimized`/`is-collapsed`). */
+ *  (`is-empty`/`is-revealed`/`is-collapsed` on the zone container, and the
+ *  per-pane `is-collapsed` frame class). */
 export interface LayoutState {
   version: number
   panes: PaneLayoutEntry[]
@@ -134,25 +143,55 @@ function coerceSize(value: unknown, fallback: number): number {
 }
 
 /** Per-zone fail-soft coercion (W2-Q16): a malformed zone value falls back to
- *  that zone's default. */
+ *  that zone's default. ⟨Unit `U-1b` — ABSENCE-PRESERVING (`ASM-U1b-1`):⟩ the
+ *  `collapsed` statement is copied ONLY when it is exactly `true` or `false`;
+ *  every other value — a junk member, a legacy profile's superseded zone-state
+ *  member, an absent key — is OMITTED, so an old/malformed profile DERIVES its
+ *  zone state instead of being silently read as "the operator expanded it".
+ *  An omitted member is never written as `undefined` (see the conditional
+ *  spread): absence is the meaning, so `exactOptionalPropertyTypes` off still
+ *  never sees a present-but-undefined key. */
 function coerceZoneLayout(value: unknown, fallbackSize: number): ZoneLayout {
-  if (!isRecord(value)) return { size: fallbackSize, minimized: false }
-  return {
-    size: coerceSize(value.size, fallbackSize),
-    minimized: value.minimized === true,
-  }
+  if (!isRecord(value)) return { size: fallbackSize }
+  const size = coerceSize(value.size, fallbackSize)
+  const stated = value.collapsed
+  return typeof stated === 'boolean' ? { size, collapsed: stated } : { size }
 }
 
-/** The pinned default layout: zero panes, the default zone/region geometry. */
+/** THE ONE DERIVATION of a zone's collapsed state — the foundation's predicate,
+ *  PURE and TOTAL over `(boolean | undefined, number)` (`forking.md` §11's last
+ *  row; `ASM-U1b-11`).
+ *
+ *  A stated boolean IS the answer (the operator's word overturns the derivation
+ *  on the same member); where nothing is stated, a zone is collapsed IFF no
+ *  enabled+placed pane names it — the census the `is-empty` mirror already
+ *  reads (`ASM-U1b-3`). It never throws: a non-finite/negative `paneCount`
+ *  simply never equals `0` and reads `false`.
+ *
+ *  ⟨`ASM-U1b-11` — WHERE IT LIVES.⟩ DEFINED here (`layout-state.ts`), because
+ *  the projection arm below (`zoneTrackVars`, `C-4`) must call it and
+ *  `operator-settings-store.ts` imports this module into the MAIN bundle —
+ *  defining it in `pane-graph.ts` would make this module import the assembler
+ *  (an import cycle that drags `pane-graph.ts` into the main bundle). It is
+ *  RE-EXPORTED from `pane-graph.ts` for the sidebar/assembler callers, so the
+ *  import graph stays one-way and every site calls THIS expression. */
+export function zoneCollapsedOf(stated: boolean | undefined, paneCount: number): boolean {
+  return typeof stated === 'boolean' ? stated : paneCount === 0
+}
+
+/** The pinned default layout: zero panes, the default zone/region geometry.
+ *  ⟨Unit `U-1b` — `ASM-U1b-2`:⟩ the four zone seeds OMIT the `collapsed` member.
+ *  A seeded `false` would state "the operator expanded this zone" for every
+ *  zone of every fresh profile and switch the derivation off. */
 export function defaultLayout(): LayoutState {
   return {
     version: LAYOUT_VERSION,
     panes: [],
     zones: {
-      left: { size: DEFAULT_ZONE_SIZE.left, minimized: false },
-      right: { size: DEFAULT_ZONE_SIZE.right, minimized: false },
-      top: { size: DEFAULT_ZONE_SIZE.top, minimized: false },
-      bottom: { size: DEFAULT_ZONE_SIZE.bottom, minimized: false },
+      left: { size: DEFAULT_ZONE_SIZE.left },
+      right: { size: DEFAULT_ZONE_SIZE.right },
+      top: { size: DEFAULT_ZONE_SIZE.top },
+      bottom: { size: DEFAULT_ZONE_SIZE.bottom },
     },
     stage: { size: DEFAULT_STAGE_SIZE },
     topBar: { size: DEFAULT_TOPBAR_SIZE },
@@ -316,11 +355,12 @@ function revealedPredicate(revealedZones: readonly LayoutZoneName[]): (id: unkno
 /** F-3 (docs/defects.md EMPTY-ZONE-TRACK-NOT-COLLAPSED) — project the shell
  *  grid's per-zone TRACK custom properties: `0px` for a zone with ZERO
  *  enabled+placed `app-graph` panes (the §2.5 census) that is NOT currently
- *  revealed as a drag drop target (the C11 carve-out), else the persisted
- *  `--zone-<zone>-size` value. `--stage-weight` stays the serialized `fr`
- *  weight, so the stage — the remaining-space track — reclaims the collapsed
- *  zone's space. Fail-soft (a null/malformed registry or layout never throws
- *  and never emits `NaN`/`Infinity`/negative geometry) and PURE.
+ *  revealed as a drag drop target (the C11 carve-out), `auto` for a COLLAPSED
+ *  occupied zone (`U-1b` `C-4`), else the persisted `--zone-<zone>-size` value.
+ *  `--stage-weight` stays the serialized `fr` weight, so the stage — the
+ *  remaining-space track — reclaims the collapsed zone's space. Fail-soft (a
+ *  null/malformed registry or layout never throws and never emits
+ *  `NaN`/`Infinity`/negative geometry) and PURE.
  *
  *  ⟨`PD-UI-14` §3 row 1 / §4 item (ii) — THE ADOPTION.⟩ The record is the
  *  vendored `census.computeTrackVars`'s own output, over the fork's five caller
@@ -364,8 +404,7 @@ export function zoneTrackVars(
     // silently reads the fallback.
     const memberTrack = trackRecord[zone]
     // The CALLER'S OWN collapse policy, never the module's: `zones.isEmpty` reads the
-    // fork's census, so a zone that is NOT empty never collapses — it carries its
-    // persisted `String(size)+unit` whatever the predicate answered.
+    // fork's census, so a zone that is NOT empty never takes the empty token.
     //
     // AN EMPTY zone carries the MODULE's own answer for that member, verbatim, and the
     // two reachable answers are the contract's two write rules (`§3` row 1): `'0px'`
@@ -374,12 +413,25 @@ export function zoneTrackVars(
     // the fork IS revealing) is the REMOVAL PATH, which the write site turns into
     // `removeProperty` so the stylesheet fallback supplies the persisted size. A member
     // the record does not carry falls back to the collapse token.
+    //
+    // ⟨Unit `U-1b` — `C-4` / `ASM-U1b-10`: THE COLLAPSED OCCUPIED ARM.⟩ An OCCUPIED zone
+    // takes `'auto'` when its state is collapsed (so the grid area, the fixed
+    // container's insets and the track all take their extent from CONTENT — the tab
+    // strip's own box), and `String(size)+unit` when it is expanded (the persisted size,
+    // the one thing a collapse never touches). The state is read through the SAME
+    // `zoneCollapsedOf` predicate the assembler calls — never re-spelled here — and the
+    // empty case keeps F-3's authority unchanged (`ASM-U1b-4`/`-8`: the two extents
+    // coexist, the `0px` rule governing the empty case). NO `size` is written on the
+    // collapsed arm and no collapsed-size constant exists anywhere (`G`).
     const declaredEmpty = isEmpty(counts, zone)
+    const collapsed = zoneCollapsedOf(l.zones[zone].collapsed, counts[zone] ?? 0)
     vars[name] = declaredEmpty
       ? typeof memberTrack === 'string'
         ? memberTrack
         : '0px'
-      : `${l.zones[zone].size}px`
+      : collapsed
+        ? 'auto'
+        : `${l.zones[zone].size}px`
   }
   return vars
 }

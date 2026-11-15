@@ -11,7 +11,7 @@
 // supplied as the controller's injected seams (§3 row 3's policy column):
 // `gutterAxis` (`axisFor`), `gutterBounds` (`boundsFor`), `clampGutterSize`
 // (`clampToBounds`' caller-side coercer + the reset/default read),
-// `isGutterResizable` (the empty/minimized gate, read FAIL-CLOSED) and
+// `isGutterResizable` (the empty/collapsed gate, read FAIL-CLOSED) and
 // `setZoneSize` (the ONE write path's policy half). The H-4 takeover-commit and
 // the reset policy stay fork-side too; `stage.size` is never touched by a zone
 // commit.
@@ -146,10 +146,13 @@ export function setZoneSize(layout: LayoutState, zone: LayoutZoneName, size: num
 }
 
 /** C11/C12 (§2.3) — a zone has a gutter only when it is neither empty (its
- *  track is collapsed) nor minimized (it keeps a fixed tab-strip track until
- *  expanded). TOTAL. */
-export function isGutterResizable(empty: boolean, minimized: boolean): boolean {
-  return empty !== true && minimized !== true
+ *  track is collapsed) nor COLLAPSED by the operator's statement (it keeps a
+ *  fixed tab-strip track until expanded). ⟨Unit `U-1b` `C-5`: the second
+ *  parameter is the collapse state (`zoneCollapsedOf`'s answer), so the body is
+ *  `empty !== true && collapsed !== true` — still FAIL-CLOSED, still the same
+ *  two-boolean shape.⟩ TOTAL. */
+export function isGutterResizable(empty: boolean, collapsed: boolean): boolean {
+  return empty !== true && collapsed !== true
 }
 
 /** The fork's ONE gutter composition (`§3` row 3), built on the vendored

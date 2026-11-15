@@ -112,7 +112,7 @@
 //        predicate is a contradiction) — **CONFIRMED for the hardcoded nulls**:
 //        arms 2, 5, 7, 8, 9, 10, 11, 12 returned a literal `null` (states 2..6 carry
 //        `distinguishable: null, restore: null`). **REFUTED for arm 4**: its predicate
-//        (`/zone:left/ && /is-minimized/` over the source) HELD — a weak file-wide read,
+//        (`/zone:left/ && /is-collapsed/` over the source) HELD — a weak file-wide read,
 //        never a contradiction. FIXED: all seven states now carry a REAL node-side
 //        (read, restore) pair over the vocabulary the clause names — class/attr reads,
 //        the modal class XOR, the scroll position, `data-mode` — each with a negative
@@ -2357,9 +2357,9 @@ function positionIndependenceOffencesFrom(src: string): string[] {
   if (!/path\s*:\s*'missing'/.test(block)) {
     out.push('the `uf_panes_1` MISSING-FRAME branch is gone — a doc-nav frame that is not rendered is no longer resolved as its own state (it would read as "pane absent")')
   }
-  const zoneRestore = branchSlice(block, /if \(\/is-minimized\/\.test\(zoneCls\)\)/)
-  if (zoneRestore === '' || !/#zone-minimize-left|ufRestoreZoneState\(/.test(zoneRestore)) {
-    out.push('the `uf_panes_1` block carries no per-block `zone:left` restore (the `#zone-minimize-left` hit-tested re-expand), so the frame read can see an EARLIER block’s minimize artifact (V-6/V-7)')
+  const zoneRestore = branchSlice(block, /if \(\/is-collapsed\/\.test\(zoneCls\)\)/)
+  if (zoneRestore === '' || !/#zone-collapse-left|ufRestoreZoneState\(/.test(zoneRestore)) {
+    out.push('the `uf_panes_1` block carries no per-block `zone:left` restore (the `#zone-collapse-left` hit-tested re-expand), so the frame read can see an EARLIER block’s collapse artifact (V-6/V-7)')
   }
   const preflightBody = (() => {
     if (src === SRC) return helperOwnBody('ufBlockPreflightRestore')
@@ -2370,7 +2370,7 @@ function positionIndependenceOffencesFrom(src: string): string[] {
     const end = scanBalanced(src, braceAt)
     return end < 0 ? '' : src.slice(braceAt, end + 1)
   })()
-  if (!/zoneWasMinimized[\s\S]{0,240}?ufRestoreZoneState\(/.test(preflightBody)) {
+  if (!/zoneWasCollapsed[\s\S]{0,240}?ufRestoreZoneState\(/.test(preflightBody)) {
     out.push('the per-block pre-flight no longer takes the restored zone through `ufRestoreZoneState` — the restore is not REACHABLE FROM THE BLOCK-RUNNER (§2.3 H-1 clause 3: per block, not once per battery)')
   }
   return out
@@ -2378,7 +2378,7 @@ function positionIndependenceOffencesFrom(src: string): string[] {
 /** ⟨B-8⟩ The MUTATION that removes the per-block restore from the block-runner
  *  (the named mutation that must fire `P-SM-2` arm 14). */
 function withoutPreflightZoneRestore(src: string): string {
-  return src.replace(/(zoneWasMinimized[\s\S]{0,240}?)ufRestoreZoneState\(/, '$1restoreZoneSkipped(')
+  return src.replace(/(zoneWasCollapsed[\s\S]{0,240}?)ufRestoreZoneState\(/, '$1restoreZoneSkipped(')
 }
 /** ⟨B-9 (`P-TP-1` arm 15)⟩ THE REAL-INPUT GATE the row builder derives its `pass`
  *  from: the binding must name the accepted `'cdp'` path or the `realInput` gate —
@@ -2715,13 +2715,13 @@ const STATE_SPECS: StateSpec[] = [
     state: 'zone:left expanded',
     read: /\bzoneState\b|'expanded'/,
     readSites: /evaluate\(|className|classList/,
-    restore: /already-expanded|#zone-minimize-|ufRestoreZoneState\(/,
+    restore: /already-expanded|#zone-collapse-|ufRestoreZoneState\(/,
   },
   {
-    state: 'zone:left MINIMIZED',
-    read: /\bis-minimized\b/,
+    state: 'zone:left COLLAPSED',
+    read: /\bis-collapsed\b/,
     readSites: /evaluate\(|className|classList/,
-    restore: /#zone-minimize-|ufRestoreZoneState\(/,
+    restore: /#zone-collapse-|ufRestoreZoneState\(/,
   },
   {
     state: 'pane collapsed',
@@ -2905,7 +2905,7 @@ function passValueExpressions(): string[] {
 }
 /** The shared-state readings the driver names when it reports a zone/pane state. */
 function zoneStateVocab(): string[] {
-  return ['is-minimized', 'minimized', 'expanded', 'already-expanded', 'absent']
+  return ['is-collapsed', 'collapsed', 'expanded', 'already-expanded', 'absent']
 }
 
 describe('R-1 a verdict per DECLARED row, or a refusal that NAMES the missing rows (§2.1 E-1/E-2/E-3)', () => {
@@ -3133,15 +3133,15 @@ describe('R-5 every verdict-carrying click is hit-tested; an off-viewport coordi
 })
 
 describe("R-6 the driver's own state is restored per block; a frame-based row cannot read its own prior block's artifact (§2.3 H-1, F-5)", () => {
-  it('R-6.i the state read is DISTINGUISHABLE — a minimized zone is not reported as "pane absent"', () => {
+  it('R-6.i the state read is DISTINGUISHABLE — a collapsed zone is not reported as "pane absent"', () => {
     const fn = helperSlice('ufEnsurePaneExpanded')
     expect(fn, 'the `ufEnsurePaneExpanded` helper must exist').not.toBe('')
     expect(
       fn,
       'V-7: `ufEnsurePaneExpanded` returns `{present:false, path:\'absent\'}` when the frame is absent — which is ' +
-        'exactly what a MINIMIZED zone produces BY DESIGN (M-6), so it cannot tell "the pane is not enabled" from ' +
-        '"the zone is minimized so its stack is a tab strip" (§2.3 H-1 clause 1)',
-    ).toMatch(/is-minimized|zoneState|zone.*minimized/i)
+        'exactly what a COLLAPSED zone produces BY DESIGN (M-6), so it cannot tell "the pane is not enabled" from ' +
+        '"the zone is collapsed so its stack is a tab strip" (§2.3 H-1 clause 1)',
+    ).toMatch(/is-collapsed|zoneState|zone.*collapsed/i)
   })
 
   it('R-6.ii the restore path is reachable PER BLOCK, not once per battery', () => {
@@ -3149,7 +3149,7 @@ describe("R-6 the driver's own state is restored per block; a frame-based row ca
     const perBlockRestore = helpers.some((h) => {
       if (h === 'uf_restore_layout') return false
       const text = maskCode((HELPER_CANDIDATES.find((w) => w.name === h) ?? { text: '' }).text)
-      return /zone:left/.test(text) && /is-minimized/.test(text)
+      return /zone:left/.test(text) && /is-collapsed/.test(text)
     })
     expect(
       perBlockRestore,
@@ -4448,7 +4448,7 @@ describe('§4 P-SM-2 — THE DRIVER\'S OWN MUTABLE STATE IS RESTORED (strat:live
     // ⟨ITEM 5 — RE-DERIVED. SUPERSEDED (as filed, states 2..6 carried `distinguishable: null,
     // restore: null` and arms 2/5/7/8/9/10/11/12 therefore returned a HARDCODED `null`: eight
     // arms that could not fail — REPRODUCED by reading; arm 4's charge of a
-    // "contradiction" is REFUTED: its `/zone:left/ && /is-minimized/` source read HELD). Every
+    // "contradiction" is REFUTED: its `/zone:left/ && /is-collapsed/` source read HELD). Every
     // state now carries a REAL node-side (read, restore) pair over the vocabulary §4.2 declares
     // — the class/attribute reads, the modal's class XOR, the scroll position, `data-mode` — and
     // each pair carries a negative draw that removes the vocabulary from the code and must turn
@@ -4466,8 +4466,8 @@ describe('§4 P-SM-2 — THE DRIVER\'S OWN MUTABLE STATE IS RESTORED (strat:live
     // distinguishable-read arm) + 3 class-(b) NOT-RUN arms + 1 class-(b) distinguishable read.
     arm(run, 1, 'distinguishable-read:zone:left expanded', () => stateArm(states[0], 'read'))
     arm(run, 2, 'restore-to-baseline:zone:left expanded', () => stateArm(states[0], 'restore'))
-    arm(run, 3, 'distinguishable-read:zone:left MINIMIZED', () => stateArm(states[1], 'read'))
-    arm(run, 4, 'restore-to-baseline:zone:left MINIMIZED', () => stateArm(states[1], 'restore'))
+    arm(run, 3, 'distinguishable-read:zone:left COLLAPSED', () => stateArm(states[1], 'read'))
+    arm(run, 4, 'restore-to-baseline:zone:left COLLAPSED', () => stateArm(states[1], 'restore'))
     arm(run, 5, 'distinguishable-read:pane collapsed', () => stateArm(states[2], 'read'))
     arm(run, 6, 'distinguishable-read:pane enabled/disabled', () =>
       stateArm(states[3], 'read') ??
@@ -4482,7 +4482,7 @@ describe('§4 P-SM-2 — THE DRIVER\'S OWN MUTABLE STATE IS RESTORED (strat:live
     arm(run, 13, 'per-block-reachability', () => {
       const perBlock = HELPER_CANDIDATES.filter((h) => {
         if (h.name === 'uf_restore_layout') return false
-        return /zone:left/.test(maskCode(h.text)) && /is-minimized/.test(maskCode(h.text))
+        return /zone:left/.test(maskCode(h.text)) && /is-collapsed/.test(maskCode(h.text))
       })
       return perBlock.length > 0
         ? null
@@ -4532,7 +4532,7 @@ describe('§4 P-SM-2 — THE DRIVER\'S OWN MUTABLE STATE IS RESTORED (strat:live
       return null
     })
     unrunArm(run, 'the 7 distinguishable state reads, executed against a booted app', 'requires the assembled app (class (b), §4.3 item 2)', 'distinguishable-read')
-    unrunArm(run, 'the real hit-tested restore gesture (`#zone-minimize-left`) driven against the app', 'requires the assembled app and a real CDP session (class (b))', 'restore-to-baseline')
+    unrunArm(run, 'the real hit-tested restore gesture (`#zone-collapse-left`) driven against the app', 'requires the assembled app and a real CDP session (class (b))', 'restore-to-baseline')
     unrunArm(run, 'the isolated-vs-full-battery agreement of `uf_panes_1`', 'requires a real battery run (class (b), §6.3 C-2 item 4)', 'position-independence')
     finish('P-SM-2', run, spec, 'the node-side terms assert the declared classification and the restore machinery; the behaviour is class (b)')
   })
@@ -6453,7 +6453,7 @@ describe('R-13 STAGED for the NEXT driver pass — `C-6`/`C-7`/`C-8` (deliberate
   // `C-7` — `ufEnsurePaneExpanded` DROPS `ufRestorePaneVisibility`'s
   // `missing-control (… NOT restored)` PATH and returns `path:'absent'` for BOTH
   // "no control rendered" and "enabled but no frame": the three states §2.3 `H-1`
-  // clause 1 names — minimized-zone, not-enabled, genuinely absent — do not carry
+  // clause 1 names — collapsed-zone, not-enabled, genuinely absent — do not carry
   // three distinct tokens.
   //
   // STATES ENUMERATED: (i) the frame is present · (ii) a persisted-OFF pane whose

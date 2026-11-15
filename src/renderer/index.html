@@ -143,6 +143,41 @@
        { grid-area: right }` (higher specificity) defeated the spanning rule
        below; operator-pane placement is owned by U-SHELL-3/9. */
     .layout .zone-bottom { grid-area: bottom; }
+    /* ⟨Unit `U-1b` `C-4` — THE COLLAPSED EXTENT, DECLARATIVE (ASM-U1b-10's second
+       author).⟩ A COLLAPSED stop of a zone's grid track reads `auto`: the grid area
+       AND the fixed zone container's box (whose insets are the SAME tokens) both take
+       their extent from CONTENT — i.e. from the collapsed zone's tab strip — and
+       `hidden` on the arrangement axis (declared on the container, below) holds the
+       strip inside it. THE TOKEN IS AUTHORED TWICE AND IT MUST BE: `applyZoneTracks`
+       writes `--zone-<z>-track` INLINE on this element at every `setLayout`, and an
+       inline custom property OUTRANKS any stylesheet rule — so this block is the
+       authoritative carrier BEFORE the first write and after a re-mount, and the JS
+       projection (`layout-state.ts` → `zoneTrackVars`) is the carrier after it. The
+       two read ONE predicate (`zoneCollapsedOf`), so they cannot disagree.
+       THE `:not(.is-empty)` GATE IS THE MECHANISM, NOT THE ORDER (`ASM-U1b-8`, corrected
+       `2026-11-15` in the `G5` repair pass — the as-landed comment claimed "order … at
+       equal specificity", which was measured WRONG). MEASURED SPECIFICITIES: each rule
+       below is `(2,3,0)` — `#app` and `#wiki-root` are two ids, and a `:has()` argument
+       counts as its own most specific compound: one attribute plus two classes — and
+       F-3's `0px` rule is ALSO `(2,3,0)`. At that TIE source order decides nothing, and
+       the ungated form was wrong for one LIVE arm: an EMPTY zone REVEALED as a drag drop
+       target carries `is-empty is-collapsed is-revealed`, so F-3's rule is gated OUT by
+       its own `:not(.is-revealed)` and an ungated `auto` beat the base
+       `var(--zone-<z>-size, …)` fallback — a childless `auto` box, i.e. a zero-width,
+       unhittable drop target, which is exactly the alternative `ASM-U1b-4` rejects. The
+       gate makes the two rules MUTUALLY EXCLUSIVE BY CONSTRUCTION (this one requires
+       `:not(.is-empty)`, F-3's requires `.is-empty`), so the cascade never has to choose
+       between them, and the THREE ARMS resolve as `C-4`/`ASM-U1b-8` state them:
+       empty + revealed ⇒ NEITHER rule matches, the base fallback supplies the persisted
+       size (exactly what `zoneTrackVars`' `''` removal path asks the stylesheet for);
+       empty + not revealed ⇒ `0px` (F-3, untouched); collapsed OCCUPIED ⇒ `auto`;
+       expanded occupied ⇒ the persisted size. Neither replaces the other, the
+       empty-track policy stays an EMPTINESS fact, and no `size` token is read here
+       (`ASM-U1b-4`). */
+    #app > #wiki-root:has([zone='left'].is-collapsed:not(.is-empty))   { --zone-left-track: auto; }
+    #app > #wiki-root:has([zone='right'].is-collapsed:not(.is-empty))  { --zone-right-track: auto; }
+    #app > #wiki-root:has([zone='top'].is-collapsed:not(.is-empty))    { --zone-top-track: auto; }
+    #app > #wiki-root:has([zone='bottom'].is-collapsed:not(.is-empty)) { --zone-bottom-track: auto; }
     /* Unit U-SHELL-4 (C11, H6) / F-3 — an empty zone's grid track collapses to
        zero, UNLESS the drag controller currently reveals it as a provisional
        drop target (`.is-revealed`). The state-derived `.is-empty` mirror is
@@ -175,8 +210,8 @@
            and gains `overflow: auto`, so a document longer than the stage's box
            scrolls inside the stage while the surrounding chrome keeps its rects.
        THE SELECTOR IS THE ZONE CONTAINER, NEVER `[zone]` ALONE: the four
-       authored gutter affordances and the zone minimize controls ALSO carry
-       `zone` (they are children/controls, not containers), so the zone rule
+       authored gutter affordances and the zone collapse controls ALSO carry
+       `zone` (they are siblings/controls, not containers), so the zone rule
        is scoped by the container's own `zone:<name>` id.
        THE `G-5` FIFTEEN-TOKEN THEME CENSUS IS UNTOUCHED — no custom property is
        declared or moved inside the three theme blocks and none is declared here
@@ -194,6 +229,55 @@
     #app [id="zone:left"][zone] { top: var(--zone-top-track); bottom: var(--zone-bottom-track); left: 0; width: var(--zone-left-track); }
     #app [id="zone:right"][zone] { top: var(--zone-top-track); bottom: var(--zone-bottom-track); right: 0; width: var(--zone-right-track); }
     #app [id="zone:main"] { overflow: auto; min-width: 0; min-height: 0; }
+    /* ⟨Unit `U-1b` `C-4`/`C-5` — THE COLLAPSED ZONE, selector by selector.⟩
+       (1) THE ARRANGEMENT AXIS GOES `hidden`, keyed on the AUTHORED `data-orientation`
+           (`pane-graph.ts` writes it on every zone container; the tab strip's own
+           `display` rules below read the same attribute), because which axis is the
+           "arrangement axis" is exactly what that attribute already says — a
+           `[collapsed]`-only rule could not tell y from x. `overflow-x` is pinned
+           `hidden` in the same rule so a shrink-to-fit `auto` track never grows a
+           scrollbar and stops being content-derived. `hidden` — not `visible` (which
+           would paint the strip outside the collapsed extent), not `clip` (which
+           breaks descendant hit-testing) and never `display: none` (which would
+           unmount the `state-slice` mirror's node).
+       (2) THE CONTROL'S OWN FIXED BOX: the hide/expand control is a ROOT-LEVEL
+           SIBLING of its container (`ASM-U1b-5` — a child is buried at a collapsed
+           zone's zero extent), positioned `fixed` in the SAME coordinate space the
+           zone containers and the gutter affordances use (`#wiki-root` carries
+           `contain: layout`), above the gutters' `z-index: 3` so it stays hit-testable
+           over the affordance's edge.
+       (3) THE FOUR POSITIONAL RULES read the ZONE'S OWN TRACK TOKEN on the axis the
+           zone fixes and overlay the zone's FOOT: the token bounds the control's box,
+           so it moves with an `auto`-shrunk zone and never leaves its zone. The fixed
+           20px is the glyph's box on the OTHER (arrangement) axis. No `--zone-*-size`
+           token is consumed: the extent is never read from the remembered size.
+       (4) THE GLYPH comes from the AUTHORED CARRIER (`collapsed="true"|"false"`) read
+           through the ADJACENT-SIBLING combinator, which is sound exactly because (2)
+           makes the control the container's immediate next sibling. `::after` is CSS,
+           not DOM, so the node's `content` stays `''` (D-8 — no hand-written DOM). */
+    #app [id^="zone:"][zone][collapsed='true'][data-orientation='vertical']   { overflow-y: hidden; overflow-x: hidden; }
+    #app [id^="zone:"][zone][collapsed='true'][data-orientation='horizontal'] { overflow-y: hidden; overflow-x: hidden; }
+    #app [id^="zone-collapse-"][zone] { position: fixed; z-index: 4; box-sizing: border-box; display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--card-bg); border: 1px solid var(--border); }
+    #app [id='zone-collapse-left'][zone]   { left: 0; bottom: var(--zone-bottom-track); width: var(--zone-left-track); height: 20px; }
+    #app [id='zone-collapse-right'][zone]  { right: 0; bottom: var(--zone-bottom-track); width: var(--zone-right-track); height: 20px; }
+    #app [id='zone-collapse-top'][zone]    { top: 0; right: 0; height: var(--zone-top-track); width: 20px; }
+    #app [id='zone-collapse-bottom'][zone] { bottom: var(--zone-bottom-track); right: 0; height: var(--zone-bottom-track); width: 20px; }
+    #app [id^="zone:"][zone] + .zone-collapse::after { content: '▾'; }
+    #app [id^="zone:"][zone][collapsed='true'] + .zone-collapse::after { content: '▸'; }
+    /* (5) A COLLAPSED ZONE OFFERS NO RESIZE STRIP — HIDDEN, NEVER DELETED.
+       `visibility: hidden` (not `display: none`) keeps a real, measurable box while
+       removing the affordance from hit-testing and the a11y tree: a `display: none`
+       box measures zero, and a zero-area affordance is the ALREADY-RECORDED defect
+       signature (`gate-4` finding 8, "the live pass printed zero affordance
+       geometry"), so a future reading could not tell "hidden by contract" from "the
+       box collapsed away again". The element stays mounted, so the renderer's
+       delegated `.gutter[zone]` wiring and the host's identity map need no re-point.
+       CORRECTNESS DOES NOT DEPEND ON THIS PAINT: `isGutterResizable` refuses the
+       gesture (fail-closed) whether or not the rule matches. */
+    #app > #wiki-root:has([zone='left'][collapsed='true']) .gutter[id='zone-gutter-left']     { visibility: hidden; }
+    #app > #wiki-root:has([zone='right'][collapsed='true']) .gutter[id='zone-gutter-right']   { visibility: hidden; }
+    #app > #wiki-root:has([zone='top'][collapsed='true']) .gutter[id='zone-gutter-top']       { visibility: hidden; }
+    #app > #wiki-root:has([zone='bottom'][collapsed='true']) .gutter[id='zone-gutter-bottom'] { visibility: hidden; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
     h2 { font-size: 1rem; margin: 0 0 0.75rem; }
     .counter-value { font-size: 2rem; font-weight: 700; margin: 0 0 0.75rem; }
@@ -236,17 +320,17 @@
        while a dragged pane comes near it (`is-revealed`); otherwise its grid
        track collapses (the derived `is-empty`). */
     .is-empty.is-revealed { outline: 2px dashed var(--accent); outline-offset: 2px; min-height: 2rem; }
-    /* Unit U-SHELL-4 (C12) — a minimized zone REPLACES its pane stack with a
-       tab strip (provident subtree). Sidebars (`left`/`right`) stack their tabs
-       vertically; top/bottom lay them out horizontally (edge-derived). */
-    .is-minimized .pane-tab { cursor: pointer; }
+    /* Unit U-SHELL-4 (C12) / unit U-1b — a COLLAPSED zone REPLACES its pane stack
+       with a tab strip (provident subtree). Sidebars (`left`/`right`) stack their
+       tabs vertically; top/bottom lay them out horizontally (edge-derived). */
+    .is-collapsed .pane-tab { cursor: pointer; }
     [data-orientation='vertical'] .pane-tab { display: block; }
     [data-orientation='horizontal'] .pane-tab { display: inline-block; margin-right: 0.5rem; }
     /* Unit U-SHELL-5 (C7) — the resize gutters between the zone tracks. The
        shell pointer controller owns the drag mechanic; the surface only reads
        the C1 tokens so it themes with the rest of the chrome. A column gutter
        (left|stage, stage|right) resizes horizontally; a row gutter
-       (top/main, main/bottom) vertically. An empty/minimized zone has no
+       (top/main, main/bottom) vertically. An empty/collapsed zone has no
        gutter (the controller's `isGutterResizable` gate) so no rule reveals one. */
     .layout .gutter { flex: none; background: var(--border); }
     .layout .gutter:hover { background: var(--hover); }
