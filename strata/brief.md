@@ -76,12 +76,15 @@ patch (D-6). Repeat failure escalates to a rebuild (`rebuild.md`). A multi-unit 
 per unit before any unit starts, because a single pass cannot carry one unit's red→green→adversarial→greens
 sequence beside a sibling's (§9, D-4).
 
-## 5. Where the loop stands (D-12)
+## 5. Where the loop stands (D-12, D-19)
 
-This is the bootstrap: **no unit is open** and none has been admitted. The first work item is the
-foundation-import intake (D-12) — its finding table is `strata/records/foundation-update-2026-11-15-research.md`,
-and its scope ruling is `pending.md` row 1, which only the user closes. A unit's stage and walkthrough
-streak are state, read from `strata/.strata/units/*.json` and never restated here (D-2).
+The program's first unit has LANDED: `V-1` `pin-restate` moved the foundation pin to `e8dfb57…`
+(measured 2026-11-15) in one atomic commit and left the fifteen modules untouched (D-19); the program's
+design is `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`. The next
+actionable work is `V-2` `conformance-refresh`, while `U-1` stands BLOCKED by its own item-8 gate —
+both intake reviews returned `ADJUDICATION` and their findings are filed under `strata/records/` — and
+the dependency ruling that gate exposed is `pending.md` row 1. No unit's stage is restated here: state
+lives in `strata/.strata/units/*.json` (D-2).
 
 The constraint every later unit inherits: nothing it builds may be a change to `provident-ssr`,
 `provident-editable` or the adjacent foundation tree (D-9), and no unit rewrites the foundation's

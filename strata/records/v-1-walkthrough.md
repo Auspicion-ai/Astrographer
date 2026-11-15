@@ -29,9 +29,9 @@ goal/expected pair and a step's citation is resolved mechanically (§2, §4).
   `168`, and the contract's pointer to the anchors' reason sent readers to `pending.md` row 1, which
   the landing's tracker pass had renumbered to row 2. Both corrected beside themselves (`9a86be7`),
   the map's three stale pointers and its status line with them (`430f681`).
-- **Run 4 — `DOC-GAP`.** All thirteen steps reproduced mechanically. Two documentation findings, both
-  repaired: the contract's "no successor" evidence cited a path with no tree prefix (routed to L1,
-  which found the archive it lives in), and this record lagged the runs the corpus cites (this rewrite).
+- **Run 4 — `DOC-GAP`.** Twelve of thirteen steps reproduced; step 10's citation limb was not settled (two
+  contract pointers). Both repaired: the "no successor" evidence's path had no tree prefix (routed to
+  L1), and this record lagged the runs (rewritten).
 
 ## Not settled, stated as such
 
