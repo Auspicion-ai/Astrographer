@@ -11,13 +11,32 @@
 // class from a ZONE node and consumes it into a PANE's `css.classes` — a pattern whose provider is
 // authorable once the engine emits it.
 //
+// VERSION TAG ON THAT GATE (added 2026-11-15, L1): the `if (hasAnyTarget && isResolutionParticipant(node)
+// && !isSeamProvider(node)) continue;` form quoted above, and every `dist/core/node.js` LINE NUMBER a
+// reader may carry over from the contract's §3 (`1151-1153` / `1169-1171` / `1222-1224`), are **0.5.1's
+// and 0.5.1's only** — they are not re-derivable at this head, because the installed engine is 0.5.2,
+// where the same guard reads `if (!seamExempt && node.valueRecord === true)` and sits at
+// `dist/core/node.js:1300-1319` (`isResolutionParticipant` 1213, `isSeamProvider` 1247, READ at this
+// head). The gate this row exercises is 0.5.2's narrowed one; the 0.5.1 numbers explain the FINDING,
+// never the current file.
+//
 // THE FIVE LIMBS (one `it` each):
-//   A — the reason the bump exists, in its narrowest measurable form: a consumer standing under a
-//       provider renders with the INHERITED class on ITS OWN element. (Measured on 0.5.1: the class
-//       DOES arrive — resolution runs over the full slice and the dropped provider still
-//       participates. See the row's report; this limb is green-on-arrival.)
+//   A — ~~the reason the bump exists, in its narrowest measurable form~~ CORRECTED 2026-11-15 (L1,
+//       blind-exit finding): **`A` IS NOT THE REASON THE BUMP EXISTS — `B` is** (see the note under
+//       `B`). `A` is the BY-POSITION INHERITANCE GUARD: a consumer standing under a provider renders
+//       with the INHERITED class on ITS OWN element. (Measured on 0.5.1: the class DOES arrive —
+//       resolution runs over the full slice and the dropped provider still participates. See the
+//       row's report; this limb is green-on-arrival.) That greenness on 0.5.1 is precisely why it
+//       cannot be the reason: the bump buys this limb nothing.
 //   B — THE PROVIDER IS AN ELEMENT: its own authored `css.id` and its own content marker reach the
 //       rendered HTML. This is exactly what the `!isSeamProvider` skip deletes ⇒ RED on 0.5.1.
+//       ⇒ **THIS IS THE REASON THE BUMP EXISTS** (2026-11-15, L1, confirming `docs/L1/unit-e-1-deps-adopt.md`
+//       §4 and the foundation's own record at
+//       `../Provident-Electron/src/shared/demo-envelope.ts:787-789`: "THE PROVIDER IS AN AUTHORED
+//       ELEMENT AND STAYS ONE — measured on `provident-ssr@0.5.2`, which narrows the compile emit
+//       gate to a runtime-minted VALUE RECORD ... instead of being dropped from render, `AL-F1`'s
+//       first half, discharged"). `B` is the only limb whose COLOUR changes across the bump, which
+//       is what "reason" has to mean.
 //   C — the walk still DISCRIMINATES BY POSITION: an outer and a nearer provider publish different
 //       classes and the consumer reads the NEAREST one, never both. Without `C`, `A`/`B` would also
 //       be satisfied by an engine that sprayed every provider's value everywhere.
