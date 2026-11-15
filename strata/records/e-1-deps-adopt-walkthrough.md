@@ -24,6 +24,10 @@ states the dependency set, and every citation's resolution.
   lines were still wrong — `brief.md` §5 routed the departed ruling to `pending.md` row 1 (my earlier
   edit had missed that sentence), and `platform.md` §5 claimed four unit contracts where two exist.
   Both replaced; the `§5` sentence had been the same claim twice corrected and is now written once.
+- **Run 4 — `STALE`.** Seven of eight scenarios confirmed; the one finding was the brief's Tests
+  census, which called 146 files "flat" where the tree holds 144 flat (`find -maxdepth 1`) plus 2
+  nested. Corrected with the commands that measure each set, and the lesson recorded: a git pathspec's
+  `*` crosses directories, which is what made two successive figures wrong.
 
 ## Not settled, stated as such
 
