@@ -58,6 +58,15 @@
 //     drifted a slot later. `D'` grades the ID **AT THE INDEX** for all four zones, drives a STRAY
 //     control (moved to the end of `children`) through the second pass to prove the assembler MOVES
 //     it rather than keeping it, and pins that `zone:sidebar` carries NONE.
+//
+// ⟨A NINTH LIMB `I` ADDED BY THE APP-GREEN PASS (`2026-11-15`, `docs/L1/unit-u-1b-app-green-pass.md`).⟩
+// The unit's `G8` measured the anchored control at `20×4` (`top`/`bottom`) and `14×20` (`right`) on
+// an EMPTY derived-collapsed zone: sized off the tracked axis, which F-3 makes `0px`, the control
+// was effectively unhittable and an operator had no painted route to overturn the derivation. The
+// fix is a hit-box floor on `index.html`'s shared control rule. `I` is that fix's NODE tooth — it
+// reads the SOURCE (`index.html`) and cannot see the paint; the PAINT is graded by the live rows
+// only (`uf_layout_10`'s four-control verdict, `uf_panes_8`'s two-state arm), which is the split
+// `D-10`/`RCA-12` requires. The eight limbs above are KEPT VERBATIM.
 // Both arms are ENVELOPE-class, exactly like their parents: same real assembler, same registry,
 // same harness (`assemble`, `reAssembledEnvelope`), no paint, no grid, no window.
 //
@@ -1752,6 +1761,119 @@ describe('U-1b zone collapse — the statement, the derivation, the act, the anc
         `corpora it builds from the REAL second children — a one-slot-late control and a deleted control — so the clean reading is ` +
         `measured against a checker that is shown to red. ` +
         `LAYER: envelope-class — the real \`assembleAppGraphEnvelope\` over a real \`PaneRegistry\`; no paint, no grid, no window`,
+    ).toEqual([])
+  })
+
+  // ⟨THE APP-GREEN PASS'S NODE TOOTH — limb `I`, ADDED `2026-11-15` (`docs/L1/unit-u-1b-app-green-pass.md`).⟩
+  // §7a fixed a MEASURED defect in the paint: on an empty derived-collapsed zone the anchored
+  // control measured `20×4` (`top`/`bottom`) and `14×20` (`right`) — effectively unhittable, so an
+  // operator had no painted route to overturn the derivation on an empty zone. The fix is a
+  // HIT-BOX FLOOR on the shared control rule, and a CSS declaration is exactly the kind of claim
+  // that gets deleted silently: no node limb read `index.html`'s control family at all. This limb
+  // is the SOURCE CLAUSE that keeps the floor from disappearing; the PAINT (that the floor
+  // actually reaches the assembled app) is `G8`-only and graded by the live rows
+  // (`uf_layout_10`'s four-control verdict, `uf_panes_8`'s two-state arm) — stated so neither
+  // layer claims the other's reading (`D-10`/`RCA-12`).
+  it("I — the control's HIT-BOX FLOOR (`§7a`) is a source clause: BOTH axes floored at 20px on the shared rule, the four positional rules still author the tracked axis off the zone track tokens, and the four collapsed-gutter hides survive", () => {
+    const html = readText('src/renderer/index.html')
+    const FLOOR = 20
+    /** The declaration block of the rule whose selector text is `needle` (the first match), or
+     *  `null` when the rule is absent — a missing rule is a NAMED problem, never a silent pass. */
+    const declsOf = (src: string, needle: string): string | null => {
+      const at = src.indexOf(needle)
+      if (at < 0) return null
+      const open = src.indexOf('{', at)
+      const close = open < 0 ? -1 : src.indexOf('}', open)
+      return open < 0 || close < 0 ? null : src.slice(open + 1, close)
+    }
+    /** The px value a declaration carries, or `NaN` when the declaration is absent. */
+    const px = (decls: string | null, prop: string): number => {
+      if (decls === null) return Number.NaN
+      const m = new RegExp(`(?:^|[;\\s])${prop}\\s*:\\s*(-?\\d+(?:\\.\\d+)?)px`).exec(decls)
+      return m ? Number(m[1]) : Number.NaN
+    }
+    const check = (src: string): string[] => {
+      const problems: string[] = []
+      // (i) THE FLOOR, on the ONE shared control rule (all four controls inherit it).
+      const shared = declsOf(src, '#app [id^="zone-collapse-"][zone] {')
+      if (shared === null) problems.push('the shared `[id^="zone-collapse-"]` rule is ABSENT from `index.html` — the control family has no shared box at all')
+      const minW = px(shared, 'min-width')
+      const minH = px(shared, 'min-height')
+      if (!(minW >= FLOOR)) problems.push(`the shared control rule's \`min-width\` reads ${Number.isNaN(minW) ? 'ABSENT' : `${minW}px`}, not the ${FLOOR}px hit-box floor (the measured defect: an empty zone's 0px track sized the control to a sliver)`)
+      if (!(minH >= FLOOR)) problems.push(`the shared control rule's \`min-height\` reads ${Number.isNaN(minH) ? 'ABSENT' : `${minH}px`}, not the ${FLOOR}px hit-box floor`)
+      // (ii) THE FLOOR IS A FLOOR, NOT A REPLACEMENT: each positional rule still authors its
+      //      TRACKED axis from the zone's own track token, so an expanded zone's control follows
+      //      its zone and a collapsed occupied zone keeps the content-derived `auto` extent.
+      const trackedAxis: Array<{ zone: Zone; prop: string; token: string }> = [
+        { zone: 'left', prop: 'width', token: '--zone-left-track' },
+        { zone: 'right', prop: 'width', token: '--zone-right-track' },
+        { zone: 'top', prop: 'height', token: '--zone-top-track' },
+        { zone: 'bottom', prop: 'height', token: '--zone-bottom-track' },
+      ]
+      for (const t of trackedAxis) {
+        const rule = declsOf(src, `[id='zone-collapse-${t.zone}']`)
+        if (rule === null) { problems.push(`the \`zone-collapse-${t.zone}\` positional rule is ABSENT — its control has no box`); continue }
+        if (!new RegExp(`${t.prop}\\s*:\\s*var\\(${t.token}`).test(rule)) {
+          problems.push(`the \`zone-collapse-${t.zone}\` rule no longer authors its TRACKED axis \`${t.prop}\` from \`var(${t.token})\` — the floor became the box, so an expanded zone's control would stop following its own track (reads: ${JSON.stringify(rule.trim().slice(0, 160))})`)
+        }
+        const cross = t.prop === 'width' ? 'height' : 'width'
+        if (!(px(rule, cross) >= FLOOR)) problems.push(`the \`zone-collapse-${t.zone}\` rule's CROSS axis \`${cross}\` wonders off the authored ${FLOOR}px box (reads ${Number.isNaN(px(rule, cross)) ? 'ABSENT' : `${px(rule, cross)}px`})`)
+      }
+      // (ii-b) THE SIDE CONTROLS' FOOT INSET (`index.html`'s `(2c)`) — the measured fix for
+      //        the shell's own floating Settings pill, whose box covers the left zone's foot
+      //        and whose `z-index: 110` outranks the control's `4`: without the inset the
+      //        control's CENTRE resolves to that button and the control cannot be pressed.
+      for (const zone of ['left', 'right'] as const) {
+        const rule = declsOf(src, `[id='zone-collapse-${zone}']`)
+        if (rule === null) continue // already reported by (ii)
+        if (!/bottom\s*:\s*calc\(\s*var\(--zone-bottom-track\)\s*\+\s*32px\s*\)/.test(rule)) {
+          problems.push(`the \`zone-collapse-${zone}\` rule no longer insets its foot anchor (\`bottom: calc(var(--zone-bottom-track) + 32px)\`) — the shell's floating \`#settings-toggle\` (z-index 110) covers that band and takes the press (reads: ${JSON.stringify(rule.trim().slice(0, 160))})`)
+        }
+      }
+      // (iii) THE COLLAPSED ZONE STILL OFFERS NO RESIZE STRIP — the four `visibility: hidden`
+      //       hides stay, and they stay `visibility` (a `display: none` would zero the box and
+      //       make "hidden by contract" indistinguishable from "the box collapsed away").
+      for (const zone of CLOSED_ZONES) {
+        const rule = declsOf(src, `:has([zone='${zone}'][collapsed='true']) .gutter[id='zone-gutter-${zone}']`)
+        if (rule === null) { problems.push(`the collapsed-zone gutter hide for \`${zone}\` is ABSENT — a collapsed zone would offer a resize strip`); continue }
+        if (!/visibility\s*:\s*hidden/.test(rule)) problems.push(`the collapsed-zone gutter rule for \`${zone}\` no longer reads \`visibility: hidden\` (reads: ${JSON.stringify(rule.trim())})`)
+        if (/display\s*:\s*none/.test(rule)) problems.push(`the collapsed-zone gutter rule for \`${zone}\` uses \`display: none\` — the affordance's box would measure zero and "hidden by contract" would become unreadable`)
+      }
+      // (iv) THE `auto` EXTENT'S DECLARATIVE MIRROR is still gated (`ASM-U1b-8`): four rules,
+      //      each requiring `:not(.is-empty)`, so F-3's `0px` empty arm keeps its own authority.
+      for (const zone of CLOSED_ZONES) {
+        const needle = `:has([zone='${zone}'].is-collapsed:not(.is-empty))`
+        const rule = declsOf(src, needle)
+        if (rule === null) { problems.push(`the declarative \`auto\` extent rule for \`${zone}\` is ABSENT (\`${needle}\`) — the pre-first-write/re-mount arm of \`ASM-U1b-10\` is gone`); continue }
+        if (!new RegExp(`--zone-${zone}-track\\s*:\\s*auto`).test(rule)) problems.push(`the \`auto\` extent rule for \`${zone}\` no longer declares \`--zone-${zone}-track: auto\``)
+      }
+      return problems
+    }
+    // THE CLEAN READING, then THREE mutations of the SAME source, each of which must red — so a
+    // clean reading is measured against a checker that is shown to see the defect classes.
+    const clean = check(html)
+    const problemsOfMutation: string[] = []
+    const mutated = [
+      { why: 'the shared floor deleted (`min-width` removed — the measured defect itself)', src: html.replace(/min-width:\s*20px;\s*/g, ''), needle: 'min-width' },
+      { why: "left's tracked axis replaced by the floor (`width: var(--zone-left-track)` → `width: 20px`)", src: html.replace(/width:\s*var\(--zone-left-track\)/g, 'width: 20px'), needle: '--zone-left-track' },
+      { why: "the left gutter's collapsed hide deleted", src: html.replace(/:has\(\[zone='left'\]\[collapsed='true'\]\) \.gutter\[id='zone-gutter-left'\]\s*\{[^}]*\}/, ''), needle: 'zone-gutter-left' },
+      { why: "the side controls' foot inset deleted (the shell's Settings pill covers that band again)", src: html.replace(/bottom:\s*calc\(var\(--zone-bottom-track\)\s*\+\s*32px\)/g, 'bottom: var(--zone-bottom-track)'), needle: '--zone-bottom-track + 32px' },
+      { why: "the left `auto` extent mirror ungated (`:not(.is-empty)` removed)", src: html.replace(/:has\(\[zone='left'\]\.is-collapsed:not\(\.is-empty\)\)/g, ":has([zone='left'].is-collapsed)"), needle: 'is-collapsed' },
+    ].map((m) => ({ why: m.why, changed: m.src !== html, problems: check(m.src) }))
+    for (const m of mutated) {
+      if (!m.changed) problemsOfMutation.push(`the mutation "${m.why}" did not change the source at all — its arm proves nothing`)
+    }
+    for (const m of mutated) {
+      if (m.problems.length === 0) problemsOfMutation.push(`the mutation "${m.why}" reads CLEAN — the limb cannot see that defect class`)
+    }
+    expect(
+      [...clean, ...problemsOfMutation],
+      `limb I — the anchored control's HIT-BOX FLOOR (\`§7a\`) as a SOURCE clause over \`src/renderer/index.html\`. ` +
+        `WHY THIS CAN FAIL: the floor is a CSS declaration; deleting it (or replacing a positional rule's tracked axis with it, ` +
+        `or un-hiding a collapsed gutter, or un-gating an \`auto\` extent rule) reds a named problem, and each mutation is DRIVEN ` +
+        `so the clean reading is measured against a checker shown to red on every class. ` +
+        `LAYER: SOURCE clause (node) — it does NOT prove the floor reaches the assembled app; that is the live rows' reading ` +
+        `(\`uf_layout_10\`'s four-control verdict and \`uf_panes_8\`'s two-state arm), and neither layer claims the other's (D-10).`,
     ).toEqual([])
   })
 })

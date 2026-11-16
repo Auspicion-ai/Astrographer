@@ -254,12 +254,40 @@
        (4) THE GLYPH comes from the AUTHORED CARRIER (`collapsed="true"|"false"`) read
            through the ADJACENT-SIBLING combinator, which is sound exactly because (2)
            makes the control the container's immediate next sibling. `::after` is CSS,
-           not DOM, so the node's `content` stays `''` (D-8 — no hand-written DOM). */
+           not DOM, so the node's `content` stays `''` (D-8 — no hand-written DOM).
+       (2b) THE HIT-BOX FLOOR — `min-width`/`min-height: 20px`, MEASURED AND FIXED BY THE
+           `U-1b` APP-GREEN PASS (`docs/L1/unit-u-1b-app-green-pass.md`). The tracked axis
+           alone bounds the control, so an EMPTY derived-collapsed zone — whose track is
+           F-3's `0px` — sized the control to a sliver the operator could not press: the
+           `G8` reading measured the `top`/`bottom` controls at `20×4` and `right` at
+           `14×20` (the `auto` extent's shrink-to-fit glyph width), i.e. no painted route
+           to overturn the derivation on an empty zone. The floor is the FLOOR ONLY: the
+           four positional rules below still author the tracked axis, so an expanded zone
+           keeps a control as wide as its track, and a collapsed OCCUPIED zone keeps the
+           content-derived `auto` extent whenever that is wider than 20px. `20×20` is the
+           same footprint the four gutter affordances/glyph box already use, and the box
+           stays on the zone's foot — it is an OVERLAY control, not a container child, so
+           a floor wider than a sub-20px track deliberately reaches into the neighbour
+           rather than being clipped. The reading that grades it lives in
+           `scripts/live-drive.mjs` (`ufZonePaintReading`/`ufZoneControlVerdict`).
+       (2c) THE FOOT INSET — `bottom: calc(var(--zone-bottom-track) + 32px)` on the two SIDE
+           controls, and it is a MEASURED fix, not taste: the shell's own floating
+           `#settings-toggle` (`.settings-toggle`: `position: fixed; left: 1rem;
+           bottom: 0.75rem; z-index: 110`) sits over the bottom-left band of the viewport,
+           i.e. exactly over the left zone's foot — so `document.elementFromPoint` at the
+           left control's box CENTRE resolved to that button and the control could not be
+           pressed at all (`uf_panes_8`'s reading printed `hit={"id":"settings-toggle"}`).
+           32px clears it with margin (the pill's top edge is ~12px above the zone's foot)
+           and is applied to `left` AND `right` TOGETHER so the pair stays symmetric under
+           one vocabulary; the top/bottom pair is right-anchored and needs no inset
+           (nothing floats over that corner). `z-index` is deliberately NOT raised above
+           the settings gear's `110`: a zone-collapse control floating over the settings
+           MODAL would be a worse defect than the one this fixes. */
     #app [id^="zone:"][zone][collapsed='true'][data-orientation='vertical']   { overflow-y: hidden; overflow-x: hidden; }
     #app [id^="zone:"][zone][collapsed='true'][data-orientation='horizontal'] { overflow-y: hidden; overflow-x: hidden; }
-    #app [id^="zone-collapse-"][zone] { position: fixed; z-index: 4; box-sizing: border-box; display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--card-bg); border: 1px solid var(--border); }
-    #app [id='zone-collapse-left'][zone]   { left: 0; bottom: var(--zone-bottom-track); width: var(--zone-left-track); height: 20px; }
-    #app [id='zone-collapse-right'][zone]  { right: 0; bottom: var(--zone-bottom-track); width: var(--zone-right-track); height: 20px; }
+    #app [id^="zone-collapse-"][zone] { position: fixed; z-index: 4; box-sizing: border-box; display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--card-bg); border: 1px solid var(--border); min-width: 20px; min-height: 20px; }
+    #app [id='zone-collapse-left'][zone]   { left: 0; bottom: calc(var(--zone-bottom-track) + 32px); width: var(--zone-left-track); height: 20px; }
+    #app [id='zone-collapse-right'][zone]  { right: 0; bottom: calc(var(--zone-bottom-track) + 32px); width: var(--zone-right-track); height: 20px; }
     #app [id='zone-collapse-top'][zone]    { top: 0; right: 0; height: var(--zone-top-track); width: 20px; }
     #app [id='zone-collapse-bottom'][zone] { bottom: var(--zone-bottom-track); right: 0; height: var(--zone-bottom-track); width: 20px; }
     #app [id^="zone:"][zone] + .zone-collapse::after { content: '▾'; }

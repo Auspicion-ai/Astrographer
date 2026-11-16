@@ -784,6 +784,171 @@ async function ufLayoutZoneScrollAttempt(h, attempt = 240) {
     }})()`)
 }
 
+// ---------------------------------------------------------------------------
+// ⟨`U-1b` APP-GREEN PASS (`2026-11-15`) — THE ZONE PAINT READING.⟩ THE THREE PAINT
+// FACTS the unit's `G8` left UNGRADED, read at ONE instant so every comparison is
+// value-for-value against the same read, and so no term can be satisfied by a later
+// reflow:
+//   (1) THE COLLAPSED EXTENT — the track token read BOTH ways: `#wiki-root`'s INLINE
+//       write (the projection's author, `layout-state.ts`'s `zoneTrackVars` via
+//       `applyZoneTracks`) and its COMPUTED value (the resolved winner of the two
+//       authors `ASM-U1b-10` requires — an inline custom property outranks the sheet,
+//       so a `'auto'` that lives only in the sheet never reaches the grid after the
+//       first `setLayout`). The container's own box and the grid's first column are
+//       read beside it, so "content-derived" is measured, not asserted.
+//   (2) THE ANCHORED CONTROL — its box, its computed sizes and `document.elementFromPoint`
+//       AT ITS CENTRE. `ufZoneControlVerdict` below is the VERDICT this reading feeds:
+//       the box was a by-product of the `excluded` print at the unit's `G8`, which is
+//       how a `20×4` control escaped the report.
+//   (3) THE RESIZE STRIP — the gutter affordance's box, its computed `visibility` and
+//       the hit at its LANE centre: "a collapsed zone offers no resize strip" is a
+//       paint/gate fact, and hiding-not-deleting (`index.html`'s `visibility: hidden`)
+//       is why the box must stay measurable here.
+// A missing container/control/gutter records `null` and the verdict fails BY NAME;
+// nothing in this evaluate throws.
+// ---------------------------------------------------------------------------
+/** The control's hit-box floor, in px — the FLOOR the paint declares (`index.html`'s
+ *  shared `zone-collapse` rule) and the floor this reading grades. ONE declaration:
+ *  the expected value and the assertion read the same number. */
+const UF_CONTROL_HIT_FLOOR_PX = 20
+/** THE SIDE CONTROLS' FOOT INSET, in px — `index.html`'s `(2c)` clause, and a MEASURED
+ *  value, not taste: the shell's own floating `#settings-toggle` (`z-index: 110`) sits over
+ *  the bottom-left band, so a `left`-zone control pinned to the zone's very foot had its
+ *  box CENTRE under that button (`elementFromPoint` -> `settings-toggle`, the `2026-11-15`
+ *  red reading). ONE declaration, so the expected geometry and the assertion agree. */
+const UF_CONTROL_FOOT_INSET_PX = 32
+
+async function ufZonePaintReading(h) {
+  return h.cdp.evaluate(`(()=>{
+    const ZONES=['left','right','top','bottom'];
+    const bx=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const what=(e)=>(e?{id:e.id||null,tag:e.tagName,cls:String(e.className||'').slice(0,60)}:null);
+    const root=document.getElementById('wiki-root');
+    const rcs=root?getComputedStyle(root):null;
+    const hit=(x,y)=>Number.isFinite(x)&&Number.isFinite(y)?document.elementFromPoint(Math.round(x),Math.round(y)):null;
+    const zones=ZONES.map((z)=>{
+      const c=document.getElementById('zone:'+z);
+      const ctl=document.getElementById('zone-collapse-'+z);
+      const g=document.getElementById('zone-gutter-'+z);
+      const ctlRect=ctl?ctl.getBoundingClientRect():null;
+      const ctlCS=ctl?getComputedStyle(ctl):null;
+      const ctlHit=ctlRect?hit(ctlRect.x+ctlRect.width/2,ctlRect.y+ctlRect.height/2):null;
+      const gRect=g?g.getBoundingClientRect():null;
+      const gHit=gRect?hit(gRect.x+gRect.width/2,gRect.y+gRect.height/2):null;
+      return {
+        zone:z,
+        box:bx(c),
+        collapsedAttr:c?String(c.getAttribute('collapsed')):null,
+        isCollapsed:c?c.classList.contains('is-collapsed'):null,
+        isEmpty:c?c.classList.contains('is-empty'):null,
+        isRevealed:c?c.classList.contains('is-revealed'):null,
+        classes:c?String(c.className||''):null,
+        trackInline:root?String(root.style.getPropertyValue('--zone-'+z+'-track')).trim():null,
+        trackComputed:rcs?String(rcs.getPropertyValue('--zone-'+z+'-track')).trim():null,
+        trackOnContainer:c?String(getComputedStyle(c).getPropertyValue('--zone-'+z+'-track')).trim():null,
+        control:ctl?{
+          id:ctl.id, box:bx(ctl),
+          width:ctlCS.width, height:ctlCS.height,
+          minWidth:ctlCS.minWidth, minHeight:ctlCS.minHeight,
+          position:ctlCS.position, zIndex:ctlCS.zIndex, visibility:ctlCS.visibility,
+          hit:what(ctlHit), onTarget:!!(ctlHit&&(ctlHit===ctl||ctl.contains(ctlHit)))
+        }:null,
+        gutter:g?{
+          id:g.id, box:bx(g),
+          visibility:getComputedStyle(g).visibility,
+          lane:gRect?[Math.round(gRect.x+gRect.width/2),Math.round(gRect.y+gRect.height/2)]:null,
+          hit:what(gHit), onTarget:!!(gHit&&gHit===g)
+        }:null
+      };
+    });
+    return {
+      viewport:[innerWidth,innerHeight],
+      rootBox:bx(root),
+      gridColumns:root?getComputedStyle(root).gridTemplateColumns:null,
+      gridRows:root?getComputedStyle(root).gridTemplateRows:null,
+      modalCls:String((document.getElementById('settings-modal')||{}).className||''),
+      zones,
+      scope:'the assembled renderer this driver spawned — the four zone CONTAINERS, the four ANCHORED collapse controls and the four GUTTER affordances, read at ONE instant'
+    }})()`)
+}
+
+/** THE CONTROL-BOX VERDICT (`§7a` gap 2) — a real, hit-testable box of the EXPECTED
+ *  geometry, per zone. The expected geometry is the authored one (`index.html`):
+ *  the TRACKED axis follows the zone's own track (`left`/`right` track the WIDTH,
+ *  `top`/`bottom` the HEIGHT) with `UF_CONTROL_HIT_FLOOR_PX` as a FLOOR (the empty
+ *  zone's `0px` track is exactly the arm the measured defect lived in), the CROSS
+ *  axis is the authored 20 px, the box sits on its zone's FOOT, inside the viewport,
+ *  and `document.elementFromPoint` at its centre resolves to the control itself.
+ *  A zone whose container box is not measurable on the anchored axis records the
+ *  SKIP by name (`footBandChecked:false`) — the foot claim is never imputed. PURE
+ *  over the reading (no shell, no clock), so a scoped run can print every term. */
+function ufZoneControlVerdict(paint) {
+  const floor = UF_CONTROL_HIT_FLOOR_PX
+  const inset = UF_CONTROL_FOOT_INSET_PX
+  const zones = paint && Array.isArray(paint.zones) ? paint.zones : []
+  const vp = paint && Array.isArray(paint.viewport) ? paint.viewport : [0, 0]
+  const problems = []
+  const terms = []
+  if (zones.length === 0) problems.push('the reading carries NO zone — nothing to grade')
+  for (const z of zones) {
+    const vertical = z.zone === 'left' || z.zone === 'right' // the tracked axis is the zone's WIDTH
+    const c = z.control
+    if (!c || !Array.isArray(c.box)) { problems.push(`${z.zone}: NO control box (zone-collapse-${z.zone} is absent from the assembled app)`); terms.push({ zone: z.zone, state: z.isCollapsed === true ? 'collapsed' : 'expanded', control: null }); continue }
+    const [x, y, w, h] = c.box
+    const [zx, zy, zw, zh] = Array.isArray(z.box) ? z.box : [0, 0, 0, 0]
+    const tracked = vertical ? w : h
+    const cross = vertical ? h : w
+    const zoneTracked = vertical ? zw : zh
+    const zoneToken = String(z.trackComputed || '').trim()
+    // ⟨THE `auto` ARM, MEASURED (`2026-11-15` green reading).⟩ On a COLLAPSED OCCUPIED zone
+    // the track token is `auto`, and `width: auto` resolves DIFFERENTLY on the two elements
+    // that read it: the zone container shrink-to-fits its TAB STRIP (measured 83px), while
+    // the control shrink-to-fits its own GLYPH and is then clamped by the hit-box floor
+    // (measured 20px). So "the control follows its zone's track" is the wrong expectation on
+    // that arm — it would demand 83px from a glyph box — and the honest pair is: the control
+    // is AT LEAST the floor and AT MOST its strip's own extent (it must not stick out of the
+    // zone it belongs to). Both arms keep their teeth: the 19px sliver this defect began as
+    // still fails the floor, and a control wider than its strip fails the fit.
+    const autoExtent = zoneToken === 'auto'
+    const trackedFloored = tracked >= floor
+    const trackedMatchesZone = autoExtent ? true : zoneTracked < floor ? true : Math.abs(tracked - zoneTracked) <= 1
+    const trackedFitsTheAutoExtent = autoExtent ? (zoneTracked > 0 ? tracked <= zoneTracked + 1 : tracked <= floor) : true
+    const crossOk = cross >= floor
+    const positive = w > 0 && h > 0
+    const inViewport = x >= 0 && y >= 0 && x + w <= vp[0] && y + h <= vp[1]
+    // THE FOOT BAND — the authored anchoring, inset-aware: the SIDE controls sit
+    // `UF_CONTROL_FOOT_INSET_PX` above their zone's foot (the shell's settings pill), the
+    // TOP/BOTTOM pair is anchored flush at the right edge. Checked only when the zone's
+    // own box is measurable on the axis the anchoring is read from — never imputed.
+    const footChecked = vertical ? zh > 0 : zw > 0
+    const bottomEdge = vertical ? (zy + zh) - inset : (zy + zh)
+    const onFoot = !footChecked ? true
+      : z.zone === 'left' ? (Math.abs(x - zx) <= 1 && Math.abs((y + h) - bottomEdge) <= 1)
+      : z.zone === 'right' ? (Math.abs((x + w) - (zx + zw)) <= 1 && Math.abs((y + h) - bottomEdge) <= 1)
+      : z.zone === 'top' ? (Math.abs(y - zy) <= 1 && Math.abs((x + w) - (zx + zw)) <= 1)
+      : (Math.abs((y + h) - (zy + zh)) <= 1 && Math.abs((x + w) - (zx + zw)) <= 1)
+    const hitTestable = c.onTarget === true
+    const term = { zone: z.zone, state: z.isCollapsed === true ? 'collapsed' : 'expanded', empty: z.isEmpty === true, box: c.box, floor, inset: vertical ? inset : 0, tracked, cross, zoneTracked, zoneToken, autoExtent, trackedFloored, trackedMatchesZone, trackedFitsTheAutoExtent, crossOk, positive, inViewport, footBandChecked: footChecked, onFoot, hitTestable, hit: c.hit }
+    terms.push(term)
+    if (!positive) problems.push(`${z.zone}: the control's box is ${w}x${h} — NOT a painted box (the measured defect: an ungraded print)`)
+    if (!trackedFloored) problems.push(`${z.zone}: the control's TRACKED size is ${tracked}px, under the ${floor}px hit-box floor (its zone's track is ${zoneTracked}px) — the box is effectively unhittable`)
+    if (!trackedMatchesZone) problems.push(`${z.zone}: the control's tracked size ${tracked}px does not follow its zone's track (${zoneTracked}px) — the control has drifted off its zone`)
+    if (!trackedFitsTheAutoExtent) problems.push(`${z.zone}: on an \`auto\` extent the control's tracked size ${tracked}px is WIDER than its own strip (${zoneTracked}px) — it sticks out of the zone it belongs to`)
+    if (!crossOk) problems.push(`${z.zone}: the control's CROSS size is ${cross}px, under the ${floor}px floor (the authored 20px is not being applied)`)
+    if (!inViewport) problems.push(`${z.zone}: the control's box ${JSON.stringify(c.box)} is outside the viewport ${JSON.stringify(vp)}`)
+    if (footChecked && !onFoot) problems.push(`${z.zone}: the control's box ${JSON.stringify(c.box)} is not on its zone's foot (zone box ${JSON.stringify(z.box)}; side controls are inset ${inset}px)`)
+    if (!hitTestable) problems.push(`${z.zone}: elementFromPoint at the control's centre does not resolve to the control (hit=${JSON.stringify(c.hit)}) — a real box nobody can press`)
+  }
+  return {
+    ok: problems.length === 0,
+    floor,
+    inset,
+    terms,
+    problems,
+    detail: terms.map((t) => `${t.zone}(${t.state}${t.empty ? ',empty' : ''}) box=${JSON.stringify(t.box)} tracked=${t.tracked}/${t.floor} zoneTrack=${t.zoneTracked}${t.autoExtent ? '(auto)' : ''} cross=${t.cross} hit=${t.hitTestable} foot=${t.footBandChecked ? t.onFoot : 'n/a'}`).join(' · ')
+  }
+}
+
 /** §7.2 LIMB 3's SUBJECT IDENTITY — **A PREPARED SUBJECT IS NAMED BY ITS OWN
  *  FIXTURE; AN INHERITED ONE IS NAMED BY THE MARKER THE SHAPE CARRIES.** The
  *  preparation helper returns EARLY when the stage box already overflows, and on
@@ -6981,30 +7146,116 @@ const BLOCKS = {
       if (f && !f.collapsed) { await ufRealClick(h, `#pane-collapse-${pid}`); await sleep(1300) }
     }
     const preMin = await ufPaneFrames(h)
+    // ⟨`U-1b` §7a GAP 1/2/3 — THE EXPANDED-STATE PAINT READING.⟩ Taken BEFORE the
+    // collapse gesture, from the SAME helper the collapsed/re-expanded arms use, so
+    // "expanded vs collapsed" is one instrument read twice rather than two probes.
+    const paintExpanded = await ufZonePaintReading(h)
     // ⟨gate-4 `D-1`⟩ the zone-collapse/tab clicks ARE the rows' own gesture (the setup
     // collapse clicks below name no row: they are the block's precondition, not a row's).
     const collapsePath = (await ufRealClick(h, '#zone-collapse-left', { rows: ['UF-PANES-8', 'U-6'] })).path
     await sleep(1500)
     const collapsedZone = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');const tabs=[...document.querySelectorAll('[id^="zone-tab-left-"]')].map((t)=>{const r=t.getBoundingClientRect();return {id:t.id,paneId:t.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}});return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length,tabs:tabs}})()`)
+    // ⟨§7a GAP 1/2 — the COLLAPSED-state paint reading.⟩ The zone is OCCUPIED (two
+    // panes) and stated collapsed by the real press above, so this is exactly the
+    // `auto` arm `ASM-U1b-8` partitions from F-3's empty case.
+    const paintCollapsed = await ufZonePaintReading(h)
+    // ⟨§7a GAP 3 — "A COLLAPSED ZONE OFFERS NO RESIZE STRIP", DRIVEN.⟩ The gesture a
+    // resize strip would accept, taken on the gutter's own LANE — its box centre, so the
+    // press is ON the affordance's lane and not on any neighbouring chrome (the `2026-11-15`
+    // red reading put the press at the zone's FOOT and the shell's floating `#settings-toggle`
+    // took it, which opened the settings modal and blocked the row's own tab click; the
+    // reading now prints the modal's class around the drag so that failure cannot recur
+    // silently). The lane's hit is recorded BEFORE the press (a `visibility:hidden`
+    // affordance is measured as unhittable, never assumed) and the drag MOVES 48px before
+    // release. What the row then asserts is the PAINT: the zone's box width and its track
+    // token are unchanged.
+    const leftPaint = (p) => (p && Array.isArray(p.zones) ? p.zones.find((z) => z.zone === 'left') : null) || {}
+    const collapsedPaint = leftPaint(paintCollapsed)
+    const drag = { attempted: false, from: null, to: null, hitAtLane: null, laneOnGutter: null, modalBefore: paintCollapsed.modalCls ?? null, modalAfter: null }
+    if (collapsedPaint.gutter && Array.isArray(collapsedPaint.gutter.lane)) {
+      const lx = collapsedPaint.gutter.lane[0]
+      const ly = collapsedPaint.gutter.lane[1]
+      drag.attempted = true
+      drag.from = [lx, ly]
+      drag.to = [lx + 48, ly]
+      drag.hitAtLane = collapsedPaint.gutter.hit
+      drag.laneOnGutter = collapsedPaint.gutter.onTarget === true
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: lx, y: ly, buttons: 0 })
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: lx, y: ly, button: 'left', buttons: 1, clickCount: 1 })
+      for (const tx of [lx + 16, lx + 32, lx + 48]) {
+        await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: tx, y: ly, button: 'left', buttons: 1 })
+        await sleep(70)
+      }
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: lx + 48, y: ly, button: 'left', buttons: 0, clickCount: 1 })
+      await sleep(700)
+    }
+    const paintAfterDrag = await ufZonePaintReading(h)
+    drag.modalAfter = paintAfterDrag.modalCls ?? null
+    const dragLeftTheAppAlone = drag.modalAfter === drag.modalBefore
     const tabClick = (await ufRealClick(h, '#zone-tab-left-doc-nav', { rows: ['UF-PANES-8', 'U-6'] }))
     await sleep(1800)
     const after = await h.cdp.evaluate(`(()=>{const z=document.getElementById('zone:left');return {cls:z.className,frames:document.querySelectorAll('.pane-frame[data-pane-id]').length}})()`)
+    // ⟨§7a GAP 3, THE NON-VACUITY PAIR.⟩ The SAME lane, read after the re-expand: the
+    // affordance must be `visible` and the lane's hit must resolve TO the gutter — so
+    // the collapsed arm's "nothing happened" cannot pass on a broken lane query.
+    const paintReExpanded = await ufZonePaintReading(h)
     const afterFrames = await ufPaneFrames(h)
     const docnavAfter = afterFrames.find((f) => f.pid === 'doc-nav') || null
     const stripReplacesStack = collapsedZone.frames === 0 && collapsedZone.tabs.length >= 1 && collapsedZone.tabs.every((t) => t.box[2] > 0 && t.box[3] > 0)
     const reExpanded = !/is-collapsed/.test(after.cls) && after.frames >= 1 && afterFrames.every((f) => f.box[2] > 0 && f.box[3] > 0)
     const clickedPaneIdentified = collapsedZone.tabs.some((t) => t.id === 'zone-tab-left-doc-nav' && t.paneId === 'doc-nav')
+    // ---- ⟨`U-1b` §7a — THE THREE PAINT TERMS, each printed with its reading ---- //
+    const zExp = leftPaint(paintExpanded)
+    const zCol = collapsedPaint
+    const zDrag = leftPaint(paintAfterDrag)
+    const zRe = leftPaint(paintReExpanded)
+    const widthOf = (z) => (Array.isArray(z.box) ? z.box[2] : null)
+    const firstColumnPx = (p) => {
+      const c = p && typeof p.gridColumns === 'string' ? String(p.gridColumns).trim().split(/\s+/)[0] : ''
+      const n = Number(String(c || '').replace('px', ''))
+      return c !== '' && Number.isFinite(n) ? n : null
+    }
+    const extentCollapsedAuto = zCol.trackComputed === 'auto'
+    const extentExpandedIsTheSize = /^\d+(?:\.\d+)?px$/.test(String(zExp.trackComputed || ''))
+    const extentContentDerived = Number.isFinite(widthOf(zCol)) && widthOf(zCol) > 0 && Number.isFinite(widthOf(zExp)) && widthOf(zCol) < widthOf(zExp)
+    // ⟨THE `auto` TRACK'S REAL PAINT SHAPE, MEASURED (`2026-11-15` red reading).⟩ The zone
+    // container is `position: fixed`, so it is OUT OF FLOW and contributes NOTHING to its
+    // grid track: an `auto` track therefore resolves to `0px` while the FIXED container
+    // shrink-to-fits its tab strip (measured `grid-template-columns "0px 914px 0px"` beside
+    // a painted `83px` box). That is the arm the stage's reclaim rides on, so it is graded
+    // as such: the grid's first column is reclaimed (0, ±1) AND the PAINTED box is
+    // content-derived — never the box equalling the column (an earlier form of this term
+    // demanded exactly that and could never pass).
+    const collapsedGridColumnReclaimed = Number.isFinite(firstColumnPx(paintCollapsed)) && firstColumnPx(paintCollapsed) <= 1
+    const controlExpanded = ufZoneControlVerdict({ ...paintExpanded, zones: (paintExpanded.zones || []).filter((z) => z.zone === 'left') })
+    const controlCollapsed = ufZoneControlVerdict({ ...paintCollapsed, zones: (paintCollapsed.zones || []).filter((z) => z.zone === 'left') })
+    const gutterHiddenWhenCollapsed = !!zCol.gutter && zCol.gutter.visibility === 'hidden'
+    const gutterBoxStillMeasurable = !!zCol.gutter && Array.isArray(zCol.gutter.box) && zCol.gutter.box[2] > 0 && zCol.gutter.box[3] > 0
+    const gutterUnhittableWhenCollapsed = !!zCol.gutter && zCol.gutter.onTarget === false
+    const noResizeAfterTheDrag = drag.attempted === true && Number.isFinite(widthOf(zDrag)) && widthOf(zDrag) === widthOf(zCol) && zDrag.trackComputed === zCol.trackComputed
+    const gutterLiveWhenExpanded = !!zRe.gutter && zRe.gutter.visibility === 'visible' && zRe.gutter.onTarget === true
+    const paintOk = extentCollapsedAuto && extentExpandedIsTheSize && extentContentDerived && collapsedGridColumnReclaimed &&
+      controlExpanded.ok && controlCollapsed.ok && gutterHiddenWhenCollapsed && gutterBoxStillMeasurable &&
+      gutterUnhittableWhenCollapsed && noResizeAfterTheDrag && gutterLiveWhenExpanded && dragLeftTheAppAlone
     // restore: re-expand both panes (the block collapses them as setup) — the
     // block's own TAIL restore, after its LAST frame census read
     for (const pid of ['doc-nav', 'search']) restore.push(JSON.stringify(await ufEnsurePaneExpanded(h, pid)))
     const ufPanes8Assertion = 'A REAL click on a collapsed zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane'
-    const ufPanes8Evidence = `pre-collapse panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-collapse-left (path=${collapsePath}) → zone class="${collapsedZone.cls}" frames=${collapsedZone.frames} tabStrips=${JSON.stringify(collapsedZone.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
-    const ufPanes8Opts = { path: collapsePath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: stripReplacesStack && reExpanded && clickedPaneIdentified, surface: await ufSurfaceTarget(h) }
+    const ufPanes8PaintAssertion = `${ufPanes8Assertion}; AND (\`U-1b\` §7a) the COLLAPSED extent reads \`auto\` and is content-derived (the painted box, the grid's own column), the ANCHORED CONTROL is a real hit-testable box of the expected geometry in BOTH states, and the collapsed zone offers NO RESIZE STRIP — graded by the affordance's computed \`visibility\`, its still-measurable box and the lane's hit test (collapsed: NOT the gutter; re-expanded: the gutter), with a REAL CDP drag on the lane recorded BESIDE those terms and NOT relied on: at this head a real boundary drag does not resize an EXPANDED zone either (\`UF-DEFECT-5\`/\`LIVE-UF7\`, a carried confirmed defect), so the drag's non-effect alone cannot carry the claim`
+    const ufPanes8PaintEvidence = `[§7a — THE PAINT FACTS, on the assembled app] EXTENT: expanded track=${JSON.stringify(zExp.trackComputed)} (inline=${JSON.stringify(zExp.trackInline)}) collapsed track=${JSON.stringify(zCol.trackComputed)} (inline=${JSON.stringify(zCol.trackInline)}) → collapsedAuto=${extentCollapsedAuto} expandedIsThePersistedSize=${extentExpandedIsTheSize}; painted zone box expanded=${JSON.stringify(zExp.box)} collapsed=${JSON.stringify(zCol.box)} → contentDerived=${extentContentDerived} (collapsed ${widthOf(zCol)}px < expanded ${widthOf(zExp)}px); grid-template-columns collapsed=${JSON.stringify(paintCollapsed.gridColumns)} → firstColumn=${firstColumnPx(paintCollapsed)}px gridColumnReclaimed=${collapsedGridColumnReclaimed} (the container is \`position: fixed\`, so an \`auto\` track holds NOTHING and the stage reclaims it — the strip paints INSIDE the fixed box); CONTROL (zone:left; floor=${controlExpanded.floor}px footInset=${controlExpanded.inset}px): expanded ${controlExpanded.detail} ok=${controlExpanded.ok}${controlExpanded.problems.length ? ` PROBLEMS=${JSON.stringify(controlExpanded.problems)}` : ''}; collapsed ${controlCollapsed.detail} ok=${controlCollapsed.ok}${controlCollapsed.problems.length ? ` PROBLEMS=${JSON.stringify(controlCollapsed.problems)}` : ''}; RESIZE STRIP (the DISCRIMINATING terms are the computed visibility, the still-measurable box and the lane hit; the drag is recorded BESIDE them and never as their substitute — at this head a real boundary drag does not resize an EXPANDED zone either, \`UF-DEFECT-5\`/\`LIVE-UF7\`): collapsed gutter visibility=${JSON.stringify(zCol.gutter ? zCol.gutter.visibility : null)} box=${JSON.stringify(zCol.gutter ? zCol.gutter.box : null)} (measurable=${gutterBoxStillMeasurable}) laneHit=${JSON.stringify(drag.hitAtLane)} laneOnGutter=${drag.laneOnGutter} → unhittable=${gutterUnhittableWhenCollapsed}; REAL CDP drag on the lane ${JSON.stringify(drag.from)}→${JSON.stringify(drag.to)} (attempted=${drag.attempted}) → zone width ${widthOf(zCol)}px→${widthOf(zDrag)}px track ${JSON.stringify(zCol.trackComputed)}→${JSON.stringify(zDrag.trackComputed)} → noResize=${noResizeAfterTheDrag}; settings-modal class around the drag ${JSON.stringify(drag.modalBefore)}→${JSON.stringify(drag.modalAfter)} → dragLeftTheAppAlone=${dragLeftTheAppAlone}; re-expanded gutter visibility=${JSON.stringify(zRe.gutter ? zRe.gutter.visibility : null)} laneHit=${JSON.stringify(zRe.gutter ? zRe.gutter.hit : null)} laneOnGutter=${zRe.gutter ? zRe.gutter.onTarget : null} → stripLiveOnceExpanded=${gutterLiveWhenExpanded}; paintOk=${paintOk}`
+
+    const ufPanes8Evidence = `pre-collapse panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-collapse-left (path=${collapsePath}) → zone class="${collapsedZone.cls}" frames=${collapsedZone.frames} tabStrips=${JSON.stringify(collapsedZone.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; ${ufPanes8PaintEvidence}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
+    // THE ROW'S OWN OK is the PAINT-INCLUSIVE one (`§7a`); the DECLARED `U-6` row keeps
+    // its LANDED claim's predicate, so the paint limbs cannot silently widen a matrix
+    // row's delta (`§5.U`'s `U-6` = "a pane-tab click after zone collapse re-expands
+    // the zone"). BOTH verdicts are printed; neither borrows the other's terms.
+    const ufPanes8BaseOk = stripReplacesStack && reExpanded && clickedPaneIdentified
+    const ufPanes8Opts = { path: collapsePath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: ufPanes8BaseOk && paintOk, surface: await ufSurfaceTarget(h) }
     // §2.1 `E-2` — the DECLARED row `U-6` (MATRIX_ROWS maps `U-6` to this block)
     // carries ITS OWN verdict; the checklist row `UF-PANES-8` keeps its own.
     return [
-      rowResult({ row: 'UF-PANES-8', dclass: 'D-interaction' }, ufPanes8Assertion, ufPanes8Evidence, ufPanes8Opts),
-      declaredRowResult('U-6', 'UF-PANES-8', ufPanes8Assertion, 'D-interaction', ufPanes8Evidence, { ...ufPanes8Opts, checklistRow: 'UF-PANES-8' }),
+      rowResult({ row: 'UF-PANES-8', dclass: 'D-interaction' }, ufPanes8PaintAssertion, ufPanes8Evidence, ufPanes8Opts),
+      declaredRowResult('U-6', 'UF-PANES-8', ufPanes8Assertion, 'D-interaction', ufPanes8Evidence, { ...ufPanes8Opts, ok: ufPanes8BaseOk, checklistRow: 'UF-PANES-8' }),
     ]
   },
 
@@ -7606,6 +7857,27 @@ const BLOCKS = {
     // moved" cannot discriminate a fixed zone from a zone stretched by the very document
     // the limb is about, so the decisive pair is the second one and it is labelled so.
     const limb2AtRest = await ufLayoutZoneScrollAttempt(h, 260)
+    // ⟨`U-1b` §7a GAPS 1 and 2 — THE PAINT READING THAT USED TO BE AN UNGRADED PRINT.⟩
+    // `ufLayoutZoneScrollAttempt` lists the four ANCHORED CONTROLS in its `excluded`
+    // census (they carry `zone` and are not containers) and prints their boxes as
+    // PROSE. That prose is why the unit's `G8` could report an operator route and
+    // measure an unhittable `20×4`. Here the SAME surface is read through
+    // `ufZonePaintReading` and GRADED: each control's box, its hit test, its tracked
+    // axis against its own zone's track, the 20 px floor — plus each zone's track
+    // token against its OWN state (`auto` collapsed-occupied, `0px` empty, the
+    // persisted size otherwise; `''` removed for the revealed empty arm), which is the
+    // dual-authoring agreement `ASM-U1b-10` requires and no node row can see.
+    const paintAtRest = await ufZonePaintReading(h)
+    const controlVerdict = ufZoneControlVerdict(paintAtRest)
+    const zoneTrackAgreement = (paintAtRest.zones || []).map((z) => {
+      const expected = z.isEmpty === true
+        ? (z.isRevealed === true ? 'the persisted size (px)' : '0px')
+        : (z.isCollapsed === true ? 'auto' : 'the persisted size (px)')
+      const observed = String(z.trackComputed || '')
+      const ok = expected === 'auto' ? observed === 'auto' : expected === '0px' ? observed === '0px' : /^\d+(?:\.\d+)?px$/.test(observed)
+      return { zone: z.zone, state: z.isCollapsed === true ? 'collapsed' : 'expanded', empty: z.isEmpty === true, revealed: z.isRevealed === true, expected, observed, inline: z.trackInline, ok }
+    })
+    const tracksAgreeWithTheirState = zoneTrackAgreement.length === 4 && zoneTrackAgreement.every((t) => t.ok)
     // LIMB 3's subject: the fixture text and path are composed HERE (the caller's
     // values), and the fixture's OWN marker text is what the preparation helper waits
     // for on the stage — so the limb-3 reading can never silently run against whatever
@@ -7681,12 +7953,22 @@ const BLOCKS = {
     // DIFFERENT claims, so the two rows are separately readable.
     const singleRootMount = filled.roots === 1 && empty.roots === 1 && restored.roots === 1
     const u4Evidence = `empty<->filled pane-set transition driven by REAL clicks: FILLED #wiki-root mounts=${filled.roots} (frames=${filled.frames}), EMPTY (every pane disabled) mounts=${empty.roots} (frames=${empty.frames}), RESTORED (every pane re-enabled) mounts=${restored.roots} (frames=${restored.frames}); census="${censusEnd}"; disabled paths=${JSON.stringify(paths)}; re-enable paths=${JSON.stringify(restorePaths)}; paneFrameCensus(filled/empty/restored)=${filled.frames}/${empty.frames}/${restored.frames} → singleRootMountAcrossTheTransition=${singleRootMount} (required: exactly ONE #wiki-root at every boundary — a stale/duplicate root keeps the id and takes layout flow)`
-    const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; ${u5LimbsEvidence}`
-    const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: isEmptied && trackCollapsed && stageReclaimed && modalClassXor, surface: await ufSurfaceTarget(h) }
+    // ⟨§7a⟩ THE CONTROL VERDICT'S OWN EVIDENCE — the four boxes that used to be an
+    // `excluded` print, printed now as GRADED terms with every failure named.
+    const paintAtRestEvidence = `[§7a — THE FOUR ANCHORED CONTROLS, GRADED (the reading that used to be the UNGRADED \`excluded\` print) AND THE ZONE TRACKS' OWN STATES; scope: the assembled renderer THIS driver spawned] ` +
+      `CONTROLS: ${controlVerdict.detail} → everyControlIsARealHitTestableBoxOfTheExpectedGeometryOnItsZoneFoot=${controlVerdict.ok} (hit-box floor=${controlVerdict.floor}px)${controlVerdict.problems.length ? ` PROBLEMS=${JSON.stringify(controlVerdict.problems)}` : ''}; ` +
+      `ZONE TRACKS vs their OWN state (the two authors \`ASM-U1b-10\` requires, read as the RESOLVED value an inline write wins): ${JSON.stringify(zoneTrackAgreement)} → tracksAgreeWithTheirState=${tracksAgreeWithTheirState}; viewport=${JSON.stringify(paintAtRest.viewport)} grid columns="${paintAtRest.gridColumns}" rows="${paintAtRest.gridRows}"; STATE MATRIX (named, never imputed): the two-state arm is graded per zone as each zone can reach it — \`zone:left\` is the only zone that can hold panes at this head, so it is the only zone read EXPANDED and COLLAPSED; relocating a pane into \`top\`/\`bottom\`/\`right\` is \`U-3\`'s drag, so those three are graded in the only state they can reach (empty ⇒ derived-collapsed)`
+    const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; ${paintAtRestEvidence} ${u5LimbsEvidence}`
+    // ⟨§7a⟩ THE PAINT-INCLUSIVE OK, kept SEPARATE from the landed predicate so neither
+    // the `U-4` mount row nor the `U-5` layout-effect row inherits terms its delta does
+    // not state (each declared row below names its own predicate).
+    const ufLayout10BaseOk = isEmptied && trackCollapsed && stageReclaimed && modalClassXor
+    const ufLayout10PaintOk = ufLayout10BaseOk && controlVerdict.ok && tracksAgreeWithTheirState
+    const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: ufLayout10PaintOk, surface: await ufSurfaceTarget(h) }
     return [
-      rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width", u5Evidence, ufLayout10Opts),
-      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width — EXTENDED (§7.2 re-pin) with limbs 2 and 3: every zone container keeps its box rect and scrolls INSIDE its own box, and the stage's own box is the scroll container with the surrounding chrome unmoved", 'D-visual', u5Evidence, { ...ufLayout10Opts, ok: isEmptied && trackCollapsed && stageReclaimed && limb2Ok && limb3Ok, required: '§7.2 limb 2 on the assembled surface, measured on the four ZONE CONTAINERS: each computes position:fixed with its own bounded box, an EXPANDED zone\'s content box is scroll-capable (overflow:auto, never visible) while a COLLAPSED zone\'s arrangement axis is hidden (`U-1b` `C-4`, read off the authored `collapsed` carrier), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone\'s own content box, the element scrolled NAMED), the zone boxes hold their rects value-for-value across a page-level scroll attempt, no zone box is stretched by the document (the page itself cannot overflow), and the reading exercises a REAL internal range (non-vacuity); §7.2 limb 3: a document LONGER than the stage\'s box is mounted on the stage (the falsifiability gate — without it the reading is inconclusive) and the stage\'s own box is the scroll container — its scrollTop advances inside it while the page\'s offset does not move and the surrounding chrome (the zones and the tab strip) keeps its rects; PLUS the row\'s filed property (the empty side zone\'s grid track collapses and the stage reclaims the width)', observed: u5Evidence, checklistRow: 'UF-LAYOUT-10' }),
-      declaredRowResult('U-4', 'UF-LAYOUT-10', 'The empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (no stale/duplicate root survives the transition)', 'D-visual', u4Evidence, { ...ufLayout10Opts, ok: singleRootMount && ufLayout10Opts.ok, checklistRow: 'UF-LAYOUT-10' }),
+      rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width; AND (`U-1b` §7a, `docs/L1/unit-u-1b-app-green-pass.md` — the cell for this row carries the collapse re-grain only, so the control-geometry limb's source is §7a, not the cell) every zone's track token agrees with its own state and all four ANCHORED collapse controls are real, hit-testable boxes of the expected geometry on their zone's foot", u5Evidence, ufLayout10Opts),
+      declaredRowResult('U-5', 'UF-LAYOUT-10', "An empty side zone's grid TRACK collapses and the stage reclaims the width — EXTENDED (§7.2 re-pin) with limbs 2 and 3: every zone container keeps its box rect and scrolls INSIDE its own box, and the stage's own box is the scroll container with the surrounding chrome unmoved", 'D-visual', u5Evidence, { ...ufLayout10Opts, ok: ufLayout10BaseOk && limb2Ok && limb3Ok, required: '§7.2 limb 2 on the assembled surface, measured on the four ZONE CONTAINERS: each computes position:fixed with its own bounded box, an EXPANDED zone\'s content box is scroll-capable (overflow:auto, never visible) while a COLLAPSED zone\'s arrangement axis is hidden (`U-1b` `C-4`, read off the authored `collapsed` carrier), any overflow scrolls INSIDE that box (scrollTop advancing inside the zone\'s own content box, the element scrolled NAMED), the zone boxes hold their rects value-for-value across a page-level scroll attempt, no zone box is stretched by the document (the page itself cannot overflow), and the reading exercises a REAL internal range (non-vacuity); §7.2 limb 3: a document LONGER than the stage\'s box is mounted on the stage (the falsifiability gate — without it the reading is inconclusive) and the stage\'s own box is the scroll container — its scrollTop advances inside it while the page\'s offset does not move and the surrounding chrome (the zones and the tab strip) keeps its rects; PLUS the row\'s filed property (the empty side zone\'s grid track collapses and the stage reclaims the width)', observed: u5Evidence, checklistRow: 'UF-LAYOUT-10' }),
+      declaredRowResult('U-4', 'UF-LAYOUT-10', 'The empty↔filled pane-set transition leaves exactly ONE #wiki-root mount (no stale/duplicate root survives the transition)', 'D-visual', u4Evidence, { ...ufLayout10Opts, ok: singleRootMount && ufLayout10BaseOk, checklistRow: 'UF-LAYOUT-10' }),
     ]
   },
 

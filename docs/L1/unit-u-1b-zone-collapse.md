@@ -143,3 +143,7 @@
 ## 7. Acceptance
 
 `U-1b` is accepted when §3's red set was **RUN and reported** before any byte, §2's six clauses landed as **one** commit, `G1`/`G2`/`G5`/`G6`/`G7` are recorded with their classes, `G8` carries the four app-only rows (RUN, or parked with its recorded reason and L0's follow-up), and `U-2`'s interface (`docs/L1/foundation-import-program.md` §5) reads the collapse carrier and the seam it authors.
+
+### §7a (`2026-11-15`) the app-green pass — appended after the unit's report; the full record is `docs/L1/unit-u-1b-app-green-pass.md`
+
+`G8` left three landed behaviours with **no row that could fail on them** (the collapsed `auto` extent, the anchored control's box, "no resize strip") and one **measured** defect (an empty derived-collapsed zone's control at `20×4`/`14×20` — no painted route to overturn the derivation). This pass authors those rows inside row blocks that **already** carry their rows (no new matrix slot, `R-10`; no new `BLOCKS` key — the frozen 100-key and `47`-key censuses are unmoved), runs them, and disposes of the defect: **fixed** in `index.html`'s shared control rule with the live reading that proves it plus a node clause tooth (`I`). The ruled `is-empty` asymmetry (`ASM-U1b-8`) is **unchanged and re-stated** there: an empty zone's extent stays `0px`, so a press on the now-hittable control states `collapsed: false` and flips the glyph, not the track.

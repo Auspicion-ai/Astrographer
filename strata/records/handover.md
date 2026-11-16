@@ -12,13 +12,12 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 | `E-1` `deps-adopt` (`1cf44b4`) | `provident-ssr ^0.5.2` and `provident-storeroom ^1.11.0`; the 0.5.1 provider-drop finding closed by adoption (D-20) | `[T]`/`[D]`/DOC |
 | `V-2` `conformance-refresh` (`8a868f7`) | the eleven copies are the pinned blobs; the lock's `conformance` block is a measured 147-suite disposition set; the register is the only copy-fidelity instrument (D-21) | `[T]`/`[D]`/DOC |
 | `U-1a` `zone-vocabulary` (`15036dd`) | the zone vocabulary is the foundation's (`top\|bottom\|left\|right`, `[zone=]`, `order`→`index`); the MCP ids moved; `UF-LAYOUT-2` gained a literal limb and the LIVE leg read it `PASS` | envelope + **one app-green row** |
-| `U-1b` `zone-collapse` (`ee3725d`) | one collapsed state (D-22), derived-and-overturnable; the sibling hide control; the `auto`/`hidden` extent partitioned from F-3's `0px` | envelope-green, **app-amber** |
+| `U-1b` `zone-collapse` (`ee3725d` + the app-green pass) | one collapsed state (D-22), derived-and-overturnable; the sibling hide control; the `auto`/`hidden` extent partitioned from F-3's `0px`; the control's hit box and the settings-gear overlap fixed | envelope-green **and app-green on its three rows** |
 
 ## What is owed, in order
 
-1. **`U-1b`'s three live rows** — the collapsed `auto` extent, the control's box as an assertion, and
-   "no resize strip" are proven by no row; plus the measured defect that on an EMPTY derived-collapsed
-   zone three of four controls are `20×4`/`14×20` (unhittable).
+1. **`U-1c`** (the theme carrier and its supersession of `A-7`), with two named residuals on `U-1b`:
+   the reveal arm's declarative half is read by no row, and `U-5`'s `§7.2` limbs are NOT-CONCLUSIVE.
 2. **The walkthroughs** — `E-1`, `V-2` and `U-1a` each read `STALE` on their last run and every finding
    since is repaired; `U-1b` has not had one. No unit has a recorded `PASS` except `V-1`.
 3. **The 53-document superseded-vocabulary census** — the old `header`/`footer`/`data-zone` spellings in
