@@ -8,29 +8,30 @@
 // collapsed body's CONTENT withheld while the body NODE stays, `ASM-U2-3` the axis split is a total
 // pure helper, `ASM-U2-6` the pill's ink derived and opaque, `ASM-U2-7` no `position: sticky`).
 //
-// THE NINE LIMBS AND THE COLOUR EACH IS EXPECTED TO READ AT THIS HEAD:
-//   · `A` the authored bar (a1…a7) — RED: the frame's children are `[button.<superseded class>
-//     (content '▸ Title'), renderRoot]`; no head row, no grip, no drops, no body node.
-//   · `B` the one-leaf act (b1…b5) — RED via the absent `setPaneCollapsed` export, the act's inline
-//     flip (b1b, a SOURCE clause) and the `data-pane-id` address (b4); its HOST-drive arms (b1/b3)
-//     read GREEN already and that is stated, not hidden.
-//   · `C` `panePaintAxesOf` — RED (helper absent; five arms unexpressible); its swapped-map
-//     falsifier is GREEN and keeps the comparator honest.
-//   · `D` the head out of the scroller (d1…d3) — RED: the pane block carries no `overflow`
-//     declaration and no `.pane-head` rule; the structural half is read off `A`.
-//   · `E` relocation survival — MIXED BY CONSTRUCTION, said before the run: (e2) byte-identity and
-//     the member's survival are GREEN ON FIRST WRITE (`movePane` spreads `...p`); (e1) — the
-//     DESTINATION frame's `collapsed='true'` carrier and `pane-body-<id>` node — is RED. Two named
-//     falsifiers keep the green halves readings.
-//   · `F` the minimum is the head — RED via (f1b)/(f2); (f1a), the no-JS-clamp census, is GREEN and
-//     is kept because the class it forbids is the one this unit could regress into.
-//   · `G` the gutter pill — RED via (g1)/(g2)/(g3): no `::before`, no `::after`, so no figure and no
-//     ink to read. (g4) the `G-5` census and (g5) "the lane's box is UNMOVED" are GREEN at this head.
-//   · `H` the vocabulary census — RED: the superseded class survives in `src/**`, `index.html` and
-//     `scripts/**`, and none of the five foundation classes is authored.
-//   · `I` no hand-written DOM — its NEGATIVE half reads GREEN today; its POSITIVE half (the five
-//     ids/classes as AUTHORED data in `pane-graph.ts`) is RED. §3 calls `I` "green today", which can
-//     only hold for the negative half; the divergence is reported, never papered over.
+// THE NINE LIMBS AND THE COLOUR EACH READ AT THE PRE-EDIT HEAD (kept: the RED set the unit was
+// authored against is part of the record): `A` bar RED (no head row/grip/drops/body node); `B`
+// one-leaf RED via the absent `setPaneCollapsed` export + the inline flip + the `data-pane-id`
+// address, its HOST-drive arms GREEN already and said so, not hidden; `C` `panePaintAxesOf` RED
+// (helper absent), its swapped-map falsifier GREEN and keeping the comparator honest; `D` the head
+// out of the scroller RED (the structural half is read off `A`); `E` relocation survival MIXED BY
+// CONSTRUCTION — (e2) GREEN on first write (`movePane` spreads `...p`), (e1) RED; `F` the minimum
+// RED via (f1b)/(f2), (f1a) GREEN and kept; `G` the gutter pill RED via (g1)/(g2)/(g3), (g4)/(g5)
+// GREEN; `H` vocabulary RED; `I` its NEGATIVE half GREEN today, its POSITIVE half RED (§3 calls
+// `I` "green today", which can only hold for the negative half — reported, never papered over).
+//
+// THE TWO REPAIRS (a green that cannot fail is a DEFECT IN THE BATTERY, not a success):
+//   · `F`/(f2) had no PRESENCE tooth: it gathered the collapsed `auto` arms and asserted `.some(…)`.
+//     MEASURED PRE-REPAIR: deleting BOTH mandated `[data-orientation]` arms from the sheet left
+//     every limb of this file unchanged (F stayed GREEN) — the `:not([zone] *)` stage arm alone
+//     satisfied the `.some`. (f2) now grades PRESENCE per orientation key (a missing arm reds BY
+//     KEY) AND AGREEMENT: each arm's `auto` axis must be the member `panePaintAxesOf(zone)` names
+//     for that orientation — the sheet and the helper are two copies of ONE axis split, and their
+//     drift now reds. TWO NAMED mutations must red it: a DELETED arm and SWAPPED axes.
+//   · `G`/(g3)'s second falsifier was DEAD CODE: `if (equalRatio < equalRatio)` compares an
+//     expression with ITSELF and can never fire (MEASURED at the old line 1710: it proved nothing).
+//     Now the sheet's own two inks are MUTATED in a copy of its text — an EQUAL-ink pill and an
+//     INVERTED-ink pill must EACH hand back the named `quieter-than` violation — while the landed
+//     sheet (the pill's ratio strictly BELOW the line's) stays the green half; no source is written.
 //
 // LAYER (MANDATORY, `D-10` / `RCA-12`): every limb is ENVELOPE-class. `A`/`E`/`H` drive the fork's
 // REAL assembler over a REAL `PaneRegistry`; `B` drives the REAL `SidebarPanes` over the layout-less
@@ -1506,8 +1507,14 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
     ).toEqual([])
   })
 
-  it('F — the minimum is the head: no JS clamp/floor of a pane extent anywhere in `src/**`, no figure on the head\'s box, and the collapsed arm reads `auto` with no figure constant', () => {
+  it('F — the minimum is the head: no JS clamp/floor of a pane extent anywhere in `src/**`, no figure on the head\'s box, and BOTH collapsed `auto` arms PRESENT, each reading `auto` on the axis `panePaintAxesOf` names, with no figure constant', async () => {
+    const module = (await import('../../../src/renderer/pane-graph.js')) as Record<string, unknown>
     const problems: string[] = []
+    // THE HELPER THIS ARM MUST AGREE WITH — reached through the file's own non-fatal reading
+    // (`readExport`), so a missing export is a NAMED problem in THIS limb's aggregate too.
+    const axes = readExport(module, 'panePaintAxesOf', 'src/renderer/pane-graph.ts', 'F')
+    problems.push(...axes.problems)
+    const helper = typeof axes.value === 'function' ? (axes.value as (zone: unknown) => unknown) : null
     const srcTs = SRC_FILES.filter((path) => TYPESCRIPT.test(path))
 
     // ---- (f1a) THE SOURCE CENSUS: no clamp/floor of a pane or head EXTENT ----------------------
@@ -1553,33 +1560,171 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
       }
     }
 
-    // ---- (f2) THE COLLAPSED ARM: `auto` on the adjustable axis, and NO FIGURE CONSTANT ---------
+    // ---- (f2) THE COLLAPSED ARMS: BOTH orientation keys PRESENT, each `auto` on the axis that
+    // orientation makes adjustable, each AGREED with `panePaintAxesOf(zone)`, and NO FIGURE
+    // CONSTANT ---------------------------------------------------------------------------------
+    // WHY PRESENCE, NOT `.some`: as FIRST filed this arm gathered the collapsed `auto` arms and
+    // asserted `.some(...)` — MEASURED, deleting BOTH mandated `[data-orientation]` arms from
+    // `src/renderer/index.html` left every limb of this file unchanged (F stayed green), because
+    // the `.pane-frame[collapsed='true']:not([zone] *)` stage arm alone satisfied the `.some`. A
+    // green that cannot fail is a defect in the battery, so the reading is per-ORIENTATION now: a
+    // missing key is named BY KEY, and each arm's axis is cross-checked against the helper that
+    // names the same split (`§3` C) — the sheet and the helper are two copies of ONE axis split,
+    // and this arm is where their agreement is graded.
+    const sheet = readText(INDEX_HTML)
     const collapsedArms = paneRules.filter((rule) => /pane-frame/.test(rule.selector) && /collapsed/.test(rule.selector))
-    if (collapsedArms.length === 0) {
-      problems.push(
-        `(f2) \`index.html\` carries NO collapsed arm keyed on the FRAME's \`collapsed\` carrier — §2 C-4's \`auto\`-on-the-adjustable-axis rule ` +
-          `is ABSENT (the landed sheet keys the zone arm on \`[collapsed='true']\` only, at index.html:289-297)`,
+    type Orientation = 'vertical' | 'horizontal'
+    const ORIENTATION_KEYS: readonly Orientation[] = ['vertical', 'horizontal']
+    /** `§2` C-4's axis split, pinned as a LITERAL: a sheet that drifted TOGETHER with the helper
+     *  still reds, so the helper below is a CROSS-check and never the only copy of the claim. */
+    const ADJUSTABLE_OF: Record<Orientation, 'height' | 'width'> = { vertical: 'height', horizontal: 'width' }
+    /** Every EXTENT declaration a rule body states (`EXTENT_PROPS` order, values trimmed). */
+    const extentDecls = (body: string): Array<{ prop: string; value: string }> => {
+      const out: Array<{ prop: string; value: string }> = []
+      for (const prop of EXTENT_PROPS) {
+        for (const found of body.matchAll(new RegExp(`(?:^|[;{\\s])${prop}\\s*:\\s*([^;}]+)`, 'g'))) {
+          out.push({ prop, value: found[1]!.trim() })
+        }
+      }
+      return out
+    }
+    /** The pane-family collapsed rules KEYED ON ONE `[data-orientation]` value in one sheet TEXT. */
+    const orientationArms = (src: string, orientation: Orientation): CssRule[] => {
+      const key = new RegExp(`data-orientation\\s*=\\s*['"]${orientation}['"]`)
+      return paneFamilyRules(cssRules(src)).filter(
+        (rule) => key.test(rule.selector) && /pane-frame/.test(rule.selector) && /collapsed/.test(rule.selector),
       )
-    } else {
-      const autoAxis = collapsedArms.some((rule) =>
-        ['height', 'width', 'min-height', 'min-width', 'flex-basis'].some((prop) => {
-          const declared = declOf(rule.body, [prop])
-          return declared !== null && /^(?:auto|min-content)$/.test(declared.value)
-        }) || /(?:^|[;{\s])flex\s*:\s*[^;]*\bauto\b/.test(rule.body),
-      )
-      if (!autoAxis) {
+    }
+    /** The helper's OWN answer for a zone, as this arm's cross-check reads it. */
+    const helperAxis = (zone: Zone): { adjustable: string | null; error: string | null } => {
+      if (helper === null) return { adjustable: null, error: null }
+      try {
+        const raw = helper(zone) as { adjustable?: unknown } | null | undefined
+        if (raw === null || typeof raw !== 'object') return { adjustable: null, error: `answered ${JSON.stringify(raw ?? null)}, not an object` }
+        return { adjustable: typeof raw.adjustable === 'string' ? raw.adjustable : null, error: null }
+      } catch (error) {
+        return { adjustable: null, error: `THREW (${String(error)})` }
+      }
+    }
+    /** (f2)'s WHOLE reading over ONE sheet text — the real file, and every mutation below. */
+    const collapsedArmProblems = (src: string, label: string): { problems: string[]; arms: string } => {
+      const out: string[] = []
+      const described: string[] = []
+      for (const orientation of ORIENTATION_KEYS) {
+        const want = ADJUSTABLE_OF[orientation]
+        const arms = orientationArms(src, orientation)
+        if (arms.length === 0) {
+          out.push(
+            `(f2)${label} NO collapsed \`auto\` arm keyed on \`[data-orientation='${orientation}']\` exists in the sheet — §2 C-4 mandates the ` +
+              `\`auto\`-on-the-adjustable-axis rule PER ZONE ORIENTATION and the ${orientation} one is ABSENT, so a ${orientation}-oriented ` +
+              `(collapsed) frame paints with no adjustable axis stated at all. The missing KEY is named, not merely a missing declaration`,
+          )
+          continue
+        }
+        const autoAxes = [
+          ...new Set(arms.flatMap((rule) => extentDecls(rule.body).filter((decl) => /^auto$/.test(decl.value)).map((decl) => decl.prop))),
+        ]
+        described.push(
+          `${orientation}: ${arms.map((rule) => `${rule.selector} (index.html:${rule.line}) ⇒ ${autoAxes.length === 0 ? 'NO `auto`' : autoAxes.join('+')}`).join(' | ')}`,
+        )
+        if (!autoAxes.includes(want)) {
+          out.push(
+            `(f2)${label} the \`[data-orientation='${orientation}']\` arm(s) [${arms.map((rule) => rule.selector).join(' | ')}] read \`auto\` on ` +
+              `[${autoAxes.join(', ') || 'NO extent axis'}] — §2 C-4 makes the ${orientation} orientation's ADJUSTABLE axis \`${want}\`, so the ` +
+              `collapsed extent is stated on the wrong axis (a collapsed frame keeps its fill relation and takes its HEAD's extent)`,
+          )
+        }
+        for (const zone of CLOSED_ZONES) {
+          if (zoneOrientation(zone) !== orientation) continue
+          const answer = helperAxis(zone)
+          if (answer.error !== null) {
+            out.push(
+              `(f2)${label} THE CROSS-CHECK HAS NO READING — \`panePaintAxesOf('${zone}')\` ${answer.error}, so the sheet's ${orientation} arm ` +
+                `cannot be compared with the helper (fail-closed, never a silent pass)`,
+            )
+            continue
+          }
+          if (answer.adjustable === null) {
+            out.push(
+              `(f2)${label} THE CROSS-CHECK HAS NO READING — \`panePaintAxesOf('${zone}')\` names no \`adjustable\` member for the ${zone} zone, so ` +
+                `the sheet's ${orientation} arm has nothing to agree with`,
+            )
+            continue
+          }
+          if (answer.adjustable !== want || !autoAxes.includes(answer.adjustable)) {
+            out.push(
+              `(f2)${label} DRIFT — the sheet's \`[data-orientation='${orientation}']\` arm makes [${autoAxes.join(', ') || 'NO extent axis'}] ` +
+                `adjustable, but \`panePaintAxesOf('${zone}')\` names \`adjustable: '${answer.adjustable}'\` for that ${orientation}-orientation ` +
+                `zone — the paint and the helper are two copies of ONE axis split and must name the same member (\`§3\` C's helper is the reading ` +
+                `the sheet has to agree with, so neither copy can drift alone)`,
+            )
+          }
+        }
+      }
+      return { problems: out, arms: described.join('; ') }
+    }
+    const realArms = collapsedArmProblems(sheet, '')
+    problems.push(...realArms.problems)
+    for (const rule of collapsedArms) {
+      const figure = extentFigure(rule.body)
+      if (figure !== null) {
         problems.push(
-          `(f2) no collapsed arm reads \`auto\` (or \`min-content\`) on the adjustable axis [${collapsedArms.map((rule) => rule.selector).join(' | ')}] — ` +
-            `§2 C-4: the pane's adjustable axis takes its extent from the HEAD it is now made of`,
+          `(f2) the collapsed arm \`${rule.selector}\` (index.html:${rule.line}) fixes an EXTENT with the length figure \`${figure}\` — the ` +
+            `collapsed extent is content-derived, so a \`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal here reds (§3 F/f2, \`ASM-U2-1\`). ` +
+            `Padding and the glyph's box are NOT this arm's subject`,
         )
       }
-      for (const rule of collapsedArms) {
-        const figure = extentFigure(rule.body)
-        if (figure !== null) {
+    }
+    // ---- (f2) THE TWO MUTATIONS — the presence half and the agreement half must each be able to
+    // SEE the defect they name, on a MUTATED COPY of the sheet text (the real file is never
+    // written). MEASURED pre-repair: with both arms deleted the old `.some` arm stayed green.
+    const mutationReadings: string[] = []
+    {
+      const isOrientationLine = (line: string, orientation: Orientation): boolean =>
+        new RegExp(`data-orientation\\s*=\\s*['"]${orientation}['"]`).test(line) && /pane-frame/.test(line) && /collapsed/.test(line)
+      // (i) DELETE ONE of the two mandated arms.
+      const withoutHorizontal = sheet.split('\n').filter((line) => !isOrientationLine(line, 'horizontal')).join('\n')
+      if (withoutHorizontal === sheet) {
+        problems.push(
+          `(f2) THE FALSIFIER FAILED — mutation (i) could not find a \`[data-orientation='horizontal']\` collapsed arm line to delete, so the ` +
+            `PRESENCE tooth's discrimination is unproven`,
+        )
+      } else {
+        const mutated = collapsedArmProblems(withoutHorizontal, ' [mutation (i): horizontal arm DELETED]')
+        mutationReadings.push(`(i) horizontal arm DELETED ⇒ ${mutated.problems.length} named problem(s)`)
+        if (!mutated.problems.some((problem) => /NO collapsed/.test(problem) && problem.includes("[data-orientation='horizontal']"))) {
           problems.push(
-            `(f2) the collapsed arm \`${rule.selector}\` (index.html:${rule.line}) fixes an EXTENT with the length figure \`${figure}\` — the ` +
-              `collapsed extent is content-derived, so a \`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal here reds (§3 F/f2, \`ASM-U2-1\`). ` +
-              `Padding and the glyph's box are NOT this arm's subject`,
+            `(f2) THE FALSIFIER FAILED — mutation (i) deleted the \`[data-orientation='horizontal']\` arm and this arm reported ` +
+              `${mutated.problems.length} problem(s) [${mutated.problems.join(' | ') || 'NONE'}], none naming the missing key: the PRESENCE half ` +
+              `cannot see a missing mandated arm`,
+          )
+        }
+      }
+      // (ii) SWAP the two arms' axes — the drift between the sheet and `panePaintAxesOf`.
+      const flipAxis = (line: string): string =>
+        line.replace(
+          /(^|[;{\s])(min-|max-)?(height|width)(\s*:\s*auto)/g,
+          (_all, lead: string, size: string | undefined, axis: string, tail: string) =>
+            `${lead}${size ?? ''}${axis === 'height' ? 'width' : 'height'}${tail}`,
+        )
+      const swapped = sheet
+        .split('\n')
+        .map((line) => (ORIENTATION_KEYS.some((orientation) => isOrientationLine(line, orientation)) ? flipAxis(line) : line))
+        .join('\n')
+      if (swapped === sheet) {
+        problems.push(
+          `(f2) THE FALSIFIER FAILED — mutation (ii) could not swap the two arms' \`auto\` axes, so the AGREEMENT half's discrimination is unproven`,
+        )
+      } else {
+        const mutated = collapsedArmProblems(swapped, ' [mutation (ii): axes SWAPPED]')
+        mutationReadings.push(
+          `(ii) axes SWAPPED ⇒ ${mutated.problems.length} named problem(s), DRIFT ${mutated.problems.some((problem) => /DRIFT/.test(problem)) ? 'reported' : 'MISSING'}`,
+        )
+        if (!mutated.problems.some((problem) => /DRIFT/.test(problem) && problem.includes('panePaintAxesOf'))) {
+          problems.push(
+            `(f2) THE FALSIFIER FAILED — mutation (ii) swapped the two arms' axes and this arm reported ${mutated.problems.length} problem(s) ` +
+              `[${mutated.problems.join(' | ') || 'NONE'}], none of them a DRIFT against \`panePaintAxesOf\`: the helper cross-check is not ` +
+              `discriminating`,
           )
         }
       }
@@ -1594,9 +1739,13 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
       problems,
       `limb F — the minimum is the head (\`§3\` limb F, sub-arms f1/f2; §2 C-4, \`ASM-U2-1\`/\`ASM-U2-7\`). The census walked ` +
         `${SRC_FILES.length} file(s) under src/ and ${paneRules.length} pane-block rule(s) in \`index.html\`. ${problems.length} problem(s). ` +
-        `THE LEDGER: (f1a) NO clamp/floor of a pane or head extent exists anywhere in \`src/**\` (no \`Math.max\` on a head extent, no JS-written ` +
-        `\`min-height\`); (f1b) the head rule declares no extent figure; (f2) the collapsed arm reads \`auto\` on the adjustable axis and carries NO ` +
-        `figure constant (a \`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal reds). ` +
+        `THE COLLAPSED ARMS READ: ${realArms.arms || '(NONE — no orientation arm exists)'}. THE LEDGER: (f1a) NO clamp/floor of a pane or head ` +
+        `extent exists anywhere in \`src/**\` (no \`Math.max\` on a head extent, no JS-written \`min-height\`); (f1b) the head rule declares no ` +
+        `extent figure; (f2) BOTH \`[data-orientation]\` arms are PRESENT (each missing one reds BY KEY), each reads \`auto\` on the axis ` +
+        `\`panePaintAxesOf(zone)\` names for that orientation (a sheet/helper DRIFT reds), and no arm carries a figure constant (a ` +
+        `\`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal reds). Two NAMED mutations keep (f2) a reading: a deleted orientation arm must red the ` +
+        `presence half by name, and swapped axes must red the DRIFT half — MEASURED pre-repair, deleting BOTH arms left this limb green. ` +
+        `THE MUTATIONS READ: ${mutationReadings.join(' | ') || '(NONE — no mutation could be built)'}. ` +
         `LAYER: a SOURCE census — the \`min-content\` FLOOR itself is a painted fact and belongs to \`G8\` alone (the head's box under a squeezed zone)`,
     ).toEqual([])
   })
@@ -1641,84 +1790,159 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
     }
 
     // ---- (g3) THE INK, COMPUTED FROM THE FILE'S OWN THEME LITERALS ----------------------------
+    // ONE function over ONE sheet TEXT, so the SAME reading runs on MUTATED COPIES below: a
+    // predicate only ever asked about the landed sheet cannot show that it discriminates.
     const blocks = themeBlocks(html)
-    const themes: Array<[string, Decls]> = [
-      ['light', blocks.light],
-      ['dark', blocks.dark],
-    ]
-    const lineInkValue = lineRules.length === 0 ? null : declOf(lineRules.map((rule) => rule.body).join(';'), ['background-color', 'background', 'color'])
-    const pillInkValue = pillRules.length === 0 ? null : declOf(pillBody, ['background-color', 'background', 'color'])
-    if (lineInkValue === null) {
-      problems.push('(g3) the `::before` DIVIDER declares no background/color ink — there is no line to be quieter than')
+    interface InkDecl {
+      prop: string
+      value: string
     }
-    if (pillInkValue === null) {
-      problems.push('(g3) the `::after` PILL declares no background/color ink — §2 C-6 DERIVES it (`color-mix` toward `--bg`, opaque), it is never a new declaration')
-    }
-    const inkReadings: string[] = []
-    for (const [label, decls] of themes) {
-      const bg = decls['--bg']
-      if (bg === undefined) {
-        problems.push(`(g3) the ${label} theme block declares no \`--bg\` — the ratio has no background to be measured against`)
-        continue
-      }
-      const bgColor = resolveColor(bg, decls)
-      if (bgColor === null) {
-        problems.push(`(g3) \`--bg: ${bg}\` in the ${label} theme block is not a resolvable colour`)
-        continue
-      }
-      if (lineInkValue === null || pillInkValue === null) continue
-      const lineInk = resolveColor(lineInkValue.value, decls)
-      const pillInk = resolveColor(pillInkValue.value, decls)
-      if (lineInk === null) {
-        problems.push(
-          `(g3) the ${label} theme cannot resolve the DIVIDER's ink \`${lineInkValue.prop}: ${lineInkValue.value}\` from its own tokens ` +
-            `[${Object.keys(decls).length} declared] — a derived ink must resolve to a literal the file itself carries`,
-        )
-        continue
-      }
-      if (pillInk === null) {
-        problems.push(
-          `(g3) the ${label} theme cannot resolve the PILL's ink \`${pillInkValue.prop}: ${pillInkValue.value}\` — §2 C-6 derives it from the ` +
-            `block's OWN declared tokens (\`color-mix\` toward \`--bg\`), so it must resolve here or it is an undeclared authority`,
-        )
-        continue
-      }
-      if (pillInk.a < 1) {
-        problems.push(
-          `(g3) the ${label} theme's pill ink resolves to alpha ${round3(pillInk.a)} — §2 C-6 (\`ASM-U2-6\`) refuses TRANSLUCENCY: an alpha fill ` +
-            `makes a colour a function of what it covers (\`D-285\`)`,
+    const inkProblems = (
+      src: string,
+      label: string,
+    ): { problems: string[]; readings: string[]; line: InkDecl | null; pill: InkDecl | null } => {
+      const out: string[] = []
+      const read: string[] = []
+      const gutter = cssRules(src).filter((rule) => /\.gutter/.test(rule.selector))
+      const lineArms = gutter.filter((rule) => /::before/.test(rule.selector) && /\.gutter\[zone\]/.test(rule.selector))
+      const pillArms = gutter.filter((rule) => /::after/.test(rule.selector) && /\.gutter\[zone\]/.test(rule.selector))
+      const pillText = pillArms.map((rule) => rule.body).join('\n')
+      const lineDecl = lineArms.length === 0 ? null : declOf(lineArms.map((rule) => rule.body).join(';'), ['background-color', 'background', 'color'])
+      const pillDecl = pillArms.length === 0 ? null : declOf(pillText, ['background-color', 'background', 'color'])
+      if (lineDecl === null) out.push(`(g3)${label} the \`::before\` DIVIDER declares no background/color ink — there is no line to be quieter than`)
+      if (pillDecl === null) {
+        out.push(
+          `(g3)${label} the \`::after\` PILL declares no background/color ink — §2 C-6 DERIVES it (\`color-mix\` toward \`--bg\`, opaque), it is ` +
+            `never a new declaration`,
         )
       }
-      const lineRatio = contrastRatio(lineInk, bgColor)
-      const pillRatio = contrastRatio(pillInk, bgColor)
-      inkReadings.push(`${label}: line ${round3(lineRatio)} vs pill ${round3(pillRatio)} against --bg ${bg}`)
-      if (!(pillRatio < lineRatio)) {
-        problems.push(
-          `(g3) in the ${label} theme the PILL's ink reads a contrast ratio of ${round3(pillRatio)} against \`--bg\`, NOT strictly lower than the ` +
-            `DIVIDER's ${round3(lineRatio)} (\`${pillInkValue.value}\` vs \`${lineInkValue.value}\`) — §2 C-6: the pill is QUIETER than the line, and ` +
-            `"quieter" is this computed reading, never a taste claim`,
-        )
-      }
-    }
-
-    // ---- (g3-falsifier) THE COMPARATOR MUST REJECT AN INK EQUAL TO THE LINE -------------------
-    {
-      const decls = blocks.light
-      const bg = decls['--bg'] === undefined ? null : resolveColor(decls['--bg']!, decls)
-      const border = decls['--border'] === undefined ? null : resolveColor(decls['--border']!, decls)
-      if (bg === null || border === null) {
-        problems.push('(g3) the light theme block no longer carries resolvable `--bg`/`--border` literals — the ratio falsifier has no subject')
-      } else {
-        const equalRatio = contrastRatio(border, bg)
-        if (equalRatio < equalRatio) {
-          problems.push('(g3) THE FALSIFIER FAILED — an ink EQUAL to the line\'s (ratio ' + round3(equalRatio) + ') satisfied "strictly lower"; the comparator is vacuous')
+      const own = themeBlocks(src)
+      for (const [themeLabel, decls] of [
+        ['light', own.light],
+        ['dark', own.dark],
+      ] as Array<[string, Decls]>) {
+        const bg = decls['--bg']
+        if (bg === undefined) {
+          out.push(`(g3)${label} the ${themeLabel} theme block declares no \`--bg\` — the ratio has no background to be measured against`)
+          continue
         }
-        const quiet = resolveColor('color-mix(in srgb, var(--border) 40%, var(--bg))', decls)
-        if (quiet === null || !(contrastRatio(quiet, bg) < equalRatio)) {
-          problems.push(
-            `(g3) THE FALSIFIER FAILED — a 40% \`color-mix(var(--border), var(--bg))\` does not read STRICTLY QUIETER than the line in the light ` +
-              `theme, so no derived ink could ever satisfy this arm (the reader, not the sheet, would be the problem)`,
+        const bgColor = resolveColor(bg, decls)
+        if (bgColor === null) {
+          out.push(`(g3)${label} \`--bg: ${bg}\` in the ${themeLabel} theme block is not a resolvable colour`)
+          continue
+        }
+        if (lineDecl === null || pillDecl === null) continue
+        const lineInk = resolveColor(lineDecl.value, decls)
+        const pillInk = resolveColor(pillDecl.value, decls)
+        if (lineInk === null) {
+          out.push(
+            `(g3)${label} the ${themeLabel} theme cannot resolve the DIVIDER's ink \`${lineDecl.prop}: ${lineDecl.value}\` from its own tokens ` +
+              `[${Object.keys(decls).length} declared] — a derived ink must resolve to a literal the file itself carries`,
           )
+          continue
+        }
+        if (pillInk === null) {
+          out.push(
+            `(g3)${label} the ${themeLabel} theme cannot resolve the PILL's ink \`${pillDecl.prop}: ${pillDecl.value}\` — §2 C-6 derives it from ` +
+              `the block's OWN declared tokens (\`color-mix\` toward \`--bg\`), so it must resolve here or it is an undeclared authority`,
+          )
+          continue
+        }
+        if (pillInk.a < 1) {
+          out.push(
+            `(g3)${label} the ${themeLabel} theme's pill ink resolves to alpha ${round3(pillInk.a)} — §2 C-6 (\`ASM-U2-6\`) refuses TRANSLUCENCY: an ` +
+              `alpha fill makes a colour a function of what it covers (\`D-285\`)`,
+          )
+        }
+        const lineRatio = contrastRatio(lineInk, bgColor)
+        const pillRatio = contrastRatio(pillInk, bgColor)
+        read.push(`${themeLabel}: line ${round3(lineRatio)} vs pill ${round3(pillRatio)} against --bg ${bg}`)
+        if (!(pillRatio < lineRatio)) {
+          out.push(
+            `(g3)${label} in the ${themeLabel} theme the PILL's ink reads a contrast ratio of ${round3(pillRatio)} against \`--bg\`, NOT strictly ` +
+              `lower than the DIVIDER's ${round3(lineRatio)} (\`${pillDecl.value}\` vs \`${lineDecl.value}\`) — §2 C-6's \`quieter-than\` predicate ` +
+              `is VIOLATED: the pill is QUIETER than the line, and "quieter" is this computed reading, never a taste claim`,
+          )
+        }
+      }
+      return { problems: out, readings: read, line: lineDecl, pill: pillDecl }
+    }
+    const realInk = inkProblems(html, '')
+    problems.push(...realInk.problems)
+    const inkReadings = realInk.readings
+    const mutationReadings: string[] = []
+
+    // ---- (g3-falsifier) THE `quieter-than` PREDICATE MUST REJECT AN EQUAL INK AND AN INVERTED ONE
+    // WHY: as FIRST filed this block read `if (equalRatio < equalRatio)` — an expression compared
+    // with ITSELF, which can never be true (MEASURED: dead code; the arm labelled "the equal-ink
+    // falsifier" proved nothing). Both falsifiers below MUTATE the sheet's own two inks in a COPY
+    // of its text and require the reading to hand the NAMED `quieter-than` violation back.
+    {
+      const pillRule = pillRules[0]
+      const pillBodyText = pillRule?.body ?? ''
+      if (realInk.line === null || realInk.pill === null || pillBodyText === '' || !html.includes(pillBodyText)) {
+        problems.push(
+          '(g3) the sheet offers no resolvable PILL rule body to mutate — neither the EQUAL-ink nor the INVERTED-ink falsifier has a subject, so ' +
+            'the `quieter-than` half cannot show it discriminates',
+        )
+      } else {
+        const pillDecl = realInk.pill
+        /** Rewrite the pill's ink to `value` in a COPY of the sheet text (the file is never written). */
+        const withPillInk = (value: string): string => {
+          const patched = pillBodyText.replace(
+            new RegExp(`(^|[;{\\s])${pillDecl.prop}\\s*:\\s*[^;}]+`),
+            `$1${pillDecl.prop}: ${value}`,
+          )
+          return html.replace(pillBodyText, () => patched)
+        }
+        const mutations: Array<{ name: string; value: string; why: string }> = [
+          {
+            name: 'EQUAL ink',
+            value: realInk.line.value,
+            why: 'the pill set to the DIVIDER\'s own colour, so the two ratios are EQUAL and `quieter-than` is violated',
+          },
+          {
+            name: 'INVERTED ink',
+            value: 'var(--fg)',
+            why: 'the pill set STRONGER than the line, so the pill reads louder and `quieter-than` is violated',
+          },
+        ]
+        for (const mutation of mutations) {
+          const mutated = withPillInk(mutation.value)
+          if (mutated === html) {
+            problems.push(
+              `(g3) THE FALSIFIER FAILED — the ${mutation.name} mutation did not rewrite the pill's \`${pillDecl.prop}\` declaration, so this ` +
+                `arm's discrimination is unproven`,
+            )
+            continue
+          }
+          const reading = inkProblems(mutated, ` [falsifier: ${mutation.name}]`)
+          mutationReadings.push(
+            `${mutation.name} (pill \`${mutation.value}\`) ⇒ ${reading.problems.length} named problem(s), \`quieter-than\` ${reading.problems.some((problem) => /quieter-than/.test(problem)) ? 'reported' : 'MISSING'}`,
+          )
+          if (!reading.problems.some((problem) => /quieter-than/.test(problem))) {
+            problems.push(
+              `(g3) THE FALSIFIER FAILED — the ${mutation.name} sheet (pill \`${pillDecl.prop}: ${mutation.value}\`, ${mutation.why}) read ` +
+                `${reading.problems.length} problem(s) [${reading.problems.join(' | ') || 'NONE'}], none of them the \`quieter-than\` violation: ` +
+                `the GREEN half this arm reports is not discriminating`,
+            )
+          }
+        }
+        // The POSITIVE control, kept as filed: the READER can see a genuinely quieter DERIVED ink,
+        // so a comparator that reports "not quieter" on everything is caught too.
+        const decls = blocks.light
+        const bg = decls['--bg'] === undefined ? null : resolveColor(decls['--bg']!, decls)
+        if (bg === null) {
+          problems.push('(g3) the light theme block no longer carries a resolvable `--bg` literal — the ratio falsifiers have no subject')
+        } else {
+          const lineInk = resolveColor(realInk.line.value, decls)
+          const quiet = resolveColor('color-mix(in srgb, var(--border) 40%, var(--bg))', decls)
+          if (lineInk === null || quiet === null || !(contrastRatio(quiet, bg) < contrastRatio(lineInk, bg))) {
+            problems.push(
+              `(g3) THE FALSIFIER FAILED — a 40% \`color-mix(var(--border), var(--bg))\` does not read STRICTLY QUIETER than the line in the light ` +
+                `theme, so no derived ink could ever satisfy this arm (the reader, not the sheet, would be the problem)`,
+            )
+          }
         }
       }
     }
@@ -1798,8 +2022,10 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
       `limb G — the gutter pill (\`§3\` limb G, sub-arms g1…g5; §2 C-6, \`ASM-U2-5\`/\`ASM-U2-6\`). INK READINGS: ${inkReadings.join('; ') || '(none — no pill/line ink to resolve)'}. ` +
         `${problems.length} problem(s). THE LEDGER: (g1) \`::before\` is the LINE and \`::after\` the PILL; (g2) the three figures (\`min(48px,100%)\`, ` +
         `\`min(7px,100%)\`, a full-round radius) and auto-margin centring; (g3) the pill's ink COMPUTED from the file's OWN theme literals reads a ` +
-        `STRICTLY LOWER WCAG ratio than the line's in BOTH themes; (g4) no custom property is declared inside the three theme blocks (the \`G-5\` ` +
-        `fifteen-token census); (g5) the lane's own box declaration is UNMOVED. ` +
+        `STRICTLY LOWER WCAG ratio than the line's in BOTH themes — and that predicate is PROVEN discriminating by TWO mutated sheets (an ` +
+        `EQUAL-ink pill and an INVERTED-ink pill must each hand back the named \`quieter-than\` violation); (g4) no custom property is declared ` +
+        `inside the three theme blocks (the \`G-5\` fifteen-token census); (g5) the lane's own box declaration is UNMOVED. ` +
+        `THE MUTATIONS READ: ${mutationReadings.join(' | ') || '(NONE — the sheet offered no pill ink to mutate)'}. ` +
         `LAYER: a SOURCE clause — the pill's PAINTED box, its painted ink and the lane's hit-test are \`G8\`-only (\`uf_panes_8\`'s fifth term)`,
     ).toEqual([])
   })
