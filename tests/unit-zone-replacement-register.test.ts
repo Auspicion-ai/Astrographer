@@ -3183,7 +3183,12 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
   //      `src/**`, or add an allow-list row for it/`mount-invariant-guard` → RED.
   //   12. control — the `G-5` FIFTEEN-TOKEN THEME CENSUS unchanged (three blocks, exactly the
   //      pinned fifteen, and no zone/grid token inside them). Stimulus: add, rename, move or drop
-  //      a token in `:root`/`html[data-theme='dark']`/the `@media` fallback → RED.
+  //      a token in `:root`/`html[theme='dark']`/the `@media` fallback → RED.
+  //      ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14: the CARRIER the light and
+  //      dark blocks are keyed on is the foundation's bare `theme` attribute. The superseded
+  //      spelling this clause used to name was `html[data-theme='dark']` (`RCA-8(c)`: annotate-
+  //      beside, never rewritten). The STIMULUS, the membership and the fifteen-token
+  //      expectation are UNMOVED — only the carrier is re-pointed.⟩
   // THE DECLARED TERMS ARE UNMOVED: `6 + 4 + 2 = 12` (as filed, as re-declared), and the
   // register's total stays `13 + 13 + 13 + 11 + 12 + 14 = 76`. `§6.0` clause 4: a reduced row is
   // REPORTED, never suppressed — nothing is reduced here, so nothing is reported abandoned.
@@ -3198,8 +3203,12 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
 
   /** The three THEME blocks' custom-property NAMES (the `G-5`/`D-6` census). The blocks
    *  are read STRUCTURALLY (a selector block's own declaration body), with the CSS comments
-   *  stripped first — the file's own prose NAMES `html[data-theme='dark']`, so an
-   *  un-stripped read would pick the comment up as if it were the selector. */
+   *  stripped first — the file's own prose NAMES `html[theme='dark']`, so an
+   *  un-stripped read would pick the comment up as if it were the selector.
+   *  ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14: both selectors below are
+   *  re-pointed from the superseded `data-theme` carrier to the LANDED `theme` attribute. The
+   *  `themeBlockTokens()` contract — three blocks, custom-property NAMES only, comments
+   *  stripped, `null` when a block cannot be read — is UNMOVED (`RCA-8(c)`).⟩ */
   function themeBlockTokens(): { root: string[]; dark: string[]; media: string[] } | null {
     const raw = gridText()
     const css = raw.replace(/\/\*[\s\S]*?\*\//g, (c) => ' '.repeat(c.length))
@@ -3219,8 +3228,8 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
       return ''
     }
     const names = (body: string): string[] => [...new Set([...body.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]!))]
-    const root = bodyOf(/:root\s*,\s*html\[data-theme='light'\]/)
-    const dark = bodyOf(/html\[data-theme='dark'\]/)
+    const root = bodyOf(/:root\s*,\s*html\[theme='light'\]/)
+    const dark = bodyOf(/html\[theme='dark'\]/)
     const media = bodyOf(/@media\s*\(prefers-color-scheme:\s*dark\)/)
     if (root === '' || dark === '') return null
     return { root: names(root), dark: names(dark), media: names(media) }
@@ -3639,9 +3648,13 @@ describe('§6 P-TP-zone-repl-5 — the shell declaration clauses (strat:zone-rep
         const blocks = themeBlockTokens()
         if (blocks === null) return 'the three THEME blocks are not readable in index.html — the G-5 census cannot be taken'
         const expected = [...PINNED_TOKENS].sort().join(',')
+        // ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14: the dark block's label
+        //  names the LANDED carrier. The superseded label was `"html[data-theme='dark']"`, kept
+        //  visible in this note (`RCA-8(c)`); the LABEL is a diagnostic string and the fifteen-token
+        //  expectation beside it is UNMOVED.⟩
         const labelled: Array<[string, string[]]> = [
           [':root/light', blocks.root],
-          ["html[data-theme='dark']", blocks.dark],
+          ["html[theme='dark']", blocks.dark],
           ['@media fallback', blocks.media],
         ]
         for (const [label, names] of labelled) {

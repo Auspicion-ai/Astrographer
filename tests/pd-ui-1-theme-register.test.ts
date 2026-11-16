@@ -594,8 +594,12 @@ function putNodeBeforePutEdge(text: string): boolean {
 // ---------------------------------------------------------------------------
 function cssBlock(css: string, selectorPattern: RegExp): string | null {
   // CSS COMMENTS ARE STRIPPED FIRST: the token block’s own comment NAMES
-  // `html[data-theme='dark']` in prose, so an un-stripped read picks the comment up as if it
+  // `html[theme='dark']` in prose, so an un-stripped read picks the comment up as if it
   // were the selector and reports the NEXT block’s braces.
+  // ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14: the prose names the LANDED
+  //  carrier (`theme`); the SUPERSEDED spelling was `data-theme`, kept visible in this note
+  //  (`RCA-8(c)`, annotate-beside). The REASON the strip exists is UNMOVED — which is why the
+  //  re-grained prose still names the selector this reader must not mistake for a rule.⟩
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, (c) => ' '.repeat(c.length))
   const m = selectorPattern.exec(stripped)
   if (m === null) return null
@@ -617,8 +621,15 @@ function customPropertiesIn(body: string): string[] {
 }
 /** The oracle: `[rootIndex, rootNames, darkNames]`, or `null` when a required block is absent. */
 function tokenBlockOracle(css: string): { rootIndex: number; darkIndex: number; root: string[]; dark: string[]; mediaPresent: boolean; media: string[] } | null {
-  const root = cssBlock(css, /:root\s*,\s*html\[data-theme='light'\]/)
-  const dark = cssBlock(css, /html\[data-theme='dark'\]/)
+  // ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14 (the foundation's vocabulary
+  //  wins): the CARRIER these two selectors key on is the bare `theme` attribute, so the two
+  //  patterns move with it. The SUPERSEDED patterns were `/:root\s*,\s*html\[data-theme='light'\]/`
+  //  and `/html\[data-theme='dark'\]/`, kept visible in this note (`RCA-8(c)`, annotate-beside).
+  //  WHAT IS **NOT** RE-GRAINED: the fifteen-name census, the `@media` presence/15-name arms and
+  //  the root-before-dark ordering arm — this is a RE-POINT of which carrier the blocks are keyed
+  //  on, never a change to what the census counts (`§3` row 6 of the unit contract).⟩
+  const root = cssBlock(css, /:root\s*,\s*html\[theme='light'\]/)
+  const dark = cssBlock(css, /html\[theme='dark'\]/)
   const media = cssBlock(css, /@media\s*\(prefers-color-scheme:\s*dark\)/)
   if (root === null || dark === null) return null
   const mediaPresent = media !== null
@@ -807,20 +818,27 @@ describe('§4 P-TH-SM-1 — nothing G-9-pinned is disturbed (strat:theme-protect
     expect(putNodeBeforePutEdge(text), '§1.4: the `op: \'putNode\'` literal precedes `op: \'putEdge\'` (all putNode ops before all putEdge ops)').toBe(true)
   })
 
-  it('P-TH-SM-1 (e) — `src/renderer/index.html`’s 15 token names, its two `html[data-theme=…]` selectors and its `@media` fallback are unchanged', () => {
+  // ⟨RE-GRAINED `2026-11-15` — unit `U-1c` (`theme-carrier`), D-14: this row's SUBJECT is
+  //  unchanged (the fifteen-token census, the two attribute selectors and the `@media` fallback),
+  //  and the two selectors are re-pointed to the LANDED carrier `html[theme='light']` /
+  //  `html[theme='dark']` (the superseded `html[data-theme=…]` spelling is kept visible in the
+  //  messages below, `RCA-8(c)`). The re-grain was authored BEFORE the `index.html` byte moved and
+  //  read RED at that head (`tokenBlockOracle` answers `null` when the light/dark block is absent),
+  //  which is RCA-1's red for this unit. The census arms are UNMOVED.⟩
+  it('P-TH-SM-1 (e) — `src/renderer/index.html`’s 15 token names, its two `html[theme=…]` selectors and its `@media` fallback are unchanged', () => {
     const css = readFileSync(INDEX_HTML_PATH, 'utf8')
     const block = tokenBlockOracle(css)
-    expect(block, '§1.2 (c) / R-3: the token block’s `:root, html[data-theme=\'light\']` block and its `html[data-theme=\'dark\']` block must both be present').not.toBeNull()
+    expect(block, '§1.2 (c) / R-3 / ⟨U-1c, D-14⟩: the token block’s `:root, html[theme=\'light\']` block and its `html[theme=\'dark\']` block must both be present (the superseded carrier was `html[data-theme=…]`)').not.toBeNull()
     expect([...block!.root].sort(), '§1.2 (c) / §4 P-TH-SM-2 (a): the `:root` block declares EXACTLY the 15 pinned custom-property names (a CENSUS, never a value claim)').toEqual([...PINNED_TOKENS].sort())
-    expect([...block!.dark].sort(), '§4 P-TH-SM-2 (a): each of the 15 names is also declared in the `html[data-theme=\'dark\']` block').toEqual([...PINNED_TOKENS].sort())
+    expect([...block!.dark].sort(), '§4 P-TH-SM-2 (a): each of the 15 names is also declared in the `html[theme=\'dark\']` block (carrier re-grained by `U-1c`)').toEqual([...PINNED_TOKENS].sort())
     expect(block!.mediaPresent, '§1.2 (c): the `@media (prefers-color-scheme: dark)` fallback is present').toBe(true)
     expect(
       block!.media.length,
-      '§1.2 (c): the fallback redeclares the same fifteen names (a census, not a value claim) — the block is KEPT unchanged by this unit',
+      '§1.2 (c): the fallback redeclares the same fifteen names (a census, not a value claim) — the block is KEPT unchanged by this unit, and `ASM-U1c-3` keeps it keyed on `:root`',
     ).toBe(15)
     expect(
       block!.rootIndex,
-      '§1.2 (c): the `:root, html[data-theme=\'light\']` block precedes the `html[data-theme=\'dark\']` override, so an explicit attribute still wins by specificity',
+      '§1.2 (c): the `:root, html[theme=\'light\']` block precedes the `html[theme=\'dark\']` override, so an explicit attribute still wins by specificity (carrier re-grained by `U-1c`)',
     ).toBeLessThan(block!.darkIndex)
   })
 

@@ -33,44 +33,67 @@ export function resolveTheme(setting: unknown, prefersDark: boolean): ResolvedTh
   return followsOs
 }
 
-/** The minimal root surface `applyThemeToRoot` writes: anything with a
- *  `data-theme`-capable `dataset` (a real `document.documentElement` or the
- *  test dom-shim element). */
+/** The minimal root surface `applyThemeToRoot` writes. Two faces, BOTH OPTIONAL so every root a
+ *  caller already hands this module stays legal (a real `document.documentElement` carries both;
+ *  the layout-less test dom-shim carries the legacy one):
+ *
+ *  - **`setAttribute` / `removeAttribute`** — the ELEMENT-LEVEL attribute face, and the ONLY face
+ *    this adapter writes. A value record is `setAttribute(write.name, write.value)`; a removal
+ *    record is `removeAttribute(write.name)`.
+ *  - **`dataset`** — the legacy `data-` prefixed face the fork used to write. It is KEPT in the
+ *    contract (a root offering only this is still a legal `ThemeRoot`, so boot stays fail-soft) and
+ *    it is NO LONGER WRITTEN: the `data-` prefixed theme carrier was superseded by the foundation's
+ *    bare `theme` attribute (unit `U-1c`, D-14; the superseded spelling is spelled out in the two
+ *    theme censuses' own notes — `tests/pd-ui-1-theme-register.test.ts` and
+ *    `tests/unit-zone-replacement-register.test.ts` — and in the owning contract §2.1 item 6,
+ *    because `src/**` may carry exactly ONE carrier spelling from this unit on). */
 export interface ThemeRoot {
-  dataset: { theme?: string }
+  setAttribute?: (name: string, value: string) => void
+  removeAttribute?: (name: string) => void
+  dataset?: { theme?: string }
 }
 
-/** Unit U-SHELL-2 §2.3/§2.4 (W1-N1) / PD-UI-1 §2.1 — apply the resolved theme to a
- *  root's `data-theme`. `prefersDark` is passed in (never read here), so the helper is
- *  pure + node-testable. The write is obtained AS DATA from the vendored
- *  `applyThemeDeclaration(attributeName, resolved)` — the fork supplies the attribute
- *  name, the mechanism owns no name. TOTAL/fail-soft (F2): a missing or frozen `dataset`
- *  is left untouched and never throws. Returns the resolved theme; the caller currently
- *  DISCARDS that return, and per `docs/specs/unit-pd-ui-1-theme.md` the liveness predicate
- *  stays SETTING-based — a return-based predicate would be a weaker second authority, so
- *  the return is redundant by construction rather than the liveness input. */
+/** Unit U-SHELL-2 §2.3/§2.4 (W1-N1) / PD-UI-1 §2.1 / **unit `U-1c` (D-14)** — apply the resolved
+ *  theme to a root's **`theme`** attribute. `prefersDark` is passed in (never read here), so the
+ *  helper is pure + node-testable. The write is obtained AS DATA from the vendored
+ *  `applyThemeDeclaration(attributeName, resolved)` — the fork supplies the attribute name, the
+ *  mechanism owns no name — and the record's own `name` is what the write applies, so this module
+ *  holds no second copy of the token. TOTAL/fail-soft (F2): a root whose face is absent, frozen or
+ *  throwing is left untouched and nothing throws. Returns the resolved theme; the caller currently
+ *  DISCARDS that return, and per `docs/specs/unit-pd-ui-1-theme.md` the liveness predicate stays
+ *  SETTING-based — a return-based predicate would be a weaker second authority, so the return is
+ *  redundant by construction rather than the liveness input. */
 export function applyThemeToRoot(root: ThemeRoot, setting: unknown, prefersDark: boolean): ResolvedTheme {
   const resolved = resolveTheme(setting, prefersDark)
   const write = applyThemeDeclaration('theme', resolved)
   try {
-    // The record's decision, applied at the ONE write site — `root.dataset.theme`, the member
-    // of the root this adapter was HANDED, and the only element a write here may touch. Its
-    // `removal` member is HONOURED with the meaning the contract RULES (`A-7` RULED 2026-09-28,
-    // `§2.1` item 6): a removal record means THE ATTRIBUTE IS REMOVED — the record's own
-    // outcome, not a third outcome it does not declare — so the SAME member carries the removal
-    // instead of the assignment, and only ever one of the two arms runs. The element-level
-    // attribute-removal mechanic is NOT taken: it would require WIDENING `ThemeRoot`, and this
-    // adapter removes only from the root it owns. Both arms sit inside this one guarded path, so
-    // a frozen/absent/refusing root is still absorbed below and can never break boot. On the
-    // REACHABLE path the member is always `false` (`§3.2` item 5: `resolveTheme` returns
-    // `'light'`/`'dark'`, always non-empty), so a reachable call always writes `write.value`.
-    if (write.removal) {
-      delete root.dataset.theme
-    } else {
-      root.dataset.theme = write.value
+    // The record's decision, applied at the ONE write site — an ELEMENT-LEVEL attribute write on the
+    // root this adapter was HANDED, and the only element a write here may touch. Its `removal`
+    // member is HONOURED with the meaning the contract RULES (`A-7` RULED 2026-09-28): a removal
+    // record means THE ATTRIBUTE IS REMOVED — the record's own outcome, not a third outcome it does
+    // not declare — so the SAME member carries the removal instead of the assignment, and only ever
+    // one of the two arms runs. Both arms are the RECORD's (`write.name`/`write.value`); a record
+    // that echoes no name (a non-string/empty caller argument) declares no target, so nothing is
+    // written and nothing throws. ⟨SUPERSEDED IN PLACE `2026-11-15` BY UNIT `U-1c` (`RCA-8(c)`,
+    // annotate-beside — the clause above is KEPT as its pass's reading): the `A-7` ruling STANDS
+    // whole; what `A-7` declined was the ELEMENT-LEVEL attribute-removal MECHANIC, *"because it
+    // would require WIDENING `ThemeRoot`"* — and D-14 takes that widening now that the carrier is
+    // the foundation's bare `[theme="dark"]` (`strata/decisions.md` D-14;
+    // `docs/specs/foundation-import-u1-change-analysis.md` §2.4). So the write moved from the
+    // legacy `dataset.theme` face to `setAttribute`/`removeAttribute`, and `dataset` is no longer
+    // written on any arm. The arm stays UNREACHABLE through the fork's own resolver (`resolveTheme`
+    // returns `'light'`/`'dark'`, always non-empty), exactly as `§3.2` item 5 states.⟩ Both arms sit
+    // inside this one guarded path, so a frozen/absent/refusing root is still absorbed below and can
+    // never break boot.
+    if (typeof write.name === 'string' && write.name !== '') {
+      if (write.removal) {
+        if (typeof root.removeAttribute === 'function') root.removeAttribute(write.name)
+      } else if (typeof root.setAttribute === 'function') {
+        root.setAttribute(write.name, write.value)
+      }
     }
   } catch {
-    // never throw — a frozen/absent root must not break boot, and a refused removal is absorbed here
+    // never throw — a frozen/absent root must not break boot, and a refused write is absorbed here
   }
   return resolved
 }

@@ -184,8 +184,10 @@ function handleRequest(runtime: Runtime, req: RpcRequest, notify: (p: { uri: str
 
 /** Unit U-SHELL-2 §2.4 (W1-N1) — apply the persisted/streamed operator theme at
  *  boot and re-resolve it live while the setting is `system`. The shell applies
- *  the theme by setting `document.documentElement.dataset.theme` (§2.3); the OS
- *  preference is read from `matchMedia('(prefers-color-scheme: dark)')`.
+ *  the theme through `applyThemeToRoot`, which writes the root's `theme` attribute
+ *  (unit `U-1c`, D-14: the element-level `setAttribute`/`removeAttribute` face of
+ *  the widened `ThemeRoot`; the superseded carrier was the `dataset.theme` member);
+ *  the OS preference is read from `matchMedia('(prefers-color-scheme: dark)')`.
  *  Fail-soft (F2): an environment without `matchMedia` degrades to the light
  *  default and never throws. */
 function installTheme(): void {

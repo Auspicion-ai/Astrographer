@@ -8,12 +8,15 @@
     /* Unit U-SHELL-2 §2.1 — the shell appearance token layer (Table C). All
        shell chrome + pane styling reads these custom properties, so a theme
        switch is a single attribute flip on <html>. The base set is light;
-       `html[data-theme='dark']` overrides it, and (until the renderer boot
+       `html[theme='dark']` overrides it, and (until the renderer boot
        applies an explicit attribute) the OS preference drives the same dark
-       tokens via the media query. Explicit `data-theme` wins over the media
-       query by specificity. `--hover` feeds the U-SHELL-6 hover affordance. */
+       tokens via the media query. Explicit `theme` wins over the media
+       query by specificity. `--hover` feeds the U-SHELL-6 hover affordance.
+       ⟨The CARRIER is `theme`, not the superseded `data-` prefixed spelling — unit
+       `U-1c`, D-14 (`strata/decisions.md`): the foundation's spelling wins, and the
+       superseded spelling is recorded in the theme censuses' notes, never here.⟩ */
     :root,
-    html[data-theme='light'] {
+    html[theme='light'] {
       color-scheme: light;
       --bg: #f4f6f8;
       --fg: #1a1d21;
@@ -31,7 +34,7 @@
       --accent: #2f6feb;
       --hover: rgba(15, 23, 42, 0.06);
     }
-    html[data-theme='dark'] {
+    html[theme='dark'] {
       color-scheme: dark;
       --bg: #1e2226;
       --fg: #e8eaed;
@@ -49,8 +52,8 @@
       --accent: #7aa2f7;
       --hover: rgba(255, 255, 255, 0.08);
     }
-    /* OS-preference fallback (no explicit `data-theme` yet): `:root` has LOWER
-       specificity than `html[data-theme=…]`, so an explicit choice still wins. */
+    /* OS-preference fallback (no explicit `theme` attribute yet): `:root` has LOWER
+       specificity than `html[theme=…]`, so an explicit choice still wins. */
     @media (prefers-color-scheme: dark) {
       :root {
         color-scheme: dark;
