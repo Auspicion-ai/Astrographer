@@ -55,6 +55,7 @@ import {
   createDragController,
   insertionIndexForPoint,
   movePane,
+  setPaneCollapsed,
   setZoneCollapsed,
   type DragController,
   type DragPoint,
@@ -3439,12 +3440,17 @@ export class SidebarPanes {
     this.editController.requestRebuild()
   }
 
-  /** U-SHELL-3 (C5) — the per-pane collapse toggle. Flips
+  /** U-SHELL-3 (C5) — the per-pane collapse toggle. ⟨Unit `U-2` `C-3` — THE ONE
+   *  LEAF: the record-PRESENT arm ROUTES THROUGH the pure `setPaneCollapsed`
+   *  helper (one `setLayout`, one member of one entry written, every other entry
+   *  and `zones`/`stage`/`topBar` byte-identical).⟩ It flips
    *  `PaneLayoutEntry.collapsed` for the pane in the coerced layout and commits
    *  ONCE through the U-SHELL-1 `setLayout` write-through (the serialized
    *  `layout` update + persist). A pane not in the registry is a NO-OP (a stale
    *  id never mutates a sibling — F5). SYNCHRONOUS (the managed write fires; the
-   *  settings broadcast drives the re-render). */
+   *  settings broadcast drives the re-render). The record-ABSENT backfill below
+   *  is a DIFFERENT arm and stays as landed: it writes a DERIVED placement, so it
+   *  is named here and never graded as a one-leaf write (`ASM-U2-1`'s residue). */
   private togglePaneCollapse(paneId: string): void {
     if (typeof paneId !== 'string' || paneId === '') return
     // F5 — a stale/unregistered pane id is a no-op (identity is stable).
@@ -3458,8 +3464,8 @@ export class SidebarPanes {
     if (index >= 0) {
       // H1 (adversarial) — an EXISTING entry is COLLAPSED-ONLY: its zone/index
       // are preserved (the toggle must never relocate/reorder the pane).
-      const panes = base.panes.map((p, i) => (i === index ? { ...p, collapsed: p.collapsed !== true } : p))
-      this.setLayout({ ...base, panes })
+      const entry = base.panes[index]
+      this.setLayout(setPaneCollapsed(base, paneId, entry.collapsed !== true))
       return
     }
     // H1 (adversarial) — no entry yet: backfill the pane's DEFAULT placement

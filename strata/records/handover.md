@@ -14,6 +14,7 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 | `U-1a` `zone-vocabulary` (`15036dd`) | the zone vocabulary is the foundation's (`top\|bottom\|left\|right`, `[zone=]`, `order`→`index`); the MCP ids moved; `UF-LAYOUT-2` gained a literal limb and the LIVE leg read it `PASS` | envelope + **one app-green row** |
 | `U-1b` `zone-collapse` (`ee3725d` + the app-green pass) | one collapsed state (D-22), derived-and-overturnable; the sibling hide control; the `auto`/`hidden` extent partitioned from F-3's `0px`; the control's hit box and the settings-gear overlap fixed | envelope-green **and app-green on its three rows** |
 | `U-1c` `theme-carrier` | `[theme="dark"]` via a widened `ThemeRoot`; `A-7` superseded by a dated clause; the seven pinned digests still match | envelope-green; **the paint is unclaimed** (no live row reads the carrier) |
+| `U-2` `pane-head` | the authored head row, the head out of the scroller, pane collapse as one leaf write, the minimum-is-the-head, the gutter pill | envelope-green **and app-green** (`UF-PANES-1/8`, `UF-LAYOUT-10`); two paints named as unclaimed |
 
 ## What is owed, in order
 

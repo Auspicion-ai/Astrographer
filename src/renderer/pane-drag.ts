@@ -267,6 +267,28 @@ export function setZoneCollapsed(
   return { ...base, zones }
 }
 
+/** ⟨Unit `U-2` `C-3` — THE ONE-LEAF PANE COLLAPSE WRITE.⟩ `setZoneCollapsed`'s
+ *  exact shape model, one level down: replace ONE pane entry's `collapsed`
+ *  member with the EXPLICIT boolean the caller states (`collapsed === true`) and
+ *  write nothing else. The fork's pane record carries no figure
+ *  (`PaneLayoutEntry` = `id`/`zone`/`index`/`collapsed`), so there is no size to
+ *  retain and none to read — ONE member at ONE address. PURE + TOTAL: a
+ *  malformed layout coerces FIRST, a non-string/empty pane id and an unknown id
+ *  are both NO-OPs returning the coerced value (ZERO writes), and the member is
+ *  an explicit boolean BOTH ways — never a delete (`§2 C-3`). */
+export function setPaneCollapsed(
+  layout: LayoutState,
+  paneId: string,
+  collapsed: boolean,
+): LayoutState {
+  const base = coerceLayout(layout)
+  if (typeof paneId !== 'string' || paneId === '') return base
+  const index = base.panes.findIndex((p) => p.id === paneId)
+  if (index < 0) return base
+  const panes = base.panes.map((p, i) => (i === index ? { ...p, collapsed: collapsed === true } : p))
+  return { ...base, panes }
+}
+
 /** C4/C11 — the shell pointer drag controller. It tracks the active pane +
  *  the drag-time revealed zone set. `move` recomputes the scope-legal zones
  *  within the snap threshold and emits ONE `onRevealChange` write per

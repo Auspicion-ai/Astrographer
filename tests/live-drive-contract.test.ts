@@ -232,7 +232,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const DRIVER_URL = new URL('../scripts/live-drive.mjs', import.meta.url)
@@ -17108,5 +17108,48 @@ describe('§4 the mock-set register — the printed declared-vs-executed tally, 
       `§4.1/§10.2.3/§10.2.5: EVERY third-register row must be HELD — a row whose arms are BROKEN, whose counterexample set is non-empty, whose declared budget is not the executed + named NOT-RUN sum, or which carries an unlabelled class-(b) arm is a RED, never a log line. THE RED SET AT THIS FILING HEAD (${redRows.length} of ${MOCK_SET_REGISTER_REPORTS.length} row(s) BROKEN, ${MOCK_SET_REGISTER_REPORTS.reduce((a, r) => a + r.broken, 0)} broken arm(s), ${red} RED / ${green} GREEN distinct executed arms): ` +
         redRows.map((r) => `${r.row}: held=${r.held}, broken=${r.broken}, counterexamples: ${r.counterexamples.join(' | ') || '(none)'}`).join('  ·  '),
     ).toBe(true)
+  })
+})
+
+// ===========================================================================
+// `U-2` `pane-head` — THE OWED “THE DRIVER MUST LOAD” ROW (`node --check`).
+//
+// THE DEBT THIS PAYS, NAMED: `docs/L1/unit-u-1b-app-green-pass.md` §6. During `U-1b`'s
+// app-green pass the driver stopped PARSEING after four unescaped backticks were put inside
+// the outer template literal of `ufPanes8PaintEvidence`. The scoped live leg then exited `1`
+// before `main()` — no rows, no reconciliation, no reading at all — while EVERY node leg
+// stayed green, this register's 123 rows included, because THE REGISTER READS THE DRIVER AS
+// TEXT: it extracts regions (`new Function` over sliced source, source clauses, censuses) and
+// never PARSES or EXECUTES the file. “The register is green” is therefore NOT “the driver
+// loads”, and the only leg that can catch that class is `node --check — which was a MANUAL
+// step until this row. `U-1b` §6 “Owed (L1-owned, next pass on this instrument)”, and
+// `U-2` is that pass: this unit EDITS the driver (`C-7`) and so authors the row.
+//
+// WHAT IT IS, AND WHAT IT IS NOT: one spawn of `node --check <driver>` with the path derived
+// from THIS FILE's own location (`DRIVER_URL`, `import.meta.url` — never a hard-coded
+// absolute path) and the interpreter taken from `process.execPath` (the node running this
+// suite), failing with the process's own stderr quoted. It ADDS NOTHING to the pinned
+// censuses (`BLOCKS`' 100-key set/sequence, the 47-key fixture census, the `uf_*` row-block
+// field requirements are all untouched) and weakens no existing row.
+// ===========================================================================
+describe('U-2 the driver LOADS — `node --check` (the debt of `docs/L1/unit-u-1b-app-green-pass.md` §6)', () => {
+  it('U-2 `pane-head` C-7: `node --check scripts/live-drive.mjs` exits 0 — the ONE leg that proves the driver parses (the register reads it as TEXT and can never see a parse error)', () => {
+    const driverPath = fileURLToPath(DRIVER_URL)
+    // NON-VACUITY: the subject must be the real file this register already reads, non-empty,
+    // or a green spawn would grade nothing.
+    expect(SRC.length, `the driver at ${driverPath} must be a non-empty source file (the subject of the parse)`).toBeGreaterThan(1000)
+    const res = spawnSync(process.execPath, ['--check', driverPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    const stderr = String(res.stderr || '')
+    const stdout = String(res.stdout || '')
+    // A spawn that could not run at all is a HARNESS failure and is reported as one: it may
+    // never be silently read as a parse result.
+    expect(res.error ?? null, `the \`node --check\` spawn itself failed (${String(res.error && res.error.message)}): the row cannot grade the parse`).toBeNull()
+    expect(res.signal ?? null, `the \`node --check\` process was killed by signal ${String(res.signal)} — no parse verdict was produced`).toBeNull()
+    expect(
+      res.status,
+      `${res.status === 0 ? '' : 'THE DRIVER DOES NOT PARSE. '}node --check ${driverPath} exited ${String(res.status)} (expected 0). ` +
+        `stderr, verbatim: ${JSON.stringify(stderr.trim())}${stdout.trim() === '' ? '' : `; stdout, verbatim: ${JSON.stringify(stdout.trim())}`}. ` +
+        'WHY THIS ROW EXISTS: the register reads the driver as TEXT (extracted regions, source clauses, censuses) and never parses it, so a driver that does not compile can pass every node row here and then fail the live leg with NO rows at all (U-1b lost a whole pass to exactly that: docs/L1/unit-u-1b-app-green-pass.md §6)',
+    ).toBe(0)
   })
 })

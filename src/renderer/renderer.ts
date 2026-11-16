@@ -449,35 +449,42 @@ function isLayoutZoneNameValue(value: unknown): value is LayoutZoneName {
 const PANE_DRAG_CAPTURE_THRESHOLD = 4
 
 /** The delegated gesture-element selector (HOST-1). Resolved per `pointerdown`
- *  via `e.target.closest(...)` so gutters/headers authored AFTER install —
+ *  via `e.target.closest(...)` so gutters/grips authored AFTER install —
  *  the real app authors them at render — still route. TWO surface kinds:
  *    - the gutter (`.gutter[zone]`; ⟨`U-1a`: the carrier is `zone=`, and the
  *      superseded attribute name is spelled only in the docs, never here⟩), and
- *    - the pane HEADER (`.pane-collapse-toggle` — the frame's FIRST child in
- *      `src/renderer/pane-graph.ts`, carrying the authored
- *      `id="pane-collapse-<paneId>"`).
+ *    - the pane's GRIP (`.pane-grab` — the head ROW's first child in
+ *      `src/renderer/pane-graph.ts`, the surface that carries the four rendered
+ *      drag operands).
  *  F-1 (2026-09-15): the `.pane-frame[data-pane-id]` element is NO LONGER a
  *  surface — a `pointerdown` anywhere in the pane BODY (a provident row, a
  *  paragraph, the body root) must never start a pane drag and never capture the
  *  pointer on the frame, because that capture retargets the gesture's `click`
  *  away from the control the operator actually pressed.
  *
- *  The header compound deliberately does NOT use the frame-anchored child form
- *  (`.pane-frame[data-pane-id] > .pane-collapse-toggle`): the dom-shim CSS
- *  subset REJECTS `>` anywhere in a selector (non-match, never a throw), so that
- *  form would resolve NOTHING under the shim-covered tests. The un-anchored
- *  compound is equivalent here (the frame ancestry is resolved separately, and
- *  the `.pane-collapse-toggle` class is authored ONLY on the pane header). No
- *  colon-bearing compound either (the dom-shim `closest` rejects `[on:...]`). */
-const GESTURE_SELECTOR = '.gutter[zone], .pane-collapse-toggle'
+ *  ⟨Unit `U-2` `C-5` — THE CONTROL IS THE GRIP'S SIBLING, NOT A SURFACE.⟩ The
+ *  collapse control sits BESIDE the grip inside the head row, so a press on it
+ *  resolves NO gesture element at all: the one press that used to arm a pane
+ *  drag and paint four zone windows is structurally impossible, not exempted.
+ *
+ *  The grip compound deliberately does NOT use the frame-anchored child form
+ *  (`.pane-frame[data-pane-id] > .pane-grab`): the dom-shim CSS subset REJECTS
+ *  `>` anywhere in a selector (non-match, never a throw), so that form would
+ *  resolve NOTHING under the shim-covered tests. The un-anchored compound is
+ *  equivalent here (the frame ancestry is resolved separately, and the
+ *  `pane-grab` class is authored ONLY on the grip). No colon-bearing compound
+ *  either (the dom-shim `closest` rejects `[on:...]`). */
+const GESTURE_SELECTOR = '.gutter[zone], .pane-grab'
 
 /** The delegated gutter element for the PERMANENT `dblclick` reset (ADV1) —
  *  resolved separately from the pointerdown selector so a double-click is
  *  decoupled from the gesture lifecycle. */
 const GUTTER_SELECTOR = '.gutter[zone]'
 
-/** F-1 — the pane HEADER's class (the grab surface). */
-const PANE_HEADER_CLASS = 'pane-collapse-toggle'
+/** ⟨Unit `U-2` `C-5`⟩ — the pane GRIP's class: the head row's FIRST child, the
+ *  one surface a pane drag may start on. The collapse control is the grip's
+ *  SIBLING and carries its own class, so it is never this surface. */
+const PANE_HEADER_CLASS = 'pane-grab'
 
 /** F-1 — the pane FRAME's class (the element carrying `data-pane-id` and owning
  *  the pointer capture for a pane drag). */
@@ -956,27 +963,31 @@ function onDocumentPointerDown(host: SidebarPanes, e: unknown): void {
       if (!begun) return
     }
 
-    // Pane-drag gesture — the matched element must be the pane HEADER surface
-    // (F-1). A BODY element inside the frame (a provident row/paragraph/root) is
-    // NOT a surface: it falls through here with no drag and no capture, so the
-    // control's own `click` is never retargeted. A header-LESS `.pane-frame` is
-    // not a surface either (the frame element itself never matches).
+    // Pane-drag gesture — the matched element must be the pane GRIP surface
+    // (F-1 / ⟨`U-2` `C-5`⟩). The grip is the head ROW's first child; a BODY
+    // element inside the frame (a provident row/paragraph/root) is NOT a surface:
+    // it falls through here with no drag and no capture, so the control's own
+    // `click` is never retargeted. A grip-LESS `.pane-frame` is not a surface
+    // either (the frame element itself never matches), and neither is the
+    // collapse CONTROL — it is the grip's SIBLING, so a press on it resolves no
+    // gesture element at all.
     const isHeaderSurface = hasClass(gestureEl, PANE_HEADER_CLASS)
     if (!isHeaderSurface) return
-    // The pane FRAME: the header's nearest `.pane-frame` ancestor. It is BOTH
+    // The pane FRAME: the grip's nearest `.pane-frame` ancestor. It is BOTH
     // the pane-id source and the pointer-capture target (the move/up routing
-    // reads the frame). No frame (detached/foreign header) → no pane identity.
+    // reads the frame). No frame (detached/foreign grip) → no pane identity.
     const frameEl = paneFrameAncestorOf(gestureEl)
     const dataPaneId = resolvePaneId(gestureEl, frameEl)
     if (dataPaneId == null || frameEl == null) return
     const session = installPaneSession()
     if (session == null) return
-    // F9/HOST-3/ADV5 — never hijack a control. PINNED (supervisor decision, F-1
-    // 2026-09-15): the header is itself a `button.pane-collapse-toggle`, so the
-    // resolved HEADER surface is the pane's explicit GRAB SURFACE and is EXEMPT
-    // from this guard. The guard stays armed as the second line of defence for
-    // every other resolved target — i.e. any control inside the pane BODY.
-    if (!isHeaderSurface && isInteractiveControl(target as Element | null)) return
+    // F9/HOST-3/ADV5 — never hijack a control. ⟨`U-2` `C-5`: the F-1 EXEMPTION IS
+    // DELETED WITH ITS CAUSE.⟩ It existed because the header WAS the collapse
+    // control (one press armed a drag and painted four zone windows); the control
+    // is now the grip's SIBLING, so a press on it never reaches this resolution at
+    // all and no exemption is owed. The guard stays armed for every other
+    // resolved target — i.e. any control INSIDE the grip's own surface.
+    if (isInteractiveControl(target as Element | null)) return
     // ADV3 — a new pane drag supersedes any in-flight one first (a prior pane
     // drag is cancelled so its reveal is re-hidden, a prior gutter is reverted).
     revertPriorGesture()

@@ -126,14 +126,18 @@ export const SIDEBAR_ZONE = 'sidebar'
 export const PANE_COLLAPSE_HANDLER = 'togglePaneCollapse'
 
 /** The inline collapse-toggle body (a full function-expression string, the
- *  same form `docNavContent`'s toggle body uses). It reads the pane's authored
- *  `data-pane-id` and routes it to the host seam (which flips
- *  `PaneLayoutEntry.collapsed` + persists `layout`). A malformed node is a
- *  no-op — never a throw. */
+ *  same form `docNavContent`'s toggle body uses). ⟨Unit `U-2` `C-1` — THE ONE
+ *  OPERAND: it reads the pane's authored `props.pane` and routes it to the host
+ *  seam (which flips `PaneLayoutEntry.collapsed` + persists `layout`).
+ *  `data-pane-id` stays the FRAME's own identity (the drag's source and the
+ *  driver's 40+ reads) and is NOT read here: a node carrying only
+ *  `data-pane-id` calls nothing. A malformed node — or an absent seam on an
+ *  older preload — is a no-op, never a throw.⟩ */
 const PANE_COLLAPSE_BODY = `function (ctx) {
   var s = window && window.provident && window.provident.sidebar;
   if (!s || typeof s.togglePaneCollapse !== 'function') return;
-  var id = ctx && ctx.node && ctx.node.props && ctx.node.props['data-pane-id'];
+  var props = ctx && ctx.node && ctx.node.props;
+  var id = props && props['pane'];
   if (id) s.togglePaneCollapse(String(id));
 }`
 
@@ -141,6 +145,25 @@ const PANE_COLLAPSE_BODY = `function (ctx) {
 export const PANE_FRAME_CLASS = 'pane-frame'
 /** The U-SHELL-3 `is-collapsed` mirror class (spec §2.5 pin 3). */
 export const PANE_COLLAPSED_CLASS = 'is-collapsed'
+
+/** ⟨Unit `U-2` `C-1`/`C-5` — THE AUTHORED BAR'S FIVE VOCABULARY CLASSES (`D-14`):
+ *  the foundation's `pane-head` (the head ROW), `pane-grab` (the DRAG surface —
+ *  the head row's first child), `pane-drop` (one per closed zone, the grip's
+ *  children), `pane-collapse` (the CONTROL — the grip's SIBLING) and `pane-body`
+ *  (the pane's only scroller). Authored HERE as data (`D-8`); `index.html` only
+ *  paints them.⟩ */
+const PANE_HEAD_CLASS = 'pane-head'
+const PANE_GRAB_CLASS = 'pane-grab'
+const PANE_DROP_CLASS = 'pane-drop'
+const PANE_CONTROL_CLASS = 'pane-collapse'
+const PANE_BODY_CLASS = 'pane-body'
+
+/** ⟨Unit `U-2` `C-1` — THE DROP'S ADDRESS ONLY.⟩ The four drops carry ONE shared
+ *  no-op handler pair so each `pane-drop` node is `provident.dispatch`-
+ *  addressable (`D-8`'s whole purpose); `U-3` owns the move itself. The body
+ *  reads nothing, calls nothing and cannot throw — it is an ADDRESS, not an act. */
+const PANE_MOVE_HANDLER = 'pane-move'
+const PANE_MOVE_BODY = `function (ctx) { return; }`
 
 /** U-SHELL-4 (C12) — the shared ZONE-COLLAPSE toggle handler name. The body is
  *  authored INLINE on the zone's own control (mirrors the U-SHELL-3
@@ -287,21 +310,119 @@ function zoneContainerChildren(
   }))
 }
 
+/** ⟨Unit `U-2` `C-3`/`ASM-U2-3` — THE AXIS SPLIT AS A TOTAL PURE HELPER.⟩ One
+ *  answer for the pane's paint axes, read OFF the fork's own orientation
+ *  (`zoneOrientation`, the edge this module already carries — no new import, no
+ *  cycle): a VERTICAL zone (`left`/`right`) fills its `width` and its adjustable
+ *  axis is its `height`, scrolling `overflow-y`; a HORIZONTAL zone
+ *  (`top`/`bottom`) is the mirror. A pane naming NO zone (the stage arm — any
+ *  non-zone value, `null`/`undefined`/`''`/an object/a number included) answers
+ *  BOTH members adjustable and NO scroll axis. TOTAL: it never throws, reads no
+ *  stored figure, and stores none. Its agreement with the sheet is a source
+ *  clause; its PAINT is `G8`-only. */
+export function panePaintAxesOf(zone: LayoutZoneName | unknown): {
+  fill: 'width' | 'height' | 'both'
+  adjustable: 'width' | 'height' | 'both'
+  scroll: 'overflow-x' | 'overflow-y' | null
+} {
+  if (!isLayoutZoneName(zone)) return { fill: 'both', adjustable: 'both', scroll: null }
+  if (zoneOrientation(zone) === 'vertical') {
+    return { fill: 'width', adjustable: 'height', scroll: 'overflow-y' }
+  }
+  return { fill: 'height', adjustable: 'width', scroll: 'overflow-x' }
+}
+
+/** ⟨Unit `U-2` `C-1` — ONE `.pane-drop` PER CLOSED ZONE.⟩ The grip's children:
+ *  each carries BOTH drag operands (`pane` + `zone`) and ONE shared no-op
+ *  handler pair, so every drop is `provident.dispatch`-addressable while the
+ *  move itself stays `U-3`'s. `.pane-drop` is deliberately unpainted. */
+function paneDropOf(paneId: string, zone: LayoutZoneName): LegacyNodeData {
+  return {
+    type: 'div',
+    props: { id: `pane-grab-${paneId}-${zone}`, pane: paneId, zone },
+    css: { classes: clickableClasses([PANE_DROP_CLASS]) },
+    handlers: [{ name: PANE_MOVE_HANDLER, event: 'click', body: PANE_MOVE_BODY }],
+  }
+}
+
+/** ⟨Unit `U-2` `C-1` — THE GRIP, the head row's FIRST child and the pane's DRAG
+ *  surface.⟩ Its glyph is the ONE authored `content` in the bar; the pane's NAME
+ *  is authored as the `name` attribute (the sheet paints it with `attr(name)`),
+ *  never as a second `content` string. Total: the title is the registry's own
+ *  (`def.title`) and an absent one paints nothing — never a throw. */
+function paneGripOf<C>(def: PaneDefinition<C>): LegacyNodeData {
+  return {
+    type: 'div',
+    props: { id: `pane-grab-${def.id}`, tabindex: '0', name: def.title },
+    css: { classes: [PANE_GRAB_CLASS] },
+    content: '⠿',
+    children: LAYOUT_PANE_ZONES.map((zone) => paneDropOf(def.id, zone)),
+  }
+}
+
+/** ⟨Unit `U-2` `C-1` — THE COLLAPSE CONTROL, the head row's SECOND child and the
+ *  grip's SIBLING (never its descendant: a press on it must resolve no gesture
+ *  element).⟩ Its operand is `props.pane` (the ONE address the handler body
+ *  reads); the id stays `pane-collapse-<id>` (the landed dispatch address) and
+ *  `data-pane-id` stays as the frame family's shared identity. It authors NO
+ *  `content`: the glyph is the SHEET's, keyed on the FRAME's own `collapsed`
+ *  carrier, so one state cannot speak for two owners. */
+function paneCollapseControlOf<C>(def: PaneDefinition<C>): LegacyNodeData {
+  return {
+    type: 'button',
+    props: { id: `pane-collapse-${def.id}`, 'data-pane-id': def.id, pane: def.id, tabindex: '0' },
+    css: { classes: clickableClasses([PANE_CONTROL_CLASS]) },
+    handlers: [{ name: PANE_COLLAPSE_HANDLER, event: 'click', body: PANE_COLLAPSE_BODY }],
+  }
+}
+
+/** ⟨Unit `U-2` `C-1` — THE HEAD ROW, the frame's FIRST child in BOTH states.⟩
+ *  It authors NO `content` and NO `css.style`: its box is the SHEET's, and a
+ *  `position` here would be a second authority for a fact the sheet owns. */
+function paneHeadOf<C>(def: PaneDefinition<C>): LegacyNodeData {
+  return {
+    type: 'div',
+    props: { id: `pane-head-${def.id}` },
+    css: { classes: [PANE_HEAD_CLASS] },
+    children: [paneGripOf(def), paneCollapseControlOf(def)],
+  }
+}
+
+/** ⟨Unit `U-2` `C-2`/`ASM-U2-2` — THE BODY, the frame's SECOND child in BOTH
+ *  states.⟩ The NODE is always authored (its id is what the re-expand restores);
+ *  a collapsed pane withholds only its CHILDREN. `renderRoot` is never mutated
+ *  and never spread onto the node. */
+function paneBodyOf<C>(
+  def: PaneDefinition<C>,
+  renderRoot: LegacyNodeData,
+  collapsed: boolean,
+): LegacyNodeData {
+  return {
+    type: 'div',
+    props: { id: `pane-body-${def.id}` },
+    css: { classes: [PANE_BODY_CLASS] },
+    children: collapsed === true ? [] : [renderRoot],
+  }
+}
+
 /** Wrap a pane's render output into a zone content root. The stable pane id
  * (`pane-<id>`) + the zone `targetPlacement` always land on the FRAME root,
  * OVERWRITING whatever `render` returned.
  *
- * U-SHELL-3 (C5) — when `collapsed` is supplied (a boolean), the frame also
- * authors the provident collapse control (ONE shared `PANE_COLLAPSE_HANDLER`
- * name) and the body. When `collapsed === true` the body nodes are NOT
- * authored (header/handle only — spec §2.2/§2.5 pin 1); the frame root carries
- * `is-collapsed` and keeps its stable identity so expanding restores the body.
+ * ⟨Unit `U-2` `C-1`/`C-2` — THE COLUMN.⟩ The frame is a COLUMN authored as
+ * `[head, body]` in BOTH states: the head row is its fixed first item (the grip
+ * and the collapse control, in that order, as SIBLINGS), and the body its only
+ * scroller. The ONE difference between the two states is the body's CHILDREN —
+ * a collapsed pane keeps the body NODE and withholds its content. The frame
+ * carries the ONE resolved boolean TWICE, as the two carriers the shell already
+ * reads: `is-collapsed` (the landed mirror class) and `collapsed="true"|"false"`
+ * (the foundation's state attribute every descendant glyph rule is keyed on).
+ * Both come from the assembler's single resolved entry — never re-derived here.
  *
  * W2-N5 — the pre-U-SHELL-3 test-only shape (a caller omitting `collapsed` got
  * the render root as the pane root — the Unit H `paneSubtreeRoot` contract) is
- * REMOVED: the U-SHELL-3 frame is the ONLY code path. The app-graph assembler
- * always supplies the boolean, so every assembled pane frame carries the
- * control; a 3-arg (no `collapsed`) caller is treated as expanded. PURE. */
+ * still REMOVED: the U-SHELL-3 frame is the ONLY code path, and a 3-arg (no
+ * `collapsed`) caller is treated as expanded. PURE. */
 export function paneSubtreeRoot<C>(
   def: PaneDefinition<C>,
   ctx: C,
@@ -316,39 +437,19 @@ export function paneSubtreeRoot<C>(
     throw new Error(`paneSubtreeRoot: pane "${def.id}" render returned nothing`)
   }
 
-  // U-SHELL-3 (C5) pane frame: a header/handle control + the body (expanded).
-  // W2-N5 — this is the ONLY shape (the pre-U-SHELL-3 test-only branch was
-  // removed): any caller, whether it passes an explicit boolean or omits
-  // `collapsed`, gets the U-SHELL-3 frame.
-  const control: LegacyNodeData = {
-    type: 'button',
-    props: {
-      // H2 (adversarial) — a STABLE authored id (unique per pane, preserved
-      // across re-derives) so the control is addressable, not just by the
-      // volatile engine nodeId.
-      id: `pane-collapse-${def.id}`,
-      'data-pane-id': def.id,
-      'data-pane-collapse': collapsed === true ? 'true' : 'false',
-    },
-    css: { classes: clickableClasses(['pane-collapse-toggle']) },
-    content: `${collapsed === true ? '▸' : '▾'} ${def.title}`,
-    handlers: [{ name: PANE_COLLAPSE_HANDLER, event: 'click', body: PANE_COLLAPSE_BODY }],
-  }
-  const body: LegacyNodeData = {
-    ...renderRoot,
-    props: { ...(renderRoot.props ?? {}) },
-  }
-  const frameClasses = collapsed === true ? [PANE_FRAME_CLASS, PANE_COLLAPSED_CLASS] : [PANE_FRAME_CLASS]
+  const collapsedState = collapsed === true
+  const head = paneHeadOf(def)
+  const body = paneBodyOf(def, renderRoot, collapsedState)
+  const frameClasses = collapsedState ? [PANE_FRAME_CLASS, PANE_COLLAPSED_CLASS] : [PANE_FRAME_CLASS]
   return {
     type: 'div',
     // U-SHELL-N7 (HOST-1) — the frame ROOT carries the stable authored
-    // `data-pane-id` (matching the collapse-toggle's own) so the delegated
+    // `data-pane-id` (matching the collapse control's own) so the delegated
     // `.pane-frame[data-pane-id='<id>']` pointer wiring actually matches.
-    props: { id: `pane-${def.id}`, 'data-pane-id': def.id },
+    props: { id: `pane-${def.id}`, 'data-pane-id': def.id, collapsed: collapsedState ? 'true' : 'false' },
     placement: { targetPlacement: [sidebarZone] },
     css: { classes: frameClasses },
-    // Collapsed = header/handle only: the body nodes are NOT authored.
-    children: collapsed === true ? [control] : [control, body],
+    children: [head, body],
   }
 }
 

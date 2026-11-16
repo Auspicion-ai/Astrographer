@@ -343,7 +343,34 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  `restated:` field, so the derivation still resolves to `src/shared/demo-envelope.ts`); and
   //  `src/main/preload.ts` IS NOT TOUCHED BY THIS PASS — its recorded `eb230a8bcbe9b5444f95aa6a89c7fec2` was
   //  re-MEASURED at this head and still reads MATCH, so it is not re-recorded.
-  { file: 'src/renderer/sidebar-panes.ts', md5: '01ccc70c8ada681854d995e45fc9c82a', superseded: '153841785965f9efe68c410313c37214', restated: 'U-1b' }, // ⟨RE-STATED AGAIN BY `U-1b` 2026-11-15 (the `G5` FIX 2 second-carrier re-emit for `ASM-U1b-9`): the md5 is re-MEASURED at the repair pass's head and the landing-time value `153841785965f9efe68c410313c37214` is now this row's `superseded` field; the `U-1a`-era superseded literal stays visible on the note above — `c56e3aac3bb4cf32302636d69d7c1b64`⟩
+  // ⟨RE-STATED 2026-11-15 — unit `U-2` (`pane-head`), §4 `P-TH-SM-1` (e)/(f) / §1.2 (c); `RCA-8(c)`
+  //  ANNOTATE-BESIDE.⟩ (Both `U-1b` re-statement blocks above are KEPT VERBATIM as those passes'
+  //  records — annotate-beside, never rewritten; the figure the SECOND of them measured is the
+  //  `superseded:` value on the row below.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are
+  //  not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree
+  //  limb). WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own text (*"a later pass may move
+  //  the file only by re-stating it here, with its reason and its unit named"*). **THE REASON:** `U-2`
+  //  `C-3` (the one-leaf collapse) replaces the act's inline `panes.map(...)` flip with ONE
+  //  `this.setLayout(setPaneCollapsed(base, paneId, entry.collapsed !== true))`, so this file's bytes
+  //  MOVE BY CONSTRUCTION in that landing; §2 `C-7` orders THIS row re-stated in the landing's own
+  //  pass. **THE UNIT:** `U-2` (`pane-head`), contract `docs/L1/unit-u-2-pane-head.md`. **THE
+  //  SUPERSEDED CHAIN, kept VISIBLE and NEVER deleted:** `df1930a3d6cac72796cc6c42609dd6c6` (the
+  //  pre-`U-ZONE-REPLACEMENT` value) ← `3f87d796f19ac839c9837d0d6f0506e8` (`U-ZONE-REPLACEMENT`
+  //  landing) ← `f0b43b52565ad33145a3c979599214eb` (that unit's GATE-4 fix pass) ←
+  //  `c56e3aac3bb4cf32302636d69d7c1b64` (`U-1a` `zone-vocabulary`) ← `153841785965f9efe68c410313c37214`
+  //  (`U-1b`'s landing re-statement) ← `01ccc70c8ada681854d995e45fc9c82a` (`U-1b`'s `G5` FIX 2
+  //  second-carrier re-emit — the value on the row line below as `superseded:`); the new value is that
+  //  chain's SEVENTH link. **THE NEW VALUE IS MEASURED, never inferred** (`md5sum
+  //  src/renderer/sidebar-panes.ts`, run TWICE at this landing's head AFTER every `src/` write, identical
+  //  both times: `24322cccde5875dd1406e6fa34e946e5`). **NO OTHER ROW OF THIS TABLE IS TOUCHED** — the
+  //  table stays SEVEN rows (`pane-graph.ts`/`renderer.ts`/`index.html` are NOT in it, so their landing
+  //  owes no second record); `UNRESTATED_CONTROL_PATH` stays DERIVED from the table itself (this row
+  //  already carried a `restated:` field, so the derivation still resolves to
+  //  `src/shared/demo-envelope.ts`); and `src/main/preload.ts` IS NOT TOUCHED BY THIS UNIT — the bridge
+  //  seam keeps its name `togglePaneCollapse` (only the authored control's OPERAND moves,
+  //  `data-pane-id` → `props.pane`), so its recorded digest is not re-recorded.
+  { file: 'src/renderer/sidebar-panes.ts', md5: '24322cccde5875dd1406e6fa34e946e5', superseded: '01ccc70c8ada681854d995e45fc9c82a', restated: 'U-2' }, // ⟨RE-STATED BY `U-2` 2026-11-15 (`pane-head` `C-3`: the act routes through `setPaneCollapsed`): the md5 is re-MEASURED at the landing head and the `U-1b` `G5`-FIX-2 value `01ccc70c8ada681854d995e45fc9c82a` is now this row's `superseded` field; the older links above (`153841785965f9efe68c410313c37214`, `c56e3aac3bb4cf32302636d69d7c1b64`, …) stay visible on the notes above⟩
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
   { file: 'src/shared/path-fork-cycle.ts', md5: 'eee412ed7609a1c8c727f2dafb2d97fb' },

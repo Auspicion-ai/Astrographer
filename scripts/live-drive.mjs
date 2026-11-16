@@ -202,7 +202,7 @@ function seedCorpus(dir) {
  *  (+ the PAINTED stage geometry, so a "populated stage" claim has a box). */
 async function ufTabState(h) {
   return h.cdp.evaluate(`(()=>{
-    const tabs=[...document.querySelectorAll('#tab-strip .tab')].map((t,i)=>{const r=t.getBoundingClientRect();const c=t.querySelector('.tab-close');const cr=c?c.getBoundingClientRect():null;const cs=getComputedStyle(t);return {i:i,id:t.getAttribute('data-tab-id'),kind:t.getAttribute('data-target-kind'),title:(t.textContent||'').replace(/\u00d7$/,'').trim(),active:t.classList.contains('is-active'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],closeBox:c?[Math.round(cr.width),Math.round(cr.height)]:null,border:cs.borderTopColor,bg:cs.backgroundColor,weight:cs.fontWeight}});
+    const tabs=[...document.querySelectorAll('#tab-strip .tab')].map((t,i)=>{const r=t.getBoundingClientRect();const c=t.querySelector('.tab-close');const cr=c?c.getBoundingClientRect():null;const cs=getComputedStyle(t);return {i:i,id:t.getAttribute('data-tab-id'),kind:t.getAttribute('data-target-kind'),title:(t.textContent||'').replace(/×$/,'').trim(),active:t.classList.contains('is-active'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],closeBox:c?[Math.round(cr.width),Math.round(cr.height)]:null,border:cs.borderTopColor,bg:cs.backgroundColor,weight:cs.fontWeight}});
     const s=document.getElementById('tab-strip');
     const m=document.getElementById('zone:main');
     const h1=m?m.querySelector('h1'):null;
@@ -1008,15 +1008,29 @@ async function ufLayoutStageScrollAttempt(h, attempt = 200) {
  *  `zone`, travelling PAST the frame that follows it in the SAME zone's slot order: a
  *  REARRANGE INSIDE ONE ZONE, driven through the driver's own input path (no synthetic
  *  DOM call, no MCP shortcut). FOUR THINGS THIS PROBE DOES HONESTLY, EACH MEASURED:
- *    (1) THE DRAG START IS THE PANE HEADER'S OWN DRAG SURFACE, resolved from the frame
- *        (`.pane-collapse-toggle` — the app's `PANE_HEADER_CLASS`) and hit-tested, with
- *        the app's OWN delegated resolution re-driven at the point
- *        (`closest('.gutter[zone], .pane-collapse-toggle')` must return that very
- *        header). NOTE, MEASURED AND RECORDED RATHER THAN ASSUMED: on this build the
- *        pane header IS a `button.pane-collapse-toggle` (the fork's own pinned F-1
- *        decision — the header is its own grab surface and is exempt from the
- *        interactive-control guard), so "a point on the header that is not the toggle"
- *        does not exist here; the probe uses the header element and says so.
+ *    (1) THE DRAG START IS THE PANE **GRIP** — the head row's own DRAG SURFACE,
+ *        resolved from the frame (`.pane-grab` — the app's `PANE_HEADER_CLASS`, and the
+ *        app's own `GESTURE_SELECTOR` is now `.gutter[zone], .pane-grab`) and
+ *        hit-tested, with the app's OWN delegated resolution re-driven at the point
+ *        (`closest('.gutter[zone], .pane-grab')` must return that very grip).
+ *        ⟨RE-GRAINED `2026-11-15` BY UNIT `U-2` `C-7` (the vocabulary: `C-5`).⟩ THE
+ *        SUPERSEDED READING, KEPT VISIBLE: *"on this build the pane header IS a
+ *        `button` carrying the (now deleted) header class, being the app's own pinned
+ *        F-1 decision — the header is its own grab surface and is exempt from the
+ *        interactive-control guard — so 'a point on the header that is not the toggle'
+ *        does not exist here"*. THE SUPERSEDED CLASS NAME IS NOT SPELLED HERE: limb `H`
+ *        of `tests/integration/shell-chrome/pane-head-target.test.ts` forbids it anywhere
+ *        under `scripts/**`. THAT
+ *        EXEMPTION IS DELETED WITH ITS CAUSE: the frame now authors a HEAD ROW whose
+ *        FIRST child is the GRIP (`.pane-grab`, the drag surface, carrying the pane
+ *        NAME as an `attr(name)` and the glyph `⠿` as its content) and whose collapse
+ *        CONTROL (`#pane-collapse-<id>`, class `pane-collapse`) is the grip's
+ *        **SIBLING**, not its descendant. So a point on the head that is neither the
+ *        grip nor the control EXISTS, and through the same delegated resolution it
+ *        resolves to NOTHING (or, on a head where a future surface wraps the row, to
+ *        the grip only) — the structural claim this probe now prints
+ *        (`gripIsTheHeadsFirstChild`, `controlIsTheGripsSibling`,
+ *        `headOffTheGripResolvesToNothing`).
  *    (2) THE DROP LANDS IN A BAND WHOSE DERIVED INSERTION INDEX IS NOT THE PANE'S OWN:
  *        a drop just inside the sibling's top edge derives the insertion index the pane
  *        ALREADY occupies, so such a probe could never register a rearrange even on a
@@ -1037,7 +1051,7 @@ async function ufLayoutStageScrollAttempt(h, attempt = 200) {
  *        reported as NOT-DRIVEN **with the reason it did not move** — never as a pass
  *        and never as a bare failure. */
 async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav') {
-  const frames = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>{const r=f.getBoundingClientRect();return {i,paneId:f.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],header:!!f.querySelector('.pane-collapse-toggle')}}))()`)
+  const frames = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f,i)=>{const r=f.getBoundingClientRect();return {i,paneId:f.getAttribute('data-pane-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],grip:!!f.querySelector('.pane-grab')}}))()`)
   if (!Array.isArray(frames) || frames.length < 2) {
     return { driven: false, reason: `zone '${zone}' renders ${Array.isArray(frames) ? frames.length : '?'} pane frame(s) — a WITHIN-zone rearrange needs at least two`, frames: frames ?? null }
   }
@@ -1084,12 +1098,17 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   const dropYRaw = dropBands != null && dropBands.indexAtSiblingMidpointDrop === from && dropBands.wantedIndex !== from
     ? Math.round(dropBands.wantedBandTopY)
     : siblingMidpointDropY
-  const point = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');if(!f)return {err:'frame gone'};const hd=f.querySelector('.pane-collapse-toggle');if(!hd)return {err:'the frame carries no pane-header surface (.pane-collapse-toggle)'};const r=hd.getBoundingClientRect();if(r.height<2)return {err:'zero-height header',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width*0.5);const y=Math.round(r.y+r.height/2);const el=document.elementFromPoint(x,y);const resolved=el&&el.closest?el.closest('.gutter[zone], .pane-collapse-toggle'):null;return {x,y,hit:el?(el.tagName+(el.className?'.'+String(el.className).slice(0,40):'')):'null',headerTag:hd.tagName,headerIsTheToggle:hd.tagName==='BUTTON',onTarget:!!(el&&(el===f||f.contains(el))),onTheAppHeaderSurface:resolved===hd,vh:window.innerHeight,headerBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
+  // ⟨RE-GRAINED `2026-11-15` — UNIT `U-2` `C-7`: THE DRAG SURFACE IS THE GRIP.⟩ The
+  // probe reads the head row it must now describe: the GRIP (`.pane-grab`) as the
+  // head's FIRST child, the CONTROL (`#pane-collapse-<id>` / `.pane-collapse`) as the
+  // grip's SIBLING, and the head's own but-not-the-grip/not-the-control point, so
+  // "the header IS the collapse control" is replaced by the measured structure.
+  const point = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');if(!f)return {err:'frame gone'};const grip=f.querySelector('.pane-grab');if(!grip)return {err:'the frame carries no pane GRIP surface (.pane-grab — the head row FIRST child and the app PANE_HEADER_CLASS, U-2 C-5)'};const head=grip.parentElement;const control=f.querySelector('.pane-collapse');const r=grip.getBoundingClientRect();if(r.height<2)return {err:'zero-height grip',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width*0.5);const y=Math.round(r.y+r.height/2);const el=document.elementFromPoint(x,y);const resolved=el&&el.closest?el.closest('.gutter[zone], .pane-grab'):null;const hr=head?head.getBoundingClientRect():null;const cr=control?control.getBoundingClientRect():null;const describe=(oel)=>{if(!oel)return 'nothing';const g=oel.closest?oel.closest('.gutter[zone], .pane-grab'):null;if(!g)return 'nothing';if(g===grip||grip.contains(g))return 'grip';return 'other:'+(g.id||g.tagName)};let off=null;if(hr&&cr&&hr.width>4){const yMid=Math.round(hr.y+hr.height/2);for(let px=Math.round(r.x+r.width)+1;px<=Math.round(cr.x)-1;px+=1){const oel=document.elementFromPoint(px,yMid);off={x:px,y:yMid,hit:oel?(oel.id||oel.tagName):'null',resolvesTo:describe(oel)};break}}if(off===null)off={x:null,y:null,hit:null,resolvesTo:'no such point (the grip and the control abut, so the head carries no uncovered midline gap)'};return {x,y,hit:el?(el.tagName+(el.className?'.'+String(el.className).slice(0,40):'')):'null',gripTag:grip.tagName,gripIsTheHeadsFirstChild:!!(head&&head.firstElementChild===grip),gripClass:String(grip.className||''),gripName:grip.getAttribute('name'),controlId:control?control.id:null,controlIsTheGripsSibling:!!(control&&control.parentElement===head&&control!==grip),headOffTheGrip:off,onTarget:!!(el&&(el===f||f.contains(el))),onTheAppGripSurface:resolved===grip,vh:window.innerHeight,gripBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
   if (!point || point.err || !point.onTarget) {
-    return { driven: false, reason: `the pane-HEADER drag start could not be hit-tested on ${start.paneId}: ${JSON.stringify(point)}`, frames, slotOrderBefore: order(frames) }
+    return { driven: false, reason: `the pane-GRIP drag start could not be hit-tested on ${start.paneId}: ${JSON.stringify(point)}`, frames, slotOrderBefore: order(frames) }
   }
-  if (point.onTheAppHeaderSurface !== true) {
-    return { driven: false, reason: `the hit-tested drag start on ${start.paneId} does NOT resolve back to the pane header through the app's own delegated resolution (closest('.gutter[zone], .pane-collapse-toggle')): ${JSON.stringify(point)} — a drag start that is not the app's own gesture surface grades nothing`, frames, slotOrderBefore: order(frames) }
+  if (point.onTheAppGripSurface !== true) {
+    return { driven: false, reason: `the hit-tested drag start on ${start.paneId} does NOT resolve back to the pane GRIP through the app's own delegated resolution (closest('.gutter[zone], .pane-grab'), the app's \`GESTURE_SELECTOR\` after U-2 C-5): ${JSON.stringify(point)} — a drag start that is not the app's own gesture surface grades nothing`, frames, slotOrderBefore: order(frames) }
   }
   const dropY = Math.max(1, Math.min(dropYRaw, point.vh - 2))
   // THE REAL POINTER PATH: small steps (2px → 12px) that stay on the header for the first
@@ -1110,20 +1129,25 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   // RESTORE (this block's own hygiene, taken AFTER the reading and recorded, never hidden):
   // the failed drag leaves the zone's provisional drop-target mirror (`is-revealed`) behind,
   // because the gesture never reached a terminal — and a revealed empty zone suppresses the
-  // C11 track collapse a LATER block measures. The app's OWN gesture path clears it: a real
-  // click on the header supersedes the in-flight drag (`revertPriorGesture` → `cancelPaneDrag`)
-  // AND terminates its own session cleanly, and the SECOND real click restores the collapse
-  // state the first one toggled (the header IS the collapse control — the same measured fact
-  // the drag start records). The restore's own state pair is printed beside the reading.
+  // C11 track collapse a LATER block measures. ⟨RE-GRAINED `2026-11-15` BY UNIT `U-2` `C-7`.⟩
+  // THE SUPERSEDED ROUTE, KEPT VISIBLE: *"a real click on the header supersedes the in-flight
+  // drag … and the SECOND real click restores the collapse state the first one toggled (the
+  // header IS the collapse control)"*. That route no longer exists: the CONTROL is the grip's
+  // SIBLING (`C-5`), so the restore now presses the CONTROL's own id
+  // (`#pane-collapse-<id>`) — a press that resolves NO gesture element at all — and reads the
+  // collapse state back through the frame's `collapsed` carrier. What the restore can no
+  // longer claim is that its own press supersedes an in-flight drag; that is printed
+  // (`revealMirrorsAfterTheRestore`) rather than assumed, and `collapseStateRestored` stays
+  // the term it always was (two presses = one round trip).
   const cleanup = { performed: false, revealMirrorsAfterTheDrag: audit ? audit.revealedMirrors : null }
   try {
     const collapseState = async () => h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="${zone}"] .pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-id')+(f.classList.contains('is-collapsed')?'(collapsed)':'(expanded)')))()`)
     if (Array.isArray(cleanup.revealMirrorsAfterTheDrag) && cleanup.revealMirrorsAfterTheDrag.length > 0) {
       cleanup.collapseBefore = await collapseState()
       for (let pass = 0; pass < 2; pass += 1) {
-        const p2 = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');const hd=f?f.querySelector('.pane-collapse-toggle'):null;if(!hd)return null;const r=hd.getBoundingClientRect();if(r.height<2)return null;return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
+        const p2 = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${start.paneId}"]');const ctl=f?f.querySelector('.pane-collapse'):null;if(!ctl)return null;const r=ctl.getBoundingClientRect();if(r.height<2)return null;return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()`)
         if (!p2) break
-        await h.cdp.gesture(`.pane-frame[data-pane-id="${start.paneId}"] .pane-collapse-toggle`, [{ type: 'down', x: p2.x, y: p2.y }, { type: 'up', x: p2.x, y: p2.y }])
+        await h.cdp.gesture(`#pane-collapse-${start.paneId}`, [{ type: 'down', x: p2.x, y: p2.y }, { type: 'up', x: p2.x, y: p2.y }])
         await sleep(1200)
       }
       cleanup.collapseAfter = await collapseState()
@@ -1139,15 +1163,24 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   }
   return {
     driven: true,
-    inputKind: 'REAL CDP pointer drag (Input.dispatchMouseEvent) in small steps on the pane HEADER surface inside the zone',
-    dragStartPane: start.paneId, dragStartPaneHeaderBox: point.headerBox, dragStartHit: point.hit, dragStartOnTarget: point.onTarget,
+    inputKind: 'REAL CDP pointer drag (Input.dispatchMouseEvent) in small steps on the pane GRIP surface (the head row FIRST child, .pane-grab) inside the zone',
+    dragStartPane: start.paneId, dragStartGripBox: point.gripBox, dragStartHit: point.hit, dragStartOnTarget: point.onTarget,
     dragStartPanePreference: preferredPane,
     dragStartPaneChosenBecause: preferredIdx === from
       ? `the preferred pane ${preferredPane} sits at index ${from} with a downward sibling (${sibling.paneId}) below it, so the requested identity IS the dragged one`
       : (preferredIdx < 0
         ? `the preferred pane ${preferredPane} is not rendered in zone '${zone}' on this run (the zone renders ${JSON.stringify(frames.map((f) => f.paneId))}), so the FIRST frame (${start.paneId}) was dragged — a within-zone DOWNWARD rearrange needs a pane with a sibling below it`
         : `the preferred pane ${preferredPane} is the LAST frame of zone '${zone}' on this run (the zone's pane ORDER is persisted state, so it can differ between runs) and a pane with no downward sibling cannot be moved DOWN, so the FIRST frame (${start.paneId}) was dragged`),
-    dragStartOnTheAppHeaderSurface: point.onTheAppHeaderSurface, dragStartHeaderTag: point.headerTag, dragStartHeaderIsTheToggle: point.headerIsTheToggle,
+    dragStartOnTheAppGripSurface: point.onTheAppGripSurface, dragStartGripTag: point.gripTag,
+    // ⟨UNIT `U-2` `C-7` — THE STRUCTURAL CLAIM THAT REPLACES "the header IS the toggle".⟩
+    // The grip is the HEAD ROW's FIRST child; the collapse CONTROL is the grip's SIBLING
+    // (never its descendant); and a point on the head that is neither of them resolves to
+    // NOTHING (or to the grip only) through the app's own delegated resolution.
+    gripIsTheHeadsFirstChild: point.gripIsTheHeadsFirstChild === true,
+    controlIsTheGripsSibling: point.controlIsTheGripsSibling === true,
+    dragStartControlId: point.controlId, dragStartGripName: point.gripName,
+    headOffTheGripPoint: point.headOffTheGrip,
+    headOffTheGripResolvesToNothing: point.headOffTheGrip && (point.headOffTheGrip.resolvesTo === 'nothing' || point.headOffTheGrip.resolvesTo === 'grip'),
     dragStart: { x: point.x, y: point.y }, dragToY: dropY, dragPastTheSiblingMidpoint: dropY > sibling.box[1] + sibling.box[3] / 2, draggedPast: sibling.paneId,
     slotOrderBefore: seqBefore, slotOrderAfter: seqAfter, rearranged: seqBefore !== seqAfter, zone, framesBefore: frames,
     pointerAudit: audit,
@@ -5457,22 +5490,30 @@ const BLOCKS = {
     return { pass: zoneContainers >= 4 && panesReparented, detail: `[zone] containers=${zoneContainers}, #panes re-parented=${panesReparented}` }
   },
   collapse: async (h) => {
-    // U-SHELL-3: the pane-frame root carries data-pane-id; its collapse toggle is
-    // `.pane-frame .pane-collapse-toggle`. Click it and assert `.is-collapsed`.
+    // U-SHELL-3: the pane-frame root carries data-pane-id. ⟨RE-GRAINED `2026-11-15` BY UNIT
+    // `U-2` `C-7` — the SUPERSEDED reading, kept visible WITHOUT its class name (limb `H`
+    // of the unit's own row forbids the deleted class anywhere under `scripts/**`): *"its
+    // collapse toggle is the frame's one `button` child (the header class that `pane-grab` +
+    // `pane-collapse` supersede). Click it and assert `.is-collapsed`"*.⟩ That one
+    // surface is now TWO: the GRIP (`.pane-grab`, the head row's FIRST child, the DRAG
+    // surface) and the CONTROL (`#pane-collapse-<id>`, class `pane-collapse`, the grip's
+    // SIBLING). This diagnostic PRESSES the CONTROL and reads the frame's own carriers
+    // (`.is-collapsed` and `collapsed="true"|"false"`, the latter replacing the frame's old
+    // `data-pane-collapse` attribute read).
     // (LIVE-11 note: only an ENABLED APP-GRAPH pane can collapse — the host H3
     // guard no-ops on operator/gnosis scope. The seeded app's app-graph panes are
     // doc-nav/crosslinks/search; target doc-nav explicitly rather than the first
     // toggle in DOM order, which is a gnosis-scope pane that cannot collapse.)
     const seam = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;return s?{collapse:typeof s.togglePaneCollapse,paneVis:typeof s.paneVisibilityToggle}:null})()`)
-    const targets = await h.cdp.evaluate(`(['doc-nav','crosslinks','search'].map((pid)=>{const f=document.querySelector('.pane-frame[data-pane-id="'+pid+'"] .pane-collapse-toggle');return {pid,toggle:!!f}}))`)
+    const targets = await h.cdp.evaluate(`(['doc-nav','crosslinks','search'].map((pid)=>{const c=document.getElementById('pane-collapse-'+pid);return {pid,control:!!c}}))`)
     let collapsed = false, detail = ''
-    const picked = targets.find((t) => t.toggle)
-    if (!picked) return { pass: false, detail: `no app-graph pane toggle; seams=${JSON.stringify(seam)} targets=${JSON.stringify(targets)}` }
-    await h.cdp.click(`.pane-frame[data-pane-id="${picked.pid}"] .pane-collapse-toggle`)
+    const picked = targets.find((t) => t.control)
+    if (!picked) return { pass: false, detail: `no app-graph pane collapse control; seams=${JSON.stringify(seam)} targets=${JSON.stringify(targets)}` }
+    await h.cdp.click(`#pane-collapse-${picked.pid}`)
     await sleep(600)
     collapsed = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${picked.pid}"]');return f?f.classList.contains('is-collapsed'):false})()`)
-    const frame = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${picked.pid}"]');return f?f.getAttribute('data-pane-collapse'):null})()`)
-    return { pass: collapsed, detail: `seams=${JSON.stringify(seam)} picked=${picked.pid} collapsed=${collapsed} data-pane-collapse=${frame}` }
+    const frame = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="${picked.pid}"]');return f?f.getAttribute('collapsed'):null})()`)
+    return { pass: collapsed, detail: `seams=${JSON.stringify(seam)} picked=${picked.pid} collapsed=${collapsed} collapsedAttr=${frame}` }
   },
   // Measurement-only probe (no pinned user-visible end state of its own — the
   // tab-switching rows are UF-TABS-1/3/4): reported as a §6.1 DIAGNOSTIC so it
@@ -5715,8 +5756,8 @@ const BLOCKS = {
     // `click` event on the button at all (instrument it), (c) does a leading
     // mouseMoved + press + release + hold-then-check collapse it.
     const probe = await h.cdp.evaluate(`(()=>{
-      const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');
-      if(!t) return {err:'no-toggle'};
+      const t=document.getElementById('pane-collapse-doc-nav');
+      if(!t) return {err:'no-control'};
       const r=t.getBoundingClientRect();
       const cx=r.x+r.width/2, cy=r.y+r.height/2;
       const hit=document.elementFromPoint(cx,cy);
@@ -5729,8 +5770,8 @@ const BLOCKS = {
     })()`)
     if (probe.err) return { pass: false, detail: `no toggle: ${probe.err}` }
     // (b) instrument + CDP coordinate press/release at the same center
-    await h.cdp.evaluate(`(()=>{window.__cdpClickFired=false;const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(t){t.addEventListener('click',()=>{window.__cdpClickFired=true},{once:true})}})()`)
-    const p = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(!t)return null;const r=t.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
+    await h.cdp.evaluate(`(()=>{window.__cdpClickFired=false;const t=document.getElementById('pane-collapse-doc-nav');if(t){t.addEventListener('click',()=>{window.__cdpClickFired=true},{once:true})}})()`)
+    const p = await h.cdp.evaluate(`(()=>{const t=document.getElementById('pane-collapse-doc-nav');if(!t)return null;const r=t.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
     // leading move to position the mouse, then press/release
     for (const s of [{ type: 'move', x: p.x, y: p.y }, { type: 'down', x: p.x, y: p.y }, { type: 'up', x: p.x, y: p.y }]) {
       const ev = s.type === 'down' ? 'mousePressed' : s.type === 'up' ? 'mouseReleased' : 'mouseMoved'
@@ -5850,13 +5891,15 @@ const BLOCKS = {
   diag: async (h) => {
     // Diagnostic: dump the pane-frame inventory + a collapse-click trace so a live
     // FAIL can be distinguished from a wrong harness selector.
-    const dump = await h.cdp.evaluate(`(()=>{const frames=[...document.querySelectorAll('.pane-frame[data-pane-id]')];return {frames:frames.map((f)=>({paneId:f.getAttribute('data-pane-id'),zone:f.getAttribute('zone'),collapse:f.getAttribute('data-pane-collapse'),hasToggle:!!f.querySelector('.pane-collapse-toggle'),isCollapsed:f.classList.contains('is-collapsed'),bodyNodes:f.children.length})),modalPanes:document.querySelector('#settings-modal-body #panes')?true:false}})()`)
-    const toggleSel = await h.cdp.evaluate(`document.querySelector('.pane-frame .pane-collapse-toggle') ? true : false`)
+    const dump = await h.cdp.evaluate(`(()=>{const frames=[...document.querySelectorAll('.pane-frame[data-pane-id]')];return {frames:frames.map((f)=>({paneId:f.getAttribute('data-pane-id'),zone:f.getAttribute('zone'),collapsed:f.getAttribute('collapsed'),hasGrip:!!f.querySelector('.pane-grab'),hasControl:!!f.querySelector('.pane-collapse'),headNodes:f.querySelectorAll(':scope > .pane-head').length,bodyNodes:f.children.length})),modalPanes:document.querySelector('#settings-modal-body #panes')?true:false}})()`)
+    // ⟨RE-GRAINED `2026-11-15` BY UNIT `U-2` `C-7`: the diagnostic PRESSES the collapse
+    // CONTROL (class `pane-collapse`, the grip's SIBLING), never the drag GRIP.⟩
+    const toggleSel = await h.cdp.evaluate(`document.querySelector('.pane-frame .pane-collapse') ? true : false`)
     let clickTrace = null
     if (toggleSel) {
-      await h.cdp.click('.pane-frame .pane-collapse-toggle')
+      await h.cdp.click('.pane-frame .pane-collapse')
       await sleep(600)
-      clickTrace = await h.cdp.evaluate(`({isCollapsed:[...document.querySelectorAll('.pane-frame')].some((f)=>f.classList.contains('is-collapsed')),frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('data-pane-collapse'))})`)
+      clickTrace = await h.cdp.evaluate(`({isCollapsed:[...document.querySelectorAll('.pane-frame')].some((f)=>f.classList.contains('is-collapsed')),frames:[...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>f.getAttribute('collapsed'))})`)
     }
     return diagResult(`diag frames=${JSON.stringify(dump)} toggle=${toggleSel} click=${JSON.stringify(clickTrace)}`)
   },
@@ -5867,10 +5910,10 @@ const BLOCKS = {
     // does NOT, the host setLayout→re-render is broken live. Also dumps the
     // toolbar representation-mode data-mode after a direct operatorSet toggle for
     // LIVE-9 (§9 `T-2`: swept onto the LANDED `representationMode` carrier).
-    const before = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null}})()`)
+    const before = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('collapsed'):null,ic:f?f.classList.contains('is-collapsed'):null}})()`)
     const direct = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.togglePaneCollapse!=='function')return 'no-seam'; try{s.togglePaneCollapse('doc-nav');return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
-    const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('data-pane-collapse'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('zone'):null}})()`)
+    const after = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {pc:f?f.getAttribute('collapsed'):null,ic:f?f.classList.contains('is-collapsed'):null,zone:f?f.getAttribute('zone'):null}})()`)
     const toggleBefore = await h.cdp.domAttr('#editor-toolbar-toggle', 'data-mode')
     const toggleDirect = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return 'no-opset'; try{s.operatorSet({representationMode:'markdown'});return 'called'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
@@ -5881,12 +5924,12 @@ const BLOCKS = {
     // LIVE-11/9 root-cause: does the provident on:click listener fire when the
     // element's native DOM click (bypassing hit-testing) is invoked via
     // Runtime.evaluate — vs the CDP Input.dispatchMouseEvent of `click`?
-    const nat = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');const t=f&&f.querySelector('.pane-collapse-toggle');if(!t)return 'no-toggle'; try{t.click();return 'clicked'}catch(e){return 'threw:'+String(e)}})()`)
+    const nat = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');const t=(f&&f.querySelector('.pane-collapse'))||document.getElementById('pane-collapse-doc-nav');if(!t)return 'no-control'; try{t.click();return 'clicked'}catch(e){return 'threw:'+String(e)}})()`)
     await sleep(600)
-    const afterNode = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {ic:f?f.classList.contains('is-collapsed'):null,pc:f?f.getAttribute('data-pane-collapse'):null}})()`)
+    const afterNode = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {ic:f?f.classList.contains('is-collapsed'):null,pc:f?f.getAttribute('collapsed'):null}})()`)
     // also: is the toggle covered / clickable? check elementFromPoint at its center.
-    const hit = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');if(!t)return 'no-toggle';const r=t.getBoundingClientRect();const el=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {same:el===t,hit:(el?el.tagName+'.'+(el.className||''):'null'),tag:t.tagName,cls:t.className,disabled:t.disabled}})()`)
-    const toggle = await h.cdp.evaluate(`(()=>{const t=document.querySelector('.pane-frame[data-pane-id="doc-nav"] .pane-collapse-toggle');return t?{handlers:t.hasAttribute('onclick'),outer:(t.outerHTML||'').slice(0,200)}:null})()`)
+    const hit = await h.cdp.evaluate(`(()=>{const t=document.getElementById('pane-collapse-doc-nav');if(!t)return 'no-control';const r=t.getBoundingClientRect();const el=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {same:el===t,hit:(el?el.tagName+'.'+(el.className||''):'null'),tag:t.tagName,cls:t.className,disabled:t.disabled}})()`)
+    const toggle = await h.cdp.evaluate(`(()=>{const t=document.getElementById('pane-collapse-doc-nav');return t?{handlers:t.hasAttribute('onclick'),outer:(t.outerHTML||'').slice(0,200)}:null})()`)
     // [DIAG] measurement only — no row verdict. This block's driver is a NATIVE
     // DOM click inside Runtime.evaluate (no hit-testing), so it records the path
     // it used and classifies itself as a proxy: a synthetic driver can never be
@@ -5942,7 +5985,7 @@ const BLOCKS = {
     const hasBoth = censusNonEmpty && census.split(/[,\s]+/).filter(Boolean).includes('doc-nav') && census.split(/[,\s]+/).filter(Boolean).includes('search')
     // presence + viewport of each pane frame (present-in-DOM is the enabled-flag
     // test; rect distinguishes an on/off-viewport presence, never a FAIL alone)
-    const frames = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const ids=['doc-nav','search','crosslinks','template-editor'];const out={};for(const id of ids){const f=document.querySelector('.pane-frame[data-pane-id="'+id+'"]');if(f){const r=f.getBoundingClientRect();out[id]={present:true,inVp:r.top>=0&&r.top<vh&&r.bottom>0,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),enabled:f.getAttribute('data-pane-collapse')!==null}}else{out[id]={present:false}}}return {vh,out}})()`)
+    const frames = await h.cdp.evaluate(`(()=>{const vh=window.innerHeight;const ids=['doc-nav','search','crosslinks','template-editor'];const out={};for(const id of ids){const f=document.querySelector('.pane-frame[data-pane-id="'+id+'"]');if(f){const r=f.getBoundingClientRect();out[id]={present:true,inVp:r.top>=0&&r.top<vh&&r.bottom>0,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),enabled:f.getAttribute('collapsed')!==null}}else{out[id]={present:false}}}return {vh,out}})()`)
     const present = (id) => !!frames.out[id].present
     const absent = (id) => !frames.out[id].present
     const assert1 = censusNonEmpty && hasBoth
@@ -6218,7 +6261,7 @@ const BLOCKS = {
     const s0 = await slots()
     if (!Array.isArray(s0) || s0.length < 2) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `not enough left-zone panes: ${JSON.stringify(s0)}`, { path: 'missing', ok: false, surface })
     // pick an in-viewport pane; drag from ITS HEADER (the collapse-toggle strip).
-    const start = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')];const cur=fs.find(f=>f.getAttribute('data-pane-id')==='doc-nav')||null;const f=cur||fs[0];const r=f.getBoundingClientRect();if(r.y>window.innerHeight-30)return {err:'off-viewport',pid:f.getAttribute('data-pane-id')};const hdr=f.querySelector('.pane-collapse-toggle');const hd=hdr?hdr.getBoundingClientRect():r;const x=Math.round(hd.x+Math.min(hd.width/2,160)),y=Math.round(hd.y+hd.height/2);const hit=document.elementFromPoint(x,y);return {pid:f.getAttribute('data-pane-id'),x:x,y:y,hdr:!!hdr,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===f||f.contains(hit)))}})()`)
+    const start = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')];const cur=fs.find(f=>f.getAttribute('data-pane-id')==='doc-nav')||null;const f=cur||fs[0];const r=f.getBoundingClientRect();if(r.y>window.innerHeight-30)return {err:'off-viewport',pid:f.getAttribute('data-pane-id')};const hdr=f.querySelector('.pane-grab');const hd=hdr?hdr.getBoundingClientRect():r;const x=Math.round(hd.x+Math.min(hd.width/2,160)),y=Math.round(hd.y+hd.height/2);const hit=document.elementFromPoint(x,y);return {pid:f.getAttribute('data-pane-id'),x:x,y:y,hdr:!!hdr,hit:hit?(hit.id||hit.tagName):null,onTarget:!!(hit&&(hit===f||f.contains(hit)))}})()`)
     if (start.err) return { ...rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `drag start ${start.err} on ${start.pid} — the pane header is not in the viewport after the scroll reset, so the REAL gesture cannot be driven this pass (an INCONCLUSIVE precondition, not a behavior FAIL)`, { path: 'off-viewport', ok: false, surface }), park: true, verdict: 'PARKED' }
     const target = await h.cdp.evaluate(`(()=>{const fs=[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')];const idx=fs.findIndex(f=>f.getAttribute('data-pane-id')==='${start.pid}');const nx=fs[idx+1];if(!nx)return null;const r=nx.getBoundingClientRect();return {pid:nx.getAttribute('data-pane-id'),y:Math.round(r.y),h:Math.round(r.height)}})()`)
     if (!target) return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `no sibling below ${start.pid}`, { path: 'missing', ok: false, surface })
@@ -6236,7 +6279,7 @@ const BLOCKS = {
     const changed = seq0 !== seq1
     const afterPos = (s1 || []).find((o) => o.pid === start.pid)
     const gesturePath = start.onTarget ? 'cdp' : 'synthetic-drag-start'
-    return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `REAL header drag on .pane-frame[data-pane-id="${start.pid}"] .pane-collapse-toggle (header=${start.hdr}) from (${start.x},${start.y}) hit=${start.hit} onTarget=${start.onTarget} PAST ${target.pid}@y=${target.y}->ty=${ty}; slot order changed=${changed} before=[${seq0}] after=[${seq1}]; ${start.pid} y=${afterPos ? afterPos.y : 'gone'}`, { path: gesturePath, ok: changed && start.onTarget, surface })
+    return rowResult({row:'UF-DEFECT-2',dclass:'D-interaction'}, 'A REAL pane-HEADER drag reorders/relocates the pane (the zone slot order changes)', `REAL GRIP drag (the head row's FIRST child, .pane-grab) on .pane-frame[data-pane-id="${start.pid}"] (grip=${start.hdr}) from (${start.x},${start.y}) hit=${start.hit} onTarget=${start.onTarget} PAST ${target.pid}@y=${target.y}->ty=${ty}; slot order changed=${changed} before=[${seq0}] after=[${seq1}]; ${start.pid} y=${afterPos ? afterPos.y : 'gone'}`, { path: gesturePath, ok: changed && start.onTarget, surface })
   },
 
   // BUG 3 — collapse the sidebar, then the pane tabs MUST re-orient VERTICALLY.
@@ -6349,11 +6392,11 @@ const BLOCKS = {
   // then Input.insertText a multi-word string with a NORMAL space), blur/commit,
   // and read back the COMMITTED store + rendered html. This answers (A) render/
   // editing-surface bug vs (B) test/manual artifact: does a typed normal space
-  // round-trip as a space, or as a literal `&nbsp;` (6 chars) / `\u00A0` /
+  // round-trip as a space, or as a literal `&nbsp;` (6 chars) / ` ` /
   // a jammed token?
   repro_nbsp: async (h) => {
     const hasNbsp = (s) => (typeof s === 'string' ? s.includes('&nbsp;') : false)
-    const hasNbs = (s) => (typeof s === 'string' ? s.includes('\u00A0') : false)
+    const hasNbs = (s) => (typeof s === 'string' ? s.includes(' ') : false)
     // 0) baseline: current committed store content for the paragraph node
     const before = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: '.live-fixture/core/alpha' }).catch((e) => ({ err: String(e.message || e) }))
     const beforeS = JSON.stringify(before)
@@ -6415,9 +6458,9 @@ const BLOCKS = {
         `  COMMITTED store p content=${JSON.stringify(pContentAfter)}\n` +
         `    content charCodes=${JSON.stringify([...pContentAfter].map((ch) => ch.charCodeAt(0)))}\n` +
         `    p children=${aChildren}\n` +
-        `    STORE literal &nbsp;=${hasNbsp(aContent) || hasNbsp(aChildren)}  \\u00A0=${hasNbs(aContent) || hasNbs(aChildren)}\n` +
+        `    STORE literal &nbsp;=${hasNbsp(aContent) || hasNbsp(aChildren)}  \ =${hasNbs(aContent) || hasNbs(aChildren)}\n` +
         `    STORE contains 'LIVE TEST'=${aContent.includes('LIVE TEST')}  jammed 'LIVETEST'=${aContent.includes('LIVETEST')}\n` +
-        `    store &nbsp;@=${aContent.indexOf('&nbsp;')} nbs@=${pContentAfter.indexOf('\u00A0')}\n` +
+        `    store &nbsp;@=${aContent.indexOf('&nbsp;')} nbs@=${pContentAfter.indexOf(' ')}\n` +
         `  RENDERED html literal &nbsp;=${hasNbsp(htmlS)} nbs=${hasNbs(htmlS)}; html-length=${htmlS.length}\n` +
         `    (rendered alpha snippet: ` + (htmlS.indexOf('LIVE') >= 0 ? JSON.stringify(htmlS.slice(htmlS.indexOf('LIVE') - 30, htmlS.indexOf('LIVE') + 40)) : '(LIVE not in rendered html)') + `)`,
     }
@@ -7050,11 +7093,22 @@ const BLOCKS = {
 
   // ---- §3 Panes ------------------------------------------------------------
 
-  // UF-PANES-1 — a REAL click on a pane's `.pane-collapse-toggle` renders the
-  // pane HEADER-ONLY (its body nodes unmount); a second click re-expands the
-  // SAME pane root (node identity stable). The verdict is gated on the
-  // hit-tested path of BOTH clicks.
+  // UF-PANES-1 — ⟨RE-GRAINED `2026-11-15` BY UNIT `U-2` `C-7`, the vocabulary re-grain
+  // of `ASM-U2-8`: the claim is NOT weakened, its MECHANISM is re-stated.⟩ A REAL press on
+  // the pane's collapse CONTROL (`#pane-collapse-<id>`, class `pane-collapse` — the grip's
+  // SIBLING) renders the pane as its HEAD ROW ALONE: the body NODE is PRESENT in BOTH
+  // states and its CHILDREN are withheld while collapsed (the collapsed box is the head,
+  // and the head adds nothing to the body's `scrollHeight`); a second REAL press
+  // re-expands the SAME pane root (node identity stable). THE SUPERSEDED WORDS, KEPT
+  // VISIBLE: *"renders the pane HEADER-ONLY (its body nodes unmount)"*. The verdict is
+  // gated on the hit-tested path of BOTH presses.
   uf_panes_1: async (h) => {
+    // ⟨`U-2` `C-7`/`ASM-U2-8` — THE ROW'S CLAIM, RE-GRAINED AND NOT WEAKENED.⟩ The
+    // SUPERSEDED assertion (KEPT VISIBLE): "A REAL click on a pane collapse toggle renders
+    // the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane
+    // root". The mechanism it named has moved (`C-2`): the collapsed pane keeps its body
+    // NODE and withholds the node's CHILDREN, so the row says what the app now does.
+    const UFP1_ASSERTION = "A REAL press on the pane collapse CONTROL (#pane-collapse-<id>) renders the pane as its HEAD ROW ONLY — the body NODE is present in BOTH states and its CONTENT is withheld while collapsed, the collapsed box is the head, and the head adds nothing to the body's scrollHeight; a second REAL press re-expands the SAME pane root"
     await ufEnsureAppClear(h)
     // §2.3 `H-1` clause 4 / §13.4 item 1 / gate-4 `B-1` — THE SANCTIONED PER-BLOCK
     // RESTORE PATH, taken BEFORE this block resolves its frame. The row brings its
@@ -7091,13 +7145,53 @@ const BLOCKS = {
       // sanctioned restore path and the frame census all printed), never an app FAIL
       // and never a silent omission (§2.1 `E-1`/`E-2`).
       const observed = `the doc-nav pane frame is not rendered after the per-block restore: ${paneExpandPath}; frameCensus=${JSON.stringify(pre.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)')))}${expanded.detail ? ` — ${expanded.detail}` : ''}`
-      return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', observed, { path: 'missing', ok: false, surface, required: 'a rendered `.pane-frame[data-pane-id="doc-nav"]` in the block\'s own frame census after the sanctioned per-block restore (`ufEnsurePaneExpanded`: the zone state read as a state + a REAL hit-tested re-expand + the persisted pane-visibility restore)', observed })
+      return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, UFP1_ASSERTION, observed, { path: 'missing', ok: false, surface, required: 'a rendered `.pane-frame[data-pane-id="doc-nav"]` in the block\'s own frame census after the sanctioned per-block restore (`ufEnsurePaneExpanded`: the zone state read as a state + a REAL hit-tested re-expand + the persisted pane-visibility restore)', observed })
     }
     if (docnav.collapsed) {
       await ufRealClick(h, '#pane-collapse-doc-nav')
       await sleep(1400)
     }
-    const paneOf = async () => h.cdp.evaluate(`(()=>{const f=document.getElementById('pane-doc-nav');const r=f.getBoundingClientRect();const t=f.querySelector('.pane-collapse-toggle');return {id:f.id,paneId:f.getAttribute('data-pane-id'),nodeId:f.getAttribute('data-node-id')||null,title:t?(t.textContent||'').trim():null,x:Math.round(r.x),li:f.querySelectorAll('li').length,h:Math.round(r.height),ul:!!f.querySelector('ul'),collapsed:f.classList.contains('is-collapsed')}})()`)
+    // ⟨UNIT `U-2` `C-7`/`C-2` — THE PANE'S SHAPE READ AT ONE INSTANT, RE-GRAINED.⟩ THE
+    // SUPERSEDED READ, KEPT VISIBLE: the pane TITLE came off the header's `textContent`
+    // (the old header carried `'▸ Title'`), and "header-only" was observed as `li`/`ul`
+    // vanishing. The vocabulary that replaces it: the pane NAME is the GRIP's
+    // `attr(name)` (its content is the glyph), the body is a NODE (`#pane-body-<id>`)
+    // present in BOTH states whose CHILDREN are withheld while collapsed, the head is the
+    // frame's FIRST child and the body its SECOND, and the collapsed box is the head.
+    const paneOf = async () => h.cdp.evaluate(`(()=>{
+      const f=document.getElementById('pane-doc-nav');
+      if(!f)return {present:false};
+      const r=f.getBoundingClientRect();
+      const bx=(e)=>{if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.x),Math.round(b.y),Math.round(b.width),Math.round(b.height)]};
+      const grip=f.querySelector('.pane-grab');
+      const ctl=f.querySelector('.pane-collapse');
+      const head=f.querySelector('.pane-head')||(grip?grip.parentElement:null);
+      const body=document.getElementById('pane-body-doc-nav');
+      const hcs=head?getComputedStyle(head):null;
+      const bcs=body?getComputedStyle(body):null;
+      // ⟨UNIT \`U-2\` RE-AIMED \`collapsedBoxIsTheHead\` — THE FRAME'S OWN CHROME AND ITS
+      // NON-HEAD CHILDREN, read HERE so the term can measure the CLAIM ("the collapsed box
+      // is the head only") instead of the frame's chrome. The four chrome numbers come off
+      // the frame's OWN computed style, never from a constant or from the sheet's text, and
+      // every child that is not the head row is censused with its computed \`display\` and
+      // its box — a body row that leaks into the collapsed box shows up in that list.
+      const num2=(v)=>{const k=parseFloat(String(v));return Number.isFinite(k)?k:null};
+      const fcs=getComputedStyle(f);
+      const nonHeadChildren=[...f.children].filter((c)=>c!==head).map((c)=>{const b=c.getBoundingClientRect();const cs2=getComputedStyle(c);return {id:c.id||null,cls:String(c.className||'').slice(0,40),display:cs2.display,box:[Math.round(b.width),Math.round(b.height)],zeroBox:b.width===0&&b.height===0}});
+      return {present:true,id:f.id,paneId:f.getAttribute('data-pane-id'),nodeId:f.getAttribute('data-node-id')||null,
+        frameBox:bx(f),frameChrome:{paddingTop:num2(fcs.paddingTop),paddingBottom:num2(fcs.paddingBottom),borderTopWidth:num2(fcs.borderTopWidth),borderBottomWidth:num2(fcs.borderBottomWidth)},
+        nonHeadChildren:nonHeadChildren,
+        title:grip?grip.getAttribute('name'):null,gripText:grip?(grip.textContent||'').trim():null,gripPresent:!!grip,controlPresent:!!ctl,
+        x:Math.round(r.x),li:f.querySelectorAll('li').length,h:Math.round(r.height),ul:!!f.querySelector('ul'),
+        collapsed:f.classList.contains('is-collapsed'),collapsedAttr:f.getAttribute('collapsed'),
+        headPresent:!!head,headIsTheFramesFirstChild:!!(head&&head.parentElement===f&&f.firstElementChild===head),headBox:bx(head),
+        bodyPresent:!!body,bodyIsTheFramesSecondChild:!!(body&&body.parentElement===f&&f.children[1]===body),
+        headIsNotInsideTheBody:!!(body&&head&&!body.contains(head)),
+        bodyChildElementCount:body?body.childElementCount:null,bodyChildren:body?body.children.length:null,bodyBox:bx(body),
+        bodyScrollHeight:body?body.scrollHeight:null,bodyClientHeight:body?body.clientHeight:null,
+        bodyOverflow:bcs?bcs.overflow:null,headOverflow:hcs?hcs.overflow:null,headPosition:hcs?hcs.position:null,
+        gripIsTheHeadsFirstChild:!!(head&&grip&&head.firstElementChild===grip),
+        controlIsTheGripsSibling:!!(head&&ctl&&ctl.parentElement===head&&ctl!==grip)}})()`)
     const before = await paneOf()
     const c1 = await ufRealClick(h, '#pane-collapse-doc-nav')
     await sleep(1500)
@@ -7105,13 +7199,112 @@ const BLOCKS = {
     const c2 = await ufRealClick(h, '#pane-collapse-doc-nav')
     await sleep(1600)
     const after = await paneOf()
-    const headerOnly = mid.collapsed === true && mid.li === 0 && mid.ul === false && mid.h < 60 && before.h > mid.h + 40
-    const reExpanded = after.collapsed === false && after.li === before.li && after.ul === true && after.h > mid.h + 40
+    // ---- ⟨`U-2` §4 `G8` — THE RE-GRAINED CLAIM, ITS THREE NEW TERMS EACH PRINTED ---- //
+    // (1) THE PANE-WIDE TERM (`headerOnly`, RE-GRAINED — the SUPERSEDED predicate was
+    //     `mid.li===0 && mid.ul===false && mid.h<60`, i.e. "the body nodes UNMOUNTED"): the
+    //     body NODE is PRESENT while collapsed, its CONTENT is withheld, the head is the
+    //     frame's FIRST child and the collapsed box is short. Every limb can fail.
+    const headerOnly = mid.present === true && mid.collapsed === true && mid.collapsedAttr === 'true' &&
+      mid.bodyPresent === true && mid.headPresent === true && mid.headIsTheFramesFirstChild === true &&
+      mid.li === 0 && mid.ul === false && mid.h < 60 && before.h > mid.h + 40
+    const reExpanded = after.present === true && after.collapsed === false && after.collapsedAttr !== 'true' &&
+      after.li === before.li && after.ul === true && after.bodyPresent === true && after.h > mid.h + 40
+    // (i) `bodyIsTheOnlyScroller` — on the SHORT/EXPANDED pane: the body's own scroll
+    //     range is EXACT, ERGO no internal overflow (scrollHeight === clientHeight), the
+    //     head's rect ENDS where the body's BEGINS (±1px), and the head is NOT inside the
+    //     body (a sibling, never the scroller's first row).
+    const bodyIsTheOnlyScroller = before.bodyPresent === true && before.headPresent === true &&
+      before.headIsNotInsideTheBody === true && before.bodyIsTheFramesSecondChild === true &&
+      Number.isFinite(before.bodyScrollHeight) && Number.isFinite(before.bodyClientHeight) &&
+      before.bodyScrollHeight === before.bodyClientHeight &&
+      Array.isArray(before.headBox) && Array.isArray(before.bodyBox) &&
+      Math.abs((before.headBox[1] + before.headBox[3]) - before.bodyBox[1]) <= 1
+    // (ii) `collapsedBoxIsTheHead` — ⟨RE-AIMED `2026-11-15`: THE TERM AS FILED WAS
+    //      UNSATISFIABLE AND ITS SUPERSEDED WORDING IS KEPT VERBATIM IN THE EVIDENCE BELOW,
+    //      WITH THE MEASUREMENT THAT KILLED IT (`RCA-8(c)`).⟩ The filed form was *"the
+    //      collapsed frame's height equals the head's height (±1) while the head's own box
+    //      is unchanged"* — two clauses NO AUTHORISED PAINT CAN MEET: the frame's border and
+    //      padding are KEPT (`C-4` lands the collapsed padding at `0.25rem 0.5rem`, it never
+    //      deletes them), so the collapsed frame is taller than its head by exactly that
+    //      chrome, and pinning the head's absolute `y` would need a `position` on the head,
+    //      which `C-1`/`ASM-U2-7` REFUSE. The re-aimed term measures THE CLAIM instead:
+    //      (a) every child of the frame that is NOT the head row is `display: none` or
+    //          carries a zero box — no body row contributes height to the collapsed box;
+    //      (b) the frame's height equals the head's height PLUS the frame's OWN collapsed
+    //          chrome, READ off `getComputedStyle(frame)` (paddingTop + paddingBottom +
+    //          borderTopWidth + borderBottomWidth; the four numbers are printed) — this reds
+    //          the moment any body row leaks into the box;
+    //      (c) the head's own EXTENT (x, width, height) is unchanged from the expanded
+    //          reading (±1) — the head does not shrink and is not squeezed;
+    //      (d) the head sits exactly the frame's own TOP chrome (borderTop + paddingTop)
+    //          away from the frame's top edge in BOTH states, so its `y` may differ by
+    //          exactly the frame's chrome delta and by nothing else (both absolute `y`s and
+    //          both chrome readings are printed).
+    const boxClose = (a, b, tol = 1) => Array.isArray(a) && Array.isArray(b) && a.length === 4 && b.length === 4 && a.every((v, i) => Math.abs(v - b[i]) <= tol)
+    const chromeFour = (c) => (c && ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].every((k) => Number.isFinite(c[k])))
+      ? [c.paddingTop, c.paddingBottom, c.borderTopWidth, c.borderBottomWidth] : null
+    const chromeTotal = (c) => { const f4 = chromeFour(c); return f4 ? f4[0] + f4[1] + f4[2] + f4[3] : null }
+    const chromeTop = (c) => { const f4 = chromeFour(c); return f4 ? f4[2] + f4[0] : null }
+    const headOffsetY = (r) => (Array.isArray(r && r.headBox) && r.headBox.length === 4 && Array.isArray(r && r.frameBox) && r.frameBox.length === 4)
+      ? r.headBox[1] - r.frameBox[1] : null
+    // (a) NO NON-HEAD CHILD CONTRIBUTES HEIGHT — and the census must NAME the body node, so
+    //     an implementation that DELETED the node cannot pass this clause by an empty list.
+    const collapsedNonHeadChildrenInert = Array.isArray(mid.nonHeadChildren) && mid.nonHeadChildren.length > 0 &&
+      mid.nonHeadChildren.some((c) => c.id === 'pane-body-doc-nav') &&
+      mid.nonHeadChildren.every((c) => c.display === 'none' || c.zeroBox === true)
+    // (b) THE FRAME IS THE HEAD PLUS ITS OWN COLLAPSED CHROME (±1).
+    const collapsedFrameIsTheHeadPlusItsOwnChrome = Number.isFinite(mid.h) && Array.isArray(mid.headBox) &&
+      chromeTotal(mid.frameChrome) !== null &&
+      Math.abs(mid.h - (mid.headBox[3] + chromeTotal(mid.frameChrome))) <= 1
+    // (c) THE HEAD DOES NOT SHRINK: the same x, width and height as the expanded reading.
+    const collapsedHeadKeptItsOwnExtent = Array.isArray(before.headBox) && Array.isArray(mid.headBox) &&
+      before.headBox.length === 4 && mid.headBox.length === 4 &&
+      Math.abs(mid.headBox[0] - before.headBox[0]) <= 1 && Math.abs(mid.headBox[2] - before.headBox[2]) <= 1 &&
+      Math.abs(mid.headBox[3] - before.headBox[3]) <= 1
+    // (d) THE HEAD MOVED BY EXACTLY THE FRAME'S CHROME DELTA — measured as the head's offset
+    //     from the frame's top edge against the frame's own top chrome, so a frame that also
+    //     MOVED (another pane above it changing) is not mis-read as the head drifting.
+    const collapsedHeadMovedByTheChromeOnly = Number.isFinite(headOffsetY(before)) && Number.isFinite(headOffsetY(mid)) &&
+      chromeTop(before.frameChrome) !== null && chromeTop(mid.frameChrome) !== null &&
+      // the head starts EXACTLY at the frame's content edge in BOTH states (no spacer, no margin)…
+      Math.abs(headOffsetY(before) - chromeTop(before.frameChrome)) <= 1 &&
+      Math.abs(headOffsetY(mid) - chromeTop(mid.frameChrome)) <= 1 &&
+      // …so its travel equals the frame's own top-chrome delta, SIGN FOR SIGN (both read mid−expanded:
+      // the collapsed padding NARROWS, so the head rises by exactly the chrome it lost).
+      Math.abs((headOffsetY(mid) - headOffsetY(before)) - (chromeTop(mid.frameChrome) - chromeTop(before.frameChrome))) <= 1
+    const collapsedBoxIsTheHead = mid.present === true && mid.bodyPresent === true && mid.headPresent === true &&
+      Number.isFinite(before.h) && before.h > mid.h + 40 &&
+      collapsedNonHeadChildrenInert && collapsedFrameIsTheHeadPlusItsOwnChrome &&
+      collapsedHeadKeptItsOwnExtent && collapsedHeadMovedByTheChromeOnly
+    // THE SUPERSEDED PREDICATE, EVALUATED AND PRINTED (never silently dropped): the two
+    // clauses that were unsatisfiable, verbatim. It reads FALSE on the landed app, and the
+    // row's verdict depends on the re-aimed term above — never on this one.
+    const collapsedBoxIsTheHeadSuperseded = mid.present === true && mid.bodyPresent === true && mid.headPresent === true &&
+      Array.isArray(mid.headBox) && Math.abs(mid.h - mid.headBox[3]) <= 1 &&
+      boxClose(before.headBox, mid.headBox)
+    // (iii) `bodyContentWithheldWhileCollapsed` — the BODY NODE exists while collapsed and
+    //       its CHILD COUNT is 0, while the pre-collapse count was > 0.
+    const bodyContentWithheldWhileCollapsed = mid.bodyPresent === true && mid.bodyChildElementCount === 0 &&
+      Number.isFinite(before.bodyChildElementCount) && before.bodyChildElementCount > 0
     // pane-ROOT identity: the same pane root (`#pane-doc-nav` / data-pane-id / title)
     // is what comes back — the frame's DOM element instance is re-materialized by
     // the re-derive, so the identity oracle is the authored root, not the instance.
     const sameRoot = before.id === after.id && before.paneId === after.paneId && before.title === after.title && before.x === after.x
-    return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, 'A REAL click on a pane collapse toggle renders the pane HEADER-ONLY (body unmounted); a second REAL click re-expands the SAME pane root', `${paneExpandPath}; doc-nav before: bodyNodes(li)=${before.li} ul=${before.ul} h=${before.h}px; REAL click #pane-collapse-doc-nav (path=${c1.path}) → is-collapsed=${mid.collapsed} bodyNodes(li)=${mid.li} ul=${mid.ul} h=${mid.h}px → headerOnly=${headerOnly}; REAL click again (path=${c2.path}) → is-collapsed=${after.collapsed} bodyNodes(li)=${after.li} ul=${after.ul} h=${after.h}px → reExpanded=${reExpanded}; samePaneRoot(identical #pane-doc-nav root: id/paneId/title/x ${before.id}/${before.paneId}/"${before.title}"/${before.x} → ${after.id}/${after.paneId}/"${after.title}"/${after.x})=${sameRoot} (data-node-id ${before.nodeId}→${after.nodeId})`, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok: headerOnly && reExpanded && sameRoot, surface })
+    const shapeOf = (r) => r && r.present === true
+      ? `head=${JSON.stringify(r.headBox)} (headIsTheFramesFirstChild=${r.headIsTheFramesFirstChild}, headOverflow=${JSON.stringify(r.headOverflow)}, headPosition=${JSON.stringify(r.headPosition)}) bodyNode=${r.bodyPresent} (bodyIsTheFramesSecondChild=${r.bodyIsTheFramesSecondChild}, headIsNotInsideTheBody=${r.headIsNotInsideTheBody}, children=${r.bodyChildElementCount}, box=${JSON.stringify(r.bodyBox)}, scrollHeight=${r.bodyScrollHeight}, clientHeight=${r.bodyClientHeight}, overflow=${JSON.stringify(r.bodyOverflow)}) frame=${r.h}px grip=${r.gripPresent} control=${r.controlPresent} name=${JSON.stringify(r.title)} glyph=${JSON.stringify(r.gripText)}`
+      : `ABSENT (${JSON.stringify(r)})`
+    // The re-aimed (ii) term's own printers: the head's x/y/width/height and the frame's
+    // four chrome numbers, so the evidence states the MEASUREMENT the term was graded on.
+    const headPart = (r) => (Array.isArray(r && r.headBox) && r.headBox.length === 4)
+      ? { x: r.headBox[0], y: r.headBox[1], w: r.headBox[2], h: r.headBox[3] } : null
+    const frameChromeTxt = (r) => {
+      const c = r && r.frameChrome
+      return c && ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].every((k) => Number.isFinite(c[k]))
+        ? `paddingTop=${c.paddingTop}px paddingBottom=${c.paddingBottom}px borderTopWidth=${c.borderTopWidth}px borderBottomWidth=${c.borderBottomWidth}px`
+        : 'UNREADABLE (no computed chrome on the frame)'
+    }
+    const ufPanes1Evidence = `${paneExpandPath}; doc-nav EXPANDED reading: ${shapeOf(before)} li=${before.li} ul=${before.ul}; REAL press #pane-collapse-doc-nav (path=${c1.path}) → COLLAPSED reading: ${shapeOf(mid)} is-collapsed=${mid.collapsed} collapsedAttr=${JSON.stringify(mid.collapsedAttr)} li=${mid.li} ul=${mid.ul} → headerOnly(head row only, body NODE present with its children withheld)=${headerOnly}; REAL press again (path=${c2.path}) → RE-EXPANDED reading: ${shapeOf(after)} is-collapsed=${after.collapsed} li=${after.li} ul=${after.ul} → reExpanded=${reExpanded}; samePaneRoot(identical #pane-doc-nav root: id/paneId/name/x ${before.id}/${before.paneId}/${JSON.stringify(before.title)}/${before.x} → ${after.id}/${after.paneId}/${JSON.stringify(after.title)}/${after.x})=${sameRoot} (data-node-id ${before.nodeId}→${after.nodeId}); ⟨U-2 C-2/C-7 — THE THREE NEW TERMS, each printed with its own reading⟩ (i) bodyIsTheOnlyScroller: expanded #pane-body-doc-nav scrollHeight=${before.bodyScrollHeight} clientHeight=${before.bodyClientHeight} (equal ⇒ no internal overflow range) headBox=${JSON.stringify(before.headBox)} → head END y=${Array.isArray(before.headBox) ? before.headBox[1] + before.headBox[3] : '?'} vs body START y=${Array.isArray(before.bodyBox) ? before.bodyBox[1] : '?'} (Δ≤1px), head NOT inside the body=${before.headIsNotInsideTheBody} → ${bodyIsTheOnlyScroller}; (ii) collapsedBoxIsTheHead ⟨RE-AIMED: the term measures the CLAIM "the collapsed box is the head only", never the frame's chrome⟩ = ${collapsedBoxIsTheHead}: (a) NO NON-HEAD CHILD CONTRIBUTES HEIGHT — the frame's non-head children read ${JSON.stringify(mid.nonHeadChildren)} (id/class/display/box), the body NODE #pane-body-doc-nav is IN that census, and every one of them is display:none or a zero box → ${collapsedNonHeadChildrenInert}; (b) FRAME = HEAD + THE FRAME'S OWN COLLAPSED CHROME (±1) — collapsed frame height=${mid.h}px vs head height=${headPart(mid) ? headPart(mid).h : '?'}px + the frame's own chrome read off getComputedStyle(frame) (${frameChromeTxt(mid)} = ${chromeTotal(mid.frameChrome)}px) = ${headPart(mid) && chromeTotal(mid.frameChrome) !== null ? headPart(mid).h + chromeTotal(mid.frameChrome) : '?'}px → ${collapsedFrameIsTheHeadPlusItsOwnChrome}; (c) THE HEAD DOES NOT SHRINK — head (x,width,height) expanded=${headPart(before) ? JSON.stringify([headPart(before).x, headPart(before).w, headPart(before).h]) : '?'} collapsed=${headPart(mid) ? JSON.stringify([headPart(mid).x, headPart(mid).w, headPart(mid).h]) : '?'} (±1) → ${collapsedHeadKeptItsOwnExtent}; (d) THE HEAD MOVED BY EXACTLY THE FRAME'S CHROME DELTA AND NOTHING ELSE — head's offset from the frame's top edge expanded=${headOffsetY(before)}px collapsed=${headOffsetY(mid)}px against the frame's own TOP chrome (borderTopWidth+paddingTop) expanded=${chromeTop(before.frameChrome)}px collapsed=${chromeTop(mid.frameChrome)}px → Δoffset=${Number.isFinite(headOffsetY(before)) && Number.isFinite(headOffsetY(mid)) ? Math.round((headOffsetY(mid) - headOffsetY(before)) * 100) / 100 : '?'}px vs Δchrome=${chromeTop(before.frameChrome) !== null && chromeTop(mid.frameChrome) !== null ? Math.round((chromeTop(mid.frameChrome) - chromeTop(before.frameChrome)) * 100) / 100 : '?'}px (both read mid−expanded); the absolute y the superseded clause pinned: head ${headPart(before) ? headPart(before).y : '?'}→${headPart(mid) ? headPart(mid).y : '?'} while the frame's own y ${Array.isArray(before.frameBox) ? before.frameBox[1] : '?'}→${Array.isArray(mid.frameBox) ? mid.frameBox[1] : '?'} (state-invariant) → ${collapsedHeadMovedByTheChromeOnly}; ⟨THE SUPERSEDED READING, VERBATIM (RCA-8(c): KEPT VISIBLE, NOT REWRITTEN)⟩: "the collapsed frame's height equals the head's height (±1) while the head's own box is unchanged from the expanded reading" — IT IS UNSATISFIABLE, AND THE MEASUREMENT THAT KILLED IT (RECORDED at that reading) IS: collapsed frame 37px vs head 27px, the difference being EXACTLY the frame's OWN collapsed chrome (2 × 4px padding + 2 × 1px border), plus the head's absolute y moving 62→58 (Δ4px = the collapsed padding's 0.25rem against the expanded 0.5rem) while the frame's own y did not move. WHY NO AUTHORISED PAINT CAN MEET BOTH CLAUSES: making the frame's height equal the head's would require DELETING the frame's border/padding (C-4 keeps them; the collapsed arm only narrows the padding), and pinning the head's absolute y would require a \`position\` on the head, which C-1 and ASM-U2-7 REFUSE (a second authority for the head's box). RE-MEASURED IN THIS READ: frame ${mid.h}px vs head ${headPart(mid) ? headPart(mid).h : '?'}px (Δ${headPart(mid) ? mid.h - headPart(mid).h : '?'}px), head y ${headPart(before) ? headPart(before).y : '?'}→${headPart(mid) ? headPart(mid).y : '?'} (Δ${headPart(before) && headPart(mid) ? headPart(mid).y - headPart(before).y : '?'}px) → THE SUPERSEDED PREDICATE, EVALUATED HERE = ${collapsedBoxIsTheHeadSuperseded} (printed so the kill stays visible; this row's verdict rests on the re-aimed term above, never on this flag); (iii) bodyContentWithheldWhileCollapsed: body NODE present while collapsed=${mid.bodyPresent} childElementCount=${mid.bodyChildElementCount} (pre-collapse=${before.bodyChildElementCount}) → ${bodyContentWithheldWhileCollapsed}; SUPERSEDED WORDING, KEPT VISIBLE: the row's claim was "renders the pane HEADER-ONLY (body unmounted)" — the mechanism is now "the body NODE is present and its CONTENT is withheld". TERM COUNT: this row now carries 6 terms (headerOnly, reExpanded, samePaneRoot, bodyIsTheOnlyScroller, collapsedBoxIsTheHead, bodyContentWithheldWhileCollapsed); every one of them can read false.`
+    return rowResult({row:'UF-PANES-1',dclass:'D-interaction'}, UFP1_ASSERTION, ufPanes1Evidence, { path: c1.path === 'cdp' && c2.path === 'cdp' ? 'cdp' : 'native-fallback', ok: headerOnly && reExpanded && sameRoot && bodyIsTheOnlyScroller && collapsedBoxIsTheHead && bodyContentWithheldWhileCollapsed, surface })
   },
 
   // UF-PANES-8 — a REAL click on a collapsed zone's tab re-expands the zone
@@ -7145,6 +7338,192 @@ const BLOCKS = {
       const f = (await ufPaneFrames(h)).find((x) => x.pid === pid)
       if (f && !f.collapsed) { await ufRealClick(h, `#pane-collapse-${pid}`); await sleep(1300) }
     }
+    // ── (iv) ⟨UNIT `U-2` `C-5`/`C-7` — `pressingTheControlArmsNoDrag`. ⟩──────────────
+    // A REAL, hit-tested press PLUS a 12px move ON THE COLLAPSE CONTROL
+    // (`#pane-collapse-doc-nav`) must arm NO pane drag: `C-5` deletes F-1's "the header IS
+    // the toggle" EXEMPTION WITH ITS CAUSE (the control is now the grip's SIBLING, so a
+    // press on it resolves NO gesture element at all). THE EXPECTED RED AT THE PRE-`U-2`
+    // HEAD IS THIS TERM'S NON-VACUITY: there the control IS the header, so the very same
+    // press arms a drag, reveals the zone drop-target mirrors and claims the pointer.
+    // The pointer is read WHILE IT IS STILL DOWN, so a LIVE session is measured, not
+    // inferred from what a completed gesture happens to leave behind.
+    const controlPress = await (async () => {
+      const rec = { attempted: false, pressPath: 'not-driven', pressPoint: null, pressBox: null, pressHit: null, onTarget: null, moveTargets: null, gotPointerCaptureEvents: null, captureHolders: null, revealedMirrors: null, slotOrderBefore: null, slotOrderAfter: null, paneCollapsedBefore: null, paneCollapsedAfter: null, reason: null }
+      const where = await h.cdp.evaluate(`(()=>{const c=document.getElementById('pane-collapse-doc-nav');if(!c)return {err:'no #pane-collapse-doc-nav on the assembled surface'};const r=c.getBoundingClientRect();if(r.width<2||r.height<2)return {err:'the control carries a degenerate box',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};const x=Math.round(r.x+r.width/2),y=Math.round(r.y+r.height/2);const hit=document.elementFromPoint(x,y);const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return {x,y,box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],hit:hit?(hit.id||hit.tagName):'null',onTarget:!!(hit&&(hit===c||c.contains(hit))),collapsed:f?f.classList.contains('is-collapsed'):null,slots:[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')].map((n)=>n.getAttribute('data-pane-id'))}})()`)
+      rec.pressBox = where ? where.box ?? null : null
+      rec.pressHit = where ? where.hit ?? null : null
+      rec.onTarget = where ? where.onTarget === true : false
+      rec.slotOrderBefore = where && where.slots ? where.slots : null
+      rec.paneCollapsedBefore = where ? where.collapsed ?? null : null
+      if (!where || where.err || rec.onTarget !== true) {
+        rec.reason = where && where.err ? where.err : `the hit test at the control's centre resolved ${JSON.stringify(rec.pressHit)} — NOT the control`
+        return rec
+      }
+      rec.pressPoint = [where.x, where.y]
+      rec.attempted = true
+      await h.cdp.evaluate(`(()=>{window.__ufCtrlAudit={moves:[],gotCapture:0};const rec=(e)=>{const t=e.target;const n=t?(t.id||t.tagName):'?';if(e.type==='gotpointercapture')window.__ufCtrlAudit.gotCapture+=1;else if(e.type==='pointermove')window.__ufCtrlAudit.moves.push(n)};for(const ty of ['pointermove','gotpointercapture'])document.addEventListener(ty,rec,true);return true})()`)
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: where.x, y: where.y, buttons: 0 })
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: where.x, y: where.y, button: 'left', buttons: 1, clickCount: 1 })
+      for (const dy of [4, 8, 12]) {
+        await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: where.x, y: where.y + dy, button: 'left', buttons: 1 })
+        await sleep(70)
+      }
+      // THE AUDIT IS READ BEFORE THE RELEASE (a live session is the claim).
+      const during = await h.cdp.evaluate(`(()=>{const a=window.__ufCtrlAudit||{};const holders=[];for(const n of document.querySelectorAll('*')){for(const id of [1,2,3]){try{if(typeof n.hasPointerCapture==='function'&&n.hasPointerCapture(id))holders.push((n.id||n.tagName)+'#'+id)}catch{}}}return {gotPointerCaptureEvents:a.gotCapture||0,captureHolders:holders,moveTargets:(a.moves||[]).slice(0,10),revealedMirrors:[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.className).slice(0,30))}})()`)
+      await h.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: where.x, y: where.y + 12, button: 'left', buttons: 0, clickCount: 1 })
+      await sleep(900)
+      rec.pressPath = 'cdp'
+      rec.gotPointerCaptureEvents = during ? during.gotPointerCaptureEvents : null
+      rec.captureHolders = during ? during.captureHolders : null
+      rec.moveTargets = during ? during.moveTargets : null
+      rec.revealedMirrors = during ? during.revealedMirrors : null
+      rec.slotOrderAfter = await h.cdp.evaluate(`(()=>[...document.querySelectorAll('[zone="left"] .pane-frame[data-pane-id]')].map((n)=>n.getAttribute('data-pane-id')))()`)
+      rec.paneCollapsedAfter = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');return f?f.classList.contains('is-collapsed'):null})()`)
+      return rec
+    })()
+    // ── THE DRAG-SUPPRESSION HALF of the term: a proven press path, NOTHING revealed, NO
+    // pointer capture held (and NO `gotpointercapture` event), and the zone's pane-slot order
+    // unchanged. Every limb can read false (the pre-`U-2` head reds it on all of them).
+    const controlPressArmedNoDrag = controlPress.pressPath === 'cdp' && controlPress.onTarget === true &&
+      Array.isArray(controlPress.revealedMirrors) && controlPress.revealedMirrors.length === 0 &&
+      Array.isArray(controlPress.captureHolders) && controlPress.captureHolders.length === 0 &&
+      controlPress.gotPointerCaptureEvents === 0 &&
+      Array.isArray(controlPress.slotOrderBefore) && Array.isArray(controlPress.slotOrderAfter) &&
+      controlPress.slotOrderBefore.join(',') === controlPress.slotOrderAfter.join(',')
+    // ⟨WHY A PRESS + A 12px MOVE DELIVERS NO `click` — MEASURED, NOT ASSERTED.⟩ The release
+    // lands OUTSIDE the control's own box, so the browser resolves no `click` ON THE CONTROL
+    // and the ACT is never reached: NO flip is the CORRECT expectation for a drag attempt, and
+    // the two points plus the box are printed beside it (the mechanism, not a taste claim).
+    const releasePoint = Array.isArray(controlPress.pressPoint) ? [controlPress.pressPoint[0], controlPress.pressPoint[1] + 12] : null
+    const releaseInsideTheControl = (Array.isArray(controlPress.pressBox) && controlPress.pressBox.length === 4 && Array.isArray(releasePoint))
+      ? releasePoint[0] >= controlPress.pressBox[0] && releasePoint[0] <= controlPress.pressBox[0] + controlPress.pressBox[2] &&
+        releasePoint[1] >= controlPress.pressBox[1] && releasePoint[1] <= controlPress.pressBox[1] + controlPress.pressBox[3]
+      : null
+    const controlPressLeftTheStateAlone = controlPress.paneCollapsedBefore !== null &&
+      controlPress.paneCollapsedBefore === controlPress.paneCollapsedAfter
+    // THE BLOCK'S OWN SETUP IS UNCHANGED BY THE DRAG ATTEMPT, so there is nothing to restore:
+    // a restore is taken ONLY if the press flipped the state (a click delivered where the
+    // attempt meant a drag). `null` is therefore the CORRECT reading on the drag path — the
+    // superseded evidence line claimed the press HAD flipped the state, which its own printed
+    // `true→true` disproved.
+    let controlPressRestore = null
+    if (controlPress.pressPath === 'cdp' && controlPress.paneCollapsedAfter !== controlPress.paneCollapsedBefore) {
+      controlPressRestore = (await ufRealClick(h, '#pane-collapse-doc-nav')).path
+      await sleep(1300)
+    }
+    // ── ⟨THE CONTROL'S REACHABILITY — THE SECOND, SEPARATE READING IN THIS TERM.⟩ The drag
+    // attempt never reaches the act BY DESIGN (no click is delivered), so it cannot grade that
+    // the control still HAS a handler: as written, a control with NO handler read the term
+    // exactly the same. This reading presses and releases IN PLACE on the SAME control, so a
+    // `click` IS delivered and the pane's collapse state must FLIP. It is then pressed once
+    // more to put the block's own setup back (both panes collapsed); that restore is printed.
+    const controlReach = await (async () => {
+      const rec = { attempted: false, pressPath: 'not-driven', collapsedBefore: null, collapsedAfter: null, restoredPath: null, restoredCollapsed: null }
+      const state = async () => h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return null;return {collapsed:f.classList.contains('is-collapsed'),attr:f.getAttribute('collapsed')}})()`)
+      rec.collapsedBefore = await state()
+      const press = await ufRealClick(h, '#pane-collapse-doc-nav')
+      rec.pressPath = press.path
+      rec.attempted = press.path === 'cdp'
+      await sleep(1400)
+      rec.collapsedAfter = await state()
+      if (rec.attempted && rec.collapsedBefore && rec.collapsedAfter &&
+        rec.collapsedAfter.collapsed !== rec.collapsedBefore.collapsed) {
+        const back = await ufRealClick(h, '#pane-collapse-doc-nav')
+        rec.restoredPath = back.path
+        await sleep(1400)
+        rec.restoredCollapsed = await state()
+      }
+      return rec
+    })()
+    const controlReachability = controlReach.pressPath === 'cdp' &&
+      controlReach.collapsedBefore !== null && controlReach.collapsedAfter !== null &&
+      controlReach.collapsedBefore.collapsed !== controlReach.collapsedAfter.collapsed &&
+      controlReach.collapsedAfter.attr === (controlReach.collapsedAfter.collapsed === true ? 'true' : 'false') &&
+      controlReach.restoredPath === 'cdp' && controlReach.restoredCollapsed !== null &&
+      controlReach.restoredCollapsed.collapsed === controlReach.collapsedBefore.collapsed
+    // THE TERM — BOTH HALVES. The drag-suppression clauses keep their verdict (nothing is
+    // weakened) and the reachability clause is ANDed in, so a control with NO handler can no
+    // longer read this term TRUE.
+    const pressingTheControlArmsNoDrag = controlPressArmedNoDrag && controlReachability
+    const controlPressEvidence = `(iv) ⟨U-2 C-5/C-7 + THE CONTROL'S REACHABILITY⟩ pressingTheControlArmsNoDrag=${pressingTheControlArmsNoDrag} = [drag suppression ${controlPressArmedNoDrag}] + [the press REACHES the act ${controlReachability}]: REAL press on the CONTROL #pane-collapse-doc-nav at ${JSON.stringify(controlPress.pressPoint)} (box=${JSON.stringify(controlPress.pressBox)}, hit=${JSON.stringify(controlPress.pressHit)}, onTarget=${controlPress.onTarget}, press path=${controlPress.pressPath}${controlPress.reason ? `, reason=${JSON.stringify(controlPress.reason)}` : ''}) + a 12px move with the button STILL DOWN, released at ${JSON.stringify(releasePoint)} — the release lands OUTSIDE the control's own box (releaseInsideTheControl=${releaseInsideTheControl}), so NO \`click\` is delivered ON THE CONTROL and NO flip is expected: the pane's collapse state reads ${JSON.stringify(controlPress.paneCollapsedBefore)}→${JSON.stringify(controlPress.paneCollapsedAfter)} (unchanged=${controlPressLeftTheStateAlone}) — the ABSENCE OF A DRAG is this half's subject, never a state change, and the block's own setup therefore needed no restore (${JSON.stringify(controlPressRestore)}: \`null\` is the CORRECT reading on this path); ⟨the SUPERSEDED wording of this line said the press HAD flipped the state, which its own printed true→true disproved — kept visible, not silently cut⟩; WHAT THE DRAG ATTEMPT MEASURED: reveal mirror census=${JSON.stringify(controlPress.revealedMirrors)} (must be EMPTY), pointer-capture holders=${JSON.stringify(controlPress.captureHolders)} (must be EMPTY: the FRAME claims the capture once a drag passes the 4px threshold), gotpointercapture events=${controlPress.gotPointerCaptureEvents} (must be 0), move targets=${JSON.stringify(controlPress.moveTargets)}, zone pane-slot order before=${JSON.stringify(controlPress.slotOrderBefore)} after=${JSON.stringify(controlPress.slotOrderAfter)}; THE SAME CONTROL'S REACHABILITY (a SEPARATE reading — pressed and released IN PLACE on the same control, so a \`click\` IS delivered): pane collapse state before=${JSON.stringify(controlReach.collapsedBefore)} → after=${JSON.stringify(controlReach.collapsedAfter)} (press path=${controlReach.pressPath}) → the press REACHED the act=${controlReachability}; the block's own setup was put back by a further REAL press (path=${JSON.stringify(controlReach.restoredPath)}) → ${JSON.stringify(controlReach.restoredCollapsed)}; AT THE PRE-U-2 HEAD (the control IS the header) the drag half reads RED on the mirrors, the capture and (typically) the slot order — that RED is this row's measured non-vacuity, recorded verbatim, never smoothed`
+    // ── (vi) ⟨UNIT `U-2` `C-4` (THE GLYPH'S ONE OWNER) — THE CONTROL'S GLYPH, READ ON THE
+    // ASSEMBLED APP.⟩ The sheet paints the control's glyph as a `::before` pseudo keyed on
+    // the PANE's OWN `collapsed` carrier (expanded `▾`, collapsed `▸`; the node authors NO
+    // `content`), and until this term NO live row read it at ALL — the token occurred exactly
+    // ONCE in this whole driver, in a comment — so one of the unit's five behaviours and a
+    // `G8`-only claim had no evidence whatever. The reading is taken with REAL presses on
+    // `#pane-collapse-<id>` forcing each state, and against a PAIRED PANE whose frame carries
+    // the OTHER state in the SAME zone: a rule keyed on the ZONE's carrier (instead of the
+    // pane's) would paint BOTH panes the same glyph, which the paired reading prints.
+    // NB: the quotes are stripped by an INDEX walk, never by a regex literal — a regex
+    // containing a quote character defeats the contract's own brace scanner (it treats
+    // ' " and ` as string starts and reports the block body as unclosed).
+    const glyphToken = (s) => {
+      const t = String(s == null ? '' : s).trim()
+      let a = 0
+      let b = t.length
+      while (a < b && (t[a] === '"' || t[a] === "'")) a += 1
+      while (b > a && (t[b - 1] === '"' || t[b - 1] === "'")) b -= 1
+      return t.slice(a, b).trim()
+    }
+    const readGlyphs = async () => h.cdp.evaluate(`(()=>{
+      const one=(pid)=>{const f=document.querySelector('.pane-frame[data-pane-id="'+pid+'"]');const c=document.getElementById('pane-collapse-'+pid);
+        return {paneId:pid,framePresent:!!f,controlPresent:!!c,
+          collapsed:f?f.classList.contains('is-collapsed'):null,collapsedAttr:f?f.getAttribute('collapsed'):null,
+          glyph:c?getComputedStyle(c,'::before').content:null,nodeText:c?(c.textContent||'').trim():null,nodeContent:c?c.getAttribute('content'):null}};
+      const z=document.getElementById('zone:left');
+      return {zonePresent:!!z,zoneCollapsed:z?z.classList.contains('is-collapsed'):null,zoneCollapsedAttr:z?z.getAttribute('collapsed'):null,docNav:one('doc-nav'),search:one('search')}})()`)
+    const glyphPresses = []
+    // THE PAIRED SETUP, WITH A REAL PRESS: doc-nav COLLAPSED beside search EXPANDED, in the
+    // SAME zone, with the ZONE EXPANDED — the one configuration in which a pane-keyed glyph
+    // rule and a zone-keyed one read differently. The block's own setup left BOTH collapsed.
+    const glyphSetupSearch = (await ufPaneFrames(h)).find((f) => f.pid === 'search') || null
+    if (glyphSetupSearch && glyphSetupSearch.collapsed) {
+      glyphPresses.push('search:expanded by ' + (await ufRealClick(h, '#pane-collapse-search')).path)
+      await sleep(1300)
+    } else glyphPresses.push('search:already-expanded (no press taken)')
+    const glyphA = await readGlyphs()
+    const glyphPressAtoB = await ufRealClick(h, '#pane-collapse-doc-nav')
+    await sleep(1400)
+    const glyphB = await readGlyphs()
+    const glyphPressBtoC = await ufRealClick(h, '#pane-collapse-doc-nav')
+    await sleep(1400)
+    const glyphC = await readGlyphs()
+    // RESTORE THE BLOCK'S OWN STARTING STATE (both panes collapsed) with one more REAL press.
+    glyphPresses.push('search:collapsed by ' + (await ufRealClick(h, '#pane-collapse-search')).path)
+    await sleep(1300)
+    const glyphRestored = await readGlyphs()
+    const glyphOf = (r, pid) => glyphToken(r && r[pid] ? r[pid].glyph : null)
+    const glyphClauses = {
+      // the reading was made with REAL hit-tested CDP presses, never a synthetic DOM click
+      thePressesWereReal: glyphPressAtoB.path === 'cdp' && glyphPressBtoC.path === 'cdp' &&
+        glyphPresses.every((p) => !/(by )(missing|zero-box|off-viewport|native-fallback)$/.test(p)),
+      // the COLLAPSED glyph while the pane is collapsed — keyed on a carrier that READS collapsed
+      collapsedPaneReadsTheCollapsedGlyph: glyphOf(glyphA, 'docNav') === '▸' &&
+        glyphA.docNav.collapsed === true && glyphA.docNav.collapsedAttr === 'true',
+      // the EXPANDED glyph while the pane is expanded
+      expandedPaneReadsTheExpandedGlyph: glyphOf(glyphB, 'docNav') === '▾' &&
+        glyphB.docNav.collapsed === false && glyphB.docNav.collapsedAttr === 'false',
+      // a second REAL press puts the collapsed glyph back (the glyph follows the state, both ways)
+      backToCollapsedReadsTheCollapsedGlyph: glyphOf(glyphC, 'docNav') === '▸' &&
+        glyphC.docNav.collapsed === true && glyphC.docNav.collapsedAttr === 'true',
+      // THE PAIRED PANE (whose frame carries the OTHER state) does not change across A→B→C
+      thePairedPaneDidNotChange: glyphOf(glyphA, 'search') === '▾' && glyphOf(glyphB, 'search') === '▾' &&
+        glyphOf(glyphC, 'search') === '▾' && glyphA.search.collapsed === false &&
+        glyphB.search.collapsed === false && glyphC.search.collapsed === false,
+      // TWO panes in ONE zone read DIFFERENT glyphs at one instant — a zone-keyed rule cannot
+      twoPanesInOneZoneReadDifferentGlyphs: glyphOf(glyphA, 'docNav') === '▸' && glyphOf(glyphA, 'search') === '▾',
+      // and the ZONE's own carrier never spoke for either pane (it reads expanded throughout)
+      theZoneCarrierSpokeForNeither: glyphA.zoneCollapsed === false && glyphB.zoneCollapsed === false && glyphC.zoneCollapsed === false,
+      // the glyph is the SHEET's, not the node's: the control carries NO text and NO content
+      theGlyphIsTheSheetsNotTheNodes: [glyphA.docNav, glyphB.docNav, glyphC.docNav].every((r) =>
+        r.controlPresent === true && r.nodeText === '' && r.nodeContent == null),
+      // the block's own setup is back (both panes collapsed)
+      theBlockSetupWasRestored: glyphRestored.docNav.collapsed === true && glyphRestored.search.collapsed === true,
+    }
+    const paneControlGlyphFollowsThePanesOwnCarrier = Object.values(glyphClauses).every((v) => v === true)
+    const glyphReadingOf = (r) => `zone:left collapsed=${JSON.stringify(r.zoneCollapsed)} (attribute collapsed=${JSON.stringify(r.zoneCollapsedAttr)}) | doc-nav: frame collapsed=${JSON.stringify(r.docNav.collapsed)} collapsedAttr=${JSON.stringify(r.docNav.collapsedAttr)} control ::before content=${JSON.stringify(r.docNav.glyph)} → glyph=${JSON.stringify(glyphOf(r, 'docNav'))} control textContent=${JSON.stringify(r.docNav.nodeText)} control content attribute=${JSON.stringify(r.docNav.nodeContent)} | search (the PAIRED pane): frame collapsed=${JSON.stringify(r.search.collapsed)} collapsedAttr=${JSON.stringify(r.search.collapsedAttr)} control ::before content=${JSON.stringify(r.search.glyph)} → glyph=${JSON.stringify(glyphOf(r, 'search'))}`
+    const paneControlGlyphEvidence = `(vi) ⟨U-2 C-4 — THE GLYPH'S ONE OWNER, keyed on the PANE's own carrier⟩ paneControlGlyphFollowsThePanesOwnCarrier=${paneControlGlyphFollowsThePanesOwnCarrier}: the sheet paints the control's glyph as a ::before (expanded ▾ / collapsed ▸) and the node authors NO content, so this term is the ONLY live evidence of that behaviour. SETUP with a real press: ${JSON.stringify(glyphPresses[0])}; ⟨A⟩ BEFORE (doc-nav COLLAPSED beside the PAIRED search pane EXPANDED, same zone, ZONE EXPANDED — a ZONE-keyed rule would paint both panes the same glyph here): ${glyphReadingOf(glyphA)} → collapsedPaneReadsTheCollapsedGlyph=${glyphClauses.collapsedPaneReadsTheCollapsedGlyph} twoPanesInOneZoneReadDifferentGlyphs=${glyphClauses.twoPanesInOneZoneReadDifferentGlyphs}; ⟨B⟩ REAL press #pane-collapse-doc-nav (path=${glyphPressAtoB.path}) → doc-nav EXPANDED: ${glyphReadingOf(glyphB)} → expandedPaneReadsTheExpandedGlyph=${glyphClauses.expandedPaneReadsTheExpandedGlyph}; ⟨C⟩ REAL press again (path=${glyphPressBtoC.path}) → doc-nav COLLAPSED again: ${glyphReadingOf(glyphC)} → backToCollapsedReadsTheCollapsedGlyph=${glyphClauses.backToCollapsedReadsTheCollapsedGlyph}; THE PAIRED READING (search's frame carries the OTHER state and is untouched by the presses): glyphs across A→B→C = ${JSON.stringify([glyphOf(glyphA, 'search'), glyphOf(glyphB, 'search'), glyphOf(glyphC, 'search')])} → thePairedPaneDidNotChange=${glyphClauses.thePairedPaneDidNotChange}; the ZONE's own carrier across the three readings (it must speak for NEITHER pane's glyph)=${JSON.stringify([glyphA.zoneCollapsed, glyphB.zoneCollapsed, glyphC.zoneCollapsed])} → theZoneCarrierSpokeForNeither=${glyphClauses.theZoneCarrierSpokeForNeither}; the glyph is the SHEET's, not the node's (empty textContent and NO content attribute in all three)=${glyphClauses.theGlyphIsTheSheetsNotTheNodes}; the presses were REAL hit-tested CDP presses=${glyphClauses.thePressesWereReal}; RESTORE of the block's own setup by ${JSON.stringify(glyphPresses[1])} → doc-nav collapsed=${JSON.stringify(glyphRestored.docNav.collapsed)} search collapsed=${JSON.stringify(glyphRestored.search.collapsed)} → theBlockSetupWasRestored=${glyphClauses.theBlockSetupWasRestored}`
     const preMin = await ufPaneFrames(h)
     // ⟨`U-1b` §7a GAP 1/2/3 — THE EXPANDED-STATE PAINT READING.⟩ Taken BEFORE the
     // collapse gesture, from the SAME helper the collapsed/re-expanded arms use, so
@@ -7203,6 +7582,122 @@ const BLOCKS = {
     const docnavAfter = afterFrames.find((f) => f.pid === 'doc-nav') || null
     const stripReplacesStack = collapsedZone.frames === 0 && collapsedZone.tabs.length >= 1 && collapsedZone.tabs.every((t) => t.box[2] > 0 && t.box[3] > 0)
     const reExpanded = !/is-collapsed/.test(after.cls) && after.frames >= 1 && afterFrames.every((f) => f.box[2] > 0 && f.box[3] > 0)
+
+    // ── (v) ⟨UNIT `U-2` `C-6` — THE GUTTER PILL, MEASURED ON THE ASSEMBLED APP.⟩ ──
+    // The four gutter lanes (`#zone-gutter-<zone>`) are the AUTHORED `.gutter[zone]`
+    // elements, and the pill is a `::after` PSEUDO (no element is added, D-8), so the
+    // lane's own box must be UNMOVED. Every figure below is READ (`getComputedStyle(el,
+    // '::after')` / `'::before'`), never restated from the sheet: the long axis
+    // `min(48px,100%)`, the thin axis `min(7px,100%)` (the lane is 6px, so 7 would paint
+    // outside it), the full-round radius, the auto-margin centring, the pill's ink being
+    // STRICTLY QUIETER than the `::before` divider line's (a WCAG contrast ratio computed
+    // from the computed colour strings against the page background) and OPAQUE (alpha 1),
+    // and the lane's END (away from the centred pill) still hit-testing TO the gutter.
+    const pill = await h.cdp.evaluate(`(()=>{
+      const ZONES=['left','right','top','bottom'];
+      const num=(v)=>{const n=parseFloat(String(v));return Number.isFinite(n)?n:null};
+      const chan=(v)=>Math.max(0,Math.min(255,Number(v)));
+      const lin=(c)=>{const v=c/255;return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4)};
+      const lum=(c)=>0.2126*lin(chan(c.r))+0.7152*lin(chan(c.g))+0.0722*lin(chan(c.b));
+      const ratio=(a,b)=>{if(!a||!b)return null;const L1=lum(a),L2=lum(b);const hi=Math.max(L1,L2),lo=Math.min(L1,L2);return (hi+0.05)/(lo+0.05)};
+      const oklab=(L,a,b)=>{const l_=L+0.3963377774*a+0.2158037573*b,m_=L-0.1055613458*a-0.0638541728*b,s_=L-0.0894841775*a-1.2914855480*b;const l=l_*l_*l_,m=m_*m_*m_,s=s_*s_*s_;const r=4.0767416621*l-3.3077115913*m+0.2309699292*s,g=-1.2684380046*l+2.6097574011*m-0.3413193965*s,bb=-0.0041960863*l-0.7034186147*m+1.7076147010*s;const gam=(v)=>v<=0.0031308?12.92*v:1.055*Math.pow(Math.max(v,0),1/2.4)-0.055;return {r:chan(gam(r)*255),g:chan(gam(g)*255),b:chan(gam(bb)*255)}};
+      const hsl=(h,s,l)=>{h=((h%360)+360)%360;s=Math.max(0,Math.min(1,s));l=Math.max(0,Math.min(1,l));const c=(1-Math.abs(2*l-1))*s;const x=c*(1-Math.abs(((h/60)%2)-1));const m=l-c/2;let r=0,g=0,b=0;if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}return {r:chan((r+m)*255),g:chan((g+m)*255),b:chan((b+m)*255)}};
+      const parse=(str)=>{
+        if(str==null)return null;const t=String(str).trim().toLowerCase();
+        if(t===''||t==='none'||t==='transparent'||t==='currentcolor')return null;
+        if(t[0]==='#'){const hx=t.slice(1);const full=hx.length===3?hx.split('').map((c)=>c+c).join(''):hx;const n=parseInt(full.slice(0,6),16);if(!Number.isFinite(n))return null;return {r:chan((n>>16)&255),g:chan((n>>8)&255),b:chan(n&255),a:full.length===8?parseInt(full.slice(6,8),16)/255:1}}
+        const open=t.indexOf('(');if(open<0)return null;const name=t.slice(0,open).trim();const body=t.slice(open+1,t.lastIndexOf(')'));
+        const sl=body.split('/');const head=sl[0].trim();const alpha=sl.length>1?num(sl[1]):null;
+        const parts=head.indexOf(',')>=0?head.split(',').map((x)=>x.trim()):head.split(/\\s+/).filter((x)=>x!=='');
+        const nums=parts.map((x)=>x.indexOf('%')>=0?num(x):num(x));
+        if(name==='rgb'||name==='rgba'){if(nums.length<3)return null;const pct=head.indexOf('%')>=0;const f=(v)=>pct?chan(v*2.55):chan(v);return {r:f(nums[0]),g:f(nums[1]),b:f(nums[2]),a:alpha==null?(nums.length>3?nums[3]:1):alpha}}
+        if(name==='hsl'||name==='hsla'){if(nums.length<3)return null;return {r:hsl(nums[0],nums[1]/100,nums[2]/100).r,g:hsl(nums[0],nums[1]/100,nums[2]/100).g,b:hsl(nums[0],nums[1]/100,nums[2]/100).b,a:alpha==null?(nums.length>3?nums[3]:1):alpha}}
+        if(name==='color'){const space=parts[0];const v=parts.slice(1).map((x)=>num(x));if(!space||v.length<3)return null;if(space==='srgb'){return {r:chan(v[0]*255),g:chan(v[1]*255),b:chan(v[2]*255),a:alpha==null?1:alpha}}if(space==='srgb-linear'){const gam=(c)=>c<=0.0031308?12.92*c:1.055*Math.pow(Math.max(c,0),1/2.4)-0.055;return {r:chan(gam(v[0])*255),g:chan(gam(v[1])*255),b:chan(gam(v[2])*255),a:alpha==null?1:alpha}}return {unreadable:name+'('+space+')'}}
+        if(name==='oklab'){if(nums.length<3)return null;const c=oklab(nums[0],nums[1],nums[2]);c.a=alpha==null?1:alpha;return c}
+        if(name==='oklch'){if(nums.length<3)return null;const rad=nums[2]*Math.PI/180;const c=oklab(nums[0],nums[1]*Math.cos(rad),nums[1]*Math.sin(rad));c.a=alpha==null?1:alpha;return c}
+        return {unreadable:name}
+      };
+      const pageBg=(()=>{
+        const cands=[document.getElementById('app'),document.body,document.documentElement];
+        for(const e of cands){if(!e)continue;const c=parse(getComputedStyle(e).backgroundColor);if(c&&!c.unreadable&&(c.a==null||c.a>0.999))return {el:e.id||e.tagName,colour:getComputedStyle(e).backgroundColor,rgb:c}}
+        for(const e of cands){if(!e)continue;const c=getComputedStyle(e).backgroundColor;if(c&&c!=='rgba(0, 0, 0, 0)')return {el:e.id||e.tagName,colour:c,rgb:parse(c),fallback:false}}
+        return {el:'(none)',colour:'(assumed white)',rgb:{r:255,g:255,b:255,a:1},fallback:true}
+      })();
+      const lanes=ZONES.map((z)=>{
+        const el=document.getElementById('zone-gutter-'+z);
+        if(!el)return {zone:z,err:'no #zone-gutter-'+z+' element'};
+        const r=el.getBoundingClientRect();
+        const box=[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)];
+        const vertical=(z==='left'||z==='right');
+        const laneLong=vertical?r.height:r.width;const laneThin=vertical?r.width:r.height;
+        const cs=getComputedStyle(el);const after=getComputedStyle(el,'::after');const before=getComputedStyle(el,'::before');const vis=cs.visibility;
+        const pillLong=num(vertical?after.height:after.width);const pillThin=num(vertical?after.width:after.height);
+        const m1=vertical?after.marginTop:after.marginLeft;const m2=vertical?after.marginBottom:after.marginRight;
+        const i1=vertical?after.top:after.left;const i2=vertical?after.bottom:after.right;
+        let centre={mechanism:'unreadable',longStart:i1,longEnd:i2,marginStart:m1,marginEnd:m2,residual:null,centred:false};
+        if(pillLong===null||pillThin===null){centre={mechanism:'NO PILL TO CENTRE (the measured axes are not lengths)',longStart:i1,longEnd:i2,marginStart:m1,marginEnd:m2,residual:null,centred:false}}
+        else if(m1==='auto'&&m2==='auto'){centre={mechanism:'auto margins on the long axis',longStart:i1,longEnd:i2,marginStart:m1,marginEnd:m2,residual:0,centred:true}}
+        else if(num(m1)!==null&&num(m2)!==null){const d=Math.abs(num(m1)-num(m2));centre={mechanism:'numeric margins on the long axis',longStart:i1,longEnd:i2,marginStart:m1,marginEnd:m2,residual:d,centred:d<=1}}
+        // THE LANE'S END — a point on the lane AWAY FROM THE CENTRED PILL.
+        const ex=Math.round(r.x+r.width/2),ey=Math.round(r.y+Math.min(2,Math.max(0,r.height-2)));
+        const endHit=document.elementFromPoint(ex,ey);
+        const pillRgb=parse(after.backgroundColor);const lineRgb=parse(before.backgroundColor);
+        return {zone:z,box,vertical,visibility:vis,laneLong:Math.round(laneLong),laneThin:Math.round(laneThin),matchesGutterSelector:typeof el.matches==='function'?el.matches('.gutter[zone]'):null,
+          authoredZone:el.getAttribute('zone'),childElementCount:el.childElementCount,
+          pillContent:after.content,pillWidth:after.width,pillHeight:after.height,pillBorderRadius:after.borderRadius,pillBackground:after.backgroundColor,pillPosition:after.position,
+          lineBackground:before.backgroundColor,lineWidth:before.width,lineHeight:before.height,
+          pillLong, pillThin, laneLongExtent:Math.round(laneLong), laneThinExtent:Math.round(laneThin), centre,
+          pillRgb, lineRgb, pillAlpha:pillRgb&&pillRgb.a!=null?pillRgb.a:null, pillColourUnreadable:pillRgb&&pillRgb.unreadable?pillRgb.unreadable:null, lineColourUnreadable:lineRgb&&lineRgb.unreadable?lineRgb.unreadable:null,
+          pillContrast:ratio(pillRgb,pageBg.rgb), lineContrast:ratio(lineRgb,pageBg.rgb),
+          endPoint:[ex,ey], endHit:endHit?(endHit.id||endHit.tagName):'null', endHitIsTheGutter:!!(endHit&&endHit===el)}
+      });
+      return {pageBg, lanes, scope:'the four AUTHORED .gutter[zone] lanes and their ::before/::after pseudos, read at ONE instant on the assembled renderer'};
+    })()`)
+    const pillLanes = Array.isArray(pill && pill.lanes) ? pill.lanes : []
+    const pillProblems = []
+    // lanes the app hides by `U-1b`'s landed collapsed-zone rule: their END-hit is printed as
+    // NOT GRADED (never imputed as a pass, never charged to the pill).
+    const hiddenLanes = []
+    if (pillLanes.length !== 4) pillProblems.push(`the reading carries ${pillLanes.length} lane(s), not the closed four`)
+    for (const L of pillLanes) {
+      if (L.err) { pillProblems.push(`${L.zone}: ${L.err}`); continue }
+      // THE LANE IS THE AUTHORED `.gutter[zone]` ELEMENT AND ITS BOX IS THE LANE'S OWN.
+      if (L.matchesGutterSelector !== true) pillProblems.push(`${L.zone}: the lane is not a \`.gutter[zone]\` element (matches=${L.matchesGutterSelector}, authored zone=${JSON.stringify(L.authoredZone)})`)
+      if (!(L.laneThinExtent > 0) || !(L.laneLongExtent > 0)) pillProblems.push(`${L.zone}: the lane's box ${JSON.stringify(L.box)} is degenerate`)
+      if (L.childElementCount !== 0) pillProblems.push(`${L.zone}: the lane carries ${L.childElementCount} child element(s) — the pill must be a PSEUDO (D-8), never an added element`)
+      // THE LONG AXIS: <= 48 AND <= the lane's long extent.
+      if (!(L.pillLong > 0)) pillProblems.push(`${L.zone}: the ::after pill's long axis reads ${JSON.stringify(L.pillWidth)}x${JSON.stringify(L.pillHeight)} — no measurable pill`)
+      else if (L.pillLong > 48) pillProblems.push(`${L.zone}: the pill's long axis is ${L.pillLong}px, over the authored min(48px,100%) cap`)
+      else if (L.pillLong > L.laneLongExtent) pillProblems.push(`${L.zone}: the pill's long axis ${L.pillLong}px exceeds its lane's long extent ${L.laneLongExtent}px`)
+      // THE THIN AXIS: <= the lane's thin extent (a 6px lane caps min(7px,100%) at 6px).
+      if (!(L.pillThin > 0)) pillProblems.push(`${L.zone}: the pill's thin axis is not measurable`)
+      else if (L.pillThin > L.laneThinExtent) pillProblems.push(`${L.zone}: the pill's thin axis ${L.pillThin}px exceeds its lane's thin extent ${L.laneThinExtent}px (min(7px,100%) must cap inside the lane)`)
+      // CENTRED WITHIN 1px (the mechanism is printed).
+      if (L.centre.centred !== true) pillProblems.push(`${L.zone}: the pill is not centred on its lane's long axis (mechanism=${L.centre.mechanism}, residual=${JSON.stringify(L.centre.residual)}, margins ${JSON.stringify(L.centre.marginStart)}/${JSON.stringify(L.centre.marginEnd)})`)
+      // THE INK: STRICTLY QUIETER than the line, and OPAQUE.
+      if (L.pillAlpha == null || L.pillAlpha < 1) pillProblems.push(`${L.zone}: the pill's ink is not OPAQUE (alpha=${JSON.stringify(L.pillAlpha)}, colour=${JSON.stringify(L.pillBackground)}) — D-285 refuses a translucency`)
+      if (L.pillColourUnreadable != null) pillProblems.push(`${L.zone}: the pill's ink ${JSON.stringify(L.pillBackground)} could not be converted to sRGB by this reader (${L.pillColourUnreadable}) — the comparison is NOT CONCLUSIVE`)
+      else if (L.lineColourUnreadable != null) pillProblems.push(`${L.zone}: the line's ink ${JSON.stringify(L.lineBackground)} could not be converted to sRGB by this reader (${L.lineColourUnreadable}) — the comparison is NOT CONCLUSIVE`)
+      else if (!(L.pillContrast > 0) || !(L.lineContrast > 0)) pillProblems.push(`${L.zone}: a contrast ratio is unreadable (pill=${JSON.stringify(L.pillContrast)}, line=${JSON.stringify(L.lineContrast)})`)
+      else if (!(L.pillContrast < L.lineContrast)) pillProblems.push(`${L.zone}: the pill's ink is NOT quieter than the line's (pill contrast ${L.pillContrast.toFixed(3)} >= line ${L.lineContrast.toFixed(3)} against the page background ${JSON.stringify(pill.pageBg.colour)})`)
+      // THE LANE'S END IS STILL THE HIT TARGET — on a lane the app RENDERS AS HITTABLE.
+      // `U-1b` §7a GAP 3 hides the affordance of a COLLAPSED ZONE (`visibility: hidden`) by
+      // a landed rule, so a hidden lane's end-hit is UNMEASURABLE BY DESIGN and is PRINTED
+      // as not-graded instead of being charged to the pill (the U-1b rows grade that rule).
+      if (L.visibility !== 'visible') hiddenLanes.push({ zone: L.zone, visibility: L.visibility, endHit: L.endHit })
+      else if (L.endHitIsTheGutter !== true) pillProblems.push(`${L.zone}: elementFromPoint at the lane's END ${JSON.stringify(L.endPoint)} resolved ${JSON.stringify(L.endHit)}, not the gutter — the hover target is no longer the whole lane`)
+    }
+    // THE LANE'S BOX IS UNMOVED — value-for-value against the SAME lanes read in this
+    // block's own EXPANDED-state paint reading (the pill added no element and no inset).
+    const laneBoxesNow = pillLanes.map((L) => (L && L.box) || null)
+    const laneBoxesPaint = ['left', 'right', 'top', 'bottom'].map((z) => {
+      const one = (paintReExpanded.zones || []).find((x) => x.zone === z)
+      return one && one.gutter && Array.isArray(one.gutter.box) ? one.gutter.box : null
+    })
+    const gutterLanesUnmoved = laneBoxesNow.length === 4 && laneBoxesNow.every((b, i) => Array.isArray(b) && Array.isArray(laneBoxesPaint[i]) && b.length === 4 && b.every((v, k) => v === laneBoxesPaint[i][k]))
+    if (!gutterLanesUnmoved) pillProblems.push(`the four lanes' boxes moved between this block's own paint reading ${JSON.stringify(laneBoxesPaint)} and the pill reading ${JSON.stringify(laneBoxesNow)} — the pill must not move the lane whose hover target it shares`)
+    const gutterPillOk = pillProblems.length === 0 && pillLanes.length === 4 && pillLanes.every((L) => !L.err)
+    const gutterPillEvidence = `(v) ⟨U-2 C-6⟩ the GUTTER PILL, measured on the assembled app: laneCensus=${pillLanes.length}/4 (${pillLanes.map((L) => L.zone + ':' + JSON.stringify(L.box) + (L.err ? '(' + L.err + ')' : '')).join(' · ')}); page background=${JSON.stringify(pill.pageBg.colour)} (read off ${pill.pageBg.el}${pill.pageBg.fallback ? ', ASSUMED white — no opaque page background was readable' : ''}); ${pillLanes.map((L) => L.err ? `${L.zone}: ${L.err}` : `${L.zone}: lane thin=${L.laneThinExtent}px long=${L.laneLongExtent}px visibility=${JSON.stringify(L.visibility)} (authored .gutter[zone]=${L.matchesGutterSelector}, childElements=${L.childElementCount}); ::after content=${JSON.stringify(L.pillContent)} width=${JSON.stringify(L.pillWidth)} height=${JSON.stringify(L.pillHeight)} borderRadius=${JSON.stringify(L.pillBorderRadius)} background=${JSON.stringify(L.pillBackground)} alpha=${JSON.stringify(L.pillAlpha)} → long=${JSON.stringify(L.pillLong)}px thin=${JSON.stringify(L.pillThin)}px centred=${L.centre.centred}(mechanism=${L.centre.mechanism}, margins ${JSON.stringify(L.centre.marginStart)}/${JSON.stringify(L.centre.marginEnd)}, residual=${JSON.stringify(L.centre.residual)}); ::before background=${JSON.stringify(L.lineBackground)} (${JSON.stringify(L.lineWidth)}x${JSON.stringify(L.lineHeight)}); CONTRAST vs the page background: pill=${L.pillContrast == null ? '?' : L.pillContrast.toFixed(3)} line=${L.lineContrast == null ? '?' : L.lineContrast.toFixed(3)} → quieter=${L.pillContrast != null && L.lineContrast != null ? L.pillContrast < L.lineContrast : false}; lane END ${JSON.stringify(L.endPoint)} → elementFromPoint=${JSON.stringify(L.endHit)} onTheGutter=${L.endHitIsTheGutter}`).join(' | ')}; lanes NOT graded at their END because \`U-1b\`'s landed collapsed-zone rule hides the affordance (printed, never imputed)=${JSON.stringify(hiddenLanes)}; lane boxes unmoved vs this block's own paint reading=${gutterLanesUnmoved} (paint=${JSON.stringify(laneBoxesPaint)} now=${JSON.stringify(laneBoxesNow)}) → gutterPillOk=${gutterPillOk}${pillProblems.length ? ` PROBLEMS=${JSON.stringify(pillProblems)}` : ''}; NOTE (named, never a green): the pill's PAINT is G8-only — no node row may claim any figure here (RCA-12)`
     const clickedPaneIdentified = collapsedZone.tabs.some((t) => t.id === 'zone-tab-left-doc-nav' && t.paneId === 'doc-nav')
     // ---- ⟨`U-1b` §7a — THE THREE PAINT TERMS, each printed with its reading ---- //
     const zExp = leftPaint(paintExpanded)
@@ -7237,20 +7732,34 @@ const BLOCKS = {
     const paintOk = extentCollapsedAuto && extentExpandedIsTheSize && extentContentDerived && collapsedGridColumnReclaimed &&
       controlExpanded.ok && controlCollapsed.ok && gutterHiddenWhenCollapsed && gutterBoxStillMeasurable &&
       gutterUnhittableWhenCollapsed && noResizeAfterTheDrag && gutterLiveWhenExpanded && dragLeftTheAppAlone
+    // ⟨UNIT `U-2` §4 `G8` — THE THREE TERMS THIS UNIT ADDS TO THIS BLOCK.⟩ They are kept in
+    // their OWN aggregate (`u2Ok`) so the `U-1b` §7a paint aggregate above keeps exactly the
+    // predicate it landed with, and the DECLARED `U-6` row keeps its own (`ufPanes8BaseOk`):
+    // no matrix slot widens, and every new term still gates the `UF-PANES-8` verdict.
+    // (iv) `pressingTheControlArmsNoDrag` (drag suppression + the control's reachability),
+    // (v) the gutter pill, (vi) `paneControlGlyphFollowsThePanesOwnCarrier` — the glyph that
+    // had NO live evidence at all before this term.
+    const u2Ok = pressingTheControlArmsNoDrag && gutterPillOk && paneControlGlyphFollowsThePanesOwnCarrier
     // restore: re-expand both panes (the block collapses them as setup) — the
     // block's own TAIL restore, after its LAST frame census read
     for (const pid of ['doc-nav', 'search']) restore.push(JSON.stringify(await ufEnsurePaneExpanded(h, pid)))
     const ufPanes8Assertion = 'A REAL click on a collapsed zone tab re-expands the zone (painted panes again) and the tab data-pane-id identifies that pane'
-    const ufPanes8PaintAssertion = `${ufPanes8Assertion}; AND (\`U-1b\` §7a) the COLLAPSED extent reads \`auto\` and is content-derived (the painted box, the grid's own column), the ANCHORED CONTROL is a real hit-testable box of the expected geometry in BOTH states, and the collapsed zone offers NO RESIZE STRIP — graded by the affordance's computed \`visibility\`, its still-measurable box and the lane's hit test (collapsed: NOT the gutter; re-expanded: the gutter), with a REAL CDP drag on the lane recorded BESIDE those terms and NOT relied on: at this head a real boundary drag does not resize an EXPANDED zone either (\`UF-DEFECT-5\`/\`LIVE-UF7\`, a carried confirmed defect), so the drag's non-effect alone cannot carry the claim`
+    const ufPanes8AssertionU2 = `${ufPanes8Assertion}; AND (U-2 C-4/C-5/C-6, this unit's G8 terms) A REAL press on the pane collapse CONTROL (#pane-collapse-<id>) arms NO drag (no zone carries is-revealed, no pointer capture is held — no gotpointercapture event either — the zone pane-slot order is unchanged) while a press released IN PLACE on the SAME control DOES flip the pane's collapse state (the control reaches its act), the control's GLYPH is the sheet's ::before keyed on the PANE's own collapsed carrier (collapsed ▸ / expanded ▾, no authored content, and a paired pane in the same zone whose frame carries the other state keeps its own glyph), and the four GUTTER lanes are unmoved authored .gutter[zone] elements whose PILL is a ::after pseudo of min(48px,100%) x min(7px,100%), centred, OPAQUE and strictly QUIETER than the ::before line, with the lane's END still hit-testing to the gutter`
+    const ufPanes8PaintAssertion = `${ufPanes8AssertionU2}; AND (\`U-1b\` §7a) the COLLAPSED extent reads \`auto\` and is content-derived (the painted box, the grid's own column), the ANCHORED CONTROL is a real hit-testable box of the expected geometry in BOTH states, and the collapsed zone offers NO RESIZE STRIP — graded by the affordance's computed \`visibility\`, its still-measurable box and the lane's hit test (collapsed: NOT the gutter; re-expanded: the gutter), with a REAL CDP drag on the lane recorded BESIDE those terms and NOT relied on: at this head a real boundary drag does not resize an EXPANDED zone either (\`UF-DEFECT-5\`/\`LIVE-UF7\`, a carried confirmed defect), so the drag's non-effect alone cannot carry the claim`
     const ufPanes8PaintEvidence = `[§7a — THE PAINT FACTS, on the assembled app] EXTENT: expanded track=${JSON.stringify(zExp.trackComputed)} (inline=${JSON.stringify(zExp.trackInline)}) collapsed track=${JSON.stringify(zCol.trackComputed)} (inline=${JSON.stringify(zCol.trackInline)}) → collapsedAuto=${extentCollapsedAuto} expandedIsThePersistedSize=${extentExpandedIsTheSize}; painted zone box expanded=${JSON.stringify(zExp.box)} collapsed=${JSON.stringify(zCol.box)} → contentDerived=${extentContentDerived} (collapsed ${widthOf(zCol)}px < expanded ${widthOf(zExp)}px); grid-template-columns collapsed=${JSON.stringify(paintCollapsed.gridColumns)} → firstColumn=${firstColumnPx(paintCollapsed)}px gridColumnReclaimed=${collapsedGridColumnReclaimed} (the container is \`position: fixed\`, so an \`auto\` track holds NOTHING and the stage reclaims it — the strip paints INSIDE the fixed box); CONTROL (zone:left; floor=${controlExpanded.floor}px footInset=${controlExpanded.inset}px): expanded ${controlExpanded.detail} ok=${controlExpanded.ok}${controlExpanded.problems.length ? ` PROBLEMS=${JSON.stringify(controlExpanded.problems)}` : ''}; collapsed ${controlCollapsed.detail} ok=${controlCollapsed.ok}${controlCollapsed.problems.length ? ` PROBLEMS=${JSON.stringify(controlCollapsed.problems)}` : ''}; RESIZE STRIP (the DISCRIMINATING terms are the computed visibility, the still-measurable box and the lane hit; the drag is recorded BESIDE them and never as their substitute — at this head a real boundary drag does not resize an EXPANDED zone either, \`UF-DEFECT-5\`/\`LIVE-UF7\`): collapsed gutter visibility=${JSON.stringify(zCol.gutter ? zCol.gutter.visibility : null)} box=${JSON.stringify(zCol.gutter ? zCol.gutter.box : null)} (measurable=${gutterBoxStillMeasurable}) laneHit=${JSON.stringify(drag.hitAtLane)} laneOnGutter=${drag.laneOnGutter} → unhittable=${gutterUnhittableWhenCollapsed}; REAL CDP drag on the lane ${JSON.stringify(drag.from)}→${JSON.stringify(drag.to)} (attempted=${drag.attempted}) → zone width ${widthOf(zCol)}px→${widthOf(zDrag)}px track ${JSON.stringify(zCol.trackComputed)}→${JSON.stringify(zDrag.trackComputed)} → noResize=${noResizeAfterTheDrag}; settings-modal class around the drag ${JSON.stringify(drag.modalBefore)}→${JSON.stringify(drag.modalAfter)} → dragLeftTheAppAlone=${dragLeftTheAppAlone}; re-expanded gutter visibility=${JSON.stringify(zRe.gutter ? zRe.gutter.visibility : null)} laneHit=${JSON.stringify(zRe.gutter ? zRe.gutter.hit : null)} laneOnGutter=${zRe.gutter ? zRe.gutter.onTarget : null} → stripLiveOnceExpanded=${gutterLiveWhenExpanded}; paintOk=${paintOk}`
 
-    const ufPanes8Evidence = `pre-collapse panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-collapse-left (path=${collapsePath}) → zone class="${collapsedZone.cls}" frames=${collapsedZone.frames} tabStrips=${JSON.stringify(collapsedZone.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; ${ufPanes8PaintEvidence}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
+    const ufPanes8U2Evidence = `[⟨U-2⟩ — THE THREE TERMS THIS UNIT ADDS, on the assembled app] ${controlPressEvidence}; ${paneControlGlyphEvidence}; ${gutterPillEvidence}`
+    const ufPanes8PaintEvidenceBoth = `${ufPanes8PaintEvidence}; ${ufPanes8U2Evidence}`
+    const ufPanes8Evidence = `pre-collapse panes=${JSON.stringify(preMin.map((f) => f.pid + (f.collapsed ? '(collapsed)' : '(expanded)'))) }; REAL click #zone-collapse-left (path=${collapsePath}) → zone class="${collapsedZone.cls}" frames=${collapsedZone.frames} tabStrips=${JSON.stringify(collapsedZone.tabs)} (vertical column, painted); REAL click #zone-tab-left-doc-nav (path=${tabClick.path}) → zone class="${after.cls}" frames=${after.frames} (doc-nav collapsed-after-click=${docnavAfter ? docnavAfter.collapsed : 'absent'}) → zoneReExpanded=${reExpanded} clickedPaneIdentifiedByTab=${clickedPaneIdentified}; ${ufPanes8PaintEvidenceBoth}; [restore] ${restore.join(' ')}; NOTE: pane-BODY activation on tab click is DEFERRED by unit-u-shell-4 §2.5 pin 5 ("live selection is deferred … the tab's data-pane-id identifies the selected pane") — the checklist row's "activates that pane's body" clause overstates the pinned spec`
     // THE ROW'S OWN OK is the PAINT-INCLUSIVE one (`§7a`); the DECLARED `U-6` row keeps
     // its LANDED claim's predicate, so the paint limbs cannot silently widen a matrix
     // row's delta (`§5.U`'s `U-6` = "a pane-tab click after zone collapse re-expands
     // the zone"). BOTH verdicts are printed; neither borrows the other's terms.
     const ufPanes8BaseOk = stripReplacesStack && reExpanded && clickedPaneIdentified
-    const ufPanes8Opts = { path: collapsePath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: ufPanes8BaseOk && paintOk, surface: await ufSurfaceTarget(h) }
+    // ⟨`U-2`⟩ THE TWO NEW TERMS ARE PART OF THE CHECKLIST ROW'S OWN VERDICT (`UF-PANES-8`):
+    // a FAIL in either one FAILS this row. The DECLARED `U-6` row below keeps
+    // `ufPanes8BaseOk` alone, so its delta is not silently widened.
+    const ufPanes8Opts = { path: collapsePath === 'cdp' && tabClick.path === 'cdp' ? 'cdp' : 'native-fallback', ok: ufPanes8BaseOk && paintOk && u2Ok, surface: await ufSurfaceTarget(h) }
     // §2.1 `E-2` — the DECLARED row `U-6` (MATRIX_ROWS maps `U-6` to this block)
     // carries ITS OWN verdict; the checklist row `UF-PANES-8` keeps its own.
     return [
@@ -7348,7 +7857,13 @@ const BLOCKS = {
     const slotsBefore = await slotSnapshot()
     const scrollDocNav = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame'};if(typeof f.scrollIntoView==='function')f.scrollIntoView({block:'start'});return true})()`)
     await sleep(500)
-    const bodyPoint = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame after the scroll'};const hdr=f.querySelector('.pane-header');const vh=window.innerHeight;const r=f.getBoundingClientRect();const xc=Math.round(r.x+r.width*0.5);const isCtrl=(el)=>{let n=el;while(n&&n!==f){const t=n.tagName?n.tagName.toLowerCase():'';if(t==='button'||t==='input'||t==='select'||t==='textarea'||t==='a')return true;n=n.parentElement}return false};const start=Math.max(0,Math.round(r.y)+4);const end=Math.min(r.y+r.height-6,vh-20);for(let y=start;y<end;y+=6){const el=document.elementFromPoint(xc,y);if(!el||!f.contains(el))continue;if(hdr&&hdr.contains(el))continue;if(isCtrl(el))continue;return {x:xc,y,hit:el.tagName+'/'+String(el.className||'').slice(0,60),inHeader:false,frameY:Math.round(r.y),vh}};return {err:'no non-control point in the VISIBLE doc-nav pane BODY',frameY:Math.round(r.y),vh}})()`)
+    const bodyPoint = await h.cdp.evaluate(`(()=>{const f=document.querySelector('.pane-frame[data-pane-id="doc-nav"]');if(!f)return {err:'no doc-nav frame after the scroll'};const hdr=f.querySelector('.pane-head');const vh=window.innerHeight;const r=f.getBoundingClientRect();const xc=Math.round(r.x+r.width*0.5);const isCtrl=(el)=>{let n=el;while(n&&n!==f){const t=n.tagName?n.tagName.toLowerCase():'';if(t==='button'||t==='input'||t==='select'||t==='textarea'||t==='a')return true;n=n.parentElement}return false};const start=Math.max(0,Math.round(r.y)+4);const end=Math.min(r.y+r.height-6,vh-20);for(let y=start;y<end;y+=6){const el=document.elementFromPoint(xc,y);if(!el||!f.contains(el))continue;if(hdr&&hdr.contains(el))continue;if(isCtrl(el))continue;return {x:xc,y,hit:el.tagName+'/'+String(el.className||'').slice(0,60),inHeader:false,frameY:Math.round(r.y),vh}};return {err:'no non-control point in the VISIBLE doc-nav pane BODY',frameY:Math.round(r.y),vh}})()`)
+        // ⟨RE-GRAINED `2026-11-15` BY UNIT `U-2` `C-7`.⟩ THE SUPERSEDED SELECTOR, KEPT VISIBLE:
+    // this probe excluded `.pane-header` — a class NO element has carried since the header's
+    // vocabulary moved, so the exclusion was DEAD and only the `isCtrl` walk stood between
+    // this probe and a point on the pane's own chrome. With the head row authored (`C-1`)
+    // the exclusion is the HEAD (`.pane-head`), which CONTAINS the grip (the drag surface)
+    // and the collapse control, so a body point can never be a drag start.
     const bodyStart = (bodyPoint && bodyPoint.err)
       // A body point that lies BELOW the fold is a DRIVER precondition (the
       // coordinate could not be hit-tested in-viewport), named as such — never an
@@ -7380,7 +7895,7 @@ const BLOCKS = {
     const u3Dclass = 'D-interaction'
     const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated)'
     const u3Evidence = bodyDrag && bodyDrag.driven === true
-      ? `REAL CDP pointer drag DOWN on the doc-nav pane BODY (start=(${bodyStart.x},${bodyStart.y}) hit=${bodyDrag.hitAtStart}, outside .pane-header) travelling to y=${bodyDrag.targetY} past the drag threshold; zone pane-slot ordering before=[${bodyDrag.seqBefore}] after=[${bodyDrag.seqAfter}] → bodyGestureAdmitted/relocated=${bodyDrag.relocated} (required false: the header is the only pane-drag surface)` : `the body-gesture probe COULD NOT BE DRIVEN: ${bodyDrag ? bodyDrag.reason : 'no probe'}`
+      ? `REAL CDP pointer drag DOWN on the doc-nav pane BODY (start=(${bodyStart.x},${bodyStart.y}) hit=${bodyDrag.hitAtStart}, OUTSIDE the pane HEAD row .pane-head — so on neither the GRIP nor the CONTROL) travelling to y=${bodyDrag.targetY} past the drag threshold; zone pane-slot ordering before=[${bodyDrag.seqBefore}] after=[${bodyDrag.seqAfter}] → bodyGestureAdmitted/relocated=${bodyDrag.relocated} (required false: the header is the only pane-drag surface)` : `the body-gesture probe COULD NOT BE DRIVEN: ${bodyDrag ? bodyDrag.reason : 'no probe'}`
     // §7.2 LIMB 1 — THE LAYOUT-EFFECT READING, carried as an EXTENSION of this
     // block's ALREADY-DECLARED row (`U-3`): a pane rearrange INSIDE one zone must
     // leave the OTHER ZONES' and the STAGE's measured rects UNCHANGED value-for-value,
@@ -7402,7 +7917,7 @@ const BLOCKS = {
     const limb1LayoutHeld = limb1SiblingZonesUnchanged && limb1StageUnchanged && limb1MountExactlyOne && limb1NoStaleChildlessRoot
     const limb1Ok = limb1Rearranged && limb1LayoutHeld
     const limb1InputReading = rearrange.driven === true
-      ? `${rearrange.inputKind} — the drag START is the pane's OWN HEADER SURFACE (hit=${JSON.stringify(rearrange.dragStartHit)}, onTarget=${rearrange.dragStartOnTarget}, and the APP'S OWN delegated resolution at that point (closest('.gutter[zone], .pane-collapse-toggle')) returns that very header=${rearrange.dragStartOnTheAppHeaderSurface}; the header element is a ${rearrange.dragStartHeaderTag}, i.e. the header IS the collapse control on this build — the fork's pinned F-1 decision, so a point on the header that is NOT the toggle does not exist and is not invented): pane ${rearrange.dragStartPane} (header box ${JSON.stringify(rearrange.dragStartPaneHeaderBox)}; WHY THIS PANE: ${rearrange.dragStartPaneChosenBecause}) dragged in small steps (${rearrange.pathShape}) from (${rearrange.dragStart.x},${rearrange.dragStart.y}) PAST ${rearrange.draggedPast} to y=${rearrange.dragToY} (past the sibling's midpoint=${rearrange.dragPastTheSiblingMidpoint}; DROP POINT DERIVATION: ${rearrange.dropBasis}) INSIDE zone '${rearrange.zone}' (the rearrange is WITHIN one zone); zone pane-slot order before=[${rearrange.slotOrderBefore}] after=[${rearrange.slotOrderAfter}] → rearrangedInsideTheZone=${rearrange.rearranged}; POINTER AUDIT (why a drag that moved nothing moved nothing): gotpointercapture events=${rearrange.pointerAudit ? rearrange.pointerAudit.gotPointerCaptureEvents : '?'}, pointer-capture holders at the end=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.captureHoldersAtTheEnd : null)}, move targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.moveTargets : null)}, terminal targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.terminalTargets : null)}, revealed zone mirrors=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.revealedMirrors : null)}; RESTORE (this block's own hygiene, AFTER the reading and never a substitute for it)=${rearrange.restore ? (rearrange.restore.performed === true ? `a leaked provisional drop-target mirror was cleared through the app's own gesture path (two real header clicks: the first supersedes the in-flight drag and terminates its own session, the second restores the collapse state it toggled) → reveal mirrors after the restore=${JSON.stringify(rearrange.restore.revealMirrorsAfterTheRestore)} pane slots after the restore=${JSON.stringify(rearrange.restore.paneSlotsAfterTheRestore)} collapse state ${JSON.stringify(rearrange.restore.collapseBefore)} -> ${JSON.stringify(rearrange.restore.collapseAfter)} restored=${rearrange.restore.collapseStateRestored}` : `nothing to restore: the drag left NO revealed zone mirror (${JSON.stringify(rearrange.restore.revealMirrorsAfterTheDrag)})`) + (rearrange.restore.error ? ` ERROR=${rearrange.restore.error}` : '') : 'no restore record'}`
+      ? `${rearrange.inputKind} — the drag START is the pane's OWN GRIP SURFACE — the head row's FIRST child (hit=${JSON.stringify(rearrange.dragStartHit)}, onTarget=${rearrange.dragStartOnTarget}, and the APP'S OWN delegated resolution at that point (closest('.gutter[zone], .pane-grab')) returns that very grip=${rearrange.dragStartOnTheAppGripSurface}; the grip element is a ${rearrange.dragStartGripTag} carrying the pane NAME as attr(name)=${JSON.stringify(rearrange.dragStartGripName)}; STRUCTURE (U-2 C-1/C-5, the claim that REPLACES the superseded *"the header IS the collapse control on this build"* — the F-1 exemption DELETED WITH ITS CAUSE): gripIsTheHeadsFirstChild=${rearrange.gripIsTheHeadsFirstChild}, the collapse control ${JSON.stringify(rearrange.dragStartControlId)} is the grip's SIBLING=${rearrange.controlIsTheGripsSibling}, and a point on the head that is NEITHER the grip NOR the control (${JSON.stringify(rearrange.headOffTheGripPoint)}) resolves — through the same delegated resolution — to nothing-or-the-grip-only=${rearrange.headOffTheGripResolvesToNothing}): pane ${rearrange.dragStartPane} (grip box ${JSON.stringify(rearrange.dragStartGripBox)}; WHY THIS PANE: ${rearrange.dragStartPaneChosenBecause}) dragged in small steps (${rearrange.pathShape}) from (${rearrange.dragStart.x},${rearrange.dragStart.y}) PAST ${rearrange.draggedPast} to y=${rearrange.dragToY} (past the sibling's midpoint=${rearrange.dragPastTheSiblingMidpoint}; DROP POINT DERIVATION: ${rearrange.dropBasis}) INSIDE zone '${rearrange.zone}' (the rearrange is WITHIN one zone); zone pane-slot order before=[${rearrange.slotOrderBefore}] after=[${rearrange.slotOrderAfter}] → rearrangedInsideTheZone=${rearrange.rearranged}; POINTER AUDIT (why a drag that moved nothing moved nothing): gotpointercapture events=${rearrange.pointerAudit ? rearrange.pointerAudit.gotPointerCaptureEvents : '?'}, pointer-capture holders at the end=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.captureHoldersAtTheEnd : null)}, move targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.moveTargets : null)}, terminal targets=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.terminalTargets : null)}, revealed zone mirrors=${JSON.stringify(rearrange.pointerAudit ? rearrange.pointerAudit.revealedMirrors : null)}; RESTORE (this block's own hygiene, AFTER the reading and never a substitute for it)=${rearrange.restore ? (rearrange.restore.performed === true ? `a leaked provisional drop-target mirror was addressed through the app's own gesture path (two real presses on the collapse CONTROL's id — the SUPERSEDED route was *two real header clicks, the first superseding the in-flight drag*; with the control a SIBLING of the grip the press resolves no gesture element at all, so what actually happened is printed, never assumed) → reveal mirrors after the restore=${JSON.stringify(rearrange.restore.revealMirrorsAfterTheRestore)} pane slots after the restore=${JSON.stringify(rearrange.restore.paneSlotsAfterTheRestore)} collapse state ${JSON.stringify(rearrange.restore.collapseBefore)} -> ${JSON.stringify(rearrange.restore.collapseAfter)} restored=${rearrange.restore.collapseStateRestored}` : `nothing to restore: the drag left NO revealed zone mirror (${JSON.stringify(rearrange.restore.revealMirrorsAfterTheDrag)})`) + (rearrange.restore.error ? ` ERROR=${rearrange.restore.error}` : '') : 'no restore record'}`
       : `NOT DRIVEN — ${rearrange.reason}`
     const limb1Evidence = `[§7.2 limb 1 — LAYOUT EFFECT, carrier row U-3/uf_panes_12; scope: the assembled renderer THIS driver spawned, its own CDP input path] ` +
       `REAL INPUT (required (iv)): ${limb1InputReading}; ` +
@@ -7825,6 +8340,31 @@ const BLOCKS = {
     }
     await sleep(1500)
     const restored = await measure()
+    // ── ⟨UNIT `U-2` §4 `G8` — THE FOUR PANE HEADS' BOXES AT ONE INSTANT.⟩ Every rendered
+    // `.pane-frame[data-pane-id]` must carry a `.pane-head` child row (`C-1`/`C-2`: the
+    // frame's FIRST child), with a NON-ZERO box, INSIDE its frame, and ABOVE its pane body
+    // (`head.bottom <= body.top + 1`, the head being a SIBLING of the only scroller). This
+    // is the reading that replaces the superseded "the frame's first child is a collapse
+    // button" census: the head row is a ROW now, so its box is measurable. Every limb can
+    // read false; the four readings are printed with the term.
+    const heads = await h.cdp.evaluate(`(()=>{
+      const bx=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+      return [...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>{
+        const pid=f.getAttribute('data-pane-id');
+        const head=f.querySelector('.pane-head');
+        const body=f.querySelector('.pane-body')||document.getElementById('pane-body-'+pid);
+        const fr=f.getBoundingClientRect();
+        const hb=head?head.getBoundingClientRect():null;
+        const bb=body?body.getBoundingClientRect():null;
+        return {paneId:pid,frameBox:bx(f),headPresent:!!head,headIsTheFramesFirstChild:!!(head&&head.parentElement===f&&f.firstElementChild===head),
+          headBox:bx(head),bodyPresent:!!body,bodyBox:bx(body),gripPresent:!!f.querySelector('.pane-grab'),controlPresent:!!f.querySelector('.pane-collapse'),
+          headNonZero:!!hb&&hb.width>0&&hb.height>0,
+          headInsideTheFrame:!!hb&&hb.left>=fr.left-1&&hb.top>=fr.top-1&&hb.right<=fr.right+1&&hb.bottom<=fr.bottom+1,
+          headAboveTheBody:!!hb&&!!bb&&hb.bottom<=bb.top+1}})})()`)
+    const headCensus = Array.isArray(heads) ? heads : []
+    const fourPaneHeadsAtOneInstant = headCensus.length > 0 && headCensus.length === restored.frames &&
+      headCensus.every((x) => x.headPresent === true && x.headIsTheFramesFirstChild === true && x.headNonZero === true && x.headInsideTheFrame === true && x.headAboveTheBody === true)
+    const headsEvidence = `(U-2 C-1/C-2) THE PANE HEADS AT ONE INSTANT: ${headCensus.length} rendered .pane-frame[data-pane-id] / ${restored.frames} frame(s) counted by the block's own measure, each: ${headCensus.map((x) => `${x.paneId} frame=${JSON.stringify(x.frameBox)} head=${JSON.stringify(x.headBox)} firstChild=${x.headIsTheFramesFirstChild} grip=${x.gripPresent} control=${x.controlPresent} nonZero=${x.headNonZero} insideTheFrame=${x.headInsideTheFrame} body=${JSON.stringify(x.bodyBox)} aboveTheBody=${x.headAboveTheBody}`).join(' | ')} → fourPaneHeadsAtOneInstant=${fourPaneHeadsAtOneInstant} (required: EVERY rendered pane's .pane-head child exists, is the frame's FIRST child, has a non-zero box, lies INSIDE its frame and ends at or above its body's top)`
     // the class XOR INSIDE the open (read from `measure()`'s own class read)
     const openXor = x(filled.modal) === 1 && x(empty.modal) === 1 && x(restored.modal) === 1
     const isEmptied = /is-empty/.test(empty.left ? empty.left.cls : '') && empty.frames === 0
@@ -7957,13 +8497,17 @@ const BLOCKS = {
     // `excluded` print, printed now as GRADED terms with every failure named.
     const paintAtRestEvidence = `[§7a — THE FOUR ANCHORED CONTROLS, GRADED (the reading that used to be the UNGRADED \`excluded\` print) AND THE ZONE TRACKS' OWN STATES; scope: the assembled renderer THIS driver spawned] ` +
       `CONTROLS: ${controlVerdict.detail} → everyControlIsARealHitTestableBoxOfTheExpectedGeometryOnItsZoneFoot=${controlVerdict.ok} (hit-box floor=${controlVerdict.floor}px)${controlVerdict.problems.length ? ` PROBLEMS=${JSON.stringify(controlVerdict.problems)}` : ''}; ` +
-      `ZONE TRACKS vs their OWN state (the two authors \`ASM-U1b-10\` requires, read as the RESOLVED value an inline write wins): ${JSON.stringify(zoneTrackAgreement)} → tracksAgreeWithTheirState=${tracksAgreeWithTheirState}; viewport=${JSON.stringify(paintAtRest.viewport)} grid columns="${paintAtRest.gridColumns}" rows="${paintAtRest.gridRows}"; STATE MATRIX (named, never imputed): the two-state arm is graded per zone as each zone can reach it — \`zone:left\` is the only zone that can hold panes at this head, so it is the only zone read EXPANDED and COLLAPSED; relocating a pane into \`top\`/\`bottom\`/\`right\` is \`U-3\`'s drag, so those three are graded in the only state they can reach (empty ⇒ derived-collapsed)`
+      `ZONE TRACKS vs their OWN state (the two authors \`ASM-U1b-10\` requires, read as the RESOLVED value an inline write wins): ${JSON.stringify(zoneTrackAgreement)} → tracksAgreeWithTheirState=${tracksAgreeWithTheirState}; ` +
+      `${headsEvidence};  viewport=${JSON.stringify(paintAtRest.viewport)} grid columns="${paintAtRest.gridColumns}" rows="${paintAtRest.gridRows}"; STATE MATRIX (named, never imputed): the two-state arm is graded per zone as each zone can reach it — \`zone:left\` is the only zone that can hold panes at this head, so it is the only zone read EXPANDED and COLLAPSED; relocating a pane into \`top\`/\`bottom\`/\`right\` is \`U-3\`'s drag, so those three are graded in the only state they can reach (empty ⇒ derived-collapsed)`
     const u5Evidence = `FILLED: left=${JSON.stringify(filled.left ? filled.left.box : null)} (display=${filled.left ? filled.left.display : '?'}) main=${JSON.stringify(filled.main ? filled.main.box : null)} gridColumns="${filled.cols}" frames=${filled.frames}; REAL clicks disabled ${JSON.stringify(paths)} → EMPTY: zone:left cls="${empty.left ? empty.left.cls : '?'}" display=${empty.left ? empty.left.display : '?'} box=${JSON.stringify(empty.left ? empty.left.box : null)} frames=${empty.frames} main=${JSON.stringify(empty.main ? empty.main.box : null)} gridColumns="${empty.cols}" → isEmptyMirrorApplied=${isEmptied} gridTrackCollapsed=${trackCollapsed} stageWidened/Reclaimed=${stageReclaimed} (stage x ${filled.main ? filled.main.box[0] : '?'}->${empty.main ? empty.main.box[0] : '?'}, width ${filled.main ? filled.main.box[2] : '?'}->${empty.main ? empty.main.box[2] : '?'}); [restore] REAL clicks re-enabled ${JSON.stringify(restorePaths)} → frames=${restored.frames} leftWidth=${restored.left ? restored.left.box[2] : '?'} census="${censusEnd}"; ${paintAtRestEvidence} ${u5LimbsEvidence}`
     // ⟨§7a⟩ THE PAINT-INCLUSIVE OK, kept SEPARATE from the landed predicate so neither
     // the `U-4` mount row nor the `U-5` layout-effect row inherits terms its delta does
     // not state (each declared row below names its own predicate).
     const ufLayout10BaseOk = isEmptied && trackCollapsed && stageReclaimed && modalClassXor
-    const ufLayout10PaintOk = ufLayout10BaseOk && controlVerdict.ok && tracksAgreeWithTheirState
+    const ufLayout10PaintOk = ufLayout10BaseOk && controlVerdict.ok && tracksAgreeWithTheirState && fourPaneHeadsAtOneInstant
+    // ⟨`U-2`⟩ THE HEAD-ROW TERM IS PART OF THIS ROW'S VERDICT: a pane whose head row is absent,
+    // zero-sized, outside its frame or below its body FAILS `UF-LAYOUT-10`. The DECLARED
+    // `U-5`/`U-4` rows keep their own predicates, so no matrix delta is widened.
     const ufLayout10Opts = { path: paths.every((p) => /:cdp$/.test(p)) && restorePaths.every((p) => /:cdp$/.test(p)) ? 'cdp' : 'native-fallback', ok: ufLayout10PaintOk, surface: await ufSurfaceTarget(h) }
     return [
       rowResult({ row: 'UF-LAYOUT-10', dclass: 'D-visual' }, "With ZERO enabled+placed panes in the left zone, the zone's grid TRACK collapses and the stage reclaims the width; AND (`U-1b` §7a, `docs/L1/unit-u-1b-app-green-pass.md` — the cell for this row carries the collapse re-grain only, so the control-geometry limb's source is §7a, not the cell) every zone's track token agrees with its own state and all four ANCHORED collapse controls are real, hit-testable boxes of the expected geometry on their zone's foot", u5Evidence, ufLayout10Opts),
