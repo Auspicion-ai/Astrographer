@@ -15,12 +15,13 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 | `U-1b` `zone-collapse` (`ee3725d` + the app-green pass) | one collapsed state (D-22), derived-and-overturnable; the sibling hide control; the `auto`/`hidden` extent partitioned from F-3's `0px`; the control's hit box and the settings-gear overlap fixed | envelope-green **and app-green on its three rows** |
 | `U-1c` `theme-carrier` | `[theme="dark"]` via a widened `ThemeRoot`; `A-7` superseded by a dated clause; the seven pinned digests still match | envelope-green; **the paint is unclaimed** (no live row reads the carrier) |
 | `U-2` `pane-head` | the authored head row, the head out of the scroller, pane collapse as one leaf write, the minimum-is-the-head, the gutter pill | envelope-green **and app-green** (`UF-PANES-1/8`, `UF-LAYOUT-10`); two paints named as unclaimed |
-| `U-3` `pane-move` | placement as `(zone, place)`, absence at the declared place, a no-op, ONE family write, the by-position zone form, the scoped `.layout [zone]` query | envelope-green **and APP-FAIL**: the live leg found `ZONE-REVEAL-REASSEMBLY-KILLS-THE-CROSS-ZONE-DRAG` |
+| `U-3` `pane-move` | placement as `(zone, place)`, absence at the declared place, a no-op, ONE family write, the by-position zone form, the scoped `.layout [zone]` query | envelope-green **and APP-FAIL** then **APP-GREEN**: the reveal defect it found is CLOSED by `reveal-without-reassembly` (all five drag terms true on the assembled app) |
 
 ## What is owed, in order
 
-1. **THE REVEAL DEFECT** `ZONE-REVEAL-REASSEMBLY-KILLS-THE-CROSS-ZONE-DRAG` — its own unit, blocking
-   `U-3`'s drag; then `U-4` `menu-opener`.
+1. **`U-4` `menu-opener`** — the port's last unit before the baseline (D-25). Carried beside it: `RR-F6`
+   (the engine's per-node pass-2 drain in `runtime.ts`, a HOST gap out of every current unit's scope),
+   the gesture-duration DOM mirror, `F8`, and `U-5:uf_layout_10=FAIL`.
 2. **The walkthroughs** — `E-1`, `V-2` and `U-1a` each read `STALE` on their last run and every finding
    since is repaired; `U-1b` has not had one. No unit has a recorded `PASS` except `V-1`.
 3. **The 53-document superseded-vocabulary census** — the old `header`/`footer`/`data-zone` spellings in

@@ -601,13 +601,50 @@ function findZoneContainer(children: ZoneContainerNode[], name: string): ZoneCon
  *  state is collapsed (C12 — `U-1b`: one class for both ways to reach the state,
  *  the operator's statement or the derivation) and `is-revealed` when the shell
  *  drag controller currently reveals it as a provisional drop target
- *  (U-SHELL-4/C11). `is-empty` is unchanged and still derives from the census. */
-function zoneMirrorClasses(paneCount: number, collapsed: boolean, revealed: boolean): string[] {
+ *  (U-SHELL-4/C11). `is-empty` is unchanged and still derives from the census.
+ *
+ *  ⟨Unit `reveal-without-reassembly` `R-1` (`ASM-RR-2`): EXPORTED, so the reveal's
+ *  paint reads the SAME predicate the assembler authors with instead of
+ *  pure-assembling a throwaway envelope. The three pushes and their ORDER are
+ *  byte-identical to the private function this replaces (`RCA-8(c)`: one
+ *  spelling, one home — a second writer of these tokens would be the drift
+ *  `ASM-U1b-10` forbids). PURE.⟩ */
+export function zoneMirrorClasses(paneCount: number, collapsed: boolean, revealed: boolean): string[] {
   const classes: string[] = []
   if (paneCount === 0) classes.push('is-empty')
   if (collapsed) classes.push('is-collapsed')
   if (revealed) classes.push('is-revealed')
   return classes
+}
+
+/** ⟨Unit `reveal-without-reassembly` `R-1` — THE ONE CALLER-SHAPED READING.⟩ The
+ *  four zone containers' class lists, computed through the SAME `paneCount` /
+ *  `collapsed` / `revealed` inputs the assembler uses (`enabledZonePaneCounts` →
+ *  `zoneCollapsedOf` → `zoneMirrorClasses`), so the reveal's paint and the
+ *  envelope author cannot disagree about a token (the `ASM-U1b-10` precedent: one
+ *  predicate, two carriers). The assembler keeps calling `zoneMirrorClasses`
+ *  directly, so its own envelope is byte-unchanged.
+ *
+ *  The reveal carrier is read through the same junk filter the assembler applies
+ *  to `input.revealedZones` (`Array.isArray` + `isLayoutZoneName`), which makes the
+ *  helper TOTAL over a hostile set (`unknown`: an absent value, a `__proto__` key,
+ *  a duplicate, a non-string). PURE: no DOM, no state, no write, no throw. */
+export function zoneMirrorsFor(
+  registry: PaneRegistry,
+  layout: LayoutState,
+  revealedZones: unknown,
+): Record<LayoutZoneName, string[]> {
+  const base = coerceLayout(layout)
+  const counts = enabledZonePaneCounts(registry, base)
+  const revealedSet = new Set<LayoutZoneName>(
+    Array.isArray(revealedZones) ? revealedZones.filter(isLayoutZoneName) : [],
+  )
+  const mirrors: Record<LayoutZoneName, string[]> = { left: [], right: [], top: [], bottom: [] }
+  for (const zone of LAYOUT_PANE_ZONES) {
+    const collapsed = zoneCollapsedOf(base.zones[zone].collapsed, counts[zone])
+    mirrors[zone] = zoneMirrorClasses(counts[zone], collapsed, revealedSet.has(zone))
+  }
+  return mirrors
 }
 
 /** Assemble the pane-inclusive app-graph envelope from the traversal envelope

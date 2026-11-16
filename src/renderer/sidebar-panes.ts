@@ -41,6 +41,7 @@ import {
   PAGE_EDIT_SURFACE_INPUT_BODY,
   PAGE_EDIT_SURFACE_BLUR_BODY,
   pageCommitWarningContent,
+  zoneMirrorsFor,
   type AppGraphAssemblyResult,
   type SearchResult,
 } from './pane-graph.js'
@@ -926,9 +927,14 @@ export class SidebarPanes {
     this.dragController = createDragController({
       threshold: 24,
       scopeOf: (paneId) => this.registry.get(paneId)?.scope ?? null,
+      // ⟨Unit `reveal-without-reassembly` `R-3` — THE REVEAL PATH RE-POINTED.⟩ The
+      // assignment stays FIRST (the drop's index derivation reads the set), and the
+      // transition is applied by the PAINT — never by a re-assembly: `INV-R`, no
+      // reveal transition may destroy the frame the gesture's pointer capture is
+      // held on (`ZONE-REVEAL-REASSEMBLY-KILLS-THE-CROSS-ZONE-DRAG`).
       onRevealChange: (zones) => {
         this.revealedZones = [...zones]
-        this.rerenderAppGraph()
+        this.applyRevealPaint()
       },
     })
     // U-SHELL-5 (C7) — the shell gutter controller, COMPOSED ON THE VENDORED
@@ -2342,6 +2348,69 @@ export class SidebarPanes {
     }
   }
 
+  /** ⟨Unit `reveal-without-reassembly` `R-2` — THE REVEAL'S PAINT (`docs/L3/shell-chrome/reveal-without-reassembly.md`
+   *  §7, the carrier-fallback pass).⟩ TWO synchronous halves, the CLASS half FIRST
+   *  (the stylesheet's `0px` gate is keyed on it, and the inline track removal is
+   *  only correct once the class is there), the TRACK half SECOND AND
+   *  UNCONDITIONALLY (`ASM-RR-6`: only the class half is fail-soft).
+   *
+   *  THE CLASS HALF IS A LIVE-DOM WRITE, and that is a MEASURED ruling, not a
+   *  preference (`L2` §10 `RR-F1`): the engine-managed mirror channel that this
+   *  file's content-reconcile path still uses arms the ENGINE's asynchronous
+   *  pass-2, whose mode is chosen PER NODE, so a non-content-anchored zone
+   *  container compiles focused-slice and the next reconciliation step emits a
+   *  root removal — every pane frame in all four zones is destroyed. A reveal must
+   *  never do that: the gesture's pointer capture is held on one of those frames,
+   *  so the reveal would end the very gesture it is previewing. The paint
+   *  therefore resolves each container by its authored id, CONFIRMS its `zone`
+   *  attribute (the shim auto-creates an element on lookup and never answers
+   *  `null`, so the confirmation is what makes an ABSENT container a per-zone
+   *  no-op), reads the live `className` as a plain STRING (the shim has no token
+   *  list API), and writes a COMPOSED class only when the ONE transient
+   *  `is-revealed` token disagrees with the desired list from `zoneMirrorsFor`.
+   *  The other two mirror tokens are never re-derived and never dropped: those two
+   *  belong to the assembler and to the content reconcile.
+   *
+   *  THE DIFF IS AGAINST THE LIVE NODE, never a remembered desired list, which is
+   *  `INV-R`'s idempotence: a transition to the SAME set writes NOTHING. A
+   *  per-zone miss (absent container, mismatched attribute, a throwing accessor)
+   *  skips THAT zone and never throws; the whole class half is one guard + one
+   *  `try`. `INV-R` also forbids the other shape entirely — no reveal transition
+   *  may be applied by a re-assembly, so this method reaches no loader, no
+   *  re-render and no engine write (`Q`(q2)/(q3) grade that as a source clause). */
+  private applyRevealPaint(): void {
+    try {
+      if (typeof document !== 'undefined') {
+        const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+        const desired = zoneMirrorsFor(this.registry, base, this.revealedZones)
+        for (const zone of LAYOUT_PANE_ZONES) {
+          try {
+            const el = document.getElementById(`zone:${zone}`)
+            if (el == null || typeof el.getAttribute !== 'function') continue
+            // THE CONFIRMATION — an auto-created or foreign element is skipped.
+            if (el.getAttribute('zone') !== zone) continue
+            const live = typeof el.className === 'string' ? el.className : ''
+            const tokens = live.split(/\s+/).filter((token) => token !== '')
+            const carries = tokens.includes('is-revealed')
+            const wanted = desired[zone].includes('is-revealed')
+            if (carries === wanted) continue
+            // Token-level: the existing order is preserved, the one transient
+            // token is appended LAST when it is added.
+            const next = wanted
+              ? [...tokens, 'is-revealed']
+              : tokens.filter((token) => token !== 'is-revealed')
+            el.className = next.join(' ')
+          } catch {
+            // per-zone fail-soft — a miss on one container is a no-op
+          }
+        }
+      }
+    } catch {
+      // the class half never breaks the paint
+    }
+    this.applyZoneTracks()
+  }
+
   /** Mount the operator settings pane in its OWN isolated GraphScope (the
    *  SecurePanels pattern) from the enabled operator panes. U-STATE-1c:
    *  IDEMPOTENT — the isolated scope + adapter are created ONCE; later calls
@@ -3472,10 +3541,10 @@ export class SidebarPanes {
     // H1 (adversarial) — no entry yet: backfill the pane's DEFAULT placement
     // from `defaultZone`/`defaultOrder` (via `deriveLayout`, the same source
     // the assembler uses) instead of hardcoding `left`/`panes.length`.
-    const enabledAppGraph = this.registry
-      .listByScope('app-graph')
-      .filter((p) => this.registry.isEnabled(p.id))
-    const derived = deriveLayout(enabledAppGraph).panes.find((p) => p.id === paneId)
+    // ⟨Unit `reveal-without-reassembly` `R-5`: the derivation is now ONE private
+    // with TWO callers (this arm and the drop's family back-fill), so the two
+    // cannot drift. Its behaviour here is unchanged.⟩
+    const derived = this.derivedPlacementOf(paneId)
     const panes = [
       ...base.panes,
       {
@@ -3486,6 +3555,77 @@ export class SidebarPanes {
       },
     ]
     this.setLayout({ ...base, panes })
+  }
+
+  /** ⟨Unit `reveal-without-reassembly` `R-5` (`RR-F7`) — ONE DERIVATION, TWO CALLERS.⟩
+   *  A pane's DECLARED placement as `deriveLayout` states it over the ENABLED
+   *  app-graph census — the same source the assembler's default overlay uses and
+   *  the source the pane-collapse toggle's backfill arm already reads (`H1`).
+   *  `index` is spread ONLY when the derivation states a FINITE number, so an
+   *  entry composed from this carries the key exactly when there is a place to
+   *  state (`ASM-U3-2`'s absence-preserving discipline).
+   *
+   *  TOTAL/fail-soft: an empty/non-string id, an id the derivation does not hold,
+   *  and a THROWING registry each answer `null` — never a throw and never an
+   *  invented placement. */
+  private derivedPlacementOf(paneId: string): { zone: LayoutZoneName; index?: number } | null {
+    if (typeof paneId !== 'string' || paneId === '') return null
+    try {
+      const enabledAppGraph = this.registry
+        .listByScope('app-graph')
+        .filter((p) => this.registry.isEnabled(p.id))
+      const derived = deriveLayout(enabledAppGraph).panes.find((p) => p.id === paneId)
+      if (derived === undefined) return null
+      return {
+        zone: derived.zone,
+        ...(typeof derived.index === 'number' && Number.isFinite(derived.index)
+          ? { index: derived.index }
+          : {}),
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /** ⟨Unit `reveal-without-reassembly` `R-5` (`RR-F7`/`RR-F8`) — THE DROP'S FAMILY,
+   *  BACK-FILLED IN MEMORY.⟩ `defaultLayout().panes` is `[]` and the main store
+   *  seeds exactly that, so a FRESH profile's record holds no entry for any pane
+   *  while the assembler still renders each at its declared place; the pure act's
+   *  `panePlacementOf` answers `null` for an absent entry and the drop returns
+   *  before its only write site — i.e. on such a record NO drop of any kind can
+   *  commit. This completes the family the write will carry, from the SAME
+   *  derivation the pane-collapse toggle uses, WITHOUT writing: the returned base
+   *  is consumed by the comparison word, the insertion index, `movePane` and the
+   *  ONE `setLayout`.
+   *
+   *  Unchanged `base` (no back-fill) when: the entry is already present; the
+   *  registry does not call the pane an ENABLED `app-graph` pane (`H3`'s rule —
+   *  an operator-scope or disabled pane may never materialise a record entry); or
+   *  the derivation answers `null` (an unknown id has no placement to state). */
+  private familyWithTheDraggedPane(base: LayoutState, paneId: string): LayoutState {
+    if (typeof paneId !== 'string' || paneId === '') return base
+    if (!Array.isArray(base.panes)) return base
+    if (base.panes.some((p) => p.id === paneId)) return base
+    try {
+      const def = this.registry.get(paneId)
+      if (def == null || def.scope !== 'app-graph' || !this.registry.isEnabled(paneId)) return base
+    } catch {
+      return base
+    }
+    const derived = this.derivedPlacementOf(paneId)
+    if (derived == null) return base
+    return {
+      ...base,
+      panes: [
+        ...base.panes,
+        {
+          id: paneId,
+          zone: derived.zone,
+          ...(derived.index !== undefined ? { index: derived.index } : {}),
+          collapsed: false,
+        },
+      ],
+    }
   }
 
   /** LIVE-12/C — the in-pane pane-visibility toggle: flip ONE pane's enabled
@@ -3618,8 +3758,24 @@ export class SidebarPanes {
   commitPaneDrop(payload?: unknown): DropResult | null {
     const result = this.dragController.drop(payload)
     if (result == null) return null
+    // ⟨Unit `reveal-without-reassembly` `R-3` — THE CLEAR IS PAINTED.⟩ The
+    // controller's own `drop()` clears its reveal set SILENTLY (no `onChange`), and
+    // a placement-equal drop into an EXPANDED zone returns below having written
+    // ZERO `setLayout`s — so without this call the `is-revealed` token would
+    // linger on the destination until an unrelated re-render. THE ONE RULE: every
+    // assignment to `this.revealedZones` is followed by the paint, and this is the
+    // only other assignment. It is placed BEFORE every early return, and it is a
+    // MIRROR write — the zero-write law of this method is untouched.
     this.revealedZones = []
-    const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    this.applyRevealPaint()
+    // ⟨`R-5` / `RR-F7` — THE RECORD RESOLUTION, BACK-FILLED IN MEMORY.⟩ A fresh
+    // profile's record holds NO pane (`defaultLayout().panes` is `[]`), so every
+    // drop would be a structural no-op; the family is completed from the SAME
+    // derivation the pane-collapse toggle backfills with, and the comparison word,
+    // the insertion index, `movePane` and the ONE `setLayout` all read the SAME
+    // base. `pane-drag.ts` does not move: its absent-id arm stays a no-op.
+    const laid = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
+    const base = this.familyWithTheDraggedPane(laid, result.paneId)
     const deltas = this.declaredPlacesOf()
     const word = panePlacementOf(base, result.paneId, deltas)
     if (word == null) return result

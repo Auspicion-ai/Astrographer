@@ -88,7 +88,7 @@ pane `order` member becoming `index`), moved the MCP-visible `zone:` ids with it
 a literal limb the live leg read `PASS`. The program's design is
 `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`.
 
-THE NEXT ACTIONABLE WORK IS THE REVEAL DEFECT `U-3` FOUND (the port finishes, then it is the BASELINE — D-25): the item-8 gate is discharged (`docs/specs/foundation-import-u1-change-analysis.md`) and both of its
+THE NEXT ACTIONABLE WORK IS `U-4` (the reveal defect is CLOSED; the port's last unit before the BASELINE, D-25): the item-8 gate is discharged (`docs/specs/foundation-import-u1-change-analysis.md`) and both of its
 adjudications are ruled (D-22): `U-1b` carries the one-state collapse and `U-1c` the theme carrier. The store-program relation is `pending.md` row 1 and
 the `docs/` migration row 2. No unit's stage is restated here: state lives in `strata/.strata/units/*.json`
 (D-2).
