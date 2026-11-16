@@ -1279,6 +1279,90 @@ export function installShellPointers(host: SidebarPanes): void {
   }
 }
 
+// ===========================================================================
+// U-4 `menu-opener` (`R-5`) — THE HANDLER PATH: the native View opener's renderer half.
+//   `INV-U4`: the opener is a ROLE-LESS item whose ONE click route opens the overlay
+//   through the LANDED controller — no class write from this path, no second author of
+//   the modal's state (`src/renderer/modal-state.ts` is, and stays, the ONE author).
+// ===========================================================================
+
+/** The structural shape this path needs of `window.provident` (`R-5`): declared HERE,
+ *  so the handler is drivable without the electron-bearing preload module. Every member
+ *  is OPTIONAL — an older bridge without the arrival must still boot (`f3`). */
+export interface MenuOpenerBridge {
+  onSettingsOpen?: (handler: () => void) => (() => void) | void
+}
+
+/** The app's OWN overlay opener (`R-5`). Resolves `#settings-modal` (frame) and
+ *  `#settings-toggle` (toggle) by LITERAL id at CALL TIME — never at module scope, since
+ *  this module is imported in the node realm before any shim document exists — and
+ *  answers `true` when the toggle's own `click` was fired, `false` on every refusal arm:
+ *  no `document`, either element absent, the frame's class already carrying the `is-open`
+ *  TOKEN, or a toggle with no `click` (the shim's own state).
+ *
+ *  IDEMPOTENT OPEN, NEVER A TOGGLE (`ASM-U4-3`): the classifier is a whitespace TOKEN
+ *  test, so `settings-modal is-opened` is NOT open (the opener fires) while
+ *  `is-open is-open` and `settings-modal is-open` ARE (the opener refuses, zero clicks, so
+ *  a second press never closes the overlay the operator opened deliberately).
+ *
+ *  It writes NO class and keeps NO controller/state: the ONE flip stays `modal-state.ts`'s
+ *  write, reached through the affordance the shell already wired. It dispatches no graph
+ *  op, imports nothing new, and NEVER throws — the whole body sits inside one `try`. */
+export function openSettingsOverlay(): boolean {
+  try {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return false
+    const frame = document.getElementById('settings-modal')
+    const toggle = document.getElementById('settings-toggle')
+    if (frame == null || toggle == null) return false
+    const rawClass: unknown = (frame as { className?: unknown }).className
+    const tokens = (typeof rawClass === 'string' ? rawClass : '').split(/\s+/)
+    if (tokens.includes('is-open')) return false
+    const fire: unknown = (toggle as { click?: unknown }).click
+    if (typeof fire !== 'function') return false
+    fire.call(toggle)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Subscribe to the native View opener's arrival (`R-5`) and route EVERY arrival to
+ *  `opener` (default: the app's own opener above).
+ *
+ *  EXACTLY ONE subscription (`f1`): `bridge.onSettingsOpen` is called ONCE, and the
+ *  bridge's OWN unsubscribe is answered when it returns one — a callable no-op otherwise,
+ *  never `undefined`. TOTAL and fail-soft (`f3`): an absent bridge, an absent or
+ *  non-function member, a THROWING member getter, a THROWING subscribe and a THROWING
+ *  opener all stay silent, and every answer is callable. Nothing is cached, nothing is
+ *  subscribed lazily, nothing is re-subscribed (`ASM-U4-7`). */
+export function installMenuOpener(
+  bridge: MenuOpenerBridge | null | undefined,
+  opener: () => unknown = openSettingsOverlay,
+): () => void {
+  const noop = (): void => {}
+  if (bridge == null) return noop
+  let subscribe: unknown
+  try {
+    subscribe = (bridge as { onSettingsOpen?: unknown }).onSettingsOpen
+  } catch {
+    return noop // a hostile getter never propagates
+  }
+  if (typeof subscribe !== 'function') return noop
+  let unsubscribe: unknown
+  try {
+    unsubscribe = (subscribe as (handler: () => void) => unknown).call(bridge, (): void => {
+      try {
+        opener()
+      } catch {
+        // fail-soft — a throwing opener never propagates out of an arrival
+      }
+    })
+  } catch {
+    return noop // a throwing subscribe never propagates
+  }
+  return typeof unsubscribe === 'function' ? (unsubscribe as () => void) : noop
+}
+
 async function main(): Promise<void> {
   const mount = document.getElementById('app')
   if (!mount) throw new Error('mount #app missing')
@@ -1582,6 +1666,11 @@ async function main(): Promise<void> {
   // graph) inside the settings modal + wire the toggle/Escape/scrim affordances.
   // Runs AFTER installShellPointers and after both mounts exist (§2.6).
   installSettingsModal()
+  // U-4 `R-5` — the native View opener's ONE renderer subscription: every arrival
+  // (`IPC_SETTINGS_OPEN`, manual-UI only) routes to the app's own opener above, which
+  // fires the shell's `#settings-toggle` affordance. Nothing is reordered here and the
+  // boot chain's settle signal is untouched.
+  installMenuOpener(bridge as MenuOpenerBridge | undefined)
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.

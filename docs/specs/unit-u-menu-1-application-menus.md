@@ -33,6 +33,7 @@ provident-authored.
 - `Menu.buildFromTemplate(...)` + `Menu.setApplicationMenu(...)` in `main.ts`.
 - Platform-aware: on darwin, the app menu role; elsewhere the menus as authored.
 - The menu is rebuilt when the pane catalog changes (§2.2).
+- ⟨**RE-GRAINED `2026-11-16` by unit `U-4` `menu-opener`** (`docs/L1/unit-u-4-menu-opener.md` §2 `R-1`, `docs/L2/shell-chrome/menu-opener.md`, D-17's per-unit grant) — **the View menu's AUTHORED SHAPE gains a SECOND item, an OPENER CARRYING NO `role`:** `submenu: [ { label: SETTINGS_OPENER_LABEL, click }, { label: 'Panes', … } ]`, where `SETTINGS_OPENER_LABEL = 'Security & Settings…'` is ONE exported spelling (`src/main/app-menu.ts`) and the opener's own key set is exactly `label` + `click`. **WHY NO ROLE, which §2.1's "app menu role on darwin" clause must not be read as licensing:** Electron's role vocabulary is a closed set of OS-provided actions and **none opens THIS app's overlay**; a `role` would both claim an OS action the app performs and REPLACE the authored `click`, so the item would stop routing to the app. **The fork's enumeration is otherwise untouched** — File (`Import…` · `Import folder…` win/linux only · `Quit`) and the View → `Panes` submenu are byte-unchanged — and **the foundation's Electron menu template is NOT copied** (`../Provident-Electron/docs/guides/forking.md` §9/§10; `docs/FORK-DIVERGENCE.md` SC-7). **The role census is the invariant that proves it:** the template's role count stays **1** on non-darwin (`quit`) and **2** on darwin (`appMenu`, `quit`); the ITEM count moves, the ROLE count does not.⟩
 
 ### 2.2 The pane-catalog IPC
 
@@ -58,6 +59,7 @@ provident-authored.
   - On confirm, a chosen **file list** passes straight through; a chosen **folder** expands to its `.md` files (U-IMPORT-1); both feed the same `importMarkdownCorpus` handler.
   - `multiSelections` is supported on all platforms — the user may select multiple `.md` files.
 - **Quit** → the standard role.
+- ⟨**RE-GRAINED `2026-11-16` by unit `U-4` `menu-opener`** (`docs/L1/unit-u-4-menu-opener.md` §2 `R-2`…`R-5`) — **the role-less View opener's action, and it lands as the third channel with an explicit receipt-free payload:** the item's `click` calls the actions seam's new **`openSettings(): void`**, which `src/main/main.ts` implements as **`backend.broadcast(IPC_SETTINGS_OPEN, null)`** — the payload literal is `null` on purpose (the signal carries NO data and writes NO receipt); **`IPC_SETTINGS_OPEN = 'provident:settings:open'`** is defined **once** in `src/shared/types.ts` and referenced **by name** by `src/main/main.ts` and `src/main/preload.ts`; the renderer subscribes through the bridge's new **top-level `onSettingsOpen(handler: () => void): () => void`** (one `ipcRenderer.on`, one `removeListener`, the payload ignored) and its handler routes to the app's OWN overlay opener — **idempotent OPEN, never a toggle** — so the modal's state keeps ONE author (the landed `modal-state.ts` controller reached through the shell's `#settings-toggle` affordance). **Manual-UI only: never an MCP tool** — an agent must not drive the operator's overlay. **This clause adds no page, no graph node and no `index.html` byte:** the native menu bar is the shell's own chrome (the AGENTS.md carve-out this spec's §1 rests on).⟩
 
 ---
 
@@ -89,6 +91,7 @@ provident-authored.
 - 1 menu module (`src/main/app-menu.ts` or inline in `main.ts`) + 2 IPC channel
   consts + 1 catalog type + 1 preload method (`pushPaneCatalog`).
 - No new npm dependency; no `provident-ssr` change.
+- ⟨**RE-READ `2026-11-16` by unit `U-4` `menu-opener` — the census above is the AS-FILED reading and is now SUPERSEDED AS A COUNT, kept visible (`RCA-8(c)`, `D-17`):** the module's census now reads **3 IPC channel consts** (`IPC_PANE_CATALOG`, `IPC_PANE_VISIBILITY`, **`IPC_SETTINGS_OPEN`**) + the one catalog type + **2 preload members over the menu surface** (`pushPaneCatalog` **and the subscription `onSettingsOpen`**), with `ProvidentBridge`'s top-level member count moving **17 → 18**. **Nothing else in the census moves** — no npm dependency, no `provident-ssr` byte, no MCP tool. The module's endpoint count `N` is **26 under the filed counting rule** (the six bridge methods it counts are `sidebar`'s four plus `operatorSettings.get`/`set`, and `onSettingsOpen` is not among them, so `strata/modules.json` needs no amendment) and **27 under the wider reading** (every bridge member the module's harness drives); the choice is L0's, because `strata/` is outside every unit's write scope. **Measured, not asserted:** the reading's sources are `tests/unit/shell-chrome/menu-opener.test.ts` limbs `D`/`E` and `tests/store-persist-adopt-register.test.ts`'s declared-set guard.⟩
 
 ---
 

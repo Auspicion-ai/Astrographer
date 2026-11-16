@@ -988,9 +988,18 @@ describe('§4 P-SM-1 — nothing G-9/X-9 pins is disturbed (strat:protected-pin-
     //  of `types.ts` still FAILS (a later pass may move it only by re-stating this row). An
     //  unrecorded move of any of the other three still fails the as-filed limb.
     const RESTATED_BASELINE_BYTES: Record<string, { supersededPreVendoringMd5: string; restatedCurrentMd5: string }> = {
+      // ⟨RE-STATED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-2`.⟩ The SAME move the row above
+      //  records (`pd-ui-1-theme-register`'s `types.ts` digest + `pd-vendor-set`'s `P-SM-2` current
+      //  figure): `src/shared/types.ts` gains the ONE settings-opener channel constant
+      //  (`IPC_SETTINGS_OPEN`), so the CURRENT-bytes limb is re-recorded ONCE MORE. The VENDORING claim
+      //  is untouched — `supersededPreVendoringMd5` is the manifest-recorded PRE-VENDORING blob's digest
+      //  and does NOT move, and it stays VISIBLE. **THE NEW VALUE IS MEASURED, never inferred**
+      //  (`md5sum src/shared/types.ts`, run TWICE at the landing's head AFTER every `src/` write,
+      //  identical both times: `8cdc2b81eef0b3fb0cd7a96f95881009`); the superseded current-bytes value
+      //  `ff8c0b9a7cfb2f37cc94c6b018c1f756` stays visible on the notes above.
       'src/shared/types.ts': {
         supersededPreVendoringMd5: '303e63d28ec430920aebf0d4a8f3fd3f',
-        restatedCurrentMd5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756',
+        restatedCurrentMd5: '8cdc2b81eef0b3fb0cd7a96f95881009',
       },
     }
     for (const rel of BASELINE_FILES_NOT_REPLACED) {

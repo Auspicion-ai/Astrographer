@@ -134,7 +134,26 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  only by re-stating it here, with its reason and its unit named, exactly as this note does.
   //  (Both new digests MEASURED by this pass at this head: types `ff8c0b9a7cfb2f37cc94c6b018c1f756` ·
   //  preload `00dba3cdd5e1eb3c7de632a838e3d28b`.)⟩
-  { file: 'src/shared/types.ts', md5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', superseded: '303e63d28ec430920aebf0d4a8f3fd3f', restated: 'U-APP-HARNESS-READINESS' },
+  // ⟨RE-STATED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-2`; §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  (This row is re-stated a FOURTH time; every earlier note above is KEPT VERBATIM as that pass's
+  //  record — `RCA-8(c)`, annotate-beside, never rewritten.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are
+  //  not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree
+  //  limb). WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own text (*"a later pass may move
+  //  the file only by re-stating it here, with its reason and its unit named, exactly as this note
+  //  does"*). **THE REASON:** `R-2` adds the ONE settings-opener channel constant
+  //  (`IPC_SETTINGS_OPEN`, main→renderer, one-way, no payload member, manual-UI only) beside the
+  //  U-MENU-1 block in `src/shared/types.ts` — so its bytes MOVE by construction. **THE UNIT:**
+  //  `U-4` (`menu-opener`), contract `docs/L1/unit-u-4-menu-opener.md` §2 `R-2` / §5.2. **THE SUPERSEDED
+  //  VALUE is the previous recorded digest, kept as this row's `superseded:` field and never deleted:**
+  //  `ff8c0b9a7cfb2f37cc94c6b018c1f756` (the `U-APP-HARNESS-READINESS` value; the older chain
+  //  `303e63d28ec430920aebf0d4a8f3fd3f` stays visible on the notes above). **THE NEW VALUE IS MEASURED,
+  //  never inferred** (`md5sum src/shared/types.ts`, run TWICE at this landing's head AFTER every `src/`
+  //  write, identical both times: `8cdc2b81eef0b3fb0cd7a96f95881009`). **NO OTHER ROW OF THIS TABLE IS
+  //  TOUCHED** — the table stays SEVEN rows and `UNRESTATED_CONTROL_PATH` stays DERIVED from the table
+  //  itself (this row already carried a `restated:` field, so the derivation still resolves to
+  //  `src/shared/demo-envelope.ts`) and is NOT hand-edited here.
+  { file: 'src/shared/types.ts', md5: '8cdc2b81eef0b3fb0cd7a96f95881009', superseded: 'ff8c0b9a7cfb2f37cc94c6b018c1f756', restated: 'U-4' }, // ⟨RE-STATED BY `U-4` 2026-11-16 (`R-2`, the settings-opener channel constant): the md5 is re-MEASURED at the landing head and `U-APP-HARNESS-READINESS`'s `ff8c0b9a7cfb2f37cc94c6b018c1f756` is now this row's `superseded` field; the as-filed `303e63d28ec430920aebf0d4a8f3fd3f` stays visible on the notes above⟩
   { file: 'src/main/operator-settings-store.ts', md5: '0f846fa907c36000511ec5d516056a42', superseded: '11841179e004f22dd758edbe927f1a40', restated: 'U-ATOMICITY-SWEEP-CLASS-B' },
   // ⟨RE-STATED 2026-10-07 — unit `U-ATOMICITY-SWEEP-CLASS-B`, §1.1 member 4 / §3.2 `I-7` / `O-4`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a RECORDED,
@@ -242,7 +261,32 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  re-statement is recorded exactly as the row's licence allows: **the reason, the unit and the whole
   //  superseded chain are named in this note**, the digest is re-MEASURED, and the SSW-era literal stays
   //  on the row line as a trailing note.⟩
-  { file: 'src/main/preload.ts', md5: 'eb230a8bcbe9b5444f95aa6a89c7fec2', superseded: 'cb1ee2ff3cd409363dd656a9914e72ad', restated: 'U-STORE-SECURITY-ADOPT' }, // ⟨RE-STATED BY `U-1b` 2026-11-15 (`C-6`, D-22 (1)): the md5 is re-MEASURED at the landing head and the immediate predecessor `cb1ee2ff3cd409363dd656a9914e72ad` is its `superseded` field; the SSW-era superseded literal stays visible on this line — `f24ea717a5f8f93a3ac490334611d22a`⟩
+  // ⟨RE-STATED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-4`; §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  (This row is re-stated a THIRD time; EVERY earlier note above is KEPT VERBATIM as that pass's
+  //  record — `RCA-8(c)`, annotate-beside, never rewritten.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are
+  //  not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree
+  //  limb). WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own text (*"a later pass may move
+  //  the file only by re-stating it here, with its reason and its unit named"*). **THE REASON:** `R-4`
+  //  adds ONE top-level `ProvidentBridge` member — `onSettingsOpen(handler: () => void): () => void`,
+  //  the `onPaneVisibility` analogue for the native View opener's arrival, implemented over ONE
+  //  `ipcRenderer.on` whose listener ignores the payload and returns the detach for the SAME listener —
+  //  so its bytes MOVE by construction. **THE UNIT:** `U-4` (`menu-opener`), contract
+  //  `docs/L1/unit-u-4-menu-opener.md` §2 `R-4` / §5.2.
+  //  ⟨THE `restated:` FIELD IS AGAIN DELIBERATELY LEFT NAMING `U-STORE-SECURITY-ADOPT`, AND THE REASON
+  //  IS THE `U-1b` PRECEDENT TAKEN ON THIS SAME ROW:⟩ two LANDED oracles pin it —
+  //  `tests/store-security-write-register.test.ts` (`P-SSW-H-3`) and `tests/pd-store-security-write.test.ts`
+  //  (arm 3(a)) — and THIS unit is not licensed to move them. So the re-statement names the unit (`U-4`),
+  //  the reason (`R-4`) and the WHOLE superseded chain in this note, RE-MEASURES the digest, and leaves
+  //  the pinned field alone: `76d2299070d4333e0e66189359baad22` (as filed) ←
+  //  `00dba3cdd5e1eb3c7de632a838e3d28b` ← `f24ea717a5f8f93a3ac490334611d22a` (SSW-era) ←
+  //  `21b8120cddadd1b1531bd0422cb5d613` ← `cb1ee2ff3cd409363dd656a9914e72ad` ←
+  //  `eb230a8bcbe9b5444f95aa6a89c7fec2` (`U-1b`) — the new value is that chain's next link. **THE NEW
+  //  VALUE IS MEASURED, never inferred** (`md5sum src/main/preload.ts`, run TWICE at this landing's head
+  //  AFTER every `src/` write, identical both times: `78b237e4d53af16a846ec540c4b5be7c`). **NO OTHER ROW
+  //  OF THIS TABLE IS TOUCHED** — the table stays SEVEN rows and `UNRESTATED_CONTROL_PATH` stays DERIVED
+  //  from the table itself (still `src/shared/demo-envelope.ts`) and is NOT hand-edited here.
+  { file: 'src/main/preload.ts', md5: '78b237e4d53af16a846ec540c4b5be7c', superseded: 'eb230a8bcbe9b5444f95aa6a89c7fec2', restated: 'U-STORE-SECURITY-ADOPT' }, // ⟨RE-STATED BY `U-1b` 2026-11-15 (`C-6`, D-22 (1)): the md5 is re-MEASURED at the landing head and the immediate predecessor `cb1ee2ff3cd409363dd656a9914e72ad` is its `superseded` field; the SSW-era superseded literal stays visible on this line — `f24ea717a5f8f93a3ac490334611d22a`⟩ ⟨RE-STATED BY `U-4` 2026-11-16 (`R-4`, the `onSettingsOpen` bridge member): the md5 is re-MEASURED at the landing head and `U-1b`'s `eb230a8bcbe9b5444f95aa6a89c7fec2` is now this row's `superseded` field; the SSW-era superseded literal `f24ea717a5f8f93a3ac490334611d22a` STAYS VISIBLE on this line and the pinned `restated:` field is left alone (two landed SSW oracles pin it — the `U-1b` precedent)⟩
   // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
   //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still

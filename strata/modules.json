@@ -29,7 +29,7 @@
         "tests/unit/shell-chrome",
         "tests/integration/shell-chrome"
       ],
-      "endpoints": 26
+      "endpoints": 27
     }
   ]
 }

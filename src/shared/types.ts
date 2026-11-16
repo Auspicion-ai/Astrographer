@@ -866,6 +866,18 @@ export const IPC_PANE_CATALOG = 'provident:pane-catalog'
  *  toggled. U-SHELL-8 owns the apply + persistence. */
 export const IPC_PANE_VISIBILITY = 'provident:pane-visibility'
 
+// ---- Unit U-4 `menu-opener` — the native View opener's channel (docs/L1/
+// unit-u-4-menu-opener.md §2 `R-2`) ----------------------------------------
+
+/** The main→renderer settings-OPENER channel, fired when the native View opener
+ *  (`SETTINGS_OPENER_LABEL`) is pressed. ONE-WAY, and **NO PAYLOAD MEMBER IS
+ *  INVENTED**: the signal carries no data and writes no receipt (the broadcast's
+ *  payload is the literal `null`), so a consumer reads nothing off the arrival.
+ *  MANUAL-UI ONLY — never an MCP tool: an agent must not drive the operator's
+ *  overlay. The opener item carries **no `role`** (`INV-U4`): no Electron role
+ *  opens this app's own overlay, and a role would replace the authored click. */
+export const IPC_SETTINGS_OPEN = 'provident:settings:open'
+
 // ---- Unit U-IMPORT-1 File → Import… result broadcast (docs/specs/
 // unit-u-import-1-import-surface.md §2.5) ------------------------------
 

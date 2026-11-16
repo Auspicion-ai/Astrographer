@@ -990,7 +990,17 @@ describe('§4 P-IM-3 — import closure holds (strat:import-closure)', () => {
  *  The other three baseline files are UNTOUCHED by this re-statement and keep the as-filed
  *  byte-identity + digest limbs exactly. */
 const BASELINE_CURRENT_BYTES_RE_STATEMENTS: Record<string, { supersededPreVendoringMd5: string; restatedMd5: string }> = {
-  types: { supersededPreVendoringMd5: '303e63d28ec430920aebf0d4a8f3fd3f', restatedMd5: 'ff8c0b9a7cfb2f37cc94c6b018c1f756' },
+  // ⟨RE-STATED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-2`.⟩ `src/shared/types.ts` gains the ONE
+  //  settings-opener channel constant (`IPC_SETTINGS_OPEN`), so its CURRENT bytes move a THIRD time.
+  //  `supersededPreVendoringMd5` is the MANIFEST-RECORDED PRE-VENDORING BLOB's digest and does NOT
+  //  move (the vendoring claim stays the asserted historical fact); only `restatedMd5` — the CURRENT
+  //  bytes limb, which the row's own text says a later pass may move ONLY by re-stating it here — is
+  //  re-recorded. **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/shared/types.ts`, run
+  //  TWICE at the landing's head AFTER every `src/` write, identical both times:
+  //  `8cdc2b81eef0b3fb0cd7a96f95881009`). The superseded current-bytes value
+  //  `ff8c0b9a7cfb2f37cc94c6b018c1f756` (the `U-APP-HARNESS-READINESS` re-statement) stays VISIBLE on
+  //  the notes above and as the seed of this row's record.
+  types: { supersededPreVendoringMd5: '303e63d28ec430920aebf0d4a8f3fd3f', restatedMd5: '8cdc2b81eef0b3fb0cd7a96f95881009' }, // ⟨RE-STATED BY `U-4` 2026-11-16 (`R-2`): prior current-bytes md5 `ff8c0b9a7cfb2f37cc94c6b018c1f756`⟩
 }
 
 describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendored member is a baseline file (strat:baseline-non-replacement)', () => {
@@ -1133,8 +1143,16 @@ describe('§4 P-SM-2 — the four baseline files are NOT replaced, and no vendor
     //  ASSERTED against the pre-vendoring blob), and the CURRENT count is re-recorded — an
     //  UNRECORDED move of `types.ts` still FAILS, the file being then neither 889 nor 875.
     //  The other three baseline files keep the as-filed invariant limb exactly.
+    // ⟨RE-STATED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-2`.⟩ The SAME `types.ts` move that
+    //  re-records the md5 row above moves this file's line count again (the settings-opener channel
+    //  constant + its doc block), so `restatedCurrent` is re-recorded BY MEASUREMENT
+    //  (`split('\n').length`, run TWICE at the landing's head AFTER every `src/` write, identical both
+    //  times: `901`). The SUPERSEDED VALUES STAY VISIBLE and still ASSERTED against the pre-vendoring
+    //  blob (`supersededPreVendoring: 875` here, `recordedForkLineCounts.types: 874` above), and the
+    //  prior current figure `889` (the `U-APP-HARNESS-READINESS` reading) stays on the notes above — an
+    //  UNRECORDED move of `types.ts` still FAILS, the file being then neither `901` nor `875`.
     const restatedLineCounts: Record<string, { supersededPreVendoring: number; restatedCurrent: number }> = {
-      types: { supersededPreVendoring: 875, restatedCurrent: 889 },
+      types: { supersededPreVendoring: 875, restatedCurrent: 901 }, // ⟨RE-STATED BY `U-4` 2026-11-16 (`R-2`): prior current count `889`⟩
     }
     const revision = preVendoringRevision()
     const problems: string[] = []

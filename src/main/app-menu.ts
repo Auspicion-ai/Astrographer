@@ -20,7 +20,23 @@ export interface AppMenuActions {
   openImportFolder(): void
   /** View → Panes → `<title>` — route the toggle to the host (`IPC_PANE_VISIBILITY`). */
   togglePane(id: string, enabled: boolean): void
+  /** View → `SETTINGS_OPENER_LABEL` (U-4 `R-1`) — the app's OWN overlay opener. The
+   *  press routes to main, which broadcasts the one-way `IPC_SETTINGS_OPEN` arrival;
+   *  the renderer answers it by firing the shell's own `#settings-toggle` affordance, so
+   *  the overlay's state keeps ONE author (`modal-state.ts`). Manual-UI only — never an
+   *  MCP tool. THE ITEM CARRIES NO `role`, AND THE OMISSION IS DELIBERATE (`INV-U4`):
+   *  Electron's role vocabulary is a closed set of OS-provided actions and none of them
+   *  opens THIS app's overlay; a `role` would also REPLACE the authored `click`, so the
+   *  item would stop routing to the app at all — and it would enter the template's role
+   *  census as a claim that the OS performs an action this app performs. */
+  openSettings(): void
 }
+
+/** U-4 `R-1` — the View opener's ONE spelling (`ASM-U4-5`): the builder authors the
+ *  item's name from it and the unit's row reads this export, so the name is never
+ *  re-spelled. The ellipsis is the single character U+2026 (`…`) — the same one the
+ *  `Import…` items use, never three dots. */
+export const SETTINGS_OPENER_LABEL = 'Security & Settings…'
 
 export interface BuildMenuOptions {
   /** The action callbacks; defaults to no-ops (structure-only templates). */
@@ -95,6 +111,7 @@ export function buildMenuTemplate(catalog: unknown, options: BuildMenuOptions = 
     openImport: () => {},
     openImportFolder: () => {},
     togglePane: () => {},
+    openSettings: () => {},
   }
   const platform = options.platform ?? process.platform
   const panes = orderPaneCatalog(normalizePaneCatalog(catalog))
@@ -128,6 +145,12 @@ export function buildMenuTemplate(catalog: unknown, options: BuildMenuOptions = 
   template.push({
     label: 'View',
     submenu: [
+      // U-4 `R-1` — the app's OWN overlay opener, the View submenu's item 0. ROLE-LESS by
+      // design (`INV-U4`): its own key set is exactly `label` + `click` — no `role`, no
+      // `type`, no `accelerator`, no `checked`, no `submenu` (a role would replace this
+      // authored click AND claim an OS action this app performs; an accelerator would be an
+      // unreadable claim, `ASM-U4-4`).
+      { label: SETTINGS_OPENER_LABEL, click: () => { actions.openSettings() } },
       // F2 — no catalog yet ⇒ disabled/empty (never a fabricated list).
       { label: 'Panes', enabled: paneItems.length > 0, submenu: paneItems },
     ],

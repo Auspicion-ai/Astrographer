@@ -5,7 +5,7 @@
 import { app, BrowserWindow, ipcMain, Menu, dialog, type MenuItemConstructorOptions } from 'electron'
 import { join, basename, dirname } from 'node:path'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, openSync, fsyncSync, closeSync } from 'node:fs'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, IPC_IMPORT_RESULT, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type ImportResultPayload, type PaneCatalogEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, IPC_IMPORT_RESULT, IPC_SETTINGS_OPEN, type RpcReply, type NotifyPayload, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RagQueryPayload, type RagBacklinksPayload, type OperatorSettingsPatch, type RagStoreChangedPayload, type ImportResultPayload, type PaneCatalogEntry } from '../shared/types.js'
 import { ProvidentMcpServer, RendererBackend, handleRagQueryIpc, handleRagBacklinksIpc, handleRagDocHeadsIpc, handleRagStoreListingIpc, handleRagStoreManageIpc, handleRagJournalIpc, handleRagJournalOpIpc, handleGnosisTool, handleTemplateTool, type McpTransportKind } from './mcp-server.js'
 import { createSecurityStore, gatePatchFromStoreResult, type SecurityStore } from './security-store.js'
 import { createOperatorSettingsStore } from './operator-settings-store.js'
@@ -534,6 +534,11 @@ async function main(): Promise<void> {
         backend.broadcast(IPC_PANE_VISIBILITY, { id, enabled })
         rebuildApplicationMenu()
       },
+      // U-4 `R-3` — the native View opener's ONE route (manual-UI only). The payload is
+      // the literal `null`: the arrival carries no data and writes no receipt (`R-2`), and
+      // the renderer answers it by firing the shell's own affordance (`R-5`), so the
+      // overlay's state keeps ONE author (`modal-state.ts`).
+      openSettings: () => { backend.broadcast(IPC_SETTINGS_OPEN, null) },
     }
     const template = buildMenuTemplate(latestPaneCatalog, { actions }) as MenuItemConstructorOptions[]
     Menu.setApplicationMenu(Menu.buildFromTemplate(template))

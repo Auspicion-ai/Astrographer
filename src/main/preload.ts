@@ -4,7 +4,7 @@
 // and replies flow renderer → main (send). Exposed as a minimal `provident`
 // surface (no Node objects leak into the page).
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type BootInstallSignal, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagJournalPayload, type RagJournalOpResult, type RagJournalAction, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
+import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC_SECURITY_SET, IPC_NOTIFY, IPC_MODULE_GET, IPC_MODULE_SET_DISABLED, IPC_MODULE_TOOL_LIST, IPC_MODULE_TOOL_INVOKE, IPC_EDIT_COMMIT, IPC_EDIT_BATCH, IPC_EDIT_RICH_COMMIT, IPC_RAG_STORE_CHANGED, IPC_RAG_QUERY, IPC_RAG_SNAPSHOT, IPC_RAG_BACKLINKS, IPC_RAG_DOC_HEADS, IPC_RAG_STORE_LISTING, IPC_RAG_STORE_MANAGE, IPC_RAG_JOURNAL, IPC_RAG_JOURNAL_OP, IPC_TEMPLATE_GET, IPC_TEMPLATE_VALIDATE, IPC_TEMPLATE_SET, IPC_TEMPLATE_CREATE, IPC_TEMPLATE_DELETE, IPC_TEMPLATE_RESET, IPC_TEMPLATE_CHANGED, IPC_OPERATOR_SETTINGS_GET, IPC_OPERATOR_SETTINGS_SET, IPC_OPERATOR_SETTINGS_CHANGED, IPC_GNOSIS_STATUS, IPC_GNOSIS_QUERY, IPC_GNOSIS_DOCUMENTS, IPC_GNOSIS_WIKIS, IPC_PANE_CATALOG, IPC_PANE_VISIBILITY, IPC_SETTINGS_OPEN, type RpcRequest, type RpcReply, type SecuritySettings, type NotifyPayload, type BootInstallSignal, type ModuleListEntry, type ModuleToolInvokePayload, type EditCommitPayload, type EditBatchPayload, type EditRichCommitPayload, type RichCommitResult, type RagQueryPayload, type RagQueryResult, type EditCommitResult, type RagStoreChangedPayload, type RagSnapshotPayload, type RagBacklinksPayload, type RagBacklinksResult, type RagDocHeadsPayload, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagJournalPayload, type RagJournalOpResult, type RagJournalAction, type TemplateChangedPayload, type OperatorSettings, type OperatorSettingsPatch, type PaneCatalogEntry } from '../shared/types.js'
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
@@ -133,6 +133,15 @@ export interface ProvidentBridge {
    *  (`IPC_PANE_VISIBILITY`), sent when a View → Panes checkbox is toggled.
    *  Returns an unsubscribe function. The apply + persistence is U-SHELL-8. */
   onPaneVisibility(handler: (change: { id: string; enabled: boolean }) => void): () => void
+  /** Unit U-4 `R-4` — subscribe to the main→renderer settings-OPENER arrival
+   *  (`IPC_SETTINGS_OPEN`), sent when the native View opener is pressed.
+   *  Returns an unsubscribe function. The arrival CARRIES NO DATA (the broadcast's
+   *  payload is the literal `null`), so `handler` takes no parameter and the listener
+   *  ignores whatever the event brings: this member is the exact analogue of
+   *  `onPaneVisibility` (a native-menu arrival, main→renderer, manual-UI only). The
+   *  overlay's own state stays `modal-state.ts`'s — the renderer answers the arrival by
+   *  firing the shell's affordance, never by writing a class from here. */
+  onSettingsOpen(handler: () => void): () => void
   security: {
     get(): Promise<SecuritySettings>
     set(patch: { token?: string | null; groups?: string[]; disable?: string[]; maxJournalLength?: number | null }): Promise<SecuritySettings & { write: SecurityWriteReceipt }>
@@ -387,6 +396,20 @@ const bridge: ProvidentBridge = {
     ipcRenderer.on(IPC_PANE_VISIBILITY, listener)
     return () => {
       ipcRenderer.removeListener(IPC_PANE_VISIBILITY, listener)
+    }
+  },
+  // Unit U-4 `R-4` — the native View opener's subscription, the `onPaneVisibility`
+  // shape exactly: ONE `ipcRenderer.on` on the SAME channel and listener the returned
+  // unsubscribe removes. THE LISTENER TAKES NO PARAMETER AND READS NOTHING OFF THE
+  // EVENT: the arrival carries no data (the broadcast's payload is the literal `null`),
+  // so there is no member to read and no receipt to write.
+  onSettingsOpen(handler: () => void): () => void {
+    const listener = (): void => {
+      handler()
+    }
+    ipcRenderer.on(IPC_SETTINGS_OPEN, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC_SETTINGS_OPEN, listener)
     }
   },
   // The manual-UI security settings (mcp-endpoint.md §6.4): exposed to the

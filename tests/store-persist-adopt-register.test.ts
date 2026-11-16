@@ -521,7 +521,17 @@ const STORE_MEMBER_NAMES = ['get', 'put', 'onFileChanged'] as const
  *  COUNTEREXAMPLE (H-1's mandated mutation, proven in this file's own adversarial note):
  *  adding an undeclared two-space-indented `telemetry: { … }` member to
  *  `ProvidentBridge` in `src/main/preload.ts` reddens limb 1 — and limb 1's own drive
- *  additionally reports the mutation through the real-bytes gate. */
+ *  additionally reports the mutation through the real-bytes gate.
+ *
+ *  ⟨AMENDED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-4`; `docs/L1/unit-u-4-menu-opener.md`
+ *  §5.2 row 4 / §8.2.⟩ The DECLARED set gains ONE further member, so the count reads SEVENTEEN →
+ *  **EIGHTEEN**: `onSettingsOpen(handler: () => void): () => void`, the native View opener's arrival
+ *  subscription. It is TOP-LEVEL for exactly the reason `onPaneVisibility` is (a NATIVE-MENU arrival,
+ *  main→renderer, one-way, manual-UI only), and **the alternative was REFUSED, not overlooked:**
+ *  burying it under `operatorSettings` would have saved this amendment and put a FALSE PARENT on a
+ *  menu signal in the bridge census. The set stays a DECLARED LITERAL — never read back from the file
+ *  under test — so limb 1's falsifiability is unchanged: an UNDECLARED added member still reddens,
+ *  and a DROPPED declared one still reddens. */
 const DECLARED_BRIDGE_TOP_LEVEL = [
   'ready',
   'bootSettled',
@@ -540,6 +550,8 @@ const DECLARED_BRIDGE_TOP_LEVEL = [
   'sidebar',
   'installSidebar',
   'store',
+  // ⟨ADDED 2026-11-16 — unit `U-4` (`menu-opener`) `R-4`: the eighteenth declared top-level member.⟩
+  'onSettingsOpen',
 ] as const
 /** §2.7 item 5 — the declared current version (`DECLARED-DEFAULT`, reversible by the
  *  architect in a one-cell amendment). */
@@ -1571,11 +1583,22 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-3 — THE NW-17-CLASS PRELOAD SET-E
         if (top.length > 0) {
           return `SET-EQUALITY (top-level): the real preload's declared member set reads [${declaredMembers.join(', ')}] — the DECLARED set is [${expected.join(', ')}]; ${top.join(' | ')} (P-SPA-IM-3 limb 1; §2.5/§1.1 member 5; §4 R-6; the amendment A-3 legalizes the \`store\` key ALONE)`
         }
-        // the guard's own re-statement of the §2.5 delta: the landing adds EXACTLY ONE
-        // top-level key, and it is `store`
-        const added = declaredMembers.filter((k) => !['ready', 'bootSettled', 'onRequest', 'sendReply', 'notify', 'pushPaneCatalog', 'onPaneVisibility', 'security', 'module', 'edit', 'rag', 'template', 'operatorSettings', 'gnosis', 'sidebar', 'installSidebar'].includes(k))
-        if (added.length !== 1 || added[0] !== 'store') {
-          return `SET-EQUALITY (top-level): the landing's new top-level keys read [${added.join(', ') || 'none'}] — §2.5/§1.1 member 5 add EXACTLY ONE key (\`store\`), and the amendment A-3 legalizes that key alone (P-SPA-IM-3 limb 1)`
+        // ⟨AMENDED 2026-11-16 — unit `U-4` (`menu-opener`), §2 `R-4`; `docs/L1/unit-u-4-menu-opener.md`
+        //  §5.2 row 4.⟩ the guard's own re-statement of the delta: the DECLARED set now carries TWO
+        // post-baseline keys and the guard NAMES BOTH, so **the teeth are unchanged** — an UNDECLARED
+        // third key still reddens HERE, a DROPPED declared one still reddens the set-equality arm above
+        // (and `missingDelta` below), and the baseline list is the same SIXTEEN pre-landing members the
+        // clause has always measured the delta against. The declared delta, dated:
+        //   · `store`          — the 2026-10-04 landing (§2.5 / §1.1 member 5; amendment `A-3`).
+        //   · `onSettingsOpen` — `U-4` (`menu-opener`) `R-4`, `2026-11-16`: the native View opener's
+        //                        arrival subscription, TOP-LEVEL for `onPaneVisibility`'s reason.
+        const PRE_LANDING_MEMBERS = ['ready', 'bootSettled', 'onRequest', 'sendReply', 'notify', 'pushPaneCatalog', 'onPaneVisibility', 'security', 'module', 'edit', 'rag', 'template', 'operatorSettings', 'gnosis', 'sidebar', 'installSidebar']
+        const DECLARED_DELTA = ['store', 'onSettingsOpen']
+        const added = declaredMembers.filter((k) => !PRE_LANDING_MEMBERS.includes(k))
+        const undeclared = added.filter((k) => !DECLARED_DELTA.includes(k))
+        const missingDelta = DECLARED_DELTA.filter((k) => !added.includes(k))
+        if (undeclared.length > 0 || missingDelta.length > 0 || added.length !== DECLARED_DELTA.length) {
+          return `SET-EQUALITY (top-level): the landing's new top-level keys read [${added.join(', ') || 'none'}] — the DECLARED delta is [${DECLARED_DELTA.join(', ')}]: \`store\` (the 2026-10-04 landing, §2.5/§1.1 member 5, amendment A-3) and \`onSettingsOpen\` (U-4 \`menu-opener\` \`R-4\`, 2026-11-16). An UNDECLARED added key [${undeclared.join(', ') || 'none'}] or a DROPPED declared one [${missingDelta.join(', ') || 'none'}] reddens here — the amendment legalizes those TWO keys, nothing else (P-SPA-IM-3 limb 1)`
         }
         if (!hasStoreKey) {
           return `SET-EQUALITY (top-level): the real preload carries a \`store\` member but NOT at the two-space member indent unit 1's arm-4 regex pinpoints — §2.5 requires the member indent to satisfy /^  store\\s*:/m (K-3) (§4 R-6; the amendment A-3 legalizes THIS key at THIS indent)`
