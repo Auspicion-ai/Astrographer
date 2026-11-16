@@ -429,3 +429,63 @@ a bug to be found later.
 
 Rejected alternatives, named: the one-state-plus-migration pairing (the shape L1 recommended on Q2 — the
 user took the state and refused the migration), and the two-state pairing (refused on Q1).
+
+---
+
+## D-23 — The record engine carries DISPLAY STATE, never document content
+
+**Status:** ACTIVE · **Date:** 2026-11-16
+
+**Source (user, verbatim):** "The app layer will still have to plug in to the record engine for full
+migration. Saving ex. entire documents into the record storeroom is not strictly necessary and probably
+wasteful of performance due to the storeroom update frequency, but it must be storing enough related
+info to reconstruct ex. the last-displayed information from a tab (ex. document, caret position, scroll
+position/visible section, etc.) so that the app layer can retrieve it from memory or from Gnosis."
+
+**Decision:** the record engine's adopted surface (surface (d)) is a STATE SEAM, not a data migration.
+The record carries what is needed to RECONSTRUCT a tab's last-displayed state — the document it showed,
+the caret position, the scroll position / visible section, and whatever beside those a tab needs to come
+back exactly as it was left. It never carries document CONTENT, and the reason is the user's own: the
+storeroom's update frequency makes bulk content there wasteful. Document content stays where it is —
+retrieved from memory or from Gnosis — and the record holds the reference plus the view state around it.
+
+**What this changes for the program:** surface (d) shrinks from "the successor to the store the fork is
+mid-adoption of" to a narrow seam — a display-state family and its read/write paths — and the fork's
+existing content authorities (the RAG/Gnosis store, the store-adoption program's carriers) keep their
+roles. Any design that moves document bodies into the record is refused by this row (D-9's "catalogue,
+never patch" is untouched; a FOUNDATION-side gap the seam exposes is a finding, not an edit).
+
+**Rejected alternative, and its reason:** writing whole documents into the record storeroom, on the
+grounds that its update frequency makes that wasteful — the user's stated cost, recorded because it is
+the load-bearing half of this ruling.
+
+---
+
+## D-24 — The app panes keep their data content and take the foundation's behaviour and update model
+
+**Status:** ACTIVE · **Date:** 2026-11-16
+
+**Source (user, verbatim):** "The app panes will keep their current internal data content, while using
+the foundation's relocation, display, styling, and update behavior. They should also be migrated to use
+the event-driven update behavior as the foundation renderer, ex. if a new backlink is detected the app
+component can fire a listener for the backlink pane renderer to trigger an update, either directly or by
+adding it to the store record."
+
+**Decision:** the fork's app panes are re-plumbed onto the foundation's model in three dimensions and
+keep their own fourth. They keep their INTERNAL DATA CONTENT — what a pane shows and the data it derives
+it from are the fork's, unchanged in substance. They TAKE the foundation's RELOCATION, DISPLAY, STYLING
+and UPDATE behaviour. And they migrate to the foundation renderer's EVENT-DRIVEN update: an app
+component that learns something (the user's example — a new backlink detected) fires a listener for the
+owning pane's renderer, or writes it to the store record, and the pane updates because it heard, not
+because something re-assembled the tree.
+
+**What this settles, and why it is recorded rather than assumed:** D-23 put the record's payload
+(display state, never content) at the seam; this row puts the panes' BEHAVIOUR on the foundation's model
+while their CONTENT stays the fork's. Together they describe a pane that is the fork's data inside the
+foundation's machinery — and they make the fork's current chrome a SCAFFOLD whose lifetime is now a
+planning question, not a permanent assumption (the intake gate for that question is running; see
+`proposals.md` and the two review records it produces).
+
+**The constraint this row does not relax:** every element is still AUTHORED provident data at the
+envelope site (D-8) — "event-driven" means a listener or a record write drives the graph, never
+hand-written DOM.
