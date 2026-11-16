@@ -8,7 +8,9 @@ state.
 | # | Proposal | What it would need | Why it is not next |
 |---|---|---|---|
 
-**THE SECOND BUILD (the pivot) IS ADMITTED FOR REVIEW AND `ADJUDICATION` IS ITS VERDICT** (2026-11-16):
+**DECLINED `2026-11-16` — THE SECOND BUILD (the pivot) — by the user's ruling in D-25: "Finish the port and then the port can be used as a baseline."** The refusal is recorded here rather than carried as a row, and it is worth keeping because the reasons are measurable: the base is a three-pane DEMO instance whose ids are literals in seven tables; the fork's store is not the foundation's engine (zero `storeroom` references in `src/`), so "writes it to the store record" has no subject until surface (d) exists; the display state D-23 names exists in neither tree; and the mandatory live gate would go BLIND rather than red (166 driver selectors), with the branch-testing-scope exemption archiving every rebuilt pane by class — `SKIPPED-BY-RULING`, which this corpus counts as no coverage. THE PORT FINISHES AND BECOMES THE BASELINE (D-25).
+
+**THE REVIEW RECORD OF THAT DECISION, kept so it is not re-derived** (2026-11-16):
 a build on the foundation's head instead of continuing the port. The user's architecture direction is
 D-23 (the record carries display state, never content) and D-24 (the app panes keep their data content
 and take the foundation's relocation, display, styling and event-driven update behaviour). Both intake

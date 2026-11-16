@@ -489,3 +489,34 @@ planning question, not a permanent assumption (the intake gate for that question
 **The constraint this row does not relax:** every element is still AUTHORED provident data at the
 envelope site (D-8) — "event-driven" means a listener or a record write drives the graph, never
 hand-written DOM.
+
+---
+
+## D-25 — Finish the port, then the port is the BASELINE
+
+**Status:** ACTIVE · **Date:** 2026-11-16 · **Closes:** the pivot question raised at D-23/D-24
+
+**Source (user, verbatim):** "Finish the port and then the port can be used as a baseline."
+
+**Decision:** the current port is COMPLETED — `U-4` `menu-opener`, the filed reveal defect
+(`ZONE-REVEAL-REASSEMBLY-KILLS-THE-CROSS-ZONE-DRAG`), and the tracker/walkthrough debt — and the completed
+port is then the BASELINE for the D-23/D-24 work: the display-state seam and the app panes' migration to
+the foundation's relocation, display, styling and event-driven update behaviour. The SECOND BUILD on the
+foundation's head is NOT taken.
+
+**What the intake gate contributed to this, kept so the refusal is not re-derived:** both reviews
+(`strata/records/foundation-import-second-build-{validity,critique}-2026-11-16.md`) returned
+`ADJUDICATION` on the same blocking set — the base is a three-pane DEMO instance whose ids are literals in
+seven tables; the fork's store is not the foundation's engine (zero `storeroom` references in the fork's
+`src/`), so "writes it to the store record" has no subject until surface (d) exists; the display state
+D-23 names exists in neither tree; and the mandatory live gate would go BLIND rather than red, 166 driver
+selectors deep, with the branch-testing-scope exemption archiving every rebuilt pane by class. Finishing
+the port keeps those rows MEANING; the pivot would have retired them by `SKIPPED-BY-RULING`, which this
+corpus counts as no coverage at all.
+
+**What the baseline changes about the pivot's blockers, recorded so a later pass prices it correctly:**
+the base is now the fork's own chrome — which already carries the foundation's vocabulary (D-14/D-16),
+its one-state collapse (D-22), its pane head and gutter (U-2) and its placement law (U-3) — so the D-24
+migration becomes an INCREMENTAL re-plumbing of pane behaviour on a tree whose live gate still reads,
+never a base swap that blinds it. Surface (d) stays a program, and it is now the seam BOTH sides agree on
+(D-23's display state, never content).
