@@ -88,7 +88,7 @@ pane `order` member becoming `index`), moved the MCP-visible `zone:` ids with it
 a literal limb the live leg read `PASS`. The program's design is
 `docs/L1/foundation-import-program.md` and its module map `strata/modules.json`.
 
-THE PORT IS COMPLETE (D-25): every program unit has landed. The next work is the BASELINE's first program — D-23's display-state seam and D-24's event-driven pane re-plumbing: the item-8 gate is discharged (`docs/specs/foundation-import-u1-change-analysis.md`) and both of its
+THE BASELINE PROGRAM IS MAPPED (D-23/D-24): ten units `B-1`…`B-10` over three modules, opening with `B-1` `record-engine-seam`. The Gnosis event feed is LANDED engine-side; the fork's consumer is `B-4`. The foundation's gaps are a feature request (DLV-1…3): the item-8 gate is discharged (`docs/specs/foundation-import-u1-change-analysis.md`) and both of its
 adjudications are ruled (D-22): `U-1b` carries the one-state collapse and `U-1c` the theme carrier. The store-program relation is `pending.md` row 1 and
 the `docs/` migration row 2. No unit's stage is restated here: state lives in `strata/.strata/units/*.json`
 (D-2).

@@ -20,8 +20,11 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 
 ## What is owed, in order
 
-1. **THE PORT IS COMPLETE** — `U-4` closed the last unit, with a recorded park for the OS-drawn menu.
-   The BASELINE (D-25) now opens: D-23's display-state seam, then D-24's event-driven pane re-plumbing.
+1. **THE BASELINE PROGRAM IS MAPPED AND `B-1` IS ITS FIRST UNIT** (`docs/L1/foundation-migration-program.md`:
+   ten units over three modules; `record-engine` and `gnosis-changes` are new). **The Gnosis event feed is
+   LANDED engine-side** (`GET /changes`, `gnosis_server.rs:1056`) — the fork's consumer is unit `B-4`, so NO
+   request is owed there. The foundation's own gaps are a filed request (`DLV-1`…`DLV-3`) plus one defect
+   row (`F-3`, the seam's census measured at 1.9.3/1.10.0 against a declared `^1.11.0`).
    Carried into it, all named: `U-5:uf_layout_10=FAIL`, `RR-F6` (engine pass-2 drain in `runtime.ts`),
    `(c4)`/`RR-F2`, `U-1c`'s open theme-carrier row, the `D-22` relocation row, the opener's SIX UNREAD
    LINKS (the only behaviour in the port with no instrument of any class), and the tracker debt.

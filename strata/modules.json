@@ -27,9 +27,35 @@
         "tests/live-drive-contract.test.ts",
         "tests/unit-live11-bridge-seams.test.ts",
         "tests/unit/shell-chrome",
-        "tests/integration/shell-chrome"
+        "tests/integration/shell-chrome",
+        "src/main/store-channels.ts",
+        "tests/unit-u5-rich-commit-ipc.test.ts",
+        "tests/unit-wave-1-bridge-wiring.test.ts"
       ],
       "endpoints": 27
+    },
+    {
+      "name": "record-engine",
+      "paths": [
+        "src/main/storeroom.ts",
+        "src/main/record-engine",
+        "src/renderer/display-client.ts",
+        "tests/unit/record-engine",
+        "tests/integration/record-engine"
+      ],
+      "endpoints": 7
+    },
+    {
+      "name": "gnosis-changes",
+      "paths": [
+        "src/main/engine-changes.ts",
+        "src/main/engine-transport.ts",
+        "src/main/engine-rag-store.ts",
+        "src/main/engine-config.ts",
+        "tests/unit/gnosis-changes",
+        "tests/integration/gnosis-changes"
+      ],
+      "endpoints": 4
     }
   ]
 }
