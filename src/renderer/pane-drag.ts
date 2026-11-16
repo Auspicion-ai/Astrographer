@@ -9,6 +9,7 @@
 import {
   coerceLayout,
   isLayoutZoneName,
+  panePlace,
   type LayoutState,
   type LayoutZoneName,
   type PaneLayoutEntry,
@@ -67,15 +68,89 @@ export function legalZonesForScope(scope: PaneScope): LayoutZoneName[] {
   return scope === 'app-graph' ? [...PANE_ZONE_NAMES] : []
 }
 
+/** ⟨Unit `U-3` `C-2` / `ASM-U3-2` — THE CALLER-SUPPLIED DECLARED PLACES.⟩ This
+ *  module holds NO registry, so the *declared* half of the ONE law
+ *  (`layout-state.ts` → `panePlace`) arrives as DATA from the caller. Every
+ *  carrier a caller plausibly holds is accepted — a `Map`, a plain record, an
+ *  array of `[id, place]` pairs, or a function — because the choice is the
+ *  CALLER's (`ASM-U3-2`), and a carrier this module cannot read is IGNORED
+ *  (answered `null`, never thrown), which is exactly `L2` §5's *"junk/absent
+ *  declared-places carrier → the write unchanged"*. */
+export type DeclaredPlaces =
+  | ReadonlyMap<string, number>
+  | Record<string, number>
+  | ReadonlyArray<unknown>
+  | ((id: string) => number | null | undefined)
+
+/** The declared place one pane's carrier states, or `null` when the carrier
+ *  states nothing usable. PRIVATE + TOTAL: a function carrier is CALLED inside a
+ *  `try/catch`, a `get`-shaped carrier (a `Map`) is read through `.get`, an array
+ *  is scanned for its `[id, place]` pair, a plain object is read through an
+ *  OWN-property test only (never a prototype walk — a `__proto__`/`constructor`
+ *  key can never answer a place), and anything else answers `null`. The answer is
+ *  a FINITE number or `null`: a junk value is "not stated", never `NaN`. */
+function declaredPlaceIn(declaredPlaces: DeclaredPlaces | undefined, paneId: string): number | null {
+  if (declaredPlaces == null) return null
+  const finite = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value)
+  const carrier = declaredPlaces as unknown
+  if (typeof carrier === 'function') {
+    try {
+      const answer = (carrier as (id: string) => unknown)(paneId)
+      return finite(answer) ? answer : null
+    } catch {
+      return null
+    }
+  }
+  if (typeof carrier === 'object' && carrier !== null) {
+    const getter = (carrier as { get?: unknown }).get
+    if (typeof getter === 'function') {
+      try {
+        const answer = (getter as (id: string) => unknown).call(carrier, paneId)
+        return finite(answer) ? answer : null
+      } catch {
+        return null
+      }
+    }
+  }
+  if (Array.isArray(carrier)) {
+    for (const pair of carrier) {
+      if (!Array.isArray(pair) || pair.length < 2) continue
+      if (pair[0] !== paneId) continue
+      return finite(pair[1]) ? pair[1] : null
+    }
+    return null
+  }
+  if (typeof carrier === 'object' && carrier !== null) {
+    if (!Object.prototype.hasOwnProperty.call(carrier, paneId)) return null
+    const answer = (carrier as Record<string, unknown>)[paneId]
+    return finite(answer) ? answer : null
+  }
+  return null
+}
+
 /** C4 — reorder within a zone (same `zone`) or relocate across zones (mutate
  *  `zone`), adjusting sibling `index`es. PURE (never mutates `layout`) and TOTAL
  *  (junk input never throws). A missing pane id / unknown zone is a no-op. An
- *  omitted/non-finite `index` appends at the end of the target zone. */
+ *  omitted/non-finite `index` appends at the end of the target zone.
+ *
+ *  ⟨Unit `U-3` `C-2` — THE FIFTH PARAMETER AND THE TWO SIBLING SORTS.⟩ The 5th
+ *  parameter is the caller's DECLARED places (§ `DeclaredPlaces` above) and is
+ *  OPTIONAL, so every landed caller compiles unchanged. Both sibling sorts read
+ *  the ONE law (`panePlace`) instead of the superseded `a.index - b.index`
+ *  (`RCA-8(c)`: kept visible, never re-introduced), which was a
+ *  `NaN`-poisoned comparison the day absence became storable. The chain is
+ *  EXPLICIT because two of the row's arms depend on it:
+ *  `effective` (**1º** the pane's only placement word) `|| declared` (**2º** a
+ *  stated-place TIE breaks at the DECLARED place) `|| seq` (**3º** registration
+ *  order — the total-order floor). Every term is `NaN`-free by construction
+ *  (`panePlace` answers finite numbers). */
 export function movePane(
   layout: LayoutState,
   paneId: string,
   zone: LayoutZoneName,
   index?: number,
+  declaredPlaces?: DeclaredPlaces,
 ): LayoutState {
   const base = coerceLayout(layout)
   if (typeof paneId !== 'string' || paneId === '') return base
@@ -87,10 +162,18 @@ export function movePane(
   const moved = panes[paneIndex]
   const originalZone = moved.zone
 
-  // The target zone's OTHER entries, in their current order.
-  const targetSiblings = panes
-    .filter((p) => p.zone === zone && p.id !== paneId)
-    .sort((a, b) => a.index - b.index)
+  // The ONE law, bound to THIS record's clones: `seq` is the pane's position in
+  // the record (the reading's order is the caller's FLOOR, never its answer).
+  const placeOf = (pane: PaneLayoutEntry): { declared: number; effective: number } =>
+    panePlace({ entry: pane, defaultOrder: declaredPlaceIn(declaredPlaces, pane.id) ?? panes.indexOf(pane) })
+  const order = (a: PaneLayoutEntry, b: PaneLayoutEntry): number => {
+    const left = placeOf(a)
+    const right = placeOf(b)
+    return left.effective - right.effective || left.declared - right.declared || panes.indexOf(a) - panes.indexOf(b)
+  }
+
+  // The target zone's OTHER entries, in the law's order.
+  const targetSiblings = panes.filter((p) => p.zone === zone && p.id !== paneId).sort(order)
   const insertIndex =
     typeof index === 'number' && Number.isFinite(index)
       ? Math.max(0, Math.min(Math.floor(index), targetSiblings.length))
@@ -110,13 +193,33 @@ export function movePane(
 
   // A relocate also renumbers the vacated source zone (sibling order adjusts).
   if (originalZone !== zone) {
-    const sourceSiblings = panes
-      .filter((p) => p.zone === originalZone && p.id !== paneId)
-      .sort((a, b) => a.index - b.index)
+    const sourceSiblings = panes.filter((p) => p.zone === originalZone && p.id !== paneId).sort(order)
     for (let i = 0; i < sourceSiblings.length; i++) sourceSiblings[i].index = i
   }
 
   return { ...base, panes }
+}
+
+/** ⟨Unit `U-3` `C-2` — THE ACT'S ONE READING.⟩ The effective placement of ONE
+ *  pane — `(zone, place)` — computed through §`panePlace`, plus the DECLARED
+ *  place it was resolved from (the caller's carrier first, the record's seat
+ *  second), so the act can compose the ONE comparison word (`zone` + `place`)
+ *  without a second law. TOTAL/fail-soft (`L2` §5): a non-string/`''` pane id, an
+ *  unknown id, a junk `layout` (coerced through `coerceLayout`) and any junk
+ *  carrier answer `null` — never a throw. */
+export function panePlacementOf(
+  layout: unknown,
+  paneId: unknown,
+  declaredPlaces?: DeclaredPlaces,
+): { zone: LayoutZoneName; place: number; declared: number } | null {
+  if (typeof paneId !== 'string' || paneId === '') return null
+  const base = coerceLayout(layout)
+  const entry = base.panes.find((p) => p.id === paneId)
+  if (entry === undefined) return null
+  const declared =
+    declaredPlaceIn(declaredPlaces, paneId) ?? panePlace({ entry, seq: base.panes.indexOf(entry) }).declared
+  const place = panePlace({ entry, defaultOrder: declared }).effective
+  return { zone: entry.zone, place, declared }
 }
 
 /** C4 (§3.1) — derive a 0-based insertion index from a drop `point` within a
@@ -222,13 +325,30 @@ export function distanceToZoneBox(point: DragPoint, zone: ZoneBounds): number | 
  *  (`distance <= threshold`), so exactly ONE authority decides proximity and the
  *  same scalar feeds the module's own candidate answer.
  *
- *  TOTAL: a malformed point/zone/threshold, a degenerate rect (a collapsed/empty
- *  track or a hidden zone — a zero or inverted span), or an unusable measured
- *  scalar answers `false`, never a throw (`§4 F6`). */
+ *  ⟨Unit `U-3` `C-3` / `ASM-U3-4` — THE REFUSAL MADE DISCRIMINATING.⟩ The
+ *  superseded predicate refused on EITHER degenerate axis (`right <= left` ⇒
+ *  `false`, then `bottom <= top` ⇒ `false`), which made an EMPTY/collapsed zone
+ *  unreachable as a drop target: its track is `0px` on its ARRANGEMENT axis, so
+ *  its box is degenerate on exactly that axis and a drag could only ever land in
+ *  an occupied zone (`MEASURED FACT 2`). The guard now refuses IFF the box is
+ *  degenerate on BOTH axes — the `0×0` phantom's own signature, which is the
+ *  anti-vacuity tooth `E`(e2) keeps — and ADMITS a box degenerate on ONE axis (a
+ *  `0px` track is a legitimate target along its edge line). `distanceToZoneBox`
+ *  needs no byte: a zero-span box measures the per-axis gap to a CLOSED box
+ *  correctly.
+ *
+ *  TOTAL: a malformed point/zone/threshold, a non-finite axis (the landed
+ *  `typeof === 'number'` guards), or an unusable measured scalar answers `false`,
+ *  never a throw (`§4 F6`). */
 function measuresWithinSnapThreshold(point: DragPoint, zone: ZoneBounds, threshold: number): boolean {
   if (point == null || zone == null) return false
-  if (typeof zone.right === 'number' && typeof zone.left === 'number' && zone.right <= zone.left) return false
-  if (typeof zone.bottom === 'number' && typeof zone.top === 'number' && zone.bottom <= zone.top) return false
+  const degenerateX =
+    typeof zone.right === 'number' && typeof zone.left === 'number' && zone.right <= zone.left
+  const degenerateY =
+    typeof zone.bottom === 'number' && typeof zone.top === 'number' && zone.bottom <= zone.top
+  // REFUSE only the box with NO span on ANY axis — a single zero-span axis is a
+  // legitimate edge-line target (an empty/collapsed zone's `0px` track).
+  if (degenerateX && degenerateY) return false
   const distance = distanceToZoneBox(point, zone)
   if (distance === null) return false
   return withinProximity(distance, threshold)

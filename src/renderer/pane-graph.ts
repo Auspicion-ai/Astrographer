@@ -3,7 +3,7 @@
 // module (no Electron). Merges the Unit C traversal envelope with the enabled
 // app-graph panes (into the pane-inclusive app-graph envelope) and builds the
 // operator isolated-scope envelope.
-import type { LegacyInitialData, LegacyNodeData, LegacyContentPayload } from 'provident-ssr'
+import type { LegacyInitialData, LegacyNodeData, LegacyContentPayload, LegacyComponentBinding } from 'provident-ssr'
 import type { BacklinkResult } from '../main/backlinks.js'
 import type { RagQueryResult } from '../shared/types.js'
 import type { EngineRagResult, HealthReport, ConflictError } from '../main/engine-rag-store.js'
@@ -31,6 +31,7 @@ import {
   coerceLayout,
   deriveLayout,
   isLayoutZoneName,
+  panePlace,
   zoneCollapsedOf,
   type LayoutPaneSpec,
   type LayoutState,
@@ -158,6 +159,50 @@ const PANE_DROP_CLASS = 'pane-drop'
 const PANE_CONTROL_CLASS = 'pane-collapse'
 const PANE_BODY_CLASS = 'pane-body'
 
+/** ⟨Unit `U-3` `C-4` / `ASM-U3-5` — THE FORM INHERITED BY POSITION.⟩ The
+ *  `zone-format` reference is the ENGINE's own provider/consumer seam
+ *  (`provident-ssr` `LegacyComponentBinding`, proven by `E-1`'s
+ *  `tests/integration/shell-chrome/deps-adopt-engine-provider.test.ts`): a
+ *  PROVIDER publishes a VALUE by position (`{ reference, value }`), a CONSUMER
+ *  names the injection path (`{ reference, target: 'css.classes' }`) and
+ *  translate synthesizes `derived.css.classes = { $: 'bindings.<ref>' }`, which
+ *  the bake APPENDS onto the host's authored classes (`D-265`: an APPEND, never
+ *  a replacement). The form is therefore read off the RECORD's `zone` — the
+ *  container a pane's payload is placed into — and never off a DOM ancestor
+ *  attribute (`index.html` keys the paint on the inherited class only, D-8).
+ *
+ *  ⟨`L2` `F1` — the TAB's consumer, ruled in-unit.⟩ A provider publishes a VALUE,
+ *  not a class on itself, so an ancestor-keyed `.pane-in-left .pane-tab` rule
+ *  would be DEAD; the tab is authored as a CONSUMER of the same family (below),
+ *  which is what makes the re-keyed tab CSS live. */
+const ZONE_FORMAT_REFERENCE = 'zone-format'
+
+/** The PROVIDER half: one value list published from one node, by position. A
+ *  node carries ONE component slot (or the engine's K7 array form), so a
+ *  pre-existing `zone-format` binding on the SAME node is REPLACED rather than
+ *  doubled — a re-assembly over this assembler's own output therefore adds no
+ *  second provider — while a binding of a DIFFERENT reference is kept and ours
+ *  appended beside it (the K7 array form). PURE + TOTAL. */
+function withZoneFormatProvider(
+  component: unknown,
+  values: readonly string[],
+): LegacyNodeData['component'] {
+  const ours: LegacyComponentBinding = { reference: ZONE_FORMAT_REFERENCE, value: [...values] }
+  const existing: unknown[] = component == null ? [] : Array.isArray(component) ? component : [component]
+  const kept = existing.filter((binding): binding is LegacyComponentBinding => {
+    if (binding == null || typeof binding !== 'object') return false
+    const reference = (binding as { reference?: unknown }).reference
+    return typeof reference === 'string' && reference !== ZONE_FORMAT_REFERENCE
+  })
+  return kept.length === 0 ? ours : [...kept, ours]
+}
+
+/** The CONSUMER half: name the `css.classes` injection path so the engine
+ *  APPENDS the nearest provider's value onto this node's authored classes. */
+function zoneFormatConsumer(): LegacyComponentBinding {
+  return { reference: ZONE_FORMAT_REFERENCE, target: 'css.classes' }
+}
+
 /** ⟨Unit `U-2` `C-1` — THE DROP'S ADDRESS ONLY.⟩ The four drops carry ONE shared
  *  no-op handler pair so each `pane-drop` node is `provident.dispatch`-
  *  addressable (`D-8`'s whole purpose); `U-3` owns the move itself. The body
@@ -210,12 +255,17 @@ const PANE_TAB_EXPAND_BODY = `function (ctx) {
   if (zone && paneId) s.paneTabExpand(String(zone), String(paneId));
 }`
 
-/** A zone's contained pane (the assembler's resolved per-zone entry). `index` is
- *  the pane's position within its zone (⟨`U-1a`: the `PaneLayoutEntry` member's
- *  spelling, `order` → `index`). */
+/** A zone's contained pane (the assembler's resolved per-zone entry).
+ *  ⟨Unit `U-3` `C-1` — the ONE law's two numbers, replacing the single `index`
+ *  (`RCA-8(c)`: the superseded member `index: number` is kept visible here and
+ *  nowhere re-spelled).⟩ `declared` is the pane's DECLARED place
+ *  (`PaneDefinition.defaultOrder` when finite, else its registration `seq`);
+ *  `effective` is its stated `PaneLayoutEntry.index` when stated, else the
+ *  declared place. Both are `panePlace`'s answers — never re-derived here. */
 interface ZonePane {
   def: PaneDefinition
-  index: number
+  declared: number
+  effective: number
   collapsed: boolean
   seq: number
 }
@@ -226,7 +276,17 @@ interface ZonePane {
  *  the default order). This is the SINGLE enabled+placed census backing the
  *  `is-empty` mirror (H1), the zone-collapse DERIVATION (`U-1b` `C-2` /
  *  `ASM-U1b-3`: `zoneCollapsedOf`'s `paneCount` input), and the C12 tab count
- *  (spec §2.5 pin 8) — NOT the raw overlay. PURE. */
+ *  (spec §2.5 pin 8) — NOT the raw overlay. PURE.
+ *
+ *  ⟨Unit `U-3` `C-1` — THE LAW'S ORDER READER.⟩ Each member's two places are
+ *  `panePlace({ entry, defaultOrder: def.defaultOrder, seq })`'s answers (the law
+ *  is CALLED, never re-spelled — `L2` §4 invariant 2), and the zone is sorted by
+ *  the comparator chain `effective || declared || seq`: **1º** the pane's only
+ *  placement word, **2º** a stated-place TIE broken at the DECLARED place,
+ *  **3º** registration order as the total-order floor. The superseded sort was
+ *  `a.index - b.index || a.seq - b.seq` (`RCA-8(c)`), which broke ties at `seq`
+ *  and — once `coerceLayout` stopped substituting the array position — would
+ *  have subtracted `number | undefined`. */
 function resolveEnabledZonePanes(
   enabledAppGraph: ReadonlyArray<PaneDefinition>,
   layout: LayoutState,
@@ -237,14 +297,14 @@ function resolveEnabledZonePanes(
   enabledAppGraph.forEach((def, seq) => {
     const entry = byId.get(def.id)
     const zone: LayoutZoneName = entry?.zone ?? (isLayoutZoneName(def.defaultZone) ? def.defaultZone : 'left')
-    const index =
-      entry?.index ??
-      (typeof def.defaultOrder === 'number' && Number.isFinite(def.defaultOrder) ? def.defaultOrder : seq)
+    const { declared, effective } = panePlace({ entry, defaultOrder: def.defaultOrder, seq })
     const collapsed = entry?.collapsed ?? false
-    zonePanes[zone].push({ def, index, collapsed, seq })
+    zonePanes[zone].push({ def, declared, effective, collapsed, seq })
   })
   for (const zone of LAYOUT_PANE_ZONES) {
-    zonePanes[zone].sort((a, b) => a.index - b.index || a.seq - b.seq)
+    zonePanes[zone].sort(
+      (a, b) => a.effective - b.effective || a.declared - b.declared || a.seq - b.seq,
+    )
   }
   return zonePanes
 }
@@ -305,6 +365,12 @@ function zoneContainerChildren(
     type: 'button',
     props: { id: `zone-tab-${zone}-${p.def.id}`, 'data-pane-id': p.def.id, zone },
     css: { classes: clickableClasses(['pane-tab']) },
+    // ⟨Unit `U-3` `C-4` / `L2` `F1` — the tab CONSUMES the zone's form.⟩ The tab
+    // strip is a child of the PROVIDER container, and a provider publishes a
+    // VALUE (never a class on itself), so an ancestor-keyed `.pane-in-<zone>
+    // .pane-tab` rule would be DEAD. Consuming the same `zone-format` family here
+    // makes `index.html`'s re-keyed `.pane-tab.pane-in-<zone>` compounds live.
+    component: zoneFormatConsumer(),
     content: p.def.title,
     handlers: [{ name: PANE_TAB_EXPAND_HANDLER, event: 'click', body: PANE_TAB_EXPAND_BODY }],
   }))
@@ -448,6 +514,13 @@ export function paneSubtreeRoot<C>(
     // `.pane-frame[data-pane-id='<id>']` pointer wiring actually matches.
     props: { id: `pane-${def.id}`, 'data-pane-id': def.id, collapsed: collapsedState ? 'true' : 'false' },
     placement: { targetPlacement: [sidebarZone] },
+    // ⟨Unit `U-3` `C-4` — the frame is the zone form's CONSUMER.⟩ The nearest
+    // `zone-format` provider is the zone CONTAINER this payload is placed into
+    // (the app ROOT for a pane standing outside the four zones), and the engine
+    // APPENDS its value onto `frameClasses` — which therefore stays the pane's
+    // OWN authored vocabulary (`pane-frame` [+ `is-collapsed`], unchanged): a
+    // class WRITE here would REPLACE the inherited one (`D-265`).
+    component: zoneFormatConsumer(),
     css: { classes: frameClasses },
     children: [head, body],
   }
@@ -706,6 +779,11 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
       children[children.indexOf(existing)] = {
         ...repaired,
         props: { ...(repaired.props ?? {}), ...carriers },
+        // ⟨Unit `U-3` `C-4` — ONE `zone-format` PROVIDER per container.⟩ The
+        // zone's form is published BY POSITION from this node: any pre-existing
+        // `zone-format` binding on it is REPLACED (a re-assembly adds no second
+        // one) and the container's own mirror classes are untouched.
+        component: withZoneFormatProvider(repaired.component, [`pane-in-${zone}`]),
         css: withContainerDeclaration({ ...(existing.css ?? {}), classes: mergedClasses }),
         ...(authoredChildren.length > 0
           ? { children: [...existingChildren, ...authoredChildren] }
@@ -716,6 +794,7 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
         type: 'div',
         props: { id: `zone:${zone}`, ...carriers },
         placement: { placementName: zone },
+        component: withZoneFormatProvider(undefined, [`pane-in-${zone}`]),
         css: withContainerDeclaration(classes.length > 0 ? { classes } : {}),
         ...(authoredChildren.length > 0 ? { children: authoredChildren } : {}),
       })
@@ -779,7 +858,20 @@ function assembleAppGraphEnvelopeBody(input: AppGraphAssemblyInput): AppGraphAss
 
   const envelope: LegacyInitialData = {
     ...traversalEnvelope,
-    template: { ...traversalEnvelope.template, root: { ...templateRoot, children: children as LegacyNodeData[] } },
+    template: {
+      ...traversalEnvelope.template,
+      root: {
+        ...templateRoot,
+        // ⟨Unit `U-3` `C-4` — THE STAGE PROVIDER, ON THE ROOT.⟩ A pane standing
+        // OUTSIDE the four zones (the stage) has no zone container above it, so
+        // its form comes from the app ROOT's provider by the engine's
+        // nearest-first walk (`D-265`). The four zone containers are NEARER and
+        // therefore shadow it: a zone-resident pane never carries
+        // `pane-in-stage`, and the outer provider never leaks past a nearer one.
+        component: withZoneFormatProvider(templateRoot.component, ['pane-in-stage']),
+        children: children as LegacyNodeData[],
+      },
+    },
     content,
   }
   return { envelope, paneIds }

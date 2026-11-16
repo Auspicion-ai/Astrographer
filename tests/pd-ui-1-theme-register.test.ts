@@ -370,7 +370,37 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  `src/shared/demo-envelope.ts`); and `src/main/preload.ts` IS NOT TOUCHED BY THIS UNIT — the bridge
   //  seam keeps its name `togglePaneCollapse` (only the authored control's OPERAND moves,
   //  `data-pane-id` → `props.pane`), so its recorded digest is not re-recorded.
-  { file: 'src/renderer/sidebar-panes.ts', md5: '24322cccde5875dd1406e6fa34e946e5', superseded: '01ccc70c8ada681854d995e45fc9c82a', restated: 'U-2' }, // ⟨RE-STATED BY `U-2` 2026-11-15 (`pane-head` `C-3`: the act routes through `setPaneCollapsed`): the md5 is re-MEASURED at the landing head and the `U-1b` `G5`-FIX-2 value `01ccc70c8ada681854d995e45fc9c82a` is now this row's `superseded` field; the older links above (`153841785965f9efe68c410313c37214`, `c56e3aac3bb4cf32302636d69d7c1b64`, …) stay visible on the notes above⟩
+  // ⟨RE-STATED 2026-11-15 — unit `U-3` (`pane-move`), §4 `P-TH-SM-1` (e)/(f) / §1.2 (c); `RCA-8(c)`
+  //  ANNOTATE-BESIDE.⟩ (Every `U-1b`/`U-2` re-statement block above is KEPT VERBATIM as those passes'
+  //  records — annotate-beside, never rewritten; the figure the LAST of them measured
+  //  `24322cccde5875dd1406e6fa34e946e5` is the `superseded:` value on the row below.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are
+  //  not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree
+  //  limb). WHAT MOVED IS THE RECORDED VALUE, licensed by this row's own text (*"a later pass may move
+  //  the file only by re-stating it here, with its reason and its unit named, exactly as this note
+  //  does"*). **THE REASON:** `U-3` `C-2` reworks `commitPaneDrop` into the contract's order (resolve
+  //  the effective placement → compose the ONE comparison word (zone + place) → the zone-first gate →
+  //  ONE `setLayout`) and adds the private `declaredPlacesOf()` (the registry's `defaultOrder`-else-`seq`
+  //  enumeration handed to `panePlace` through `panePlacementOf`/`movePane`), so this file's bytes MOVE
+  //  BY CONSTRUCTION in that landing; `docs/L3/shell-chrome/pane-move.md` §5 step 7 orders THIS row
+  //  re-stated in the landing's own pass. **THE UNIT:** `U-3` (`pane-move`), contract
+  //  `docs/L1/unit-u-3-pane-move.md`. **THE SUPERSEDED CHAIN, kept VISIBLE and NEVER deleted:**
+  //  `df1930a3d6cac72796cc6c42609dd6c6` (the pre-`U-ZONE-REPLACEMENT` value) ←
+  //  `3f87d796f19ac839c9837d0d6f0506e8` ← `f0b43b52565ad33145a3c979599214eb` ←
+  //  `c56e3aac3bb4cf32302636d69d7c1b64` ← `153841785965f9efe68c410313c37214` ←
+  //  `01ccc70c8ada681854d995e45fc9c82a` ← `24322cccde5875dd1406e6fa34e946e5` (`U-2`'s landing re-statement
+  //  — the value on the row line below as `superseded:`); the new value is that chain's EIGHTH link.
+  //  **THE NEW VALUE IS MEASURED, never inferred** (`md5sum src/renderer/sidebar-panes.ts`, run TWICE at
+  //  this landing's head AFTER every `src/` write, identical both times:
+  //  `cc85d7358ba342be5e1736125990b373`). **NO OTHER ROW OF THIS TABLE IS TOUCHED** — the table stays
+  //  SEVEN rows (`layout-state.ts`/`pane-graph.ts`/`pane-drag.ts`/`renderer.ts`/`index.html` are NOT in
+  //  it, so their landing owes no second record); `UNRESTATED_CONTROL_PATH` stays DERIVED from the table
+  //  itself (this row already carried a `restated:` field, so the derivation still resolves to
+  //  `src/shared/demo-envelope.ts`); and `src/main/preload.ts` IS NOT TOUCHED BY THIS UNIT — `N` stays
+  //  **26** (no IPC channel, no bridge method, no MCP tool, no menu item), so its recorded
+  //  `eb230a8bcbe9b5444f95aa6a89c7fec2` was re-MEASURED at this head, still reads MATCH, and is NOT
+  //  re-recorded.
+  { file: 'src/renderer/sidebar-panes.ts', md5: 'cc85d7358ba342be5e1736125990b373', superseded: '24322cccde5875dd1406e6fa34e946e5', restated: 'U-3' }, // ⟨RE-STATED BY `U-3` 2026-11-15 (`pane-move` `C-2`: the act's order becomes placement → ONE word → the zone-first gate → ONE `setLayout`, plus `declaredPlacesOf`): the md5 is re-MEASURED at the landing head and `U-2`'s `24322cccde5875dd1406e6fa34e946e5` is now this row's `superseded` field; `U-2`'s own trailing note is kept VISIBLE below and the older links above (`01ccc70c8ada681854d995e45fc9c82a`, `153841785965f9efe68c410313c37214`, `c56e3aac3bb4cf32302636d69d7c1b64`, …) stay visible on the notes above — ⟨SUPERSEDED, kept verbatim: `U-2` read `24322cccde5875dd1406e6fa34e946e5` with `superseded: 01ccc70c8ada681854d995e45fc9c82a`, `restated: 'U-2'`⟩⟩
   { file: 'src/shared/demo-envelope.ts', md5: 'fd2178d2ab56be95b929d33422f7d67c' },
   { file: 'src/shared/dom-shim.ts', md5: 'a93e1cfc4fdcf52a01de9c16cf0f5556' },
   { file: 'src/shared/path-fork-cycle.ts', md5: 'eee412ed7609a1c8c727f2dafb2d97fb' },

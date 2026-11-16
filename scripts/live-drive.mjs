@@ -1195,6 +1195,687 @@ async function ufPaneRearrangeInput(h, zone = 'left', preferredPane = 'doc-nav')
   }
 }
 
+// ---------------------------------------------------------------------------
+// ⟨UNIT `U-3` `C-6` — THE RELOCATION GESTURE.⟩ ONE helper beside
+// `ufPaneRearrangeInput` (the same house shape: `driven` / `reason` / an audit /
+// a `restore` half), driving a REAL hit-tested CDP pointer drag from ONE zone's
+// pane GRIP (`.pane-grab`) to ANOTHER zone's CONTAINER box and releasing there,
+// with THE MID-DRAG SAMPLE taken BETWEEN the LAST `mouseMoved` and the
+// `mouseReleased` — the ONE instant at which an EMPTY zone's preview band exists
+// at all (`is-revealed` on the container plus a RESTORED `--zone-<z>-track`).
+// That instant is `U-1b`'s named reveal-arm `DOC-GAP`, closed here because a
+// CROSS-ZONE drag is its FIRST route (`§2 C-3`'s discriminating admission is what
+// makes an empty zone reachable at all); it is `G8`-ONLY and no node row may
+// claim it (`RCA-12`).
+//
+// WHAT THE PATH MUST RESPECT — each fact READ from `src/renderer/`, never assumed:
+//   (1) THE DESTINATION IS AN EMPTY ZONE WHOSE TRACK IS `0px`, so its container box
+//       is DEGENERATE on its arrangement axis (`index.html`'s fixed-zone rules).
+//       What is measured is therefore (a) that the probe is ADMITTED there at all
+//       (the one-axis admission of `measuresWithinSnapThreshold`) and (b) that the
+//       reveal restores the PERSISTED size before the release.
+//   (2) THE DROP IS RESOLVED BY THE APP'S OWN `dropZoneForPoint` OVER THE SCOPED
+//       PROJECTION (`renderer.ts` `onPaneSessionMove`/`onPaneSessionEnd`,
+//       threshold 24, FIRST match in document order), so the release point must be
+//       INSIDE the destination container's rect AND more than the threshold away
+//       from every OTHER zone's rect — a neighbour zone that came first would win
+//       the first-match and the gesture would grade the wrong property. The point
+//       is DERIVED from the sheet's own geometry (`#app [id="zone:<z>"][zone]`:
+//       top/bottom are `left:0;right:0;height:var(--zone-<z>-track)`, left/right
+//       are `top:var(--zone-top-track);bottom:var(--zone-bottom-track);width:…`)
+//       and CHECKED against that projection BEFORE a single event is dispatched; a
+//       point that cannot be derived is `driven:false` WITH ITS REASON, never a
+//       quietly-different gesture.
+//   (3) THE POINTER CAPTURE IS DEFERRED past `PANE_DRAG_CAPTURE_THRESHOLD` (4px of
+//       travel), so the pointer is driven in SMALL STEPS before the walk.
+//   (4) THE REVEAL IS A MIRROR WRITE THAT RE-RENDERS THE APP GRAPH, so the sample
+//       is taken after a bounded settle and is never inferred from the commit.
+//   (5) THE INSERTION INDEX IS THE APP'S OWN BAND RULE (`insertionIndexForPoint`
+//       over the destination's arrangement axis), so the RESTORING drag lands at
+//       the band that reproduces the pane's OWN pre-block place — which is what
+//       makes term (v) a RESTORE and not a second move.
+//
+// Every reading is taken through the seams the driver already uses: `ufLayoutReading`
+// for the zone/slot geometry, the driver's own `window.provident.operatorSettings.get()`
+// path for the PERSISTED record (the same getter `:9363`'s sibling reads).
+// ---------------------------------------------------------------------------
+async function ufPaneRelocateInput(h, { from = 'left', to = 'right' } = {}) {
+  const ZONES = ['left', 'right', 'top', 'bottom']
+  const TERM_NAMES = [
+    'relocatedToTheDestinationZone',
+    'theInheritedFormFollowed',
+    'theDestinationZoneOpened',
+    'oneGestureOneWrite',
+    'restoredByASecondDrag',
+  ]
+  const asJson = (v) => JSON.stringify(v === undefined ? null : v)
+  /** A KEY-ORDER-INSENSITIVE deep equality, so two reads of the SAME record cannot
+   *  disagree about member ORDER (the record crosses an IPC boundary twice). */
+  const canonical = (v) => {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v === undefined ? null : v)
+    if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']'
+    return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical(v[k])).join(',') + '}'
+  }
+  const classesOf = (s) => String(s == null ? '' : s).split(/\s+/).filter((c) => c !== '')
+  const zoneKey = (z) => 'zone' + z.charAt(0).toUpperCase() + z.slice(1)
+  /** The class-attribute reader — `getAttribute('class')`, never the `class` property
+   *  (the shell's own reads use the attribute; the two agree on this surface). */
+  const frameCensusJs = `(()=>{
+    const zoneOf=(f)=>{const z=f.closest?f.closest('[zone]'):null;return z?z.getAttribute('zone'):null};
+    const boxOf=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    return [...document.querySelectorAll('.pane-frame[data-pane-id]')].map((f)=>{
+      const parent=f.parentElement;
+      const sibs=parent?[...parent.children].filter((c)=>c.classList&&c.classList.contains('pane-frame')):[];
+      return {paneId:f.getAttribute('data-pane-id'),zone:zoneOf(f),slot:sibs.indexOf(f),cls:f.getAttribute('class')||'',box:boxOf(f),hasGrip:!!f.querySelector('.pane-grab')};
+    });
+  })()`
+  const notDriven = (why) => {
+    const terms = {}
+    for (const name of TERM_NAMES) terms[name] = { ok: false, reading: `NOT-DRIVEN — ${why}` }
+    const problems = [`NOT-DRIVEN: ${why}`]
+    return {
+      driven: false, reason: why, from, to, pane: null, ok: false, terms, problems, readings: {},
+      evidence: `[U-3 C-6 — the relocation gesture + the FIVE live terms; scope: the assembled renderer THIS driver spawned, its own CDP input path] ` +
+        `the gesture COULD NOT BE DRIVEN: ${why}; ` +
+        TERM_NAMES.map((n) => `${n}=false (${terms[n].reading})`).join('; ') +
+        `; PROBLEMS=${JSON.stringify(problems)}`,
+    }
+  }
+
+  // ---- (1) THE STATE, READ (the persisted record + the frames + the containers)
+  const readRecord = async () => {
+    try {
+      const r = await h.cdp.evaluate(`(async()=>{try{const s=await window.provident.operatorSettings.get();return {ok:true,layout:(s&&s.layout)?JSON.parse(JSON.stringify(s.layout)):null}}catch(e){return {ok:false,err:String(e&&e.message?e.message:e)}}})()`)
+      if (r && r.ok === true && r.layout != null) return { ok: true, layout: r.layout }
+      return { ok: false, err: r && r.err ? r.err : 'the getter answered no layout member' }
+    } catch (e) {
+      return { ok: false, err: String(e && e.message ? e.message : e) }
+    }
+  }
+  const recordBefore = await readRecord()
+  if (recordBefore.ok !== true) {
+    return notDriven(`the persisted layout could not be read through window.provident.operatorSettings.get(): ${recordBefore.err} — the record half of terms (iv)/(v) has no subject`)
+  }
+  const census = await h.cdp.evaluate(`(()=>{
+    const boxOf=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const zones={};
+    for(const z of ['left','right','top','bottom']){const e=document.getElementById('zone:'+z);zones[z]={present:!!e,cls:e?(e.getAttribute('class')||''):null,box:boxOf(e)}}
+    const grid=document.querySelector('#app > #wiki-root')||document.querySelector('#wiki-root');
+    const tracks={};
+    if(grid){for(const z of ['left','right','top','bottom']){tracks[z]={computed:String(getComputedStyle(grid).getPropertyValue('--zone-'+z+'-track')||''),inline:String(grid.style.getPropertyValue('--zone-'+z+'-track')||''),sizeComputed:String(getComputedStyle(grid).getPropertyValue('--zone-'+z+'-size')||''),sizeInline:String(grid.style.getPropertyValue('--zone-'+z+'-size')||'')}}}
+    return {viewport:[window.innerWidth,window.innerHeight],zones,tracks,gridPresent:!!grid,projection:[...document.querySelectorAll('.layout [zone]')].map((e)=>({id:e.id||null,zone:e.getAttribute('zone'),cls:String(e.getAttribute('class')||''),orientation:e.getAttribute('data-orientation')}))};
+  })()`)
+  if (!census || !census.zones) return notDriven(`the four zone CONTAINERS could not be read (#zone:<zone> — the assembled surface's own identities): ${asJson(census)}`)
+  const framesBefore = await h.cdp.evaluate(frameCensusJs)
+  // THE DRIVER'S OWN SIBLING-ZONE/STAGE READING, taken BEFORE a single event is
+  // dispatched, so the before/after pair is of the SAME reads (`ufLayoutReading`'s).
+  const zonesBefore = await ufLayoutReading(h)
+  const framesOf = (list, z) => (Array.isArray(list) ? list.filter((f) => f.zone === z) : [])
+
+  // ---- (2) THE SOURCE ZONE AND THE PANE
+  const fromZone = ZONES.includes(from) ? from : 'left'
+  const sourceFrames = framesOf(framesBefore, fromZone)
+  if (sourceFrames.length === 0) {
+    return notDriven(`zone '${fromZone}' renders 0 pane frames on this run (the census: ${asJson(ZONES.map((z) => z + '=' + framesOf(framesBefore, z).map((f) => f.paneId).join('|')))}) — a relocation needs a SOURCE zone that HOLDS a pane`)
+  }
+  // ---- (3) THE DESTINATION: an EMPTY zone (the requested one when it is empty)
+  const empties = ZONES.filter((z) => z !== fromZone && framesOf(framesBefore, z).length === 0)
+  const destZone = empties.includes(to) ? to : (empties.length > 0 ? empties[0] : null)
+  if (destZone == null) {
+    return notDriven(`no EMPTY zone to relocate into: every zone other than '${fromZone}' holds a frame (${asJson(ZONES.map((z) => z + '=' + framesOf(framesBefore, z).map((f) => f.paneId).join('|')))}) — the reveal is measured on an EMPTY zone, so this run has no subject`)
+  }
+  const destChosenBecause = destZone === to
+    ? `the requested destination '${to}' is EMPTY on this run (0 pane frames)`
+    : `the requested destination '${to}' is NOT empty on this run (${framesOf(framesBefore, to).length} frame(s)), so '${destZone}' (the first EMPTY zone) was chosen and is PRINTED as the subject`
+
+  // ---- (4) THE PROTAGONIST AND ITS OWN GRIP, HIT-TESTED
+  const probeGripsJs = `(()=>{
+    const out=[];
+    for(const f of document.querySelectorAll('.pane-frame[data-pane-id]')){
+      const z=f.closest?f.closest('[zone]'):null;
+      if(!z||z.getAttribute('zone')!==${asJson(fromZone)})continue;
+      const grip=f.querySelector('.pane-grab');
+      if(!grip){out.push({paneId:f.getAttribute('data-pane-id'),err:'the frame carries no pane GRIP surface (.pane-grab)'});continue}
+      const r=grip.getBoundingClientRect();
+      if(!(r.height>=2&&r.width>=2)){out.push({paneId:f.getAttribute('data-pane-id'),err:'the grip box is degenerate',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]});continue}
+      const x=Math.round(r.x+r.width*0.5),y=Math.round(r.y+r.height/2);
+      const el=document.elementFromPoint(x,y);
+      const resolved=el&&el.closest?el.closest('.gutter[zone], .pane-grab'):null;
+      out.push({paneId:f.getAttribute('data-pane-id'),x,y,gripBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],hit:el?(el.tagName+(el.getAttribute('class')?'.'+String(el.getAttribute('class')).slice(0,40):'')):'null',resolvesToTheGrip:resolved===grip,inViewport:x>=0&&y>=0&&x<=window.innerWidth&&y<=window.innerHeight,vp:[window.innerWidth,window.innerHeight]});
+    }
+    return out;
+  })()`
+  const pickStart = (probes) => (Array.isArray(probes) ? probes.find((p) => p.resolvesToTheGrip === true && p.inViewport === true) : null) || null
+  let gripProbes = await h.cdp.evaluate(probeGripsJs)
+  let start = pickStart(gripProbes)
+  let scrolledSourceIntoView = false
+  if (start == null) {
+    // A frame BELOW THE FOLD cannot be hit-tested in-viewport — a DRIVER precondition,
+    // named as such (`§2.3 H-4`), handled by ONE scroll of each source frame to the top
+    // of its own zone's scroll box and ONE re-probe (never a silent park).
+    await h.cdp.evaluate(`(()=>{for(const f of document.querySelectorAll('.pane-frame[data-pane-id]')){const z=f.closest?f.closest('[zone]'):null;if(z&&z.getAttribute('zone')===${asJson(fromZone)}&&typeof f.scrollIntoView==='function')f.scrollIntoView({block:'start'})}return true})()`)
+    await sleep(420)
+    gripProbes = await h.cdp.evaluate(probeGripsJs)
+    start = pickStart(gripProbes)
+    scrolledSourceIntoView = true
+  }
+  if (start == null) {
+    return notDriven(`no pane GRIP in zone '${fromZone}' resolves back to ITSELF through the app's own delegated resolution (closest('.gutter[zone], .pane-grab'), the app's GESTURE_SELECTOR) at a hit-tested in-viewport point${scrolledSourceIntoView ? ' — even after scrolling each source frame to the top of its own zone' : ''}: ${asJson(gripProbes)}`)
+  }
+  const paneId = start.paneId
+  const paneBefore = (framesBefore || []).find((f) => f.paneId === paneId) || null
+  const sourceSlot = paneBefore ? paneBefore.slot : -1
+  const sourcePaneIds = sourceFrames.map((f) => f.paneId)
+
+  // ---- (5) THE DESTINATION POINT, DERIVED FROM THE **RENDERED** GEOMETRY AND CHECKED
+  // AGAINST THE APP'S OWN RESOLUTION.
+  //
+  // ⟨MEASURED CORRECTION, kept as the reading that corrected this helper's first draft.⟩
+  // THE ZONE CONTAINERS ARE LAID OUT AGAINST THE SHELL'S OWN GRID ROOT, NOT THE VIEWPORT:
+  // the assembled app measures `zone:top = [33,53,914,0]` and `zone:right = [947,53,0,634]`
+  // while `window.innerWidth` is 980 — the fixed boxes are inset from the viewport by the
+  // grid root's own box, so a candidate point derived from `innerWidth`/`innerHeight`
+  // lands OUTSIDE the app's grid (and outside the destination's rect, which the contract
+  // requires the release point to be INSIDE). Every number below is therefore read off
+  // the CONTAINERS' OWN rendered rects, and the only thing assumed is the sheet's own
+  // growth rule (`index.html` `#app [id="zone:<z>"][zone]`): a top/bottom track grows
+  // INWARD from the edge the container is pinned to and moves the two SIDE containers'
+  // insets; a left/right track grows inward from its own side edge and moves nothing but
+  // the stage.
+  const vp = Array.isArray(census.viewport) ? census.viewport : [0, 0]
+  const currentTrack = (z) => {
+    const b = census.zones[z] ? census.zones[z].box : null
+    if (b == null) return 0
+    return z === 'left' || z === 'right' ? b[2] : b[3]
+  }
+  const persistedSizeOf = (z) => {
+    const rec = recordBefore.layout
+    const stated = rec && rec.zones && rec.zones[z] ? rec.zones[z].size : null
+    if (typeof stated === 'number' && Number.isFinite(stated) && stated > 0) return { size: stated, source: `the persisted record zones.${z}.size` }
+    const css = parseFloat(String((census.tracks[z] && census.tracks[z].sizeComputed) || ''))
+    if (Number.isFinite(css) && css > 0) return { size: css, source: `the projected --zone-${z}-size` }
+    return null
+  }
+  const destSizeRead = persistedSizeOf(destZone)
+  if (destSizeRead == null) {
+    return notDriven(`the EMPTY destination zone '${destZone}' states no persisted size (neither zones.${destZone}.size nor the projected --zone-${destZone}-size is a finite positive number), so the reveal's restored track could not be graded: ${asJson(census.tracks[destZone])}`)
+  }
+  const tracks = { left: currentTrack('left'), right: currentTrack('right'), top: currentTrack('top'), bottom: currentTrack('bottom') }
+  const rectOf = (z) => {
+    const b = census.zones[z] ? census.zones[z].box : null
+    if (b == null) return null
+    return { left: b[0], top: b[1], right: b[0] + b[2], bottom: b[1] + b[3], width: b[2], height: b[3] }
+  }
+  const rendered = { left: rectOf('left'), right: rectOf('right'), top: rectOf('top'), bottom: rectOf('bottom') }
+  const destRendered = rendered[destZone]
+  if (destRendered == null) {
+    return notDriven(`the destination zone '${destZone}''s own container box could not be read (#zone:${destZone} — the assembled surface's own identity): ${asJson(census.zones[destZone])}`)
+  }
+  const distanceTo = (p, b) => Math.hypot(Math.max(b.left - p.x, 0, p.x - b.right), Math.max(b.top - p.y, 0, p.y - b.bottom))
+  const inside = (p, b) => p.x > b.left + 1 && p.x < b.right - 1 && p.y > b.top + 1 && p.y < b.bottom - 1
+  const horizontalDest = destZone === 'top' || destZone === 'bottom'
+  /** THE POST-REVEAL BOX — the persisted size restored along the destination's own
+   *  arrangement axis, growing INWARD from its pinned edge. */
+  const destBox = (() => {
+    if (destZone === 'top') return { left: destRendered.left, top: destRendered.top, right: destRendered.right, bottom: destRendered.top + destSizeRead.size }
+    if (destZone === 'bottom') return { left: destRendered.left, top: destRendered.bottom - destSizeRead.size, right: destRendered.right, bottom: destRendered.bottom }
+    if (destZone === 'left') return { left: destRendered.left, top: destRendered.top, right: destRendered.left + destSizeRead.size, bottom: destRendered.bottom }
+    return { left: destRendered.right - destSizeRead.size, top: destRendered.top, right: destRendered.right, bottom: destRendered.bottom }
+  })()
+  /** A NEIGHBOUR'S POST-REVEAL BOX — only the SIDE containers' insets move, and only for
+   *  a TOP/BOTTOM destination (their `top`/`bottom` insets ARE the same tokens). */
+  const neighbourBox = (z) => {
+    const r = rendered[z]
+    if (r == null) return null
+    let top = r.top
+    let bottom = r.bottom
+    if (destZone === 'top' && (z === 'left' || z === 'right')) top = r.top + destSizeRead.size
+    if (destZone === 'bottom' && (z === 'left' || z === 'right')) bottom = r.bottom - destSizeRead.size
+    return { zone: z, left: r.left, top, right: r.right, bottom }
+  }
+  const postRevealBox = (z) => (z === destZone ? destBox : neighbourBox(z))
+  // THE PROJECTION'S DOCUMENT ORDER — `dropZoneForPoint` returns the FIRST candidate within
+  // the snap threshold, so WHICH zone a release point resolves to is an ORDER question over
+  // the app's own candidate set (`.layout [zone]`, the gutter and `.pane-drop` classes
+  // skipped, `zone` ∈ the closed four, `data-orientation` = `zoneOrientation(zone)`).
+  const projectionOrder = (Array.isArray(census.projection) ? census.projection : [])
+    .filter((p) => {
+      const cls = String(p.cls || '').split(/\s+/)
+      if (cls.includes('gutter') || cls.includes('pane-drop')) return false
+      if (ZONES.indexOf(p.zone) < 0) return false
+      return p.orientation === (p.zone === 'top' || p.zone === 'bottom' ? 'horizontal' : 'vertical')
+    })
+    .map((p) => p.zone)
+  const SNAP = 24
+  const resolvedZone = (p) => projectionOrder.find((z) => {
+    const b = postRevealBox(z)
+    if (b == null) return false
+    return distanceTo(p, b) <= SNAP
+  }) || null
+  const inwardOf = (size) => Math.max(2, Math.min(12, Math.floor(size / 3)))
+  const inward = inwardOf(destSizeRead.size)
+  const midOf = (lo, hi) => Math.round((lo + hi) / 2)
+  const destAxisCandidates = []
+  if (horizontalDest) {
+    const y = destZone === 'top' ? destRendered.top + inward : destRendered.bottom - inward
+    for (const x of [start.x, midOf(destBox.left, destBox.right), Math.round(destBox.left + (destBox.right - destBox.left) * 0.25), Math.round(destBox.left + (destBox.right - destBox.left) * 0.75)]) destAxisCandidates.push({ x, y })
+  } else {
+    const x = destZone === 'left' ? destRendered.left + inward : destRendered.right - inward
+    for (const y of [start.y, midOf(destBox.top, destBox.bottom), Math.round(destBox.top + (destBox.bottom - destBox.top) * 0.25), Math.round(destBox.top + (destBox.bottom - destBox.top) * 0.75)]) destAxisCandidates.push({ x, y })
+  }
+  const checkPoint = (p) => {
+    const why = []
+    if (!(p.x >= 2 && p.y >= 2 && p.x <= vp[0] - 2 && p.y <= vp[1] - 2)) why.push(`(${p.x},${p.y}) is not inside the viewport ${asJson(vp)} with a 2px margin`)
+    if (!inside(p, destBox)) why.push(`(${p.x},${p.y}) is not INSIDE the destination container's post-reveal box ${asJson(destBox)} (the contract requires the pointer to END inside the destination's rect)`)
+    const dAnchor = distanceTo(p, destRendered)
+    if (!(dAnchor <= SNAP)) why.push(`(${p.x},${p.y}) is ${Math.round(dAnchor)}px from the destination's PRE-reveal box ${asJson([destRendered.left, destRendered.top, destRendered.right, destRendered.bottom])} — beyond the app's ${SNAP}px snap threshold, so its move would never REVEAL the empty zone`)
+    const resolved = resolvedZone(p)
+    if (resolved !== destZone) why.push(`(${p.x},${p.y}) resolves to zone '${resolved}' by the app's own first-match rule over the projection order ${asJson(projectionOrder)} (distances ${asJson(ZONES.map((z) => { const b = postRevealBox(z); return b == null ? z + '=unreadable' : z + '=' + Math.round(distanceTo(p, b)) / 1 }))}), not to '${destZone}'`)
+    return why
+  }
+  const checkedDestPoints = destAxisCandidates.map((p) => ({ point: p, offences: checkPoint(p) }))
+  const accepted = checkedDestPoints.find((c) => c.offences.length === 0)
+  if (accepted === undefined) {
+    return notDriven(`no derivable release point inside zone '${destZone}''s container is attributable to it by the app's own first-match zone resolution: ${asJson(checkedDestPoints)} (the projection order is ${asJson(projectionOrder)}; the destination's persisted size ${destSizeRead.size}px comes from ${destSizeRead.source})`)
+  }
+  const releasePoint = accepted.point
+  const derivedPointWhy = `the release point (${releasePoint.x},${releasePoint.y}) is INSIDE zone '${destZone}''s post-reveal container box ${asJson(destBox)} (${inward}px from the ${destZone === 'top' ? 'top' : destZone === 'bottom' ? 'bottom' : destZone === 'left' ? 'left' : 'right'} edge its degenerate pre-reveal box collapses onto, i.e. within the app's own 24px snap proximity — so the probe is ADMITTED by the one-axis-degenerate admission ` + '`U-3 C-3`' + ` makes discriminating and the reveal is what opens the zone), and the app's own first-match rule over the projection order ${asJson(projectionOrder)} resolves it to '${destZone}'`
+
+  // ---- (6) THE DRAG (explicit CDP input, one event at a time)
+  // THE POINTER AUDIT — installed BEFORE the first event and read AFTER the release, so
+  // "the drag moved nothing" is answered by the events that ACTUALLY fired (the capture
+  // claim, any lost capture, the per-move target and the reveal set the app was about to
+  // read) instead of inferred. Capture-phase listeners only; they read, never act, and
+  // they add no task boundary to the gesture's own timing.
+  await h.cdp.evaluate(`(()=>{
+    window.__ufRelocateAudit={events:[],captures:0,losts:[],ups:[],moves:0};
+    const revealed=()=>[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.getAttribute('class')||'').slice(0,40));
+    const name=(t)=>{if(!t)return '?';const pid=t.getAttribute&&t.getAttribute('data-pane-id');if(pid)return t.tagName+':'+pid;return (t.id||t.tagName)};
+    const rec=(e)=>{const a=window.__ufRelocateAudit;if(e.type==='gotpointercapture')a.captures+=1;if(e.type==='lostpointercapture')a.losts.push(name(e.target));if(e.type==='pointerup')a.ups.push(name(e.target));if(e.type==='pointermove')a.moves+=1;a.events.push(e.type+'@'+Math.round(e.clientX)+','+Math.round(e.clientY)+'>'+name(e.target)+' revealed='+revealed().join('|'))};
+    for(const t of ['pointerdown','pointermove','pointerup','pointercancel','gotpointercapture','lostpointercapture'])document.addEventListener(t,rec,true);
+    return true;
+  })()`)
+  const dispatches = []
+  const send = async (params) => {
+    await h.cdp.send('Input.dispatchMouseEvent', params)
+    dispatches.push(params.type + '@' + params.x + ',' + params.y)
+  }
+  await send({ type: 'mouseMoved', x: start.x, y: start.y, buttons: 0 })
+  await sleep(80)
+  await send({ type: 'mousePressed', x: start.x, y: start.y, button: 'left', buttons: 1, clickCount: 1 })
+  await sleep(80)
+  // SMALL STEPS (2..12px): the app claims the pointer capture only past 4px of travel.
+  for (const step of [[1, 2], [1, 4], [2, 6], [3, 8], [4, 10], [5, 12]]) {
+    await send({ type: 'mouseMoved', x: start.x + step[0], y: start.y + step[1], buttons: 1 })
+    await sleep(40)
+  }
+  const walkFrom = { x: start.x + 5, y: start.y + 12 }
+  const walk = [0.45, 0.8, 1].map((f) => ({ x: Math.round(walkFrom.x + (releasePoint.x - walkFrom.x) * f), y: Math.round(walkFrom.y + (releasePoint.y - walkFrom.y) * f) }))
+  for (const p of walk) {
+    await send({ type: 'mouseMoved', x: p.x, y: p.y, buttons: 1 })
+    await sleep(160)
+  }
+  // THE BOUNDED SETTLE — the reveal is a mirror write that re-renders the app graph,
+  // so the sample is taken AFTER it lands and is never inferred from the commit.
+  await sleep(520)
+  const preview = await h.cdp.evaluate(`(()=>{
+    const boxOf=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    const dest=document.getElementById('zone:'+${asJson(destZone)});
+    const grid=document.querySelector('#app > #wiki-root')||document.querySelector('#wiki-root');
+    const revealed=[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.getAttribute('class')||'').slice(0,60));
+    const hit=document.elementFromPoint(${releasePoint.x},${releasePoint.y});
+    const hitZone=hit&&hit.closest?hit.closest('[zone]'):null;
+    const capture=[];
+    for(const e of document.querySelectorAll('.pane-frame[data-pane-id], [id^="zone:"]')){
+      for(const id of [1,2,3,4]){try{if(typeof e.hasPointerCapture==='function'&&e.hasPointerCapture(id))capture.push((e.getAttribute('data-pane-id')||e.id||e.tagName)+'#'+id)}catch(err){}}
+    }
+    return {
+      revealedZones:revealed,
+      destZone:${asJson(destZone)},
+      destIdPresent:!!dest,
+      destClassDuringDrag:dest?(dest.getAttribute('class')||''):null,
+      destBoxDuringDrag:boxOf(dest),
+      destTrackDuringDrag:grid?String(getComputedStyle(grid).getPropertyValue('--zone-'+${asJson(destZone)}+'-track')||''):null,
+      destTrackInlineDuringDrag:grid?String(grid.style.getPropertyValue('--zone-'+${asJson(destZone)}+'-track')||''):null,
+      destSizeVarDuringDrag:grid?String(getComputedStyle(grid).getPropertyValue('--zone-'+${asJson(destZone)}+'-size')||''):null,
+      destSizeVarInlineDuringDrag:grid?String(grid.style.getPropertyValue('--zone-'+${asJson(destZone)}+'-size')||''):null,
+      hitAtTheReleasePoint:hit?(hit.tagName+(hit.getAttribute('class')?'.'+String(hit.getAttribute('class')).slice(0,40):'')):'null',
+      zoneAtTheReleasePoint:hitZone?hitZone.getAttribute('zone'):null,
+      pointerCaptureHoldersAtTheSample:capture,
+      viewport:[window.innerWidth,window.innerHeight],
+    };
+  })()`)
+  await send({ type: 'mouseReleased', x: releasePoint.x, y: releasePoint.y, button: 'left', buttons: 0, clickCount: 1 })
+  await sleep(1500)
+  const pointerAudit = await h.cdp.evaluate(`(()=>{const a=window.__ufRelocateAudit||{};return {gotPointerCaptureEvents:a.captures||0,lostPointerCapture:(a.losts||[]),pointerUps:(a.ups||[]),moveEvents:a.moves||0,head:(a.events||[]).slice(0,12),tail:(a.events||[]).slice(-14)}})()`)
+  // THE MEASURED SEQUENCE, READ OFF THE AUDIT'S OWN EVENTS (never assumed): the capture
+  // claim, any LOSS of it, and what the app's reveal mirror did on the moves after the
+  // loss. When a loss is present the app's own guard is what ended the gesture, and the
+  // reading must carry that rather than a bare `false`.
+  const lostCapture = pointerAudit && Array.isArray(pointerAudit.lostPointerCapture) ? pointerAudit.lostPointerCapture : []
+  const afterTheLoss = (() => {
+    const evts = pointerAudit && Array.isArray(pointerAudit.tail) ? pointerAudit.tail : []
+    const at = evts.findIndex((e) => String(e).indexOf('lostpointercapture') === 0)
+    if (at < 0) return null
+    const later = evts.slice(at + 1).filter((e) => String(e).indexOf('pointermove') === 0)
+    if (later.length === 0) return null
+    return { moves: later.length, allEmpty: later.every((e) => /revealed=$/.test(String(e))), events: later }
+  })()
+  const captureMechanism = lostCapture.length === 0
+    ? `the capture was NEVER lost (lostpointercapture=${asJson(lostCapture)})`
+    : `THE MEASURED SEQUENCE: gotpointercapture=${asJson(pointerAudit.gotPointerCaptureEvents)} and then lostpointercapture on ${asJson(lostCapture)}; the moves after that loss read ${asJson(afterTheLoss ? afterTheLoss.events : 'no later move')} → ${afterTheLoss == null ? 'the audit carries no later move to read' : `${afterTheLoss.moves} later move(s), every one recording an EMPTY reveal mirror=${afterTheLoss.allEmpty}`} — i.e. the app's reveal write RE-RENDERS the app graph (sidebar-panes onRevealChange → rerenderAppGraph), that mount replaces the .pane-frame the capture is held on, and the shell's own lost-capture guard (renderer onLostPointerCapture → host.cancelPaneDrag) ends the drag`
+
+  // ---- (7) THE AFTER-STATE (slots, zones, the record)
+  const framesAfter = await h.cdp.evaluate(frameCensusJs)
+  const zonesAfter = await ufLayoutReading(h)
+  const recordAfter = await readRecord()
+  const tracksAfterJs = `(()=>{
+    const grid=document.querySelector('#app > #wiki-root')||document.querySelector('#wiki-root');
+    const dest=document.getElementById('zone:'+${asJson(destZone)});
+    const boxOf=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+    if(!grid)return null;
+    return {destTrack:String(getComputedStyle(grid).getPropertyValue('--zone-'+${asJson(destZone)}+'-track')||''),destTrackInline:String(grid.style.getPropertyValue('--zone-'+${asJson(destZone)}+'-track')||''),destBox:boxOf(dest),destClass:dest?(dest.getAttribute('class')||''):null,revealedZones:[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.getAttribute('class')||'').slice(0,60))};
+  })()`
+  const tracksAfterCommit = await h.cdp.evaluate(tracksAfterJs)
+
+  // ---- (8) THE FIVE TERMS, over readings taken in ONE run
+  const classesOn = (cls) => classesOf(cls)
+  const destHolds = framesOf(framesAfter, destZone).map((f) => f.paneId)
+  const sourceHolds = framesOf(framesAfter, fromZone).map((f) => f.paneId)
+  const movedFrame = (framesAfter || []).find((f) => f.paneId === paneId) || null
+  const movedClasses = classesOn(movedFrame ? movedFrame.cls : '')
+  const carriesTo = movedClasses.includes('pane-in-' + destZone)
+  const carriesFrom = movedClasses.includes('pane-in-' + fromZone)
+  const carryingFrom = (framesAfter || []).filter((f) => classesOn(f.cls).includes('pane-in-' + fromZone))
+  const carryingFromOutsideTheSource = carryingFrom.filter((f) => f.zone !== fromZone)
+  // THE BY-POSITION CLAIM, MEASURED OVER EVERY FRAME: each frame's zone-form class set
+  // must be EXACTLY its own container's zone (the stage provider's `pane-in-stage` for a
+  // frame standing outside the four zones) — a leak or a stale form shows up here.
+  const wrongForm = (framesAfter || [])
+    .map((f) => {
+      const want = f.zone ? 'pane-in-' + f.zone : 'pane-in-stage'
+      const carries = classesOn(f.cls).filter((c) => c.indexOf('pane-in-') === 0)
+      return carries.length === 1 && carries[0] === want ? null : f.paneId + ' wants ' + want + ' carries ' + asJson(carries)
+    })
+    .filter((x) => x != null)
+  const relocatedToTheDestinationZone = destHolds.includes(paneId) && !sourceHolds.includes(paneId)
+  const theInheritedFormFollowed = carriesTo && !carriesFrom && carryingFromOutsideTheSource.length === 0 && wrongForm.length === 0
+
+  const normaliseTrack = (v) => {
+    const t = String(v == null ? '' : v).trim()
+    // A recomputed custom property may still be the VAR FORM the sheet declares
+    // (`var(--zone-<z>-size, 48px)`); its SUBSTITUTED value is what a size reading is.
+    const m = /^var\(\s*--zone-([a-z]+)-size\s*(?:,\s*([^)]*))?\)$/.exec(t)
+    if (m == null) return t
+    const inline = String((preview && preview.destSizeVarInlineDuringDrag) || '').trim()
+    if (inline !== '') return inline
+    return m[2] == null ? '' : String(m[2]).trim()
+  }
+  const trackDuring = normaliseTrack(preview ? preview.destTrackDuringDrag : '')
+  const trackAfter = normaliseTrack(tracksAfterCommit ? tracksAfterCommit.destTrack : '')
+  const destRevealedDuring = classesOf(preview ? preview.destClassDuringDrag : '').includes('is-revealed')
+  const destArrangementAxisIsHeight = destZone === 'top' || destZone === 'bottom'
+  const destBoxDuring = preview ? preview.destBoxDuringDrag : null
+  const openedAlongItsArrangementAxis = destBoxDuring != null && (destArrangementAxisIsHeight ? destBoxDuring[3] > 0 : destBoxDuring[2] > 0)
+  const theDestinationZoneOpened = destRevealedDuring === true &&
+    trackDuring !== '' && trackDuring !== '0px' && trackDuring !== 'auto' &&
+    trackAfter !== '' && trackDuring === trackAfter &&
+    openedAlongItsArrangementAxis === true
+
+  // (iv) ONE GESTURE, ONE WRITE — the sibling zones and the slot census unchanged
+  // value-for-value apart from the TWO panes' zones, and the record's diff confined
+  // to the moved pane's `zone`/`index` plus the affected zones' renumbering.
+  const untouched = ZONES.filter((z) => z !== destZone && z !== fromZone)
+  const untouchedZonesUnchanged = untouched.every((z) => asJson(zonesAfter ? zonesAfter[zoneKey(z)] : null) === asJson(zonesBefore ? zonesBefore[zoneKey(z)] : null))
+  const mountsUnchanged = !!zonesBefore && !!zonesAfter && zonesBefore.mountCount === 1 && zonesAfter.mountCount === 1 && zonesBefore.staleChildlessRoots === 0 && zonesAfter.staleChildlessRoots === 0
+  const slotKey = (list) => (Array.isArray(list) ? list.map((f) => f.paneId + '@' + f.zone + '#' + f.slot).sort() : [])
+  const slotsBefore = slotKey(framesBefore)
+  const slotsAfter = slotKey(framesAfter)
+  const slotChangedOnlyForTheTwoZones = (() => {
+    if (!Array.isArray(framesBefore) || !Array.isArray(framesAfter)) return false
+    if (framesBefore.length !== framesAfter.length) return false
+    const before = new Map(framesBefore.map((f) => [f.paneId, f]))
+    for (const f of framesAfter) {
+      const was = before.get(f.paneId)
+      if (was == null) return false // a pane appeared — never this gesture's business
+      if (was.zone !== f.zone || was.slot !== f.slot) {
+        if (!(was.zone === fromZone || was.zone === destZone || f.zone === fromZone || f.zone === destZone)) return false
+      }
+    }
+    return true
+  })()
+  // THE STAGE: an opened track RECLAIMS stage space, so "unchanged" would be the wrong
+  // claim and a vacuous one. The honest, STRONGER tooth: the stage's box may differ on
+  // the destination's OWN axis ONLY, and by EXACTLY the extent the destination's box
+  // gained — every other member of the box value-for-value.
+  const stageBeforeBox = zonesBefore ? zonesBefore.main : null
+  const stageAfterBox = zonesAfter ? zonesAfter.main : null
+  const destBoxBefore = zonesBefore ? zonesBefore[zoneKey(destZone)] : null
+  const destBoxAfter = zonesAfter ? zonesAfter[zoneKey(destZone)] : null
+  const stageReclaimedExactlyTheOpenedExtent = (() => {
+    if (stageBeforeBox == null || stageAfterBox == null || destBoxBefore == null || destBoxAfter == null) return false
+    if (!Array.isArray(stageBeforeBox) || !Array.isArray(stageAfterBox)) return false
+    const axis = destArrangementAxisIsHeight ? 3 : 2 // the destination's arrangement axis: its height / its width
+    const destGain = destBoxAfter[axis] - destBoxBefore[axis]
+    const stageGain = stageAfterBox[axis] - stageBeforeBox[axis]
+    if (destGain <= 0) return false
+    if (stageGain !== -destGain) return false
+    const others = [0, 1, 2, 3].filter((i) => i !== axis)
+    return others.every((i) => stageBeforeBox[i] === stageAfterBox[i])
+  })()
+  const recBefore = recordBefore.layout
+  const recAfter = recordAfter.ok === true ? recordAfter.layout : null
+  const panesOf = (rec) => (rec && Array.isArray(rec.panes) ? rec.panes : null)
+  const panesBeforeRec = panesOf(recBefore)
+  const panesAfterRec = panesOf(recAfter)
+  const recordDiffConfined = (() => {
+    if (panesBeforeRec == null || panesAfterRec == null) return false
+    if (panesBeforeRec.length !== panesAfterRec.length) return false
+    const before = new Map(panesBeforeRec.map((p) => [String(p.id), p]))
+    for (const p of panesAfterRec) {
+      const was = before.get(String(p.id))
+      if (was == null) return false
+      const touched = was.zone === fromZone || was.zone === destZone || p.zone === fromZone || p.zone === destZone
+      if (!touched && canonical(was) !== canonical(p)) return false
+      // NO FIGURE IS EVER WRITTEN: an entry's members stay inside the record's own four.
+      for (const key of Object.keys(p)) if (['id', 'zone', 'index', 'collapsed'].indexOf(key) < 0) return false
+    }
+    return true
+  })()
+  const recordZonesSizeIdentical = (() => {
+    if (recAfter == null) return false
+    return ZONES.every((z) => {
+      const a = recBefore && recBefore.zones && recBefore.zones[z] ? recBefore.zones[z].size : null
+      const b = recAfter.zones && recAfter.zones[z] ? recAfter.zones[z].size : null
+      return asJson(a) === asJson(b)
+    })
+  })()
+  const recordStageTopBarIdentical = recAfter == null ? false : canonical(recBefore ? recBefore.stage : null) === canonical(recAfter.stage) && canonical(recBefore ? recBefore.topBar : null) === canonical(recAfter.topBar)
+  const oneGestureOneWrite = untouchedZonesUnchanged && mountsUnchanged === true && slotChangedOnlyForTheTwoZones && stageReclaimedExactlyTheOpenedExtent && recordDiffConfined && recordZonesSizeIdentical && recordStageTopBarIdentical
+
+  // ---- (9) THE RESTORE — a SECOND real drag back to the source zone, landed at the
+  // band the APP'S OWN insertion rule reads as the pane's pre-block place
+  // (`insertionIndexForPoint`: `floor(fraction x slots)`, `slots` = the target zone's
+  // other panes + 1), so the second gesture RESTORES and is not a further move
+  // (D-266: crossing N times is one crossing).
+  const restoreProbes = await h.cdp.evaluate(`(()=>{
+    const out=[];
+    for(const f of document.querySelectorAll('.pane-frame[data-pane-id]')){
+      const z=f.closest?f.closest('[zone]'):null;
+      if(!z||z.getAttribute('zone')!==${asJson(destZone)})continue;
+      const grip=f.querySelector('.pane-grab');
+      if(!grip){out.push({paneId:f.getAttribute('data-pane-id'),err:'the frame carries no pane GRIP surface (.pane-grab)'});continue}
+      const r=grip.getBoundingClientRect();
+      if(!(r.height>=2&&r.width>=2)){out.push({paneId:f.getAttribute('data-pane-id'),err:'the grip box is degenerate',box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]});continue}
+      const x=Math.round(r.x+r.width*0.5),y=Math.round(r.y+r.height/2);
+      const el=document.elementFromPoint(x,y);
+      const resolved=el&&el.closest?el.closest('.gutter[zone], .pane-grab'):null;
+      out.push({paneId:f.getAttribute('data-pane-id'),x,y,gripBox:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],hit:el?(el.tagName+(el.getAttribute('class')?'.'+String(el.getAttribute('class')).slice(0,40):'')):'null',resolvesToTheGrip:resolved===grip,inViewport:x>=0&&y>=0&&x<=window.innerWidth&&y<=window.innerHeight});
+    }
+    return out;
+  })()`)
+  const restoreStart = (Array.isArray(restoreProbes) ? restoreProbes.find((p) => p.paneId === paneId && p.resolvesToTheGrip === true && p.inViewport === true) : null) || null
+  const fromBoxAfter = zonesAfter ? zonesAfter[zoneKey(fromZone)] : null
+  const sourceSlotCount = sourceFrames.length // = (the source zone's panes minus the moved one) + 1
+  const restoreFraction = sourceSlot >= 0 && sourceSlotCount > 0 ? (sourceSlot + 0.5) / sourceSlotCount : 0.5
+  const clampInto = (v, lo, hi) => Math.max(lo + 2, Math.min(hi - 2, v))
+  const restorePoint = (() => {
+    if (!Array.isArray(fromBoxAfter)) return null
+    const bx = fromBoxAfter[0]
+    const by = fromBoxAfter[1]
+    const bw = fromBoxAfter[2]
+    const bh = fromBoxAfter[3]
+    const vertical = fromZone === 'left' || fromZone === 'right'
+    if (vertical) return { x: Math.round(bx + bw / 2), y: clampInto(Math.round(by + bh * restoreFraction), by, by + bh) }
+    return { x: clampInto(Math.round(bx + bw * restoreFraction), bx, bx + bw), y: Math.round(by + bh / 2) }
+  })()
+  const restoreOffences = (() => {
+    if (restorePoint == null) return [`the source zone '${fromZone}' box could not be read after the commit`]
+    const why = []
+    if (!(restorePoint.x >= 2 && restorePoint.y >= 2 && restorePoint.x <= vp[0] - 2 && restorePoint.y <= vp[1] - 2)) why.push(`(${restorePoint.x},${restorePoint.y}) is outside the viewport ${asJson(vp)} with a 2px margin`)
+    const box = { left: fromBoxAfter[0], top: fromBoxAfter[1], right: fromBoxAfter[0] + fromBoxAfter[2], bottom: fromBoxAfter[1] + fromBoxAfter[3] }
+    if (!inside(restorePoint, box)) why.push(`(${restorePoint.x},${restorePoint.y}) is not INSIDE the source container's box ${asJson(fromBoxAfter)}`)
+    return why
+  })()
+  let restore = { driven: false, reason: 'not attempted' }
+  let framesAfterRestore = null
+  let restoreRecord = { ok: false, err: 'not read' }
+  if (restoreStart == null || restorePoint == null || restoreOffences.length > 0) {
+    restore = {
+      driven: false,
+      reason: restoreStart == null
+        ? `the moved pane ${paneId} carries no hit-testable GRIP inside zone '${destZone}' after the commit, so the restoring drag has no start (the probes: ${asJson(restoreProbes)})`
+        : `no restorable release point inside zone '${fromZone}': ${asJson(restoreOffences)} (the source container's box after the commit is ${asJson(fromBoxAfter)})`,
+    }
+  } else {
+    const rDispatches = []
+    const rsend = async (params) => {
+      await h.cdp.send('Input.dispatchMouseEvent', params)
+      rDispatches.push(params.type + '@' + params.x + ',' + params.y)
+    }
+    await rsend({ type: 'mouseMoved', x: restoreStart.x, y: restoreStart.y, buttons: 0 })
+    await sleep(80)
+    await rsend({ type: 'mousePressed', x: restoreStart.x, y: restoreStart.y, button: 'left', buttons: 1, clickCount: 1 })
+    await sleep(80)
+    for (const step of [[1, 2], [1, 4], [2, 6], [3, 8], [4, 10], [5, 12]]) {
+      await rsend({ type: 'mouseMoved', x: restoreStart.x + step[0], y: restoreStart.y + step[1], buttons: 1 })
+      await sleep(40)
+    }
+    const rWalkFrom = { x: restoreStart.x + 5, y: restoreStart.y + 12 }
+    for (const f of [0.45, 0.8, 1]) {
+      await rsend({ type: 'mouseMoved', x: Math.round(rWalkFrom.x + (restorePoint.x - rWalkFrom.x) * f), y: Math.round(rWalkFrom.y + (restorePoint.y - rWalkFrom.y) * f), buttons: 1 })
+      await sleep(150)
+    }
+    await sleep(400)
+    const restorePreview = await h.cdp.evaluate(`(()=>{
+      const d=document.getElementById('zone:'+${asJson(fromZone)});
+      const boxOf=(e)=>{if(!e)return null;const r=e.getBoundingClientRect();return [Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]};
+      return {revealedZones:[...document.querySelectorAll('.is-revealed')].map((e)=>e.id||String(e.getAttribute('class')||'').slice(0,60)),sourceClassDuringDrag:d?(d.getAttribute('class')||''):null,sourceBoxDuringDrag:boxOf(d)};
+    })()`)
+    await rsend({ type: 'mouseReleased', x: restorePoint.x, y: restorePoint.y, button: 'left', buttons: 0, clickCount: 1 })
+    await sleep(1500)
+    framesAfterRestore = await h.cdp.evaluate(frameCensusJs)
+    restoreRecord = await readRecord()
+    restore = {
+      driven: true,
+      start: { x: restoreStart.x, y: restoreStart.y },
+      startHit: restoreStart.hit,
+      startOnTheAppGripSurface: restoreStart.resolvesToTheGrip === true,
+      to: restorePoint,
+      bandFraction: restoreFraction,
+      sourceSlot,
+      slotsInTheSource: sourceSlotCount,
+      bandWhy: `the release point (${restorePoint.x},${restorePoint.y}) is the band ${sourceSlot} of ${sourceSlotCount} of zone '${fromZone}' (fraction ${restoreFraction.toFixed(4)} x ${sourceSlotCount} → index ${Math.min(sourceSlotCount - 1, Math.floor(restoreFraction * sourceSlotCount))} by the app's own insertionIndexForPoint), i.e. the place the pane held BEFORE the block`,
+      preview: restorePreview,
+      pathShape: rDispatches.join(' '),
+      recordAfterRestore: restoreRecord.ok === true ? restoreRecord.layout : null,
+      recordAfterRestoreRead: restoreRecord.ok === true ? 'ok' : restoreRecord.err,
+    }
+  }
+  const restoreFrame = framesAfterRestore ? (framesAfterRestore.find((f) => f.paneId === paneId) || null) : null
+  const restorePanesEqual = restoreRecord.ok === true && canonical((restoreRecord.layout && restoreRecord.layout.panes) || null) === canonical((recBefore && recBefore.panes) || null)
+  const restoreBackInTheSourceZone = restoreFrame != null && restoreFrame.zone === fromZone && classesOf(restoreFrame.cls).includes('pane-in-' + fromZone)
+  const restoredByASecondDrag = restore.driven === true && restorePanesEqual && restoreBackInTheSourceZone
+
+  // ---- (10) THE FIVE TERMS AS ONE AGGREGATE, THEN THE EVIDENCE (PROBLEMS= ALWAYS)
+  const terms = {
+    relocatedToTheDestinationZone: {
+      ok: relocatedToTheDestinationZone,
+      reading: `[zone="${destZone}"] .pane-frame[data-pane-id] holds ${asJson(destHolds)} (the moved pane ${paneId} present=${destHolds.includes(paneId)}) and [zone="${fromZone}"] holds ${asJson(sourceHolds)} (the moved pane ABSENT=${!sourceHolds.includes(paneId)}) — required: held by '${destZone}' and NOT by '${fromZone}'`,
+    },
+    theInheritedFormFollowed: {
+      ok: theInheritedFormFollowed,
+      reading: `the moved frame's class attribute is ${asJson(movedFrame ? movedFrame.cls : null)} → carries pane-in-${destZone}=${carriesTo}, carries pane-in-${fromZone}=${carriesFrom}; frames carrying pane-in-${fromZone}=${asJson(carryingFrom.map((f) => f.paneId + '@' + f.zone))} → OUTSIDE the source container=${asJson(carryingFromOutsideTheSource.map((f) => f.paneId + '@' + f.zone))}${carryingFrom.length > 0 && carryingFromOutsideTheSource.length === 0 ? ` (${carryingFrom.length} frame(s) remain IN '${fromZone}' and legitimately inherit its form, so the "no frame ANYWHERE carries pane-in-${fromZone}" form additionally needs an EMPTY source container)` : ''}; every frame's zone-form class set equals its OWN container's zone=${wrongForm.length === 0}${wrongForm.length > 0 ? ' ' + asJson(wrongForm) : ''}`,
+    },
+    theDestinationZoneOpened: {
+      ok: theDestinationZoneOpened,
+      reading: `DURING the drag the destination's class attribute is ${asJson(preview ? preview.destClassDuringDrag : null)} → is-revealed=${destRevealedDuring}, its box is ${asJson(destBoxDuring)} (non-degenerate on its arrangement axis=${openedAlongItsArrangementAxis}), and the computed --zone-${destZone}-track is ${asJson(preview ? preview.destTrackDuringDrag : null)} (inline ${asJson(preview ? preview.destTrackInlineDuringDrag : null)}) → normalised ${asJson(trackDuring)}; AFTER the commit the same read is ${asJson(tracksAfterCommit ? tracksAfterCommit.destTrack : null)} → normalised ${asJson(trackAfter)}, and the PERSISTED size beside it is ${destSizeRead.size}px (from ${destSizeRead.source}); .is-revealed during the drag=${asJson(preview ? preview.revealedZones : null)}, after the commit=${asJson(tracksAfterCommit ? tracksAfterCommit.revealedZones : null)}; the pointer-capture holders at the sample=${asJson(preview ? preview.pointerCaptureHoldersAtTheSample : null)}, the element under the release point=${asJson(preview ? preview.hitAtTheReleasePoint : null)} in zone ${asJson(preview ? preview.zoneAtTheReleasePoint : null)}; POINTER AUDIT (why a drag that revealed nothing revealed nothing): gotpointercapture=${asJson(pointerAudit ? pointerAudit.gotPointerCaptureEvents : null)}, lostpointercapture on=${asJson(pointerAudit ? pointerAudit.lostPointerCapture : null)}, pointerup on=${asJson(pointerAudit ? pointerAudit.pointerUps : null)}, move events=${asJson(pointerAudit ? pointerAudit.moveEvents : null)}, first events=${asJson(pointerAudit ? pointerAudit.head : null)}, last events=${asJson(pointerAudit ? pointerAudit.tail : null)}; ${captureMechanism} — required: revealed during, the track non-empty AND not 0px/auto AND equal to the after-commit read`,
+    },
+    oneGestureOneWrite: {
+      ok: oneGestureOneWrite,
+      reading: `the two untouched sibling zones ${asJson(untouched)} kept their rects value-for-value=${untouchedZonesUnchanged} (before ${asJson(untouched.map((z) => zonesBefore ? zonesBefore[zoneKey(z)] : null))} after ${asJson(untouched.map((z) => zonesAfter ? zonesAfter[zoneKey(z)] : null))}); #wiki-root mounts exactly 1 with no stale childless root=${mountsUnchanged === true} (mounts ${asJson(zonesBefore ? zonesBefore.mountCount : null)}→${asJson(zonesAfter ? zonesAfter.mountCount : null)}, stale ${asJson(zonesBefore ? zonesBefore.staleChildlessRoots : null)}→${asJson(zonesAfter ? zonesAfter.staleChildlessRoots : null)}); the pane-slot census moved only for the two panes' zones=${slotChangedOnlyForTheTwoZones} (before ${asJson(slotsBefore)} after ${asJson(slotsAfter)}); the stage's box ${asJson(stageBeforeBox)} → ${asJson(stageAfterBox)} differs ONLY on the destination's arrangement axis and by EXACTLY the extent the destination's own box gained (${asJson(destBoxBefore)} → ${asJson(destBoxAfter)})=${stageReclaimedExactlyTheOpenedExtent}; the record's diff is confined to the moved pane's zone/index plus the affected zones' renumbering=${recordDiffConfined}, zones.*.size byte-identical=${recordZonesSizeIdentical}, stage/topBar byte-identical=${recordStageTopBarIdentical} (the record's panes: before ${asJson(panesBeforeRec)} after ${asJson(panesAfterRec)})`,
+    },
+    restoredByASecondDrag: {
+      ok: restoredByASecondDrag,
+      reading: restore.driven === true
+        ? `a SECOND real drag from ${paneId}'s grip in '${destZone}' back into '${fromZone}' (${restore.bandWhy}; path shape ${restore.pathShape}) → recordAfterRestore.panes deep-equals recordBefore.panes=${restorePanesEqual} (after restore ${asJson(restoreRecord.ok === true && restoreRecord.layout ? restoreRecord.layout.panes : null)} vs before ${asJson(recBefore ? recBefore.panes : null)}), and the frame is back under [zone="${fromZone}"] carrying pane-in-${fromZone}=${restoreBackInTheSourceZone} (frame ${asJson(restoreFrame)})`
+        : `NOT-DRIVEN — ${restore.reason}`,
+    },
+  }
+  const problems = []
+  for (const name of TERM_NAMES) if (terms[name].ok !== true) problems.push(name + ': ' + terms[name].reading)
+  const ok = TERM_NAMES.every((name) => terms[name].ok === true)
+  const evidence = `[U-3 C-6 — the relocation gesture + the FIVE live terms; scope: the assembled renderer THIS driver spawned, its own CDP input path] ` +
+    `REAL INPUT: a real hit-tested CDP pointer drag driven ONE Input.dispatchMouseEvent AT A TIME — the pane ${paneId} (slot ${sourceSlot} of zone '${fromZone}', which held ${asJson(sourcePaneIds)}) was gripped at (${start.x},${start.y}) (grip box ${asJson(start.gripBox)}, hit ${asJson(start.hit)}, and the APP'S OWN delegated resolution at that point (closest('.gutter[zone], .pane-grab')) returns that very grip=${start.resolvesToTheGrip === true}), the source was scrolled into view first=${scrolledSourceIntoView}, the path was ${asJson(dispatches)} [${dispatches.length} dispatch(es): a hover with buttons:0, the press, 6 small 2..12px steps past the app's 4px deferred-capture threshold, 3 walk moves with the LAST inside the destination box, then a bounded settle and the MID-DRAG sample, then the release], and the destination was '${destZone}' (${destChosenBecause}; its persisted size is ${destSizeRead.size}px from ${destSizeRead.source}) — ${derivedPointWhy}. ` +
+    `the destination's box DURING the drag was ${asJson(preview ? preview.destBoxDuringDrag : null)} and its rect after the commit is ${asJson(tracksAfterCommit ? tracksAfterCommit.destBox : null)}; the zone projection's own candidate ORDER (the app's first-match domain) is ${asJson(projectionOrder)} over the rendered boxes ${asJson(rendered)}; ${captureMechanism}; the record read seam is window.provident.operatorSettings.get().layout (${recordAfter.ok === true ? 'read ok' : recordAfter.err}); ` +
+    `${TERM_NAMES.map((name) => `${name}=${terms[name].ok === true ? 'true' : 'false'} (${terms[name].reading})`).join('; ')}; ` +
+    `PROBLEMS=${JSON.stringify(problems)}`
+
+  return {
+    driven: true,
+    inputKind: 'REAL CDP pointer drag (Input.dispatchMouseEvent) driven ONE EVENT AT A TIME from the pane GRIP surface (.pane-grab) of the source zone to the DESTINATION ZONE CONTAINER box, sampled MID-DRAG between the last move and the release',
+    from: fromZone,
+    to: destZone,
+    toRequested: to,
+    destChosenBecause,
+    pane: paneId,
+    paneChosenBecause: `the FIRST frame of zone '${fromZone}' whose grip resolves to itself through the app's delegated resolution (${asJson(gripProbes)})`,
+    scrolledSourceIntoView,
+    sourcePaneIds,
+    sourceSlot,
+    dragStart: { x: start.x, y: start.y },
+    dragStartHit: start.hit,
+    dragStartGripBox: start.gripBox,
+    dragStartOnTheAppGripSurface: start.resolvesToTheGrip === true,
+    dragTo: releasePoint,
+    dragToDerivation: derivedPointWhy,
+    pathShape: dispatches.join(' '),
+    dispatches: dispatches.length,
+    destSize: destSizeRead,
+    predictedDestBox: destBox,
+    projectionOrder,
+    renderedZoneBoxes: rendered,
+    preview,
+    pointerAudit,
+    tracksBefore: tracks,
+    tracksAfterCommit,
+    zonesBeforeRender: census.zones,
+    slotsBefore,
+    slotsAfter,
+    recordBefore: recBefore,
+    recordAfter: recAfter,
+    recordAfterRead: recordAfter.ok === true ? 'ok' : recordAfter.err,
+    framesBefore,
+    framesAfter,
+    restore,
+    framesAfterRestore,
+    terms,
+    problems,
+    ok,
+    evidence,
+  }
+}
+
 /** §7.2 LIMB 3's FIXTURE NAME — the driver's OWN artifact (written by
  *  `ufEnsureStageBoxOverflowDoc` only where the stage box does not already overflow)
  *  and removed by this run's own cleanup path, by this ONE name. */
@@ -7893,7 +8574,7 @@ const BLOCKS = {
     const leaf = await h.cdp.evaluate(`(()=>{const l=document.querySelector('li[data-document-id=".live-fixture/core/beta"]');if(!l)return null;const r=l.getBoundingClientRect();return {doc:l.getAttribute('data-document-id'),box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)]}})()`)
     const u1Assertion = 'A REAL click on a doc-nav document ROW focuses that document in the stage'
     const u3Dclass = 'D-interaction'
-    const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated)'
+    const u3Assertion = 'The pane-drag gesture surface is the pane HEADER only — a REAL pointer gesture starting on the pane BODY is never hijacked (the pane is not relocated); ⟨U-3 C-6⟩ AND a REAL cross-zone GRIP drag relocates the pane INTO an EMPTY zone (admitted on its one-axis-degenerate box), reveals that zone mid-drag with its persisted track restored, paints the frame with the form it INHERITS BY POSITION, writes the whole family ONCE, and is undone by a SECOND real drag back to the pane\'s own pre-block place and record'
     const u3Evidence = bodyDrag && bodyDrag.driven === true
       ? `REAL CDP pointer drag DOWN on the doc-nav pane BODY (start=(${bodyStart.x},${bodyStart.y}) hit=${bodyDrag.hitAtStart}, OUTSIDE the pane HEAD row .pane-head — so on neither the GRIP nor the CONTROL) travelling to y=${bodyDrag.targetY} past the drag threshold; zone pane-slot ordering before=[${bodyDrag.seqBefore}] after=[${bodyDrag.seqAfter}] → bodyGestureAdmitted/relocated=${bodyDrag.relocated} (required false: the header is the only pane-drag surface)` : `the body-gesture probe COULD NOT BE DRIVEN: ${bodyDrag ? bodyDrag.reason : 'no probe'}`
     // §7.2 LIMB 1 — THE LAYOUT-EFFECT READING, carried as an EXTENSION of this
@@ -7908,6 +8589,14 @@ const BLOCKS = {
     const limb1Before = await ufLayoutReading(h)
     const rearrange = await ufPaneRearrangeInput(h, 'left', 'doc-nav')
     const limb1After = await ufLayoutReading(h)
+    // ⟨Unit `U-3` `C-6` — THE RELOCATION GESTURE AND ITS FIVE LIVE TERMS, driven AFTER
+    // the within-zone limb (so that limb's own before/after pair is never disturbed) and
+    // BEFORE the remaining rows read the app: the gesture RESTORES itself with a SECOND
+    // real drag, so the pane-set, the zone assignment and the record are back at their
+    // pre-block values when the block's doc-nav click runs. NO new `BLOCKS` key, no new
+    // `U-n` id, `MATRIX_ROWS` unmoved: the terms fold into THIS row's `ok` as ONE ADDED
+    // conjunct beside the landed two, which stay verbatim.
+    const placed = await ufPaneRelocateInput(h, { from: 'left', to: 'right' })
     const rectUnchanged = (a, b) => JSON.stringify(a) === JSON.stringify(b)
     const limb1SiblingZonesUnchanged = rectUnchanged(limb1Before.zoneRight, limb1After.zoneRight) && rectUnchanged(limb1Before.zoneTop, limb1After.zoneTop) && rectUnchanged(limb1Before.zoneBottom, limb1After.zoneBottom)
     const limb1StageUnchanged = rectUnchanged(limb1Before.main, limb1After.main)
@@ -7927,10 +8616,10 @@ const BLOCKS = {
       `OBSERVED (ii) #wiki-root mount count: BEFORE=${limb1Before.mountCount} AFTER=${limb1After.mountCount} → exactlyOneMount=${limb1MountExactlyOne} (required EXACTLY 1 — no zero, no two); ` +
       `OBSERVED (iii) STALE CHILDLESS ROOT: childless #wiki-root(s) BEFORE=${limb1Before.staleChildlessRoots} AFTER=${limb1After.staleChildlessRoots} → NO stale childless root appeared=${limb1NoStaleChildlessRoot} (explicit statement: NO element under the layout root carried zero children in the post-state); ` +
       `pane frames before=${JSON.stringify(limb1Before.frames.map((f) => f.paneId))} after=${JSON.stringify(limb1After.frames.map((f) => f.paneId))} → limb1LayoutEffectHeld=${limb1Ok}${limb1Rearranged === true ? '' : ` — THE READING IS NOT-DRIVEN: the rearrange gesture did not move a pane, so the before/after pair is NOT a within-zone rearrange and may NOT be read as the limb. The four sub-readings above are printed as a SCOPED measurement of a state in which nothing was rearranged. THE GESTURE ITSELF IS PROVEN (it started on the pane's own header surface at a hit-tested point, in small steps, and dropped past the sibling's midpoint), so this is an APP finding about the pane-drag wiring — filed in docs/defects.md with its owner — and NOT a probe gap`}`
-    const u3EvidenceWithLimb1 = `${limb1Evidence}; [§7.2 limb 1's OTHER half — the pane-BODY gesture probe, kept BESIDE the limb, never substituted for it] ${u3Evidence}`
+    const u3EvidenceWithLimb1 = `${limb1Evidence}; [§7.2 limb 1's OTHER half — the pane-BODY gesture probe, kept BESIDE the limb, never substituted for it] ${u3Evidence}; [⟨U-3 C-6⟩ THE RELOCATION GESTURE AND ITS FIVE LIVE TERMS — the row's ADDED conjunct] ${placed.evidence}`
     const u3Opts = limb1Rearranged && bodyDrag && bodyDrag.driven === true
-      ? { path: 'cdp', ok: limb1LayoutHeld && bodyDrag.relocated === false, surface: surface, gesture: true, checklistRow: 'UF-PANES-12', required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange leaves the sibling zones\' and the stage\'s rects UNCHANGED value-for-value, #wiki-root mounts EXACTLY ONE, and NO stale childless root appears (plus: a pane-BODY gesture is never admitted — the header is the only pane-drag surface)', observed: u3EvidenceWithLimb1 }
-      : { path: 'missing', ok: false, surface: surface, required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange — THE DRIVER PRECONDITION IS THAT THE GESTURE ACTUALLY MOVES A PANE (a rearrange that moves nothing cannot discriminate the property, so a scoped before/after pair taken in a state where no pane moved is REPORTED as a scoped measurement and is NOT-DRIVEN, never a silent park)', observed: u3EvidenceWithLimb1 }
+      ? { path: 'cdp', ok: limb1LayoutHeld && bodyDrag.relocated === false && placed.driven === true && placed.ok === true, surface: surface, gesture: true, checklistRow: 'UF-PANES-12', required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange leaves the sibling zones\' and the stage\'s rects UNCHANGED value-for-value, #wiki-root mounts EXACTLY ONE, and NO stale childless root appears (plus: a pane-BODY gesture is never admitted — the header is the only pane-drag surface); ⟨U-3 C-6⟩ AND a REAL cross-zone GRIP drag relocates the pane into an EMPTY zone, measured by FIVE live terms that must EACH hold — relocatedToTheDestinationZone (the destination container holds the frame and the source does not), theInheritedFormFollowed (the frame carries pane-in-<dest> and not pane-in-<source>, with NO frame carrying another zone\'s form), theDestinationZoneOpened (during the drag the destination is is-revealed with its computed --zone-<dest>-track non-empty, not 0px and not auto, EQUAL to the same read after the commit, whose persisted size is printed beside it), oneGestureOneWrite (the untouched sibling zones\' rects value-for-value, the slot census moved only for the two panes\' zones, the stage yielded exactly the opened extent, and the record\'s diff confined to the moved pane\'s zone/index plus the affected zones\' renumbering), and restoredByASecondDrag (a SECOND real drag restores the pre-block zone assignment AND recordAfterRestore.panes deep-equals recordBefore.panes) — PROBLEMS= is always printed, so a clean run and a run whose terms never took a reading are distinguishable', observed: u3EvidenceWithLimb1 }
+      : { path: 'missing', ok: false, surface: surface, required: '§7.2 limb 1 on the assembled surface: a REAL hit-tested within-zone pane rearrange — THE DRIVER PRECONDITION IS THAT THE GESTURE ACTUALLY MOVES A PANE (a rearrange that moves nothing cannot discriminate the property, so a scoped before/after pair taken in a state where no pane moved is REPORTED as a scoped measurement and is NOT-DRIVEN, never a silent park); ⟨U-3 C-6⟩ with the five live terms reported NOT-DRIVEN with their reason', observed: u3EvidenceWithLimb1 }
     const u3 = declaredRowResult('U-3', 'UF-PANES-12', u3Assertion, u3Dclass, u3EvidenceWithLimb1, u3Opts)
     if (!leaf) {
       const why = `doc-nav has no li[data-document-id=".live-fixture/core/beta"] (folder expand path=${folderPath}, expanded=${folderOpen})`

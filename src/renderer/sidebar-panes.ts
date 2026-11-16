@@ -55,6 +55,7 @@ import {
   createDragController,
   insertionIndexForPoint,
   movePane,
+  panePlacementOf,
   setPaneCollapsed,
   setZoneCollapsed,
   type DragController,
@@ -3582,42 +3583,73 @@ export class SidebarPanes {
     this.dragController.cancel()
   }
 
-  /** Commit the active drop: resolve the controller's `DropResult`, derive the
-   *  within-zone insertion index from the recorded drop point (§3.1), apply
-   *  `movePane` to the current layout, and persist via ONE `setLayout`. A
-   *  self-drop that lands in the pane's current zone/index is a NO-OP (F2):
-   *  zero `operatorSettings.set` writes and no placement change. Returns the
-   *  committed descriptor (null when the drop is rejected — no mutation). */
+  /** Commit the active drop: resolve the effective placement, compose the ONE
+   *  comparison word (zone + place), pass the zone-first gate, and persist via
+   *  ONE `setLayout`. A self-drop that lands in the pane's current effective
+   *  placement is a NO-OP (F2): zero `operatorSettings.set` writes and no
+   *  placement change. Returns the committed descriptor (null when the drop is
+   *  rejected — no mutation).
+   *
+   *  ⟨Unit `U-3` `C-2` — THE TWO-WRITE BODY REPLACED BY ONE ACCEPTANCE WORD.⟩ The
+   *  superseded body applied `movePane`, then compared `before.zone`/`before.index`
+   *  against the written entry (two writes on a collapsed target: the relocation,
+   *  then the open). It is now, in order: `L2` §3's *"resolve → compose ONE word
+   *  (zone + place) → the zone-first gate → ONE `setLayout`"*.
+   *  1. the controller's descriptor (`null` ⇒ ZERO writes);
+   *  2. the reveal mirror cleared (the controller reset its own set silently, so
+   *     this costs no crossing write);
+   *  3. the record the act reads + the caller's DECLARED places;
+   *  4. `panePlacementOf`'s effective placement — an unknown pane ⇒ ZERO writes;
+   *  5. the insertion index (the recorded drop point's band, else append);
+   *  6. the destination place the word is compared AT;
+   *  7. **THE ONE COMPOSED DECISION**: `wordEqual` AND the gate's answer are
+   *     computed once, and exactly one `setLayout` carries BOTH families — a
+   *     placement-equal drop into a COLLAPSED zone writes the zone member with
+   *     `panes` byte-identical, and a RELOCATING drop into a collapsed zone
+   *     writes both in ONE call (never the foundation's two leaves, and never a
+   *     collapse written ALONE — which would silently DROP the relocation, the
+   *     first draft's defect, recorded rather than overwritten);
+   *  8. a placement-equal drop into an EXPANDED zone ⇒ ZERO `setLayout`s.
+   *  The gate's census is read over the record the write will carry (`next`), so
+   *  the derivation sees the zone the panes family is about to occupy: a
+   *  relocation that makes an empty zone non-empty IS its open and needs no
+   *  statement, while a STATED `collapsed: true` is the operator's word and is
+   *  always overturned by the drop. No geometry is written on any arm. */
   commitPaneDrop(payload?: unknown): DropResult | null {
     const result = this.dragController.drop(payload)
     if (result == null) return null
-    // A committed drop ends the gesture; clear the revealed drop-target mirror
-    // (the controller reset its internal set silently — no extra crossing write).
     this.revealedZones = []
     const base = this.layout != null ? coerceLayout(this.layout) : defaultLayout()
-    // U-SHELL-4 (C4/§3.1) — when the controller did not pin an index, derive it
+    const deltas = this.declaredPlacesOf()
+    const word = panePlacementOf(base, result.paneId, deltas)
+    if (word == null) return result
+    // U-SHELL-4 (C4/§3.1) — when the controller did not pin a position, derive it
     // from the recorded drop point within the target zone's bounds. No recorded
-    // point (a synthetic/index-less drop) → append (the prior behavior).
-    let index = result.index
-    if (index === undefined && this.lastDragPoint != null) {
+    // point (a synthetic/position-less drop) → append.
+    let insertIndex = result.index
+    if (insertIndex === undefined && this.lastDragPoint != null) {
       const bounds = this.lastDragZones.find((z) => z.zone === result.zone)
       if (bounds != null) {
         const slots =
           base.panes.filter((p) => p.zone === result.zone && p.id !== result.paneId).length + 1
-        index = insertionIndexForPoint(this.lastDragPoint, bounds, slots)
+        insertIndex = insertionIndexForPoint(this.lastDragPoint, bounds, slots)
       }
     }
     this.lastDragPoint = null
     this.lastDragZones = []
-    const next = movePane(base, result.paneId, result.zone, index)
-    // F2 — a drop of a pane onto its own current position changes neither the
-    // zone nor the effective index → a no-op (0 writes, no placement change).
-    const before = base.panes.find((p) => p.id === result.paneId)
-    const after = next.panes.find((p) => p.id === result.paneId)
-    if (before != null && after != null && before.zone === after.zone && before.index === after.index) {
-      return result
-    }
-    this.setLayout(next)
+    const others = base.panes.filter((p) => p.zone === result.zone && p.id !== result.paneId)
+    const destPlace =
+      typeof insertIndex === 'number' && Number.isFinite(insertIndex)
+        ? Math.max(0, Math.min(Math.floor(insertIndex), others.length))
+        : others.length
+    const wordEqual = result.zone === word.zone && destPlace === word.place
+    const next = wordEqual ? base : movePane(base, result.paneId, result.zone, insertIndex, deltas)
+    const closed = zoneCollapsedOf(
+      base.zones[result.zone].collapsed,
+      enabledZonePaneCounts(this.registry, next)[result.zone],
+    )
+    if (wordEqual && !closed) return result
+    this.setLayout(closed ? setZoneCollapsed(next, result.zone, false) : next)
     return result
   }
 
@@ -3655,6 +3687,30 @@ export class SidebarPanes {
     } catch {
       // fail-soft — a throwing gesture never breaks the shell wiring
     }
+  }
+
+  /** ⟨Unit `U-3` `C-2` — THE DECLARED PLACES, BUILT BY THE CALLER (I2).⟩
+   *  `pane-drag.ts` holds no registry, so the *declared* half of the ONE law
+   *  arrives as DATA: the SAME enumeration the assembler builds
+   *  (`pane-graph.ts` → `assembleAppGraphEnvelope`:
+   *  `listByScope('app-graph').filter(pane => isEnabled(pane.id))`), where `seq`
+   *  is the index in THAT filtered array and the value is the pane's finite
+   *  `defaultOrder` else that `seq`. Passed to `panePlacementOf` (the word) and
+   *  `movePane` (the two sibling sorts), so neither site re-spells
+   *  `defaultOrder ?? seq`. TOTAL: a throwing/absent registry answers an EMPTY
+   *  map — the act then falls back to the record's own seats, never a throw. */
+  private declaredPlacesOf(): ReadonlyMap<string, number> {
+    const places = new Map<string, number>()
+    try {
+      const enabled = this.registry.listByScope('app-graph').filter((pane) => this.registry.isEnabled(pane.id))
+      enabled.forEach((pane, seq) => {
+        const stated = pane.defaultOrder
+        places.set(pane.id, typeof stated === 'number' && Number.isFinite(stated) ? stated : seq)
+      })
+    } catch {
+      return new Map<string, number>()
+    }
+    return places
   }
 
   /** The controller's own move channel: the fork pushes the per-move size onto the

@@ -337,9 +337,24 @@
     .pane-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
     .pane-frame[collapsed='true'] > :not(.pane-head) { display: none; }
     .pane-frame[collapsed='true'] > .pane-body { overflow: hidden; }
-    [data-orientation='vertical'] .pane-frame[collapsed='true'] { height: auto; }
-    [data-orientation='horizontal'] .pane-frame[collapsed='true'] { width: auto; }
-    .pane-frame[collapsed='true']:not([zone] *) { height: auto; width: auto; }
+    /* ⟨Unit `U-3` `C-4` / `ASM-U3-5` — THE PANE'S FORM IS READ OFF THE RECORD'S ZONE.⟩
+       The four rules below were SUPERSEDED IN PLACE (`RCA-8(c)`, kept visible here and never
+       re-spelled as a selector): `[data-orientation='vertical'] .pane-frame[collapsed='true']`
+       / `[data-orientation='horizontal'] …` keyed the pane's collapsed extent on an ANCESTOR
+       ATTRIBUTE, and `.pane-frame[collapsed='true']:not([zone] *)` approximated the stage by
+       DOM ancestry. Both made the form a fact of the TREE rather than of the serialized
+       `zone` — the very mechanism this unit deletes. The engine now APPENDS the inherited
+       class from the record's zone (the zone CONTAINER publishes `zone-format`,
+       `value: ['pane-in-<zone>']`; the frame and the tab CONSUME it into `css.classes`), so
+       these rules key on the class ITSELF and are independent of where the pane is mounted.
+       The stage approximation becomes the compound `.pane-in-stage`, which the app ROOT
+       publishes — a pane outside the four zones inherits it by the engine's nearest-first
+       walk, and a zone-resident pane never carries it. CSS ONLY: no element is added (D-8). */
+    .pane-frame[collapsed='true'].pane-in-left,
+    .pane-frame[collapsed='true'].pane-in-right { height: auto; }
+    .pane-frame[collapsed='true'].pane-in-top,
+    .pane-frame[collapsed='true'].pane-in-bottom { width: auto; }
+    .pane-frame[collapsed='true'].pane-in-stage { height: auto; width: auto; }
     input { width: 100%; box-sizing: border-box; padding: 0.4rem; background: var(--input-bg); color: var(--input-fg); border: 1px solid var(--input-border); }
     .echo-out { margin-top: 0.75rem; padding: 0.5rem; border: 1px dashed var(--border-strong); min-height: 1.25rem; }
     #status { margin-top: 1rem; font-family: monospace; font-size: 0.75rem; color: var(--muted); }
@@ -368,11 +383,16 @@
        track collapses (the derived `is-empty`). */
     .is-empty.is-revealed { outline: 2px dashed var(--accent); outline-offset: 2px; min-height: 2rem; }
     /* Unit U-SHELL-4 (C12) / unit U-1b — a COLLAPSED zone REPLACES its pane stack
-       with a tab strip (provident subtree). Sidebars (`left`/`right`) stack their
-       tabs vertically; top/bottom lay them out horizontally (edge-derived). */
+       with a tab strip (provident subtree). ⟨Unit `U-3` `C-4`: the two tab rules are
+       re-keyed onto the INHERITED CLASS as COMPOUNDS.⟩ Sidebars (`left`/`right`) stack
+       their tabs vertically; top/bottom lay them out horizontally. The tab is a CHILD of
+       the zone container, which PUBLISHES the form as a value (a provider publishes no
+       class on itself), so an ancestor-keyed `.pane-in-<zone> .pane-tab` selector would be
+       DEAD (`L2` `F1`); the tab therefore CONSUMES `zone-format` too (`pane-graph.ts`) and
+       these compounds match the class the engine appends onto the TAB's own element. */
     .is-collapsed .pane-tab { cursor: pointer; }
-    [data-orientation='vertical'] .pane-tab { display: block; }
-    [data-orientation='horizontal'] .pane-tab { display: inline-block; margin-right: 0.5rem; }
+    .pane-tab.pane-in-left, .pane-tab.pane-in-right { display: block; }
+    .pane-tab.pane-in-top, .pane-tab.pane-in-bottom { display: inline-block; margin-right: 0.5rem; }
     /* Unit U-SHELL-5 (C7) — the resize gutters between the zone tracks. The
        shell pointer controller owns the drag mechanic; the surface only reads
        the C1 tokens so it themes with the rest of the chrome. A column gutter

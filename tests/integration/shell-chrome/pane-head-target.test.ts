@@ -32,6 +32,17 @@
 //     Now the sheet's own two inks are MUTATED in a copy of its text — an EQUAL-ink pill and an
 //     INVERTED-ink pill must EACH hand back the named `quieter-than` violation — while the landed
 //     sheet (the pill's ratio strictly BELOW the line's) stays the green half; no source is written.
+//   · `F`/(f2) RE-GRAINED (`2026-11-15`, this pass) — unit `U-3`'s §2 `C-4` (`ASM-U3-5`, D-265) REPLACED
+//     the `[data-orientation]`-ANCESTOR-keyed collapsed rules with the INHERITED-CLASS keying, so (f2)'s
+//     reader was keyed on a selector form the sheet no longer carries and the limb went RED by design.
+//     The SUPERSEDED READING stays visible (`RCA-8(c)`): the reader filtered rules whose SELECTOR
+//     matched `data-orientation='vertical'|'horizontal'`, and the two falsifier mutations deleted /
+//     axis-flipped those same `[data-orientation]` lines. The reader now keys on the class the engine
+//     APPENDS from the record's zone — vertical on `.pane-in-left`/`.pane-in-right` (the `height: auto`
+//     arm), horizontal on `.pane-in-top`/`.pane-in-bottom` (the `width: auto` arm) — the `auto`-axis
+//     agreement with `panePaintAxesOf` and the "no figure constant" half are UNCHANGED, both mutations
+//     now delete/axis-flip the very rule the reader keys on (so each tooth can still red), and a
+//     per-zone tooth was ADDED (every zone of the pair must be named). Stricter, never looser.
 //
 // LAYER (MANDATORY, `D-10` / `RCA-12`): every limb is ENVELOPE-class. `A`/`E`/`H` drive the fork's
 // REAL assembler over a REAL `PaneRegistry`; `B` drives the REAL `SidebarPanes` over the layout-less
@@ -1571,6 +1582,11 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
     // missing key is named BY KEY, and each arm's axis is cross-checked against the helper that
     // names the same split (`§3` C) — the sheet and the helper are two copies of ONE axis split,
     // and this arm is where their agreement is graded.
+    // ⟨RE-GRAINED `2026-11-15` — the KEY the absence is named by is unit `U-3` `C-4`'s INHERITED CLASS
+    // (`.pane-in-left`/`.pane-in-right` vertical, `.pane-in-top`/`.pane-in-bottom` horizontal) instead
+    // of the superseded `[data-orientation]` ancestor attribute (D-265/`ASM-U3-5`: the form is read
+    // off the RECORD's zone). The claim is UNCHANGED and one tooth was ADDED — every zone of the pair
+    // must be named by its own class — so nothing here is loosened by the re-keying.⟩
     const sheet = readText(INDEX_HTML)
     const collapsedArms = paneRules.filter((rule) => /pane-frame/.test(rule.selector) && /collapsed/.test(rule.selector))
     type Orientation = 'vertical' | 'horizontal'
@@ -1588,13 +1604,38 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
       }
       return out
     }
-    /** The pane-family collapsed rules KEYED ON ONE `[data-orientation]` value in one sheet TEXT. */
-    const orientationArms = (src: string, orientation: Orientation): CssRule[] => {
-      const key = new RegExp(`data-orientation\\s*=\\s*['"]${orientation}['"]`)
-      return paneFamilyRules(cssRules(src)).filter(
-        (rule) => key.test(rule.selector) && /pane-frame/.test(rule.selector) && /collapsed/.test(rule.selector),
-      )
+    // ⟨RE-GRAINED `2026-11-15` (this pass) — `RCA-8(c)`: the SUPERSEDED READING stays visible.⟩ This
+    // arm was RED only because unit `U-3`'s §2 `C-4` (`ASM-U3-5`, D-265) — by design, contract
+    // mandated — REPLACED the `[data-orientation]`-ANCESTOR-keyed collapsed rules in
+    // `src/renderer/index.html` with the INHERITED-CLASS keying. The superseded form, quoted from the
+    // pre-`U-3` sheet, was: `[data-orientation='vertical'] .pane-frame[collapsed='true']` (height:
+    // auto) and `[data-orientation='horizontal'] .pane-frame[collapsed='true']` (width: auto), and the
+    // reader below filtered on that attribute. `U-3` `C-4` re-keys the very same two rules onto the
+    // class the ENGINE APPENDS from the record's `zone` (the form is read off the RECORD, never off an
+    // ancestor ATTRIBUTE): `.pane-in-left`/`.pane-in-right` carry `height: auto` (the side zones are
+    // VERTICAL) and `.pane-in-top`/`.pane-in-bottom` carry `width: auto` (the row zones are
+    // HORIZONTAL). The keying is therefore the same AXIS SPLIT with a different carrier, and the two
+    // halves this arm grades are UNCHANGED: PRESENCE per key, and AGREEMENT with `panePaintAxesOf`.
+    /** `U-3` `C-4`'s INHERITED-CLASS keying, per orientation — spelled as a LITERAL so a sheet that
+     *  drifted TOGETHER with the helper still reds (`§2` C-4's axis split, pinned here). */
+    const FORM_CLASSES_OF: Record<Orientation, readonly string[]> = {
+      vertical: ['pane-in-left', 'pane-in-right'],
+      horizontal: ['pane-in-top', 'pane-in-bottom'],
     }
+    /** One orientation's key SET as this arm NAMES it in a failure message. */
+    const formKeyOf = (orientation: Orientation): string =>
+      FORM_CLASSES_OF[orientation].map((cls) => `.${cls}`).join('|')
+    /** True when ONE selector names `zone`'s OWN inherited class (`U-3` `C-4`, `ASM-U3-5`). */
+    const namesFormClass = (selector: string, zone: string): boolean =>
+      new RegExp(`\\.pane-in-${zone}(?![\\w-])`).test(selector)
+    /** The pane-family collapsed rules KEYED ON ONE orientation's INHERITED class set in one sheet TEXT. */
+    const orientationArms = (src: string, orientation: Orientation): CssRule[] =>
+      paneFamilyRules(cssRules(src)).filter(
+        (rule) =>
+          FORM_CLASSES_OF[orientation].some((cls) => new RegExp(`\\.${cls}(?![\\w-])`).test(rule.selector)) &&
+          /pane-frame/.test(rule.selector) &&
+          /collapsed/.test(rule.selector),
+      )
     /** The helper's OWN answer for a zone, as this arm's cross-check reads it. */
     const helperAxis = (zone: Zone): { adjustable: string | null; error: string | null } => {
       if (helper === null) return { adjustable: null, error: null }
@@ -1615,8 +1656,9 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
         const arms = orientationArms(src, orientation)
         if (arms.length === 0) {
           out.push(
-            `(f2)${label} NO collapsed \`auto\` arm keyed on \`[data-orientation='${orientation}']\` exists in the sheet — §2 C-4 mandates the ` +
-              `\`auto\`-on-the-adjustable-axis rule PER ZONE ORIENTATION and the ${orientation} one is ABSENT, so a ${orientation}-oriented ` +
+            `(f2)${label} NO collapsed \`auto\` arm keyed on the INHERITED class \`${formKeyOf(orientation)}\` exists in the sheet — §2 C-4 ` +
+              `(as amended by \`U-3\` \`C-4\`/\`ASM-U3-5\`) mandates the \`auto\`-on-the-adjustable-axis rule PER ZONE ORIENTATION, read off the ` +
+              `class the engine appends from the record's \`zone\`, and the ${orientation} one is ABSENT, so a ${orientation}-oriented ` +
               `(collapsed) frame paints with no adjustable axis stated at all. The missing KEY is named, not merely a missing declaration`,
           )
           continue
@@ -1629,13 +1671,24 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
         )
         if (!autoAxes.includes(want)) {
           out.push(
-            `(f2)${label} the \`[data-orientation='${orientation}']\` arm(s) [${arms.map((rule) => rule.selector).join(' | ')}] read \`auto\` on ` +
+            `(f2)${label} the \`${formKeyOf(orientation)}\` arm(s) [${arms.map((rule) => rule.selector).join(' | ')}] read \`auto\` on ` +
               `[${autoAxes.join(', ') || 'NO extent axis'}] — §2 C-4 makes the ${orientation} orientation's ADJUSTABLE axis \`${want}\`, so the ` +
               `collapsed extent is stated on the wrong axis (a collapsed frame keeps its fill relation and takes its HEAD's extent)`,
           )
         }
         for (const zone of CLOSED_ZONES) {
           if (zoneOrientation(zone) !== orientation) continue
+          // ADDED BY THE RE-GRAIN (`U-3` `C-4`): the keying is now PER ZONE — an arm that named only
+          // `left` would leave `right` formless, and the superseded ancestor keying could not express
+          // this because both side zones shared one `[data-orientation='vertical']` rule. A tooth
+          // ADDED, never a claim relaxed.
+          if (!arms.some((rule) => namesFormClass(rule.selector, zone))) {
+            out.push(
+              `(f2)${label} NO arm of the ${orientation} key \`${formKeyOf(orientation)}\` names the \`${zone}\` zone's OWN inherited class ` +
+                `\`.pane-in-${zone}\` — §2 C-4 (\`ASM-U3-5\`) reads the form off the RECORD's zone through the class the engine APPENDS, so ` +
+                `every zone of the pair must be keyed, or that zone's collapsed frame states no adjustable axis at all`,
+            )
+          }
           const answer = helperAxis(zone)
           if (answer.error !== null) {
             out.push(
@@ -1653,7 +1706,7 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
           }
           if (answer.adjustable !== want || !autoAxes.includes(answer.adjustable)) {
             out.push(
-              `(f2)${label} DRIFT — the sheet's \`[data-orientation='${orientation}']\` arm makes [${autoAxes.join(', ') || 'NO extent axis'}] ` +
+              `(f2)${label} DRIFT — the sheet's \`${formKeyOf(orientation)}\` arm makes [${autoAxes.join(', ') || 'NO extent axis'}] ` +
                 `adjustable, but \`panePaintAxesOf('${zone}')\` names \`adjustable: '${answer.adjustable}'\` for that ${orientation}-orientation ` +
                 `zone — the paint and the helper are two copies of ONE axis split and must name the same member (\`§3\` C's helper is the reading ` +
                 `the sheet has to agree with, so neither copy can drift alone)`,
@@ -1680,27 +1733,38 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
     // written). MEASURED pre-repair: with both arms deleted the old `.some` arm stayed green.
     const mutationReadings: string[] = []
     {
-      const isOrientationLine = (line: string, orientation: Orientation): boolean =>
-        new RegExp(`data-orientation\\s*=\\s*['"]${orientation}['"]`).test(line) && /pane-frame/.test(line) && /collapsed/.test(line)
-      // (i) DELETE ONE of the two mandated arms.
-      const withoutHorizontal = sheet.split('\n').filter((line) => !isOrientationLine(line, 'horizontal')).join('\n')
+      /** The lines of a sheet TEXT that carry ONE orientation's collapsed FORM arm — i.e. the very
+       *  rule `orientationArms` keys on. ⟨`RCA-8(c)`, the SUPERSEDED form kept visible: this
+       *  predicate matched `data-orientation='vertical'|'horizontal'` lines before `U-3` `C-4`
+       *  re-keyed the sheet onto the inherited class. Rebuilt, because a mutation that deletes a
+       *  carrier the reader no longer reads deletes NOTHING and the falsifier goes vacuous.⟩ */
+      const isFormArmLine = (line: string, orientation: Orientation): boolean =>
+        FORM_CLASSES_OF[orientation].some((cls) => new RegExp(`\\.${cls}(?![\\w-])`).test(line)) &&
+        /pane-frame/.test(line) &&
+        /collapsed/.test(line)
+      // (i) DELETE ONE of the two mandated arms — ALL of its lines, because the pair's two class names
+      // sit on the selector's two lines and the `auto` declaration rides the second: the reader must
+      // answer ABSENT for the horizontal key afterwards, or the PRESENCE tooth proves nothing.
+      const withoutHorizontal = sheet.split('\n').filter((line) => !isFormArmLine(line, 'horizontal')).join('\n')
       if (withoutHorizontal === sheet) {
         problems.push(
-          `(f2) THE FALSIFIER FAILED — mutation (i) could not find a \`[data-orientation='horizontal']\` collapsed arm line to delete, so the ` +
-            `PRESENCE tooth's discrimination is unproven`,
+          `(f2) THE FALSIFIER FAILED — mutation (i) could not find a collapsed arm line carrying the horizontal inherited class ` +
+            `\`${formKeyOf('horizontal')}\` to delete, so the PRESENCE tooth's discrimination is unproven`,
         )
       } else {
         const mutated = collapsedArmProblems(withoutHorizontal, ' [mutation (i): horizontal arm DELETED]')
         mutationReadings.push(`(i) horizontal arm DELETED ⇒ ${mutated.problems.length} named problem(s)`)
-        if (!mutated.problems.some((problem) => /NO collapsed/.test(problem) && problem.includes("[data-orientation='horizontal']"))) {
+        if (!mutated.problems.some((problem) => /NO collapsed/.test(problem) && problem.includes(formKeyOf('horizontal')))) {
           problems.push(
-            `(f2) THE FALSIFIER FAILED — mutation (i) deleted the \`[data-orientation='horizontal']\` arm and this arm reported ` +
+            `(f2) THE FALSIFIER FAILED — mutation (i) deleted the arm keyed \`${formKeyOf('horizontal')}\` and this arm reported ` +
               `${mutated.problems.length} problem(s) [${mutated.problems.join(' | ') || 'NONE'}], none naming the missing key: the PRESENCE half ` +
               `cannot see a missing mandated arm`,
           )
         }
       }
-      // (ii) SWAP the two arms' axes — the drift between the sheet and `panePaintAxesOf`.
+      // (ii) SWAP the two arms' axes — the drift between the sheet and `panePaintAxesOf`. Rebuilt onto
+      // the INHERITED-CLASS arms (`U-3` `C-4`): the flipped lines are exactly the rules the reader
+      // keys on, so the mutation renames the very `auto` axis the AGREEMENT half compares.
       const flipAxis = (line: string): string =>
         line.replace(
           /(^|[;{\s])(min-|max-)?(height|width)(\s*:\s*auto)/g,
@@ -1709,7 +1773,7 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
         )
       const swapped = sheet
         .split('\n')
-        .map((line) => (ORIENTATION_KEYS.some((orientation) => isOrientationLine(line, orientation)) ? flipAxis(line) : line))
+        .map((line) => (ORIENTATION_KEYS.some((orientation) => isFormArmLine(line, orientation)) ? flipAxis(line) : line))
         .join('\n')
       if (swapped === sheet) {
         problems.push(
@@ -1739,12 +1803,15 @@ describe('U-2 pane head — the authored bar, the one-leaf act, the paint axes, 
       problems,
       `limb F — the minimum is the head (\`§3\` limb F, sub-arms f1/f2; §2 C-4, \`ASM-U2-1\`/\`ASM-U2-7\`). The census walked ` +
         `${SRC_FILES.length} file(s) under src/ and ${paneRules.length} pane-block rule(s) in \`index.html\`. ${problems.length} problem(s). ` +
-        `THE COLLAPSED ARMS READ: ${realArms.arms || '(NONE — no orientation arm exists)'}. THE LEDGER: (f1a) NO clamp/floor of a pane or head ` +
+        `THE COLLAPSED ARMS READ: ${realArms.arms || '(NONE — no inherited-class arm exists)'}. THE LEDGER: (f1a) NO clamp/floor of a pane or head ` +
         `extent exists anywhere in \`src/**\` (no \`Math.max\` on a head extent, no JS-written \`min-height\`); (f1b) the head rule declares no ` +
-        `extent figure; (f2) BOTH \`[data-orientation]\` arms are PRESENT (each missing one reds BY KEY), each reads \`auto\` on the axis ` +
-        `\`panePaintAxesOf(zone)\` names for that orientation (a sheet/helper DRIFT reds), and no arm carries a figure constant (a ` +
-        `\`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal reds). Two NAMED mutations keep (f2) a reading: a deleted orientation arm must red the ` +
-        `presence half by name, and swapped axes must red the DRIFT half — MEASURED pre-repair, deleting BOTH arms left this limb green. ` +
+        `extent figure; (f2) BOTH INHERITED-CLASS arms are PRESENT (each missing one reds BY KEY, and EVERY zone of the pair must be named by ` +
+        `its own class), each reads \`auto\` on the axis \`panePaintAxesOf(zone)\` names for that orientation (a sheet/helper DRIFT reds), and ` +
+        `no arm carries a figure constant (a \`DEFAULT_PANE_COLLAPSED_SIZE\`-shaped literal reds). SUPERSEDED READING, kept visible ` +
+        `(\`RCA-8(c)\`): this ledger graded the two \`[data-orientation]\` ANCESTOR-keyed arms until unit \`U-3\` \`C-4\` (\`ASM-U3-5\`, D-265) ` +
+        `re-keyed the sheet onto the class the engine APPENDS from the record's zone. Two NAMED mutations keep (f2) a reading: a DELETED ` +
+        `inherited-class arm must red the presence half by name, and swapped axes must red the DRIFT half — MEASURED pre-repair, deleting BOTH ` +
+        `arms left this limb green. ` +
         `THE MUTATIONS READ: ${mutationReadings.join(' | ') || '(NONE — no mutation could be built)'}. ` +
         `LAYER: a SOURCE census — the \`min-content\` FLOOR itself is a painted fact and belongs to \`G8\` alone (the head's box under a squeezed zone)`,
     ).toEqual([])

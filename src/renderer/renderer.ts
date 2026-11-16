@@ -6,7 +6,7 @@ import { SidebarPanes } from './sidebar-panes.js'
 import { GnosisPanes } from './gnosis-panes.js'
 import { GnosisCrudPanes } from './gnosis-crud-panes.js'
 import { gutterSizeForPoint } from './pane-gutter.js'
-import { toZoneBounds, dropZoneForPoint, type ZoneBounds } from './pane-drag.js'
+import { toZoneBounds, dropZoneForPoint, zoneOrientation, type ZoneBounds } from './pane-drag.js'
 import { createPaneRegistry } from './pane-registry.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
@@ -801,9 +801,25 @@ function onPaneSessionMove(gesture: { readonly value?: unknown } | null): void {
       // NOT a drop container — skip it so it is never projected as a zone.
       const cls = typeof el.className === 'string' ? el.className : ''
       if (cls.split(/\s+/).includes('gutter')) continue
+      // ⟨Unit `U-3` `C-3` / `ASM-U3-3` — THE DROPS ARE NOT CANDIDATES.⟩ The
+      // `.layout [zone]` set also matches the EIGHT authored `.pane-drop` nodes
+      // (four per grip, two panes). They are deliberately UNPAINTED, and the
+      // scope below is what refuses them — never the `0×0` box, which is a
+      // property of the SHEET and not of the identity: a hostile sheet giving a
+      // drop a box still cannot make it a candidate.
+      if (cls.split(/\s+/).includes('pane-drop')) continue
       // HOST-5 — fail-closed: project ONLY a real LayoutZoneName.
       const dataZone = typeof el.getAttribute === 'function' ? el.getAttribute('zone') : null
       if (!isLayoutZoneNameValue(dataZone)) continue
+      // ⟨Unit `U-3` `C-3` — THE CONTAINER'S OWN AUTHORED DISCRIMINANT.⟩ The four
+      // zone containers each author `data-orientation = zoneOrientation(zone)`
+      // (`pane-graph.ts` is the ONLY author of that carrier in `src/**`); the
+      // collapse controls, the zone tabs, the drops and the gutters carry none,
+      // so requiring it narrows the set to the four containers by IDENTITY. No
+      // box test enters this projection: the scope is the authored identity.
+      const authored =
+        typeof el.getAttribute === 'function' ? el.getAttribute('data-orientation') : null
+      if (authored === null || authored !== zoneOrientation(dataZone)) continue
       if (typeof el.getBoundingClientRect === 'function') {
         zones.push(toZoneBounds(dataZone, el.getBoundingClientRect()))
       }

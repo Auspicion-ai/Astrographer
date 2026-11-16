@@ -51,11 +51,22 @@ export type RegionName = 'stage' | 'top-bar'
 /** One pane's placement overlay entry. `collapsed` is PER-PANE (C5); `index`
  *  is the pane's position within its zone (W2-Q1) — ⟨`U-1a`: D-16's spelling move,
  *  `order` → `index`, over a settled meaning; the pre-`U-1a` member name was
- *  `order` (superseded, kept visible).⟩ */
+ *  `order` (superseded, kept visible).⟩
+ *
+ *  ⟨Unit `U-3` `C-1` / `ASM-U3-2` — **ABSENCE IS STORABLE** (`D-262`).⟩ `index`
+ *  is OPTIONAL and an ABSENT member is a meaning, not a hole: *"sort me at my
+ *  DECLARED place"* (`PaneDefinition.defaultOrder` when finite, else the pane's
+ *  registration `seq` — the ONE law is `panePlace` below). The member is the
+ *  precedent `collapsed`'s absence-preserving shape applied one member over: a
+ *  malformed/junk `index` and an absent one BOTH end ABSENT at the coercion
+ *  boundary, and `coerceLayout` NEVER substitutes the reading's array position
+ *  (that substitution WAS the defect `D-262` names — the read position is a
+ *  fact of the serialized array, never of the pane). Every arithmetic reader
+ *  goes through `panePlace`, so `number | undefined` is never subtracted. */
 export interface PaneLayoutEntry {
   id: string
   zone: LayoutZoneName
-  index: number
+  index?: number
   collapsed: boolean
 }
 
@@ -248,7 +259,17 @@ export function coerceLayout(value: unknown): LayoutState {
     panes.push({
       id,
       zone: isLayoutZoneName(raw.zone) ? raw.zone : 'left', // F3/W2-Q2 — unknown/stage/top-bar → left
-      index: typeof raw.index === 'number' && Number.isFinite(raw.index) ? raw.index : index,
+      // ⟨Unit `U-3` `C-1` / `ASM-U3-2` — ABSENCE-PRESERVING (`D-262`).⟩ The
+      // member is copied ONLY when it is a FINITE NUMBER; a junk value (`'x'`,
+      // `NaN`, `±Infinity`) and an absent key both leave the key OFF the entry
+      // (the conditional spread — never a present-but-`undefined` key, the same
+      // discipline `coerceZoneLayout` uses one member over). The superseded
+      // reading is KEPT VISIBLE and NEVER re-introduced (`RCA-8(c)`):
+      // `index: typeof raw.index === 'number' && Number.isFinite(raw.index) ?
+      // raw.index : index` — the loop's array POSITION — which is exactly the
+      // `D-262` defect (the pane would sort at the reading's slot, not at its
+      // declared place).
+      ...(typeof raw.index === 'number' && Number.isFinite(raw.index) ? { index: raw.index } : {}),
       collapsed: raw.collapsed === true,
     })
   }
@@ -265,6 +286,37 @@ export function coerceLayout(value: unknown): LayoutState {
   const topBar = { size: coerceSize(rawTopBar.size, DEFAULT_TOPBAR_SIZE) }
 
   return { version: LAYOUT_VERSION, panes, zones, stage, topBar }
+}
+
+/** ⟨Unit `U-3` `C-1` — THE ONE PLACEMENT LAW.⟩ A pane's **declared place** is
+ *  `defaultOrder` when that is a finite number, else its registration `seq`, else
+ *  `0`; its **effective place** is the entry's STATED finite `index` when one is
+ *  stated, else the declared place. ONE expression, ONE home: the assembler
+ *  (`pane-graph.ts` → `resolveEnabledZonePanes`) reads it for ORDER, the act
+ *  (`pane-drag.ts` → `panePlacementOf`/`movePane`) for the WORD and the two
+ *  sibling SORTS, and NO site re-spells `defaultOrder ?? seq` or `index ??
+ *  declared` (`L2` §4 invariant 2 — the two would drift apart).
+ *
+ *  PURE + TOTAL (`L2` §3: *"TOTAL/fail-soft"*): every input arm — an absent
+ *  entry, a junk `defaultOrder`/`seq` (`'x'`, `NaN`, `±Infinity`), an absent
+ *  `input` itself — answers two FINITE numbers and never throws, so no
+ *  comparison downstream can be `NaN`-poisoned and no caller needs a guard. */
+export function panePlace(input: {
+  entry?: PaneLayoutEntry
+  defaultOrder?: unknown
+  seq?: unknown
+}): { declared: number; effective: number } {
+  const finite = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value)
+  const source = input ?? {}
+  const declared = finite(source.defaultOrder)
+    ? source.defaultOrder
+    : finite(source.seq)
+      ? source.seq
+      : 0
+  const stated = source.entry?.index
+  const effective = finite(stated) ? stated : declared
+  return { declared, effective }
 }
 
 /** The §2.5 enabled+placed census for ONE zone — `true` when the zone holds
