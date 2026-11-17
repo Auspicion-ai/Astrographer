@@ -34,10 +34,9 @@ The strata workflow ran for the first time in this project today. Read `strata/b
    LINKS (the only behaviour in the port with no instrument of any class), and the tracker debt.
 2. **The walkthroughs** — `E-1`, `V-2` and `U-1a` each read `STALE` on their last run and every finding
    since is repaired; `U-1b` has not had one. No unit has a recorded `PASS` except `V-1`.
-3. **The 53-document superseded-vocabulary census** — the old `header`/`footer`/`data-zone` spellings in
-   `docs/` outside the units' grants. `FORK-DIVERGENCE.md` and `HANDOVER.md` carry dated notes; the rest
-   are listed in `U-1a`'s and `U-1b`'s doc reviews.
-4. **`U-1c`** (the theme carrier and its supersession of `A-7`), then `U-2`/`U-3`/`U-4`.
+3. **The superseded-vocabulary census** in `docs/` outside the units' grants (dated notes cover
+   `FORK-DIVERGENCE` and `HANDOVER`; the rest are listed in `U-1a`'s and `U-1b`'s doc reviews).
+4. Anything the baseline's units owe, each named in `docs/next-steps.md`'s DONE rows.
 
 ## Waiting on the user
 
@@ -48,9 +47,8 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 
 ## Process lessons from this session (each cost real time)
 
-- **A `python` string replace is not an edit unless the anchor is verified afterwards** (D-5). Three "repairs"
-  were reported as landed and were not in the tree; the exit walkthrough — reading the corpus, not the
-  commit message — is what caught it.
+- **A string replace is not an edit unless the anchor is verified afterwards** (D-5) — three "repairs" were
+  reported as landed and were not; the exit walkthrough caught it.
 - **A walkthrough finds one class per run** (D-5). Eight runs on `V-1`, five on `E-1`, four on `V-2`. The
   findings were almost always *my own* tracker/census drift, never the unit's evidence.
 - **The full live battery is bounded at 240 s and may not reach its reconciliation line** (D-10). Scope a block
