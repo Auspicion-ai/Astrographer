@@ -235,3 +235,13 @@ CATALOGUED in `docs/defects.md` with their fork-side rules and neither is patche
    other's writes; the fork's rule is to construct ONCE and keep the handle (`B-2` inherits it).
 2. **`STOREROOM-CANONICALISES-MEMBER-ORDER`** — every round trip canonicalises member order, so a
    byte-for-byte JSON comparison is not a stable oracle; the fork's rule is to compare members.
+
+---
+
+## 2026-11-16 — `STOREROOM-EXPORTS-MAP-IMPORT-ONLY` (HIGH, package-owned; handed off, never patched)
+
+`provident-storeroom@1.11.0` ships an ESM-only exports map (`{types, import}`, no `main`/`require`/`default`),
+so this fork's CommonJS Electron main **cannot load it**: `ERR_PACKAGE_PATH_NOT_EXPORTED` at boot. The cheap
+fix is upstream and measured — a `"require": "./index.mjs"` (or `default`) condition boots the fork's
+**unmodified** built main with **zero fork bytes** changed. The full request, its acceptance predicate and the
+priced fork-side alternatives are in `docs/feature-requests/provident-storeroom-cjs-entry-request.md`.

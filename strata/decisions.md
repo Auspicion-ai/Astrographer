@@ -595,3 +595,37 @@ the fork has since built the seam it was missing, at the scale D-23 set.
 limb `E` asserted the ABSENCE of a consumer; it is now the suite's one class-(b) red and `E-1`'s TestWriter
 re-grains it to the successor claim (exactly one consumer, and it is a declared module) — never deleting the
 row, whose point was that none existed.
+
+---
+
+## D-29 — `B-2` is BLOCKED on the package's exports map; the tree stays bootable and the fix goes upstream first
+
+**Status:** ACTIVE · **Date:** 2026-11-16 · **Source (measurement):** unit `B-2`'s return
+(`docs/L1/unit-b-2-display-wire.md`), re-read in this seat against the installed package
+
+**Decision:** `B-2` is recorded as BLOCKED-ON-PREREQUISITE, not DONE and not failed. The crossing it built is
+correct and was measured working — the pre-window queue holds and flushes in order, the subscriber is
+arity-0 and re-reads, the one construction is bound, the external is on both main legs — but the product
+**cannot boot**: `provident-storeroom@1.11.0` is `"type": "module"` with `exports: {".": {types, import}}` and
+no `main`/`require`/`default`, so a CommonJS main fails at load with `ERR_PACKAGE_PATH_NOT_EXPORTED`. And the
+omitted external does not fail the build — it **silently inlines** the ESM-only package (measured
++2,667,936 B stripped, 15 package-path comments, `var import_meta = {}`), which is worse than the loud failure
+`ASM-B1-4` predicted.
+
+**The routing, in order, each measured by the unit:**
+1. **UPSTREAM, cheapest** — a `"require": "./index.mjs"` (or `default`) condition on the package's exports map
+   boots the fork's **unmodified** `main.cjs` with **zero fork bytes** changed. Filed as
+   `docs/feature-requests/provident-storeroom-cjs-entry-request.md` + a `docs/defects.md` row + `HANDOFF.md`;
+   the package is never patched here (D-9).
+2. **FORK-SIDE, if upstream does not move** — an ESM main bundle (measured working under a six-line
+   `createRequire`/`__dirname` banner) as its OWN unit (`B-2a`), because it costs `package.json`'s `main`
+   field, the build format and six files outside every current unit's scope.
+3. **REFUSED** — an async `await import()` seam: a Promise boundary across 18 construction sites.
+
+**The tree is BOOTABLE and the unit's evidence is preserved:** the five changed sources and the re-grained
+`deps-adopt` row were reverted, so `build` and `typecheck` are green and the app boots as it did at `B-1`'s
+head; the four new rows are moved to `archive/b-2-blocked/` (gitignored, NOT collected — a red row is not a
+standing red) and the contract plus the L2/L3 crossing pages stay live, each stating the block and its route.
+
+Rejected alternative: keeping the wiring in the tree — which would leave a baseline whose `npm run start`
+fails, and D-25 made this tree the baseline.
