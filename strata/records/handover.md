@@ -51,8 +51,7 @@ The strata workflow ran for the first time in this project today. Read `strata/b
   reported as landed and were not; the exit walkthrough caught it.
 - **A walkthrough finds one class per run** (D-5). Eight runs on `V-1`, five on `E-1`, four on `V-2`. The
   findings were almost always *my own* tracker/census drift, never the unit's evidence.
-- **The full live battery is bounded at 240 s and may not reach its reconciliation line** (D-10). Scope a block
-  (`--block=<id>`) for a verdict rather than reading a truncated run as coverage.
+- **The full live battery is bounded at 240 s and may not reconcile** (D-10): scope a block for a verdict.
 
 **The pivot is CLOSED (D-25):** the second build on the foundation's head was declined after both intake
 reviews returned `ADJUDICATION` (the demo-instance base; the fork's store is not the foundation's engine;
