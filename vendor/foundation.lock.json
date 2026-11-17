@@ -4,9 +4,9 @@
     "path": "../Provident-Electron",
     "remote": "https://github.com/LittleKingsguard/Provident-Electron",
     "ref": "main",
-    "commit": "e8dfb57730f657521d543c8d49f0d67e7ee1e6d4",
-    "measuredAt": "2026-11-15",
-    "digestCommand": "git -C ../Provident-Electron show e8dfb57730f657521d543c8d49f0d67e7ee1e6d4:src/shared/<name>.ts | md5sum   # cross-checked with: (cd ../Provident-Electron && md5sum src/shared/census.ts src/shared/container.ts src/shared/focus-model.ts src/shared/gesture-session.ts src/shared/gutter.ts src/shared/gutter-affordance.ts src/shared/layout-projection.ts src/shared/menu-template.ts src/shared/mount-invariant-guard.ts src/shared/overlay.ts src/shared/owned-list-host.ts src/shared/relocate.ts src/shared/slot-host.ts src/shared/theme.ts src/shared/zones.ts)",
+    "commit": "b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921",
+    "measuredAt": "2026-11-16",
+    "digestCommand": "git -C ../Provident-Electron show b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921:src/shared/<name>.ts | md5sum   # cross-checked with: (cd ../Provident-Electron && md5sum src/shared/census.ts src/shared/container.ts src/shared/focus-model.ts src/shared/gesture-session.ts src/shared/gutter.ts src/shared/gutter-affordance.ts src/shared/layout-projection.ts src/shared/menu-template.ts src/shared/mount-invariant-guard.ts src/shared/overlay.ts src/shared/owned-list-host.ts src/shared/relocate.ts src/shared/slot-host.ts src/shared/theme.ts src/shared/zones.ts)",
     "byteIdentity": "byte-identical to the pinned commit's blob at `commit` (verified per module by md5, 15/15 REPRODUCED against the proposal §2 table)"
   },
   "modules": [
@@ -200,8 +200,8 @@
     "leg": "conformance",
     "config": "vitest.conformance.config.ts",
     "placement": "vendor/Provident-Electron/tests/",
-    "revision": "e8dfb57730f657521d543c8d49f0d67e7ee1e6d4",
-    "derivation": "A suite is INCLUDED iff every specifier its module-under-test path carries resolves to one of the fifteen vendored `src/shared/<name>` modules; EXCLUDED iff it carries an out-of-set module-under-test specifier (the X-1 class); every other suite in the pinned tree's `tests/**/*.test.ts` universe carries an explicit `notAdmitted` disposition. Re-Derived at `revision` by an AST walk (`importSpecifiers`) over the pinned blobs plus the resolution of the universe's computed dynamic forms, 2026-11-15.",
+    "revision": "b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921",
+    "derivation": "A suite is INCLUDED iff every specifier its module-under-test path carries resolves to one of the fifteen vendored `src/shared/<name>` modules; EXCLUDED iff it carries an out-of-set module-under-test specifier (the X-1 class); every other suite in the pinned tree's `tests/**/*.test.ts` universe carries an explicit `notAdmitted` disposition. Re-Derived at `revision` by an AST walk (`importSpecifiers`) over the pinned blobs plus the resolution of the universe's computed dynamic forms, 2026-11-16.",
     "included": [
       "theme.test.ts",
       "zones.test.ts",
@@ -218,19 +218,19 @@
     "excluded": [
       {
         "suite": "layout-projection.test.ts",
-        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (a static import, an import type, and the computed ['..','src','shared','dom-shim.js'].join('/') form), which resolves to THIS repo's divergent dom-shim.ts (508 lines vs the foundation's 237 at the pin), so the suite would drive the fork's shim and not the pinned one; the suite also drives git status --porcelain against the repo. RE-DERIVED at `revision` (2026-11-15): the two clauses this reason used to carry — a dom-shim.ts read by path and a ../package.json read — are FALSE there (no fs call takes either path, and ../package.json is read by six suites that are INCLUDED, so it never discriminated); the dom-shim.js import edge and the porcelain audit stand."
+        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (a static import, an import type, and the computed ['..','src','shared','dom-shim.js'].join('/') form), which resolves to THIS repo's divergent dom-shim.ts (508 lines vs the foundation's 237 at the pin), so the suite would drive the fork's shim and not the pinned one; the suite also drives git status --porcelain against the repo. RE-DERIVED at `revision` (2026-11-16): the two clauses this reason used to carry — a dom-shim.ts read by path and a ../package.json read — are FALSE there (no fs call takes either path, and ../package.json is read by six suites that are INCLUDED, so it never discriminated); the dom-shim.js import edge and the porcelain audit stand."
       },
       {
         "suite": "owned-list-host.test.ts",
-        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (static, import type, and the computed array-join form), i.e. this repo's divergent copy, so the suite would drive the fork's shim and not the pinned one. The owned-list-host MODULE itself stays vendored (§2.1 item 4). RE-DERIVED at `revision` (2026-11-15): TRUE and complete."
+        "reason": "X-1 EXCLUSION — installShim, mountEl and the ShimElement type come from ../src/shared/dom-shim.js (static, import type, and the computed array-join form), i.e. this repo's divergent copy, so the suite would drive the fork's shim and not the pinned one. The owned-list-host MODULE itself stays vendored (§2.1 item 4). RE-DERIVED at `revision` (2026-11-16): TRUE and complete."
       },
       {
         "suite": "slot-host.test.ts",
-        "reason": "X-1 EXCLUSION — ../src/shared/dom-shim.js as above, PLUS two further out-of-set imports: ../src/main/security.js and ../src/main/mcp-server.js, both reached by computed dynamic import (the foundation's own src/main modules, of which this fork has no sibling by that name). The slot-host MODULE itself stays vendored. RE-DERIVED at `revision` (2026-11-15): all three edges still present."
+        "reason": "X-1 EXCLUSION — ../src/shared/dom-shim.js as above, PLUS two further out-of-set imports: ../src/main/security.js and ../src/main/mcp-server.js, both reached by computed dynamic import (the foundation's own src/main modules, of which this fork has no sibling by that name). The slot-host MODULE itself stays vendored. RE-DERIVED at `revision` (2026-11-16): all three edges still present."
       },
       {
         "suite": "mount-invariant-guard.test.ts",
-        "reason": "X-1 EXCLUSION — THREE out-of-set imports, all re-derived at `revision` (2026-11-15): ../src/shared/dom-shim.js (static and import type), ../src/renderer/runtime.js (Runtime, static) and ../src/shared/demo-envelope.js (demoEnvelope, static and computed form). The fork's copies are divergent: demo-envelope 131 lines vs the foundation's 2239 at the pin (433 at 7bd1de47…), dom-shim 508 vs 237. The mount-invariant-guard module stays vendored; its reconcileMount fix is not in the set (PD-UI-10)."
+        "reason": "X-1 EXCLUSION — THREE out-of-set imports, all re-derived at `revision` (2026-11-16): ../src/shared/dom-shim.js (static and import type), ../src/renderer/runtime.js (Runtime, static) and ../src/shared/demo-envelope.js (demoEnvelope, static and computed form). The fork's copies are divergent: demo-envelope 131 lines vs the foundation's 2239 at the pin (433 at 7bd1de47…), dom-shim 508 vs 237. The mount-invariant-guard module stays vendored; its reconcileMount fix is not in the set (PD-UI-10)."
       }
     ],
     "notAdmitted": [
@@ -1025,36 +1025,54 @@
         "class": "NESTED-PLACEMENT",
         "criterion": "nested",
         "reason": "Nested at depth 3 (`tests/unit/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 3 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-tabs-record/declared-entries.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-tabs-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/integration/store-view-record/declared-entries.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/integration/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 1 relative `src/` specifier(s) measured at the pin."
+      },
+      {
+        "suite": "tests/unit/store-view-record/family-object.test.ts",
+        "class": "NESTED-PLACEMENT",
+        "criterion": "nested",
+        "reason": "Nested at depth 3 (`tests/unit/store-view-record/…`): the leg's placement is flat, one directory up from this suite, so it has no place; 2 relative `src/` specifier(s) measured at the pin."
       }
     ],
     "outOfUniverse": [
       {
         "suite": "tests/module-store.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/security-store.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/store-core-graph.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/store-core-graph-integration.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/store-focus.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/store-persist.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       },
       {
         "suite": "tests/store-security.test.ts",
-        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-15 — no blob at any path), so no disposition may name a suite that does not exist."
+        "reason": "named by unit-foundation-rerevendor-2026-10-04.md §2.3 as OUT-OF-UNIVERSE; ABSENT from the pinned tests/ at `revision` (measured 2026-11-16 — no blob at any path), so no disposition may name a suite that does not exist."
       }
     ],
     "caveats": [

@@ -20,10 +20,10 @@ The strata workflow ran for the first time in this project today. Read `strata/b
 
 ## What is owed, in order
 
-1. **THE FOUNDATION ANSWERED `DLV-1…DLV-3` (D-26)** — its HEAD is `b312d83` (25 commits ahead), their
-   `forking.md` §2.5/§3.4 and the `viewFamily` object are the answer, the fifteen vendored modules are still
-   byte-equal (so the re-pin owes no module byte), and two of our asks were refused with reasons. **`B-0`
-   `re-pin-b312d83` is now the program's first unit.**
+1. **`B-0` LANDED (D-27): the pin is `b312d83…`**, the universe is a measured 150-suite disposition set, and
+   the re-pin owed NEITHER a module NOR a copy byte (the copies are byte-equal at both pins). **`B-1`
+   `record-engine-seam` is the program's next unit** — it adopts the foundation's `viewFamily` object under
+   D-26's five measured constraints.
 2. **THE BASELINE PROGRAM IS MAPPED AND `B-1` IS ITS SECOND UNIT** (`docs/L1/foundation-migration-program.md`:
    ten units over three modules; `record-engine` and `gnosis-changes` are new). **The Gnosis event feed is
    LANDED engine-side** (`GET /changes`, `gnosis_server.rs:1056`) — the fork's consumer is unit `B-4`, so NO

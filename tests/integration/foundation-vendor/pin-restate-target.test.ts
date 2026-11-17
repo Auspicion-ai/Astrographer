@@ -28,7 +28,7 @@
 //       declaration, and that literal is the lock's `foundation.commit` (agreement, never a
 //       hardcoded revision).
 //   E — the REGISTER COUPLING: measured from the contract's anchored `§4` region and from the
-//       register source — exactly 4 `declared refresh reading` clauses, 4 distinct dates, the
+//       register source — exactly 5 `declared refresh reading` clauses, 5 distinct dates, the
 //       GOVERNING reading equal to the lock's `foundation.measuredAt`, and the register's own two
 //       clause-count assertions reading the same number. A NON-VACUITY control drives the clause
 //       counter over a synthetic 2-clause region.
@@ -39,8 +39,9 @@
 // consumer behaviour and it is NOT app-green.
 //
 // COLOURS AT THE AUTHORING HEAD (the implementer's target is the inverse of A/B/E): A, B and E are
-// expected RED at this head (the lock still pins `7bd1de4786c4d46a3fee02f72adaf6ef612985d1`, its
-// `measuredAt` is still `2026-10-04`, and the `§4` region still carries 3 clauses); C, D and F are
+// expected RED at this head (the lock still pins a revision that is NOT the adjacent tree's HEAD —
+// both are printed by limb A at run time, never restated here — its `measuredAt` is still the prior
+// run day `2026-11-15`, and the `§4` region still carries 4 clauses); C, D and F are
 // green-on-arrival guards. No limb is relaxed to change a colour.
 
 import { spawnSync } from 'node:child_process'
@@ -87,11 +88,11 @@ const PINNED_FIFTEEN = [
   'zones',
 ] as const
 
-/** Limb B — THE DAY THIS UNIT'S RUN READ: `date +%F` returned `2026-11-15` when this row was
- *  authored, and the run's own LOCAL day is authoritative (the corpus's A-12 rule), never a UTC
+/** Limb B — THE DAY THIS UNIT'S RUN READ: `date +%F` returned `2026-11-16` when this row was
+ *  re-pointed, and the run's own LOCAL day is authoritative (the corpus's A-12 rule), never a UTC
  *  day. If a later run's local day differs, THIS LITERAL is corrected in place — the limb asserts
  *  the unit's run day, never a stale one. */
-const UNIT_DAY = '2026-11-15'
+const UNIT_DAY = '2026-11-16'
 
 // ---------------------------------------------------------------------------
 // SMALL READERS
@@ -357,7 +358,7 @@ describe('PIN-RESTATE TARGET — the unit’s landed state, asserted from the lo
     ).toBe(readAtRunTime)
   })
 
-  it('B — `vendor/foundation.lock.json`’s `foundation.measuredAt` equals this unit’s declared run day (2026-11-15, the day this unit’s run read)', () => {
+  it('B — `vendor/foundation.lock.json`’s `foundation.measuredAt` equals this unit’s declared run day (2026-11-16, the day this unit’s run read)', () => {
     const lock = readLock()
     expect(
       lock.measuredAt,
@@ -399,7 +400,7 @@ describe('PIN-RESTATE TARGET — the unit’s landed state, asserted from the lo
     }
   })
 
-  it('E — the register coupling: the contract’s anchored `§4` region carries exactly 4 `declared refresh reading` clauses with 4 distinct dates, its GOVERNING reading equals the lock’s `foundation.measuredAt`, and the register’s own two clause-count assertions read the same number', () => {
+  it('E — the register coupling: the contract’s anchored `§4` region carries exactly 5 `declared refresh reading` clauses with 5 distinct dates, its GOVERNING reading equals the lock’s `foundation.measuredAt`, and the register’s own two clause-count assertions read the same number', () => {
     // -----------------------------------------------------------------------
     // NON-VACUITY CONTROL FIRST: a counter that always returns the expected number must be
     // shown to discriminate, so it is driven over a synthetic region carrying only TWO clauses.
@@ -436,12 +437,12 @@ describe('PIN-RESTATE TARGET — the unit’s landed state, asserted from the lo
     const clauseDates = measured.clauses.map((clause) => clause.date)
     expect(
       measured.clauses.length,
-      `E: the anchored §4 region (${region.detail}) must carry EXACTLY 4 \`declared refresh reading (<YYYY-MM-DD>)\` clauses — the as-filed three PLUS this unit’s re-anchoring clause; it carried ${measured.clauses.length}: [${clauseDates.join(', ')}].`,
-    ).toBe(4)
+      `E: the anchored §4 region (${region.detail}) must carry EXACTLY 5 \`declared refresh reading (<YYYY-MM-DD>)\` clauses — the four readings it keeps visible PLUS this unit’s re-anchoring clause; it carried ${measured.clauses.length}: [${clauseDates.join(', ')}].`,
+    ).toBe(5)
     expect(
       new Set(clauseDates).size,
-      `E: the region must cite 4 DISTINCT dates (one per refresh it keeps visible); it cited ${new Set(clauseDates).size} over [${clauseDates.join(', ')}].`,
-    ).toBe(4)
+      `E: the region must cite 5 DISTINCT dates (one per refresh it keeps visible); it cited ${new Set(clauseDates).size} over [${clauseDates.join(', ')}].`,
+    ).toBe(5)
     const lock = readLock()
     expect(
       measured.reading,

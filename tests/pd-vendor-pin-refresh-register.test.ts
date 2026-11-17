@@ -2038,17 +2038,19 @@ describe('PD-VENDOR-PIN-REFRESH §4 — the register arithmetic, the caps, the r
     // THE REAL READING IS UNMOVED BY THE SELECTION RULE — and the selection limb is
     // exercised by the LANDED contract itself: the anchored region carries the AS-FILED
     // clause (`§4.1` ②, the `2026-09-28` reading the re-anchoring clause supersedes) AND
-    // the amended governing clause, and the rule picks the GOVERNING one.
+    // each dated governing clause a later refresh appended BESIDE it, and the rule picks the
+    // GOVERNING one. ⟨The two messages below count the clauses dynamically: each unit that
+    // re-anchors the region moves the count, so no message may restate it as a fixed word.⟩
     const realClauses = declaredReadingClauses(region.text)
     expect(
       realClauses.length,
-      `G-3: the anchored §4 region carries the as-filed clause AND the amended governing clause (read ${realClauses.length}: [${realClauses.map((c) => c.date).join(', ')}]) — a region whose clauses are read here so the selection is visible, not inferred`,
-    ).toBe(4)
+      `G-3: the anchored §4 region carries the as-filed clause AND every governing clause a later refresh appended beside it (read ${realClauses.length}: [${realClauses.map((c) => c.date).join(', ')}]) — a region whose clauses are read here so the selection is visible, not inferred`,
+    ).toBe(5)
     const realClauseDates = realClauses.map((c) => c.date)
     expect(
       new Set(realClauseDates).size,
-      `G-3: the two clauses cite DIFFERENT readings (${realClauseDates.join(', ')}) — so the region itself is the selection limb's subject, and a last-match reader and the governing reader CAN be told apart on the landed contract`,
-    ).toBe(4)
+      `G-3: the region's clauses cite DIFFERENT readings (${realClauseDates.join(', ')}) — so the region itself is the selection limb's subject, and a last-match reader and the governing reader CAN be told apart on the landed contract`,
+    ).toBe(5)
     expect(real.reading, 'G-3: the reading the `measuredAt` limb compares against IS the LAST clause’s — the landed region’s governing clause, which is the amended one').toBe(realClauses[realClauses.length - 1]!.date)
     expect(
       String(real.reading),

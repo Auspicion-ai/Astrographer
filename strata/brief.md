@@ -46,7 +46,7 @@ replaced, never annotated.
 | Tool groups (gate) | **9** — `read`, `dispatch`, `graph`, `code`, `module`, `rag`, `edit`, `gnosis`, `gnosis-edit` | `src/main/security.ts` (`VALID_GROUPS`) |
 | Transports | stdio, and Streamable HTTP behind `--mcp-transport=http` | `package.json`'s `start:http`, `src/main/main.ts` |
 | Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
-| Foundation pin | commit `e8dfb57…`, measured 2026-11-15 by unit `V-1`; **15** modules byte-identical at that commit, so the move owed no module byte | `vendor/foundation.lock.json`, `docs/L1/unit-v-1-pin-restate.md` |
+| Foundation pin | commit `b312d83…`, measured 2026-11-16 by unit `B-0`; **15** modules byte-identical at that commit and the eleven conformance copies byte-equal at both pins, so the move owed neither a module nor a copy byte | `vendor/foundation.lock.json`, `docs/L1/unit-b-0-re-pin-b312d83.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
 | Tests | **144** flat `tests/*.test.ts` + 3 flat `tests/*.test.mjs`, and **3** nested `tests/integration/<module>/*.test.ts` the units added (147 `.test.ts` collected in all); a git pathspec's `*` crosses directories, so the census is taken with `find -maxdepth` | `find tests -maxdepth 1 -name '*.test.ts'`, `find tests -mindepth 2 -name '*.test.ts'` |
 | Docs corpus | **254** tracked files, **227** of them under `docs/specs/` (re-measured after the `docs/L1/` unit contracts landed) | `git ls-files 'docs/**'` |
@@ -101,7 +101,7 @@ surface locally where an import unit would move the pin (D-11).
 
 | Instrument | Reading | What it can see |
 |---|---|---|
-| `npm test` | at the `V-2` landing: **147 files / 3,245 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
+| `npm test` | at the `B-0` landing: **155 files / 3,312 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
 | `npm run typecheck` | exit 0 at the same head | `src/**/*.ts` only |
 | `npm run build` | exit 0 at the same head | the bundles exist at all |
 | `npm run conformance` | **11 files, 11 failed — 511 failed / 59 passed (570)**, 3 suites collecting zero tests: a class tally and nothing more | the leg cannot see what it is usually assumed to see — its copies' specifiers resolve against a `vendor/Provident-Electron/src/` that does not exist, so the tally proves neither copy fidelity (the register does that) nor behaviour (D-11) |

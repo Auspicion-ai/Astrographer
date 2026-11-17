@@ -550,3 +550,27 @@ at ARITY 0 and receives nothing; the sink's address is the triggering LEAF, neve
 new family's address must be added to the delivery's private array IN THE SAME EDIT as its spec (their two rows
 red on a half-edit); a root with no declaration is lawful and must stay expressible (`['drag']`); and their
 census rows prove INDEPENDENCE, not agreement.
+
+---
+
+## D-27 — The pin is `b312d83…`, and the re-pin owed neither a module nor a copy byte
+
+**Status:** ACTIVE · **Date:** 2026-11-16 · **Source (measurement):** unit `B-0`'s landing
+(`docs/L1/unit-b-0-re-pin-b312d83.md`), re-taken in this seat (the fifteen md5-equal at `b312d83`; the six
+foundation-vendor instruments 176/176; drift CLEAN with its pin arm equal)
+
+**Decision:** the pin is `b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921`, `measuredAt` `2026-11-16`, and the
+anchored §4 region carries **five** dated declared-refresh-reading clauses whose last governs. The suite
+universe moved **147 → 150** (11 included · 4 excluded · **135** not-admitted · 7 retired · 4 caveats) and
+the leg's tally is **unchanged** at 511/59/570 — because, measured, **the eleven vendored conformance copies
+are byte-equal at BOTH pins**, so this re-pin owed no copy byte either. That falsifies D-26's clause "and the
+conformance copies" and D-21's `147/132` figures as readings; both keep their text and read through this row.
+
+**Two corrections recorded so the next re-pin does not inherit them:** the red set's prediction that the
+conformance register's arm `C` would red BEFORE the change was WRONG — it reads the universe at the lock's
+`commit`, so it reds only BETWEEN the pin move and the block restatement, which is exactly why those two are
+one atomic act; and `tests/pd-vendor-manifest.test.ts`'s row TITLE is now three pins stale (owner: the pin's
+TestWriter, `F-14`).
+
+Rejected alternative: re-copying the eleven suites to be safe — which would write identical bytes and report
+an act that did nothing.

@@ -89,7 +89,7 @@ const PINNED_FIFTEEN = [
 ] as const
 
 /** §3.3 item 2 — the architect-measured pinned revision. */
-const PINNED_COMMIT = 'e8dfb57730f657521d543c8d49f0d67e7ee1e6d4'
+const PINNED_COMMIT = 'b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921'
 
 /** §2.2 — the four baseline files that are NOT replaced (clause (2) of `R-3`). */
 const BASELINE_FILES_NOT_REPLACED = [
