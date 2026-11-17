@@ -520,3 +520,33 @@ its one-state collapse (D-22), its pane head and gutter (U-2) and its placement 
 migration becomes an INCREMENTAL re-plumbing of pane behaviour on a tree whose live gate still reads,
 never a base swap that blinds it. Surface (d) stays a program, and it is now the seam BOTH sides agree on
 (D-23's display state, never content).
+
+---
+
+## D-26 — The foundation answered `DLV-1…DLV-3`; the re-pin is owed and the family object is adopted, not hand-rolled
+
+**Status:** ACTIVE · **Date:** 2026-11-16 · **Source:** the foundation's own agents' handover, received and
+verified in this seat (`strata/records/foundation-handover-2026-11-16.md`)
+
+**What was verified here, not taken on trust:** the foundation's HEAD is **`b312d83`**, **25 commits / 30
+files** ahead of our pin (`+2,139/−509`); `forking.md` now carries **§2.5** (a record family of your own) and
+**§3.4** (when your data is not the record); `viewFamily`/`VIEW_FAMILIES` exist in their
+`src/main/view-record/index.ts`; and — the reading that decides the cost — **the fifteen vendored modules are
+still byte-equal at `b312d83`**, so the re-pin owes no module byte (only the pin, the five value lines and the
+conformance copies).
+
+**Decision:** the baseline program starts with a RE-PIN (`B-0`) to `b312d83`, because nothing they answered
+reaches this tree until the pin moves. Then `B-1` adopts their **family object** (`viewFamily` / `VIEW_FAMILIES`
+/ the spec types, with the `tag` discriminant load-bearing) rather than a hand-rolled seam, and it copies their
+three rows (`FH-1`, `FH-2`, `FH-3`) as the relation nothing in this fork measures.
+
+**Two refusals recorded so they are not re-asked by accident:** the delivery-level constructor (our DLV-2 clause
+4) and the `subscribe` signature widening (DLV-1 as a mechanism) are REFUSED upstream with reasons; if this fork
+ever needs either, it files again and the item becomes a unit THERE — never a workaround here (D-9's rule read
+at the design layer).
+
+**Five measured constraints the units inherit** (each cost the foundation a row): a subscribe handler is called
+at ARITY 0 and receives nothing; the sink's address is the triggering LEAF, never a root — route on a prefix; a
+new family's address must be added to the delivery's private array IN THE SAME EDIT as its spec (their two rows
+red on a half-edit); a root with no declaration is lawful and must stay expressible (`['drag']`); and their
+census rows prove INDEPENDENCE, not agreement.

@@ -31,6 +31,12 @@
 - **Why `record-engine` and not `shell-chrome`.** The family, its seam and its client are one contract with one reader; `shell-chrome` would put the record's value arms in the module that paints panes, and D-7's cap would hide the growth. **Why `gnosis-changes` and not `shell-chrome`.** `B-4` WRITES `ENGINE_ENDPOINTS`, so it must own the file it writes; `shell-chrome` owns none of `src/main/engine-*.ts` today.
 - **Named, not hidden:** the remainder of the fork's `src/main` (`mcp-server.ts`, `rag-store*.ts`, `authority-store.ts`, `backlinks.ts`, `edit-ops.ts`, …, 40 files) is claimed by **no** module — as it was under the ported program. This map does not widen to cover it; a path no module claims is a lint reading (ASM-L1-4's precedent), and every unit here writes only its own module's paths.
 
+### `B-0` `re-pin-b312d83` — the pin move that brings the answers into reach (added 2026-11-16)
+
+The foundation's reply to `DLV-1…DLV-3` is **not in this tree** until the pin moves: their HEAD is `b312d83`, 25 commits / 30 files ahead of ours, and `forking.md` §2.5/§3.4 exist only there. The re-pin owes **no module byte** — the fifteen vendored modules are byte-equal at `b312d83` (measured in this pass) — so it is `V-1`'s own act repeated: the lock's three `foundation` keys, the three `PINNED_COMMIT` constants, the anchored §4 clause and its count assertions, and **the conformance copies refreshed again** (they are one revision behind at every re-pin; `V-2`'s instrument is what says so). Order: `B-0` → `B-1`.
+
+**`B-1` adopts the foundation's family object, not a hand-rolled seam** (`viewFamily` / `VIEW_FAMILIES` / the spec types, the `tag` discriminant load-bearing), and copies their three rows (`FH-1`, `FH-2`, `FH-3` — D-26). It inherits their five measured constraints: a subscribe handler is called at ARITY 0; the sink's address is the triggering LEAF; a family's address goes into the delivery's private array IN THE SAME EDIT as its spec; a root with no declaration stays expressible; and the census rows prove independence, not agreement.
+
 ## 3. The units
 
 ### `B-1` `record-engine-seam` — module `record-engine`
