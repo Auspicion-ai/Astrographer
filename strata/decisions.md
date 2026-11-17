@@ -574,3 +574,24 @@ TestWriter, `F-14`).
 
 Rejected alternative: re-copying the eleven suites to be safe — which would write identical bytes and report
 an act that did nothing.
+
+---
+
+## D-28 — The seam has a consumer, and the two earlier clauses that assumed it did not are superseded as readings
+
+**Status:** ACTIVE · **Date:** 2026-11-17 · **Source (measurement):** unit `B-1`'s landing
+(`docs/L1/unit-b-1-record-engine-seam.md`), re-taken in this seat (the module battery 102/102, `typecheck` 0,
+`build` 0 with no package reference in either built entry)
+
+**Decision:** the two clauses that described `provident-storeroom` as consumerless are SUPERSEDED AS
+READINGS, kept as filed and read through this row. D-20's "no unit may claim a storeroom consumer until
+surface (d) admits one" is discharged by `B-1`, which becomes the package's ONE consumer; and D-25's
+justification clause "zero `storeroom` references in the fork's `src/`" is a statement about the tree as it
+stood on 2026-11-16, not about this head. The findings they carried still stand as HISTORY: the reason the
+second build was refused (a foreign engine) was true then and this row does not reopen it — it records that
+the fork has since built the seam it was missing, at the scale D-23 set.
+
+**The one red this creates, named with its owner:** `tests/integration/shell-chrome/deps-adopt-engine-provider.test.ts`
+limb `E` asserted the ABSENCE of a consumer; it is now the suite's one class-(b) red and `E-1`'s TestWriter
+re-grains it to the successor claim (exactly one consumer, and it is a declared module) — never deleting the
+row, whose point was that none existed.

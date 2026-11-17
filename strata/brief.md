@@ -101,7 +101,7 @@ surface locally where an import unit would move the pin (D-11).
 
 | Instrument | Reading | What it can see |
 |---|---|---|
-| `npm test` | at the `B-0` landing: **155 files / 3,312 passed \| 22 skipped / 4 failed** — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
+| `npm test` | at the `B-1` landing: **167 files / 3,413 passed \| 22 skipped / 5 failed** — four class-(a) real-ollama gates plus ONE class-(b) red, named: `deps-adopt-engine-provider.test.ts` limb `E`, whose "no consumer" premise `B-1` lawfully ends (`docs/defects.md`, owner `E-1`'s TestWriter) — the four reds are the real-ollama live gates (the `embeddinggemma` model absent), not the change set; the last clean reading was 140 files / 3,105 passed / 0 failed at `9119608` | pure-module and main-process behaviour under the layout-less DOM shim — envelope-green, never app-green (D-10) |
 | `npm run typecheck` | exit 0 at the same head | `src/**/*.ts` only |
 | `npm run build` | exit 0 at the same head | the bundles exist at all |
 | `npm run conformance` | **11 files, 11 failed — 511 failed / 59 passed (570)**, 3 suites collecting zero tests: a class tally and nothing more | the leg cannot see what it is usually assumed to see — its copies' specifiers resolve against a `vendor/Provident-Electron/src/` that does not exist, so the tally proves neither copy fidelity (the register does that) nor behaviour (D-11) |
