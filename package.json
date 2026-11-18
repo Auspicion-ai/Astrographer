@@ -1,7 +1,7 @@
 {
   "name": "provident-electron",
   "version": "0.1.0",
-  "description": "Prebuilt Electron shell for apps using the Provident SSR framework (provident-ssr) — full synthetic-event access + rendered-HTML visibility for MCP endpoints, for agentic use and debugging exposure.",
+  "description": "Prebuilt Electron shell for apps using the Provident SSR framework (provident-ssr) \u2014 full synthetic-event access + rendered-HTML visibility for MCP endpoints, for agentic use and debugging exposure.",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "dist/main/main.cjs",
@@ -28,7 +28,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "provident-editable": "^0.2.0",
     "provident-ssr": "^0.5.2",
-    "provident-storeroom": "^1.11.0",
+    "provident-storeroom": "^1.12.0",
     "undici": "^6.28.1"
   },
   "devDependencies": {
@@ -38,5 +38,8 @@
     "typescript": "^5.5.0",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

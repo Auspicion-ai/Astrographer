@@ -629,3 +629,36 @@ standing red) and the contract plus the L2/L3 crossing pages stay live, each sta
 
 Rejected alternative: keeping the wiring in the tree — which would leave a baseline whose `npm run start`
 fails, and D-25 made this tree the baseline.
+
+---
+
+## D-30 — The upstream answer, adopted; the Node floor attested; the re-pin owed and named
+
+**Status:** ACTIVE · **Date:** 2026-11-16 · **Source:** the foundation's handover (received and verified in
+this seat) plus the measurements below
+
+**What was verified HERE, not taken on trust:** `provident-storeroom@1.12.0` is installed and its exports map
+now reads `{".": {types, import, require}}` with `require` naming the same ESM entry; a `.cjs` file at our repo
+root loads it — **`CJS require OK — keys: storeCreate`**, `storeCreate: function`; its `engines.node` is
+`>=22.12.0` and this seat's Node is **v24.20.0**; and the tree still types and builds at the bump.
+
+**Decision:** the fork adopts `provident-storeroom@^1.12.0` and **attests `engines.node: ">=22.12.0"` in
+`package.json`** — because the upstream handover is right that the REAL constraint moved from the exports map to
+the Node floor (below it, the loader refuses). It **keeps `--external:provident-storeroom`**: the silent-inline
+trap is unchanged and measured on both sides (their two-line probe: 213,948 bytes inlined from a two-line
+probe; our own earlier reading: 2,667,936 B stripped). It **does not shim**: the five refused workarounds stay
+refused for the reason we found, and `--experimental-require-module` could never have helped until a condition
+existed in the exports map. **`B-2a` (`main-bundle-esm`) is therefore NOT required** — it stays an option, which
+is exactly what D-29's route 2 said it was.
+
+**The census lesson already holds here, and this seat checked rather than assumed:** their D-299 says the
+constant had declared 13 while the package answers 14 at a bare construction (15 armed or after a write, the
+14th being `Symbol(provident-storeroom.registration-deliver)`), and that a row reading the CONSTANT makes the
+declaration its own witness. Our `STOREROOM_DECLARED_SURFACE.symbolCount` is **14** and our
+`seam-census.test.ts` **enumerates `Object.getOwnPropertySymbols` on a live instance and compares the count**
+— so the figure is checked against the instance, not against itself, and the 15th-after-a-write is documented
+in the constant. `B-1` reached their conclusion independently; the handover confirms it.
+
+**OWED and NAMED, not hidden:** the foundation's HEAD moved to **`49d3137`**, 7 commits past our pin, so
+`npm run drift` now reads **FAIL — 1 PIN fault** (the byte arm still equal). A re-pin (`B-0b`) is owed before
+any unit cites a foundation page again; until it lands the FAIL is a known reading, not a surprise.

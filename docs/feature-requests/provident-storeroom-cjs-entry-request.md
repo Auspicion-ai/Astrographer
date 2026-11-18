@@ -40,3 +40,14 @@ Any of these satisfies it; the named example is the cheapest:
 `STOREROOM-EXPORTS-MAP-IMPORT-ONLY`; the boot smoke that produced `ERR_PACKAGE_PATH_NOT_EXPORTED` from the
 fork's built `main.cjs`, and the unmodified-main boot that succeeded once the `require` condition was added to
 a scratch copy of the package.
+
+---
+
+## DISCHARGED — `provident-storeroom@1.12.0`, published 2026-11-18
+
+The answer is the first option requested: the exports map now reads `{".": {types, import, require}}`, with
+`require` naming the same ESM entry. Verified in this fork: a `.cjs` host file loads the package
+(`keys: storeCreate`) and `storeCreate` is a function. The one term the answer adds is `engines.node
+>=22.12.0` (below it the loader refuses) — attested in our `package.json`; this seat runs v24.20.0. The
+silent-inline trap is unchanged and the `--external:provident-storeroom` flag stays. No CJS build was
+published and none is needed: one file, two specifiers, no dual-package hazard.

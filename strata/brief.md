@@ -45,7 +45,7 @@ replaced, never annotated.
 | MCP tools | **59** in `ALL_TOOLS`; **3** resources (2 fixed URIs + 1 template) | `src/main/mcp-server.ts` |
 | Tool groups (gate) | **9** — `read`, `dispatch`, `graph`, `code`, `module`, `rag`, `edit`, `gnosis`, `gnosis-edit` | `src/main/security.ts` (`VALID_GROUPS`) |
 | Transports | stdio, and Streamable HTTP behind `--mcp-transport=http` | `package.json`'s `start:http`, `src/main/main.ts` |
-| Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.11.0`, `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
+| Consumed packages | `provident-ssr ^0.5.2`, `provident-storeroom ^1.12.0` (the CJS condition landed upstream; `engines.node >=22.12.0` attested), `provident-editable ^0.2.0`, `@modelcontextprotocol/sdk ^1.30.0`, `undici ^6.28.1` | `package.json`'s `dependencies` (D-20) |
 | Foundation pin | commit `b312d83…`, measured 2026-11-16 by unit `B-0`; **15** modules byte-identical at that commit and the eleven conformance copies byte-equal at both pins, so the move owed neither a module nor a copy byte | `vendor/foundation.lock.json`, `docs/L1/unit-b-0-re-pin-b312d83.md` |
 | Source files | **92** tracked `src/**/*.ts` — 43 `src/main`, 26 `src/renderer`, 23 `src/shared` | `git ls-files 'src/**/*.ts'` |
 | Tests | **144** flat `tests/*.test.ts` + 3 flat `tests/*.test.mjs`, and **3** nested `tests/integration/<module>/*.test.ts` the units added (147 `.test.ts` collected in all); a git pathspec's `*` crosses directories, so the census is taken with `find -maxdepth` | `find tests -maxdepth 1 -name '*.test.ts'`, `find tests -mindepth 2 -name '*.test.ts'` |
