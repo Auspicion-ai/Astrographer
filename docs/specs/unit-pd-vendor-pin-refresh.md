@@ -685,6 +685,21 @@ the region's declared-refresh-reading clause count therefore reads **`5`** (`202
 declared reading**, it still discriminates against an absent, ill-formed or uncoupled date, and this is a **CONTRACT
 clause, not a register term** — the declared terms `7` + `16` + `21` = `44` stand exactly as landed.
 
+**⟨THE `measuredAt` RE-ANCHORING CLAUSE — added by unit `B-0b` (`re-pin-49d3137`) of the strata foundation-migration program, `docs/L1/unit-b-0b-re-pin-49d3137.md` §2 site 5 (the route `§1.2` item 10's carve-out authorizes: one dated, additive clause inside this anchored `§4` region, ordered by a refresh contract's measured-day coupling — `unit-foundation-rerevendor-2026-10-04.md` §1.1 item 7), in the SAME landing that moved the pin to the adjacent tree's HEAD as READ at that landing's own run; ANNOTATE-BESIDE (`RCA-8(c)`): no as-filed clause above is deleted, renumbered or rewritten, and the SUPERSEDED reading is kept visible here.⟩** **the contract's declared refresh
+reading (`2026-11-18`) SUPERSEDES the as-filed declaration (the SUPERSEDED reading `2026-11-16` stays
+visible beside it, never deleted and never rewritten).** The register's `measuredAt` limb compares the
+manifest's `foundation.measuredAt` against the governing declared reading clause in this anchored `§4`
+region, so this clause re-couples that limb automatically: **`foundation.measuredAt` moved `2026-11-16` → `2026-11-18`**
+in the `B-0b` (`re-pin-49d3137`) landing, because that landing's own run read the **LOCAL/repo day `2026-11-18`**
+(`A-12`; the refresh's own reading's day is authoritative, never a UTC day), while the pin literal itself moved
+`b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921` → `49d3137dbf81b6e535e62a30d9e494d80e9589b3` in the same landing, and
+the region's declared-refresh-reading clause count therefore reads **`6`** (`2026-09-28` · `2026-09-30` · `2026-10-04` ·
+`2026-11-15` · `2026-11-16` · `2026-11-18`), the count the register's own two clause-count assertions carry
+(`tests/pd-vendor-pin-refresh-register.test.ts`, the `§4 row 2 (G-3)` row).
+**NO TOOTH IS RELAXED AND NO TERM MOVES:** the limb still requires **present** · **`YYYY-MM-DD`** · **equal to the
+declared reading**, it still discriminates against an absent, ill-formed or uncoupled date, and this is a **CONTRACT
+clause, not a register term** — the declared terms `7` + `16` + `21` = `44` stand exactly as landed.
+
 ---
 
 ## 5. The layer ledger — what this unit does NOT claim

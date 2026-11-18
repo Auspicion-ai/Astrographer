@@ -89,7 +89,7 @@ const PINNED_FIFTEEN = [
 ] as const
 
 /** §3.3 item 2 — the architect-measured pinned revision. */
-const PINNED_COMMIT = 'b312d8390ddf36a6da48cc0b4b2e6aa3b61dc921'
+const PINNED_COMMIT = '49d3137dbf81b6e535e62a30d9e494d80e9589b3'
 
 /** §2.2 — the four baseline files that are NOT replaced (clause (2) of `R-3`). */
 const BASELINE_FILES_NOT_REPLACED = [
@@ -324,7 +324,7 @@ describe('PD-VENDOR §2.2 — the manifest shape (foundation block + per-module 
   //  citation — the shape the repo already uses (`A-3`/`D-12`: a superseded literal is kept as an
   //  annotated citation, never deleted). NO ASSERTION CHANGES: the row below still reads
   //  `expect(foundation.commit).toBe(PINNED_COMMIT)`, which is the pin as consumed.
-  it('§3.3 item 2 — foundation.commit equals the pinned revision 93c058f6…7ab3 ⟨superseded: dd34e011…adbfe was the pin before the 2026-10-05 refresh; d7b98b57…f52cb5 before the 2026-09-30 one; 8f193a8…f82459 before the 2026-09-28 one⟩', () => {
+  it('§3.3 item 2 — foundation.commit equals the pinned revision 49d3137…89b3 ⟨superseded: b312d839…dc921 was the pin before the 2026-11-18 re-pin; e8dfb577…e6d4 before the 2026-11-16 one; 7bd1de47…985d1 before the 2026-10-04 re-vendor; 93c058f6…7ab3 before the 2026-10-05 refresh; dd34e011…adbfe before the 2026-09-30 one; d7b98b57…f52cb5 before the 2026-09-28 one; 8f193a8…f82459 before the 2026-09-28 one⟩', () => {
     const foundation = requireManifest().foundation as Record<string, unknown>
     expect(foundation, 'the manifest carries no `foundation` block').toBeDefined()
     expect(foundation.commit).toBe(PINNED_COMMIT)

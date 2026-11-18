@@ -688,3 +688,27 @@ export census 2 → 4, the preload member set gaining `display`, and the preload
 `b13c3189…`) — being paid under their own licensed rule; FOUR reds that are the foundation pin's drift
 (`49d3137` vs our `b312d83`), which is `B-0b`'s; and one INFO for `B-3`: the client's held reading aliases
 the port's answer, so `B-3` must pin it.
+
+---
+
+## D-32 — The pin is `49d3137…`; the universe is 152 and the re-pin owed no copy byte for the second time
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** unit `B-0b`'s landing
+(`docs/L1/unit-b-0b-re-pin-49d3137.md`), re-verified in this seat (`drift` CLEAN with its PIN ARM equal; the
+pin rows 121/121; the full suite at its environmental floor)
+
+**Decision:** the pin is `49d313739dbf81b6e535e62a30d9e494d80e9589b3`, `measuredAt` `2026-11-18`, and the
+anchored §4 region carries **six** dated clauses. The suite universe is **152** (11 included · 4 excluded ·
+137 not-admitted · 7 retired · 4 caveats), re-derived with 0 orphans and 0 duplicates. **The fifteen vendored
+modules are byte-equal at the new head (15/15) and the eleven conformance copies are byte-equal at BOTH pins
+(0/11 moved)** — so this re-pin owed **no module byte and no copy byte**, the second consecutive one, and the
+foundation's "two changes touched the tests" landed in a nested boundary row and a not-admitted census
+constant, neither of them a vendored suite.
+
+**One INFO from `B-0` is measured FALSE and corrected beside itself:** the suggestion that the anti-vacuity
+baseline "must roll forward to `e8dfb57`" would make arm `A` vacuous, because the copies SIT at `e8dfb57`'s
+bytes — rolling the baseline to them would read 0 of 11 differing. The row is annotated, never reworded.
+
+**What this clears:** the drift leg's PIN arm, and all four class-(d) reds the suite carried. After this unit
+the suite reads `4 failed / 3,444 passed / 22 skipped`, and **all four are class (a)** — the standing
+real-ollama environment gates. Class (b) is 0 and class (c) is 0: the tree is at its clean floor.

@@ -156,7 +156,12 @@ const DEFAULT_FOUNDATION_PATH = '../Provident-Electron'
  *  comparison message). This revision exists in this file for exactly one purpose: arm `A` must
  *  prove that the eleven pin blobs DIFFER from the blobs of the revision the copies were left at
  *  — a byte comparison against a revision that produced the same bytes would prove nothing.
- *  It is the old pin `V-1` left the copies at (`docs/decisions.md` `D-19`). */
+ *  It is the older literal `D-19` keeps as filed (`D-11`'s pin) — three pin-moves back and TWO of them
+ *  re-pins — and it is NOT the revision the copies sit at: the copies were last re-copied at
+ *  `e8dfb57…` (`V-2`) and have not moved since (all eleven byte-equal at `b312d83…` and at the current
+ *  pin — measured), so this baseline is DELIBERATELY STALE and MUST NOT be rolled forward to those
+ *  pins, because arm `A` requires a revision whose eleven blobs DIFFER from the pin's — a roll-forward
+ *  would make the control vacuous. */
 const OLD_PIN_ANTI_VACUITY_BASELINE = '7bd1de4786c4d46a3fee02f72adaf6ef612985d1'
 
 /** The five `criterion` tags the block's `notAdmitted` rows may carry — EXACTLY this set, one
