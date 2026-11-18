@@ -76,12 +76,29 @@ const OPERATOR_SETTINGS_PATH = join(REPO_ROOT, 'src', 'main', 'operator-settings
 const SPEC_PATH = join(REPO_ROOT, 'docs', 'specs', 'unit-store-persist-adopt.md')
 const SELF_PATH = join(HERE, 'pd-store-persist-adopt.test.ts')
 
-/** §2.1 — the channel module's EXACT export-name set (`CENSUS`: 2 names, with terms). */
-const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT'] as const
-/** §2.1 — the two declared values, single-sourced in member 1. */
+/** §2.1 — the channel module's EXACT export-name set (`CENSUS`: 4 names, with terms).
+ *
+ *  ⟨RE-STATED 2026-11-18 — unit `B-2` (`display-wire`), §4; contract
+ *  `docs/L1/unit-b-2-display-wire.md`.⟩ **THE CLAIM IS UNMOVED AND THE SET IS WIDENED BY EXACTLY WHAT
+ *  THE CHANGE ADDED.** §2.1's claim is a SET EQUALITY between this module's export names and the
+ *  declared set: `B-2` homes this unit's two DISPLAY channel constants in THIS module rather than in
+ *  `src/shared/types.ts` — `DISPLAY_READ`, a REQUEST over `invoke`/`handle`, and `DISPLAY_CHANGED`, a
+ *  SIGNAL over `send`/`on` that carries nothing (`D-24`) — because three landed rows pin that file's
+ *  md5 while this module yields ONE structural sentence its own edit amends. So the module now
+ *  declares FOUR names and the module's own `CENSUS: 4 names` sentence moved in the SAME edit; the
+ *  as-filed `CENSUS: 2` is kept VISIBLE beside the restated literal rather than deleted. **NO OTHER
+ *  LIMB IS TOUCHED**: the module is still CONSTANTS-ONLY (no function, no state), the two STORE
+ *  constants still number exactly TWO (the `Y-3` push still rides the existing `webContents.send`
+ *  surface and needs no constant of its own — `constantsCensusProblems` below is unchanged), and the
+ *  single-source rule now covers all FOUR literals, which is the SAME rule over a wider subject. */
+const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED'] as const
+/** §2.1 — the four declared values, single-sourced in member 1 (the `B-2` pair added 2026-11-18; the
+ *  two store-channel values are the as-filed ones, unmoved). */
 const CHANNEL_VALUES: ReadonlyArray<[string, string]> = [
   ['STORE_FILE_GET', 'provident:store:file:get'],
   ['STORE_FILE_PUT', 'provident:store:file:put'],
+  ['DISPLAY_READ', 'provident:display:read'],
+  ['DISPLAY_CHANGED', 'provident:display:changed'],
 ]
 /** §2.1 — the CONTRACT's importer set: `src/main/main.ts` and `src/main/preload.ts` ONLY. */
 const CHANNEL_IMPORTERS = ['src/main/main.ts', 'src/main/preload.ts']
@@ -209,7 +226,7 @@ function channelModuleProblems(): string[] {
   const expected = [...CHANNEL_EXPORT_NAMES]
   if (exportNames.length !== expected.length || expected.some((n) => !exportNames.includes(n))) {
     problems.push(
-      `EXPORT-SET: the module's export-name set is [${exportNames.join(', ') || 'none'}] — §1.1 member 1 declares EXACTLY {${expected.join(', ')}} (CENSUS: 2 names, printed with its terms) (F-2)`,
+      `EXPORT-SET: the module's export-name set is [${exportNames.join(', ') || 'none'}] — §1.1 member 1 declares EXACTLY {${expected.join(', ')}} (CENSUS: ${String(expected.length)} names, printed with its terms; RE-STATED 2026-11-18 by unit \`B-2\` \`display-wire\` §4, which homed this unit's \`DISPLAY_READ\`/\`DISPLAY_CHANGED\` pair here and moved the census 2 → 4) (F-2)`,
     )
   }
   // (b) every export is a non-empty string constant — no function, no state, no logic
@@ -680,7 +697,7 @@ function persistedSetProblems(): { claimProblems: string[]; carrierProblems: str
 // ===========================================================================
 // ARM 1 — the channel module's export census + the single-source rule scan (§2.1).
 // ===========================================================================
-describe('PD-STORE-PERSIST-ADOPT arm 1 — the channel module: `src/main/store-channels.ts` declares EXACTLY {STORE_FILE_GET, STORE_FILE_PUT}, non-empty string constants only; the constants are single-sourced (a re-spelling anywhere else in src/** reddens); main.ts and preload.ts are the ONLY importers; the constants census stays TWO', () => {
+describe('PD-STORE-PERSIST-ADOPT arm 1 — the channel module: `src/main/store-channels.ts` declares EXACTLY {STORE_FILE_GET, STORE_FILE_PUT, DISPLAY_READ, DISPLAY_CHANGED} (the set RE-STATED 2026-11-18 by unit `B-2` `display-wire` §4 — census 2 → 4, claim unmoved), non-empty string constants only; every constant is single-sourced (a re-spelling anywhere else in src/** reddens); main.ts and preload.ts are the ONLY importers; the STORE-channel constants census stays TWO', () => {
   it('arm 1 — the module export census + the import closure + the whole-tree re-spelling scan + the importer census (§2.1; §1.1 member 1; §3 F-2/F-3)', () => {
     const problems = [...channelModuleProblems(), ...singleSourceProblems(), ...importerSetProblems(), ...constantsCensusProblems()]
     // eslint-disable-next-line no-console

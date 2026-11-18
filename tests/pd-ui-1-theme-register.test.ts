@@ -286,7 +286,39 @@ const UNTOUCHED_DIGESTS: Array<{ file: string; md5: string; superseded?: string;
   //  AFTER every `src/` write, identical both times: `78b237e4d53af16a846ec540c4b5be7c`). **NO OTHER ROW
   //  OF THIS TABLE IS TOUCHED** — the table stays SEVEN rows and `UNRESTATED_CONTROL_PATH` stays DERIVED
   //  from the table itself (still `src/shared/demo-envelope.ts`) and is NOT hand-edited here.
-  { file: 'src/main/preload.ts', md5: '78b237e4d53af16a846ec540c4b5be7c', superseded: 'eb230a8bcbe9b5444f95aa6a89c7fec2', restated: 'U-STORE-SECURITY-ADOPT' }, // ⟨RE-STATED BY `U-1b` 2026-11-15 (`C-6`, D-22 (1)): the md5 is re-MEASURED at the landing head and the immediate predecessor `cb1ee2ff3cd409363dd656a9914e72ad` is its `superseded` field; the SSW-era superseded literal stays visible on this line — `f24ea717a5f8f93a3ac490334611d22a`⟩ ⟨RE-STATED BY `U-4` 2026-11-16 (`R-4`, the `onSettingsOpen` bridge member): the md5 is re-MEASURED at the landing head and `U-1b`'s `eb230a8bcbe9b5444f95aa6a89c7fec2` is now this row's `superseded` field; the SSW-era superseded literal `f24ea717a5f8f93a3ac490334611d22a` STAYS VISIBLE on this line and the pinned `restated:` field is left alone (two landed SSW oracles pin it — the `U-1b` precedent)⟩
+  // ⟨RE-STATED 2026-11-18 — unit `B-2` (`display-wire`), §4; §4 `P-TH-SM-1` (e)/(f) / §1.2 (c).⟩
+  //  (This row is re-stated a FOURTH time; EVERY earlier note above is KEPT VERBATIM as that pass's
+  //  record — `RCA-8(c)`, annotate-beside, never rewritten.)
+  //  THE ROW'S SUBJECT IS UNCHANGED — the path stays a RECORDED, md5-pinned digest and its TEETH are
+  //  not relaxed (an UNRECORDED move of it still FAILS both the ⟨A-1⟩ digest limb and the working-tree
+  //  limb). WHAT MOVED IS THE RECORDED VALUE, and the move is LICENSED BY THIS ROW'S OWN TEXT: *"a
+  //  later pass may move the file only by re-stating it here, with its reason and its unit named"*.
+  //  **THE REASON:** `B-2` lands the DISPLAY CROSSING's bridge half — ONE top-level `ProvidentBridge`
+  //  member `display` (`{ read, onChanged }`, the realm's ONLY door to the crossing), implemented over
+  //  the TWO channel constants that same landing declares in `src/main/store-channels.ts`
+  //  (`DISPLAY_READ`, a REQUEST over `invoke`/`handle`; `DISPLAY_CHANGED`, a SIGNAL over `send`/`on`
+  //  that carries nothing) — so its bytes MOVE by construction. **THE UNIT:** `B-2` (`display-wire`),
+  //  contract `docs/L1/unit-b-2-display-wire.md` §4 / §9. **THE SUPERSEDED VALUE IS THE ROW'S OWN
+  //  `superseded:` FIELD BESIDE IT** (`78b237e4d53af16a846ec540c4b5be7c`, the `U-4` value, kept
+  //  VISIBLE and NEVER deleted; the SSW-era literal `f24ea717a5f8f93a3ac490334611d22a` STAYS VISIBLE
+  //  on the row line, because two landed SSW oracles require it there). **THE NEW VALUE IS MEASURED,
+  //  never inferred** (`md5sum src/main/preload.ts`, run TWICE at this landing's head AFTER every
+  //  `src/` write, identical both times: `b13c31891c2d798f01f7041d920ff49b`). **NO OTHER ROW OF THIS
+  //  TABLE IS TOUCHED** — it stays SEVEN rows and `UNRESTATED_CONTROL_PATH` stays DERIVED from the
+  //  table itself (still `src/shared/demo-envelope.ts`) and is NOT hand-edited here; and
+  //  `src/shared/types.ts`, the OTHER file this unit's neighbourhood touches, is NOT touched by `B-2`
+  //  at all, so its row stays at `8cdc2b81eef0b3fb0cd7a96f95881009`.
+  //  ⟨THE `restated:` FIELD IS AGAIN DELIBERATELY LEFT NAMING `U-STORE-SECURITY-ADOPT`, AND THE REASON
+  //  IS THE `U-1b`/`U-4` PRECEDENT TAKEN ON THIS SAME ROW:⟩ two LANDED oracles pin it —
+  //  `tests/store-security-write-register.test.ts` (`P-SSW-H-3`) and `tests/pd-store-security-write.test.ts`
+  //  (arm 3(a)) — and THIS unit is not licensed to move them. So the re-statement names the unit
+  //  (`B-2`), the reason and the WHOLE superseded chain in this note, RE-MEASURES the digest, and
+  //  leaves the pinned field alone: `76d2299070d4333e0e66189359baad22` (as filed) ←
+  //  `00dba3cdd5e1eb3c7de632a838e3d28b` ← `f24ea717a5f8f93a3ac490334611d22a` (SSW-era) ←
+  //  `21b8120cddadd1b1531bd0422cb5d613` ← `cb1ee2ff3cd409363dd656a9914e72ad` ←
+  //  `eb230a8bcbe9b5444f95aa6a89c7fec2` (`U-1b`) ← `78b237e4d53af16a846ec540c4b5be7c` (`U-4`) — the
+  //  new value is that chain's next link.⟩
+  { file: 'src/main/preload.ts', md5: 'b13c31891c2d798f01f7041d920ff49b', superseded: '78b237e4d53af16a846ec540c4b5be7c', restated: 'U-STORE-SECURITY-ADOPT' }, // ⟨RE-STATED BY `U-1b` 2026-11-15 (`C-6`, D-22 (1)): the md5 is re-MEASURED at the landing head and the immediate predecessor `cb1ee2ff3cd409363dd656a9914e72ad` is its `superseded` field; the SSW-era superseded literal stays visible on this line — `f24ea717a5f8f93a3ac490334611d22a`⟩ ⟨RE-STATED BY `U-4` 2026-11-16 (`R-4`, the `onSettingsOpen` bridge member): the md5 is re-MEASURED at the landing head and `U-1b`'s `eb230a8bcbe9b5444f95aa6a89c7fec2` is now this row's `superseded` field; the SSW-era superseded literal `f24ea717a5f8f93a3ac490334611d22a` STAYS VISIBLE on this line and the pinned `restated:` field is left alone (two landed SSW oracles pin it — the `U-1b` precedent)⟩ ⟨RE-STATED BY `B-2` 2026-11-18 (`docs/L1/unit-b-2-display-wire.md` §4, the display crossing's bridge member): the md5 is re-MEASURED at the landing head and `U-4`'s `78b237e4d53af16a846ec540c4b5be7c` is now this row's `superseded` field; the SSW-era superseded literal `f24ea717a5f8f93a3ac490334611d22a` STAYS VISIBLE on this line, the pinned `restated:` field is left alone (two landed SSW oracles pin it — the `U-1b`/`U-4` precedent), and the reason + unit are named in the note block above⟩
   // ⟨RE-STATED 2026-10-04 — unit `U-ZONE-REPLACEMENT` / `PD-UI-14`, §5 `G-7` / §10 `O-8`.⟩
   //  THE ROW'S SUBJECT IS UNCHANGED — §4 `P-TH-SM-1` (e)/(f) / §1.2 (c): the path stays a
   //  RECORDED, md5-pinned digest and its TEETH are not relaxed (an UNRECORDED move of it still

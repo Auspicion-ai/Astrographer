@@ -497,12 +497,27 @@ const CHANNEL_REFUSALS = ['malformed-payload', 'write-failed'] as const
 /** §2.4 / `K-1` — the STORE's own refusal union (dossier row 7). The channel mints NO
  *  store-class spelling of its own and re-spells NO store token. */
 const STORE_REFUSALS = ['undeclared-name', 'tier-filter-miss', 'secure-refused', 'cap-exceeded', 'no-such-anchor'] as const
-/** §2.1 / §1.1 member 1 — the channel module's EXACT export-name set (`CENSUS`: 2). */
-const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT'] as const
-/** §2.1 — the two declared values, single-sourced. */
+/** §2.1 / §1.1 member 1 — the channel module's EXACT export-name set (`CENSUS`: 4).
+ *
+ *  ⟨RE-STATED 2026-11-18 — unit `B-2` (`display-wire`), §4; contract
+ *  `docs/L1/unit-b-2-display-wire.md`.⟩ **THE CLAIM IS UNMOVED AND THE SET IS WIDENED BY EXACTLY WHAT
+ *  THE CHANGE ADDED.** The claim is a SET EQUALITY between `src/main/store-channels.ts`'s export names
+ *  and the declared set; `B-2` homes this unit's two DISPLAY channel constants in THAT module rather
+ *  than in `src/shared/types.ts` — `DISPLAY_READ`, a REQUEST over `invoke`/`handle`; `DISPLAY_CHANGED`,
+ *  a SIGNAL over `send`/`on` that carries nothing (`D-24`) — because three landed rows pin that file's
+ *  md5 while this module yields ONE structural sentence its own edit amends. So the census reads
+ *  **2 → 4** and the module's own `CENSUS: 4 names` sentence moved in the SAME edit; the as-filed
+ *  `CENSUS: 2` is KEPT VISIBLE here rather than deleted. **NO OTHER LIMB MOVES**: every export is
+ *  still a NON-EMPTY STRING constant (no function, no state), and the single-source rule below now
+ *  covers all FOUR literals — the SAME rule over a wider subject, never a relaxed one. */
+const CHANNEL_EXPORT_NAMES = ['STORE_FILE_GET', 'STORE_FILE_PUT', 'DISPLAY_READ', 'DISPLAY_CHANGED'] as const
+/** §2.1 — the four declared values, single-sourced (the `B-2` pair added 2026-11-18; the two
+ *  store-channel values are the as-filed ones, unmoved). */
 const CHANNEL_VALUES: ReadonlyArray<[string, string]> = [
   ['STORE_FILE_GET', 'provident:store:file:get'],
   ['STORE_FILE_PUT', 'provident:store:file:put'],
+  ['DISPLAY_READ', 'provident:display:read'],
+  ['DISPLAY_CHANGED', 'provident:display:changed'],
 ]
 /** §2.5 — the `store` sub-namespace's EXACT member set (verbatim from the foundation). */
 const STORE_MEMBER_NAMES = ['get', 'put', 'onFileChanged'] as const
@@ -531,7 +546,19 @@ const STORE_MEMBER_NAMES = ['get', 'put', 'onFileChanged'] as const
  *  burying it under `operatorSettings` would have saved this amendment and put a FALSE PARENT on a
  *  menu signal in the bridge census. The set stays a DECLARED LITERAL — never read back from the file
  *  under test — so limb 1's falsifiability is unchanged: an UNDECLARED added member still reddens,
- *  and a DROPPED declared one still reddens. */
+ *  and a DROPPED declared one still reddens.
+ *
+ *  ⟨AMENDED 2026-11-18 — unit `B-2` (`display-wire`), §4; `docs/L1/unit-b-2-display-wire.md`.⟩ The
+ *  DECLARED set gains ONE further member, so the count reads EIGHTEEN → **NINETEEN**: `display`, the
+ *  DISPLAY CROSSING's bridge half (`{ read, onChanged }`) and the realm's ONLY door to it. It is
+ *  TOP-LEVEL for the reason `store` and `onSettingsOpen` are top-level — it is not a member of any
+ *  existing namespace, and burying it under one would put a FALSE PARENT on the crossing in the bridge
+ *  census — and **the alternative was REFUSED, not overlooked:** a `recordEngine.display` spelling would
+ *  have saved this amendment and re-opened the `src/main/record-engine/**` import the same contract
+ *  forbids the preload. **THE CLAIM AND THE MECHANISM ARE UNMOVED** — the set is still a DECLARED
+ *  LITERAL compared against the REAL `ProvidentBridge` bytes, so an UNDECLARED added member still
+ *  reddens limb 1 and a DROPPED declared one still reddens it; the set is widened by exactly the one
+ *  member the change added. */
 const DECLARED_BRIDGE_TOP_LEVEL = [
   'ready',
   'bootSettled',
@@ -552,6 +579,8 @@ const DECLARED_BRIDGE_TOP_LEVEL = [
   'store',
   // ⟨ADDED 2026-11-16 — unit `U-4` (`menu-opener`) `R-4`: the eighteenth declared top-level member.⟩
   'onSettingsOpen',
+  // ⟨ADDED 2026-11-18 — unit `B-2` (`display-wire`) §4: the NINETEENTH declared top-level member.⟩
+  'display',
 ] as const
 /** §2.7 item 5 — the declared current version (`DECLARED-DEFAULT`, reversible by the
  *  architect in a one-cell amendment). */
@@ -892,7 +921,7 @@ function exportSetProblems(ns: Record<string, unknown>): string[] {
   const expected = [...CHANNEL_EXPORT_NAMES]
   if (names.length !== expected.length || expected.some((n) => !names.includes(n))) {
     problems.push(
-      `EXPORT-SET: the module's export-name set is [${names.join(', ') || 'none'}] — §1.1 member 1 declares EXACTLY {${expected.join(', ')}} (CENSUS: 2 names) (F-2)`,
+      `EXPORT-SET: the module's export-name set is [${names.join(', ') || 'none'}] — §1.1 member 1 declares EXACTLY {${expected.join(', ')}} (CENSUS: ${String(expected.length)} names; RE-STATED 2026-11-18 by unit \`B-2\` \`display-wire\` §4, which homed this unit's \`DISPLAY_READ\`/\`DISPLAY_CHANGED\` pair here and moved the census 2 → 4) (F-2)`,
     )
   }
   for (const [name, value] of Object.entries(ns)) {
@@ -1280,7 +1309,7 @@ function durabilityOverclaimProblems(assertedClaimText: string): string[] {
 //   3 = (1) export-name set equality; (2) every export a non-empty string;
 //       (3) import-equality at both consumer sites + a whole-tree re-spelling scan.
 // ---------------------------------------------------------------------------
-describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-1 — the channel module is declared content only, single-sourced: the export-name set is EXACTLY {STORE_FILE_GET, STORE_FILE_PUT}, every export is a non-empty string constant, the consumer sites are identity-equal to the import, and a re-spelling anywhere else in src/** reddens (S-SPA-CH-1)', () => {
+describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-1 — the channel module is declared content only, single-sourced: the export-name set is EXACTLY {STORE_FILE_GET, STORE_FILE_PUT, DISPLAY_READ, DISPLAY_CHANGED} (RE-STATED 2026-11-18 by unit `B-2` `display-wire` §4: census 2 → 4, claim unmoved), every export is a non-empty string constant, the consumer sites are identity-equal to the import, and a re-spelling anywhere else in src/** reddens (S-SPA-CH-1)', () => {
   it('P-SPA-IM-1 — 3', async () => {
     const run = newRun()
     let i = 0
@@ -1592,13 +1621,20 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-3 — THE NW-17-CLASS PRELOAD SET-E
         //   · `store`          — the 2026-10-04 landing (§2.5 / §1.1 member 5; amendment `A-3`).
         //   · `onSettingsOpen` — `U-4` (`menu-opener`) `R-4`, `2026-11-16`: the native View opener's
         //                        arrival subscription, TOP-LEVEL for `onPaneVisibility`'s reason.
+        // ⟨AMENDED 2026-11-18 — unit `B-2` (`display-wire`) §4; `docs/L1/unit-b-2-display-wire.md`.⟩
+        //   · `display`        — `2026-11-18`: the DISPLAY CROSSING's bridge half. The DECLARED delta
+        //                        now names THREE post-baseline keys and the guard NAMES ALL THREE, so
+        //                        **the teeth are unchanged** — an UNDECLARED fourth key still reddens
+        //                        HERE, a DROPPED declared one still reddens the set-equality arm above
+        //                        (and `missingDelta` below), and the baseline is the same SIXTEEN
+        //                        pre-landing members the clause has always measured the delta against.
         const PRE_LANDING_MEMBERS = ['ready', 'bootSettled', 'onRequest', 'sendReply', 'notify', 'pushPaneCatalog', 'onPaneVisibility', 'security', 'module', 'edit', 'rag', 'template', 'operatorSettings', 'gnosis', 'sidebar', 'installSidebar']
-        const DECLARED_DELTA = ['store', 'onSettingsOpen']
+        const DECLARED_DELTA = ['store', 'onSettingsOpen', 'display']
         const added = declaredMembers.filter((k) => !PRE_LANDING_MEMBERS.includes(k))
         const undeclared = added.filter((k) => !DECLARED_DELTA.includes(k))
         const missingDelta = DECLARED_DELTA.filter((k) => !added.includes(k))
         if (undeclared.length > 0 || missingDelta.length > 0 || added.length !== DECLARED_DELTA.length) {
-          return `SET-EQUALITY (top-level): the landing's new top-level keys read [${added.join(', ') || 'none'}] — the DECLARED delta is [${DECLARED_DELTA.join(', ')}]: \`store\` (the 2026-10-04 landing, §2.5/§1.1 member 5, amendment A-3) and \`onSettingsOpen\` (U-4 \`menu-opener\` \`R-4\`, 2026-11-16). An UNDECLARED added key [${undeclared.join(', ') || 'none'}] or a DROPPED declared one [${missingDelta.join(', ') || 'none'}] reddens here — the amendment legalizes those TWO keys, nothing else (P-SPA-IM-3 limb 1)`
+          return `SET-EQUALITY (top-level): the landing's new top-level keys read [${added.join(', ') || 'none'}] — the DECLARED delta is [${DECLARED_DELTA.join(', ')}]: \`store\` (the 2026-10-04 landing, §2.5/§1.1 member 5, amendment A-3), \`onSettingsOpen\` (U-4 \`menu-opener\` \`R-4\`, 2026-11-16) and \`display\` (B-2 \`display-wire\` §4, 2026-11-18 — the set RE-STATED 18 → 19). An UNDECLARED added key [${undeclared.join(', ') || 'none'}] or a DROPPED declared one [${missingDelta.join(', ') || 'none'}] reddens here — the amendment legalizes those THREE keys, nothing else (P-SPA-IM-3 limb 1)`
         }
         if (!hasStoreKey) {
           return `SET-EQUALITY (top-level): the real preload carries a \`store\` member but NOT at the two-space member indent unit 1's arm-4 regex pinpoints — §2.5 requires the member indent to satisfy /^  store\\s*:/m (K-3) (§4 R-6; the amendment A-3 legalizes THIS key at THIS indent)`
@@ -1810,20 +1846,30 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-4 — the bootRecord bound + the cr
 //       stamp present; (3) the declared value 1 on the cold first write; (4) the
 //       fork-wide version-token census printed with its terms.
 // ---------------------------------------------------------------------------
-describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-5 — the constants + schemaVersion census, stated honestly: the channel module\'s export set is exactly TWO; the carrier carries schemaVersion from its FIRST write with the declared value 1; the token is NOT claimed zero-hit in this fork (the fork\'s other carriers\' version keys are counted and named in the same census) (S-SPA-CENS-1)', () => {
+describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-5 — the constants + schemaVersion census, stated honestly: the channel module\'s export set is exactly FOUR (RE-STATED 2026-11-18 by unit `B-2` `display-wire` §4: census 2 → 4, claim unmoved); the carrier carries schemaVersion from its FIRST write with the declared value 1; the token is NOT claimed zero-hit in this fork (the fork\'s other carriers\' version keys are counted and named in the same census) (S-SPA-CENS-1)', () => {
   it('P-SPA-IM-5 — 4', async () => {
     const run = newRun()
     let i = 0
     const channelsSrc = readMaybe(CHANNELS_PATH)
 
-    // ⟨drive 1⟩ the channel-constant census (2 names, printed)
+    // ⟨drive 1⟩ the channel-constant census (`CENSUS: 4`, printed)
+    //
+    // ⟨RE-STATED 2026-11-18 — unit `B-2` (`display-wire`) §4; contract
+    //  `docs/L1/unit-b-2-display-wire.md`.⟩ **THE CLAIM IS UNMOVED — a COUNT census over the module's
+    //  own `export const` declarations, every name printed with its terms — and the COUNT MOVES WITH
+    //  THE CHANGE: `B-2` homes this unit's `DISPLAY_READ`/`DISPLAY_CHANGED` pair in this module, so the
+    //  census reads 2 → **4**. The count is now DERIVED from the declared literal rather than re-typed,
+    //  so a future census that moves without a re-statement of THIS row still reddens, and the as-filed
+    //  `CENSUS: 2` is KEPT VISIBLE in this message rather than deleted. The row's TEETH are unchanged:
+    //  a census that CONTAINS every declared name but counts a different total still reddens (an extra
+    //  constant is the falsifier), and a missing declared name reddens.
     const channelNames = channelsSrc === null ? null : [...channelsSrc.matchAll(/export\s+const\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!)
     attempt(
       run,
       i++,
-      channelNames !== null && channelNames.length === 2 && CHANNEL_EXPORT_NAMES.every((n) => channelNames.includes(n))
+      channelNames !== null && channelNames.length === CHANNEL_EXPORT_NAMES.length && CHANNEL_EXPORT_NAMES.every((n) => channelNames.includes(n))
         ? null
-        : `CHANNEL-CONSTANT-CENSUS: ${relative(REPO_ROOT, CHANNELS_PATH)} ${channelNames === null ? 'DOES NOT EXIST at this head' : `declares [${channelNames.join(', ')}]`} — §1.1 member 1 declares EXACTLY 2 names {${CHANNEL_EXPORT_NAMES.join(', ')}} with their terms printed (CENSUS: 2) (§4 R-6)`,
+        : `CHANNEL-CONSTANT-CENSUS: ${relative(REPO_ROOT, CHANNELS_PATH)} ${channelNames === null ? 'DOES NOT EXIST at this head' : `declares [${channelNames.join(', ')}]`} — §1.1 member 1 declares EXACTLY ${String(CHANNEL_EXPORT_NAMES.length)} names {${CHANNEL_EXPORT_NAMES.join(', ')}} with their terms printed (CENSUS: ${String(CHANNEL_EXPORT_NAMES.length)}; the as-filed CENSUS: 2 was RE-STATED 2026-11-18 by unit \`B-2\` \`display-wire\` §4, which homed the \`DISPLAY_READ\`/\`DISPLAY_CHANGED\` pair here) (§4 R-6)`,
     )
 
     // ⟨drive 2⟩ the first-write stamp present — the cold first write's file carries the
@@ -1880,9 +1926,17 @@ describe('STORE-PERSIST-ADOPT §5.1 P-SPA-IM-5 — the constants + schemaVersion
       run,
       i++,
       ((): string | null => {
-        const forged = 'export const STORE_FILE_GET = \'a\'\nexport const STORE_FILE_PUT = \'b\'\nexport const STORE_FILE_DEL = \'c\''
+        // ⟨RE-STATED 2026-11-18 — unit `B-2` (`display-wire`) §4.⟩ The forged module now carries EVERY
+        // declared name PLUS one undeclared constant, so this control keeps pointing at the row's own
+        // falsifier (an EXTRA constant) instead of at a date-stamped count: the census oracle must read
+        // a total that DIFFERS from the declared census, or it is vacuous. The as-filed form forged a
+        // three-constant module against a census of two; the census moved 2 → 4, so the forgery moves
+        // with it — the discrimination is UNMOVED.
+        const forged = [...CHANNEL_EXPORT_NAMES.map((n, k) => `export const ${n} = 'v${String(k)}'`), `export const DISPLAY_EXTRA = 'v-extra'`].join('\n')
         const names = [...forged.matchAll(/export\s+const\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!)
-        return names.length === 2 ? 'CONTROL 1 could not discriminate: the constant-census oracle counted a THREE-constant module as two' : null
+        return names.length === CHANNEL_EXPORT_NAMES.length && CHANNEL_EXPORT_NAMES.every((n) => names.includes(n))
+          ? `CONTROL 1 could not discriminate: the constant-census oracle counted a module carrying the declared ${String(CHANNEL_EXPORT_NAMES.length)} constants PLUS an UNDECLARED extra as exactly the declared census — an added constant must move the count (§1.1 member 1)`
+          : null
       })(),
     )
     attempt(
