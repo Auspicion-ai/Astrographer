@@ -25,7 +25,7 @@
 // removed in `afterAll`.
 //
 // **MEASURED — AND THIS IS WHY NO ROW HERE ASSERTS MEMBER ORDER, SO DO NOT "RESTORE" A STRING COMPARISON OF A READ-BACK**: the
-// installed `provident-storeroom@1.11.0` CANONICALISES object member order on every round trip — a written `{zeta:1, alpha:2,
+// installed `provident-storeroom` (measured at `1.11.0`, unchanged at `1.12.0`) CANONICALISES object member order on every round trip — a written `{zeta:1, alpha:2,
 // mid:3}` reads back `{alpha:2, mid:3, zeta:1}`, recursively, at the `file`, `mem` AND `temp` tiers, and in the `after.value` of the
 // journal op — so every read-back below is compared with `toEqual`, which compares the MEMBERS AND THEIR VALUES rather than two
 // spellings; §2 fixes the members' names and domains and never their spelling order, so a `JSON.stringify`-against-a-fixture

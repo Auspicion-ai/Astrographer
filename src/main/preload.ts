@@ -8,7 +8,7 @@ import { IPC_INVOKE, IPC_REPLY, IPC_READY, IPC_BOOT_READY, IPC_SECURITY_GET, IPC
 import type { ContentWindowTemplate, TemplateSource, TemplateVerdict } from './template-store.js'
 import type { BatchOp, BatchResult, RagNodeChild } from './rag-store.js'
 import type { EngineRagResult, HealthReport, EngineRagQueryOptions } from './engine-rag-store.js'
-import { STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
+import { DISPLAY_CHANGED, DISPLAY_READ, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 export interface ModuleBridgeResult {
   corrupt: boolean
@@ -310,6 +310,26 @@ export interface ProvidentBridge {
     get(): Promise<Array<{ name: string; value: unknown }>>
     put(row: { name: string; value: unknown }): Promise<{ status: 'committed' | 'refused'; reason?: 'malformed-payload' | 'write-failed' }>
     onFileChanged(handler: () => void): () => void
+  }
+  /** Unit `B-2` `display-wire` §4 (`docs/L1/unit-b-2-display-wire.md`) — **THE DISPLAY CROSSING'S BRIDGE MEMBER: ONE top-level
+   *  key with exactly TWO members, and NEITHER is a sender.**
+   *
+   *  `read` is a REQUEST (`invoke`/`handle`): it answers the record's own reading or the DECLARED `null`, and nothing throws.
+   *  `onChanged` is the SUBSCRIBER: ONE registration on the push channel, whose listener calls its handler at **ARITY ZERO
+   *  and with NOTHING** — the push carries no value, no address and no reading (`D-24`, `forking.md` §2.5), so the only
+   *  correct answer to it is the caller's own re-read. It returns the withdrawal, and the withdrawal removes the SAME listener.
+   *
+   *  **THERE IS NO `commit`, `write`, `put` or sender member**: the write route is `B-10`'s, and a member set of exactly
+   *  `{read, onChanged}` is what this unit's bridge census pins.
+   *
+   *  **`read`'s type is this realm's OWN STRUCTURAL TWIN of the reading — `Promise<Record<string, unknown> | null>` — never an
+   *  import from the renderer's `display-client.ts` and never one from `src/main/record-engine/`** (the `SecurityWriteReceipt`
+   *  precedent, `ASM-B2-1`): a preload→renderer type import would invert the realm boundary, and an import of the record's
+   *  shape would admit a SECOND authority on what an entry is in the same pass that first reaches the parse from two realms.
+   *  Nothing here judges an entry; it answers whatever the record answered. */
+  display: {
+    read(): Promise<Record<string, unknown> | null>
+    onChanged(handler: () => void): () => void
   }
 }
 
@@ -708,6 +728,24 @@ const bridge: ProvidentBridge = {
     // second `webContents.send` registration here (§2.5).
     onFileChanged(_handler: () => void): () => void {
       return () => {}
+    },
+  },
+  // Unit `B-2` `display-wire` §4 — **THE DISPLAY CROSSING'S TWO MEMBERS, AND THIS IS THE REALM'S ONLY DOOR TO IT.**
+  // `read` invokes the READ channel and answers whatever the record answered (`null` on a degraded boot: the DECLARED
+  // absence, never a throw). `onChanged` registers the ONE listener and returns the withdrawal that removes that SAME
+  // listener; **the listener hands its handler NOTHING**, because the push carries nothing.
+  display: {
+    read(): Promise<Record<string, unknown> | null> {
+      return ipcRenderer.invoke(DISPLAY_READ)
+    },
+    onChanged(handler: () => void): () => void {
+      const listener = (): void => {
+        handler()
+      }
+      ipcRenderer.on(DISPLAY_CHANGED, listener)
+      return () => {
+        ipcRenderer.removeListener(DISPLAY_CHANGED, listener)
+      }
     },
   },
 }

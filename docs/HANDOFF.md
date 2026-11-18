@@ -238,7 +238,7 @@ CATALOGUED in `docs/defects.md` with their fork-side rules and neither is patche
 
 ---
 
-## 2026-11-16 — `STOREROOM-EXPORTS-MAP-IMPORT-ONLY` (HIGH, package-owned; handed off, never patched)
+## 2026-11-16 — `STOREROOM-EXPORTS-MAP-IMPORT-ONLY` (HIGH, package-owned; **ANSWERED UPSTREAM 2026-11-18 at `provident-storeroom@1.12.0`** — the exports map gained `require`, verified in this fork, and the fork attests `engines.node >=22.12.0`; kept for the record)
 
 `provident-storeroom@1.11.0` ships an ESM-only exports map (`{types, import}`, no `main`/`require`/`default`),
 so this fork's CommonJS Electron main **cannot load it**: `ERR_PACKAGE_PATH_NOT_EXPORTED` at boot. The cheap

@@ -2,7 +2,7 @@
 // RED row, authored BEFORE the dependency change (RCA-1) and RUN before it.
 //
 // WHY THIS ROW EXISTS: the unit takes `provident-ssr` `^0.5.1` → `^0.5.2` and adds
-// `provident-storeroom` `^1.11.0` with no consumer. The bump is not hygiene — it discharges a
+// `provident-storeroom` `^1.12.0` with no consumer. The bump is not hygiene — it discharges a
 // FOUNDATION FINDING by adoption (D-20, D-9's never-patch rule): on 0.5.1 the compile emit gate at
 // `dist/core/node.js` `if (hasAnyTarget && isResolutionParticipant(node) && !isSeamProvider(node))
 // continue;` treats an AUTHORED provider consumed by name as a value holder and NOT an element, so
@@ -43,8 +43,22 @@
 //   D — DECLARATION / RESOLUTION / LOCK AGREEMENT: `package.json`, the installed packages, and the
 //       lockfile root mirror + package entries all say the same two things, and the declaration
 //       count moved by exactly one.
-//   E — NO CONSUMER (D-20's ahead-of-consumer clause): no `src/**` file names `provident-storeroom`.
-//       GREEN-ON-ARRIVAL as a negative, non-vacuous via a floor on the walked file count.
+//   E — ~~NO CONSUMER (D-20's ahead-of-consumer clause): no `src/**` file names `provident-storeroom`.~~
+//       **RE-GRAINED 2026-11-17 by unit `B-2` `display-wire` under the `D-17` grant.** The as-filed
+//       negative was TRUE until `B-1` landed the seam: `src/main/storeroom.ts` is now the fork's ONE
+//       import of the package, so "nothing names it" is falsified by measurement and cannot pass at any
+//       head. Its SUCCESSOR claim is the one that was always the point of the row — the package has
+//       exactly ONE consumer module, and the BOOT REACHES IT: the importer census is exactly
+//       `['src/main/storeroom.ts']` AND `src/main/storeroom.ts` is in the import graph walked from
+//       `src/main/main.ts` over `src/**`. **Never deleted**: its subject (a dependency adopted ahead of
+//       any consumer) is still what the row is about, and its two halves are "not zero consumers" and
+//       "not two".
+//
+// VERSION LITERALS RE-STATED 2026-11-17 (the same pass, same grant): `D-30` bumped this fork's
+// `provident-storeroom` declaration to `^1.12.0` (the upstream release that carries a `require`
+// condition in its exports map), so limb `D`'s three pinned literals — declaration, installed, lock —
+// move with it. The row's CLAIM is unchanged: declaration, resolution and lock agree, and the
+// declaration count is five.
 //
 // WHAT THIS ROW DOES NOT DO: no network, no ollama, no electron, no spawn, no `git`; it writes
 // nothing and reads only the repo it lives in. Limb `D`/`E` read files from a path built from THIS
@@ -54,6 +68,7 @@
 // layout-less DOM shim — they prove the ENGINE's emit/resolve behaviour, never app-green.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { translateLegacy, Supervisor, EventBridge, SSRFragmentAdapter, renderProducingProcess } from 'provident-ssr'
 import { installShim } from '../../../src/shared/dom-shim.js'
@@ -174,21 +189,21 @@ describe('deps-adopt (E-1): the provident-ssr bump and the provider-as-element i
     // throws ENOENT if the install did not resolve it — a missing substrate FAILS, never skips
     const storeroomInstalled = readJson('node_modules/provident-storeroom/package.json') as { version: string }
     expect(pkg.dependencies['provident-ssr']).toBe('^0.5.2')
-    expect(pkg.dependencies['provident-storeroom']).toBe('^1.11.0')
+    expect(pkg.dependencies['provident-storeroom']).toBe('^1.12.0')
     expect(ssrInstalled.version).toBe('0.5.2')
-    expect(storeroomInstalled.version).toBe('1.11.0')
+    expect(storeroomInstalled.version).toBe('1.12.0')
     // the lock's ROOT MIRROR equals the declarations — read against `pkg`, never re-spelled here
     const mirror = lock.packages[''].dependencies ?? {}
     expect(mirror['provident-ssr']).toBe(pkg.dependencies['provident-ssr'])
     expect(mirror['provident-storeroom']).toBe(pkg.dependencies['provident-storeroom'])
     // and the two resolved entries carry the versions the install actually landed
     expect(lock.packages['node_modules/provident-ssr'].version).toBe('0.5.2')
-    expect(lock.packages['node_modules/provident-storeroom'].version).toBe('1.11.0')
+    expect(lock.packages['node_modules/provident-storeroom'].version).toBe('1.12.0')
     // THE AUTHORITY COUNT: the four pre-existing declarations plus exactly one addition
     expect(Object.keys(pkg.dependencies).length).toBe(5)
   })
 
-  it('E — no consumer: nothing under src/ names provident-storeroom (green, and non-vacuous)', () => {
+  it('E — exactly ONE consumer module, and the boot REACHES it: the importer census is `src/main/storeroom.ts` alone, and that module is in the import graph walked from `src/main/main.ts` (RE-GRAINED by `B-2` under `D-17`)', () => {
     const walk = (dir: string): string[] => {
       const found: string[] = []
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -199,9 +214,49 @@ describe('deps-adopt (E-1): the provident-ssr bump and the provider-as-element i
       return found
     }
     const sources = walk(`${ROOT}src`)
-    // non-vacuity: an empty or shallow walk cannot satisfy the negative below
+    // non-vacuity: an empty or shallow walk cannot satisfy either half below
     expect(sources.length).toBeGreaterThan(50)
-    const importers = sources.filter((file) => readFileSync(file, 'utf8').includes('provident-storeroom'))
-    expect(importers).toEqual([])
+
+    /** The repo-relative spelling, so a failure names the site the way the contract does. */
+    const rel = (file: string): string => (file.startsWith(ROOT) ? file.slice(ROOT.length) : file)
+
+    // ── HALF 1: THE IMPORTER CENSUS IS EXACTLY ONE — not "none" (the as-filed reading) and not "two".
+    const importers = sources.filter((file) => readFileSync(file, 'utf8').includes('provident-storeroom')).map(rel)
+    expect(
+      importers,
+      'limb E (RE-GRAINED): `B-1` landed the fork\'s seam, so exactly ONE `src/**` module names the package — a SECOND one is a second seam (the surface pinned in two places), and NONE means the dependency has no consumer again',
+    ).toEqual(['src/main/storeroom.ts'])
+
+    // ── HALF 2: AND THE BOOT REACHES IT — the subject the as-filed row could not state, because there was nothing to reach.
+    // The walk is over the same `src/**` bytes: a specifier that is not relative is a package import and is not followed
+    // (the package is not this repo's to walk), and a `.js` specifier resolves to the `.ts` source beside it.
+    const specifiersOf = (source: string): string[] => {
+      const found: string[] = []
+      for (const match of source.matchAll(/(?:from\s+|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g)) found.push(match[1] as string)
+      return found
+    }
+    const byPath = new Map(sources.map((file) => [rel(file), file]))
+    const reached = new Set<string>()
+    const pending = ['src/main/main.ts']
+    while (pending.length > 0) {
+      const current = pending.pop() as string
+      if (reached.has(current)) continue
+      reached.add(current)
+      const file = byPath.get(current)
+      if (file === undefined) continue
+      for (const specifier of specifiersOf(readFileSync(file, 'utf8'))) {
+        if (!specifier.startsWith('.')) continue
+        const target = rel(resolve(dirname(file), specifier)).replace(/\.js$/, '.ts')
+        if (byPath.has(target)) pending.push(target)
+      }
+    }
+    expect(reached.size, 'the import graph walked from `src/main/main.ts` found modules, or "the boot reaches the seam" is vacuous').toBeGreaterThan(10)
+    expect(
+      [...reached].includes('src/main/storeroom.ts'),
+      'limb E (RE-GRAINED, half 2): the ONE importer of `provident-storeroom` must be REACHABLE FROM THE BOOT — a seam no boot imports is a dependency with no consumer in the only sense that matters (the app)',
+    ).toBe(true)
+    // AND THE REACH IS THROUGH THE BOOT ITSELF, named, so a graph that reached the seam by a side door would still fail here.
+    const bootSource = readFileSync(`${ROOT}src/main/main.ts`, 'utf8')
+    expect(bootSource, 'the boot must import the seam by name (`./storeroom.js`), not reach it transitively through a module that happens to need a store type').toContain("'./storeroom.js'")
   })
 })

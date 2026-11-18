@@ -248,3 +248,5 @@ uncomputable. See `docs/specs/gnosis-offload-review.md` §11 (the 2026-09-17 add
 (`docs/specs/astrographer-scope-realignment-review.md` §1.2/§7.3) explicitly asserts **no new parked
 trigger**: the measured dominant cost of the observed freezes is style/layout/paint, so the engine
 legs are not the lever, and the track is neither re-opened nor re-litigated by this doc set.
+
+**PARKED, named:** `B-2a` `main-bundle-esm` — an ESM main bundle (measured working under a six-line `createRequire`/`__dirname` banner) is NO LONGER REQUIRED now that `provident-storeroom@1.12.0` answers `require`; it is parked as an OPTION under D-29/D-31, not a blocker, and would cost `package.json`'s `main`, the build format and six files if ever taken.

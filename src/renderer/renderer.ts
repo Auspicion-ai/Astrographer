@@ -14,6 +14,9 @@ import { SecurePanels } from './secure-panels.js'
 import { installSettingsModal } from './modal-state.js'
 import { createEditController } from './edit-controller.js'
 import { applyThemeToRoot } from './theme.js'
+// Unit `B-2` `display-wire` §4 — the crossing's renderer half. The TYPE import of `DisplayReading` is this realm's own
+// (`./display-client.js`), which is the lawful direction: main's preload declares its own structural twin instead.
+import { createDisplayClient, type DisplayClient, type DisplayReading, type DisplaySubscription } from './display-client.js'
 import { type LayoutState, type LayoutZoneName } from './layout-state.js'
 import { applyLayoutToRoot } from './layout-vars.js'
 import { TabStrip } from './tab-strip.js'
@@ -1363,6 +1366,87 @@ export function installMenuOpener(
   return typeof unsubscribe === 'function' ? (unsubscribe as () => void) : noop
 }
 
+// ===========================================================================
+// Unit `B-2` `display-wire` (`docs/L1/unit-b-2-display-wire.md` §4) — THE CROSSING'S RENDERER HALF:
+//   the ONE installation, the subscription registered BEFORE the realm says it is ready, and the ONE stated
+//   boot read. This unit PAINTS NOTHING: `B-3` owns the channel that renders the reading and `B-10` owns the
+//   three capture sites, so the crossing is HELD as one binding for them to lift — never installed again.
+// ===========================================================================
+
+/** The MEMBER shape this path needs of `window.provident.display` (`B-2` §4): declared HERE beside its use — the
+ *  `MenuOpenerBridge` precedent — so the install is drivable without the electron-bearing preload module. Every
+ *  member is OPTIONAL, because B-1's client turns each absence into a DECLARED `subscribed: false` word of its
+ *  own rather than a throw. The reading's type comes from this realm's OWN `./display-client.js` (a same-realm
+ *  type import is the lawful direction: the preload may not reach the renderer, and does not). */
+export interface DisplayBridgeMember {
+  read?(): Promise<DisplayReading | null>
+  onChanged?(handler: () => void): unknown
+}
+
+/** The BRIDGE shape this path needs — the ONE top-level key, and it is the shape `installDisplayCrossing` takes
+ *  because that is what the boot holds (`window.provident`). **THE MEMBER AND THE BRIDGE ARE TWO TYPES BECAUSE THEY
+ *  ARE TWO THINGS**: the preload's `display` key wraps the two members, so a single flat interface could not be
+ *  both what the site passes and what the member is — and the flattened reading of §4 is what `TS2339` redded
+ *  (`B-2`'s landing fix; the contract's §4 amendment says so in its own words). */
+export interface DisplayBridge {
+  display?: DisplayBridgeMember
+}
+
+/** The crossing's two halves, held as ONE binding: the client that holds the shape, and the subscription that
+ *  answers whether a realm is listening. **`B-3` lifts this binding; nothing may install a second** — a second
+ *  call is a second `ipcRenderer.on` registration for ONE channel (`B2-ADV-04`). */
+export interface DisplayCrossing {
+  client: DisplayClient
+  subscription: DisplaySubscription
+}
+
+/** **THE DISPLAY CROSSING'S ONE INSTALLATION — SUBSCRIBE FIRST, THEN FILL ONCE, AND ONLY A LIVE SUBSCRIPTION IS OWED THE
+ *  READ.**
+ *
+ *  THE ORDER IS THE CLAIM: a read taken BEFORE the subscription loses every change that lands between the two,
+ *  while the listener re-reads anyway — so `subscribe` registers first and `fill()` is the ONE stated boot read
+ *  (its answer replaces the shape; its own listener hands the caller the re-read's reading).
+ *
+ *  **AND THE FILL IS GATED ON THE SUBSCRIPTION, WHICH IS NOT DEFENSIVENESS BUT THE ROW'S OWN MEASUREMENT**
+ *  (`display-wire-lockstep` §5(h), measured at the landing): `display-client.ts` already looks its port's `read` route
+ *  up ONCE per `subscribe` to decide `no-read-route`, so an unconditional `fill()` would look the SAME route up a second
+ *  time on a bridge that has none — a read the boot made against a route that is not there. So the fill is issued from
+ *  the client's OWN verdict: a live subscription is the only state in which the read has a destination, and every
+ *  absent arm (`no-port`, `no-read-route`, `no-changed-route`, `register-threw`) answers `subscribed: false` and owes
+ *  no read.
+ *
+ *  TOTAL over every absent bridge — no bridge at all, no `display` member, **a `display` getter that THROWS** (contained by
+ *  `memberOf`, `B2-ADV2-02`), a member that is not an object, a
+ *  `read`/`onChanged` that is not a function, a registration that throws: the answer is ALWAYS a
+ *  `DisplayCrossing`, the subscription carries the client's own `subscribed: false` word, the withdraw is
+ *  callable, and nothing throws. **AND `no-port` IS NOT THE DEGRADED-BOOT WORD** (`B2-ADV-01`, measured): a
+ *  preload that always exposes the member answers `subscribed: true` with a `null` reading when main's
+ *  construction was refused, because `no-port` is the ABSENT-MEMBER arm — so a consumer keys on the READING. */
+export function installDisplayCrossing(bridge: DisplayBridge | null | undefined): DisplayCrossing {
+  const client = createDisplayClient(memberOf(bridge))
+  // SUBSCRIBE FIRST: the listener re-reads, so nothing that lands between the two calls is lost.
+  const subscription = client.subscribe(() => {})
+  // THEN THE ONE STATED BOOT READ — owed only to a live subscription (see the docblock: the second route lookup is the
+  // measured fault this gate removes).
+  if (subscription.subscribed) void client.fill()
+  return { client, subscription }
+}
+
+/** **THE `display` MEMBER, OR `null` — AND THE LOOKUP IS CONTAINED** (`B2-ADV2-02`, MEASURED: an unguarded `bridge?.display`
+ *  made the install THROW on a host with a throwing `display` GETTER, which is the `B1-ADV-05(c)` class one level up and
+ *  falsified this function's own totality claim; a getter is not a guard, so an accessor that throws is an ABSENT MEMBER).
+ *  A member that is not an object is absent too — that is the client's `no-port` arm, and the client is the ONE authority on
+ *  which of its four words a given absence earns. Nothing here stores, copies or inspects the member. */
+function memberOf(bridge: DisplayBridge | null | undefined): DisplayBridgeMember | null {
+  if (bridge === null || bridge === undefined) return null
+  try {
+    const member: unknown = bridge.display
+    return member !== null && typeof member === 'object' ? (member as DisplayBridgeMember) : null
+  } catch {
+    return null
+  }
+}
+
 async function main(): Promise<void> {
   const mount = document.getElementById('app')
   if (!mount) throw new Error('mount #app missing')
@@ -1671,6 +1755,13 @@ async function main(): Promise<void> {
   // fires the shell's `#settings-toggle` affordance. Nothing is reordered here and the
   // boot chain's settle signal is untouched.
   installMenuOpener(bridge as MenuOpenerBridge | undefined)
+  // Unit `B-2` `display-wire` §4 — THE DISPLAY CROSSING'S ONE INSTALLATION, and it stands ABOVE `bridge.ready()`
+  // on purpose: the readiness signal below is what arms main's pre-window queue, so a subscription registered after
+  // it would miss the flush it is the destination of. The crossing is HELD for `B-3` (the unit that renders the
+  // reading) and `B-10` (the capture sites); **this unit's handler paints NOTHING and the site adds no
+  // `state-slice`, no mount and no DOM write** (`D-8`, `RR-F1`). The binding below is the ONE installation: a
+  // second call would be a second registration for one channel (`B2-ADV-04` — lift this binding, never add one).
+  const displayCrossing = installDisplayCrossing(bridge as DisplayBridge | undefined)
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.

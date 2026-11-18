@@ -12,7 +12,9 @@
 // `provident-storeroom`"), never a figure this row derives: a census cannot derive its own subject.
 //
 // **AND THE CENSUS FIGURE IS `DEFECTS.md` `F-3`'s**: the foundation's declared census was measured at `1.9.3`/`1.10.0` while
-// `package.json` declares `^1.11.0`, so this unit OWNS the re-measure. What that means for this row is the shape of its
+// `package.json` declares `^1.12.0` (`D-30`'s adoption of the release that carries a `require` condition in its exports map;
+// this row's subject was measured at `1.11.0` and re-measured green at `1.12.0`), so this unit OWNS the re-measure. What that
+// means for this row is the shape of its
 // assertions: **the member list and the `memberCount` literal are compared with the INSTANCE** — `Object.getOwnPropertyNames`
 // on a fresh store — so a stale literal reds here rather than passing by `length`, and **the construction-instant
 // `Object.getOwnPropertySymbols` count is compared with the module's `symbolCount` literal** for the same reason. A copied-down

@@ -662,3 +662,29 @@ in the constant. `B-1` reached their conclusion independently; the handover conf
 **OWED and NAMED, not hidden:** the foundation's HEAD moved to **`49d3137`**, 7 commits past our pin, so
 `npm run drift` now reads **FAIL — 1 PIN fault** (the byte arm still equal). A re-pin (`B-0b`) is owed before
 any unit cites a foundation page again; until it lands the FAIL is a known reading, not a surprise.
+
+---
+
+## D-31 — `B-2` `display-wire` LANDED: the crossing reaches the renderer, and the app BOOTS with the record
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** unit `B-2`'s landing
+(`docs/L1/unit-b-2-display-wire.md`), re-verified in this seat (the four restored rows and the fifth,
+89/89; `typecheck` 0; `build` 0 with `require("provident-storeroom")` at `dist/main/main.cjs:62506`)
+
+**Decision:** the crossing is LANDED at `provident-storeroom@1.12.0`: ONE bound construction in `main.ts`
+with both `listeners:` and `constraints:`, the payload-free push and its channel constant, the
+subscriber-only preload member (arity 0), the renderer's subscribe-then-fill site, the pre-window queue
+armed inside the existing `IPC_READY` body, and `--external:provident-storeroom` on both main legs. **D-29
+is SUPERSEDED by this row and by D-30**: its BLOCKED-ON-PREREQUISITE state ended when the package answered,
+and `B-2a` (`main-bundle-esm`) is PARKED as an option, not a blocker.
+
+**The reading that matters, verbatim:** the built `main.cjs` BOOTS against a scratch home —
+`provident-profile.json` reads `{"display":{}}` (14 bytes), the log carries
+`[provident-main] renderer ready — MCP backend armed`, and `ERR_PACKAGE_PATH_NOT_EXPORTED` is absent (0
+matches). That is the unit's ONE app reading and it is a boot, not a paint.
+
+**What the landing creates, each named:** NINE re-statement debts in four registers (the channel module's
+export census 2 → 4, the preload member set gaining `display`, and the preload md5 moving to
+`b13c3189…`) — being paid under their own licensed rule; FOUR reds that are the foundation pin's drift
+(`49d3137` vs our `b312d83`), which is `B-0b`'s; and one INFO for `B-3`: the client's held reading aliases
+the port's answer, so `B-3` must pin it.

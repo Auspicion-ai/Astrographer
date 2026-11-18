@@ -24,7 +24,7 @@ import { buildRagStoreDirectory, storeLoadStatus } from './rag-store-directory.j
 import { createRagStoreRuntimeController } from './rag-store-runtime.js'
 import { CapabilityRouter } from '../renderer/extensions.js'
 import { createO0HookRecorder } from '../shared/o0-hook.js'
-import { STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
+import { DISPLAY_CHANGED, DISPLAY_READ, STORE_FILE_GET, STORE_FILE_PUT } from './store-channels.js'
 
 // §3.6b — the MAIN-side O-0 recorder (the optional `snapshot.clone` refinement): a
 // SECOND, INDEPENDENT instance — never the RENDERER's app-wide singleton. The driver
@@ -58,6 +58,12 @@ import { createEngineRagStore } from './engine-rag-store.js'
 import { createEngineCrudRagStore } from './engine-crud-rag-store.js'
 import { createAuthorityStore } from './authority-store.js'
 import { createIdempotencyRegistry } from './idempotency-registry.js'
+// `B-2` `display-wire` — THE CROSSING'S MAIN HALF (`docs/L1/unit-b-1-record-engine-seam.md` §1's scope ruling 1 named THIS
+// unit as the owner of the boot's ONE construction and of the build's `--external` clause). `./storeroom.js` is the fork's ONE
+// import of the store package and this file does not spell the package: the seam hands over `createProfileStore` and the
+// `StoreInstance` type, and the census row on the one seam stays true.
+import { createDisplayDelivery, createDisplayRecord, displayConstraintDeclarations } from './record-engine/index.js'
+import { createProfileStore, type StoreInstance } from './storeroom.js'
 
 // The main process is bundled as CJS (Electron runs it reliably that way), so
 // `__dirname` is available.
@@ -336,6 +342,75 @@ function logEffectiveToolGroups(
   )
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// `B-2` `display-wire` — THE PRE-WINDOW HOLD: WHAT A CREATION DELIVERS BEFORE ANY WINDOW EXISTS, HELD UNTIL A REALM CAN HEAR IT
+// (`docs/L1/unit-b-2-display-wire.md` §2, adopted from the foundation's `createDeliveryQueue` at our pin `b312d83`)
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+// ⟦B-2-PRE-WINDOW⟧
+/** **A CREATION'S DELIVERY FIRES BEFORE ANY WINDOW EXISTS**, so a bare broadcast is a send into nothing: the display family's
+ *  creation repair writes its placeholder inside `createProfileStore`, and the entry the construction adopts delivers at that
+ *  instant — with `BrowserWindow.getAllWindows()` empty. **THE HOLD IS THE ANSWER, AND IT HOLDS ADDRESSES, NEVER READINGS.** A
+ *  queue of values would be a SECOND AUTHORITY beside the record; what is held here is the delivery's own argument, which is
+ *  all a push may ever carry, so **the flush translates nothing**: it re-emits the crossing's one signal and the realm re-reads.
+ *
+ *  `deliver` is TOTAL and it is the listener's whole act: it runs no store verb, reads no family and formats nothing (a listener
+ *  body's write would open a commit of its own inside the one that fired it), and it never throws, because an uncontained throw
+ *  at a registration instant refuses the construction. With no realm standing it HOLDS the address verbatim; once armed it
+ *  pushes.
+ *
+ *  `arm` is the flush, it is UNCONDITIONAL, and it emits ONE push per arrival. A queue that flushed only when it had something
+ *  held would leave a RELOADED realm unpainted until the next record change — a new silence of exactly the class this unit
+ *  exists to remove — so every arrival owes that realm one delivery and `held`'s content is the creation's EVIDENCE, not the
+ *  trigger. The clear is unconditional too, which is what keeps the hold from growing with the app's age.
+ *
+ *  `held` is a READING and never a destination: an insertion-ordered list of the addresses delivered while nothing could hear
+ *  them. Its reader is a battery. */
+interface DeliveryQueue {
+  /** THE LISTENER'S WHOLE ACT: the delivered ADDRESS — never a value, never a read. Total. */
+  deliver(address: readonly string[]): void
+  /** THE REALM HAS ARRIVED: one push for this crossing, then the held addresses are dropped. Idempotent, re-armed by the next arrival. */
+  arm(): void
+  /** WHAT WAS DELIVERED WITH NO DESTINATION — the creation's evidence, a reading for a battery and never a destination. */
+  readonly held: readonly (readonly string[])[]
+}
+
+function createDeliveryQueue(push: () => void): DeliveryQueue {
+  const held: (readonly string[])[] = []
+  let armed = false
+  return {
+    deliver(address: readonly string[]): void {
+      if (armed) {
+        push()
+        return
+      }
+      // HELD VERBATIM: the address is the delivery's own argument, and a copy of it is the whole of what this queue keeps. **A
+      // VALUE THAT IS NOT AN ADDRESS IS NOT HELD** (`B2-ADV2-03`, measured: `[...address]` threw `TypeError: address is not
+      // iterable` on a non-iterable, so an untotal `deliver` could refuse the act that fired it at a registration instant) —
+      // nothing to copy, nothing to hold, and the total claim becomes true at the edge rather than only inside the types.
+      if (!Array.isArray(address)) return
+      held.push([...address])
+    },
+    arm(): void {
+      // THE FLAG FIRST, so nothing delivered DURING the push is held behind it; then ONE push for this crossing; then the held
+      // set is dropped whether or not it held anything — **and the clear runs in a `finally`** (`B2-ADV2-03`, measured on a
+      // throwing push: `armed` stayed `true` while the hold survived, so "the clear is unconditional" was false exactly where
+      // it matters). The push still propagates its own failure; what it may not do is leave the crossing half-flushed.
+      armed = true
+      try {
+        push()
+      } finally {
+        held.length = 0
+      }
+    },
+    get held(): readonly (readonly string[])[] {
+      // A READING: a copy, so a reader cannot reach the queue's own list.
+      return held.map((address) => [...address])
+    },
+  }
+}
+// ⟦/B-2-PRE-WINDOW⟧
+
 async function main(): Promise<void> {
   console.error(`[provident-main] node ${process.versions.node} electron ${process.versions.electron} crypto=${typeof globalThis.crypto}`)
   // U-STORE-PERSIST-ADOPT §2.9 — THE `--provident-user-data=` SEAM, RESOLVED
@@ -402,6 +477,75 @@ async function main(): Promise<void> {
   // `provident.list_targets` reply carries no `boot` member at all (`P-6`).
   const optedIn = requested.length > 0
   const backend = new RendererBackend(optedIn ? { bootObservable: true } : {})
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // `B-2` `display-wire` — THE BOOT'S ONE CONSTRUCTION AND THE CROSSING'S MAIN HALF, IN THE CONTRACT'S OWN ORDER
+  // (`docs/L1/unit-b-2-display-wire.md` §2; the order is the foundation's, adopted at our pin `b312d83`)
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // THE SITE IS PART OF THE CLAIM: after the launch's refusal arms (the `--enable-tool-groups` abort above) and BEFORE
+  // `new BrowserWindow`, which is the fork's `D-19` boot order — construction → … → window → load.
+  //
+  // (1) THE PUSH LOOP. Every window is told and the destroyed guard stands; **the push carries NO VALUE AND NO ADDRESS**
+  // (`D-24`, `forking.md` §2.5), so the renderer's only correct answer to it is its own re-read. The `send` is CONTAINED per
+  // window, and that containment is not decoration: this body runs inside the delivery's own contained turn, and a throw at a
+  // registration instant would refuse the construction — so one window's failure must stay that window's.
+  const pushDisplayChanged = (): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue
+      try {
+        win.webContents.send(DISPLAY_CHANGED)
+      } catch {
+        /* one window's failure is that window's: the family moved and the delivery happened */
+      }
+    }
+  }
+  // (2) THE QUEUE, BUILT BEFORE THE STORE — the creation's own repair delivers before any window exists, so the hold has to
+  // stand before the construction does. (3) THE DELIVERY, whose sink is the queue's `deliver`: total and uninterpreted, an
+  // address in and nothing else.
+  const displayQueue = createDeliveryQueue(pushDisplayChanged)
+  const displayDelivery = createDisplayDelivery((address) => displayQueue.deliver(address))
+  // (4) THE HOLDER the constraint bodies read — DECLARED before the call and BOUND after it answers, which is exactly why an
+  // unwrapped body can act at the registration instant and a wrapped one abstains.
+  const displayStoreHolder: { current: StoreInstance | null } = { current: null }
+  // (5) THE BOOT'S **ONE** CONSTRUCTION, ADOPTING **BOTH** DECLARATION LISTS. `listeners:` is what makes a write's delivery
+  // reach the push loop at all. `constraints:` is what makes the family STAND: without `display-must-stand` no creation repair
+  // runs, a leaf write has no parent to land under (a nested write does not create its parent) and every `commitTab` is
+  // refused. **NO SECOND CONSTRUCTION EXISTS ANYWHERE** (`docs/defects.md` `STOREROOM-TWO-INSTANCES-CLOBBER-ONE-FILE`, the
+  // foundation's `D-80`): the census row makes this call site count a fact rather than a promise.
+  const displayProfilePath = join(app.getPath('userData'), 'provident-profile.json')
+  let displayStore: StoreInstance | null = null
+  try {
+    displayStore = createProfileStore({
+      filePath: displayProfilePath,
+      listeners: [...displayDelivery.entries],
+      constraints: [...displayConstraintDeclarations(() => displayStoreHolder.current)] as never,
+    })
+  } catch (refusal) {
+    // **A REFUSED CONSTRUCTION DEGRADES BY NAME AND NEVER RETRIES.** The store throws `FilePathUnreachable` for a `filePath`
+    // that can never be occupied, and the foundation funnels that into a FATAL boot. **HERE IT DEGRADES**, for one reason:
+    // this family's payload is DISPLAY STATE — a caret and a scroll — and a lost caret must not kill an app whose document
+    // content lives elsewhere (the fork's other persistence seams are all fail-soft). The degradation is LEGIBLE, not silent:
+    // this one line carries the store's own `status` and the path, the read route answers the DECLARED `null`, the arm still
+    // fires, and a consumer keys on the READING. **`no-port` is NOT this boot's word** — that is the absent-bridge MEMBER arm
+    // and a preload that always exposes the member can never produce it (`B2-ADV-01`). WHAT IS FORBIDDEN ON THIS PATH: a
+    // second construction, a defaulted `filePath`, a retry, a fallback store. **Cheap reversal:** one `throw` instead of this.
+    const shape = refusal as { status?: unknown; message?: unknown } | null
+    const status = typeof shape?.status === 'string' ? shape.status : 'no `status` member, so this is not a store refusal'
+    const reason = typeof shape?.message === 'string' ? shape.message : String(refusal)
+    console.error(
+      `[provident-main] display profile store REFUSED at '${displayProfilePath}' (status '${status}'): "${reason}" — ` +
+        'the display family stays ABSENT for this launch; the read route answers the declared null, the push still fires, and ' +
+        'a consumer must key on that READING (no second construction, no defaulted path, no retry, no fallback store)',
+    )
+  }
+  // (6) THE HOLDER BOUND, once the call has answered — never before, or every constraint body would read `null` at the
+  // registration instant it is meant to abstain at.
+  displayStoreHolder.current = displayStore
+  // (7) THE RECORD OVER THAT HANDLE, and its read as the crossing's ONE request route. A degraded boot answers the DECLARED
+  // `null` and nothing throws (`createDisplayRecord` is total over its store: an absent family is a declared absence).
+  const displayRecord = displayStore === null ? null : createDisplayRecord({ store: displayStore, delivery: displayDelivery })
+  ipcMain.handle(DISPLAY_READ, () => (displayRecord === null ? null : displayRecord.read()))
+
   // Unit U-MENU-1 §2 — the native application-menu surface. The renderer pushes
   // the live pane catalog over `IPC_PANE_CATALOG` (boot + registry change); main
   // rebuilds the View → Panes submenu from the latest catalog. The menu bar is
@@ -1108,6 +1252,12 @@ async function main(): Promise<void> {
 
   ipcMain.on(IPC_READY, () => {
     backend.markReady()
+    // `B-2` §2 item 7 — **THE REALM HAS ARRIVED: THE PRE-WINDOW QUEUE IS FLUSHED HERE**, inside this EXISTING body and AFTER
+    // the landed readiness act. BOTH halves of that are the claim: the renderer subscribes ABOVE `bridge.ready()` (so this
+    // signal is what tells it a realm exists), and the push's consumer answers with a `display.read()` invoke that main
+    // dispatches only once the backend is ready — so an arm issued BEFORE `markReady()` would hand the realm a signal whose
+    // read is not yet armed. ONE push per arrival, unconditionally: a RELOADED realm is owed one too.
+    displayQueue.arm()
     console.error('[provident-main] renderer ready — MCP backend armed')
   })
   // §2.2 `B-1` item 4 — the renderer boot chain's COMPLETION signal (its own
