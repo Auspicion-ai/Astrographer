@@ -42,6 +42,7 @@ import {
   PAGE_EDIT_SURFACE_BLUR_BODY,
   pageCommitWarningContent,
   zoneMirrorsFor,
+  paneSubtreeRoot,
   type AppGraphAssemblyResult,
   type SearchResult,
 } from './pane-graph.js'
@@ -88,6 +89,10 @@ type GutterGestureSession = ReturnType<typeof createGestureSession>
 import type { EditController, CaretState, RichCaretEdge, RebuildKind, CommitFailure } from './edit-controller.js'
 import { decodePage, buildPageOps } from '../main/page-diff.js'
 import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from './content-reconcile.js'
+// ⟨Unit `B-3` `§2`/`§3` — THE CHANNEL AND THE PAINT'S VERDICT.⟩ The host HOLDS a channel (`SidebarPanesOptions.events`) and
+// answers ONE paint per fire (`updatePane`); the verdict's closed vocabulary lives with the channel's report family, so the two
+// sides of a pane update name one set of words.
+import type { PaneEvents, PaneUpdateReason, PaneUpdateVerdict } from './pane-events.js'
 import {
   scopeDocumentIds,
   plainRagId,
@@ -271,7 +276,21 @@ export interface SidebarPanesOptions {
     openDocumentTab?(documentId: string): void
     editSearchQuery?(tabId: string, params: TabSearchParams): void
   }
+  /** ⟨Unit `B-3` `§3` — THE CHANNEL THE HOST PAINTS FOR.⟩ At `boot` the host subscribes `REPLUMBED_PANE_IDS` to it, each
+   *  subscription's body being ONE `updatePane(<pane id>)` call — so a pane update arrives because a component FIRED (the direct
+   *  arm) or because the record's push was re-read and `deliver()`ed (the record arm), never because something re-assembled the
+   *  tree (`INV-E`). **Absent ⇒ the host subscribes nothing** and every pane family keeps its pre-migration `refresh()` route
+   *  until its own unit (`r5`): the migration is incremental by construction, never a big bang. */
+  events?: PaneEvents
 }
+
+/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`, and the
+ *  whole of it: **exactly `['gnosis-query']`**. The set is ONE constant so a later family unit must EXTEND it deliberately
+ *  (`B-8` for the other gnosis panes, `B-5`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
+ *  deliberately NOT here: it is `operator`-scope, the operator mount is `B-9`'s surface, and `updatePane` answers
+ *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): "exactly `['gnosis-query']`" is a fact of
+ *  the VALUE, not only a convention — a `push` cannot add a silent second subscriber. */
+export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query'])
 
 // ---- handler bodies (function-STRING data). They reach the IPC bridge via
 // `window.provident.sidebar` — NEVER an MCP tool. The host installs the
@@ -744,6 +763,12 @@ export class SidebarPanes {
   /** The last traversal envelope passed to loadAppGraph (used by refresh +
    *  submitQuery to re-assemble + re-load without a RAG re-traversal). */
   private lastTraversalEnvelope: LegacyInitialData | null = null
+  /** ⟨Unit `B-3` `§3`⟩ The channel this host paints for (`SidebarPanesOptions.events`), or `null` on a host that predates it —
+   *  and `null` means the host subscribes NOTHING (the pre-migration `refresh()` route stands for every pane, `r5`). */
+  private readonly events: PaneEvents | null = null
+  /** ⟨Unit `B-3` `§3`⟩ The withdrawals for the ONE boot-time subscription set (`REPLUMBED_PANE_IDS`), kept so a re-boot
+   *  withdraws the previous registrations instead of stacking a second subscriber per pane (`B2-ADV-04`'s lesson, one realm in). */
+  private unsubPaneUpdates: Array<() => void> = []
 
   /** The operator isolated-scope graph (M3/M17). */
   private operatorScope: GraphScope | null = null
@@ -921,6 +946,9 @@ export class SidebarPanes {
     this.sidebarZone = opts.sidebarZone ?? SIDEBAR_ZONE
     this.gnosis = opts.gnosis ?? null
     this.tabs = opts.tabs ?? null
+    // ⟨Unit `B-3` `§3`⟩ THE CHANNEL — held, never constructed here: the renderer owns the ONE channel (a second
+    // `createPaneEvents()` would be a second registry for one event, and a pane firing into the wrong one would be silent).
+    this.events = opts.events ?? null
     // U-SHELL-4 — the shell drag controller. The scope of the dragged pane gates
     // reveal + drop legality (an operator pane never targets an app-graph zone);
     // each threshold-crossing commits ONE reveal write (W2-Q7/F4).
@@ -2450,6 +2478,227 @@ export class SidebarPanes {
     this.mountOperator()
   }
 
+  /** ⟨Unit `B-3` `C-2`/`§3` — **THE ONE PAINT**: re-render ONE pane and apply ONLY that pane's authored content root through
+   *  the managed channel the stage already uses (`Runtime.applyContentReconcile`, the same reconciler the content re-derive
+   *  drives). `INV-E` is this method's own body: **0 `loadAppGraph`, 0 `mountOperator`, 0 `refresh()`** — a pane whose host data
+   *  moved updates because it HEARD, never because something re-assembled the tree.
+   *
+   *  THE FIVE STEPS, IN ORDER, AND NOTHING ELSE:
+   *   1. the pane's `PaneDefinition` off the REGISTRY (the one authority over which panes exist);
+   *   2. the LIVE materialized frame `pane-<id>` off `runtime.materializedContentRoots()` — **and the frame's OWN
+   *      `placement.targetPlacement[0]` / `props.collapsed` are what the fresh frame is authored with**, so the placement law is
+   *      CONTINUED rather than re-spelled (`ASM-B3-3`/`ASM-U1b-10`: `paneSubtreeRoot` is called, never re-implemented);
+   *   3. `def.render(ctx)` over the host's own `buildTemplateContext()`, so the content is whatever the host's cache says NOW;
+   *   4. `reconcileDocumentRoots` over **that pane's root ONLY** — one `previous` root, one `next` envelope and `documentIds:
+   *      ['']`, so `removed`/`added` are EMPTY BY CONSTRUCTION and no document root and no sibling pane can enter the buckets;
+   *   5. `runtime.applyContentReconcile` **only when `replaced.length > 0`** — a shape-equal re-render applies NOTHING
+   *      (`reason:'unchanged'`, `r1`'s idempotence limb).
+   *
+   *  EVERY ABSENT ARM IS A DECLARED WORD (never a throw, never a fallback to a re-assembly): `not-a-pane` · `operator-scope`
+   *  (the arm that keeps `B-9`'s surface OUT of this unit instead of silently re-mounting it) · `not-enabled` · `no-runtime` ·
+   *  `not-mounted`. TOTAL at every argument. */
+  updatePane(paneId: string): PaneUpdateVerdict {
+    const echo = typeof paneId === 'string' ? paneId : ''
+    const verdict = (reason: PaneUpdateReason, applied: string[] = []): PaneUpdateVerdict => ({
+      paneId: echo,
+      painted: reason === 'painted',
+      reason,
+      applied,
+    })
+    // ⟨`ASM-B3-L3-2` — CONTAINED AS A WHOLE.⟩ Steps 1–8 run inside ONE guard, so a throw from ANY site folds into the same declared
+    // `unchanged` answer instead of escaping at a caller: the words are CLOSED (an eighth would be a re-statement of `r3`'s census)
+    // and the paint is an arm of an event dispatch — the one place in this host where a throw must stay inside.
+    try {
+      return this.paintPane(echo, verdict)
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${echo}'): the paint threw`, thrown)
+      return verdict('unchanged')
+    }
+  }
+
+  /** `updatePane`'s body: the five steps of `§3`, in order, and nothing else. */
+  private paintPane(
+    paneId: string,
+    verdict: (reason: PaneUpdateReason, applied?: string[]) => PaneUpdateVerdict,
+  ): PaneUpdateVerdict {
+    // (1) THE DEFINITION. A non-string/empty id can name no pane, and the registry is asked (never a private map).
+    if (typeof paneId !== 'string' || paneId === '') return verdict('not-a-pane')
+    const def = this.registry.get(paneId)
+    if (def == null) return verdict('not-a-pane')
+    // (2) THE OPERATOR SCOPE IS `B-9`'s — its lawful paint re-MOUNTS that surface, which is that unit's, not this one's.
+    if (def.scope === 'operator') return verdict('operator-scope')
+    // (3) THE ENABLED CENSUS: a disabled pane renders no frame, so the word is `not-enabled` and NOT `not-mounted` (the census
+    // that excludes it is the ENABLED one).
+    if (!this.registry.isEnabled(paneId)) return verdict('not-enabled')
+    // (4) THE RUNTIME: mounted-ness is a fact of the runtime's materialized root set, so a host holding no runtime cannot answer
+    // it at all — the absence of the ROUTE is its own declared word.
+    const runtime = this.runtime
+    if (runtime == null) return verdict('no-runtime')
+    // (5) THE LIVE FRAME — the paint's subject and the source of the placement law it continues.
+    const cssId = `pane-${paneId}`
+    const liveFrame = runtime
+      .materializedContentRoots()
+      .find((root) => (root?.props as { id?: unknown } | undefined)?.id === cssId)
+    if (liveFrame == null) return verdict('not-mounted')
+    const targets = (liveFrame.placement as { targetPlacement?: unknown } | undefined)?.targetPlacement
+    const zone =
+      Array.isArray(targets) && typeof targets[0] === 'string' && targets[0] !== '' ? targets[0] : this.sidebarZone
+    const collapsed = (liveFrame.props as { collapsed?: unknown } | undefined)?.collapsed === 'true'
+
+    // (6) THE FRESH FRAME. A render that THROWS is contained (`ASM-B3-L2-2`): the vocabulary is CLOSED, nothing was applied, and
+    // the least-wrong declared word is `unchanged` — the paint never throws at a caller and never invents an eighth word.
+    let fresh: LegacyNodeData
+    try {
+      fresh = paneSubtreeRoot(def, this.buildTemplateContext(), zone, collapsed)
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the pane's render threw`, thrown)
+      return verdict('unchanged')
+    }
+
+    // (7) THE RECONCILE — ONE root in, ONE root out.
+    const paneEnvelope: LegacyInitialData = {
+      template: { root: { type: 'div', props: { id: 'wiki-root' }, children: [] } },
+      content: [{ content: [fresh] }],
+    } as unknown as LegacyInitialData
+    const result = reconcileDocumentRoots({
+      previous: [{ documentId: '', root: liveFrame }],
+      next: [{ documentId: '', envelope: paneEnvelope }],
+      change: null,
+      documentIds: [''],
+    })
+    // (5, closed) A shape-equal re-render replaces NOTHING and therefore applies NOTHING.
+    if (result.replaced.length === 0) return verdict('unchanged')
+
+    // (8) THE APPLY — ONE call, and only now. ⟨`B3-F6` — THE VERDICT IS EARNED FROM THE CHANNEL'S OWN REPORT.⟩ `painted` is claimed
+    // only when `applyContentReconcile` says it APPLIED this root; an apply that answered without it (a missing `next` node, a
+    // refused bucket) is `unchanged` with the warnings logged. A verdict that never reads the channel's answer would report a paint
+    // the DOM never received — measured on the real `Runtime` with a code-CRUD-mutated envelope.
+    let applied: string[] = []
+    try {
+      const documents = this.paneDocumentCensus(runtime, cssId, fresh)
+      if (documents == null) {
+        // the per-document census is PRESENT but unreadable: an apply would flatten it onto `documentId: ''` (the harm
+        // `ASM-B3-L2-1` names), so the paint REFUSES rather than rewriting a census it cannot carry.
+        console.error(`[sidebar-panes] updatePane('${paneId}'): the runtime's document census is unreadable — refusing the apply`)
+        return verdict('unchanged')
+      }
+      const report = runtime.applyContentReconcile({
+        result,
+        next: this.panePayloadEnvelope(runtime, liveFrame, fresh, cssId),
+        documents,
+      })
+      const appliedIds = (report as { applied?: unknown } | null | undefined)?.applied
+      applied = Array.isArray(appliedIds) ? appliedIds.filter((id): id is string => typeof id === 'string') : []
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the managed channel refused the apply`, thrown)
+      return verdict('unchanged')
+    }
+    if (!applied.includes(cssId)) {
+      console.error(
+        `[sidebar-panes] updatePane('${paneId}'): the managed channel applied [${applied.join(', ')}] and NOT the pane's own root`,
+      )
+      return verdict('unchanged')
+    }
+    return verdict('painted', [cssId])
+  }
+
+  /** ⟨`B3-F2` — **THE FULL-CENSUS PAYLOAD SUPPLY**, and the measurement that amended the contract's §3 step 5.⟩
+   *  `Runtime.applyContentReconcile` does not merge: its body assigns `this.contentRoots = extractContentRoots(input.next)` and
+   *  rebuilds `this.documentRoots` from the same input (`src/renderer/runtime.ts:670-683`). Handing it the one-root envelope the
+   *  RECONCILE considered would therefore TRUNCATE the live root census — the next pane update would answer `not-mounted` for a
+   *  frame that is still on screen, and a later multi-document re-derive would `added`-reattach roots that never left. So the paint
+   *  hands the runtime the LIVE envelope with the pane's frame swapped **by IDENTITY**, read through `runtime.codeGet('')` (a
+   *  PUBLIC, total read of the code-CRUD source of truth, `READ` `runtime.ts:1266-1274`) so the template, the payload grouping and
+   *  the page-edit surface all survive the paint. A runtime with no such route (a recording double) or an envelope that does not
+   *  carry the frame falls back to an envelope over the live root list — the census, which is the fact the runtime actually owns. */
+  private panePayloadEnvelope(
+    runtime: Runtime,
+    liveFrame: LegacyNodeData,
+    fresh: LegacyNodeData,
+    cssId: string,
+  ): LegacyInitialData {
+    const live = this.liveEnvelopeOf(runtime)
+    // ⟨`B3-F6(a)` — SWAP BY IDENTITY **OR** BY ID.⟩ Identity alone was not enough: the code-CRUD surface can REPLACE the envelope's
+    // pane root with a distinct object (`provident.code.set` on that path), and a structurally-equal envelope is a third case — in
+    // both, an identity-only swap hands the runtime a `next` that still carries the OLD frame, `applyContentReconcile` attaches
+    // nothing, and the paint would report success for a frame it never mounted. The id is the frame's OWN authored carrier, so
+    // matching on it as well states exactly one root and cannot touch a sibling (ids are unique by construction).
+    const swap = (node: unknown): unknown => {
+      if (node === liveFrame) return fresh
+      const id = (node as { props?: { id?: unknown } } | null | undefined)?.props?.id
+      return id === cssId ? fresh : node
+    }
+    if (live != null && Array.isArray(live.content)) {
+      const content = (live.content as unknown as Array<{ content?: unknown }>).map((payload) => {
+        const nodes = payload?.content
+        if (!Array.isArray(nodes)) return payload
+        return { ...payload, content: nodes.map(swap) } as { content?: unknown }
+      })
+      return { ...live, content } as unknown as LegacyInitialData
+    }
+    const roots = runtime.materializedContentRoots().map((root) => (root === liveFrame ? fresh : root))
+    return {
+      template: { root: { type: 'div', props: { id: 'wiki-root' }, children: [] } },
+      content: [{ content: roots }],
+    } as unknown as LegacyInitialData
+  }
+
+  /** The LIVE envelope behind the materialized roots, or `null` — the ONE contained read (`B1-ADV-05(c)`'s rule: an accessor
+   *  is not a guard, so a runtime that throws here is the ABSENT route and the caller falls back). */
+  private liveEnvelopeOf(runtime: Runtime): LegacyInitialData | null {
+    try {
+      const read = (runtime as unknown as { codeGet?: (path: string) => unknown }).codeGet
+      if (typeof read !== 'function') return null
+      const answer = read.call(runtime, '') as { value?: unknown } | null | undefined
+      const value = answer?.value
+      if (value == null || typeof value !== 'object') return null
+      const envelope = value as { content?: unknown }
+      return Array.isArray(envelope.content) ? (value as LegacyInitialData) : null
+    } catch {
+      return null
+    }
+  }
+
+  /** ⟨`ASM-B3-L2-1` — **the live per-document census, CARRIED**.⟩ `applyContentReconcile` rebuilds `this.documentRoots` from
+   *  `input.documents` and, when that member is absent, flattens EVERY root to `documentId: ''`. A pane paint is not a
+   *  re-scoping: a `mountTabs` after a flattened census would key the document roots to a different document scope and
+   *  destroy-and-reattach them. So the paint carries the census it found (`materializedDocumentRoots()`), grouped by the
+   *  document id it was already grouped by, with the pane's own frame swapped for the fresh one. `[]` when the runtime cannot be
+   *  ASKED at all (a foreign/older runtime with no such member — the documented flattening, and the fact was unobtainable); **`null`
+   *  when it was asked and the read THREW** — the caller refuses the apply there instead of flattening a census it could not read
+   *  (`B3-F8`, measured: a throwing census read re-scoped every document root to `''`, the exact harm `ASM-B3-L2-1` names). */
+  private paneDocumentCensus(
+    runtime: Runtime,
+    cssId: string,
+    fresh: LegacyNodeData,
+  ): { documentId: string; envelope: LegacyInitialData }[] | null {
+    const read = (runtime as unknown as { materializedDocumentRoots?: () => DocumentRoot[] }).materializedDocumentRoots
+    if (typeof read !== 'function') return []
+    let live: DocumentRoot[]
+    try {
+      live = read.call(runtime) ?? []
+    } catch {
+      return null
+    }
+    const grouped = new Map<string, LegacyNodeData[]>()
+    for (const entry of Array.isArray(live) ? live : []) {
+      if (entry == null || entry.root == null) continue
+      const rootId = (entry.root.props as { id?: unknown } | undefined)?.id
+      const node = rootId === cssId ? fresh : entry.root
+      const documentId = typeof entry.documentId === 'string' ? entry.documentId : ''
+      const standing = grouped.get(documentId)
+      if (standing === undefined) grouped.set(documentId, [node])
+      else standing.push(node)
+    }
+    return [...grouped.entries()].map(([documentId, roots]) => ({
+      documentId,
+      envelope: {
+        template: { root: { type: 'div', children: [] } },
+        content: [{ content: roots }],
+      } as unknown as LegacyInitialData,
+    }))
+  }
+
   /** Re-fetch the pane data (snapshot/backlinks/query/operator-settings) over
    *  the bridge and re-render. Re-renders the EXISTING app graph + the EXISTING
    *  operator graph (M17) — it NEVER rebuilds the operator envelope or re-runs a
@@ -2615,6 +2864,20 @@ export class SidebarPanes {
     const traversalEnvelope = this.buildTraversalEnvelope(snapshot, renderIds)
     this.loadAppGraph(runtime, traversalEnvelope)
     this.mountOperator()
+    // ⟨Unit `B-3` `§3` — THE PAINT'S REGISTRATION, FOR THE RE-PLUMBED CENSUS ONLY, AND AFTER THE FIRST LOAD (`ASM-B3-L3-3`).⟩
+    // ONE subscription per id in `REPLUMBED_PANE_IDS`, each body being ONE `updatePane(<report.paneId>)`: a fire (direct arm) or a
+    // `deliver()` (record arm) from now on reaches the PAINT instead of `refresh()`, and every pane NOT in the census keeps its
+    // pre-migration route (`r5` — the migration is incremental, never a big bang). Registering after the first
+    // `loadAppGraph` + `mountOperator` is load-bearing: a settle arriving during the boot's own bridge awaits would otherwise
+    // answer `not-mounted` and be lost before the pane it names has a frame. The withdrawals are released first, so a re-boot
+    // cannot stack a second subscriber on one id (`B2-ADV-04`'s lesson, one realm in).
+    for (const release of this.unsubPaneUpdates) release()
+    this.unsubPaneUpdates = []
+    if (this.events != null) {
+      for (const paneId of REPLUMBED_PANE_IDS) {
+        this.unsubPaneUpdates.push(this.events.subscribe(paneId, (report) => void this.updatePane(report.paneId)))
+      }
+    }
     // Subscribe to the re-derive triggers.
     this.unsubRag = this.bridge.edit.onRagStoreChanged((p) => this.onRagStoreChanged(p))
     this.unsubTemplate = this.bridge.template.onTemplateChanged((p) => this.onTemplateChanged(p))

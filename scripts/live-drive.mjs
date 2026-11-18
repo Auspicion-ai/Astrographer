@@ -2074,6 +2074,60 @@ async function gnosisAssembleSig(h) {
   return h.cdp.evaluate(`(()=>{const g=(s)=>{const e=document.querySelector(s);return e?e.getAttribute('data-node-id'):null};return {roots:document.querySelectorAll('#wiki-root').length,root:g('#wiki-root'),status:g('[data-gnosis-pane="status"]'),wikis:g('.pane-frame[data-pane-id="gnosis-wikis"] [data-gnosis-pane]'),docs:g('.pane-frame[data-pane-id="gnosis-documents"] [data-gnosis-pane]')}})()`)
 }
 
+/** ⟨Unit `B-3` §8 — **THE `INV-E` ASSEMBLED-APP LIMB: the pane-frame census, MARKED then READ.**⟩ `INV-E` is "no pane update
+ *  may be applied by a re-assembly", and its three counters are NODE-only. What the assembled app CAN show is the counters'
+ *  shadow on the DOM: a whole-graph re-assembly (`loadAppGraph`) re-mints the assembly root `#wiki-root` and EVERY pane frame,
+ *  while ONE pane's paint replaces ONE content root — so the fired pane's own `.pane-frame[data-pane-id]` node is RE-MINTED with
+ *  its carriers (zone class, `collapsed`, head/grip/control/body ids) UNCHANGED, the assembly root's `data-node-id` and every
+ *  OTHER frame's node AND its own per-run mark SURVIVE, exactly one `#pane-gnosis-query` exists, and the pane's rendered text
+ *  moved.
+ *  `mark: true` stamps every live frame with an own property (a per-run token) and records the census; `mark: false` re-reads the
+ *  SAME census and leaves the DOM alone (a mark can only be absent from a node that was replaced). READ-ONLY: no app state, no
+ *  envelope, no handler, nothing is promoted to a verdict here — the block that owns the row reads these values. */
+async function gnosisPaneFrameCensus(h, mark, reuseToken) {
+  // THE TOKEN MUST BE THE SAME ON BOTH HALVES: the mark half mints it and RETURNS it; the read half is handed it back. A second
+  // mint would stamp with one token and compare against another, and every survivor would read `marked:false` — the limb would
+  // then report "no frame survived" on a run where nothing was re-minted at all (measured on this unit's first live pass).
+  const token = typeof reuseToken === 'string' && reuseToken !== ''
+    ? reuseToken
+    : 'b3-inv-e-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    const read = (el) => {
+      const head = el.querySelector('.pane-head')
+      const body = el.querySelector('.pane-body')
+      const grip = head ? head.children[0] : null
+      const control = head ? head.children[1] : null
+      const classes = String(el.className || '')
+      const zoneMatch = /\\bpane-in-([a-z]+)\\b/.exec(classes)
+      return {
+        zone: zoneMatch ? zoneMatch[1] : null,
+        collapsed: el.getAttribute('collapsed'),
+        id: el.getAttribute('id'),
+        headId: head ? head.getAttribute('id') : null,
+        gripId: grip ? grip.getAttribute('id') : null,
+        controlId: control ? control.getAttribute('id') : null,
+        bodyId: body ? body.getAttribute('id') : null,
+      }
+    }
+    if (${mark ? 'true' : 'false'}) { for (const el of frames) { try { el.__b3Mark = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const queryEl = document.querySelector('#pane-gnosis-query')
+    const rootEl = document.querySelector('#wiki-root')
+    return JSON.stringify({
+      token: TOKEN,
+      root: rootEl ? rootEl.getAttribute('data-node-id') : null,
+      queryFrames: document.querySelectorAll('#pane-gnosis-query').length,
+      queryText: queryEl ? String(queryEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 240) : null,
+      frames: frames.map((el) => {
+        const carries = (() => { try { return el.__b3Mark === TOKEN } catch (e) { return false } })()
+        return { pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries, carriers: read(el) }
+      }),
+    })
+  })()`
+  return JSON.parse(await h.cdp.evaluate(expr))
+}
+
 /** The [DIAG] dispatch probe: hand the SAME handler the DOM click would reach a
  *  direct `provident.dispatch` so "the handler is dead" and "the handler ran but
  *  its seam is a no-op" are distinguishable. Never a verdict. */
@@ -9347,6 +9401,10 @@ const BLOCKS = {
   gnosis_query: async (h) => {
     const en = await gnosisEnablePanes(h, ['gnosis-query'])
     const exp = await ufEnsurePaneExpanded(h, 'gnosis-query')
+    // ⟨Unit `B-3` §8 — THE `INV-E` LIMB, MARK HALF.⟩ Taken AFTER the sanctioned per-block restore and BEFORE the submit: every
+    // `.pane-frame[data-pane-id]` is stamped and its `data-node-id` recorded, so a frame that SURVIVES the submit keeps its stamp
+    // and a frame that was RE-MINTED cannot carry one (a re-assembly re-mints them all; ONE pane's paint re-mints exactly one).
+    const framesBefore = await gnosisPaneFrameCensus(h, true)
     const focus = await ufRealClick(h, '#gnosis-query-input')
     await sleep(300)
     await h.cdp.evaluate(`(()=>{const e=document.getElementById('gnosis-query-input');if(e)e.value='';return true})()`)
@@ -9355,6 +9413,36 @@ const BLOCKS = {
     const typed = await h.cdp.evaluate(`(document.getElementById('gnosis-query-input')||{}).value||null`)
     const submit = await ufRealClick(h, '#gnosis-query-submit')
     await sleep(3500)
+    // ⟨THE READ HALF — the same census and the SAME mark token, re-read (nothing is stamped twice and nothing is written).⟩
+    const framesAfter = await gnosisPaneFrameCensus(h, false, framesBefore.token)
+    const beforeByPid = new Map((framesBefore.frames || []).map((f) => [f.pid, f]))
+    const queryBefore = beforeByPid.get('gnosis-query') || null
+    const queryAfter = (framesAfter.frames || []).find((f) => f.pid === 'gnosis-query') || null
+    // LIMB (i): the assembly root `#wiki-root` was NOT re-minted — a whole-graph `loadAppGraph` mints a new root node id.
+    const assemblyRootUnchanged = !!framesBefore.root && framesBefore.root === framesAfter.root
+    // LIMB (ii): every OTHER pane frame that STOOD BEFORE the submit is still there, still carrying its stamp and its node id — its
+    // DOM node survived, so no other pane was re-minted. ⟨Computed over the BEFORE census (`B3-F12`, measured): a sibling that
+    // VANISHED during the submit has to RED this limb, and filtering the AFTER census alone could never see it.⟩
+    const otherBefore = (framesBefore.frames || []).filter((f) => f.pid !== 'gnosis-query')
+    const afterByPid = new Map((framesAfter.frames || []).map((f) => [f.pid, f]))
+    const otherPanes = otherBefore.map((f) => ({ pid: f.pid, marked: (afterByPid.get(f.pid) || {}).marked === true }))
+    const otherPanesSurvived =
+      otherBefore.length > 0 &&
+      otherBefore.every((f) => {
+        const now = afterByPid.get(f.pid)
+        return now !== undefined && now.marked === true && now.nodeId === f.nodeId
+      })
+    // LIMB (iii): the fired pane's OWN frame WAS re-minted (its stamp is gone) with its carriers/zone/slot unchanged.
+    const queryFrameReminted = !!queryBefore && !!queryAfter && queryAfter.marked === false && queryBefore.nodeId !== queryAfter.nodeId
+    const carriersOf = (f) => (f && f.carriers ? JSON.stringify(f.carriers) : null)
+    const queryCarriersHeld = !!queryBefore && carriersOf(queryBefore) === carriersOf(queryAfter)
+    // LIMB (iv): exactly ONE `#pane-gnosis-query` exists after the paint (no duplicate, no orphan).
+    const exactlyOneQueryFrame = framesBefore.queryFrames === 1 && framesAfter.queryFrames === 1
+    // LIMB (v): the pane's rendered CONTENT changed — the paint's own effect. On an engine-absent run the render is shape-equal
+    // (`gnosisQueryContent` renders `(no engine results)` for "no query yet" AND for a rejected query), so the paint correctly
+    // answers `unchanged` and this limb reads FALSE — the honest NOT-DRIVEN side of the row, printed rather than smoothed.
+    const paneContentChanged = framesBefore.queryText !== framesAfter.queryText
+    const invEHolds = assemblyRootUnchanged && otherPanesSurvived && queryFrameReminted && queryCarriersHeld && exactlyOneQueryFrame
     const st = await gnosisPaneState(h, 'gnosis-query')
     const rows = st ? st.lis.filter((l) => l.doc || l.node) : []
     const painted = rows.filter((l) => l.box && l.box[2] > 0 && l.box[3] > 0)
@@ -9363,7 +9451,7 @@ const BLOCKS = {
     const streamResult = streamChunks && streamChunks[0] && streamChunks[0].type === 'result' ? streamChunks[0].result : null
     const mcpQuery = await h.mcpTool(h.mcp, 'gnosis.query', { query: 'enrichment graph node' }).catch((e) => ({ __error: String(e.message || e) }))
     const paneRenderedResults = rows.length > 0
-    return rowResult({row:'UF-GNOSIS-3',dclass:'D-interaction'}, 'A REAL typed query + REAL submit in the gnosis-query pane runs a real engine query and renders >=1 result row (painted)', `enable=${JSON.stringify(en.flips)} expand=${exp.path}; REAL click #gnosis-query-input path=${focus.path} + Input.insertText → typedValue="${typed}"; REAL click #gnosis-query-submit path=${submit.path} → pane data-gnosis-pane=query data-gnosis-query="${st ? st.queryAttr : '?'}" traceMode=${st ? st.traceMode : '?'} renderedResultRows=${rows.length} painted=${painted.length} paneText="${st ? st.paneText : '?'}"; INDEPENDENT ORACLE — the SAME query over the GET path (gnosis.stream) returns ${streamResult ? streamResult.results.length + ' results (first "' + streamResult.results[0].snippet + '" @ ' + streamResult.results[0].score + ')' : JSON.stringify(engine).slice(0, 200)}; the POST path (gnosis.query MCP) returns ${JSON.stringify(mcpQuery).slice(0, 200)}`, { path: focus.path === 'cdp' && submit.path === 'cdp' ? 'cdp' : submit.path, ok: paneRenderedResults && painted.length > 0 && !!streamResult && streamResult.results.length > 0, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-3',dclass:'D-interaction'}, 'A REAL typed query + REAL submit in the gnosis-query pane runs a real engine query and renders >=1 result row (painted), and the update is applied to THAT pane ONLY — the assembled-app reading of `INV-E`', `enable=${JSON.stringify(en.flips)} expand=${exp.path}; REAL click #gnosis-query-input path=${focus.path} + Input.insertText → typedValue="${typed}"; REAL click #gnosis-query-submit path=${submit.path} → pane data-gnosis-pane=query data-gnosis-query="${st ? st.queryAttr : '?'}" traceMode=${st ? st.traceMode : '?'} renderedResultRows=${rows.length} painted=${painted.length} paneText="${st ? st.paneText : '?'}"; INV-E LIMB (assembled app, the counters' DOM shadow): pane frames before=${JSON.stringify((framesBefore.frames || []).map((f) => f.pid + '@' + f.nodeId))} after=${JSON.stringify((framesAfter.frames || []).map((f) => f.pid + '@' + f.nodeId))}; (i) assemblyRootUnchanged=${assemblyRootUnchanged} (#wiki-root data-node-id "${framesBefore.root}" → "${framesAfter.root}"); (ii) otherPanesSurvived=${otherPanesSurvived} (marked survivors ${JSON.stringify(otherPanes.map((f) => f.pid + ':' + f.marked))}); (iii) queryFrameReminted=${queryFrameReminted} with queryCarriersHeld=${queryCarriersHeld} (before ${carriersOf(queryBefore)} vs after ${carriersOf(queryAfter)}); (iv) exactlyOneQueryFrame=${exactlyOneQueryFrame} (before ${framesBefore.queryFrames} after ${framesAfter.queryFrames}); (v) paneContentChanged=${paneContentChanged} ("${framesBefore.queryText}" → "${framesAfter.queryText}") — limbs (i)/(ii)/(iv) are the counters' DOM shadow and need no content delta; limbs (iii)/(v) need the settled submit to CHANGE the pane's render, which has TWO named causes for reading false and neither is smoothed: (a) the pane is GATE-CLOSED at renderer boot (its own text reads "the gnosis group is not enabled", so the pane's \`#gnosis-query-input\` / \`#gnosis-query-submit\` controls are not authored at all and the block's click CANNOT land — the gate cache is fetched once in \`GnosisPanes.boot()\` and only re-fetched by a submit that cannot happen), or (b) an ENGINE-ABSENT run reads (v)=false because \`gnosisQueryContent\` renders the same \`(no engine results)\` node for "no query yet" and for a rejected query; what would prove the paint is a run whose PERSISTED security set carries the \`gnosis\` group BEFORE the renderer boots AND a READY engine that answers the query; INDEPENDENT ORACLE — the SAME query over the GET path (gnosis.stream) returns ${streamResult ? streamResult.results.length + ' results (first "' + streamResult.results[0].snippet + '" @ ' + streamResult.results[0].score + ')' : JSON.stringify(engine).slice(0, 200)}; the POST path (gnosis.query MCP) returns ${JSON.stringify(mcpQuery).slice(0, 200)}`, { path: focus.path === 'cdp' && submit.path === 'cdp' ? 'cdp' : submit.path, ok: paneRenderedResults && painted.length > 0 && !!streamResult && streamResult.results.length > 0 && invEHolds && paneContentChanged, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-4: gnosis-status is modal-confined + MCP-invisible ----

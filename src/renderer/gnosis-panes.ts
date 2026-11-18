@@ -36,17 +36,20 @@ export interface GnosisBridge {
   }
 }
 
-/** The renderer-wired re-render trigger the gnosis host calls after a status or
- *  query settles (the host re-assembles the app-graph + re-mounts the operator
- *  so the updated pane data renders). */
-export type GnosisOnChanged = () => void
+/** ⟨Unit `B-3` `C-1`/`§4` — THE DIRECT ARM'S FIRST HALF: **a component that learnt something NAMES ITS OWNER**.⟩ The
+ *  renderer-wired trigger the gnosis host calls after a status or query settles: it hands over the ONE pane id the settle is
+ *  ABOUT (`'gnosis-status'` from `refreshStatus()`, `'gnosis-query'` from `submitQuery()`), and the site fires that pane on the
+ *  channel — never `host.refresh()`, which re-assembled the whole graph for one pane's data (`INV-E`).
+ *  **The argless form is gone on purpose**: a callback that answers "something changed" makes the site guess the owner, and a
+ *  guess is exactly what a later unit must not inherit. */
+export type GnosisOnChanged = (paneId: string) => void
 
 export interface GnosisPanesOptions {
   /** The app's shared PaneRegistry (the same registry SidebarPanes uses). */
   registry: PaneRegistry
   /** The preload bridge (`window.provident`). */
   bridge: GnosisBridge
-  /** Called when the pane state changes so the host re-renders the panes. */
+  /** Called with the pane id a settle is about, so the site can fire that pane on the channel. */
   onChanged: GnosisOnChanged
 }
 
@@ -130,17 +133,19 @@ export class GnosisPanes {
   /** `sidebar.gnosisStatus` — refresh the engine HealthReport over the bridge.
    *  A REJECTED bridge call (the D2 engine-absent `EngineUnavailable`) is
    *  CAUGHT and renders the unavailable state (null lastStatus) — never a crash
-   *  (§5.6). SYNCHRONOUS (fire-and-forget; the result routes on resolution). */
+   *  (§5.6). SYNCHRONOUS (fire-and-forget; the result routes on resolution).
+   *  ⟨`B-3` §4⟩ BOTH settle arms name `'gnosis-status'`: the OPERATOR pane the
+   *  report belongs to (and therefore the pane whose paint `B-9` owes). */
   refreshStatus(): void {
     void this.bridge.gnosis.status()
       .then((report) => {
         this.lastStatus = report
-        this.onChanged()
+        this.onChanged('gnosis-status')
       })
       .catch(() => {
         // §5.6 — the engine-absent / bridge-rejection path: the unavailable state.
         this.lastStatus = null
-        this.onChanged()
+        this.onChanged('gnosis-status')
       })
   }
 
@@ -148,7 +153,11 @@ export class GnosisPanes {
    *  the `gnosis` group OFF gets the closed state (no IPC is fired). When the
    *  group is ON, issue `bridge.gnosis.query`; a REJECTED bridge call is CAUGHT
    *  and renders the empty/error state (null lastQuery) — never a crash (§5.6,
-   *  §5.9-29). SYNCHRONOUS. */
+   *  §5.9-29). SYNCHRONOUS.
+   *  ⟨`B-3` §4⟩ ALL FIVE settle arms name `'gnosis-query'` — the app-graph pane
+   *  this data belongs to, and the ONE pane this unit re-plumbs onto the channel
+   *  (`REPLUMBED_PANE_IDS`). A fail-closed settle is a settle: the pane's render
+   *  changes and the pane hears about it through the same fire as a success. */
   submitQuery(value: string): void {
     if (!value) return
     // M13 — refresh the gate cache on each submit so a runtime tightening is
@@ -159,7 +168,7 @@ export class GnosisPanes {
         // fail-closed: the gnosis group is off → the closed/unavailable state.
         this.queryClosed = true
         this.lastQuery = null
-        this.onChanged()
+        this.onChanged('gnosis-query')
         return
       }
       this.queryClosed = false
@@ -167,21 +176,21 @@ export class GnosisPanes {
         .then((result) => {
           this.lastQuery = result
           this.queryError = false
-          this.onChanged()
+          this.onChanged('gnosis-query')
         })
         .catch(() => {
           // §5.6 — a rejected query call (the engine absent / EngineUnavailable):
           // surface as the empty/error state (never a crash).
           this.queryError = true
           this.lastQuery = null
-          this.onChanged()
+          this.onChanged('gnosis-query')
         })
     }).catch(() => {
       // a security fetch failure → FAIL CLOSED (never issue a query).
       this.security = null
       this.queryClosed = true
       this.lastQuery = null
-      this.onChanged()
+      this.onChanged('gnosis-query')
     })
   }
 

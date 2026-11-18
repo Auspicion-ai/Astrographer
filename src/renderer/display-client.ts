@@ -92,6 +92,99 @@ const noop = (): void => undefined
 const asReading = (held: unknown): DisplayReading | null =>
   held !== null && typeof held === 'object' && !Array.isArray(held) ? (held as DisplayReading) : null
 
+/** **THE COPY'S DEPTH CAP** (`docs/L1/unit-b-3-pane-update-channel.md` §5): the family's value is two records and one array deep
+ *  (`display-shape.ts`'s `DisplayEntry` → `DisplayCaret`/`DisplayView` → `anchor.path`), so eight levels is generous; past the cap
+ *  a value is CARRIED rather than walked, which keeps the copy TOTAL and bounded on a hostile graph instead of blowing the stack. */
+const COPY_DEPTH_CAP = 8
+
+/** A plain record: `Object.prototype` or a null prototype. A class instance, a Map, a Date — anything with its own prototype — is
+ *  NOT copied member-by-member (that would hand back a plain object where the port promised a live one) and is carried as-is. */
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  let proto: unknown
+  try {
+    proto = Object.getPrototypeOf(value)
+  } catch {
+    return false
+  }
+  return proto === Object.prototype || proto === null
+}
+
+/** The BOUNDED STRUCTURAL COPY (`§5`): primitives pass through, arrays are rebuilt index-wise (a hole stays a hole), plain records
+ *  are re-created over THEIR OWN KEYS, and everything else is carried. It never coerces, never drops a key and never repairs one —
+ *  a malformed entry is copied exactly as it arrived, because the family's parse judges it at `displayOf` and nowhere earlier.
+ *
+ *  ⟨`B3-F5`, MEASURED on this landing's own adversarial pass, and it is why the rules below are spelled out:⟩
+ *   · **OWN NAMES, NOT ENUMERABLE NAMES.** `Object.getOwnPropertyNames` (an own NON-enumerable member is still a member the port
+ *     stated; `Object.keys` DROPPED it, so the copy silently changed what the client held);
+ *   · **A PLAIN-OBJECT PROTOTYPE, AND `__proto__` IS A KEY.** The copy is built with `Object.create(null)` and the source's members
+ *     are written with `Object.defineProperty`, so a `__proto__` tab id (constructible from `JSON.parse`, i.e. store-authored data)
+ *     is HELD AS A KEY instead of becoming the held object's prototype — the prototype-injection the first design allowed;
+ *   · **EACH MEMBER IS READ INSIDE ITS OWN `try`.** One throwing accessor used to abort the whole copy, and the abort's answer was
+ *     the PORT'S OWN OBJECT — the alias the pin exists to close, re-armed by the hostile entry. A member that cannot be read is
+ *     OMITTED (the entry then reads as malformed at `displayOf`, which is the family's own verdict); nothing else is affected. */
+function structuralCopy(value: unknown, depth: number): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (depth >= COPY_DEPTH_CAP) return value
+  if (Array.isArray(value)) {
+    const out: unknown[] = []
+    out.length = value.length
+    for (let index = 0; index < value.length; index += 1) {
+      try {
+        if (Object.hasOwn(value, index)) out[index] = structuralCopy(value[index], depth + 1)
+      } catch {
+        // a member that cannot be read is omitted; the array's LENGTH is preserved so a hole is still a hole
+      }
+    }
+    return out
+  }
+  if (!isPlainRecord(value)) return value
+  const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+  for (const key of ownNamesOf(value)) {
+    try {
+      writeMember(out, key, structuralCopy(value[key], depth + 1))
+    } catch {
+      // a throwing accessor contributes nothing (the entry is malformed at the family's accessor, which is where it is judged)
+    }
+  }
+  return out
+}
+
+/** The own names of a value, contained: a hostile `ownKeys` trap is an EMPTY member set, never a throw. */
+function ownNamesOf(value: object): string[] {
+  try {
+    return Object.getOwnPropertyNames(value)
+  } catch {
+    return []
+  }
+}
+
+/** One member write that cannot be captured by `__proto__`: `defineProperty` states an OWN DATA member, where `out[key] = …`
+ *  would run the prototype's setter. */
+function writeMember(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+}
+
+/** **`fill()` LANDS A COPY** (`B-2`'s INFO `B2-ADV2-04`, `docs/L2/record-engine/crossing.md` §5): a new record over the answer's
+ *  own keys, each value structurally copied. **This is the ONE new private member §5 allows and it is deliberately NOT an export** —
+ *  `record-engine`'s `N` stays 7.
+ *
+ *  Why it exists at all: the record arm's decision is made off `client.reading()`, so an ALIASED held reading is a caller-writable
+ *  authority over what "the client holds" — the `B1-ADV-05` family one level up. The copy changes the OBJECT IDENTITY and never the
+ *  bytes, TOTALLY: it re-reads nothing, refuses nothing, and — because every member is read inside its own `try` — it can never fall
+ *  back to the port's own object (`fill()` still never throws; a member it cannot read is simply not held). */
+const copyReading = (reading: DisplayReading): DisplayReading => {
+  const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>
+  for (const key of ownNamesOf(reading)) {
+    try {
+      writeMember(out, key, structuralCopy((reading as Record<string, unknown>)[key], 0))
+    } catch {
+      // a throwing accessor contributes nothing; the rest of the reading still lands
+    }
+  }
+  return out as DisplayReading
+}
+
 /** **THE CLIENT OVER THE REALM'S PORT** — see the header for the whole discipline. It holds ONE value (`held`), one counter for the
  *  fill sequence, and no cache of anything else: no address, no delivery, no store. */
 export function createDisplayClient(port: DisplayPort): DisplayClient {
@@ -145,8 +238,9 @@ export function createDisplayClient(port: DisplayPort): DisplayClient {
     return readOnce().then((next) => {
       // **ONLY A READING CHANGES THE SHAPE, AND ONLY WHILE THIS CALL IS STILL THE NEWEST** — the two rules of the header, in one
       // guard. A merge would keep the stale member the store no longer states, and an overwrite by a superseded call would let an
-      // older answer win.
-      if (next !== null && mine === started) held = next
+      // older answer win. AND WHAT LANDS IS A COPY (`§5`): the port's object is never what this client holds, so neither side can
+      // rewrite the other.
+      if (next !== null && mine === started) held = copyReading(next)
       return held
     })
   }
@@ -160,8 +254,15 @@ export function createDisplayClient(port: DisplayPort): DisplayClient {
     if (!Object.hasOwn(held, tabId)) return null
     // AND THE ENTRY IS JUDGED BY THE FAMILY'S OWN PARSE, because the port is structural and this client trusts no answer it was
     // handed: a member that is no plain record, or whose `documentId` is not a non-empty string, is the `null` arm.
-    const admitted = displayEntryIn((held as Record<string, unknown>)[tabId])
-    return admitted.ok ? admitted.entry : null
+    // ⟨`B3-F5` — THE PARSE IS CONTAINED.⟩ This member is documented TOTAL, and a hostile entry (a getter that throws inside the
+    // shape) made `displayEntryIn` throw OUT of it — an accessor is not a guard (`B1-ADV-05(c)`'s rule, one level down), so a
+    // throw here is the `null` arm and never an exception at a caller.
+    try {
+      const admitted = displayEntryIn((held as Record<string, unknown>)[tabId])
+      return admitted.ok ? admitted.entry : null
+    } catch {
+      return null
+    }
   }
 
   const subscribe = (handler: (reading: DisplayReading | null) => void): DisplaySubscription => {

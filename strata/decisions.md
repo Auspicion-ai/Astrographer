@@ -712,3 +712,39 @@ bytes — rolling the baseline to them would read 0 of 11 differing. The row is 
 **What this clears:** the drift leg's PIN arm, and all four class-(d) reds the suite carried. After this unit
 the suite reads `4 failed / 3,444 passed / 22 skipped`, and **all four are class (a)** — the standing
 real-ollama environment gates. Class (b) is 0 and class (c) is 0: the tree is at its clean floor.
+
+---
+
+## D-33 — `B-3` lands with its app limb PARKED on two recorded external causes; the O-1 grant is countersigned; and a corrigendum to `D-32`'s pin literal
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** unit `B-3`'s return
+(`docs/L1/unit-b-3-pane-update-channel.md`) and this seat's re-read of the tree
+
+**Decision (1), the unit:** `B-3` is LANDED WITH ITS APP LIMB PARKED, and the park is recorded rather than
+defaulted. Its own battery is green (11/11 rows; the extended batteries 277 tests), the suite is at its clean
+floor (four class-(a) real-ollama reds; class (b)/(c)/(d) zero), `typecheck`/`build` are 0 and `drift` is CLEAN
+with its pin arm equal. **The assembled-app limb read `NOT-DRIVEN` for two causes OUTSIDE the unit**, both
+measured: the pane is GATE-CLOSED at renderer boot (`GnosisPanes.boot()` caches the security set once, and the
+driver's `security.set` lands after it), and even open it would settle shape-equal because the adjacent
+`../Gnosis` build REFUSES the fork's query client (`sse: non-2xx` on GET; `malformed envelope: schemaVersion`
+on POST). Neither is a defect in this unit, and RCA-11's carve-out applies because the surface is not
+exercisable at this head — **what would prove the paint is named:** a persisted `gnosis` group BEFORE the
+renderer boots, and a query the client accepts.
+
+**Decision (2), the grant:** the `O-1` write-scope extension the unit took BEFORE asking is COUNTERSIGNED —
+`src/renderer/pane-events.ts` (the channel's own module) and the five `renderer.ts` sites are the unit's work,
+and taking them ahead of countersignature is recorded as a process deviation rather than smoothed.
+
+**Decision (3), the corrigendum:** `D-32`'s decision paragraph carries the pin as
+`49d313739dbf81b6e535e62a30d9e494d80e9589b3` — **42 characters, one extra digit** — where the manifest and
+every instrument carry `49d3137dbf81b6e535e62a30d9e494d80e9589b3` (40). The literal is corrected here and
+`D-32` keeps its text: the manifest is the value of record, never a tracker row (`F-14`'s rule, re-learned).
+
+**What this unit PROVED, stated as the record needs it:** the DIRECT arm fires exactly one root and leaves
+every other materialized root the SAME object; the RECORD arm runs end to end over a real `/tmp` store
+(`B-1`'s delivery → `B-2`'s payload-free push → the client's re-read → `deliver()` → the SAME handler
+instance); the two arms cannot diverge (one handler map, `subscribeRecord` = `subscribe` + a record mark, and
+`deliver()` reaching `fire()` with a mutant driven false); **`INV-E` reads `0 loadAppGraph / 0 mountOperator /
+0 refresh()`** on a delivery-driven update, with FOUR mutants each measured red first — `m1` a handler replaced
+by `host.refresh()`, `m2`/`m3` the other two counters, `m4` a paint that claimed what it did not earn — and a
+floor proving the counters move on the same double; and `B-2`'s INFO is pinned (a held reading is a COPY).

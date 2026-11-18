@@ -245,3 +245,13 @@ so this fork's CommonJS Electron main **cannot load it**: `ERR_PACKAGE_PATH_NOT_
 fix is upstream and measured — a `"require": "./index.mjs"` (or `default`) condition boots the fork's
 **unmodified** built main with **zero fork bytes** changed. The full request, its acceptance predicate and the
 priced fork-side alternatives are in `docs/feature-requests/provident-storeroom-cjs-entry-request.md`.
+
+---
+
+## 2026-11-18 — `GNOSIS-ENGINE-REFUSES-THE-FORK-QUERY-CLIENT` (MED, engine-owned; catalogued, never patched)
+
+The adjacent `../Gnosis` build refuses this fork's query client on both routes: `sse: non-2xx` on the GET and
+`malformed envelope: schemaVersion` on the POST. Consequence recorded in `docs/defects.md`: a gnosis pane's
+query settles shape-equal, so its live paint cannot be distinguished from a no-op — the park `B-3` records
+rather than a claim it paints. Two asks: accept the client's envelope shape (or publish the expected
+`schemaVersion`), and state the SSE route's contract.

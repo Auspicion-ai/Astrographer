@@ -8,6 +8,10 @@ import { GnosisCrudPanes } from './gnosis-crud-panes.js'
 import { gutterSizeForPoint } from './pane-gutter.js'
 import { toZoneBounds, dropZoneForPoint, zoneOrientation, type ZoneBounds } from './pane-drag.js'
 import { createPaneRegistry } from './pane-registry.js'
+// ⟨Unit `B-3` `§4` — THE CHANNEL'S ONE CONSTRUCTION SITE.⟩ The renderer owns the ONE `PaneEvents` instance: the host paints for it
+// (`SidebarPanesOptions.events`), the gnosis family fires into it (the DIRECT arm) and the display crossing's listener delivers
+// into it (the RECORD arm). A second `createPaneEvents()` anywhere would be a second registry for one event.
+import { createPaneEvents } from './pane-events.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../main/template-shape.js'
 import type { LegacyInitialData } from 'provident-ssr'
 import { SecurePanels } from './secure-panels.js'
@@ -1422,10 +1426,26 @@ export interface DisplayCrossing {
  *  callable, and nothing throws. **AND `no-port` IS NOT THE DEGRADED-BOOT WORD** (`B2-ADV-01`, measured): a
  *  preload that always exposes the member answers `subscribed: true` with a `null` reading when main's
  *  construction was refused, because `no-port` is the ABSENT-MEMBER arm — so a consumer keys on the READING. */
-export function installDisplayCrossing(bridge: DisplayBridge | null | undefined): DisplayCrossing {
+export function installDisplayCrossing(
+  bridge: DisplayBridge | null | undefined,
+  onReading?: (reading: DisplayReading | null) => void,
+): DisplayCrossing {
   const client = createDisplayClient(memberOf(bridge))
   // SUBSCRIBE FIRST: the listener re-reads, so nothing that lands between the two calls is lost.
-  const subscription = client.subscribe(() => {})
+  // ⟨Unit `B-3` `§4` (ii) — **THE ONE LISTENER IS ALSO THE RECORD ARM'S** (`B3-F6`, measured).⟩ `onReading` is the caller's body (the pane channel's
+  // `deliver()`), and it runs INSIDE this subscription: the alternative — a second `client.subscribe(...)` beside this one — is a
+  // SECOND `ipcRenderer.on` registration for the ONE push channel (`src/main/preload.ts`'s `display.onChanged` registers one
+  // listener per call), so every push would be read twice and the crossing's own "ONE binding" claim (`B2-ADV-04`) would be false.
+  // MEASURED on this unit's adversarial pass: two registrations, and one push produced two re-reads. The caller's throw stops at
+  // the caller (the same rule the client's own listener applies one level down).
+  const subscription = client.subscribe((reading) => {
+    if (typeof onReading !== 'function') return
+    try {
+      onReading(reading)
+    } catch {
+      /* the caller's handler, the caller's error */
+    }
+  })
   // THEN THE ONE STATED BOOT READ — owed only to a live subscription (see the docblock: the second route lookup is the
   // measured fault this gate removes).
   if (subscription.subscribed) void client.fill()
@@ -1675,6 +1695,23 @@ async function main(): Promise<void> {
   // renderer-level onRagStoreChanged closure is removed to avoid double-firing).
   const operatorMount = document.getElementById('operator-panes')
   const registry = createPaneRegistry()
+  // ⟨Unit `B-3` `§4` (i) — THE CHANNEL, built beside the registry it addresses.⟩ Every pane update this app applies travels
+  // through THIS instance: the host subscribes `REPLUMBED_PANE_IDS` to it at boot (its body is ONE `updatePane`), the gnosis
+  // family fires into it below, and the record arm's `deliver()` rides the crossing's ONE subscription further down.
+  const paneEvents = createPaneEvents()
+  // ⟨`B-3` `§4` (iii) — THE DIRECT ARM'S SITE, and the ONE pre-migration branch this unit leaves standing.⟩ A component that learnt
+  // something names the pane it is about (`GnosisOnChanged`), and the fire is what makes that pane's own paint run — NOT
+  // `host.refresh()`, whose body re-assembled the whole graph (0/0/0 is `INV-E`). **The fallback is scoped by the pane's OWN
+  // verdict, not by a hard-coded id:** a fire nothing stands behind (`fired === false`) is a pane this unit did NOT re-plumb, and
+  // when that pane is `operator`-scope its lawful paint is `B-9`'s re-mount — so the pre-migration route is kept, marked, and
+  // DELETED by that unit when its paint lands. An app-graph pane with no paint is B-8's or B-5/B-6/B-7's and gets NOTHING here: a
+  // silent `refresh()` for it would be exactly the re-assembly `INV-E` forbids.
+  const firePaneUpdate = (paneId: string): void => {
+    const report = paneEvents.fire(paneId)
+    if (report.fired) return
+    // ⟨B-9⟩ DELETE THIS BRANCH when the operator panes' paint lands: the operator mount is THAT unit's lawful re-mount.
+    if (registry.get(paneId)?.scope === 'operator' && host) void host.refresh()
+  }
   const pvBridge = bridge as never as {
     gnosis: {
       status(): Promise<import('../main/engine-rag-store.js').HealthReport>
@@ -1696,11 +1733,10 @@ async function main(): Promise<void> {
   const gnosisPanes = new GnosisPanes({
     registry,
     bridge: pvBridge,
-    // Re-render the pane-inclusive envelopes after a status/query settles so the
-    // updated gnosis data renders (the host re-assembles + re-mounts).
-    onChanged: () => {
-      if (host) void host.refresh()
-    },
+    // ⟨`B-3` `§4`⟩ A settle names the pane it is ABOUT (`'gnosis-status'` / `'gnosis-query'`) and the site fires that pane on the
+    // channel — the DIRECT arm's second half. The old body (`host.refresh()`) re-assembled the app graph AND re-mounted the
+    // operator pane for ONE pane's data, which is exactly what `INV-E` counts at zero.
+    onChanged: (paneId) => firePaneUpdate(paneId),
   })
   gnosisPanes.registerPanes()
   // Unit A2 §5.5 — the D4-parity gnosis document-editor/wiki GUI panes.
@@ -1726,6 +1762,9 @@ async function main(): Promise<void> {
     bridge: bridge as never,
     backRefs,
     editController,
+    // ⟨`B-3` `§3`⟩ THE CHANNEL the host paints for: at boot it subscribes `REPLUMBED_PANE_IDS` (exactly `['gnosis-query']`), so a
+    // fire reaches `updatePane` for those panes and every other family keeps its `refresh()` route until its own unit.
+    events: paneEvents,
     gnosis: {
       status: () => gnosisPanes.refreshStatus(),
       query: (value: string) => gnosisPanes.submitQuery(value),
@@ -1761,7 +1800,16 @@ async function main(): Promise<void> {
   // reading) and `B-10` (the capture sites); **this unit's handler paints NOTHING and the site adds no
   // `state-slice`, no mount and no DOM write** (`D-8`, `RR-F1`). The binding below is the ONE installation: a
   // second call would be a second registration for one channel (`B2-ADV-04` — lift this binding, never add one).
-  const displayCrossing = installDisplayCrossing(bridge as DisplayBridge | undefined)
+  // ⟨Unit `B-3` `§4` (ii) — THE RECORD ARM, RIDING THE SAME ONE BINDING.⟩ `B-1`'s delivery → `B-2`'s payload-free push → the client's
+  // re-read (inside the crossing's own listener) → **`deliver()`**, which fires every pane that DECLARED record interest through the
+  // SAME `fire` the direct arm uses (§2: one registry, two declarations, one dispatch). The push carries nothing, so the only
+  // correct answer to it is a re-read — and the body handed to `installDisplayCrossing` runs AFTER that re-read landed, so a pane's
+  // paint sees the reading the re-read answered.
+  // **THIS ADDS NO REGISTRATION (`B2-ADV-04`):** it is the ONE installation's own listener carrying one more body. A second
+  // `installDisplayCrossing`/`client.subscribe` call would be a second `ipcRenderer.on` for ONE channel and would double every push.
+  const displayCrossing = installDisplayCrossing(bridge as DisplayBridge | undefined, () => {
+    paneEvents.deliver()
+  })
   // HOST-1/HOST-2 — boot the host first so the store/doc-heads snapshot is
   // available, then load the persisted tabs + materialize the default + mount
   // the active body (the real default context). The host boot is not blocked.
