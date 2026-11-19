@@ -36,6 +36,10 @@ import {
   createEngineFetch,
   createCrudFetch,
 } from './engine-transport.js'
+// Unit `B-4a` §3 — THE ACCEPTED-WRITE SEAM'S vocabulary. A TYPE-ONLY import: this file gains no runtime dependency on the
+// mirror (and the mirror imports this file only for `Document`-shaped values it never names), so the seam stays ONE optional
+// member that a caller either passes or does not.
+import type { EngineMirrorWrite } from './engine-mirror.js'
 
 // ---------------------------------------------------------------------------
 // The options + wire-shape types (§5.1).
@@ -75,6 +79,13 @@ export interface EngineCrudRagStoreOptions {
     /** Retry backoff base in ms (default 100). */
     backoffMs?: number
   }
+  /** Unit `B-4a` §3 — THE ACCEPTED-WRITE SEAM (`docs/L1/unit-b-4a-engine-store-mirror.md` §3). `crudCall` calls it ONCE, AFTER
+   *  `decodeCrudResponse` returned, and only for the SIX mutating document methods (`createDocument`, `updateDocument`,
+   *  `deleteDocument`, `publishDocument`, `unpublishDocument`, `archiveDocument`). So it fires ONLY for an answer the engine
+   *  ACCEPTED: a READ never fires it, and a refused (`EngineWireError`) or malformed answer throws before it is reached. The
+   *  caller AWAITS it, so the local projection lands BEFORE this proxy's own answer reaches the caller; its fault is CONTAINED
+   *  here (the engine has already accepted the write, so a sink fault must never fail the caller's call). Omitted ⇒ no seam. */
+  onAccepted?: (write: EngineMirrorWrite) => void | Promise<void>
 }
 
 /** The serde-frozen request bodies (P1a §4.2 — snake_case keys preserved
@@ -653,6 +664,27 @@ export function decodeCrudResponse(payload: unknown): CrudResult {
 // The factory + proxy.
 // ---------------------------------------------------------------------------
 
+/** Unit `B-4a` §3 — the write an ACCEPTED answer describes, or `null` when the mirror has nothing to do. The discriminator is
+ *  the ANSWER's own `method`: the five document-returning mutating methods are an UPSERT of the `Document` the engine answered,
+ *  `deleteDocument` is a REMOVE of the id that was asked for, and every other member (the six reads, `createWiki`) is `null`.
+ *  PURE, so the seam's ONE call site in `crudCall` stays a call and not a decision. */
+function acceptedWriteFor(crudResult: CrudResult, args: CrudRequestArgs): EngineMirrorWrite | null {
+  switch (crudResult.method) {
+    case 'createDocument':
+    case 'updateDocument':
+    case 'publishDocument':
+    case 'unpublishDocument':
+    case 'archiveDocument':
+      return { kind: 'upsert', document: crudResult.result }
+    case 'deleteDocument': {
+      const documentId = (args as DeleteDocumentArgs).documentId
+      return typeof documentId === 'string' && documentId !== '' ? { kind: 'remove', documentId } : null
+    }
+    default:
+      return null
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -725,6 +757,21 @@ export function createEngineCrudRagStore(opts: EngineCrudRagStoreOptions): Engin
     const text = await res.clone().text()
     const decoded = decodeEnvelope(text)
     const crudResult = decodeCrudResponse(decoded.payload)
+    // ── UNIT `B-4a` §3 — THE ACCEPTED-WRITE SEAM. ONE call, placed AFTER `decodeCrudResponse` returned: a refused or malformed
+    // answer threw above, so the seam can only ever see an answer the engine ACCEPTED. It is AWAITED here for the contract's
+    // "same instant" limb (the caller that holds the engine's answer must already be able to re-read the doc-heads), and it is
+    // CONTAINED (the engine has already accepted this write; a sink's fault is the sink's and is counted on the mirror's
+    // `status()`, never turned into a rejection of the engine's answer).
+    if (opts.onAccepted !== undefined && crudResult.method === method) {
+      const acceptedWrite = acceptedWriteFor(crudResult, args)
+      if (acceptedWrite !== null) {
+        try {
+          await opts.onAccepted(acceptedWrite)
+        } catch {
+          // Contained by contract (`docs/L1/unit-b-4a-engine-store-mirror.md` §3): nothing here may reject.
+        }
+      }
+    }
     return crudResult.result as T
   }
 

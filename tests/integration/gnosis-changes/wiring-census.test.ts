@@ -20,6 +20,10 @@
 //
 // NON-VACUITY: every clause is a MEASURED count (exactly one, or a position), never a "contains", and each is paired with the
 // absence it forbids — no channel literal in `main.ts`, no second construction site, no awaited `connect()`.
+//
+// RE-GRAINED BY UNIT `B-4a` (`O-2`), TWO ROWS, NEVER ONE DELETED: `c9(c)` reads the engine document-list walk in a SECOND window
+// around `createEngineMirror(` (the walk moved from the feed's `reconcile:` into the mirror's `read:`), and `c9(h)` needles
+// `read: async` instead of `reconcile: async`. Every subject of both rows is kept; each row's own comment names what moved.
 import { describe, it, expect } from 'vitest'
 
 import { occurrences, readText, stripComments } from './harness.js'
@@ -80,6 +84,15 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
   it('c9(c) — the sink broadcasts on the EXISTING channel and the re-read is the engine CRUD read', () => {
     // MUTATION THAT WOULD RED IT: a new channel constant, a sink that logs instead of broadcasting, or a `reconcile` that
     // invents its answer instead of reading the engine (the `ASM-B4-3` refusal).
+    //
+    // **RE-GRAINED, NEVER DELETED (`O-2`; `docs/L1/unit-b-4a-engine-store-mirror.md` §9 `O-2`,
+    // `docs/L2/gnosis-changes/engine-mirror.md` §7's last row):** the WALK MOVED. Under unit `B-4a` the engine document-list
+    // walk leaves the feed's `reconcile:` and becomes the MIRROR's `read:` in `main.ts` — the mirror owns it so that its
+    // `reconcile()` is walk + project + answer in ONE act (`ASM-B4A-3`), which is the whole of that unit's invariant. So the
+    // walk subjects (`listWikis(`, `listDocuments(`, the engine-origin label and the two bounds) are read in a SECOND window
+    // around `createEngineMirror(`, and the feed window keeps the subjects it still owns: `onChange`,
+    // `IPC_RAG_STORE_CHANGED`, `broadcast(` and `reconcile`. NO SUBJECT OF THIS ROW WAS DROPPED — every one of them is still
+    // an exact count or a presence, and the full-file `ENGINE_ORIGIN_STORE` count is still asserted below.
     const problems: string[] = []
     const code = stripComments(readText(MAIN_FILE))
     const site = windowAround(code, 'createEngineChangesFeed(', 0, 2000)
@@ -92,11 +105,21 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
       }
       if (!site.text.includes('broadcast(')) problems.push('c9(c): the construction window carries no `broadcast(` — the descriptor reaches no realm')
       if (!site.text.includes('reconcile')) problems.push('c9(c): the construction window carries no `reconcile` — §2.4\'s re-read is REQUIRED')
-      if (occurrences(site.text, 'listWikis(') !== 1) problems.push('c9(c): the window reads `listWikis(` ' + occurrences(site.text, 'listWikis(') + ' time(s) — §4 gives the feed the FULL engine CRUD read, wikis FIRST')
-      if (occurrences(site.text, 'listDocuments(') !== 1) problems.push('c9(c): the window reads `listDocuments(` ' + occurrences(site.text, 'listDocuments(') + ' time(s) — §4 gives the feed each wiki\'s documents')
-      if (!site.text.includes('ENGINE_ORIGIN_STORE')) {
-        problems.push('c9(c): the re-read\'s descriptor does not carry `ENGINE_ORIGIN_STORE` — ASM-B4-1 pins the engine-origin label, not a registry name')
+    }
+    // THE SECOND WINDOW (`O-2`) — the walk's NEW home, `main.ts`'s mirror construction (`B-4a` §5 site 1).
+    const walk = windowAround(code, 'createEngineMirror(', 0, 2400)
+    if (walk.text === '') {
+      problems.push('c9(c): the `createEngineMirror(` window is absent from main.ts — the engine document-list walk has no home, so §2.4\'s re-read cannot cover the engine at all')
+    } else {
+      const wikis = occurrences(walk.text, 'listWikis(')
+      if (wikis !== 1) problems.push('c9(c): the MIRROR window reads `listWikis(` ' + wikis + ' time(s) — §5 site 1 gives the walk the FULL engine CRUD read, wikis FIRST')
+      const documents = occurrences(walk.text, 'listDocuments(')
+      if (documents !== 1) problems.push('c9(c): the MIRROR window reads `listDocuments(` ' + documents + ' time(s) — §5 site 1 gives the walk each wiki\'s documents')
+      if (!walk.text.includes('ENGINE_ORIGIN_STORE')) {
+        problems.push('c9(c): the walk\'s descriptor does not carry `ENGINE_ORIGIN_STORE` — ASM-B4-1 pins the engine-origin label, not a registry name')
       }
+      if (!walk.text.includes('RECONCILE_PAGE_SIZE')) problems.push('c9(c): the MIRROR window carries no `RECONCILE_PAGE_SIZE` — the walk must read EVERY page under the unit\'s own page size')
+      if (!walk.text.includes('RECONCILE_MAX_PAGES')) problems.push('c9(c): the MIRROR window carries no `RECONCILE_MAX_PAGES` — without the bound a lying `total` holds the walk open for ever (`F-4`)')
     }
     if (occurrences(code, 'ENGINE_ORIGIN_STORE') === 0) {
       problems.push('c9(c): main.ts never names `ENGINE_ORIGIN_STORE` — the origin label is not wired at all')
@@ -229,9 +252,16 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
     // or below the announced head — and a re-read that quietly reads one page (or walks for ever on a lying `total`) would make
     // that coverage claim false while §2.3 kept dropping frames "because the re-read covers it" (`F-4`). The clause is a function
     // of the TEXT, and the mutants below are the two ways it can be false: an unpaged single read, and an unbounded loop.
+    //
+    // **RE-GRAINED, NEVER DELETED (`O-2`; `docs/L1/unit-b-4a-engine-store-mirror.md` §9 `O-2`,
+    // `docs/L2/gnosis-changes/engine-mirror.md` §7's last row):** the walk MOVED from the feed's `reconcile:` closure into the
+    // MIRROR's `read:` member in `main.ts` (`B-4a` §5 site 1), so the needle is `read: async` instead of `reconcile: async`.
+    // ALL SIX clause subjects and BOTH mutants are kept, unchanged: the same page size, the same page bound, the same
+    // `page <= RECONCILE_MAX_PAGES` loop, the same `page += 1` step, the same `seen >= listed.total` exit, and the same
+    // `pageSize: 300+` mutant. No subject was dropped and no bound was loosened.
     const clause = (text: string): boolean => {
       const code = stripComments(text)
-      const site = windowAround(code, 'reconcile: async', 0, 2000).text
+      const site = windowAround(code, 'read: async', 0, 2000).text
       if (site === '') return false
       return (
         site.includes('RECONCILE_PAGE_SIZE') &&
@@ -250,7 +280,7 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
       problems.push(`c9(h): \`${MAIN_FILE}\` could not be read (${err instanceof Error ? err.message : String(err)})`)
     }
     if (real !== '') {
-      const unpaged = real.replace(/pageSize: RECONCILE_PAGE_SIZE/, 'pageSize: 1000').replace(/for \(let page = 1; page <= RECONCILE_MAX_PAGES; page \+= 1\) \{/, '{')
+      const unpaged = real.replace(/pageSize:\s*RECONCILE_PAGE_SIZE/g, 'pageSize: 1000').replace(/for \(let page = 1; page <= RECONCILE_MAX_PAGES; page \+= 1\) \{/, '{')
       if (unpaged === real) problems.push('c9(h): the mutants could not be built — the clause has no falsifiable subject')
       else if (clause(unpaged)) problems.push('c9(h): the clause answered TRUE for an UNPAGED read (`pageSize: 1000`, no page loop) — the clause cannot fail')
       const unbounded = real.replace(/page <= RECONCILE_MAX_PAGES/, 'page <= Number.POSITIVE_INFINITY')
@@ -258,7 +288,7 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
         problems.push('c9(h): the clause answered TRUE for an UNBOUNDED walk — a lying `total` would hold the re-read open for ever')
       }
       if (!clause(real)) {
-        problems.push(`c9(h): the \`reconcile\` in \`${MAIN_FILE}\` is not a PAGED and BOUNDED walk (\`RECONCILE_PAGE_SIZE\` / \`RECONCILE_MAX_PAGES\` / a \`seen >= total\` exit) — an unpaged re-read cannot carry §2.3's "the re-read covers it"`)
+        problems.push(`c9(h): the \`read\` in \`${MAIN_FILE}\` is not a PAGED and BOUNDED walk (\`RECONCILE_PAGE_SIZE\` / \`RECONCILE_MAX_PAGES\` / a \`seen >= total\` exit) — an unpaged re-read cannot carry §2.3's "the re-read covers it"`)
       }
     }
     expect(problems, `c9(h):\n${problems.join('\n')}`).toEqual([])

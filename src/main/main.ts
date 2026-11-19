@@ -57,6 +57,8 @@ import { createQueryAuditLog } from './query-audit.js'
 import { createEngineRagStore, ENGINE_ORIGIN_STORE } from './engine-rag-store.js'
 import { createEngineCrudRagStore } from './engine-crud-rag-store.js'
 import { createEngineChangesFeed } from './engine-changes.js'
+// Unit `B-4a` `engine-store-mirror` — the engine's write made VISIBLE to the store the doc-heads read (`B6-F1`'s closure).
+import { createEngineMirror, type EngineMirrorDocument, type EngineMirrorRead } from './engine-mirror.js'
 import { createAuthorityStore } from './authority-store.js'
 import { createIdempotencyRegistry } from './idempotency-registry.js'
 // `B-2` `display-wire` — THE CROSSING'S MAIN HALF (`docs/L1/unit-b-1-record-engine-seam.md` §1's scope ruling 1 named THIS
@@ -828,6 +830,58 @@ async function main(): Promise<void> {
   // be absent (D2): `waitForReady` is NOT awaited at boot (the boot does not
   // block on an absent engine) and is NOT exposed as a tool.
   const engineRagStore = createEngineRagStore({ baseUrl: resolveEngineBaseUrl() })
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+  // Unit `B-4a` `engine-store-mirror` — SITE (1): THE MIRROR, INERT AT CONSTRUCTION (`docs/L1/unit-b-4a-engine-store-mirror.md`
+  // §3/§4/§5; `docs/L2/gnosis-changes/engine-mirror.md` §5). It sits HERE, after the runtime controller its `store` thunk closes
+  // over and BEFORE the CRUD proxy it feeds (site 2 hands that proxy its `accepted` member), and it reads nothing and writes
+  // nothing until a write or a descriptor arrives (the `createEngineRagStore` discipline above, `:825-830`).
+  //
+  // THE DEFECT THIS CLOSES (`B6-F1`, HIGH, `D-40`'s grant): the doc-heads read is
+  // `handleRagDocHeadsIpc(runtime.getDefaultStore())` (`:1195-1197` below) — ONE LOCAL store — while the engine's writes land in
+  // two wire clients that hold no store at all. So an engine-created document could never appear in the doc-nav pane: the pane
+  // re-read and answered `unchanged`. The mirror is the missing PROJECTION — never a second source of truth (contract §1
+  // `ASM-B4A-1`); the engine stays authoritative for engine-side data.
+  //
+  // `store` IS A THUNK, not a store: the shell's hot default-store swap (`createRagStoreRuntimeController`) must be honoured, so
+  // every projection lands in whichever store is the default AT THE MOMENT it lands. `read` is the engine document-LIST read and
+  // it stays HERE rather than inside the module — the walk is PAGED and page-BOUNDED (`RECONCILE_PAGE_SIZE`/`RECONCILE_MAX_PAGES`,
+  // `:313-314`) because the CRUD list is paged, and the walk reports `complete`, which is the ONLY thing that may license a delete
+  // (contract §5(ii); a partial list that claimed otherwise is exactly `F-4`'s lie). `origin` is passed EXPLICITLY so the engine
+  // origin label this wiring's descriptors carry is named at the wiring site, not inferred from a default.
+  const engineMirror = createEngineMirror({
+    origin: ENGINE_ORIGIN_STORE,
+    store: () => runtime.getDefaultStore(),
+    // THE TWO BOUNDS MUST AGREE (adversarial `B4A-F9`): the walk below can read at most `RECONCILE_PAGE_SIZE × RECONCILE_MAX_PAGES`
+    // ids per wiki, so the module's own per-walk bound is stated HERE as that same product rather than left at a tighter, invisible
+    // default — a mirror whose bound is smaller than its reader's simply never projects when they disagree.
+    maxPerWalk: RECONCILE_PAGE_SIZE * RECONCILE_MAX_PAGES,
+    read: async (): Promise<EngineMirrorRead> => {
+      const documents: EngineMirrorDocument[] = []
+      let complete = true
+      const wikis = await engineCrudRagStore.listWikis({})
+      for (const wiki of wikis) {
+        let seen = 0
+        let closed = false
+        for (let page = 1; page <= RECONCILE_MAX_PAGES; page += 1) {
+          const listed = await engineCrudRagStore.listDocuments({
+            wikiId: wiki.wikiId,
+            body: { state: null, tag: null, page, pageSize: RECONCILE_PAGE_SIZE },
+          })
+          for (const document of listed.items) {
+            documents.push({ documentId: document.documentId, title: document.title, updatedAt: document.updatedAt })
+          }
+          seen += listed.items.length
+          if (listed.items.length === 0 || seen >= listed.total) {
+            closed = true
+            break
+          }
+        }
+        // A wiki whose walk hit the page bound leaves the list PARTIAL — and a partial list may never license a delete.
+        if (!closed) complete = false
+      }
+      return { documents, complete }
+    },
+  })
   // Unit A2 §5.4 — construct the CRUD proxy + the shell-side AuthorityStore (H3)
   // + the caller-side IdempotencyRegistry (P4) at boot UNCONDITIONALLY (the CRUD
   // factory does NO network I/O — A1 §5.1) and inject them into the MCP server.
@@ -836,7 +890,14 @@ async function main(): Promise<void> {
   // boot (the boot does not block on an absent engine) and is NOT exposed as a
   // tool. The AuthorityStore mapping is a boot-time, in-memory mapping (a change
   // requires a restart); a callerId with no entry has no edit authority.
-  const engineCrudRagStore = createEngineCrudRagStore({ baseUrl: resolveEngineBaseUrl() })
+  //
+  // SITE (2) — THE SEAM (`B-4a` §3/§5 site 2): the proxy's ONE optional member, so the six mutating document methods' ACCEPTED
+  // answers reach the mirror BEFORE the proxy's own call resolves. Reads fire nothing and a refused answer fires nothing (the
+  // seam is called after `decodeCrudResponse` returned).
+  const engineCrudRagStore = createEngineCrudRagStore({
+    baseUrl: resolveEngineBaseUrl(),
+    onAccepted: (write) => engineMirror.accepted(write),
+  })
   // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
   // Unit `B-4` `engine-changes` — THE ENGINE CHANGE FEED'S WIRING, AND NOTHING ELSE (`docs/L1/unit-b-4-engine-changes.md` §4;
   // `docs/L2/gnosis-changes/engine-changes.md` §4.4). FOUR SITES, AND THE SITE OF EACH IS PART OF THE CLAIM: three of them are in
@@ -844,11 +905,14 @@ async function main(): Promise<void> {
   // exists and has loaded (see the banner at that site; `F-2`, ruled by `L1`).
   //
   // (1) THE CONSTRUCTION is INERT — `createEngineChangesFeed` opens no socket and reads nothing (the `createEngineRagStore`
-  //     discipline two lines up, `:825-830`), so it sits beside the two engine proxies (`:830`, `:839`) and AFTER the CRUD proxy
+  //     discipline two lines up, `:827-832`), so it sits beside the two engine proxies (`:832`, `:893`) and AFTER the CRUD proxy
   //     its `reconcile` closes over.
   // (2) THE RE-READ is the FULL engine CRUD read (§2.4, `ASM-B4-3` — the callable is INJECTED, so the consumer holds no CRUD
   //     surface of its own): every wiki, then EVERY PAGE of each wiki's documents, answered as ONE `structural` descriptor naming
-  //     the documents it saw. THE PAGINATION IS NOT DECORATION — the CRUD list is PAGED (`DocumentList` carries `total`/`page`/
+  //     the documents it saw. ⟨**MOVED BY `B-4a` TO THE MIRROR'S `read` (site 1 above), `O-2`'s re-grain:** the walk must be
+  //     `reconcile()`'s own act — walk + project + answer in ONE act — or the engine's authoritative document list is read by two
+  //     different closures that can disagree; `c9(c)`'s walk subjects and `c9(h)`'s needle were re-grained with it, never
+  //     deleted.⟩ THE PAGINATION IS NOT DECORATION — the CRUD list is PAGED (`DocumentList` carries `total`/`page`/
   //     `pageSize`), so an unpaged read would reconcile the engine's default FIRST PAGE ONLY while claiming to have re-read the
   //     store (this unit's adversarial finding `F-4`, measured). The walk is BOUNDED (`RECONCILE_MAX_PAGES`), so a lying `total`
   //     cannot hold a re-read open for ever, and `c9(h)` pins both the page size and the bound. A re-read that fails — or that
@@ -858,6 +922,12 @@ async function main(): Promise<void> {
   //     `shared/types.ts` widening — and the descriptor carries `ENGINE_ORIGIN_STORE` (`'gnosis:engine'`), which
   //     `RAG_STORE_NAME_PATTERN` can never mint, so the renderer's fail-closed foreign-store guard drops it as a foreign store
   //     until a pane DECLARES engine-change interest (that adoption is `B-6`/`B-8`'s, never this unit's).
+  //     ⟨**AND IT SETTLES FIRST (`B-4a` §4, `B-4a` §5 site 3) — THE MIRROR, THEN THE BROADCAST, IN THE SAME EXPRESSION.** A pane
+  //     that reacts to a descriptor by re-reading `IPC_RAG_DOC_HEADS` must not be able to read a store the mirror has not yet
+  //     written: that is `B6-F1`'s whole failure, and this is the only place it can be closed. `settle` is the module's ONE
+  //     serialization point (one walk in flight, one trailing demand, no timer), so broadcast order stays frame order; it never
+  //     rejects, so no descriptor can be lost to a mirror fault, and the `void` marks the float because `onChange`'s own type is
+  //     `(descriptor) => void` (`engine-changes.ts` takes ZERO byte — contract §4 "no second publisher").⟩
   //
   // **WHERE `connect()` SITS, AND IT IS PART OF THE CLAIM (`F-2`, RULED BY `L1`): it is issued AFTER the window exists and AFTER
   // its content has LOADED — the banner below `await win.loadFile(...)` — never here.** As first landed it was issued at THIS
@@ -873,24 +943,17 @@ async function main(): Promise<void> {
   // byte and is not added.
   const engineChangesFeed = createEngineChangesFeed({
     baseUrl: resolveEngineBaseUrl(),
-    reconcile: async (): Promise<RagStoreChangedPayload> => {
-      const nodeIds: string[] = []
-      const wikis = await engineCrudRagStore.listWikis({})
-      for (const wiki of wikis) {
-        let seen = 0
-        for (let page = 1; page <= RECONCILE_MAX_PAGES; page += 1) {
-          const listed = await engineCrudRagStore.listDocuments({
-            wikiId: wiki.wikiId,
-            body: { state: null, tag: null, page, pageSize: RECONCILE_PAGE_SIZE },
-          })
-          for (const document of listed.items) nodeIds.push(document.documentId)
-          seen += listed.items.length
-          if (listed.items.length === 0 || seen >= listed.total) break
+    reconcile: () => engineMirror.reconcile(),
+    onChange: (descriptor: RagStoreChangedPayload) => {
+      void (async (): Promise<void> => {
+        await engineMirror.settle(descriptor)
+        try {
+          backend.broadcast(IPC_RAG_STORE_CHANGED, descriptor)
+        } catch {
+          // The sink's own fault is the sink's: a broadcast that throws must not unown this descriptor's settle.
         }
-      }
-      return { kind: 'structural', nodeIds, edgeIds: [], store: ENGINE_ORIGIN_STORE }
+      })()
     },
-    onChange: (descriptor: RagStoreChangedPayload) => backend.broadcast(IPC_RAG_STORE_CHANGED, descriptor),
   })
   app.once('before-quit', () => {
     engineChangesFeed.close()
