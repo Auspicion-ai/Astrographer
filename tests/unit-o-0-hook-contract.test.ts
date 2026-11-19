@@ -1287,12 +1287,31 @@ describe('§B10 source-contract (§3.6b): the CALLER-level seams for stages 1/2/
       s,
       "`docheads.pull` is not instrumented at the shell's own call site: no `.record('docheads.pull', () => …this.bridge.rag.docHeads()…)` wrapper — §3.6b requires the same caller-level round trip on the doc-heads payload",
     ).toMatch(/\.record\(\s*['"`]docheads\.pull['"`][\s\S]{0,200}?this\.bridge\.rag\.docHeads\(\)/)
-    // §3.6(b): no work added or removed — the pre-existing call sites stay 2 each
-    // (the re-derive body + the boot body), never multiplied by the wrap.
+    // §3.6(b): no work added or removed — the pre-existing WRAPPED call sites stay 2
+    // `snapshot()` (the re-derive body + the boot body), never multiplied by the wrap.
+    // `docHeads()` reads 3, because its third site is a PAINT’s data arm rather than a
+    // cache-fill route — the extension below names it.
+    //
+    // ⟨EXTENDED BY UNIT `B-6` (`pane-doc-nav`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ The `docHeads()` CALL-SITE
+    // census moves from 2 to 3 (measured 2 → 3 at this head). The third site is the `doc-nav` pane’s re-read arm inside
+    // `paintReplumbedPane` (unit `B-6`, `docs/L1/unit-b-6-pane-doc-nav.md` §3 — ONE `bridge.rag.docHeads()` per pane update, gated
+    // on the paint’s OWN census through `replumbedPaneCanRender` and guarded by a generation stamp), and it is deliberately BARE for
+    // the same reason the SAME method’s `backlinks` re-read is bare (`B-5`’s arm): §3.6b’s recorder brackets the shell’s COLD
+    // CACHE-FILL round trips — the two `boot`/`reDerive` routes wrapped in `.record('docheads.pull', …)` — not a paint’s data arm.
+    // So the census reads: 2 wrapped cache-fill sites + 1 bare paint arm = 3. That is a RECORDED VALUE moving with a named cause,
+    // not a loosened comparison: the `snapshot()` pin stays 2 (no `snapshot()` site was added — a census-wide count cannot be
+    // seduced by the doc-heads move), the `.record('docheads.pull', …)` arm above stays, and the tooth stays — an ACCIDENTAL fourth
+    // `docHeads()` site (a stray re-read copied out of the arm, or a fifth cache-fill route) still REDS this exact pin.
     const snapCalls = s.match(/this\.bridge\.rag\.snapshot\(\)/g) ?? []
     const docCalls = s.match(/this\.bridge\.rag\.docHeads\(\)/g) ?? []
     expect(snapCalls.length, '§3.6(b): the `snapshot()` CALL SITES changed count (the wrap must move no work)').toBe(2)
-    expect(docCalls.length, '§3.6(b): the `docHeads()` CALL SITES changed count (the wrap must move no work)').toBe(2)
+    expect(
+      docCalls.length,
+      '§3.6(b): the `docHeads()` CALL SITES changed count (the wrap must move no work) — expected 3: the TWO `.record(\'docheads.pull\', …)` ' +
+        'cache-fill routes in `boot`/`reDerive`, PLUS the BARE `doc-nav` re-read arm in `paintReplumbedPane` (unit `B-6`, ' +
+        '`docs/L1/unit-b-6-pane-doc-nav.md` §3; bare for the same reason that method’s `backlinks` re-read is bare — `B-5`’s arm, since ' +
+        'the recorder brackets the shell’s cache-fill routes, not a paint’s data arm). A FOURTH site still reds this pin.',
+    ).toBe(3)
     // The renderer’s APP-WIDE recorder is the instance that owns these two seams
     // (the same one the five render-path stages use) — never a new ad-hoc one.
     expect(

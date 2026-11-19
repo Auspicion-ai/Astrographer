@@ -631,12 +631,26 @@ async function seedHost(options: SeedOptions = {}): Promise<HostDrive> {
   // is a DELEGATING façade handed to the host as its `events` — the host's `this.events?.fire('crosslinks')` is exactly the
   // dispatch the fail-closed store guards must prevent, and `drive.channel` stays the REAL channel so every pre-existing row's
   // `fire`/`subscribe` behaves byte-for-byte as before.
+  // ⟨HARNESS CONFORMANCE — NOT A `B-6` BEHAVIOUR CHANGE.⟩ This façade is a `PaneEvents`, so it must carry EVERY member the
+  // interface REQUIRES — and `subscribeChange` has been required since `B-4`. It did not, and the `as unknown as` cast hid exactly
+  // that: `boot` registers a change-interested census id (unit `B-6` declares `doc-nav`) with `subscribeChange`, so the host's own
+  // boot threw `TypeError: this.events.subscribeChange is not a function` and took every row in this file with it. The missing seven
+  // members are added below, each forwarding STRAIGHT to the REAL `channel` (no counting, no behaviour). The cast now stands only for
+  // the COUNTING member (`fire`, the dispatch census `L9` reads) and the shared handler-type erasure (`subscribe`), never to paper
+  // over a member the interface already required: every reading below is still the host's own dispatch on the real registry.
   const hostedEvents = {
     subscribe: (paneId: string, handler: (report: never) => void): (() => void) => channel.subscribe(paneId, handler),
+    subscribeRecord: (paneId: string, handler: (report: never) => void): (() => void) => channel.subscribeRecord(paneId, handler),
+    subscribeChange: (paneId: string, handler: (report: never) => void): (() => void) => channel.subscribeChange(paneId, handler),
     fire: (paneId: string): unknown => {
       firesLog.push(typeof paneId === 'string' ? paneId : `(non-string: ${shown(paneId)})`)
       return channel.fire(paneId)
     },
+    publishChange: (): unknown => channel.publishChange(),
+    deliver: (): unknown => channel.deliver(),
+    panes: (): string[] => channel.panes(),
+    recordPanes: (): string[] => channel.recordPanes(),
+    changePanes: (): string[] => channel.changePanes(),
   } as unknown as ReturnType<typeof createPaneEvents>
   const host = new SidebarPanes({
     mount: new ShimElement('div') as never,
@@ -875,6 +889,13 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     const drive = await seeded({ documents: true, events: true })
     try {
       problems.push(...drive.bootProblems)
+      // ⟨`B-6` — THE SIBLING PANE IS ISOLATED, NOT EXCUSED.⟩ `B-6` added a SECOND data-backed pane (`doc-nav`) to this SAME
+      // broadcast, so this row's limbs measure the `crosslinks` arm ALONE. The sibling is disabled through the registry — its OWN
+      // declared gate, the one `paintReplumbedPane` and `updatePane` both honour (`not-enabled`) — while its frame stays materialized,
+      // so it is STILL an "other root, same object" subject below. NO ZERO IS REMOVED BY THIS: the doc-heads census still has to read
+      // 0 and the pane's frame still has to be the SAME OBJECT; the sibling's lawful one-re-read-and-one-paint cost is measured by
+      // `B-6`'s own rows (`D1`/`D2`/`D10` in `tests/integration/shell-chrome/pane-doc-nav.test.ts`).
+      drive.registry.disable(DOC_NAV)
 
       // ---- THE SEED'S PRE-CONDITIONS (each one is a reading this row's arms depend on) -----------------
       const before = drive.roots()
@@ -946,7 +967,10 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       }
 
       // ---- THE PAINT'S OWN VERDICT ---------------------------------------------------------------------
-      const verdicts = drive.verdicts()
+      // ⟨`B-6`⟩ The census is read over THIS ROW'S pane: the disabled sibling still ANSWERS (its declared word `not-enabled`, and
+      // the apply/root-identity arms below are what keep that answer non-painting), so an absolute verdict COUNT would be a count of
+      // the census rather than of this arm.
+      const verdicts = drive.verdicts().filter((verdict) => verdict['paneId'] === CROSSLINKS)
       if (verdicts.length !== 1) {
         problems.push(
           `limb L1: the fire produced ${verdicts.length} pane verdict(s) ${shown(verdicts)}, not EXACTLY ONE — §4's declared arm is the ` +
@@ -1180,18 +1204,28 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     ).toEqual([])
   })
 
-  it('L3 — the census moves by exactly ONE: `REPLUMBED_PANE_IDS` is `{gnosis-query, crosslinks}` with its `B-5` comment, `doc-nav`/`search`/`template-editor` reach NO listener, `refresh()` still re-assembles, and `renderer.ts` is untouched', async () => {
+  it('L3 — the census moves by exactly ONE: `REPLUMBED_PANE_IDS` is `{gnosis-query, crosslinks, doc-nav}` (extended by `B-6`) with its `B-5` comment, `doc-nav` and `crosslinks` each answer ONE registration, `search`/`template-editor` reach NO listener, `refresh()` still re-assembles, and `renderer.ts` is untouched', async () => {
     // §6 `L3` (§4's ONE declared census; §2's "the migration is incremental, never a big bang"; `O-4`: `renderer.ts`'s `⟨B-9⟩`
     // fallback and `gnosisCrudPanes`'s `host.refresh()` are NOT this unit's).
+    // ⟨EXTENDED BY UNIT `B-6` (`pane-doc-nav`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ `B-6` moved the census by exactly
+    // ONE more id (`doc-nav`, whose cause is the pane's TWO sources) and registered it in the SAME `boot` loop, so this file's
+    // recorded value moves to the LANDED three-id value and `doc-nav` moves OUT of the negative loop INTO its own positive control
+    // (ONE registration, never two): after `B-6` it IS a listener, and a `fired:false, handlers:0` arm for it would be false by
+    // design. The SET comparison stays SET-equality, the `settings`-exclusion arm stays, the `B-5` comment-window clause stays exactly
+    // as it is, and `search`/`template-editor` keep their negatives. `doc-nav`'s OWN arm (its re-read, its gate, its stamp) is
+    // `B-6`'s row to grade (`tests/integration/shell-chrome/pane-doc-nav.test.ts`); THIS row grades the census VALUE and the other
+    // families' silence.
     // LAYER: envelope-class — the host module's exports + the sources' TEXT + the REAL host over the shim.
     // NON-VACUITY: the `fired:false, handlers:0` arms are floored by the SAME channel answering `fired:true, handlers:1` for
     // `crosslinks` (the host's own boot-time subscription), and the census SET equality is floored by the source clause that
-    // requires the cause to be NAMED beside it — so "exactly these two" cannot pass by naming neither. `host.refresh()` moves all
+    // requires the cause to be NAMED beside it — so "exactly these three" cannot pass by naming none. `host.refresh()` moves all
     // three counters on this very double, which is `L1`'s and `L5`'s zeroes' floor.
-    // MUTATION THAT WOULD RED IT: adding a third id (a silent second subscriber) or dropping one reds the SET arm; entombing the
-    // move in code with no `B-5` cause reds the source clause; subscribing `doc-nav`/`search`/`template-editor` to the channel
-    // reds its `handlers:0` arm; deleting the `⟨B-9⟩` operator fallback or `gnosisCrudPanes.onChanged`'s `refresh()` reds the
-    // `renderer.ts` clause; a host whose `refresh()` no longer re-assembles reds the floor and makes `L1`'s zeroes unreadable.
+    // MUTATION THAT WOULD RED IT: adding a fourth id (a silent second subscriber) or dropping one reds the SET arm; entombing the
+    // move in code with no `B-5` cause reds the source clause; subscribing `search`/`template-editor` to the channel reds its
+    // `handlers:0` arm; stacking a `subscribeChange` beside the plain `subscribe` for `doc-nav` reds its `handlers:1` control
+    // (`B2-ADV-04`); a `doc-nav` registered with a plain `subscribe` leaves `changePanes()` short and reds `B-6`'s own `D4`; deleting
+    // the `⟨B-9⟩` operator fallback or `gnosisCrudPanes.onChanged`'s `refresh()` reds the `renderer.ts` clause; a host whose
+    // `refresh()` no longer re-assembles reds the floor and makes `L1`'s zeroes unreadable.
     const problems: string[] = []
 
     // ---- THE CONSTANT (through `await import()`, per the reachability rule) ---------------------------
@@ -1205,11 +1239,11 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     if (replumbed === undefined) {
       problems.push(
         `limb L3: \`REPLUMBED_PANE_IDS\` does not resolve on \`src/renderer/sidebar-panes.js\` — §4 pins it as the ONE declared ` +
-          `constant naming the panes whose paint the host registers on the channel: exactly \`{gnosis-query, crosslinks}\``,
+          `constant naming the panes whose paint the host registers on the channel: exactly \`{gnosis-query, crosslinks, doc-nav}\``,
       )
     } else {
       const read = Array.isArray(replumbed) ? replumbed.map(String) : null
-      const wanted = ['gnosis-query', CROSSLINKS]
+      const wanted = ['gnosis-query', CROSSLINKS, DOC_NAV]
       const asSet = read === null ? null : [...new Set(read)].sort()
       const wantedSet = [...new Set(wanted)].sort()
       if (asSet === null) {
@@ -1217,8 +1251,9 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       } else if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `limb L3: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the row ` +
-            `moves by EXACTLY ONE (\`gnosis-query\` -> \`['gnosis-query','crosslinks']\`) and a later family unit must EXTEND this ` +
-            `constant deliberately; every other pane keeps its \`refresh()\` route until its own unit`,
+            `moves by EXACTLY ONE per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; \`B-6\`: -> ` +
+            `\`['gnosis-query','crosslinks','doc-nav']\`) and a later family unit must EXTEND this constant deliberately; every other ` +
+            `pane keeps its \`refresh()\` route until its own unit`,
         )
       }
       if (read !== null && read.includes(SETTINGS)) {
@@ -1278,8 +1313,22 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
             `subscriber per id, never a second stacked by a re-boot or a second declaration`,
         )
       }
-      // THE NEGATIVES: the three families that keep `refresh()` reach NO listener.
-      for (const paneId of [DOC_NAV, SEARCH, TEMPLATE_EDITOR]) {
+      // ⟨`B-6` — `doc-nav` IS A LISTENER NOW, SO ITS ARM IS A POSITIVE CONTROL, NEVER A DELETED ONE.⟩ The census was EXTENDED by
+      // exactly ONE id, and that id is registered with `subscribeChange` (`subscribe` + a mark, the SAME handler map), so a fire
+      // reaches it ONCE. `handlers:1` is the `B2-ADV-04` arm in its positive form: a landing that stacked a `subscribeChange` beside
+      // the plain `subscribe` would answer `handlers:2` here and run the pane's whole re-read + paint twice per fire. `doc-nav`'s
+      // re-read, gate and stamp are `B-6`'s own rows; THIS file grades the census VALUE and the other families' silence.
+      const docNavPositive = drive.channel.fire(DOC_NAV)
+      await settle()
+      if (docNavPositive.fired !== true || docNavPositive.handlers !== 1) {
+        problems.push(
+          `limb L3: \`fire('${DOC_NAV}')\` answered ${shown(docNavPositive)}, not \`fired:true, handlers:1\` — the census was EXTENDED ` +
+            `by \`B-6\` (one id, one cause: the pane's two sources) and its id is subscribed ONCE by the ONE boot loop, so the census ` +
+            `IS a listener on this channel and ONE registration is what \`B2-ADV-04\` allows`,
+        )
+      }
+      // THE NEGATIVES: the two families that keep `refresh()` reach NO listener.
+      for (const paneId of [SEARCH, TEMPLATE_EDITOR]) {
         const report = drive.channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
           problems.push(
@@ -1359,11 +1408,13 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     expect(
       problems,
       `limb L3 — the census moves by exactly ONE and the other families keep \`refresh()\` (§6 L3; §4's ONE declared census; O-4). ` +
-        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly \`{gnosis-query, crosslinks}\` as a SET, carry a \`B-5\` ` +
-        `comment naming the cause beside its declaration, leave \`doc-nav\`/\`search\`/\`template-editor\` with NO listener ` +
-        `(\`fired:false, handlers:0\`) while the SAME channel answers \`fired:true, handlers:1\` for \`crosslinks\`; ` +
-        `\`host.refresh()\` must still reach \`loadAppGraph\` + \`mountOperator\` on this double (the floor under \`L1\`'s zeroes); and ` +
-        `\`${RENDERER_FILE}\`'s ⟨B-9⟩ fallback + \`gnosisCrudPanes\` \`refresh()\` must still be there. envelope-class`,
+        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly \`{gnosis-query, crosslinks, doc-nav}\` as a SET — the ` +
+        `\`B-6\` EXTENSION of this row's recorded value, never a relaxation of it — carry a \`B-5\` comment naming the cause beside its ` +
+        `declaration, leave \`search\`/\`template-editor\` with NO listener (\`fired:false, handlers:0\`) while the SAME channel answers ` +
+        `\`fired:true, handlers:1\` for \`crosslinks\` AND for \`doc-nav\` (ONE registration each, \`B2-ADV-04\`); \`host.refresh()\` must ` +
+        `still reach \`loadAppGraph\` + \`mountOperator\` on this double (the floor under \`L1\`'s zeroes); and \`${RENDERER_FILE}\`'s ` +
+        `⟨B-9⟩ fallback + \`gnosisCrudPanes\` \`refresh()\` must still be there. \`doc-nav\`'s own arm (its re-read, its gate, its ` +
+        `stamp) is \`B-6\`'s row to grade; THIS row grades the census VALUE and the other families' silence. envelope-class`,
     ).toEqual([])
   })
 
@@ -1782,6 +1833,11 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     const drive = await seeded({ documents: true, events: true })
     try {
       problems.push(...drive.bootProblems)
+      // ⟨`B-6` — THE SIBLING PANE IS ISOLATED, NOT EXCUSED.⟩ `B-6` added a SECOND data-backed pane (`doc-nav`) to this SAME
+      // broadcast, so this row's verdict limbs measure the `crosslinks` arm ALONE. The sibling is disabled through the registry — its
+      // OWN declared gate (`not-enabled`, which `paintReplumbedPane` and `updatePane` both honour) — while its frame stays
+      // materialized. Its lawful one-re-read-and-one-answer cost is measured by `B-6`'s own rows.
+      drive.registry.disable(DOC_NAV)
       const before = drive.roots()
       const paneBefore = rootById(before, `pane-${CROSSLINKS}`)
       if (paneBefore === undefined) {
@@ -1795,7 +1851,10 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       drive.resetCounters()
       const fire = await deliverFire(drive, edgeWritePayload(['e-new']), 'L6·fire')
       problems.push(...fire.problems)
-      const fireVerdicts = drive.verdicts()
+      // ⟨`B-6`⟩ The verdict census is read over THIS ROW'S pane: the disabled sibling still ANSWERS its declared word
+      // (`not-enabled`, `painted:false`, `applied: []`), and "the settled state's final verdict is `painted`" is a claim about the
+      // `crosslinks` arm, not about the census.
+      const fireVerdicts = drive.verdicts().filter((verdict) => verdict['paneId'] === CROSSLINKS)
       if (fireVerdicts.length === 0) {
         problems.push('limb L6: the fire produced no paint verdict — the settled state has nothing to have settled FROM')
       } else {
@@ -1836,7 +1895,7 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
             `\`applyContentChange\` that assembles AFTER the commit authors the pane from FRESH state`,
         )
       }
-      const settledVerdicts = drive.verdicts()
+      const settledVerdicts = drive.verdicts().filter((verdict) => verdict['paneId'] === CROSSLINKS)
       if (settledVerdicts.length > 0) {
         const final = settledVerdicts[settledVerdicts.length - 1]
         if (final['painted'] !== true) {
@@ -2427,19 +2486,22 @@ describe('pane-links — B5-F5: the subject\'s MOVEMENT re-reads the pane (and o
     ).toEqual([])
   })
 
-  it('L9 — the fail-closed store guards fire NOTHING: `lastStore === null`, a malformed `store` and a FOREIGN `store` each dispatch 0 fires, 0 re-reads and 0 rebuilds — floored by a same-store payload firing exactly once and re-reading exactly once', async () => {
+  it('L9 — the fail-closed store guards fire NOTHING: `lastStore === null`, a malformed `store` and a FOREIGN `store` each dispatch 0 fires, 0 re-reads and 0 rebuilds — floored by a same-store payload dispatching exactly `[crosslinks, doc-nav]` (the `B-6` extension of the fire census) with exactly ONE `rag.backlinks` re-read and exactly `[content]` rebuild', async () => {
     // §6 `L9` — THE COVERAGE GAP the adversarial pass named: "the fire sits BEHIND three fail-closed store guards in
     // `onRagStoreChanged` (`lastStore === null`, malformed `store`, FOREIGN `store`); no row grades that a foreign store's broadcast
     // fires nothing" (`docs/L2` §2's guard row / §6's second row, both `✔` measured; `docs/L1` §2's containment).
     // LAYER: envelope-class — the host's OWN fire dispatches (the channel is the object the host holds as `events`, so wrapping its
     // `fire` counts the HOST's calls), the bridge's re-read census, the recorded `requestRebuild` calls and the authored envelope.
     // NON-VACUITY: every negative arm is floored by (d) — the SAME harness, the SAME payload shape, the SAME counters, with only the
-    // `store` matching — firing exactly once and re-reading exactly once; and the two guard STATES are constructed through the
-    // PUBLIC `boot` (a snapshot whose `store` is `null`; a payload whose `store` is missing/non-string/empty/foreign), never by
-    // reaching into the host.
+    // `store` matching — dispatching exactly the two fires named above and re-reading `rag.backlinks` exactly once; and the two guard
+    // STATES are constructed through the PUBLIC `boot` (a snapshot whose `store` is `null`; a payload whose `store` is
+    // missing/non-string/empty/foreign), never by reaching into the host.
     // MEASURED AT THIS HEAD, RECORDED RATHER THAN HIDDEN: all three guards ALREADY return before the fire (the fire is the LAST
     // statement pair in the handler), so this row is GREEN on the landed host and is a REGRESSION PIN, not a red limb. It is here
     // because the `B5-F5` fix adds a SECOND fire site and a handler refactor is exactly what could hoist the fire above the guards.
+    // ⟨`B-6`⟩ AND ITS FLOOR COUNT MOVED WITH THE LANDING, NOT AROUND IT: (d)'s fire census is now TWO dispatches (`crosslinks` on
+    // B-5's `edgeIds` predicate, then `doc-nav` on `B-6`'s UNCONDITIONAL local fire) — named, exact and order-sensitive — while the
+    // re-read (`rag.backlinks` 1) and the rebuild (`['content']`) teeth are unchanged.
     // MUTATION THAT WOULD RED IT: moving the fire above any guard (or into a helper the guards run BEFORE returning) reds a
     // negative arm's `fires`/`backlinks`/`rebuilds` census while (d) stays green; dropping the `payload.store !== lastStore` guard
     // reds the FOREIGN arm and would paint a store this host is not rendering; dropping the malformed-store guard reds the
@@ -2540,13 +2602,20 @@ describe('pane-links — B5-F5: the subject\'s MOVEMENT re-reads the pane (and o
         const positive = await deliverFire(guarded, edgeWritePayload(['e-new']), 'L9·d')
         problems.push(...positive.problems)
         const positiveCounters = guarded.counters()
-        const positiveFires = guarded.fires().length - positiveMark
-        if (positiveFires !== 1) {
+        const positiveDispatches = guarded.fires().slice(positiveMark)
+        // ⟨`B-6`-CAUSED EXTENSION OF THE FIRE CENSUS — ONE MORE DISPATCH, NAMED, NEVER A RELAXATION.⟩ `B-6` added a second data-backed
+        // pane to this SAME broadcast and its local fire is UNCONDITIONAL for a matched store (`ASM-B6-4`: the pane's row title is the
+        // doc-head edge's source node's CONTENT, so `edgeIds` cannot decide it), so a same-store payload carrying a non-empty `edgeIds`
+        // now dispatches TWO fires, in order: `crosslinks` (B-5's `edgeIds` predicate) and then `doc-nav` (B-6's unconditional fire,
+        // which sits after it in `onRagStoreChanged`). The census is restated to the LANDED value and stays EXACT and order-sensitive;
+        // every tooth of the floor is kept: `rag.backlinks` must still read exactly 1 and `requestRebuild` exactly `['content']`
+        // below, so a host that fires NOTHING is still not a pass.
+        if (fingerprint(positiveDispatches) !== fingerprint([CROSSLINKS, DOC_NAV])) {
           problems.push(
-            `limb L9(d): a SAME-STORE payload carrying a non-empty \`edgeIds\` dispatched ${positiveFires} fire(s) ` +
-              `[${guarded.fires().slice(positiveMark).join(', ')}], not exactly 1 — §2's declared predicate is ` +
-              `\`Array.isArray(payload.edgeIds) && payload.edgeIds.length > 0\`, and this is the control every negative arm above ` +
-              `stands on: a host that fires NOTHING is not a pass`,
+            `limb L9(d): a SAME-STORE payload carrying a non-empty \`edgeIds\` dispatched ${shown(positiveDispatches)}, not exactly ` +
+              `\`${shown([CROSSLINKS, DOC_NAV])}\` — one fire per DATA-BACKED pane: \`${CROSSLINKS}\` on §2's declared predicate ` +
+              `(\`Array.isArray(payload.edgeIds) && payload.edgeIds.length > 0\`) and \`${DOC_NAV}\` on \`B-6\`'s UNCONDITIONAL local ` +
+              `fire, in that order. This is the control every negative arm above stands on: a host that fires NOTHING is not a pass`,
           )
         }
         if (positiveCounters.backlinks !== 1) {
@@ -2582,7 +2651,9 @@ describe('pane-links — B5-F5: the subject\'s MOVEMENT re-reads the pane (and o
         `${problems.length} problem(s). A broadcast whose \`store\` is absent/non-string/empty, or a valid string that is NOT the ` +
         `captured \`lastStore\`, or any broadcast to a host whose \`lastStore\` is \`null\`, must dispatch \`0\` fires, make \`0\` ` +
         `\`rag.backlinks\` calls and request \`0\` rebuilds — floored by a same-store payload with a non-empty \`edgeIds\` dispatching ` +
-        `exactly ONE fire, making exactly ONE re-read (\`${HEAD_NODE_ID}\`) and requesting exactly \`['content']\`. The host's pinned ` +
+        `exactly \`${shown([CROSSLINKS, DOC_NAV])}\` (one fire per data-backed pane: B-5's \`edgeIds\` predicate, then B-6's ` +
+        `UNCONDITIONAL local fire — the \`B-6\` extension of this census, named), making exactly ONE re-read (\`${HEAD_NODE_ID}\`) ` +
+        `and requesting exactly \`['content']\`. The host's pinned ` +
         `drops warned: ${shown(warnings.slice(0, 8))}. envelope-class — the REAL host over the layout-less DOM shim; no rendered ` +
         `box, no style, no pointer (G8-only, §8)`,
     ).toEqual([])

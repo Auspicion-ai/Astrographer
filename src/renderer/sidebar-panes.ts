@@ -92,7 +92,7 @@ import { reconcileDocumentRoots, type DocumentRoot, type ReconcileChange } from 
 // ⟨Unit `B-3` `§2`/`§3` — THE CHANNEL AND THE PAINT'S VERDICT.⟩ The host HOLDS a channel (`SidebarPanesOptions.events`) and
 // answers ONE paint per fire (`updatePane`); the verdict's closed vocabulary lives with the channel's report family, so the two
 // sides of a pane update name one set of words.
-import type { PaneEvents, PaneUpdateReason, PaneUpdateVerdict } from './pane-events.js'
+import type { PaneEvents, PaneUpdateReason, PaneUpdateVerdict, FireReport } from './pane-events.js'
 import {
   scopeDocumentIds,
   plainRagId,
@@ -285,7 +285,7 @@ export interface SidebarPanesOptions {
 }
 
 /** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **exactly
- *  `['gnosis-query', 'crosslinks']`**. The set is ONE constant so a later family unit must EXTEND it deliberately
+ *  `gnosis-query`, `crosslinks` and `doc-nav`**. The set is ONE constant so a later family unit must EXTEND it deliberately
  *  (`B-8` for the other gnosis panes, `B-6`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
  *  deliberately NOT here: it is `operator`-scope, the operator mount is `B-9`'s surface, and `updatePane` answers
  *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): the census is a fact of
@@ -297,8 +297,28 @@ export interface SidebarPanesOptions {
  *  `putEdge` arm → `IPC_RAG_STORE_CHANGED` with a NON-EMPTY `edgeIds`), the LEARNER is this host's `onRagStoreChanged`,
  *  and the pane's answer is ONE `bridge.rag.backlinks(subject)` re-read then ONE `updatePane('crosslinks')` — `INV-E`,
  *  never a re-assembly. The cause is named HERE, beside the declaration, so the move is a DELIBERATE extension: it is one
- *  id, it is the same `subscribe` (one subscriber per id, `B2-ADV-04`), and every other family keeps its `refresh()`. */
-export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks'])
+ *  id, it is the same `subscribe` (one subscriber per id, `B2-ADV-04`), and every other family keeps its `refresh()`.
+ *  ⟨Unit `B-6` — `doc-nav` JOINS FOR ITS OWN CAUSE: this pane hears BOTH SOURCES (`docs/L1/unit-b-6-pane-doc-nav.md` §2) — a change
+ *  of the RENDERED STORE (fired locally in `onRagStoreChanged`) and an ENGINE-originated change (published through the change
+ *  census) — and answers ONE `rag.docHeads()` re-read + ONE `updatePane('doc-nav')`, never a re-assembly. One id, one registration.⟩ */
+export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks', 'doc-nav'])
+
+/** ⟨Unit `B-6` `§4` — THE CHANGE-INTEREST CENSUS: ONE FROZEN DECLARATION, and the only input the `boot` loop uses to choose a
+ *  DECLARATION per id.⟩ An id listed here is registered with `subscribeChange` — which is `subscribe` PLUS a mark, in the SAME
+ *  handler map — and every other census id with plain `subscribe`: ONE registration per id, NEVER both (`B2-ADV-04`), so
+ *  `publishChange()` (the engine source) and `fire()` (the local source) reach the same registration and the arms cannot diverge.
+ *  `doc-nav` is the first and only change-interested pane at this head; `B-8`'s gnosis family EXTENDS this declaration, never a
+ *  second publisher (`O-3`). */
+const CHANGE_INTERESTED_PANE_IDS: readonly string[] = Object.freeze(['doc-nav'])
+
+/** ⟨Unit `B-6` `§5` — `ASM-B6-1`: **THE ENGINE-ORIGIN LABEL, SPELLED ONCE IN THE RENDERER AND NEVER IMPORTED.**⟩ Its home is
+ *  `src/main/engine-rag-store.ts`'s `export const ENGINE_ORIGIN_STORE` — the name `B-4`'s sink stamps on every engine frame's
+ *  `store` member, and no registry name can equal it (`RAG_STORE_NAME_PATTERN` refuses a colon, so an engine frame DIES on the
+ *  foreign-store guard unless the branch comparing it to THIS spelling sits ABOVE the guards). It is DECLARED, not imported: that
+ *  main module imports `./engine-transport.js`, which imports `undici` at module scope, so a VALUE import would put the engine's
+ *  HTTP stack into the renderer bundle for one string. `S2` PARSES this declaration and the main-side one and compares their
+ *  values (`D-38`: a token search is not a declaration search). */
+const ENGINE_ORIGIN_STORE_LABEL = 'gnosis:engine'
 
 // ---- handler bodies (function-STRING data). They reach the IPC bridge via
 // `window.provident.sidebar` — NEVER an MCP tool. The host installs the
@@ -655,6 +675,11 @@ export class SidebarPanes {
    *  Set by the boot/re-derive (fetched over the `rag-doc-heads` IPC) and read
    *  by `buildContext()` (which populates `ctx.docHeads`). */
   private lastDocHeads: RagDocHeadsPayload['documents'] | null = null
+  /** ⟨Unit `B-6` `§3` — `ASM-B6-3`: **THE RE-READ'S GENERATION STAMP.**⟩ A host-owned MONOTONE counter, bumped BEFORE each
+   *  `bridge.rag.docHeads()` the paint issues and compared AFTER the answer lands: an answer that no longer holds the NEWEST
+   *  generation is DROPPED (no commit, no paint) because an UNCOALESCED fire puts N answers in flight and a stale one landing
+   *  LAST would paint a stale list with no later fire to correct it. One counter, two reads — no timer and no queue (`D-82`). */
+  private docHeadsGeneration = 0
   private lastCrosslinks: CrosslinkWiring[] = []
   private lastBacklinks: BacklinkResult | null = null
   private lastQueryResult: RagQueryResult | null = null
@@ -2527,6 +2552,19 @@ export class SidebarPanes {
     return null
   }
 
+  /** ⟨Unit `B-6` `§3` — **THE RE-READ'S GATE**, and it is the paint's OWN census rather than a second one.⟩ True iff the registry
+   *  KNOWS the id, its scope is NOT `operator`, and it is ENABLED — the three cheap facts `paintPane` answers `not-a-pane` /
+   *  `operator-scope` / `not-enabled` with. A pane that renders no frame must not cost an IPC (`D9`: an IPC that can change
+   *  nothing). `not-mounted` and `no-runtime` are deliberately NOT gated on: they are transient boot states, and gating on them
+   *  would restate `paintPane`'s steps 4–5 one level up. TOTAL at every argument: a degenerate id answers `false`, never a throw. */
+  private replumbedPaneCanRender(paneId: string): boolean {
+    if (typeof paneId !== 'string' || paneId === '') return false
+    const def = this.registry.get(paneId)
+    if (def == null) return false
+    if (def.scope === 'operator') return false
+    return this.registry.isEnabled(paneId)
+  }
+
   /** ⟨Unit `B-5` `§4` — **THE HOST'S OWN PER-PANE DISPATCH**, and it is a DECLARED dispatch, never a per-pane table of
    *  readers (`ASM-B3-2`'s refusal, one realm over; `O-3` is where a second data-backed pane lands).⟩ This is the `boot`
    *  subscription's body for every `REPLUMBED_PANE_IDS` id, and its arms are, in order, and nothing else:
@@ -2549,7 +2587,11 @@ export class SidebarPanes {
    *  The move's own fire is what re-reads for the new subject, so nothing is lost. This is the host's OWN page-commit idiom
    *  (`pageSubjectStamp` / `superseded()` in `commitPageEdit`, which drops every post-await resolution when its subject was
    *  drained in flight), re-spelled over §3's subject rather than a second invalidation rule. A bridge ERROR still keeps the
-   *  last-known list and the paint still runs (`ASM-B5-L2-3`). */
+   *  last-known list and the paint still runs (`ASM-B5-L2-3`).
+   *
+   *  ⟨Unit `B-6` `§3` — THE SECOND DATA-BACKED ARM, `doc-nav`'s:⟩ ONE `bridge.rag.docHeads()` behind the GENERATION stamp
+   *  (`ASM-B6-3`) and the paint's own GATE (`replumbedPaneCanRender`) — one call, one commit, one `updatePane('doc-nav')`, and no
+   *  snapshot/security/backlinks/template/traversal read of any kind. */
   async paintReplumbedPane(paneId: string): Promise<void> {
     if (paneId === 'crosslinks') {
       const subject = this.linksPaneSubjectNodeId()
@@ -2561,6 +2603,27 @@ export class SidebarPanes {
           this.lastBacklinks = result
         } catch {
           // keep the last-known backlinks on a bridge error (never a crash — the `refresh()` discipline)
+        }
+      }
+    } else if (paneId === 'doc-nav') {
+      // ⟨Unit `B-6` `§3` — THE SECOND DATA-BACKED PANE'S RE-READ: ONE CALL, ONE GATE, ONE STAMP.⟩ `F-3`: the pane renders from
+      // `ctx.docHeads` (which `buildContext` copies from `lastDocHeads`) plus the host's expanded-folder set and
+      // `ctx.currentDocumentId`, so its whole data source is ONE `bridge.rag.docHeads()` — no snapshot, no security, no backlinks,
+      // no traversal, no template, no `stores`, no `decorateShared`, no `syncZoneMirrors`, no backRefs recompute.
+      if (this.replumbedPaneCanRender(paneId)) {
+        const generation = (this.docHeadsGeneration += 1)
+        try {
+          const answer = await this.bridge.rag.docHeads()
+          // `ASM-B6-3`: an answer that no longer holds the NEWEST generation is DROPPED — not committed and not painted (this
+          // return precedes `updatePane`), because the answer that DOES hold it owns the paint.
+          if (generation !== this.docHeadsGeneration) return
+          const documents = (answer as { documents?: unknown } | null | undefined)?.documents
+          // An ARRAY is committed even when empty (the pane authors `(no documents)`); anything else keeps the last-known list.
+          if (Array.isArray(documents)) this.lastDocHeads = documents as RagDocHeadsPayload['documents']
+        } catch {
+          // A bridge error KEEPS the last-known list (the `refresh()` discipline) and the paint still runs (it may lawfully
+          // answer `unchanged`); a superseded error is dropped at the same stamp as a superseded answer.
+          if (generation !== this.docHeadsGeneration) return
         }
       }
     }
@@ -2977,8 +3040,17 @@ export class SidebarPanes {
     for (const release of this.unsubPaneUpdates) release()
     this.unsubPaneUpdates = []
     if (this.events != null) {
+      // ⟨Unit `B-6` `§4` — ONE REGISTRATION PER ID, and the DECLARATION is chosen PER ID (`B2-ADV-04`).⟩ A change-interested id
+      // (`CHANGE_INTERESTED_PANE_IDS`) is registered with `subscribeChange` — `subscribe` PLUS a mark in the SAME handler map — so
+      // `publishChange()` (the engine source) and `fire` (the local source) reach the SAME registration; every other census id with
+      // plain `subscribe`. NEVER both: a second subscription would run the pane's whole re-read + paint twice per engine frame.
       for (const paneId of REPLUMBED_PANE_IDS) {
-        this.unsubPaneUpdates.push(this.events.subscribe(paneId, (report) => void this.paintReplumbedPane(report.paneId)))
+        const handler = (report: FireReport): void => void this.paintReplumbedPane(report.paneId)
+        this.unsubPaneUpdates.push(
+          CHANGE_INTERESTED_PANE_IDS.includes(paneId)
+            ? this.events.subscribeChange(paneId, handler)
+            : this.events.subscribe(paneId, handler),
+        )
       }
     }
     // Subscribe to the re-derive triggers.
@@ -3178,6 +3250,18 @@ export class SidebarPanes {
     // messages); (b) a FOREIGN-store drop (a valid string !== the captured
     // name) stays SILENT by design (routine). The drop OUTCOME is unchanged
     // in every branch — the warn is diagnostic-only.
+    // ⟨Unit `B-6` `§2` item 1 — **THE ENGINE BRANCH, FIRST, AND THE ORDER IS THE CLAIM.**⟩ `B-4`'s sink broadcasts the engine's own
+    // frame on this SAME channel carrying `store: ENGINE_ORIGIN_STORE` (`'gnosis:engine'`), a name no registry name can equal — so
+    // the arm must sit ABOVE the three local guards, or every engine frame dies on the foreign-store guard and the second source is
+    // silently dead (`F-1`/`F-2`). EXACT EQUALITY on the `store` member and nothing else: no `kind`, no `nodeIds`, no `edgeIds`
+    // decides which arm runs. It PUBLISHES (reaching only the change-interested panes, through `fire`) and RETURNS: it must NOT
+    // accumulate `pendingContentChange` and must NOT `requestRebuild`, because the engine's `nodeIds` are the ENGINE's ids and a
+    // local re-derive around them is the wrong-origin harm `B4-EX-2` pinned fail-closed on the main side. Every non-engine foreign
+    // name still falls through to the guards below, unchanged.
+    if (payload.store === ENGINE_ORIGIN_STORE_LABEL) {
+      this.events?.publishChange()
+      return
+    }
     if (this.lastStore === null) {
       console.warn('[sidebar] rag-store-changed dropped: no captured boot store (lastStore null)')
       return
@@ -3215,6 +3299,13 @@ export class SidebarPanes {
     if (Array.isArray(payload.edgeIds) && payload.edgeIds.length > 0) {
       this.events?.fire('crosslinks')
     }
+    // ⟨Unit `B-6` `§2` item 3 + `F-4` / `ASM-B6-4` — **THE LOCAL FIRE, UNCONDITIONAL FOR A MATCHED STORE.**⟩ This pane's row TITLE
+    // is the `doc-head` edge's SOURCE NODE'S CONTENT, so a `kind:'content'` commit (`edgeIds: []`, the `IPC_EDIT_COMMIT` shape) CAN
+    // RETITLE a document and a `structural` one can create or delete one: `B-5`'s `edgeIds` predicate, or `kind === 'structural'`,
+    // would MISS a rename. So the STORE decides and nothing else — the fire is behind no payload-shape guard. It is ADDITIVE
+    // (`ASM-B6-2`): the rebuild below STAYS (a structural write moves things this unit does not own), and the ORDER is
+    // load-bearing — the fire's IPC is ISSUED first, so the re-read's commit precedes the re-derive's assemble.
+    this.events?.fire('doc-nav')
     this.editController.requestRebuild('content')
   }
 

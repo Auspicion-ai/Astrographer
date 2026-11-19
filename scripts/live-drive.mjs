@@ -2194,6 +2194,72 @@ async function ufLinksPaneFrameCensus(h, mark, reuseToken) {
   return JSON.parse(await h.cdp.evaluate(expr))
 }
 
+/** ⟨Unit `B-6` §8 (`G8`) — **THE `doc-nav` PANE'S OWN PAINT, MARKED THEN READ.**⟩ The same instrument shape as
+ *  `ufLinksPaneFrameCensus` (`B-5`'s), one pane over, plus the pane's DOCUMENT-ROW census: the `doc-nav`'s data is
+ *  `ctx.docHeads`, so its causal oracle is the rendered row set (`li[data-document-id]`) and its titles — the SAME
+ *  reading `v3_docnav` and `uf_panes_12` take, and the only one an un-plumbed tree cannot produce while the
+ *  re-derive is queued behind the dirty-edit guard (this unit's `F-5`).
+ *  A SECOND own property (`__b6Mark`) so a `B-5` mark and a `B-6` mark on the same node never alias.
+ *  `mark: true` stamps every live frame with a per-run token and records the census; `mark: false` re-reads the
+ *  SAME census with the token handed back and leaves the DOM alone (a mark can only be absent from a replaced
+ *  node). READ-ONLY: no app state, no envelope, no handler — the block that owns the row reads these values. */
+async function ufDocNavPaneCensus(h, mark, reuseToken) {
+  const token = typeof reuseToken === 'string' && reuseToken !== ''
+    ? reuseToken
+    : 'b6-docnav-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const PANE = 'doc-nav'
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    const read = (el) => {
+      const head = el.querySelector('.pane-head')
+      const body = el.querySelector('.pane-body')
+      const grip = head ? head.children[0] : null
+      const control = head ? head.children[1] : null
+      const classes = String(el.className || '')
+      const zoneMatch = /\\bpane-in-([a-z]+)\\b/.exec(classes)
+      return {
+        zone: zoneMatch ? zoneMatch[1] : null,
+        collapsed: el.getAttribute('collapsed'),
+        id: el.getAttribute('id'),
+        headId: head ? head.getAttribute('id') : null,
+        gripId: grip ? grip.getAttribute('id') : null,
+        controlId: control ? control.getAttribute('id') : null,
+        bodyId: body ? body.getAttribute('id') : null,
+      }
+    }
+    if (${mark ? 'true' : 'false'}) { for (const el of frames) { try { el.__b6Mark = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const paneEl = document.getElementById('pane-' + PANE)
+    const rootEl = document.getElementById('wiki-root')
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim()
+    const rows = paneEl ? [].slice.call(paneEl.querySelectorAll('li[data-document-id]')).map((li) => ({
+      documentId: li.getAttribute('data-document-id'),
+      current: li.getAttribute('data-current'),
+      text: norm(li.textContent),
+    })) : []
+    const folders = paneEl ? [].slice.call(paneEl.querySelectorAll('[data-folder-path]')).map((f) => ({
+      path: f.getAttribute('data-folder-path'),
+      expanded: f.getAttribute('data-expanded'),
+    })) : []
+    return JSON.stringify({
+      token: TOKEN,
+      root: rootEl ? rootEl.getAttribute('data-node-id') : null,
+      paneId: PANE,
+      panePresent: !!paneEl,
+      paneFrameCount: document.querySelectorAll('#pane-' + PANE).length,
+      paneText: paneEl ? norm(paneEl.textContent) : null,
+      rows,
+      rowIds: rows.map((r) => r.documentId),
+      folders,
+      frames: frames.map((el) => {
+        const carries = (() => { try { return el.__b6Mark === TOKEN } catch (e) { return false } })()
+        return { pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries, carriers: read(el) }
+      }),
+    })
+  })()`
+  return JSON.parse(await h.cdp.evaluate(expr))
+}
+
 /** The [DIAG] dispatch probe: hand the SAME handler the DOM click would reach a
  *  direct `provident.dispatch` so "the handler is dead" and "the handler ran but
  *  its seam is a no-op" are distinguishable. Never a verdict. */
@@ -9929,6 +9995,120 @@ const BLOCKS = {
     const visAfterDisable = await ufPaneVisibilityState(h, linksPaneId)
     const paneDisabledRestored = visAfterDisable === 'false'
     const restoreOk = edgeCreate.edgeId !== null && edgeRemove.failure === null && linksLineCleared && paneDisabledRestored
+    // =========================================================================
+    // ⟨Unit `B-6` §8 (`G8`) — **THE SECOND LIMB IN THIS BLOCK: A DOCUMENT CREATED WHILE A PAGE EDIT IS DIRTY REPAINTS
+    // THE `doc-nav` PANE, ALONE, WITH NO RE-DERIVE.**⟩ The discriminator is `F-5`'s: `requestRebuild` sits behind the
+    // edit controller's dirty-edit guard (`src/renderer/edit-controller.ts`), so while the page-edit surface holds an
+    // UNCOMMITTED typed edit a store change re-derives NOTHING — `lastDocHeads` is never re-read and the tree stays
+    // stale. `B-6`'s fire is NOT gated by that guard, so the pane re-reads and paints anyway. **An un-plumbed tree can
+    // never produce limb (v) in that window**: the same document created on a CLEAN controller is also named, and that
+    // is exactly why the reading is taken BEFORE the blur (the assembly root and the sibling frames are the control).
+    // The block is the host by the contract's rule (rendered document + a real store write whose oracle survives), and
+    // `B-5`'s limb above is the regression obligation this one must not disturb. NO NEW `BLOCKS` KEY (frozen census).
+    // The layer of every reading below is the ASSEMBLED APP (`RCA-12`): `G8`, the only app-green layer.
+    // =========================================================================
+    const docNavPaneId = 'doc-nav'
+    const docNavEnable = await ufEnsurePaneExpanded(h, docNavPaneId)
+    await sleep(2500)
+    const docNavBase = await ufDocNavPaneCensus(h, true)
+    // (a) THE DIRTY WINDOW, DRIVEN FOR REAL: a caret in the surface, real typed text, and NO blur — then the typed
+    //     text is read BACK from the STORE and must be ABSENT there (it has not committed), which is what makes the
+    //     guard's queue real rather than assumed. The surface copy is re-read after the paint.
+    const dirtyCaret = await ufCaretAt(h, st.blockCount > 1 ? st.blockCount - 1 : 0).catch(() => ({ ok: false }))
+    const dirtyMarker = `DOCNAVDIRTY${Date.now() % 100000}`
+    await ufType(h, dirtyMarker)
+    const dirtySurfaceText = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?String(s.textContent||'').indexOf(${JSON.stringify(dirtyMarker)})>=0:null})()`)
+    const dirtyStoreDoc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch(() => null)
+    const dirtyStoreAbsent = !String(JSON.stringify(dirtyStoreDoc ?? '')).includes(dirtyMarker)
+    // (b) THE STORE WRITE — a FRESH document through the app's OWN import route (`edit.import_markdown`), which is a
+    //     real doc-head creation and emits a LOCAL `structural` descriptor (`edgeIds: []`, `store === the rendered
+    //     store's name`) on `IPC_RAG_STORE_CHANGED`. The reply is printed VERBATIM; a driver-side refusal is
+    //     classified through `driverFailureReason` and PARKS the limb, never smoothed into an app FAIL.
+    let docNavImport = { read: null, failure: null, documentId: null, path: null, marker: null }
+    try {
+      // THE FIXTURE'S PATH IS PART OF THE READING (`MEASURED 2026-11-19`, the first B-6 live run): the store's importer
+      // enforces a CONTAINMENT GUARD — `markdown import: path outside corpus root` — and the default store's
+      // `corpusRoot` is the app's OWN cwd (the project root), so a fixture in the OS temp dir is REFUSED and the limb
+      // parks with no document to name. The fixture is therefore written AT THE PROJECT ROOT (a root-level document,
+      // so its doc-nav leaf is rendered without expanding any folder) and REMOVED in the restore below.
+      const b6Marker = `DOCNAVLIMB${Date.now() % 100000}`
+      const b6Path = join(ROOT, `b6-docnav-limb-${Date.now() % 100000}.md`)
+      writeFileSync(b6Path, `# ${b6Marker}\n\nA disposable document the B-6 doc-nav limb imports to move the pane's own list.\n`, 'utf8')
+      const read = await mcpToolResult(h.mcp, 'edit.import_markdown', { files: [b6Path] })
+        .catch((e) => ({ ok: false, isError: false, tool: 'edit.import_markdown', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+      docNavImport = {
+        read,
+        failure: driverReadFailure(read),
+        documentId: read && read.value && Array.isArray(read.value.documentIds) && typeof read.value.documentIds[0] === 'string' ? read.value.documentIds[0] : null,
+        path: b6Path,
+        marker: b6Marker,
+      }
+    } catch (e) {
+      docNavImport = { read: null, failure: { kind: 'driver', detail: `the fixture could not be written: ${String(e && e.message ? e.message : e)}` }, documentId: null, path: null, marker: null }
+    }
+    await sleep(4500)
+    // (c) THE FIVE LIMBS, read SEPARATELY off the settled app, BEFORE the blur releases the queued rebuild.
+    const docNavAfter = await ufDocNavPaneCensus(h, false, docNavBase.token)
+    const dnBaseByPid = new Map((docNavBase.frames || []).map((f) => [f.pid, f]))
+    const dnAfterByPid = new Map((docNavAfter.frames || []).map((f) => [f.pid, f]))
+    const dnRootHeld = !!docNavBase.root && docNavBase.root === docNavAfter.root
+    const dnOtherBefore = (docNavBase.frames || []).filter((f) => f.pid !== docNavPaneId)
+    const dnOthers = dnOtherBefore.map((f) => {
+      const now = dnAfterByPid.get(f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const dnOthersSurvived = dnOtherBefore.length > 0 && dnOthers.every((p) => p.marked && p.nodeIdHeld)
+    const dnBefore = dnBaseByPid.get(docNavPaneId) || null
+    const dnAfter = dnAfterByPid.get(docNavPaneId) || null
+    const dnCarriersHeld = !!dnBefore && !!dnAfter && JSON.stringify(dnBefore.carriers) === JSON.stringify(dnAfter.carriers)
+    const dnReminted = !!dnBefore && !!dnAfter && dnAfter.marked === false
+    const dnExactlyOne = docNavBase.paneFrameCount === 1 && docNavAfter.paneFrameCount === 1
+    const dnRowsChanged = JSON.stringify(docNavBase.rowIds || []) !== JSON.stringify(docNavAfter.rowIds || [])
+    // (v) THE CAUSAL ORACLE: the NEW document's row is NAMED, and it was NOT in the baseline.
+    const dnNewDocId = docNavImport.documentId
+    const dnNamedBefore = dnNewDocId !== null && (docNavBase.rowIds || []).includes(dnNewDocId)
+    const dnNamedAfter = dnNewDocId !== null && (docNavAfter.rowIds || []).includes(dnNewDocId)
+    const dnNamesTheNewDocument = dnNamedAfter && !dnNamedBefore
+    const dnSurfaceTextHeld = dirtySurfaceText === true && await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?String(s.textContent||'').indexOf(${JSON.stringify(dirtyMarker)})>=0:null})()`)
+    // (d) THE RELEASE — the REAL blur commits the dirty page, which fires the queued rebuild; the pane must STILL name
+    //     the new document afterwards (the settled state is fresh, both routes agreeing). Its own reading, printed apart.
+    const dirtyBlur = await ufBlurSurface(h)
+    await sleep(3500)
+    const docNavSettled = await ufDocNavPaneCensus(h, false, docNavBase.token)
+    const dnNamedSettled = dnNewDocId !== null && (docNavSettled.rowIds || []).includes(dnNewDocId)
+    // (e) RESTORE — delete the imported document through the app's OWN batch channel (`window.provident.edit.batch` ->
+    //     `IPC_EDIT_BATCH` -> `applyBatch`, the primitive the MCP `edit.*` writers use), one atomic batch of
+    //     `removeNode` ops derived from the STORE's own document read. Then the pane's row must be GONE — the
+    //     reverse-direction half, which no single-direction oracle can give.
+    let docNavRemove = { ops: null, bridge: null, nodes: null }
+    if (dnNewDocId !== null) {
+      const docRead = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: dnNewDocId }).catch(() => null)
+      const nodeIds = docRead && Array.isArray(docRead.nodes) ? docRead.nodes.map((n) => (n && typeof n.id === 'string' ? n.id : null)).filter((id) => id !== null) : []
+      docNavRemove.nodes = nodeIds.length
+      docNavRemove.ops = nodeIds.map((id) => ({ op: 'removeNode', id }))
+      if (nodeIds.length > 0) {
+        docNavRemove.bridge = await h.cdp.evaluate(`(async()=>{try{const e=window.provident&&window.provident.edit;if(!e||typeof e.batch!=='function')return {called:false,reason:'window.provident.edit.batch is not on the bridge'};const r=await e.batch(${JSON.stringify(nodeIds.map((id) => ({ op: 'removeNode', id })))});return {called:true,result:r}}catch(err){return {called:true,threw:String(err&&err.message?err.message:err)}}})()`)
+      }
+    }
+    await sleep(4000)
+    const docNavRestored = await ufDocNavPaneCensus(h, false, docNavBase.token)
+    const dnRowGone = dnNewDocId !== null && !(docNavRestored.rowIds || []).includes(dnNewDocId)
+    // THE FIXTURE FILE IS THE LIMB'S OWN RESIDUE AND IS REMOVED HERE (the store delete above removes the DOCUMENT; a
+    // file left in the project root would be an exportable artifact of the run, not a reading).
+    let docNavFixtureRemoved = false
+    if (docNavImport.path) { try { rmSync(docNavImport.path, { force: true }); docNavFixtureRemoved = true } catch { docNavFixtureRemoved = false } }
+    const docNavRestoreOk = dnNewDocId !== null && !!(docNavRemove.bridge && docNavRemove.bridge.called === true && docNavRemove.bridge.result && docNavRemove.bridge.result.ok === true) && dnRowGone && docNavFixtureRemoved
+    // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (never an app FAIL, never smoothed into a pass).
+    let docNavParkReason = null
+    if (docNavEnable.present !== true) docNavParkReason = `PRECONDITION-FAILED: the ${docNavPaneId} pane could not be enabled/expanded through the operator control (path=${docNavEnable.path}; zone:left=${docNavEnable.zoneState}) — a driver-side state, so the limb is PARKED`
+    else if (docNavBase.panePresent !== true) docNavParkReason = `PRECONDITION-FAILED: no #pane-${docNavPaneId} on the assembled surface after the sanctioned restore`
+    else if (dirtySurfaceText !== true) docNavParkReason = `PRECONDITION-FAILED: the typed text never reached the page-edit surface (typed "${dirtyMarker}"), so the dirty-edit window this limb's discriminator rests on was not created`
+    else if (!dirtyStoreAbsent) docNavParkReason = `PRECONDITION-FAILED: the typed text was ALREADY in the store before the blur, so the page was not dirty when the descriptor landed — the window this limb rests on was missed`
+    else if (docNavImport.failure !== null) docNavParkReason = driverFailureReason(docNavImport.failure.kind, docNavImport.failure.detail, docNavImport.failure.extra).marker
+    else if (dnNewDocId === null) docNavParkReason = 'PRECONDITION-FAILED: `edit.import_markdown` answered no documentIds, so the new document the causal oracle names does not exist'
+    const docNavLimbOk = docNavParkReason === null && dnRootHeld && dnOthersSurvived && dnCarriersHeld && dnReminted &&
+      dnExactlyOne && dnRowsChanged && dnNamesTheNewDocument && dnSurfaceTextHeld && dnNamedSettled && docNavRestoreOk
+    const docNavLimbEvidence = `⟨B-6 §8 G8 — THE SECOND SOURCE-BEARING PANE'S ASSEMBLED-APP LIMB (assembled app; the ONLY app-green layer)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${docNavEnable.path} present=${docNavEnable.present} zone:left=${docNavEnable.zoneState}; BASELINE #wiki-root data-node-id="${docNavBase.root}" frames=${JSON.stringify((docNavBase.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${docNavPaneId} x${docNavBase.paneFrameCount} rows=${JSON.stringify(docNavBase.rowIds)} text="${String(docNavBase.paneText || '').slice(0, 240)}"; (a) THE DIRTY WINDOW (F-5): caret=${JSON.stringify(dirtyCaret.ok === true)} REAL typed "${dirtyMarker}" present in the page-edit surface=${dirtySurfaceText} and ABSENT from the store (${'rag.get_document'} read-back before the blur)=${dirtyStoreAbsent} => the dirty-edit guard is HOLDING the rebuild; (b) THE STORE WRITE — edit.import_markdown REPLY VERBATIM=${JSON.stringify(docNavImport.read ? docNavImport.read.value : null)} isError=${docNavImport.read ? docNavImport.read.isError : '?'} => documentId=${JSON.stringify(dnNewDocId)} (fixture ${docNavImport.path}, marker "${docNavImport.marker}"); (c) THE FIVE LIMBS read BEFORE the blur released the queue: (i) assemblyRootUnchanged=${dnRootHeld} ("${docNavBase.root}" -> "${docNavAfter.root}"); (ii) otherPanesSurvived=${dnOthersSurvived} (${JSON.stringify(dnOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) exactlyOneDocNavFrame=${dnExactlyOne} (before ${docNavBase.paneFrameCount} after ${docNavAfter.paneFrameCount}); (iv) paneReminted=${dnReminted} with paneCarriersHeld=${dnCarriersHeld} (frame node id "${dnBefore ? dnBefore.nodeId : '?'}" -> "${dnAfter ? dnAfter.nodeId : '?'}", carriers ${JSON.stringify(dnBefore ? dnBefore.carriers : null)} -> ${JSON.stringify(dnAfter ? dnAfter.carriers : null)}); (v) rowSetMoved=${dnRowsChanged} namesTheNewDocument=${dnNamesTheNewDocument} (named before=${dnNamedBefore} after=${dnNamedAfter}; rows ${JSON.stringify(docNavBase.rowIds)} -> ${JSON.stringify(docNavAfter.rowIds)}; text "${String(docNavAfter.paneText || '').slice(0, 240)}") AND the uncommitted typed text is STILL in the surface across the paint=${dnSurfaceTextHeld}; (d) THE RELEASE — REAL blur (page commit => warning=${dirtyBlur.warning}) fires the queued rebuild; the pane STILL names the new document=${dnNamedSettled} (rows=${JSON.stringify(docNavSettled.rowIds)}); (e) RESTORE — the app's OWN batch channel removed the imported document (nodes=${docNavRemove.nodes}, ops=${JSON.stringify(docNavRemove.ops)}, bridge=${JSON.stringify(docNavRemove.bridge)}) and the pane's row is GONE=${dnRowGone} (rows=${JSON.stringify(docNavRestored.rowIds)}), the fixture file removed=${docNavFixtureRemoved} => DOCNAV_LIMB_OK=${docNavLimbOk}`
     // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (never an app FAIL, never smoothed into a pass).
     let linksParkReason = null
     if (linksEnable.present !== true) linksParkReason = `PRECONDITION-FAILED: the ${linksPaneId} pane could not be enabled/expanded through the operator control (path=${linksEnable.path}; zone:left=${linksEnable.zoneState}) — a driver-side state, so the limb is PARKED`
@@ -9937,12 +10117,12 @@ const BLOCKS = {
     else if (edgeCreate.failure !== null) linksParkReason = driverFailureReason(edgeCreate.failure.kind, edgeCreate.failure.detail, edgeCreate.failure.extra).marker
     const linksLimbOk = linksParkReason === null && controlHeld && assemblyRootUnchanged && otherPanesSurvived &&
       linksCarriersHeld && linksReminted && exactlyOneLinksFrame && linksContentChanged && linksLineNamed && linksBaselineWasNone
-    const okAll = ok && linksLimbOk && restoreOk
+    const okAll = ok && linksLimbOk && docNavLimbOk && restoreOk
     const linksLimbEvidence = `⟨B-5 §8 G8 — THE D-24 ASSEMBLED-APP LIMB (assembled app; the ONLY app-green layer)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${linksEnable.path} present=${linksEnable.present} zone:left=${linksEnable.zoneState}; QUIET GATE after the enable (mark, settle, re-read with no store write) held=${quietHeld} frames=${JSON.stringify(quietFrames)}; CONTROL (the edgeIds:[] shape, a SECOND real content-only commit driven now that the pane is mounted — the block's OWN typed commit landed before the pane existed, a driver sequencing fact): caret=${JSON.stringify(controlCaret.ok || false)} typed "${controlMarker}" blur(warning=${controlBlur.warning}) store read-back containsMarker=${controlCommitted} => frameHeld=${controlFrameHeld} textHeld=${controlTextHeld} rootHeld=${controlRootHeld} otherFramesSurvived=${controlOtherSurvived} (${JSON.stringify(controlOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) CONTROL_HELD=${controlHeld} (the control's claim is the crosslinks pane's OWN stillness; otherFramesSurvived is printed as its own reading, not folded in — a content-only commit legitimately re-authors a SIBLING pane) (frame node id "${controlPaneBefore ? controlPaneBefore.nodeId : '?'}" -> "${controlPaneAfter ? controlPaneAfter.nodeId : '?'}"; text "${controlMark.paneText}" -> "${controlRead.paneText}"); (c) BASELINE #wiki-root data-node-id="${base.root}" frames=${JSON.stringify((base.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${linksPaneId} x${base.paneFrameCount} text="${base.paneText}" ((none) present=${linksBaselineWasNone}); (d) SUBJECT read off the DOM #zone:main [data-doc-head]=${JSON.stringify(subjectRead)} => subjectNodeId=${subjectNodeId}, SOURCE from ANOTHER document sourceDoc=${sourceDoc} sourceNodeId=${sourceNodeId} (candidates ${JSON.stringify(sourceTried)}); (e) edit.set_edge REPLY VERBATIM=${JSON.stringify(edgeCreate.read ? edgeCreate.read.value : null)} isError=${edgeCreate.read ? edgeCreate.read.isError : 'no-call'} edgeId=${edgeCreate.edgeId}; (f) THE FIVE LIMBS read off the SETTLED app: (i) assemblyRootUnchanged=${assemblyRootUnchanged} (#wiki-root "${base.root}" -> "${after.root}"); (ii) otherPanesSurvived=${otherPanesSurvived} (${JSON.stringify(otherPanes.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) paneReminted=${linksReminted} with paneCarriersHeld=${linksCarriersHeld} (before ${carriersOf(linksBefore)} vs after ${carriersOf(linksAfter)}); (iv) exactlyOneCrosslinksFrame=${exactlyOneLinksFrame} (before ${base.paneFrameCount} after ${after.paneFrameCount}); (v) paneContentChanged=${linksContentChanged} ("${base.paneText}" -> "${after.paneText}") namesTheNewEdge=${linksLineNamed} expectedLine=${JSON.stringify(expectedLine)} renderedLinks=${JSON.stringify(after.paneLinks)}; (g) RESTORE: the CONTRACTED route MCP edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.mcp)} and the app's OWN batch channel window.provident.edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.bridge)} edgeId=${edgeCreate.edgeId} removedClearedTheLine=${linksLineCleared} (pane text after the delete "${linksTextAfterRestore}"); pane visibility re-disabled through its own control: before=${visBeforeDisable} path=${disablePath} after=${visAfterDisable} restored=${paneDisabledRestored}; PARK REASON=${JSON.stringify(linksParkReason)} (a driver precondition is PARKED by name — never an app FAIL, never a pass)`
-    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}`
-    const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge'
+    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}; ${docNavLimbEvidence}`
+    const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge — AND (unit `B-6` §8, gate `G8`) a document CREATED while a page edit is DIRTY repaints the `doc-nav` pane (title `Documents`, `.pane-frame[data-pane-id="doc-nav"]`) ITSELF and ALONE: with the uncommitted typed text still in the surface, `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-doc-nav` exists, the pane frame is re-minted with its carriers held, and the pane row set MOVES to NAME the new document — a reading the queued re-derive cannot produce, and the restored state no longer names it'
     return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, linksAssertion, evidenceFull,
-      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null, parkReason: linksParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk } } })
+      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null || docNavParkReason !== null, parkReason: linksParkReason ?? docNavParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk }, b6DocNavLimb: { assemblyRootUnchanged: dnRootHeld, otherPanesSurvived: dnOthersSurvived, paneReminted: dnReminted, paneCarriersHeld: dnCarriersHeld, exactlyOneDocNavFrame: dnExactlyOne, rowSetMoved: dnRowsChanged, namesTheNewDocument: dnNamesTheNewDocument, dirtyWindowHeldAcrossThePaint: dnSurfaceTextHeld, namedAfterTheRelease: dnNamedSettled, rowGoneAfterRestore: dnRowGone, restoreOk: docNavRestoreOk, importedDocumentId: dnNewDocId } } })
   },
 
   // ---- §8.3 item 3 — a FAILED commit is USER-VISIBLE (painted, typed) AND

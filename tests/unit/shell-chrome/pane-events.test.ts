@@ -1031,12 +1031,17 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // ⟨EXTENDED BY UNIT `B-5` (`pane-links`) — DELIBERATELY, per this row's own message ("a later unit must EXTEND it
     // deliberately").⟩ `B-5` moved the census by exactly ONE: `crosslinks` joins `gnosis-query`, because a new backlink is
     // now DETECTED on the channel (`docs/L1/unit-b-5-pane-links.md` §2/§4) and that pane's dispatch re-reads and paints its
-    // own root. The SUBJECT and the TEETH are unchanged — the value is still pinned EXACTLY, so a THIRD id still reds it.
-    const PINNED_CENSUS = ['gnosis-query', 'crosslinks']
+    // own root. The SUBJECT and the TEETH are unchanged — the value is still pinned EXACTLY, so a FURTHER id still reds it.
+    // ⟨EXTENDED AGAIN BY UNIT `B-6` (`pane-doc-nav`) — the same discipline, ONE more row.⟩ `doc-nav` joins the census because that
+    // pane hears BOTH sources (`docs/L1/unit-b-6-pane-doc-nav.md` §2: the rendered STORE's change fired locally, and the ENGINE's
+    // change published through the change-interest declaration) and its dispatch re-reads `rag.docHeads` and paints its own root.
+    // The value moves to the LANDED three-id value and the fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
+    const PINNED_CENSUS = ['gnosis-query', 'crosslinks', 'doc-nav']
     if (replumbed === undefined) {
       problems.push(
         '(r9) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
-          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s one-row extension)`,
+          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s and \`B-6\`'s ` +
+          `one-row extensions)`,
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1050,8 +1055,8 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
       `limb r9 — the two censes and the pinned constant (§6 r9; §2's declared-empty record interest; §3's \`REPLUMBED_PANE_IDS\`). ` +
         `${problems.length} problem(s). The shipped record-interest set is EMPTY BY CONSTRUCTION (no pane renders display state ` +
         `today; \`B-10\` authors the first reader) and the control proves it can MOVE; the two declarations reach different arms; ` +
-        `both censuses are copies; and the re-plumbed census is exactly ${shown(['gnosis-query', 'crosslinks'])} (extended by ` +
-        `\`B-5\`, one id). ` +
+        `both censuses are copies; and the re-plumbed census is exactly ${shown(['gnosis-query', 'crosslinks', 'doc-nav'])} ` +
+        `(extended by \`B-5\` and then by \`B-6\`, one id each). ` +
         `envelope-class and PURE — no Electron, no DOM; the constant is read off the host MODULE's exports`,
     ).toEqual([])
   })

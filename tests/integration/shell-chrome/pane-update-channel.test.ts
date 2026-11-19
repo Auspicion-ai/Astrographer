@@ -1190,14 +1190,18 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     // ⟨EXTENDED BY UNIT `B-5` (`pane-links`) — DELIBERATELY, per this row's own message ("a later unit must EXTEND this
     // constant deliberately").⟩ `B-5` moved the census by exactly ONE: `crosslinks` joins `gnosis-query`, because a new
     // backlink is now DETECTED on this channel (`docs/L1/unit-b-5-pane-links.md` §2/§4) and that pane's dispatch re-reads
-    // and paints its own root. The row's SUBJECT and TEETH are unchanged — the value is still pinned EXACTLY, so a THIRD id
+    // and paints its own root. The row's SUBJECT and TEETH are unchanged — the value is still pinned EXACTLY, so a FURTHER id
     // (a silent second subscriber) still reds it; what moved is the recorded value, with its unit named.
-    const PINNED_CENSUS = [QUERY, 'crosslinks']
+    // ⟨EXTENDED AGAIN BY UNIT `B-6` (`pane-doc-nav`) — the same discipline, ONE more row.⟩ `doc-nav` joins the census because that
+    // pane hears BOTH sources (`docs/L1/unit-b-6-pane-doc-nav.md` §2) — the rendered STORE's change fired locally AND the ENGINE's
+    // change published through the change-interest declaration — and its dispatch re-reads `rag.docHeads` and paints its own root.
+    // The fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
+    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav']
     if (replumbed === undefined) {
       problems.push(
         '(r5) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
           `naming the panes whose paint the host registers on the channel: exactly ${shown(PINNED_CENSUS)} (the ` +
-          "`pane-update-channel` census plus `B-5`'s one-row extension)",
+          "`pane-update-channel` census plus `B-5`'s and `B-6`'s one-row extensions)",
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1212,7 +1216,8 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
       `limb r5 — the pre-migration path still works and its scope is declared (§6 r5; §3's \`REPLUMBED_PANE_IDS\`). ` +
         `${problems.length} problem(s). \`host.refresh()\` still reaches \`loadAppGraph\` + \`mountOperator\` on this very double ` +
         `(each read twice: the wrapped instance method AND a bypass-proof observable), so \`r1\`'s and \`r6\`'s zeroes are readings ` +
-        `and not a dead counter; and the re-plumbed census is exactly ${shown([QUERY, 'crosslinks'])} (extended by \`B-5\`, one id). ` +
+        `and not a dead counter; and the re-plumbed census is exactly ${shown([QUERY, 'crosslinks', 'doc-nav'])} (extended by ` +
+        `\`B-5\` and then by \`B-6\`, one id each). ` +
         `envelope-class — the REAL SidebarPanes over the layout-less DOM shim; no rendered box, no pointer (G8-only)`,
     ).toEqual([])
   })

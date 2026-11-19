@@ -33,9 +33,11 @@
 // **`deliver()` AND `publishChange()` CARRY NOTHING AND ADDRESS NOTHING** (`B-2`'s push is payload-free), so this module holds
 // **NO** address→pane table (`CRG-1`'s shape, one realm up): a pane DECLARES its interest and its handler re-reads whatever it
 // needs. The shipped record-interest census is EMPTY and that is a DECLARATION, not an accident — no pane renders display state
-// today; `B-10` authors the FIRST reader (`O-4`). **The shipped CHANGE-interest census is EMPTY for the same reason and is the
-// same kind of declaration** — no pane follows an engine-originated change until `B-6` (doc-nav) and `B-8` (the gnosis family),
-// which the map's §4 edge table assigns; this module ships the ARM, and the arm is proven movable by its rows.
+// today; `B-10` authors the FIRST reader (`O-4`). **A FRESH channel's CHANGE-interest census is EMPTY for the same reason and is
+// the same kind of declaration** — that is this module's own default VALUE, which its rows pin (a bare `createPaneEvents()`
+// answers `[]`) — while the shipped HOST declares `['doc-nav']` at `boot` through `subscribeChange` (unit `B-6`,
+// `docs/L1/unit-b-6-pane-doc-nav.md` §4), so the census a RUNNING app reads is ONE id wide; `B-8`'s gnosis family EXTENDS that
+// same declaration, never a second publisher. This module ships the ARM, and the arm is proven movable by its rows.
 //
 // **AND IT IS TIMERLESS** (`D-82` clause 4's discipline): no timer, no poll, no retry, no queue, no deferred work. A fire is a
 // synchronous pass over the handlers that stand at that instant, and `deliver()`/`publishChange()` are synchronous passes over
@@ -93,7 +95,8 @@ export interface PaneEvents {
   panes(): string[]
   /** The record-interested census (a COPY). EMPTY at this head by declaration (`§2`). */
   recordPanes(): string[]
-  /** The change-interested census (a COPY). EMPTY at this head by declaration (no pane adopts it until `B-6`/`B-8`). */
+  /** The change-interested census (a COPY). EMPTY on a FRESH channel (this module's own default value); the `B-6` host's `boot` declares
+   *  `doc-nav` through `subscribeChange`, and `B-8` extends that same declaration. */
   changePanes(): string[]
 }
 
