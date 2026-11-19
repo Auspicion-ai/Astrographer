@@ -964,9 +964,7 @@ change through the store's own `applyBatch` (so `rag-store.ts` takes zero byte),
 waits on that batch, one bounded coalesced walk per structural descriptor plus one duplicated walk per connect,
 and limb-(b) projections carry id + title only.
 
-**The readings that decide it, verbatim:** `E1` — the doc-heads answers `[]` → `[{documentId:'d1', title:
-'Getting Started', path:[], tags:['guide']}]`, `accepted 1 / projected 1`. `E2` — a document the fork NEVER
-wrote: `[]` → at the **broadcast instant** `doc-e / 'Engine Doc'`, `walks 3`, sink order = frame order.
+**The readings that decide it, verbatim:** `E1` — the doc-heads answers `[]` → `[{documentId:'d1', title:'Getting Started', path:[], tags:['guide']}]`, `accepted 1 / projected 1`. `E2` — a document the fork NEVER wrote: `[]` → at the **broadcast instant** `doc-e / 'Engine Doc'`, `walks 3`, sink order = frame order.
 **The mutation that un-mirrors only:** delete the seam's one `onAccepted` call → **`E1` alone** reds while
 `E2` and every `c` row stay green — and that FALSIFIED a sentence of the unit's own contract, recorded as
 `B4A-F10` rather than smoothed.
