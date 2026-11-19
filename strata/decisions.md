@@ -985,7 +985,7 @@ a short/empty terminal page, `total` a hint) and NOT taken, because taking it re
 block in `scripts/live-drive.mjs`, and the adapter note below.
 
 **And the engine path is COMPLETE in the fork:** engine write → mirror → store → doc-heads, and engine change →
-consumer → pane. The only refusal left is the engine's own, and no engine event has been received anywhere.
+consumer → pane. The only refusal left is the engine's own; no engine event has been received anywhere.
 
 ---
 
