@@ -319,8 +319,55 @@ export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-quer
  *  handler map — and every other census id with plain `subscribe`: ONE registration per id, NEVER both (`B2-ADV-04`), so
  *  `publishChange()` (the engine source) and `fire()` (the local source) reach the same registration and the arms cannot diverge.
  *  `doc-nav` is the first and only change-interested pane at this head; `B-8`'s gnosis family EXTENDS this declaration, never a
- *  second publisher (`O-3`). */
+ *  second publisher (`O-3`).
+ *
+ *  ⟨Unit `B-8` `§9` — `B6-F15`, THE CAUSE THIS DECLARATION IS NOW GUARDED.⟩ A change-interest id is only HEARD if the census also
+ *  paints it: `subscribeChange` exists for census ids, so an id named HERE but ABSENT from `REPLUMBED_PANE_IDS` subscribes
+ *  NOTHING while `publishChange()` drifts on — the half-wire `D-42` refuses, produced silently by the one edit this declaration
+ *  invites (§4's `B-8` state — `['doc-nav','gnosis-documents','gnosis-wikis']` — is exactly it). The containment is therefore a
+ *  RULE, not a convention: `changeInterestSubsetProblems` below is the counter, and `boot` validates this pair with it BEFORE it
+ *  attaches a single subscription and refuses the WHOLE plan when the answer is non-empty (`B6-F15`, `docs/L1/unit-b-8-pane-gnosis.md` §9). */
 const CHANGE_INTERESTED_PANE_IDS: readonly string[] = Object.freeze(['doc-nav'])
+
+/** ⟨Unit `B-8` `§9` (`B6-F15`) — **THE SUBSET COUNTER: this declaration may never name a pane the paint census does not carry.**⟩
+ *  The defect it closes, in one sentence: an id in `CHANGE_INTERESTED_PANE_IDS` that is ABSENT from `REPLUMBED_PANE_IDS`
+ *  subscribes NOTHING while `publishChange()` drifts on — a silent half-wire. Returns ONE problem sentence per change-interested
+ *  id missing from the census, IN INPUT ORDER, and `[]` when the declaration is a subset of it. PURE and TOTAL: a non-array
+ *  argument, an unsearchable census or a non-string member answers a problem and never a throw (a non-string id can never be
+ *  certified present). No `this`, no `await`, no `console`, no I/O and no timer — which is what lets `boot` decide the verdict
+ *  from the two arguments alone and refuse the whole plan BEFORE it awaits anything. Contract: `docs/L1/unit-b-8-pane-gnosis.md` §9;
+ *  its only caller is `boot`'s validate-then-subscribe. */
+export function changeInterestSubsetProblems(changeInterest: readonly string[], census: readonly string[]): string[] {
+  const problems: string[] = []
+  const interested: readonly unknown[] = Array.isArray(changeInterest) ? changeInterest : []
+  const painted: readonly unknown[] = Array.isArray(census) ? census : []
+  if (!Array.isArray(changeInterest)) {
+    problems.push(
+      'changeInterestSubsetProblems: the change-interest argument is not an array (read ' +
+        `${typeof changeInterest}), so no id it declares can be certified painted — the plan is not validated`,
+    )
+  }
+  if (!Array.isArray(census)) {
+    problems.push(
+      'changeInterestSubsetProblems: the census argument is not an array (read ' +
+        `${typeof census}), so the paint census cannot be searched and no change-interested id can be certified present`,
+    )
+  }
+  for (const paneId of interested) {
+    if (typeof paneId !== 'string') {
+      problems.push(
+        `changeInterestSubsetProblems: the change-interest declaration carries a NON-STRING member (read ${typeof paneId}), ` +
+          'which can never be certified present in the paint census',
+      )
+    } else if (!painted.includes(paneId)) {
+      problems.push(
+        `changeInterestSubsetProblems: '${paneId}' is declared change-interested but is ABSENT from the paint census — it ` +
+          'subscribes NOTHING while publishChange() drifts on (a silent half-wire)',
+      )
+    }
+  }
+  return problems
+}
 
 /** ⟨Unit `B-6` `§5` — `ASM-B6-1`: **THE ENGINE-ORIGIN LABEL, SPELLED ONCE IN THE RENDERER AND NEVER IMPORTED.**⟩ Its home is
  *  `src/main/engine-rag-store.ts`'s `export const ENGINE_ORIGIN_STORE` — the name `B-4`'s sink stamps on every engine frame's
@@ -2920,6 +2967,25 @@ export class SidebarPanes {
    *  rag-store-changed + template-changed. Async. */
   async boot(runtime: Runtime): Promise<void> {
     if (runtime == null) throw new Error('SidebarPanes.boot: runtime required')
+    // ⟨Unit `B-8` `§9` (`B6-F15`) — VALIDATE THE PLAN, THEN SUBSCRIBE: NEVER A HALF-SUBSCRIBED HOST.⟩ The subscription plan (which
+    // id, with which declaration) is a pure function of the two frozen declarations, so it is computed and VALIDATED here — BEFORE
+    // any side effect, and long before the first attach below. A change-interested id the census does not paint would subscribe
+    // NOTHING while `publishChange()` drifts on, so a non-empty answer refuses the WHOLE plan with ONE loud error: no subscription
+    // is attached (`D-42`: an unsubscribed declaration is worse than an absent one, and a half-subscribed host is worse than both),
+    // no withdrawal is released, and no host field is written — `boot` throws before its first statement's successor.
+    const subscriptionPlan = REPLUMBED_PANE_IDS.map((paneId) => ({
+      paneId,
+      declaration: CHANGE_INTERESTED_PANE_IDS.includes(paneId) ? 'change' : 'plain',
+    }))
+    const planProblems = changeInterestSubsetProblems([...CHANGE_INTERESTED_PANE_IDS], [...REPLUMBED_PANE_IDS])
+    if (planProblems.length > 0) {
+      throw new Error(
+        `[sidebar-panes] boot refused — the change-interest declaration is NOT a subset of the paint census, so the WHOLE ` +
+          `subscription plan is refused and NOTHING is attached (docs/L1/unit-b-8-pane-gnosis.md §9, B6-F15): ` +
+          `${planProblems.join(' ')} | CHANGE_INTERESTED_PANE_IDS = [${[...CHANGE_INTERESTED_PANE_IDS].join(', ')}] | ` +
+          `REPLUMBED_PANE_IDS = [${[...REPLUMBED_PANE_IDS].join(', ')}]`,
+      )
+    }
     this.runtime = runtime
     // H3 — a fresh boot: clear the toggle-during-boot guard before the pane
     // registration + settings fetch below.
@@ -3068,10 +3134,13 @@ export class SidebarPanes {
       // (`CHANGE_INTERESTED_PANE_IDS`) is registered with `subscribeChange` — `subscribe` PLUS a mark in the SAME handler map — so
       // `publishChange()` (the engine source) and `fire` (the local source) reach the SAME registration; every other census id with
       // plain `subscribe`. NEVER both: a second subscription would run the pane's whole re-read + paint twice per engine frame.
-      for (const paneId of REPLUMBED_PANE_IDS) {
+      // ⟨Unit `B-8` `§9`⟩ The choice is not re-derived here: it was made in `subscriptionPlan` at the head of `boot` and VALIDATED
+      // there (`changeInterestSubsetProblems`), so this loop can only ever attach a plan whose change-interest ids are in the
+      // census — one entry per id, the plan's own order, the census's own ids.
+      for (const { paneId, declaration } of subscriptionPlan) {
         const handler = (report: FireReport): void => void this.paintReplumbedPane(report.paneId)
         this.unsubPaneUpdates.push(
-          CHANGE_INTERESTED_PANE_IDS.includes(paneId)
+          declaration === 'change'
             ? this.events.subscribeChange(paneId, handler)
             : this.events.subscribe(paneId, handler),
         )

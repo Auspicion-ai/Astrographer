@@ -1047,3 +1047,37 @@ change set (a known quantity), then re-run §7's gates and §8's commands with `
 them untracked in `tests/`; the next pass either lands them green or moves them back. The two pin files the seat
 could not countersign were countersigned in the delegation that followed (`tests/pd-ui-1-theme-register.test.ts`,
 `tests/unit-wave-1-bridge-wiring.test.ts`).
+
+---
+
+## D-44 — `B-8` is GRANTED the two `renderer.ts` sites it stopped for; `B6-F15` lands; the census move waits on that grant
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-8`'s return, re-verified in this seat
+(its four rows green; the suite at its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN)
+
+**The stop is the unit's substance:** `gnosis-documents`/`gnosis-wikis` fire through `renderer.ts`'s
+`onChanged: () => { if (host) void host.refresh() }` closure, and the engine arm's delegate needs the same file —
+so **no in-grant seam reaches the channel**, and a census move without that line would be a **dead
+registration** (an id in both declarations whose paint is missing subscribes, fires, and paints nothing —
+the unit's own `X1b`). `gnosis-status` is operator-scope and would skip `renderer.ts`'s `⟨B-9⟩` fallback.
+
+**THE GRANT (with the price):** `B-8` takes `src/renderer/renderer.ts` for (1) the CRUD panes' `onChanged` →
+`firePaneUpdate(paneId)` — **one line**; and (2) the `SidebarPanes` gnosis delegate carrying
+`documents`/`wikis`/`refreshFromEngine` — **three lines**, which also repairs a defect predating this program.
+The `⟨B-9⟩` operator fallback stays `B-9`'s. The map's own `B-8` row already named `renderer.ts` as what `B-8`
+replaces, so the delegation was narrower than the design.
+
+**What LANDED regardless, and is green:** `B6-F15`'s containment clause as a **runtime refusal inside `boot`**
+(validate-then-subscribe, after only the `runtime == null` guard, so a refusal leaves no subscription, no
+withdrawer, no field and no bridge call) — because a suite-only check cannot refuse the SILENT edit it exists
+for — plus its four rows (`C1`/`C2` red first, then 4/4). `B6-F6` does NOT bite here (the stamp orders two
+answers to ONE subject and these paints re-read nothing); its residue (two racing settlements) is carried to
+`B-9`.
+
+**Countersigned, recorded not smoothed:** one out-of-grant recorded-value re-statement in
+`tests/pd-ui-1-theme-register.test.ts` (old value kept as `superseded:`, `restated: 'pane-gnosis'`). And
+`strata/modules.json`'s `shell-chrome` `N` moves **34 → 35** under D-41's definition (one new export), cap 400.
+
+**An instrument finding worth keeping:** the live driver captures no renderer console, so greps for
+`boot refused` reading 0 prove **nothing** — the reading is structurally vacuous. An instrument that reads the
+boot's own status is owed, and it is named rather than counted as evidence.

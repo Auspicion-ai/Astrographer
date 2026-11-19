@@ -32,7 +32,7 @@
         "tests/unit-u5-rich-commit-ipc.test.ts",
         "tests/unit-wave-1-bridge-wiring.test.ts"
       ],
-      "endpoints": 34
+      "endpoints": 35
     },
     {
       "name": "record-engine",
