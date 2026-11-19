@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { installShim, mountEl } from '../src/shared/dom-shim.js'
 import { DEFAULT_CONTENT_WINDOW_TEMPLATE } from '../src/main/template-store.js'
 import { createPaneRegistry } from '../src/renderer/pane-registry.js'
+import { createPaneEvents } from '../src/renderer/pane-events.js'
 import { createEditController } from '../src/renderer/edit-controller.js'
 import { SidebarPanes } from '../src/renderer/sidebar-panes.js'
 import { handleRagQueryIpc } from '../src/main/mcp-server.js'
@@ -95,7 +96,7 @@ describe('W1-N5 — template Validate host hook', () => {
     }
   }
 
-  it('host: installSidebarBridge exposes templateValidateResult; the verdict lands in buildTemplateContext().validation + drives a re-derive', () => {
+  it('host: installSidebarBridge exposes templateValidateResult; the verdict lands in buildTemplateContext().validation and FIRES `template-editor` exactly once (ONE report, `fired:true, handlers:1`) while NO rebuild is requested', () => {
     installShim()
     const mount = mountEl() as never
     const operatorMount = mountEl() as never
@@ -107,6 +108,17 @@ describe('W1-N5 — template Validate host hook', () => {
       commit: async () => ({ ok: true, nodeId: 'x' }),
       onRebuild,
     })
+    // ⟨RE-STATED STRICTLY STRONGER BY UNIT `B-7` (`pane-search-template`) — A RECORDED-VALUE RE-STATEMENT, NEVER A RELAXATION.⟩
+    // This row used to pin `expect(onRebuild).toHaveBeenCalled()` after `templateValidateResult`, i.e. exactly the whole-app
+    // re-assembly `ASM-B7-4` REMOVES (`docs/L1/unit-b-7-pane-search-template.md` §1 `F-3`: `this.templateValidation` reaches NOBODY
+    // but this pane's render). The replacement is STRONGER, not weaker: the host is handed a REAL `createPaneEvents()` as its
+    // `events`, a spy is subscribed to `'template-editor'` BEFORE the seam runs, and the row now asserts the fire's COUNT (exactly
+    // once), its whole REPORT payload (`{paneId:'template-editor', fired:true, handlers:1, reason:'fired'}` — the channel's own
+    // closed vocabulary, not a boolean) AND the NEGATIVE for the removed rebuild. The bridge seam, the
+    // `buildTemplateContext().validation` reading and the rendered `template-validation` clause are all kept.
+    const paneEvents = createPaneEvents()
+    const painted = vi.fn()
+    paneEvents.subscribe('template-editor', painted)
     const host = new SidebarPanes({
       mount,
       operatorMount,
@@ -114,6 +126,7 @@ describe('W1-N5 — template Validate host hook', () => {
       bridge: makeHostBridge() as never,
       backRefs,
       editController,
+      events: paneEvents,
     })
     host.registerPanes()
     ;(globalThis as unknown as { window?: unknown }).window = { provident: {} }
@@ -123,7 +136,13 @@ describe('W1-N5 — template Validate host hook', () => {
 
     ;(sidebar.templateValidateResult as (v: unknown) => void)({ ok: true })
     expect(host.buildTemplateContext().validation).toEqual({ ok: true })
-    expect(onRebuild).toHaveBeenCalled()
+    // THE DELIVERY IS THE FIRE, WITH ITS WHOLE REPORT (`B-7` §2/§3: the commit precedes the fire and the paint runs synchronously
+    // inside it, so the report is the reading of "the pane heard its own source").
+    expect(painted).toHaveBeenCalledTimes(1)
+    expect(painted.mock.calls[0]?.[0]).toEqual({ paneId: 'template-editor', fired: true, handlers: 1, reason: 'fired' })
+    // AND THE REMOVED RE-ASSEMBLY IS MEASURED ABSENT (`ASM-B7-4` keeps the rebuild for the TEMPLATE CHANGE and removes it for the
+    // VERDICT — `B-7`'s own asymmetry).
+    expect(onRebuild).not.toHaveBeenCalled()
 
     const rendered = registry.get('template-editor')!.render(host.buildTemplateContext())
     expect(JSON.stringify(rendered)).toContain('template-validation')

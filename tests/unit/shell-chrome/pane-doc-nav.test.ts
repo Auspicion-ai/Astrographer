@@ -55,10 +55,21 @@ const SIDEBAR_FILE = 'src/renderer/sidebar-panes.ts'
 const PANE_EVENTS_FILE = 'src/renderer/pane-events.ts'
 const ENGINE_STORE_FILE = 'src/main/engine-rag-store.ts'
 
-/** §4: the pinned census after this unit's ONE move. `doc-nav` is the addition; `settings` stays OUT (`B-9`'s surface). */
-const PINNED_REPLUMBED: readonly string[] = ['gnosis-query', 'crosslinks', 'doc-nav']
-/** §4: the families that keep the pre-migration `refresh()` route. */
-const PRE_MIGRATION_PANES: readonly string[] = ['search', 'template-editor']
+/** §4: the pinned census after this unit's ONE move. `doc-nav` is the addition; `settings` stays OUT (`B-9`'s surface).
+ *  ⟨EXTENDED BY UNIT `B-7` (`pane-search-template`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ `B-7` moved the census by
+ *  exactly TWO more ids (`search`, whose producer is its OWN answered `rag.query`; `template-editor`, whose source is the template
+ *  STORE's change push), so the pinned SET moves to the landed five-id value with the SET comparison, the `settings` exclusion and
+ *  the `doc-nav`-duplicate arm all unchanged. See `D4(b)` below: those two ids are no longer "families that keep `refresh()`", so
+ *  their `fired:false, handlers:0` arms are CONVERTED to positive `fired:true, handlers:1` arms (never deleted) and the negative
+ *  family arm is re-pointed at `settings`/`gnosis-*`, which still keep `refresh()`. */
+const PINNED_REPLUMBED: readonly string[] = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
+/** §4: the families that keep the pre-migration `refresh()` route AFTER `B-7` — `B-7` took `search`/`template-editor` OUT of this
+ *  list, so the negative arm below is carried by the families that are still un-migrated (`settings` is `B-9`'s surface and the three
+ *  gnosis ids are `B-8`'s), never by a deleted arm. */
+const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status', 'gnosis-documents', 'gnosis-wikis']
+/** THE TWO IDS `B-7` MOVED INTO THE CENSUS — graded as POSITIVES below (`fired:true, handlers:1`), which is the `B2-ADV-04` arm in
+ *  its positive form: a landing that stacked a second subscription would answer `handlers:2`. */
+const B7_MOVED_PANES: readonly string[] = ['search', 'template-editor']
 const DOC_NAV = 'doc-nav'
 const CROSSLINKS = 'crosslinks'
 const SETTINGS = 'settings'
@@ -795,18 +806,20 @@ async function seedLightHost(): Promise<LightDrive> {
   }
 }
 
-describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with its `B-6` cause), `changePanes()` is exactly `[doc-nav]`, the other families reach NO listener, and the pre-migration route still re-assembles', () => {
-  it('D4 — `REPLUMBED_PANE_IDS` is exactly `{gnosis-query, crosslinks, doc-nav}` with its `B-6` comment naming the cause, `changePanes() === [doc-nav]`, `fire(search|template-editor)` answers `fired:false, handlers:0`, `settings` has no re-read arm, and `host.refresh()` still reaches `loadAppGraph` + `mountOperator`', async () => {
+describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with its `B-6` cause) and is EXTENDED by `B-7`, `changePanes()` is exactly `[doc-nav]`, the families that keep `refresh()` reach NO listener, and the pre-migration route still re-assembles', () => {
+  it('D4 — `REPLUMBED_PANE_IDS` is exactly `{gnosis-query, crosslinks, doc-nav, search, template-editor}` with its `B-6` comment naming the cause, `changePanes() === [doc-nav]`, `fire(search|template-editor)` answers `fired:true, handlers:1` while `settings`/`gnosis-*` answer `fired:false, handlers:0`, and `host.refresh()` still reaches `loadAppGraph` + `mountOperator`', async () => {
     // §6 `D4` (§4's ONE declared census; §2's "the migration is incremental, never a big bang"; `F-2`'s empty change census; the
     // `r5` floor: every other family keeps `refresh()`).
     // LAYER: envelope-class — the host module's export, the sources' TEXT, and the REAL host + REAL channel over the shim.
     // NON-VACUITY: the `fired:false, handlers:0` arms are floored by the SAME channel answering `fired:true, handlers:1` for
-    // `crosslinks` (the host's OWN boot-time subscription, `B-5`'s landed arm), and the census SET equality is floored by the source
-    // clause requiring the cause to be NAMED beside the declaration — so "exactly these three" cannot pass by naming none. The
-    // `refresh()` floor (`loadAppGraph` + `mountOperator` both move) is what makes the integration file's `INV-E` zeroes readable.
-    // MUTATION THAT WOULD RED IT: adding a fourth id (a silent second subscriber) or dropping one reds the SET arm; entombing the
+    // `crosslinks` (the host's OWN boot-time subscription, `B-5`'s landed arm) AND for the two ids `B-7` moved (`search`,
+    // `template-editor`), and the census SET equality is floored by the source clause requiring the cause to be NAMED beside the
+    // declaration — so "exactly this SET" cannot pass by naming none. The `refresh()` floor (`loadAppGraph` + `mountOperator` both
+    // move) is what makes the integration file's `INV-E` zeroes readable.
+    // MUTATION THAT WOULD RED IT: adding a further id (a silent second subscriber) or dropping one reds the SET arm; entombing the
     // move in code with no `B-6` cause reds the comment clause; registering `doc-nav` with a plain `subscribe` (so `publishChange`
-    // can never reach it) reds `changePanes()`; subscribing `search`/`template-editor` to the channel reds their `handlers:0` arm; a
+    // can never reach it) reds `changePanes()`; subscribing a family that keeps `refresh()` (`settings`/`gnosis-*`) to the channel
+    // reds its `handlers:0` arm, and stacking a second registration on `search`/`template-editor` reds their `handlers:1` arm; a
     // host whose `refresh()` no longer re-assembles reds the floor and would make every zero above unreadable.
     // THAT "ENTOMBING ... REDS THE COMMENT CLAUSE" CLAIM WAS FALSE AS FIRST WRITTEN (measured, then closed — `S1(6)`'s comment has
     // the numbers): the clause searched the 12-line window for `B-6` and separately for any cause word, and the PRE-LANDING window
@@ -839,7 +852,8 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
       } else if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `limb D4: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the census ` +
-            `moves by EXACTLY ONE (\`['gnosis-query','crosslinks']\` -> \`['gnosis-query','crosslinks','doc-nav']\`), and a later family ` +
+            `moves by EXACTLY ONE per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; \`B-6\`: -> ` +
+            `\`['gnosis-query','crosslinks','doc-nav']\`; \`B-7\`: -> the five-id SET above), and a later family ` +
             `unit must EXTEND this constant deliberately; every other pane keeps its \`refresh()\` route until its own unit`,
         )
       }
@@ -910,7 +924,22 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
         problems.push(`limb D4: \`recordPanes()\` reads ${shown(channel.recordPanes())}, not \`[]\` — the RECORD census stays empty (\`O-4\`: \`B-10\` authors the first reader)`)
       }
       // THE NEGATIVES: the families that keep `refresh()` reach NO listener, and the operator pane no re-read arm.
-      for (const paneId of [...PRE_MIGRATION_PANES, SETTINGS]) {
+      // ⟨`B-7` — `search`/`template-editor` ARE LISTENERS NOW, SO THEIR ARMS ARE POSITIVE CONTROLS, NEVER DELETED ONES.⟩ The census
+      // was extended by exactly TWO ids and each is subscribed ONCE by the ONE boot loop, so a fire reaches each ONCE
+      // (`handlers:1` is `B2-ADV-04` in its positive form: a stacked second subscription answers `handlers:2`). The `fired:false,
+      // handlers:0` arm below is RE-POINTED at the families still un-migrated (`settings`, `B-9`'s; `gnosis-status`/`gnosis-documents`/
+      // `gnosis-wikis`, `B-8`'s), so "another family subscribed" still reds.
+      for (const paneId of B7_MOVED_PANES) {
+        const report = channel.fire(paneId)
+        if (report.fired !== true || report.handlers !== 1) {
+          problems.push(
+            `limb D4: \`fire('${paneId}')\` answered ${shown(report)}, not \`fired:true, handlers:1\` — \`B-7\` EXTENDED the census by ` +
+              `this id deliberately, and the ONE boot loop subscribes ONE handler per census id, so the census IS a listener here and ` +
+              `ONE registration is what \`B2-ADV-04\` allows`,
+          )
+        }
+      }
+      for (const paneId of PRE_MIGRATION_PANES) {
         const report = channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
           problems.push(
@@ -953,11 +982,12 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
     expect(
       problems,
       `limb D4 — the census moves by exactly ONE and every other family keeps \`refresh()\` (§6 D4; §4's ONE declared census; ` +
-        `\`F-2\`). ${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly \`{gnosis-query, crosslinks, doc-nav}\` as a ` +
-        `SET, carry a \`B-6\` comment naming the cause beside its declaration, make \`changePanes()\` exactly \`['${DOC_NAV}']\`, leave ` +
-        `\`search\`/\`template-editor\`/\`settings\` with NO listener (\`fired:false, handlers:0\`) while the SAME channel answers ` +
-        `\`fired:true, handlers:1\` for \`${CROSSLINKS}\`, and keep \`host.refresh()\` reaching \`loadAppGraph\` + \`mountOperator\` on ` +
-        `this double (the floor under the integration rows' zeroes). envelope-class`,
+        `\`F-2\`). ${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly ` +
+        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` as a SET (this row's \`B-6\` recorded value EXTENDED by ` +
+        `\`B-7\`'s two ids, never relaxed), carry a \`B-6\` comment naming the cause beside its declaration, make \`changePanes()\` ` +
+        `exactly \`['${DOC_NAV}']\`, answer \`fired:true, handlers:1\` for \`${CROSSLINKS}\` AND for \`B-7\`'s two moved ids while ` +
+        `\`settings\`/\`gnosis-*\` answer \`fired:false, handlers:0\`, and keep \`host.refresh()\` reaching \`loadAppGraph\` + ` +
+        `\`mountOperator\` on this double (the floor under the integration rows' zeroes). envelope-class`,
     ).toEqual([])
   })
 })

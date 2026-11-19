@@ -75,12 +75,18 @@ const readText = (relativePath: string): string => readFileSync(`${ROOT}${relati
 const SIDEBAR_FILE = 'src/renderer/sidebar-panes.ts'
 const RENDERER_FILE = 'src/renderer/renderer.ts'
 
-/** The pane under this unit, and the three app-graph families `L3` proves keep their `refresh()` route. */
+/** The pane under this unit, and the app-graph families `L3` proves keep their `refresh()` route.
+ *  ⟨`B-7` — `search`/`template-editor` are no longer among them:⟩ they were moved INTO `REPLUMBED_PANE_IDS` (each now answers its
+ *  OWN producer — the search pane its answered `rag.query`, the template pane the template STORE's change push), so `L3` grades them
+ *  as POSITIVE `fired:true, handlers:1` controls and the negative family arm is carried by `PRE_MIGRATION_FAMILIES` below. */
 const CROSSLINKS = 'crosslinks'
 const DOC_NAV = 'doc-nav'
 const SEARCH = 'search'
 const TEMPLATE_EDITOR = 'template-editor'
 const SETTINGS = 'settings'
+/** THE FAMILIES THAT STILL KEEP `refresh()` AFTER `B-7` — `settings` is `B-9`'s surface and the three gnosis ids are `B-8`'s, so the
+ *  `fired:false, handlers:0` arm is RE-POINTED here rather than deleted. */
+const PRE_MIGRATION_FAMILIES: readonly string[] = [SETTINGS, 'gnosis-status', 'gnosis-documents', 'gnosis-wikis']
 const OPERATOR_PROBE = 'probe-b5-operator'
 
 /** §3's subject, derived from the seed's `doc-head` edge: `target === _currentDocumentId` → `source`. */
@@ -1204,7 +1210,7 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     ).toEqual([])
   })
 
-  it('L3 — the census moves by exactly ONE: `REPLUMBED_PANE_IDS` is `{gnosis-query, crosslinks, doc-nav}` (extended by `B-6`) with its `B-5` comment, `doc-nav` and `crosslinks` each answer ONE registration, `search`/`template-editor` reach NO listener, `refresh()` still re-assembles, and `renderer.ts` is untouched', async () => {
+  it('L3 — the census moves by exactly ONE: `REPLUMBED_PANE_IDS` is `{gnosis-query, crosslinks, doc-nav, search, template-editor}` (extended by `B-6` and by `B-7`) with its `B-5` comment, `doc-nav`, `crosslinks`, `search` and `template-editor` each answer ONE registration, `settings`/`gnosis-*` reach NO listener, `refresh()` still re-assembles, and `renderer.ts` is untouched', async () => {
     // §6 `L3` (§4's ONE declared census; §2's "the migration is incremental, never a big bang"; `O-4`: `renderer.ts`'s `⟨B-9⟩`
     // fallback and `gnosisCrudPanes`'s `host.refresh()` are NOT this unit's).
     // ⟨EXTENDED BY UNIT `B-6` (`pane-doc-nav`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ `B-6` moved the census by exactly
@@ -1212,7 +1218,10 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     // recorded value moves to the LANDED three-id value and `doc-nav` moves OUT of the negative loop INTO its own positive control
     // (ONE registration, never two): after `B-6` it IS a listener, and a `fired:false, handlers:0` arm for it would be false by
     // design. The SET comparison stays SET-equality, the `settings`-exclusion arm stays, the `B-5` comment-window clause stays exactly
-    // as it is, and `search`/`template-editor` keep their negatives. `doc-nav`'s OWN arm (its re-read, its gate, its stamp) is
+    // as it is. ⟨EXTENDED AGAIN BY `B-7` (`pane-search-template`): TWO more ids⟩ — `search` and `template-editor` JOIN the census
+    // (each now answers its OWN producer), so they move OUT of this row's negative loop INTO positive `fired:true, handlers:1`
+    // controls exactly as `doc-nav` did under `B-6`, and the negative family arm is RE-POINTED at `settings`/`gnosis-*` rather than
+    // deleted. `doc-nav`'s OWN arm (its re-read, its gate, its stamp) is
     // `B-6`'s row to grade (`tests/integration/shell-chrome/pane-doc-nav.test.ts`); THIS row grades the census VALUE and the other
     // families' silence.
     // LAYER: envelope-class — the host module's exports + the sources' TEXT + the REAL host over the shim.
@@ -1243,7 +1252,7 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       )
     } else {
       const read = Array.isArray(replumbed) ? replumbed.map(String) : null
-      const wanted = ['gnosis-query', CROSSLINKS, DOC_NAV]
+      const wanted = ['gnosis-query', CROSSLINKS, DOC_NAV, SEARCH, TEMPLATE_EDITOR]
       const asSet = read === null ? null : [...new Set(read)].sort()
       const wantedSet = [...new Set(wanted)].sort()
       if (asSet === null) {
@@ -1252,7 +1261,8 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
         problems.push(
           `limb L3: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the row ` +
             `moves by EXACTLY ONE per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; \`B-6\`: -> ` +
-            `\`['gnosis-query','crosslinks','doc-nav']\`) and a later family unit must EXTEND this constant deliberately; every other ` +
+            `\`['gnosis-query','crosslinks','doc-nav']\`; \`B-7\`: -> \`[ … ,'search','template-editor']\`) and a later family unit ` +
+            `must EXTEND this constant deliberately; every other ` +
             `pane keeps its \`refresh()\` route until its own unit`,
         )
       }
@@ -1327,8 +1337,25 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
             `IS a listener on this channel and ONE registration is what \`B2-ADV-04\` allows`,
         )
       }
-      // THE NEGATIVES: the two families that keep `refresh()` reach NO listener.
+      // ⟨`B-7` — `search`/`template-editor` ARE LISTENERS NOW, SO THEIR ARMS ARE POSITIVE CONTROLS, NEVER DELETED ONES.⟩ `B-7`
+      // extended the census by exactly those TWO ids (each answers its OWN producer: the search pane its answered `rag.query`, the
+      // template pane the template STORE's change push), and the ONE boot loop subscribes ONE handler per id, so `handlers:1` is the
+      // `B2-ADV-04` arm in its POSITIVE form — a stacked second subscription would answer `handlers:2` and run the whole re-read +
+      // paint twice per fire.
       for (const paneId of [SEARCH, TEMPLATE_EDITOR]) {
+        const report = drive.channel.fire(paneId)
+        if (report.fired !== true || report.handlers !== 1) {
+          problems.push(
+            `limb L3: \`fire('${paneId}')\` answered ${shown(report)}, not \`fired:true, handlers:1\` — \`B-7\` EXTENDED the census by ` +
+              `this id deliberately (\`docs/L1/unit-b-7-pane-search-template.md\` §4), so the census IS a listener here and ONE ` +
+              `registration is what \`B2-ADV-04\` allows`,
+          )
+        }
+      }
+      // THE NEGATIVES: the families that still keep `refresh()` reach NO listener. ⟨RE-POINTED BY `B-7`, never deleted:⟩ the arm that
+      // used to carry `search`/`template-editor` is now carried by `settings` (`B-9`'s surface) and by the gnosis families (`B-8`'s),
+      // so "another family subscribed" still reds.
+      for (const paneId of PRE_MIGRATION_FAMILIES) {
         const report = drive.channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
           problems.push(
@@ -1408,10 +1435,11 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     expect(
       problems,
       `limb L3 — the census moves by exactly ONE and the other families keep \`refresh()\` (§6 L3; §4's ONE declared census; O-4). ` +
-        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly \`{gnosis-query, crosslinks, doc-nav}\` as a SET — the ` +
-        `\`B-6\` EXTENSION of this row's recorded value, never a relaxation of it — carry a \`B-5\` comment naming the cause beside its ` +
-        `declaration, leave \`search\`/\`template-editor\` with NO listener (\`fired:false, handlers:0\`) while the SAME channel answers ` +
-        `\`fired:true, handlers:1\` for \`crosslinks\` AND for \`doc-nav\` (ONE registration each, \`B2-ADV-04\`); \`host.refresh()\` must ` +
+        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly ` +
+        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` as a SET — the \`B-6\` and \`B-7\` EXTENSIONS of this row's ` +
+        `recorded value, never a relaxation of it — carry a \`B-5\` comment naming the cause beside its ` +
+        `declaration, answer \`fired:true, handlers:1\` for \`crosslinks\`, \`doc-nav\` and \`B-7\`'s two moved ids (ONE registration ` +
+        `each, \`B2-ADV-04\`) while \`settings\`/\`gnosis-*\` answer \`fired:false, handlers:0\`; \`host.refresh()\` must ` +
         `still reach \`loadAppGraph\` + \`mountOperator\` on this double (the floor under \`L1\`'s zeroes); and \`${RENDERER_FILE}\`'s ` +
         `⟨B-9⟩ fallback + \`gnosisCrudPanes\` \`refresh()\` must still be there. \`doc-nav\`'s own arm (its re-read, its gate, its ` +
         `stamp) is \`B-6\`'s row to grade; THIS row grades the census VALUE and the other families' silence. envelope-class`,

@@ -1014,3 +1014,36 @@ would be exactly the RCA-11 default this program has spent its whole run refusin
 **What the next pass inherits, named:** the five red rows' subjects; the fact that the template half is
 ALREADY WRITTEN in the archived rows and can be re-landed with the search half; and the tree's green state as
 the starting point.
+
+---
+
+## D-43 — Correction: `B-7` WAS WORKING. `D-42`'s revert was wrong, and my own rows were the defect
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Corrects:** `D-42`'s cause and disposition · **Source
+(measurement):** `B-7`'s report, received after this seat interrupted it, with both live limbs quoted
+
+**This is the fourth time an interrupt has produced a wrong record from L0** — after the reveal re-landing,
+`B-5`'s "owed" line and `B-4`'s "findings owed". The rule has been written three times and I have now broken it
+a fourth: **an interrupt is not a verdict.**
+
+**What was actually true at the head I reverted:** `SEARCH_LIMB_OK=true` (`--block=uf_panes_14
+--fixture=core`) and `TEMPLATE_LIMB_OK=true` (`--block=u_edit_1_live_typed_commit_one_batch`), with `B-5`'s and
+`B-6`'s limbs unregressed in the same runs. **The search pane's mechanism worked.** `D-42`'s sentence — "the
+search pane had left `refresh()` and its own event did not yet paint it" — is **UNESTABLISHED, and
+contradicted** by that reading and by `Q3` (a search row only a working paint can pass) reading green.
+
+**And the five reds that misled me were DEFECTIVE ROWS, three of them implementing my own contract's §6:** `Q2`'s
+control, `X2` and `X4`'s control demanded **a paint from a bare fire over already-painted state** — which the
+`r1` idempotence rule forbids, and which only the `query → fire → query` loop `ASM-B7-2` refuses could satisfy.
+`X3`'s `m5` read staleness after a re-assembly that lawfully re-authors the pane. A row that cannot be
+satisfied is not evidence against the code; it is evidence against the row, and §6 was corrected in place.
+
+**The disposition, corrected:** `B-7` is NOT a refusal and NOT a park. It is a unit whose design and both live
+readings were EARNED and whose rows need re-authoring. Its §10f order stands as the next pass's sequence:
+re-author the corrected rows against the revised §6, fix the harness's `Q1`/`X3` scoping, then re-apply the
+change set (a known quantity), then re-run §7's gates and §8's commands with `--fixture=core`.
+
+**Owed to this seat, named:** `D-42`'s archive inventory was wrong — one row file is archived, and the re-run has
+them untracked in `tests/`; the next pass either lands them green or moves them back. The two pin files the seat
+could not countersign were countersigned in the delegation that followed (`tests/pd-ui-1-theme-register.test.ts`,
+`tests/unit-wave-1-bridge-wiring.test.ts`).

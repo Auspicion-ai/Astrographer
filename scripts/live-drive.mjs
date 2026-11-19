@@ -2260,6 +2260,104 @@ async function ufDocNavPaneCensus(h, mark, reuseToken) {
   return JSON.parse(await h.cdp.evaluate(expr))
 }
 
+/** ⟨Unit `B-7` §8 (`G8`) — **THE MARKED PANE-FRAME CENSUS FOR THIS UNIT'S TWO LIMBS.**⟩ The same
+ *  DOM/CDP idiom as `ufLinksPaneFrameCensus` (`B-5`) and `ufDocNavPaneCensus` (`B-6`) — ONE
+ *  `cdp.evaluate` over the rendered `.pane-frame[data-pane-id]` census, never a new IPC surface and
+ *  never hand-written DOM — carrying the three things this unit's two panes need and the two landed
+ *  instruments do not:
+ *
+ *    (a) **ITS OWN OWN-PROPERTIES, ONE PER LIMB (`B-7` §8):** `__b7SearchMark` for the search limb
+ *        and `__b7TemplateMark` for the template limb. The two limbs mark the SAME nodes in the SAME
+ *        run, so a `B-7` mark can never alias `B-5`'s `__b5Mark` or `B-6`'s `__b6Mark` — and a
+ *        `B-5`/`B-6` reading taken after either limb is untouched by it.
+ *    (b) **THE PER-FRAME ANSWER, COMPUTED HERE INSTEAD OF BY EACH CALLER:** every frame carries its
+ *        `data-pane-id`, its `data-node-id`, whether THIS RUN's mark survived it (`marked` — a mark
+ *        can only be absent from a node that was REPLACED) and, when the baseline frame list is
+ *        handed back with the token, whether the node id was HELD (`nodeIdHeld`) — printed as
+ *        `frameChecks`.
+ *    (c) **THE TWO PANES' OWN PROJECTIONS, READ AT THE SAME INSTANT AS THE CENSUS** so one call is
+ *        one instant: `#pane-<id>`'s result rows (`li[data-document-id]`), its rendered empty state
+ *        (`[data-empty]` — the search pane's `(no results)` warm-up baseline), its template zone
+ *        rows (`li[data-template-zone]`) and the advanced-search carrier
+ *        (`#advanced-search-toggle[data-expanded]`, `Q3` on the assembled app).
+ *
+ *  `mark: true` stamps every live frame with this limb's per-run token (and records the census);
+ *  `mark: false` re-reads the SAME census with the token handed back and leaves the DOM alone. The
+ *  token must be the SAME on both halves (the cost `B-3`/`B-5` each measured: a second mint makes
+ *  every survivor read `marked:false`). READ-ONLY: no app state, no envelope, no handler, no
+ *  verdict — the block that owns the row reads these values. */
+async function ufB7PaneFrameCensus(h, opts = {}) {
+  const limb = opts.limb === 'search' ? 'search' : 'template'
+  const prop = limb === 'search' ? '__b7SearchMark' : '__b7TemplateMark'
+  const paneId = typeof opts.paneId === 'string' && opts.paneId !== ''
+    ? opts.paneId
+    : (limb === 'search' ? 'search' : 'template-editor')
+  const mark = opts.mark === true
+  const token = typeof opts.reuseToken === 'string' && opts.reuseToken !== ''
+    ? opts.reuseToken
+    : 'b7-' + limb + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const baseline = Array.isArray(opts.baseline) ? opts.baseline : null
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const PROP = ${JSON.stringify(prop)}
+    const PANE = ${JSON.stringify(paneId)}
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    const read = (el) => {
+      const head = el.querySelector('.pane-head')
+      const body = el.querySelector('.pane-body')
+      const grip = head ? head.children[0] : null
+      const control = head ? head.children[1] : null
+      const classes = String(el.className || '')
+      const zoneMatch = /\\bpane-in-([a-z]+)\\b/.exec(classes)
+      return {
+        zone: zoneMatch ? zoneMatch[1] : null,
+        collapsed: el.getAttribute('collapsed'),
+        id: el.getAttribute('id'),
+        headId: head ? head.getAttribute('id') : null,
+        gripId: grip ? grip.getAttribute('id') : null,
+        controlId: control ? control.getAttribute('id') : null,
+        bodyId: body ? body.getAttribute('id') : null,
+      }
+    }
+    if (${mark ? 'true' : 'false'}) { for (const el of frames) { try { el[PROP] = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const paneEl = document.getElementById('pane-' + PANE)
+    const rootEl = document.getElementById('wiki-root')
+    const toggleEl = document.getElementById('advanced-search-toggle')
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim()
+    const attrsOf = (sel, attr) => (paneEl ? [].slice.call(paneEl.querySelectorAll(sel)).map((e) => e.getAttribute(attr)) : [])
+    return JSON.stringify({
+      token: TOKEN,
+      limb: ${JSON.stringify(limb)},
+      prop: PROP,
+      root: rootEl ? rootEl.getAttribute('data-node-id') : null,
+      paneId: PANE,
+      panePresent: !!paneEl,
+      paneFrameCount: document.querySelectorAll('#pane-' + PANE).length,
+      paneText: paneEl ? norm(paneEl.textContent) : null,
+      resultRows: attrsOf('li[data-document-id]', 'data-document-id'),
+      zoneRows: attrsOf('li[data-template-zone]', 'data-template-zone'),
+      emptyTexts: paneEl ? [].slice.call(paneEl.querySelectorAll('[data-empty]')).map((e) => norm(e.textContent)) : [],
+      advancedSearchExpanded: toggleEl ? toggleEl.getAttribute('data-expanded') : null,
+      frames: frames.map((el) => {
+        const carries = (() => { try { return el[PROP] === TOKEN } catch (e) { return false } })()
+        return { pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries, carriers: read(el) }
+      }),
+    })
+  })()`
+  const census = JSON.parse(await h.cdp.evaluate(expr))
+  const baseByPid = new Map((baseline || []).map((f) => [f && f.pid, f]))
+  census.frameChecks = (census.frames || []).map((f) => {
+    const prior = baseByPid.get(f.pid) || null
+    return {
+      pid: f.pid,
+      nodeId: f.nodeId,
+      marked: f.marked === true,
+      nodeIdHeld: prior === null ? null : prior.nodeId === f.nodeId,
+    }
+  })
+  return census
+}
+
 /** The [DIAG] dispatch probe: hand the SAME handler the DOM click would reach a
  *  direct `provident.dispatch` so "the handler is dead" and "the handler ran but
  *  its seam is a no-op" are distinguishable. Never a verdict. */
@@ -8863,7 +8961,69 @@ const BLOCKS = {
     { const ownPark = await ufFixtureOwnPark(h, 'uf_panes_14', 'corpus-query-results', 'UF-PANES-14'); if (ownPark !== null) return ownPark }
     await ufEnsureAppClear(h)
     const pane = await ufEnsurePaneExpanded(h, 'search')
+    // =========================================================================
+    // ⟨Unit `B-7` §8 (`G8`) — **THE SEARCH PANE'S OWN ANSWER, READ ON THE ASSEMBLED APP.**⟩ The
+    // block is the host by the contract's rule: it ALREADY drives the pane's own producer through
+    // the app's own surface (`ufPaneSearch` = a REAL disclosure click, a REAL focus,
+    // `Input.insertText`, a REAL submit of `#advanced-search-submit`), so the limb adds ONE
+    // warm-up query and ONE marked census — no new `BLOCKS` key (the key census is FROZEN with a
+    // digest in `tests/live-drive-contract.test.ts`), no new dispatch, no new IPC surface.
+    // THE DISCRIMINATOR IS A REAL ANSWER AND NEVER A FIRST PAINT: step (0) drives a term the corpus
+    // CANNOT match, so the disclosure is already expanded and the pane's painted state is
+    // `(no results)` BEFORE the mark is taken; the block's own query then has to MOVE that state
+    // for reading (v) to be true, which a tree that re-assembled the whole graph — or did not
+    // paint at all — cannot produce (`F-2`: the pre-unit settlement re-minted EVERY frame).
+    // The layer of every reading below is the ASSEMBLED APP (`RCA-12`): `G8`, the only app-green
+    // layer this unit owns. `B-5`'s and `B-6`'s limbs in the other block stay REGRESSION
+    // OBLIGATIONS and are neither touched nor weakened by this one.
+    // =========================================================================
+    // (0) THE WARM-UP — a term the corpus cannot match, driven by the SAME real gesture.
+    const b7Warm = await ufPaneSearch(h, 'b7-no-match-zzz')
+    // (1) MARK every `.pane-frame[data-pane-id]` with THIS run's token on the property
+    //     `__b7SearchMark` (never `B-5`'s `__b5Mark` / `B-6`'s `__b6Mark`) and record each frame's
+    //     `data-node-id` plus `#wiki-root`'s.
+    const b7Base = await ufB7PaneFrameCensus(h, { limb: 'search', mark: true, paneId: 'search' })
+    const b7RootBefore = b7Base.root
+    const b7ToggleBefore = b7Base.advancedSearchExpanded
+    const b7BaselineWasNoResults = (b7Base.resultRows || []).length === 0 && (b7Base.emptyTexts || []).some((t) => /\(no results\)/.test(String(t)))
+    // (2) THE BLOCK'S OWN REAL TYPED QUERY — unchanged, and it is the limb's producer.
     const search = await ufPaneSearch(h, 'alpha')
+    // (3) THE SIX READINGS, read SEPARATELY off the settled app (a second, later census proves the
+    //     re-mint happened ONCE: a settled frame that moves again would red `noFurtherRemint`).
+    const b7After = await ufB7PaneFrameCensus(h, { limb: 'search', mark: false, reuseToken: b7Base.token, paneId: 'search', baseline: b7Base.frames })
+    await sleep(1500)
+    const b7SettledRead = await ufB7PaneFrameCensus(h, { limb: 'search', mark: false, reuseToken: b7Base.token, paneId: 'search', baseline: b7Base.frames })
+    const b7AfterByPid = new Map((b7After.frames || []).map((f) => [f.pid, f]))
+    const b7OtherBefore = (b7Base.frames || []).filter((f) => f.pid !== 'search')
+    const b7Others = b7OtherBefore.map((f) => {
+      const now = b7AfterByPid.get(f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const b7Before = (b7Base.frames || []).find((f) => f.pid === 'search') || null
+    const b7Now = (b7After.frames || []).find((f) => f.pid === 'search') || null
+    const b7SettledFrame = (b7SettledRead.frames || []).find((f) => f.pid === 'search') || null
+    const b7RootHeld = !!b7RootBefore && b7RootBefore === b7After.root
+    const b7OthersSurvived = b7OtherBefore.length > 0 && b7Others.every((p) => p.marked && p.nodeIdHeld)
+    const b7ExactlyOne = b7Base.paneFrameCount === 1 && b7After.paneFrameCount === 1
+    const b7CarriersHeld = !!b7Before && !!b7Now && JSON.stringify(b7Before.carriers) === JSON.stringify(b7Now.carriers)
+    const b7RemintCount = !!b7Before && !!b7Now && b7Before.nodeId !== b7Now.nodeId ? 1 : 0
+    const b7NoFurtherRemint = !!b7Now && !!b7SettledFrame && b7SettledFrame.nodeId === b7Now.nodeId
+    const b7RemintedOnce = b7RemintCount === 1 && !!b7Now && b7Now.marked === false && b7NoFurtherRemint
+    const b7RowsBefore = b7Base.resultRows || []
+    const b7RowsAfter = b7After.resultRows || []
+    const b7RowSetMoved = JSON.stringify(b7RowsBefore) !== JSON.stringify(b7RowsAfter)
+    const b7NamesTheQueryDocuments = b7RowsAfter.length > 0 && b7RowsAfter.every((d) => typeof d === 'string' && d.includes('alpha'))
+    const b7ToggleHeld = b7ToggleBefore === 'true' && b7After.advancedSearchExpanded === 'true'
+    // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (a driver-side state is PARKED with its
+    // reason; it is never smoothed into a pass and never silently graded as an app FAIL).
+    let b7SearchParkReason = null
+    if (pane.present !== true) b7SearchParkReason = `PRECONDITION-FAILED: the search pane could not be enabled/expanded through the operator control (path=${pane.path}; zone:left=${pane.zoneState}) — a driver-side state, so the limb is PARKED`
+    else if (b7Base.panePresent !== true) b7SearchParkReason = 'PRECONDITION-FAILED: no #pane-search on the assembled surface after the sanctioned restore'
+    else if (!b7BaselineWasNoResults) b7SearchParkReason = `PRECONDITION-FAILED: the warm-up query "b7-no-match-zzz" did not leave the pane in its empty state (rows=${JSON.stringify(b7RowsBefore)} [data-empty]=${JSON.stringify(b7Base.emptyTexts || [])}) — the discriminator would then be a first paint, not a real answer`
+    else if (search.value !== 'alpha') b7SearchParkReason = `PRECONDITION-FAILED: the block's own REAL typed query never landed in #pane-search-input (typedValue=${JSON.stringify(search.value)}) — a driver-side state, so the limb is PARKED`
+    const b7SearchLimbOk = b7SearchParkReason === null && b7RootHeld && b7OthersSurvived && b7ExactlyOne &&
+      b7RemintedOnce && b7CarriersHeld && b7RowSetMoved && b7NamesTheQueryDocuments && b7BaselineWasNoResults && b7ToggleHeld
+    const b7SearchEvidence = `⟨B-7 §8 G8 — THE SEARCH PANE'S OWN ANSWER (assembled app; the ONLY app-green layer; NO new BLOCKS key)⟩ (0) WARM-UP "b7-no-match-zzz" driven by the REAL gesture (disclosure=${b7Warm.togglePath} inputFocus=${b7Warm.focusPath} submit=${b7Warm.submitPath}) → baseline rows=${JSON.stringify(b7RowsBefore)} [data-empty]=${JSON.stringify(b7Base.emptyTexts || [])} baselineWasNoResults=${b7BaselineWasNoResults}; (1) ${(b7Base.frames || []).length} frame(s) marked with this run's token ${JSON.stringify(b7Base.token)} on own property __b7SearchMark: frames=${JSON.stringify((b7Base.frames || []).map((f) => f.pid + '@' + f.nodeId))} #wiki-root=${JSON.stringify(b7RootBefore)}; (2) THE BLOCK'S OWN REAL TYPED QUERY "alpha": disclosure=${search.togglePath} inputFocus=${search.focusPath} focusedId=${JSON.stringify(search.focusedId)} typedValue=${JSON.stringify(search.value)} submit=${search.submitPath}; (3) THE SIX READINGS: (i) assemblyRootUnchanged=${b7RootHeld} (#wiki-root data-node-id ${JSON.stringify(b7RootBefore)} -> ${JSON.stringify(b7After.root)}); (ii) otherPanesSurvived=${b7OthersSurvived} (${JSON.stringify(b7Others.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) exactlyOneSearchFrame=${b7ExactlyOne} (before ${b7Base.paneFrameCount} after ${b7After.paneFrameCount}); (iv) paneRemintedExactlyOnce=${b7RemintedOnce} (observed re-mints=${b7RemintCount}, noFurtherRemint=${b7NoFurtherRemint}; frame node id ${JSON.stringify(b7Before ? b7Before.nodeId : null)} -> ${JSON.stringify(b7Now ? b7Now.nodeId : null)} settled ${JSON.stringify(b7SettledFrame ? b7SettledFrame.nodeId : null)}) with paneCarriersHeld=${b7CarriersHeld} (before ${JSON.stringify(b7Before ? b7Before.carriers : null)} vs after ${JSON.stringify(b7Now ? b7Now.carriers : null)}); (v) rowSetMoved=${b7RowSetMoved} from ${JSON.stringify(b7RowsBefore)} ("(no results)" baseline=${b7BaselineWasNoResults}) to ${JSON.stringify(b7RowsAfter)} namingTheQueryDocuments=${b7NamesTheQueryDocuments}; (vi) advancedSearchCarrierHeld=${b7ToggleHeld} (#advanced-search-toggle data-expanded ${JSON.stringify(b7ToggleBefore)} -> ${JSON.stringify(b7After.advancedSearchExpanded)}) => SEARCH_LIMB_OK=${b7SearchLimbOk}; PARK REASON=${b7SearchParkReason === null ? 'null' : b7SearchParkReason}`
     const rows = search.rows || []
     const rowsRendered = rows.length > 0 && rows.every((r) => r.box[2] > 0 && r.box[3] > 0)
     // real HOVER over the first row → the C6 hover affordance must paint
@@ -8897,6 +9057,11 @@ const BLOCKS = {
     const newTab = tabsAfter.count === tabsBefore.count + 1
     const detail = `search pane expand=${JSON.stringify(pane)}; search pane: disclosure=${search.togglePath} inputFocus=${search.focusPath} typedValue="${search.value}" submit=${search.submitPath}; ${rows.length} result rows painted=${rowsRendered} (first doc=${rows[0] ? rows[0].doc : '?'} box=${rows[0] ? JSON.stringify(rows[0].box) : '?'} cls="${rows[0] ? rows[0].cls : '?'}"); REAL hover → bg ${hover ? hover.bgBefore : '?'} → ${hover ? hover.bgAfter : '?'} changed=${hover ? hover.changed : '?'}; REAL click on the row (path=${click.path}) → tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab}; click-event targets=${JSON.stringify(events)}`
     const surface = await ufSurfaceTarget(h)
+    // ⟨Unit `B-7` §8⟩ THE LIMB'S OWN SIX READINGS RIDE THIS ROW'S EVIDENCE — printed, never
+    // summarised, so the `⟨B-7 §8 G8 …⟩` line is quotable VERBATIM (the shape
+    // `docs/L2/shell-chrome/pane-search-template.md` §11 reproduces). The two declared rows
+    // (`U-2`/`U-3`) keep their own evidence: this limb is `UF-PANES-14`'s reading, not theirs.
+    const detailLimb = `${detail}; ${b7SearchEvidence}`
     const ufPanes14Assertion = 'A REAL typed query + REAL submit renders hover-highlighting result rows, and a REAL row click opens the linked doc in a NEW tab'
     const diag = '; [DIAG] attribution available — run --block=uf_tabs_7_diag (a NATIVE DOM click on the same row) to separate a dead handler from a gesture that never delivered the click'
     // §2.1 `E-1` — THE DECLARATION IS A PROMISE: `MATRIX_ROWS` names this block as an
@@ -8911,7 +9076,7 @@ const BLOCKS = {
     const u3BodyEvidence = `REAL hit-tested click (path=${click.path}) on '#pane-search li[data-document-id]' — a BODY control of the search pane frame (insidePane=${bodyness.insidePane}, insidePaneHeader=${bodyness.inHeader}); the gesture reached its OWN handler: tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab} (required true: a hijacked body click would leave the tab count unchanged), click-event targets=${JSON.stringify(events)}`
     const u3Ok = bodyness.found === true && bodyness.insidePane === true && bodyness.inHeader === false && click.path === 'cdp' && newTab
     return [
-      rowResult({row:'UF-PANES-14',dclass:'D-interaction'}, ufPanes14Assertion, newTab ? detail : `${detail}${diag}`, { path: click.path, ok: rowsRendered && !!hover && hover.changed && newTab, surface }),
+      rowResult({row:'UF-PANES-14',dclass:'D-interaction'}, ufPanes14Assertion, newTab ? detailLimb : `${detailLimb}${diag}`, { path: click.path, ok: rowsRendered && !!hover && hover.changed && newTab && b7SearchLimbOk, surface }),
       declaredRowResult('U-2', 'UF-PANES-14', u2Assertion, 'D-interaction', newTab ? detail : `${detail}${diag}`, { path: click.path, ok: newTab, surface, required: 'the real row click increases the tab count by one (a document tab opens)', observed: `tabs ${tabsBefore.count}->${tabsAfter.count} openedNewTab=${newTab}`, checklistRow: 'UF-PANES-14' }),
       declaredRowResult('U-3', 'UF-PANES-14', u3Assertion, 'D-interaction', u3BodyEvidence, { path: bodyness.found === true ? click.path : 'missing', ok: u3Ok, surface, required: 'a hit-tested REAL click on a pane-BODY control outside `.pane-header` whose own handler runs (the tab count increases)', observed: `bodyControl(insidePane=${bodyness.insidePane}, inHeader=${bodyness.inHeader}) clickPath=${click.path} openedNewTab=${newTab}`, checklistRow: 'UF-PANES-14' }),
     ]
@@ -10010,6 +10175,31 @@ const BLOCKS = {
     const docNavPaneId = 'doc-nav'
     const docNavEnable = await ufEnsurePaneExpanded(h, docNavPaneId)
     await sleep(2500)
+    // =========================================================================
+    // ⟨Unit `B-7` §8 (`G8`) — **THE TEMPLATE PANE'S OWN SOURCE, READ INSIDE THE DIRTY WINDOW.**⟩ THE
+    // THIRD LIMB IN THIS BLOCK, and the block is its host by the contract's rule: it already holds a
+    // RENDERED DOCUMENT and the REAL dirty window `F-5` needs (the uncommitted typed edit above).
+    // `this.template` is the template STORE's state, so its producer is a template write on the app's
+    // OWN route (`code.template.create`, the MCP route `B-5` §8 sets the precedent for; `code` is in
+    // the default group set) — and `onTemplateChanged` commits, FIRES the pane (the paint lands
+    // synchronously, `ASM-B7-1`: this pane takes NO re-read arm) and then QUEUES its
+    // `requestRebuild('template')` behind the dirty guard. So the pane's OWN rows must MOVE while the
+    // queued re-assembly has provably NOT run — a reading no un-plumbed tree can produce.
+    // (0) THE ENABLE IS DRIVEN **BEFORE THE WINDOW OPENS**, and that is a precondition, not a
+    //     convenience: the operator control sits behind `#settings-modal`, whose open/close takes
+    //     focus from `#page-edit-surface` and would therefore run the page's own commit-on-blur —
+    //     the block's blur below must remain the ONE release of the queue. The pane is RE-DISABLED in
+    //     the restore (also outside the window), so this run exports NO persisted-state change
+    //     (`UF_BASELINE_PANES` restores only `doc-nav`/`search`).
+    //     A CONSEQUENCE, STATED BECAUSE IT IS A STRICTER READING AND NOT A WEAKENING: `docNavBase` is
+    //     marked BELOW this enable, so `B-6`'s `(ii)` pool now CARRIES `template-editor` (that pane
+    //     must survive the `doc-nav` limb's store write too). `B-5`'s pool was taken BEFORE this
+    //     enable and is unmoved; NO `B-5`/`B-6` reading is weakened, reordered or deleted here.
+    // The layer of every reading below is the ASSEMBLED APP (`RCA-12`): `G8`, the only app-green one.
+    // =========================================================================
+    const tplPaneId = 'template-editor'
+    const tplEnable = await ufEnsurePaneExpanded(h, tplPaneId)
+    await sleep(3000)
     const docNavBase = await ufDocNavPaneCensus(h, true)
     // (a) THE DIRTY WINDOW, DRIVEN FOR REAL: a caret in the surface, real typed text, and NO blur — then the typed
     //     text is read BACK from the STORE and must be ABSENT there (it has not committed), which is what makes the
@@ -10070,6 +10260,76 @@ const BLOCKS = {
     const dnNamedAfter = dnNewDocId !== null && (docNavAfter.rowIds || []).includes(dnNewDocId)
     const dnNamesTheNewDocument = dnNamedAfter && !dnNamedBefore
     const dnSurfaceTextHeld = dirtySurfaceText === true && await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?String(s.textContent||'').indexOf(${JSON.stringify(dirtyMarker)})>=0:null})()`)
+    // =========================================================================
+    // ⟨B-7 §8 (`G8`) — (0) THE BASELINE, (1) THE STORE WRITE WHILE THE PAGE IS DIRTY, (2) THE FIVE
+    // READINGS TAKEN BEFORE THE BLOCK'S OWN BLUR RELEASES THE QUEUE.⟩ Every reading below is the
+    // ASSEMBLED APP's (the only app-green layer this unit owns); the page read is composed from the
+    // driver's OWN surface helpers (`ufEditSurfaceState`'s text length/hash, `ufCaret`'s live range,
+    // the rendered root's `data-node-id`), never from a new IPC surface.
+    // =========================================================================
+    const tplPageRead = async () => {
+      const pageState = await ufEditSurfaceState(h)
+      const pageCaret = await ufCaret(h)
+      const pageDom = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return {nodeId:s?s.getAttribute('data-node-id'):null,focus:(document.activeElement&&(document.activeElement.id||document.activeElement.tagName))||null}})()`)
+      return { nodeId: pageDom.nodeId, focus: pageDom.focus, len: pageState.len, hash: pageState.hash, marker: pageState.marker, caret: { startBlock: pageCaret.startBlock ?? null, endBlock: pageCaret.endBlock ?? null, insideSurface: pageCaret.insideSurface === true } }
+    }
+    // (0) THE BASELINE — taken AFTER the enable has settled AND after the `doc-nav` limb's own store
+    //     write has settled, so the sibling frames this limb must HOLD are the SETTLED ones: the frame
+    //     marks on the property `__b7TemplateMark` (never `B-5`'s / `B-6`'s), each frame's
+    //     `data-node-id`, `#wiki-root`, and the pane's OWN rendered zone rows
+    //     (`li[data-template-zone]`, expected `["main"]`).
+    const tplBase = await ufB7PaneFrameCensus(h, { limb: 'template', mark: true, paneId: tplPaneId })
+    const tplPageBefore = await tplPageRead()
+    // (1) THE STORE WRITE WHILE THE PAGE IS DIRTY, through the app's OWN route (`code.template.create`
+    //     on the MCP surface — the `B-5` §8 precedent). The reply is printed VERBATIM; a refusal is a
+    //     DRIVER precondition, classified through the corpus's own `driverReadFailure` — never smoothed
+    //     into an app FAIL and never into a pass.
+    const tplCreate = await mcpToolResult(h.mcp, 'code.template.create', { zone: 'b7limb' })
+      .catch((e) => ({ ok: false, isError: false, tool: 'code.template.create', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+    const tplCreateFailure = driverReadFailure(tplCreate)
+    await sleep(4500)
+    // (2) THE FIVE READINGS, read SEPARATELY off the settled app, BEFORE the blur releases the queue
+    //     (a second, later census proves the pane's re-mint happened ONCE).
+    const tplAfter = await ufB7PaneFrameCensus(h, { limb: 'template', mark: false, reuseToken: tplBase.token, paneId: tplPaneId, baseline: tplBase.frames })
+    await sleep(1500)
+    const tplSettledRead = await ufB7PaneFrameCensus(h, { limb: 'template', mark: false, reuseToken: tplBase.token, paneId: tplPaneId, baseline: tplBase.frames })
+    const tplPageAfter = await tplPageRead()
+    const tplStoreWhileDirty = await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch(() => null)
+    const tplStoreStillLacksTyped = !String(JSON.stringify(tplStoreWhileDirty ?? '')).includes(dirtyMarker)
+    const tplSurfaceStillDirty = await h.cdp.evaluate(`(()=>{const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');return s?String(s.textContent||'').indexOf(${JSON.stringify(dirtyMarker)})>=0:null})()`)
+    const tplBaseByPid = new Map((tplBase.frames || []).map((f) => [f.pid, f]))
+    const tplAfterByPid = new Map((tplAfter.frames || []).map((f) => [f.pid, f]))
+    const tplRootHeld = !!tplBase.root && tplBase.root === tplAfter.root
+    const tplPageSurfaceUnchanged = !!tplPageBefore.nodeId && tplPageBefore.nodeId === tplPageAfter.nodeId &&
+      tplPageBefore.len === tplPageAfter.len && tplPageBefore.hash === tplPageAfter.hash && tplPageBefore.focus === tplPageAfter.focus
+    const tplOtherBefore = (tplBase.frames || []).filter((f) => f.pid !== tplPaneId)
+    const tplOthers = tplOtherBefore.map((f) => {
+      const now = tplAfterByPid.get(f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const tplOthersSurvived = tplOtherBefore.length > 0 && tplOthers.every((p) => p.marked && p.nodeIdHeld)
+    const tplPaneBefore = tplBaseByPid.get(tplPaneId) || null
+    const tplPaneAfter = tplAfterByPid.get(tplPaneId) || null
+    const tplSettledFrame = (tplSettledRead.frames || []).find((f) => f.pid === tplPaneId) || null
+    const tplExactlyOne = tplBase.paneFrameCount === 1 && tplAfter.paneFrameCount === 1
+    const tplCarriersHeld = !!tplPaneBefore && !!tplPaneAfter && JSON.stringify(tplPaneBefore.carriers) === JSON.stringify(tplPaneAfter.carriers)
+    const tplRemintCount = !!tplPaneBefore && !!tplPaneAfter && tplPaneBefore.nodeId !== tplPaneAfter.nodeId ? 1 : 0
+    const tplNoFurtherRemint = !!tplPaneAfter && !!tplSettledFrame && tplSettledFrame.nodeId === tplPaneAfter.nodeId
+    const tplRemintedOnce = tplRemintCount === 1 && !!tplPaneAfter && tplPaneAfter.marked === false && tplNoFurtherRemint
+    const tplZonesBefore = tplBase.zoneRows || []
+    const tplZonesAfter = tplAfter.zoneRows || []
+    const tplZoneRowsNowNameIt = tplZonesAfter.includes('b7limb') && !tplZonesBefore.includes('b7limb')
+    const tplQueuedRebuildUnrun = tplSurfaceStillDirty === true && tplStoreStillLacksTyped
+    // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (a driver-side state is PARKED with its own
+    // reason; it is never smoothed into a pass and never graded as an app FAIL).
+    let tplParkReason = null
+    if (tplEnable.present !== true) tplParkReason = `PRECONDITION-FAILED: the ${tplPaneId} pane could not be enabled/expanded through the operator control (path=${tplEnable.path}; zone:left=${tplEnable.zoneState}) — a driver-side state, so the limb is PARKED`
+    else if (tplBase.panePresent !== true) tplParkReason = `PRECONDITION-FAILED: no #pane-${tplPaneId} on the assembled surface after the sanctioned restore`
+    else if (dirtySurfaceText !== true || !dirtyStoreAbsent) tplParkReason = `PRECONDITION-FAILED: the dirty-edit window this limb's discriminator rests on was not held when the template write landed (typed "${dirtyMarker}" in the surface=${dirtySurfaceText}, absent from the store before the blur=${dirtyStoreAbsent})`
+    else if (tplCreateFailure !== null) tplParkReason = driverFailureReason(tplCreateFailure.kind, tplCreateFailure.detail, tplCreateFailure.extra).marker
+    else if (!(tplCreate.value && tplCreate.value.template)) tplParkReason = 'PRECONDITION-FAILED: `code.template.create` answered no template in its reply, so the store\'s push the pane answers was never made'
+    const tplLimbOk = tplParkReason === null && tplRootHeld && tplPageSurfaceUnchanged && tplOthersSurvived && tplExactlyOne &&
+      tplRemintedOnce && tplCarriersHeld && tplZoneRowsNowNameIt && tplQueuedRebuildUnrun
     // (d) THE RELEASE — the REAL blur commits the dirty page, which fires the queued rebuild; the pane must STILL name
     //     the new document afterwards (the settled state is fresh, both routes agreeing). Its own reading, printed apart.
     const dirtyBlur = await ufBlurSurface(h)
@@ -10098,6 +10358,37 @@ const BLOCKS = {
     let docNavFixtureRemoved = false
     if (docNavImport.path) { try { rmSync(docNavImport.path, { force: true }); docNavFixtureRemoved = true } catch { docNavFixtureRemoved = false } }
     const docNavRestoreOk = dnNewDocId !== null && !!(docNavRemove.bridge && docNavRemove.bridge.called === true && docNavRemove.bridge.result && docNavRemove.bridge.result.ok === true) && dnRowGone && docNavFixtureRemoved
+    // =========================================================================
+    // ⟨B-7 §8 (`G8`) — (3) THE RESTORE, driven AFTER the block's own blur released the queue.⟩ Why
+    // here and not inside the window: the re-disable goes through the operator control, which sits
+    // behind `#settings-modal` — opening it takes focus from `#page-edit-surface` and would run the
+    // page's own commit-on-blur, so the ENABLE was driven before the window and the RE-DISABLE is
+    // driven after the block's ONE release. (a) remove the disposable zone through the SAME app
+    // route and read the pane's rows back out: `zoneGone` is the reverse-direction half, which no
+    // single-direction oracle can give; (b) `true` -> `false` on the pane's own control, so this run
+    // exports NO persisted-state change.
+    // =========================================================================
+    const tplDelete = await mcpToolResult(h.mcp, 'code.template.delete', { zone: 'b7limb' })
+      .catch((e) => ({ ok: false, isError: false, tool: 'code.template.delete', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+    const tplDeleteFailure = driverReadFailure(tplDelete)
+    await sleep(4500)
+    const tplRestored = await ufB7PaneFrameCensus(h, { limb: 'template', mark: false, reuseToken: tplBase.token, paneId: tplPaneId, baseline: tplBase.frames })
+    const tplZonesRestored = tplRestored.zoneRows || []
+    const tplZoneGone = !tplZonesRestored.includes('b7limb') && tplZonesRestored.includes('main')
+    const tplVisBefore = await ufPaneVisibilityState(h, tplPaneId)
+    let tplDisablePath = 'already-disabled'
+    if (tplVisBefore === 'true') {
+      await ufModal(h, true)
+      const tplDisableClick = await ufRealClick(h, `#operator-pane-visibility-${tplPaneId}`)
+      await sleep(1500)
+      tplDisablePath = tplDisableClick.path
+      await ufModal(h, false)
+      await sleep(2000)
+    }
+    const tplVisAfter = await ufPaneVisibilityState(h, tplPaneId)
+    const tplPaneDisabled = tplVisBefore === 'true' && tplVisAfter === 'false'
+    const tplRestoreOk = tplDeleteFailure === null && tplZoneGone && tplPaneDisabled
+    const tplLimbEvidence = `⟨B-7 §8 G8 — THE TEMPLATE PANE'S OWN SOURCE, READ INSIDE THE DIRTY WINDOW (assembled app; the ONLY app-green layer; NO new BLOCKS key)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${tplEnable.path} present=${tplEnable.present} zone:left=${tplEnable.zoneState} (driven BEFORE the window opens: the control sits behind #settings-modal, whose open/close takes focus from #page-edit-surface and would run the page's own commit-on-blur — the block's blur is the ONE release, no second blur is added); BASELINE #wiki-root data-node-id=${JSON.stringify(tplBase.root)} frames=${JSON.stringify((tplBase.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${tplPaneId} x${tplBase.paneFrameCount} zoneRows=${JSON.stringify(tplZonesBefore)} text=${JSON.stringify(String(tplBase.paneText || '').slice(0, 240))}; (1) THE STORE WRITE while the page is DIRTY — ROUTE USED="mcp:code.template.create" zone="b7limb" REPLY VERBATIM=${JSON.stringify(tplCreate.value)} isError=${tplCreate.isError}; (2) THE FIVE READINGS taken BEFORE the block's blur released the queue: (i) assemblyRootUnchanged=${tplRootHeld} (#wiki-root ${JSON.stringify(tplBase.root)} -> ${JSON.stringify(tplAfter.root)}) and pageSurfaceUnchanged=${tplPageSurfaceUnchanged} (#page-edit-surface data-node-id ${JSON.stringify(tplPageBefore.nodeId)} -> ${JSON.stringify(tplPageAfter.nodeId)}, text len/hash ${tplPageBefore.len}/${tplPageBefore.hash} -> ${tplPageAfter.len}/${tplPageAfter.hash}, focus ${JSON.stringify(tplPageBefore.focus)} -> ${JSON.stringify(tplPageAfter.focus)}, caret ${JSON.stringify(tplPageBefore.caret)} -> ${JSON.stringify(tplPageAfter.caret)}); (ii) otherPanesSurvived=${tplOthersSurvived} (${JSON.stringify(tplOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) — THE SCOPING CLAUSE: the template-editor pane is EXCLUDED from THIS limb's (ii) alone because it MOVES ON PURPOSE here (it is this limb's SUBJECT), and the exclusion is THIS limb's ALONE: B-5's and B-6's own pools are NOT weakened by it — B-5 censuses every frame that stood at ITS baseline (taken BEFORE this limb enables the pane, so the pane is not in it), and B-6's baseline is taken AFTER (so its pool CARRIES the pane, a STRICTER reading) — and NONE is dropped from either; (iii) exactlyOneTemplateFrame=${tplExactlyOne} (before ${tplBase.paneFrameCount} after ${tplAfter.paneFrameCount}) with paneCarriersHeld=${tplCarriersHeld} (before ${JSON.stringify(tplPaneBefore ? tplPaneBefore.carriers : null)} vs after ${JSON.stringify(tplPaneAfter ? tplPaneAfter.carriers : null)}); (iv) paneRemintedExactlyOnce=${tplRemintedOnce} (observed re-mints=${tplRemintCount}, noFurtherRemint=${tplNoFurtherRemint}; frame node id ${JSON.stringify(tplPaneBefore ? tplPaneBefore.nodeId : null)} -> ${JSON.stringify(tplPaneAfter ? tplPaneAfter.nodeId : null)} settled ${JSON.stringify(tplSettledFrame ? tplSettledFrame.nodeId : null)}); (v) zoneRowsNowNameIt=${tplZoneRowsNowNameIt} (${JSON.stringify(tplZonesBefore)} -> ${JSON.stringify(tplZonesAfter)}) WHILE the queued requestRebuild('template') provably has NOT run: the typed dirty text "${dirtyMarker}" is STILL in the page-edit surface=${tplSurfaceStillDirty} and STILL ABSENT from the store (rag.get_document read-back)=${tplStoreStillLacksTyped} => queuedRebuildUnrun=${tplQueuedRebuildUnrun}; (3) RESTORE — mcp:code.template.delete zone="b7limb" isError=${tplDelete.isError}, zone rows read back ${JSON.stringify(tplZonesRestored)} zoneGone=${tplZoneGone}; pane re-disabled through its OWN operator control path=${tplDisablePath} (${JSON.stringify(tplVisBefore)} -> ${JSON.stringify(tplVisAfter)}) paneDisabled=${tplPaneDisabled} => TEMPLATE_LIMB_OK=${tplLimbOk}; PARK REASON=${tplParkReason === null ? 'null' : tplParkReason}`
     // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (never an app FAIL, never smoothed into a pass).
     let docNavParkReason = null
     if (docNavEnable.present !== true) docNavParkReason = `PRECONDITION-FAILED: the ${docNavPaneId} pane could not be enabled/expanded through the operator control (path=${docNavEnable.path}; zone:left=${docNavEnable.zoneState}) — a driver-side state, so the limb is PARKED`
@@ -10117,12 +10408,12 @@ const BLOCKS = {
     else if (edgeCreate.failure !== null) linksParkReason = driverFailureReason(edgeCreate.failure.kind, edgeCreate.failure.detail, edgeCreate.failure.extra).marker
     const linksLimbOk = linksParkReason === null && controlHeld && assemblyRootUnchanged && otherPanesSurvived &&
       linksCarriersHeld && linksReminted && exactlyOneLinksFrame && linksContentChanged && linksLineNamed && linksBaselineWasNone
-    const okAll = ok && linksLimbOk && docNavLimbOk && restoreOk
+    const okAll = ok && linksLimbOk && docNavLimbOk && tplLimbOk && tplRestoreOk && restoreOk
     const linksLimbEvidence = `⟨B-5 §8 G8 — THE D-24 ASSEMBLED-APP LIMB (assembled app; the ONLY app-green layer)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${linksEnable.path} present=${linksEnable.present} zone:left=${linksEnable.zoneState}; QUIET GATE after the enable (mark, settle, re-read with no store write) held=${quietHeld} frames=${JSON.stringify(quietFrames)}; CONTROL (the edgeIds:[] shape, a SECOND real content-only commit driven now that the pane is mounted — the block's OWN typed commit landed before the pane existed, a driver sequencing fact): caret=${JSON.stringify(controlCaret.ok || false)} typed "${controlMarker}" blur(warning=${controlBlur.warning}) store read-back containsMarker=${controlCommitted} => frameHeld=${controlFrameHeld} textHeld=${controlTextHeld} rootHeld=${controlRootHeld} otherFramesSurvived=${controlOtherSurvived} (${JSON.stringify(controlOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) CONTROL_HELD=${controlHeld} (the control's claim is the crosslinks pane's OWN stillness; otherFramesSurvived is printed as its own reading, not folded in — a content-only commit legitimately re-authors a SIBLING pane) (frame node id "${controlPaneBefore ? controlPaneBefore.nodeId : '?'}" -> "${controlPaneAfter ? controlPaneAfter.nodeId : '?'}"; text "${controlMark.paneText}" -> "${controlRead.paneText}"); (c) BASELINE #wiki-root data-node-id="${base.root}" frames=${JSON.stringify((base.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${linksPaneId} x${base.paneFrameCount} text="${base.paneText}" ((none) present=${linksBaselineWasNone}); (d) SUBJECT read off the DOM #zone:main [data-doc-head]=${JSON.stringify(subjectRead)} => subjectNodeId=${subjectNodeId}, SOURCE from ANOTHER document sourceDoc=${sourceDoc} sourceNodeId=${sourceNodeId} (candidates ${JSON.stringify(sourceTried)}); (e) edit.set_edge REPLY VERBATIM=${JSON.stringify(edgeCreate.read ? edgeCreate.read.value : null)} isError=${edgeCreate.read ? edgeCreate.read.isError : 'no-call'} edgeId=${edgeCreate.edgeId}; (f) THE FIVE LIMBS read off the SETTLED app: (i) assemblyRootUnchanged=${assemblyRootUnchanged} (#wiki-root "${base.root}" -> "${after.root}"); (ii) otherPanesSurvived=${otherPanesSurvived} (${JSON.stringify(otherPanes.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) paneReminted=${linksReminted} with paneCarriersHeld=${linksCarriersHeld} (before ${carriersOf(linksBefore)} vs after ${carriersOf(linksAfter)}); (iv) exactlyOneCrosslinksFrame=${exactlyOneLinksFrame} (before ${base.paneFrameCount} after ${after.paneFrameCount}); (v) paneContentChanged=${linksContentChanged} ("${base.paneText}" -> "${after.paneText}") namesTheNewEdge=${linksLineNamed} expectedLine=${JSON.stringify(expectedLine)} renderedLinks=${JSON.stringify(after.paneLinks)}; (g) RESTORE: the CONTRACTED route MCP edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.mcp)} and the app's OWN batch channel window.provident.edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.bridge)} edgeId=${edgeCreate.edgeId} removedClearedTheLine=${linksLineCleared} (pane text after the delete "${linksTextAfterRestore}"); pane visibility re-disabled through its own control: before=${visBeforeDisable} path=${disablePath} after=${visAfterDisable} restored=${paneDisabledRestored}; PARK REASON=${JSON.stringify(linksParkReason)} (a driver precondition is PARKED by name — never an app FAIL, never a pass)`
-    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}; ${docNavLimbEvidence}`
+    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}; ${docNavLimbEvidence}; ${tplLimbEvidence}`
     const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge — AND (unit `B-6` §8, gate `G8`) a document CREATED while a page edit is DIRTY repaints the `doc-nav` pane (title `Documents`, `.pane-frame[data-pane-id="doc-nav"]`) ITSELF and ALONE: with the uncommitted typed text still in the surface, `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-doc-nav` exists, the pane frame is re-minted with its carriers held, and the pane row set MOVES to NAME the new document — a reading the queued re-derive cannot produce, and the restored state no longer names it'
     return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, linksAssertion, evidenceFull,
-      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null || docNavParkReason !== null, parkReason: linksParkReason ?? docNavParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk }, b6DocNavLimb: { assemblyRootUnchanged: dnRootHeld, otherPanesSurvived: dnOthersSurvived, paneReminted: dnReminted, paneCarriersHeld: dnCarriersHeld, exactlyOneDocNavFrame: dnExactlyOne, rowSetMoved: dnRowsChanged, namesTheNewDocument: dnNamesTheNewDocument, dirtyWindowHeldAcrossThePaint: dnSurfaceTextHeld, namedAfterTheRelease: dnNamedSettled, rowGoneAfterRestore: dnRowGone, restoreOk: docNavRestoreOk, importedDocumentId: dnNewDocId } } })
+      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null || docNavParkReason !== null || tplParkReason !== null, parkReason: linksParkReason ?? docNavParkReason ?? tplParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk }, b6DocNavLimb: { assemblyRootUnchanged: dnRootHeld, otherPanesSurvived: dnOthersSurvived, paneReminted: dnReminted, paneCarriersHeld: dnCarriersHeld, exactlyOneDocNavFrame: dnExactlyOne, rowSetMoved: dnRowsChanged, namesTheNewDocument: dnNamesTheNewDocument, dirtyWindowHeldAcrossThePaint: dnSurfaceTextHeld, namedAfterTheRelease: dnNamedSettled, rowGoneAfterRestore: dnRowGone, restoreOk: docNavRestoreOk, importedDocumentId: dnNewDocId }, b7TemplateLimb: { assemblyRootUnchanged: tplRootHeld, pageSurfaceUnchanged: tplPageSurfaceUnchanged, otherPanesSurvived: tplOthersSurvived, exactlyOneTemplateFrame: tplExactlyOne, paneReminted: tplRemintedOnce, paneCarriersHeld: tplCarriersHeld, zoneRowsNowNameIt: tplZoneRowsNowNameIt, queuedRebuildUnrun: tplQueuedRebuildUnrun, zoneGone: tplZoneGone, paneDisabledAfterRestore: tplPaneDisabled, limbOk: tplLimbOk, restoreOk: tplRestoreOk, parkReason: tplParkReason } } })
   },
 
   // ---- §8.3 item 3 — a FAILED commit is USER-VISIBLE (painted, typed) AND

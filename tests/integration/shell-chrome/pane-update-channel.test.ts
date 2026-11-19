@@ -1107,7 +1107,7 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     ).toEqual([])
   })
 
-  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly `[\'gnosis-query\', \'crosslinks\']`', async () => {
+  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly `[\'gnosis-query\', \'crosslinks\', \'doc-nav\', \'search\', \'template-editor\']`', async () => {
     // §6 r5 (§1's `INV-E` floor; §3's ONE declared constant). LAYER: envelope-class — the REAL host over the shim plus a
     // reading of the host module's exports.
     // NON-VACUITY: this limb IS the floor — its whole purpose is to prove the three counters CAN move on the very double whose
@@ -1117,7 +1117,7 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     // MUTATION THAT WOULD RED IT: a harness whose runtime is not attached (the seed would not reach `loadEnvelope`) reds the
     // floor; removing the operator pane reds the `mountOperator` secondary reading; a `REPLUMBED_PANE_IDS` that names an
     // UNNAMED further pane reds the constant arm (a later unit must EXTEND the census deliberately — ⟨`B-5` `pane-links` did,
-    // by exactly one id: `docs/L1/unit-b-5-pane-links.md` §4⟩).
+    // by exactly one id: `docs/L1/unit-b-5-pane-links.md` §4; `B-6` by one more, `B-7` by two more the same way⟩).
     const problems: string[] = []
     const drive = seedHost(SEED_LAYOUT(), SEED_PANES)
     try {
@@ -1196,12 +1196,18 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     // pane hears BOTH sources (`docs/L1/unit-b-6-pane-doc-nav.md` §2) — the rendered STORE's change fired locally AND the ENGINE's
     // change published through the change-interest declaration — and its dispatch re-reads `rag.docHeads` and paints its own root.
     // The fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
-    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav']
+    // ⟨EXTENDED AGAIN BY UNIT `B-7` (`pane-search-template`) — TWO more ids, the same discipline, and the value is still pinned
+    // EXACTLY (the fingerprint comparison below stays ORDER-SENSITIVE, so a bare REORDER still reds).⟩ `search` joins because its
+    // OWN answered `rag.query` is its producer (the two submit seams commit and then fire that pane's event, and its disclosure
+    // toggle does the same) and `template-editor` because the template STORE's change push is its source (`onTemplateChanged`
+    // commits the payload's whole template — the payload IS the template, no `template.get()` re-read — and then fires), plus its
+    // own validate verdict; `docs/L1/unit-b-7-pane-search-template.md` §2/§4.
+    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor']
     if (replumbed === undefined) {
       problems.push(
         '(r5) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
           `naming the panes whose paint the host registers on the channel: exactly ${shown(PINNED_CENSUS)} (the ` +
-          "`pane-update-channel` census plus `B-5`'s and `B-6`'s one-row extensions)",
+          "`pane-update-channel` census plus `B-5`'s, `B-6`'s and `B-7`'s deliberate extensions)",
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1216,8 +1222,9 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
       `limb r5 — the pre-migration path still works and its scope is declared (§6 r5; §3's \`REPLUMBED_PANE_IDS\`). ` +
         `${problems.length} problem(s). \`host.refresh()\` still reaches \`loadAppGraph\` + \`mountOperator\` on this very double ` +
         `(each read twice: the wrapped instance method AND a bypass-proof observable), so \`r1\`'s and \`r6\`'s zeroes are readings ` +
-        `and not a dead counter; and the re-plumbed census is exactly ${shown([QUERY, 'crosslinks', 'doc-nav'])} (extended by ` +
-        `\`B-5\` and then by \`B-6\`, one id each). ` +
+        `and not a dead counter; and the re-plumbed census is exactly ` +
+        `${shown([QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor'])} (extended by ` +
+        `\`B-5\`, then \`B-6\`, then \`B-7\` — one id, one id, two ids). ` +
         `envelope-class — the REAL SidebarPanes over the layout-less DOM shim; no rendered box, no pointer (G8-only)`,
     ).toEqual([])
   })

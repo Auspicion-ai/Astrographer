@@ -883,9 +883,9 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // MUTATION THAT WOULD RED IT: shipping a record-interest set that is not `[]` (a pane registered before `B-10` authors its
     // reader) reds the first arm; a `subscribeRecord` that never marks the id reds the control; a `deliver()` that fires every
     // subscriber (folding the two declarations) reds the difference arm; returning the LIVE arrays instead of copies reds the
-    // copy arm; and a `REPLUMBED_PANE_IDS` that reaches a THIRD pane — an extension no unit named — reds the constant arm
-    // (⟨`B-5` `pane-links` took it from one id to two DELIBERATELY: `docs/L1/unit-b-5-pane-links.md` §4; the value below is
-    // re-pinned to the landed census and the teeth are unchanged⟩).
+    // copy arm; and a `REPLUMBED_PANE_IDS` that reaches one pane MORE than the landed census — an extension no unit named — reds
+    // the constant arm (⟨`B-5` `pane-links` took it from one id to two DELIBERATELY: `docs/L1/unit-b-5-pane-links.md` §4; the value
+    // below is re-pinned to the landed census and the teeth are unchanged; `B-6` added one more and `B-7` two more the same way⟩).
     const problems: string[] = []
     const { channel, problems: channelProblems } = makeChannel('r9')
     problems.push(...channelProblems)
@@ -1036,12 +1036,17 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // pane hears BOTH sources (`docs/L1/unit-b-6-pane-doc-nav.md` §2: the rendered STORE's change fired locally, and the ENGINE's
     // change published through the change-interest declaration) and its dispatch re-reads `rag.docHeads` and paints its own root.
     // The value moves to the LANDED three-id value and the fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
-    const PINNED_CENSUS = ['gnosis-query', 'crosslinks', 'doc-nav']
+    // ⟨EXTENDED AGAIN BY UNIT `B-7` (`pane-search-template`) — TWO more ids, the same discipline, and the value is still pinned
+    // EXACTLY.⟩ `search` joins because its OWN answered `rag.query` is now its producer (the two submit seams commit and then fire
+    // that pane's event) and `template-editor` because the template STORE's change push is now its source (`onTemplateChanged`
+    // commits the payload's whole template and then fires) — `docs/L1/unit-b-7-pane-search-template.md` §2/§4. The comparison below
+    // stays ORDER-SENSITIVE and EXACT (a bare REORDER still reds, as do a sixth id, a dropped id and a duplicate).
+    const PINNED_CENSUS = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
     if (replumbed === undefined) {
       problems.push(
         '(r9) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
-          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s and \`B-6\`'s ` +
-          `one-row extensions)`,
+          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s, \`B-6\`'s ` +
+          `and \`B-7\`'s deliberate extensions)`,
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1055,8 +1060,9 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
       `limb r9 — the two censes and the pinned constant (§6 r9; §2's declared-empty record interest; §3's \`REPLUMBED_PANE_IDS\`). ` +
         `${problems.length} problem(s). The shipped record-interest set is EMPTY BY CONSTRUCTION (no pane renders display state ` +
         `today; \`B-10\` authors the first reader) and the control proves it can MOVE; the two declarations reach different arms; ` +
-        `both censuses are copies; and the re-plumbed census is exactly ${shown(['gnosis-query', 'crosslinks', 'doc-nav'])} ` +
-        `(extended by \`B-5\` and then by \`B-6\`, one id each). ` +
+        `both censuses are copies; and the re-plumbed census is exactly ` +
+        `${shown(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor'])} ` +
+        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\` — one id, then one id, then two). ` +
         `envelope-class and PURE — no Electron, no DOM; the constant is read off the host MODULE's exports`,
     ).toEqual([])
   })

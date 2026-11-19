@@ -284,12 +284,23 @@ export interface SidebarPanesOptions {
   events?: PaneEvents
 }
 
-/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **exactly
- *  `gnosis-query`, `crosslinks` and `doc-nav`**. The set is ONE constant so a later family unit must EXTEND it deliberately
+/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **five ids at
+ *  this head — `gnosis-query`, `crosslinks`, `doc-nav`, `search` and `template-editor` — i.e. ONE constant EXTENDED
+ *  deliberately, once per unit, each with its cause beside it** (the count is a fact of THIS declaration and is never carried
+ *  into prose as a fixed literal; each landing's paragraph below states the delta it took). The set is ONE constant so a later
+ *  family unit must EXTEND it deliberately
  *  (`B-8` for the other gnosis panes, `B-6`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
  *  deliberately NOT here: it is `operator`-scope, the operator mount is `B-9`'s surface, and `updatePane` answers
  *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): the census is a fact of
  *  the VALUE, not only a convention — a `push` cannot add a silent second subscriber.
+ *
+ *  ⟨Unit `B-7` — THE ROW MOVED BY EXACTLY TWO MORE, AND HERE IS THE CAUSE.⟩ `search` and `template-editor` join the census
+ *  because each now answers a PRODUCER OF ITS OWN instead of a re-assembly: the search pane's source is its OWN answered
+ *  `rag.query` — the two submit seams commit `lastQueryResult` and then FIRE `search`, and its disclosure toggle does the same
+ *  for `advancedSearchOpen` — while the template pane's source is the template STORE's change push (`onTemplateChanged` commits
+ *  `payload.template`, which IS the whole template, then FIRES `template-editor`, and only then keeps its structural rebuild) plus
+ *  its own validate verdict. Neither pane re-reads a bridge on its own event, so neither owes a re-read arm (`ASM-B7-1`); it is two
+ *  ids, the same `subscribe`, ONE registration per id (`B2-ADV-04`), and every other family keeps its `refresh()`.
  *
  *  ⟨Unit `B-5` `§4` — THE ROW MOVED BY EXACTLY ONE, AND HERE IS THE CAUSE (`D-24`'s own example).⟩ `crosslinks` joins the
  *  census because a NEW BACKLINK is now DETECTED on this very channel and the pane must HEAR it (the contract's §2
@@ -301,7 +312,7 @@ export interface SidebarPanesOptions {
  *  ⟨Unit `B-6` — `doc-nav` JOINS FOR ITS OWN CAUSE: this pane hears BOTH SOURCES (`docs/L1/unit-b-6-pane-doc-nav.md` §2) — a change
  *  of the RENDERED STORE (fired locally in `onRagStoreChanged`) and an ENGINE-originated change (published through the change
  *  census) — and answers ONE `rag.docHeads()` re-read + ONE `updatePane('doc-nav')`, never a re-assembly. One id, one registration.⟩ */
-export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks', 'doc-nav'])
+export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor'])
 
 /** ⟨Unit `B-6` `§4` — THE CHANGE-INTEREST CENSUS: ONE FROZEN DECLARATION, and the only input the `boot` loop uses to choose a
  *  DECLARATION per id.⟩ An id listed here is registered with `subscribeChange` — which is `subscribe` PLUS a mark, in the SAME
@@ -738,7 +749,8 @@ export class SidebarPanes {
    *  ONE legal channel for the per-move value (`§R` R6). */
   private liveGutterHandle: { set?: (value: unknown) => unknown } | null = null
   /** U-PARITY-C18 — the advanced-search disclosure state (collapsed by default).
-   *  Flipped by the `pane-search-advanced-toggle` handler → re-derive. */
+   *  Flipped by the `pane-search-advanced-toggle` handler → FIRE `search` (`B-7`: this
+   *  state is the pane's own, so the toggle no longer re-derives). */
   private advancedSearchOpen = false
   /** U-PARITY-C18 — the C15 document-metadata fields are present in this build
    *  (LocalRagQueryFilters), so the `documentPathPrefix`/`tags` controls render.
@@ -793,8 +805,11 @@ export class SidebarPanes {
 
   /** The app Runtime the host loads the pane-inclusive envelope into. */
   private runtime: Runtime | null = null
-  /** The last traversal envelope passed to loadAppGraph (used by refresh +
-   *  submitQuery to re-assemble + re-load without a RAG re-traversal). */
+  /** The last traversal envelope passed to loadAppGraph (used by refresh + the
+   *  hover-preview re-render to re-assemble + re-load without a RAG re-traversal).
+   *  ⟨Unit `B-7` `ASM-B7-3`⟩ the two query settlements no longer take this route:
+   *  they commit their own field and FIRE their own pane, so a settled query
+   *  re-assembles NOTHING. */
   private lastTraversalEnvelope: LegacyInitialData | null = null
   /** ⟨Unit `B-3` `§3`⟩ The channel this host paints for (`SidebarPanesOptions.events`), or `null` on a host that predates it —
    *  and `null` means the host subscribes NOTHING (the pre-migration `refresh()` route stands for every pane, `r5`). */
@@ -2591,7 +2606,16 @@ export class SidebarPanes {
    *
    *  ⟨Unit `B-6` `§3` — THE SECOND DATA-BACKED ARM, `doc-nav`'s:⟩ ONE `bridge.rag.docHeads()` behind the GENERATION stamp
    *  (`ASM-B6-3`) and the paint's own GATE (`replumbedPaneCanRender`) — one call, one commit, one `updatePane('doc-nav')`, and no
-   *  snapshot/security/backlinks/template/traversal read of any kind. */
+   *  snapshot/security/backlinks/template/traversal read of any kind.
+   *
+   *  ⟨Unit `B-7` — **THE TWO PANES OF THIS UNIT TAKE NO ARM AT ALL** (`ASM-B7-1`), and the absence is the DECISION, not an
+   *  omission.⟩ `search` and `template-editor` owe NO re-read: a `bridge.rag.query` re-issued on the search pane's OWN event is an
+   *  unbounded `query → fire → query` loop (the re-issue's settlement is itself the producer that fires, and this channel is
+   *  payload-free by construction, so the handler cannot tell a settlement fire from a store one), and a `bridge.template.get()` is
+   *  an IPC that can change nothing — `TemplateChangedPayload` carries the WHOLE template, so the push payload IS the store's
+   *  template. Both panes' producers therefore commit their field in the same tick BEFORE they fire, which is why both reach
+   *  `this.updatePane(paneId)` **synchronously inside the fire**: a pane with no re-read arm is `B-3`'s behaviour byte-for-byte, and
+   *  the two landed arms above stay byte-for-byte as well. */
   async paintReplumbedPane(paneId: string): Promise<void> {
     if (paneId === 'crosslinks') {
       const subject = this.linksPaneSubjectNodeId()
@@ -3309,13 +3333,21 @@ export class SidebarPanes {
     this.editController.requestRebuild('content')
   }
 
-  /** The template-changed handler: updates the stored template + routes through
-   *  the edit controller's dirty-edit guard (requestRebuild('template') — a
-   *  template change alters the page structure, so a full reload). */
+  /** The template-changed handler: commits the payload's template, FIRES the template
+   *  pane's own event and then routes through the edit controller's dirty-edit guard
+   *  (requestRebuild('template') — a template change alters the page structure, so a
+   *  full reload). ⟨Unit `B-7` `ASM-B7-4`⟩ the two halves are ASYMMETRIC and the order
+   *  is load-bearing: the push payload IS the store's whole template (`F-4`), so the
+   *  fire is ADDITIVE (`ASM-B5-2`) and ISSUED FIRST — the paint is synchronous, so any
+   *  later assemble authors the pane from FRESH state — while the rebuild STAYS,
+   *  because `this.template` IS the page structure and a structural write may move
+   *  things this unit does not own. */
   onTemplateChanged(payload: TemplateChangedPayload): void {
+    // THE COMMIT PRECEDES THE FIRE, AND THE FIRE PRECEDES THE KEPT REBUILD (§3).
     this.template = payload.template
     // A template change supersedes any pending content change descriptor.
     this.pendingContentChange = null
+    this.events?.fire('template-editor')
     this.editController.requestRebuild('template')
   }
 
@@ -4424,30 +4456,34 @@ export class SidebarPanes {
   }
 
   /** `pane-search-submit` — gate (M13) → `bridge.rag.query` → store the result →
-   *  re-render the search pane (M10). An empty query does nothing. SYNCHRONOUS
-   *  (the gate reads the cached security; the IPC is fired, the result handled
-   *  on resolution) so a dispatchable handler cannot bypass the gate. */
+   *  FIRE the search pane's OWN event (`this.events?.fire('search')`), which paints
+   *  THAT pane and nothing else (`B-7` `F-1`/`F-2`: this pane's data is host state no
+   *  other pane reads, so the settlement re-assembles nothing — the whole-app
+   *  `loadAppGraph` and its `anyDirty()` guard are GONE, `ASM-B7-3`). An empty query
+   *  does nothing. SYNCHRONOUS (the gate reads the cached security; the IPC is fired,
+   *  the result handled on resolution) so a dispatchable handler cannot bypass the gate. */
   private submitQuery(value: string): void {
     if (!value) return
     if (!this.security?.enabled.includes('rag')) return // fail-closed (M13)
     // F4 — the operator-settings topK feeds the search query (spec §5.4 M9).
     void this.bridge.rag.query(value, this.lastOperatorSettings?.topK ?? 5).then((result) => {
+      // THE COMMIT PRECEDES THE FIRE (§3): the paint runs synchronously inside the fire, so it must author the state just committed.
       this.lastQueryResult = result
-      // F7 — route the search re-render through the dirty-edit guard: skip the
-      // re-load while a control is dirty so an in-progress edit is not clobbered.
-      if (this.editController.anyDirty()) return
-      if (this.runtime && this.lastTraversalEnvelope) {
-        this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
-      }
+      this.events?.fire('search')
     })
   }
 
-  /** `pane-search-advanced-toggle` — flip the disclosure state + re-derive (the
-   *  search pane re-renders with the fields revealed/hidden). Mirrors the
-   *  `docNavToggle` host seam. SYNCHRONOUS. */
+  /** `pane-search-advanced-toggle` — flip the disclosure state and FIRE the search
+   *  pane's own event (`this.events?.fire('search')`), so the pane repaints its own
+   *  frame with the fields revealed/hidden. `B-7` `F-1`: `advancedSearchOpen` is this
+   *  pane's OWN state and nothing but its render reads it, so this seam no longer
+   *  re-derives and no longer mirrors the `docNavToggle` host seam — a
+   *  `requestRebuild()` here re-authored roots this pane does not own (`ASM-B7-3`).
+   *  SYNCHRONOUS. */
   private searchAdvancedToggle(): void {
+    // THE COMMIT PRECEDES THE FIRE (§3): the paint authors the flipped disclosure.
     this.advancedSearchOpen = !this.advancedSearchOpen
-    this.editController.requestRebuild()
+    this.events?.fire('search')
   }
 
   /** U-SHELL-9a §2.6 — the `pane-search-expand-tab` host seam: open the pane's
@@ -4475,17 +4511,17 @@ export class SidebarPanes {
   }
 
   /** `pane-search-advanced-submit` — gate (M13) → `bridge.rag.query` with the
-   *  advanced `options` → store the result → re-render the search pane. An
+   *  advanced `options` → store the result → FIRE the search pane's own event. An
    *  empty query does nothing. F1/state 6 — a REJECTED engine call surfaces its
-   *  message inline (`advancedSearchError`) and re-renders; it never throws. */
+   *  message inline (`advancedSearchError`) and fires too; it never throws. `B-7`
+   *  `§2`: BOTH arms COMMIT first and then call ONE local helper that carries the
+   *  fire, so `lastQueryResult`/`advancedSearchError` have landed before the paint
+   *  runs — the `anyDirty()`/`loadAppGraph` block is GONE (`ASM-B7-3`). */
   private submitAdvancedQuery(value: string, options: AdvancedSearchQueryOptions): void {
     if (!value) return
     if (!this.security?.enabled.includes('rag')) return // fail-closed (M13)
     const rerender = (): void => {
-      if (this.editController.anyDirty()) return
-      if (this.runtime && this.lastTraversalEnvelope) {
-        this.loadAppGraph(this.runtime, this.lastTraversalEnvelope)
-      }
+      this.events?.fire('search')
     }
     void this.bridge.rag
       .query(value, this.lastOperatorSettings?.topK ?? 5, undefined, options ?? {})
@@ -4536,12 +4572,16 @@ export class SidebarPanes {
   /** W1-N5 (U-PARITY-PARTIALS §1.1) — the template Validate result seam. The
    *  pane's `template-validate` handler resolves `bridge.template.validate` in
    *  main (group-gated there) and hands the verdict here; the host records it as
-   *  the template pane's `validation` context and requests a rebuild so the next
-   *  render shows the inline valid/error feedback. A null/malformed verdict
-   *  clears the feedback (never throws). SYNCHRONOUS (the rebuild is guarded). */
+   *  the template pane's `validation` context and FIRES that pane's own event, so
+   *  the next paint shows the inline valid/error feedback. A null/malformed verdict
+   *  clears the feedback (never throws). ⟨Unit `B-7` `F-3`/`ASM-B7-4`⟩ the verdict
+   *  reaches NOBODY but this pane's render, so the settled `requestRebuild()` is
+   *  pure waste and is REMOVED — the fire is the whole delivery.
+   *  SYNCHRONOUS. */
   private templateValidateResult(verdict: TemplateVerdict | null): void {
+    // THE COMMIT PRECEDES THE FIRE (§3): the paint authors the recorded verdict.
     this.templateValidation = verdict ?? null
-    this.editController.requestRebuild()
+    this.events?.fire('template-editor')
   }
 
   /** `operatorSet` — Unit U1 §1.4 — `bridge.operatorSettings.set` → main
