@@ -284,13 +284,21 @@ export interface SidebarPanesOptions {
   events?: PaneEvents
 }
 
-/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`, and the
- *  whole of it: **exactly `['gnosis-query']`**. The set is ONE constant so a later family unit must EXTEND it deliberately
- *  (`B-8` for the other gnosis panes, `B-5`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
+/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **exactly
+ *  `['gnosis-query', 'crosslinks']`**. The set is ONE constant so a later family unit must EXTEND it deliberately
+ *  (`B-8` for the other gnosis panes, `B-6`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
  *  deliberately NOT here: it is `operator`-scope, the operator mount is `B-9`'s surface, and `updatePane` answers
- *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): "exactly `['gnosis-query']`" is a fact of
- *  the VALUE, not only a convention — a `push` cannot add a silent second subscriber. */
-export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query'])
+ *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): the census is a fact of
+ *  the VALUE, not only a convention — a `push` cannot add a silent second subscriber.
+ *
+ *  ⟨Unit `B-5` `§4` — THE ROW MOVED BY EXACTLY ONE, AND HERE IS THE CAUSE (`D-24`'s own example).⟩ `crosslinks` joins the
+ *  census because a NEW BACKLINK is now DETECTED on this very channel and the pane must HEAR it (the contract's §2
+ *  detection seam): the PRODUCER is main's edge-write announcement (`edit.set_edge` / `deriveBatchBroadcast`'s
+ *  `putEdge` arm → `IPC_RAG_STORE_CHANGED` with a NON-EMPTY `edgeIds`), the LEARNER is this host's `onRagStoreChanged`,
+ *  and the pane's answer is ONE `bridge.rag.backlinks(subject)` re-read then ONE `updatePane('crosslinks')` — `INV-E`,
+ *  never a re-assembly. The cause is named HERE, beside the declaration, so the move is a DELIBERATE extension: it is one
+ *  id, it is the same `subscribe` (one subscriber per id, `B2-ADV-04`), and every other family keeps its `refresh()`. */
+export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks'])
 
 // ---- handler bodies (function-STRING data). They reach the IPC bridge via
 // `window.provident.sidebar` — NEVER an MCP tool. The host installs the
@@ -1021,13 +1029,29 @@ export class SidebarPanes {
   /** Host-owned mutable state (M5): the host owns the current-document/node
    *  state and exposes these setters the handler bodies reach via the
    *  `window.provident.sidebar` bridge (M2). The host determines which document
-   *  is loaded + displayed. */
+   *  is loaded + displayed.
+   *
+   *  ⟨`B5-F5(a)` — A REAL SUBJECT MOVE IS A FIRE, AND ONLY A REAL MOVE.⟩ §3's subject (`linksPaneSubjectNodeId`,
+   *  `ASM-B5-1`) is `_currentNodeId` when set, ELSE the current document's doc-head, so BOTH setters can MOVE it. The
+   *  resolved subject is therefore read BEFORE the assignment and again AFTER it, and the `crosslinks` pane is FIRED
+   *  only when the two differ: a same-value call (the id the state already holds) dispatches NOTHING — no re-read, no
+   *  verdict, no apply — so the fix cannot pass by AMPLIFYING every setter call. The moved subject then re-reads through
+   *  the SAME boot subscription the pane already has (§4: ONE subscriber per census id, made by the ONE boot loop — never
+   *  a second wiring), so a move re-reads for the subject it moved TO instead of leaving the pane authoring the PREVIOUS
+   *  subject's list. `fire` never throws and a host with no channel is a no-op, so this seam stays TOTAL. */
   setCurrentDocumentId(id: string | null): void {
+    const subject = this.linksPaneSubjectNodeId()
     this._currentDocumentId = id
+    if (this.linksPaneSubjectNodeId() !== subject) this.events?.fire('crosslinks')
   }
 
+  /** ⟨`B5-F5(a)`, the SECOND subject arm.⟩ `_currentNodeId` IS `ASM-B5-1`'s FIRST arm, so selecting a node moves the pane's
+   *  subject exactly as a document switch does — and a re-selection of the node already held fires nothing (the same
+   *  value-move control, on this setter). */
   setCurrentNodeId(id: string | null): void {
+    const subject = this.linksPaneSubjectNodeId()
     this._currentNodeId = id
+    if (this.linksPaneSubjectNodeId() !== subject) this.events?.fire('crosslinks')
   }
 
   // ---- U-STAGE-ACTIVE-TAB §5.2 — the pinned identity readers ---------------
@@ -2478,6 +2502,71 @@ export class SidebarPanes {
     this.mountOperator()
   }
 
+  /** ⟨Unit `B-5` `§3` — `ASM-B5-1`: **THE PANE'S SUBJECT**, and it is the unit's ONE design call.⟩ The `crosslinks` pane is
+   *  about ONE node, and this method is the ONLY definition of which one: `_currentNodeId` when it is SET (unchanged
+   *  behaviour for any future producer), ELSE the CURRENT DOCUMENT'S DOC-HEAD NODE, read off the cached traversal snapshot's
+   *  `doc-head` edges (`kind === 'doc-head' && target === _currentDocumentId` → `source`) — the same vocabulary
+   *  `deriveDocumentIds` reads for the document ROOTS and `src/main/backlinks.ts`'s `documentOf` reads for a node's document.
+   *  `null` when no document is current: the pane then authors `(none)` and the paint legitimately answers `unchanged`.
+   *
+   *  **ONE definition, TWO callers:** `paintReplumbedPane`'s re-read AND `refresh()`'s backlink fetch both ask THIS method,
+   *  so the paint and the pre-migration route can never disagree about what the pane is about — two authors for one subject
+   *  would be the `ASM-B3-2` fault one level down. **TOTAL at every state:** a malformed snapshot (a trusted-but-unvalidated
+   *  bridge) or a blank id answers `null`, never a throw, and nothing here reads the DOM. */
+  linksPaneSubjectNodeId(): string | null {
+    const nodeId = this._currentNodeId
+    if (typeof nodeId === 'string' && nodeId !== '') return nodeId
+    const documentId = this._currentDocumentId
+    if (typeof documentId !== 'string' || documentId === '') return null
+    const edges = this.lastSnapshot?.edges ?? []
+    for (const edge of edges) {
+      if (edge == null || edge.kind !== 'doc-head' || edge.target !== documentId) continue
+      const source = edge.source
+      return typeof source === 'string' && source !== '' ? source : null
+    }
+    return null
+  }
+
+  /** ⟨Unit `B-5` `§4` — **THE HOST'S OWN PER-PANE DISPATCH**, and it is a DECLARED dispatch, never a per-pane table of
+   *  readers (`ASM-B3-2`'s refusal, one realm over; `O-3` is where a second data-backed pane lands).⟩ This is the `boot`
+   *  subscription's body for every `REPLUMBED_PANE_IDS` id, and its arms are, in order, and nothing else:
+   *
+   *  (1) **THE PANE'S DATA RE-READ — ONE bridge call, and only a data-backed pane has one** (today `crosslinks` alone):
+   *      `const result = await this.bridge.rag.backlinks(subject)` commits `lastBacklinks`, so the paint right after it
+   *      authors from FRESH state. **NO snapshot, no doc-heads, no security, no traversal, no template, no
+   *      `decorateShared`, no `syncZoneMirrors`, no backRefs recompute.** A bridge error KEEPS the last-known list (the
+   *      `refresh()` discipline) and the paint still runs.
+   *  (2) **`updatePane(paneId)` — the ONE `B-3` paint, unchanged.** A pane with no re-read step is that behaviour
+   *      byte-for-byte; and a fire with NO subject still paints (it may legitimately answer `unchanged`).
+   *
+   *  **TOTAL at every argument:** a non-string / empty / unknown id takes no re-read arm and `updatePane` answers its own
+   *  declared word (`not-a-pane`). It NEVER throws and never rejects — it is reachable only from an event dispatch, which is
+   *  the one place a throw cannot be contained.
+   *
+   *  ⟨`B5-F5(b)` — THE SUBJECT STAMP: A SUPERSEDED ANSWER IS DROPPED.⟩ The subject is captured BEFORE the `await` (it is the
+   *  re-read's ARGUMENT) and re-resolved AFTER the answer lands; a mismatch means the subject MOVED while this answer was in
+   *  flight, so the answer is DISCARDED — `lastBacklinks` is not committed and no paint runs (`return` before `updatePane`).
+   *  The move's own fire is what re-reads for the new subject, so nothing is lost. This is the host's OWN page-commit idiom
+   *  (`pageSubjectStamp` / `superseded()` in `commitPageEdit`, which drops every post-await resolution when its subject was
+   *  drained in flight), re-spelled over §3's subject rather than a second invalidation rule. A bridge ERROR still keeps the
+   *  last-known list and the paint still runs (`ASM-B5-L2-3`). */
+  async paintReplumbedPane(paneId: string): Promise<void> {
+    if (paneId === 'crosslinks') {
+      const subject = this.linksPaneSubjectNodeId()
+      if (subject !== null) {
+        try {
+          const result = await this.bridge.rag.backlinks(subject)
+          // §11.8 item 3's discipline, one pane over: an answer whose subject moved in flight is discarded, never applied.
+          if (this.linksPaneSubjectNodeId() !== subject) return
+          this.lastBacklinks = result
+        } catch {
+          // keep the last-known backlinks on a bridge error (never a crash — the `refresh()` discipline)
+        }
+      }
+    }
+    this.updatePane(paneId)
+  }
+
   /** ⟨Unit `B-3` `C-2`/`§3` — **THE ONE PAINT**: re-render ONE pane and apply ONLY that pane's authored content root through
    *  the managed channel the stage already uses (`Runtime.applyContentReconcile`, the same reconciler the content re-derive
    *  drives). `INV-E` is this method's own body: **0 `loadAppGraph`, 0 `mountOperator`, 0 `refresh()`** — a pane whose host data
@@ -2704,7 +2793,12 @@ export class SidebarPanes {
    *  operator graph (M17) — it NEVER rebuilds the operator envelope or re-runs a
    *  RAG re-traversal. Async. */
   async refresh(): Promise<void> {
-    const nodeId = this._currentNodeId
+    // ⟨Unit `B-5` `§3` — THE SAME HELPER, so this route and the paint agree about what the pane is about.⟩ `F-2`: the dead
+    // `setCurrentNodeId` seam left this guard never true and `lastBacklinks` permanently `null`; `ASM-B5-1` gives the pane a
+    // SUBJECT (the current document's doc-head) instead of a selection producer, so the fetch below can actually happen —
+    // and `paintReplumbedPane` asks the SAME method, never a second spelling of "the pane's node". The guard semantics are
+    // unchanged: `null` ⇒ NO fetch.
+    const nodeId = this.linksPaneSubjectNodeId()
     if (nodeId) {
       try {
         this.lastBacklinks = await this.bridge.rag.backlinks(nodeId)
@@ -2856,7 +2950,13 @@ export class SidebarPanes {
     // default is `FS-7`) — see `stageDocumentScope()`.
     const documentIds = this.deriveDocumentIds(snapshot).sort((a, b) => a.localeCompare(b))
     const current = this._currentDocumentId ?? documentIds[0] ?? null
-    if (current) this.setCurrentDocumentId(current)
+    // ⟨`B5-F5(a)` — THE BOOT'S DOCUMENT SELECTION IS STATE INITIALISATION, NOT A SUBJECT MOVE.⟩ `setCurrentDocumentId` fires the
+    // `crosslinks` pane when the resolved subject MOVES (so a document switch re-reads instead of leaving the previous subject's
+    // list standing). At boot there is nothing to re-read FROM and nobody to hear it: the census subscription is registered a few
+    // statements BELOW (after the first `loadAppGraph`), and the first assemble authors the pane from host state — `lastBacklinks`
+    // is still `null` and the pane authors `(none)` by design. So the initial selection writes the field directly; the fire stays
+    // exactly where a move can happen (the public setters), and a re-boot cannot repaint a frame that is about to be re-assembled.
+    if (current) this._currentDocumentId = current
     const renderIds = current ? [current] : []
     // U-SHELL-9b — record the boot-mounted document set (a single doc at boot;
     // a later `mountTabs` supersedes it with the simultaneous set).
@@ -2865,9 +2965,12 @@ export class SidebarPanes {
     this.loadAppGraph(runtime, traversalEnvelope)
     this.mountOperator()
     // ⟨Unit `B-3` `§3` — THE PAINT'S REGISTRATION, FOR THE RE-PLUMBED CENSUS ONLY, AND AFTER THE FIRST LOAD (`ASM-B3-L3-3`).⟩
-    // ONE subscription per id in `REPLUMBED_PANE_IDS`, each body being ONE `updatePane(<report.paneId>)`: a fire (direct arm) or a
-    // `deliver()` (record arm) from now on reaches the PAINT instead of `refresh()`, and every pane NOT in the census keeps its
-    // pre-migration route (`r5` — the migration is incremental, never a big bang). Registering after the first
+    // ONE subscription per id in `REPLUMBED_PANE_IDS`, each body being the host's OWN per-pane dispatch
+    // `paintReplumbedPane(<report.paneId>)` (`B-5` `§4`: the pane's data re-read — only a data-backed pane has one — THEN ONE
+    // `updatePane(<pane id>)`): a fire (direct arm) or a `deliver()` (record arm) from now on reaches the PAINT instead of
+    // `refresh()`, and every pane NOT in the census keeps its pre-migration route (`r5` — the migration is incremental, never a
+    // big bang). `B-5` does NOT add a second subscription for `crosslinks`: the census moved and this loop is the ONLY place a
+    // subscription is made, so `B2-ADV-04`'s one-subscriber-per-id rule holds by construction. Registering after the first
     // `loadAppGraph` + `mountOperator` is load-bearing: a settle arriving during the boot's own bridge awaits would otherwise
     // answer `not-mounted` and be lost before the pane it names has a frame. The withdrawals are released first, so a re-boot
     // cannot stack a second subscriber on one id (`B2-ADV-04`'s lesson, one realm in).
@@ -2875,7 +2978,7 @@ export class SidebarPanes {
     this.unsubPaneUpdates = []
     if (this.events != null) {
       for (const paneId of REPLUMBED_PANE_IDS) {
-        this.unsubPaneUpdates.push(this.events.subscribe(paneId, (report) => void this.updatePane(report.paneId)))
+        this.unsubPaneUpdates.push(this.events.subscribe(paneId, (report) => void this.paintReplumbedPane(report.paneId)))
       }
     }
     // Subscribe to the re-derive triggers.
@@ -3093,6 +3196,24 @@ export class SidebarPanes {
       kind: payload.kind === 'structural' || prev?.kind === 'structural' ? 'structural' : 'content',
       nodeIds: [...new Set([...(prev?.nodeIds ?? []), ...(payload.nodeIds ?? [])])],
       edgeIds: [...new Set([...(prev?.edgeIds ?? []), ...(payload.edgeIds ?? [])])],
+    }
+    // ⟨Unit `B-5` `§2`/`§4` — THE DETECTION SEAM: THE FIRE, AND ITS PLACE IN THIS ORDER IS LOAD-BEARING.⟩ An EDGE moved
+    // (`payload.edgeIds` non-empty — `edit.set_edge`'s payload and `deriveBatchBroadcast`'s `putEdge`/`removeEdge` arm both
+    // carry it), so an ENUMERATION may have moved: FIRE the `crosslinks` pane, whose registered dispatch
+    // (`paintReplumbedPane`) re-reads its ONE `bridge.rag.backlinks(subject)` call and paints its OWN root (`INV-E`).
+    //
+    // THE PREDICATE IS THE WHOLE CONTROL and it is DECLARED, not implied: a CONTENT-ONLY commit broadcasts `edgeIds: []`
+    // (the `IPC_EDIT_COMMIT` shape), so "a node's text changed" fires NOTHING for this pane. Firing unconditionally would
+    // paint on every text commit.
+    //
+    // `pendingContentChange` COMMIT -> FIRE -> `requestRebuild` is the ORDER, not a style: the fire's bridge call is ISSUED
+    // first, so the re-read's commit precedes the re-derive's assemble in every interleaving the two promise chains can
+    // produce — and an `applyContentChange` that assembles AFTER the commit authors the pane from FRESH state. The fire is
+    // ADDITIVE (`ASM-B5-2`): the rebuild STAYS, because a structural edge write may move things this unit does not own and
+    // the renderer cannot tell a creation from an edge write from the payload alone. `fire` never throws and a fire with no
+    // listener is a no-op, so this site is TOTAL.
+    if (Array.isArray(payload.edgeIds) && payload.edgeIds.length > 0) {
+      this.events?.fire('crosslinks')
     }
     this.editController.requestRebuild('content')
   }

@@ -883,7 +883,9 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // MUTATION THAT WOULD RED IT: shipping a record-interest set that is not `[]` (a pane registered before `B-10` authors its
     // reader) reds the first arm; a `subscribeRecord` that never marks the id reds the control; a `deliver()` that fires every
     // subscriber (folding the two declarations) reds the difference arm; returning the LIVE arrays instead of copies reds the
-    // copy arm; and a `REPLUMBED_PANE_IDS` that grew to a second pane reds the constant arm.
+    // copy arm; and a `REPLUMBED_PANE_IDS` that reaches a THIRD pane — an extension no unit named — reds the constant arm
+    // (⟨`B-5` `pane-links` took it from one id to two DELIBERATELY: `docs/L1/unit-b-5-pane-links.md` §4; the value below is
+    // re-pinned to the landed census and the teeth are unchanged⟩).
     const problems: string[] = []
     const { channel, problems: channelProblems } = makeChannel('r9')
     problems.push(...channelProblems)
@@ -1026,14 +1028,19 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
       problems.push(`(r9) \`src/renderer/sidebar-panes.ts\` does not resolve as a module (${String(error)}) — the pinned constant's home is unreadable`)
     }
     const replumbed = hostModule === null ? undefined : hostModule['REPLUMBED_PANE_IDS']
+    // ⟨EXTENDED BY UNIT `B-5` (`pane-links`) — DELIBERATELY, per this row's own message ("a later unit must EXTEND it
+    // deliberately").⟩ `B-5` moved the census by exactly ONE: `crosslinks` joins `gnosis-query`, because a new backlink is
+    // now DETECTED on the channel (`docs/L1/unit-b-5-pane-links.md` §2/§4) and that pane's dispatch re-reads and paints its
+    // own root. The SUBJECT and the TEETH are unchanged — the value is still pinned EXACTLY, so a THIRD id still reds it.
+    const PINNED_CENSUS = ['gnosis-query', 'crosslinks']
     if (replumbed === undefined) {
       problems.push(
         '(r9) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
-          'naming the panes whose paint the host registers on the channel (exactly `[\'gnosis-query\']`)',
+          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s one-row extension)`,
       )
-    } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(['gnosis-query'])) {
+    } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
-        `(r9) \`REPLUMBED_PANE_IDS\` reads ${shown(replumbed)}, not exactly \`['gnosis-query']\` — §3: the set is ONE declared ` +
+        `(r9) \`REPLUMBED_PANE_IDS\` reads ${shown(replumbed)}, not exactly ${shown(PINNED_CENSUS)} — §3: the set is ONE declared ` +
           `constant, so a later unit must EXTEND it deliberately and can never inherit a silent second subscriber`,
       )
     }
@@ -1043,7 +1050,8 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
       `limb r9 — the two censes and the pinned constant (§6 r9; §2's declared-empty record interest; §3's \`REPLUMBED_PANE_IDS\`). ` +
         `${problems.length} problem(s). The shipped record-interest set is EMPTY BY CONSTRUCTION (no pane renders display state ` +
         `today; \`B-10\` authors the first reader) and the control proves it can MOVE; the two declarations reach different arms; ` +
-        `both censuses are copies; and the re-plumbed census is exactly \`['gnosis-query']\`. ` +
+        `both censuses are copies; and the re-plumbed census is exactly ${shown(['gnosis-query', 'crosslinks'])} (extended by ` +
+        `\`B-5\`, one id). ` +
         `envelope-class and PURE — no Electron, no DOM; the constant is read off the host MODULE's exports`,
     ).toEqual([])
   })

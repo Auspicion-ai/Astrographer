@@ -2128,6 +2128,72 @@ async function gnosisPaneFrameCensus(h, mark, reuseToken) {
   return JSON.parse(await h.cdp.evaluate(expr))
 }
 
+/** ⟨Unit `B-5` §8 (`G8`) — **THE `D-24` ASSEMBLED-APP LIMB: THE `crosslinks` PANE'S OWN PAINT, MARKED THEN
+ *  READ.**⟩ `D-24`'s own example is "if a new backlink is detected the app component can fire a listener for
+ *  the backlink pane renderer to trigger an update". What the assembled app can show is that update's DOM
+ *  shadow: a NEW `crosslink` edge fires the pane, which re-reads ONE `bridge.rag.backlinks(subject)` and paints
+ *  ITS OWN root — so the pane's own `.pane-frame[data-pane-id="crosslinks"]` node is RE-MINTED with its
+ *  carriers (zone class, `collapsed`, head/grip/control/body ids) UNCHANGED, the assembly root `#wiki-root`'s
+ *  `data-node-id` and every OTHER frame's node AND its own per-run mark SURVIVE, exactly ONE `#pane-crosslinks`
+ *  exists, and the pane's RENDERED TEXT moved.
+ *  THE TEXT IS THE CAUSAL ORACLE, and it is why this pane can earn a paint where `B-3`'s could not: before the
+ *  unit `setCurrentNodeId` had NO caller, so `lastBacklinks` was permanently `null` and the "Backlinks /
+ *  outlinks" section authored `(none)` on every render the app has ever made; and no re-assembly can author the
+ *  backlink line either (`applyContentChange` never re-reads the enumeration). So a list that MOVES from
+ *  `(none)` to a line naming the new edge is something an un-plumbed tree can never produce.
+ *  `mark: true` stamps every live frame with an own property (a per-run token) and records the census;
+ *  `mark: false` re-reads the SAME census with the token handed back and leaves the DOM alone (a mark can only
+ *  be absent from a node that was replaced). READ-ONLY: no app state, no envelope, no handler, nothing is
+ *  promoted to a verdict here — the block that owns the row reads these values. */
+async function ufLinksPaneFrameCensus(h, mark, reuseToken) {
+  // THE TOKEN MUST BE THE SAME ON BOTH HALVES (`B-3`'s `gnosisPaneFrameCensus` measured the cost of a second
+  // mint: every survivor then reads `marked:false` and the limb reports "no frame survived" on a run where
+  // nothing was re-minted at all). The mark half mints it and RETURNS it; the read half is handed it back.
+  const token = typeof reuseToken === 'string' && reuseToken !== ''
+    ? reuseToken
+    : 'b5-links-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const PANE = 'crosslinks'
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    const read = (el) => {
+      const head = el.querySelector('.pane-head')
+      const body = el.querySelector('.pane-body')
+      const grip = head ? head.children[0] : null
+      const control = head ? head.children[1] : null
+      const classes = String(el.className || '')
+      const zoneMatch = /\\bpane-in-([a-z]+)\\b/.exec(classes)
+      return {
+        zone: zoneMatch ? zoneMatch[1] : null,
+        collapsed: el.getAttribute('collapsed'),
+        id: el.getAttribute('id'),
+        headId: head ? head.getAttribute('id') : null,
+        gripId: grip ? grip.getAttribute('id') : null,
+        controlId: control ? control.getAttribute('id') : null,
+        bodyId: body ? body.getAttribute('id') : null,
+      }
+    }
+    if (${mark ? 'true' : 'false'}) { for (const el of frames) { try { el.__b5Mark = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const paneEl = document.getElementById('pane-' + PANE)
+    const rootEl = document.getElementById('wiki-root')
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim()
+    return JSON.stringify({
+      token: TOKEN,
+      root: rootEl ? rootEl.getAttribute('data-node-id') : null,
+      paneId: PANE,
+      paneFrameCount: document.querySelectorAll('#pane-' + PANE).length,
+      paneText: paneEl ? norm(paneEl.textContent) : null,
+      paneLinks: paneEl ? [].slice.call(paneEl.querySelectorAll('li[data-source]')).map((li) => ({ source: li.getAttribute('data-source'), target: li.getAttribute('data-target'), scope: li.getAttribute('data-scope'), text: norm(li.textContent) })) : [],
+      paneNoneCount: paneEl ? (norm(paneEl.textContent).match(/\\(none\\)/g) || []).length : null,
+      frames: frames.map((el) => {
+        const carries = (() => { try { return el.__b5Mark === TOKEN } catch (e) { return false } })()
+        return { pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries, carriers: read(el) }
+      }),
+    })
+  })()`
+  return JSON.parse(await h.cdp.evaluate(expr))
+}
+
 /** The [DIAG] dispatch probe: hand the SAME handler the DOM click would reach a
  *  direct `provident.dispatch` so "the handler is dead" and "the handler ran but
  *  its seam is a no-op" are distinguishable. Never a verdict. */
@@ -9689,8 +9755,194 @@ const BLOCKS = {
       ? { entries: journal.entries.length, batches: journal.entries.filter((e) => e && e.kind === 'batch').length, kindCounts: journal.entries.reduce((a, e) => { const k = (e && e.kind) || '?'; a[k] = (a[k] || 0) + 1; return a }, {}) }
       : null
     const ok = typed.hasMarker && storeChanged && storeHasMarker && domHasMarker && !blur.warning
-    return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged', `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind})`,
-      { path: 'cdp', ok, surface })
+    // =========================================================================
+    // ⟨Unit `B-5` §8 (`G8`) — **THE `D-24` ASSEMBLED-APP LIMB: A NEW BACKLINK REPAINTS THE `crosslinks` PANE,
+    // ALONE.**⟩ `D-24`'s own example: "if a new backlink is detected the app component can fire a listener for
+    // the backlink pane renderer to trigger an update". This block is the HOST by the contract's rule — it
+    // already holds a rendered document AND a real store write whose own oracle SURVIVES the unit — and its
+    // typed+blurred commit above is the `edgeIds: []` CONTROL: a content-only commit announces NO edge, so the
+    // pane must not move for it. The limb adds ONE action (a real `edit.set_edge`) and restores it afterwards.
+    // **NO NEW `BLOCKS` KEY**: the key census is FROZEN (100 keys + a sha256 of their sequence) in
+    // `tests/live-drive-contract.test.ts`, which is outside this unit's write scope.
+    // The layer of every reading below is the ASSEMBLED APP (`RCA-12`): `G8`, the only app-green layer.
+    // =========================================================================
+    const linksPaneId = 'crosslinks'
+    // (a) ENABLE + EXPAND the pane through the driver's REAL hit-tested operator control: `crosslinks` is NOT in
+    //     the shipped first-run enabled set (only `search`+`doc-nav`) and `updatePane` answers `not-enabled` for
+    //     a disabled pane, so the pane must be ON before it can paint. Its `path` is recorded, never assumed.
+    const linksEnable = await ufEnsurePaneExpanded(h, linksPaneId)
+    await sleep(3000)
+    // (b) THE CONTROL — the `edgeIds: []` shape MEASURED on the assembled app. The block's OWN typed commit
+    //     landed BEFORE the pane existed (a driver sequencing fact, named here and not smoothed), so the
+    //     control is DRIVEN now that the pane is mounted: the SAME real gesture (caret -> type -> blur) as a
+    //     SECOND content-only commit, after which the pane's frame node id, its carriers and its normalised
+    //     text must NOT move and no frame may be re-minted.
+    // A QUIET GATE FIRST, and it is not decoration: enabling the pane persists an operator setting, whose
+    // `requestRebuild('content')` reconcile can still be settling, and a frame re-minted by THAT would be
+    // mis-attributed to the content-only commit below. The gate marks, settles, and re-reads with NO store
+    // write; a frame that moves here is named as the enable's own settle, not the control's.
+    const quietMark = await ufLinksPaneFrameCensus(h, true)
+    await sleep(2500)
+    const quietRead = await ufLinksPaneFrameCensus(h, false, quietMark.token)
+    const quietFrames = (quietMark.frames || []).map((f) => {
+      const now = (quietRead.frames || []).find((x) => x.pid === f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const quietHeld = quietFrames.length > 0 && quietFrames.every((f) => f.marked && f.nodeIdHeld)
+    const controlMark = await ufLinksPaneFrameCensus(h, true)
+    const controlSt = await ufEditSurfaceState(h)
+    const controlIdx = controlSt.blockCount > 1 ? controlSt.blockCount - 1 : 0
+    const controlCaret = await ufCaretAt(h, controlIdx)
+    await sleep(250)
+    const controlMarker = `LINKSCONTROL${Date.now() % 100000}`
+    await ufType(h, controlMarker)
+    const controlBlur = await ufBlurSurface(h)
+    await sleep(2500)
+    const controlDoc = await h.mcpTool(h.mcp, 'rag.get_document', { documentId }).catch(() => null)
+    const controlCommitted = String(JSON.stringify(controlDoc ?? '')).includes(controlMarker)
+    const controlRead = await ufLinksPaneFrameCensus(h, false, controlMark.token)
+    const controlPaneBefore = (controlMark.frames || []).find((f) => f.pid === linksPaneId) || null
+    const controlPaneAfter = (controlRead.frames || []).find((f) => f.pid === linksPaneId) || null
+    const controlFrameHeld = !!controlPaneBefore && !!controlPaneAfter &&
+      controlPaneBefore.nodeId === controlPaneAfter.nodeId && controlPaneAfter.marked === true &&
+      JSON.stringify(controlPaneBefore.carriers) === JSON.stringify(controlPaneAfter.carriers)
+    const controlTextHeld = controlMark.paneText != null && controlMark.paneText === controlRead.paneText
+    const controlRootHeld = !!controlMark.root && controlMark.root === controlRead.root
+    const controlOthers = (controlMark.frames || []).filter((f) => f.pid !== linksPaneId).map((f) => {
+      const now = (controlRead.frames || []).find((x) => x.pid === f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const controlOtherSurvived = controlOthers.length > 0 && controlOthers.every((f) => f.marked && f.nodeIdHeld)
+    // THE CONTROL'S CLAIM IS SCOPED TO THIS PANE, and that scope is the honest one: an `edgeIds: []` payload must
+    // fire NOTHING for `crosslinks` (`L2(a)`), so the readable shadow is that THIS pane's frame node id, its
+    // carriers and its text are unmoved across the commit. `controlOtherSurvived` is PRINTED beside it as its own
+    // reading and is NOT folded into the control: a content-only commit legitimately RE-AUTHORS other panes (this
+    // run measured `doc-nav` re-minted — see the printed frame detail), which is neither this unit's claim nor a
+    // content-only event's contract. Folding it in would blame the links pane for a sibling's repaint.
+    const controlHeld = controlCommitted && controlFrameHeld && controlTextHeld && controlRootHeld
+    // (c) BASELINE — mark EVERY `.pane-frame[data-pane-id]` with a NEW per-run token and record each frame's
+    //     `data-node-id`, the assembly root `#wiki-root`'s, and `#pane-crosslinks`'s text (expected `(none)`).
+    const base = await ufLinksPaneFrameCensus(h, true)
+    // (d) THE SUBJECT — read off the DOM: `#zone:main [data-doc-head]`'s `data-rag-node-id`, which is exactly
+    //     the node the pane's subject helper resolves (`ASM-B5-1`: `_currentNodeId` — which has no caller —
+    //     else the CURRENT DOCUMENT'S DOC-HEAD NODE), so the oracle below reads the pane's OWN subject.
+    const subjectRead = await h.cdp.evaluate(`(()=>{const m=document.getElementById('zone:main');const el=m?m.querySelector('[data-doc-head]'):null;const s=document.getElementById('${UF_PAGE_EDIT_SURFACE_ID}');const sel=s?s.querySelector('[data-doc-head]'):null;return {mainHead:el?el.getAttribute('data-rag-node-id'):null,surfaceHead:sel?sel.getAttribute('data-rag-node-id'):null,surfaceMarker:s?s.getAttribute('data-edit-surface'):null,headsInMain:m?[].slice.call(m.querySelectorAll('[data-doc-head]')).map((e)=>e.getAttribute('data-rag-node-id')):[]}})()`)
+    const subjectNodeId = subjectRead.mainHead
+    // A SOURCE from ANOTHER document: the edge is CROSS-DOCUMENT by construction, so the rendered document's
+    // own OUTGOING half (`ctx.crosslinks`, a traversal product) cannot move and the causal oracle stays the
+    // BACKLINK line alone (`ASM-B5-3`).
+    const linksDocs = await h.mcpTool(h.mcp, 'rag.list_documents', {}).catch(() => null)
+    const otherDocuments = linksDocs && Array.isArray(linksDocs.documents)
+      ? linksDocs.documents.map((d) => (d ? d.documentId : null)).filter((id) => typeof id === 'string' && id !== '' && id !== documentId)
+      : []
+    let sourceDoc = null
+    let sourceNodeId = null
+    const sourceTried = []
+    for (const otherDocId of otherDocuments.slice(0, 6)) {
+      const sub = await h.mcpTool(h.mcp, 'rag.get_document', { documentId: otherDocId }).catch(() => null)
+      const nodes = sub && Array.isArray(sub.nodes) ? sub.nodes : []
+      const pick = nodes.find((n) => n && n.props && n.props['data-doc-head'] === true) || nodes[0] || null
+      sourceTried.push({ docId: otherDocId, nodes: nodes.length, pick: pick ? pick.id : null })
+      if (pick && typeof pick.id === 'string' && pick.id !== '' && pick.id !== subjectNodeId) { sourceDoc = otherDocId; sourceNodeId = pick.id; break }
+    }
+    // (e) CREATE THE BACKLINK FOR REAL — ONE `edit.set_edge`, the producer of main's edge-write announcement
+    //     (`{kind:'structural', nodeIds:[source,target], edgeIds:[edge.id]}` over the EXISTING channel). The
+    //     reply is printed VERBATIM; an `isError` reply is a DRIVER precondition, classified through the
+    //     corpus's own `driverFailureReason` — never smoothed into an app FAIL and never into a pass.
+    let edgeCreate = { read: null, failure: null, edgeId: null }
+    if (subjectNodeId !== null && sourceNodeId !== null) {
+      const read = await mcpToolResult(h.mcp, 'edit.set_edge', { kind: 'crosslink', source: sourceNodeId, target: subjectNodeId })
+        .catch((e) => ({ ok: false, isError: false, tool: 'edit.set_edge', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+      edgeCreate = {
+        read,
+        failure: driverReadFailure(read),
+        edgeId: read && read.value && read.value.edge && typeof read.value.edge.id === 'string' ? read.value.edge.id : null,
+      }
+    }
+    await sleep(4500)
+    // (f) THE FIVE LIMBS, read SEPARATELY off the SETTLED app — never collapsed into one boolean.
+    const after = await ufLinksPaneFrameCensus(h, false, base.token)
+    const baseByPid = new Map((base.frames || []).map((f) => [f.pid, f]))
+    const afterByPid = new Map((after.frames || []).map((f) => [f.pid, f]))
+    // (i) the assembly root `#wiki-root` was NOT re-minted (a whole-graph `loadAppGraph` mints a new root id).
+    const assemblyRootUnchanged = !!base.root && base.root === after.root
+    // (ii) every OTHER pane frame that STOOD at the baseline is still there, still carrying its mark and its
+    //      node id (computed over the BEFORE census, so a sibling that VANISHED reds the limb).
+    const otherBefore = (base.frames || []).filter((f) => f.pid !== linksPaneId)
+    const otherPanes = otherBefore.map((f) => {
+      const now = afterByPid.get(f.pid)
+      return { pid: f.pid, marked: !!now && now.marked === true, nodeIdHeld: !!now && now.nodeId === f.nodeId }
+    })
+    const otherPanesSurvived = otherBefore.length > 0 && otherPanes.every((p) => p.marked && p.nodeIdHeld)
+    // (iii) the pane's OWN frame was RE-MINTED (its mark is gone) with its carriers held (id, data-pane-id,
+    //       zone class, collapsed, head/grip/collapse-control/body ids).
+    const linksBefore = baseByPid.get(linksPaneId) || null
+    const linksAfter = afterByPid.get(linksPaneId) || null
+    const carriersOf = (f) => (f && f.carriers ? JSON.stringify(f.carriers) : null)
+    const linksCarriersHeld = !!linksBefore && !!linksAfter && carriersOf(linksBefore) === carriersOf(linksAfter)
+    const linksReminted = !!linksBefore && !!linksAfter && linksAfter.marked === false && linksBefore.nodeId !== linksAfter.nodeId
+    // (iv) exactly ONE `#pane-crosslinks` exists (no duplicate, no orphan).
+    const exactlyOneLinksFrame = base.paneFrameCount === 1 && after.paneFrameCount === 1
+    // (v) THE CAUSAL ORACLE — the pane's rendered list MOVED from `(none)` to a line naming the new edge. An
+    //     un-plumbed tree can never produce it: `lastBacklinks` was permanently `null` before the unit, and no
+    //     re-assembly re-reads the enumeration (`F-3`).
+    const linksContentChanged = !!base.paneText && !!after.paneText && base.paneText !== after.paneText
+    const expectedLine = sourceNodeId !== null && subjectNodeId !== null ? `${sourceNodeId} → ${subjectNodeId}` : null
+    const linksLineNamed = !!expectedLine && !!after.paneText && after.paneText.includes(expectedLine)
+    const linksBaselineWasNone = !!base.paneText && base.paneText.includes('(none)')
+    // (g) RESTORE — delete the edge through the SAME transaction primitive the MCP surface uses, then re-disable
+    //     `crosslinks` through its OWN visibility control, so this run exports NO persisted-state change
+    //     (`UF_BASELINE_PANES` restores only `doc-nav`/`search`, so leaving the pane ON would leak into a later
+    //     block as a `LIVE-DRIVER-PERSISTENCE-ORDER-ARTIFACT`).
+    let edgeRemove = { read: null, failure: null, mcp: null, bridge: null }
+    if (edgeCreate.edgeId !== null) {
+      // THE CONTRACTED ROUTE FIRST, SAID VERBATIM: unit `B-5`'s §8 names `edit.batch` with a `removeEdge` op
+      // "the same transaction primitive the MCP surface uses" — and on THIS surface that tool is NOT
+      // REGISTERED. The refusal is recorded as the DEFECT it is, never smoothed, and the restore then goes
+      // through the app's OWN batch channel (`window.provident.edit.batch` -> `IPC_EDIT_BATCH` ->
+      // `applyBatch`, the same transaction primitive), which is a REAL app route and not a substitute seam.
+      const mcpAttempt = await mcpToolResult(h.mcp, 'edit.batch', { ops: [{ op: 'removeEdge', id: edgeCreate.edgeId }] })
+        .catch((e) => ({ ok: false, isError: false, tool: 'edit.batch', value: null, errorText: String(e && e.message ? e.message : e), transportError: true }))
+      const bridgeAttempt = await h.cdp.evaluate(`(async()=>{try{const e=window.provident&&window.provident.edit;if(!e||typeof e.batch!=='function')return {called:false,reason:'window.provident.edit.batch is not on the bridge'};const r=await e.batch([{op:'removeEdge',id:${JSON.stringify(edgeCreate.edgeId)}}]);return {called:true,result:r}}catch(err){return {called:true,threw:String(err&&err.message?err.message:err)}}})()`)
+      const bridgeOk = !!(bridgeAttempt && bridgeAttempt.called === true && bridgeAttempt.result && bridgeAttempt.result.ok === true)
+      edgeRemove = {
+        read: bridgeOk ? { ok: true, isError: false, tool: 'window.provident.edit.batch', value: bridgeAttempt.result } : mcpAttempt,
+        failure: bridgeOk ? null : driverReadFailure(mcpAttempt),
+        mcp: { value: mcpAttempt.value, isError: mcpAttempt.isError, errorText: mcpAttempt.errorText },
+        bridge: bridgeAttempt,
+      }
+    }
+    await sleep(4000)
+    const restoredCensus = await ufLinksPaneFrameCensus(h, false, base.token)
+    const linksTextAfterRestore = restoredCensus.paneText
+    const linksLineCleared = expectedLine !== null && !!linksTextAfterRestore && !linksTextAfterRestore.includes(expectedLine)
+    const visBeforeDisable = await ufPaneVisibilityState(h, linksPaneId)
+    let disablePath = 'already-disabled'
+    if (visBeforeDisable === 'true') {
+      await ufModal(h, true)
+      const disableClick = await ufRealClick(h, `#operator-pane-visibility-${linksPaneId}`)
+      await sleep(1500)
+      disablePath = disableClick.path
+      await ufModal(h, false)
+      await sleep(2000)
+    }
+    const visAfterDisable = await ufPaneVisibilityState(h, linksPaneId)
+    const paneDisabledRestored = visAfterDisable === 'false'
+    const restoreOk = edgeCreate.edgeId !== null && edgeRemove.failure === null && linksLineCleared && paneDisabledRestored
+    // THE DRIVER PRECONDITIONS, CLASSIFIED AND NAMED (never an app FAIL, never smoothed into a pass).
+    let linksParkReason = null
+    if (linksEnable.present !== true) linksParkReason = `PRECONDITION-FAILED: the ${linksPaneId} pane could not be enabled/expanded through the operator control (path=${linksEnable.path}; zone:left=${linksEnable.zoneState}) — a driver-side state, so the limb is PARKED`
+    else if (subjectNodeId === null) linksParkReason = `PRECONDITION-FAILED: no [data-doc-head] node id in #zone:main (read ${JSON.stringify(subjectRead)}) — the pane's subject is unreadable, so the causal oracle has no target`
+    else if (sourceNodeId === null) linksParkReason = `PRECONDITION-FAILED: no source node in ANOTHER document (documents=${JSON.stringify(otherDocuments.slice(0, 6))}, tried=${JSON.stringify(sourceTried)})`
+    else if (edgeCreate.failure !== null) linksParkReason = driverFailureReason(edgeCreate.failure.kind, edgeCreate.failure.detail, edgeCreate.failure.extra).marker
+    const linksLimbOk = linksParkReason === null && controlHeld && assemblyRootUnchanged && otherPanesSurvived &&
+      linksCarriersHeld && linksReminted && exactlyOneLinksFrame && linksContentChanged && linksLineNamed && linksBaselineWasNone
+    const okAll = ok && linksLimbOk && restoreOk
+    const linksLimbEvidence = `⟨B-5 §8 G8 — THE D-24 ASSEMBLED-APP LIMB (assembled app; the ONLY app-green layer)⟩ (0) pane ENABLED+EXPANDED through the operator control: path=${linksEnable.path} present=${linksEnable.present} zone:left=${linksEnable.zoneState}; QUIET GATE after the enable (mark, settle, re-read with no store write) held=${quietHeld} frames=${JSON.stringify(quietFrames)}; CONTROL (the edgeIds:[] shape, a SECOND real content-only commit driven now that the pane is mounted — the block's OWN typed commit landed before the pane existed, a driver sequencing fact): caret=${JSON.stringify(controlCaret.ok || false)} typed "${controlMarker}" blur(warning=${controlBlur.warning}) store read-back containsMarker=${controlCommitted} => frameHeld=${controlFrameHeld} textHeld=${controlTextHeld} rootHeld=${controlRootHeld} otherFramesSurvived=${controlOtherSurvived} (${JSON.stringify(controlOthers.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}) CONTROL_HELD=${controlHeld} (the control's claim is the crosslinks pane's OWN stillness; otherFramesSurvived is printed as its own reading, not folded in — a content-only commit legitimately re-authors a SIBLING pane) (frame node id "${controlPaneBefore ? controlPaneBefore.nodeId : '?'}" -> "${controlPaneAfter ? controlPaneAfter.nodeId : '?'}"; text "${controlMark.paneText}" -> "${controlRead.paneText}"); (c) BASELINE #wiki-root data-node-id="${base.root}" frames=${JSON.stringify((base.frames || []).map((f) => f.pid + '@' + f.nodeId))} #pane-${linksPaneId} x${base.paneFrameCount} text="${base.paneText}" ((none) present=${linksBaselineWasNone}); (d) SUBJECT read off the DOM #zone:main [data-doc-head]=${JSON.stringify(subjectRead)} => subjectNodeId=${subjectNodeId}, SOURCE from ANOTHER document sourceDoc=${sourceDoc} sourceNodeId=${sourceNodeId} (candidates ${JSON.stringify(sourceTried)}); (e) edit.set_edge REPLY VERBATIM=${JSON.stringify(edgeCreate.read ? edgeCreate.read.value : null)} isError=${edgeCreate.read ? edgeCreate.read.isError : 'no-call'} edgeId=${edgeCreate.edgeId}; (f) THE FIVE LIMBS read off the SETTLED app: (i) assemblyRootUnchanged=${assemblyRootUnchanged} (#wiki-root "${base.root}" -> "${after.root}"); (ii) otherPanesSurvived=${otherPanesSurvived} (${JSON.stringify(otherPanes.map((p) => p.pid + ':marked=' + p.marked + ',nodeIdHeld=' + p.nodeIdHeld))}); (iii) paneReminted=${linksReminted} with paneCarriersHeld=${linksCarriersHeld} (before ${carriersOf(linksBefore)} vs after ${carriersOf(linksAfter)}); (iv) exactlyOneCrosslinksFrame=${exactlyOneLinksFrame} (before ${base.paneFrameCount} after ${after.paneFrameCount}); (v) paneContentChanged=${linksContentChanged} ("${base.paneText}" -> "${after.paneText}") namesTheNewEdge=${linksLineNamed} expectedLine=${JSON.stringify(expectedLine)} renderedLinks=${JSON.stringify(after.paneLinks)}; (g) RESTORE: the CONTRACTED route MCP edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.mcp)} and the app's OWN batch channel window.provident.edit.batch REPLY VERBATIM=${JSON.stringify(edgeRemove.bridge)} edgeId=${edgeCreate.edgeId} removedClearedTheLine=${linksLineCleared} (pane text after the delete "${linksTextAfterRestore}"); pane visibility re-disabled through its own control: before=${visBeforeDisable} path=${disablePath} after=${visAfterDisable} restored=${paneDisabledRestored}; PARK REASON=${JSON.stringify(linksParkReason)} (a driver precondition is PARKED by name — never an app FAIL, never a pass)`
+    const evidenceFull = `fixture=${JSON.stringify({ docId: fixture.docId, blocks: fixture.surface ? fixture.surface.blockCount : null, active: fixture.active ? fixture.active.activeTabId + '/' + fixture.active.activeTabKind : null, surfacePresent: fixture.surface ? fixture.surface.present : null })}; documentId=${documentId} surface box=${JSON.stringify(st.box)}; caret placed at block ${idx} (${JSON.stringify(placed)}) => ${JSON.stringify(selBefore)}; REAL typed text "${marker}" landed in the surface=${typed.hasMarker} (surface text len ${st.len}->${typed.len}); REAL blur (page-commit seam) => ${JSON.stringify(blur)}; STORE read-back rag.get_document changed=${storeChanged} containsMarker=${storeHasMarker}; rendered DOM containsMarker=${domHasMarker} (store/DOM AGREE=${storeHasMarker === domHasMarker}); journal BEFORE=${JSON.stringify(journalPreDetail)} (undoDepth ${journalBefore}) AFTER=${JSON.stringify(journalPostDetail)} (undoDepth ${journal && journal.undoDepth}, delta=${journalDelta}) — the ONE-batch claim's store-side half; commit-warning present=${blur.warning} (kind=${blur.warningKind}); ${linksLimbEvidence}`
+    const linksAssertion = 'A real typed edit + blur commits to the store in ONE batch: the `rag.get_document` read-back and the rendered DOM agree on the typed text, and an unrelated block is byte-unchanged — AND (unit `B-5` §8 / D-24, gate `G8`) a NEWLY DETECTED BACKLINK repaints the `crosslinks` pane (title `Links`, `.pane-frame[data-pane-id="crosslinks"]`) ITSELF and ALONE: `#wiki-root` and every OTHER pane frame survive with their per-run mark, exactly ONE `#pane-crosslinks` exists, the pane frame is re-minted with its carriers held, and the pane named list MOVES from `(none)` to a line naming the new edge'
+    return rowResult({row:'U-EDIT-1-LIVE-7',dclass:'D-state'}, linksAssertion, evidenceFull,
+      { path: 'cdp', ok: okAll, surface, park: linksParkReason !== null, parkReason: linksParkReason, extra: { b5LinksLimb: { assemblyRootUnchanged, otherPanesSurvived, paneReminted: linksReminted, paneCarriersHeld: linksCarriersHeld, exactlyOneCrosslinksFrame: exactlyOneLinksFrame, paneContentChanged: linksContentChanged, namesTheNewEdge: linksLineNamed, controlHeld, restoreOk } } })
   },
 
   // ---- §8.3 item 3 — a FAILED commit is USER-VISIBLE (painted, typed) AND

@@ -748,3 +748,25 @@ instance); the two arms cannot diverge (one handler map, `subscribeRecord` = `su
 0 refresh()`** on a delivery-driven update, with FOUR mutants each measured red first — `m1` a handler replaced
 by `host.refresh()`, `m2`/`m3` the other two counters, `m4` a paint that claimed what it did not earn — and a
 floor proving the counters move on the same double; and `B-2`'s INFO is pinned (a held reading is a COPY).
+
+---
+
+## D-34 — `B-5` lands envelope-green with its live paint OWED; `crosslinks` joins the re-plumbed set
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** `B-5`'s interrupted pass, re-verified in
+this seat (its rows 20/20 with `B-3`'s; the full suite at its clean floor; `typecheck` 0; `build` 0; `drift`
+CLEAN with its pin arm equal; `node --check` 0)
+
+**Decision:** `B-5` `pane-links` lands ENVELOPE-GREEN: the links pane (`crosslinks`) is re-plumbed onto
+`B-3`'s channel — `REPLUMBED_PANE_IDS` is now `['gnosis-query', 'crosslinks']` — and its rows are green.
+
+**The one thing not proved, stated rather than implied:** the seat was interrupted before its scoped live leg
+and its reviews, so **the links pane's actual REPAINT is OWED**. The route is named so the next pass does not
+re-derive it: create a backlink on the assembled app (`DISPLAY=:0`) and read the pane's content moving while
+`(i)` the rest of the assembly is unchanged, `(ii)` the other panes' marks survived, and `(iv)` exactly one
+frame — the same three control terms `B-3` used. Until that reading exists, this unit's paint is unclaimed, and
+its `INV-E` counters are proven only at node grain.
+
+**Why it lands anyway, rather than being held:** its rows, its census and the suite are verified green, its
+change set is inside its grant, and holding a working unit for a missing live reading would leave the tree
+neither better nor worse — the OWED line is the honest form, and the tracker carries it.
