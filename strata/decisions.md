@@ -986,3 +986,33 @@ block in `scripts/live-drive.mjs`, and the adapter note below.
 
 **And the engine path is COMPLETE in the fork:** engine write → mirror → store → doc-heads, and engine change →
 consumer → pane. The only refusal left is the engine's own, and no engine event has been received anywhere.
+
+---
+
+## D-42 — `B-7` is NOT landed: the template pane worked, the SEARCH pane did not, and the tree is reverted to green
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-7`'s interrupted pass, assessed in this
+seat (`docs/unit/shell-chrome` 19 files / **135 tests green** after the revert; `typecheck` 0; `build` 0)
+
+**What was measured before the revert:** the seat wired BOTH panes into `REPLUMBED_PANE_IDS`
+(`['gnosis-query','crosslinks','doc-nav','search','template-editor']`) and drove a live run in which the
+**template** limb read `TEMPLATE_LIMB_OK=true`. But its own rows read **7 green / 5 red**, and the five reds
+were all the SEARCH pane's: `Q1` (a settled query must paint `pane-search` ALONE from both submit seams), `Q2`
+(the dirty-edit window must not gate the pane's own event), `X2` (neither pane touches the other), `X3`
+(`INV-E` and the seven mutants), `X4` (an absent pane costs no paint and no IPC). The template pane's rows
+(`Q3`, `T1`, `T2`, `X1`) passed.
+
+**The decision: REVERT the source, KEEP the design.** A half-wired pane is worse than an absent one — the
+search pane had left `refresh()` and its own event did not yet paint it, so the app's search pane would have
+stopped updating while the suite claimed it was re-plumbed. The source, the driver and the six test files'
+edits are reverted; the **contract and both layer pages survive** (`docs/L1/unit-b-7-pane-search-template.md`,
+`docs/L2|L3/shell-chrome/pane-search-template.md`) and the four row files are archived under
+`archive/b-7-incomplete/` — they are the SPECIFICATION of what the next pass must make green, not noise.
+
+**Why this is landed as a refusal rather than a park:** the cause is not external. The template pane proves
+the pattern works on this tree; the search pane needs its own mechanism finished, and calling that a park
+would be exactly the RCA-11 default this program has spent its whole run refusing.
+
+**What the next pass inherits, named:** the five red rows' subjects; the fact that the template half is
+ALREADY WRITTEN in the archived rows and can be re-landed with the search half; and the tree's green state as
+the starting point.
