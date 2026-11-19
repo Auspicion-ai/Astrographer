@@ -980,8 +980,8 @@ wrong, it re-states ALL FOUR together rather than one.
 
 **Carried with an owner:** `B4A-F13` (LOW) — the walk's `complete` rests on the engine's own `total`, so an
 engine that under-reports could license one over-eager DELETE. The remedy is named (`ASM-B4A-6`: proof-of-end is
-a short/empty terminal page, `total` a hint) and NOT taken, because taking it re-grains a sibling unit's row
-(`B-4`'s `c9(h)`); the projection restores itself on the next walk. **Owed:** `G6`'s blind greens, the live
+a short/empty terminal page, `total` a hint) and NOT taken — it re-grains a sibling unit's row (`B-4`'s `c9(h)`)
+and the projection restores itself next walk. **Owed:** `G6`'s blind greens, the live
 block in `scripts/live-drive.mjs`, and the adapter note below.
 
 **And the engine path is COMPLETE in the fork:** engine write → mirror → store → doc-heads, and engine change →
