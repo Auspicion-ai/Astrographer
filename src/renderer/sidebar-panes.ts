@@ -254,8 +254,23 @@ export interface SidebarPanesOptions {
    *  panes, wired by the renderer via `GnosisPanes`). When present, the
    *  `window.provident.sidebar.gnosisStatus`/`gnosisQuery` handler bodies route
    *  here. Absent (tests / pre-Gnosis hosts) → the sidebar gnosis methods are
-   *  no-ops (never throw). */
-  gnosis?: { status(): void; query(value: string): void }
+   *  no-ops (never throw).
+   *
+   *  ⟨Unit `B-8` `§5`/§12a — THE DELEGATE WIDENS BY THREE (`D-44`'s grant line 2).⟩ The two CRUD panes' OWN controls reach
+   *  `window.provident.sidebar.gnosisDocuments`/`gnosisWikis`, and `installSidebarBridge` used to install no such members, so every
+   *  one of those bodies ran `undefined?.()` and the panes have been read-once-at-boot since A2 (`F-7`). `documents`/`wikis` are those
+   *  two seams; `refreshFromEngine` is the ENGINE arm's producer (the descriptor is a TRIGGER, and the host's read is what answers it —
+   *  `F-3`/`ASM-B8-2`). All three are OPTIONAL so a pre-Gnosis host keeps booting: an absent member is a no-op, never a throw. */
+  gnosis?: {
+    status(): void
+    query(value: string): void
+    /** `sidebar.gnosisDocuments` — route a document tool call through the CRUD host. */
+    documents?(tool: string, args: Record<string, unknown>): void
+    /** `sidebar.gnosisWikis` — route a wiki tool call through the CRUD host. */
+    wikis?(tool: string, args: Record<string, unknown>): void
+    /** The engine descriptor's producer: issue the CRUD panes' own read(s) so their settles fire and paint. */
+    refreshFromEngine?(): void
+  }
   /** The back-reference map (the edit controller's map — the SOLE authoritative
    *  carrier). The host clears + repopulates it after each buildTraversal. */
   backRefs: Map<string, string[]>
@@ -284,8 +299,8 @@ export interface SidebarPanesOptions {
   events?: PaneEvents
 }
 
-/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **five ids at
- *  this head — `gnosis-query`, `crosslinks`, `doc-nav`, `search` and `template-editor` — i.e. ONE constant EXTENDED
+/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **seven ids at
+ *  this head — `gnosis-query`, `crosslinks`, `doc-nav`, `search`, `template-editor`, `gnosis-documents` and `gnosis-wikis` — i.e. ONE constant EXTENDED
  *  deliberately, once per unit, each with its cause beside it** (the count is a fact of THIS declaration and is never carried
  *  into prose as a fixed literal; each landing's paragraph below states the delta it took). The set is ONE constant so a later
  *  family unit must EXTEND it deliberately
@@ -311,8 +326,27 @@ export interface SidebarPanesOptions {
  *  id, it is the same `subscribe` (one subscriber per id, `B2-ADV-04`), and every other family keeps its `refresh()`.
  *  ⟨Unit `B-6` — `doc-nav` JOINS FOR ITS OWN CAUSE: this pane hears BOTH SOURCES (`docs/L1/unit-b-6-pane-doc-nav.md` §2) — a change
  *  of the RENDERED STORE (fired locally in `onRagStoreChanged`) and an ENGINE-originated change (published through the change
- *  census) — and answers ONE `rag.docHeads()` re-read + ONE `updatePane('doc-nav')`, never a re-assembly. One id, one registration.⟩ */
-export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor'])
+ *  census) — and answers ONE `rag.docHeads()` re-read + ONE `updatePane('doc-nav')`, never a re-assembly. One id, one registration.⟩
+ *  ⟨Unit `B-8` — THE ROW MOVED BY EXACTLY TWO MORE, AND HERE IS THE CAUSE (`D-44`'s grant, §12a).⟩ `gnosis-documents` and `gnosis-wikis`
+ *  join the census because each now answers a PRODUCER OF ITS OWN instead of `host.refresh()`: the CRUD host's bridge settle
+ *  (`gnosis.wiki.list`, `gnosis.document.list`, `gnosis.wiki.get`, `gnosis.document.get` and the mutating verbs) commits its own field and
+ *  then FIRES the pane(s) whose rendered fields it wrote (`F-8`'s field census), while the ENGINE descriptor's arm re-reads through that same
+ *  producer (`refreshFromEngine`) — so a paint arrives because the pane HEARD, never because something re-assembled the tree. Neither pane
+ *  re-reads a bridge on its OWN event (`ASM-B8-1`: a re-issue is the unbounded `settle → fire → settle` loop `F-4` names), so neither owes a
+ *  re-read arm and both reach `updatePane` synchronously inside the fire. It is two ids, the same `subscribe`, ONE registration per id
+ *  (`B2-ADV-04`), and every other family keeps its `refresh()`. **`gnosis-status` is deliberately NOT here, and the reason is a hazard rather
+ *  than a schedule:** its paint is `B-9`'s (`paintPane` answers `operator-scope` for an operator-scope registration), so a census entry would
+ *  make `fire` answer `fired:true` while nothing paints — and `renderer.ts`'s `⟨B-9⟩` fallback would then be skipped PRECISELY BECAUSE it fired,
+ *  which is a silently dead operator pane. The two families still keeping `refresh()` are therefore `settings` and `gnosis-status`, both `B-9`'s.⟩ */
+export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze([
+  'gnosis-query',
+  'crosslinks',
+  'doc-nav',
+  'search',
+  'template-editor',
+  'gnosis-documents',
+  'gnosis-wikis',
+])
 
 /** ⟨Unit `B-6` `§4` — THE CHANGE-INTEREST CENSUS: ONE FROZEN DECLARATION, and the only input the `boot` loop uses to choose a
  *  DECLARATION per id.⟩ An id listed here is registered with `subscribeChange` — which is `subscribe` PLUS a mark, in the SAME
@@ -324,9 +358,19 @@ export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze(['gnosis-quer
  *  ⟨Unit `B-8` `§9` — `B6-F15`, THE CAUSE THIS DECLARATION IS NOW GUARDED.⟩ A change-interest id is only HEARD if the census also
  *  paints it: `subscribeChange` exists for census ids, so an id named HERE but ABSENT from `REPLUMBED_PANE_IDS` subscribes
  *  NOTHING while `publishChange()` drifts on — the half-wire `D-42` refuses, produced silently by the one edit this declaration
- *  invites (§4's `B-8` state — `['doc-nav','gnosis-documents','gnosis-wikis']` — is exactly it). The containment is therefore a
- *  RULE, not a convention: `changeInterestSubsetProblems` below is the counter, and `boot` validates this pair with it BEFORE it
- *  attaches a single subscription and refuses the WHOLE plan when the answer is non-empty (`B6-F15`, `docs/L1/unit-b-8-pane-gnosis.md` §9). */
+ *  invites. The containment is therefore a RULE, not a convention: `changeInterestSubsetProblems` below is the counter, and `boot` validates
+ *  this pair with it BEFORE it attaches a single subscription and refuses the WHOLE plan when the answer is non-empty
+ *  (`B6-F15`, `docs/L1/unit-b-8-pane-gnosis.md` §9).
+ *
+ *  ⟨Unit `B-8` `§12a` — **THE DECLARATION DOES *NOT* MOVE, AND THE REASON IS MEASURED** (`D-40`'s `m6` lesson, one declaration over).⟩ The two
+ *  CRUD panes DO follow engine-changeable data (`F-3`), but `publishChange()` is not their route to it: a fire's contract is "re-read your
+ *  subject", and these panes have NO re-read arm by design (`F-4` — a re-issue is the unbounded `settle → fire → settle` loop), so a
+ *  `publishChange` fire reaches them with nothing to re-read and can paint NOTHING. Measured, both ways: in the `pane-doc-nav` `D2` harness
+ *  (no gnosis pane registered) it answers `not-a-pane`, and in the app it answers `unchanged`. That is a DECLARED BUT INERT path — precisely
+ *  the class `D-40` names — so this declaration stays ONE id wide. Their engine route is the ENGINE ARM's producer instead:
+ *  `onRagStoreChanged` calls the delegate's `refreshFromEngine()`, whose SETTLE fires its own pane (`descriptor → read → settle → fire → paint`),
+ *  so `publishChange()` keeps its one meaning and the engine has one route per pane, never two. `B6-F15`'s containment is what makes that
+ *  binding either way: a change-interest id the census does not paint is refused by `boot` before anything attaches.⟩ */
 const CHANGE_INTERESTED_PANE_IDS: readonly string[] = Object.freeze(['doc-nav'])
 
 /** ⟨Unit `B-8` `§9` (`B6-F15`) — **THE SUBSET COUNTER: this declaration may never name a pane the paint census does not carry.**⟩
@@ -660,7 +704,7 @@ export class SidebarPanes {
   private readonly sidebarZone: string
   /** Unit GN-MCP-UI §5.5 — the optional gnosis GUI delegate (see the options
    *  doc). Null when not provided (the sidebar gnosis methods become no-ops). */
-  private readonly gnosis: { status(): void; query(value: string): void } | null
+  private readonly gnosis: NonNullable<SidebarPanesOptions['gnosis']> | null
   /** Unit U-SHELL-9a §2.6 — the optional main-focus tab-strip delegate (the
    *  search pane's pane-first expand-to-tab control + the result/open/edit
    *  seams reach it; HOST-4/HOST-5). */
@@ -3330,8 +3374,32 @@ export class SidebarPanes {
     }
   }
 
+  /** ⟨Unit `B-8` `§12a`, grant line 2 + the adversarial pass's `ABS-B8-2` — **THE ENGINE ARM'S PRODUCER CALL, CONTAINED.**⟩ The engine branch
+   *  calls this and then `publishChange()`, so the containment is here: a delegate whose bridge lacks `security` (or any future producer that
+   *  throws synchronously) must not skip the publish for that descriptor and must not escape into the runtime's IPC listener, which has no
+   *  guard of its own (`ASM-B3-L2-2`'s discipline, applied to a producer call rather than a paint). A REJECTED read is already handled inside the
+   *  host; this covers the synchronous arm. The ORDER — read issued, then publish — is what makes a pane that heard both read FRESH state.
+   *  (It is a METHOD rather than two inline statements because `onRagStoreChanged`'s body is read through a fixed-size source window by a
+   *  sibling unit's row, `pane-links` `S1`; widening that window would be a test-side relaxation this unit may not make.) */
+  private containedProducerRefresh(): void {
+    try {
+      this.gnosis?.refreshFromEngine?.()
+    } catch (thrown) {
+      console.error('[sidebar-panes] the engine descriptor reached a producer that threw — publishChange() proceeds', thrown)
+    }
+  }
+
   /** The rag-store-changed handler: routes through the edit controller's
-   *  dirty-edit guard (requestRebuild). */
+   *  dirty-edit guard (requestRebuild).
+   *
+   *  ⟨Unit `B-8` `§12a`, grant line 2 — **THE ENGINE ARM'S PRODUCER CALL, stated here because the handler's own window is bounded.**⟩ The engine
+   *  branch (exact `store === 'gnosis:engine'`, ABOVE the three local guards) runs `publishEngineDescriptor()`, which calls
+   *  `this.gnosis?.refreshFromEngine?.()` BEFORE `publishChange()`, and returns. The descriptor is a TRIGGER: the CRUD panes' data is answered by
+   *  the engine CRUD proxy and their paint re-reads NOTHING (`ASM-B8-1`), so the HOST issues the read — `refreshFromEngine()` issues ONE
+   *  `gnosis.wiki.list` (plus the selected wiki's `document.list`) through the panes' OWN producer, whose settle then fires its own pane:
+   *  `descriptor → read → settle → fire → paint`, which terminates because the paint re-reads nothing. `publishChange()` is unchanged and still
+   *  addresses `doc-nav` alone (a CRUD pane carries no re-read arm, so a change-interest mark there would be a declared-but-inert path —
+   *  `§12a`'s measured narrowing). */
   onRagStoreChanged(payload: RagStoreChangedPayload): void {
     // B5 — the fail-closed foreign-store drop: a broadcast for a store this
     // host is NOT rendering must NOT re-derive the unchanged default graph.
@@ -3352,6 +3420,7 @@ export class SidebarPanes {
     // local re-derive around them is the wrong-origin harm `B4-EX-2` pinned fail-closed on the main side. Every non-engine foreign
     // name still falls through to the guards below, unchanged.
     if (payload.store === ENGINE_ORIGIN_STORE_LABEL) {
+      this.containedProducerRefresh()
       this.events?.publishChange()
       return
     }
@@ -4035,6 +4104,13 @@ export class SidebarPanes {
       // `GnosisPanes` delegate (a no-op when no delegate is provided — never throw).
       gnosisStatus: () => { this.gnosis?.status?.() },
       gnosisQuery: (value: string) => { this.gnosis?.query?.(value) },
+      // ⟨Unit `B-8` `§12a` — THE TWO SEAMS `F-7` RECORDED AS MISSING (`D-44`'s grant line 2).⟩ The A2 CRUD panes' own controls
+      // (`#gnosis-documents-refresh`/`#gnosis-wikis-refresh`, the wiki/document li selects and the mutating verbs) route through
+      // `window.provident.sidebar.gnosisDocuments`/`gnosisWikis`; until these two members existed, every one of those bodies reached
+      // `undefined?.()` and the panes were read-once-at-boot. The preload proxy ALREADY exposes both keys (`src/main/preload.ts`), so the
+      // boundary parity guard below agrees with them — the defect was the renderer-side holder, never the bridge.
+      gnosisDocuments: (tool: string, args: Record<string, unknown>) => { this.gnosis?.documents?.(tool, args) },
+      gnosisWikis: (tool: string, args: Record<string, unknown>) => { this.gnosis?.wikis?.(tool, args) },
       // Unit U-EDIT-2 (C16) §2.1/§2.2 — the project-journal seams the app-graph
       // Undo/Redo controls + history-entry thumbs reach via
       // `window.provident.sidebar` (the M2 pattern). Each delegates to the host

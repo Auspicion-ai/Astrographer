@@ -67,9 +67,57 @@ export interface GnosisCrudBridge {
 }
 
 /** The renderer-wired re-render trigger the gnosis-crud host calls after a
- *  bridge call settles (the host re-assembles the app-graph so the updated pane
- *  data renders). */
-export type GnosisCrudOnChanged = () => void
+ *  bridge call settles (the host re-paints the panes whose data changed).
+ *
+ *  ⟨Unit `B-8` `§12a` — **IT NAMES ITS PANE, and that is the whole of grant line 1.**⟩ The pre-migration type was `() => void`, so a settle
+ *  could only ask the renderer for `host.refresh()` — a whole-graph re-assembly for ONE pane's data, which `INV-E` counts at zero and which
+ *  is precisely what the channel exists to avoid. A settle knows WHICH fields it wrote, so it names the pane(s) those fields are RENDERED BY
+ *  and the renderer fires them (`firePaneUpdate(paneId)`) — the `B-3`/`B-5`/`B-6`/`B-7` arm. */
+export type GnosisCrudOnChanged = (paneId: string) => void
+
+/** ⟨Unit `B-8` `§12a` — **THE FIRES ARE A FIELD CENSUS, NEVER AN ENTRY-POINT CENSUS** (`F-8`).⟩ The fields this host writes, named as the
+ *  panes that RENDER them read them. The two panes share `lastWikis` and `noEditAccess` (both author them), so a settle that moves either
+ *  must fire BOTH; `lastDocuments`/`lastDocument`/`lastConflict` are the documents pane's alone and `lastWiki` is the wikis pane's. This
+ *  type is the declaration the mapping below is total over. */
+export type GnosisCrudField = 'wikis' | 'documents' | 'document' | 'wiki' | 'conflict' | 'no-edit-access'
+
+/** The two panes this host owns, in DECLARATION order — the order `onChanged` is called in, so a settle that touches both fires them in
+ *  one fixed order and a row can compare the sequence rather than a set. */
+const GNOSIS_CRUD_PANE_IDS: readonly string[] = Object.freeze(['gnosis-documents', 'gnosis-wikis'])
+const DOCUMENTS_PANE = 'gnosis-documents'
+const WIKIS_PANE = 'gnosis-wikis'
+
+/** The field → panes mapping, and the reason for each entry as a reading of the two renderers rather than a guess: `lastWikis` is
+ *  authored by BOTH (`documentsContent`'s wiki selector + `wikisContent`'s list), `noEditAccess` by BOTH (the H-2 indicator is authored
+ *  twice), `lastConflict`/`lastDocuments`/`lastDocument` by `gnosis-documents` only, `lastWiki` by `gnosis-wikis` only. */
+const FIELD_PANES: Record<GnosisCrudField, readonly string[]> = {
+  wikis: [DOCUMENTS_PANE, WIKIS_PANE],
+  'no-edit-access': [DOCUMENTS_PANE, WIKIS_PANE],
+  documents: [DOCUMENTS_PANE],
+  document: [DOCUMENTS_PANE],
+  conflict: [DOCUMENTS_PANE],
+  wiki: [WIKIS_PANE],
+}
+
+/** ⟨Unit `B-8` `§12a` — **THE PANE CENSUS, EXPORTED AND PURE**, so the declaration is drivable by a row instead of readable only in prose.⟩
+ *  Answers the pane ids a settle that wrote `fields` must fire, DEDUPED, in `GNOSIS_CRUD_PANE_IDS` order. PURE and TOTAL: a non-array
+ *  argument, a non-string member or an unknown field name is IGNORED (it can name no pane), never a throw — the same discipline
+ *  `changeInterestSubsetProblems` carries one module over. Its only caller is `firePanes`. */
+export function gnosisCrudPanesTouchedBy(fields: readonly GnosisCrudField[]): string[] {
+  const touched = new Set<string>()
+  if (Array.isArray(fields)) {
+    for (const field of fields) {
+      // `FIELD_PANES` is an OBJECT, so a bare index resolves inherited `Object.prototype` members — `'constructor'`, `'toString'`,
+      // `'valueOf'`, `'__proto__'` would answer a non-iterable and THROW (`panes is not iterable`), falsifying the totality this
+      // function declares. The lookup is therefore OWN-property only: an unknown name is IGNORED, which is what "never a throw" means.
+      if (typeof field !== 'string' || !Object.prototype.hasOwnProperty.call(FIELD_PANES, field)) continue
+      // The own-property guard above proves the name is one of the SIX literal keys (`FIELD_PANES` has no other own keys), so the narrowing
+      // cast is SOUND here — it is the type-level restatement of what the guard just proved at runtime.
+      for (const paneId of FIELD_PANES[field as GnosisCrudField]) touched.add(paneId)
+    }
+  }
+  return GNOSIS_CRUD_PANE_IDS.filter((paneId) => touched.has(paneId))
+}
 
 export interface GnosisCrudPanesOptions {
   /** The app's shared PaneRegistry (the same registry SidebarPanes uses). */
@@ -243,6 +291,13 @@ export class GnosisCrudPanes {
     registerHandlerDef('gnosis-wikis-create', { name: 'gnosis-wikis-create', body: GNOSIS_WIKIS_CREATE_BODY })
   }
 
+  /** ⟨Unit `B-8` `§12a` — THE ONE FIRE PATH.⟩ Fire the panes whose rendered fields a settle wrote, through the renderer's channel
+   *  (`onChanged(paneId)` → `firePaneUpdate(paneId)` → `paneEvents.fire` → the host's `paintReplumbedPane` → ONE `updatePane`). The
+   *  census is `gnosisCrudPanesTouchedBy`'s, so a settle cannot fire a pane it did not move and cannot forget one it did. */
+  private firePanes(fields: readonly GnosisCrudField[]): void {
+    for (const paneId of gnosisCrudPanesTouchedBy(fields)) this.onChanged(paneId)
+  }
+
   /** Fetch the security gate cache (the fail-closed group source) + refresh the
    *  wiki list. A bridge error keeps the gate fail-closed (null security). */
   async boot(): Promise<void> {
@@ -254,6 +309,17 @@ export class GnosisCrudPanes {
     this.readClosed = !(this.security?.enabled.includes('gnosis') ?? false)
     this.editClosed = !(this.security?.enabled.includes('gnosis-edit') ?? false)
     this.refreshWikis()
+  }
+
+  /** ⟨Unit `B-8` `§12a` — **THE ENGINE ARM'S PRODUCER** (`D-44`'s grant line 2, `F-3`/`ASM-B8-2`).⟩ Called by the host's
+   *  `onRagStoreChanged` when a descriptor carries `store: 'gnosis:engine'`. It issues this host's OWN reads — ONE `gnosis.wiki.list`
+   *  (the wiki list is authored by BOTH panes) plus, when a wiki is selected, that wiki's `document.list` — and each SETTLE then fires
+   *  its own pane. The descriptor therefore never reaches a pane directly: it reaches the PRODUCER, and the pane paints because its own
+   *  settle named it (`descriptor → read → settle → fire → paint`), which is what makes the paint's "re-read nothing" (`ASM-B8-1`) safe. */
+  refreshFromEngine(): void {
+    this.refreshWikis()
+    const wikiId = this.lastWiki?.wikiId
+    if (typeof wikiId === 'string' && wikiId !== '') this.gnosisDocuments('gnosis.document.list', { wikiId })
   }
 
   /** `sidebar.gnosisDocuments` — route a document tool call through the bridge.
@@ -278,7 +344,7 @@ export class GnosisCrudPanes {
         // content).
         this.lastConflict = null
         this.noEditAccess = true
-        this.onChanged()
+        this.firePanes(['conflict', 'no-edit-access'])
         return
       }
       if (!mutating && !readOk) {
@@ -287,14 +353,13 @@ export class GnosisCrudPanes {
         this.lastDocuments = null
         this.lastDocument = null
         this.noEditAccess = false
-        this.onChanged()
+        this.firePanes(['wikis', 'documents', 'document', 'no-edit-access'])
         return
       }
       this.noEditAccess = false
       void this.bridge.gnosis.documents(tool, args)
         .then((result) => {
-          this.applyDocumentsResult(tool, result)
-          this.onChanged()
+          this.firePanes(this.applyDocumentsResult(tool, result))
         })
         .catch((e) => {
           // §5.6/H2 — a rejected bridge call (the engine absent / a ConflictError
@@ -304,15 +369,17 @@ export class GnosisCrudPanes {
           if (e instanceof Error && /conflict|409|revision/i.test(e.message)) {
             this.lastConflict = e as ConflictError
             this.noEditAccess = false
+            this.firePanes(['conflict', 'no-edit-access'])
           } else if (e instanceof Error && /no edit authority/i.test(e.message)) {
             this.noEditAccess = true
+            this.firePanes(['no-edit-access'])
           } else {
             this.lastWikis = null
             this.lastDocuments = null
             this.lastDocument = null
             this.noEditAccess = false
+            this.firePanes(['wikis', 'documents', 'document', 'no-edit-access'])
           }
-          this.onChanged()
         })
     }).catch(() => {
       // a security fetch failure → FAIL CLOSED (never issue a bridge call).
@@ -323,7 +390,7 @@ export class GnosisCrudPanes {
       this.lastDocuments = null
       this.lastDocument = null
       this.noEditAccess = false
-      this.onChanged()
+      this.firePanes(['wikis', 'documents', 'document', 'no-edit-access'])
     })
   }
 
@@ -345,21 +412,20 @@ export class GnosisCrudPanes {
         // content).
         this.lastWikis = null
         this.noEditAccess = true
-        this.onChanged()
+        this.firePanes(['wikis', 'no-edit-access'])
         return
       }
       if (!mutating && !readOk) {
         this.lastWikis = null
         this.lastWiki = null
         this.noEditAccess = false
-        this.onChanged()
+        this.firePanes(['wikis', 'wiki', 'no-edit-access'])
         return
       }
       this.noEditAccess = false
       void this.bridge.gnosis.wikis(tool, args)
         .then((result) => {
-          this.applyWikisResult(tool, result)
-          this.onChanged()
+          this.firePanes(this.applyWikisResult(tool, result))
         })
         .catch((e) => {
           // §5.6 — the engine-absent / bridge-rejection path: the unavailable
@@ -367,12 +433,13 @@ export class GnosisCrudPanes {
           // §5.9-40) surfaces the no-edit-access state.
           if (e instanceof Error && /no edit authority/i.test(e.message)) {
             this.noEditAccess = true
+            this.firePanes(['no-edit-access'])
           } else {
             this.lastWikis = null
             this.lastWiki = null
             this.noEditAccess = false
+            this.firePanes(['wikis', 'wiki', 'no-edit-access'])
           }
-          this.onChanged()
         })
     }).catch(() => {
       this.security = null
@@ -381,7 +448,7 @@ export class GnosisCrudPanes {
       this.lastWikis = null
       this.lastWiki = null
       this.noEditAccess = false
-      this.onChanged()
+      this.firePanes(['wikis', 'wiki', 'no-edit-access'])
     })
   }
 
@@ -391,31 +458,48 @@ export class GnosisCrudPanes {
     this.gnosisDocuments('gnosis.wiki.list', {})
   }
 
-  /** Apply a resolved document-tool result to the cached state. */
-  private applyDocumentsResult(tool: string, result: unknown): void {
+  /** Apply a resolved document-tool result to the cached state, and answer the FIELDS it wrote (the settle's field census, `F-8`). */
+  private applyDocumentsResult(tool: string, result: unknown): GnosisCrudField[] {
+    // `lastConflict` is cleared on EVERY documents settle, so `'conflict'` is always among the fields written — and it is rendered by
+    // `gnosis-documents` only, so it never widens the fire past that pane.
     this.lastConflict = null
     if (tool === 'gnosis.wiki.list') {
       this.lastWikis = Array.isArray(result) ? (result as Wiki[]) : null
-    } else if (tool === 'gnosis.document.list') {
+      return ['conflict', 'wikis']
+    }
+    if (tool === 'gnosis.document.list') {
       this.lastDocuments = (result ?? null) as DocumentList | null
-    } else if (tool === 'gnosis.document.get') {
+      return ['conflict', 'documents']
+    }
+    if (tool === 'gnosis.document.get') {
       this.lastDocument = (result ?? null) as Document | null
-    } else if (tool === 'gnosis.document.create' || tool === 'gnosis.document.update' ||
+      return ['conflict', 'document']
+    }
+    if (tool === 'gnosis.document.create' || tool === 'gnosis.document.update' ||
       tool === 'gnosis.document.publish' || tool === 'gnosis.document.unpublish' ||
       tool === 'gnosis.document.archive') {
       this.lastDocument = (result ?? null) as Document | null
-    } else if (tool === 'gnosis.document.delete') {
-      this.lastDocument = null
+      return ['conflict', 'document']
     }
+    if (tool === 'gnosis.document.delete') {
+      this.lastDocument = null
+      return ['conflict', 'document']
+    }
+    // An UNKNOWN tool wrote nothing but the conflict clear — it moved no rendered list, so it fires documents for that clear alone.
+    return ['conflict']
   }
 
-  /** Apply a resolved wiki-tool result to the cached state. */
-  private applyWikisResult(tool: string, result: unknown): void {
+  /** Apply a resolved wiki-tool result to the cached state, and answer the FIELDS it wrote (`F-8`'s field census). */
+  private applyWikisResult(tool: string, result: unknown): GnosisCrudField[] {
     if (tool === 'gnosis.wiki.list') {
       this.lastWikis = Array.isArray(result) ? (result as Wiki[]) : null
-    } else if (tool === 'gnosis.wiki.get' || tool === 'gnosis.wiki.create') {
-      this.lastWiki = (result ?? null) as Wiki | null
+      return ['wikis']
     }
+    if (tool === 'gnosis.wiki.get' || tool === 'gnosis.wiki.create') {
+      this.lastWiki = (result ?? null) as Wiki | null
+      return ['wiki']
+    }
+    return []
   }
 
   /** Expose the current document/wiki state (the pane renders + tests read it). */

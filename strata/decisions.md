@@ -1081,3 +1081,43 @@ answers to ONE subject and these paints re-read nothing); its residue (two racin
 **An instrument finding worth keeping:** the live driver captures no renderer console, so greps for
 `boot refused` reading 0 prove **nothing** — the reading is structurally vacuous. An instrument that reads the
 boot's own status is owed, and it is named rather than counted as evidence.
+
+---
+
+## D-45 — `B-8` completes: the gnosis census moves by TWO, `gnosis-status` is REFUSED for a hazard, and one filed decision is reversed on measurement
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-8`'s completion, re-verified in this seat
+(the suite at its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN with its pin arm equal; `node --check` 0)
+
+**The census decision is `+TWO`, not four, and the reason is a hazard:** `gnosis-status`'s registration is
+`scope:'operator'` and `paintPane` answers `operator-scope` for it, so a census entry would make
+`fire('gnosis-status')` answer `fired:true, handlers:1` while **no `updatePane` can paint** — and
+`firePaneUpdate`'s `⟨B-9⟩` fallback is skipped *precisely because it fired*. A dead operator pane shipped as a
+live registration is `D-40`'s `m6` in the census instead of in a mutant. **`gnosis-status` waits for `B-9`.**
+Families still on `refresh()`: `settings` and `gnosis-status`, both `B-9`'s.
+
+**The two granted sites are wired:** `renderer.ts`'s CRUD `onChanged` now calls `firePaneUpdate(paneId)` (one
+line), and the `SidebarPanes` gnosis delegate carries `documents`/`wikis`/`refreshFromEngine` (three lines,
+plus `installSidebarBridge`'s `gnosisDocuments`/`gnosisWikis`, which closes `F-7`'s read-once-at-boot defect).
+The `⟨B-9⟩` operator fallback is untouched.
+
+**AND ONE FILED DECISION WAS REVERSED ON MEASUREMENT:** the contract's
+`CHANGE_INTERESTED_PANE_IDS = ['doc-nav','gnosis-documents','gnosis-wikis']` was landed, then **re-narrowed to
+`['doc-nav']`**, because a `publishChange()` fire on a pane with no re-read arm **cannot paint anything**
+(`not-a-pane`/`unchanged`, both read) — a declared-but-inert path, which is `D-40`'s `m6` class in the census
+rather than in a mutant. The gnosis panes' engine route is the producer's (`refreshFromEngine` → settle →
+fire), one route per pane. A design sentence that measurement falsifies is corrected, not defended.
+
+**Two carried findings now have teeth:** `X1b` (a CONVERSE clause — containment proves subset, never
+PAINTABLE: over the real booted host every live census id must answer `updatePane` ≠ `operator-scope`/
+`not-a-pane`, falsified both by adding `gnosis-status` and by fabricating an id) and `P1-1` (the member census
+grades DECLARATION SHAPES — longhand and shorthand certified present, a **spread** a NAMED problem rather than
+a silent absence or presence).
+
+**The boot-status instrument is measured UNREACHABLE from the driver**, not merely absent: `provident
+.list_targets` attaches `boot`, but `main.ts` arms it from the LAUNCH flag's groups while the driver arms groups
+POST-boot via `security.set`, so `list_targets` keys read `["nodes"]` and the instrument is structurally
+unavailable. Recorded so the next pass does not spend a run rediscovering it.
+
+**Countersigned:** four chained digest re-statements (final `ecd2e539a9006bc4e56506198ccd6d04`) and
+`shell-chrome`'s `N` **35 → 37** under D-41's definition (two new export declarations), cap 420.

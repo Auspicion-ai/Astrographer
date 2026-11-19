@@ -1748,11 +1748,12 @@ async function main(): Promise<void> {
   const gnosisCrudPanes = new GnosisCrudPanes({
     registry,
     bridge: pvBridge,
-    // Re-render the pane-inclusive envelopes after a document/wiki call settles
-    // so the updated CRUD data renders (the host re-assembles + re-mounts).
-    onChanged: () => {
-      if (host) void host.refresh()
-    },
+    // ⟨Unit `B-8` `§12a` — GRANT LINE 1 (`D-44`): **THE CRUD PANES' SETTLE NAMES ITS PANE, AND THE FIRE IS THE PAINT.**⟩ The pre-migration body
+    // here was `onChanged: () => { if (host) void host.refresh() }` — a WHOLE-GRAPH re-assembly for ONE pane's data, which is exactly what
+    // `INV-E` counts at zero. The settle now hands the pane id it moved (`F-8`'s field census, inside `GnosisCrudPanes`), so the fire reaches
+    // the channel and one pane repaints. Without this line a census entry for `gnosis-documents`/`gnosis-wikis` would be a DEAD REGISTRATION
+    // (an id in both declarations whose paint never runs) — the `X1b` hazard, in the shape `D-44` granted it away.
+    onChanged: (paneId) => firePaneUpdate(paneId),
   })
   gnosisCrudPanes.registerPanes()
   host = new SidebarPanes({
@@ -1768,6 +1769,13 @@ async function main(): Promise<void> {
     gnosis: {
       status: () => gnosisPanes.refreshStatus(),
       query: (value: string) => gnosisPanes.submitQuery(value),
+      // ⟨Unit `B-8` `§12a` — GRANT LINE 2 (`D-44`): **THE DELEGATE CARRIES THE CRUD HOST.**⟩ Three members, and each closes a measured hole:
+      // `documents`/`wikis` are the `installSidebarBridge` seams the A2 panes' OWN controls have always reached into `undefined?.()` (`F-7` —
+      // the panes have been read-once-at-boot since A2), and `refreshFromEngine` is the ENGINE arm's producer, so an engine descriptor issues
+      // this host's own read and the settle that follows fires the pane (`descriptor → read → settle → fire → paint`, `ASM-B8-2`).
+      documents: (tool, args) => gnosisCrudPanes.gnosisDocuments(tool, args),
+      wikis: (tool, args) => gnosisCrudPanes.gnosisWikis(tool, args),
+      refreshFromEngine: () => gnosisCrudPanes.refreshFromEngine(),
     },
     // Unit U-SHELL-9a §2.6 — the search-pane delegates: expand-to-tab
     // (HOST-1 seam), result open → NEW document tab (HOST-4), and the in-tab

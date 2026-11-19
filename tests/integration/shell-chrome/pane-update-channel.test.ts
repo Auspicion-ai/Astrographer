@@ -1107,7 +1107,7 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     ).toEqual([])
   })
 
-  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly `[\'gnosis-query\', \'crosslinks\', \'doc-nav\', \'search\', \'template-editor\']`', async () => {
+  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly the SEVEN-id value `[\'gnosis-query\', \'crosslinks\', \'doc-nav\', \'search\', \'template-editor\', \'gnosis-documents\', \'gnosis-wikis\']` (`B-8`, `D-44`)`', async () => {
     // §6 r5 (§1's `INV-E` floor; §3's ONE declared constant). LAYER: envelope-class — the REAL host over the shim plus a
     // reading of the host module's exports.
     // NON-VACUITY: this limb IS the floor — its whole purpose is to prove the three counters CAN move on the very double whose
@@ -1202,12 +1202,17 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     // toggle does the same) and `template-editor` because the template STORE's change push is its source (`onTemplateChanged`
     // commits the payload's whole template — the payload IS the template, no `template.get()` re-read — and then fires), plus its
     // own validate verdict; `docs/L1/unit-b-7-pane-search-template.md` §2/§4.
-    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor']
+    // ⟨EXTENDED AGAIN BY UNIT `B-8` (`pane-gnosis`) — TWO more ids, the SAME discipline, and the value is still pinned EXACTLY
+    // (`D-44`, §12a of `docs/L1/unit-b-8-pane-gnosis.md`).⟩ `gnosis-documents` and `gnosis-wikis` join because each now answers a
+    // PRODUCER OF ITS OWN: the CRUD host's bridge settle commits the rendered field and then fires that pane (grant line 1), and
+    // the engine descriptor re-reads through the producer (`refreshFromEngine`, grant line 2). `gnosis-status` stays OUT (`F-5`: its
+    // paint is `B-9`'s). The fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
+    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis']
     if (replumbed === undefined) {
       problems.push(
         '(r5) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
           `naming the panes whose paint the host registers on the channel: exactly ${shown(PINNED_CENSUS)} (the ` +
-          "`pane-update-channel` census plus `B-5`'s, `B-6`'s and `B-7`'s deliberate extensions)",
+          "`pane-update-channel` census plus `B-5`'s, `B-6`'s, `B-7`'s and `B-8`'s deliberate extensions)",
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1223,8 +1228,8 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
         `${problems.length} problem(s). \`host.refresh()\` still reaches \`loadAppGraph\` + \`mountOperator\` on this very double ` +
         `(each read twice: the wrapped instance method AND a bypass-proof observable), so \`r1\`'s and \`r6\`'s zeroes are readings ` +
         `and not a dead counter; and the re-plumbed census is exactly ` +
-        `${shown([QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor'])} (extended by ` +
-        `\`B-5\`, then \`B-6\`, then \`B-7\` — one id, one id, two ids). ` +
+        `${shown([QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis'])} ` +
+        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\` — one id, one id, two ids, two ids). ` +
         `envelope-class — the REAL SidebarPanes over the layout-less DOM shim; no rendered box, no pointer (G8-only)`,
     ).toEqual([])
   })

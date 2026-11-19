@@ -8,7 +8,7 @@
 //       `this.templateValidation = …` BEFORE `this.events?.fire(<id>)`, so the paint (which runs synchronously inside the fire,
 //       `ASM-B7-1`) authors the state the producer just committed; and in `onTemplateChanged` the fire ALSO precedes the KEPT
 //       `this.editController.requestRebuild('template')`, so any later assemble authors the pane from fresh state.
-//   §4  THE CENSUS MOVES BY EXACTLY TWO: `REPLUMBED_PANE_IDS` becomes the five-id SET
+//   §4  THE CENSUS MOVES BY EXACTLY TWO, then `B-8` adds TWO more (`D-44`, §12a): `REPLUMBED_PANE_IDS` becomes the SEVEN-id SET
 //       `{gnosis-query, crosslinks, doc-nav, search, template-editor}`, and `settings`/`gnosis-status`/`gnosis-documents`/
 //       `gnosis-wikis` KEEP `refresh()`.
 //   §5  THE WHOLE CHANGE SET is `src/renderer/sidebar-panes.ts`: the census; `submitQuery` (commit → fire, with the
@@ -72,11 +72,22 @@ const SEARCH = 'search'
 const TEMPLATE_EDITOR = 'template-editor'
 const CENSUS_NAME = 'REPLUMBED_PANE_IDS'
 
-/** §4: the census AFTER this unit's TWO-id move. Compared as a SET — the claim is MEMBERSHIP, never the spelling order. */
-const REQUIRED_CENSUS: readonly string[] = ['gnosis-query', CROSSLINKS, DOC_NAV, SEARCH, TEMPLATE_EDITOR]
+/** §4: the census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more (`D-44`, §12a) — the recorded value is RE-STATED,
+ *  never relaxed: the seven ids, compared as a SET, because the claim is MEMBERSHIP and never the spelling order. */
+const REQUIRED_CENSUS: readonly string[] = [
+  'gnosis-query',
+  CROSSLINKS,
+  DOC_NAV,
+  SEARCH,
+  TEMPLATE_EDITOR,
+  'gnosis-documents',
+  'gnosis-wikis',
+]
 
-/** §4: the four families that KEEP `refresh()`. Named so a census that swallowed one of them reds a second time, by name. */
-const FAMILIES_KEEPING_REFRESH: readonly string[] = ['settings', 'gnosis-status', 'gnosis-documents', 'gnosis-wikis']
+/** §4: the families that still KEEP `refresh()` after `B-8`: **two, not four** (`D-44`, §12a — `gnosis-documents`/`gnosis-wikis`
+ *  joined the census and the change-interest declaration, so their `refresh()` route is GONE). Named so a census that swallowed
+ *  either of these two operator families reds a second time, by name. */
+const FAMILIES_KEEPING_REFRESH: readonly string[] = ['settings', 'gnosis-status']
 
 /** THE PRE-LANDING DECLARATION, VERBATIM off `src/renderer/sidebar-panes.ts` at this head — three ids, no `search`, no
  *  `template-editor`. It is carried as a FIXTURE because §4's SET arm has to prove it READS RED on a census that has not moved;
@@ -394,7 +405,7 @@ const LETTER_LIMBS: readonly LetterLimb[] = [
   },
 ]
 
-describe('pane-search-template — S1: the LETTER — the census is the five-id SET, both settlements fire with no `loadAppGraph`/`anyDirty`, the toggle and the verdict carry no `requestRebuild`, and `onTemplateChanged` commits + fires + KEEPS its rebuild', () => {
+describe('pane-search-template — S1: the LETTER — the census is the SEVEN-id SET (`B-8` re-stated the value), both settlements fire with no `loadAppGraph`/`anyDirty`, the toggle and the verdict carry no `requestRebuild`, and `onTemplateChanged` commits + fires + KEEPS its rebuild', () => {
   it("S1 — `REPLUMBED_PANE_IDS` parses to {gnosis-query, crosslinks, doc-nav, search, template-editor}; `submitQuery`/`submitAdvancedQuery` fire `search` with no `loadAppGraph`/`anyDirty`; `searchAdvancedToggle`/`templateValidateResult` fire with no `requestRebuild`; `onTemplateChanged` commits, fires and keeps `requestRebuild('template')`", () => {
     // §6 `S1`; §4's TWO-id census move; §5's five sites; §9's `ASM-B7-1`/`ASM-B7-3`/`ASM-B7-4`.
     // WHY EACH ARM IS THE SHAPE IT IS: the census is read as an ARRAY LITERAL OFF ITS DECLARATION and compared as a SET (so a
@@ -420,7 +431,7 @@ describe('pane-search-template — S1: the LETTER — the census is the five-id 
     if (sidebarText !== '') {
       const code = stripComments(sidebarText)
 
-      // ---- (a) THE CENSUS IS THE FIVE-ID SET ------------------------------------------------------
+      // ---- (a) THE CENSUS IS THE SEVEN-ID SET (`B-8`'s two ids included) ---------------------------
       const parsedCensus = censusLiteralOf(code, CENSUS_NAME)
       if (parsedCensus === null) {
         problems.push(
@@ -431,7 +442,7 @@ describe('pane-search-template — S1: the LETTER — the census is the five-id 
         if (new Set(parsedCensus).size !== parsedCensus.length) {
           problems.push(
             `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` parses to ${shown(parsedCensus)} — it spells a DUPLICATE id. §4: the ` +
-              `census is a SET of five ids, and a duplicate is a second registration shape waiting to happen (\`B2-ADV-04\`). ` +
+              `census is a SET of ${REQUIRED_CENSUS.length} ids, and a duplicate is a second registration shape waiting to happen (\`B2-ADV-04\`). ` +
               `LAYER: ${LAYER}`,
           )
         }
@@ -439,30 +450,33 @@ describe('pane-search-template — S1: the LETTER — the census is the five-id 
           const missing = REQUIRED_CENSUS.filter((id) => !parsedCensus.includes(id))
           const unexpected = parsedCensus.filter((id) => !REQUIRED_CENSUS.includes(id))
           problems.push(
-            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` parses to ${shown(parsedCensus)} — §4's move makes it the five-id SET ` +
-              `${shown([...REQUIRED_CENSUS])} compared as a SET (order-insensitive). RE-PARSED VALUES: parsed=${shown(parsedCensus)} ` +
-              `required=${shown([...REQUIRED_CENSUS])} missing=${shown(missing)} unexpected=${shown(unexpected)}. ` +
-              `\`${CROSSLINKS}\` and \`${DOC_NAV}\` are \`B-5\`'s and \`B-6\`'s landed members and must survive the move; a sixth id ` +
-              `would be a silent second subscriber. LAYER: ${LAYER}`,
+            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` parses to ${shown(parsedCensus)} — §4's moves make it the ` +
+              `${REQUIRED_CENSUS.length}-id SET ${shown([...REQUIRED_CENSUS])} compared as a SET (order-insensitive). RE-PARSED ` +
+              `VALUES: parsed=${shown(parsedCensus)} required=${shown([...REQUIRED_CENSUS])} missing=${shown(missing)} ` +
+              `unexpected=${shown(unexpected)}. \`${CROSSLINKS}\` and \`${DOC_NAV}\` are \`B-5\`'s and \`B-6\`'s landed members, ` +
+              `\`${SEARCH}\` and \`${TEMPLATE_EDITOR}\` are THIS unit's, and \`gnosis-documents\`/\`gnosis-wikis\` are \`B-8\`'s ` +
+              `(\`D-44\`) — every one of them must survive the move; one MORE id would be a silent second subscriber. LAYER: ${LAYER}`,
           )
         }
         const swallowed = FAMILIES_KEEPING_REFRESH.filter((id) => parsedCensus.includes(id))
         if (swallowed.length > 0) {
           problems.push(
-            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` now carries ${shown(swallowed)} — §4: those four families ` +
-              `(${shown([...FAMILIES_KEEPING_REFRESH])}) KEEP \`refresh()\` after this unit; five registered panes are ` +
-              `re-plumbed, four are not. RE-PARSED VALUE: ${shown(parsedCensus)}. LAYER: ${LAYER}`,
+            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` now carries ${shown(swallowed)} — §4/§12a: the two operator families ` +
+              `(${shown([...FAMILIES_KEEPING_REFRESH])}) still KEEP \`refresh()\` after \`B-8\` (\`settings\` is \`B-9\`'s surface and ` +
+              `\`gnosis-status\`'s paint is \`B-9\`'s); the rest of the registry is re-plumbed. RE-PARSED VALUE: ${shown(parsedCensus)}. ` +
+              `LAYER: ${LAYER}`,
           )
         }
         // THE FLOOR, IN THE OTHER DIRECTION: the SAME parser on the PRE-LANDING declaration (carried verbatim above) must return
         // the three-id census AND must not be judged equal to the required SET — otherwise the arm above cannot tell this head from
-        // the landing, and "five ids" would be a claim no reading supports.
+        // the landing, and "the required SET" would be a claim no reading supports.
         const fixtureCensus = censusLiteralOf(PRE_MIGRATION_CENSUS_DECLARATION, CENSUS_NAME)
         if (fixtureCensus === null || fixtureCensus.length !== 3 || sameSet(fixtureCensus, REQUIRED_CENSUS)) {
           problems.push(
             `S1(a·floor): the parser read the PRE-LANDING fixture as ${shown(fixtureCensus)} — it must read ` +
-              `\`${PRE_MIGRATION_CENSUS_DECLARATION}\` as the three-id census and must NOT judge it equal to the required five-id ` +
-              `SET ${shown([...REQUIRED_CENSUS])}. With the fixture misread, the arm above is vacuous. LAYER: ${LAYER}`,
+              `\`${PRE_MIGRATION_CENSUS_DECLARATION}\` as the three-id census and must NOT judge it equal to the required ` +
+              `${REQUIRED_CENSUS.length}-id SET ${shown([...REQUIRED_CENSUS])}. With the fixture misread, the arm above is vacuous. ` +
+              `LAYER: ${LAYER}`,
           )
         }
       }

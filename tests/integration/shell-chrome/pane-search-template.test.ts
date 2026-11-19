@@ -83,12 +83,23 @@ const CROSSLINKS = 'crosslinks'
 const DOC_NAV = 'doc-nav'
 /** The operator scope (`B-9`'s surface) — `X1`/`X4` prove it keeps `refresh()` and answers `operator-scope`. */
 const SETTINGS = 'settings'
-/** The four families §4 names that keep the pre-migration `refresh()` route. */
-const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status', 'gnosis-documents', 'gnosis-wikis']
+/** The families that still keep the pre-migration `refresh()` route AFTER `B-8` (`D-44`, §12a): the TWO operator families —
+ *  `settings` (`B-9`'s surface) and `gnosis-status` (whose paint is `B-9`'s). `gnosis-documents`/`gnosis-wikis` were re-pointed OUT of
+ *  this list by `B-8` (they are census members and listeners now), so the `fired:false, handlers:0` arm is NARROWED, never deleted. */
+const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status']
 /** An id no pane declares: the paint's `not-a-pane` arm (`X4`). */
 const UNKNOWN_PANE = 'probe-b7-unknown'
-/** §4: the pinned census AFTER this unit's TWO-id move (set equality, order-insensitive). */
-const PINNED_REPLUMBED: readonly string[] = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
+/** §4: the pinned census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more ids (`D-44`, §12a) — the recorded VALUE is
+ *  re-stated, never relaxed (set equality, order-insensitive). */
+const PINNED_REPLUMBED: readonly string[] = [
+  'gnosis-query',
+  'crosslinks',
+  'doc-nav',
+  'search',
+  'template-editor',
+  'gnosis-documents',
+  'gnosis-wikis',
+]
 
 /** The query the two submit seams are driven with. It never collides with a document id or a zone name. */
 const PROBE_TERM = 'b7-probe-term'
@@ -1702,7 +1713,7 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
     ).toEqual([])
   })
 
-  it('X1 — the census moves by exactly TWO: `REPLUMBED_PANE_IDS` is the five-id SET with a `B-7` comment paragraph naming both causes (proven in BOTH directions), every other family answers `{fired:false,handlers:0}`, and the pre-migration route still reaches `loadAppGraph` + `mountOperator`', async () => {
+  it('X1 — the census moves by exactly TWO here and by TWO more under `B-8`: `REPLUMBED_PANE_IDS` is the SEVEN-id SET with a `B-7` comment paragraph naming both causes (proven in BOTH directions), the two operator families answer `{fired:false,handlers:0}`, and the pre-migration route still reaches `loadAppGraph` + `mountOperator`', async () => {
     // §6 `X1` (§4: the census moves by exactly TWO with a `B-7` cause paragraph naming both sources; the four families that keep
     // `refresh()`; `B-6`'s `F-12` anti-vacuous comment clause — a token search is NOT a cause sentence).
     // LAYER: envelope-class — the module's exported VALUE, the source TEXT (comments read as PARAGRAPHS), the REAL channel's answers
@@ -1719,6 +1730,9 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
     const problems: string[] = []
 
     // ---- (1) THE CONSTANT (through `await import()`, per the reachability rule) --------------------
+    // ⟨RE-STATED BY `B-8` (`D-44`, §12a): the recorded VALUE moves to the seven-id set; the SUBJECT (a pinned census, floored by the
+    // `B-7` cause clause and by the `refresh()` floor) and the TEETH are unchanged — an extra id, a dropped id or a duplicate still
+    // reds.⟩
     let hostModule: Record<string, unknown> | null = null
     try {
       hostModule = (await import('../../../src/renderer/sidebar-panes.js')) as Record<string, unknown>
@@ -1740,7 +1754,8 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
       } else if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `limb X1: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the census ` +
-            `moves by EXACTLY TWO (\`['gnosis-query','crosslinks','doc-nav']\` -> \`[ …, 'search', 'template-editor']\`) and this unit's ` +
+            `moves by TWO here (\`['gnosis-query','crosslinks','doc-nav']\` -> \`[ …, 'search', 'template-editor']\`) and by TWO MORE ` +
+            `under \`B-8\` (\`D-44\`: \`[ …, 'gnosis-documents', 'gnosis-wikis']\`), and this unit's ` +
             `TWO panes must both be in it, or their fires reach no listener at all`,
         )
       }
@@ -1821,7 +1836,9 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
             `ONE handler per census id, so the census IS a listener set on this channel`,
         )
       }
-      // EVERY censused id answers `fired:true, handlers:1` — the move is a REGISTRATION, not only a constant.
+      // EVERY censused id answers `fired:true, handlers:1` — the move is a REGISTRATION, not only a constant. ⟨`B-8`'s two ids are in
+      // the PINNED list, so this loop now also reads `gnosis-documents`/`gnosis-wikis` as listeners: that is the `D-44` arm, and it is
+      // why the negative family list below lost exactly those two.⟩
       for (const paneId of PINNED_REPLUMBED) {
         const report = channel.fire(paneId)
         if (report.fired !== true || report.handlers !== 1) {
@@ -1831,7 +1848,8 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
           )
         }
       }
-      // THE NEGATIVES: the four families §4 names keep the pre-migration route and reach NO listener.
+      // THE NEGATIVES: the TWO operator families that keep the pre-migration route reach NO listener (`gnosis-documents`/
+      // `gnosis-wikis` left this list under `B-8`; they are POSITIVE arms in the loop above).
       for (const paneId of PRE_MIGRATION_PANES) {
         const report = channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
@@ -1879,10 +1897,11 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
     expect(
       problems,
       `limb X1 — the census moves by exactly TWO and every other family keeps \`refresh()\` (§6 X1; §4; \`B-6\`'s \`F-12\`). ` +
-        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly the five-id SET ` +
-        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\`, carry a \`B-7\` COMMENT PARAGRAPH naming both panes and a ` +
+        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly the SEVEN-id SET ` +
+        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor, gnosis-documents, gnosis-wikis}\` (\`B-8\`'s two included), ` +
+        `carry a \`B-7\` COMMENT PARAGRAPH naming both panes and a ` +
         `cause (proven in both directions: the shipped file GREEN, the census-moved-with-no-cause fixture RED), each censused id must ` +
-        `answer \`fired:true, handlers:1\`, the four pre-migration families must answer \`fired:false, handlers:0\`, and \`host.refresh()\` ` +
+        `answer \`fired:true, handlers:1\`, the TWO operator families must answer \`fired:false, handlers:0\`, and \`host.refresh()\` ` +
         `must still reach \`loadAppGraph\` + \`mountOperator\`. envelope-class`,
     ).toEqual([])
   })

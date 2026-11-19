@@ -58,27 +58,44 @@ const ENGINE_STORE_FILE = 'src/main/engine-rag-store.ts'
 /** §4: the pinned census after this unit's ONE move. `doc-nav` is the addition; `settings` stays OUT (`B-9`'s surface).
  *  ⟨EXTENDED BY UNIT `B-7` (`pane-search-template`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ `B-7` moved the census by
  *  exactly TWO more ids (`search`, whose producer is its OWN answered `rag.query`; `template-editor`, whose source is the template
- *  STORE's change push), so the pinned SET moves to the landed five-id value with the SET comparison, the `settings` exclusion and
- *  the `doc-nav`-duplicate arm all unchanged. See `D4(b)` below: those two ids are no longer "families that keep `refresh()`", so
- *  their `fired:false, handlers:0` arms are CONVERTED to positive `fired:true, handlers:1` arms (never deleted) and the negative
- *  family arm is re-pointed at `settings`/`gnosis-*`, which still keep `refresh()`. */
-const PINNED_REPLUMBED: readonly string[] = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
-/** §4: the families that keep the pre-migration `refresh()` route AFTER `B-7` — `B-7` took `search`/`template-editor` OUT of this
- *  list, so the negative arm below is carried by the families that are still un-migrated (`settings` is `B-9`'s surface and the three
- *  gnosis ids are `B-8`'s), never by a deleted arm. */
-const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status', 'gnosis-documents', 'gnosis-wikis']
+ *  STORE's change push), so the pinned SET moves to the landed value with the SET comparison, the `settings` exclusion and the
+ *  `doc-nav`-duplicate arm all unchanged.
+ *  ⟨EXTENDED AGAIN BY UNIT `B-8` (`pane-gnosis`) — TWO more ids, the SAME recorded-value discipline (`D-44`, §12a).⟩
+ *  `gnosis-documents` and `gnosis-wikis` join because each now answers a PRODUCER of its own (the CRUD host's bridge settle commits
+ *  the rendered field and then fires that pane; the engine descriptor re-reads through `refreshFromEngine`), and `gnosis-status`
+ *  stays OUT (`F-5`: its paint is `B-9`'s). The SET comparison, the `settings` exclusion and the duplicate arm are unchanged, and
+ *  the negative family arm narrows to the two operator families that still keep `refresh()`. */
+const PINNED_REPLUMBED: readonly string[] = [
+  'gnosis-query',
+  'crosslinks',
+  'doc-nav',
+  'search',
+  'template-editor',
+  'gnosis-documents',
+  'gnosis-wikis',
+]
+/** §4/§12a: the families that keep the pre-migration `refresh()` route AFTER `B-8` — `B-7` took `search`/`template-editor` OUT and
+ *  `B-8` took `gnosis-documents`/`gnosis-wikis` OUT, so the negative arm below is carried by the TWO operator families that are still
+ *  un-migrated (`settings` is `B-9`'s surface and `gnosis-status`'s paint is `B-9`'s), never by a deleted arm. */
+const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status']
 /** THE TWO IDS `B-7` MOVED INTO THE CENSUS — graded as POSITIVES below (`fired:true, handlers:1`), which is the `B2-ADV-04` arm in
  *  its positive form: a landing that stacked a second subscription would answer `handlers:2`. */
 const B7_MOVED_PANES: readonly string[] = ['search', 'template-editor']
+/** THE TWO IDS `B-8` MOVED INTO THE CENSUS — the same positive grade, one unit later: without it "the census is the seven-id SET"
+ *  would rest on the constant alone and a landing that named an id it never subscribed would read green here. */
+const B8_MOVED_PANES: readonly string[] = ['gnosis-documents', 'gnosis-wikis']
 const DOC_NAV = 'doc-nav'
 const CROSSLINKS = 'crosslinks'
 const SETTINGS = 'settings'
 
-/** How far above `REPLUMBED_PANE_IDS` its comment clause is read. §4 asks for a `B-6` comment NAMING THE CAUSE beside the
- *  declaration; the window is generous so a multi-line docblock fits and small enough that an unrelated comment cannot supply it.
- *  THE WINDOW IS NOT THE CLAUSE (re-anchored — see `censusCauseProblems`): the clause is satisfied by ONE COMMENT PARAGRAPH inside
- *  it, never by tokens scattered across it. */
-const COMMENT_WINDOW_LINES = 12
+/** How far above `REPLUMBED_PANE_IDS` its comment clause is read: the CONTIGUOUS comment block above the declaration (walking
+ *  upward over comment lines and blank lines, stopping at the first line of code, bounded so an unrelated top-of-file docblock cannot
+ *  supply it). §4 asks for a `B-6` comment NAMING THE CAUSE beside the declaration.
+ *  ⟨RE-STATED BY UNIT `B-8` (`D-44`) — THE WINDOW WIDENED, THE CLAUSE DID NOT.⟩ It was a fixed 12 lines, and `B-8`'s landing inserts
+ *  its OWN cause paragraph above this declaration: with `B-6`'s paragraph pushed past line 12 the clause would red on a CORRECT
+ *  landing. The clause is, and remains, ONE COMMENT PARAGRAPH carrying `B-6` + `doc-nav` + a cause word — the window was never the
+ *  clause (`censusCauseProblems` says so), and the paragraph requirement is untouched, so a paragraph-free move still reds. */
+const COMMENT_WINDOW_LIMIT = 80
 
 /** The words that can NAME THE CAUSE §4 asks for: both sources of §2 are the engine's change and the rendered store's change. */
 const CAUSE_WORDS: readonly string[] = ['engine', 'store', 'source']
@@ -290,7 +307,7 @@ const causeWordsIn = (text: string): string[] => CAUSE_WORDS.filter((word) => ne
 
 /** §4's COMMENT CLAUSE, read on a GIVEN source text — the parameter is what lets `S1(6)` prove BOTH directions from ONE clause
  *  (the shipped file off disk, the pre-landing fixture it also carries). Returns the problems it reads; `[]` only when ONE
- *  comment paragraph inside `COMMENT_WINDOW_LINES` above `REPLUMBED_PANE_IDS` carries THIS unit's id, the pane the move adds,
+ *  comment paragraph inside the CONTIGUOUS COMMENT BLOCK above `REPLUMBED_PANE_IDS` carries THIS unit's id, the pane the move adds,
  *  AND a cause word TOGETHER. `where` only labels the text in the message; nothing here reads the filesystem. */
 function censusCauseProblems(text: string, where: string, limb: string): string[] {
   const lines = text.split('\n')
@@ -298,12 +315,20 @@ function censusCauseProblems(text: string, where: string, limb: string): string[
   if (at < 0) {
     return [`${limb}: no \`export const REPLUMBED_PANE_IDS\` declaration line was found in ${where} — the comment clause has no anchor`]
   }
-  const firstLineNumber = Math.max(0, at - COMMENT_WINDOW_LINES) + 1
-  const paragraphs = commentParagraphsOf(lines.slice(Math.max(0, at - COMMENT_WINDOW_LINES), at), firstLineNumber)
+  // THE CONTIGUOUS BLOCK: walk upward over comment lines and blank lines, stopping at the first line of CODE (or the limit).
+  let from = at
+  while (from > 0 && at - from < COMMENT_WINDOW_LIMIT) {
+    const line = lines[from - 1]
+    if (COMMENT_LINE.test(line) || line.trim() === '') from -= 1
+    else break
+  }
+  const firstLineNumber = from + 1
+  const paragraphs = commentParagraphsOf(lines.slice(from, at), firstLineNumber)
   const carried = paragraphs.filter((paragraph) => CENSUS_UNIT.test(paragraph.text))
   if (carried.length === 0) {
     return [
-      `${limb}: the ${COMMENT_WINDOW_LINES} lines above \`REPLUMBED_PANE_IDS\` in ${where} carry NO \`B-6\` marker in any of their ` +
+      `${limb}: the contiguous comment block above \`REPLUMBED_PANE_IDS\` in ${where} (lines ${from + 1}-${at}) carries NO ` +
+        `\`B-6\` marker in any of its ` +
         `${paragraphs.length} comment paragraph(s) — §4: the census moves by exactly ONE and carries a comment NAMING THE CAUSE ` +
         `(\`D-24\`'s precedence: a move entombed in code with no cause recorded beside it is a review finding). Read: ` +
         `${shown(paragraphs.map((paragraph) => `lines ${paragraph.from}-${paragraph.to}: ${paragraph.text.split('\n')[0].slice(0, 80)}`))}`,
@@ -318,7 +343,7 @@ function censusCauseProblems(text: string, where: string, limb: string): string[
   )
   return [
     `${limb}: \`REPLUMBED_PANE_IDS\` in ${where} DOES carry a \`B-6\` marker, but NO comment paragraph inside the ` +
-      `${COMMENT_WINDOW_LINES} lines above the declaration carries the unit id TOGETHER WITH the pane the move adds ` +
+      `contiguous comment block above the declaration carries the unit id TOGETHER WITH the pane the move adds ` +
       `(\`${DOC_NAV}\`) AND a CAUSE word (${shown([...CAUSE_WORDS])}) — §4's comment is the SENTENCE THAT NAMES THIS UNIT'S MOVE, ` +
       `not the two tokens somewhere in a window: the PRE-EXISTING "(\`B-8\` for the other gnosis panes, \`B-6\`…\`B-10\`)" sentence ` +
       `and the \`B-5\` docblock together satisfied a window-wide token search, so a census moved with NO \`B-6\` cause still read ` +
@@ -806,8 +831,8 @@ async function seedLightHost(): Promise<LightDrive> {
   }
 }
 
-describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with its `B-6` cause) and is EXTENDED by `B-7`, `changePanes()` is exactly `[doc-nav]`, the families that keep `refresh()` reach NO listener, and the pre-migration route still re-assembles', () => {
-  it('D4 — `REPLUMBED_PANE_IDS` is exactly `{gnosis-query, crosslinks, doc-nav, search, template-editor}` with its `B-6` comment naming the cause, `changePanes() === [doc-nav]`, `fire(search|template-editor)` answers `fired:true, handlers:1` while `settings`/`gnosis-*` answer `fired:false, handlers:0`, and `host.refresh()` still reaches `loadAppGraph` + `mountOperator`', async () => {
+describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with its `B-6` cause) and is EXTENDED by `B-7` and by `B-8`, `changePanes()` is exactly `[doc-nav]`, the families that keep `refresh()` reach NO listener, and the pre-migration route still re-assembles', () => {
+  it('D4 — `REPLUMBED_PANE_IDS` is exactly the SEVEN-id set (extended by `B-7` and by `B-8`) with its `B-6` comment naming the cause, `changePanes()` carries `doc-nav`, `fire(search|template-editor|gnosis-documents|gnosis-wikis)` answers `fired:true, handlers:1` while `settings`/`gnosis-status` answer `fired:false, handlers:0`, and `host.refresh()` still reaches `loadAppGraph` + `mountOperator`', async () => {
     // §6 `D4` (§4's ONE declared census; §2's "the migration is incremental, never a big bang"; `F-2`'s empty change census; the
     // `r5` floor: every other family keeps `refresh()`).
     // LAYER: envelope-class — the host module's export, the sources' TEXT, and the REAL host + REAL channel over the shim.
@@ -852,9 +877,10 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
       } else if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `limb D4: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the census ` +
-            `moves by EXACTLY ONE per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; \`B-6\`: -> ` +
-            `\`['gnosis-query','crosslinks','doc-nav']\`; \`B-7\`: -> the five-id SET above), and a later family ` +
-            `unit must EXTEND this constant deliberately; every other pane keeps its \`refresh()\` route until its own unit`,
+            `moves by a DELIBERATE, RECORDED EXTENSION per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; ` +
+            `\`B-6\`: -> \`['gnosis-query','crosslinks','doc-nav']\`; \`B-7\`: -> +\`['search','template-editor']\`; \`B-8\` ` +
+            `(\`D-44\`): -> +\`['gnosis-documents','gnosis-wikis']\`, the seven-id SET above), and a later family unit must EXTEND ` +
+            `this constant deliberately; every other pane keeps its \`refresh()\` route until its own unit`,
         )
       }
       if (read !== null && read.includes(SETTINGS)) {
@@ -939,6 +965,19 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
           )
         }
       }
+      // ⟨`B-8` — THE SAME POSITIVE GRADE, ONE UNIT LATER (`D-44`, §12a).⟩ `gnosis-documents`/`gnosis-wikis` ARE census members now,
+      // so their `fired:true, handlers:1` arm is the positive form of `B2-ADV-04` (a stacked subscription answers `handlers:2`) and
+      // the ONLY reading that shows the seven-id constant is an ATTACHMENT on this channel rather than a larger literal.
+      for (const paneId of B8_MOVED_PANES) {
+        const report = channel.fire(paneId)
+        if (report.fired !== true || report.handlers !== 1) {
+          problems.push(
+            `limb D4: \`fire('${paneId}')\` answered ${shown(report)}, not \`fired:true, handlers:1\` — \`B-8\` EXTENDED the census ` +
+              `by this id deliberately (grant lines 1 and 2 give it its own producer), and the ONE boot loop subscribes ONE handler ` +
+              `per census id, so the census IS a listener here and ONE registration is what \`B2-ADV-04\` allows`,
+          )
+        }
+      }
       for (const paneId of PRE_MIGRATION_PANES) {
         const report = channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
@@ -983,10 +1022,11 @@ describe('pane-doc-nav — D4: `REPLUMBED_PANE_IDS` moves by exactly ONE (with i
       problems,
       `limb D4 — the census moves by exactly ONE and every other family keeps \`refresh()\` (§6 D4; §4's ONE declared census; ` +
         `\`F-2\`). ${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly ` +
-        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` as a SET (this row's \`B-6\` recorded value EXTENDED by ` +
-        `\`B-7\`'s two ids, never relaxed), carry a \`B-6\` comment naming the cause beside its declaration, make \`changePanes()\` ` +
-        `exactly \`['${DOC_NAV}']\`, answer \`fired:true, handlers:1\` for \`${CROSSLINKS}\` AND for \`B-7\`'s two moved ids while ` +
-        `\`settings\`/\`gnosis-*\` answer \`fired:false, handlers:0\`, and keep \`host.refresh()\` reaching \`loadAppGraph\` + ` +
+        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor, gnosis-documents, gnosis-wikis}\` as a SET (this row's ` +
+        `\`B-6\` recorded value EXTENDED by \`B-7\`'s AND \`B-8\`'s two ids, never relaxed), carry a \`B-6\` comment naming the cause ` +
+        `beside its declaration, make \`changePanes()\` carry \`${DOC_NAV}\`, answer \`fired:true, handlers:1\` for ` +
+        `\`${CROSSLINKS}\`, for \`B-7\`'s two moved ids AND for \`B-8\`'s two while \`settings\`/\`gnosis-status\` answer ` +
+        `\`fired:false, handlers:0\`, and keep \`host.refresh()\` reaching \`loadAppGraph\` + ` +
         `\`mountOperator\` on this double (the floor under the integration rows' zeroes). envelope-class`,
     ).toEqual([])
   })

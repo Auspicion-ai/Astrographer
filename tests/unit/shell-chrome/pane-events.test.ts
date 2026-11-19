@@ -1041,12 +1041,26 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // that pane's event) and `template-editor` because the template STORE's change push is now its source (`onTemplateChanged`
     // commits the payload's whole template and then fires) — `docs/L1/unit-b-7-pane-search-template.md` §2/§4. The comparison below
     // stays ORDER-SENSITIVE and EXACT (a bare REORDER still reds, as do a sixth id, a dropped id and a duplicate).
-    const PINNED_CENSUS = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
+    // ⟨EXTENDED AGAIN BY UNIT `B-8` (`pane-gnosis`) — TWO more ids, and the SAME discipline (`D-44`, §12a).⟩ `gnosis-documents` and
+    // `gnosis-wikis` join because each now answers a PRODUCER OF ITS OWN: the CRUD host's bridge settle commits the rendered field
+    // and then FIRES that pane (`onChanged: (paneId) => firePaneUpdate(paneId)`, grant line 1), and the engine descriptor re-reads
+    // through the producer (`refreshFromEngine`, grant line 2) — `docs/L1/unit-b-8-pane-gnosis.md` §2/§12a. `gnosis-status` is
+    // still ABSENT on purpose (`F-5`: its paint is `B-9`'s). The value is re-stated, the TEETH are unchanged: the fingerprint
+    // comparison below stays ORDER-SENSITIVE and EXACT, so a sixth id, a dropped id, a bare reorder and a duplicate all still red.
+    const PINNED_CENSUS = [
+      'gnosis-query',
+      'crosslinks',
+      'doc-nav',
+      'search',
+      'template-editor',
+      'gnosis-documents',
+      'gnosis-wikis',
+    ]
     if (replumbed === undefined) {
       problems.push(
         '(r9) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
-          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s, \`B-6\`'s ` +
-          `and \`B-7\`'s deliberate extensions)`,
+          `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s, \`B-6\`'s, ` +
+          `\`B-7\`'s and \`B-8\`'s deliberate extensions)`,
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1061,8 +1075,8 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
         `${problems.length} problem(s). The shipped record-interest set is EMPTY BY CONSTRUCTION (no pane renders display state ` +
         `today; \`B-10\` authors the first reader) and the control proves it can MOVE; the two declarations reach different arms; ` +
         `both censuses are copies; and the re-plumbed census is exactly ` +
-        `${shown(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor'])} ` +
-        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\` — one id, then one id, then two). ` +
+        `${shown(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis'])} ` +
+        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\` — one id, then one id, then two, then two). ` +
         `envelope-class and PURE — no Electron, no DOM; the constant is read off the host MODULE's exports`,
     ).toEqual([])
   })

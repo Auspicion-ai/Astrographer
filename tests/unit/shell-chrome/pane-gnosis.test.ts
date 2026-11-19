@@ -11,18 +11,30 @@
 //
 // SOURCE OF EVERY ASSERTION (all paths relative to the repo root):
 //   §9 `B6-F15`  the ONE exported PURE, TOTAL counter + `boot`'s validate-then-subscribe (rows `C1`, `C2`).
-//   §4           the census value and the change-interest value at this head — the two declarations rows `C3`/`C4` parse
-//                ("`REPLUMBED_PANE_IDS` is `['gnosis-query','crosslinks','doc-nav','search','template-editor']`"; "`doc-nav` is the
-//                first and only change-interested pane at this head"); §4 also names the half-landed state the clause exists to
-//                make impossible: "`CHANGE_INTERESTED_PANE_IDS` becomes `['doc-nav','gnosis-documents','gnosis-wikis']` — which is
-//                exactly the state `B6-F15`'s containment clause exists to make impossible to half-land".
+//   §4           the census value and the change-interest value at this head — the two declarations rows `C3`/`C4` parse.
+//   §12a (`D-44`)THE SECOND PASS'S AMENDMENT, and the reading `C3`/`C4` now grade: the grant (`D-44`) moved the census
+//                FIVE -> SEVEN (`['gnosis-query','crosslinks','doc-nav','search','template-editor','gnosis-documents',
+//                'gnosis-wikis']`), `gnosis-status` stays OUT (its paint is `B-9`'s, and entering it makes `fire` answer
+//                `fired:true` while nothing paints — a silently dead operator pane), and the three granted sites are the LANDED
+//                shape (`renderer.ts`'s CRUD `onChanged: (paneId) => firePaneUpdate(paneId)`, the `⟨B-9⟩` fallback UNCHANGED,
+//                and `installSidebarBridge`'s `methods` now carrying `gnosisDocuments`/`gnosisWikis`).
+//                ⟨THE CHANGE-INTEREST DECLARATION DOES *NOT* MOVE — §12a's MEASURED RE-NARROW.⟩ An earlier reading of this pass
+//                pinned `CHANGE_INTERESTED_PANE_IDS` as `['doc-nav','gnosis-documents','gnosis-wikis']`; the architect RE-NARROWED it
+//                to `['doc-nav']` after measurement, and `C3`/`C4` grade the NARROWED value. THE CAUSE (`D-40`'s `m6` class, named in the
+//                declaration's own docblock): `publishChange()`'s fire contract is "re-read your subject", a CRUD pane has NO re-read arm
+//                by design (`F-4` — a re-issue is the unbounded `settle → fire → settle` loop), so a `publishChange` fire reaches it with
+//                nothing to re-read and paints NOTHING — a DECLARED BUT INERT path. Measured both ways: `not-a-pane` in the
+//                `pane-doc-nav` `D2` harness (no gnosis pane registered) and `unchanged` in the app. The CRUD panes' engine route is the
+//                ENGINE ARM's producer instead: `onRagStoreChanged` calls the delegate's own `refreshFromEngine()`, whose SETTLE fires its
+//                own pane (`descriptor → read → settle → fire → paint`), so the engine has ONE route per pane, never two.
 //   §6 `X1`      "the row that reds a landing which enters the operator pane into the census without its paint" — `C3` pins the
-//                census UNMOVED (three gnosis ids absent, `gnosis-status` with its reason).
-//   §6 `S1`      the letter row's source-clause discipline (comments stripped, declarations parsed, never a token search).
-//   §10          THE STOP: the three grant lines this tree is still waiting on — `C3` pins each site of them BY NAME (`F-1`'s CRUD
-//                `onChanged: () => { … host.refresh() }`, `F-5`'s `${B-9}` operator fallback in `firePaneUpdate`, `F-7`'s
-//                `installSidebarBridge` methods object with no `gnosisDocuments`/`gnosisWikis`), so the day one half-lands without
-//                the others the pin reds instead of the tree drifting.
+//                census MOVED TO SEVEN with `gnosis-status` ABSENT and names its reason.
+//   §6 `X1b`     THE CONVERSE CLAUSE (this pass authors it): `census ⊆ paintable` over the REAL booted host — every census id must
+//                answer `updatePane(id)` with something other than `operator-scope`/`not-a-pane`, proved falsifiable on two forged
+//                censuses (the `gnosis-status` entry is the concrete dead-registration hazard).
+//   §6 `S1`/§6 AUTHORING REFUSALS (`D-43`) the source-clause discipline (comments stripped, DECLARATIONS parsed, never a token
+//                search) and `P1-1`'s correction of it: a member census grades DECLARATION SHAPES (`key: value`, `key,`,
+//                `key(args) {`) and can never be satisfied — or emptied — by a SPELLING.
 //
 // DECLARATIONS ARE PARSED, NEVER SEARCHED (`D-38`: `src.indexOf('VALID_GROUPS')` latched onto a COMMENT once). Every clause below
 // strips comments FIRST (the stripper is length-preserving, and each row CHECKS that: a raw/commented offset would let prose
@@ -31,11 +43,11 @@
 // it is read in a three-line window anchored on the branch's own code line, never as a file-wide token search.
 //
 // LAYER (MANDATORY, D-10 / `RCA-12`): ENVELOPE-CLASS. `C1`'s declaration clause, `C2`'s plan clause and `C3`/`C4`'s declaration
-// clauses read `src/**`'s TEXT (comments stripped) and nothing else; `C1`'s behaviour arms, `C2`'s census arms and `C3`'s parse
-// cross-check drive the REAL exported values and the REAL `SidebarPanes` host over the LAYOUT-LESS `dom-shim` against a recording
-// runtime double. What this file can NEVER read, named so nobody quotes it: that a fire PAINTS a pane, that a pane re-reads once,
-// that the counters are 0/0/0, or that the assembled Electron window repaints — those are §6's `Q*`/`X2`/`X3` rows (this file's
-// clause unit is `B6-F15` alone) and §8's assembled-app limb (`G8`).
+// clauses read `src/**`'s TEXT (comments stripped) and nothing else; `C1`'s behaviour arms, `C2`'s census arms, `C3`'s parse
+// cross-check and `X1b`'s paintable clause drive the REAL exported values and the REAL `SidebarPanes` host over the LAYOUT-LESS
+// `dom-shim` against a recording runtime double. What this file can NEVER read, named so nobody quotes it: that a fire PAINTS a
+// pane, that a pane re-reads once, that the counters are 0/0/0, or that the assembled Electron window repaints — those are §6's
+// `Q*`/`X2`/`X3` rows (`tests/integration/shell-chrome/pane-gnosis.test.ts`) and §8's assembled-app limb (`G8`).
 //
 // REACHABILITY RULE (this file always COLLECTS and RUNS): every subject is reached through `readFileSync`/`await import()`
 // inside a `try`, and a missing subject is a NAMED problem inside the row's ONE aggregate `expect(problems, …)` — never an ENOENT
@@ -61,19 +73,54 @@ const RENDERER_FILE = 'src/renderer/renderer.ts'
 
 /** §9: the ONE name this pass lands. */
 const COUNTER_NAME = 'changeInterestSubsetProblems'
-/** §4: the PAINT census at this head — the pin's recorded value, kept whole (five ids, order-insensitive comparison). */
-const PINNED_CENSUS: readonly string[] = ['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor']
-/** §4: the CHANGE-INTEREST declaration at this head ("`doc-nav` is the first and only change-interested pane at this head"). */
+/** §12a (`D-44`): the PAINT census AFTER the grant's move — SEVEN ids, order-insensitive comparison, the recorded value kept
+ *  whole. `[§4's five]` + `gnosis-documents` + `gnosis-wikis`, in the contract's declared order. */
+const PINNED_CENSUS: readonly string[] = [
+  'gnosis-query',
+  'crosslinks',
+  'doc-nav',
+  'search',
+  'template-editor',
+  'gnosis-documents',
+  'gnosis-wikis',
+]
+/** §12a: the CHANGE-INTEREST declaration after the grant — ONE id, `doc-nav`, exactly as the architect RE-NARROWED it after
+ *  measurement (an earlier reading of this pass pinned the three-id set; the declaration never lands that way). THE CAUSE, as the
+ *  declaration's own docblock now records it: `publishChange()`'s fire contract is "re-read your subject", and a CRUD pane has NO
+ *  re-read arm by design (`F-4` — a re-issue is the unbounded `settle → fire → settle` loop), so a fire reaches it with nothing to
+ *  re-read and paints nothing — a DECLARED BUT INERT path (`D-40`'s `m6` class; measured `not-a-pane` in the `pane-doc-nav` `D2`
+ *  harness and `unchanged` in the app). Their engine route is the ENGINE ARM's producer: `onRagStoreChanged` calls the delegate's
+ *  `refreshFromEngine()`, whose SETTLE fires its own pane, so the engine has ONE route per pane and `publishChange()` keeps its
+ *  one meaning. */
 const PINNED_CHANGE_INTEREST: readonly string[] = ['doc-nav']
-/** §4/`F-5`: the three gnosis ids the census must NOT carry at this head — `gnosis-query` is `B-3`'s landed id, `gnosis-documents`
- *  and `gnosis-wikis` are `F-1`'s blocked pair, and `gnosis-status` is `F-5`'s operator-scope trap (`X1`). */
-const ABSENT_GNOSIS_PANES: readonly string[] = ['gnosis-status', 'gnosis-documents', 'gnosis-wikis']
+/** §12a/`F-5`: the two panes the census must NOT carry, EACH WITH ITS REASON — `gnosis-status` is `operator`-scope and its paint is
+ *  `B-9`'s (`paintPane` answers `operator-scope`, so entering it makes `fire` answer `fired:true` while nothing paints and
+ *  `renderer.ts`'s `⟨B-9⟩` fallback is then skipped: a SILENTLY DEAD operator pane); `settings` is the operator surface too. */
+const ABSENT_CENSUS_PANES: ReadonlyArray<{ paneId: string; reason: string }> = [
+  {
+    paneId: 'gnosis-status',
+    reason:
+      "its registration carries `scope:'operator'`, `paintPane`'s step 2 answers `operator-scope` for it and its paint is `B-9`'s — " +
+      'entering it makes `fire` answer `fired:true` while nothing paints, and `renderer.ts`\'s `⟨B-9⟩` operator fallback is skipped ' +
+      'precisely because `fired` is true (the silently dead operator pane `F-5` names)',
+  },
+  {
+    paneId: 'settings',
+    reason:
+      'it is the operator scope\'s own pane (`B-9`\'s surface): `updatePane` answers `operator-scope` and the operator mount — not the ' +
+      'app-graph paint — is its lawful route',
+  },
+]
 const CENSUS_NAME = 'REPLUMBED_PANE_IDS'
 const CHANGE_INTEREST_NAME = 'CHANGE_INTERESTED_PANE_IDS'
 const DOC_NAV = 'doc-nav'
-/** The forged ids: a change-interest declaration that names a pane the census does not paint — the half-wire, spelled. */
-const FORGED_FIRST = 'gnosis-documents'
-const FORGED_SECOND = 'gnosis-wikis'
+/** The forged ids: change-interested ids the census does NOT paint. `gnosis-status` is the CONCRETE half-wire (`F-5`: the operator
+ *  pane whose entry makes `fire` answer `fired:true` with no paint), and the probe is an id no unit ever registers. Both are ABSENT
+ *  from the seven-id value, so the forged-pair arms below stay a reading of the SHIPPED census rather than of a stale list. */
+const FORGED_FIRST = 'gnosis-status'
+const FORGED_SECOND = 'probe-b8-never-painted'
+const DOCUMENTS_PANE = 'gnosis-documents'
+const WIKIS_PANE = 'gnosis-wikis'
 
 const fingerprint = (value: unknown): string => {
   try {
@@ -290,8 +337,232 @@ function bodyAt(text: string, anchor: RegExp, limb: string, what: string): BodyR
 const BOOT_ANCHOR = /async[ \t]+boot[ \t]*\(/
 const FIRE_PANE_UPDATE_ANCHOR = /const[ \t]+firePaneUpdate[ \t]*=/
 const GNOSIS_CRUD_ANCHOR = /new[ \t]+GnosisCrudPanes[ \t]*\(/
+const SIDEBAR_PANES_ANCHOR = /new[ \t]+SidebarPanes[ \t]*\(/
 const INSTALL_SIDEBAR_BRIDGE_ANCHOR = /private[ \t]+installSidebarBridge[ \t]*\(/
 const SIDEBAR_METHODS_ANCHOR = /const[ \t]+methods[ \t]*=/
+/** The `SidebarPanes` construction's gnosis delegate MEMBER — an object-literal member, matched on the member SHAPE (`gnosis: {`),
+ *  never on a mention. */
+const GNOSIS_DELEGATE_ANCHOR = /(?:^|[\s,{])gnosis[ \t]*:[ \t]*\{/
+
+// ===========================================================================
+// `P1-1` — THE MEMBER CENSUS, GRADED AS A DECLARATION SHAPE AND NEVER AS A SPELLING.
+//
+// THE FINDING, as this pass's contract states it (§6's AUTHORING REFUSALS, `D-43`; `P1-1` carried from §9): "`C3`'s absence arms were
+// measured evadable by a shorthand (`gnosisDocuments,`) or spread (`...crudSeams`) member" — the pre-pass instrument tested
+// `[{,]\s*<name>\s*[:(]`, so a SHORTHAND member (which is exactly the shape grant line 2's delegate produces when the members are
+// hoisted) read ABSENT, and a SPREAD read ABSENT too. An absence arm that a lawful shape slips past is a vacuous arm; the remedy is
+// this parser: it splits the object literal's TOP-LEVEL members (depth- and string-aware), strips comments first (the same
+// length-preserving stripper every row in this file uses), and answers `{ declared, spreads }`. A SPREAD is then a NAMED problem of
+// its own — never a silent absence and never a silent presence — because the members it carries cannot be enumerated.
+// ===========================================================================
+
+interface MemberCensus {
+  /** the TOP-LEVEL member KEYS the object literal DECLARES, in declaration order (longhand, shorthand and method shorthand) */
+  declared: string[]
+  /** the TOP-LEVEL spread expressions, verbatim (`...crudSeams`) — each makes the census UNREADABLE for every required member */
+  spreads: string[]
+}
+
+/** Split an object literal's INNER text into its top-level comma-separated members — brace/bracket/paren depth and string literals
+ *  are respected, so a nested object's key, an arrow body's comma and a `'a,b'` string can never split a member. */
+function topLevelMembers(inner: string): string[] {
+  const members: string[] = []
+  let current = ''
+  let depth = 0
+  let mode: 'code' | 'single' | 'double' | 'template' = 'code'
+  let i = 0
+  while (i < inner.length) {
+    const ch = inner[i]!
+    if (mode === 'code') {
+      if (ch === "'") {
+        mode = 'single'
+        current += ch
+        i += 1
+        continue
+      }
+      if (ch === '"') {
+        mode = 'double'
+        current += ch
+        i += 1
+        continue
+      }
+      if (ch === '`') {
+        mode = 'template'
+        current += ch
+        i += 1
+        continue
+      }
+      if (ch === '{' || ch === '(' || ch === '[') depth += 1
+      else if (ch === '}' || ch === ')' || ch === ']') depth -= 1
+      else if (ch === ',' && depth === 0) {
+        members.push(current)
+        current = ''
+        i += 1
+        continue
+      }
+      current += ch
+      i += 1
+      continue
+    }
+    current += ch
+    if (ch === '\\') {
+      current += inner[i + 1] ?? ''
+      i += 2
+      continue
+    }
+    if ((mode === 'single' && ch === "'") || (mode === 'double' && ch === '"') || (mode === 'template' && ch === '`')) mode = 'code'
+    i += 1
+  }
+  if (current.trim() !== '') members.push(current)
+  return members
+}
+
+/** A member's leading KEY: `key: value` (longhand), a method shorthand `key(args) {`, an `async key(…)` / `*key(…)` form, and a bare
+ *  shorthand `key`. `null` when the member opens with something that is not an identifier (a quoted/computed key). */
+const MEMBER_KEY = /^(?:async[ \t]+)?\*?[ \t]*([A-Za-z_$][\w$]*)/
+
+/** **THE MEMBER-CENSUS PARSER.** Takes an OBJECT LITERAL's text (raw is fine — comments are stripped here, and the stripper's
+ *  length-preservation is asserted by every row that reads a source file), brace-matches past any leading furniture, and answers the
+ *  TOP-LEVEL member keys plus every top-level spread. It never throws and never guesses: an unparseable body answers two empty
+ *  arrays, which the clause below turns into a NAMED problem (never a vacuous pass). */
+function parseObjectMemberKeys(body: string): MemberCensus {
+  const code = stripComments(body)
+  const open = code.indexOf('{')
+  const close = open < 0 ? -1 : matchBrace(code, open)
+  const census: MemberCensus = { declared: [], spreads: [] }
+  if (open < 0 || close <= open) return census
+  for (const raw of topLevelMembers(code.slice(open + 1, close))) {
+    const member = raw.trim()
+    if (member === '') continue
+    if (member.startsWith('...')) {
+      census.spreads.push(member.replace(/\s+/g, ' '))
+      continue
+    }
+    const match = MEMBER_KEY.exec(member)
+    if (match === null) continue
+    census.declared.push(match[1]!)
+  }
+  return census
+}
+
+/** **THE MEMBER-CENSUS CLAUSE.** `[]` only when every `required` member is DECLARED at the object literal's top level; otherwise the
+ *  problem sentences. A spread short-circuits to ONE named problem — "never a silent absence and never a silent presence" — because a
+ *  member arriving through a spread can be neither certified present nor certified absent, so an absence arm over that body would be
+ *  vacuous in the one direction that matters.
+ *
+ *  PROVED BOTH WAYS in `P1-1` (the row that closes the finding): a compliant longhand fixture and a SHORTHAND fixture (the shape the
+ *  pre-pass regex missed) both answer `[]`; a spread fixture and an absent-member fixture each answer a NAMED problem. */
+function memberCensusProblems(census: MemberCensus, required: readonly string[], where: string, limb: string): string[] {
+  if (census.spreads.length > 0) {
+    return [
+      `${limb}: the member census of ${where} is UNREADABLE — the object literal SPREADS ${shown(census.spreads)}, so a member ` +
+        `that arrives through the spread can be neither certified PRESENT nor certified ABSENT (a spread is never a silent absence ` +
+        `and never a silent presence). Declared top-level members read: ${shown(census.declared)}`,
+    ]
+  }
+  const problems: string[] = []
+  for (const name of required) {
+    if (!census.declared.includes(name)) {
+      problems.push(
+        `${limb}: ${where} does NOT DECLARE the top-level member \`${name}\` (declaration shapes read: longhand \`${name}: …\`, ` +
+          `shorthand \`${name},\`, method shorthand \`${name}(…) {\`). Required: ${shown([...required])}. Declared: ` +
+          `${shown(census.declared)}`,
+      )
+    }
+  }
+  return problems
+}
+
+/** The RAW text of ONE top-level member of an object literal (key through value), or a NAMED problem — the reader `C3`'s grant-site
+ *  arms use to isolate `onChanged: …` and the gnosis delegate before grading their INTERNALS. Comments are stripped first (the same
+ *  length-preserving stripper), so prose can never supply a member. */
+function objectMemberText(rawBody: string, name: string): { text: string; problems: string[] } {
+  const code = stripComments(rawBody)
+  const open = code.indexOf('{')
+  const close = open < 0 ? -1 : matchBrace(code, open)
+  if (open < 0 || close <= open) {
+    return {
+      text: '',
+      problems: [`the object literal under inspection carries no BALANCED braced body — the member \`${name}\` cannot be located`],
+    }
+  }
+  const members = topLevelMembers(code.slice(open + 1, close))
+  const declared: string[] = []
+  for (const raw of members) {
+    const member = raw.trim()
+    if (member === '') continue
+    const key = MEMBER_KEY.exec(member)
+    if (key !== null) declared.push(key[1]!)
+    if (key === null || key[1] !== name) continue
+    return { text: member, problems: [] }
+  }
+  return {
+    text: '',
+    problems: [`the object literal does NOT DECLARE the top-level member \`${name}\` — declared: ${shown(declared)}`],
+  }
+}
+
+/** The braced BODY of a NESTED object-literal member (`gnosis: { … }`) — the delegate `C3`'s member census parses, isolated from the
+ *  enclosing options object so a member of the OUTER literal can never satisfy the inner census. */
+function nestedObjectMemberBody(rawBody: string, name: string): { body: string; problems: string[] } {
+  const member = objectMemberText(rawBody, name)
+  if (member.text === '') return { body: '', problems: member.problems }
+  const open = member.text.indexOf('{')
+  const close = open < 0 ? -1 : matchBrace(member.text, open)
+  if (open < 0 || close <= open) {
+    return {
+      body: '',
+      problems: [`the \`${name}\` member is not an OBJECT LITERAL (read: ${shown(member.text)}) — there is no member census to grade`],
+    }
+  }
+  return { body: member.text.slice(open, close + 1), problems: [] }
+}
+
+/** **`X1b`'s CLAUSE, and the only place it lives:** every id in `census` must answer `updatePane(id)` with a reason that is NOT
+ *  `operator-scope` and NOT `not-a-pane` (i.e. `census ⊆ paintable`). `painted`/`unchanged`/`not-enabled`/`not-mounted`/`no-runtime`
+ *  are all admissible: the first two are the paint's own answers and the last three are transient boot / registry states, none of
+ *  which is a registration that can never paint. The forged-census mutants `X1b` drives prove the clause falsifiable. */
+function censusPaintableProblems(
+  host: Record<string, unknown> | null,
+  census: readonly string[],
+  where: string,
+  limb: string,
+): string[] {
+  if (host === null) {
+    return [`${limb}: the booted host is ABSENT — \`census ⊆ paintable\` over ${where} has no subject`]
+  }
+  const updatePane = host['updatePane']
+  if (typeof updatePane !== 'function') {
+    return [`${limb}: \`updatePane\` is NOT a function on the booted host (read ${typeof updatePane}) — ${where} cannot be graded`]
+  }
+  const problems: string[] = []
+  for (const paneId of census) {
+    let verdict: unknown
+    try {
+      verdict = (updatePane as (id: string) => unknown).call(host, paneId)
+    } catch (error) {
+      problems.push(
+        `${limb}: \`updatePane('${paneId}')\` THREW for ${where} (${String(error)}) — the paint is TOTAL at every argument, so a ` +
+          `census entry that makes it throw is a finding, never a silent skip`,
+      )
+      continue
+    }
+    const reason = (verdict as { reason?: unknown } | null | undefined)?.reason
+    if (reason === 'operator-scope' || reason === 'not-a-pane') {
+      problems.push(
+        `${limb}: ${where} names \`${paneId}\` and \`updatePane('${paneId}')\` answers \`reason: '${String(reason)}'\` — ` +
+          `\`census ⊆ paintable\` REFUSES this entry: ${
+            reason === 'operator-scope'
+              ? 'the operator scope\'s lawful paint is `B-9`\'s re-mount, so a census entry for it makes `fire` answer ' +
+                '`fired:true` while nothing paints AND skips `renderer.ts`\'s `⟨B-9⟩` fallback — a SILENTLY DEAD operator pane'
+              : 'no host registered the pane, so the fire reaches a registration whose paint cannot exist'
+          }`,
+      )
+    }
+  }
+  return problems
+}
+
 
 // ===========================================================================
 // DECLARATION PARSERS (`D-38`: parse the DECLARATION, never search for the token).
@@ -629,13 +900,23 @@ function documentSnapshot(): Record<string, unknown> {
 
 interface ChannelBootDrive {
   channel: ReturnType<typeof createPaneEvents> | null
+  /** The booted host — the subject of `X1b`'s `census ⊆ paintable` clause (`updatePane(<id>)`'s declared word is the reading). */
+  host: Record<string, unknown> | null
   problems: string[]
   restore: () => void
 }
 
+interface BootOptions {
+  /** `true` → register the REAL pane hosts into the registry the host uses, exactly as `renderer.ts` does: `GnosisPanes` (which
+   *  registers `gnosis-status` + `gnosis-query`, the `operator`/`app-graph` pair) and `GnosisCrudPanes` (which registers
+   *  `gnosis-documents` + `gnosis-wikis`) — the registry a `census ⊆ paintable` clause must read, because a census id whose pane
+   *  no host registered can only ever answer `not-a-pane`. */
+  withRealPanes?: boolean
+}
+
 /** Boot the REAL host with the REAL channel and answer the channel it subscribed into — the ONE reading that shows WHICH
  *  declarations the boot loop actually made (the census it painted for and the change-interest ids it marked). */
-async function bootChannelHost(limb: string): Promise<ChannelBootDrive> {
+async function bootChannelHost(limb: string, options: BootOptions = {}): Promise<ChannelBootDrive> {
   installShim()
   const globals = globalThis as Record<string, unknown>
   const previousWindow = globals['window']
@@ -647,7 +928,13 @@ async function bootChannelHost(limb: string): Promise<ChannelBootDrive> {
   const channel = createPaneEvents()
   try {
     const bridge = {
-      security: { get: async (): Promise<Record<string, unknown>> => ({ token: null, enabled: ['read'] }) },
+      security: { get: async (): Promise<Record<string, unknown>> => ({ token: null, enabled: ['read', 'gnosis', 'gnosis-edit'] }) },
+      gnosis: {
+        status: async (): Promise<Record<string, unknown>> => ({ ok: true }),
+        query: async (value: string): Promise<Record<string, unknown>> => ({ query: value, results: [] }),
+        documents: async (): Promise<unknown> => ({ items: [] }),
+        wikis: async (): Promise<unknown> => [],
+      },
       edit: {
         onRagStoreChanged: (_handler: (payload: unknown) => void): (() => void) => () => undefined,
         commit: async (): Promise<Record<string, unknown>> => ({ ok: true }),
@@ -683,8 +970,10 @@ async function bootChannelHost(limb: string): Promise<ChannelBootDrive> {
       },
       operatorSettings: {
         get: async (): Promise<Record<string, unknown>> => ({
-          enabledPanes: [DOC_NAV, 'search', 'crosslinks'],
-          enabledOperatorPanes: ['settings'],
+          // ⟨`X1b`⟩ EVERY app-graph census id this harness can register is ENABLED, so the frames exist and the paint's own gate
+          // (`not-enabled`) cannot mask a `not-a-pane`; the clause grades the declARED WORD, and `not-enabled` is admissible.
+          enabledPanes: [DOC_NAV, 'search', 'crosslinks', DOCUMENTS_PANE, WIKIS_PANE, 'gnosis-query', 'template-editor'],
+          enabledOperatorPanes: ['settings', 'gnosis-status'],
           panesInitialized: true,
           defaultDocumentId: null,
           topK: 5,
@@ -693,11 +982,28 @@ async function bootChannelHost(limb: string): Promise<ChannelBootDrive> {
         onChanged: (_handler: (settings: unknown) => void): (() => void) => () => undefined,
       },
     }
+    const registry = createPaneRegistry()
+    if (options.withRealPanes === true) {
+      // EXACTLY THE `renderer.ts` ORDER: both gnosis hosts register into the SHARED registry, before `SidebarPanes.boot` assembles.
+      const GnosisPanesCtor = (await import('../../../src/renderer/gnosis-panes.js')).GnosisPanes as new (opts: unknown) => {
+        registerPanes(): void
+      }
+      new GnosisPanesCtor({
+        registry,
+        bridge,
+        // The standby the `⟨B-9⟩` fallback uses: a settle names its pane and the site fires it. Nothing in `X1b` depends on it firing.
+        onChanged: (): void => undefined,
+      }).registerPanes()
+      const GnosisCrudPanesCtor = (await import('../../../src/renderer/gnosis-crud-panes.js')).GnosisCrudPanes as new (opts: unknown) => {
+        registerPanes(): void
+      }
+      new GnosisCrudPanesCtor({ registry, bridge, onChanged: (): void => undefined }).registerPanes()
+    }
     const SidebarPanesCtor = (await import('../../../src/renderer/sidebar-panes.js')).SidebarPanes as new (opts: unknown) => unknown
     const host = new SidebarPanesCtor({
       mount: new ShimElement('div'),
       operatorMount: new ShimElement('div'),
-      registry: createPaneRegistry(),
+      registry,
       bridge,
       backRefs: new Map<string, string[]>(),
       editController: {
@@ -709,14 +1015,14 @@ async function bootChannelHost(limb: string): Promise<ChannelBootDrive> {
       events: channel,
     }) as Record<string, unknown>
     await (host['boot'] as (runtime: unknown) => Promise<void>).call(host, recordingRuntime())
+    return { channel, host, problems, restore }
   } catch (error) {
     problems.push(
       `${limb}: the harness's \`host.boot(runtime)\` THREW (${String(error)}) — the shipped census's ATTACHMENTS have no booted ` +
         `subject, so the change-interest reading below cannot be made`,
     )
-    return { channel: null, problems, restore }
+    return { channel: null, host: null, problems, restore }
   }
-  return { channel, problems, restore }
 }
 
 const loadHostModule = async (limb: string): Promise<{ module: Record<string, unknown> | null; problems: string[] }> => {
@@ -824,9 +1130,11 @@ describe('pane-gnosis — C1: `changeInterestSubsetProblems` is ONE exported, PU
           kind: 'exactly-empty',
         }),
       )
-      // (2b) THE FORGED PAIR — one id the census does not paint: a problem NAMING it. The shipped census carries neither
-      // `gnosis-documents` nor `gnosis-wikis` (§4: they enter only with `F-1`'s grant), so the forged pair is one edit away from the
-      // half-landed state §4 names verbatim: "`CHANGE_INTERESTED_PANE_IDS` becomes `['doc-nav','gnosis-documents','gnosis-wikis']`".
+      // (2b) THE FORGED PAIR — one id the census does not paint: a problem NAMING it. ⟨RE-STATED by §12a (`D-44`) — the recorded
+      // VALUES moved, the ARMS did not.⟩ The shipped census now CARRIES `gnosis-documents`/`gnosis-wikis` (the seven-id value), so
+      // the forged ids are the two the census still does NOT paint: `gnosis-status` (`F-5`'s operator pane — the CONCRETE half-wire:
+      // entering it makes `fire` answer `fired:true` with no paint while the `⟨B-9⟩` fallback is skipped) and an id no unit
+      // registers. A counter that certified either one would bless exactly the dead registration `X1`/`X1b` exist to refuse.
       problems.push(
         ...gradeAnswer('C1', `['${DOC_NAV}','${FORGED_FIRST}'], the shipped census VALUE`, drive(fn, [DOC_NAV, FORGED_FIRST], census), {
           kind: 'exactly-one-naming',
@@ -1069,8 +1377,8 @@ describe('pane-gnosis — C2: `boot` computes the plan FIRST and refuses the WHO
         if (authorised.length === 0) {
           problems.push(
             `C2: the change-interest declaration parsed as ${shown(declaredChangeInterest)} and NONE of its ids is in the census, ` +
-              `so the \`changePanes()\` comparison above is VACUOUS (\`[] === []\`) — at this head §4 records \`['${DOC_NAV}']\`, ` +
-              `which IS in the census`,
+              `so the \`changePanes()\` comparison above is VACUOUS (\`[] === []\`) — §12a records ` +
+              `${shown(PINNED_CHANGE_INTEREST)}, every id of which IS in the seven-id census`,
           )
         }
         // (2c) THE FORGED PAIR, THROUGH THE ONLY SEAM THERE IS. `boot`'s census is module-private (a `const` in the module body, not
@@ -1109,65 +1417,69 @@ describe('pane-gnosis — C2: `boot` computes the plan FIRST and refuses the WHO
   })
 })
 
+
 // ===========================================================================
-// `C3` — THE CENSUS IS UNMOVED: THE STOP'S EVIDENCE PIN (GREEN ON ARRIVAL).
+// `C3` — THE CENSUS HAS MOVED AND THE SITES ARE THE GRANTED ONES (§12a, `D-44`).
 // ===========================================================================
-describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in this pass and the STOP’s three grant sites still stand', () => {
-  it('C3 — PIN: `REPLUMBED_PANE_IDS` parses to exactly `{gnosis-query, crosslinks, doc-nav, search, template-editor}` (and the runtime value agrees), none of `gnosis-status`/`gnosis-documents`/`gnosis-wikis` is in it, `CHANGE_INTERESTED_PANE_IDS` is exactly `[doc-nav]`, and the three §1/§10 sites are present and NAMED (`F-1`, `F-5`, `F-7`)', async () => {
-    // ⇒ GREEN ON ARRIVAL — THIS IS A PIN, NOT A RED. It must stay green through the `B6-F15` landing (that landing moves NO census
-    // id) and it must RED the day someone HALF-LANDS: an id added to the census without the grant line that can move it, or a grant
-    // site deleted/re-wired without the census following. Each arm names the contract finding it pins.
-    // LAYER: envelope-class — DECLARATION parses over `src/renderer/**`'s text (comments stripped), one of them cross-checked
-    // against the module's runtime value; and ONE marker read from the RAW text (`⟨B-9⟩` lives in a comment and that comment IS the
-    // record).
+describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and the two `renderer.ts` grant sites plus the two seams now stand as `D-44` states them', () => {
+  it('C3 — PIN: `REPLUMBED_PANE_IDS` parses to exactly the SEVEN-id set (runtime agrees, still exported) with `gnosis-status` and `settings` ABSENT and each named with its reason; `CHANGE_INTERESTED_PANE_IDS` parses to exactly `[doc-nav]` (the re-narrowed value) and is still module-private; the CRUD `onChanged` is the ONE-PARAMETER form whose body calls `firePaneUpdate(paneId)` with NO `host.refresh()`; the `⟨B-9⟩` operator fallback is UNCHANGED; the `SidebarPanes` gnosis delegate DECLARES status/query/documents/wikis/refreshFromEngine; and `installSidebarBridge`’s `methods` DECLARES gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis', async () => {
+    // §12a (`D-44`) — THE PIN, RE-GRAINED. The pre-pass pin asserted the OPPOSITE two things ("the census does not move in this
+    // pass" and "`onChanged` is still a zero-parameter arrow wired to `host.refresh()`"); those are the arms THIS pass inverts, and
+    // they are inverted HERE — deliberately, in the set, with the landing — never relaxed in isolation (`B-7`'s recorded-value
+    // precedent). Every arm now names the LANDED fact and the contract sentence it reads, so a HALF-landing reds by name: a census
+    // of five, a change-interest declaration of one, a zero-parameter `onChanged`, a delegate without `documents`/`wikis`/
+    // `refreshFromEngine`, or a `methods` object without `gnosisDocuments`/`gnosisWikis` each reds its own arm.
+    // LAYER: envelope-class — DECLARATION parses over `src/renderer/**`'s text (comments stripped, bodies brace-matched) plus ONE
+    // cross-check against the module's runtime census value; ONE marker is read from the RAW text (`⟨B-9⟩` lives in a comment, and
+    // that comment IS the record the contract asks for — read in a three-line window anchored on the branch's own code line,
+    // never as a file-wide token search).
+    // DIFFERENCE FROM THE PRE-PASS ROW, named because this is the inversion: the census arms are now POSITIVE (seven ids, with the
+    // two CRUD panes present) and the absence arm is narrowed to the two panes that genuinely have no paint (`gnosis-status`,
+    // `settings`); the member arms grade DECLARATION SHAPES through `parseObjectMemberKeys` (`P1-1`), never a spelling.
     const problems: string[] = []
 
-    // ---- (1) THE PAINT CENSUS — exactly five ids, and three gnosis ids absent (`X1`, §4) -----------------------------------
+    // ---- (1) THE PAINT CENSUS — the SEVEN-id SET, and the two panes that must NOT be in it, each with its reason --------------
     const source = readSource(SIDEBAR_FILE, 'C3')
     problems.push(...source.problems)
     const censusDeclaration = parseIdListDeclaration(source.code, CENSUS_NAME)
     const censusValues = censusDeclaration.values
+    let parsedCensusSet: string[] | null = null
     if (!censusDeclaration.found) {
       problems.push(
-        `C3: \`${CENSUS_NAME}\` does not PARSE out of \`${SIDEBAR_FILE}\` — §4 pins it as the ONE declared census, so its absence is ` +
-          `a finding, never a vacuous pass`,
+        `C3: \`${CENSUS_NAME}\` does not PARSE out of \`${SIDEBAR_FILE}\` — §12a pins it as the ONE declared census, so its absence ` +
+          `is a finding, never a vacuous pass`,
       )
     } else if (censusValues === null) {
       problems.push(
-        `C3: \`${CENSUS_NAME}\` is declared but does NOT parse to a literal id list — §4's recorded value cannot be read, and a row ` +
+        `C3: \`${CENSUS_NAME}\` is declared but does NOT parse to a literal id list — the recorded value cannot be read, and a row ` +
           `that passes over an unparsed declaration is the \`B6-F12\` defect`,
       )
     } else {
       const asSet = [...new Set(censusValues)].sort()
+      parsedCensusSet = asSet
       const wantedSet = [...new Set(PINNED_CENSUS)].sort()
       if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
-          `C3: \`${CENSUS_NAME}\` parses to ${shown(censusValues)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4 pins ` +
-            `the census at this head to the five-id SET, and the census does NOT move in this pass (\`F-1\`: the fire for ` +
-            `\`gnosis-documents\`/\`gnosis-wikis\` is \`renderer.ts\`'s line, which the delegation's write scope excludes). A move ` +
-            `without the grant is the half-wire \`D-42\` refuses`,
+          `C3: \`${CENSUS_NAME}\` parses to ${shown(censusValues)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §12a ` +
+            `(\`D-44\`) moves the census \`five -> seven\` (\`gnosis-documents\` and \`gnosis-wikis\` land WITH their fires, grant ` +
+            `lines 1 and 2) and the previous pass's five-id value is SUPERSEDED. A move without the granted fires is the half-wire ` +
+            `\`D-42\` refuses; a move of a different SIZE is a different decision than the one recorded`,
         )
       }
       if (censusValues.length !== asSet.length) {
-        problems.push(
-          `C3: \`${CENSUS_NAME}\` repeats an id (${shown(censusValues)}) — ONE id, ONE subscriber (\`B2-ADV-04\`)`,
-        )
+        problems.push(`C3: \`${CENSUS_NAME}\` repeats an id (${shown(censusValues)}) — ONE id, ONE subscriber (\`B2-ADV-04\`)`)
       }
-      for (const paneId of ABSENT_GNOSIS_PANES) {
-        if (censusValues.includes(paneId)) {
+      for (const absent of ABSENT_CENSUS_PANES) {
+        if (censusValues.includes(absent.paneId)) {
           problems.push(
-            `C3: \`${CENSUS_NAME}\` names \`${paneId}\` — §6 \`X1\`: the census does NOT move for the gnosis family in this pass. ` +
-              `\`gnosis-documents\`/\`gnosis-wikis\` are \`F-1\`'s blocked pair (their fire is \`renderer.ts\`'s \`onChanged\`, outside ` +
-              `this grant) and \`gnosis-status\` is \`F-5\`'s trap: \`paintPane\` answers \`operator-scope\` for it, so entering it makes ` +
-              `\`fire\` answer \`fired:true\` while nothing paints — and \`renderer.ts\`'s \`⟨B-9⟩\` fallback is then skipped precisely ` +
-              `because \`fired\` is true, which is a SILENTLY DEAD OPERATOR PANE`,
+            `C3: \`${CENSUS_NAME}\` names \`${absent.paneId}\` — it must stay OUT: ${absent.reason}`,
           )
         }
       }
       if (!censusDeclaration.exported) {
         problems.push(
-          `C3: \`${CENSUS_NAME}\` is no longer EXPORTED — the booted-host rows (\`C2\`) and the sibling pins read it as the shipped ` +
-            `VALUE, so its export is part of the same recorded value`,
+          `C3: \`${CENSUS_NAME}\` is no longer EXPORTED — the booted-host rows (\`C2\`, \`X1b\`) and the sibling pins read it as the ` +
+            `shipped VALUE, so its export is part of the same recorded value`,
         )
       }
       // THE PARSE IS FLOORED BY THE RUNTIME VALUE: a parse that silently read the wrong bytes would still have to agree with what
@@ -1187,13 +1499,13 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
       }
     }
 
-    // ---- (2) THE CHANGE-INTEREST DECLARATION — exactly `['doc-nav']` (§4, §9) ----------------------------------------------
+    // ---- (2) THE CHANGE-INTEREST DECLARATION — exactly the ONE id (`doc-nav`), and still module-private ------------------------
     const changeDeclaration = parseIdListDeclaration(source.code, CHANGE_INTEREST_NAME)
     const changeValues = changeDeclaration.values
     if (!changeDeclaration.found) {
       problems.push(
-        `C3: \`${CHANGE_INTEREST_NAME}\` does not PARSE out of \`${SIDEBAR_FILE}\` — §4: "\`doc-nav\` is the first and only ` +
-          `change-interested pane at this head"; a missing declaration is a finding, never a vacuous pass`,
+        `C3: \`${CHANGE_INTEREST_NAME}\` does not PARSE out of \`${SIDEBAR_FILE}\` — §4/§12a pin it as the ONE declaration the boot ` +
+          `loop's per-id choice reads; a missing declaration is a finding, never a vacuous pass`,
       )
     } else if (changeValues === null) {
       problems.push(
@@ -1205,12 +1517,13 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
       const wantedSet = [...new Set(PINNED_CHANGE_INTEREST)].sort()
       if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
-          `C3: \`${CHANGE_INTEREST_NAME}\` parses to ${shown(changeValues)}, not exactly ${shown(PINNED_CHANGE_INTEREST)} — §4 ` +
-            `records the change-interest declaration at this head as ONE id. §4 names the state a B-8 grant WOULD produce ` +
-            `("[\`doc-nav\`,\`gnosis-documents\`,\`gnosis-wikis\`] — which is exactly the state \`B6-F15\`'s containment clause ` +
-            `exists to make impossible to half-land"): a move here without the census is the half-wire ` +
-            `\`changeInterestSubsetProblems\` exists to refuse, and a move here BEFORE that counter is consulted by \`boot\` is the ` +
-            `same drift one declaration over`,
+          `C3: \`${CHANGE_INTEREST_NAME}\` parses to ${shown(changeValues)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — ` +
+            `§12a RE-NARROWED the declaration to exactly ${shown(PINNED_CHANGE_INTEREST)} AFTER MEASUREMENT, and the reason is the ` +
+            `\`D-40\` \`m6\` class: \`publishChange()\`'s fire contract is "re-read your subject", a CRUD pane has NO re-read arm by ` +
+            `design (\`F-4\` — a re-issue is the unbounded \`settle → fire → settle\` loop), so a fire reaches it with nothing to ` +
+            `re-read and paints NOTHING (measured \`not-a-pane\` in the \`pane-doc-nav\` \`D2\` harness, \`unchanged\` in the app). ` +
+            `Declaring change interest there is a DECLARED BUT INERT path; their engine route is the ENGINE ARM's producer, ` +
+            `\`refreshFromEngine()\`, whose SETTLE fires its own pane`,
         )
       }
       if (changeDeclaration.exported) {
@@ -1221,38 +1534,50 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
       }
     }
 
-    // ---- (3) `F-1`'s SITE: the CRUD host's `onChanged: () => { … host.refresh() }` in `renderer.ts` -------------------------
+    // ---- (3) GRANT LINE 1 (`F-1`): the CRUD host's `onChanged` is the ONE-PARAMETER `(paneId) => firePaneUpdate(paneId)` ------
     const renderer = readSource(RENDERER_FILE, 'C3')
     problems.push(...renderer.problems)
     if (renderer.raw !== '') {
       const crud = bodyAt(renderer.raw, GNOSIS_CRUD_ANCHOR, 'C3', 'new GnosisCrudPanes(')
       problems.push(...crud.problems)
       if (crud.body !== '') {
-        const code = stripComments(crud.body)
-        const zeroArg = /onChanged\s*:\s*\(\s*\)\s*(?::\s*[^=]*)?=>\s*\{/.test(code)
-        const refreshes = /host\s*\.\s*refresh\s*\(\s*\)/.test(code)
-        const changedAt = code.indexOf('onChanged')
-        const refreshAt = code.search(/host\s*\.\s*refresh\s*\(\s*\)/)
-        if (!zeroArg) {
-          problems.push(
-            `C3 (\`F-1\`): the \`new GnosisCrudPanes({…})\` construction in \`${RENDERER_FILE}\` no longer carries a ZERO-PARAMETER ` +
-              `\`onChanged: () => {\` — \`F-1\` records "the \`GnosisCrudOnChanged\` is still \`() => void\` and \`renderer.ts\` wires ` +
-              `it to \`onChanged: () => { if (host) void host.refresh() }\`". If the grant's line 1 landed, this pin must be RE-PINNED ` +
-              `deliberately in the same pass that moves the census (\`B-7\`'s recorded-value precedent), never relaxed in isolation`,
-          )
-        }
-        if (!refreshes || refreshAt < changedAt) {
-          problems.push(
-            `C3 (\`F-1\`): the \`GnosisCrudPanes\` construction no longer routes \`onChanged\` into \`host.refresh()\` — \`F-1\`: ` +
-              `"\`host.refresh()\` is \`renderer.ts\`'s line … a census move for \`gnosis-documents\`/\`gnosis-wikis\` without that ` +
-              `line buys a half-wire", which is why §10 owes it as grant line 1`,
-          )
+        const member = objectMemberText(crud.body, 'onChanged')
+        problems.push(...member.problems)
+        if (member.text !== '') {
+          // THE ONE-PARAMETER FORM, graded by SHAPE: a single named parameter (typed or not) whose body calls
+          // `firePaneUpdate(<that parameter>)`. The parameter's NAME is read off the declaration, never spelled here, so a landing
+          // that renames it still passes and a landing that DROPS it cannot.
+          const arrow = /^onChanged\s*:\s*\(\s*([A-Za-z_$][\w$]*)\s*(?::\s*[^)]*)?\)\s*=>/.exec(member.text)
+          if (arrow === null) {
+            const zeroArg = /^onChanged\s*:\s*\(\s*\)\s*(?::\s*[^=]*)?=>/.test(member.text)
+            problems.push(
+              `C3 (\`F-1\`, grant line 1): the \`new GnosisCrudPanes({…})\` construction's \`onChanged\` reads ${shown(member.text)} — ` +
+                `§12a lands ${zeroArg ? 'the ONE-PARAMETER form' : 'the one-parameter arrow form'} ` +
+                `\`onChanged: (paneId) => firePaneUpdate(paneId)\`, because the zero-parameter arrow \`F-1\` records ("the ` +
+                `\`GnosisCrudOnChanged\` is still \`() => void\`") IGNORES the id the settle now hands it: a census move without this ` +
+                `line buys a DEAD REGISTRATION`,
+            )
+          } else {
+            const parameter = arrow[1]!
+            if (!new RegExp(`firePaneUpdate\\s*\\(\\s*${parameter.replace(/\$/g, '\\$')}\\s*\\)`).test(member.text)) {
+              problems.push(
+                `C3 (\`F-1\`, grant line 1): the \`onChanged\` member takes \`${parameter}\` but its body does not call ` +
+                  `\`firePaneUpdate(${parameter})\` (member read: ${shown(member.text)}) — the settle names the pane it is ABOUT and ` +
+                  `the site fires THAT pane; anything else loses the id again`,
+              )
+            }
+          }
+          if (/\.\s*refresh\s*\(/.test(member.text)) {
+            problems.push(
+              `C3 (\`F-1\`, grant line 1): the \`onChanged\` member STILL reaches \`refresh()\` (member read: ${shown(member.text)}) — ` +
+                `the pre-migration body was \`onChanged: () => { if (host) void host.refresh() }\`, a WHOLE-GRAPH re-assembly for ` +
+                `ONE pane's data, which is exactly what \`INV-E\` counts at zero; §12a replaces it, it does not keep it beside the fire`,
+            )
+          }
         }
       }
-    }
 
-    // ---- (4) `F-5`'s SITE: the `⟨B-9⟩` operator fallback in `firePaneUpdate` ------------------------------------------------
-    if (renderer.raw !== '') {
+      // ---- (4) THE `⟨B-9⟩` OPERATOR FALLBACK — UNCHANGED pins (`F-5`) ---------------------------------------------------
       const fallback = bodyAt(renderer.raw, FIRE_PANE_UPDATE_ANCHOR, 'C3', 'const firePaneUpdate =')
       problems.push(...fallback.problems)
       if (fallback.body !== '') {
@@ -1273,13 +1598,12 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
         if (!/scope\s*===\s*'operator'/.test(code) || !/host\s*\.\s*refresh\s*\(\s*\)/.test(code)) {
           problems.push(
             `C3 (\`F-5\`): the \`operator\`-scope fallback is GONE from \`firePaneUpdate\` (expected ` +
-              `\`registry.get(paneId)?.scope === 'operator' … host.refresh()\`) — §10's grant line 3 keeps \`gnosis-status\` out of ` +
-              `the census precisely BECAUSE this fallback is the pane's only lawful paint until \`B-9\` lands \`mountOperator\``,
+              `\`registry.get(paneId)?.scope === 'operator' … host.refresh()\`) — §12a keeps it for \`B-9\` precisely BECAUSE ` +
+              `\`gnosis-status\` stays out of the census: it is the operator pane's only lawful paint until \`B-9\` lands`,
           )
         }
-        // THE MARKER, read from the RAW body (the `${B-9}` unit marker IS a comment, and the comment is the record the contract
-        // asks for). Anchored on the branch's own code line, never a file-wide token search: the marker must sit within three
-        // lines of the `scope === 'operator'` test it explains.
+        // THE MARKER, read from the RAW body (the `⟨B-9⟩` unit marker IS a comment, and the comment is the record the contract
+        // asks for). Anchored on the branch's own code line, never a file-wide token search.
         const rawLines = fallback.body.split('\n')
         const branchLine = rawLines.findIndex((line) => /scope\s*===\s*'operator'/.test(line))
         const markerWindow = branchLine < 0 ? [] : rawLines.slice(Math.max(0, branchLine - 3), branchLine + 1)
@@ -1291,9 +1615,33 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
           )
         }
       }
+
+      // ---- (5) GRANT LINE 2 (`F-7`): the `SidebarPanes` gnosis delegate DECLARES all five members --------------------------
+      const sidebarConstruction = bodyAt(renderer.raw, SIDEBAR_PANES_ANCHOR, 'C3', 'new SidebarPanes(')
+      problems.push(...sidebarConstruction.problems)
+      if (sidebarConstruction.body !== '') {
+        const delegate = nestedObjectMemberBody(sidebarConstruction.body, 'gnosis')
+        problems.push(...delegate.problems)
+        if (delegate.body !== '') {
+          const census = parseObjectMemberKeys(delegate.body)
+          problems.push(
+            ...memberCensusProblems(
+              census,
+              ['status', 'query', 'documents', 'wikis', 'refreshFromEngine'],
+              "`renderer.ts`'s `new SidebarPanes({…})` construction's `gnosis` delegate",
+              'C3 (`F-7`, grant line 2)',
+            ),
+          )
+          // THE POSITIVE CONTROL: the two members that were ALREADY there. Without it a delegate this row failed to locate would
+          // satisfy the absence arms by reading an empty census.
+          problems.push(
+            ...memberCensusProblems(census, ['status', 'query'], "the SAME `gnosis` delegate (positive control)", 'C3 (`F-7`)'),
+          )
+        }
+      }
     }
 
-    // ---- (5) `F-7`'s SITE: `installSidebarBridge`'s `methods` object carries NO `gnosisDocuments`/`gnosisWikis` ---------------
+    // ---- (6) GRANT LINE 2 (`F-7`): `installSidebarBridge`'s `methods` DECLARES the two CRUD seams ------------------------------
     if (source.raw !== '') {
       const install = bodyAt(source.raw, INSTALL_SIDEBAR_BRIDGE_ANCHOR, 'C3', 'private installSidebarBridge(')
       problems.push(...install.problems)
@@ -1301,59 +1649,60 @@ describe('pane-gnosis — C3 PIN (GREEN on arrival): the census does not move in
         const methods = bodyAt(stripComments(install.body), SIDEBAR_METHODS_ANCHOR, 'C3', 'const methods =')
         problems.push(...methods.problems)
         if (methods.body !== '') {
-          const carries = (name: string): boolean => new RegExp(`[{,]\\s*${name}\\s*[:(]`).test(methods.body)
-          // THE POSITIVE CONTROL FIRST: the two gnosis seams `F-7` says ARE there. Without it, "no `gnosisDocuments`" would also be
-          // satisfied by a `methods` object this row failed to locate.
-          for (const present of ['gnosisStatus', 'gnosisQuery']) {
-            if (!carries(present)) {
-              problems.push(
-                `C3 (\`F-7\`): the \`methods\` object of \`installSidebarBridge\` does not carry \`${present}\` — \`F-7\` records ` +
-                  `"\`installSidebarBridge\`'s \`methods\` object carries \`gnosisStatus\`/\`gnosisQuery\` and no ` +
-                  `\`gnosisDocuments\`/\`gnosisWikis\`". A missing positive control would make the absence arms below vacuous`,
-              )
-            }
-          }
-          for (const absent of ['gnosisDocuments', 'gnosisWikis']) {
-            if (carries(absent)) {
-              problems.push(
-                `C3 (\`F-7\`): the \`methods\` object of \`installSidebarBridge\` now carries \`${absent}\` — \`F-7\` records this as ` +
-                  `the defect that has held the two CRUD panes read-once-at-boot since A2, and §10 owes its fix as grant line 2 ` +
-                  `(the \`SidebarPanesOptions.gnosis\` delegate widened to the CRUD host). Landing it without the census move, or ` +
-                  `vice versa, is the half-wire; this pin reds so the pair is re-pinned DELIBERATELY in one pass`,
-              )
-            }
-          }
+          const census = parseObjectMemberKeys(methods.body)
+          problems.push(
+            ...memberCensusProblems(
+              census,
+              ['gnosisStatus', 'gnosisQuery', 'gnosisDocuments', 'gnosisWikis'],
+              "`installSidebarBridge`'s `methods` object",
+              'C3 (`F-7`)',
+            ),
+          )
+          problems.push(
+            ...memberCensusProblems(
+              census,
+              ['gnosisStatus', 'gnosisQuery'],
+              "`installSidebarBridge`'s `methods` object (positive control)",
+              'C3 (`F-7`)',
+            ),
+          )
         }
       }
     }
 
     expect(
       problems,
-      `C3 PIN — the census is UNMOVED and the STOP's evidence stands (GREEN ON ARRIVAL; §6 \`X1\`, §4, §10; findings \`F-1\`, ` +
-        `\`F-5\`, \`F-7\`). ${problems.length} problem(s). \`${CENSUS_NAME}\` must be exactly ` +
-        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` as a SET with none of ` +
-        `\`{gnosis-status, gnosis-documents, gnosis-wikis}\`, \`${CHANGE_INTEREST_NAME}\` exactly \`['${DOC_NAV}']\`, and the three ` +
-        `grant sites of §1/§10 unchanged: \`renderer.ts\`'s CRUD \`onChanged: () => { … host.refresh() }\` (\`F-1\`), its \`⟨B-9⟩\` ` +
-        `operator fallback in \`firePaneUpdate\` (\`F-5\`), and \`installSidebarBridge\`'s \`methods\` without ` +
-        `\`gnosisDocuments\`/\`gnosisWikis\` (\`F-7\`). envelope-class`,
+      `C3 PIN — the census HAS MOVED and the granted sites stand (§12a \`D-44\`; §4, §6 \`X1\`; findings \`F-1\`, \`F-5\`, \`F-7\`). ` +
+        `${problems.length} problem(s). \`${CENSUS_NAME}\` must be exactly ${shown(PINNED_CENSUS)} as a SET with ` +
+        `${shown(ABSENT_CENSUS_PANES.map((entry) => entry.paneId))} ABSENT (each refused for its own recorded reason), ` +
+        `\`${CHANGE_INTEREST_NAME}\` exactly ${shown(PINNED_CHANGE_INTEREST)} and still module-private, \`renderer.ts\`'s CRUD ` +
+        `\`onChanged\` the ONE-PARAMETER \`(paneId) => firePaneUpdate(paneId)\` with no \`host.refresh()\`, its \`⟨B-9⟩\` operator ` +
+        `fallback UNCHANGED, the \`SidebarPanes\` gnosis delegate DECLARING status/query/documents/wikis/refreshFromEngine, and ` +
+        `\`installSidebarBridge\`'s \`methods\` DECLARING gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis. envelope-class — ` +
+        `declaration parses plus the module's runtime value; every member is graded as a DECLARATION SHAPE (\`P1-1\`), never a spelling`,
     ).toEqual([])
   })
 })
 
 // ===========================================================================
-// `C4` — THE SUBJECT OF THE RULE IS TODAY'S SHIPPED PAIR (GREEN ON ARRIVAL).
+// `C4` — THE CHANGE CENSUS IS STILL A SUBSET OF THE PAINT CENSUS (GREEN ON ARRIVAL).
 // ===========================================================================
 describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBSET of the paint census, recomputed by PARSING both declarations', () => {
-  it('C4 — PIN: `CHANGE_INTERESTED_PANE_IDS ⊆ REPLUMBED_PANE_IDS` over both PARSED declarations, with the positive control that the parse is REAL (the census reads the five ids, the change-interest reads `doc-nav`)', async () => {
+  it('C4 — PIN: `CHANGE_INTERESTED_PANE_IDS` ⊆ `REPLUMBED_PANE_IDS` over both PARSED declarations, with the positive control that the parse is REAL (the census reads the SEVEN ids, the change-interest reads the ONE)', async () => {
     // ⇒ GREEN ON ARRIVAL — A PIN. §9's containment rule has no subject if either declaration fails to parse, so this row proves the
     // parse before it grades the relation: a row that passes over a FAILED parse is the `B6-F12` defect (`D-38`'s lesson one realm
     // over), and a row that computes a subset over `[]` would be green forever.
     // LAYER: envelope-class — two DECLARATION parses over `src/renderer/sidebar-panes.ts`'s text (comments stripped). The declarations
     // are PARSED, never imported: `CHANGE_INTERESTED_PANE_IDS` is module-private, and importing the census would only prove what the
     // module already decided.
+    // RE-STATED BY §12a, NOT RELAXED: the census positive control moves to the SEVEN-id value the grant lands, and the
+    // change-interest positive control moves to the ONE-id value the architect RE-NARROWED after measurement (`['doc-nav']` — the
+    // `D-40` `m6` cause: a `publishChange` fire reaches a CRUD pane with no re-read arm and paints nothing, so declaring change
+    // interest there is a declared-but-inert path; their engine route is the ENGINE ARM's `refreshFromEngine()`). The empty-declaration
+    // arms stay exactly as filed, and the subset relation is graded over both PARSED values whatever they are.
     // MUTATION THAT WOULD RED IT: an id added to the change-interest declaration without the census (the half-wire, and the day a
     // landing half-lands `B-8`); a census id removed while the change declaration still names it; a computed initialiser on either
-    // declaration (the parse arms); a census that is no longer the five-id value (the positive control).
+    // declaration (the parse arms); a census or change-interest value that is not the recorded one (the positive controls).
     const problems: string[] = []
     const source = readSource(SIDEBAR_FILE, 'C4')
     problems.push(...source.problems)
@@ -1374,7 +1723,7 @@ describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBS
       const wantedSet = [...new Set(PINNED_CENSUS)].sort()
       if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
-          `C4: the PARSED census is ${shown(censusValues)}, not the five-id value ${shown(PINNED_CENSUS)} this row's subject is — ` +
+          `C4: the PARSED census is ${shown(censusValues)}, not the SEVEN-id value ${shown(PINNED_CENSUS)} this row's subject is — ` +
             `either the head moved (then C3 reds and the move must be re-pinned deliberately) or this parse is reading the wrong ` +
             `bytes (then the subset arm below proves nothing)`,
         )
@@ -1385,12 +1734,12 @@ describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBS
         `C4: \`${CHANGE_INTEREST_NAME}\` did not parse to a literal id list (found: ${change.found}) — the subset relation has no ` +
           `left-hand side`,
       )
-    } else if (fingerprint(changeValues) !== fingerprint(PINNED_CHANGE_INTEREST)) {
+    } else if (fingerprint([...new Set(changeValues)].sort()) !== fingerprint([...new Set(PINNED_CHANGE_INTEREST)].sort())) {
       problems.push(
-        `C4: the PARSED change-interest declaration reads ${shown(changeValues)}, not ${shown(PINNED_CHANGE_INTEREST)} — §4 records ` +
-          `\`doc-nav\` as the one change-interested id at this head; this is the positive control, so a different value must be ` +
-          `re-pinned DELIBERATELY (and ` +
-          `${COUNTER_NAME} must be consulting it) rather than passing silently`,
+        `C4: the PARSED change-interest declaration reads ${shown(changeValues)}, not ${shown(PINNED_CHANGE_INTEREST)} — §12a ` +
+          `RE-NARROWED the declaration to the ONE id after measurement (the \`D-40\` \`m6\` class: no CRUD re-read arm, so a ` +
+          `\`publishChange\` fire paints nothing), so a different value must be re-pinned DELIBERATELY ` +
+          `(and \`${COUNTER_NAME}\` must be consulting it) rather than passing silently`,
       )
     }
 
@@ -1406,8 +1755,8 @@ describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBS
       }
       if (changeValues.length === 0) {
         problems.push(
-          `C4: the change-interest declaration parsed EMPTY — the subset relation would be vacuously true, and §4 records ` +
-            `\`['${DOC_NAV}']\` at this head (a booted host's \`changePanes()\` is read in C2)`,
+          `C4: the change-interest declaration parsed EMPTY — the subset relation would be vacuously true, and §4/§12a record ` +
+            `${shown(PINNED_CHANGE_INTEREST)} (a booted host's \`changePanes()\` is read in C2)`,
         )
       }
       if (censusValues.length === 0) {
@@ -1421,9 +1770,215 @@ describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBS
     expect(
       problems,
       `C4 PIN — the change census is a SUBSET of the paint census, recomputed by PARSING both declarations (GREEN ON ARRIVAL; §9 ` +
-        `\`B6-F15\`, §4). ${problems.length} problem(s). The positive control is the point: the census must read exactly ` +
-        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` and the change-interest declaration exactly ` +
-        `\`['${DOC_NAV}']\` BEFORE the containment is graded, so a failed parse can never pass this row vacuously. envelope-class`,
+        `\`B6-F15\`, §4, §12a). ${problems.length} problem(s). The positive control is the point: the census must read exactly ` +
+        `${shown(PINNED_CENSUS)} and the change-interest declaration exactly ${shown(PINNED_CHANGE_INTEREST)} BEFORE the ` +
+        `containment is graded, so a failed parse can never pass this row vacuously. envelope-class`,
+    ).toEqual([])
+  })
+})
+
+// ===========================================================================
+// `P1-1` — FINDING CLOSED: A MEMBER CENSUS GRADES DECLARATION SHAPES, NEVER SPELLINGS.
+// ===========================================================================
+describe('pane-gnosis — P1-1 (finding closed): the member census is a CLAUSE over DECLARATION SHAPES, proved both ways on fixtures', () => {
+  it('P1-1 — a longhand member AND a shorthand member are both certified PRESENT, a spread makes the census UNREADABLE (a NAMED problem, never a silent absence and never a silent presence), an absent member is named, a nested key is never a top-level member, a comment/string comma never splits a member, and the compliant fixture answers `[]`', () => {
+    // THE FINDING (`P1-1`, carried from §9 and closed here): the pre-pass `C3` graded a member with
+    // `[{,]\s*<name>\s*[:(]`, so (i) a SHORTHAND member (`gnosisDocuments,`) — exactly the shape a landing produces when it hoists
+    // the members — read ABSENT, and (ii) a SPREAD (`...crudSeams`) read ABSENT too, i.e. an absence arm could be satisfied by a
+    // body that does not declare the member at all. Both directions are VACUITY, and both are closed by grading the DECLARATION:
+    // `parseObjectMemberKeys` splits the object literal's TOP-LEVEL members, and `memberCensusProblems` refuses a spread outright.
+    // LAYER: envelope/pure — fixtures only; nothing here reads `src/**` (the shipped bodies are graded by `C3`, through THIS
+    // clause). Proved BOTH WAYS, which is what makes it a clause rather than a pin: the compliant fixture answers `[]` (so it is not
+    // always-red, `D-43`) and each mutant answers a NAMED problem (so it is not always-green).
+    const problems: string[] = []
+    const REQUIRED = ['status', 'query', 'documents', 'wikis', 'refreshFromEngine'] as const
+
+    // ---- (i) LONGHAND IS PRESENT ---------------------------------------------------------------------------------------
+    const longhand = [
+      '{',
+      '  status: () => undefined,',
+      '  query: (value: string) => value,',
+      '  documents: (tool: string, args: Record<string, unknown>) => forward(tool, args),',
+      '  wikis: (tool: string, args: Record<string, unknown>) => forward(tool, args),',
+      '  refreshFromEngine: () => reRead(),',
+      '}',
+    ].join('\n')
+    const longhandCensus = parseObjectMemberKeys(longhand)
+    if (!REQUIRED.every((name) => longhandCensus.declared.includes(name))) {
+      problems.push(
+        `P1-1: the LONGHAND fixture is not certified present — \`parseObjectMemberKeys\` read ${shown(longhandCensus)} for a body that ` +
+          `declares all five members. A parser that cannot read the plainest shape is not a census`,
+      )
+    }
+    // NON-VACUITY: the SAME clause must answer `[]` for a compliant body — a clause that reds every landing (including the lawful
+    // one) would read as "the landing is missing" while proving nothing (`D-43`'s failure mode).
+    const compliantProblems = memberCensusProblems(longhandCensus, REQUIRED, 'the COMPLIANT fixture', 'P1-1')
+    if (compliantProblems.length > 0) {
+      problems.push(
+        `P1-1: the clause REJECTED the compliant fixture (${shown(compliantProblems)}) — it is unsatisfiable as written, so every red ` +
+          `it produces elsewhere proves nothing`,
+      )
+    }
+
+    // ---- (ii) THE SHORTHAND MEMBER IS PRESENT — THE SHAPE THE PRE-PASS REGEX MISSED --------------------------------------
+    const shorthand = '{ gnosisStatus: () => undefined, gnosisDocuments, gnosisWikis, }'
+    const shorthandCensus = parseObjectMemberKeys(shorthand)
+    const shorthandProblems = memberCensusProblems(shorthandCensus, ['gnosisDocuments', 'gnosisWikis'], 'the SHORTHAND fixture', 'P1-1')
+    if (shorthandProblems.length > 0) {
+      problems.push(
+        `P1-1: the clause did NOT certify the SHORTHAND members (${shown(shorthandProblems)}) — \`gnosisDocuments,\` and ` +
+          `\`gnosisWikis,\` ARE declarations, and a census that cannot see them makes every absence arm over that body vacuously ` +
+          `satisfiable. Census read: ${shown(shorthandCensus)}`,
+      )
+    }
+    // THE FINDING, MEASURED ON THE OLD INSTRUMENT ITSELF: the pre-pass predicate reads FALSE on the same text — this arm exists so
+    // the finding is a reading rather than a claim, and so a relapse into the spelling search is visible here.
+    const prePassCarries = (name: string): boolean => new RegExp(`[{,]\\s*${name}\\s*[:(]`).test(shorthand)
+    for (const name of ['gnosisDocuments', 'gnosisWikis']) {
+      if (prePassCarries(name)) {
+        problems.push(
+          `P1-1: the PRE-PASS predicate \`[{,]\\s*${name}\\s*[:(]\` now matches the shorthand fixture — this arm exists to record ` +
+            `that it did NOT (the finding), so the fixture must stay a true shorthand body`,
+        )
+      }
+    }
+
+    // ---- (iii) A SPREAD MAKES THE CENSUS UNREADABLE (a NAMED problem, both directions) ----------------------------------
+    const spread = '{ ...crudSeams, gnosisStatus: () => undefined }'
+    const spreadCensus = parseObjectMemberKeys(spread)
+    if (spreadCensus.spreads.length !== 1 || !spreadCensus.spreads[0]!.includes('crudSeams')) {
+      problems.push(
+        `P1-1: the SPREAD fixture's spread was not recorded (census read: ${shown(spreadCensus)}) — a spread is the one shape whose ` +
+          `members cannot be enumerated, so it must be READ and reported, never dropped`,
+      )
+    }
+    const spreadProblems = memberCensusProblems(spreadCensus, ['gnosisStatus'], 'the SPREAD fixture', 'P1-1')
+    if (spreadProblems.length !== 1) {
+      problems.push(
+        `P1-1: the clause answered ${spreadProblems.length} problem(s) for a body with a SPREAD (${shown(spreadProblems)}), not exactly ` +
+          `ONE — a spread is never a silent absence and never a silent presence: the census is UNREADABLE, and one NAMED problem is ` +
+          `the whole answer`,
+      )
+    } else if (!/spread/i.test(spreadProblems[0]!) || !spreadProblems[0]!.includes('crudSeams')) {
+      problems.push(
+        `P1-1: the spread's problem does not NAME the spread (${shown(spreadProblems[0])}) — the sentence must say WHAT made the ` +
+          `census unreadable, or a reviewer cannot tell it from a missing member`,
+      )
+    }
+
+    // ---- (iv) AN ABSENT MEMBER IS NAMED ---------------------------------------------------------------------------------
+    const absent = '{ status: () => undefined, query: (value: string) => value }'
+    const absentCensus = parseObjectMemberKeys(absent)
+    const absentProblems = memberCensusProblems(absentCensus, ['status', 'documents'], 'the ABSENT-MEMBER fixture', 'P1-1')
+    if (absentProblems.length !== 1 || !absentProblems[0]!.includes('documents')) {
+      problems.push(
+        `P1-1: the clause answered ${shown(absentProblems)} for a body missing \`documents\`, not exactly ONE problem NAMING it — an ` +
+          `absence arm that does not name the member cannot red a missing grant line legibly`,
+      )
+    }
+
+    // ---- (v) TOP-LEVEL ONLY, AND A COMMA INSIDE A VALUE/COMMENT NEVER SPLITS A MEMBER -----------------------------------
+    const nested = [
+      '{',
+      '  // a comment, with a comma, that must never split this member',
+      '  status: () => ({ nested: 1, other: "a,b" }),',
+      '  documents(tool, args) { return args.tool === tool }',
+      '}',
+    ].join('\n')
+    const nestedCensus = parseObjectMemberKeys(nested)
+    if (nestedCensus.declared.includes('nested') || nestedCensus.declared.includes('other')) {
+      problems.push(
+        `P1-1: a NESTED object's key was read as a TOP-LEVEL member (census read: ${shown(nestedCensus)}) — the census is over the ` +
+          `object literal's own members; a nested key is a different authority and would let a delegate certify itself`,
+      )
+    }
+    if (!nestedCensus.declared.includes('status') || !nestedCensus.declared.includes('documents')) {
+      problems.push(
+        `P1-1: a longhand member beside a COMMENT carrying a comma, or a METHOD-SHORTHAND member, was not read (census read: ` +
+          `${shown(nestedCensus)}) — comments are stripped first and both shapes are declarations`,
+      )
+    }
+
+    expect(
+      problems,
+      `P1-1 — a member census grades DECLARATION SHAPES, never spellings (finding closed; §6's AUTHORING REFUSALS, \`D-43\`). ` +
+        `${problems.length} problem(s). A longhand member and a SHORTHAND member must BOTH be certified present (the pre-pass regex ` +
+        `\`[{,]\\s*name\\s*[:(]\` missed the shorthand — that is the finding, measured above), a SPREAD must make the census ` +
+        `UNREADABLE with ONE named problem (never a silent absence, never a silent presence), an absent member must answer a problem ` +
+        `naming it, and the COMPLIANT fixture must answer \`[]\` so the clause is not always-red. envelope/pure — fixtures only`,
+    ).toEqual([])
+  })
+})
+
+// ===========================================================================
+// `X1b` — THE CONVERSE CLAUSE: `census ⊆ paintable`, over the REAL booted host (GREEN ON ARRIVAL BY DESIGN).
+// ===========================================================================
+describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)` never answers `operator-scope`/`not-a-pane` — proved falsifiable on two forged censuses', () => {
+  it('X1b — over the REAL booted `SidebarPanes` host (whose registry carries the REAL `GnosisPanes` + `GnosisCrudPanes` registrations, exactly as `renderer.ts` installs them) EVERY id in the LIVE `REPLUMBED_PANE_IDS` answers a reason that is not `operator-scope` and not `not-a-pane`; the SAME clause answers a problem for `[...census, gnosis-status]` (the concrete dead-registration hazard, `F-5`) and for `[...census, a-pane-that-does-not-exist]`', async () => {
+    // ⇒ GREEN ON ARRIVAL BY DESIGN: THIS IS A CLAUSE, NOT A PIN. It reds no landing today because today's census ids are all
+    // paintable-or-transient; it exists to outlive a deliberate re-pin. `C3` catches TODAY'S form of the wrong move (a census of the
+    // wrong SIZE, an operator pane named in it); `X1b` catches the class: an id in the census whose paint DOES NOT EXIST subscribes,
+    // fires and paints nothing (`F-5` is the concrete case — `gnosis-status` answers `operator-scope`), and the containment clause
+    // alone cannot see it.
+    // ITS RED-ON-WRONG-LANDING ARM IS THE `gnosis-status` MUTANT: the clause is driven over a FORGED census that adds
+    // `gnosis-status` and MUST answer a problem. That is the arm a landing which enters the operator pane will trip, and it is
+    // proved HERE, on the same clause, rather than claimed in prose.
+    // LAYER: envelope-class — the REAL host booted over the LAYOUT-LESS `dom-shim` against a recording runtime double; the reading is
+    // the paint's OWN declared word (`updatePane`'s closed vocabulary). `painted`/`unchanged`/`not-enabled`/`not-mounted`/`no-runtime`
+    // are all admissible (`not-mounted`/`no-runtime` are transient boot states and `not-enabled` is the registry's own census); the two
+    // REFUSED words are `operator-scope` (the operator mount is `B-9`'s surface) and `not-a-pane` (no host registered it).
+    const problems: string[] = []
+    const loaded = await loadHostModule('X1b')
+    problems.push(...loaded.problems)
+    const liveCensus = loaded.module === null ? undefined : loaded.module[CENSUS_NAME]
+    if (loaded.module !== null && (!Array.isArray(liveCensus) || !liveCensus.every((id) => typeof id === 'string'))) {
+      problems.push(`X1b: \`${CENSUS_NAME}\` reads ${shown(liveCensus)}, not an array of pane ids — the clause has no subject`)
+    }
+    const censusIds: string[] = Array.isArray(liveCensus) ? (liveCensus as string[]).filter((id) => typeof id === 'string') : []
+    if (censusIds.length === 0) {
+      problems.push(
+        `X1b: the LIVE census parsed EMPTY — "every census id is paintable" would be VACUOUSLY true, which is the vacuity the ` +
+          `clause exists to refuse`,
+      )
+    }
+
+    const drive = await bootChannelHost('X1b', { withRealPanes: true })
+    try {
+      problems.push(...drive.problems)
+      if (drive.host !== null) {
+        // THE LIVE CENSUS: every id must clear the two REFUSED words.
+        problems.push(...censusPaintableProblems(drive.host, censusIds, 'the LIVE census', 'X1b'))
+        // FALSIFIABILITY — THE TWO MUTANTS. Both are FORGED censuses (never contentions about today's value), and each must answer a
+        // problem, or the clause is a sentence that can only ever be green.
+        const operatorMutant = [...censusIds, 'gnosis-status']
+        const operatorProblems = censusPaintableProblems(drive.host, operatorMutant, 'the forged census + `gnosis-status`', 'X1b·proof')
+        if (operatorProblems.length === 0) {
+          problems.push(
+            `X1b·proof: the clause ACCEPTED the forged census ${shown(operatorMutant)} — \`gnosis-status\` is registered ` +
+              `\`scope:'operator'\` (\`F-5\`), so \`updatePane('gnosis-status')\` answers \`operator-scope\` and a census that names it ` +
+              `is a silently dead registration. A clause that cannot red THIS mutant cannot red the hazard the contract names`,
+          )
+        }
+        const unknownMutant = [...censusIds, 'a-pane-that-does-not-exist']
+        const unknownProblems = censusPaintableProblems(drive.host, unknownMutant, 'the forged census + an unregistered id', 'X1b·proof')
+        if (unknownProblems.length === 0) {
+          problems.push(
+            `X1b·proof: the clause ACCEPTED the forged census ${shown(unknownMutant)} — an unregistered id answers \`not-a-pane\`, so any ` +
+              `census entry no host registered must be a problem`,
+          )
+        }
+      }
+    } finally {
+      drive.restore()
+    }
+
+    expect(
+      problems,
+      `X1b — the CONVERSE CLAUSE: \`census ⊆ paintable\` (\`P1-4\`/\`C5\`, authored by this pass; §6 \`X1b\`). ${problems.length} ` +
+        `problem(s). Over the REAL booted host, EVERY id in the live \`${CENSUS_NAME}\` (${shown(censusIds)}) must answer ` +
+        `\`updatePane(id)\` with a reason OTHER than \`operator-scope\`/\`not-a-pane\`, and the SAME clause must answer a problem for ` +
+        `\`[...census, 'gnosis-status']\` (the concrete dead registration: \`F-5\`) and for \`[...census, 'a-pane-that-does-not-exist']\`. ` +
+        `GREEN ON ARRIVAL BY DESIGN — a clause, not a pin; its red-on-wrong-landing arm is the \`gnosis-status\` mutant. envelope-class`,
     ).toEqual([])
   })
 })
