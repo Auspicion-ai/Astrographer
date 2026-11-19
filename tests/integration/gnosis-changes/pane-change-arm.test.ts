@@ -258,10 +258,18 @@ describe('B-4 §5 `c11` — `INV-E` read STRUCTURALLY: the channel module can re
       problems.push(`c11: \`${PANE_EVENTS_FILE}\` could not be read (${err instanceof Error ? err.message : String(err)})`)
     }
     if (real !== '') {
+      // ONE MUTANT PER CONJUNCT, because a mutant that carries two needles cannot isolate either: `host.refresh()` alone would not
+      // distinguish the `host.` clause from the `refresh(` clause (the independent gates measured exactly that gap), so the bare
+      // `refresh()` mutant below is what gives the third conjunct its own teeth, and `runtime.` / `require(` / `from 'electron'`
+      // each get their own spelling too — every conjunct must be able to turn the clause FALSE on its own.
       const mutants = [
-        `${real}\nconst smuggled = () => host.refresh()\n`,
+        `${real}\nconst smuggled = () => host.refresh()\n`, // both needles: the historical mutant, kept
+        `${real}\nconst smuggled = () => refresh()\n`, // ISOLATES `refresh(` — no `host.`, no other needle
         `${real}\nconst smuggled = () => loadAppGraph()\n`,
         `${real}\nconst smuggled = () => mountOperator()\n`,
+        `${real}\nconst smuggled = () => runtime.mount()\n`, // ISOLATES `runtime.`
+        `${real}\nconst smuggled = require('electron')\n`, // ISOLATES `require(`
+        `${real}\nimport { ipcMain } from 'electron'\n`, // ISOLATES `from 'electron'`
       ]
       for (const mutant of mutants) {
         if (clause(mutant)) {

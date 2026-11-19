@@ -2,11 +2,11 @@
 // (`c6`, `c7`, `c8`). Authored BEFORE the change set's bytes exist (RCA-1).
 //
 // SOURCE OF EVERY ASSERTION: `docs/L1/unit-b-4-engine-changes.md` §3, §2.5 and §5 —
-//   `c6`  "A NON-loopback baseUrl is refused BEFORE any subscription (`assertLoopback`, `src/main/engine-transport.ts:54`) — the
+//   `c6`  "A NON-loopback baseUrl is refused BEFORE any subscription (`assertLoopback`, `src/main/engine-transport.ts:57-67`) — the
 //          double's `subscribe` is never called; the subscribe goes through the transport seam's export; and a SOURCE clause
 //          grades that `engine-changes.ts` contains NO `fetch(`, no `createSseClient`, no `http://` and no `assertLoopback`
 //          (the one spelling lives in the transport), with a mutant (an inlined `fetch`) driven to `false` first."
-//   `c7`  "A non-2xx answer (the real client's own `sse: non-2xx response`, `src/main/engine-rag-store.ts:782-785`), a premature
+//   `c7`  "A non-2xx answer (the real client's own `sse: non-2xx response`, `src/main/engine-rag-store.ts:796-799`), a premature
 //          close and a transport fault each settle `status()` at `EngineUnavailable` with its `cause`; ZERO descriptors are
 //          fabricated; and a SOURCE clause grades no `setTimeout`/`setInterval`/`retry` in the module (D-82 clause 4) with a
 //          mutant driven false first."
@@ -14,8 +14,8 @@
 //          `connect()` — the boot-completion limb — while `c1`'s control proves the same feed still applies frames when the
 //          engine answers."
 //
-// THE TYPED CLASS IS THE FORK'S OWN: `EngineUnavailable` (`src/main/engine-rag-store.ts:97-109`) with its `cause` member — a
-// bare `EngineWireError` is NOT the typed unavailability §2.5 requires, and a raw `Error` is neither.
+// THE TYPED CLASS IS THE FORK'S OWN: `EngineUnavailable` (`src/main/engine-rag-store.ts:111-123`) with its `cause` member — a
+// bare `EngineWireError` (`:100-109`) is NOT the typed unavailability §2.5 requires, and a raw `Error` is neither.
 //
 // LAYER (D-10 / RCA-12): ENVELOPE-CLASS. No socket, no engine, no Electron. **The live arm is PARKED** (`docs/L2/…/engine-changes.md`
 // §6): the engine at this head refuses the fork's client with `sse: non-2xx response` — which is exactly the fault `c7`'s first
@@ -98,7 +98,7 @@ describe('B-4 §5 `c6` — the transport is the fork\'s ONE stream opener', () =
         problems.push(`c6(a): \`connect()\` THREW on a non-loopback baseUrl (${err instanceof Error ? err.message : String(err)}) — §2.5: it never rejects`)
       }
       if (double.calls !== 0) {
-        problems.push(`c6(a): the double's \`subscribe\` read ${double.calls} call(s) for a non-loopback baseUrl — \`assertLoopback\` runs BEFORE the subscription (engine-transport.ts:54)`)
+        problems.push(`c6(a): the double's \`subscribe\` read ${double.calls} call(s) for a non-loopback baseUrl — \`assertLoopback\` runs BEFORE the subscription (engine-transport.ts:57-67)`)
       }
       const failure = typedFailure(feed.status()?.failure)
       if (failure === null) problems.push(`c6(a): \`status().failure\` read ${String(feed.status()?.failure)} — a non-loopback refusal is a typed EngineUnavailable`)
@@ -204,7 +204,7 @@ describe('B-4 §5 `c7` — a dropped connection is a TYPED UNAVAILABILITY, never
           problems.push(`c7(a): after ${fault.name} \`status().failure\` read ${String(feed.status()?.failure)} — §2.5 requires the typed EngineUnavailable`)
         } else {
           if (fault.cause !== undefined && failure.cause !== fault.cause) {
-            problems.push(`c7(a): ${fault.name} settled the cause at \`${String(failure.cause)}\` — \`transportError\` maps it to '${fault.cause}' (engine-transport.ts:71-93)`)
+            problems.push(`c7(a): ${fault.name} settled the cause at \`${String(failure.cause)}\` — \`transportError\` maps it to '${fault.cause}' (engine-transport.ts:74-96)`)
           }
           if (fault.message !== undefined && !fault.message.test(failure.message)) {
             problems.push(`c7(a): ${fault.name} settled the message at ${JSON.stringify(failure.message)} — the refusal's own words must survive`)

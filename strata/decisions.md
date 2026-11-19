@@ -833,3 +833,80 @@ pane through `B-3`'s channel. No engine event was received at this head and none
 
 **A unit that ends a program's data path rather than a screen:** with `B-4` landed, the engine→store→pane path
 exists in every link except the one the engine itself refuses.
+
+---
+
+## D-37 — Corrigendum to `D-36`: `B-4`'s post-ruling readings, and the three defects its own adversarial pass found
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Corrects:** `D-36`'s row count and its "pre-ruling" description ·
+**Source (measurement):** `B-4`'s report, received after this seat interrupted it
+
+**Corrigendum.** `D-36` records `B-4` as 51/51 rows and says its adversarial/doc-review findings are owed.
+Both statements were true of the state I sampled and false of the unit: after its own rulings the battery is
+**8 files / 53 rows green**, and its findings are DISPOSED, not owed. **This is the third time an interrupt has
+produced a wrong record from L0** — after `B-5`'s OWED line and the reveal re-landing — and the rule it breaks
+is now written a third time: **an interrupt is not a verdict.**
+
+**The three defects it found and fixed, each with a row that reds on the WRONG design:**
+1. **The de-dup watermark was FEED-WIDE**, so a reconnect after an engine restart dropped every later frame for
+   ever — the engine's cursor is `epoch()` and resets. Now **per connection** (shipped `applied 3 / dropped 0`
+   against a mutant `applied 1 / dropped 2 / position 901`).
+2. **The re-read answer's `store` accepted any non-empty string**, so a wrong-origin descriptor reached the
+   local channel with the gate open. Now **pinned and fail-closed**.
+3. **The contract's own `content` criterion was false** for two engine tokens, so the mapping is now
+   **frame-first, then token** (2 `content` / 18 `structural` over the engine's twenty, plus an unknown 21st
+   emitted-and-counted).
+
+**And the reading that decides `B-4`'s honesty:** its `G8` is **PARKED, NOT DRIVEN** — the engine refuses the
+fork's subscription (`sse: non-2xx` on the very GET the feed uses) and refuses its write envelope
+(`malformed envelope: schemaVersion`), so no write can commit a frame to receive; the permitted probe read
+**NOT-RUN** with nothing listening on `127.0.0.1:8080`. **No engine event was received and none is claimed.**
+
+**Owed and named:** `G6`'s blind greens, the `docs/next-steps.md` DONE row's red/green record (upgraded below),
+`strata/modules.json`'s `N` definition — the map says 12, the narrow roster says 8, and the map's own definition
+disagrees with `platform.md` §4, so the figure is PROVISIONAL (as `D-35` already recorded for `shell-chrome`)
+until a unit states what it counts.
+
+---
+
+## D-38 — `edit.batch` IS REGISTERED: the tool was designed and never built, and the primitive already covered it
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** unit `edit-batch`'s landing
+(`docs/L1/unit-edit-batch.md`), re-verified in this seat (the suite back at its clean floor; `typecheck` 0;
+`build` 0; `drift` CLEAN)
+
+**The investigation split in two, and only the second half was the defect:** the **primitive is COMPLETE** —
+`RagStore.applyBatch` applies all seven `BatchOp` members, is atomic with snapshot/restore rollback, lands one
+`batch` journal entry and one persist, and is already the UI path's writer — while **the tool was DESIGNED and
+never built** (`unit-p-ipc-edit-batch.md` §5.5 pinned the mapping as FORWARD-LOOKING). So the five `src/` sites'
+claim was **true of the primitive and false of the tool**.
+
+**Decision:** REGISTER, not retire. The primitive covers the declared contract exactly, so registering is a
+wiring act that makes five true statements true; retiring a documented capability to fit a missing registration
+would have invented the opposite error. `edit-ops.ts` took **no byte**. The shape is a membership row in the
+EXISTING `edit` group (`VALID_GROUPS`/`ToolGroup` unmoved at nine, no tenth group — and the row is mandatory,
+or the tool registers nowhere even with `edit` on, which is `B-1`'s unreachable-tool defect in a new place), a
+lax-schema/strict-handler `registerTools` row (`ops` required, **no `.min(1)`** — an empty batch is a lawful
+no-op, precedent `provident.code.loadBatch`), and a handler passing the raw ops through the shared primitive
+with one emission on success.
+
+**Reachability is PROVED, not assumed:** a real MCP `Client` over `InMemoryTransport` calls `edit.batch`
+through `registerTools`; 18/18 rows green, including a refusal-by-absence arm with the store untouched and a
+live widen that then WRITES.
+
+**A parser lesson, recorded because it is general:** the four pinned `ALL_TOOLS` census rows were re-stated to
+60, and one of them then failed for a reason that had nothing to do with the count — `validGroupsOf` used
+`src.indexOf('VALID_GROUPS')`, which latched onto the unit's own lawful COMMENT mentioning the token and read
+the next bracket it found. The parser now matches the DECLARATION and falls back only when no declaration shape
+exists. A token search is not a declaration search.
+
+---
+
+## D-39 — The `ALL_TOOLS` count is 60 and the `edit.batch` row in `D-35` is discharged
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Source (measurement):** unit `edit-batch`'s landing (`D-38`)
+
+**Decision:** `ALL_TOOLS` reads **60** (the fifth of the six sites the program started with is now served), and
+`D-35`'s finding that "`edit.batch` is not registered" is DISCHARGED by `D-38` — kept as filed and read through
+this row. The census restatements the registration owed (four rows across four files) are paid, one of them by
+hardening a parser that had matched a token's MENTION rather than its DECLARATION.

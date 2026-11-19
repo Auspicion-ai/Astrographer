@@ -27,6 +27,16 @@
 // (`src/main/engine-rag-store.ts`, the `src/main/preload.ts:33-36` pattern). The mapping FITS that four-member shape; a fifth key
 // is a contract breach, and out of this unit's write scope by construction (`src/shared/types.ts` is FORBIDDEN to it).
 //
+// AND §2.2 IS TWO LIMBS IN ONE ORDER (`F-13`, the L1 contract's own amendment): the FRAME decides FIRST — a non-empty `edgeIds` is
+// `structural` whatever the token, which is the same condition the fork's reconciler takes its FULL path on
+// (`src/renderer/content-reconcile.ts:374-375`, `:566`) — and the TOKEN decides the remainder (`content` only for `update_fact`
+// and `update_community_summary`; everything else, and every UNKNOWN token, `structural`).
+//
+// AND THE WATERMARK IS PER CONNECTION (`F-11`): `change_cursor()` is `epoch().to_string()` (`../Gnosis/src/store/mod.rs:2400-2413`)
+// and reads `"0"` on a fresh store, so a reconnect after an engine restart ANNOUNCES LOWER than the retired connection. The
+// watermark therefore lives on the connection (§2.3) and is re-established by each announcement; only within one connection is it
+// monotonic, and only a connection's own head licenses §2.3's "the re-read covers it" drop.
+//
 // AND IT IS PURE OF THE HOST: no Electron, no DOM, no filesystem, no `fetch`, no URL, no header, no loopback rule, NO TIMER. The
 // socket is `engine-transport.ts`'s `subscribeEngineStream`, the stream client is the fork's ONE SSE opener reached through that
 // seam, and a drop is a TYPED, TERMINAL answer (§2.5 — `D-82` clause 4's discipline): no poll, no retry, no backoff, no
@@ -44,18 +54,16 @@ import { subscribeEngineStream } from './engine-transport.js'
 // §2.2 — THE KIND TABLE (one table, one mapper; a token cannot be known to one caller and unknown to the other).
 // ---------------------------------------------------------------------------
 
-/** The FOUR tokens that claim `content`: an entry that rewrites node TEXT and moves no graph shape. Everything else is
- *  `structural` — the wider invalidation is the SAFE arm, because mislabelling a structural change as `content` makes the
- *  renderer walk a stale graph (`docs/L1/unit-b-4-engine-changes.md` §2.2). */
-const CONTENT_KINDS: readonly string[] = Object.freeze([
-  'update_document',
-  'update_fact',
-  'update_community_summary',
-  're_sync_embed',
-])
+/** THE TWO TOKENS THAT CLAIM `content` (`F-13`, the L1 contract's amended §2.2): only the appended ops that rewrite node TEXT and
+ *  move no graph shape. `update_document` REPLACES the document's graph and can write `link`/`embed`/`crosslink` edges
+ *  (`../Gnosis/src/store/mod.rs:3604-3634`) and `re_sync_embed` flips an embed edge's `state` (`:5733-5830`), so both are
+ *  `structural` — the old criterion ("rewrites node TEXT and moves no graph shape") is FALSE for them. */
+const CONTENT_KINDS: readonly string[] = Object.freeze(['update_fact', 'update_community_summary'])
 
-/** The SIXTEEN appended tokens the engine's closed set carries today (`u4-cursor-paged-reads.md:512-517`). */
+/** The other EIGHTEEN tokens of the engine's closed set (`u4-cursor-paged-reads.md:512-517`): the graph moved. */
 const STRUCTURAL_KINDS: readonly string[] = Object.freeze([
+  'update_document',
+  're_sync_embed',
   'create_document',
   'delete_document',
   'publish_document',
@@ -126,10 +134,13 @@ const hasExactKeys = (body: Record<string, unknown>, keys: readonly string[]): b
   return present.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(body, key))
 }
 
-/** The FORK'S descriptor, exactly (`src/shared/types.ts:415-421`): four keys, both id arrays, the origin label. A re-read's answer
- *  is checked against THIS and not merely against "an object" — `{}` or `{kind:'structural'}` is no more a descriptor than
+/** The FORK'S descriptor, exactly (`src/shared/types.ts:415-421`): four keys, both id arrays, the PINNED origin label. A re-read's
+ *  answer is checked against THIS and not merely against "an object" — `{}` or `{kind:'structural'}` is no more a descriptor than
  *  `undefined` is, and emitting one would put an unshaped payload on `IPC_RAG_STORE_CHANGED` while opening the gate on a
- *  coverage claim that covered nothing (this unit's adversarial finding `F-9`, measured). */
+ *  coverage claim that covered nothing (this unit's adversarial finding `F-9`, measured). **`store` is pinned to the ORIGIN and is
+ *  not "any non-empty string" (`F-12`, measured):** the renderer's foreign-store guard reads every OTHER non-empty name as a LOCAL
+ *  store (`READ` `src/renderer/sidebar-panes.ts:3185-3189`), so `'default'` or a registry-legal `'gnosis-engine'` would re-derive
+ *  the local graph on an engine event — exactly what `ASM-B4-1` exists to prevent. */
 const DESCRIPTOR_KEYS: readonly string[] = Object.freeze(['kind', 'nodeIds', 'edgeIds', 'store'])
 
 const isDescriptor = (value: unknown): value is RagStoreChangedPayload =>
@@ -138,11 +149,16 @@ const isDescriptor = (value: unknown): value is RagStoreChangedPayload =>
   (value['kind'] === 'content' || value['kind'] === 'structural') &&
   isStringArray(value['nodeIds']) &&
   isStringArray(value['edgeIds']) &&
-  typeof value['store'] === 'string' &&
-  value['store'] !== ''
+  value['store'] === ENGINE_ORIGIN_STORE
 
-/** The closed table, TOTAL over every string: an UNKNOWN token is `structural` (`ASM-B4-2`) — never dropped, never thrown. */
-const mapChangeKind = (token: string): 'content' | 'structural' => KIND_TABLE.get(token) ?? 'structural'
+/** The closed table, TOTAL over every string: an UNKNOWN token is `structural` (`ASM-B4-2`) — never dropped, never thrown.
+ *
+ *  §2.2's TWO LIMBS, AND THEIR ORDER IS THE RULE (`F-13`): **the FRAME decides first** — a `change` frame whose `edgeIds` array is
+ *  NON-EMPTY maps to `structural` whatever its token, because the graph moved and the fork's reconciler takes its FULL path on
+ *  exactly that condition (`READ` `src/renderer/content-reconcile.ts:374-375`, `:566`) — and **then the TOKEN decides the
+ *  remainder**. A kind that disagrees with the renderer's own fallback would make it walk a stale graph. */
+const mapChangeKind = (token: string, edgeIds: readonly string[]): 'content' | 'structural' =>
+  edgeIds.length > 0 ? 'structural' : (KIND_TABLE.get(token) ?? 'structural')
 
 const isKnownKind = (token: unknown): boolean => typeof token === 'string' && KIND_TABLE.has(token)
 
@@ -189,7 +205,7 @@ export function changeFrameToPayload(body: unknown): RagStoreChangedPayload {
     throw new ChangeFrameRefusal('timestamp', '`timestamp` is the committed entry\'s ISO-8601 string')
   }
   return {
-    kind: mapChangeKind(body.kind),
+    kind: mapChangeKind(body.kind, body.edgeIds),
     nodeIds: body.nodeIds,
     edgeIds: body.edgeIds,
     store: ENGINE_ORIGIN_STORE,
@@ -207,7 +223,7 @@ export interface EngineChangesFeedOptions {
   baseUrl: string
   /** The bearer token, passed through to the seam. */
   auth?: { token?: string }
-  /** The injectable stream client — THE TEST SEAM, the same injection `createEngineRagStore` takes (`engine-rag-store.ts:285`). */
+  /** The injectable stream client — THE TEST SEAM, the same injection `createEngineRagStore` takes (`engine-rag-store.ts:299`). */
   sse?: SseClient
   /** §2.4 — the re-read, called on EVERY connect and delivered to the sink BEFORE that connection's first change frame. */
   reconcile: () => RagStoreChangedPayload | Promise<RagStoreChangedPayload>
@@ -223,11 +239,12 @@ export interface EngineChangesStatus {
    *  connection (`gnosis_server.rs:983-986`) and NOTHING can be framed without it, so the absence is NAMED here — there is no
    *  timer, no timeout and no default head (a default would be a watermark the engine never sent). */
   readonly announced: boolean
-  /** The accepted position as the engine spelled it (a canonical decimal token), or `null` before the first frame. */
+  /** The accepted position of the LIVE connection as the engine spelled it (a canonical decimal token), or `null` while it has
+   *  announced nothing — the watermark is the connection's, so a retired connection's position is not reported (`F-11`). */
   readonly cursor: string | null
   /** The SAME position numerically. The de-dup compares exactly (BigInt internally); this member is the reader's rendering. */
   readonly position: number | null
-  /** ALWAYS the typed class with its `cause` (`engine-rag-store.ts:97-109`) — never a bare wire error, never a raw `Error`. */
+  /** ALWAYS the typed class with its `cause` (`engine-rag-store.ts:111-123`) — never a bare wire error, never a raw `Error`. */
   readonly failure: EngineUnavailable | null
 }
 
@@ -242,7 +259,7 @@ export interface EngineChangesCensus {
   }
   /** Descriptors emitted to the sink (the re-read's answer is NOT counted here — it is not a frame). */
   readonly applied: number
-  /** `change` frames dropped by §2.3 (at or below the position). */
+  /** `change` frames dropped by §2.3 (at or below the CURRENT connection's watermark — never a feed-lifetime one, `F-11`). */
   readonly dropped: number
   /** `change` frames whose token was NOT in the closed twenty (`ASM-B4-2`). */
   readonly unknownKind: number
@@ -261,7 +278,7 @@ export interface EngineChangesFeed {
   census(): EngineChangesCensus
 }
 
-/** The normaliser every fault passes through: the seam has already run `transportError` (`engine-transport.ts:71-93`), so a
+/** The normaliser every fault passes through: the seam has already run `transportError` (`engine-transport.ts:74-96`), so a
  *  typed wire error arrives here as `EngineUnavailable` or as a sibling; anything else becomes the typed unavailability §2.5
  *  requires, carrying the original words. */
 function asUnavailable(err: unknown, what: string): EngineUnavailable {
@@ -286,6 +303,12 @@ interface Connection {
   close(): void
   /** §2.1 — the head this connection's announcement recorded; `null` until it announces (and nothing is judged until then). */
   head: bigint | null
+  /** §2.3 — THIS connection's de-dup watermark, and the ONLY watermark authority. It is NOT monotonic for the life of the feed:
+   *  the engine's `change_cursor()` is `epoch().to_string()` (`../Gnosis/src/store/mod.rs:2400-2413`) and reads `"0"` on a fresh
+   *  store, so a reconnect after an engine restart announces a head BELOW the retired connection's — and a feed-lifetime watermark
+   *  would drop every frame of the restarted engine for ever, killing the live path the moment a reconnect succeeds (`F-11`,
+   *  measured). The re-read covers everything `<=` ITS OWN connection's head, which is what makes the drop lawful again. */
+  watermark: bigint | null
   /** §2.4 — the answer of THIS connection's re-read has reached the sink, so §2.3 may judge its frames. */
   gateOpen: boolean
   /** The `change` frames framed while the gate stood shut, in arrival order — the only place a frame waits, and it never waits
@@ -295,7 +318,7 @@ interface Connection {
 
 /**
  * THE FEED. Construction is INERT — no network I/O, no timer, no subscription (the `createEngineRagStore` discipline,
- * `engine-rag-store.ts:844-846`), so `src/main/main.ts` may build it at boot beside the two engine proxies.
+ * `engine-rag-store.ts:860-866`), so `src/main/main.ts` may build it at boot beside the two engine proxies.
  */
 export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineChangesFeed {
   if (opts == null || typeof opts !== 'object') {
@@ -311,9 +334,10 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
     throw new Error('engine changes feed: onChange required')
   }
 
-  /** The position, EXACTLY: a `BigInt` comparison is numeric for every `u64` the engine can print, where a `Number` compare
-   *  collapses 9007199254740992 and 9007199254740993 onto one double. */
-  let lastCursor: bigint | null = null
+  /**
+   * The position, EXACTLY: a `BigInt` comparison is numeric for every `u64` the engine can print, where a `Number` compare
+   * collapses 9007199254740992 and 9007199254740993 onto one double. It lives on the CONNECTION (§2.3), never on the feed.
+   */
   let failure: EngineUnavailable | null = null
   let connected = false
   let generation = 0
@@ -321,31 +345,33 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
   const counters = { seen: 0, cursor: 0, change: 0, refused: 0, applied: 0, dropped: 0, unknownKind: 0, connects: 0 }
 
   /** The sink call, CONTAINED: a sink's throw is the sink's, and `createSseClient` would otherwise catch it and re-fire it as
-   *  `onError` (`engine-rag-store.ts:804-809`), turning one host fault into a dead subscription. */
+   *  `onError` (`engine-rag-store.ts:818-823`), turning one host fault into a dead subscription. */
   const emit = (descriptor: RagStoreChangedPayload): void => {
     try {
       opts.onChange(descriptor)
     } catch {
-      /* one sink's fault is its own (the `fire` containment discipline, `pane-events.ts:123-129`) */
+      /* one sink's fault is its own (the `fire` containment discipline, `pane-events.ts:145-151`) */
     }
   }
 
-  /** The position advances MONOTONICALLY and never backwards (§2.3), for a `cursor` announcement as for an applied frame. */
-  const advance = (token: string): void => {
+  /** §2.3 — a POSITION only ever advances the CURRENT connection's watermark: an announcement records its connection's head (§2.1)
+   *  and a later announcement on the SAME connection moves it forward, never back. Across connections it is RE-ESTABLISHED from
+   *  that connection's own announcement — which is the whole of `F-11`'s fix. */
+  const advance = (connection: Connection, token: string): void => {
     const at = BigInt(token)
-    if (lastCursor === null || at > lastCursor) lastCursor = at
+    if (connection.watermark === null || at > connection.watermark) connection.watermark = at
   }
 
   /** §2.3 — ONE judgement, over a frame whose cursor is already parsed. The ONLY path to `onChange` for a `change` frame, so a
    *  held frame and a live frame are judged by the same rule and neither can be applied twice. */
-  const judge = (descriptor: RagStoreChangedPayload, at: bigint): void => {
-    if (lastCursor !== null && at <= lastCursor) {
+  const judge = (connection: Connection, descriptor: RagStoreChangedPayload, at: bigint): void => {
+    if (connection.watermark !== null && at <= connection.watermark) {
       // §2.3 — a reconnect replays the retained window `(floor, head]`; a replayed frame is DROPPED and counted, and the drop is
-      // lawful because the re-read (which STARTED after the head was read) covers everything at or below that head.
+      // lawful because THIS connection's re-read (which STARTED after its head was read) covers everything at or below that head.
       counters.dropped += 1
       return
     }
-    lastCursor = at
+    connection.watermark = at
     counters.applied += 1
     emit(descriptor)
   }
@@ -381,7 +407,7 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
     connection.held = []
     for (const frame of held) {
       if (live !== connection || connection.ended) return
-      judge(frame.descriptor, frame.cursor)
+      judge(connection, frame.descriptor, frame.cursor)
     }
   }
 
@@ -412,7 +438,7 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
         return
       }
       counters.cursor += 1
-      advance(body.cursor)
+      advance(connection, body.cursor)
       if (connection.head === null) {
         // THE HEAD, and the ONLY start of this connection's re-read (`ASM-B4-5`). A later announcement on the same connection
         // only moves the watermark — `reconcile` reads exactly ONCE per connect (§5 `c5`).
@@ -437,7 +463,7 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
       connection.held.push({ descriptor, cursor: at })
       return
     }
-    judge(descriptor, at)
+    judge(connection, descriptor, at)
   }
 
   /** ONE ending path for a fault and for a close. The feed ships no retry (§2.5): the caller may connect again, and §2.4 is what
@@ -468,6 +494,7 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
       ended: false,
       handle: null,
       head: null,
+      watermark: null,
       gateOpen: false,
       held: [],
       close: () => {
@@ -531,8 +558,10 @@ export function createEngineChangesFeed(opts: EngineChangesFeedOptions): EngineC
   const status = (): EngineChangesStatus => ({
     connected,
     announced: live !== null && live.head !== null,
-    cursor: lastCursor === null ? null : lastCursor.toString(),
-    position: lastCursor === null ? null : Number(lastCursor),
+    // The position is the LIVE connection's watermark, and there is no other: a retired connection's position is not this feed's
+    // to report (the reconnect re-establishes it from its own announcement — `F-11`).
+    cursor: live === null || live.watermark === null ? null : live.watermark.toString(),
+    position: live === null || live.watermark === null ? null : Number(live.watermark),
     failure,
   })
 

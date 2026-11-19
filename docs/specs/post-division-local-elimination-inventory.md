@@ -609,7 +609,7 @@ exercise an eliminated surface:
 
 | Figure | Fork (READ) | Foundation (READ) | Note |
 | --- | --- | --- | --- |
-| `ALL_TOOLS` rows | **59** | **22** | the fork's roster is **37 rows larger** — the whole app surface (`rag.*`, `edit.*`, `gnosis.*`, `code.template.*`, `module.*`, `get_query_audit_log`, `rag-stream`) |
+| `ALL_TOOLS` rows | **59** | **22** | the fork's roster is **37 rows larger** — the whole app surface (`rag.*`, `edit.*`, `gnosis.*`, `code.template.*`, `module.*`, `get_query_audit_log`, `rag-stream`). **⟶ MOVED 2026-11-19 (unit `edit-batch`, annotate-beside): the fork's roster is `60` — `edit.batch` is now registered (`docs/L1/unit-edit-batch.md`) — so the delta is `38` rows and this cell is kept as the pre-registration reading.** |
 | `provident.focus` present? | **YES** | **YES** | the **only** row in the fork's roster that has a direct foundation counterpart |
 | `provident.get_journal` present? | **YES** (read-only journal introspection) | **NO** | **STAYS FORK-LOCAL** — no foundation counterpart |
 | Group of `provident.focus` | `dispatch` (`src/main/security.ts` `TOOL_GROUPS`) | `dispatch` (the foundation spec's `§2.1` item 2: *"the EXISTING group, ON by default"*) | **AGREE** |

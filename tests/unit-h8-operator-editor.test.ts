@@ -1270,7 +1270,7 @@ describe('§5.8 — the negative pins: NO new MCP tool / census stays 41 / not g
     // edit.set_doc_meta (unit-ud7 §5.3), and Unit U-SHELL-9a added
     // provident.focus (unit-u-shell-9a-main-focus-tabs.md §2.7), and Unit
     // U-JR1 added provident.get_journal (unit-ujr1-get-journal.md §2.2).
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(59)
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(60)
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.manage')
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.list_stores')
     expect(ProvidentMcpServer.ALL_TOOLS).not.toContain('rag.store-listing')

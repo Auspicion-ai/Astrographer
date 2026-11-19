@@ -10,7 +10,7 @@
 // THE FOUR `F-1` LIMBS, one `it` each:
 //   `a1` a `change` frame's cursor that is NOT the canonical decimal is a REFUSAL, never a coercion (the `Number(...)` shape);
 //   `a2` a THROWING sink is CONTAINED — `createSseClient` would otherwise catch it and re-fire it as `onError`
-//        (`src/main/engine-rag-store.ts:804-809`), turning one host fault into a dead subscription;
+//        (`src/main/engine-rag-store.ts:818-823`), turning one host fault into a dead subscription;
 //   `a3` a frame delivered from a RETIRED connection (after `close()` / a reconnect) is never applied;
 //   `a4` a second `connect()` WITHOUT `close()` opens NO second socket and runs NO second re-read (`ASM-L2-2`).
 // And the remaining boundary states: `a5` the cursor frame's EXTRA-key tolerance (a declared relaxation, said so), `a6` a
@@ -109,7 +109,7 @@ describe('B-4 adversarial — hostile frames, host faults, and the lifecycle bou
   })
 
   it('a2 — a THROWING sink is CONTAINED: the stream survives, the position advances, and the NEXT frame still applies', async () => {
-    // F-1(b), repaired. Without the containment `createSseClient`'s own `try`/`catch` (`engine-rag-store.ts:804-809`) converts the
+    // F-1(b), repaired. Without the containment `createSseClient`'s own `try`/`catch` (`engine-rag-store.ts:818-823`) converts the
     // sink's throw into `onError`, and this feed would settle a typed failure it never had.
     const { feed, double, problems } = await rig({
       onChange: () => {
@@ -264,14 +264,18 @@ describe('B-4 adversarial — hostile frames, host faults, and the lifecycle bou
     expect(problems, `a6:\n${problems.join('\n')}`).toEqual([])
   })
 
-  it('a7 — a re-read that answers a NON-descriptor is a typed failure and the subscription is CLOSED (fail-closed, in that order)', async () => {
+  it('a7 — a re-read that answers a NON-descriptor or a WRONG-ORIGIN `store` is a typed failure and the subscription is CLOSED (fail-closed, in that order)', async () => {
     // RE-GRAINED BY `ASM-B4-5`, AND THE RE-GRAIN IS THE MEASUREMENT: the feed now SUBSCRIBES first (the anchor), so
     // "no subscription opened" is no longer the fail-closed shape — "the subscription it opened is torn down, and nothing was
     // emitted" is. A design that left the socket standing after a failed re-read would be applying frames of a connection it
     // could not reconcile, which is the gap claim `ASM-B-4` refuses in terms. AND IT GAINED THE WRONG-SHAPED-OBJECT LIMB
-    // (`F-9`, this pass): `{}`, `{kind:'structural'}` with no id arrays, and a four-key body whose `store`/`kind` is wrong are as
-    // much "no descriptor" as `undefined` is — emitting one would put an unshaped payload on the broadcast AND open §2.3's
+    // (`F-9`, the post-ruling pass): `{}`, `{kind:'structural'}` with no id arrays, and a four-key body whose `kind` is wrong are
+    // as much "no descriptor" as `undefined` is — emitting one would put an unshaped payload on the broadcast AND open §2.3's
     // "covered by the re-read" gate on an answer that covered nothing.
+    // AND (`F-12`, THIS PASS) THE `store` LIMB IS AN ORIGIN LIMB: `ASM-B4-1` pins the engine-origin label, and the renderer's
+    // foreign-store guard (`src/renderer/sidebar-panes.ts:3185-3189`) reads any OTHER non-empty string as a LOCAL store name.
+    // Measured before this pass: an answer carrying `store: 'default'` was emitted, opened the gate, and reached
+    // `IPC_RAG_STORE_CHANGED` as a local store change. `''` was already refused; the two registry-shaped names below were not.
     const problems: string[] = []
     const answers: unknown[] = [
       undefined,
@@ -283,6 +287,10 @@ describe('B-4 adversarial — hostile frames, host faults, and the lifecycle bou
       { kind: 'structural' },
       { kind: 'structural', nodeIds: [], edgeIds: [] },
       { kind: 'structural', nodeIds: [], edgeIds: [], store: '' },
+      // F-12 — a WRONG ORIGIN: the default store's registry name (what the renderer would accept as LOCAL) …
+      { kind: 'structural', nodeIds: [], edgeIds: [], store: 'default' },
+      // … and a registry-LEGAL name that is still not the origin (`RAG_STORE_NAME_PATTERN` matches it).
+      { kind: 'structural', nodeIds: [], edgeIds: [], store: 'gnosis-engine' },
       { kind: 'moved', nodeIds: [], edgeIds: [], store: 'gnosis:engine' },
       { kind: 'structural', nodeIds: 'n1', edgeIds: [], store: 'gnosis:engine' },
       { kind: 'structural', nodeIds: [], edgeIds: [], store: 'gnosis:engine', extra: 1 },
@@ -320,9 +328,12 @@ describe('B-4 adversarial — hostile frames, host faults, and the lifecycle bou
     expect(problems, `a7:\n${problems.join('\n')}`).toEqual([])
   })
 
-  it('a8 — `pane-events`: a handler that RELEASES ANOTHER mid-dispatch starves nobody (the snapshot), and a self-release finishes the pass', () => {
+  it('a8 — `pane-events`: releasing ANOTHER mid-dispatch starves nobody (the snapshot), and a SELF-release finishes the pass it stands in', () => {
     // The `pane-registry.ts:93-104` precedent, inherited by `publishChange` through `fire`. `B-3` proved it for the direct arm; this
     // row re-proves it on the CHANGE arm, because a second dispatch would not inherit it.
+    // THE TITLE NAMES TWO LIMBS AND BOTH BELOW ARE DRIVEN: releases-ANOTHER (the snapshot) and SELF-release (the handler that
+    // withdraws itself during the very pass it is in). The earlier draft titled the row "a self-release finishes the pass" while
+    // driving only the other-release limb — a title outrunning its body, measured by the independent gates and fixed here.
     const problems: string[] = []
     const channel = createPaneEvents()
     const order: string[] = []
@@ -350,6 +361,29 @@ describe('B-4 adversarial — hostile frames, host faults, and the lifecycle bou
     }
     if (order.length !== 3) problems.push(`a8: the two passes read ${JSON.stringify(order)} — 'a' must run once per pass and 'b' once in total`)
     if (JSON.stringify(order2) !== JSON.stringify(['c'])) problems.push(`a8: the pane's newly declared handler read ${JSON.stringify(order2)} — once per pass`)
+
+    // THE SELF-RELEASE LIMB — the limb the title always claimed. A handler that calls ITS OWN release from inside the dispatch
+    // must not shorten the pass it stands in (the snapshot again), must not recurse, and must be absent from the NEXT pass.
+    const selfChannel = createPaneEvents()
+    const selfOrder: string[] = []
+    let selfRuns = 0
+    let releaseSelf: () => void = () => undefined
+    releaseSelf = selfChannel.subscribeChange('doc-nav', () => {
+      selfRuns += 1
+      selfOrder.push('self')
+      releaseSelf()
+    })
+    selfChannel.subscribeChange('doc-nav', () => selfOrder.push('peer'))
+    const selfReports = selfChannel.publishChange()
+    if (JSON.stringify(selfOrder) !== JSON.stringify(['self', 'peer'])) {
+      problems.push(`a8: a SELF-release during the dispatch read ${JSON.stringify(selfOrder)} — the pass must finish ('self' then 'peer'), the snapshot being taken before any handler ran`)
+    }
+    if (selfRuns !== 1) problems.push(`a8: the self-releasing handler ran ${selfRuns} time(s) in one pass — a release must not re-enter or starve its own pass`)
+    if (!Array.isArray(selfReports) || selfReports.length !== 1) problems.push(`a8: the self-release pass answered ${JSON.stringify(selfReports)} — one report per interested pane`)
+    selfChannel.publishChange()
+    if (JSON.stringify(selfOrder) !== JSON.stringify(['self', 'peer', 'peer'])) {
+      problems.push(`a8: after the self-release the next pass read ${JSON.stringify(selfOrder)} — the released handler is gone and its peer still fires`)
+    }
     expect(problems, `a8:\n${problems.join('\n')}`).toEqual([])
   })
 

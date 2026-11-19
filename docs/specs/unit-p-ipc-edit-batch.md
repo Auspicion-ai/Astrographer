@@ -32,7 +32,9 @@
   the amended `src/main/edit-ops.ts` (the `handleEditBatch` shared handler + the
   `deriveBatchBroadcast` helper), and the amended `src/main/mcp-server.ts`
   (the forward-looking `edit.batch` tool wiring) from §5.6/§5.7 before any
-  implementation.
+  implementation. ⟨**that last file was NOT touched by this unit — its tool
+  wiring is FORWARD-LOOKING and LANDED 2026-11-19 by unit `edit-batch` (§5.5's
+  landing note); the file owes no byte here.**⟩
 
 ---
 
@@ -76,7 +78,8 @@ project already has the exact machinery this needs:
   template for `bridge.edit.batch`. The renderer never writes to the RAG store
   directly; it sends an IPC to main, which calls the store (SINGLE-WRITER-STORE).
 - **The MCP tool→op mapping pattern** (Unit D §5.1.8) is the template for the
-  forward-looking `edit.batch` MCP tool.
+  forward-looking `edit.batch` MCP tool. **⟶ LANDED 2026-11-19 (unit `edit-batch`):** the tool is
+  REGISTERED and follows exactly this pattern — see §5.5's landing note.
 
 No engine/foundation gap blocks this unit. The IPC channel is **project-specific**
 (the IPC surface is host-side, per `docs/decisions.md` ENGINE-GAP-HANDOFF). No
@@ -91,7 +94,7 @@ NOT this unit.
 | The `bridge.edit.batch` preload method | Project-specific | Low cost; the renderer-side invocation (MCP/UI equivalence). |
 | The `ipcMain.handle(IPC_EDIT_BATCH, ...)` handler | Project-specific | Low cost; validates the payload, calls `applyBatch`, broadcasts on success. |
 | The `deriveBatchBroadcast` helper | Project-specific | Low cost; derives the `rag-store-changed` payload from a successful batch. |
-| The forward-looking `edit.batch` MCP tool | Project-specific (the tool→op mapping) | Low cost; the same batch reachable via MCP tool and UI IPC (§8.2 BINDING). |
+| The forward-looking `edit.batch` MCP tool | Project-specific (the tool→op mapping) | Low cost; the same batch reachable via MCP tool and UI IPC (§8.2 BINDING). **⟶ LANDED 2026-11-19 (unit `edit-batch`, §5.5's landing note): the equivalence is now SERVED on both paths, not merely pinned.** |
 
 No engine gap. The contenteditable UI, the retrieval indexing of inline
 `children` text, the traversal disambiguation of inline vs doc-children, and
@@ -292,6 +295,17 @@ N) — all or nothing, one journal entry, one persist.
   within a batch is a FORWARD-LOOKING extension (a later slice) — the channel's
   contract is pinned now; the rich-text-in-batch application is not.
 
+  > **⟨ANNOTATED 2026-11-19 BY UNIT `edit-batch` — the paragraph above is KEPT VERBATIM as this
+  > unit's reading, and this note is the corrected state: the fail-state it describes NO LONGER
+  > EXISTS.⟩** `U-EDIT-1 (C9)` landed the THREE OPS' APPLICATION inside a batch
+  > (`src/main/rag-store.ts:1309-1369` — `setProps` MERGES, `setSubtree` REPLACES, `setType` is
+  > setType-class and never delete+create), so `'rag applyBatch: op not supported: …'` appears
+  > NOWHERE in `src/`. **§5.7 item 8 is therefore a DEAD fail-state and the whole
+  > "forward-looking" framing of this subsection is superseded.** What survives is a different,
+  > smaller defect — the DERIVATION still treats the three ops as unreachable and emits
+  > `nodeIds: []` for them — filed as `docs/defects.md`
+  > `BATCH-BROADCAST-NAMES-NO-NODE-FOR-RICH-OPS`.
+
 ### 5.3 The preload bridge (`bridge.edit.batch`)
 
 The renderer-side function that invokes the channel. It follows the existing
@@ -473,6 +487,23 @@ IPC, both routing through the same `applyBatch` primitive (§8.2 BINDING,
 unit pins the channel-level contract and the tool→op mapping below as the
 contract that later unit implements.
 
+> **⟶ LANDED 2026-11-19 BY UNIT `edit-batch` (`docs/L1/unit-edit-batch.md`) — the
+> "later unit" this paragraph names, and its sentence is KEPT as the forward
+> reference it was. `edit.batch` is now REGISTERED:** `TOOL_GROUPS['edit.batch'] =
+> 'edit'` (`src/main/security.ts`, a membership row in the EXISTING group — no new
+> group, `VALID_GROUPS` unmoved), `ALL_TOOLS` carries the name (census **59 → 60**),
+> the `registerTools` row advertises `{ ops: z.array(z.unknown()), store?:
+> z.string() }` (lax schema / strict handler, so the primitive's typed results reach
+> the agent verbatim — no `.min(1)`: an empty batch is a valid no-op per §5.6 item
+> 6), and `handleEditTool`'s `case 'edit.batch'` calls the SHARED `handleEditBatch`
+> and emits `rag-store-changed` ONCE through `deriveBatchBroadcast` with the same
+> pre-batch snapshot `main.ts:1044-1050` takes. **§5.6 item 8 — the equivalence row
+> this unit deferred — is now exercisable and IS exercised:** `client.callTool`
+> through the server's own `registerTools` path vs `handleEditBatch` over the same
+> ops produce the same records and the same payload
+> (`tests/integration/shell-chrome/edit-batch.test.ts` I9). The binding rules below
+> are served, not merely pinned.
+
 **Tool → op mapping (pinned):**
 
 | Tool | Op | Result |
@@ -576,7 +607,11 @@ contract that later unit implements.
    → `{ ok: false, error: 'rag applyBatch: op not supported: setProps at index
    0', failedIndex: 0 }`; the store is unchanged; NO broadcast (A5 — their
    application within a batch is a forward-looking extension, deferred from Unit
-   O §5.5).
+   O §5.5). **⟶ DEAD FAIL-STATE 2026-11-19 (unit `edit-batch`): this answer can no longer be
+   produced.** `U-EDIT-1 (C9)` landed the three ops' application (`rag-store.ts:1309-1369`), so the
+   same call now answers `ok: true` with a `{ op: 'setProps', … }` result and ONE broadcast whose
+   `nodeIds` is EMPTY — that residual is filed as `docs/defects.md`
+   `BATCH-BROADCAST-NAMES-NO-NODE-FOR-RICH-OPS`; §5.2's annotation carries the same correction.**
 9. **A batch whose putNode writes a malformed `children` array:** `bridge.edit.batch([{
    op: 'putNode', node: { ...n1, children: [{ type: 'span', content: 'x' }] } }])`
    → `{ ok: false, error: 'rag applyBatch: children required/invalid at index 0',
@@ -603,6 +638,10 @@ contract that later unit implements.
   testing).
 - **New MCP tool (forward-looking):** 1 — `edit.batch` (the tool→op mapping in
   §5.5; the tool wiring is a later unit).
+  **⟶ LANDED 2026-11-19 (unit `edit-batch`):** the one tool is REGISTERED — the
+  census above is met at the `src/main/mcp-server.ts` seam (`ALL_TOOLS` 59 → 60, a
+  `registerTools` row, a `handleEditTool` case) plus its `TOOL_GROUPS` membership
+  row in `src/main/security.ts`. See the §5.5 landing note.
 - **`rag-store-changed` broadcasts per successful non-empty batch:** exactly 1
   (A4). A failed batch broadcasts 0 times (A2). An empty batch broadcasts 1 time
   (a valid no-op).
@@ -662,6 +701,6 @@ contract that later unit implements.
   `deriveBatchBroadcast` helper the handler calls), `src/main/rag-store.ts` (the
   `applyBatch` method the channel calls, the `BatchOp`/`BatchResult` types the
   channel transports),
-  `src/main/mcp-server.ts` (the `edit.*` tool wiring — the forward-looking
-  `edit.batch` tool), `src/renderer/sidebar-panes.ts` (the `onRagStoreChanged`
+  `src/main/mcp-server.ts` (the `edit.*` tool wiring — including the LANDED
+  `edit.batch` tool, `docs/L1/unit-edit-batch.md` §3), `src/renderer/sidebar-panes.ts` (the `onRagStoreChanged`
   handler that ignores the broadcast payload and calls `requestRebuild`).

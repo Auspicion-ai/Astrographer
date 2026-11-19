@@ -59,6 +59,13 @@ const TOOL_GROUPS: Record<string, ToolGroup> = {
   // U-D7 (docs/specs/unit-ud7-set-doc-meta-op.md §5.3) — the mutating tag-write
   // op (document-root `tags` only; path immutable). `edit` group, default-off.
   'edit.set_doc_meta': 'edit',
+  // unit `edit-batch` (docs/L1/unit-edit-batch.md §3.1) — the batch write path's
+  // MCP name. This is a MEMBERSHIP row in the EXISTING `edit` group, not a tenth
+  // group: `VALID_GROUPS`/`ToolGroup` are unchanged. Without the row
+  // `groupForTool` answers null, `toolAllowed` is false and the name is filtered
+  // out of `allowedToolNames()`, so the tool would register nowhere even with
+  // `edit` enabled — B-1's unreachable-tool defect in a new place.
+  'edit.batch': 'edit',
   // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
   // tools, ALL in the `code` group (default-off). Main-handled against the
   // template store through the five-seam gate. `get`/`validate` are read-only;

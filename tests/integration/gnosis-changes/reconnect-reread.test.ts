@@ -19,6 +19,11 @@
 // THE THREE LIMBS, AND WHAT EACH PROVES:
 //   `c5(a)` the ORDER, on the real module: subscribe → (announcement) → reconcile → answer → judged frames, with the
 //           sink's SEQUENCE as the evidence and the per-connect count read after two connects;
+//   `c5(b)` and `c5(c)` are DESIGN-MODEL ROWS, NOT IMPLEMENTATION EVIDENCE — a disclosure, because a green that cannot red is not a
+//           green: `c5(b)` runs a hand-written counter and `c5(c)` a hand-written engine model, and NEITHER LOADS `src/`. They are
+//           kept because they carry the argument (the mutants `c5(a)`/`c5(d)` would otherwise have no falsifiability floor), and
+//           both titles now say what they are. The contract discloses `c11`'s red-run green the same way (`c11` is a
+//           zero-occurrence clause), so this is the same disclosure for the same reason;
 //   `c5(b)` MUTANT — a design that skips the second connect's re-read reads `1`, so `c5(a)`'s `2` has teeth;
 //   `c5(c)` MUTANT — the PRE-SUBSCRIBE design (the landed `F-5` shape) modelled beside the anchored design through ONE
 //           interleaving: a commit lands after the re-read's read and before the engine's head read. The anchored shape covers
@@ -135,7 +140,12 @@ describe('B-4 §5 `c5` — a reconnect is a RE-READ, and the re-read is ANCHORED
         await feed.connect()
         if (double.calls !== 2) problems.push(`c5(a): the double's \`subscribe\` read ${double.calls} call(s) after two connects — one connection per connect, no second socket`)
         if (reconciles !== 1) problems.push(`c5(a): \`reconcile\` read ${reconciles} right after the SECOND connect — a connect does not re-read on its own; its ANNOUNCEMENT does`)
-        announceAt(double, '5')
+        // THE SECOND HEAD IS THIS CONNECTION'S OWN, AND THAT IS THE `F-11` CORRECTION: the first connection applied 6 live, so the
+        // engine's head at the reconnect is 6, and the retained window `(floor, 6]` is {5, 6}. Drawing the head at 5 instead would
+        // make `6` an ABOVE-HEAD frame — which §2.4 applies exactly once, by the same rule as `live-7` — so the old fixture only
+        // read "dropped" under a FEED-LIFETIME watermark. The row's subject (the replayed window is dropped BECAUSE the answer
+        // covers it) is unchanged; the head is now the one the engine would send.
+        announceAt(double, '6')
         double.frame('change', changeFrame({ cursor: '5', nodeIds: ['window-5-replay'] }))
         double.frame('change', changeFrame({ cursor: '6', nodeIds: ['window-6-replay'] }))
         if (reconciles !== 2) problems.push(`c5(a): after the second announcement \`reconcile\` read ${reconciles} — exactly ONE per connect (2)`)
@@ -160,8 +170,10 @@ describe('B-4 §5 `c5` — a reconnect is a RE-READ, and the re-read is ANCHORED
     expect(problems, `c5(a):\n${problems.join('\n')}`).toEqual([])
   })
 
-  it('c5(b) MUTANT — a design that re-reads only on the FIRST connect reads `1`, so the `2` above has teeth', async () => {
+  it('c5(b) DESIGN MODEL (not implementation evidence — loads no `src/`) — a design that re-reads only on the FIRST connect reads `1`, so the `2` above has teeth', async () => {
     // The mutant is deliberately WRONG; it exists to prove the reading is falsifiable (the `B-3` `r7` mutant discipline).
+    // DESIGN MODEL, DISCLOSED: nothing here imports `src/main/engine-changes.ts`, so this row can never red on the module's byte —
+    // it is the falsifiability floor under `c5(a)`'s `2`, and the title says so.
     const double = new SseFrameDouble()
     let reconciles = 0
     let connectedOnce = false
@@ -178,11 +190,13 @@ describe('B-4 §5 `c5` — a reconnect is a RE-READ, and the re-read is ANCHORED
     expect(double.calls, 'the mutant still opens one connection per connect, so the ONLY divergence is the missing re-read').toBe(2)
   })
 
-  it('c5(c) MUTANT — a design that re-reads BEFORE subscribing leaves the landing\'s `F-5` window: the commit is ≤ the head AND absent from the answer', async () => {
+  it('c5(c) DESIGN MODEL (not implementation evidence — loads no `src/`) — a design that re-reads BEFORE subscribing leaves the landing\'s `F-5` window: the commit is ≤ the head AND absent from the answer', async () => {
     // THE INTERLEAVING, AND IT IS ONE: a commit lands AFTER the re-read's read and BEFORE the engine's head read. Both designs
     // below see the same engine, the same commit and the same journal; they differ ONLY in whether the head was read before
     // or after the re-read. `covered` = the commit surfaced by the re-read's answer; `applied` = the commit surfaced by a
     // frame. The row's assertion (`gap` empty) is what `c5(a)` and `c5(d)` measure on the real module.
+    // DESIGN MODEL, DISCLOSED (R4): this row is TWO HAND-WRITTEN MODELS and no module byte — it would read identically against an
+    // empty `src/`. `c5(d)` is its implementation reading, and the pair is what makes that reading non-vacuous.
     interface Outcome {
       covered: number[]
       applied: number[]

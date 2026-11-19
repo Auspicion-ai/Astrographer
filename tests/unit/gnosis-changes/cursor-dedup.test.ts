@@ -220,6 +220,60 @@ describe('B-4 §5 `c4` — de-dup by cursor, and the comparison is NUMERIC', () 
     expect(problems, `c4(d):\n${problems.join('\n')}`).toEqual([])
   })
 
+  it('c4(f) — the watermark is PER CONNECTION: a reconnect re-establishes ITS OWN head, so an engine restart (announced head 3) applies 4 and 5', async () => {
+    // MUTATION THAT WOULD RED IT — AND IT IS THE SHIPPED SHAPE BEFORE THIS PASS: a watermark monotonic for the life of the FEED.
+    // The engine's `change_cursor()` is `epoch()` (`../Gnosis/src/store/mod.rs:2400-2413`) and reads `"0"` on a fresh store, so a
+    // reconnect after an engine restart announces a head BELOW the previous connection's: with a feed-lifetime watermark the
+    // re-read's answer is emitted and then frames 4 and 5 are dropped FOR EVER, and only a `>= 902` frame applies again — a
+    // reconnect silently kills the live path. §2.3/§2.4 make the drop lawful only within ONE connection's frame of reference.
+    // THE CONTROL BELOW IS THE OTHER DIRECTION: a frame at or below the CURRENT connection's head is still dropped and counted,
+    // so the per-connection watermark is not a licence to replay.
+    // The row collects into a LOCAL array and the `drive()` aggregate is appended after it returns: referencing the outer
+    // `const problems` from inside the body would read it before its initializer ran (a TDZ throw dressed up as "driving threw"),
+    // which is how this row's first draft red-ed for the wrong reason — measured at this pass's own red run and fixed here.
+    const collected: string[] = []
+    const problems = await drive('c4(f)', async ({ feed, double, sink }) => {
+      await feed.connect()
+      announceAt(double, '900')
+      await settled()
+      frameAt(double, '901', 'before-restart')
+      if (sink.named('before-restart').length !== 1) {
+        collected.push(`c4(f): the first connection's frame at 901 was emitted ${sink.named('before-restart').length} time(s) — the setup limb must apply, or the reconnect limb below is vacuous`)
+      }
+      // THE ENGINE RESTARTS: close, connect, and the new connection announces the FRESH epoch.
+      feed.close()
+      await feed.connect()
+      announceAt(double, '3')
+      await settled()
+      if (sink.named('reconciled').length !== 2) {
+        collected.push(`c4(f): the re-read answered ${sink.named('reconciled').length} time(s) over two connections — one answer per connection is the coverage the drop below relies on`)
+      }
+      frameAt(double, '4', 'after-restart-4')
+      frameAt(double, '5', 'after-restart-5')
+      if (sink.named('after-restart-4').length !== 1) {
+        collected.push(
+          'c4(f): the frame at cursor 4 was NOT emitted after the reconnect announced head 3 — a watermark monotonic for the life ' +
+            'of the FEED still holds 901, so a restarted engine\'s frames are dropped for ever (§2.3 is per CONNECTION)',
+        )
+      }
+      if (sink.named('after-restart-5').length !== 1) {
+        collected.push(`c4(f): the frame at cursor 5 was emitted ${sink.named('after-restart-5').length} time(s) after the reconnect — the new connection's watermark must advance with its own frames`)
+      }
+      const census = feed.census()
+      if (census?.applied !== 3) collected.push(`c4(f): \`applied\` read ${String(census?.applied)} — 901, 4 and 5 are three applied frames (the two re-read answers are not frames)`)
+      if (census?.dropped !== 0) collected.push(`c4(f): \`dropped\` read ${String(census?.dropped)} before the control — nothing here is a replay`)
+      const status = feed.status()
+      if (status?.position !== 5) collected.push(`c4(f): \`status().position\` read ${String(status?.position)} — the CURRENT connection's position is 5, not the retired connection's 901`)
+      if (status?.cursor !== '5') collected.push(`c4(f): \`status().cursor\` read ${String(status?.cursor)} — the live frame's token reads '5'`)
+      // CONTROL — and it is the limb that keeps the drop (c4(c)) intact: at/below the CURRENT head is still a drop.
+      frameAt(double, '3', 'stale-head')
+      if (sink.named('stale-head').length !== 0) collected.push('c4(f) CONTROL: a frame at the CURRENT connection\'s head was emitted — §2.3 still drops anything at or below the watermark')
+      if (feed.census()?.dropped !== 1) collected.push(`c4(f) CONTROL: \`dropped\` read ${String(feed.census()?.dropped)} — the at-head frame is dropped AND counted`)
+    })
+    problems.push(...collected)
+    expect(problems, `c4(f):\n${problems.join('\n')}`).toEqual([])
+  })
+
   it('c4(e) CONTROL — two DIFFERENT increasing cursors deliver TWICE on the same harness', async () => {
     // The floor under every "once" limb above: this harness CAN count two deliveries.
     const problems = await drive('c4(e)', async ({ feed, double, sink }) => {

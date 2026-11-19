@@ -9,11 +9,12 @@
 //         TYPED FRAME REFUSAL: never a fabricated descriptor, never a stream teardown (`../Gnosis/docs/specs/u4-cursor-paged-reads.md:521-524`).
 //   §2.2  the mapping. EXACTLY four keys `{kind, nodeIds, edgeIds, store}`; `nodeIds`/`edgeIds` carried VERBATIM (identity, no
 //         copy, no parse, no re-encode — the `edgeIds` elements are the engine's six-term JSON strings); `kind` from the closed
-//         table (`content` = `update_document`/`update_fact`/`update_community_summary`/`re_sync_embed`, the other SIXTEEN =
-//         `structural`, an UNKNOWN token = `structural` and is never dropped or thrown); `store` = the pinned engine-origin
-//         label `'gnosis:engine'` (`ASM-B4-1`); `cursor`/`wikiId`/`timestamp`/`type` DO NOT cross the wire.
-//   §5    `c2`, `c3` (the table limb; the unknown-kind COUNTER is the consumer's and its row lives in
-//         `tests/integration/gnosis-changes/consumer-frames.test.ts` as `c3(b)`).
+//         table — as AMENDED by the L1 contract this pass, the FRAME decides first (a non-empty `edgeIds` is `structural` whatever
+//         the token) and the TOKEN decides the remainder (`content` = `update_fact`/`update_community_summary` only, the other
+//         EIGHTEEN = `structural`, an UNKNOWN token = `structural` and is never dropped or thrown); `store` = the pinned
+//         engine-origin label `'gnosis:engine'` (`ASM-B4-1`); `cursor`/`wikiId`/`timestamp`/`type` DO NOT cross the wire.
+//   §5    `c2`, `c3(a)` (the table limb), `c3(c)` (the FRAME OVERRIDE); the unknown-kind COUNTER is the consumer's and its row
+//         lives in `tests/integration/gnosis-changes/consumer-frames.test.ts` as `c3(b)`.
 //
 // LAYER (D-10 / RCA-12): ENVELOPE-CLASS and PURE — the module under test imports no Electron, no DOM, no fs, no socket, and
 // these rows inject nothing at all: they call the exported mapper with a plain body. What this layer can NEVER say, named so
@@ -31,9 +32,15 @@ import { changeFrame, EDGE_ID, loadChangesModule, shown } from '../../integratio
 /** The exact four keys, in the contract's own order (§2.2). */
 const DESCRIPTOR_KEYS = ['kind', 'nodeIds', 'edgeIds', 'store']
 
-/** §2.2 — the closed table, spelled token by token so a mis-signed token cannot hide inside a folded list. */
-const CONTENT_TOKENS = ['update_document', 'update_fact', 'update_community_summary', 're_sync_embed'] as const
+/** §2.2 as AMENDED THIS PASS (the L1 contract's mapping rule, `F-13`) — the closed table, spelled token by token so a mis-signed
+ *  token cannot hide inside a folded list. TWO tokens claim `content`: the two appended ops that rewrite node TEXT and nothing
+ *  else. `update_document` (it REPLACES the document's graph and can write `link`/`embed`/`crosslink` edges,
+ *  `../Gnosis/src/store/mod.rs:3604-3634`) and `re_sync_embed` (it flips an embed edge's `state`, `:5733-5830`) are
+ *  `structural`, because the contract's old criterion ("rewrites node TEXT and moves no graph shape") is FALSE for both. */
+const CONTENT_TOKENS = ['update_fact', 'update_community_summary'] as const
 const STRUCTURAL_TOKENS = [
+  'update_document',
+  're_sync_embed',
   'create_document',
   'delete_document',
   'publish_document',
@@ -109,9 +116,9 @@ describe('B-4 §5 `c2` — a `change` frame maps to the FORK\'s descriptor, EXAC
 })
 
 describe('B-4 §5 `c3` (a) — THE KIND TABLE: all twenty tokens, one by one', () => {
-  it('c3(a) — the 4 `content` tokens and the 16 `structural` tokens each map to §2.2\'s word', async () => {
-    // MUTATION THAT WOULD RED IT: swapping one token between the columns (e.g. `re_sync_embed` → structural, or `delete_document`
-    // → content), or a mapper that folds the table into a prefix/regex guess.
+  it('c3(a) — 2 tokens read `content` and 18 read `structural` (the AMENDED §2.2 table)', async () => {
+    // MUTATION THAT WOULD RED IT: swapping one token between the columns (e.g. `update_fact` → structural, or `update_document`
+    // → content, the pre-amendment reading), or a mapper that folds the table into a prefix/regex guess.
     const mod = await loadChangesModule()
     const problems = [...mod.problems]
     if (mod.changeFrameToPayload !== null) {
@@ -134,6 +141,47 @@ describe('B-4 §5 `c3` (a) — THE KIND TABLE: all twenty tokens, one by one', (
       )
     }
     expect(problems, `c3(a) — the kind table:\n${problems.join('\n')}`).toEqual([])
+  })
+})
+
+describe('B-4 §5 `c3` (c) — THE FRAME DECIDES FIRST: a non-empty `edgeIds` is `structural`, whatever the token', () => {
+  it('c3(c) — `update_fact` WITH edges reads `structural`; the same token with an EMPTY `edgeIds` control reads `content`', async () => {
+    // WHY THE FRAME WINS (the L1 contract's own amended rule, `F-13`): the fork's renderer takes its FULL reconcile path when the
+    // descriptor is `structural` OR when `edgeIds` is non-empty (`src/renderer/content-reconcile.ts:374-375`, `:566`), so a frame
+    // that carries edges is a graph move whatever its token says. `update_document` replaces a document's graph and can write
+    // `link`/`embed`/`crosslink` edges (`../Gnosis/src/store/mod.rs:3604-3634`); `re_sync_embed` flips an embed edge's `state`
+    // (`:5733-5830`). Mislabelling either as `content` makes the renderer walk a stale graph.
+    // MUTATION THAT WOULD RED IT: a mapper that reads the token alone (the pre-amendment shape) — the `edgeIds`-bearing arm would
+    // read `content` while the renderer still took the full path, which is exactly the discrepancy this row forbids.
+    const mod = await loadChangesModule()
+    const problems = [...mod.problems]
+    if (mod.changeFrameToPayload !== null) {
+      const withEdges = mod.changeFrameToPayload(
+        changeFrame({ kind: 'update_fact', nodeIds: ['n1'], edgeIds: [EDGE_ID] }),
+      ) as Record<string, unknown> | undefined
+      if (withEdges?.['kind'] !== 'structural') {
+        problems.push(
+          `c3(c): an \`update_fact\` frame carrying a non-empty \`edgeIds\` read ${shown(withEdges?.['kind'])} — §2.2's FRAME limb ` +
+            'wins over the token: a frame that moves the graph is `structural`',
+        )
+      }
+      // THE CONTROL: the SAME token with no edges is a text rewrite, so the token limb still decides.
+      const noEdges = mod.changeFrameToPayload(
+        changeFrame({ kind: 'update_fact', nodeIds: ['n2'], edgeIds: [] }),
+      ) as Record<string, unknown> | undefined
+      if (noEdges?.['kind'] !== 'content') {
+        problems.push(`c3(c) CONTROL: an \`update_fact\` frame with an EMPTY \`edgeIds\` read ${shown(noEdges?.['kind'])} — the token limb must still answer \`content\``)
+      }
+      // AND THE OVERRIDE IS THE FRAME'S, NOT THE TOKEN'S: an UNKNOWN token carrying edges is `structural` too (no new refusal, no
+      // counter: `c3(b)` owns the unknown-kind counter).
+      const unknownWithEdges = mod.changeFrameToPayload(
+        changeFrame({ kind: 'reindex_everything', nodeIds: ['n3'], edgeIds: [EDGE_ID] }),
+      ) as Record<string, unknown> | undefined
+      if (unknownWithEdges?.['kind'] !== 'structural') {
+        problems.push(`c3(c): an UNKNOWN token carrying edges read ${shown(unknownWithEdges?.['kind'])} — the frame limb applies to every token`)
+      }
+    }
+    expect(problems, `c3(c):\n${problems.join('\n')}`).toEqual([])
   })
 })
 

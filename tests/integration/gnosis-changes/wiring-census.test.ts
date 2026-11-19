@@ -218,7 +218,7 @@ describe('B-4 §5 `c9` — the wiring: ONE construction, ONE channel, no orphan'
       }
       // AND IT IS STILL NOT AWAITED: the post-window site must not turn the boot into a socket wait (§4's amendment keeps this).
       if (occurrences(code, `await ${name}.connect(`) !== 0) {
-        problems.push(`c9(g): the post-window site AWAITS \`connect()\` — an absent engine must never hold the boot (the \`waitForReady\` precedent, main.ts:820-821)`)
+        problems.push(`c9(g): the post-window site AWAITS \`connect()\` — an absent engine must never hold the boot (the \`waitForReady\` precedent, main.ts:828-829)`)
       }
     }
     expect(problems, `c9(g):\n${problems.join('\n')}`).toEqual([])

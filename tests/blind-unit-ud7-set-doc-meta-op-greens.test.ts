@@ -611,7 +611,7 @@ describe('UD7-G15 — the seam set', () => {
   it('groupForTool resolves "edit"; ALL_TOOLS carries the row (census 59)', () => {
     expect(groupForTool('edit.set_doc_meta')).toBe('edit')
     expect(ProvidentMcpServer.ALL_TOOLS).toContain('edit.set_doc_meta')
-    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(59)
+    expect(ProvidentMcpServer.ALL_TOOLS).toHaveLength(60)
   })
 
   it('RpcMethod union accepts "edit.set_doc_meta" (type-level)', () => {

@@ -527,6 +527,22 @@ primitive** (there is no `edit.batch` MCP tool registration; the batch reaches t
 atomicity is that unit's restatement), **U(local-store-frozen)** in S3. **The union is 31 tools,
 30 of them registered MCP tools + this IPC primitive.** A count that does not equal 31 is `FS17`.
 
+> **⟨ANNOTATED 2026-11-19 BY UNIT `edit-batch` — `RCA-8(c)`, ANNOTATE-BESIDE: the row above is KEPT
+> VERBATIM as this register's pre-registration reading, and the annotation is the corrected state.⟩**
+> **`edit.batch` IS NOW A REGISTERED MCP TOOL** (`edit` group, default-off;
+> `docs/L1/unit-edit-batch.md`, `DECIDED: MCP-EDIT-BATCH-REGISTERED`): the sentence *"there is no
+> `edit.batch` MCP tool registration"* is TRUE OF THE HEAD THIS ROW WAS COUNTED AT AND FALSE OF THIS
+> ONE. **THE COUNT IS UNMOVED AND THE CLASS MOVED — say it exactly, because the first draft of this
+> note got it wrong and a doc review caught it: the union is still 31** = 8 `rag` + 9 `edit`
+> (**now all NINE registered**: the eight plus `edit.batch`) + 7 `gnosis` + 7 `gnosis-edit`
+> (`8 + 9 + 7 + 7 = 31`), so **what moved is the REGISTERED count, 30 → 31, and the grid stays
+> `31 × 4 = 124` cells — NOT 32 / 128.** The 31st member was already counted; only its class changed
+> (IPC-only → registered). **The `FS17` count arm therefore stays `31` and must NOT be restated.**
+> The `edit.batch` route pin itself is UNMOVED: the new tool reaches the SAME authority the primitive
+> did (H in S0/S1, `D(U-EDIT-1)` in S2, `U(local-store-frozen)` in S3), because `handleEditTool`'s
+> case calls the same shared `handleEditBatch` → `applyBatch`. **No write is accepted by two
+> authorities by this change.**
+
 **Rules that make the table a contract rather than a sketch.**
 
 1. **S0/S1 are read-identical and write-identical for `rag.*`/`edit.*`.** The switch changes **nothing**
@@ -1075,8 +1091,8 @@ adversarial pass, one doc review, one DONE row).
 
 | Claim | Value | Status |
 | --- | --- | --- |
-| **The routed MCP tool union** | **31** = 8 `rag`-group + 9 `edit`-group (8 registered `edit.*` tools + the group's own `edit.batch` IPC-only primitive, which is the union's 31st entry) + 7 `gnosis`-group read tools (3 retrieval/health + 4 CRUD) + 7 `gnosis-edit`-group mutating tools | **counted** from the registrations in `src/main/mcp-server.ts` + `security.ts` `TOOL_GROUPS`/`VALID_GROUPS` in this pass (the four groups carry **30** registered tools: 8 + 8 + 7 + 7); **recounted** by the 2026-09-21 item-10d documentation review |
-| **The routing grid** | **31 × 4 = 124 cells**, 30 of them registered MCP tools and one IPC primitive | derived (a product, not a reading) |
+| **The routed MCP tool union** | **31** = 8 `rag`-group + 9 `edit`-group (8 registered `edit.*` tools + the group's own `edit.batch` IPC-only primitive, which is the union's 31st entry) + 7 `gnosis`-group read tools (3 retrieval/health + 4 CRUD) + 7 `gnosis-edit`-group mutating tools | **counted** from the registrations in `src/main/mcp-server.ts` + `security.ts` `TOOL_GROUPS`/`VALID_GROUPS` in this pass (the four groups carry **30** registered tools: 8 + 8 + 7 + 7); **recounted** by the 2026-09-21 item-10d documentation review. **⟶ SUPERSEDED 2026-11-19 BY UNIT `edit-batch` (`RCA-8(c)`, annotate-beside): the union is STILL `31` = 8 `rag` + 9 `edit` (now all NINE REGISTERED — the eight plus the now-registered `edit.batch`) + 7 `gnosis` + 7 `gnosis-edit`; the REGISTERED count moved 30 → 31 and there is no IPC-only anchor left, so `no IPC-only` changes the CLASS of the 31st member, not the count. The grid below stays `31 × 4 = 124` (an earlier draft of this annotation said 32/128 — it did not add up: 8+9+7+7 = 31 — and the count anchor's annotation above records the correction). This cell is kept as the pre-registration count.** |
+| **The routing grid** | **31 × 4 = 124 cells**, 30 of them registered MCP tools and one IPC primitive | derived (a product, not a reading). **⟶ `31 × 4 = 124` UNMOVED at this head (unit `edit-batch`): the 31st entry is now registered too, so the cell reads "31 registered MCP tools".** |
 | **The renderer IPC routing tables** | **19 rows** covering the `bridge` surface | counted from `src/main/preload.ts` + `src/shared/types.ts` in this pass |
 | **The operator corpus** | **226 documents / 6 102 nodes / 9 266 edges** | **NOT this spec's reading** — it is the accepted O-0 artifact's corpus row as recorded by `docs/specs/design-extensions-review.md` §14.1 `C-1` and `docs/pending.md` §"PARKED DESTINATION — the engine track" (trigger (b)'s input). Quoted, **never re-derived**; `O0_OPERATOR_DOCUMENTS = 226` must not be re-seeded |
 | **The suite reading** | `221 files / 4 988 passed / 58 skipped / 0 failed` | a **reading at a named pass**, quoted from `docs/specs/design-extensions-review.md` §14.3 — not re-run here |

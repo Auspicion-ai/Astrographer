@@ -170,7 +170,14 @@ function blockAfter(src: string, fromText: string, at = 0): { at: number; body: 
 
 /** The `VALID_GROUPS` literal of a source file, as a set of names (the `S-4` two-place fence). */
 function validGroupsOf(src: string): string[] | null {
-  const at = src.indexOf('VALID_GROUPS')
+  // ⟨RE-STATED 2026-11-18 by unit `edit-batch` — a PARSER-HARDENING re-statement, not a value move.⟩
+  // The original `src.indexOf('VALID_GROUPS')` latched onto the FIRST MENTION of the token, and a
+  // lawful membership-row comment (`'VALID_GROUPS'/ToolGroup are unchanged`) put that mention in a
+  // COMMENT ahead of the declaration, so the parser then read the next bracket it found. It now
+  // looks for the DECLARATION (`const VALID_GROUPS =` / `VALID_GROUPS: ReadonlySet`) and falls back
+  // to the bare token only when no declaration shape is present. The claim is UNMOVED.
+  const decl = /(?:const|let|var)\s+VALID_GROUPS\b|VALID_GROUPS\s*:\s*ReadonlySet/.exec(src)
+  const at = decl !== null ? decl.index : src.indexOf('VALID_GROUPS')
   if (at < 0) return null
   const open = src.indexOf('[', at)
   if (open < 0) return null
@@ -239,6 +246,7 @@ const PRE_CHANGE_ALL_TOOLS: string[] = [
   'edit.set_edge',
   'edit.import_markdown',
   'edit.set_doc_meta',
+  'edit.batch',
   'code.template.get',
   'code.template.validate',
   'code.template.set',

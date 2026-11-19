@@ -792,6 +792,13 @@ document-flow). Sources: `ProvidentMcpServer.ALL_TOOLS` (`mcp-server.ts:1679`),
 
 #### A. Astrographer MCP tools (55 static + dynamic `module:<name>.<tool>`)
 
+> **⟨ANNOTATED 2026-11-19 BY UNIT `edit-batch` — this heading and the table below are a **2026-09-11
+> PARITY READING** (55 static / 56 rows), KEPT as such. The landed roster is **60** and this table
+> carries **no `edit.batch` row**; the four members added since are `rag.list_documents` (U-D5),
+> `edit.set_doc_meta` (U-D7), `provident.focus` (U-SHELL-9a) and `edit.batch`
+> (`docs/L1/unit-edit-batch.md`). This is a UI-PARITY INDEX, not a tool census — the census the gate
+> and the tests read is `ProvidentMcpServer.ALL_TOOLS`.⟩**
+
 | Tool | UI home (§4) | Verdict |
 | --- | --- | --- |
 | `provident.dispatch` | G6 dispatch/observe console | GAP (PARKED — plugin handling) |
@@ -897,7 +904,9 @@ so the census is exhaustive and the absence is intentional.
 **Summary.** Tools (56 rows = 55 static + the dynamic module form): **21
 EXISTS**, **9 PARTIAL**, **21 GAP**, **4 CARVE-OUT** (`module.install`/
 `module.update`/`module.list`/`provident.teardown`), **1 decide**
-(`module:<name>.<tool>`). Of the 21 GAPs: **15 PARKED — plugin handling**
+(`module:<name>.<tool>`). ⟨**2026-11-19 NOTE:** the `56 rows = 55 static` figures are a
+**2026-09-11 parity reading**, not a census of this head (**60** static; `edit.batch` and three
+earlier members came after). See the annotated heading above.⟩ Of the 21 GAPs: **15 PARKED — plugin handling**
 (the `provident.code.*` cluster + graph/dispatch/inspect), **2 PARKED — app
 integrations** (`provident.export`/`validate`), **3 PARKED — post-MVP
 knowledge-graph tools** (`rag.list_nodes`/`rag.get_edges`/`provident.get_node_state`),

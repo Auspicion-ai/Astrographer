@@ -18,7 +18,7 @@
 //
 // THE FRAMES ARE REAL: `SseFrameDouble.frame()` builds `event: …\ndata: …\n\n` and parses it with the shipped `parseSseFrame`
 // before handing `(event, data)` to the consumer — the same pair the shipped `createSseClient` produces
-// (`src/main/engine-rag-store.ts:804-809`). The double is INJECTED (`EngineRagStoreOptions.sse`, `:285`); no socket is opened.
+// (`src/main/engine-rag-store.ts:818-823`). The double is INJECTED (`EngineRagStoreOptions.sse`, `:299`); no socket is opened.
 //
 // LAYER (D-10 / RCA-12): ENVELOPE-CLASS. These rows read the consumer's own sink and census. They can NEVER say a frame was
 // sent by an engine, that the engine's route answered, or anything about the assembled app — the live arm is PARKED
@@ -84,8 +84,13 @@ async function rig(): Promise<Rig> {
   }
 }
 
-const CONTENT_TOKENS = ['update_document', 'update_fact', 'update_community_summary', 're_sync_embed'] as const
+/** §2.2 as AMENDED this pass (`F-13`): TWO tokens claim `content`; `update_document` and `re_sync_embed` are `structural` because
+ *  each moves graph shape (`../Gnosis/src/store/mod.rs:3604-3634`, `:5733-5830`). Every frame below carries an EMPTY `edgeIds`, so
+ *  the TOKEN limb is what decides — the FRAME limb is `c3(c)`'s. */
+const CONTENT_TOKENS = ['update_fact', 'update_community_summary'] as const
 const STRUCTURAL_TOKENS = [
+  'update_document',
+  're_sync_embed',
   'create_document',
   'delete_document',
   'publish_document',

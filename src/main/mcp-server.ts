@@ -23,11 +23,11 @@ import type {
 import { IPC_RAG_STORE_CHANGED, IPC_TEMPLATE_CHANGED, type TemplateChangedPayload, type RagDocHeadsPayload, type RagStoreChangedPayload, type RagStoreLoadStatus, type RagStoreListingEntry, type RagStoreListingPayload, type RagStoreManageRequest, type RagStoreManageResult, type RagStoreManageOp, type RagJournalPayload, type RagJournalOpResult } from '../shared/types.js'
 import { SecurityGate, type ToolGroup, moduleToolAllowed } from './security.js'
 import type { ModuleStore } from './module-store.js'
-import type { RagStore } from './rag-store.js'
+import type { RagStore, RagNode, BatchOp } from './rag-store.js'
 import { computeDocumentSubgraph } from './traversal.js'
 import { validateTemplate } from './template-shape.js'
 import type { TemplateStore, ContentWindowTemplate } from './template-store.js'
-import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge, setDocMeta } from './edit-ops.js'
+import { setContent, createNode, deleteNode, splitNode, mergeNode, setEdge, setDocMeta, handleEditBatch, deriveBatchBroadcast } from './edit-ops.js'
 import { importMarkdownCorpus } from './markdown-import.js'
 import { enumerateLinks, type BacklinkResult } from './backlinks.js'
 import { createLexicalIndex, createLexicalEmbedder, createRetrieval, qualifyStoreResult } from './retrieval.js'
@@ -1507,11 +1507,50 @@ export async function handleEditTool(
       if (result.ok) emit({ kind: 'structural', nodeIds: [nodeId], edgeIds: [], store: storeName })
       return result
     }
+    // unit `edit-batch` (docs/L1/unit-edit-batch.md §3.3/§3.4) — the batch write
+    // path. The tool is a THIN validator over the SHARED handler the UI's
+    // `IPC_EDIT_BATCH` path already calls (`handleEditBatch` → one
+    // `store.applyBatch`), so MCP and UI answer the SAME `BatchResult` — that is
+    // what `unit-p-ipc-edit-batch.md` §5.5's mapping table claims and what
+    // `docs/defects.md` `MCP-EDIT-BATCH-NOT-REGISTERED` measured missing.
+    case 'edit.batch': {
+      // Finding-5 discipline, identical to every sibling case — but here it is
+      // load-bearing for a second reason: the ops are passed RAW so `applyBatch`'s
+      // typed domain result (`rag applyBatch: … at index N`) reaches the agent
+      // VERBATIM rather than as an SDK schema error. (The `handleEditBatch`
+      // payload guard's own message — `edit-batch: ops must be an array` — is the
+      // DIRECT handler's fail-state: the advertised `z.array(z.unknown())` rejects
+      // a null/absent `ops` before this case runs, which is the ratio decidendi of
+      // the lax schema, §3.3.)
+      const ops = args.ops
+      // Capture the pre-batch node snapshot BEFORE the call — the exact capture
+      // the UI path performs (main.ts:1044-1050) — so both paths derive the SAME
+      // payload from `deriveBatchBroadcast` (A6 determinism, MCP/UI equivalence).
+      const preBatchNodes = new Map<string, RagNode>()
+      if (Array.isArray(ops)) {
+        for (const op of ops as BatchOp[]) {
+          if (op && op.op === 'putNode' && op.node && typeof op.node.id === 'string') {
+            const before = target.getNode(op.node.id)
+            if (before) preBatchNodes.set(op.node.id, before)
+          }
+        }
+      }
+      const result = await handleEditBatch(target, { ops: ops as BatchOp[] })
+      // A4/A2 — a successful batch (the empty batch included: it is a valid
+      // no-op, and the UI path emits for it too) broadcasts ONCE; a failed or
+      // malformed batch broadcasts ZERO times. The `edit.` prefix already wires
+      // the retrieval-index reconcile + the renderer broadcast (see
+      // registerTools), so `emit` is the single emission point.
+      if (result.ok) {
+        const derived = deriveBatchBroadcast((Array.isArray(ops) ? ops : []) as BatchOp[], result.results, preBatchNodes)
+        emit({ kind: derived.kind, nodeIds: derived.nodeIds, edgeIds: derived.edgeIds, store: storeName })
+      }
+      return result
+    }
     default:
       throw new Error(`unknown edit tool: ${name}`)
   }
 }
-
 /** U9-FIX — re-sync the CapabilityRouter from the persisted module store. The
  *  store is the source of truth (persisted, fail-disabled/hash-verified); the
  *  router is the LIVE capability surface. Each installed, non-disabled,
@@ -1857,6 +1896,12 @@ export class ProvidentMcpServer {
     'edit.import_markdown',
     // U-D7 §5.3 — the mutating tag-write tool (document-root tags only).
     'edit.set_doc_meta',
+    // unit `edit-batch` (docs/L1/unit-edit-batch.md §3.2) — the MCP name for the
+    // `applyBatch` transaction primitive the UI's `IPC_EDIT_BATCH` already uses
+    // (MCP/UI equivalence, `unit-p-ipc-edit-batch.md` §5.5, whose tool wiring was
+    // pinned FORWARD-LOOKING and is served here). `edit` group, default-off. The
+    // census moves 59 → 60.
+    'edit.batch',
     // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*` CRUD
     // tools, ALL in the `code` group (default-off), main-handled against the
     // template store.
@@ -2344,6 +2389,17 @@ export class ProvidentMcpServer {
       // per-store import root. The schema stays `files`-ONLY otherwise (ADV-1).
       { name: 'edit.import_markdown', description: 'Import a corpus of markdown files into the addressed RAG store as a ONE-WAY SNAPSHOT (parse → validate doc-flow → applyBatch as ONE atomic batch journal entry). Requires edit group. The corpus root is fixed server-side per store: the addressed store\'s configured corpus root; the default store\'s root is its configured corpus root (the project root when unconfigured) — it is NOT an agent-supplied argument.', inputSchema: { files: z.array(z.string().min(1)).min(1), store: z.string().optional() } },
       { name: 'edit.set_doc_meta', description: 'Set a document root\'s tags (a document-metadata write → journaled as a structural node-update, re-traversal). Only tags are mutable; documentPath is immutable in v1. The target must be a document root (a doc-head target). Requires edit group.', inputSchema: { nodeId: z.string(), tags: z.array(z.string()), store: z.string().optional() } },
+      // unit `edit-batch` (docs/L1/unit-edit-batch.md §3.3) — the batch write
+      // path. LAX SCHEMA, STRICT HANDLER (the U-MS2 §5.2 discipline and the
+      // `provident.code.loadBatch` precedent above, whose `ops` is the same
+      // `z.array(z.unknown())`): `applyBatch`'s typed domain results
+      // (`rag applyBatch: <reason> at index N`) must reach the agent VERBATIM —
+      // a per-op zod union would answer the SDK's schema error instead and break
+      // §5.5's "same batch, same result" equivalence with the UI path.
+      // `ops` is REQUIRED and carries NO `.min(1)`: an empty batch is a valid
+      // no-op (`rag-store.ts:1379`, unit-P §5.6.6). The trailing `store` is the
+      // house field every rag/edit schema carries (U-MS2 §5.2), not new surface.
+      { name: 'edit.batch', description: 'Apply a batch of edit ops ATOMICALLY through the store\'s applyBatch transaction primitive: all or nothing, ONE batch journal entry, ONE persist, a mid-batch failure rolls back. Each op is a closed BatchOp member (putNode/removeNode/putEdge/removeEdge/setProps/setSubtree/setType) and a malformed or failing op returns { ok: false, error, failedIndex }. Requires edit group.', inputSchema: { ops: z.array(z.unknown()), store: z.string().optional() } },
       // Unit I (docs/specs/unit-i-template.md §5.3) — the `code.template.*`
       // CRUD tools, ALL in the `code` group (default-off), main-handled against
       // the template store. `get`/`validate` are read-only; `set`/`create`/

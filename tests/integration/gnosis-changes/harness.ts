@@ -3,14 +3,14 @@
 // `tests/**/*.test.ts` only, so this module is IMPORTED, never run as a suite of its own; the UNIT rows import it too, and
 // that is deliberate — one double, one frame builder, one comment-stripper, so the two suites cannot drift apart.
 //
-// THE DOUBLE IS THE `EngineRagStoreOptions.sse` SEAM AND NOTHING ELSE (`src/main/engine-rag-store.ts:285`): `SseClient` is
+// THE DOUBLE IS THE `EngineRagStoreOptions.sse` SEAM AND NOTHING ELSE (`src/main/engine-rag-store.ts:299`): `SseClient` is
 // the fork's ONE injectable stream interface (`:194-203`), the consumer takes it through `opts.sse` (contract §2), and NO row
 // in either suite opens a socket, spawns an engine, or reads a port. **There is no network in this file and none in its
 // callers** — the live arm is PARKED (`docs/L2/gnosis-changes/engine-changes.md` §6) and no row here claims an engine event.
 //
 // FRAMES GO THROUGH THE REAL PARSER: `frame()`/`raw()` build `event: …\ndata: …\n\n` and hand it to `parseSseFrame`
-// (`src/main/engine-rag-store.ts:705-732`) before calling the consumer's `onEvent`, so a row that drives a frame drives the
-// same `(event, data)` pair the shipped `createSseClient` produces (`:804-809`) rather than a shape invented here.
+// (`src/main/engine-rag-store.ts:719-746`) before calling the consumer's `onEvent`, so a row that drives a frame drives the
+// same `(event, data)` pair the shipped `createSseClient` produces (`:818-823`) rather than a shape invented here.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
