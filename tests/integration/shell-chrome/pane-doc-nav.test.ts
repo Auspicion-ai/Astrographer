@@ -13,7 +13,8 @@
 //      discriminator is the `store` member and NOTHING ELSE.
 //   §3 the re-read: ONE `bridge.rag.docHeads()` call committed to `lastDocHeads` under a GENERATION STAMP (`ASM-B6-3`: a
 //      superseded answer is DROPPED, never committed and never painted), the re-read's GATE being the paint's own census
-//      (`not-a-pane`/`operator-scope`/`not-enabled`).
+//      (`not-a-pane`/`not-enabled`, and — ⟨RE-STATED BY UNIT `B-9` §3⟩ — the operator surface's OWN paint word for an
+//      `operator`-scope pane, whose `operator-scope` refusal `B-9` deleted).
 //   §4 the census moves by exactly ONE (`REPLUMBED_PANE_IDS` gains `doc-nav`), ONE registration per id whose DECLARATION picks
 //      `subscribeChange` for a change-interested id and `subscribe` for every other id.
 //   §6 the rows `D1`, `D2`, `D3`, `D5`, `D6`, `D7`, `D9`, `D10`, each with its subject and the mutation that would red it.
@@ -2160,16 +2161,23 @@ describe('pane-doc-nav — the FIRST pane that hears BOTH sources: ONE `doc-head
     ).toEqual([])
   })
 
-  it('D9 — a DISABLED pane is not re-read: a disabled `doc-nav`, `settings`\' operator scope and an unknown id each cost 0 `docHeads` and the paint answers its own declared word, while ENABLING it makes the same descriptor re-read exactly once', async () => {
-    // §6 `D9` (§3: "The re-read's GATE is the paint's own census" — `not-a-pane`/`operator-scope`/`not-enabled`; the words
-    // `not-mounted`/`no-runtime` are deliberately NOT gated on, being transient boot states).
+  it('D9 — a DISABLED pane is not re-read: a disabled `doc-nav`, `settings`\' operator scope and an unknown id each cost 0 `docHeads` and the paint answers its own declared word — the operator pane\'s being the operator surface\'s own paint word — while ENABLING it makes the same descriptor re-read exactly once', async () => {
+    // §6 `D9` (§3: "The re-read's GATE is the paint's own census" — `not-a-pane`/`not-enabled`; the words
+    // `not-mounted`/`no-runtime` are deliberately NOT gated on, being transient boot states). ⟨RE-STATED BY UNIT `B-9`
+    // (`docs/L1/unit-b-9-pane-operator-settings.md` §3, §6 `O4`/`S1`; §4 `F-9`) — THE OPERATOR ARM'S WORD CHANGED, ITS TEETH DID
+    // NOT: this arm used to require `settings` to answer `operator-scope`, because `paintPane`'s step 2 REFUSED every `operator`-scope
+    // registration. §3 replaced that refusal with a ROUTE to the operator surface's own retained-graph paint (`paintOperatorPane`), so
+    // on this harness — which HAS an operator mount and a mounted `settings` pane — the answer is the paint's own word: `unchanged`
+    // (the re-authored section is shape-equal to the retained one) or `painted`. The row's teeth are untouched and still read here:
+    // ZERO `rag.docHeads` calls and ZERO `applyContentReconcile`.⟩
     // LAYER: envelope-class — the re-read census, the paint's own declared verdicts and call counts.
     // NON-VACUITY: the CONTROL on a second seed is the SAME descriptor on the same state with the pane ENABLED, and it must re-read
     // exactly once — so the three zeros above cannot be satisfied by a host that never re-reads anything.
     // MUTATION THAT WOULD RED IT: the naive arm (a re-read BEFORE the gate, or a gate spelled as a lookup that ignores
     // `isEnabled`) reds the disabled arm; gating on `not-mounted`/`no-runtime` instead of the three facts the census answers reds the
-    // declared-word arms; an arm that re-reads for an `operator`-scope id reds the `settings` arm; a host that never re-reads reds
-    // the control.
+    // declared-word arms; an arm that re-reads for an `operator`-scope id reds the `settings` arm (⟨`B-9` §3⟩ its lawful answer is the
+    // operator paint's own word, and the ZERO `rag.docHeads` reading is what still forbids a re-read there); a host that never
+    // re-reads reds the control.
     const problems: string[] = []
 
     // ---- (a) THE DISABLED PANE, THE OPERATOR SCOPE AND THE UNKNOWN ID -------------------------------
@@ -2189,12 +2197,18 @@ describe('pane-doc-nav — the FIRST pane that hears BOTH sources: ONE `doc-head
         if (gate.registry.isEnabled(DOC_NAV) !== false) {
           problems.push('limb D9: `registry.disable(\'doc-nav\')` did not take — the disabled arm has no subject')
         }
-        const arms: Array<[string, string, string]> = [
-          [DOC_NAV, 'not-enabled', 'a DISABLED `doc-nav`'],
-          [SETTINGS, 'operator-scope', '`settings` (the operator scope, `B-9`\'s surface)'],
-          [UNKNOWN_PANE, 'not-a-pane', `the unknown id \`${UNKNOWN_PANE}\``],
+        // ⟨RE-STATED BY UNIT `B-9` §3⟩ Each arm now names the SET of words it accepts, so the operator arm can demand the paint's own
+        // vocabulary without weakening any other arm: the disabled-`doc-nav` arm and the unknown-id arm still accept EXACTLY ONE word.
+        const arms: Array<[string, readonly string[], string]> = [
+          [DOC_NAV, ['not-enabled'], 'a DISABLED `doc-nav`'],
+          [
+            SETTINGS,
+            ['unchanged', 'painted'],
+            '`settings` (the operator scope — ⟨UNIT `B-9` §3⟩ its paint is the operator surface\'s OWN retained-graph paint, so the word is the paint\'s, not the deleted `operator-scope` refusal)',
+          ],
+          [UNKNOWN_PANE, ['not-a-pane'], `the unknown id \`${UNKNOWN_PANE}\``],
         ]
-        for (const [paneId, word, label] of arms) {
+        for (const [paneId, words, label] of arms) {
           gate.setDocHeads(headsTwo())
           gate.resetCounters()
           const mark = gate.verdicts().length
@@ -2224,10 +2238,10 @@ describe('pane-doc-nav — the FIRST pane that hears BOTH sources: ONE `doc-head
               `limb D9: ${label} produced ${verdicts.length} verdict(s) ${shown(verdicts)}, not exactly ONE — the paint still ANSWERS ` +
                 `(its declared word is the reading), it just does not re-read`,
             )
-          } else if (verdicts[0]['reason'] !== word) {
+          } else if (!words.includes(String(verdicts[0]['reason']))) {
             problems.push(
-              `limb D9: ${label} answered \`reason: ${shown(verdicts[0]['reason'])}\`, not the declared word \`'${word}'\` — the ` +
-                `paint's closed vocabulary distinguishes one wiring fault from another`,
+              `limb D9: ${label} answered \`reason: ${shown(verdicts[0]['reason'])}\`, not the declared word ` +
+                `\`'${shown([...words])}'\` — the paint's closed vocabulary distinguishes one wiring fault from another`,
             )
           }
         }
@@ -2260,9 +2274,11 @@ describe('pane-doc-nav — the FIRST pane that hears BOTH sources: ONE `doc-head
 
     expect(
       problems,
-      `limb D9 — a disabled pane is not re-read (§6 D9; §3's gate = the paint's own census). ${problems.length} problem(s). A ` +
+      `limb D9 — a disabled pane is not re-read (§6 D9; §3's gate = the paint's own census; ⟨RE-STATED BY UNIT \`B-9\` §3⟩ the ` +
+        `operator arm now names the paint's words). ${problems.length} problem(s). A ` +
         `DISABLED \`${DOC_NAV}\`, the operator-scope \`${SETTINGS}\` and the unknown \`${UNKNOWN_PANE}\` must each cost 0 ` +
-        `\`rag.docHeads\` calls and answer their own declared word (\`not-enabled\` / \`operator-scope\` / \`not-a-pane\`), while the ` +
+        `\`rag.docHeads\` calls and answer their own declared word (\`not-enabled\` / the operator surface's own ` +
+        `\`unchanged\`|\`painted\` / \`not-a-pane\`), while the ` +
         `SAME descriptor with the pane ENABLED re-reads exactly once. envelope-class — the REAL host over the layout-less DOM shim; no ` +
         `rendered box, no pointer (G8-only)`,
     ).toEqual([])

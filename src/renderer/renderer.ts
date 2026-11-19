@@ -1699,18 +1699,17 @@ async function main(): Promise<void> {
   // through THIS instance: the host subscribes `REPLUMBED_PANE_IDS` to it at boot (its body is ONE `updatePane`), the gnosis
   // family fires into it below, and the record arm's `deliver()` rides the crossing's ONE subscription further down.
   const paneEvents = createPaneEvents()
-  // ⟨`B-3` `§4` (iii) — THE DIRECT ARM'S SITE, and the ONE pre-migration branch this unit leaves standing.⟩ A component that learnt
-  // something names the pane it is about (`GnosisOnChanged`), and the fire is what makes that pane's own paint run — NOT
-  // `host.refresh()`, whose body re-assembled the whole graph (0/0/0 is `INV-E`). **The fallback is scoped by the pane's OWN
-  // verdict, not by a hard-coded id:** a fire nothing stands behind (`fired === false`) is a pane this unit did NOT re-plumb, and
-  // when that pane is `operator`-scope its lawful paint is `B-9`'s re-mount — so the pre-migration route is kept, marked, and
-  // DELETED by that unit when its paint lands. An app-graph pane with no paint is B-8's or B-5/B-6/B-7's and gets NOTHING here: a
-  // silent `refresh()` for it would be exactly the re-assembly `INV-E` forbids.
+  // ⟨`B-3` `§4` (iii) — THE DIRECT ARM'S SITE, and (as of unit `B-9`) the ONLY thing it does.⟩ A component that learnt something
+  // names the pane it is about (`GnosisOnChanged` / `GnosisCrudOnChanged`), and the fire is what makes that pane's OWN paint run —
+  // NOT `host.refresh()`, whose body re-assembled the whole graph (0/0/0 is `INV-E`). Every pane family is on the channel now: the
+  // app-graph panes via `updatePane`'s content reconcile, and the two `operator`-scope panes (`settings`, `gnosis-status`) via
+  // `paintPane`'s operator arm, which re-authors ONE section of the RETAINED operator graph and re-renders it through that
+  // surface's own adapter. **The pre-migration `⟨B-9⟩` fallback is DELETED** (`docs/L1/unit-b-9-pane-operator-settings.md` §4 SITE 1:
+  // it fired `host.refresh()` for an `operator`-scope pane whose fire had not landed, which is exactly the last re-assembly in the
+  // app and exactly what `INV-E` counts at zero). With it gone there is no branch to describe: a fire that reaches no pane stays a
+  // no-op, and `updatePane`'s own closed vocabulary is the only thing that speaks about a pane's absence.
   const firePaneUpdate = (paneId: string): void => {
-    const report = paneEvents.fire(paneId)
-    if (report.fired) return
-    // ⟨B-9⟩ DELETE THIS BRANCH when the operator panes' paint lands: the operator mount is THAT unit's lawful re-mount.
-    if (registry.get(paneId)?.scope === 'operator' && host) void host.refresh()
+    paneEvents.fire(paneId)
   }
   const pvBridge = bridge as never as {
     gnosis: {

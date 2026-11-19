@@ -2053,14 +2053,116 @@ async function gnosisEnablePanes(h, paneIds) {
   return { open: open.path, flips, frames }
 }
 
-/** Count the gnosis bridge invocations the RENDERER issues, plus the CDP click
- *  targets — [DIAG] attribution only (a real gesture's delivery proof), never a
- *  row's PASS oracle by itself. */
+/** ⟨Unit `B-9` §11 defect (1) — **THE DELIVERY-POSITIVE ATTRIBUTION PROBE, RE-IMPLEMENTED ON A
+ *  MECHANISM THAT EXISTS.**⟩ This probe counts the RENDERER's own invocations of a NAMED producer
+ *  function — the positive a row needs when its engine-gated observables are INVARIANT
+ *  (`UF-GNOSIS-4`: a lawful `#gnosis-status-refresh` click re-reads an invariant `HealthReport`, so
+ *  the pane's node ids HOLD, and an oracle resting on `!refreshReassembled` would pass on a boot
+ *  where NOTHING happened).
+ *
+ *  **THE ORIGINAL MECHANISM IS MEASURED IMPOSSIBLE HERE, AND THE MEASUREMENT IS THE REASON
+ *  (`D-43`).** The first form wrapped `window.provident.sidebar[fnName]`. On THIS app that wrapper is
+ *  never installed: `src/main/preload.ts` exposes the bridge through
+ *  `contextBridge.exposeInMainWorld('provident', bridge)`, which makes `window.provident` a
+ *  NON-WRITABLE / NON-CONFIGURABLE global (`Object.getOwnPropertyDescriptor(window,'provident')` →
+ *  `{ writable:false, configurable:false }`) with a DEEP-FROZEN exposed graph
+ *  (`Object.isFrozen(window.provident)` `true`, `…sidebar` and `…gnosis` likewise). A sloppy-mode
+ *  assignment therefore SILENTLY NO-OPS, and the old probe's unconditional `return true` claimed an arm
+ *  that was never made — it would have printed `0` for a click that worked. Measured on this host
+ *  (Electron `44.4.3`, `contextIsolation:true`) in a scratch window: `patchDirect=false`, and
+ *  `window.provident = <prototype-chained wrapper>` refused while the wrapper still forwarded.
+ *
+ *  **What it does instead:** V8 PRECISE COVERAGE (`Profiler.startPreciseCoverage` with `callCount`)
+ *  over the page's own scripts. It reads EXECUTION, so it needs no mutable seam: it patches nothing,
+ *  pauses nothing, re-renders nothing, and it is ENGINE-INDEPENDENT by construction — `refreshStatus`
+ *  is entered on BOTH of its settle arms (the success arm AND the `EngineUnavailable` rejection), so a
+ *  captured `0` means the click never reached its producer, which is exactly the fact the deleted
+ *  re-assembly used to prove incidentally.
+ *
+ *  `arm` starts the collection and takes the ARM's own reading, which (because the read RESETS the counters — see
+ *  `gnosisReadBridgeProbe`) zeroes the window; the owner's later read is therefore the DELTA over the window the click owns, and a
+ *  life-time total (which would count the boot's own `refreshStatus`) can never appear. The arm's figure is kept as its RECORD and is
+ *  printed, never subtracted. `read` answers the per-function invocation count plus the producer's own SOURCE LINE, read VERBATIM off
+ *  the served bundle on disk (the same build-identity route the O-0 check uses: `dist/renderer/renderer.js` is the served file).
+ *  READ-ONLY: nothing here is promoted to a verdict; the block that owns the row
+ *  reads these values. */
 async function gnosisArmBridgeProbe(h, fnName) {
-  return h.cdp.evaluate(`(()=>{window.__gnosisCalls=[];const s=window.provident&&window.provident.sidebar;if(s&&typeof s[${JSON.stringify(fnName)}]==='function'&&!s.__gnosisArmed){const orig=s[${JSON.stringify(fnName)}];s[${JSON.stringify(fnName)}]=function(){window.__gnosisCalls.push(JSON.stringify([].slice.call(arguments)).slice(0,300));return orig.apply(this,arguments)};s.__gnosisArmed=true}return true})()`)
+  const fn = typeof fnName === 'string' && fnName !== '' ? fnName : 'refreshStatus'
+  const out = { mechanism: 'v8-precise-coverage', fn, armed: false, baseline: null, baselineScript: null, why: null }
+  try {
+    await h.cdp.send('Profiler.enable')
+    await h.cdp.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
+    out.armed = true
+  } catch (e) {
+    out.why = `Profiler.startPreciseCoverage refused: ${String(e && e.message ? e.message : e)}`
+    return out
+  }
+  const base = await gnosisReadBridgeProbe(h, fn).catch((e) => ({ error: String(e && e.message ? e.message : e) }))
+  out.baseline = base && typeof base.count === 'number' ? base.count : null
+  out.baselineScript = base && base.script ? base.script : null
+  if (base && base.error) out.why = base.error
+  return out
 }
-async function gnosisReadBridgeProbe(h) {
-  return h.cdp.evaluate(`JSON.stringify(window.__gnosisCalls||[])`)
+
+/** Read the probe mid-window. ⟨CORRECTED (`B-9`'s ADJ 6): **`Profiler.takePreciseCoverage` is DESTRUCTIVE — it RESETS the
+ *  execution counters** and answers the counts accumulated since the previous read (`D-43`'s discipline: fix the reading on the
+ *  measurement).⟩ So the ARM's own read is the floor and the POST-window read IS the delta: a caller must NOT subtract the arm's
+ *  baseline again (that double subtraction reports a delivered call as `0`). The baseline is kept as the arm's RECORD only. */
+async function gnosisReadBridgeProbe(h, fnName) {
+  const fn = typeof fnName === 'string' && fnName !== '' ? fnName : 'refreshStatus'
+  const cov = await h.cdp.send('Profiler.takePreciseCoverage')
+  const scripts = cov && Array.isArray(cov.result) ? cov.result : []
+  let best = null
+  for (const s of scripts) {
+    for (const f of (s && s.functions) || []) {
+      if (f.functionName !== fn) continue
+      const range = f.ranges && f.ranges[0] ? f.ranges[0] : null
+      const hit = { script: String((s && s.url) || ''), count: range ? range.count : null, startOffset: range ? range.startOffset : null, endOffset: range ? range.endOffset : null }
+      // The SAME name may appear in more than one script (the page's bundle and a re-imported copy):
+      // keep the one that actually RAN, and among those the highest count, so the reading is never
+      // the dead copy's zero.
+      if (hit.count != null && hit.script !== '' && (best === null || hit.count > best.count)) best = hit
+    }
+  }
+  if (best === null) return { fn, count: 0, matched: false, scriptsScanned: scripts.length, script: null, startOffset: null, endOffset: null, entryLine: null, entryText: null, producerLine: null, producerText: null, sourceWhy: null }
+  const src = gnosisProducerSource(best.script, best.startOffset)
+  return { fn, matched: true, scriptsScanned: scripts.length, ...best, entryLine: src.entryLine, entryText: src.entryText, producerLine: src.producerLine, producerText: src.producerText, sourceWhy: src.why }
+}
+
+/** The producer's own SOURCE, read VERBATIM off the served bundle on disk: the function's entry line
+ *  (from the coverage range's start offset) and the first `bridge.<x>.<y>(…)` call inside its opening
+ *  lines — the call the probe's count is about, printable as evidence rather than described. */
+function gnosisProducerSource(scriptUrl, startOffset) {
+  const out = { entryLine: null, entryText: null, producerLine: null, producerText: null, why: null }
+  try {
+    if (typeof scriptUrl !== 'string' || !/^file:\/\//.test(scriptUrl) || typeof startOffset !== 'number') {
+      out.why = `the coverage entry names no file:// bundle (script=${JSON.stringify(scriptUrl)}, startOffset=${JSON.stringify(startOffset)})`
+      return out
+    }
+    const file = decodeURIComponent(scriptUrl.replace(/^file:\/\//, ''))
+    const text = readFileSync(file, 'utf8')
+    let line = 1
+    for (let i = 0; i < startOffset && i < text.length; i += 1) if (text.charCodeAt(i) === 10) line += 1
+    const lines = text.split('\n')
+    out.entryLine = line
+    out.entryText = String(lines[line - 1] || '').trim().slice(0, 160)
+    for (let i = line - 1; i < Math.min(lines.length, line + 8); i += 1) {
+      const src = String(lines[i] || '')
+      if (/bridge(?:\.[A-Za-z0-9_$]+)+\(/.test(src)) { out.producerLine = i + 1; out.producerText = src.trim().slice(0, 200); break }
+    }
+  } catch (e) {
+    out.why = String(e && e.message ? e.message : e)
+  }
+  return out
+}
+
+/** Withdraw the probe: stop + disable the profiler so the collection cannot outlive the row (a
+ *  coverage collection left running would tax every block after this one). Never throws. */
+async function gnosisDisarmBridgeProbe(h) {
+  const out = { stopped: false, disabled: false, why: null }
+  try { await h.cdp.send('Profiler.stopPreciseCoverage'); out.stopped = true } catch (e) { out.why = String(e && e.message ? e.message : e) }
+  try { await h.cdp.send('Profiler.disable'); out.disabled = true } catch (e) { out.why = out.why || String(e && e.message ? e.message : e) }
+  return out
 }
 
 /** The app-graph RE-ASSEMBLY signature (the runtime node ids of the assembly
@@ -2356,6 +2458,133 @@ async function ufB7PaneFrameCensus(h, opts = {}) {
     }
   })
   return census
+}
+
+/** ⟨Unit `B-9` §8 (`G8`) — **THE SETTINGS PANE'S OWN LIVE LIMB, MARKED THEN READ.**⟩ The same
+ *  DOM/CDP idiom as the `B-3`/`B-5`/`B-6`/`B-7` frame censuses (ONE `cdp.evaluate`, a per-run own
+ *  property, the mark-then-read token rule), extended to the ONE surface none of them reaches: the
+ *  OPERATOR mount. `settings` is an `operator`-scope pane, so its section is NOT a
+ *  `.pane-frame[data-pane-id]` — it is the section the RETAINED operator graph authors under
+ *  `operator-pane-settings` (`buildOperatorEnvelope`'s id rule) inside the STATIC `#operator-panes`
+ *  mount (`src/renderer/index.html`), which no paint ever replaces.
+ *
+ *  The five limbs the contract names (§8), all read at ONE instant per call:
+ *    (i)   the ASSEMBLY — `#wiki-root`'s `data-node-id` and the `#wiki-root` COUNT — plus the
+ *          `#operator-panes` mount's own outer element, MARKED, so "the same node" is a reading and
+ *          not an assumption (a re-assembly replaces the mount's CHILDREN, never the mount);
+ *    (ii)  every live `.pane-frame[data-pane-id]`'s per-run mark (the `B-3`/`B-5`/`B-6`/`B-7` limb);
+ *    (iii) the settings SECTION — `#operator-pane-settings`'s `data-node-id` AND its carriers: `id`,
+ *          the TAG SEQUENCE of its FIRST-LEVEL children, those children's AUTHORED ids, its full text,
+ *          and that text with the `topK:` line normalized out — so the ONE member limb (v) must MOVE
+ *          is never smuggled into a carrier that limb (iii) requires HELD. ⟨CORRECTED BY MEASUREMENT
+ *          (the first live reading, `D-43`'s discipline): the engine AUTO-MINTS `props.id` for every
+ *          node that never authored one (`node.js::ensureAutoIds` → `preempt-node-<nodeId>`), so the
+ *          section's `h2` carries `preempt-node-node-1162` → `preempt-node-node-1194` across a lawful
+ *          re-mint. That id is NODE IDENTITY, not a carrier — `src/renderer/runtime.ts`'s own authored-
+ *          id filter strips the `/^(preempt-node-|node-)/` namespace for exactly this reason — so the
+ *          graded carrier set is the TAGS plus the AUTHORED ids, and the full `tag#id` sequence is
+ *          printed UNGRADED beside it as the re-mint's own evidence.⟩
+ *    (iv)  the count of `#operator-pane-settings` frames;
+ *    (v)   the pane's own CONTENT — `#operator-topk` and `#operator-enabled-panes`'s texts.
+ *  ⟨ADJ 6 OF THE `B-9` ADVERSARIAL CLOSE-OUT — **TWO MORE READINGS, because limbs (i)–(v) do not forbid a
+ *  WHOLE-SURFACE RE-MOUNT:** nothing above reads a SIBLING operator section, so `mountOperator()` could
+ *  rebuild every section and every limb would still hold (the mount element survives, the settings
+ *  section legitimately re-mints, the frames survive).⟩
+ *    (vi)  the SURFACE'S OWN SECTION CENSUS — every operator section (`operator-pane-<id>`) under the
+ *          mount, as `{id, nodeId}`, in document order. ⟨CORRECTED ON ITS FIRST LIVE READING (`D-43`):
+ *          the first form censused `document.getElementById('operator-panes')`'s CHILDREN — but that
+ *          resolves the STATIC `<div id="operator-panes"></div>` in `src/renderer/index.html`, whose
+ *          only child is the provident-AUTHORED `div#operator-panes` root, so the list read ONE
+ *          wrapper address however many sections existed and a whole-surface re-mount could never move
+ *          it. The sections are the authored root's children (the mount carries TWO `operator-panes`
+ *          ids; the INNERMOST one is the author's), and the term therefore reads THEIR node ids: a
+ *          whole-surface re-mount re-mints every section's node id, a lawful per-pane paint re-mints
+ *          exactly the painted one.⟩
+ *    (vii) a SIBLING operator section's `data-node-id` — `#operator-pane-gnosis-status` by default,
+ *          the section beside the settings one — HELD across the write, with its own child census.
+ *          Reported as `siblingSection` (absent ⇒ `null`, and the block that owns the row says so).
+ *  `mark: true` stamps every live frame, the operator mount, the settings section AND the sibling section
+ *  with THIS instrument's per-run token (`__b9Mark`, so a `B-5`/`B-6`/`B-7` mark on the same node never
+ *  aliases); `mark: false` re-reads with the token handed back and leaves the DOM alone — a mark can
+ *  only be absent from a node that was REPLACED. READ-ONLY: no app state, no envelope, no handler, no
+ *  timer, no bridge read. Nothing is promoted to a verdict here; the block that owns the row reads
+ *  these values. */
+async function ufOperatorSettingsCensus(h, opts = {}) {
+  const mark = opts.mark === true
+  const siblingPaneId = typeof opts.siblingPaneId === 'string' && opts.siblingPaneId !== '' ? opts.siblingPaneId : 'gnosis-status'
+  const token = typeof opts.reuseToken === 'string' && opts.reuseToken !== ''
+    ? opts.reuseToken
+    : 'b9-settings-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  const expr = `(() => {
+    const TOKEN = ${JSON.stringify(token)}
+    const PROP = '__b9Mark'
+    const SIBLING = ${JSON.stringify('operator-pane-' + siblingPaneId)}
+    const norm = (s) => String(s || '').replace(/\\s+/g, ' ').trim()
+    const tagOf = (el) => String((el && el.tagName) || '').toLowerCase()
+    const idOf = (el) => (el ? el.getAttribute('id') : null)
+    // THE AUTHORED-ID FILTER (the engine's own rule, restated): an auto-minted preempt/node id is NODE
+    // IDENTITY, never a carrier, so a census built on it would read a lawful re-mint as a move.
+    const authoredId = (el) => { const i = idOf(el); return typeof i === 'string' && i !== '' && !/^(preempt-node-|node-)/.test(i) ? i : null }
+    const addressOf = (el) => tagOf(el) + (authoredId(el) ? '#' + authoredId(el) : '')
+    const frames = [].slice.call(document.querySelectorAll('.pane-frame[data-pane-id]'))
+    const mountEl = document.getElementById('operator-panes')
+    // THE MOUNT CARRIES TWO operator-panes IDS: the STATIC div#operator-panes in
+    // src/renderer/index.html (the element limb (i) marks — no paint replaces it) and the provident-
+    // AUTHORED root the translation mints inside it. The SECTIONS are children of the INNERMOST one, so
+    // the section census reads THERE (the first form read the static container and could only ever see
+    // the one wrapper address — measured on the row's first live run).
+    const mountEls = [].slice.call(document.querySelectorAll('#operator-panes'))
+    const sectionHost = mountEls.length > 0 ? mountEls[mountEls.length - 1] : null
+    const sectionEls = sectionHost == null ? [] : [].slice.call(sectionHost.children)
+    const sectionEl = document.getElementById('operator-pane-settings')
+    const siblingEl = document.getElementById(SIBLING)
+    const marked = frames.slice()
+    for (const el of [mountEl, sectionEl, siblingEl]) if (el != null && marked.indexOf(el) < 0) marked.push(el)
+    if (${mark ? 'true' : 'false'}) { for (const el of marked) { try { el[PROP] = TOKEN } catch (e) { /* a frozen node cannot be marked */ } } }
+    const carries = (el) => { try { return el != null && el[PROP] === TOKEN } catch (e) { return false } }
+    const textOf = (el) => (el ? norm(el.textContent) : null)
+    const sectionShape = (el) => (el == null ? null : {
+      marked: carries(el),
+      nodeId: el.getAttribute('data-node-id'),
+      id: idOf(el),
+      tag: tagOf(el),
+      children: [].slice.call(el.children).map(addressOf),
+      childTags: [].slice.call(el.children).map((c) => tagOf(c)),
+      childAuthoredIds: [].slice.call(el.children).map((c) => authoredId(c)).filter((i) => typeof i === 'string'),
+      text: textOf(el),
+    })
+    const rootEl = document.querySelector('#wiki-root')
+    const sectionText = textOf(sectionEl)
+    return JSON.stringify({
+      token: TOKEN,
+      siblingSelector: SIBLING,
+      root: rootEl ? rootEl.getAttribute('data-node-id') : null,
+      roots: document.querySelectorAll('#wiki-root').length,
+      operatorMount: mountEl == null ? null : {
+        marked: carries(mountEl),
+        tag: tagOf(mountEl),
+        id: idOf(mountEl),
+        childCount: mountEl.children.length,
+      },
+      // (vi) THE SURFACE'S OWN SECTION CENSUS — every operator section under the authored mount root,
+      // in document order, by AUTHORED id and by the node id a re-mount re-mints.
+      sections: sectionEls.map((el) => ({ id: idOf(el), nodeId: el.getAttribute('data-node-id'), tag: tagOf(el) })),
+      sectionHostTag: sectionHost == null ? null : tagOf(sectionHost),
+      settingsSectionCount: document.querySelectorAll('#operator-pane-settings').length,
+      settingsSection: sectionEl == null ? null : {
+        ...sectionShape(sectionEl),
+        textWithoutTopK: sectionText == null ? null : sectionText.replace(/topK:\\s*\\d+/g, 'topK:<n>'),
+      },
+      // (vii) THE SIBLING SECTION — the operator section beside the settings one. It is an ABSENT reading
+      // (a JSON null) when the pane is disabled or the section is missing: the block that owns the row
+      // says so in its detail instead of pretending to grade a section that is not there.
+      siblingSection: sectionShape(siblingEl),
+      topk: textOf(document.getElementById('operator-topk')),
+      enabledPanes: textOf(document.getElementById('operator-enabled-panes')),
+      frames: frames.map((el) => ({ pid: el.getAttribute('data-pane-id'), nodeId: el.getAttribute('data-node-id'), marked: carries(el) })),
+    })
+  })()`
+  return JSON.parse(await h.cdp.evaluate(expr))
 }
 
 /** The [DIAG] dispatch probe: hand the SAME handler the DOM click would reach a
@@ -8004,8 +8233,89 @@ const BLOCKS = {
     const modeOk = painted(r.mode) && /representationMode:\s*(html|markdown)/.test(r.mode.text)
     const docOk = painted(r.doc)
     const storesOk = painted(r.stores) && /store/i.test(r.stores.text)
+    // ⟨Unit `B-9` §8 (`G8`) — **THE SETTINGS PANE'S LIVE LIMB: a settings PUSH repaints the
+    // `settings` pane ALONE, and this is the assembled-app reading of it.**⟩ The pane's source is the
+    // OPERATOR-SETTINGS PUSH (`onOperatorSettingsChanged`: commit → FIRE `settings` → the two declared
+    // predicates decide whether anything else is re-derived: `settingsMovesOperatorCensus` for the
+    // operator SURFACE, `settingsMovesAppGraph` for the app graph). `topK` is chosen on purpose: it is
+    // NOT one of the TWO app-graph members (`representationMode`/`layout` — the CONSEQUENCE's census,
+    // `B-9`'s ADJ 1) and NOT part of the operator scope's section census (`enabledOperatorPanes` +
+    // the `panesInitialized` gate), so this write MUST re-derive NOTHING — which is exactly what limbs
+    // (i)/(ii) and the two ADJ 6 terms below would see if the deleted `⟨B-9⟩` fallback (`host.refresh()`
+    // → `loadAppGraph` + `mountOperator`), the unconditional `requestRebuild('operator')`, or a
+    // whole-operator-surface re-mount had come back. The write goes through the app's OWN seam
+    // (`window.provident.sidebar.operatorSet`, the precedent at `diag2`) — main persists, the
+    // `operator-settings-changed` broadcast returns, the host commits and fires, and the pane's own
+    // section paints. NOT a click on `#operator-editing-mode-toggle` / `#operator-pane-visibility-<id>`:
+    // both legitimately move a census (the app graph, or the operator scope's section set), so either
+    // would confound the arms this row is built on.
+    const s0 = await ufOperatorSettingsCensus(h, { mark: true })
+    const parsedTopK = (() => { const m = /topK:\s*(\d+)/.exec(String(s0.topk == null ? '' : s0.topk)); return m ? Number(m[1]) : null })()
+    const nextTopK = parsedTopK == null ? 8 : (parsedTopK >= 12 ? parsedTopK - 3 : parsedTopK + 3)
+    const seam = await h.cdp.evaluate(`(()=>{const s=window.provident&&window.provident.sidebar;if(!s||typeof s.operatorSet!=='function')return {available:false,why:'window.provident.sidebar.operatorSet is not a function on the exposed bridge'};try{s.operatorSet({topK:${nextTopK}});return {available:true,topK:${nextTopK}}}catch(e){return {available:false,threw:String(e&&e.message?e.message:e)}}})()`)
+    await sleep(2600)
+    const s1 = await ufOperatorSettingsCensus(h, { mark: false, reuseToken: s0.token })
+    // THE CONTROL — no further write, the same read again: a second, identical re-author must be
+    // `unchanged` (the paint's `operatorSectionShapes` census), so the section is STABLE and nothing
+    // is re-minted. Without it limb (iii)'s re-mint could be any async re-render, not the push's.
+    await sleep(2600)
+    const s2 = await ufOperatorSettingsCensus(h, { mark: false, reuseToken: s0.token })
+    const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+    const carrierOf = (s) => (s == null ? null : { id: s.id, tag: s.tag, childTags: s.childTags, childAuthoredIds: s.childAuthoredIds, textWithoutTopK: s.textWithoutTopK })
+    const beforeFrames = s0.frames || []
+    const mountHeld = s0.operatorMount != null && s1.operatorMount != null && s1.operatorMount.marked === true && sameJson([s0.operatorMount.tag, s0.operatorMount.id], [s1.operatorMount.tag, s1.operatorMount.id])
+    const limbAssemblyRootHeld = sameJson([s0.roots, s0.root], [s1.roots, s1.root]) && mountHeld
+    const survivors = beforeFrames.filter((f) => { const a = (s1.frames || []).find((x) => x.pid === f.pid); return !!a && a.marked === true && a.nodeId === f.nodeId })
+    const limbOtherPanesSurvived = beforeFrames.length > 0 && survivors.length === beforeFrames.length
+    const limbSectionReminted = s0.settingsSection != null && s1.settingsSection != null &&
+      s0.settingsSection.marked === true && s1.settingsSection.marked === false &&
+      typeof s0.settingsSection.nodeId === 'string' && typeof s1.settingsSection.nodeId === 'string' &&
+      s0.settingsSection.nodeId !== s1.settingsSection.nodeId
+    const limbSectionCarriersHeld = s0.settingsSection != null && s1.settingsSection != null && sameJson(carrierOf(s0.settingsSection), carrierOf(s1.settingsSection))
+    const limbExactlyOneSection = s0.settingsSectionCount === 1 && s1.settingsSectionCount === 1
+    const limbPaneContentMoved = s0.topk !== s1.topk && String(s1.topk == null ? '' : s1.topk) === `topK: ${nextTopK}`
+    const limbEnabledPanesHeld = s0.enabledPanes != null && s0.enabledPanes === s1.enabledPanes
+    // ⟨ADJ 6 — **LIMBS (vi) AND (vii): NOTHING ABOVE FORBIDS A WHOLE-OPERATOR-SURFACE RE-MOUNT.**⟩ Limbs (i)–(v) read the
+    // assembly root, the app-graph frames, the SETTINGS section and the pane's text — and every one of them SURVIVES
+    // `mountOperator()`, because the `#operator-panes` mount element is static and the settings section legitimately re-mints.
+    // So a lawful-looking run could hide a whole-surface re-mount. (vi) grades the SURFACE'S OWN SECTION CENSUS — every
+    // `operator-pane-<id>` section's NODE ID, in document order: a whole-surface re-mount re-mints EVERY section's node id,
+    // while a lawful per-pane paint re-mints exactly the painted one, so every OTHER section must HOLD. ⟨THE FIRST FORM WAS
+    // MEASURED WRONG ON THIS ROW'S OWN FIRST LIVE RUN (`D-43`): it censused the static mount's CHILDREN, which is one wrapper
+    // address however many sections exist — it read `["div#operator-panes"]` on both sides and could never turn RED for the
+    // reason it was added. It now reads the authored root's children, and its own non-vacuity floor is "at least ONE section
+    // beside the settings one".⟩ (vii) grades a SIBLING operator section's `data-node-id` explicitly.
+    const sectionsBefore = s0.sections || []
+    const sectionsAfter = s1.sections || []
+    const foreignSectionsBefore = sectionsBefore.filter((section) => section.id !== 'operator-pane-settings')
+    const foreignSectionsAfter = sectionsAfter.filter((section) => section.id !== 'operator-pane-settings')
+    const foreignMoved = foreignSectionsBefore
+      .map((before) => ({ before, after: foreignSectionsAfter.find((after) => after.id === before.id) || null }))
+      .filter((pair) => pair.after == null || pair.after.nodeId !== pair.before.nodeId)
+    const limbMountCensusUnchanged = sectionsBefore.length === sectionsAfter.length &&
+      sectionsBefore.length > 0 && foreignSectionsBefore.length > 0 && foreignMoved.length === 0
+    const siblingBefore = s0.siblingSection
+    const siblingAfter = s1.siblingSection
+    const siblingShapeOf = (s) => (s == null ? null : { id: s.id, tag: s.tag, nodeId: s.nodeId, childTags: s.childTags, childAuthoredIds: s.childAuthoredIds })
+    // A SIBLING THAT IS ABSENT ON BOTH READS IS NOT A HELD SIBLING: the term answers `absent-symmetrically` and the row says so
+    // in its detail, because "no sibling to compare" would otherwise be a vacuous pass (the vacuity class `B-9` §11 defect (1)
+    // closed one reading over). Limb (vi) is then the non-vacuous term; on this host the sibling IS present and the detail prints
+    // its before/after values, so the term is proved non-vacuous rather than assumed.
+    const siblingVerdict = siblingBefore == null && siblingAfter == null
+      ? 'absent-symmetrically'
+      : (siblingBefore != null && siblingAfter != null && sameJson(siblingShapeOf(siblingBefore), siblingShapeOf(siblingAfter)) ? 'held' : 'moved')
+    const limbSiblingSectionHeld = siblingVerdict === 'held' || siblingVerdict === 'absent-symmetrically'
+    const controlStable = s1.settingsSection != null && s2.settingsSection != null && sameJson(
+      { root: s1.root, roots: s1.roots, nodeId: s1.settingsSection.nodeId, carriers: carrierOf(s1.settingsSection), topk: s1.topk, sectionCount: s1.settingsSectionCount, sections: s1.sections, sibling: siblingShapeOf(s1.siblingSection) },
+      { root: s2.root, roots: s2.roots, nodeId: s2.settingsSection.nodeId, carriers: carrierOf(s2.settingsSection), topk: s2.topk, sectionCount: s2.settingsSectionCount, sections: s2.sections, sibling: siblingShapeOf(s2.siblingSection) },
+    )
+    const b9LimbOk = seam.available === true && limbAssemblyRootHeld && limbOtherPanesSurvived && limbSectionReminted && limbSectionCarriersHeld && limbExactlyOneSection && limbPaneContentMoved && limbEnabledPanesHeld && limbMountCensusUnchanged && limbSiblingSectionHeld && controlStable
     await ufModal(h, false)
-    return rowResult({row:'UF-SETTINGS-5',dclass:'D-state'}, 'The operator settings reflect topK / representation-mode / default-document (plus rag-stores), each PAINTED', `#operator-topk="${r.topk ? r.topk.text : 'MISSING'}" (painted=${painted(r.topk)}, matches /topK:\\d+/=${topkOk}); #operator-editing-mode="${r.mode ? r.mode.text : 'MISSING'}" (matches /representationMode:(html|markdown)/=${modeOk}); #operator-default-document="${r.doc ? r.doc.text : 'MISSING'}" (painted=${docOk}); #operator-rag-stores="${r.stores ? r.stores.text.slice(0, 60) : 'MISSING'}…" (painted=${storesOk})`, { path: 'cdp', ok: topkOk && modeOk && docOk && storesOk, surface: await ufSurfaceTarget(h) })
+    const b9Detail = `; B-9 SETTINGS LIMB (assembled app) — the write is the app's OWN seam window.provident.sidebar.operatorSet({topK:${nextTopK}}) → ${JSON.stringify(seam)} (main persists → operator-settings-changed broadcast → onOperatorSettingsChanged COMMITS and FIRES \`settings\` → settingsMovesAppGraph(previous,next)=false for this member, so NO re-derive); (i) assemblyRootHeld=${limbAssemblyRootHeld} (#wiki-root data-node-id "${s0.root}" → "${s1.root}", #wiki-root count ${s0.roots} → ${s1.roots}; #operator-panes outer element ${s0.operatorMount ? JSON.stringify(s0.operatorMount.tag + '#' + s0.operatorMount.id) : 'MISSING'} still carries the per-run mark=${s0.operatorMount ? s1.operatorMount && s1.operatorMount.marked : '?'}); (ii) otherPanesSurvived=${limbOtherPanesSurvived} (marked survivors ${JSON.stringify(survivors.map((f) => f.pid))} of ${JSON.stringify(beforeFrames.map((f) => f.pid))}, each with its node id HELD); (iii) settingsSectionRemintedExactlyOnce=${limbSectionReminted} (#operator-pane-settings data-node-id "${s0.settingsSection ? s0.settingsSection.nodeId : 'MISSING'}" → "${s1.settingsSection ? s1.settingsSection.nodeId : 'MISSING'}", the pre-write mark ${s0.settingsSection ? String(s0.settingsSection.marked) : '?'} → ${s1.settingsSection ? String(s1.settingsSection.marked) : '?'} — absent from a REPLACED node only) with carriersHeld=${limbSectionCarriersHeld} — CARRIER GRADING, STATED SO THE RAW SEQUENCE CANNOT BE MIS-READ: the GRADED carrier set is the first-level child TAGS + their AUTHORED ids + the section TEXT with the \`topK:\` line normalized out (the ONE member limb (v) must move is never a carrier limb (iii) requires HELD); what is NOT graded is the engine's AUTOMINTED \`preempt-node-<nodeId>\` props.id, which is NODE IDENTITY and not a carrier — it re-mints on every lawful re-authoring, so a carrier set that counted it could never be HELD (the reading that forced this: \`node.js::ensureAutoIds\` mints \`preempt-node-node-1162\` → \`preempt-node-node-1194\` across the lawful re-mint of this very row) and \`src/renderer/runtime.ts\`'s authored-id filter strips that same \`preempt-node-\`/\`node-\` namespace for exactly that reason; the raw \`tag#id\` sequence is therefore printed UNGRADED beside the graded triple as the re-mint's own evidence, never as a graded term. READ: id ${s0.settingsSection ? JSON.stringify(s0.settingsSection.id) : '?'}; child TAGS ${s0.settingsSection ? JSON.stringify(s0.settingsSection.childTags) : '?'} → ${s1.settingsSection ? JSON.stringify(s1.settingsSection.childTags) : '?'}; AUTHORED ids ${s0.settingsSection ? JSON.stringify(s0.settingsSection.childAuthoredIds) : '?'} → ${s1.settingsSection ? JSON.stringify(s1.settingsSection.childAuthoredIds) : '?'}; RAW tag#id (UNGRADED evidence) ${s0.settingsSection ? JSON.stringify(s0.settingsSection.children) : '?'} → ${s1.settingsSection ? JSON.stringify(s1.settingsSection.children) : '?'}; text with the topK line normalized out ${s0.settingsSection ? JSON.stringify(s0.settingsSection.textWithoutTopK) : '?'} → ${s1.settingsSection ? JSON.stringify(s1.settingsSection.textWithoutTopK) : '?'}); (iv) exactlyOneSettingsFrame=${limbExactlyOneSection} (count ${s0.settingsSectionCount} → ${s1.settingsSectionCount}); (v) paneContentMoved=${limbPaneContentMoved} ("${s0.topk}" → "${s1.topk}") and enabledPanesHeld=${limbEnabledPanesHeld} ("${s0.enabledPanes}" → "${s1.enabledPanes}" — it is NOT a member this write moved, and it must not say otherwise); CONTROL (no further write, re-read) sectionStable=${controlStable} (data-node-id "${s1.settingsSection ? s1.settingsSection.nodeId : 'MISSING'}" → "${s2.settingsSection ? s2.settingsSection.nodeId : 'MISSING'}", carriers ${sameJson(carrierOf(s1.settingsSection), carrierOf(s2.settingsSection)) ? 'IDENTICAL' : 'MOVED'} — a second identical re-author is \`unchanged\` and mints nothing)`
+    // ⟨ADJ 6 — **THE TWO NEW GRADED TERMS, PRINTED WHERE THEY ARE GRADED** (a term the detail does not state is a term a later
+    // reader cannot audit).⟩ Kept as its own sentence rather than folded into `b9Detail` so the ADJ 6 pair reads as one addition.
+    const b9Adjudication6Detail = `; B-9 ADJ 6 (adversarial close-out — the two terms that forbid a WHOLE-OPERATOR-SURFACE re-mount): (vi) mountCensusUnchanged=${limbMountCensusUnchanged} (#operator-panes' OWN SECTIONS by AUTHORED id → data-node-id, in document order; count ${sectionsBefore.length} → ${sectionsAfter.length}; BEFORE ${JSON.stringify(sectionsBefore)} → AFTER ${JSON.stringify(sectionsAfter)}; the graded half is EVERY section BESIDE the painted one — ${foreignSectionsBefore.length} of them, moved=${JSON.stringify(foreignMoved.map((pair) => pair.before.id))} — because a whole-surface re-mount re-mints EVERY section's node id while a lawful per-pane paint re-mints exactly ONE; the term's own non-vacuity floor is "at least one section beside the settings one", printed here as ${foreignSectionsBefore.length}); (vii) siblingSectionHeld=${limbSiblingSectionHeld} — siblingVerdict=${JSON.stringify(siblingVerdict)} (#${s0.siblingSelector} data-node-id "${siblingBefore ? siblingBefore.nodeId : 'ABSENT'}" → "${siblingAfter ? siblingAfter.nodeId : 'ABSENT'}", authored id ${siblingBefore ? JSON.stringify(siblingBefore.id) : 'ABSENT'} → ${siblingAfter ? JSON.stringify(siblingAfter.id) : 'ABSENT'}, childTags ${JSON.stringify(siblingBefore ? siblingBefore.childTags : null)} → ${JSON.stringify(siblingAfter ? siblingAfter.childTags : null)}: the SIBLING operator section is the one frame a per-pane paint may NEVER touch, and its before/after values are printed HERE so the term cannot be read as vacuous); ADJ 6's OTHER half — the coverage arithmetic — is UF-GNOSIS-4's producerCalls (Profiler.takePreciseCoverage RESETS the counters, so the post-arm count IS the delta over the click's own window; the arm's baseline is printed as its own record, never subtracted twice).`
+    return rowResult({row:'UF-SETTINGS-5',dclass:'D-state'}, 'The operator settings reflect topK / representation-mode / default-document (plus rag-stores), each PAINTED', `#operator-topk="${r.topk ? r.topk.text : 'MISSING'}" (painted=${painted(r.topk)}, matches /topK:\\d+/=${topkOk}); #operator-editing-mode="${r.mode ? r.mode.text : 'MISSING'}" (matches /representationMode:(html|markdown)/=${modeOk}); #operator-default-document="${r.doc ? r.doc.text : 'MISSING'}" (painted=${docOk}); #operator-rag-stores="${r.stores ? r.stores.text.slice(0, 60) : 'MISSING'}…" (painted=${storesOk})${b9Detail}${b9Adjudication6Detail}`, { path: 'cdp', ok: topkOk && modeOk && docOk && storesOk && b9LimbOk, surface: await ufSurfaceTarget(h) })
   },
 
   // UF-SETTINGS-7 — a REAL per-pane [data-pane][data-enabled] click flips a
@@ -9783,10 +10093,68 @@ const BLOCKS = {
     await sleep(3000)
     const s2 = await gnosisAssembleSig(h)
     const controlStable = JSON.stringify(s1) === JSON.stringify(s2)
+    // ⟨`B-9` §11 defect (1), SECOND HALF — **THE DELIVERY-POSITIVE TERM, ARMED BEFORE THE CLICK.**⟩
+    // `!refreshReassembled` is the DEFAULT of "nothing happened": a booted window where the click
+    // never reached anything reads identical to a window where the lawful paint ran, and the deleted
+    // re-assembly was, incidentally, the old oracle's delivery proof. The producer is
+    // `GnosisPanes.refreshStatus`, whose ONE bridge call is `bridge.gnosis.status()` and which is
+    // entered on BOTH settle arms (success AND the `EngineUnavailable` rejection) — so this term is
+    // independent of the engine by construction, and a capture of `0` means the click never reached
+    // its producer. Armed here, read after the settle, disarmed before the block returns.
+    const probeArm = await gnosisArmBridgeProbe(h, 'refreshStatus')
     const rb = await ufRealClick(h, '#gnosis-status-refresh')
     await sleep(2800)
     const s3 = await gnosisAssembleSig(h)
+    // THE COLLECTION IS ALWAYS WITHDRAWN: a read that throws is recorded as a MISS (never a silently armed profiler
+    // taxing every later block), and the disarm runs whether the read answered or not.
+    let probe
+    try {
+      probe = await gnosisReadBridgeProbe(h, 'refreshStatus')
+    } catch (e) {
+      probe = { fn: 'refreshStatus', count: null, matched: false, scriptsScanned: 0, script: null, startOffset: null, endOffset: null, entryLine: null, entryText: null, producerLine: null, producerText: null, sourceWhy: `takePreciseCoverage failed: ${String(e && e.message ? e.message : e)}` }
+    }
+    const probeOff = await gnosisDisarmBridgeProbe(h)
+    // ⟨ADJ 6 (the adversarial close-out) — **THE COVERAGE ARITHMETIC CORRECTED, and the correction is a MEASUREMENT, not a
+    // preference.**⟩ `Profiler.takePreciseCoverage` **RESETS the execution counters** (`D-43`'s discipline: evidence against the
+    // reading, then fix the reading), so the ARM's own read zeroes the window and the POST-click read IS the delta over exactly the
+    // window the click owns. The earlier form subtracted the arm's baseline a SECOND time (`probe.count - probeArm.baseline`), which
+    // drops a real call whenever the arm's own read carried a count (baseline 1, delta 1 → 0) — a delivered click reported as a
+    // MISS, i.e. the delivery-positive term failing in the false-RED direction. The baseline stays in `probeArm` and is PRINTED in
+    // the detail as that arm's own record; it is never arithmetic input again.
+    const producerCalls = typeof probe.count === 'number' ? probe.count : null
+    // ⟨Unit `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §8) — THE ORACLE IS INVERTED HERE.⟩ Before this unit a
+    // `#gnosis-status-refresh` click re-assembled the WHOLE app graph (`onChanged` → `renderer.ts`'s `⟨B-9⟩` fallback →
+    // `host.refresh()` → `loadAppGraph` + `mountOperator`), so the click's causal proof was "the assembly signature CHANGED" — and
+    // the row's `ok` REQUIRED it. The operator pane now PAINTS ITS OWN SECTION of the retained operator graph, so the same click
+    // must leave the assembly root AND every frame member EQUAL. `assemblyRootHeld` reads the root half directly; the whole-signature
+    // `refreshReassembled` is the REMOVED route and the row now requires its ABSENCE.
+    //
+    // ⟨THE FIRST DRAFT'S `&& statusFrameReminted` TERM IS WITHDRAWN AS UNSATISFIABLE, AND THE MEASUREMENT IS THE REASON (`D-43`).⟩
+    // A lawful click re-reads an INVARIANT `HealthReport`, so `gnosisStatusContent` re-authors a SHAPE-EQUAL section and the paint
+    // answers `unchanged` — it mints nothing and the status frame's `data-node-id` HELPS, so a re-mint term could never be true on a
+    // healthy run (this block's own sentence says "a value delta is impossible here", `src/renderer/pane-graph.ts`'s
+    // `gnosisStatusContent` authors only from the report, and this unit's own `O3` CONTROL pins `painted:false` for an identical
+    // re-settle). `statusFrameReminted` is therefore STILL COMPUTED AND PRINTED as a reading — false means "the report did not move",
+    // which is the lawful outcome; it is simply not a PASS requirement. Never a false oracle, never a park.
+    //
+    // ⟨`B-9` §11 defect (1) — **THE ORACLE NOW REQUIRES DELIVERY, NOT ONLY THE ABSENCE OF A CHANGE.**⟩
+    // `ok` = `painted && matchesEngine && controlStable && assemblyRootHeld && !refreshReassembled &&
+    // producerDelivered && repainted && !statusInHtml && !statusInTargets`. The `producerDelivered` term is
+    // the one that reads a POSITIVE (`refreshStatus` was entered across the click — its `bridge.gnosis.status()`
+    // fires on both settle arms, so the engine cannot gate it); `!refreshReassembled` alone was satisfiable by
+    // a window in which the click reached nothing, and `assemblyRootHeld` alone by a boot with no app graph.
     const refreshReassembled = JSON.stringify(s2) !== JSON.stringify(s3)
+    // ⟨§11 defect (1), FIRST HALF — **`assemblyRootHeld` MUST NOT BE VACUOUSLY SATISFIABLE.**⟩ The
+    // original form compared `[roots, root]` PAIRS, which read `[0,null] === [0,null]` on a boot whose
+    // app graph never mounted (no `#wiki-root` at all): a row that passes for the absence of the very
+    // thing it claims to hold. It now requires EXACTLY ONE assembly root, a NON-EMPTY string node id,
+    // and the id and the root count HELD across the click.
+    const assemblyRootHeld = s2.roots === 1 && typeof s2.root === 'string' && s2.root !== '' &&
+      s2.root === s3.root && s2.roots === s3.roots
+    const statusFrameReminted = String(s2.status) !== String(s3.status)
+    // The delivery term is REQUIRED, not diagnostic: without it the row could pass on a click that
+    // reached nothing (the `D-40` `m6` class, at the row's own oracle).
+    const producerDelivered = typeof producerCalls === 'number' && producerCalls >= 1
     const after = await h.cdp.evaluate(`(()=>{const p=document.querySelector('[data-gnosis-pane="status"]');if(!p)return null;const r=p.getBoundingClientRect();return {box:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],state:p.getAttribute('data-gnosis-state'),text:String(p.textContent||'').replace(/\\s+/g,' ').trim()}})()`)
     const engine = await h.mcpTool(h.mcp, 'gnosis.status', {}).catch((e) => ({ error: String(e.message || e) }))
     await ufModal(h, false)
@@ -9799,7 +10167,7 @@ const BLOCKS = {
     const painted = !!(before && before.box[2] > 0 && before.box[3] > 0)
     const matchesEngine = !!(before && engine && before.state === engine.state && before.version === engine.version && before.subs.length === Object.keys(engine.subsystems || {}).length && before.subs.every((s) => s.endsWith('=true')))
     const repainted = !!(after && after.box[2] > 0 && after.box[3] > 0 && after.state === 'Ready')
-    return rowResult({row:'UF-GNOSIS-4',dclass:'D-state'}, 'The gnosis-status pane renders the LIVE engine report INSIDE the settings modal (painted), #gnosis-status-refresh updates it, and the pane is ABSENT from the app-graph MCP surfaces', `modal opened by a REAL click (path=${open.path}); pane inModal=${before ? before.inModal : '?'} inOperatorPanes=${before ? before.inOperatorPanes : '?'} box=${before ? JSON.stringify(before.box) : 'null'} painted=${painted} data-gnosis-state=${before ? before.state : '?'} version=${before ? before.version : '?'} subsystems=${JSON.stringify(before ? before.subs : null)} text="${before ? before.text.slice(0, 200) : '?'}"; matchesLiveEngineReport(state+version+subsystemCensus)=${matchesEngine} (engine gnosis.status state=${engine ? engine.state : '?'} version=${engine ? engine.version : '?'}); CONTROL(no click 3 s) signatureStable=${controlStable} (sig ${JSON.stringify(s1)}); REAL click #gnosis-status-refresh path=${rb.path} (hit=${rb.rect ? rb.rect.hit : '?'}) → app-graph RE-ASSEMBLED=${refreshReassembled} (sig ${JSON.stringify(s3)}) which is the causal proof the click reached its handler → refreshStatus() → the live engine read → onChanged()/host.refresh(); repainted=${repainted} state=${after ? after.state : '?'} (a value delta is impossible here: the engine's HealthReport is invariant while the engine stays Ready); MCP invisibility: get_rendered_html(${htmlStr.length} chars) contains a status-pane marker=${statusInHtml}; list_targets contains "gnosis-status"=${statusInTargets}`, { path: rb.path, ok: painted && matchesEngine && controlStable && refreshReassembled && repainted && !statusInHtml && !statusInTargets, surface: await ufSurfaceTarget(h) })
+    return rowResult({row:'UF-GNOSIS-4',dclass:'D-state'}, 'The gnosis-status pane renders the LIVE engine report INSIDE the settings modal (painted), #gnosis-status-refresh updates it, and the pane is ABSENT from the app-graph MCP surfaces', `modal opened by a REAL click (path=${open.path}); pane inModal=${before ? before.inModal : '?'} inOperatorPanes=${before ? before.inOperatorPanes : '?'} box=${before ? JSON.stringify(before.box) : 'null'} painted=${painted} data-gnosis-state=${before ? before.state : '?'} version=${before ? before.version : '?'} subsystems=${JSON.stringify(before ? before.subs : null)} text="${before ? before.text.slice(0, 200) : '?'}"; matchesLiveEngineReport(state+version+subsystemCensus)=${matchesEngine} (engine gnosis.status state=${engine ? engine.state : '?'} version=${engine ? engine.version : '?'}); CONTROL(no click 3 s) signatureStable=${controlStable} (sig ${JSON.stringify(s1)}); REAL click #gnosis-status-refresh path=${rb.path} (hit=${rb.rect ? rb.rect.hit : '?'}) → assemblyRootHeld=${assemblyRootHeld} (the assembly root '#wiki-root' and its frame census ${assemblyRootHeld ? 'SURVIVED' : 'MOVED'}: sig ${JSON.stringify(s3)}) and the REMOVED route's disproof: refreshReassembled=${refreshReassembled} (the WHOLE-GRAPH re-assembly signature — the row REQUIRES its absence; a true here is the evidence the re-assembly returned); statusFrameReminted=${statusFrameReminted} (the status pane's own node id ${statusFrameReminted ? 'changed — the report MOVED' : 'HELD — the report did not move, which is the lawful outcome and the same shape-equal control this unit\'s O3 row pins'}); DELIVERY-POSITIVE TERM (the click reached its PRODUCER — engine-independent, armed before the click): producerCalls=${producerCalls} (${probe.matched ? `the producer function \`${probe.fn}\` was ENTERED ${producerCalls} time(s) across the click, by V8 precise coverage over the served bundle ${probe.script} (baseline ${probeArm.baseline} → ${probe.count}); the call it makes, VERBATIM: \`${probe.producerText || '?'}\` at line ${probe.producerLine || '?'} — its entry line \`${probe.entryText || '?'}\` at ${probe.entryLine || '?'}` : `the producer function \`${probe.fn}\` is ABSENT from the coverage report over ${probe.scriptsScanned} script(s) — the arm is wrong or the producer never ran (${probe.sourceWhy || 'no match'})`}; arm=${JSON.stringify(probeArm)} disarm=${JSON.stringify(probeOff)}; producerDelivered=${producerDelivered} (a capture of 0 turns this row RED: it means the click never reached the producer, which is the very thing the DELETED re-assembly used to prove incidentally); repainted=${repainted} state=${after ? after.state : '?'} (a value delta is impossible here: the engine's HealthReport is invariant while the engine stays Ready); MCP invisibility: get_rendered_html(${htmlStr.length} chars) contains a status-pane marker=${statusInHtml}; list_targets contains "gnosis-status"=${statusInTargets}`, { path: rb.path, ok: painted && matchesEngine && controlStable && assemblyRootHeld && !refreshReassembled && producerDelivered && repainted && !statusInHtml && !statusInTargets, surface: await ufSurfaceTarget(h) })
   },
 
   // ---- UF-GNOSIS-5: the docs-pane Update path (HC1) ----

@@ -84,10 +84,19 @@ const DOC_NAV = 'doc-nav'
 const SEARCH = 'search'
 const TEMPLATE_EDITOR = 'template-editor'
 const SETTINGS = 'settings'
-/** THE FAMILIES THAT STILL KEEP `refresh()` AFTER `B-8` (`D-44`, §12a) — the TWO operator families: `settings` is `B-9`'s surface
- *  and `gnosis-status`'s paint is `B-9`'s. `gnosis-documents`/`gnosis-wikis` were RE-POINTED OUT of this list by `B-8` (they are
- *  census members and listeners now), so the `fired:false, handlers:0` arm is NARROWED rather than deleted. */
-const PRE_MIGRATION_FAMILIES: readonly string[] = [SETTINGS, 'gnosis-status']
+const GNOSIS_STATUS = 'gnosis-status'
+/** ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O1`) — THE LIST IS EMPTY AND THE LOOP STAYS.⟩
+ *  THE FAMILIES THAT KEEP `refresh()`: **NONE.** `B-8` narrowed this list to the TWO operator families (`settings` and
+ *  `gnosis-status`, both `B-9`'s); `B-9` gave both a paint (`paintPane`'s operator arm is a route to the operator surface's own
+ *  retained-graph paint, §3) and entered them in the census, so `fired:false, handlers:0` has NO subject left and the two arms are
+ *  POSITIVE controls in the loop below (`B9_MOVED_FAMILIES`). The list is kept — EMPTY, never deleted — because the loop over it is
+ *  the live floor that NO family is pre-migration: the day a landing adds an id here while the census still subscribes it, that
+ *  fire reads `fired:true` and this reds by name. */
+const PRE_MIGRATION_FAMILIES: readonly string[] = []
+/** ⟨ADDED BY UNIT `B-9` (§4 `F-9`, §6 `O1`) — THE SAME TWO ARMS, RE-STATED AS POSITIVES.⟩ The last two families that kept the
+ *  pre-migration `refresh()` route: census members with their own paint now, so each answers `fired:true, handlers:1` (ONE
+ *  registration per id, `B2-ADV-04`). */
+const B9_MOVED_FAMILIES: readonly string[] = [SETTINGS, GNOSIS_STATUS]
 const OPERATOR_PROBE = 'probe-b5-operator'
 
 /** §3's subject, derived from the seed's `doc-head` edge: `target === _currentDocumentId` → `source`. */
@@ -116,6 +125,27 @@ const fingerprint = (value: unknown): string => {
 
 /** A value as a failure message prints it. */
 const shown = (value: unknown): string => (value === undefined ? '(absent)' : fingerprint(value))
+
+/** ⟨ADDED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 SITE 1) — `L3`'s inverted fallback arm needs the
+ *  `firePaneUpdate` arrow's OWN brace-matched body, READ **RAW**.⟩ The `⟨B-9⟩` marker the arm must now find ABSENT is a COMMENT, so
+ *  a comment-stripped reading could never see it — and a comment inside that body asserting the deleted branch is exactly as much a
+ *  finding as the branch. The body is delimited by its own braces, never by a line window. TOTAL: `null` (a named problem at the
+ *  call site) when the arrow or its body is absent, and never a throw. */
+function firePaneUpdateBody(text: string): string | null {
+  const match = /const[ \t]+firePaneUpdate[ \t]*=/.exec(text)
+  if (match === null) return null
+  const open = text.indexOf('{', match.index + match[0].length)
+  if (open < 0) return null
+  let depth = 0
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === '{') depth += 1
+    else if (text[i] === '}') {
+      depth -= 1
+      if (depth === 0) return text.slice(open, i + 1)
+    }
+  }
+  return null
+}
 
 beforeAll(() => {
   installShim()
@@ -1211,7 +1241,7 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     ).toEqual([])
   })
 
-  it('L3 — the census moves by a RECORDED EXTENSION per unit: `REPLUMBED_PANE_IDS` is the SEVEN-id set (extended by `B-6`, `B-7` and `B-8`) with its `B-5` comment, `doc-nav`, `crosslinks`, `search`, `template-editor`, `gnosis-documents` and `gnosis-wikis` each answer ONE registration, `settings`/`gnosis-status` reach NO listener, `refresh()` still re-assembles, and `renderer.ts` is untouched', async () => {
+  it('L3 — the census moves by a RECORDED EXTENSION per unit: `REPLUMBED_PANE_IDS` is the NINE-id set (extended by `B-6`, `B-7`, `B-8` and `B-9`) with its `B-5` comment, all nine ids (`settings`/`gnosis-status` included) answer ONE registration, no family is left on `refresh()`, `refresh()` still re-assembles, and `renderer.ts`\'s `⟨B-9⟩` fallback is DELETED', async () => {
     // §6 `L3` (§4's ONE declared census; §2's "the migration is incremental, never a big bang"; `O-4`: `renderer.ts`'s `⟨B-9⟩`
     // fallback and `gnosisCrudPanes`'s `host.refresh()` are NOT this unit's).
     // ⟨EXTENDED BY UNIT `B-6` (`pane-doc-nav`) — A RECORDED-VALUE EXTENSION, NEVER A RELAXATION.⟩ `B-6` moved the census by exactly
@@ -1230,12 +1260,13 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
     // `crosslinks` (the host's own boot-time subscription), and the census SET equality is floored by the source clause that
     // requires the cause to be NAMED beside it — so "exactly these three" cannot pass by naming none. `host.refresh()` moves all
     // three counters on this very double, which is `L1`'s and `L5`'s zeroes' floor.
-    // MUTATION THAT WOULD RED IT: adding a fourth id (a silent second subscriber) or dropping one reds the SET arm; entombing the
-    // move in code with no `B-5` cause reds the source clause; subscribing `search`/`template-editor` to the channel reds its
-    // `handlers:0` arm; stacking a `subscribeChange` beside the plain `subscribe` for `doc-nav` reds its `handlers:1` control
-    // (`B2-ADV-04`); a `doc-nav` registered with a plain `subscribe` leaves `changePanes()` short and reds `B-6`'s own `D4`; deleting
-    // the `⟨B-9⟩` operator fallback or `gnosisCrudPanes.onChanged`'s `refresh()` reds the `renderer.ts` clause; a host whose
-    // `refresh()` no longer re-assembles reds the floor and makes `L1`'s zeroes unreadable.
+    // MUTATION THAT WOULD RED IT: adding a tenth id (a silent second subscriber) or dropping one reds the SET arm; entombing the
+    // move in code with no `B-5` cause reds the source clause; stacking a second subscription on any moved id reds its `handlers:1`
+    // control (`B2-ADV-04`); a `doc-nav` registered with a plain `subscribe` leaves `changePanes()` short and reds `B-6`'s own `D4`;
+    // ⟨RE-STATED BY UNIT `B-9` §4 SITE 1⟩ RESTORING the `⟨B-9⟩` operator fallback (its `report.fired` early return, its
+    // `scope === 'operator'` probe, its `host.refresh()`, or even its marker comment) reds the `renderer.ts` clause, which now
+    // requires their ABSENCE — while deleting the whole arrow reds that clause's POSITIVE floor (`paneEvents.fire(paneId)`); a host
+    // whose `refresh()` no longer re-assembles reds the floor and makes `L1`'s zeroes unreadable.
     const problems: string[] = []
 
     // ---- THE CONSTANT (through `await import()`, per the reachability rule) ---------------------------
@@ -1257,7 +1288,11 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       // (each now answers its OWN producer: the CRUD host's settle fires its pane, the engine descriptor re-reads through it), so they
       // move OUT of the negative loop INTO positive controls exactly as `doc-nav` did under `B-6`. The SET comparison, the
       // `settings` exclusion and the `B-5` cause clause are unchanged; only the recorded VALUE is re-stated.
-      const wanted = ['gnosis-query', CROSSLINKS, DOC_NAV, SEARCH, TEMPLATE_EDITOR, 'gnosis-documents', 'gnosis-wikis']
+      // ⟨EXTENDED ONCE MORE BY UNIT `B-9` (§4 `F-9`, §6 `O1`): the LAST TWO ids⟩ — `settings`/`gnosis-status` JOIN the census (each
+      // now answers a producer of its own AND a paint of its own: the operator surface's retained-graph paint, §3), so they move OUT
+      // of the negative loop INTO positive controls exactly as `doc-nav` did under `B-6`. The SET comparison and the `B-5` cause
+      // clause are unchanged; only the recorded VALUE is re-stated, and the `settings` exclusion arm INVERTS with it.
+      const wanted = ['gnosis-query', CROSSLINKS, DOC_NAV, SEARCH, TEMPLATE_EDITOR, 'gnosis-documents', 'gnosis-wikis', SETTINGS, GNOSIS_STATUS]
       const asSet = read === null ? null : [...new Set(read)].sort()
       const wantedSet = [...new Set(wanted)].sort()
       if (asSet === null) {
@@ -1267,14 +1302,20 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
           `limb L3: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the row ` +
             `moves by a DELIBERATE, RECORDED EXTENSION per unit (\`B-5\`: \`['gnosis-query']\` -> \`['gnosis-query','crosslinks']\`; ` +
             `\`B-6\`: -> \`['gnosis-query','crosslinks','doc-nav']\`; \`B-7\`: -> \`[ … ,'search','template-editor']\`; \`B-8\` ` +
-            `(\`D-44\`): -> \`[ … ,'gnosis-documents','gnosis-wikis']\`) and a later family unit must EXTEND this constant ` +
-            `deliberately; every other pane keeps its \`refresh()\` route until its own unit`,
+            `(\`D-44\`): -> \`[ … ,'gnosis-documents','gnosis-wikis']\`; ⟨UNIT \`B-9\` §4 \`F-9\`/§6 \`O1\`⟩: -> ` +
+            `\`[ … ,'settings','gnosis-status']\`) and a later family unit must EXTEND this constant ` +
+            `deliberately; no family keeps \`refresh()\` as a pane-update route any longer`,
         )
       }
-      if (read !== null && read.includes(SETTINGS)) {
+      // ⟨INVERTED BY UNIT `B-9` (§3/§4, §6 `O1`) — THE SAME ARM, THE OPPOSITE READING.⟩ This arm used to RED when the census named
+      // `settings` ("the operator pane is `B-9`'s surface … `updatePane` answers `operator-scope` for it; §4 keeps it OUT"). §3
+      // replaced that refusal with the operator surface's OWN retained-graph paint, so the pane MUST be a census member now: an
+      // operator pane outside the census can never receive its fire, whatever its paint answers.
+      if (read !== null && !read.includes(SETTINGS)) {
         problems.push(
-          `limb L3: \`REPLUMBED_PANE_IDS\` names \`${SETTINGS}\` — the operator pane is \`B-9\`'s surface (its lawful paint RE-MOUNTS the ` +
-            `operator scope) and \`updatePane\` answers \`operator-scope\` for it; §4 keeps it OUT of this census`,
+          `limb L3: \`REPLUMBED_PANE_IDS\` does NOT name \`${SETTINGS}\` — ⟨UNIT \`B-9\` §4\⟩ the operator pane MUST be in this ` +
+            `census now: \`paintPane\`'s operator arm is a ROUTE to the operator surface's own retained-graph paint (§3), so the pane ` +
+            `is paintable and a census without it leaves its fire with no listener`,
         )
       }
     }
@@ -1368,10 +1409,25 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
           )
         }
       }
+      // ⟨ADDED BY UNIT `B-9` (§4 `F-9`, §6 `O1`) — THE EXACT RE-STATEMENT OF THE TWO ARMS THAT USED TO READ `fired:false,
+      // handlers:0`.⟩ `settings` and `gnosis-status` were the LAST families keeping the pre-migration `refresh()`; they are census
+      // members with their own paint now, so the SAME TWO arms read `fired:true, handlers:1` — ONE registration per id (`B2-ADV-04`),
+      // which also shows the operator panes really are ATTACHED on this channel and not only named in a larger literal.
+      for (const paneId of B9_MOVED_FAMILIES) {
+        const report = drive.channel.fire(paneId)
+        await settle()
+        if (report.fired !== true || report.handlers !== 1) {
+          problems.push(
+            `limb L3: \`fire('${paneId}')\` answered ${shown(report)}, not \`fired:true, handlers:1\` — ⟨UNIT \`B-9\` §4\⟩ the census ` +
+              `EXTENDED by this operator id deliberately (its paint is the operator surface's own retained-graph paint, §3), so the ` +
+              `census IS a listener here and ONE registration is what \`B2-ADV-04\` allows`,
+          )
+        }
+      }
       // THE NEGATIVES: the families that still keep `refresh()` reach NO listener. ⟨NARROWED BY `B-8`, never deleted:⟩ the arm that
       // used to carry `search`/`template-editor` was re-pointed by `B-7` at `settings`/the gnosis families, and `B-8` moved
-      // `gnosis-documents`/`gnosis-wikis` INTO the census — so the negative arm is now carried by the TWO operator families
-      // (`settings`, `gnosis-status`), and "another family subscribed" still reds.
+      // `gnosis-documents`/`gnosis-wikis` INTO the census. ⟨UNIT `B-9` §6 `O1`⟩ the LAST TWO subjects (`settings`, `gnosis-status`)
+      // are positive controls above, so this loop now reads ZERO — the live floor that no family is pre-migration, kept not deleted.
       for (const paneId of PRE_MIGRATION_FAMILIES) {
         const report = drive.channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
@@ -1428,15 +1484,53 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
       problems.push(`limb L3: \`${RENDERER_FILE}\` is unreadable (${String(error)}) — the ⟨B-9⟩ scope clause has no subject`)
     }
     if (rendererText !== '') {
-      const operatorFallback = /registry\s*\.\s*get\(\s*paneId\s*\)\s*\?\.\s*scope\s*===\s*'operator'[\s\S]{0,200}?host\.refresh\(\)/.test(
-        rendererText,
-      )
-      if (!operatorFallback) {
+      // ⟨INVERTED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 SITE 1, §6 `O4`'s `m1`; §4 `F-9`) — EVERY ARM
+      // INVERTED, NO ARM REMOVED.⟩ This clause used to require the `⟨B-9⟩` operator fallback PRESENT ("`O-4`: that branch is `B-9`'s
+      // to DELETE when the operator panes' paint lands, and this unit must not have moved it"). `B-9` §4 SITE 1 DELETED it, so the
+      // SAME readings are now ABSENCE arms — and every one of them stays FLOORED by the POSITIVE arm that the arrow still calls
+      // `paneEvents.fire(paneId)`, so a landing that deleted the whole arrow cannot pass by deletion. The body is read from its OWN
+      // braces, RAW: the marker the last arm forbids IS a comment, so a stripped reading could never see it.
+      const arrowBody = firePaneUpdateBody(rendererText)
+      if (arrowBody === null) {
         problems.push(
-          `limb L3: \`${RENDERER_FILE}\` no longer carries the ⟨B-9⟩ operator fallback (\`registry.get(paneId)?.scope === 'operator'\` ` +
-            `followed by \`host.refresh()\`) — \`O-4\`: that branch is \`B-9\`'s to DELETE when the operator panes' paint lands, and this ` +
-            `unit must not have moved it`,
+          `limb L3: \`${RENDERER_FILE}\` carries NO \`const firePaneUpdate = … => { … }\` arrow with a brace-matched body — the ` +
+            `inverted \`⟨B-9⟩\` clause has no subject, and the whole arrow was deleted rather than its fallback branch`,
         )
+      } else if (!/paneEvents\s*\.\s*fire\s*\(\s*paneId\s*\)/.test(arrowBody)) {
+        problems.push(
+          `limb L3: \`firePaneUpdate\`'s body no longer calls \`paneEvents.fire(paneId)\` (body read: ` +
+            `${shown(arrowBody.replace(/\s+/g, ' ').trim())}) — ⟨UNIT \`B-9\` §4 SITE 1\⟩ "the arrow keeps \`fire(paneId)\` and ` +
+            `nothing else", so this POSITIVE arm is what floors every absence arm below`,
+        )
+      } else {
+        if (/report\s*\.\s*fired/.test(arrowBody)) {
+          problems.push(
+            `limb L3: \`firePaneUpdate\`'s body STILL reads \`report.fired\` (body read: ` +
+              `${shown(arrowBody.replace(/\s+/g, ' ').trim())}) — ⟨UNIT \`B-9\` §4 SITE 1\⟩ the fallback's early return is deleted ` +
+              `TODAY, and a surviving early return is the deleted branch under another name`,
+          )
+        }
+        if (/registry\s*\.\s*get\(\s*paneId\s*\)\s*\?\.\s*scope\s*===\s*'operator'/.test(arrowBody)) {
+          problems.push(
+            `limb L3: \`firePaneUpdate\`'s body STILL probes \`registry.get(paneId)?.scope === 'operator'\` (body read: ` +
+              `${shown(arrowBody.replace(/\s+/g, ' ').trim())}) — that probe IS the operator fallback \`B-9\` §4 SITE 1 deleted`,
+          )
+        }
+        if (/host\s*\.\s*refresh\s*\(\s*\)/.test(arrowBody)) {
+          problems.push(
+            `limb L3: \`firePaneUpdate\`'s body STILL calls \`host.refresh()\` (body read: ` +
+              `${shown(arrowBody.replace(/\s+/g, ' ').trim())}) — \`refresh()\` re-fetches then re-assembles (\`loadAppGraph\` + ` +
+              `\`mountOperator\`), which is THE LAST RE-ASSEMBLY IN THE APP and the exact thing \`INV-E\` counts at zero; \`B-9\` §4 ` +
+              `SITE 1 deletes it from this arrow (it survives on its own boot/landing route, §4's "NOT removed, and said so")`,
+          )
+        }
+        if (arrowBody.includes('⟨B-9⟩')) {
+          problems.push(
+            `limb L3: the \`⟨B-9⟩\` MARKER still sits inside \`firePaneUpdate\`'s body (raw body read: ` +
+              `${shown(arrowBody.replace(/\s+/g, ' ').trim())}) — it was the DELETION ORDER ("DELETE THIS BRANCH when the operator ` +
+              `panes' paint lands"), the branch it marked is deleted, so a surviving marker is a comment asserting the old state`,
+          )
+        }
       }
       const crudRefresh = /gnosisCrudPanes\s*=\s*new\s+GnosisCrudPanes\(\{[\s\S]{0,400}?onChanged[\s\S]{0,200}?host\.refresh\(\)/.test(
         rendererText,
@@ -1451,15 +1545,17 @@ describe('pane-links — a detected backlink fires the `crosslinks` pane: ONE re
 
     expect(
       problems,
-      `limb L3 — the census moves by exactly ONE and the other families keep \`refresh()\` (§6 L3; §4's ONE declared census; O-4). ` +
-        `${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be exactly ` +
-        `\`{gnosis-query, crosslinks, doc-nav, search, template-editor}\` as a SET — the \`B-6\` and \`B-7\` EXTENSIONS of this row's ` +
+      `limb L3 — the census moves by a RECORDED EXTENSION per unit and NO family is left on \`refresh()\` (§6 L3; §4's ONE declared ` +
+        `census; O-4; ⟨RE-STATED BY UNIT \`B-9\` §4 \`F-9\`/§6 \`O1\`⟩). ${problems.length} problem(s). \`REPLUMBED_PANE_IDS\` must be ` +
+        `exactly \`{gnosis-query, crosslinks, doc-nav, search, template-editor, gnosis-documents, gnosis-wikis, settings, ` +
+        `gnosis-status}\` as a SET — the \`B-6\`, \`B-7\`, \`B-8\` and \`B-9\` EXTENSIONS of this row's ` +
         `recorded value, never a relaxation of it — carry a \`B-5\` comment naming the cause beside its ` +
-        `declaration, answer \`fired:true, handlers:1\` for \`crosslinks\`, \`doc-nav\` and \`B-7\`'s two moved ids (ONE registration ` +
-        `each, \`B2-ADV-04\`) while \`settings\`/\`gnosis-*\` answer \`fired:false, handlers:0\`; \`host.refresh()\` must ` +
+        `declaration, answer \`fired:true, handlers:1\` for ALL NINE ids (\`settings\`/\`gnosis-status\` included, ONE registration ` +
+        `each, \`B2-ADV-04\`) with the pre-migration loop empty; \`host.refresh()\` must ` +
         `still reach \`loadAppGraph\` + \`mountOperator\` on this double (the floor under \`L1\`'s zeroes); and \`${RENDERER_FILE}\`'s ` +
-        `⟨B-9⟩ fallback + \`gnosisCrudPanes\` \`refresh()\` must still be there. \`doc-nav\`'s own arm (its re-read, its gate, its ` +
-        `stamp) is \`B-6\`'s row to grade; THIS row grades the census VALUE and the other families' silence. envelope-class`,
+        `\`firePaneUpdate\` must carry \`paneEvents.fire(paneId)\` and NOT the DELETED ` +
+        `⟨B-9⟩ fallback. \`doc-nav\`'s own arm (its re-read, its gate, its ` +
+        `stamp) is \`B-6\`'s row to grade; THIS row grades the census VALUE and the register's silence. envelope-class`,
     ).toEqual([])
   })
 

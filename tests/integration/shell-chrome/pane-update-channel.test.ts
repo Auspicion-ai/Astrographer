@@ -31,13 +31,14 @@
 //           `reason:'unchanged'`.
 //   `r2`  — A FIRE FOR X PAINTS NOTHING ON Y, in BOTH directions on one harness (X then Y, Y then X), each with its own
 //           positive half.
-//   `r3`  — THE HOST ARMS: `not-a-pane` / `not-enabled` / `operator-scope` / `not-mounted` / `no-runtime` each answer their
+//   `r3`  — THE HOST ARMS: `not-a-pane` / `not-enabled` / `not-mounted` / `no-runtime` each answer their
 //           DECLARED WORD, none throws, none paints — with the SAME-harness positive control that the enabled+mounted pane DOES
 //           paint. (`r3`'s pure arm — the unregistered/degenerate ids on the channel itself — is
 //           `tests/unit/shell-chrome/pane-events.test.ts`; that file has no host and this one has no channel double.)
 //   `r5`  — THE FLOOR AND THE CENSUS: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double (so
-//           `r1`'s and `r6`'s zeroes are not vacuous), and `REPLUMBED_PANE_IDS` is exactly `['gnosis-query', 'crosslinks']`
-//           (the landed census, EXTENDED BY UNIT `B-5` `pane-links` by exactly one id — `docs/L1/unit-b-5-pane-links.md` §4).
+//           `r1`'s and `r6`'s zeroes are not vacuous), and `REPLUMBED_PANE_IDS` is exactly the pinned census — the landed value
+//           EXTENDED BY UNIT `B-5` `pane-links`, then `B-6`, `B-7`, `B-8` and ⟨RE-STATED BY UNIT `B-9` `F-9`⟩ `B-9` (nine ids,
+//           `settings`/`gnosis-status` last).
 //   `r6(i)`+`r6(iii)` — `INV-E`, AND ITS FOUR MUTANTS MEASURED RED FIRST: the DIRECT arm's `0/0/0` on a pane whose root WAS
 //           replaced, then m1 `() => host.refresh()`, m2 `() => host.loadAppGraph(…)`, m3 `() => host.mountOperator()` and m4 a
 //           no-op handler, each driven through a channel and each printed with its reading.
@@ -928,14 +929,22 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     ).toEqual([])
   })
 
-  it('r3 (host arms) — `not-a-pane` / `not-enabled` / `operator-scope` / `not-mounted` / `no-runtime` are DECLARED words: none throws, none paints, and the enabled+mounted pane still paints', () => {
+  it('r3 (host arms) — `not-a-pane` / `not-enabled` / `not-mounted` / `no-runtime` are DECLARED words (a fabricated `operator`-scope registration answers `not-mounted`, NOT the deleted `operator-scope`): none throws, none paints, and the enabled+mounted pane still paints', () => {
     // §6 r3's HOST arms (§3's closed `PaneUpdateReason` vocabulary). LAYER: envelope-class — the REAL host over the shim.
     // NON-VACUITY: every arm is preceded or followed by the SAME harness's POSITIVE CONTROL (`updatePane('gnosis-query')` paints
     // after the cache moved), and each arm asserts the root census is UNCHANGED by identity and that no `applyContentReconcile`
     // was recorded — so "declared word, no paint" cannot be read as "the harness painted nothing anywhere".
     // MUTATION THAT WOULD RED IT: throwing on an unregistered id (the `pane-registry.ts` `requireKnown` shape) reds the arm;
-    // falling back to a re-assembly for any absent arm reds the counter arm; answering a GENERIC word for `operator-scope` (e.g.
-    // folding it into `not-mounted`) reds that arm; silently re-mounting the operator scope reds the counter/root arms.
+    // falling back to a re-assembly for any absent arm reds the counter arm; answering a GENERIC word for the operator arm (e.g.
+    // `painted` with an empty `applied`) reds that arm; silently re-mounting the operator scope reds the counter/root arms.
+    // ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §3 step 2, §6 `O4`'s `m3`; §4 `F-9`) — THE OPERATOR
+    // ARM'S SUBJECT MOVED, THE ARM AND ITS `expect` DID NOT.⟩ This arm used to grade `operator-scope`, the word `paintPane` answered
+    // for EVERY `operator`-scope registration. §3 REPLACED THAT REFUSAL WITH A ROUTE: step 2 now hands the pane to
+    // `paintOperatorPane`, which reads the RETAINED operator graph for that pane's own section (`operator-pane-<id>`). A fabricated
+    // `operator`-scope registration — `probe-b3-operator`, enabled at boot but with NO section in that graph — therefore answers
+    // `not-mounted` (the retained section is absent), and `operator-scope` is NO LONGER ANSWERED HERE AT ALL on a host that has an
+    // operator mount (this harness has one). The word still exists in `pane-events.ts`'s `PaneUpdateReason` union for the hosts that
+    // legitimately have no operator mount, and `DECLARED_REASONS` above still names it.
     const problems: string[] = []
     const drive = seedHost(
       rawLayout(
@@ -956,7 +965,7 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
         problems.push('limb r3: the harness failed to register a DISABLED pane — the `not-enabled` arm has no subject')
       }
       if (drive.registry.get(OPERATOR_PANE)?.scope !== 'operator') {
-        problems.push('limb r3: the harness operator pane does not read `operator` — the `operator-scope` arm has no subject')
+        problems.push('limb r3: the harness operator pane does not read `operator` — the operator arm has no subject')
       }
 
       // ---- THE POSITIVE CONTROL FIRST ---------------------------------------------------------
@@ -1007,10 +1016,14 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
           why: 'a registered pane the operator has DISABLED renders no frame, and the word is `not-enabled` (not `not-mounted`: the census that excludes it is the ENABLED one)',
         },
         {
-          label: 'operator-scope',
+          // ⟨RE-STATED BY UNIT `B-9` §3 step 2/step 3⟩ The SUBJECT is unchanged (the harness's fabricated `operator`-scope
+          // registration, enabled at boot); what changed is the WORD. `operator-scope` was the REFUSAL, and §3 replaced it with a
+          // ROUTE to the operator surface's own retained-graph paint. This pane has no `operator-pane-<id>` section in that graph,
+          // so step 3 answers `not-mounted` — the declared absence — and the deleted refusal is never answered on this host.
+          label: 'operator-scope→not-mounted',
           paneId: OPERATOR_PANE,
-          expected: 'operator-scope',
-          why: 'an operator pane is `B-9`\'s surface: §3 makes `operator-scope` the arm that keeps the operator mount OUT of this unit rather than silently re-mounting it',
+          expected: 'not-mounted',
+          why: 'an operator pane is a ROUTE now (`B-9` §3): this host HAS an operator mount, so the refusal `operator-scope` is not answered at all, and a pane with no section in the retained operator graph is `not-mounted` — the refusal is no longer `operator-scope` and `B-9` §3 replaced it with a route',
         },
         {
           label: 'not-mounted',
@@ -1048,7 +1061,8 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
         if (counters.refresh !== 0 || counters.loadAppGraph !== 0 || counters.mountOperator !== 0) {
           problems.push(
             `limb r3 (${arm.label}): the arm read ${countersReading(counters)} — §3: no absent arm may FALL BACK to a re-assembly ` +
-              `(in particular \`operator-scope\` must not re-mount the operator surface)`,
+              `(in particular ⟨UNIT \`B-9\` §3⟩ the operator arm must not re-mount the operator surface — its paint re-renders the ` +
+              `RETAINED graph and re-assembles nothing)`,
           )
         }
         const after = drive.roots()
@@ -1099,15 +1113,18 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
 
     expect(
       problems,
-      `limb r3 (host arms) — the absent arms are DECLARED words (§6 r3; §3's closed \`PaneUpdateReason\`). ${problems.length} ` +
-        `problem(s). Five absences — an unknown id, a disabled pane, an operator-scope pane, an enabled pane with no frame, and a ` +
+      `limb r3 (host arms) — the absent arms are DECLARED words (§6 r3; §3's closed \`PaneUpdateReason\`; ⟨RE-STATED BY UNIT ` +
+        `\`B-9\` §3⟩ the operator arm reads the paint's own word). ${problems.length} ` +
+        `problem(s). Five absences — an unknown id, a disabled pane, a fabricated \`operator\`-scope registration (which answers ` +
+        `\`not-mounted\`: the refusal is no longer \`operator-scope\`, which \`B-9\` §3 replaced with a ROUTE), an enabled ` +
+        `pane with no frame, and a ` +
         `host with no runtime — each answer their own word, none throws, none paints, and none re-assembles; the SAME harness's ` +
         `enabled+mounted pane paints. envelope-class — the REAL SidebarPanes over the layout-less DOM shim; no rendered box, no ` +
         `pointer (G8-only)`,
     ).toEqual([])
   })
 
-  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly the SEVEN-id value `[\'gnosis-query\', \'crosslinks\', \'doc-nav\', \'search\', \'template-editor\', \'gnosis-documents\', \'gnosis-wikis\']` (`B-8`, `D-44`)`', async () => {
+  it('r5 — THE FLOOR: `host.refresh()` still reaches `loadAppGraph` + `mountOperator` on this double, and `REPLUMBED_PANE_IDS` is exactly the NINE-id value `[\'gnosis-query\', \'crosslinks\', \'doc-nav\', \'search\', \'template-editor\', \'gnosis-documents\', \'gnosis-wikis\', \'settings\', \'gnosis-status\']` (`B-9`, `F-9`)`', async () => {
     // §6 r5 (§1's `INV-E` floor; §3's ONE declared constant). LAYER: envelope-class — the REAL host over the shim plus a
     // reading of the host module's exports.
     // NON-VACUITY: this limb IS the floor — its whole purpose is to prove the three counters CAN move on the very double whose
@@ -1205,14 +1222,18 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
     // ⟨EXTENDED AGAIN BY UNIT `B-8` (`pane-gnosis`) — TWO more ids, the SAME discipline, and the value is still pinned EXACTLY
     // (`D-44`, §12a of `docs/L1/unit-b-8-pane-gnosis.md`).⟩ `gnosis-documents` and `gnosis-wikis` join because each now answers a
     // PRODUCER OF ITS OWN: the CRUD host's bridge settle commits the rendered field and then fires that pane (grant line 1), and
-    // the engine descriptor re-reads through the producer (`refreshFromEngine`, grant line 2). `gnosis-status` stays OUT (`F-5`: its
-    // paint is `B-9`'s). The fingerprint comparison below stays ORDER-SENSITIVE and EXACT.
-    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis']
+    // the engine descriptor re-reads through the producer (`refreshFromEngine`, grant line 2).
+    // ⟨EXTENDED ONCE MORE BY UNIT `B-9` (`pane-operator-settings`) — the LAST TWO ids, the SAME discipline (`F-9` of
+    // `docs/L1/unit-b-9-pane-operator-settings.md`, §6 `O1`), and the value is still pinned EXACTLY.⟩ `settings` and `gnosis-status`
+    // join because each now answers a PRODUCER of its own AND a PAINT of its own: `paintPane`'s operator arm is a ROUTE to the
+    // operator surface's own retained-graph paint (§3), so an operator pane entry is no longer a silently dead registration. The
+    // fingerprint comparison below stays ORDER-SENSITIVE and EXACT, so a bare REORDER still reds.
+    const PINNED_CENSUS = [QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis', 'settings', 'gnosis-status']
     if (replumbed === undefined) {
       problems.push(
         '(r5) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
           `naming the panes whose paint the host registers on the channel: exactly ${shown(PINNED_CENSUS)} (the ` +
-          "`pane-update-channel` census plus `B-5`'s, `B-6`'s, `B-7`'s and `B-8`'s deliberate extensions)",
+          "`pane-update-channel` census plus `B-5`'s, `B-6`'s, `B-7`'s, `B-8`'s and `B-9`'s deliberate extensions)",
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1228,8 +1249,9 @@ describe('pane-update-channel — the host paint over the REAL SidebarPanes: one
         `${problems.length} problem(s). \`host.refresh()\` still reaches \`loadAppGraph\` + \`mountOperator\` on this very double ` +
         `(each read twice: the wrapped instance method AND a bypass-proof observable), so \`r1\`'s and \`r6\`'s zeroes are readings ` +
         `and not a dead counter; and the re-plumbed census is exactly ` +
-        `${shown([QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis'])} ` +
-        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\` — one id, one id, two ids, two ids). ` +
+        `${shown([QUERY, 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis', 'settings', 'gnosis-status'])} ` +
+        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\`, then ⟨` +
+        `\`B-9\` §4 \`F-9\`/§6 \`O1\`⟩ — one id, one id, two ids, two ids, two more ids). ` +
         `envelope-class — the REAL SidebarPanes over the layout-less DOM shim; no rendered box, no pointer (G8-only)`,
     ).toEqual([])
   })

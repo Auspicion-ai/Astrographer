@@ -12,12 +12,20 @@
 // SOURCE OF EVERY ASSERTION (all paths relative to the repo root):
 //   §9 `B6-F15`  the ONE exported PURE, TOTAL counter + `boot`'s validate-then-subscribe (rows `C1`, `C2`).
 //   §4           the census value and the change-interest value at this head — the two declarations rows `C3`/`C4` parse.
-//   §12a (`D-44`)THE SECOND PASS'S AMENDMENT, and the reading `C3`/`C4` now grade: the grant (`D-44`) moved the census
+//   §4 (`B-9`)   THE LANDING THAT MOVES THIS FILE'S PINS — `docs/L1/unit-b-9-pane-operator-settings.md` §4 (`F-9`, "the fourth
+//                repeat of the `B-7` `F-2` lesson") plus §6 `O1`/`O8`: `REPLUMBED_PANE_IDS` is the NINE-id set
+//                (`['gnosis-query','crosslinks','doc-nav','search','template-editor','gnosis-documents','gnosis-wikis',
+//                'settings','gnosis-status']`), entering BOTH operator panes as LIVE registrations because `paintPane`'s operator
+//                arm is now a ROUTE to a PAINT (§3) rather than the `operator-scope` refusal; `CHANGE_INTERESTED_PANE_IDS` does NOT
+//                move (`['doc-nav']`); and `renderer.ts`'s `⟨B-9⟩` operator fallback is DELETED — `firePaneUpdate`'s body is
+//                `paneEvents.fire(paneId)` and NOTHING else. **A RE-STATEMENT OF RECORDED VALUES, NEVER A RELAXATION:** no row is
+//                deleted, no matcher is widened, no arm is `skip`ped, and the `expect(`/`it(` counts on this file do not fall.
+//   §12a (`D-44`)THE PREVIOUS PASS'S AMENDMENT, KEPT AS THE RECORD OF THE VALUE `B-9` RE-STATED: the grant moved the census
 //                FIVE -> SEVEN (`['gnosis-query','crosslinks','doc-nav','search','template-editor','gnosis-documents',
-//                'gnosis-wikis']`), `gnosis-status` stays OUT (its paint is `B-9`'s, and entering it makes `fire` answer
-//                `fired:true` while nothing paints — a silently dead operator pane), and the three granted sites are the LANDED
-//                shape (`renderer.ts`'s CRUD `onChanged: (paneId) => firePaneUpdate(paneId)`, the `⟨B-9⟩` fallback UNCHANGED,
-//                and `installSidebarBridge`'s `methods` now carrying `gnosisDocuments`/`gnosisWikis`).
+//                'gnosis-wikis']`). Two of its three granted sites are still LANDED and still graded here (`renderer.ts`'s CRUD
+//                `onChanged: (paneId) => firePaneUpdate(paneId)` and `installSidebarBridge`'s `methods` now carrying
+//                `gnosisDocuments`/`gnosisWikis`); the third — the `⟨B-9⟩` fallback, pinned UNCHANGED at that head — is the one
+//                `B-9` §4 SITE 1 DELETED, and this file now pins its ABSENCE.
 //                ⟨THE CHANGE-INTEREST DECLARATION DOES *NOT* MOVE — §12a's MEASURED RE-NARROW.⟩ An earlier reading of this pass
 //                pinned `CHANGE_INTERESTED_PANE_IDS` as `['doc-nav','gnosis-documents','gnosis-wikis']`; the architect RE-NARROWED it
 //                to `['doc-nav']` after measurement, and `C3`/`C4` grade the NARROWED value. THE CAUSE (`D-40`'s `m6` class, named in the
@@ -28,10 +36,13 @@
 //                ENGINE ARM's producer instead: `onRagStoreChanged` calls the delegate's own `refreshFromEngine()`, whose SETTLE fires its
 //                own pane (`descriptor → read → settle → fire → paint`), so the engine has ONE route per pane, never two.
 //   §6 `X1`      "the row that reds a landing which enters the operator pane into the census without its paint" — `C3` pins the
-//                census MOVED TO SEVEN with `gnosis-status` ABSENT and names its reason.
-//   §6 `X1b`     THE CONVERSE CLAUSE (this pass authors it): `census ⊆ paintable` over the REAL booted host — every census id must
-//                answer `updatePane(id)` with something other than `operator-scope`/`not-a-pane`, proved falsifiable on two forged
-//                censuses (the `gnosis-status` entry is the concrete dead-registration hazard).
+//                census MOVED TO NINE with `gnosis-status` and `settings` PRESENT, EACH named with the reason its entry is now a
+//                LIVE registration (`B-9` §3's retained-graph operator paint), plus the `⟨B-9⟩` fallback's ABSENCE.
+//   §6 `X1b`/`O8`THE CONVERSE CLAUSE: `census ⊆ paintable` over the REAL booted host — every census id must answer `updatePane(id)`
+//                with something other than `operator-scope`/`not-a-pane`, proved falsifiable on TWO forged censuses (a fabricated id
+//                nobody registers, and a fabricated id in the OPERATOR SECTION namespace) PLUS the classified arm §10 adjudication 4
+//                names (a fabricated `operator`-scope registration must not answer `operator-scope`). `B-9` §4: the retired
+//                `gnosis-status` mutant is GONE because that pane now PAINTS.
 //   §6 `S1`/§6 AUTHORING REFUSALS (`D-43`) the source-clause discipline (comments stripped, DECLARATIONS parsed, never a token
 //                search) and `P1-1`'s correction of it: a member census grades DECLARATION SHAPES (`key: value`, `key,`,
 //                `key(args) {`) and can never be satisfied — or emptied — by a SPELLING.
@@ -39,8 +50,10 @@
 // DECLARATIONS ARE PARSED, NEVER SEARCHED (`D-38`: `src.indexOf('VALID_GROUPS')` latched onto a COMMENT once). Every clause below
 // strips comments FIRST (the stripper is length-preserving, and each row CHECKS that: a raw/commented offset would let prose
 // satisfy a clause), then locates a DECLARATION by its declaration shape and brace-matches its body. One marker is deliberately
-// read from the RAW text — the `${B-9}` unit marker lives in a comment, and that comment IS the record the contract asks for — and
-// it is read in a three-line window anchored on the branch's own code line, never as a file-wide token search.
+// read from the RAW text — the `⟨B-9⟩` unit marker lives in a COMMENT, and that comment IS the record the contract asks for — and it
+// is read in a window anchored on `firePaneUpdate`'s own body, never as a file-wide token search. **`B-9` §4 SITE 1 INVERTED what
+// that marker means:** the fallback it marked has been DELETED, so this file reads the RAW slice to prove the comment is gone as
+// well as the code — a comment asserting the old branch would be the same finding as the branch itself.
 //
 // LAYER (MANDATORY, D-10 / `RCA-12`): ENVELOPE-CLASS. `C1`'s declaration clause, `C2`'s plan clause and `C3`/`C4`'s declaration
 // clauses read `src/**`'s TEXT (comments stripped) and nothing else; `C1`'s behaviour arms, `C2`'s census arms, `C3`'s parse
@@ -73,8 +86,10 @@ const RENDERER_FILE = 'src/renderer/renderer.ts'
 
 /** §9: the ONE name this pass lands. */
 const COUNTER_NAME = 'changeInterestSubsetProblems'
-/** §12a (`D-44`): the PAINT census AFTER the grant's move — SEVEN ids, order-insensitive comparison, the recorded value kept
- *  whole. `[§4's five]` + `gnosis-documents` + `gnosis-wikis`, in the contract's declared order. */
+/** ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O1`) — a RECORDED-VALUE MOVE, never a
+ *  relaxation: the recorded id list gained its last two members and nothing else.⟩ The PAINT census AFTER `B-9`'s move — **NINE
+ *  ids**, order-insensitive comparison, the recorded value kept whole. `[§12a's seven]` + `settings` + `gnosis-status`, in the
+ *  contract's declared order (`§1` `F-1`). */
 const PINNED_CENSUS: readonly string[] = [
   'gnosis-query',
   'crosslinks',
@@ -83,6 +98,8 @@ const PINNED_CENSUS: readonly string[] = [
   'template-editor',
   'gnosis-documents',
   'gnosis-wikis',
+  'settings',
+  'gnosis-status',
 ]
 /** §12a: the CHANGE-INTEREST declaration after the grant — ONE id, `doc-nav`, exactly as the architect RE-NARROWED it after
  *  measurement (an earlier reading of this pass pinned the three-id set; the declaration never lands that way). THE CAUSE, as the
@@ -93,32 +110,50 @@ const PINNED_CENSUS: readonly string[] = [
  *  `refreshFromEngine()`, whose SETTLE fires its own pane, so the engine has ONE route per pane and `publishChange()` keeps its
  *  one meaning. */
 const PINNED_CHANGE_INTEREST: readonly string[] = ['doc-nav']
-/** §12a/`F-5`: the two panes the census must NOT carry, EACH WITH ITS REASON — `gnosis-status` is `operator`-scope and its paint is
- *  `B-9`'s (`paintPane` answers `operator-scope`, so entering it makes `fire` answer `fired:true` while nothing paints and
- *  `renderer.ts`'s `⟨B-9⟩` fallback is then skipped: a SILENTLY DEAD operator pane); `settings` is the operator surface too. */
-const ABSENT_CENSUS_PANES: ReadonlyArray<{ paneId: string; reason: string }> = [
+/** ⟨RE-STATED BY UNIT `B-9` (§4 `F-9`, §6 `O1`; `docs/L1/unit-b-9-pane-operator-settings.md` §3) — THE INVERSION, and the reason
+ *  it is a recorded-value move and not a relaxation: the two operator panes moved from the census's ABSENT list to its PRESENT
+ *  list, and each entry keeps its `{paneId, reason}` SHAPE and gains the reason its presence is now LAWFUL.⟩ §12a/`F-5`/`B-9` §3:
+ *  the two panes the census MUST carry, EACH WITH ITS REASON — `gnosis-status` and `settings` are `operator`-scope, and since `B-9`
+ *  an operator-scope pane's paint is the OPERATOR SURFACE'S OWN retained-graph paint (`paintPane`'s step 2 routes to
+ *  `paintOperatorPane`, which re-authors ONE section and re-renders it through that surface's own adapter, re-assembling nothing), so
+ *  entering them is a LIVE registration: the fire is answered by a paint instead of being skipped past a now-deleted fallback. */
+const PRESENT_CENSUS_PANES: ReadonlyArray<{ paneId: string; reason: string }> = [
   {
     paneId: 'gnosis-status',
     reason:
-      "its registration carries `scope:'operator'`, `paintPane`'s step 2 answers `operator-scope` for it and its paint is `B-9`'s — " +
-      'entering it makes `fire` answer `fired:true` while nothing paints, and `renderer.ts`\'s `⟨B-9⟩` operator fallback is skipped ' +
-      'precisely because `fired` is true (the silently dead operator pane `F-5` names)',
+      "it is `operator`-scope and its paint is the OPERATOR SURFACE'S OWN retained-graph paint (`B-9` §3: `paintPane`'s operator arm " +
+      'routes to `paintOperatorPane`, which re-authors ONE section of the retained operator graph and re-renders it through that ' +
+      "surface's own adapter) — so entering it is a LIVE registration: `fire('gnosis-status')` reaches a paint, and the `⟨B-9⟩` " +
+      'fallback that made its entry a silent death is DELETED (`§4` SITE 1)',
   },
   {
     paneId: 'settings',
     reason:
-      'it is the operator scope\'s own pane (`B-9`\'s surface): `updatePane` answers `operator-scope` and the operator mount — not the ' +
-      'app-graph paint — is its lawful route',
+      "it is the operator scope's own pane and its paint is the same retained-graph paint `B-9` §3 lands (`paintOperatorPane`, one " +
+      'section re-authored and re-rendered through the operator adapter) — its source is the operator-settings PUSH ' +
+      '(`onOperatorSettingsChanged` commits then fires) plus the stamped store-listing settlement, so entering it is a LIVE ' +
+      'registration rather than the dead one `F-2` named',
   },
 ]
 const CENSUS_NAME = 'REPLUMBED_PANE_IDS'
 const CHANGE_INTEREST_NAME = 'CHANGE_INTERESTED_PANE_IDS'
 const DOC_NAV = 'doc-nav'
-/** The forged ids: change-interested ids the census does NOT paint. `gnosis-status` is the CONCRETE half-wire (`F-5`: the operator
- *  pane whose entry makes `fire` answer `fired:true` with no paint), and the probe is an id no unit ever registers. Both are ABSENT
- *  from the seven-id value, so the forged-pair arms below stay a reading of the SHIPPED census rather than of a stale list. */
-const FORGED_FIRST = 'gnosis-status'
-const FORGED_SECOND = 'probe-b8-never-painted'
+/** ⟨RE-STATED BY UNIT `B-9` (§4 `F-9`, §6 `C1`/`C2`) — the recorded VALUES moved, the arms did not.⟩ The forged ids: change-interested
+ *  ids the census does NOT paint — and after `B-9` BOTH are FABRICATED ids no unit ever registers, because the census now carries
+ *  every real id there is (the retired `gnosis-status` first probe IS a census member now, so keeping it would have made both arms
+ *  vacuous). `FORGED_FIRST` is this file's OWN existing second probe (`probe-b8-never-painted`); `FORGED_SECOND` is the `B-9` probe
+ *  beside it. Both are ABSENT from the nine-id value, so the forged-pair arms stay a reading of the SHIPPED census rather than of a
+ *  stale list. */
+const FORGED_FIRST = 'probe-b8-never-painted'
+const FORGED_SECOND = 'probe-b9-never-painted'
+/** ⟨Added by unit `B-9` (§6 `O8`, §10 adjudication 4) — `X1b`'s first forged-census mutant, replacing the retired `gnosis-status`
+ *  one.⟩ A FABRICATED id in the OPERATOR SECTION namespace: it only LOOKS like the `operator-pane-<id>` id `buildOperatorEnvelope`
+ *  mints, and no host registers it, so `updatePane` must answer `not-a-pane` — which the clause must report as a problem. */
+const FORGED_OPERATOR_ID = 'operator-pane-probe-b9-operator-ish'
+/** ⟨Added by unit `B-9` (§6 `O8`, §10 adjudication 4) — `X1b`'s CLASSIFIED arm.⟩ A FABRICATED `operator`-scope pane the row registers
+ *  into the booted host's registry AFTER boot (mirroring `pane-operator-settings`'s `O8` row): its section is not in the retained
+ *  operator graph, so §3 step 3 answers `not-mounted` — and the word this arm refuses is `operator-scope`, which §3 deleted. */
+const FORGED_CLASSIFIED_OPERATOR_PANE = 'probe-b9-operator-pane'
 const DOCUMENTS_PANE = 'gnosis-documents'
 const WIKIS_PANE = 'gnosis-wikis'
 
@@ -521,7 +556,10 @@ function nestedObjectMemberBody(rawBody: string, name: string): { body: string; 
 /** **`X1b`'s CLAUSE, and the only place it lives:** every id in `census` must answer `updatePane(id)` with a reason that is NOT
  *  `operator-scope` and NOT `not-a-pane` (i.e. `census ⊆ paintable`). `painted`/`unchanged`/`not-enabled`/`not-mounted`/`no-runtime`
  *  are all admissible: the first two are the paint's own answers and the last three are transient boot / registry states, none of
- *  which is a registration that can never paint. The forged-census mutants `X1b` drives prove the clause falsifiable. */
+ *  which is a registration that can never paint. The forged-census mutants `X1b` drives prove the clause falsifiable; ⟨UNIT `B-9`
+ *  §3/§4⟩ on a host that HAS an operator mount `operator-scope` is no longer answered AT ALL — an operator-scope pane routes to the
+ *  operator surface's own retained-graph paint, whose absences are `not-mounted`/`not-enabled` — so the word survives in this clause
+ *  for the hosts that legitimately have no operator mount (`pane-events.ts`'s vocabulary), never for this harness. */
 function censusPaintableProblems(
   host: Record<string, unknown> | null,
   census: readonly string[],
@@ -902,6 +940,10 @@ interface ChannelBootDrive {
   channel: ReturnType<typeof createPaneEvents> | null
   /** The booted host — the subject of `X1b`'s `census ⊆ paintable` clause (`updatePane(<id>)`'s declared word is the reading). */
   host: Record<string, unknown> | null
+  /** ⟨Added by unit `B-9` (§6 `O8`, §10 adjudication 4) — `X1b`'s CLASSIFIED arm registers a fabricated `operator`-scope pane AFTER
+   *  boot and must read what `updatePane` answers for it, so the drive hands the registry out. Additive only: no existing reading
+   *  changes and no arm is removed.⟩ The registry the booted host was constructed with. */
+  registry: Record<string, unknown> | null
   problems: string[]
   restore: () => void
 }
@@ -1015,13 +1057,13 @@ async function bootChannelHost(limb: string, options: BootOptions = {}): Promise
       events: channel,
     }) as Record<string, unknown>
     await (host['boot'] as (runtime: unknown) => Promise<void>).call(host, recordingRuntime())
-    return { channel, host, problems, restore }
+    return { channel, host, registry, problems, restore }
   } catch (error) {
     problems.push(
       `${limb}: the harness's \`host.boot(runtime)\` THREW (${String(error)}) — the shipped census's ATTACHMENTS have no booted ` +
         `subject, so the change-interest reading below cannot be made`,
     )
-    return { channel: null, host: null, problems, restore }
+    return { channel: null, host: null, registry: null, problems, restore }
   }
 }
 
@@ -1130,11 +1172,12 @@ describe('pane-gnosis — C1: `changeInterestSubsetProblems` is ONE exported, PU
           kind: 'exactly-empty',
         }),
       )
-      // (2b) THE FORGED PAIR — one id the census does not paint: a problem NAMING it. ⟨RE-STATED by §12a (`D-44`) — the recorded
-      // VALUES moved, the ARMS did not.⟩ The shipped census now CARRIES `gnosis-documents`/`gnosis-wikis` (the seven-id value), so
-      // the forged ids are the two the census still does NOT paint: `gnosis-status` (`F-5`'s operator pane — the CONCRETE half-wire:
-      // entering it makes `fire` answer `fired:true` with no paint while the `⟨B-9⟩` fallback is skipped) and an id no unit
-      // registers. A counter that certified either one would bless exactly the dead registration `X1`/`X1b` exist to refuse.
+      // (2b) THE FORGED PAIR — one id the census does not paint: a problem NAMING it. ⟨RE-STATED by `B-9` (§4 `F-9`, §6 `C1`) — the
+      // recorded VALUES moved, the ARMS did not.⟩ The shipped census now CARRIES `gnosis-documents`/`gnosis-wikis` AND both operator
+      // panes (the nine-id value), so the forged ids are the two the census still does NOT paint: `probe-b8-never-painted` (this
+      // file's own existing second probe) and `probe-b9-never-painted` — ids no unit registers. The retired first probe was
+      // `gnosis-status`, which the census now carries, so forging it would prove nothing; a counter that certified either fabric id
+      // would bless exactly the dead registration `X1`/`X1b` exist to refuse.
       problems.push(
         ...gradeAnswer('C1', `['${DOC_NAV}','${FORGED_FIRST}'], the shipped census VALUE`, drive(fn, [DOC_NAV, FORGED_FIRST], census), {
           kind: 'exactly-one-naming',
@@ -1378,7 +1421,7 @@ describe('pane-gnosis — C2: `boot` computes the plan FIRST and refuses the WHO
           problems.push(
             `C2: the change-interest declaration parsed as ${shown(declaredChangeInterest)} and NONE of its ids is in the census, ` +
               `so the \`changePanes()\` comparison above is VACUOUS (\`[] === []\`) — §12a records ` +
-              `${shown(PINNED_CHANGE_INTEREST)}, every id of which IS in the seven-id census`,
+              `${shown(PINNED_CHANGE_INTEREST)}, every id of which IS in the nine-id census`,
           )
         }
         // (2c) THE FORGED PAIR, THROUGH THE ONLY SEAM THERE IS. `boot`'s census is module-private (a `const` in the module body, not
@@ -1421,24 +1464,28 @@ describe('pane-gnosis — C2: `boot` computes the plan FIRST and refuses the WHO
 // ===========================================================================
 // `C3` — THE CENSUS HAS MOVED AND THE SITES ARE THE GRANTED ONES (§12a, `D-44`).
 // ===========================================================================
-describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and the two `renderer.ts` grant sites plus the two seams now stand as `D-44` states them', () => {
-  it('C3 — PIN: `REPLUMBED_PANE_IDS` parses to exactly the SEVEN-id set (runtime agrees, still exported) with `gnosis-status` and `settings` ABSENT and each named with its reason; `CHANGE_INTERESTED_PANE_IDS` parses to exactly `[doc-nav]` (the re-narrowed value) and is still module-private; the CRUD `onChanged` is the ONE-PARAMETER form whose body calls `firePaneUpdate(paneId)` with NO `host.refresh()`; the `⟨B-9⟩` operator fallback is UNCHANGED; the `SidebarPanes` gnosis delegate DECLARES status/query/documents/wikis/refreshFromEngine; and `installSidebarBridge`’s `methods` DECLARES gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis', async () => {
-    // §12a (`D-44`) — THE PIN, RE-GRAINED. The pre-pass pin asserted the OPPOSITE two things ("the census does not move in this
-    // pass" and "`onChanged` is still a zero-parameter arrow wired to `host.refresh()`"); those are the arms THIS pass inverts, and
-    // they are inverted HERE — deliberately, in the set, with the landing — never relaxed in isolation (`B-7`'s recorded-value
-    // precedent). Every arm now names the LANDED fact and the contract sentence it reads, so a HALF-landing reds by name: a census
-    // of five, a change-interest declaration of one, a zero-parameter `onChanged`, a delegate without `documents`/`wikis`/
-    // `refreshFromEngine`, or a `methods` object without `gnosisDocuments`/`gnosisWikis` each reds its own arm.
+describe('pane-gnosis — C3 PIN: the census HAS moved to the NINE-id value, both operator panes are PRESENT with their reasons, and `renderer.ts`\'s `⟨B-9⟩` fallback is DELETED', () => {
+  it('C3 — PIN: `REPLUMBED_PANE_IDS` parses to exactly the NINE-id set (runtime agrees, still exported) with `settings` and `gnosis-status` PRESENT and each named with the reason its entry is now a LIVE registration; `CHANGE_INTERESTED_PANE_IDS` parses to exactly `[doc-nav]` (the re-narrowed value) and is still module-private; the CRUD `onChanged` is the ONE-PARAMETER form whose body calls `firePaneUpdate(paneId)` with NO `host.refresh()`; `firePaneUpdate`\'s body is `paneEvents.fire(paneId)` with NO `report.fired` early return, NO `scope === \'operator\'` probe, NO `host.refresh()` and NO `⟨B-9⟩` marker; the `SidebarPanes` gnosis delegate DECLARES status/query/documents/wikis/refreshFromEngine; and `installSidebarBridge`’s `methods` DECLARES gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis', async () => {
+    // §12a (`D-44`) — THE PIN, RE-GRAINED; ⟨RE-STATED BY UNIT `B-9` (§4 `F-9`, §6 `O1`/`S1`) — the SECOND re-grain of the same
+    // pin, and again a RECORDED-VALUE MOVE: the ABSENT arms became PRESENT arms and the fallback arm INVERTED to an absence, with
+    // every `expect(`/`it(` kept.⟩ The pre-pass pin asserted the OPPOSITE two things ("the census does not move in this pass" and
+    // "`onChanged` is still a zero-parameter arrow wired to `host.refresh()`"); those are the arms THAT pass inverted, and they are
+    // inverted HERE — deliberately, in the set, with the landing — never relaxed in isolation (`B-7`'s recorded-value precedent).
+    // Every arm now names the LANDED fact and the contract sentence it reads, so a HALF-landing reds by name: a census of five or
+    // seven, a change-interest declaration of one, a zero-parameter `onChanged`, a delegate without `documents`/`wikis`/
+    // `refreshFromEngine`, a `methods` object without `gnosisDocuments`/`gnosisWikis`, or a `firePaneUpdate` that still carries the
+    // `⟨B-9⟩` fallback each reds its own arm.
     // LAYER: envelope-class — DECLARATION parses over `src/renderer/**`'s text (comments stripped, bodies brace-matched) plus ONE
-    // cross-check against the module's runtime census value; ONE marker is read from the RAW text (`⟨B-9⟩` lives in a comment, and
-    // that comment IS the record the contract asks for — read in a three-line window anchored on the branch's own code line,
-    // never as a file-wide token search).
-    // DIFFERENCE FROM THE PRE-PASS ROW, named because this is the inversion: the census arms are now POSITIVE (seven ids, with the
-    // two CRUD panes present) and the absence arm is narrowed to the two panes that genuinely have no paint (`gnosis-status`,
-    // `settings`); the member arms grade DECLARATION SHAPES through `parseObjectMemberKeys` (`P1-1`), never a spelling.
+    // cross-check against the module's runtime census value; the RAW text is read for the `⟨B-9⟩` marker ONLY, because that marker
+    // lives in a COMMENT and a comment asserting the deleted branch is exactly as much a finding as the branch — read in a window
+    // anchored on `firePaneUpdate`'s own body, never as a file-wide token search.
+    // DIFFERENCE FROM THE PRE-PASS ROW, named because this is the inversion: the census arms are now POSITIVE (nine ids, with BOTH
+    // CRUD panes AND both operator panes present, each operator entry carrying the reason its entry is a LIVE registration now) and
+    // the fallback arm is an ABSENCE arm floored by the fire call that must still be there; the member arms grade DECLARATION SHAPES
+    // through `parseObjectMemberKeys` (`P1-1`), never a spelling.
     const problems: string[] = []
 
-    // ---- (1) THE PAINT CENSUS — the SEVEN-id SET, and the two panes that must NOT be in it, each with its reason --------------
+    // ---- (1) THE PAINT CENSUS — the NINE-id SET, and the two operator panes that must NOW be in it, each with its reason ---------
     const source = readSource(SIDEBAR_FILE, 'C3')
     problems.push(...source.problems)
     const censusDeclaration = parseIdListDeclaration(source.code, CENSUS_NAME)
@@ -1461,18 +1508,19 @@ describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and
       if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `C3: \`${CENSUS_NAME}\` parses to ${shown(censusValues)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §12a ` +
-            `(\`D-44\`) moves the census \`five -> seven\` (\`gnosis-documents\` and \`gnosis-wikis\` land WITH their fires, grant ` +
-            `lines 1 and 2) and the previous pass's five-id value is SUPERSEDED. A move without the granted fires is the half-wire ` +
-            `\`D-42\` refuses; a move of a different SIZE is a different decision than the one recorded`,
+            `(\`D-44\`) moved the census \`five -> seven\` and ⟨UNIT \`B-9\` §4 \`F-9\`/\`O1\`⟩ moved it \`seven -> nine\` (\`settings\` ` +
+            `and \`gnosis-status\` land WITH their paint, the operator surface's own retained-graph paint, so each entry is a LIVE ` +
+            `registration) and the previous passes' values are SUPERSEDED. A move without the paint is the half-wire \`D-42\` ` +
+            `refuses; a move of a different SIZE is a different decision than the one recorded`,
         )
       }
       if (censusValues.length !== asSet.length) {
         problems.push(`C3: \`${CENSUS_NAME}\` repeats an id (${shown(censusValues)}) — ONE id, ONE subscriber (\`B2-ADV-04\`)`)
       }
-      for (const absent of ABSENT_CENSUS_PANES) {
-        if (censusValues.includes(absent.paneId)) {
+      for (const present of PRESENT_CENSUS_PANES) {
+        if (!censusValues.includes(present.paneId)) {
           problems.push(
-            `C3: \`${CENSUS_NAME}\` names \`${absent.paneId}\` — it must stay OUT: ${absent.reason}`,
+            `C3: \`${CENSUS_NAME}\` does NOT name \`${present.paneId}\` — it must be IN the census: ${present.reason}`,
           )
         }
       }
@@ -1577,41 +1625,57 @@ describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and
         }
       }
 
-      // ---- (4) THE `⟨B-9⟩` OPERATOR FALLBACK — UNCHANGED pins (`F-5`) ---------------------------------------------------
+      // ---- (4) THE `⟨B-9⟩` OPERATOR FALLBACK — INVERTED pins (`F-5`; ⟨UNIT `B-9` §4 SITE 1⟩) ------------------------------
+      // ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 SITE 1, §6 `O4`'s `m1`; `F-9`) — EVERY ARM
+      // INVERTED, NO ARM REMOVED.⟩ The pre-pass row pinned the fallback PRESENT: the `report.fired` early return, the
+      // `registry.get(paneId)?.scope === 'operator'` probe, the `host.refresh()` call and the `⟨B-9⟩` deletion-order marker. `B-9`
+      // §4 SITE 1 DELETED that branch (its whole body is `paneEvents.fire(paneId)`), so the SAME readings are now ABSENCE arms — and
+      // every one of them stays FLOORED by the POSITIVE arm that the arrow still calls `paneEvents.fire(paneId)`, so a landing that
+      // deleted the whole arrow cannot pass this row by deletion.
       const fallback = bodyAt(renderer.raw, FIRE_PANE_UPDATE_ANCHOR, 'C3', 'const firePaneUpdate =')
       problems.push(...fallback.problems)
       if (fallback.body !== '') {
         const code = stripComments(fallback.body)
         if (!/paneEvents\s*\.\s*fire\s*\(\s*paneId\s*\)/.test(code)) {
           problems.push(
-            `C3 (\`F-5\`): \`firePaneUpdate\` no longer calls \`paneEvents.fire(paneId)\` — the site's whole subject is the channel ` +
-              `report the fallback is scoped by`,
+            `C3 (\`F-5\`): \`firePaneUpdate\` no longer calls \`paneEvents.fire(paneId)\` — after \`B-9\` the fire is the site's WHOLE ` +
+              `subject (\`B-9\` §4 SITE 1: "the arrow keeps \`fire(paneId)\` and nothing else"), so this POSITIVE arm is what floors ` +
+              `every absence arm below`,
           )
         }
-        if (!/if\s*\(\s*report\s*\.\s*fired\s*\)\s*\{?\s*return/.test(code)) {
+        if (/report\s*\.\s*fired/.test(code)) {
           problems.push(
-            `C3 (\`F-5\`): \`firePaneUpdate\` no longer returns early on \`report.fired\` — \`F-5\`'s hazard is exactly an operator ` +
-              `pane entering the census: the fire answers \`fired:true\`, this early return skips the fallback, and the operator ` +
-              `pane goes silently dead`,
+            `C3 (\`F-5\`, \`B-9\` §4 SITE 1): \`firePaneUpdate\` STILL reads \`report.fired\` (body read: ` +
+              `${shown(code.replace(/\s+/g, ' ').trim())}) — \`B-9\` DELETED the fallback's early return ("\`const report = …\` … ` +
+              `\`if (report.fired) return\`"); the arrow's body is \`paneEvents.fire(paneId)\` and nothing else, so a surviving early ` +
+              `return is the deleted branch under another name`,
           )
         }
-        if (!/scope\s*===\s*'operator'/.test(code) || !/host\s*\.\s*refresh\s*\(\s*\)/.test(code)) {
+        if (/scope\s*===\s*'operator'/.test(code)) {
           problems.push(
-            `C3 (\`F-5\`): the \`operator\`-scope fallback is GONE from \`firePaneUpdate\` (expected ` +
-              `\`registry.get(paneId)?.scope === 'operator' … host.refresh()\`) — §12a keeps it for \`B-9\` precisely BECAUSE ` +
-              `\`gnosis-status\` stays out of the census: it is the operator pane's only lawful paint until \`B-9\` lands`,
+            `C3 (\`F-5\`, \`B-9\` §4 SITE 1): \`firePaneUpdate\` STILL carries the \`scope === 'operator'\` probe (body read: ` +
+              `${shown(code.replace(/\s+/g, ' ').trim())}) — that probe IS the operator fallback \`B-9\` deleted: with both operator ` +
+              `panes in the census and their retained-graph paint landed, there is no operator-scope pane left without a paint`,
+          )
+        }
+        if (/host\s*\.\s*refresh\s*\(\s*\)/.test(code)) {
+          problems.push(
+            `C3 (\`F-5\`, \`B-9\` §4 SITE 1): \`firePaneUpdate\` STILL calls \`host.refresh()\` (body read: ` +
+              `${shown(code.replace(/\s+/g, ' ').trim())}) — \`refresh()\` re-fetches then re-assembles (\`loadAppGraph\` + ` +
+              `\`mountOperator\`), which is THE LAST RE-ASSEMBLY IN THE APP and the exact thing \`INV-E\` counts at zero; \`B-9\` §4 ` +
+              `SITE 1 deletes it from this arrow (it survives on its own boot/landing route, \`§4\`'s "NOT removed, and said so")`,
           )
         }
         // THE MARKER, read from the RAW body (the `⟨B-9⟩` unit marker IS a comment, and the comment is the record the contract
-        // asks for). Anchored on the branch's own code line, never a file-wide token search.
+        // asks for). ⟨`B-9` §4 SITE 1⟩ THE MARKER'S MEANING INVERTED: it was the DELETION ORDER this unit inherits, so after the
+        // landing it must be GONE — a comment carrying it would record a branch that no longer exists.
         const rawLines = fallback.body.split('\n')
-        const branchLine = rawLines.findIndex((line) => /scope\s*===\s*'operator'/.test(line))
-        const markerWindow = branchLine < 0 ? [] : rawLines.slice(Math.max(0, branchLine - 3), branchLine + 1)
-        if (branchLine < 0 || !markerWindow.some((line) => line.includes('⟨B-9⟩'))) {
+        const markerLine = rawLines.findIndex((line) => line.includes('⟨B-9⟩'))
+        if (markerLine >= 0) {
           problems.push(
-            `C3 (\`F-5\`): the operator fallback's \`⟨B-9⟩\` MARKER is gone (expected within three lines above ` +
-              `\`scope === 'operator'\`) — the marker is the DELETION ORDER \`B-9\` inherits ("DELETE THIS BRANCH when the operator ` +
-              `panes' paint lands"); an unmarked fallback is indistinguishable from a permanent double route`,
+            `C3 (\`F-5\`, \`B-9\` §4 SITE 1): the \`⟨B-9⟩\` MARKER still sits inside \`firePaneUpdate\`'s body (raw line ${markerLine + 1}: ` +
+              `${shown(rawLines[markerLine]!.trim())}) — it was the DELETION ORDER ("DELETE THIS BRANCH when the operator panes' ` +
+              `paint lands"), the branch it marked is deleted, so a surviving marker is a comment asserting the old state`,
           )
         }
       }
@@ -1672,14 +1736,16 @@ describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and
 
     expect(
       problems,
-      `C3 PIN — the census HAS MOVED and the granted sites stand (§12a \`D-44\`; §4, §6 \`X1\`; findings \`F-1\`, \`F-5\`, \`F-7\`). ` +
-        `${problems.length} problem(s). \`${CENSUS_NAME}\` must be exactly ${shown(PINNED_CENSUS)} as a SET with ` +
-        `${shown(ABSENT_CENSUS_PANES.map((entry) => entry.paneId))} ABSENT (each refused for its own recorded reason), ` +
-        `\`${CHANGE_INTEREST_NAME}\` exactly ${shown(PINNED_CHANGE_INTEREST)} and still module-private, \`renderer.ts\`'s CRUD ` +
-        `\`onChanged\` the ONE-PARAMETER \`(paneId) => firePaneUpdate(paneId)\` with no \`host.refresh()\`, its \`⟨B-9⟩\` operator ` +
-        `fallback UNCHANGED, the \`SidebarPanes\` gnosis delegate DECLARING status/query/documents/wikis/refreshFromEngine, and ` +
-        `\`installSidebarBridge\`'s \`methods\` DECLARING gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis. envelope-class — ` +
-        `declaration parses plus the module's runtime value; every member is graded as a DECLARATION SHAPE (\`P1-1\`), never a spelling`,
+      `C3 PIN — the census HAS MOVED TO NINE and the \`⟨B-9⟩\` fallback is DELETED (⟨UNIT \`B-9\` §4 \`F-9\`/§6 \`O1\`/\`S1\`⟩; §12a ` +
+        `\`D-44\`; §4, §6 \`X1\`; findings \`F-1\`, \`F-5\`, \`F-7\`). ${problems.length} problem(s). \`${CENSUS_NAME}\` must be exactly ` +
+        `${shown(PINNED_CENSUS)} as a SET with ${shown(PRESENT_CENSUS_PANES.map((entry) => entry.paneId))} PRESENT (each carrying ` +
+        `the reason its entry is now a LIVE registration), \`${CHANGE_INTEREST_NAME}\` exactly ${shown(PINNED_CHANGE_INTEREST)} and ` +
+        `still module-private, \`renderer.ts\`'s CRUD \`onChanged\` the ONE-PARAMETER \`(paneId) => firePaneUpdate(paneId)\` with no ` +
+        `\`host.refresh()\`, \`firePaneUpdate\`'s body \`paneEvents.fire(paneId)\` with NO \`report.fired\` early return, NO ` +
+        `\`scope === 'operator'\` probe, NO \`host.refresh()\` and NO \`⟨B-9⟩\` marker, the \`SidebarPanes\` gnosis delegate DECLARING ` +
+        `status/query/documents/wikis/refreshFromEngine, and \`installSidebarBridge\`'s \`methods\` DECLARING ` +
+        `gnosisStatus/gnosisQuery/gnosisDocuments/gnosisWikis. envelope-class — declaration parses plus the module's runtime value; ` +
+        `every member is graded as a DECLARATION SHAPE (\`P1-1\`), never a spelling`,
     ).toEqual([])
   })
 })
@@ -1688,21 +1754,23 @@ describe('pane-gnosis — C3 PIN: the census HAS moved to the seven-id value and
 // `C4` — THE CHANGE CENSUS IS STILL A SUBSET OF THE PAINT CENSUS (GREEN ON ARRIVAL).
 // ===========================================================================
 describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBSET of the paint census, recomputed by PARSING both declarations', () => {
-  it('C4 — PIN: `CHANGE_INTERESTED_PANE_IDS` ⊆ `REPLUMBED_PANE_IDS` over both PARSED declarations, with the positive control that the parse is REAL (the census reads the SEVEN ids, the change-interest reads the ONE)', async () => {
+  it('C4 — PIN: `CHANGE_INTERESTED_PANE_IDS` ⊆ `REPLUMBED_PANE_IDS` over both PARSED declarations, with the positive control that the parse is REAL (the census reads the NINE ids, the change-interest reads the ONE)', async () => {
     // ⇒ GREEN ON ARRIVAL — A PIN. §9's containment rule has no subject if either declaration fails to parse, so this row proves the
     // parse before it grades the relation: a row that passes over a FAILED parse is the `B6-F12` defect (`D-38`'s lesson one realm
     // over), and a row that computes a subset over `[]` would be green forever.
     // LAYER: envelope-class — two DECLARATION parses over `src/renderer/sidebar-panes.ts`'s text (comments stripped). The declarations
     // are PARSED, never imported: `CHANGE_INTERESTED_PANE_IDS` is module-private, and importing the census would only prove what the
     // module already decided.
-    // RE-STATED BY §12a, NOT RELAXED: the census positive control moves to the SEVEN-id value the grant lands, and the
-    // change-interest positive control moves to the ONE-id value the architect RE-NARROWED after measurement (`['doc-nav']` — the
-    // `D-40` `m6` cause: a `publishChange` fire reaches a CRUD pane with no re-read arm and paints nothing, so declaring change
-    // interest there is a declared-but-inert path; their engine route is the ENGINE ARM's `refreshFromEngine()`). The empty-declaration
-    // arms stay exactly as filed, and the subset relation is graded over both PARSED values whatever they are.
+    // RE-STATED BY §12a, NOT RELAXED; ⟨RE-STATED ONCE MORE BY UNIT `B-9` (§4 `F-9`, §6 `C4`) — the cohort of a RECORDED-VALUE
+    // MOVE: the census positive control reads the NINE-id value `B-9` lands, and `changeInterest` stays `['doc-nav']` because this
+    // unit does not move it (`B6-F15`'s containment: neither operator pane follows engine-changeable data through a re-read it does
+    // not have).⟩ The change-interest positive control is the ONE-id value the architect RE-NARROWED after measurement (`['doc-nav']`
+    // — the `D-40` `m6` cause: a `publishChange` fire reaches a CRUD pane with no re-read arm and paints nothing, so declaring change
+    // interest there is a declared-but-inert path; their engine route is the ENGINE ARM's `refreshFromEngine()`). The
+    // empty-declaration arms stay exactly as filed, and the subset relation is graded over both PARSED values whatever they are.
     // MUTATION THAT WOULD RED IT: an id added to the change-interest declaration without the census (the half-wire, and the day a
-    // landing half-lands `B-8`); a census id removed while the change declaration still names it; a computed initialiser on either
-    // declaration (the parse arms); a census or change-interest value that is not the recorded one (the positive controls).
+    // landing half-lands a census move); a census id removed while the change declaration still names it; a computed initialiser on
+    // either declaration (the parse arms); a census or change-interest value that is not the recorded one (the positive controls).
     const problems: string[] = []
     const source = readSource(SIDEBAR_FILE, 'C4')
     problems.push(...source.problems)
@@ -1723,7 +1791,7 @@ describe('pane-gnosis — C4 PIN (GREEN on arrival): the change census is a SUBS
       const wantedSet = [...new Set(PINNED_CENSUS)].sort()
       if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
-          `C4: the PARSED census is ${shown(censusValues)}, not the SEVEN-id value ${shown(PINNED_CENSUS)} this row's subject is — ` +
+          `C4: the PARSED census is ${shown(censusValues)}, not the NINE-id value ${shown(PINNED_CENSUS)} this row's subject is — ` +
             `either the head moved (then C3 reds and the move must be re-pinned deliberately) or this parse is reading the wrong ` +
             `bytes (then the subset arm below proves nothing)`,
         )
@@ -1913,20 +1981,26 @@ describe('pane-gnosis — P1-1 (finding closed): the member census is a CLAUSE o
 // ===========================================================================
 // `X1b` — THE CONVERSE CLAUSE: `census ⊆ paintable`, over the REAL booted host (GREEN ON ARRIVAL BY DESIGN).
 // ===========================================================================
-describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)` never answers `operator-scope`/`not-a-pane` — proved falsifiable on two forged censuses', () => {
-  it('X1b — over the REAL booted `SidebarPanes` host (whose registry carries the REAL `GnosisPanes` + `GnosisCrudPanes` registrations, exactly as `renderer.ts` installs them) EVERY id in the LIVE `REPLUMBED_PANE_IDS` answers a reason that is not `operator-scope` and not `not-a-pane`; the SAME clause answers a problem for `[...census, gnosis-status]` (the concrete dead-registration hazard, `F-5`) and for `[...census, a-pane-that-does-not-exist]`', async () => {
+describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)` never answers `operator-scope`/`not-a-pane` — proved falsifiable on TWO forged censuses and one classified operator registration', () => {
+  it('X1b — over the REAL booted `SidebarPanes` host (whose registry carries the REAL `GnosisPanes` + `GnosisCrudPanes` registrations, exactly as `renderer.ts` installs them) EVERY id in the LIVE nine-id `REPLUMBED_PANE_IDS` answers a reason that is not `operator-scope` and not `not-a-pane` — `settings` and `gnosis-status` included; the SAME clause answers a problem for `[...census, operator-pane-probe-b9-operator-ish]` (a fabricated id in the OPERATOR SECTION namespace) and for `[...census, a-pane-that-does-not-exist]`, and a fabricated `operator`-scope pane registered AFTER boot must answer a word OTHER than `operator-scope`', async () => {
     // ⇒ GREEN ON ARRIVAL BY DESIGN: THIS IS A CLAUSE, NOT A PIN. It reds no landing today because today's census ids are all
     // paintable-or-transient; it exists to outlive a deliberate re-pin. `C3` catches TODAY'S form of the wrong move (a census of the
     // wrong SIZE, an operator pane named in it); `X1b` catches the class: an id in the census whose paint DOES NOT EXIST subscribes,
-    // fires and paints nothing (`F-5` is the concrete case — `gnosis-status` answers `operator-scope`), and the containment clause
-    // alone cannot see it.
-    // ITS RED-ON-WRONG-LANDING ARM IS THE `gnosis-status` MUTANT: the clause is driven over a FORGED census that adds
-    // `gnosis-status` and MUST answer a problem. That is the arm a landing which enters the operator pane will trip, and it is
-    // proved HERE, on the same clause, rather than claimed in prose.
+    // fires and paints nothing, and the containment clause alone cannot see it.
+    // ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O8`, §10 adjudication 4) — THE FORGED
+    // `gnosis-status` MUTANT IS RETIRED AND THE ROW SAYS SO.⟩ Before this unit, `gnosis-status` was the CONCRETE dead-registration
+    // hazard (`F-2`: it answered `operator-scope`, so a census naming it bought a silently dead pane). §3 replaces that REFUSAL with
+    // a ROUTE to the operator surface's own retained-graph paint, so after the landing `gnosis-status` IS paintable and forging it
+    // would prove nothing. The mutant therefore MOVES to the TWO arms adjudication 4 names — a fabricated id in the operator SECTION
+    // namespace (`operator-pane-probe-b9-operator-ish`, registered nowhere, so `not-a-pane`) and the pre-existing unregistered id
+    // (`a-pane-that-does-not-exist`) — and the classified case becomes its OWN arm: a fabricated `operator`-scope registration must
+    // answer a word OTHER than `operator-scope`. **THE CONCRETE HAZARD `F-5` NAMED IS GONE**, because both operator panes now have a
+    // paint; what survives is the class the clause exists for.
     // LAYER: envelope-class — the REAL host booted over the LAYOUT-LESS `dom-shim` against a recording runtime double; the reading is
     // the paint's OWN declared word (`updatePane`'s closed vocabulary). `painted`/`unchanged`/`not-enabled`/`not-mounted`/`no-runtime`
     // are all admissible (`not-mounted`/`no-runtime` are transient boot states and `not-enabled` is the registry's own census); the two
-    // REFUSED words are `operator-scope` (the operator mount is `B-9`'s surface) and `not-a-pane` (no host registered it).
+    // REFUSED words are `operator-scope` (on a host that HAS an operator mount, `B-9` §3 turns it into a route) and `not-a-pane` (no
+    // host registered it).
     const problems: string[] = []
     const loaded = await loadHostModule('X1b')
     problems.push(...loaded.problems)
@@ -1949,14 +2023,23 @@ describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)`
         // THE LIVE CENSUS: every id must clear the two REFUSED words.
         problems.push(...censusPaintableProblems(drive.host, censusIds, 'the LIVE census', 'X1b'))
         // FALSIFIABILITY — THE TWO MUTANTS. Both are FORGED censuses (never contentions about today's value), and each must answer a
-        // problem, or the clause is a sentence that can only ever be green.
-        const operatorMutant = [...censusIds, 'gnosis-status']
-        const operatorProblems = censusPaintableProblems(drive.host, operatorMutant, 'the forged census + `gnosis-status`', 'X1b·proof')
-        if (operatorProblems.length === 0) {
+        // problem, or the clause is a sentence that can only ever be green. ⟨UNIT `B-9` §6 `O8`/§10 adjudication 4⟩ THE FIRST MUTANT
+        // MOVED OFF `gnosis-status` (paintable now, so forging it would prove nothing) TO a fabricated id in the OPERATOR SECTION
+        // namespace: it only LOOKS like an `operator-pane-<id>` section, no host registered it, so `not-a-pane` — and a census entry
+        // no host registered must always be a problem.
+        const operatorIshMutant = [...censusIds, FORGED_OPERATOR_ID]
+        const operatorIshProblems = censusPaintableProblems(
+          drive.host,
+          operatorIshMutant,
+          `the forged census + \`${FORGED_OPERATOR_ID}\` (a fabricated id in the OPERATOR SECTION namespace, registered nowhere)`,
+          'X1b·proof',
+        )
+        if (operatorIshProblems.length === 0) {
           problems.push(
-            `X1b·proof: the clause ACCEPTED the forged census ${shown(operatorMutant)} — \`gnosis-status\` is registered ` +
-              `\`scope:'operator'\` (\`F-5\`), so \`updatePane('gnosis-status')\` answers \`operator-scope\` and a census that names it ` +
-              `is a silently dead registration. A clause that cannot red THIS mutant cannot red the hazard the contract names`,
+            `X1b·proof: the clause ACCEPTED the forged census ${shown(operatorIshMutant)} — \`${FORGED_OPERATOR_ID}\` is nobody's ` +
+              `registration (it only LOOKS like an \`operator-pane-<id>\` section id), so \`updatePane\` answers \`not-a-pane\` and ` +
+              `a census that names it is a silently dead registration. A clause that cannot red THIS mutant cannot red the class the ` +
+              `contract names`,
           )
         }
         const unknownMutant = [...censusIds, 'a-pane-that-does-not-exist']
@@ -1967,6 +2050,48 @@ describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)`
               `census entry no host registered must be a problem`,
           )
         }
+        // ---- THE CLASSIFIED ARM (§10 adjudication 4; mirrors `O8`'s row in `tests/unit/shell-chrome/pane-operator-settings.test.ts`) --
+        // §3 step 3 answers `not-mounted` for an ENABLED `operator`-scope pane with no section in the retained operator graph, and
+        // `not-mounted` is ADMISSIBLE in this clause (a transient state). What is NOT admissible — and what this arm grades — is
+        // `operator-scope`: on a host that HAS an operator mount, `B-9` §3 turned that word into a ROUTE, so a fabricated operator
+        // registration answering it would be the very refusal this unit deletes. THE CONCRETE HAZARD `F-5` NAMED IS GONE.
+        const registry = drive.registry
+        if (registry === null) {
+          problems.push(
+            `X1b·proof: the harness handed back NO registry, so the CLASSIFIED \`operator\`-scope arm has no subject — a fabricated ` +
+              `operator registration cannot be made and the word this unit deletes cannot be read`,
+          )
+        } else {
+          try {
+            ;(registry['register'] as (def: unknown) => void).call(registry, {
+              id: FORGED_CLASSIFIED_OPERATOR_PANE,
+              title: 'Probe',
+              scope: 'operator',
+              render: () => ({ type: 'div' }),
+            })
+            ;(registry['enable'] as (id: string) => void).call(registry, FORGED_CLASSIFIED_OPERATOR_PANE)
+          } catch (error) {
+            problems.push(
+              `X1b·proof: the harness could not register the fabricated \`operator\`-scope pane (${String(error)}) — the CLASSIFIED ` +
+                `arm has no subject`,
+            )
+          }
+          const classifiedProblems = censusPaintableProblems(
+            drive.host,
+            [FORGED_CLASSIFIED_OPERATOR_PANE],
+            `a fabricated \`operator\`-scope registration (\`${FORGED_CLASSIFIED_OPERATOR_PANE}\`) made AFTER boot`,
+            'X1b·proof',
+          )
+          problems.push(...classifiedProblems)
+          if (classifiedProblems.length > 0) {
+            problems.push(
+              `X1b·proof: a fabricated \`operator\`-scope pane registered AFTER boot still answers a REFUSED word — **the concrete ` +
+                `hazard \`F-5\` named is GONE** (both operator panes have a paint now, \`B-9\` §4), and §3 step 2 replaced ` +
+                `\`operator-scope\` with a ROUTE: its section is not in the retained operator graph, so the lawful answer is ` +
+                `\`not-mounted\`, never the deleted refusal`,
+            )
+          }
+        }
       }
     } finally {
       drive.restore()
@@ -1974,11 +2099,15 @@ describe('pane-gnosis — X1b: every census id is PAINTABLE — `updatePane(id)`
 
     expect(
       problems,
-      `X1b — the CONVERSE CLAUSE: \`census ⊆ paintable\` (\`P1-4\`/\`C5\`, authored by this pass; §6 \`X1b\`). ${problems.length} ` +
-        `problem(s). Over the REAL booted host, EVERY id in the live \`${CENSUS_NAME}\` (${shown(censusIds)}) must answer ` +
-        `\`updatePane(id)\` with a reason OTHER than \`operator-scope\`/\`not-a-pane\`, and the SAME clause must answer a problem for ` +
-        `\`[...census, 'gnosis-status']\` (the concrete dead registration: \`F-5\`) and for \`[...census, 'a-pane-that-does-not-exist']\`. ` +
-        `GREEN ON ARRIVAL BY DESIGN — a clause, not a pin; its red-on-wrong-landing arm is the \`gnosis-status\` mutant. envelope-class`,
+      `X1b — the CONVERSE CLAUSE: \`census ⊆ paintable\` (\`P1-4\`/\`C5\`; §6 \`X1b\`, ⟨RE-STATED BY UNIT \`B-9\` §6 \`O8\`/§10 ` +
+        `adjudication 4⟩). ${problems.length} problem(s). Over the REAL booted host, EVERY id in the live \`${CENSUS_NAME}\` ` +
+        `(${shown(censusIds)}) must answer \`updatePane(id)\` with a reason OTHER than \`operator-scope\`/\`not-a-pane\` — ` +
+        `\`settings\` and \`gnosis-status\` included — and the SAME clause must answer a problem for ` +
+        `\`[...census, '${FORGED_OPERATOR_ID}']\` (a fabricated id in the OPERATOR SECTION namespace) and for ` +
+        `\`[...census, 'a-pane-that-does-not-exist']\`, while a fabricated \`operator\`-scope registration made AFTER boot must NOT ` +
+        `answer \`operator-scope\`. The retired \`gnosis-status\` mutant is NAMED here: after the landing that pane IS paintable, so ` +
+        `the concrete hazard it represented is GONE — which is what makes the stricter reading possible. ` +
+        `GREEN ON ARRIVAL BY DESIGN — a clause, not a pin. envelope-class`,
     ).toEqual([])
   })
 })

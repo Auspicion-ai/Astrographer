@@ -299,15 +299,14 @@ export interface SidebarPanesOptions {
   events?: PaneEvents
 }
 
-/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **seven ids at
- *  this head — `gnosis-query`, `crosslinks`, `doc-nav`, `search`, `template-editor`, `gnosis-documents` and `gnosis-wikis` — i.e. ONE constant EXTENDED
+/** ⟨Unit `B-3` `§3` — THE ONE DECLARED CENSUS.⟩ The panes whose paint the host registers on the channel at `boot`: **nine ids at
+ *  this head — `gnosis-query`, `crosslinks`, `doc-nav`, `search`, `template-editor`, `gnosis-documents`, `gnosis-wikis`,
+ *  `settings` and `gnosis-status` — i.e. ONE constant EXTENDED
  *  deliberately, once per unit, each with its cause beside it** (the count is a fact of THIS declaration and is never carried
  *  into prose as a fixed literal; each landing's paragraph below states the delta it took). The set is ONE constant so a later
  *  family unit must EXTEND it deliberately
- *  (`B-8` for the other gnosis panes, `B-6`…`B-10`) and can never inherit a silent second subscriber. `gnosis-status` is
- *  deliberately NOT here: it is `operator`-scope, the operator mount is `B-9`'s surface, and `updatePane` answers
- *  `operator-scope` for it rather than re-mounting it (`r3`/`r5`). **FROZEN** (`B3-F13`): the census is a fact of
- *  the VALUE, not only a convention — a `push` cannot add a silent second subscriber.
+ *  (`B-8` for the other gnosis panes, `B-6`…`B-10`) and can never inherit a silent second subscriber. **FROZEN** (`B3-F13`):
+ *  the census is a fact of the VALUE, not only a convention — a `push` cannot add a silent second subscriber.
  *
  *  ⟨Unit `B-7` — THE ROW MOVED BY EXACTLY TWO MORE, AND HERE IS THE CAUSE.⟩ `search` and `template-editor` join the census
  *  because each now answers a PRODUCER OF ITS OWN instead of a re-assembly: the search pane's source is its OWN answered
@@ -334,10 +333,22 @@ export interface SidebarPanesOptions {
  *  producer (`refreshFromEngine`) — so a paint arrives because the pane HEARD, never because something re-assembled the tree. Neither pane
  *  re-reads a bridge on its OWN event (`ASM-B8-1`: a re-issue is the unbounded `settle → fire → settle` loop `F-4` names), so neither owes a
  *  re-read arm and both reach `updatePane` synchronously inside the fire. It is two ids, the same `subscribe`, ONE registration per id
- *  (`B2-ADV-04`), and every other family keeps its `refresh()`. **`gnosis-status` is deliberately NOT here, and the reason is a hazard rather
- *  than a schedule:** its paint is `B-9`'s (`paintPane` answers `operator-scope` for an operator-scope registration), so a census entry would
- *  make `fire` answer `fired:true` while nothing paints — and `renderer.ts`'s `⟨B-9⟩` fallback would then be skipped PRECISELY BECAUSE it fired,
- *  which is a silently dead operator pane. The two families still keeping `refresh()` are therefore `settings` and `gnosis-status`, both `B-9`'s.⟩ */
+ *  (`B2-ADV-04`), and every other family keeps its `refresh()`.⟩
+ *
+ *  ⟨Unit `B-9` — **THE ROW MOVED BY EXACTLY TWO MORE, AND HERE IS THE CAUSE** (`docs/L1/unit-b-9-pane-operator-settings.md` §6 `O1`,
+ *  adjudications 1–4).⟩ `settings` and `gnosis-status` join the census because each now answers a PRODUCER OF ITS OWN and each
+ *  has a PAINT of its own: `settings`' source is the OPERATOR-SETTINGS PUSH — `onOperatorSettingsChanged` commits
+ *  `lastOperatorSettings`/`representationMode`/`layout` from the payload (the broadcast IS the store's state) and then FIRES
+ *  `settings`, while the store-listing re-read's own settlement (`refreshRegistryManage`, generation-stamped) fires it too — and
+ *  `gnosis-status`' source is its OWN settled HEALTH REPORT (`GnosisPanes.refreshStatus`'s two arms, both already naming it through
+ *  `onChanged`). The PAINT that receives those fires is `updatePane`'s operator arm, which is a ROUTE rather than a refusal as of
+ *  this same landing (§3's six steps): it re-authors ONE section of the RETAINED operator graph and re-renders that graph through
+ *  its own adapter, so it re-assembles NOTHING (`0 loadAppGraph`, `0 mountOperator`, `0 refresh()` — `INV-E`) and neither pane
+ *  re-reads a bridge on its own event (`ASM-B9-1`). The hazard the previous paragraph recorded is therefore GONE rather than
+ *  scheduled: a census entry for these ids no longer makes `fire` answer `fired:true` while nothing paints. It is two ids, the same
+ *  `subscribe`, ONE registration per id (`B2-ADV-04`), and no family keeps the pre-migration `refresh()` route. **`B6-F15`'s
+ *  containment still binds:** `CHANGE_INTERESTED_PANE_IDS` deliberately does NOT grow (neither pane follows engine-changeable data,
+ *  and neither has a re-read arm).⟩ */
 export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze([
   'gnosis-query',
   'crosslinks',
@@ -346,6 +357,8 @@ export const REPLUMBED_PANE_IDS: readonly string[] = Object.freeze([
   'template-editor',
   'gnosis-documents',
   'gnosis-wikis',
+  'settings',
+  'gnosis-status',
 ])
 
 /** ⟨Unit `B-6` `§4` — THE CHANGE-INTEREST CENSUS: ONE FROZEN DECLARATION, and the only input the `boot` loop uses to choose a
@@ -412,6 +425,221 @@ export function changeInterestSubsetProblems(changeInterest: readonly string[], 
   }
   return problems
 }
+
+/** ⟨Unit `B-9` `§2`/`§6` `O5` — **`ASM-B9-3`: THE APP-GRAPH FIELD CENSUS, AS ONE EXPORTED PURE TOTAL PREDICATE** (adjudication 1 pins
+ *  the symbol and its arity: `settingsMovesAppGraph(previous, next)`, declared ONCE here, two arguments because "moved" is a
+ *  COMPARISON).⟩ `onOperatorSettingsChanged` commits the push and FIRES `settings` for every write — the fire is the operator
+ *  pane's whole delivery — and the APP GRAPH is re-derived only when this predicate says an app-graph member moved.
+ *
+ *  **THE MEMBER SET IS THE CONSEQUENCE'S CENSUS, NOT THE PAYLOAD'S.** Exactly TWO members reach the assembled envelope, and that
+ *  is the whole table (nothing may be added back without a member the assembled envelope actually READS):
+ *
+ *   · `representationMode` → `applyEditorToolbar`/`editorToolbarContent` (the toolbar's mode);
+ *   · `layout` → `applyZoneTracks`/`deriveLayout` (the zone tracks, and the placement/geometry the assembly renders).
+ *
+ *  THREE MEMBERS ARE DELIBERATELY *NOT* COUNTED, and the measured REASON for each removal is written beside it so a later pass
+ *  cannot re-widen this set by inspection alone:
+ *
+ *   · `enabledPanes` — **ECHO**. It reaches the app graph only through the REGISTRY, and `refresh()` never re-applies the registry;
+ *     the LOCAL route is the authority (`togglePaneVisibility`/`onPaneVisibilityChange` set the registry BEFORE they persist and run
+ *     their own rebuild), so the broadcast that comes back is the echo of a move the app already made.
+ *   · `defaultDocumentId` — **TAB-CONTEXT-ONLY**. It reaches `getTabContext()`'s `lastFocusedDocumentId` (the first-tab default
+ *     resolution) and the settings pane's own row; the assembled envelope never reads it.
+ *   · `tabs` — **BOOT-ONLY**. `renderer.ts` reads `settings.tabs` ONCE at boot (`tabStrip.load(settings?.tabs)`); a push cannot
+ *     re-load the tab strip, so a rebuild for it re-assembles the whole graph for zero graph consequence.
+ *
+ *  (The two members this census was ALREADY without are `topK` (`settingsContent`'s `topK:` line) and `panesInitialized`, which the
+ *  operator pane alone renders.) Counting either class was MEASURED WASTE, not a safety margin: every `TabStrip.commit` (focus /
+ *  open / close / query-edit) persists `{tabs}` and broadcasts, and each such push re-assembled the whole app graph AND the operator
+ *  surface for a member with no graph consequence at all.
+ *
+ *  **PURE and TOTAL, and an INCOMPARABLE MEMBER ANSWERS MOVED** (ADJ 3): no `this.`, no `await`, no `console.`, no bridge, no DOM,
+ *  no I/O and no timer — the verdict is decidable from the two arguments alone — and at EVERY degenerate argument (a null/undefined
+ *  payload, a number, a string, an array, a malformed member) it answers a BOOLEAN and never throws. A payload that names no
+ *  app-graph member has moved none, so a NON-RECORD answers `false`; but a member whose READ THROWS (a getter that throws, a Proxy
+ *  `get` trap) or whose value cannot be COMPARED (a cyclic/unprintable value) answers **`true` — MOVED**. That DIRECTION is the
+ *  load-bearing half and it is stated so no later pass reverses it: a needless re-assembly is CHEAP, a STALE app graph is NOT. Two
+ *  distinct cyclic `layout` values used to print the same token, compare EQUAL and drop a REAL move — the defect ADJ 3 closes.
+ *  *Rejected:* the previous five-member set (three echoes/boot-only/tab-context members counted as graph consequences), and a
+ *  blanket "a settings write never re-assembles" (a real regression on a `representationMode` flip). */
+export function settingsMovesAppGraph(previous: unknown, next: unknown): boolean {
+  return settingsMembersMoved(previous, next, APP_GRAPH_SETTINGS_MEMBERS)
+}
+
+/** `settingsMovesAppGraph`'s ONE member census — the ONLY members the assembled envelope reads (ADJ 1), in declaration order. */
+const APP_GRAPH_SETTINGS_MEMBERS: readonly string[] = Object.freeze(['representationMode', 'layout'])
+
+/** ⟨ADJ 2 — **THE OPERATOR SURFACE'S OWN SECTION CENSUS, as a SECOND exported PURE TOTAL predicate.**⟩ `buildOperatorEnvelope`
+ *  authors ONE `section` per ENABLED `operator`-scope pane, so the operator scope's section set is a census of its own — and
+ *  `enabledOperatorPanes` (with `panesInitialized`'s empty-list gate) is exactly that census. A push that moves only it repaints the
+ *  PANE (whose visibility rows read the PAYLOAD) while the operator SURFACE keeps whatever its last authoring produced, so pane and
+ *  surface can disagree; `refreshOperator()` (→ `mountOperator`) is the route §4 already keeps lawful for "a visibility flip that
+ *  changes the operator scope's census", and `onOperatorSettingsChanged` routes it between the fire and the app-graph rebuild.
+ *
+ *  **⟨THE ROUTE'S OWN LIMIT, MEASURED AND NAMED RATHER THAN CLAIMED SHUT (`D-43`; owner L0's to decide, recorded here because a
+ *  later reader must not believe the leg closes more than it does):⟩** `refreshOperator()` re-authors from the REGISTRY, and THIS
+ *  HANDLER NEVER WRITES THE REGISTRY (its writers are `applyPersistedPaneVisibility` at boot, `onPaneVisibilityChange` and
+ *  `togglePaneVisibility`). So (i) on a push that arrives WITHOUT the local route — the `sidebar.operatorSet` seam can carry
+ *  `enabledOperatorPanes` — the predicate answers MOVED and the surface re-authors the registry's OLD section set: the
+ *  pane/surface disagreement SURVIVES the leg, and closing it would need a THIRD registry writer (the payload applied like the
+ *  boot arm applies it), which no adjudication grants; and (ii) on the LOCAL route the push is an ECHO (the toggle already set the
+ *  registry and re-authored), so the leg is a SECOND whole-surface mount per visibility flip — the same echo cost ADJ 1 removed
+ *  for `enabledPanes`, accepted here because ADJ 3's rule prices a needless re-assembly as cheaper than a stale surface. **A PURE
+ *  predicate over two payloads cannot tell an echo from a real move; if that cost ever matters, the fix is the third writer, not a
+ *  smarter predicate.**
+ *
+ *  **TRUE iff the operator scope's SECTION SET moved.** The effective set is read in `applyPersistedPaneVisibility`'s AUTHORITY
+ *  ORDER and with its GATE: a NON-EMPTY `enabledOperatorPanes` list is authoritative and compared as a SET (its ids deduped,
+ *  ORDER-INSENSITIVE — the envelope's section order comes from the REGISTRY, never from this list); an EMPTY / absent / non-array
+ *  list means EVERY operator section until `panesInitialized === true`, and NONE once it is `true` (the `emptyMeansEnabled` gate).
+ *  `panesInitialized` is therefore counted ONLY beside an empty list — beside a non-empty list it changes nothing. The boot arm's
+ *  REGISTRY-SCOPE FILTER (`scopeList` drops an id whose scope does not match) is deliberately NOT reimplemented: a PURE predicate
+ *  cannot know the registry, so two lists whose ids are all unregistered compare MOVED where boot's effective set is unchanged —
+ *  an OVER-fire (a needless re-author, the cheap direction), never an under-fire.
+ *
+ *  PURE and TOTAL on the SAME terms as `settingsMovesAppGraph`, INCLUDING the direction rule: a member whose read throws, or whose
+ *  value cannot be compared, answers **MOVED** (`true`) and never throws (a stale operator surface is the expensive direction). */
+export function settingsMovesOperatorCensus(previous: unknown, next: unknown): boolean {
+  let before: Record<string, unknown> | null
+  let after: Record<string, unknown> | null
+  try {
+    before = settingsPayloadRecord(previous)
+    after = settingsPayloadRecord(next)
+  } catch {
+    // an unreadable payload is INCOMPARABLE, and incomparable answers MOVED (never a throw at the handler).
+    return true
+  }
+  if (before === null || after === null) return false
+  let beforeCensus: string | null
+  let afterCensus: string | null
+  try {
+    beforeCensus = settingsOperatorCensusShape(before)
+    afterCensus = settingsOperatorCensusShape(after)
+  } catch {
+    return true
+  }
+  if (beforeCensus === null || afterCensus === null) return true
+  return beforeCensus !== afterCensus
+}
+
+/** **THE ONE COMPARISON BOTH MEMBER CENSUSES ARE BUILT ON:** `true` iff a member of `members` moved between the two payloads.
+ *  EVERY read is inside the guard, and an INCOMPARABLE member — a read that throws, a value that cannot be printed — answers
+ *  MOVED (`true`), so the predicate never throws at its caller and never drops a real move (ADJ 3). A non-record payload names no
+ *  member, so it has moved none (`false`). TOTAL at every argument. */
+function settingsMembersMoved(previous: unknown, next: unknown, members: readonly string[]): boolean {
+  let before: Record<string, unknown> | null
+  let after: Record<string, unknown> | null
+  try {
+    before = settingsPayloadRecord(previous)
+    after = settingsPayloadRecord(next)
+  } catch {
+    return true
+  }
+  if (before === null || after === null) return false
+  for (const member of members) {
+    let left: string | null
+    let right: string | null
+    try {
+      left = settingsMemberShape(before[member])
+      right = settingsMemberShape(after[member])
+    } catch {
+      return true
+    }
+    if (left === null || right === null) return true
+    if (left !== right) return true
+  }
+  return false
+}
+
+/** The operator scope's EFFECTIVE section census, as ONE comparable token (`settingsMovesOperatorCensus`'s whole subject):
+ *  `set:<sorted unique ids>` for a NON-EMPTY list, `empty:pre-init` (EVERY section — `panesInitialized !== true`) or
+ *  `empty:initialized` (NONE) for the gated case. `null` means **INCOMPARABLE** and the caller answers MOVED. A member READ that
+ *  throws IS ALLOWED TO PROPAGATE — this function carries no `try` of its own, because the caller's guard is the ONE place the
+ *  direction rule ("throwing ⇒ MOVED") is decided; reading the two together is the contract, and a later pass must not delete the
+ *  caller's guard on the strength of this sentence. TOTAL where it can be: nothing here throws on its OWN account. */
+function settingsOperatorCensusShape(payload: Record<string, unknown>): string | null {
+  const raw = payload['enabledOperatorPanes']
+  if (raw != null && settingsMemberShape(raw) === null) return null
+  const ids: string[] = []
+  if (Array.isArray(raw)) {
+    for (const member of raw) {
+      // The boot's `scopeList` drops a non-string/empty member, and a duplicate is ONE section — the section SET is the subject.
+      if (typeof member !== 'string' || member === '') continue
+      if (!ids.includes(member)) ids.push(member)
+    }
+  }
+  if (ids.length > 0) return `set:${JSON.stringify(ids.slice().sort())}`
+  return payload['panesInitialized'] === true ? 'empty:initialized' : 'empty:pre-init'
+}
+
+/** A settings payload as a plain record, or `null` when the value names no payload at all (a null/undefined/number/string/
+ *  array/function). TOTAL: never throws, never coerces (a `String(input)` would let `null` and `'null'` collide). */
+function settingsPayloadRecord(value: unknown): Record<string, unknown> | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+/** A value's STABLE printed form, or **`null` when it cannot be COMPARED** — an unprintable/cyclic value, a `JSON.stringify` that
+ *  throws, a `toJSON` that throws. This is the CENSUS half, and it is deliberately distinct from `settingsMemberPrint` below: the
+ *  two callers want OPPOSITE things from the same failure (a comparison must not read "cannot compare" as "equal" — the dropped
+ *  move ADJ 3 closes — while a MAP KEY must always be a string). TOTAL: never throws. */
+function settingsMemberShape(value: unknown): string | null {
+  if (value === undefined) return '(undefined)'
+  try {
+    const printed = JSON.stringify(value, (_key, member) =>
+      typeof member === 'function' ? `(fn:${String(member)})` : member,
+    )
+    return typeof printed === 'string' ? printed : null
+  } catch {
+    return null
+  }
+}
+
+/** A value's printed form as a STRING, so two authored operator SECTIONS can be compared without a throw: `undefined` answers its
+ *  own token (so "absent" and "present" differ), `JSON.stringify` carries the rest — with FUNCTION-valued members kept by their
+ *  SOURCE (`L3-F4`: `JSON.stringify` DROPS a function, so two sections differing only in a handler body would have printed equal
+ *  and a stale pane would have answered `unchanged` forever) — and an incomparable value answers a token rather than an exception.
+ *  TOTAL at every argument. **STATED LIMIT, with its owner (`G5` / the next operator-pane unit):** this printer is a MAP KEY, so it
+ *  must answer SOMETHING for an incomparable value — and `JSON.stringify` itself collapses several distinct shapes onto one text: a
+ *  nested `undefined` member is DROPPED (`{ a: undefined }` and `{}` print equal), `NaN`/`±Infinity` become `null`, `Date`s become
+ *  one ISO string per instant and a class instance becomes its own enumerable members. Two DISTINCT sections differing only in such
+ *  a member would therefore print EQUAL and the pane would answer `unchanged` over stale data. **No operator pane authors such a
+ *  prop at this head** (their sections are strings/numbers/booleans/authored ids), which is why this is a recorded LIMIT and not a
+ *  defect row. **⟨THE COMPARISON HALF SHARES PART OF IT, AND SAYING SO IS THE POINT (`D-43`):⟩** `settingsMemberShape` DETECTS an
+ *  incomparable value (a throw, a cycle → `null` ⇒ MOVED, the safe direction) but it cannot detect what `JSON.stringify` SILENTLY
+ *  collapses — two members differing only in a nested `undefined` (`{a: undefined}` vs `{}`) or in `NaN`/`±Infinity` (both `null`)
+ *  compare HELD, which is the UNSAFE direction. Bounded in practice: the host's own `coerceLayout` never emits a present-but-
+ *  `undefined` or non-finite member, so only a FOREIGN payload reaches it. Same owner (`G5` / the next operator-pane unit). */
+function settingsMemberPrint(value: unknown): string {
+  const shape = settingsMemberShape(value)
+  return shape === null ? '(unprintable)' : shape
+}
+
+/** ⟨Unit `B-9` `§3` — **THE SLICE OF PROVINDENT-SSR'S `Node` THIS HOST'S OPERATOR PAINT USES**, declared structurally.⟩ The paint
+ *  re-authors ONE section of the RETAINED operator graph, so it needs exactly these eight members and nothing else: the authored
+ *  `base` (to find the section by its `props.id`), the family `children` (the retained order), the FAMILY LINK (where the fresh
+ *  section is attached, at the replaced section's own `priority`), `addAnchor`/`childAnchor`/`orphan`/`destroy` (the graft and the
+ *  release) and `hubFor` (the RETAINED tree's link hub, so the fresh section's anchors share the surface's ONE hub). Total: every
+ *  member is read defensively and a node that fails the shape answers `unchanged`. */
+interface OperatorGraphNode {
+  readonly id: string
+  readonly base?: { props?: Record<string, unknown> }
+  readonly children: readonly OperatorGraphNode[]
+  readonly hubFor?: unknown
+  familyLinkFor(): unknown
+  childAnchor(): unknown
+  addAnchor(role: string, target: unknown, options: Record<string, unknown>, link: unknown): unknown
+  orphan(anchor: unknown): void
+  destroy(): void
+  markDestroyed(): void
+}
+/** One node's subtree IN TREE ORDER (the node first, then its children), the order `translateLegacy` answers its `nodes` in. */
+function operatorSeriesOf(node: OperatorGraphNode, out: OperatorGraphNode[] = []): OperatorGraphNode[] {
+  out.push(node)
+  for (const child of node.children) operatorSeriesOf(child, out)
+  return out
+}
+
 
 /** ⟨Unit `B-6` `§5` — `ASM-B6-1`: **THE ENGINE-ORIGIN LABEL, SPELLED ONCE IN THE RENDERER AND NEVER IMPORTED.**⟩ Its home is
  *  `src/main/engine-rag-store.ts`'s `export const ENGINE_ORIGIN_STORE` — the name `B-4`'s sink stamps on every engine frame's
@@ -916,6 +1144,19 @@ export class SidebarPanes {
   private operatorRoot: unknown = null
   private operatorNodes: unknown[] = []
   private operatorPrevMap: Map<string, unknown> | null = null
+  /** ⟨Unit `B-9` `§3` — **THE AUTHORED-SHAPE CENSUS of the retained operator sections** (`ASM-B9-L2-1`).⟩ `mountOperator` records,
+   *  per ENABLED operator pane, the stable printed form of the section it authored (the pane's own `render(ctx)` output under the
+   *  surface's `operator-pane-<id>` id rule), and the per-pane paint compares a FRESH authoring against it: a shape-equal
+   *  re-authoring mints no node, swaps nothing and answers `unchanged` (`r1`'s idempotence limb), which is what makes the paint's
+   *  `painted` an EARNED reading rather than an adopted render (`B3-F6`). ONE writer per arm: `mountOperator` seeds it, the paint
+   *  updates exactly the painted pane's entry. */
+  private operatorSectionShapes = new Map<string, string>()
+  /** ⟨Unit `B-9` `§5` — `B6-F6`'s RESIDUE: **THE STORE-LISTING GENERATION STAMP**, the `ASM-B6-3`/`B5-F5(b)` idiom one subject
+   *  over.⟩ A host-owned MONOTONE counter, bumped BEFORE each `bridge.rag.stores()` the registry-manage settlement issues and
+   *  compared AFTER the answer lands: an answer that no longer holds the NEWEST generation is DROPPED — not committed and not
+   *  painted — because an uncoalesced settle puts N answers in flight and a stale one landing LAST would commit a stale listing
+   *  with no later fire to correct it. One counter, two reads, no timer and no queue (`D-82` clause 4). */
+  private storeListingGeneration = 0
 
   /** The re-derive in-flight coalescing (M11/S19). */
   private reDeriveInFlight = false
@@ -2614,6 +2855,17 @@ export class SidebarPanes {
       this.operatorPrevMap = null
     }
     const envelope = buildOperatorEnvelope(this.registry, this.buildTemplateContext())
+    // ⟨Unit `B-9` `§3`⟩ THE AUTHORED-SHAPE CENSUS, seeded where the sections are AUTHORED (`ASM-B9-L2-1`): the per-pane paint
+    // compares a fresh authoring against the shape recorded here, so `painted` is earned by a MOVED shape and never by a re-render.
+    const shapes = new Map<string, string>()
+    const authoredRoot = envelope.template?.root
+    const authored = Array.isArray(authoredRoot?.children) ? authoredRoot.children : []
+    for (const section of authored) {
+      const id = (section?.props as { id?: unknown } | undefined)?.id
+      if (typeof id !== 'string' || !id.startsWith('operator-pane-')) continue
+      shapes.set(id.slice('operator-pane-'.length), settingsMemberPrint(section))
+    }
+    this.operatorSectionShapes = shapes
     const hub = createLinkHub()
     const t = translateLegacy(envelope, { hub, graphScope: this.operatorScope })
     // provident-ssr 0.4.1 — release the previous operator Supervisor's module-
@@ -2761,9 +3013,12 @@ export class SidebarPanes {
    *   5. `runtime.applyContentReconcile` **only when `replaced.length > 0`** — a shape-equal re-render applies NOTHING
    *      (`reason:'unchanged'`, `r1`'s idempotence limb).
    *
-   *  EVERY ABSENT ARM IS A DECLARED WORD (never a throw, never a fallback to a re-assembly): `not-a-pane` · `operator-scope`
-   *  (the arm that keeps `B-9`'s surface OUT of this unit instead of silently re-mounting it) · `not-enabled` · `no-runtime` ·
-   *  `not-mounted`. TOTAL at every argument. */
+   *  EVERY ABSENT ARM IS A DECLARED WORD (never a throw, never a fallback to a re-assembly): `not-a-pane` · `not-enabled` ·
+   *  `no-runtime` · `not-mounted` — and, for an `operator`-scope pane, the SAME four words from the operator surface's own arm
+   *  (`paintOperatorPane`): the pane's section off the retained operator graph is its frame, so a host with no operator mount and
+   *  a pane with no section are both `not-mounted`. ⟨Unit `B-9` `§3`: `operator-scope` is NO LONGER ANSWERED here — it stays in
+   *  `pane-events.ts`'s vocabulary for the hosts that legitimately have no operator mount, and this host's operator panes now
+   *  PAINT.⟩ TOTAL at every argument. */
   updatePane(paneId: string): PaneUpdateVerdict {
     const echo = typeof paneId === 'string' ? paneId : ''
     const verdict = (reason: PaneUpdateReason, applied: string[] = []): PaneUpdateVerdict => ({
@@ -2792,8 +3047,11 @@ export class SidebarPanes {
     if (typeof paneId !== 'string' || paneId === '') return verdict('not-a-pane')
     const def = this.registry.get(paneId)
     if (def == null) return verdict('not-a-pane')
-    // (2) THE OPERATOR SCOPE IS `B-9`'s — its lawful paint re-MOUNTS that surface, which is that unit's, not this one's.
-    if (def.scope === 'operator') return verdict('operator-scope')
+    // (2) THE OPERATOR SCOPE IS A ROUTE, NOT AN ABSENCE. ⟨Unit `B-9` `§3`: step 2's refusal became a PAINT of that surface's own
+    // retained graph — one section re-authored and re-rendered through the operator adapter, re-assembling nothing. The WORD
+    // `operator-scope` stays in `pane-events.ts`'s vocabulary for the hosts that legitimately have no operator mount; this host's
+    // answer is the paint's own (`paintOperatorPane`).⟩
+    if (def.scope === 'operator') return this.paintOperatorPane(paneId, def, verdict)
     // (3) THE ENABLED CENSUS: a disabled pane renders no frame, so the word is `not-enabled` and NOT `not-mounted` (the census
     // that excludes it is the ENABLED one).
     if (!this.registry.isEnabled(paneId)) return verdict('not-enabled')
@@ -2867,6 +3125,162 @@ export class SidebarPanes {
       return verdict('unchanged')
     }
     return verdict('painted', [cssId])
+  }
+
+  /** ⟨Unit `B-9` `§3` — **THE OPERATOR PANE'S PAINT**, the ONE design call of that unit (`ASM-B9-2`).⟩ An `operator`-scope pane used
+   *  to answer `operator-scope` here, so its only route was a WHOLE-GRAPH re-assembly (`renderer.ts`'s `⟨B-9⟩` fallback →
+   *  `host.refresh()` → `loadAppGraph` + `mountOperator`) — the last one in the app. The operator surface is its OWN managed graph
+   *  with its OWN diffing channel (a DOM interaction already re-renders it: `handleOperatorEvent` → dispatch → flush →
+   *  `renderOperator()`), so a PER-PANE paint is expressible and this is it, in the contract's six steps:
+   *
+   *   1. the pane's `PaneDefinition` off the REGISTRY — the CALLER's step (step 1 of `paintPane`), `scope === 'operator'` is a ROUTE;
+   *   2. the LIVE operator surface (`operatorScope`/`operatorAdapter`/`operatorSupervisor`/`operatorRoot`): **absent ⇒ `not-mounted`**
+   *      (a declared word — this host has no operator mount at all);
+   *   3. the ENABLED census, then the pane's SECTION off the RETAINED graph (its authored id is `operator-pane-<id>`, the id
+   *      `buildOperatorEnvelope` mints): disabled ⇒ `not-enabled`; enabled with no section ⇒ `not-mounted`. **THE ORDER, STATED
+   *      EXACTLY AS THIS METHOD USES IT** (ADJ 7 — "the existing words, in the existing order" must be the READ order, not a slogan):
+   *      step 2 reads the SURFACE first and step 3 reads the ENABLED census second, so a DISABLED operator pane on a host with NO
+   *      operator mount answers **`not-mounted`** (the absence of the whole surface is the more fundamental fact). The app-graph arm
+   *      above orders the same two facts the other way round — its enabled census (step 3) precedes its runtime (step 4) — because a
+   *      disabled frame is never a runtime question there. **Two surfaces, two lawful orders, both stated rather than assumed;**
+   *   4. the FRESH section: `def.render(this.buildTemplateContext())` re-authored under the SAME id rule and re-translated ALONE
+   *      against the RETAINED `GraphScope` and the RETAINED tree's hub, as a CONTENT payload so it arrives UNATTACHED; then grafted
+   *      onto the RETAINED family link at the replaced section's own `priority` (so the sibling ORDER is preserved) and swapped into
+   *      the retained node list **by that section only — every sibling node the SAME OBJECT**, and the subtree it replaced is
+   *      ORPHANED and released (never left registered on the surface's supervisor);
+   *   5. `renderOperator()` — the surface's OWN channel (`ASM-B9-2`), never a re-mount (`0 mountOperator`, `0 loadAppGraph`,
+   *      `0 refresh()` — `INV-E`);
+   *   6. the verdict is EARNED (`B3-F6`): `painted` only when the authored SHAPE MOVED (and the render therefore re-minted that
+   *      section's nodes); a shape-equal re-authoring is `unchanged` with `applied: []` and mints nothing at all.
+   *
+   *  `applied` is `['operator-pane-<id>']` — the id the SURFACE authors (adjudication 2). The app-graph arm keeps `pane-<id>`
+   *  because that is that surface's spelling: two surfaces, one rule. **The paint re-reads NO bridge** (`ASM-B9-1`: each producer
+   *  commits its field in the same tick BEFORE it fires). TOTAL at every argument: every absence is a declared word, no node is ever
+   *  minted on the `unchanged` arm, and a throw from ANY site here is contained one level up by `updatePane`'s own guard, which folds
+   *  it into the declared `unchanged` answer (the vocabulary is closed — never an eighth word, never an exemption at a caller). */
+  private paintOperatorPane(
+    paneId: string,
+    def: NonNullable<ReturnType<PaneRegistry['get']>>,
+    verdict: (reason: PaneUpdateReason, applied?: string[]) => PaneUpdateVerdict,
+  ): PaneUpdateVerdict {
+    // (2) THE LIVE OPERATOR SURFACE.
+    const scope = this.operatorScope
+    const supervisor = this.operatorSupervisor
+    const root = this.operatorRoot as OperatorGraphNode | null
+    if (scope == null || this.operatorAdapter == null || supervisor == null || root == null) return verdict('not-mounted')
+    // (3) THE ENABLED CENSUS, THEN THE RETAINED SECTION.
+    if (!this.registry.isEnabled(paneId)) return verdict('not-enabled')
+    const sectionId = `operator-pane-${paneId}`
+    const retained = root.children.find((node) => node.base?.props?.['id'] === sectionId) ?? null
+    if (retained == null) return verdict('not-mounted')
+    // (6, the READING) THE FRESH SECTION, authored through the pane's OWN render under the surface's id rule, and its SHAPE compared
+    // against the shape the retained section was authored from: equal ⇒ nothing moved ⇒ `unchanged`, and NOTHING is minted.
+    let freshSection: LegacyNodeData
+    try {
+      const section = def.render(this.buildTemplateContext())
+      if (section == null || typeof section !== 'object') return verdict('unchanged')
+      freshSection = { ...section, props: { ...(section.props ?? {}), id: sectionId } }
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the operator pane's render threw`, thrown)
+      return verdict('unchanged')
+    }
+    const freshShape = settingsMemberPrint(freshSection)
+    if (this.operatorSectionShapes.get(paneId) === freshShape) return verdict('unchanged')
+    // (4) ONE SECTION, RE-TRANSLATED ALONE against the RETAINED scope + hub, arriving UNATTACHED (a `content` payload).
+    let freshRoot: OperatorGraphNode | null
+    try {
+      // ⟨`L3-F5` — the hub is the RETAINED tree's, so the fresh section's same-name component/placement anchors land on the SAME
+      // shared links as every sibling's. The `createLinkHub()` arm below is a DECLARED DEGRADATION, reachable only on a host whose
+      // operator tree was translated WITHOUT a hub (`mountOperator` always supplies one, so this host never takes it): it keeps the
+      // paint total instead of failing a pane over a link-sharing nuance, and it is named here rather than silent.⟩
+      const hub =
+        root.hubFor != null && typeof root.hubFor === 'object'
+          ? (root.hubFor as ReturnType<typeof createLinkHub>)
+          : createLinkHub()
+      const translated = translateLegacy(
+        {
+          template: { root: { type: 'div', props: { id: 'operator-panes' }, children: [] } },
+          content: [{ content: [freshSection] }],
+          clientConfig: { runInstantiation: true, runRendering: true },
+        } as unknown as LegacyInitialData,
+        { hub, graphScope: scope },
+      ) as unknown as { content: readonly OperatorGraphNode[] }
+      freshRoot = translated.content[0] ?? null
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the operator section could not be translated`, thrown)
+      return verdict('unchanged')
+    }
+    if (freshRoot == null) return verdict('unchanged')
+    // THE GRAFT: attach the fresh section, then release the subtree it replaces and CLAIM THE SLOT the replaced one held. The link
+    // refuses a DUPLICATE order (`unique-order`), so the fresh anchor is attached UNORDERED while the old anchor still holds the
+    // index, the old anchor is orphaned, and only then is the index set (`Link.setOrder`) — which is also why `Node.children` (sorted
+    // on `a.options.priority ?? a.options.order`) keeps the sibling ORDER byte-for-byte. Sibling anchors are untouched, so every
+    // sibling NODE stays the SAME OBJECT.
+    const at = root.children.indexOf(retained)
+    const replacedNodes = operatorSeriesOf(retained)
+    const freshNodes = operatorSeriesOf(freshRoot)
+    // THE REPLACED SECTION'S OWN ORDER, read off its ANCHOR (`L3-F1`: `root.children` is the SORTED view, so its index is the
+    // section's RANK and not its authored `priority` — they coincide only while every sibling keeps its translated index).
+    const replacedAnchor = retained.childAnchor() as { options?: { priority?: unknown; order?: unknown } } | null
+    const authoredPriority = replacedAnchor?.options?.priority ?? replacedAnchor?.options?.order
+    const order = typeof authoredPriority === 'number' && Number.isFinite(authoredPriority) ? authoredPriority : at
+    try {
+      const link = root.familyLinkFor() as { setOrder?(anchor: unknown, priority: number): void }
+      const grafted = freshRoot.addAnchor('child', freshRoot, {}, link)
+      if (replacedAnchor != null) retained.orphan(replacedAnchor)
+      retained.destroy()
+      if (grafted != null && order >= 0 && typeof link.setOrder === 'function') {
+        try {
+          link.setOrder(grafted, order)
+        } catch {
+          // The section is ATTACHED and renders; only the sibling ORDER would differ, which is never worth losing the paint over.
+        }
+      }
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the operator section could not be grafted`, thrown)
+      return verdict('unchanged')
+    }
+    for (const node of freshNodes) supervisor.registerNode(node as never)
+    // THE RELEASE (`L3-F3`) — **CONTAINMENT, NOT RELEASE; the words are chosen because the measurement corrected them.** Every
+    // replaced node is flagged (`markDestroyed()` sets `destroyed` + the `sweep-candidate` dirty scope) AND orphaned, so the replaced
+    // subtree leaves the RENDER: `renderOperator()`'s `byNode` is built from the host's own node SLICE (`this.operatorNodes`), and the
+    // flag makes the subtree unreachable. ⟨MEASURED — the engine's sweep/finalize machinery does NOT read this flag for a host-side
+    // release and CANNOT release the node:⟩ the fresh section is a `content` payload, so `translateLegacy` calls
+    // `registerContentNode` and the node is SWEEP-EXEMPT BY CONSTRUCTION (`isContentNode(node) ⇒ continue`); the replaced root is
+    // SKIPPED FOREVER once flagged (`runSweep`: `if (node.destroyed) continue`), so `evictDestroyedNode` is never reached and **THREE
+    // per-scope censuses grow by one subtree's node objects per paint** — `Supervisor.nodes`, the isolated scope's `registered`/`byId`,
+    // and its `contentNodes`. **THERE IS NO STALE-HANDLER HAZARD** (also measured): `resolveDispatchTarget` misses a tombstoned id,
+    // `dispatchEvent` answers `[]`, and `getNode` on a stale wire dispatches nothing. So the residue is BOUNDED MEMORY, not a live
+    // surface, and the engine exposes no per-node unregister to close it (`Supervisor`'s public surface is `registerNode`/`allNodes`/
+    // `dispose`, and `dispose()` is a re-mount). Catalogued, never patched: `docs/defects.md`
+    // `SUPERVISOR-NODE-MAP-APPENDS-ONE-OPERATOR-SUBTREE-PER-PAINT` and `docs/HANDOFF.md`
+    // `ENG-SUPERVISOR-NO-PER-NODE-UNREGISTER` (`D-9`).⟩
+    for (const node of replacedNodes) {
+      try {
+        node.markDestroyed()
+      } catch {
+        // a node that cannot be flagged is already out of the tree; the render's `isInTree` filter excludes it either way
+      }
+    }
+    // THE NODE LIST: exactly that section's nodes replaced IN PLACE. The insertion point is the REPLACED SECTION ROOT's index in
+    // `operatorNodes` — a NODE index, never the `root.children` index (`L3-F2`: each section contributes a whole SUBTREE, so the two
+    // indices diverge from the second section on). The fresh subtree is already in tree order, as `translateLegacy`'s `nodes` were.
+    const replacedWires = new Set(replacedNodes.map((node) => node.id))
+    const kept = this.operatorNodes.filter((node) => !replacedWires.has((node as OperatorGraphNode).id))
+    const nodeAt = this.operatorNodes.indexOf(retained)
+    const insertAt = nodeAt < 0 ? kept.length : Math.min(nodeAt, kept.length)
+    this.operatorNodes = [...kept.slice(0, insertAt), ...freshNodes, ...kept.slice(insertAt)]
+    // (5) THE SURFACE'S OWN CHANNEL.
+    try {
+      this.renderOperator()
+    } catch (thrown) {
+      console.error(`[sidebar-panes] updatePane('${paneId}'): the operator surface's render threw`, thrown)
+      return verdict('unchanged')
+    }
+    // THE SHAPE COMMIT, AFTER the render (`L2-F6`): a census entry written before a failed render would make the NEXT identical push
+    // answer `unchanged` over a pane that never re-rendered — so the baseline only advances on a paint that landed.
+    this.operatorSectionShapes.set(paneId, freshShape)
+    return verdict('painted', [sectionId])
   }
 
   /** ⟨`B3-F2` — **THE FULL-CENSUS PAYLOAD SUPPLY**, and the measurement that amended the contract's §3 step 5.⟩
@@ -3493,24 +3907,53 @@ export class SidebarPanes {
    *  broadcast payload IS the authoritative store state (main broadcasts
    *  `operatorSettingsStore.set()`'s result post-SET), so the host does NOT
    *  re-fetch — a re-fetch is redundant and creates an async race with the sync
-   *  requestRebuild requirement. FULLY SYNCHRONOUS: set lastOperatorSettings +
-   *  the representation mode from the PAYLOAD (defensive coercion — only
-   *  'markdown' passes), then route through the edit controller's dirty-edit
-   *  guard (requestRebuild) → the SAME single re-derive as rag-store-changed /
-   *  template-changed (a FRESH traversal — never refresh() over the cached
-   *  envelope). A malformed/absent representation mode is coerced to 'html' and
-   *  the handler STILL rebuilds (the payload is authoritative, not dropped). */
+   *  fire requirement. FULLY SYNCHRONOUS, and its statement ORDER is the
+   *  contract's (`docs/L1/unit-b-9-pane-operator-settings.md` §4 SITE 2, with the
+   *  operator census added by ADJ 2 — the order is LOAD-BEARING, four statements):
+   *  COMMIT (`lastOperatorSettings` + the representation mode, defensive
+   *  coercion — only 'markdown' passes; a payload carrying the layout slice
+   *  updates the overlay) → FIRE `settings` (the operator pane's OWN delivery:
+   *  its producer committed in this same tick, so the paint re-reads nothing —
+   *  `ASM-B9-1`) → **the SURFACE re-author, guarded by the OPERATOR-CENSUS
+   *  census (`settingsMovesOperatorCensus`): the operator scope's SECTION SET
+   *  moved ⇒ `refreshOperator()`** → and ONLY THEN the app-graph rebuild,
+   *  guarded by the FIELD CENSUS (`settingsMovesAppGraph`): an app-graph member
+   *  moved ⇒ re-derive; none ⇒ the fire is the whole delivery. The FIRE
+   *  PRECEDES BOTH re-assemblies, so the pane's own paint is never a
+   *  re-assembly's by-product. A malformed/absent representation mode is
+   *  coerced to 'html' and the handler STILL fires (the payload is
+   *  authoritative, not dropped).
+   *
+   *  ⟨Why the guard is load-bearing, measured (`F-3`'s correction, §10):⟩ the
+   *  rebuild is `requestRebuild('operator')` → `reDerive('operator')` →
+   *  `refresh()`, and `refresh()` RE-READS `bridge.operatorSettings.get()`. An
+   *  unconditional rebuild therefore CLOBBERED the push that triggered it — a
+   *  push of `topK: 12` rendered the store's `5` — on top of re-assembling the
+   *  whole graph for a member the operator pane alone renders. */
   private onOperatorSettingsChanged(payload: OperatorSettings): void {
+    // THE PREVIOUS PAYLOAD, captured BEFORE the commit: "moved" is a comparison (`ASM-B9-3`).
+    const previous = this.lastOperatorSettings
     // F2 (adversarial) — defensive guard: a null/undefined payload is never
     // dereferenced (never throw); it coerces to the html default and the handler
-    // STILL rebuilds (the broadcast is authoritative, not dropped).
+    // STILL fires (the broadcast is authoritative, not dropped).
     payload = (payload ?? {}) as OperatorSettings
     this.lastOperatorSettings = payload
     this.representationMode = payload.representationMode === 'markdown' ? 'markdown' : 'html'
     // W2-N1 (§2.5) — the broadcast is authoritative; a payload carrying the
     // layout slice updates the overlay (a payload without it keeps the current).
     if (payload.layout != null) this.layout = coerceLayout(payload.layout)
-    this.editController.requestRebuild('operator') // → reDerive('operator'): operator pane + app graph (editingMode)
+    // THE FIRE PRECEDES EVERY RE-ASSEMBLY (§4 SITE 2, in that order): the operator pane hears its own producer and repaints itself.
+    this.events?.fire('settings')
+    // THE OPERATOR-SURFACE CENSUS (ADJ 2): a push that moved the operator scope's SECTION SET re-authors the SURFACE. The pane's
+    // visibility rows read this PAYLOAD while `buildOperatorEnvelope` reads the REGISTRY, so without this leg the pane and the
+    // surface can disagree. `mountOperator` (through `refreshOperator`) is lawful on this route — §4 keeps it for exactly "a
+    // visibility flip that changes the operator scope's census". ⟨THE LEG'S LIMIT, NAMED AND NOT OVERCLAIMED (`D-43`): this handler
+    // does NOT write the registry, so a push that arrives OUTSIDE the local toggle route re-authors the registry's OLD section set
+    // (the disagreement survives), and a push that IS the toggle's own echo costs a SECOND whole-surface mount. Closing the first
+    // would need a third registry writer, which no adjudication grants; see the predicate's own docblock.⟩
+    if (settingsMovesOperatorCensus(previous, payload)) this.refreshOperator()
+    // THE APP-GRAPH FIELD CENSUS (§2's DECLARATION; `ASM-B9-3`): only an APP-GRAPH member's move re-derives the tree.
+    if (settingsMovesAppGraph(previous, payload)) this.editController.requestRebuild('operator')
     // An operator rebuild is not a content change; drop any stale descriptor so
     // it is not applied on a later content pass (adversarial finding 6).
     this.pendingContentChange = null
@@ -4795,11 +5238,27 @@ export class SidebarPanes {
     this.mountOperator()
   }
 
-  /** U-H8 — re-fetch the read-only listing (refresh-on-apply) + re-render the pane. */
+  /** U-H8 — re-fetch the read-only listing (refresh-on-apply) + FIRE the pane it belongs to. ⟨Unit `B-9` `§5` (`B6-F6`'s residue):
+   *  **THE GENERATION STAMP, and the settlement is the SETTINGS PANE's source.**⟩ `rag.stores()` is ONE subject (`lastStoreListing`),
+   *  so two racing settlements are the `ASM-B6-3`/`B5-F5(b)` shape: the counter is bumped BEFORE the read and compared AFTER the
+   *  answer lands, and an answer that no longer holds the NEWEST generation is DROPPED — not committed and not painted (the answer
+   *  that DOES hold it owns the paint). The winner COMMITS then FIRES `settings`: a listing read is that pane's OWN producer, so the
+   *  paint repaints the pane and re-assembles nothing (`F-7`). No timer, no retry, no queue (`D-82` clause 4). */
   private refreshRegistryManage(): void {
+    const generation = (this.storeListingGeneration += 1)
     void this.bridge.rag.stores().then((p) => {
+      // A superseded answer is dropped at the same stamp as a superseded error: nothing is committed and nothing paints.
+      if (generation !== this.storeListingGeneration) return
       this.lastStoreListing = p
-      this.mountOperator()
+      // ⟨THE CHANNEL-ABSENT DEGRADATION, and it is the option's OWN declared law (`SidebarPanesOptions.events`: "Absent ⇒ the host
+      // subscribes nothing and every pane family keeps its pre-migration `refresh()` route until its own unit").⟩ A host with NO
+      // channel has no pane-paint route at all, so the settlement keeps the operator RE-AUTHOR it has always had there — the
+      // pre-migration route, on a host that cannot fire. ⟨`L2` corrects `L3` §5 here, on a MEASUREMENT: the L3 seat refused this arm
+      // because it would allegedly put `mountOperator` inside `O6`'s counter window, but `O6`'s harness always hands the host its
+      // `events` channel, so the fallback is UNREACHABLE on every row that counts `mountOperator` — measured, not argued.⟩ A host
+      // WITH the channel FIRES and the pane paints itself: `0 mountOperator` there, which is `O6`'s reading.
+      if (this.events == null) this.mountOperator()
+      else this.events.fire('settings')
     }).catch(() => {
       // keep the last-known listing (never a crash) — the F-MS5-3 non-abort discipline
     })
@@ -5145,12 +5604,15 @@ export class SidebarPanes {
     })
   }
 
-  /** Compile the operator graph root + re-render into the operator mount. */
+  /** Compile the operator graph root + re-render into the operator mount. ⟨Unit `B-9` `§3` (`L3-F3`): `byNode` is built from the
+   *  SLICE this method compiles (`this.operatorNodes`), never from `operatorSupervisor.allNodes()` — a per-pane paint replaces one
+   *  section and the supervisor's own node map is append-only for a host that never re-mounts, so `allNodes()` would hand the emitter
+   *  every REPLACED subtree as well. The slice is already the resolution universe (`compile` is called over the same list).⟩ */
   private renderOperator(): void {
     if (!this.operatorRoot || !this.operatorSupervisor || !this.operatorAdapter || !this.operatorScope) return
     const cr = (this.operatorRoot as { compile(nodes: unknown[]): { actionable: unknown[] } }).compile(this.operatorNodes as never)
     this.operatorSupervisor.recordResolved(cr.actionable as never)
-    const byNode = new Map(this.operatorSupervisor.allNodes().map((n) => [n.id, n]))
+    const byNode = new Map((this.operatorNodes as Array<{ id: string }>).map((n) => [n.id, n]))
     const renderOptions: RenderOptions = { nodeIdAttribute: true, graphScope: this.operatorScope }
     this.operatorAdapter.beginBatch()
     const dom = renderProducingProcess(cr.actionable as never, byNode as never, this.operatorAdapter, this.operatorPrevMap as never, renderOptions)

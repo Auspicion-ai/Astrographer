@@ -356,10 +356,19 @@ export class GnosisCrudPanes {
         this.firePanes(['wikis', 'documents', 'document', 'no-edit-access'])
         return
       }
+      // ⟨Unit `B-9` §6 `O7` / `ADV-B8-1` (grant `D-46`, from `B-9`'s REQUESTED grant) — THE CLEAR IS ANNOUNCED.⟩
+      // `noEditAccess` is a SHARED field rendered by BOTH crud panes (the H-2 indicator, `FIELD_PANES`), so a
+      // settle that CLEARS it must reach the sibling as well — until this line it was WRITTEN and not ANNOUNCED,
+      // and `gnosis-wikis` kept authoring the indicator until it heard again. The clear is a consequence of THIS
+      // settle, so it rides the settle's own field census: `gnosisCrudPanesTouchedBy(['no-edit-access'])` already
+      // names both panes, so the fix is the CALLER's list. Added only when the flag actually CHANGED — a settle
+      // that never set the flag moves no pane it did not otherwise move.
+      const clearedNoEditAccess = this.noEditAccess
       this.noEditAccess = false
       void this.bridge.gnosis.documents(tool, args)
         .then((result) => {
-          this.firePanes(this.applyDocumentsResult(tool, result))
+          const fields = this.applyDocumentsResult(tool, result)
+          this.firePanes(clearedNoEditAccess ? [...fields, 'no-edit-access'] : fields)
         })
         .catch((e) => {
           // §5.6/H2 — a rejected bridge call (the engine absent / a ConflictError
@@ -422,10 +431,15 @@ export class GnosisCrudPanes {
         this.firePanes(['wikis', 'wiki', 'no-edit-access'])
         return
       }
+      // ⟨Unit `B-9` §6 `O7` / `ADV-B8-1` (grant `D-46`) — the same ANNOUNCED clear as the documents path above:
+      // `noEditAccess` is SHARED, so a settle that clears it must reach the sibling crud pane that renders the
+      // indicator. Added only when the flag actually CHANGED.
+      const clearedNoEditAccess = this.noEditAccess
       this.noEditAccess = false
       void this.bridge.gnosis.wikis(tool, args)
         .then((result) => {
-          this.firePanes(this.applyWikisResult(tool, result))
+          const fields = this.applyWikisResult(tool, result)
+          this.firePanes(clearedNoEditAccess ? [...fields, 'no-edit-access'] : fields)
         })
         .catch((e) => {
           // §5.6 — the engine-absent / bridge-rejection path: the unavailable

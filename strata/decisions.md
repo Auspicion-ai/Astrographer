@@ -1121,3 +1121,45 @@ unavailable. Recorded so the next pass does not spend a run rediscovering it.
 
 **Countersigned:** four chained digest re-statements (final `ecd2e539a9006bc4e56506198ccd6d04`) and
 `shell-chrome`'s `N` **35 → 37** under D-41's definition (two new export declarations), cap 420.
+
+---
+
+## D-46 — `B-9` deletes THE LAST RE-ASSEMBLY in the program; the `O7` grant is taken by L0; and my delegation's own claim was FALSE
+
+**Status:** ACTIVE · **Date:** 2026-11-19 · **Source (measurement):** `B-9`'s return and this seat's re-runs
+(rows 14/14 with `O7` un-skipped; the suite at its clean floor; `typecheck` 0; `build` 0; `drift` CLEAN)
+
+**The last re-assembly is GONE.** `renderer.ts`'s `firePaneUpdate`'s `⟨B-9⟩` branch —
+`if (registry.get(paneId)?.scope === 'operator' && host) void host.refresh()` — is now `paneEvents.fire(paneId)`
+and nothing else; and `onOperatorSettingsChanged`'s unconditional `requestRebuild('operator')` is deleted. The
+operator surface's paint is its **RETAINED graph re-rendered through its own adapter** (`renderOperator()`), so
+`INV-E` reads `0 loadAppGraph / 0 mountOperator / 0 refresh()` for **EVERY pane family in the app**.
+
+**AND MY DELEGATION'S CLAIM WAS FALSE, measured:** I wrote that `gnosis-status` under `⟨B-9⟩` reads
+`0 loadAppGraph / 1 mountOperator / 0 refresh()`. The unit RUN it: `refresh=1 loadAppGraph=1 mountOperator=1
+updatePane=0`, `fire={fired:false, handlers:0}` — **the whole re-assembly ran, and the fire never happened.**
+A `settings` settle read the same `1/1/1`, fired nothing, and its rebuild's own `operatorSettings.get()`
+**clobbered the push that triggered it** (`topK: 12` rendered `5`). The claim came from a neighbouring unit's
+note and I repeated it as fact; the unit measured it instead.
+
+**The adversarial pass found the FIELD CENSUS wrong in three ways, one HIGH:** two of its five members never
+entered the assembled envelope and one never reached the registry, so **every `TabStrip.commit` re-assembled the
+whole app graph for nothing**. The predicate is now exactly `representationMode`/`layout` with each removed
+member's measured reason; `enabledOperatorPanes` gets its own exported predicate; and an **incomparable member
+answers MOVED** (fail-safe, so a cyclic `layout` can no longer DROP a move).
+
+**`X1b` is GREEN and STRICTER:** the census is **nine ids**, every one answering `updatePane` ≠
+`operator-scope`/`not-a-pane` over the real booted host — so the hazard `D-45` refused is gone rather than
+dodged.
+
+**THE `O7` GRANT, TAKEN HERE (the unit refused to widen, correctly):** one line per success path in
+`src/renderer/gnosis-crud-panes.ts` — the settle's fire list names `'no-edit-access'` **when the flag actually
+changed**, so a CLEARED shared field reaches the SIBLING pane that renders the H-2 indicator. `O7` is un-skipped
+and green; its message had named the exact fix, so the grant was a one-line act, not a design question.
+
+**Countersigned:** the `sidebar-panes` digest chain (final `3bac76d4e53ebf9f7723630704bb8081`). And
+`shell-chrome`'s `N` **37 → 39** under D-41's definition (two new export declarations), cap 440.
+
+**CARRIED:** `ADJ 2` — the routed leg cannot move the registry, so a non-echo `enabledOperatorPanes` push
+re-authors the OLD section set. Not a regression (both pre-`B-9` routes also re-mounted, plus a `loadAppGraph`
+this removes), **no row can see it**, and closing it needs a THIRD registry writer — a design act, not a line.

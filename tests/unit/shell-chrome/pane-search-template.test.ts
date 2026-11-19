@@ -8,9 +8,11 @@
 //       `this.templateValidation = …` BEFORE `this.events?.fire(<id>)`, so the paint (which runs synchronously inside the fire,
 //       `ASM-B7-1`) authors the state the producer just committed; and in `onTemplateChanged` the fire ALSO precedes the KEPT
 //       `this.editController.requestRebuild('template')`, so any later assemble authors the pane from fresh state.
-//   §4  THE CENSUS MOVES BY EXACTLY TWO, then `B-8` adds TWO more (`D-44`, §12a): `REPLUMBED_PANE_IDS` becomes the SEVEN-id SET
-//       `{gnosis-query, crosslinks, doc-nav, search, template-editor}`, and `settings`/`gnosis-status`/`gnosis-documents`/
-//       `gnosis-wikis` KEEP `refresh()`.
+//   §4  THE CENSUS MOVES BY EXACTLY TWO, then `B-8` adds TWO more (`D-44`, §12a), then `B-9` adds the LAST TWO (`B-9` §4 `F-9`,
+//       §6 `O1`): `REPLUMBED_PANE_IDS` is the NINE-id SET — this unit's five plus `gnosis-documents`/`gnosis-wikis` plus `settings`/
+//       `gnosis-status` — and after `B-9` NO family keeps `refresh()` as a pane-update route. ⟨RE-STATED BY UNIT `B-9` — a
+//       RECORDED-VALUE MOVE, never a relaxation: the sentence this line used to carry ("\`settings\`/\`gnosis-status\`/
+//       \`gnosis-documents\`/\`gnosis-wikis\` KEEP \`refresh()\`") is now FALSE and is recorded here as SUPERSEDED rather than deleted.⟩
 //   §5  THE WHOLE CHANGE SET is `src/renderer/sidebar-panes.ts`: the census; `submitQuery` (commit → fire, with the
 //       `anyDirty()`/`loadAppGraph` block REMOVED); `submitAdvancedQuery`'s `rerender` (both arms → fire, `loadAppGraph` REMOVED);
 //       `searchAdvancedToggle` (fire, `requestRebuild()` REMOVED); `onTemplateChanged` (commit → fire → KEEP
@@ -72,8 +74,9 @@ const SEARCH = 'search'
 const TEMPLATE_EDITOR = 'template-editor'
 const CENSUS_NAME = 'REPLUMBED_PANE_IDS'
 
-/** §4: the census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more (`D-44`, §12a) — the recorded value is RE-STATED,
- *  never relaxed: the seven ids, compared as a SET, because the claim is MEMBERSHIP and never the spelling order. */
+/** §4: the census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more (`D-44`, §12a) and by `B-9`'s LAST TWO (⟨UNIT `B-9`
+ *  §4 `F-9`, §6 `O1`⟩) — the recorded value is RE-STATED, never relaxed: the NINE ids, compared as a SET, because the claim is
+ *  MEMBERSHIP and never the spelling order. */
 const REQUIRED_CENSUS: readonly string[] = [
   'gnosis-query',
   CROSSLINKS,
@@ -82,12 +85,19 @@ const REQUIRED_CENSUS: readonly string[] = [
   TEMPLATE_EDITOR,
   'gnosis-documents',
   'gnosis-wikis',
+  'settings',
+  'gnosis-status',
 ]
 
-/** §4: the families that still KEEP `refresh()` after `B-8`: **two, not four** (`D-44`, §12a — `gnosis-documents`/`gnosis-wikis`
- *  joined the census and the change-interest declaration, so their `refresh()` route is GONE). Named so a census that swallowed
- *  either of these two operator families reds a second time, by name. */
-const FAMILIES_KEEPING_REFRESH: readonly string[] = ['settings', 'gnosis-status']
+/** ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O1`; `docs/L3/shell-chrome/
+ *  pane-operator-settings.md`) — THE SET IS NOW EMPTY AND THE ARM STAYS.⟩ §4: the families that still KEEP `refresh()` as a
+ *  PANE-UPDATE route after `B-9`: **NONE.** `B-8` left two (`settings`, `gnosis-status` — the last `refresh()` families, both
+ *  `B-9`'s); `B-9` gave both a paint and entered them in the census, so a pane update reaches no family through `refresh()` any
+ *  more. The list is kept — EMPTY, not deleted — because the arm that REDS when one of its members appears in the census is the live
+ *  floor that says no family may ever come back to `refresh()` by accident; an empty membership is a reading, and deleting the arm
+ *  would be the relaxation this file's law forbids. (`refresh()` itself stays: it is the host's boot/landing route and no row here
+ *  may be satisfied by deleting it — `B-9` §4, "NOT removed, and said so".) */
+const FAMILIES_KEEPING_REFRESH: readonly string[] = []
 
 /** THE PRE-LANDING DECLARATION, VERBATIM off `src/renderer/sidebar-panes.ts` at this head — three ids, no `search`, no
  *  `template-editor`. It is carried as a FIXTURE because §4's SET arm has to prove it READS RED on a census that has not moved;
@@ -405,8 +415,8 @@ const LETTER_LIMBS: readonly LetterLimb[] = [
   },
 ]
 
-describe('pane-search-template — S1: the LETTER — the census is the SEVEN-id SET (`B-8` re-stated the value), both settlements fire with no `loadAppGraph`/`anyDirty`, the toggle and the verdict carry no `requestRebuild`, and `onTemplateChanged` commits + fires + KEEPS its rebuild', () => {
-  it("S1 — `REPLUMBED_PANE_IDS` parses to {gnosis-query, crosslinks, doc-nav, search, template-editor}; `submitQuery`/`submitAdvancedQuery` fire `search` with no `loadAppGraph`/`anyDirty`; `searchAdvancedToggle`/`templateValidateResult` fire with no `requestRebuild`; `onTemplateChanged` commits, fires and keeps `requestRebuild('template')`", () => {
+describe('pane-search-template — S1: the LETTER — the census is the NINE-id SET (`B-9` re-stated the value, NO family keeping `refresh()`), both settlements fire with no `loadAppGraph`/`anyDirty`, the toggle and the verdict carry no `requestRebuild`, and `onTemplateChanged` commits + fires + KEEPS its rebuild', () => {
+  it("S1 — `REPLUMBED_PANE_IDS` parses to {gnosis-query, crosslinks, doc-nav, search, template-editor, gnosis-documents, gnosis-wikis, settings, gnosis-status}; `submitQuery`/`submitAdvancedQuery` fire `search` with no `loadAppGraph`/`anyDirty`; `searchAdvancedToggle`/`templateValidateResult` fire with no `requestRebuild`; `onTemplateChanged` commits, fires and keeps `requestRebuild('template')`", () => {
     // §6 `S1`; §4's TWO-id census move; §5's five sites; §9's `ASM-B7-1`/`ASM-B7-3`/`ASM-B7-4`.
     // WHY EACH ARM IS THE SHAPE IT IS: the census is read as an ARRAY LITERAL OFF ITS DECLARATION and compared as a SET (so a
     // reorder is lawful and a sixth/dropped/duplicated id is not), and every letter arm reads its OWN named method's brace-matched
@@ -431,7 +441,7 @@ describe('pane-search-template — S1: the LETTER — the census is the SEVEN-id
     if (sidebarText !== '') {
       const code = stripComments(sidebarText)
 
-      // ---- (a) THE CENSUS IS THE SEVEN-ID SET (`B-8`'s two ids included) ---------------------------
+      // ---- (a) THE CENSUS IS THE NINE-ID SET (`B-8`'s two ids and `B-9`'s two included) --------------
       const parsedCensus = censusLiteralOf(code, CENSUS_NAME)
       if (parsedCensus === null) {
         problems.push(
@@ -458,13 +468,17 @@ describe('pane-search-template — S1: the LETTER — the census is the SEVEN-id
               `(\`D-44\`) — every one of them must survive the move; one MORE id would be a silent second subscriber. LAYER: ${LAYER}`,
           )
         }
+        // ⟨RE-STATED BY UNIT `B-9` (§4 `F-9`, §6 `O1`) — THE ARM STAYS AND ITS SET EMPTIED.⟩ `FAMILIES_KEEPING_REFRESH` is now `[]`
+        // because no family keeps `refresh()` after `B-9`; the arm therefore reads ZERO every run, and it is kept DELIBERATELY as a
+        // live floor: the day a landing re-introduces a `refresh()`-family into the census, `swallowed` is non-empty and this reds by
+        // name. An empty list is a reading about the head, never a reason to delete the `expect`.
         const swallowed = FAMILIES_KEEPING_REFRESH.filter((id) => parsedCensus.includes(id))
         if (swallowed.length > 0) {
           problems.push(
-            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` now carries ${shown(swallowed)} — §4/§12a: the two operator families ` +
-              `(${shown([...FAMILIES_KEEPING_REFRESH])}) still KEEP \`refresh()\` after \`B-8\` (\`settings\` is \`B-9\`'s surface and ` +
-              `\`gnosis-status\`'s paint is \`B-9\`'s); the rest of the registry is re-plumbed. RE-PARSED VALUE: ${shown(parsedCensus)}. ` +
-              `LAYER: ${LAYER}`,
+            `S1(a): \`${CENSUS_NAME}\` in \`${SIDEBAR_FILE}\` now carries ${shown(swallowed)} — ⟨UNIT \`B-9\` §4/§6 \`O1\`⟩ NO family ` +
+              `keeps \`refresh()\` as a pane-update route after \`B-9\` (\`settings\` and \`gnosis-status\` are the last two, and both ` +
+              `now PAINT through \`paintPane\`'s operator arm), so \`${shown([...FAMILIES_KEEPING_REFRESH])}\` is the set a census ` +
+              `entry may never name. RE-PARSED VALUE: ${shown(parsedCensus)}. LAYER: ${LAYER}`,
           )
         }
         // THE FLOOR, IN THE OTHER DIRECTION: the SAME parser on the PRE-LANDING declaration (carried verbatim above) must return
@@ -530,7 +544,7 @@ describe('pane-search-template — S1: the LETTER — the census is the SEVEN-id
     expect(
       problems,
       `S1 — THE LETTER (§6 S1; §4's TWO-id census move; §5's five sites; \`ASM-B7-1\`/\`ASM-B7-3\`/\`ASM-B7-4\`). ` +
-        `${problems.length} problem(s). Inside \`${SIDEBAR_FILE}\`: \`${CENSUS_NAME}\` parsing as the SET ` +
+        `${problems.length} problem(s). Inside \`${SIDEBAR_FILE}\`: \`${CENSUS_NAME}\` parsing as the NINE-id SET ` +
         `${shown([...REQUIRED_CENSUS])}; \`submitQuery\` and \`submitAdvancedQuery\` carrying a \`fire('${SEARCH}')\` and NO ` +
         `\`loadAppGraph\`/\`anyDirty\`; \`searchAdvancedToggle\` and \`templateValidateResult\` carrying their fire and NO ` +
         `\`requestRebuild\`; and \`onTemplateChanged\` carrying the \`this.template =\` commit, the fire AND the KEPT ` +

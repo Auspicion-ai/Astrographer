@@ -81,16 +81,20 @@ const TEMPLATE_EDITOR = 'template-editor'
 /** `B-5`'s pane and `B-6`'s — this unit may not weaken either (`X2` is the cross-isolation census). */
 const CROSSLINKS = 'crosslinks'
 const DOC_NAV = 'doc-nav'
-/** The operator scope (`B-9`'s surface) — `X1`/`X4` prove it keeps `refresh()` and answers `operator-scope`. */
+/** The operator scope's own pane — ⟨RE-STATED BY UNIT `B-9` (§4 `F-9`, §6 `O1`/`O4`)⟩ it is a CENSUS MEMBER and it PAINTS now, so
+ *  `X1` requires it PRESENT (the arm inverted) and `X4` reads the operator surface's own paint words instead of `operator-scope`. */
 const SETTINGS = 'settings'
-/** The families that still keep the pre-migration `refresh()` route AFTER `B-8` (`D-44`, §12a): the TWO operator families —
- *  `settings` (`B-9`'s surface) and `gnosis-status` (whose paint is `B-9`'s). `gnosis-documents`/`gnosis-wikis` were re-pointed OUT of
- *  this list by `B-8` (they are census members and listeners now), so the `fired:false, handlers:0` arm is NARROWED, never deleted. */
-const PRE_MIGRATION_PANES: readonly string[] = ['settings', 'gnosis-status']
+/** ⟨RE-STATED BY UNIT `B-9` (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O1`) — THE LIST IS NOW EMPTY AND THE LOOP
+ *  STAYS.⟩ The families that still keep the pre-migration `refresh()` route: **NONE.** `B-8` narrowed this list to the TWO operator
+ *  families (`settings` and `gnosis-status`, both `B-9`'s); `B-9` gave both a paint and entered them in the census, so the last
+ *  `fired:false, handlers:0` subjects are gone and they are POSITIVE arms in the loop above (`PINNED_REPLUMBED` now covers them).
+ *  The list is kept — EMPTY, never deleted — because the loop over it is the live floor that NO family is pre-migration: the day a
+ *  landing adds an id here and still subscribes it, that id's fire reads `fired:true` and this reds by name. */
+const PRE_MIGRATION_PANES: readonly string[] = []
 /** An id no pane declares: the paint's `not-a-pane` arm (`X4`). */
 const UNKNOWN_PANE = 'probe-b7-unknown'
-/** §4: the pinned census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more ids (`D-44`, §12a) — the recorded VALUE is
- *  re-stated, never relaxed (set equality, order-insensitive). */
+/** §4: the pinned census AFTER this unit's TWO-id move, EXTENDED by `B-8`'s TWO more ids (`D-44`, §12a) and by `B-9`'s LAST TWO
+ *  (⟨UNIT `B-9` §4 `F-9`, §6 `O1`⟩) — the recorded VALUE is re-stated, never relaxed (set equality, order-insensitive). */
 const PINNED_REPLUMBED: readonly string[] = [
   'gnosis-query',
   'crosslinks',
@@ -99,6 +103,8 @@ const PINNED_REPLUMBED: readonly string[] = [
   'template-editor',
   'gnosis-documents',
   'gnosis-wikis',
+  'settings',
+  'gnosis-status',
 ]
 
 /** The query the two submit seams are driven with. It never collides with a document id or a zone name. */
@@ -1713,13 +1719,15 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
     ).toEqual([])
   })
 
-  it('X1 — the census moves by exactly TWO here and by TWO more under `B-8`: `REPLUMBED_PANE_IDS` is the SEVEN-id SET with a `B-7` comment paragraph naming both causes (proven in BOTH directions), the two operator families answer `{fired:false,handlers:0}`, and the pre-migration route still reaches `loadAppGraph` + `mountOperator`', async () => {
+  it('X1 — the census moves by exactly TWO here, by TWO more under `B-8` and by TWO more under `B-9`: `REPLUMBED_PANE_IDS` is the NINE-id SET with a `B-7` comment paragraph naming both causes (proven in BOTH directions), EVERY censused id answers `{fired:true,handlers:1}` — `settings`/`gnosis-status` included, so no family is pre-migration — and the pre-migration route still reaches `loadAppGraph` + `mountOperator`', async () => {
     // §6 `X1` (§4: the census moves by exactly TWO with a `B-7` cause paragraph naming both sources; the four families that keep
     // `refresh()`; `B-6`'s `F-12` anti-vacuous comment clause — a token search is NOT a cause sentence).
     // LAYER: envelope-class — the module's exported VALUE, the source TEXT (comments read as PARAGRAPHS), the REAL channel's answers
     // and the `refresh()` floor on this double.
-    // NON_VACUITY: the `fired:false, handlers:0` arms are floored by the SAME channel answering `fired:true, handlers:1` for
-    // `crosslinks` (a landed arm) AND for each of the relocated five ids; the comment clause is proven in BOTH directions HERE (the
+    // NON_VACUITY: the `fired:false, handlers:0` loop is floored by the SAME channel answering `fired:true, handlers:1` for
+    // `crosslinks` (a landed arm) AND for each of the relocated NINE ids — and after ⟨UNIT `B-9` §6 `O1`⟩ it is EMPTY: `settings` and
+    // `gnosis-status` are listeners too, so no family is pre-migration and the loop is a live zero rather than a claim; the comment
+    // clause is proven in BOTH directions HERE (the
     // shipped file must be GREEN and the PRE-LANDING fixture — a census MOVED with the `B-7` paragraph ABSENT — must be RED, so a
     // relapse into a window-wide token search reds this row); and the `refresh()` floor (`loadAppGraph` + `mountOperator` both move)
     // is the positive that makes the integration rows' `INV-E` zeroes readable.
@@ -1754,13 +1762,22 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
       } else if (fingerprint(asSet) !== fingerprint(wantedSet)) {
         problems.push(
           `limb X1: \`REPLUMBED_PANE_IDS\` reads ${shown(read)}, whose SET is ${shown(asSet)}, not ${shown(wantedSet)} — §4: the census ` +
-            `moves by TWO here (\`['gnosis-query','crosslinks','doc-nav']\` -> \`[ …, 'search', 'template-editor']\`) and by TWO MORE ` +
-            `under \`B-8\` (\`D-44\`: \`[ …, 'gnosis-documents', 'gnosis-wikis']\`), and this unit's ` +
+            `moves by TWO here (\`['gnosis-query','crosslinks','doc-nav']\` -> \`[ …, 'search', 'template-editor']\`), by TWO MORE ` +
+            `under \`B-8\` (\`D-44\`: \`[ …, 'gnosis-documents', 'gnosis-wikis']\`) and by TWO MORE under ` +
+            `⟨UNIT \`B-9\` §4 \`F-9\`/§6 \`O1\`⟩ (\`[ …, 'settings', 'gnosis-status']\`), and this unit's ` +
             `TWO panes must both be in it, or their fires reach no listener at all`,
         )
       }
-      if (read !== null && read.includes(SETTINGS)) {
-        problems.push(`limb X1: \`REPLUMBED_PANE_IDS\` names \`${SETTINGS}\` — the operator pane is \`B-9\`'s surface and \`updatePane\` answers \`operator-scope\` for it`)
+      // ⟨INVERTED BY UNIT `B-9` (§3/§4, §6 `O1`) — THE SAME ARM, THE OPPOSITE READING: this arm used to RED when the census named
+      // `settings` ("the operator pane is `B-9`'s surface and `updatePane` answers `operator-scope` for it"). §3 replaced that
+      // refusal with the operator surface's OWN retained-graph paint, so the pane MUST now be a census member: an operator pane
+      // outside the census can never receive its fire, whatever its paint answers.
+      if (read !== null && !read.includes(SETTINGS)) {
+        problems.push(
+          `limb X1: \`REPLUMBED_PANE_IDS\` does NOT name \`${SETTINGS}\` — ⟨UNIT \`B-9\` §4\⟩ the operator pane MUST be in the ` +
+            `census now: \`paintPane\`'s operator arm is a ROUTE to the operator surface's own retained-graph paint (§3), so the pane ` +
+            `is paintable and a census without it leaves its fire with no listener`,
+        )
       }
       for (const paneId of [SEARCH, TEMPLATE_EDITOR]) {
         if (read !== null && read.filter((id) => id === paneId).length > 1) {
@@ -1838,7 +1855,9 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
       }
       // EVERY censused id answers `fired:true, handlers:1` — the move is a REGISTRATION, not only a constant. ⟨`B-8`'s two ids are in
       // the PINNED list, so this loop now also reads `gnosis-documents`/`gnosis-wikis` as listeners: that is the `D-44` arm, and it is
-      // why the negative family list below lost exactly those two.⟩
+      // why the negative family list below lost exactly those two. ⟨UNIT `B-9` §6 `O1`⟩ THE SAME READ AGAIN FOR `settings`/
+      // `gnosis-status`: they are in `PINNED_REPLUMBED` now, so this loop reads them as listeners (`fired:true, handlers:1` — ONE
+      // registration each) and `PRE_MIGRATION_PANES` is empty for exactly that reason.⟩
       for (const paneId of PINNED_REPLUMBED) {
         const report = channel.fire(paneId)
         if (report.fired !== true || report.handlers !== 1) {
@@ -1848,8 +1867,11 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
           )
         }
       }
-      // THE NEGATIVES: the TWO operator families that keep the pre-migration route reach NO listener (`gnosis-documents`/
-      // `gnosis-wikis` left this list under `B-8`; they are POSITIVE arms in the loop above).
+      // THE NEGATIVES: ⟨UNIT `B-9` §4 `F-9`/§6 `O1` — THE LOOP STAYS, THE LIST IS EMPTY.⟩ After `B-9` NO family keeps the
+      // pre-migration route (`gnosis-documents`/`gnosis-wikis` left this list under `B-8`; `settings`/`gnosis-status` leave it here,
+      // and they are POSITIVE arms in the loop above), so this loop reads ZERO every run — and it is kept DELIBERATELY as the live
+      // floor that no family is pre-migration: the day a landing adds an id here while still subscribing it, that `fire` reads
+      // `fired:true, handlers:1` and this reds by name. An empty list is a reading about the head, never a reason to drop an arm.
       for (const paneId of PRE_MIGRATION_PANES) {
         const report = channel.fire(paneId)
         if (report.fired !== false || report.handlers !== 0) {
@@ -2525,9 +2547,16 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
     ).toEqual([])
   })
 
-  it('X4 — an ABSENT pane costs no paint and no IPC: a DISABLED `search`/`template-editor`, an unknown id and `settings` answer `not-enabled`/`not-a-pane`/`operator-scope` with ZERO bridge calls, and ENABLING the pane makes the same fire paint exactly once', async () => {
-    // §6 `X4` (§3: "The re-read's GATE is the paint's own census" — `not-enabled` / `not-a-pane` / `operator-scope`; the words
-    // `not-mounted`/`no-runtime` are deliberately NOT gated on, being transient boot states).
+  it('X4 — an ABSENT pane costs no paint and no IPC: a DISABLED `search`/`template-editor`, an unknown id and `settings` answer `not-enabled`/`not-a-pane`/the operator surface\'s own paint word (`unchanged` or `painted`) with ZERO bridge calls, and ENABLING the pane makes the same fire paint exactly once', async () => {
+    // §6 `X4` (§3: "The re-read's GATE is the paint's own census" — `not-enabled` / `not-a-pane`; the words
+    // `not-mounted`/`no-runtime` are deliberately NOT gated on, being transient boot states). ⟨RE-STATED BY UNIT `B-9`
+    // (`docs/L1/unit-b-9-pane-operator-settings.md` §3, §6 `O4`/`S1`; §4 `F-9`) — THE THIRD GATE WORD CHANGED, THE TEETH DID NOT:
+    // this arm used to require `settings` to answer `operator-scope`, because `paintPane`'s step 2 REFUSED every `operator`-scope
+    // registration. §3 replaced that refusal with a ROUTE to the operator surface's OWN retained-graph paint (`paintOperatorPane`),
+    // so on this harness — which HAS an operator mount and a mounted `settings` pane — the answer is the paint's own word:
+    // `unchanged` (the re-authored section is shape-equal to the retained one) or `painted`. What this arm still measures is
+    // unchanged and is its teeth: ZERO bridge calls and ZERO `applyContentReconcile`, i.e. the operator pane's update costs no IPC
+    // and re-assembles nothing.⟩
     // LAYER: envelope-class — the re-read census, the paint's own declared verdicts and call counts.
     // NON-VACUITY: the CONTROL is the SAME channel fire with the pane ENABLED on the SAME seed, and it must paint exactly once — so the
     // zeros above cannot be satisfied by a host that never paints anything; and the gate arms are read through the PUBLIC
@@ -2548,19 +2577,25 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
       problems.push(...absent)
       if (absent.length === 0) {
         const paint = (drive.host as unknown as { paintReplumbedPane(id: string): Promise<void> }).paintReplumbedPane.bind(drive.host)
-        const gateArms: Array<[string, string, string]> = []
+        // ⟨RE-STATED BY UNIT `B-9` §3⟩ Each arm now names the SET of words it accepts, so the operator arm can demand the paint's own
+        // vocabulary without weakening any other arm: the two app-graph arms and the unknown-id arm still accept EXACTLY ONE word.
+        const gateArms: Array<[string, readonly string[], string]> = []
         for (const paneId of [SEARCH, TEMPLATE_EDITOR]) {
           drive.registry.disable(paneId)
-          gateArms.push([paneId, 'not-enabled', `a DISABLED \`${paneId}\``])
+          gateArms.push([paneId, ['not-enabled'], `a DISABLED \`${paneId}\``])
         }
-        gateArms.push([SETTINGS, 'operator-scope', `\`${SETTINGS}\` (the operator scope, \`B-9\`'s surface)`])
-        gateArms.push([UNKNOWN_PANE, 'not-a-pane', `the unknown id \`${UNKNOWN_PANE}\``])
+        gateArms.push([
+          SETTINGS,
+          ['unchanged', 'painted'],
+          `\`${SETTINGS}\` (the operator scope — ⟨UNIT \`B-9\` §3⟩ its paint is the operator surface's OWN retained-graph paint, so the word is the paint's, not the deleted \`operator-scope\` refusal)`,
+        ])
+        gateArms.push([UNKNOWN_PANE, ['not-a-pane'], `the unknown id \`${UNKNOWN_PANE}\``])
         for (const paneId of [SEARCH, TEMPLATE_EDITOR]) {
           if (drive.registry.isEnabled(paneId) !== false) {
             problems.push(`limb X4: \`registry.disable('${paneId}')\` did not take — the disabled arm has no subject`)
           }
         }
-        for (const [paneId, word, label] of gateArms) {
+        for (const [paneId, words, label] of gateArms) {
           drive.resetCounters()
           let threw = ''
           try {
@@ -2583,10 +2618,10 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
               `limb X4: ${label} produced ${verdicts.length} verdict(s) ${shown(verdicts)}, not exactly ONE — the paint still ANSWERS ` +
                 `(its declared word is the reading), it just does not paint or re-read`,
             )
-          } else if (verdicts[0]['reason'] !== word) {
+          } else if (!words.includes(String(verdicts[0]['reason']))) {
             problems.push(
-              `limb X4: ${label} answered \`reason: ${shown(verdicts[0]['reason'])}\`, not the declared word \`'${word}'\` — the ` +
-                `paint's closed vocabulary distinguishes one wiring fault from another`,
+              `limb X4: ${label} answered \`reason: ${shown(verdicts[0]['reason'])}\`, not the declared word ` +
+                `\`'${shown([...words])}'\` — the paint's closed vocabulary distinguishes one wiring fault from another`,
             )
           }
         }
@@ -2654,11 +2689,12 @@ describe('pane-search-template — the TWO panes that answer their OWN source: o
 
     expect(
       problems,
-      `limb X4 — an absent pane costs no paint and no IPC (§6 X4; §3's gate = the paint's own census). ${problems.length} ` +
+      `limb X4 — an absent pane costs no paint and no IPC (§6 X4; §3's gate = the paint's own census; ⟨RE-STATED BY UNIT ` +
+        `\`B-9\` §3⟩ the operator arm now names the paint's words). ${problems.length} ` +
         `problem(s). A DISABLED \`${SEARCH}\`/\`${TEMPLATE_EDITOR}\`, the operator-scope \`${SETTINGS}\` and the unknown ` +
-        `\`${UNKNOWN_PANE}\` must each cost ZERO bridge calls and answer their own declared word (\`not-enabled\` / \`operator-scope\` / \`not-a-pane\`), ` +
-        `while ENABLING the pane makes the SAME channel fire paint exactly once. envelope-class — the REAL host over the layout-less ` +
-        `DOM shim; no rendered box, no pointer (G8-only)`,
+        `\`${UNKNOWN_PANE}\` must each cost ZERO bridge calls and answer their own declared word (\`not-enabled\` / the operator ` +
+        `surface's own \`unchanged\`|\`painted\` / \`not-a-pane\`), while ENABLING the pane makes the SAME channel fire paint ` +
+        `exactly once. envelope-class — the REAL host over the layout-less DOM shim; no rendered box, no pointer (G8-only)`,
     ).toEqual([])
   })
 })

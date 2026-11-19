@@ -885,7 +885,8 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // subscriber (folding the two declarations) reds the difference arm; returning the LIVE arrays instead of copies reds the
     // copy arm; and a `REPLUMBED_PANE_IDS` that reaches one pane MORE than the landed census — an extension no unit named — reds
     // the constant arm (⟨`B-5` `pane-links` took it from one id to two DELIBERATELY: `docs/L1/unit-b-5-pane-links.md` §4; the value
-    // below is re-pinned to the landed census and the teeth are unchanged; `B-6` added one more and `B-7` two more the same way⟩).
+    // below is re-pinned to the landed census and the teeth are unchanged; `B-6` added one more, `B-7` two more, `B-8` two more and
+    // ⟨UNIT `B-9` §4 `F-9`⟩ `B-9` the last two, all the same way⟩).
     const problems: string[] = []
     const { channel, problems: channelProblems } = makeChannel('r9')
     problems.push(...channelProblems)
@@ -1044,9 +1045,14 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
     // ⟨EXTENDED AGAIN BY UNIT `B-8` (`pane-gnosis`) — TWO more ids, and the SAME discipline (`D-44`, §12a).⟩ `gnosis-documents` and
     // `gnosis-wikis` join because each now answers a PRODUCER OF ITS OWN: the CRUD host's bridge settle commits the rendered field
     // and then FIRES that pane (`onChanged: (paneId) => firePaneUpdate(paneId)`, grant line 1), and the engine descriptor re-reads
-    // through the producer (`refreshFromEngine`, grant line 2) — `docs/L1/unit-b-8-pane-gnosis.md` §2/§12a. `gnosis-status` is
-    // still ABSENT on purpose (`F-5`: its paint is `B-9`'s). The value is re-stated, the TEETH are unchanged: the fingerprint
-    // comparison below stays ORDER-SENSITIVE and EXACT, so a sixth id, a dropped id, a bare reorder and a duplicate all still red.
+    // through the producer (`refreshFromEngine`, grant line 2) — `docs/L1/unit-b-8-pane-gnosis.md` §2/§12a.
+    // ⟨RE-STATED BY UNIT `B-9` (`pane-operator-settings`) — the LAST TWO ids, a RECORDED-VALUE MOVE and never a relaxation
+    // (`docs/L1/unit-b-9-pane-operator-settings.md` §4 `F-9`, §6 `O1`).⟩ `settings` and `gnosis-status` join because each now answers
+    // a PRODUCER of its own AND a PAINT of its own: `paintPane`'s operator arm is a ROUTE to the operator surface's own retained-graph
+    // paint (§3), so an operator entry in the census is a LIVE registration rather than the silently dead one `F-5` recorded — the
+    // sentence this comment used to carry ("`gnosis-status` is still ABSENT on purpose") is FALSE at this head and is recorded here
+    // as SUPERSEDED. The value is re-stated, the TEETH are unchanged: the fingerprint comparison below stays ORDER-SENSITIVE and
+    // EXACT, so a tenth id, a dropped id, a bare reorder and a duplicate all still red.
     const PINNED_CENSUS = [
       'gnosis-query',
       'crosslinks',
@@ -1055,12 +1061,14 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
       'template-editor',
       'gnosis-documents',
       'gnosis-wikis',
+      'settings',
+      'gnosis-status',
     ]
     if (replumbed === undefined) {
       problems.push(
         '(r9) `REPLUMBED_PANE_IDS` does not resolve on `src/renderer/sidebar-panes.js` — §3 pins it as the ONE declared constant ' +
           `naming the panes whose paint the host registers on the channel (exactly ${shown(PINNED_CENSUS)} after \`B-5\`'s, \`B-6\`'s, ` +
-          `\`B-7\`'s and \`B-8\`'s deliberate extensions)`,
+          `\`B-7\`'s, \`B-8\`'s and ⟨UNIT \`B-9\` §4 \`F-9\`⟩ \`B-9\`'s deliberate extensions)`,
       )
     } else if (!Array.isArray(replumbed) || fingerprint(replumbed) !== fingerprint(PINNED_CENSUS)) {
       problems.push(
@@ -1075,8 +1083,9 @@ describe('pane-events — the channel alone (pure): the declared no-ops, the non
         `${problems.length} problem(s). The shipped record-interest set is EMPTY BY CONSTRUCTION (no pane renders display state ` +
         `today; \`B-10\` authors the first reader) and the control proves it can MOVE; the two declarations reach different arms; ` +
         `both censuses are copies; and the re-plumbed census is exactly ` +
-        `${shown(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis'])} ` +
-        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\` — one id, then one id, then two, then two). ` +
+        `${shown(['gnosis-query', 'crosslinks', 'doc-nav', 'search', 'template-editor', 'gnosis-documents', 'gnosis-wikis', 'settings', 'gnosis-status'])} ` +
+        `(extended by \`B-5\`, then \`B-6\`, then \`B-7\`, then \`B-8\`, then ⟨UNIT \`B-9\` §4 \`F-9\`/§6 \`O1\`⟩ \`B-9\` — one id, ` +
+        `then one id, then two, then two, then two). ` +
         `envelope-class and PURE — no Electron, no DOM; the constant is read off the host MODULE's exports`,
     ).toEqual([])
   })
