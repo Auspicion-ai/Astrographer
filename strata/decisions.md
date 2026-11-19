@@ -770,3 +770,37 @@ its `INV-E` counters are proven only at node grain.
 **Why it lands anyway, rather than being held:** its rows, its census and the suite are verified green, its
 change set is inside its grant, and holding a working unit for a missing live reading would leave the tree
 neither better nor worse — the OWED line is the honest form, and the tracker carries it.
+
+---
+
+## D-35 — Correction: `B-5` IS DRIVEN. My `D-34` "OWED" line was written from a seat I interrupted too early
+
+**Status:** ACTIVE · **Date:** 2026-11-18 · **Corrects:** `D-34`'s OWED line · **Source (measurement):** `B-5`'s
+own return, received AFTER this seat interrupted it, with its reading reproduced in
+`archive/live-runs/2026-11-18-b-5-pane-links-live.log`
+
+**This is the second time in this program that an interrupt produced a false verdict from L0.** `D-34` recorded
+that `B-5`'s live repaint was OWED; the seat's report shows it had finished and read **DRIVEN**. The rule this
+seat keeps breaking is now written down twice: **an interrupt is not a verdict** — read the artifact's own last
+evidence before recording one.
+
+**The reading, verbatim, from the archived log:** `(i) assemblyRootUnchanged=true (#wiki-root "node-2668" ->
+"node-2668")` · `(ii) otherPanesSurvived=true` · `(iii) paneReminted=true with paneCarriersHeld=true` ·
+`(iv) exactlyOneCrosslinksFrame=true` · `(v) paneContentChanged=true` with `namesTheNewEdge=true`, the pane's
+text moving **`(none)` → the new edge's line → back to `(none)` on the delete** · CONTROL `frameHeld=true
+textHeld=true rootHeld=true` across an `edgeIds: []` commit · row `U-EDIT-1-LIVE-7 verdict=PASS`,
+`realInput=true`, `done: 1 blocks, 0 FAIL, 0 PARKED, 0 NOT-DRIVEN`, exit 0.
+
+**So the program now has TWO assembled-app proofs, not one:** `B-2`'s boot and `B-5`'s paint. The links pane
+repaints from an event with the rest of the assembly provably untouched — D-24's claim, seen.
+
+**And a finding that matters more than the unit:** the pane's backlink half had never rendered a line, because
+`setCurrentNodeId` has **no caller** — `_currentNodeId` is always `null`, so `lastBacklinks` was never
+assigned and every render the app has ever made printed `(none)`. That is filed as a defect below, with a
+second: the MCP tool **`edit.batch` is not registered** (`MCP error -32602`, measured) although five sites cite
+it.
+
+**One figure withdrawn, and L0 must not invent it back:** the seat's `O-2` endpoints 34 → 36 is WITHDRAWN — no
+instrument derives it and `modules.md` §3 and `platform.md` §4 disagree on the definition. `shell-chrome`'s
+`N` therefore stays **34 as a PROVISIONAL figure whose definition is owed**, and the next unit that touches the
+map must state the definition it counts rather than move the number.
